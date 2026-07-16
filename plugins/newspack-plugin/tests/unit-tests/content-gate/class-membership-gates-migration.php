@@ -12,13 +12,14 @@
  *   nested / reusable-block gate layouts migrate as empty. Pinned by the
  *   extract_gate_layouts / serialize_gate_inner_blocks tests below (they flip red).
  *
- * NOT pinned here: NPPD-2064 (fingerprint-based gate splitting/grouping). That fix
- * lands in group_plans_by_fingerprint() and the merged-product consolidation, which
- * depend on WC_Memberships_Membership_Plan and so are not unit-testable in this
- * harness — they are exercised end-to-end against real WooCommerce Memberships. The
- * compute_rules_fingerprint() tests below only pin the fingerprint's *canonicality*
- * (order-independence), which the 2064 fix preserves; they will NOT flip red, so the
- * 2064 author must add net-new grouping/split tests rather than rely on these.
+ * NPPD-2064 (content-overlap consolidation, preserving WCM's OR access semantics):
+ * the consolidation *decision* logic is extracted into WC-free pure helpers
+ * (rules_cover, rule_sets_overlap, plan_rule_set_consolidation, rules_require_any_match)
+ * and pinned by the net-new tests below. The group→gate wiring that drives them lives
+ * in group_plans_by_fingerprint() / consolidate_plan_groups(), which depend on
+ * WC_Memberships_Membership_Plan and so are exercised end-to-end against real
+ * WooCommerce Memberships. The compute_rules_fingerprint() tests only pin the
+ * fingerprint's *canonicality* (order-independence), which the 2064 fix preserves.
  *
  * @package Newspack\Tests\Content_Gate
  */
@@ -380,6 +381,241 @@ class Test_Membership_Gates_Migration extends \WP_UnitTestCase {
 			$this->invoke_private_static( 'compute_rules_fingerprint', [ $category_rules ] ),
 			$this->invoke_private_static( 'compute_rules_fingerprint', [ $post_rules ] )
 		);
+	}
+
+	/**
+	 * NPPD-2064 subset detection: a category-only rule set is covered by a rule set
+	 * that adds an all-posts rule (its content is a subset), but not the reverse. This
+	 * is the decidable case the consolidation merges into a single gate.
+	 */
+	public function test_rules_cover_detects_subset_rule_set() {
+		$category_only = [
+			[
+				'slug'  => 'category',
+				'value' => [ '5' ],
+			],
+		];
+		$category_plus_all_posts = [
+			[
+				'slug'  => 'category',
+				'value' => [ '5' ],
+			],
+			[
+				'slug'  => 'post_types',
+				'value' => [ 'post' ],
+			],
+		];
+
+		$this->assertTrue(
+			$this->invoke_private_static( 'rules_cover', [ $category_plus_all_posts, $category_only ] ),
+			'The category+all-posts rule set covers the category-only rule set.'
+		);
+		$this->assertFalse(
+			$this->invoke_private_static( 'rules_cover', [ $category_only, $category_plus_all_posts ] ),
+			'The narrower category-only rule set does not cover the broader one.'
+		);
+		$this->assertFalse(
+			$this->invoke_private_static( 'rules_cover', [ $category_plus_all_posts, [] ] ),
+			'An empty (site-wide) rule set is never treated as a subset to consolidate.'
+		);
+	}
+
+	/**
+	 * A rule value covers another only when it contains every element — term-ID or
+	 * post-type-slug containment, on the stringified values map_rules_to_ac_format
+	 * emits.
+	 */
+	public function test_rules_cover_requires_value_containment_for_the_same_slug() {
+		$category_five = [
+			[
+				'slug'  => 'category',
+				'value' => [ '5' ],
+			],
+		];
+		$category_five_six = [
+			[
+				'slug'  => 'category',
+				'value' => [ '5', '6' ],
+			],
+		];
+
+		$this->assertTrue(
+			$this->invoke_private_static( 'rules_cover', [ $category_five_six, $category_five ] ),
+			'category {5,6} covers category {5}.'
+		);
+		$this->assertFalse(
+			$this->invoke_private_static( 'rules_cover', [ $category_five, $category_five_six ] ),
+			'category {5} does not cover category {5,6}.'
+		);
+	}
+
+	/**
+	 * NPPD-2064 field shape: four plans gating one category, two of them carrying an
+	 * extra all-posts rule, split into two fingerprint groups. The category-only group
+	 * is a subset of the category+all-posts group, so it is absorbed into it — one
+	 * gate, no unresolved overlaps.
+	 */
+	public function test_plan_rule_set_consolidation_absorbs_subset_into_superset() {
+		$category_only = [
+			[
+				'slug'  => 'category',
+				'value' => [ '5' ],
+			],
+		];
+		$category_plus_all_posts = [
+			[
+				'slug'  => 'category',
+				'value' => [ '5' ],
+			],
+			[
+				'slug'  => 'post_types',
+				'value' => [ 'post' ],
+			],
+		];
+
+		$plan = $this->invoke_private_static(
+			'plan_rule_set_consolidation',
+			[ [ $category_only, $category_plus_all_posts ] ]
+		);
+
+		$this->assertSame(
+			[ 0 => 1 ],
+			$plan['absorbed_by'],
+			'The category-only group (index 0) is absorbed into the category+all-posts group (index 1).'
+		);
+		$this->assertSame( [], $plan['overlaps'], 'A clean subset produces no unresolved-overlap warnings.' );
+	}
+
+	/**
+	 * NPPD-2064 non-subset overlap: two rule sets share a category but each carries a
+	 * distinct extra tag, so neither covers the other. They stay separate and the
+	 * denial risk is flagged rather than silently merged.
+	 */
+	public function test_plan_rule_set_consolidation_flags_non_subset_overlap() {
+		$category_and_tag_seven = [
+			[
+				'slug'  => 'category',
+				'value' => [ '5' ],
+			],
+			[
+				'slug'  => 'post_tag',
+				'value' => [ '7' ],
+			],
+		];
+		$category_and_tag_eight = [
+			[
+				'slug'  => 'category',
+				'value' => [ '5' ],
+			],
+			[
+				'slug'  => 'post_tag',
+				'value' => [ '8' ],
+			],
+		];
+
+		$plan = $this->invoke_private_static(
+			'plan_rule_set_consolidation',
+			[ [ $category_and_tag_seven, $category_and_tag_eight ] ]
+		);
+
+		$this->assertSame( [], $plan['absorbed_by'], 'Neither rule set is a subset, so nothing is absorbed.' );
+		$this->assertSame( [ [ 0, 1 ] ], $plan['overlaps'], 'The shared category is flagged as an unresolved overlap.' );
+	}
+
+	/**
+	 * Disjoint rule sets neither consolidate nor warn.
+	 */
+	public function test_plan_rule_set_consolidation_leaves_disjoint_groups_alone() {
+		$category_five = [
+			[
+				'slug'  => 'category',
+				'value' => [ '5' ],
+			],
+		];
+		$tag_seven = [
+			[
+				'slug'  => 'post_tag',
+				'value' => [ '7' ],
+			],
+		];
+
+		$plan = $this->invoke_private_static(
+			'plan_rule_set_consolidation',
+			[ [ $category_five, $tag_seven ] ]
+		);
+
+		$this->assertSame( [], $plan['absorbed_by'] );
+		$this->assertSame( [], $plan['overlaps'] );
+	}
+
+	/**
+	 * A whole-post-type rule overlaps taxonomy-scoped content of that type, since the
+	 * taxonomy rule gates posts the post-type rule also gates.
+	 */
+	public function test_rule_sets_overlap_treats_all_posts_as_overlapping_a_taxonomy() {
+		$all_posts = [
+			[
+				'slug'  => 'post_types',
+				'value' => [ 'post' ],
+			],
+		];
+		$category_five = [
+			[
+				'slug'  => 'category',
+				'value' => [ '5' ],
+			],
+		];
+
+		$this->assertTrue(
+			$this->invoke_private_static( 'rule_sets_overlap', [ $all_posts, $category_five ] )
+		);
+		$this->assertFalse(
+			$this->invoke_private_static(
+				'rule_sets_overlap',
+				[
+					[
+						[
+							'slug'  => 'category',
+							'value' => [ '5' ],
+						],
+					],
+					[
+						[
+							'slug'  => 'post_tag',
+							'value' => [ '7' ],
+						],
+					],
+				]
+			),
+			'Different taxonomies with no post-type rule do not register as overlapping.'
+		);
+	}
+
+	/**
+	 * The OR-semantics guard: a gate carrying more than one content rule must combine
+	 * them with match-any so WCM's OR access is preserved; a single-rule gate keeps the
+	 * default match mode.
+	 */
+	public function test_rules_require_any_match_only_for_multiple_rules() {
+		$single_rule = [
+			[
+				'slug'  => 'category',
+				'value' => [ '5' ],
+			],
+		];
+		$two_rules = [
+			[
+				'slug'  => 'category',
+				'value' => [ '5' ],
+			],
+			[
+				'slug'  => 'post_types',
+				'value' => [ 'post' ],
+			],
+		];
+
+		$this->assertFalse( $this->invoke_private_static( 'rules_require_any_match', [ $single_rule ] ) );
+		$this->assertTrue( $this->invoke_private_static( 'rules_require_any_match', [ $two_rules ] ) );
 	}
 
 	/**

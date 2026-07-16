@@ -115,6 +115,14 @@ class Membership_Gates_Migration {
 		// Phase 1: group plans by content-rule fingerprint.
 		$plan_groups = self::group_plans_by_fingerprint( $plan_ids, $skipped );
 
+		// Phase 1b: consolidate groups whose content is a subset of another's into a
+		// single gate. Fingerprint grouping splits plans that gate the same content
+		// under non-identical rule sets (e.g. category-only vs category + all-posts)
+		// into separate gates with disjoint product lists; gate priority then denies a
+		// reader entitled via one plan at the other plan's gate. Merging by content
+		// overlap keeps WCM's OR access intact.
+		$plan_groups = self::consolidate_plan_groups( array_values( $plan_groups ) );
+
 		// Phase 2: create/update one gate per group.
 		$group_count = count( $plan_groups );
 		if ( $group_count < ( $total - count( $skipped ) ) ) {
@@ -195,6 +203,14 @@ class Membership_Gates_Migration {
 				// Set content rules.
 				\Newspack\Content_Rules::update_gate_content_rules( $gate_id, $ac_rules );
 
+				// A gate carrying more than one content rule must combine them with
+				// match-any (OR) so WCM's OR access semantics survive — content the plan
+				// gated under any single rule stays gated, and the reader is entitled
+				// through it. Single-rule gates keep the default match mode.
+				if ( self::rules_require_any_match( $ac_rules ) ) {
+					\Newspack\Content_Rules::update_gate_content_rules_match( $gate_id, 'any' );
+				}
+
 				// Registration layout (always).
 				self::apply_layout( $gate_id, $gate_title, 'registration', $layouts['registration'] );
 
@@ -258,12 +274,12 @@ class Membership_Gates_Migration {
 	 * are collected into $skipped instead of grouped. Plans that map to the same
 	 * canonical rule fingerprint share a group (and therefore a single gate).
 	 *
-	 * This is the primary grouping/split seam for NPPD-2064 (fingerprint
-	 * gate-splitting): the fix lands here (and in the merged-product consolidation
-	 * in migrate_membership_gates()). This method depends on
-	 * WC_Memberships_Membership_Plan, so its grouping/split behavior is NOT covered
-	 * by unit tests — the NPPD-2064 author must add net-new tests (the existing
-	 * compute_rules_fingerprint() tests only pin canonicality, which the fix keeps).
+	 * Exact-fingerprint grouping only merges plans with identical rule sets; plans
+	 * that gate the same content under non-identical rule sets are consolidated
+	 * afterwards by consolidate_plan_groups() (NPPD-2064). This method depends on
+	 * WC_Memberships_Membership_Plan, so it is exercised end-to-end rather than by
+	 * unit tests; the consolidation decision logic it feeds is pinned by pure-helper
+	 * tests instead.
 	 *
 	 * @param int[] $plan_ids Plan post IDs.
 	 * @param array $skipped  Skipped-plan summary rows, appended to by reference.
@@ -661,5 +677,267 @@ class Membership_Gates_Migration {
 		// Fallback only if JSON encoding fails; the fingerprint is an internal
 		// grouping key, never unserialized.
 		return $fingerprint ? $fingerprint : serialize( $normalised ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize
+	}
+
+	/**
+	 * Whether a gate must combine its content rules with match-any (OR).
+	 *
+	 * WooCommerce Memberships grants access when a reader's plan matches ANY of its
+	 * content rules, but an Access Control gate defaults to match-all (AND). A gate
+	 * carrying more than one content rule must therefore be flipped to match-any so a
+	 * plan's OR access semantics survive the migration; a single-rule gate is
+	 * unaffected by the mode and keeps the default.
+	 *
+	 * @param array[] $ac_rules AC-format content rules.
+	 *
+	 * @return bool True when the gate needs match-any.
+	 */
+	private static function rules_require_any_match( array $ac_rules ): bool {
+		return count( $ac_rules ) > 1;
+	}
+
+	/**
+	 * Whether every element of $subset_value is present in $superset_value.
+	 *
+	 * Values are the stringified term-ID or post-type-slug lists that
+	 * map_rules_to_ac_format() emits, so plain set containment decides coverage.
+	 *
+	 * @param string[] $superset_value The candidate covering value list.
+	 * @param string[] $subset_value   The value list that must be fully contained.
+	 *
+	 * @return bool True when $superset_value contains every element of $subset_value.
+	 */
+	private static function rule_value_covers( array $superset_value, array $subset_value ): bool {
+		return empty( array_diff( $subset_value, $superset_value ) );
+	}
+
+	/**
+	 * Whether $superset_rules covers all content gated by $subset_rules.
+	 *
+	 * Under OR semantics a rule set gates the union of its rules' content, so
+	 * $subset_rules is covered when every one of its rules has a same-slug rule in
+	 * $superset_rules whose value contains it. An empty $subset_rules is never treated
+	 * as a subset — a rule-less (site-wide signup) gate is not consolidated.
+	 *
+	 * @param array[] $superset_rules The candidate covering rule set.
+	 * @param array[] $subset_rules   The rule set that must be fully covered.
+	 *
+	 * @return bool True when $superset_rules covers $subset_rules.
+	 */
+	private static function rules_cover( array $superset_rules, array $subset_rules ): bool {
+		if ( empty( $subset_rules ) ) {
+			return false;
+		}
+		foreach ( $subset_rules as $needle ) {
+			$covered = false;
+			foreach ( $superset_rules as $candidate ) {
+				if ( $candidate['slug'] === $needle['slug']
+					&& self::rule_value_covers( $candidate['value'], $needle['value'] ) ) {
+					$covered = true;
+					break;
+				}
+			}
+			if ( ! $covered ) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * Reduce a rule set to its coverage signature: fully-gated post types, taxonomy
+	 * terms keyed by taxonomy slug, and specific post IDs.
+	 *
+	 * @param array[] $ac_rules AC-format content rules.
+	 *
+	 * @return array{post_types: string[], specific: string[], taxonomies: array<string,string[]>}
+	 */
+	private static function coverage_signature( array $ac_rules ): array {
+		$signature = [
+			'post_types' => [],
+			'specific'   => [],
+			'taxonomies' => [],
+		];
+		foreach ( $ac_rules as $rule ) {
+			if ( 'post_types' === $rule['slug'] ) {
+				$signature['post_types'] = array_merge( $signature['post_types'], $rule['value'] );
+			} elseif ( 'specific_posts' === $rule['slug'] ) {
+				$signature['specific'] = array_merge( $signature['specific'], $rule['value'] );
+			} else {
+				$signature['taxonomies'][ $rule['slug'] ] = array_merge( $signature['taxonomies'][ $rule['slug'] ] ?? [], $rule['value'] );
+			}
+		}
+		return $signature;
+	}
+
+	/**
+	 * Whether two rule sets could gate a common piece of content.
+	 *
+	 * Overlap is conservative — a whole-post-type rule is treated as overlapping any
+	 * taxonomy-scoped or specific-post rule on the other side, since those narrower
+	 * rules gate posts the post-type rule also gates. It exists to flag denial risk in
+	 * the undecidable (non-subset) case, so false positives are preferable to missing a
+	 * real overlap.
+	 *
+	 * @param array[] $a First rule set.
+	 * @param array[] $b Second rule set.
+	 *
+	 * @return bool True when the rule sets may gate common content.
+	 */
+	private static function rule_sets_overlap( array $a, array $b ): bool {
+		$sig_a = self::coverage_signature( $a );
+		$sig_b = self::coverage_signature( $b );
+
+		// The same whole post type gated on both sides.
+		if ( array_intersect( $sig_a['post_types'], $sig_b['post_types'] ) ) {
+			return true;
+		}
+		// The same specific post gated on both sides.
+		if ( array_intersect( $sig_a['specific'], $sig_b['specific'] ) ) {
+			return true;
+		}
+		// The same taxonomy with intersecting terms.
+		foreach ( $sig_a['taxonomies'] as $slug => $terms ) {
+			if ( isset( $sig_b['taxonomies'][ $slug ] ) && array_intersect( $terms, $sig_b['taxonomies'][ $slug ] ) ) {
+				return true;
+			}
+		}
+		// A whole-post-type rule on one side against narrower (taxonomy or specific)
+		// rules on the other — the narrower rules gate posts of that type.
+		$a_has_narrower = ! empty( $sig_a['taxonomies'] ) || ! empty( $sig_a['specific'] );
+		$b_has_narrower = ! empty( $sig_b['taxonomies'] ) || ! empty( $sig_b['specific'] );
+		if ( ( ! empty( $sig_a['post_types'] ) && $b_has_narrower )
+			|| ( ! empty( $sig_b['post_types'] ) && $a_has_narrower ) ) {
+			return true;
+		}
+		return false;
+	}
+
+	/**
+	 * Plan how fingerprint groups consolidate by content overlap (NPPD-2064).
+	 *
+	 * A group whose content is a subset of another's is absorbed into the largest
+	 * covering group, so the two share a single gate whose (superset) rules cover the
+	 * union of content and whose access products are unioned — preserving WCM's OR
+	 * access so no entitled reader is denied. Groups that overlap without a subset
+	 * relation cannot be safely merged (a single gate would need one product list for
+	 * disjoint entitlements) and are reported as overlaps for a loud warning instead.
+	 *
+	 * Pure and WooCommerce-free: it decides purely from the rule sets, so the
+	 * group→gate wiring in consolidate_plan_groups() stays a thin adapter.
+	 *
+	 * @param array[] $rule_sets List of AC-format rule sets, one per fingerprint group.
+	 *
+	 * @return array{absorbed_by: array<int,int>, overlaps: array<int,int[]>}
+	 *               absorbed_by maps an absorbed group index to its covering root index;
+	 *               overlaps lists [i, j] index pairs of unresolved overlapping roots.
+	 */
+	private static function plan_rule_set_consolidation( array $rule_sets ): array {
+		$absorbed_by = [];
+
+		foreach ( $rule_sets as $i => $rules_i ) {
+			if ( empty( $rules_i ) ) {
+				continue;
+			}
+			$best_root = null;
+			$best_size = -1;
+			foreach ( $rule_sets as $j => $rules_j ) {
+				if ( $i === $j || empty( $rules_j ) ) {
+					continue;
+				}
+				// $j strictly covers $i: it covers $i but $i does not cover $j. Distinct
+				// fingerprints already rule out identical sets; the second check guards
+				// the pathological coverage-equal-but-not-identical case.
+				if ( self::rules_cover( $rules_j, $rules_i ) && ! self::rules_cover( $rules_i, $rules_j ) ) {
+					$size = count( $rules_j );
+					if ( $size > $best_size ) {
+						$best_size = $size;
+						$best_root = $j;
+					}
+				}
+			}
+			if ( null !== $best_root ) {
+				$absorbed_by[ $i ] = $best_root;
+			}
+		}
+
+		// Roots are the groups that survive as their own gate.
+		$roots    = array_values( array_diff( array_keys( $rule_sets ), array_keys( $absorbed_by ) ) );
+		$overlaps = [];
+		foreach ( $roots as $position => $i ) {
+			foreach ( array_slice( $roots, $position + 1 ) as $j ) {
+				if ( ! empty( $rule_sets[ $i ] ) && ! empty( $rule_sets[ $j ] ) && self::rule_sets_overlap( $rule_sets[ $i ], $rule_sets[ $j ] ) ) {
+					$overlaps[] = [ $i, $j ];
+				}
+			}
+		}
+
+		return [
+			'absorbed_by' => $absorbed_by,
+			'overlaps'    => $overlaps,
+		];
+	}
+
+	/**
+	 * Union of a group's parent product IDs (across all its plan descriptors).
+	 *
+	 * @param array[] $group List of plan descriptors sharing a gate.
+	 *
+	 * @return string[] De-duplicated product IDs.
+	 */
+	private static function group_product_ids( array $group ): array {
+		return array_values( array_unique( array_merge( [], ...array_column( $group, 'product_ids' ) ) ) );
+	}
+
+	/**
+	 * Consolidate fingerprint groups into gate groups by content overlap (NPPD-2064).
+	 *
+	 * Delegates the decision to plan_rule_set_consolidation(), then folds each absorbed
+	 * group's plan descriptors into its covering root group so the gate built from it
+	 * unions their access products and plan names. Overlaps that cannot be safely
+	 * merged are surfaced as loud warnings naming the plans and products at risk.
+	 *
+	 * @param array[] $groups List of fingerprint groups (each a list of plan descriptors).
+	 *
+	 * @return array[] The consolidated gate groups.
+	 */
+	private static function consolidate_plan_groups( array $groups ): array {
+		$rule_sets = array_map(
+			fn( $group ) => $group[0]['ac_rules'],
+			$groups
+		);
+		$plan = self::plan_rule_set_consolidation( $rule_sets );
+
+		$merged = [];
+		foreach ( $groups as $index => $group ) {
+			if ( ! isset( $plan['absorbed_by'][ $index ] ) ) {
+				$merged[ $index ] = $group;
+			}
+		}
+		foreach ( $plan['absorbed_by'] as $index => $root ) {
+			$merged[ $root ] = array_merge( $merged[ $root ], $groups[ $index ] );
+			WP_CLI::line(
+				sprintf(
+					'Consolidating "%s" into "%s": its content is a subset, so their access products are merged to preserve OR access.',
+					implode( ', ', array_column( $groups[ $index ], 'name' ) ),
+					implode( ', ', array_column( $groups[ $root ], 'name' ) )
+				)
+			);
+		}
+
+		foreach ( $plan['overlaps'] as $pair ) {
+			list( $i, $j ) = $pair;
+			WP_CLI::warning(
+				sprintf(
+					'Plans [%s] and [%s] gate overlapping content under non-subset rule sets, so they map to separate gates. A reader entitled via one plan may be denied at the other gate (access products [%s] vs [%s]). Review gate priority and access products manually.',
+					implode( ', ', array_column( $groups[ $i ], 'name' ) ),
+					implode( ', ', array_column( $groups[ $j ], 'name' ) ),
+					implode( ', ', self::group_product_ids( $groups[ $i ] ) ),
+					implode( ', ', self::group_product_ids( $groups[ $j ] ) )
+				)
+			);
+		}
+
+		return array_values( $merged );
 	}
 }
