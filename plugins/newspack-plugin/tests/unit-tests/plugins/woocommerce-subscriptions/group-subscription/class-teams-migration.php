@@ -49,12 +49,10 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 	/**
 	 * Include the WC mocks.
 	 *
-	 * The `wcmti-` invitation statuses are deliberately left unregistered, which
-	 * reproduces the case the reader's PHP-side pending filter defends against: once
-	 * WooCommerce Teams is deactivated its statuses are unregistered, so WP_Query drops
-	 * the `post_status` clause and returns every status. wp_insert_post stores an
-	 * unregistered status verbatim, so the fixtures below keep their raw status and
-	 * exercise that filter.
+	 * The `wcmti-` invitation statuses are deliberately left unregistered so the fixtures
+	 * reproduce the Teams-deactivated case the reader's PHP-side pending filter guards
+	 * (see get_pending_team_invitation_emails()'s docblock): the status clause is dropped
+	 * and every status returns, and wp_insert_post stores the unregistered status verbatim.
 	 */
 	public static function set_up_before_class() {
 		parent::set_up_before_class();
@@ -635,5 +633,51 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 		$this->assertArrayHasKey( $member_email, $result['skipped'], 'An existing member should be skipped, not re-invited.' );
 		$this->assertArrayHasKey( $editor_email, $result['skipped'], 'A non-reader should be skipped, not invited.' );
 		$this->assertCount( 2, $result['skipped'], 'Exactly the two invalid invitees should be skipped.' );
+	}
+
+	/**
+	 * A re-run must not re-email an already-invited reader. The source `wc_team_invitation`
+	 * post is never consumed (it stays pending), and generate_invite() re-sends
+	 * unconditionally, so the reader would be re-emailed on every re-run without the
+	 * already-invited gate. This pins the endorsed recovery re-run as safe.
+	 */
+	public function test_migrate_team_invitations_second_run_sends_nothing() {
+		$owner        = $this->create_reader();
+		$subscription = $this->create_group_subscription( $owner );
+		$team_id      = $this->create_team( $owner, [], $subscription->get_id() );
+		$invitee      = 'rerun-invitee@test.com';
+		$this->create_team_invitation( $team_id, $invitee );
+
+		$first = Teams_Migration::migrate_team_invitations( $subscription, $team_id, true );
+		$this->assertSame( [ $invitee ], $first['sent'], 'The first run should send the invite.' );
+
+		$second = Teams_Migration::migrate_team_invitations( $subscription, $team_id, true );
+		$this->assertSame( [], $second['sent'], 'A re-run must send nothing while the invite is still live.' );
+		$this->assertArrayHasKey( $invitee, $second['skipped'], 'The already-invited reader should be reported as skipped on the re-run.' );
+		$this->assertCount( 1, Group_Subscription_Invite::get_invites( $subscription ), 'The subscription should still hold exactly one invite for the reader.' );
+	}
+
+	/**
+	 * Two teams owned by the same owner resolve to the same group subscription. When both
+	 * carry a pending invitation for the same email, it must be sent once — the second
+	 * team sees the invite the first team wrote and skips it, so no reader is double-emailed
+	 * within a single run.
+	 */
+	public function test_migrate_team_invitations_merged_teams_send_shared_email_once() {
+		$owner        = $this->create_reader();
+		$subscription = $this->create_group_subscription( $owner );
+		$team_a       = $this->create_team( $owner, [], $subscription->get_id() );
+		$team_b       = $this->create_team( $owner, [], $subscription->get_id() );
+		$shared       = 'shared-invitee@test.com';
+		$this->create_team_invitation( $team_a, $shared );
+		$this->create_team_invitation( $team_b, $shared );
+
+		$first  = Teams_Migration::migrate_team_invitations( $subscription, $team_a, true );
+		$second = Teams_Migration::migrate_team_invitations( $subscription, $team_b, true );
+
+		$this->assertSame( [ $shared ], $first['sent'], 'The first team should send the shared invite.' );
+		$this->assertSame( [], $second['sent'], 'The second team must not re-send the shared invite.' );
+		$this->assertArrayHasKey( $shared, $second['skipped'], 'The shared invitee should be skipped on the second team.' );
+		$this->assertCount( 1, Group_Subscription_Invite::get_invites( $subscription ), 'Only one invite should exist for the shared email.' );
 	}
 }

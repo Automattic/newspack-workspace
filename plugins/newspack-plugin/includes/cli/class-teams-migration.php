@@ -465,7 +465,7 @@ class Teams_Migration {
 		WP_CLI::line( '' );
 		WP_CLI::success( sprintf( 'Done. %d team(s) processed: %d used existing subscriptions, %d had new subscriptions created, %d skipped, %d had error(s).', count( $summary ), count( $summary ) - $new_count, $new_count, count( $skipped ), count( $errored_rows ) ) );
 		if ( ! empty( $invitation_rows ) ) {
-			WP_CLI::success( sprintf( '%d pending invitation(s) across processed teams: %d %s, %d skipped, %d listed only.', count( $invitation_rows ), $invites_sent, $send_invitations ? 'sent' : 'would be sent', $invites_skipped, count( $invitation_rows ) - $invites_sent - $invites_skipped ) );
+			WP_CLI::success( sprintf( 'Pending invitations: %d %s, %d skipped, %d listed only.', $invites_sent, $send_invitations ? 'sent' : 'would be sent', $invites_skipped, count( $invitation_rows ) - $invites_sent - $invites_skipped ) );
 		}
 	}
 
@@ -1171,6 +1171,12 @@ class Teams_Migration {
 	 * (already a member, non-reader account, group at its member limit) are recorded as
 	 * skipped with the reason rather than fataling. Exposed for testing.
 	 *
+	 * An email that already holds a live (non-expired) invite on the subscription is
+	 * skipped without re-inviting: generate_invite() replaces and re-sends unconditionally,
+	 * so this gate is what keeps a re-run (the endorsed recovery path) — and two teams
+	 * merged into one subscription sharing a pending invitee — from re-emailing a reader
+	 * who was already invited.
+	 *
 	 * @param \WC_Subscription|null $subscription The resolved group subscription, or null (e.g. a dry-run new subscription).
 	 * @param int                   $team_id      The team post ID.
 	 * @param bool                  $send         Whether to actually create and send invites.
@@ -1178,7 +1184,7 @@ class Teams_Migration {
 	 * @return array {
 	 *     @type string[]              $emails  Pending invitee emails for the team.
 	 *     @type string[]              $sent    Emails an invite was created and sent for.
-	 *     @type array<string, string> $skipped Email => skip reason for invitees generate_invite() rejected.
+	 *     @type array<string, string> $skipped Email => skip reason for invitees that were not sent.
 	 * }
 	 */
 	public static function migrate_team_invitations( $subscription, $team_id, $send ) {
@@ -1193,12 +1199,27 @@ class Teams_Migration {
 			return $result;
 		}
 
+		// Emails that already hold a live invite on the subscription (from a prior run, or
+		// an earlier team merged into the same subscription this run). Keyed lowercase so
+		// case variants of the same mailbox collapse.
+		$already_invited = [];
+		foreach ( Group_Subscription_Invite::get_invites( $subscription, false ) as $invite ) {
+			if ( ! empty( $invite['email'] ) ) {
+				$already_invited[ strtolower( $invite['email'] ) ] = true;
+			}
+		}
+
 		foreach ( $emails as $email ) {
+			if ( isset( $already_invited[ strtolower( $email ) ] ) ) {
+				$result['skipped'][ $email ] = __( 'Already invited.', 'newspack-plugin' );
+				continue;
+			}
 			$invite = Group_Subscription_Invite::generate_invite( $subscription, $email );
 			if ( \is_wp_error( $invite ) ) {
 				$result['skipped'][ $email ] = $invite->get_error_message();
 			} else {
-				$result['sent'][] = $email;
+				$result['sent'][]                        = $email;
+				$already_invited[ strtolower( $email ) ] = true;
 			}
 		}
 
