@@ -1,5 +1,8 @@
 {
 	"extends": "newspack-scripts/config/tsconfig.json",
+	"compilerOptions": {
+		"allowJs": false
+	},
 	"include": [
 		"newspack-theme/js/src",
 		"node_modules/newspack-scripts/types"

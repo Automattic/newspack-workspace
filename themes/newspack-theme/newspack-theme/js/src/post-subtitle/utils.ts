@@ -14,7 +14,7 @@ const SUBTITLE_RETRY_INTERVAL_MS = 100;
  * Mirrors the $subtitle_allowed_tags allowlist in newspack_post_subtitle() (template-tags.php).
  * TODO: Keep in sync with $subtitle_allowed_tags in inc/template-tags.php.
  */
-const SUBTITLE_ALLOWED_TAGS = {
+const SUBTITLE_ALLOWED_TAGS: Record< string, string[] > = {
 	b: [],
 	strong: [],
 	i: [],
@@ -38,13 +38,14 @@ const URL_ATTRS = [ 'href' ];
  * @param {string} html Raw subtitle string, possibly containing HTML.
  * @return {string} Sanitized HTML string.
  */
-const sanitizeSubtitle = html => {
+const sanitizeSubtitle = ( html: string ): string => {
 	const parsed = new DOMParser().parseFromString( html, 'text/html' );
 
-	const walk = node => {
+	const walk = ( node: Node ) => {
 		let i = 0;
 		while ( i < node.childNodes.length ) {
-			const child = node.childNodes[ i ];
+			// Narrowed to Element below the nodeType check; DOM lib types don't refine on nodeType comparisons.
+			const child = node.childNodes[ i ] as Element;
 			if ( child.nodeType !== Node.ELEMENT_NODE ) {
 				i++;
 				continue;
@@ -64,7 +65,7 @@ const sanitizeSubtitle = html => {
 					if ( ! child.hasAttribute( urlAttr ) ) {
 						return;
 					}
-					const value = child.getAttribute( urlAttr ).trim();
+					const value = child.getAttribute( urlAttr )!.trim();
 					let safe = false;
 					try {
 						const parsedUrl = new URL( value, 'https://x' );
@@ -86,8 +87,13 @@ const sanitizeSubtitle = html => {
 	return parsed.body.innerHTML;
 };
 
-/** Tracks the single in-flight retry timeout to prevent overlapping chains. */
-let subtitleRetryTimeout = null;
+/**
+ * Tracks the single in-flight retry timeout to prevent overlapping chains.
+ * Untyped `null` doesn't satisfy `clearTimeout`'s `number | undefined` param, so
+ * this uses `undefined` as the "no timer" sentinel instead (behaviorally identical --
+ * nothing else in this module distinguishes null from undefined here).
+ */
+let subtitleRetryTimeout: ReturnType< typeof setTimeout > | undefined;
 
 /**
  * Appends subtitle to DOM, below the Title in the Editor.
@@ -95,18 +101,18 @@ let subtitleRetryTimeout = null;
  * @param {string} subtitle   Subtitle text
  * @param {number} retryCount Internal retry counter
  */
-export const appendSubtitleToTitleDOMElement = ( subtitle, retryCount = 0 ) => {
+export const appendSubtitleToTitleDOMElement = ( subtitle: string, retryCount = 0 ): void => {
 	// In WordPress 7.0+ the editor is always iframed; use the canvas document.
 	// TODO: Remove `document` fallback once WordPress 7.0 is released and the non-iframed editor is no longer supported.
 	const editorCanvas = document.querySelector( 'iframe[name="editor-canvas"]' );
-	const doc = ( editorCanvas && editorCanvas.contentDocument ) || document;
+	const doc = ( editorCanvas && ( editorCanvas as HTMLIFrameElement ).contentDocument ) || document;
 	const titleEl = doc.querySelector( '.edit-post-visual-editor__post-title-wrapper' );
 
 	clearTimeout( subtitleRetryTimeout );
 
 	if ( titleEl && typeof subtitle === 'string' ) {
 		let subtitleEl = doc.getElementById( SUBTITLE_ID );
-		const titleParent = titleEl.parentNode;
+		const titleParent = titleEl.parentNode as HTMLElement;
 		if ( ! subtitleEl ) {
 			subtitleEl = doc.createElement( 'div' );
 			subtitleEl.id = SUBTITLE_ID;
@@ -118,6 +124,12 @@ export const appendSubtitleToTitleDOMElement = ( subtitle, retryCount = 0 ) => {
 	}
 };
 
-export const connectWithSelect = withSelect( select => ( {
-	subtitle: select( 'core/editor' ).getEditedPostAttribute( 'meta' )[ META_FIELD_NAME ],
-} ) );
+export const connectWithSelect = withSelect( select => {
+	// The editor selectors are untyped for string-keyed stores; assert at the store boundary.
+	const { getEditedPostAttribute } = select( 'core/editor' ) as {
+		getEditedPostAttribute: ( attribute: string ) => Record< string, unknown >;
+	};
+	return {
+		subtitle: getEditedPostAttribute( 'meta' )[ META_FIELD_NAME ] as string,
+	};
+} );

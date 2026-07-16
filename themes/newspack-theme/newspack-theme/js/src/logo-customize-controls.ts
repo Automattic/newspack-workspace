@@ -7,7 +7,7 @@
  *
  * Contains handlers to change Customizer controls.
  */
-( function ( $ ) {
+( function ( $: NewspackThemeJQueryStatic ) {
 	'use strict';
 
 	const api = wp.customize;

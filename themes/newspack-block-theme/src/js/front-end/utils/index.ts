@@ -10,7 +10,7 @@
  * @param {Function} callback A function to execute after the DOM is ready.
  * @return {void}
  */
-export const domReady = callback => {
+export const domReady = ( callback: () => void ): void => {
 	if ( typeof document === 'undefined' ) {
 		return;
 	}

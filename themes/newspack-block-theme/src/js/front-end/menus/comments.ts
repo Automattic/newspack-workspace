@@ -13,7 +13,7 @@ import { ANIMATION_DURATION } from './consts';
  * @param {string}      finalUrl The URL of the fetched page (after any redirects).
  * @param {HTMLElement} contents The .comments-menu__contents panel element.
  */
-const swapCommentsBlock = ( doc, finalUrl, contents ) => {
+const swapCommentsBlock = ( doc: Document, finalUrl: string, contents: HTMLElement ): boolean => {
 	const commentsBlock = contents.querySelector( '.wp-block-comments' );
 	if ( ! commentsBlock ) {
 		return false;
@@ -56,8 +56,8 @@ const swapCommentsBlock = ( doc, finalUrl, contents ) => {
  * @param {string}      url      The URL to fetch (comment pagination link).
  * @param {HTMLElement} contents The .comments-menu__contents panel element.
  */
-const loadCommentPage = ( url, contents ) => {
-	const commentsBlock = contents.querySelector( '.wp-block-comments' );
+const loadCommentPage = ( url: string, contents: HTMLElement ): void => {
+	const commentsBlock = contents.querySelector< HTMLElement >( '.wp-block-comments' );
 	if ( ! commentsBlock ) {
 		return;
 	}
@@ -92,8 +92,8 @@ const loadCommentPage = ( url, contents ) => {
  * @param {HTMLFormElement} form    The comment form element.
  * @param {string}          message The error message to display.
  */
-const showCommentFormError = ( form, message ) => {
-	let noticeEl = form.querySelector( '.newspack-ui__notice--error' );
+const showCommentFormError = ( form: HTMLFormElement, message: string ): void => {
+	let noticeEl = form.querySelector< HTMLElement >( '.newspack-ui__notice--error' );
 	if ( ! noticeEl ) {
 		const wrapper = document.createElement( 'div' );
 		wrapper.className = 'newspack-ui';
@@ -112,8 +112,8 @@ const showCommentFormError = ( form, message ) => {
  * @param {HTMLFormElement} form     The comment form element.
  * @param {HTMLElement}     contents The .comments-menu__contents panel element.
  */
-const submitCommentForm = ( form, contents ) => {
-	const commentsBlock = contents.querySelector( '.wp-block-comments' );
+const submitCommentForm = ( form: HTMLFormElement, contents: HTMLElement ): void => {
+	const commentsBlock = contents.querySelector< HTMLElement >( '.wp-block-comments' );
 	if ( ! commentsBlock ) {
 		return;
 	}
@@ -165,7 +165,7 @@ const submitCommentForm = ( form, contents ) => {
 };
 
 domReady( function () {
-	const contents = document.querySelector( '.comments-menu__contents' );
+	const contents = document.querySelector< HTMLElement >( '.comments-menu__contents' );
 
 	createMenu( {
 		menuType: 'comments-menu',
@@ -184,7 +184,7 @@ domReady( function () {
 	// Intercept pagination clicks inside the comment panel and load the new page inline rather than reloading page.
 	if ( contents ) {
 		contents.addEventListener( 'click', event => {
-			const link = event.target.closest( '.wp-block-comments-pagination a' );
+			const link = ( event.target as HTMLElement ).closest< HTMLAnchorElement >( '.wp-block-comments-pagination a' );
 			if ( ! link ) {
 				return;
 			}
@@ -198,7 +198,7 @@ domReady( function () {
 
 		// Intercept comment form submission to keep the panel open after posting.
 		contents.addEventListener( 'submit', event => {
-			const form = event.target.closest( '#commentform' );
+			const form = ( event.target as HTMLElement ).closest< HTMLFormElement >( '#commentform' );
 			if ( ! form ) {
 				return;
 			}
@@ -218,7 +218,7 @@ domReady( function () {
 
 	if ( isCommentPagination || commentHash ) {
 		// The first .comments-menu__toggle in the DOM is the outer "Comments" open button.
-		const toggle = document.querySelector( '.comments-menu__toggle' );
+		const toggle = document.querySelector< HTMLElement >( '.comments-menu__toggle' );
 		if ( toggle ) {
 			toggle.click();
 

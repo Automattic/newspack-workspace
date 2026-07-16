@@ -3,11 +3,25 @@
 import { addFilter } from '@wordpress/hooks';
 import { RadioControl } from '@wordpress/components';
 import { withDispatch, withSelect, select } from '@wordpress/data';
-import { Component, Fragment } from '@wordpress/element';
+import { Component, ComponentType, Fragment } from '@wordpress/element';
 import { compose } from '@wordpress/compose';
 import { __ } from '@wordpress/i18n';
 
-class RadioCustom extends Component {
+interface PostMeta {
+	newspack_featured_image_position?: string;
+	[ key: string ]: unknown;
+}
+
+interface RadioCustomProps {
+	meta: PostMeta;
+	updateFeaturedImagePosition: ( value: string, meta: PostMeta ) => void;
+}
+
+interface RadioCustomState {
+	value?: string;
+}
+
+class RadioCustom extends Component< RadioCustomProps, RadioCustomState > {
 	render() {
 		const { meta, updateFeaturedImagePosition } = this.props;
 
@@ -37,6 +51,7 @@ class RadioCustom extends Component {
 					{ label: __( 'Hidden', 'newspack-theme' ), value: 'hidden' },
 				] }
 				onChange={ value => {
+					// This sets `value` in component state, but nothing ever reads `this.state.value` -- pre-existing dead state, not fixed here.
 					this.setState( { value } );
 					updateFeaturedImagePosition( value, meta );
 				} }
@@ -45,9 +60,13 @@ class RadioCustom extends Component {
 	}
 }
 
-const ComposedRadio = compose( [
+const ComposedRadio = compose(
 	withSelect( _select => {
-		const { getCurrentPostAttribute, getEditedPostAttribute } = _select( 'core/editor' );
+		// The editor selectors are untyped for string-keyed stores; assert at the store boundary.
+		const { getCurrentPostAttribute, getEditedPostAttribute } = _select( 'core/editor' ) as {
+			getCurrentPostAttribute: ( attribute: string ) => PostMeta | undefined;
+			getEditedPostAttribute: ( attribute: string ) => PostMeta | undefined;
+		};
 		return {
 			meta: {
 				...getCurrentPostAttribute( 'meta' ),
@@ -55,21 +74,24 @@ const ComposedRadio = compose( [
 			},
 		};
 	} ),
-	withDispatch( dispatch => ( {
-		updateFeaturedImagePosition( value, meta ) {
-			meta = {
-				...meta,
-				newspack_featured_image_position: value,
-			};
-			dispatch( 'core/editor' ).editPost( { meta } );
-		},
-	} ) ),
-] )( RadioCustom );
+	withDispatch(
+		dispatch =>
+			( {
+				updateFeaturedImagePosition( value: string, meta: PostMeta ) {
+					meta = {
+						...meta,
+						newspack_featured_image_position: value,
+					};
+					( dispatch( 'core/editor' ) as { editPost: ( edits: Record< string, unknown > ) => void } ).editPost( { meta } );
+				},
+			} ) as Record< string, ( ...args: unknown[] ) => unknown >
+	)
+)( RadioCustom ) as ComponentType;
 
-const wrapPostFeaturedImage = OriginalComponent => {
+const wrapPostFeaturedImage = ( OriginalComponent: ComponentType ) => {
 	// eslint-disable-next-line react/display-name
-	return props => {
-		const post_type = select( 'core/editor' ).getCurrentPostType();
+	return ( props: Record< string, unknown > ) => {
+		const post_type = ( select( 'core/editor' ) as Record< string, ( ...args: unknown[] ) => unknown > ).getCurrentPostType() as string;
 
 		// eslint-disable-next-line no-undef
 		if ( ! newspack_theme_featured_image_post_types.includes( post_type ) ) {

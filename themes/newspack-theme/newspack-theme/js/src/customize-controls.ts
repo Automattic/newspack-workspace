@@ -8,7 +8,7 @@
  * Contains handlers to make Theme Customizer preview reload changes asynchronously.
  */
 
-( function ( $ ) {
+( function ( $: NewspackThemeJQueryStatic ) {
 	wp.customize.bind( 'ready', function () {
 		// Only show the color hue control when there's a custom primary color.
 		wp.customize( 'theme_colors', function ( setting ) {
@@ -255,7 +255,7 @@
 
 		// Controls to show/hide mobile CTA options
 		wp.customize( 'show_header_cta', function ( setting ) {
-			const toggleVisibility = function ( control ) {
+			const toggleVisibility = function ( control: NewspackCustomizeControl ) {
 				const visibility = function () {
 					if ( true === setting.get() ) {
 						control.container.slideDown( 180 );

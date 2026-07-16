@@ -8,11 +8,11 @@
 
 ( function () {
 	// Shared variables
-	const headerContain = document.getElementById( 'masthead' ),
+	const headerContain = document.getElementById( 'masthead' )!,
 		searchToggle = document.getElementById( 'search-toggle' );
 
 	if ( null !== searchToggle ) {
-		const headerSearch = document.getElementById( 'header-search' ),
+		const headerSearch = document.getElementById( 'header-search' )!,
 			headerSearchInput = headerSearch.getElementsByTagName( 'input' )[ 0 ],
 			searchToggleTextContain = searchToggle.getElementsByTagName( 'span' )[ 0 ],
 			searchToggleTextDefault = searchToggleTextContain.innerText;
@@ -43,16 +43,16 @@
 	// Menu toggle variables.
 	const mobileToggle = document.getElementsByClassName( 'mobile-menu-toggle' ),
 		body = document.body,
-		mobileSidebar = document.getElementById( 'mobile-sidebar-fallback' ),
+		mobileSidebar = document.getElementById( 'mobile-sidebar-fallback' )!,
 		desktopToggle = document.getElementsByClassName( 'desktop-menu-toggle' ),
-		desktopSidebar = document.getElementById( 'desktop-sidebar-fallback' ),
+		desktopSidebar = document.getElementById( 'desktop-sidebar-fallback' )!,
 		subpageToggle = document.getElementsByClassName( 'subpage-toggle' );
 
 	/**
 	 * @description Creates semi-transparent overlay behind menus.
 	 * @param {string} maskId The ID to add to the div.
 	 */
-	function createOverlay( maskId ) {
+	function createOverlay( maskId: string ) {
 		const mask = document.createElement( 'div' );
 		mask.setAttribute( 'class', 'overlay-mask' );
 		mask.setAttribute( 'id', maskId );
@@ -63,18 +63,18 @@
 	 * @description Removes semi-transparent overlay behind menus.
 	 * @param {string} maskId The ID to use for the overlay.
 	 */
-	function removeOverlay( maskId ) {
-		const mask = document.getElementById( maskId );
-		mask.parentNode.removeChild( mask );
+	function removeOverlay( maskId: string ) {
+		const mask = document.getElementById( maskId )!;
+		( mask.parentNode as HTMLElement ).removeChild( mask );
 	}
 
 	/**
 	 * @description Opens specifed slide-out menu.
-	 * @param {string} menuClass  The class to add to the body to toggle menu visibility.
-	 * @param {string} openButton The button used to open the menu.
-	 * @param {string} maskId     The ID to use for the overlay.
+	 * @param {string}      menuClass  The class to add to the body to toggle menu visibility.
+	 * @param {HTMLElement} openButton The button used to open the menu.
+	 * @param {string}      maskId     The ID to use for the overlay.
 	 */
-	function openMenu( menuClass, openButton, maskId ) {
+	function openMenu( menuClass: string, openButton: HTMLElement, maskId: string ) {
 		body.classList.add( menuClass );
 		openButton.focus();
 		createOverlay( maskId );
@@ -82,11 +82,11 @@
 
 	/**
 	 * @description Closes specifed slide-out menu.
-	 * @param {string} menuClass  The class to remove from the body to toggle menu visibility.
-	 * @param {string} openButton The button used to open the menu.
-	 * @param {string} maskId     The ID to use for the overlay.
+	 * @param {string}      menuClass  The class to remove from the body to toggle menu visibility.
+	 * @param {HTMLElement} openButton The button used to open the menu.
+	 * @param {string}      maskId     The ID to use for the overlay.
 	 */
-	function closeMenu( menuClass, openButton, maskId ) {
+	function closeMenu( menuClass: string, openButton: HTMLElement, maskId: string ) {
 		body.classList.remove( menuClass );
 		openButton.focus();
 		removeOverlay( maskId );
@@ -94,8 +94,8 @@
 
 	// Mobile menu fallback.
 	for ( let i = 0; i < mobileToggle.length; i++ ) {
-		const mobileOpenButton = headerContain.querySelector( '.mobile-menu-toggle' ),
-			mobileCloseButton = mobileSidebar.querySelector( '.mobile-menu-toggle' );
+		const mobileOpenButton = headerContain.querySelector< HTMLElement >( '.mobile-menu-toggle' )!,
+			mobileCloseButton = mobileSidebar.querySelector< HTMLElement >( '.mobile-menu-toggle' )!;
 
 		mobileToggle[ i ].addEventListener(
 			'click',
@@ -112,8 +112,8 @@
 
 	// Desktop menu (AKA slide-out sidebar) fallback.
 	for ( let i = 0; i < desktopToggle.length; i++ ) {
-		const desktopOpenButton = headerContain.querySelector( '.desktop-menu-toggle' ),
-			desktopCloseButton = desktopSidebar.querySelector( '.desktop-menu-toggle' );
+		const desktopOpenButton = headerContain.querySelector< HTMLElement >( '.desktop-menu-toggle' )!,
+			desktopCloseButton = desktopSidebar.querySelector< HTMLElement >( '.desktop-menu-toggle' )!;
 
 		desktopToggle[ i ].addEventListener(
 			'click',
@@ -130,9 +130,9 @@
 
 	// 'Subpage' menu fallback.
 	if ( 0 < subpageToggle.length && headerContain ) {
-		const subpageSidebar = document.getElementById( 'subpage-sidebar-fallback' ),
-			subpageOpenButton = headerContain.querySelector( '.subpage-toggle' ),
-			subpageCloseButton = subpageSidebar.querySelector( '.subpage-toggle' );
+		const subpageSidebar = document.getElementById( 'subpage-sidebar-fallback' )!,
+			subpageOpenButton = headerContain.querySelector< HTMLElement >( '.subpage-toggle' )!,
+			subpageCloseButton = subpageSidebar.querySelector< HTMLElement >( '.subpage-toggle' )!;
 
 		for ( let i = 0; i < subpageToggle.length; i++ ) {
 			subpageToggle[ i ].addEventListener(
@@ -151,8 +151,9 @@
 
 	// Add listener to the menu overlays, so they can be closed on click.
 	document.addEventListener( 'click', function ( e ) {
-		if ( e.target && e.target.className === 'overlay-mask' ) {
-			const maskId = e.target.id;
+		const target = e.target as HTMLElement | null;
+		if ( target && target.className === 'overlay-mask' ) {
+			const maskId = target.id;
 			const menu = maskId.split( '-' );
 
 			body.classList.remove( menu[ 1 ] + '-menu-opened' );
@@ -165,7 +166,7 @@
 		const dropdownToggle = headerContain.getElementsByClassName( 'submenu-expand' );
 		if ( 0 < dropdownToggle.length ) {
 			for ( let i = 0; i < dropdownToggle.length; i++ ) {
-				const dropdownToggleLabel = dropdownToggle[ i ].querySelector( 'span.screen-reader-text' );
+				const dropdownToggleLabel = dropdownToggle[ i ].querySelector< HTMLElement >( 'span.screen-reader-text' )!;
 
 				dropdownToggle[ i ].addEventListener(
 					'click',
@@ -192,7 +193,7 @@
 		body.classList.contains( 'h-sub' ) &&
 		( body.classList.contains( 'single-featured-image-behind' ) || body.classList.contains( 'single-featured-image-beside' ) )
 	) {
-		let scrollTimer,
+		let scrollTimer: ReturnType< typeof setTimeout > | null,
 			lastScrollFireTime = 0;
 
 		window.onscroll = function () {
@@ -231,7 +232,7 @@
 
 	// Make sure comments exist before going any further.
 	if ( null !== commentsToggle ) {
-		const commentsWrapper = document.getElementById( 'comments-wrapper' ),
+		const commentsWrapper = document.getElementById( 'comments-wrapper' )!,
 			commentsToggleTextContain = commentsToggle.getElementsByTagName( 'span' )[ 0 ];
 
 		commentsToggle.addEventListener(
@@ -254,7 +255,7 @@
 
 	// Make sure checkout details exist before going any further.
 	if ( null !== orderDetailToggle ) {
-		const orderDetailWrapper = document.getElementById( 'order-details-wrapper' ),
+		const orderDetailWrapper = document.getElementById( 'order-details-wrapper' )!,
 			orderDetailToggleTextContain = orderDetailToggle.getElementsByTagName( 'span' )[ 0 ],
 			hideOrderDetails = newspackScreenReaderText.hide_order_details,
 			showOrderDetails = newspackScreenReaderText.show_order_details;

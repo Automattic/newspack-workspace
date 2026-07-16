@@ -8,7 +8,7 @@
  * Contains handlers to make Theme Customizer preview reload changes asynchronously.
  */
 
-( function ( $ ) {
+( function ( $: NewspackThemeJQueryStatic ) {
 	// Hide site tagline
 	wp.customize( 'header_display_tagline', function ( value ) {
 		value.bind( function ( to ) {
