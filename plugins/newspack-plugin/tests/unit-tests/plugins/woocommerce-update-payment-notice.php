@@ -550,6 +550,54 @@ class Newspack_Test_WooCommerce_Update_Payment_Notice extends WP_UnitTestCase {
 	}
 
 	/**
+	 * When a product grants several plans and only some are still active, the
+	 * reader must keep seeing the notice: paying is still required to restore
+	 * the uncovered plan.
+	 */
+	public function test_no_equivalent_access_when_only_some_plans_are_covered() {
+		$user_id = self::factory()->user->create();
+		newspack_register_mock_membership_plan( 810, [ 4242 ] );
+		newspack_register_mock_membership_plan( 811, [ 4242 ] );
+		// Plan 810 is still active; plan 811 is not covered by either layer.
+		global $wc_memberships_active_memberships;
+		$wc_memberships_active_memberships[ $user_id ] = [ 810 ];
+		$product                                       = wc_create_mock_product(
+			[
+				'id'   => 4242,
+				'name' => 'Newsroom Pro',
+			]
+		);
+		$this->assertFalse( \Newspack\Memberships::user_has_equivalent_active_access( $product, $user_id ) );
+	}
+
+	/**
+	 * When every plan a product grants is still covered -- here one by an active
+	 * membership and the other by a separate active subscription -- access is
+	 * equivalent and the notice is suppressed.
+	 */
+	public function test_equivalent_access_when_all_plans_are_covered() {
+		$user_id = self::factory()->user->create();
+		newspack_register_mock_membership_plan( 812, [ 4242 ] );
+		newspack_register_mock_membership_plan( 813, [ 4242, 99603 ] );
+		global $wc_memberships_active_memberships;
+		$wc_memberships_active_memberships[ $user_id ] = [ 812 ];
+		wcs_create_subscription(
+			[
+				'customer_id' => $user_id,
+				'status'      => 'active',
+				'products'    => [ 99603 ],
+			]
+		);
+		$product = wc_create_mock_product(
+			[
+				'id'   => 4242,
+				'name' => 'Newsroom Pro',
+			]
+		);
+		$this->assertTrue( \Newspack\Memberships::user_has_equivalent_active_access( $product, $user_id ) );
+	}
+
+	/**
 	 * A pending-cancel subscription (still has access until period end) counts as equivalent access.
 	 */
 	public function test_equivalent_access_via_pending_cancel_subscription() {

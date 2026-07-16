@@ -894,6 +894,13 @@ class Memberships {
 			return false;
 		}
 
+		// Access is only equivalent when EVERY plan the product grants is still
+		// covered. A product can grant several plans; a reader who kept Plan A
+		// but lost Plan B still has to pay to restore Plan B, so a single
+		// surviving plan must not suppress the notice. Both layers below
+		// contribute coverage, and any plan left uncovered is decisive.
+		$covered_plan_ids = [];
+
 		// Layer 3 — currently-active membership access. Enumerate the user's
 		// active memberships so we can skip one tied to the subscription under
 		// evaluation: a membership kept active by the same on-hold/pending
@@ -902,7 +909,8 @@ class Memberships {
 		// Layer 2's active-status self-match proofing. NPPM-2926.
 		if ( function_exists( 'wc_memberships_get_user_active_memberships' ) ) {
 			foreach ( wc_memberships_get_user_active_memberships( $user_id ) as $membership ) {
-				if ( ! in_array( (int) $membership->get_plan_id(), $plan_ids, true ) ) {
+				$plan_id = (int) $membership->get_plan_id();
+				if ( ! in_array( $plan_id, $plan_ids, true ) ) {
 					continue;
 				}
 				// Only subscription-tied memberships expose get_subscription_id();
@@ -912,7 +920,7 @@ class Memberships {
 					&& (int) $membership->get_subscription_id() === (int) $exclude_subscription_id ) {
 					continue;
 				}
-				return true;
+				$covered_plan_ids[] = $plan_id;
 			}
 		}
 
@@ -920,13 +928,19 @@ class Memberships {
 		// get_user_subscription_for_membership_plan() resolves through
 		// WooCommerce_Connection::get_active_subscriptions_for_user(), which
 		// filters to ACTIVE_SUBSCRIPTION_STATUSES — so the on-hold/pending
-		// subscription under evaluation can never self-match here.
+		// subscription under evaluation can never self-match here. Plans already
+		// covered by Layer 3 are skipped, and the first plan neither layer covers
+		// settles the answer — so this stays at one lookup in the common
+		// single-plan case rather than one per plan.
 		foreach ( $plan_ids as $plan_id ) {
-			if ( self::get_user_subscription_for_membership_plan( $user_id, $plan_id ) ) {
-				return true;
+			if ( in_array( $plan_id, $covered_plan_ids, true ) ) {
+				continue;
+			}
+			if ( ! self::get_user_subscription_for_membership_plan( $user_id, $plan_id ) ) {
+				return false;
 			}
 		}
-		return false;
+		return true;
 	}
 
 	/**
