@@ -789,6 +789,65 @@ class Membership_Gates_Migration {
 	}
 
 	/**
+	 * Expand a rule set's hierarchical-taxonomy term values to include descendant terms
+	 * (NPPD-2066).
+	 *
+	 * A content rule targeting a parent term gates every post assigned only to that
+	 * term's descendants: WooCommerce Memberships cascades a taxonomy restriction down
+	 * the term tree (WC_Memberships_Rules matches a post via get_term_children()), and
+	 * Access Control mirrors it at evaluation time
+	 * (Content_Restriction_Control::expand_hierarchical_terms()). The consolidation
+	 * decision compares flat value lists, so without expansion a plan restricting a child
+	 * category and a plan restricting its parent share no value: they neither consolidate
+	 * (neither is a value-subset of the other) nor trip the overlap warning (their term
+	 * lists do not intersect). The split is silent, unlike every other overlap shape.
+	 *
+	 * Expanding each hierarchical-taxonomy rule value to its descendants before the pure
+	 * subset/overlap helpers run makes parent ⊃ child a visible coverage relation: the
+	 * parent rule set covers the child's, so the child group is absorbed; a hierarchy
+	 * overlap that is not a clean subset trips the loud warning instead of vanishing.
+	 *
+	 * The expanded values feed the consolidation *decision* only. The gate that survives
+	 * still carries the plan's original (unexpanded) parent-term rule, which enforcement
+	 * re-expands at read time — so a child term added after the migration stays covered.
+	 *
+	 * Post-type, specific-post, and newsletter rules — and non-hierarchical taxonomies
+	 * such as tags — have no term tree and pass through unchanged.
+	 *
+	 * This helper is the hierarchy-aware seam of the otherwise WooCommerce-free
+	 * consolidation: it reads the term tree (get_taxonomy / get_term_children), keeping
+	 * plan_rule_set_consolidation() and its subset/overlap helpers pure.
+	 *
+	 * @param array[] $ac_rules AC-format content rules.
+	 *
+	 * @return array[] The rule set with hierarchical-taxonomy values expanded to descendants.
+	 */
+	private static function expand_rule_set_hierarchy( array $ac_rules ): array {
+		foreach ( $ac_rules as &$ac_rule ) {
+			// Only a hierarchical taxonomy has a term tree to walk. get_taxonomy()
+			// returns false for the non-taxonomy rule slugs this migration emits
+			// ('post_types', 'specific_posts') and for any unregistered slug, and the
+			// hierarchical check skips flat taxonomies such as tags — so those rules pass
+			// through unchanged.
+			$taxonomy = \get_taxonomy( $ac_rule['slug'] );
+			if ( ! $taxonomy || ! $taxonomy->hierarchical ) {
+				continue;
+			}
+			$expanded = array_map( 'strval', $ac_rule['value'] );
+			foreach ( $ac_rule['value'] as $term_id ) {
+				// get_term_children() returns the full recursive descendant set (an empty
+				// array for a leaf term). It only errors on a non-existent taxonomy, which
+				// the truthy get_taxonomy() guard above has already ruled out.
+				$descendants = \get_term_children( (int) $term_id, $ac_rule['slug'] );
+				$expanded    = array_merge( $expanded, array_map( 'strval', $descendants ) );
+			}
+			$ac_rule['value'] = array_values( array_unique( $expanded ) );
+		}
+		unset( $ac_rule );
+		return $ac_rules;
+	}
+
+	/**
 	 * Plan how fingerprint groups consolidate by content overlap (NPPD-2064).
 	 *
 	 * A group whose content is a subset of another's is absorbed into the largest
@@ -834,10 +893,19 @@ class Membership_Gates_Migration {
 				if ( $group_has_purchase[ $i ] !== $group_has_purchase[ $j ] ) {
 					continue;
 				}
-				// $j strictly covers $i: it covers $i but $i does not cover $j. Distinct
-				// fingerprints already rule out identical sets; the second check guards
-				// the pathological coverage-equal-but-not-identical case.
-				if ( self::rules_cover( $rules_j, $rules_i ) && ! self::rules_cover( $rules_i, $rules_j ) ) {
+				// $j absorbs $i when it covers $i and is not the narrower set. Strict
+				// coverage ($j covers $i, $i does not cover $j) makes $j the superset root.
+				// Equal coverage (mutual) is reachable once expand_rule_set_hierarchy()
+				// canonicalises distinct fingerprints to the same term closure — a parent
+				// rule and a redundant parent-plus-child rule expand to identical values.
+				// Distinct flat fingerprints no longer imply distinct coverage, so the
+				// equal case must still collapse: fold it into the lowest-index member of
+				// the equivalence class (the $j < $i tie-break is asymmetric, so the two
+				// never absorb each other), keeping the pair on one gate instead of
+				// splitting them with a spurious overlap warning.
+				$j_covers_i = self::rules_cover( $rules_j, $rules_i );
+				$i_covers_j = self::rules_cover( $rules_i, $rules_j );
+				if ( $j_covers_i && ( ! $i_covers_j || $j < $i ) ) {
 					$size = count( $rules_j );
 					if ( $size > $best_size ) {
 						$best_size = $size;
@@ -923,7 +991,7 @@ class Membership_Gates_Migration {
 	 */
 	private static function consolidate_plan_groups( array $groups ): array {
 		$rule_sets          = array_map(
-			fn( $group ) => $group[0]['ac_rules'],
+			fn( $group ) => self::expand_rule_set_hierarchy( $group[0]['ac_rules'] ),
 			$groups
 		);
 		$group_has_purchase = array_map(

@@ -624,6 +624,208 @@ class Test_Membership_Gates_Migration extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * NPPD-2066 hierarchy expansion: a rule restricting a parent category term expands
+	 * to include its descendant terms, because both WooCommerce Memberships and Access
+	 * Control cascade a parent-term restriction to posts assigned only to a child term.
+	 * The expanded value is what the consolidation decision compares, so parent ⊃ child
+	 * becomes a visible coverage relation instead of two flat, non-overlapping values.
+	 */
+	public function test_expand_rule_set_hierarchy_expands_parent_category_to_descendants() {
+		$parent_term_id = self::factory()->category->create();
+		$child_term_id  = self::factory()->category->create( [ 'parent' => $parent_term_id ] );
+
+		$parent_rule_set = [
+			[
+				'slug'  => 'category',
+				'value' => [ (string) $parent_term_id ],
+			],
+		];
+
+		$expanded = $this->invoke_private_static( 'expand_rule_set_hierarchy', [ $parent_rule_set ] );
+
+		$this->assertSame( 'category', $expanded[0]['slug'] );
+		$this->assertEqualSets(
+			[ (string) $parent_term_id, (string) $child_term_id ],
+			$expanded[0]['value'],
+			'The parent-category rule value gains its child term (values stay stringified).'
+		);
+	}
+
+	/**
+	 * NPPD-2066: expansion only touches hierarchical taxonomies. Tags (non-hierarchical)
+	 * and post_types / specific_posts rules have no term tree and pass through untouched,
+	 * so the expansion never fabricates coverage between unrelated rule sets.
+	 */
+	public function test_expand_rule_set_hierarchy_leaves_non_hierarchical_and_non_taxonomy_rules_unchanged() {
+		$tag_term_id = self::factory()->tag->create();
+
+		$rule_set = [
+			[
+				'slug'  => 'post_tag',
+				'value' => [ (string) $tag_term_id ],
+			],
+			[
+				'slug'  => 'post_types',
+				'value' => [ 'post' ],
+			],
+			[
+				'slug'  => 'specific_posts',
+				'value' => [ '42' ],
+			],
+		];
+
+		$this->assertSame(
+			$rule_set,
+			$this->invoke_private_static( 'expand_rule_set_hierarchy', [ $rule_set ] ),
+			'Non-hierarchical taxonomy, post-type, and specific-post rules are returned verbatim.'
+		);
+	}
+
+	/**
+	 * NPPD-2066 end-to-end decision: a plan restricting a parent category and a plan
+	 * restricting its child are split by fingerprint grouping (distinct flat values). Once
+	 * their rule values are hierarchy-expanded — exactly what consolidate_plan_groups()
+	 * does before delegating — the parent set covers the child set, so the child group is
+	 * absorbed into the parent and no unresolved overlap is left. Without expansion the
+	 * split is silent: neither absorbed nor flagged.
+	 */
+	public function test_hierarchy_nested_plans_consolidate_after_expansion() {
+		$parent_term_id = self::factory()->category->create();
+		$child_term_id  = self::factory()->category->create( [ 'parent' => $parent_term_id ] );
+
+		$child_group_rules  = [
+			[
+				'slug'  => 'category',
+				'value' => [ (string) $child_term_id ],
+			],
+		];
+		$parent_group_rules = [
+			[
+				'slug'  => 'category',
+				'value' => [ (string) $parent_term_id ],
+			],
+		];
+
+		$expanded_rule_sets = array_map(
+			fn( $rules ) => $this->invoke_private_static( 'expand_rule_set_hierarchy', [ $rules ] ),
+			[ $child_group_rules, $parent_group_rules ]
+		);
+
+		$plan = $this->invoke_private_static(
+			'plan_rule_set_consolidation',
+			[ $expanded_rule_sets, [ true, true ] ]
+		);
+
+		$this->assertSame(
+			[ 0 => 1 ],
+			$plan['absorbed_by'],
+			'The child-category group (index 0) is absorbed into the parent-category group (index 1).'
+		);
+		$this->assertSame( [], $plan['overlaps'], 'A clean hierarchy subset leaves no unresolved-overlap warning.' );
+	}
+
+	/**
+	 * NPPD-2066 equal-coverage regression guard: hierarchy expansion can canonicalise two
+	 * *distinct* fingerprints to the *same* term closure — a plan restricting a parent
+	 * category, and a plan restricting that parent plus a redundant child. Once expanded
+	 * they mutually cover, which is not a strict subset; a planner that only absorbs strict
+	 * subsets would leave both as roots and fire a spurious overlap warning, splitting a
+	 * pair the pre-expansion flat containment consolidated cleanly. Equal-coverage groups
+	 * must collapse into their lowest-index representative so they still share one gate.
+	 */
+	public function test_plan_rule_set_consolidation_collapses_equal_coverage_groups() {
+		$parent_term_id = self::factory()->category->create();
+		$child_term_id  = self::factory()->category->create( [ 'parent' => $parent_term_id ] );
+
+		$parent_only_rules       = [
+			[
+				'slug'  => 'category',
+				'value' => [ (string) $parent_term_id ],
+			],
+		];
+		$parent_plus_child_rules = [
+			[
+				'slug'  => 'category',
+				'value' => [ (string) $parent_term_id, (string) $child_term_id ],
+			],
+		];
+
+		$expanded_rule_sets = array_map(
+			fn( $rules ) => $this->invoke_private_static( 'expand_rule_set_hierarchy', [ $rules ] ),
+			[ $parent_only_rules, $parent_plus_child_rules ]
+		);
+
+		$this->assertSame(
+			$expanded_rule_sets[0][0]['value'],
+			$expanded_rule_sets[1][0]['value'],
+			'Both rule sets expand to the identical term closure (precondition for the regression).'
+		);
+
+		$plan = $this->invoke_private_static(
+			'plan_rule_set_consolidation',
+			[ $expanded_rule_sets, [ true, true ] ]
+		);
+
+		$this->assertSame(
+			[ 1 => 0 ],
+			$plan['absorbed_by'],
+			'The equal-coverage group (index 1) collapses into the lowest-index representative (index 0).'
+		);
+		$this->assertSame( [], $plan['overlaps'], 'Equal-coverage groups consolidate, so no spurious overlap warning fires.' );
+	}
+
+	/**
+	 * NPPD-2066 equal-coverage determinism: three distinct fingerprints (parent P; P plus
+	 * one child; P plus both children) all expand to the same term closure, forming an
+	 * equivalence class of size three. Every member must fold to the single lowest-index
+	 * representative regardless of iteration order — the asymmetric $j < $i tie-break plus
+	 * the chain resolution converge the whole class on one root, never leaving an
+	 * intermediate representative that would fatal in consolidate_plan_groups().
+	 */
+	public function test_plan_rule_set_consolidation_collapses_equal_coverage_class_of_three() {
+		$parent_term_id      = self::factory()->category->create();
+		$first_child_term_id = self::factory()->category->create( [ 'parent' => $parent_term_id ] );
+		$last_child_term_id  = self::factory()->category->create( [ 'parent' => $parent_term_id ] );
+
+		$rule_sets = array_map(
+			fn( $value ) => $this->invoke_private_static(
+				'expand_rule_set_hierarchy',
+				[
+					[
+						[
+							'slug'  => 'category',
+							'value' => $value,
+						],
+					],
+				]
+			),
+			[
+				[ (string) $parent_term_id ],
+				[ (string) $parent_term_id, (string) $first_child_term_id ],
+				[ (string) $parent_term_id, (string) $first_child_term_id, (string) $last_child_term_id ],
+			]
+		);
+
+		$this->assertEqualSets( $rule_sets[0][0]['value'], $rule_sets[1][0]['value'], 'All three expand to the same closure.' );
+		$this->assertEqualSets( $rule_sets[0][0]['value'], $rule_sets[2][0]['value'], 'All three expand to the same closure.' );
+
+		$plan = $this->invoke_private_static(
+			'plan_rule_set_consolidation',
+			[ $rule_sets, [ true, true, true ] ]
+		);
+
+		$this->assertSame(
+			[
+				1 => 0,
+				2 => 0,
+			],
+			$plan['absorbed_by'],
+			'Both later members of the equivalence class fold to the lowest-index representative.'
+		);
+		$this->assertSame( [], $plan['overlaps'], 'A fully-collapsed equivalence class leaves no unresolved overlap.' );
+	}
+
+	/**
 	 * The product-ID union across a group's plan descriptors is de-duplicated, so a
 	 * consolidated gate's paid-access list carries each merged plan's products once.
 	 */
