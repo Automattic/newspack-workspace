@@ -282,11 +282,13 @@ HTML;
 	}
 
 	/**
-	 * Create a published np_memberships_gate-shaped post with the given block content.
+	 * Create a published post carrying the given block content, standing in for an
+	 * np_memberships_gate.
 	 *
-	 * The post type is registered on the fly since WooCommerce Memberships is not
-	 * loaded in the unit-test harness; extract_gate_layouts() only reads
-	 * post_content, so a plain post carrying the markup is sufficient.
+	 * A plain post (the default 'post' type) is used because extract_gate_layouts()
+	 * only reads post_content — it never checks the post type — so the real
+	 * np_memberships_gate CPT (registered by WooCommerce Memberships, which is not
+	 * loaded in the unit-test harness) is not needed here.
 	 *
 	 * @param string $content The block markup.
 	 *
