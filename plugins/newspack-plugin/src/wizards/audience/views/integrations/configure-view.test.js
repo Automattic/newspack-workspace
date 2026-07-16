@@ -230,6 +230,36 @@ describe( 'ConfigureView save wiring', () => {
 		expect( screen.getByLabelText( 'Audience ID' ).value ).toBe( 'abc123' );
 		expect( useUnsavedChangesDialog ).toHaveBeenLastCalledWith( { when: false } );
 	} );
+
+	// Metadata lists round-trip in canonical (not click) order, so the reconcile
+	// must set-compare them or a saved field would stay stuck dirty.
+	it( 'reconciles a metadata array even when the server reorders it', () => {
+		const withOutbound = value => ( {
+			esp: { ...INTEGRATION, settings: [ { key: 'outgoing_metadata_fields', type: 'metadata', label: 'Outbound', value } ] },
+		} );
+		const { rerender } = renderConfigureView( {
+			integrations: withOutbound( [] ),
+			inFlightChanges: { esp: { outgoing_metadata_fields: [ 'B', 'A' ] } },
+		} );
+		expect( useUnsavedChangesDialog ).toHaveBeenLastCalledWith( { when: true } );
+		rerender( buildConfigureView( { integrations: withOutbound( [ 'A', 'B' ] ) } ) );
+		expect( useUnsavedChangesDialog ).toHaveBeenLastCalledWith( { when: false } );
+	} );
+
+	// A boolean checkbox draft round-trips from WP options as the string '1', so
+	// the reconcile must coerce or the field would stay stuck dirty.
+	it( 'reconciles a boolean checkbox against a string-typed server value', () => {
+		const withCheckbox = value => ( {
+			esp: { ...INTEGRATION, settings: [ { key: 'sync_delete', type: 'checkbox', label: 'Sync delete', value } ] },
+		} );
+		const { rerender } = renderConfigureView( {
+			integrations: withCheckbox( false ),
+			inFlightChanges: { esp: { sync_delete: true } },
+		} );
+		expect( useUnsavedChangesDialog ).toHaveBeenLastCalledWith( { when: true } );
+		rerender( buildConfigureView( { integrations: withCheckbox( '1' ) } ) );
+		expect( useUnsavedChangesDialog ).toHaveBeenLastCalledWith( { when: false } );
+	} );
 } );
 
 describe( 'ConfigureView per-id remount', () => {
