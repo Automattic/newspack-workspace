@@ -76,6 +76,15 @@ class Membership_Gates_Migration {
 			WP_CLI::error( 'WooCommerce Memberships is not active. Aborting.' );
 		}
 
+		// The standalone `migrate-memberships` drop-in registers the same command
+		// name (defaulting to WRITE — the inverse of this port's dry-run default).
+		// This port's `init` registration overrides the drop-in's `plugins_loaded`
+		// one, so this callback is the one running — but the ambiguity is a footgun,
+		// so warn loudly and tell the operator to deactivate the drop-in.
+		if ( class_exists( 'Newspack_Migrate_Membership_Gates_Command' ) ) {
+			WP_CLI::warning( 'The standalone `migrate-memberships` drop-in is also active and registers this same command (with the opposite, write-by-default flag convention). This in-plugin command is running, but deactivate/delete the drop-in to avoid confusion.' );
+		}
+
 		if ( $dry_run ) {
 			WP_CLI::line( '' );
 			WP_CLI::line( '*** DRY RUN MODE — no data will be modified. Pass --live to write. ***' );
@@ -249,7 +258,12 @@ class Membership_Gates_Migration {
 	 * are collected into $skipped instead of grouped. Plans that map to the same
 	 * canonical rule fingerprint share a group (and therefore a single gate).
 	 *
-	 * This is the fingerprint/grouping seam for NPPD-2064 (fingerprint gate-splitting).
+	 * This is the primary grouping/split seam for NPPD-2064 (fingerprint
+	 * gate-splitting): the fix lands here (and in the merged-product consolidation
+	 * in migrate_membership_gates()). This method depends on
+	 * WC_Memberships_Membership_Plan, so its grouping/split behavior is NOT covered
+	 * by unit tests — the NPPD-2064 author must add net-new tests (the existing
+	 * compute_rules_fingerprint() tests only pin canonicality, which the fix keeps).
 	 *
 	 * @param int[] $plan_ids Plan post IDs.
 	 * @param array $skipped  Skipped-plan summary rows, appended to by reference.
@@ -580,7 +594,10 @@ class Membership_Gates_Migration {
 	 * produce the same fingerprint regardless of the order WC Memberships returned
 	 * them in.
 	 *
-	 * This is the fingerprint seam for NPPD-2064 (fingerprint gate-splitting).
+	 * Supports the NPPD-2064 grouping work, but note the split decision itself lives
+	 * in group_plans_by_fingerprint(), not here. Only this function's canonicality
+	 * (order-independence) is unit-tested; that property is preserved by the 2064 fix,
+	 * so those tests will not flip red.
 	 *
 	 * @param array[] $ac_rules AC-format content rules: [ [ 'slug' => string, 'value' => int[] ], ... ].
 	 *

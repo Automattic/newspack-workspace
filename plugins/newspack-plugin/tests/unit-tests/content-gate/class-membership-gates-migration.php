@@ -3,17 +3,24 @@
  * Characterization tests for the migrate-membership-gates CLI (NPPD-2059).
  *
  * These pin the behavior of the pure mapping/fingerprint/layout-extraction
- * helpers exactly as ported from the standalone drop-in, INCLUDING the three
- * known bugs that land as separate stacked PRs. Where a test asserts a buggy
- * result on purpose it is flagged with the follow-up issue ID; those stacked
- * fixes will flip the corresponding assertion:
+ * helpers exactly as ported from the standalone drop-in. Where a test asserts a
+ * buggy result on purpose it is flagged with the follow-up issue ID; those
+ * stacked fixes will flip the corresponding assertion:
  *
  * - NPPD-2058: extract_gate_layouts() only inspects top-level wrapper blocks, so
- *   nested / reusable-block gate layouts migrate as empty.
+ *   nested / reusable-block gate layouts migrate as empty. Pinned by the
+ *   extract_gate_layouts / serialize_gate_inner_blocks tests below (they flip red).
  * - NPPD-2063: map_rules_to_ac_format() emits the raw WooCommerce content-type
  *   name as the AC rule slug instead of remapping to 'post_types' / 'specific_posts'.
- * - NPPD-2064: compute_rules_fingerprint() is the grouping key that decides how
- *   plans are split across gates.
+ *   Pinned by the map_rules_to_ac_format tests below (they flip red).
+ *
+ * NOT pinned here: NPPD-2064 (fingerprint-based gate splitting/grouping). That fix
+ * lands in group_plans_by_fingerprint() and the merged-product consolidation, which
+ * depend on WC_Memberships_Membership_Plan and so are not unit-testable in this
+ * harness — they are exercised end-to-end against real WooCommerce Memberships. The
+ * compute_rules_fingerprint() tests below only pin the fingerprint's *canonicality*
+ * (order-independence), which the 2064 fix preserves; they will NOT flip red, so the
+ * 2064 author must add net-new grouping/split tests rather than rely on these.
  *
  * @package Newspack\Tests\Content_Gate
  */
@@ -127,7 +134,8 @@ class Test_Membership_Gates_Migration extends \WP_UnitTestCase {
 
 	/**
 	 * Two rules with the same content type are merged into one AC rule with a
-	 * de-duplicated, stringified value list.
+	 * de-duplicated, stringified value list. (The 'category' slug assertion is also
+	 * touched by NPPD-2063, which will remap the slug — expect this to flip red too.)
 	 */
 	public function test_map_rules_to_ac_format_merges_and_dedupes_object_ids_for_the_same_slug() {
 		$first_category_rule  = $this->make_rule( 'category', [ 1, 2 ] );
