@@ -14,6 +14,11 @@
 	svg {
 		transition: fill 125ms ease-in-out;
 	}
+	// Slot for a pre-rendered icon element that owns its own badge.
+	&__icon-slot {
+		align-items: center;
+		display: flex;
+	}
 	&__icon {
 		border-radius: wp-vars.$radius-round;
 		display: grid;

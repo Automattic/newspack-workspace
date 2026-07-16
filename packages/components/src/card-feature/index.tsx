@@ -7,6 +7,7 @@ import classnames from 'classnames';
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
+import { isValidElement } from '@wordpress/element';
 import { DropdownMenu, __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 import { moreVertical } from '@wordpress/icons';
 
@@ -44,8 +45,8 @@ type MoreControl = {
 type CardFeatureProps = {
 	title: string;
 	description?: string;
-	/** Icon displayed on the right-hand side of the title and description. */
-	icon?: CardFeatureIcon;
+	/** Icon shown beside the title: a descriptor (coloured badge) or a ready element rendered as-is. */
+	icon?: CardFeatureIcon | React.ReactElement;
 	/** Whether the feature is currently enabled. */
 	enabled?: boolean;
 	/**
@@ -126,10 +127,11 @@ const CardFeature = ( {
 		}
 	};
 
-	const iconClasses = icon
+	const iconDescriptor = icon && ! isValidElement( icon ) ? ( icon as CardFeatureIcon ) : null;
+	const iconClasses = iconDescriptor
 		? classnames( 'newspack-card-feature__icon', {
-				'newspack-card-feature__icon--radius-small': !! icon.backgroundColor && icon.radius !== 'full',
-				'newspack-card-feature__icon--radius-full': icon.radius === 'full',
+				'newspack-card-feature__icon--radius-small': !! iconDescriptor.backgroundColor && iconDescriptor.radius !== 'full',
+				'newspack-card-feature__icon--radius-full': iconDescriptor.radius === 'full',
 		  } )
 		: undefined;
 
@@ -146,17 +148,20 @@ const CardFeature = ( {
 								<h2 className="newspack-card-feature__title">{ title }</h2>
 								{ description && <p className="newspack-card-feature__description">{ description }</p> }
 							</div>
-							{ icon && (
-								<div
-									className={ iconClasses }
-									style={ {
-										backgroundColor: icon.backgroundColor,
-										color: icon.fill,
-									} }
-								>
-									{ icon.node }
-								</div>
-							) }
+							{ icon &&
+								( iconDescriptor ? (
+									<div
+										className={ iconClasses }
+										style={ {
+											backgroundColor: iconDescriptor.backgroundColor,
+											color: iconDescriptor.fill,
+										} }
+									>
+										{ iconDescriptor.node }
+									</div>
+								) : (
+									icon
+								) ) }
 						</HStack>
 						<HStack alignment="edge">
 							<HStack expanded={ false } spacing="8px">
