@@ -26,4 +26,13 @@ describe( 'IntegrationIcon', () => {
 		const { container } = render( <IntegrationIcon provider="unknown_esp" /> );
 		expect( container.querySelector( '.newspack-integration-icon' ) ).toBeNull();
 	} );
+
+	it.each( [ '__proto__', 'constructor', 'toString', 'hasOwnProperty' ] )(
+		'renders nothing for the prototype-key slug %s without throwing',
+		slug => {
+			const { container } = render( <IntegrationIcon provider={ slug } /> );
+			expect( container.querySelector( '.newspack-integration-icon' ) ).toBeNull();
+			expect( container ).toBeEmptyDOMElement();
+		}
+	);
 } );

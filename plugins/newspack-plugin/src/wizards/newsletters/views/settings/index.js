@@ -326,7 +326,7 @@ export const Settings = ( {
 								key={ option.value }
 								className="newspack-newsletters-esp-card"
 								disabled={ isDisabled }
-								iconElement={ <IntegrationIcon provider={ option.value } /> }
+								iconElement={ espProviderOrder.includes( option.value ) ? <IntegrationIcon provider={ option.value } /> : null }
 								title={ option.name }
 								isActive={ option.value === selectedProviderValue }
 								onEnable={ () => providerSelectProps.onChange( option.value ) }
