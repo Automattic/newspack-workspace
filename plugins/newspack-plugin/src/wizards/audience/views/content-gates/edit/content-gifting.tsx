@@ -127,7 +127,6 @@ const ContentGiftingSettings = () => {
 					type: 'more',
 				},
 			],
-			sectionName: __( 'Content gifting', 'newspack-plugin' ),
 		} );
 	}, [ config, isDirty, setHeaderData ] );
 
