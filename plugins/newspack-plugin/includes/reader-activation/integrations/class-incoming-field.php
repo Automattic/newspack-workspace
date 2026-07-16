@@ -33,7 +33,7 @@ class Incoming_Field {
 	/**
 	 * Value type. Base values are 'string' or 'boolean'; integrations may also
 	 * declare a richer input kind that the segmentation UI uses to constrain the
-	 * available operators: 'number', 'date', 'select', 'multiselect'.
+	 * available operators: 'number', 'date', 'datetime', 'select', 'multiselect'.
 	 *
 	 * @var string
 	 */
@@ -144,7 +144,7 @@ class Incoming_Field {
 	/**
 	 * Set the value type.
 	 *
-	 * @param string $value_type One of 'string', 'boolean', 'number', 'date', 'select', 'multiselect'.
+	 * @param string $value_type One of 'string', 'boolean', 'number', 'date', 'datetime', 'select', 'multiselect'.
 	 * @return self
 	 */
 	public function set_value_type( $value_type ) {

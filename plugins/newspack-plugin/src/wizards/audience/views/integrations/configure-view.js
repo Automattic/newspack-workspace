@@ -39,6 +39,7 @@ export const operatorOptionsForField = field => {
 		case 'number':
 			return [ { label: __( 'Number', 'newspack-plugin' ), value: 'range' } ];
 		case 'date':
+		case 'datetime':
 			return [ { label: __( 'Text', 'newspack-plugin' ), value: 'default' } ];
 		case 'multiselect':
 			return [ { label: __( 'Multiple values', 'newspack-plugin' ), value: 'list__in' } ];
