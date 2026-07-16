@@ -14,10 +14,7 @@ const mockSetHeaderData = jest.fn();
 jest.mock( '@wordpress/data', () => ( {
 	useDispatch: () => ( { setHeaderData: mockSetHeaderData } ),
 } ) );
-// Mocking @wordpress/data above breaks @wordpress/components' real barrel
-// (its autocomplete submodule eagerly requires @wordpress/rich-text, which
-// calls combineReducers() at module load). Stub CheckboxControl directly —
-// the fixtures below have no inbound/outbound fields, so it never renders.
+// Stub the components barrel: with @wordpress/data mocked, the real barrel eagerly loads @wordpress/rich-text, whose module-load combineReducers() call throws.
 jest.mock( '@wordpress/components', () => ( {
 	CheckboxControl: () => null,
 } ) );
@@ -172,6 +169,21 @@ describe( 'ConfigureView save wiring', () => {
 		expect( onSave ).toHaveBeenCalledWith( 'esp', { mailchimp_audience_id: 'abc123' } );
 		expect( screen.getByLabelText( 'Audience ID' ).value ).toBe( 'abc123' );
 		expect( useUnsavedChangesDialog ).toHaveBeenLastCalledWith( { when: true } );
+	} );
+
+	// Guards the draftRef: the header Save action is only re-registered when
+	// hasPending transitions, so a second edit made while already dirty does not
+	// re-run that effect. Reading draftRef.current (not a captured draft) is what
+	// makes Save submit the latest edit.
+	it( 'saves the latest draft after multiple edits', async () => {
+		const onSave = jest.fn( () => Promise.resolve() );
+		renderConfigureView( { onSave } );
+		fireEvent.change( screen.getByLabelText( 'Audience ID' ), { target: { value: 'abc' } } );
+		fireEvent.change( screen.getByLabelText( 'Audience ID' ), { target: { value: 'abcd' } } );
+		await act( async () => {
+			getLatestSaveAction()();
+		} );
+		expect( onSave ).toHaveBeenCalledWith( 'esp', { mailchimp_audience_id: 'abcd' } );
 	} );
 } );
 
