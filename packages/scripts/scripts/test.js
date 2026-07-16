@@ -19,6 +19,9 @@ const JEST_CONFIG = {
 	rootDir: modules.rootDirectory,
 	setupFilesAfterEnv: [ path.resolve( __dirname, 'utils/jestSetup.js' ) ],
 	testMatch: [ '<rootDir>/**/*test.js?(x)' ],
+	// Skip compiled copies (packages compile src into dist/ and shared/) and
+	// PHP vendor trees; <rootDir> anchors keep plugin src/shared/ tests running.
+	testPathIgnorePatterns: [ '/node_modules/', '<rootDir>/dist/', '<rootDir>/shared/', '/vendor/' ],
 	transform: {
 		'^.+\\.(j|t)sx?$': path.resolve( __dirname, 'utils/babelJestTransformer.js' ),
 	},

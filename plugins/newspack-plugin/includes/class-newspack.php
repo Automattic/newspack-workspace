@@ -149,6 +149,9 @@ final class Newspack {
 		include_once NEWSPACK_ABSPATH . 'includes/bylines/class-bylines.php';
 		include_once NEWSPACK_ABSPATH . 'includes/class-post-date.php';
 		include_once NEWSPACK_ABSPATH . 'includes/lite-site/class-lite-site.php';
+		// Classifies CTA link targets by conversion intent; used by the content gate
+		// (below) to stamp landing-page CTAs for order-meta attribution (NPPD-1887).
+		include_once NEWSPACK_ABSPATH . 'includes/class-cta-intent-classifier.php';
 		include_once NEWSPACK_ABSPATH . 'includes/content-gate/trait-content-gate-layout.php';
 		include_once NEWSPACK_ABSPATH . 'includes/content-gate/class-content-gate.php';
 
@@ -194,6 +197,7 @@ final class Newspack {
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/audience/class-audience-content-gates.php';
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/audience/class-audience-donations.php';
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/audience/class-audience-subscriptions.php';
+		include_once NEWSPACK_ABSPATH . 'includes/wizards/audience/class-audience-subscription-products.php';
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/audience/class-audience-pricing-rules.php';
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/audience/class-audience-integrations.php';
 
@@ -227,6 +231,7 @@ final class Newspack {
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/class-mailchimp-for-woocommerce.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/class-onesignal.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/class-organic-profile-block.php';
+		include_once NEWSPACK_ABSPATH . 'includes/plugins/class-woocommerce-content-detector.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/class-perfmatters.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/class-pwa.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/co-authors-plus/class-author-rest-fields.php';

@@ -345,7 +345,7 @@ const BlockVisibilityPanel = ( { attributes, setAttributes }: BlockEditProps ) =
 		<InspectorControls>
 			<PanelBody
 				className="newspack-access-control-block-visibility-panel"
-				title={ __( 'Access control', 'newspack-plugin' ) }
+				title={ __( 'Access Control', 'newspack-plugin' ) }
 				initialOpen={ rulesActive }
 			>
 				{ /* Mode toggle: Gate (default) or Custom */ }

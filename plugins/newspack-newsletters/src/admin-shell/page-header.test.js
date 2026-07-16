@@ -183,15 +183,14 @@ describe( 'PageHeader', () => {
 		// Stand up the same DOM newspack-plugin renders so the portal slot exists.
 		const wrapper = document.createElement( 'div' );
 		wrapper.id = 'newspack-wizards-admin-header';
-		wrapper.innerHTML =
-			'<div class="newspack-wizard__header"><div class="newspack-wizard__header__inner"><div class="newspack-wizard__title"><h2>Test</h2></div></div></div>';
+		wrapper.innerHTML = '<div id="newspack-wizards-admin-header-actions"></div>';
 		document.body.appendChild( wrapper );
 
-		const actions = [ { type: 'primary', label: 'Add new newsletter' } ];
+		const actions = [ { type: 'primary', label: 'Add Newsletter' } ];
 		render( withProvider( <Harness actions={ actions } /> ) );
 
 		const portalled = wrapper.querySelector( '.newspack-newsletters-admin__header-actions--in-newspack-header' );
 		expect( portalled ).not.toBeNull();
-		expect( portalled.querySelector( 'button' ) ).toHaveTextContent( 'Add new newsletter' );
+		expect( portalled.querySelector( 'button' ) ).toHaveTextContent( 'Add Newsletter' );
 	} );
 } );

@@ -71,4 +71,16 @@ class Newsletters_List_Page extends Hidden_React_List_Page {
 	public function get_redirect_post_type(): string {
 		return Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT;
 	}
+
+	/**
+	 * Explicit admin-header breadcrumb trail.
+	 *
+	 * @return array<array{label: string}>
+	 */
+	public function get_wizard_breadcrumbs(): ?array {
+		return [
+			[ 'label' => __( 'Newsletters', 'newspack-newsletters' ) ],
+			[ 'label' => __( 'All Newsletters', 'newspack-newsletters' ) ],
+		];
+	}
 }

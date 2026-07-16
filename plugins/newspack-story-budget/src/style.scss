@@ -1,5 +1,7 @@
 /* stylelint-disable no-invalid-position-at-import-rule */
 @use "~@wordpress/base-styles/colors" as wp-colors;
+@use "~@wordpress/base-styles/mixins" as wp-mixins;
+@use "~@wordpress/base-styles/variables" as wp-vars;
 @import "@wordpress/dataviews/build-style/style.css";
 
 body.toplevel_page_newspack-story-budget {
@@ -399,11 +401,9 @@ body.toplevel_page_newspack-story-budget {
 	}
 
 	&__notices {
-		position: fixed;
-		bottom: 24px;
-		padding-left: 24px;
+		@include wp-mixins.snackbar-container();
+		gap: wp-vars.$grid-unit-10;
 		z-index: 99999;
-		pointer-events: none;
 
 		.components-snackbar__action.components-button {
 			margin-left: 8px;
@@ -460,43 +460,6 @@ body.toplevel_page_newspack-story-budget {
 			color: wp-colors.$alert-red;
 		}
 	}
-}
-
-/**
- * Newspack Wizard Tweaks
- */
-.newspack-wizard {
-	&__header {
-		&__inner {
-			display: flex;
-			align-items: center;
-			justify-content: space-between;
-			border-bottom: 1px solid wp-colors.$gray-300;
-		}
-		&__actions {
-			padding: 0 16px;
-			display: flex;
-			flex: 1 1 auto;
-			flex-direction: row-reverse;
-			align-items: center;
-			gap: 8px;
-		}
-	}
-	&__title {
-		border-bottom: 0;
-	}
-}
-// Fix Tabbed Navigation
-.newspack-tabbed-navigation {
-	z-index: 10;
-	position: static;
-	li a {
-		box-sizing: border-box;
-	}
-}
-// Fix header logo background color.
-.newspack-wizard__title svg {
-	background: var(--wp-components-color-accent) !important;
 }
 
 // Fix menu item cursor.
