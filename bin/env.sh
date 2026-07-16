@@ -652,18 +652,23 @@ MIGRATE
         # remove the worktree directory the env was bound to, not whatever
         # branch is currently checked out there.
         #
-        # Known follow-up: for monorepo worktrees the safe form (e.g. feat-foo)
-        # won't match the real branch (feat/foo) in worktree.sh's final
-        # `git branch -D`, so the local branch ref is left dangling after the
-        # worktree dir is removed. Harmless (re-create reuses it) but accrues
-        # across create/destroy cycles. A proper fix removes the dir by safe
-        # name and deletes the branch by its resolved real name separately.
         for entry in "${worktree_entries[@]}"; do
             IFS='|' read -r wt_repo wt_branch wt_kind <<< "$entry"
             if [[ "$wt_kind" == "repos" ]]; then
+                # Standalone repos/ worktrees keep their (long-lived) branch.
                 "$NABSPATH/bin/worktree.sh" remove-repos --yes "$wt_repo" "$wt_branch"
             else
+                # Remove the worktree DIR by its safe form (the identifier the env
+                # was bound to -- stable even if someone `git checkout`ed a
+                # different branch inside it), then delete the REAL branch
+                # separately: worktree.sh's own `git branch -D <safe>` no-ops
+                # against a slash-named branch (feat/foo vs feat-foo), which
+                # previously left the local ref dangling across create/destroy.
+                real_branch=$(resolve_unsanitized_branch "$wt_branch" "")
                 "$NABSPATH/bin/worktree.sh" remove --yes "$wt_repo" "$wt_branch"
+                if [[ -n "$real_branch" && "$real_branch" != "$wt_branch" ]]; then
+                    git -C "$NABSPATH" branch -D "$real_branch" 2>/dev/null && echo "Deleted branch $real_branch"
+                fi
             fi
         done
         echo "Destroyed environment '$env_name'"

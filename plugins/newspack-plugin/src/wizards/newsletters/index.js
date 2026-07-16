@@ -16,15 +16,17 @@ import { __ } from '@wordpress/i18n';
 import { Wizard } from '../../../packages/components/src';
 import NewslettersSettings from './views/settings';
 
+const ROOT = [ { label: __( 'Newsletters', 'newspack-plugin' ) } ];
+
 const NewslettersWizard = () => (
 	<Wizard
 		headerText={ __( 'Newsletters', 'newspack-plugin' ) }
 		requiredPlugins={ [ 'newspack-newsletters' ] }
-		fixedHeader
 		sections={ [
 			{
 				path: '/',
 				render: NewslettersSettings,
+				breadcrumbs: [ ...ROOT, { label: __( 'Settings', 'newspack-plugin' ) } ],
 			},
 		] }
 	/>
