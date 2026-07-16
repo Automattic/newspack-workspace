@@ -9,6 +9,7 @@ namespace Newspack\CLI;
 
 use WP_CLI;
 use Newspack\Woocommerce_Subscriptions as WooCommerce_Subscriptions_Integration;
+use Newspack\WooCommerce_Connection;
 use Newspack\On_Hold_Duration;
 use Newspack\Card_Expiry_Warning;
 use Newspack\Emails;
@@ -19,6 +20,26 @@ defined( 'ABSPATH' ) || exit;
  * WooCommerce Subscriptions Integration CLI commands.
  */
 class WooCommerce_Subscriptions {
+	/**
+	 * Product statuses the gate product picker offers (mirrors the default statuses
+	 * `Access_Rules::get_subscription_products_options` -> `wc_get_products` lists). A
+	 * subscription line item on a product outside this set is not gate-selectable, so
+	 * Access Control can never reference it. Single source of truth shared by the audit
+	 * classifier and the repair target check so the two can't drift.
+	 *
+	 * @var string[]
+	 */
+	const SELECTABLE_PRODUCT_STATUSES = [ 'publish', 'private', 'draft', 'pending' ];
+
+	/**
+	 * Product types the gate product picker offers. A repair target outside this set can
+	 * never be referenced by a gate (and a non-`product` post such as a variation would
+	 * also throw in WC_Order_Item_Product::set_product_id()).
+	 *
+	 * @var string[]
+	 */
+	const SELECTABLE_PRODUCT_TYPES = [ 'subscription', 'variable-subscription' ];
+
 	/**
 	 * Flag for live mode.
 	 *
@@ -409,6 +430,438 @@ class WooCommerce_Subscriptions {
 		}
 
 		WP_CLI::success( $summary );
+	}
+
+	/**
+	 * Audit active subscriptions whose line-item product Access Control can never match,
+	 * and optionally repair them from an explicit operator-supplied product mapping.
+	 *
+	 * Access Control's paid-access rule grants access on an active subscription to one of
+	 * the products configured on a gate. Two field data shapes break that link, so a reader
+	 * with an active subscription silently loses access when WooCommerce Memberships is
+	 * switched off:
+	 *
+	 *   - Variant A (orphaned line item): the line item carries no product reference (the
+	 *     product was hard-deleted, or the subscription was created by hand). AC can never
+	 *     match it.
+	 *   - Variant B (trashed product): the line item points at a product in the trash, which
+	 *     the gate's product picker can never offer, so no gate can be configured with it.
+	 *
+	 * With no --map the command audits only (read-only): it prints one row per at-risk
+	 * subscription with a best-guess intended product derived from the line-item name. The
+	 * guess is evidence only — the tool never repairs from its own guess. Pass --map to
+	 * repair the subscriptions named explicitly; repairs are a dry-run unless --live is given.
+	 *
+	 * ## OPTIONS
+	 *
+	 * [--map=<pairs>]
+	 * : Comma-separated `<subscription_id>:<product_id>` pairs to repair. Each re-attaches
+	 *   (variant A) or swaps onto (variant B) the given live product. Only the subscriptions
+	 *   named here are ever modified. Example: --map=51:1234,73:500
+	 *
+	 * [--live]
+	 * : Apply the --map repairs. Without this flag repairs run as a dry-run and write nothing.
+	 *
+	 * ## EXAMPLES
+	 *
+	 *     wp newspack audit-subscription-products
+	 *     wp newspack audit-subscription-products --map=51:1234,73:500
+	 *     wp newspack audit-subscription-products --map=51:1234,73:500 --live
+	 *
+	 * @param array $args       Positional args (unused).
+	 * @param array $assoc_args Associative args.
+	 */
+	public function audit_subscription_products( $args, $assoc_args ) {
+		// Gate on WC Subscriptions being active — the actual precondition. This is a
+		// read-only data-integrity audit; it does not need Reader Activation (so it can be
+		// run as migration prep before RAS is toggled on), unlike the expiration-path
+		// commands that gate on is_enabled().
+		if ( ! WooCommerce_Subscriptions_Integration::is_active() || ! function_exists( 'wcs_get_subscriptions' ) ) {
+			WP_CLI::error( 'WooCommerce Subscriptions is not active.' );
+			return;
+		}
+
+		$live_products = self::get_live_subscription_products();
+		$rows          = self::audit_active_subscriptions( $live_products );
+
+		if ( empty( $rows ) ) {
+			WP_CLI::success( 'No active subscriptions with a missing or non-gate-selectable line-item product were found.' );
+		} else {
+			WP_CLI::line( sprintf( '%d active subscription(s) have a line-item product Access Control cannot match:', count( $rows ) ) );
+			WP_CLI::line( '' );
+			$table = array_map(
+				function( $row ) {
+					return [
+						'subscription' => $row['subscription_id'],
+						'user'         => $row['user'],
+						'variant'      => $row['variant'],
+						'guess'        => null !== $row['guess_product_id']
+							? sprintf( '%s (#%d)', $row['guess_product_name'], $row['guess_product_id'] )
+							: '(no match)',
+						'evidence'     => $row['evidence'],
+					];
+				},
+				$rows
+			);
+			\WP_CLI\Utils\format_items( 'table', $table, [ 'subscription', 'user', 'variant', 'guess', 'evidence' ] );
+		}
+
+		$map = self::parse_map_argument( (string) \WP_CLI\Utils\get_flag_value( $assoc_args, 'map', '' ) );
+		if ( empty( $map ) ) {
+			return;
+		}
+
+		$dry_run = ! (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'live', false );
+		WP_CLI::line( '' );
+		if ( $dry_run ) {
+			WP_CLI::line( '*** DRY RUN MODE — no data will be modified. Pass --live to apply. ***' );
+			WP_CLI::line( '' );
+		}
+
+		foreach ( $map as $subscription_id => $product_id ) {
+			$subscription = wcs_get_subscription( $subscription_id );
+			if ( ! $subscription ) {
+				WP_CLI::warning( sprintf( 'Subscription %d not found — skipping.', $subscription_id ) );
+				continue;
+			}
+			$result = self::repair_subscription_product( $subscription, $product_id, $dry_run );
+			if ( ! $result['ok'] ) {
+				WP_CLI::warning( sprintf( 'Subscription %d: %s', $subscription_id, $result['message'] ) );
+				continue;
+			}
+			WP_CLI::success(
+				sprintf(
+					'Subscription %d (variant %s): %s line-item product %s -> %d.',
+					$subscription_id,
+					$result['variant'],
+					$result['applied'] ? 'set' : 'would set',
+					0 === $result['old_product_id'] ? '(none)' : (string) $result['old_product_id'],
+					$result['new_product_id']
+				)
+			);
+		}
+	}
+
+	/**
+	 * Build audit rows for the at-risk subscriptions in a given set.
+	 *
+	 * A subscription is at risk when it has at least one broken line item (missing or
+	 * trashed product) and no line item pointing at a live product — i.e. Access Control
+	 * has no product on the subscription it could ever match against a gate.
+	 *
+	 * @param array $subscriptions Subscriptions to inspect (WC_Subscription objects).
+	 * @param array $live_products Live subscription products as `[ 'id' => int, 'name' => string ]`.
+	 * @return array List of audit rows.
+	 */
+	public static function build_audit_rows( array $subscriptions, array $live_products ): array {
+		$rows = [];
+		foreach ( $subscriptions as $subscription ) {
+			$finding = self::classify_subscription_product_link( $subscription );
+			if ( null === $finding ) {
+				continue;
+			}
+			$first_broken = $finding['broken'][0];
+			$guess        = self::guess_product_by_name( $first_broken['name'], $live_products );
+			$variants     = array_values( array_unique( wp_list_pluck( $finding['broken'], 'variant' ) ) );
+			sort( $variants );
+			$rows[] = [
+				'subscription_id'    => (int) $subscription->get_id(),
+				'user'               => self::describe_user( (int) $subscription->get_customer_id() ),
+				'variant'            => implode( ', ', $variants ),
+				'guess_product_id'   => null !== $guess ? $guess['id'] : null,
+				'guess_product_name' => null !== $guess ? $guess['name'] : null,
+				'evidence'           => implode( ' ', wp_list_pluck( $finding['broken'], 'evidence' ) ),
+			];
+		}
+		return $rows;
+	}
+
+	/**
+	 * Re-attach (variant A) or swap onto (variant B) a live product for a single subscription.
+	 *
+	 * Executes only the explicit mapping the operator passed — never a guess. The swap
+	 * target must be a gate-selectable subscription product (a gate can only ever reference
+	 * one of those), and the subscription must be one the audit flagged. Refuses
+	 * subscriptions with more than one broken line item, and the no-line-items case, so the
+	 * operator resolves the ambiguity by hand. This edits billing-relevant data, so the
+	 * caller logs exactly what changed on which subscription.
+	 *
+	 * @param \WC_Subscription $subscription The subscription to repair.
+	 * @param int              $product_id   The live product ID to attach.
+	 * @param bool             $dry_run      When true, report what would change without writing.
+	 * @return array Result: ok, applied, subscription_id, variant, old_product_id, new_product_id, message.
+	 */
+	public static function repair_subscription_product( $subscription, int $product_id, bool $dry_run ): array {
+		$result = [
+			'ok'              => false,
+			'applied'         => false,
+			'subscription_id' => (int) $subscription->get_id(),
+			'variant'         => '',
+			'old_product_id'  => 0,
+			'new_product_id'  => $product_id,
+			'message'         => '',
+		];
+
+		// The swap target must be a product a gate can actually reference. Anything the
+		// picker would not list (wrong type — simple, variation, grouped — or a non-listed
+		// status) leaves the reader just as unmatchable, so reject it rather than report a
+		// hollow success. This also blocks a variation ID, whose non-`product` post type
+		// would otherwise throw in set_product_id() and abort the batch.
+		$target = wc_get_product( $product_id );
+		if ( ! $target ) {
+			$result['message'] = sprintf( 'Mapped product #%d does not exist — mapping rejected.', $product_id );
+			return $result;
+		}
+		if ( ! self::is_selectable_product( $target ) ) {
+			$result['message'] = sprintf( 'Mapped product #%d is not a gate-selectable subscription product (type: %s, status: %s) — map onto a listed subscription/variable-subscription product.', $product_id, $target->get_type(), $target->get_status() );
+			return $result;
+		}
+
+		$finding = self::classify_subscription_product_link( $subscription );
+		if ( null === $finding ) {
+			$result['message'] = 'Subscription is not flagged by the audit (no missing/non-selectable line-item product) — nothing to repair.';
+			return $result;
+		}
+		if ( count( $finding['broken'] ) > 1 ) {
+			$result['message'] = 'Subscription has more than one broken line item — repair it manually to avoid an ambiguous mapping.';
+			return $result;
+		}
+
+		$broken = $finding['broken'][0];
+		$item   = $broken['item'];
+		if ( null === $item ) {
+			$result['message'] = 'Subscription has no line item to re-point — add a subscription product to it manually.';
+			return $result;
+		}
+		$result['variant']        = $broken['variant'];
+		$result['old_product_id'] = (int) $item->get_product_id();
+
+		if ( ! $dry_run ) {
+			// Re-point only the product reference Access Control matches on. The line-item
+			// name and stored totals are deliberately left untouched — the reader keeps the
+			// price they signed up for, and calculate_totals() is intentionally not called.
+			$item->set_product_id( $product_id );
+			$item->set_variation_id( 0 );
+			$item->save();
+			$subscription->save();
+			$result['applied'] = true;
+		}
+		$result['ok'] = true;
+		return $result;
+	}
+
+	/**
+	 * Parse the --map argument into an explicit `subscription_id => product_id` map.
+	 *
+	 * Only well-formed numeric `<sub>:<product>` pairs are kept; blanks and malformed
+	 * tokens are dropped so a typo can never silently repair the wrong subscription.
+	 *
+	 * @param string $raw Comma-separated `<subscription_id>:<product_id>` pairs.
+	 * @return array Map of subscription ID => product ID.
+	 */
+	public static function parse_map_argument( string $raw ): array {
+		$map = [];
+		foreach ( explode( ',', (string) $raw ) as $pair ) {
+			$pair = trim( $pair );
+			if ( '' === $pair || false === strpos( $pair, ':' ) ) {
+				continue;
+			}
+			list( $subscription_id, $product_id ) = array_map( 'trim', explode( ':', $pair, 2 ) );
+			if ( ! ctype_digit( $subscription_id ) || ! ctype_digit( $product_id ) ) {
+				continue;
+			}
+			$map[ (int) $subscription_id ] = (int) $product_id;
+		}
+		return $map;
+	}
+
+	/**
+	 * Classify a subscription's line items against the Access Control paid-access rule.
+	 *
+	 * Returns null when the subscription is out of scope (not active) or healthy (has any
+	 * line item on a gate-selectable product). Otherwise returns the broken line items, each
+	 * tagged with its variant (A: no line items / no or deleted product; B: product exists
+	 * but is not gate-selectable — wrong type or a non-listed status, e.g. trashed), evidence,
+	 * and the WC_Order_Item_Product so a repair can re-point it (null for the no-line-items case).
+	 *
+	 * Keys on the line item's parent `product_id`, deliberately ignoring `variation_id`:
+	 * gates are only ever configured with a parent product ID (the picker,
+	 * `Access_Rules::get_subscription_products_options`, offers `subscription` /
+	 * `variable-subscription` parents, never variations), and `WC_Subscription::has_product()`
+	 * matches a gate's parent ID against the line item's `product_id`. So it is the parent's
+	 * liveness — not the specific variation's — that decides whether Access Control can match.
+	 *
+	 * @param object $subscription The subscription to classify.
+	 * @return array|null `[ 'broken' => [ [ 'item', 'name', 'variant', 'evidence' ], ... ] ]` or null.
+	 */
+	private static function classify_subscription_product_link( $subscription ): ?array {
+		if ( ! $subscription->has_status( WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES ) ) {
+			return null;
+		}
+		$items = $subscription->get_items();
+		if ( empty( $items ) ) {
+			// A subscription with no line items is as unmatchable as an orphaned one.
+			return [
+				'broken' => [
+					[
+						'item'     => null,
+						'name'     => '',
+						'variant'  => 'A',
+						'evidence' => 'Subscription has no line items.',
+					],
+				],
+			];
+		}
+		$broken           = [];
+		$has_live_product = false;
+		foreach ( $items as $item ) {
+			$product_id = (int) $item->get_product_id();
+			$name       = $item->get_name();
+			if ( 0 === $product_id ) {
+				$broken[] = [
+					'item'     => $item,
+					'name'     => $name,
+					'variant'  => 'A',
+					'evidence' => 'Line item carries no product ID.',
+				];
+				continue;
+			}
+			$product = wc_get_product( $product_id );
+			if ( ! $product ) {
+				$broken[] = [
+					'item'     => $item,
+					'name'     => $name,
+					'variant'  => 'A',
+					'evidence' => sprintf( 'Line-item product #%d no longer exists.', $product_id ),
+				];
+				continue;
+			}
+			if ( ! self::is_selectable_product( $product ) ) {
+				$broken[] = [
+					'item'     => $item,
+					'name'     => $name,
+					'variant'  => 'B',
+					'evidence' => sprintf( 'Line-item product #%d ("%s") is not gate-selectable (type: %s, status: %s).', $product_id, $product->get_name(), $product->get_type(), $product->get_status() ),
+				];
+				continue;
+			}
+			$has_live_product = true;
+		}
+		if ( empty( $broken ) || $has_live_product ) {
+			return null;
+		}
+		return [ 'broken' => $broken ];
+	}
+
+	/**
+	 * Best-guess the intended product for a broken line item by matching its name against
+	 * the live products. Exact (case-insensitive) name match only — a loose match would be
+	 * misleading, and the guess is evidence, never an input to a repair.
+	 *
+	 * @param string $item_name     The broken line item's name.
+	 * @param array  $live_products Live subscription products as `[ 'id' => int, 'name' => string ]`.
+	 * @return array|null The matched `[ 'id' => int, 'name' => string ]`, or null when none matches.
+	 */
+	private static function guess_product_by_name( string $item_name, array $live_products ): ?array {
+		$needle = strtolower( trim( $item_name ) );
+		if ( '' === $needle ) {
+			return null;
+		}
+		foreach ( $live_products as $product ) {
+			if ( strtolower( trim( (string) $product['name'] ) ) === $needle ) {
+				return [
+					'id'   => (int) $product['id'],
+					'name' => $product['name'],
+				];
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * Fetch the gate-selectable subscription products, for guess-matching.
+	 *
+	 * Mirrors `Access_Rules::get_subscription_products_options`: the same product types and
+	 * statuses the gate product picker lists (via the shared allowlist constants).
+	 *
+	 * @return array List of `[ 'id' => int, 'name' => string ]`.
+	 */
+	private static function get_live_subscription_products(): array {
+		$products = wc_get_products(
+			[
+				'type'   => self::SELECTABLE_PRODUCT_TYPES,
+				'status' => self::SELECTABLE_PRODUCT_STATUSES,
+				'limit'  => -1,
+			]
+		);
+		$live = [];
+		foreach ( $products as $product ) {
+			$live[] = [
+				'id'   => $product->get_id(),
+				'name' => $product->get_name(),
+			];
+		}
+		return $live;
+	}
+
+	/**
+	 * Whether a product is one the gate picker would list — the same type + status allowlist
+	 * as `get_live_subscription_products()`, so the repair target check and the audit's
+	 * live-product set can't drift.
+	 *
+	 * @param \WC_Product $product The product to test.
+	 * @return bool
+	 */
+	private static function is_selectable_product( $product ): bool {
+		return in_array( $product->get_type(), self::SELECTABLE_PRODUCT_TYPES, true )
+			&& in_array( $product->get_status(), self::SELECTABLE_PRODUCT_STATUSES, true );
+	}
+
+	/**
+	 * Audit every active-status subscription, one page at a time.
+	 *
+	 * Paginates and classifies each page as it is fetched, keeping only the (small) at-risk
+	 * row set rather than holding every WC_Subscription object in memory — so a large store
+	 * doesn't OOM. Terminates on the first short (non-full) page.
+	 *
+	 * @param array $live_products Live subscription products as `[ 'id' => int, 'name' => string ]`.
+	 * @return array List of audit rows.
+	 */
+	private static function audit_active_subscriptions( array $live_products ): array {
+		$per_page = 100;
+		$paged    = 1;
+		$rows     = [];
+		do {
+			$batch = wcs_get_subscriptions(
+				[
+					'subscription_status'    => WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES,
+					'subscriptions_per_page' => $per_page,
+					'paged'                  => $paged,
+				]
+			);
+			$batch_size = count( $batch );
+			$rows       = array_merge( $rows, self::build_audit_rows( $batch, $live_products ) );
+			++$paged;
+		} while ( $batch_size === $per_page );
+		return $rows;
+	}
+
+	/**
+	 * Describe a subscription's owner for the audit table.
+	 *
+	 * @param int $user_id The customer/user ID.
+	 * @return string A human-readable owner label.
+	 */
+	private static function describe_user( int $user_id ): string {
+		$user_id = (int) $user_id;
+		if ( $user_id <= 0 ) {
+			return '(guest)';
+		}
+		$user = get_userdata( $user_id );
+		if ( ! $user ) {
+			return sprintf( '#%d (deleted)', $user_id );
+		}
+		return sprintf( '%s (#%d)', $user->user_email, $user_id );
 	}
 
 	/**

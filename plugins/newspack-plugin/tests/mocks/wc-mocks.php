@@ -161,6 +161,18 @@ class WC_Order_Item_Product {
 	public function get_product_id() {
 		return $this->data['product_id'] ?? 0;
 	}
+	public function get_variation_id() {
+		return $this->data['variation_id'] ?? 0;
+	}
+	public function set_product_id( $product_id ) {
+		$this->data['product_id'] = (int) $product_id;
+	}
+	public function set_variation_id( $variation_id ) {
+		$this->data['variation_id'] = (int) $variation_id;
+	}
+	public function save() {
+		return true;
+	}
 	public function get_subtotal() {
 		return $this->data['subtotal'] ?? 0;
 	}
@@ -191,6 +203,9 @@ class WC_Product {
 	}
 	public function get_name() {
 		return $this->data['name'] ?? '';
+	}
+	public function get_status() {
+		return $this->data['status'] ?? 'publish';
 	}
 	public function get_type() {
 		return $this->data['type'] ?? 'simple';
@@ -673,17 +688,28 @@ function wcs_get_users_subscriptions( $user_id ) {
 	return apply_filters( 'wcs_get_users_subscriptions', $user_subscriptions, $user_id );
 }
 function wcs_get_subscriptions( $args = [] ) {
-	// Minimal mock: implements only the `customer_id` filter, the sole arg the code
-	// under test passes. If a future test needs status/paging args
-	// (subscription_status, subscriptions_per_page, paged, offset), extend the filter
-	// here rather than relying on this returning the full set.
+	// Minimal mock: implements the `customer_id` and `subscription_status` filters plus
+	// `subscriptions_per_page`/`paged` slicing (the args the audit CLI paginates with).
+	// Extend the filter here rather than relying on this returning the full set.
 	global $subscriptions_database;
 	$customer_id = $args['customer_id'] ?? null;
+	$statuses    = isset( $args['subscription_status'] ) ? (array) $args['subscription_status'] : null;
 	$matches     = [];
 	foreach ( $subscriptions_database as $id => $subscription ) {
-		if ( null === $customer_id || $subscription->get_customer_id() === $customer_id ) {
-			$matches[ $id ] = $subscription;
+		if ( null !== $customer_id && $subscription->get_customer_id() !== $customer_id ) {
+			continue;
 		}
+		if ( null !== $statuses && ! $subscription->has_status( $statuses ) ) {
+			continue;
+		}
+		$matches[ $id ] = $subscription;
+	}
+	// Page the results so a caller looping `paged` terminates on an empty final page.
+	$per_page = isset( $args['subscriptions_per_page'] ) ? (int) $args['subscriptions_per_page'] : 0;
+	if ( $per_page > 0 ) {
+		$paged  = max( 1, (int) ( $args['paged'] ?? 1 ) );
+		$offset = ( $paged - 1 ) * $per_page;
+		$matches = array_slice( $matches, $offset, $per_page, true );
 	}
 	return $matches;
 }

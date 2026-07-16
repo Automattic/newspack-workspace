@@ -82,6 +82,7 @@ class Initializer {
 		WP_CLI::add_command( 'newspack backfill-non-editing-contributors', [ 'Newspack\CLI\Co_Authors_Plus', 'backfill_non_editing_contributor' ] );
 		WP_CLI::add_command( 'newspack migrate-expired-subscriptions', [ 'Newspack\CLI\WooCommerce_Subscriptions', 'migrate_expired_subscriptions' ] );
 		WP_CLI::add_command( 'newspack card-expiry-warning-backfill', [ 'Newspack\CLI\WooCommerce_Subscriptions', 'card_expiry_warning_backfill' ] );
+		WP_CLI::add_command( 'newspack audit-subscription-products', [ 'Newspack\CLI\WooCommerce_Subscriptions', 'audit_subscription_products' ] );
 		WP_CLI::add_command( 'newspack ga4-dimensions', 'Newspack\CLI\GA4_Dimensions' );
 
 		// Only register the Teams for Memberships diagnostics command on sites where the
