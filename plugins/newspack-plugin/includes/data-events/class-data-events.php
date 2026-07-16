@@ -687,7 +687,6 @@ final class Data_Events {
 		$url = \add_query_arg(
 			[
 				'action' => self::ACTION,
-				'nonce'  => self::get_nonce(),
 			],
 			\admin_url( 'admin-ajax.php' )
 		);
@@ -697,7 +696,14 @@ final class Data_Events {
 			[
 				'timeout'   => 0.01,
 				'blocking'  => false,
-				'body'      => [ 'dispatches' => self::$queued_dispatches ],
+				// The nonce travels in the body, not the query string: it is the only
+				// credential authenticating the (nopriv) receiving endpoint, and a query
+				// string is recorded verbatim in the web server access log on every
+				// dispatch. maybe_handle() reads it from $_REQUEST, which covers both.
+				'body'      => [
+					'nonce'      => self::get_nonce(),
+					'dispatches' => self::$queued_dispatches,
+				],
 				'cookies'   => $_COOKIE, // phpcs:ignore
 				'sslverify' => apply_filters( 'https_local_ssl_verify', false ),
 			]
