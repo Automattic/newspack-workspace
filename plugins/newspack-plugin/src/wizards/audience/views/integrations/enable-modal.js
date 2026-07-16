@@ -3,12 +3,15 @@
  */
 import { useState } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
+// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
+import { __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components';
 
 /**
  * Internal dependencies
  */
-import { Button, Card, Modal, Notice } from '../../../../../packages/components/src';
+import { Button, Modal, Notice } from '../../../../../packages/components/src';
 import { SettingsField } from './settings-field';
+import './enable-modal.scss';
 
 const isEmptyValue = value => value === undefined || value === null || value === '';
 
@@ -70,22 +73,22 @@ export const EnableModal = ( { integration, onClose, onEnable, onGoToSettings } 
 			size="small"
 		>
 			{ hasUnsatisfiableField ? (
-				<>
+				<VStack spacing={ 6 } className="newspack-integration-enable-modal__content">
 					<Notice
 						isWarning
 						noticeText={ __( 'No options are available yet. Configure this integration to complete setup.', 'newspack-plugin' ) }
 					/>
-					<Card buttonsCard noBorder className="justify-end">
-						<Button variant="secondary" onClick={ onClose }>
+					<HStack justify="flex-end" spacing={ 2 }>
+						<Button variant="tertiary" onClick={ onClose }>
 							{ __( 'Cancel', 'newspack-plugin' ) }
 						</Button>
 						<Button variant="primary" onClick={ onGoToSettings }>
 							{ __( 'Open settings', 'newspack-plugin' ) }
 						</Button>
-					</Card>
-				</>
+					</HStack>
+				</VStack>
 			) : (
-				<>
+				<VStack spacing={ 6 } className="newspack-integration-enable-modal__content">
 					{ error && <Notice isError noticeText={ error } /> }
 					{ missingFields.map( field => (
 						<SettingsField
@@ -95,15 +98,15 @@ export const EnableModal = ( { integration, onClose, onEnable, onGoToSettings } 
 							onChange={ value => setValues( prev => ( { ...prev, [ field.key ]: value } ) ) }
 						/>
 					) ) }
-					<Card buttonsCard noBorder className="justify-end">
-						<Button variant="secondary" onClick={ onClose } disabled={ enabling }>
+					<HStack justify="flex-end" spacing={ 2 }>
+						<Button variant="tertiary" onClick={ onClose } disabled={ enabling }>
 							{ __( 'Cancel', 'newspack-plugin' ) }
 						</Button>
-						<Button variant="primary" onClick={ handleEnable } disabled={ enabling || hasEmptyField }>
+						<Button variant="primary" onClick={ handleEnable } isBusy={ enabling } disabled={ enabling || hasEmptyField }>
 							{ enabling ? __( 'Enabling…', 'newspack-plugin' ) : __( 'Enable', 'newspack-plugin' ) }
 						</Button>
-					</Card>
-				</>
+					</HStack>
+				</VStack>
 			) }
 		</Modal>
 	);
