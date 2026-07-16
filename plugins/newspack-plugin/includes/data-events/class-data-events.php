@@ -258,9 +258,17 @@ final class Data_Events {
 	 * @return bool Whether the nonce is valid.
 	 */
 	public static function verify_nonce( $nonce ) {
+		// Fail closed on anything that is not a usable nonce. The stored nonce is created
+		// lazily on the first dispatch, so before then it reads as an empty string -- a
+		// loose comparison would let an empty nonce authenticate against it and hand the
+		// dispatch endpoint to anyone.
+		if ( ! is_string( $nonce ) || '' === $nonce ) {
+			return false;
+		}
+
 		// Check against current nonce.
 		$current_nonce = \get_option( self::NONCE_OPTION, '' );
-		if ( $current_nonce === $nonce ) {
+		if ( is_string( $current_nonce ) && '' !== $current_nonce && \hash_equals( $current_nonce, $nonce ) ) {
 			return true;
 		}
 
@@ -268,7 +276,12 @@ final class Data_Events {
 		$previous_nonce = \get_option( self::PREVIOUS_NONCE_OPTION, '' );
 		$previous_expiration = \get_option( self::PREVIOUS_NONCE_EXPIRATION_OPTION, 0 );
 
-		if ( $previous_nonce === $nonce && time() <= $previous_expiration ) {
+		if (
+			is_string( $previous_nonce )
+			&& '' !== $previous_nonce
+			&& time() <= $previous_expiration
+			&& \hash_equals( $previous_nonce, $nonce )
+		) {
 			return true;
 		}
 
