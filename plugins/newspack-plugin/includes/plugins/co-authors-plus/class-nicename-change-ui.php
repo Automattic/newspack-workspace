@@ -83,6 +83,18 @@ class Nicename_Change_UI {
 
 		check_ajax_referer( 'newspack_change_nicename_nonce', 'nonce' );
 
+		// The response enumerates existing users and guest authors, so it is gated on the
+		// same capability that gates the UI this endpoint serves (the user-edit screen).
+		if ( ! current_user_can( 'edit_users' ) ) {
+			wp_send_json(
+				[
+					'success' => false,
+					'message' => esc_html__( 'You are not allowed to do that.', 'newspack-plugin' ),
+				],
+				403
+			);
+		}
+
 		$new_nicename = isset( $_POST['new_nicename'] ) ? sanitize_title( wp_unslash( $_POST['new_nicename'] ) ) : '';
 
 		$existing = Nicename_Change::get_existing_nicenames( $new_nicename );
@@ -113,14 +125,6 @@ class Nicename_Change_UI {
 
 		check_ajax_referer( 'newspack_change_nicename_nonce', 'nonce' );
 
-		$new_nicename = isset( $_POST['new_nicename'] ) ? sanitize_title( wp_unslash( $_POST['new_nicename'] ) ) : '';
-
-		$existing = Nicename_Change::get_existing_nicenames( $new_nicename );
-
-		if ( ! empty( $existing ) ) {
-			return self::change_nicename_check_ajax();
-		}
-
 		$user_id = isset( $_POST['user_id'] ) ? (int) $_POST['user_id'] : 0;
 
 		if ( ! $user_id ) {
@@ -130,6 +134,26 @@ class Nicename_Change_UI {
 					'message' => esc_html__( 'User not found.', 'newspack-plugin' ),
 				]
 			);
+		}
+
+		// The nonce only proves the request came from the user-edit screen, not that the
+		// caller may edit this particular user -- authorize the target before touching it.
+		if ( ! current_user_can( 'edit_user', $user_id ) ) {
+			wp_send_json(
+				[
+					'success' => false,
+					'message' => esc_html__( 'You are not allowed to edit this user.', 'newspack-plugin' ),
+				],
+				403
+			);
+		}
+
+		$new_nicename = isset( $_POST['new_nicename'] ) ? sanitize_title( wp_unslash( $_POST['new_nicename'] ) ) : '';
+
+		$existing = Nicename_Change::get_existing_nicenames( $new_nicename );
+
+		if ( ! empty( $existing ) ) {
+			return self::change_nicename_check_ajax();
 		}
 
 		// Update the nicename.
