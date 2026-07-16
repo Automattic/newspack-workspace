@@ -19,7 +19,7 @@
 		gap: 4px;
 		padding: 16px;
 		text-align: left;
-		background: #fff;
+		background: wp-colors.$white;
 		border: 1px solid wp-colors.$gray-300;
 		border-radius: 4px;
 		cursor: pointer;
@@ -107,6 +107,15 @@
 	&__preview {
 		&.is-loading {
 			opacity: 0.6;
+		}
+
+		// Draw the eye to the targeted-segment price columns: a faint tint of the
+		// same hue as the changed-cell highlight marks the whole column, mirroring
+		// how the sole "Resulting price" column reads as highlighted with no segment.
+		// A changed cell within the column still gets the solid highlight below
+		// (defined after this rule, so equal-specificity source order wins).
+		.newspack-pricing-rules__impact-table .is-segment-col {
+			background: rgba(wp-colors.$alert-yellow, 0.12);
 		}
 
 		.newspack-pricing-rules__impact-table .is-changed {

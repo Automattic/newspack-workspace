@@ -26,6 +26,7 @@ import { formatPrice, formatSegment } from './impact-format';
 interface PriceColumn {
 	key: string;
 	label: string;
+	isSegment: boolean;
 	byId: Record< number, CatalogImpactRow >;
 }
 
@@ -70,11 +71,13 @@ export default function ImpactTable( { baseline, segmentGroups, currency }: Impa
 		{
 			key: 'baseline',
 			label: hasSegments ? __( 'Everyone else', 'newspack-plugin' ) : __( 'Resulting price', 'newspack-plugin' ),
+			isSegment: false,
 			byId: indexById( baseline ),
 		},
 		...segmentGroups.map( group => ( {
 			key: `seg-${ group.segment_id }`,
 			label: group.segment_label,
+			isSegment: true,
 			byId: indexById( group.sample ),
 		} ) ),
 	];
@@ -88,7 +91,7 @@ export default function ImpactTable( { baseline, segmentGroups, currency }: Impa
 						<th scope="col">{ __( 'Product', 'newspack-plugin' ) }</th>
 						<th scope="col">{ __( 'Regular', 'newspack-plugin' ) }</th>
 						{ columns.map( col => (
-							<th scope="col" key={ col.key }>
+							<th scope="col" key={ col.key } className={ col.isSegment ? 'is-segment-col' : undefined }>
 								{ col.label }
 							</th>
 						) ) }
@@ -101,8 +104,9 @@ export default function ImpactTable( { baseline, segmentGroups, currency }: Impa
 							<td>{ formatPrice( row.regular, currency ) }</td>
 							{ columns.map( col => {
 								const cell = col.byId[ row.product_id ];
+								const cellClass = [ col.isSegment && 'is-segment-col', cell?.changed && 'is-changed' ].filter( Boolean ).join( ' ' );
 								return (
-									<td key={ col.key } className={ cell?.changed ? 'is-changed' : undefined }>
+									<td key={ col.key } className={ cellClass || undefined }>
 										<ResultingCell row={ cell } currency={ currency } />
 									</td>
 								);

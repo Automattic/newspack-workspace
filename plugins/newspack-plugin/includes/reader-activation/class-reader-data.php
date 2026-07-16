@@ -252,7 +252,13 @@ final class Reader_Data {
 	public static function get_matched_segments( int $user_id ): array {
 		$raw = self::get_data( $user_id, 'matched_segments' );
 		$ids = is_string( $raw ) ? json_decode( $raw, true ) : ( is_array( $raw ) ? $raw : [] );
-		return is_array( $ids ) ? array_values( array_map( 'strval', $ids ) ) : [];
+		if ( ! is_array( $ids ) ) {
+			return [];
+		}
+		// Client-asserted JSON: drop non-scalar members (e.g. a nested array in a
+		// malformed `[[1,2],3]` payload) before stringifying, so a bad payload can't
+		// raise an "Array to string conversion" warning or yield "Array" entries.
+		return array_values( array_map( 'strval', array_filter( $ids, 'is_scalar' ) ) );
 	}
 
 	/**

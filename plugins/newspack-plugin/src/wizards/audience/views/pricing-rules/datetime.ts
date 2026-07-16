@@ -17,6 +17,11 @@ export function localInputToTs( value: string ): number | null {
 	if ( ! value ) {
 		return null;
 	}
-	const ms = new Date( value ).getTime();
+	// Some browser/OS combinations render `datetime-local` as date-only (e.g. Firefox
+	// in certain locales), emitting `YYYY-MM-DD` with no time. `new Date( 'YYYY-MM-DD' )`
+	// parses as UTC midnight — a day-boundary shift in most timezones — so normalize a
+	// bare date to local midnight before parsing, rather than dropping it as unparseable.
+	const normalized = /^\d{4}-\d{2}-\d{2}$/.test( value ) ? `${ value }T00:00` : value;
+	const ms = new Date( normalized ).getTime();
 	return Number.isNaN( ms ) ? null : Math.floor( ms / 1000 );
 }

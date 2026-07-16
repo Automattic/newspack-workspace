@@ -5,13 +5,18 @@
 /**
  * WordPress dependencies
  */
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 import { useState, useEffect, useCallback, useMemo } from '@wordpress/element';
 import { useDispatch } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
 import { filterSortAndPaginate } from '@wordpress/dataviews';
-import type { Action, Field, View } from '@wordpress/dataviews';
-import { Spinner, Button } from '@wordpress/components';
+import type { Action, Field, View, RenderModalProps } from '@wordpress/dataviews';
+import {
+	Spinner,
+	Button,
+	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
+	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
+} from '@wordpress/components';
 
 /**
  * Internal dependencies
@@ -99,10 +104,6 @@ export default function PricingRulesList() {
 
 	const trashRule = useCallback(
 		( id: number ) => {
-			// eslint-disable-next-line no-alert
-			if ( ! window.confirm( __( 'Move this pricing rule to the trash?', 'newspack-plugin' ) ) ) {
-				return;
-			}
 			apiFetch( { path: `${ API_PATH }/${ id }`, method: 'DELETE' } )
 				.then( () => fetchData() )
 				.catch( () =>
@@ -210,7 +211,41 @@ export default function PricingRulesList() {
 	const actions: Action< PricingRuleRow >[] = useMemo(
 		() => [
 			{ id: 'edit', label: __( 'Edit', 'newspack-plugin' ), isPrimary: true, callback: items => history.push( `/edit/${ items[ 0 ].id }` ) },
-			{ id: 'trash', label: __( 'Trash', 'newspack-plugin' ), isDestructive: true, callback: items => trashRule( items[ 0 ].id ) },
+			{
+				id: 'trash',
+				label: __( 'Trash', 'newspack-plugin' ),
+				isDestructive: true,
+				// Confirm via the WP modal pattern (DataViews RenderModal) rather than window.confirm.
+				RenderModal: ( { items, closeModal }: RenderModalProps< PricingRuleRow > ) => {
+					const rule = items[ 0 ];
+					return (
+						<VStack spacing={ 4 }>
+							<p>
+								{ sprintf(
+									/* translators: %s: the pricing rule's name. */
+									__( 'Move “%s” to the trash?', 'newspack-plugin' ),
+									rule.title || `#${ rule.id }`
+								) }
+							</p>
+							<HStack justify="flex-end">
+								<Button variant="tertiary" onClick={ closeModal }>
+									{ __( 'Cancel', 'newspack-plugin' ) }
+								</Button>
+								<Button
+									variant="primary"
+									isDestructive
+									onClick={ () => {
+										trashRule( rule.id );
+										closeModal?.();
+									} }
+								>
+									{ __( 'Move to trash', 'newspack-plugin' ) }
+								</Button>
+							</HStack>
+						</VStack>
+					);
+				},
+			},
 		],
 		[ history, trashRule ]
 	);

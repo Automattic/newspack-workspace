@@ -50,4 +50,14 @@ class Newspack_Test_Reader_Data_Matched_Segments extends WP_UnitTestCase {
 		update_user_meta( $user_id, Reader_Data::get_meta_key_name( 'matched_segments' ), 'not-json' );
 		self::assertSame( [], Reader_Data::get_matched_segments( $user_id ) );
 	}
+
+	/**
+	 * Drops non-scalar members of a partially-malformed payload without emitting an
+	 * "Array to string conversion" warning, since the snapshot is client-asserted.
+	 */
+	public function test_drops_non_scalar_members() {
+		$user_id = self::factory()->user->create();
+		Reader_Data::update_item( $user_id, 'matched_segments', wp_json_encode( [ [ 1, 2 ], 3 ] ) );
+		self::assertSame( [ '3' ], Reader_Data::get_matched_segments( $user_id ) );
+	}
 }

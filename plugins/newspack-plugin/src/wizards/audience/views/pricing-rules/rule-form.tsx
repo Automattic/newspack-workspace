@@ -48,6 +48,21 @@ interface StepRowState {
 	label: string;
 }
 
+/**
+ * Seed condition state from a saved rule, coercing array-valued conditions (e.g.
+ * `reader_segment`) to numeric IDs. A legacy rule can persist segment IDs as
+ * strings (`[ "20" ]`); the segment token field matches by numeric identity
+ * (`ids.includes( option.value )`), so string IDs would render no tokens on edit.
+ * Coercing here heals those rows and decouples the form from the server value type.
+ */
+function seedConditions( raw: ConditionsMap | undefined ): ConditionsMap {
+	const seeded: ConditionsMap = {};
+	for ( const [ id, val ] of Object.entries( raw ?? {} ) ) {
+		seeded[ id ] = Array.isArray( val ) ? val.map( Number ).filter( n => ! Number.isNaN( n ) ) : val;
+	}
+	return seeded;
+}
+
 export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps ) {
 	const { setHeaderData, addNotice } = useDispatch( WIZARD_STORE_NAMESPACE );
 
@@ -122,7 +137,7 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 
 	const [ activeFrom, setActiveFrom ] = useState( tsToLocalInput( rule?.active_from ?? null ) );
 	const [ activeUntil, setActiveUntil ] = useState( tsToLocalInput( rule?.active_until ?? null ) );
-	const [ conditions, setConditions ] = useState< ConditionsMap >( () => ( { ...( rule?.conditions ?? {} ) } ) );
+	const [ conditions, setConditions ] = useState< ConditionsMap >( () => seedConditions( rule?.conditions ) );
 	const [ isSaving, setIsSaving ] = useState( false );
 
 	const previewBody = useMemo( () => {
@@ -188,6 +203,24 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 				message: __( 'Enter a price for this rule.', 'newspack-plugin' ),
 				type: 'error',
 				id: 'pricing-rule-value',
+			} );
+			return;
+		}
+		// A non-empty start/end that doesn't parse would otherwise be silently dropped
+		// to "no date" on save; surface it instead of discarding the operator's input.
+		if ( activeFrom.trim() !== '' && localInputToTs( activeFrom ) === null ) {
+			addNotice( {
+				message: __( 'Enter a valid start date, or clear it.', 'newspack-plugin' ),
+				type: 'error',
+				id: 'pricing-rule-active-from',
+			} );
+			return;
+		}
+		if ( activeUntil.trim() !== '' && localInputToTs( activeUntil ) === null ) {
+			addNotice( {
+				message: __( 'Enter a valid end date, or clear it.', 'newspack-plugin' ),
+				type: 'error',
+				id: 'pricing-rule-active-until',
 			} );
 			return;
 		}
