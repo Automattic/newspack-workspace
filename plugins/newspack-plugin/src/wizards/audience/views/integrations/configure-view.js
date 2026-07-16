@@ -16,6 +16,16 @@ import { SettingsField } from './settings-field';
 
 import './configure-view.scss';
 
+// Compare a draft field value against its saved server value. Field values are
+// scalars (string/boolean) or arrays of strings (metadata/checkbox lists); the
+// array compare is order-sensitive, matching how the draft builds them.
+const valuesMatch = ( a, b ) => {
+	if ( Array.isArray( a ) && Array.isArray( b ) ) {
+		return a.length === b.length && a.every( ( value, index ) => value === b[ index ] );
+	}
+	return a === b;
+};
+
 // Remount the inner view when the integration id changes so the local draft is
 // per-integration. Switching integrations (same Route, new params) and leaving
 // the view both reset the draft structurally — no unmount cleanup effect needed.
@@ -68,6 +78,33 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 		return { settingsFields: settings, inboundField: inbound, outboundField: outbound };
 	}, [ integration?.settings ] );
 
+	// A successful save (or refetch) replaces integration.settings with the saved
+	// server values. Drop draft keys that now match the server value so the draft
+	// clears even when the initiating view has remounted, while genuine unsaved
+	// edits (typed during the in-flight window, or a still-failing field) survive.
+	useEffect( () => {
+		if ( ! integration?.settings ) {
+			return;
+		}
+		setDraft( prev => {
+			const keys = Object.keys( prev );
+			if ( keys.length === 0 ) {
+				return prev;
+			}
+			let changed = false;
+			const next = {};
+			for ( const key of keys ) {
+				const field = integration.settings.find( f => f.key === key );
+				if ( field && valuesMatch( field.value, prev[ key ] ) ) {
+					changed = true;
+					continue;
+				}
+				next[ key ] = prev[ key ];
+			}
+			return changed ? next : prev;
+		} );
+	}, [ integration?.settings ] );
+
 	// Set the static header data (name/title/description) only when the
 	// integration identity changes. Avoids per-keystroke churn from
 	// hasPending/saving updates feeding through SET_HEADER_DATA.
@@ -94,9 +131,9 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 					type: 'primary',
 					label: __( 'Save', 'newspack-plugin' ),
 					action: () => {
-						onSave( integrationId, draftRef.current )
-							.then( () => setDraft( {} ) )
-							.catch( () => {} );
+						// The draft clears via the reconcile effect once the parent
+						// reflects the saved values; on failure the draft is retained.
+						onSave( integrationId, draftRef.current ).catch( () => {} );
 					},
 					disabled: ! hasPending || integrationSaving,
 				},

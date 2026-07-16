@@ -147,15 +147,21 @@ describe( 'ConfigureView save wiring', () => {
 		useUnsavedChangesDialog.mockReturnValue( { confirmDialog: null, requestConfirm: jest.fn() } );
 	} );
 
-	it( 'saves the current draft and clears it on success', async () => {
+	// Server value for the field once a save of `value` has landed.
+	const savedIntegrations = value => ( {
+		esp: { ...INTEGRATION, settings: [ { key: 'mailchimp_audience_id', type: 'text', label: 'Audience ID', value } ] },
+	} );
+
+	it( 'reconciles the draft once the parent reflects the saved value', async () => {
 		const onSave = jest.fn( () => Promise.resolve() );
-		renderConfigureView( { onSave } );
+		const { rerender } = renderConfigureView( { onSave } );
 		fireEvent.change( screen.getByLabelText( 'Audience ID' ), { target: { value: 'abc123' } } );
 		await act( async () => {
 			getLatestSaveAction()();
 		} );
 		expect( onSave ).toHaveBeenCalledWith( 'esp', { mailchimp_audience_id: 'abc123' } );
-		expect( screen.getByLabelText( 'Audience ID' ).value ).toBe( '' );
+		rerender( buildConfigureView( { integrations: savedIntegrations( 'abc123' ), onSave } ) );
+		expect( screen.getByLabelText( 'Audience ID' ).value ).toBe( 'abc123' );
 		expect( useUnsavedChangesDialog ).toHaveBeenLastCalledWith( { when: false } );
 	} );
 
@@ -184,6 +190,45 @@ describe( 'ConfigureView save wiring', () => {
 			getLatestSaveAction()();
 		} );
 		expect( onSave ).toHaveBeenCalledWith( 'esp', { mailchimp_audience_id: 'abcd' } );
+	} );
+
+	// Fields stay editable during an in-flight save; a successful save must clear
+	// only the submitted values, not edits typed while the request was pending.
+	it( 'preserves edits typed while a save is in flight', async () => {
+		let resolveSave;
+		const onSave = jest.fn(
+			() =>
+				new Promise( resolve => {
+					resolveSave = resolve;
+				} )
+		);
+		const { rerender } = renderConfigureView( { onSave } );
+		fireEvent.change( screen.getByLabelText( 'Audience ID' ), { target: { value: 'abc123' } } );
+		act( () => {
+			getLatestSaveAction()();
+		} );
+		fireEvent.change( screen.getByLabelText( 'Audience ID' ), { target: { value: 'abc123-more' } } );
+		await act( async () => {
+			resolveSave();
+		} );
+		// Parent reflects only the submitted 'abc123'; the later edit must survive.
+		rerender( buildConfigureView( { integrations: savedIntegrations( 'abc123' ), onSave } ) );
+		expect( screen.getByLabelText( 'Audience ID' ).value ).toBe( 'abc123-more' );
+		expect( useUnsavedChangesDialog ).toHaveBeenLastCalledWith( { when: true } );
+	} );
+
+	// After a save completes the mounted view must clear its draft even if the
+	// instance that clicked Save has since remounted (the seeded instance owns no
+	// success closure) — otherwise it shows a phantom "unsaved changes" state.
+	it( 'clears a re-seeded draft once the server reflects the save', () => {
+		const { rerender } = renderConfigureView( {
+			inFlightChanges: { esp: { mailchimp_audience_id: 'abc123' } },
+			saving: { esp: true },
+		} );
+		expect( screen.getByLabelText( 'Audience ID' ).value ).toBe( 'abc123' );
+		rerender( buildConfigureView( { integrations: savedIntegrations( 'abc123' ), inFlightChanges: {}, saving: {} } ) );
+		expect( screen.getByLabelText( 'Audience ID' ).value ).toBe( 'abc123' );
+		expect( useUnsavedChangesDialog ).toHaveBeenLastCalledWith( { when: false } );
 	} );
 } );
 
