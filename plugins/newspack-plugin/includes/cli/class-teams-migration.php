@@ -39,18 +39,31 @@ class Teams_Migration {
 	const TEAM_ROLE_META_KEY_TEMPLATE = '_wc_memberships_for_teams_team_%d_role';
 
 	/**
+	 * Subscription meta key stamping the source team a group subscription was migrated
+	 * from. migrate-teams keys reuse on this marker so one owner's several teams each
+	 * migrate to their own group subscription instead of merging into one.
+	 *
+	 * @var string
+	 */
+	const MIGRATED_TEAM_ID_META_KEY = '_newspack_migrated_team_id';
+
+	/**
 	 * Migrate all active team memberships to Newspack group subscriptions.
 	 *
 	 * For teams already linked to an active subscription: enables the group
 	 * subscription settings, adds all team members as group members, and promotes
 	 * any team member whose Teams role is `manager` to a group manager.
 	 *
-	 * For teams with no linked subscription: searches for an existing active group
-	 * subscription owned by the team owner and re-uses it. If none is found,
-	 * creates a new $0 subscription on the given product.
+	 * For teams with no linked subscription: reuses the group subscription this team
+	 * was previously migrated to (stamped with MIGRATED_TEAM_ID_META_KEY), falling
+	 * back to an unmarked group subscription owned by the team owner for groups from
+	 * migrator runs predating per-team marking. If none is found, creates a new $0
+	 * subscription on the given product.
 	 *
 	 * The command is idempotent — re-running it updates existing group
-	 * subscriptions in place rather than creating duplicates. When --product-id is
+	 * subscriptions in place rather than creating duplicates. Reuse keys on the
+	 * source team, so an owner who owns several teams migrates to one group
+	 * subscription per team rather than a single merged group. When --product-id is
 	 * supplied, every re-used subscription has its line items replaced with the
 	 * migration product.
 	 *
@@ -215,22 +228,24 @@ class Teams_Migration {
 				}
 			}
 
-			// If no linked subscription was reusable, look for an existing group
-			// subscription owned by the team owner so re-running the command does not
-			// create duplicate subscriptions.
+			// If no linked subscription was reusable, reuse the group subscription this
+			// team was previously migrated to (stamped with MIGRATED_TEAM_ID_META_KEY),
+			// so re-running the command keys on the team and does not create duplicate
+			// subscriptions. An owner who owns several teams therefore keeps one group
+			// subscription per team rather than merging them all into one.
 			if ( ! $subscription ) {
-				$owner_group_sub = self::find_group_subscription_for_owner( $owner_id );
-				if ( $owner_group_sub ) {
-					$subscription = $owner_group_sub;
-					WP_CLI::line( sprintf( 'Team %d: found existing group subscription %d for owner %d — re-updating.', $team_id, $owner_group_sub->get_id(), $owner_id ) );
-					// An owner who owns several unlinked teams reuses the same group
-					// subscription for each, so their members merge into one group and
-					// the name/limit take the last team processed. Warn when the reused
-					// subscription already carries a different group name so the operator
-					// can spot an unintended merge.
-					$existing_name = $owner_group_sub->get_meta( '_newspack_group_subscription_name' );
-					if ( '' !== $existing_name && $existing_name !== $team->post_title ) {
-						WP_CLI::warning( sprintf( 'Team %d ("%s"): merging into subscription %d already named "%s" (owner %d owns multiple teams). Members will be combined and the group renamed.', $team_id, $team->post_title, $owner_group_sub->get_id(), $existing_name, $owner_id ) );
+				$reusable_sub = self::find_reusable_group_subscription( $team_id, $owner_id, $used_owner_fallback );
+				if ( $reusable_sub ) {
+					$subscription = $reusable_sub;
+					if ( $used_owner_fallback ) {
+						// The only groups lacking the team marker are from migrator runs
+						// predating per-team marking. Adopt one for this team (it is marked
+						// below), and warn: for a multi-team owner only the first team can
+						// adopt the legacy group, and if it was another team's group the
+						// name changes.
+						WP_CLI::warning( sprintf( 'Team %d ("%s"): no group subscription marked for this team; adopting unmarked group subscription %d owned by owner %d (legacy migrator run) and marking it for this team.', $team_id, $team->post_title, $reusable_sub->get_id(), $owner_id ) );
+					} else {
+						WP_CLI::line( sprintf( 'Team %d: found existing group subscription %d migrated from this team — re-updating.', $team_id, $reusable_sub->get_id() ) );
 					}
 				}
 			}
@@ -278,6 +293,10 @@ class Teams_Migration {
 			if ( ! $dry_run ) {
 				$subscription->update_meta_data( '_newspack_group_subscription_enabled', 'yes' );
 				$subscription->update_meta_data( '_newspack_group_subscription_name', $team->post_title );
+				// Stamp the source team so re-runs reuse this subscription by team (see
+				// find_reusable_group_subscription() for the reuse rules and the dry-run
+				// caveat).
+				$subscription->update_meta_data( self::MIGRATED_TEAM_ID_META_KEY, $team_id );
 				$subscription->save();
 			}
 
@@ -844,9 +863,10 @@ class Teams_Migration {
 	 * The `migrate-teams` command flattened every Teams member to a plain group
 	 * member on already-migrated sites, dropping the manager designation. This
 	 * re-designates managers: for every published team, it resolves the group
-	 * subscription (the team's linked active subscription, else an active group
-	 * subscription owned by the team owner) and promotes each member whose Teams
-	 * role is `manager` — and who is already a group member — to a group manager.
+	 * subscription (the team's linked active subscription, else the group this team
+	 * was migrated to by team marker, else an unmarked group owned by the team owner)
+	 * and promotes each member whose Teams role is `manager` — and who is already a
+	 * group member — to a group manager.
 	 *
 	 * Dry-run by default; pass --live to write. Idempotent — members already
 	 * managing are left untouched.
@@ -1139,8 +1159,11 @@ class Teams_Migration {
 	/**
 	 * Resolve the group subscription to backfill managers into for a team.
 	 *
-	 * Mirrors migrate-teams: prefer the team's linked active group subscription,
-	 * else an active group subscription owned by the team owner. Never creates one.
+	 * Mirrors migrate-teams: prefer the team's linked active group subscription, else
+	 * the group subscription this team was migrated to (by team marker, so a multi-team
+	 * owner's managers are never promoted into a sibling team's group), else an unmarked
+	 * group subscription owned by the team owner (legacy pre-marker groups). Never
+	 * creates one.
 	 *
 	 * @param int $team_id  The team post ID.
 	 * @param int $owner_id The team owner user ID.
@@ -1155,21 +1178,46 @@ class Teams_Migration {
 				return $subscription;
 			}
 		}
-		return self::find_group_subscription_for_owner( $owner_id );
+		return self::find_reusable_group_subscription( $team_id, $owner_id );
 	}
 
 	/**
-	 * Find the first active group subscription owned by a user, if any.
+	 * Resolve the group subscription to reuse for a team whose linked subscription was
+	 * not reusable.
 	 *
-	 * @param int $owner_id User ID to search.
+	 * Prefers the group subscription this team was previously migrated to (stamped with
+	 * MIGRATED_TEAM_ID_META_KEY), so reuse keys on the team and a multi-team owner keeps
+	 * one group subscription per team. Falls back to an unmarked active group
+	 * subscription owned by the team owner — only groups from migrator runs predating
+	 * per-team marking lack the marker — and flags that fallback so the caller can warn.
+	 *
+	 * Both lookups run over a single pass of the owner's subscriptions. Discovery is
+	 * scoped to the team's current owner (migrated groups are owned by their team owner),
+	 * which assumes the owner has not changed since the team was migrated; if it has, the
+	 * prior group is owned by the old owner and is not found here, so a re-run creates a
+	 * fresh group for the team rather than reusing the original.
+	 *
+	 * Dry-run caveat: migrate-teams stamps the marker only on a live run, so a dry-run
+	 * preview of an owner whose only group predates per-team marking shows each of their
+	 * teams adopting that one legacy group (the live run avoids the merge by marking it
+	 * on the first team). The preview over-reports the merge rather than hiding one, so
+	 * the live outcome is always safe.
+	 *
+	 * @param int  $team_id             The team post ID.
+	 * @param int  $owner_id            The team owner user ID.
+	 * @param bool $used_owner_fallback Set true when the unmarked owner fallback matched. Passed by reference.
 	 *
 	 * @return \WC_Subscription|null
 	 */
-	private static function find_group_subscription_for_owner( $owner_id ) {
-		$owner_id = absint( $owner_id );
-		if ( ! $owner_id || ! function_exists( 'wcs_get_users_subscriptions' ) ) {
+	public static function find_reusable_group_subscription( $team_id, $owner_id, &$used_owner_fallback = false ) {
+		$used_owner_fallback = false;
+		$team_id             = absint( $team_id );
+		$owner_id            = absint( $owner_id );
+		if ( ! $team_id || ! $owner_id || ! function_exists( 'wcs_get_users_subscriptions' ) ) {
 			return null;
 		}
+
+		$unmarked_group_sub = null;
 		foreach ( \wcs_get_users_subscriptions( $owner_id ) as $subscription ) {
 			// wcs_get_users_subscriptions is filtered to include member-only groups; require ownership.
 			if ( (int) $subscription->get_user_id() !== $owner_id ) {
@@ -1178,10 +1226,27 @@ class Teams_Migration {
 			if ( 'active' !== $subscription->get_status() ) {
 				continue;
 			}
-			if ( Group_Subscription::is_group_subscription( $subscription ) ) {
+			if ( ! Group_Subscription::is_group_subscription( $subscription ) ) {
+				continue;
+			}
+			$marked_team_id = (int) $subscription->get_meta( self::MIGRATED_TEAM_ID_META_KEY );
+			// A group already migrated from this team wins outright — reuse keys on the
+			// source team, so a sibling team of the same owner never merges into it.
+			if ( $marked_team_id === $team_id ) {
 				return $subscription;
 			}
+			// Remember the first unmarked group as the legacy fallback. A group already
+			// marked for a different team is skipped so it is never merged into.
+			if ( null === $unmarked_group_sub && 0 === $marked_team_id ) {
+				$unmarked_group_sub = $subscription;
+			}
 		}
+
+		if ( $unmarked_group_sub ) {
+			$used_owner_fallback = true;
+			return $unmarked_group_sub;
+		}
+
 		return null;
 	}
 

@@ -127,6 +127,7 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 			]
 		);
 		$subscription->update_meta_data( Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'enabled', 'yes' );
+		$subscription->save();
 		return $subscription;
 	}
 
@@ -482,5 +483,176 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 		$this->assertTrue( $result['resolved'], 'The active group subscription should resolve.' );
 		$this->assertSame( $active_group->get_id(), $result['subscription_id'], 'The active group subscription should be selected over the cancelled/non-group ones.' );
 		$this->assertSame( [ $member ], $result['promoted'], 'The manager-role member should be promoted into the resolved group.' );
+	}
+
+	/**
+	 * Backfill resolution keys on the team marker for a multi-team owner: a team resolves
+	 * to its own migrated group, never a sibling team's, so managers are never promoted
+	 * across teams. This pins the sibling-command half of the NPPD-2060 fix — the merge
+	 * the migration avoids must not resurface in the manager backfill.
+	 *
+	 * Backfills team B, whose group is the owner's *second* group, so an owner-first
+	 * resolver (the deleted pre-fix behaviour) would wrongly land on team A's group — the
+	 * marker-keyed resolver must land on team B's.
+	 */
+	public function test_backfill_resolves_team_marked_group_for_multi_team_owner() {
+		$owner          = $this->create_reader();
+		$team_a_manager = $this->create_reader();
+		$team_b_manager = $this->create_reader();
+		// Two unlinked teams of the same owner, each already migrated to its own marked group.
+		$team_a_id    = $this->create_team( $owner, [ $team_a_manager ], null );
+		$team_b_id    = $this->create_team( $owner, [ $team_b_manager ], null );
+		$team_a_group = $this->create_migrated_group_subscription( $owner, $team_a_id );
+		$team_b_group = $this->create_migrated_group_subscription( $owner, $team_b_id );
+		Teams_Migration::add_group_member( $team_a_group, $team_a_manager );
+		Teams_Migration::add_group_member( $team_b_group, $team_b_manager );
+		$this->set_team_role( $team_a_manager, $team_a_id, 'manager' );
+		$this->set_team_role( $team_b_manager, $team_b_id, 'manager' );
+
+		$result = Teams_Migration::backfill_team_managers_for_team( $team_b_id, true );
+
+		$this->assertTrue( $result['resolved'], 'Team B should resolve to its own marked group.' );
+		$this->assertSame( $team_b_group->get_id(), $result['subscription_id'], 'Backfill must resolve team B\'s marked group (its second group), never team A\'s.' );
+		$this->assertSame( [ $team_b_manager ], $result['promoted'], 'Only team B\'s manager should be promoted, into team B\'s group.' );
+		$this->assertNotContains( $team_b_manager, array_map( 'intval', Group_Subscription::get_managers( $team_a_group ) ), 'Team B\'s manager must not land in team A\'s group.' );
+	}
+
+	/**
+	 * Backfill for a team with no linked and no marked group falls back to an unmarked
+	 * (legacy pre-marker) group owned by the team owner — the unified resolver keeps the
+	 * legacy path that predates per-team marking.
+	 */
+	public function test_backfill_falls_back_to_unmarked_owner_group() {
+		$owner          = $this->create_reader();
+		$manager_member = $this->create_reader();
+		$legacy_group   = $this->create_group_subscription( $owner ); // Unmarked.
+		Teams_Migration::add_group_member( $legacy_group, $manager_member );
+		$team_id = $this->create_team( $owner, [ $manager_member ], null );
+		$this->set_team_role( $manager_member, $team_id, 'manager' );
+
+		$result = Teams_Migration::backfill_team_managers_for_team( $team_id, true );
+
+		$this->assertTrue( $result['resolved'], 'An unmarked owner group should still resolve as the legacy fallback.' );
+		$this->assertSame( $legacy_group->get_id(), $result['subscription_id'], 'The unmarked legacy group should be resolved.' );
+		$this->assertSame( [ $manager_member ], $result['promoted'], 'The manager-role member should be promoted into the legacy group.' );
+	}
+
+	/**
+	 * Create an active group subscription owned by $owner_id and marked as migrated
+	 * from $team_id, mirroring what migrate-teams stamps for a team.
+	 *
+	 * @param int $owner_id Owner user ID.
+	 * @param int $team_id  Source team post ID to stamp on the subscription.
+	 * @return WC_Subscription
+	 */
+	private function create_migrated_group_subscription( int $owner_id, int $team_id ) {
+		$subscription = $this->create_group_subscription( $owner_id );
+		$subscription->update_meta_data( Teams_Migration::MIGRATED_TEAM_ID_META_KEY, $team_id );
+		$subscription->save();
+		return $subscription;
+	}
+
+	/**
+	 * Reuse keys on the source team: each team resolves back to the group subscription
+	 * stamped with its own team ID, even when one owner owns both — so re-running the
+	 * migration updates each team's group in place rather than duplicating it.
+	 */
+	public function test_reuse_keys_on_team_marker_not_owner() {
+		$owner            = $this->create_reader();
+		$first_team_id    = $this->create_team( $owner, [] );
+		$second_team_id   = $this->create_team( $owner, [] );
+		$first_team_group  = $this->create_migrated_group_subscription( $owner, $first_team_id );
+		$second_team_group = $this->create_migrated_group_subscription( $owner, $second_team_id );
+
+		$used_owner_fallback = null;
+		$this->assertSame(
+			$first_team_group->get_id(),
+			Teams_Migration::find_reusable_group_subscription( $first_team_id, $owner, $used_owner_fallback )->get_id(),
+			'The first team should resolve to the subscription marked with its own team ID.'
+		);
+		$this->assertFalse( $used_owner_fallback, 'A marker match is not an owner fallback.' );
+
+		$this->assertSame(
+			$second_team_group->get_id(),
+			Teams_Migration::find_reusable_group_subscription( $second_team_id, $owner, $used_owner_fallback )->get_id(),
+			'The second team should resolve to its own marked subscription, not the first team\'s.'
+		);
+		$this->assertFalse( $used_owner_fallback, 'A marker match is not an owner fallback.' );
+	}
+
+	/**
+	 * The multi-team-owner merge regression (NPPD-2060): an owner who owns a second team
+	 * must not have it resolve into the first team's already-migrated group subscription.
+	 * With reuse keyed on the owner, the second team merged into the first's group and
+	 * inherited its name and seat limit; keyed on the team marker, the second team finds
+	 * no reusable group and a fresh one is created for it instead.
+	 */
+	public function test_second_team_of_owner_does_not_merge_into_first_teams_group() {
+		$owner          = $this->create_reader();
+		$first_team_id  = $this->create_team( $owner, [] );
+		$second_team_id = $this->create_team( $owner, [] );
+		// Only the first team has been migrated so far.
+		$this->create_migrated_group_subscription( $owner, $first_team_id );
+
+		$used_owner_fallback = null;
+		$resolved            = Teams_Migration::find_reusable_group_subscription( $second_team_id, $owner, $used_owner_fallback );
+
+		$this->assertNull( $resolved, 'The second team must not reuse the first team\'s group subscription — a new group is created for it.' );
+		$this->assertFalse( $used_owner_fallback, 'A subscription already claimed by another team is not an eligible owner fallback.' );
+	}
+
+	/**
+	 * Legacy fallback: a group subscription created by a migrator run predating per-team
+	 * marking carries no marker, so it is adopted for the team by owner lookup (flagged so
+	 * the caller can warn). It is then marked, so a second team of the same owner no longer
+	 * matches it.
+	 */
+	public function test_unmarked_owner_group_is_adopted_as_legacy_fallback() {
+		$owner   = $this->create_reader();
+		$team_id = $this->create_team( $owner, [] );
+		// A pre-existing, unmarked group subscription (no MIGRATED_TEAM_ID_META_KEY).
+		$legacy_group = $this->create_group_subscription( $owner );
+
+		$used_owner_fallback = null;
+		$resolved            = Teams_Migration::find_reusable_group_subscription( $team_id, $owner, $used_owner_fallback );
+
+		$this->assertSame( $legacy_group->get_id(), $resolved->get_id(), 'An unmarked owner-owned group subscription should be adopted.' );
+		$this->assertTrue( $used_owner_fallback, 'Adopting an unmarked owner subscription must flag the owner fallback so the caller warns.' );
+	}
+
+	/**
+	 * Reuse ignores subscriptions that carry another team's marker, are inactive, or are
+	 * not group-enabled: an owner whose only subscriptions are a different team's marked
+	 * group, a cancelled group, and an active non-group sub has no reusable group for a
+	 * fresh team.
+	 */
+	public function test_reuse_ignores_other_team_inactive_and_non_group_subscriptions() {
+		$owner            = $this->create_reader();
+		$other_team_id    = $this->create_team( $owner, [] );
+		$fresh_team_id    = $this->create_team( $owner, [] );
+		$this->create_migrated_group_subscription( $owner, $other_team_id );
+		$cancelled = wcs_create_subscription(
+			[
+				'customer_id'    => $owner,
+				'status'         => 'cancelled',
+				'billing_period' => 'month',
+			]
+		);
+		$cancelled->update_meta_data( Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'enabled', 'yes' );
+		$cancelled->save();
+		wcs_create_subscription(
+			[
+				'customer_id'    => $owner,
+				'status'         => 'active',
+				'billing_period' => 'month',
+			]
+		);
+
+		$used_owner_fallback = null;
+		$this->assertNull(
+			Teams_Migration::find_reusable_group_subscription( $fresh_team_id, $owner, $used_owner_fallback ),
+			'A fresh team should find no reusable group among another team\'s marked group, a cancelled group, and a non-group subscription.'
+		);
+		$this->assertFalse( $used_owner_fallback, 'No eligible fallback exists here.' );
 	}
 }
