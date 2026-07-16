@@ -46,6 +46,8 @@
 	}
 
 	&--variant-tertiary {
-		background-color: wp-colors.$gray-100;
+		// Fallback for consumers whose bundle doesn't carry the wpds token sheet
+		// (it ships with the Page header's stylesheet).
+		background-color: var( --wpds-color-stroke-surface-neutral-weak, #{wp-colors.$gray-100} );
 	}
 }

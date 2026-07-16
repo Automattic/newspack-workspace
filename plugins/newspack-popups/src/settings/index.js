@@ -7,12 +7,12 @@ import { render, useState } from '@wordpress/element';
 import domReady from '@wordpress/dom-ready';
 import { __ } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
-import { Button, Card, CardBody, CardHeader, CheckboxControl, FlexBlock, Notice, SelectControl, TextControl } from '@wordpress/components';
+import { Button, Card, CardBody, CheckboxControl, Notice, SelectControl, SlotFillProvider, TextControl } from '@wordpress/components';
 
 /**
  * Newspack dependencies.
  */
-import { NewspackIcon } from 'newspack-components';
+import { Page } from 'newspack-components';
 
 /**
  * Internal dependencies
@@ -87,18 +87,8 @@ const App = () => {
 	};
 
 	return (
-		<div className="newspack-campaigns__wrapper">
-			<div className="newspack-logo__wrapper">
-				<Button className="newspack-logo-button" href="https://newspack.pub/" target="_blank" label={ __( 'By Newspack' ) }>
-					<NewspackIcon height={ 32 } />
-				</Button>
-			</div>
+		<Page breadcrumbItems={ [ { label: __( 'Prompts', 'newspack-popups' ) }, { label: __( 'Settings', 'newspack-popups' ) } ] }>
 			<Card>
-				<CardHeader isShady>
-					<FlexBlock>
-						<h2>{ __( 'Settings', 'newspack-popups' ) }</h2>
-					</FlexBlock>
-				</CardHeader>
 				<CardBody>
 					{ settings.map( renderSetting ) }
 					{ error && (
@@ -113,11 +103,16 @@ const App = () => {
 					</div>
 				</CardBody>
 			</Card>
-		</div>
+		</Page>
 	);
 };
 
 domReady( () => {
 	const element = document.getElementById( 'newspack-popups-settings-root' );
-	render( <App />, element );
+	render(
+		<SlotFillProvider>
+			<App />
+		</SlotFillProvider>,
+		element
+	);
 } );

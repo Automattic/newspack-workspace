@@ -20,6 +20,11 @@ const API_PATH = '/newspack/v1/wizard/newspack-audience-integrations/settings';
 // Minimum time the Activate action stays busy, even when the request is faster.
 const MIN_ACTIVATION_BUSY_MS = 2000;
 
+const INTEGRATIONS_BREADCRUMBS = [
+	{ label: __( 'Audience Management', 'newspack-plugin' ) },
+	{ label: __( 'Integrations', 'newspack-plugin' ), url: '#/settings' },
+];
+
 const AudienceIntegrations = ( props, ref ) => {
 	const [ integrations, setIntegrations ] = useState( {} );
 	const [ pendingChanges, setPendingChanges ] = useState( {} );
@@ -267,6 +272,7 @@ const AudienceIntegrations = ( props, ref ) => {
 					exact: true,
 					render: SettingsSection,
 					props: sharedProps,
+					breadcrumbs: INTEGRATIONS_BREADCRUMBS,
 				},
 				{
 					path: '/settings/:integrationId/logs',
@@ -274,6 +280,7 @@ const AudienceIntegrations = ( props, ref ) => {
 					props: sharedProps,
 					isHidden: true,
 					fullWidth: true,
+					breadcrumbs: INTEGRATIONS_BREADCRUMBS,
 				},
 				{
 					path: '/settings/:integrationId',
@@ -281,6 +288,7 @@ const AudienceIntegrations = ( props, ref ) => {
 					props: sharedProps,
 					backNav: '#/settings',
 					isHidden: true,
+					breadcrumbs: INTEGRATIONS_BREADCRUMBS,
 				},
 			] }
 			ref={ ref }

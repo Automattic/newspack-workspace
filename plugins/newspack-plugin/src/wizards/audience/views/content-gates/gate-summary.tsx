@@ -34,7 +34,7 @@ export const getGateSummarySections = ( gate: Gate, isNewsletter = false ): Gate
 
 	sections.push( {
 		key: 'content_rules',
-		label: __( 'Content rules', 'newspack-plugin' ),
+		label: __( 'Content Rules', 'newspack-plugin' ),
 		content:
 			gate.content_rules.length > 0 ? (
 				gate.content_rules.map( rule => (
@@ -56,7 +56,7 @@ export const getGateSummarySections = ( gate: Gate, isNewsletter = false ): Gate
 	if ( ! isNewsletter ) {
 		sections.push( {
 			key: 'registration',
-			label: __( 'Registered access', 'newspack-plugin' ),
+			label: __( 'Registered Access', 'newspack-plugin' ),
 			content: (
 				<>
 					{ gate.registration?.active && (
@@ -84,7 +84,7 @@ export const getGateSummarySections = ( gate: Gate, isNewsletter = false ): Gate
 
 	sections.push( {
 		key: 'custom_access',
-		label: __( 'Paid access', 'newspack-plugin' ),
+		label: __( 'Paid Access', 'newspack-plugin' ),
 		content: (
 			<>
 				{ gate.custom_access?.active &&

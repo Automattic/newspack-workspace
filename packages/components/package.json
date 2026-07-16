@@ -23,9 +23,14 @@
 		"access": "public"
 	},
 	"dependencies": {
+		"@wordpress/admin-ui": "2.4.0",
+		"@wordpress/style-runtime": "^0.5.0",
+		"@wordpress/theme": "^0.16.0",
+		"@wordpress/ui": "^0.16.0",
 		"classnames": "^2.3.1",
 		"lodash": "^4.17.21",
 		"moment-range": "^3.1.1",
+		"newspack-icons": "workspace:*",
 		"qs": "^6.15.2",
 		"react-router-dom": "^5.3.4",
 		"@babel/runtime": "^7.29.7",
@@ -53,7 +58,8 @@
 		"@babel/preset-env": "^7.29.7",
 		"@babel/preset-react": "^7.29.7",
 		"@babel/preset-typescript": "^7.29.7",
-		"recursive-copy": "^2.0.0"
+		"recursive-copy": "^2.0.0",
+		"newspack-scripts": "workspace:*"
 	},
 	"babel": {
 		"ignore": [
@@ -67,6 +73,7 @@
 		"compile:cjs": "babel src --config-file ./babel.config.cjs.js --extensions='.js,.jsx,.ts,.tsx' --out-dir dist/cjs",
 		"compile:esm": "babel src --extensions='.js,.jsx,.ts,.tsx' --out-dir dist/esm",
 		"compile": "npm run compile:cjs && npm run compile:esm",
+		"test": "newspack-scripts test",
 		"prepublishOnly": "npm run clean && npm run compile && node copy-styles.js",
 		"postpublish": "npm run clean",
 		"build": "npm run clean && npm run compile && node copy-styles.js"

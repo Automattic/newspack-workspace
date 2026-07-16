@@ -155,13 +155,13 @@ export default function ContentGateSettings( {
 	const layoutOptions: { label: string; action?: () => void; href?: string }[] = [];
 	if ( hasRegistrationLayout ) {
 		layoutOptions.push( {
-			label: __( 'Edit registered access layout', 'newspack-plugin' ),
+			label: __( 'Edit Registered Access Layout', 'newspack-plugin' ),
 			href: getEditGateLayoutUrl( gate.id, 'registration' ),
 		} );
 	}
 	if ( hasCustomAccessLayout ) {
 		layoutOptions.push( {
-			label: __( 'Edit paid access layout', 'newspack-plugin' ),
+			label: __( 'Edit Paid Access Layout', 'newspack-plugin' ),
 			href: getEditGateLayoutUrl( gate.id, 'custom_access' ),
 		} );
 	}
