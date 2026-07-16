@@ -212,9 +212,20 @@ class Membership_Gates_Migration {
 				}
 			}
 
+			// Persist the under-cover flag in the summary table, not just the transient
+			// warning, so operators reading the table can see which gates omit a whole
+			// taxonomy and need manual attention (NPPD-2065).
+			$omitted_taxonomies = array_values(
+				array_unique( array_merge( [], ...array_column( $group, 'omitted_taxonomies' ) ) )
+			);
+			$action_label       = $dry_run ? $action . ' (dry-run)' : $action;
+			if ( ! empty( $omitted_taxonomies ) ) {
+				$action_label .= sprintf( ' — under-covers (omitted whole taxonomy: %s)', implode( ', ', $omitted_taxonomies ) );
+			}
+
 			$summary[] = [
 				'plan_name'     => $gate_title,
-				'action'        => $dry_run ? $action . ' (dry-run)' : $action,
+				'action'        => $action_label,
 				'gate_id'       => $gate_id ?? '(pending)',
 				'content_rules' => count( $ac_rules ),
 				'access_type'   => $access_type,
@@ -277,7 +288,8 @@ class Membership_Gates_Migration {
 	 * @param array $skipped  Skipped-plan summary rows, appended to by reference.
 	 *
 	 * @return array<string,array> Map of fingerprint => list of plan descriptors, each
-	 *                             [ 'pid', 'name', 'access_method', 'ac_rules', 'product_ids' ].
+	 *                             [ 'pid', 'name', 'access_method', 'ac_rules', 'product_ids',
+	 *                             'omitted_taxonomies' ].
 	 */
 	private static function group_plans_by_fingerprint( array $plan_ids, array &$skipped ): array {
 		$plan_groups = [];
@@ -302,10 +314,8 @@ class Membership_Gates_Migration {
 			$wc_rules = $plan->get_content_restriction_rules();
 			$ac_rules = self::map_rules_to_ac_format( $wc_rules );
 
-			// A whole-taxonomy WCM rule ("restrict every post carrying taxonomy X") has
-			// no Access Control equivalent, so map_rules_to_ac_format() drops it. Warn
-			// loudly per plan so the gap is never silent — the generated gate under-covers
-			// what WCM gated, and the operator has to configure it manually (NPPD-2065).
+			// Whole-taxonomy rules are dropped by map_rules_to_ac_format() (see its
+			// docblock); warn per plan so the gap is never silent (NPPD-2065).
 			$dropped_taxonomies = self::whole_taxonomy_rule_slugs( $wc_rules );
 			if ( ! empty( $dropped_taxonomies ) ) {
 				if ( empty( $ac_rules ) ) {
@@ -316,7 +326,7 @@ class Membership_Gates_Migration {
 					// differently — the skip is reported per plan below.
 					WP_CLI::warning(
 						sprintf(
-							'Plan "%s" restricts all content in taxonomy [%s], which Access Control cannot represent. No gate is generated for it — configure this gate manually.',
+							'Plan "%s" restricts all content in taxonomy [%s], which Access Control cannot represent, so no gate is generated for it. Subscribers of this plan\'s product may lose access to content that other gates cover — add that product to those gates, or hand-build this taxonomy gate.',
 							$plan_name,
 							implode( ', ', $dropped_taxonomies )
 						)
@@ -332,7 +342,7 @@ class Membership_Gates_Migration {
 				}
 				WP_CLI::warning(
 					sprintf(
-						'Plan "%s" also restricts every post in taxonomy [%s] (beyond any specific terms gated), which Access Control cannot represent. That blanket restriction is omitted, so the generated gate under-covers what WCM gated — review it manually.',
+						'Plan "%s" also restricts every post in taxonomy [%s] (beyond any specific terms gated), which Access Control cannot represent, so that blanket restriction is omitted and the generated gate under-covers what WCM gated. Subscribers of this plan\'s product may lose access to the omitted content where another gate covers it — add that product to those gates, or hand-build the taxonomy gate.',
 						$plan_name,
 						implode( ', ', $dropped_taxonomies )
 					)
@@ -359,11 +369,14 @@ class Membership_Gates_Migration {
 			// specific content applies site-wide.
 			$fingerprint                   = self::compute_rules_fingerprint( $ac_rules );
 			$plan_groups[ $fingerprint ][] = [
-				'pid'           => $pid,
-				'name'          => $plan_name,
-				'access_method' => $access_method,
-				'ac_rules'      => $ac_rules,
-				'product_ids'   => 'purchase' === $access_method ? array_values( $plan->get_product_ids() ) : [],
+				'pid'                => $pid,
+				'name'               => $plan_name,
+				'access_method'      => $access_method,
+				'ac_rules'           => $ac_rules,
+				'product_ids'        => 'purchase' === $access_method ? array_values( $plan->get_product_ids() ) : [],
+				// Whole taxonomies dropped from this plan's gate, so its summary row can
+				// flag that the gate under-covers (NPPD-2065). Empty for faithful plans.
+				'omitted_taxonomies' => $dropped_taxonomies,
 			];
 		}
 
@@ -490,12 +503,11 @@ class Membership_Gates_Migration {
 	 * discriminator rather than string-matching the name against a hardcoded list, so
 	 * custom post types (e.g. 'guest-author') map correctly.
 	 *
-	 * A taxonomy rule with no term IDs is WCM's "restrict every post carrying this
-	 * taxonomy" — a whole-taxonomy restriction Access Control has no slug for. Emitting
-	 * it as an empty-value rule would be silently dropped by
-	 * Content_Rules::get_gate_content_rules (it filters empty-value rules), leaving the
-	 * gate to under-cover. So it is dropped here instead; whole_taxonomy_rule_slugs()
-	 * lets the caller detect and warn about the gap per plan (NPPD-2065).
+	 * The authoritative note on the whole-taxonomy drop (NPPD-2065): a taxonomy rule with
+	 * no term IDs is WCM's "restrict every post carrying this taxonomy", which AC has no
+	 * slug for. Emitted as an empty-value rule it would be silently filtered out by
+	 * Content_Rules::get_gate_content_rules, so the gate would under-cover. It is dropped
+	 * here (via is_whole_taxonomy_rule()) instead, and the caller warns per plan.
 	 *
 	 * @param \WC_Memberships_Membership_Plan_Rule[] $wc_rules Array of WC Memberships rules.
 	 *
@@ -509,10 +521,7 @@ class Membership_Gates_Migration {
 				continue;
 			}
 
-			// Drop whole-taxonomy rules (no term IDs) rather than emit an empty-value rule
-			// Access Control would silently filter out; the caller warns instead. Detection
-			// is shared with whole_taxonomy_rule_slugs() so the drop and the warning can
-			// never disagree about what is dropped.
+			// Drop whole-taxonomy rules (see the docblock note above).
 			if ( self::is_whole_taxonomy_rule( $rule ) ) {
 				continue;
 			}
@@ -569,17 +578,12 @@ class Membership_Gates_Migration {
 	}
 
 	/**
-	 * List the taxonomy slugs of a plan's whole-taxonomy content rules (NPPD-2065).
-	 *
-	 * A whole-taxonomy rule (taxonomy content type, no term IDs) restricts every post
-	 * carrying the taxonomy — a restriction Access Control cannot represent, so
-	 * map_rules_to_ac_format() drops it. This is its pure, WooCommerce-free detection
-	 * counterpart: the caller uses the returned slugs to warn per plan that the generated
-	 * gate under-covers, keeping the warning out of the reflection-tested mapper.
+	 * Taxonomy slugs of a plan's whole-taxonomy rules — the WC-free detection seam the
+	 * caller warns from (map_rules_to_ac_format() drops them). See is_whole_taxonomy_rule().
 	 *
 	 * @param \WC_Memberships_Membership_Plan_Rule[] $wc_rules Array of WC Memberships rules.
 	 *
-	 * @return string[] De-duplicated taxonomy slugs of the whole-taxonomy rules, in encounter order.
+	 * @return string[] De-duplicated taxonomy slugs, in encounter order.
 	 */
 	private static function whole_taxonomy_rule_slugs( array $wc_rules ): array {
 		$slugs = [];
@@ -592,14 +596,9 @@ class Membership_Gates_Migration {
 	}
 
 	/**
-	 * Whether a WC rule is a whole-taxonomy restriction (NPPD-2065).
-	 *
-	 * A whole-taxonomy rule is a named taxonomy rule with no term IDs — WCM's "restrict
-	 * every post carrying this taxonomy", which Access Control has no slug for. This is
-	 * the single source of truth for that shape: map_rules_to_ac_format() drops such
-	 * rules and whole_taxonomy_rule_slugs() reports them, both via this predicate, so the
-	 * drop and the operator warning can never diverge (a divergence would silently
-	 * reintroduce the under-cover the fix closes).
+	 * Whether a WC rule is a whole-taxonomy restriction: a named taxonomy rule with no
+	 * term IDs. Single source of truth for the shape both the drop and the warning key
+	 * off, so they cannot diverge (NPPD-2065).
 	 *
 	 * @param \WC_Memberships_Membership_Plan_Rule $rule A WC Memberships rule.
 	 *

@@ -387,26 +387,6 @@ class Test_Membership_Gates_Migration extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * NPPD-2065: only taxonomy rules with no object IDs are whole-taxonomy. Term-scoped
-	 * taxonomy rules, whole-post-type rules, specific-post rules, and rules with an empty
-	 * content-type name are all representable (or already skipped) and must not be
-	 * reported.
-	 */
-	public function test_whole_taxonomy_rule_slugs_ignores_representable_and_nameless_rules() {
-		$term_scoped_category = $this->make_rule( 'taxonomy', 'category', [ 5 ] );
-		$whole_post_type      = $this->make_rule( 'post_type', 'post', [] );
-		$specific_post        = $this->make_rule( 'post_type', 'post', [ 12 ] );
-		$nameless_taxonomy    = $this->make_rule( 'taxonomy', '', [] );
-
-		$slugs = $this->invoke_private_static(
-			'whole_taxonomy_rule_slugs',
-			[ [ $term_scoped_category, $whole_post_type, $specific_post, $nameless_taxonomy ] ]
-		);
-
-		$this->assertSame( [], $slugs );
-	}
-
-	/**
 	 * NPPD-2065: is_whole_taxonomy_rule() is the single predicate both the mapper's drop
 	 * and the caller's warning key off, so pinning it here guards the safety property that
 	 * a rule is dropped by map_rules_to_ac_format() if and only if the caller warns about
