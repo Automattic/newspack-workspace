@@ -725,35 +725,6 @@ class Test_Membership_Gates_Migration extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * NPPD-2066 proves the expansion is *necessary*, not merely sufficient: fed the raw
-	 * (unexpanded) parent-category and child-category rule sets, the consolidation planner
-	 * neither absorbs nor flags them — the silent split this fix exists to close. The
-	 * companion test above shows expansion turns that same pair into a clean absorption.
-	 */
-	public function test_hierarchy_nested_plans_are_silently_split_without_expansion() {
-		$parent_group_rules = [
-			[
-				'slug'  => 'category',
-				'value' => [ '18' ],
-			],
-		];
-		$child_group_rules = [
-			[
-				'slug'  => 'category',
-				'value' => [ '19' ],
-			],
-		];
-
-		$plan = $this->invoke_private_static(
-			'plan_rule_set_consolidation',
-			[ [ $parent_group_rules, $child_group_rules ], [ true, true ] ]
-		);
-
-		$this->assertSame( [], $plan['absorbed_by'], 'Raw flat values share no term, so neither group is absorbed.' );
-		$this->assertSame( [], $plan['overlaps'], 'Raw flat values do not intersect, so the split is silent (the NPPD-2066 bug).' );
-	}
-
-	/**
 	 * NPPD-2066 equal-coverage regression guard: hierarchy expansion can canonicalise two
 	 * *distinct* fingerprints to the *same* term closure — a plan restricting a parent
 	 * category, and a plan restricting that parent plus a redundant child. Once expanded

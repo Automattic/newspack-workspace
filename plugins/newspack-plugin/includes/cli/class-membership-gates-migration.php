@@ -823,26 +823,23 @@ class Membership_Gates_Migration {
 	 * @return array[] The rule set with hierarchical-taxonomy values expanded to descendants.
 	 */
 	private static function expand_rule_set_hierarchy( array $ac_rules ): array {
-		// A fast path for the non-taxonomy slugs Access Control honours; the
-		// get_taxonomy() guard below is the real filter (it also skips non-hierarchical
-		// taxonomies such as tags and any unregistered slug), so this list need not be
-		// exhaustive — it just avoids a needless get_taxonomy() lookup on the common
-		// non-taxonomy rules.
-		$non_taxonomy_slugs = [ 'post_types', 'specific_posts', 'newsletters' ];
 		foreach ( $ac_rules as &$ac_rule ) {
-			if ( in_array( $ac_rule['slug'], $non_taxonomy_slugs, true ) ) {
-				continue;
-			}
+			// Only a hierarchical taxonomy has a term tree to walk. get_taxonomy()
+			// returns false for the non-taxonomy rule slugs ('post_types',
+			// 'specific_posts', 'newsletters') and for any unregistered slug, and the
+			// hierarchical check skips flat taxonomies such as tags — so those rules pass
+			// through unchanged.
 			$taxonomy = \get_taxonomy( $ac_rule['slug'] );
 			if ( ! $taxonomy || ! $taxonomy->hierarchical ) {
 				continue;
 			}
 			$expanded = array_map( 'strval', $ac_rule['value'] );
 			foreach ( $ac_rule['value'] as $term_id ) {
-				$children = \get_term_children( (int) $term_id, $ac_rule['slug'] );
-				if ( ! \is_wp_error( $children ) ) {
-					$expanded = array_merge( $expanded, array_map( 'strval', $children ) );
-				}
+				// get_term_children() returns the full recursive descendant set (an empty
+				// array for a leaf term). It only errors on a non-existent taxonomy, which
+				// the truthy get_taxonomy() guard above has already ruled out.
+				$descendants = \get_term_children( (int) $term_id, $ac_rule['slug'] );
+				$expanded    = array_merge( $expanded, array_map( 'strval', $descendants ) );
 			}
 			$ac_rule['value'] = array_values( array_unique( $expanded ) );
 		}
