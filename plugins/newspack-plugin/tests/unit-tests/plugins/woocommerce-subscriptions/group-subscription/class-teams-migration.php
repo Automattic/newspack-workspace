@@ -47,27 +47,18 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 	private $invitation_ids = [];
 
 	/**
-	 * Include the WC mocks and register the WooCommerce Teams invitation statuses.
+	 * Include the WC mocks.
 	 *
-	 * The migration reads invitation posts by their raw `wcmti-` status; registering
-	 * the statuses (as the Teams plugin does at runtime) keeps wp_insert_post from
-	 * coercing the fixture invitations to a built-in status. The `protected` flag
-	 * mirrors Teams' own registration — WP_Query strips protected statuses from the
-	 * status clause in this non-admin context, so this is what makes the query return
-	 * every status and exercises the reader's own pending filter.
+	 * The `wcmti-` invitation statuses are deliberately left unregistered, which
+	 * reproduces the case the reader's PHP-side pending filter defends against: once
+	 * WooCommerce Teams is deactivated its statuses are unregistered, so WP_Query drops
+	 * the `post_status` clause and returns every status. wp_insert_post stores an
+	 * unregistered status verbatim, so the fixtures below keep their raw status and
+	 * exercise that filter.
 	 */
 	public static function set_up_before_class() {
 		parent::set_up_before_class();
 		require_once dirname( __DIR__, 4 ) . '/mocks/wc-mocks.php';
-		foreach ( [ 'wcmti-pending', 'wcmti-accepted', 'wcmti-cancelled' ] as $invitation_status ) {
-			register_post_status(
-				$invitation_status,
-				[
-					'public'    => false,
-					'protected' => true,
-				] 
-			);
-		}
 	}
 
 	/**
@@ -539,8 +530,8 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 
 	/**
 	 * The pending-invitation reader returns only the emails of pending invitations for
-	 * the given team: accepted/cancelled invites, malformed titles, and other teams'
-	 * invites are all excluded.
+	 * the given team: accepted/cancelled invites, malformed titles, other teams'
+	 * invites, and duplicate addresses are all excluded/deduped.
 	 */
 	public function test_get_pending_team_invitation_emails_returns_pending_valid_emails_only() {
 		$owner   = $this->create_reader();
@@ -550,6 +541,8 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 		$pending_two = 'pending-two@test.com';
 		$this->create_team_invitation( $team_id, $pending_one );
 		$this->create_team_invitation( $team_id, $pending_two );
+		// A second pending invitation for the same address is deduped, not returned twice.
+		$this->create_team_invitation( $team_id, $pending_one );
 		// Non-pending invitations are not carried over.
 		$this->create_team_invitation( $team_id, 'accepted@test.com', 'wcmti-accepted' );
 		$this->create_team_invitation( $team_id, 'cancelled@test.com', 'wcmti-cancelled' );
@@ -562,7 +555,7 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 		$emails = Teams_Migration::get_pending_team_invitation_emails( $team_id );
 
 		sort( $emails );
-		$this->assertSame( [ $pending_one, $pending_two ], $emails, 'Only pending, valid, same-team invitation emails should be returned.' );
+		$this->assertSame( [ $pending_one, $pending_two ], $emails, 'Only pending, valid, same-team invitation emails should be returned, deduped.' );
 	}
 
 	/**

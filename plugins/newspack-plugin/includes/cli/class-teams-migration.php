@@ -1214,11 +1214,13 @@ class Teams_Migration {
 	 * Teams plugin being active. Malformed and duplicate addresses are dropped. Exposed
 	 * for testing.
 	 *
-	 * WooCommerce Teams registers its invitation statuses as protected, which WP_Query
-	 * strips from the status clause in the non-admin CLI context this runs in — a
-	 * `post_status` filter is silently dropped there, returning every status. So the
-	 * pending filter is applied in PHP on each post's actual status rather than trusted
-	 * to the query.
+	 * The `post_status` query filter only narrows the result when the status is
+	 * registered: WooCommerce Teams registers `wcmti-pending` on `init`, so during a
+	 * migration (Teams still active) the database returns pending invitations directly.
+	 * This must not depend on Teams being active, though — once Teams is deactivated the
+	 * status is unregistered and WP_Query silently drops the status clause, returning
+	 * every status. So the pending filter is re-applied in PHP on each post's actual
+	 * status as the guarantee that holds either way.
 	 *
 	 * @param int $team_id The team post ID.
 	 *
@@ -1227,13 +1229,15 @@ class Teams_Migration {
 	public static function get_pending_team_invitation_emails( $team_id ) {
 		$invitations = \get_posts(
 			[
-				'post_type'      => 'wc_team_invitation',
-				'post_status'    => [ 'wcmti-pending', 'wcmti-accepted', 'wcmti-cancelled' ],
-				'post_parent'    => absint( $team_id ),
-				'posts_per_page' => -1,
-				'orderby'        => 'ID',
-				'order'          => 'ASC',
-				'no_found_rows'  => true,
+				'post_type'              => 'wc_team_invitation',
+				'post_status'            => 'wcmti-pending',
+				'post_parent'            => absint( $team_id ),
+				'posts_per_page'         => -1,
+				'orderby'                => 'ID',
+				'order'                  => 'ASC',
+				'no_found_rows'          => true,
+				'update_post_meta_cache' => false,
+				'update_post_term_cache' => false,
 			]
 		);
 
