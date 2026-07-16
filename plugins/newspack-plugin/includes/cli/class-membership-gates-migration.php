@@ -342,7 +342,7 @@ class Membership_Gates_Migration {
 				}
 				WP_CLI::warning(
 					sprintf(
-						'Plan "%s" also restricts every post in taxonomy [%s] (beyond any specific terms gated), which Access Control cannot represent, so that blanket restriction is omitted and the generated gate under-covers what WCM gated. Subscribers of this plan\'s product may lose access to the omitted content where another gate covers it — add that product to those gates, or hand-build the taxonomy gate.',
+						'Plan "%s" also restricts every post in taxonomy [%s], which Access Control cannot represent, so that blanket restriction is omitted and the generated gate under-covers what WCM gated. Subscribers of this plan\'s product may lose access to the omitted content where another gate covers it — add that product to those gates, or hand-build the taxonomy gate.',
 						$plan_name,
 						implode( ', ', $dropped_taxonomies )
 					)
