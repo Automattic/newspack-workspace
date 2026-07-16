@@ -46,6 +46,8 @@ correctness, paywall bypass, cache leakage, secret exposure.**
      `(int) $user_id === get_current_user_id()`).
   A `__return_true` route with no in-callback auth is a finding. These routes must also
   declare `args` with a `sanitize_callback`.
+- The public `/register` endpoint's "integration key" is shipped to the frontend – bot
+  friction, not authentication. Never treat it as proof of identity.
 
 ## Content gate / paywall bypass
 
@@ -54,8 +56,8 @@ HMAC-based; preserve these invariants:
 
 - Sign with `hash_hmac('sha256', …, wp_salt(...))`; compare **only** with `hash_equals`.
 - **Validate cheaply before touching the DB**: cap token length before base64-decode,
-  `ctype_digit` the id/expiry, verify the HMAC, and only then query. Reordering this so a
-  forged token costs DB work reintroduces a DoS.
+  `ctype_digit` the id/expiry, verify the HMAC, then query. Reordering this so a forged
+  token costs DB work reintroduces a DoS.
 - TTL/expiry must be derived server-side (e.g. post meta), never from a client timestamp.
 - Bypass grants must be scoped to the specific post, so a grant for one post cannot
   unlock another.
@@ -70,7 +72,7 @@ gated content reaching another. Highest-consequence area in the repo.
   prefix** – that prefix is what makes Batcache skip the cache. Renaming such a cookie
   without it silently poisons the cache. See the `Newsletters_Access::COOKIE_NAME`
   docblock.
-- Any path emitting personalized/gated output must call **both** `batcache_cancel()` and
+- Any path emitting personalized/gated output calls **both** `batcache_cancel()` and
   `nocache_headers()`.
 - Access cookies must be HMAC-signed with an expiry, not bare flags.
 - Do not introduce `vary_cache_on_function` – the strategy is cookie-prefix exemption,
@@ -80,11 +82,11 @@ gated content reaching another. Highest-consequence area in the repo.
 
 ESP/OAuth credentials (Mailchimp/Constant Contact/ActiveCampaign keys, Salesforce tokens,
 `newspack_node_secret_key`) are stored **unencrypted in wp_options**, so exposure control
-is entirely about egress:
+is all about egress:
 
 - Never add a credential to a REST response, log line, error message, or JS payload.
-  Newsletters gates this with an explicit `PROVIDER_CREDENTIAL_ALLOWLIST`; widening it,
-  or returning a secret not on it, is a finding.
+  Newsletters gates this with `PROVIDER_CREDENTIAL_ALLOWLIST`; widening it, or returning
+  a secret not on it, is a finding.
 - Refresh/access tokens must never leave the server.
 - Fail **closed** on an empty signing secret – an empty-key HMAC is reproducible by
   anyone (see `Salesforce::api_validate_webhook`).
@@ -96,41 +98,37 @@ is entirely about egress:
 Auth is symmetric AEAD: a successful decrypt proves possession of the shared key, and that
 is the entire authorization. A compromised node is therefore **accepted risk, out of
 scope** – an attacker holding a node's key is a bigger incident than the sync layer can
-defend against. Attacker-controlled payloads are a premise here, not a finding.
+defend against. Attacker-controlled payloads are a premise, not a finding.
 
 **Not findings** – by design:
 
 - A node broadcasting user-sync events that create accounts on the hub and other nodes.
   `Reader_Registered` calls `get_or_create_user_by_email()` on both deliberately;
-  propagating accounts across the network *is* the feature.
+  propagating accounts network-wide *is* the feature.
 - **Roles propagating network-wide, including `administrator`.** The manual "Sync user
   across network" button sends `role` on the wire and `User_Manually_Synced` applies it
-  unallowlisted by design – that is how an admin on one site propagates an admin role.
+  unallowlisted by design – that is how an admin propagates an admin role.
 - No second auth factor behind the signature check; no replay cache beyond the 60s window.
 
-Scoped to the same-operator model: if a diff *changes* that model (e.g. admitting
-third-party nodes), the constraints that docblock names – `sanitize_user()` on
-`user_login`, restricting `role` – become real requirements.
+Scoped to the same-operator model: if a diff *changes* it (e.g. admitting third-party
+nodes), the constraints that docblock names – `sanitize_user()` on `user_login`,
+restricting `role` – become real requirements.
 
 ## Injection the linter misses
 
-- **Inline `<script>` JSON:** `wp_json_encode()` does not escape `<`, `>`, or `/`, so an
-  encoded value containing `</script>` breaks out. When echoing JSON into a literal
-  script block, pass `JSON_HEX_TAG | JSON_HEX_AMP`, or prefer `wp_localize_script`.
+- **Inline `<script>` JSON is not a `</script>` breakout – do not report one.**
+  `json_encode` escapes `/` as `\/` by default, so an encoded `</script>` emits
+  `<\/script>` and cannot close the element. Bare `echo wp_json_encode( $x )` in a script
+  block is fine; `JSON_HEX_TAG` does not fix a bug that isn't there. (`<!--<script>` does
+  derail the tokenizer, but storing it needs `unfiltered_html` – Editors/Admins, who can
+  inject raw `<script>` anyway.)
 - **Block `render_callback`s** (`src/blocks/*/view.php`) build HTML/shortcodes with
   `sprintf`/concatenation. Escape at output (`esc_attr` on `className`) and validate
-  attributes into a local var – `block.json` type coercion is not a security boundary.
-  Blocks delegating to a template must be audited at the template.
+  attributes into a local var – `block.json` types are not a security boundary. Blocks
+  delegating to a template are audited at the template.
 - **Frontend JS:** `.innerHTML =` with server or reader-supplied values (content-gate
-  banners, popups merge tags rendering reader profile data) needs the value sanitized
-  server-side (`wp_kses`) or set via `textContent`.
-
-## Reader identity
-
-The public `/register` endpoint's "integration key" is `hash_hmac(...)` of a static id and
-is **shipped to the frontend** – bot friction, not authentication. Never treat it as proof
-of identity. The honeypot inverts the fields: the real address arrives in `npe`, while
-`email` must be empty.
+  banners, popups merge tags rendering reader profile data) needs the value `wp_kses`'d
+  server-side or set via `textContent`.
 
 ## CI workflows
 
