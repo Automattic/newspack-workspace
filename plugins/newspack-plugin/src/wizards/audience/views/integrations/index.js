@@ -15,6 +15,11 @@ import { LogsView } from './logs-view';
 
 const API_PATH = '/newspack/v1/wizard/newspack-audience-integrations/settings';
 
+const INTEGRATIONS_BREADCRUMBS = [
+	{ label: __( 'Audience Management', 'newspack-plugin' ) },
+	{ label: __( 'Integrations', 'newspack-plugin' ), url: '#/settings' },
+];
+
 const AudienceIntegrations = ( props, ref ) => {
 	const [ integrations, setIntegrations ] = useState( {} );
 	const [ pendingChanges, setPendingChanges ] = useState( {} );
@@ -158,6 +163,7 @@ const AudienceIntegrations = ( props, ref ) => {
 					exact: true,
 					render: SettingsSection,
 					props: sharedProps,
+					breadcrumbs: INTEGRATIONS_BREADCRUMBS,
 				},
 				{
 					path: '/settings/:integrationId/logs',
@@ -165,6 +171,7 @@ const AudienceIntegrations = ( props, ref ) => {
 					props: sharedProps,
 					isHidden: true,
 					fullWidth: true,
+					breadcrumbs: INTEGRATIONS_BREADCRUMBS,
 				},
 				{
 					path: '/settings/:integrationId',
@@ -172,6 +179,7 @@ const AudienceIntegrations = ( props, ref ) => {
 					props: sharedProps,
 					backNav: '#/settings',
 					isHidden: true,
+					breadcrumbs: INTEGRATIONS_BREADCRUMBS,
 				},
 			] }
 			ref={ ref }
