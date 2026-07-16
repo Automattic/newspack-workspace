@@ -475,7 +475,7 @@ class Test_Membership_Gates_Migration extends \WP_UnitTestCase {
 
 		$plan = $this->invoke_private_static(
 			'plan_rule_set_consolidation',
-			[ [ $category_only, $category_plus_all_posts ] ]
+			[ [ $category_only, $category_plus_all_posts ], [ true, true ] ]
 		);
 
 		$this->assertSame(
@@ -515,7 +515,7 @@ class Test_Membership_Gates_Migration extends \WP_UnitTestCase {
 
 		$plan = $this->invoke_private_static(
 			'plan_rule_set_consolidation',
-			[ [ $category_and_tag_seven, $category_and_tag_eight ] ]
+			[ [ $category_and_tag_seven, $category_and_tag_eight ], [ true, true ] ]
 		);
 
 		$this->assertSame( [], $plan['absorbed_by'], 'Neither rule set is a subset, so nothing is absorbed.' );
@@ -541,11 +541,44 @@ class Test_Membership_Gates_Migration extends \WP_UnitTestCase {
 
 		$plan = $this->invoke_private_static(
 			'plan_rule_set_consolidation',
-			[ [ $category_five, $tag_seven ] ]
+			[ [ $category_five, $tag_seven ], [ true, true ] ]
 		);
 
 		$this->assertSame( [], $plan['absorbed_by'] );
 		$this->assertSame( [], $plan['overlaps'] );
+	}
+
+	/**
+	 * NPPD-2064 purchase boundary: a signup group whose content is a subset of a
+	 * purchase group is NOT absorbed — a single gate would attach the purchase group's
+	 * subscription requirement to the signup content, denying registered readers who
+	 * reach it for free today. They stay separate and the overlap is flagged.
+	 */
+	public function test_plan_rule_set_consolidation_does_not_merge_across_the_purchase_boundary() {
+		$signup_category_only = [
+			[
+				'slug'  => 'category',
+				'value' => [ '5' ],
+			],
+		];
+		$purchase_category_plus_all_posts = [
+			[
+				'slug'  => 'category',
+				'value' => [ '5' ],
+			],
+			[
+				'slug'  => 'post_types',
+				'value' => [ 'post' ],
+			],
+		];
+
+		$plan = $this->invoke_private_static(
+			'plan_rule_set_consolidation',
+			[ [ $signup_category_only, $purchase_category_plus_all_posts ], [ false, true ] ]
+		);
+
+		$this->assertSame( [], $plan['absorbed_by'], 'A signup subset is not folded into a purchase superset.' );
+		$this->assertSame( [ [ 0, 1 ] ], $plan['overlaps'], 'The cross-boundary overlap is flagged instead.' );
 	}
 
 	/**
@@ -576,7 +609,7 @@ class Test_Membership_Gates_Migration extends \WP_UnitTestCase {
 
 		$plan = $this->invoke_private_static(
 			'plan_rule_set_consolidation',
-			[ [ $tier_basic, $tier_plus, $tier_top ] ]
+			[ [ $tier_basic, $tier_plus, $tier_top ], [ true, true, true ] ]
 		);
 
 		$this->assertSame(
@@ -625,8 +658,19 @@ class Test_Membership_Gates_Migration extends \WP_UnitTestCase {
 			],
 		];
 
+		$specific_posts = [
+			[
+				'slug'  => 'specific_posts',
+				'value' => [ '42' ],
+			],
+		];
+
 		$this->assertTrue(
 			$this->invoke_private_static( 'rule_sets_overlap', [ $all_posts, $category_five ] )
+		);
+		$this->assertTrue(
+			$this->invoke_private_static( 'rule_sets_overlap', [ $all_posts, $specific_posts ] ),
+			'A whole-post-type rule also overlaps specific-post rules of that type.'
 		);
 		$this->assertFalse(
 			$this->invoke_private_static(

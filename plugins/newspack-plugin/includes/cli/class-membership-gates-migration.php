@@ -798,16 +798,25 @@ class Membership_Gates_Migration {
 	 * relation cannot be safely merged (a single gate would need one product list for
 	 * disjoint entitlements) and are reported as overlaps for a loud warning instead.
 	 *
-	 * Pure and WooCommerce-free: it decides purely from the rule sets, so the
-	 * group→gate wiring in consolidate_plan_groups() stays a thin adapter.
+	 * Absorption only merges groups on the same side of the purchase boundary. A gate
+	 * built from a purchase group carries custom_access (a subscription requirement),
+	 * which Access Control enforces on top of registration; folding a purchase group
+	 * into a signup-only superset would attach that subscription requirement to the
+	 * signup plan's broader content, denying registered readers who reach it for free
+	 * today. Cross-boundary pairs stay separate and, if they overlap, raise the warning.
 	 *
-	 * @param array[] $rule_sets List of AC-format rule sets, one per fingerprint group.
+	 * Pure and WooCommerce-free: it decides purely from the rule sets and the per-group
+	 * purchase flags, so the group→gate wiring in consolidate_plan_groups() stays a thin
+	 * adapter.
+	 *
+	 * @param array[] $rule_sets          List of AC-format rule sets, one per fingerprint group.
+	 * @param bool[]  $group_has_purchase Whether each group carries a purchase plan (parallel to $rule_sets).
 	 *
 	 * @return array{absorbed_by: array<int,int>, overlaps: array<int,int[]>}
 	 *               absorbed_by maps an absorbed group index to its covering root index;
 	 *               overlaps lists [i, j] index pairs of unresolved overlapping roots.
 	 */
-	private static function plan_rule_set_consolidation( array $rule_sets ): array {
+	private static function plan_rule_set_consolidation( array $rule_sets, array $group_has_purchase ): array {
 		$absorbed_by = [];
 
 		foreach ( $rule_sets as $i => $rules_i ) {
@@ -818,6 +827,11 @@ class Membership_Gates_Migration {
 			$best_size = -1;
 			foreach ( $rule_sets as $j => $rules_j ) {
 				if ( $i === $j || empty( $rules_j ) ) {
+					continue;
+				}
+				// Never merge across the purchase boundary — a purchase gate's
+				// custom_access would over-restrict a signup group's content.
+				if ( $group_has_purchase[ $i ] !== $group_has_purchase[ $j ] ) {
 					continue;
 				}
 				// $j strictly covers $i: it covers $i but $i does not cover $j. Distinct
@@ -908,11 +922,15 @@ class Membership_Gates_Migration {
 	 * @return array[] The consolidated gate groups.
 	 */
 	private static function consolidate_plan_groups( array $groups ): array {
-		$rule_sets = array_map(
+		$rule_sets          = array_map(
 			fn( $group ) => $group[0]['ac_rules'],
 			$groups
 		);
-		$plan = self::plan_rule_set_consolidation( $rule_sets );
+		$group_has_purchase = array_map(
+			fn( $group ) => (bool) array_filter( $group, fn( $descriptor ) => 'purchase' === $descriptor['access_method'] ),
+			$groups
+		);
+		$plan = self::plan_rule_set_consolidation( $rule_sets, $group_has_purchase );
 
 		$merged = [];
 		foreach ( $groups as $index => $group ) {
