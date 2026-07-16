@@ -825,8 +825,8 @@ class Membership_Gates_Migration {
 	private static function expand_rule_set_hierarchy( array $ac_rules ): array {
 		foreach ( $ac_rules as &$ac_rule ) {
 			// Only a hierarchical taxonomy has a term tree to walk. get_taxonomy()
-			// returns false for the non-taxonomy rule slugs ('post_types',
-			// 'specific_posts', 'newsletters') and for any unregistered slug, and the
+			// returns false for the non-taxonomy rule slugs this migration emits
+			// ('post_types', 'specific_posts') and for any unregistered slug, and the
 			// hierarchical check skips flat taxonomies such as tags — so those rules pass
 			// through unchanged.
 			$taxonomy = \get_taxonomy( $ac_rule['slug'] );
