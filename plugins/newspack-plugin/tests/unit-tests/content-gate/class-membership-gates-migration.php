@@ -327,6 +327,114 @@ class Test_Membership_Gates_Migration extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * NPPD-2065: a whole-taxonomy rule (taxonomy content type, no object IDs — "restrict
+	 * every post carrying this taxonomy") has no Access Control equivalent. It must not
+	 * map to an empty-value rule (`[ 'slug' => taxonomy, 'value' => [] ]`), which AC's
+	 * Content_Rules::get_gate_content_rules silently filters out, leaving the gate to
+	 * under-cover. So map_rules_to_ac_format drops it entirely; the caller warns.
+	 */
+	public function test_map_rules_to_ac_format_drops_whole_taxonomy_rule() {
+		$whole_category_rule = $this->make_rule( 'taxonomy', 'category', [] );
+
+		$mapped_rules = $this->invoke_private_static( 'map_rules_to_ac_format', [ [ $whole_category_rule ] ] );
+
+		$this->assertSame( [], $mapped_rules, 'A whole-taxonomy rule is dropped, never emitted as an empty-value rule.' );
+	}
+
+	/**
+	 * NPPD-2065: dropping a whole-taxonomy rule must not disturb the other, representable
+	 * rules in the same plan — a plan gating "all categories" plus a specific tag maps to
+	 * the tag rule alone (the category restriction is dropped and warned separately).
+	 */
+	public function test_map_rules_to_ac_format_drops_whole_taxonomy_but_keeps_other_rules() {
+		$whole_category_rule = $this->make_rule( 'taxonomy', 'category', [] );
+		$specific_tag_rule   = $this->make_rule( 'taxonomy', 'post_tag', [ 7 ] );
+
+		$mapped_rules = $this->invoke_private_static(
+			'map_rules_to_ac_format',
+			[ [ $whole_category_rule, $specific_tag_rule ] ]
+		);
+
+		$this->assertSame(
+			[
+				[
+					'slug'  => 'post_tag',
+					'value' => [ '7' ],
+				],
+			],
+			$mapped_rules,
+			'Only the representable tag rule survives; the empty-value category rule leaves no trace.'
+		);
+	}
+
+	/**
+	 * NPPD-2065 detection seam: whole_taxonomy_rule_slugs() reports the taxonomy slug of
+	 * each whole-taxonomy rule so the caller can warn per plan. It is the pure, WC-free
+	 * counterpart to the drop in map_rules_to_ac_format — keeping the warning out of the
+	 * reflection-tested mapper.
+	 */
+	public function test_whole_taxonomy_rule_slugs_reports_empty_object_id_taxonomy_rules() {
+		$whole_category_rule = $this->make_rule( 'taxonomy', 'category', [] );
+		$whole_tag_rule      = $this->make_rule( 'taxonomy', 'post_tag', [] );
+		$duplicate_category  = $this->make_rule( 'taxonomy', 'category', [] );
+
+		$slugs = $this->invoke_private_static(
+			'whole_taxonomy_rule_slugs',
+			[ [ $whole_category_rule, $whole_tag_rule, $duplicate_category ] ]
+		);
+
+		$this->assertSame( [ 'category', 'post_tag' ], $slugs, 'Each whole-taxonomy slug is reported once, in encounter order.' );
+	}
+
+	/**
+	 * NPPD-2065: only taxonomy rules with no object IDs are whole-taxonomy. Term-scoped
+	 * taxonomy rules, whole-post-type rules, specific-post rules, and rules with an empty
+	 * content-type name are all representable (or already skipped) and must not be
+	 * reported.
+	 */
+	public function test_whole_taxonomy_rule_slugs_ignores_representable_and_nameless_rules() {
+		$term_scoped_category = $this->make_rule( 'taxonomy', 'category', [ 5 ] );
+		$whole_post_type      = $this->make_rule( 'post_type', 'post', [] );
+		$specific_post        = $this->make_rule( 'post_type', 'post', [ 12 ] );
+		$nameless_taxonomy    = $this->make_rule( 'taxonomy', '', [] );
+
+		$slugs = $this->invoke_private_static(
+			'whole_taxonomy_rule_slugs',
+			[ [ $term_scoped_category, $whole_post_type, $specific_post, $nameless_taxonomy ] ]
+		);
+
+		$this->assertSame( [], $slugs );
+	}
+
+	/**
+	 * NPPD-2065 fingerprint/consolidation interaction: a dropped whole-taxonomy rule
+	 * leaves no trace in the mapped rules, so it cannot spuriously split a plan into its
+	 * own fingerprint group nor block a merge. A plan gating "all categories" plus
+	 * category term 5 fingerprints identically to a plan gating only category term 5 —
+	 * they consolidate into one gate on the representable content, while the dropped
+	 * "all categories" restriction is surfaced by the per-plan warning (asserted e2e).
+	 */
+	public function test_dropped_whole_taxonomy_rule_does_not_affect_fingerprint() {
+		$whole_category_rule = $this->make_rule( 'taxonomy', 'category', [] );
+		$category_five_rule  = $this->make_rule( 'taxonomy', 'category', [ 5 ] );
+
+		$mapped_with_whole_taxonomy = $this->invoke_private_static(
+			'map_rules_to_ac_format',
+			[ [ $whole_category_rule, $category_five_rule ] ]
+		);
+		$mapped_category_five_only  = $this->invoke_private_static(
+			'map_rules_to_ac_format',
+			[ [ $category_five_rule ] ]
+		);
+
+		$this->assertSame(
+			$this->invoke_private_static( 'compute_rules_fingerprint', [ $mapped_with_whole_taxonomy ] ),
+			$this->invoke_private_static( 'compute_rules_fingerprint', [ $mapped_category_five_only ] ),
+			'The dropped whole-taxonomy rule leaves the fingerprint identical to the representable-only plan.'
+		);
+	}
+
+	/**
 	 * NPPD-2064 grouping key: the fingerprint is canonical, so rule sets that are
 	 * equivalent up to rule order and object-ID order collapse to the same string
 	 * (and therefore into a single gate).

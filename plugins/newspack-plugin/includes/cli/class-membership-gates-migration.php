@@ -302,6 +302,43 @@ class Membership_Gates_Migration {
 			$wc_rules = $plan->get_content_restriction_rules();
 			$ac_rules = self::map_rules_to_ac_format( $wc_rules );
 
+			// A whole-taxonomy WCM rule ("restrict every post carrying taxonomy X") has
+			// no Access Control equivalent, so map_rules_to_ac_format() drops it. Warn
+			// loudly per plan so the gap is never silent — the generated gate under-covers
+			// what WCM gated, and the operator has to configure it manually (NPPD-2065).
+			$dropped_taxonomies = self::whole_taxonomy_rule_slugs( $wc_rules );
+			if ( ! empty( $dropped_taxonomies ) ) {
+				if ( empty( $ac_rules ) ) {
+					// The whole-taxonomy rule(s) were the plan's only content restriction,
+					// so no faithful gate can be generated. Skip the plan rather than let
+					// it fall through to a site-wide signup gate (which would over-cover
+					// everything) or merge with genuinely rule-less plans WCM treated
+					// differently — the skip is reported per plan below.
+					WP_CLI::warning(
+						sprintf(
+							'Plan "%s" restricts all content in taxonomy [%s], which Access Control cannot represent. No gate is generated for it — configure this gate manually.',
+							$plan_name,
+							implode( ', ', $dropped_taxonomies )
+						)
+					);
+					$skipped[] = [
+						'plan_name'     => $plan_name,
+						'action'        => 'skipped (whole-taxonomy only — configure manually)',
+						'gate_id'       => '—',
+						'content_rules' => '0',
+						'access_type'   => $access_method,
+					];
+					continue;
+				}
+				WP_CLI::warning(
+					sprintf(
+						'Plan "%s" also restricts all content in taxonomy [%s], which Access Control cannot represent. That restriction is omitted, so the generated gate under-covers what WCM gated — review it manually.',
+						$plan_name,
+						implode( ', ', $dropped_taxonomies )
+					)
+				);
+			}
+
 			// Allow signup plans with no explicit content rules to proceed — a
 			// free-registration gate may gate all content implicitly without needing
 			// specific rule entries.
@@ -444,13 +481,21 @@ class Membership_Gates_Migration {
 	 * 'post_types' (value = post-type slugs), 'specific_posts' (value = post IDs),
 	 * 'newsletters', and taxonomy slugs (value = term IDs). The mapping is therefore:
 	 *
-	 * - taxonomy rule                        → slug = taxonomy name, value = term IDs.
+	 * - taxonomy rule, with term IDs         → slug = taxonomy name, value = term IDs.
+	 * - taxonomy rule, no term IDs           → dropped (see below).
 	 * - post-type rule, no object IDs        → slug = 'post_types',    value = [ post-type name ].
 	 * - post-type rule, with object IDs      → slug = 'specific_posts', value = post IDs.
 	 *
 	 * The post_type vs. taxonomy split uses the rule's own `get_content_type()`
 	 * discriminator rather than string-matching the name against a hardcoded list, so
 	 * custom post types (e.g. 'guest-author') map correctly.
+	 *
+	 * A taxonomy rule with no term IDs is WCM's "restrict every post carrying this
+	 * taxonomy" — a whole-taxonomy restriction Access Control has no slug for. Emitting
+	 * it as an empty-value rule would be silently dropped by
+	 * Content_Rules::get_gate_content_rules (it filters empty-value rules), leaving the
+	 * gate to under-cover. So it is dropped here instead; whole_taxonomy_rule_slugs()
+	 * lets the caller detect and warn about the gap per plan (NPPD-2065).
 	 *
 	 * @param \WC_Memberships_Membership_Plan_Rule[] $wc_rules Array of WC Memberships rules.
 	 *
@@ -467,6 +512,11 @@ class Membership_Gates_Migration {
 			$object_ids = array_map( 'strval', array_values( $rule->get_object_ids() ) );
 
 			if ( 'taxonomy' === $rule->get_content_type() ) {
+				// Drop whole-taxonomy rules (no term IDs) rather than emit an empty-value
+				// rule Access Control would silently filter out; the caller warns instead.
+				if ( empty( $object_ids ) ) {
+					continue;
+				}
 				// Taxonomy rules key under the taxonomy slug; the value is the term IDs.
 				$slug  = $content_type_name;
 				$value = $object_ids;
@@ -513,6 +563,32 @@ class Membership_Gates_Migration {
 		unset( $ac_rule );
 
 		return $ac_rules;
+	}
+
+	/**
+	 * List the taxonomy slugs of a plan's whole-taxonomy content rules (NPPD-2065).
+	 *
+	 * A whole-taxonomy rule (taxonomy content type, no term IDs) restricts every post
+	 * carrying the taxonomy — a restriction Access Control cannot represent, so
+	 * map_rules_to_ac_format() drops it. This is its pure, WooCommerce-free detection
+	 * counterpart: the caller uses the returned slugs to warn per plan that the generated
+	 * gate under-covers, keeping the warning out of the reflection-tested mapper.
+	 *
+	 * @param \WC_Memberships_Membership_Plan_Rule[] $wc_rules Array of WC Memberships rules.
+	 *
+	 * @return string[] De-duplicated taxonomy slugs of the whole-taxonomy rules, in encounter order.
+	 */
+	private static function whole_taxonomy_rule_slugs( array $wc_rules ): array {
+		$slugs = [];
+		foreach ( $wc_rules as $rule ) {
+			$content_type_name = $rule->get_content_type_name();
+			if ( ! empty( $content_type_name )
+				&& 'taxonomy' === $rule->get_content_type()
+				&& empty( $rule->get_object_ids() ) ) {
+				$slugs[] = $content_type_name;
+			}
+		}
+		return array_values( array_unique( $slugs ) );
 	}
 
 	/**
