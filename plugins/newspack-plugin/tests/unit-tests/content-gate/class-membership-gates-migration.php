@@ -270,7 +270,8 @@ class Test_Membership_Gates_Migration extends \WP_UnitTestCase {
 					'value' => [ '8' ],
 				],
 			],
-			$mapped_rules
+			$mapped_rules,
+			'Only post_types is canonicalized; specific_posts and taxonomy values keep insertion order (the fingerprint orders those numeric IDs via SORT_NUMERIC).'
 		);
 	}
 
