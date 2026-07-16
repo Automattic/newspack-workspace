@@ -78,7 +78,7 @@ function Seo() {
 	useEffect( get, [] );
 
 	function get() {
-		wizardApiFetch(
+		wizardApiFetch< SeoData >(
 			{
 				path: PATH,
 			},
@@ -94,7 +94,7 @@ function Seo() {
 		if ( ! isVerificationCodesValid || ! isAccountsValid ) {
 			return;
 		}
-		wizardApiFetch(
+		wizardApiFetch< SeoData >(
 			{
 				path: PATH,
 				method: 'POST',

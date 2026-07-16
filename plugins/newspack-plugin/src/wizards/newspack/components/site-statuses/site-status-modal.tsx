@@ -16,7 +16,7 @@ const SiteActionModal = ( { onRequestClose, plugins, onSuccess }: SiteActionModa
 		<Modal title={ __( 'Add missing dependencies', 'newspack-plugin' ) } onRequestClose={ () => onRequestClose( false ) }>
 			<PluginInstaller
 				plugins={ plugins }
-				onStatus={ ( { complete, pluginInfo }: { complete: boolean; pluginInfo: Record< string, any > } ) => {
+				onStatus={ ( { complete, pluginInfo } ) => {
 					if ( complete ) {
 						onSuccess( pluginInfo );
 						onRequestClose( false );

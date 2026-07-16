@@ -11,6 +11,7 @@ import { ToggleControl, TextareaControl } from '@wordpress/components';
 import { Button, Grid } from '../../../../../packages/components/src';
 import { useWizardData } from '../../../../../packages/components/src/wizard/store/utils';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
+import type { WizardsStoreSelectors } from '../../../../../packages/components/src/wizard/store';
 import WizardsSection from '../../../wizards-section';
 
 const DATA_STORE_KEY = 'newspack-audience/checkout-configuration';
@@ -23,9 +24,12 @@ function CheckoutConfiguration() {
 		woocommerce_checkout_privacy_policy_text: string;
 	} >( DATA_STORE_KEY );
 	const { updateWizardSettings, saveWizardSettings } = useDispatch( WIZARD_STORE_NAMESPACE );
-	const isQuietLoading = useSelect( ( select: any ) => select( WIZARD_STORE_NAMESPACE ).isQuietLoading() ?? false, [] );
+	const isQuietLoading = useSelect(
+		( select: ( store: string ) => WizardsStoreSelectors ) => select( WIZARD_STORE_NAMESPACE ).isQuietLoading() ?? false,
+		[]
+	);
 
-	const onChange = ( value: any, key: string ) =>
+	const onChange = ( value: string | boolean, key: string ) =>
 		updateWizardSettings( {
 			slug: DATA_STORE_KEY,
 			path: [ key ],

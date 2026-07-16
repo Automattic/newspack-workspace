@@ -8,7 +8,7 @@ import { addQueryArgs } from '@wordpress/url';
  * Get edit gate layout URL.
  */
 export function getEditGateLayoutUrl( gateId: number, gateMode: string ) {
-	const audienceGates = ( window as any ).newspackAudienceContentGates;
+	const audienceGates = window.newspackAudienceContentGates;
 
 	if ( ! audienceGates || typeof audienceGates.edit_gate_layout_url !== 'string' || ! audienceGates.edit_gate_layout_url ) {
 		// Fallback to avoid runtime errors if the global config is not available.

@@ -5,7 +5,7 @@ class WizardError extends Error {
 	errorCode: string;
 	details: string;
 
-	constructor( message: string, errorCode: string, details: any = '' ) {
+	constructor( message: string, errorCode: string, details: string = '' ) {
 		super( message );
 		this.name = 'WizardError';
 		this.errorCode = errorCode;

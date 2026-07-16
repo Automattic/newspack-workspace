@@ -27,9 +27,13 @@ function removeQueryArgs( str: string ) {
 }
 
 /**
- * Holds in-progress promises for each fetch request.
+ * Holds in-progress promises for each fetch request. Shared across every
+ * `useWizardApiFetch` call site, each of which may use a different `T`, so
+ * the resolved value type can't be known here — callers cast back to their
+ * own `T` when reading. `Partial` keeps entries honestly optional, since this
+ * is a sparse cache and most keys are never set.
  */
-let promiseCache: Record< string, any > = {};
+let promiseCache: Partial< Record< string, Promise< unknown > > > = {};
 
 /**
  * Parses the API error response into a WizardApiError object.
@@ -67,10 +71,13 @@ const parseApiError = ( error: WpFetchError | string ): WizardApiError | null =>
  * @return             Object with an `on` method to trigger callbacks.
  */
 const onCallbacks = < T >( callbacks: ApiFetchCallbacks< T > ) => ( {
-	on( cb: keyof ApiFetchCallbacks< T >, d: any = null ) {
+	on( cb: keyof ApiFetchCallbacks< T >, d: T | WizardApiError | null = null ) {
 		const callback = callbacks?.[ cb ];
 		if ( callback && typeof callback === 'function' ) {
-			callback( d );
+			// Cast: `cb` picks which callback (and thus which parameter shape) runs at
+			// runtime, so the exact match between `d` and that callback's declared
+			// parameter can't be verified statically.
+			( callback as ( arg: T | WizardApiError | null ) => void )( d );
 		}
 	},
 } );
@@ -124,7 +131,7 @@ export function useWizardApiFetch( slug: string ) {
 		 * @param value                The value to set for the property.
 		 * @param cacheKeyPathOverride The path to update in the wizard data.
 		 */
-		return ( prop: string | string[], value: any, cacheKeyPathOverride = cacheKeyPath ) => {
+		return ( prop: string | string[], value: unknown, cacheKeyPathOverride = cacheKeyPath ) => {
 			// Remove query parameters from the cacheKeyPath
 
 			const normalizedPath = cacheKeyPathOverride ? removeQueryArgs( cacheKeyPathOverride ) : cacheKeyPathOverride;
@@ -146,7 +153,9 @@ export function useWizardApiFetch( slug: string ) {
 	 * @return               The result of the API fetch request.
 	 */
 	const apiFetch = useCallback(
-		async < T = any >( opts: ApiFetchOptions, callbacks?: ApiFetchCallbacks< T > ) => {
+		// Defaults to `{}` (not `unknown`) to match the `WizardApiFetch<T = {}>` contract
+		// that downstream call sites type this function against when no `T` is given.
+		async < T = object >( opts: ApiFetchOptions, callbacks?: ApiFetchCallbacks< T > ) => {
 			const { on } = onCallbacks< T >( callbacks ?? {} );
 			const updateSettings = updateWizardData( opts.path );
 			const { path, method = 'GET' } = opts;
@@ -204,15 +213,18 @@ export function useWizardApiFetch( slug: string ) {
 			}
 
 			// If the promise is already in progress, return it before making a new request.
+			// Cast: this cache entry may have been written by a call site using a
+			// different `T`, so its resolved value type can't be verified here.
 			if ( promiseCache[ cacheKeyPath ] ) {
 				setIsFetching( true );
-				return promiseCache[ cacheKeyPath ].then( thenCallback ).catch( catchCallback ).finally( finallyCallback );
+				return ( promiseCache[ cacheKeyPath ] as Promise< T > ).then( thenCallback ).catch( catchCallback ).finally( finallyCallback );
 			}
 
 			// Cache exists and is not empty, return it.
 			if ( isCached && ( cachedError || cachedMethod ) ) {
 				setError( cachedError );
-				on( 'onSuccess', cachedMethod );
+				// Cast: the wizard store's `WizardData` shape doesn't carry this call's `T`.
+				on( 'onSuccess', cachedMethod as T );
 				return cachedMethod;
 			}
 
@@ -235,7 +247,8 @@ export function useWizardApiFetch( slug: string ) {
 			// so a `.catch()` at the call site attached to the resolved async
 			// wrapper instead of the real request and never saw the rejection
 			// `catchCallback` re-throws.
-			return promiseCache[ cacheKeyPath ];
+			// Cast: we just stored this call's own `Promise<T>` under `cacheKeyPath` above.
+			return promiseCache[ cacheKeyPath ] as Promise< T >;
 		},
 		[ wizardApiFetch, wizardData, updateWizardSettings, isFetching, slug ]
 	);
@@ -250,7 +263,7 @@ export function useWizardApiFetch( slug: string ) {
 				get( method: ApiMethods = 'GET' ) {
 					return wizardData[ cacheKey ][ method ];
 				},
-				set( value: any, method: ApiMethods = 'GET' ) {
+				set( value: unknown, method: ApiMethods = 'GET' ) {
 					updateWizardSettings( {
 						slug,
 						path: [ cacheKey, method ],

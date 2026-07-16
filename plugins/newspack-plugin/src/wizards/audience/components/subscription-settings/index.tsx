@@ -11,6 +11,7 @@ import { ToggleControl, TextareaControl, TextControl } from '@wordpress/componen
 import { Button, Grid } from '../../../../../packages/components/src';
 import { useWizardData } from '../../../../../packages/components/src/wizard/store/utils';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
+import type { WizardsStoreSelectors } from '../../../../../packages/components/src/wizard/store';
 import WizardsSection from '../../../wizards-section';
 
 const DATA_STORE_KEY = 'newspack-audience/subscription-settings';
@@ -24,11 +25,14 @@ function SubscriptionSettings() {
 		woocommerce_terms_confirmation_url: string;
 	} >( DATA_STORE_KEY );
 	const { updateWizardSettings, saveWizardSettings } = useDispatch( WIZARD_STORE_NAMESPACE );
-	const isQuietLoading = useSelect( ( select: any ) => select( WIZARD_STORE_NAMESPACE ).isQuietLoading() ?? false, [] );
+	const isQuietLoading = useSelect(
+		( select: ( store: string ) => WizardsStoreSelectors ) => select( WIZARD_STORE_NAMESPACE ).isQuietLoading() ?? false,
+		[]
+	);
 
 	// Toggle between the Subscription confirmation and Terms & Conditions confirmation.
 	// Only one can be enabled at a time.
-	const onChange = ( value: any, key: string ) => {
+	const onChange = ( value: string | boolean, key: string ) => {
 		// If enabling Subscription confirmation, disable terms confirmation.
 		if ( key === 'woocommerce_enable_subscription_confirmation' && value ) {
 			updateWizardSettings( {

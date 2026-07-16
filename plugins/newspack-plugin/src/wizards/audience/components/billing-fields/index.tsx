@@ -11,6 +11,7 @@ import { CheckboxControl } from '@wordpress/components';
 import { Button, Grid } from '../../../../../packages/components/src';
 import { useWizardData } from '../../../../../packages/components/src/wizard/store/utils';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
+import type { WizardsStoreSelectors } from '../../../../../packages/components/src/wizard/store';
 import WizardsSection from '../../../wizards-section';
 
 const BillingFields = () => {
@@ -20,13 +21,16 @@ const BillingFields = () => {
 		billing_fields: string[];
 	} >( 'newspack-audience/billing-fields' );
 	const { updateWizardSettings, saveWizardSettings } = useDispatch( WIZARD_STORE_NAMESPACE );
-	const isQuietLoading = useSelect( ( select: any ) => select( WIZARD_STORE_NAMESPACE ).isQuietLoading() ?? false, [] );
+	const isQuietLoading = useSelect(
+		( select: ( store: string ) => WizardsStoreSelectors ) => select( WIZARD_STORE_NAMESPACE ).isQuietLoading() ?? false,
+		[]
+	);
 
 	if ( ! wizardData ) {
 		return null;
 	}
 
-	const changeHandler = ( value: any ) =>
+	const changeHandler = ( value: string[] ) =>
 		updateWizardSettings( {
 			slug: 'newspack-audience/billing-fields',
 			path: [ 'billing_fields' ],

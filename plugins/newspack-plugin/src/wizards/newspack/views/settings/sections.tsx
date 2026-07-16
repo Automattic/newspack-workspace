@@ -5,6 +5,7 @@
  */
 import { __ } from '@wordpress/i18n';
 import { lazy } from '@wordpress/element';
+import type { WizardSection } from '../../../../../packages/components/src/wizard';
 
 // NPPD-1538: forward stale bookmarks of `?page=newspack-settings#/emails`
 // to the new Audience > Configuration > Emails home. This is an
@@ -93,7 +94,7 @@ if ( 'experimental-tools' in settingsTabs ) {
 
 const settingsSectionKeys = Object.keys( settingsTabs ) as SectionKeys[];
 
-export default settingsSectionKeys.reduce( ( acc: any[], sectionPath ) => {
+export default settingsSectionKeys.reduce( ( acc: WizardSection[], sectionPath ) => {
 	acc.push( {
 		label: settingsTabs[ sectionPath ].label,
 		exact: '/' === ( settingsTabs[ sectionPath ].path ?? '' ),

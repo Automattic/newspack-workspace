@@ -80,7 +80,7 @@ function validationErrorHandler( { setError }: { setError: ( value: WizardErrorT
  * @param props.onToggle           Callback for the toggle
  * @param props.onChecked          Callback for the checked state
  */
-const WizardsToggleHeaderCard = < T extends Record< string, any > >( {
+const WizardsToggleHeaderCard = < T extends { active: boolean } >( {
 	title,
 	description,
 	namespace,
@@ -122,7 +122,10 @@ const WizardsToggleHeaderCard = < T extends Record< string, any > >( {
 						}
 					}
 					if ( typeof validate.callback === 'string' ) {
-						if ( ! fieldValidations[ validate.callback ]( settingsUpdates[ field ] ) ) {
+						// Cast: `fieldValidationMap` lets any `keyof T` pair with the 'isIntegerId'/'isId'
+						// string validators, which require a string value — a pre-existing contract
+						// the type system can't verify (not fixed here; callers must self-police it).
+						if ( ! fieldValidations[ validate.callback ]( settingsUpdates[ field ] as string ) ) {
 							return;
 						}
 					} else if ( typeof validate.callback === 'function' ) {

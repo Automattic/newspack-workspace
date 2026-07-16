@@ -30,16 +30,24 @@ const settingsDefault: RecaptchaData = {
 
 type RecaptchaDependsOn = Partial< Record< keyof RecaptchaData, string > >;
 
-const fieldValidationMap = new Map<
-	keyof Omit< RecaptchaData, 'use_captcha' >,
-	{
-		callback: ( value: any, version?: RecaptchaVersions ) => string;
-		dependsOn?: RecaptchaDependsOn;
-	}
->( [
+type FieldValidation = {
+	callback: ( value: string | RecaptchaData[ 'credentials' ], version?: RecaptchaVersions ) => string;
+	dependsOn?: RecaptchaDependsOn;
+};
+
+// Type-erases each field's specific `value` type to `FieldValidation`'s shared union, so
+// per-field configs (each precisely typed against its own field) can share one Map value type.
+function fieldValidation< T extends string | RecaptchaData[ 'credentials' ] >( config: {
+	callback: ( value: T, version?: RecaptchaVersions ) => string;
+	dependsOn?: RecaptchaDependsOn;
+} ): FieldValidation {
+	return config as FieldValidation;
+}
+
+const fieldValidationMap = new Map< keyof Omit< RecaptchaData, 'use_captcha' >, FieldValidation >( [
 	[
 		'credentials',
-		{
+		fieldValidation( {
 			dependsOn: { version: 'v3' },
 			callback: ( credentials: RecaptchaData[ 'credentials' ], version = 'v3' ) => {
 				if ( ! credentials[ version ].site_key ) {
@@ -50,13 +58,13 @@ const fieldValidationMap = new Map<
 				}
 				return '';
 			},
-		},
+		} ),
 	],
 	[
 		'threshold',
-		{
+		fieldValidation( {
 			dependsOn: { version: 'v3' },
-			callback: value => {
+			callback: ( value: string ) => {
 				const threshold = parseFloat( value || '0' );
 				if ( threshold < 0.1 ) {
 					return ERROR_MESSAGES.RECAPTCHA.THRESHOLD_INVALID_MIN;
@@ -66,7 +74,7 @@ const fieldValidationMap = new Map<
 				}
 				return '';
 			},
-		},
+		} ),
 	],
 ] );
 
