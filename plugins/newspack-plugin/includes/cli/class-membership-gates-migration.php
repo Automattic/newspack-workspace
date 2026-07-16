@@ -823,6 +823,11 @@ class Membership_Gates_Migration {
 	 * @return array[] The rule set with hierarchical-taxonomy values expanded to descendants.
 	 */
 	private static function expand_rule_set_hierarchy( array $ac_rules ): array {
+		// A fast path for the non-taxonomy slugs Access Control honours; the
+		// get_taxonomy() guard below is the real filter (it also skips non-hierarchical
+		// taxonomies such as tags and any unregistered slug), so this list need not be
+		// exhaustive — it just avoids a needless get_taxonomy() lookup on the common
+		// non-taxonomy rules.
 		$non_taxonomy_slugs = [ 'post_types', 'specific_posts', 'newsletters' ];
 		foreach ( $ac_rules as &$ac_rule ) {
 			if ( in_array( $ac_rule['slug'], $non_taxonomy_slugs, true ) ) {
@@ -891,10 +896,19 @@ class Membership_Gates_Migration {
 				if ( $group_has_purchase[ $i ] !== $group_has_purchase[ $j ] ) {
 					continue;
 				}
-				// $j strictly covers $i: it covers $i but $i does not cover $j. Distinct
-				// fingerprints already rule out identical sets; the second check guards
-				// the pathological coverage-equal-but-not-identical case.
-				if ( self::rules_cover( $rules_j, $rules_i ) && ! self::rules_cover( $rules_i, $rules_j ) ) {
+				// $j absorbs $i when it covers $i and is not the narrower set. Strict
+				// coverage ($j covers $i, $i does not cover $j) makes $j the superset root.
+				// Equal coverage (mutual) is reachable once expand_rule_set_hierarchy()
+				// canonicalises distinct fingerprints to the same term closure — a parent
+				// rule and a redundant parent-plus-child rule expand to identical values.
+				// Distinct flat fingerprints no longer imply distinct coverage, so the
+				// equal case must still collapse: fold it into the lowest-index member of
+				// the equivalence class (the $j < $i tie-break is asymmetric, so the two
+				// never absorb each other), keeping the pair on one gate instead of
+				// splitting them with a spurious overlap warning.
+				$j_covers_i = self::rules_cover( $rules_j, $rules_i );
+				$i_covers_j = self::rules_cover( $rules_i, $rules_j );
+				if ( $j_covers_i && ( ! $i_covers_j || $j < $i ) ) {
 					$size = count( $rules_j );
 					if ( $size > $best_size ) {
 						$best_size = $size;

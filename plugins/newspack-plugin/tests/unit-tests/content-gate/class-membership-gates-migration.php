@@ -725,6 +725,136 @@ class Test_Membership_Gates_Migration extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * NPPD-2066 proves the expansion is *necessary*, not merely sufficient: fed the raw
+	 * (unexpanded) parent-category and child-category rule sets, the consolidation planner
+	 * neither absorbs nor flags them — the silent split this fix exists to close. The
+	 * companion test above shows expansion turns that same pair into a clean absorption.
+	 */
+	public function test_hierarchy_nested_plans_are_silently_split_without_expansion() {
+		$parent_group_rules = [
+			[
+				'slug'  => 'category',
+				'value' => [ '18' ],
+			],
+		];
+		$child_group_rules = [
+			[
+				'slug'  => 'category',
+				'value' => [ '19' ],
+			],
+		];
+
+		$plan = $this->invoke_private_static(
+			'plan_rule_set_consolidation',
+			[ [ $parent_group_rules, $child_group_rules ], [ true, true ] ]
+		);
+
+		$this->assertSame( [], $plan['absorbed_by'], 'Raw flat values share no term, so neither group is absorbed.' );
+		$this->assertSame( [], $plan['overlaps'], 'Raw flat values do not intersect, so the split is silent (the NPPD-2066 bug).' );
+	}
+
+	/**
+	 * NPPD-2066 equal-coverage regression guard: hierarchy expansion can canonicalise two
+	 * *distinct* fingerprints to the *same* term closure — a plan restricting a parent
+	 * category, and a plan restricting that parent plus a redundant child. Once expanded
+	 * they mutually cover, which is not a strict subset; a planner that only absorbs strict
+	 * subsets would leave both as roots and fire a spurious overlap warning, splitting a
+	 * pair the pre-expansion flat containment consolidated cleanly. Equal-coverage groups
+	 * must collapse into their lowest-index representative so they still share one gate.
+	 */
+	public function test_plan_rule_set_consolidation_collapses_equal_coverage_groups() {
+		$parent_term_id = self::factory()->category->create();
+		$child_term_id  = self::factory()->category->create( [ 'parent' => $parent_term_id ] );
+
+		$parent_only_rules       = [
+			[
+				'slug'  => 'category',
+				'value' => [ (string) $parent_term_id ],
+			],
+		];
+		$parent_plus_child_rules = [
+			[
+				'slug'  => 'category',
+				'value' => [ (string) $parent_term_id, (string) $child_term_id ],
+			],
+		];
+
+		$expanded_rule_sets = array_map(
+			fn( $rules ) => $this->invoke_private_static( 'expand_rule_set_hierarchy', [ $rules ] ),
+			[ $parent_only_rules, $parent_plus_child_rules ]
+		);
+
+		$this->assertSame(
+			$expanded_rule_sets[0][0]['value'],
+			$expanded_rule_sets[1][0]['value'],
+			'Both rule sets expand to the identical term closure (precondition for the regression).'
+		);
+
+		$plan = $this->invoke_private_static(
+			'plan_rule_set_consolidation',
+			[ $expanded_rule_sets, [ true, true ] ]
+		);
+
+		$this->assertSame(
+			[ 1 => 0 ],
+			$plan['absorbed_by'],
+			'The equal-coverage group (index 1) collapses into the lowest-index representative (index 0).'
+		);
+		$this->assertSame( [], $plan['overlaps'], 'Equal-coverage groups consolidate, so no spurious overlap warning fires.' );
+	}
+
+	/**
+	 * NPPD-2066 equal-coverage determinism: three distinct fingerprints (parent P; P plus
+	 * one child; P plus both children) all expand to the same term closure, forming an
+	 * equivalence class of size three. Every member must fold to the single lowest-index
+	 * representative regardless of iteration order — the asymmetric $j < $i tie-break plus
+	 * the chain resolution converge the whole class on one root, never leaving an
+	 * intermediate representative that would fatal in consolidate_plan_groups().
+	 */
+	public function test_plan_rule_set_consolidation_collapses_equal_coverage_class_of_three() {
+		$parent_term_id      = self::factory()->category->create();
+		$first_child_term_id = self::factory()->category->create( [ 'parent' => $parent_term_id ] );
+		$last_child_term_id  = self::factory()->category->create( [ 'parent' => $parent_term_id ] );
+
+		$rule_sets = array_map(
+			fn( $value ) => $this->invoke_private_static(
+				'expand_rule_set_hierarchy',
+				[
+					[
+						[
+							'slug'  => 'category',
+							'value' => $value,
+						],
+					],
+				]
+			),
+			[
+				[ (string) $parent_term_id ],
+				[ (string) $parent_term_id, (string) $first_child_term_id ],
+				[ (string) $parent_term_id, (string) $first_child_term_id, (string) $last_child_term_id ],
+			]
+		);
+
+		$this->assertEqualSets( $rule_sets[0][0]['value'], $rule_sets[1][0]['value'], 'All three expand to the same closure.' );
+		$this->assertEqualSets( $rule_sets[0][0]['value'], $rule_sets[2][0]['value'], 'All three expand to the same closure.' );
+
+		$plan = $this->invoke_private_static(
+			'plan_rule_set_consolidation',
+			[ $rule_sets, [ true, true, true ] ]
+		);
+
+		$this->assertSame(
+			[
+				1 => 0,
+				2 => 0,
+			],
+			$plan['absorbed_by'],
+			'Both later members of the equivalence class fold to the lowest-index representative.'
+		);
+		$this->assertSame( [], $plan['overlaps'], 'A fully-collapsed equivalence class leaves no unresolved overlap.' );
+	}
+
+	/**
 	 * The product-ID union across a group's plan descriptors is de-duplicated, so a
 	 * consolidated gate's paid-access list carries each merged plan's products once.
 	 */
