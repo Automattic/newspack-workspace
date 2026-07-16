@@ -1,0 +1,41 @@
+@use "~@wordpress/base-styles/colors" as wp-colors;
+
+.newspack-breadcrumbs__list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+
+	> li {
+		flex-shrink: 0;
+		margin: 0;
+
+		a {
+			color: wp-colors.$gray-900;
+
+			&:hover,
+			&:focus,
+			&:active {
+				color: wp-colors.$gray-900;
+			}
+		}
+	}
+
+	> li:last-child {
+		flex-shrink: 1;
+		min-width: 0;
+	}
+}
+
+.newspack-breadcrumbs__separator {
+	color: var(--wpds-color-stroke-surface-neutral, #dbdbdb);
+	margin: 0 var(--wpds-dimension-gap-sm, 8px);
+	user-select: none;
+}
+
+.newspack-breadcrumbs__list h1.newspack-breadcrumbs__current {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	padding: 0;
+	line-height: normal;
+}

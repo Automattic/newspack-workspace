@@ -40,7 +40,7 @@ const modalTitle = modalType => {
 	} else if ( MODAL_TYPE_DUPLICATE === modalType ) {
 		return __( 'Duplicate Campaign', 'newspack-plugin' );
 	}
-	return __( 'Add New Campaign', 'newspack-plugin' );
+	return __( 'Add Campaign', 'newspack-plugin' );
 };
 
 const modalButton = modalType => {
@@ -247,54 +247,42 @@ const Campaigns = props => {
 						</div>
 					) }
 				</div>
-				<div className="newspack-campaigns__campaign-group__add-new-button">
-					<Button
-						isPrimary
-						onClick={ () => {
-							setModalVisible( ! modalVisible );
-							setCampaignName( '' );
-							setModalType( MODAL_TYPE_NEW );
+				{ modalVisible && (
+					<Modal
+						title={ modalTitle( modalType ) }
+						onRequestClose={ () => {
+							setModalVisible( false );
 						} }
 					>
-						{ __( 'Add New Campaign', 'newspack-plugin' ) }
-					</Button>
-					{ modalVisible && (
-						<Modal
-							title={ modalTitle( modalType ) }
-							onRequestClose={ () => {
-								setModalVisible( false );
+						<TextControl
+							id="newspack-add-campaigns-modal-input"
+							placeholder={ __( 'Campaign Name', 'newspack-plugin' ) }
+							onChange={ setCampaignName }
+							label={ __( 'Campaign Name', 'newspack-plugin' ) }
+							hideLabelFromVision={ true }
+							value={ campaignName }
+							onKeyDown={ event => {
+								if ( ENTER === event.keyCode && '' !== campaignName ) {
+									event.preventDefault();
+									submitModal( campaignName );
+								}
 							} }
-						>
-							<TextControl
-								id="newspack-add-campaigns-modal-input"
-								placeholder={ __( 'Campaign Name', 'newspack-plugin' ) }
-								onChange={ setCampaignName }
-								label={ __( 'Campaign Name', 'newspack-plugin' ) }
-								hideLabelFromVision={ true }
-								value={ campaignName }
-								onKeyDown={ event => {
-									if ( ENTER === event.keyCode && '' !== campaignName ) {
-										event.preventDefault();
-										submitModal( campaignName );
-									}
+						/>
+						<Card buttonsCard noBorder className="justify-end">
+							<Button
+								variant="secondary"
+								onClick={ () => {
+									setModalVisible( false );
 								} }
-							/>
-							<Card buttonsCard noBorder className="justify-end">
-								<Button
-									variant="secondary"
-									onClick={ () => {
-										setModalVisible( false );
-									} }
-								>
-									{ __( 'Cancel', 'newspack-plugin' ) }
-								</Button>
-								<Button variant="primary" disabled={ ! campaignName } onClick={ () => submitModal( campaignName ) }>
-									{ modalButton( modalType ) }
-								</Button>
-							</Card>
-						</Modal>
-					) }
-				</div>
+							>
+								{ __( 'Cancel', 'newspack-plugin' ) }
+							</Button>
+							<Button variant="primary" disabled={ ! campaignName } onClick={ () => submitModal( campaignName ) }>
+								{ modalButton( modalType ) }
+							</Button>
+						</Card>
+					</Modal>
+				) }
 			</Card>
 			<VStack spacing={ 4 }>
 				{ groupBySegment( segments, prompts ).map( ( segment, index ) =>

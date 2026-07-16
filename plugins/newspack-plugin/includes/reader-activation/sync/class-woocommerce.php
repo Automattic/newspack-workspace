@@ -8,6 +8,7 @@
 namespace Newspack\Reader_Activation\Sync;
 
 use Newspack\Donations;
+use Newspack\Group_Subscription;
 use Newspack\WooCommerce_Connection;
 use Newspack\WooCommerce_Order_UTM;
 use Newspack\Subscriptions_Meta;
@@ -104,8 +105,18 @@ class WooCommerce {
 		}
 		$subscriptions = array_reduce(
 			array_keys( \wcs_get_users_subscriptions( $user_id ) ),
-			function( $acc, $subscription_id ) {
+			function( $acc, $subscription_id ) use ( $user_id ) {
 				$subscription = \wcs_get_subscription( $subscription_id );
+				if ( ! $subscription ) {
+					return $acc;
+				}
+				// Skip group subscriptions the user is only a *member* of (not the owner);
+				// the My Account member-injection filter can surface these on account pages,
+				// but the contact's "current product" must reflect a subscription they own.
+				// Group access syncs separately via Content Access Group/Source. See NPPM-3021.
+				if ( Group_Subscription::user_is_member( $user_id, $subscription ) ) {
+					return $acc;
+				}
 				if ( $subscription->has_status( WooCommerce_Connection::FORMER_SUBSCRIBER_STATUSES ) ) {
 
 					// Only donation subscriptions that have at least one completed order are considered.
