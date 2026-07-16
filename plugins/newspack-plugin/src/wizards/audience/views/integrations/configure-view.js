@@ -16,12 +16,23 @@ import { SettingsField } from './settings-field';
 
 import './configure-view.scss';
 
+// Coerce a value to boolean. Values can arrive from WP options as scalar
+// strings (`'1'`/`'0'`/`'true'`/`'false'`/`''`); note `Boolean( '0' )` is `true`
+// in JS, so the falsy string forms are matched explicitly.
+const toBool = value => ( typeof value === 'string' ? ! [ '', '0', 'false' ].includes( value.toLowerCase() ) : Boolean( value ) );
+
 // Compare a draft field value against its saved server value. Field values are
-// scalars (string/boolean) or arrays of strings (metadata/checkbox lists); the
-// array compare is order-sensitive, matching how the draft builds them.
+// scalars (string/boolean) or arrays of strings (metadata/checkbox lists). The
+// backend can round-trip these unfaithfully — metadata arrays come back in
+// canonical order (`array_intersect`), and booleans as `'1'`/`''` — so arrays
+// are compared as sets and booleans are coerced, else a saved field would stay
+// stuck "dirty".
 const valuesMatch = ( a, b ) => {
 	if ( Array.isArray( a ) && Array.isArray( b ) ) {
-		return a.length === b.length && a.every( ( value, index ) => value === b[ index ] );
+		return a.length === b.length && a.every( value => b.includes( value ) );
+	}
+	if ( typeof a === 'boolean' || typeof b === 'boolean' ) {
+		return toBool( a ) === toBool( b );
 	}
 	return a === b;
 };
@@ -191,14 +202,11 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 			return true;
 		}
 		const refValue = getFieldValue( ref );
-		// For boolean conditions, coerce both sides — values can arrive from WP options
-		// as scalar strings (`'1'`/`'0'`/`'true'`/`'false'`/`''`) after migration or from
-		// the REST layer, so strict equality would hide dependent fields until the parent
-		// is re-saved. Note `Boolean( '0' )` is `true` in JS, so the falsy string forms
-		// are matched explicitly rather than via a bare `Boolean()` cast.
+		// For boolean conditions, coerce both sides so a string-typed option value
+		// (`'1'`/`'0'`/`''`) still matches — strict equality would otherwise hide
+		// dependent fields until the parent is re-saved.
 		if ( typeof field.condition.equals === 'boolean' ) {
-			const normalized = typeof refValue === 'string' ? ! [ '', '0', 'false' ].includes( refValue.toLowerCase() ) : Boolean( refValue );
-			return normalized === field.condition.equals;
+			return toBool( refValue ) === field.condition.equals;
 		}
 		return refValue === field.condition.equals;
 	};
