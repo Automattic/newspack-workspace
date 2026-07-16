@@ -84,7 +84,10 @@ export default {
 			return false;
 		}
 		const { min, max } = config.value;
-		if ( ( min && criteria.value < min ) || ( max && criteria.value > max ) ) {
+		// Treat only genuinely-absent bounds ( undefined / null / '' ) as unbounded, so a
+		// min or max of 0 is still enforced — matching the server's (float) min/max compare.
+		const hasBound = value => undefined !== value && null !== value && '' !== value;
+		if ( ( hasBound( min ) && criteria.value < min ) || ( hasBound( max ) && criteria.value > max ) ) {
 			return false;
 		}
 		return true;

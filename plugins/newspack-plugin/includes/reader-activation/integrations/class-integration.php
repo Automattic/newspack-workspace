@@ -522,6 +522,16 @@ abstract class Integration {
 	];
 
 	/**
+	 * Allowed matching functions (operators) for an incoming field's segment
+	 * criterion. Enforced on every write path — REST sanitize and the storage
+	 * setter — and re-applied on read; the single source of truth so those
+	 * paths can't drift.
+	 *
+	 * @var string[]
+	 */
+	private const ALLOWED_INCOMING_MATCHING_FUNCTIONS = [ 'default', 'range', 'list__in', 'list__not_in' ];
+
+	/**
 	 * Get the enabled incoming fields for this integration.
 	 *
 	 * Reads stored field data (key => raw_data map saved by
@@ -584,7 +594,11 @@ abstract class Integration {
 				// The publisher's stored operator choice is authoritative. Re-apply it after
 				// configure_incoming_field(), which may (re)derive matching_function from the
 				// provider schema and clobber the choice for non-ESP integrations.
-				if ( isset( $raw_data['matching_function'] ) && is_string( $raw_data['matching_function'] ) ) {
+				if (
+					isset( $raw_data['matching_function'] )
+					&& is_string( $raw_data['matching_function'] )
+					&& in_array( $raw_data['matching_function'], self::ALLOWED_INCOMING_MATCHING_FUNCTIONS, true )
+				) {
 					$field->set_matching_function( $raw_data['matching_function'] );
 				}
 				$fields[] = $field;
@@ -687,8 +701,6 @@ abstract class Integration {
 			}
 		}
 
-		$allowed_matching_functions = [ 'default', 'range', 'list__in', 'list__not_in' ];
-
 		// Store as key => raw_data map, overriding matching_function when chosen.
 		$fields_to_store = [];
 		foreach ( $key_operator_map as $key => $matching_function ) {
@@ -696,7 +708,7 @@ abstract class Integration {
 			if ( isset( $available_by_key[ $key ] ) ) {
 				$raw_data = $available_by_key[ $key ]->get_raw_data();
 			}
-			if ( null !== $matching_function && in_array( $matching_function, $allowed_matching_functions, true ) ) {
+			if ( null !== $matching_function && in_array( $matching_function, self::ALLOWED_INCOMING_MATCHING_FUNCTIONS, true ) ) {
 				$raw_data['matching_function'] = $matching_function;
 			}
 			$fields_to_store[ $key ] = $raw_data;
@@ -1182,8 +1194,7 @@ abstract class Integration {
 				}
 				// Incoming metadata fields carry a per-field operator: key => matching_function.
 				if ( 'incoming_metadata_fields' === ( $field['key'] ?? '' ) ) {
-					$allowed_matching_functions = [ 'default', 'range', 'list__in', 'list__not_in' ];
-					$sanitized                  = [];
+					$sanitized = [];
 					// PHP 8.0-safe array_is_list(): the array is a list iff re-indexing is a no-op.
 					if ( $value === array_values( $value ) ) {
 						// Legacy plain list of enabled keys: keep it a list so
@@ -1202,7 +1213,7 @@ abstract class Integration {
 							if ( '' === $key ) {
 								continue;
 							}
-							$sanitized[ $key ] = ( is_string( $operator ) && in_array( $operator, $allowed_matching_functions, true ) ) ? $operator : 'default';
+							$sanitized[ $key ] = ( is_string( $operator ) && in_array( $operator, self::ALLOWED_INCOMING_MATCHING_FUNCTIONS, true ) ) ? $operator : 'default';
 						}
 					}
 					return $sanitized;

@@ -22,12 +22,13 @@ import './configure-view.scss';
  * Options are primarily driven by the field's `value_type`, which the
  * integration declares (e.g. a date field shouldn't offer the "Number"
  * range operator, and a single-select field shouldn't offer it either).
- * For `value_type: 'string'` (or an unrecognized value_type, e.g. the
- * legacy 'boolean'), fall back to the has-options heuristic so the
- * built-in ESP integration — which only ever declares 'string' or
- * 'boolean' — is unchanged: enumerated fields (those the ESP returns
- * with a fixed option set) can be matched against a single value or any
- * of several; free-form fields are matched as text or as a numeric range.
+ * The built-in ESP integration maps its provider field types onto these
+ * value_types (number/date/datetime/select/multiselect), so those fields
+ * hit the typed cases above. A field left as a plain `string` (or an
+ * unrecognized value_type) falls back to the has-options heuristic:
+ * enumerated fields (those the ESP returns with a fixed option set) can be
+ * matched against a single value or any of several; free-form fields are
+ * matched as text or as a numeric range.
  *
  * @param {Object}  field              The incoming field option object.
  * @param {string}  [field.value_type] The field's declared value type.
@@ -48,8 +49,11 @@ export const operatorOptionsForField = field => {
 				{ label: __( 'Single value', 'newspack-plugin' ), value: 'default' },
 				{ label: __( 'Multiple values', 'newspack-plugin' ), value: 'list__in' },
 			];
+		case 'boolean':
+			// A boolean can't be range- or list-matched; only exact (text) match applies.
+			return [ { label: __( 'Text', 'newspack-plugin' ), value: 'default' } ];
 		default:
-			// 'string' / 'boolean' / unknown: fall back to the options-presence heuristic.
+			// 'string' / unknown: fall back to the options-presence heuristic.
 			return field?.has_options
 				? [
 						{ label: __( 'Single value', 'newspack-plugin' ), value: 'default' },
@@ -243,6 +247,13 @@ export const ConfigureView = ( { integrations, loading, pendingChanges, saving, 
 									// a key present means enabled, and its value is the chosen matching operator.
 									const currentMap = getFieldValue( inboundField ) || {};
 									const checked = Object.prototype.hasOwnProperty.call( currentMap, optionValue );
+									const operatorOptions = operatorOptionsForField( option );
+									// If the stored operator isn't among the options offered for this field's
+									// current value_type (e.g. a field enabled before it declared a type), fall
+									// back to the first option so the control never shows a value with no option.
+									const selectedOperator = operatorOptions.some( o => o.value === currentMap[ optionValue ] )
+										? currentMap[ optionValue ]
+										: operatorOptions[ 0 ]?.value;
 									return (
 										<div className="newspack-configure-view__inbound-field" key={ optionValue }>
 											<CheckboxControl
@@ -258,8 +269,8 @@ export const ConfigureView = ( { integrations, loading, pendingChanges, saving, 
 													className="newspack-configure-view__inbound-operator"
 													label={ __( 'Segment as', 'newspack-plugin' ) }
 													hideLabelFromVision
-													value={ currentMap[ optionValue ] }
-													options={ operatorOptionsForField( option ) }
+													value={ selectedOperator }
+													options={ operatorOptions }
 													onChange={ operator =>
 														onFieldChange( integrationId, inboundField.key, {
 															...currentMap,
