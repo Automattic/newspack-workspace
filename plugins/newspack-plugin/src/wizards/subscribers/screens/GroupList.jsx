@@ -28,7 +28,7 @@ import { SHOW_AVATARS, useAvatars } from '../data/use-avatars';
 import { useGroups } from '../data/use-groups';
 import { WIZARD_STORE_NAMESPACE } from '../../../../packages/components/src/wizard/store';
 import { GROUP_STATUS_LABELS, GROUP_STATUS_BADGE_LEVEL } from '../status';
-import { GROUP_LABEL_PLURAL, GROUP_LABEL_PLURAL_LOWER } from '../labels';
+import { GROUP_LABEL_PLURAL } from '../labels';
 
 const DEFAULT_VIEW = {
 	type: 'table',
@@ -133,9 +133,13 @@ export default function GroupList() {
 				label: __( 'Members', 'newspack-plugin' ),
 				// The endpoint returns the owner-inclusive member count directly.
 				getValue: ( { item } ) => item.members,
+				// A seat limit of 0 means the group is uncapped, so there is no
+				// denominator to show against the count.
 				render: ( { item } ) => (
 					<span>
-						{ item.members } / { item.seatLimit }
+						{ item.seatLimit > 0
+							? `${ item.members } / ${ item.seatLimit }`
+							: sprintf( __( '%s / Unlimited', 'newspack-plugin' ), item.members ) }
 					</span>
 				),
 				enableSorting: true,
@@ -188,7 +192,7 @@ export default function GroupList() {
 					{ GROUP_LABEL_PLURAL }{ ' ' }
 					<span
 						className="newspack-subscribers__header-count"
-						aria-label={ sprintf( __( '%1$s %2$s total', 'newspack-plugin' ), total.toLocaleString(), GROUP_LABEL_PLURAL_LOWER ) }
+						aria-label={ sprintf( __( '%1$s %2$s total', 'newspack-plugin' ), total.toLocaleString(), GROUP_LABEL_PLURAL ) }
 					>
 						{ `(${ total.toLocaleString() })` }
 					</span>

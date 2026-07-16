@@ -13,7 +13,6 @@ const cfg = ( typeof window !== 'undefined' && window.newspackSubscribers ) || {
 
 export const GROUP_LABEL = cfg.groupLabel || __( 'Group', 'newspack-plugin' );
 export const GROUP_LABEL_PLURAL = cfg.groupLabelPlural || __( 'Groups', 'newspack-plugin' );
-export const GROUP_LABEL_PLURAL_LOWER = GROUP_LABEL_PLURAL.toLowerCase();
 
 // A group member's role within their group. The group is the owner's, held by
 // exactly one owner; any number of managers maintain it; everyone else is a
