@@ -1,0 +1,259 @@
+/**
+ * WordPress dependencies
+ */
+import { BlockPreview, store as blockEditorStore } from '@wordpress/block-editor';
+import { Spinner } from '@wordpress/components';
+import { useDispatch, useSelect } from '@wordpress/data';
+import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
+import type { Block } from '@wordpress/blocks';
+
+/**
+ * Internal dependencies
+ */
+import './style.scss';
+import { getSamplePosts } from '../../editor/blocks/posts-inserter/sample-posts';
+import { getTemplateBlocks } from '../../editor/blocks/posts-inserter/utils';
+
+// First parameter of `getTemplateBlocks`, referenced structurally (rather than importing
+// `InserterPost` by name) so this stays in sync with whatever shape that module declares.
+type InserterPost = Parameters< typeof getTemplateBlocks >[ 0 ][ number ];
+
+/** The subset of layout/newsletter meta this preview reads for its display styles. */
+interface NewsletterPreviewMeta {
+	font_body?: string;
+	font_header?: string;
+	background_color?: string;
+	text_color?: string;
+	custom_css?: string;
+	[ key: string ]: unknown;
+}
+
+interface NewsletterPreviewProps {
+	layoutId?: number | null;
+	meta?: NewsletterPreviewMeta;
+	blocks: Block[];
+	viewportWidth?: number;
+	[ key: string ]: unknown;
+}
+
+const POSTS_INSERTER = 'newspack-newsletters/posts-inserter';
+
+const CORE_STYLESHEET_IDS = [ 'wp-block-library-css', 'wp-block-library-theme-css', 'wp-edit-blocks-css', 'wp-components-css' ];
+
+const DEFAULT_FONTS_CSS =
+	'body *:not(code) { font-family: georgia, serif; } body h1, body h2, body h3, body h4, body h5, body h6 { font-family: arial, sans-serif; }';
+
+const buildResolvedStyles = () => {
+	const sources: Array< [ string, HTMLElement | null ] > = CORE_STYLESHEET_IDS.map( id => [ id, document.getElementById( id ) ] );
+	if ( process.env.NODE_ENV !== 'production' ) {
+		const missing = sources.filter( ( [ , node ] ) => ! node ).map( ( [ id ] ) => id );
+		if ( missing.length ) {
+			// eslint-disable-next-line no-console
+			console.warn(
+				`[newspack-newsletters] NewsletterPreview: core stylesheet(s) not enqueued, preview may render unstyled: ${ missing.join( ', ' ) }`
+			);
+		}
+	}
+	return sources
+		.map( ( [ , node ] ) => node )
+		.filter( ( node ): node is HTMLElement => Boolean( node ) )
+		.map( source => source.outerHTML )
+		.join( '\n' );
+};
+
+// Second parameter of `getTemplateBlocks`, referenced structurally since the posts-inserter
+// module doesn't export its `InserterAttributes` interface by name.
+type PostsInserterAttributes = Parameters< typeof getTemplateBlocks >[ 1 ];
+
+const withSamplePostsInserter = ( blocks: Block[] ): Block[] => {
+	if ( ! Array.isArray( blocks ) ) {
+		return blocks;
+	}
+	const samples = getSamplePosts();
+	let cursor = 0;
+	const take = ( count: number ) => {
+		const slice = Array.from( { length: count }, ( _, i ) => samples[ ( cursor + i ) % samples.length ] );
+		cursor += count;
+		return slice;
+	};
+	const walk = ( nodes: Block[] ): Block[] =>
+		nodes.flatMap( block => {
+			if ( block?.name === POSTS_INSERTER ) {
+				const count = ( block.attributes?.postsToShow as number | undefined ) || samples.length;
+				// The sample posts stand in for `InserterPost`s in previews only; `id` is
+				// unused by `getTemplateBlocks` downstream, so a synthetic numeric id (the
+				// real samples use string ids like "sample-1") is only a type-level detail.
+				const inserterPosts: InserterPost[] = take( count ).map( ( samplePost, index ) => ( {
+					...samplePost,
+					id: index,
+				} ) );
+				// `excerptLength` is the one required field; block.json (see the posts-inserter
+				// block's own registration) gives it a default of 15, which real parsed blocks
+				// always carry, so this only matters as a type-level fallback.
+				const attributes: PostsInserterAttributes = {
+					excerptLength: ( block.attributes?.excerptLength as number | undefined ) ?? 15,
+					...block.attributes,
+				};
+				return getTemplateBlocks( inserterPosts, attributes );
+			}
+			if ( block?.innerBlocks?.length ) {
+				return [ { ...block, innerBlocks: walk( block.innerBlocks ) } ];
+			}
+			return [ block ];
+		} );
+	return walk( blocks );
+};
+
+const NewsletterPreview = ( { layoutId = null, meta = {}, blocks, ...props }: NewsletterPreviewProps ) => {
+	const previewBlocks = useMemo( () => withSamplePostsInserter( blocks ), [ blocks ] );
+	const [ isReady, setIsReady ] = useState( false );
+
+	// Admin-shell previews lack the editor-provided assets, so seed them; skip
+	// the live editor (populated string) so its canvas isn't reloaded. Environment
+	// is inferred from the private `__unstableResolvedAssets.styles` field: the live
+	// editor populates it before any preview mounts, the admin shell leaves it
+	// undefined. If a future WP populates it everywhere, admin-shell previews would
+	// stop seeding and an explicit mount-site flag would be needed instead.
+	const { updateSettings } = useDispatch( blockEditorStore );
+	const resolvedAssets = useSelect( select => {
+		// `getSettings` isn't present on this store's shipped selector types; cast at
+		// this opaque `@wordpress/block-editor` store boundary (the method is always
+		// present at runtime, hence the optional chaining below rather than a fallback).
+		const { getSettings } = select( blockEditorStore ) as {
+			getSettings?: () => { __unstableResolvedAssets?: { styles?: unknown } };
+		};
+		return getSettings?.().__unstableResolvedAssets;
+	}, [] );
+	useEffect( () => {
+		if ( typeof resolvedAssets?.styles === 'string' ) {
+			return;
+		}
+		updateSettings( {
+			__unstableResolvedAssets: { styles: buildResolvedStyles(), scripts: '' },
+			styles: [
+				...( window.newspackNewslettersGlobalStyles ? [ { css: window.newspackNewslettersGlobalStyles } ] : [] ),
+				{ css: DEFAULT_FONTS_CSS },
+			],
+		} );
+	}, [ resolvedAssets, updateSettings ] );
+
+	const additionalStyles = useMemo( () => {
+		const rules: string[] = [];
+		// `!important` so layout fonts/colors beat the seeded defaults and the
+		// editor's own var-based font rules (higher specificity) in editor previews.
+		if ( meta.font_body ) {
+			rules.push( `body *:not( code ) { font-family: ${ meta.font_body } !important; }` );
+		}
+		if ( meta.font_header ) {
+			rules.push( `body h1, body h2, body h3, body h4, body h5, body h6 { font-family: ${ meta.font_header } !important; }` );
+		}
+		if ( meta.background_color ) {
+			rules.push( `body { background-color: ${ meta.background_color } !important; }` );
+		}
+		if ( meta.text_color ) {
+			rules.push( `body { color: ${ meta.text_color } !important; }` );
+		}
+		if ( meta.custom_css ) {
+			rules.push( meta.custom_css );
+		}
+		return rules.length ? [ { css: rules.join( '\n' ) } ] : [];
+	}, [ meta.font_body, meta.font_header, meta.background_color, meta.text_color, meta.custom_css ] );
+
+	// Apply the styles to the iframe editor.
+	const useInlineStyles = () => {
+		const ref = useRef< HTMLDivElement >( null );
+		useEffect( () => {
+			const node = ref.current;
+			if ( ! node ) {
+				return;
+			}
+			// Reset on input change so a new layout doesn't reveal mid-load.
+			setIsReady( false );
+			let cleanup = () => {};
+			let cancelled = false;
+			const safetyId = setTimeout( () => ! cancelled && setIsReady( true ), 8000 );
+			const markReady = ( iframe: HTMLIFrameElement ) => {
+				if ( cancelled ) {
+					return;
+				}
+				const doc = iframe?.contentDocument;
+				if ( ! doc ) {
+					return;
+				}
+				const awaitLoad = ( el: Element ) =>
+					new Promise< void >( resolve => {
+						el.addEventListener( 'load', () => resolve(), { once: true } );
+						el.addEventListener( 'error', () => resolve(), { once: true } );
+					} );
+				const linkPromises = Array.from( doc.querySelectorAll< HTMLLinkElement >( 'link[rel="stylesheet"]' ) )
+					.filter( link => ! link.sheet )
+					.map( awaitLoad );
+				const imgPromises = Array.from( doc.querySelectorAll( 'img' ) )
+					.filter( img => ! img.complete )
+					.map( awaitLoad );
+				Promise.all( [ ...linkPromises, ...imgPromises ] ).then( () => {
+					if ( ! cancelled ) {
+						clearTimeout( safetyId );
+						setIsReady( true );
+					}
+				} );
+			};
+			const attach = ( iframe: HTMLIFrameElement ) => {
+				const appendStyle = () => {
+					if ( ! iframe.contentDocument?.body ) {
+						return;
+					}
+					// Scopes `editor.scss` overrides to layout thumbnails.
+					iframe.contentDocument.body.classList.add( 'newspack-newsletters-layout-preview' );
+					markReady( iframe );
+				};
+				if ( 'complete' === iframe.contentDocument?.readyState ) {
+					appendStyle();
+				}
+				iframe.addEventListener( 'load', appendStyle );
+				cleanup = () => iframe.removeEventListener( 'load', appendStyle );
+			};
+			const initial = node.querySelector< HTMLIFrameElement >( 'iframe[title="Editor canvas"]' );
+			if ( initial ) {
+				attach( initial );
+				return () => {
+					cancelled = true;
+					clearTimeout( safetyId );
+					cleanup();
+				};
+			}
+			const observer = new MutationObserver( () => {
+				const iframe = node.querySelector< HTMLIFrameElement >( 'iframe[title="Editor canvas"]' );
+				if ( iframe ) {
+					observer.disconnect();
+					attach( iframe );
+				}
+			} );
+			observer.observe( node, { childList: true, subtree: true } );
+			return () => {
+				cancelled = true;
+				clearTimeout( safetyId );
+				observer.disconnect();
+				cleanup();
+			};
+		}, [ layoutId, previewBlocks ] );
+		return ref;
+	};
+
+	return (
+		<div
+			ref={ useInlineStyles() }
+			className={ `newspack-newsletters__layout-preview${ isReady ? ' is-ready' : '' }` }
+			style={ { backgroundColor: meta.background_color } }
+		>
+			{ ! isReady && (
+				<div className="newspack-newsletters__layout-preview-spinner">
+					<Spinner />
+				</div>
+			) }
+			<BlockPreview { ...props } blocks={ previewBlocks } additionalStyles={ additionalStyles } />
+		</div>
+	);
+};
+
+export default NewsletterPreview;
