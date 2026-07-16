@@ -58,11 +58,11 @@ export function useAvatars( emails, { size } = {} ) {
 			batches.push( list.slice( i, i + AVATAR_BATCH_SIZE ) );
 		}
 		Promise.all(
-			batches.map( emails =>
+			batches.map( batch =>
 				apiFetch( {
 					path: '/newspack/v1/wizard/newspack-subscribers/avatars',
 					method: 'POST',
-					data: size ? { emails, size } : { emails },
+					data: size ? { emails: batch, size } : { emails: batch },
 				} ).catch( () => null )
 			)
 		)
