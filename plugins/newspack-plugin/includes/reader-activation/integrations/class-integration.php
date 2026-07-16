@@ -671,11 +671,19 @@ abstract class Integration {
 		// PHP 8.0-safe array_is_list(): the array is a list iff re-indexing is a no-op.
 		if ( $fields === array_values( $fields ) ) {
 			foreach ( $fields as $key ) {
-				$key_operator_map[ (string) $key ] = null;
+				$key = (string) $key;
+				if ( '' === $key ) {
+					continue;
+				}
+				$key_operator_map[ $key ] = null;
 			}
 		} else {
 			foreach ( $fields as $key => $matching_function ) {
-				$key_operator_map[ (string) $key ] = is_string( $matching_function ) ? $matching_function : null;
+				$key = (string) $key;
+				if ( '' === $key ) {
+					continue;
+				}
+				$key_operator_map[ $key ] = is_string( $matching_function ) ? $matching_function : null;
 			}
 		}
 
@@ -1182,12 +1190,19 @@ abstract class Integration {
 						// update_enabled_incoming_fields() preserves each field's provider-default
 						// matching_function (no forced 'default' override).
 						foreach ( $value as $key ) {
-							$sanitized[] = \sanitize_text_field( (string) $key );
+							$key = \sanitize_text_field( (string) $key );
+							if ( '' === $key ) {
+								continue;
+							}
+							$sanitized[] = $key;
 						}
 					} else {
 						foreach ( $value as $key => $operator ) {
-							$operator = is_string( $operator ) ? $operator : 'default';
-							$sanitized[ \sanitize_text_field( (string) $key ) ] = in_array( $operator, $allowed_matching_functions, true ) ? $operator : 'default';
+							$key = \sanitize_text_field( (string) $key );
+							if ( '' === $key ) {
+								continue;
+							}
+							$sanitized[ $key ] = ( is_string( $operator ) && in_array( $operator, $allowed_matching_functions, true ) ) ? $operator : 'default';
 						}
 					}
 					return $sanitized;
