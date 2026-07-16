@@ -9,7 +9,7 @@ import { Icon, envelope } from '@wordpress/icons';
 /**
  * Internal dependencies
  */
-import { Card, CardFeature, Grid } from '../../../../../packages/components/src';
+import { Card, CardFeature, Grid, IntegrationIcon, espProviderOrder } from '../../../../../packages/components/src';
 import colors from '../../../../../packages/colors/colors.module.scss';
 import WizardsTab from '../../../wizards-tab';
 import WizardSection from '../../../wizards-section';
@@ -67,10 +67,17 @@ export const SettingsSection = ( { integrations, loading, activating = {}, onTog
 									is_connected: isConnected = true,
 									unsupported_reason: unsupportedReason,
 									unsupported_action_label: unsupportedActionLabel,
+									provider,
 									setup_url,
 									name,
 									description,
 								} = integration;
+								const cardIcon =
+									provider && espProviderOrder.includes( provider ) ? (
+										<IntegrationIcon provider={ provider } />
+									) : (
+										INTEGRATION_ICONS[ id ] || DEFAULT_ICON
+									);
 								const missingPlugins = getMissingPlugins( integration );
 								const requiresInstallPlugins = missingPlugins.filter( plugin => ! plugin.is_installed );
 								// Only offer Activate when every missing plugin is at least installed;
@@ -146,7 +153,7 @@ export const SettingsSection = ( { integrations, loading, activating = {}, onTog
 										key={ id }
 										title={ name }
 										description={ description }
-										icon={ INTEGRATION_ICONS[ id ] || DEFAULT_ICON }
+										icon={ cardIcon }
 										enabled={ isEnabled }
 										requirements={ requirements }
 										requirementsActionable={ canActivate || canFixUnsupported }

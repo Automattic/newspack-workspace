@@ -24,6 +24,8 @@ jest.mock( '../../../../../packages/components/src', () => ( {
 		mockCardFeatureProps.push( props );
 		return null;
 	},
+	IntegrationIcon: ( { provider } ) => <span data-provider={ provider } />,
+	espProviderOrder: [ 'active_campaign', 'mailchimp', 'constant_contact', 'manual' ],
 } ) );
 jest.mock( './enable-modal', () => {
 	const actual = jest.requireActual( './enable-modal' );
@@ -216,5 +218,21 @@ describe( 'Audience Integrations settings section card action', () => {
 		} );
 		expect( cardProps.enableLabel ).toBe( 'Open settings' );
 		expect( cardProps.requirementsActionable ).toBe( true );
+	} );
+
+	it( 'renders the connected provider brand icon via IntegrationIcon', () => {
+		const { cardProps } = renderSection( { is_connected: true, provider: 'mailchimp' } );
+		expect( cardProps.icon.props.provider ).toBe( 'mailchimp' );
+	} );
+
+	it( 'renders the manual provider brand icon via IntegrationIcon', () => {
+		const { cardProps } = renderSection( { is_connected: true, provider: 'manual' } );
+		expect( cardProps.icon.props.provider ).toBe( 'manual' );
+	} );
+
+	it( 'keeps the generic icon descriptor when no provider is connected', () => {
+		const { cardProps } = renderSection( { provider: null } );
+		expect( cardProps.icon.node ).toBeDefined();
+		expect( cardProps.icon.props ).toBeUndefined();
 	} );
 } );

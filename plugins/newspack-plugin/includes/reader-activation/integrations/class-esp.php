@@ -114,6 +114,23 @@ class ESP extends Integration {
 	}
 
 	/**
+	 * The selected ESP provider slug, so the integration card shows its brand mark.
+	 *
+	 * Reported whenever a provider is selected — including the manual provider,
+	 * which is unsupported yet still carries its own mark. The card falls back to
+	 * its generic icon only when no provider is selected at all.
+	 *
+	 * @return string|null The provider service slug (e.g. 'mailchimp'), or null.
+	 */
+	public function get_provider_slug() {
+		if ( ! class_exists( 'Newspack_Newsletters' ) ) {
+			return null;
+		}
+		$service = \Newspack_Newsletters::service_provider();
+		return ! empty( $service ) ? $service : null;
+	}
+
+	/**
 	 * Get the plugins this integration depends on, with their install/active status.
 	 *
 	 * @return array List of associative arrays with keys `slug`, `name`, `is_active`, `is_installed`.

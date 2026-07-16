@@ -211,6 +211,19 @@ abstract class Integration {
 	}
 
 	/**
+	 * Get the slug identifying which brand icon the integration card should show.
+	 *
+	 * Child classes override this to name the connected vendor (e.g. the active
+	 * ESP provider). The integrations UI maps the slug to a brand mark; a null
+	 * return keeps the integration's generic icon.
+	 *
+	 * @return string|null The icon slug, or null for the generic icon.
+	 */
+	public function get_provider_slug() {
+		return null;
+	}
+
+	/**
 	 * Get the plugins this integration depends on, with their active status.
 	 *
 	 * Child classes should override this to declare any plugins that must be
