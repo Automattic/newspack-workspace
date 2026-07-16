@@ -549,6 +549,65 @@ class Test_Membership_Gates_Migration extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * NPPD-2064 nested tiers: three plans gating a widening set of the same category
+	 * (a Basic/Plus/Premium shape) cover each other in a chain. Every absorbed group
+	 * must resolve to the terminal (widest) root, never an intermediate one — otherwise
+	 * consolidate_plan_groups() folds a group into a root it never seeded and fatals.
+	 */
+	public function test_plan_rule_set_consolidation_resolves_transitive_chains_to_terminal_root() {
+		$tier_basic = [
+			[
+				'slug'  => 'category',
+				'value' => [ '5' ],
+			],
+		];
+		$tier_plus = [
+			[
+				'slug'  => 'category',
+				'value' => [ '5', '6' ],
+			],
+		];
+		$tier_top = [
+			[
+				'slug'  => 'category',
+				'value' => [ '5', '6', '7' ],
+			],
+		];
+
+		$plan = $this->invoke_private_static(
+			'plan_rule_set_consolidation',
+			[ [ $tier_basic, $tier_plus, $tier_top ] ]
+		);
+
+		$this->assertSame(
+			[
+				0 => 2,
+				1 => 2,
+			],
+			$plan['absorbed_by'],
+			'Both narrower tiers resolve to the widest (terminal) root, never the intermediate one.'
+		);
+		$this->assertSame( [], $plan['overlaps'], 'A single terminal root leaves no unresolved overlap.' );
+	}
+
+	/**
+	 * The product-ID union across a group's plan descriptors is de-duplicated, so a
+	 * consolidated gate's paid-access list carries each merged plan's products once.
+	 */
+	public function test_group_product_ids_unions_and_dedupes_descriptor_products() {
+		$group = [
+			[ 'product_ids' => [ '103' ] ],
+			[ 'product_ids' => [ '101', '102' ] ],
+			[ 'product_ids' => [ '102' ] ],
+		];
+
+		$this->assertSame(
+			[ '103', '101', '102' ],
+			$this->invoke_private_static( 'group_product_ids', [ $group ] )
+		);
+	}
+
+	/**
 	 * A whole-post-type rule overlaps taxonomy-scoped content of that type, since the
 	 * taxonomy rule gates posts the post-type rule also gates.
 	 */

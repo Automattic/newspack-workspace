@@ -206,10 +206,13 @@ class Membership_Gates_Migration {
 				// A gate carrying more than one content rule must combine them with
 				// match-any (OR) so WCM's OR access semantics survive — content the plan
 				// gated under any single rule stays gated, and the reader is entitled
-				// through it. Single-rule gates keep the default match mode.
-				if ( self::rules_require_any_match( $ac_rules ) ) {
-					\Newspack\Content_Rules::update_gate_content_rules_match( $gate_id, 'any' );
-				}
+				// through it. The mode is written deterministically ('all' for a single
+				// rule, the default) so re-running the migration resets a stale 'any' on
+				// a gate that now maps to one rule.
+				\Newspack\Content_Rules::update_gate_content_rules_match(
+					$gate_id,
+					self::rules_require_any_match( $ac_rules ) ? 'any' : 'all'
+				);
 
 				// Registration layout (always).
 				self::apply_layout( $gate_id, $gate_title, 'registration', $layouts['registration'] );
@@ -861,6 +864,22 @@ class Membership_Gates_Migration {
 			}
 		}
 
+		// Resolve absorption chains to their terminal root. Value-nested tiers (e.g.
+		// category {5} ⊂ {5,6} ⊂ {5,6,7}) cover each other with equal rule counts, so
+		// the count tie-break can point a group at an intermediate root that is itself
+		// absorbed. Follow each chain to the group that survives as a gate so every
+		// absorbed group folds into a seeded root. Coverage is a strict partial order
+		// (irreflexive + transitive), so the chain is acyclic; the seen-guard is
+		// belt-and-braces against ever looping.
+		foreach ( $absorbed_by as $index => $root ) {
+			$seen = [ $index => true ];
+			while ( isset( $absorbed_by[ $root ] ) && ! isset( $seen[ $root ] ) ) {
+				$seen[ $root ] = true;
+				$root          = $absorbed_by[ $root ];
+			}
+			$absorbed_by[ $index ] = $root;
+		}
+
 		// Roots are the groups that survive as their own gate.
 		$roots    = array_values( array_diff( array_keys( $rule_sets ), array_keys( $absorbed_by ) ) );
 		$overlaps = [];
@@ -896,6 +915,12 @@ class Membership_Gates_Migration {
 	 * group's plan descriptors into its covering root group so the gate built from it
 	 * unions their access products and plan names. Overlaps that cannot be safely
 	 * merged are surfaced as loud warnings naming the plans and products at risk.
+	 *
+	 * The single gate gates the union of content with the union of products, so a
+	 * subscriber to the narrower (absorbed) plan gains access to the broader plan's
+	 * content too. That over-grant is deliberate: it is the chosen tradeoff to preserve
+	 * WCM's OR access without denying any entitled reader — the alternative (separate
+	 * gates with disjoint product lists) is exactly the false-denial bug NPPD-2064 fixes.
 	 *
 	 * @param array[] $groups List of fingerprint groups (each a list of plan descriptors).
 	 *
