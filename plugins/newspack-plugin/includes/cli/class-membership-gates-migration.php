@@ -323,7 +323,7 @@ class Membership_Gates_Migration {
 	 *
 	 * @return void
 	 */
-	private static function apply_layout( $gate_id, $gate_title, $mode, $content, $product_ids = null ) {
+	private static function apply_layout( int $gate_id, string $gate_title, string $mode, string $content, ?array $product_ids = null ): void {
 		if ( 'custom_access' === $mode ) {
 			$settings  = \Newspack\Content_Gate::get_custom_access_settings( $gate_id );
 			$layout_id = $settings['gate_layout_id'] ?? 0;
@@ -335,6 +335,12 @@ class Membership_Gates_Migration {
 		}
 
 		if ( $layout_id ) {
+			// The overwrite is unconditional even when $content is '' — mirroring the
+			// drop-in. Content_Gate::create_gate() seeds a default block-pattern layout,
+			// which this replaces with the migrated markup; an empty $content (no
+			// np_memberships_gate found for the group, or a nested/reusable wrapper) thus
+			// blanks that default. Preserving those defaults on empty content is the
+			// empty-layout fix tracked in NPPD-2058; kept faithful here.
 			\wp_update_post(
 				[
 					'ID'           => $layout_id,
