@@ -78,6 +78,35 @@ class ActiveCampaignIntegrationsSchemaTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Value-type mapping is derived from AC's field type so the framework constrains
+	 * the segment operator per field shape. Mirrors newspack-manager's ActiveCampaign
+	 * integration so the same field types identically across both AC integrations.
+	 */
+	public function test_value_type_by_field_type() {
+		$expected = [
+			'text'        => 'string',
+			'textarea'    => 'string',
+			'hidden'      => 'string',
+			'dropdown'    => 'select',
+			'radio'       => 'select',
+			'listbox'     => 'select',
+			'checkbox'    => 'multiselect',
+			'multiselect' => 'multiselect',
+			'date'        => 'date',
+			'datetime'    => 'datetime',
+		];
+		foreach ( $expected as $type => $value_type ) {
+			$mapped = $this->map_field(
+				[
+					'perstag' => 'X',
+					'type'    => $type,
+				]
+			);
+			$this->assertSame( $value_type, $mapped['value_type'], "$type should map to value_type '$value_type'" );
+		}
+	}
+
+	/**
 	 * Promotion eligibility — the eligible set drives the `is_access_rule` /
 	 * `is_segment_criteria` defaults the consumer applies to fresh fields. Both
 	 * flags are derived from the same internal predicate today, but assert each

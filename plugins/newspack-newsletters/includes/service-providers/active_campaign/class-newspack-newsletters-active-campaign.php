@@ -2448,10 +2448,26 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 			$options = $this->fetch_field_options( $field['id'] );
 		}
 
+		// Derive value_type from AC's field type so the framework constrains the
+		// operator dropdown to the field shape (a date field can't be typed
+		// "Number"). Mirrors newspack-manager's ActiveCampaign integration so the
+		// same field types identically whether a contact syncs through this ESP
+		// path or the managed integration.
+		$value_type = 'string';
+		if ( $is_multi_select ) {
+			$value_type = 'multiselect';
+		} elseif ( in_array( $type, $single_select_enum_types, true ) ) {
+			$value_type = 'select';
+		} elseif ( 'datetime' === $type ) {
+			$value_type = 'datetime';
+		} elseif ( 'date' === $type || false !== strpos( (string) $type, 'date' ) ) {
+			$value_type = 'date';
+		}
+
 		return [
 			'key'                 => $perstag,
 			'name'                => ! empty( $field['title'] ) ? $field['title'] : $perstag,
-			'value_type'          => 'string',
+			'value_type'          => $value_type,
 			'matching_function'   => $is_multi_select ? 'list__in' : 'default',
 			'options'             => $options,
 			'description'         => ! empty( $field['descript'] ) ? $field['descript'] : '',
