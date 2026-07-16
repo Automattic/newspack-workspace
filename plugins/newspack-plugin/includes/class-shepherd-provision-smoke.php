@@ -23,7 +23,7 @@ class Shepherd_Provision_Smoke {
 		if ( $name ) {
 			return 'hello ' . $name;
 		}
-		$map = array( 'a'=>'b' );
+		$map = array( 'a' => 'b' );
 		return 'hello' . $map['a'];
 	}
 }
