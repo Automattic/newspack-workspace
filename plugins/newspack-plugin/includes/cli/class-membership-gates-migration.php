@@ -429,11 +429,20 @@ class Membership_Gates_Migration {
 	 * Map WooCommerce Membership content restriction rules to the Access Control
 	 * content_rules format.
 	 *
-	 * This is the rule-mapping seam for NPPD-2063 (content-rule slug mistranslation):
-	 * the slug is taken verbatim from WC's `get_content_type_name()` (e.g. 'post',
-	 * 'page', 'post_tag'), whereas Access Control keys post-type rules under
-	 * 'post_types' and individual posts under 'specific_posts'. The remapping lands
-	 * in the stacked NPPD-2063 PR; this port preserves the drop-in behavior.
+	 * WC and AC key content restrictions differently. A WC rule carries a content
+	 * type kind (`get_content_type()`, either 'post_type' or 'taxonomy') plus a name
+	 * (`get_content_type_name()`, e.g. 'post', 'page', 'guest-author', 'category',
+	 * 'post_tag') and optional object IDs. AC enforcement only honours these slugs:
+	 * 'post_types' (value = post-type slugs), 'specific_posts' (value = post IDs),
+	 * 'newsletters', and taxonomy slugs (value = term IDs). The mapping is therefore:
+	 *
+	 * - taxonomy rule                        → slug = taxonomy name, value = term IDs.
+	 * - post-type rule, no object IDs        → slug = 'post_types',    value = [ post-type name ].
+	 * - post-type rule, with object IDs      → slug = 'specific_posts', value = post IDs.
+	 *
+	 * The post_type vs. taxonomy split uses the rule's own `get_content_type()`
+	 * discriminator rather than string-matching the name against a hardcoded list, so
+	 * custom post types (e.g. 'guest-author') map correctly.
 	 *
 	 * @param \WC_Memberships_Membership_Plan_Rule[] $wc_rules Array of WC Memberships rules.
 	 *
@@ -442,25 +451,42 @@ class Membership_Gates_Migration {
 	private static function map_rules_to_ac_format( array $wc_rules ): array {
 		$ac_rules = [];
 		foreach ( $wc_rules as $rule ) {
-			$slug = $rule->get_content_type_name(); // E.g. 'post', 'category', 'post_tag'.
-			if ( empty( $slug ) ) {
+			$content_type_name = $rule->get_content_type_name(); // A post-type or taxonomy name such as post, page, category or guest-author.
+			if ( empty( $content_type_name ) ) {
 				continue;
 			}
+
+			$object_ids = array_map( 'strval', array_values( $rule->get_object_ids() ) );
+
+			if ( 'taxonomy' === $rule->get_content_type() ) {
+				// Taxonomy rules key under the taxonomy slug; the value is the term IDs.
+				$slug  = $content_type_name;
+				$value = $object_ids;
+			} elseif ( empty( $object_ids ) ) {
+				// A whole-post-type rule keys under 'post_types'; the value is the
+				// post-type slug.
+				$slug  = 'post_types';
+				$value = [ $content_type_name ];
+			} else {
+				// A rule targeting individual objects keys under 'specific_posts'; the
+				// value is the post IDs.
+				$slug  = 'specific_posts';
+				$value = $object_ids;
+			}
+
 			$existing_key = array_search( $slug, array_column( $ac_rules, 'slug' ), true );
 			if ( false !== $existing_key ) {
-				// Merge object IDs into the existing rule for this slug.
-				$ac_rules[ $existing_key ]['value'] = array_map(
-					'strval',
-					array_values(
-						array_unique(
-							array_merge( $ac_rules[ $existing_key ]['value'], $rule->get_object_ids() )
-						)
+				// Merge values into the existing rule for this slug (post-type slugs or
+				// object IDs), de-duplicated.
+				$ac_rules[ $existing_key ]['value'] = array_values(
+					array_unique(
+						array_merge( $ac_rules[ $existing_key ]['value'], $value )
 					)
 				);
 			} else {
 				$ac_rules[] = [
 					'slug'  => $slug,
-					'value' => array_map( 'strval', array_values( $rule->get_object_ids() ) ),
+					'value' => $value,
 				];
 			}
 		}

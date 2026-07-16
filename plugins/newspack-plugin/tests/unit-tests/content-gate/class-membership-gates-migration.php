@@ -3,16 +3,14 @@
  * Characterization tests for the migrate-membership-gates CLI (NPPD-2059).
  *
  * These pin the behavior of the pure mapping/fingerprint/layout-extraction
- * helpers exactly as ported from the standalone drop-in. Where a test asserts a
- * buggy result on purpose it is flagged with the follow-up issue ID; those
- * stacked fixes will flip the corresponding assertion:
+ * helpers. The map_rules_to_ac_format tests assert the NPPD-2063 translation table
+ * (WC content rules → valid AC 'post_types' / 'specific_posts' / taxonomy slugs).
+ * Where a test asserts a buggy result on purpose it is flagged with the follow-up
+ * issue ID; that stacked fix will flip the corresponding assertion:
  *
  * - NPPD-2058: extract_gate_layouts() only inspects top-level wrapper blocks, so
  *   nested / reusable-block gate layouts migrate as empty. Pinned by the
  *   extract_gate_layouts / serialize_gate_inner_blocks tests below (they flip red).
- * - NPPD-2063: map_rules_to_ac_format() emits the raw WooCommerce content-type
- *   name as the AC rule slug instead of remapping to 'post_types' / 'specific_posts'.
- *   Pinned by the map_rules_to_ac_format tests below (they flip red).
  *
  * NOT pinned here: NPPD-2064 (fingerprint-based gate splitting/grouping). That fix
  * lands in group_plans_by_fingerprint() and the merged-product consolidation, which
@@ -53,16 +51,24 @@ class Test_Membership_Gates_Migration extends \WP_UnitTestCase {
 	/**
 	 * Build a minimal stand-in for a WC_Memberships_Membership_Plan_Rule.
 	 *
-	 * The drop-in's rule mapping only calls get_content_type_name() and
+	 * The rule mapping only calls get_content_type(), get_content_type_name() and
 	 * get_object_ids(), so the WC Memberships plugin is not needed to exercise it.
 	 *
+	 * @param string $content_type      The WC content type kind ('post_type' or 'taxonomy').
 	 * @param string $content_type_name The WC content type name (e.g. 'post', 'category').
 	 * @param int[]  $object_ids        The restricted object IDs.
 	 *
 	 * @return object A rule-shaped object.
 	 */
-	private function make_rule( string $content_type_name, array $object_ids ) {
-		return new class( $content_type_name, $object_ids ) {
+	private function make_rule( string $content_type, string $content_type_name, array $object_ids ) {
+		return new class( $content_type, $content_type_name, $object_ids ) {
+
+			/**
+			 * The WC content type kind.
+			 *
+			 * @var string
+			 */
+			private $content_type;
 
 			/**
 			 * The WC content type name.
@@ -81,12 +87,23 @@ class Test_Membership_Gates_Migration extends \WP_UnitTestCase {
 			/**
 			 * Constructor.
 			 *
+			 * @param string $content_type      The WC content type kind.
 			 * @param string $content_type_name The WC content type name.
 			 * @param int[]  $object_ids        The restricted object IDs.
 			 */
-			public function __construct( string $content_type_name, array $object_ids ) {
+			public function __construct( string $content_type, string $content_type_name, array $object_ids ) {
+				$this->content_type      = $content_type;
 				$this->content_type_name = $content_type_name;
 				$this->object_ids        = $object_ids;
+			}
+
+			/**
+			 * Return the WC content type kind ('post_type' or 'taxonomy').
+			 *
+			 * @return string
+			 */
+			public function get_content_type() {
+				return $this->content_type;
 			}
 
 			/**
@@ -110,36 +127,104 @@ class Test_Membership_Gates_Migration extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * NPPD-2063: the AC rule slug is the raw WooCommerce content-type name, not the
-	 * AC content-rules key ('post_types' for post types, 'specific_posts' for
-	 * individual posts). Object IDs are stringified. The stacked NPPD-2063 fix will
-	 * change the expected slug here.
+	 * A post-type rule targeting specific objects maps to a 'specific_posts' rule
+	 * whose value is the stringified object IDs — the slug AC enforcement honours for
+	 * individual posts (a raw 'post'/'page' slug would never match any post).
 	 */
-	public function test_map_rules_to_ac_format_uses_raw_wc_content_type_name_as_slug() {
-		$post_rule = $this->make_rule( 'post', [ 12, 34 ] );
+	public function test_map_rules_to_ac_format_maps_specific_post_type_rule_to_specific_posts() {
+		$post_rule = $this->make_rule( 'post_type', 'post', [ 12, 34 ] );
 
 		$mapped_rules = $this->invoke_private_static( 'map_rules_to_ac_format', [ [ $post_rule ] ] );
 
 		$this->assertSame(
 			[
 				[
-					'slug'  => 'post',
+					'slug'  => 'specific_posts',
 					'value' => [ '12', '34' ],
 				],
 			],
-			$mapped_rules,
-			'Slug should be the verbatim WC content-type name and values stringified (NPPD-2063 seam).'
+			$mapped_rules
 		);
 	}
 
 	/**
-	 * Two rules with the same content type are merged into one AC rule with a
-	 * de-duplicated, stringified value list. (The 'category' slug assertion is also
-	 * touched by NPPD-2063, which will remap the slug — expect this to flip red too.)
+	 * A post-type rule with no object IDs restricts the whole post type, so it maps
+	 * to a 'post_types' rule whose value is the post-type slug.
+	 */
+	public function test_map_rules_to_ac_format_maps_all_posts_rule_to_post_types() {
+		$all_posts_rule = $this->make_rule( 'post_type', 'post', [] );
+
+		$mapped_rules = $this->invoke_private_static( 'map_rules_to_ac_format', [ [ $all_posts_rule ] ] );
+
+		$this->assertSame(
+			[
+				[
+					'slug'  => 'post_types',
+					'value' => [ 'post' ],
+				],
+			],
+			$mapped_rules
+		);
+	}
+
+	/**
+	 * The post_type vs. taxonomy split relies on the rule's own get_content_type()
+	 * discriminator, so a custom post type (here 'guest-author') with specific
+	 * objects maps to 'specific_posts' just like a built-in post type — no hardcoded
+	 * post-type name list is consulted.
+	 */
+	public function test_map_rules_to_ac_format_maps_custom_post_type_rule_to_specific_posts() {
+		$guest_author_rule = $this->make_rule( 'post_type', 'guest-author', [ 91 ] );
+
+		$mapped_rules = $this->invoke_private_static( 'map_rules_to_ac_format', [ [ $guest_author_rule ] ] );
+
+		$this->assertSame(
+			[
+				[
+					'slug'  => 'specific_posts',
+					'value' => [ '91' ],
+				],
+			],
+			$mapped_rules
+		);
+	}
+
+	/**
+	 * Taxonomy rules already use the taxonomy slug as their AC slug (which AC
+	 * enforcement resolves via get_taxonomy()), so they pass through unchanged with a
+	 * term-ID value list.
+	 */
+	public function test_map_rules_to_ac_format_keeps_taxonomy_slug_unchanged() {
+		$category_rule = $this->make_rule( 'taxonomy', 'category', [ 5, 6 ] );
+		$tag_rule      = $this->make_rule( 'taxonomy', 'post_tag', [ 7 ] );
+
+		$mapped_rules = $this->invoke_private_static(
+			'map_rules_to_ac_format',
+			[ [ $category_rule, $tag_rule ] ]
+		);
+
+		$this->assertSame(
+			[
+				[
+					'slug'  => 'category',
+					'value' => [ '5', '6' ],
+				],
+				[
+					'slug'  => 'post_tag',
+					'value' => [ '7' ],
+				],
+			],
+			$mapped_rules
+		);
+	}
+
+	/**
+	 * Two taxonomy rules for the same taxonomy collapse into a single AC rule with a
+	 * de-duplicated, stringified term-ID list.
 	 */
 	public function test_map_rules_to_ac_format_merges_and_dedupes_object_ids_for_the_same_slug() {
-		$first_category_rule  = $this->make_rule( 'category', [ 1, 2 ] );
-		$second_category_rule = $this->make_rule( 'category', [ 2, 3 ] );
+		$first_category_rule  = $this->make_rule( 'taxonomy', 'category', [ 1, 2 ] );
+		$second_category_rule = $this->make_rule( 'taxonomy', 'category', [ 2, 3 ] );
 
 		$mapped_rules = $this->invoke_private_static(
 			'map_rules_to_ac_format',
@@ -152,10 +237,47 @@ class Test_Membership_Gates_Migration extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A mixed rule set exercises all three mappings and their merge semantics at
+	 * once: whole-post-type rules merge their post-type slugs under 'post_types',
+	 * specific-object rules (across different post types) merge their IDs under
+	 * 'specific_posts', and a taxonomy rule keeps its own slug.
+	 */
+	public function test_map_rules_to_ac_format_merges_mixed_rule_set_by_target_slug() {
+		$all_posts_rule    = $this->make_rule( 'post_type', 'post', [] );
+		$all_pages_rule    = $this->make_rule( 'post_type', 'page', [] );
+		$specific_page     = $this->make_rule( 'post_type', 'page', [ 5 ] );
+		$specific_articles = $this->make_rule( 'post_type', 'post', [ 12, 34 ] );
+		$category_rule     = $this->make_rule( 'taxonomy', 'category', [ 8 ] );
+
+		$mapped_rules = $this->invoke_private_static(
+			'map_rules_to_ac_format',
+			[ [ $all_posts_rule, $all_pages_rule, $specific_page, $specific_articles, $category_rule ] ]
+		);
+
+		$this->assertSame(
+			[
+				[
+					'slug'  => 'post_types',
+					'value' => [ 'post', 'page' ],
+				],
+				[
+					'slug'  => 'specific_posts',
+					'value' => [ '5', '12', '34' ],
+				],
+				[
+					'slug'  => 'category',
+					'value' => [ '8' ],
+				],
+			],
+			$mapped_rules
+		);
+	}
+
+	/**
 	 * Rules with an empty content-type name are dropped entirely.
 	 */
 	public function test_map_rules_to_ac_format_skips_rules_with_empty_content_type() {
-		$empty_rule = $this->make_rule( '', [ 7 ] );
+		$empty_rule = $this->make_rule( 'post_type', '', [ 7 ] );
 
 		$mapped_rules = $this->invoke_private_static( 'map_rules_to_ac_format', [ [ $empty_rule ] ] );
 
