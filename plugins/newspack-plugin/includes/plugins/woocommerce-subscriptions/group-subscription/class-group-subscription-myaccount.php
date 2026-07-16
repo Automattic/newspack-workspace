@@ -257,7 +257,10 @@ class Group_Subscription_MyAccount {
 	 * @return array{ 0: int, 1: string }
 	 */
 	private static function get_subscription_context(): array {
-		$subscription_id = filter_input( INPUT_POST, 'subscription_id', FILTER_VALIDATE_INT ) ?? 0;
+		// absint() over ?? 0: the null coalesce covers only an absent field, while a
+		// present-but-invalid value validates to false — both must land on the int 0
+		// this method's contract promises.
+		$subscription_id = absint( filter_input( INPUT_POST, 'subscription_id', FILTER_VALIDATE_INT ) );
 		$redirect_url    = self::get_group_url( $subscription_id );
 		return [ $subscription_id, $redirect_url ];
 	}
