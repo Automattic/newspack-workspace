@@ -21,30 +21,36 @@ import { stringify } from 'qs';
 /**
  * Internal dependencies.
  */
-import { WebPreview, withWizard } from '../../../../../packages/components/src';
+import { Button, WebPreview, withWizard } from '../../../../../packages/components/src';
 import Router from '../../../../../packages/components/src/proxied-imports/router';
 import { Campaigns, Settings, Segments } from './views';
+import AddCampaignAction from './campaigns/add-campaign-action';
 import { CampaignsContext } from '../../contexts';
 
-const { HashRouter, Redirect, Route, Switch } = Router;
+const { HashRouter, NavLink, Redirect, Route, Switch } = Router;
 
 const headerText = __( 'Audience Management / Campaigns', 'newspack-plugin' );
 
+const ROOT = [ { label: __( 'Audience Management', 'newspack-plugin' ) } ];
+
 const tabbedNavigation = [
 	{
-		label: __( 'Campaigns', 'newpack-plugin' ),
+		label: __( 'Campaigns', 'newspack-plugin' ),
 		path: '/campaigns',
 		exact: true,
+		breadcrumbs: [ ...ROOT, { label: __( 'Campaigns', 'newspack-plugin' ) } ],
 	},
 	{
-		label: __( 'Segments', 'newpack-plugin' ),
+		label: __( 'Segments', 'newspack-plugin' ),
 		path: '/segments',
 		exact: false,
+		breadcrumbs: [ ...ROOT, { label: __( 'Segments', 'newspack-plugin' ) } ],
 	},
 	{
-		label: __( 'Settings', 'newpack-plugin' ),
+		label: __( 'Settings', 'newspack-plugin' ),
 		path: '/settings',
 		exact: true,
+		breadcrumbs: [ ...ROOT, { label: __( 'Settings', 'newspack-plugin' ) } ],
 	},
 ];
 
@@ -346,6 +352,7 @@ class AudienceCampaigns extends Component {
 													duplicateCampaignGroup={ duplicateCampaignGroup }
 													renameCampaignGroup={ renameCampaignGroup }
 													campaigns={ campaigns }
+													headerActions={ <AddCampaignAction createCampaignGroup={ createCampaignGroup } /> }
 												/>
 											</CampaignsContext.Provider>
 										);
@@ -358,6 +365,13 @@ class AudienceCampaigns extends Component {
 											{ ...props }
 											{ ...sharedProps }
 											setSegments={ segmentsList => this.setState( { segments: segmentsList } ) }
+											headerActions={
+												props.match.params.id ? undefined : (
+													<NavLink to="segments/new">
+														<Button variant="primary">{ __( 'Add Segment', 'newspack-plugin' ) }</Button>
+													</NavLink>
+												)
+											}
 										/>
 									) }
 								/>

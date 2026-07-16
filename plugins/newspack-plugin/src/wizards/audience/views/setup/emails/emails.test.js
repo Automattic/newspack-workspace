@@ -51,23 +51,26 @@ jest.mock( '../../../../../../packages/components/src', () => {
 	}
 	return {
 		Badge: ( { text } ) => <span>{ text }</span>,
-		DataViews: ( { data, fields, actions, view, onChangeView } ) => {
+		DataViews: ( { data, fields, actions, view, onChangeView, header } ) => {
 			mockCapturedActions = actions || [];
 			mockCapturedView = view;
 			mockCapturedOnChangeView = onChangeView;
 			mockCapturedData = data;
 			return (
-				<table data-testid="dataviews">
-					<tbody>
-						{ data.map( ( item, i ) => (
-							<tr key={ i }>
-								{ fields.map( field => (
-									<td key={ field.id }>{ renderField( field, item ) }</td>
-								) ) }
-							</tr>
-						) ) }
-					</tbody>
-				</table>
+				<>
+					{ header }
+					<table data-testid="dataviews">
+						<tbody>
+							{ data.map( ( item, i ) => (
+								<tr key={ i }>
+									{ fields.map( field => (
+										<td key={ field.id }>{ renderField( field, item ) }</td>
+									) ) }
+								</tr>
+							) ) }
+						</tbody>
+					</table>
+				</>
 			);
 		},
 		Card: ( { children } ) => <div data-testid="card">{ children }</div>,
@@ -784,7 +787,8 @@ describe( 'Emails', () => {
 
 		// The tab surface renders no visible title; the section heading is
 		// present for assistive tech but visually hidden via screen-reader-text.
-		const heading = screen.getByRole( 'heading', { level: 1, name: 'Emails' } );
+		// It's an h2 — the single h1 now comes from the wizard's Page breadcrumb.
+		const heading = screen.getByRole( 'heading', { level: 2, name: 'Emails' } );
 		expect( heading ).toHaveClass( 'screen-reader-text' );
 	} );
 

@@ -1,4 +1,5 @@
 @use "~@wordpress/base-styles/colors" as wp-colors;
+@use "~@wordpress/base-styles/variables" as wp-vars;
 
 /**
  * Plugins table.
@@ -25,17 +26,17 @@ table.plugins {
 	&--hidden {
 		display: none;
 	}
-	h1,
+	h2,
 	p,
 	> div > div {
-		padding-left: 32px;
-		padding-right: 32px;
+		padding-left: wp-vars.$grid-unit-40;
+		padding-right: wp-vars.$grid-unit-40;
 	}
-	h1 {
-		margin-top: 21px;
-		font-size: 16px;
-		padding-bottom: 20px;
-		border-bottom: 1px solid #ddd;
+	h2 {
+		margin-top: wp-vars.$grid-unit-30;
+		font-size: wp-vars.$font-size-large;
+		padding-bottom: wp-vars.$grid-unit-30;
+		border-bottom: 1px solid wp-colors.$gray-300;
 	}
 	> div {
 		position: relative;

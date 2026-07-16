@@ -19,7 +19,7 @@
 		"prepare": "husky || true; pnpm run build:packages",
 		"lint": "pnpm --filter './plugins/*' --filter './themes/*' run lint:js && composer phpcs",
 		"lint:changed": "pnpm --filter '...[origin/main]' run lint:js",
-		"test:js": "pnpm --filter './plugins/*' --filter './themes/*' run test",
+		"test:js": "pnpm --filter './packages/*' --filter './plugins/*' --filter './themes/*' run --if-present test",
 		"test:php": "composer test",
 		"format": "pnpm --filter './plugins/*' --filter './themes/*' run format:js",
 		"cm": "commit"

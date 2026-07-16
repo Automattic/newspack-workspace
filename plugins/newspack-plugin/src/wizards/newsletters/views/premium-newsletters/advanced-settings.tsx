@@ -83,10 +83,10 @@ const AdvancedSettings = ( { closeModal, showModal }: { closeModal: () => void; 
 	updateConfig.current = handleUpdateConfig;
 	return (
 		showModal && (
-			<Modal onClose={ closeModal } size="medium" title={ __( 'Advanced settings', 'newspack-plugin' ) } onRequestClose={ closeModal }>
+			<Modal onClose={ closeModal } size="medium" title={ __( 'Advanced Settings', 'newspack-plugin' ) } onRequestClose={ closeModal }>
 				<VStack>
 					<ToggleControl
-						label={ __( 'Auto signup', 'newspack-plugin' ) }
+						label={ __( 'Auto Signup', 'newspack-plugin' ) }
 						help={ __( 'Automatically sign up users when they meet access requirements for premium newsletters.', 'newspack-plugin' ) }
 						checked={ config?.auto_signup }
 						onChange={ value => setConfig( { ...config, auto_signup: value } ) }

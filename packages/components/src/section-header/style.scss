@@ -4,6 +4,7 @@
 
 @use "~@wordpress/base-styles/colors" as wp-colors;
 @use "~@wordpress/base-styles/variables" as wp-vars;
+@use "~@wordpress/base-styles/mixins" as wp-mixins;
 @use "../../../colors/colors.module" as colors;
 
 .newspack-section-header {
@@ -87,16 +88,17 @@
 		color: wp-colors.$gray-700;
 	}
 
+	// Title sizing keyed to the class, not the tag, so demoting the heading level
+	// (h1 -> h2 when the breadcrumb Page owns the page h1) never changes its look,
+	// and genuine h2s elsewhere in the header are unaffected.
+	&__title {
+		@include wp-mixins.heading-x-large();
+	}
+
 	&__title-container {
 		align-items: center;
 		display: flex;
 		gap: 8px;
-
-		h2 {
-			font-size: wp-vars.$font-size-x-large;
-			font-weight: wp-vars.$font-weight-medium;
-			line-height: wp-vars.$font-line-height-x-large;
-		}
 
 		.newspack-section-header__menu,
 		.newspack-section-header__secondary-action,
@@ -163,11 +165,6 @@
 			svg {
 				fill: var(--wp-admin-theme-color);
 			}
-		}
-		h1 {
-			font-size: wp-vars.$font-size-x-large;
-			font-weight: wp-vars.$font-weight-medium;
-			line-height: wp-vars.$font-line-height-x-large;
 		}
 	}
 }
