@@ -104,14 +104,9 @@ describe( 'AudienceIntegrations notices', () => {
 	} );
 
 	it( 'announces an error snackbar when the save request fails', async () => {
-		act( () => {
-			captured.props.onFieldChange( 'esp', 'mailchimp_audience_id', 'abc123' );
-		} );
-		await waitFor( () => expect( captured.props.pendingChanges.esp ).toEqual( { mailchimp_audience_id: 'abc123' } ) );
-
 		apiFetch.mockRejectedValue( new Error( 'nope' ) );
 		await act( async () => {
-			captured.props.onSave( 'esp' );
+			captured.props.onSave( 'esp', { mailchimp_audience_id: 'abc123' } ).catch( () => {} );
 			await flushPromises();
 		} );
 		await waitFor( () =>
@@ -222,7 +217,7 @@ describe( 'AudienceIntegrations notices', () => {
 	} );
 } );
 
-describe( 'AudienceIntegrations pending changes', () => {
+describe( 'AudienceIntegrations retry buffer', () => {
 	beforeEach( async () => {
 		apiFetch.mockReset();
 		apiFetch.mockResolvedValue( SETTINGS_MAP );
@@ -230,44 +225,41 @@ describe( 'AudienceIntegrations pending changes', () => {
 		await waitFor( () => expect( captured.props.loading ).toBe( false ) );
 	} );
 
-	// Pins Finding 1: onDiscardChanges must clear the real pendingChanges state
-	// in the parent, not just be a callback that gets invoked. A no-op
-	// handleDiscardChanges would fail this assertion even though it would pass
-	// a test that only checks the callback was called.
-	it( "clears an integration's pending changes when onDiscardChanges is called", async () => {
-		act( () => {
-			captured.props.onFieldChange( 'esp', 'mailchimp_audience_id', 'abc123' );
-		} );
-		await waitFor( () => expect( captured.props.pendingChanges.esp ).toEqual( { mailchimp_audience_id: 'abc123' } ) );
-
-		act( () => {
-			captured.props.onDiscardChanges( 'esp' );
-		} );
-		await waitFor( () => expect( captured.props.pendingChanges.esp ).toBeUndefined() );
-	} );
-
-	it( 'is a no-op when there is nothing pending for the integration', async () => {
-		const pendingChangesBefore = captured.props.pendingChanges;
-		act( () => {
-			captured.props.onDiscardChanges( 'esp' );
-		} );
-		expect( captured.props.pendingChanges ).toBe( pendingChangesBefore );
-	} );
-
-	// Pins a data-safety property: on a failed save, the server never received
-	// the edit, so pendingChanges is the user's only copy of it. A future
-	// refactor must not start clearing it on failure.
-	it( 'preserves pendingChanges when the save request fails', async () => {
-		act( () => {
-			captured.props.onFieldChange( 'esp', 'mailchimp_audience_id', 'abc123' );
-		} );
-		await waitFor( () => expect( captured.props.pendingChanges.esp ).toEqual( { mailchimp_audience_id: 'abc123' } ) );
-
-		apiFetch.mockRejectedValue( new Error( 'nope' ) );
+	it( 'clears the retry buffer when the save succeeds', async () => {
 		await act( async () => {
-			captured.props.onSave( 'esp' );
+			captured.props.onSave( 'esp', { mailchimp_audience_id: 'abc123' } );
 			await flushPromises();
 		} );
-		expect( captured.props.pendingChanges.esp ).toEqual( { mailchimp_audience_id: 'abc123' } );
+		expect( captured.props.inFlightChanges.esp ).toBeUndefined();
+	} );
+
+	// The server never received a failed edit, so the buffer is the user's only
+	// copy. A future change must not start clearing it on failure.
+	it( 'retains the retry buffer when the save fails', async () => {
+		apiFetch.mockRejectedValue( new Error( 'nope' ) );
+		await act( async () => {
+			captured.props.onSave( 'esp', { mailchimp_audience_id: 'abc123' } ).catch( () => {} );
+			await flushPromises();
+		} );
+		expect( captured.props.inFlightChanges.esp ).toEqual( { mailchimp_audience_id: 'abc123' } );
+	} );
+
+	it( 'marks the integration saving while the request is in flight', async () => {
+		let resolveSave;
+		apiFetch.mockImplementation(
+			() =>
+				new Promise( resolve => {
+					resolveSave = resolve;
+				} )
+		);
+		act( () => {
+			captured.props.onSave( 'esp', { mailchimp_audience_id: 'abc123' } );
+		} );
+		await waitFor( () => expect( captured.props.saving.esp ).toBe( true ) );
+		await act( async () => {
+			resolveSave( SETTINGS_MAP );
+			await flushPromises();
+		} );
+		expect( captured.props.saving.esp ).toBe( false );
 	} );
 } );
