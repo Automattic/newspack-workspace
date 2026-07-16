@@ -442,10 +442,12 @@ class WooCommerce_Subscriptions {
 	 * switched off:
 	 *
 	 *   - Variant A (orphaned line item): the line item carries no product reference (the
-	 *     product was hard-deleted, or the subscription was created by hand). AC can never
-	 *     match it.
-	 *   - Variant B (trashed product): the line item points at a product in the trash, which
-	 *     the gate's product picker can never offer, so no gate can be configured with it.
+	 *     product was hard-deleted, or the subscription was created by hand), or the
+	 *     subscription has no line items at all. AC can never match it.
+	 *   - Variant B (non-gate-selectable product): the line item points at a product the gate
+	 *     picker can never offer — the wrong type (only subscription / variable-subscription
+	 *     are selectable) or a status outside the picker's allowlist (e.g. trashed or
+	 *     auto-draft). No gate can be configured with it.
 	 *
 	 * With no --map the command audits only (read-only): it prints one row per at-risk
 	 * subscription with a best-guess intended product derived from the line-item name. The

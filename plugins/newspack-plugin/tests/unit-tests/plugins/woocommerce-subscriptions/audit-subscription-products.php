@@ -616,7 +616,7 @@ class Newspack_Test_Audit_Subscription_Products extends WP_UnitTestCase {
 					'id'   => $live_annual_id,
 					'name' => 'Digital Annual',
 				],
-			] 
+			]
 		);
 
 		$this->assertCount( 1, $rows, 'The at-risk subscription on the second page must be found — pagination must continue past a full first page.' );
