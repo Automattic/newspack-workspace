@@ -15,6 +15,7 @@
 
 use Newspack\CLI\Teams_Migration;
 use Newspack\Group_Subscription;
+use Newspack\Group_Subscription_Invite;
 use Newspack\Group_Subscription_Settings;
 
 /**
@@ -39,11 +40,34 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 	private $team_ids = [];
 
 	/**
-	 * Include the WC mocks.
+	 * Invitation post IDs to clean up.
+	 *
+	 * @var int[]
+	 */
+	private $invitation_ids = [];
+
+	/**
+	 * Include the WC mocks and register the WooCommerce Teams invitation statuses.
+	 *
+	 * The migration reads invitation posts by their raw `wcmti-` status; registering
+	 * the statuses (as the Teams plugin does at runtime) keeps wp_insert_post from
+	 * coercing the fixture invitations to a built-in status. The `protected` flag
+	 * mirrors Teams' own registration — WP_Query strips protected statuses from the
+	 * status clause in this non-admin context, so this is what makes the query return
+	 * every status and exercises the reader's own pending filter.
 	 */
 	public static function set_up_before_class() {
 		parent::set_up_before_class();
 		require_once dirname( __DIR__, 4 ) . '/mocks/wc-mocks.php';
+		foreach ( [ 'wcmti-pending', 'wcmti-accepted', 'wcmti-cancelled' ] as $invitation_status ) {
+			register_post_status(
+				$invitation_status,
+				[
+					'public'    => false,
+					'protected' => true,
+				] 
+			);
+		}
 	}
 
 	/**
@@ -68,8 +92,12 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 		foreach ( $this->team_ids as $team_id ) {
 			wp_delete_post( $team_id, true );
 		}
-		$this->user_ids = [];
-		$this->team_ids = [];
+		foreach ( $this->invitation_ids as $invitation_id ) {
+			wp_delete_post( $invitation_id, true );
+		}
+		$this->user_ids       = [];
+		$this->team_ids       = [];
+		$this->invitation_ids = [];
 		parent::tear_down();
 	}
 
@@ -482,5 +510,137 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 		$this->assertTrue( $result['resolved'], 'The active group subscription should resolve.' );
 		$this->assertSame( $active_group->get_id(), $result['subscription_id'], 'The active group subscription should be selected over the cancelled/non-group ones.' );
 		$this->assertSame( [ $member ], $result['promoted'], 'The manager-role member should be promoted into the resolved group.' );
+	}
+
+	/**
+	 * Create a WooCommerce Teams invitation post (a `wc_team_invitation` whose title
+	 * holds the invitee email and whose parent is the team), mirroring how the Teams
+	 * plugin stores pending invites.
+	 *
+	 * @param int    $team_id The team post ID.
+	 * @param string $email   The invitee email (stored as the post title).
+	 * @param string $status  The invitation post status (defaults to pending).
+	 * @return int Invitation post ID.
+	 */
+	private function create_team_invitation( int $team_id, string $email, string $status = 'wcmti-pending' ): int {
+		$invitation_id = wp_insert_post(
+			[
+				'post_type'   => 'wc_team_invitation',
+				'post_status' => $status,
+				'post_title'  => $email,
+				'post_parent' => $team_id,
+			]
+		);
+		$this->assertNotWPError( $invitation_id, 'Fixture invitation creation should succeed.' );
+		$this->assertGreaterThan( 0, $invitation_id, 'Fixture invitation should receive a post ID.' );
+		$this->invitation_ids[] = $invitation_id;
+		return $invitation_id;
+	}
+
+	/**
+	 * The pending-invitation reader returns only the emails of pending invitations for
+	 * the given team: accepted/cancelled invites, malformed titles, and other teams'
+	 * invites are all excluded.
+	 */
+	public function test_get_pending_team_invitation_emails_returns_pending_valid_emails_only() {
+		$owner   = $this->create_reader();
+		$team_id = $this->create_team( $owner, [], null );
+
+		$pending_one = 'pending-one@test.com';
+		$pending_two = 'pending-two@test.com';
+		$this->create_team_invitation( $team_id, $pending_one );
+		$this->create_team_invitation( $team_id, $pending_two );
+		// Non-pending invitations are not carried over.
+		$this->create_team_invitation( $team_id, 'accepted@test.com', 'wcmti-accepted' );
+		$this->create_team_invitation( $team_id, 'cancelled@test.com', 'wcmti-cancelled' );
+		// A malformed title is dropped rather than handed to generate_invite().
+		$this->create_team_invitation( $team_id, 'not-an-email' );
+		// A pending invitation on another team must not leak in.
+		$other_team = $this->create_team( $owner, [], null );
+		$this->create_team_invitation( $other_team, 'other-team@test.com' );
+
+		$emails = Teams_Migration::get_pending_team_invitation_emails( $team_id );
+
+		sort( $emails );
+		$this->assertSame( [ $pending_one, $pending_two ], $emails, 'Only pending, valid, same-team invitation emails should be returned.' );
+	}
+
+	/**
+	 * With sending disabled (the default, and always the case in a dry-run or without
+	 * --migrate-invitations), migrate_team_invitations() still reports the pending
+	 * invitees so the re-invite list is never lost — but writes no invite and sends
+	 * no email.
+	 */
+	public function test_migrate_team_invitations_lists_without_sending_when_disabled() {
+		$owner        = $this->create_reader();
+		$subscription = $this->create_group_subscription( $owner );
+		$team_id      = $this->create_team( $owner, [], $subscription->get_id() );
+		$this->create_team_invitation( $team_id, 'invitee-a@test.com' );
+		$this->create_team_invitation( $team_id, 'invitee-b@test.com' );
+
+		$result = Teams_Migration::migrate_team_invitations( $subscription, $team_id, false );
+
+		sort( $result['emails'] );
+		$this->assertSame( [ 'invitee-a@test.com', 'invitee-b@test.com' ], $result['emails'], 'The pending invitees must be reported even when sending is disabled.' );
+		$this->assertSame( [], $result['sent'], 'No invites should be sent when sending is disabled.' );
+		$this->assertSame( [], $result['skipped'], 'Nothing should be skipped when no send is attempted.' );
+		$this->assertEmpty( Group_Subscription_Invite::get_invites( $subscription ), 'A disabled run must not write any invite onto the subscription.' );
+	}
+
+	/**
+	 * With sending enabled, migrate_team_invitations() creates a group-subscription
+	 * invite for each pending invitee and the invites land on the subscription.
+	 */
+	public function test_migrate_team_invitations_sends_invites_when_enabled() {
+		$owner        = $this->create_reader();
+		$subscription = $this->create_group_subscription( $owner );
+		$team_id      = $this->create_team( $owner, [], $subscription->get_id() );
+		$invitee_one  = 'new-invitee-one@test.com';
+		$invitee_two  = 'new-invitee-two@test.com';
+		$this->create_team_invitation( $team_id, $invitee_one );
+		$this->create_team_invitation( $team_id, $invitee_two );
+
+		$result = Teams_Migration::migrate_team_invitations( $subscription, $team_id, true );
+
+		sort( $result['sent'] );
+		$this->assertSame( [ $invitee_one, $invitee_two ], $result['sent'], 'Both pending invitees should receive a group-subscription invite.' );
+		$this->assertSame( [], $result['skipped'], 'No invitee should be skipped in the clean case.' );
+
+		$invited_emails = array_column( Group_Subscription_Invite::get_invites( $subscription ), 'email' );
+		sort( $invited_emails );
+		$this->assertSame( [ $invitee_one, $invitee_two ], $invited_emails, 'The invites should land on the group subscription.' );
+	}
+
+	/**
+	 * A current group member and a non-reader account are both rejected by
+	 * generate_invite(); the migration must record these as skipped (with a reason)
+	 * rather than fatal, and still send the valid invite.
+	 */
+	public function test_migrate_team_invitations_skips_existing_members_and_non_readers() {
+		$owner        = $this->create_reader();
+		$subscription = $this->create_group_subscription( $owner );
+		$team_id      = $this->create_team( $owner, [], $subscription->get_id() );
+
+		// A brand-new email with no account — the only invitable case here.
+		$new_email = 'fresh-invitee@test.com';
+		$this->create_team_invitation( $team_id, $new_email );
+
+		// A current group member — re-inviting a member is rejected.
+		$member       = $this->create_reader();
+		$member_email = get_userdata( $member )->user_email;
+		Teams_Migration::add_group_member( $subscription, $member );
+		$this->create_team_invitation( $team_id, $member_email );
+
+		// A non-reader account (editor) — not a valid reader target.
+		$editor       = $this->create_editor();
+		$editor_email = get_userdata( $editor )->user_email;
+		$this->create_team_invitation( $team_id, $editor_email );
+
+		$result = Teams_Migration::migrate_team_invitations( $subscription, $team_id, true );
+
+		$this->assertSame( [ $new_email ], $result['sent'], 'Only the fresh invitee should be invited.' );
+		$this->assertArrayHasKey( $member_email, $result['skipped'], 'An existing member should be skipped, not re-invited.' );
+		$this->assertArrayHasKey( $editor_email, $result['skipped'], 'A non-reader should be skipped, not invited.' );
+		$this->assertCount( 2, $result['skipped'], 'Exactly the two invalid invitees should be skipped.' );
 	}
 }
