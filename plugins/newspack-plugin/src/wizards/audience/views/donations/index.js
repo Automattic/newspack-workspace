@@ -18,6 +18,8 @@ import { useWizardData } from '../../../../../packages/components/src/wizard/sto
 import Configuration from './configuration';
 import { AUDIENCE_DONATIONS_WIZARD_SLUG, OTHER } from '../../constants';
 
+const ROOT = [ { label: __( 'Audience Management', 'newspack-plugin' ) } ];
+
 const AudienceDonations = ( props, ref ) => {
 	const { platform_data, donation_data } = useWizardData( AUDIENCE_DONATIONS_WIZARD_SLUG );
 	const usedPlatform = platform_data?.platform;
@@ -27,6 +29,7 @@ const AudienceDonations = ( props, ref ) => {
 			path: '/configuration',
 			render: Configuration,
 			isHidden: usedPlatform === OTHER,
+			breadcrumbs: [ ...ROOT, { label: __( 'Donations', 'newspack-plugin' ) } ],
 		},
 	];
 	return (

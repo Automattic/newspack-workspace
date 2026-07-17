@@ -136,7 +136,7 @@ class Emails {
 			$handle,
 			Newspack::plugin_url() . '/dist/other-scripts/emails.js',
 			[],
-			NEWSPACK_PLUGIN_VERSION,
+			Newspack::asset_version( 'other-scripts/emails' ),
 			true
 		);
 		\wp_localize_script(
@@ -157,7 +157,7 @@ class Emails {
 			$handle,
 			Newspack::plugin_url() . '/dist/other-scripts/emails.css',
 			[],
-			NEWSPACK_PLUGIN_VERSION
+			Newspack::asset_version( 'other-scripts/emails' )
 		);
 		\wp_style_add_data( $handle, 'rtl', 'replace' );
 		\wp_enqueue_style( $handle );

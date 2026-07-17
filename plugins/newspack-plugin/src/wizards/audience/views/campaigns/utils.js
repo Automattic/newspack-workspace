@@ -185,7 +185,23 @@ export const segmentDescription = segment => {
 		}
 	}
 
-	return descriptionMessages.join( ' | ' );
+	if ( ! descriptionMessages.length ) {
+		return null;
+	}
+
+	// Criteria messages can be React elements (some `criteriaMessage` filters resolve
+	// their labels asynchronously). Interleave the separators as nodes instead of
+	// `.join( ' | ' )`, which would coerce those elements to the string "[object Object]".
+	return (
+		<Fragment>
+			{ descriptionMessages.map( ( message, index ) => (
+				<Fragment key={ index }>
+					{ index > 0 && ' | ' }
+					{ message }
+				</Fragment>
+			) ) }
+		</Fragment>
+	);
 };
 
 const getFavoriteCategoryNamesFn = async favoriteCategories => {

@@ -477,6 +477,13 @@ final class Magic_Link {
 	 * @return bool|\WP_Error Whether the email was sent or WP_Error if sending failed.
 	 */
 	public static function send_email( $user, $redirect_to = '', $use_otp = true ) {
+		// Guard against a non-string redirect (e.g. a wp_parse_url() array passed
+		// through from a caller when neither a redirect_url nor a Referer is
+		// available). add_query_arg() would otherwise run strstr() on the array
+		// and fatal with a TypeError.
+		if ( ! \is_string( $redirect_to ) ) {
+			$redirect_to = '';
+		}
 		// Send reminder to non-reader accounts to use standard WP login.
 		if ( ! Reader_Activation::is_user_reader( $user ) ) {
 			return Reader_Activation::send_non_reader_login_reminder( $user );

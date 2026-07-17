@@ -117,20 +117,6 @@ abstract class Admin_Page {
 	}
 
 	/**
-	 * URL of the newspack-plugin admin-header tab whose `selected`
-	 * state should reflect this page.
-	 *
-	 * Override on hidden subpages whose live URL carries an extra
-	 * `&page=…` the tab href doesn't — the wizard header's strict
-	 * URL equality check would otherwise miss them.
-	 *
-	 * @return string|null
-	 */
-	public function get_wizard_tab_url(): ?string {
-		return null;
-	}
-
-	/**
 	 * Desired 0-based index within the parent submenu list.
 	 *
 	 * `add_submenu_page`'s `$position` is unreliable here — numeric
@@ -144,16 +130,14 @@ abstract class Admin_Page {
 	}
 
 	/**
-	 * Override the wizard header breadcrumb text for this page.
+	 * Explicit breadcrumb trail for the newspack-plugin admin header on this
+	 * page, overriding the wizard's default trail via the
+	 * `newspack_wizards_admin_header_breadcrumbs` filter. Return `null` to
+	 * leave the wizard's trail untouched.
 	 *
-	 * Newspack-plugin's wizard prefers `post_type` over `page` slug
-	 * when resolving the breadcrumb, so a hidden React subpage ends
-	 * up showing the parent CPT's label. Override to inject the
-	 * correct text via inline script after the header mounts.
-	 *
-	 * @return string|null
+	 * @return array<array{label: string, url?: string}>|null
 	 */
-	public function get_wizard_header_label(): ?string {
+	public function get_wizard_breadcrumbs(): ?array {
 		return null;
 	}
 

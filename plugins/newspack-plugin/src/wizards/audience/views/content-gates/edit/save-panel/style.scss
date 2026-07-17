@@ -1,0 +1,146 @@
+/**
+ * Content Gate pre-save checklist panel.
+ */
+
+@use "~@wordpress/base-styles/colors" as wp-colors;
+@use "~@wordpress/base-styles/variables" as wp-vars;
+
+@keyframes newspack-content-gate-save-panel-slide-in {
+	0% { transform: translateX(100%); }
+	100% { transform: translateX(0); }
+}
+
+@keyframes newspack-content-gate-save-panel-slide-out {
+	0% { transform: translateX(0); }
+	100% { transform: translateX(100%); }
+}
+
+// No scrim: transparent overlay, frame anchored to the right edge and offset
+// below the wp-admin bar so the panel reads like the editor sidebar.
+.newspack-content-gate-save-panel__overlay {
+	align-items: stretch;
+	background: transparent;
+	justify-content: flex-end;
+	padding: 0;
+	top: var(--wp-admin--admin-bar--height, 32px);
+}
+
+.components-modal__frame.newspack-content-gate-save-panel {
+	animation: 0.2s ease-out forwards newspack-content-gate-save-panel-slide-in;
+	border-left: 1px solid wp-colors.$gray-300;
+	border-radius: 0;
+	box-shadow: none;
+	height: 100%;
+	margin: 0;
+	max-height: 100%;
+	max-width: 100vw;
+	min-width: 281px;
+	width: 281px;
+
+	@media (max-width: 600px) {
+		width: 100vw;
+	}
+
+	.components-modal__content {
+		display: flex;
+		flex-direction: column;
+		padding: 0;
+	}
+
+	.components-modal__children-container {
+		display: flex;
+		flex: 1 1 auto;
+		flex-direction: column;
+		min-height: 0;
+	}
+}
+
+.newspack-content-gate-save-panel__form {
+	display: flex;
+	flex: 1 1 auto;
+	flex-direction: column;
+	min-height: 0;
+}
+
+// Cancel / Save sit at the top, split 50/50, in a 60px-tall bar.
+.newspack-content-gate-save-panel__actions {
+	align-items: center;
+	border-bottom: 1px solid wp-colors.$gray-300;
+	display: flex;
+	flex: 0 0 auto;
+	gap: wp-vars.$grid-unit-15;
+	min-height: 60px;
+	padding: wp-vars.$grid-unit-10 wp-vars.$grid-unit-20;
+
+	.components-button {
+		flex: 1;
+		justify-content: center;
+	}
+}
+
+// Body sits at the top, the "always show" checkbox pins to the very bottom.
+.newspack-content-gate-save-panel__content {
+	display: flex;
+	flex: 1 1 auto;
+	flex-direction: column;
+	gap: wp-vars.$grid-unit-20;
+	justify-content: space-between;
+	overflow-x: hidden;
+	overflow-y: auto;
+	padding: wp-vars.$grid-unit-20;
+}
+
+.newspack-content-gate-save-panel__body {
+	flex: 0 0 auto;
+}
+
+// Dividers bleed past the content's horizontal padding to the panel edges.
+.newspack-divider.newspack-content-gate-save-panel__divider {
+	margin-left: -#{wp-vars.$grid-unit-20};
+	margin-right: -#{wp-vars.$grid-unit-20};
+	width: auto;
+}
+
+.newspack-content-gate-save-panel__always-show {
+	flex: 0 0 auto;
+}
+
+.newspack-content-gate-save-panel__summary {
+	display: flex;
+	flex-direction: column;
+	gap: wp-vars.$grid-unit-20;
+}
+
+// Only the label/value text styling remains; layout comes from flex/VStacks.
+.newspack-content-gate-save-panel__summary-label {
+	font-size: wp-vars.$font-size-small;
+	font-weight: wp-vars.$font-weight-medium;
+	line-height: wp-vars.$font-line-height-small;
+	margin: 0;
+	text-transform: uppercase;
+}
+
+.newspack-content-gate-save-panel__summary-value {
+	margin: 0;
+
+	p {
+		margin: 0;
+	}
+}
+
+// Slide-out on close. Higher specificity than @wp/components' default
+// disappear animation so our keyframes win the cascade.
+.components-modal__screen-overlay.newspack-content-gate-save-panel__overlay.is-animating-out {
+	animation: none;
+}
+
+.components-modal__screen-overlay.newspack-content-gate-save-panel__overlay.is-animating-out .components-modal__frame {
+	animation: 0.2s ease-in forwards newspack-content-gate-save-panel-slide-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.components-modal__frame.newspack-content-gate-save-panel,
+	.components-modal__screen-overlay.newspack-content-gate-save-panel__overlay.is-animating-out .components-modal__frame {
+		animation: none;
+	}
+}

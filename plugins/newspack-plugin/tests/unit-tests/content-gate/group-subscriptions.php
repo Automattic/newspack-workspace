@@ -24,6 +24,18 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 	protected $user_ids = [];
 
 	/**
+	 * Setup before each test.
+	 */
+	public function set_up() {
+		parent::set_up();
+		// The group subscription REST routes and invite flows are gated behind the
+		// Access Control feature flag; turn it on so the surfaces under test are wired.
+		if ( ! defined( 'NEWSPACK_CONTENT_GATES' ) ) {
+			define( 'NEWSPACK_CONTENT_GATES', true );
+		}
+	}
+
+	/**
 	 * Teardown after tests.
 	 */
 	public function tear_down() {

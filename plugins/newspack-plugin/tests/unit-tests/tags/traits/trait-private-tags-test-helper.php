@@ -10,29 +10,23 @@ use Newspack\Private_Tags;
 /**
  * Shared setup/teardown for Private_Tags test classes.
  *
- * Defines the feature-flag constant, primes init() once, and provides
- * per-test reset of the static caches (which survive WP's per-test DB rollback).
+ * Re-registers Private_Tags hooks before each test and provides per-test reset of
+ * the static caches (which survive WP's per-test DB rollback).
  */
 trait Private_Tags_Test_Helper {
 
 	/**
-	 * Define the feature flag constant (idempotent) and run Private_Tags::init() once.
+	 * Re-register Private_Tags hooks for the current test.
 	 *
-	 * The class auto-runs init() at file load time with the constant undefined,
-	 * so $initiated stays false and our explicit call here is what wires hooks.
+	 * The feature is on by default, so no constant is needed to enable it. The
+	 * class registers init() on `after_setup_theme` (so it runs once during the
+	 * test bootstrap), but WP_UnitTestCase::set_up()
+	 * snapshots $wp_filter and tear_down() restores it — hooks registered after
+	 * the snapshot are removed between tests. Flip $initiated back to false and
+	 * re-run init() each test to force a fresh hook registration. (add_filter is
+	 * idempotent for the same callback + priority, so re-running cannot double-register.)
 	 */
 	protected function enable_private_tags_feature() {
-		// NOTE: the feature-flag-OFF path (is_enabled() false) is intentionally not
-		// covered. Once NEWSPACK_PRIVATE_TAGS_ENABLED is defined it can't be undefined
-		// within the process, and the failure mode is benign (flag off → the feature
-		// no-ops, which is the correct result). Covering it would require a dedicated
-		// @runInSeparateProcess test; the cost outweighs the value for a rollout gate.
-		if ( ! defined( 'NEWSPACK_PRIVATE_TAGS_ENABLED' ) ) {
-			define( 'NEWSPACK_PRIVATE_TAGS_ENABLED', true );
-		}
-		// WP_UnitTestCase::set_up() snapshots $wp_filter and tear_down() restores it —
-		// hooks registered after the snapshot are removed between tests. Force a fresh
-		// re-registration each test by flipping $initiated back to false.
 		$ref  = new ReflectionClass( Private_Tags::class );
 		$prop = $ref->getProperty( 'initiated' );
 		$prop->setAccessible( true );

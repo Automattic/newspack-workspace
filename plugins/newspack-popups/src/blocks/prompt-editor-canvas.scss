@@ -1,0 +1,49 @@
+/**
+ * Prompt editor canvas styles.
+ *
+ * These rules need to load through blocks.css so WordPress does not copy
+ * editor.css into the iframe and warn. The post-type scope keeps them limited
+ * to the Prompt editor canvas.
+ *
+ * The duplicated `.editor-styles-wrapper` selector supports both the iframe
+ * body and the legacy non-iframe editor wrapper.
+ */
+
+$overlay__gap: 16px;
+$size__x-small: 380px;
+$size__small: 544px;
+$size__medium: 784px;
+$size__large: 1264px;
+
+.post-type-newspack_popups_cpt {
+	.editor-post-title__input::placeholder {
+		color: var(--newspack-popups-editor-placeholder-color, #7d7d7d) !important;
+	}
+
+	.block-editor-block-list__layout {
+		margin-left: auto;
+		margin-right: auto;
+
+		&[class*="is-size-"] {
+			max-width: $size__large;
+			padding: #{2 * $overlay__gap};
+		}
+
+		&.is-size-x-small {
+			max-width: $size__x-small;
+		}
+
+		&.is-size-small {
+			max-width: $size__small;
+		}
+
+		&.is-size-medium {
+			max-width: $size__medium;
+		}
+	}
+
+	&.editor-styles-wrapper .block-editor-block-list__layout[class*="is-size-"] .wp-block,
+	.editor-styles-wrapper .block-editor-block-list__layout[class*="is-size-"] .wp-block {
+		max-width: 100%;
+	}
+}

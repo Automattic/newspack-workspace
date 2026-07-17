@@ -205,9 +205,11 @@ class Newspack_Test_Frontend_Registration_Endpoint extends WP_UnitTestCase {
 		if ( $user ) {
 			wp_delete_user( $user->ID );
 		}
-		// Reset rate limit state.
+		// Reset rate limit state for both buckets.
 		delete_transient( 'newspack_reg_ip_' . md5( '127.0.0.1' ) );
 		wp_cache_delete( 'newspack_reg_ip_' . md5( '127.0.0.1' ), 'newspack_rate_limit' );
+		delete_transient( 'newspack_check_email_ip_' . md5( '127.0.0.1' ) );
+		wp_cache_delete( 'newspack_check_email_ip_' . md5( '127.0.0.1' ), 'newspack_rate_limit' );
 		// Clean up any $_POST pollution.
 		unset( $_POST['g-recaptcha-response'] );
 		parent::tear_down();
@@ -757,5 +759,133 @@ class Newspack_Test_Frontend_Registration_Endpoint extends WP_UnitTestCase {
 		$integrations = Reader_Registration::get_frontend_registration_integrations();
 		$this->assertArrayHasKey( 'registry-test', $integrations );
 		$this->assertEquals( 'Registry Test', $integrations['registry-test'] );
+	}
+
+	/**
+	 * Helper to make a /check-email preflight request.
+	 *
+	 * @param array $body Request body.
+	 * @return WP_REST_Response
+	 */
+	private function do_check_email_request( $body = [] ) {
+		$request = new WP_REST_Request( 'POST', '/newspack/v1/reader-activation/check-email' );
+		$request->set_header( 'Content-Type', 'application/json' );
+		$request->set_body( wp_json_encode( $body ) );
+		return $this->server->dispatch( $request );
+	}
+
+	/**
+	 * /check-email returns `exists: true` only for accounts that are readers — a
+	 * staff / admin / editor that shares the email must surface as `exists: false`
+	 * so the endpoint can't be used to enumerate non-reader logins.
+	 */
+	public function test_check_email_reader_vs_non_reader() {
+		$reader_email     = 'check-reader@test.com';
+		$non_reader_email = 'check-editor@test.com';
+		$reader_id        = Reader_Activation::register_reader( $reader_email, 'Reader' );
+		wp_set_current_user( 0 );
+		$non_reader_id = self::factory()->user->create(
+			[
+				'user_email' => $non_reader_email,
+				'role'       => 'editor',
+			]
+		);
+
+		// Reader account → exists: true.
+		$response = $this->do_check_email_request( [ 'email' => $reader_email ] );
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertTrue( $response->get_data()['exists'], 'A reader account must surface as exists:true.' );
+
+		// Non-reader (editor) sharing an email → exists: false (privacy filter).
+		$response = $this->do_check_email_request( [ 'email' => $non_reader_email ] );
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertFalse( $response->get_data()['exists'], 'Non-reader accounts must surface as exists:false to prevent enumeration.' );
+
+		// Unknown email → exists: false.
+		$response = $this->do_check_email_request( [ 'email' => 'nobody@test.com' ] );
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertFalse( $response->get_data()['exists'] );
+
+		// Clean up.
+		wp_delete_user( $reader_id );
+		wp_delete_user( $non_reader_id );
+	}
+
+	/**
+	 * /check-email must reject missing or invalid email addresses with a 400 — the
+	 * frontend confirmation-modal helper relies on this to fall open via its
+	 * res.ok gate instead of treating malformed input as exists:false.
+	 */
+	public function test_check_email_invalid_email_rejected() {
+		// Missing email entirely.
+		$response = $this->do_check_email_request( [] );
+		$this->assertEquals( 400, $response->get_status(), 'Missing email must return 400.' );
+
+		// Malformed email.
+		$response = $this->do_check_email_request( [ 'email' => 'not-an-email' ] );
+		$this->assertEquals( 400, $response->get_status(), 'Malformed email must return 400.' );
+	}
+
+	/**
+	 * /check-email has its own per-IP rate-limit bucket separate from /register so
+	 * an enumeration sweep can't be unbounded while still allowing legitimate
+	 * users 10 full registrations per hour (1 preflight + 1 register per
+	 * submission, each bucket counted independently).
+	 */
+	public function test_check_email_rate_limit() {
+		add_filter(
+			'newspack_frontend_registration_rate_limit',
+			static function ( $limit, $ip, $bucket = 'registration' ) {
+				return 'check_email' === $bucket ? 2 : $limit;
+			},
+			10,
+			3
+		);
+
+		$ok1 = $this->do_check_email_request( [ 'email' => 'rl-a@test.com' ] );
+		$this->assertEquals( 200, $ok1->get_status(), '1st check-email under the limit must succeed.' );
+
+		$ok2 = $this->do_check_email_request( [ 'email' => 'rl-b@test.com' ] );
+		$this->assertEquals( 200, $ok2->get_status(), '2nd check-email under the limit must succeed.' );
+
+		$blocked = $this->do_check_email_request( [ 'email' => 'rl-c@test.com' ] );
+		$this->assertEquals( 429, $blocked->get_status(), 'Over-limit check-email must return 429.' );
+
+		remove_all_filters( 'newspack_frontend_registration_rate_limit' );
+		delete_transient( 'newspack_check_email_ip_' . md5( '127.0.0.1' ) );
+		wp_cache_delete( 'newspack_check_email_ip_' . md5( '127.0.0.1' ), 'newspack_rate_limit' );
+	}
+
+	/**
+	 * The /check-email rate-limit bucket must NOT consume the /register budget.
+	 * A legitimate user submission (1 preflight + 1 register) should still buy 10
+	 * full registrations per hour regardless of how many preflights happened.
+	 */
+	public function test_check_email_does_not_drain_registration_bucket() {
+		// Saturate the check-email bucket.
+		add_filter(
+			'newspack_frontend_registration_rate_limit',
+			static function ( $limit, $ip, $bucket = 'registration' ) {
+				return 'check_email' === $bucket ? 1 : $limit;
+			},
+			10,
+			3
+		);
+		$ok      = $this->do_check_email_request( [ 'email' => 'bucket-a@test.com' ] );
+		$blocked = $this->do_check_email_request( [ 'email' => 'bucket-b@test.com' ] );
+		$this->assertEquals( 200, $ok->get_status() );
+		$this->assertEquals( 429, $blocked->get_status(), 'check-email bucket must saturate independently.' );
+
+		// /register cache key must still be untouched.
+		$register_attempts = (int) get_transient( 'newspack_reg_ip_' . md5( '127.0.0.1' ) );
+		$this->assertSame( 0, $register_attempts, '/register bucket must remain at 0 after exhausting /check-email.' );
+
+		// Object cache fallback path.
+		$wp_cache_attempts = (int) wp_cache_get( 'newspack_reg_ip_' . md5( '127.0.0.1' ), 'newspack_rate_limit' );
+		$this->assertSame( 0, $wp_cache_attempts, '/register object-cache bucket must remain at 0.' );
+
+		remove_all_filters( 'newspack_frontend_registration_rate_limit' );
+		delete_transient( 'newspack_check_email_ip_' . md5( '127.0.0.1' ) );
+		wp_cache_delete( 'newspack_check_email_ip_' . md5( '127.0.0.1' ), 'newspack_rate_limit' );
 	}
 }

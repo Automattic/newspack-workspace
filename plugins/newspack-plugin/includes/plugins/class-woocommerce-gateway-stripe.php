@@ -53,6 +53,10 @@ class WooCommerce_Gateway_Stripe {
 		add_action( 'plugins_loaded', [ __CLASS__, 'maybe_register_post_meta_guard' ], 20 );
 		add_action( 'woocommerce_before_subscription_object_save', [ __CLASS__, 'maybe_strip_stripe_customer_id_before_save' ] );
 		add_filter( 'wcs_renewal_order_created', [ __CLASS__, 'clear_stripe_customer_id_on_renewal' ], 10, 2 );
+
+		// Disable Stripe Adaptive Pricing when modal checkout omits the billing country field.
+		add_action( 'wp_loaded', [ __CLASS__, 'maybe_disable_adaptive_pricing_on_modal_checkout_request' ], 20 );
+		add_action( 'woocommerce_stripe_updated', [ __CLASS__, 'maybe_disable_adaptive_pricing_without_country_field' ], 10 );
 	}
 
 	/**
@@ -348,6 +352,90 @@ class WooCommerce_Gateway_Stripe {
 		}
 
 		return $renewal_order;
+	}
+
+	/**
+	 * Disable Adaptive Pricing only when handling a modal checkout request.
+	 *
+	 * Uses Modal_Checkout::is_modal_checkout() so the guard also covers checkout
+	 * AJAX requests (where modal_checkout=1 travels in post_data) and express
+	 * checkout, while excluding My Account flows, which render the country field.
+	 */
+	public static function maybe_disable_adaptive_pricing_on_modal_checkout_request(): void {
+		if ( ! \class_exists( '\Newspack_Blocks\Modal_Checkout' ) || ! \Newspack_Blocks\Modal_Checkout::is_modal_checkout() ) {
+			return;
+		}
+
+		self::maybe_disable_adaptive_pricing_without_country_field();
+	}
+
+	/**
+	 * Disable Adaptive Pricing when modal checkout cannot provide billing country.
+	 *
+	 * Stripe Adaptive Pricing requires a billing country during Checkout Sessions
+	 * confirmation. Newspack modal checkout can be configured to omit that field,
+	 * which makes one-time modal payments fail at confirm.
+	 *
+	 * The store-wide, persistent write is intentional, and deliberately one-way:
+	 *
+	 * - Persisting keeps the admin toggle truthful. A request-scoped filter would
+	 *   report Adaptive Pricing as enabled while checkout behaves otherwise, and
+	 *   it would have to cover every settings read path (render, wc-ajax,
+	 *   confirm), where one missed path brings the fatal back.
+	 * - It durably neutralizes the WC Stripe 10.8 migration, which force-enables
+	 *   Adaptive Pricing for existing stores regardless of a previous 'no'.
+	 * - There is no automatic re-enable path: re-enabling while donation fields
+	 *   still omit billing_country would re-break donations. The flip is logged
+	 *   (locally and via newspack_log) so support can see why the toggle does
+	 *   not stick.
+	 *
+	 * Known trade-off: the decision is keyed on the donation billing-fields
+	 * config, while a shippable modal cart keeps the full field set (country
+	 * included). Adaptive Pricing is a single store-wide setting, so per-checkout
+	 * precision is not possible with a persistent write; sites mixing
+	 * country-less donations with shippable modal carts lose Adaptive Pricing
+	 * everywhere. Accepted, since modal checkout is overwhelmingly virtual
+	 * products on Newspack sites.
+	 */
+	public static function maybe_disable_adaptive_pricing_without_country_field(): void {
+		// Relevance check, not a code dependency: without newspack-blocks there is
+		// no modal checkout, the standard checkout renders the country field, and
+		// Adaptive Pricing works, so disabling it would be over-reach.
+		if ( ! \class_exists( '\Newspack_Blocks\Modal_Checkout' ) ) {
+			return;
+		}
+
+		$billing_fields = \apply_filters( 'newspack_blocks_donate_billing_fields_keys', [] );
+
+		if ( empty( $billing_fields ) || \in_array( 'billing_country', $billing_fields, true ) ) {
+			return;
+		}
+
+		if (
+			! \class_exists( '\WC_Stripe_Helper' ) ||
+			! \method_exists( '\WC_Stripe_Helper', 'get_stripe_settings' ) ||
+			! \method_exists( '\WC_Stripe_Helper', 'update_main_stripe_settings' )
+		) {
+			return;
+		}
+
+		$stripe_settings = \WC_Stripe_Helper::get_stripe_settings();
+
+		if ( ! \is_array( $stripe_settings ) || 'yes' !== ( $stripe_settings['adaptive_pricing'] ?? 'no' ) ) {
+			return;
+		}
+
+		$stripe_settings['adaptive_pricing'] = 'no';
+		\WC_Stripe_Helper::update_main_stripe_settings( $stripe_settings );
+
+		$message = 'Disabled Stripe Adaptive Pricing because Newspack modal checkout does not collect billing country.';
+		Logger::log( $message, 'NEWSPACK-WOOCOMMERCE' );
+		Logger::newspack_log(
+			'newspack_stripe_adaptive_pricing_disabled',
+			$message,
+			[ 'billing_fields' => $billing_fields ],
+			'debug'
+		);
 	}
 }
 WooCommerce_Gateway_Stripe::init();
