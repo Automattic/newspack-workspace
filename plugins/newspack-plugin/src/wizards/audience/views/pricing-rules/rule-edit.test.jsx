@@ -2,8 +2,6 @@
  * Regression test for the edit-view routing bug: navigating directly between rule
  * ids must remount RuleForm so it re-seeds from the newly-fetched rule, instead of
  * keeping the previous rule's mount-only state.
- *
- * @package Newspack
  */
 
 /**
