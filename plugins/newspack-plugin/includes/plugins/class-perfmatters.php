@@ -26,11 +26,8 @@ class Perfmatters {
 
 	/**
 	 * Scripts to delay spec.
-	 *
-	 * @param bool $exclude_above_header_reveal Whether to drop the above-header reveal
-	 *                                          scripts from the delay queue (NPPM-2934).
 	 */
-	private static function scripts_to_delay( $exclude_above_header_reveal = false ) {
+	private static function scripts_to_delay() {
 		$scripts_to_delay = [
 			// Newspack.
 			'newspack-popups',
@@ -82,13 +79,6 @@ class Perfmatters {
 		// are buttons that do things, and they should do those things on the first click.
 		if ( ! Reader_Activation::is_enabled() ) {
 			$scripts_to_delay[] = 'newspack-plugin';
-		}
-
-		// When the site has published above-header prompts, keep the scripts that reveal
-		// them out of the delay queue so the prompts appear immediately instead of after
-		// the first interaction (NPPM-2934).
-		if ( $exclude_above_header_reveal ) {
-			$scripts_to_delay = array_values( array_diff( $scripts_to_delay, self::above_header_reveal_scripts() ) );
 		}
 
 		return $scripts_to_delay;
@@ -233,16 +223,20 @@ class Perfmatters {
 
 		// JS delay.
 		$options['assets']['delay_js'] = true;
+		$delay_js_inclusions           = self::scripts_to_delay();
 		if ( isset( $options['assets']['delay_js_inclusions'] ) && is_array( $options['assets']['delay_js_inclusions'] ) ) {
-			$options['assets']['delay_js_inclusions'] = array_unique(
-				array_merge(
-					$options['assets']['delay_js_inclusions'],
-					self::scripts_to_delay( $reveal_above_header )
-				)
-			);
-		} else {
-			$options['assets']['delay_js_inclusions'] = self::scripts_to_delay( $reveal_above_header );
+			$delay_js_inclusions = array_merge( $options['assets']['delay_js_inclusions'], $delay_js_inclusions );
 		}
+		// When the site has published above-header prompts, keep the scripts that reveal them
+		// out of the delay queue so the prompts appear immediately instead of after the first
+		// interaction. The subtraction runs on the merged list, not just on Newspack's own
+		// contribution: Perfmatters persists its delay list whenever its settings are saved
+		// through the UI, so on a configured site the stored list already contains the reveal
+		// scripts and merging alone would put them straight back (NPPM-2934).
+		if ( $reveal_above_header ) {
+			$delay_js_inclusions = array_diff( $delay_js_inclusions, self::above_header_reveal_scripts() );
+		}
+		$options['assets']['delay_js_inclusions'] = array_values( array_unique( $delay_js_inclusions ) );
 		$options['assets']['delay_timeout'] = true;
 		$options['assets']['fastclick']     = true;
 

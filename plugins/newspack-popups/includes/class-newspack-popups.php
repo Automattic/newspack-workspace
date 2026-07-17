@@ -1237,7 +1237,9 @@ final class Newspack_Popups {
 	 * changes outside of a post save (e.g. a CLI/importer/programmatic meta update).
 	 *
 	 * Shared handler for added_post_meta / updated_post_meta / deleted_post_meta, whose
-	 * second and third arguments are the object ID and meta key in every case.
+	 * second and third arguments are the object ID and meta key in every case. WordPress
+	 * offers no post-type-scoped variant of these hooks, so the post type is checked here;
+	 * the meta key is compared first to keep that check off the path of unrelated writes.
 	 *
 	 * @param int|int[] $meta_id   Meta ID (or IDs, for deleted_post_meta). Unused.
 	 * @param int       $object_id Post ID the meta belongs to.

@@ -19,6 +19,21 @@ final class Newspack_Popups_Model {
 	const HAS_ABOVE_HEADER_TRANSIENT = 'newspack_popups_has_above_header';
 
 	/**
+	 * Request-level memo of has_published_above_header_prompts(). Null when unresolved.
+	 *
+	 * @var bool|null
+	 */
+	private static $has_above_header_memo = null;
+
+	/**
+	 * Whether has_published_above_header_prompts() is mid-resolution, to catch a nested
+	 * read triggered from within its own query.
+	 *
+	 * @var bool
+	 */
+	private static $is_resolving_above_header = false;
+
+	/**
 	 * Possible placements of overlay popups.
 	 *
 	 * @var array
@@ -873,12 +888,36 @@ final class Newspack_Popups_Model {
 	 * the reveal scripts actually matter, so already-cached pages keep the old behavior
 	 * until their cache entries turn over.
 	 *
+	 * On top of the transient, the result is memoized for the rest of the request. The
+	 * Perfmatters integration reads it from `option_perfmatters_options`, which fires on
+	 * every read of that option and Perfmatters reads it many times per request; without
+	 * the memo each of those repeats the transient lookup (an uncached options query on
+	 * sites with no persistent object cache). The memo is reset by
+	 * flush_above_header_cache(), so an in-request change is still picked up.
+	 *
 	 * @return boolean True if at least one published above-header prompt exists.
 	 */
 	public static function has_published_above_header_prompts() {
+		if ( null !== self::$has_above_header_memo ) {
+			return self::$has_above_header_memo;
+		}
+
+		// The WP_Query below runs inside the option_perfmatters_options filter on a
+		// transient miss. Anything it touches that reads perfmatters_options again would
+		// re-enter this method, and with nothing memoized yet would start the query over,
+		// recursing without end. Report "no prompts" to such a nested read - it resolves
+		// before the outer pass has an answer to give it - and let the outer pass memoize
+		// the real result.
+		if ( self::$is_resolving_above_header ) {
+			return false;
+		}
+		self::$is_resolving_above_header = true;
+
 		$cached = get_transient( self::HAS_ABOVE_HEADER_TRANSIENT );
 		if ( false !== $cached ) {
-			return '1' === $cached;
+			self::$is_resolving_above_header = false;
+			self::$has_above_header_memo     = '1' === $cached;
+			return self::$has_above_header_memo;
 		}
 
 		$query = new WP_Query(
@@ -898,6 +937,9 @@ final class Newspack_Popups_Model {
 
 		set_transient( self::HAS_ABOVE_HEADER_TRANSIENT, $has_above_header ? '1' : '0', DAY_IN_SECONDS );
 
+		self::$is_resolving_above_header = false;
+		self::$has_above_header_memo     = $has_above_header;
+
 		return $has_above_header;
 	}
 
@@ -905,6 +947,7 @@ final class Newspack_Popups_Model {
 	 * Flush the cached above-header prompt detection.
 	 */
 	public static function flush_above_header_cache() {
+		self::$has_above_header_memo = null;
 		delete_transient( self::HAS_ABOVE_HEADER_TRANSIENT );
 	}
 

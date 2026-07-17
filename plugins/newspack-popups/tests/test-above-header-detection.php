@@ -118,6 +118,21 @@ class AboveHeaderDetectionTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The Perfmatters integration reads this on every get_option( 'perfmatters_options' ),
+	 * many times per request, so the result is memoized for the request: a repeat call
+	 * must not hit the database at all.
+	 */
+	public function test_result_is_memoized_within_the_request() {
+		$this->create_prompt( 'above_header', 'publish' );
+		$this->assertTrue( Newspack_Popups_Model::has_published_above_header_prompts() );
+
+		$queries_after_first_call = get_num_queries();
+		Newspack_Popups_Model::has_published_above_header_prompts();
+
+		$this->assertSame( $queries_after_first_call, get_num_queries() );
+	}
+
+	/**
 	 * Changing a published prompt's placement away from above_header invalidates the
 	 * cache via the placement-meta hook, even without a post save.
 	 */
