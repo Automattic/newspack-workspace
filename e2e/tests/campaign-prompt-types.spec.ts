@@ -83,9 +83,15 @@ test(
       page.getByTestId("snackbar").getByText("Post published.")
     ).toBeVisible();
 
-    // Verify the inline prompt on the front end (inline prompts appear within post content).
+    // Verify the inline prompt on the front end. Unlike the above-header prompt,
+    // an inline prompt renders within the content flow and so starts below the
+    // fold: scroll to it and assert it actually lands in the viewport, which
+    // toBeVisible() alone would not catch (it ignores scroll position).
     await page.goto("/");
-    await expect(page.getByText(inlineBody)).toBeVisible();
+    const inlinePrompt = page.getByText(inlineBody);
+    await expect(inlinePrompt).toBeVisible();
+    await inlinePrompt.scrollIntoViewIfNeeded();
+    await expect(inlinePrompt).toBeInViewport();
 
     // Clean up: delete the inline prompt and campaign.
     await goToAdminMenu("Audience", "Campaigns", page);
