@@ -8,6 +8,13 @@ db_name_for_env() {
     echo "wordpress_$(echo "$1" | tr '-' '_')"
 }
 
+# The PHPUnit database for an env. Created lazily by the first `n test-php` run
+# in the env, so it may not exist. Keep in step with bin/test-php.sh, which
+# derives the same name inside the container from $MYSQL_DATABASE.
+test_db_name_for_env() {
+    echo "wp_tests_$(echo "$1" | tr '-' '_')"
+}
+
 # Find the next available loopback IP (127.0.0.2+).
 # Checks both compose files and running containers to avoid conflicts.
 next_loopback_ip() {
@@ -598,6 +605,7 @@ MIGRATE
         compose_file="$NABSPATH/docker-compose.env-${env_name}.yml"
         container_name=$(echo "newspack_env_${env_name}" | tr '-' '_')
         db_name=$(db_name_for_env "$env_name")
+        test_db_name=$(test_db_name_for_env "$env_name")
         # Read domain, IP, and worktrees before removing compose file.
         domain=""
         ip=""
@@ -611,7 +619,8 @@ MIGRATE
         fi
         docker stop "$container_name" 2>/dev/null
         docker rm "$container_name" 2>/dev/null
-        # Drop the environment database via docker compose (avoids hardcoding container name).
+        # Drop the environment databases via docker compose (avoids hardcoding container name).
+        # The test database only exists if `n test-php` ever ran in this env, hence IF EXISTS.
         set -a
         source "$NABSPATH/default.env"
         [[ -f "$NABSPATH/.env" ]] && source "$NABSPATH/.env"
@@ -619,8 +628,8 @@ MIGRATE
         docker compose -f "$NABSPATH/docker-compose.yml" up -d db 2>/dev/null
         docker compose -f "$NABSPATH/docker-compose.yml" exec -T db \
             mariadb -h localhost -u root -p"${MYSQL_ROOT_PASSWORD}" \
-            -e "DROP DATABASE IF EXISTS \`${db_name}\`" 2>/dev/null
-        echo "Dropped database $db_name"
+            -e "DROP DATABASE IF EXISTS \`${db_name}\`; DROP DATABASE IF EXISTS \`${test_db_name}\`" 2>/dev/null
+        echo "Dropped databases $db_name, $test_db_name"
         # Remove env html and certs directories.
         if [[ -d "$NABSPATH/envs/${env_name}" ]]; then
             rm -rf "$NABSPATH/envs/${env_name}"
