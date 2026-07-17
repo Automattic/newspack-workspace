@@ -11,6 +11,8 @@ use Newspack\Group_Subscription_Settings;
 
 /**
  * Test Group_Subscription_Settings.
+ *
+ * @group WooCommerce_Subscriptions_Integration
  */
 class Test_Group_Subscription_Settings extends WP_UnitTestCase {
 
@@ -241,5 +243,336 @@ class Test_Group_Subscription_Settings extends WP_UnitTestCase {
 		$settings = Group_Subscription_Settings::get_subscription_settings( $subscription );
 
 		$this->assertSame( Group_Subscription::get_label( 'singular' ), $settings['name'], 'When neither name meta nor a product name is set, the group name should fall back to the publisher singular group label.' );
+	}
+
+	/*
+	 * --- metabox registration (HPOS vs legacy CPT) ---
+	 */
+
+	/**
+	 * Register the metabox via the handler and report whether it landed.
+	 *
+	 * @param mixed $hook_arg The second `add_meta_boxes` argument (WP_Post on the classic
+	 *                        editor, WC_Subscription under HPOS).
+	 * @return bool Whether the group subscription metabox was registered.
+	 */
+	private function register_metabox_returns_registered( $hook_arg ) {
+		if ( ! defined( 'NEWSPACK_CONTENT_GATES' ) ) {
+			define( 'NEWSPACK_CONTENT_GATES', true );
+		}
+		global $wp_meta_boxes;
+		$original_meta_boxes = $wp_meta_boxes;
+		$wp_meta_boxes       = [];
+		Group_Subscription_Settings::add_group_subscription_meta_box( 'shop_subscription', $hook_arg );
+		$registered    = isset( $wp_meta_boxes['shop_subscription']['normal']['high']['newspack-group-subscription'] );
+		$wp_meta_boxes = $original_meta_boxes;
+		return $registered;
+	}
+
+	/**
+	 * On the legacy (non-HPOS) order editor WP core passes a WP_Post as the second
+	 * `add_meta_boxes` argument. The metabox must still register for subscriptions.
+	 */
+	public function test_metabox_registers_on_legacy_cpt_editor() {
+		$subscription = $this->make_subscription_with_product( [ 'enabled' => 'yes' ] );
+		$post         = new WP_Post(
+			(object) [
+				'ID'        => $subscription->get_id(),
+				'post_type' => 'shop_subscription',
+			]
+		);
+
+		$this->assertTrue(
+			$this->register_metabox_returns_registered( $post ),
+			'Group subscription metabox should register on the legacy CPT editor (WP_Post hook argument).'
+		);
+	}
+
+	/**
+	 * Under HPOS the second `add_meta_boxes` argument is the WC_Subscription object.
+	 */
+	public function test_metabox_registers_on_hpos_editor() {
+		$subscription = $this->make_subscription_with_product( [ 'enabled' => 'yes' ] );
+
+		$this->assertTrue(
+			$this->register_metabox_returns_registered( $subscription ),
+			'Group subscription metabox should register under HPOS (WC_Subscription hook argument).'
+		);
+	}
+
+	/**
+	 * A post that is not a subscription must never get the metabox, in either mode.
+	 */
+	public function test_metabox_not_registered_for_non_subscription_post() {
+		$this->make_subscription_with_product( [ 'enabled' => 'yes' ] );
+		$not_a_subscription = new WP_Post(
+			(object) [
+				'ID'        => 999999,
+				'post_type' => 'shop_order',
+			]
+		);
+
+		$this->assertFalse(
+			$this->register_metabox_returns_registered( $not_a_subscription ),
+			'Metabox must not register for a post that is not a subscription.'
+		);
+	}
+
+	/**
+	 * Under HPOS a subscription's ID lives in a separate space from wp_posts and can coincide
+	 * with an ordinary post/product ID. Editing that unrelated post must NOT resolve to the
+	 * subscription or register the metabox on the wrong screen.
+	 */
+	public function test_metabox_not_registered_for_non_subscription_post_with_colliding_id() {
+		$subscription = $this->make_subscription_with_product( [ 'enabled' => 'yes' ] );
+		// A product whose ID happens to match the subscription's ID (the HPOS collision case).
+		$colliding_product = new WP_Post(
+			(object) [
+				'ID'        => $subscription->get_id(),
+				'post_type' => 'product',
+			]
+		);
+
+		$this->assertFalse(
+			$this->register_metabox_returns_registered( $colliding_product ),
+			'Metabox must not register on a non-subscription post even when its ID collides with a subscription ID.'
+		);
+	}
+
+	/**
+	 * Run the meta-box save handler with a simulated $_POST payload.
+	 *
+	 * @param WC_Subscription $subscription The subscription being saved.
+	 * @param array           $post         POST fields (the save nonce is added automatically).
+	 */
+	private function run_meta_box_save( $subscription, array $post ) {
+		// phpcs:disable WordPress.Security.NonceVerification.Missing -- Test helper seeds $_POST to exercise save_group_subscription_meta(), which verifies the nonce itself.
+		$prev_post = $_POST;
+		$_POST     = array_merge(
+			[ 'woocommerce_meta_nonce' => wp_create_nonce( 'woocommerce_save_data' ) ],
+			$post
+		);
+		// phpcs:enable WordPress.Security.NonceVerification.Missing
+		Group_Subscription_Settings::save_group_subscription_meta( $subscription->get_id(), $subscription );
+		$_POST = $prev_post;
+	}
+
+	/**
+	 * A manually-created subscription whose product enables
+	 * groups must keep inheriting when the meta box was rendered unchecked (no product
+	 * linked yet) and the admin never touched the control. Saving must not write a
+	 * spurious `enabled = 'no'` override.
+	 */
+	public function test_save_keeps_inheritance_when_unchecked_box_matches_baseline() {
+		$subscription = $this->make_subscription_with_product( [ 'enabled' => 'yes' ] );
+		$prefix       = Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX;
+
+		// Meta box rendered unchecked (baseline 'no'); admin submits without toggling it.
+		$this->run_meta_box_save(
+			$subscription,
+			[ $prefix . 'enabled_baseline' => 'no' ]
+		);
+
+		$this->assertSame( '', $subscription->get_meta( $prefix . 'enabled', true ), 'No own enabled override should be written when the unchecked box matches its rendered baseline.' );
+		$this->assertTrue( Group_Subscription_Settings::get_subscription_settings( $subscription )['enabled'], 'The subscription should still inherit enabled=true from the product.' );
+	}
+
+	/**
+	 * Intentional opt-out is preserved: unchecking a box that was rendered checked
+	 * writes the explicit `enabled = 'no'` override.
+	 */
+	public function test_save_writes_override_when_unchecking_rendered_checked_box() {
+		$subscription = $this->make_subscription_with_product( [ 'enabled' => 'yes' ] );
+		$prefix       = Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX;
+
+		// Meta box rendered checked (baseline 'yes'); admin unchecks it (no 'enabled' key posted).
+		$this->run_meta_box_save(
+			$subscription,
+			[ $prefix . 'enabled_baseline' => 'yes' ]
+		);
+
+		$this->assertSame( 'no', $subscription->get_meta( $prefix . 'enabled', true ), 'An explicit no override should be written when the admin unchecks a rendered-checked box.' );
+		$this->assertFalse( Group_Subscription_Settings::get_subscription_settings( $subscription )['enabled'], 'The subscription should be disabled by the explicit override.' );
+	}
+
+	/**
+	 * An unchanged limit (submitted value equals the rendered baseline) writes no override.
+	 */
+	public function test_save_does_not_override_limit_when_unchanged_from_baseline() {
+		$subscription = $this->make_subscription_with_product(
+			[
+				'enabled' => 'yes',
+				'limit'   => '10',
+			]
+		);
+		$prefix = Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX;
+
+		$this->run_meta_box_save(
+			$subscription,
+			[
+				$prefix . 'enabled'          => 'yes',
+				$prefix . 'enabled_baseline' => 'yes',
+				$prefix . 'limit'            => '10',
+				$prefix . 'limit_baseline'   => '10',
+			]
+		);
+
+		$this->assertSame( '', $subscription->get_meta( $prefix . 'limit', true ), 'No own limit override should be written when the submitted limit matches its baseline.' );
+		$this->assertSame( 10, Group_Subscription_Settings::get_subscription_settings( $subscription )['limit'], 'The subscription should still inherit the product limit.' );
+	}
+
+	/**
+	 * A changed limit (submitted value differs from the rendered baseline) writes the override.
+	 */
+	public function test_save_writes_limit_override_when_changed_from_baseline() {
+		$subscription = $this->make_subscription_with_product(
+			[
+				'enabled' => 'yes',
+				'limit'   => '10',
+			]
+		);
+		$prefix = Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX;
+
+		$this->run_meta_box_save(
+			$subscription,
+			[
+				$prefix . 'enabled'          => 'yes',
+				$prefix . 'enabled_baseline' => 'yes',
+				$prefix . 'limit'            => '5',
+				$prefix . 'limit_baseline'   => '10',
+			]
+		);
+
+		$this->assertSame( 5, Group_Subscription_Settings::get_subscription_settings( $subscription )['limit'], 'A changed limit should override the inherited product limit.' );
+	}
+
+	/**
+	 * An unchanged name (submitted value equals the rendered baseline) writes no override.
+	 */
+	public function test_save_does_not_override_name_when_unchanged_from_baseline() {
+		$subscription = $this->make_subscription_with_product(
+			[ 'enabled' => 'yes' ],
+			[],
+			[],
+			[ 'name' => 'Daily Reader' ]
+		);
+		$prefix = Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX;
+
+		$this->run_meta_box_save(
+			$subscription,
+			[
+				$prefix . 'enabled'          => 'yes',
+				$prefix . 'enabled_baseline' => 'yes',
+				$prefix . 'name'             => 'Daily Reader',
+				$prefix . 'name_baseline'    => 'Daily Reader',
+			]
+		);
+
+		$this->assertSame( '', $subscription->get_meta( $prefix . 'name', true ), 'No own name override should be written when the submitted name matches its baseline.' );
+		$this->assertSame( 'Daily Reader', Group_Subscription_Settings::get_subscription_settings( $subscription )['name'], 'The subscription should still inherit the product name.' );
+	}
+
+	/**
+	 * A changed name (submitted value differs from the rendered baseline) writes the override.
+	 */
+	public function test_save_writes_name_override_when_changed_from_baseline() {
+		$subscription = $this->make_subscription_with_product(
+			[ 'enabled' => 'yes' ],
+			[],
+			[],
+			[ 'name' => 'Daily Reader' ]
+		);
+		$prefix = Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX;
+
+		$this->run_meta_box_save(
+			$subscription,
+			[
+				$prefix . 'enabled'          => 'yes',
+				$prefix . 'enabled_baseline' => 'yes',
+				$prefix . 'name'             => 'My Custom Group',
+				$prefix . 'name_baseline'    => 'Daily Reader',
+			]
+		);
+
+		$this->assertSame( 'My Custom Group', Group_Subscription_Settings::get_subscription_settings( $subscription )['name'], 'A changed name should override the inherited product name.' );
+	}
+
+	/**
+	 * A no-op save on a subscription that inherits group-enabled status from its
+	 * product still refreshes the cached group-subscription ID set, so the new
+	 * subscription appears in the admin group filters without waiting for expiry.
+	 */
+	public function test_save_clears_group_ids_cache_when_subscription_inherits_enabled() {
+		$subscription = $this->make_subscription_with_product( [ 'enabled' => 'yes' ] );
+		$prefix       = Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX;
+		set_transient( Group_Subscription_Settings::GROUP_SUBSCRIPTION_IDS_TRANSIENT, [ 999 ], MINUTE_IN_SECONDS );
+
+		$this->run_meta_box_save( $subscription, [ $prefix . 'enabled_baseline' => 'no' ] );
+
+		$this->assertFalse( get_transient( Group_Subscription_Settings::GROUP_SUBSCRIPTION_IDS_TRANSIENT ), 'The cached group-subscription ID set should be cleared so the inheriting subscription is discoverable.' );
+	}
+
+	/**
+	 * A no-op save on a non-group subscription leaves the cached group-subscription
+	 * ID set intact, so unrelated subscription saves do not churn the cache.
+	 */
+	public function test_save_keeps_group_ids_cache_for_non_group_subscription() {
+		$subscription = $this->make_subscription_with_product();
+		$prefix       = Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX;
+		set_transient( Group_Subscription_Settings::GROUP_SUBSCRIPTION_IDS_TRANSIENT, [ 999 ], MINUTE_IN_SECONDS );
+
+		$this->run_meta_box_save( $subscription, [ $prefix . 'enabled_baseline' => 'no' ] );
+
+		$this->assertSame( [ 999 ], get_transient( Group_Subscription_Settings::GROUP_SUBSCRIPTION_IDS_TRANSIENT ), 'A non-group subscription save should not bust the cache.' );
+	}
+
+	/**
+	 * Checking the box on a create form whose product already makes the effective
+	 * status enabled produces no meta write (the value already matches inheritance),
+	 * so the cached group-subscription ID set must still be refreshed.
+	 */
+	public function test_save_clears_group_ids_cache_when_checked_enabled_matches_inherited() {
+		$subscription = $this->make_subscription_with_product( [ 'enabled' => 'yes' ] );
+		$prefix       = Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX;
+		set_transient( Group_Subscription_Settings::GROUP_SUBSCRIPTION_IDS_TRANSIENT, [ 999 ], MINUTE_IN_SECONDS );
+
+		$this->run_meta_box_save(
+			$subscription,
+			[
+				$prefix . 'enabled'          => 'yes',
+				$prefix . 'enabled_baseline' => 'no',
+			]
+		);
+
+		$this->assertFalse( get_transient( Group_Subscription_Settings::GROUP_SUBSCRIPTION_IDS_TRANSIENT ), 'The cache must be refreshed even when the checked value already matches the inherited state.' );
+	}
+
+	/**
+	 * When a subscription that was a group subscription loses that status through its
+	 * product (effective enabled goes from true to false) with the checkbox untouched,
+	 * the cached group-subscription ID set must be refreshed so it drops out of filters.
+	 */
+	public function test_save_clears_group_ids_cache_when_inherited_status_turns_off() {
+		$subscription = $this->make_subscription_with_product( [ 'enabled' => 'yes' ] );
+		$prefix       = Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX;
+		set_transient( Group_Subscription_Settings::GROUP_SUBSCRIPTION_IDS_TRANSIENT, [ 999 ], MINUTE_IN_SECONDS );
+
+		// The product is no longer group-enabled at save time; the box rendered checked (baseline 'yes') and was left untouched.
+		wc_create_mock_product(
+			[
+				'id'   => 123,
+				'meta' => [ $prefix . 'enabled' => 'no' ],
+			]
+		);
+
+		$this->run_meta_box_save(
+			$subscription,
+			[
+				$prefix . 'enabled'          => 'yes',
+				$prefix . 'enabled_baseline' => 'yes',
+			]
+		);
+
+		$this->assertFalse( get_transient( Group_Subscription_Settings::GROUP_SUBSCRIPTION_IDS_TRANSIENT ), 'The cache must be refreshed when inherited group status turns off.' );
 	}
 }

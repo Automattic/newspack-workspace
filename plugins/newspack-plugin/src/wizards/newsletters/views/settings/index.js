@@ -384,7 +384,7 @@ export const Settings = ( {
 						<Grid columns={ 2 } gutter={ 32 } noMargin>
 							<SectionHeader
 								heading={ 2 }
-								title={ __( 'Email service provider', 'newspack-plugin' ) }
+								title={ __( 'Email Service Provider', 'newspack-plugin' ) }
 								description={ __( 'Connect an email service provider (ESP) to author and send newsletters.', 'newspack-plugin' ) }
 								noMargin
 							/>
@@ -846,7 +846,6 @@ const NewslettersSettings = () => {
 	useEffect( () => {
 		setHeaderData( {
 			sectionName: __( 'Settings', 'newspack-plugin' ),
-			sectionTitle: __( 'Settings', 'newspack-plugin' ),
 			actions: [
 				{
 					type: 'primary',

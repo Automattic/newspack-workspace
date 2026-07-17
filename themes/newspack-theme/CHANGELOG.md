@@ -1,3 +1,41 @@
+## newspack-theme [2.23.7](https://github.com/Automattic/newspack-workspace/compare/newspack-theme@2.23.6...newspack-theme@2.23.7) (2026-07-09)
+
+
+### Bug Fixes
+
+* **themes:** remove unintended highlight behind colored text ([#574](https://github.com/Automattic/newspack-workspace/issues/574)) ([d94254c](https://github.com/Automattic/newspack-workspace/commit/d94254c6427f689d70c140b710a017a102c07a8f))
+
+## newspack-theme [2.23.6](https://github.com/Automattic/newspack-workspace/compare/newspack-theme@2.23.5...newspack-theme@2.23.6) (2026-06-29)
+
+
+### Bug Fixes
+
+* **ads:** move shared sticky ads styles to newspack-ads plugin ([#233](https://github.com/Automattic/newspack-workspace/issues/233)) ([165e48c](https://github.com/Automattic/newspack-workspace/commit/165e48c351536e5be2559b20e2ac029c82b14a6a))
+* allow wide/full alignment inside content wrappers ([3ee93dc](https://github.com/Automattic/newspack-workspace/commit/3ee93dcd0fe8382c4e1033bdd806fc702c2a8552))
+* **comments:** add Customizer toggle for comment meta position ([#2691](https://github.com/Automattic/newspack-workspace/issues/2691)) ([954719d](https://github.com/Automattic/newspack-workspace/commit/954719d42be46c9ac3754b8ebf22eb6604bffbdd)), closes [#2310](https://github.com/Automattic/newspack-workspace/issues/2310)
+* temporary patch BEC editor preview ([#198](https://github.com/Automattic/newspack-workspace/issues/198)) ([34089fe](https://github.com/Automattic/newspack-workspace/commit/34089fe6422ce412b1648b7ff20a61e56a94696a))
+
+## newspack-theme [2.23.5](https://github.com/Automattic/newspack-workspace/compare/newspack-theme@2.23.4...newspack-theme@2.23.5) (2026-06-26)
+
+
+### Bug Fixes
+
+* **theme:** prevent Custom Fields clobber, keep box editable ([#439](https://github.com/Automattic/newspack-workspace/issues/439)) ([f19e1f9](https://github.com/Automattic/newspack-workspace/commit/f19e1f9c1371e9e8a5e0d9bf4420f5ef866be05d))
+
+## newspack-theme [2.23.4](https://github.com/Automattic/newspack-workspace/compare/newspack-theme@2.23.3...newspack-theme@2.23.4) (2026-06-23)
+
+
+### Bug Fixes
+
+* **theme:** stop Custom Fields box overwriting editor post meta ([#375](https://github.com/Automattic/newspack-workspace/issues/375)) ([3738a64](https://github.com/Automattic/newspack-workspace/commit/3738a649164b80508530b75f4cd243b8cf0b94fa))
+
+## newspack-theme [2.23.3](https://github.com/Automattic/newspack-workspace/compare/newspack-theme@2.23.2...newspack-theme@2.23.3) (2026-06-19)
+
+
+### Bug Fixes
+
+* **separator:** restore Default separator width on WP 7.0 ([#324](https://github.com/Automattic/newspack-workspace/issues/324)) ([8a8b315](https://github.com/Automattic/newspack-workspace/commit/8a8b3158daba9774022e64b9ef929d6509856acc))
+
 ## newspack-theme [2.23.2](https://github.com/Automattic/newspack-workspace/compare/newspack-theme@2.23.1...newspack-theme@2.23.2) (2026-06-17)
 
 

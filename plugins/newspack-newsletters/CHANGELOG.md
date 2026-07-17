@@ -1,3 +1,64 @@
+# newspack-newsletters [3.36.0](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.35.2...newspack-newsletters@3.36.0) (2026-07-08)
+
+
+### Features
+
+* **newsletters:** dated per-ad impression/click stats (NPPD-1861) ([#543](https://github.com/Automattic/newspack-workspace/issues/543)) ([078271d](https://github.com/Automattic/newspack-workspace/commit/078271d892d8c787027a6fcc037c761a3e26246b))
+
+## newspack-newsletters [3.35.2](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.35.1...newspack-newsletters@3.35.2) (2026-07-01)
+
+
+### Bug Fixes
+
+* **newsletters:** add status control to ads quick edit ([#478](https://github.com/Automattic/newspack-workspace/issues/478)) ([4a3fab1](https://github.com/Automattic/newspack-workspace/commit/4a3fab13eb016a436e26f0759625c23f59cc9cab))
+
+## newspack-newsletters [3.35.1](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.35.0...newspack-newsletters@3.35.1) (2026-07-01)
+
+
+### Bug Fixes
+
+* **newsletters:** limit ad editor status to active/inactive ([d7c741c](https://github.com/Automattic/newspack-workspace/commit/d7c741cd0d56abfc2e962f5d0f0df22dc840bf2d))
+
+# newspack-newsletters [3.35.0](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.34.4...newspack-newsletters@3.35.0) (2026-06-29)
+
+
+### Bug Fixes
+
+* **newsletters:** ad publish meta error, invalid dates, advertiser counts ([#418](https://github.com/Automattic/newspack-workspace/issues/418)) ([d720894](https://github.com/Automattic/newspack-workspace/commit/d72089419dd50b02e94bec6ca0a15cbe1ed5e1ae))
+* **newsletters:** restore unsaved-changes fix dropped in sync merge ([3dbef78](https://github.com/Automattic/newspack-workspace/commit/3dbef786d56272e2358058a445ea15813959f09e)), closes [#2163](https://github.com/Automattic/newspack-workspace/issues/2163)
+
+
+### Features
+
+* **content-gate:** add newsletter link access-control bypass ([#136](https://github.com/Automattic/newspack-workspace/issues/136)) ([fe9a4af](https://github.com/Automattic/newspack-workspace/commit/fe9a4af3b5fb0473910325bb6362f46f590e8746))
+* ship admin UX modernisation milestone to trunk ([#2163](https://github.com/Automattic/newspack-workspace/issues/2163)) ([ba6fd01](https://github.com/Automattic/newspack-workspace/commit/ba6fd019c0f6608899d384bc4d7b140310e1bdd8)), closes [#2087](https://github.com/Automattic/newspack-workspace/issues/2087) [#2088](https://github.com/Automattic/newspack-workspace/issues/2088) [#2089](https://github.com/Automattic/newspack-workspace/issues/2089) [#2090](https://github.com/Automattic/newspack-workspace/issues/2090) [#2092](https://github.com/Automattic/newspack-workspace/issues/2092) [#2091](https://github.com/Automattic/newspack-workspace/issues/2091) [#2093](https://github.com/Automattic/newspack-workspace/issues/2093) [#2094](https://github.com/Automattic/newspack-workspace/issues/2094) [#2095](https://github.com/Automattic/newspack-workspace/issues/2095) [#2096](https://github.com/Automattic/newspack-workspace/issues/2096) [#2097](https://github.com/Automattic/newspack-workspace/issues/2097) [#2098](https://github.com/Automattic/newspack-workspace/issues/2098) [#2101](https://github.com/Automattic/newspack-workspace/issues/2101) [#2103](https://github.com/Automattic/newspack-workspace/issues/2103) [#2104](https://github.com/Automattic/newspack-workspace/issues/2104) [#2105](https://github.com/Automattic/newspack-workspace/issues/2105) [#2106](https://github.com/Automattic/newspack-workspace/issues/2106) [#2108](https://github.com/Automattic/newspack-workspace/issues/2108) [#2110](https://github.com/Automattic/newspack-workspace/issues/2110) [#2110](https://github.com/Automattic/newspack-workspace/issues/2110) [#2111](https://github.com/Automattic/newspack-workspace/issues/2111) [#2114](https://github.com/Automattic/newspack-workspace/issues/2114) [#2119](https://github.com/Automattic/newspack-workspace/issues/2119) [#2121](https://github.com/Automattic/newspack-workspace/issues/2121) [#2122](https://github.com/Automattic/newspack-workspace/issues/2122) [#2125](https://github.com/Automattic/newspack-workspace/issues/2125) [#2126](https://github.com/Automattic/newspack-workspace/issues/2126) [#2129](https://github.com/Automattic/newspack-workspace/issues/2129) [#2130](https://github.com/Automattic/newspack-workspace/issues/2130) [#2132](https://github.com/Automattic/newspack-workspace/issues/2132) [#2133](https://github.com/Automattic/newspack-workspace/issues/2133) [#2134](https://github.com/Automattic/newspack-workspace/issues/2134) [#2135](https://github.com/Automattic/newspack-workspace/issues/2135) [#2152](https://github.com/Automattic/newspack-workspace/issues/2152) [#2153](https://github.com/Automattic/newspack-workspace/issues/2153) [#2154](https://github.com/Automattic/newspack-workspace/issues/2154) [#2155](https://github.com/Automattic/newspack-workspace/issues/2155) [#2156](https://github.com/Automattic/newspack-workspace/issues/2156) [#2157](https://github.com/Automattic/newspack-workspace/issues/2157) [#2158](https://github.com/Automattic/newspack-workspace/issues/2158) [#2158](https://github.com/Automattic/newspack-workspace/issues/2158) [#2158](https://github.com/Automattic/newspack-workspace/issues/2158) [#2158](https://github.com/Automattic/newspack-workspace/issues/2158) [#2159](https://github.com/Automattic/newspack-workspace/issues/2159) [#2160](https://github.com/Automattic/newspack-workspace/issues/2160) [#2161](https://github.com/Automattic/newspack-workspace/issues/2161) [#2141](https://github.com/Automattic/newspack-workspace/issues/2141) [#2162](https://github.com/Automattic/newspack-workspace/issues/2162)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.4.0
+
+## newspack-newsletters [3.34.4](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.34.3...newspack-newsletters@3.34.4) (2026-06-24)
+
+
+### Bug Fixes
+
+* **newsletters:** harden ActiveCampaign sends against API timeouts ([#269](https://github.com/Automattic/newspack-workspace/issues/269), NPPM-2878) ([fb89d70](https://github.com/Automattic/newspack-workspace/commit/fb89d70b6201842ee5d7ef04ac8348a6cd9f7720))
+
+## newspack-newsletters [3.34.3](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.34.2...newspack-newsletters@3.34.3) (2026-06-23)
+
+
+### Bug Fixes
+
+* **newsletters:** persist send-config before send (NPPM-2935, NPPM-2929) ([#387](https://github.com/Automattic/newspack-workspace/issues/387)) ([3f4db5b](https://github.com/Automattic/newspack-workspace/commit/3f4db5b8f5b26e78e5689af7d18404f7fa18a9c3))
+
+## newspack-newsletters [3.34.2](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.34.1...newspack-newsletters@3.34.2) (2026-06-22)
+
+
+### Bug Fixes
+
+* **posts-inserter:** show featured images for all post types ([#337](https://github.com/Automattic/newspack-workspace/issues/337)) ([c4e9b51](https://github.com/Automattic/newspack-workspace/commit/c4e9b5101145986f93bca30950830f00e23769f6))
+
 ## newspack-newsletters [3.34.1](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.34.0...newspack-newsletters@3.34.1) (2026-06-15)
 
 

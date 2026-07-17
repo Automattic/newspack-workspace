@@ -10,7 +10,9 @@ namespace Newspack\Newsletters\Admin;
 defined( 'ABSPATH' ) || exit;
 
 use Newspack_Newsletters\Ads;
+use WP_Error;
 use WP_Post;
+use WP_REST_Request;
 
 /**
  * Adds a read-only `newspack_newsletters_ad_status` REST field on the
@@ -47,6 +49,62 @@ class Ads_List_REST {
 			2
 		);
 		add_filter( 'posts_clauses', [ __CLASS__, 'apply_meta_sort_clauses' ], 10, 2 );
+		add_filter( 'rest_request_before_callbacks', [ __CLASS__, 'guard_invalid_dates' ], 10, 3 );
+	}
+
+	/**
+	 * Reject REST writes that supply a non-empty but non-ISO start_date or
+	 * expiry_date — e.g. '06/29/2026'. An empty string is an intentional
+	 * clear and is allowed through; sanitize_ad_date normalises valid ISO
+	 * datetime strings to a bare Y-m-d before they reach the meta table.
+	 *
+	 * @param mixed           $response Earlier filter result; passed through if non-null.
+	 * @param array           $handler  Route handler details.
+	 * @param WP_REST_Request $request  Incoming REST request.
+	 * @return mixed WP_Error with status 400 when an invalid date is found, otherwise $response.
+	 */
+	public static function guard_invalid_dates( $response, $handler, $request ) {
+		unset( $handler );
+
+		if ( null !== $response ) {
+			return $response;
+		}
+
+		if ( ! $request instanceof WP_REST_Request ) {
+			return $response;
+		}
+
+		$route   = $request->get_route();
+		$pattern = '#^/wp/v2/' . preg_quote( Ads::CPT, '#' ) . '(?:/\d+)?$#';
+		if ( ! preg_match( $pattern, $route ) ) {
+			return $response;
+		}
+
+		$method = $request->get_method();
+		if ( ! in_array( $method, [ 'POST', 'PUT', 'PATCH' ], true ) ) {
+			return $response;
+		}
+
+		$meta = $request->get_param( 'meta' );
+		if ( ! is_array( $meta ) ) {
+			return $response;
+		}
+
+		foreach ( [ 'start_date', 'expiry_date' ] as $key ) {
+			if ( ! isset( $meta[ $key ] ) ) {
+				continue;
+			}
+			$value = $meta[ $key ];
+			if ( is_string( $value ) && '' !== $value && '' === Ads::sanitize_ad_date( $value ) ) {
+				return new WP_Error(
+					'newspack_newsletters_ad_invalid_date',
+					__( 'Start and expiration dates must be valid YYYY-MM-DD dates.', 'newspack-newsletters' ),
+					[ 'status' => 400 ]
+				);
+			}
+		}
+
+		return $response;
 	}
 
 	/**
@@ -128,7 +186,7 @@ class Ads_List_REST {
 		}
 
 		global $wpdb;
-		$today = gmdate( 'Y-m-d' );
+		$today = current_time( 'Y-m-d' );
 
 		$post_status_set = [];
 		$bucket_clauses  = [];
@@ -147,14 +205,14 @@ class Ads_List_REST {
 				case 'expired':
 					$post_status_set    = array_merge( $post_status_set, [ 'publish', 'private' ] );
 					$bucket_clauses[]   = $wpdb->prepare(
-						"( {$wpdb->posts}.post_status IN ( 'publish', 'private' ) AND EXISTS ( SELECT 1 FROM {$wpdb->postmeta} WHERE post_id = {$wpdb->posts}.ID AND meta_key = 'expiry_date' AND meta_value <> '' AND meta_value < %s ) )",
+						"( {$wpdb->posts}.post_status IN ( 'publish', 'private' ) AND EXISTS ( SELECT 1 FROM {$wpdb->postmeta} WHERE post_id = {$wpdb->posts}.ID AND meta_key = 'expiry_date' AND ( STR_TO_DATE( LEFT( meta_value, 10 ), '%%Y-%%m-%%d' ) + INTERVAL 0 DAY ) < %s ) )",
 						$today
 					);
 					break;
 				case 'scheduled':
 					$post_status_set    = array_merge( $post_status_set, [ 'publish', 'private', 'future' ] );
 					$bucket_clauses[]   = $wpdb->prepare(
-						"( ( {$wpdb->posts}.post_status IN ( 'publish', 'private' ) AND EXISTS ( SELECT 1 FROM {$wpdb->postmeta} WHERE post_id = {$wpdb->posts}.ID AND meta_key = 'start_date' AND meta_value <> '' AND meta_value > %s ) ) OR {$wpdb->posts}.post_status = 'future' )",
+						"( ( {$wpdb->posts}.post_status IN ( 'publish', 'private' ) AND EXISTS ( SELECT 1 FROM {$wpdb->postmeta} WHERE post_id = {$wpdb->posts}.ID AND meta_key = 'start_date' AND ( STR_TO_DATE( LEFT( meta_value, 10 ), '%%Y-%%m-%%d' ) + INTERVAL 0 DAY ) > %s ) ) OR {$wpdb->posts}.post_status = 'future' )",
 						$today
 					);
 					break;
@@ -162,10 +220,10 @@ class Ads_List_REST {
 					$post_status_set    = array_merge( $post_status_set, [ 'publish', 'private' ] );
 					$bucket_clauses[]   = $wpdb->prepare(
 						"( {$wpdb->posts}.post_status IN ( 'publish', 'private' )"
-						. " AND ( NOT EXISTS ( SELECT 1 FROM {$wpdb->postmeta} sm1 WHERE sm1.post_id = {$wpdb->posts}.ID AND sm1.meta_key = 'start_date' AND sm1.meta_value <> '' )"
-						. " OR EXISTS ( SELECT 1 FROM {$wpdb->postmeta} sm2 WHERE sm2.post_id = {$wpdb->posts}.ID AND sm2.meta_key = 'start_date' AND sm2.meta_value <> '' AND sm2.meta_value <= %s ) )"
-						. " AND ( NOT EXISTS ( SELECT 1 FROM {$wpdb->postmeta} em1 WHERE em1.post_id = {$wpdb->posts}.ID AND em1.meta_key = 'expiry_date' AND em1.meta_value <> '' )"
-						. " OR EXISTS ( SELECT 1 FROM {$wpdb->postmeta} em2 WHERE em2.post_id = {$wpdb->posts}.ID AND em2.meta_key = 'expiry_date' AND em2.meta_value <> '' AND em2.meta_value >= %s ) ) )",
+						. " AND ( NOT EXISTS ( SELECT 1 FROM {$wpdb->postmeta} sm1 WHERE sm1.post_id = {$wpdb->posts}.ID AND sm1.meta_key = 'start_date' AND ( STR_TO_DATE( LEFT( sm1.meta_value, 10 ), '%%Y-%%m-%%d' ) + INTERVAL 0 DAY ) IS NOT NULL )"
+						. " OR EXISTS ( SELECT 1 FROM {$wpdb->postmeta} sm2 WHERE sm2.post_id = {$wpdb->posts}.ID AND sm2.meta_key = 'start_date' AND ( STR_TO_DATE( LEFT( sm2.meta_value, 10 ), '%%Y-%%m-%%d' ) + INTERVAL 0 DAY ) <= %s ) )"
+						. " AND ( NOT EXISTS ( SELECT 1 FROM {$wpdb->postmeta} em1 WHERE em1.post_id = {$wpdb->posts}.ID AND em1.meta_key = 'expiry_date' AND ( STR_TO_DATE( LEFT( em1.meta_value, 10 ), '%%Y-%%m-%%d' ) + INTERVAL 0 DAY ) IS NOT NULL )"
+						. " OR EXISTS ( SELECT 1 FROM {$wpdb->postmeta} em2 WHERE em2.post_id = {$wpdb->posts}.ID AND em2.meta_key = 'expiry_date' AND ( STR_TO_DATE( LEFT( em2.meta_value, 10 ), '%%Y-%%m-%%d' ) + INTERVAL 0 DAY ) >= %s ) ) )",
 						$today,
 						$today
 					);
@@ -311,9 +369,10 @@ class Ads_List_REST {
 		}
 
 		if ( in_array( $post->post_status, [ 'publish', 'private' ], true ) ) {
-			$today       = gmdate( 'Y-m-d' );
-			$start_date  = (string) get_post_meta( $post->ID, 'start_date', true );
-			$expiry_date = (string) get_post_meta( $post->ID, 'expiry_date', true );
+			$today = current_time( 'Y-m-d' );
+			// Normalize legacy ISO datetime meta to bare dates.
+			$start_date  = Ads::sanitize_ad_date( get_post_meta( $post->ID, 'start_date', true ) );
+			$expiry_date = Ads::sanitize_ad_date( get_post_meta( $post->ID, 'expiry_date', true ) );
 
 			// Noon UTC so the timestamp lands on the intended calendar day in any reasonable site timezone; date-only meta makes the time-of-day a presentation safeguard.
 			if ( '' !== $start_date ) {

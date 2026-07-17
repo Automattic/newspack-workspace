@@ -41,6 +41,13 @@ h1 {
 	margin-block: 0 2.5rem;
 }
 
+.newspack-wizard__heading {
+	font-size: 2rem;
+	font-weight: 400;
+	line-height: 1.25;
+	margin-block: 0 2.5rem;
+}
+
 /**
  * Utils
  */
@@ -190,7 +197,7 @@ h1 {
 	margin: 0 auto;
 	padding: calc(var(--newspack-wizard-section-space) * 2) var(--newspack-wizard-section-space) 0;
 	max-width: calc(calc(var(--newspack-wizard-section-space) * 2) + var(--newspack-wizard-section-width));
-	> h1 {
+	> .newspack-wizard__heading {
 		margin-bottom: 8px;
 	}
 	&__description {
@@ -204,7 +211,7 @@ h1 {
 }
 
 .newspack-wizard__sections.newspack-audience-integrations {
-	> h1 {
+	> .newspack-wizard__heading {
 		margin-bottom: 0;
 	}
 

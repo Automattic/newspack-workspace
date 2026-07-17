@@ -1,0 +1,240 @@
+{
+  "exportFormatVersion": 2,
+  "exportTime": "2026-06-22 00:00:00",
+  "containerVersion": {
+    "path": "accounts/0/containers/0/versions/0",
+    "accountId": "0",
+    "containerId": "0",
+    "containerVersionId": "0",
+    "container": {
+      "path": "accounts/0/containers/0",
+      "accountId": "0",
+      "containerId": "0",
+      "name": "Newspack GA4 Reader Params (template)",
+      "publicId": "GTM-XXXXXXX",
+      "usageContext": [
+        "WEB"
+      ],
+      "fingerprint": "0",
+      "tagManagerUrl": ""
+    },
+    "variable": [
+      {
+        "accountId": "0",
+        "containerId": "0",
+        "variableId": "1",
+        "name": "DLV - Newspack - logged_in",
+        "type": "v",
+        "notes": "Newspack reader param. Pushed to window.dataLayer by newspack-plugin (Site Kit integration). Values: yes | no.",
+        "parameter": [
+          { "type": "INTEGER", "key": "dataLayerVersion", "value": "2" },
+          { "type": "BOOLEAN", "key": "setDefaultValue", "value": "false" },
+          { "type": "TEMPLATE", "key": "name", "value": "logged_in" }
+        ],
+        "fingerprint": "0",
+        "formatValue": {}
+      },
+      {
+        "accountId": "0",
+        "containerId": "0",
+        "variableId": "2",
+        "name": "DLV - Newspack - is_reader",
+        "type": "v",
+        "notes": "Newspack reader param. Values: yes | no.",
+        "parameter": [
+          { "type": "INTEGER", "key": "dataLayerVersion", "value": "2" },
+          { "type": "BOOLEAN", "key": "setDefaultValue", "value": "false" },
+          { "type": "TEMPLATE", "key": "name", "value": "is_reader" }
+        ],
+        "fingerprint": "0",
+        "formatValue": {}
+      },
+      {
+        "accountId": "0",
+        "containerId": "0",
+        "variableId": "3",
+        "name": "DLV - Newspack - is_newsletter_subscriber",
+        "type": "v",
+        "notes": "Newspack reader param. Values: yes | no.",
+        "parameter": [
+          { "type": "INTEGER", "key": "dataLayerVersion", "value": "2" },
+          { "type": "BOOLEAN", "key": "setDefaultValue", "value": "false" },
+          { "type": "TEMPLATE", "key": "name", "value": "is_newsletter_subscriber" }
+        ],
+        "fingerprint": "0",
+        "formatValue": {}
+      },
+      {
+        "accountId": "0",
+        "containerId": "0",
+        "variableId": "4",
+        "name": "DLV - Newspack - is_donor",
+        "type": "v",
+        "notes": "Newspack reader param. Values: yes | no.",
+        "parameter": [
+          { "type": "INTEGER", "key": "dataLayerVersion", "value": "2" },
+          { "type": "BOOLEAN", "key": "setDefaultValue", "value": "false" },
+          { "type": "TEMPLATE", "key": "name", "value": "is_donor" }
+        ],
+        "fingerprint": "0",
+        "formatValue": {}
+      },
+      {
+        "accountId": "0",
+        "containerId": "0",
+        "variableId": "5",
+        "name": "DLV - Newspack - is_subscriber",
+        "type": "v",
+        "notes": "Newspack reader param. Active non-donation subscriptions. Values: yes | no.",
+        "parameter": [
+          { "type": "INTEGER", "key": "dataLayerVersion", "value": "2" },
+          { "type": "BOOLEAN", "key": "setDefaultValue", "value": "false" },
+          { "type": "TEMPLATE", "key": "name", "value": "is_subscriber" }
+        ],
+        "fingerprint": "0",
+        "formatValue": {}
+      },
+      {
+        "accountId": "0",
+        "containerId": "0",
+        "variableId": "6",
+        "name": "DLV - Newspack - post_id",
+        "type": "v",
+        "notes": "Newspack reader param. Present on singular views only.",
+        "parameter": [
+          { "type": "INTEGER", "key": "dataLayerVersion", "value": "2" },
+          { "type": "BOOLEAN", "key": "setDefaultValue", "value": "false" },
+          { "type": "TEMPLATE", "key": "name", "value": "post_id" }
+        ],
+        "fingerprint": "0",
+        "formatValue": {}
+      },
+      {
+        "accountId": "0",
+        "containerId": "0",
+        "variableId": "7",
+        "name": "DLV - Newspack - author",
+        "type": "v",
+        "notes": "Newspack reader param. Present on singular views only.",
+        "parameter": [
+          { "type": "INTEGER", "key": "dataLayerVersion", "value": "2" },
+          { "type": "BOOLEAN", "key": "setDefaultValue", "value": "false" },
+          { "type": "TEMPLATE", "key": "name", "value": "author" }
+        ],
+        "fingerprint": "0",
+        "formatValue": {}
+      },
+      {
+        "accountId": "0",
+        "containerId": "0",
+        "variableId": "8",
+        "name": "DLV - Newspack - categories",
+        "type": "v",
+        "notes": "Newspack reader param. Present on singular views and category archives.",
+        "parameter": [
+          { "type": "INTEGER", "key": "dataLayerVersion", "value": "2" },
+          { "type": "BOOLEAN", "key": "setDefaultValue", "value": "false" },
+          { "type": "TEMPLATE", "key": "name", "value": "categories" }
+        ],
+        "fingerprint": "0",
+        "formatValue": {}
+      },
+      {
+        "accountId": "0",
+        "containerId": "0",
+        "variableId": "9",
+        "name": "DLV - Newspack - group",
+        "type": "v",
+        "notes": "Newspack reader param. Present when the Content Gate feature is enabled. Anonymized group IDs, or 'none'.",
+        "parameter": [
+          { "type": "INTEGER", "key": "dataLayerVersion", "value": "2" },
+          { "type": "BOOLEAN", "key": "setDefaultValue", "value": "false" },
+          { "type": "TEMPLATE", "key": "name", "value": "group" }
+        ],
+        "fingerprint": "0",
+        "formatValue": {}
+      },
+      {
+        "accountId": "0",
+        "containerId": "0",
+        "variableId": "10",
+        "name": "Newspack - GA4 Reader Params (config settings)",
+        "type": "gtcs",
+        "notes": "Bundles all Newspack reader params as Google-tag configuration parameters. Reference this from your GA4 Google Tag's 'Configuration settings variable' field so the params ride every page_view.",
+        "parameter": [
+          {
+            "type": "LIST",
+            "key": "configSettingsTable",
+            "list": [
+              {
+                "type": "MAP",
+                "map": [
+                  { "type": "TEMPLATE", "key": "parameter", "value": "logged_in" },
+                  { "type": "TEMPLATE", "key": "parameterValue", "value": "{{DLV - Newspack - logged_in}}" }
+                ]
+              },
+              {
+                "type": "MAP",
+                "map": [
+                  { "type": "TEMPLATE", "key": "parameter", "value": "is_reader" },
+                  { "type": "TEMPLATE", "key": "parameterValue", "value": "{{DLV - Newspack - is_reader}}" }
+                ]
+              },
+              {
+                "type": "MAP",
+                "map": [
+                  { "type": "TEMPLATE", "key": "parameter", "value": "is_newsletter_subscriber" },
+                  { "type": "TEMPLATE", "key": "parameterValue", "value": "{{DLV - Newspack - is_newsletter_subscriber}}" }
+                ]
+              },
+              {
+                "type": "MAP",
+                "map": [
+                  { "type": "TEMPLATE", "key": "parameter", "value": "is_donor" },
+                  { "type": "TEMPLATE", "key": "parameterValue", "value": "{{DLV - Newspack - is_donor}}" }
+                ]
+              },
+              {
+                "type": "MAP",
+                "map": [
+                  { "type": "TEMPLATE", "key": "parameter", "value": "is_subscriber" },
+                  { "type": "TEMPLATE", "key": "parameterValue", "value": "{{DLV - Newspack - is_subscriber}}" }
+                ]
+              },
+              {
+                "type": "MAP",
+                "map": [
+                  { "type": "TEMPLATE", "key": "parameter", "value": "post_id" },
+                  { "type": "TEMPLATE", "key": "parameterValue", "value": "{{DLV - Newspack - post_id}}" }
+                ]
+              },
+              {
+                "type": "MAP",
+                "map": [
+                  { "type": "TEMPLATE", "key": "parameter", "value": "author" },
+                  { "type": "TEMPLATE", "key": "parameterValue", "value": "{{DLV - Newspack - author}}" }
+                ]
+              },
+              {
+                "type": "MAP",
+                "map": [
+                  { "type": "TEMPLATE", "key": "parameter", "value": "categories" },
+                  { "type": "TEMPLATE", "key": "parameterValue", "value": "{{DLV - Newspack - categories}}" }
+                ]
+              },
+              {
+                "type": "MAP",
+                "map": [
+                  { "type": "TEMPLATE", "key": "parameter", "value": "group" },
+                  { "type": "TEMPLATE", "key": "parameterValue", "value": "{{DLV - Newspack - group}}" }
+                ]
+              }
+            ]
+          }
+        ],
+        "fingerprint": "0"
+      }
+    ],
+    "fingerprint": "0"
+  }
+}

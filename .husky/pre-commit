@@ -1,0 +1,15 @@
+# `|| exit $?` blocks the commit on lint failure independent of `set -e` (husky
+# runs this as `sh -e`, but don't depend on that — keep the gate self-contained).
+pnpm exec lint-staged --config .lintstagedrc.json || exit $?
+
+# Optional personal pre-commit hook. Drop your own commands in
+# `.husky/pre-commit.local` (gitignored, per-checkout — `.husky/pre-commit` is
+# tracked, so each git worktree needs its own `.local`) and they run after the
+# lint above — git honours a single core.hooksPath, so this is how personal
+# hooks coexist with husky instead of being overwritten. Run as a POSIX-sh
+# snippet (its shebang is ignored); exit non-zero to block. Absent file = no-op.
+# Avoid mutating staged files here — the lint already ran, so changes made now
+# aren't re-checked (CI still re-lints the PR regardless).
+if [ -f .husky/pre-commit.local ]; then
+	sh .husky/pre-commit.local
+fi

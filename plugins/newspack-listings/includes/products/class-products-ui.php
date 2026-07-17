@@ -18,6 +18,27 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Products_Ui extends Products {
 	/**
+	 * Number of included listings granted to premium subscribers.
+	 *
+	 * @var int
+	 */
+	private $total_included_listings;
+
+	/**
+	 * Nonce action string for creating a listing.
+	 *
+	 * @var string
+	 */
+	private $create_nonce;
+
+	/**
+	 * Nonce action string for deleting a listing.
+	 *
+	 * @var string
+	 */
+	private $delete_nonce;
+
+	/**
 	 * Constructor.
 	 */
 	public function __construct() {
@@ -525,6 +546,126 @@ final class Products_Ui extends Products {
 	}
 
 	/**
+	 * Check whether a user is allowed to delete a self-serve premium listing.
+	 *
+	 * Passing the delete nonce only proves the request came from the user's own
+	 * session; it is not an authorization check. A self-serve subscriber may only
+	 * delete premium listings they own, so ownership must be verified before
+	 * trashing anything. See NPPM-2965.
+	 *
+	 * @param int      $post_id Post ID of the listing to delete.
+	 * @param int|null $user_id User ID to check. Defaults to the current user.
+	 * @return bool True if the user may delete the listing.
+	 */
+	public function user_can_delete_premium_listing( $post_id, $user_id = null ) {
+		if ( null === $user_id ) {
+			$user_id = get_current_user_id();
+		}
+		$user_id = (int) $user_id;
+		if ( ! $user_id ) {
+			return false;
+		}
+
+		$post = get_post( $post_id );
+		if ( ! $post ) {
+			return false;
+		}
+
+		// Must be a self-serve listing post type (Event or Marketplace).
+		$allowed_post_types = [
+			Core::NEWSPACK_LISTINGS_POST_TYPES['event'],
+			Core::NEWSPACK_LISTINGS_POST_TYPES['marketplace'],
+		];
+		if ( ! in_array( $post->post_type, $allowed_post_types, true ) ) {
+			return false;
+		}
+
+		// Must be a premium listing created via a subscription.
+		if ( ! get_post_meta( $post->ID, self::POST_META_KEYS['listing_subscription'], true ) ) {
+			return false;
+		}
+
+		// Must be owned by the requesting user.
+		return (int) $post->post_author === $user_id;
+	}
+
+	/**
+	 * Check whether a user may create another self-serve premium listing against
+	 * the given subscription.
+	 *
+	 * Verifies that the subscription belongs to the user, is an active premium
+	 * subscription, and still has included listings remaining. Passing the create
+	 * nonce only proves request origin, so these checks must not rely on the
+	 * attacker-supplied customer or subscription id. See NPPM-2965.
+	 *
+	 * @param int      $subscription_id Subscription ID to create the listing against.
+	 * @param int|null $user_id         User ID to check. Defaults to the current user.
+	 * @return bool True if the user may create a listing.
+	 */
+	public function user_can_create_premium_listing( $subscription_id, $user_id = null ) {
+		if ( null === $user_id ) {
+			$user_id = get_current_user_id();
+		}
+		$user_id         = (int) $user_id;
+		$subscription_id = (int) $subscription_id;
+		if ( ! $user_id || ! $subscription_id || ! function_exists( 'wcs_get_subscription' ) ) {
+			return false;
+		}
+
+		$subscription = wcs_get_subscription( $subscription_id );
+		if ( ! $subscription ) {
+			return false;
+		}
+
+		// The subscription must belong to the requesting user.
+		if ( (int) $subscription->get_user_id() !== $user_id ) {
+			return false;
+		}
+
+		// Must be an active premium subscription.
+		$is_premium = 'active' === $subscription->get_status()
+			&& get_post_meta( $subscription_id, self::SUBSCRIPTION_META_KEYS['is_premium'], true );
+		if ( ! $is_premium ) {
+			return false;
+		}
+
+		// Must have included listings remaining.
+		return $this->get_remaining_included_listings( $subscription_id ) > 0;
+	}
+
+	/**
+	 * Count the self-serve premium listings still available on a subscription.
+	 *
+	 * A premium subscription grants up to `$this->total_included_listings`
+	 * Event/Marketplace listings; this returns how many remain unused.
+	 *
+	 * @param int $subscription_id Subscription ID.
+	 * @return int Remaining included listings (never negative).
+	 */
+	public function get_remaining_included_listings( $subscription_id ) {
+		$subscription_id = (int) $subscription_id;
+		if ( ! $subscription_id ) {
+			return 0;
+		}
+
+		$existing_listings = get_posts(
+			[
+				'meta_key'       => self::POST_META_KEYS['listing_subscription'],
+				'meta_value'     => $subscription_id, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+				'post_status'    => [ 'draft', 'future', 'pending', 'private', 'publish' ],
+				'post_type'      => [
+					Core::NEWSPACK_LISTINGS_POST_TYPES['event'],
+					Core::NEWSPACK_LISTINGS_POST_TYPES['marketplace'],
+				],
+				'posts_per_page' => $this->total_included_listings, // phpcs:ignore WordPress.WP.PostsPerPage.posts_per_page_posts_per_page
+				'fields'         => 'ids',
+			]
+		);
+
+		return max( 0, $this->total_included_listings - count( $existing_listings ) );
+	}
+
+	/**
 	 * Intercept GET params and create a Marketplace or Event listing for a premium subscription.
 	 */
 	public function create_or_delete_premium_listing() {
@@ -551,6 +692,12 @@ final class Products_Ui extends Products {
 				return;
 			}
 
+			// The nonce only proves request origin, not authorization: verify the
+			// current user actually owns the listing before trashing it (NPPM-2965).
+			if ( ! $this->user_can_delete_premium_listing( $delete_post ) ) {
+				return;
+			}
+
 			wp_trash_post( $delete_post );
 			wp_safe_redirect( $redirect_uri );
 			exit;
@@ -561,10 +708,19 @@ final class Products_Ui extends Products {
 			return;
 		}
 
-		// Get order info and remaining premium listings.
-		$subscription = new \WC_Subscription( $subscription_id );
-		$args         = [
-			'post_author' => $customer_id,
+		// Normalize the subscription id once so the ownership/quota checks and the
+		// stored listing meta all use the same value (NPPM-2965).
+		$subscription_id = (int) $subscription_id;
+
+		// Verify the current user owns the subscription and has quota remaining
+		// before creating a listing; the nonce alone is not authorization (NPPM-2965).
+		if ( ! $this->user_can_create_premium_listing( $subscription_id ) ) {
+			return;
+		}
+
+		// Attribute the new listing to the current user, not an attacker-supplied id.
+		$args = [
+			'post_author' => get_current_user_id(),
 			'post_status' => 'draft',
 			'post_title'  => sprintf(
 				// translators: default "untitled" listing title.

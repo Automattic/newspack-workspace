@@ -16,6 +16,18 @@ import { Button, Card, Grid, Notice, TextControl, withWizardScreen } from '../..
 import AdUnitSizeControl, { getSizes } from '../../components/ad-unit-size-control';
 
 /**
+ * Whether an ad unit has the required fields to be saved.
+ *
+ * @param {Object} adUnit Ad unit data.
+ * @return {boolean} Whether the ad unit can be saved.
+ */
+export const isAdUnitValid = ( adUnit = {} ) => {
+	const { name = '', code = '', fluid = false, sizes = [], is_legacy: isLegacy } = adUnit;
+	const hasValidSize = fluid || ( Array.isArray( sizes ) && sizes.length > 0 );
+	return name.length > 0 && ( ! isLegacy || code.length > 0 ) && hasValidSize;
+};
+
+/**
  * New/Edit Ad Unit Screen.
  */
 class AdUnit extends Component {
@@ -52,7 +64,7 @@ class AdUnit extends Component {
 	 * Render.
 	 */
 	render() {
-		const { adUnit, service, onSave, onCancel } = this.props;
+		const { adUnit } = this.props;
 		const { id, code, fluid = false, name = '', path = [] } = adUnit;
 		const isLegacy = adUnit.is_legacy;
 		const isExistingAdUnit = id !== 0;
@@ -102,7 +114,7 @@ class AdUnit extends Component {
 				<Card headerActions noBorder>
 					<h2>{ sizeOptions.length > 1 ? __( 'Ad Unit Sizes', 'newspack-plugin' ) : __( 'Ad Unit Size', 'newspack-plugin' ) }</h2>
 					<Button variant="secondary" onClick={ () => this.handleOnChange( 'sizes', [ ...sizes, this.getNextAvailableSize() ] ) }>
-						{ __( 'Add New Size', 'newspack-plugin' ) }
+						{ __( 'Add Size', 'newspack-plugin' ) }
 					</Button>
 				</Card>
 
@@ -157,19 +169,6 @@ class AdUnit extends Component {
 						/>
 					</Grid>
 				) ) }
-
-				<div className="newspack-buttons-card">
-					<Button
-						disabled={ name.length === 0 || ( isLegacy && code.length === 0 ) || isInvalidSize }
-						variant="primary"
-						onClick={ () => onSave( id ) }
-					>
-						{ __( 'Save', 'newspack-plugin' ) }
-					</Button>
-					<Button variant="secondary" onClick={ () => onCancel() } href={ `#/${ service }` }>
-						{ __( 'Cancel', 'newspack-plugin' ) }
-					</Button>
-				</div>
 			</>
 		);
 	}
