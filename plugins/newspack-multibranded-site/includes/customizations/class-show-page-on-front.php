@@ -60,9 +60,14 @@ class Show_Page_On_Front {
 	 * @return void
 	 */
 	public static function pre_get_posts( &$query ) {
+		// Bail before the reset so secondary queries can't clear the flag.
+		if ( ! $query->is_main_query() ) {
+			return;
+		}
+
 		self::$filtered = false;
 
-		if ( ! $query->is_main_query() || is_admin() || is_feed() ) {
+		if ( is_admin() || is_feed() ) {
 			return;
 		}
 
@@ -78,9 +83,9 @@ class Show_Page_On_Front {
 			if ( ! empty( $show_page_on_front ) ) {
 				$page = get_page( $show_page_on_front );
 				if ( $page ) {
-					$query->query      = [ 'page_id' => $page->ID ];
-					$query->query_vars = $query->query;
-					$query->parse_query();
+					// Pass the query as an argument so parse_query() resets the flags; otherwise the
+					// brand archive's is_archive/is_tax survive and consumers misread the page as an archive.
+					$query->parse_query( [ 'page_id' => $page->ID ] );
 					self::$filtered = true;
 				}
 			}
@@ -88,36 +93,21 @@ class Show_Page_On_Front {
 	}
 
 	/**
-	 * Fixes the body classes when the term displays a page on front
+	 * Adds the front page body class when the brand displays a page on front.
+	 *
+	 * Core supplies the page-* classes; the theme only adds newspack-front-page for the
+	 * site's own front page, so brand front pages need it added here.
 	 *
 	 * @param string[] $classes An array of body class names.
 	 * @param string[] $class   An array of additional class names added to the body.
 	 * @return array
 	 */
 	public static function body_class( $classes, $class ) {
-		$queried_object = get_queried_object();
-		if ( ! $queried_object instanceof \WP_Term || Taxonomy::SLUG !== $queried_object->taxonomy ) {
+		if ( ! is_page() || ! self::is_filtered() ) {
 			return $classes;
 		}
 
-		$show_page_on_front = get_term_meta( $queried_object->term_id, Show_Page_On_Front_Meta::get_key(), true );
-
-		if ( ! $show_page_on_front ) {
-			return $classes;
-		}
-
-		$classes_to_remove = [ 'archive', '-template-default', 'page-id-' . $queried_object->term_id ];
-
-		$classes = array_diff( $classes, $classes_to_remove );
-
-		$classes = array_merge(
-			[
-				'newspack-front-page',
-				'page-template-default',
-				'page-id-' . $show_page_on_front,
-			],
-			$classes
-		);
+		$classes[] = 'newspack-front-page';
 
 		return $classes;
 	}
