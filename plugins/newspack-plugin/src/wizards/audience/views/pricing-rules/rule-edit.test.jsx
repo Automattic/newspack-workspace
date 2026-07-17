@@ -23,9 +23,12 @@ import { RULES_API_PATH as API_PATH } from './constants';
 jest.mock( '@wordpress/api-fetch', () => jest.fn() );
 
 // Stub the Router barrel so RuleEdit's useHistory() resolves without a real router.
-jest.mock( '../../../../../packages/components/src', () => ( {
-	Router: { useHistory: () => ( { push: jest.fn() } ) },
-} ) );
+// The returned history must be a STABLE reference: RuleEdit's load effect depends on
+// it, so a fresh object per render would retrigger the effect and loop.
+jest.mock( '../../../../../packages/components/src', () => {
+	const history = { push: jest.fn() };
+	return { Router: { useHistory: () => history } };
+} );
 
 // Stub RuleForm with a component that seeds its displayed rule from mount-only
 // state — mirroring the real form, whose useState initializers run only on mount.
@@ -55,10 +58,10 @@ describe( 'RuleEdit routing', () => {
 
 	it( 'reseeds the form when the route switches to a different rule id', async () => {
 		const { rerender } = render( <RuleEdit match={ { params: { id: '1' } } } /> );
-		await screen.findByText( 'Rule A' );
+		expect( await screen.findByText( 'Rule A' ) ).toBeInTheDocument();
 
 		rerender( <RuleEdit match={ { params: { id: '2' } } } /> );
-		await screen.findByText( 'Rule B' );
-		expect( screen.queryByText( 'Rule A' ) ).toBeNull();
+		expect( await screen.findByText( 'Rule B' ) ).toBeInTheDocument();
+		expect( screen.queryByText( 'Rule A' ) ).not.toBeInTheDocument();
 	} );
 } );
