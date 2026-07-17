@@ -163,6 +163,13 @@ n test-php --list-groups            # List available test groups
 n test-js                           # Run JS tests
 ```
 
+`n test-php` provisions its own test database, separate from the site database:
+`wp_tests` for the main checkout, and `wp_tests_<env>` inside an isolated env.
+All containers share one MariaDB server, so the per-env name is what keeps
+concurrent `n test-php` runs in different envs from truncating each other's
+tables mid-run. It is created on the env's first test run and dropped by
+`n env destroy`.
+
 #### End-to-end (Playwright) tests
 The Playwright end-to-end suite lives in [`e2e/`](e2e/) — a self-contained npm
 project deliberately kept out of the pnpm workspace, so the per-package lint/build/

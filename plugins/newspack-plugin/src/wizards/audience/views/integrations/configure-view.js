@@ -9,7 +9,7 @@ import { useEffect, useMemo, useRef } from '@wordpress/element';
 /**
  * Internal dependencies
  */
-import { Accordion, Divider, Grid, SectionHeader } from '../../../../../packages/components/src';
+import { Accordion, Divider, Grid, SectionHeader, useUnsavedChangesDialog } from '../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import WizardsTab from '../../../wizards-tab';
 import { SettingsField } from './settings-field';
@@ -89,13 +89,38 @@ export const toggleField = ( currentMap, option, checked ) => {
 	return next;
 };
 
-export const ConfigureView = ( { integrations, loading, pendingChanges, saving, onFieldChange, onSave, match } ) => {
+export const ConfigureView = ( { integrations, loading, pendingChanges, saving, onFieldChange, onDiscardChanges, onSave, match } ) => {
 	const { setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
 
 	const integrationId = match?.params?.integrationId;
 	const integration = integrations[ integrationId ];
 
 	const hasPending = pendingChanges[ integrationId ] && Object.keys( pendingChanges[ integrationId ] ).length > 0;
+	const integrationSaving = saving[ integrationId ];
+
+	const { confirmDialog: navBlockDialog } = useUnsavedChangesDialog( {
+		when: !! hasPending && ! integrationSaving && !! integration,
+	} );
+
+	// A save in flight owns its integration's pending changes: handleSave
+	// clears them itself on success, and on failure they are the user's only
+	// copy. The ref holds the whole `saving` map (not the pre-indexed
+	// `integrationSaving` scalar) so the cleanup can read the latest state for
+	// the integration it owns — on an integrationId change, ConfigureView
+	// doesn't unmount (same route, new params), so the cleanup must check the
+	// id it closed over, not whichever id rendered last. Must run for every
+	// render path — placed above the early returns.
+	const savingRef = useRef( saving );
+	savingRef.current = saving;
+
+	useEffect(
+		() => () => {
+			if ( ! savingRef.current[ integrationId ] ) {
+				onDiscardChanges( integrationId );
+			}
+		},
+		[ integrationId, onDiscardChanges ]
+	);
 
 	// Split settings into groups.
 	const { settingsFields, inboundField, outboundField } = useMemo( () => {
@@ -132,7 +157,6 @@ export const ConfigureView = ( { integrations, loading, pendingChanges, saving, 
 	}, [ integration?.id, integration?.name, integration?.description, setHeaderData ] );
 
 	// Update only the header actions when save state changes.
-	const integrationSaving = saving[ integrationId ];
 	useEffect( () => {
 		if ( ! integration ) {
 			return;
@@ -212,114 +236,117 @@ export const ConfigureView = ( { integrations, loading, pendingChanges, saving, 
 	};
 
 	return (
-		<WizardsTab isFetching={ loading }>
-			<div className="newspack-configure-view">
-				{ /* Section 1: Settings */ }
-				{ settingsFields.length > 0 && (
-					<Grid columns={ 2 } gutter={ 32 }>
-						<SectionHeader heading={ 2 } title={ __( 'Settings', 'newspack-plugin' ) } />
-						<Grid columns={ 1 } rowGap={ 16 }>
-							{ settingsFields.filter( fieldIsVisible ).map( field => (
-								<SettingsField
-									key={ field.key }
-									field={ field }
-									value={ getFieldValue( field ) }
-									onChange={ val => onFieldChange( integrationId, field.key, val ) }
-								/>
-							) ) }
-						</Grid>
-					</Grid>
-				) }
-
-				{ /* Section 2: Inbound */ }
-				{ inboundField && (
-					<>
-						<Divider alignment="full-width" variant="tertiary" marginTop={ 32 } marginBottom={ 32 } />
-						<Grid columns={ 2 } gutter={ 32 } noMargin>
-							<SectionHeader heading={ 2 } title={ __( 'Inbound', 'newspack-plugin' ) } noMargin />
-							<Grid columns={ 1 } rowGap={ 8 } noMargin>
-								{ ( inboundField.options || [] ).map( option => {
-									// Options are always { value, label, matching_function, has_options } objects
-									// for this field (see class-integration.php:get_settings_config()).
-									const optionValue = option.value;
-									const optionLabel = option.label || option.value;
-									// The stored value for this field is a { key => operator } map, not an array:
-									// a key present means enabled, and its value is the chosen matching operator.
-									const currentMap = getFieldValue( inboundField ) || {};
-									const checked = Object.prototype.hasOwnProperty.call( currentMap, optionValue );
-									const operatorOptions = operatorOptionsForField( option );
-									// If the stored operator isn't among the options offered for this field's
-									// current value_type (e.g. a field enabled before it declared a type), fall
-									// back to the first option so the control never shows a value with no option.
-									const selectedOperator = operatorOptions.some( o => o.value === currentMap[ optionValue ] )
-										? currentMap[ optionValue ]
-										: operatorOptions[ 0 ]?.value;
-									return (
-										<div className="newspack-configure-view__inbound-field" key={ optionValue }>
-											<CheckboxControl
-												className="newspack-checkbox-control"
-												label={ optionLabel }
-												checked={ checked }
-												onChange={ isChecked =>
-													onFieldChange( integrationId, inboundField.key, toggleField( currentMap, option, isChecked ) )
-												}
-											/>
-											{ checked && (
-												<SelectControl
-													className="newspack-configure-view__inbound-operator"
-													label={ __( 'Segment as', 'newspack-plugin' ) }
-													hideLabelFromVision
-													value={ selectedOperator }
-													options={ operatorOptions }
-													onChange={ operator =>
-														onFieldChange( integrationId, inboundField.key, {
-															...currentMap,
-															[ optionValue ]: operator,
-														} )
-													}
-												/>
-											) }
-										</div>
-									);
-								} ) }
+		<>
+			{ navBlockDialog }
+			<WizardsTab isFetching={ loading }>
+				<div className="newspack-configure-view">
+					{ /* Section 1: Settings */ }
+					{ settingsFields.length > 0 && (
+						<Grid columns={ 2 } gutter={ 32 }>
+							<SectionHeader heading={ 2 } title={ __( 'Settings', 'newspack-plugin' ) } />
+							<Grid columns={ 1 } rowGap={ 16 }>
+								{ settingsFields.filter( fieldIsVisible ).map( field => (
+									<SettingsField
+										key={ field.key }
+										field={ field }
+										value={ getFieldValue( field ) }
+										onChange={ val => onFieldChange( integrationId, field.key, val ) }
+									/>
+								) ) }
 							</Grid>
 						</Grid>
-					</>
-				) }
+					) }
 
-				{ /* Section 3: Outbound */ }
-				{ outboundField && (
-					<>
-						<Divider alignment="full-width" variant="tertiary" marginTop={ 32 } marginBottom={ 32 } />
-						<Grid columns={ 2 } gutter={ 32 } noMargin>
-							<SectionHeader heading={ 2 } title={ __( 'Outbound', 'newspack-plugin' ) } noMargin />
-							<div>
-								{ ( outboundField.grouped_options || [] ).map( ( group, index ) => {
-									const currentValue = getFieldValue( outboundField );
-									const selected = Array.isArray( currentValue ) ? currentValue : [];
-									return (
-										<Accordion key={ group.section } title={ group.section } defaultOpen={ index === 0 }>
-											<Grid columns={ 1 } rowGap={ 8 } noMargin>
-												{ group.fields.map( fieldName => (
-													<CheckboxControl
-														className="newspack-checkbox-control"
-														key={ fieldName }
-														label={ fieldName }
-														checked={ selected.includes( fieldName ) }
-														onChange={ checked =>
-															handleCheckboxListChange( outboundField.key, currentValue, fieldName, checked )
+					{ /* Section 2: Inbound */ }
+					{ inboundField && (
+						<>
+							<Divider alignment="full-width" variant="tertiary" marginTop={ 32 } marginBottom={ 32 } />
+							<Grid columns={ 2 } gutter={ 32 } noMargin>
+								<SectionHeader heading={ 2 } title={ __( 'Inbound', 'newspack-plugin' ) } noMargin />
+								<Grid columns={ 1 } rowGap={ 8 } noMargin>
+									{ ( inboundField.options || [] ).map( option => {
+										// Options are always { value, label, matching_function, has_options } objects
+										// for this field (see class-integration.php:get_settings_config()).
+										const optionValue = option.value;
+										const optionLabel = option.label || option.value;
+										// The stored value for this field is a { key => operator } map, not an array:
+										// a key present means enabled, and its value is the chosen matching operator.
+										const currentMap = getFieldValue( inboundField ) || {};
+										const checked = Object.prototype.hasOwnProperty.call( currentMap, optionValue );
+										const operatorOptions = operatorOptionsForField( option );
+										// If the stored operator isn't among the options offered for this field's
+										// current value_type (e.g. a field enabled before it declared a type), fall
+										// back to the first option so the control never shows a value with no option.
+										const selectedOperator = operatorOptions.some( o => o.value === currentMap[ optionValue ] )
+											? currentMap[ optionValue ]
+											: operatorOptions[ 0 ]?.value;
+										return (
+											<div className="newspack-configure-view__inbound-field" key={ optionValue }>
+												<CheckboxControl
+													className="newspack-checkbox-control"
+													label={ optionLabel }
+													checked={ checked }
+													onChange={ isChecked =>
+														onFieldChange( integrationId, inboundField.key, toggleField( currentMap, option, isChecked ) )
+													}
+												/>
+												{ checked && (
+													<SelectControl
+														className="newspack-configure-view__inbound-operator"
+														label={ __( 'Segment as', 'newspack-plugin' ) }
+														hideLabelFromVision
+														value={ selectedOperator }
+														options={ operatorOptions }
+														onChange={ operator =>
+															onFieldChange( integrationId, inboundField.key, {
+																...currentMap,
+																[ optionValue ]: operator,
+															} )
 														}
 													/>
-												) ) }
-											</Grid>
-										</Accordion>
-									);
-								} ) }
-							</div>
-						</Grid>
-					</>
-				) }
-			</div>
-		</WizardsTab>
+												) }
+											</div>
+										);
+									} ) }
+								</Grid>
+							</Grid>
+						</>
+					) }
+
+					{ /* Section 3: Outbound */ }
+					{ outboundField && (
+						<>
+							<Divider alignment="full-width" variant="tertiary" marginTop={ 32 } marginBottom={ 32 } />
+							<Grid columns={ 2 } gutter={ 32 } noMargin>
+								<SectionHeader heading={ 2 } title={ __( 'Outbound', 'newspack-plugin' ) } noMargin />
+								<div>
+									{ ( outboundField.grouped_options || [] ).map( ( group, index ) => {
+										const currentValue = getFieldValue( outboundField );
+										const selected = Array.isArray( currentValue ) ? currentValue : [];
+										return (
+											<Accordion key={ group.section } title={ group.section } defaultOpen={ index === 0 }>
+												<Grid columns={ 1 } rowGap={ 8 } noMargin>
+													{ group.fields.map( fieldName => (
+														<CheckboxControl
+															className="newspack-checkbox-control"
+															key={ fieldName }
+															label={ fieldName }
+															checked={ selected.includes( fieldName ) }
+															onChange={ checked =>
+																handleCheckboxListChange( outboundField.key, currentValue, fieldName, checked )
+															}
+														/>
+													) ) }
+												</Grid>
+											</Accordion>
+										);
+									} ) }
+								</div>
+							</Grid>
+						</>
+					) }
+				</div>
+			</WizardsTab>
+		</>
 	);
 };
