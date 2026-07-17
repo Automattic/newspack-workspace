@@ -214,7 +214,7 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 	return (
 		<>
 			{ navBlockDialog }
-			<div className={ `newspack-configure-view${ loading ? ' is-fetching' : '' }` }>
+			<div className="newspack-configure-view">
 				{ /* Section 1: Settings */ }
 				{ settingsFields.length > 0 && (
 					<Grid columns={ 2 } gutter={ 32 }>
