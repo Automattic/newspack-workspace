@@ -37,7 +37,7 @@ const DEFAULT_ICON = {
 
 const getMissingPlugins = integration => ( integration.required_plugins || [] ).filter( plugin => ! plugin.is_active );
 
-export const SettingsSection = ( { integrations, loading, activating = {}, onToggleEnabled, onActivatePlugin, onSetupAndEnable, history } ) => {
+export const SettingsSection = ( { integrations, loading, activating = {}, toggling = {}, onToggleEnabled, onActivatePlugin, onSetupAndEnable, history } ) => {
 	const integrationIds = Object.keys( integrations );
 	const [ enablingId, setEnablingId ] = useState( null );
 
@@ -158,7 +158,7 @@ export const SettingsSection = ( { integrations, loading, activating = {}, onTog
 										requirements={ requirements }
 										requirementsActionable={ canActivate || canFixUnsupported }
 										enableLabel={ enableLabel }
-										busy={ isActivating }
+										busy={ isActivating || !! toggling[ id ] }
 										onEnable={ onEnable }
 										onConfigure={ needsConnection ? goToSetup : goToConfigure }
 										moreControls={
