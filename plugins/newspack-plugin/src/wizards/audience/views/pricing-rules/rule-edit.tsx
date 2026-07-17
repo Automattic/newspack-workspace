@@ -29,6 +29,11 @@ export default function RuleEdit( { match }: { match: { params: { id?: string } 
 	const [ isLoading, setIsLoading ] = useState( true );
 
 	useEffect( () => {
+		// Reset loading on an id change so the Spinner guard re-triggers and RuleForm
+		// unmounts during the refetch. Its state is seeded by mount-only initializers,
+		// so without this it would keep the previous rule's values when navigating
+		// directly between rule ids in the URL.
+		setIsLoading( true );
 		let cancelled = false;
 		// The list endpoint also returns the vocab (strategies/scopes/calc_types/currency).
 		Promise.all< any >( [
@@ -72,5 +77,7 @@ export default function RuleEdit( { match }: { match: { params: { id?: string } 
 		return <p>{ __( 'Rule not found.', 'newspack-plugin' ) }</p>;
 	}
 
-	return <RuleForm isNew={ isNew } rule={ rule } vocab={ vocab } onDone={ onDone } />;
+	// Key by rule id so the form remounts — re-running its mount-only state
+	// initializers — when the route switches between rules.
+	return <RuleForm key={ id ?? 'new' } isNew={ isNew } rule={ rule } vocab={ vocab } onDone={ onDone } />;
 }
