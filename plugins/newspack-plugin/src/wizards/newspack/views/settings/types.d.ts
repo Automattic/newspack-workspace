@@ -116,4 +116,5 @@ type PrintData = {
 	indesign_platform: IndesignPlatform;
 	indesign_post_types: string[];
 	available_post_types: IndesignPostTypeOption[];
+	indesign_exclude_captions: boolean;
 };

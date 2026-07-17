@@ -62,6 +62,22 @@ class InDesign_Exporter {
 	public const POST_TYPES_DEFAULT = [ 'post' ];
 
 	/**
+	 * Option name storing whether photo captions are excluded from exports.
+	 *
+	 * Photo credits are a separate attribution field and are always exported.
+	 *
+	 * @var string
+	 */
+	public const CAPTIONS_OPTION = 'newspack_indesign_export_exclude_captions';
+
+	/**
+	 * Default value for the exclude-captions option.
+	 *
+	 * @var bool
+	 */
+	public const EXCLUDE_CAPTIONS_DEFAULT = false;
+
+	/**
 	 * Post types hidden from the admin setting because they have no editorial
 	 * "article content" to export (lists, feeds, store products, etc.).
 	 *
@@ -392,9 +408,10 @@ class InDesign_Exporter {
 	 * @param array $post_ids Array of post IDs to export.
 	 */
 	private static function export_posts( $post_ids ) {
-		$converter      = new InDesign_Converter();
-		$platform       = self::resolve_platform();
-		$exported_files = [];
+		$converter        = new InDesign_Converter();
+		$platform         = self::resolve_platform();
+		$include_captions = ! self::get_exclude_captions_setting();
+		$exported_files   = [];
 
 		foreach ( $post_ids as $post_id ) {
 			$post = get_post( $post_id );
@@ -402,7 +419,13 @@ class InDesign_Exporter {
 				continue;
 			}
 
-			$content          = $converter->convert_post( $post, [ 'platform' => $platform ] );
+			$content          = $converter->convert_post(
+				$post,
+				[
+					'platform'         => $platform,
+					'include_captions' => $include_captions,
+				]
+			);
 			$filename         = self::generate_filename( $post );
 			$exported_files[] = [
 				'filename' => $filename,
@@ -428,6 +451,17 @@ class InDesign_Exporter {
 	public static function get_platform_setting() {
 		$value = get_option( self::PLATFORM_OPTION, self::PLATFORM_DEFAULT );
 		return in_array( $value, self::ALLOWED_PLATFORMS, true ) ? $value : self::PLATFORM_DEFAULT;
+	}
+
+	/**
+	 * Whether photo captions should be excluded from exports.
+	 *
+	 * Photo credits are a separate attribution field and are always exported.
+	 *
+	 * @return bool True when captions should be omitted.
+	 */
+	public static function get_exclude_captions_setting() {
+		return (bool) get_option( self::CAPTIONS_OPTION, self::EXCLUDE_CAPTIONS_DEFAULT );
 	}
 
 	/**

@@ -34,6 +34,7 @@ class Test_Print_Section extends WP_UnitTestCase {
 		delete_option( Optional_Modules::OPTION_NAME );
 		delete_option( InDesign_Exporter::PLATFORM_OPTION );
 		delete_option( InDesign_Exporter::POST_TYPES_OPTION );
+		delete_option( InDesign_Exporter::CAPTIONS_OPTION );
 		$this->section = new Print_Section();
 	}
 
@@ -186,5 +187,45 @@ class Test_Print_Section extends WP_UnitTestCase {
 
 		$this->assertSame( [ 'post' ], $result['indesign_post_types'] );
 		$this->assertSame( [ 'post' ], get_option( InDesign_Exporter::POST_TYPES_OPTION ) );
+	}
+
+	/**
+	 * Test that api_get_print_settings exposes the exclude-captions setting,
+	 * defaulting to false.
+	 */
+	public function test_api_get_print_settings_includes_exclude_captions_default() {
+		$result = $this->section->api_get_print_settings();
+
+		$this->assertArrayHasKey( 'indesign_exclude_captions', $result );
+		$this->assertFalse( $result['indesign_exclude_captions'] );
+	}
+
+	/**
+	 * Test that a boolean exclude-captions value is persisted.
+	 */
+	public function test_api_update_print_settings_persists_exclude_captions() {
+		$request = new WP_REST_Request();
+		$request->set_param( 'module_enabled_print', true );
+		$request->set_param( 'indesign_exclude_captions', true );
+
+		$result = $this->section->api_update_print_settings( $request );
+
+		$this->assertTrue( $result['indesign_exclude_captions'] );
+		$this->assertTrue( InDesign_Exporter::get_exclude_captions_setting() );
+	}
+
+	/**
+	 * Test that a non-boolean exclude-captions value is rejected.
+	 */
+	public function test_api_update_print_settings_rejects_non_boolean_exclude_captions() {
+		$request = new WP_REST_Request();
+		$request->set_param( 'module_enabled_print', true );
+		$request->set_param( 'indesign_exclude_captions', 'yes' );
+
+		$result = $this->section->api_update_print_settings( $request );
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'invalid_param', $result->get_error_code() );
+		$this->assertSame( 400, $result->get_error_data()['status'] );
 	}
 }

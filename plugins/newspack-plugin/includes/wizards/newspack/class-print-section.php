@@ -68,10 +68,11 @@ class Print_Section extends Wizard_Section {
 	 */
 	public function api_get_print_settings() {
 		return [
-			'module_enabled_print' => Optional_Modules::is_optional_module_active( InDesign_Exporter::MODULE_NAME ),
-			'indesign_platform'    => InDesign_Exporter::get_platform_setting(),
-			'indesign_post_types'  => InDesign_Exporter::get_post_types_setting(),
-			'available_post_types' => InDesign_Exporter::get_available_post_types(),
+			'module_enabled_print'      => Optional_Modules::is_optional_module_active( InDesign_Exporter::MODULE_NAME ),
+			'indesign_platform'         => InDesign_Exporter::get_platform_setting(),
+			'indesign_post_types'       => InDesign_Exporter::get_post_types_setting(),
+			'available_post_types'      => InDesign_Exporter::get_available_post_types(),
+			'indesign_exclude_captions' => InDesign_Exporter::get_exclude_captions_setting(),
 		];
 	}
 
@@ -111,6 +112,12 @@ class Print_Section extends Wizard_Section {
 			);
 		}
 
+		$has_exclude_captions_param = $request->has_param( 'indesign_exclude_captions' );
+		$exclude_captions           = $has_exclude_captions_param ? $request->get_param( 'indesign_exclude_captions' ) : null;
+		if ( $has_exclude_captions_param && ! is_bool( $exclude_captions ) ) {
+			return new \WP_Error( 'invalid_param', __( 'Invalid parameter for indesign_exclude_captions.', 'newspack-plugin' ), [ 'status' => 400 ] );
+		}
+
 		if ( $module_enabled_print ) {
 			Optional_Modules::activate_optional_module( InDesign_Exporter::MODULE_NAME );
 		} else {
@@ -125,11 +132,16 @@ class Print_Section extends Wizard_Section {
 			update_option( InDesign_Exporter::POST_TYPES_OPTION, $post_types );
 		}
 
+		if ( $has_exclude_captions_param ) {
+			update_option( InDesign_Exporter::CAPTIONS_OPTION, $exclude_captions );
+		}
+
 		return [
-			'module_enabled_print' => $module_enabled_print,
-			'indesign_platform'    => InDesign_Exporter::get_platform_setting(),
-			'indesign_post_types'  => InDesign_Exporter::get_post_types_setting(),
-			'available_post_types' => InDesign_Exporter::get_available_post_types(),
+			'module_enabled_print'      => $module_enabled_print,
+			'indesign_platform'         => InDesign_Exporter::get_platform_setting(),
+			'indesign_post_types'       => InDesign_Exporter::get_post_types_setting(),
+			'available_post_types'      => InDesign_Exporter::get_available_post_types(),
+			'indesign_exclude_captions' => InDesign_Exporter::get_exclude_captions_setting(),
 		];
 	}
 }

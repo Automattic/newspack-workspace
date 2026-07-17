@@ -31,6 +31,7 @@ function Print() {
 			indesign_platform: 'auto',
 			indesign_post_types: [ 'post' ],
 			available_post_types: [],
+			indesign_exclude_captions: false,
 		},
 		description: __( 'Allows editors to export article content in Adobe InDesign Tagged Text format.', 'newspack-plugin' ),
 	} );
@@ -91,6 +92,20 @@ function Print() {
 								onChange={ ( checked: boolean ) => togglePostType( option.value, checked ) }
 							/>
 						) ) }
+					</WizardSection>
+					<WizardSection
+						title={ __( 'Photo captions', 'newspack-plugin' ) }
+						description={ __(
+							'Photo captions are appended to the end of each export. Enable this to leave them out — photo credits are still included.',
+							'newspack-plugin'
+						) }
+					>
+						<CheckboxControl
+							label={ __( 'Exclude photo captions', 'newspack-plugin' ) }
+							checked={ apiData.indesign_exclude_captions }
+							disabled={ isFetching }
+							onChange={ ( checked: boolean ) => apiFetchToggle( { ...apiData, indesign_exclude_captions: checked }, true ) }
+						/>
 					</WizardSection>
 				</>
 			) }

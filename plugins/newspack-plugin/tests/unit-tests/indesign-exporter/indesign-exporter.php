@@ -909,4 +909,108 @@ class Newspack_Test_InDesign_Exporter extends WP_UnitTestCase {
 		$this->assertStringContainsString( '<pstyle:PhotoCaption>Image Caption with <0x00E1> <0x00E9> <0x00ED> <0x00F3> <0x00FA> <0x00F1> <0x00E7> <0x00F0> <0x00F0>  , &, <, > and <CharStyle:bullet>n<CharStyle:>.', $content );
 		$this->assertStringContainsString( '<pstyle:PhotoCredit>Image Credit with <0x00E1> <0x00E9> <0x00ED> <0x00F3> <0x00FA> <0x00F1> <0x00E7> <0x00F0> <0x00F0>  , &, <, > and <CharStyle:bullet>n<CharStyle:>.', $content );
 	}
+
+	/**
+	 * Test that photo captions are dropped when include_captions is false, while
+	 * photo credits — a separate attribution field — are still exported.
+	 */
+	public function test_convert_post_excludes_captions_when_disabled() {
+		$image_id = $this->factory->attachment->create();
+		wp_update_post(
+			[
+				'ID'           => $image_id,
+				'post_excerpt' => 'Image Caption',
+			]
+		);
+		update_post_meta( $image_id, '_media_credit', 'Image Credit' );
+
+		$post_id = $this->factory->post->create(
+			[
+				'post_title'   => 'Test Post',
+				'post_content' => '<!-- wp:image {"id":' . $image_id . '} --><!-- /wp:image -->',
+			]
+		);
+
+		$converter = new InDesign_Converter();
+		$content   = $converter->convert_post( $post_id, [ 'include_captions' => false ] );
+
+		$this->assertStringNotContainsString( '<pstyle:PhotoCaption>', $content );
+		$this->assertStringNotContainsString( 'Image Caption', $content );
+		$this->assertStringContainsString( '<pstyle:PhotoCredit>Image Credit', $content );
+	}
+
+	/**
+	 * Test that an image carrying only a caption (no credit) produces no photo
+	 * block at all when captions are disabled.
+	 */
+	public function test_convert_post_excludes_caption_only_image_when_disabled() {
+		$image_id = $this->factory->attachment->create();
+		wp_update_post(
+			[
+				'ID'           => $image_id,
+				'post_excerpt' => 'Caption Only Image',
+			]
+		);
+
+		$post_id = $this->factory->post->create(
+			[
+				'post_title'   => 'Test Post',
+				'post_content' => '<!-- wp:image {"id":' . $image_id . '} --><!-- /wp:image -->',
+			]
+		);
+
+		$converter = new InDesign_Converter();
+		$content   = $converter->convert_post( $post_id, [ 'include_captions' => false ] );
+
+		$this->assertStringNotContainsString( 'Caption Only Image', $content );
+		$this->assertStringNotContainsString( '<pstyle:PhotoCaption>', $content );
+		$this->assertStringNotContainsString( '<pstyle:PhotoCredit>', $content );
+	}
+
+	/**
+	 * Test that captions are included by default (preserves prior behavior when
+	 * the option is omitted).
+	 */
+	public function test_convert_post_includes_captions_by_default() {
+		$image_id = $this->factory->attachment->create();
+		wp_update_post(
+			[
+				'ID'           => $image_id,
+				'post_excerpt' => 'Default Caption',
+			]
+		);
+
+		$post_id = $this->factory->post->create(
+			[
+				'post_title'   => 'Test Post',
+				'post_content' => '<!-- wp:image {"id":' . $image_id . '} --><!-- /wp:image -->',
+			]
+		);
+
+		$converter = new InDesign_Converter();
+		$content   = $converter->convert_post( $post_id );
+
+		$this->assertStringContainsString( '<pstyle:PhotoCaption>Default Caption', $content );
+	}
+
+	/**
+	 * Test that the exclude-captions setting defaults to false when unset.
+	 */
+	public function test_exclude_captions_setting_default() {
+		delete_option( InDesign_Exporter::CAPTIONS_OPTION );
+		$this->assertFalse( InDesign_Exporter::get_exclude_captions_setting() );
+	}
+
+	/**
+	 * Test that the exclude-captions setting returns the stored boolean value.
+	 */
+	public function test_exclude_captions_setting_returns_stored_bool() {
+		update_option( InDesign_Exporter::CAPTIONS_OPTION, true );
+		$this->assertTrue( InDesign_Exporter::get_exclude_captions_setting() );
+
+		update_option( InDesign_Exporter::CAPTIONS_OPTION, false );
+		$this->assertFalse( InDesign_Exporter::get_exclude_captions_setting() );
+
+		delete_option( InDesign_Exporter::CAPTIONS_OPTION );
+	}
 }
