@@ -254,8 +254,28 @@ class Test_Promoted_Fields extends \WP_UnitTestCase {
 			->set_matching_function( 'range' );
 
 		// Decimal value within decimal bounds, and boundary-inclusive.
-		$this->assertTrue( $method->invoke( null, $field, $user_id, [ 'min' => 10.5, 'max' => 99.99 ] ) );
-		$this->assertTrue( $method->invoke( null, $field, $user_id, [ 'min' => 49.99, 'max' => 49.99 ] ) );
+		$this->assertTrue(
+			$method->invoke(
+				null,
+				$field,
+				$user_id,
+				[
+					'min' => 10.5,
+					'max' => 99.99,
+				]
+			)
+		);
+		$this->assertTrue(
+			$method->invoke(
+				null,
+				$field,
+				$user_id,
+				[
+					'min' => 49.99,
+					'max' => 49.99,
+				]
+			)
+		);
 		// Outside the bounds on each side.
 		$this->assertFalse( $method->invoke( null, $field, $user_id, [ 'min' => 50 ] ) );
 		$this->assertFalse( $method->invoke( null, $field, $user_id, [ 'max' => 10 ] ) );
