@@ -19,8 +19,13 @@ const IntegrationIcon = ( { provider, className }: { provider: string; className
 	if ( ! node ) {
 		return null;
 	}
+	// Decorative: the provider is always named in adjacent visible text (the card
+	// title), so hide the mark from assistive tech to avoid duplicate announcements.
 	return (
-		<span className={ classnames( 'newspack-integration-icon', `newspack-integration-icon--${ provider.replace( /_/g, '-' ) }`, className ) }>
+		<span
+			aria-hidden="true"
+			className={ classnames( 'newspack-integration-icon', `newspack-integration-icon--${ provider.replace( /_/g, '-' ) }`, className ) }
+		>
 			{ node }
 		</span>
 	);
