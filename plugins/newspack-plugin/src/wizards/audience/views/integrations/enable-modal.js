@@ -55,11 +55,14 @@ export const EnableModal = ( { integration, onClose, onEnable, onGoToSettings } 
 	const handleEnable = () => {
 		setEnabling( true );
 		setError( null );
-		onEnable( values )
-			.catch( () => {
-				setError( __( 'Something went wrong. Please try again.', 'newspack-plugin' ) );
-			} )
-			.finally( () => setEnabling( false ) );
+		// On success the parent closes the modal (unmounting this component), so
+		// only reset the busy state on failure — where the modal stays open for a
+		// retry. Resetting it unconditionally would set state on an unmounted
+		// component in the success case.
+		onEnable( values ).catch( () => {
+			setError( __( 'Something went wrong. Please try again.', 'newspack-plugin' ) );
+			setEnabling( false );
+		} );
 	};
 
 	return (
