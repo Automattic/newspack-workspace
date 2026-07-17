@@ -127,6 +127,7 @@ describe( 'AudienceIntegrations notices', () => {
 			await flushPromises();
 		} );
 		expect( mockRemoveNotice ).toHaveBeenCalledWith( 'integration-saved-esp' );
+		expect( mockRemoveNotice.mock.invocationCallOrder[ 0 ] ).toBeLessThan( mockAddNotice.mock.invocationCallOrder[ 0 ] );
 	} );
 
 	it( 'announces an error snackbar when the save request fails', async () => {
