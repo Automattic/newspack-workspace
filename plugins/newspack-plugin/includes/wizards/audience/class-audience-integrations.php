@@ -132,6 +132,12 @@ class Audience_Integrations extends Wizard {
 				'methods'             => WP_REST_Server::EDITABLE,
 				'callback'            => [ $this, 'api_update_integration_enabled' ],
 				'permission_callback' => [ $this, 'api_permissions_check' ],
+				'args'                => [
+					'enabled' => [
+						'type'     => 'boolean',
+						'required' => true,
+					],
+				],
 			]
 		);
 
