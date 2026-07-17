@@ -37,7 +37,16 @@ const DEFAULT_ICON = {
 
 const getMissingPlugins = integration => ( integration.required_plugins || [] ).filter( plugin => ! plugin.is_active );
 
-export const SettingsSection = ( { integrations, loading, activating = {}, toggling = {}, onToggleEnabled, onActivatePlugin, onSetupAndEnable, history } ) => {
+export const SettingsSection = ( {
+	integrations,
+	loading,
+	activating = {},
+	toggling = {},
+	onToggleEnabled,
+	onActivatePlugin,
+	onSetupAndEnable,
+	history,
+} ) => {
 	const integrationIds = Object.keys( integrations );
 	const [ enablingId, setEnablingId ] = useState( null );
 

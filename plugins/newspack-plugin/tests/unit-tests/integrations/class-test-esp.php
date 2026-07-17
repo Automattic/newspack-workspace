@@ -570,10 +570,9 @@ class Test_ESP extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * is_connected() reflects only whether a usable provider is configured in
-	 * Newspack Newsletters (stored config) — independent of the master list, which
-	 * is what separates it from is_set_up(). Drives the Connect-vs-Enable branch on
-	 * the Integrations card.
+	 * Only a configured provider (stored config) — not the master list — makes
+	 * is_connected() true, which is what separates it from is_set_up(). Drives the
+	 * Connect-vs-Enable branch on the Integrations card.
 	 */
 	public function test_is_connected_reflects_provider_configuration() {
 		$esp = new ESP();
@@ -586,9 +585,9 @@ class Test_ESP extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * is_set_up() requires a stored master list in addition to a connected
-	 * provider, so a connected-but-audience-less ESP is connected yet not set up —
-	 * exactly the state the Enable modal exists to resolve.
+	 * Requires a stored master list on top of a connected provider, so a
+	 * connected-but-audience-less ESP is connected yet not set up — exactly the
+	 * state the Enable modal exists to resolve.
 	 */
 	public function test_is_set_up_requires_master_list_on_top_of_connection() {
 		\Newspack_Newsletters::$is_service_provider_configured = true;
