@@ -339,7 +339,7 @@ class Group_Subscription_API {
 		// mbstring guard: WP core polyfills it in wp-includes/compat.php. Unlike mb_strtolower(),
 		// which core does not polyfill, hence the guard in Group_Subscription::get_label_lower().
 		$name = mb_substr( trim( (string) $request->get_param( 'name' ) ), 0, Group_Subscription_Settings::GROUP_NAME_MAX_LENGTH );
-		Group_Subscription_Settings::update_subscription_settings( $subscription, [ 'name' => $name ] );
+		Group_Subscription_Settings::update_subscription_name( $subscription, $name );
 		// Return the resolved name so the client can reflect the fallback when the name was cleared.
 		$settings = Group_Subscription_Settings::get_subscription_settings( $subscription );
 		return \rest_ensure_response( [ 'name' => $settings['name'] ] );

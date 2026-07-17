@@ -263,6 +263,31 @@ class Test_Group_Subscription_API extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Renaming to a name that happens to equal the currently-inherited name must still pin
+	 * the override, so a later change to the inherited source can't silently rename the
+	 * reader's group underneath them (NPPD-1813).
+	 *
+	 * Reproduced here via the label fallback (the test subscriptions carry no product); in
+	 * production the same drift happens via the product-name step of the fallback chain.
+	 */
+	public function test_update_name_pins_override_matching_the_inherited_name() {
+		$subscription   = $this->create_group_subscription( 'active' );
+		$inherited_name = \Newspack\Group_Subscription::get_label( 'singular' );
+
+		// The reader types the name they currently see, which equals the inherited fallback.
+		Group_Subscription_API::api_update_name( $this->rename_request_for( $subscription->get_id(), $inherited_name ) );
+
+		// The publisher then renames the underlying source the fallback resolves to.
+		update_option( 'newspack_group_subscription_label_singular', 'Team' );
+
+		$this->assertSame(
+			$inherited_name,
+			Group_Subscription_Settings::get_subscription_settings( $subscription )['name'],
+			'A name the reader explicitly saved must stay pinned when the inherited source changes.'
+		);
+	}
+
+	/**
 	 * An over-long name is capped to GROUP_NAME_MAX_LENGTH so it can't break the header/picker layout.
 	 */
 	public function test_update_name_caps_length() {
