@@ -1,0 +1,58 @@
+/**
+ * Subscription Products page styles.
+ *
+ * Deliberately minimal — the page inherits the wizard chrome, DataViews layout, and
+ * Badge styling from the shared component library. These rules only cover the
+ * bundled-plan/unlocks chips, the create/edit form, and a few muted states.
+ */
+
+@use "~@wordpress/base-styles/colors" as wp-colors;
+
+.newspack-subscription-products {
+	&__muted {
+		color: wp-colors.$gray-700;
+	}
+
+	// Product name acts as an edit trigger, but should read like a title link.
+	&__name-link.components-button {
+		height: auto;
+		padding: 0;
+		text-align: left;
+		text-decoration: none;
+	}
+
+	// Bundled-plan chips (grouped "Plan bundle" products).
+	&__bundled {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 4px;
+	}
+
+	// A variable plan row (label + remove, then price/every/period) — separated so each
+	// block reads as a single plan in the narrow side panel.
+	&__plan {
+		padding-bottom: 12px;
+		border-bottom: 1px solid wp-colors.$gray-100;
+	}
+
+	&__bundle-picker {
+		max-height: 220px;
+		overflow-y: auto;
+		border: 1px solid wp-colors.$gray-200;
+		border-radius: 2px;
+		padding: 12px;
+	}
+
+	// "Unlocks" — content gates this product unlocks (Access control).
+	&__unlocks {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 4px;
+	}
+
+	// Plan-detail caption (e.g. the read-only "Unlocks" label in the edit form).
+	&__modal-label {
+		color: wp-colors.$gray-700;
+		font-weight: 500;
+	}
+}
