@@ -24,6 +24,7 @@ worktrees
 worktrees-repos
 envs
 docker-compose.env-*.yml
+docker-compose.override.yml
 .claude/settings.local.json
 node_modules/
 .pnpm-store/

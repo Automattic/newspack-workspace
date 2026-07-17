@@ -1,3 +1,10 @@
+## @automattic/newspack-blocks [4.27.1](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.27.0...newspack-blocks@4.27.1) (2026-07-14)
+
+
+### Bug Fixes
+
+* **blocks:** fix express checkout address validation in modal checkout ([#597](https://github.com/Automattic/newspack-workspace/issues/597)) ([09e001f](https://github.com/Automattic/newspack-workspace/commit/09e001fb8333ae9ab5f7d03c894e9bbeefe3144c))
+
 # @automattic/newspack-blocks [4.27.0](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.26.8...newspack-blocks@4.27.0) (2026-07-08)
 
 
