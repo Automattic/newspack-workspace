@@ -28,11 +28,12 @@ apiFetch.use( ( options, next ) => {
 } );
 
 function AdEdit() {
-	const { status, price, startDate, expiryDate, insertionStrategy, positionInContent, positionBlockCount } = useSelect( select => {
-		const { getEditedPostAttribute } = select( 'core/editor' );
+	const { status, isSaving, price, startDate, expiryDate, insertionStrategy, positionInContent, positionBlockCount } = useSelect( select => {
+		const { getEditedPostAttribute, isSavingPost } = select( 'core/editor' );
 		const meta = getEditedPostAttribute( 'meta' );
 		return {
 			status: getEditedPostAttribute( 'status' ),
+			isSaving: isSavingPost(),
 			price: meta.price,
 			// Normalize to Y-m-d on read so all client-side date comparisons are
 			// plain string compares regardless of any legacy ISO-datetime value.
@@ -138,6 +139,7 @@ function AdEdit() {
 						{ label: __( 'Inactive', 'newspack-newsletters' ), value: 'inactive' },
 					] }
 					onChange={ setStatus }
+					disabled={ isSaving }
 					help={ __(
 						'Active ads run according to their start and expiration dates. Inactive ads are never shown.',
 						'newspack-newsletters'
