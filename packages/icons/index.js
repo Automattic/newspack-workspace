@@ -11,6 +11,7 @@ export { default as aspectSquare } from './src/aspect-square';
 export { default as ballotBox } from './src/ballot-box';
 export { default as broadcast } from './src/broadcast';
 export { default as browser } from './src/browser';
+export { default as chartReport } from './src/chart-report';
 export { default as collections } from './src/collections';
 export { default as contentCarousel } from './src/content-carousel';
 export { default as contentLocked } from './src/content-locked';

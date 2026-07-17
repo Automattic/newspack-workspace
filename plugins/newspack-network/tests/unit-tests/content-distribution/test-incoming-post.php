@@ -1008,4 +1008,77 @@ class TestIncomingPost extends \WP_UnitTestCase {
 		$this->assertEmpty( $categories );
 		$this->assertEmpty( $tags );
 	}
+
+	/**
+	 * Test that block attributes containing HTML survive insertion intact.
+	 *
+	 * Block-comment attribute JSON escapes `<`, `>`, `&` and `"` as \uXXXX
+	 * sequences with literal backslashes. wp_insert_post() expects slashed
+	 * input, so an unslashed insert strips those backslashes and corrupts
+	 * the attributes (e.g. Everlit player embeds rendering as
+	 * "u003ciframe title=u0022...").
+	 */
+	public function test_insert_preserves_escaped_block_attributes() {
+		$iframe = '<iframe title="Everlit Audio Player" src="https://everlit.audio/embeds/test?client=wp&amp;v=1" height="136px"></iframe>';
+		$block  = serialize_block(
+			[
+				'blockName'    => 'everlit/audio-player',
+				'attrs'        => [ 'embed' => $iframe ],
+				'innerBlocks'  => [],
+				'innerHTML'    => '',
+				'innerContent' => [],
+			]
+		);
+
+		$payload                             = $this->get_sample_payload();
+		$payload['post_id']                  = 99;
+		$payload['network_post_id']          = '99999999990abcdef1234567890abcde';
+		$payload['post_data']['raw_content'] = $block;
+		$payload['post_data']['content']     = $iframe;
+
+		$incoming_post = new Incoming_Post( $payload );
+		$post_id       = $incoming_post->insert();
+
+		$this->assertFalse( is_wp_error( $post_id ) );
+
+		$stored = get_post_field( 'post_content', $post_id );
+		$this->assertStringContainsString( '\u003ciframe', $stored, 'Escaped block-attribute HTML must survive insertion with backslashes intact.' );
+		// The escaped `<` surviving with its backslash (asserted above) is what pins the
+		// fix; also assert the backslash-stripped corruption is absent, rather than a
+		// byte-exact block round-trip that couples the test to serialize_blocks internals.
+		$this->assertStringNotContainsString( '"embed":"u003c', $stored, 'The backslash-stripped corruption (bare u003c) must not appear.' );
+	}
+
+	/**
+	 * The stored payload must survive storage intact: meta functions unslash
+	 * their input, and re-links / partial updates rebuild post_content from
+	 * the stored payload — a corrupted copy re-introduces the corruption.
+	 */
+	public function test_stored_payload_preserves_escaped_block_attributes_on_reinsert() {
+		$iframe = '<iframe title="Everlit Audio Player" src="https://everlit.audio/embeds/test?client=wp&amp;v=1"></iframe>';
+		$block  = serialize_block(
+			[
+				'blockName'    => 'everlit/audio-player',
+				'attrs'        => [ 'embed' => $iframe ],
+				'innerBlocks'  => [],
+				'innerHTML'    => '',
+				'innerContent' => [],
+			]
+		);
+
+		$payload                             = $this->get_sample_payload();
+		$payload['post_id']                  = 98;
+		$payload['network_post_id']          = '88888888880abcdef1234567890abcde';
+		$payload['post_data']['raw_content'] = $block;
+		$payload['post_data']['content']     = $iframe;
+
+		$post_id = ( new Incoming_Post( $payload ) )->insert();
+		$this->assertSame( $block, get_post_field( 'post_content', $post_id ) );
+
+		// Reload from the stored payload — the re-link / partial-update path.
+		$reloaded = new Incoming_Post( $post_id );
+		$this->assertFalse( is_wp_error( $reloaded->insert() ), 'The re-insert from the stored payload must succeed.' );
+
+		$this->assertSame( $block, get_post_field( 'post_content', $post_id ), 'Content must survive a re-insert from the stored payload.' );
+	}
 }

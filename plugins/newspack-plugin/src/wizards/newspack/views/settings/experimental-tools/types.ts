@@ -18,6 +18,7 @@ export interface Tool {
 	label: string;
 	description: string;
 	disclosure?: string;
+	location_hint?: string;
 	llm?: string;
 	constant: string | null;
 	constant_active: boolean;
