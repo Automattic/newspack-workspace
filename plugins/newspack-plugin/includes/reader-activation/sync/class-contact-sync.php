@@ -182,7 +182,7 @@ class Contact_Sync extends Sync {
 	 *
 	 * @return bool True when neither `skip_lists` nor `fields` scoping is set.
 	 */
-	private static function options_are_default( $options ) {
+	private static function options_are_default( $options ): bool {
 		return empty( $options['skip_lists'] ) && empty( $options['fields'] );
 	}
 
@@ -205,7 +205,7 @@ class Contact_Sync extends Sync {
 	 *
 	 * @return array The prepared, scoped contact.
 	 */
-	private static function prepare_contact_for_integration( $integration, $contact, $options = [] ) {
+	private static function prepare_contact_for_integration( $integration, $contact, $options = [] ): array {
 		$integration_contact = $integration->prepare_contact( $contact );
 
 		if ( empty( $options['fields'] ) ) {

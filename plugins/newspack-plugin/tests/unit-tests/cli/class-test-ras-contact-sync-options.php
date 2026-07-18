@@ -10,6 +10,7 @@ use Newspack\Reader_Activation\Integrations;
 
 require_once dirname( __DIR__, 3 ) . '/includes/cli/class-ras-contact-sync.php';
 require_once dirname( __DIR__ ) . '/integrations/class-failing-sample-integration.php';
+require_once dirname( __DIR__, 2 ) . '/mocks/newsletters-mocks.php';
 
 /**
  * Pre-flight parsing of --skip-lists / --fields.
@@ -53,6 +54,36 @@ class Test_RAS_Contact_Sync_Options extends WP_UnitTestCase {
 		$options = $this->parse( [ 'skip-lists' => true ] );
 		$this->assertTrue( $options['skip_lists'] );
 		$this->assertNull( $options['fields'] );
+	}
+
+	/**
+	 * Mailchimp rejects a list-less upsert before writing any metadata, so a
+	 * --skip-lists backfill would push nothing. The pre-flight must catch this and
+	 * fail with an actionable error rather than let every contact fail at push time.
+	 */
+	public function test_skip_lists_errors_on_mailchimp_provider() {
+		update_option( 'newspack_newsletters_service_provider', 'mailchimp' );
+
+		$result = $this->parse( [ 'skip-lists' => true ] );
+
+		delete_option( 'newspack_newsletters_service_provider' );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'newspack_esp_sync_skip_lists_mailchimp', $result->get_error_code() );
+	}
+
+	/**
+	 * A non-Mailchimp provider must NOT trip the --skip-lists pre-flight guard.
+	 */
+	public function test_skip_lists_allowed_on_non_mailchimp_provider() {
+		update_option( 'newspack_newsletters_service_provider', 'active_campaign' );
+
+		$options = $this->parse( [ 'skip-lists' => true ] );
+
+		delete_option( 'newspack_newsletters_service_provider' );
+
+		$this->assertIsArray( $options );
+		$this->assertTrue( $options['skip_lists'] );
 	}
 
 	/**

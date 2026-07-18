@@ -420,7 +420,7 @@ class RAS_Contact_Sync {
 	 * : Label recorded as the sync context (e.g. in ESP activity logs). Defaults to a generic CLI context.
 	 *
 	 * [--skip-lists]
-	 * : Upsert each contact WITHOUT a master list, so an unsubscribed contact is not resubscribed. Missing contacts are still created (list-less). Use for backfills that must not alter list membership. Honored only by integrations that read the sync options (the built-in ESP integration does); a third-party integration implementing the 3-argument `push_contact_data()` contract will still add to its own lists.
+	 * : Upsert each contact WITHOUT a master list, so an unsubscribed contact is not resubscribed. Missing contacts are still created (list-less). Use for backfills that must not alter list membership. Honored only by integrations that read the sync options (the built-in ESP integration does); a third-party integration implementing the 3-argument `push_contact_data()` contract will still add to its own lists. Not supported on Mailchimp, which rejects a list-less upsert before writing any metadata — the pre-flight errors out.
 	 *
 	 * [--fields=<name1,name2>]
 	 * : Comma-delimited metadata fields (raw keys or display labels, any case) to sync. Restricts both what is computed and what is pushed to just these fields; all other metadata — and the reader's name — is left untouched. Every requested field must be enabled as an outgoing field on each active integration. The `newspack_esp_sync_contact` filter still runs, but any metadata it adds outside `--fields` is dropped.
@@ -486,11 +486,27 @@ class RAS_Contact_Sync {
 	 *
 	 * @return array|\WP_Error `[ 'skip_lists' => bool, 'fields' => string[]|null ]` or WP_Error.
 	 */
-	private static function parse_sync_options( $assoc_args ) {
+	private static function parse_sync_options( $assoc_args ): array|\WP_Error {
 		$options = [
 			'skip_lists' => ! empty( $assoc_args['skip-lists'] ),
 			'fields'     => null,
 		];
+
+		// Mailchimp cannot do a list-less upsert: its upsert_contact() override
+		// returns a "No lists found." WP_Error before writing any merge fields, so a
+		// --skip-lists backfill on Mailchimp would push metadata for no one (every
+		// contact tallied as an error). Fail the pre-flight with an actionable message
+		// rather than letting the whole run fail contact-by-contact.
+		if (
+			$options['skip_lists'] &&
+			class_exists( 'Newspack_Newsletters' ) &&
+			'mailchimp' === \Newspack_Newsletters::service_provider()
+		) {
+			return new \WP_Error(
+				'newspack_esp_sync_skip_lists_mailchimp',
+				__( 'The --skip-lists option is not supported on Mailchimp: a list-less upsert is rejected before any metadata is written, so no fields would be synced. Mailchimp requires each contact to belong to an audience.', 'newspack-plugin' )
+			);
+		}
 
 		if ( empty( $assoc_args['fields'] ) ) {
 			return $options;

@@ -382,7 +382,7 @@ class Metadata {
 	 *                            currently unavailable
 	 *                            (`newspack_esp_sync_unavailable_field`).
 	 */
-	public static function resolve_field_labels( array $inputs ) {
+	public static function resolve_field_labels( array $inputs ): array|\WP_Error {
 		$available_lookup = self::build_field_lookup( self::get_all_fields( true ) );
 		$all_lookup       = self::build_field_lookup( self::get_all_fields( false ) );
 
@@ -435,7 +435,7 @@ class Metadata {
 	 *
 	 * @return array<string, string> Lowercased raw-key or label => canonical label.
 	 */
-	private static function build_field_lookup( array $fields ) {
+	private static function build_field_lookup( array $fields ): array {
 		$lookup = [];
 		foreach ( $fields as $raw_key => $label ) {
 			// Trim the lookup keys to match resolve_field_labels()'s trimmed tokens,
@@ -497,7 +497,7 @@ class Metadata {
 	 *
 	 * @return bool
 	 */
-	private static function class_handles_any_field( $class, array $fields ) {
+	private static function class_handles_any_field( $class, array $fields ): bool {
 		if ( Contact_Metadata\Legacy_Basic::class === $class ) {
 			$class_raw_keys = array_keys( Legacy_Metadata::get_all_fields() );
 		} else {
