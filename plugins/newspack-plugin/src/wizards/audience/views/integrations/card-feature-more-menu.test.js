@@ -41,6 +41,11 @@ describe( 'CardFeature More menu gating', () => {
 		expect( moreMenu() ).not.toBeInTheDocument();
 	} );
 
+	it( 'hides the More menu when not enabled even with an actionable requirement', () => {
+		renderCard( { enabled: false, requirements: 'Requires an API-based ESP', requirementsActionable: true } );
+		expect( moreMenu() ).not.toBeInTheDocument();
+	} );
+
 	it( 'hides the More menu when there are no controls', () => {
 		renderCard( { enabled: true, moreControls: [] } );
 		expect( moreMenu() ).not.toBeInTheDocument();
