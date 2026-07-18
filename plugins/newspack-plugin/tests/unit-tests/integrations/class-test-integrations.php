@@ -1744,4 +1744,218 @@ class Test_Integrations extends \WP_UnitTestCase {
 		$this->assertArrayHasKey( 'with-deps', $settings );
 		$this->assertSame( $declared, $settings['with-deps']['required_plugins'] );
 	}
+
+	/**
+	 * Integrations that don't override is_connected() report themselves as
+	 * connected, so the audience UI routes their card to the configure view
+	 * rather than an external setup page.
+	 */
+	public function test_is_connected_defaults_to_true() {
+		$integration = new Sample_Integration( 'no-overrides', 'No Overrides' );
+
+		$this->assertTrue( $integration->is_connected() );
+	}
+
+	/**
+	 * The settings payload that drives the audience UI card surfaces the
+	 * is_connected flag, including a child override reporting a disconnected
+	 * external service.
+	 */
+	public function test_get_all_integration_settings_surfaces_is_connected() {
+		$connected    = new Sample_Integration( 'connected', 'Connected' );
+		$disconnected = new class( 'disconnected', 'Disconnected' ) extends Sample_Integration {
+			/**
+			 * Force this mock to report its external service as not connected.
+			 *
+			 * @return bool
+			 */
+			public function is_connected() {
+				return false;
+			}
+		};
+
+		Integrations::register( $connected );
+		Integrations::register( $disconnected );
+
+		$settings = Integrations::get_all_integration_settings();
+
+		$this->assertTrue( $settings['connected']['is_connected'] );
+		$this->assertFalse( $settings['disconnected']['is_connected'] );
+	}
+
+	/**
+	 * The settings config passes the `required` field flag through to clients.
+	 */
+	public function test_settings_config_passes_required_flag_through() {
+		$integration = new class( 'required_flag_test', 'Required Flag Test' ) extends Sample_Integration {
+			/**
+			 * Declare a required select field.
+			 *
+			 * @return array Field declarations.
+			 */
+			public function register_settings_fields() {
+				return [
+					[
+						'key'      => 'main_list',
+						'type'     => 'select',
+						'default'  => '',
+						'required' => true,
+						'label'    => 'Main list',
+					],
+				];
+			}
+		};
+
+		$config = $integration->get_settings_config();
+		$fields = array_combine( array_column( $config, 'key' ), $config );
+		$this->assertArrayHasKey( 'main_list', $fields );
+		$this->assertTrue( $fields['main_list']['required'] );
+	}
+
+	/**
+	 * The enable endpoint rejects enabling an integration whose external service is not connected.
+	 */
+	public function test_enable_endpoint_rejects_unconnected_integration() {
+		$integration = new class( 'unconnected_test', 'Unconnected Test' ) extends Sample_Integration {
+			/**
+			 * Report the external service as not connected.
+			 *
+			 * @return bool
+			 */
+			public function is_connected() {
+				return false;
+			}
+		};
+		Integrations::register( $integration );
+
+		$wizard  = new \Newspack\Audience_Integrations();
+		$request = new \WP_REST_Request( 'POST' );
+		$request->set_param( 'integration_id', 'unconnected_test' );
+		$request->set_param( 'enabled', true );
+
+		$response = $wizard->api_update_integration_enabled( $request );
+		$this->assertWPError( $response );
+		$this->assertSame( 'newspack_integration_not_connected', $response->get_error_code() );
+		$this->assertFalse( Integrations::is_enabled( 'unconnected_test' ) );
+	}
+
+	/**
+	 * The enable endpoint still allows disabling an integration that is not connected.
+	 */
+	public function test_enable_endpoint_allows_disabling_unconnected_integration() {
+		$integration = new class( 'unconnected_disable_test', 'Unconnected Disable Test' ) extends Sample_Integration {
+			/**
+			 * Report the external service as not connected.
+			 *
+			 * @return bool
+			 */
+			public function is_connected() {
+				return false;
+			}
+		};
+		Integrations::register( $integration );
+		Integrations::enable( 'unconnected_disable_test' );
+
+		$wizard  = new \Newspack\Audience_Integrations();
+		$request = new \WP_REST_Request( 'POST' );
+		$request->set_param( 'integration_id', 'unconnected_disable_test' );
+		$request->set_param( 'enabled', false );
+
+		$response = $wizard->api_update_integration_enabled( $request );
+		$this->assertNotWPError( $response );
+		$this->assertFalse( Integrations::is_enabled( 'unconnected_disable_test' ) );
+	}
+
+	/**
+	 * The enable endpoint enables a connected integration.
+	 */
+	public function test_enable_endpoint_enables_connected_integration() {
+		$integration = new Sample_Integration( 'connected_test', 'Connected Test' );
+		Integrations::register( $integration );
+
+		$wizard  = new \Newspack\Audience_Integrations();
+		$request = new \WP_REST_Request( 'POST' );
+		$request->set_param( 'integration_id', 'connected_test' );
+		$request->set_param( 'enabled', true );
+
+		$response = $wizard->api_update_integration_enabled( $request );
+		$this->assertNotWPError( $response );
+		$this->assertTrue( Integrations::is_enabled( 'connected_test' ) );
+	}
+
+	/**
+	 * The get_unsupported_reason() default flows through to the settings payload as null.
+	 */
+	public function test_unsupported_reason_defaults_to_null_in_settings_payload() {
+		Integrations::register( new Sample_Integration( 'unsupported_default_test', 'Unsupported Default Test' ) );
+		$settings = Integrations::get_all_integration_settings();
+		$this->assertArrayHasKey( 'unsupported_default_test', $settings );
+		$this->assertArrayHasKey( 'unsupported_reason', $settings['unsupported_default_test'] );
+		$this->assertNull( $settings['unsupported_default_test']['unsupported_reason'] );
+	}
+
+	/**
+	 * The enable endpoint rejects enabling an unsupported integration.
+	 */
+	public function test_enable_endpoint_rejects_unsupported_integration() {
+		$integration = new class( 'unsupported_test', 'Unsupported Test' ) extends Sample_Integration {
+			/**
+			 * Report the integration as unsupported.
+			 *
+			 * @return string
+			 */
+			public function get_unsupported_reason() {
+				return 'Requires an API-based ESP';
+			}
+		};
+		Integrations::register( $integration );
+
+		$wizard  = new \Newspack\Audience_Integrations();
+		$request = new \WP_REST_Request( 'POST' );
+		$request->set_param( 'integration_id', 'unsupported_test' );
+		$request->set_param( 'enabled', true );
+
+		$response = $wizard->api_update_integration_enabled( $request );
+		$this->assertWPError( $response );
+		$this->assertSame( 'newspack_integration_unsupported', $response->get_error_code() );
+		$this->assertFalse( Integrations::is_enabled( 'unsupported_test' ) );
+	}
+
+	/**
+	 * The ESP integration reports unsupported only while the manual provider is active.
+	 */
+	public function test_esp_unsupported_with_manual_provider() {
+		$esp = new \Newspack\Reader_Activation\Integrations\ESP();
+
+		update_option( 'newspack_newsletters_service_provider', 'manual' );
+		$this->assertSame( 'Requires an API-based ESP', $esp->get_unsupported_reason() );
+
+		update_option( 'newspack_newsletters_service_provider', 'mailchimp' );
+		$this->assertNull( $esp->get_unsupported_reason() );
+
+		delete_option( 'newspack_newsletters_service_provider' );
+	}
+
+	/**
+	 * The get_unsupported_action_label() default flows through to the settings payload.
+	 */
+	public function test_unsupported_action_label_defaults_in_settings_payload() {
+		Integrations::register( new Sample_Integration( 'unsupported_label_default_test', 'Unsupported Label Default Test' ) );
+		$settings = Integrations::get_all_integration_settings();
+		$this->assertArrayHasKey( 'unsupported_label_default_test', $settings );
+		$this->assertArrayHasKey( 'unsupported_action_label', $settings['unsupported_label_default_test'] );
+		$this->assertSame( 'Open settings', $settings['unsupported_label_default_test']['unsupported_action_label'] );
+	}
+
+	/**
+	 * The ESP integration names its remedy: swap the manual provider for an API-based one.
+	 *
+	 * Unlike get_unsupported_reason(), the label is not provider-conditional —
+	 * ESP::get_unsupported_action_label() always returns "Change provider".
+	 */
+	public function test_esp_unsupported_action_label_is_change_provider() {
+		$esp = new \Newspack\Reader_Activation\Integrations\ESP();
+
+		$this->assertSame( 'Change provider', $esp->get_unsupported_action_label() );
+	}
 }
