@@ -273,7 +273,7 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 									const currentValue = getFieldValue( outboundField );
 									const selected = Array.isArray( currentValue ) ? currentValue : [];
 									return (
-										<AccordionPanel key={ group.section } title={ group.section } defaultOpen={ index === 0 }>
+										<AccordionPanel key={ `${ index }-${ group.section }` } title={ group.section } defaultOpen={ index === 0 }>
 											<Grid columns={ 1 } rowGap={ 8 } noMargin>
 												{ group.fields.map( fieldName => (
 													<CheckboxControl
