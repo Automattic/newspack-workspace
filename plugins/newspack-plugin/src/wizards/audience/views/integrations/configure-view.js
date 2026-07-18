@@ -21,12 +21,11 @@ import './configure-view.scss';
 // in JS, so the falsy string forms are matched explicitly.
 const toBool = value => ( typeof value === 'string' ? ! [ '', '0', 'false' ].includes( value.toLowerCase() ) : Boolean( value ) );
 
-// Compare a draft field value against its saved server value. Field values are
-// scalars (string/boolean) or arrays of strings (metadata/checkbox lists). The
-// backend can round-trip these unfaithfully — metadata arrays come back in
-// canonical order (`array_intersect`), and booleans as `'1'`/`''` — so arrays
-// are compared as sets and booleans are coerced, else a saved field would stay
-// stuck "dirty".
+// Compare two field values for equivalence. Field values are scalars
+// (string/boolean) or arrays of strings (metadata/checkbox lists). The backend
+// can round-trip these unfaithfully — metadata arrays come back in canonical
+// order (`array_intersect`), and booleans as `'1'`/`''` — so arrays are compared
+// as sets and booleans are coerced, else a saved field would stay stuck "dirty".
 const valuesMatch = ( a, b ) => {
 	if ( Array.isArray( a ) && Array.isArray( b ) ) {
 		return a.length === b.length && a.every( value => b.includes( value ) );
@@ -58,7 +57,21 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 	const draftRef = useRef( draft );
 	draftRef.current = draft;
 
-	const hasPending = Object.keys( draft ).length > 0;
+	// Diff draft values against the saved values, not mere key presence, so
+	// editing a field back to its original value disarms the guard.
+	const hasPending = useMemo( () => {
+		const keys = Object.keys( draft );
+		if ( keys.length === 0 ) {
+			return false;
+		}
+		if ( ! integration?.settings ) {
+			return true;
+		}
+		return keys.some( key => {
+			const field = integration.settings.find( f => f.key === key );
+			return ! field || ! valuesMatch( field.value, draft[ key ] );
+		} );
+	}, [ draft, integration?.settings ] );
 	const integrationSaving = saving[ integrationId ];
 
 	const { confirmDialog: navBlockDialog } = useUnsavedChangesDialog( {
@@ -89,24 +102,24 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 		return { settingsFields: settings, inboundField: inbound, outboundField: outbound };
 	}, [ integration?.settings ] );
 
-	// A successful save (or refetch) replaces integration.settings with the saved
-	// server values. Drop draft keys that now match the server value so the draft
-	// clears even when the initiating view has remounted, while genuine unsaved
-	// edits (typed during the in-flight window, or a still-failing field) survive.
+	// The parent clears the submitted change from its retry buffer on save
+	// success (a failed save keeps it): drop the submitted keys not re-edited
+	// since. Matching the submitted value, not the server's, survives backend
+	// normalization (`'' → 'NP_'`, `'5' → 5`) that value-equality would misread.
+	const lastInFlightRef = useRef( inFlightChanges?.[ integrationId ] );
 	useEffect( () => {
-		if ( ! integration?.settings ) {
+		const submitted = lastInFlightRef.current;
+		const current = inFlightChanges?.[ integrationId ];
+		lastInFlightRef.current = current;
+		if ( ! submitted || current ) {
 			return;
 		}
 		setDraft( prev => {
 			const keys = Object.keys( prev );
-			if ( keys.length === 0 ) {
-				return prev;
-			}
 			let changed = false;
 			const next = {};
 			for ( const key of keys ) {
-				const field = integration.settings.find( f => f.key === key );
-				if ( field && valuesMatch( field.value, prev[ key ] ) ) {
+				if ( key in submitted && valuesMatch( submitted[ key ], prev[ key ] ) ) {
 					changed = true;
 					continue;
 				}
@@ -114,7 +127,7 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 			}
 			return changed ? next : prev;
 		} );
-	}, [ integration?.settings ] );
+	}, [ inFlightChanges, integrationId ] );
 
 	// Set the static header data (name/title/description) only when the
 	// integration identity changes. Avoids per-keystroke churn from

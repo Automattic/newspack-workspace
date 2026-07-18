@@ -15,17 +15,26 @@ jest.mock( '@wordpress/data', () => ( {
 	useDispatch: () => ( { setHeaderData: mockSetHeaderData } ),
 } ) );
 // Stub the components barrel: with @wordpress/data mocked, the real barrel eagerly loads @wordpress/rich-text, whose module-load combineReducers() call throws.
+// Cover everything SettingsField imports so a future select/oauth/textarea fixture renders a stub, not `undefined`.
 jest.mock( '@wordpress/components', () => ( {
 	CheckboxControl: () => null,
+	ExternalLink: ( { children } ) => children,
+	TextareaControl: ( { label, value, onChange } ) => (
+		<textarea aria-label={ label } value={ value || '' } onChange={ e => onChange( e.target.value ) } />
+	),
 } ) );
 jest.mock( '../../../../../packages/components/src', () => ( {
 	Accordion: ( { children } ) => children,
 	AccordionPanel: ( { children } ) => children,
+	Button: ( { children } ) => children,
 	Divider: () => null,
 	Grid: ( { children } ) => children,
 	SectionHeader: () => null,
+	SelectControl: ( { label, value, onChange } ) => (
+		<input aria-label={ label } value={ value || '' } onChange={ e => onChange( e.target.value ) } />
+	),
 	// Minimal controlled input so tests can drive the local draft by typing.
-	TextControl: ( { label, value, onChange } ) => <input aria-label={ label } value={ value || '' } onChange={ e => onChange( e.target.value ) } />,
+	TextControl: ( { label, value, onChange } ) => <input aria-label={ label } value={ value ?? '' } onChange={ e => onChange( e.target.value ) } />,
 	useUnsavedChangesDialog: jest.fn( () => ( { confirmDialog: null, requestConfirm: jest.fn() } ) ),
 } ) );
 jest.mock(
@@ -99,6 +108,15 @@ describe( 'ConfigureView unsaved-changes guard', () => {
 	it( 'does not arm the guard while a save is in flight, even with a draft', () => {
 		renderConfigureView( { saving: { esp: true } } );
 		fireEvent.change( screen.getByLabelText( 'Audience ID' ), { target: { value: 'abc123' } } );
+		expect( useUnsavedChangesDialog ).toHaveBeenLastCalledWith( { when: false } );
+	} );
+
+	it( 'disarms the guard when a field is edited back to its saved value', () => {
+		renderConfigureView();
+		const input = screen.getByLabelText( 'Audience ID' );
+		fireEvent.change( input, { target: { value: 'abc123' } } );
+		expect( useUnsavedChangesDialog ).toHaveBeenLastCalledWith( { when: true } );
+		fireEvent.change( input, { target: { value: '' } } );
 		expect( useUnsavedChangesDialog ).toHaveBeenLastCalledWith( { when: false } );
 	} );
 
@@ -259,6 +277,39 @@ describe( 'ConfigureView save wiring', () => {
 		} );
 		expect( useUnsavedChangesDialog ).toHaveBeenLastCalledWith( { when: true } );
 		rerender( buildConfigureView( { integrations: withCheckbox( '1' ) } ) );
+		expect( useUnsavedChangesDialog ).toHaveBeenLastCalledWith( { when: false } );
+	} );
+
+	// Cleared prefix submits '' but the backend forces 'NP_', so the saved value
+	// never equals the submitted one — value-equality would leave it stuck dirty.
+	it( 'reconciles a field the server normalizes away from the submitted value', () => {
+		const withPrefix = value => ( {
+			esp: { ...INTEGRATION, settings: [ { key: 'metadata_prefix', type: 'text', label: 'Prefix', value } ] },
+		} );
+		const { rerender } = renderConfigureView( {
+			integrations: withPrefix( 'OLD_' ),
+			inFlightChanges: { esp: { metadata_prefix: '' } },
+		} );
+		expect( screen.getByLabelText( 'Prefix' ).value ).toBe( '' );
+		expect( useUnsavedChangesDialog ).toHaveBeenLastCalledWith( { when: true } );
+		rerender( buildConfigureView( { integrations: withPrefix( 'NP_' ) } ) );
+		expect( screen.getByLabelText( 'Prefix' ).value ).toBe( 'NP_' );
+		expect( useUnsavedChangesDialog ).toHaveBeenLastCalledWith( { when: false } );
+	} );
+
+	// The control emits '5' but the sanitizer stores 5, so the saved value never
+	// strict-equals the submitted one.
+	it( 'reconciles a number field the server coerces to a numeric type', () => {
+		const withNumber = value => ( {
+			esp: { ...INTEGRATION, settings: [ { key: 'batch_size', type: 'number', label: 'Batch size', value } ] },
+		} );
+		const { rerender } = renderConfigureView( {
+			integrations: withNumber( 1 ),
+			inFlightChanges: { esp: { batch_size: '5' } },
+		} );
+		expect( useUnsavedChangesDialog ).toHaveBeenLastCalledWith( { when: true } );
+		rerender( buildConfigureView( { integrations: withNumber( 5 ) } ) );
+		expect( screen.getByLabelText( 'Batch size' ).value ).toBe( '5' );
 		expect( useUnsavedChangesDialog ).toHaveBeenLastCalledWith( { when: false } );
 	} );
 } );
