@@ -136,9 +136,13 @@ class Nicename_Change_UI {
 			);
 		}
 
-		// The nonce only proves the request came from the user-edit screen, not that the
-		// caller may edit this particular user -- authorize the target before touching it.
-		if ( ! current_user_can( 'edit_user', $user_id ) ) {
+		// The nonce only proves the request came from the user-edit screen. Require the same
+		// primitive that gates the availability check this handler may delegate to on a slug
+		// collision (so an authorized caller never gets 403'd mid-flow), and object-level
+		// authorization for the target so it can't be used to edit an arbitrary user. The
+		// primitive check also closes the self-edit gap where map_meta_cap grants
+		// `edit_user` on one's own ID to any logged-in user.
+		if ( ! current_user_can( 'edit_users' ) || ! current_user_can( 'edit_user', $user_id ) ) {
 			wp_send_json(
 				[
 					'success' => false,
