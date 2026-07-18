@@ -152,31 +152,20 @@ const AudienceIntegrations = ( props, ref ) => {
 				path: `${ API_PATH }/${ integrationId }`,
 				method: 'POST',
 				data: { settings },
-			} ).then( savedData =>
+			} ).then( () =>
 				apiFetch( {
 					path: `${ API_PATH }/${ integrationId }/enabled`,
 					method: 'POST',
 					data: { enabled: true },
+				} ).then( data => {
+					// Swap in the integration only once both steps succeed, so an enable
+					// failure leaves the modal's filled fields in place for a retry. The
+					// retry buffer is untouched: this flow saves only the modal's missing
+					// fields and must not discard an unrelated pending ConfigureView edit.
+					setIntegrations( data );
+					addEnabledNotice( integrationId, true, data );
+					return data;
 				} )
-					// The settings save succeeded even if enabling failed — reflect
-					// the saved values so the UI doesn't offer the modal again for
-					// settings that are already stored.
-					.catch( error => {
-						setIntegrations( savedData );
-						throw error;
-					} )
-					.then( data => {
-						setIntegrations( data );
-						addEnabledNotice( integrationId, true, data );
-						return data;
-					} )
-					.finally( () => {
-						setInFlightChanges( prev => {
-							const next = { ...prev };
-							delete next[ integrationId ];
-							return next;
-						} );
-					} )
 			),
 		[ addEnabledNotice ]
 	);

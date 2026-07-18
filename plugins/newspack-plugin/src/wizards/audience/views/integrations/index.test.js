@@ -164,6 +164,20 @@ describe( 'AudienceIntegrations notices', () => {
 		expect( mockAddNotice ).not.toHaveBeenCalled();
 	} );
 
+	// On a settings-ok/enable-fail partial, keep the pre-save integration so the
+	// modal keeps its fields for a retry instead of collapsing to a bare error.
+	it( 'does not swap integration state when only the enable step fails', async () => {
+		const savedData = {
+			esp: { id: 'esp', name: 'Newsletter ESP', enabled: false, settings: [ { key: 'mailchimp_audience_id', value: 'abc123' } ] },
+		};
+		apiFetch.mockReset();
+		apiFetch.mockResolvedValueOnce( savedData ).mockRejectedValueOnce( new Error( 'nope' ) );
+		await act( async () => {
+			await expect( captured.props.onSetupAndEnable( 'esp', { mailchimp_audience_id: 'abc123' } ) ).rejects.toThrow( 'nope' );
+		} );
+		expect( captured.props.integrations.esp.settings ).toEqual( [] );
+	} );
+
 	it( 'keeps the activating state for a minimum window even when activation is instant', async () => {
 		jest.useFakeTimers();
 		try {
@@ -269,6 +283,24 @@ describe( 'AudienceIntegrations retry buffer', () => {
 			await flushPromises();
 		} );
 		expect( captured.props.inFlightChanges.esp ).toEqual( { mailchimp_audience_id: 'abc123' } );
+	} );
+
+	// Setup-and-enable saves only the modal's fields, so it must not discard an
+	// unrelated failed ConfigureView edit still in the retry buffer.
+	it( 'preserves a prior failed-save retry buffer across a setup-and-enable', async () => {
+		apiFetch.mockReset();
+		apiFetch.mockRejectedValueOnce( new Error( 'save failed' ) );
+		await act( async () => {
+			captured.props.onSave( 'esp', { mailchimp_audience_id: 'from-configure' } ).catch( () => {} );
+			await flushPromises();
+		} );
+		expect( captured.props.inFlightChanges.esp ).toEqual( { mailchimp_audience_id: 'from-configure' } );
+
+		apiFetch.mockResolvedValue( SETTINGS_MAP );
+		await act( async () => {
+			await captured.props.onSetupAndEnable( 'esp', { other_field: 'x' } );
+		} );
+		expect( captured.props.inFlightChanges.esp ).toEqual( { mailchimp_audience_id: 'from-configure' } );
 	} );
 
 	it( 'marks the integration saving while the request is in flight', async () => {
