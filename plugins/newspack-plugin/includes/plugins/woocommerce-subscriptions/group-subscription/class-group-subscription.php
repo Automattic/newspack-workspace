@@ -396,6 +396,18 @@ class Group_Subscription {
 			}
 		}
 
+		// A direct add fulfils any outstanding invite to the same email, so cancel it below -- this is
+		// what the "cancelled below" note in the limit check above refers to, and it mirrors the invite
+		// acceptance path (which cancels on add). Without it the new member and their now-stale invite
+		// would both linger, and both count toward the limit. Collect the pending emails once so the add
+		// loop can cancel only genuine matches (cancel_invite() saves unconditionally).
+		$pending_invite_emails = [];
+		foreach ( Group_Subscription_Invite::get_invites( $subscription, false ) as $invite ) {
+			if ( ! empty( $invite['email'] ) ) {
+				$pending_invite_emails[] = strtolower( $invite['email'] );
+			}
+		}
+
 		// Add new members.
 		foreach ( $members_to_add as $member_id ) {
 			if ( ! Reader_Activation::is_user_reader( $member_id ) ) {
@@ -409,10 +421,14 @@ class Group_Subscription {
 			}
 			if ( \add_user_meta( $member_id, self::GROUP_SUBSCRIPTION_USER_META_KEY, $subscription->get_id() ) ) {
 				\update_user_meta( $member_id, self::get_member_joined_meta_key( $subscription->get_id() ), time() );
+				$member_email                = \get_userdata( $member_id )->user_email;
 				$members_added[ $member_id ] = [
-					'email' => \get_userdata( $member_id )->user_email,
+					'email' => $member_email,
 					'url'   => \get_edit_user_link( $member_id ),
 				];
+				if ( in_array( strtolower( $member_email ), $pending_invite_emails, true ) ) {
+					Group_Subscription_Invite::cancel_invite( $subscription, $member_email );
+				}
 			}
 		}
 

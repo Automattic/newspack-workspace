@@ -112,12 +112,13 @@ class Test_Group_Subscription extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Seed a pending (non-expired) email invite on $subscription.
+	 * Seed an email invite on $subscription.
 	 *
 	 * @param string          $email        The invited email address.
 	 * @param WC_Subscription $subscription The group subscription.
+	 * @param bool            $expired      Whether the invite should already be expired (defaults to pending).
 	 */
-	private function add_invite( string $email, WC_Subscription $subscription ): void {
+	private function add_invite( string $email, WC_Subscription $subscription, bool $expired = false ): void {
 		$invites = $subscription->get_meta( Group_Subscription_Invite::META, true );
 		if ( ! is_array( $invites ) ) {
 			$invites = [];
@@ -126,7 +127,7 @@ class Test_Group_Subscription extends WP_UnitTestCase {
 		$invites[ 'test-key-' . $email ] = [
 			'added_by'   => 0,
 			'email'      => $email,
-			'expiration' => time() + HOUR_IN_SECONDS,
+			'expiration' => $expired ? time() - HOUR_IN_SECONDS : time() + HOUR_IN_SECONDS,
 		];
 		$subscription->update_meta_data( Group_Subscription_Invite::META, $invites );
 	}
@@ -278,5 +279,61 @@ class Test_Group_Subscription extends WP_UnitTestCase {
 		$this->assertNotWPError( $result, 'Adding a user who holds the last pending invite should succeed.' );
 		// get_members() may return IDs as strings (raw from meta), so compare after casting.
 		$this->assertContains( (int) $invitee, array_map( 'intval', Group_Subscription::get_members( $sub ) ), 'The invitee should now be a member.' );
+	}
+
+	/**
+	 * A direct add fulfils any matching pending invite, so the invite is cancelled -- otherwise the
+	 * now-member and their stale invite would both count toward the limit (the invite-acceptance path
+	 * cancels on add; a direct add via the /members endpoint must do the same).
+	 */
+	public function test_update_members_direct_add_cancels_matching_invite() {
+		$owner_id = $this->create_reader_user();
+		$invitee  = $this->create_reader_user();
+		$email    = get_userdata( $invitee )->user_email;
+		$sub      = $this->create_group_subscription( $owner_id, 5 );
+		$this->add_invite( $email, $sub );
+
+		$result = Group_Subscription::update_members( $sub, [ $invitee ] );
+		$this->assertNotWPError( $result, 'Adding an invited user directly should succeed.' );
+		$this->assertContains( (int) $invitee, array_map( 'intval', Group_Subscription::get_members( $sub ) ), 'The invitee should now be a member.' );
+		$this->assertEmpty(
+			Group_Subscription_Invite::get_invites( $sub ),
+			'The fulfilled invite should be cancelled once the invitee is added directly.'
+		);
+	}
+
+	/**
+	 * The limit check only bounds additions, so a removal-only call must succeed even on a group that
+	 * is already over its limit (e.g. after the limit was lowered) -- a removal can never push a group
+	 * further over capacity, and rejecting it would strand the already-persisted removal.
+	 */
+	public function test_update_members_removal_only_succeeds_on_over_limit_group() {
+		$owner_id = $this->create_reader_user();
+		$member_a = $this->create_reader_user();
+		$member_b = $this->create_reader_user();
+		$sub      = $this->create_group_subscription( $owner_id, 1 ); // Limit of 1, but seed two members (over capacity).
+		$this->add_member( $member_a, $sub );
+		$this->add_member( $member_b, $sub );
+
+		$result = Group_Subscription::update_members( $sub, [], [ $member_a ] );
+		$this->assertNotWPError( $result, 'A removal-only call must succeed even on an over-limit group.' );
+		$this->assertArrayHasKey( $member_a, $result['members_removed'], 'The removed member should be reported.' );
+		$this->assertNotContains( (int) $member_a, array_map( 'intval', Group_Subscription::get_members( $sub ) ), 'The removed member should no longer be a member.' );
+	}
+
+	/**
+	 * Expired invites are excluded from the count via get_invites( $sub, false ), so an expired invite
+	 * does not reserve a spot -- a direct add succeeds when only expired invites stand between the
+	 * group and its limit.
+	 */
+	public function test_update_members_expired_invite_does_not_consume_a_spot() {
+		$owner_id  = $this->create_reader_user();
+		$member_id = $this->create_reader_user();
+		$sub       = $this->create_group_subscription( $owner_id, 1 ); // One spot in addition to the owner.
+		$this->add_invite( 'expired@test.com', $sub, true ); // Expired -- must not reserve the spot.
+
+		$result = Group_Subscription::update_members( $sub, [ $member_id ] );
+		$this->assertNotWPError( $result, 'An expired invite must not reserve a spot, so the direct add should succeed.' );
+		$this->assertContains( (int) $member_id, array_map( 'intval', Group_Subscription::get_members( $sub ) ), 'The member should have been added.' );
 	}
 }

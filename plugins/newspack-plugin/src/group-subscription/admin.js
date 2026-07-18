@@ -75,6 +75,13 @@ import './admin.scss';
 		$container.toggleClass( 'is-at-limit', used >= limit );
 	}
 
+	// Remove any lingering "invitation sent" confirmation from the members section. It's shown by
+	// inviteMember(); clear it before an unrelated add/remove/cancel so a stale notice doesn't read
+	// oddly after an action it has nothing to do with.
+	function clearInviteSuccess( $container ) {
+		$container.find( '.newspack-group-subscription__members mark.success' ).remove();
+	}
+
 	// Show or hide group subscription options based on the enabled checkbox.
 	function showOrHideOptions( e ) {
 		const $metabox = $( e.currentTarget ).closest( '#newspack-group-subscription' );
@@ -90,11 +97,13 @@ import './admin.scss';
 		e.preventDefault();
 		const $select = $( e.currentTarget );
 		$select.attr( 'disabled', true );
-		const subscriptionId = $select.closest( '.newspack-group-subscription__container' ).data( 'subscription-id' );
+		const $container = $select.closest( '.newspack-group-subscription__container' );
+		const subscriptionId = $container.data( 'subscription-id' );
 		const memberToAdd = $select.val();
 		if ( ! memberToAdd || ! subscriptionId ) {
 			return;
 		}
+		clearInviteSuccess( $container );
 		fetch( `${ newspackGroupSubscriptions.apiUrl }/members`, {
 			method: 'POST',
 			headers: {
@@ -109,7 +118,6 @@ import './admin.scss';
 					throw new Error( data.message );
 				}
 				if ( data.members_added?.[ memberToAdd ] ) {
-					const $container = $select.closest( '.newspack-group-subscription__container' );
 					const $membersList = $container.find( '.newspack-group-subscription__members-list' );
 					const $membersCount = $container.find( '.newspack-group-subscription__members-count' );
 					$membersList.append(
@@ -141,10 +149,12 @@ import './admin.scss';
 		e.preventDefault();
 		const $this = $( e.currentTarget );
 		const userId = $this.data( 'user-id' );
-		const subscriptionId = $this.closest( '.newspack-group-subscription__container' ).data( 'subscription-id' );
+		const $container = $this.closest( '.newspack-group-subscription__container' );
+		const subscriptionId = $container.data( 'subscription-id' );
 		if ( ! userId || ! subscriptionId ) {
 			return;
 		}
+		clearInviteSuccess( $container );
 		const $listItem = $this.closest( 'li' );
 		$listItem.addClass( 'newspack-group-subscription__to-remove' );
 		$listItem.find( '.error' ).remove();
@@ -162,7 +172,6 @@ import './admin.scss';
 					throw new Error( data.message );
 				}
 				if ( data.members_removed?.[ userId ] ) {
-					const $container = $listItem.closest( '.newspack-group-subscription__container' );
 					const $membersList = $container.find( '.newspack-group-subscription__members-list' );
 					const $membersCount = $container.find( '.newspack-group-subscription__members-count' );
 					$listItem.remove();
@@ -186,7 +195,7 @@ import './admin.scss';
 		const $this = $( e.currentTarget );
 		const $container = $this.closest( '.newspack-group-subscription__container' );
 		$this.parent().find( '.error,.success' ).remove();
-		$container.find( '.newspack-group-subscription__members mark.success' ).remove();
+		clearInviteSuccess( $container );
 		const $email = $container.find( 'input[name="_newspack_group_subscription_invite_email"]' );
 		const $button = $this.parent().find( 'button' );
 		$email.attr( 'disabled', true );
@@ -218,7 +227,7 @@ import './admin.scss';
 				const $membersCount = $container.find( '.newspack-group-subscription__members-count' );
 				$membersList.find( `li[data-email="${ data.email }"]` ).remove();
 				$membersList.append(
-					`<li data-email="${ data.email }" data-consumes-spot="1"><span class="newspack-group-subscription__pending-invite"></span> <span class="newspack-group-subscription__pending-invite-label"></span><a href="#" class="newspack-group-subscription__cancel-invite">&#215; <span class="screen-reader-text">Delete</span></a></li>`
+					`<li data-email="${ data.email }" data-consumes-spot="1"><span class="newspack-group-subscription__pending-invite"></span> <span class="newspack-group-subscription__pending-invite-label"></span><a href="#" class="newspack-group-subscription__cancel-invite">&#215; <span class="screen-reader-text">Cancel</span></a></li>`
 				);
 				const $added = $membersList.find( 'li' ).last();
 				$added.data( 'email', data.email );
@@ -246,6 +255,7 @@ import './admin.scss';
 	function cancelInvite( e ) {
 		e.preventDefault();
 		const $this = $( e.currentTarget );
+		const $container = $this.closest( '.newspack-group-subscription__container' );
 		const $listItem = $this.closest( 'li' );
 		$listItem.addClass( 'newspack-group-subscription__to-remove' );
 		$listItem.find( '.error' ).remove();
@@ -255,7 +265,7 @@ import './admin.scss';
 			$this.parent().removeClass( 'newspack-group-subscription__to-remove' );
 			return;
 		}
-		const $container = $this.closest( '.newspack-group-subscription__container' );
+		clearInviteSuccess( $container );
 		const subscriptionId = $container.data( 'subscription-id' );
 		fetch( `${ newspackGroupSubscriptions.apiUrl }/invite`, {
 			method: 'DELETE',
