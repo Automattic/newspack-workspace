@@ -217,4 +217,27 @@ class TestProductNetworkIdsCLI extends WP_UnitTestCase {
 		// Values are sanitized ( sanitize_text_field trims surrounding whitespace ).
 		$this->assertSame( 'basic', $parsed[6] );
 	}
+
+	/**
+	 * An inline-JSON map longer than PHP_MAXPATHLEN still parses: the path-detection guard skips
+	 * is_readable() for over-length strings, so no "File name too long" E_WARNING is raised.
+	 */
+	public function test_parse_map_long_inline_json_is_not_treated_as_a_path() {
+		$parse_map_method = new ReflectionMethod( Product_Network_Ids::class, 'parse_map' );
+		$parse_map_method->setAccessible( true );
+
+		// Build a JSON object whose serialized length comfortably exceeds PHP_MAXPATHLEN: each
+		// entry serializes to more than one character, so PHP_MAXPATHLEN entries guarantees it.
+		$pairs = [];
+		foreach ( range( 1, PHP_MAXPATHLEN ) as $product_id ) {
+			$pairs[ (string) $product_id ] = 'premium';
+		}
+		$long_map = wp_json_encode( $pairs );
+		$this->assertGreaterThan( PHP_MAXPATHLEN, strlen( $long_map ) );
+
+		$parsed = $parse_map_method->invoke( null, $long_map );
+
+		$this->assertSame( count( $pairs ), count( $parsed ) );
+		$this->assertSame( 'premium', reset( $parsed ) );
+	}
 }

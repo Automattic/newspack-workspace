@@ -199,6 +199,12 @@ class Product_Network_Ids {
 		$apply     = isset( $assoc_args['apply'] );
 		$overwrite = isset( $assoc_args['overwrite'] );
 
+		// Writing the meta only propagates across the network through the newspack_network_product_updated
+		// listener, which registers only when Newspack\Data_Events is loaded and emits only when wc_get_product
+		// is available. With either missing the meta is written locally and nothing syncs -- surface that up
+		// front so "Wrote N" is never mistaken for "propagated", which is the NPPD-2057 flip failure.
+		$can_propagate = class_exists( 'Newspack\Data_Events' ) && function_exists( 'wc_get_product' );
+
 		WP_CLI::line( '' );
 		if ( $apply ) {
 			WP_CLI::line( '⚡️ Running live: product Network IDs will be written.' );
@@ -206,6 +212,13 @@ class Product_Network_Ids {
 			WP_CLI::line( 'Running in dry-run mode. Use --apply to write changes.' );
 		}
 		WP_CLI::line( '' );
+
+		if ( ! $can_propagate ) {
+			WP_CLI::warning(
+				'Cross-site propagation is unavailable here ( newspack_network_product_updated needs Newspack\\Data_Events and WooCommerce active ). Network IDs will be written to this site only; propagate them afterwards with "wp newspack-network data-backfill newspack_network_product_updated --live".'
+			);
+			WP_CLI::line( '' );
+		}
 
 		if ( isset( $assoc_args['map'] ) ) {
 			$assignments = self::parse_map( $assoc_args['map'] );
@@ -276,7 +289,13 @@ class Product_Network_Ids {
 		WP_CLI::line( '' );
 		if ( $apply ) {
 			WP_CLI::success( sprintf( 'Wrote %d product Network ID(s), skipped %d, %d already set.', $to_write, $skipped, $already ) );
-			WP_CLI::line( 'If propagation did not complete ( e.g. the Data Events listener was unavailable ), replay it with:' );
+			if ( ! $can_propagate ) {
+				WP_CLI::warning( 'These writes were NOT propagated ( see the warning above ). Once Data Events and WooCommerce are active, replay propagation with:' );
+			} else {
+				// A product already carrying the target Network ID fires no event, so this command cannot
+				// re-propagate an already-tagged-but-desynced product. Point operators at the backfill for that.
+				WP_CLI::line( 'Products already carrying the target Network ID fire no event; if propagation may have been missed ( including for already-set products ), replay it with:' );
+			}
 			WP_CLI::line( '  wp newspack-network data-backfill newspack_network_product_updated --live' );
 		} else {
 			WP_CLI::success( sprintf( 'Dry run: %d product Network ID(s) would be written, %d skipped, %d already set. Re-run with --apply.', $to_write, $skipped, $already ) );
@@ -451,6 +470,10 @@ class Product_Network_Ids {
 			]
 		);
 
+		// Prime the postmeta cache in a single query so the get_network_id() reads below hit the cache
+		// instead of one get_post_meta() DB round-trip per product ( fields => 'ids' skips WP's own priming ).
+		update_meta_cache( 'post', $tagged_ids );
+
 		// The meta_query already excludes empty/absent Network IDs, so every ID here is tagged.
 		$tagged = [];
 		foreach ( $tagged_ids as $product_id ) {
@@ -466,7 +489,9 @@ class Product_Network_Ids {
 	 * @return array
 	 */
 	private static function parse_map( $map ) {
-		if ( is_string( $map ) && is_readable( $map ) ) {
+		// Only treat the argument as a path when it's short enough to be one: passing a long inline-JSON
+		// map straight to is_readable() can trip an E_WARNING ( "File name too long" ) on some platforms.
+		if ( is_string( $map ) && strlen( $map ) < PHP_MAXPATHLEN && is_readable( $map ) ) {
 			$map = file_get_contents( $map ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents, WordPressVIPMinimum.Performance.FetchingRemoteData.FileGetContentsUnknown
 		}
 		$decoded = json_decode( (string) $map, true );
