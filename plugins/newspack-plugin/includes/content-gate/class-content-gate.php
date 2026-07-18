@@ -455,6 +455,13 @@ class Content_Gate {
 	 * Enqueue block editor assets.
 	 */
 	public static function enqueue_block_editor_assets() {
+		// Share the same feature gate as Content_Restriction_Control::register_meta():
+		// with the flag off the exempt key is absent from the REST schema, so the panel
+		// must not render a toggle that could not persist. In practice get_gates() is
+		// already empty when the flag is off, but gating both on the flag keeps them aligned.
+		if ( ! self::is_newspack_feature_enabled() ) {
+			return;
+		}
 		if ( ! in_array( get_post_type(), array_column( Content_Restriction_Control::get_available_post_types(), 'value' ), true ) ) {
 			return;
 		}

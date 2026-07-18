@@ -1,0 +1,7 @@
+// Spacing inside the modal comes from the VStack gap, so drop the field
+// controls' own bottom margins.
+.newspack-integration-enable-modal__content {
+	.components-base-control {
+		margin-bottom: 0;
+	}
+}

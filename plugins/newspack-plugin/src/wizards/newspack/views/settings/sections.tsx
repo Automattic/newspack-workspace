@@ -99,6 +99,7 @@ export default settingsSectionKeys.reduce( ( acc: any[], sectionPath ) => {
 		exact: '/' === ( settingsTabs[ sectionPath ].path ?? '' ),
 		path: settingsTabs[ sectionPath ].path ?? `/${ sectionPath }`,
 		activeTabPaths: settingsTabs[ sectionPath ].activeTabPaths ?? undefined,
+		breadcrumbs: [ { label: __( 'Settings', 'newspack' ) }, { label: settingsTabs[ sectionPath ].label } ],
 		render: sectionComponents[ sectionPath ] ?? sectionComponents.default,
 	} );
 	return acc;

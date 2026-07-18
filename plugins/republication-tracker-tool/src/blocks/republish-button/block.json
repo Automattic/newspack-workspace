@@ -1,0 +1,66 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/block.json",
+	"apiVersion": 3,
+	"name": "republication-tracker-tool/republish-button",
+	"title": "Republish Button",
+	"category": "widgets",
+	"description": "A button that allows readers to republish your content under a Creative Commons license.",
+	"keywords": [ "republish", "creative commons", "syndication" ],
+	"textdomain": "republication-tracker-tool",
+	"attributes": {
+		"buttonText": {
+			"type": "string",
+			"default": "Republish This Story"
+		},
+		"showLicense": {
+			"type": "boolean",
+			"default": true
+		}
+	},
+	"supports": {
+		"anchor": true,
+		"align": false,
+		"color": {
+			"background": true,
+			"text": true,
+			"__experimentalDefaultControls": {
+				"background": true,
+				"text": true
+			}
+		},
+		"typography": {
+			"fontSize": true,
+			"lineHeight": true,
+			"__experimentalFontFamily": true,
+			"__experimentalFontWeight": true,
+			"__experimentalFontStyle": true,
+			"__experimentalTextTransform": true,
+			"__experimentalTextDecoration": true,
+			"__experimentalLetterSpacing": true,
+			"__experimentalDefaultControls": {
+				"fontSize": true
+			}
+		},
+		"spacing": {
+			"padding": true,
+			"__experimentalDefaultControls": {
+				"padding": true
+			}
+		},
+		"__experimentalBorder": {
+			"radius": true,
+			"color": true,
+			"style": true,
+			"width": true,
+			"__experimentalDefaultControls": {}
+		},
+		"shadow": true
+	},
+	"editorScript": "file:../../../dist/republish-button.js",
+	"style": "file:../../../dist/republish-button.css",
+	"example": {
+		"attributes": {
+			"buttonText": "Republish This Story"
+		}
+	}
+}
