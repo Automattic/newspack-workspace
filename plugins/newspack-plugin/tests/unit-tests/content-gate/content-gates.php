@@ -2858,6 +2858,28 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Protected (`_`-prefixed) meta must not carry over to the copy. Keys like `_edit_lock`
+	 * are WordPress bookkeeping bound to the source post; copying them would misattribute
+	 * that state to the copy. Both copy loops (gate meta and layout meta) skip these keys,
+	 * and this pins that so a future refactor can't quietly start copying them through.
+	 */
+	public function test_duplicate_gate_skips_protected_meta() {
+		$source_id        = $this->gate_ids[2];
+		$source           = Content_Gate::get_gate( $source_id );
+		$source_layout_id = $source['registration']['gate_layout_id'];
+
+		add_post_meta( $source_id, '_private', 'gate-secret' );
+		add_post_meta( $source_layout_id, '_private', 'layout-secret' );
+
+		$copy_id = Content_Gate::duplicate_gate( $source_id );
+		$this->assertNotWPError( $copy_id );
+		$copy = Content_Gate::get_gate( $copy_id );
+
+		$this->assertSame( '', get_post_meta( $copy_id, '_private', true ), 'Protected meta on the gate is not copied' );
+		$this->assertSame( '', get_post_meta( $copy['registration']['gate_layout_id'], '_private', true ), 'Protected meta on the layout is not copied' );
+	}
+
+	/**
 	 * Layouts must be deep-copied. Sharing layout posts between two gates would let
 	 * delete_gate_layouts() destroy the surviving gate's reader-facing content.
 	 */

@@ -886,6 +886,11 @@ class Content_Gate {
 			true // Return WP_Error on failure.
 		);
 		if ( is_wp_error( $new_gate_id ) ) {
+			// A failed insert is a genuine server error, so give it an explicit 500 status
+			// (matching the controlled codes on the validation branches above) rather than
+			// leaving the REST layer to fall back on its generic 500. The underlying error
+			// is preserved so a maintainer can see why the insert failed.
+			$new_gate_id->add_data( [ 'status' => 500 ] );
 			return $new_gate_id;
 		}
 
