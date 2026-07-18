@@ -14,12 +14,13 @@ import apiFetch from '@wordpress/api-fetch';
 import AudienceIntegrations from './index';
 
 const mockAddNotice = jest.fn();
+const mockRemoveNotice = jest.fn();
 const captured = {};
 const loadingStates = [];
 
 jest.mock( '@wordpress/api-fetch', () => jest.fn() );
 jest.mock( '@wordpress/data', () => ( {
-	useDispatch: () => ( { addNotice: mockAddNotice } ),
+	useDispatch: () => ( { addNotice: mockAddNotice, removeNotice: mockRemoveNotice } ),
 } ) );
 jest.mock( '../../../../../packages/components/src', () => ( {
 	Wizard: ( { sections } ) => {
@@ -54,6 +55,7 @@ const flushPromises = () => new Promise( resolve => setTimeout( resolve, 0 ) );
 describe( 'AudienceIntegrations notices', () => {
 	beforeEach( async () => {
 		mockAddNotice.mockClear();
+		mockRemoveNotice.mockClear();
 		apiFetch.mockReset();
 		apiFetch.mockResolvedValue( SETTINGS_MAP );
 		render( <AudienceIntegrations /> );
@@ -101,6 +103,31 @@ describe( 'AudienceIntegrations notices', () => {
 				message: 'Something went wrong. Please try again.',
 			} )
 		);
+	} );
+
+	it( 'announces a success snackbar when the save succeeds', async () => {
+		await act( async () => {
+			captured.props.onSave( 'esp', { mailchimp_audience_id: 'abc123' } );
+			await flushPromises();
+		} );
+		await waitFor( () =>
+			expect( mockAddNotice ).toHaveBeenCalledWith( {
+				id: 'integration-saved-esp',
+				type: 'success',
+				message: 'Settings saved.',
+			} )
+		);
+	} );
+
+	// Success and error share a notice id, and the wizard keys snackbars by id, so
+	// each save has to clear the previous attempt's notice before adding its own.
+	it( 'clears the previous save snackbar before each save', async () => {
+		await act( async () => {
+			captured.props.onSave( 'esp', { mailchimp_audience_id: 'abc123' } );
+			await flushPromises();
+		} );
+		expect( mockRemoveNotice ).toHaveBeenCalledWith( 'integration-saved-esp' );
+		expect( mockRemoveNotice.mock.invocationCallOrder[ 0 ] ).toBeLessThan( mockAddNotice.mock.invocationCallOrder[ 0 ] );
 	} );
 
 	it( 'announces an error snackbar when the save request fails', async () => {
