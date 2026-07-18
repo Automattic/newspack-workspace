@@ -36,7 +36,7 @@ const Accordion = ( { children, className, hideSingleTitle = false, spacing = 6 
 			{ panels.map( ( panel, index ) => (
 				<Fragment key={ panel.key }>
 					{ panel }
-					{ index < panels.length - 1 && <Divider variant="tertiary" marginBottom={ 0 } marginTop={ 0 } /> }
+					{ index < panels.length - 1 && <Divider variant="secondary" marginBottom={ 0 } marginTop={ 0 } /> }
 				</Fragment>
 			) ) }
 		</VStack>
