@@ -22,7 +22,6 @@ import {
 	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
-import { atSymbol } from '@wordpress/icons';
 
 // Wizard-bridge event contract. The newsletters bridge bundle exposes its
 // event names on `window.newspackNewslettersEvents`; we fall back to the
@@ -56,13 +55,14 @@ import {
 	CardSettingsGroup,
 	Divider,
 	Grid,
+	IntegrationIcon,
 	PluginInstaller,
 	SectionHeader,
 	SelectControl,
 	TextControl,
 	Waiting,
+	espProviderOrder,
 	hooks,
-	integrationIcons,
 	useUnsavedChangesDialog,
 } from '../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
@@ -266,18 +266,11 @@ export const Settings = ( {
 	);
 	const postSettings = values( config.settings ).filter( isPostSetting );
 
-	const PROVIDER_ORDER = [ 'active_campaign', 'mailchimp', 'constant_contact', 'manual' ];
-	const PROVIDER_ICONS = {
-		active_campaign: integrationIcons.activeCampaign,
-		mailchimp: integrationIcons.mailchimp,
-		constant_contact: integrationIcons.constantContact,
-		manual: atSymbol,
-	};
 	const providerOptions = ( config.settings?.newspack_newsletters_service_provider?.options || [] )
 		.filter( opt => opt.value !== '' )
 		.sort( ( a, b ) => {
-			const aIdx = PROVIDER_ORDER.indexOf( a.value );
-			const bIdx = PROVIDER_ORDER.indexOf( b.value );
+			const aIdx = espProviderOrder.indexOf( a.value );
+			const bIdx = espProviderOrder.indexOf( b.value );
 			if ( aIdx === -1 && bIdx === -1 ) {
 				return 0;
 			}
@@ -331,9 +324,9 @@ export const Settings = ( {
 						{ providerOptions.map( option => (
 							<CardSettingsGroup
 								key={ option.value }
-								className={ `newspack-newsletters-esp-card newspack-newsletters-esp-card--${ option.value.replace( /_/g, '-' ) }` }
+								className="newspack-newsletters-esp-card"
 								disabled={ isDisabled }
-								icon={ PROVIDER_ICONS[ option.value ] }
+								iconElement={ espProviderOrder.includes( option.value ) ? <IntegrationIcon provider={ option.value } /> : null }
 								title={ option.name }
 								isActive={ option.value === selectedProviderValue }
 								onEnable={ () => providerSelectProps.onChange( option.value ) }

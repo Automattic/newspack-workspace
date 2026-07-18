@@ -12,6 +12,7 @@ export { default as CardFeature } from './card-feature';
 export { default as CardForm } from './card-form';
 export { default as CardSettingsGroup } from './card-settings-group';
 export { default as CardSortableList } from './card-sortable-list';
+export { default as IntegrationIcon } from './integration-icon';
 export { default as CategoryAutocomplete } from './category-autocomplete';
 export { default as ColorPicker } from './color-picker';
 export { default as ConfirmDialog } from './confirm-dialog';
@@ -56,6 +57,7 @@ export { default as useConfirmDialog } from './hooks/use-confirm-dialog';
 export { default as useUnsavedChangesDialog } from './hooks/use-unsaved-changes-dialog';
 import * as integrationIcons from './integration-icons';
 export { integrationIcons };
+export { espProviderOrder } from './integration-icons';
 export { default as utils } from './utils';
 
 import './style.scss';
