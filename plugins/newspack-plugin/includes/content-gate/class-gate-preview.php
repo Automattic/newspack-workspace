@@ -49,6 +49,22 @@ class Gate_Preview {
 	];
 
 	/**
+	 * Upper bound on the preview-URL `visible_paragraphs` override.
+	 *
+	 * Defense-in-depth: during a preview filter_is_post_restricted() forces the
+	 * queried post to be restricted, and `ngp_vp` is attacker-controllable by
+	 * anyone who clears the capability check. Without a ceiling, an exotic role
+	 * granted the preview capability but not post-read rights could point the
+	 * preview at a gated post and set `ngp_vp` arbitrarily high, so the excerpt
+	 * builder (`array_slice( $paragraphs, 0, $count )`) emits the entire body as
+	 * the "excerpt". No real gate shows anywhere near this many visible
+	 * paragraphs, so the clamp never affects a legitimate preview.
+	 *
+	 * @var int
+	 */
+	const PREVIEW_MAX_VISIBLE_PARAGRAPHS = 50;
+
+	/**
 	 * Register the force-render callbacks.
 	 *
 	 * All callbacks are registered unconditionally and no-op unless the request
@@ -99,6 +115,12 @@ class Gate_Preview {
 	public static function current_user_can_preview() {
 		/**
 		 * Filters the capability required to preview a gate layout.
+		 *
+		 * The `edit_others_pages` default mirrors newspack-popups. Note the
+		 * gate-layout CPT registers with no `capability_type`, so it maps to *post*
+		 * capabilities (editing others' layouts actually needs `edit_others_posts`);
+		 * the mismatch is deliberate parity, and this filter is the escape hatch for
+		 * roles that hold one capability but not the other.
 		 *
 		 * @param string $capability Capability to check. Default: edit_others_pages.
 		 */
@@ -158,9 +180,21 @@ class Gate_Preview {
 	 * Only present, valid params are returned; anything missing or invalid is
 	 * dropped so the layout's stored meta wins for that key.
 	 *
+	 * The parsed overrides are memoized per request: this is consulted from
+	 * filter_layout_meta(), which fires on every matching meta read during a
+	 * preview render, and $_GET is immutable for the request. The cache is
+	 * skipped under IS_TEST_ENV, where a single suite drives multiple $_GET
+	 * states through this method (precedent: get_layout_parent_gate_id()).
+	 *
 	 * @return array<string,mixed> Meta key => override value.
 	 */
 	public static function get_preview_meta_overrides() {
+		$use_cache = ! ( defined( 'IS_TEST_ENV' ) && IS_TEST_ENV );
+		static $cache = null;
+		if ( $use_cache && null !== $cache ) {
+			return $cache;
+		}
+
 		$overrides = [];
 		foreach ( self::PREVIEW_QUERY_KEYS as $meta_key => $query_key ) {
 			if ( ! isset( $_GET[ $query_key ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
@@ -171,6 +205,10 @@ class Gate_Preview {
 			if ( null !== $value ) {
 				$overrides[ $meta_key ] = $value;
 			}
+		}
+
+		if ( $use_cache ) {
+			$cache = $overrides;
 		}
 		return $overrides;
 	}
@@ -201,10 +239,12 @@ class Gate_Preview {
 				}
 				return null;
 			case 'visible_paragraphs':
-				// Clamp with max( 0, (int) ) to match the stored-meta path in
-				// get_visible_paragraphs(); absint() would turn "-5" into 5 and
-				// preview more paragraphs than the real gate ever would.
-				return is_numeric( $raw ) ? max( 0, (int) $raw ) : null;
+				// Clamp to [ 0, PREVIEW_MAX_VISIBLE_PARAGRAPHS ]. The lower bound
+				// matches the stored-meta path in get_visible_paragraphs() (absint()
+				// would turn "-5" into 5 and preview more paragraphs than the real
+				// gate ever would); the upper bound is defense-in-depth against a
+				// hand-edited URL dumping a gated post's full body.
+				return is_numeric( $raw ) ? min( self::PREVIEW_MAX_VISIBLE_PARAGRAPHS, max( 0, (int) $raw ) ) : null;
 			case 'overlay_position':
 				return in_array( $raw, [ 'center', 'bottom' ], true ) ? $raw : null;
 			case 'overlay_size':
@@ -295,7 +335,9 @@ class Gate_Preview {
 				'no_found_rows'  => true,
 			]
 		);
-		$posts = $query->get_posts();
+		// Read the results WP_Query already fetched in its constructor; calling
+		// get_posts() again re-executes the SQL (WordPress/VIP duplicate-query pattern).
+		$posts = $query->posts;
 		return $posts ? (string) get_the_permalink( $posts[0] ) : '';
 	}
 

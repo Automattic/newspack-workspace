@@ -367,6 +367,16 @@ class Test_Gate_Preview extends \WP_UnitTestCase {
 		$_GET['ngp_vp'] = '-5';
 		$overrides      = Gate_Preview::get_preview_meta_overrides();
 		$this->assertSame( 0, $overrides['visible_paragraphs'], 'A negative count clamps to 0, not its absolute value.' );
+
+		// A very high paragraph count clamps to the preview ceiling (defense-in-depth
+		// so a hand-edited URL can't dump a gated post's full body as the excerpt).
+		$_GET['ngp_vp'] = '99999';
+		$overrides      = Gate_Preview::get_preview_meta_overrides();
+		$this->assertSame(
+			Gate_Preview::PREVIEW_MAX_VISIBLE_PARAGRAPHS,
+			$overrides['visible_paragraphs'],
+			'An unbounded count clamps to the preview ceiling.'
+		);
 	}
 
 	/**
