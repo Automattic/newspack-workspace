@@ -197,6 +197,7 @@ final class Newspack {
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/audience/class-audience-content-gates.php';
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/audience/class-audience-donations.php';
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/audience/class-audience-subscriptions.php';
+		include_once NEWSPACK_ABSPATH . 'includes/wizards/audience/class-audience-subscription-products.php';
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/audience/class-audience-integrations.php';
 
 		// Network Wizard.
@@ -229,6 +230,7 @@ final class Newspack {
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/class-mailchimp-for-woocommerce.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/class-onesignal.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/class-organic-profile-block.php';
+		include_once NEWSPACK_ABSPATH . 'includes/plugins/class-woocommerce-content-detector.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/class-perfmatters.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/class-pwa.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/co-authors-plus/class-author-rest-fields.php';

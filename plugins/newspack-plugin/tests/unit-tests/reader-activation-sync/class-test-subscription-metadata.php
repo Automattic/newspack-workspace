@@ -6,6 +6,8 @@
  */
 
 use Newspack\Subscriptions_Meta;
+use Newspack\Group_Subscription;
+use Newspack\Group_Subscription_Settings;
 use Newspack\Reader_Activation\Sync\Contact_Metadata\Subscription;
 
 require_once __DIR__ . '/../../mocks/wc-mocks.php';
@@ -145,6 +147,35 @@ class Test_Subscription_Metadata extends WP_UnitTestCase {
 
 		$metadata = ( new Subscription( self::$user_id ) )->get_metadata();
 		$this->assertSame( 2, $metadata['Active_Subscription_Count'] );
+	}
+
+	public function test_metadata_excludes_group_member_subscriptions() {
+		// A group subscription owned by a *different* user that self::$user_id only belongs
+		// to as a member. The My Account member-injection filter can surface it in the
+		// member's wcs_get_users_subscriptions() results on account pages; it must not feed
+		// the member's own subscription metadata — group access is synced separately via the
+		// Content Access Group / Content Access Source fields. See NPPM-3021.
+		$owner_id  = self::factory()->user->create( [ 'role' => 'subscriber' ] );
+		$group_sub = $this->create_subscription( [ 'customer_id' => $owner_id ] );
+		$group_sub->update_meta_data( Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'enabled', 'yes' );
+		add_user_meta( self::$user_id, Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY, $group_sub->get_id() );
+
+		// Simulate the My Account injection surfacing the owner's group sub for the member.
+		$inject = function ( $subs, $user_id ) use ( $group_sub ) {
+			if ( (int) $user_id === (int) self::$user_id ) {
+				$subs[ $group_sub->get_id() ] = $group_sub;
+			}
+			return $subs;
+		};
+		add_filter( 'wcs_get_users_subscriptions', $inject, 15, 2 );
+		try {
+			$metadata = ( new Subscription( self::$user_id ) )->get_metadata();
+		} finally {
+			remove_filter( 'wcs_get_users_subscriptions', $inject, 15 );
+		}
+
+		$this->assertSame( 0, $metadata['Active_Subscription_Count'], 'A group-member sub must not count toward the member.' );
+		$this->assertSame( '', $metadata['Subscriber_Status'], 'A group-member sub must not set the member Subscriber Status.' );
 	}
 
 	public function test_pending_cancel_counted_as_active() {
