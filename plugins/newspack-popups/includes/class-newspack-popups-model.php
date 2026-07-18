@@ -913,34 +913,41 @@ final class Newspack_Popups_Model {
 		}
 		self::$is_resolving_above_header = true;
 
-		$cached = get_transient( self::HAS_ABOVE_HEADER_TRANSIENT );
-		if ( false !== $cached ) {
+		// Reset the recursion guard unconditionally: if get_transient() or the WP_Query
+		// throws (or a hook firing inside them does), leaving the guard set would make every
+		// later call this request short-circuit to false, silently re-delaying the reveal
+		// scripts - the exact symptom this path fixes.
+		try {
+			$cached = get_transient( self::HAS_ABOVE_HEADER_TRANSIENT );
+			if ( false !== $cached ) {
+				self::$has_above_header_memo = '1' === $cached;
+				return self::$has_above_header_memo;
+			}
+
+			$query = new WP_Query(
+				[
+					'post_type'              => Newspack_Popups::NEWSPACK_POPUPS_CPT,
+					'post_status'            => 'publish',
+					'posts_per_page'         => 1,
+					'fields'                 => 'ids',
+					'no_found_rows'          => true,
+					'update_post_meta_cache' => false,
+					'update_post_term_cache' => false,
+					'orderby'                => 'none', // Pure existence check - skip the default post_date filesort.
+					'meta_key'               => 'placement', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+					'meta_value'             => 'above_header', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+				]
+			);
+			$has_above_header = $query->have_posts();
+
+			set_transient( self::HAS_ABOVE_HEADER_TRANSIENT, $has_above_header ? '1' : '0', DAY_IN_SECONDS );
+
+			self::$has_above_header_memo = $has_above_header;
+
+			return $has_above_header;
+		} finally {
 			self::$is_resolving_above_header = false;
-			self::$has_above_header_memo     = '1' === $cached;
-			return self::$has_above_header_memo;
 		}
-
-		$query = new WP_Query(
-			[
-				'post_type'              => Newspack_Popups::NEWSPACK_POPUPS_CPT,
-				'post_status'            => 'publish',
-				'posts_per_page'         => 1,
-				'fields'                 => 'ids',
-				'no_found_rows'          => true,
-				'update_post_meta_cache' => false,
-				'update_post_term_cache' => false,
-				'meta_key'               => 'placement', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
-				'meta_value'             => 'above_header', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
-			]
-		);
-		$has_above_header = $query->have_posts();
-
-		set_transient( self::HAS_ABOVE_HEADER_TRANSIENT, $has_above_header ? '1' : '0', DAY_IN_SECONDS );
-
-		self::$is_resolving_above_header = false;
-		self::$has_above_header_memo     = $has_above_header;
-
-		return $has_above_header;
 	}
 
 	/**

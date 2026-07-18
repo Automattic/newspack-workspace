@@ -47,6 +47,11 @@ class Newspack_Test_Perfmatters extends WP_UnitTestCase {
 
 		$this->assertContains( 'newspack-popups', $options['assets']['js_exclusions'] );
 		$this->assertContains( 'newspack-plugin', $options['assets']['js_exclusions'] );
+
+		// `window.newspack` is an inline token; deferral only applies to external <script src>
+		// files, so it is intentionally kept out of the defer exclusions even while present in
+		// the delay exclusions. Assert the asymmetry so the two lists cannot silently drift.
+		$this->assertNotContains( 'window.newspack', $options['assets']['js_exclusions'] );
 	}
 
 	/**
