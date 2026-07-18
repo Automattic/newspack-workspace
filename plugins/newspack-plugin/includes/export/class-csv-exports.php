@@ -283,7 +283,7 @@ final class CSV_Exports {
 	public static function ajax_export() {
 		\check_ajax_referer( self::AJAX_NONCE_ACTION, 'security' );
 
-		$type = isset( $_POST['export'] ) ? \sanitize_key( $_POST['export'] ) : '';
+		$type = isset( $_POST['export'] ) ? \sanitize_key( \wp_unslash( $_POST['export'] ) ) : '';
 		if ( ! self::current_user_can_export( $type ) ) {
 			\wp_send_json_error(
 				[ 'message' => __( 'You do not have permission to export this data.', 'newspack-plugin' ) ],
@@ -377,7 +377,7 @@ final class CSV_Exports {
 			\wp_die( \esc_html__( 'Invalid download link.', 'newspack-plugin' ), '', 403 );
 		}
 
-		$type = isset( $_GET['export'] ) ? \sanitize_key( $_GET['export'] ) : '';
+		$type = isset( $_GET['export'] ) ? \sanitize_key( \wp_unslash( $_GET['export'] ) ) : '';
 		if ( ! self::current_user_can_export( $type ) ) {
 			\wp_die( \esc_html__( 'You do not have permission to download this export.', 'newspack-plugin' ), '', 403 );
 		}
@@ -401,7 +401,9 @@ final class CSV_Exports {
 		if ( ! file_exists( $exporter->get_export_file_path() ) ) {
 			\wp_die( \esc_html__( 'This download link has expired. Please run the export again.', 'newspack-plugin' ), '', 410 );
 		}
-		$exporter->export();
+		// Streamed rather than WC's export(), which loads the whole file into
+		// memory and can OOM on a large PII export (see stream_export()).
+		$exporter->stream_export();
 	}
 
 	/**

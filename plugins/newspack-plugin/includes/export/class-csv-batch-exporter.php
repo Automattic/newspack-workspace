@@ -111,9 +111,53 @@ abstract class CSV_Batch_Exporter extends \WC_CSV_Batch_Exporter {
 	}
 
 	/**
+	 * Stream the assembled export (headers row + data) to the browser, delete
+	 * the temp files, and exit. Used by the admin download in place of the
+	 * parent's export().
+	 *
+	 * The parent WC_CSV_Batch_Exporter::export() sends get_headers_row_file()
+	 * . get_file(), and get_file() reads the entire data file into a single
+	 * PHP string — so peak memory is roughly the full file size and a large
+	 * PII export (100k+ rows) can exceed memory_limit and fail the download
+	 * after the multi-step build already succeeded. Streaming the data file
+	 * keeps memory flat regardless of export size (the same reason save_to()
+	 * streams for the CLI path).
+	 *
+	 * @return void
+	 */
+	public function stream_export(): void {
+		$this->send_headers();
+
+		// Discard any active output buffering so fpassthru() streams straight
+		// to the client instead of buffering the whole file back into memory.
+		while ( ob_get_level() > 0 ) {
+			ob_end_clean();
+		}
+
+		// The headers row is small; get_headers_row_file() also regenerates it
+		// when the temp file is missing.
+		echo $this->get_headers_row_file(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+
+		// phpcs:disable WordPress.WP.AlternativeFunctions.file_system_operations_fopen, WordPress.WP.AlternativeFunctions.file_system_operations_fclose, WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_unlink, WordPress.WP.AlternativeFunctions.file_system_operations_fpassthru
+		$data_file = $this->get_file_path();
+		$data      = file_exists( $data_file ) ? fopen( $data_file, 'r' ) : false;
+		if ( $data ) {
+			fpassthru( $data );
+			fclose( $data );
+		}
+		foreach ( [ $this->get_file_path(), $this->get_headers_row_file_path() ] as $temp_file ) {
+			if ( file_exists( $temp_file ) ) {
+				unlink( $temp_file );
+			}
+		}
+		// phpcs:enable
+		die();
+	}
+
+	/**
 	 * Save the assembled export (headers row + data) to a path and remove
 	 * the temp files. Used by the WP-CLI commands; the admin flow streams
-	 * via export() instead.
+	 * via stream_export() instead.
 	 *
 	 * Streams the data file instead of concatenating in memory (a large
 	 * export would otherwise peak at ~2x file size), and keeps the temp

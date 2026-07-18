@@ -98,10 +98,14 @@ class Subscriptions_CSV_Exporter extends CSV_Batch_Exporter {
 	 * stable key keeps offset pagination consistent when subscriptions are
 	 * created mid-export — both order datastores map 'ID' to the primary key).
 	 *
-	 * @param array $params Parsed query-string params from the admin list.
+	 * @param array  $params    Parsed query-string params from the admin list.
+	 * @param string $cache_key Per-run cache key (the export filename) used to
+	 *                          memoize the product-filter ID set across the
+	 *                          run's pages; '' disables caching (the default,
+	 *                          keeping the method pure for direct callers).
 	 * @return array Query args.
 	 */
-	public static function build_query_args( array $params ): array {
+	public static function build_query_args( array $params, string $cache_key = '' ): array {
 		// Array-shaped params (a mangled ?m[]=... URL) would TypeError in the
 		// string handling below; degrade to "filter ignored" instead.
 		$params = array_filter( \wc_clean( $params ), 'is_scalar' );
@@ -129,7 +133,7 @@ class Subscriptions_CSV_Exporter extends CSV_Batch_Exporter {
 		// any other ID restriction. Never pass product_id to the query
 		// functions directly — that path runs unpaged.
 		if ( ! empty( $params['_wcs_product'] ) ) {
-			$product_subscription_ids = array_keys( \wcs_get_subscriptions_for_product( absint( $params['_wcs_product'] ) ) );
+			$product_subscription_ids = self::get_product_subscription_ids( absint( $params['_wcs_product'] ), $cache_key );
 			$args                     = \WCS_Admin_Post_Types::set_post__in_query_var( $args, $product_subscription_ids );
 		}
 
@@ -192,10 +196,46 @@ class Subscriptions_CSV_Exporter extends CSV_Batch_Exporter {
 	}
 
 	/**
+	 * Resolve a product's subscription ID set, memoized for the duration of one
+	 * export run.
+	 *
+	 * WCS resolves this via wcs_get_subscriptions_for_product(), an unpaged
+	 * (LIMIT -1) query that — unlike the customer store — it does not cache, so
+	 * a paged export would otherwise re-run it (and pass the full ID set as
+	 * post__in) on every page. When a per-run cache key is given, the result
+	 * is stored in a
+	 * short-lived transient so it resolves once per run instead of once per
+	 * page. The key is the export filename, which is unique per run, so a later
+	 * run always re-resolves against current data.
+	 *
+	 * @param int    $product_id Product ID.
+	 * @param string $cache_key  Per-run cache key, or '' to skip caching.
+	 * @return int[] Subscription IDs.
+	 */
+	private static function get_product_subscription_ids( int $product_id, string $cache_key ): array {
+		$transient = '' !== $cache_key
+			? 'newspack_export_product_subs_' . md5( $cache_key . ':' . $product_id )
+			: '';
+		if ( '' !== $transient ) {
+			$cached = \get_transient( $transient );
+			if ( is_array( $cached ) ) {
+				return $cached;
+			}
+		}
+		$ids = array_map( 'intval', array_keys( \wcs_get_subscriptions_for_product( $product_id ) ) );
+		if ( '' !== $transient ) {
+			\set_transient( $transient, $ids, HOUR_IN_SECONDS );
+		}
+		return $ids;
+	}
+
+	/**
 	 * Prepare one page of subscription rows.
 	 */
 	public function prepare_data_to_export(): void {
-		$args             = self::build_query_args( $this->list_params );
+		// Pass the run's filename so a product filter's ID set is resolved once
+		// per run rather than re-queried on every page.
+		$args             = self::build_query_args( $this->list_params, $this->get_filename() );
 		$args['limit']    = $this->get_limit();
 		$args['offset']   = ( $this->get_page() - 1 ) * $this->get_limit();
 		$args['paginate'] = true;
@@ -260,7 +300,7 @@ class Subscriptions_CSV_Exporter extends CSV_Batch_Exporter {
 			'start_date'          => self::get_date_field( $subscription, 'start' ),
 			'trial_end_date'      => self::get_date_field( $subscription, 'trial_end' ),
 			'next_payment_date'   => self::get_date_field( $subscription, 'next_payment' ),
-			'last_payment_date'   => self::get_date_field( $subscription, 'last_payment' ),
+			'last_payment_date'   => self::get_date_field( $subscription, 'last_order_date_created' ),
 			'end_date'            => self::get_date_field( $subscription, 'end' ),
 			'billing_period'      => $subscription->get_billing_period(),
 			'billing_interval'    => $subscription->get_billing_interval(),

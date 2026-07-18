@@ -173,6 +173,12 @@ class Export {
 		if ( ! $exporter->save_to( $output ) ) {
 			WP_CLI::error( sprintf( 'Could not write to %s.', $output ) );
 		}
-		WP_CLI::success( sprintf( 'Exported %d rows to %s.', $exported, $output ) );
+		// The no-progress guard can break the loop before completion, shipping
+		// a partial CSV; say so rather than reporting an unqualified success.
+		if ( $percent >= 100 ) {
+			WP_CLI::success( sprintf( 'Exported %d rows to %s.', $exported, $output ) );
+		} else {
+			WP_CLI::warning( sprintf( 'Export incomplete: wrote %d rows to %s before stopping early.', $exported, $output ) );
+		}
 	}
 }
