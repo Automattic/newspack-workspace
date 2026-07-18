@@ -35,9 +35,9 @@ describe( 'Accordion dividers', () => {
 		expect( container.querySelector( '.newspack-accordion' ).lastElementChild ).not.toHaveClass( 'newspack-divider' );
 	} );
 
-	it( 'renders tertiary dividers', () => {
+	it( 'renders secondary dividers', () => {
 		const { container } = renderPanels( 2 );
-		expect( dividers( container )[ 0 ] ).toHaveClass( 'newspack-divider--variant-tertiary' );
+		expect( dividers( container )[ 0 ] ).toHaveClass( 'newspack-divider--variant-secondary' );
 	} );
 } );
 
