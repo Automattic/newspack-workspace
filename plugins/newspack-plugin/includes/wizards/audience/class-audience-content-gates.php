@@ -175,8 +175,8 @@ class Audience_Content_Gates extends Wizard {
 				'permission_callback' => [ $this, 'api_permissions_check' ],
 				'args'                => [
 					'advanced_settings' => [
-						'type'       => 'object',
-						'properties' => [
+						'type'              => 'object',
+						'properties'        => [
 							'restrict_feeds'        => [ 'type' => 'boolean' ],
 							'feed_restriction_mode' => [
 								'type' => 'string',
@@ -184,6 +184,11 @@ class Audience_Content_Gates extends Wizard {
 							],
 							'newsletter_link_bypass_enabled' => [ 'type' => 'boolean' ],
 						],
+						// Validate the whole object against the schema so the nested
+						// feed_restriction_mode enum is actually enforced (a bad value
+						// returns a 400 instead of being silently coerced to exclude).
+						'validate_callback' => 'rest_validate_request_arg',
+						'sanitize_callback' => 'rest_sanitize_request_arg',
 					],
 				],
 			]

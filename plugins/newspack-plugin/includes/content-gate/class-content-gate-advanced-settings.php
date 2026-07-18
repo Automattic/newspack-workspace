@@ -69,7 +69,13 @@ class Content_Gate_Advanced_Settings {
 	public static function init() {
 		add_filter( 'the_content_feed', [ __CLASS__, 'restrict_feed_content' ], PHP_INT_MAX );
 		add_filter( 'the_excerpt_rss', [ __CLASS__, 'restrict_feed_excerpt' ], PHP_INT_MAX );
-		add_action( 'pre_get_posts', [ __CLASS__, 'overfetch_restricted_feed' ] );
+		// Runs at PHP_INT_MAX so the over-fetch reads posts_per_rss *after* every
+		// other feed-query modifier has set it. Other pre_get_posts writers (e.g.
+		// the RSS-Enhancements module's modify_feed_query) run at the default
+		// priority 10 and overwrite posts_per_rss with the publisher's configured
+		// item count; capturing the trim target before them would trim partner
+		// feeds back to the stale default length even when nothing was restricted.
+		add_action( 'pre_get_posts', [ __CLASS__, 'overfetch_restricted_feed' ], PHP_INT_MAX );
 		add_filter( 'the_posts', [ __CLASS__, 'exclude_restricted_posts_from_feed' ], 10, 2 );
 	}
 
@@ -107,7 +113,7 @@ class Content_Gate_Advanced_Settings {
 	 *
 	 * @return string
 	 */
-	private static function sanitize_feed_mode( $mode ) {
+	private static function sanitize_feed_mode( mixed $mode ): string {
 		return in_array( $mode, [ self::FEED_MODE_TRUNCATE, self::FEED_MODE_EXCLUDE ], true ) ? $mode : self::FEED_MODE_EXCLUDE;
 	}
 
@@ -243,7 +249,18 @@ class Content_Gate_Advanced_Settings {
 	 * A feed's `posts_per_page` is derived from `posts_per_rss` in the
 	 * `is_feed` branch of WP_Query::get_posts(), which runs after `pre_get_posts`
 	 * — so inflating `posts_per_rss` here makes WP fetch a larger page, and the
-	 * original length is stashed for the trim step.
+	 * original length is stashed for the trim step. Hooked at PHP_INT_MAX (see
+	 * init) so it reads the length *after* other feed-query modifiers have set it,
+	 * capturing the publisher's real feed length rather than a stale default.
+	 *
+	 * Exclude is the site-wide default, so this over-fetch runs on every main feed
+	 * request whenever exclude is active — including on sites that restrict
+	 * nothing — fetching up to min(posts_per_rss × multiplier, FEED_OVERFETCH_MAX)
+	 * posts and evaluating is_post_restricted() on each in the_posts. Feed output
+	 * is normally page-cached, so only the first uncached request after a purge
+	 * (and aggregators hitting many category/author/tag variants) pays the
+	 * multiplier; the cost is bounded by FEED_OVERFETCH_MAX and the multiplier is
+	 * filterable.
 	 *
 	 * @param \WP_Query $wp_query The query about to run.
 	 */
@@ -331,7 +348,7 @@ class Content_Gate_Advanced_Settings {
 	 *
 	 * @return string
 	 */
-	private static function maybe_truncate_feed_string( $feed_string ) {
+	private static function maybe_truncate_feed_string( string $feed_string ): string {
 		$post = get_post();
 		if ( ! $post || self::FEED_MODE_OFF === self::get_feed_restriction_mode( $post ) ) {
 			return $feed_string;

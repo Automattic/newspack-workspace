@@ -375,10 +375,11 @@ class Test_Feed_Restriction extends \WP_UnitTestCase {
 				$captured = (int) $query->get( 'posts_per_rss' );
 			}
 		};
-		// Priority 11 runs after overfetch_restricted_feed() (default priority 10).
-		add_action( 'pre_get_posts', $capture, 11 );
+		// overfetch_restricted_feed() runs at PHP_INT_MAX; registering the capture
+		// at the same priority but later means it runs after the over-fetch.
+		add_action( 'pre_get_posts', $capture, PHP_INT_MAX );
 		$this->feed_post_ids();
-		remove_action( 'pre_get_posts', $capture, 11 );
+		remove_action( 'pre_get_posts', $capture, PHP_INT_MAX );
 
 		return $captured;
 	}
@@ -522,5 +523,122 @@ class Test_Feed_Restriction extends \WP_UnitTestCase {
 		remove_filter( 'newspack_content_gate_feed_restriction_mode', $force_off );
 
 		$this->assertStringContainsString( 'PAID_FIVE', $feed_content, 'Filtering the mode to off should leave full content in the feed.' );
+	}
+
+	/**
+	 * The over-fetch honours a later pre_get_posts writer that raises
+	 * posts_per_rss (e.g. the RSS-Enhancements module's configured item count):
+	 * because overfetch_restricted_feed() runs at PHP_INT_MAX it reads the raised
+	 * length, so the feed is trimmed to the partner length (6), not the stale
+	 * default (3) — even when nothing is restricted. Regression guard for the
+	 * cross-module interaction where the trim target was captured too early.
+	 */
+	public function test_overfetch_target_reflects_later_pre_get_posts_writer() {
+		update_option( 'posts_per_rss', 3 );
+
+		// A partner-feed modifier raising posts_per_rss on the default priority,
+		// registered after content-gate's own load-time callback.
+		$raise_feed_length = function ( $query ) {
+			if ( $query->is_feed() && $query->is_main_query() ) {
+				$query->set( 'posts_per_rss', 6 );
+			}
+		};
+		add_action( 'pre_get_posts', $raise_feed_length, 10 );
+
+		// Nothing is restricted, so the exclude filter drops no items and the feed
+		// should come back at the full partner length.
+		$grant_all = function () {
+			return false;
+		};
+		add_filter( 'newspack_is_post_restricted', $grant_all, 99 );
+
+		$free_ids = [];
+		foreach ( range( 1, 7 ) as $day ) {
+			$free_ids[] = $this->factory->post->create(
+				[
+					'post_status' => 'publish',
+					'post_date'   => sprintf( '2019-02-%02d 00:00:00', $day ),
+				]
+			);
+		}
+
+		$feed_ids = $this->feed_post_ids();
+
+		remove_action( 'pre_get_posts', $raise_feed_length, 10 );
+		remove_filter( 'newspack_is_post_restricted', $grant_all, 99 );
+		foreach ( $free_ids as $id ) {
+			wp_delete_post( $id, true );
+		}
+
+		$this->assertCount( 6, $feed_ids, "Feed must honour a later writer's posts_per_rss (6), not the stale default (3)." );
+	}
+
+	/**
+	 * Paginated feed pages (paged > 1) are not over-fetched: inflating
+	 * posts_per_rss there would push core's offset past unrestricted posts. The
+	 * page keeps its requested length so later pages fall back to plain drop.
+	 */
+	public function test_overfetch_skips_paginated_feed_pages() {
+		update_option( 'posts_per_rss', 3 );
+
+		$captured = null;
+		$capture  = function ( $query ) use ( &$captured ) {
+			if ( $query->is_feed() && $query->is_main_query() ) {
+				$captured = (int) $query->get( 'posts_per_rss' );
+			}
+		};
+		add_action( 'pre_get_posts', $capture, PHP_INT_MAX );
+		$this->go_to( add_query_arg( 'paged', 2, get_feed_link( 'rss2' ) ) );
+		while ( have_posts() ) {
+			the_post();
+		}
+		wp_reset_postdata();
+		remove_action( 'pre_get_posts', $capture, PHP_INT_MAX );
+
+		// The over-fetch bails without touching the query var, so it stays unset
+		// (0) rather than the inflated 15 (3 × the default multiplier); WP then
+		// derives the page length straight from the posts_per_rss option.
+		$this->assertSame( 0, $captured, 'Paginated feed pages (paged > 1) must not be over-fetched.' );
+	}
+
+	/**
+	 * A non-positive over-fetch multiplier is clamped to 1 (max( 1, … )), so the
+	 * over-fetch collapses to the requested length and no inflation happens: a
+	 * rogue filter return can never shorten or empty the feed.
+	 */
+	public function test_overfetch_multiplier_clamps_to_minimum() {
+		update_option( 'posts_per_rss', 4 );
+
+		// Everything unrestricted, so the feed length is governed purely by the
+		// (clamped) over-fetch rather than by dropped items.
+		$grant_all = function () {
+			return false;
+		};
+		add_filter( 'newspack_is_post_restricted', $grant_all, 99 );
+
+		$free_ids = [];
+		foreach ( range( 1, 6 ) as $day ) {
+			$free_ids[] = $this->factory->post->create(
+				[
+					'post_status' => 'publish',
+					'post_date'   => sprintf( '2018-03-%02d 00:00:00', $day ),
+				]
+			);
+		}
+
+		$zero = function () {
+			return 0;
+		};
+		add_filter( 'newspack_content_gate_feed_overfetch_multiplier', $zero );
+
+		$feed_ids = $this->feed_post_ids();
+
+		remove_filter( 'newspack_content_gate_feed_overfetch_multiplier', $zero );
+		remove_filter( 'newspack_is_post_restricted', $grant_all, 99 );
+		foreach ( $free_ids as $id ) {
+			wp_delete_post( $id, true );
+		}
+
+		$this->assertCount( 4, $feed_ids, 'A non-positive multiplier must clamp to 1 and leave the feed at its requested length.' );
 	}
 }
