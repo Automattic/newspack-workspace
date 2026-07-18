@@ -20,6 +20,7 @@ jest.mock( '@wordpress/components', () => ( {
 } ) );
 jest.mock( '../../../../../packages/components/src', () => ( {
 	Accordion: ( { children } ) => children,
+	AccordionPanel: ( { children } ) => children,
 	Divider: () => null,
 	Grid: ( { children } ) => children,
 	SectionHeader: () => null,

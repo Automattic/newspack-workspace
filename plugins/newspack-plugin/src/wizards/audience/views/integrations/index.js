@@ -33,7 +33,7 @@ const AudienceIntegrations = ( props, ref ) => {
 	const [ activating, setActivating ] = useState( {} );
 	const [ loading, setLoading ] = useState( true );
 
-	const { addNotice } = useDispatch( WIZARD_STORE_NAMESPACE );
+	const { addNotice, removeNotice } = useDispatch( WIZARD_STORE_NAMESPACE );
 
 	const addEnabledNotice = useCallback(
 		( integrationId, enabled, data ) => {
@@ -79,6 +79,9 @@ const AudienceIntegrations = ( props, ref ) => {
 			}
 			setInFlightChanges( prev => ( { ...prev, [ integrationId ]: changes } ) );
 			setSaving( prev => ( { ...prev, [ integrationId ]: true } ) );
+			// Drop the previous attempt's snackbar so a retry doesn't stack a second
+			// notice under the same id.
+			removeNotice( `integration-saved-${ integrationId }` );
 			return apiFetch( {
 				path: `${ API_PATH }/${ integrationId }`,
 				method: 'POST',
@@ -90,6 +93,11 @@ const AudienceIntegrations = ( props, ref ) => {
 						const next = { ...prev };
 						delete next[ integrationId ];
 						return next;
+					} );
+					addNotice( {
+						id: `integration-saved-${ integrationId }`,
+						type: 'success',
+						message: __( 'Settings saved.', 'newspack-plugin' ),
 					} );
 				} )
 				.catch( error => {
@@ -107,7 +115,7 @@ const AudienceIntegrations = ( props, ref ) => {
 					setSaving( prev => ( { ...prev, [ integrationId ]: false } ) );
 				} );
 		},
-		[ addNotice ]
+		[ addNotice, removeNotice ]
 	);
 
 	const handleToggleEnabled = useCallback(
