@@ -41,7 +41,7 @@ const valuesMatch = ( a, b ) => {
 // the view both reset the draft structurally — no unmount cleanup effect needed.
 export const ConfigureView = props => <ConfigureViewInner key={ props.match?.params?.integrationId } { ...props } />;
 
-const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, onSave, match } ) => {
+const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, onSave, onDiscardChanges, match } ) => {
 	const { setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
 
 	const integrationId = match?.params?.integrationId;
@@ -57,8 +57,7 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 	const draftRef = useRef( draft );
 	draftRef.current = draft;
 
-	// Diff draft values against the saved values, not mere key presence, so
-	// editing a field back to its original value disarms the guard.
+	// Diff against saved values, not key presence, so a revert disarms the guard.
 	const hasPending = useMemo( () => {
 		const keys = Object.keys( draft );
 		if ( keys.length === 0 ) {
@@ -102,10 +101,9 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 		return { settingsFields: settings, inboundField: inbound, outboundField: outbound };
 	}, [ integration?.settings ] );
 
-	// The parent clears the submitted change from its retry buffer on save
-	// success (a failed save keeps it): drop the submitted keys not re-edited
-	// since. Matching the submitted value, not the server's, survives backend
-	// normalization (`'' → 'NP_'`, `'5' → 5`) that value-equality would misread.
+	// The parent clears the retry buffer on save success; drop submitted keys not
+	// re-edited since. Matching the submitted value (not the server's) survives
+	// backend normalization (`'' → 'NP_'`, `'5' → 5`) that equality would misread.
 	const lastInFlightRef = useRef( inFlightChanges?.[ integrationId ] );
 	useEffect( () => {
 		const submitted = lastInFlightRef.current;
@@ -128,6 +126,14 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 			return changed ? next : prev;
 		} );
 	}, [ inFlightChanges, integrationId ] );
+
+	// Clear the retry buffer once a reverted draft is clean, else it re-seeds the
+	// stale failed edit on the next visit.
+	useEffect( () => {
+		if ( ! hasPending && ! integrationSaving && inFlightChanges?.[ integrationId ] ) {
+			onDiscardChanges?.( integrationId );
+		}
+	}, [ hasPending, integrationSaving, inFlightChanges, integrationId, onDiscardChanges ] );
 
 	// Set the static header data (name/title/description) only when the
 	// integration identity changes. Avoids per-keystroke churn from

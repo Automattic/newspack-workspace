@@ -66,6 +66,7 @@ const buildConfigureView = ( {
 	inFlightChanges = {},
 	saving = {},
 	onSave = jest.fn( () => Promise.resolve() ),
+	onDiscardChanges = jest.fn(),
 	integrationId = 'esp',
 } = {} ) => (
 	<ConfigureView
@@ -74,6 +75,7 @@ const buildConfigureView = ( {
 		inFlightChanges={ inFlightChanges }
 		saving={ saving }
 		onSave={ onSave }
+		onDiscardChanges={ onDiscardChanges }
 		match={ { params: { integrationId } } }
 	/>
 );
@@ -118,6 +120,20 @@ describe( 'ConfigureView unsaved-changes guard', () => {
 		expect( useUnsavedChangesDialog ).toHaveBeenLastCalledWith( { when: true } );
 		fireEvent.change( input, { target: { value: '' } } );
 		expect( useUnsavedChangesDialog ).toHaveBeenLastCalledWith( { when: false } );
+	} );
+
+	// Reverting a seeded failed-save edit must clear the parent's retry buffer.
+	it( 'discards the retry buffer when a seeded draft is reverted to its saved value', () => {
+		const onDiscardChanges = jest.fn();
+		const seeded = {
+			esp: { ...INTEGRATION, settings: [ { key: 'mailchimp_audience_id', type: 'text', label: 'Audience ID', value: 'saved' } ] },
+		};
+		render(
+			buildConfigureView( { integrations: seeded, inFlightChanges: { esp: { mailchimp_audience_id: 'failed-edit' } }, onDiscardChanges } )
+		);
+		expect( onDiscardChanges ).not.toHaveBeenCalled();
+		fireEvent.change( screen.getByLabelText( 'Audience ID' ), { target: { value: 'saved' } } );
+		expect( onDiscardChanges ).toHaveBeenCalledWith( 'esp' );
 	} );
 
 	// The "integration not found" branch renders no dialog, so the guard must

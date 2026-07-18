@@ -303,6 +303,37 @@ describe( 'AudienceIntegrations retry buffer', () => {
 		expect( captured.props.inFlightChanges.esp ).toEqual( { mailchimp_audience_id: 'from-configure' } );
 	} );
 
+	// A key saved via setup-and-enable is dropped from the buffer; others stay.
+	it( 'drops only the overlapping keys from the retry buffer on setup-and-enable', async () => {
+		apiFetch.mockReset();
+		apiFetch.mockRejectedValueOnce( new Error( 'save failed' ) );
+		await act( async () => {
+			captured.props.onSave( 'esp', { mailchimp_audience_id: 'A', other_field: 'keep' } ).catch( () => {} );
+			await flushPromises();
+		} );
+		expect( captured.props.inFlightChanges.esp ).toEqual( { mailchimp_audience_id: 'A', other_field: 'keep' } );
+
+		apiFetch.mockResolvedValue( SETTINGS_MAP );
+		await act( async () => {
+			await captured.props.onSetupAndEnable( 'esp', { mailchimp_audience_id: 'B' } );
+		} );
+		expect( captured.props.inFlightChanges.esp ).toEqual( { other_field: 'keep' } );
+	} );
+
+	it( 'clears the retry buffer when a ConfigureView discards its changes', async () => {
+		apiFetch.mockReset();
+		apiFetch.mockRejectedValueOnce( new Error( 'save failed' ) );
+		await act( async () => {
+			captured.props.onSave( 'esp', { mailchimp_audience_id: 'A' } ).catch( () => {} );
+			await flushPromises();
+		} );
+		expect( captured.props.inFlightChanges.esp ).toEqual( { mailchimp_audience_id: 'A' } );
+		act( () => {
+			captured.props.onDiscardChanges( 'esp' );
+		} );
+		expect( captured.props.inFlightChanges.esp ).toBeUndefined();
+	} );
+
 	it( 'marks the integration saving while the request is in flight', async () => {
 		let resolveSave;
 		apiFetch.mockImplementation(

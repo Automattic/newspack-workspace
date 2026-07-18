@@ -152,23 +152,49 @@ const AudienceIntegrations = ( props, ref ) => {
 				path: `${ API_PATH }/${ integrationId }`,
 				method: 'POST',
 				data: { settings },
-			} ).then( () =>
-				apiFetch( {
+			} ).then( () => {
+				// Drop only the just-saved keys from the retry buffer, so an unrelated
+				// pending edit survives but a stale one can't later overwrite the server.
+				setInFlightChanges( prev => {
+					const buffered = prev[ integrationId ];
+					if ( ! buffered ) {
+						return prev;
+					}
+					const remaining = { ...buffered };
+					Object.keys( settings ).forEach( key => delete remaining[ key ] );
+					const next = { ...prev };
+					if ( Object.keys( remaining ).length ) {
+						next[ integrationId ] = remaining;
+					} else {
+						delete next[ integrationId ];
+					}
+					return next;
+				} );
+				return apiFetch( {
 					path: `${ API_PATH }/${ integrationId }/enabled`,
 					method: 'POST',
 					data: { enabled: true },
 				} ).then( data => {
-					// Swap in the integration only once both steps succeed, so an enable
-					// failure leaves the modal's filled fields in place for a retry. The
-					// retry buffer is untouched: this flow saves only the modal's missing
-					// fields and must not discard an unrelated pending ConfigureView edit.
+					// Swap in state only once both steps succeed, so an enable failure
+					// keeps the modal's filled fields for a retry.
 					setIntegrations( data );
 					addEnabledNotice( integrationId, true, data );
 					return data;
-				} )
-			),
+				} );
+			} ),
 		[ addEnabledNotice ]
 	);
+
+	const handleDiscardChanges = useCallback( integrationId => {
+		setInFlightChanges( prev => {
+			if ( ! prev[ integrationId ] ) {
+				return prev;
+			}
+			const next = { ...prev };
+			delete next[ integrationId ];
+			return next;
+		} );
+	}, [] );
 
 	const handleActivatePlugin = useCallback(
 		pluginSlugs => {
@@ -230,6 +256,7 @@ const AudienceIntegrations = ( props, ref ) => {
 		activating,
 		loading,
 		onSave: handleSave,
+		onDiscardChanges: handleDiscardChanges,
 		onToggleEnabled: handleToggleEnabled,
 		onActivatePlugin: handleActivatePlugin,
 		onSetupAndEnable: handleSetupAndEnable,
