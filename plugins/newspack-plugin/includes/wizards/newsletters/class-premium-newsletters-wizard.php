@@ -140,6 +140,22 @@ class Premium_Newsletters_Wizard extends Wizard {
 			]
 		);
 
+		register_rest_route(
+			NEWSPACK_API_NAMESPACE,
+			'/wizard/' . $this->slug . '/(?P<id>\d+)/duplicate',
+			[
+				'methods'             => 'POST',
+				'callback'            => [ $this, 'api_duplicate_gate' ],
+				'permission_callback' => [ $this, 'api_permissions_check' ],
+				'args'                => [
+					'id' => [
+						'type'              => 'integer',
+						'sanitize_callback' => 'absint',
+					],
+				],
+			]
+		);
+
 		$this->register_preferences_route();
 	}
 
@@ -358,6 +374,34 @@ class Premium_Newsletters_Wizard extends Wizard {
 		}
 		wp_delete_post( $id, true );
 		return rest_ensure_response( true );
+	}
+
+	/**
+	 * Duplicate a gate.
+	 *
+	 * @param \WP_REST_Request $request The request object.
+	 *
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public function api_duplicate_gate( $request ) {
+		$id   = $request->get_param( 'id' );
+		$gate = get_post( $id );
+		if ( ! $gate ) {
+			return new \WP_Error( 'invalid_gate_id', __( 'Invalid gate ID.', 'newspack-plugin' ), [ 'status' => 400 ] );
+		}
+		if ( Content_Gate::GATE_CPT !== $gate->post_type ) {
+			return new \WP_Error( 'invalid_gate_type', __( 'Invalid gate type.', 'newspack-plugin' ), [ 'status' => 400 ] );
+		}
+		// A copy of a content gate belongs to the Access control list, where this wizard could not show it.
+		if ( ! get_post_meta( $id, 'is_newsletter', true ) ) {
+			return new \WP_Error( 'invalid_newsletter_gate', __( 'Invalid newsletter gate.', 'newspack-plugin' ), [ 'status' => 400 ] );
+		}
+
+		$new_gate_id = Content_Gate::duplicate_gate( $id );
+		if ( is_wp_error( $new_gate_id ) ) {
+			return $new_gate_id;
+		}
+		return rest_ensure_response( Content_Gate::get_gate( $new_gate_id ) );
 	}
 
 	/**
