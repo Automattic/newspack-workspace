@@ -690,14 +690,43 @@ class Content_Gate {
 	 * list — and priority is what orders overlapping gates, so a tie leaves an arbitrary gate
 	 * deciding what a reader sees.
 	 *
+	 * This reads the current max and returns max + 1, a check-then-act pair that isn't atomic:
+	 * two concurrent creations could read the same max and both claim it. Gate creation is a
+	 * one-at-a-time admin action, so that race can't realistically happen and no lock is warranted.
+	 *
+	 * Only the single highest-priority gate in the bucket is queried (its ID and priority meta),
+	 * rather than hydrating every gate, since that top priority is all this needs.
+	 *
 	 * @param string $post_type     Post type whose bucket the new gate belongs to. Defaults to self::GATE_CPT.
 	 * @param bool   $is_newsletter Whether the new gate is a premium newsletter gate.
 	 *
 	 * @return int
 	 */
 	public static function get_next_gate_priority( $post_type = self::GATE_CPT, $is_newsletter = false ) {
-		$bucket_gates = self::get_gates( $post_type, null, $is_newsletter );
-		return $bucket_gates ? max( wp_list_pluck( $bucket_gates, 'priority' ) ) + 1 : 0;
+		$top_gate_ids = get_posts(
+			[
+				'post_type'      => $post_type,
+				'post_status'    => self::get_post_statuses(),
+				'posts_per_page' => 1,
+				'fields'         => 'ids',
+				'orderby'        => [ 'priority' => 'DESC' ],
+				'meta_query'     => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+					'relation' => 'AND',
+					'priority' => [
+						'key'  => 'gate_priority',
+						'type' => 'NUMERIC',
+					],
+					[
+						'key'     => 'is_newsletter',
+						'compare' => $is_newsletter ? 'EXISTS' : 'NOT EXISTS',
+					],
+				],
+			]
+		);
+		if ( empty( $top_gate_ids ) ) {
+			return 0;
+		}
+		return (int) get_post_meta( $top_gate_ids[0], 'gate_priority', true ) + 1;
 	}
 
 	/**
