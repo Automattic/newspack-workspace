@@ -518,11 +518,17 @@ class Group_Subscription_Invite {
 		}
 		$invite = self::get_invite_by_key( $subscription, $key );
 		if ( ! $invite || $invite['email'] !== $email ) {
-			// No need to display an error if the user is already a member: just give a success message.
+			// No need to display an error if the invite is already fulfilled: just give a success
+			// message. This covers a direct member add cancelling the invite before it is accepted.
+			// Check both the current user and the invited-email user (a direct add cancels the invite
+			// for the email, so the invitee may already be a member without being the current user).
+			$invited_user    = get_user_by( 'email', $email );
+			$invited_user_id = $invited_user ? $invited_user->ID : 0;
 			$current_user_id = get_current_user_id();
 			if (
 				Group_Subscription::user_is_manager( $current_user_id, $subscription )
 				|| Group_Subscription::user_is_member( $current_user_id, $subscription )
+				|| ( $invited_user_id && Group_Subscription::user_is_member( $invited_user_id, $subscription ) )
 			) {
 				return true;
 			}

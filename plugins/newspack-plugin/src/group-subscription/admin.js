@@ -255,7 +255,6 @@ import './admin.scss';
 	function cancelInvite( e ) {
 		e.preventDefault();
 		const $this = $( e.currentTarget );
-		const $container = $this.closest( '.newspack-group-subscription__container' );
 		const $listItem = $this.closest( 'li' );
 		$listItem.addClass( 'newspack-group-subscription__to-remove' );
 		$listItem.find( '.error' ).remove();
@@ -265,6 +264,7 @@ import './admin.scss';
 			$this.parent().removeClass( 'newspack-group-subscription__to-remove' );
 			return;
 		}
+		const $container = $this.closest( '.newspack-group-subscription__container' );
 		clearInviteSuccess( $container );
 		const subscriptionId = $container.data( 'subscription-id' );
 		fetch( `${ newspackGroupSubscriptions.apiUrl }/invite`, {
