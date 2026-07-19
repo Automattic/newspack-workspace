@@ -1,3 +1,10 @@
+## newspack-block-theme [1.29.1](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.29.0...newspack-block-theme@1.29.1) (2026-07-09)
+
+
+### Bug Fixes
+
+* **themes:** remove unintended highlight behind colored text ([#574](https://github.com/Automattic/newspack-workspace/issues/574)) ([d94254c](https://github.com/Automattic/newspack-workspace/commit/d94254c6427f689d70c140b710a017a102c07a8f))
+
 # newspack-block-theme [1.29.0](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.28.6...newspack-block-theme@1.29.0) (2026-06-29)
 
 

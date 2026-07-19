@@ -20,6 +20,9 @@ import { PREMIUM_NEWSLETTERS_WIZARD_SLUG, BASE_HEADER_TEXT } from './consts';
 import PremiumNewslettersList from './premium-newsletters-list';
 import Edit from '../../../audience/views/content-gates/edit';
 
+const ROOT = [ { label: __( 'Newsletters', 'newspack-plugin' ) } ];
+const PREMIUM_BREADCRUMBS = [ ...ROOT, { label: __( 'Premium', 'newspack-plugin' ) } ];
+
 const PremiumNewsletters = ( props, ref ) => {
 	const { updateWizardSettings } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const updateGatesData = gates => {
@@ -33,21 +36,22 @@ const PremiumNewsletters = ( props, ref ) => {
 	return (
 		<Wizard
 			apiSlug={ PREMIUM_NEWSLETTERS_WIZARD_SLUG }
-			title={ __( 'Access control', 'newspack-plugin' ) }
+			title={ __( 'Access Control', 'newspack-plugin' ) }
 			headerText={ BASE_HEADER_TEXT }
 			ref={ ref }
 			sharedProps={ { updateGatesData } }
-			fixedHeader
 			sections={ [
 				{
 					path: '/content-gates',
 					render: PremiumNewslettersList,
+					breadcrumbs: PREMIUM_BREADCRUMBS,
 				},
 				{
 					path: '/edit/:id/:type?',
 					render: Edit,
 					isHidden: true,
 					exact: true,
+					breadcrumbs: PREMIUM_BREADCRUMBS,
 					props: {
 						isNewsletter: true,
 						slug: PREMIUM_NEWSLETTERS_WIZARD_SLUG,

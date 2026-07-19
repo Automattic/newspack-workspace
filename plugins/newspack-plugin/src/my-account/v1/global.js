@@ -46,7 +46,7 @@ domReady( () => {
 				if ( ! text ) {
 					return;
 				}
-				createNotice( text, 'success' );
+				createNotice( text );
 				el.remove();
 			} );
 	}

@@ -74,7 +74,7 @@ export default function AdvertisersListScreen() {
 					: [
 							{
 								type: 'primary',
-								label: __( 'Add new advertiser', 'newspack-newsletters' ),
+								label: __( 'Add Advertiser', 'newspack-newsletters' ),
 								onClick: openAdd,
 							},
 					  ],
@@ -100,7 +100,7 @@ export default function AdvertisersListScreen() {
 						'Group ads by the advertiser they belong to so you can track and report on each one separately.',
 						'newspack-newsletters'
 					) }
-					ctaTitle={ __( 'Add new advertiser', 'newspack-newsletters' ) }
+					ctaTitle={ __( 'Add Advertiser', 'newspack-newsletters' ) }
 					ctaOnClick={ openAdd }
 				/>
 			) : (

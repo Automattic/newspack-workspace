@@ -170,12 +170,25 @@ function render_block( $attrs ) {
 	$display_input_label = ! empty( $attrs['displayInputLabels'] );
 	$email_label         = $display_input_label ? $attrs['emailLabel'] : '';
 	$input_id            = sprintf( 'newspack-newsletters-subscribe-block-input-%s', $block_id );
+
+	// After-subscribe redirect config. Mirrors the Checkout Button block's
+	// afterSuccess* attributes; the Continue button + redirect are wired up on
+	// the front end in view.js (see the success branch of form.endFlow).
+	$after_success_behavior = $attrs['afterSuccessBehavior'] ?? '';
+	$after_success_url      = $attrs['afterSuccessURL'] ?? '';
+	$after_success_label    = $attrs['afterSuccessButtonLabel'] ?? '';
 	// phpcs:enable
 	ob_start();
 	?>
 	<div
 		class="wp-block-newspack-newsletters-subscribe newspack-newsletters-subscribe <?php echo esc_attr( get_block_classes( $attrs ) ); ?>"
 		data-success-message="<?php echo \esc_attr( $attrs['successMessage'] ); ?>"
+		<?php if ( $after_success_behavior ) : ?>
+			data-after-success-behavior="<?php echo \esc_attr( $after_success_behavior ); ?>"
+			<?php // The redirect URL is escaped with esc_url() rather than the Checkout Button's esc_attr(): it strips javascript:/data: schemes and only ever feeds window.location.href. This intentionally diverges from strict parity — esc_url() rewrites a schemeless relative path without a leading slash (e.g. "foo/bar" → "http://foo/bar"), so publishers should use a leading slash ("/foo/bar") or an absolute URL for a same-site destination. ?>
+			data-after-success-url="<?php echo \esc_url( $after_success_url ); ?>"
+			data-after-success-label="<?php echo \esc_attr( $after_success_label ); ?>"
+		<?php endif; ?>
 		<?php echo $subscribed ? 'data-status="200"' : ''; ?>
 	>
 		<?php if ( ! $subscribed ) : ?>
