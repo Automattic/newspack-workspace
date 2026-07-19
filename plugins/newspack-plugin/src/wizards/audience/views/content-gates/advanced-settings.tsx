@@ -87,7 +87,7 @@ const AdvancedSettings = ( { closeModal, showModal }: { closeModal: () => void; 
 	updateConfig.current = handleUpdateConfig;
 	return (
 		showModal && (
-			<Modal onClose={ closeModal } size="medium" title={ __( 'Advanced settings', 'newspack-plugin' ) } onRequestClose={ closeModal }>
+			<Modal onClose={ closeModal } size="medium" title={ __( 'Advanced Settings', 'newspack-plugin' ) } onRequestClose={ closeModal }>
 				<VStack>
 					<ToggleControl
 						label={ __( 'Restrict content in feeds', 'newspack-plugin' ) }

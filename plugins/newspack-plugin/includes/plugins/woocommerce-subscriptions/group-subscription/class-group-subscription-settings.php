@@ -218,6 +218,25 @@ class Group_Subscription_Settings {
 	}
 
 	/**
+	 * Normalize a member limit to the owner-inclusive contract.
+	 *
+	 * The limit counts the owner, so a group must be allowed at least 2 seats to have
+	 * room for one member besides them. A positive limit is floored to that minimum;
+	 * unlimited (0) is left untouched. Applied on every read as well as on write, so
+	 * limits stored under the earlier "members in addition to the owner" meaning — a
+	 * stored 1 would otherwise leave zero usable member seats — stay workable without
+	 * a re-save. See Group_Subscription::get_member_seat_limit().
+	 *
+	 * @param mixed $limit The raw limit value.
+	 *
+	 * @return int The normalized limit: 0 (unlimited) or 2 and up.
+	 */
+	public static function normalize_limit( $limit ) {
+		$limit = absint( $limit );
+		return $limit > 0 ? max( 2, $limit ) : 0;
+	}
+
+	/**
 	 * Get the group subscription settings for a product.
 	 *
 	 * @param WC_Product|int $product The product object or ID.
@@ -246,7 +265,10 @@ class Group_Subscription_Settings {
 		 * @param array $settings The group subscription settings.
 		 * @param WC_Product $product The product object.
 		 */
-		return apply_filters( 'newspack_group_subscription_product_settings', $settings, $product );
+		$settings = apply_filters( 'newspack_group_subscription_product_settings', $settings, $product );
+
+		$settings['limit'] = self::normalize_limit( $settings['limit'] ?? 0 );
+		return $settings;
 	}
 
 	/**
@@ -282,7 +304,10 @@ class Group_Subscription_Settings {
 		 * @param array $settings The group subscription settings.
 		 * @param WC_Subscription $subscription The subscription object.
 		 */
-		return apply_filters( 'newspack_group_subscription_settings', $settings, $subscription );
+		$settings = apply_filters( 'newspack_group_subscription_settings', $settings, $subscription );
+
+		$settings['limit'] = self::normalize_limit( $settings['limit'] ?? 0 );
+		return $settings;
 	}
 
 	/**
@@ -312,11 +337,8 @@ class Group_Subscription_Settings {
 			} elseif ( is_int( self::DEFAULT_SETTINGS[ $key ] ) ) {
 				$value = absint( $value );
 			}
-			// A group must have room for at least one member besides the owner, so floor
-			// a positive limit to the 2-seat minimum (owner + 1). Unlimited (0) is left
-			// untouched. See Group_Subscription::get_member_seat_limit().
-			if ( 'limit' === $key && $value > 0 ) {
-				$value = max( 2, $value );
+			if ( 'limit' === $key ) {
+				$value = self::normalize_limit( $value );
 			}
 			if ( $value !== $previous_value ) {
 				$subscription->update_meta_data( self::GROUP_SUBSCRIPTION_META_PREFIX . $key, $value );

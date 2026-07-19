@@ -17,7 +17,6 @@ import { withWizardScreen, ActionCard, Button, Card, Grid, SectionHeader } from 
 const Completed = () => {
 	useEffect( () => {
 		document.body.classList.add( 'newspack-wizard__completed' );
-		document.querySelector( '.newspack-wizard__header' ).remove();
 		return () => document.body.classList.remove( 'newspack-wizard__completed' );
 	}, [] );
 
@@ -91,4 +90,4 @@ const Completed = () => {
 	);
 };
 
-export default withWizardScreen( Completed, { hidePrimaryButton: true } );
+export default withWizardScreen( Completed, { hidePrimaryButton: true, hideHeader: true } );

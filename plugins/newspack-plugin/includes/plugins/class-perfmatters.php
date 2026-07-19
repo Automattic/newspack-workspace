@@ -22,6 +22,7 @@ class Perfmatters {
 		add_filter( 'perfmatters_lazyload_youtube_thumbnail_resolution', [ __CLASS__, 'maybe_serve_high_res_youtube_thumbs' ] );
 		add_filter( 'perfmatters_rucss_excluded_stylesheets', [ __CLASS__, 'add_rucss_excluded_stylesheets' ] );
 		add_filter( 'perfmatters_delay_js', [ __CLASS__, 'should_delay_js' ] );
+		add_filter( 'perfmatters_disable_woocommerce_scripts', [ __CLASS__, 'maybe_keep_woocommerce_assets' ] );
 	}
 
 	/**
@@ -381,6 +382,26 @@ class Perfmatters {
 			return false;
 		}
 		return $delay_js;
+	}
+
+	/**
+	 * Veto Perfmatters' "Disable WooCommerce Scripts" strip on requests that
+	 * actually render WooCommerce content, so block/shortcode styles aren't lost
+	 * (NPPM-193). Keeps the global default `disable_woocommerce_scripts => true`
+	 * intact, so the perf win stands on every other request.
+	 *
+	 * @param bool $disable Whether Perfmatters should disable WC scripts/styles.
+	 *
+	 * @return bool
+	 */
+	public static function maybe_keep_woocommerce_assets( $disable ) {
+		if ( self::should_ignore_defaults() ) {
+			return $disable;
+		}
+		if ( WooCommerce_Content_Detector::current_request_has_woocommerce_content() ) {
+			return false;
+		}
+		return $disable;
 	}
 }
 Perfmatters::init();

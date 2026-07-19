@@ -227,7 +227,7 @@ export default function LayoutsListScreen() {
 			() => [
 				{
 					type: 'primary',
-					label: __( 'Add new layout', 'newspack-newsletters' ),
+					label: __( 'Add Layout', 'newspack-newsletters' ),
 					href: `${ getAdminUrl() }post-new.php?post_type=${ LAYOUT_CPT_SLUG }`,
 				},
 			],
