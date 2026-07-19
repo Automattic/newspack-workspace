@@ -22,6 +22,17 @@ class Newspack_Popups_Settings {
 	const DEFAULT_DONOR_MERGE_FIELD = 'DONAT';
 
 	/**
+	 * The settings page hook suffix returned by add_submenu_page().
+	 *
+	 * Used to scope asset enqueuing to this screen. The screen base can't be
+	 * relied on because the parent CPT is registered with `show_in_menu` false,
+	 * which orphans the submenu and yields an `admin_page_*` base.
+	 *
+	 * @var string
+	 */
+	public static $page_hook = '';
+
+	/**
 	 * Set up hooks.
 	 */
 	public static function init() {
@@ -33,7 +44,7 @@ class Newspack_Popups_Settings {
 	 * Add settings page.
 	 */
 	public static function add_plugin_page() {
-		add_submenu_page(
+		self::$page_hook = add_submenu_page(
 			'edit.php?post_type=' . Newspack_Popups::NEWSPACK_POPUPS_CPT,
 			__( 'Campaigns Settings', 'newspack-popups' ),
 			__( 'Settings', 'newspack-popups' ),
@@ -391,11 +402,11 @@ class Newspack_Popups_Settings {
 
 	/**
 	 * Load up common JS/CSS for settings.
+	 *
+	 * @param string $hook_suffix Current admin page hook suffix.
 	 */
-	public static function admin_enqueue_scripts() {
-		$screen = get_current_screen();
-
-		if ( Newspack_Popups::NEWSPACK_POPUPS_CPT . '_page_' . self::NEWSPACK_POPUPS_SETTINGS_PAGE !== $screen->base ) {
+	public static function admin_enqueue_scripts( $hook_suffix ) {
+		if ( $hook_suffix !== self::$page_hook ) {
 			return;
 		}
 

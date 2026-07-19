@@ -6,15 +6,29 @@
  */
 
 use Newspack\Perfmatters;
+use Newspack\WooCommerce_Content_Detector;
 
 require_once __DIR__ . '/../mocks/newspack-popups-model-mock.php';
 
 /**
- * Tests the Perfmatters above-header prompt handling.
+ * Tests the Perfmatters integration: above-header prompt handling and the
+ * WooCommerce veto.
  */
 class Newspack_Test_Perfmatters extends WP_UnitTestCase {
-	public function tear_down() { // phpcs:ignore Squiz.Commenting.FunctionComment.Missing
+	/**
+	 * Reset the detector memo before each test.
+	 */
+	public function set_up() {
+		parent::set_up();
+		WooCommerce_Content_Detector::reset_memo();
+	}
+
+	/**
+	 * Reset the above-header flag and the detector memo after each test.
+	 */
+	public function tear_down() {
 		\Newspack_Popups_Model::$has_above_header = false;
+		WooCommerce_Content_Detector::reset_memo();
 		parent::tear_down();
 	}
 
@@ -108,5 +122,51 @@ class Newspack_Test_Perfmatters extends WP_UnitTestCase {
 
 		$this->assertContains( 'newspack-blocks', $options['assets']['delay_js_inclusions'] );
 		$this->assertContains( 'recaptcha', $options['assets']['delay_js_inclusions'] );
+	}
+
+	/**
+	 * When WooCommerce content is present, the callback vetoes the strip
+	 * (returns false) regardless of the incoming value.
+	 */
+	public function test_vetoes_when_wc_content_present() {
+		$page = self::factory()->post->create(
+			[
+				'post_type'    => 'page',
+				'post_content' => '<!-- wp:woocommerce/product-category /-->',
+			]
+		);
+		$this->go_to( get_permalink( $page ) );
+		WooCommerce_Content_Detector::reset_memo();
+		$this->assertFalse( Perfmatters::maybe_keep_woocommerce_assets( true ) );
+	}
+
+	/**
+	 * When no WooCommerce content is present, the callback passes the incoming
+	 * value through unchanged.
+	 */
+	public function test_passes_through_when_no_wc_content() {
+		$page = self::factory()->post->create(
+			[
+				'post_type'    => 'page',
+				'post_content' => '<!-- wp:paragraph --><p>hi</p><!-- /wp:paragraph -->',
+			]
+		);
+		$this->go_to( get_permalink( $page ) );
+		WooCommerce_Content_Detector::reset_memo();
+		$this->assertTrue( Perfmatters::maybe_keep_woocommerce_assets( true ) );
+		$this->assertFalse( Perfmatters::maybe_keep_woocommerce_assets( false ) );
+	}
+
+	/**
+	 * With NEWSPACK_IGNORE_PERFMATTERS_DEFAULTS defined, the callback returns the
+	 * incoming value untouched and never consults the detector.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_ignore_defaults_passes_through() {
+		define( 'NEWSPACK_IGNORE_PERFMATTERS_DEFAULTS', true );
+		$this->assertTrue( Perfmatters::maybe_keep_woocommerce_assets( true ) );
+		$this->assertFalse( Perfmatters::maybe_keep_woocommerce_assets( false ) );
 	}
 }

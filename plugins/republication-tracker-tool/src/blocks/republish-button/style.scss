@@ -1,0 +1,15 @@
+// The republish button renders with the standard `wp-block-button` / `wp-block-button__link`
+// markup, so theme button styles cascade automatically. Plugin-specific overrides go on the
+// `wp-block-republication-tracker-tool-republish-button` class (attached to the inner button).
+.wp-block-republication-tracker-tool-republish-button {
+	cursor: pointer;
+}
+
+.wp-block-republication-tracker-tool-republish-button__license {
+	margin-top: 0.5em;
+
+	img {
+		max-width: 100%;
+		height: auto;
+	}
+}

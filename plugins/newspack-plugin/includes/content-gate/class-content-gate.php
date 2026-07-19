@@ -37,11 +37,19 @@ class Content_Gate {
 	private static $is_gated = false;
 
 	/**
-	 * Whether the post is being shown via metering.
+	 * Whether the queried post's content is locked for the current reader, i.e.
+	 * fully gated with no access (the content has been replaced by a gate).
+	 *
+	 * Distinct from $is_gated, which only signals that gate markup is being
+	 * rendered: that flag is also raised while building the metering excerpt
+	 * and while rendering an overlay gate for a *metered* (still-readable) post.
+	 * Comment gating must key off the access decision instead so it stays
+	 * correct regardless of when gate markup happens to render. Set once, on the
+	 * `the_post` action, before any content or comments are rendered.
 	 *
 	 * @var boolean
 	 */
-	private static $is_metered = false;
+	private static $is_content_locked = false;
 
 	/**
 	 * Valid gate post statuses.
@@ -217,13 +225,13 @@ class Content_Gate {
 			 */
 			! apply_filters( 'newspack_content_gate_restrict_post', true, $post->ID )
 		) {
-			// Content is accessible via metering — show comments but prevent commenting.
-			self::$is_metered        = true;
-			$post->comment_status    = 'closed';
+			// Content is accessible (e.g. via metering); leave commenting governed
+			// by the site's Discussion Settings rather than gating it.
 			return;
 		}
 
-		self::$is_gated = true;
+		self::$is_gated          = true;
+		self::$is_content_locked = true;
 
 		$content = self::get_restricted_post_excerpt( $post );
 
@@ -263,7 +271,9 @@ class Content_Gate {
 	/**
 	 * Filter whether comments are open.
 	 *
-	 * Close comments on gated and metered posts.
+	 * Close comments only on fully locked posts, where the reader cannot access
+	 * the content. Metered (currently-accessible) posts are left untouched so
+	 * the site's Discussion Settings continue to govern commenting.
 	 *
 	 * @param bool $open    Whether comments are open.
 	 * @param int  $post_id Post ID.
@@ -271,7 +281,7 @@ class Content_Gate {
 	 * @return bool
 	 */
 	public static function filter_comments_open( $open, $post_id ) {
-		if ( ( self::$is_gated || self::$is_metered ) && (int) $post_id === (int) get_queried_object_id() ) {
+		if ( self::$is_content_locked && (int) $post_id === (int) get_queried_object_id() ) {
 			return false;
 		}
 		return $open;
@@ -280,7 +290,7 @@ class Content_Gate {
 	/**
 	 * Filter comments array.
 	 *
-	 * Hide all comments on fully gated posts.
+	 * Hide all comments on fully locked posts.
 	 *
 	 * @param array $comments Array of comments.
 	 * @param int   $post_id  Post ID.
@@ -288,7 +298,7 @@ class Content_Gate {
 	 * @return array
 	 */
 	public static function filter_comments_array( $comments, $post_id ) {
-		if ( self::$is_gated && (int) $post_id === (int) get_queried_object_id() ) {
+		if ( self::$is_content_locked && (int) $post_id === (int) get_queried_object_id() ) {
 			return [];
 		}
 		return $comments;
@@ -297,7 +307,7 @@ class Content_Gate {
 	/**
 	 * Filter the comment count.
 	 *
-	 * Return 0 on fully gated posts.
+	 * Return 0 on fully locked posts.
 	 *
 	 * @param int $count   Comment count.
 	 * @param int $post_id Post ID.
@@ -305,7 +315,7 @@ class Content_Gate {
 	 * @return int
 	 */
 	public static function filter_comments_number( $count, $post_id ) {
-		if ( self::$is_gated && (int) $post_id === (int) get_queried_object_id() ) {
+		if ( self::$is_content_locked && (int) $post_id === (int) get_queried_object_id() ) {
 			return 0;
 		}
 		return $count;
@@ -445,6 +455,13 @@ class Content_Gate {
 	 * Enqueue block editor assets.
 	 */
 	public static function enqueue_block_editor_assets() {
+		// Share the same feature gate as Content_Restriction_Control::register_meta():
+		// with the flag off the exempt key is absent from the REST schema, so the panel
+		// must not render a toggle that could not persist. In practice get_gates() is
+		// already empty when the flag is off, but gating both on the flag keeps them aligned.
+		if ( ! self::is_newspack_feature_enabled() ) {
+			return;
+		}
 		if ( ! in_array( get_post_type(), array_column( Content_Restriction_Control::get_available_post_types(), 'value' ), true ) ) {
 			return;
 		}
@@ -682,9 +699,9 @@ class Content_Gate {
 	public static function create_gate( $gate, $post_type = self::GATE_CPT, $is_newsletter = false ) {
 		$all_gates = self::get_gates();
 		$args      = [
-			'post_title'   => $gate['title'],
+			'post_title'   => $gate['title'] ?? __( 'Untitled Content Gate', 'newspack-plugin' ),
 			'post_type'    => $post_type,
-			'post_status'  => 'publish',
+			'post_status'  => isset( $gate['status'] ) && in_array( $gate['status'], self::get_post_statuses(), true ) ? $gate['status'] : 'publish',
 			'post_content' => '',
 			'meta_input'   => [
 				'gate_priority' => count( $all_gates ),
@@ -713,6 +730,8 @@ class Content_Gate {
 		}
 
 		// Create default layouts for registration and custom_access modes.
+		$layout_titles = self::get_gate_mode_layout_titles();
+
 		$registration_settings  = $gate['registration'] ?? [];
 		$registration_layout_id = $registration_settings['gate_layout_id'] ?? 0;
 		$custom_access_settings  = $gate['custom_access'] ?? [];
@@ -721,7 +740,7 @@ class Content_Gate {
 		if ( ! $registration_layout_id ) {
 			$registration_content   = self::get_layout_default_content( $gate_id, 'registration', $registration_settings, $custom_access_settings );
 			$registration_layout_id = self::create_gate_layout(
-				__( 'Registration Access Layout', 'newspack-plugin' ),
+				$layout_titles['registration'],
 				$registration_content
 			);
 		}
@@ -733,7 +752,7 @@ class Content_Gate {
 		if ( ! $custom_access_layout_id ) {
 			$custom_access_content   = self::get_layout_default_content( $gate_id, 'custom_access', $registration_settings, $custom_access_settings );
 			$custom_access_layout_id = self::create_gate_layout(
-				__( 'Paid Access Layout', 'newspack-plugin' ),
+				$layout_titles['custom_access'],
 				$custom_access_content
 			);
 			if ( ! is_wp_error( $custom_access_layout_id ) ) {
@@ -743,6 +762,203 @@ class Content_Gate {
 		self::update_custom_access_settings( $gate_id, $custom_access_settings );
 
 		return $gate_id;
+	}
+
+	/**
+	 * The gate meta keys holding a mode's settings, mapped to the default title of that
+	 * mode's layout post.
+	 *
+	 * @return array
+	 */
+	private static function get_gate_mode_layout_titles() {
+		return [
+			'registration'  => __( 'Registration Access Layout', 'newspack-plugin' ),
+			'custom_access' => __( 'Paid Access Layout', 'newspack-plugin' ),
+		];
+	}
+
+	/**
+	 * Get a unique title for a copy of a gate.
+	 *
+	 * Appends a translatable " copy" suffix, numbering it (" copy 2", " copy 3", …)
+	 * until it no longer collides with an existing gate in the same bucket.
+	 *
+	 * @param int        $gate_id       Gate ID being duplicated.
+	 * @param array|null $bucket_gates  Optional gates of the source's bucket, to save re-fetching them.
+	 *
+	 * @return string
+	 */
+	public static function get_duplicate_gate_title( $gate_id, $bucket_gates = null ) {
+		// Deliberately not get_the_title(): the 'the_title' filters texturize the title and
+		// prefix drafts/private posts, so the copy's stored title would not be the source's
+		// title plus a suffix, and would not compare against the raw titles below.
+		$source       = get_post( $gate_id );
+		$source_title = $source ? $source->post_title : '';
+
+		if ( null === $bucket_gates ) {
+			$is_newsletter = (bool) get_post_meta( $gate_id, 'is_newsletter', true );
+			$bucket_gates  = self::get_gates( self::GATE_CPT, null, $is_newsletter );
+		}
+		$taken_titles = wp_list_pluck( $bucket_gates, 'title' );
+
+		/* translators: %s: title of the gate being duplicated. */
+		$title = sprintf( __( '%s copy', 'newspack-plugin' ), $source_title );
+
+		$copy_number = 1;
+		while ( in_array( $title, $taken_titles, true ) ) {
+			++$copy_number;
+			/* translators: 1: title of the gate being duplicated. 2: number of this copy. */
+			$title = sprintf( __( '%1$s copy %2$d', 'newspack-plugin' ), $source_title, $copy_number );
+		}
+
+		return $title;
+	}
+
+	/**
+	 * Copy a gate layout post, with the presentation settings stored as its meta.
+	 *
+	 * Those settings ('style', 'visible_paragraphs', …) decide how much of a restricted
+	 * article a reader sees, so a copy that dropped them would not just look different —
+	 * it would reveal a different amount of the gated content.
+	 *
+	 * @param \WP_Post $source_layout The layout post to copy.
+	 *
+	 * @return int|\WP_Error The new layout post ID or error if not created.
+	 */
+	private static function duplicate_gate_layout( $source_layout ) {
+		// Deliberately not create_gate_layout(): it substitutes the default gate content for an
+		// empty layout, which would give the copy a member message a deliberately blank source
+		// layout doesn't show.
+		$new_layout_id = \wp_insert_post(
+			[
+				'post_title'   => $source_layout->post_title,
+				'post_type'    => self::GATE_LAYOUT_CPT,
+				'post_content' => $source_layout->post_content,
+				'post_status'  => $source_layout->post_status,
+			],
+			true // Return WP_Error on failure.
+		);
+		if ( is_wp_error( $new_layout_id ) ) {
+			return $new_layout_id;
+		}
+
+		foreach ( \get_post_meta( $source_layout->ID ) as $key => $values ) {
+			if ( str_starts_with( $key, '_' ) ) {
+				continue;
+			}
+			foreach ( $values as $value ) {
+				\add_post_meta( $new_layout_id, $key, \maybe_unserialize( $value ) );
+			}
+		}
+
+		return $new_layout_id;
+	}
+
+	/**
+	 * Duplicate a gate.
+	 *
+	 * The copy is always created inactive, regardless of the site's default status for
+	 * new gates: a copy of a live gate silently going live would change the site's
+	 * access behavior.
+	 *
+	 * @param int $gate_id Gate ID to duplicate.
+	 *
+	 * @return int|\WP_Error The new gate ID, or error if the source is not a gate or the copy could not be created.
+	 */
+	public static function duplicate_gate( $gate_id ) {
+		$source = get_post( $gate_id );
+		if ( ! $source || self::GATE_CPT !== $source->post_type ) {
+			return new \WP_Error( 'newspack_content_gate_not_found', __( 'Gate not found.', 'newspack-plugin' ), [ 'status' => 400 ] );
+		}
+		if ( ! in_array( $source->post_status, self::get_post_statuses(), true ) ) {
+			return new \WP_Error( 'newspack_content_gate_invalid_status', __( 'This gate cannot be duplicated.', 'newspack-plugin' ), [ 'status' => 400 ] );
+		}
+
+		$is_newsletter = (bool) get_post_meta( $gate_id, 'is_newsletter', true );
+
+		// Content gates and premium newsletter gates are prioritized in separate buckets, so
+		// the copy goes after the last gate of its own. Derived from the highest priority in
+		// use rather than the gate count, which would collide with an existing gate whenever
+		// one has been deleted from the middle of the list.
+		$bucket_gates = self::get_gates( self::GATE_CPT, null, $is_newsletter );
+		$priority     = $bucket_gates ? max( wp_list_pluck( $bucket_gates, 'priority' ) ) + 1 : 0;
+
+		$new_gate_id = \wp_insert_post(
+			[
+				'post_title'   => self::get_duplicate_gate_title( $gate_id, $bucket_gates ),
+				'post_type'    => self::GATE_CPT,
+				'post_status'  => 'draft',
+				'post_content' => '',
+			],
+			true // Return WP_Error on failure.
+		);
+		if ( is_wp_error( $new_gate_id ) ) {
+			// A failed insert is a genuine server error, so give it an explicit 500 status
+			// (matching the controlled codes on the validation branches above) rather than
+			// leaving the REST layer to fall back on its generic 500. The underlying error
+			// is preserved so a maintainer can see why the insert failed.
+			$new_gate_id->add_data( [ 'status' => 500 ] );
+			return $new_gate_id;
+		}
+
+		$layout_titles = self::get_gate_mode_layout_titles();
+
+		// Copy the settings generically, so gate settings added later are carried over without
+		// a list to maintain here.
+		foreach ( \get_post_meta( $gate_id ) as $key => $values ) {
+			if ( 'gate_priority' === $key || str_starts_with( $key, '_' ) ) {
+				continue;
+			}
+			foreach ( $values as $value ) {
+				$value = \maybe_unserialize( $value );
+				// The source's layout IDs must never be persisted on the copy, not even
+				// briefly: while they are, deleting the copy would delete the layouts the
+				// source is still serving to readers. The copy's own layouts are wired in
+				// below.
+				if ( isset( $layout_titles[ $key ] ) && is_array( $value ) ) {
+					unset( $value['gate_layout_id'] );
+				}
+				\add_post_meta( $new_gate_id, $key, $value );
+			}
+		}
+		\update_post_meta( $new_gate_id, 'gate_priority', $priority );
+
+		// Deep-copy the layouts. Sharing layout posts between two gates would let
+		// delete_gate_layouts() destroy the surviving gate's reader-facing content.
+		foreach ( $layout_titles as $gate_mode => $default_layout_title ) {
+			$source_settings  = \get_post_meta( $gate_id, $gate_mode, true );
+			$source_layout_id = is_array( $source_settings ) && ! empty( $source_settings['gate_layout_id'] ) ? $source_settings['gate_layout_id'] : 0;
+			$source_layout    = $source_layout_id ? get_post( $source_layout_id ) : null;
+
+			if ( $source_layout && self::GATE_LAYOUT_CPT === $source_layout->post_type ) {
+				$new_layout_id = self::duplicate_gate_layout( $source_layout );
+			} else {
+				// Stale or missing layout ID: create a fresh default layout, as create_gate() does.
+				$new_layout_id = self::create_gate_layout(
+					$default_layout_title,
+					self::get_layout_default_content(
+						$new_gate_id,
+						$gate_mode,
+						self::get_registration_settings( $new_gate_id ),
+						self::get_custom_access_settings( $new_gate_id )
+					)
+				);
+			}
+
+			if ( is_wp_error( $new_layout_id ) ) {
+				// Discard the half-built copy rather than leave it in the publisher's list.
+				// Its own layouts, if any, go with it via delete_gate_layouts().
+				\wp_delete_post( $new_gate_id, true );
+				return $new_layout_id;
+			}
+
+			$settings                   = \get_post_meta( $new_gate_id, $gate_mode, true );
+			$settings                   = is_array( $settings ) ? $settings : [];
+			$settings['gate_layout_id'] = $new_layout_id;
+			\update_post_meta( $new_gate_id, $gate_mode, $settings );
+		}
+
+		return $new_gate_id;
 	}
 
 	/**
@@ -1096,7 +1312,7 @@ class Content_Gate {
 
 		return [
 			'active'               => isset( $registration['active'] ) ? (bool) $registration['active'] : false,
-			'metering'             => isset( $registration['metering'] ) ? $registration['metering'] : $default_metering,
+			'metering'             => isset( $registration['metering'] ) && is_array( $registration['metering'] ) ? wp_parse_args( $registration['metering'], $default_metering ) : $default_metering,
 			'require_verification' => isset( $registration['require_verification'] ) ? (bool) $registration['require_verification'] : false,
 			'gate_layout_id'       => isset( $registration['gate_layout_id'] ) ? (int) $registration['gate_layout_id'] : 0,
 		];
@@ -1131,6 +1347,9 @@ class Content_Gate {
 	public static function update_registration_settings( $gate_id, $settings ) {
 		$registration = get_post_meta( $gate_id, 'registration', true );
 		if ( $registration ) {
+			if ( isset( $settings['metering'], $registration['metering'] ) && is_array( $settings['metering'] ) && is_array( $registration['metering'] ) ) {
+				$settings['metering'] = wp_parse_args( $settings['metering'], $registration['metering'] );
+			}
 			$settings = wp_parse_args( $settings, $registration );
 		}
 		\update_post_meta( $gate_id, 'registration', $settings );
@@ -1162,7 +1381,7 @@ class Content_Gate {
 
 		return [
 			'active'         => isset( $custom_access['active'] ) ? (bool) $custom_access['active'] : false,
-			'metering'       => isset( $custom_access['metering'] ) ? $custom_access['metering'] : $default_metering,
+			'metering'       => isset( $custom_access['metering'] ) && is_array( $custom_access['metering'] ) ? wp_parse_args( $custom_access['metering'], $default_metering ) : $default_metering,
 			'access_rules'   => $access_rules,
 			'gate_layout_id' => isset( $custom_access['gate_layout_id'] ) ? (int) $custom_access['gate_layout_id'] : 0,
 		];
@@ -1179,6 +1398,9 @@ class Content_Gate {
 	public static function update_custom_access_settings( $gate_id, $settings ) {
 		$custom_access = get_post_meta( $gate_id, 'custom_access', true );
 		if ( $custom_access ) {
+			if ( isset( $settings['metering'], $custom_access['metering'] ) && is_array( $settings['metering'] ) && is_array( $custom_access['metering'] ) ) {
+				$settings['metering'] = wp_parse_args( $settings['metering'], $custom_access['metering'] );
+			}
 			$settings = wp_parse_args( $settings, $custom_access );
 		}
 		\update_post_meta( $gate_id, 'custom_access', $settings );
@@ -1278,16 +1500,19 @@ class Content_Gate {
 		}
 
 		// Update title, priority, and status.
-		wp_update_post(
-			[
-				'ID'          => $id,
-				'post_title'  => $gate['title'],
-				'post_status' => isset( $gate['status'] ) ? $gate['status'] : $post->post_status,
-				'meta_input'  => [
-					'gate_priority' => $gate['priority'],
-				],
-			]
-		);
+		$update_args = [
+			'ID'          => $id,
+			'post_status' => isset( $gate['status'] ) ? $gate['status'] : $post->post_status,
+		];
+		if ( isset( $gate['title'] ) ) {
+			$update_args['post_title'] = $gate['title'];
+		}
+		if ( isset( $gate['priority'] ) ) {
+			$update_args['meta_input'] = [
+				'gate_priority' => $gate['priority'],
+			];
+		}
+		wp_update_post( $update_args );
 
 		// Update content rules.
 		if ( isset( $gate['content_rules'] ) ) {
@@ -1324,6 +1549,84 @@ class Content_Gate {
 		 * @param array $valid_post_statuses Valid gate post statuses.
 		 */
 		return apply_filters( 'newspack_content_gate_valid_post_statuses', self::$valid_gate_post_statuses );
+	}
+
+	/**
+	 * Option name storing the default status applied to newly created gates.
+	 */
+	const DEFAULT_STATUS_OPTION = 'newspack_content_gate_default_status';
+
+	/**
+	 * Get the default status ('publish' or 'draft') for newly created gates.
+	 *
+	 * Defaults to 'draft' (inactive) so new gates are set up before going live.
+	 * Only affects gates created going forward; existing gates keep their own
+	 * status. Publishers can change this default in the Access control preferences.
+	 *
+	 * @return string
+	 */
+	public static function get_default_new_gate_status() {
+		$value = get_option( self::DEFAULT_STATUS_OPTION, 'draft' );
+		return in_array( $value, [ 'publish', 'draft' ], true ) ? $value : 'draft';
+	}
+
+	/**
+	 * Set the default status for newly created gates.
+	 *
+	 * @param string $status Either 'publish' or 'draft'.
+	 *
+	 * @return string The stored status.
+	 */
+	public static function set_default_new_gate_status( $status ) {
+		$status = in_array( $status, [ 'publish', 'draft' ], true ) ? $status : 'draft';
+		update_option( self::DEFAULT_STATUS_OPTION, $status, false );
+		return $status;
+	}
+
+	/**
+	 * Fill in the site-wide default status on a new-gate payload when none was provided.
+	 *
+	 * For REST create endpoints only. Direct PHP callers of create_gate() (e.g. the
+	 * WooCommerce Memberships auto-gate creators) rely on its 'publish' fallback,
+	 * which must not be routed through this option.
+	 *
+	 * @param array $gate Gate payload.
+	 *
+	 * @return array The gate payload with a status.
+	 */
+	public static function with_default_new_gate_status( $gate ) {
+		if ( is_array( $gate ) && ! isset( $gate['status'] ) ) {
+			$gate['status'] = self::get_default_new_gate_status();
+		}
+		return $gate;
+	}
+
+	/**
+	 * User meta key for the pre-save checklist preference.
+	 */
+	const PRESAVE_CHECKS_META_KEY = 'np_gate_presave_checks';
+
+	/**
+	 * Whether the current user should see the gate pre-save checklist panel.
+	 *
+	 * Defaults to enabled (true) when the user has never set the preference.
+	 *
+	 * @return bool
+	 */
+	public static function get_presave_checks_enabled() {
+		$value = get_user_meta( get_current_user_id(), self::PRESAVE_CHECKS_META_KEY, true );
+		return '' === $value ? true : '1' === $value;
+	}
+
+	/**
+	 * Set the pre-save checklist preference for the current user.
+	 *
+	 * @param bool $enabled Whether the pre-save checklist is enabled.
+	 *
+	 * @return void
+	 */
+	public static function set_presave_checks_enabled( $enabled ) {
+		update_user_meta( get_current_user_id(), self::PRESAVE_CHECKS_META_KEY, $enabled ? '1' : '0' );
 	}
 
 	/**

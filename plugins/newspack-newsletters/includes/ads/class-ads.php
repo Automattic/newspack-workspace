@@ -267,7 +267,7 @@ final class Ads {
 			'menu_name'                => _x( 'Newsletter Ads', 'admin menu', 'newspack-newsletters' ),
 			'name_admin_bar'           => _x( 'Newsletter Ad', 'add new on admin bar', 'newspack-newsletters' ),
 			'add_new'                  => _x( 'Add New', 'popup', 'newspack-newsletters' ),
-			'add_new_item'             => __( 'Add New Newsletter Ad', 'newspack-newsletters' ),
+			'add_new_item'             => __( 'Add Newsletter Ad', 'newspack-newsletters' ),
 			'new_item'                 => __( 'New Newsletter Ad', 'newspack-newsletters' ),
 			'edit_item'                => __( 'Edit Newsletter Ad', 'newspack-newsletters' ),
 			'view_item'                => __( 'View Newsletter Ad', 'newspack-newsletters' ),
@@ -690,6 +690,8 @@ final class Ads {
 			}
 			$impressions++;
 			update_post_meta( $ad_id, 'tracking_impressions', $impressions );
+			// Also record a dated row so impressions can be reported over a timeframe.
+			Tracking\Ad_Stats::record_impressions( $ad_id, $newsletter_id, 1 );
 		}
 	}
 
@@ -711,6 +713,8 @@ final class Ads {
 			}
 			$impressions += $views;
 			update_post_meta( $ad_id, 'tracking_impressions', $impressions );
+			// Also record a dated row so impressions can be reported over a timeframe.
+			Tracking\Ad_Stats::record_impressions( $ad_id, $newsletter_id, $views );
 		}
 	}
 

@@ -49,6 +49,91 @@ class Newspack_Test_Reader_Activation extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A reader already authenticated in the browser (e.g. a returning reader, or a
+	 * shared/public device still carrying a prior reader's remember-me cookie) must
+	 * still get a WordPress account created when subscribing with a DIFFERENT email,
+	 * without hijacking the current session.
+	 *
+	 * Reproduces NPPM-2936: the Newsletter Subscription block authenticates the reader
+	 * on the first signup (register_reader -> set_current_reader -> remember-me cookie),
+	 * so a second back-to-back signup from the same browser was treated as logged-in and
+	 * silently skipped account creation — while the email was still pushed to the ESP
+	 * list, leaving a list subscription with no account.
+	 */
+	public function test_register_reader_while_logged_in_creates_account_without_hijacking_session() {
+		// First signup from a clean session creates and authenticates the reader.
+		$first_reader_id = Reader_Activation::register_reader( 'first-signup@test.com', 'First Signup', true );
+		$this->assertIsInt( $first_reader_id );
+		$this->assertSame( $first_reader_id, get_current_user_id(), 'First signup should authenticate the reader.' );
+		$this->assertTrue( is_user_logged_in() );
+
+		// A different email is then submitted from the same (now authenticated) browser,
+		// exactly as the subscription block does for a logged-in visitor: register without
+		// re-authenticating.
+		$second_reader_id = Reader_Activation::register_reader(
+			'second-signup@test.com',
+			'Second Signup',
+			false, // Do not authenticate: preserve the current session.
+			[ 'registration_method' => 'newsletters-subscription' ]
+		);
+
+		// The second email must get its own real reader account...
+		$this->assertIsInt( $second_reader_id, 'A logged-in browser submitting a different email must still create an account.' );
+		$second_reader = get_user_by( 'email', 'second-signup@test.com' );
+		$this->assertInstanceOf( 'WP_User', $second_reader );
+		$this->assertTrue( (bool) get_user_meta( $second_reader->ID, Reader_Activation::READER, true ), 'The second account must be a real reader account, not a bare WP user.' );
+
+		// ...without changing who is logged in.
+		$this->assertSame( $first_reader_id, get_current_user_id(), 'Creating the second account must not hijack the current session.' );
+
+		wp_delete_user( $first_reader_id );  // Clean up.
+		wp_delete_user( $second_reader_id ); // Clean up.
+	}
+
+	/**
+	 * The dominant real-world path: a returning reader who is still logged in re-subscribes
+	 * via the block with their OWN email. This must be a no-op — reuse the existing account,
+	 * create no duplicate, preserve the session, and send no email. The "no email" guard is
+	 * load-bearing: the magic-link/OTP for a passwordless reader is suppressed only because
+	 * the registration method contains `newsletters-subscription`; a regression there would
+	 * silently email returning readers on every signup.
+	 */
+	public function test_register_reader_while_logged_in_with_own_email_is_noop() {
+		// A returning reader is already authenticated in this browser (passwordless, as RAS
+		// readers are — so the magic-link branch is genuinely exercised).
+		$reader_id = Reader_Activation::register_reader( 'returning@test.com', 'Returning Reader', true );
+		$this->assertIsInt( $reader_id );
+		$this->assertSame( $reader_id, get_current_user_id() );
+		$this->assertTrue( Reader_Activation::is_reader_without_password( $reader_id ), 'Test precondition: the reader must be passwordless to exercise the OTP-suppression path.' );
+
+		// Capture any outgoing email to prove the re-subscribe is side-effect-free.
+		$sent_emails = 0;
+		$email_counter = function ( $args ) use ( &$sent_emails ) {
+			$sent_emails++;
+			return $args;
+		};
+		add_filter( 'wp_mail', $email_counter );
+
+		// The reader re-subscribes via the block with their OWN (current) email.
+		$result = Reader_Activation::register_reader(
+			'returning@test.com',
+			'Returning Reader',
+			false, // Logged in: do not authenticate.
+			[ 'registration_method' => 'newsletters-subscription' ]
+		);
+
+		remove_filter( 'wp_mail', $email_counter );
+
+		// Existing account reused (false), no duplicate, no email, session preserved.
+		$this->assertFalse( $result, 'Re-subscribing with the current reader\'s own email must not create a second account.' );
+		$this->assertSame( $reader_id, get_user_by( 'email', 'returning@test.com' )->ID, 'The existing reader account must be reused, not duplicated.' );
+		$this->assertSame( 0, $sent_emails, 'Re-subscribing via the block must not send a magic link or login reminder.' );
+		$this->assertSame( $reader_id, get_current_user_id(), 'Session must be preserved.' );
+
+		wp_delete_user( $reader_id ); // Clean up.
+	}
+
+	/**
 	 * Test that verifying a reader register the proper meta.
 	 */
 	public function test_verify_reader_email() {
