@@ -156,7 +156,9 @@ h1 {
 .newspack-wizard,
 .newspack-wizard *,
 .newspack-wizard__content,
-.newspack-wizard__content * {
+.newspack-wizard__content *,
+#newspack-wizards-admin-header,
+#newspack-wizards-admin-header * {
 	box-sizing: border-box;
 }
 
