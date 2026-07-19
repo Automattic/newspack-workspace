@@ -44,6 +44,11 @@ class Group_Subscription_MyAccount {
 	const LEAVE_GROUP_NONCE_ACTION = 'newspack_group_subscription_leave_group';
 
 	/**
+	 * Nonce action for the make/remove manager forms.
+	 */
+	const SET_MANAGER_ROLE_NONCE_ACTION = 'newspack_group_subscription_set_manager_role';
+
+	/**
 	 * Register hooks for the My Account group subscription UI.
 	 */
 	public static function init() {
@@ -74,6 +79,7 @@ class Group_Subscription_MyAccount {
 		add_action( 'admin_post_' . self::CANCEL_INVITE_NONCE_ACTION, [ __CLASS__, 'handle_cancel_invite' ] );
 		add_action( 'admin_post_' . self::REMOVE_MEMBER_NONCE_ACTION, [ __CLASS__, 'handle_remove_member' ] );
 		add_action( 'admin_post_' . self::LEAVE_GROUP_NONCE_ACTION, [ __CLASS__, 'handle_leave_group' ] );
+		add_action( 'admin_post_' . self::SET_MANAGER_ROLE_NONCE_ACTION, [ __CLASS__, 'handle_set_manager_role' ] );
 	}
 
 	/**
@@ -257,7 +263,10 @@ class Group_Subscription_MyAccount {
 	 * @return array{ 0: int, 1: string }
 	 */
 	private static function get_subscription_context(): array {
-		$subscription_id = filter_input( INPUT_POST, 'subscription_id', FILTER_VALIDATE_INT ) ?? 0;
+		// absint() over ?? 0: the null coalesce covers only an absent field, while a
+		// present-but-invalid value validates to false — both must land on the int 0
+		// this method's contract promises.
+		$subscription_id = absint( filter_input( INPUT_POST, 'subscription_id', FILTER_VALIDATE_INT ) );
 		$redirect_url    = self::get_group_url( $subscription_id );
 		return [ $subscription_id, $redirect_url ];
 	}
@@ -635,7 +644,23 @@ class Group_Subscription_MyAccount {
 		self::verify_manageable( $subscription_id, $redirect_url, 'members' );
 
 		$member_id = filter_input( INPUT_POST, 'member_id', FILTER_VALIDATE_INT ) ?? 0;
-		$result    = Group_Subscription::update_members( $subscription_id, [], [ $member_id ] );
+		// verify_permission() only proves the actor may manage this group at all;
+		// the peer-manager rule (a manager can't remove another manager) is enforced
+		// here so a forged POST can't do what the UI won't offer.
+		if ( ! Group_Subscription::can_actor_remove_member( get_current_user_id(), $member_id, $subscription_id ) ) {
+			$error_message = sprintf(
+				/* translators: %s: lowercase singular group label (e.g. "group", "team"). */
+				__( 'You do not have permission to remove this member from the %s.', 'newspack-plugin' ),
+				Group_Subscription::get_label_lower( 'singular' )
+			);
+			self::redirect(
+				new \WP_Error( 'newspack_group_subscription_remove_not_allowed', $error_message ),
+				$redirect_url,
+				'members',
+				$error_message
+			);
+		}
+		$result = Group_Subscription::update_members( $subscription_id, [], [ $member_id ] );
 
 		$member_label = newspack_get_user_display_label( $member_id );
 		if ( '' === $member_label ) {
@@ -652,6 +677,58 @@ class Group_Subscription_MyAccount {
 				$member_label,
 				Group_Subscription::get_label_lower( 'singular' )
 			)
+		);
+	}
+
+	/**
+	 * Handle the make/remove manager form submission.
+	 *
+	 * Gated to the subscription owner — or a store admin acting on the owner's
+	 * behalf (the admin-side parity). An instant action with no confirm step,
+	 * mirroring the admin prototype: promote/demote stays with the person who
+	 * owns the billing, so managers cannot change peer roles.
+	 */
+	public static function handle_set_manager_role() {
+		check_admin_referer( self::SET_MANAGER_ROLE_NONCE_ACTION );
+		[ $subscription_id, $redirect_url ] = self::get_subscription_context();
+
+		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $subscription_id );
+		// Guard the current-user id so a logged-out request (uid 0) never reads as
+		// the owner of an ownerless (owner 0) subscription.
+		$is_owner = $subscription && get_current_user_id() && get_current_user_id() === (int) $subscription->get_user_id();
+		if ( ! $subscription || ( ! $is_owner && ! current_user_can( 'manage_woocommerce' ) ) ) {
+			$error_message = sprintf(
+				/* translators: %s: lowercase singular group label (e.g. "group", "team"). */
+				__( 'Only the owner can change who manages this %s.', 'newspack-plugin' ),
+				Group_Subscription::get_label_lower( 'singular' )
+			);
+			self::redirect(
+				new \WP_Error( 'newspack_group_subscription_role_permission', $error_message ),
+				$redirect_url,
+				'members',
+				$error_message
+			);
+		}
+		self::verify_manageable( $subscription_id, $redirect_url, 'members' );
+
+		$member_id = absint( filter_input( INPUT_POST, 'member_id', FILTER_VALIDATE_INT ) );
+		$role      = 'manager' === filter_input( INPUT_POST, 'role', FILTER_SANITIZE_SPECIAL_CHARS ) ? 'manager' : 'member';
+		$result    = 'manager' === $role
+			? Group_Subscription::add_manager( $subscription, $member_id )
+			: Group_Subscription::remove_manager( $subscription, $member_id );
+
+		$member = get_userdata( $member_id );
+		$name   = $member ? newspack_get_user_display_label( $member ) : __( 'This member', 'newspack-plugin' );
+
+		self::redirect(
+			$result,
+			$redirect_url,
+			'members',
+			'manager' === $role
+				/* translators: %s: member display name. */
+				? sprintf( __( '%s is now a manager.', 'newspack-plugin' ), $name )
+				/* translators: %s: member display name. */
+				: sprintf( __( '%s is no longer a manager.', 'newspack-plugin' ), $name )
 		);
 	}
 }
