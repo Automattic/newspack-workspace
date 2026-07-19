@@ -30,7 +30,9 @@ if ( ! empty( $managers_and_members ) ) {
 		$members_by_id[ $member_user->ID ] = $member_user;
 	}
 }
-$member_limit         = Group_Subscription_Settings::get_subscription_settings( $subscription )['limit'];
+// The seat limit, not the owner-inclusive configured limit: $members excludes the owner,
+// so this is the threshold the server actually gates additions and invites on.
+$member_limit         = Group_Subscription::get_member_seat_limit( $subscription );
 $all_invites          = Group_Subscription_Invite::get_invites( $subscription );
 $pending_invites      = Group_Subscription_Invite::get_invites( $subscription, false );
 $current_user_id      = get_current_user_id();
