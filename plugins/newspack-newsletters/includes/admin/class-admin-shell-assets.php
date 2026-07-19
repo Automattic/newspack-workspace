@@ -12,7 +12,7 @@ use Newspack_Newsletters;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Asset enqueue + wizard-header inline-script patch.
+ * Asset enqueue + wizard-header breadcrumb filter.
  */
 class Admin_Shell_Assets {
 	const SCRIPT_HANDLE = 'newspack-newsletters-admin-shell';
@@ -22,8 +22,7 @@ class Admin_Shell_Assets {
 	 */
 	public static function init() {
 		add_action( 'admin_enqueue_scripts', [ __CLASS__, 'enqueue' ] );
-		// Priority 99 so we run after newspack-plugin's wizard header has registered its script — `wp_add_inline_script` needs the handle in place.
-		add_action( 'admin_enqueue_scripts', [ __CLASS__, 'patch_wizard_header_active_tab' ], 99 );
+		add_filter( 'newspack_wizards_admin_header_breadcrumbs', [ __CLASS__, 'filter_breadcrumbs' ] );
 	}
 
 	/**
@@ -70,77 +69,18 @@ class Admin_Shell_Assets {
 	}
 
 	/**
-	 * Patch the wizard header's "selected" tab state for hidden React subpages.
+	 * Supply the current admin-shell page's explicit breadcrumb trail to the
+	 * newspack-plugin admin header, overriding the wizard's default trail.
 	 *
-	 * The wizard's strict `window.location.href === tab.href` check
-	 * breaks for subpages (live URL carries an extra `&page=…`). Each
-	 * page declares its canonical tab URL + breadcrumb label; this
-	 * injects an observer that flips the matching `<a>` to `.selected`
-	 * and rewrites the heading once the wizard mounts.
+	 * @param array $breadcrumbs Breadcrumb trail from the wizard.
+	 * @return array
 	 */
-	public static function patch_wizard_header_active_tab() {
+	public static function filter_breadcrumbs( $breadcrumbs ) {
 		$current_page = Admin_Shell::get_current_page();
 		if ( ! $current_page ) {
-			return;
+			return $breadcrumbs;
 		}
-		if ( ! wp_script_is( 'newspack-wizards-admin-header', 'registered' ) ) {
-			return;
-		}
-
-		$tab_url          = $current_page->get_wizard_tab_url();
-		$breadcrumb_label = $current_page->get_wizard_header_label();
-
-		if ( null === $tab_url && null === $breadcrumb_label ) {
-			return;
-		}
-
-		$tab_url_json    = null === $tab_url ? 'null' : wp_json_encode( $tab_url );
-		$breadcrumb_json = null === $breadcrumb_label ? 'null' : wp_json_encode( $breadcrumb_label );
-
-		wp_add_inline_script(
-			'newspack-wizards-admin-header',
-			sprintf(
-				'( function () {
-					var tabUrl = %1$s;
-					var breadcrumb = %2$s;
-					var observer = null;
-					function apply() {
-						var tabDone = ! tabUrl;
-						var breadcrumbDone = ! breadcrumb;
-						if ( tabUrl ) {
-							var links = document.querySelectorAll( ".newspack-tabbed-navigation a" );
-							links.forEach( function ( link ) {
-								if ( link.href === tabUrl ) {
-									link.classList.add( "selected" );
-								}
-							} );
-							tabDone = links.length > 0;
-						}
-						if ( breadcrumb ) {
-							var heading = document.querySelector( ".newspack-wizard__title h2" );
-							if ( heading ) {
-								if ( heading.textContent !== breadcrumb ) {
-									heading.textContent = breadcrumb;
-								}
-								breadcrumbDone = true;
-							}
-						}
-						if ( tabDone && breadcrumbDone && observer ) {
-							observer.disconnect();
-							observer = null;
-							setTimeout( function () {
-								apply();
-							}, 0 );
-						}
-					}
-					apply();
-					var root = document.querySelector( ".newspack-wizard" ) || document.body;
-					observer = new MutationObserver( apply );
-					observer.observe( root, { childList: true, subtree: true } );
-				} )();',
-				$tab_url_json,
-				$breadcrumb_json
-			)
-		);
+		$crumbs = $current_page->get_wizard_breadcrumbs();
+		return null === $crumbs ? $breadcrumbs : $crumbs;
 	}
 }
