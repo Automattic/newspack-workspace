@@ -178,13 +178,19 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 	 * Teardown after tests.
 	 */
 	public function tear_down() {
-		foreach ( Content_Gate::get_gates() as $gate ) {
+		// Both buckets: get_gates() defaults to content gates only, so premium newsletter gates
+		// would otherwise survive into later tests and skew title/priority derivation there.
+		$gates = array_merge( Content_Gate::get_gates(), Content_Gate::get_gates( Content_Gate::GATE_CPT, null, true ) );
+		foreach ( $gates as $gate ) {
 			wp_delete_post( $gate['id'], true );
 		}
 		foreach ( $this->post_ids as $post_id ) {
 			wp_delete_post( $post_id, true );
 		}
 		$this->reset_restriction_cache();
+		// Statics persist across tests (they are not rolled back with the DB), so
+		// reset them here — including after an assertion failure leaves them dirty.
+		$this->reset_gate_render_state();
 		// phpcs:disable WordPressVIPMinimum.Variables.ServerVariables.UserControlledHeaders, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__REMOTE_ADDR__, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 		if ( null === $this->original_remote_addr ) {
 			unset( $_SERVER['REMOTE_ADDR'] );
@@ -1044,45 +1050,55 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Test comment filters on fully gated posts.
+	 * Reset the render-time static flags on Content_Gate so a test driving
+	 * restrict_post() starts from a clean slate, independent of test ordering
+	 * (restrict_post() short-circuits on has_rendered()).
 	 */
-	public function test_comments_closed_on_gated_post() {
-		$post_id = $this->post_ids[0];
-
-		$this->set_content_gate_property( 'is_gated', true );
-		$this->set_content_gate_property( 'is_metered', false );
-
-		// Simulate queried object.
-		$this->go_to( get_permalink( $post_id ) );
-
-		$this->assertFalse( Content_Gate::filter_comments_open( true, $post_id ), 'Comments should be closed on gated post' );
-		$this->assertEmpty( Content_Gate::filter_comments_array( [ 'comment1', 'comment2' ], $post_id ), 'Comments array should be empty on gated post' );
-		$this->assertSame( 0, Content_Gate::filter_comments_number( 5, $post_id ), 'Comment count should be 0 on gated post' );
-
-		// Reset.
+	private function reset_gate_render_state() {
+		$this->set_content_gate_property( 'gate_rendered', false );
 		$this->set_content_gate_property( 'is_gated', false );
+		$this->set_content_gate_property( 'is_content_locked', false );
 	}
 
 	/**
-	 * Test comment filters on metered posts.
+	 * Test comment filters gate a fully locked post (reader has no access).
 	 */
-	public function test_comments_closed_but_visible_on_metered_post() {
+	public function test_comments_closed_on_locked_post() {
 		$post_id = $this->post_ids[0];
 
-		$this->set_content_gate_property( 'is_gated', false );
-		$this->set_content_gate_property( 'is_metered', true );
+		$this->set_content_gate_property( 'is_content_locked', true );
 
 		// Simulate queried object.
 		$this->go_to( get_permalink( $post_id ) );
 
-		$this->assertFalse( Content_Gate::filter_comments_open( true, $post_id ), 'Comments should be closed on metered post' );
+		$this->assertFalse( Content_Gate::filter_comments_open( true, $post_id ), 'Comments should be closed on a locked post' );
+		$this->assertEmpty( Content_Gate::filter_comments_array( [ 'comment1', 'comment2' ], $post_id ), 'Comments array should be empty on a locked post' );
+		$this->assertSame( 0, Content_Gate::filter_comments_number( 5, $post_id ), 'Comment count should be 0 on a locked post' );
+	}
 
+	/**
+	 * Test comment filters pass through when the content is not locked.
+	 *
+	 * This covers metered (still-readable) and unrestricted posts alike: neither
+	 * locks the content, so commenting is left to the site's Discussion Settings.
+	 * Critically, the filters key off the access decision ($is_content_locked),
+	 * not the render-time $is_gated flag, which is also raised while rendering an
+	 * overlay gate for a metered post (NPPD-1829).
+	 */
+	public function test_comments_pass_through_when_not_locked() {
+		$post_id = $this->post_ids[0];
+
+		$this->set_content_gate_property( 'is_content_locked', false );
+		// $is_gated may be raised by overlay/excerpt rendering on a readable post;
+		// it must not gate comments on its own.
+		$this->set_content_gate_property( 'is_gated', true );
+
+		$this->go_to( get_permalink( $post_id ) );
+
+		$this->assertTrue( Content_Gate::filter_comments_open( true, $post_id ), 'Comments should remain open when the content is not locked' );
 		$comments = [ 'comment1', 'comment2' ];
-		$this->assertSame( $comments, Content_Gate::filter_comments_array( $comments, $post_id ), 'Existing comments should remain visible on metered post' );
-		$this->assertSame( 5, Content_Gate::filter_comments_number( 5, $post_id ), 'Comment count should be unchanged on metered post' );
-
-		// Reset.
-		$this->set_content_gate_property( 'is_metered', false );
+		$this->assertSame( $comments, Content_Gate::filter_comments_array( $comments, $post_id ), 'Existing comments should remain visible when the content is not locked' );
+		$this->assertSame( 5, Content_Gate::filter_comments_number( 5, $post_id ), 'Comment count should be unchanged when the content is not locked' );
 	}
 
 	/**
@@ -1093,37 +1109,95 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 		$other_post_id = $this->factory->post->create();
 		$this->post_ids[] = $other_post_id;
 
-		$this->set_content_gate_property( 'is_gated', true );
-		$this->set_content_gate_property( 'is_metered', false );
+		$this->set_content_gate_property( 'is_content_locked', true );
 
-		// Simulate queried object as the gated post.
+		// Simulate queried object as the locked post.
 		$this->go_to( get_permalink( $post_id ) );
 
 		// Filters should not affect the other post.
-		$this->assertTrue( Content_Gate::filter_comments_open( true, $other_post_id ), 'Comments should remain open on non-gated post' );
+		$this->assertTrue( Content_Gate::filter_comments_open( true, $other_post_id ), 'Comments should remain open on the non-locked post' );
 		$comments = [ 'comment1' ];
-		$this->assertSame( $comments, Content_Gate::filter_comments_array( $comments, $other_post_id ), 'Comments array should be unchanged on non-gated post' );
-		$this->assertSame( 3, Content_Gate::filter_comments_number( 3, $other_post_id ), 'Comment count should be unchanged on non-gated post' );
-
-		// Reset.
-		$this->set_content_gate_property( 'is_gated', false );
+		$this->assertSame( $comments, Content_Gate::filter_comments_array( $comments, $other_post_id ), 'Comments array should be unchanged on the non-locked post' );
+		$this->assertSame( 3, Content_Gate::filter_comments_number( 3, $other_post_id ), 'Comment count should be unchanged on the non-locked post' );
 	}
 
 	/**
-	 * Test comment filters pass through on unrestricted posts.
+	 * Metered (currently-accessible) content must leave commenting governed by
+	 * the site's Discussion Settings, not force it closed.
+	 *
+	 * Regression test for NPPD-1829: a Paid Access gate left logged-out readers
+	 * unable to comment on posts they could still read via metering, even on a
+	 * site that allows unauthenticated commenting.
 	 */
-	public function test_comments_unaffected_on_unrestricted_post() {
+	public function test_metered_post_keeps_commenting_per_discussion_settings() {
 		$post_id = $this->post_ids[0];
 
-		$this->set_content_gate_property( 'is_gated', false );
-		$this->set_content_gate_property( 'is_metered', false );
+		$this->reset_gate_render_state();
 
+		// Site allows logged-out commenting (name + email), per Discussion Settings.
+		update_option( 'comment_registration', 0 );
+		wp_update_post(
+			[
+				'ID'             => $post_id,
+				'comment_status' => 'open',
+			]
+		);
+
+		// Logged-out reader.
+		wp_set_current_user( 0 );
+
+		// The published gate restricts this post for the anonymous reader...
+		$this->assertNotFalse( Content_Gate::is_post_restricted( $post_id ), 'Post should be restricted for the logged-out reader' );
+
+		// ...but metering grants read access for this view. The Metering class
+		// signals that by returning false from this filter.
+		add_filter( 'newspack_content_gate_restrict_post', '__return_false' );
+
+		// Render the post through the gate's restriction logic.
 		$this->go_to( get_permalink( $post_id ) );
+		$post = get_post( $post_id );
+		Content_Gate::restrict_post( $post, $GLOBALS['wp_query'] );
 
-		$this->assertTrue( Content_Gate::filter_comments_open( true, $post_id ), 'Comments should remain open on unrestricted post' );
-		$comments = [ 'comment1', 'comment2' ];
-		$this->assertSame( $comments, Content_Gate::filter_comments_array( $comments, $post_id ), 'Comments array should be unchanged on unrestricted post' );
-		$this->assertSame( 5, Content_Gate::filter_comments_number( 5, $post_id ), 'Comment count should be unchanged on unrestricted post' );
+		remove_filter( 'newspack_content_gate_restrict_post', '__return_false' );
+
+		$this->assertSame( 'open', $post->comment_status, 'Metered post must not have its comment status force-closed' );
+		// Assert the gate filter directly (not only via comments_open()) so the
+		// pass/fail hinge is explicit and does not depend on the filter being
+		// registered through init() at runtime.
+		$this->assertTrue( Content_Gate::filter_comments_open( true, $post_id ), 'Gate filter must not close comments on a metered post' );
+		$this->assertTrue( comments_open( $post_id ), 'Logged-out reader must be able to comment on a metered post when Discussion Settings allow it' );
+	}
+
+	/**
+	 * The companion invariant to NPPD-1829: a fully gated post (reader has no
+	 * access, no metering grace) must still lock commenting end-to-end.
+	 */
+	public function test_gated_post_locks_commenting() {
+		$post_id = $this->post_ids[0];
+
+		$this->reset_gate_render_state();
+
+		update_option( 'comment_registration', 0 );
+		wp_update_post(
+			[
+				'ID'             => $post_id,
+				'comment_status' => 'open',
+			]
+		);
+
+		// Logged-out reader with no access and no metering grace (default filter).
+		wp_set_current_user( 0 );
+		$this->assertNotFalse( Content_Gate::is_post_restricted( $post_id ), 'Post should be restricted for the logged-out reader' );
+
+		// Render the post through the gate's restriction logic (gated branch).
+		$this->go_to( get_permalink( $post_id ) );
+		$post = get_post( $post_id );
+		Content_Gate::restrict_post( $post, $GLOBALS['wp_query'] );
+
+		$this->assertSame( 'closed', $post->comment_status, 'Gated post should have its comment status closed' );
+		$this->assertFalse( comments_open( $post_id ), 'Gated post must not accept comments' );
+		$this->assertFalse( Content_Gate::filter_comments_open( true, $post_id ), 'Comment filter should report closed on a gated post' );
+		$this->assertSame( 0, Content_Gate::filter_comments_number( 5, $post_id ), 'Comment count should be 0 on a gated post' );
 	}
 
 	/**
@@ -2430,5 +2504,619 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 		Content_Gate::update_gate_settings( $gate_id, $sanitized );
 
 		$this->assertSame( 'any', Content_Rules::get_gate_content_rules_match( $gate_id ), 'Stored match mode must not be reset when the field is absent from the update payload' );
+	}
+
+	/**
+	 * Updating a gate via a payload that omits status must not reset a published
+	 * gate to draft (a draft gate stops enforcing).
+	 */
+	public function test_update_gate_without_status_preserves_stored_status() {
+		$gate_id          = Content_Gate::create_gate(
+			[
+				'title'  => 'Published Gate',
+				'status' => 'publish',
+			]
+		);
+		$this->gate_ids[] = $gate_id;
+		$this->assertSame( 'publish', get_post_status( $gate_id ), 'Pre-condition: gate is published' );
+
+		// Simulate a REST update that omits the status field.
+		$sanitized = Content_Gate_API::sanitize_gate(
+			[
+				'title'    => 'Published Gate',
+				'priority' => 1,
+			]
+		);
+		$this->assertArrayNotHasKey( 'status', $sanitized, 'Missing status must not be injected into the sanitized output' );
+
+		Content_Gate::update_gate_settings( $gate_id, $sanitized );
+		$this->assertSame( 'publish', get_post_status( $gate_id ), 'Stored status must not be reset when the field is absent from the update payload' );
+	}
+
+	/**
+	 * A partial REST update (e.g. title/priority only) must not wipe a published
+	 * gate's content rules, registration, or custom access settings (an empty
+	 * content_rules set stops the gate from enforcing).
+	 */
+	public function test_update_gate_without_rules_preserves_stored_rules_and_status() {
+		$gate_id          = Content_Gate::create_gate( [ 'title' => 'Rules Gate' ] );
+		$this->gate_ids[] = $gate_id;
+
+		// Establish the gate as published with content rules.
+		Content_Gate::update_gate_settings(
+			$gate_id,
+			[
+				'title'         => 'Rules Gate',
+				'priority'      => 0,
+				'status'        => 'publish',
+				'content_rules' => [
+					[
+						'slug'  => 'post_types',
+						'value' => [ 'post' ],
+					],
+				],
+			]
+		);
+		$this->assertSame( 'publish', get_post_status( $gate_id ), 'Pre-condition: gate is published' );
+		$this->assertNotEmpty( Content_Rules::get_gate_content_rules( $gate_id ), 'Pre-condition: gate has content rules' );
+
+		// Simulate a REST update that only sends title and priority.
+		$sanitized = Content_Gate_API::sanitize_gate(
+			[
+				'title'    => 'Rules Gate',
+				'priority' => 1,
+			]
+		);
+		$this->assertArrayNotHasKey( 'content_rules', $sanitized, 'Missing content_rules must not be injected into the sanitized output' );
+		$this->assertArrayNotHasKey( 'registration', $sanitized, 'Missing registration must not be injected into the sanitized output' );
+		$this->assertArrayNotHasKey( 'custom_access', $sanitized, 'Missing custom_access must not be injected into the sanitized output' );
+		$this->assertArrayNotHasKey( 'status', $sanitized, 'Missing status must not be injected into the sanitized output' );
+
+		Content_Gate::update_gate_settings( $gate_id, $sanitized );
+
+		$this->assertNotEmpty( Content_Rules::get_gate_content_rules( $gate_id ), 'Stored content rules must not be wiped when the field is absent from the update payload' );
+		$this->assertSame( 'publish', get_post_status( $gate_id ), 'Stored status must not be reset when the field is absent from the update payload' );
+	}
+
+	/**
+	 * A status-only REST update payload must not clobber the gate's stored
+	 * title or priority.
+	 */
+	public function test_update_gate_status_only_preserves_title_and_priority() {
+		$gate_id          = Content_Gate::create_gate( [ 'title' => 'Original Title' ] );
+		$this->gate_ids[] = $gate_id;
+
+		// Establish the gate as published with a distinct title and priority.
+		Content_Gate::update_gate_settings(
+			$gate_id,
+			[
+				'title'    => 'Original Title',
+				'priority' => 5,
+				'status'   => 'publish',
+			]
+		);
+		$this->assertSame( 'Original Title', get_post( $gate_id )->post_title, 'Pre-condition: gate has the expected title' );
+		$this->assertSame( '5', get_post_meta( $gate_id, 'gate_priority', true ), 'Pre-condition: gate has the expected priority' );
+
+		// Simulate a REST update that only sends status.
+		$sanitized = Content_Gate_API::sanitize_gate( [ 'status' => 'draft' ] );
+		$this->assertSame( [ 'status' => 'draft' ], $sanitized, 'Sanitized output must contain only the explicitly provided status field' );
+
+		Content_Gate::update_gate_settings( $gate_id, $sanitized );
+
+		$this->assertSame( 'Original Title', get_post( $gate_id )->post_title, 'Stored title must not be reset when the field is absent from the update payload' );
+		$this->assertSame( '5', get_post_meta( $gate_id, 'gate_priority', true ), 'Stored priority must not be reset when the field is absent from the update payload' );
+		$this->assertSame( 'draft', get_post_status( $gate_id ), 'Status must be updated to the explicitly provided value' );
+	}
+
+	/**
+	 * A sparse nested registration/custom_access update payload (e.g. only
+	 * toggling `active`) must not wipe the stored metering, verification, or
+	 * access rules for that mode.
+	 */
+	public function test_update_gate_sparse_nested_settings_preserve_stored_values() {
+		$gate_id          = Content_Gate::create_gate( [ 'title' => 'Sparse Nested Gate' ] );
+		$this->gate_ids[] = $gate_id;
+
+		// Establish the gate with full registration and custom_access settings.
+		Content_Gate::update_gate_settings(
+			$gate_id,
+			[
+				'title'         => 'Sparse Nested Gate',
+				'priority'      => 0,
+				'registration'  => [
+					'active'               => true,
+					'metering'             => [
+						'enabled' => true,
+						'count'   => 3,
+						'period'  => 'month',
+					],
+					'require_verification' => true,
+				],
+				'custom_access' => [
+					'active'       => true,
+					'access_rules' => [
+						[
+							'slug'  => 'email_domain',
+							'value' => 'example.com',
+						],
+					],
+				],
+			]
+		);
+
+		// Sparse update: only toggle registration.active.
+		$sanitized_registration = Content_Gate_API::sanitize_registration( [ 'active' => false ] );
+		$this->assertSame( [ 'active' => false ], $sanitized_registration, 'Sanitized registration must contain only the explicitly provided field' );
+
+		Content_Gate::update_gate_settings( $gate_id, [ 'registration' => $sanitized_registration ] );
+
+		$registration = Content_Gate::get_registration_settings( $gate_id );
+		$this->assertFalse( $registration['active'], 'Registration active must be updated to the explicitly provided value' );
+		$this->assertTrue( $registration['metering']['enabled'], 'Stored registration metering must not be wiped by a sparse update' );
+		$this->assertSame( 3, $registration['metering']['count'], 'Stored registration metering count must not be wiped by a sparse update' );
+		$this->assertTrue( $registration['require_verification'], 'Stored require_verification must not be wiped by a sparse update' );
+
+		// Sparse update: only toggle custom_access.active.
+		$sanitized_custom_access = Content_Gate_API::sanitize_custom_access( [ 'active' => false ] );
+		$this->assertSame( [ 'active' => false ], $sanitized_custom_access, 'Sanitized custom_access must contain only the explicitly provided field' );
+
+		Content_Gate::update_gate_settings( $gate_id, [ 'custom_access' => $sanitized_custom_access ] );
+
+		$custom_access = Content_Gate::get_custom_access_settings( $gate_id );
+		$this->assertFalse( $custom_access['active'], 'Custom access active must be updated to the explicitly provided value' );
+		$this->assertSame( 'email_domain', $custom_access['access_rules'][0][0]['slug'], 'Stored access_rules must not be wiped by a sparse update' );
+	}
+
+	/**
+	 * A sparse metering update (e.g. only toggling `enabled`) must not wipe
+	 * the stored `count`/`period`, since the storage layer's shallow merge
+	 * would otherwise replace the whole metering array wholesale.
+	 */
+	public function test_update_gate_sparse_metering_preserve_stored_values() {
+		$gate_id          = Content_Gate::create_gate( [ 'title' => 'Sparse Metering Gate' ] );
+		$this->gate_ids[] = $gate_id;
+
+		// Establish the gate with full registration and custom_access metering.
+		Content_Gate::update_gate_settings(
+			$gate_id,
+			[
+				'title'         => 'Sparse Metering Gate',
+				'priority'      => 0,
+				'registration'  => [
+					'active'   => true,
+					'metering' => [
+						'enabled' => true,
+						'count'   => 3,
+						'period'  => 'week',
+					],
+				],
+				'custom_access' => [
+					'active'   => true,
+					'metering' => [
+						'enabled' => true,
+						'count'   => 3,
+						'period'  => 'week',
+					],
+				],
+			]
+		);
+
+		// Sparse update: only toggle registration.metering.enabled.
+		$sanitized_registration = Content_Gate_API::sanitize_registration( [ 'metering' => [ 'enabled' => false ] ] );
+		$this->assertSame( [ 'metering' => [ 'enabled' => false ] ], $sanitized_registration, 'Sanitized registration metering must contain only the explicitly provided field' );
+
+		Content_Gate::update_gate_settings( $gate_id, [ 'registration' => $sanitized_registration ] );
+
+		$registration = Content_Gate::get_registration_settings( $gate_id );
+		$this->assertFalse( $registration['metering']['enabled'], 'Registration metering enabled must be updated to the explicitly provided value' );
+		$this->assertSame( 3, $registration['metering']['count'], 'Stored registration metering count must not be wiped by a sparse update' );
+		$this->assertSame( 'week', $registration['metering']['period'], 'Stored registration metering period must not be wiped by a sparse update' );
+
+		// Sparse update: only toggle custom_access.metering.enabled.
+		$sanitized_custom_access = Content_Gate_API::sanitize_custom_access( [ 'metering' => [ 'enabled' => false ] ] );
+		$this->assertSame( [ 'metering' => [ 'enabled' => false ] ], $sanitized_custom_access, 'Sanitized custom_access metering must contain only the explicitly provided field' );
+
+		Content_Gate::update_gate_settings( $gate_id, [ 'custom_access' => $sanitized_custom_access ] );
+
+		$custom_access = Content_Gate::get_custom_access_settings( $gate_id );
+		$this->assertFalse( $custom_access['metering']['enabled'], 'Custom access metering enabled must be updated to the explicitly provided value' );
+		$this->assertSame( 3, $custom_access['metering']['count'], 'Stored custom_access metering count must not be wiped by a sparse update' );
+		$this->assertSame( 'week', $custom_access['metering']['period'], 'Stored custom_access metering period must not be wiped by a sparse update' );
+	}
+
+	/**
+	 * Creating a gate must fall back to a default title when the payload
+	 * omits one, since sanitize_gate() no longer guarantees a title.
+	 */
+	public function test_create_gate_without_title_uses_default_title() {
+		$gate_id          = Content_Gate::create_gate( [] );
+		$this->gate_ids[] = $gate_id;
+
+		$this->assertSame( 'Untitled Content Gate', get_post( $gate_id )->post_title );
+	}
+
+	/**
+	 * The site-wide default-status option is applied to new-gate payloads that omit
+	 * status, without overriding an explicit status, and without affecting direct
+	 * PHP callers of create_gate() (e.g. WooCommerce Memberships), which rely on
+	 * the 'publish' fallback.
+	 */
+	public function test_with_default_new_gate_status() {
+		Content_Gate::set_default_new_gate_status( 'publish' );
+
+		$defaulted = Content_Gate::with_default_new_gate_status( [ 'title' => 'New Gate' ] );
+		$this->assertSame( 'publish', $defaulted['status'], 'Omitted status must be filled from the site-wide default' );
+
+		$explicit = Content_Gate::with_default_new_gate_status(
+			[
+				'title'  => 'New Gate',
+				'status' => 'draft',
+			]
+		);
+		$this->assertSame( 'draft', $explicit['status'], 'Explicit status must not be overridden by the default' );
+
+		$gate_id          = Content_Gate::create_gate( [ 'title' => 'Direct PHP Gate' ] );
+		$this->gate_ids[] = $gate_id;
+		$this->assertSame( 'publish', get_post_status( $gate_id ), 'Direct create_gate() callers keep the publish fallback regardless of the option' );
+
+		Content_Gate::set_default_new_gate_status( 'draft' );
+		$gate_id_2        = Content_Gate::create_gate( [ 'title' => 'Direct PHP Gate 2' ] );
+		$this->gate_ids[] = $gate_id_2;
+		$this->assertSame( 'publish', get_post_status( $gate_id_2 ), 'Memberships-style callers must not be affected by a draft default' );
+
+		delete_option( Content_Gate::DEFAULT_STATUS_OPTION );
+	}
+
+	/**
+	 * A duplicate carries over every setting of its source, but is always created
+	 * inactive and last in the list — a copy of a live gate silently going live
+	 * would change site-wide access behavior.
+	 */
+	public function test_duplicate_gate_copies_settings() {
+		$source_id = $this->gate_ids[2]; // 'Published Gate'.
+		Content_Gate::update_gate_settings(
+			$source_id,
+			[
+				'content_rules_match' => 'all',
+				'custom_access'       => [
+					'active'       => true,
+					'metering'     => [
+						'enabled' => true,
+						'count'   => 5,
+						'period'  => 'week',
+					],
+					'access_rules' => [
+						[
+							[
+								'slug'  => 'subscriptions',
+								'value' => [ 123 ],
+							],
+						],
+					],
+				],
+			]
+		);
+		$source = Content_Gate::get_gate( $source_id );
+
+		$copy_id = Content_Gate::duplicate_gate( $source_id );
+		$this->assertNotWPError( $copy_id, 'Duplicating a valid gate succeeds' );
+		$copy = Content_Gate::get_gate( $copy_id );
+
+		$this->assertSame( 'Published Gate copy', $copy['title'] );
+		$this->assertSame( 'draft', $copy['status'], 'A copy is always inactive, even when the source is published' );
+		$this->assertSame( $source['content_rules'], $copy['content_rules'] );
+		$this->assertSame( $source['content_rules_match'], $copy['content_rules_match'] );
+
+		// Layout IDs are deep-copied (asserted in test_duplicate_gate_deep_copies_layouts), so compare everything else.
+		unset( $source['registration']['gate_layout_id'], $copy['registration']['gate_layout_id'] );
+		unset( $source['custom_access']['gate_layout_id'], $copy['custom_access']['gate_layout_id'] );
+		$this->assertSame( $source['registration'], $copy['registration'] );
+		$this->assertSame( $source['custom_access'], $copy['custom_access'] );
+
+		// get_gates() returns content gates ordered by priority, so the copy coming last means
+		// it was appended rather than sorted in among the existing gates.
+		$content_gates = Content_Gate::get_gates();
+		$this->assertSame( $copy_id, end( $content_gates )['id'], 'The copy is appended to the end of the gate list' );
+		$this->assertGreaterThan( $source['priority'], $copy['priority'], 'The copy sorts after its source' );
+	}
+
+	/**
+	 * A layout's presentation settings live as meta on the layout post, and they gate how
+	 * much of the restricted article a reader can see. Dropping them on the copy would not
+	 * just look wrong: an overlay layout revealing no paragraphs would come back as an
+	 * inline one revealing the article's first two.
+	 */
+	public function test_duplicate_gate_copies_layout_settings() {
+		$source_id     = $this->gate_ids[2];
+		$source        = Content_Gate::get_gate( $source_id );
+		$source_layout_id = $source['registration']['gate_layout_id'];
+
+		$layout_settings = [
+			'style'              => 'overlay',
+			'visible_paragraphs' => 0,
+			'overlay_position'   => 'bottom',
+			'overlay_size'       => 'large',
+			'inline_fade'        => false,
+			'use_more_tag'       => false,
+		];
+		foreach ( $layout_settings as $key => $value ) {
+			update_post_meta( $source_layout_id, $key, $value );
+		}
+
+		$copy_id   = Content_Gate::duplicate_gate( $source_id );
+		$copy      = Content_Gate::get_gate( $copy_id );
+		$copy_layout_id = $copy['registration']['gate_layout_id'];
+
+		foreach ( $layout_settings as $key => $value ) {
+			$this->assertEquals(
+				get_post_meta( $source_layout_id, $key, true ),
+				get_post_meta( $copy_layout_id, $key, true ),
+				sprintf( 'Layout setting "%s" must carry over to the copy', $key )
+			);
+		}
+	}
+
+	/**
+	 * Protected (`_`-prefixed) meta must not carry over to the copy. Keys like `_edit_lock`
+	 * are WordPress bookkeeping bound to the source post; copying them would misattribute
+	 * that state to the copy. Both copy loops (gate meta and layout meta) skip these keys,
+	 * and this pins that so a future refactor can't quietly start copying them through.
+	 */
+	public function test_duplicate_gate_skips_protected_meta() {
+		$source_id        = $this->gate_ids[2];
+		$source           = Content_Gate::get_gate( $source_id );
+		$source_layout_id = $source['registration']['gate_layout_id'];
+
+		add_post_meta( $source_id, '_private', 'gate-secret' );
+		add_post_meta( $source_layout_id, '_private', 'layout-secret' );
+
+		$copy_id = Content_Gate::duplicate_gate( $source_id );
+		$this->assertNotWPError( $copy_id );
+		$copy = Content_Gate::get_gate( $copy_id );
+
+		$this->assertSame( '', get_post_meta( $copy_id, '_private', true ), 'Protected meta on the gate is not copied' );
+		$this->assertSame( '', get_post_meta( $copy['registration']['gate_layout_id'], '_private', true ), 'Protected meta on the layout is not copied' );
+	}
+
+	/**
+	 * Layouts must be deep-copied. Sharing layout posts between two gates would let
+	 * delete_gate_layouts() destroy the surviving gate's reader-facing content.
+	 */
+	public function test_duplicate_gate_deep_copies_layouts() {
+		$source_id = $this->gate_ids[2];
+		$source    = Content_Gate::get_gate( $source_id );
+
+		// Customize the source layouts — the publisher's edits are the main thing worth duplicating.
+		wp_update_post(
+			[
+				'ID'           => $source['registration']['gate_layout_id'],
+				'post_content' => '<!-- wp:paragraph --><p>Custom registration layout</p><!-- /wp:paragraph -->',
+			]
+		);
+		wp_update_post(
+			[
+				'ID'           => $source['custom_access']['gate_layout_id'],
+				'post_content' => '<!-- wp:paragraph --><p>Custom paid access layout</p><!-- /wp:paragraph -->',
+			]
+		);
+
+		$copy_id = Content_Gate::duplicate_gate( $source_id );
+		$copy    = Content_Gate::get_gate( $copy_id );
+
+		$copy_registration_layout_id  = $copy['registration']['gate_layout_id'];
+		$copy_custom_access_layout_id = $copy['custom_access']['gate_layout_id'];
+
+		$this->assertNotEmpty( $copy_registration_layout_id, 'The copy has its own registration layout' );
+		$this->assertNotEmpty( $copy_custom_access_layout_id, 'The copy has its own paid access layout' );
+		$this->assertNotEquals( $source['registration']['gate_layout_id'], $copy_registration_layout_id, 'Layout posts are not shared between gates' );
+		$this->assertNotEquals( $source['custom_access']['gate_layout_id'], $copy_custom_access_layout_id, 'Layout posts are not shared between gates' );
+
+		$this->assertStringContainsString( 'Custom registration layout', get_post( $copy_registration_layout_id )->post_content, 'The customized layout content is carried over' );
+		$this->assertStringContainsString( 'Custom paid access layout', get_post( $copy_custom_access_layout_id )->post_content, 'The customized layout content is carried over' );
+
+		// Permanently deleting the source must not take the copy's layouts with it.
+		wp_delete_post( $source_id, true );
+
+		$this->assertNotNull( get_post( $copy_registration_layout_id ), "The copy's registration layout survives deletion of the source gate" );
+		$this->assertNotNull( get_post( $copy_custom_access_layout_id ), "The copy's paid access layout survives deletion of the source gate" );
+	}
+
+	/**
+	 * A layout a publisher deliberately emptied must stay empty on the copy — not fall back to
+	 * the default "only available to members" content, which the source doesn't show.
+	 */
+	public function test_duplicate_gate_preserves_empty_layout_content() {
+		$source_id        = $this->gate_ids[2];
+		$source           = Content_Gate::get_gate( $source_id );
+		$source_layout_id = $source['registration']['gate_layout_id'];
+
+		wp_update_post(
+			[
+				'ID'           => $source_layout_id,
+				'post_content' => '',
+			]
+		);
+
+		$copy_id = Content_Gate::duplicate_gate( $source_id );
+		$copy    = Content_Gate::get_gate( $copy_id );
+
+		$this->assertSame( '', get_post( $copy['registration']['gate_layout_id'] )->post_content, 'An intentionally blank layout stays blank on the copy' );
+	}
+
+	/**
+	 * If a layout can't be created, the half-built copy must not be left behind pointing at
+	 * the source's layouts: deleting that copy would then permanently delete the layouts the
+	 * source gate is still serving to readers.
+	 */
+	public function test_duplicate_gate_cleans_up_when_layout_creation_fails() {
+		$source_id = $this->gate_ids[2];
+		$source    = Content_Gate::get_gate( $source_id );
+
+		$get_layout_ids = function () {
+			return get_posts(
+				[
+					'post_type'      => Content_Gate::GATE_LAYOUT_CPT,
+					'post_status'    => 'any',
+					'posts_per_page' => -1,
+					'fields'         => 'ids',
+				]
+			);
+		};
+		$layout_ids_before = $get_layout_ids();
+
+		// Fail the *second* layout insert only. That's the branch worth protecting: the copy
+		// already owns a registration layout, so the cleanup has a layout of its own to reap.
+		$layout_inserts             = 0;
+		$fail_second_layout_creation = function ( $maybe_empty, $postarr ) use ( &$layout_inserts ) {
+			if ( Content_Gate::GATE_LAYOUT_CPT !== $postarr['post_type'] ) {
+				return $maybe_empty;
+			}
+			++$layout_inserts;
+			return $layout_inserts > 1;
+		};
+		add_filter( 'wp_insert_post_empty_content', $fail_second_layout_creation, 10, 2 );
+		$result = Content_Gate::duplicate_gate( $source_id );
+		remove_filter( 'wp_insert_post_empty_content', $fail_second_layout_creation, 10 );
+
+		$this->assertWPError( $result, 'Duplication fails when a layout cannot be created' );
+		$this->assertSame( 2, $layout_inserts, 'The first layout was created before the second one failed' );
+
+		$gate_titles = wp_list_pluck( Content_Gate::get_gates(), 'title' );
+		$this->assertNotContains( 'Published Gate copy', $gate_titles, 'The half-built copy is cleaned up rather than left in the list' );
+
+		// The copy's own layout goes with it — no orphaned layout posts left behind.
+		$this->assertEqualsCanonicalizing( $layout_ids_before, $get_layout_ids(), 'No layout posts are added or removed by a failed duplication' );
+
+		// The whole point: the source gate is untouched and still owns its layouts.
+		$this->assertNotNull( get_post( $source['registration']['gate_layout_id'] ), "The source's registration layout is untouched" );
+		$this->assertNotNull( get_post( $source['custom_access']['gate_layout_id'] ), "The source's paid access layout is untouched" );
+	}
+
+	/**
+	 * Repeated duplication produces unique, numbered titles.
+	 */
+	public function test_duplicate_gate_title_uniqueness() {
+		$source_id = $this->gate_ids[2];
+
+		$first_copy_id = Content_Gate::duplicate_gate( $source_id );
+		$this->assertSame( 'Published Gate copy', get_post( $first_copy_id )->post_title );
+
+		$second_copy_id = Content_Gate::duplicate_gate( $source_id );
+		$this->assertSame( 'Published Gate copy 2', get_post( $second_copy_id )->post_title );
+
+		// Duplicating a copy reads as a copy of that copy.
+		$copy_of_copy_id = Content_Gate::duplicate_gate( $first_copy_id );
+		$this->assertSame( 'Published Gate copy copy', get_post( $copy_of_copy_id )->post_title );
+	}
+
+	/**
+	 * A gate whose layout post is gone (stale ID) still duplicates, getting a fresh
+	 * layout with default content — mirroring create_gate()'s self-healing.
+	 */
+	public function test_duplicate_gate_missing_layout_falls_back() {
+		$source_id = $this->gate_ids[2];
+		$source    = Content_Gate::get_gate( $source_id );
+
+		wp_delete_post( $source['registration']['gate_layout_id'], true );
+
+		$copy_id = Content_Gate::duplicate_gate( $source_id );
+		$this->assertNotWPError( $copy_id, 'A stale layout ID does not break duplication' );
+
+		$copy = Content_Gate::get_gate( $copy_id );
+		$this->assertNotEmpty( $copy['registration']['gate_layout_id'], 'A fresh registration layout is created' );
+
+		$layout = get_post( $copy['registration']['gate_layout_id'] );
+		$this->assertNotNull( $layout );
+		$this->assertNotEmpty( $layout->post_content, 'The fresh layout gets default content' );
+	}
+
+	/**
+	 * A premium newsletter gate duplicates into the newsletter bucket: it keeps the
+	 * is_newsletter flag and stays out of the content gates list.
+	 */
+	public function test_duplicate_newsletter_gate() {
+		$newsletter_gate_id = Content_Gate::create_gate( [ 'title' => 'Premium Newsletter Gate' ], Content_Gate::GATE_CPT, true );
+
+		$copy_id = Content_Gate::duplicate_gate( $newsletter_gate_id );
+		$this->assertNotWPError( $copy_id );
+
+		$this->assertSame( 'Premium Newsletter Gate copy', get_post( $copy_id )->post_title );
+		$this->assertNotEmpty( get_post_meta( $copy_id, 'is_newsletter', true ), 'The copy stays a newsletter gate' );
+
+		$newsletter_gate_ids = wp_list_pluck( Content_Gate::get_gates( Content_Gate::GATE_CPT, null, true ), 'id' );
+		$this->assertContains( $copy_id, $newsletter_gate_ids, 'The copy is listed with the premium newsletter gates' );
+
+		$content_gate_ids = wp_list_pluck( Content_Gate::get_gates(), 'id' );
+		$this->assertNotContains( $copy_id, $content_gate_ids, 'The copy is not listed with the content gates' );
+
+		// get_gates() returns the bucket ordered by priority, so the copy being last means it
+		// was appended within the newsletter bucket rather than sorted in among the others.
+		$this->assertSame( $copy_id, end( $newsletter_gate_ids ), 'The copy is appended to the end of the newsletter bucket' );
+		$this->assertGreaterThan(
+			Content_Gate::get_gate( $newsletter_gate_id )['priority'],
+			Content_Gate::get_gate( $copy_id )['priority'],
+			'The copy sorts after its source'
+		);
+	}
+
+	/**
+	 * A non-gate post ID cannot be duplicated.
+	 */
+	public function test_duplicate_gate_rejects_non_gate() {
+		$this->assertWPError( Content_Gate::duplicate_gate( $this->post_ids[0] ), 'A regular post is not a gate' );
+		$this->assertWPError( Content_Gate::duplicate_gate( 999999 ), 'A non-existent post is not a gate' );
+	}
+
+	/**
+	 * The access control wizard's duplicate route returns the full gate shape the
+	 * frontend consumes.
+	 */
+	public function test_duplicate_gate_endpoint() {
+		wp_set_current_user( $this->factory->user->create( [ 'role' => 'administrator' ] ) );
+
+		$request  = new \WP_REST_Request( 'POST', '/' . NEWSPACK_API_NAMESPACE . '/wizard/newspack-audience-access-control/' . $this->gate_ids[2] . '/duplicate' );
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+
+		$data = $response->get_data();
+		$this->assertSame( 'Published Gate copy', $data['title'] );
+		$this->assertSame( 'draft', $data['status'] );
+		$this->assertArrayHasKey( 'registration', $data );
+		$this->assertArrayHasKey( 'custom_access', $data );
+		$this->assertArrayHasKey( 'content_rules', $data );
+		$this->assertNotEquals( $this->gate_ids[2], $data['id'] );
+	}
+
+	/**
+	 * Each wizard only duplicates gates from its own bucket: a copy made from the
+	 * wrong wizard would be invisible in the list it was created from.
+	 */
+	public function test_duplicate_gate_endpoint_rejects_cross_wizard_gates() {
+		wp_set_current_user( $this->factory->user->create( [ 'role' => 'administrator' ] ) );
+
+		$newsletter_gate_id = Content_Gate::create_gate( [ 'title' => 'Premium Newsletter Gate' ], Content_Gate::GATE_CPT, true );
+
+		$request  = new \WP_REST_Request( 'POST', '/' . NEWSPACK_API_NAMESPACE . '/wizard/newspack-audience-access-control/' . $newsletter_gate_id . '/duplicate' );
+		$response = rest_get_server()->dispatch( $request );
+		$this->assertSame( 400, $response->get_status(), 'The access control wizard rejects newsletter gates' );
+
+		// The Premium Newsletters wizard bails out of registering its routes when the
+		// Newsletters plugin is absent (as it is in this suite), so exercise its
+		// callback directly.
+		$premium_newsletters_wizard = \Newspack\Wizards::get_wizard( 'premium-newsletters' );
+
+		$content_gate_request = new \WP_REST_Request( 'POST', '/' . NEWSPACK_API_NAMESPACE . '/wizard/newspack-premium-newsletters/' . $this->gate_ids[2] . '/duplicate' );
+		$content_gate_request->set_param( 'id', $this->gate_ids[2] );
+		$rejection = $premium_newsletters_wizard->api_duplicate_gate( $content_gate_request );
+		$this->assertWPError( $rejection, 'The premium newsletters wizard rejects content gates' );
+		$this->assertSame( 400, $rejection->get_error_data()['status'] );
+
+		$newsletter_request = new \WP_REST_Request( 'POST', '/' . NEWSPACK_API_NAMESPACE . '/wizard/newspack-premium-newsletters/' . $newsletter_gate_id . '/duplicate' );
+		$newsletter_request->set_param( 'id', $newsletter_gate_id );
+		$success = $premium_newsletters_wizard->api_duplicate_gate( $newsletter_request );
+		$this->assertNotWPError( $success );
+		$this->assertSame( 'Premium Newsletter Gate copy', $success->get_data()['title'] );
 	}
 }

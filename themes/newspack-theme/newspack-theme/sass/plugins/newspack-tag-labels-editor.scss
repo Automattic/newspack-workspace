@@ -1,0 +1,32 @@
+@use "../variables-site/variables-site";
+@use "../mixins/mixins-main";
+@use "../variables-site/structure";
+
+// Newspack Blocks
+.tag-labels {
+	// Use `.tag-label.flag` so this beats `.wpnbha .cat-links a` / `.wpnbpc .cat-links a` on specificity.
+	.tag-label.flag {
+		background: var(--newspack-theme-color-highlight);
+		color: var(--newspack-theme-color-text-main);
+		line-height: 1;
+		padding: 0.3em 0.5em;
+		text-transform: uppercase;
+	}
+}
+
+.block-editor {
+	article {
+		.tag-labels,
+		.tag-labels + .cat-links {
+			display: inline-flex;
+		}
+		.tag-label + .tag-label {
+			margin-left: 0.3em; // Don't collapse multiple labels.
+		}
+		.tag-labels a,
+		.tag-labels a:hover {
+			padding: 0.3em 0.5em;
+			text-decoration: none;
+		}
+	}
+}

@@ -59,6 +59,7 @@ class Content_Restriction_Control {
 	 */
 	public static function init() {
 		add_action( 'init', [ __CLASS__, 'register_meta' ] );
+		add_action( 'init', [ __CLASS__, 'register_meta_guards' ] );
 		add_filter( 'newspack_is_post_restricted', [ __CLASS__, 'is_post_restricted' ], 10, 2 );
 	}
 
@@ -467,9 +468,27 @@ class Content_Restriction_Control {
 	}
 
 	/**
+	 * Whether the current user may toggle the content-gate exemption meta.
+	 *
+	 * Single source of truth for the exemption's write capability, shared by
+	 * the meta's register_meta() auth_callback and the REST strip guard so the
+	 * two cannot drift — the strip is defined as the inverse of what the field
+	 * authorizes rather than a re-derivation of the same literal. If the
+	 * capability ever becomes filterable, both stay in lockstep.
+	 *
+	 * @return bool
+	 */
+	public static function current_user_can_edit_exemption() {
+		return current_user_can( 'edit_others_posts' );
+	}
+
+	/**
 	 * Register post meta for the exemption flag.
 	 */
 	public static function register_meta() {
+		if ( ! Content_Gate::is_newspack_feature_enabled() ) {
+			return;
+		}
 		$post_types = array_column( (array) self::get_available_post_types(), 'value' );
 		foreach ( $post_types as $post_type ) {
 			\register_meta(
@@ -481,12 +500,50 @@ class Content_Restriction_Control {
 					'type'           => 'boolean',
 					'default'        => false,
 					'single'         => true,
-					'auth_callback'  => function() {
-						return current_user_can( 'edit_others_posts' );
-					},
+					'auth_callback'  => [ __CLASS__, 'current_user_can_edit_exemption' ],
 				]
 			);
 		}
+	}
+
+	/**
+	 * Register the REST guard that strips the exemption meta from unauthorized
+	 * saves. Registered unconditionally — independent of whether the meta itself
+	 * is registered — so its lifetime never depends on when the content-gate
+	 * feature flag resolves. It is a harmless no-op when the key is absent from
+	 * the request.
+	 */
+	public static function register_meta_guards() {
+		$post_types = array_column( (array) self::get_available_post_types(), 'value' );
+		foreach ( $post_types as $post_type ) {
+			\add_filter( "rest_pre_insert_{$post_type}", [ __CLASS__, 'strip_unauthorized_exempt_meta' ], 10, 2 );
+		}
+	}
+
+	/**
+	 * Remove the exemption meta from an incoming REST save when the current
+	 * user cannot toggle it, so a stray ride-along (Members / Custom Fields /
+	 * third-party) is silently ignored instead of 403-ing the whole save.
+	 *
+	 * Note: `WP_REST_Request` returns array params by value, so the key must be
+	 * removed on a local copy and reassigned — `unset( $request['meta'][ $k ] )`
+	 * is a no-op ("indirect modification of overloaded element").
+	 *
+	 * @param stdClass        $prepared_post Prepared post object (returned unchanged).
+	 * @param WP_REST_Request $request       Incoming request.
+	 * @return stdClass
+	 */
+	public static function strip_unauthorized_exempt_meta( $prepared_post, $request ) {
+		$meta = $request['meta'];
+		if (
+			is_array( $meta ) &&
+			array_key_exists( self::IS_EXEMPT_META_KEY, $meta ) &&
+			! self::current_user_can_edit_exemption()
+		) {
+			unset( $meta[ self::IS_EXEMPT_META_KEY ] );
+			$request['meta'] = $meta;
+		}
+		return $prepared_post;
 	}
 }
 Content_Restriction_Control::init();

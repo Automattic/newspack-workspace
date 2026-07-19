@@ -30,6 +30,17 @@ final class Modal_Checkout {
 	const CHECKOUT_REGISTRATION_ORDER_META_KEY = '_newspack_checkout_registration_meta';
 
 	/**
+	 * Billing fields with server-side format validation in the Store API,
+	 * mapped from their classic checkout keys to Store API address keys.
+	 *
+	 * @var string[]
+	 */
+	const STORE_API_VALIDATED_ADDRESS_FIELDS = [
+		'billing_state'    => 'state',
+		'billing_postcode' => 'postcode',
+	];
+
+	/**
 	 * Whether the modal checkout has been enqueued.
 	 *
 	 * @var boolean
@@ -157,6 +168,8 @@ final class Modal_Checkout {
 		add_filter( 'woocommerce_get_checkout_order_received_url', [ __CLASS__, 'woocommerce_get_return_url' ], 10, 2 );
 		add_filter( 'wc_get_template', [ __CLASS__, 'wc_get_template' ], 10, 2 );
 		add_filter( 'woocommerce_checkout_fields', [ __CLASS__, 'woocommerce_checkout_fields' ] );
+		add_filter( 'rest_pre_dispatch', [ __CLASS__, 'scrub_store_api_checkout_address' ], 10, 3 );
+		add_filter( 'woocommerce_get_country_locale', [ __CLASS__, 'relax_configured_off_locale_fields' ] );
 		add_filter( 'woocommerce_update_order_review_fragments', [ __CLASS__, 'order_review_fragments' ] );
 		add_filter( 'woocommerce_cart_needs_payment', [ __CLASS__, 'cart_needs_payment' ] );
 		add_filter( 'newspack_recaptcha_verify_captcha', [ __CLASS__, 'recaptcha_verify_captcha' ], 10, 3 );
@@ -205,6 +218,8 @@ final class Modal_Checkout {
 		// Make the current cart price available to the JavaScript.
 		add_action( 'wp_ajax_get_cart_total', [ __CLASS__, 'get_cart_total_js' ] );
 		add_action( 'wp_ajax_nopriv_get_cart_total', [ __CLASS__, 'get_cart_total_js' ] );
+		add_action( 'wp_ajax_get_cart_product_summary', [ __CLASS__, 'get_cart_product_summary_js' ] );
+		add_action( 'wp_ajax_nopriv_get_cart_product_summary', [ __CLASS__, 'get_cart_product_summary_js' ] );
 
 		// Wrap required checkbox text in a span so it works nicely with the Newspack UI grid layout.
 		add_filter( 'woocommerce_form_field_checkbox', [ __CLASS__, 'wrap_required_checkbox_text' ], 10, 4 );
@@ -1330,7 +1345,13 @@ final class Modal_Checkout {
 	}
 
 	/**
-	 * Modify fields for modal checkout.
+	 * Remove the configured-off billing fields from modal checkout requests.
+	 *
+	 * Deliberately scoped to modal checkout: some publishers rely on standard
+	 * Woo checkout flows that predate Audience Management, so those keep the
+	 * stock field set. The express checkout gap this leaves (wallets submitting
+	 * values for fields the buyer cannot see) is handled for modal-originated
+	 * requests by scrub_store_api_checkout_address() below.
 	 *
 	 * @param array $fields Checkout fields.
 	 *
@@ -1341,8 +1362,8 @@ final class Modal_Checkout {
 			return $fields;
 		}
 		$cart = \WC()->cart;
-		// Don't modify fields if shipping is required.
-		if ( $cart->needs_shipping_address() ) {
+		// Don't modify fields if there is no cart or shipping is required.
+		if ( ! $cart || $cart->needs_shipping_address() ) {
 			return $fields;
 		}
 		/**
@@ -1371,6 +1392,199 @@ final class Modal_Checkout {
 		}
 
 		return $fields;
+	}
+
+	/**
+	 * Scrub invalid address values from Store API checkout requests when the
+	 * corresponding billing fields are configured off.
+	 *
+	 * Express checkout wallets submit to wc/store/v1/checkout and can supply
+	 * values the buyer never sees or corrects (e.g. Apple Pay sending a suburb
+	 * as the state), which hard-fails Store API address validation. Values the
+	 * validation would accept are left untouched, and only the billing address
+	 * is scrubbed. Runs on rest_pre_dispatch because the validation happens
+	 * during dispatch.
+	 *
+	 * The shipping address is intentionally out of scope. Carts that need a
+	 * shipping address bail below, and wallets return only billing contact when
+	 * shipping is not requested, so a virtual-cart request carries no shipping
+	 * address to scrub.
+	 *
+	 * Scoped to requests originating from the modal checkout, so any Store API
+	 * checkout outside the modal (e.g. the blocks checkout page or express
+	 * buttons on product pages) keeps stock behavior.
+	 *
+	 * @param mixed            $result  Response to replace the requested version with.
+	 * @param \WP_REST_Server  $server  Server instance.
+	 * @param \WP_REST_Request $request Request used to generate the response.
+	 *
+	 * @return mixed
+	 */
+	public static function scrub_store_api_checkout_address( $result, $server, $request ) {
+		if ( null !== $result ) {
+			return $result;
+		}
+
+		if (
+			! $request instanceof \WP_REST_Request ||
+			'POST' !== $request->get_method() ||
+			0 !== strpos( $request->get_route(), '/wc/store/v1/checkout' )
+		) {
+			return $result;
+		}
+
+		if ( ! self::is_modal_checkout_referer() ) {
+			return $result;
+		}
+
+		if ( ! function_exists( 'WC' ) || ! class_exists( 'WC_Validation' ) ) {
+			return $result;
+		}
+
+		$billing_fields = apply_filters( 'newspack_blocks_donate_billing_fields_keys', [] );
+
+		if ( empty( $billing_fields ) ) {
+			return $result;
+		}
+
+		// Physical-goods flows are never modified. The cart is not always
+		// initialized this early in Store API requests; when it is, bail for
+		// carts that need a shipping address. Only the billing address is
+		// scrubbed, so shipping data is never touched either way.
+		if ( \WC()->cart && \WC()->cart->needs_shipping_address() ) {
+			return $result;
+		}
+
+		$address = $request->get_param( 'billing_address' );
+
+		if ( is_array( $address ) ) {
+			$scrubbed = self::scrub_invalid_address_values( $address, $billing_fields );
+
+			if ( $scrubbed !== $address ) {
+				$request->set_param( 'billing_address', $scrubbed );
+			}
+		}
+
+		return $result;
+	}
+
+	/**
+	 * Whether the current request originates from the modal checkout, based on
+	 * the referer.
+	 *
+	 * Express checkout submissions go to the Store API as JSON, so the usual
+	 * modal_checkout request params are absent. The requests are made from the
+	 * modal checkout iframe, whose URL carries modal_checkout=1, so it shows up
+	 * as the (same-origin) referer.
+	 *
+	 * @return bool
+	 */
+	private static function is_modal_checkout_referer() {
+		$referer = isset( $_SERVER['HTTP_REFERER'] ) ? esc_url_raw( wp_unslash( $_SERVER['HTTP_REFERER'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
+		if ( ! $referer ) {
+			return false;
+		}
+
+		$query_string = \wp_parse_url( $referer, PHP_URL_QUERY );
+		\wp_parse_str( (string) $query_string, $query_params );
+
+		return ! empty( $query_params['modal_checkout'] );
+	}
+
+	/**
+	 * Drop configured-off address values that would fail Store API validation.
+	 *
+	 * @param array    $address        Store API address (billing or shipping).
+	 * @param string[] $billing_fields Configured billing field keys.
+	 *
+	 * @return array Scrubbed address.
+	 */
+	private static function scrub_invalid_address_values( $address, $billing_fields ) {
+		$country = isset( $address['country'] ) ? $address['country'] : '';
+
+		if (
+			! in_array( 'billing_state', $billing_fields, true ) &&
+			! empty( $address['state'] ) &&
+			is_string( $address['state'] ) &&
+			$country
+		) {
+			$states = \WC()->countries->get_states( $country );
+
+			if ( is_array( $states ) && ! empty( $states ) ) {
+				$code_match = array_key_exists( strtoupper( $address['state'] ), array_change_key_case( $states, CASE_UPPER ) );
+				$name_match = in_array( strtolower( $address['state'] ), array_map( 'strtolower', $states ), true );
+
+				if ( ! $code_match && ! $name_match ) {
+					$address['state'] = '';
+				}
+			}
+		}
+
+		if (
+			! in_array( 'billing_postcode', $billing_fields, true ) &&
+			! empty( $address['postcode'] ) &&
+			is_string( $address['postcode'] ) &&
+			! \WC_Validation::is_postcode( $address['postcode'], $country )
+		) {
+			$address['postcode'] = '';
+		}
+
+		return $address;
+	}
+
+	/**
+	 * Relax locale-required flags for configured-off billing fields.
+	 *
+	 * After an invalid wallet value is scrubbed (see
+	 * scrub_store_api_checkout_address), the Store API order validation would
+	 * still reject the checkout when the country locale marks the field as
+	 * required. A field the site is configured not to collect cannot be
+	 * required.
+	 *
+	 * Scoped to modal-originated requests so standard Woo flows keep the stock
+	 * locale rules.
+	 *
+	 * @param array $locale Country locale field settings.
+	 *
+	 * @return array
+	 */
+	public static function relax_configured_off_locale_fields( $locale ) {
+		if ( ! self::is_modal_checkout_referer() && ! self::is_modal_checkout() ) {
+			return $locale;
+		}
+
+		$billing_fields = apply_filters( 'newspack_blocks_donate_billing_fields_keys', [] );
+
+		if ( empty( $billing_fields ) ) {
+			return $locale;
+		}
+
+		// Never relax requirements when the cart needs a shipping address:
+		// physical-goods flows keep the full locale rules.
+		if ( function_exists( 'WC' ) && \WC()->cart && \WC()->cart->needs_shipping_address() ) {
+			return $locale;
+		}
+
+		$off = [];
+
+		foreach ( self::STORE_API_VALIDATED_ADDRESS_FIELDS as $config_key => $address_key ) {
+			if ( ! in_array( $config_key, $billing_fields, true ) ) {
+				$off[] = $address_key;
+			}
+		}
+
+		if ( empty( $off ) ) {
+			return $locale;
+		}
+
+		foreach ( array_keys( $locale ) as $country ) {
+			foreach ( $off as $address_key ) {
+				$locale[ $country ][ $address_key ]['required'] = false;
+			}
+		}
+
+		return $locale;
 	}
 
 	/**
@@ -1767,6 +1981,112 @@ final class Modal_Checkout {
 	}
 
 	/**
+	 * Get validated cart item context for the modal checkout product summary.
+	 *
+	 * @param \WC_Cart $cart Cart object.
+	 *
+	 * @return array|null
+	 */
+	private static function get_cart_product_summary_context( $cart ) {
+		if ( ! $cart || 1 !== $cart->get_cart_contents_count() ) {
+			return null;
+		}
+		$cart_item_key = array_key_first( $cart->get_cart() );
+		$cart_item     = $cart->get_cart_item( $cart_item_key );
+
+		// phpcs:disable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce hooks.
+		$product    = apply_filters( 'woocommerce_cart_item_product', $cart_item['data'], $cart_item, $cart_item_key );
+		$is_visible = $product && $product->exists() && $cart_item['quantity'] > 0 && apply_filters( 'woocommerce_checkout_cart_item_visible', true, $cart_item, $cart_item_key );
+		// phpcs:enable
+
+		return [
+			'cart_item_key' => $cart_item_key,
+			'cart_item'     => $cart_item,
+			'product'       => $product,
+			'is_visible'    => $is_visible,
+		];
+	}
+
+	/**
+	 * Get the cart product summary shown at the top of modal checkout.
+	 *
+	 * @param \WC_Cart|null $cart    Cart object.
+	 * @param array|null    $context Validated cart item context.
+	 */
+	private static function get_cart_product_summary( $cart = null, $context = null ) {
+		if ( ! $cart ) {
+			if ( ! function_exists( 'WC' ) ) {
+				return '';
+			}
+			$cart = \WC()->cart;
+		}
+		$context = $context ? $context : self::get_cart_product_summary_context( $cart );
+		if ( ! $context || ! $context['is_visible'] ) {
+			return '';
+		}
+
+		$cart_item_key    = $context['cart_item_key'];
+		$cart_item        = $context['cart_item'];
+		$product          = $context['product'];
+		$allowed_html     = self::get_cart_product_summary_allowed_html();
+		// phpcs:disable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce hooks.
+		$product_name     = apply_filters(
+			'woocommerce_cart_item_name',
+			$product->get_name(),
+			$cart_item,
+			$cart_item_key
+		);
+		$product_subtotal = apply_filters(
+			'woocommerce_cart_item_subtotal',
+			$cart->get_product_subtotal( $product, $cart_item['quantity'] ),
+			$cart_item,
+			$cart_item_key
+		);
+		// phpcs:enable
+
+		$summary = $product_name . ': ';
+		if ( function_exists( 'wc_get_formatted_cart_item_data' ) ) {
+			$summary .= wc_get_formatted_cart_item_data( $cart_item );
+		}
+		$summary .= $product_subtotal;
+		return wp_kses( $summary, $allowed_html );
+	}
+
+	/**
+	 * Get allowed HTML for the modal checkout product summary.
+	 *
+	 * @return array Allowed HTML tags and attributes.
+	 */
+	private static function get_cart_product_summary_allowed_html() {
+		$allowed_html = wp_kses_allowed_html( 'post' );
+
+		$allowed_html['bdi'] = [
+			'class' => true,
+			'dir'   => true,
+		];
+
+		if ( ! isset( $allowed_html['span'] ) ) {
+			$allowed_html['span'] = [];
+		}
+		$allowed_html['span']['class'] = true;
+
+		if ( ! isset( $allowed_html['small'] ) ) {
+			$allowed_html['small'] = [];
+		}
+		$allowed_html['small']['class'] = true;
+
+		return $allowed_html;
+	}
+
+	/**
+	 * Get the updated cart product summary for JavaScript.
+	 */
+	public static function get_cart_product_summary_js() {
+		echo self::get_cart_product_summary(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+		wp_die();
+	}
+
+	/**
 	 * Get the updated price for updating the "Place order" button.
 	 */
 	public static function get_cart_total_js() {
@@ -1792,29 +2112,20 @@ final class Modal_Checkout {
 		if ( 1 !== $cart->get_cart_contents_count() ) {
 			return;
 		}
-		$cart_item_key = array_key_first( $cart->get_cart() );
-		$cart_item = $cart->get_cart_item( $cart_item_key );
-		$product_id = $cart_item['variation_id'] ? $cart_item['variation_id'] : $cart_item['product_id'];
-		$class_prefix = self::get_class_prefix();
+		$summary_context = self::get_cart_product_summary_context( $cart );
+		$class_prefix    = self::get_class_prefix();
 		?>
 			<div class="<?php echo esc_attr( "order-details-summary {$class_prefix}__box {$class_prefix}__box--text-center" ); ?>">
 			<?php
-			// phpcs:disable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce hooks.
-			$_product = apply_filters( 'woocommerce_cart_item_product', $cart_item['data'], $cart_item, $cart_item_key );
-			if ( $_product && $_product->exists() && $cart_item['quantity'] > 0 && apply_filters( 'woocommerce_checkout_cart_item_visible', true, $cart_item, $cart_item_key ) ) :
+			if ( $summary_context && $summary_context['is_visible'] ) :
 				?>
 				<p id="modal-checkout-product-details" data-checkout='<?php echo wp_json_encode( Checkout_Data::get_checkout_data( $cart ) ); ?>'>
 					<strong>
-						<?php
-						echo apply_filters( 'woocommerce_cart_item_name', $_product->get_name(), $cart_item, $cart_item_key ) . ': '; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
-						echo wc_get_formatted_cart_item_data( $cart_item ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
-						?>
-						<?php echo apply_filters( 'woocommerce_cart_item_subtotal', $cart->get_product_subtotal( $_product, $cart_item['quantity'] ), $cart_item, $cart_item_key ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+						<?php echo self::get_cart_product_summary( $cart, $summary_context ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 					</strong>
 				</p>
 				<?php
 			endif;
-			// phpcs:enable
 			?>
 			</div>
 		<?php
@@ -1965,7 +2276,25 @@ final class Modal_Checkout {
 	 * @return false|int User ID if found by email address, false otherwise.
 	 */
 	public static function get_user_id_from_email() {
-		$billing_email = filter_input( INPUT_POST, 'billing_email', FILTER_SANITIZE_EMAIL );
+		$billing_email = '';
+		if ( isset( $_POST['billing_email'] ) && is_string( $_POST['billing_email'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+			$billing_email = sanitize_email( wp_unslash( $_POST['billing_email'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
+		}
+
+		if ( ! $billing_email ) {
+			$post_data = '';
+			if ( isset( $_POST['post_data'] ) && is_string( $_POST['post_data'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+				$post_data = wp_unslash( $_POST['post_data'] ); // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Parsed and sanitized below.
+			}
+
+			// WooCommerce order-review requests send checkout fields serialized in post_data.
+			if ( $post_data ) {
+				wp_parse_str( $post_data, $parsed_post_data );
+				if ( isset( $parsed_post_data['billing_email'] ) && is_string( $parsed_post_data['billing_email'] ) ) {
+					$billing_email = sanitize_email( $parsed_post_data['billing_email'] );
+				}
+			}
+		}
 		if ( $billing_email ) {
 			$customer = \get_user_by( 'email', $billing_email );
 			if ( $customer ) {
@@ -2251,6 +2580,7 @@ final class Modal_Checkout {
 		if ( $user_id !== 0 ) {
 			return $is_limited_for_user;
 		}
+		// Standard and modal checkout refreshes can both carry guest emails in serialized post_data.
 		$id_from_email = self::get_user_id_from_email();
 		if ( $id_from_email ) {
 			$is_limited_for_user = wcs_is_product_limited_for_user( $product, $id_from_email );

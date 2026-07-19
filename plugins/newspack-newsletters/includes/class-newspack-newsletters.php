@@ -19,6 +19,14 @@ final class Newspack_Newsletters {
 	const API_NAMESPACE                     = 'newspack-newsletters/v1';
 
 	/**
+	 * Send-config meta keys the ESP send path reads. Single source of truth for
+	 * the fields that must be persisted before the send fires (NPPM-2935/2929).
+	 * Keep in lockstep with the send-config get_post_meta reads in the provider
+	 * send/sync path (e.g. Active_Campaign::create_campaign / sync).
+	 */
+	const SEND_CONFIG_META_KEYS = [ 'send_list_id', 'send_sublist_id', 'senderName', 'senderEmail' ];
+
+	/**
 	 * Supported fonts.
 	 *
 	 * @var array
@@ -82,6 +90,7 @@ final class Newspack_Newsletters {
 		add_filter( 'post_row_actions', [ __CLASS__, 'display_view_or_preview_link_in_admin' ] );
 		add_filter( 'jetpack_relatedposts_filter_options', [ __CLASS__, 'disable_jetpack_related_posts' ] );
 		add_action( 'save_post_' . self::NEWSPACK_NEWSLETTERS_CPT, [ __CLASS__, 'save' ], 10, 3 );
+		add_filter( 'rest_pre_insert_' . self::NEWSPACK_NEWSLETTERS_CPT, [ __CLASS__, 'persist_send_config_before_send' ], 10, 2 );
 		add_action( 'admin_enqueue_scripts', [ __CLASS__, 'branding_scripts' ] );
 		add_filter( 'newspack_theme_featured_image_post_types', [ __CLASS__, 'support_featured_image_options' ] );
 		add_filter( 'gform_force_hooks_js_output', [ __CLASS__, 'suppress_gravityforms_js_on_newsletters' ] );
@@ -342,6 +351,15 @@ final class Newspack_Newsletters {
 				'default'        => -1,
 			]
 		);
+		// The four send-config keys below (SEND_CONFIG_META_KEYS) are also
+		// committed early by persist_send_config_before_send() on rest_pre_insert
+		// so the ESP send reads fresh values. That early write goes through
+		// update_post_meta() — so a registered sanitize_callback is still applied
+		// — but it bypasses the REST schema validation and the per-key
+		// 'edit_post_meta' capability check the normal meta route runs. It is
+		// therefore only safe while these keys stay permissive strings
+		// (auth_callback __return_true, no restrictive schema/sanitize). If that
+		// changes, mirror it in persist_send_config_before_send().
 		\register_meta(
 			'post',
 			'send_list_id',
@@ -551,6 +569,60 @@ final class Newspack_Newsletters {
 	}
 
 	/**
+	 * Persist send-config to post meta before the post is updated.
+	 *
+	 * The ESP send is triggered from `pre_post_update`, which fires inside
+	 * `wp_update_post()` — BEFORE the REST controller writes the request's
+	 * post meta. Without this, the send reads stale send-config and emails the
+	 * previously-stored list/segment/sender (NPPM-2935) or fails with an empty
+	 * sender (NPPM-2929). `rest_pre_insert_{cpt}` fires in
+	 * prepare_item_for_database, before `wp_update_post()`, so committing the
+	 * request's send-config here guarantees the send reads current values.
+	 *
+	 * `rest_pre_insert` runs only after the route's edit_post permission check,
+	 * and these meta keys carry no custom sanitize/auth callbacks, so no REST
+	 * guarantee is bypassed; `wp_slash` mirrors the normal meta write so the
+	 * value the send reads matches what is finally stored. Non-scalar values are
+	 * skipped (the REST schema rejects them moments later anyway). The early write
+	 * is committed during prepare and is intentionally not rolled back if the
+	 * enclosing post update later fails — acceptable because the send only fires on
+	 * a successful status transition within that same update.
+	 *
+	 * @param stdClass        $prepared_post Post object about to be inserted/updated.
+	 * @param WP_REST_Request $request       The REST request.
+	 * @return stdClass The unchanged prepared post.
+	 */
+	public static function persist_send_config_before_send( $prepared_post, $request ) {
+		// Only existing posts have a send to protect; a new auto-draft has no ID and no send.
+		if ( empty( $prepared_post->ID ) ) {
+			return $prepared_post;
+		}
+		$meta = $request['meta'];
+		if ( ! is_array( $meta ) ) {
+			return $prepared_post;
+		}
+		foreach ( self::SEND_CONFIG_META_KEYS as $key ) {
+			if ( ! array_key_exists( $key, $meta ) ) {
+				continue;
+			}
+			$value = $meta[ $key ];
+			// Send-config keys are scalar strings; skip a malformed non-scalar value.
+			// It would emit a cast warning below and persist a bogus value the send
+			// reads before REST schema validation rejects the request. null is allowed
+			// (it clears the field, matching the normal meta path's effect on read).
+			if ( null !== $value && ! is_scalar( $value ) ) {
+				continue;
+			}
+			// Skip a redundant write when unchanged (defense-in-depth; keeps unchanged saves byte-identical).
+			if ( (string) $value === (string) get_post_meta( $prepared_post->ID, $key, true ) ) {
+				continue;
+			}
+			update_post_meta( $prepared_post->ID, $key, wp_slash( $value ) );
+		}
+		return $prepared_post;
+	}
+
+	/**
 	 * Register the custom post type.
 	 */
 	public static function register_cpt() {
@@ -567,7 +639,7 @@ final class Newspack_Newsletters {
 			'menu_name'                => _x( 'Newsletters', 'admin menu', 'newspack-newsletters' ),
 			'name_admin_bar'           => _x( 'Newsletter', 'add new on admin bar', 'newspack-newsletters' ),
 			'add_new'                  => _x( 'Add New', 'newsletter', 'newspack-newsletters' ),
-			'add_new_item'             => __( 'Add New Newsletter', 'newspack-newsletters' ),
+			'add_new_item'             => __( 'Add Newsletter', 'newspack-newsletters' ),
 			'new_item'                 => __( 'New Newsletter', 'newspack-newsletters' ),
 			'edit_item'                => __( 'Edit Newsletter', 'newspack-newsletters' ),
 			'view_item'                => __( 'View Newsletter', 'newspack-newsletters' ),
@@ -817,7 +889,7 @@ final class Newspack_Newsletters {
 			[
 				'methods'             => \WP_REST_Server::READABLE,
 				'callback'            => [ __CLASS__, 'api_get_layouts' ],
-				'permission_callback' => [ __CLASS__, 'api_authoring_permissions_check' ],
+				'permission_callback' => [ __CLASS__, 'api_edit_posts_permissions_check' ],
 				'args'                => [
 					'defaults_only' => [
 						'type'        => 'boolean',
@@ -856,7 +928,7 @@ final class Newspack_Newsletters {
 			[
 				'methods'             => \WP_REST_Server::EDITABLE,
 				'callback'            => [ __CLASS__, 'api_set_color_palette' ],
-				'permission_callback' => [ __CLASS__, 'api_authoring_permissions_check' ],
+				'permission_callback' => [ __CLASS__, 'api_edit_posts_permissions_check' ],
 			]
 		);
 
@@ -866,7 +938,7 @@ final class Newspack_Newsletters {
 			[
 				'methods'             => \WP_REST_Server::EDITABLE,
 				'callback'            => [ __CLASS__, 'api_get_mjml' ],
-				'permission_callback' => [ __CLASS__, 'api_authoring_permissions_check' ],
+				'permission_callback' => [ __CLASS__, 'api_edit_post_permissions_check' ],
 				'args'                => [
 					'post_id' => [
 						'required'          => true,
@@ -890,9 +962,27 @@ final class Newspack_Newsletters {
 	 * @param WP_REST_Request $request API request object.
 	 */
 	public static function api_set_color_palette( $request ) {
-		self::update_color_palette( json_decode( $request->get_body(), true ) );
-
-		return \rest_ensure_response( [] );
+		/*
+		 * The newsletter editor auto-POSTs the palette on every editor load, including for
+		 * Contributors/Authors who can now reach the editor (via post-mjml) but must not
+		 * change this site-wide option. We deliberately return success WITHOUT writing for
+		 * those roles instead of a 403 — otherwise the editor surfaces a "You cannot use
+		 * this resource." notice on every load. So for unauthorized roles the response
+		 * reports success while the option write is a no-op. The write capability is
+		 * filterable via `newspack_newsletters_color_palette_capability`.
+		 */
+		$capability = apply_filters( 'newspack_newsletters_color_palette_capability', 'edit_others_posts' );
+		$did_write  = false;
+		if ( current_user_can( $capability ) ) {
+			// update_option() returns false when the value is unchanged as well as on
+			// failure, so `updated` reports "the stored palette changed", not "no error".
+			$did_write = self::update_color_palette( json_decode( $request->get_body(), true ) );
+		} else {
+			Newspack_Newsletters_Logger::log( 'Color palette write skipped: current user lacks the "' . $capability . '" capability.' );
+		}
+		// The route's contract is always 200; the body distinguishes a real write from a
+		// permission-skipped no-op so a client or maintainer can tell them apart.
+		return \rest_ensure_response( [ 'updated' => (bool) $did_write ] );
 	}
 
 	/**
@@ -909,23 +999,6 @@ final class Newspack_Newsletters {
 		}
 		$post->post_content = $request['content'];
 		return \rest_ensure_response( Newspack_Newsletters_Renderer::render_post_to_mjml( $post ) );
-	}
-
-	/**
-	 * Set post meta.
-	 * The save_post action fires before post meta is updated.
-	 * This causes newsletters to be synced to the ESP before recent changes to custom fields have been recorded,
-	 * which leads to incorrect rendering. This is addressed through custom endpoints to update the  fields
-	 * as soon as they are changed in the editor, so that the changes are available the next time sync to ESP occurs.
-	 *
-	 * @param WP_REST_Request $request API request object.
-	 */
-	public static function api_set_post_meta( $request ) {
-		$id    = $request['id'];
-		$key   = $request['key'];
-		$value = $request['value'];
-		update_post_meta( $id, $key, $value );
-		return [];
 	}
 
 	/**
@@ -954,7 +1027,23 @@ final class Newspack_Newsletters {
 				)
 			);
 		}
-		return \rest_ensure_response( Newspack_Newsletters_Layouts::get_layouts() );
+		$layouts = Newspack_Newsletters_Layouts::get_layouts();
+
+		/*
+		 * The layouts list is readable at `edit_posts` so Contributors/Authors can pick a
+		 * layout, but each saved layout's `campaign_defaults` carries send/audience config
+		 * (senderEmail, send_list_id, send_sublist_id) that the editor copies into the draft.
+		 * Withhold it from roles below `edit_others_posts` so the send/audience surface stays
+		 * editor-only — the picker still applies content, colors and fonts without it.
+		 */
+		if ( ! current_user_can( 'edit_others_posts' ) ) {
+			foreach ( $layouts as $layout ) {
+				if ( isset( $layout->meta ) && is_array( $layout->meta ) ) {
+					unset( $layout->meta['campaign_defaults'] );
+				}
+			}
+		}
+		return \rest_ensure_response( $layouts );
 	}
 
 	/**
@@ -1095,6 +1184,54 @@ final class Newspack_Newsletters {
 			);
 		}
 		return true;
+	}
+
+	/**
+	 * Permission check for post-scoped authoring routes (e.g. `post-mjml`):
+	 * the current user must be able to edit the specific post the request
+	 * targets. Scoped on `post_id` only — never a generic `id`, which on
+	 * other routes refers to a different CPT (e.g. a layout).
+	 *
+	 * @param WP_REST_Request $request API request object.
+	 * @return bool|WP_Error
+	 */
+	public static function api_edit_post_permissions_check( $request ) {
+		$post_id = (int) $request->get_param( 'post_id' );
+		if ( $post_id && current_user_can( 'edit_post', $post_id ) ) {
+			return true;
+		}
+		return new \WP_Error(
+			'newspack_rest_forbidden',
+			esc_html__( 'You cannot use this resource.', 'newspack-newsletters' ),
+			[
+				'status' => 403,
+			]
+		);
+	}
+
+	/**
+	 * Permission check for non-post authoring reads needed to load the
+	 * editor (e.g. the `layouts` list of saved templates). Any user who can
+	 * author posts may use them. These surface editor-support content; the
+	 * one field that carries send/audience configuration (`campaign_defaults`)
+	 * is stripped from the layouts payload for roles below `edit_others_posts`
+	 * in api_get_layouts(), so this relaxed check does not broaden that surface.
+	 *
+	 * @param WP_REST_Request $request API request object.
+	 * @return bool|WP_Error
+	 */
+	public static function api_edit_posts_permissions_check( $request ) {
+		unset( $request );
+		if ( current_user_can( 'edit_posts' ) ) {
+			return true;
+		}
+		return new \WP_Error(
+			'newspack_rest_forbidden',
+			esc_html__( 'You cannot use this resource.', 'newspack-newsletters' ),
+			[
+				'status' => 403,
+			]
+		);
 	}
 
 	/**

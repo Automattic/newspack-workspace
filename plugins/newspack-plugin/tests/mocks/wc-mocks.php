@@ -60,6 +60,22 @@ class WC_Stripe_Feature_Flags {
 	}
 }
 
+class WC_Stripe_Helper {
+	public static $settings     = [];
+	public static $update_calls = 0;
+	public static function get_stripe_settings() {
+		return self::$settings;
+	}
+	public static function update_main_stripe_settings( $options ) {
+		self::$settings = $options;
+		self::$update_calls++;
+	}
+	public static function reset_testing_settings() {
+		self::$settings     = [];
+		self::$update_calls = 0;
+	}
+}
+
 class WC_Payment_Gateways {
 	private static $gateways = [];
 	public static function instance() {
@@ -457,6 +473,11 @@ if ( ! class_exists( 'WC_Subscriptions_Switcher' ) ) {
 	 * caller passed the expected sign-up-fee mode and orders_to_include list.
 	 */
 	class WC_Subscriptions_Switcher {
+		public static function cart_contains_switches( $item_action = 'any' ) {
+			unset( $item_action );
+			return false;
+		}
+
 		public static function calculate_total_paid_since_last_order( $subscription, $subscription_item, $include_sign_up_fees = 'include_sign_up_fees', $orders_to_include = [] ) {
 			global $wcs_mock_total_paid_including_signup_fee, $wcs_mock_last_calculate_total_paid_args;
 			$wcs_mock_last_calculate_total_paid_args = [
@@ -561,17 +582,17 @@ function wc_get_checkout_url() {
 }
 function wcs_is_subscription( $order ) {
 	global $subscriptions_database;
+	// Mirror real WooCommerce Subscriptions: only an actual WC_Subscription object
+	// (or a numeric ID present in the store) counts as a subscription. In particular
+	// a WP_Post — which WP core passes as the second `add_meta_boxes` argument on the
+	// classic (non-HPOS) order editor — is NOT a subscription here, just as it isn't
+	// under real WCS. That distinction is what the metabox-registration guard must
+	// resolve, so the mock must not paper over it.
 	if ( is_object( $order ) ) {
-		if ( method_exists( $order, 'get_id' ) ) {
-			$id = $order->get_id();
-		} elseif ( isset( $order->ID ) ) {
-			$id = (int) $order->ID;
-		} elseif ( isset( $order->id ) ) {
-			$id = (int) $order->id;
-		} else {
-			// Object has no recognisable ID property — treat as not-a-subscription.
+		if ( ! $order instanceof WC_Subscription ) {
 			return false;
 		}
+		$id = $order->get_id();
 	} else {
 		$id = (int) $order;
 	}
@@ -585,6 +606,15 @@ function wcs_create_subscription( $data = [] ) {
 	}
 	$subscription = new WC_Subscription( $data );
 	$subscriptions_database[ $subscription->get_id() ] = $subscription;
+	// The mock reuses subscription IDs across tests (each test resets
+	// $subscriptions_database, so IDs restart at 1). Group_Subscription memoizes
+	// managers/members per request keyed by subscription ID, so a (re)created
+	// subscription must invalidate that cache or a later test reading the reused ID
+	// would see the previous test's cached data. No-op in production, where
+	// subscription IDs are unique post IDs that are never reissued.
+	if ( class_exists( '\Newspack\Group_Subscription' ) ) {
+		\Newspack\Group_Subscription::reset_cache();
+	}
 	return $subscription;
 }
 function wcs_get_subscription( $subscription_id ) {
@@ -682,6 +712,12 @@ function wc_string_to_bool( $string ) {
 function wc_bool_to_string( $bool ) {
 	return $bool ? 'yes' : 'no';
 }
+function wc_clean( $var ) {
+	if ( is_array( $var ) ) {
+		return array_map( 'wc_clean', $var );
+	}
+	return is_scalar( $var ) ? sanitize_text_field( $var ) : $var;
+}
 function wc_prices_include_tax() {
 	global $wcs_mock_prices_include_tax;
 	return ! empty( $wcs_mock_prices_include_tax );
@@ -769,4 +805,46 @@ function wc_get_template( $template_name, $args = [] ) {
 		extract( $args );
 		include $map[ $template_name ];
 	}
+}
+
+/**
+ * Minimal mock for WC_Webhook. generate_signature() mirrors the real
+ * WC_Webhook::generate_signature() (default sha256; the
+ * woocommerce_webhook_hash_algorithm filter is not applied) so signature
+ * verification can be tested.
+ */
+class WC_Webhook {
+	public static $registry = [];
+	private $id     = 0;
+	private $secret = '';
+	public function set_name( $value ) {}
+	public function set_topic( $value ) {}
+	public function set_status( $value ) {}
+	public function set_delivery_url( $value ) {}
+	public function set_user_id( $value ) {}
+	public function set_secret( $value ) {
+		$this->secret = $value;
+	}
+	public function delete( $force = false ) {
+		unset( self::$registry[ $this->id ] );
+	}
+	public function get_id() {
+		return $this->id;
+	}
+	public function get_secret() {
+		return $this->secret;
+	}
+	public function save() {
+		if ( ! $this->id ) {
+			$this->id = count( self::$registry ) + 1;
+		}
+		self::$registry[ $this->id ] = $this;
+		return $this->id;
+	}
+	public function generate_signature( $payload ) {
+		return base64_encode( hash_hmac( 'sha256', $payload, wp_specialchars_decode( $this->secret, ENT_QUOTES ), true ) );
+	}
+}
+function wc_get_webhook( $id ) {
+	return isset( WC_Webhook::$registry[ (int) $id ] ) ? WC_Webhook::$registry[ (int) $id ] : null;
 }

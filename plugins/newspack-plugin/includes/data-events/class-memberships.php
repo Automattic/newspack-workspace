@@ -40,12 +40,52 @@ final class Memberships {
 	public static function init() {
 		add_action( 'init', [ __CLASS__, 'register_listeners' ] );
 		add_filter( 'newspack_blocks_modal_checkout_cart_item_data', [ __CLASS__, 'checkout_cart_item_data' ], 10, 2 );
+		// Donations add to cart through Donations::process_donation_request(), which applies
+		// its OWN cart-item-data filter and never the modal-checkout one above. Without this
+		// line a gate CTA pointing at the donation page carries `gate_post_id` all the way
+		// into `INPUT_GET` and then drops it — verified live, NPPD-1887. The line-item writer
+		// below is hooked globally, so this is the only missing link.
+		add_filter( 'newspack_donations_cart_item_data', [ __CLASS__, 'checkout_cart_item_data' ] );
 		add_action( 'woocommerce_checkout_create_order_line_item', [ __CLASS__, 'checkout_create_order_line_item' ], 10, 4 );
 		add_filter( 'newspack_register_reader_metadata', [ __CLASS__, 'register_reader_metadata' ] );
 		add_filter( 'newspack_auth_form_metadata', [ __CLASS__, 'register_reader_metadata' ] );
 		add_filter( 'newspack_otp_login_metadata', [ __CLASS__, 'register_reader_metadata' ] );
 		add_filter( 'newspack_register_reader_form_metadata', [ __CLASS__, 'register_reader_metadata' ] );
 		add_filter( 'newspack_newsletters_subscription_form_metadata', [ __CLASS__, 'register_reader_metadata' ] );
+	}
+
+	/**
+	 * Is this a real gate post?
+	 *
+	 * The id arrives from a client-supplied form field. It always has (the gate injects
+	 * a hidden input into its own forms), but since NPPD-1887 it can also be REPLAYED
+	 * from sessionStorage onto a landing-page checkout form, which widens the surface
+	 * enough to be worth checking before writing it into order meta. Insights reads
+	 * `_gate_post_id` as a gate identity; an arbitrary integer would silently corrupt
+	 * the per-gate breakdown.
+	 *
+	 * Both gate CPTs are accepted: Content_Gate::get_gate_post_id() resolves to a
+	 * `np_memberships_gate` when WC Memberships is active and a `np_content_gate`
+	 * otherwise, and the client can't tell us which.
+	 *
+	 * Returns the CAST id, not a bool, so callers persist the integer rather than the
+	 * raw candidate. `(int) '1139 OR 1=1'` is 1139 — validating the cast while writing
+	 * the original would let a malformed string land in `_gate_post_id`, and Insights
+	 * GROUPs by that value.
+	 *
+	 * @param mixed $gate_post_id Candidate post ID.
+	 * @return int|false The validated gate post ID, or false.
+	 */
+	private static function get_valid_gate_post_id( $gate_post_id ) {
+		$gate_post_id = (int) $gate_post_id;
+		if ( 0 >= $gate_post_id ) {
+			return false;
+		}
+		$valid_types = [ Content_Gate::GATE_CPT ];
+		if ( class_exists( '\Newspack\Memberships' ) ) {
+			$valid_types[] = \Newspack\Memberships::GATE_CPT;
+		}
+		return in_array( get_post_type( $gate_post_id ), $valid_types, true ) ? $gate_post_id : false;
 	}
 
 	/**
@@ -73,8 +113,12 @@ final class Memberships {
 	 * @return void
 	 */
 	public static function checkout_create_order_line_item( $item, $cart_item_key, $values, $order ) {
-		if ( ! empty( $values[ self::METADATA_NAME ] ) ) {
-			$order->add_meta_data( '_gate_post_id', $values[ self::METADATA_NAME ] );
+		if ( empty( $values[ self::METADATA_NAME ] ) ) {
+			return;
+		}
+		$gate_post_id = self::get_valid_gate_post_id( $values[ self::METADATA_NAME ] );
+		if ( false !== $gate_post_id ) {
+			$order->add_meta_data( '_gate_post_id', $gate_post_id );
 		}
 	}
 
