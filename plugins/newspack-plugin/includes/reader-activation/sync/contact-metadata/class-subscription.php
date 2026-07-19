@@ -8,6 +8,7 @@
 namespace Newspack\Reader_Activation\Sync\Contact_Metadata;
 
 use Newspack\Donations;
+use Newspack\Group_Subscription;
 use Newspack\Subscriptions_Meta;
 use Newspack\WooCommerce_Connection;
 use Newspack\Reader_Activation\Sync\Contact_Metadata;
@@ -139,6 +140,14 @@ class Subscription extends Contact_Metadata {
 
 		$all_subscriptions = \wcs_get_users_subscriptions( $this->user->ID );
 		foreach ( $all_subscriptions as $subscription ) {
+			// Skip group subscriptions the user is only a *member* of (not the owner). On
+			// account pages, wcs_get_users_subscriptions() can surface these via the My
+			// Account member-injection filter, but a member's subscription metadata must
+			// reflect only subscriptions they own; their group access is synced separately
+			// through the Content Access Group / Content Access Source fields. See NPPM-3021.
+			if ( Group_Subscription::user_is_member( $this->user->ID, $subscription ) ) {
+				continue;
+			}
 			if ( $this->is_relevant_subscription( $subscription ) ) {
 				$this->user_subscriptions_cache[] = $subscription;
 			}

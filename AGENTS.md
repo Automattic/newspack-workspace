@@ -120,6 +120,20 @@ n stop            # Stop containers
 n restart         # Stop and start
 ```
 
+#### Customizing the main dev stack (docker-compose.override.yml)
+
+`n start` invokes Compose with an explicit `-f`, which disables Compose's automatic loading of an override file. To customize the **main** dev container (extra bind mounts, env vars, ports, etc.) without editing the tracked `docker-compose.yml`, create a `docker-compose.override.yml` at the workspace root. When present, `n start` appends it (`-f docker-compose.override.yml`) so its settings merge over the base stack; when absent, nothing changes. The file is gitignored, so it stays a per-developer customization.
+
+Example – add a host directory as a bind mount on the `wordpress` service:
+```yaml
+services:
+  wordpress:
+    volumes:
+      - /Users/me/some-local-dir:/var/www/extra
+```
+
+This override applies only to the main stack (`newspack_dev`). Isolated environments (`n env`) do **not** load it; they layer their own generated `docker-compose.env-*.yml` files instead, so a root override can't clobber env-specific config.
+
 ### First-Time Setup
 ```bash
 cp default.env .env           # Create local config
@@ -148,6 +162,13 @@ n test-php --filter test_name       # Run a specific test method
 n test-php --list-groups            # List available test groups
 n test-js                           # Run JS tests
 ```
+
+`n test-php` provisions its own test database, separate from the site database:
+`wp_tests` for the main checkout, and `wp_tests_<env>` inside an isolated env.
+All containers share one MariaDB server, so the per-env name is what keeps
+concurrent `n test-php` runs in different envs from truncating each other's
+tables mid-run. It is created on the env's first test run and dropped by
+`n env destroy`.
 
 #### End-to-end (Playwright) tests
 The Playwright end-to-end suite lives in [`e2e/`](e2e/) — a self-contained npm
