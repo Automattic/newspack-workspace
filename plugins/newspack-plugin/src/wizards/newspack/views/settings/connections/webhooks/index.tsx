@@ -88,7 +88,7 @@ function Webhooks() {
 					noMargin
 				/>
 				<Button variant="primary" onClick={ () => setActionHandler( 'new' ) } disabled={ inFlight }>
-					{ inFlight ? __( 'Loading…', 'newspack-plugin' ) : __( 'Add New Endpoint', 'newspack-plugin' ) }
+					{ inFlight ? __( 'Loading…', 'newspack-plugin' ) : __( 'Add Endpoint', 'newspack-plugin' ) }
 				</Button>
 			</div>
 			{ ! inFlight &&

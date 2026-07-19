@@ -1,0 +1,42 @@
+@use "~@wordpress/base-styles/colors" as wp-colors;
+@use "~@wordpress/base-styles/variables" as wp-vars;
+
+.newspack-integration-icon {
+	align-items: center;
+	border-radius: wp-vars.$radius-round;
+	display: flex;
+	flex: 0 0 wp-vars.$grid-unit-50;
+	height: wp-vars.$grid-unit-50;
+	justify-content: center;
+	width: wp-vars.$grid-unit-50;
+
+	svg {
+		display: block;
+		fill: currentcolor;
+		height: wp-vars.$grid-unit-30;
+		width: wp-vars.$grid-unit-30;
+	}
+
+	&--active-campaign {
+		background: #004cff;
+	}
+
+	&--mailchimp {
+		background: #ffe01b;
+	}
+
+	&--constant-contact {
+		background: wp-colors.$gray-100;
+	}
+
+	&--manual {
+		background: wp-colors.$gray-800;
+		color: wp-colors.$white;
+
+		// Set the fill on the path directly so the card's active/hover state
+		// (which recolours header svgs) can't override the white manual mark.
+		svg path {
+			fill: currentcolor;
+		}
+	}
+}

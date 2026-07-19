@@ -438,8 +438,13 @@ class IP_Access_Rule {
 	 * Get the URL to redirect to from the dedicated endpoint.
 	 *
 	 * Checks redirect_to param, then Referer header, then falls back to homepage.
+	 * Returned host-relative (see get_check_url()) so the loading page's
+	 * client-side redirect resolves against the document (proxy) origin. Under a
+	 * rewriting proxy (e.g. a library EZproxy) an absolute URL would send the
+	 * just-verified reader back to the canonical host — off the proxy, without
+	 * the proxied IP — and re-lock the content. See NPPD-2039.
 	 *
-	 * @return string The redirect URL.
+	 * @return string Host-relative redirect URL (path and query, without scheme or host).
 	 */
 	private static function get_dedicated_redirect_url() {
 		$home = home_url( '/' );
@@ -447,16 +452,39 @@ class IP_Access_Rule {
 		if ( ! empty( $_GET['redirect_to'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended, WordPress.Security.ValidatedSanitizedInput
 			$url = esc_url_raw( wp_unslash( $_GET['redirect_to'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended, WordPress.Security.ValidatedSanitizedInput
 			if ( wp_validate_redirect( $url, $home ) !== $home || $url === $home ) {
-				return $url;
+				return wp_make_link_relative( $url );
 			}
 		}
 
 		$referer = wp_get_referer();
 		if ( $referer && wp_validate_redirect( $referer, $home ) !== $home ) {
-			return $referer;
+			return wp_make_link_relative( $referer );
 		}
 
-		return $home;
+		return wp_make_link_relative( $home );
+	}
+
+	/**
+	 * Build the host-relative URL for the institutional-access check endpoint.
+	 *
+	 * The loading page's fetch must resolve against the document origin rather
+	 * than an absolute canonical host. When the page is served through a
+	 * rewriting reverse proxy (e.g. a library EZproxy), that origin is the
+	 * proxy host, so a host-relative URL stays proxied and the origin sees the
+	 * proxy's whitelisted IP. An absolute URL is left unrewritten inside the
+	 * inline script, so the browser fetches it directly from the reader's real
+	 * IP — bypassing the proxy and defeating institutional IP access. See NPPD-2039.
+	 *
+	 * @param int|null $institution_id Optional. Institution post ID to scope the check.
+	 *
+	 * @return string Host-relative REST URL (path and query, without scheme or host).
+	 */
+	private static function get_check_url( $institution_id = null ) {
+		$url = rest_url( NEWSPACK_API_NAMESPACE . self::REST_ROUTE );
+		if ( $institution_id ) {
+			$url = add_query_arg( 'institution_id', $institution_id, $url );
+		}
+		return wp_make_link_relative( $url );
 	}
 
 	/**
@@ -472,10 +500,7 @@ class IP_Access_Rule {
 	 */
 	public static function render_loading_page( $institution_id = null ) {
 		$redirect_url = self::get_dedicated_redirect_url();
-		$rest_url     = rest_url( NEWSPACK_API_NAMESPACE . self::REST_ROUTE );
-		if ( $institution_id ) {
-			$rest_url = add_query_arg( 'institution_id', $institution_id, $rest_url );
-		}
+		$rest_url     = self::get_check_url( $institution_id );
 		$result_param = self::RESULT_PARAM;
 		$site_name    = get_bloginfo( 'name' );
 		$timeout_ms   = 10000;

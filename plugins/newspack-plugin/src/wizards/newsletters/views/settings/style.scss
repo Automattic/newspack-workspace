@@ -1,4 +1,3 @@
-@use "~@wordpress/base-styles/colors" as wp-colors;
 @use "~@wordpress/base-styles/variables" as wp-vars;
 
 .newspack-newsletters-sub-list-item {
@@ -17,17 +16,4 @@
 
 .newspack-newsletters-list-item__badge {
 	margin-inline-start: wp-vars.$grid-unit-50;
-}
-
-
-.newspack-newsletters-esp-card {
-	&--active-campaign .newspack-card--core__icon {
-		background: #004CFF;
-	}
-	&--mailchimp .newspack-card--core__icon {
-		background: #FFE01B;
-	}
-	&--constant-contact .newspack-card--core__icon {
-		background: wp-colors.$gray-100;
-	}
 }
