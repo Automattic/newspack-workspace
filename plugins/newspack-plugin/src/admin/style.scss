@@ -286,6 +286,14 @@ h1 {
 	margin: 0 0 wp-vars.$grid-unit-10;
 }
 
+.newspack-text-muted {
+	color: wp-colors.$gray-700;
+}
+
+.newspack-is-dimmed {
+	opacity: 0.5;
+}
+
 // Overrides
 .newspack-wizard__sections .newspack-wizard__section {
 	.newspack-section-header:first-child {
