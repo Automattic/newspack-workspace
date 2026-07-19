@@ -69,9 +69,12 @@ function enqueue_scripts() {
 		\Newspack\Newspack::plugin_url() . '/dist/reader-registration-block.js',
 		[ 'wp-polyfill', 'newspack-reader-activation' ],
 		\Newspack\Newspack::asset_version( 'reader-registration-block' ),
-		true
+		[
+			'strategy'  => 'defer',
+			'in_footer' => true,
+		]
 	);
-	\wp_script_add_data( $handle, 'async', true );
+	\wp_script_add_data( $handle, 'defer', true );
 	\wp_script_add_data( $handle, 'amp-plus', true );
 	\wp_localize_script(
 		$handle,

@@ -22,30 +22,35 @@ const ROUTES = [
 		label: __( 'Welcome', 'newspack' ),
 		render: Welcome,
 		isHiddenInNav: true,
+		breadcrumbs: [ { label: __( 'Welcome', 'newspack' ) } ],
 	},
 	{
 		path: '/settings',
 		label: __( 'Settings', 'newspack' ),
 		subHeaderText: __( 'Share a few details so we can start setting up your site', 'newspack' ),
 		render: Settings,
+		breadcrumbs: [ { label: __( 'Settings', 'newspack' ) } ],
 	},
 	{
 		path: '/services',
 		label: __( 'Services', 'newspack' ),
 		subHeaderText: __( 'Activate and configure the services that you need', 'newspack' ),
 		render: Services,
+		breadcrumbs: [ { label: __( 'Services', 'newspack' ) } ],
 	},
 	{
 		path: '/design',
 		label: __( 'Design', 'newspack' ),
 		subHeaderText: __( 'Customize the look and feel of your site', 'newspack' ),
 		render: withWizardScreen( Design, { hidePrimaryButton: true } ),
+		breadcrumbs: [ { label: __( 'Design', 'newspack' ) } ],
 	},
 	{
 		path: '/completed',
 		label: __( 'Completed', 'newspack' ),
 		render: Completed,
 		isHiddenInNav: true,
+		breadcrumbs: [ { label: __( 'Completed', 'newspack' ) } ],
 	},
 ];
 

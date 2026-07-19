@@ -6,7 +6,7 @@
  * WordPress dependencies
  */
 import { __, sprintf } from '@wordpress/i18n';
-import { __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { Notice, __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 
 /**
  * Internal dependencies
@@ -35,6 +35,11 @@ export default function EnableModal( {
 				<p>{ tool.disclosure }</p>
 			) : (
 				<p>{ __( 'This tool is in active development. Your experience using it directly shapes what it becomes.', 'newspack-plugin' ) }</p>
+			) }
+			{ tool.location_hint && (
+				<Notice status="info" isDismissible={ false } className="experimental-tools__location-hint">
+					{ tool.location_hint }
+				</Notice>
 			) }
 			<HStack justify="flex-end" spacing={ 4 } wrap className="newspack-modal__footer">
 				<Button variant="secondary" onClick={ onClose } disabled={ disabled }>

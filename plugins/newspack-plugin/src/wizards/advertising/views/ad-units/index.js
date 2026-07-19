@@ -8,7 +8,6 @@
 import { useEffect, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { ExternalLink, __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
-import { arrowLeft } from '@wordpress/icons';
 
 /**
  * Internal dependencies
@@ -16,8 +15,6 @@ import { arrowLeft } from '@wordpress/icons';
 import { ActionCard, Button, Card, Notice, SelectControl, TextControl, withWizardScreen } from '../../../../../packages/components/src';
 import ServiceAccountConnection from './service-account-connection';
 import OptionsPopover from './options-popover';
-
-const CREATE_AD_ID_PARAM = 'create';
 
 /**
  * Advertising management screen.
@@ -101,12 +98,6 @@ const AdUnits = ( { adUnits, parentAdUnits, onDelete, wizardApiFetch, updateWith
 
 	return (
 		<>
-			<Card noBorder>
-				<Button isLink href="#/" icon={ arrowLeft }>
-					{ __( 'Back', 'newspack-plugin' ) }
-				</Button>
-			</Card>
-
 			{ ! isLegacy && networkCode && (
 				<>
 					<SelectControl
@@ -199,13 +190,6 @@ const AdUnits = ( { adUnits, parentAdUnits, onDelete, wizardApiFetch, updateWith
 					'newspack-plugin'
 				) }
 			</p>
-			<Card headerActions noBorder>
-				<HStack justify="flex-end">
-					<Button variant="primary" href={ `#/google_ad_manager/${ CREATE_AD_ID_PARAM }` }>
-						{ __( 'Add New Ad Unit', 'newspack-plugin' ) }
-					</Button>
-				</HStack>
-			</Card>
 			<Card noBorder>
 				{ Object.values( adUnits )
 					.filter( adUnit => adUnit.id !== 0 )

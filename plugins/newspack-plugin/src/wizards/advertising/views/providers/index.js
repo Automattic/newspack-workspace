@@ -67,7 +67,7 @@ const Providers = ( { services, fetchAdvertisingData, toggleService } ) => {
 
 	return (
 		<Fragment>
-			<h1>{ __( 'Providers', 'newspack-plugin' ) }</h1>
+			<h2 className="newspack-wizard__heading">{ __( 'Providers', 'newspack-plugin' ) }</h2>
 			<ActionCard
 				title={ __( 'Google Ad Manager', 'newspack-plugin' ) }
 				description={ __( 'Manage Google Ad Manager ad units and placements directly from the Newspack dashboard.', 'newspack-plugin' ) }

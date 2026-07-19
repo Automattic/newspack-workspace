@@ -291,7 +291,26 @@ class Group_Subscription_API {
 		}
 		$members_to_add    = $request->get_param( 'members_to_add' );
 		$members_to_remove = $request->get_param( 'members_to_remove' );
-		$results           = Group_Subscription::update_members( $subscription_id, $members_to_add ?? [], $members_to_remove ?? [] );
+		// The shared permission_callback only proves the actor may manage the group;
+		// it doesn't stop a manager from removing a peer manager. Enforce the
+		// per-target peer-manager rule here, matching the My Account handler, so a
+		// forged request can't do what the UI won't offer.
+		foreach ( (array) $members_to_remove as $member_to_remove ) {
+			if ( ! Group_Subscription::can_actor_remove_member( get_current_user_id(), $member_to_remove, $subscription_id ) ) {
+				return \rest_ensure_response(
+					new \WP_Error(
+						'newspack_group_subscription_remove_not_allowed',
+						sprintf(
+							/* translators: %s: lowercase singular group label (e.g. "group", "team"). */
+							__( 'You do not have permission to remove this member from the %s.', 'newspack-plugin' ),
+							Group_Subscription::get_label_lower( 'singular' )
+						),
+						[ 'status' => 403 ]
+					)
+				);
+			}
+		}
+		$results = Group_Subscription::update_members( $subscription_id, $members_to_add ?? [], $members_to_remove ?? [] );
 		return \rest_ensure_response( $results );
 	}
 
