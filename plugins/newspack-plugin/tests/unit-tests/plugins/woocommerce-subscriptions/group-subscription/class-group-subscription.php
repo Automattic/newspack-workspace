@@ -273,4 +273,29 @@ class Test_Group_Subscription extends WP_UnitTestCase {
 			'Unlimited (0) is left untouched by the floor.'
 		);
 	}
+
+	/**
+	 * The floor also applies on read, so a limit of 1 already stored under the earlier
+	 * "members in addition to the owner" meaning still leaves one usable member seat
+	 * instead of zero. Without this, such a group silently rejects its first member.
+	 */
+	public function test_stored_limit_of_one_is_floored_on_read() {
+		$owner_id = $this->create_reader_user();
+		// Writes the meta directly, as a group saved before the limit became owner-inclusive would carry it.
+		$sub = $this->create_group_subscription( $owner_id, 1 );
+
+		$this->assertSame(
+			2,
+			Group_Subscription_Settings::get_subscription_settings( $sub )['limit'],
+			'A stored limit of 1 reads as the two-seat minimum without a re-save.'
+		);
+		$this->assertSame(
+			1,
+			Group_Subscription::get_member_seat_limit( $sub ),
+			'The floored limit leaves one member seat, not zero.'
+		);
+
+		$added = Group_Subscription::update_members( $sub, [ $this->create_reader_user() ] );
+		$this->assertFalse( is_wp_error( $added ), 'The first member of an otherwise-empty group is not rejected as over limit.' );
+	}
 }
