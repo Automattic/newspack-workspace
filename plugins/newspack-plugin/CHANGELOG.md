@@ -1,3 +1,10 @@
+## newspack [6.45.3](https://github.com/Automattic/newspack-workspace/compare/newspack@6.45.2...newspack@6.45.3) (2026-07-15)
+
+
+### Bug Fixes
+
+* **subscriptions:** keep group owner sub on member delete (NPPM-3021) ([#630](https://github.com/Automattic/newspack-workspace/issues/630)) ([4fb004d](https://github.com/Automattic/newspack-workspace/commit/4fb004d7f3ea2cac188c87f70af7afd4f1b55b33))
+
 ## newspack [6.45.2](https://github.com/Automattic/newspack-workspace/compare/newspack@6.45.1...newspack@6.45.2) (2026-07-14)
 
 
