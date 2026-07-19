@@ -19,6 +19,11 @@ const SCRIPT_PATH = resolve(__dirname, "..", "e2e-setup.sh");
 // and point e2e-setup.sh at it via SITE_SETUP_SCRIPT.
 const SITE_SETUP_PATH = resolve(__dirname, "..", "site-setup.sh");
 const REMOTE_SITE_SETUP = "/tmp/e2e-site-setup.sh";
+// The e2e helper plugin ships in this repo too. We copy it onto the target and
+// point e2e-setup.sh at it (E2E_PLUGIN_SRC) so the site always runs the committed
+// version rather than a stale copy left installed by hand.
+const E2E_PLUGIN_PATH = resolve(__dirname, "..", "e2e-plugin.php");
+const REMOTE_E2E_PLUGIN = "/tmp/e2e-helper-plugin.php";
 
 // A site is "local" when it lives in a Docker env we can `docker exec` into:
 // *.local / *.test hosts and loopback addresses. Everything else is remote (SSH).
@@ -72,6 +77,7 @@ export const setupSite = ({ woo }: SetupOptions): void => {
 
   const script = readFileSync(SCRIPT_PATH);
   const siteSetup = readFileSync(SITE_SETUP_PATH);
+  const e2ePlugin = readFileSync(E2E_PLUGIN_PATH);
   const args = scriptArgs(woo);
   // Forward Stripe test keys (if present) into the target environment.
   const stripeEnv = ["STRIPE_PUB_KEY", "STRIPE_SECRET_KEY"];
@@ -84,12 +90,16 @@ export const setupSite = ({ woo }: SetupOptions): void => {
     execFileSync("docker", ["cp", SITE_SETUP_PATH, `${container}:${REMOTE_SITE_SETUP}`], {
       stdio: ["ignore", "inherit", "inherit"],
     });
+    execFileSync("docker", ["cp", E2E_PLUGIN_PATH, `${container}:${REMOTE_E2E_PLUGIN}`], {
+      stdio: ["ignore", "inherit", "inherit"],
+    });
     const envForwards = stripeEnv.flatMap((v) => (process.env[v] ? ["-e", v] : []));
     execFileSync(
       "docker",
       [
         "exec", "-i",
         "-e", `SITE_SETUP_SCRIPT=${REMOTE_SITE_SETUP}`,
+        "-e", `E2E_PLUGIN_SRC=${REMOTE_E2E_PLUGIN}`,
         ...envForwards,
         container, "bash", "-s", "--", ...args, "--allow-root", "--reset", "full",
       ],
@@ -126,12 +136,14 @@ export const setupSite = ({ woo }: SetupOptions): void => {
     }
   };
 
-  // 1. Ship site-setup.sh onto the target.
+  // 1. Ship site-setup.sh and the e2e helper plugin onto the target.
   runSsh(`cat > ${shQuote(REMOTE_SITE_SETUP)}`, siteSetup);
+  runSsh(`cat > ${shQuote(REMOTE_E2E_PLUGIN)}`, e2ePlugin);
 
-  // 2. Run e2e-setup.sh (piped), pointing it at the copy and forwarding Stripe keys.
+  // 2. Run e2e-setup.sh (piped), pointing it at the copies and forwarding Stripe keys.
   const inlineEnv = [
     `SITE_SETUP_SCRIPT=${shQuote(REMOTE_SITE_SETUP)}`,
+    `E2E_PLUGIN_SRC=${shQuote(REMOTE_E2E_PLUGIN)}`,
     ...stripeEnv
       .filter((v) => process.env[v])
       .map((v) => `${v}=${shQuote(process.env[v] as string)}`),

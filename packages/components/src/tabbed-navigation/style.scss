@@ -2,81 +2,101 @@
  * Tabbed Navigation
  */
 
+@use "../../../colors/colors.module" as colors;
 @use "~@wordpress/base-styles/colors" as wp-colors;
+@use "~@wordpress/base-styles/variables" as wp-vars;
+
+// The Tabs.Root wrapper spans the tab bar and the tab panels so the panels can
+// contain the routed content; it plays no layout role of its own.
+.newspack-tabbed-navigation__root {
+	display: contents;
+}
 
 .newspack-tabbed-navigation {
-	background: white;
+	background: wp-colors.$white;
+	border-bottom: var( --wpds-border-width-xs, #{wp-vars.$border-width} ) solid var( --wpds-color-stroke-surface-neutral-weak, #{wp-colors.$gray-100} );
 	width: 100%;
 
-	@media only screen and ( min-width: 600px ) {
-		position: sticky;
-		top: 46px;
-		z-index: 3;
-	}
+	/* stylelint-disable-next-line plugin-wpds/no-setting-wpds-custom-properties -- deliberate Newspack brand override of the indicator token. */
+	--wpds-color-stroke-interactive-neutral-strong: #{colors.$primary-600};
 
-	@media only screen and ( min-width: 783px ) {
-		top: 32px;
-	}
+	a[role="tab"] {
+		text-decoration: none;
 
-	ul {
-		box-shadow: 0 -1px 0 inset wp-colors.$gray-300;
-		display: flex;
-		flex-wrap: wrap;
-		margin: 0;
-	}
+		// wp-admin's unlayered `a { color }` beats every rule inside the design
+		// system's @layer wp-ui, so anchor tabs need their colors restated here:
+		// gray-900 for enabled tabs, and the DS disabled token for disabled ones.
+		&:not([data-disabled]):not([aria-disabled="true"]) {
+			color: wp-colors.$gray-900;
 
-	li {
-		margin-bottom: 0;
-		width: 100%;
-
-		@media screen and ( min-width: 600px ) {
-			width: auto;
+			&:hover,
+			&:active,
+			&[aria-selected="true"] {
+				color: wp-colors.$gray-900;
+			}
 		}
 
-		a {
-			align-items: center;
-			color: wp-colors.$gray-900;
-			display: flex;
-			font-weight: bold;
-			height: 48px;
+		// wp-admin's common.css and the wizard shell both decorate a:focus with a
+		// box-shadow ring, a 2px border-radius, and a transparent outline. Reset
+		// all three so the component's own :focus-visible ring (an inset outline
+		// on its ::after, shipped by @wordpress/ui) is the only focus treatment.
+		&:focus {
+			border-radius: 0;
+			box-shadow: none;
 			outline: none;
-			padding: 12px 15px;
-			text-decoration: none;
+		}
 
-			@media screen and ( min-width: 600px ) {
-				border-bottom: 4px solid transparent;
-				padding-bottom: 8px;
-			}
+		// Square the component's focus ring corners.
+		&::after {
+			border-radius: 0;
+		}
 
-			&:active,
-			&:focus,
-			&:hover {
-				color: var(--wp-admin-theme-color);
-			}
+		&[data-disabled],
+		&[aria-disabled="true"] {
+			color: var( --wpds-color-foreground-interactive-neutral-disabled, #{wp-colors.$gray-600} );
+			pointer-events: none;
+		}
+	}
 
-			&:focus-visible {
-				outline: 2px solid var(--wp-admin-theme-color);
-				outline-offset: -2px;
-			}
+	// Link-driven variant: plain navigation styled to match the tabs widget.
+	&--links {
+		align-items: stretch;
+		display: flex;
+		overflow-x: auto;
+	}
 
-			&.selected {
-				box-shadow: inset 0 0 0 2px white, inset 0 0 0 4px var(--wp-admin-theme-color);
+	.newspack-tabbed-navigation__link {
+		align-items: center;
+		color: wp-colors.$gray-900;
+		display: flex;
+		font-size: var( --wpds-typography-font-size-md, #{wp-vars.$default-font-size} );
+		height: wp-vars.$grid-unit-60; // Matches @wordpress/ui's horizontal tab height.
+		line-height: 1.2;
+		padding-inline: var( --wpds-dimension-padding-lg, #{wp-vars.$grid-unit-20} );
+		text-decoration: none;
+		white-space: nowrap;
 
-				@media screen and ( min-width: 600px ) {
-					border-color: var(--wp-admin-theme-color);
-					box-shadow: none;
-				}
-			}
+		&:hover,
+		&:active,
+		&:focus {
+			color: wp-colors.$gray-900;
+		}
 
-			&.disabled {
-				cursor: not-allowed;
-				opacity: 0.3;
-				pointer-events: none;
+		// Mirror the tabs widget's focus ring (an inset outline) with plain
+		// outline + offset, replacing wp-admin's box-shadow focus decoration.
+		&:focus {
+			border-radius: 0;
+			box-shadow: none;
+			outline: none;
+		}
 
-				&:hover {
-					color: inherit;
-				}
-			}
+		&:focus-visible {
+			outline: var( --wpds-border-width-focus, var( --wp-admin-border-width-focus, #{wp-vars.$border-width-focus-fallback} ) ) solid var( --wpds-color-stroke-focus, var( --wp-admin-theme-color ) );
+			outline-offset: calc( var( --wpds-dimension-padding-md, #{wp-vars.$grid-unit-15} ) * -1 );
+		}
+
+		&[aria-current="page"] {
+			box-shadow: inset 0 calc( var( --wpds-border-width-focus, #{wp-vars.$border-width-focus-fallback} ) * -1 ) 0 var( --wpds-color-stroke-interactive-neutral-strong, #{colors.$primary-600} );
 		}
 	}
 }
