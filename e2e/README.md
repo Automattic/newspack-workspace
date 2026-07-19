@@ -113,6 +113,16 @@ Tag tests `@vanilla` or `@with-woo` so they run in the matching phase. If a test
 needs a particular fixture (a page, product, user, …), have `e2e-setup.sh` (or the
 underlying `site-setup.sh`) create it, so it's rebuilt on every run.
 
+### Content gating (Access Control)
+
+Provisioning defines `NEWSPACK_CONTENT_GATES` in wp-config, enabling the
+Audience > Access control wizard and its front-end enforcement, which
+`content-gating.spec.ts` and `premium-newsletters.spec.ts` cover. In the
+`--woo` phase, `e2e-setup.sh` deactivates `woocommerce-memberships` after the
+generic bootstrap: Access Control defers to Memberships whenever that plugin
+is active, so leaving it on would make the first-party gating inert (this also
+matches the target state of migrated Newspack sites).
+
 ## Provisioning the test site manually
 
 `e2e-setup.sh` and `site-setup.sh` can be run by hand. Copy them, plus

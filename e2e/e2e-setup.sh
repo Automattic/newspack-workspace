@@ -108,6 +108,8 @@ SITE_SETUP_ARGS=(
   --no-campaigns        # Leave campaigns empty: campaigns.spec.ts builds a prompt
                         # from a clean slate and asserts an empty segment at the end,
                         # so the RAS preset prompts must not be seeded.
+  --no-membership-plans # Woo Memberships gets deactivated below (Access Control
+                        # owns content gating), so its plans would be inert fixtures.
 )
 if [ "$WOO" = false ]; then
   SITE_SETUP_ARGS+=(--no-woocommerce)
@@ -120,6 +122,21 @@ echo "==> Applying e2e-specific configuration"
 wp --skip-plugins --skip-themes config set NEWSPACK_IS_E2E true --raw
 # Note: this flag is slated for removal upstream.
 wp --skip-plugins --skip-themes config set NEWSPACK_EMAIL_CHANGE_ENABLED true --raw
+# Enable the Access Control (content gating) system: the flag gates the
+# Audience > Access control wizard, its REST routes, and all front-end
+# enforcement, so content-gating.spec.ts is inert without it.
+wp --skip-plugins --skip-themes config set NEWSPACK_CONTENT_GATES true --raw
+
+# Local Docker only (--allow-root is the marker): WP-CLI runs as root while
+# the web server runs as www-data, and under filesystem load WordPress's
+# ownership probe can flake, silently switching WP_Filesystem to the
+# unconfigured FTP backend - plugin activation then dies with an ftp_nlist()
+# fatal mid-provisioning. Pinning the direct method (always correct inside
+# the container) removes that fallback path. Managed hosts (CI over SSH)
+# configure their own filesystem method, so leave them alone.
+if [ "$ALLOW_ROOT" = true ]; then
+  wp --skip-plugins --skip-themes config set FS_METHOD direct
+fi
 
 wp --skip-themes option update timezone_string 'America/New_York'
 
@@ -180,6 +197,28 @@ if [ "$WOO" = true ]; then
     echo "ERROR: could not activate woocommerce-gateway-stripe - is it installed on the site?" >&2
     exit 1
   }
+
+  # Access Control defers to WooCommerce Memberships whenever that plugin is
+  # active (Content_Gate::restrict_post() bails on Memberships::is_active()), so
+  # the first-party gating the suite tests would never take effect. Deactivate it
+  # after site-setup.sh (which activates the Woo stack wholesale) to match the
+  # target state of migrated Newspack sites: Access Control owns the front-end.
+  wp --skip-themes plugin deactivate woocommerce-memberships 2>/dev/null || true
+
+  # Provisioning boots WP many times before WooCommerce activates, and the
+  # Newspack native My Account page (reader-activation/class-my-account.php)
+  # can get created in one of those boots - winning the "my-account" slug, so
+  # WooCommerce's later page install falls back to "my-account-2" and every
+  # spec that navigates to /my-account/ lands on the wrong page. Reconcile the
+  # way the plugin does when WooCommerce is (re)activated: both features
+  # resolve to WooCommerce's page, which owns the canonical slug.
+  WOO_MY_ACCOUNT_ID=$(wp --skip-themes option get woocommerce_myaccount_page_id 2>/dev/null || true)
+  NATIVE_MY_ACCOUNT_ID=$(wp --skip-themes option get newspack_my_account_page_id 2>/dev/null || true)
+  if [ -n "$WOO_MY_ACCOUNT_ID" ] && [ -n "$NATIVE_MY_ACCOUNT_ID" ] && [ "$NATIVE_MY_ACCOUNT_ID" != "$WOO_MY_ACCOUNT_ID" ]; then
+    wp --skip-themes post delete "$NATIVE_MY_ACCOUNT_ID" --force
+    wp --skip-themes option update newspack_my_account_page_id "$WOO_MY_ACCOUNT_ID"
+    wp --skip-themes post update "$WOO_MY_ACCOUNT_ID" --post_name=my-account
+  fi
 
   # Options site-setup.sh doesn't set but the suite relies on.
   wp --skip-plugins --skip-themes option update woocommerce_coming_soon 'no'
