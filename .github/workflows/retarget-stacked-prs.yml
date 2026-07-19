@@ -73,9 +73,10 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          children=$(gh pr list --repo "$REPO" --base "$PARENT_HEAD" --state open --json number,headRefName --jq '.[] | "\(.number):\(.headRefName)"')
+          # Ref names cannot contain ":", so it is a safe field separator.
+          children=$(gh pr list --repo "$REPO" --base "$PARENT_HEAD" --state open --json number,headRefName,isCrossRepository --jq '.[] | "\(.number):\(.isCrossRepository):\(.headRefName)"')
 
-          while IFS=: read -r number branch; do
+          while IFS=: read -r number cross branch; do
             [ -z "$number" ] && continue
             echo "Retargeting #$number ($branch) from $PARENT_HEAD to $PARENT_BASE."
             if ! gh api -X PATCH "repos/$REPO/pulls/$number" -f base="$PARENT_BASE" > /dev/null; then
@@ -83,7 +84,20 @@ jobs:
               continue
             fi
 
-            git fetch origin "$branch" "$PARENT_BASE"
+            # A fork-headed child can be retargeted but not pushed to – its
+            # branch lives in the fork, not here. Leave the merge to the author.
+            if [ "$cross" = "true" ]; then
+              gh pr comment "$number" --repo "$REPO" --body "Base branch \`$PARENT_HEAD\` was merged into \`$PARENT_BASE\` (#$PARENT_NUMBER), so this PR was retargeted to \`$PARENT_BASE\`. The branch lives in a fork, so the automatic merge of \`$PARENT_BASE\` was skipped – please merge \`$PARENT_BASE\` into \`$branch\` yourself. Until then the diff will include changes already merged via #$PARENT_NUMBER."
+              continue
+            fi
+
+            # The branch can vanish or move between listing and fetch; a failed
+            # fetch must not kill the loop for the remaining children.
+            if ! git fetch origin "$branch" "$PARENT_BASE"; then
+              gh pr comment "$number" --repo "$REPO" --body "Base branch \`$PARENT_HEAD\` was merged into \`$PARENT_BASE\` (#$PARENT_NUMBER), so this PR was retargeted to \`$PARENT_BASE\`. The automatic merge of \`$PARENT_BASE\` into \`$branch\` was skipped (the branch could not be fetched) – please merge \`$PARENT_BASE\` in manually."
+              echo "::warning::Could not fetch $branch – automatic merge skipped for #$number."
+              continue
+            fi
             git checkout -B "$branch" "origin/$branch"
             if git merge --no-edit "origin/$PARENT_BASE"; then
               if git push origin "$branch"; then
