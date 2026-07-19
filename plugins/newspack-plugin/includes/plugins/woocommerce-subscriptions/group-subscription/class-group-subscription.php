@@ -25,6 +25,13 @@ class Group_Subscription {
 	const GROUP_SUBSCRIPTION_JOINED_META_KEY_PREFIX = '_newspack_group_subscription_joined_';
 
 	/**
+	 * Per-manager user meta key. Repeatable, with the subscription ID as the
+	 * value — mirroring the membership storage above. The owner is never
+	 * stored: ownership implies management.
+	 */
+	const GROUP_SUBSCRIPTION_MANAGER_USER_META_KEY = '_newspack_group_subscription_manager';
+
+	/**
 	 * Build the per-subscription joined-at user_meta key.
 	 *
 	 * @param int $subscription_id Subscription ID.
@@ -74,6 +81,24 @@ class Group_Subscription {
 	private static $managed_subscriptions_cache = [];
 
 	/**
+	 * Per-request cache of a group's manager user IDs, keyed by subscription ID.
+	 *
+	 * A single group render calls get_managers() several times (member table, seat
+	 * count, per-row role); each call otherwise runs a get_users() meta query. The
+	 * cache is busted by the same user-meta hooks that reset the others.
+	 *
+	 * @var array<int,int[]>
+	 */
+	private static $managers_cache = [];
+
+	/**
+	 * Per-request cache of a group's member user IDs, keyed by subscription ID.
+	 *
+	 * @var array<int,int[]>
+	 */
+	private static $members_cache = [];
+
+	/**
 	 * Reset the per-request caches.
 	 *
 	 * Tests, CLI workers, and invalidation hooks call this to bust the static
@@ -85,6 +110,8 @@ class Group_Subscription {
 		self::$names_cache                 = [];
 		self::$member_subscriptions_cache  = [];
 		self::$managed_subscriptions_cache = [];
+		self::$managers_cache              = [];
+		self::$members_cache               = [];
 	}
 
 	/**
@@ -107,7 +134,7 @@ class Group_Subscription {
 	 * @param string    $meta_key  Meta key.
 	 */
 	public static function maybe_reset_cache_on_user_meta( $meta_ids, $object_id, $meta_key ) {
-		if ( self::GROUP_SUBSCRIPTION_USER_META_KEY === $meta_key ) {
+		if ( in_array( $meta_key, [ self::GROUP_SUBSCRIPTION_USER_META_KEY, self::GROUP_SUBSCRIPTION_MANAGER_USER_META_KEY ], true ) ) {
 			self::reset_cache();
 		}
 	}
@@ -167,24 +194,168 @@ class Group_Subscription {
 	 * @return int[] The group manager user IDs.
 	 */
 	public static function get_managers( $subscription ) {
-		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $subscription );
+		$subscription    = WooCommerce_Subscriptions::sanitize_subscription( $subscription );
+		$subscription_id = $subscription ? $subscription->get_id() : 0;
+
+		if ( isset( self::$managers_cache[ $subscription_id ] ) ) {
+			$managers = self::$managers_cache[ $subscription_id ];
+		} else {
+			// The owner is always a manager: ownership implies management.
+			$managers = [ $subscription ? $subscription->get_user_id() : 0 ];
+			if ( $subscription ) {
+				$stored = \get_users(
+					[
+						'fields'      => [ 'ID' ],
+						'count_total' => false,
+						'meta_query'  => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+							[
+								'key'   => self::GROUP_SUBSCRIPTION_MANAGER_USER_META_KEY,
+								'value' => $subscription->get_id(),
+							],
+						],
+					]
+				);
+				foreach ( $stored as $user ) {
+					$managers[] = (int) $user->ID;
+				}
+				$managers = array_values( array_unique( $managers ) );
+			}
+			self::$managers_cache[ $subscription_id ] = $managers;
+		}
 
 		/**
 		 * Filter the managers of a group subscription.
-		 * Currently this is only the subscription owner.
 		 *
-		 * @param int[] $member_ids The group manager user IDs.
-		 * @param WC_Subscription $subscription The subscription object.
+		 * @param int[]             $managers     The group manager user IDs (owner plus any promoted managers).
+		 * @param \WC_Subscription  $subscription The subscription object.
 		 */
-		return apply_filters( 'newspack_group_subscription_managers', [ $subscription ? $subscription->get_user_id() : 0 ], $subscription );
+		return apply_filters( 'newspack_group_subscription_managers', $managers, $subscription );
 	}
 
 	/**
-	 * Get the group subscriptions a user manages (owns).
+	 * Promote a group member to manager.
 	 *
-	 * Mirrors the data-layer side of `get_managers()` — a manager is any user
-	 * who owns a group-enabled subscription. Filters out non-group-enabled subs
-	 * and gifted subscriptions where the user isn't the owner.
+	 * Only an existing member qualifies, and the owner is never stored —
+	 * ownership implies management. Storage mirrors membership: a repeatable
+	 * user meta with the subscription ID as the value.
+	 *
+	 * @param \WC_Subscription|int $subscription The subscription object or ID.
+	 * @param int                  $user_id      The member user ID.
+	 *
+	 * @return true|\WP_Error True on success.
+	 */
+	public static function add_manager( $subscription, $user_id ) {
+		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $subscription );
+		$user_id      = absint( $user_id );
+		if ( ! self::is_group_subscription( $subscription ) ) {
+			return new \WP_Error( 'newspack_group_subscription_add_manager', __( 'Subscription not found.', 'newspack-plugin' ), [ 'status' => 404 ] );
+		}
+		if ( $user_id === (int) $subscription->get_user_id() ) {
+			return new \WP_Error( 'newspack_group_subscription_add_manager', __( 'The owner already manages this subscription.', 'newspack-plugin' ), [ 'status' => 400 ] );
+		}
+		// Read membership from the data layer rather than via user_is_member(), which
+		// routes through is_group_subscription() and its My Account side effect. Same
+		// reasoning as can_actor_remove_member(): a role decision must not depend on
+		// the context it is made from.
+		if ( ! in_array( $user_id, array_map( 'intval', self::get_members( $subscription ) ), true ) ) {
+			return new \WP_Error( 'newspack_group_subscription_add_manager', __( 'Only an existing member can be made a manager.', 'newspack-plugin' ), [ 'status' => 400 ] );
+		}
+		if ( ! in_array( $user_id, self::get_managers( $subscription ), true ) ) {
+			\add_user_meta( $user_id, self::GROUP_SUBSCRIPTION_MANAGER_USER_META_KEY, $subscription->get_id() );
+		}
+		return true;
+	}
+
+	/**
+	 * Demote a manager back to a regular member.
+	 *
+	 * @param \WC_Subscription|int $subscription The subscription object or ID.
+	 * @param int                  $user_id      The manager user ID.
+	 *
+	 * @return true|\WP_Error True on success.
+	 */
+	public static function remove_manager( $subscription, $user_id ) {
+		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $subscription );
+		$user_id      = absint( $user_id );
+		if ( ! self::is_group_subscription( $subscription ) ) {
+			return new \WP_Error( 'newspack_group_subscription_remove_manager', __( 'Subscription not found.', 'newspack-plugin' ), [ 'status' => 404 ] );
+		}
+		if ( $user_id === (int) $subscription->get_user_id() ) {
+			return new \WP_Error( 'newspack_group_subscription_remove_manager', __( 'The owner cannot be demoted.', 'newspack-plugin' ), [ 'status' => 400 ] );
+		}
+		if ( ! in_array( $user_id, self::get_managers( $subscription ), true ) ) {
+			return new \WP_Error( 'newspack_group_subscription_remove_manager', __( 'This member is not a manager.', 'newspack-plugin' ), [ 'status' => 400 ] );
+		}
+		\delete_user_meta( $user_id, self::GROUP_SUBSCRIPTION_MANAGER_USER_META_KEY, $subscription->get_id() );
+		return true;
+	}
+
+	/**
+	 * Whether an actor is allowed to remove a target member from a group.
+	 *
+	 * The single server-side authority for member removal — the My Account
+	 * admin-post handler and the REST endpoint both defer to it, so the
+	 * peer-manager rule can't be bypassed by forging a request the UI wouldn't
+	 * offer. Role model: exactly one owner (the subscription customer, who holds
+	 * billing and can never be removed), any number of managers (maintenance, no
+	 * billing), and plain members.
+	 *
+	 * - The owner and store admins (`manage_woocommerce`) may remove anyone but the owner.
+	 * - A manager may remove plain members only — never a peer manager of the same group.
+	 * - Plain members and outsiders may remove no one.
+	 *
+	 * @param int                  $actor_id     The user attempting the removal.
+	 * @param int                  $target_id    The member being removed.
+	 * @param \WC_Subscription|int $subscription The subscription object or ID.
+	 *
+	 * @return bool Whether the removal is permitted.
+	 */
+	public static function can_actor_remove_member( $actor_id, $target_id, $subscription ) {
+		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $subscription );
+		if ( ! $subscription ) {
+			return false;
+		}
+		$actor_id  = (int) $actor_id;
+		$target_id = (int) $target_id;
+		$owner_id  = (int) $subscription->get_user_id();
+
+		// A logged-out / unresolved actor can remove no one — guard before the
+		// owner comparison so an actor of 0 never matches an ownerless (owner 0) group.
+		if ( ! $actor_id ) {
+			return false;
+		}
+
+		// The owner holds billing and is never removable from their own group.
+		if ( $target_id === $owner_id ) {
+			return false;
+		}
+
+		// The owner and store admins may remove any non-owner member.
+		if ( $actor_id === $owner_id || \user_can( $actor_id, 'manage_woocommerce' ) ) {
+			return true;
+		}
+
+		// A manager may remove plain members only — never a peer manager. Read the
+		// manager list directly (not user_is_manager(), whose is_group_subscription()
+		// call has a My Account side effect) so the rule is context-independent.
+		$managers = array_map( 'intval', self::get_managers( $subscription ) );
+		if ( in_array( $actor_id, $managers, true ) ) {
+			return ! in_array( $target_id, $managers, true );
+		}
+
+		// Plain members and outsiders cannot remove anyone.
+		return false;
+	}
+
+	/**
+	 * Get the group subscriptions a user manages.
+	 *
+	 * The reverse of `get_managers()`: a user manages a group either by owning
+	 * its subscription or by having been promoted to manager of a group they're
+	 * a member of. Owned subscriptions are filtered to group-enabled subs the
+	 * user actually owns (gifted subs where they're only the recipient are
+	 * excluded); manager-of subscriptions are read from the user's own manager
+	 * meta and filtered to group-enabled subs.
 	 *
 	 * @param int  $user_id  The user ID.
 	 * @param bool $ids_only If true, return only subscription IDs instead of objects.
@@ -219,6 +390,31 @@ class Group_Subscription {
 			$managed[] = $ids_only ? $sub->get_id() : $sub;
 		}
 
+		// Subscriptions the user manages without owning (a promoted manager),
+		// read from their own manager meta — the reverse of get_managers().
+		$have_ids   = array_map(
+			function ( $sub ) {
+				return $sub instanceof \WC_Subscription ? $sub->get_id() : (int) $sub;
+			},
+			$managed
+		);
+		$manager_of = array_map( 'absint', (array) \get_user_meta( $user_id, self::GROUP_SUBSCRIPTION_MANAGER_USER_META_KEY, false ) );
+		foreach ( $manager_of as $managed_id ) {
+			if ( in_array( $managed_id, $have_ids, true ) ) {
+				continue;
+			}
+			$sub = WooCommerce_Subscriptions::sanitize_subscription( $managed_id );
+			if ( ! $sub instanceof \WC_Subscription ) {
+				continue;
+			}
+			$settings = Group_Subscription_Settings::get_subscription_settings( $sub );
+			if ( empty( $settings['enabled'] ) ) {
+				continue;
+			}
+			$managed[]  = $ids_only ? $sub->get_id() : $sub;
+			$have_ids[] = $managed_id;
+		}
+
 		/**
 		 * Filter the group subscriptions a user manages.
 		 *
@@ -244,22 +440,28 @@ class Group_Subscription {
 			return [];
 		}
 		$subscription_id = $subscription->get_id();
-		$members         = array_map(
-			function( $user ) {
-				return $user->ID;
-			},
-			\get_users(
-				[
-					'fields'     => [ 'ID' ],
-					'meta_query' => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
-						[
-							'key'   => self::GROUP_SUBSCRIPTION_USER_META_KEY,
-							'value' => $subscription_id,
+		if ( isset( self::$members_cache[ $subscription_id ] ) ) {
+			$members = self::$members_cache[ $subscription_id ];
+		} else {
+			$members = array_map(
+				function( $user ) {
+					return $user->ID;
+				},
+				\get_users(
+					[
+						'fields'      => [ 'ID' ],
+						'count_total' => false,
+						'meta_query'  => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+							[
+								'key'   => self::GROUP_SUBSCRIPTION_USER_META_KEY,
+								'value' => $subscription_id,
+							],
 						],
-					],
-				]
-			)
-		);
+					]
+				)
+			);
+			self::$members_cache[ $subscription_id ] = $members;
+		}
 
 		/**
 		 * Filter the members of a group subscription.
@@ -304,12 +506,11 @@ class Group_Subscription {
 	/**
 	 * Get the total member capacity for a group, or null when there is no limit.
 	 *
-	 * The configured member limit is the number of members allowed *in addition to*
-	 * the manager(s)/owner, so the total capacity is the limit plus the number of
-	 * managers. The manager count is filtered the same way get_all_members() filters
-	 * empty IDs, so the capacity (denominator) and get_member_count() (numerator) always
-	 * agree about the owner — including the edge case of an ownerless subscription, where
-	 * neither counts a phantom owner.
+	 * The configured limit is the group's total capacity *including* the owner: the
+	 * owner occupies one of the limited seats rather than sitting free on top of it.
+	 * So the capacity is simply the limit, which keeps the denominator in step with
+	 * the owner-inclusive get_member_count() numerator. The member-meta seats left
+	 * for everyone but the owner are given by get_member_seat_limit().
 	 *
 	 * @param \WC_Subscription|int $subscription The subscription object or ID.
 	 *
@@ -322,10 +523,40 @@ class Group_Subscription {
 		}
 		$settings = Group_Subscription_Settings::get_subscription_settings( $subscription );
 		$limit    = isset( $settings['limit'] ) ? (int) $settings['limit'] : 0;
+		return $limit > 0 ? $limit : null;
+	}
+
+	/**
+	 * Get the number of member-meta seats a group can hold, or null when unlimited.
+	 *
+	 * The configured limit is the total capacity including the owner, so the owner's
+	 * seat — the one manager who holds no member meta — is reserved out of it, leaving
+	 * `limit - 1` member seats in the common owned case (and all of `limit` in the
+	 * ownerless edge case). This is the threshold the add and invite gates count
+	 * member-meta holders against, and it stays in step with get_member_capacity():
+	 * capacity = seats + owner.
+	 *
+	 * @param \WC_Subscription|int $subscription The subscription object or ID.
+	 *
+	 * @return int|null The member-meta seat limit, or null when unlimited.
+	 */
+	public static function get_member_seat_limit( $subscription ) {
+		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $subscription );
+		if ( ! $subscription ) {
+			return null;
+		}
+		$settings = Group_Subscription_Settings::get_subscription_settings( $subscription );
+		$limit    = isset( $settings['limit'] ) ? (int) $settings['limit'] : 0;
 		if ( $limit <= 0 ) {
 			return null;
 		}
-		return $limit + count( array_filter( array_map( 'intval', self::get_managers( $subscription ) ) ) );
+		// Managers who hold no member seat (in practice just the owner) occupy a seat
+		// within the limit; promoted managers already count via their member meta.
+		$managers_without_member_seat = array_diff(
+			array_filter( array_map( 'intval', self::get_managers( $subscription ) ) ),
+			array_map( 'intval', self::get_members( $subscription ) )
+		);
+		return max( 0, $limit - count( $managers_without_member_seat ) );
 	}
 
 	/**
@@ -360,6 +591,8 @@ class Group_Subscription {
 			}
 			if ( \delete_user_meta( $member_id, self::GROUP_SUBSCRIPTION_USER_META_KEY, $subscription->get_id() ) ) {
 				\delete_user_meta( $member_id, self::get_member_joined_meta_key( $subscription->get_id() ) );
+				// Leaving the group also ends any manager role — no orphaned managers.
+				\delete_user_meta( $member_id, self::GROUP_SUBSCRIPTION_MANAGER_USER_META_KEY, $subscription->get_id() );
 				$members_removed[ $member_id ] = [
 					'email' => \get_userdata( $member_id )->user_email,
 					'url'   => \get_edit_user_link( $member_id ),
@@ -373,7 +606,8 @@ class Group_Subscription {
 		// separate requests), so this can't happen today. If a caller ever combines both arrays,
 		// move this check ahead of the removal loop and compute the projected count there.
 		$existing_members = self::get_members( $subscription );
-		if ( $subscription_settings['limit'] > 0 && count( $existing_members ) + count( $members_to_add ) > $subscription_settings['limit'] ) {
+		$seat_limit       = self::get_member_seat_limit( $subscription );
+		if ( null !== $seat_limit && count( $existing_members ) + count( $members_to_add ) > $seat_limit ) {
 			return new \WP_Error( 'newspack_group_subscription_update_members', __( 'Member limit reached. Please remove some members or increase the limit.', 'newspack-plugin' ), [ 'status' => 409 ] );
 		}
 
@@ -403,7 +637,11 @@ class Group_Subscription {
 	}
 
 	/**
-	 * Check if a user is a member (not manager) of a group subscription.
+	 * Check if a user holds group membership (the member meta) for a subscription.
+	 *
+	 * A promoted manager keeps their membership, so this returns true for managers
+	 * too — it reflects the membership record, not an exclusive "member, not manager"
+	 * role. Use {@see self::user_is_manager()} to distinguish the manager role.
 	 *
 	 * @param int                  $user_id The user ID.
 	 * @param \WC_Subscription|int $subscription The subscription object or ID.

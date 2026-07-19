@@ -730,6 +730,8 @@ class Content_Gate {
 		}
 
 		// Create default layouts for registration and custom_access modes.
+		$layout_titles = self::get_gate_mode_layout_titles();
+
 		$registration_settings  = $gate['registration'] ?? [];
 		$registration_layout_id = $registration_settings['gate_layout_id'] ?? 0;
 		$custom_access_settings  = $gate['custom_access'] ?? [];
@@ -738,7 +740,7 @@ class Content_Gate {
 		if ( ! $registration_layout_id ) {
 			$registration_content   = self::get_layout_default_content( $gate_id, 'registration', $registration_settings, $custom_access_settings );
 			$registration_layout_id = self::create_gate_layout(
-				__( 'Registration Access Layout', 'newspack-plugin' ),
+				$layout_titles['registration'],
 				$registration_content
 			);
 		}
@@ -750,7 +752,7 @@ class Content_Gate {
 		if ( ! $custom_access_layout_id ) {
 			$custom_access_content   = self::get_layout_default_content( $gate_id, 'custom_access', $registration_settings, $custom_access_settings );
 			$custom_access_layout_id = self::create_gate_layout(
-				__( 'Paid Access Layout', 'newspack-plugin' ),
+				$layout_titles['custom_access'],
 				$custom_access_content
 			);
 			if ( ! is_wp_error( $custom_access_layout_id ) ) {
@@ -760,6 +762,203 @@ class Content_Gate {
 		self::update_custom_access_settings( $gate_id, $custom_access_settings );
 
 		return $gate_id;
+	}
+
+	/**
+	 * The gate meta keys holding a mode's settings, mapped to the default title of that
+	 * mode's layout post.
+	 *
+	 * @return array
+	 */
+	private static function get_gate_mode_layout_titles() {
+		return [
+			'registration'  => __( 'Registration Access Layout', 'newspack-plugin' ),
+			'custom_access' => __( 'Paid Access Layout', 'newspack-plugin' ),
+		];
+	}
+
+	/**
+	 * Get a unique title for a copy of a gate.
+	 *
+	 * Appends a translatable " copy" suffix, numbering it (" copy 2", " copy 3", …)
+	 * until it no longer collides with an existing gate in the same bucket.
+	 *
+	 * @param int        $gate_id       Gate ID being duplicated.
+	 * @param array|null $bucket_gates  Optional gates of the source's bucket, to save re-fetching them.
+	 *
+	 * @return string
+	 */
+	public static function get_duplicate_gate_title( $gate_id, $bucket_gates = null ) {
+		// Deliberately not get_the_title(): the 'the_title' filters texturize the title and
+		// prefix drafts/private posts, so the copy's stored title would not be the source's
+		// title plus a suffix, and would not compare against the raw titles below.
+		$source       = get_post( $gate_id );
+		$source_title = $source ? $source->post_title : '';
+
+		if ( null === $bucket_gates ) {
+			$is_newsletter = (bool) get_post_meta( $gate_id, 'is_newsletter', true );
+			$bucket_gates  = self::get_gates( self::GATE_CPT, null, $is_newsletter );
+		}
+		$taken_titles = wp_list_pluck( $bucket_gates, 'title' );
+
+		/* translators: %s: title of the gate being duplicated. */
+		$title = sprintf( __( '%s copy', 'newspack-plugin' ), $source_title );
+
+		$copy_number = 1;
+		while ( in_array( $title, $taken_titles, true ) ) {
+			++$copy_number;
+			/* translators: 1: title of the gate being duplicated. 2: number of this copy. */
+			$title = sprintf( __( '%1$s copy %2$d', 'newspack-plugin' ), $source_title, $copy_number );
+		}
+
+		return $title;
+	}
+
+	/**
+	 * Copy a gate layout post, with the presentation settings stored as its meta.
+	 *
+	 * Those settings ('style', 'visible_paragraphs', …) decide how much of a restricted
+	 * article a reader sees, so a copy that dropped them would not just look different —
+	 * it would reveal a different amount of the gated content.
+	 *
+	 * @param \WP_Post $source_layout The layout post to copy.
+	 *
+	 * @return int|\WP_Error The new layout post ID or error if not created.
+	 */
+	private static function duplicate_gate_layout( $source_layout ) {
+		// Deliberately not create_gate_layout(): it substitutes the default gate content for an
+		// empty layout, which would give the copy a member message a deliberately blank source
+		// layout doesn't show.
+		$new_layout_id = \wp_insert_post(
+			[
+				'post_title'   => $source_layout->post_title,
+				'post_type'    => self::GATE_LAYOUT_CPT,
+				'post_content' => $source_layout->post_content,
+				'post_status'  => $source_layout->post_status,
+			],
+			true // Return WP_Error on failure.
+		);
+		if ( is_wp_error( $new_layout_id ) ) {
+			return $new_layout_id;
+		}
+
+		foreach ( \get_post_meta( $source_layout->ID ) as $key => $values ) {
+			if ( str_starts_with( $key, '_' ) ) {
+				continue;
+			}
+			foreach ( $values as $value ) {
+				\add_post_meta( $new_layout_id, $key, \maybe_unserialize( $value ) );
+			}
+		}
+
+		return $new_layout_id;
+	}
+
+	/**
+	 * Duplicate a gate.
+	 *
+	 * The copy is always created inactive, regardless of the site's default status for
+	 * new gates: a copy of a live gate silently going live would change the site's
+	 * access behavior.
+	 *
+	 * @param int $gate_id Gate ID to duplicate.
+	 *
+	 * @return int|\WP_Error The new gate ID, or error if the source is not a gate or the copy could not be created.
+	 */
+	public static function duplicate_gate( $gate_id ) {
+		$source = get_post( $gate_id );
+		if ( ! $source || self::GATE_CPT !== $source->post_type ) {
+			return new \WP_Error( 'newspack_content_gate_not_found', __( 'Gate not found.', 'newspack-plugin' ), [ 'status' => 400 ] );
+		}
+		if ( ! in_array( $source->post_status, self::get_post_statuses(), true ) ) {
+			return new \WP_Error( 'newspack_content_gate_invalid_status', __( 'This gate cannot be duplicated.', 'newspack-plugin' ), [ 'status' => 400 ] );
+		}
+
+		$is_newsletter = (bool) get_post_meta( $gate_id, 'is_newsletter', true );
+
+		// Content gates and premium newsletter gates are prioritized in separate buckets, so
+		// the copy goes after the last gate of its own. Derived from the highest priority in
+		// use rather than the gate count, which would collide with an existing gate whenever
+		// one has been deleted from the middle of the list.
+		$bucket_gates = self::get_gates( self::GATE_CPT, null, $is_newsletter );
+		$priority     = $bucket_gates ? max( wp_list_pluck( $bucket_gates, 'priority' ) ) + 1 : 0;
+
+		$new_gate_id = \wp_insert_post(
+			[
+				'post_title'   => self::get_duplicate_gate_title( $gate_id, $bucket_gates ),
+				'post_type'    => self::GATE_CPT,
+				'post_status'  => 'draft',
+				'post_content' => '',
+			],
+			true // Return WP_Error on failure.
+		);
+		if ( is_wp_error( $new_gate_id ) ) {
+			// A failed insert is a genuine server error, so give it an explicit 500 status
+			// (matching the controlled codes on the validation branches above) rather than
+			// leaving the REST layer to fall back on its generic 500. The underlying error
+			// is preserved so a maintainer can see why the insert failed.
+			$new_gate_id->add_data( [ 'status' => 500 ] );
+			return $new_gate_id;
+		}
+
+		$layout_titles = self::get_gate_mode_layout_titles();
+
+		// Copy the settings generically, so gate settings added later are carried over without
+		// a list to maintain here.
+		foreach ( \get_post_meta( $gate_id ) as $key => $values ) {
+			if ( 'gate_priority' === $key || str_starts_with( $key, '_' ) ) {
+				continue;
+			}
+			foreach ( $values as $value ) {
+				$value = \maybe_unserialize( $value );
+				// The source's layout IDs must never be persisted on the copy, not even
+				// briefly: while they are, deleting the copy would delete the layouts the
+				// source is still serving to readers. The copy's own layouts are wired in
+				// below.
+				if ( isset( $layout_titles[ $key ] ) && is_array( $value ) ) {
+					unset( $value['gate_layout_id'] );
+				}
+				\add_post_meta( $new_gate_id, $key, $value );
+			}
+		}
+		\update_post_meta( $new_gate_id, 'gate_priority', $priority );
+
+		// Deep-copy the layouts. Sharing layout posts between two gates would let
+		// delete_gate_layouts() destroy the surviving gate's reader-facing content.
+		foreach ( $layout_titles as $gate_mode => $default_layout_title ) {
+			$source_settings  = \get_post_meta( $gate_id, $gate_mode, true );
+			$source_layout_id = is_array( $source_settings ) && ! empty( $source_settings['gate_layout_id'] ) ? $source_settings['gate_layout_id'] : 0;
+			$source_layout    = $source_layout_id ? get_post( $source_layout_id ) : null;
+
+			if ( $source_layout && self::GATE_LAYOUT_CPT === $source_layout->post_type ) {
+				$new_layout_id = self::duplicate_gate_layout( $source_layout );
+			} else {
+				// Stale or missing layout ID: create a fresh default layout, as create_gate() does.
+				$new_layout_id = self::create_gate_layout(
+					$default_layout_title,
+					self::get_layout_default_content(
+						$new_gate_id,
+						$gate_mode,
+						self::get_registration_settings( $new_gate_id ),
+						self::get_custom_access_settings( $new_gate_id )
+					)
+				);
+			}
+
+			if ( is_wp_error( $new_layout_id ) ) {
+				// Discard the half-built copy rather than leave it in the publisher's list.
+				// Its own layouts, if any, go with it via delete_gate_layouts().
+				\wp_delete_post( $new_gate_id, true );
+				return $new_layout_id;
+			}
+
+			$settings                   = \get_post_meta( $new_gate_id, $gate_mode, true );
+			$settings                   = is_array( $settings ) ? $settings : [];
+			$settings['gate_layout_id'] = $new_layout_id;
+			\update_post_meta( $new_gate_id, $gate_mode, $settings );
+		}
+
+		return $new_gate_id;
 	}
 
 	/**

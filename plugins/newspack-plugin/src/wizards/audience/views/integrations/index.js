@@ -1,19 +1,24 @@
 /**
  * WordPress dependencies.
  */
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
+import { useDispatch } from '@wordpress/data';
 import { forwardRef, useState, useEffect, useCallback } from '@wordpress/element';
 
 /**
  * Internal dependencies.
  */
 import { Wizard, withWizard } from '../../../../../packages/components/src';
+import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import { SettingsSection } from './settings-section';
 import { ConfigureView } from './configure-view';
 import { LogsView } from './logs-view';
 
 const API_PATH = '/newspack/v1/wizard/newspack-audience-integrations/settings';
+
+// Minimum time the Activate action stays busy, even when the request is faster.
+const MIN_ACTIVATION_BUSY_MS = 2000;
 
 const INTEGRATIONS_BREADCRUMBS = [
 	{ label: __( 'Audience Management', 'newspack-plugin' ) },
@@ -28,14 +33,39 @@ const AudienceIntegrations = ( props, ref ) => {
 	const [ activating, setActivating ] = useState( {} );
 	const [ loading, setLoading ] = useState( true );
 
-	const fetchSettings = useCallback( () => {
-		setLoading( true );
-		apiFetch( { path: API_PATH } )
+	const { addNotice } = useDispatch( WIZARD_STORE_NAMESPACE );
+
+	const addEnabledNotice = useCallback(
+		( integrationId, enabled, data ) => {
+			const name = data?.[ integrationId ]?.name || integrationId;
+			addNotice( {
+				id: `integration-enabled-${ integrationId }`,
+				type: 'success',
+				message: enabled
+					? sprintf( /* translators: %s: integration name. */ __( '%s enabled.', 'newspack-plugin' ), name )
+					: sprintf( /* translators: %s: integration name. */ __( '%s disabled.', 'newspack-plugin' ), name ),
+			} );
+		},
+		[ addNotice ]
+	);
+
+	// showLoading swaps the whole card grid for a "Loading…" line, which is right
+	// on first mount and wrong on a refetch — the cards are already on screen and
+	// the card carries its own busy state.
+	const fetchSettings = useCallback( ( { showLoading = true } = {} ) => {
+		if ( showLoading ) {
+			setLoading( true );
+		}
+		return apiFetch( { path: API_PATH } )
 			.then( data => {
 				setIntegrations( data );
 				setPendingChanges( {} );
 			} )
-			.finally( () => setLoading( false ) );
+			.finally( () => {
+				if ( showLoading ) {
+					setLoading( false );
+				}
+			} );
 	}, [] );
 
 	useEffect( () => {
@@ -52,47 +82,119 @@ const AudienceIntegrations = ( props, ref ) => {
 		} ) );
 	}, [] );
 
-	const handleSave = useCallback( integrationId => {
-		setPendingChanges( currentPendingChanges => {
-			const changes = currentPendingChanges[ integrationId ];
-			if ( ! changes || Object.keys( changes ).length === 0 ) {
-				return currentPendingChanges;
+	const handleDiscardChanges = useCallback( integrationId => {
+		setPendingChanges( prev => {
+			if ( ! prev[ integrationId ] ) {
+				return prev;
 			}
-			setSaving( prev => ( { ...prev, [ integrationId ]: true } ) );
-			apiFetch( {
-				path: `${ API_PATH }/${ integrationId }`,
-				method: 'POST',
-				data: { settings: changes },
-			} )
-				.then( data => {
-					setIntegrations( data );
-					setPendingChanges( prev => {
-						const next = { ...prev };
-						delete next[ integrationId ];
-						return next;
-					} );
-				} )
-				.finally( () => {
-					setSaving( prev => ( { ...prev, [ integrationId ]: false } ) );
-				} );
-			return currentPendingChanges;
+			const next = { ...prev };
+			delete next[ integrationId ];
+			return next;
 		} );
 	}, [] );
 
-	const handleToggleEnabled = useCallback( ( integrationId, enabled ) => {
-		setToggling( prev => ( { ...prev, [ integrationId ]: true } ) );
-		apiFetch( {
-			path: `${ API_PATH }/${ integrationId }/enabled`,
-			method: 'POST',
-			data: { enabled },
-		} )
-			.then( data => {
-				setIntegrations( data );
-			} )
-			.finally( () => {
-				setToggling( prev => ( { ...prev, [ integrationId ]: false } ) );
+	const handleSave = useCallback(
+		integrationId => {
+			setPendingChanges( currentPendingChanges => {
+				const changes = currentPendingChanges[ integrationId ];
+				if ( ! changes || Object.keys( changes ).length === 0 ) {
+					return currentPendingChanges;
+				}
+				setSaving( prev => ( { ...prev, [ integrationId ]: true } ) );
+				apiFetch( {
+					path: `${ API_PATH }/${ integrationId }`,
+					method: 'POST',
+					data: { settings: changes },
+				} )
+					.then( data => {
+						setIntegrations( data );
+						setPendingChanges( prev => {
+							const next = { ...prev };
+							delete next[ integrationId ];
+							return next;
+						} );
+					} )
+					.catch( () => {
+						// Leave pendingChanges untouched; the server never received the
+						// edit, so it's the user's only copy. apiFetch already logs the
+						// underlying error to the console and the user can retry.
+						addNotice( {
+							id: `integration-saved-${ integrationId }`,
+							type: 'error',
+							message: __( 'Something went wrong. Please try again.', 'newspack-plugin' ),
+						} );
+					} )
+					.finally( () => {
+						setSaving( prev => ( { ...prev, [ integrationId ]: false } ) );
+					} );
+				return currentPendingChanges;
 			} );
-	}, [] );
+		},
+		[ addNotice ]
+	);
+
+	const handleToggleEnabled = useCallback(
+		( integrationId, enabled ) => {
+			setToggling( prev => ( { ...prev, [ integrationId ]: true } ) );
+			apiFetch( {
+				path: `${ API_PATH }/${ integrationId }/enabled`,
+				method: 'POST',
+				data: { enabled },
+			} )
+				.then( data => {
+					setIntegrations( data );
+					addEnabledNotice( integrationId, enabled, data );
+				} )
+				.catch( () => {
+					// Leave the integration in its previous state; apiFetch already
+					// logs the underlying error to the console and the user can retry.
+					addNotice( {
+						id: `integration-enabled-${ integrationId }`,
+						type: 'error',
+						message: __( 'Something went wrong. Please try again.', 'newspack-plugin' ),
+					} );
+				} )
+				.finally( () => {
+					setToggling( prev => ( { ...prev, [ integrationId ]: false } ) );
+				} );
+		},
+		[ addEnabledNotice, addNotice ]
+	);
+
+	const handleSetupAndEnable = useCallback(
+		( integrationId, settings ) =>
+			apiFetch( {
+				path: `${ API_PATH }/${ integrationId }`,
+				method: 'POST',
+				data: { settings },
+			} ).then( savedData =>
+				apiFetch( {
+					path: `${ API_PATH }/${ integrationId }/enabled`,
+					method: 'POST',
+					data: { enabled: true },
+				} )
+					// The settings save succeeded even if enabling failed — reflect
+					// the saved values so the UI doesn't offer the modal again for
+					// settings that are already stored.
+					.catch( error => {
+						setIntegrations( savedData );
+						throw error;
+					} )
+					.then( data => {
+						setIntegrations( data );
+						addEnabledNotice( integrationId, true, data );
+						return data;
+					} )
+					.finally( () => {
+						setPendingChanges( prev => {
+							const next = { ...prev };
+							delete next[ integrationId ];
+							return next;
+						} );
+					} )
+			),
+		[ addEnabledNotice ]
+	);
 
 	const handleActivatePlugin = useCallback(
 		pluginSlugs => {
@@ -108,15 +210,20 @@ const AudienceIntegrations = ( props, ref ) => {
 				if ( ! claimed.length ) {
 					return prev;
 				}
-				Promise.all(
-					claimed.map( slug =>
-						apiFetch( {
-							path: `/newspack/v1/plugins/${ slug }/activate`,
-							method: 'POST',
-						} )
-					)
-				)
-					.then( () => fetchSettings() )
+				Promise.all( [
+					Promise.all(
+						claimed.map( slug =>
+							apiFetch( {
+								path: `/newspack/v1/plugins/${ slug }/activate`,
+								method: 'POST',
+							} )
+						)
+					),
+					// Hold the busy state for a beat even when activation is
+					// near-instant, so the user sees that something happened.
+					new Promise( resolve => setTimeout( resolve, MIN_ACTIVATION_BUSY_MS ) ),
+				] )
+					.then( () => fetchSettings( { showLoading: false } ) )
 					.catch( () => {
 						// Surface nothing here; failures leave the integration in its
 						// previous state and the user can retry. apiFetch already logs
@@ -149,9 +256,11 @@ const AudienceIntegrations = ( props, ref ) => {
 		activating,
 		loading,
 		onFieldChange: handleFieldChange,
+		onDiscardChanges: handleDiscardChanges,
 		onSave: handleSave,
 		onToggleEnabled: handleToggleEnabled,
 		onActivatePlugin: handleActivatePlugin,
+		onSetupAndEnable: handleSetupAndEnable,
 	};
 
 	return (

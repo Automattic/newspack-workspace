@@ -61,9 +61,11 @@ if ( in_array( $subscription_status, [ 'cancelled', 'expired' ], true ) ) {
 		</div>
 		<div class="newspack-my-account__subscription--actions">
 			<div class="newspack-my-account__subscription--actions-container">
-				<a href="<?php echo esc_url( wc_get_endpoint_url( 'view-subscription', $subscription->get_id(), wc_get_page_permalink( 'myaccount' ) ) ); ?>" class="newspack-ui__button newspack-ui__button--secondary">
-					<?php esc_html_e( 'View subscription', 'newspack-plugin' ); ?>
-				</a>
+				<?php if ( $user_id === (int) $subscription->get_user_id() ) : // Billing is the owner's surface; a manager never sees it. ?>
+					<a href="<?php echo esc_url( wc_get_endpoint_url( 'view-subscription', $subscription->get_id(), wc_get_page_permalink( 'myaccount' ) ) ); ?>" class="newspack-ui__button newspack-ui__button--secondary">
+						<?php esc_html_e( 'View subscription', 'newspack-plugin' ); ?>
+					</a>
+				<?php endif; ?>
 				<?php if ( $is_active && ! $is_completely_empty ) : ?>
 					<div class="newspack-ui__dropdown newspack-my-account__subscription--actions-dropdown">
 						<button class="newspack-ui__button newspack-ui__button--secondary newspack-ui__dropdown__toggle">
