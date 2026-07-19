@@ -606,6 +606,15 @@ function wcs_create_subscription( $data = [] ) {
 	}
 	$subscription = new WC_Subscription( $data );
 	$subscriptions_database[ $subscription->get_id() ] = $subscription;
+	// The mock reuses subscription IDs across tests (each test resets
+	// $subscriptions_database, so IDs restart at 1). Group_Subscription memoizes
+	// managers/members per request keyed by subscription ID, so a (re)created
+	// subscription must invalidate that cache or a later test reading the reused ID
+	// would see the previous test's cached data. No-op in production, where
+	// subscription IDs are unique post IDs that are never reissued.
+	if ( class_exists( '\Newspack\Group_Subscription' ) ) {
+		\Newspack\Group_Subscription::reset_cache();
+	}
 	return $subscription;
 }
 function wcs_get_subscription( $subscription_id ) {

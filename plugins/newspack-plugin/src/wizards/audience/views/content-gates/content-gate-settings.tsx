@@ -129,6 +129,33 @@ export default function ContentGateSettings( {
 		);
 	};
 
+	const handleDuplicate = () => {
+		resetError();
+		resetNotices();
+		wizardApiFetch< Gate >(
+			{
+				path: `/newspack/v1/wizard/${ slug }/${ gate.id }/duplicate`,
+				method: 'POST',
+			},
+			{
+				onSuccess( data: Gate ) {
+					// The copy is appended to the end of the list server-side.
+					updateGatesData( [ ...gates, data ] );
+					addNotice( {
+						message: sprintf(
+							// translators: %s is the title of the newly created copy.
+							__( '“%s” gate created as inactive.', 'newspack-plugin' ),
+							data.title
+						),
+						type: 'success',
+						id: 'content-gate-duplicated',
+						actions: [ { label: __( 'Edit', 'newspack-plugin' ), onClick: () => history.push( `/edit/${ data.id }` ) } ],
+					} );
+				},
+			}
+		);
+	};
+
 	const actions = [
 		[
 			{
@@ -139,6 +166,11 @@ export default function ContentGateSettings( {
 			{
 				label: gate.status !== 'publish' ? __( 'Set to active', 'newspack-plugin' ) : __( 'Set to inactive', 'newspack-plugin' ),
 				action: () => updateStatus.current?.( gate.status === 'publish' ? 'draft' : 'publish' ),
+				disabled: isFetching,
+			},
+			{
+				label: __( 'Duplicate', 'newspack-plugin' ),
+				action: handleDuplicate,
 				disabled: isFetching,
 			},
 			{
@@ -155,13 +187,13 @@ export default function ContentGateSettings( {
 	const layoutOptions: { label: string; action?: () => void; href?: string }[] = [];
 	if ( hasRegistrationLayout ) {
 		layoutOptions.push( {
-			label: __( 'Edit registered access layout', 'newspack-plugin' ),
+			label: __( 'Edit Registered Access Layout', 'newspack-plugin' ),
 			href: getEditGateLayoutUrl( gate.id, 'registration' ),
 		} );
 	}
 	if ( hasCustomAccessLayout ) {
 		layoutOptions.push( {
-			label: __( 'Edit paid access layout', 'newspack-plugin' ),
+			label: __( 'Edit Paid Access Layout', 'newspack-plugin' ),
 			href: getEditGateLayoutUrl( gate.id, 'custom_access' ),
 		} );
 	}

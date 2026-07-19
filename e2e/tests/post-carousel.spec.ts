@@ -52,6 +52,13 @@ test("Post Carousel block renders and navigates", {
     const carousel = page.locator('.wp-block-newspack-blocks-carousel');
     await expect(carousel).toBeVisible();
 
+    // Bring the carousel into view before exercising it. Playwright auto-scrolls
+    // to an element only at the moment it interacts with it, so without this the
+    // arrow click and slide transition happen against a carousel still below the
+    // fold -- the assertions pass, but the recording never shows the navigation.
+    // Scroll it up first so the tape actually captures the interaction.
+    await carousel.scrollIntoViewIfNeeded();
+
     // Verify at least one post title is visible within the carousel.
     const carouselArticles = carousel.locator('article');
     await expect(carouselArticles.first()).toBeVisible();

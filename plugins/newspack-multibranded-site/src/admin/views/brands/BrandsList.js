@@ -10,7 +10,7 @@ import { Card, ActionCard, Button, Popover, withWizardScreen } from 'newspack-co
 
 const AddNewBrandLink = () => (
 	<NavLink to="brands/new">
-		<Button variant="primary">{ __( 'Add New Brand', 'newspack' ) }</Button>
+		<Button variant="primary">{ __( 'Add Brand', 'newspack' ) }</Button>
 	</NavLink>
 );
 

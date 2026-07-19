@@ -60,7 +60,7 @@ export default function NewslettersListScreen() {
 					: [
 							{
 								type: 'primary',
-								label: __( 'Add new newsletter', 'newspack-newsletters' ),
+								label: __( 'Add Newsletter', 'newspack-newsletters' ),
 								href: addNewHref,
 							},
 					  ],
@@ -82,7 +82,7 @@ export default function NewslettersListScreen() {
 				icon={ envelope }
 				title={ __( 'Get started with newsletters', 'newspack-newsletters' ) }
 				description={ __( 'Compose, schedule, and send newsletters to your subscribers via your connected ESP.', 'newspack-newsletters' ) }
-				ctaTitle={ __( 'Add new newsletter', 'newspack-newsletters' ) }
+				ctaTitle={ __( 'Add Newsletter', 'newspack-newsletters' ) }
 				ctaHref={ addNewHref }
 			/>
 		);
