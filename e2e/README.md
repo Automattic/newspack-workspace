@@ -26,6 +26,13 @@ site `https://e2e.newspackstaging.com`. The build definition lives in TeamCity
 settings, not in this repo; its steps are: install dependencies, write a `.env`,
 then run `npm run test:setup` (the setup projects provision the site over SSH).
 
+That staging site is pinned to the **stable release** channel, and provisioning
+rebuilds against the plugin version installed there – not the version the specs
+were merged with. A spec that drives UI which only exists in `alpha`/`main` will
+therefore fail nightly until that feature ships to stable, so new specs must
+feature-detect such UI rather than assume it is present. See `AGENTS.md` →
+"Site setup model" for details.
+
 [Credentials for the Atomic site used for the e2e testing.](https://mc.a8c.com/secret-store/?secret_id=12168)
 
 The build is parameterised by these variables (set in TeamCity, not committed):
