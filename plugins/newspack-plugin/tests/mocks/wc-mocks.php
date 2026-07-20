@@ -896,6 +896,10 @@ function wc_get_product( $product_id ) {
  * Recording mock: notices land on the $wc_mock_notices global so tests can
  * assert the reader-facing half of code paths gated on
  * function_exists( 'wc_add_notice' ).
+ *
+ * @param string $message     Notice message.
+ * @param string $notice_type Notice type: 'success' | 'error' | 'notice'.
+ * @param array  $data        Extra notice data (unused).
  */
 function wc_add_notice( $message, $notice_type = 'success', $data = [] ) {
 	global $wc_mock_notices;
