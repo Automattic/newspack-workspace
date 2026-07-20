@@ -31,6 +31,16 @@ The suite provisions the site from scratch each phase rather than restoring a DB
 dump. This keeps it drift-free: the site is always rebuilt against the currently
 installed plugin code, so a plugin/core update can't leave a stale fixture behind.
 
+> **Specs run against the *installed* plugin version, not the version they were
+> merged with.** The nightly targets a site pinned to the **stable release**
+> channel, but specs land on `main`, which tracks `alpha`. So a spec that drives
+> UI only present in `alpha` (a feature not yet shipped to stable) will fail every
+> night until that feature reaches the release channel – even though it passes
+> locally against `main`. When adding coverage for recently-merged UI, either
+> feature-detect the new element and fall back to the older flow (see
+> `saveGateAsActive` in `tests/utils-content-gates.ts`), or gate the spec so it
+> skips when the feature is absent. Don't assume the newest UI is present.
+
 - **`site-setup.sh`** (this repo) is the from-scratch Newspack bootstrap (DB reset +
   fresh install + posts/users/WooCommerce+donations/memberships/subscriptions/
   campaigns/menus). It's a generic dev provisioner, parameterised by `--url`,
