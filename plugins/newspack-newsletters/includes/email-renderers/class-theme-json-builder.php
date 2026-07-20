@@ -2,7 +2,7 @@
 /**
  * Builds a per-newsletter theme.json array from existing post meta.
  *
- * @package Newspack_Newsletters
+ * @package Newspack
  */
 
 namespace Newspack\Newsletters\Email_Renderers;
@@ -117,23 +117,23 @@ class Theme_Json_Builder {
 			],
 		];
 
-		// Emit email-safe button styles when the WC renderer is active. The WC email
-		// package drops CSS-var and rem values, so resolve radius and padding to px here.
-		if ( Feature_Flag::is_enabled() ) {
-			$styles['elements']['button'] = [
-				'border' => [
-					'radius' => self::resolve_button_border_radius(),
-				],
-			];
+		// Emit email-safe button styles. The WC email package drops CSS-var and rem
+		// values, so resolve radius and padding to px here. build() only runs inside a
+		// WC render/editor context (via Editor_Bootstrap), so this needs no flag gate —
+		// keeping it a pure meta→theme.json translator whose output depends only on $post.
+		$styles['elements']['button'] = [
+			'border' => [
+				'radius' => self::resolve_button_border_radius(),
+			],
+		];
 
-			// Only emit padding when the theme defines it. Classic themes
-			// (newspack-theme) define no button padding in theme.json.
-			$padding = self::resolve_button_padding();
-			if ( ! empty( $padding ) ) {
-				$styles['elements']['button']['spacing'] = [
-					'padding' => $padding,
-				];
-			}
+		// Only emit padding when the theme defines it. Classic themes
+		// (newspack-theme) define no button padding in theme.json.
+		$padding = self::resolve_button_padding();
+		if ( ! empty( $padding ) ) {
+			$styles['elements']['button']['spacing'] = [
+				'padding' => $padding,
+			];
 		}
 
 		return [

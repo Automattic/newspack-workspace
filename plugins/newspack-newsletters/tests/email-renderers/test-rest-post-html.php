@@ -160,4 +160,23 @@ class Test_REST_Post_Html extends WP_UnitTestCase {
 		$this->assertNotSame( 200, $response->get_status() );
 		$this->assertContains( $response->get_status(), [ 401, 403 ] );
 	}
+
+	/**
+	 * An authenticated but under-privileged user (a contributor, who can edit their
+	 * own posts but lacks `edit_others_posts`) is rejected. This pins the endpoint's
+	 * real authorization boundary — the logged-out case alone doesn't exercise it.
+	 *
+	 * @return void
+	 */
+	public function test_post_html_route_rejects_under_privileged_user() {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'contributor' ] ) );
+		$post_id = $this->create_newsletter_with_paragraph( 'Should be gated for contributors' );
+
+		$request = new WP_REST_Request( 'GET', self::ROUTE );
+		$request->set_param( 'post_id', $post_id );
+		$response = rest_do_request( $request );
+
+		$this->assertNotSame( 200, $response->get_status() );
+		$this->assertContains( $response->get_status(), [ 401, 403 ] );
+	}
 }

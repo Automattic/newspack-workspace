@@ -5,7 +5,7 @@
  * Theme-origin values still win. Every method is flag-gated and
  * email-editor-request-gated — must NOT touch any non-newsletter context.
  *
- * @package Newspack_Newsletters
+ * @package Newspack
  */
 
 namespace Newspack\Newsletters\Email_Renderers;
@@ -29,14 +29,17 @@ class Email_Defaults {
 	const DEFAULT_BUTTON_BORDER_RADIUS = '4px';
 
 	/**
-	 * Wire up wp_theme_json_data_default only when the WC renderer flag is on.
+	 * Wire up the wp_theme_json_data_default callbacks.
+	 *
+	 * Registered unconditionally rather than behind Feature_Flag at load time: a site
+	 * that enables the renderer via the `newspack_newsletters_use_woo_renderer` filter
+	 * on a later hook would otherwise miss these editor-canvas defaults (init() runs at
+	 * plugin load). Each callback re-resolves the flag per request and guards on the
+	 * email-editor request context, so the filters stay inert until both are true.
 	 *
 	 * @return void
 	 */
 	public static function init() {
-		if ( ! Feature_Flag::is_enabled() ) {
-			return;
-		}
 		add_filter( 'wp_theme_json_data_default', [ __CLASS__, 'inject_button_border_radius' ] );
 		add_filter( 'wp_theme_json_data_default', [ __CLASS__, 'inject_fonts' ] );
 	}

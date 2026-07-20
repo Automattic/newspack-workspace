@@ -20,7 +20,7 @@ class Feature_Flag {
 	 *
 	 * @return boolean
 	 */
-	public static function is_enabled() {
+	public static function is_enabled(): bool {
 		$enabled = (bool) get_option( self::OPTION, false );
 		if ( defined( 'NEWSPACK_NEWSLETTERS_WOO_RENDERER' ) ) {
 			$enabled = (bool) constant( 'NEWSPACK_NEWSLETTERS_WOO_RENDERER' );

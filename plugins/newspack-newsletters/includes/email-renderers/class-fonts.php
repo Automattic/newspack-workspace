@@ -5,7 +5,7 @@
  * Ensures render and canvas agree: un-customized newsletters inherit the active
  * theme's fonts instead of a hardcoded default.
  *
- * @package Newspack_Newsletters
+ * @package Newspack
  */
 
 namespace Newspack\Newsletters\Email_Renderers;

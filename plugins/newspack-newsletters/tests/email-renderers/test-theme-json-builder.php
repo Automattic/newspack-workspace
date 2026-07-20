@@ -240,13 +240,21 @@ class Test_Theme_Json_Builder extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Flag off: builder emits no button element at all (unchanged behavior).
+	 * The builder is a pure meta→theme.json translator: it emits button styles regardless
+	 * of the feature flag. build() is only reached inside a WC render/editor context
+	 * (via Editor_Bootstrap), so its output must depend only on $post — not on the flag,
+	 * which previously made the tests exercise a different branch than production.
 	 */
-	public function test_flag_off_does_not_inject_button() {
+	public function test_build_emits_button_styles_independent_of_flag() {
 		add_filter( 'newspack_newsletters_use_woo_renderer', '__return_false' );
 		$theme = Theme_Json_Builder::build( get_post( self::factory()->post->create() ) );
 		remove_filter( 'newspack_newsletters_use_woo_renderer', '__return_false' );
-		$this->assertArrayNotHasKey( 'button', $theme['styles']['elements'] ?? [] );
+		$this->assertArrayHasKey(
+			'button',
+			$theme['styles']['elements'] ?? [],
+			'build() must emit button styles even with the flag off — it is a pure translator.'
+		);
+		$this->assertArrayHasKey( 'border', $theme['styles']['elements']['button'] );
 	}
 
 	/**
