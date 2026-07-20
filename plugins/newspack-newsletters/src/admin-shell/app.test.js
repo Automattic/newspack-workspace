@@ -36,10 +36,10 @@ describe( 'admin-shell App chrome', () => {
 		expect( screen.getByRole( 'heading', { level: 1, name: 'Newsletters' } ) ).toBeInTheDocument();
 	} );
 
-	it( 'hides the h1 visually in bundled mode (newspack-plugin owns the breadcrumb)', () => {
+	it( 'renders no h1 in bundled mode (newspack-plugin admin-header owns the breadcrumb)', () => {
 		window.newspackNewslettersAdmin = { bundledMode: true };
 		const { container } = render( <App label="Newsletters" Screen={ NoopScreen } /> );
-		expect( container.querySelector( 'h1.screen-reader-text' ) ).not.toBeNull();
+		expect( container.querySelector( 'h1' ) ).toBeNull();
 	} );
 
 	it( 'shows the h1 as a visible page title in standalone mode', () => {
