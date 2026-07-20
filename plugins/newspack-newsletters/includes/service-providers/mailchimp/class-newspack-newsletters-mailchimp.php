@@ -1632,6 +1632,20 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 	}
 
 	/**
+	 * The fallback message shown to readers whose Mailchimp contact is in a
+	 * compliance state, used when no custom message has been configured.
+	 *
+	 * Shared with the settings list, which uses it as the field placeholder so the
+	 * wizard previews the real fallback copy. A method rather than a class constant
+	 * because gettext extraction requires a string literal inside __().
+	 *
+	 * @return string The default resubscribe error message.
+	 */
+	public static function get_default_resubscribe_message() {
+		return __( "We'll need to subscribe this email address manually. Please contact our support team.", 'newspack-newsletters' );
+	}
+
+	/**
 	 * Filters the error message shown to readers when an error occurs.
 	 *
 	 * @param string $reader_error The default error message.
@@ -1649,7 +1663,7 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 			if ( ! empty( $custom_message ) ) {
 				return $custom_message;
 			}
-			$reader_error = __( "We'll need to subscribe this email address manually. Please contact our support team.", 'newspack-newsletters' );
+			$reader_error = self::get_default_resubscribe_message();
 		}
 		return $reader_error;
 	}
