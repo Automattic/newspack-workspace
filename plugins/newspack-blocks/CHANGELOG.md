@@ -1,3 +1,24 @@
+## @automattic/newspack-blocks [4.27.1](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.27.0...newspack-blocks@4.27.1) (2026-07-14)
+
+
+### Bug Fixes
+
+* **blocks:** fix express checkout address validation in modal checkout ([#597](https://github.com/Automattic/newspack-workspace/issues/597)) ([09e001f](https://github.com/Automattic/newspack-workspace/commit/09e001fb8333ae9ab5f7d03c894e9bbeefe3144c))
+
+# @automattic/newspack-blocks [4.27.0](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.26.8...newspack-blocks@4.27.0) (2026-07-08)
+
+
+### Features
+
+* **gates:** capture gate id on landing-page conversions (NPPD-1887) ([#575](https://github.com/Automattic/newspack-workspace/issues/575)) ([20e84f8](https://github.com/Automattic/newspack-workspace/commit/20e84f87dc1be96b5575548593fd0f7e77da52e6))
+
+## @automattic/newspack-blocks [4.26.8](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.26.7...newspack-blocks@4.26.8) (2026-07-02)
+
+
+### Bug Fixes
+
+* **blocks:** restrict articles endpoint to viewable post types ([cde3e84](https://github.com/Automattic/newspack-workspace/commit/cde3e84ebf2c8e653f085560799f32c69bd75a36))
+
 ## @automattic/newspack-blocks [4.26.7](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.26.6...newspack-blocks@4.26.7) (2026-06-30)
 
 

@@ -145,7 +145,7 @@ interface AdvancedSettings {
 	// Post content fallback image.
 	post_content_fallback_image?: string | null;
 
-	// Private Tags settings (present only when NEWSPACK_PRIVATE_TAGS_ENABLED is active).
+	// Private Tags settings (present unless the feature is opted out via the NEWSPACK_PRIVATE_TAGS_DISABLED constant or the newspack_private_tags_enabled filter).
 	newspack_private_tags_settings?: {
 		all: boolean;
 		archives: boolean;
@@ -157,6 +157,7 @@ interface AdvancedSettings {
 		gam_targeting: boolean;
 		yoast_metadata: boolean;
 		yoast_sitemap: boolean;
+		reader_data: boolean;
 		[ key: string ]: boolean;
 	};
 }

@@ -109,16 +109,28 @@ class Content_Gate_API {
 	 * @return array The sanitized gate.
 	 */
 	public static function sanitize_gate( $gate ) {
-		$sanitized = [
-			'title'         => isset( $gate['title'] ) ? sanitize_text_field( $gate['title'] ) : __( 'Untitled Content Gate', 'newspack-plugin' ),
-			'priority'      => isset( $gate['priority'] ) ? intval( $gate['priority'] ) : 0,
-			'status'        => isset( $gate['status'] ) && ! empty( $gate['id'] ) ? self::sanitize_status( $gate['status'], $gate['id'] ) : 'draft',
-			'content_rules' => isset( $gate['content_rules'] ) ? self::sanitize_rules( $gate['content_rules'], 'content' ) : [],
-			'registration'  => isset( $gate['registration'] ) ? self::sanitize_registration( $gate['registration'] ) : [],
-			'custom_access' => isset( $gate['custom_access'] ) ? self::sanitize_custom_access( $gate['custom_access'] ) : [],
-		];
-		// Only include the rule-combination mode when the request explicitly provided it,
-		// so an omitted field does not clobber an existing gate's stored mode on update.
+		$sanitized = [];
+		// Only include fields the request explicitly provided, so an omitted
+		// field does not clobber an existing gate's stored value on update
+		// (a published gate silently reset to draft, or with its rules wiped, stops enforcing).
+		if ( isset( $gate['title'] ) ) {
+			$sanitized['title'] = sanitize_text_field( $gate['title'] );
+		}
+		if ( isset( $gate['priority'] ) ) {
+			$sanitized['priority'] = intval( $gate['priority'] );
+		}
+		if ( isset( $gate['status'] ) ) {
+			$sanitized['status'] = self::sanitize_status( $gate['status'], $gate['id'] ?? 0 );
+		}
+		if ( isset( $gate['content_rules'] ) ) {
+			$sanitized['content_rules'] = self::sanitize_rules( $gate['content_rules'], 'content' );
+		}
+		if ( isset( $gate['registration'] ) ) {
+			$sanitized['registration'] = self::sanitize_registration( $gate['registration'] );
+		}
+		if ( isset( $gate['custom_access'] ) ) {
+			$sanitized['custom_access'] = self::sanitize_custom_access( $gate['custom_access'] );
+		}
 		if ( isset( $gate['content_rules_match'] ) ) {
 			$sanitized['content_rules_match'] = in_array( $gate['content_rules_match'], [ 'all', 'any' ], true ) ? $gate['content_rules_match'] : 'all';
 		}
@@ -133,15 +145,20 @@ class Content_Gate_API {
 	 * @return array The sanitized registration.
 	 */
 	public static function sanitize_registration( $registration ) {
-		$registration = [
-			'active'               => boolval( $registration['active'] ),
-			'metering'             => self::sanitize_metering( $registration['metering'] ),
-			'require_verification' => boolval( $registration['require_verification'] ),
-		];
-		if ( isset( $registration['gate_layout_id'] ) ) {
-			$registration['gate_layout_id'] = absint( $registration['gate_layout_id'] );
+		$sanitized = [];
+		if ( isset( $registration['active'] ) ) {
+			$sanitized['active'] = boolval( $registration['active'] );
 		}
-		return $registration;
+		if ( isset( $registration['metering'] ) ) {
+			$sanitized['metering'] = self::sanitize_metering( $registration['metering'] );
+		}
+		if ( isset( $registration['require_verification'] ) ) {
+			$sanitized['require_verification'] = boolval( $registration['require_verification'] );
+		}
+		if ( isset( $registration['gate_layout_id'] ) ) {
+			$sanitized['gate_layout_id'] = absint( $registration['gate_layout_id'] );
+		}
+		return $sanitized;
 	}
 
 	/**
@@ -152,15 +169,20 @@ class Content_Gate_API {
 	 * @return array The sanitized custom access.
 	 */
 	public static function sanitize_custom_access( $custom_access ) {
-		$custom_access = [
-			'active'       => boolval( $custom_access['active'] ),
-			'metering'     => self::sanitize_metering( $custom_access['metering'] ),
-			'access_rules' => self::sanitize_rules( $custom_access['access_rules'], 'access' ),
-		];
-		if ( isset( $custom_access['gate_layout_id'] ) ) {
-			$custom_access['gate_layout_id'] = absint( $custom_access['gate_layout_id'] );
+		$sanitized = [];
+		if ( isset( $custom_access['active'] ) ) {
+			$sanitized['active'] = boolval( $custom_access['active'] );
 		}
-		return $custom_access;
+		if ( isset( $custom_access['metering'] ) ) {
+			$sanitized['metering'] = self::sanitize_metering( $custom_access['metering'] );
+		}
+		if ( isset( $custom_access['access_rules'] ) ) {
+			$sanitized['access_rules'] = self::sanitize_rules( $custom_access['access_rules'], 'access' );
+		}
+		if ( isset( $custom_access['gate_layout_id'] ) ) {
+			$sanitized['gate_layout_id'] = absint( $custom_access['gate_layout_id'] );
+		}
+		return $sanitized;
 	}
 
 	/**
@@ -171,19 +193,17 @@ class Content_Gate_API {
 	 * @return array The sanitized metering.
 	 */
 	public static function sanitize_metering( $metering ) {
-		$metering = wp_parse_args(
-			$metering,
-			[
-				'enabled' => false,
-				'count'   => 0,
-				'period'  => 'month',
-			]
-		);
-		return [
-			'enabled' => boolval( $metering['enabled'] ),
-			'count'   => intval( $metering['count'] ),
-			'period'  => sanitize_text_field( $metering['period'] ),
-		];
+		$sanitized = [];
+		if ( isset( $metering['enabled'] ) ) {
+			$sanitized['enabled'] = boolval( $metering['enabled'] );
+		}
+		if ( isset( $metering['count'] ) ) {
+			$sanitized['count'] = intval( $metering['count'] );
+		}
+		if ( isset( $metering['period'] ) ) {
+			$sanitized['period'] = sanitize_text_field( $metering['period'] );
+		}
+		return $sanitized;
 	}
 
 	/**
