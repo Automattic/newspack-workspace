@@ -14,12 +14,13 @@ import apiFetch from '@wordpress/api-fetch';
 import AudienceIntegrations from './index';
 
 const mockAddNotice = jest.fn();
+const mockRemoveNotice = jest.fn();
 const captured = {};
 const loadingStates = [];
 
 jest.mock( '@wordpress/api-fetch', () => jest.fn() );
 jest.mock( '@wordpress/data', () => ( {
-	useDispatch: () => ( { addNotice: mockAddNotice } ),
+	useDispatch: () => ( { addNotice: mockAddNotice, removeNotice: mockRemoveNotice } ),
 } ) );
 jest.mock( '../../../../../packages/components/src', () => ( {
 	Wizard: ( { sections } ) => {
@@ -54,6 +55,7 @@ const flushPromises = () => new Promise( resolve => setTimeout( resolve, 0 ) );
 describe( 'AudienceIntegrations notices', () => {
 	beforeEach( async () => {
 		mockAddNotice.mockClear();
+		mockRemoveNotice.mockClear();
 		apiFetch.mockReset();
 		apiFetch.mockResolvedValue( SETTINGS_MAP );
 		render( <AudienceIntegrations /> );
@@ -103,15 +105,35 @@ describe( 'AudienceIntegrations notices', () => {
 		);
 	} );
 
-	it( 'announces an error snackbar when the save request fails', async () => {
-		act( () => {
-			captured.props.onFieldChange( 'esp', 'mailchimp_audience_id', 'abc123' );
+	it( 'announces a success snackbar when the save succeeds', async () => {
+		await act( async () => {
+			captured.props.onSave( 'esp', { mailchimp_audience_id: 'abc123' } );
+			await flushPromises();
 		} );
-		await waitFor( () => expect( captured.props.pendingChanges.esp ).toEqual( { mailchimp_audience_id: 'abc123' } ) );
+		await waitFor( () =>
+			expect( mockAddNotice ).toHaveBeenCalledWith( {
+				id: 'integration-saved-esp',
+				type: 'success',
+				message: 'Settings saved.',
+			} )
+		);
+	} );
 
+	// Success and error share a notice id, and the wizard keys snackbars by id, so
+	// each save has to clear the previous attempt's notice before adding its own.
+	it( 'clears the previous save snackbar before each save', async () => {
+		await act( async () => {
+			captured.props.onSave( 'esp', { mailchimp_audience_id: 'abc123' } );
+			await flushPromises();
+		} );
+		expect( mockRemoveNotice ).toHaveBeenCalledWith( 'integration-saved-esp' );
+		expect( mockRemoveNotice.mock.invocationCallOrder[ 0 ] ).toBeLessThan( mockAddNotice.mock.invocationCallOrder[ 0 ] );
+	} );
+
+	it( 'announces an error snackbar when the save request fails', async () => {
 		apiFetch.mockRejectedValue( new Error( 'nope' ) );
 		await act( async () => {
-			captured.props.onSave( 'esp' );
+			captured.props.onSave( 'esp', { mailchimp_audience_id: 'abc123' } ).catch( () => {} );
 			await flushPromises();
 		} );
 		await waitFor( () =>
@@ -140,6 +162,20 @@ describe( 'AudienceIntegrations notices', () => {
 			await expect( captured.props.onSetupAndEnable( 'esp', { mailchimp_audience_id: 'abc123' } ) ).rejects.toThrow( 'nope' );
 		} );
 		expect( mockAddNotice ).not.toHaveBeenCalled();
+	} );
+
+	// On a settings-ok/enable-fail partial, keep the pre-save integration so the
+	// modal keeps its fields for a retry instead of collapsing to a bare error.
+	it( 'does not swap integration state when only the enable step fails', async () => {
+		const savedData = {
+			esp: { id: 'esp', name: 'Newsletter ESP', enabled: false, settings: [ { key: 'mailchimp_audience_id', value: 'abc123' } ] },
+		};
+		apiFetch.mockReset();
+		apiFetch.mockResolvedValueOnce( savedData ).mockRejectedValueOnce( new Error( 'nope' ) );
+		await act( async () => {
+			await expect( captured.props.onSetupAndEnable( 'esp', { mailchimp_audience_id: 'abc123' } ) ).rejects.toThrow( 'nope' );
+		} );
+		expect( captured.props.integrations.esp.settings ).toEqual( [] );
 	} );
 
 	it( 'keeps the activating state for a minimum window even when activation is instant', async () => {
@@ -222,7 +258,7 @@ describe( 'AudienceIntegrations notices', () => {
 	} );
 } );
 
-describe( 'AudienceIntegrations pending changes', () => {
+describe( 'AudienceIntegrations retry buffer', () => {
 	beforeEach( async () => {
 		apiFetch.mockReset();
 		apiFetch.mockResolvedValue( SETTINGS_MAP );
@@ -230,44 +266,90 @@ describe( 'AudienceIntegrations pending changes', () => {
 		await waitFor( () => expect( captured.props.loading ).toBe( false ) );
 	} );
 
-	// Pins Finding 1: onDiscardChanges must clear the real pendingChanges state
-	// in the parent, not just be a callback that gets invoked. A no-op
-	// handleDiscardChanges would fail this assertion even though it would pass
-	// a test that only checks the callback was called.
-	it( "clears an integration's pending changes when onDiscardChanges is called", async () => {
-		act( () => {
-			captured.props.onFieldChange( 'esp', 'mailchimp_audience_id', 'abc123' );
-		} );
-		await waitFor( () => expect( captured.props.pendingChanges.esp ).toEqual( { mailchimp_audience_id: 'abc123' } ) );
-
-		act( () => {
-			captured.props.onDiscardChanges( 'esp' );
-		} );
-		await waitFor( () => expect( captured.props.pendingChanges.esp ).toBeUndefined() );
-	} );
-
-	it( 'is a no-op when there is nothing pending for the integration', async () => {
-		const pendingChangesBefore = captured.props.pendingChanges;
-		act( () => {
-			captured.props.onDiscardChanges( 'esp' );
-		} );
-		expect( captured.props.pendingChanges ).toBe( pendingChangesBefore );
-	} );
-
-	// Pins a data-safety property: on a failed save, the server never received
-	// the edit, so pendingChanges is the user's only copy of it. A future
-	// refactor must not start clearing it on failure.
-	it( 'preserves pendingChanges when the save request fails', async () => {
-		act( () => {
-			captured.props.onFieldChange( 'esp', 'mailchimp_audience_id', 'abc123' );
-		} );
-		await waitFor( () => expect( captured.props.pendingChanges.esp ).toEqual( { mailchimp_audience_id: 'abc123' } ) );
-
-		apiFetch.mockRejectedValue( new Error( 'nope' ) );
+	it( 'clears the retry buffer when the save succeeds', async () => {
 		await act( async () => {
-			captured.props.onSave( 'esp' );
+			captured.props.onSave( 'esp', { mailchimp_audience_id: 'abc123' } );
 			await flushPromises();
 		} );
-		expect( captured.props.pendingChanges.esp ).toEqual( { mailchimp_audience_id: 'abc123' } );
+		expect( captured.props.inFlightChanges.esp ).toBeUndefined();
+	} );
+
+	// The server never received a failed edit, so the buffer is the user's only
+	// copy. A future change must not start clearing it on failure.
+	it( 'retains the retry buffer when the save fails', async () => {
+		apiFetch.mockRejectedValue( new Error( 'nope' ) );
+		await act( async () => {
+			captured.props.onSave( 'esp', { mailchimp_audience_id: 'abc123' } ).catch( () => {} );
+			await flushPromises();
+		} );
+		expect( captured.props.inFlightChanges.esp ).toEqual( { mailchimp_audience_id: 'abc123' } );
+	} );
+
+	// Setup-and-enable saves only the modal's fields, so it must not discard an
+	// unrelated failed ConfigureView edit still in the retry buffer.
+	it( 'preserves a prior failed-save retry buffer across a setup-and-enable', async () => {
+		apiFetch.mockReset();
+		apiFetch.mockRejectedValueOnce( new Error( 'save failed' ) );
+		await act( async () => {
+			captured.props.onSave( 'esp', { mailchimp_audience_id: 'from-configure' } ).catch( () => {} );
+			await flushPromises();
+		} );
+		expect( captured.props.inFlightChanges.esp ).toEqual( { mailchimp_audience_id: 'from-configure' } );
+
+		apiFetch.mockResolvedValue( SETTINGS_MAP );
+		await act( async () => {
+			await captured.props.onSetupAndEnable( 'esp', { other_field: 'x' } );
+		} );
+		expect( captured.props.inFlightChanges.esp ).toEqual( { mailchimp_audience_id: 'from-configure' } );
+	} );
+
+	// A key saved via setup-and-enable is dropped from the buffer; others stay.
+	it( 'drops only the overlapping keys from the retry buffer on setup-and-enable', async () => {
+		apiFetch.mockReset();
+		apiFetch.mockRejectedValueOnce( new Error( 'save failed' ) );
+		await act( async () => {
+			captured.props.onSave( 'esp', { mailchimp_audience_id: 'A', other_field: 'keep' } ).catch( () => {} );
+			await flushPromises();
+		} );
+		expect( captured.props.inFlightChanges.esp ).toEqual( { mailchimp_audience_id: 'A', other_field: 'keep' } );
+
+		apiFetch.mockResolvedValue( SETTINGS_MAP );
+		await act( async () => {
+			await captured.props.onSetupAndEnable( 'esp', { mailchimp_audience_id: 'B' } );
+		} );
+		expect( captured.props.inFlightChanges.esp ).toEqual( { other_field: 'keep' } );
+	} );
+
+	it( 'clears the retry buffer when a ConfigureView discards its changes', async () => {
+		apiFetch.mockReset();
+		apiFetch.mockRejectedValueOnce( new Error( 'save failed' ) );
+		await act( async () => {
+			captured.props.onSave( 'esp', { mailchimp_audience_id: 'A' } ).catch( () => {} );
+			await flushPromises();
+		} );
+		expect( captured.props.inFlightChanges.esp ).toEqual( { mailchimp_audience_id: 'A' } );
+		act( () => {
+			captured.props.onDiscardChanges( 'esp' );
+		} );
+		expect( captured.props.inFlightChanges.esp ).toBeUndefined();
+	} );
+
+	it( 'marks the integration saving while the request is in flight', async () => {
+		let resolveSave;
+		apiFetch.mockImplementation(
+			() =>
+				new Promise( resolve => {
+					resolveSave = resolve;
+				} )
+		);
+		act( () => {
+			captured.props.onSave( 'esp', { mailchimp_audience_id: 'abc123' } );
+		} );
+		await waitFor( () => expect( captured.props.saving.esp ).toBe( true ) );
+		await act( async () => {
+			resolveSave( SETTINGS_MAP );
+			await flushPromises();
+		} );
+		expect( captured.props.saving.esp ).toBe( false );
 	} );
 } );

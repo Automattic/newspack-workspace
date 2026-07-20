@@ -68,7 +68,7 @@ export const SettingsSection = ( {
 				) }
 				{ ! loading && integrationIds.length > 0 && (
 					<>
-						<Grid columns={ 2 } gutter={ 16 }>
+						<Grid columns={ 2 }>
 							{ integrationIds.map( id => {
 								const integration = integrations[ id ];
 								const {
