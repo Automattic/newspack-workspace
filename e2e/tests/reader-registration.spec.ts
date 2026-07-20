@@ -71,7 +71,11 @@ test("Register on the site", {
   await page.getByPlaceholder("Your Last Name").click();
   await page.getByPlaceholder("Your Last Name").fill("Doe");
   await page.getByRole("button", { name: "Update profile" }).click();
-  await expect(page.getByText("Account details changed successfully.")).toBeVisible();
+  // The message renders in the snackbar and is mirrored into an aria-live
+  // screen-reader region, so an unscoped text lookup can match both.
+  await expect(
+    page.getByText("Account details changed successfully.").first()
+  ).toBeVisible();
   await expect(page.getByPlaceholder("Your First Name")).toHaveValue("John");
   await expect(page.getByPlaceholder("Your Last Name")).toHaveValue("Doe");
 
@@ -82,9 +86,11 @@ test("Register on the site", {
     .getByRole("link", { name: "Create a password" })
     .click();
   await expect(
-    page.getByText(
-      "Please check your email inbox for instructions on how to set a new password."
-    )
+    page
+      .getByText(
+        "Please check your email inbox for instructions on how to set a new password."
+      )
+      .first()
   ).toBeVisible();
   await openEmail(page, "Set a new password", emailAddress);
   await clickLinkURL(page, "Set password");
@@ -126,11 +132,13 @@ test("Register on the site", {
   await page.locator("#newspack_account_email").fill(newEmailAddress);
   await page.getByRole("button", { name: "Update profile" }).click();
   const expectedNotification = `A verification email has been sent to ${newEmailAddress}. Please verify to complete the change.`;
-  await expect(page.getByText(expectedNotification)).toBeVisible();
+  // Scoped with first(): snackbar messages are mirrored into an aria-live
+  // screen-reader region, so an unscoped text lookup can match both.
+  await expect(page.getByText(expectedNotification).first()).toBeVisible();
   await openEmail(page, "Confirm email change", newEmailAddress);
   await clickLinkURL(page, "Confirm email change");
   await expect(
-    page.getByText("Your email address has been successfully updated.")
+    page.getByText("Your email address has been successfully updated.").first()
   ).toBeVisible();
   await expect(page.locator("#newspack_account_email")).toHaveValue(
     newEmailAddress
