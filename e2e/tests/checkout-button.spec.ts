@@ -8,6 +8,7 @@ import {
   goToUncached,
   randomEmailAddress,
   randomString,
+  trashListedItem,
 } from "./utils";
 import {
   logIn,
@@ -143,13 +144,6 @@ test("Add Checkout Button block to a page and buy the product", {
     ["/wp-admin/edit.php?post_type=product", productName],
   ];
   for (const [listUrl, title] of listings) {
-    await page.goto(`${listUrl}&s=${encodeURIComponent(title)}`);
-    const row = page.getByRole("row").filter({ hasText: title }).first();
-    await row.hover();
-    await row.getByRole("link", { name: "Trash" }).click();
-    // Wait for the trash to actually land. Without this the test can end while
-    // the click's navigation is still in flight, which cancels it -- leaving the
-    // item behind for every later run to trip over.
-    await expect(page.locator("#message")).toContainText("moved to the Trash");
+    await trashListedItem(page, listUrl, title);
   }
 });

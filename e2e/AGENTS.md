@@ -24,6 +24,20 @@ SITE_URL="https://e2e.newspackstaging.com" ADMIN_PASSWORD="<staging-pw>" \
   (`docker exec newspack_env_e2e_release wp --allow-root ...`).
 - `USE_SETUP` gates whether the setup projects (and the dependency chain) run. With
   it unset, `npm test` runs the specs against whatever state the site is already in.
+- `E2E_PHASE` (`vanilla` | `woo`) and `E2E_VIEWPORT` (`desktop` | `mobile`) each
+  select one axis of the run; unset means "both". Every slice provisions and runs
+  on its own, so a slice can target its own site independently. The four
+  single-slice scripts wrap the combinations:
+
+  ```sh
+  npm run test:vanilla:desktop   # E2E_PHASE=vanilla E2E_VIEWPORT=desktop
+  npm run test:vanilla:mobile
+  npm run test:woo:desktop
+  npm run test:woo:mobile
+  ```
+
+  Because each provisioning does a destructive from-scratch reset, two slices must
+  not share a site concurrently -- run them against separate sites (see CI notes).
 
 ## Site setup model (read this before touching provisioning or the setup phases)
 
@@ -76,3 +90,31 @@ The build definition lives in TeamCity settings, not this repo. It provisions ov
 SSH using the `E2E_SSH_HOST` / `E2E_SSH_USER` / `E2E_SSH_USER_PASS` credentials, which
 `setupSite` also reads for the remote path. A managed host (Atomic) cannot
 `DROP DATABASE`, so the remote path uses `--reset clean` (drop tables, keep the DB).
+
+### Sliced into four parallel build configs
+
+A single build running the whole suite (both phases, both viewports) exceeds
+TeamCity's 20-minute per-build execution timeout -- the build is killed at 20:00
+before Playwright flushes, reporting "0 passed". So the suite is sliced into four
+independent build configs, one per `E2E_PHASE` x `E2E_VIEWPORT` combination, each
+comfortably under the cap:
+
+| Build config    | `E2E_PHASE` | `E2E_VIEWPORT` | Script                      |
+| --------------- | ----------- | -------------- | --------------------------- |
+| vanilla-desktop | `vanilla`   | `desktop`      | `npm run test:vanilla:desktop` |
+| vanilla-mobile  | `vanilla`   | `mobile`       | `npm run test:vanilla:mobile`  |
+| woo-desktop     | `woo`       | `desktop`      | `npm run test:woo:desktop`  |
+| woo-mobile      | `woo`       | `mobile`       | `npm run test:woo:mobile`   |
+
+Each config provisions its own site from scratch (`--reset clean` + full setup),
+so the four **must each target a different site** -- otherwise a parallel run's
+reset would wipe a site another config is mid-test on. Point each config at its
+own site via `E2E_SITE_URL` (written to `.env` as `SITE_URL`); every other
+parameter (`E2E_SSH_HOST`/`E2E_SSH_USER` for that site, Stripe test keys, admin
+creds) is set per config the same way the single build sets them today. With four
+sites the configs run fully in parallel; with fewer, chain the ones that share a
+site so they never provision concurrently.
+
+If a single slice ever creeps back toward the 20-minute cap, slice that phase's
+specs further (e.g. by tag or file) the same way, rather than lengthening any one
+build.

@@ -5,7 +5,7 @@ import {
   getEditorCanvas,
   openEditorSettingsPanel,
 } from "./utils-admin";
-import { goToUncached, randomString } from "./utils";
+import { goToUncached, randomString, trashListedItem } from "./utils";
 
 test(
   "Create a sponsor and label sponsored content",
@@ -110,16 +110,7 @@ test(
       ["/wp-admin/edit.php?post_type=newspack_spnsrs_cpt", sponsorName],
     ];
     for (const [listUrl, title] of listings) {
-      const separator = listUrl.includes("?") ? "&" : "?";
-      await page.goto(`${listUrl}${separator}s=${encodeURIComponent(title)}`);
-      const row = page.getByRole("row").filter({ hasText: title }).first();
-      await row.hover();
-      await row.getByRole("link", { name: "Trash" }).click();
-      // Wait for the trash to actually land. Without this the test can end while
-      // the click's navigation is still in flight, which cancels it -- leaving a
-      // published sponsored post behind, which suppresses the author bio and so
-      // breaks the author spec on the next run.
-      await expect(page.locator("#message")).toContainText("moved to the Trash");
+      await trashListedItem(page, listUrl, title);
     }
   }
 );

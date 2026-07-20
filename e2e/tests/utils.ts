@@ -48,6 +48,23 @@ export const clickLinkURL = async (page, linkText) => {
   await page.goto(logInURL);
 };
 
+// Trash a single item from a WP admin list table (edit.php), found by searching
+// for `title`, and confirm it is gone. Reads the row's Trash action URL straight
+// from the DOM and navigates to it, rather than clicking the hover-reveal "Trash"
+// link (visibility:hidden until the row is hovered on desktop) or driving the
+// bulk-action <select> (hidden on the narrow mobile admin viewport) -- both are
+// unreliable across viewports. The Trash link (`a.submitdelete`) is always in the
+// DOM with its nonce, and the trash action is a plain GET, so navigating to its
+// href performs the trash the same way on any viewport or post type.
+export const trashListedItem = async (page, listUrl, title) => {
+  const separator = listUrl.includes("?") ? "&" : "?";
+  await page.goto(`${listUrl}${separator}s=${encodeURIComponent(title)}`);
+  const row = page.getByRole("row").filter({ hasText: title }).first();
+  const trashUrl = await row.locator("a.submitdelete").first().getAttribute("href");
+  await page.goto(trashUrl);
+  await expect(page.getByRole("row").filter({ hasText: title })).toHaveCount(0);
+};
+
 // The modal checkout -- opened by the Donate block, the Checkout Button block
 // and anything else that sells a product -- renders in its own iframe.
 export const getModalCheckout = (page) =>

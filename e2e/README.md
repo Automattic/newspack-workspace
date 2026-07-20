@@ -20,11 +20,17 @@ Will need a local test site – set it up with [`newspack-docker`](https://githu
 
 ### CI testing
 
-The suite runs nightly (~07:00 UTC) on TeamCity, build configuration
-`Newspack_E2eTests` (project `Newspack_E2ETests`), against the Atomic staging
-site `https://e2e.newspackstaging.com`. The build definition lives in TeamCity
-settings, not in this repo; its steps are: install dependencies, write a `.env`,
-then run `npm run test:setup` (the setup projects provision the site over SSH).
+The suite runs nightly (~07:00 UTC) on TeamCity, project `Newspack_E2ETests`,
+against Atomic staging sites. The build definitions live in TeamCity settings, not
+in this repo; each config's steps are: install dependencies, write a `.env`, then
+run its slice script (the setup projects provision the site over SSH).
+
+The full suite (both phases, both viewports) runs well over TeamCity's 20-minute
+per-build execution timeout, so it is split into four parallel build configs, one
+per phase/viewport slice (`npm run test:vanilla:desktop` / `:vanilla:mobile` /
+`:woo:desktop` / `:woo:mobile`). Each provisions its own site from scratch, so the
+four must each target a **different** site (a shared site's reset would clobber a
+parallel slice). See `AGENTS.md` → "Sliced into four parallel build configs".
 
 That staging site is pinned to the **stable release** channel, and provisioning
 rebuilds against the plugin version installed there – not the version the specs

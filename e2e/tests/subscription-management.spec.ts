@@ -25,10 +25,11 @@ test(
      */
     await page.goto("/support-our-publication/");
     await page.getByRole("button", { name: "Donate Now" }).click();
+    // Match on the amount + interval only. The line's product-name prefix varies
+    // ("Donate: ..." vs "Donate: Monthly ..."), but "$15.00 / month" is stable
+    // across those variants and is what actually confirms the right donation.
     await expect(
-      getPageInIframe(page).locator(
-        'strong:has-text("Donate: $15.00 / month")'
-      )
+      getPageInIframe(page).locator('strong:has-text("$15.00 / month")')
     ).toBeVisible();
     await getPageInIframe(page)
       .getByLabel("Email address *")
