@@ -31,6 +31,17 @@ The suite provisions the site from scratch each phase rather than restoring a DB
 dump. This keeps it drift-free: the site is always rebuilt against the currently
 installed plugin code, so a plugin/core update can't leave a stale fixture behind.
 
+> **Specs run against the *installed* plugin version, and the nightly's site is
+> pinned to the stable release channel. Write specs against the release-channel
+> UI, and only that.** Specs land on `main` (which tracks `alpha`), so it is
+> tempting to drive the newest UI – but a spec that drives a feature not yet
+> shipped to stable fails every night until it ships. Don't paper over the gap
+> with feature-detection, channel branching, or `test.skip()`: a spec must not
+> fork on release vs `alpha`/`main`. If a feature is alpha-only, hold its coverage
+> until it reaches the release channel; when that UI later lands on release,
+> update the spec to match. The suite's one job is to prove the release channel
+> works, so a spec that no longer matches release is a spec to fix, not to branch.
+
 - **`site-setup.sh`** (this repo) is the from-scratch Newspack bootstrap (DB reset +
   fresh install + posts/users/WooCommerce+donations/memberships/subscriptions/
   campaigns/menus). It's a generic dev provisioner, parameterised by `--url`,
@@ -41,8 +52,11 @@ installed plugin code, so a plugin/core update can't leave a stale fixture behin
   (ads/newsletters/manager), Stripe test keys, editor preferences, timezone, etc.
   `--woo` / `--no-woo` selects the WooCommerce stack.
 - **`tests/site-setup.ts`** (`setupSite`) is how the Playwright setup projects run
-  it: it copies `site-setup.sh` onto the target and streams `e2e-setup.sh` (which
-  points at the copy via `SITE_SETUP_SCRIPT`). Locally it `docker cp` + `docker exec`s
+  it: it copies `site-setup.sh` and `e2e-plugin.php` onto the target and streams
+  `e2e-setup.sh`, pointing it at the copies via `SITE_SETUP_SCRIPT` /
+  `E2E_PLUGIN_SRC`. `e2e-setup.sh` then deploys the plugin into the site's plugins
+  dir before activating it, so the running plugin always matches the committed
+  source. Locally it `docker cp` + `docker exec`s
   into the env container (as root, `--allow-root`, full `wp db reset`); on CI it
   SSHes to the host (no `--allow-root`, `--reset clean` since a managed host can't
   `DROP DATABASE`). Local vs remote is decided from the `SITE_URL` host.
@@ -52,8 +66,9 @@ installed plugin code, so a plugin/core update can't leave a stale fixture behin
   `ADMIN_PASSWORD=password` is for the local env; staging's lives in the a8c secret
   store (README → `secret_id=12168`).
 - **On-site prerequisites**: the WooCommerce stack for the `--woo` path, and the
-  `e2e-plugin` + the Newspack plugins the suite activates (incl. `newspack-manager`)
-  must be installed. `site-setup.sh` itself is shipped from this repo, not the site.
+  Newspack plugins the suite activates (incl. `newspack-manager`) must be installed.
+  `site-setup.sh` and `e2e-plugin.php` are shipped from this repo, not the site –
+  provisioning deploys the plugin every run, so it can't drift out of sync.
 
 ## CI (TeamCity) notes
 

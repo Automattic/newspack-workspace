@@ -60,6 +60,22 @@ class WC_Stripe_Feature_Flags {
 	}
 }
 
+class WC_Stripe_Helper {
+	public static $settings     = [];
+	public static $update_calls = 0;
+	public static function get_stripe_settings() {
+		return self::$settings;
+	}
+	public static function update_main_stripe_settings( $options ) {
+		self::$settings = $options;
+		self::$update_calls++;
+	}
+	public static function reset_testing_settings() {
+		self::$settings     = [];
+		self::$update_calls = 0;
+	}
+}
+
 class WC_Payment_Gateways {
 	private static $gateways = [];
 	public static function instance() {
@@ -158,6 +174,9 @@ class WC_Order_Item_Product {
 	public function get_id() {
 		return $this->data['id'] ?? 0;
 	}
+	public function get_quantity() {
+		return $this->data['quantity'] ?? 1;
+	}
 	public function get_subtotal() {
 		return $this->data['subtotal'] ?? 0;
 	}
@@ -202,8 +221,49 @@ class WC_Product {
 	public function get_children() {
 		return $this->data['children'] ?? [];
 	}
+	public function get_regular_price() {
+		return $this->data['regular_price'] ?? ( $this->meta['_regular_price'] ?? 0 );
+	}
+	public function get_price() {
+		return $this->data['price'] ?? ( $this->meta['_price'] ?? $this->get_regular_price() );
+	}
+	public function set_price( $price ) {
+		$this->data['price'] = $price;
+	}
 	public function get_meta( $key, $single = true ) {
 		return $this->meta[ $key ] ?? '';
+	}
+}
+
+class WC_Cart {
+	public $cart_contents = [];
+	public function __construct( $cart_contents = [] ) {
+		$this->cart_contents = $cart_contents;
+	}
+	public function get_cart() {
+		return $this->cart_contents;
+	}
+	public function get_cart_item( $key ) {
+		return $this->cart_contents[ $key ] ?? [];
+	}
+}
+
+if ( ! class_exists( 'WC_Subscriptions_Cart' ) ) {
+	/**
+	 * Minimal WCS cart shim: only the calculation-type flag the dynamic-pricing
+	 * surface reads to distinguish the main cart pass from the recurring-totals
+	 * projection pass. Deliberately omits get_recurring_cart_key — code paths
+	 * guard on method_exists and skip when absent.
+	 */
+	class WC_Subscriptions_Cart {
+		public static $calculation_type = 'none';
+		public static function get_calculation_type() {
+			return self::$calculation_type;
+		}
+		public static function set_calculation_type( $type ) {
+			self::$calculation_type = $type;
+			return $type;
+		}
 	}
 }
 
@@ -524,6 +584,38 @@ if ( ! class_exists( 'WC_Subscriptions_Product' ) ) {
 			}
 			return (float) $product->get_meta( '_subscription_price' );
 		}
+		public static function is_subscription( $product ) {
+			return is_object( $product ) && method_exists( $product, 'get_type' )
+				&& in_array( $product->get_type(), [ 'subscription', 'variable-subscription', 'subscription_variation' ], true );
+		}
+		public static function get_period( $product ) {
+			$period = is_object( $product ) && method_exists( $product, 'get_meta' ) ? $product->get_meta( '_subscription_period' ) : '';
+			return $period ? $period : 'month';
+		}
+		public static function get_interval( $product ) {
+			$interval = is_object( $product ) && method_exists( $product, 'get_meta' ) ? (int) $product->get_meta( '_subscription_period_interval' ) : 0;
+			return $interval > 0 ? $interval : 1;
+		}
+		/**
+		 * Minimal mirror of WCS's price-string builder — enough to derive a
+		 * locale-stable suffix in tests. Real WCS returns localized text via
+		 * `wcs_price_string`; we just need a placeholder-substitutable format.
+		 *
+		 * @param WC_Product $product The subscription product.
+		 * @param array      $include Optional. Price-string options ('price', 'subscription_period').
+		 * @return string
+		 */
+		public static function get_price_string( $product, $include = [] ) {
+			$price    = isset( $include['price'] ) ? (string) $include['price'] : '';
+			$include_period = ! array_key_exists( 'subscription_period', $include ) || $include['subscription_period'];
+			$suffix = '';
+			if ( $include_period ) {
+				$interval = self::get_interval( $product );
+				$period   = self::get_period( $product );
+				$suffix   = 1 === $interval ? sprintf( ' / %s', $period ) : sprintf( ' every %d %ss', $interval, $period );
+			}
+			return $price . $suffix;
+		}
 	}
 }
 
@@ -619,6 +711,15 @@ function wcs_create_subscription( $data = [] ) {
 	}
 	$subscription = new WC_Subscription( $data );
 	$subscriptions_database[ $subscription->get_id() ] = $subscription;
+	// The mock reuses subscription IDs across tests (each test resets
+	// $subscriptions_database, so IDs restart at 1). Group_Subscription memoizes
+	// managers/members per request keyed by subscription ID, so a (re)created
+	// subscription must invalidate that cache or a later test reading the reused ID
+	// would see the previous test's cached data. No-op in production, where
+	// subscription IDs are unique post IDs that are never reissued.
+	if ( class_exists( '\Newspack\Group_Subscription' ) ) {
+		\Newspack\Group_Subscription::reset_cache();
+	}
 	return $subscription;
 }
 function wcs_get_subscription( $subscription_id ) {

@@ -6,7 +6,7 @@ declare global {
 				href: string;
 				forceSelected: boolean;
 			}>;
-			title: string;
+			breadcrumbs: Array<{ label: string; url?: string }>;
 		};
 		newspackAudience: {
 			has_reader_activation: boolean;

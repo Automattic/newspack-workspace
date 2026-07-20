@@ -153,8 +153,8 @@ function render_callback( $attributes ) {
 		$checkout_data = Checkout_Data::get_checkout_data( $product );
 
 		$form = sprintf(
-			'<form data-checkout="%1$s">%2$s %3$s</form>',
-			esc_attr( wp_json_encode( $checkout_data ) ),
+			'<form %1$s>%2$s %3$s</form>',
+			Checkout_Data::data_checkout_attr( $checkout_data ),
 			$button,
 			$hidden_fields
 		);

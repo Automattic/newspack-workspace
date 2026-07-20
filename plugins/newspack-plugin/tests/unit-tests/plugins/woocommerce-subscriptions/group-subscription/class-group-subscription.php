@@ -175,16 +175,17 @@ class Test_Group_Subscription extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Capacity is the configured limit plus the owner (limit is "in addition to owner").
+	 * Capacity is the configured limit, which now counts the owner: the owner sits
+	 * inside the limit rather than being a free seat on top of it.
 	 */
-	public function test_member_capacity_is_limit_plus_owner() {
+	public function test_member_capacity_is_the_configured_limit() {
 		$owner_id = $this->create_reader_user();
 		$sub      = $this->create_group_subscription( $owner_id, 10 );
 
 		$this->assertSame(
-			11,
+			10,
 			Group_Subscription::get_member_capacity( $sub ),
-			'A limit of 10 should yield a total capacity of 11 (10 members in addition to the owner).'
+			'A limit of 10 is the total capacity including the owner.'
 		);
 	}
 
@@ -202,11 +203,11 @@ class Test_Group_Subscription extends WP_UnitTestCase {
 	}
 
 	/**
-	 * For an ownerless subscription the capacity (denominator) and count (numerator)
-	 * agree about the owner: neither counts a phantom owner, so it reads "0 of limit",
-	 * not "0 of limit + 1".
+	 * Capacity is the limit whether or not the group has an owner: the owner is one
+	 * of the limited seats, not an extra one, so an ownerless group reads "0 of limit"
+	 * exactly as an owned one would.
 	 */
-	public function test_member_capacity_excludes_phantom_owner_when_ownerless() {
+	public function test_member_capacity_is_the_limit_when_ownerless() {
 		// customer_id 0 -> get_managers() returns [0], an empty/phantom owner.
 		$sub = $this->create_group_subscription( 0, 10 );
 
@@ -218,7 +219,83 @@ class Test_Group_Subscription extends WP_UnitTestCase {
 		$this->assertSame(
 			10,
 			Group_Subscription::get_member_capacity( $sub ),
-			'An ownerless group should not add a phantom owner to capacity (10, not 11), keeping numerator and denominator consistent.'
+			'Capacity is the limit (10), independent of whether an owner occupies a seat.'
 		);
+	}
+
+	/**
+	 * The owner occupies one of the limited seats, so a limit of N leaves N-1 member
+	 * seats. Filling them is allowed; the next add is rejected with a 409.
+	 */
+	public function test_owner_counts_against_the_member_limit() {
+		$owner_id = $this->create_reader_user();
+		$sub      = $this->create_group_subscription( $owner_id, 2 ); // Owner + one member seat.
+
+		$this->assertSame(
+			1,
+			Group_Subscription::get_member_seat_limit( $sub ),
+			'A limit of 2 leaves a single member seat once the owner is reserved.'
+		);
+
+		$member_id = $this->create_reader_user();
+		$first     = Group_Subscription::update_members( $sub, [ $member_id ] );
+		$this->assertFalse( is_wp_error( $first ), 'The single non-owner seat can be filled.' );
+		$this->assertSame(
+			2,
+			Group_Subscription::get_member_count( $sub ),
+			'Owner + one member exactly fills the two-seat group.'
+		);
+
+		$overflow = Group_Subscription::update_members( $sub, [ $this->create_reader_user() ] );
+		$this->assertTrue( is_wp_error( $overflow ), 'Adding past the owner-inclusive limit is rejected.' );
+		$this->assertSame( 409, $overflow->get_error_data()['status'] );
+	}
+
+	/**
+	 * A positive limit is floored to the 2-seat minimum on save, so a group always
+	 * has room for at least one member besides the owner. Unlimited (0) is preserved.
+	 */
+	public function test_positive_limit_is_floored_to_two_on_save() {
+		$owner_id = $this->create_reader_user();
+		$sub      = $this->create_group_subscription( $owner_id );
+
+		Group_Subscription_Settings::update_subscription_settings( $sub, [ 'limit' => 1 ] );
+		$this->assertSame(
+			2,
+			Group_Subscription_Settings::get_subscription_settings( $sub )['limit'],
+			'A limit of 1 is raised to the two-seat minimum.'
+		);
+
+		Group_Subscription_Settings::update_subscription_settings( $sub, [ 'limit' => 0 ] );
+		$this->assertSame(
+			0,
+			Group_Subscription_Settings::get_subscription_settings( $sub )['limit'],
+			'Unlimited (0) is left untouched by the floor.'
+		);
+	}
+
+	/**
+	 * The floor also applies on read, so a limit of 1 already stored under the earlier
+	 * "members in addition to the owner" meaning still leaves one usable member seat
+	 * instead of zero. Without this, such a group silently rejects its first member.
+	 */
+	public function test_stored_limit_of_one_is_floored_on_read() {
+		$owner_id = $this->create_reader_user();
+		// Writes the meta directly, as a group saved before the limit became owner-inclusive would carry it.
+		$sub = $this->create_group_subscription( $owner_id, 1 );
+
+		$this->assertSame(
+			2,
+			Group_Subscription_Settings::get_subscription_settings( $sub )['limit'],
+			'A stored limit of 1 reads as the two-seat minimum without a re-save.'
+		);
+		$this->assertSame(
+			1,
+			Group_Subscription::get_member_seat_limit( $sub ),
+			'The floored limit leaves one member seat, not zero.'
+		);
+
+		$added = Group_Subscription::update_members( $sub, [ $this->create_reader_user() ] );
+		$this->assertFalse( is_wp_error( $added ), 'The first member of an otherwise-empty group is not rejected as over limit.' );
 	}
 }

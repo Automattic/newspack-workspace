@@ -30,10 +30,62 @@ export const goToMyAccount = async (page) => {
   await page.waitForURL(/my-account/);
 };
 
+// Navigate to a front-end URL while bypassing the page cache. Anonymous
+// responses are served from Batcache, so a page loaded right after an
+// admin-side change can come back stale -- a signed-out assertion would then be
+// checking a copy rendered before the change. A unique query string lands in
+// its own cache bucket and forces a fresh render.
+export const goToUncached = async (page, url) => {
+  const separator = url.includes("?") ? "&" : "?";
+  await page.goto(
+    `${url}${separator}cachebust=${Date.now()}-${randomString(4)}`
+  );
+};
+
 export const clickLinkURL = async (page, linkText) => {
   const logInElement = await page.getByRole("link", { name: linkText });
   const logInURL = await logInElement.getAttribute("href");
   await page.goto(logInURL);
+};
+
+// The modal checkout -- opened by the Donate block, the Checkout Button block
+// and anything else that sells a product -- renders in its own iframe.
+export const getModalCheckout = (page) =>
+  page.frameLocator('iframe[name="newspack_modal_checkout_iframe"]');
+
+// The card fields are a Stripe Elements iframe nested inside the modal checkout.
+// Stripe renders an extra aria-hidden "Secure payment input frame" (the ACH
+// bank-search results frame) alongside the card input frame, so exclude hidden
+// frames to keep this matching a single element.
+export const getStripeCardFields = (page) =>
+  getModalCheckout(page).frameLocator(
+    `[data-payment-method-type="card"] [title="Secure payment input frame"]:not([aria-hidden="true"])`
+  );
+
+// Pay with Stripe's test card. The site runs on Stripe test keys, so this is the
+// card that always succeeds.
+export const fillStripeTestCard = async (page) => {
+  const cardFields = getStripeCardFields(page);
+  await cardFields
+    .getByPlaceholder("1234 1234 1234 1234")
+    .fill("4242 4242 4242 4242");
+  await cardFields.getByPlaceholder("MM / YY").fill("04 / 44");
+  await cardFields.getByLabel("Security code").fill("333");
+
+  // Depending on geo, Stripe may want a ZIP code, too.
+  const zipCode = cardFields.getByPlaceholder("12345");
+  if (await zipCode.isVisible()) {
+    await zipCode.fill("12345");
+  }
+};
+
+// Fill the modal checkout's billing step and move on to payment.
+export const fillModalCheckoutBillingDetails = async (page, emailAddress) => {
+  const modalCheckout = getModalCheckout(page);
+  await modalCheckout.getByLabel("Email address *").fill(emailAddress);
+  await modalCheckout.getByLabel("First name *").fill("John");
+  await modalCheckout.getByLabel("Last name *").fill("Doe");
+  await modalCheckout.getByRole("button", { name: "Continue" }).click();
 };
 
 export const addClickIndicator = async ({ page }) => {
@@ -71,13 +123,22 @@ export const isMobile = async (page) =>
 
 export const clickMyAccountMenuItem = async (page, label) => {
   const link = page.getByRole("link", { name: label });
-  // Wait for the account page chrome to render before deciding mobile vs.
-  // desktop. Some flows navigate asynchronously (e.g. after "Save password"),
-  // and evaluating isMobile() against the transitional page returns false, so
-  // the mobile nav drawer never opens and the target link stays off-screen.
-  await link.waitFor({ state: "attached" });
-  if (await isMobile(page)) {
-    await page.getByRole("button", { name: "Open navigation" }).click();
-  }
-  await link.click();
+
+  // On a phone the account menu is a drawer parked off-screen, so the item has
+  // to be revealed before it can be clicked. An unrevealed item still counts as
+  // visible -- it has a box and is not hidden -- it just sits beyond the
+  // viewport with no scroll that can reach it, so a plain click retries until
+  // it times out.
+  //
+  // Retry the whole reveal-and-click rather than deciding once up front: some
+  // callers arrive mid-navigation (e.g. straight after "Save password"), and a
+  // single check against the transitional page finds no nav toggle, so the
+  // drawer stays shut and the item stays unreachable. The toggle renames itself
+  // to "Close navigation" once open, so retrying can never close it again.
+  await expect(async () => {
+    if (await isMobile(page)) {
+      await page.getByRole("button", { name: "Open navigation" }).click();
+    }
+    await link.click({ timeout: 5000 });
+  }).toPass({ timeout: 30000 });
 };

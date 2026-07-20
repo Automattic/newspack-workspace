@@ -40,7 +40,7 @@ function PostSettings() {
 		<PluginDocumentSettingPanel
 			name="content-gate-post-exemptions-panel"
 			className="newspack-content-gate-panel"
-			title={ __( 'Access control settings', 'newspack-plugin' ) }
+			title={ __( 'Access Control Settings', 'newspack-plugin' ) }
 		>
 			{ matchingGates.length > 0 ? (
 				<p>
