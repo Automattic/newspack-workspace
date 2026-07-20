@@ -780,4 +780,123 @@ class Test_Metering extends \WP_UnitTestCase {
 		$this->assertEquals( 'month', Metering::get_metering_period( $post_id ), 'Logged-in readers should get the paid access period' );
 		$this->assertEquals( 3, Metering::get_total_metered_views( true ), 'Logged-in readers should get the paid access count' );
 	}
+
+	/**
+	 * Test that a logged-in reader who has not verified their email is governed by the
+	 * registered access settings, not the paid access ones.
+	 *
+	 * Such a reader is shown the registered access gate layout, so the paid access
+	 * allowance must not leak into the metering surfaces they see.
+	 */
+	public function test_unverified_reader_uses_registration_settings() {
+		// Registered access active, verification required, metering OFF. Paid access
+		// active with metering ON — the allowance that must not be borrowed.
+		$gate_id = $this->create_gate_with_settings(
+			[
+				'registration'  => [
+					'active'               => true,
+					'require_verification' => true,
+					'metering'             => [
+						'enabled' => false,
+						'count'   => 2,
+						'period'  => 'week',
+					],
+				],
+				'custom_access' => [
+					'active'   => true,
+					'metering' => [
+						'enabled' => true,
+						'count'   => 3,
+						'period'  => 'month',
+					],
+				],
+			]
+		);
+
+		// Create a post.
+		$post_id = $this->factory->post->create();
+		$this->post_ids[] = $post_id;
+
+		// Set query to current post.
+		global $wp_query;
+		$wp_query = new \WP_Query( [ 'p' => $post_id ] );
+		add_filter( 'newspack_is_post_restricted', '__return_true' );
+
+		// Apply the filter to control the gate context for testing.
+		add_filter(
+			'newspack_content_gate_post_id',
+			function() use ( $gate_id ) {
+				return $gate_id;
+			}
+		);
+
+		// Register a reader but leave them unverified.
+		$user_id = $this->register_reader( 'unverified-reader@metering-test.com' );
+		wp_set_current_user( $user_id );
+		$user = wp_get_current_user();
+		$this->assertTrue( Reader_Activation::is_user_reader( $user ), 'User should be a reader' );
+		$this->assertFalse( Reader_Activation::is_reader_verified( $user ), 'Reader should not be verified' );
+
+		// The reader sees the registered access gate immediately - no metered views.
+		$this->assertFalse( Metering::is_logged_in_metering_allowed( $post_id ), 'Unverified readers should not be metered' );
+
+		// The metering surfaces must report the registered access settings, not the paid ones.
+		$this->assertFalse( Metering::get_total_metered_views( true ), 'Unverified readers should not be offered the paid access allowance' );
+		$this->assertEquals( 'week', Metering::get_metering_period( $post_id ), 'Unverified readers should get the registered access period' );
+	}
+
+	/**
+	 * Test that a logged-in reader who HAS verified their email is still governed by the
+	 * paid access settings on a gate that requires verification.
+	 */
+	public function test_verified_reader_uses_paid_settings() {
+		$gate_id = $this->create_gate_with_settings(
+			[
+				'registration'  => [
+					'active'               => true,
+					'require_verification' => true,
+					'metering'             => [
+						'enabled' => false,
+						'count'   => 2,
+						'period'  => 'week',
+					],
+				],
+				'custom_access' => [
+					'active'   => true,
+					'metering' => [
+						'enabled' => true,
+						'count'   => 3,
+						'period'  => 'month',
+					],
+				],
+			]
+		);
+
+		// Create a post.
+		$post_id = $this->factory->post->create();
+		$this->post_ids[] = $post_id;
+
+		// Set query to current post.
+		global $wp_query;
+		$wp_query = new \WP_Query( [ 'p' => $post_id ] );
+		add_filter( 'newspack_is_post_restricted', '__return_true' );
+
+		// Apply the filter to control the gate context for testing.
+		add_filter(
+			'newspack_content_gate_post_id',
+			function() use ( $gate_id ) {
+				return $gate_id;
+			}
+		);
+
+		// Register and verify the reader.
+		$user_id = $this->register_reader( 'verified-reader@metering-test.com' );
+		\update_user_meta( $user_id, Reader_Activation::EMAIL_VERIFIED, true );
+		wp_set_current_user( $user_id );
+		$this->assertTrue( Reader_Activation::is_reader_verified( wp_get_current_user() ), 'Reader should be verified' );
+
+		// Past the registration wall, so the paid access settings govern.
+		$this->assertEquals( 3, Metering::get_total_metered_views( true ), 'Verified readers should get the paid access count' );
+		$this->assertEquals( 'month', Metering::get_metering_period( $post_id ), 'Verified readers should get the paid access period' );
+	}
 }
