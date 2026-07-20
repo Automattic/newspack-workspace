@@ -87,6 +87,11 @@ class Wizards {
 		if ( defined( 'NEWSPACK_PLANS_UI' ) && NEWSPACK_PLANS_UI && ( class_exists( 'WC_Subscriptions' ) || function_exists( 'wcs_get_subscriptions' ) ) ) {
 			self::$wizards['audience-subscription-products'] = new Audience_Subscription_Products();
 		}
+		// Pricing Rules manager, available when the dynamic-pricing engine
+		// plugin is active (it owns the rules REST API).
+		if ( Dynamic_Pricing_Bridges::is_engine_active() ) {
+			self::$wizards['audience-pricing-rules'] = new Audience_Pricing_Rules();
+		}
 	}
 
 	/**

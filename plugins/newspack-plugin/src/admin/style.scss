@@ -220,9 +220,9 @@ h1 {
 		margin-top: 8px;
 
 		// Match the width of a single card in the 2-column CardFeature grid
-		// (grid has 16px gutter; falls back to 1 column below 744px viewport).
+		// (grid has 32px gutter; falls back to 1 column below 744px viewport).
 		@media screen and ( min-width: 744px ) {
-			max-width: calc((100% - 16px) / 2);
+			max-width: calc((100% - 32px) / 2);
 		}
 	}
 }

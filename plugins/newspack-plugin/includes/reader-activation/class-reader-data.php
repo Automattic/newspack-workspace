@@ -238,6 +238,30 @@ final class Reader_Data {
 	}
 
 	/**
+	 * The reader's last-known matching segment IDs (term IDs as strings), or [].
+	 *
+	 * Client-computed snapshot: a best-effort record of the reader's segment
+	 * membership as of their last page view, written by the browser via the
+	 * `matched_segments` reader-data item — not a live re-evaluation. Consumers
+	 * must treat it as client-asserted.
+	 *
+	 * @param int $user_id User ID.
+	 *
+	 * @return string[] Matching segment IDs, or [] when unknown/malformed.
+	 */
+	public static function get_matched_segments( int $user_id ): array {
+		$raw = self::get_data( $user_id, 'matched_segments' );
+		$ids = is_string( $raw ) ? json_decode( $raw, true ) : ( is_array( $raw ) ? $raw : [] );
+		if ( ! is_array( $ids ) ) {
+			return [];
+		}
+		// Client-asserted JSON: drop non-scalar members (e.g. a nested array in a
+		// malformed `[[1,2],3]` payload) before stringifying, so a bad payload can't
+		// raise an "Array to string conversion" warning or yield "Array" entries.
+		return array_values( array_map( 'strval', array_filter( $ids, 'is_scalar' ) ) );
+	}
+
+	/**
 	 * Update reader data item.
 	 *
 	 * @param string $user_id User ID.
