@@ -139,4 +139,40 @@ class CheckoutButtonBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		$this->assertSame( trim( $class ), $class, 'Class list should have no leading or trailing whitespace.' );
 		$this->assertStringNotContainsString( '  ', $class, 'Class list should not contain double spaces.' );
 	}
+
+	/**
+	 * A `coupon` attribute should render a hidden coupon field.
+	 */
+	public function test_coupon_attribute_emits_hidden_field() {
+		$output = $this->render( [ 'coupon' => 'SUMMER25' ] );
+		$this->assertStringContainsString(
+			'<input type="hidden" name="coupon" value="SUMMER25" />',
+			$output
+		);
+	}
+
+	/**
+	 * With no coupon attribute, no coupon field should be rendered.
+	 */
+	public function test_no_coupon_attribute_emits_no_field() {
+		$output = $this->render();
+		$this->assertStringNotContainsString( 'name="coupon"', $output );
+	}
+
+	/**
+	 * The coupon value must be escaped for an HTML attribute.
+	 */
+	public function test_coupon_value_is_escaped() {
+		$output = $this->render( [ 'coupon' => 'A"B' ] );
+		$this->assertStringContainsString( 'value="A&quot;B"', $output );
+		$this->assertStringNotContainsString( 'value="A"B"', $output );
+	}
+
+	/**
+	 * An empty coupon attribute should render no coupon field.
+	 */
+	public function test_empty_coupon_attribute_emits_no_field() {
+		$output = $this->render( [ 'coupon' => '' ] );
+		$this->assertStringNotContainsString( 'name="coupon"', $output );
+	}
 }
