@@ -118,9 +118,23 @@ const RoutedTabbedNavigation = ( { items, className, disableUpcoming, content = 
 		);
 	} );
 
+	// A route no visible tab owns — a hidden sub-view (an edit screen), or a path
+	// with no matching tab at all — still has to render its content, outside the
+	// panels: with no active tab there is no panel entitled to hold it. Without
+	// this the page body is blank, and because the router's own fallback (the
+	// wizard's trailing `<Redirect>`) lives inside that content, it never mounts
+	// to correct the route either.
+	const unownedContent = null === activeValue ? content : null;
+
 	return (
 		<Tabs.Root value={ activeValue } className="newspack-tabbed-navigation__root">
-			{ renderShell( bar, panels ) }
+			{ renderShell(
+				bar,
+				<>
+					{ panels }
+					{ unownedContent }
+				</>
+			) }
 		</Tabs.Root>
 	);
 };

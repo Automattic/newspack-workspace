@@ -2,7 +2,7 @@
  * External dependencies.
  */
 import { act, fireEvent, render, screen } from '@testing-library/react';
-import { MemoryRouter, useHistory } from 'react-router-dom';
+import { MemoryRouter, Redirect, useHistory } from 'react-router-dom';
 
 /**
  * Internal dependencies.
@@ -149,6 +149,27 @@ describe( 'TabbedNavigation with routed items', () => {
 		ITEMS.forEach( ( { label } ) => {
 			expect( getTab( label ) ).toHaveAttribute( 'aria-disabled', 'true' );
 		} );
+	} );
+
+	it( 'renders the content outside the panels when no tab owns the route', () => {
+		// Hidden sub-views (an edit screen) and stale URLs land here. The content
+		// must still mount — otherwise the page body is blank — but no panel may
+		// claim it, since no tab is selected.
+		renderTabs( { initialEntries: [ '/edit/123' ] } );
+
+		const content = screen.getByText( 'Routed content' );
+		expect( content ).toBeInTheDocument();
+		expect( content.closest( '[role="tabpanel"]' ) ).toBeNull();
+		ITEMS.forEach( ( { label } ) => {
+			expect( getTab( label ) ).toHaveAttribute( 'aria-selected', 'false' );
+		} );
+	} );
+
+	it( 'mounts unowned content so a router fallback inside it still runs', () => {
+		// The wizard's trailing <Redirect> lives inside this content, so dropping
+		// it would strand the route instead of correcting it.
+		renderTabs( { initialEntries: [ '/unknown' ], content: <Redirect to="/stories" /> } );
+		expect( getTab( 'Stories' ) ).toHaveAttribute( 'aria-selected', 'true' );
 	} );
 
 	it( 'navigates when the active tab changes so panels follow the route', () => {
