@@ -28,6 +28,11 @@ class Group_Subscription_Settings {
 	const GROUP_SUBSCRIPTION_META_PREFIX = '_newspack_group_subscription_';
 
 	/**
+	 * Maximum length for a custom group name. Mirrored by the rename input's maxlength.
+	 */
+	const GROUP_NAME_MAX_LENGTH = 100;
+
+	/**
 	 * Initialize hooks and filters.
 	 */
 	public static function init() {
@@ -354,6 +359,35 @@ class Group_Subscription_Settings {
 				self::clear_group_subscription_ids_cache();
 			}
 		}
+	}
+
+	/**
+	 * Set the group name override on a subscription.
+	 *
+	 * Deliberately does NOT go through update_subscription_settings(), which dedupes against
+	 * the *resolved* name (custom → product name → label). That dedupe is right for the admin
+	 * meta box, whose field is pre-filled with the resolved name: a no-op save there must not
+	 * silently sever product inheritance. It is wrong for an explicit rename, whose field is
+	 * pre-filled with the raw override and shows the fallback only as a placeholder — so a
+	 * non-empty submit means "pin this name", even when it happens to equal what the group
+	 * currently inherits. Without pinning, a later product/label rename would silently rename
+	 * the reader's group underneath them.
+	 *
+	 * @param WC_Subscription|int $subscription The subscription object or ID.
+	 * @param string              $name         The custom name. An empty string clears the override.
+	 */
+	public static function update_subscription_name( $subscription, $name ) {
+		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $subscription );
+		if ( ! $subscription ) {
+			return;
+		}
+		$meta_key = self::GROUP_SUBSCRIPTION_META_PREFIX . 'name';
+		// Compare against the raw override, not the resolved name, so only a genuine no-op skips the write.
+		if ( (string) $subscription->get_meta( $meta_key, true ) === $name ) {
+			return;
+		}
+		$subscription->update_meta_data( $meta_key, $name );
+		$subscription->save();
 	}
 
 	/**
