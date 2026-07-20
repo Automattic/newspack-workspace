@@ -187,6 +187,36 @@ class Test_Ad_Block extends WP_UnitTestCase {
 	}
 
 	// ------------------------------------------------------------------
+	// Link tracking
+	// ------------------------------------------------------------------
+
+	/**
+	 * Ad links are routed through click tracking — the WC ad renderer runs the ad's HTML
+	 * through process_links() with the ad's own post context, so ad URLs are proxied through
+	 * the click endpoint, mirroring the MJML ad path. Click tracking only proxies ad links.
+	 */
+	public function test_ad_links_are_click_tracked() {
+		update_option( 'newspack_newsletters_use_click_tracking', '1' );
+		$ad_id = self::factory()->post->create(
+			[
+				'post_type'    => Ads::CPT,
+				'post_status'  => 'publish',
+				'post_title'   => 'Tracked Ad',
+				'post_content' => '<!-- wp:paragraph --><p><a href="https://example.com/deal">Advertiser</a></p><!-- /wp:paragraph -->',
+			]
+		);
+
+		$html = $this->render_newsletter( '<!-- wp:newspack-newsletters/ad {"adId":"' . $ad_id . '"} /-->' );
+
+		delete_option( 'newspack_newsletters_use_click_tracking' );
+		$this->assertStringContainsString(
+			'np_newsletters_click',
+			$html,
+			'Ad links must be proxied through the click endpoint for tracking.'
+		);
+	}
+
+	// ------------------------------------------------------------------
 	// Direct-ID guards: only an active ad of the ads CPT may render
 	// ------------------------------------------------------------------
 

@@ -96,6 +96,11 @@ class Test_Renderer_Controller extends WP_UnitTestCase {
 				'post_status'  => 'draft',
 				'post_title'   => 'Visibility newsletter',
 				'post_content' => $content,
+				// Set an explicit preheader so the preview-text fallback (which trims a
+				// text summary of ALL content, web-only blocks included, matching the MJML
+				// path) doesn't put "WEB ONLY BLOCK" into the hidden preheader and muddy
+				// the body-visibility assertion below.
+				'meta_input'   => [ 'preview_text' => 'Deterministic preheader' ],
 			]
 		);
 
@@ -117,6 +122,126 @@ class Test_Renderer_Controller extends WP_UnitTestCase {
 		add_filter( 'newspack_newsletters_use_woo_renderer', '__return_true' );
 		$this->assertSame( 'wc', Renderer_Controller::active_engine() );
 		remove_filter( 'newspack_newsletters_use_woo_renderer', '__return_true' );
+	}
+
+	/**
+	 * Create a newsletter CPT post whose body contains a single external link.
+	 *
+	 * @param string $href Link URL.
+	 * @return int Created post ID.
+	 */
+	private function create_newsletter_with_link( $href ) {
+		return self::factory()->post->create(
+			[
+				'post_type'    => \Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT,
+				'post_status'  => 'draft',
+				'post_title'   => 'Link newsletter',
+				'post_content' => '<!-- wp:paragraph --><p><a href="' . $href . '">click here</a></p><!-- /wp:paragraph -->',
+			]
+		);
+	}
+
+	/**
+	 * Body links are rewritten through Newspack_Newsletters_Renderer::process_links(), so they
+	 * carry UTM params in the sent HTML — parity with the MJML path (NEWS: link tracking gap).
+	 */
+	public function test_render_wc_appends_utm_to_body_links() {
+		\Newspack\Newsletters\Email_Renderers\Editor_Bootstrap::init();
+		$post_id = $this->create_newsletter_with_link( 'https://example.com/story' );
+
+		$html = Renderer_Controller::render_wc( get_post( $post_id ) );
+
+		$this->assertStringContainsString( 'utm_medium=email', $html, 'Body links must be routed through process_links for UTM parity.' );
+	}
+
+	/**
+	 * The newsletter's custom_css meta is injected into the rendered <head>, matching the
+	 * MJML template which appends custom_css to its <style> block.
+	 */
+	public function test_render_wc_injects_custom_css() {
+		\Newspack\Newsletters\Email_Renderers\Editor_Bootstrap::init();
+		$post_id = $this->create_newsletter_with_paragraph( 'Custom CSS newsletter' );
+		update_post_meta( $post_id, 'custom_css', '.np-custom-marker{color:#abcabc}' );
+
+		$html = Renderer_Controller::render_wc( get_post( $post_id ) );
+
+		$this->assertStringContainsString( 'np-custom-marker', $html, 'custom_css meta must be injected into the email head.' );
+	}
+
+	/**
+	 * With the tracking pixel enabled (the default), render_wc() appends the 1x1 open pixel —
+	 * parity with the MJML path, which adds it via the newspack_newsletters_editor_mjml_body hook.
+	 */
+	public function test_render_wc_includes_tracking_pixel_when_enabled() {
+		\Newspack\Newsletters\Email_Renderers\Editor_Bootstrap::init();
+		update_option( 'newspack_newsletters_use_tracking_pixel', '1' );
+		$post_id = $this->create_newsletter_with_paragraph( 'Pixel newsletter' );
+
+		$html = Renderer_Controller::render_wc( get_post( $post_id ) );
+
+		$this->assertStringContainsString( 'width="1" height="1"', $html, 'The open tracking pixel must be present when enabled.' );
+	}
+
+	/**
+	 * With the tracking pixel disabled, render_wc() emits no open pixel.
+	 */
+	public function test_render_wc_omits_tracking_pixel_when_disabled() {
+		\Newspack\Newsletters\Email_Renderers\Editor_Bootstrap::init();
+		update_option( 'newspack_newsletters_use_tracking_pixel', '0' );
+		$post_id = $this->create_newsletter_with_paragraph( 'No pixel newsletter' );
+
+		$html = Renderer_Controller::render_wc( get_post( $post_id ) );
+
+		delete_option( 'newspack_newsletters_use_tracking_pixel' );
+		$this->assertStringNotContainsString( 'width="1" height="1"', $html, 'The open tracking pixel must be absent when disabled.' );
+	}
+
+	/**
+	 * A block carrying conditionalBefore/conditionalAfter (ESP merge-tag guards for
+	 * per-segment show/hide) is wrapped in those guards in the rendered email, matching
+	 * the MJML path's <mj-raw> conditional wrapping. Without this, a segment-only block
+	 * ships unguarded to the whole list (BLOCKER — irreversible sends).
+	 */
+	public function test_render_wc_wraps_conditional_content_blocks() {
+		\Newspack\Newsletters\Email_Renderers\Editor_Bootstrap::init();
+		$content = '<!-- wp:group {"conditionalBefore":"*|IF_COND_BEFORE|*","conditionalAfter":"*|IF_COND_AFTER|*"} -->'
+			. '<div class="wp-block-group"><!-- wp:paragraph --><p>GUARDED CONTENT</p><!-- /wp:paragraph --></div>'
+			. '<!-- /wp:group -->';
+		$post_id = self::factory()->post->create(
+			[
+				'post_type'    => \Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT,
+				'post_status'  => 'draft',
+				'post_title'   => 'Conditional newsletter',
+				'post_content' => $content,
+				// Explicit preheader so the preview-text fallback doesn't also place
+				// "GUARDED CONTENT" in the hidden preheader and skew the position checks.
+				'meta_input'   => [ 'preview_text' => 'Deterministic preheader' ],
+			]
+		);
+
+		$html = Renderer_Controller::render_wc( get_post( $post_id ) );
+
+		$before_pos  = strpos( $html, '*|IF_COND_BEFORE|*' );
+		$content_pos = strpos( $html, 'GUARDED CONTENT' );
+		$after_pos   = strpos( $html, '*|IF_COND_AFTER|*' );
+
+		$this->assertNotFalse( $before_pos, 'The opening ESP conditional guard must be present.' );
+		$this->assertNotFalse( $after_pos, 'The closing ESP conditional guard must be present.' );
+		$this->assertLessThan( $content_pos, $before_pos, 'The opening guard must precede the guarded content.' );
+		$this->assertGreaterThan( $content_pos, $after_pos, 'The closing guard must follow the guarded content.' );
+	}
+
+	/**
+	 * A block with no conditional attributes is not wrapped — the guard only fires for
+	 * blocks that actually carry conditionalBefore AND conditionalAfter.
+	 */
+	public function test_render_wc_does_not_wrap_unconditional_blocks() {
+		\Newspack\Newsletters\Email_Renderers\Editor_Bootstrap::init();
+		$post_id = $this->create_newsletter_with_paragraph( 'Plain content' );
+
+		$html = Renderer_Controller::render_wc( get_post( $post_id ) );
+
+		$this->assertStringNotContainsString( '*|IF', $html, 'Unconditional blocks must not gain merge-tag guards.' );
 	}
 
 	/**
@@ -252,6 +377,38 @@ class Test_Renderer_Controller extends WP_UnitTestCase {
 		$this->assertStringContainsString( 'Banded content', $html, 'Expected the band content to survive the transform.' );
 		$this->assertStringContainsString( 'Intro', $html, 'Expected surrounding content to survive.' );
 		$this->assertStringContainsString( 'Outro', $html );
+	}
+
+	/**
+	 * A conditional guard on an alignfull background group survives the full-bleed
+	 * transform — the DOM surgery that hoists the band must not drop the ESP merge tags,
+	 * or a segment-only full-bleed section would ship unguarded (the blocker scenario).
+	 */
+	public function test_render_wc_wraps_conditional_alignfull_background_section() {
+		\Newspack\Newsletters\Email_Renderers\Editor_Bootstrap::init();
+		$content = '<!-- wp:group {"align":"full","conditionalBefore":"*|IF_BAND|*","conditionalAfter":"*|END_BAND|*","style":{"color":{"background":"#ffcc00","text":"#000000"}}} -->'
+			. '<div class="wp-block-group alignfull has-text-color has-background" style="background-color:#ffcc00;color:#000000">'
+			. '<!-- wp:paragraph --><p>Banded guarded content</p><!-- /wp:paragraph --></div>'
+			. '<!-- /wp:group -->';
+		$post_id = self::factory()->post->create(
+			[
+				'post_type'    => \Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT,
+				'post_status'  => 'draft',
+				'post_title'   => 'Conditional band newsletter',
+				'post_content' => $content,
+				'meta_input'   => [ 'preview_text' => 'Deterministic preheader' ],
+			]
+		);
+
+		$html = Renderer_Controller::render_wc( get_post( $post_id ) );
+
+		$before_pos  = strpos( $html, '*|IF_BAND|*' );
+		$content_pos = strpos( $html, 'Banded guarded content' );
+		$after_pos   = strpos( $html, '*|END_BAND|*' );
+		$this->assertNotFalse( $before_pos, 'The opening guard must survive the full-bleed transform.' );
+		$this->assertNotFalse( $after_pos, 'The closing guard must survive the full-bleed transform.' );
+		$this->assertLessThan( $content_pos, $before_pos, 'The opening guard must precede the banded content.' );
+		$this->assertGreaterThan( $content_pos, $after_pos, 'The closing guard must follow the banded content.' );
 	}
 
 	/**

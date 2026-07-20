@@ -46,7 +46,7 @@ class Renderer_Controller {
 	 * @param int $post_id Post ID.
 	 * @return string One of self::ENGINE_MJML|self::ENGINE_WC.
 	 */
-	public static function get_post_renderer( $post_id ) {
+	public static function get_post_renderer( int $post_id ): string {
 		$stamp = get_post_meta( $post_id, self::RENDERER_META, true );
 		return ( self::ENGINE_WC === $stamp ) ? self::ENGINE_WC : self::ENGINE_MJML;
 	}
@@ -58,7 +58,7 @@ class Renderer_Controller {
 	 * @param string $engine  One of self::ENGINE_MJML|self::ENGINE_WC.
 	 * @return void
 	 */
-	public static function stamp_renderer( $post_id, $engine ) {
+	public static function stamp_renderer( int $post_id, string $engine ): void {
 		update_post_meta( $post_id, self::RENDERER_META, self::ENGINE_WC === $engine ? self::ENGINE_WC : self::ENGINE_MJML );
 	}
 
@@ -112,13 +112,37 @@ class Renderer_Controller {
 		};
 		add_filter( 'the_content', $inject_content, 0 );
 
+		// Wrap conditional-content blocks in their ESP merge-tag guards, mirroring the MJML
+		// path's <mj-raw> conditional wrapping (class-newspack-newsletters-renderer.php). A
+		// block carrying conditionalBefore/conditionalAfter is shown/hidden per recipient
+		// segment by the ESP; without the wrap the guarded block ships unguarded to everyone.
+		//
+		// Runs at priority 20 — after the package's own render_block callback (priority 10),
+		// which replaces a structural block's content with its composed email table — so the
+		// guards wrap the package's final email HTML for the block rather than being discarded.
+		$wrap_conditionals = static function ( $block_content, $block ) {
+			$attrs = $block['attrs'] ?? [];
+			if ( ! empty( $attrs['conditionalBefore'] ) && ! empty( $attrs['conditionalAfter'] ) ) {
+				return $attrs['conditionalBefore'] . $block_content . $attrs['conditionalAfter'];
+			}
+			return $block_content;
+		};
+		add_filter( 'render_block', $wrap_conditionals, 20, 2 );
+
 		// Save/restore so nested render_wc() calls leave the outer post intact.
 		$previous             = self::$rendering_post;
 		self::$rendering_post = $post;
+		// Attribute ad click-tracking to the source newsletter: Click::process_link()
+		// reads Newspack_Newsletters_Renderer::$newsletter_id when proxying ad links.
+		$previous_newsletter_id                        = \Newspack_Newsletters_Renderer::$newsletter_id;
+		\Newspack_Newsletters_Renderer::$newsletter_id = $post->ID;
 		try {
 			$container = \Automattic\WooCommerce\EmailEditor\Email_Editor_Container::container();
 			$renderer  = $container->get( \Automattic\WooCommerce\EmailEditor\Engine\Renderer\Renderer::class );
-			$preheader = (string) get_post_meta( $post->ID, 'preview_text', true );
+			// Route the preheader through the legacy resolver for parity: it falls back
+			// to a trimmed text version of the newsletter when preview_text meta is empty
+			// and strips ESP merge tags, matching the MJML path.
+			$preheader = (string) \Newspack_Newsletters_Renderer::get_preview_text( $post );
 			$result    = $renderer->render(
 				$render_post,
 				(string) $post->post_title,
@@ -127,14 +151,85 @@ class Renderer_Controller {
 				'',
 				Editor_Bootstrap::TEMPLATE_SLUG
 			);
-			return isset( $result['html'] ) ? Full_Bleed_Sections::transform( (string) $result['html'] ) : '';
+			if ( ! isset( $result['html'] ) ) {
+				return '';
+			}
+			$html = Full_Bleed_Sections::transform( (string) $result['html'] );
+			return self::finalize_html( $html, $post );
 		} catch ( \Throwable $e ) {
 			\Newspack_Newsletters_Logger::log( 'Email editor: WC render failed — ' . $e->getMessage() );
 			return '';
 		} finally {
-			self::$rendering_post = $previous;
+			self::$rendering_post                          = $previous;
+			\Newspack_Newsletters_Renderer::$newsletter_id = $previous_newsletter_id;
 			remove_filter( 'the_content', $inject_content, 0 );
+			remove_filter( 'render_block', $wrap_conditionals, 20 );
 		}
+	}
+
+	/**
+	 * Apply the final send-path post-processing the MJML path bakes into its saved HTML,
+	 * so a flag-on newsletter ships with the same link tracking, custom CSS and open pixel.
+	 *
+	 * @param string   $html Rendered email HTML.
+	 * @param \WP_Post $post Newsletter post.
+	 * @return string Finalized email HTML.
+	 */
+	private static function finalize_html( string $html, \WP_Post $post ): string {
+		// UTM + click-tracking link rewriting. Ad links are already processed with the
+		// ad's own post context inside the ad block renderer (click tracking only proxies
+		// ad links); the process_links() dedup skips them on this newsletter-context pass.
+		if ( class_exists( '\Newspack_Newsletters_Renderer' ) ) {
+			$html = (string) \Newspack_Newsletters_Renderer::process_links( $html, $post );
+		}
+		$html = self::inject_custom_css( $html, $post );
+		$html = self::inject_tracking_pixel( $html, $post );
+		return $html;
+	}
+
+	/**
+	 * Inject the newsletter's custom_css meta into the email <head>, mirroring the MJML
+	 * template which appends custom_css to its <style> block (and esc_html()s it).
+	 *
+	 * @param string   $html Email HTML.
+	 * @param \WP_Post $post Newsletter post.
+	 * @return string
+	 */
+	private static function inject_custom_css( string $html, \WP_Post $post ): string {
+		$custom_css = (string) \get_post_meta( $post->ID, 'custom_css', true );
+		if ( '' === trim( $custom_css ) ) {
+			return $html;
+		}
+		$style = '<style type="text/css">' . \esc_html( $custom_css ) . '</style>';
+		$pos   = stripos( $html, '</head>' );
+		if ( false !== $pos ) {
+			// substr_replace (not preg) so a `$`/`\` in the CSS isn't read as a backreference.
+			return substr_replace( $html, $style . '</head>', $pos, strlen( '</head>' ) );
+		}
+		return $style . $html;
+	}
+
+	/**
+	 * Inject the open-tracking pixel before </body> when tracking is enabled, mirroring
+	 * the MJML path's newspack_newsletters_editor_mjml_body hook.
+	 *
+	 * @param string   $html Email HTML.
+	 * @param \WP_Post $post Newsletter post.
+	 * @return string
+	 */
+	private static function inject_tracking_pixel( string $html, \WP_Post $post ): string {
+		if ( ! class_exists( '\Newspack_Newsletters\Tracking\Pixel' ) ) {
+			return $html;
+		}
+		$pixel = \Newspack_Newsletters\Tracking\Pixel::get_pixel_markup( $post->ID );
+		if ( '' === $pixel ) {
+			return $html;
+		}
+		$pos = stripos( $html, '</body>' );
+		if ( false !== $pos ) {
+			return substr_replace( $html, $pixel . '</body>', $pos, strlen( '</body>' ) );
+		}
+		return $html . $pixel;
 	}
 
 	/**

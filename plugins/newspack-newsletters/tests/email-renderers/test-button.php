@@ -48,7 +48,10 @@ class Test_Button extends WP_UnitTestCase {
 	public function test_button_renders_email_safe_link() {
 		$content = '<!-- wp:buttons --><div class="wp-block-buttons"><!-- wp:button --><div class="wp-block-button"><a class="wp-block-button__link wp-element-button" href="https://example.com">Click me</a></div><!-- /wp:button --></div><!-- /wp:buttons -->';
 		$html    = $this->render_newsletter( $content );
-		$this->assertStringContainsString( 'href="https://example.com"', $html, 'Expected the button link href to survive.' );
+		// process_links() appends UTM params (parity with MJML), so the href carries the
+		// destination plus query params rather than the bare URL.
+		$this->assertMatchesRegularExpression( '#href="https://example\.com[^"]*"#', $html, 'Expected the button link href to survive.' );
+		$this->assertStringContainsString( 'utm_medium=email', $html, 'Expected the button link to be UTM-tagged via process_links.' );
 		$this->assertStringContainsString( 'target="_blank"', $html, 'Expected the button link to open in a new tab.' );
 		$this->assertStringContainsString( '>Click me</a>', $html, 'Expected the button label to render.' );
 		$this->assertMatchesRegularExpression( '/class="[^"]*\bwp-block-button\b/', $html, 'Expected the button to render inside a wp-block-button table cell.' );

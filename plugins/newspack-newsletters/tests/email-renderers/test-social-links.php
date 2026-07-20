@@ -53,8 +53,10 @@ class Test_Social_Links extends WP_UnitTestCase {
 		$this->assertStringNotContainsString( '<svg', $html, 'Expected social icons to render as <img>, never stripped-by-email <svg>.' );
 		$this->assertMatchesRegularExpression( '#<img[^>]+src="[^"]*/icons/twitter/twitter-white\.png"#', $html, 'Expected a hosted Twitter PNG icon.' );
 		$this->assertMatchesRegularExpression( '#<img[^>]+src="[^"]*/icons/facebook/facebook-white\.png"#', $html, 'Expected a hosted Facebook PNG icon.' );
-		$this->assertStringContainsString( 'href="https://twitter.com/x"', $html, 'Expected the Twitter link href to survive.' );
-		$this->assertStringContainsString( 'href="https://facebook.com/x"', $html, 'Expected the Facebook link href to survive.' );
+		// process_links() appends UTM params (parity with MJML), so hrefs carry the
+		// destination plus query params rather than the bare URL.
+		$this->assertMatchesRegularExpression( '#href="https://twitter\.com/x[^"]*"#', $html, 'Expected the Twitter link href to survive.' );
+		$this->assertMatchesRegularExpression( '#href="https://facebook\.com/x[^"]*"#', $html, 'Expected the Facebook link href to survive.' );
 	}
 
 	/**

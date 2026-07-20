@@ -67,6 +67,15 @@ class Ad extends Abstract_Block_Renderer {
 		self::$render_stack[] = $ad_post->ID;
 		try {
 			$html = (string) do_blocks( $ad_post->post_content );
+			// Route ad links through process_links() with the ad's own post context, so ad
+			// URLs get UTM params and are proxied through the click endpoint. Click tracking
+			// only proxies ad links, so this must run with the ad post (not the newsletter);
+			// mirrors the MJML ad path (post_to_mjml_components → process_links( …, $ad_post )).
+			// The newsletter-context process_links() pass in render_wc() then skips these via
+			// its dedup, so they are not double-processed.
+			if ( class_exists( '\Newspack_Newsletters_Renderer' ) ) {
+				$html = (string) \Newspack_Newsletters_Renderer::process_links( $html, $ad_post );
+			}
 		} finally {
 			array_pop( self::$render_stack );
 		}
