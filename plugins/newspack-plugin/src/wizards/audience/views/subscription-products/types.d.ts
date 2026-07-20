@@ -55,6 +55,8 @@ interface SubscriptionProductVariation {
 	price_label: string;
 	// Each variation resolves its own applied-rule stack + effective price.
 	policy: SubscriptionPolicyResolution;
+	// Active subscribers on this plan; a plan with subscribers can't be removed.
+	active_subscriptions: number;
 	// Group-subscription (multi-seat) settings for this plan.
 	group: { enabled: boolean; limit: number };
 }

@@ -5,8 +5,18 @@
 import './gate.scss';
 import { getEventPayload, sendEvent } from '../reader-activation/analytics';
 import { debugLog } from '../reader-activation/utils';
+import { persistCtaAttribution } from '../shared/js/cta-attribution';
 
 const EVENT_NAME = 'np_gate_interaction';
+
+/**
+ * Paid-intent CTA anchors, stamped server-side by \Newspack\CTA_Intent_Classifier.
+ *
+ * Only `core/button` anchors classifying as donation or subscription carry this
+ * attribute. Body-copy links never do — a reader clicking "read our latest" inside
+ * a gate must not attribute a later subscription to that gate.
+ */
+const CTA_SELECTOR = 'a[data-newspack-cta]';
 
 /**
  * Specify a function to execute when the DOM is fully loaded.
@@ -127,6 +137,43 @@ function addFormInputs( gate ) {
 }
 
 /**
+ * Persist gate attribution when a reader clicks a paid-intent CTA that leaves the page,
+ * and report the click to GA4.
+ *
+ * Two independent jobs, deliberately in that order:
+ *
+ *   1. Persist. This is what makes the conversion attributable. It must happen even
+ *      when gtag is absent (analytics blocked / consent denied), so it sits outside
+ *      the gtag guard — the same reasoning as addFormInputs() in handleSeen().
+ *   2. Report. Gates have never emitted a click event (only seen / dismissed /
+ *      form_submission), which is why the gates funnel has no engagement stage of its
+ *      own. `action: 'clicked'` closes that gap and mirrors what prompts already do.
+ *
+ * Scoped to the gate element, so anchors in the restricted article excerpt (a sibling
+ * of `.newspack-content-gate__gate`) can never fire this.
+ *
+ * @param {HTMLElement} gate The gate element.
+ */
+function manageCtaClicks( gate ) {
+	const anchors = [ ...gate.querySelectorAll( CTA_SELECTOR ) ];
+	anchors.forEach( anchor => {
+		anchor.addEventListener( 'click', () => {
+			persistCtaAttribution( 'gate', gateInfo.gate_post_id );
+
+			if ( 'function' !== typeof window.gtag ) {
+				return;
+			}
+			const payload = {
+				action: 'clicked',
+				action_value: anchor.getAttribute( 'href' ) || '',
+				cta_intent: anchor.dataset.newspackCta || '',
+			};
+			sendEvent( getGateEventPayload( payload, gate ), EVENT_NAME );
+		} );
+	} );
+}
+
+/**
  * Check if a DOM element is visible.
  */
 function isVisible( el ) {
@@ -152,6 +199,30 @@ function getGateEventPayload( payload, gate ) {
 		gateInfo.gate_has_checkout_button = isVisible( gate.querySelector( '.wp-block-newspack-blocks-checkout-button' ) ) ? 'yes' : 'no';
 		gateInfo.gate_has_registration_link = isVisible( gate.querySelector( 'a[href="#register_modal"]' ) ) ? 'yes' : 'no';
 		gateInfo.gate_has_signin_link = isVisible( gate.querySelector( 'a[href="#signin_modal"]' ) ) ? 'yes' : 'no';
+		// NPPD-1887: paid-intent CTA linking out to a landing page. The attribute is
+		// stamped server-side by CTA_Intent_Classifier; the DOM only reads the verdict.
+		// This is the gate analog of `gate_has_checkout_button` and widens the hub's
+		// `checkout_impressions` denominator so link-only gates stop being invisible.
+		//
+		// Deliberately matches ANY paid intent (donation OR subscription), not just
+		// `[data-newspack-cta="subscription"]`. Narrowing it looks correct and is a trap:
+		// classify_href() tests its donation pattern BEFORE its subscription pattern, and
+		// that pattern matches `member|membership|donor|contribute|/support`. So
+		// `/membership/`, `/become-a-member/` and `/support/` — the three most common
+		// paywall-gate destinations there are — all classify as `donation`. Scoping this
+		// flag to subscription-intent anchors would give those gates
+		// `checkout_impressions = 0`, and Gates_Metric::get_paywall_conversion_direct()
+		// skips any gate with `checkout_impressions <= 0` — silently dropping the exact
+		// conversions this ticket exists to capture, while their revenue still lands in
+		// `total_paywall_revenue_direct` (pure local).
+		//
+		// The cost is the mirror image: a gate whose ONLY paid CTA is an unambiguous
+		// donation page enters the paywall denominator without ever producing a
+		// subscription, diluting the rate. Accepted for v1 — a subscription-gated gate
+		// pointing readers at a donation page is not a pattern publishers use, whereas
+		// `/membership/` is everywhere. Revisit if the intent labels ever become reliable
+		// enough to gate capability on; see CTA_Intent_Classifier::classify_href().
+		gateInfo.gate_has_checkout_link = isVisible( gate.querySelector( CTA_SELECTOR ) ) ? 'yes' : 'no';
 	}
 
 	return getEventPayload( { ...payload, ...gateInfo } );
@@ -173,12 +244,18 @@ function handleSeen( gate, shouldRecordHit = false ) {
 		} );
 	}
 
+	// Add hidden form inputs. Deliberately BEFORE the gtag guard: `gate_post_id` is
+	// what stamps `_gate_post_id` onto the Woo order, i.e. the entire server-side
+	// Direct-attribution chain. Behind the guard (where it used to sit) a reader with
+	// analytics blocked or consent denied would check out through the gate's own
+	// checkout block and the order would carry no gate at all. Attribution must not
+	// depend on Google Analytics being loaded. (NPPD-1887)
+	addFormInputs( gate );
+
 	if ( 'function' !== typeof window.gtag ) {
 		return;
 	}
 
-	// Add hidden form inputs.
-	addFormInputs( gate );
 	const payload = {
 		action: 'seen',
 	};
@@ -317,6 +394,11 @@ domReady( function () {
 	if ( ! gate ) {
 		return;
 	}
+
+	// Bound at DOM-ready rather than on 'seen': an overlay gate is clickable the moment
+	// it renders, and an inline gate's 'seen' handler only runs once it scrolls into
+	// view. A CTA click must always persist attribution.
+	manageCtaClicks( gate );
 
 	initReloadHandler();
 	if ( gate.classList.contains( 'newspack-content-gate__overlay-gate' ) ) {

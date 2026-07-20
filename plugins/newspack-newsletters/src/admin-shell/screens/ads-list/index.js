@@ -88,7 +88,7 @@ export default function AdsListScreen() {
 					: [
 							{
 								type: 'primary',
-								label: __( 'Add new newsletter ad', 'newspack-newsletters' ),
+								label: __( 'Add Newsletter Ad', 'newspack-newsletters' ),
 								href: addNewHref,
 							},
 					  ],
@@ -113,7 +113,7 @@ export default function AdsListScreen() {
 					'Monetise newsletters with sponsored or house ads. Schedule by date, target by placement or category.',
 					'newspack-newsletters'
 				) }
-				ctaTitle={ __( 'Add new newsletter ad', 'newspack-newsletters' ) }
+				ctaTitle={ __( 'Add Newsletter Ad', 'newspack-newsletters' ) }
 				ctaHref={ addNewHref }
 			/>
 		);

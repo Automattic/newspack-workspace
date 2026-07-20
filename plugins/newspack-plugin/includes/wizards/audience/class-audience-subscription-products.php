@@ -33,6 +33,19 @@ class Audience_Subscription_Products extends Wizard {
 	protected $parent_slug = 'newspack-audience';
 
 	/**
+	 * Capability required to manage plans.
+	 *
+	 * Overrides the base wizard's `manage_options`: this page is product management, so it
+	 * mirrors the sibling group-subscription API and core product-CRUD by gating on
+	 * `manage_woocommerce`, letting WooCommerce shop managers (not only full admins) manage
+	 * plans. Applies to the menu page and all three REST routes, which share
+	 * {@see Wizard::api_permissions_check()}.
+	 *
+	 * @var string
+	 */
+	protected $capability = 'manage_woocommerce';
+
+	/**
 	 * Subscription product types we surface. `grouped` products are included only when they
 	 * bundle subscription children (they're the plan-switching "Plan Options" containers).
 	 */
@@ -58,11 +71,32 @@ class Audience_Subscription_Products extends Wizard {
 	const ACTIVE_SUBSCRIPTION_STATUSES = [ 'active', 'pending-cancel' ];
 
 	/**
+	 * Subscription statuses that pin a product/variation against deletion — anything that can
+	 * still renew or resume, so deleting the product would orphan a live subscription. Broader
+	 * than {@see self::ACTIVE_SUBSCRIPTION_STATUSES} (the informational subscriber count), which
+	 * counts only currently-active subscribers.
+	 */
+	const BLOCKING_SUBSCRIPTION_STATUSES = [ 'active', 'pending', 'on-hold', 'pending-cancel' ];
+
+	/**
 	 * Constructor.
 	 */
 	public function __construct() {
 		parent::__construct();
 		add_action( 'rest_api_init', [ $this, 'register_api_endpoints' ] );
+
+		// Guard against orphaning live subscriptions: block trashing/deleting a subscription
+		// product (or variation) that still has renewable subscriptions, from anywhere in
+		// wp-admin (the core Products list, a bulk action, or a programmatic delete).
+		add_filter( 'pre_trash_post', [ $this, 'block_subscription_product_deletion' ], 10, 2 );
+		add_filter( 'pre_delete_post', [ $this, 'block_subscription_product_deletion' ], 10, 2 );
+
+		// Keep the "Unlocks" column fresh: invalidate the cached product → content-gates map
+		// whenever a gate is saved, trashed, or deleted, or its custom_access rules change.
+		add_action( 'save_post', [ $this, 'maybe_invalidate_gate_map' ], 10, 2 );
+		add_action( 'before_delete_post', [ $this, 'maybe_invalidate_gate_map' ], 10, 2 );
+		add_action( 'updated_post_meta', [ $this, 'maybe_invalidate_gate_map_on_meta' ], 10, 3 );
+		add_action( 'added_post_meta', [ $this, 'maybe_invalidate_gate_map_on_meta' ], 10, 3 );
 	}
 
 	/**
@@ -258,6 +292,13 @@ class Audience_Subscription_Products extends Wizard {
 	const VALID_PERIODS = [ 'day', 'week', 'month', 'year' ];
 
 	/**
+	 * Display name of the plan-selection attribute on variable subscriptions. The variation
+	 * attribute key is always `sanitize_title()` of this name (see
+	 * {@see self::billing_period_attribute_key()}) — never hardcode the derived slug.
+	 */
+	const BILLING_PERIOD_ATTRIBUTE_NAME = 'Billing period';
+
+	/**
 	 * Whether the group-subscription (multi-seat) feature is available.
 	 *
 	 * The canonical product editor only exposes the group-subscription fields when this
@@ -272,24 +313,92 @@ class Audience_Subscription_Products extends Wizard {
 	}
 
 	/**
-	 * Whether a product or variation ID still has active (or pending-cancel) subscriptions.
+	 * The variation attribute key for the plan-selection ("Billing period") attribute.
+	 *
+	 * WooCommerce derives a variation attribute's key from `sanitize_title()` of its name, so the
+	 * key is computed rather than hardcoded — a localized or renamed attribute name would
+	 * otherwise silently detach every variation (its attribute reading back as "Any").
+	 *
+	 * @return string
+	 */
+	private static function billing_period_attribute_key() {
+		return sanitize_title( self::BILLING_PERIOD_ATTRIBUTE_NAME );
+	}
+
+	/**
+	 * Whether a product or variation ID still has a subscription that could renew or resume
+	 * (see {@see self::BLOCKING_SUBSCRIPTION_STATUSES}). Used to refuse deletions that would
+	 * orphan a live subscription.
 	 *
 	 * @param int $product_id The product or variation ID.
 	 *
 	 * @return bool
 	 */
-	private static function product_has_active_subscriptions( $product_id ) {
-		if ( ! function_exists( 'wcs_get_subscriptions' ) ) {
+	private static function product_has_blocking_subscriptions( $product_id ) {
+		if ( ! function_exists( 'wcs_get_subscriptions_for_product' ) ) {
 			return false;
 		}
-		$subscriptions = \wcs_get_subscriptions(
+		// 'ids' + limit 1: only existence matters, so avoid hydrating WC_Subscription objects.
+		$subscription_ids = \wcs_get_subscriptions_for_product(
+			$product_id,
+			'ids',
 			[
-				'product_id'             => $product_id,
-				'subscription_status'    => self::ACTIVE_SUBSCRIPTION_STATUSES,
-				'subscriptions_per_page' => 1,
+				'subscription_status' => self::BLOCKING_SUBSCRIPTION_STATUSES,
+				'limit'               => 1,
 			]
 		);
-		return ! empty( $subscriptions );
+		return ! empty( $subscription_ids );
+	}
+
+	/**
+	 * Block trashing or deleting a subscription product (or variation) that still has a
+	 * renewable subscription, from anywhere in wp-admin. Renewals resolve the subscription's
+	 * product by ID, so removing it would orphan the subscription.
+	 *
+	 * Hooked on the `pre_trash_post` / `pre_delete_post` short-circuit filters: returning a
+	 * non-null value aborts the operation, and WordPress surfaces its standard failure notice.
+	 *
+	 * @param \WP_Post|false|null $check Short-circuit value (null lets the operation proceed).
+	 * @param \WP_Post            $post  The post being trashed or deleted.
+	 *
+	 * @return \WP_Post|false|null False to block the deletion; the unchanged $check otherwise.
+	 */
+	public function block_subscription_product_deletion( $check, $post ) {
+		if ( null !== $check ) {
+			return $check; // Another handler already decided the outcome.
+		}
+		if ( ! $post instanceof \WP_Post || ! in_array( $post->post_type, [ 'product', 'product_variation' ], true ) ) {
+			return $check;
+		}
+		return self::post_has_blocking_subscriptions( $post ) ? false : $check;
+	}
+
+	/**
+	 * Whether a product/variation post — or, for a variable subscription, any of its variations —
+	 * still has a renewable subscription.
+	 *
+	 * @param \WP_Post $post The product or product_variation post.
+	 *
+	 * @return bool
+	 */
+	private static function post_has_blocking_subscriptions( $post ) {
+		if ( ! function_exists( 'wc_get_product' ) ) {
+			return false;
+		}
+		$product = wc_get_product( $post->ID );
+		if ( ! $product ) {
+			return false;
+		}
+		$product_ids = [ $product->get_id() ];
+		if ( $product->is_type( 'variable-subscription' ) ) {
+			$product_ids = array_merge( $product_ids, $product->get_children() );
+		}
+		foreach ( $product_ids as $product_id ) {
+			if ( self::product_has_blocking_subscriptions( (int) $product_id ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -395,9 +504,7 @@ class Audience_Subscription_Products extends Wizard {
 		$product->update_meta_data( '_subscription_period', $period );
 		$product->update_meta_data( '_subscription_period_interval', $interval );
 		$product->update_meta_data( '_subscription_length', 0 );
-		if ( $is_donation ) {
-			$product->update_meta_data( WooCommerce_Products::DONATION_FLAG_META_KEY, wc_bool_to_string( true ) );
-		}
+		self::set_donation_flag( $product, $is_donation );
 		if ( self::group_subscription_available() && ! empty( $params['is_group_subscription'] ) ) {
 			$product->update_meta_data( self::GROUP_ENABLED_META, wc_bool_to_string( true ) );
 			$product->update_meta_data( self::GROUP_LIMIT_META, isset( $params['group_member_limit'] ) ? max( 0, (int) $params['group_member_limit'] ) : 0 );
@@ -458,14 +565,12 @@ class Audience_Subscription_Products extends Wizard {
 			$product->set_category_ids( $category_ids );
 		}
 		$attribute = new \WC_Product_Attribute();
-		$attribute->set_name( 'Billing period' );
+		$attribute->set_name( self::BILLING_PERIOD_ATTRIBUTE_NAME );
 		$attribute->set_options( $labels );
 		$attribute->set_visible( true );
 		$attribute->set_variation( true );
 		$product->set_attributes( [ $attribute ] );
-		if ( $is_donation ) {
-			$product->update_meta_data( WooCommerce_Products::DONATION_FLAG_META_KEY, wc_bool_to_string( true ) );
-		}
+		self::set_donation_flag( $product, $is_donation );
 		$parent_id = $product->save();
 		if ( ! $parent_id ) {
 			return new \WP_Error( 'create_failed', __( 'Failed to create the product.', 'newspack-plugin' ), [ 'status' => 500 ] );
@@ -475,10 +580,11 @@ class Audience_Subscription_Products extends Wizard {
 		// without this the parent reads back as 'simple' and has no variations.
 		wp_set_object_terms( $parent_id, 'variable-subscription', 'product_type' );
 
+		$variation_ids = [];
 		foreach ( $clean as $plan ) {
 			$variation = new \WC_Product_Variation();
 			$variation->set_parent_id( $parent_id );
-			$variation->set_attributes( [ 'billing-period' => $plan['label'] ] );
+			$variation->set_attributes( [ self::billing_period_attribute_key() => $plan['label'] ] );
 			$variation->set_status( 'publish' );
 			$variation->set_regular_price( (string) $plan['price'] );
 			$variation->update_meta_data( '_subscription_price', wc_format_decimal( $plan['price'] ) );
@@ -489,7 +595,16 @@ class Audience_Subscription_Products extends Wizard {
 				$variation->update_meta_data( self::GROUP_ENABLED_META, wc_bool_to_string( true ) );
 				$variation->update_meta_data( self::GROUP_LIMIT_META, $plan['group_limit'] );
 			}
-			$variation->save();
+			$variation_id = $variation->save();
+			if ( ! $variation_id ) {
+				// A plan failed to persist — roll back so we never leave a parent missing a plan.
+				foreach ( $variation_ids as $saved_id ) {
+					wp_delete_post( $saved_id, true );
+				}
+				wp_delete_post( $parent_id, true );
+				return new \WP_Error( 'create_failed', __( 'Failed to create one of the plans.', 'newspack-plugin' ), [ 'status' => 500 ] );
+			}
+			$variation_ids[] = $variation_id;
 		}
 
 		if ( method_exists( '\WC_Product_Variable_Subscription', 'sync' ) ) {
@@ -532,9 +647,7 @@ class Audience_Subscription_Products extends Wizard {
 			$product->set_category_ids( $category_ids );
 		}
 		$product->set_children( $valid );
-		if ( $is_donation ) {
-			$product->update_meta_data( WooCommerce_Products::DONATION_FLAG_META_KEY, wc_bool_to_string( true ) );
-		}
+		self::set_donation_flag( $product, $is_donation );
 		$product_id = $product->save();
 		if ( ! $product_id ) {
 			return new \WP_Error( 'create_failed', __( 'Failed to create the product.', 'newspack-plugin' ), [ 'status' => 500 ] );
@@ -689,7 +802,7 @@ class Audience_Subscription_Products extends Wizard {
 
 			if ( $variation_id && in_array( $variation_id, $existing_ids, true ) ) {
 				$existing = wc_get_product( $variation_id );
-				$label    = $existing ? $existing->get_attribute( 'billing-period' ) : '';
+				$label    = $existing ? $existing->get_attribute( self::billing_period_attribute_key() ) : '';
 			} else {
 				$variation_id = 0;
 				$label        = isset( $variation['label'] ) ? sanitize_text_field( $variation['label'] ) : '';
@@ -714,14 +827,47 @@ class Audience_Subscription_Products extends Wizard {
 			return new \WP_Error( 'duplicate_labels', __( 'Plan labels must be unique.', 'newspack-plugin' ), [ 'status' => 400 ] );
 		}
 
+		// Refuse to drop a variation that still has subscribers: deleting it would orphan live
+		// subscriptions, and silently keeping it (while stripping its label from the parent's
+		// options) leaves the product inconsistent. Check up-front, before any mutation, so a
+		// blocked removal changes nothing and the UI can surface why.
+		$kept_ids = array_filter( array_map( 'intval', wp_list_pluck( $plans, 'id' ) ) );
+		$blocked  = [];
+		foreach ( array_diff( $existing_ids, $kept_ids ) as $removed_id ) {
+			if ( ! self::product_has_blocking_subscriptions( (int) $removed_id ) ) {
+				continue;
+			}
+			$removed   = wc_get_product( (int) $removed_id );
+			$label     = $removed ? $removed->get_attribute( self::billing_period_attribute_key() ) : '';
+			$blocked[] = '' !== $label ? $label : (string) $removed_id;
+		}
+		if ( ! empty( $blocked ) ) {
+			return new \WP_Error(
+				'plan_has_subscribers',
+				sprintf(
+					/* translators: %s: comma-separated plan labels. */
+					__( 'Can’t remove a plan that still has active subscribers: %s. Cancel or move those subscriptions first.', 'newspack-plugin' ),
+					implode( ', ', $blocked )
+				),
+				[ 'status' => 409 ]
+			);
+		}
+
 		// Rebuild the parent's billing-period attribute to the desired set of plan labels.
 		$attribute = new \WC_Product_Attribute();
-		$attribute->set_name( 'Billing period' );
+		$attribute->set_name( self::BILLING_PERIOD_ATTRIBUTE_NAME );
 		$attribute->set_options( $labels );
 		$attribute->set_visible( true );
 		$attribute->set_variation( true );
 		$product->set_attributes( [ $attribute ] );
 		$product->save();
+
+		// The Plans UI collapses group-subscription settings into a single control for the whole
+		// product, so it can't represent divergent per-variation values. When the existing
+		// variations already diverge (e.g. set via the core product editor), writing the collapsed
+		// value to each would silently clobber them — so leave existing variations' group meta
+		// untouched in that case (new variations still take the submitted value).
+		$group_settings_diverge = self::existing_group_settings_diverge( $existing_ids );
 
 		// Upsert variations.
 		$keep_ids = [];
@@ -730,14 +876,17 @@ class Audience_Subscription_Products extends Wizard {
 			if ( ! $plan['id'] ) {
 				$variation->set_parent_id( $parent_id );
 			}
-			$variation->set_attributes( [ 'billing-period' => $plan['label'] ] );
+			$variation->set_attributes( [ self::billing_period_attribute_key() => $plan['label'] ] );
 			$variation->set_status( 'publish' );
 			$variation->set_regular_price( (string) $plan['price'] );
 			$variation->update_meta_data( '_subscription_price', wc_format_decimal( $plan['price'] ) );
 			$variation->update_meta_data( '_subscription_period', $plan['period'] );
 			$variation->update_meta_data( '_subscription_period_interval', $plan['interval'] );
 			$variation->update_meta_data( '_subscription_length', 0 );
-			if ( self::group_subscription_available() ) {
+			// Preserve divergent group settings on existing variations (see above); new variations
+			// (no id yet) always take the submitted value.
+			$preserve_group_settings = $plan['id'] && $group_settings_diverge;
+			if ( self::group_subscription_available() && ! $preserve_group_settings ) {
 				$variation->update_meta_data( self::GROUP_ENABLED_META, wc_bool_to_string( $plan['group_enabled'] ) );
 				if ( $plan['group_enabled'] ) {
 					$variation->update_meta_data( self::GROUP_LIMIT_META, $plan['group_limit'] );
@@ -751,7 +900,7 @@ class Audience_Subscription_Products extends Wizard {
 		// it would orphan live subscriptions. For the rest, trash (not force-delete) so a removed
 		// plan can be recovered.
 		foreach ( array_diff( $existing_ids, $keep_ids ) as $removed_id ) {
-			if ( self::product_has_active_subscriptions( (int) $removed_id ) ) {
+			if ( self::product_has_blocking_subscriptions( (int) $removed_id ) ) {
 				continue;
 			}
 			wp_delete_post( $removed_id, false );
@@ -914,6 +1063,35 @@ class Audience_Subscription_Products extends Wizard {
 	}
 
 	/**
+	 * Whether a variable subscription's existing variations carry divergent group-subscription
+	 * settings — i.e. they aren't all disabled, nor all enabled with the same member limit. The
+	 * Plans UI collapses these to one control, so on divergence it must not overwrite the
+	 * per-variation values (which can only be set via the core product editor).
+	 *
+	 * @param int[] $variation_ids Existing variation IDs.
+	 *
+	 * @return bool
+	 */
+	private static function existing_group_settings_diverge( $variation_ids ) {
+		$signature = null;
+		foreach ( $variation_ids as $variation_id ) {
+			$variation = wc_get_product( (int) $variation_id );
+			if ( ! $variation ) {
+				continue;
+			}
+			$settings = self::read_group_settings( $variation );
+			// Comparable key: 'off' when disabled, otherwise the (int) member limit.
+			$current = $settings['enabled'] ? (int) $settings['limit'] : 'off';
+			if ( null === $signature ) {
+				$signature = $current;
+			} elseif ( $signature !== $current ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
 	 * Build a row-level group-subscription summary.
 	 *
 	 * For variable subscriptions the setting lives on each variation, so the row is "enabled"
@@ -1030,15 +1208,19 @@ class Audience_Subscription_Products extends Wizard {
 				$v_interval = (int) $variation->get_meta( '_subscription_period_interval' );
 
 				$pricing['variations'][] = [
-					'id'          => $variation_id,
-					'name'        => $variation->get_name(),
-					'plan_label'  => $variation->get_attribute( 'billing-period' ),
-					'base_price'  => $v_price,
-					'period'      => $v_period,
-					'interval'    => $v_interval,
-					'price_label' => self::format_price_label( $v_price, $v_period, $v_interval ),
+					'id'                   => $variation_id,
+					'name'                 => $variation->get_name(),
+					'plan_label'           => $variation->get_attribute( self::billing_period_attribute_key() ),
+					'base_price'           => $v_price,
+					'period'               => $v_period,
+					'interval'             => $v_interval,
+					'price_label'          => self::format_price_label( $v_price, $v_period, $v_interval ),
+					// Active subscribers on this specific plan — drives the UI's guard against
+					// removing a plan that still has subscribers. Free: the id is memoized for
+					// the row's total count.
+					'active_subscriptions' => count( self::active_subscription_ids_for( (int) $variation_id ) ),
 					// Group-subscription (multi-seat) settings live per variation.
-					'group'       => self::read_group_settings( $variation ),
+					'group'                => self::read_group_settings( $variation ),
 				];
 			}
 
@@ -1139,10 +1321,38 @@ class Audience_Subscription_Products extends Wizard {
 	 */
 	private static function read_subscription_price( $product ) {
 		$raw = $product->get_meta( '_subscription_price' );
-		if ( ! isset( $raw ) || '' === $raw ) {
+		// get_meta() always returns a set value (defaults to ''), so '' === $raw is the real test.
+		if ( '' === $raw ) {
 			return null;
 		}
 		return (float) $raw;
+	}
+
+	/**
+	 * Per-request cache of active-subscription IDs, keyed by product/variation ID.
+	 *
+	 * @var array<int, array>
+	 */
+	private static $active_subscription_ids = [];
+
+	/**
+	 * Active (see self::ACTIVE_SUBSCRIPTION_STATUSES) subscription IDs for one product or
+	 * variation ID, memoized for the request. The same id recurs across rows — a variation feeds
+	 * both its own count and its parent's, and grouped products aggregate children also listed
+	 * individually — so each id resolves to at most one lightweight query.
+	 *
+	 * @param int $product_id The product or variation ID.
+	 *
+	 * @return array Subscription IDs (keyed id => id).
+	 */
+	private static function active_subscription_ids_for( $product_id ) {
+		$product_id = (int) $product_id;
+		if ( ! isset( self::$active_subscription_ids[ $product_id ] ) ) {
+			self::$active_subscription_ids[ $product_id ] = function_exists( 'wcs_get_subscriptions_for_product' )
+				? \wcs_get_subscriptions_for_product( $product_id, 'ids', [ 'subscription_status' => self::ACTIVE_SUBSCRIPTION_STATUSES ] )
+				: [];
+		}
+		return self::$active_subscription_ids[ $product_id ];
 	}
 
 	/**
@@ -1157,7 +1367,7 @@ class Audience_Subscription_Products extends Wizard {
 	 * @return int|null The active subscription count, or null when unavailable.
 	 */
 	private static function get_active_subscription_count( $product ) {
-		if ( ! function_exists( 'wcs_get_subscriptions' ) ) {
+		if ( ! function_exists( 'wcs_get_subscriptions_for_product' ) ) {
 			return null;
 		}
 		// One-time (simple) products have no subscriptions — distinguish from a genuine zero.
@@ -1182,25 +1392,11 @@ class Audience_Subscription_Products extends Wizard {
 			}
 		}
 
-		// Per-request memo: the same product id recurs across rows (notably grouped products
-		// that aggregate children also listed individually), and each wcs_get_subscriptions()
-		// call is a query — so resolve each id at most once.
-		static $ids_by_product = [];
+		// Dedupe subscription IDs across the parent, variations, and grouped children (the same
+		// id recurs across rows) via the shared per-request memo.
 		$subscription_ids = [];
 		foreach ( $product_ids as $product_id ) {
-			if ( ! isset( $ids_by_product[ $product_id ] ) ) {
-				$subscriptions = \wcs_get_subscriptions(
-					[
-						'product_id'             => $product_id,
-						'subscription_status'    => self::ACTIVE_SUBSCRIPTION_STATUSES,
-						'subscriptions_per_page' => -1,
-					]
-				);
-				// wcs_get_subscriptions() is keyed by subscription id.
-				$ids_by_product[ $product_id ] = array_keys( $subscriptions );
-			}
-			// Dedupe across variations and repeated product ids.
-			foreach ( $ids_by_product[ $product_id ] as $subscription_id ) {
+			foreach ( self::active_subscription_ids_for( (int) $product_id ) as $subscription_id ) {
 				$subscription_ids[ $subscription_id ] = true;
 			}
 		}
@@ -1437,6 +1633,51 @@ class Audience_Subscription_Products extends Wizard {
 		set_transient( self::GATE_MAP_TRANSIENT, $map, 5 * MINUTE_IN_SECONDS );
 		self::$product_gate_map = $map;
 		return $map;
+	}
+
+	/**
+	 * Invalidate the cached product → content-gates map when a content-gate post is saved,
+	 * trashed, or deleted — its status or existence changes which gates the map includes.
+	 *
+	 * @param int      $post_id The post ID (unused; the post object carries the type).
+	 * @param \WP_Post $post    The post being saved or deleted.
+	 *
+	 * @return void
+	 */
+	public function maybe_invalidate_gate_map( $post_id, $post ) {
+		if ( ! class_exists( 'Newspack\Content_Gate' ) || ! $post instanceof \WP_Post ) {
+			return;
+		}
+		if ( in_array( $post->post_type, Content_Gate::get_gate_post_types(), true ) ) {
+			self::invalidate_gate_map_cache();
+		}
+	}
+
+	/**
+	 * Invalidate the cached product → content-gates map when a gate's `custom_access` rules are
+	 * written directly. The subscription rule that feeds the map lives in that post meta, and its
+	 * update bypasses `save_post`.
+	 *
+	 * @param int    $meta_id   The meta row ID (unused).
+	 * @param int    $object_id The post ID (unused).
+	 * @param string $meta_key  The meta key that changed.
+	 *
+	 * @return void
+	 */
+	public function maybe_invalidate_gate_map_on_meta( $meta_id, $object_id, $meta_key ) {
+		if ( 'custom_access' === $meta_key ) {
+			self::invalidate_gate_map_cache();
+		}
+	}
+
+	/**
+	 * Clear the cached product → content-gates map (cross-request transient + per-request memo).
+	 *
+	 * @return void
+	 */
+	public static function invalidate_gate_map_cache() {
+		delete_transient( self::GATE_MAP_TRANSIENT );
+		self::$product_gate_map = null;
 	}
 
 	/**

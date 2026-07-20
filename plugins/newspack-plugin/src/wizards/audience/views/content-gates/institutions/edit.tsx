@@ -192,7 +192,7 @@ export default function InstitutionEdit( { match }: { match: { params: { id?: st
 	useEffect( () => {
 		setHeaderData( {
 			backNav: '#/institutions',
-			sectionName: isNew ? __( 'Add institution', 'newspack-plugin' ) : __( 'Edit institution', 'newspack-plugin' ),
+			sectionName: isNew ? __( 'Add Institution', 'newspack-plugin' ) : __( 'Edit Institution', 'newspack-plugin' ),
 		} );
 	}, [ isNew, setHeaderData ] );
 

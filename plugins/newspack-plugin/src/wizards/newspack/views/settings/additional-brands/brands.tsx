@@ -36,7 +36,7 @@ export default function Brands( {
 				</h2>
 				<NavLink to={ `${ TAB_PATH }/new` }>
 					<Button variant="primary" disabled={ isFetching }>
-						{ __( 'Add New Brand', 'newspack-plugin' ) }
+						{ __( 'Add Brand', 'newspack-plugin' ) }
 					</Button>
 				</NavLink>
 			</Card>

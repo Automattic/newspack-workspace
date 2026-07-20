@@ -595,6 +595,7 @@ final class Newspack_Newsletters_Editor {
 		}
 
 		if ( self::is_editing_newsletter() || self::is_editing_layout() ) {
+			$provider = Newspack_Newsletters::get_service_provider();
 			wp_localize_script(
 				'newspack-newsletters-editor',
 				'newspack_newsletters_data',

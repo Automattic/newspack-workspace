@@ -28,27 +28,11 @@
 		gap: 4px;
 	}
 
-	// Add-product modal.
-	&__add-modal {
-		min-width: 480px;
-		max-width: 640px;
-	}
-
-	&__add-modal-label {
-		font-weight: 500;
-	}
-
 	// A variable plan row (label + remove, then price/every/period) — separated so each
 	// block reads as a single plan in the narrow side panel.
 	&__plan {
 		padding-bottom: 12px;
 		border-bottom: 1px solid wp-colors.$gray-100;
-	}
-
-	&__add-modal-help {
-		margin: 0;
-		color: wp-colors.$gray-700;
-		font-size: 12px;
 	}
 
 	&__bundle-picker {
@@ -66,32 +50,10 @@
 		gap: 4px;
 	}
 
-	// Edit modal.
-	&__modal {
-		min-width: 360px;
-	}
-
+	// Plan-detail caption (e.g. the read-only "Unlocks" label in the edit form).
 	&__modal-label {
 		color: wp-colors.$gray-700;
 		font-weight: 500;
-	}
-
-	&__modal-value {
-		text-align: right;
-	}
-
-	&__modal-divider {
-		width: 100%;
-		border: none;
-		border-top: 1px solid wp-colors.$gray-200;
-		margin: 0;
-	}
-
-	&__modal-note {
-		color: wp-colors.$gray-700;
-		font-size: 12px;
-		font-style: italic;
-		margin: 0;
 	}
 
 	// --- Applied rules + effective price ---
