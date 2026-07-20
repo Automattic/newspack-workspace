@@ -347,7 +347,7 @@ trait Content_Gate_Layout {
 		$size     = \get_post_meta( $gate_post_id, 'overlay_size', true );
 		// $gate_post_id is the layout ID here despite the name; the preview seam keys off it.
 		/** This filter is documented in includes/content-gate/trait-content-gate-layout.php */
-		$content  = self::annotate_gate_ctas( \apply_filters( 'newspack_gate_content', \apply_filters( 'newspack_gate_layout_content', \get_the_content( null, null, $gate_post_id ), $gate_post_id ) ) );
+		$content = self::annotate_gate_ctas( \apply_filters( 'newspack_gate_content', \apply_filters( 'newspack_gate_layout_content', \get_the_content( null, null, $gate_post_id ), $gate_post_id ) ) );
 		?>
 		<div class="newspack-content-gate__gate newspack-content-gate__overlay-gate" style="display:none;" data-position="<?php echo \esc_attr( $position ); ?>" data-size="<?php echo \esc_attr( $size ); ?>">
 			<div class="newspack-content-gate__overlay-gate__container">
