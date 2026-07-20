@@ -64,6 +64,7 @@ class Admin_Shell_Assets {
 				'restUrl'         => esc_url_raw( rest_url() ),
 				'adminUrl'        => esc_url_raw( admin_url() ),
 				'cptSlug'         => Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT,
+				'serviceProvider' => Newspack_Newsletters::service_provider(),
 			]
 		);
 	}
