@@ -90,7 +90,15 @@ export default function init() {
 				// Validate inputs.
 				if ( isNYP ) {
 					const amountInput = form.querySelector( '#nyp_amount.current' );
-					if ( amountInput && ( ! amountInput.value || amountInput.value === amountInput.dataset.originalValue ) ) {
+					// Compare numerically in minor units, matching the server-side guard:
+					// a string comparison would treat "10.00" over an original "10" as a
+					// change and let the submission through only to be rejected later.
+					const toCents = value => Math.round( parseFloat( value ) * 100 );
+					if (
+						amountInput &&
+						( ! amountInput.value ||
+							toCents( amountInput.value ) === toCents( amountInput.dataset.originalValue ) )
+					) {
 						form.querySelector( 'button[type="submit"]' ).disabled = true;
 						isFormValid = false;
 					} else {

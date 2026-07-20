@@ -20,14 +20,13 @@ class Newspack_Test_Subscriptions_Tiers extends WP_UnitTestCase {
 	 */
 	public function set_up() {
 		parent::set_up();
-		global $subscriptions_database, $products_database;
+		global $subscriptions_database, $products_database, $order_items_database, $wc_mock_notices;
 		$subscriptions_database = [];
 		$products_database      = [];
+		$order_items_database   = [];
+		$wc_mock_notices        = [];
 		wp_set_current_user( 0 );
 		unset(
-			$_GET['switch-subscription'],
-			$_GET['item'],
-			$_GET['price'],
 			$_REQUEST['switch-subscription'],
 			$_REQUEST['item'],
 			$_REQUEST['price']
@@ -40,9 +39,6 @@ class Newspack_Test_Subscriptions_Tiers extends WP_UnitTestCase {
 	public function tear_down() {
 		wp_set_current_user( 0 );
 		unset(
-			$_GET['switch-subscription'],
-			$_GET['item'],
-			$_GET['price'],
 			$_REQUEST['switch-subscription'],
 			$_REQUEST['item'],
 			$_REQUEST['price']
@@ -124,8 +120,48 @@ class Newspack_Test_Subscriptions_Tiers extends WP_UnitTestCase {
 
 		[ $frequency, $product, $subscription ] = Subscriptions_Tiers::get_current_tier( $tiers );
 
+		// The frequency is what drives the "Current" badge and front-end guard, so
+		// its absence is exactly the silent failure this regression test pins.
+		$this->assertSame( 'month_1', $frequency );
 		$this->assertSame( $premium, $product, 'A pending-cancel subscription should be recognized as the current tier.' );
 		$this->assertNotNull( $subscription );
+	}
+
+	/**
+	 * A subscription the user can see but does not own (e.g. injected into
+	 * `wcs_get_users_subscriptions` for a group-subscription member) is not their
+	 * current tier — matching the ownership test the switch backstop applies.
+	 */
+	public function test_ignores_subscription_owned_by_another_user() {
+		$owner_id  = self::factory()->user->create();
+		$member_id = self::factory()->user->create();
+		wp_set_current_user( $member_id );
+
+		[ $basic, $premium ] = $this->make_tier_products();
+		$tiers               = [ 'month_1' => [ $basic, $premium ] ];
+
+		$owner_subscription = wcs_create_subscription(
+			[
+				'customer_id' => $owner_id,
+				'status'      => 'active',
+				'products'    => [ 102 ],
+			]
+		);
+
+		// Simulate Group_Subscription_MyAccount::inject_member_group_subscriptions().
+		$inject = function ( $subscriptions ) use ( $owner_subscription ) {
+			$subscriptions[ $owner_subscription->get_id() ] = $owner_subscription;
+			return $subscriptions;
+		};
+		add_filter( 'wcs_get_users_subscriptions', $inject );
+
+		[ $frequency, $product, $subscription ] = Subscriptions_Tiers::get_current_tier( $tiers );
+
+		remove_filter( 'wcs_get_users_subscriptions', $inject );
+
+		$this->assertNull( $frequency );
+		$this->assertNull( $product );
+		$this->assertNull( $subscription );
 	}
 
 	/**
@@ -178,10 +214,11 @@ class Newspack_Test_Subscriptions_Tiers extends WP_UnitTestCase {
 	 * @param float|null $amount       Recurring line total, for name-your-price checks.
 	 * @param array      $product_meta Meta for the registered product (e.g. `_nyp`, `_subscription_period_interval`).
 	 * @param int        $variation_id Variation ID held by the line item, if any.
+	 * @param int        $quantity     Line item quantity.
 	 *
 	 * @return \WC_Subscription
 	 */
-	private function make_subscription( $user_id, $status, $product_id, $amount = null, $product_meta = [], $variation_id = 0 ) {
+	private function make_subscription( $user_id, $status, $product_id, $amount = null, $product_meta = [], $variation_id = 0, $quantity = 1 ) {
 		$canonical_id = $variation_id ? $variation_id : $product_id;
 		wc_create_mock_product(
 			[
@@ -197,6 +234,7 @@ class Newspack_Test_Subscriptions_Tiers extends WP_UnitTestCase {
 				'product_id'   => $product_id,
 				'variation_id' => $variation_id,
 				'total'        => $amount ?? 0,
+				'quantity'     => $quantity,
 			]
 		);
 		return wcs_create_subscription(
@@ -490,5 +528,163 @@ class Newspack_Test_Subscriptions_Tiers extends WP_UnitTestCase {
 		$_REQUEST['item']                = '555';
 
 		$this->assertFalse( Subscriptions_Tiers::prevent_switch_to_same_subscription( true, 102 ) );
+	}
+
+	/**
+	 * An `item` naming a line item from an unrelated order can't bypass the
+	 * backstop: order item IDs are globally unique and the default
+	 * `WC_Abstract_Order::get_item()` resolves them without an order scope, so an
+	 * unscoped lookup would return the foreign item, mismatch the product and let
+	 * the same-tier switch through. The lookup must be scoped to the switched
+	 * subscription's own items.
+	 */
+	public function test_prevent_switch_ignores_foreign_item_id() {
+		$user_id  = self::factory()->user->create();
+		$other_id = self::factory()->user->create();
+		wp_set_current_user( $user_id );
+
+		// The reader's own subscription holds tier product 102 via line item 555.
+		$subscription = $this->make_subscription( $user_id, 'active', 102 );
+
+		// A different user's order holds product 45 via line item 999.
+		wc_create_mock_product(
+			[
+				'id'   => 45,
+				'type' => 'subscription',
+				'name' => 'Unrelated',
+			]
+		);
+		$foreign_item = new WC_Order_Item_Product(
+			[
+				'id'         => 999,
+				'product_id' => 45,
+				'total'      => 5,
+			]
+		);
+		wcs_create_subscription(
+			[
+				'customer_id' => $other_id,
+				'status'      => 'active',
+				'products'    => [ 45 ],
+				'items'       => [ $foreign_item ],
+			]
+		);
+
+		$_REQUEST['switch-subscription'] = (string) $subscription->get_id();
+		$_REQUEST['item']                = '999'; // Crafted: item 999 belongs to another order.
+
+		// The foreign item must not resolve; the fallback scan finds the reader's own
+		// line item for product 102 and the same-tier switch stays blocked.
+		$this->assertFalse( Subscriptions_Tiers::prevent_switch_to_same_subscription( true, 102 ) );
+	}
+
+	/**
+	 * A quantity change on the same plan is a legitimate switch in WCS's native
+	 * flow (product, variation and quantity must all match to be "identical"), so
+	 * the backstop steps aside for it.
+	 */
+	public function test_prevent_switch_allows_quantity_change() {
+		$user_id = self::factory()->user->create();
+		wp_set_current_user( $user_id );
+		$subscription                    = $this->make_subscription( $user_id, 'active', 102, null, [], 0, 1 );
+		$_REQUEST['switch-subscription'] = (string) $subscription->get_id();
+
+		// Seat change from 1 to 3 on the same product: a real switch, allowed.
+		$this->assertTrue( Subscriptions_Tiers::prevent_switch_to_same_subscription( true, 102, 3 ) );
+	}
+
+	/**
+	 * Name-your-price with quantity > 1: the line total is normalized per unit
+	 * before comparing, so an unchanged per-unit amount is blocked and a changed
+	 * one is allowed.
+	 */
+	public function test_prevent_switch_nyp_compares_per_unit_amount() {
+		$user_id = self::factory()->user->create();
+		wp_set_current_user( $user_id );
+		// 2 seats at $10/unit → $20 line total, monthly.
+		$subscription                    = $this->make_subscription( $user_id, 'active', 102, 20.00, [ '_nyp' => 'yes' ], 0, 2 );
+		$_REQUEST['switch-subscription'] = (string) $subscription->get_id();
+
+		$_REQUEST['price'] = '10'; // Unchanged per-unit amount.
+		$this->assertFalse( Subscriptions_Tiers::prevent_switch_to_same_subscription( true, 102, 2 ) );
+
+		$_REQUEST['price'] = '12'; // Changed per-unit amount.
+		$this->assertTrue( Subscriptions_Tiers::prevent_switch_to_same_subscription( true, 102, 2 ) );
+	}
+
+	/**
+	 * Blocking queues the reader-facing error notice.
+	 */
+	public function test_prevent_switch_records_error_notice() {
+		global $wc_mock_notices;
+		$user_id = self::factory()->user->create();
+		wp_set_current_user( $user_id );
+		$subscription                    = $this->make_subscription( $user_id, 'active', 102 );
+		$_REQUEST['switch-subscription'] = (string) $subscription->get_id();
+
+		$this->assertFalse( Subscriptions_Tiers::prevent_switch_to_same_subscription( true, 102 ) );
+
+		$this->assertCount( 1, $wc_mock_notices );
+		$this->assertSame( 'error', $wc_mock_notices[0]['type'] );
+		$this->assertStringContainsString( 'already subscribed', $wc_mock_notices[0]['notice'] );
+	}
+
+	/**
+	 * The pure decision helper compares amounts in minor units: a one-cent change
+	 * is a real change (binary float noise made abs( 10.01 - 10.00 ) fall under a
+	 * 0.01 epsilon), while a re-submission of the same value in another textual
+	 * form is not.
+	 */
+	public function test_is_same_subscription_switch_one_cent_change() {
+		$this->assertFalse( Subscriptions_Tiers::is_same_subscription_switch( 101, 10.00, 101, 10.01 ) );
+		$this->assertTrue( Subscriptions_Tiers::is_same_subscription_switch( 101, 10.00, 101, (float) '10.00' ) );
+	}
+
+	/**
+	 * The cart-item-data twin of the guard throws to abort the add — the
+	 * mechanism `WC_Cart::add_to_cart()` documents for plugins, and the only one
+	 * that runs on direct `add_to_cart()` calls such as the modal checkout's.
+	 */
+	public function test_cart_item_data_guard_throws_when_blocked() {
+		$user_id = self::factory()->user->create();
+		wp_set_current_user( $user_id );
+		$subscription                    = $this->make_subscription( $user_id, 'active', 102 );
+		$_REQUEST['switch-subscription'] = (string) $subscription->get_id();
+
+		$this->expectException( \Exception::class );
+		$this->expectExceptionMessage( 'already subscribed' );
+		Subscriptions_Tiers::prevent_switch_to_same_subscription_cart_item_data( [], 102 );
+	}
+
+	/**
+	 * The cart-item-data guard passes the data through untouched for a genuine
+	 * switch.
+	 */
+	public function test_cart_item_data_guard_passes_data_through() {
+		$user_id = self::factory()->user->create();
+		wp_set_current_user( $user_id );
+		$subscription                    = $this->make_subscription( $user_id, 'active', 102 );
+		$_REQUEST['switch-subscription'] = (string) $subscription->get_id();
+
+		$cart_item_data = [ 'referer' => 'https://example.test/' ];
+		$this->assertSame( $cart_item_data, Subscriptions_Tiers::prevent_switch_to_same_subscription_cart_item_data( $cart_item_data, 101 ) );
+	}
+
+	/**
+	 * The guard is registered on both add-to-cart filters. The validation filter
+	 * is applied by WooCommerce's request handlers but not by
+	 * `WC_Cart::add_to_cart()` itself, which the modal checkout calls directly —
+	 * the cart-item-data filter is what actually runs on that path, before WCS
+	 * consumes the switch params at priority 10.
+	 */
+	public function test_guard_hook_registrations() {
+		$this->assertSame(
+			10,
+			has_filter( 'woocommerce_add_to_cart_validation', [ Subscriptions_Tiers::class, 'prevent_switch_to_same_subscription' ] )
+		);
+		$this->assertSame(
+			9,
+			has_filter( 'woocommerce_add_cart_item_data', [ Subscriptions_Tiers::class, 'prevent_switch_to_same_subscription_cart_item_data' ] )
+		);
 	}
 }

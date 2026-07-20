@@ -129,6 +129,7 @@ class WC_Customer {
 $orders_database = [];
 $subscriptions_database = [];
 $products_database = [];
+$order_items_database = [];
 
 class WC_Order_Item_Product {
 	private $data = [];
@@ -137,6 +138,12 @@ class WC_Order_Item_Product {
 		$this->data = $data;
 		if ( isset( $data['meta'] ) ) {
 			$this->meta = $data['meta'];
+		}
+		// Mirror wc_order_items: order item IDs are globally unique, and
+		// WC_Order_Factory::get_order_item() resolves them without an order scope.
+		if ( ! empty( $data['id'] ) ) {
+			global $order_items_database;
+			$order_items_database[ (int) $data['id'] ] = $this;
 		}
 	}
 	public function get_name() {
@@ -428,6 +435,14 @@ class WC_Subscription {
 		return $this->data['items'] ?? [];
 	}
 	public function get_item( $item_id, $load_from_db = true ) {
+		// Faithful to WC_Abstract_Order::get_item(): the default delegates to
+		// WC_Order_Factory::get_order_item(), a *global* lookup that resolves an
+		// order item belonging to any order — only $load_from_db = false scopes
+		// the search to this order's own items.
+		if ( $load_from_db ) {
+			global $order_items_database;
+			return $order_items_database[ (int) $item_id ] ?? false;
+		}
 		foreach ( $this->get_items() as $item ) {
 			if ( (int) $item->get_id() === (int) $item_id ) {
 				return $item;
@@ -775,6 +790,18 @@ function wc_get_order( $order_id ) {
 function wc_get_product( $product_id ) {
 	global $products_database;
 	return $products_database[ $product_id ] ?? false;
+}
+/**
+ * Recording mock: notices land on the $wc_mock_notices global so tests can
+ * assert the reader-facing half of code paths gated on
+ * function_exists( 'wc_add_notice' ).
+ */
+function wc_add_notice( $message, $notice_type = 'success', $data = [] ) {
+	global $wc_mock_notices;
+	$wc_mock_notices[] = [
+		'notice' => $message,
+		'type'   => $notice_type,
+	];
 }
 function wcs_get_subscription_status_name( $status ) {
 	return ucfirst( $status );

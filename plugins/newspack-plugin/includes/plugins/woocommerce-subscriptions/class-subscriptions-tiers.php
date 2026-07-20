@@ -38,11 +38,18 @@ class Subscriptions_Tiers {
 		add_filter( 'newspack_popups_assess_has_disabled_popups', [ __CLASS__, 'disable_popups' ] );
 
 		// Server-side backstop preventing a switch to the subscription the reader
-		// already owns (NPPM-2952). The front-end guard is the primary defense. This
-		// fires on every add-to-cart carrying a WCS switch (including WCS's own native
-		// switch flow), but no-ops unless the switch targets a product the current
-		// user's own subscription already holds.
+		// already owns (NPPM-2952). The front-end guard is the primary defense.
+		// Registered on both filters because they cover different entry points:
+		// `woocommerce_add_to_cart_validation` is applied by WooCommerce's request
+		// handlers (form handler, AJAX, Store API, session restore) but NOT by
+		// `WC_Cart::add_to_cart()` itself, which `Modal_Checkout` calls directly —
+		// `woocommerce_add_cart_item_data` runs inside `add_to_cart()` on every
+		// path and covers those direct calls, at priority 9 so the request is
+		// rejected just before WooCommerce Subscriptions consumes the same switch
+		// params (priority 10). Both no-op unless the switch targets a product the
+		// current user's own subscription already holds.
 		add_filter( 'woocommerce_add_to_cart_validation', [ __CLASS__, 'prevent_switch_to_same_subscription' ], 10, 4 );
+		add_filter( 'woocommerce_add_cart_item_data', [ __CLASS__, 'prevent_switch_to_same_subscription_cart_item_data' ], 9, 4 );
 
 		// Unhook Upgrade/Downgrade switch direction text.
 		add_action(
@@ -388,6 +395,12 @@ class Subscriptions_Tiers {
 					if (
 						$subscription->has_product( $product->get_id() )
 						&& $subscription->has_status( WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES )
+						// `wcs_get_users_subscriptions` is filtered (e.g. group
+						// subscriptions inject subs the user is only a member of, owned
+						// by someone else); only a subscription the user owns is their
+						// "current" tier — matching the ownership test the switch
+						// backstop applies.
+						&& (int) $subscription->get_user_id() === (int) $user_id
 					) {
 						return [ $frequency, $product, $subscription ];
 					}
@@ -898,32 +911,89 @@ class Subscriptions_Tiers {
 	 * @return bool Whether the product may be added to the cart.
 	 */
 	public static function prevent_switch_to_same_subscription( $passed, $product_id, $quantity = 1, $variation_id = 0 ) {
-		if ( true !== $passed || ! function_exists( 'wcs_get_subscription' ) ) {
+		if ( true !== $passed ) {
 			return $passed;
+		}
+		$error = self::get_same_subscription_switch_error( $product_id, $quantity, $variation_id );
+		if ( null !== $error ) {
+			if ( function_exists( 'wc_add_notice' ) ) {
+				wc_add_notice( $error, 'error' );
+			}
+			return false;
+		}
+		return $passed;
+	}
+
+	/**
+	 * The same guard, for cart additions that never run the validation filter.
+	 *
+	 * `woocommerce_add_to_cart_validation` is applied by WooCommerce's request
+	 * handlers, not by `WC_Cart::add_to_cart()` itself, so direct calls — notably
+	 * `Modal_Checkout::process_checkout_request()`, the flow the tiers modal
+	 * submits to — bypass it. This filter runs inside `add_to_cart()` on every
+	 * path. Throwing is WooCommerce's documented way for a plugin to abort the
+	 * add: the cart catches the exception, queues its message as an error notice
+	 * and returns false to the caller.
+	 *
+	 * @param array $cart_item_data Cart item data.
+	 * @param int   $product_id     The product being added to the cart.
+	 * @param int   $variation_id   The variation being added, if any.
+	 * @param int   $quantity       The quantity being added.
+	 *
+	 * @throws \Exception When the request is a switch onto the subscription the reader already owns.
+	 *
+	 * @return array Cart item data, unchanged.
+	 */
+	public static function prevent_switch_to_same_subscription_cart_item_data( $cart_item_data, $product_id, $variation_id = 0, $quantity = 1 ) {
+		$error = self::get_same_subscription_switch_error( $product_id, $quantity, $variation_id );
+		if ( null !== $error ) {
+			throw new \Exception( esc_html( $error ) );
+		}
+		return $cart_item_data;
+	}
+
+	/**
+	 * Get the blocking error when an add-to-cart is a switch onto the very
+	 * subscription the current reader already owns.
+	 *
+	 * Null means the request is not such a no-op: not a switch at all, a switch
+	 * on someone else's subscription (left for WCS to authorize), a different
+	 * product, variation or quantity, or a name-your-price amount change.
+	 *
+	 * @param int $product_id   The product being added to the cart.
+	 * @param int $quantity     The quantity being added.
+	 * @param int $variation_id The variation being added, if any.
+	 *
+	 * @return string|null Error message when the switch must be blocked, null otherwise.
+	 */
+	private static function get_same_subscription_switch_error( $product_id, $quantity = 1, $variation_id = 0 ) {
+		if ( ! function_exists( 'wcs_get_subscription' ) ) {
+			return null;
 		}
 
 		// The tiers modal submits the switch as query params, but read from
-		// $_REQUEST so the backstop also covers a crafted POST request.
+		// $_REQUEST so the backstop also covers a crafted POST request. The
+		// logged-in test runs before the subscription is loaded so anonymous
+		// requests never trigger a subscription post load.
 		// phpcs:disable WordPress.Security.NonceVerification.Recommended
-		if ( empty( $_REQUEST['switch-subscription'] ) ) {
-			return $passed;
+		if ( empty( $_REQUEST['switch-subscription'] ) || ! is_user_logged_in() ) {
+			return null;
 		}
 		$subscription = wcs_get_subscription( absint( wp_unslash( $_REQUEST['switch-subscription'] ) ) );
-		if (
-			! $subscription
-			|| ! is_user_logged_in()
-			|| (int) $subscription->get_user_id() !== get_current_user_id()
-		) {
-			return $passed;
+		if ( ! $subscription || (int) $subscription->get_user_id() !== get_current_user_id() ) {
+			return null;
 		}
 		$target_id = $variation_id ? (int) $variation_id : (int) $product_id;
 
 		// Identify the specific line item being switched. Prefer the `item` the modal
-		// (and WCS's own switch flow) submits; fall back to scanning for the target
+		// (and WCS's own switch flow) submits, resolved against the subscription's own
+		// items — order item IDs are globally unique, so the default (unscoped)
+		// `get_item()` lookup would resolve a crafted `item` from an unrelated order
+		// and let a same-tier switch through. Fall back to scanning for the target
 		// product so a crafted request that omits `item` is still covered.
 		$line_item = null;
 		if ( ! empty( $_REQUEST['item'] ) ) {
-			$line_item = $subscription->get_item( absint( wp_unslash( $_REQUEST['item'] ) ) );
+			$line_item = $subscription->get_item( absint( wp_unslash( $_REQUEST['item'] ) ), false );
 		}
 		if ( ! $line_item ) {
 			foreach ( $subscription->get_items() as $item ) {
@@ -938,44 +1008,55 @@ class Subscriptions_Tiers {
 		// No such line item, or the located item holds a different product than the one
 		// being switched to: it's a real switch, not a no-op.
 		if ( ! $line_item ) {
-			return $passed;
+			return null;
 		}
 		$current_id = $line_item->get_variation_id() ? (int) $line_item->get_variation_id() : (int) $line_item->get_product_id();
 		if ( $current_id !== $target_id ) {
-			return $passed;
+			return null;
+		}
+
+		// WCS treats a switch as identical only when product, variation *and* quantity
+		// all match, so a quantity change on the same plan is a legitimate switch.
+		$line_quantity = max( 1, (int) $line_item->get_quantity() );
+		if ( (int) $quantity !== $line_quantity ) {
+			return null;
 		}
 
 		// Only name-your-price tiers have an amount to compare, and it must be read on
-		// the same per-billing-period basis the modal submits: the NYP <input> carries
-		// line_total / interval, not the full-cycle total. A fixed-price tier keeps a
-		// null amount, so re-selecting it is always a no-op — appending a spurious
-		// `price` to a fixed tier can't slip a same-tier switch past this check. The
-		// value is a plain period-decimal string from an <input type="number">, so
-		// (float) is correct; wc_format_decimal() would misread it on comma-decimal stores.
+		// the same basis the modal submits: the NYP <input> carries a per-billing-period
+		// amount, so the line total is divided by the interval and (for parity with the
+		// per-unit price the submitted value becomes) by the quantity. A fixed-price
+		// tier keeps a null amount, so re-selecting it is always a no-op — appending a
+		// spurious `price` to a fixed tier can't slip a same-tier switch past this
+		// check. The value is a plain period-decimal string from an
+		// <input type="number">, so (float) is correct; wc_format_decimal() would
+		// misread it on comma-decimal stores.
 		$target_amount  = null;
 		$current_amount = null;
 		$target_product = wc_get_product( $target_id );
-		if ( $target_product && 'yes' === $target_product->get_meta( '_nyp' ) && isset( $_REQUEST['price'] ) ) {
+		$target_is_nyp  = $target_product && (
+			class_exists( '\WC_Name_Your_Price_Helpers' )
+				// The helper resolves the variation/parent lookup; a bare meta read on a
+				// variation would miss `_nyp` stored on the parent and misclassify the
+				// tier as fixed-price, blocking a genuine amount change.
+				? \WC_Name_Your_Price_Helpers::is_nyp( $target_id )
+				: 'yes' === $target_product->get_meta( '_nyp' )
+		);
+		if ( $target_is_nyp && isset( $_REQUEST['price'] ) ) {
 			$price_param = sanitize_text_field( wp_unslash( $_REQUEST['price'] ) );
 			if ( '' !== $price_param ) {
 				$interval       = max( 1, (int) $target_product->get_meta( '_subscription_period_interval' ) );
 				$target_amount  = (float) $price_param;
-				$current_amount = (float) $line_item->get_total() / $interval;
+				$current_amount = (float) $line_item->get_total() / $interval / $line_quantity;
 			}
 		}
 		// phpcs:enable WordPress.Security.NonceVerification.Recommended
 
 		if ( self::is_same_subscription_switch( $current_id, $current_amount, $target_id, $target_amount ) ) {
-			if ( function_exists( 'wc_add_notice' ) ) {
-				wc_add_notice(
-					__( 'You’re already subscribed to this option. Choose a different one to change your subscription.', 'newspack-plugin' ),
-					'error'
-				);
-			}
-			return false;
+			return __( 'You’re already subscribed to this option. Choose a different one to change your subscription.', 'newspack-plugin' );
 		}
 
-		return $passed;
+		return null;
 	}
 
 	/**
@@ -1003,7 +1084,12 @@ class Subscriptions_Tiers {
 		if ( null === $current_amount ) {
 			return false;
 		}
-		return abs( (float) $target_amount - (float) $current_amount ) < 0.01;
+		// Compare in minor units so binary float noise can't misclassify a smallest-step
+		// change (abs( 10.01 - 10.00 ) is 0.00999… in PHP, which an epsilon of 0.01
+		// classifies as unchanged), sized by the store's price decimals so zero- and
+		// three-decimal currencies keep a correct smallest step.
+		$factor = pow( 10, function_exists( 'wc_get_price_decimals' ) ? wc_get_price_decimals() : 2 );
+		return (int) round( (float) $target_amount * $factor ) === (int) round( (float) $current_amount * $factor );
 	}
 
 	/**

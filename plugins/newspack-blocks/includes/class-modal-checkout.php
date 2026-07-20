@@ -436,7 +436,7 @@ final class Modal_Checkout {
 		$cart_item_data = apply_filters( 'newspack_blocks_modal_checkout_cart_item_data', $cart_item_data );
 
 		\WC()->cart->empty_cart();
-		\WC()->cart->add_to_cart( $product_id, 1, 0, [], $cart_item_data );
+		$cart_item_key = \WC()->cart->add_to_cart( $product_id, 1, 0, [], $cart_item_data );
 
 		// Set checkout registration flag if user is logged not logged in.
 		if ( ! is_user_logged_in() ) {
@@ -484,6 +484,13 @@ final class Modal_Checkout {
 		\do_action( 'newspack_blocks_checkout_button_modal', $checkout_button_metadata );
 
 		$checkout_url = apply_filters( 'newspack_blocks_checkout_url', $checkout_url );
+
+		// If the product could not be added (e.g. rejected by an add-to-cart guard),
+		// the cart is empty and the checkout would render blank: point the modal at
+		// its error screen, which prints the queued error notice and a back button.
+		if ( ! $cart_item_key ) {
+			$checkout_url = add_query_arg( 'modal_checkout', 1, \wc_get_cart_url() );
+		}
 
 		if ( defined( 'DOING_AJAX' ) ) {
 			echo wp_json_encode( [ 'url' => $checkout_url ] );
@@ -672,7 +679,23 @@ final class Modal_Checkout {
 		$coupons = \WC()->cart->get_applied_coupons();
 
 		\WC()->cart->empty_cart();
-		\WC()->cart->add_to_cart( $product_id, 1, 0, [], $cart_item_data );
+		$cart_item_key = \WC()->cart->add_to_cart( $product_id, 1, 0, [], $cart_item_data );
+
+		// A rejected add (e.g. an add-to-cart guard) must not report success: surface
+		// the error notice the cart queued for it instead of a thank-you message.
+		if ( ! $cart_item_key ) {
+			$error_notices = \wc_get_notices( 'error' );
+			\wc_clear_notices();
+			wp_send_json_error(
+				[
+					'message' => ! empty( $error_notices[0]['notice'] )
+						? $error_notices[0]['notice']
+						: __( 'This product could not be added to the cart.', 'newspack-blocks' ),
+				]
+			);
+
+			wp_die();
+		}
 
 		if ( ! empty( $coupons ) ) {
 			foreach ( $coupons as $coupon ) {
