@@ -76,7 +76,11 @@ jobs:
             exit 1
           fi
           # grep: 0 = match, 1 = no match, >=2 = error. Only 1 means "no release".
-          grep -q 'The next release version is' msr-dryrun.log
+          # Case-insensitive: semantic-release logs "The next release version is
+          # X" for an existing package, but "There is no previous release, the
+          # next release version is X" for a package's first-ever release --
+          # missing the latter would silently skip that release.
+          grep -qi 'the next release version is' msr-dryrun.log
           grep_status=$?
           if [ "$grep_status" -eq 0 ]; then
             echo "release_needed=true" >> "$GITHUB_OUTPUT"
