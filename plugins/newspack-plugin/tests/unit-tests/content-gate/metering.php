@@ -631,6 +631,9 @@ class Test_Metering extends \WP_UnitTestCase {
 						'period'  => 'month',
 					],
 				],
+				// Load-bearing: paid access must stay active with metering ON, since it is
+				// the allowance the pre-fix code wrongly handed to anonymous readers.
+				// Disabling either would make this test pass with the bug present.
 				'custom_access' => [
 					'active'   => true,
 					'metering' => [

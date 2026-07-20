@@ -216,6 +216,10 @@ class Metering {
 	 * all. Only when the registration wall is inactive do anonymous readers fall
 	 * through to the paywall, and with it the `custom_access` metering settings.
 	 *
+	 * Legacy Woo Memberships gates are exempt: they have no `registration` meta at all
+	 * and read both meters from the shared `metering` meta, so they short-circuit past
+	 * the `active` check.
+	 *
 	 * @param int $gate_id Gate ID.
 	 *
 	 * @return array Metering settings.
