@@ -2060,8 +2060,16 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 						]
 					);
 					if ( \is_wp_error( $field_res ) ) {
-						/** A field that can't be registered must never block the signup — sync the contact without it. */
-						Newspack_Newsletters_Logger::log( 'Error creating ActiveCampaign field "' . $field_title . '": ' . $field_res->get_error_message() );
+						/**
+						 * A field that can't be registered must never block the signup — sync the
+						 * contact without it.
+						 *
+						 * Logged with error_log() rather than Newspack_Newsletters_Logger, which
+						 * no-ops unless NEWSPACK_LOG_LEVEL is defined — undefined on a default
+						 * production site. The dropped field carries Reader Activation data that
+						 * segments and automations key on, so it must stay diagnosable.
+						 */
+						error_log( '[NEWSPACK-NEWSLETTERS]: Error creating ActiveCampaign field "' . $field_title . '": ' . $field_res->get_error_message() ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
 						continue;
 					}
 					/** Set list relation. */
