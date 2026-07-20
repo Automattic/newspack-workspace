@@ -337,16 +337,8 @@ class Group_Subscription_Settings {
 			} elseif ( is_int( self::DEFAULT_SETTINGS[ $key ] ) ) {
 				$value = absint( $value );
 			}
-<<<<<<< HEAD
-			// A group must have room for at least one member besides the owner, so floor
-			// a positive limit to the 2-seat minimum (owner + 1). Unlimited (0) is left
-			// untouched. See Group_Subscription::get_member_seat_limit().
-			if ( 'limit' === $key && $value > 0 ) {
-				$value = max( 2, $value );
-=======
 			if ( 'limit' === $key ) {
 				$value = self::normalize_limit( $value );
->>>>>>> origin/main
 			}
 			if ( $value !== $previous_value ) {
 				$subscription->update_meta_data( self::GROUP_SUBSCRIPTION_META_PREFIX . $key, $value );

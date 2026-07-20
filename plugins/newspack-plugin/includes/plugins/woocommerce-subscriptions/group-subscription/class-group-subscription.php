@@ -253,15 +253,11 @@ class Group_Subscription {
 		if ( $user_id === (int) $subscription->get_user_id() ) {
 			return new \WP_Error( 'newspack_group_subscription_add_manager', __( 'The owner already manages this subscription.', 'newspack-plugin' ), [ 'status' => 400 ] );
 		}
-<<<<<<< HEAD
-		if ( ! self::user_is_member( $user_id, $subscription ) ) {
-=======
 		// Read membership from the data layer rather than via user_is_member(), which
 		// routes through is_group_subscription() and its My Account side effect. Same
 		// reasoning as can_actor_remove_member(): a role decision must not depend on
 		// the context it is made from.
 		if ( ! in_array( $user_id, array_map( 'intval', self::get_members( $subscription ) ), true ) ) {
->>>>>>> origin/main
 			return new \WP_Error( 'newspack_group_subscription_add_manager', __( 'Only an existing member can be made a manager.', 'newspack-plugin' ), [ 'status' => 400 ] );
 		}
 		if ( ! in_array( $user_id, self::get_managers( $subscription ), true ) ) {
