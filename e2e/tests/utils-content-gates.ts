@@ -93,26 +93,11 @@ const clickHeaderSave = async (page: Page) => {
   }
 };
 
-// Save the gate being edited and leave it live (Active). Two plugin flows
-// exist and the target site may run either, so detect which one Save triggers:
-//   - Pre-save checks on: Save opens a confirmation panel ("Are you ready to
-//     save?") where the status is chosen. New gates default to Inactive there,
-//     so pick Active explicitly.
-//   - Pre-save checks off / older plugin: Save persists immediately and new
-//     gates default to Active, so there is no panel to drive.
-// Either way the wizard routes back to the gate list once the gate is saved.
+// Save the gate being edited and return to the gate list. New gates default to
+// Active, so Save persists immediately and the wizard routes back to the list --
+// there is no status to choose.
 export const saveGateAsActive = async (page: Page) => {
   await clickHeaderSave(page);
-  const saveDialog = page.getByRole("dialog");
-  const saveConfirmation = saveDialog.getByText("Are you ready to save?");
-  const hasSavePanel = await saveConfirmation
-    .waitFor({ state: "visible", timeout: 5000 })
-    .then(() => true)
-    .catch(() => false);
-  if (hasSavePanel) {
-    await saveDialog.getByRole("radio", { name: "Active", exact: true }).check();
-    await saveDialog.getByRole("button", { name: "Save", exact: true }).click();
-  }
   await page.waitForURL(/#\/content-gates/);
 };
 
