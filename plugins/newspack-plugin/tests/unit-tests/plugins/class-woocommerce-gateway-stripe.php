@@ -5,9 +5,11 @@
  * @package Newspack\Tests
  */
 
+use Newspack\Donations;
 use Newspack\WooCommerce_Gateway_Stripe;
 
 require_once __DIR__ . '/../../mocks/wc-mocks.php';
+require_once __DIR__ . '/../../mocks/newspack-blocks-mocks.php';
 
 /**
  * Tests WooCommerce_Gateway_Stripe dual-gateway guard methods.
@@ -24,6 +26,17 @@ class Newspack_Test_WooCommerce_Gateway_Stripe extends WP_UnitTestCase {
 		global $orders_database, $subscriptions_database;
 		$orders_database        = [];
 		$subscriptions_database = [];
+		WC_Stripe_Helper::reset_testing_settings();
+		unset( $_REQUEST['modal_checkout'] );
+		delete_option( Donations::DONATION_BILLING_FIELDS_OPTION );
+	}
+
+	/**
+	 * Clean up request data.
+	 */
+	public function tear_down() {
+		unset( $_REQUEST['modal_checkout'] );
+		parent::tear_down();
 	}
 
 	// -------------------------------------------------------------------------
@@ -422,5 +435,117 @@ class Newspack_Test_WooCommerce_Gateway_Stripe extends WP_UnitTestCase {
 				"_stripe_customer_id should not be cleared from renewal order for {$gateway}."
 			);
 		}
+	}
+
+	// -------------------------------------------------------------------------
+	// Part 4: Adaptive Pricing guard
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Adaptive Pricing should be disabled when the configured billing fields
+	 * omit billing_country.
+	 */
+	public function test_adaptive_pricing_disabled_when_country_field_omitted() {
+		update_option( Donations::DONATION_BILLING_FIELDS_OPTION, [ 'billing_first_name', 'billing_last_name', 'billing_email' ] );
+		WC_Stripe_Helper::$settings = [ 'adaptive_pricing' => 'yes' ];
+
+		WooCommerce_Gateway_Stripe::maybe_disable_adaptive_pricing_without_country_field();
+
+		$this->assertSame(
+			'no',
+			WC_Stripe_Helper::$settings['adaptive_pricing'],
+			'Adaptive Pricing should be disabled when billing fields omit billing_country.'
+		);
+	}
+
+	/**
+	 * Adaptive Pricing should be left alone when no custom billing fields are
+	 * configured (the default WooCommerce field set includes billing_country).
+	 */
+	public function test_adaptive_pricing_untouched_for_default_billing_fields() {
+		WC_Stripe_Helper::$settings = [ 'adaptive_pricing' => 'yes' ];
+
+		WooCommerce_Gateway_Stripe::maybe_disable_adaptive_pricing_without_country_field();
+
+		$this->assertSame(
+			'yes',
+			WC_Stripe_Helper::$settings['adaptive_pricing'],
+			'Adaptive Pricing should be left enabled when billing fields are the default set.'
+		);
+		$this->assertSame(
+			0,
+			WC_Stripe_Helper::$update_calls,
+			'Settings should not be written at all when billing fields are the default set.'
+		);
+	}
+
+	/**
+	 * Adaptive Pricing should be left alone when the configured billing fields
+	 * include billing_country.
+	 */
+	public function test_adaptive_pricing_untouched_when_country_field_present() {
+		update_option( Donations::DONATION_BILLING_FIELDS_OPTION, [ 'billing_first_name', 'billing_country', 'billing_email' ] );
+		WC_Stripe_Helper::$settings = [ 'adaptive_pricing' => 'yes' ];
+
+		WooCommerce_Gateway_Stripe::maybe_disable_adaptive_pricing_without_country_field();
+
+		$this->assertSame(
+			'yes',
+			WC_Stripe_Helper::$settings['adaptive_pricing'],
+			'Adaptive Pricing should be left enabled when billing fields include billing_country.'
+		);
+		$this->assertSame(
+			0,
+			WC_Stripe_Helper::$update_calls,
+			'Settings should not be written at all when billing fields include billing_country.'
+		);
+	}
+
+	/**
+	 * No settings write should happen when Adaptive Pricing is already off,
+	 * or when the setting is absent entirely.
+	 */
+	public function test_adaptive_pricing_noop_when_already_disabled() {
+		update_option( Donations::DONATION_BILLING_FIELDS_OPTION, [ 'billing_first_name', 'billing_email' ] );
+
+		WC_Stripe_Helper::$settings = [ 'adaptive_pricing' => 'no' ];
+		WooCommerce_Gateway_Stripe::maybe_disable_adaptive_pricing_without_country_field();
+		$this->assertSame(
+			0,
+			WC_Stripe_Helper::$update_calls,
+			'Settings should not be written when Adaptive Pricing is already disabled.'
+		);
+
+		WC_Stripe_Helper::$settings = [];
+		WooCommerce_Gateway_Stripe::maybe_disable_adaptive_pricing_without_country_field();
+		$this->assertSame(
+			0,
+			WC_Stripe_Helper::$update_calls,
+			'Settings should not be written when the Adaptive Pricing setting is absent.'
+		);
+	}
+
+	/**
+	 * The wp_loaded wrapper should only act on modal checkout requests.
+	 */
+	public function test_adaptive_pricing_wrapper_only_acts_on_modal_checkout_requests() {
+		update_option( Donations::DONATION_BILLING_FIELDS_OPTION, [ 'billing_first_name', 'billing_email' ] );
+		WC_Stripe_Helper::$settings = [ 'adaptive_pricing' => 'yes' ];
+
+		unset( $_REQUEST['modal_checkout'] );
+		WooCommerce_Gateway_Stripe::maybe_disable_adaptive_pricing_on_modal_checkout_request();
+		$this->assertSame(
+			'yes',
+			WC_Stripe_Helper::$settings['adaptive_pricing'],
+			'The wrapper should not act outside modal checkout requests.'
+		);
+
+		$_REQUEST['modal_checkout'] = '1';
+		WooCommerce_Gateway_Stripe::maybe_disable_adaptive_pricing_on_modal_checkout_request();
+		$this->assertSame(
+			'no',
+			WC_Stripe_Helper::$settings['adaptive_pricing'],
+			'The wrapper should disable Adaptive Pricing on modal checkout requests.'
+		);
 	}
 }

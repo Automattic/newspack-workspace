@@ -1,6 +1,6 @@
 {
 	"name": "newspack-newsletters",
-	"version": "3.35.2",
+	"version": "3.37.0",
 	"description": "",
 	"repository": {
 		"type": "git",
@@ -49,6 +49,7 @@
 		"qs": "^6.15.2"
 	},
 	"devDependencies": {
+		"@wordpress/dataviews": "^16.0.0",
 		"lodash": "^4.17.0",
 		"newspack-scripts": "workspace:*"
 	}

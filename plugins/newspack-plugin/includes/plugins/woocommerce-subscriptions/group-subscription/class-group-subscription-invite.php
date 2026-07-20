@@ -425,11 +425,9 @@ class Group_Subscription_Invite {
 				}
 			)
 		);
-		$subscription_settings = Group_Subscription_Settings::get_subscription_settings( $subscription );
-		if ( $subscription_settings['limit'] > 0 ) {
-			if ( $pending_invites_count + count( Group_Subscription::get_members( $subscription ) ) >= $subscription_settings['limit'] ) {
-				return new \WP_Error( 'newspack_group_subscription_invite_limit_reached', __( 'You have reached the group member limit for this subscription. Please remove some members or cancel pending invitations before inviting more group members.', 'newspack-plugin' ) );
-			}
+		$seat_limit = Group_Subscription::get_member_seat_limit( $subscription );
+		if ( null !== $seat_limit && $pending_invites_count + count( Group_Subscription::get_members( $subscription ) ) >= $seat_limit ) {
+			return new \WP_Error( 'newspack_group_subscription_invite_limit_reached', __( 'You have reached the group member limit for this subscription. Please remove some members or cancel pending invitations before inviting more group members.', 'newspack-plugin' ) );
 		}
 
 		// Add the new invite.
@@ -810,11 +808,11 @@ class Group_Subscription_Invite {
 		}
 
 		// Member-limit check.
-		$settings             = Group_Subscription_Settings::get_subscription_settings( $subscription );
+		$seat_limit           = Group_Subscription::get_member_seat_limit( $subscription );
 		$member_count         = count( Group_Subscription::get_members( $subscription ) );
 		$pending_invite_count = count( self::get_invites( $subscription, false ) );
 
-		if ( $settings['limit'] > 0 && ( $member_count + $pending_invite_count ) >= $settings['limit'] ) {
+		if ( null !== $seat_limit && ( $member_count + $pending_invite_count ) >= $seat_limit ) {
 			self::redirect_with_result( 'link_full', $error_target_url );
 			return;
 		}
@@ -863,49 +861,26 @@ class Group_Subscription_Invite {
 		}
 
 		$messages = [
-			'link_invalid'              => [
-				'message' => __( 'This link is no longer valid. Please contact the group manager.', 'newspack-plugin' ),
-				'type'    => 'error',
-			],
-			'link_full'                 => [
-				'message' => __( 'This group already has the maximum number of members. Please contact the group manager.', 'newspack-plugin' ),
-				'type'    => 'error',
-			],
-			'link_failed'               => [
-				'message' => __( "We couldn't add you to the group. Please contact the group manager.", 'newspack-plugin' ),
-				'type'    => 'error',
-			],
-			'login_needed'              => [
-				'message' => __( 'Please log in or register an account to join the group.', 'newspack-plugin' ),
-				'type'    => 'notice',
-			],
-			'error_invalid_link'        => [
-				'message' => __( 'Invalid invitation link.', 'newspack-plugin' ),
-				'type'    => 'error',
-			],
-			'error_email_mismatch'      => [
-				'message' => __( 'This invitation is for a different email address.', 'newspack-plugin' ),
-				'type'    => 'error',
-			],
-			'error_invite_invalid'      => [
-				'message' => __( 'Invalid or expired invitation.', 'newspack-plugin' ),
-				'type'    => 'error',
-			],
-			'error_registration_failed' => [
-				'message' => __( 'Could not create your account. Please try again.', 'newspack-plugin' ),
-				'type'    => 'error',
-			],
+			'link_invalid'              => __( 'This link is no longer valid. Please contact the group manager.', 'newspack-plugin' ),
+			'link_full'                 => __( 'This group already has the maximum number of members. Please contact the group manager.', 'newspack-plugin' ),
+			'link_failed'               => __( "We couldn't add you to the group. Please contact the group manager.", 'newspack-plugin' ),
+			'login_needed'              => __( 'Please log in or register an account to join the group.', 'newspack-plugin' ),
+			'error_invalid_link'        => __( 'Invalid invitation link.', 'newspack-plugin' ),
+			'error_email_mismatch'      => __( 'This invitation is for a different email address.', 'newspack-plugin' ),
+			'error_invite_invalid'      => __( 'Invalid or expired invitation.', 'newspack-plugin' ),
+			'error_registration_failed' => __( 'Could not create your account. Please try again.', 'newspack-plugin' ),
 		];
 
 		if ( 'success' === $result ) {
 			$message = __( 'You have successfully joined the group!', 'newspack-plugin' );
 			$type    = 'success';
 		} else {
-			$message = ! empty( $messages[ $result ]['message'] ) ? $messages[ $result ]['message'] : __( 'There was a problem with your invitation.', 'newspack-plugin' );
-			$type = ! empty( $messages[ $result ]['type'] ) ? $messages[ $result ]['type'] : 'error';
+			$message = ! empty( $messages[ $result ] ) ? $messages[ $result ] : __( 'There was a problem with your invitation.', 'newspack-plugin' );
+			// 'login_needed' is an informational call to action, not an error, so it announces politely.
+			$type = 'login_needed' === $result ? 'success' : 'error';
 		}
 
-		Newspack_UI::add_notice( $message, $type );
+		Newspack_UI::add_notice( $message, [ 'type' => $type ] );
 	}
 
 	/**

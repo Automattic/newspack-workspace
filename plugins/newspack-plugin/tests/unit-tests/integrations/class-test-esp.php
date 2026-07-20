@@ -40,6 +40,7 @@ class Test_ESP extends \WP_UnitTestCase {
 	 */
 	public function tear_down() {
 		\Newspack_Newsletters_Contacts::reset_calls();
+		\Newspack_Newsletters::$is_service_provider_configured = true;
 		remove_all_filters( 'newspack_ras_metadata_keys' );
 		remove_all_filters( 'newspack_ras_metadata_prefix' );
 		\delete_option( 'newspack_integration_incoming_fields_esp' );
@@ -441,6 +442,59 @@ class Test_ESP extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Delete_contact() should delegate to Newspack_Newsletters_Contacts::delete()
+	 * once can_sync() passes (ESP integration enabled + master list id present).
+	 */
+	public function test_esp_delete_contact_calls_newsletters_delete() {
+		\Newspack_Newsletters_Contacts::reset_calls();
+		\update_option( \Newspack\Reader_Activation\Integrations::OPTION_NAME, [ 'esp' ] );
+		\update_option( 'newspack_integration_settings_esp_mailchimp_audience_id', 'list-abc' );
+
+		$esp    = new \Newspack\Reader_Activation\Integrations\ESP();
+		$result = $esp->delete_contact( 'reader@example.com' );
+
+		$this->assertTrue( $result );
+		$this->assertCount( 1, \Newspack_Newsletters_Contacts::$delete_calls );
+		$this->assertSame( 'reader@example.com', \Newspack_Newsletters_Contacts::$delete_calls[0]['email'] );
+
+		\delete_option( \Newspack\Reader_Activation\Integrations::OPTION_NAME );
+		\delete_option( 'newspack_integration_settings_esp_mailchimp_audience_id' );
+	}
+
+	/**
+	 * The legacy sync_esp_delete field should no longer be declared by the ESP
+	 * integration — replaced by the base-class sync_account_deletion field.
+	 */
+	public function test_esp_register_settings_does_not_include_sync_esp_delete() {
+		$esp  = new \Newspack\Reader_Activation\Integrations\ESP();
+		$keys = array_column( $esp->register_settings_fields(), 'key' );
+		$this->assertNotContains( 'sync_esp_delete', $keys );
+	}
+
+	/**
+	 * Regression: ESP's get_settings_config() filters the parent's full settings
+	 * list down to a curated allow-list. The first version of the deletion-sync
+	 * patch only allowed the explicit provider/metadata fields, dropping the
+	 * base-class auto-appended account_deletion fields before they reached the
+	 * REST response — making them invisible in the configure UI.
+	 *
+	 * Verifies via Reflection that the same auto_keys allow-list ESP uses
+	 * internally includes both new field keys.
+	 */
+	public function test_esp_get_settings_config_filter_includes_account_deletion_keys() {
+		$esp        = new \Newspack\Reader_Activation\Integrations\ESP();
+		$base_keys  = array_column( $esp->get_settings_fields(), 'key' );
+		$auto_keys  = array_merge(
+			array_column( $esp->get_account_deletion_fields(), 'key' ),
+			array_column( $esp->get_metadata_fields(), 'key' )
+		);
+		$this->assertContains( 'sync_account_deletion', $base_keys, 'Account-deletion field declared on the integration.' );
+		$this->assertContains( 'account_deletion_handling', $base_keys, 'Handling-mode field declared on the integration.' );
+		$this->assertContains( 'sync_account_deletion', $auto_keys, 'Filter must keep the deletion checkbox.' );
+		$this->assertContains( 'account_deletion_handling', $auto_keys, 'Filter must keep the handling-mode select.' );
+	}
+
+	/**
 	 * Entries without a usable string `key` are skipped rather than producing malformed fields.
 	 */
 	public function test_get_available_incoming_fields_skips_entries_without_usable_key() {
@@ -513,5 +567,36 @@ class Test_ESP extends \WP_UnitTestCase {
 		$this->assertCount( 1, $required );
 		$this->assertFalse( $required[0]['is_active'] );
 		$this->assertFalse( $required[0]['is_installed'] );
+	}
+
+	/**
+	 * Only a configured provider (stored config) — not the master list — makes
+	 * is_connected() true, which is what separates it from is_set_up(). Drives the
+	 * Connect-vs-Enable branch on the Integrations card.
+	 */
+	public function test_is_connected_reflects_provider_configuration() {
+		$esp = new ESP();
+
+		\Newspack_Newsletters::$is_service_provider_configured = true;
+		$this->assertTrue( $esp->is_connected(), 'Connected when a newsletters provider is configured.' );
+
+		\Newspack_Newsletters::$is_service_provider_configured = false;
+		$this->assertFalse( $esp->is_connected(), 'Not connected when no provider is configured.' );
+	}
+
+	/**
+	 * Requires a stored master list on top of a connected provider, so a
+	 * connected-but-audience-less ESP is connected yet not set up — exactly the
+	 * state the Enable modal exists to resolve.
+	 */
+	public function test_is_set_up_requires_master_list_on_top_of_connection() {
+		\Newspack_Newsletters::$is_service_provider_configured = true;
+
+		$without_list = new ESP();
+		$this->assertTrue( $without_list->is_connected(), 'Sanity: provider is connected.' );
+		$this->assertFalse( $without_list->is_set_up(), 'Connected but no master list is not set up.' );
+
+		$with_list = $this->make_esp_with_master_list( 'list-123' );
+		$this->assertTrue( $with_list->is_set_up(), 'Connected with a master list is set up.' );
 	}
 }

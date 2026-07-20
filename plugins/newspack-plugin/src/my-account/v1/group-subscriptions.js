@@ -145,87 +145,88 @@ domReady( function () {
 		return elapsed < MIN_LOADING_MS ? new Promise( resolve => setTimeout( resolve, MIN_LOADING_MS - elapsed ) ) : Promise.resolve();
 	};
 
-	const generateLink = async e => {
-		const el = e.currentTarget;
-		el.classList.add( 'newspack-ui__button--loading' );
-		el.setAttribute( 'aria-busy', 'true' );
-		el.setAttribute( 'disabled', '' );
-		const errorText = e.currentTarget.getAttribute( 'data-error-text' );
-		const loadingStart = now();
+	// Run an async action while a button shows its loading state (spinner + disabled + aria-busy),
+	// always restoring the button afterwards. The action owns its own waitForMinLoading() timing.
+	const withLoadingButton = async ( button, action ) => {
+		button.classList.add( 'newspack-ui__button--loading' );
+		button.setAttribute( 'aria-busy', 'true' );
+		button.setAttribute( 'disabled', '' );
 		try {
-			const response = await fetch( restUrl, {
-				method: 'POST',
-				credentials: 'same-origin',
-				headers: {
-					'Content-Type': 'application/json',
-					'X-WP-Nonce': nonce,
-				},
-				body: JSON.stringify( { subscription_id: subId } ),
-			} );
-			const data = await response.json();
-			await waitForMinLoading( loadingStart );
-			if ( ! response.ok || ! data || ! data.url ) {
-				const message = ( data && data.message ) || errorText;
-				showSnackbar( message, 'error' );
-				return;
-			}
-			const isRegenerate = !! content.getAttribute( 'data-invite-link' );
-			content.setAttribute( 'data-invite-link', data.url );
-			afterInviteLink( true );
-			if ( await copyToClipboard( data.url ) ) {
-				const message = isRegenerate
-					? newspackMyAccountV1?.labels?.invite_link_regenerated || 'New invite link copied. The old one no longer works.'
-					: newspackMyAccountV1?.labels?.invite_link_copied || 'Invite link copied.';
-				showSnackbar( message );
-			} else {
-				showSnackbar( copyFailedMessage( data.url ), 'error' );
-			}
-		} catch ( error ) {
-			await waitForMinLoading( loadingStart );
-			showSnackbar( errorText, 'error' );
+			return await action();
 		} finally {
-			el.classList.remove( 'newspack-ui__button--loading' );
-			el.removeAttribute( 'aria-busy' );
-			el.removeAttribute( 'disabled' );
+			button.classList.remove( 'newspack-ui__button--loading' );
+			button.removeAttribute( 'aria-busy' );
+			button.removeAttribute( 'disabled' );
 		}
 	};
 
-	const deleteLink = async e => {
-		const el = e.currentTarget;
-		el.classList.add( 'newspack-ui__button--loading' );
-		el.setAttribute( 'aria-busy', 'true' );
-		el.setAttribute( 'disabled', '' );
-		const errorText = e.currentTarget.getAttribute( 'data-error-text' );
-		const loadingStart = now();
-		try {
-			const response = await fetch( restUrl, {
-				method: 'DELETE',
-				credentials: 'same-origin',
-				headers: {
-					'Content-Type': 'application/json',
-					'X-WP-Nonce': nonce,
-				},
-				body: JSON.stringify( { subscription_id: subId } ),
-			} );
-			const data = await response.json();
-			await waitForMinLoading( loadingStart );
-			if ( ! response.ok ) {
-				const message = ( data && data.message ) || errorText;
-				showSnackbar( message, 'error' );
-				return;
+	const generateLink = e =>
+		withLoadingButton( e.currentTarget, async () => {
+			const errorText = e.currentTarget.getAttribute( 'data-error-text' );
+			const loadingStart = now();
+			try {
+				const response = await fetch( restUrl, {
+					method: 'POST',
+					credentials: 'same-origin',
+					headers: {
+						'Content-Type': 'application/json',
+						'X-WP-Nonce': nonce,
+					},
+					body: JSON.stringify( { subscription_id: subId } ),
+				} );
+				const data = await response.json();
+				await waitForMinLoading( loadingStart );
+				if ( ! response.ok || ! data || ! data.url ) {
+					const message = ( data && data.message ) || errorText;
+					showSnackbar( message, 'error' );
+					return;
+				}
+				const isRegenerate = !! content.getAttribute( 'data-invite-link' );
+				content.setAttribute( 'data-invite-link', data.url );
+				afterInviteLink( true );
+				if ( await copyToClipboard( data.url ) ) {
+					const message = isRegenerate
+						? newspackMyAccountV1?.labels?.invite_link_regenerated || 'New invite link copied. The old one no longer works.'
+						: newspackMyAccountV1?.labels?.invite_link_copied || 'Invite link copied.';
+					showSnackbar( message );
+				} else {
+					showSnackbar( copyFailedMessage( data.url ), 'error' );
+				}
+			} catch ( error ) {
+				await waitForMinLoading( loadingStart );
+				showSnackbar( errorText, 'error' );
 			}
-			showSnackbar( newspackMyAccountV1?.labels?.invite_link_disabled || 'Invite link disabled. You can create a new link any time.' );
-			content.removeAttribute( 'data-invite-link' );
-			afterInviteLink( false );
-		} catch ( error ) {
-			await waitForMinLoading( loadingStart );
-			showSnackbar( errorText, 'error' );
-		} finally {
-			el.classList.remove( 'newspack-ui__button--loading' );
-			el.removeAttribute( 'aria-busy' );
-			el.removeAttribute( 'disabled' );
-		}
-	};
+		} );
+
+	const deleteLink = e =>
+		withLoadingButton( e.currentTarget, async () => {
+			const errorText = e.currentTarget.getAttribute( 'data-error-text' );
+			const loadingStart = now();
+			try {
+				const response = await fetch( restUrl, {
+					method: 'DELETE',
+					credentials: 'same-origin',
+					headers: {
+						'Content-Type': 'application/json',
+						'X-WP-Nonce': nonce,
+					},
+					body: JSON.stringify( { subscription_id: subId } ),
+				} );
+				const data = await response.json();
+				await waitForMinLoading( loadingStart );
+				if ( ! response.ok ) {
+					const message = ( data && data.message ) || errorText;
+					showSnackbar( message, 'error' );
+					return;
+				}
+				showSnackbar( newspackMyAccountV1?.labels?.invite_link_disabled || 'Invite link disabled. You can create a new link any time.' );
+				content.removeAttribute( 'data-invite-link' );
+				afterInviteLink( false );
+			} catch ( error ) {
+				await waitForMinLoading( loadingStart );
+				showSnackbar( errorText, 'error' );
+			}
+		} );
 
 	copyButtons.forEach( button => {
 		button.addEventListener( 'click', async e => {
@@ -254,4 +255,71 @@ domReady( function () {
 			deleteLink( e );
 		} );
 	} );
+
+	// Rename group: the pencil button in the header opens a modal; saving POSTs the new name and
+	// updates the header (and any other) group-name element in place.
+	const renameModal = document.getElementById( 'newspack-my-account__group_subscription--rename' );
+	const renameForm = renameModal?.querySelector( '.newspack-my-account__group--rename-form' );
+	const renameInput = renameModal?.querySelector( '.newspack-my-account__group--rename-input' );
+	const renameTriggers = [ ...document.querySelectorAll( '.newspack-my-account__group--rename' ) ];
+	const groupNameEls = [ ...document.querySelectorAll( '[data-group-name]' ) ];
+	if ( renameModal && renameForm && renameInput ) {
+		// The rename request targets the subscription id carried on the form itself (always
+		// rendered server-side), rather than reusing the invite panel's id — a missing
+		// attribute then surfaces as a failed request instead of silently renaming the wrong
+		// group. The input is seeded with the stored custom name (empty when the group uses an
+		// inherited fallback), tracked here so it survives a rename without a page reload; the
+		// resolved fallback shows as the input's placeholder.
+		const renameSubId = parseInt( renameForm.getAttribute( 'data-subscription-id' ), 10 );
+		let customName = renameInput.value;
+		renameTriggers.forEach( trigger => {
+			trigger.addEventListener( 'click', event => {
+				event.preventDefault();
+				renameInput.value = customName;
+				renameModal.setAttribute( 'data-state', 'open' );
+				window.requestAnimationFrame( () => {
+					renameInput.focus();
+					renameInput.select();
+				} );
+			} );
+		} );
+
+		renameForm.addEventListener( 'submit', event => {
+			event.preventDefault();
+			const saveButton = renameForm.querySelector( '.newspack-my-account__group--rename-save' );
+			const errorText = renameForm.getAttribute( 'data-error-text' );
+			const name = renameInput.value.trim();
+			return withLoadingButton( saveButton, async () => {
+				const loadingStart = now();
+				try {
+					const response = await fetch( `${ baseUrl }${ namespace }/name`, {
+						method: 'POST',
+						credentials: 'same-origin',
+						headers: {
+							'Content-Type': 'application/json',
+							'X-WP-Nonce': nonce,
+						},
+						body: JSON.stringify( { subscription_id: renameSubId, name } ),
+					} );
+					const data = await response.json();
+					await waitForMinLoading( loadingStart );
+					if ( ! response.ok || ! data || typeof data.name !== 'string' ) {
+						showSnackbar( ( data && data.message ) || errorText, 'error' );
+						return;
+					}
+					// Track what the user actually typed (empty when cleared) for the next open,
+					// while the header shows the resolved name (which may be the inherited fallback).
+					customName = name;
+					groupNameEls.forEach( el => {
+						el.textContent = data.name;
+					} );
+					renameModal.setAttribute( 'data-state', 'closed' );
+					showSnackbar( newspackMyAccountV1?.labels?.group_name_updated || 'Name updated.' );
+				} catch ( error ) {
+					await waitForMinLoading( loadingStart );
+					showSnackbar( errorText, 'error' );
+				}
+			} );
+		} );
+	}
 } );

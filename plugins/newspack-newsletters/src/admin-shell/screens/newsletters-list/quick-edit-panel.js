@@ -13,6 +13,7 @@ import { __ } from '@wordpress/i18n';
 import { envelope } from '@wordpress/icons';
 
 import QuickEditPanel from '../../components/quick-edit-panel';
+import { getNewsletterVisibilityDescriptions } from '../../../utils/service-provider';
 import { notifyError, notifySuccess } from '../../notices';
 import { fetchAllTerms, initialSelectionsForTaxonomy, resolveTokens, sortedIdsEqual } from '../../utils/terms';
 
@@ -90,6 +91,7 @@ export default function NewslettersQuickEditPanel( { item, onClose, onSaved } ) 
 	};
 
 	const subjectTitle = item?.title?.raw ?? item?.title?.rendered ?? __( '(no subject)', 'newspack-newsletters' );
+	const visibilityDescriptions = getNewsletterVisibilityDescriptions();
 
 	return (
 		<QuickEditPanel
@@ -129,12 +131,12 @@ export default function NewslettersQuickEditPanel( { item, onClose, onSaved } ) 
 					{
 						label: __( 'Email and web', 'newspack-newsletters' ),
 						value: 'public',
-						description: __( 'Sent by email and published as an article on your site.', 'newspack-newsletters' ),
+						description: visibilityDescriptions.public,
 					},
 					{
 						label: __( 'Email only', 'newspack-newsletters' ),
 						value: 'private',
-						description: __( 'Sent by email only; not visible on your site.', 'newspack-newsletters' ),
+						description: visibilityDescriptions.private,
 					},
 				] }
 				onChange={ setVisibility }
