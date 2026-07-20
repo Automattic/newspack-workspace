@@ -2040,7 +2040,7 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 					 * field under and no valid payload key to write to. Skip rather than emit a
 					 * malformed `field[%%,0]` key that two such fields would collide on.
 					 */
-					error_log( '[NEWSPACK-NEWSLETTERS]: Skipped ActiveCampaign field "' . $field_title . '": title produced an empty perstag.' ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+					error_log( '[NEWSPACK-NEWSLETTERS]: Skipped ActiveCampaign field "' . sanitize_text_field( $field_title ) . '": title produced an empty perstag.' ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
 					continue;
 				} else {
 					$field_res = $this->api_v3_request(
@@ -2068,8 +2068,11 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 						 * no-ops unless NEWSPACK_LOG_LEVEL is defined — undefined on a default
 						 * production site. The dropped field carries Reader Activation data that
 						 * segments and automations key on, so it must stay diagnosable.
+						 *
+						 * Both interpolated values are sanitized: the error message is remote
+						 * API text, and a newline in it would forge a second log line.
 						 */
-						error_log( '[NEWSPACK-NEWSLETTERS]: Error creating ActiveCampaign field "' . $field_title . '": ' . $field_res->get_error_message() ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+						error_log( '[NEWSPACK-NEWSLETTERS]: Error creating ActiveCampaign field "' . sanitize_text_field( $field_title ) . '": ' . sanitize_text_field( $field_res->get_error_message() ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
 						continue;
 					}
 					/** Set list relation. */
