@@ -204,6 +204,31 @@ class Metering {
 	}
 
 	/**
+	 * Get the metering settings that govern anonymous readers.
+	 *
+	 * Beware the two senses of "registered" in this class: `get_anonymous_settings()`
+	 * reads the `registration` meta (the registration wall), while
+	 * `get_registered_settings()` reads the `custom_access` meta (the paywall).
+	 *
+	 * Anonymous readers are gated by the registration wall, so the `registration`
+	 * settings apply whenever that wall is active - including when its metering is
+	 * deliberately turned off, which means anonymous readers get no metered views at
+	 * all. Only when the registration wall is inactive do anonymous readers fall
+	 * through to the paywall, and with it the `custom_access` metering settings.
+	 *
+	 * @param int $gate_id Gate ID.
+	 *
+	 * @return array Metering settings.
+	 */
+	private static function get_effective_anonymous_settings( $gate_id ) {
+		if ( Memberships::is_active() ) {
+			return self::get_anonymous_settings( $gate_id );
+		}
+		$registration = Content_Gate::get_registration_settings( $gate_id );
+		return $registration['active'] ? self::get_anonymous_settings( $gate_id ) : self::get_registered_settings( $gate_id );
+	}
+
+	/**
 	 * Update metering settings for a gate.
 	 *
 	 * @param int   $gate_id  Gate ID.
@@ -230,7 +255,7 @@ class Metering {
 		}
 		$gate_layout_id = Content_Gate::get_gate_layout_id();
 		$gate_post_id   = Content_Gate::get_gate_post_id();
-		$handle       = 'newspack-content-gate-metering';
+		$handle         = 'newspack-content-gate-metering';
 		\wp_enqueue_script(
 			$handle,
 			Newspack::plugin_url() . '/dist/content-gate-metering.js',
@@ -239,9 +264,7 @@ class Metering {
 			true
 		);
 
-		$anonymous_settings   = self::get_anonymous_settings( $gate_post_id );
-		$registered_settings  = self::get_registered_settings( $gate_post_id );
-		$settings = $anonymous_settings['enabled'] ? $anonymous_settings : $registered_settings;
+		$settings = self::get_effective_anonymous_settings( $gate_post_id );
 		\wp_localize_script(
 			$handle,
 			'newspack_metering_settings',
@@ -329,9 +352,7 @@ class Metering {
 		}
 
 		$gate_post_id         = Content_Gate::get_gate_post_id();
-		$anonymous_settings   = self::get_anonymous_settings( $gate_post_id );
-		$registered_settings  = self::get_registered_settings( $gate_post_id );
-		$settings             = Memberships::is_active() || $anonymous_settings['enabled'] ? $anonymous_settings : $registered_settings;
+		$settings             = self::get_effective_anonymous_settings( $gate_post_id );
 		$is_frontend_metering = $settings['enabled'] && $settings['count'] > 0;
 
 		/**
@@ -490,10 +511,8 @@ class Metering {
 		if ( ! $post_id ) {
 			$post_id = get_the_ID();
 		}
-		$gate_post_id         = Content_Gate::get_gate_post_id( $post_id );
-		$anonymous_settings   = self::get_anonymous_settings( $gate_post_id );
-		$registered_settings  = self::get_registered_settings( $gate_post_id );
-		$settings = $anonymous_settings['enabled'] ? $anonymous_settings : $registered_settings;
+		$gate_post_id = Content_Gate::get_gate_post_id( $post_id );
+		$settings     = \is_user_logged_in() ? self::get_registered_settings( $gate_post_id ) : self::get_effective_anonymous_settings( $gate_post_id );
 		return $settings['period'];
 	}
 
@@ -528,12 +547,11 @@ class Metering {
 		if ( ! $gate_post_id ) {
 			return false;
 		}
-		$anonymous_settings   = self::get_anonymous_settings( $gate_post_id );
-		$registered_settings  = self::get_registered_settings( $gate_post_id );
-		if ( ! $is_logged_in && $anonymous_settings['enabled'] ) {
-			return $anonymous_settings['count'];
+		$settings = $is_logged_in ? self::get_registered_settings( $gate_post_id ) : self::get_effective_anonymous_settings( $gate_post_id );
+		if ( ! $settings['enabled'] ) {
+			return false;
 		}
-		return $registered_settings['count'];
+		return $settings['count'];
 	}
 }
 Metering::init();
