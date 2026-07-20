@@ -18,9 +18,8 @@ defined( 'ABSPATH' ) || exit;
  * This class is the SINGLE boundary between the Subscription Products UI and the
  * standalone pricing-rule engine (woocommerce-dynamic-pricing). get_resolution()
  * reads the live engine: it composes all active rules over the product's purchase
- * cycle for the effective price, and lists the matching rules with the winner
- * flagged. When the engine plugin is inactive it reports the base price with no
- * rules.
+ * cycle for the effective price, and lists the rules that apply. When the engine
+ * plugin is inactive it reports the base price with no rules.
  *
  * The returned array shape is the contract the DataViews UI consumes; keep it
  * stable. Nothing else should call the engine for this read directly — route it
@@ -59,7 +58,6 @@ class Subscription_Policy_Resolver {
 	 *         @type string $slug             Machine slug.
 	 *         @type string $label            Human label.
 	 *         @type string $type             Policy type: promo|season|winback|loyalty.
-	 *         @type bool   $is_winning       Whether this policy sets the effective price.
 	 *         @type string $adjustment_label Short description of the adjustment.
 	 *     }
 	 * }
@@ -85,8 +83,8 @@ class Subscription_Policy_Resolver {
 	 * Produce the resolution payload by reading the live pricing-rule engine.
 	 *
 	 * Composes all active rules over the product's purchase (acquisition) cycle for
-	 * the effective price, and lists the matching rules with the winner flagged —
-	 * the same engine the storefront uses, so the table matches what buyers see.
+	 * the effective price, and lists the rules that apply — the same engine the
+	 * storefront uses, so the table matches what buyers see.
 	 * Without the engine (plugin inactive), an invalid product, or an
 	 * engine-excluded product (e.g. donations), it reports the base price and no
 	 * rules.
@@ -112,24 +110,30 @@ class Subscription_Policy_Resolver {
 			return self::build( $base, $base, $currency, $cycle, [], [] );
 		}
 
-		// Project the composed price across the subscription's cycles, attributing the
-		// winning rule to each segment — the same walk the impact preview uses. The
-		// purchase cycle (segment 0) sets the headline effective price + winning rule.
-		$schedule   = self::project_schedule( $engine, $product, $base );
-		$effective  = $schedule ? (float) $schedule[0]['amount'] : $base;
-		$winning_id = $schedule ? (string) $schedule[0]['rule_id'] : '';
+		// Derive the base the way every other engine surface does, instead of trusting
+		// the wizard's injected `_subscription_price` — which diverges from the catalog
+		// recurring price for some products (e.g. APFS), so a percent rule would show a
+		// Plans price that disagrees with the storefront/My-Account schedule.
+		$base = \Automattic\WooCommerce\DynamicPricing\Amount_Calculator::base_price_for( $product );
 
-		$repository = $engine->repository();
-		$matching   = $repository ? $repository->for_context( self::context_for( $product, $base, 1 ) ) : [];
+		// Project the composed price across the subscription's cycles with the engine's
+		// public projector — the same walk the admin inspector uses, sharing its
+		// per-request memo. Segment 0 (the purchase cycle) is the headline effective price.
+		$schedule  = \Automattic\WooCommerce\DynamicPricing\Schedule_Projector::project_for_product( $product );
+		$effective = ! empty( $schedule ) ? (float) $schedule[0]['amount'] : $base;
 
+		// Chips list the rules that actually apply: matching_rules() runs the condition
+		// gate (unlike a raw scope+window lookup), so segment/reader-gated rules that
+		// don't apply to this product no longer over-list as chips.
 		$rules = [];
-		foreach ( $matching as $rule ) {
+		foreach ( $engine->matching_rules( self::context_for( $product, $base, 1 ) ) as $rule ) {
 			$rule_id = (string) $rule->id;
 			$rules[] = self::policy(
 				$rule_id,
 				(string) $rule->strategy_id,
-				get_the_title( (int) $rule_id ),
-				'' !== $winning_id && $rule_id === $winning_id,
+				// get_the_title() runs wptexturize, so decode entities (e.g. `A & B` →
+				// `A &#038; B`) before the chip renders the label as a plain text node.
+				html_entity_decode( get_the_title( (int) $rule_id ), ENT_QUOTES ),
 				self::strategy_label( (string) $rule->strategy_id )
 			);
 		}
@@ -160,43 +164,6 @@ class Subscription_Policy_Resolver {
 	}
 
 	/**
-	 * Walk the engine across the projection horizon, merging equal consecutive
-	 * prices into segments and attributing the winning rule to each (the rule
-	 * winning at the segment's first cycle). Mirrors the impact preview's
-	 * projection so the Plans tooltip matches what buyers are charged over time.
-	 *
-	 * @param \Automattic\WooCommerce\DynamicPricing\Pricing_Engine $engine  The engine.
-	 * @param \WC_Product                                           $product The product.
-	 * @param float                                                 $base    The base recurring price.
-	 *
-	 * @return array<int, array{from_cycle:int, amount:float, rule_id:string, rule_label:string}>
-	 */
-	private static function project_schedule( $engine, $product, $base ) {
-		$horizon  = \Automattic\WooCommerce\DynamicPricing\Schedule_Projector::HORIZON;
-		$decimals = function_exists( 'wc_get_price_decimals' ) ? wc_get_price_decimals() : 2;
-		$segments = [];
-		$previous = null;
-
-		for ( $cycle = 1; $cycle <= $horizon; $cycle++ ) {
-			$decision = $engine->resolve( self::context_for( $product, $base, $cycle ) );
-			$amount   = round( $decision ? (float) $decision->amount : (float) $base, $decimals );
-
-			if ( null === $previous || abs( $amount - $previous ) >= 0.01 ) {
-				$rule_id    = ( $decision && $decision->rule_id ) ? (string) $decision->rule_id : '';
-				$segments[] = [
-					'from_cycle' => $cycle,
-					'amount'     => $amount,
-					'rule_id'    => $rule_id,
-					'rule_label' => '' !== $rule_id ? (string) get_the_title( (int) $rule_id ) : '',
-				];
-				$previous = $amount;
-			}
-		}
-
-		return $segments;
-	}
-
-	/**
 	 * Assemble a resolution payload in the shape resolve() documents.
 	 *
 	 * @param float  $base_price      The unmodified base price.
@@ -204,7 +171,7 @@ class Subscription_Policy_Resolver {
 	 * @param string $currency        ISO currency code.
 	 * @param string $cycle           Billing period slug.
 	 * @param array  $rules           Applied-rule entries (see policy()).
-	 * @param array  $schedule        Per-cycle price trajectory (see project_schedule()).
+	 * @param array  $schedule        Per-cycle price trajectory (from Schedule_Projector).
 	 *
 	 * @return array The resolution payload.
 	 */
@@ -245,18 +212,16 @@ class Subscription_Policy_Resolver {
 	 * @param string $id               Stable policy id.
 	 * @param string $type             Policy type.
 	 * @param string $label            Human label.
-	 * @param bool   $is_winning       Whether this policy sets the effective price.
 	 * @param string $adjustment_label Short description of the adjustment.
 	 *
 	 * @return array The policy entry.
 	 */
-	private static function policy( $id, $type, $label, $is_winning, $adjustment_label ) {
+	private static function policy( $id, $type, $label, $adjustment_label ) {
 		return [
 			'id'               => $id,
 			'slug'             => $id,
 			'label'            => $label,
 			'type'             => $type,
-			'is_winning'       => (bool) $is_winning,
 			'adjustment_label' => $adjustment_label,
 		];
 	}

@@ -29,7 +29,13 @@ const { useHistory } = Router;
 
 const API_PATH = '/newspack/v1/wizard/newspack-audience-subscription-products/products';
 
-const DEFAULT_CURRENCY: SubscriptionProductsCurrency = { code: 'USD', symbol: '$', decimals: 2 };
+const DEFAULT_CURRENCY: SubscriptionProductsCurrency = {
+	code: 'USD',
+	symbol: '$',
+	decimals: 2,
+	decimal_separator: '.',
+	thousand_separator: ',',
+};
 
 type Scope = 'subscriptions' | 'donations' | 'groups';
 
@@ -73,7 +79,10 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 	const [ currency, setCurrency ] = useState< SubscriptionProductsCurrency >( DEFAULT_CURRENCY );
 	const [ policyIsMock, setPolicyIsMock ] = useState( false );
 	const [ isLoading, setIsLoading ] = useState( true );
-	const [ view, setView ] = useState< View >( DEFAULT_VIEW );
+	const [ view, setView ] = useState< View >( () => ( {
+		...DEFAULT_VIEW,
+		fields: DEFAULT_VIEW.fields.filter( field => scope === 'subscriptions' || ( field !== 'policies' && field !== 'effective_price' ) ),
+	} ) );
 
 	const globals = window.newspackAudienceSubscriptionProducts;
 
@@ -314,7 +323,18 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 		[ history ]
 	);
 
-	const { data: processedData, paginationInfo } = useMemo( () => filterSortAndPaginate( scopedData, view, fields ), [ scopedData, view, fields ] );
+	// Applied-rule + effective-price columns only apply to subscription products —
+	// donations and plan bundles are engine-excluded, so they never carry a rule.
+	// Hide the two columns (and their column-picker entries) outside that scope.
+	const visibleFields = useMemo(
+		() => ( scope === 'subscriptions' ? fields : fields.filter( field => field.id !== 'policies' && field.id !== 'effective_price' ) ),
+		[ fields, scope ]
+	);
+
+	const { data: processedData, paginationInfo } = useMemo(
+		() => filterSortAndPaginate( scopedData, view, visibleFields ),
+		[ scopedData, view, visibleFields ]
+	);
 
 	if ( isLoading ) {
 		return (
@@ -337,7 +357,7 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 			<DataViews
 				className="newspack-subscription-products__dataviews"
 				data={ processedData }
-				fields={ fields }
+				fields={ visibleFields }
 				view={ view }
 				onChangeView={ setView }
 				actions={ actions }

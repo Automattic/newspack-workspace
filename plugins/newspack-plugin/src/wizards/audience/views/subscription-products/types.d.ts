@@ -13,7 +13,6 @@ interface SubscriptionPolicy {
 	slug: string;
 	label: string;
 	type: 'promo' | 'season' | 'winback' | 'loyalty' | string;
-	is_winning: boolean;
 	adjustment_label: string;
 }
 
@@ -24,8 +23,6 @@ interface SubscriptionPolicy {
 interface SubscriptionPolicySegment {
 	from_cycle: number;
 	amount: number;
-	rule_id: string;
-	rule_label: string;
 }
 
 /**

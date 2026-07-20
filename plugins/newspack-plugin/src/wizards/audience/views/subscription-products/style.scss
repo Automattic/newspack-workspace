@@ -64,6 +64,14 @@
 		gap: 4px;
 	}
 
+	// Per-plan label in the edit form's read-only policy list (variable subscriptions).
+	&__policy-plan-label {
+		flex: 0 0 auto;
+		min-width: 96px;
+		color: wp-colors.$gray-700;
+		font-weight: 500;
+	}
+
 	// base -> effective price display.
 	&__effective-price {
 		display: inline-flex;
@@ -96,7 +104,7 @@
 
 		&:hover .newspack-subscription-products__effective-price-value,
 		&:focus-visible .newspack-subscription-products__effective-price-value {
-			border-bottom-color: currentColor;
+			border-bottom-color: currentcolor;
 		}
 	}
 
