@@ -2010,8 +2010,10 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 				if ( ! is_wp_error( $existing_fields ) ) {
 					// Index-preserving lookups: array_column() would reindex and skip
 					// rows missing the key, mapping a match to the wrong field.
+					// A row with an empty perstag can't supply a usable payload key, so
+					// it must never match — `! empty()` rather than `isset()`.
 					foreach ( $existing_fields as $index => $existing_field ) {
-						if ( isset( $existing_field['perstag'] ) && $existing_field['perstag'] === $field_perstag ) {
+						if ( ! empty( $existing_field['perstag'] ) && $existing_field['perstag'] === $field_perstag ) {
 							$existing_index = $index;
 							break;
 						}
@@ -2019,7 +2021,7 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 					if ( false === $existing_index ) {
 						foreach ( $existing_fields as $index => $existing_field ) {
 							if (
-								isset( $existing_field['title'], $existing_field['perstag'] ) &&
+								! empty( $existing_field['title'] ) && ! empty( $existing_field['perstag'] ) &&
 								0 === strcasecmp( trim( $existing_field['title'] ), trim( $field_title ) )
 							) {
 								$existing_index = $index;
@@ -2032,6 +2034,14 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 				if ( false !== $existing_index ) {
 					/** Use the existing field's actual perstag — it may differ from the generated one. */
 					$field_perstag = $existing_fields[ $existing_index ]['perstag'];
+				} elseif ( empty( $field_perstag ) ) {
+					/**
+					 * The title sanitized down to nothing, so there's no perstag to create the
+					 * field under and no valid payload key to write to. Skip rather than emit a
+					 * malformed `field[%%,0]` key that two such fields would collide on.
+					 */
+					error_log( '[NEWSPACK-NEWSLETTERS]: Skipped ActiveCampaign field "' . $field_title . '": title produced an empty perstag.' ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+					continue;
 				} else {
 					$field_res = $this->api_v3_request(
 						'fields',

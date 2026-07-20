@@ -242,4 +242,64 @@ class ActiveCampaignFieldMatchingTest extends WP_UnitTestCase {
 		$this->assertArrayHasKey( 'field[%NEWSLETTERSSUBSCRIPTIONMETHOD%,0]', $this->contact_payload, 'Title match must resolve to the matched field\'s perstag, not a reindexed neighbor\'s.' );
 		$this->assertArrayNotHasKey( 'field[%UNRELATED_FIELD%,0]', $this->contact_payload, 'Value must not be written to an unrelated field.' );
 	}
+
+	/**
+	 * An empty-string perstag is as unusable as a missing one: it yields no
+	 * valid payload key, and two such fields would collide on `field[%%,0]`.
+	 * A row like that must never win a title match.
+	 */
+	public function test_title_match_skips_field_rows_with_empty_perstag() {
+		$this->remote_fields = [
+			[
+				'id'      => '4',
+				'title'   => 'Newsletter Subscription Method',
+				'perstag' => '',
+				'type'    => 'text',
+				// Matching title, but an empty perstag: unusable, must not match.
+			],
+			[
+				'id'      => '9',
+				'title'   => 'Newsletter Subscription Method',
+				'perstag' => 'NEWSLETTERSSUBSCRIPTIONMETHOD',
+				'type'    => 'text',
+			],
+		];
+
+		// phpcs:ignore phpcsSniffs.Newsletters.ForbiddenMethods.PossibleForbiddenContactsMethods, phpcsSniffs.Newsletters.ForbiddenContactsMethods.ForbiddenContactsMethods -- this test exercises the provider method itself.
+		$result = Newspack_Newsletters_Active_Campaign::instance()->add_contact(
+			[
+				'email'    => 'reader5@example.net',
+				'metadata' => [ 'Newsletter Subscription Method' => 'newsletter-block' ],
+			],
+			'1'
+		);
+
+		$this->assertFalse( is_wp_error( $result ) );
+		$this->assertArrayNotHasKey( 'field[%%,0]', $this->contact_payload, 'An empty perstag must never produce a payload key.' );
+		$this->assertArrayHasKey( 'field[%NEWSLETTERSSUBSCRIPTIONMETHOD%,0]', $this->contact_payload, 'Title match must skip the empty-perstag row and resolve to the usable field.' );
+		$this->assertNotContains( 'v3:fields:create', $this->called_actions, 'A usable field with the same title exists, so no create should be attempted.' );
+	}
+
+	/**
+	 * A metadata key that sanitizes down to an empty perstag has nowhere valid
+	 * to write, so it must be skipped outright rather than created — a create
+	 * that succeeded would still leave the payload key malformed.
+	 */
+	public function test_metadata_key_with_empty_generated_perstag_is_skipped() {
+		$this->remote_fields = [];
+
+		// phpcs:ignore phpcsSniffs.Newsletters.ForbiddenMethods.PossibleForbiddenContactsMethods, phpcsSniffs.Newsletters.ForbiddenContactsMethods.ForbiddenContactsMethods -- this test exercises the provider method itself.
+		$result = Newspack_Newsletters_Active_Campaign::instance()->add_contact(
+			[
+				'email'    => 'reader6@example.net',
+				'metadata' => [ '!!!' => 'newsletter-block' ],
+			],
+			'1'
+		);
+
+		$this->assertFalse( is_wp_error( $result ), 'An unusable metadata key must not abort the signup.' );
+		$this->assertNotContains( 'v3:fields:create', $this->called_actions, 'No field-create should be attempted for a key with no usable perstag.' );
+		$this->assertArrayNotHasKey( 'field[%%,0]', $this->contact_payload, 'An empty perstag must never produce a payload key.' );
+		$this->assertTrue( in_array( 'contact_add', $this->called_actions, true ) || in_array( 'contact_sync', $this->called_actions, true ), 'Contact sync must still run after skipping an unusable field.' );
+	}
 }
