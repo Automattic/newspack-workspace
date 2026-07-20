@@ -12,6 +12,17 @@ import './style.scss';
  */
 import classNames from 'classnames';
 
+/**
+ * Divider component.
+ *
+ * @param {Object}        props                - Component props.
+ * @param {string}        [props.alignment]    - Horizontal alignment of the divider.
+ * @param {string}        [props.className]    - Additional class name.
+ * @param {number|string} [props.marginBottom] - Bottom margin, in pixels when numeric.
+ * @param {number|string} [props.marginTop]    - Top margin, in pixels when numeric.
+ * @param {string}        [props.variant]      - Visual variant of the divider.
+ * @return {JSX.Element} Divider component.
+ */
 const Divider = ( { alignment = 'none', className = undefined, marginBottom = 64, marginTop = 64, variant = 'default', ...otherProps } ) => {
 	const classes = classNames(
 		'newspack-divider',
