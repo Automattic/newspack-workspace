@@ -6,6 +6,10 @@ It's built on the [WooCommerce Email Editor package](https://github.com/woocomme
 
 Everything here is in the `Newspack\Newsletters\Email_Renderers` namespace, autoloaded via the Composer classmap on `includes/`. The `blocks/` override files are classmapped too, but the registry also loads them eagerly so they self-register without anything referencing them by name — see [Adding an override](#adding-an-override).
 
+### Package version
+
+This code targets `woocommerce/email-editor` **`2.14.0`** (pinned in `composer.json`). It depends on the exact rendered markup and renderer APIs of that release — `Full_Bleed_Sections` and the `blocks/` overrides in particular parse the package's canvas output. On a WooCommerce site the same package is also shipped by Woo core through its own jetpack-autoloader, which loads the single highest version site-wide, so the actually-loaded classes may be **newer** than the pin. The render path degrades gracefully (structure mismatch → no-op band, bad override → fail closed), so a drift produces plain-but-correct email rather than a fatal — but a future Woo bump that reshapes the canvas markup can silently disable full-bleed banding or an override. When bumping the pin (or when Woo core moves ahead of it), smoke-test full-bleed sections and the overridden blocks against the loaded version.
+
 ## Reference model: vanilla WordPress, not MJML
 
 When deciding what "correct" output is for a block under the WC engine, **compare against vanilla WordPress block output — not the legacy MJML rendering.** Many MJML choices were workarounds for MJML's own constraints, not deliberate design. Treat MJML divergences as suspect, and only add an override (below) when the package output genuinely diverges from WP.

@@ -124,6 +124,15 @@ require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/class-wizard-bridge.p
 
 // Boot the WooCommerce Email Editor package. Must run before the `init` hook
 // so the editor's own `init` callbacks (CPT, templates) are registered in time.
+//
+// Deliberately NOT behind Feature_Flag: the boot only registers package plumbing
+// (container, CPT opt-in, wrapping template, theme.json/render filters). The actual
+// editor takeover — asset enqueuing, theme.json overrides, the block allow-list and
+// the `use_woo_renderer` editor flag — is gated on Feature_Flag::is_enabled() in
+// Newspack_Newsletters_Editor, so on a flag-off site the WC canvas never engages and
+// this boot is behaviorally inert. Gating the boot itself would also skip the
+// load-bearing init:11 CPT re-registration that keeps Newspack's CPT args
+// authoritative after the package re-registers opted-in post types on init:10.
 \Newspack\Newsletters\Email_Renderers\Editor_Bootstrap::init();
 
 // This MUST be initialized after Newspack_Newsletter class.
