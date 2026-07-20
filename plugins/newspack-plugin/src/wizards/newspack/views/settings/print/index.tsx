@@ -6,7 +6,8 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { CheckboxControl, SelectControl } from '@wordpress/components';
+import { CheckboxControl, Notice, SelectControl } from '@wordpress/components';
+import { useEffect, useRef, useState } from '@wordpress/element';
 
 /**
  * Internal dependencies
@@ -22,6 +23,9 @@ const PLATFORM_OPTIONS: { label: string; value: IndesignPlatform }[] = [
 	{ label: __( 'Windows', 'newspack-plugin' ), value: 'win' },
 ];
 
+// Coalesce a rapid series of post-type checkbox clicks into a single save.
+const POST_TYPES_SAVE_DEBOUNCE_MS = 500;
+
 function Print() {
 	const { description, apiData, isFetching, actionText, apiFetchToggle, errorMessage } = useWizardApiFetchToggle< PrintData >( {
 		path: '/newspack/v1/wizard/newspack-settings/print',
@@ -36,14 +40,51 @@ function Print() {
 		description: __( 'Allows editors to export article content in Adobe InDesign Tagged Text format.', 'newspack-plugin' ),
 	} );
 
+	// Optimistic mirror of the post-type selection so a checkbox flips on click
+	// instead of waiting for the round trip. Kept in sync with the server value
+	// on load and after every successful save.
+	const [ selectedPostTypes, setSelectedPostTypes ] = useState< string[] >( apiData.indesign_post_types );
+	useEffect( () => {
+		setSelectedPostTypes( apiData.indesign_post_types );
+	}, [ apiData.indesign_post_types ] );
+
+	const saveTimer = useRef< ReturnType< typeof setTimeout > | undefined >();
+	useEffect(
+		() => () => {
+			if ( saveTimer.current ) {
+				clearTimeout( saveTimer.current );
+			}
+		},
+		[]
+	);
+
+	/**
+	 * Persist a change, sending only the writable fields. `available_post_types`
+	 * is derived server-side (read-only), so it is stripped from the payload.
+	 */
+	const save = ( overrides: Partial< PrintData > ) => {
+		// eslint-disable-next-line @typescript-eslint/no-unused-vars
+		const { available_post_types, ...writable } = { ...apiData, ...overrides };
+		apiFetchToggle( writable, true );
+	};
+
 	const togglePostType = ( slug: string, checked: boolean ) => {
-		const next = new Set( apiData.indesign_post_types );
+		const next = new Set( selectedPostTypes );
 		if ( checked ) {
 			next.add( slug );
 		} else {
 			next.delete( slug );
 		}
-		apiFetchToggle( { ...apiData, indesign_post_types: Array.from( next ) }, true );
+		const nextPostTypes = Array.from( next );
+		// Reflect the click immediately, then debounce the save. The API layer
+		// dedupes concurrent requests to the same path, so firing one request per
+		// click would drop all but the first and revert the boxes to that first
+		// response. Debouncing sends a single request carrying the final selection.
+		setSelectedPostTypes( nextPostTypes );
+		if ( saveTimer.current ) {
+			clearTimeout( saveTimer.current );
+		}
+		saveTimer.current = setTimeout( () => save( { indesign_post_types: nextPostTypes } ), POST_TYPES_SAVE_DEBOUNCE_MS );
 	};
 
 	return (
@@ -56,7 +97,7 @@ function Print() {
 					actionText={ actionText }
 					error={ errorMessage }
 					toggleChecked={ apiData.module_enabled_print }
-					toggleOnChange={ ( value: boolean ) => apiFetchToggle( { ...apiData, module_enabled_print: value }, true ) }
+					toggleOnChange={ ( value: boolean ) => save( { module_enabled_print: value } ) }
 				/>
 			</WizardSection>
 			{ apiData.module_enabled_print && (
@@ -73,7 +114,7 @@ function Print() {
 							value={ apiData.indesign_platform }
 							disabled={ isFetching }
 							options={ PLATFORM_OPTIONS }
-							onChange={ ( value: IndesignPlatform ) => apiFetchToggle( { ...apiData, indesign_platform: value }, true ) }
+							onChange={ ( value: IndesignPlatform ) => save( { indesign_platform: value } ) }
 						/>
 					</WizardSection>
 					<WizardSection
@@ -87,11 +128,19 @@ function Print() {
 							<CheckboxControl
 								key={ option.value }
 								label={ option.label }
-								checked={ apiData.indesign_post_types.includes( option.value ) }
+								checked={ selectedPostTypes.includes( option.value ) }
 								disabled={ isFetching }
 								onChange={ ( checked: boolean ) => togglePostType( option.value, checked ) }
 							/>
 						) ) }
+						{ selectedPostTypes.length === 0 && (
+							<Notice status="warning" isDismissible={ false }>
+								{ __(
+									'No post types are selected. The "Export as Adobe InDesign" actions will not appear anywhere until you select at least one.',
+									'newspack-plugin'
+								) }
+							</Notice>
+						) }
 					</WizardSection>
 					<WizardSection
 						title={ __( 'Photo captions', 'newspack-plugin' ) }
@@ -104,7 +153,7 @@ function Print() {
 							label={ __( 'Exclude photo captions', 'newspack-plugin' ) }
 							checked={ apiData.indesign_exclude_captions }
 							disabled={ isFetching }
-							onChange={ ( checked: boolean ) => apiFetchToggle( { ...apiData, indesign_exclude_captions: checked }, true ) }
+							onChange={ ( checked: boolean ) => save( { indesign_exclude_captions: checked } ) }
 						/>
 					</WizardSection>
 				</>

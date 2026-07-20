@@ -100,16 +100,19 @@ class Print_Section extends Wizard_Section {
 			if ( ! is_array( $post_types ) ) {
 				return new \WP_Error( 'invalid_param', __( 'Invalid parameter for indesign_post_types.', 'newspack-plugin' ), [ 'status' => 400 ] );
 			}
-			$post_types = array_values(
-				array_unique(
-					array_filter(
-						$post_types,
-						static function ( $slug ) {
-							return is_string( $slug ) && post_type_exists( $slug );
-						}
-					)
-				)
-			);
+			// Validate against the same "available" list the settings UI offers
+			// (public + show_ui, minus excluded types), which is the single source
+			// of truth for a valid slug. Rejecting here — rather than silently
+			// dropping unknown slugs — keeps the stored option from diverging from
+			// the effective value the reader returns. Safe at this layer: REST runs
+			// long after `init`, so the available list is complete.
+			$available_post_types = array_column( InDesign_Exporter::get_available_post_types(), 'value' );
+			$post_types           = array_values( array_unique( $post_types ) );
+			foreach ( $post_types as $slug ) {
+				if ( ! is_string( $slug ) || ! in_array( $slug, $available_post_types, true ) ) {
+					return new \WP_Error( 'invalid_param', __( 'Invalid parameter for indesign_post_types.', 'newspack-plugin' ), [ 'status' => 400 ] );
+				}
+			}
 		}
 
 		$has_exclude_captions_param = $request->has_param( 'indesign_exclude_captions' );
@@ -133,7 +136,7 @@ class Print_Section extends Wizard_Section {
 		}
 
 		if ( $has_exclude_captions_param ) {
-			update_option( InDesign_Exporter::CAPTIONS_OPTION, $exclude_captions );
+			update_option( InDesign_Exporter::EXCLUDE_CAPTIONS_OPTION, $exclude_captions );
 		}
 
 		return [

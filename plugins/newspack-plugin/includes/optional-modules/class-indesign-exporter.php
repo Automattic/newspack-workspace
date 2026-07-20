@@ -68,7 +68,7 @@ class InDesign_Exporter {
 	 *
 	 * @var string
 	 */
-	public const CAPTIONS_OPTION = 'newspack_indesign_export_exclude_captions';
+	public const EXCLUDE_CAPTIONS_OPTION = 'newspack_indesign_export_exclude_captions';
 
 	/**
 	 * Default value for the exclude-captions option.
@@ -107,6 +107,29 @@ class InDesign_Exporter {
 
 		add_action( 'enqueue_block_editor_assets', [ __CLASS__, 'enqueue_block_editor_assets' ] );
 
+		// The list-table bulk and row actions depend on the configured post types,
+		// which may include custom post types. CPTs register on `init`, but this
+		// module boots at file scope while plugins load — before `init` — so the
+		// supported-types list would be resolved before CPTs exist and their
+		// `bulk_actions-edit-{$post_type}` filters would never be added. Defer that
+		// registration to `init` (priority 20, after CPTs register). Matches the
+		// deferred-registration pattern used by the sibling optional modules.
+		add_action( 'init', [ __CLASS__, 'register_list_table_actions' ], 20 );
+		add_action( 'admin_post_export_indesign_single', [ __CLASS__, 'handle_single_export' ] );
+		add_action( 'admin_notices', [ __CLASS__, 'admin_notices' ] );
+	}
+
+	/**
+	 * Register the list-table bulk and row export actions.
+	 *
+	 * Hooked to `init` (priority 20) so every configured post type — including
+	 * custom post types registered on `init` — is present when the supported
+	 * list is resolved. The `bulk_actions-edit-{$post_type}` filter names are
+	 * built from that list here; the shared row-action filters are added
+	 * alongside them. Both sets of filters fire during list-table render, well
+	 * after `init`, so late registration is safe.
+	 */
+	public static function register_list_table_actions() {
 		$supported_post_types = self::get_supported_post_types();
 		foreach ( $supported_post_types as $post_type ) {
 			add_filter( "bulk_actions-edit-{$post_type}", [ __CLASS__, 'add_bulk_action' ] );
@@ -117,8 +140,6 @@ class InDesign_Exporter {
 		// (pages, hierarchical CPTs) and `post_row_actions` for the rest, so hook both.
 		add_filter( 'post_row_actions', [ __CLASS__, 'add_row_action' ], 10, 2 );
 		add_filter( 'page_row_actions', [ __CLASS__, 'add_row_action' ], 10, 2 );
-		add_action( 'admin_post_export_indesign_single', [ __CLASS__, 'handle_single_export' ] );
-		add_action( 'admin_notices', [ __CLASS__, 'admin_notices' ] );
 	}
 
 	/**
@@ -152,7 +173,7 @@ class InDesign_Exporter {
 		 *
 		 * @param array $supported_post_types Array of post type names that support InDesign export.
 		 */
-		return apply_filters( 'newspack_indesign_export_supported_post_types', $supported_post_types );
+		return (array) apply_filters( 'newspack_indesign_export_supported_post_types', $supported_post_types );
 	}
 
 	/**
@@ -284,7 +305,18 @@ class InDesign_Exporter {
 			return add_query_arg( 'indesign_export_error', 'no_posts', $redirect_to );
 		}
 
-		$post_ids = array_values( array_filter( $post_ids, [ __CLASS__, 'is_post_supported' ] ) );
+		// Resolve the supported post types once for the whole selection rather than
+		// re-running is_post_supported() (and its post-type registry walk) per ID.
+		$supported_post_types = self::get_supported_post_types();
+		$post_ids             = array_values(
+			array_filter(
+				$post_ids,
+				static function ( $post_id ) use ( $supported_post_types ) {
+					$post = get_post( $post_id );
+					return $post && in_array( $post->post_type, $supported_post_types, true );
+				}
+			)
+		);
 		if ( empty( $post_ids ) ) {
 			return add_query_arg( 'indesign_export_error', 'unsupported_post_type', $redirect_to );
 		}
@@ -461,7 +493,7 @@ class InDesign_Exporter {
 	 * @return bool True when captions should be omitted.
 	 */
 	public static function get_exclude_captions_setting() {
-		return (bool) get_option( self::CAPTIONS_OPTION, self::EXCLUDE_CAPTIONS_DEFAULT );
+		return (bool) get_option( self::EXCLUDE_CAPTIONS_OPTION, self::EXCLUDE_CAPTIONS_DEFAULT );
 	}
 
 	/**
@@ -482,18 +514,25 @@ class InDesign_Exporter {
 	 *
 	 * Honors the site setting first. When the setting is 'auto', the platform
 	 * is sniffed from the requesting browser's User-Agent — InDesign requires
-	 * the header to match the host OS or markup is rendered literally.
+	 * the header to match the host OS or markup is rendered literally. A
+	 * non-browser client (WP-CLI, a direct REST call) under 'auto' has no
+	 * User-Agent and therefore resolves to 'win'.
+	 *
+	 * The return value is normalized to exactly 'mac' or 'win' after the filter
+	 * runs, so a callback returning 'auto', null, or any other value degrades to
+	 * 'win' (the converter's default header) rather than an invalid platform.
 	 *
 	 * @return string Either 'mac' or 'win'.
 	 */
-	private static function resolve_platform() {
+	public static function resolve_platform() {
 		$setting    = self::get_platform_setting();
 		$user_agent = '';
 
 		if ( 'mac' === $setting || 'win' === $setting ) {
 			$platform = $setting;
 		} else {
-			// The export runs from an authenticated admin-post.php request that is never cached.
+			// The export runs from an authenticated admin request (admin-post.php
+			// for a single export, or an edit.php bulk action) that is never cached.
 			// phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__HTTP_USER_AGENT__
 			$user_agent = isset( $_SERVER['HTTP_USER_AGENT'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) ) : '';
 			$platform   = self::sniff_user_agent_platform( $user_agent );
@@ -508,7 +547,9 @@ class InDesign_Exporter {
 		 *                           sanitize_text_field() + wp_unslash(), or '' when
 		 *                           not consulted (i.e. setting is not 'auto').
 		 */
-		return apply_filters( 'newspack_indesign_export_platform', $platform, $setting, $user_agent );
+		$platform = apply_filters( 'newspack_indesign_export_platform', $platform, $setting, $user_agent );
+
+		return 'mac' === $platform ? 'mac' : 'win';
 	}
 
 	/**

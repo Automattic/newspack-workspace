@@ -570,7 +570,7 @@ class InDesign_Converter {
 			return '';
 		}
 
-		$tag_content = "\r\n";
+		$tag_content = '';
 
 		foreach ( $images as $image_id => $insert_tag ) {
 			if ( ! $insert_tag ) {
@@ -593,7 +593,14 @@ class InDesign_Converter {
 			}
 		}
 
-		return $tag_content;
+		// Every image was skipped (no caption/credit to emit, e.g. caption-only
+		// images with captions excluded). Return nothing so array_filter() in
+		// convert_post() drops this block instead of appending a blank line.
+		if ( '' === $tag_content ) {
+			return '';
+		}
+
+		return "\r\n" . $tag_content;
 	}
 
 	/**
