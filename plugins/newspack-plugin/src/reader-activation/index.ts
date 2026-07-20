@@ -1,0 +1,841 @@
+/* globals newspack_ras_config, newspack_reader_data */
+
+window.newspack_ras_config = window.newspack_ras_config || {};
+
+import Store from './store';
+import { getPendingCheckout, setPendingCheckout } from './checkout';
+import { EVENTS, on, off, emit } from './events';
+import { getCookie, setCookie, generateID, debugLog } from './utils';
+import overlays from './overlays';
+import segments from './segments';
+import initAnalytics from './analytics';
+import setupArticleViewsAggregates from './article-view';
+import setupEngagement from './engagement';
+import initSubscriptionTiersForm from './subscription-tiers-form';
+import { openAuthModal as _openAuthModal } from '../reader-activation-auth/auth-modal';
+import { getApiNonce, hydrateSession } from './session';
+
+/**
+ * Reader Activation Library.
+ *
+ * Store() returns [ publicStore, internalClear ]. Only `store` (the public
+ * object) is exported and assigned to window.newspackReaderActivation.store;
+ * `clearReaderStore` is kept module-private so the destructive namespace wipe
+ * is not reachable by third-party code as readerActivation.store.clear()
+ * (NPPM-2721).
+ */
+const [ store, clearReaderStore ] = Store();
+export { store };
+
+/**
+ * Dispatch reader activity.
+ *
+ * @param {string} action    Action name.
+ * @param {Object} data      Data object.
+ * @param {number} timestamp Timestamp. (optional)
+ *
+ * @return {Object} Activity.
+ */
+export function dispatchActivity( action: string, data: Record< string, unknown >, timestamp = 0 ): NewspackReaderActivity {
+	const activity = { action, data, timestamp: timestamp || Date.now() };
+	store.add( 'activity', activity );
+	emit( EVENTS.activity, activity );
+	return activity;
+}
+
+/**
+ * Get all activities from a given action.
+ *
+ * @param {string} action
+ *
+ * @return {Array} Activities.
+ */
+export function getActivities( action?: string ): NewspackReaderActivity[] {
+	const activities = ( store.get( 'activity' ) || [] ) as NewspackReaderActivity[];
+	if ( ! action ) {
+		return activities;
+	}
+	return activities.filter( activity => activity.action === action );
+}
+
+/**
+ * Get all unique activities from a given action by a given iteratee.
+ *
+ * @param {string}          action   Action name.
+ * @param {string|Function} iteratee Iteratee or a data key.
+ *
+ * @return {Array} Unique activities.
+ */
+export function getUniqueActivitiesBy(
+	action: string,
+	iteratee: string | ( ( activity: NewspackReaderActivity ) => unknown )
+): NewspackReaderActivity[] {
+	const activities = getActivities( action );
+	const unique: NewspackReaderActivity[] = [];
+	const seen: Record< string, boolean > = {};
+	for ( const activity of activities ) {
+		const value = typeof iteratee === 'function' ? iteratee( activity ) : activity.data[ iteratee ];
+		if ( ! seen[ value as string ] ) {
+			unique.push( activity );
+			seen[ value as string ] = true;
+		}
+	}
+	return unique;
+}
+
+/**
+ * Reader functions.
+ */
+
+/**
+ * Set the current reader.
+ *
+ * @param {string} email Email.
+ */
+export function setReaderEmail( email: string ) {
+	if ( ! email ) {
+		return;
+	}
+	const reader = getReader();
+	reader.email = email;
+	store.set( 'reader', reader, false );
+	emit( EVENTS.reader, reader );
+}
+
+/**
+ * Set whether the current reader is authenticated.
+ *
+ * @param {boolean} authenticated Whether the current reader is authenticated. Default is true.
+ */
+export function setAuthenticated( authenticated = true ) {
+	const reader = ( store.get( 'reader' ) || {} ) as NewspackReader;
+	if ( ! reader.email ) {
+		throw new Error( 'Reader email not set' );
+	}
+	reader.authenticated = Boolean( authenticated );
+	store.set( 'reader', reader, false );
+	emit( EVENTS.reader, reader );
+}
+
+/**
+ * Detect whether the current reader is authenticated.
+ */
+export function refreshAuthentication() {
+	const email = getCookie( 'np_auth_reader' );
+	if ( email ) {
+		setReaderEmail( email );
+		setAuthenticated( true );
+	} else {
+		setReaderEmail( getCookie( 'np_auth_intention' ) );
+	}
+}
+
+/**
+ * Get the current reader.
+ *
+ * @return {Object} Reader data.
+ */
+export function getReader(): NewspackReader {
+	return ( store.get( 'reader' ) || {} ) as NewspackReader;
+}
+
+/**
+ * Whether the current reader has a valid email link attached to the session.
+ *
+ * @return {boolean} Whether the current reader has a valid email link attached to the session.
+ */
+export function hasAuthLink() {
+	const reader = getReader();
+	const otpHash = getCookie( 'np_otp_hash' );
+	return !! ( reader?.email && otpHash );
+}
+
+const authStrategies = [ 'pwd', 'link' ];
+
+/**
+ * Start the authentication modal with an optional custom callback.
+ *
+ * @param {Object} config Config.
+ */
+export function openAuthModal( config: NewspackAuthModalConfig = {} ) {
+	config = {
+		onSuccess: null,
+		onDismiss: null,
+		onError: null,
+		initialState: null,
+		skipSuccess: false,
+		skipNewslettersSignup: false,
+		labels: {
+			signin: {
+				title: window.newspack_reader_activation_labels.signin.title,
+			},
+			register: {
+				title: window.newspack_reader_activation_labels.register.title,
+			},
+		},
+		content: null,
+		trigger: null,
+		closeOnSuccess: true,
+		...config,
+	};
+
+	if ( newspack_ras_config.is_logged_in ) {
+		if ( config.onSuccess && typeof config.onSuccess === 'function' ) {
+			config.onSuccess();
+		}
+		return;
+	}
+	_openAuthModal( config );
+}
+
+/**
+ * Start the newsletter signup modal with an optional custom callback.
+ *
+ * @param {Object} config Config.
+ */
+export function openNewslettersSignupModal( config: NewspackNewslettersSignupModalConfig = {} ) {
+	// Set default config.
+	config = {
+		...{
+			onSuccess: null,
+			onDismiss: null,
+			onError: null,
+			initialState: null,
+			skipSuccess: false,
+			labels: {},
+			content: null,
+			closeOnSuccess: true,
+		},
+		...config,
+	};
+
+	if ( readerActivation?._openNewslettersSignupModal ) {
+		readerActivation._openNewslettersSignupModal( config );
+	} else {
+		console.warn( 'Newsletters signup modal not available' ); // eslint-disable-line no-console
+		if ( config?.onError && typeof config.onError === 'function' ) {
+			config.onError();
+		}
+	}
+}
+
+/**
+ * Get the reader's OTP hash for the current authentication request.
+ *
+ * @return {string} OTP hash.
+ */
+export function getOTPHash() {
+	return getCookie( 'np_otp_hash' );
+}
+
+/**
+ * OTP timer storage key.
+ */
+const OTP_TIMER_STORAGE_KEY = 'newspack_otp_timer';
+
+/**
+ * Set the OTP timer to the current time.
+ */
+export function setOTPTimer() {
+	localStorage.setItem( OTP_TIMER_STORAGE_KEY, String( Math.floor( Date.now() / 1000 ) ) );
+}
+
+/**
+ * Clear the OTP timer.
+ */
+export function clearOTPTimer() {
+	localStorage.removeItem( OTP_TIMER_STORAGE_KEY );
+}
+
+/**
+ * Get the time remaining for the OTP timer.
+ *
+ * @return {number} Time remaining in seconds
+ */
+export function getOTPTimeRemaining() {
+	const timer = localStorage.getItem( OTP_TIMER_STORAGE_KEY );
+	if ( ! timer ) {
+		return 0;
+	}
+	const timeRemaining = newspack_ras_config.otp_rate_interval! - ( Math.floor( Date.now() / 1000 ) - Number( timer ) );
+	if ( ! timeRemaining ) {
+		clearOTPTimer();
+	}
+	return timeRemaining > 0 ? timeRemaining : 0;
+}
+
+/**
+ * Authenticate reader using an OTP code.
+ *
+ * @param {number} code OTP code.
+ *
+ * @return {Promise} Promise.
+ */
+export function authenticateOTP( code: string ) {
+	return new Promise< NewspackAuthResponseData >( ( resolve, reject ) => {
+		const hash = getOTPHash();
+		const email = getReader()?.email;
+		if ( ! hash ) {
+			return reject( { message: 'Code has expired', expired: true } );
+		}
+		if ( ! email ) {
+			return reject( { message: 'You must provide an email' } );
+		}
+		if ( ! code ) {
+			return reject( { message: 'Invalid code' } );
+		}
+		fetch( '', {
+			method: 'POST',
+			headers: {
+				Accept: 'application/json',
+			},
+			body: new URLSearchParams( {
+				action: newspack_ras_config.otp_auth_action!,
+				email,
+				hash,
+				code,
+			} ),
+		} )
+			.then( response => response.json() )
+			.then( ( { success, message, data } ) => {
+				const payload = {
+					...data,
+					email,
+					authenticated: !! success,
+					message,
+				};
+				setAuthenticated( !! success );
+				if ( success ) {
+					resolve( payload );
+				} else {
+					reject( payload );
+				}
+			} );
+	} );
+}
+
+/**
+ * Set the reader preferred authentication strategy.
+ *
+ * @param {string} strategy Authentication strategy.
+ *
+ * @return {string} Reader preferred authentication strategy.
+ */
+export function setAuthStrategy( strategy: string ) {
+	if ( ! authStrategies.includes( strategy ) ) {
+		throw new Error( 'Invalid authentication strategy' );
+	}
+	setCookie( 'np_auth_strategy', strategy );
+	return strategy;
+}
+
+/**
+ * Get the reader preferred authentication strategy.
+ *
+ * @return {string} Reader preferred authentication strategy.
+ */
+export function getAuthStrategy() {
+	if ( getOTPHash() ) {
+		return 'otp';
+	}
+	return getCookie( 'np_auth_strategy' );
+}
+
+/**
+ * Ensure the client ID cookie is set.
+ */
+function fixClientID() {
+	const clientIDCookieName = newspack_ras_config.cid_cookie!;
+	if ( ! getCookie( clientIDCookieName ) ) {
+		setCookie( clientIDCookieName, generateID( 12 ) );
+	}
+}
+
+/**
+ * Push activities coming from the server.
+ */
+function pushActivities() {
+	const activity = newspack_reader_data?.reader_activity || [];
+	activity.forEach( ( { action, data } ) => dispatchActivity( action, data ) );
+}
+
+/**
+ * Store the referrer.
+ */
+function setReferrer() {
+	const normalize = ( hostname: string ) =>
+		hostname
+			.trim()
+			.toLowerCase()
+			.replace( /^www\./, '' );
+	const referrer = document.referrer ? normalize( new URL( document.referrer ).hostname ) : '';
+	if ( referrer && referrer !== normalize( window.location.hostname ) ) {
+		store.set( 'referrer', referrer );
+	} else {
+		store.set( 'referrer', '' );
+	}
+}
+
+/**
+ * Listen to cookie changes to detect authentication.
+ */
+function attachAuthCookiesListener() {
+	// If the reader is already authenticated, bail.
+	if ( getCookie( 'np_auth_reader' ) ) {
+		return;
+	}
+	const interval = setInterval( () => {
+		const reader = getReader();
+		const intentionCookie = getCookie( 'np_auth_intention' );
+		if ( intentionCookie && reader.email !== intentionCookie ) {
+			setReaderEmail( intentionCookie );
+		} else {
+			const authCookie = getCookie( 'np_auth_reader' );
+			if ( authCookie ) {
+				setReaderEmail( authCookie );
+				setAuthenticated( true );
+				hydrateSession();
+				clearInterval( interval );
+			}
+		}
+	}, 1000 );
+}
+
+/**
+ * Set the reader as newsletter subscriber once a newsletter form is submitted.
+ */
+function attachNewsletterFormListener() {
+	const newspackForms = [ '.newspack-newsletters-subscribe' ];
+
+	// newspack-subscribe-form is a generic class that can be added to any 3rd party form. Once it's submitted, we consider the reader a newsletter subscriber.
+	const thirdPartyForms = [ '.mc4wp-form', '.newspack-subscribe-form' ];
+
+	const attachHandler = ( el: Element, eventToListenTo = 'submit' ) => {
+		const form = 'FORM' === el.tagName ? el : el.querySelector( 'form' );
+		if ( ! form ) {
+			return;
+		}
+		form.addEventListener( eventToListenTo, () => {
+			store.set( 'is_newsletter_subscriber', true );
+		} );
+	};
+
+	const gformIds: number[] = [];
+
+	// For third-party forms, set reader data on form submit. Also detect Gravity Forms.
+	document.querySelectorAll( thirdPartyForms.join( ',' ) ).forEach( el => {
+		// If the form id stats with gform_ and it has a data-formid prop, it's a gravity form.
+		const isGravityForm = el.id.startsWith( 'gform_' ) && el.hasAttribute( 'data-formid' );
+		if ( isGravityForm ) {
+			gformIds.push( parseInt( el.getAttribute( 'data-formid' )! ) );
+			return;
+		}
+		// If not a gravity form, just attach the handler.
+		attachHandler( el );
+	} );
+
+	// First-party forms success event listener.
+	document.querySelectorAll( newspackForms.join( ',' ) ).forEach( el => attachHandler( el, 'newspack-newsletters-subscribe-success' ) );
+
+	// Gravity forms handlers.
+	document.addEventListener( 'gform/post_render', event => {
+		if ( window.gform?.utils?.addAsyncFilter && gformIds.includes( ( event as CustomEvent ).detail?.formId ) ) {
+			window.gform.utils.addAsyncFilter( 'gform/submission/pre_submission', async data => {
+				store.set( 'is_newsletter_subscriber', true );
+				return data;
+			} );
+		}
+	} );
+}
+
+/**
+ * Acquire a reCAPTCHA v2 invisible token.
+ *
+ * Renders a temporary invisible widget, executes it, and resolves
+ * with the token. Cleans up the widget container after completion.
+ *
+ * @todo Consider adding an in-flight guard to coalesce concurrent calls,
+ * since each invocation renders a separate widget and the reCAPTCHA API
+ * may not handle multiple simultaneous invisible widgets well.
+ *
+ * @param {string} siteKey reCAPTCHA site key.
+ * @return {Promise<string>} Resolves with the reCAPTCHA token.
+ */
+function acquireV2InvisibleToken( siteKey: string ) {
+	return new Promise< string >( function ( resolve, reject ) {
+		const container = document.createElement( 'div' );
+		container.style.display = 'none';
+		document.body.appendChild( container );
+
+		let settled = false;
+		const timeout = setTimeout( function () {
+			if ( ! settled ) {
+				settled = true;
+				container.remove();
+				reject( new Error( 'reCAPTCHA timed out.' ) );
+			}
+		}, 30000 );
+
+		function settle( fn: ( value?: unknown ) => void, value?: unknown ) {
+			if ( settled ) {
+				return;
+			}
+			settled = true;
+			clearTimeout( timeout );
+			container.remove();
+			fn( value );
+		}
+
+		try {
+			const widgetId = window.grecaptcha!.render( container, {
+				sitekey: siteKey,
+				size: 'invisible',
+				isolated: true,
+				callback( token ) {
+					settle( resolve as ( value?: unknown ) => void, token );
+				},
+				'error-callback'() {
+					settle( reject, new Error( 'reCAPTCHA challenge failed.' ) );
+				},
+				'expired-callback'() {
+					settle( reject, new Error( 'reCAPTCHA token expired.' ) );
+				},
+			} );
+			window.grecaptcha!.execute( widgetId );
+		} catch ( err ) {
+			settle( reject, err );
+		}
+	} );
+}
+
+/**
+ * Register a reader via a frontend integration.
+ *
+ * @param {string} email                  Reader email address.
+ * @param {string} integrationId          Registered integration ID.
+ * @param {Object} profileFields          Optional profile fields: { first_name, last_name, metadata }.
+ * @param {Object} profileFields.metadata Optional arbitrary key-value pairs to store as user meta.
+ * @return {Promise} Resolves with reader data on success, rejects with error on failure.
+ */
+function register( email: string, integrationId: string, profileFields: NewspackFrontendRegistrationFields = {} ) {
+	const config = newspack_ras_config?.frontend_registration_integrations || {};
+	const integration = config[ integrationId ];
+
+	if ( ! integration ) {
+		return Promise.reject( new Error( 'Unknown integration: ' + integrationId ) );
+	}
+
+	if ( ! email || ! /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test( email ) ) {
+		return Promise.reject( new Error( 'Invalid email address.' ) );
+	}
+
+	if ( ! newspack_ras_config?.frontend_registration_url ) {
+		return Promise.reject( new Error( 'Registration is not available.' ) );
+	}
+
+	const body: Record< string, unknown > = {
+		npe: email,
+		integration_id: integrationId,
+		integration_key: integration.key,
+		first_name: profileFields.first_name || '',
+		last_name: profileFields.last_name || '',
+		metadata: profileFields.metadata || {},
+	};
+
+	// Acquire reCAPTCHA token if configured, using the appropriate version flow.
+	const captchaSiteKey = newspack_ras_config?.captcha_site_key;
+	const captchaVersion = newspack_ras_config?.captcha_version;
+	let captchaPromise;
+
+	if ( captchaSiteKey ) {
+		if ( ! window.grecaptcha ) {
+			return Promise.reject( new Error( 'reCAPTCHA is configured but not loaded.' ) );
+		}
+		if ( captchaVersion === 'v3' ) {
+			captchaPromise = new Promise( function ( resolve, reject ) {
+				window.grecaptcha!.ready( function () {
+					window
+						.grecaptcha!.execute( captchaSiteKey, {
+							action: 'integration_registration',
+						} )
+						.then( resolve )
+						.catch( reject );
+				} );
+			} );
+		} else if ( captchaVersion && captchaVersion.substring( 0, 2 ) === 'v2' ) {
+			captchaPromise = new Promise( function ( resolve, reject ) {
+				window.grecaptcha!.ready( function () {
+					acquireV2InvisibleToken( captchaSiteKey ).then( resolve ).catch( reject );
+				} );
+			} );
+		} else {
+			captchaPromise = Promise.resolve( '' );
+		}
+	} else {
+		captchaPromise = Promise.resolve( '' );
+	}
+
+	return captchaPromise
+		.then( function ( token ) {
+			if ( token ) {
+				body[ 'g-recaptcha-response' ] = token;
+			}
+			const headers: Record< string, string > = { 'Content-Type': 'application/json' };
+			const nonce = getApiNonce();
+			if ( nonce ) {
+				headers[ 'X-WP-Nonce' ] = nonce;
+			}
+			return fetch( newspack_ras_config.frontend_registration_url!, {
+				method: 'POST',
+				headers,
+				credentials: 'same-origin',
+				body: JSON.stringify( body ),
+			} );
+		} )
+		.then( function ( response ) {
+			return response.json().then( function ( data ) {
+				if ( ! response.ok ) {
+					const error: Error & { code?: unknown } = new Error( data.message || 'Registration failed.' );
+					error.code = data.code;
+					throw error;
+				}
+				return data;
+			} );
+		} )
+		.then( function ( data ) {
+			const readerEmail = data.email || email;
+			const reader = {
+				...( store.get( 'reader' ) || {} ),
+				email: readerEmail,
+				authenticated: true,
+			};
+			store.set( 'reader', reader, false );
+			emit( EVENTS.reader, reader );
+			dispatchActivity( 'reader_registered', {
+				email: readerEmail,
+				integration_id: integrationId,
+				status: data.status || 'created',
+			} );
+			return data;
+		} )
+		.catch( function ( error ) {
+			dispatchActivity( 'reader_registration_failed', {
+				email,
+				integration_id: integrationId,
+				error: error.code || 'network_error',
+			} );
+			throw error;
+		} );
+}
+
+const readerActivation: NewspackReaderActivation = {
+	store,
+	overlays,
+	segments,
+	on,
+	off,
+	dispatchActivity,
+	getActivities,
+	getUniqueActivitiesBy,
+	setReaderEmail,
+	setAuthenticated,
+	refreshAuthentication,
+	getReader,
+	openNewslettersSignupModal,
+	// openVerificationModal and maybeConfirmRegistration are attached at runtime by
+	// the reader-activation-auth bundle (see reader-activation-auth/index.js). They
+	// aren't included in this literal because they depend on auth-modal markup that
+	// only ships when the auth modal is rendered. Cross-plugin consumers gate access
+	// with `typeof ras?.openVerificationModal === 'function'`.
+	hasAuthLink,
+	getOTPHash,
+	setOTPTimer,
+	clearOTPTimer,
+	getOTPTimeRemaining,
+	authenticateOTP,
+	setAuthStrategy,
+	getAuthStrategy,
+	setPendingCheckout,
+	getPendingCheckout,
+	debugLog,
+	register,
+	...( newspack_ras_config.is_ras_enabled && { openAuthModal } ),
+};
+
+/**
+ * Handle a push to the newspackRAS array.
+ *
+ * @param {...Array|Function} args Array to dispatchActivity reader activity or
+ *                                 function to callback with the
+ *                                 readerActivation object.
+ */
+function handlePush( ...args: NewspackRASQueueItem[] ) {
+	args.forEach( arg => {
+		if ( Array.isArray( arg ) && typeof arg[ 0 ] === 'string' ) {
+			dispatchActivity( ...arg );
+		} else if ( typeof arg === 'function' ) {
+			arg( readerActivation );
+		} else {
+			console.warn( 'Invalid newspackRAS.push argument', arg ); // eslint-disable-line no-console
+		}
+	} );
+}
+
+/**
+ * Whether init() must clear the local reader namespace because the persisted
+ * reader identity no longer matches the current session. Pure — no storage/IO,
+ * no globals; all inputs are passed in so it can be unit-tested as a truth table.
+ *
+ * Three independent triggers:
+ *   - account switch (NPPM-2899): a previously-AUTHENTICATED reader is replaced by a
+ *     server-confirmed DIFFERENT reader. Gated on storedReader.authenticated === true
+ *     so an unauthenticated stored email (e.g. a newsletter lead) logging in under a
+ *     different email keeps its anonymous carryover. Keys on authenticated_email
+ *     (server-confirmed), never the intention cookie.
+ *   - logout (NPPM-2721): server anonymous AND a prior session was authenticated.
+ *   - orphaned (NPPM-2721): server anonymous AND a stale stored email != intention.
+ *
+ * Exported only so the truth table above can be unit-tested directly; it is not part
+ * of the public readerActivation API and is not attached to window.newspackReaderActivation.
+ * Do not depend on it from other bundles.
+ *
+ * @access private
+ *
+ * @param {Object}  args
+ * @param {string}  args.authenticatedEmail  newspack_ras_config.authenticated_email ('' when anonymous).
+ * @param {string}  args.initialEmail        authenticated_email || np_auth_intention cookie (the intention cookie = identity).
+ * @param {Object}  args.storedReader        Persisted reader ({ email, authenticated }).
+ * @param {boolean} args.hasAuthReaderCookie Whether the np_auth_reader cookie is present (the reader cookie = cache guard).
+ * @return {boolean} Whether to clear the namespace.
+ */
+export function shouldClearReaderData( {
+	authenticatedEmail,
+	initialEmail,
+	storedReader,
+	hasAuthReaderCookie,
+}: {
+	authenticatedEmail?: string;
+	initialEmail?: string;
+	storedReader?: { email?: string; authenticated?: unknown } | null;
+	hasAuthReaderCookie: boolean;
+} ): boolean {
+	const norm = ( email?: string ) => ( email || '' ).trim().toLowerCase();
+	const authed = norm( authenticatedEmail );
+	const stored = norm( storedReader?.email );
+
+	// Account switch: a previously-authenticated reader is replaced by a different
+	// server-confirmed reader. The authenticated gate preserves carryover for an
+	// unauthenticated stored email logging in under a different address.
+	//
+	// Unlike the anonymous triggers below, this does NOT consult np_auth_reader.
+	// The cookie guard exists because *anonymous* full-page-cached responses
+	// (Batcache/Varnish/CDN) can be served to a logged-in browser (NPPM-2721); but
+	// authenticated configs (non-empty authenticated_email) are not page-cached —
+	// logged-in requests bypass the full-page cache — so that concern doesn't apply
+	// here. The receiving browser's own auth cookie also can't distinguish a real
+	// switch from such a (non-occurring) cached-authenticated response, so gating on
+	// it would only risk suppressing legitimate A→B clears.
+	if ( storedReader?.authenticated === true && authed && stored && authed !== stored ) {
+		return true;
+	}
+
+	// Remaining triggers require the server to report anonymous. A present
+	// np_auth_reader cookie means "not anonymous" (NPPM-2721 cached-page guard).
+	// Use the normalized `authed` so a whitespace-only email is handled consistently.
+	// Behavioral delta vs NPPM-2721: deriving this from `authed` (not the raw
+	// authenticated_email) makes a degenerate whitespace-only value ('   ') normalize
+	// to anonymous, which could newly trigger the logout/orphaned clear. The server
+	// only ever sends '' or a real email, so this input is non-occurring; the
+	// normalization is intentional and keeps the comparison consistent.
+	const serverSaysAnonymous = ! authed && ! hasAuthReaderCookie;
+	if ( ! serverSaysAnonymous ) {
+		return false;
+	}
+	const storedClaimsAuth = storedReader?.authenticated === true;
+	const storedEmailIsOrphaned = !! stored && stored !== norm( initialEmail );
+	return storedClaimsAuth || storedEmailIsOrphaned;
+}
+
+/**
+ * Initialize.
+ */
+function init() {
+	const data = newspack_ras_config;
+	// np_auth_intention = identity (who the in-progress auth flow is for); distinct
+	// from np_auth_reader below, which is the cached-page guard, not an identity.
+	const initialEmail = data?.authenticated_email || getCookie( 'np_auth_intention' );
+	const authenticated = !! data?.authenticated_email;
+	let currentReader = getReader();
+
+	// Clear the local reader namespace when the persisted identity no longer matches
+	// the current session — logout, an orphaned leftover, or an authenticated account
+	// switch (A→B). See shouldClearReaderData() for the full trigger set (NPPM-2721 +
+	// NPPM-2899).
+	if (
+		shouldClearReaderData( {
+			authenticatedEmail: data?.authenticated_email,
+			initialEmail,
+			storedReader: currentReader,
+			// np_auth_reader = cache guard (present ⇒ "not anonymous"), NOT an identity.
+			hasAuthReaderCookie: !! getCookie( 'np_auth_reader' ),
+		} )
+	) {
+		// Capture the current reader's server-localized snapshot before the wipe.
+		// clearReaderStore() empties newspack_reader_data.items, which would make the
+		// trailing store.rehydrate() a no-op. The reference survives the wipe because
+		// clear() reassigns the property rather than mutating the object (NPPM-2899).
+		const serverReaderItems = newspack_reader_data?.items;
+		clearReaderStore();
+		// Re-read so currentReader reflects the post-clear reseed ({ authenticated:
+		// false }, no email); otherwise the reader object built below would pick the
+		// stale email back up via `initialEmail || currentReader?.email`.
+		currentReader = getReader();
+		// On an authenticated account switch (A→B), restore the new reader's own
+		// server snapshot the clear just dropped so reader B isn't briefly missing its
+		// OWN read-only state (e.g. reading as a non-donor for prompt segmentation)
+		// until its next navigation. The trailing store.rehydrate() consumes it. This
+		// is scoped to the switch case: logout/orphaned clears are anonymous
+		// (authenticated === false) and intentionally leave the namespace empty.
+		if ( authenticated && serverReaderItems ) {
+			newspack_reader_data.items = serverReaderItems;
+		}
+	}
+
+	const reader = { email: initialEmail || currentReader?.email, authenticated };
+	if ( currentReader?.email !== reader?.email || currentReader?.authenticated !== reader?.authenticated ) {
+		store.set( 'reader', reader, false );
+	}
+	// On an account switch (A→B) this fires once with the final identity (B); the
+	// intermediate anonymous reseed clear() performs is surfaced only on EVENTS.data
+	// (per wiped key), never as a separate EVENTS.reader. Consumers here react to the
+	// current reader state, not to a reset transition, so this is intentional — any
+	// per-reader cache invalidation should key off the EVENTS.data wipe events.
+	emit( EVENTS.reader, reader );
+	initAnalytics( readerActivation );
+	initSubscriptionTiersForm();
+	fixClientID();
+	setupArticleViewsAggregates( readerActivation );
+	setupEngagement( readerActivation );
+	attachAuthCookiesListener();
+	attachNewsletterFormListener();
+	pushActivities();
+	setReferrer();
+
+	window.newspackReaderActivation = readerActivation;
+
+	window.newspackRAS = window.newspackRAS || [];
+	window.newspackRAS.forEach( arg => handlePush( arg ) );
+	window.newspackRAS.push = handlePush;
+
+	// Rehydrate after all synchronous strategy registrations, including
+	// those from third parties via newspackRAS.push().
+	store.rehydrate();
+
+	window.newspackRASInitialized = true;
+}
+
+if ( ! window.newspackRASInitialized ) {
+	init();
+}
+
+export default readerActivation;

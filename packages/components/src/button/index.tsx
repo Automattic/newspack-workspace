@@ -17,10 +17,15 @@ import './style.scss';
 const { useHistory } = Router;
 
 type OriginalButtonProps = Partial< React.ComponentProps< typeof BaseComponent > >;
+// `Omit` over the base component's button/anchor props union keeps only the
+// keys common to both variants, dropping anchor-only attributes — re-add the
+// ones Newspack call sites rely on.
 type Props = Omit< OriginalButtonProps, 'href' | 'onClick' > & {
 	href?: string;
 	loading?: boolean;
 	onClick?: () => void;
+	target?: React.HTMLAttributeAnchorTarget;
+	rel?: string;
 };
 
 const Button = ( { href, loading = undefined, onClick, ...otherProps }: Props ) => {

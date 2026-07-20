@@ -27,7 +27,8 @@ export default function WizardSection( {
 	className,
 }: {
 	title?: string;
-	description?: string | React.ReactNode;
+	/** Forwarded to SectionHeader, which also renders function descriptions. */
+	description?: string | React.ReactNode | ( () => React.ReactNode );
 	children: React.ReactNode;
 	scrollToAnchor?: string | null;
 	className?: string;

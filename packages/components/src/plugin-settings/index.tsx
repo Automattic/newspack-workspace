@@ -31,10 +31,10 @@ type PluginSettingsProps = {
 	afterFetch?: ( settings: PluginSettingsData ) => void;
 	/** Called with the updated settings after a section is saved. */
 	afterUpdate?: ( settings: PluginSettingsData ) => void;
-	/** Title displayed above the settings. */
-	title?: string;
-	/** Description displayed under the title. */
-	description?: string;
+	/** Title displayed above the settings. `null` suppresses the default title. */
+	title?: string | null;
+	/** Description displayed under the title. Forwarded to `SectionHeader`, which also accepts a render function. */
+	description?: React.ReactNode | ( () => React.ReactNode );
 	/** Whether section headers have a grey background. */
 	hasGreyHeader?: boolean;
 	/** HTML heading level of the title. */

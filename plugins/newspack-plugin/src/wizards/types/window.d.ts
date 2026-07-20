@@ -19,6 +19,27 @@ declare global {
 			preview_post: string;
 			preview_archive: string;
 			integrations_settings_enabled: boolean;
+			// Whether the Newspack Content Gate / Group subscriptions feature is
+			// enabled; gates the "Advanced settings" and Content Gating tabs.
+			is_newspack_feature_enabled?: boolean;
+			// Whether the Salesforce integration can be configured on this site.
+			can_use_salesforce?: boolean;
+			// Callback URL used by the Salesforce OAuth connection flow.
+			salesforce_redirect_url?: string;
+			// Newsletter lists available for the post-signup/checkout selector,
+			// or an error map keyed by error code when they can't be loaded.
+			available_newsletter_lists: import( '../../../../../packages/components/src/sortable-newsletter-list-control' ).NewsletterList[] | { errors: Record< string, string > };
+			// ESP metadata field slugs offered for reader-data sync.
+			esp_metadata_fields?: string[];
+			// Content-gifting availability and metering context.
+			content_gifting?: {
+				has_metering?: boolean;
+				can_use_gifting?: {
+					errors?: Record< string, string[] >;
+				};
+			};
+			// Products purchasable via gifting / countdown CTAs.
+			available_products?: PurchasableProductOption[];
 			// Optional: consumers guard with `?.`/fallbacks because the
 			// payload can be absent (plugin filter strips it, non-Audience
 			// mount, HMR reseed) — keep the type honest about that.
@@ -49,14 +70,7 @@ declare global {
 				[K in PromptOptionsBaseKey]: string;
 			};
 			experimental: boolean;
-			criteria: Array<{
-				category: string;
-				description: string;
-				id: string;
-				matching_attribute: string;
-				matching_function: string;
-				name: string;
-			}>;
+			criteria: CampaignsCriteriaConfig[];
 		};
 		newspackAudienceDonations: {
 			can_use_name_your_price: boolean;
@@ -80,6 +94,10 @@ declare global {
 			edit_gate_layout_url: string;
 		};
 	}
+
+	// Bare-global access to the Campaigns wizard payload (referenced without
+	// the `window.` prefix in several Campaigns wizard files).
+	const newspackAudienceCampaigns: Window[ 'newspackAudienceCampaigns' ];
 }
 
 export { };

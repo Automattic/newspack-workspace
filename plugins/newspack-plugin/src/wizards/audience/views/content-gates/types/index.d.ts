@@ -185,21 +185,13 @@ type PurchasableProductOption = {
 };
 
 /**
- * Data localized by the Audience wizard (`Audience_Wizard`) as
- * `newspackAudience`. Only the slice consumed by the content-gates screens is
- * typed here; the full window-level shape lives in wizards/types/window.d.ts.
+ * Bare-global access to the Audience wizard payload localized by
+ * `Audience_Wizard` as `newspackAudience` (referenced without the `window.`
+ * prefix across the Audience wizard files). The full shape lives on the
+ * `Window` interface in wizards/types/window.d.ts; this alias keeps the two in
+ * sync.
  */
-declare const newspackAudience:
-	| {
-			available_products?: PurchasableProductOption[];
-			content_gifting?: {
-				has_metering?: boolean;
-				can_use_gifting?: {
-					errors?: Record< string, string[] >;
-				};
-			};
-	  }
-	| undefined;
+declare const newspackAudience: Window[ 'newspackAudience' ];
 
 type Institution = {
 	id: number;

@@ -96,9 +96,7 @@ webpackConfig.output.chunkFilename = '[name].[contenthash].js';
 // otherwise keep a bare, unversioned name and get served stale by CDNs/proxies
 // after a deploy (they're loaded by webpack's runtime, not wp_enqueue_style, so
 // they never pick up a ?ver). Hashing matches the JS chunks' cache-busting.
-const miniCssExtractPlugin = webpackConfig.plugins.find(
-	plugin => plugin.constructor && plugin.constructor.name === 'MiniCssExtractPlugin'
-);
+const miniCssExtractPlugin = webpackConfig.plugins.find( plugin => plugin.constructor && plugin.constructor.name === 'MiniCssExtractPlugin' );
 if ( miniCssExtractPlugin && miniCssExtractPlugin.options ) {
 	miniCssExtractPlugin.options.chunkFilename = '[name].[contenthash].css';
 }

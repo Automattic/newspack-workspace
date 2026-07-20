@@ -1,0 +1,164 @@
+/* globals newspack_ras_config */
+/**
+ * Internal dependencies
+ */
+import { SIGN_IN_MODAL_HASHES, getModalContainer, openAuthModal } from './auth-modal';
+import { openVerificationModal as openVerificationModalImpl } from './verification-modal';
+import { maybeConfirmRegistration as maybeConfirmRegistrationImpl } from './confirmation-modal';
+
+import { domReady } from '../utils';
+
+import './auth-form';
+
+window.newspackRAS = window.newspackRAS || [];
+window.newspackRAS.push( readerActivation => {
+	domReady( function () {
+		/** Expose the openAuthModal function to the RAS scope */
+		readerActivation._openAuthModal = openAuthModal;
+		/**
+		 * Expose the openVerificationModal helper on the RAS scope (consumed cross-plugin
+		 * by registration entry points like the newspack-newsletters subscribe block).
+		 * Injects readerActivation.setOTPTimer so the helper doesn't reach back through
+		 * the window global.
+		 */
+		readerActivation.openVerificationModal = config =>
+			openVerificationModalImpl( {
+				setOTPTimer: readerActivation.setOTPTimer,
+				...config,
+			} );
+		/**
+		 * Expose the maybeConfirmRegistration helper on the RAS scope (consumed
+		 * cross-plugin by registration entry points).
+		 */
+		readerActivation.maybeConfirmRegistration = maybeConfirmRegistrationImpl;
+
+		/**
+		 * Handle hash change.
+		 *
+		 * @param {Event} ev Hash change event.
+		 */
+		function handleHashChange( ev?: Event ) {
+			const container = getModalContainer();
+			if ( ! container ) {
+				return;
+			}
+
+			const currentHash = window.location.hash.replace( '#', '' );
+			// Both #signin_modal and #register_modal open the unified form. The form decides
+			// signin vs register server-side based on whether the submitted email already
+			// belongs to an account, so the two hashes are functionally equivalent here.
+			if ( SIGN_IN_MODAL_HASHES.includes( currentHash ) ) {
+				if ( ev ) {
+					ev.preventDefault();
+				}
+
+				container.setFormAction( 'signin' );
+				openAuthModal( { closeOnSuccess: true } );
+			}
+		}
+		window.addEventListener( 'hashchange', handleHashChange );
+		handleHashChange();
+
+		/**
+		 * Handle account link click.
+		 *
+		 * @param {Event} ev Click event.
+		 */
+		function handleAccountLinkClick( ev: Event ) {
+			ev.preventDefault();
+			const modalTrigger = ev.target as HTMLElement;
+			let callback: ( () => void ) | undefined;
+			let redirect: string | null | undefined;
+			if ( modalTrigger.getAttribute( 'data-redirect' ) ) {
+				redirect = modalTrigger.getAttribute( 'data-redirect' );
+			} else {
+				redirect = modalTrigger.getAttribute( 'href' );
+			}
+			if ( ! redirect ) {
+				const closestEl = modalTrigger.closest( 'a' );
+				if ( closestEl ) {
+					if ( closestEl.getAttribute( 'data-redirect' ) ) {
+						redirect = closestEl.getAttribute( 'data-redirect' );
+					} else {
+						redirect = closestEl.getAttribute( 'href' );
+					}
+				}
+			}
+			if ( redirect && redirect !== '#' ) {
+				callback = () => {
+					window.location.href = redirect;
+				};
+			}
+
+			openAuthModal( {
+				onSuccess: callback,
+				onError: callback,
+				trigger: modalTrigger,
+				closeOnSuccess: true,
+			} );
+		}
+
+		/**
+		 * Initialize trigger links.
+		 */
+		function initializeTriggerLinks() {
+			const triggerLinks = document.querySelectorAll(
+				// The href selector excludes the My Account Button block.
+				`[data-newspack-reader-account-link],[href="${ newspack_ras_config.account_url }"]:not(.wp-block-newspack-my-account-button)`
+			);
+			triggerLinks.forEach( link => {
+				link.addEventListener( 'click', handleAccountLinkClick );
+			} );
+		}
+		initializeTriggerLinks();
+		/** Re-initialize links in case the navigation DOM was modified by a third-party. */
+		setTimeout( initializeTriggerLinks, 1000 );
+
+		/**
+		 * Handle reader changes.
+		 */
+		function handleReaderChanges() {
+			const reader = ( window.newspackReaderActivation as NewspackReaderActivation ).getReader();
+			const accountLinks = document.querySelectorAll( '.newspack-reader__account-link' );
+			if ( accountLinks?.length ) {
+				accountLinks.forEach( link => {
+					const labels = JSON.parse( link.getAttribute( 'data-labels' ) as string );
+					const labelEl = link.querySelector( '.newspack-reader__account-link__label' );
+					if ( labelEl ) {
+						// Change the label for the My Account button only.
+						const isLoggedIn = link.getAttribute( 'data-newspack-logged-in' ) === '1';
+						if ( isLoggedIn ) {
+							labelEl.textContent = labels.signedin;
+							return;
+						}
+						labelEl.textContent = reader?.authenticated ? labels.signedin : labels.signedout;
+
+						// Set my account link href if the reader is authenticated.
+						if ( reader?.authenticated ) {
+							link.setAttribute( 'href', newspack_ras_config.account_url as string );
+						}
+					}
+				} );
+			}
+		}
+		( window.newspackReaderActivation as NewspackReaderActivation ).on( 'reader', handleReaderChanges );
+		handleReaderChanges();
+	} );
+
+	/**
+	 * Detect a reader login via magic link token.
+	 */
+	const queryString = window.location.search;
+	const params = new URLSearchParams( queryString );
+	const reader = readerActivation.getReader();
+	if ( params.get( newspack_ras_config?.auth_action_result as string ) && reader?.email && reader?.authenticated ) {
+		// Remove the auth action result from the URL.
+		params.delete( newspack_ras_config?.auth_action_result as string );
+		const newQueryString = params.toString() ? '?' + params.toString() : '';
+		window.history.replaceState( {}, '', window.location.pathname + newQueryString );
+		readerActivation.dispatchActivity( 'reader_logged_in', {
+			email: reader.email,
+			login_method: 'auth-token',
+		} );
+	}
+} );
