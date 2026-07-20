@@ -1,4 +1,4 @@
-import { expect, test, Page } from "@playwright/test";
+import { expect, Page } from "@playwright/test";
 import { goToAdminMenu } from "./utils-admin";
 
 // Shared helpers for the Access Control wizard, used by the content gating
@@ -93,35 +93,11 @@ const clickHeaderSave = async (page: Page) => {
   }
 };
 
-// Save the gate being edited and leave it live (Active) via the pre-save panel
-// ("Are you ready to save?"), where new gates default to Inactive so Active is
-// picked explicitly.
-//
-// The panel is part of the redesigned Access Control wizard, which ships in
-// alpha/main but not yet on the stable release channel. It is the first point
-// where the spec's flow diverges from the older wizard: the reader-facing
-// enforcement, layout editing and teardown that follow all assume the redesign
-// too. On a site without it, Save persists immediately and routes straight back
-// to the gate list, so the panel never appears -- and pressing on would hang the
-// rest of the spec against UI that isn't there. So when the panel is absent,
-// skip: the whole spec targets the redesign and can't run on this channel. The
-// skip lifts automatically once the redesign reaches the release channel. (This
-// is why the nightly runs green on release while the specs still cover alpha; see
-// AGENTS.md -> "Site setup model".)
+// Save the gate being edited and return to the gate list. New gates default to
+// Active, so Save persists immediately and the wizard routes back to the list --
+// there is no status to choose.
 export const saveGateAsActive = async (page: Page) => {
   await clickHeaderSave(page);
-  const saveDialog = page.getByRole("dialog");
-  const hasSavePanel = await saveDialog
-    .getByText("Are you ready to save?")
-    .waitFor({ state: "visible", timeout: 8000 })
-    .then(() => true)
-    .catch(() => false);
-  test.skip(
-    !hasSavePanel,
-    "Access Control redesign (pre-save panel) is not on this release channel; the spec targets the alpha wizard."
-  );
-  await saveDialog.getByRole("radio", { name: "Active", exact: true }).check();
-  await saveDialog.getByRole("button", { name: "Save", exact: true }).click();
   await page.waitForURL(/#\/content-gates/);
 };
 

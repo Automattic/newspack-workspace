@@ -28,10 +28,11 @@ then run `npm run test:setup` (the setup projects provision the site over SSH).
 
 That staging site is pinned to the **stable release** channel, and provisioning
 rebuilds against the plugin version installed there – not the version the specs
-were merged with. A spec that drives UI which only exists in `alpha`/`main` will
-therefore fail nightly until that feature ships to stable, so new specs must
-feature-detect such UI and `test.skip()` when it is absent rather than assume it
-is present. See `AGENTS.md` → "Site setup model" for details.
+were merged with. Write specs against the release-channel UI: a spec that drives
+UI which only exists in `alpha`/`main` will fail nightly until that feature ships
+to stable. Don't work around that with channel branching or skips – hold coverage
+for alpha-only UI until it reaches release. See `AGENTS.md` → "Site setup model"
+for details.
 
 [Credentials for the Atomic site used for the e2e testing.](https://mc.a8c.com/secret-store/?secret_id=12168)
 
