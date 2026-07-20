@@ -36,10 +36,15 @@ installed plugin code, so a plugin/core update can't leave a stale fixture behin
 > channel, but specs land on `main`, which tracks `alpha`. So a spec that drives
 > UI only present in `alpha` (a feature not yet shipped to stable) will fail every
 > night until that feature reaches the release channel – even though it passes
-> locally against `main`. When adding coverage for recently-merged UI, either
-> feature-detect the new element and fall back to the older flow (see
-> `saveGateAsActive` in `tests/utils-content-gates.ts`), or gate the spec so it
-> skips when the feature is absent. Don't assume the newest UI is present.
+> locally against `main`. When adding coverage for recently-merged UI, don't
+> assume the newest UI is present: probe for a marker of the new flow and, if it
+> is absent, `test.skip()` the spec (it lifts automatically once the feature
+> reaches release). Skip the whole spec rather than patching a single step – if
+> the flow diverges at one point it usually diverges downstream too, so a
+> half-adapted spec hangs on the *next* alpha-only interaction instead of failing
+> fast. `saveGateAsActive` in `tests/utils-content-gates.ts` is the reference: it
+> detects the redesigned wizard's pre-save panel and skips the whole content-gate
+> spec when it is missing.
 
 - **`site-setup.sh`** (this repo) is the from-scratch Newspack bootstrap (DB reset +
   fresh install + posts/users/WooCommerce+donations/memberships/subscriptions/

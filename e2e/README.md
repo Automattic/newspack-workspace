@@ -30,8 +30,8 @@ That staging site is pinned to the **stable release** channel, and provisioning
 rebuilds against the plugin version installed there – not the version the specs
 were merged with. A spec that drives UI which only exists in `alpha`/`main` will
 therefore fail nightly until that feature ships to stable, so new specs must
-feature-detect such UI rather than assume it is present. See `AGENTS.md` →
-"Site setup model" for details.
+feature-detect such UI and `test.skip()` when it is absent rather than assume it
+is present. See `AGENTS.md` → "Site setup model" for details.
 
 [Credentials for the Atomic site used for the e2e testing.](https://mc.a8c.com/secret-store/?secret_id=12168)
 
