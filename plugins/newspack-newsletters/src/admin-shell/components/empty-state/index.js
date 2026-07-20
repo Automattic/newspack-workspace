@@ -14,7 +14,7 @@ import { Grid, SectionHeader } from 'newspack-components';
  * @property {*}        icon         Icon component (from `@wordpress/icons` or similar) for the page header.
  * @property {string}   title        Page-header title (e.g. "Get started with advertisers").
  * @property {string}   description  Short, value-prop description below the title.
- * @property {string}   ctaTitle     Button label (e.g. "Add new advertiser").
+ * @property {string}   ctaTitle     Button label (e.g. "Add Advertiser").
  * @property {string}   [ctaHref]    Button link target. Mutually exclusive with `ctaOnClick`.
  * @property {Function} [ctaOnClick] Click handler. Used when the create flow is in-page (e.g. opens a modal)
  *                                   rather than a navigation. Mutually exclusive with `ctaHref`.

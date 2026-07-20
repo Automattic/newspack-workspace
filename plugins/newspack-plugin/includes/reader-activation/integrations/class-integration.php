@@ -151,6 +151,54 @@ abstract class Integration {
 	}
 
 	/**
+	 * Whether the external service this integration depends on is connected.
+	 *
+	 * Distinct from is_set_up(): "connected" covers only the third-party
+	 * prerequisite configured at its source (provider chosen, API key
+	 * entered), while is_set_up() additionally requires the integration's
+	 * own settings to be complete. The Integrations UI routes the card's
+	 * primary action on this: not connected sends the user to get_setup_url(),
+	 * connected-but-not-set-up sends them to the integration's settings view.
+	 * Like is_set_up(), this is a stored-state check by contract — no live
+	 * API calls. Returns true by default.
+	 *
+	 * @return bool True if connected, false otherwise.
+	 */
+	public function is_connected() {
+		return true;
+	}
+
+	/**
+	 * Why this integration cannot operate with the site's current configuration.
+	 *
+	 * A non-null string marks the integration as unsupported: the Integrations
+	 * UI shows the string verbatim as the card's error badge and routes the
+	 * primary action to get_setup_url(), and the REST layer refuses to enable
+	 * the integration. Distinct from is_connected(): connected-but-unsupported
+	 * means the external prerequisite exists but is incompatible with this
+	 * integration (e.g. the newsletters provider is "manual", which has no API
+	 * to sync contacts against). Returns null by default.
+	 *
+	 * @return string|null Reason the integration is unsupported, or null.
+	 */
+	public function get_unsupported_reason() {
+		return null;
+	}
+
+	/**
+	 * The primary action label to offer when get_unsupported_reason() returns a reason.
+	 *
+	 * Child classes that report an unsupported reason should override this to name
+	 * the remedy, so the integrations UI does not have to carry per-integration copy.
+	 * Only read when get_unsupported_reason() is non-null.
+	 *
+	 * @return string The action label.
+	 */
+	public function get_unsupported_action_label() {
+		return __( 'Open settings', 'newspack-plugin' );
+	}
+
+	/**
 	 * Get the URL where the user can set up this integration.
 	 *
 	 * Child classes should override this to return the admin page where
@@ -160,6 +208,19 @@ abstract class Integration {
 	 */
 	public function get_setup_url() {
 		return '';
+	}
+
+	/**
+	 * Get the slug identifying which brand icon the integration card should show.
+	 *
+	 * Child classes override this to name the connected vendor (e.g. the active
+	 * ESP provider). The integrations UI maps the slug to a brand mark; a null
+	 * return keeps the integration's generic icon.
+	 *
+	 * @return string|null The icon slug, or null for the generic icon.
+	 */
+	public function get_provider_slug() {
+		return null;
 	}
 
 	/**

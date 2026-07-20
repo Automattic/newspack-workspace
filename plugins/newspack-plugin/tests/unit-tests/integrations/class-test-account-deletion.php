@@ -816,6 +816,77 @@ class Test_Account_Deletion extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * An enabled integration whose external prerequisites are not configured
+	 * (is_set_up() === false) must be skipped by the deletion dispatcher, just
+	 * as the regular sync path skips it via get_active_configured_integrations().
+	 * Otherwise a deletion would perform I/O and schedule Action Scheduler retries
+	 * against an integration the admin never finished setting up.
+	 */
+	public function test_handle_account_deletion_skips_unconfigured_integration() {
+		$this->reset_integrations();
+		$spy            = new \Deletion_Spy_Integration( 'spy-unconfigured', 'Spy Unconfigured' );
+		$spy->is_set_up = false;
+		Integrations::register( $spy );
+		$spy->update_settings_field_value( 'sync_account_deletion', true );
+		$spy->update_settings_field_value( 'account_deletion_handling', 'delete' );
+		Integrations::enable( 'spy-unconfigured' );
+
+		\Newspack\Reader_Activation\Contact_Sync::handle_account_deletion(
+			'reader@example.com',
+			[
+				'email'    => 'reader@example.com',
+				'metadata' => [],
+			],
+			'TestContext'
+		);
+
+		$this->assertCount( 0, $spy->delete_calls, 'Unconfigured integration must not have delete_contact called.' );
+		$this->assertCount( 0, $spy->push_calls, 'Unconfigured integration must not have push_contact_data called.' );
+	}
+
+	/**
+	 * The deletion retry executor must abort the retry chain when the integration
+	 * is no longer set up, mirroring the guard in execute_integration_retry(). A
+	 * retry firing against an unconfigured integration would re-schedule itself
+	 * indefinitely instead of dropping cleanly.
+	 */
+	public function test_execute_deletion_retry_aborts_when_integration_not_set_up() {
+		if ( ! function_exists( 'as_schedule_single_action' ) ) {
+			$this->markTestSkipped( 'ActionScheduler not available.' );
+		}
+		\as_unschedule_all_actions( \Newspack\Reader_Activation\Contact_Sync::RETRY_DELETION_HOOK );
+
+		$this->reset_integrations();
+		$spy            = new \Deletion_Spy_Integration( 'spy-retry-unconfigured', 'Spy Retry Unconfigured' );
+		$spy->is_set_up = false;
+		Integrations::register( $spy );
+		Integrations::enable( 'spy-retry-unconfigured' );
+
+		\Newspack\Reader_Activation\Contact_Sync::execute_deletion_retry(
+			[
+				'integration_id' => 'spy-retry-unconfigured',
+				'mode'           => 'delete',
+				'email'          => 'reader@example.com',
+				'contact'        => [],
+				'context'        => 'TestContext',
+				'retry_count'    => 1,
+			]
+		);
+
+		$this->assertCount( 0, $spy->delete_calls, 'Retry against an unconfigured integration must not call delete_contact.' );
+
+		$pending = \as_get_scheduled_actions(
+			[
+				'hook'   => \Newspack\Reader_Activation\Contact_Sync::RETRY_DELETION_HOOK,
+				'group'  => Integrations::get_action_group( 'spy-retry-unconfigured' ),
+				'status' => \ActionScheduler_Store::STATUS_PENDING,
+			],
+			'ARRAY_A'
+		);
+		$this->assertEmpty( $pending, 'Aborted retry chain must not schedule a further retry.' );
+	}
+
+	/**
 	 * In v1 metadata mode, Integration::prepare_contact() strips metadata keys that
 	 * are not registered in Sync\Metadata::get_keys() and enabled_outgoing_fields.
 	 * The dispatcher must re-inject account_deleted (with the integration's prefix)

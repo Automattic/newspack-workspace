@@ -4,6 +4,7 @@
 import { __, sprintf } from '@wordpress/i18n';
 import { CardBody } from '@wordpress/components';
 import { useDispatch } from '@wordpress/data';
+import { decodeEntities } from '@wordpress/html-entities';
 import { createInterpolateElement, useRef } from '@wordpress/element';
 
 /**
@@ -82,6 +83,13 @@ export default function ContentGateSettings( {
 						actions: [ { label: __( 'Undo', 'newspack-plugin' ), onClick: () => updateStatus.current?.( prevStatus ) } ],
 					} );
 				},
+				onError( fetchError: WpFetchError ) {
+					addNotice( {
+						message: decodeEntities( fetchError.message ),
+						type: 'error',
+						id: 'content-gate-status-error',
+					} );
+				},
 			}
 		);
 	};
@@ -110,6 +118,40 @@ export default function ContentGateSettings( {
 						id: 'content-gate-deleted',
 					} );
 				},
+				onError( fetchError: WpFetchError ) {
+					addNotice( {
+						message: decodeEntities( fetchError.message ),
+						type: 'error',
+						id: 'content-gate-delete-error',
+					} );
+				},
+			}
+		);
+	};
+
+	const handleDuplicate = () => {
+		resetError();
+		resetNotices();
+		wizardApiFetch< Gate >(
+			{
+				path: `/newspack/v1/wizard/${ slug }/${ gate.id }/duplicate`,
+				method: 'POST',
+			},
+			{
+				onSuccess( data: Gate ) {
+					// The copy is appended to the end of the list server-side.
+					updateGatesData( [ ...gates, data ] );
+					addNotice( {
+						message: sprintf(
+							// translators: %s is the title of the newly created copy.
+							__( '“%s” gate created as inactive.', 'newspack-plugin' ),
+							data.title
+						),
+						type: 'success',
+						id: 'content-gate-duplicated',
+						actions: [ { label: __( 'Edit', 'newspack-plugin' ), onClick: () => history.push( `/edit/${ data.id }` ) } ],
+					} );
+				},
 			}
 		);
 	};
@@ -127,6 +169,11 @@ export default function ContentGateSettings( {
 				disabled: isFetching,
 			},
 			{
+				label: __( 'Duplicate', 'newspack-plugin' ),
+				action: handleDuplicate,
+				disabled: isFetching,
+			},
+			{
 				label: __( 'Delete', 'newspack-plugin' ),
 				action: () => requestDelete( handleDelete ),
 				disabled: isFetching,
@@ -140,13 +187,13 @@ export default function ContentGateSettings( {
 	const layoutOptions: { label: string; action?: () => void; href?: string }[] = [];
 	if ( hasRegistrationLayout ) {
 		layoutOptions.push( {
-			label: __( 'Edit registered access layout', 'newspack-plugin' ),
+			label: __( 'Edit Registered Access Layout', 'newspack-plugin' ),
 			href: getEditGateLayoutUrl( gate.id, 'registration' ),
 		} );
 	}
 	if ( hasCustomAccessLayout ) {
 		layoutOptions.push( {
-			label: __( 'Edit paid access layout', 'newspack-plugin' ),
+			label: __( 'Edit Paid Access Layout', 'newspack-plugin' ),
 			href: getEditGateLayoutUrl( gate.id, 'custom_access' ),
 		} );
 	}
