@@ -1,0 +1,10 @@
+/**
+ * Fast Checkout block — frontend styles.
+ */
+
+.wp-block-newspack-blocks-fast-checkout--unavailable {
+	padding: 1.5rem;
+	border: 1px solid var( --wp--preset--color--border, #ccc );
+	border-radius: 4px;
+	text-align: center;
+}

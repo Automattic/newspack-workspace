@@ -1,0 +1,44 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/block.json",
+	"apiVersion": 3,
+	"name": "newspack-blocks/fast-checkout",
+	"title": "Fast Checkout",
+	"category": "newspack",
+	"description": "Single-product checkout landing page wrapping the WooCommerce Checkout block.",
+	"keywords": [ "woocommerce", "checkout", "product", "landing", "fast" ],
+	"textdomain": "newspack-blocks",
+	"attributes": {
+		"product": { "type": "string" },
+		"variation": { "type": "string" },
+		"is_variable": { "type": "boolean", "default": false },
+		"afterSuccessURL": { "type": "string" }
+	},
+	"providesContext": {
+		"newspack-blocks/fastCheckoutProductId": "product",
+		"newspack-blocks/fastCheckoutVariationId": "variation"
+	},
+	"supports": {
+		"anchor": true,
+		"align": [ "wide", "full" ],
+		"html": false,
+		"color": {
+			"gradients": true,
+			"__experimentalDefaultControls": { "background": true, "text": true }
+		},
+		"typography": {
+			"fontSize": true,
+			"lineHeight": true
+		},
+		"spacing": {
+			"padding": true,
+			"margin": true,
+			"blockGap": true
+		},
+		"layout": {
+			"allowSwitching": false,
+			"default": { "type": "constrained" }
+		}
+	},
+	"editorStyle": "newspack-blocks-editor",
+	"style": "newspack-blocks-fast-checkout"
+}

@@ -20,14 +20,31 @@ const blockList = JSON.parse( fs.readFileSync( blockListFile ) );
 const editorSetup = path.join( __dirname, 'src', 'setup', 'editor' );
 
 function blockScripts( type, inputDir, blocks ) {
-	return blocks.map( block => path.join( inputDir, 'blocks', block, `${ type }.js` ) ).filter( fs.existsSync );
+	return blocks
+		.map( block => {
+			const jsPath = path.join( inputDir, 'blocks', block, `${ type }.js` );
+			if ( fs.existsSync( jsPath ) ) {
+				return jsPath;
+			}
+			const tsPath = path.join( inputDir, 'blocks', block, `${ type }.ts` );
+			if ( fs.existsSync( tsPath ) ) {
+				return tsPath;
+			}
+			return null;
+		} )
+		.filter( Boolean );
+}
+
+function hasEditorEntry( block ) {
+	const base = path.join( __dirname, 'src', 'blocks', block, 'editor' );
+	return [ '.js', '.ts', '.tsx' ].some( ext => fs.existsSync( base + ext ) );
 }
 
 const blocksDir = path.join( __dirname, 'src', 'blocks' );
 const blocks = fs
 	.readdirSync( blocksDir )
 	.filter( block => isDevelopment || blockList.production.includes( block ) )
-	.filter( block => fs.existsSync( path.join( __dirname, 'src', 'blocks', block, 'editor.js' ) ) );
+	.filter( hasEditorEntry );
 
 // Helps split up each block into its own folder view script
 const viewBlocksScripts = blocks.reduce( ( viewBlocks, block ) => {
