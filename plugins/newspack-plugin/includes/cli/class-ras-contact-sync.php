@@ -383,6 +383,7 @@ class RAS_Contact_Sync {
 					break;
 				}
 
+				self::batch_boundary_pause();
 				$user_ids = self::get_batch_of_readers( $config['batch_size'], $config['offset'] + ( $batches * $config['batch_size'] ) );
 			}
 		}
@@ -442,6 +443,27 @@ class RAS_Contact_Sync {
 		} else {
 			$tally['processed']++;
 		}
+	}
+
+	/**
+	 * Inter-batch hygiene for the bulk pull loop.
+	 *
+	 * A long CLI run accumulates every get_userdata() result in the runtime
+	 * object cache and fires an unspaced external request stream (one per
+	 * reader per pull target) — and since pull errors are deliberately not
+	 * retried, tripping a provider rate limit turns straight into tallied
+	 * errors the operator must re-run. Free the cache and pause for a second
+	 * at each batch boundary. No-op outside a real WP-CLI runtime (the WP_CLI
+	 * constant is not defined under PHPUnit), so tests are unaffected.
+	 */
+	private static function batch_boundary_pause() {
+		if ( ! defined( 'WP_CLI' ) || ! WP_CLI ) {
+			return;
+		}
+		if ( function_exists( '\WP_CLI\Utils\wp_clear_object_cache' ) ) {
+			\WP_CLI\Utils\wp_clear_object_cache();
+		}
+		sleep( 1 );
 	}
 
 	/**
@@ -569,8 +591,10 @@ class RAS_Contact_Sync {
 	/**
 	 * Format the summary line for one direction's results tally.
 	 *
-	 * The push wording matches the historical `esp sync` output exactly so
-	 * operator tooling that greps the summary keeps working.
+	 * The push wording matches the historical `esp sync` output exactly (a verb
+	 * spliced into the shared template) so operator tooling that greps the
+	 * summary keeps working. The pull wording is new and carries no such
+	 * freeze, so it uses full-sentence strings that translators can reorder.
 	 *
 	 * @param array  $tally      Results tally ( `processed`, `errors`, `skipped` ).
 	 * @param bool   $is_dry_run Whether the run was a dry run.
@@ -579,12 +603,19 @@ class RAS_Contact_Sync {
 	 */
 	private static function format_summary( $tally, $is_dry_run, $direction ) {
 		if ( 'pull' === $direction ) {
-			$verb = $is_dry_run ? __( 'Would pull', 'newspack-plugin' ) : __( 'Pulled', 'newspack-plugin' );
-		} else {
-			$verb = $is_dry_run ? __( 'Would sync', 'newspack-plugin' ) : __( 'Synced', 'newspack-plugin' );
+			if ( $is_dry_run ) {
+				// Translators: 1: processed count, 2: error count, 3: skipped count.
+				$template = __( 'Would pull %1$d contacts (%2$d errors, %3$d skipped).', 'newspack-plugin' );
+			} else {
+				// Translators: 1: processed count, 2: error count, 3: skipped count.
+				$template = __( 'Pulled %1$d contacts (%2$d errors, %3$d skipped).', 'newspack-plugin' );
+			}
+			return sprintf( $template, $tally['processed'], $tally['errors'], $tally['skipped'] );
 		}
+
+		$verb = $is_dry_run ? __( 'Would sync', 'newspack-plugin' ) : __( 'Synced', 'newspack-plugin' );
 		return sprintf(
-			// Translators: 1: verb (Synced/Would sync/Pulled/Would pull), 2: processed count, 3: error count, 4: skipped count.
+			// Translators: 1: verb (Synced/Would sync), 2: processed count, 3: error count, 4: skipped count.
 			__( '%1$s %2$d contacts (%3$d errors, %4$d skipped).', 'newspack-plugin' ),
 			$verb,
 			$tally['processed'],
@@ -711,7 +742,7 @@ class RAS_Contact_Sync {
 	 * : Offset value passed to the reader/subscription query. Use with `--batch-size` and `--max-batches` to run multiple processes in parallel.
 	 *
 	 * [--sync-context=<string>]
-	 * : Label recorded as the sync context (e.g. in ESP activity logs). Defaults to a generic CLI context.
+	 * : Label recorded as the sync context on the push leg (e.g. in ESP activity logs); the pull leg does not record a context. Defaults to a generic CLI context.
 	 *
 	 * [--skip-lists]
 	 * : (push only) Upsert each contact WITHOUT a master list, so an unsubscribed contact is not resubscribed. Not supported on Mailchimp, which rejects a list-less upsert before writing any metadata — the pre-flight errors out.
@@ -723,6 +754,10 @@ class RAS_Contact_Sync {
 	 *
 	 * Push-only options hard-error when `--direction` includes `pull` — run a
 	 * separate `--direction=push` command for them.
+	 *
+	 * A direction that includes `pull` also requires at least one in-scope
+	 * integration with enabled incoming fields; this is validated in the
+	 * pre-flight, before any push work runs.
 	 *
 	 * Pull failures are NOT auto-retried via ActionScheduler (a bulk run against
 	 * a flaky API would flood the queue). Re-run the affected `--offset` window
@@ -845,7 +880,7 @@ class RAS_Contact_Sync {
 		if ( ! empty( $integration_id ) ) {
 			$integrations = array_intersect_key( $integrations, [ $integration_id => true ] );
 		}
-		foreach ( $integrations as $integration_id => $integration ) {
+		foreach ( $integrations as $id => $integration ) {
 			$enabled = $integration->get_enabled_outgoing_fields();
 			$missing = array_values( array_diff( $labels, $enabled ) );
 			if ( ! empty( $missing ) ) {
@@ -854,7 +889,7 @@ class RAS_Contact_Sync {
 					sprintf(
 						// Translators: 1: integration id, 2: comma-separated field labels.
 						__( 'These fields are not enabled as outgoing fields for integration "%1$s": %2$s. Enable them under Audience > Access control / metadata settings, then re-run.', 'newspack-plugin' ),
-						$integration_id,
+						$id,
 						implode( ', ', $missing )
 					)
 				);
@@ -871,6 +906,11 @@ class RAS_Contact_Sync {
 	 * Push-only flags are rejected outright when the direction includes pull —
 	 * silently applying them to just the push leg would be surprising; operators
 	 * run a separate `--direction=push` command instead.
+	 *
+	 * When the direction includes pull, also requires at least one in-scope
+	 * integration with enabled incoming fields: surfacing that here keeps a
+	 * `--direction=both` run from completing a full push before discovering
+	 * the pull leg has nothing to do.
 	 *
 	 * @param array $assoc_args Associative CLI args.
 	 *
@@ -920,6 +960,29 @@ class RAS_Contact_Sync {
 						)
 					);
 				}
+			}
+
+			// Fail fast when the pull leg has no viable target. Without this,
+			// --direction=both would complete the entire push leg (real ESP
+			// writes, potentially hours) before pull_contacts() surfaced this
+			// deterministic, configuration-only error — and WP_CLI::error()
+			// would then discard the accumulated push summary.
+			$pull_scope = Integrations::get_active_configured_integrations();
+			if ( '' !== $integration_id ) {
+				$pull_scope = array_intersect_key( $pull_scope, [ $integration_id => true ] );
+			}
+			$has_pull_target = false;
+			foreach ( $pull_scope as $integration ) {
+				if ( ! empty( $integration->get_enabled_incoming_fields() ) ) {
+					$has_pull_target = true;
+					break;
+				}
+			}
+			if ( ! $has_pull_target ) {
+				return new \WP_Error(
+					'newspack_backfill_no_pull_targets',
+					__( 'No active integrations with enabled incoming fields to pull from.', 'newspack-plugin' )
+				);
 			}
 		}
 

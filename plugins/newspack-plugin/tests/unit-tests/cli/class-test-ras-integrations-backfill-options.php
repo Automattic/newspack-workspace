@@ -25,9 +25,13 @@ class Test_RAS_Integrations_Backfill_Options extends WP_UnitTestCase {
 		Failing_Sample_Integration::reset();
 		Integrations::register( new Failing_Sample_Integration( 'backfill_mock', 'Backfill Mock' ) );
 		Integrations::enable( 'backfill_mock' );
+		// Give the mock an enabled incoming field so pull directions pass the
+		// pull-target pre-flight; tests for the no-target path delete this.
+		update_option( 'newspack_integration_incoming_fields_backfill_mock', [ 'field_a' => [ 'name' => 'Field A' ] ] );
 	}
 
 	public function tear_down() {
+		delete_option( 'newspack_integration_incoming_fields_backfill_mock' );
 		Integrations::disable( 'backfill_mock' );
 		Integrations::enable( 'esp' );
 		Failing_Sample_Integration::reset();
@@ -166,5 +170,50 @@ class Test_RAS_Integrations_Backfill_Options extends WP_UnitTestCase {
 
 		$this->assertSame( 1, Failing_Sample_Integration::$pull_count );
 		$this->assertSame( '"gold"', \Newspack\Reader_Data::get_data( $user_id, 'field_a' ) );
+	}
+
+	/**
+	 * A pull direction pre-flights that at least one in-scope integration has
+	 * enabled incoming fields — otherwise `--direction=both` would complete a
+	 * full push before discovering the pull leg has nothing to do (NPPD-2076).
+	 */
+	public function test_pull_direction_without_pull_targets_fails_preflight() {
+		delete_option( 'newspack_integration_incoming_fields_backfill_mock' );
+
+		foreach ( [ 'pull', 'both' ] as $direction ) {
+			$result = $this->parse( [ 'direction' => $direction ] );
+			$this->assertInstanceOf( \WP_Error::class, $result, "Direction '$direction' must fail without pull targets." );
+			$this->assertSame( 'newspack_backfill_no_pull_targets', $result->get_error_code() );
+		}
+
+		$this->assertIsArray( $this->parse( [ 'direction' => 'push' ] ), 'Push direction needs no pull targets.' );
+	}
+
+	/**
+	 * With --integration, the pull-target pre-flight considers only the target
+	 * integration, mirroring the runtime scoping.
+	 */
+	public function test_pull_preflight_scopes_to_target_integration() {
+		Integrations::register( new Failing_Sample_Integration( 'backfill_other', 'Backfill Other' ) );
+		Integrations::enable( 'backfill_other' );
+
+		$scoped_to_other = $this->parse(
+			[
+				'direction'   => 'pull',
+				'integration' => 'backfill_other',
+			]
+		);
+		$scoped_to_mock  = $this->parse(
+			[
+				'direction'   => 'pull',
+				'integration' => 'backfill_mock',
+			]
+		);
+
+		Integrations::disable( 'backfill_other' );
+
+		$this->assertInstanceOf( \WP_Error::class, $scoped_to_other, 'backfill_other has no enabled incoming fields.' );
+		$this->assertSame( 'newspack_backfill_no_pull_targets', $scoped_to_other->get_error_code() );
+		$this->assertIsArray( $scoped_to_mock, 'backfill_mock has an enabled incoming field.' );
 	}
 }

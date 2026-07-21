@@ -322,6 +322,9 @@ wp newspack integrations backfill --direction=both --integration=esp --batch-siz
 - `--direction=push|pull|both` (default `push`). Push-only flags
   (`--subscription-ids`, `--order-ids`, `--migrated-subscriptions`,
   `--skip-lists`, `--fields`) hard-error when the direction includes pull.
+- A direction that includes `pull` requires at least one in-scope integration
+  with enabled incoming fields — validated in the pre-flight, so a
+  `--direction=both` run fails fast instead of completing the push leg first.
 - `--integration=<id>` restricts the run to one active, configured integration;
   on the push side this also scopes the `--fields` pre-flight validation.
 - A pull `--dry-run` still performs the external API reads — it only skips
