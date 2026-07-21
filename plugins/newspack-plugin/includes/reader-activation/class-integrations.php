@@ -87,6 +87,7 @@ class Integrations {
 		require_once __DIR__ . '/integrations/class-integration.php';
 		require_once __DIR__ . '/integrations/class-contact-pull.php';
 		require_once __DIR__ . '/integrations/class-contact-cron.php';
+		require_once __DIR__ . '/integrations/class-form-capture.php';
 
 		add_action( 'init', [ __CLASS__, 'register_integrations' ], 5 );
 		add_action( 'init', [ __CLASS__, 'register_my_account_endpoints' ], 6 );
@@ -279,6 +280,7 @@ class Integrations {
 	public static function register_integrations() {
 		// Native integrations.
 		self::register( new Integrations\ESP() );
+		self::register( new Integrations\Form_Capture() );
 
 		// Hook for other plugins/code to register their integrations.
 		do_action( 'newspack_reader_activation_register_integrations' );
