@@ -125,4 +125,36 @@ class Test_RAS_Integrations_Backfill_Options extends WP_UnitTestCase {
 		);
 		$this->assertIsArray( $parsed, 'parse_backfill_options only routes; push-only flag validity is parse_sync_options\'s job.' );
 	}
+
+	public function test_cli_backfill_rejects_invalid_direction_via_error() {
+		$this->expectException( \Exception::class );
+		$this->expectExceptionMessage( 'Invalid --direction' );
+		RAS_Contact_Sync::cli_backfill( [], [ 'direction' => 'sideways' ] );
+	}
+
+	/**
+	 * End-to-end pull leg through the public command entry point: a
+	 * --direction=pull run drives Contact_Pull for the target reader.
+	 * (The push leg is covered end-to-end by the existing tally tests plus
+	 * the scoping/parsing layers; driving it here would drag the WC mock
+	 * fidelity constraints into this file for no added coverage.)
+	 */
+	public function test_cli_backfill_pull_direction_pulls_readers() {
+		update_option( 'newspack_integration_incoming_fields_backfill_mock', [ 'field_a' => [ 'name' => 'Field A' ] ] );
+		Failing_Sample_Integration::$pull_data = [ 'field_a' => 'gold' ];
+		$user_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+
+		RAS_Contact_Sync::cli_backfill(
+			[],
+			[
+				'direction' => 'pull',
+				'user-ids'  => (string) $user_id,
+			]
+		);
+
+		delete_option( 'newspack_integration_incoming_fields_backfill_mock' );
+
+		$this->assertSame( 1, Failing_Sample_Integration::$pull_count );
+		$this->assertSame( '"gold"', \Newspack\Reader_Data::get_data( $user_id, 'field_a' ) );
+	}
 }

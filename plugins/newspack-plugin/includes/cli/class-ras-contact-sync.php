@@ -542,7 +542,61 @@ class RAS_Contact_Sync {
 	}
 
 	/**
+	 * Build the batch-sync config array from CLI associative args.
+	 *
+	 * Shared by `wp newspack integrations backfill` and the `wp newspack esp sync` alias.
+	 *
+	 * @param array $assoc_args Associative CLI args.
+	 * @return array Batch config for sync_contacts() (sync `options` not included).
+	 */
+	private static function build_sync_config( $assoc_args ) {
+		return [
+			'is_dry_run'       => ! empty( $assoc_args['dry-run'] ),
+			'active_only'      => ! empty( $assoc_args['active-only'] ),
+			'migrated_only'    => ! empty( $assoc_args['migrated-subscriptions'] ) ? $assoc_args['migrated-subscriptions'] : false,
+			'subscription_ids' => ! empty( $assoc_args['subscription-ids'] ) ? explode( ',', $assoc_args['subscription-ids'] ) : false,
+			'user_ids'         => ! empty( $assoc_args['user-ids'] ) ? explode( ',', $assoc_args['user-ids'] ) : false,
+			'order_ids'        => ! empty( $assoc_args['order-ids'] ) ? explode( ',', $assoc_args['order-ids'] ) : false,
+			'batch_size'       => ! empty( $assoc_args['batch-size'] ) ? intval( $assoc_args['batch-size'] ) : 10,
+			'offset'           => ! empty( $assoc_args['offset'] ) ? intval( $assoc_args['offset'] ) : 0,
+			'max_batches'      => ! empty( $assoc_args['max-batches'] ) ? intval( $assoc_args['max-batches'] ) : 0,
+			'context'          => ! empty( $assoc_args['sync-context'] ) ? $assoc_args['sync-context'] : static::$context,
+		];
+	}
+
+	/**
+	 * Format the summary line for one direction's results tally.
+	 *
+	 * The push wording matches the historical `esp sync` output exactly so
+	 * operator tooling that greps the summary keeps working.
+	 *
+	 * @param array  $tally      Results tally ( `processed`, `errors`, `skipped` ).
+	 * @param bool   $is_dry_run Whether the run was a dry run.
+	 * @param string $direction  Either 'push' or 'pull'.
+	 * @return string
+	 */
+	private static function format_summary( $tally, $is_dry_run, $direction ) {
+		if ( 'pull' === $direction ) {
+			$verb = $is_dry_run ? __( 'Would pull', 'newspack-plugin' ) : __( 'Pulled', 'newspack-plugin' );
+		} else {
+			$verb = $is_dry_run ? __( 'Would sync', 'newspack-plugin' ) : __( 'Synced', 'newspack-plugin' );
+		}
+		return sprintf(
+			// Translators: 1: verb (Synced/Would sync/Pulled/Would pull), 2: processed count, 3: error count, 4: skipped count.
+			__( '%1$s %2$d contacts (%3$d errors, %4$d skipped).', 'newspack-plugin' ),
+			$verb,
+			$tally['processed'],
+			$tally['errors'],
+			$tally['skipped']
+		);
+	}
+
+	/**
 	 * Sync Reader Activation contact data to the connected ESP for all customers, migrated subscriptions, or specific customers/subscriptions/orders.
+	 *
+	 * Legacy alias of `wp newspack integrations backfill` (push direction). New
+	 * capabilities (--direction, --integration) live on that command; this alias
+	 * keeps the historical flag surface unchanged.
 	 *
 	 * ## OPTIONS
 	 *
@@ -592,18 +646,9 @@ class RAS_Contact_Sync {
 	 * @param array $assoc_args Associative args.
 	 */
 	public static function cli_sync_contacts( $args, $assoc_args ) {
-		$config = [];
-		$config['is_dry_run']       = ! empty( $assoc_args['dry-run'] );
-		$config['active_only']      = ! empty( $assoc_args['active-only'] );
-		$config['migrated_only']    = ! empty( $assoc_args['migrated-subscriptions'] ) ? $assoc_args['migrated-subscriptions'] : false;
-		$config['subscription_ids'] = ! empty( $assoc_args['subscription-ids'] ) ? explode( ',', $assoc_args['subscription-ids'] ) : false;
-		$config['user_ids']         = ! empty( $assoc_args['user-ids'] ) ? explode( ',', $assoc_args['user-ids'] ) : false;
-		$config['order_ids']        = ! empty( $assoc_args['order-ids'] ) ? explode( ',', $assoc_args['order-ids'] ) : false;
-		$config['batch_size']       = ! empty( $assoc_args['batch-size'] ) ? intval( $assoc_args['batch-size'] ) : 10;
-		$config['offset']           = ! empty( $assoc_args['offset'] ) ? intval( $assoc_args['offset'] ) : 0;
-		$config['max_batches']      = ! empty( $assoc_args['max-batches'] ) ? intval( $assoc_args['max-batches'] ) : 0;
-		$config['context']          = ! empty( $assoc_args['sync-context'] ) ? $assoc_args['sync-context'] : static::$context;
+		WP_CLI::log( __( 'Note: `wp newspack esp sync` is a legacy alias of `wp newspack integrations backfill`.', 'newspack-plugin' ) );
 
+		$config  = self::build_sync_config( $assoc_args );
 		$options = self::parse_sync_options( $assoc_args );
 		if ( \is_wp_error( $options ) ) {
 			WP_CLI::error( $options->get_error_message() );
@@ -618,16 +663,125 @@ class RAS_Contact_Sync {
 			return;
 		}
 		WP_CLI::line( "\n" );
-		WP_CLI::success(
-			sprintf(
-				// Translators: 1: verb (Synced/Would sync), 2: processed count, 3: error count, 4: skipped count.
-				__( '%1$s %2$d contacts (%3$d errors, %4$d skipped).', 'newspack-plugin' ),
-				$config['is_dry_run'] ? __( 'Would sync', 'newspack-plugin' ) : __( 'Synced', 'newspack-plugin' ),
-				$results['processed'],
-				$results['errors'],
-				$results['skipped']
-			)
-		);
+		WP_CLI::success( self::format_summary( $results, $config['is_dry_run'], 'push' ) );
+	}
+
+	/**
+	 * Backfill reader contact data to and/or from the active integrations.
+	 *
+	 * Generic successor of `wp newspack esp sync`: pushes reader data out to
+	 * integrations, pulls enabled incoming fields back in, or both — optionally
+	 * scoped to a single integration.
+	 *
+	 * ## OPTIONS
+	 *
+	 * [--direction=<push|pull|both>]
+	 * : Sync direction. `push` sends reader data to the integrations (same as the legacy `wp newspack esp sync`); `pull` fetches enabled incoming fields from the integrations into Newspack reader data; `both` runs push then pull. Defaults to `push`.
+	 *
+	 * [--integration=<id>]
+	 * : Restrict the backfill to a single active, configured integration (e.g. `esp`). By default every active, configured integration takes part.
+	 *
+	 * [--dry-run]
+	 * : Output results but do not persist anything. NOTE: a pull dry-run still performs the external API reads (that is what previewing a pull means); it only skips writing reader data. On the push side, combined with `--skip-lists`/`--fields`, the preview runs the `newspack_esp_sync_contact` filter for fidelity.
+	 *
+	 * [--active-only]
+	 * : Only process users who have active subscriptions.
+	 *
+	 * [--user-ids=<id1,id2,etc>]
+	 * : Comma-delimited list of user IDs to process.
+	 *
+	 * [--subscription-ids=<id1,id2,etc>]
+	 * : (push only) Comma-delimited list of subscription IDs to process.
+	 *
+	 * [--order-ids=<id1,id2,etc>]
+	 * : (push only) Comma-delimited list of order IDs to process.
+	 *
+	 * [--migrated-subscriptions=<stripe|piano-csv|stripe-csv>]
+	 * : (push only) Only process subscriptions migrated via the Newspack Subscription Migrations plugin. That plugin must be active.
+	 *
+	 * [--batch-size=<number>]
+	 * : Number of contacts to query/process at once.
+	 *
+	 * [--max-batches=<number>]
+	 * : Maximum number of batches to process.
+	 *
+	 * [--offset=<number>]
+	 * : Offset value passed to the reader/subscription query. Use with `--batch-size` and `--max-batches` to run multiple processes in parallel.
+	 *
+	 * [--sync-context=<string>]
+	 * : Label recorded as the sync context (e.g. in ESP activity logs). Defaults to a generic CLI context.
+	 *
+	 * [--skip-lists]
+	 * : (push only) Upsert each contact WITHOUT a master list, so an unsubscribed contact is not resubscribed. Not supported on Mailchimp, which rejects a list-less upsert before writing any metadata — the pre-flight errors out.
+	 *
+	 * [--fields=<name1,name2>]
+	 * : (push only) Comma-delimited metadata fields (raw keys or display labels, any case) to sync. Each field must be enabled as an outgoing field on every integration taking part in the run (just the `--integration` target when scoped).
+	 *
+	 * ## NOTES
+	 *
+	 * Push-only options hard-error when `--direction` includes `pull` — run a
+	 * separate `--direction=push` command for them.
+	 *
+	 * Pull failures are NOT auto-retried via ActionScheduler (a bulk run against
+	 * a flaky API would flood the queue). Re-run the affected `--offset` window
+	 * instead. Push retry behavior is unchanged from `wp newspack esp sync`,
+	 * including the no-retry rule for `--skip-lists`/`--fields` runs.
+	 *
+	 * @param array $args Positional args.
+	 * @param array $assoc_args Associative args.
+	 */
+	public static function cli_backfill( $args, $assoc_args ) {
+		$backfill = self::parse_backfill_options( $assoc_args );
+		if ( \is_wp_error( $backfill ) ) {
+			WP_CLI::error( $backfill->get_error_message() );
+			return;
+		}
+		$direction      = $backfill['direction'];
+		$integration_id = $backfill['integration_id'];
+		$config         = self::build_sync_config( $assoc_args );
+		$summaries      = [];
+
+		if ( in_array( $direction, [ 'push', 'both' ], true ) ) {
+			$options = self::parse_sync_options( $assoc_args, $integration_id );
+			if ( \is_wp_error( $options ) ) {
+				WP_CLI::error( $options->get_error_message() );
+				return;
+			}
+			$options['integration_id'] = $integration_id;
+
+			$push_config            = $config;
+			$push_config['options'] = $options;
+
+			$push_results = self::sync_contacts( $push_config );
+			if ( \is_wp_error( $push_results ) ) {
+				WP_CLI::error( $push_results->get_error_message() );
+				return;
+			}
+			$summaries[] = self::format_summary( $push_results, $config['is_dry_run'], 'push' );
+		}
+
+		if ( in_array( $direction, [ 'pull', 'both' ], true ) ) {
+			static::log( __( 'Running integrations contact pull...', 'newspack-plugin' ) );
+			$pull_results = self::pull_contacts(
+				[
+					'active_only'    => $config['active_only'],
+					'user_ids'       => $config['user_ids'],
+					'batch_size'     => $config['batch_size'],
+					'offset'         => $config['offset'],
+					'max_batches'    => $config['max_batches'],
+					'is_dry_run'     => $config['is_dry_run'],
+					'integration_id' => $integration_id,
+				]
+			);
+			if ( \is_wp_error( $pull_results ) ) {
+				WP_CLI::error( $pull_results->get_error_message() );
+				return;
+			}
+			$summaries[] = self::format_summary( $pull_results, $config['is_dry_run'], 'pull' );
+		}
+
+		WP_CLI::line( "\n" );
+		WP_CLI::success( implode( ' ', $summaries ) );
 	}
 
 	/**
