@@ -157,6 +157,11 @@ epoch_to_date() {
 # source commit (the env would serve outdated compiled JS/CSS over current
 # PHP — easy to misdiagnose as a branch-sync problem).
 #
+# Re-runs are safe: an existing node_modules/vendor is never touched (it may
+# hold the worktree's own installs), and an existing dist/build is refreshed
+# only when the main checkout's copy is newer — a worktree's own fresher
+# build (--rebuild or a manual host build) survives.
+#
 # When $3 (auto_rebuild) is true, stale monorepo worktrees are rebuilt from
 # their own source after seeding. The rebuild MUST run on the host — env
 # worktrees can't be built in-container — and goes through corepack pnpm,
@@ -167,7 +172,7 @@ seed_worktree_assets() {
     local env_name="$2"
     local auto_rebuild="$3"
     local now_ts line wt_path container_path repo repo_host_path src dst wt_root
-    local built_ts age_days age_label src_ts dir entry rel_path
+    local built_ts age_days age_label src_ts dir entry rel_path src_dir_ts dst_dir_ts
     local stale_mono=()
     now_ts=$(date +%s)
     # Anchored regex (matching each_worktree_in_env / get_target_container
@@ -208,14 +213,50 @@ seed_worktree_assets() {
             echo "Copying built assets for $repo (no dist/build in $repo_host_path)..."
         fi
         for dir in node_modules vendor dist build; do
-            if [[ -d "$src/$dir" ]]; then
-                cp -al "$src/$dir" "$dst/$dir" 2>/dev/null || cp -a "$src/$dir" "$dst/$dir"
+            [[ -d "$src/$dir" ]] || continue
+            if [[ -d "$dst/$dir" ]]; then
+                # Re-run: the worktree already has this dir, and a bare cp
+                # into an existing directory would nest a copy inside it
+                # (dst/dist/dist) instead of refreshing it.
+                if [[ "$dir" == node_modules || "$dir" == vendor ]]; then
+                    # Dependency dirs may hold the worktree's own installs
+                    # (host-side pnpm/composer); never clobber them.
+                    echo "  $dir/: kept (seeded only when missing; delete it to re-seed)."
+                    continue
+                fi
+                # dist/build: refresh only when the main checkout's copy is
+                # newer — a worktree may carry its own fresher build
+                # (--rebuild or a manual host build) that a re-run must not
+                # roll back to the main checkout's older one.
+                src_dir_ts=$(newest_mtime_in "$src/$dir")
+                dst_dir_ts=$(newest_mtime_in "$dst/$dir")
+                if [[ -n "$src_dir_ts" && ( -z "$dst_dir_ts" || "$src_dir_ts" -gt "$dst_dir_ts" ) ]]; then
+                    echo "  $dir/: refreshing (the main checkout's copy is newer)."
+                    rm -rf "$dst/$dir"
+                else
+                    echo "  $dir/: kept (the worktree's copy is not older than the main checkout's)."
+                    continue
+                fi
             fi
+            # A failed hardlink copy (e.g. across filesystems) leaves a partial
+            # destination behind; clear it so the plain-copy fallback starts
+            # clean instead of nesting into it.
+            cp -al "$src/$dir" "$dst/$dir" 2>/dev/null \
+                || { rm -rf "$dst/$dir"; cp -a "$src/$dir" "$dst/$dir"; }
         done
-        # Stale when the seeded dist/build predate the worktree's last source
-        # commit. Compare against the commit date, not source file mtimes — a
-        # fresh worktree checkout stamps every file with the checkout time,
-        # which would false-flag assets built moments earlier.
+        # Judge staleness on what the worktree actually ends up with, not on
+        # the main checkout's copy — a kept worktree-local build may be newer
+        # than the assets offered above.
+        built_ts=$(newest_mtime_in "$dst/dist" "$dst/build")
+        if [[ -n "$built_ts" ]]; then
+            age_days=$(( (now_ts - built_ts) / 86400 ))
+            age_label="${age_days} days"
+            [[ "$age_days" -eq 1 ]] && age_label="1 day"
+        fi
+        # Stale when the resulting dist/build predate the worktree's last
+        # source commit. Compare against the commit date, not source file
+        # mtimes — a fresh worktree checkout stamps every file with the
+        # checkout time, which would false-flag assets built moments earlier.
         src_ts=$(git -C "$dst" log -1 --format=%ct -- . 2>/dev/null)
         if [[ -n "$built_ts" && -n "$src_ts" && "$built_ts" -lt "$src_ts" ]]; then
             log_warning "Seeded assets for $repo are STALE: built $(epoch_to_date "$built_ts") ($age_label ago), but the worktree's source last changed $(epoch_to_date "$src_ts")."
@@ -952,6 +993,7 @@ MIGRATE
         echo "      --build                      Seed built assets (node_modules/vendor/dist/build) from the"
         echo "                                   main checkout into the env's worktrees, reporting their build"
         echo "                                   date and warning when they predate the worktree's source"
+        echo "                                   (re-runs refresh dist/build only when the main checkout's is newer)"
         echo "      --rebuild                    Implies --build; also rebuilds stale worktree JS on the host"
         echo "  up --all [--build] [--rebuild]   Start all environments"
         echo "  cleanup [--all] [--yes]          Remove environments (--all selects everything, --yes skips confirmation)"

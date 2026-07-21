@@ -282,6 +282,9 @@ n env up <name> [options]      # Start environment (creates DB, installs WP, set
                                #   main checkout into the env's worktrees. Prints each repo's
                                #   asset build date and warns prominently when the assets
                                #   predate the worktree's source (stale compiled JS/CSS).
+                               #   Safe to re-run: existing node_modules/vendor are kept, and
+                               #   dist/build refresh only when the main checkout's copy is
+                               #   newer (a worktree's own fresher build survives).
   --rebuild                    #   Implies --build; after seeding, rebuilds stale monorepo
                                #   worktree JS from the worktree's own source on the HOST via
                                #   corepack pnpm (env worktrees cannot be built in-container).

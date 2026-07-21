@@ -288,7 +288,8 @@ n worktree remove <plugin> <branch> # Remove a worktree
 ```BASH
 n env create <name> --worktree <repo>:<branch> [--worktree ...] [--port <port>]
 n env up <name> [--build]           # Start the environment (--build seeds built assets
-                                    #   from the main checkout and warns when they're stale)
+                                    #   from the main checkout and warns when they're stale;
+                                    #   re-runs only refresh dist/build when main's is newer)
 n env up <name> --rebuild           # --build + rebuild stale worktree JS on the host
 n env down <name>                   # Stop the environment
 n env destroy <name>                # Stop and remove the environment
