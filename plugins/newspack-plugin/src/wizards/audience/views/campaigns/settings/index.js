@@ -2,12 +2,12 @@
  * Internal dependencies
  */
 import { withWizardScreen, PluginSettings } from '../../../../../../packages/components/src';
-import ContextualPromptsOptIn from './contextual-prompts-opt-in';
+import ContextualPromptsSettings from './contextual-prompts-settings';
 
 const Settings = () => {
 	return (
 		<>
-			<ContextualPromptsOptIn />
+			<ContextualPromptsSettings />
 			<PluginSettings pluginSlug="newspack-audience-campaigns" isWizard={ true } title={ null } />
 		</>
 	);

@@ -38,6 +38,64 @@ class Newspack_Popups_Settings {
 	}
 
 	/**
+	 * The publisher-profile fields that tailor AI-generated Contextual Prompt
+	 * copy. Rendered in the AI Copy Assistant configure view, and read by
+	 * newspack-manager's Prompt_Donation::get_publisher_profile() via these
+	 * same option keys — keep them in sync.
+	 *
+	 * @return array List of field definitions ( key, label, help, type, value ).
+	 */
+	public static function get_ai_copy_assistant_fields() {
+		$fields = [
+			[
+				'key'   => 'newspack_contextual_prompts_publisher_name',
+				'label' => __( 'Publisher name', 'newspack-popups' ),
+				'help'  => __( 'How your newsroom is named in donation appeals. Defaults to the site title when empty.', 'newspack-popups' ),
+				'type'  => 'text',
+			],
+			[
+				'key'   => 'newspack_contextual_prompts_coverage_area',
+				'label' => __( 'Coverage area', 'newspack-popups' ),
+				'help'  => __( 'The place or beat your newsroom covers, e.g. "San Diego County". Helps ground the appeal.', 'newspack-popups' ),
+				'type'  => 'text',
+			],
+			[
+				'key'   => 'newspack_contextual_prompts_voice',
+				'label' => __( 'Voice and tone', 'newspack-popups' ),
+				'help'  => __( 'A short note on how appeals should sound, e.g. "plainspoken and investigative, no hype".', 'newspack-popups' ),
+				'type'  => 'textarea',
+			],
+			[
+				'key'   => 'newspack_contextual_prompts_additional_guidance',
+				'label' => __( 'Additional guidance', 'newspack-popups' ),
+				'help'  => __( 'Optional house do/don\'ts appended to the AI guidance. Never overrides the non-advocacy guardrail.', 'newspack-popups' ),
+				'type'  => 'textarea',
+			],
+		];
+
+		foreach ( $fields as &$field ) {
+			$field['value'] = (string) get_option( $field['key'], '' );
+		}
+
+		return $fields;
+	}
+
+	/**
+	 * Save AI Copy Assistant profile fields. Only known keys are written.
+	 *
+	 * @param array $fields Map of field key => value.
+	 * @return void
+	 */
+	public static function save_ai_copy_assistant_fields( $fields ) {
+		$allowed = wp_list_pluck( self::get_ai_copy_assistant_fields(), 'key' );
+		foreach ( (array) $fields as $key => $value ) {
+			if ( in_array( $key, $allowed, true ) ) {
+				update_option( $key, sanitize_textarea_field( $value ) );
+			}
+		}
+	}
+
+	/**
 	 * The settings page hook suffix returned by add_submenu_page().
 	 *
 	 * Used to scope asset enqueuing to this screen. The screen base can't be
@@ -332,63 +390,6 @@ class Newspack_Popups_Settings {
 				'public'      => false,
 			],
 		];
-
-		// AI Copy Assistant profile — only exposed once an admin has opted in
-		// (see the opt-in card in Campaigns > Settings). Publisher details here
-		// are read by newspack-manager's Prompt_Donation::get_publisher_profile()
-		// via these same option keys; keep them in sync.
-		if ( self::is_ai_copy_assistant_enabled() ) {
-			$settings_list = array_merge(
-				$settings_list,
-				[
-					[
-						'description' => __( 'AI Copy Assistant', 'newspack-popups' ),
-						'help'        => __( 'Details used to tailor AI-generated Contextual Prompt copy to your newsroom.', 'newspack-popups' ),
-						'section'     => 'ai_copy_assistant',
-						'key'         => 'active',
-						'type'        => 'boolean',
-						'public'      => true,
-						'value'       => null,
-					],
-					[
-						'section'     => 'ai_copy_assistant',
-						'key'         => 'newspack_contextual_prompts_publisher_name',
-						'type'        => 'string',
-						'value'       => get_option( 'newspack_contextual_prompts_publisher_name', '' ),
-						'default'     => '',
-						'description' => __( 'Publisher name', 'newspack-popups' ),
-						'help'        => __( 'How your newsroom is named in donation appeals. Defaults to the site title when empty.', 'newspack-popups' ),
-					],
-					[
-						'section'     => 'ai_copy_assistant',
-						'key'         => 'newspack_contextual_prompts_coverage_area',
-						'type'        => 'string',
-						'value'       => get_option( 'newspack_contextual_prompts_coverage_area', '' ),
-						'default'     => '',
-						'description' => __( 'Coverage area', 'newspack-popups' ),
-						'help'        => __( 'The place or beat your newsroom covers, e.g. "San Diego County". Helps ground the appeal.', 'newspack-popups' ),
-					],
-					[
-						'section'     => 'ai_copy_assistant',
-						'key'         => 'newspack_contextual_prompts_voice',
-						'type'        => 'string',
-						'value'       => get_option( 'newspack_contextual_prompts_voice', '' ),
-						'default'     => '',
-						'description' => __( 'Voice and tone', 'newspack-popups' ),
-						'help'        => __( 'A short note on how appeals should sound, e.g. "plainspoken and investigative, no hype".', 'newspack-popups' ),
-					],
-					[
-						'section'     => 'ai_copy_assistant',
-						'key'         => 'newspack_contextual_prompts_additional_guidance',
-						'type'        => 'string',
-						'value'       => get_option( 'newspack_contextual_prompts_additional_guidance', '' ),
-						'default'     => '',
-						'description' => __( 'Additional guidance', 'newspack-popups' ),
-						'help'        => __( 'Optional house do/don\'ts appended to the AI guidance. Never overrides the non-advocacy guardrail.', 'newspack-popups' ),
-					],
-				]
-			);
-		}
 
 		$default_setting = array(
 			'section' => '',

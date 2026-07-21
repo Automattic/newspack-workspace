@@ -149,6 +149,21 @@ final class Newspack_Popups_API {
 		);
 		register_rest_route(
 			'newspack-popups/v1',
+			'/contextual-prompt/profile',
+			[
+				'methods'             => \WP_REST_Server::EDITABLE,
+				'callback'            => [ __CLASS__, 'api_save_contextual_prompt_profile' ],
+				'permission_callback' => [ $this, 'permission_callback' ],
+				'args'                => [
+					'fields' => [
+						'required' => true,
+						'type'     => 'object',
+					],
+				],
+			]
+		);
+		register_rest_route(
+			'newspack-popups/v1',
 			'/contextual-prompt',
 			[
 				'methods'             => \WP_REST_Server::CREATABLE,
@@ -201,12 +216,32 @@ final class Newspack_Popups_API {
 	 * @return WP_REST_Response
 	 */
 	public static function api_get_contextual_prompt_status() {
-		return rest_ensure_response(
-			[
-				'enabled'    => Newspack_Popups_Settings::is_ai_copy_assistant_enabled(),
-				'can_manage' => current_user_can( 'manage_options' ),
-			]
-		);
+		return rest_ensure_response( self::contextual_prompt_status() );
+	}
+
+	/**
+	 * The Contextual Prompts status payload: opt-in state, whether the user can
+	 * manage it, and the publisher-profile fields.
+	 *
+	 * @return array
+	 */
+	private static function contextual_prompt_status() {
+		return [
+			'enabled'    => Newspack_Popups_Settings::is_ai_copy_assistant_enabled(),
+			'can_manage' => current_user_can( 'manage_options' ),
+			'fields'     => Newspack_Popups_Settings::get_ai_copy_assistant_fields(),
+		];
+	}
+
+	/**
+	 * Save the Contextual Prompts publisher profile. Administrator-only.
+	 *
+	 * @param WP_REST_Request $request Request object.
+	 * @return WP_REST_Response
+	 */
+	public static function api_save_contextual_prompt_profile( $request ) {
+		Newspack_Popups_Settings::save_ai_copy_assistant_fields( (array) $request['fields'] );
+		return rest_ensure_response( self::contextual_prompt_status() );
 	}
 
 	/**
@@ -217,12 +252,7 @@ final class Newspack_Popups_API {
 	 */
 	public static function api_set_contextual_prompt_enabled( $request ) {
 		update_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION, (bool) $request['enabled'] );
-		return rest_ensure_response(
-			[
-				'enabled'    => Newspack_Popups_Settings::is_ai_copy_assistant_enabled(),
-				'can_manage' => current_user_can( 'manage_options' ),
-			]
-		);
+		return rest_ensure_response( self::contextual_prompt_status() );
 	}
 
 	/**

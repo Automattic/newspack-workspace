@@ -1,10 +1,10 @@
 <?php // phpcs:ignore WordPress.Files.FileName.InvalidClassFileName
 /**
- * Test the AI Copy Assistant settings section and its opt-in gate.
+ * Test the AI Copy Assistant opt-in + publisher-profile settings.
  *
  * The feature is hidden until an administrator opts in (union/AI-policy
- * requirement): the publisher-profile section only appears once opted in, and
- * the create endpoint refuses to run otherwise.
+ * requirement). Its profile lives behind a dedicated endpoint (not the generic
+ * Campaigns settings list), and the create endpoint refuses to run until opted in.
  *
  * @package Newspack_Popups
  */
@@ -19,72 +19,79 @@ class AiCopyAssistantSettingsTest extends WP_UnitTestCase {
 	 */
 	public function tear_down() {
 		delete_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION );
-		foreach ( [ 'publisher_name', 'coverage_area', 'voice', 'additional_guidance' ] as $key ) {
-			delete_option( 'newspack_contextual_prompts_' . $key );
+		foreach ( wp_list_pluck( Newspack_Popups_Settings::get_ai_copy_assistant_fields(), 'key' ) as $key ) {
+			delete_option( $key );
 		}
 		parent::tear_down();
 	}
 
 	/**
-	 * Opt in for tests that need the section present.
+	 * Off by default.
 	 */
-	private function opt_in() {
-		update_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION, true );
-	}
-
-	/**
-	 * The feature is off by default and the profile section is hidden.
-	 */
-	public function test_hidden_until_opted_in() {
+	public function test_disabled_by_default() {
 		$this->assertFalse( Newspack_Popups_Settings::is_ai_copy_assistant_enabled() );
-
-		$grouped = Newspack_Popups_Settings::get_settings( true );
-		$this->assertArrayNotHasKey( 'ai_copy_assistant', $grouped, 'Profile fields are hidden until opt-in.' );
 	}
 
 	/**
-	 * Once opted in, the section appears with an always-on header and the four
-	 * profile fields.
+	 * The profile is NOT part of the generic Campaigns settings list — it has its
+	 * own card/endpoint, so there is no duplicate "AI Copy Assistant" box.
 	 */
-	public function test_section_exposed_after_opt_in() {
-		$this->opt_in();
-		$this->assertTrue( Newspack_Popups_Settings::is_ai_copy_assistant_enabled() );
-
+	public function test_profile_not_in_general_settings_list() {
+		update_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION, true );
 		$grouped = Newspack_Popups_Settings::get_settings( true );
-		$this->assertArrayHasKey( 'ai_copy_assistant', $grouped );
+		$this->assertArrayNotHasKey( 'ai_copy_assistant', $grouped );
+	}
 
-		$keys = wp_list_pluck( $grouped['ai_copy_assistant'], 'key' );
-		$this->assertContains( 'active', $keys );
+	/**
+	 * The profile fields expose the keys the Manager reads, with current values.
+	 */
+	public function test_profile_fields() {
+		update_option( 'newspack_contextual_prompts_coverage_area', 'San Diego County' );
+		$fields = Newspack_Popups_Settings::get_ai_copy_assistant_fields();
+		$keys   = wp_list_pluck( $fields, 'key' );
+
 		$this->assertContains( 'newspack_contextual_prompts_publisher_name', $keys );
 		$this->assertContains( 'newspack_contextual_prompts_coverage_area', $keys );
 		$this->assertContains( 'newspack_contextual_prompts_voice', $keys );
 		$this->assertContains( 'newspack_contextual_prompts_additional_guidance', $keys );
 
-		$header = current(
+		$coverage = current(
 			array_filter(
-				$grouped['ai_copy_assistant'],
-				function ( $item ) {
-					return 'active' === $item['key'];
+				$fields,
+				function ( $f ) {
+					return 'newspack_contextual_prompts_coverage_area' === $f['key'];
 				}
 			)
 		);
-		$this->assertNull( $header['value'], 'Header is always-on (no toggle).' );
+		$this->assertSame( 'San Diego County', $coverage['value'] );
 	}
 
 	/**
-	 * A field update persists to the option the Manager reads.
+	 * Saving persists known keys and ignores anything else.
 	 */
-	public function test_field_update_persists_to_option() {
-		$this->opt_in();
-
-		$updated = Newspack_Popups_Settings::update_setting(
-			'ai_copy_assistant',
-			'newspack_contextual_prompts_coverage_area',
-			'San Diego County'
+	public function test_save_profile_fields() {
+		Newspack_Popups_Settings::save_ai_copy_assistant_fields(
+			[
+				'newspack_contextual_prompts_voice' => 'plainspoken and investigative',
+				'not_a_real_field'                  => 'ignored',
+			]
 		);
 
-		$this->assertNotWPError( $updated );
-		$this->assertSame( 'San Diego County', get_option( 'newspack_contextual_prompts_coverage_area' ) );
+		$this->assertSame( 'plainspoken and investigative', get_option( 'newspack_contextual_prompts_voice' ) );
+		$this->assertFalse( get_option( 'not_a_real_field' ) );
+	}
+
+	/**
+	 * The status endpoint reports opt-in state, management capability, and fields.
+	 */
+	public function test_status_endpoint() {
+		$response = Newspack_Popups_Api::api_get_contextual_prompt_status();
+		$data     = $response->get_data();
+
+		$this->assertArrayHasKey( 'enabled', $data );
+		$this->assertArrayHasKey( 'can_manage', $data );
+		$this->assertArrayHasKey( 'fields', $data );
+		$this->assertCount( 4, $data['fields'] );
 	}
 
 	/**
@@ -100,8 +107,7 @@ class AiCopyAssistantSettingsTest extends WP_UnitTestCase {
 		$this->assertWPError( $blocked );
 		$this->assertSame( 'newspack_contextual_prompts_disabled', $blocked->get_error_code() );
 
-		// After opting in, the same request creates a prompt.
-		$this->opt_in();
+		update_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION, true );
 		$created = Newspack_Popups_Api::api_create_contextual_prompt( $request );
 		$this->assertNotWPError( $created );
 	}
