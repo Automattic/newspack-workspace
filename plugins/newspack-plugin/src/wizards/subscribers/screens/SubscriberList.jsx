@@ -21,7 +21,7 @@ import { __experimentalHStack as HStack, __experimentalVStack as VStack } from '
 /**
  * Internal dependencies.
  */
-import { Badge, DataViews, Waiting } from '../../../../packages/components/src';
+import { Badge, Button, DataViews, Notice, Waiting } from '../../../../packages/components/src';
 import './style.scss';
 import { fmtRelative, fmtDate } from '../format';
 import { SHOW_AVATARS, useAvatars } from '../data/use-avatars';
@@ -55,8 +55,10 @@ const planEntries = ( item, groupEntries ) => {
 };
 
 // Plan entries to show in the Subscription column: a cancelled plan is dropped
-// whenever the reader still has a live (active/on-hold) one, since it's no longer
-// what they're paying for. A fully churned reader keeps their cancelled plans.
+// whenever the reader still has a live one, since it's no longer what they're
+// paying for. A fully churned reader keeps their cancelled plans. This is one of
+// the four copies of that invariant — see the SOURCE OF TRUTH note on
+// displayStatuses in status.js before changing it.
 const visiblePlanEntries = entries => {
 	const hasLive = entries.some( e => e.status !== 'cancelled' );
 	return hasLive ? entries.filter( e => e.status !== 'cancelled' ) : entries;
@@ -91,12 +93,14 @@ export default function SubscriberList() {
 	// The server owns filter/sort/paginate; this page's rows come back already
 	// narrowed. Group-role, tag, newsletter and plan filters arrive in later
 	// slices (the endpoint honors status here); sorting is name / member-since.
-	const { items, total, pages, loading: subscribersLoading } = useSubscribers( view );
+	const { items, total, pages, loading: subscribersLoading, error, reload } = useSubscribers( view );
 
 	// Resolve avatar URLs for the current page, keyed by subscriber id. The table
-	// is held behind a spinner until they resolve so the avatars don't flash in.
+	// renders immediately with the avatar placeholder and each avatar fills in as
+	// it resolves — blanking the whole table on every page/sort/filter change
+	// would be a far heavier flash than the one it avoids.
 	const emails = useMemo( () => items.map( s => s.email ), [ items ] );
-	const { avatars: avatarsByEmail, loading: avatarsLoading } = useAvatars( emails );
+	const { avatars: avatarsByEmail } = useAvatars( emails );
 	const avatars = useMemo( () => {
 		const byId = {};
 		items.forEach( s => {
@@ -271,6 +275,13 @@ export default function SubscriberList() {
 	// DataViews only makes the title cell clickable; delegate clicks from the
 	// rest of the row to the same target, ignoring genuinely interactive elements
 	// (the title button, selection checkbox, links).
+	//
+	// DEPENDS ON DATAVIEWS INTERNAL MARKUP: the row is located by the
+	// `dataviews-view-table__row` class, which DataViews owns and could rename on
+	// upgrade — whole-row click-through would then silently stop working (grep for
+	// "DEPENDS ON DATAVIEWS INTERNAL MARKUP" when bumping @wordpress/dataviews).
+	// Keyboard users are unaffected either way: the title cell is a real button
+	// wired to the same handler, which is the accessible path here.
 	const onRowClick = event => {
 		if ( event.target.closest( 'a, button, input, label, [role="button"], [role="checkbox"]' ) ) {
 			return;
@@ -304,11 +315,23 @@ export default function SubscriberList() {
 		} );
 	}, [ setHeaderData, total ] );
 
-	if ( subscribersLoading || avatarsLoading ) {
+	if ( subscribersLoading ) {
 		return (
 			<div className="newspack-subscribers__loading">
 				<Waiting isCenter />
 			</div>
+		);
+	}
+
+	// A failed read must not read as "this site has no subscribers": say so, and
+	// offer a retry.
+	if ( error ) {
+		return (
+			<Notice isError noticeText={ sprintf( __( 'Could not load subscribers: %s', 'newspack-plugin' ), error ) }>
+				<Button variant="link" onClick={ reload }>
+					{ __( 'Retry', 'newspack-plugin' ) }
+				</Button>
+			</Notice>
 		);
 	}
 

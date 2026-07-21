@@ -79,21 +79,27 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 	/**
 	 * Create a reader user (display name carries the scope token) and track it.
 	 *
-	 * @param string $name Human name, prefixed with the scope token in display_name.
-	 * @param string $role Optional role.
+	 * @param string $name       Human name, prefixed with the scope token in display_name.
+	 * @param string $role       Optional role.
+	 * @param string $registered Optional 'Y-m-d H:i:s' registration date. Fixture users
+	 *                           otherwise all register in the same second, which makes
+	 *                           member-since ordering unobservable.
 	 *
 	 * @return int The new user ID.
 	 */
-	private function create_reader( string $name = 'Reader', string $role = 'subscriber' ): int {
+	private function create_reader( string $name = 'Reader', string $role = 'subscriber', string $registered = '' ): int {
 		$suffix  = wp_generate_password( 6, false );
 		$user_id = wp_insert_user(
-			[
-				'user_login'   => 'reader-' . $suffix,
-				'user_pass'    => wp_generate_password(),
-				'user_email'   => 'reader-' . $suffix . '@test.com',
-				'display_name' => $this->scope_token . ' ' . $name,
-				'role'         => $role,
-			]
+			array_filter(
+				[
+					'user_login'      => 'reader-' . $suffix,
+					'user_pass'       => wp_generate_password(),
+					'user_email'      => 'reader-' . $suffix . '@test.com',
+					'display_name'    => $this->scope_token . ' ' . $name,
+					'role'            => $role,
+					'user_registered' => $registered,
+				]
+			)
 		);
 		update_user_meta( $user_id, '_newspack_reader', true );
 		$this->user_ids[] = $user_id;
@@ -250,6 +256,27 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 		$sorted = $names;
 		sort( $sorted );
 		$this->assertSame( $sorted, $names );
+	}
+
+	/**
+	 * Sorting by member-since is honoured server-side — and it is the endpoint's
+	 * default order, so the list's out-of-the-box ordering rides on it.
+	 */
+	public function test_sorts_by_member_since_by_default() {
+		$this->login_admin();
+		$oldest_id = $this->create_reader( 'Oldest', 'subscriber', '2020-01-01 00:00:00' );
+		$middle_id = $this->create_reader( 'Middle', 'subscriber', '2022-06-15 00:00:00' );
+		$newest_id = $this->create_reader( 'Newest', 'subscriber', '2024-11-30 00:00:00' );
+
+		// No orderby/order params: the registered defaults are memberSince / desc.
+		$descending = array_column( $this->dispatch()->get_data()['items'], 'id' );
+		$this->assertSame( [ $newest_id, $middle_id, $oldest_id ], $descending );
+
+		$ascending = array_column( $this->dispatch( [ 'order' => 'asc' ] )->get_data()['items'], 'id' );
+		$this->assertSame( [ $oldest_id, $middle_id, $newest_id ], $ascending );
+
+		// memberSince is hydrated from the same column.
+		$this->assertSame( '2024-11-30', $this->dispatch()->get_data()['items'][0]['memberSince'] );
 	}
 
 	/**
@@ -494,6 +521,42 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 		$this->assertTrue( $data['show'] );
 		$this->assertArrayHasKey( 'reader@test.com', $data['avatars'] );
 		$this->assertArrayNotHasKey( '', $data['avatars'], 'Blank emails are dropped.' );
+	}
+
+	/**
+	 * The avatars endpoint bounds its inputs: `size` is enumerated to 16–512 (so a
+	 * caller can't ask core for an arbitrarily large render) and the email batch is
+	 * capped, so an oversized payload can't fan out into unbounded avatar lookups.
+	 */
+	public function test_avatars_endpoint_bounds_its_inputs() {
+		$this->login_admin();
+		update_option( 'show_avatars', true );
+
+		foreach ( [ 8, 1024 ] as $out_of_range_size ) {
+			$request = new WP_REST_Request( 'POST', '/newspack/v1/wizard/newspack-subscribers/avatars' );
+			$request->set_param( 'emails', [ 'reader@test.com' ] );
+			$request->set_param( 'size', $out_of_range_size );
+			$this->assertSame(
+				400,
+				rest_get_server()->dispatch( $request )->get_status(),
+				"A size of $out_of_range_size is outside the 16-512 range the endpoint accepts."
+			);
+		}
+
+		$in_range = new WP_REST_Request( 'POST', '/newspack/v1/wizard/newspack-subscribers/avatars' );
+		$in_range->set_param( 'emails', [ 'reader@test.com' ] );
+		$in_range->set_param( 'size', 128 );
+		$this->assertSame( 200, rest_get_server()->dispatch( $in_range )->get_status() );
+
+		// One over the cap: the overflow is dropped rather than resolved. The
+		// client batches larger sets, so nothing is lost end to end.
+		$cap      = \Newspack\Subscribers_Wizard::AVATAR_BATCH_CAP;
+		$oversize = new WP_REST_Request( 'POST', '/newspack/v1/wizard/newspack-subscribers/avatars' );
+		$oversize->set_param( 'emails', array_map( fn( $i ) => "reader$i@test.com", range( 0, $cap ) ) );
+		$avatars = rest_get_server()->dispatch( $oversize )->get_data()['avatars'];
+		$this->assertCount( $cap, $avatars );
+		$this->assertArrayHasKey( 'reader0@test.com', $avatars );
+		$this->assertArrayNotHasKey( "reader$cap@test.com", $avatars, 'Emails past the cap are dropped.' );
 	}
 
 	/**

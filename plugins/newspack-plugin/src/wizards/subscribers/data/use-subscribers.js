@@ -12,7 +12,8 @@
 /**
  * WordPress dependencies.
  */
-import { useEffect, useMemo, useState } from '@wordpress/element';
+import { useCallback, useEffect, useMemo, useState } from '@wordpress/element';
+import { __ } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
 import { addQueryArgs } from '@wordpress/url';
 
@@ -53,12 +54,20 @@ export const viewToParams = view => {
 /**
  * Fetch one server-paginated page of subscribers for the given view.
  *
+ * A failed request is reported as `error` rather than collapsing into an empty
+ * page, so the screen can tell "this site has no subscribers" apart from "we
+ * could not read them" and offer `reload` as a retry.
+ *
  * @param {Object} view The DataViews view (page, perPage, sort, search, filters).
- * @return {{ items: Array, total: number, pages: number, loading: boolean }} The page.
+ * @return {{ items: Array, total: number, pages: number, loading: boolean, error: string, reload: Function }} The page.
  */
 export function useSubscribers( view ) {
 	const [ result, setResult ] = useState( { items: [], total: 0, pages: 0 } );
 	const [ loading, setLoading ] = useState( true );
+	const [ error, setError ] = useState( '' );
+	const [ attempt, setAttempt ] = useState( 0 );
+
+	const reload = useCallback( () => setAttempt( n => n + 1 ), [] );
 
 	// Serialize the params so the effect re-runs only when a query-affecting bit
 	// of the view actually changes (the view object is a fresh reference each
@@ -79,10 +88,12 @@ export function useSubscribers( view ) {
 					total: response?.total || 0,
 					pages: response?.pages || 0,
 				} );
+				setError( '' );
 			} )
-			.catch( () => {
+			.catch( e => {
 				if ( ! cancelled ) {
 					setResult( { items: [], total: 0, pages: 0 } );
+					setError( e?.message || __( 'Something went wrong.', 'newspack-plugin' ) );
 				}
 			} )
 			.finally( () => {
@@ -93,7 +104,7 @@ export function useSubscribers( view ) {
 		return () => {
 			cancelled = true;
 		};
-	}, [ key ] );
+	}, [ key, attempt ] );
 
-	return { ...result, loading };
+	return { ...result, loading, error, reload };
 }

@@ -912,14 +912,17 @@ function wcs_get_users_subscriptions( $user_id ) {
 	return apply_filters( 'wcs_get_users_subscriptions', $user_subscriptions, $user_id );
 }
 function wcs_get_subscriptions( $args = [] ) {
-	// Minimal mock: implements the `customer_id` and `subscription_status` filters —
-	// the args the code under test passes. `subscription_status` accepts a single
-	// status or an array; 'any' (or unset) means no status filter. `meta_query` and
-	// paging args (subscriptions_per_page, paged, offset) are still ignored — extend
-	// here rather than relying on this returning the full set if a test needs them.
+	// Minimal mock: implements the `customer_id` and `subscription_status` filters
+	// plus `subscriptions_per_page`/`paged` paging — the args the code under test
+	// passes. `subscription_status` accepts a single status or an array; 'any' (or
+	// unset) means no status filter. `meta_query` and `offset` are still ignored —
+	// extend here rather than relying on this returning the full set if a test
+	// needs them.
 	global $subscriptions_database;
 	$customer_id = $args['customer_id'] ?? null;
 	$statuses    = $args['subscription_status'] ?? 'any';
+	$per_page    = isset( $args['subscriptions_per_page'] ) ? (int) $args['subscriptions_per_page'] : 0;
+	$paged       = isset( $args['paged'] ) ? max( 1, (int) $args['paged'] ) : 1;
 	if ( 'any' === $statuses ) {
 		$statuses = null;
 	} elseif ( null !== $statuses ) {
@@ -934,6 +937,9 @@ function wcs_get_subscriptions( $args = [] ) {
 			continue;
 		}
 		$matches[ $id ] = $subscription;
+	}
+	if ( $per_page > 0 ) {
+		$matches = array_slice( $matches, ( $paged - 1 ) * $per_page, $per_page, true );
 	}
 	return $matches;
 }

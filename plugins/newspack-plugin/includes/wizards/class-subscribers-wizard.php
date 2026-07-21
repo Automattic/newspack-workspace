@@ -49,6 +49,21 @@ class Subscribers_Wizard extends Wizard {
 	const FILTER_INCLUDE_CAP = 10000;
 
 	/**
+	 * Upper bound on the number of avatars one /avatars request resolves. A single
+	 * list page needs at most `per_page` (≤100); the client batches larger sets.
+	 */
+	const AVATAR_BATCH_CAP = 200;
+
+	/**
+	 * How many subscriptions the filter scan hydrates at a time. The scan itself
+	 * is bounded by FILTER_INCLUDE_CAP, but WooCommerce returns fully hydrated
+	 * WC_Subscription objects and only their customer ID is needed here — walking
+	 * the set a page at a time keeps peak memory at one chunk rather than the
+	 * whole cap. See customer_ids_for_raw_statuses().
+	 */
+	const FILTER_SCAN_CHUNK = 500;
+
+	/**
 	 * Per-request memo of the site's group subscriptions (each with its resolved
 	 * settings). A single request can resolve these several times — once per active
 	 * filter set plus the group list itself — and each resolution hydrates every
@@ -66,6 +81,14 @@ class Subscribers_Wizard extends Wizard {
 	 * @var array<int,array<int,array>>|null
 	 */
 	private $group_membership_index = null;
+
+	/**
+	 * Per-request memo of customer IDs keyed by the sorted status set they were
+	 * resolved for. See customer_ids_for_raw_statuses().
+	 *
+	 * @var array<string,int[]>
+	 */
+	private $raw_status_ids_cache = [];
 
 	/**
 	 * Constructor.
@@ -133,9 +156,14 @@ class Subscribers_Wizard extends Wizard {
 				'permission_callback' => [ $this, 'api_permissions_check' ],
 				'args'                => [
 					'emails' => [
-						'type'     => 'array',
-						'required' => true,
-						'items'    => [ 'type' => 'string' ],
+						'type'              => 'array',
+						'required'          => true,
+						'items'             => [ 'type' => 'string' ],
+						// Sanitized declaratively, like the sibling `size` arg. Invalid
+						// entries are dropped rather than failing the whole request:
+						// one malformed address shouldn't blank a page of avatars.
+						'sanitize_callback' => [ __CLASS__, 'sanitize_emails_arg' ],
+						'validate_callback' => 'rest_validate_request_arg',
 					],
 					'size'   => [
 						'type'              => 'integer',
@@ -211,10 +239,27 @@ class Subscribers_Wizard extends Wizard {
 						'type'              => 'array',
 						'items'             => [ 'type' => 'string' ],
 						'sanitize_callback' => 'rest_sanitize_request_arg',
+						'validate_callback' => 'rest_validate_request_arg',
 					],
 				],
 			]
 		);
+	}
+
+	/**
+	 * Sanitize the /avatars `emails` arg: valid addresses only, deduplicated and
+	 * bounded to AVATAR_BATCH_CAP.
+	 *
+	 * Invalid entries are dropped rather than rejected so a single malformed
+	 * address can't fail the whole batch.
+	 *
+	 * @param mixed $emails The raw `emails` request arg.
+	 *
+	 * @return string[] Sanitized, unique, capped email addresses.
+	 */
+	public static function sanitize_emails_arg( $emails ) {
+		$sanitized = array_filter( array_map( 'sanitize_email', (array) $emails ) );
+		return array_values( array_slice( array_unique( $sanitized ), 0, self::AVATAR_BATCH_CAP ) );
 	}
 
 	/**
@@ -257,6 +302,7 @@ class Subscribers_Wizard extends Wizard {
 	public function api_get_groups() {
 		$this->group_subscriptions_cache = null;
 		$this->group_membership_index    = null;
+		$this->raw_status_ids_cache      = [];
 		$items                           = [];
 		foreach ( $this->get_group_subscriptions() as $group ) {
 			$items[] = $this->prepare_group( $group['subscription'], $group['settings'] );
@@ -363,9 +409,10 @@ class Subscribers_Wizard extends Wizard {
 	public function api_get_subscribers( $request ) {
 		$this->group_subscriptions_cache = null;
 		$this->group_membership_index    = null;
+		$this->raw_status_ids_cache      = [];
 		$per_page                        = (int) $request->get_param( 'per_page' );
-		$page     = (int) $request->get_param( 'page' );
-		$search   = trim( (string) $request->get_param( 'search' ) );
+		$page                            = (int) $request->get_param( 'page' );
+		$search                          = trim( (string) $request->get_param( 'search' ) );
 
 		$query_args = [
 			'role__in'    => Reader_Activation::get_reader_roles(),
@@ -418,6 +465,19 @@ class Subscribers_Wizard extends Wizard {
 
 	/**
 	 * Shape a reader user for the admin subscriber list.
+	 *
+	 * Cost note: group memberships are indexed once per request
+	 * (get_group_membership_index), but two lookups here are inherently per-row —
+	 * wcs_get_users_subscriptions() and last_payment_date()'s wc_get_orders() —
+	 * so a page costs ~2 × `per_page` (≤100) WooCommerce queries. Both are
+	 * "newest/owned rows for one customer" lookups that WooCommerce can't answer
+	 * per-customer in a single batched query: batching last_payment_date() over
+	 * the page's customer IDs would need either an unbounded `limit => -1` (worse
+	 * peak memory than the bounded per-row queries) or a truncated scan that
+	 * silently blanks the last payment of a reader whose most recent order falls
+	 * outside it. The bounded per-row shape is the correct trade-off here, and
+	 * matches the existing convention elsewhere in the plugin
+	 * (Sync\Contact_Metadata\Engagement::get_latest_order).
 	 *
 	 * @param \WP_User $user The reader user.
 	 *
@@ -567,6 +627,22 @@ class Subscribers_Wizard extends Wizard {
 	 * dropped whenever any live status remains. Empty when they have no
 	 * subscription at all (a free reader shows no status badge).
 	 *
+	 * SOURCE OF TRUTH for the status-reduction rule. The rule is:
+	 *
+	 *   Rank statuses active → pending → on-hold → cancelled, and drop
+	 *   `cancelled` entirely whenever the reader still holds any live
+	 *   (non-cancelled) subscription; a reader with no subscription at all has
+	 *   no status.
+	 *
+	 * It is re-encoded in three other places, each of which points back here and
+	 * must be changed in step or the endpoint's filter will contradict the badge
+	 * it filters on:
+	 *   - customer_ids_for_statuses() below — the endpoint's `status` filter.
+	 *   - displayStatuses() in src/wizards/subscribers/status.js — the row's
+	 *     status badges.
+	 *   - visiblePlanEntries in src/wizards/subscribers/screens/SubscriberList.jsx
+	 *     — the Subscription column.
+	 *
 	 * @param array $subscriptions Individual subscription entries.
 	 * @param array $groups        Group membership entries.
 	 *
@@ -667,8 +743,9 @@ class Subscribers_Wizard extends Wizard {
 
 	/**
 	 * Customer IDs whose displayed status matches any of the given prototype
-	 * statuses, mirroring the list's badge reduction (see reduced_status /
-	 * displayStatuses): a live status always qualifies, but `cancelled` matches
+	 * statuses, mirroring the list's badge reduction (reduced_status() above is
+	 * the documented source of truth for that rule): a live status always
+	 * qualifies, but `cancelled` matches
 	 * only fully-churned readers — anyone who also holds a live (active/pending/
 	 * on-hold) subscription is dropped, since the badge hides cancelled while a
 	 * live plan remains. Without this the Cancelled filter would surface readers
@@ -711,21 +788,39 @@ class Subscribers_Wizard extends Wizard {
 		if ( empty( $prototype_statuses ) ) {
 			return [];
 		}
+		// Memoized per status set: customer_ids_for_statuses() asks for up to three
+		// overlapping sets per request (and a filter like ['active','cancelled']
+		// asks for `active` twice), each of which would otherwise repeat the full
+		// subscription scan below.
+		sort( $prototype_statuses );
+		$cache_key = implode( ',', $prototype_statuses );
+		if ( isset( $this->raw_status_ids_cache[ $cache_key ] ) ) {
+			return $this->raw_status_ids_cache[ $cache_key ];
+		}
 		$ids = [];
 
 		// Individual + owned subscriptions in a matching WCS status (HPOS-safe).
 		// Bounded to the same ceiling the include set is capped at, so the filter
-		// path can't load an unbounded number of subscription objects on a large store.
+		// path can't load an unbounded number of subscription objects on a large
+		// store, and walked a chunk at a time: WooCommerce hands back fully
+		// hydrated WC_Subscription objects and only the customer ID is read here,
+		// so paging keeps peak memory at one chunk instead of the whole cap.
 		$wcs_statuses = $this->wcs_statuses_for( $prototype_statuses );
 		if ( ! empty( $wcs_statuses ) && function_exists( 'wcs_get_subscriptions' ) ) {
-			$subs = \wcs_get_subscriptions(
-				[
-					'subscriptions_per_page' => self::FILTER_INCLUDE_CAP,
-					'subscription_status'    => $wcs_statuses,
-				]
-			);
-			foreach ( $subs as $subscription ) {
-				$ids[] = (int) $subscription->get_customer_id();
+			for ( $page = 1; ( $page - 1 ) * self::FILTER_SCAN_CHUNK < self::FILTER_INCLUDE_CAP; $page++ ) {
+				$subs = \wcs_get_subscriptions(
+					[
+						'subscriptions_per_page' => self::FILTER_SCAN_CHUNK,
+						'paged'                  => $page,
+						'subscription_status'    => $wcs_statuses,
+					]
+				);
+				foreach ( $subs as $subscription ) {
+					$ids[] = (int) $subscription->get_customer_id();
+				}
+				if ( count( $subs ) < self::FILTER_SCAN_CHUNK ) {
+					break;
+				}
 			}
 		}
 
@@ -736,7 +831,8 @@ class Subscribers_Wizard extends Wizard {
 			}
 		}
 
-		return array_values( array_unique( array_filter( $ids ) ) );
+		$this->raw_status_ids_cache[ $cache_key ] = array_values( array_unique( array_filter( $ids ) ) );
+		return $this->raw_status_ids_cache[ $cache_key ];
 	}
 
 	/**
@@ -858,14 +954,10 @@ class Subscribers_Wizard extends Wizard {
 		// displays (list: 32px → 64, profile: 64px → 128).
 		$size    = $request->get_param( 'size' );
 		$avatars = [];
-		// A single list page resolves at most `per_page` (≤100) avatars; bound the
-		// batch so an oversized payload can't fan out into unbounded get_avatar_url() calls.
-		$emails = array_slice( (array) $request->get_param( 'emails' ), 0, 200 );
-		foreach ( $emails as $email ) {
-			$email = sanitize_email( $email );
-			if ( '' === $email ) {
-				continue;
-			}
+		// Already sanitized, deduplicated and capped at AVATAR_BATCH_CAP by the
+		// arg's sanitize_callback (sanitize_emails_arg), so an oversized payload
+		// can't fan out into unbounded get_avatar_url() calls.
+		foreach ( (array) $request->get_param( 'emails' ) as $email ) {
 			$avatars[ $email ] = get_avatar_url( $email, [ 'size' => $size ] );
 		}
 		return rest_ensure_response(

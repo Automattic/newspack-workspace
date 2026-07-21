@@ -24,20 +24,6 @@ export const STATUS_BADGE_LEVEL = {
 // Active first, then pending, then on-hold, then cancelled.
 export const STATUS_RANK = { active: 0, pending: 1, 'on-hold': 2, cancelled: 3 };
 
-// Group subscriptions never sit in the 'pending' (awaiting-first-payment) bucket,
-// so the group status filter/badges use the three statuses a group can hold.
-export const GROUP_STATUS_LABELS = {
-	active: STATUS_LABELS.active,
-	'on-hold': STATUS_LABELS[ 'on-hold' ],
-	cancelled: STATUS_LABELS.cancelled,
-};
-
-export const GROUP_STATUS_BADGE_LEVEL = {
-	active: STATUS_BADGE_LEVEL.active,
-	'on-hold': STATUS_BADGE_LEVEL[ 'on-hold' ],
-	cancelled: STATUS_BADGE_LEVEL.cancelled,
-};
-
 /**
  * Reduce a subscriber's many subscription statuses to the badge(s) we show.
  *
@@ -46,6 +32,15 @@ export const GROUP_STATUS_BADGE_LEVEL = {
  * cancellation alongside an active or on-hold plan is just noise; cancelled
  * only shows when every subscription is cancelled. Falls back to the stored
  * status when there are none on file.
+ *
+ * SOURCE OF TRUTH — the "cancelled is dropped whenever a live status remains"
+ * invariant is documented once, on the PHP side, in
+ * Subscribers_Wizard::reduced_status(). It is re-encoded in three other places
+ * that must stay in lockstep with it, each carrying a pointer back:
+ * Subscribers_Wizard::customer_ids_for_statuses() (the endpoint's status
+ * filter), this function (the row's status badges), and `visiblePlanEntries`
+ * in SubscriberList.jsx (the Subscription column). Change one, change all four,
+ * or the filter will contradict the badge it filters on.
  *
  * @param {string[]} statuses Per-subscription statuses (group and individual).
  * @param {string}   fallback Stored status to use when there are none.

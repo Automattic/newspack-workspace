@@ -21,13 +21,13 @@ import { __experimentalHStack as HStack } from '@wordpress/components'; // eslin
 /**
  * Internal dependencies.
  */
-import { Badge, DataViews, Waiting } from '../../../../packages/components/src';
+import { Badge, Button, DataViews, Notice, Waiting } from '../../../../packages/components/src';
 import { fmtDate } from '../format';
 import './style.scss';
 import { SHOW_AVATARS, useAvatars } from '../data/use-avatars';
 import { useGroups } from '../data/use-groups';
 import { WIZARD_STORE_NAMESPACE } from '../../../../packages/components/src/wizard/store';
-import { GROUP_STATUS_LABELS, GROUP_STATUS_BADGE_LEVEL } from '../status';
+import { STATUS_LABELS, STATUS_BADGE_LEVEL } from '../status';
 import { GROUP_LABEL_PLURAL } from '../labels';
 
 const DEFAULT_VIEW = {
@@ -39,7 +39,8 @@ const DEFAULT_VIEW = {
 	fields: [ 'members', 'status', 'createdAt' ],
 	// Hide cancelled groups by default: they add noise with little value. Still
 	// reachable by ticking "Cancelled" in the Status filter (or clearing it).
-	filters: [ { field: 'status', operator: 'isAny', value: [ 'active', 'on-hold' ] } ],
+	// A group awaiting its first payment sits in `pending`, so it stays visible.
+	filters: [ { field: 'status', operator: 'isAny', value: [ 'active', 'pending', 'on-hold' ] } ],
 	layout: {},
 	titleField: 'owner',
 };
@@ -49,7 +50,7 @@ export default function GroupList() {
 
 	const { setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
 
-	const { groups, loading: groupsLoading } = useGroups();
+	const { groups, loading: groupsLoading, error, reload } = useGroups();
 
 	const openGroup = item => {
 		if ( item?.editUrl ) {
@@ -57,10 +58,10 @@ export default function GroupList() {
 		}
 	};
 
-	// Resolve owner avatar URLs once, keyed by group id. The list is held behind
-	// a spinner until they resolve so the avatars don't flash in after the table.
+	// Resolve owner avatar URLs, keyed by group id. The table renders immediately
+	// with the avatar placeholder and each avatar fills in as it resolves.
 	const ownerEmails = useMemo( () => groups.map( g => g.owner?.email ), [ groups ] );
-	const { avatars: avatarsByEmail, loading: avatarsLoading } = useAvatars( ownerEmails );
+	const { avatars: avatarsByEmail } = useAvatars( ownerEmails );
 	const avatars = useMemo( () => {
 		const byId = {};
 		groups.forEach( g => {
@@ -147,10 +148,10 @@ export default function GroupList() {
 			{
 				id: 'status',
 				label: __( 'Status', 'newspack-plugin' ),
-				elements: Object.entries( GROUP_STATUS_LABELS ).map( ( [ value, label ] ) => ( { value, label } ) ),
+				elements: Object.entries( STATUS_LABELS ).map( ( [ value, label ] ) => ( { value, label } ) ),
 				filterBy: { operators: [ 'isAny' ] },
 				getValue: ( { item } ) => item.status,
-				render: ( { item } ) => <Badge level={ GROUP_STATUS_BADGE_LEVEL[ item.status ] } text={ GROUP_STATUS_LABELS[ item.status ] } />,
+				render: ( { item } ) => <Badge level={ STATUS_BADGE_LEVEL[ item.status ] } text={ STATUS_LABELS[ item.status ] } />,
 			},
 			{
 				id: 'createdAt',
@@ -166,6 +167,13 @@ export default function GroupList() {
 	const { data: processedData, paginationInfo } = useMemo( () => filterSortAndPaginate( groups, view, fields ), [ groups, view, fields ] );
 
 	// Whole-row click → subscription edit (DataViews only wires up the title cell).
+	//
+	// DEPENDS ON DATAVIEWS INTERNAL MARKUP: the row is located by the
+	// `dataviews-view-table__row` class, which DataViews owns and could rename on
+	// upgrade — whole-row click-through would then silently stop working (grep for
+	// "DEPENDS ON DATAVIEWS INTERNAL MARKUP" when bumping @wordpress/dataviews).
+	// Keyboard users are unaffected either way: the title cell is a real button
+	// wired to the same handler, which is the accessible path here.
 	const onRowClick = event => {
 		if ( event.target.closest( 'a, button, input, label, [role="button"], [role="checkbox"]' ) ) {
 			return;
@@ -201,11 +209,23 @@ export default function GroupList() {
 		} );
 	}, [ setHeaderData, total ] );
 
-	if ( groupsLoading || avatarsLoading ) {
+	if ( groupsLoading ) {
 		return (
 			<div className="newspack-subscribers__loading">
 				<Waiting isCenter />
 			</div>
+		);
+	}
+
+	// A failed read must not read as "this site has no groups": say so, and offer
+	// a retry.
+	if ( error ) {
+		return (
+			<Notice isError noticeText={ sprintf( __( 'Could not load %1$s: %2$s', 'newspack-plugin' ), GROUP_LABEL_PLURAL, error ) }>
+				<Button variant="link" onClick={ reload }>
+					{ __( 'Retry', 'newspack-plugin' ) }
+				</Button>
+			</Notice>
 		);
 	}
 
