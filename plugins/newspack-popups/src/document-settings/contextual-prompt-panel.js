@@ -13,7 +13,7 @@ import { __ } from '@wordpress/i18n';
 import { useState } from '@wordpress/element';
 import { useSelect } from '@wordpress/data';
 import { PluginDocumentSettingPanel } from '@wordpress/edit-post';
-import { Button, TextControl, TextareaControl, Notice, Spinner } from '@wordpress/components';
+import { Button, TextControl, TextareaControl, Notice, Spinner, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 import apiFetch from '@wordpress/api-fetch';
 
 const FRAMING_LABELS = {
@@ -125,59 +125,70 @@ const ContextualPromptPanel = () => {
 
 	return (
 		<PluginDocumentSettingPanel name="newspack-contextual-prompt" title={ __( 'Contextual Prompt', 'newspack-popups' ) }>
-			<p>{ __( 'Generate a story-specific donation call-to-action for this post.', 'newspack-popups' ) }</p>
+			<VStack spacing={ 4 }>
+				<p style={ { margin: 0 } }>{ __( 'Generate a story-specific donation call-to-action for this post.', 'newspack-popups' ) }</p>
 
-			{ error && (
-				<Notice status="error" isDismissible={ false }>
-					{ error }
-				</Notice>
-			) }
+				{ error && (
+					<Notice status="error" isDismissible={ false }>
+						{ error }
+					</Notice>
+				) }
 
-			{ created ? (
-				<Notice status="success" isDismissible={ false }>
-					{ __( 'Prompt created for this post.', 'newspack-popups' ) }{ ' ' }
-					{ created.edit_link && <a href={ created.edit_link }>{ __( 'Edit prompt', 'newspack-popups' ) }</a> }
-				</Notice>
-			) : (
-				<>
-					<Button variant="secondary" onClick={ generate } disabled={ generating }>
-						{ generating && <Spinner /> }
-						{ generating ? __( 'Generating…', 'newspack-popups' ) : __( 'Generate suggestions', 'newspack-popups' ) }
-					</Button>
+				{ created ? (
+					<Notice status="success" isDismissible={ false }>
+						{ __( 'Prompt created for this post.', 'newspack-popups' ) }{ ' ' }
+						{ created.edit_link && <a href={ created.edit_link }>{ __( 'Edit prompt', 'newspack-popups' ) }</a> }
+					</Notice>
+				) : (
+					<>
+						<Button variant="secondary" onClick={ generate } disabled={ generating }>
+							{ generating && <Spinner /> }
+							{ generating ? __( 'Generating…', 'newspack-popups' ) : __( 'Generate suggestions', 'newspack-popups' ) }
+						</Button>
 
-					{ candidates.map( ( candidate, index ) => (
-						<div key={ index } className="newspack-contextual-prompt__candidate">
-							<strong>{ FRAMING_LABELS[ candidate.framing ] || candidate.framing }</strong>
-							{ candidate.flags?.includes( 'over_word_cap' ) && (
-								<Notice status="warning" isDismissible={ false }>
-									{ __( 'This suggestion is longer than recommended.', 'newspack-popups' ) }
-								</Notice>
-							) }
-							<TextareaControl value={ candidate.body } onChange={ value => updateBody( index, value ) } />
-							<Button variant={ selected === index ? 'primary' : 'secondary' } onClick={ () => chooseCandidate( index ) }>
-								{ selected === index ? __( 'Selected', 'newspack-popups' ) : __( 'Use this', 'newspack-popups' ) }
-							</Button>
-						</div>
-					) ) }
+						{ candidates.map( ( candidate, index ) => (
+							<VStack key={ index } spacing={ 2 } className="newspack-contextual-prompt__candidate">
+								<strong>{ FRAMING_LABELS[ candidate.framing ] || candidate.framing }</strong>
+								{ candidate.flags?.includes( 'over_word_cap' ) && (
+									<Notice status="warning" isDismissible={ false }>
+										{ __( 'This suggestion is longer than recommended.', 'newspack-popups' ) }
+									</Notice>
+								) }
+								<TextareaControl rows={ 4 } value={ candidate.body } onChange={ value => updateBody( index, value ) } />
+								<div>
+									<Button variant={ selected === index ? 'primary' : 'secondary' } onClick={ () => chooseCandidate( index ) }>
+										{ selected === index ? __( 'Selected', 'newspack-popups' ) : __( 'Use this', 'newspack-popups' ) }
+									</Button>
+								</div>
+							</VStack>
+						) ) }
 
-					{ null !== selected && (
-						<div className="newspack-contextual-prompt__placement">
-							<TextControl label={ __( 'Button label', 'newspack-popups' ) } value={ buttonLabel } onChange={ setButtonLabel } />
-							<TextControl label={ __( 'Donate URL', 'newspack-popups' ) } type="url" value={ buttonUrl } onChange={ setButtonUrl } />
-							<TextControl
-								label={ __( 'Position (paragraph)', 'newspack-popups' ) }
-								type="number"
-								min={ 0 }
-								value={ position }
-								onChange={ value => setPosition( parseInt( value, 10 ) || 0 ) }
-							/>
-							<Button variant="primary" onClick={ create } disabled={ creating }>
-								{ creating ? __( 'Creating…', 'newspack-popups' ) : __( 'Create prompt', 'newspack-popups' ) }
-							</Button>
-						</div>
-					) }
-				</>
-			) }
+						{ null !== selected && (
+							<VStack spacing={ 3 } className="newspack-contextual-prompt__placement">
+								<TextControl label={ __( 'Button label', 'newspack-popups' ) } value={ buttonLabel } onChange={ setButtonLabel } />
+								<TextControl
+									label={ __( 'Donate URL', 'newspack-popups' ) }
+									type="url"
+									value={ buttonUrl }
+									onChange={ setButtonUrl }
+								/>
+								<TextControl
+									label={ __( 'Position (paragraph)', 'newspack-popups' ) }
+									type="number"
+									min={ 0 }
+									value={ position }
+									onChange={ value => setPosition( parseInt( value, 10 ) || 0 ) }
+								/>
+								<div>
+									<Button variant="primary" onClick={ create } disabled={ creating }>
+										{ creating ? __( 'Creating…', 'newspack-popups' ) : __( 'Create prompt', 'newspack-popups' ) }
+									</Button>
+								</div>
+							</VStack>
+						) }
+					</>
+				) }
+			</VStack>
 		</PluginDocumentSettingPanel>
 	);
 };
