@@ -239,6 +239,33 @@ final class Newspack_Popups_Model {
 			$args['tax_query'] = [ $tax_query ]; // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query
 		}
 
+		// Keep post-scoped prompts (Contextual Prompts) out of the general query;
+		// they are injected only on their parent post. See Newspack_Popups_Post_Scope.
+		$args = Newspack_Popups_Post_Scope::exclude_scoped_from_args( $args );
+
+		return self::retrieve_popups_with_query( new WP_Query( $args ) );
+	}
+
+	/**
+	 * Retrieve the prompts scoped to a given post (Contextual Prompts).
+	 *
+	 * @param int  $post_id             The post the prompts are scoped to.
+	 * @param bool $include_unpublished Whether to include unpublished prompts.
+	 * @return array Eligible popup objects.
+	 */
+	public static function retrieve_scoped_popups( $post_id, $include_unpublished = false ) {
+		$post_id = (int) $post_id;
+		if ( ! $post_id ) {
+			return [];
+		}
+
+		$args = [
+			'post_type'      => Newspack_Popups::NEWSPACK_POPUPS_CPT,
+			'post_status'    => $include_unpublished ? [ 'draft', 'pending', 'future', 'publish' ] : 'publish',
+			'posts_per_page' => 100,
+			'post_parent'    => $post_id,
+		];
+
 		return self::retrieve_popups_with_query( new WP_Query( $args ) );
 	}
 

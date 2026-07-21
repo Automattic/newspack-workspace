@@ -104,6 +104,8 @@ final class Newspack_Popups {
 		include_once __DIR__ . '/class-newspack-segments-migration.php';
 		include_once __DIR__ . '/class-newspack-segments-model.php';
 		include_once __DIR__ . '/class-newspack-popups-presets.php';
+		include_once __DIR__ . '/class-newspack-popups-post-scope.php';
+		Newspack_Popups_Post_Scope::init();
 		include_once __DIR__ . '/class-newspack-popups-inserter.php';
 		include_once __DIR__ . '/class-newspack-popups-api.php';
 		include_once __DIR__ . '/class-newspack-popups-settings.php';

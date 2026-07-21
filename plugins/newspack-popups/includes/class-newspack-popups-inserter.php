@@ -179,7 +179,15 @@ final class Newspack_Popups_Inserter {
 
 		// Retrieve all prompts eligible for display.
 		$popups_to_maybe_display = Newspack_Popups_Model::retrieve_eligible_popups( $include_unpublished, $campaign_id );
-		$popups_to_display       = array_filter(
+
+		// Post-scoped prompts (Contextual Prompts) are excluded from the query above
+		// for scale; inject the current post's scoped prompts explicitly.
+		$popups_to_maybe_display = array_merge(
+			$popups_to_maybe_display,
+			Newspack_Popups_Post_Scope::get_scoped_popups_for_current_post( $include_unpublished )
+		);
+
+		$popups_to_display = array_filter(
 			$popups_to_maybe_display,
 			function( $popup ) {
 				return self::should_display( $popup, true );
