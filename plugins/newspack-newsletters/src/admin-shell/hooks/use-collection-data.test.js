@@ -41,9 +41,9 @@ describe( 'useCollectionData', () => {
 				2: [ { id: 3 }, { id: 4 } ],
 				3: [ { id: 5 } ],
 			};
-			apiFetch.mockImplementation( ( { path } ) => {
+			apiFetch.mockImplementation( ( { path, parse } ) => {
 				const page = Number( ( path.match( /[?&]page=(\d+)/ ) || [] )[ 1 ] || 1 );
-				return Promise.resolve( makeResponse( pages[ page ], { total: 5, totalPages: 3 } ) );
+				return Promise.resolve( parse === false ? makeResponse( pages[ page ], { total: 5, totalPages: 3 } ) : pages[ page ] );
 			} );
 
 			const { result } = renderHook( () => useCollectionData( { path: '/wp/v2/test?per_page=2&page=1', fetchAll: true } ) );
@@ -87,15 +87,14 @@ describe( 'useCollectionData', () => {
 			expect( notifyError ).toHaveBeenCalledWith( 'Only some items could be loaded. Reload the page to try again.', {
 				id: 'test-id',
 			} );
-			// The footer/header count must match what's actually on screen, not the server's original total.
 			expect( result.current.paginationInfo ).toEqual( { totalItems: result.current.data.length, totalPages: 1 } );
 		} );
 
 		it( 'stops at the fetch-all cap and notifies the list was truncated', async () => {
-			apiFetch.mockImplementation( ( { path } ) => {
+			apiFetch.mockImplementation( ( { path, parse } ) => {
 				const page = Number( ( path.match( /[?&]page=(\d+)/ ) || [] )[ 1 ] || 1 );
 				const items = Array.from( { length: 100 }, ( unused, i ) => ( { id: page * 100 + i } ) );
-				return Promise.resolve( makeResponse( items, { total: 50000, totalPages: 500 } ) );
+				return Promise.resolve( parse === false ? makeResponse( items, { total: 50000, totalPages: 500 } ) : items );
 			} );
 
 			const { result } = renderHook( () => useCollectionData( { path: '/wp/v2/test?per_page=100&page=1', fetchAll: true } ) );
@@ -131,13 +130,12 @@ describe( 'useCollectionData', () => {
 		} );
 
 		it( 'keeps pages that succeeded alongside a failing sibling in the same batch', async () => {
-			// Page 4 went out of range because the collection shrank.
-			apiFetch.mockImplementation( ( { path } ) => {
+			apiFetch.mockImplementation( ( { path, parse } ) => {
 				const page = Number( ( path.match( /[?&]page=(\d+)/ ) || [] )[ 1 ] || 1 );
 				if ( page === 4 ) {
 					return Promise.reject( { code: 'rest_post_invalid_page_number', data: { status: 400 } } );
 				}
-				return Promise.resolve( makeResponse( [ { id: page } ], { total: 8, totalPages: 4 } ) );
+				return Promise.resolve( parse === false ? makeResponse( [ { id: page } ], { total: 8, totalPages: 4 } ) : [ { id: page } ] );
 			} );
 
 			const { result } = renderHook( () => useCollectionData( { path: '/wp/v2/test?per_page=2&page=1', fetchAll: true } ) );

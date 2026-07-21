@@ -15,7 +15,7 @@ import { envelope } from '@wordpress/icons';
 import QuickEditPanel from '../../components/quick-edit-panel';
 import { getNewsletterVisibilityDescriptions } from '../../../utils/service-provider';
 import { notifyError, notifySuccess } from '../../notices';
-import { fetchAllTerms, initialSelectionsForTaxonomy, resolveTokens, selectionsFromIds, sortedIdsEqual } from '../../utils/terms';
+import { fetchAllTerms, initialSelectionsForTaxonomy, resolveTokens, selectionsFromIds, sortedIdsEqual, unresolvedIds } from '../../utils/terms';
 
 const POSTS_PATH = '/wp/v2/newspack_nl_cpt';
 
@@ -46,8 +46,7 @@ function useQuickEditOptions() {
 export default function NewslettersQuickEditPanel( { item, onClose, onSaved } ) {
 	const { categories, tags } = useQuickEditOptions();
 
-	// Terms are only embedded when a taxonomy column is visible — otherwise
-	// resolve the post's raw IDs against the fetched options.
+	// Terms are only embedded when a taxonomy column is visible.
 	const initialCategorySelections = useMemo( () => {
 		const embedded = initialSelectionsForTaxonomy( item, 'category' );
 		return embedded.length ? embedded : selectionsFromIds( item?.categories, categories );
@@ -56,6 +55,9 @@ export default function NewslettersQuickEditPanel( { item, onClose, onSaved } ) 
 		const embedded = initialSelectionsForTaxonomy( item, 'post_tag' );
 		return embedded.length ? embedded : selectionsFromIds( item?.tags, tags );
 	}, [ item, tags ] );
+	// Unresolvable terms can't be shown or removed, so they ride along on save.
+	const unresolvedCategoryIds = useMemo( () => unresolvedIds( item?.categories, initialCategorySelections ), [ item, initialCategorySelections ] );
+	const unresolvedTagIds = useMemo( () => unresolvedIds( item?.tags, initialTagSelections ), [ item, initialTagSelections ] );
 	const initialVisibility = item?.meta?.is_public ? 'public' : 'private';
 
 	const [ categorySelections, setCategorySelections ] = useState( initialCategorySelections );
@@ -64,7 +66,6 @@ export default function NewslettersQuickEditPanel( { item, onClose, onSaved } ) 
 	const [ isBusy, setIsBusy ] = useState( false );
 	const hasEditedTermsRef = useRef( false );
 
-	// Options land after the first render, resolving ID-only terms.
 	useEffect( () => {
 		if ( ! hasEditedTermsRef.current ) {
 			setCategorySelections( initialCategorySelections );
@@ -95,13 +96,12 @@ export default function NewslettersQuickEditPanel( { item, onClose, onSaved } ) 
 
 	const handleSave = async () => {
 		setIsBusy( true );
-		// An untouched taxonomy must never be overwritten with what we resolved.
 		const data = { meta: { is_public: visibility === 'public' } };
 		if ( categoriesDirty ) {
-			data.categories = categorySelections.map( s => s.id );
+			data.categories = [ ...categorySelections.map( s => s.id ), ...unresolvedCategoryIds ];
 		}
 		if ( tagsDirty ) {
-			data.tags = tagSelections.map( s => s.id );
+			data.tags = [ ...tagSelections.map( s => s.id ), ...unresolvedTagIds ];
 		}
 		try {
 			await apiFetch( { path: `${ POSTS_PATH }/${ item.id }`, method: 'POST', data } );

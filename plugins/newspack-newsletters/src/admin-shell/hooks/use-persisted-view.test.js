@@ -62,7 +62,6 @@ describe( 'usePersistedView', () => {
 		} );
 		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
 
-		// Back to the seeded value: still unsaved, so nothing to send.
 		act( () => {
 			result.current[ 1 ]( current => ( { ...current, perPage: 25 } ) );
 		} );

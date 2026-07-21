@@ -22,8 +22,7 @@ function readPaginationInfo( response ) {
 	};
 }
 
-// The collection got shorter mid-walk — retrying won't help. Any other 400 is
-// a real failure.
+// The collection got shorter mid-walk — retrying won't help.
 const OUT_OF_RANGE_PAGE_CODES = [ 'rest_post_invalid_page_number', 'rest_term_invalid_page_number' ];
 
 function isOutOfRangePageError( error ) {
@@ -102,19 +101,17 @@ export default function useCollectionData( { path, trashCountPath = null, mutati
 					return;
 				}
 
-				// Caps the walk so a very large site can't hand DataViews tens of
-				// thousands of non-virtualised rows.
 				const maxPage = Math.min( pagination.totalPages, Math.ceil( FETCH_ALL_MAX_ITEMS / FETCH_ALL_CHUNK_SIZE ) );
 
 				setProgress( { loaded: all.length, total: pagination.totalItems } );
 				let endedEarly = false;
 				let cappedByMax = false;
-				// Settled, not all-or-nothing: one bad page must not discard its
-				// siblings. Keeping only the run before it stays contiguous.
+				// Settled, so one bad page doesn't discard its siblings.
 				const fetchPages = ( from, to ) => {
 					const batch = [];
 					for ( let p = from; p <= to; p++ ) {
-						batch.push( apiFetch( { path: addQueryArgs( path, { page: p } ), parse: false } ).then( r => r.json() ) );
+						// Parsed — an unparsed rejection is a bare `Response`, no error code.
+						batch.push( apiFetch( { path: addQueryArgs( path, { page: p } ) } ) );
 					}
 					return Promise.allSettled( batch );
 				};

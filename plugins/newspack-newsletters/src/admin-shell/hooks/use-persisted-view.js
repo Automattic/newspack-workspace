@@ -30,8 +30,6 @@ export default function usePersistedView( screenKey, defaultView ) {
 	} );
 
 	const lastSavedRef = useRef( view.perPage );
-	// The value the user last chose — may differ from `lastSavedRef` while a
-	// save for an older value is still in flight.
 	const desiredRef = useRef( view.perPage );
 	const inFlightRef = useRef( false );
 
@@ -54,7 +52,6 @@ export default function usePersistedView( screenKey, defaultView ) {
 				.catch( () => {} )
 				.finally( () => {
 					inFlightRef.current = false;
-					// Changed mid-flight: the effect's guard skipped it, so correct here.
 					if ( desiredRef.current !== perPage && isValidPerPage( desiredRef.current ) ) {
 						save( desiredRef.current );
 					}

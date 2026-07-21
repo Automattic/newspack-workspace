@@ -53,8 +53,6 @@ describe( 'NewslettersQuickEditPanel', () => {
 		} );
 	} );
 
-	// The regression this guards: with the term embed skipped, an untouched
-	// taxonomy was posted as `[]` and stripped every term from the post.
 	it( 'does not send categories or tags when only visibility changed', async () => {
 		const item = { id: 42, title: { raw: 'Friday Five' }, meta: { is_public: false }, categories: [ 5 ], tags: [ 7 ] };
 		render( <NewslettersQuickEditPanel item={ item } onClose={ jest.fn() } onSaved={ jest.fn() } /> );
@@ -66,6 +64,19 @@ describe( 'NewslettersQuickEditPanel', () => {
 
 		await waitFor( () => expect( postCall() ).toBeTruthy() );
 		expect( postCall().data ).toEqual( { meta: { is_public: true } } );
+	} );
+
+	it( 'keeps assigned term IDs that the options fetch never resolved', async () => {
+		const item = { id: 42, title: { raw: 'Friday Five' }, meta: {}, categories: [ 5, 99 ], tags: [] };
+		render( <NewslettersQuickEditPanel item={ item } onClose={ jest.fn() } onSaved={ jest.fn() } /> );
+
+		await waitFor( () => expect( screen.getByText( 'News' ) ).toBeInTheDocument() );
+
+		fireEvent.click( screen.getByRole( 'button', { name: /remove item/i } ) );
+		fireEvent.click( screen.getByTestId( 'panel-save' ) );
+
+		await waitFor( () => expect( postCall() ).toBeTruthy() );
+		expect( postCall().data.categories ).toEqual( [ 99 ] );
 	} );
 
 	it( 'seeds the token fields from the raw term IDs when no embed is present', async () => {
