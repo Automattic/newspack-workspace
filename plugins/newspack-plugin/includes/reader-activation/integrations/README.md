@@ -245,10 +245,11 @@ When a contact needs to be synced, the framework calls `push_contact_data()` on 
 
 ### Optional `$options` parameter
 
-`Contact_Sync` may pass a fourth `$options` array to `push_contact_data()` carrying operator-driven sync scoping (currently used by the `wp newspack esp sync` CLI):
+`Contact_Sync` may pass a fourth `$options` array to `push_contact_data()` carrying operator-driven sync scoping (currently used by the `wp newspack integrations backfill` CLI and its legacy alias `wp newspack esp sync`):
 
 - `skip_lists` (bool) — upsert the contact without adding it to any list, so an unsubscribed contact isn't resubscribed.
 - `fields` (string[]|null) — the canonical field labels the sync is scoped to (already applied to the metadata before your method is called).
+- `integration_id` (string|null) — restricts the push fan-out to a single active integration (the framework consumes this key in `Contact_Sync::push_to_integrations()`; it is not forwarded per-integration).
 
 The abstract signature intentionally stays three-parameter (`push_contact_data( $contact, $context, $existing_contact )`). `Contact_Sync::push_to_integrations()` calls every integration with the fourth `$options` argument; PHP discards surplus positional arguments to a method that declares fewer parameters (they remain available via `func_get_args()`) — there is no warning or error, so a three-parameter implementation keeps working unchanged. Adding the fourth parameter to the *abstract* instead would be a fatal "declaration must be compatible" error for every existing three-parameter override, which is why the parameter lives only on the concrete overrides that use it. Add `$options = []` to your override only if the integration needs to react to these flags (the built-in `esp` integration reads `skip_lists`). Integrations that ignore `$options` behave exactly as before.
 
@@ -299,6 +300,39 @@ $field
 Use `configure_incoming_field()` to enrich a field after construction — it's called on every field returned by `get_available_incoming_fields()` and again whenever stored fields are re-hydrated. This is where you set `is_access_rule`, `is_segment_criteria`, and any custom callback.
 
 The base class also offers `get_filtered_incoming_fields()`, which hides fields whose name matches one of the integration's own outgoing prefixed keys, so publishers don't re-select fields they're already pushing.
+
+---
+
+## Backfill CLI
+
+`wp newspack integrations backfill` runs an operator-driven bulk sync in either
+direction, optionally scoped to a single integration:
+
+```sh
+# Re-push all readers to every active integration (same as the legacy `esp sync`).
+wp newspack integrations backfill
+
+# Pull enabled incoming fields for all readers from one integration.
+wp newspack integrations backfill --direction=pull --integration=esp
+
+# Fully catch up one integration, 500 readers per batch.
+wp newspack integrations backfill --direction=both --integration=esp --batch-size=500
+```
+
+- `--direction=push|pull|both` (default `push`). Push-only flags
+  (`--subscription-ids`, `--order-ids`, `--migrated-subscriptions`,
+  `--skip-lists`, `--fields`) hard-error when the direction includes pull.
+- `--integration=<id>` restricts the run to one active, configured integration;
+  on the push side this also scopes the `--fields` pre-flight validation.
+- A pull `--dry-run` still performs the external API reads — it only skips
+  writing reader data.
+- Pull failures are **not** retried via ActionScheduler (a bulk run against a
+  flaky API would flood the queue): errors are tallied and logged, and the
+  affected `--offset` window can be re-run. Push retry semantics are unchanged.
+- `wp newspack esp sync` remains as a backward-compatible alias frozen to the
+  push direction and its historical flag surface.
+
+See `wp help newspack integrations backfill` for the full option reference.
 
 ---
 
