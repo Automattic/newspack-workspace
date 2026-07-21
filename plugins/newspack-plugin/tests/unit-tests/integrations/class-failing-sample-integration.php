@@ -33,6 +33,27 @@ class Failing_Sample_Integration extends Integration {
 	public static $pull_count = 0;
 
 	/**
+	 * Integration IDs that received a push, in call order.
+	 *
+	 * @var string[]
+	 */
+	public static $push_ids = [];
+
+	/**
+	 * Data returned by pull_contact_data.
+	 *
+	 * @var array
+	 */
+	public static $pull_data = [];
+
+	/**
+	 * Whether pull_contact_data should fail.
+	 *
+	 * @var bool
+	 */
+	public static $pull_should_fail = false;
+
+	/**
 	 * Value returned by is_set_up(). Tests that simulate an
 	 * enabled-but-unconfigured integration set this to false.
 	 *
@@ -58,6 +79,7 @@ class Failing_Sample_Integration extends Integration {
 	 */
 	public function push_contact_data( $contact, $context = '', $existing_contact = null ) {
 		self::$push_count++;
+		self::$push_ids[] = $this->get_id();
 		if ( self::$should_fail ) {
 			return new \WP_Error( 'mock_error', 'Mock push failed' );
 		}
@@ -72,7 +94,10 @@ class Failing_Sample_Integration extends Integration {
 	 */
 	public function pull_contact_data( $user_id ) {
 		self::$pull_count++;
-		return [];
+		if ( self::$pull_should_fail ) {
+			return new \WP_Error( 'mock_pull_error', 'Mock pull failed' );
+		}
+		return self::$pull_data;
 	}
 
 	/**
@@ -107,9 +132,12 @@ class Failing_Sample_Integration extends Integration {
 	 * Reset state between tests.
 	 */
 	public static function reset() {
-		self::$should_fail     = false;
-		self::$push_count      = 0;
-		self::$pull_count      = 0;
-		self::$is_set_up_value = true;
+		self::$should_fail      = false;
+		self::$push_count       = 0;
+		self::$pull_count       = 0;
+		self::$push_ids         = [];
+		self::$pull_data        = [];
+		self::$pull_should_fail = false;
+		self::$is_set_up_value  = true;
 	}
 }
