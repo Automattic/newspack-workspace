@@ -250,6 +250,16 @@ final class Reader_Registration {
 
 		if ( $attempts > $limit ) {
 			Logger::log( sprintf( 'Frontend registration rate limit exceeded for IP %1$s (bucket: %2$s)', $ip, $bucket ) );
+			Logger::newspack_log(
+				'newspack_frontend_registration_rate_limited',
+				'Frontend registration rate limit exceeded.',
+				[
+					'ip'       => $ip,
+					'bucket'   => $bucket,
+					'attempts' => $attempts,
+				],
+				'error'
+			);
 			return new \WP_Error(
 				'rate_limit_exceeded',
 				__( 'Too many registration attempts. Please try again later.', 'newspack-plugin' ),
@@ -393,6 +403,15 @@ final class Reader_Registration {
 			$captcha_result                = Recaptcha::verify_captcha();
 			unset( $_POST['g-recaptcha-response'] );
 			if ( \is_wp_error( $captcha_result ) ) {
+				Logger::newspack_log(
+					'newspack_frontend_registration_captcha_failed',
+					'Frontend registration rejected by reCAPTCHA.',
+					[
+						'integration_id' => $integration_id,
+						'error'          => $captcha_result->get_error_message(),
+					],
+					'error'
+				);
 				return new \WP_Error(
 					'recaptcha_failed',
 					$captcha_result->get_error_message(),
@@ -404,6 +423,12 @@ final class Reader_Registration {
 		// Step 8: Validate email.
 		$email = $request->get_param( 'npe' );
 		if ( empty( $email ) ) {
+			Logger::newspack_log(
+				'newspack_frontend_registration_invalid_email',
+				'Frontend registration rejected: missing or invalid email.',
+				[ 'integration_id' => $integration_id ],
+				'error'
+			);
 			return new \WP_Error(
 				'invalid_email',
 				__( 'A valid email address is required.', 'newspack-plugin' ),
@@ -440,6 +465,15 @@ final class Reader_Registration {
 				);
 			}
 
+			Logger::newspack_log(
+				'newspack_frontend_registration_failed',
+				'Frontend registration failed in register_reader().',
+				[
+					'integration_id' => $integration_id,
+					'error'          => $result->get_error_message(),
+				],
+				'error'
+			);
 			return new \WP_Error(
 				'registration_failed',
 				$result->get_error_message(),
