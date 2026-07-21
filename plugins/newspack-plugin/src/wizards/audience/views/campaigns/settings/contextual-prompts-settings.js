@@ -19,7 +19,7 @@ import { chevronLeft } from '@wordpress/icons';
 /**
  * Internal dependencies
  */
-import { CardFeature, Button, Modal, Waiting } from '../../../../../../packages/components/src';
+import { CardFeature, Button, Grid, Modal, Waiting } from '../../../../../../packages/components/src';
 
 const DISCLOSURE = __(
 	'Enabling the AI Copy Assistant lets editors generate donation call-to-action copy for their stories using AI. When used, the content of the post is sent to a third-party AI provider to draft suggestions. It is retained by the provider for up to 30 days for abuse monitoring, is not used to train AI models, and never appears in other AI products. Every suggestion is a draft an editor reviews and approves — nothing is ever published automatically.',
@@ -137,18 +137,20 @@ const ContextualPromptsSettings = () => {
 					{ error.message }
 				</Notice>
 			) }
-			<CardFeature
-				title={ __( 'AI Copy Assistant', 'newspack-plugin' ) }
-				description={ description }
-				enabled={ enabled }
-				busy={ inFlight }
-				requirements={ ! canManage && ! enabled ? __( 'An administrator must enable this feature.', 'newspack-plugin' ) : undefined }
-				onEnable={ canManage ? () => setModalOpen( true ) : undefined }
-				onConfigure={ canManage && enabled ? () => setView( 'configure' ) : undefined }
-				moreControls={
-					canManage && enabled ? [ { title: __( 'Disable', 'newspack-plugin' ), onClick: () => setEnabled( false ) } ] : undefined
-				}
-			/>
+			<Grid columns={ 1 } gutter={ 0 }>
+				<CardFeature
+					title={ __( 'AI Copy Assistant', 'newspack-plugin' ) }
+					description={ description }
+					enabled={ enabled }
+					busy={ inFlight }
+					requirements={ ! canManage && ! enabled ? __( 'An administrator must enable this feature.', 'newspack-plugin' ) : undefined }
+					onEnable={ canManage ? () => setModalOpen( true ) : undefined }
+					onConfigure={ canManage && enabled ? () => setView( 'configure' ) : undefined }
+					moreControls={
+						canManage && enabled ? [ { title: __( 'Disable', 'newspack-plugin' ), onClick: () => setEnabled( false ) } ] : undefined
+					}
+				/>
+			</Grid>
 			{ modalOpen && (
 				<Modal
 					title={ __( 'Enable the AI Copy Assistant?', 'newspack-plugin' ) }
