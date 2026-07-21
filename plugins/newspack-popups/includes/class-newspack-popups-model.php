@@ -264,6 +264,13 @@ final class Newspack_Popups_Model {
 			'post_status'    => $include_unpublished ? [ 'draft', 'pending', 'future', 'publish' ] : 'publish',
 			'posts_per_page' => 100,
 			'post_parent'    => $post_id,
+			// Scoped prompts are in-article asks. Constrain to inline placements so a
+			// prompt whose placement drifted to an overlay value (e.g. edited in the
+			// prompt CPT editor) can never render as a full-screen takeover on the story.
+			'meta_key'       => 'placement',
+			// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+			'meta_value'     => self::$inline_placements,
+			'meta_compare'   => 'IN',
 		];
 
 		return self::retrieve_popups_with_query( new WP_Query( $args ) );

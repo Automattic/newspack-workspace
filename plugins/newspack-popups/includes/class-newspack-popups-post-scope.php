@@ -133,6 +133,13 @@ final class Newspack_Popups_Post_Scope {
 			return $updated;
 		}
 
+		// Re-assert the scoped-prompt contract. A Contextual Prompt is always an
+		// in-article ask, but placement/trigger are editable in the prompt CPT editor
+		// (reachable from the panel's "Advanced settings" link) — without this, a
+		// prompt flipped to an overlay placement would stay that way and render as a
+		// full-screen takeover on the story.
+		update_post_meta( $prompt_id, 'placement', 'inline' );
+		update_post_meta( $prompt_id, 'trigger_type', 'blocks_count' );
 		update_post_meta( $prompt_id, 'trigger_blocks_count', (string) $position );
 		self::store_prompt_fields( $prompt_id, $body, $button_label, $button_url );
 		if ( isset( $args['ai_edited'] ) ) {

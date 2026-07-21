@@ -262,6 +262,48 @@ class PostScopeTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A scoped prompt whose placement drifted to an overlay must never be served as
+	 * a scoped prompt, and updating it must restore the inline contract. Otherwise an
+	 * in-article donation ask renders as a full-screen takeover on the story.
+	 */
+	public function test_overlay_placement_drift_is_contained() {
+		$post_id   = self::factory()->post->create( [ 'post_type' => 'post' ] );
+		$prompt_id = Newspack_Popups_Post_Scope::create_scoped_prompt(
+			[
+				'post_id'  => $post_id,
+				'body'     => 'Fund this reporting.',
+				'position' => 2,
+			]
+		);
+
+		// Sanity: it starts inline and is retrievable.
+		$this->assertSame( 'inline', get_post_meta( $prompt_id, 'placement', true ) );
+		$this->assertCount( 1, Newspack_Popups_Model::retrieve_scoped_popups( $post_id ) );
+
+		// Drift: someone flips placement to an overlay in the prompt CPT editor.
+		update_post_meta( $prompt_id, 'placement', 'center' );
+
+		// The scoped query must not return it while it is an overlay.
+		$this->assertCount(
+			0,
+			Newspack_Popups_Model::retrieve_scoped_popups( $post_id ),
+			'An overlay-placed prompt must not be served as a scoped in-article prompt.'
+		);
+
+		// Updating through the panel re-asserts the inline contract.
+		Newspack_Popups_Post_Scope::update_scoped_prompt(
+			$prompt_id,
+			[
+				'body'     => 'Fund this reporting.',
+				'position' => 2,
+			]
+		);
+		$this->assertSame( 'inline', get_post_meta( $prompt_id, 'placement', true ) );
+		$this->assertSame( 'blocks_count', get_post_meta( $prompt_id, 'trigger_type', true ) );
+		$this->assertCount( 1, Newspack_Popups_Model::retrieve_scoped_popups( $post_id ) );
+	}
+
+	/**
 	 * Updating something that isn't a scoped prompt is rejected.
 	 */
 	public function test_update_rejects_non_scoped_prompt() {
