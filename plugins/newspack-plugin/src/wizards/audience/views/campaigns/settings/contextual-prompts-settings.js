@@ -17,7 +17,7 @@
 import { __ } from '@wordpress/i18n';
 import { useState, useEffect } from '@wordpress/element';
 import apiFetch from '@wordpress/api-fetch';
-import { Notice, TextControl, TextareaControl, __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { Notice, TextControl, TextareaControl, __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 import { chevronLeft } from '@wordpress/icons';
 
 /**
@@ -100,30 +100,36 @@ const ContextualPromptsSettings = ( { configuring, onConfigure } ) => {
 					<Button icon={ chevronLeft } label={ __( 'Back', 'newspack-plugin' ) } onClick={ () => onConfigure( false ) } isLink />
 					<h2 className="newspack-wizard__heading">{ __( 'Contextual Prompts', 'newspack-plugin' ) }</h2>
 				</HStack>
-				<p>{ __( 'Details used to tailor AI-generated Contextual Prompt copy to your newsroom.', 'newspack-plugin' ) }</p>
+				<VStack spacing={ 6 } style={ { marginTop: 16 } }>
+					<p style={ { margin: 0 } }>
+						{ __( 'Details used to tailor AI-generated Contextual Prompt copy to your newsroom.', 'newspack-plugin' ) }
+					</p>
 
-				{ error && (
-					<Notice status="error" isDismissible={ false }>
-						{ error.message }
-					</Notice>
-				) }
+					{ error && (
+						<Notice status="error" isDismissible={ false }>
+							{ error.message }
+						</Notice>
+					) }
 
-				{ ( fields || [] ).map( field => {
-					const Control = 'textarea' === field.type ? TextareaControl : TextControl;
-					return (
-						<Control
-							key={ field.key }
-							label={ field.label }
-							help={ field.help }
-							value={ values[ field.key ] ?? '' }
-							onChange={ value => setValues( prev => ( { ...prev, [ field.key ]: value } ) ) }
-						/>
-					);
-				} ) }
+					{ ( fields || [] ).map( field => {
+						const Control = 'textarea' === field.type ? TextareaControl : TextControl;
+						return (
+							<Control
+								key={ field.key }
+								label={ field.label }
+								help={ field.help }
+								value={ values[ field.key ] ?? '' }
+								onChange={ value => setValues( prev => ( { ...prev, [ field.key ]: value } ) ) }
+							/>
+						);
+					} ) }
 
-				<Button variant="primary" type="submit" disabled={ inFlight }>
-					{ inFlight ? __( 'Saving…', 'newspack-plugin' ) : __( 'Save', 'newspack-plugin' ) }
-				</Button>
+					<div>
+						<Button variant="primary" type="submit" disabled={ inFlight }>
+							{ inFlight ? __( 'Saving…', 'newspack-plugin' ) : __( 'Save', 'newspack-plugin' ) }
+						</Button>
+					</div>
+				</VStack>
 			</form>
 		);
 	}

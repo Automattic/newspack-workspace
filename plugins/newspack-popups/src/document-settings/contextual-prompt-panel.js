@@ -23,11 +23,12 @@ const FRAMING_LABELS = {
 };
 
 const ContextualPromptPanel = () => {
-	const { postId, postType, content } = useSelect( select => {
+	const { postId, postType, postLink, content } = useSelect( select => {
 		const editor = select( 'core/editor' );
 		return {
 			postId: editor.getCurrentPostId(),
 			postType: editor.getCurrentPostType(),
+			postLink: editor.getPermalink(),
 			content: editor.getEditedPostContent(),
 		};
 	}, [] );
@@ -126,7 +127,7 @@ const ContextualPromptPanel = () => {
 	return (
 		<PluginDocumentSettingPanel name="newspack-contextual-prompt" title={ __( 'Contextual Prompt', 'newspack-popups' ) }>
 			<VStack spacing={ 4 }>
-				<p style={ { margin: 0 } }>{ __( 'Generate a story-specific donation call-to-action for this post.', 'newspack-popups' ) }</p>
+				<p style={ { margin: 0 } }>{ __( 'Generate a story-specific donation prompt for this post.', 'newspack-popups' ) }</p>
 
 				{ error && (
 					<Notice status="error" isDismissible={ false }>
@@ -136,8 +137,22 @@ const ContextualPromptPanel = () => {
 
 				{ created ? (
 					<Notice status="success" isDismissible={ false }>
-						{ __( 'Prompt created for this post.', 'newspack-popups' ) }{ ' ' }
-						{ created.edit_link && <a href={ created.edit_link }>{ __( 'Edit prompt', 'newspack-popups' ) }</a> }
+						<p style={ { margin: 0 } }>
+							{ __( 'Prompt created. Readers will see it on this story at the position you chose.', 'newspack-popups' ) }
+						</p>
+						<p style={ { margin: '8px 0 0' } }>
+							{ postLink && (
+								<a href={ postLink } target="_blank" rel="noreferrer">
+									{ __( 'View story', 'newspack-popups' ) }
+								</a>
+							) }
+							{ postLink && created.edit_link && ' · ' }
+							{ created.edit_link && (
+								<a href={ created.edit_link } target="_blank" rel="noreferrer">
+									{ __( 'Edit prompt settings', 'newspack-popups' ) }
+								</a>
+							) }
+						</p>
 					</Notice>
 				) : (
 					<>
