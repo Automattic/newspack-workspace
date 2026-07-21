@@ -197,5 +197,28 @@ class Newspack_Blocks_Modal_Checkout_Data_Test extends WP_UnitTestCase_Blocks {
 		$this->assertSame( [ 1407, 1408 ], $data['variation_ids'] );
 		$this->assertArrayNotHasKey( 'amount', $data );
 	}
+
+	/**
+	 * The data-checkout attribute must escape values so a product name containing
+	 * an apostrophe can't break out of the single-quoted attribute.
+	 */
+	public function test_data_checkout_attr_escapes_single_quotes() {
+		$attr = Checkout_Data::data_checkout_attr( [ 'name' => "Editor's Choice" ] );
+
+		// Single-quote delimited attribute, matching the markup that consumes it.
+		$this->assertStringStartsWith( "data-checkout='", $attr );
+		$this->assertStringEndsWith( "'", $attr );
+
+		// The apostrophe from the payload is escaped, so it can't terminate the attribute.
+		$inner = substr( $attr, strlen( "data-checkout='" ), -1 );
+		$this->assertStringNotContainsString( "'", $inner );
+		$this->assertStringContainsString( '&#039;', $inner );
+
+		// The escaped value still round-trips back to the original payload.
+		$this->assertSame(
+			[ 'name' => "Editor's Choice" ],
+			json_decode( html_entity_decode( $inner, ENT_QUOTES ), true )
+		);
+	}
 }
 // phpcs:enable Generic.Files.OneObjectStructurePerFile.MultipleFound

@@ -130,10 +130,14 @@ class Contact_Sync extends Sync {
 	 * @param array  $contact          The contact data to sync.
 	 * @param string $context          The context of the sync. Defaults to static::$context.
 	 * @param array  $existing_contact Optional. Existing contact data to merge with. Defaults to null.
+	 * @param array  $options          Optional. Sync options threaded to the integration push:
+	 *                                 `skip_lists` (bool) and `fields` (string[]|null). These apply
+	 *                                 only to the direct push path below — not the queued Data Events
+	 *                                 branch, which never runs under WP-CLI.
 	 *
 	 * @return true|\WP_Error True if succeeded or WP_Error.
 	 */
-	public static function sync( $contact, $context = '', $existing_contact = null ) {
+	public static function sync( $contact, $context = '', $existing_contact = null, $options = [] ) {
 		$can_sync = static::can_sync( true );
 		if ( $can_sync->has_errors() ) {
 			return $can_sync;
@@ -168,22 +172,97 @@ class Contact_Sync extends Sync {
 			Logger::log( $contact );
 		}
 
-		return self::push_to_integrations( $contact, $context, $existing_contact );
+		return self::push_to_integrations( $contact, $context, $existing_contact, $options );
+	}
+
+	/**
+	 * Whether the given sync options are the default (no CLI field/list scoping).
+	 *
+	 * @param array $options Sync options.
+	 *
+	 * @return bool True when neither `skip_lists` nor `fields` scoping is set.
+	 */
+	private static function options_are_default( $options ): bool {
+		return empty( $options['skip_lists'] ) && empty( $options['fields'] );
+	}
+
+	/**
+	 * Prepare a contact for a single integration, applying the integration's own
+	 * `prepare_contact()` and then the CLI field/name scoping from `$options`.
+	 *
+	 * When `$options['fields']` is set: the reader `name` is dropped (so a
+	 * field-scoped backfill can't rewrite reader names — ESPs only set first/last
+	 * name when a name is present), and metadata is filtered to just the requested
+	 * labels. Filtering runs after `prepare_contact()` so keys are already prefixed
+	 * in both metadata modes; a key is kept when its de-prefixed remainder equals a
+	 * requested label, or begins with a requested label ending in `': '` (the UTM
+	 * label shape, e.g. `Signup UTM: source`). Everything else — including
+	 * `status` / `status_if_new` — is dropped.
+	 *
+	 * @param \Newspack\Reader_Activation\Integration $integration The target integration.
+	 * @param array                                   $contact     The contact data.
+	 * @param array                                   $options     Sync options.
+	 *
+	 * @return array The prepared, scoped contact.
+	 */
+	private static function prepare_contact_for_integration( $integration, $contact, $options = [] ): array {
+		$integration_contact = $integration->prepare_contact( $contact );
+
+		if ( empty( $options['fields'] ) ) {
+			return $integration_contact;
+		}
+
+		// Drop the reader name so a field-scoped backfill can't rewrite names (ESPs
+		// only set first/last name when a name is present). Applied to the prepared
+		// contact — after prepare_contact() — so an integration override that derives
+		// a name can't re-introduce it and defeat the guarantee.
+		unset( $integration_contact['name'] );
+
+		$prefix   = $integration->get_metadata_prefix();
+		$labels   = $options['fields'];
+		$filtered = [];
+		foreach ( $integration_contact['metadata'] ?? [] as $key => $value ) {
+			$remainder = 0 === strpos( $key, $prefix ) ? substr( $key, strlen( $prefix ) ) : $key;
+			foreach ( $labels as $label ) {
+				if ( $remainder === $label ) {
+					$filtered[ $key ] = $value;
+					break;
+				}
+				// UTM-style labels end in ": " and match any suffixed key (e.g. "Signup UTM: source").
+				// This trailing-": " shape is the contract defined by the UTM labels in
+				// Legacy_Metadata::get_basic_fields() ("Signup UTM: ", "Payment UTM: ").
+				if ( ': ' === substr( $label, -2 ) && 0 === strpos( $remainder, $label ) ) {
+					$filtered[ $key ] = $value;
+					break;
+				}
+			}
+		}
+
+		$integration_contact['metadata'] = $filtered;
+		return $integration_contact;
 	}
 
 	/**
 	 * Push contact data to all active integrations.
 	 *
 	 * Failed integrations are scheduled for retry via ActionScheduler
-	 * with exponential backoff.
+	 * with exponential backoff — unless `$options` carries CLI field/list scoping,
+	 * in which case retries are suppressed (see below).
 	 *
 	 * @param array  $contact          The contact data to sync.
 	 * @param string $context          The context of the sync.
 	 * @param array  $existing_contact Optional. Existing contact data to merge with.
+	 * @param array  $options          Optional. Sync options: `skip_lists` (bool) and
+	 *                                 `fields` (string[]|null). When non-default, contacts
+	 *                                 are field/name-scoped per integration and failed pushes
+	 *                                 are NOT auto-retried — the AS retry handler rebuilds the
+	 *                                 full contact and would push it with the master list,
+	 *                                 undoing the list-less/field-scoped intent. Operators
+	 *                                 re-run the affected `--offset` window instead.
 	 *
 	 * @return true|\WP_Error True if all succeeded, or WP_Error with combined messages.
 	 */
-	private static function push_to_integrations( $contact, $context, $existing_contact = null ) {
+	private static function push_to_integrations( $contact, $context, $existing_contact = null, $options = [] ) {
 		/**
 		 * Filters the contact data before syncing to the integration, allowing modifications or additions to the contact data.
 		 *
@@ -206,7 +285,7 @@ class Contact_Sync extends Sync {
 		}
 
 		foreach ( $integrations as $integration_id => $integration ) {
-			$integration_contact = $integration->prepare_contact( $contact );
+			$integration_contact = self::prepare_contact_for_integration( $integration, $contact, $options );
 
 			// Added logging here to more easily monitor integration sync data. Can be removed once integrations are released.
 			if ( 'legacy' !== Metadata::get_version() ) {
@@ -214,7 +293,7 @@ class Contact_Sync extends Sync {
 				Logger::log( $integration_contact );
 			}
 
-			$result = $integration->push_contact_data( $integration_contact, $context, $existing_contact );
+			$result = $integration->push_contact_data( $integration_contact, $context, $existing_contact, $options );
 			if ( \is_wp_error( $result ) ) {
 				/**
 				 * Fires when a contact sync fails on the original attempt (before retries).
@@ -239,7 +318,11 @@ class Contact_Sync extends Sync {
 						'reason'         => $result->get_error_message(),
 					]
 				);
-				self::schedule_integration_retry( $integration_id, $user_id, $context, 0, $result, $previous_email );
+				if ( self::options_are_default( $options ) ) {
+					self::schedule_integration_retry( $integration_id, $user_id, $context, 0, $result, $previous_email );
+				} else {
+					static::log( sprintf( 'Retry skipped for integration "%s" sync of %s: CLI sync with custom options (skip-lists/fields). Re-run the affected batch to retry.', $integration_id, $contact['email'] ?? 'unknown' ) );
+				}
 				$errors[] = sprintf( '[%s] %s', $integration_id, $result->get_error_message() );
 				if ( self::$current_as_action_id ) {
 					\ActionScheduler_Logger::instance()->log(
@@ -959,11 +1042,13 @@ class Contact_Sync extends Sync {
 	/**
 	 * Get contact data for syncing.
 	 *
-	 * @param int $user_id The user ID.
+	 * @param int           $user_id The user ID.
+	 * @param string[]|null $fields  Optional. Canonical field labels to restrict the computed
+	 *                               metadata to. `null` computes every available field.
 	 *
 	 * @return array|\WP_Error The contact data or WP_Error.
 	 */
-	public static function get_contact_data( $user_id ) {
+	public static function get_contact_data( $user_id, $fields = null ) {
 		$user = \get_userdata( $user_id );
 		if ( ! $user ) {
 			return new \WP_Error( 'newspack_esp_sync_contact', __( 'User not found.', 'newspack-plugin' ) );
@@ -996,7 +1081,7 @@ class Contact_Sync extends Sync {
 			$customer->save();
 		}
 
-		$contact = Sync\Metadata::get_contact_with_metadata( $customer );
+		$contact = Sync\Metadata::get_contact_with_metadata( $customer, $fields );
 
 		return $contact;
 	}
@@ -1008,10 +1093,14 @@ class Contact_Sync extends Sync {
 	 * @param int|\WC_order $user_id_or_order User ID or WC_Order object.
 	 * @param string        $context          The context of the sync.
 	 * @param bool          $is_dry_run       True if a dry run.
+	 * @param array         $options          Optional. Sync options: `skip_lists` (bool) and
+	 *                                        `fields` (string[]|null, canonical labels). `fields`
+	 *                                        restricts both what metadata is computed and what is
+	 *                                        pushed; `skip_lists` upserts without a master list.
 	 *
 	 * @return true|\WP_Error True if the contact was synced successfully, WP_Error otherwise.
 	 */
-	public static function sync_contact( $user_id_or_order, $context = '', $is_dry_run = false ) {
+	public static function sync_contact( $user_id_or_order, $context = '', $is_dry_run = false, $options = [] ) {
 		$can_sync = static::can_sync( true );
 		if ( ! $is_dry_run && $can_sync->has_errors() ) {
 			return $can_sync;
@@ -1020,12 +1109,18 @@ class Contact_Sync extends Sync {
 		$is_order = $user_id_or_order instanceof \WC_Order;
 		$order    = $is_order ? $user_id_or_order : false;
 		$user_id  = $is_order ? $order->get_customer_id() : $user_id_or_order;
+		$fields   = $options['fields'] ?? null;
 
-		$contact = $is_order ? Sync\Metadata::get_contact_with_metadata( $order ) : self::get_contact_data( $user_id );
+		$contact = $is_order ? Sync\Metadata::get_contact_with_metadata( $order, $fields ) : self::get_contact_data( $user_id, $fields );
 		if ( \is_wp_error( $contact ) || empty( $contact['email'] ) ) {
 			return \is_wp_error( $contact ) ? $contact : new \WP_Error( 'newspack_esp_sync_contact', __( 'Contact email is empty.', 'newspack-plugin' ) );
 		}
-		$result = $is_dry_run ? true : self::sync( $contact, $context );
+
+		if ( $is_dry_run && ! self::options_are_default( $options ) ) {
+			self::log_dry_run_with_options( $contact, $context, $options );
+		}
+
+		$result = $is_dry_run ? true : self::sync( $contact, $context, null, $options );
 
 		if ( $result && ! \is_wp_error( $result ) ) {
 			static::log(
@@ -1039,6 +1134,48 @@ class Contact_Sync extends Sync {
 		}
 
 		return $result;
+	}
+
+	/**
+	 * Log, per active integration, the field/list-scoped payload a `--dry-run`
+	 * with custom options would push. Warns when scoping leaves no metadata to
+	 * send (e.g. requested fields aren't enabled as outgoing for that integration).
+	 *
+	 * @param array  $contact The computed contact data.
+	 * @param string $context The sync context.
+	 * @param array  $options Sync options (`skip_lists`, `fields`).
+	 *
+	 * @return void
+	 */
+	private static function log_dry_run_with_options( $contact, $context, $options ) {
+		// Mirror the real push path (push_to_integrations): run the contact filter
+		// before per-integration scoping so the preview reflects any metadata a
+		// publisher filter contributes.
+		/** This filter is documented in includes/reader-activation/sync/class-contact-sync.php. */
+		$contact    = \apply_filters( 'newspack_esp_sync_contact', $contact, $context );
+		$skip_lists = ! empty( $options['skip_lists'] );
+		foreach ( Integrations::get_active_configured_integrations() as $integration_id => $integration ) {
+			$prepared = self::prepare_contact_for_integration( $integration, $contact, $options );
+			$metadata = $prepared['metadata'] ?? [];
+			static::log(
+				sprintf(
+					'[dry-run] %s → integration "%s": lists %s, %d field(s): %s',
+					$prepared['email'] ?? 'unknown',
+					$integration_id,
+					$skip_lists ? 'skipped' : 'master list',
+					count( $metadata ),
+					implode( ', ', array_keys( $metadata ) )
+				)
+			);
+			if ( ! empty( $options['fields'] ) && empty( $metadata ) ) {
+				static::log(
+					sprintf(
+						'[dry-run] WARNING: no metadata to sync for integration "%s" — this reader likely has no values for the requested fields (the CLI pre-flight already confirmed they are enabled as outgoing fields).',
+						$integration_id
+					)
+				);
+			}
+		}
 	}
 
 	/**

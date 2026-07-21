@@ -39,7 +39,7 @@ type CardFeatureIcon = {
 type MoreControl = {
 	title: string;
 	onClick: () => void;
-	icon?: React.ReactNode;
+	icon?: JSX.Element;
 };
 
 type CardFeatureProps = {
@@ -58,7 +58,9 @@ type CardFeatureProps = {
 	requirements?: string;
 	/**
 	 * When `requirements` is set, keep the primary button clickable so the
-	 * user can remediate the unmet requirement from this card.
+	 * user can remediate the unmet requirement from this card, and keep the
+	 * "More" dropdown available — the feature is degraded but still operable
+	 * (e.g. can be disabled), unlike a hard-locked requirement.
 	 */
 	requirementsActionable?: boolean;
 	/** Primary button label when not enabled. Default: "Enable". */
@@ -71,7 +73,7 @@ type CardFeatureProps = {
 	onEnable?: () => void;
 	/** Called when the primary button is clicked and the feature is enabled. */
 	onConfigure?: () => void;
-	/** Controls rendered inside the "More" dropdown, shown only when enabled. */
+	/** Controls rendered inside the "More" dropdown, shown when enabled — including the unmet-requirements state when `requirementsActionable`. */
 	moreControls?: MoreControl[];
 	/** Badge text shown when enabled. Default: "Enabled". */
 	badgeText?: string;
@@ -118,6 +120,7 @@ const CardFeature = ( {
 
 	const isConfigureState = enabled && ! requirements;
 	const buttonLabel = isConfigureState ? configureLabel ?? __( 'Configure', 'newspack-plugin' ) : enableLabel ?? __( 'Enable', 'newspack-plugin' );
+	const showMoreControls = enabled && !! moreControls?.length && ( ! requirements || requirementsActionable );
 
 	const handleButtonClick = () => {
 		if ( isConfigureState ) {
@@ -135,6 +138,23 @@ const CardFeature = ( {
 		  } )
 		: undefined;
 
+	let renderedIcon = null;
+	if ( isValidElement( icon ) ) {
+		renderedIcon = icon;
+	} else if ( iconDescriptor ) {
+		renderedIcon = (
+			<div
+				className={ iconClasses }
+				style={ {
+					backgroundColor: iconDescriptor.backgroundColor,
+					color: iconDescriptor.fill,
+				} }
+			>
+				{ iconDescriptor.node }
+			</div>
+		);
+	}
+
 	return (
 		<Card
 			className={ classes }
@@ -148,20 +168,7 @@ const CardFeature = ( {
 								<h2 className="newspack-card-feature__title">{ title }</h2>
 								{ description && <p className="newspack-card-feature__description">{ description }</p> }
 							</div>
-							{ icon &&
-								( iconDescriptor ? (
-									<div
-										className={ iconClasses }
-										style={ {
-											backgroundColor: iconDescriptor.backgroundColor,
-											color: iconDescriptor.fill,
-										} }
-									>
-										{ iconDescriptor.node }
-									</div>
-								) : (
-									icon
-								) ) }
+							{ renderedIcon }
 						</HStack>
 						<HStack alignment="edge">
 							<HStack expanded={ false } spacing="8px">
@@ -174,7 +181,7 @@ const CardFeature = ( {
 								>
 									{ buttonLabel }
 								</Button>
-								{ isConfigureState && !! moreControls?.length && (
+								{ showMoreControls && (
 									<DropdownMenu
 										icon={ moreVertical }
 										label={ __( 'More', 'newspack-plugin' ) }

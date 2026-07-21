@@ -5,7 +5,7 @@
 /**
  * WordPress dependencies.
  */
-import { Notice, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { Notice, __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 import { useContext, useEffect, useState, Fragment } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { ENTER } from '@wordpress/keycodes';
@@ -277,7 +277,7 @@ const Campaigns = props => {
 								}
 							} }
 						/>
-						<Card buttonsCard noBorder className="justify-end">
+						<HStack justify="flex-end" spacing={ 4 } wrap className="newspack-modal__footer">
 							<Button
 								variant="secondary"
 								onClick={ () => {
@@ -289,7 +289,7 @@ const Campaigns = props => {
 							<Button variant="primary" disabled={ ! campaignName } onClick={ () => submitModal( campaignName ) }>
 								{ modalButton( modalType ) }
 							</Button>
-						</Card>
+						</HStack>
 					</Modal>
 				) }
 			</Card>

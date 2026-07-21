@@ -138,6 +138,12 @@ jobs:
        # build). Without it pnpm exits non-zero on a missing script.
       - run: pnpm --filter "${{ matrix.package }}" run --if-present lint:js
         continue-on-error: false
+      # Type gate: the build strips types via Babel without checking them and
+      # ESLint is not type-aware, so this is the only step that catches type
+      # errors. Packages opt in by defining the script (tsc --noEmit against
+      # the package's own tsconfig).
+      - run: pnpm --filter "${{ matrix.package }}" run --if-present typescript:check
+        continue-on-error: false
       - run: pnpm --filter "${{ matrix.package }}" run --if-present build
       - run: pnpm --filter "${{ matrix.package }}" run --if-present test
         continue-on-error: false

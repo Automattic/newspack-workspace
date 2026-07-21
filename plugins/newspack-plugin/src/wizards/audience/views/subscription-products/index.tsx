@@ -1,8 +1,9 @@
 /**
  * Subscription Products management screen.
  *
- * A DataViews list of WooCommerce Subscriptions products using the consolidated
- * product model (name, type, price, active subscriptions, category, status).
+ * A DataViews list of WooCommerce Subscriptions products with the consolidated product
+ * model, plus the applied-rule stack + effective price (behind the
+ * Subscription_Policy_Resolver seam).
  */
 
 import '../../../../shared/js/public-path';
