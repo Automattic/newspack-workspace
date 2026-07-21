@@ -28,21 +28,51 @@ export default function usePersistedView( screenKey, defaultView ) {
 
 	const lastSavedRef = useRef( view.perPage );
 	const timerRef = useRef( null );
+	const requestSeqRef = useRef( 0 );
+	const isUnmountingRef = useRef( false );
+
+	// Cleans up before the effect below on unmount (effects clean up in
+	// declaration order), so that effect can tell a true unmount apart from
+	// a routine dependency change.
+	useEffect(
+		() => () => {
+			isUnmountingRef.current = true;
+		},
+		[]
+	);
 
 	useEffect( () => {
 		if ( view.perPage === lastSavedRef.current || ! isValidPerPage( view.perPage ) ) {
 			return undefined;
 		}
 		const { perPage } = view;
-		timerRef.current = setTimeout( () => {
-			lastSavedRef.current = perPage;
+		const save = () => {
+			timerRef.current = null;
+			const seq = ++requestSeqRef.current;
 			apiFetch( {
 				path: PREFERENCES_PATH,
 				method: 'POST',
 				data: { screen: screenKey, prefs: { perPage } },
-			} ).catch( () => {} );
-		}, SAVE_DEBOUNCE_MS );
-		return () => clearTimeout( timerRef.current );
+			} )
+				.then( () => {
+					// A newer save may have been issued (and even settled) while
+					// this one was in flight — don't let it clobber that state.
+					if ( seq === requestSeqRef.current ) {
+						lastSavedRef.current = perPage;
+					}
+				} )
+				.catch( () => {} );
+		};
+		timerRef.current = setTimeout( save, SAVE_DEBOUNCE_MS );
+		return () => {
+			if ( timerRef.current ) {
+				clearTimeout( timerRef.current );
+				timerRef.current = null;
+				if ( isUnmountingRef.current ) {
+					save();
+				}
+			}
+		};
 	}, [ view.perPage, screenKey ] ); // eslint-disable-line react-hooks/exhaustive-deps
 
 	return [ view, setView ];

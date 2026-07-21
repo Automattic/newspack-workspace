@@ -61,4 +61,54 @@ describe( 'usePersistedView', () => {
 		} );
 		expect( apiFetch ).not.toHaveBeenCalled();
 	} );
+
+	it( 'retries a rejected save on a subsequent identical change', async () => {
+		apiFetch.mockRejectedValueOnce( new Error( 'save failed' ) );
+
+		const { result } = renderHook( () => usePersistedView( 'newsletters-list', DEFAULT_VIEW ) );
+
+		act( () => {
+			result.current[ 1 ]( current => ( { ...current, perPage: 50 } ) );
+		} );
+		await act( async () => {
+			jest.runAllTimers();
+			await Promise.resolve();
+			await Promise.resolve();
+		} );
+		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
+
+		act( () => {
+			result.current[ 1 ]( current => ( { ...current, perPage: 25 } ) );
+		} );
+		act( () => {
+			jest.runAllTimers();
+		} );
+		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
+
+		act( () => {
+			result.current[ 1 ]( current => ( { ...current, perPage: 50 } ) );
+		} );
+		await act( async () => {
+			jest.runAllTimers();
+			await Promise.resolve();
+		} );
+		expect( apiFetch ).toHaveBeenCalledTimes( 2 );
+	} );
+
+	it( 'flushes a pending debounced save immediately on unmount', () => {
+		const { result, unmount } = renderHook( () => usePersistedView( 'newsletters-list', DEFAULT_VIEW ) );
+
+		act( () => {
+			result.current[ 1 ]( current => ( { ...current, perPage: 50 } ) );
+		} );
+		expect( apiFetch ).not.toHaveBeenCalled();
+
+		unmount();
+
+		expect( apiFetch ).toHaveBeenCalledWith( {
+			path: '/newspack-newsletters/v1/admin-shell/preferences',
+			method: 'POST',
+			data: { screen: 'newsletters-list', prefs: { perPage: 50 } },
+		} );
+	} );
 } );

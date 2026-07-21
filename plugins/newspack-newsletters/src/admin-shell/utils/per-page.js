@@ -10,6 +10,10 @@ export const PER_PAGE_ALL = -1;
 
 export const FETCH_ALL_CHUNK_SIZE = 100;
 
+// Caps the "All" walk so a very large site can't lock the tab with an
+// unvirtualised table.
+export const FETCH_ALL_MAX_ITEMS = 10000;
+
 // DataViews' stock `perPageSizes` plus "All".
 export const DEFAULT_PER_PAGE_OPTIONS = [ 10, 20, 50, 100, PER_PAGE_ALL ];
 

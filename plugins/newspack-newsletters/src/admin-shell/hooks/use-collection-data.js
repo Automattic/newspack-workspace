@@ -1,8 +1,10 @@
 import apiFetch from '@wordpress/api-fetch';
 import { useCallback, useEffect, useState } from '@wordpress/element';
+import { __, sprintf } from '@wordpress/i18n';
 import { addQueryArgs } from '@wordpress/url';
 
-import { notifyError } from '../notices';
+import { notifyError, notifyInfo } from '../notices';
+import { FETCH_ALL_CHUNK_SIZE, FETCH_ALL_MAX_ITEMS } from '../utils/per-page';
 
 // Modest parallelism for fetch-all walks — enough to hide latency
 // without hammering the server.
@@ -92,13 +94,37 @@ export default function useCollectionData( { path, trashCountPath = null, mutati
 					return;
 				}
 
+				// Caps the walk so a very large site can't hand DataViews tens of
+				// thousands of non-virtualised rows.
+				const maxPage = Math.min( pagination.totalPages, Math.ceil( FETCH_ALL_MAX_ITEMS / FETCH_ALL_CHUNK_SIZE ) );
+
 				setProgress( { loaded: all.length, total: pagination.totalItems } );
-				for ( let page = 2; page <= pagination.totalPages && ! cancelled; page += FETCH_ALL_CONCURRENCY ) {
-					const batch = [];
-					for ( let p = page; p <= Math.min( page + FETCH_ALL_CONCURRENCY - 1, pagination.totalPages ); p++ ) {
-						batch.push( apiFetch( { path: addQueryArgs( path, { page: p } ), parse: false } ).then( r => r.json() ) );
+				for ( let page = 2; page <= maxPage && ! cancelled; page += FETCH_ALL_CONCURRENCY ) {
+					const lastPage = Math.min( page + FETCH_ALL_CONCURRENCY - 1, maxPage );
+					const fetchBatch = () => {
+						const batch = [];
+						for ( let p = page; p <= lastPage; p++ ) {
+							batch.push( apiFetch( { path: addQueryArgs( path, { page: p } ), parse: false } ).then( r => r.json() ) );
+						}
+						return Promise.all( batch );
+					};
+
+					let pages;
+					try {
+						pages = await fetchBatch();
+					} catch {
+						try {
+							pages = await fetchBatch();
+						} catch {
+							if ( ! cancelled ) {
+								notifyError(
+									__( 'Only some items could be loaded. Reload the page to try again.', 'newspack-newsletters' ),
+									errorNoticeId ? { id: errorNoticeId } : undefined
+								);
+							}
+							return;
+						}
 					}
-					const pages = await Promise.all( batch );
 					if ( cancelled ) {
 						return;
 					}
@@ -109,6 +135,16 @@ export default function useCollectionData( { path, trashCountPath = null, mutati
 					} );
 					setData( all.slice() );
 					setProgress( { loaded: all.length, total: pagination.totalItems } );
+				}
+
+				if ( maxPage < pagination.totalPages && ! cancelled ) {
+					notifyInfo(
+						sprintf(
+							/* translators: %s: number of items shown */
+							__( 'Showing the first %s items. Use search or filters to narrow the list.', 'newspack-newsletters' ),
+							all.length.toLocaleString()
+						)
+					);
 				}
 			} )
 			.catch( () => {

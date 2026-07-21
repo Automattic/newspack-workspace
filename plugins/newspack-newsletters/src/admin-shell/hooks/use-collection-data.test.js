@@ -2,9 +2,11 @@ import { renderHook, waitFor } from '@testing-library/react';
 import apiFetch from '@wordpress/api-fetch';
 
 import useCollectionData from './use-collection-data';
+import { notifyError, notifyInfo } from '../notices';
+import { FETCH_ALL_MAX_ITEMS } from '../utils/per-page';
 
 jest.mock( '@wordpress/api-fetch', () => jest.fn() );
-jest.mock( '../notices', () => ( { notifyError: jest.fn() } ) );
+jest.mock( '../notices', () => ( { notifyError: jest.fn(), notifyInfo: jest.fn() } ) );
 
 const makeResponse = ( items, { total = items.length, totalPages = 1 } = {} ) => ( {
 	headers: {
@@ -16,6 +18,8 @@ const makeResponse = ( items, { total = items.length, totalPages = 1 } = {} ) =>
 describe( 'useCollectionData', () => {
 	beforeEach( () => {
 		apiFetch.mockReset();
+		notifyError.mockClear();
+		notifyInfo.mockClear();
 	} );
 
 	it( 'fetches a single page and reports header-driven pagination', async () => {
@@ -60,6 +64,46 @@ describe( 'useCollectionData', () => {
 			await waitFor( () => expect( result.current.isLoading ).toBe( false ) );
 			expect( result.current.data ).toHaveLength( 1 );
 			expect( apiFetch ).toHaveBeenCalledTimes( 1 );
+		} );
+
+		it( 'keeps already-loaded items and notifies once a page fails on both the initial attempt and the retry', async () => {
+			let page2Attempts = 0;
+			apiFetch.mockImplementation( ( { path } ) => {
+				const page = Number( ( path.match( /[?&]page=(\d+)/ ) || [] )[ 1 ] || 1 );
+				if ( page === 1 ) {
+					return Promise.resolve( makeResponse( [ { id: 1 }, { id: 2 } ], { total: 3, totalPages: 2 } ) );
+				}
+				page2Attempts += 1;
+				return Promise.reject( new Error( 'network error' ) );
+			} );
+
+			const { result } = renderHook( () =>
+				useCollectionData( { path: '/wp/v2/test?per_page=2&page=1', fetchAll: true, errorNoticeId: 'test-id' } )
+			);
+
+			await waitFor( () => expect( result.current.isLoading ).toBe( false ) );
+			expect( result.current.data.map( item => item.id ) ).toEqual( [ 1, 2 ] );
+			expect( page2Attempts ).toBe( 2 );
+			expect( notifyError ).toHaveBeenCalledWith( 'Only some items could be loaded. Reload the page to try again.', {
+				id: 'test-id',
+			} );
+		} );
+
+		it( 'stops at the fetch-all cap and notifies the list was truncated', async () => {
+			apiFetch.mockImplementation( ( { path } ) => {
+				const page = Number( ( path.match( /[?&]page=(\d+)/ ) || [] )[ 1 ] || 1 );
+				const items = Array.from( { length: 100 }, ( unused, i ) => ( { id: page * 100 + i } ) );
+				return Promise.resolve( makeResponse( items, { total: 50000, totalPages: 500 } ) );
+			} );
+
+			const { result } = renderHook( () => useCollectionData( { path: '/wp/v2/test?per_page=100&page=1', fetchAll: true } ) );
+
+			await waitFor( () => expect( result.current.isLoading ).toBe( false ) );
+			expect( result.current.data ).toHaveLength( FETCH_ALL_MAX_ITEMS );
+			expect( apiFetch ).toHaveBeenCalledTimes( FETCH_ALL_MAX_ITEMS / 100 );
+			expect( notifyInfo ).toHaveBeenCalledWith(
+				`Showing the first ${ FETCH_ALL_MAX_ITEMS.toLocaleString() } items. Use search or filters to narrow the list.`
+			);
 		} );
 	} );
 } );
