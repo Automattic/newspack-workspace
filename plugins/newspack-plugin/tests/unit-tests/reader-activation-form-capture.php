@@ -94,10 +94,6 @@ class Test_Form_Capture extends WP_UnitTestCase {
 		$this->assertSame( [ '.newspack-form-capture' ], $integration->get_selectors(), 'Marker class is always present.' );
 		$integration->update_settings_field_value( 'selectors', "#signup-form\n .sidebar form \n#signup-form" );
 		$this->assertSame( [ '.newspack-form-capture', '#signup-form', '.sidebar form' ], $integration->get_selectors() );
-
-		$this->assertSame( [], $integration->get_lists() );
-		$integration->update_settings_field_value( 'lists', ' list-1, list-2 ,, ' );
-		$this->assertSame( [ 'list-1', 'list-2' ], $integration->get_lists() );
 	}
 
 	/**
@@ -135,25 +131,6 @@ class Test_Form_Capture extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Configured lists are injected into registration metadata, scoped to
-	 * this integration's registration method only.
-	 */
-	public function test_lists_metadata_injection_is_scoped() {
-		Integrations::enable( Form_Capture::ID );
-		$integration = Integrations::get_integration( Form_Capture::ID );
-		$integration->update_settings_field_value( 'lists', 'list-a,list-b' );
-
-		$ours = apply_filters( 'newspack_register_reader_metadata', [ 'registration_method' => Form_Capture::get_registration_method() ], false, false );
-		$this->assertSame( [ 'list-a', 'list-b' ], $ours['lists'] );
-
-		$other = apply_filters( 'newspack_register_reader_metadata', [ 'registration_method' => 'registration-block' ], false, false );
-		$this->assertArrayNotHasKey( 'lists', $other );
-
-		$integration->update_settings_field_value( 'lists', '' );
-		Integrations::disable( Form_Capture::ID );
-	}
-
-	/**
 	 * The magic link is suppressed for this integration's registrations only.
 	 */
 	public function test_magic_link_suppressed_for_form_capture_method() {
@@ -167,8 +144,8 @@ class Test_Form_Capture extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Existing readers get an explicit contact sync only when no lists are
-	 * configured (lists path upserts via the newsletters subscription flow).
+	 * Existing readers get an explicit contact sync — the reader_registered
+	 * data event covers new users only.
 	 */
 	public function test_should_sync_existing_reader_decision() {
 		$integration = Integrations::get_integration( Form_Capture::ID );
@@ -177,7 +154,6 @@ class Test_Form_Capture extends WP_UnitTestCase {
 
 		$this->assertTrue( $integration->should_sync_existing_reader( $user, $method ) );
 		$this->assertFalse( $integration->should_sync_existing_reader( false, $method ), 'New users are covered by the reader_registered data event.' );
-		$this->assertFalse( $integration->should_sync_existing_reader( $user, $method + [ 'lists' => [ 'list-a' ] ] ), 'Lists path already upserts.' );
 		$this->assertFalse( $integration->should_sync_existing_reader( $user, [ 'registration_method' => 'auth-form' ] ), 'Other methods are not ours to sync.' );
 	}
 
@@ -204,7 +180,7 @@ class Test_Form_Capture extends WP_UnitTestCase {
 
 	/**
 	 * End-to-end: the registration endpoint accepts this integration's key and
-	 * produces a reader whose metadata carries the configured lists.
+	 * produces a reader stamped with this integration's registration method.
 	 *
 	 * Mirrors the logged-out precondition from
 	 * Newspack_Test_Frontend_Registration_Endpoint::set_up() in
@@ -215,12 +191,11 @@ class Test_Form_Capture extends WP_UnitTestCase {
 	 * params via WP_REST_Request::get_param() and doesn't depend on the REST
 	 * server's schema-driven sanitization/defaults for the fields exercised below.
 	 */
-	public function test_endpoint_registers_reader_with_injected_lists() {
+	public function test_endpoint_registers_reader() {
 		wp_set_current_user( 0 );
 
 		Integrations::enable( Form_Capture::ID );
 		$integration = Integrations::get_integration( Form_Capture::ID );
-		$integration->update_settings_field_value( 'lists', 'list-a' );
 
 		$captured_metadata = null;
 		$capture           = function( $email, $authenticate, $user_id, $existing_user, $metadata ) use ( &$captured_metadata ) {
@@ -235,13 +210,11 @@ class Test_Form_Capture extends WP_UnitTestCase {
 		$response = Reader_Registration::api_frontend_register_reader( $request );
 
 		$this->assertSame( 201, $response->get_status() );
-		$this->assertSame( [ 'list-a' ], $captured_metadata['lists'] );
 		$this->assertSame( Form_Capture::get_registration_method(), $captured_metadata['registration_method'] );
 		$user = get_user_by( 'email', 'capture-endpoint@example.com' );
 		$this->assertNotFalse( $user );
 
 		remove_action( 'newspack_registered_reader', $capture );
-		$integration->update_settings_field_value( 'lists', '' );
 		Integrations::disable( Form_Capture::ID );
 	}
 

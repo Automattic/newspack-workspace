@@ -59,7 +59,6 @@ class Form_Capture extends Integration {
 			__( 'Register readers from email signup forms built with any form tool.', 'newspack-plugin' )
 		);
 
-		\add_filter( 'newspack_register_reader_metadata', [ $this, 'filter_registration_metadata' ], 10, 3 );
 		\add_filter( 'newspack_reader_activation_send_magic_link_on_reregistration', [ $this, 'filter_send_magic_link' ], 10, 3 );
 		\add_action( 'newspack_registered_reader', [ $this, 'handle_registered_reader' ], 10, 5 );
 		\add_action( 'wp_enqueue_scripts', [ $this, 'enqueue_scripts' ], 20 );
@@ -89,13 +88,6 @@ class Form_Capture extends Integration {
 				'type'        => 'textarea',
 				'label'       => __( 'Form selectors', 'newspack-plugin' ),
 				'description' => __( 'CSS selectors (one per line) of forms to capture, in addition to any form with the newspack-form-capture class. Only opt in forms whose submissions should always create a reader account: capture runs even if the form tool itself later rejects the submission.', 'newspack-plugin' ),
-				'default'     => '',
-			],
-			[
-				'key'         => 'lists',
-				'type'        => 'text',
-				'label'       => __( 'Newsletter list IDs', 'newspack-plugin' ),
-				'description' => __( 'Comma-separated newsletter list IDs to subscribe captured contacts to. Leave empty to only sync the contact.', 'newspack-plugin' ),
 				'default'     => '',
 			],
 		];
@@ -154,16 +146,6 @@ class Form_Capture extends Integration {
 	}
 
 	/**
-	 * Get the configured newsletter list IDs.
-	 *
-	 * @return string[] List IDs.
-	 */
-	public function get_lists() {
-		$value = (string) $this->get_settings_field_value( 'lists' );
-		return array_values( array_filter( array_map( 'trim', explode( ',', $value ) ) ) );
-	}
-
-	/**
 	 * Enqueue the frontend capture script when the integration is active.
 	 */
 	public function enqueue_scripts() {
@@ -185,7 +167,6 @@ class Form_Capture extends Integration {
 			'newspack_form_capture',
 			[
 				'selectors' => $this->get_selectors(),
-				'has_lists' => ! empty( $this->get_lists() ),
 			]
 		);
 		\wp_script_add_data( self::SCRIPT_HANDLE, 'defer', true );
@@ -202,30 +183,6 @@ class Form_Capture extends Integration {
 	 */
 	private function is_capture_registration( $metadata ) {
 		return ( $metadata['registration_method'] ?? '' ) === self::get_registration_method();
-	}
-
-	/**
-	 * Inject configured newsletter lists into registration metadata for
-	 * registrations originating from this integration.
-	 *
-	 * Lists are injected server-side (never taken from the client payload) so
-	 * the capture script cannot dictate list membership.
-	 *
-	 * @param array          $metadata      Registration metadata.
-	 * @param int|false      $user_id       The created user id, or false for existing users.
-	 * @param false|\WP_User $existing_user The existing user object, if any.
-	 *
-	 * @return array Metadata.
-	 */
-	public function filter_registration_metadata( $metadata, $user_id, $existing_user ) {
-		if ( ! $this->is_capture_registration( $metadata ) ) {
-			return $metadata;
-		}
-		$lists = $this->get_lists();
-		if ( ! empty( $lists ) && empty( $metadata['lists'] ) ) {
-			$metadata['lists'] = $lists;
-		}
-		return $metadata;
 	}
 
 	/**
@@ -248,10 +205,9 @@ class Form_Capture extends Integration {
 
 	/**
 	 * Whether a capture of an existing reader should trigger an explicit
-	 * contact sync. The reader_registered data event skips existing users, and
-	 * when lists are configured the newsletters subscription path already
-	 * upserts the contact — so an explicit sync is only needed for existing
-	 * readers with no lists configured.
+	 * contact sync. The reader_registered data event skips existing users,
+	 * so an explicit sync is the only way a repeat capture reaches the
+	 * contact record.
 	 *
 	 * @param false|\WP_User $existing_user The existing user object, if any.
 	 * @param array          $metadata      Registration metadata.
@@ -263,9 +219,6 @@ class Form_Capture extends Integration {
 			return false;
 		}
 		if ( ! $existing_user ) {
-			return false;
-		}
-		if ( ! empty( $metadata['lists'] ) ) {
 			return false;
 		}
 		return true;

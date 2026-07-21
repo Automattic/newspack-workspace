@@ -66,26 +66,13 @@ window.newspackRAS.push( readerActivation => {
 			// v3 tokens are single-use.
 			warmToken = null;
 		}
-		readerActivation
-			.register( email, 'form-capture', getNameValues( form ), options )
-			.then( data => {
-				// Only 'created' responses got the configured lists injected.
-				// The endpoint also resolves with status 'existing' for a
-				// logged-in caller — a short-circuit that registers and
-				// subscribes nobody, so it must not flag the reader.
-				// has_lists arrives as a stringy boolean ('1'/'') via
-				// wp_localize_script — truthiness check only.
-				if ( config.has_lists && 'created' === data?.status ) {
-					readerActivation.store.set( 'is_newsletter_subscriber', true );
-				}
-			} )
-			.catch( error => {
-				// Allow retry after transient failures; an existing-reader
-				// conflict is permanent for this pageview.
-				if ( 'reader_already_exists' !== error?.code ) {
-					captured.delete( email );
-				}
-			} );
+		readerActivation.register( email, 'form-capture', getNameValues( form ), options ).catch( error => {
+			// Allow retry after transient failures; an existing-reader
+			// conflict is permanent for this pageview.
+			if ( 'reader_already_exists' !== error?.code ) {
+				captured.delete( email );
+			}
+		} );
 	};
 
 	const attach = () => {
