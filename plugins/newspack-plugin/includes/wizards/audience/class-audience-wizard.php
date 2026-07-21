@@ -714,9 +714,6 @@ class Audience_Wizard extends Wizard {
 			if ( isset( $args['content_gifting']['cta_type'] ) ) {
 				Content_Gifting_CTA::set_cta_type( sanitize_text_field( $args['content_gifting']['cta_type'] ) );
 			}
-			if ( isset( $args['content_gifting']['cta_product_id'] ) ) {
-				Content_Gifting_CTA::set_cta_product_id( (int) $args['content_gifting']['cta_product_id'] );
-			}
 			if ( isset( $args['content_gifting']['cta_url'] ) ) {
 				Content_Gifting_CTA::set_cta_url( sanitize_text_field( $args['content_gifting']['cta_url'] ) );
 			}

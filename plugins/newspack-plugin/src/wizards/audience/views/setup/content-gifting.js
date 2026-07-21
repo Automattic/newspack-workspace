@@ -17,8 +17,8 @@ import {
 import { ActionCard, Button, Grid, Notice, SelectControl, TextControl } from '../../../../../packages/components/src';
 
 export default function ContentGifting( { config, setConfig, updateConfig, noBorder = false } ) {
+	const ctaType = config.content_gifting?.cta_type || 'product';
 	const giftingErrors = Object.values( newspackAudience?.content_gifting?.can_use_gifting?.errors || {} ).flat();
-	const availableProducts = newspackAudience?.available_products || [];
 	const hasMetering = newspackAudience?.content_gifting?.has_metering;
 
 	return (
@@ -118,11 +118,12 @@ export default function ContentGifting( { config, setConfig, updateConfig, noBor
 						</ToggleGroupControl>
 						<ToggleGroupControl
 							label={ __( 'Subscribe button action', 'newspack-plugin' ) }
-							help={ __(
-								'Whether the subscribe button should start a product checkout or redirect to a landing page.',
-								'newspack-plugin'
-							) }
-							value={ config.content_gifting.cta_type || 'product' }
+							help={
+								ctaType === 'product'
+									? __( 'The product is automatically set by the content gate access rules.', 'newspack-plugin' )
+									: __( 'Redirect to a landing page.', 'newspack-plugin' )
+							}
+							value={ ctaType }
 							onChange={ value => setConfig( { ...config, content_gifting: { ...config.content_gifting, cta_type: value } } ) }
 							isBlock
 							__next40pxDefaultSize
@@ -130,20 +131,7 @@ export default function ContentGifting( { config, setConfig, updateConfig, noBor
 							<ToggleGroupControlOption label={ __( 'Product', 'newspack-plugin' ) } value="product" />
 							<ToggleGroupControlOption label={ __( 'Landing page', 'newspack-plugin' ) } value="url" />
 						</ToggleGroupControl>
-						{ config.content_gifting.cta_type === 'product' && (
-							<SelectControl
-								label={ __( 'Subscribe button product', 'newspack-plugin' ) }
-								help={ __( 'Product linked to the subscribe button.', 'newspack-plugin' ) }
-								options={ [ { label: __( 'Select a product', 'newspack-plugin' ), value: 0, disabled: true }, ...availableProducts ] }
-								value={ config.content_gifting.cta_product_id }
-								suggestions={ availableProducts.map( o => o.label ) }
-								onChange={ value =>
-									setConfig( { ...config, content_gifting: { ...config.content_gifting, cta_product_id: value } } )
-								}
-								__next40pxDefaultSize
-							/>
-						) }
-						{ config.content_gifting.cta_type === 'url' && (
+						{ ctaType === 'url' && (
 							<TextControl
 								label={ __( 'Subscribe button URL', 'newspack-plugin' ) }
 								help={ __( 'URL for the landing page to redirect to.', 'newspack-plugin' ) }
@@ -175,8 +163,7 @@ export default function ContentGifting( { config, setConfig, updateConfig, noBor
 														) }
 													</div>
 												</div>
-												{ ( ( config.content_gifting.cta_type === 'product' && config.content_gifting.cta_product_id ) ||
-													( config.content_gifting.cta_type === 'url' && config.content_gifting.cta_url ) ) && (
+												{ ( ctaType === 'product' || ( ctaType === 'url' && config.content_gifting.cta_url ) ) && (
 													<button
 														className={ `newspack-ui__button newspack-ui__button--x-small ${
 															( config.content_gifting.style || 'light' ) === 'dark'

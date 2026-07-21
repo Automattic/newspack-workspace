@@ -1239,6 +1239,182 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 		$this->assertEquals( $grouped_rules, $settings['access_rules'], 'Grouped rules should be preserved' );
 	}
 
+	/**
+	 * Test get_gate_access_product_ids returns empty when no gate exists for the post.
+	 */
+	public function test_get_gate_access_product_ids_no_gate() {
+		$post_id = $this->factory->post->create( [ 'post_type' => 'page' ] );
+		$this->post_ids[] = $post_id;
+
+		$result = Content_Gate::get_gate_access_product_ids( $post_id );
+		$this->assertEmpty( $result, 'Should return empty array when no gate applies to the post' );
+	}
+
+	/**
+	 * Test get_gate_access_product_ids returns empty when custom access is inactive.
+	 */
+	public function test_get_gate_access_product_ids_inactive_custom_access() {
+		$gate_id = Content_Gate::create_gate( [ 'title' => 'Inactive Custom Access Gate' ] );
+		$this->gate_ids[] = $gate_id;
+
+		Content_Gate::update_custom_access_settings(
+			$gate_id,
+			[
+				'active'       => false,
+				'access_rules' => [
+					[
+						[
+							'slug'  => 'subscription',
+							'value' => [ 100 ],
+						],
+					],
+				],
+			]
+		);
+
+		// Map the post to this gate.
+		$filter = function( $post_id ) use ( $gate_id ) {
+			return $gate_id;
+		};
+		add_filter( 'newspack_content_gate_post_id', $filter );
+
+		$result = Content_Gate::get_gate_access_product_ids( $this->post_ids[0] );
+		$this->assertEmpty( $result, 'Should return empty array when custom access is inactive' );
+
+		remove_filter( 'newspack_content_gate_post_id', $filter );
+	}
+
+	/**
+	 * Test get_gate_access_product_ids extracts subscription product IDs from access rules.
+	 */
+	public function test_get_gate_access_product_ids_extracts_subscriptions() {
+		$gate_id = Content_Gate::create_gate( [ 'title' => 'Subscription Gate' ] );
+		$this->gate_ids[] = $gate_id;
+
+		Content_Gate::update_custom_access_settings(
+			$gate_id,
+			[
+				'active'       => true,
+				'access_rules' => [
+					[
+						[
+							'slug'  => 'subscription',
+							'value' => [ 42, 43 ],
+						],
+					],
+				],
+			]
+		);
+
+		// Map the post to this gate.
+		$filter = function( $post_id ) use ( $gate_id ) {
+			return $gate_id;
+		};
+		add_filter( 'newspack_content_gate_post_id', $filter );
+
+		$result = Content_Gate::get_gate_access_product_ids( $this->post_ids[0] );
+		$this->assertEquals( [ 42, 43 ], $result, 'Should extract subscription product IDs from access rules' );
+
+		remove_filter( 'newspack_content_gate_post_id', $filter );
+	}
+
+	/**
+	 * Test get_gate_access_product_ids extracts from multiple groups and deduplicates.
+	 */
+	public function test_get_gate_access_product_ids_multiple_groups() {
+		$gate_id = Content_Gate::create_gate( [ 'title' => 'Multi Group Gate' ] );
+		$this->gate_ids[] = $gate_id;
+
+		Content_Gate::update_custom_access_settings(
+			$gate_id,
+			[
+				'active'       => true,
+				'access_rules' => [
+					[
+						[
+							'slug'  => 'subscription',
+							'value' => [ 10, 20 ],
+						],
+					],
+					[
+						[
+							'slug'  => 'subscription',
+							'value' => [ 20, 30 ],
+						],
+					],
+				],
+			]
+		);
+
+		// Map the post to this gate.
+		$filter = function( $post_id ) use ( $gate_id ) {
+			return $gate_id;
+		};
+		add_filter( 'newspack_content_gate_post_id', $filter );
+
+		$result = Content_Gate::get_gate_access_product_ids( $this->post_ids[0] );
+		$this->assertCount( 3, $result, 'Should deduplicate product IDs across groups' );
+		$this->assertContains( 10, $result );
+		$this->assertContains( 20, $result );
+		$this->assertContains( 30, $result );
+
+		remove_filter( 'newspack_content_gate_post_id', $filter );
+	}
+
+	/**
+	 * Test get_gate_access_product_ids ignores non-subscription rules.
+	 */
+	public function test_get_gate_access_product_ids_ignores_non_subscription() {
+		$gate_id = Content_Gate::create_gate( [ 'title' => 'Mixed Rules Gate' ] );
+		$this->gate_ids[] = $gate_id;
+
+		Content_Gate::update_custom_access_settings(
+			$gate_id,
+			[
+				'active'       => true,
+				'access_rules' => [
+					[
+						[
+							'slug'  => 'email_domain',
+							'value' => 'example.com',
+						],
+						[
+							'slug'  => 'subscription',
+							'value' => [ 55 ],
+						],
+					],
+				],
+			]
+		);
+
+		// Map the post to this gate.
+		$filter = function( $post_id ) use ( $gate_id ) {
+			return $gate_id;
+		};
+		add_filter( 'newspack_content_gate_post_id', $filter );
+
+		$result = Content_Gate::get_gate_access_product_ids( $this->post_ids[0] );
+		$this->assertEquals( [ 55 ], $result, 'Should only include subscription product IDs, not other rule types' );
+
+		remove_filter( 'newspack_content_gate_post_id', $filter );
+	}
+
+	/**
+	 * Test get_gate_access_product_ids filter augmentation.
+	 */
+	public function test_get_gate_access_product_ids_filter() {
+		$filter_callback = function( $product_ids, $post_id ) {
+			$product_ids[] = 999;
+			return $product_ids;
+		};
+		add_filter( 'newspack_gate_access_product_ids', $filter_callback, 10, 2 );
+
+		$result = Content_Gate::get_gate_access_product_ids( $this->post_ids[0] );
+		$this->assertContains( 999, $result, 'Filter should be able to add product IDs' );
+
+		remove_filter( 'newspack_gate_access_product_ids', $filter_callback, 10 );
+	}
+
 	// =========================================================================
 	// Newsletter content rule (added in feat/access-control-premium-newsletters)
 	// =========================================================================
