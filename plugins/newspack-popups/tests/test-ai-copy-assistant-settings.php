@@ -1,10 +1,10 @@
 <?php // phpcs:ignore WordPress.Files.FileName.InvalidClassFileName
 /**
- * Test the AI Copy Assistant settings section.
+ * Test the AI Copy Assistant settings section and its opt-in gate.
  *
- * The Audience wizard renders whatever Newspack_Popups_Settings::get_settings()
- * returns, so this section appearing there (with option-backed fields the
- * Manager reads) is the whole contract.
+ * The feature is hidden until an administrator opts in (union/AI-policy
+ * requirement): the publisher-profile section only appears once opted in, and
+ * the create endpoint refuses to run otherwise.
  *
  * @package Newspack_Popups
  */
@@ -15,9 +15,10 @@
 class AiCopyAssistantSettingsTest extends WP_UnitTestCase {
 
 	/**
-	 * Reset the publisher-profile options between tests.
+	 * Reset the opt-in and profile options between tests.
 	 */
 	public function tear_down() {
+		delete_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION );
 		foreach ( [ 'publisher_name', 'coverage_area', 'voice', 'additional_guidance' ] as $key ) {
 			delete_option( 'newspack_contextual_prompts_' . $key );
 		}
@@ -25,22 +26,40 @@ class AiCopyAssistantSettingsTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The grouped settings expose an ai_copy_assistant section with an always-on
-	 * header and the four profile fields.
+	 * Opt in for tests that need the section present.
 	 */
-	public function test_section_is_exposed() {
-		$grouped = Newspack_Popups_Settings::get_settings( true );
+	private function opt_in() {
+		update_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION, true );
+	}
 
+	/**
+	 * The feature is off by default and the profile section is hidden.
+	 */
+	public function test_hidden_until_opted_in() {
+		$this->assertFalse( Newspack_Popups_Settings::is_ai_copy_assistant_enabled() );
+
+		$grouped = Newspack_Popups_Settings::get_settings( true );
+		$this->assertArrayNotHasKey( 'ai_copy_assistant', $grouped, 'Profile fields are hidden until opt-in.' );
+	}
+
+	/**
+	 * Once opted in, the section appears with an always-on header and the four
+	 * profile fields.
+	 */
+	public function test_section_exposed_after_opt_in() {
+		$this->opt_in();
+		$this->assertTrue( Newspack_Popups_Settings::is_ai_copy_assistant_enabled() );
+
+		$grouped = Newspack_Popups_Settings::get_settings( true );
 		$this->assertArrayHasKey( 'ai_copy_assistant', $grouped );
 
 		$keys = wp_list_pluck( $grouped['ai_copy_assistant'], 'key' );
-		$this->assertContains( 'active', $keys, 'Section header item present.' );
+		$this->assertContains( 'active', $keys );
 		$this->assertContains( 'newspack_contextual_prompts_publisher_name', $keys );
 		$this->assertContains( 'newspack_contextual_prompts_coverage_area', $keys );
 		$this->assertContains( 'newspack_contextual_prompts_voice', $keys );
 		$this->assertContains( 'newspack_contextual_prompts_additional_guidance', $keys );
 
-		// The header is always-on (no toggle): its value is null.
 		$header = current(
 			array_filter(
 				$grouped['ai_copy_assistant'],
@@ -49,13 +68,15 @@ class AiCopyAssistantSettingsTest extends WP_UnitTestCase {
 				}
 			)
 		);
-		$this->assertNull( $header['value'] );
+		$this->assertNull( $header['value'], 'Header is always-on (no toggle).' );
 	}
 
 	/**
 	 * A field update persists to the option the Manager reads.
 	 */
 	public function test_field_update_persists_to_option() {
+		$this->opt_in();
+
 		$updated = Newspack_Popups_Settings::update_setting(
 			'ai_copy_assistant',
 			'newspack_contextual_prompts_coverage_area',
@@ -67,11 +88,21 @@ class AiCopyAssistantSettingsTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * An update to an unknown field in the section is rejected.
+	 * The create endpoint refuses to run when the feature is not opted into.
 	 */
-	public function test_unknown_field_is_rejected() {
-		$this->assertWPError(
-			Newspack_Popups_Settings::update_setting( 'ai_copy_assistant', 'not_a_real_field', 'x' )
-		);
+	public function test_create_endpoint_blocked_when_disabled() {
+		$post_id = self::factory()->post->create( [ 'post_type' => 'post' ] );
+		$request = new WP_REST_Request( 'POST', '/newspack-popups/v1/contextual-prompt' );
+		$request->set_param( 'post_id', $post_id );
+		$request->set_param( 'body', 'Fund the reporting.' );
+
+		$blocked = Newspack_Popups_Api::api_create_contextual_prompt( $request );
+		$this->assertWPError( $blocked );
+		$this->assertSame( 'newspack_contextual_prompts_disabled', $blocked->get_error_code() );
+
+		// After opting in, the same request creates a prompt.
+		$this->opt_in();
+		$created = Newspack_Popups_Api::api_create_contextual_prompt( $request );
+		$this->assertNotWPError( $created );
 	}
 }

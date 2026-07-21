@@ -816,6 +816,11 @@ final class Newspack_Popups {
 					$document_settings_asset['version'] ?? filemtime( $document_settings_script_path ),
 					true
 				);
+				\wp_localize_script(
+					'newspack-popups',
+					'newspackPopupsContextualPrompt',
+					[ 'enabled' => Newspack_Popups_Settings::is_ai_copy_assistant_enabled() ]
+				);
 			}
 
 			return;

@@ -122,6 +122,33 @@ final class Newspack_Popups_API {
 		);
 		register_rest_route(
 			'newspack-popups/v1',
+			'/contextual-prompt/status',
+			[
+				'methods'             => \WP_REST_Server::READABLE,
+				'callback'            => [ __CLASS__, 'api_get_contextual_prompt_status' ],
+				'permission_callback' => function () {
+					return current_user_can( 'edit_posts' );
+				},
+			]
+		);
+		register_rest_route(
+			'newspack-popups/v1',
+			'/contextual-prompt/enable',
+			[
+				'methods'             => \WP_REST_Server::EDITABLE,
+				// Opting into AI use is an administrator decision.
+				'callback'            => [ __CLASS__, 'api_set_contextual_prompt_enabled' ],
+				'permission_callback' => [ $this, 'permission_callback' ],
+				'args'                => [
+					'enabled' => [
+						'required'          => true,
+						'sanitize_callback' => 'rest_sanitize_boolean',
+					],
+				],
+			]
+		);
+		register_rest_route(
+			'newspack-popups/v1',
 			'/contextual-prompt',
 			[
 				'methods'             => \WP_REST_Server::CREATABLE,
@@ -168,12 +195,51 @@ final class Newspack_Popups_API {
 	}
 
 	/**
+	 * Report whether Contextual Prompts is opted into, and whether the current
+	 * user is allowed to change that.
+	 *
+	 * @return WP_REST_Response
+	 */
+	public static function api_get_contextual_prompt_status() {
+		return rest_ensure_response(
+			[
+				'enabled'    => Newspack_Popups_Settings::is_ai_copy_assistant_enabled(),
+				'can_manage' => current_user_can( 'manage_options' ),
+			]
+		);
+	}
+
+	/**
+	 * Opt this site into (or out of) Contextual Prompts. Administrator-only.
+	 *
+	 * @param WP_REST_Request $request Request object.
+	 * @return WP_REST_Response
+	 */
+	public static function api_set_contextual_prompt_enabled( $request ) {
+		update_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION, (bool) $request['enabled'] );
+		return rest_ensure_response(
+			[
+				'enabled'    => Newspack_Popups_Settings::is_ai_copy_assistant_enabled(),
+				'can_manage' => current_user_can( 'manage_options' ),
+			]
+		);
+	}
+
+	/**
 	 * Create a Contextual Prompt scoped to a post from an approved candidate.
 	 *
 	 * @param WP_REST_Request $request Request object.
 	 * @return WP_REST_Response|WP_Error
 	 */
 	public static function api_create_contextual_prompt( $request ) {
+		if ( ! Newspack_Popups_Settings::is_ai_copy_assistant_enabled() ) {
+			return new \WP_Error(
+				'newspack_contextual_prompts_disabled',
+				esc_html__( 'Contextual Prompts is not enabled for this site.', 'newspack-popups' ),
+				[ 'status' => 403 ]
+			);
+		}
+
 		$prompt_id = Newspack_Popups_Post_Scope::create_scoped_prompt(
 			[
 				'post_id'          => $request['post_id'],

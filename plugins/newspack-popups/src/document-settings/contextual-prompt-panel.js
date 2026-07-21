@@ -44,8 +44,10 @@ const ContextualPromptPanel = () => {
 	const [ created, setCreated ] = useState( null );
 	const [ error, setError ] = useState( '' );
 
-	// The bundle also loads while editing a prompt itself; never offer the panel there.
-	if ( 'newspack_popups_cpt' === postType ) {
+	// Hidden until an administrator opts the site into AI use (see Campaigns >
+	// Settings). Also never shown while editing a prompt itself.
+	const optedIn = window.newspackPopupsContextualPrompt?.enabled;
+	if ( ! optedIn || 'newspack_popups_cpt' === postType ) {
 		return null;
 	}
 
