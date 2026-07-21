@@ -23,6 +23,7 @@ describe( 'buildQueryParams', () => {
 		expect( _fields ).not.toContain( 'excerpt' );
 		// Without `_links`, `_embed` expands nothing and the author/terms columns go blank.
 		expect( _fields.split( ',' ) ).toContain( '_links' );
+		expect( _fields.split( ',' ) ).toEqual( expect.arrayContaining( [ 'categories', 'tags' ] ) );
 	} );
 
 	it( 'requests context=edit so meta and private fields are returned', () => {

@@ -8,14 +8,14 @@
 
 import apiFetch from '@wordpress/api-fetch';
 import { FormTokenField, RadioControl } from '@wordpress/components';
-import { useEffect, useMemo, useState } from '@wordpress/element';
+import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { envelope } from '@wordpress/icons';
 
 import QuickEditPanel from '../../components/quick-edit-panel';
 import { getNewsletterVisibilityDescriptions } from '../../../utils/service-provider';
 import { notifyError, notifySuccess } from '../../notices';
-import { fetchAllTerms, initialSelectionsForTaxonomy, resolveTokens, sortedIdsEqual } from '../../utils/terms';
+import { fetchAllTerms, initialSelectionsForTaxonomy, resolveTokens, selectionsFromIds, sortedIdsEqual } from '../../utils/terms';
 
 const POSTS_PATH = '/wp/v2/newspack_nl_cpt';
 
@@ -46,19 +46,39 @@ function useQuickEditOptions() {
 export default function NewslettersQuickEditPanel( { item, onClose, onSaved } ) {
 	const { categories, tags } = useQuickEditOptions();
 
-	const initialCategorySelections = useMemo( () => initialSelectionsForTaxonomy( item, 'category' ), [ item ] );
-	const initialTagSelections = useMemo( () => initialSelectionsForTaxonomy( item, 'post_tag' ), [ item ] );
+	// Terms are only embedded when a taxonomy column is visible — otherwise
+	// resolve the post's raw IDs against the fetched options.
+	const initialCategorySelections = useMemo( () => {
+		const embedded = initialSelectionsForTaxonomy( item, 'category' );
+		return embedded.length ? embedded : selectionsFromIds( item?.categories, categories );
+	}, [ item, categories ] );
+	const initialTagSelections = useMemo( () => {
+		const embedded = initialSelectionsForTaxonomy( item, 'post_tag' );
+		return embedded.length ? embedded : selectionsFromIds( item?.tags, tags );
+	}, [ item, tags ] );
 	const initialVisibility = item?.meta?.is_public ? 'public' : 'private';
 
 	const [ categorySelections, setCategorySelections ] = useState( initialCategorySelections );
 	const [ tagSelections, setTagSelections ] = useState( initialTagSelections );
 	const [ visibility, setVisibility ] = useState( initialVisibility );
 	const [ isBusy, setIsBusy ] = useState( false );
+	const hasEditedTermsRef = useRef( false );
 
-	const isDirty =
-		visibility !== initialVisibility ||
-		! sortedIdsEqual( categorySelections, initialCategorySelections ) ||
-		! sortedIdsEqual( tagSelections, initialTagSelections );
+	// Options land after the first render, resolving ID-only terms.
+	useEffect( () => {
+		if ( ! hasEditedTermsRef.current ) {
+			setCategorySelections( initialCategorySelections );
+		}
+	}, [ initialCategorySelections ] );
+	useEffect( () => {
+		if ( ! hasEditedTermsRef.current ) {
+			setTagSelections( initialTagSelections );
+		}
+	}, [ initialTagSelections ] );
+
+	const categoriesDirty = ! sortedIdsEqual( categorySelections, initialCategorySelections );
+	const tagsDirty = ! sortedIdsEqual( tagSelections, initialTagSelections );
+	const isDirty = visibility !== initialVisibility || categoriesDirty || tagsDirty;
 
 	const categoryNames = useMemo( () => categories.map( c => String( c.name ) ), [ categories ] );
 	const tagNames = useMemo( () => tags.map( t => String( t.name ) ), [ tags ] );
@@ -75,11 +95,14 @@ export default function NewslettersQuickEditPanel( { item, onClose, onSaved } ) 
 
 	const handleSave = async () => {
 		setIsBusy( true );
-		const data = {
-			categories: categorySelections.map( s => s.id ),
-			tags: tagSelections.map( s => s.id ),
-			meta: { is_public: visibility === 'public' },
-		};
+		// An untouched taxonomy must never be overwritten with what we resolved.
+		const data = { meta: { is_public: visibility === 'public' } };
+		if ( categoriesDirty ) {
+			data.categories = categorySelections.map( s => s.id );
+		}
+		if ( tagsDirty ) {
+			data.tags = tagSelections.map( s => s.id );
+		}
 		try {
 			await apiFetch( { path: `${ POSTS_PATH }/${ item.id }`, method: 'POST', data } );
 			notifySuccess( __( 'Newsletter updated.', 'newspack-newsletters' ) );
@@ -108,7 +131,10 @@ export default function NewslettersQuickEditPanel( { item, onClose, onSaved } ) 
 				label={ __( 'Categories', 'newspack-newsletters' ) }
 				value={ categoryTokens }
 				suggestions={ categoryNames }
-				onChange={ next => setCategorySelections( resolveTokens( next, categorySelections, categories ) ) }
+				onChange={ next => {
+					hasEditedTermsRef.current = true;
+					setCategorySelections( resolveTokens( next, categorySelections, categories ) );
+				} }
 				__experimentalValidateInput={ validateCategory }
 				__experimentalShowHowTo={ false }
 				__next40pxDefaultSize
@@ -118,7 +144,10 @@ export default function NewslettersQuickEditPanel( { item, onClose, onSaved } ) 
 				label={ __( 'Tags', 'newspack-newsletters' ) }
 				value={ tagTokens }
 				suggestions={ tagNames }
-				onChange={ next => setTagSelections( resolveTokens( next, tagSelections, tags ) ) }
+				onChange={ next => {
+					hasEditedTermsRef.current = true;
+					setTagSelections( resolveTokens( next, tagSelections, tags ) );
+				} }
 				__experimentalValidateInput={ validateTag }
 				__experimentalShowHowTo={ false }
 				__next40pxDefaultSize

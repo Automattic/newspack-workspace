@@ -49,7 +49,9 @@ export function buildQueryParams( view = {} ) {
 		// links that survive the `_fields` filter.
 		extraParams: {
 			_embed: needsTerms ? 'author,wp:term' : 'author',
-			_fields: 'id,status,title,date,link,meta,newspack_newsletters_status,_links',
+			// `categories`/`tags` are cheap ID arrays — Quick Edit needs the
+			// post's real terms even when the embed is skipped.
+			_fields: 'id,status,title,date,link,meta,categories,tags,newspack_newsletters_status,_links',
 		},
 	} );
 }

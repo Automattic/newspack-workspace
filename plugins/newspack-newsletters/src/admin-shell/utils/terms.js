@@ -56,6 +56,13 @@ export const initialSelectionsForTaxonomy = ( item, taxonomy ) =>
 		.map( term => ( { id: term?.id, name: term?.name } ) )
 		.filter( s => typeof s.id === 'number' && s.name );
 
+// Unresolvable IDs drop out — names only exist in the fetched options.
+export const selectionsFromIds = ( ids, options ) =>
+	( Array.isArray( ids ) ? ids : [] )
+		.map( id => ( Array.isArray( options ) ? options : [] ).find( option => option?.id === id ) )
+		.filter( option => option && option.name )
+		.map( option => ( { id: option.id, name: option.name } ) );
+
 export const sortedIdsEqual = ( a, b ) => {
 	if ( a.length !== b.length ) {
 		return false;

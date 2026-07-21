@@ -131,7 +131,7 @@ describe( 'useCollectionData', () => {
 		} );
 
 		it( 'keeps pages that succeeded alongside a failing sibling in the same batch', async () => {
-			// Pages 2 and 3 land; page 4 went out of range because the collection shrank.
+			// Page 4 went out of range because the collection shrank.
 			apiFetch.mockImplementation( ( { path } ) => {
 				const page = Number( ( path.match( /[?&]page=(\d+)/ ) || [] )[ 1 ] || 1 );
 				if ( page === 4 ) {
@@ -148,20 +148,22 @@ describe( 'useCollectionData', () => {
 			expect( notifyError ).not.toHaveBeenCalled();
 		} );
 
-		it( 'also treats a bare 400 status (no error code) as an out-of-range page', async () => {
+		it( 'retries and reports a 400 that is not an invalid-page error', async () => {
+			let page2Attempts = 0;
 			apiFetch.mockImplementation( ( { path } ) => {
 				const page = Number( ( path.match( /[?&]page=(\d+)/ ) || [] )[ 1 ] || 1 );
 				if ( page === 1 ) {
 					return Promise.resolve( makeResponse( [ { id: 1 }, { id: 2 } ], { total: 3, totalPages: 2 } ) );
 				}
-				return Promise.reject( { status: 400 } );
+				page2Attempts += 1;
+				return Promise.reject( { code: 'rest_invalid_param', data: { status: 400 } } );
 			} );
 
 			const { result } = renderHook( () => useCollectionData( { path: '/wp/v2/test?per_page=2&page=1', fetchAll: true } ) );
 
 			await waitFor( () => expect( result.current.isLoading ).toBe( false ) );
-			expect( result.current.data.map( item => item.id ) ).toEqual( [ 1, 2 ] );
-			expect( notifyError ).not.toHaveBeenCalled();
+			expect( page2Attempts ).toBe( 2 );
+			expect( notifyError ).toHaveBeenCalled();
 		} );
 	} );
 } );

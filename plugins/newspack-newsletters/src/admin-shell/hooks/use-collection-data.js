@@ -22,16 +22,12 @@ function readPaginationInfo( response ) {
 	};
 }
 
-// A page can go out of range mid-walk if items are trashed/filtered away by
-// someone else — the collection got shorter, retrying won't help.
+// The collection got shorter mid-walk — retrying won't help. Any other 400 is
+// a real failure.
+const OUT_OF_RANGE_PAGE_CODES = [ 'rest_post_invalid_page_number', 'rest_term_invalid_page_number' ];
+
 function isOutOfRangePageError( error ) {
-	if ( ! error ) {
-		return false;
-	}
-	if ( error.code === 'rest_post_invalid_page_number' ) {
-		return true;
-	}
-	return error.status === 400 || error.data?.status === 400;
+	return OUT_OF_RANGE_PAGE_CODES.includes( error?.code );
 }
 
 /**
@@ -113,9 +109,8 @@ export default function useCollectionData( { path, trashCountPath = null, mutati
 				setProgress( { loaded: all.length, total: pagination.totalItems } );
 				let endedEarly = false;
 				let cappedByMax = false;
-				// Settled rather than all-or-nothing: one bad page must not discard
-				// its siblings. Only the run before the first failure is kept, so
-				// the collection stays contiguous.
+				// Settled, not all-or-nothing: one bad page must not discard its
+				// siblings. Keeping only the run before it stays contiguous.
 				const fetchPages = ( from, to ) => {
 					const batch = [];
 					for ( let p = from; p <= to; p++ ) {

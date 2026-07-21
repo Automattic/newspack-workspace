@@ -40,8 +40,7 @@ export default function usePersistedView( screenKey, defaultView ) {
 		if ( view.perPage === lastSavedRef.current || ! isValidPerPage( view.perPage ) || inFlightRef.current ) {
 			return;
 		}
-		// One request at a time: concurrent writes could otherwise reach the
-		// server out of order and leave the older value stored.
+		// One at a time — concurrent writes could land out of order.
 		const save = perPage => {
 			inFlightRef.current = true;
 			apiFetch( {
@@ -55,8 +54,7 @@ export default function usePersistedView( screenKey, defaultView ) {
 				.catch( () => {} )
 				.finally( () => {
 					inFlightRef.current = false;
-					// The user changed their mind mid-flight; the effect's guard
-					// stopped it scheduling anything, so chain the correction here.
+					// Changed mid-flight: the effect's guard skipped it, so correct here.
 					if ( desiredRef.current !== perPage && isValidPerPage( desiredRef.current ) ) {
 						save( desiredRef.current );
 					}
