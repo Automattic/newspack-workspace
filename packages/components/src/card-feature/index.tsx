@@ -152,18 +152,20 @@ const CardFeature = ( {
 								{ description && <p className="newspack-card-feature__description">{ description }</p> }
 							</div>
 							{ icon &&
-								( iconDescriptor ? (
-									<div
-										className={ iconClasses }
-										style={ {
-											backgroundColor: iconDescriptor.backgroundColor,
-											color: iconDescriptor.fill,
-										} }
-									>
-										{ iconDescriptor.node }
-									</div>
-								) : (
+								( isValidElement( icon ) ? (
 									icon
+								) : (
+									iconDescriptor && (
+										<div
+											className={ iconClasses }
+											style={ {
+												backgroundColor: iconDescriptor.backgroundColor,
+												color: iconDescriptor.fill,
+											} }
+										>
+											{ iconDescriptor.node }
+										</div>
+									)
 								) ) }
 						</HStack>
 						<HStack alignment="edge">
