@@ -1,10 +1,14 @@
 /**
- * Contextual Prompts (AI Copy Assistant) settings.
+ * Contextual Prompts settings.
  *
  * Mirrors the Experimental Tools pattern: a single feature card with an
  * admin-only opt-in + AI-use disclosure, and a configure view for the
  * publisher-profile fields. Hidden behind opt-in because some newsrooms are
  * contractually barred from using AI.
+ *
+ * The `configuring` state is controlled by the parent so it can hide the rest
+ * of the Campaigns settings while the configure view is open (the configure
+ * view replaces the page, like the Experimental Tools screen).
  */
 
 /**
@@ -33,9 +37,8 @@ const CONFIRMATION = __(
 
 const fieldsToValues = fields => ( fields || [] ).reduce( ( acc, field ) => ( { ...acc, [ field.key ]: field.value ?? '' } ), {} );
 
-const ContextualPromptsSettings = () => {
+const ContextualPromptsSettings = ( { configuring, onConfigure } ) => {
 	const [ status, setStatus ] = useState( null );
-	const [ view, setView ] = useState( 'card' );
 	const [ modalOpen, setModalOpen ] = useState( false );
 	const [ values, setValues ] = useState( {} );
 	const [ inFlight, setInFlight ] = useState( false );
@@ -73,7 +76,7 @@ const ContextualPromptsSettings = () => {
 
 	const saveProfile = () =>
 		request( '/newspack-popups/v1/contextual-prompt/profile', { fields: values } )
-			.then( () => setView( 'card' ) )
+			.then( () => onConfigure( false ) )
 			.catch( () => {} );
 
 	if ( ! status ) {
@@ -83,8 +86,8 @@ const ContextualPromptsSettings = () => {
 	const { enabled, can_manage: canManage, fields } = status;
 
 	// Configure view: the publisher-profile fields, mirroring the Experimental
-	// Tools configure screen.
-	if ( 'configure' === view ) {
+	// Tools configure screen. The parent hides the rest of Campaigns settings.
+	if ( configuring ) {
 		return (
 			<form
 				className="newspack-wizard__sections"
@@ -94,7 +97,7 @@ const ContextualPromptsSettings = () => {
 				} }
 			>
 				<HStack justify="flex-start" spacing={ 2 }>
-					<Button icon={ chevronLeft } label={ __( 'Back', 'newspack-plugin' ) } onClick={ () => setView( 'card' ) } isLink />
+					<Button icon={ chevronLeft } label={ __( 'Back', 'newspack-plugin' ) } onClick={ () => onConfigure( false ) } isLink />
 					<h2 className="newspack-wizard__heading">{ __( 'Contextual Prompts', 'newspack-plugin' ) }</h2>
 				</HStack>
 				<p>{ __( 'Details used to tailor AI-generated Contextual Prompt copy to your newsroom.', 'newspack-plugin' ) }</p>
@@ -145,7 +148,7 @@ const ContextualPromptsSettings = () => {
 					busy={ inFlight }
 					requirements={ ! canManage && ! enabled ? __( 'An administrator must enable this feature.', 'newspack-plugin' ) : undefined }
 					onEnable={ canManage ? () => setModalOpen( true ) : undefined }
-					onConfigure={ canManage && enabled ? () => setView( 'configure' ) : undefined }
+					onConfigure={ canManage && enabled ? () => onConfigure( true ) : undefined }
 					moreControls={
 						canManage && enabled ? [ { title: __( 'Disable', 'newspack-plugin' ), onClick: () => setEnabled( false ) } ] : undefined
 					}
