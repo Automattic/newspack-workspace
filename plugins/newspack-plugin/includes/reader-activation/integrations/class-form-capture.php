@@ -15,7 +15,7 @@ use Newspack\Newspack;
 use Newspack\Reader_Activation;
 use Newspack\Reader_Activation\Integration;
 use Newspack\Reader_Activation\Integrations;
-use Newspack\Reader_Activation\Sync\Contact_Sync;
+use Newspack\Reader_Activation\Contact_Sync;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -47,6 +47,10 @@ class Form_Capture extends Integration {
 			__( 'Inbound Form Capture', 'newspack-plugin' ),
 			__( 'Register readers from email signup forms built with any form tool.', 'newspack-plugin' )
 		);
+
+		\add_filter( 'newspack_register_reader_metadata', [ $this, 'filter_registration_metadata' ], 10, 3 );
+		\add_filter( 'newspack_reader_activation_send_magic_link_on_reregistration', [ $this, 'filter_send_magic_link' ], 10, 3 );
+		\add_action( 'newspack_registered_reader', [ $this, 'handle_registered_reader' ], 10, 5 );
 	}
 
 	/**
@@ -143,5 +147,89 @@ class Form_Capture extends Integration {
 	public function get_lists() {
 		$value = (string) $this->get_settings_field_value( 'lists' );
 		return array_values( array_filter( array_map( 'trim', explode( ',', $value ) ) ) );
+	}
+
+	/**
+	 * Inject configured newsletter lists into registration metadata for
+	 * registrations originating from this integration.
+	 *
+	 * Lists are injected server-side (never taken from the client payload) so
+	 * the capture script cannot dictate list membership.
+	 *
+	 * @param array          $metadata      Registration metadata.
+	 * @param int|false      $user_id       The created user id, or false for existing users.
+	 * @param false|\WP_User $existing_user The existing user object, if any.
+	 *
+	 * @return array Metadata.
+	 */
+	public function filter_registration_metadata( $metadata, $user_id, $existing_user ) {
+		if ( ( $metadata['registration_method'] ?? '' ) !== self::get_registration_method() ) {
+			return $metadata;
+		}
+		$lists = $this->get_lists();
+		if ( ! empty( $lists ) && empty( $metadata['lists'] ) ) {
+			$metadata['lists'] = $lists;
+		}
+		return $metadata;
+	}
+
+	/**
+	 * Suppress the magic link email for repeat capture submissions — capture
+	 * is invisible, so an existing reader re-submitting an opted-in form must
+	 * not be emailed a login link every time.
+	 *
+	 * @param bool     $should_send   Whether the magic link would be sent.
+	 * @param \WP_User $existing_user The existing reader account.
+	 * @param array    $metadata      Registration metadata.
+	 *
+	 * @return bool Whether to send the magic link.
+	 */
+	public function filter_send_magic_link( $should_send, $existing_user, $metadata ) {
+		if ( ( $metadata['registration_method'] ?? '' ) === self::get_registration_method() ) {
+			return false;
+		}
+		return $should_send;
+	}
+
+	/**
+	 * Whether a capture of an existing reader should trigger an explicit
+	 * contact sync. The reader_registered data event skips existing users, and
+	 * when lists are configured the newsletters subscription path already
+	 * upserts the contact — so an explicit sync is only needed for existing
+	 * readers with no lists configured.
+	 *
+	 * @param false|\WP_User $existing_user The existing user object, if any.
+	 * @param array          $metadata      Registration metadata.
+	 *
+	 * @return bool Whether to sync the contact.
+	 */
+	public function should_sync_existing_reader( $existing_user, $metadata ) {
+		if ( ( $metadata['registration_method'] ?? '' ) !== self::get_registration_method() ) {
+			return false;
+		}
+		if ( ! $existing_user ) {
+			return false;
+		}
+		if ( ! empty( $metadata['lists'] ) ) {
+			return false;
+		}
+		return true;
+	}
+
+	/**
+	 * After a capture registration, sync existing readers to the ESP so the
+	 * "upgrade a known reader" path reaches the contact record.
+	 *
+	 * @param string         $email         Email address.
+	 * @param bool           $authenticate  Whether the registration authenticates the session.
+	 * @param false|int      $user_id       The created user id.
+	 * @param false|\WP_User $existing_user The existing user object.
+	 * @param array          $metadata      Registration metadata.
+	 */
+	public function handle_registered_reader( $email, $authenticate, $user_id, $existing_user, $metadata ) {
+		if ( ! $this->should_sync_existing_reader( $existing_user, $metadata ) ) {
+			return;
+		}
+		Contact_Sync::sync_contact( $existing_user->ID, 'Form Capture registration (existing reader)' );
 	}
 }
