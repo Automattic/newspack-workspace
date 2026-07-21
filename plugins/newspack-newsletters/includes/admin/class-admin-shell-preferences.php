@@ -17,12 +17,14 @@ defined( 'ABSPATH' ) || exit;
  * page), stored in user meta so they follow the user across browsers.
  * Values are bootstrapped into the localized `newspackNewslettersAdmin`
  * global (see `Admin_Shell_Assets`), so the REST route is write-only in
- * practice.
+ * practice. Each screen gets its own user-meta key so a save only ever
+ * touches that screen's value — two tabs saving different screens can't
+ * clobber each other via a shared read-modify-write.
  */
 class Admin_Shell_Preferences {
 	const API_NAMESPACE = 'newspack-newsletters/v1';
 	const ROUTE         = 'admin-shell/preferences';
-	const USER_META_KEY = 'newspack_newsletters_admin_view_prefs';
+	const USER_META_KEY_PREFIX = 'newspack_newsletters_admin_view_prefs_';
 
 	const SCREEN_KEYS = [ 'newsletters-list', 'ads-list', 'advertisers-list', 'layouts-list' ];
 
@@ -94,12 +96,10 @@ class Admin_Shell_Preferences {
 			);
 		}
 
-		$all_prefs = self::get_preferences();
+		$screen_key = $request->get_param( 'screen' );
+		update_user_meta( get_current_user_id(), self::get_user_meta_key( $screen_key ), [ 'perPage' => $per_page ] );
 
-		$all_prefs[ $request->get_param( 'screen' ) ] = [ 'perPage' => $per_page ];
-		update_user_meta( get_current_user_id(), self::USER_META_KEY, $all_prefs );
-
-		return rest_ensure_response( $all_prefs );
+		return rest_ensure_response( self::get_preferences() );
 	}
 
 	/**
@@ -108,21 +108,28 @@ class Admin_Shell_Preferences {
 	 * @return array
 	 */
 	public static function get_preferences(): array {
-		$raw = get_user_meta( get_current_user_id(), self::USER_META_KEY, true );
-		if ( ! is_array( $raw ) ) {
-			return [];
-		}
 		$prefs = [];
 		foreach ( self::SCREEN_KEYS as $screen_key ) {
-			if ( ! isset( $raw[ $screen_key ]['perPage'] ) || ! is_numeric( $raw[ $screen_key ]['perPage'] ) ) {
+			$raw = get_user_meta( get_current_user_id(), self::get_user_meta_key( $screen_key ), true );
+			if ( ! is_array( $raw ) || ! isset( $raw['perPage'] ) || ! is_numeric( $raw['perPage'] ) ) {
 				continue;
 			}
-			$per_page = (int) $raw[ $screen_key ]['perPage'];
+			$per_page = (int) $raw['perPage'];
 			if ( self::is_valid_per_page( $per_page ) ) {
 				$prefs[ $screen_key ] = [ 'perPage' => $per_page ];
 			}
 		}
 		return $prefs;
+	}
+
+	/**
+	 * The user-meta key a screen's preferences are stored under.
+	 *
+	 * @param string $screen_key Screen identifier.
+	 * @return string
+	 */
+	public static function get_user_meta_key( string $screen_key ): string {
+		return self::USER_META_KEY_PREFIX . $screen_key;
 	}
 
 	/**

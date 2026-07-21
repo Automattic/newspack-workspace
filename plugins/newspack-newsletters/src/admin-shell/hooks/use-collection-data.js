@@ -22,6 +22,18 @@ function readPaginationInfo( response ) {
 	};
 }
 
+// A page can go out of range mid-walk if items are trashed/filtered away by
+// someone else — the collection got shorter, retrying won't help.
+function isOutOfRangePageError( error ) {
+	if ( ! error ) {
+		return false;
+	}
+	if ( error.code === 'rest_post_invalid_page_number' ) {
+		return true;
+	}
+	return error.status === 400 || error.data?.status === 400;
+}
+
 /**
  * Server-side paginated fetch hook for DataView list screens.
  *
@@ -31,9 +43,9 @@ function readPaginationInfo( response ) {
  *
  * When `fetchAll` is set, the first response's `X-WP-TotalPages` drives
  * a walk over the remaining pages (the REST API caps `per_page` at 100).
- * Items render incrementally as pages land; `progress` reports the walk
- * (`{ loaded, total }`, `null` outside a walk) and `totalPages` is
- * clamped to 1 so the footer doesn't offer pagination.
+ * `data` commits once the walk finishes (or aborts); `progress` reports
+ * the walk meanwhile (`{ loaded, total }`, `null` outside a walk) and
+ * `totalPages` is clamped to 1 so the footer doesn't offer pagination.
  *
  * @param {Object}  options
  * @param {string}  options.path             Pre-computed REST path. Falsy ⇒ defer.
@@ -86,11 +98,11 @@ export default function useCollectionData( { path, trashCountPath = null, mutati
 				}
 
 				const all = [ ...firstPage ];
-				setData( all.slice() );
 				setPaginationInfo( { totalItems: pagination.totalItems, totalPages: 1 } );
 				setHasLoadedOnce( true );
 
 				if ( pagination.totalPages <= 1 ) {
+					setData( all );
 					return;
 				}
 
@@ -99,6 +111,8 @@ export default function useCollectionData( { path, trashCountPath = null, mutati
 				const maxPage = Math.min( pagination.totalPages, Math.ceil( FETCH_ALL_MAX_ITEMS / FETCH_ALL_CHUNK_SIZE ) );
 
 				setProgress( { loaded: all.length, total: pagination.totalItems } );
+				let endedEarly = false;
+				let cappedByMax = false;
 				for ( let page = 2; page <= maxPage && ! cancelled; page += FETCH_ALL_CONCURRENCY ) {
 					const lastPage = Math.min( page + FETCH_ALL_CONCURRENCY - 1, maxPage );
 					const fetchBatch = () => {
@@ -112,17 +126,26 @@ export default function useCollectionData( { path, trashCountPath = null, mutati
 					let pages;
 					try {
 						pages = await fetchBatch();
-					} catch {
+					} catch ( error ) {
+						if ( isOutOfRangePageError( error ) ) {
+							endedEarly = true;
+							break;
+						}
 						try {
 							pages = await fetchBatch();
-						} catch {
+						} catch ( retryError ) {
+							if ( isOutOfRangePageError( retryError ) ) {
+								endedEarly = true;
+								break;
+							}
 							if ( ! cancelled ) {
 								notifyError(
 									__( 'Only some items could be loaded. Reload the page to try again.', 'newspack-newsletters' ),
 									errorNoticeId ? { id: errorNoticeId } : undefined
 								);
 							}
-							return;
+							endedEarly = true;
+							break;
 						}
 					}
 					if ( cancelled ) {
@@ -133,11 +156,25 @@ export default function useCollectionData( { path, trashCountPath = null, mutati
 							all.push( ...pageItems );
 						}
 					} );
-					setData( all.slice() );
 					setProgress( { loaded: all.length, total: pagination.totalItems } );
 				}
 
-				if ( maxPage < pagination.totalPages && ! cancelled ) {
+				if ( cancelled ) {
+					return;
+				}
+
+				if ( ! endedEarly && maxPage < pagination.totalPages ) {
+					endedEarly = true;
+					cappedByMax = true;
+				}
+
+				setData( all );
+
+				if ( endedEarly ) {
+					setPaginationInfo( { totalItems: all.length, totalPages: 1 } );
+				}
+
+				if ( cappedByMax ) {
 					notifyInfo(
 						sprintf(
 							/* translators: %s: number of items shown */

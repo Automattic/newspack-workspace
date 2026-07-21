@@ -4,6 +4,10 @@
  * `Admin_Shell_Preferences`). Only `perPage` is persisted for now —
  * the saved value follows the user across browsers, matching classic
  * Screen Options behaviour.
+ *
+ * The save is not debounced: `perPage` is a discrete control, so a change
+ * costs at most one request per click, and firing immediately means a
+ * navigation right after the click can't drop the preference.
  */
 
 import apiFetch from '@wordpress/api-fetch';
@@ -13,7 +17,6 @@ import { getViewPrefs } from '../admin-globals';
 import { isValidPerPage } from '../utils/per-page';
 
 const PREFERENCES_PATH = '/newspack-newsletters/v1/admin-shell/preferences';
-const SAVE_DEBOUNCE_MS = 500;
 
 /**
  * @param {string} screenKey   Screen identifier (allowlisted server-side).
@@ -27,27 +30,17 @@ export default function usePersistedView( screenKey, defaultView ) {
 	} );
 
 	const lastSavedRef = useRef( view.perPage );
-	const timerRef = useRef( null );
+	// The value the user last chose — may differ from `lastSavedRef` while a
+	// save for an older value is still in flight.
+	const desiredRef = useRef( view.perPage );
 	const requestSeqRef = useRef( 0 );
-	const isUnmountingRef = useRef( false );
-
-	// Cleans up before the effect below on unmount (effects clean up in
-	// declaration order), so that effect can tell a true unmount apart from
-	// a routine dependency change.
-	useEffect(
-		() => () => {
-			isUnmountingRef.current = true;
-		},
-		[]
-	);
 
 	useEffect( () => {
+		desiredRef.current = view.perPage;
 		if ( view.perPage === lastSavedRef.current || ! isValidPerPage( view.perPage ) ) {
-			return undefined;
+			return;
 		}
-		const { perPage } = view;
-		const save = () => {
-			timerRef.current = null;
+		const save = perPage => {
 			const seq = ++requestSeqRef.current;
 			apiFetch( {
 				path: PREFERENCES_PATH,
@@ -55,25 +48,22 @@ export default function usePersistedView( screenKey, defaultView ) {
 				data: { screen: screenKey, prefs: { perPage } },
 			} )
 				.then( () => {
-					// A newer save may have been issued (and even settled) while
-					// this one was in flight — don't let it clobber that state.
-					if ( seq === requestSeqRef.current ) {
-						lastSavedRef.current = perPage;
+					// A newer save was issued while this one was in flight — it
+					// owns the state now.
+					if ( seq !== requestSeqRef.current ) {
+						return;
+					}
+					lastSavedRef.current = perPage;
+					// Reverting mid-flight leaves the effect's guard satisfied, so
+					// nothing else would correct the stored value.
+					if ( perPage !== desiredRef.current ) {
+						save( desiredRef.current );
 					}
 				} )
 				.catch( () => {} );
 		};
-		timerRef.current = setTimeout( save, SAVE_DEBOUNCE_MS );
-		return () => {
-			if ( timerRef.current ) {
-				clearTimeout( timerRef.current );
-				timerRef.current = null;
-				if ( isUnmountingRef.current ) {
-					save();
-				}
-			}
-		};
-	}, [ view.perPage, screenKey ] ); // eslint-disable-line react-hooks/exhaustive-deps
+		save( view.perPage );
+	}, [ view.perPage, screenKey ] );
 
 	return [ view, setView ];
 }

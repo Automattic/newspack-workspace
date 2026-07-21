@@ -131,20 +131,33 @@ class Admin_Shell_Preferences_Test extends WP_UnitTestCase {
 	 * shipped to the client.
 	 */
 	public function test_get_preferences_sanitizes_stored_meta() {
-		update_user_meta(
-			$this->editor_id,
-			Admin_Shell_Preferences::USER_META_KEY,
-			[
-				'newsletters-list' => [ 'perPage' => 25 ],
-				'evil-screen'      => [ 'perPage' => 25 ],
-				'ads-list'         => [ 'perPage' => 9999 ],
-				'layouts-list'     => 'not-an-array',
-			]
-		);
+		update_user_meta( $this->editor_id, Admin_Shell_Preferences::get_user_meta_key( 'newsletters-list' ), [ 'perPage' => 25 ] );
+		update_user_meta( $this->editor_id, Admin_Shell_Preferences::get_user_meta_key( 'ads-list' ), [ 'perPage' => 9999 ] );
+		update_user_meta( $this->editor_id, Admin_Shell_Preferences::get_user_meta_key( 'layouts-list' ), 'not-an-array' );
 
 		$this->assertSame(
 			[ 'newsletters-list' => [ 'perPage' => 25 ] ],
 			Admin_Shell_Preferences::get_preferences()
 		);
+	}
+
+	/**
+	 * Each screen is stored under its own user-meta key, so a save for
+	 * one screen never reads or rewrites another's — the fix for the
+	 * shared-array race where concurrent saves from different screens
+	 * could clobber one another.
+	 */
+	public function test_save_does_not_touch_other_screens_meta_key() {
+		update_user_meta( $this->editor_id, Admin_Shell_Preferences::get_user_meta_key( 'ads-list' ), [ 'perPage' => 20 ] );
+
+		rest_do_request( $this->make_request( 'newsletters-list', [ 'perPage' => 50 ] ) );
+
+		$this->assertSame(
+			[ 'perPage' => 20 ],
+			get_user_meta( $this->editor_id, Admin_Shell_Preferences::get_user_meta_key( 'ads-list' ), true )
+		);
+		$prefs = Admin_Shell_Preferences::get_preferences();
+		$this->assertSame( 50, $prefs['newsletters-list']['perPage'] );
+		$this->assertSame( 20, $prefs['ads-list']['perPage'] );
 	}
 }

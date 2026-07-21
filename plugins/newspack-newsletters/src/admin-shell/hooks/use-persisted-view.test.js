@@ -10,14 +10,9 @@ const DEFAULT_VIEW = { type: 'table', page: 1, perPage: 25 };
 
 describe( 'usePersistedView', () => {
 	beforeEach( () => {
-		jest.useFakeTimers();
 		apiFetch.mockReset();
 		apiFetch.mockResolvedValue( {} );
 		delete window.newspackNewslettersAdmin;
-	} );
-
-	afterEach( () => {
-		jest.useRealTimers();
 	} );
 
 	it( 'seeds perPage from the bootstrapped preferences', () => {
@@ -32,17 +27,13 @@ describe( 'usePersistedView', () => {
 		expect( result.current[ 0 ].perPage ).toBe( 25 );
 	} );
 
-	it( 'persists a perPage change (debounced), including the All sentinel', () => {
+	it( 'persists a perPage change, including the All sentinel', () => {
 		const { result } = renderHook( () => usePersistedView( 'newsletters-list', DEFAULT_VIEW ) );
 
 		act( () => {
 			result.current[ 1 ]( current => ( { ...current, perPage: PER_PAGE_ALL, page: 1 } ) );
 		} );
-		expect( apiFetch ).not.toHaveBeenCalled();
 
-		act( () => {
-			jest.runAllTimers();
-		} );
 		expect( apiFetch ).toHaveBeenCalledWith( {
 			path: '/newspack-newsletters/v1/admin-shell/preferences',
 			method: 'POST',
@@ -56,9 +47,7 @@ describe( 'usePersistedView', () => {
 		act( () => {
 			result.current[ 1 ]( current => ( { ...current, page: 3, search: 'digest' } ) );
 		} );
-		act( () => {
-			jest.runAllTimers();
-		} );
+
 		expect( apiFetch ).not.toHaveBeenCalled();
 	} );
 
@@ -67,48 +56,57 @@ describe( 'usePersistedView', () => {
 
 		const { result } = renderHook( () => usePersistedView( 'newsletters-list', DEFAULT_VIEW ) );
 
-		act( () => {
-			result.current[ 1 ]( current => ( { ...current, perPage: 50 } ) );
-		} );
 		await act( async () => {
-			jest.runAllTimers();
-			await Promise.resolve();
+			result.current[ 1 ]( current => ( { ...current, perPage: 50 } ) );
 			await Promise.resolve();
 		} );
 		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
 
+		// Back to the seeded value: still unsaved, so nothing to send.
 		act( () => {
 			result.current[ 1 ]( current => ( { ...current, perPage: 25 } ) );
 		} );
-		act( () => {
-			jest.runAllTimers();
-		} );
 		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
 
-		act( () => {
-			result.current[ 1 ]( current => ( { ...current, perPage: 50 } ) );
-		} );
 		await act( async () => {
-			jest.runAllTimers();
+			result.current[ 1 ]( current => ( { ...current, perPage: 50 } ) );
 			await Promise.resolve();
 		} );
 		expect( apiFetch ).toHaveBeenCalledTimes( 2 );
 	} );
 
-	it( 'flushes a pending debounced save immediately on unmount', () => {
-		const { result, unmount } = renderHook( () => usePersistedView( 'newsletters-list', DEFAULT_VIEW ) );
+	it( 'converges on the last chosen value when reverted while a save is in flight', async () => {
+		const DEFAULT_20 = { type: 'table', page: 1, perPage: 20 };
+		const deferred = {};
+		apiFetch.mockImplementationOnce( () => new Promise( resolve => ( deferred.resolve = resolve ) ) );
+		apiFetch.mockResolvedValue( {} );
+
+		const { result } = renderHook( () => usePersistedView( 'newsletters-list', DEFAULT_20 ) );
 
 		act( () => {
 			result.current[ 1 ]( current => ( { ...current, perPage: 50 } ) );
 		} );
-		expect( apiFetch ).not.toHaveBeenCalled();
-
-		unmount();
-
-		expect( apiFetch ).toHaveBeenCalledWith( {
+		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
+		expect( apiFetch ).toHaveBeenLastCalledWith( {
 			path: '/newspack-newsletters/v1/admin-shell/preferences',
 			method: 'POST',
 			data: { screen: 'newsletters-list', prefs: { perPage: 50 } },
+		} );
+
+		act( () => {
+			result.current[ 1 ]( current => ( { ...current, perPage: 20 } ) );
+		} );
+
+		await act( async () => {
+			deferred.resolve( {} );
+			await Promise.resolve();
+			await Promise.resolve();
+		} );
+
+		expect( apiFetch ).toHaveBeenLastCalledWith( {
+			path: '/newspack-newsletters/v1/admin-shell/preferences',
+			method: 'POST',
+			data: { screen: 'newsletters-list', prefs: { perPage: 20 } },
 		} );
 	} );
 } );

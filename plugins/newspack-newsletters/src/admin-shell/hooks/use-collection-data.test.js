@@ -87,6 +87,8 @@ describe( 'useCollectionData', () => {
 			expect( notifyError ).toHaveBeenCalledWith( 'Only some items could be loaded. Reload the page to try again.', {
 				id: 'test-id',
 			} );
+			// The footer/header count must match what's actually on screen, not the server's original total.
+			expect( result.current.paginationInfo ).toEqual( { totalItems: result.current.data.length, totalPages: 1 } );
 		} );
 
 		it( 'stops at the fetch-all cap and notifies the list was truncated', async () => {
@@ -104,6 +106,44 @@ describe( 'useCollectionData', () => {
 			expect( notifyInfo ).toHaveBeenCalledWith(
 				`Showing the first ${ FETCH_ALL_MAX_ITEMS.toLocaleString() } items. Use search or filters to narrow the list.`
 			);
+			expect( result.current.paginationInfo ).toEqual( { totalItems: result.current.data.length, totalPages: 1 } );
+		} );
+
+		it( 'stops quietly on a deterministic out-of-range page — no retry, no error notice', async () => {
+			let page2Attempts = 0;
+			apiFetch.mockImplementation( ( { path } ) => {
+				const page = Number( ( path.match( /[?&]page=(\d+)/ ) || [] )[ 1 ] || 1 );
+				if ( page === 1 ) {
+					return Promise.resolve( makeResponse( [ { id: 1 }, { id: 2 } ], { total: 3, totalPages: 2 } ) );
+				}
+				page2Attempts += 1;
+				return Promise.reject( { code: 'rest_post_invalid_page_number', data: { status: 400 } } );
+			} );
+
+			const { result } = renderHook( () => useCollectionData( { path: '/wp/v2/test?per_page=2&page=1', fetchAll: true } ) );
+
+			await waitFor( () => expect( result.current.isLoading ).toBe( false ) );
+			expect( result.current.data.map( item => item.id ) ).toEqual( [ 1, 2 ] );
+			expect( page2Attempts ).toBe( 1 );
+			expect( notifyError ).not.toHaveBeenCalled();
+			expect( notifyInfo ).not.toHaveBeenCalled();
+			expect( result.current.paginationInfo ).toEqual( { totalItems: 2, totalPages: 1 } );
+		} );
+
+		it( 'also treats a bare 400 status (no error code) as an out-of-range page', async () => {
+			apiFetch.mockImplementation( ( { path } ) => {
+				const page = Number( ( path.match( /[?&]page=(\d+)/ ) || [] )[ 1 ] || 1 );
+				if ( page === 1 ) {
+					return Promise.resolve( makeResponse( [ { id: 1 }, { id: 2 } ], { total: 3, totalPages: 2 } ) );
+				}
+				return Promise.reject( { status: 400 } );
+			} );
+
+			const { result } = renderHook( () => useCollectionData( { path: '/wp/v2/test?per_page=2&page=1', fetchAll: true } ) );
+
+			await waitFor( () => expect( result.current.isLoading ).toBe( false ) );
+			expect( result.current.data.map( item => item.id ) ).toEqual( [ 1, 2 ] );
+			expect( notifyError ).not.toHaveBeenCalled();
 		} );
 	} );
 } );
