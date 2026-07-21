@@ -315,6 +315,54 @@ class Newspack_Popups_Settings {
 				'help'        => __( 'If enabled, readers can dismiss overlay prompts by tapping on the colored overlay background underneath the prompt content. This will make it easier for readers to dismiss prompts, but potentially result in less reader engagement.', 'newspack-popups' ),
 				'public'      => false,
 			],
+			// AI Copy Assistant: publisher details used to tailor AI-generated
+			// Contextual Prompt copy. Read by newspack-manager's Prompt_Donation
+			// (get_publisher_profile) via these same option keys.
+			[
+				'description' => __( 'AI Copy Assistant', 'newspack-popups' ),
+				'help'        => __( 'Details used to tailor AI-generated Contextual Prompt copy to your newsroom.', 'newspack-popups' ),
+				'section'     => 'ai_copy_assistant',
+				'key'         => 'active',
+				'type'        => 'boolean',
+				'public'      => true,
+				'value'       => null,
+			],
+			[
+				'section'     => 'ai_copy_assistant',
+				'key'         => 'newspack_contextual_prompts_publisher_name',
+				'type'        => 'string',
+				'value'       => get_option( 'newspack_contextual_prompts_publisher_name', '' ),
+				'default'     => '',
+				'description' => __( 'Publisher name', 'newspack-popups' ),
+				'help'        => __( 'How your newsroom is named in donation appeals. Defaults to the site title when empty.', 'newspack-popups' ),
+			],
+			[
+				'section'     => 'ai_copy_assistant',
+				'key'         => 'newspack_contextual_prompts_coverage_area',
+				'type'        => 'string',
+				'value'       => get_option( 'newspack_contextual_prompts_coverage_area', '' ),
+				'default'     => '',
+				'description' => __( 'Coverage area', 'newspack-popups' ),
+				'help'        => __( 'The place or beat your newsroom covers, e.g. "San Diego County". Helps ground the appeal.', 'newspack-popups' ),
+			],
+			[
+				'section'     => 'ai_copy_assistant',
+				'key'         => 'newspack_contextual_prompts_voice',
+				'type'        => 'string',
+				'value'       => get_option( 'newspack_contextual_prompts_voice', '' ),
+				'default'     => '',
+				'description' => __( 'Voice and tone', 'newspack-popups' ),
+				'help'        => __( 'A short note on how appeals should sound, e.g. "plainspoken and investigative, no hype".', 'newspack-popups' ),
+			],
+			[
+				'section'     => 'ai_copy_assistant',
+				'key'         => 'newspack_contextual_prompts_additional_guidance',
+				'type'        => 'string',
+				'value'       => get_option( 'newspack_contextual_prompts_additional_guidance', '' ),
+				'default'     => '',
+				'description' => __( 'Additional guidance', 'newspack-popups' ),
+				'help'        => __( 'Optional house do/don\'ts appended to the AI guidance. Never overrides the non-advocacy guardrail.', 'newspack-popups' ),
+			],
 		];
 
 		$default_setting = array(
