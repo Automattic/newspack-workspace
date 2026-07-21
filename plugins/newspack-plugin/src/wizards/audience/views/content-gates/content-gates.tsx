@@ -54,13 +54,13 @@ const ContentGates = ( { updateGatesData }: { updateGatesData: ( gates: Gate[] )
 				action: () => history.push( '/institutions' ),
 			},
 			{
-				label: __( 'Advanced settings', 'newspack-plugin' ),
+				label: __( 'Advanced Settings', 'newspack-plugin' ),
 				action: () => setShowAdvancedSettings( true ),
 			},
 		];
 		if ( gates.length > 1 ) {
 			sectionMenu.unshift( {
-				label: __( 'Gate priority', 'newspack-plugin' ),
+				label: __( 'Gate Priority', 'newspack-plugin' ),
 				action: () => setShowPriorityModal( true ),
 			} );
 		}
@@ -68,11 +68,11 @@ const ContentGates = ( { updateGatesData }: { updateGatesData: ( gates: Gate[] )
 			actions: [
 				{
 					type: 'primary',
-					label: __( 'Add new content gate', 'newspack-plugin' ),
+					label: __( 'Add Content Gate', 'newspack-plugin' ),
 					href: '#/edit/new/all',
 				},
 			],
-			sectionTitle: __( 'Access control', 'newspack-plugin' ),
+			sectionTitle: __( 'Access Control', 'newspack-plugin' ),
 			sectionDescription: __(
 				'Set up gates to manage what content readers can access across your site. Start by selecting which content to restrict, then configure access through registered and/or paid options (including metered rules).',
 				'newspack-plugin'
@@ -178,18 +178,18 @@ const ContentGates = ( { updateGatesData }: { updateGatesData: ( gates: Gate[] )
 			<Divider alignment="full-width" />
 			<Grid className="newspack-content-gates__other-settings" columns={ 2 } gutter={ 32 }>
 				<SettingsCard
-					title={ __( 'Metered countdown', 'newspack-plugin' ) }
+					title={ __( 'Metered Countdown', 'newspack-plugin' ) }
 					description={ __(
 						'Show a countdown banner letting readers know how many free views they have left before content is restricted.',
 						'newspack-plugin'
 					) }
 					enabled={ !! config.countdown_banner?.enabled }
-					requirements={ ! hasMetering ? __( 'Requires metering', 'newspack-plugin' ) : undefined }
+					requirements={ ! hasMetering ? __( 'Requires Metering', 'newspack-plugin' ) : undefined }
 					toggleEnabled={ toggleCountdownBanner.current }
 					href={ '/settings/countdown-banner' }
 				/>
 				<SettingsCard
-					title={ __( 'Content gifting', 'newspack-plugin' ) }
+					title={ __( 'Content Gifting', 'newspack-plugin' ) }
 					description={ __(
 						'Let members gift articles to non-subscribers. Recipients can read the full content without needing to subscribe.',
 						'newspack-plugin'

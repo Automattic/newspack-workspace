@@ -41,6 +41,7 @@ import apiFetch from '@wordpress/api-fetch';
  */
 import './edit.scss';
 import RedirectAfterSuccess from '../../components/redirect-after-success';
+import CouponControl from './coupon-control';
 
 function getVariationName( variation ) {
 	const attributes = [];
@@ -158,7 +159,7 @@ function ProductControl( props ) {
 		return <Spinner />;
 	}
 	return (
-		<div className="newspack-checkout-button__product-field" style={ { marginBottom: '16px' } }>
+		<div className="newspack-checkout-button__product-field">
 			{ selected && ! isChanging ? (
 				<>
 					<BaseControl label={ __( 'Product', 'newspack-blocks' ) } id="selected-product-control">
@@ -201,7 +202,7 @@ function ProductControl( props ) {
 
 function CheckoutButtonEdit( props ) {
 	const { attributes, setAttributes, className } = props;
-	const { placeholder, style, text, product, price, variation, width } = attributes;
+	const { placeholder, style, text, product, price, variation, width, coupon } = attributes;
 
 	const [ productData, setProductData ] = useState( {} );
 	const [ variations, setVariations ] = useState( [] );
@@ -337,6 +338,9 @@ function CheckoutButtonEdit( props ) {
 							</>
 						) }
 					</ProductControl>
+					{ newspack_blocks_data?.coupons_enabled && (
+						<CouponControl value={ coupon } onChange={ value => setAttributes( { coupon: value } ) } />
+					) }
 					<WidthControl selectedWidth={ width } setAttributes={ setAttributes } />
 				</PanelBody>
 				<PanelBody title={ __( 'After purchase', 'newspack-blocks' ) }>

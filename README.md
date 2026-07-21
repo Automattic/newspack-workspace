@@ -1,7 +1,16 @@
 # newspack-workspace
-Newspack helper Repository for running local environments using Docker.
 
-The main idea is to have all the dependecies we need to run the projects, and its tests, inside the container so we don't depend on anything in our local machine.
+[![CI](https://github.com/Automattic/newspack-workspace/actions/workflows/ci.yml/badge.svg)](https://github.com/Automattic/newspack-workspace/actions/workflows/ci.yml)
+[![License](https://img.shields.io/github/license/Automattic/newspack-workspace)](LICENSE)
+[![WordPress](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.wordpress.org%2Fcore%2Fversion-check%2F1.7%2F&query=%24.offers%5B0%5D.version&label=WordPress&color=21759B&logo=wordpress&logoColor=white)](https://wordpress.org/download/releases/)
+[![PHP](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FAutomattic%2Fnewspack-workspace%2Fmain%2Fcomposer.json&query=%24.require.php&label=PHP&color=777BB4&logo=php&logoColor=white)](composer.json)
+[![Node](https://img.shields.io/badge/Node-22-339933?logo=nodedotjs&logoColor=white)](.nvmrc)
+[![pnpm](https://img.shields.io/badge/pnpm-10-F69220?logo=pnpm&logoColor=white)](package.json)
+[![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)](Dockerfile)
+[![code style: Prettier](https://img.shields.io/badge/code_style-prettier-F7B93E?logo=prettier&logoColor=black)](.prettierrc.js)
+
+The Newspack monorepo. All product [plugins](plugins), [themes](themes), and shared [packages](packages) live here. It also ships a Docker-based local development environment, so the dependencies needed to run the projects and their tests live inside the container, independent of your local machine.
+
 ## Getting started
 
 ### Clone this repository

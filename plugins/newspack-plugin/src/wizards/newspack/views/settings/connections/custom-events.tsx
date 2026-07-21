@@ -7,6 +7,7 @@
  */
 import { __ } from '@wordpress/i18n';
 import { useState, useEffect } from '@wordpress/element';
+import { __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 
 /**
  * Internal dependencies
@@ -134,12 +135,14 @@ function CustomEvents() {
 				/>
 			</Grid>
 			{ errorMessage && <Notice isError noticeText={ errorMessage } /> }
-			<Button className="mr2" variant="primary" onClick={ updateGa4Credentials } disabled={ isInputsEmpty() || !! errorMessage }>
-				{ __( 'Save', 'newspack-plugin' ) }
-			</Button>
-			<Button variant="secondary" onClick={ resetGa4Credentials } disabled={ isInputsEmpty() }>
-				{ __( 'Reset', 'newspack-plugin' ) }
-			</Button>
+			<HStack justify="flex-start" spacing={ 2 }>
+				<Button variant="primary" onClick={ updateGa4Credentials } disabled={ isInputsEmpty() || !! errorMessage }>
+					{ __( 'Save', 'newspack-plugin' ) }
+				</Button>
+				<Button variant="secondary" onClick={ resetGa4Credentials } disabled={ isInputsEmpty() }>
+					{ __( 'Reset', 'newspack-plugin' ) }
+				</Button>
+			</HStack>
 		</div>
 	);
 }

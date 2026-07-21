@@ -119,7 +119,9 @@ class My_Integration extends Integration {
 
 | Method | Purpose |
 | --- | --- |
-| `is_set_up()` | Whether external prerequisites (provider chosen, key entered, etc.) are configured. Defaults to `true`. Used by the Integrations UI to mark cards as ready. |
+| `is_set_up()` | Whether the integration is fully configured (external prerequisites **and** the integration's own settings). Defaults to `true`. Used by the Integrations UI to mark cards as ready. |
+| `is_connected()` | Whether the external service prerequisite alone (provider chosen, key entered) is configured at its source. Defaults to `true`. The Integrations UI routes the card's primary action on this: not connected → `get_setup_url()`, connected but not set up → the integration's own settings view ("Finish setup"). |
+| `get_unsupported_reason()` | Non-null string marks the integration as unsupported with the site's current configuration (e.g. the ESP integration while the newsletters provider is "manual"). The Integrations UI shows the string verbatim as the card's error badge and routes the primary action to `get_setup_url()`; the REST layer refuses to enable. Defaults to `null`. |
 | `get_setup_url()` | Admin URL where the integration's prerequisites are configured. Defaults to empty string. |
 | `test_connection()` | Lightweight live API call to verify credentials and reachability. Called as part of `health_check()`. Defaults to `true`. |
 | `pull_contact_data( $user_id )` | Fetch contact data from the external system. Return `array` of `field_key => value` or `WP_Error`. Defaults to `[]`. |
@@ -131,7 +133,7 @@ class My_Integration extends Integration {
 | `handle_logged_in_user_registration( $user, $request )` | Called when a logged-in user attempts to register again via the frontend. Use to update user data, link the account, record a new event, etc. Default is a no-op. |
 | `get_my_account_menu_item()` | Return `[ 'slug' => ..., 'label' => ..., 'position' => ... ]` to add a tab to the WooCommerce My Account page. Default returns `null` (no tab). |
 | `render_my_account_page( $value )` | Echo markup for the integration's My Account page. Called inside the WooCommerce account template. |
-| `get_required_plugins()` | Declare third-party plugins this integration depends on. Return an array of `[ 'slug' => ..., 'name' => ..., 'is_active' => ..., 'is_installed' => ... ]` entries. The Integrations UI uses this to gate the card: when every missing dependency is at least installed, it offers an **Activate** action; when any dependency is uninstalled, the card stays disabled with a "Requires …" affordance. Default `[]`. |
+| `delete_contact( $email )` | Remove the contact identified by `$email` from the external system. Default returns a `not_implemented` WP_Error. Required only if the integration declares it can be set to `delete` mode for account-deletion handling. |
 
 ---
 
@@ -146,6 +148,7 @@ Settings fields are declared statically in `register_settings_fields()` and stor
     'key'         => 'master_list',
     'type'        => 'select',
     'default'     => '',
+    'required'    => true, // Optional. See below.
     'label'       => __( 'Master List', 'my-plugin' ),
     'description' => __( '...', 'my-plugin' ),
     'options'     => [ ... ], // Required for 'select'.
@@ -153,6 +156,8 @@ Settings fields are declared statically in `register_settings_fields()` and stor
 ```
 
 Supported `type` values: `text`, `password`, `textarea`, `number`, `checkbox`, `select`, `metadata`, `oauth`, `hidden`. The base class sanitizes values per type before persisting.
+
+`required => true` marks a field that must have a value before the integration can be enabled from the Integrations UI. When the card's Enable action runs while a required field is empty, the UI opens a modal that collects the missing required fields, saves them, and then enables the integration in one step. Do not combine `required` with the managed field types (`oauth`, `hidden`) — the Integrations UI cannot collect those, and the settings endpoint refuses client writes for them.
 
 `oauth` and `hidden` are **managed field types**: `Integrations::update_integration_settings()` calls `is_managed_settings_field()` and skips them, so admin clients can't overwrite them by POSTing to the settings REST endpoint. They're writable only from trusted PHP via `update_settings_field_value()`. See `Integration::MANAGED_FIELD_TYPES`.
 
@@ -199,6 +204,33 @@ Every integration automatically gets three additional fields appended to its set
 | `outgoing_metadata_fields` | `metadata` | Subset of Newspack metadata fields to push. Stored at `newspack_integration_outgoing_fields_{id}`. |
 | `incoming_metadata_fields` | `metadata` | Subset of external fields to pull and store on the Newspack user. Stored at `newspack_integration_incoming_fields_{id}` as a `key => raw_data` map. |
 
+### Built-in account-deletion fields
+
+In addition to the metadata fields, every integration automatically gets two account-deletion settings:
+
+| Field key | Type | Purpose |
+| --- | --- | --- |
+| `sync_account_deletion` | `checkbox` | Whether to propagate WordPress reader-account deletions to this integration. Default `true`. Stored at `newspack_integration_settings_{id}_sync_account_deletion`. Migrated lazily from the legacy `newspack_reader_activation_sync_esp_delete` option (see migration note below). |
+| `account_deletion_handling` | `select` | When sync is on, choose between `delete` (call `$integration->delete_contact()`) and `flag` (push the contact with an `Account_Deleted` metadata field — a `Y-m-d H:i:s` timestamp matching peer datetime fields — plus a `Membership_Status` field set to `user-deleted` for backward compatibility). Default `'delete'` for integrations that support hard delete, otherwise `'flag'`. Stored at `newspack_integration_settings_{id}_account_deletion_handling`. Declares a `condition` on `sync_account_deletion` so the configure UI hides it when sync is off. |
+
+**Legacy migration.** Both fields derive from the single legacy `sync_esp_delete` boolean, which was effectively three-way in behavior: `true` hard-deleted the contact, while `false` kept the contact but removed it from every list (still a deletion signal). Because *both* states propagated a deletion, a migrated site always keeps `sync_account_deletion = true`; the legacy boolean only picks the handling mode — `true → delete`, `false → flag`. Mapping legacy `false` to `flag` (rather than disabling sync) preserves the old "don't hard-delete, but still signal the deletion" posture. Sites that never set the legacy option fall through to the field defaults. See `Integration::migrate_account_deletion_setting()`.
+
+The dispatcher lives at `Contact_Sync::handle_account_deletion()` and is called from the v1 `reader_delete_sync` data event handler. Legacy-mode sites continue to use the older `reader_deleted` handler that calls Newspack Newsletters directly.
+
+### Conditional fields
+
+A settings field can declare an optional `condition` so the frontend hides it when another field's current value doesn't match:
+
+```php
+[
+    'key'       => 'dependent_field',
+    'type'      => 'text',
+    'condition' => [ 'field' => 'controlling_field', 'equals' => true ],
+],
+```
+
+The configure-view in `src/wizards/audience/views/integrations/` honors this predicate. Conditions are single-level only (no nesting, no array of conditions).
+
 ---
 
 ## Push (Outgoing Sync)
@@ -210,6 +242,15 @@ When a contact needs to be synced, the framework calls `push_contact_data()` on 
 3. Preserves keys already in prefixed form if the underlying field is enabled.
 
 `prepare_contact()` is a no-op when the site is still on the legacy metadata schema (where the metadata classes pre-filter), which keeps newly-built integrations compatible with un-migrated sites.
+
+### Optional `$options` parameter
+
+`Contact_Sync` may pass a fourth `$options` array to `push_contact_data()` carrying operator-driven sync scoping (currently used by the `wp newspack esp sync` CLI):
+
+- `skip_lists` (bool) — upsert the contact without adding it to any list, so an unsubscribed contact isn't resubscribed.
+- `fields` (string[]|null) — the canonical field labels the sync is scoped to (already applied to the metadata before your method is called).
+
+The abstract signature intentionally stays three-parameter (`push_contact_data( $contact, $context, $existing_contact )`). `Contact_Sync::push_to_integrations()` calls every integration with the fourth `$options` argument; PHP discards surplus positional arguments to a method that declares fewer parameters (they remain available via `func_get_args()`) — there is no warning or error, so a three-parameter implementation keeps working unchanged. Adding the fourth parameter to the *abstract* instead would be a fatal "declaration must be compatible" error for every existing three-parameter override, which is why the parameter lives only on the concrete overrides that use it. Add `$options = []` to your override only if the integration needs to react to these flags (the built-in `esp` integration reads `skip_lists`). Integrations that ignore `$options` behave exactly as before.
 
 ### When pushes are triggered
 

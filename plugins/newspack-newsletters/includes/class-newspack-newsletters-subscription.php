@@ -1356,7 +1356,6 @@ class Newspack_Newsletters_Subscription {
 				$message,
 				[
 					'type'           => $type,
-					'corner'         => 'top-right',
 					'autohide'       => true,
 					'active_on_load' => true,
 				]

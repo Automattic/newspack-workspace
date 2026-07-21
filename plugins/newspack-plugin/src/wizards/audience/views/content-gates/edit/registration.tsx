@@ -21,10 +21,10 @@ interface RegistrationProps {
 export default function Registration( { registration, onChange, isNewsletter = false }: RegistrationProps ) {
 	const handleChange = useCallback(
 		( value: Partial< Registration > ) => {
+			// Spread the full object so fields this screen doesn't manage
+			// (e.g. gate_layout_id) survive the update and the next save.
 			onChange( {
-				active: registration.active,
-				metering: registration.metering,
-				require_verification: registration.require_verification,
+				...registration,
 				...value,
 			} );
 		},

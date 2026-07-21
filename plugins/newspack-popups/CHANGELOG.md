@@ -1,3 +1,21 @@
+# newspack-popups [3.15.0](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.14.1...newspack-popups@3.15.0) (2026-07-20)
+
+
+### Bug Fixes
+
+* **popups:** flush overlay block-support styles (NPPM-2897) ([#216](https://github.com/Automattic/newspack-workspace/issues/216)) ([e439dc1](https://github.com/Automattic/newspack-workspace/commit/e439dc18a9a969bf08311575aab6f3b45e95574b))
+* **popups:** prevent stale prompt settings saves ([#266](https://github.com/Automattic/newspack-workspace/issues/266)) ([7900ad6](https://github.com/Automattic/newspack-workspace/commit/7900ad615c395cf8d17f889ccad299b67df0ac0c))
+
+
+### Features
+
+* **segmentation:** segment donors arriving from newsletter links ([#327](https://github.com/Automattic/newspack-workspace/issues/327), NPPM-2876) ([6aee115](https://github.com/Automattic/newspack-workspace/commit/6aee11518f5b4b6e569177665452e0b18fcc023f))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.5.0
+
 ## newspack-popups [3.14.1](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.14.0...newspack-popups@3.14.1) (2026-07-01)
 
 
