@@ -42,6 +42,7 @@ const entry = {
 	'reader-activation': path.join( __dirname, 'src', 'reader-activation', 'index.js' ),
 	'reader-auth': path.join( __dirname, 'src', 'reader-activation-auth', 'index.js' ),
 	'newsletters-signup': path.join( __dirname, 'src', 'reader-activation-newsletters', 'index.js' ),
+	'form-capture': path.join( __dirname, 'src', 'reader-activation-form-capture', 'index.js' ),
 	'reader-registration-block': path.join( __dirname, 'src', 'blocks', 'reader-registration', 'view.js' ),
 	'correction-box-block': path.join( __dirname, 'src', 'blocks', 'correction-box', 'index.js' ),
 	'correction-item-block': path.join( __dirname, 'src', 'blocks', 'correction-item', 'index.js' ),

@@ -51,6 +51,7 @@ class Form_Capture extends Integration {
 		\add_filter( 'newspack_register_reader_metadata', [ $this, 'filter_registration_metadata' ], 10, 3 );
 		\add_filter( 'newspack_reader_activation_send_magic_link_on_reregistration', [ $this, 'filter_send_magic_link' ], 10, 3 );
 		\add_action( 'newspack_registered_reader', [ $this, 'handle_registered_reader' ], 10, 5 );
+		\add_action( 'wp_enqueue_scripts', [ $this, 'enqueue_scripts' ], 20 );
 	}
 
 	/**
@@ -147,6 +148,35 @@ class Form_Capture extends Integration {
 	public function get_lists() {
 		$value = (string) $this->get_settings_field_value( 'lists' );
 		return array_values( array_filter( array_map( 'trim', explode( ',', $value ) ) ) );
+	}
+
+	/**
+	 * Enqueue the frontend capture script when the integration is active.
+	 */
+	public function enqueue_scripts() {
+		if ( ! Reader_Activation::is_enabled() || ! Integrations::is_enabled( self::ID ) ) {
+			return;
+		}
+		\wp_enqueue_script(
+			self::SCRIPT_HANDLE,
+			Newspack::plugin_url() . '/dist/form-capture.js',
+			[ Reader_Activation::SCRIPT_HANDLE ],
+			Newspack::asset_version( 'form-capture' ),
+			[
+				'strategy'  => 'defer',
+				'in_footer' => true,
+			]
+		);
+		\wp_localize_script(
+			self::SCRIPT_HANDLE,
+			'newspack_form_capture',
+			[
+				'selectors' => $this->get_selectors(),
+				'has_lists' => ! empty( $this->get_lists() ),
+			]
+		);
+		\wp_script_add_data( self::SCRIPT_HANDLE, 'defer', true );
+		\wp_script_add_data( self::SCRIPT_HANDLE, 'amp-plus', true );
 	}
 
 	/**

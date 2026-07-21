@@ -229,4 +229,19 @@ class Test_Form_Capture extends WP_UnitTestCase {
 		$integration->update_settings_field_value( 'lists', '' );
 		Integrations::disable( Form_Capture::ID );
 	}
+
+	/**
+	 * The capture script is enqueued only when the integration is enabled.
+	 */
+	public function test_capture_script_enqueued_only_when_enabled() {
+		$integration = Integrations::get_integration( Form_Capture::ID );
+
+		$integration->enqueue_scripts();
+		$this->assertFalse( wp_script_is( Form_Capture::SCRIPT_HANDLE, 'enqueued' ) );
+
+		Integrations::enable( Form_Capture::ID );
+		$integration->enqueue_scripts();
+		$this->assertTrue( wp_script_is( Form_Capture::SCRIPT_HANDLE, 'enqueued' ) );
+		Integrations::disable( Form_Capture::ID );
+	}
 }
