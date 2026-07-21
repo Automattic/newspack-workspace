@@ -33,34 +33,34 @@ export default function usePersistedView( screenKey, defaultView ) {
 	// The value the user last chose — may differ from `lastSavedRef` while a
 	// save for an older value is still in flight.
 	const desiredRef = useRef( view.perPage );
-	const requestSeqRef = useRef( 0 );
+	const inFlightRef = useRef( false );
 
 	useEffect( () => {
 		desiredRef.current = view.perPage;
-		if ( view.perPage === lastSavedRef.current || ! isValidPerPage( view.perPage ) ) {
+		if ( view.perPage === lastSavedRef.current || ! isValidPerPage( view.perPage ) || inFlightRef.current ) {
 			return;
 		}
+		// One request at a time: concurrent writes could otherwise reach the
+		// server out of order and leave the older value stored.
 		const save = perPage => {
-			const seq = ++requestSeqRef.current;
+			inFlightRef.current = true;
 			apiFetch( {
 				path: PREFERENCES_PATH,
 				method: 'POST',
 				data: { screen: screenKey, prefs: { perPage } },
 			} )
 				.then( () => {
-					// A newer save was issued while this one was in flight — it
-					// owns the state now.
-					if ( seq !== requestSeqRef.current ) {
-						return;
-					}
 					lastSavedRef.current = perPage;
-					// Reverting mid-flight leaves the effect's guard satisfied, so
-					// nothing else would correct the stored value.
-					if ( perPage !== desiredRef.current ) {
+				} )
+				.catch( () => {} )
+				.finally( () => {
+					inFlightRef.current = false;
+					// The user changed their mind mid-flight; the effect's guard
+					// stopped it scheduling anything, so chain the correction here.
+					if ( desiredRef.current !== perPage && isValidPerPage( desiredRef.current ) ) {
 						save( desiredRef.current );
 					}
-				} )
-				.catch( () => {} );
+				} );
 		};
 		save( view.perPage );
 	}, [ view.perPage, screenKey ] );

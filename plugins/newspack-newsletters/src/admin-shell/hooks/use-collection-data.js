@@ -113,50 +113,56 @@ export default function useCollectionData( { path, trashCountPath = null, mutati
 				setProgress( { loaded: all.length, total: pagination.totalItems } );
 				let endedEarly = false;
 				let cappedByMax = false;
-				for ( let page = 2; page <= maxPage && ! cancelled; page += FETCH_ALL_CONCURRENCY ) {
-					const lastPage = Math.min( page + FETCH_ALL_CONCURRENCY - 1, maxPage );
-					const fetchBatch = () => {
-						const batch = [];
-						for ( let p = page; p <= lastPage; p++ ) {
-							batch.push( apiFetch( { path: addQueryArgs( path, { page: p } ), parse: false } ).then( r => r.json() ) );
-						}
-						return Promise.all( batch );
-					};
-
-					let pages;
-					try {
-						pages = await fetchBatch();
-					} catch ( error ) {
-						if ( isOutOfRangePageError( error ) ) {
-							endedEarly = true;
+				// Settled rather than all-or-nothing: one bad page must not discard
+				// its siblings. Only the run before the first failure is kept, so
+				// the collection stays contiguous.
+				const fetchPages = ( from, to ) => {
+					const batch = [];
+					for ( let p = from; p <= to; p++ ) {
+						batch.push( apiFetch( { path: addQueryArgs( path, { page: p } ), parse: false } ).then( r => r.json() ) );
+					}
+					return Promise.allSettled( batch );
+				};
+				const keepFulfilledPrefix = results => {
+					for ( const result of results ) {
+						if ( result.status !== 'fulfilled' ) {
 							break;
 						}
-						try {
-							pages = await fetchBatch();
-						} catch ( retryError ) {
-							if ( isOutOfRangePageError( retryError ) ) {
-								endedEarly = true;
-								break;
-							}
-							if ( ! cancelled ) {
-								notifyError(
-									__( 'Only some items could be loaded. Reload the page to try again.', 'newspack-newsletters' ),
-									errorNoticeId ? { id: errorNoticeId } : undefined
-								);
-							}
-							endedEarly = true;
-							break;
+						if ( Array.isArray( result.value ) ) {
+							all.push( ...result.value );
 						}
 					}
+					return results.findIndex( result => result.status === 'rejected' );
+				};
+
+				for ( let page = 2; page <= maxPage && ! cancelled; page += FETCH_ALL_CONCURRENCY ) {
+					const lastPage = Math.min( page + FETCH_ALL_CONCURRENCY - 1, maxPage );
+
+					let results = await fetchPages( page, lastPage );
 					if ( cancelled ) {
 						return;
 					}
-					pages.forEach( pageItems => {
-						if ( Array.isArray( pageItems ) ) {
-							all.push( ...pageItems );
+					let failedAt = keepFulfilledPrefix( results );
+
+					if ( failedAt !== -1 && ! isOutOfRangePageError( results[ failedAt ].reason ) ) {
+						results = await fetchPages( page + failedAt, lastPage );
+						if ( cancelled ) {
+							return;
 						}
-					} );
+						failedAt = keepFulfilledPrefix( results );
+						if ( failedAt !== -1 && ! isOutOfRangePageError( results[ failedAt ].reason ) ) {
+							notifyError(
+								__( 'Only some items could be loaded. Reload the page to try again.', 'newspack-newsletters' ),
+								errorNoticeId ? { id: errorNoticeId } : undefined
+							);
+						}
+					}
+
 					setProgress( { loaded: all.length, total: pagination.totalItems } );
+					if ( failedAt !== -1 ) {
+						endedEarly = true;
+						break;
+					}
 				}
 
 				if ( cancelled ) {

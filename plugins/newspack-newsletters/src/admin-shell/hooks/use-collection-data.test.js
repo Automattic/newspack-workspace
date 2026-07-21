@@ -130,6 +130,24 @@ describe( 'useCollectionData', () => {
 			expect( result.current.paginationInfo ).toEqual( { totalItems: 2, totalPages: 1 } );
 		} );
 
+		it( 'keeps pages that succeeded alongside a failing sibling in the same batch', async () => {
+			// Pages 2 and 3 land; page 4 went out of range because the collection shrank.
+			apiFetch.mockImplementation( ( { path } ) => {
+				const page = Number( ( path.match( /[?&]page=(\d+)/ ) || [] )[ 1 ] || 1 );
+				if ( page === 4 ) {
+					return Promise.reject( { code: 'rest_post_invalid_page_number', data: { status: 400 } } );
+				}
+				return Promise.resolve( makeResponse( [ { id: page } ], { total: 8, totalPages: 4 } ) );
+			} );
+
+			const { result } = renderHook( () => useCollectionData( { path: '/wp/v2/test?per_page=2&page=1', fetchAll: true } ) );
+
+			await waitFor( () => expect( result.current.isLoading ).toBe( false ) );
+			expect( result.current.data.map( item => item.id ) ).toEqual( [ 1, 2, 3 ] );
+			expect( result.current.paginationInfo ).toEqual( { totalItems: 3, totalPages: 1 } );
+			expect( notifyError ).not.toHaveBeenCalled();
+		} );
+
 		it( 'also treats a bare 400 status (no error code) as an out-of-range page', async () => {
 			apiFetch.mockImplementation( ( { path } ) => {
 				const page = Number( ( path.match( /[?&]page=(\d+)/ ) || [] )[ 1 ] || 1 );

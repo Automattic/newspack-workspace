@@ -97,7 +97,7 @@ export default function NewslettersListScreen() {
 
 	return (
 		<>
-			<HeaderCount count={ paginationInfo.totalItems } />
+			<HeaderCount count={ paginationInfo.totalItems } isRealized={ hasLoadedOnce } />
 			<DataViews
 				className="newspack-newsletters-list"
 				data={ data }

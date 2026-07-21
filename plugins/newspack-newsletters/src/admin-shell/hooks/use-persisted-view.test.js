@@ -75,6 +75,35 @@ describe( 'usePersistedView', () => {
 		expect( apiFetch ).toHaveBeenCalledTimes( 2 );
 	} );
 
+	it( 'never has two saves in flight, so writes cannot reach the server out of order', async () => {
+		const deferred = {};
+		apiFetch.mockImplementationOnce( () => new Promise( resolve => ( deferred.resolve = resolve ) ) );
+		apiFetch.mockResolvedValue( {} );
+
+		const { result } = renderHook( () => usePersistedView( 'newsletters-list', DEFAULT_VIEW ) );
+
+		act( () => {
+			result.current[ 1 ]( current => ( { ...current, perPage: 50 } ) );
+		} );
+		act( () => {
+			result.current[ 1 ]( current => ( { ...current, perPage: 100 } ) );
+		} );
+		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
+
+		await act( async () => {
+			deferred.resolve( {} );
+			await Promise.resolve();
+			await Promise.resolve();
+		} );
+
+		expect( apiFetch ).toHaveBeenCalledTimes( 2 );
+		expect( apiFetch ).toHaveBeenLastCalledWith( {
+			path: '/newspack-newsletters/v1/admin-shell/preferences',
+			method: 'POST',
+			data: { screen: 'newsletters-list', prefs: { perPage: 100 } },
+		} );
+	} );
+
 	it( 'converges on the last chosen value when reverted while a save is in flight', async () => {
 		const DEFAULT_20 = { type: 'table', page: 1, perPage: 20 };
 		const deferred = {};
