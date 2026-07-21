@@ -75,7 +75,10 @@ window.newspackRAS.push( readerActivation => {
 					readerActivation.store.set( 'is_newsletter_subscriber', true );
 				}
 			} )
-			.catch( () => {} );
+			.catch( () => {
+				// Allow retry on a later submit after a transient failure.
+				captured.delete( email );
+			} );
 	};
 
 	const attach = () => {
@@ -91,6 +94,17 @@ window.newspackRAS.push( readerActivation => {
 
 	attach();
 	// Form plugins render/replace forms after load (multi-page, AJAX embeds).
-	const observer = new MutationObserver( attach );
+	// Coalesce mutation bursts (infinite scroll, ad refresh) into one scan.
+	let scanScheduled = false;
+	const observer = new MutationObserver( () => {
+		if ( scanScheduled ) {
+			return;
+		}
+		scanScheduled = true;
+		setTimeout( () => {
+			scanScheduled = false;
+			attach();
+		}, 200 );
+	} );
 	observer.observe( document.body, { childList: true, subtree: true } );
 } );
