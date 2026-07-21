@@ -22,7 +22,7 @@ import { chevronLeft } from '@wordpress/icons';
 import { CardFeature, Button, Grid, Modal, Waiting } from '../../../../../../packages/components/src';
 
 const DISCLOSURE = __(
-	'Enabling the AI Copy Assistant lets editors generate donation call-to-action copy for their stories using AI. When used, the content of the post is sent to a third-party AI provider to draft suggestions. It is retained by the provider for up to 30 days for abuse monitoring, is not used to train AI models, and never appears in other AI products. Every suggestion is a draft an editor reviews and approves — nothing is ever published automatically.',
+	'Enabling Contextual Prompts lets editors generate donation call-to-action copy for their stories using AI. When used, the content of the post is sent to a third-party AI provider to draft suggestions. It is retained by the provider for up to 30 days for abuse monitoring, is not used to train AI models, and never appears in other AI products. Every suggestion is a draft an editor reviews and approves — nothing is ever published automatically.',
 	'newspack-plugin'
 );
 
@@ -95,7 +95,7 @@ const ContextualPromptsSettings = () => {
 			>
 				<HStack justify="flex-start" spacing={ 2 }>
 					<Button icon={ chevronLeft } label={ __( 'Back', 'newspack-plugin' ) } onClick={ () => setView( 'card' ) } isLink />
-					<h2 className="newspack-wizard__heading">{ __( 'AI Copy Assistant', 'newspack-plugin' ) }</h2>
+					<h2 className="newspack-wizard__heading">{ __( 'Contextual Prompts', 'newspack-plugin' ) }</h2>
 				</HStack>
 				<p>{ __( 'Details used to tailor AI-generated Contextual Prompt copy to your newsroom.', 'newspack-plugin' ) }</p>
 
@@ -139,7 +139,7 @@ const ContextualPromptsSettings = () => {
 			) }
 			<Grid columns={ 1 } gutter={ 0 }>
 				<CardFeature
-					title={ __( 'AI Copy Assistant', 'newspack-plugin' ) }
+					title={ __( 'Contextual Prompts', 'newspack-plugin' ) }
 					description={ description }
 					enabled={ enabled }
 					busy={ inFlight }
@@ -152,10 +152,7 @@ const ContextualPromptsSettings = () => {
 				/>
 			</Grid>
 			{ modalOpen && (
-				<Modal
-					title={ __( 'Enable the AI Copy Assistant?', 'newspack-plugin' ) }
-					onRequestClose={ () => ! inFlight && setModalOpen( false ) }
-				>
+				<Modal title={ __( 'Enable Contextual Prompts?', 'newspack-plugin' ) } onRequestClose={ () => ! inFlight && setModalOpen( false ) }>
 					<p>{ DISCLOSURE }</p>
 					<Notice status="warning" isDismissible={ false }>
 						{ CONFIRMATION }
