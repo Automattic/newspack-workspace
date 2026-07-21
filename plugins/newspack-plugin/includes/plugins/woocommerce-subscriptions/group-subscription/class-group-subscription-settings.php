@@ -118,7 +118,26 @@ class Group_Subscription_Settings {
 				'pending_label'         => __( '(pending)', 'newspack-plugin' ),
 				'remove_label'          => __( 'Remove', 'newspack-plugin' ),
 				'cancel_label'          => __( 'Cancel', 'newspack-plugin' ),
+				'cancel_error_message'  => __( 'Failed to cancel invitation.', 'newspack-plugin' ),
+				'limit_notice'          => self::get_limit_notice_text(),
 			]
+		);
+	}
+
+	/**
+	 * Get the "member limit reached" sentence shown in the admin metabox.
+	 *
+	 * Shared by the server-side render and the JS that rewrites the notice on live
+	 * add/remove/invite/cancel, so both always say the same thing — including the
+	 * publisher-configurable container label.
+	 *
+	 * @return string The translated notice text.
+	 */
+	public static function get_limit_notice_text() {
+		return sprintf(
+			/* translators: %s: lowercase singular group label (e.g. "group", "team"). */
+			__( 'This %s has reached its member limit. Remove a member, or raise the member limit above and save, to add more.', 'newspack-plugin' ),
+			Group_Subscription::get_label_lower( 'singular' )
 		);
 	}
 
@@ -451,23 +470,25 @@ class Group_Subscription_Settings {
 				];
 			}
 		}
-		// A spot is consumed by each group member and each pending (non-expired) invite; the owner
-		// is excluded because the limit counts members "in addition to the owner". The count uses
-		// the raw $members set (not the display-filtered $member_users) so it matches the server-side
-		// enforcement (Group_Subscription::update_members and the invite gate) and the reader-facing
-		// My Account view (templates/v1/group-subscription-members.php) exactly, so the admin is
-		// never shown an add form the server would then reject with a 409. A limit of 0 means
-		// unlimited. The admin JS re-evaluates on add/remove/invite/cancel to keep the form and
-		// notice in sync.
-		$member_limit    = (int) $settings['limit'];
+		// A spot is consumed by each group member and each pending (non-expired) invite. The
+		// threshold is the member-seat limit, not the owner-inclusive configured limit: $members
+		// comes from get_members(), which returns member-meta holders and so excludes the owner,
+		// and get_member_seat_limit() reserves the seat of every manager who holds no member meta
+		// (in practice the owner). That is the exact expression the server enforces in
+		// Group_Subscription::update_members() and Group_Subscription_Invite::generate_invite(),
+		// and the one the reader-facing My Account view computes
+		// (my-account/templates/v1/group-subscription-members.php), so the admin is never shown an
+		// add form the server would then reject with a 409. A null seat limit means unlimited. The
+		// admin JS re-evaluates on add/remove/invite/cancel to keep the form and notice in sync.
+		$seat_limit      = Group_Subscription::get_member_seat_limit( $subscription );
 		$pending_invites = Group_Subscription_Invite::get_invites( $subscription, false );
-		$is_at_limit     = $member_limit > 0 && ( count( $members ) + count( $pending_invites ) ) >= $member_limit;
+		$is_at_limit     = null !== $seat_limit && ( count( $members ) + count( $pending_invites ) ) >= $seat_limit;
 		// Members in the raw set but not rendered as spot-marked rows (a manager who also carries
 		// member meta, or a non-reader member) still consume a spot; the JS adds this offset to
 		// its rendered-row tally so its live count matches this server-side one.
-		$spots_offset = count( $members ) - count( $member_users );
+		$spots_offset = count( $members ) - count( $member_rows );
 		?>
-		<div class="newspack-group-subscription__container<?php echo $is_at_limit ? ' is-at-limit' : ''; ?>" data-subscription-id="<?php echo \esc_attr( $subscription->get_id() ); ?>" data-member-limit="<?php echo \esc_attr( (string) $member_limit ); ?>" data-spots-offset="<?php echo \esc_attr( (string) $spots_offset ); ?>">
+		<div class="newspack-group-subscription__container<?php echo $is_at_limit ? ' is-at-limit' : ''; ?>" data-subscription-id="<?php echo \esc_attr( $subscription->get_id() ); ?>" data-member-limit="<?php echo \esc_attr( null === $seat_limit ? '' : (string) $seat_limit ); ?>" data-spots-offset="<?php echo \esc_attr( (string) $spots_offset ); ?>">
 			<input type="hidden" name="<?php echo \esc_attr( self::GROUP_SUBSCRIPTION_META_PREFIX . 'enabled_baseline' ); ?>" value="<?php echo \esc_attr( \wc_bool_to_string( $settings['enabled'] ) ); ?>" />
 			<input type="hidden" name="<?php echo \esc_attr( self::GROUP_SUBSCRIPTION_META_PREFIX . 'limit_baseline' ); ?>" value="<?php echo \esc_attr( (int) $settings['limit'] ); ?>" />
 			<input type="hidden" name="<?php echo \esc_attr( self::GROUP_SUBSCRIPTION_META_PREFIX . 'name_baseline' ); ?>" value="<?php echo \esc_attr( $settings['name'] ); ?>" />
@@ -583,10 +604,23 @@ class Group_Subscription_Settings {
 					?>
 				</ul>
 			</div>
-			<div class="newspack-group-subscription__limit-notice notice notice-warning inline" role="status">
-				<p><?php \esc_html_e( 'This group subscription has reached its member limit. Remove a member, or raise the member limit above and save, to add more.', 'newspack-plugin' ); ?></p>
+			<?php
+			// The live region is always present and never display:none — an element hidden that way
+			// is out of the accessibility tree, so it would not announce when the JS reveals it.
+			// The notice itself is added and removed inside it (server-side here, by the admin JS on
+			// live transitions), which is the content change screen readers actually announce.
+			?>
+			<div class="newspack-group-subscription__limit-notice show_if_newspack_group_subscription_enabled" role="status">
+				<?php if ( $is_at_limit ) : ?>
+					<div class="notice notice-warning inline"><p><?php echo \esc_html( self::get_limit_notice_text() ); ?></p></div>
+				<?php endif; ?>
 			</div>
-			<div class="newspack-group-subscription__add-member show_if_newspack_group_subscription_enabled form-row">
+			<?php
+			// The add-member form is hidden with the `hidden` attribute rather than by a stylesheet
+			// rule, so the initial state is right even if the CSS fails to load; the JS toggles the
+			// same attribute on add/remove/invite/cancel. update_members() remains the authority.
+			?>
+			<div class="newspack-group-subscription__add-member show_if_newspack_group_subscription_enabled form-row"<?php echo $is_at_limit ? ' hidden' : ''; ?>>
 				<h3><?php \esc_html_e( 'Add new group members', 'newspack-plugin' ); ?></h3>
 				<select id="_newspack_group_subscription_member_ids" name="_newspack_group_subscription_member_ids[]">
 					<option value="">

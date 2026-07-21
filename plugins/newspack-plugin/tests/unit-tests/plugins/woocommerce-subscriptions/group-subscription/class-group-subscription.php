@@ -37,6 +37,10 @@ class Test_Group_Subscription extends WP_UnitTestCase {
 	 */
 	public function set_up() {
 		parent::set_up();
+		// The metabox render is gated behind the Access Control feature flag.
+		if ( ! defined( 'NEWSPACK_CONTENT_GATES' ) ) {
+			define( 'NEWSPACK_CONTENT_GATES', true );
+		}
 		global $subscriptions_database, $products_database;
 		$subscriptions_database = [];
 		$products_database      = [];
@@ -130,6 +134,9 @@ class Test_Group_Subscription extends WP_UnitTestCase {
 			'expiration' => $expired ? time() - HOUR_IN_SECONDS : time() + HOUR_IN_SECONDS,
 		];
 		$subscription->update_meta_data( Group_Subscription_Invite::META, $invites );
+		// Persist, so a test that re-fetches the subscription by ID still sees the invite rather
+		// than relying on the same in-memory instance being threaded through every call.
+		$subscription->save();
 	}
 
 	/**
@@ -412,5 +419,82 @@ class Test_Group_Subscription extends WP_UnitTestCase {
 
 		$added = Group_Subscription::update_members( $sub, [ $this->create_reader_user() ] );
 		$this->assertFalse( is_wp_error( $added ), 'The first member of an otherwise-empty group is not rejected as over limit.' );
+	}
+
+	/**
+	 * An invite whose stored address differs in case from the member's account email is still
+	 * cancelled by a direct add. sanitize_email() preserves case and wp_insert_user() does not
+	 * lowercase user_email, so the two can legitimately differ -- and a case-sensitive match would
+	 * leave a phantom invite consuming a seat for a reader who is already a member.
+	 */
+	public function test_update_members_cancels_a_case_mismatched_invite() {
+		$owner_id = $this->create_reader_user();
+		$invitee  = $this->create_reader_user();
+		$sub      = $this->create_group_subscription( $owner_id, 5 );
+		$this->add_invite( strtoupper( get_userdata( $invitee )->user_email ), $sub );
+
+		$result = Group_Subscription::update_members( $sub, [ $invitee ] );
+		$this->assertNotWPError( $result, 'Adding an invited user directly should succeed.' );
+		$this->assertEmpty(
+			Group_Subscription_Invite::get_invites( $sub ),
+			'A case-mismatched invite must be cancelled too, or it keeps consuming a seat.'
+		);
+		$this->assertCount( 1, $result['invites_cancelled'], 'The cancelled invite should be reported back to the caller.' );
+	}
+
+	/**
+	 * The admin metabox must gate on the same threshold the server enforces, or an admin is shown an
+	 * add form whose submission update_members() then rejects with a 409 -- the bug this whole
+	 * feature exists to remove. Rendering it is also the only coverage of the callback itself.
+	 *
+	 * @param int    $limit           The configured (owner-inclusive) member limit.
+	 * @param int    $members_to_seed How many members to seed besides the owner.
+	 * @param bool   $expect_at_limit Whether the metabox should render as at-limit.
+	 * @param string $expected_limit  The expected data-member-limit attribute value.
+	 *
+	 * @dataProvider metabox_limit_states
+	 */
+	public function test_metabox_gates_on_the_member_seat_limit( $limit, $members_to_seed, $expect_at_limit, $expected_limit ) {
+		$sub = $this->create_group_subscription( $this->create_reader_user(), $limit );
+		for ( $i = 0; $i < $members_to_seed; $i++ ) {
+			$this->add_member( $this->create_reader_user(), $sub );
+		}
+
+		ob_start();
+		Group_Subscription_Settings::add_group_subscription_options( $sub );
+		$markup = ob_get_clean();
+
+		$this->assertNotEmpty( $markup, 'The metabox callback must render (a fatal here takes down the whole edit screen).' );
+		$this->assertStringContainsString(
+			'data-member-limit="' . $expected_limit . '"',
+			$markup,
+			'data-member-limit carries the member-seat limit, which is what the admin JS re-tallies against.'
+		);
+		$this->assertSame(
+			$expect_at_limit,
+			false !== strpos( $markup, 'newspack-group-subscription__container is-at-limit' ),
+			'The at-limit state must match what update_members() would do with the same group.'
+		);
+		// The add form is gated by the `hidden` attribute rather than by a stylesheet rule, so the
+		// initial state holds even if the CSS never loads.
+		$this->assertSame(
+			$expect_at_limit,
+			false !== strpos( $markup, 'newspack-group-subscription__add-member show_if_newspack_group_subscription_enabled form-row" hidden' ),
+			'The add-member form is hidden server-side exactly when the group is at its limit.'
+		);
+	}
+
+	/**
+	 * Metabox limit states: a limit of 2 leaves one member seat, so one member fills the group.
+	 *
+	 * @return array[] limit, members to seed, expected at-limit, expected data-member-limit.
+	 */
+	public function metabox_limit_states() {
+		return [
+			'empty two-seat group'  => [ 2, 0, false, '1' ],
+			'full two-seat group'   => [ 2, 1, true, '1' ],
+			'roomy five-seat group' => [ 5, 1, false, '4' ],
+			'unlimited group'       => [ 0, 3, false, '' ],
+		];
 	}
 }

@@ -9,23 +9,14 @@
 		display: none;
 	}
 	&.enabled {
-		.show_if_newspack_group_subscription_enabled {
+		// :not([hidden]) so the `hidden` attribute — which is what actually gates the add-member
+		// form at capacity, server-side and from the JS — isn't overridden by this reveal rule.
+		.show_if_newspack_group_subscription_enabled:not([hidden]) {
 			display: block;
 		}
 	}
-	// The limit warning is hidden until the group is enabled and at capacity; when it shows,
-	// the add-member form is hidden so an admin can't attempt an add the server would reject.
-	.newspack-group-subscription__limit-notice {
-		display: none;
+	.newspack-group-subscription__limit-notice .notice {
 		margin: 0 0 16px;
-	}
-	&.enabled .newspack-group-subscription__container.is-at-limit {
-		.newspack-group-subscription__limit-notice {
-			display: block;
-		}
-		.newspack-group-subscription__add-member {
-			display: none;
-		}
 	}
 	h3 {
 		font-size: 14px;
@@ -46,6 +37,11 @@
 		.newspack-group-subscription__add-member {
 			flex: 1;
 			min-width: 250px;
+		}
+		// The notice spans the metabox rather than being wedged in as a narrow column
+		// beside its flex siblings.
+		.newspack-group-subscription__limit-notice {
+			flex: 0 0 100%;
 		}
 	}
 	.newspack-group-subscription__members-list {

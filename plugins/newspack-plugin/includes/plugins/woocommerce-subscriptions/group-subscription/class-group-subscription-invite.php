@@ -408,10 +408,12 @@ class Group_Subscription_Invite {
 			return new \WP_Error( 'newspack_group_subscription_invite_existing_user', __( 'User is already a member of this group subscription.', 'newspack-plugin' ) );
 		}
 
-		// Delete any invites for the given email address. There should only be one invitation per email address.
+		// Delete any invites for the given email address. There should only be one invitation per
+		// email address -- matched case-insensitively, since a stored invite and a re-invite of the
+		// same address can differ in case (sanitize_email() preserves it).
 		$all_invites = self::get_invites( $subscription );
 		foreach ( $all_invites as $key => $invite ) {
-			if ( $invite['email'] === $email ) {
+			if ( strtolower( $invite['email'] ) === strtolower( $email ) ) {
 				unset( $all_invites[ $key ] );
 			}
 		}
@@ -518,15 +520,15 @@ class Group_Subscription_Invite {
 		if ( ! $invite || $invite['email'] !== $email ) {
 			// No need to display an error if the invite is already fulfilled: just give a success
 			// message. This covers a direct member add cancelling the invite before it is accepted.
-			// Check both the current user and the invited-email user (a direct add cancels the invite
-			// for the email, so the invitee may already be a member without being the current user).
-			$invited_user    = get_user_by( 'email', $email );
-			$invited_user_id = $invited_user ? $invited_user->ID : 0;
+			// Only the acting user is checked, deliberately: every caller binds $email to the current
+			// session (process_invite_request() rejects a mismatch when logged in, and creates and
+			// logs in the account for $email otherwise), so the invitee is always the current user.
+			// Checking the $_GET-supplied $email's account instead would turn this into a "does this
+			// address belong to this group?" oracle for any future caller that skips that binding.
 			$current_user_id = get_current_user_id();
 			if (
 				Group_Subscription::user_is_manager( $current_user_id, $subscription )
 				|| Group_Subscription::user_is_member( $current_user_id, $subscription )
-				|| ( $invited_user_id && Group_Subscription::user_is_member( $invited_user_id, $subscription ) )
 			) {
 				return true;
 			}
@@ -915,16 +917,42 @@ class Group_Subscription_Invite {
 	 * @return true|\WP_Error Whether the invite was cancelled, or a WP_Error if the invite cannot be cancelled.
 	 */
 	public static function cancel_invite( $subscription, $email ) {
+		return self::cancel_invites( $subscription, [ $email ] );
+	}
+
+	/**
+	 * Cancel every pending invite for a given subscription addressed to any of the given emails.
+	 *
+	 * Batched so a caller cancelling several invites at once (e.g. a bulk member add) performs a
+	 * single subscription write, rather than one save -- and one `woocommerce_update_subscription`
+	 * cascade -- per invite.
+	 *
+	 * @param \WC_Subscription|int $subscription The subscription object or ID.
+	 * @param string[]             $emails The email addresses whose invites should be cancelled.
+	 *
+	 * @return true|\WP_Error True on success, or a WP_Error if the invites cannot be cancelled.
+	 */
+	public static function cancel_invites( $subscription, $emails ) {
 		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $subscription );
 		if ( ! $subscription || ! Group_Subscription::is_group_subscription( $subscription ) ) {
 			return new \WP_Error( 'newspack_group_subscription_invite_invalid_subscription', __( 'Invalid subscription.', 'newspack-plugin' ) );
 		}
-		if ( ! $email ) {
+		// Invites are stored as sanitize_email() output, which preserves case, and wp_insert_user()
+		// does not lowercase user_email -- so a stored invite and the matching account can legitimately
+		// differ in case. Match case-insensitively, as email addresses are in practice, otherwise a
+		// mixed-case invite survives the cancellation and keeps consuming a seat.
+		$needles = [];
+		foreach ( (array) $emails as $email ) {
+			if ( $email ) {
+				$needles[] = strtolower( $email );
+			}
+		}
+		if ( empty( $needles ) ) {
 			return new \WP_Error( 'newspack_group_subscription_invite_invalid_email', __( 'Invalid email address.', 'newspack-plugin' ) );
 		}
 		$all_invites = self::get_invites( $subscription );
 		foreach ( $all_invites as $key => $invite ) {
-			if ( $invite['email'] === $email ) {
+			if ( in_array( strtolower( $invite['email'] ), $needles, true ) ) {
 				unset( $all_invites[ $key ] );
 			}
 		}

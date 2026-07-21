@@ -566,7 +566,8 @@ class Group_Subscription {
 	 * @param int[]                $members_to_add Group member user IDs to add the subscription.
 	 * @param int[]                $members_to_remove Group member user IDs to remove from the subscription.
 	 *
-	 * @return array|\WP_Error Added/removed results.
+	 * @return array|\WP_Error Added/removed results, plus `invites_cancelled`: the emails whose
+	 *                         pending invites the additions fulfilled and cancelled.
 	 */
 	public static function update_members( $subscription, $members_to_add, $members_to_remove = [] ) {
 		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $subscription );
@@ -607,6 +608,11 @@ class Group_Subscription {
 		// JS and admin-post handlers split them), so a combined over-limit add can't strand a removal.
 		// The threshold is the owner-inclusive member-seat limit, so update_members stays in step with
 		// the invite path and get_member_capacity (the owner occupies one of the limited seats).
+		// The count and the writes below are not atomic: nothing locks between reading the members
+		// and invites here and adding the member meta, so two adds racing for the last seat (two
+		// admins, or an admin add racing an invite acceptance) can both pass this check and both
+		// land, leaving the group one seat over. That has always been true of this code path; the
+		// exposure is admin-only and low-concurrency, so it is accepted rather than locked against.
 		$seat_limit = self::get_member_seat_limit( $subscription );
 		if ( ! empty( $members_to_add ) && null !== $seat_limit ) {
 			// Pending (non-expired) invites reserve a spot, so count them alongside existing members --
@@ -636,13 +642,15 @@ class Group_Subscription {
 		// what the "cancelled below" note in the limit check above refers to, and it mirrors the invite
 		// acceptance path (which cancels on add). Without it the new member and their now-stale invite
 		// would both linger, and both count toward the limit. Collect the pending emails once so the add
-		// loop can cancel only genuine matches (cancel_invite() saves unconditionally).
+		// loop can flag only genuine matches, then cancel them in a single write after the loop --
+		// cancel_invites() persists the subscription, which is too heavy to repeat per member.
 		$pending_invite_emails = [];
 		foreach ( Group_Subscription_Invite::get_invites( $subscription, false ) as $invite ) {
 			if ( ! empty( $invite['email'] ) ) {
 				$pending_invite_emails[] = strtolower( $invite['email'] );
 			}
 		}
+		$invites_to_cancel = [];
 
 		// Add new members.
 		foreach ( $members_to_add as $member_id ) {
@@ -663,14 +671,39 @@ class Group_Subscription {
 					'url'   => \get_edit_user_link( $member_id ),
 				];
 				if ( in_array( strtolower( $member_email ), $pending_invite_emails, true ) ) {
-					Group_Subscription_Invite::cancel_invite( $subscription, $member_email );
+					$invites_to_cancel[] = $member_email;
 				}
 			}
 		}
 
+		if ( ! empty( $invites_to_cancel ) ) {
+			$cancelled = Group_Subscription_Invite::cancel_invites( $subscription, $invites_to_cancel );
+			if ( is_wp_error( $cancelled ) ) {
+				// Not fatal -- the members were added -- but it leaves stale invites still consuming
+				// seats, so surface it rather than swallowing it. is_group_subscription() returns
+				// false in some My Account contexts, which is the likeliest cause.
+				\do_action(
+					'newspack_log',
+					'newspack_group_subscription_invite_cancel_failed',
+					$cancelled->get_error_message(),
+					[
+						'type' => 'error',
+						'data' => [
+							'subscription_id' => $subscription->get_id(),
+							'emails'          => $invites_to_cancel,
+						],
+					]
+				);
+				$invites_to_cancel = [];
+			}
+		}
+
 		return [
-			'members_added'   => $members_added,
-			'members_removed' => $members_removed,
+			'members_added'     => $members_added,
+			'members_removed'   => $members_removed,
+			// The emails whose pending invites this add fulfilled and cancelled, so callers (the
+			// admin JS) can drop the now-stale invite rows instead of leaving them counting a seat.
+			'invites_cancelled' => $invites_to_cancel,
 		];
 	}
 

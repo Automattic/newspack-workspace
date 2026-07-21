@@ -58,21 +58,44 @@ import './admin.scss';
 		} );
 	}
 
-	// Toggle the at-limit state on a container: when the spots in use reach the member limit,
-	// the CSS hides the add-member form and reveals the "limit reached" notice. Spots in use =
-	// the spot-marked rendered rows (reader-members + pending invites) plus data-spots-offset,
-	// which folds in any members the server counts but that aren't rendered as rows (a non-reader
-	// member, or a manager who also carries member meta) so this matches the server-side count.
-	// A limit of 0 is unlimited.
+	// Toggle the at-limit state on a container: when the spots in use reach the member-seat limit,
+	// the add-member form is hidden (via the `hidden` attribute, mirroring the server-side render)
+	// and the "limit reached" notice is written into the live region. Spots in use = the
+	// spot-marked rendered rows (reader-members + pending invites) plus data-spots-offset, which
+	// folds in any members the server counts but that aren't rendered as rows (a non-reader member,
+	// or a manager who also carries member meta) so this matches the server-side count. An empty
+	// data-member-limit means unlimited.
 	function refreshLimitState( $container ) {
-		const limit = parseInt( $container.attr( 'data-member-limit' ), 10 );
-		if ( ! limit || limit < 1 ) {
-			$container.removeClass( 'is-at-limit' );
-			return;
+		const rawLimit = $container.attr( 'data-member-limit' );
+		const limit = parseInt( rawLimit, 10 );
+		const $notice = $container.find( '.newspack-group-subscription__limit-notice' );
+		const $addMember = $container.find( '.newspack-group-subscription__add-member' );
+		let isAtLimit = false;
+		if ( rawLimit !== '' && ! isNaN( limit ) ) {
+			const offset = parseInt( $container.attr( 'data-spots-offset' ), 10 ) || 0;
+			const used = $container.find( '.newspack-group-subscription__members-list li[data-consumes-spot]' ).length + offset;
+			isAtLimit = used >= limit;
 		}
-		const offset = parseInt( $container.attr( 'data-spots-offset' ), 10 ) || 0;
-		const used = $container.find( '.newspack-group-subscription__members-list li[data-consumes-spot]' ).length + offset;
-		$container.toggleClass( 'is-at-limit', used >= limit );
+		$container.toggleClass( 'is-at-limit', isAtLimit );
+		$addMember.attr( 'hidden', isAtLimit ? 'hidden' : null );
+		// Write and clear the sentence rather than toggling the visibility of static text: the live
+		// region has to stay in the accessibility tree for the change to be announced at all.
+		if ( isAtLimit && ! $notice.children().length ) {
+			$notice.append( `<div class="notice notice-warning inline"><p></p></div>` );
+			$notice.find( 'p' ).text( newspackGroupSubscriptions.limit_notice );
+		} else if ( ! isAtLimit ) {
+			$notice.empty();
+		}
+	}
+
+	// Find rendered invite rows by email. Matching is done on the attribute value rather than by
+	// interpolating the address into a selector string, and case-insensitively to match how the
+	// server cancels invites (a stored invite and the account's email can differ in case).
+	function findInviteRows( $membersList, email ) {
+		const needle = String( email ).toLowerCase();
+		return $membersList.find( 'li[data-email]' ).filter( function () {
+			return $( this ).attr( 'data-email' ).toLowerCase() === needle;
+		} );
 	}
 
 	// Remove any lingering "invitation sent" confirmation from the members section. It's shown by
@@ -121,7 +144,7 @@ import './admin.scss';
 					const $membersList = $container.find( '.newspack-group-subscription__members-list' );
 					const $membersCount = $container.find( '.newspack-group-subscription__members-count' );
 					$membersList.append(
-						`<li data-consumes-spot="1"><a class="newspack-group-subscription__member-user-link" href="#"></a><a href="#" class="newspack-group-subscription__remove-member">&#215; <span class="screen-reader-text">Remove</span></a></li>`
+						`<li data-consumes-spot="1"><a class="newspack-group-subscription__member-user-link" href="#"></a><a href="#" class="newspack-group-subscription__remove-member">&#215; <span class="screen-reader-text"></span></a></li>`
 					);
 					const $added = $membersList.find( 'li' ).last();
 					$added
@@ -130,6 +153,11 @@ import './admin.scss';
 						.attr( 'href', data.members_added[ memberToAdd ].url );
 					$added.find( ' .newspack-group-subscription__remove-member' ).data( 'user-id', memberToAdd );
 					$added.find( '.screen-reader-text' ).text( newspackGroupSubscriptions.remove_label );
+					// The server cancels any pending invite the add fulfils, so drop those rows too --
+					// otherwise they keep counting toward the tally and the limit until a reload.
+					( data.invites_cancelled || [] ).forEach( email => {
+						findInviteRows( $membersList, email ).remove();
+					} );
 					$membersCount.text( $membersList.find( 'li' ).length );
 					refreshLimitState( $container );
 				}
@@ -225,12 +253,15 @@ import './admin.scss';
 				$email.val( '' );
 				const $membersList = $container.find( '.newspack-group-subscription__members-list' );
 				const $membersCount = $container.find( '.newspack-group-subscription__members-count' );
-				$membersList.find( `li[data-email="${ data.email }"]` ).remove();
+				findInviteRows( $membersList, data.email ).remove();
+				// The row is built empty and then populated with .text()/.attr(), so the address is
+				// never interpolated into markup -- the escaping is local, not reliant on the REST
+				// layer's sanitize_email().
 				$membersList.append(
-					`<li data-email="${ data.email }" data-consumes-spot="1"><span class="newspack-group-subscription__pending-invite"></span> <span class="newspack-group-subscription__pending-invite-label"></span><a href="#" class="newspack-group-subscription__cancel-invite">&#215; <span class="screen-reader-text">Cancel</span></a></li>`
+					`<li data-consumes-spot="1"><span class="newspack-group-subscription__pending-invite"></span> <span class="newspack-group-subscription__pending-invite-label"></span><a href="#" class="newspack-group-subscription__cancel-invite">&#215; <span class="screen-reader-text"></span></a></li>`
 				);
 				const $added = $membersList.find( 'li' ).last();
-				$added.data( 'email', data.email );
+				$added.attr( 'data-email', data.email );
 				$added.find( '.newspack-group-subscription__pending-invite' ).text( data.email );
 				$added.find( '.newspack-group-subscription__pending-invite-label' ).text( newspackGroupSubscriptions.pending_label );
 				$added.find( '.screen-reader-text' ).text( newspackGroupSubscriptions.cancel_label );
@@ -278,7 +309,7 @@ import './admin.scss';
 			.then( response => response.json() )
 			.then( data => {
 				if ( data === false || ( data && data.code && data.message && data.message !== 'abort' ) ) {
-					throw new Error( data.message || 'Failed to cancel invite' );
+					throw new Error( data.message || newspackGroupSubscriptions.cancel_error_message );
 				}
 				const $membersList = $container.find( '.newspack-group-subscription__members-list' );
 				const $membersCount = $container.find( '.newspack-group-subscription__members-count' );
