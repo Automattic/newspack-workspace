@@ -30,13 +30,14 @@ class Test_RAS_Contact_Sync_Options extends WP_UnitTestCase {
 	/**
 	 * Invoke the private static parse_sync_options() via reflection.
 	 *
-	 * @param array $assoc_args Associative CLI args.
+	 * @param array       $assoc_args     Associative CLI args.
+	 * @param string|null $integration_id Optional integration scope.
 	 * @return array|\WP_Error
 	 */
-	private function parse( array $assoc_args ) {
+	private function parse( array $assoc_args, $integration_id = null ) {
 		$parse_method = new \ReflectionMethod( RAS_Contact_Sync::class, 'parse_sync_options' );
 		$parse_method->setAccessible( true );
-		return $parse_method->invoke( null, $assoc_args );
+		return $parse_method->invoke( null, $assoc_args, $integration_id );
 	}
 
 	public function test_defaults_when_no_options_passed() {
@@ -126,5 +127,32 @@ class Test_RAS_Contact_Sync_Options extends WP_UnitTestCase {
 
 		$this->assertInstanceOf( \WP_Error::class, $result );
 		$this->assertSame( 'newspack_esp_sync_fields_not_enabled', $result->get_error_code() );
+	}
+
+	/**
+	 * With --integration, the --fields pre-flight must validate against the
+	 * target integration only — another active integration missing the field
+	 * must not fail the run (NPPD-2076).
+	 */
+	public function test_fields_validation_scopes_to_target_integration() {
+		Failing_Sample_Integration::reset();
+		$with_field = new Failing_Sample_Integration( 'scoped_ok', 'Scoped OK' );
+		$without    = new Failing_Sample_Integration( 'scoped_missing', 'Scoped Missing' );
+		Integrations::register( $with_field );
+		Integrations::register( $without );
+		Integrations::enable( 'scoped_ok' );
+		Integrations::enable( 'scoped_missing' );
+		$with_field->update_enabled_outgoing_fields( [ 'Content Access' ] );
+		$without->update_enabled_outgoing_fields( [ 'Account' ] );
+
+		$unscoped = $this->parse( [ 'fields' => 'Content Access' ] );
+		$scoped   = $this->parse( [ 'fields' => 'Content Access' ], 'scoped_ok' );
+
+		Integrations::disable( 'scoped_ok' );
+		Integrations::disable( 'scoped_missing' );
+
+		$this->assertInstanceOf( \WP_Error::class, $unscoped, 'Unscoped: scoped_missing lacks the field, so pre-flight fails.' );
+		$this->assertIsArray( $scoped, 'Scoped to scoped_ok: pre-flight passes.' );
+		$this->assertSame( [ 'Content Access' ], $scoped['fields'] );
 	}
 }

@@ -482,11 +482,14 @@ class RAS_Contact_Sync {
 	 * disabled fields are silently dropped downstream, so a run would otherwise
 	 * "succeed" while pushing empty metadata.
 	 *
-	 * @param array $assoc_args Associative CLI args.
+	 * @param array       $assoc_args     Associative CLI args.
+	 * @param string|null $integration_id Optional. Restrict the enabled-outgoing-fields
+	 *                                    validation to this integration (set when
+	 *                                    `--integration` scopes the run).
 	 *
 	 * @return array|\WP_Error `[ 'skip_lists' => bool, 'fields' => string[]|null ]` or WP_Error.
 	 */
-	private static function parse_sync_options( $assoc_args ): array|\WP_Error {
+	private static function parse_sync_options( $assoc_args, $integration_id = null ): array|\WP_Error {
 		$options = [
 			'skip_lists' => ! empty( $assoc_args['skip-lists'] ),
 			'fields'     => null,
@@ -526,6 +529,9 @@ class RAS_Contact_Sync {
 		// that "succeeds" while pushing empty metadata to one integration is worse
 		// than a hard error the operator can resolve by enabling the field.
 		$integrations = Integrations::get_active_configured_integrations();
+		if ( ! empty( $integration_id ) ) {
+			$integrations = array_intersect_key( $integrations, [ $integration_id => true ] );
+		}
 		foreach ( $integrations as $integration_id => $integration ) {
 			$enabled = $integration->get_enabled_outgoing_fields();
 			$missing = array_values( array_diff( $labels, $enabled ) );
@@ -543,5 +549,70 @@ class RAS_Contact_Sync {
 		}
 
 		return $options;
+	}
+
+	/**
+	 * Parse and validate the `--direction` / `--integration` backfill options (pre-flight).
+	 *
+	 * Runs even under `--dry-run` so misconfiguration surfaces before any batch.
+	 * Push-only flags are rejected outright when the direction includes pull —
+	 * silently applying them to just the push leg would be surprising; operators
+	 * run a separate `--direction=push` command instead.
+	 *
+	 * @param array $assoc_args Associative CLI args.
+	 *
+	 * @return array|\WP_Error `[ 'direction' => 'push'|'pull'|'both', 'integration_id' => string|null ]` or WP_Error.
+	 */
+	private static function parse_backfill_options( $assoc_args ): array|\WP_Error {
+		$direction = isset( $assoc_args['direction'] ) ? (string) $assoc_args['direction'] : 'push';
+		if ( ! in_array( $direction, [ 'push', 'pull', 'both' ], true ) ) {
+			return new \WP_Error(
+				'newspack_backfill_invalid_direction',
+				sprintf(
+					// Translators: %s is the value passed to --direction.
+					__( 'Invalid --direction "%s". Supported values: push, pull, both.', 'newspack-plugin' ),
+					$direction
+				)
+			);
+		}
+
+		$integration_id = isset( $assoc_args['integration'] ) ? (string) $assoc_args['integration'] : '';
+		if ( '' !== $integration_id ) {
+			$active = Integrations::get_active_configured_integrations();
+			if ( ! isset( $active[ $integration_id ] ) ) {
+				$available = implode( ', ', array_keys( $active ) );
+				return new \WP_Error(
+					'newspack_backfill_invalid_integration',
+					sprintf(
+						// Translators: 1: the integration id passed to --integration, 2: comma-separated list of valid ids.
+						__( 'Integration "%1$s" is not active and configured. Active configured integrations: %2$s.', 'newspack-plugin' ),
+						$integration_id,
+						$available ? $available : __( '(none)', 'newspack-plugin' )
+					)
+				);
+			}
+		}
+
+		if ( 'push' !== $direction ) {
+			$push_only_flags = [ 'subscription-ids', 'order-ids', 'migrated-subscriptions', 'skip-lists', 'fields' ];
+			foreach ( $push_only_flags as $flag ) {
+				if ( ! empty( $assoc_args[ $flag ] ) ) {
+					return new \WP_Error(
+						'newspack_backfill_push_only_flag',
+						sprintf(
+							// Translators: 1: the push-only flag name, 2: the requested direction.
+							__( '--%1$s is a push-only option and cannot be combined with --direction=%2$s. Run a separate --direction=push command for it.', 'newspack-plugin' ),
+							$flag,
+							$direction
+						)
+					);
+				}
+			}
+		}
+
+		return [
+			'direction'      => $direction,
+			'integration_id' => '' !== $integration_id ? $integration_id : null,
+		];
 	}
 }
