@@ -167,6 +167,27 @@ class Test_Form_Capture extends WP_UnitTestCase {
 	}
 
 	/**
+	 * An existing-reader capture registration schedules the contact sync
+	 * asynchronously (via Contact_Sync::schedule_sync()'s wp_schedule_single_event())
+	 * rather than syncing synchronously on the request thread.
+	 */
+	public function test_existing_reader_sync_is_scheduled_not_synchronous() {
+		$integration = Integrations::get_integration( Form_Capture::ID );
+		$user        = self::factory()->user->create_and_get( [ 'role' => 'subscriber' ] );
+		$method      = [ 'registration_method' => Form_Capture::get_registration_method() ];
+		$context     = 'Form Capture registration (existing reader)';
+
+		$integration->handle_registered_reader( $user->user_email, true, false, $user, $method );
+
+		$this->assertNotFalse(
+			wp_next_scheduled( 'newspack_scheduled_esp_sync', [ $user->ID, $context ] ),
+			'An async ESP sync must be scheduled for an existing reader capture with no lists.'
+		);
+
+		wp_clear_scheduled_hook( 'newspack_scheduled_esp_sync', [ $user->ID, $context ] );
+	}
+
+	/**
 	 * End-to-end: the registration endpoint accepts this integration's key and
 	 * produces a reader whose metadata carries the configured lists.
 	 *

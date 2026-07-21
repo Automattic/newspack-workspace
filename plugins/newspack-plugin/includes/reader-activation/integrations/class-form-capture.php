@@ -150,6 +150,18 @@ class Form_Capture extends Integration {
 	}
 
 	/**
+	 * Whether registration metadata originates from this integration's
+	 * frontend registration flow.
+	 *
+	 * @param array $metadata Registration metadata.
+	 *
+	 * @return bool Whether the registration is a form capture.
+	 */
+	private function is_capture_registration( $metadata ) {
+		return ( $metadata['registration_method'] ?? '' ) === self::get_registration_method();
+	}
+
+	/**
 	 * Inject configured newsletter lists into registration metadata for
 	 * registrations originating from this integration.
 	 *
@@ -163,7 +175,7 @@ class Form_Capture extends Integration {
 	 * @return array Metadata.
 	 */
 	public function filter_registration_metadata( $metadata, $user_id, $existing_user ) {
-		if ( ( $metadata['registration_method'] ?? '' ) !== self::get_registration_method() ) {
+		if ( ! $this->is_capture_registration( $metadata ) ) {
 			return $metadata;
 		}
 		$lists = $this->get_lists();
@@ -185,7 +197,7 @@ class Form_Capture extends Integration {
 	 * @return bool Whether to send the magic link.
 	 */
 	public function filter_send_magic_link( $should_send, $existing_user, $metadata ) {
-		if ( ( $metadata['registration_method'] ?? '' ) === self::get_registration_method() ) {
+		if ( $this->is_capture_registration( $metadata ) ) {
 			return false;
 		}
 		return $should_send;
@@ -204,7 +216,7 @@ class Form_Capture extends Integration {
 	 * @return bool Whether to sync the contact.
 	 */
 	public function should_sync_existing_reader( $existing_user, $metadata ) {
-		if ( ( $metadata['registration_method'] ?? '' ) !== self::get_registration_method() ) {
+		if ( ! $this->is_capture_registration( $metadata ) ) {
 			return false;
 		}
 		if ( ! $existing_user ) {
@@ -218,7 +230,8 @@ class Form_Capture extends Integration {
 
 	/**
 	 * After a capture registration, sync existing readers to the ESP so the
-	 * "upgrade a known reader" path reaches the contact record.
+	 * "upgrade a known reader" path reaches the contact record. Schedules a
+	 * contact sync so the ESP I/O stays off the request thread.
 	 *
 	 * @param string         $email         Email address.
 	 * @param bool           $authenticate  Whether the registration authenticates the session.
@@ -230,6 +243,6 @@ class Form_Capture extends Integration {
 		if ( ! $this->should_sync_existing_reader( $existing_user, $metadata ) ) {
 			return;
 		}
-		Contact_Sync::sync_contact( $existing_user->ID, 'Form Capture registration (existing reader)' );
+		Contact_Sync::schedule_sync( $existing_user->ID, 'Form Capture registration (existing reader)', 0 );
 	}
 }
