@@ -111,4 +111,36 @@ class AiCopyAssistantSettingsTest extends WP_UnitTestCase {
 		$created = Newspack_Popups_Api::api_create_contextual_prompt( $request );
 		$this->assertNotWPError( $created );
 	}
+
+	/**
+	 * Opt-in gating is symmetric: the profile-save and scoped-prompt-read endpoints
+	 * are inert before opt-in too, not just the create endpoint. The feature must
+	 * read and write nothing until an administrator opts in.
+	 */
+	public function test_profile_and_read_endpoints_blocked_when_disabled() {
+		$post_id = self::factory()->post->create( [ 'post_type' => 'post' ] );
+
+		$profile_request = new WP_REST_Request( 'POST', '/newspack-popups/v1/contextual-prompt/profile' );
+		$profile_request->set_param( 'fields', [ 'newspack_contextual_prompts_coverage_area' => 'Somewhere' ] );
+		$blocked_profile = Newspack_Popups_Api::api_save_contextual_prompt_profile( $profile_request );
+		$this->assertWPError( $blocked_profile );
+		$this->assertSame( 'newspack_contextual_prompts_disabled', $blocked_profile->get_error_code() );
+		$this->assertSame(
+			'',
+			get_option( 'newspack_contextual_prompts_coverage_area', '' ),
+			'A blocked profile save must not write.'
+		);
+
+		$get_request = new WP_REST_Request( 'GET', '/newspack-popups/v1/contextual-prompt' );
+		$get_request->set_param( 'post_id', $post_id );
+		$blocked_get = Newspack_Popups_Api::api_get_scoped_prompt( $get_request );
+		$this->assertWPError( $blocked_get );
+		$this->assertSame( 'newspack_contextual_prompts_disabled', $blocked_get->get_error_code() );
+
+		// Both work once opted in.
+		update_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION, true );
+		$this->assertNotWPError( Newspack_Popups_Api::api_save_contextual_prompt_profile( $profile_request ) );
+		$this->assertSame( 'Somewhere', get_option( 'newspack_contextual_prompts_coverage_area', '' ) );
+		$this->assertNotWPError( Newspack_Popups_Api::api_get_scoped_prompt( $get_request ) );
+	}
 }

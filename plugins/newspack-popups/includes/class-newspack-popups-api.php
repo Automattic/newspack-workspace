@@ -256,8 +256,33 @@ final class Newspack_Popups_API {
 	 * @return WP_REST_Response
 	 */
 	public static function api_save_contextual_prompt_profile( $request ) {
+		$enabled = self::require_contextual_prompts_enabled();
+		if ( is_wp_error( $enabled ) ) {
+			return $enabled;
+		}
+
 		Newspack_Popups_Settings::save_ai_copy_assistant_fields( (array) $request['fields'] );
 		return rest_ensure_response( self::contextual_prompt_status() );
+	}
+
+	/**
+	 * Guard for endpoints that must stay inert until an administrator opts the site
+	 * into AI use. Some newsrooms are contractually barred from using AI, so the
+	 * feature reads and writes nothing before opt-in — see NPPD-2095. The opt-in
+	 * status/enable endpoints are deliberately exempt; they are how opt-in happens.
+	 *
+	 * @return true|\WP_Error True when enabled, WP_Error otherwise.
+	 */
+	private static function require_contextual_prompts_enabled() {
+		if ( Newspack_Popups_Settings::is_ai_copy_assistant_enabled() ) {
+			return true;
+		}
+
+		return new \WP_Error(
+			'newspack_contextual_prompts_disabled',
+			esc_html__( 'Contextual Prompts is not enabled for this site.', 'newspack-popups' ),
+			[ 'status' => 403 ]
+		);
 	}
 
 	/**
@@ -278,6 +303,11 @@ final class Newspack_Popups_API {
 	 * @return WP_REST_Response
 	 */
 	public static function api_get_scoped_prompt( $request ) {
+		$enabled = self::require_contextual_prompts_enabled();
+		if ( is_wp_error( $enabled ) ) {
+			return $enabled;
+		}
+
 		return rest_ensure_response(
 			[
 				'prompt' => Newspack_Popups_Post_Scope::get_scoped_prompt_for_post( $request['post_id'] ),
@@ -293,12 +323,9 @@ final class Newspack_Popups_API {
 	 * @return WP_REST_Response|WP_Error
 	 */
 	public static function api_create_contextual_prompt( $request ) {
-		if ( ! Newspack_Popups_Settings::is_ai_copy_assistant_enabled() ) {
-			return new \WP_Error(
-				'newspack_contextual_prompts_disabled',
-				esc_html__( 'Contextual Prompts is not enabled for this site.', 'newspack-popups' ),
-				[ 'status' => 403 ]
-			);
+		$enabled = self::require_contextual_prompts_enabled();
+		if ( is_wp_error( $enabled ) ) {
+			return $enabled;
 		}
 
 		$prompt_id = (int) ( $request['prompt_id'] ?? 0 );

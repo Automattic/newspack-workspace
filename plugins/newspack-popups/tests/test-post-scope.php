@@ -304,6 +304,46 @@ class PostScopeTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Update re-asserts the campaign group (so the prompt stays identifiable) without
+	 * discarding an extra group a publisher filed it under, and leaves a deliberate
+	 * frequency cap alone — 'always' is a creation default, not an invariant.
+	 */
+	public function test_update_preserves_publisher_choices() {
+		$post_id   = self::factory()->post->create( [ 'post_type' => 'post' ] );
+		$prompt_id = Newspack_Popups_Post_Scope::create_scoped_prompt(
+			[
+				'post_id'  => $post_id,
+				'body'     => 'Fund this reporting.',
+				'position' => 2,
+			]
+		);
+
+		// Publisher caps frequency and files it under an extra campaign group.
+		Newspack_Popups_Model::set_popup_options( $prompt_id, [ 'frequency' => 'daily' ] );
+		$taxonomy = Newspack_Popups::NEWSPACK_POPUPS_TAXONOMY;
+		$extra    = wp_insert_term( 'Spring Drive', $taxonomy );
+		wp_set_post_terms( $prompt_id, [ (int) $extra['term_id'] ], $taxonomy, true );
+
+		Newspack_Popups_Post_Scope::update_scoped_prompt(
+			$prompt_id,
+			[
+				'body'     => 'Edited copy.',
+				'position' => 4,
+			]
+		);
+
+		$this->assertSame(
+			'daily',
+			get_post_meta( $prompt_id, 'frequency', true ),
+			'A deliberate frequency cap must survive an update.'
+		);
+
+		$group_names = wp_get_post_terms( $prompt_id, $taxonomy, [ 'fields' => 'names' ] );
+		$this->assertContains( Newspack_Popups_Post_Scope::CAMPAIGN_GROUP_NAME, $group_names );
+		$this->assertContains( 'Spring Drive', $group_names, 'An extra campaign group must not be wiped.' );
+	}
+
+	/**
 	 * Updating something that isn't a scoped prompt is rejected.
 	 */
 	public function test_update_rejects_non_scoped_prompt() {

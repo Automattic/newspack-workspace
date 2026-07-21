@@ -138,9 +138,25 @@ final class Newspack_Popups_Post_Scope {
 		// (reachable from the panel's "Advanced settings" link) — without this, a
 		// prompt flipped to an overlay placement would stay that way and render as a
 		// full-screen takeover on the story.
-		update_post_meta( $prompt_id, 'placement', 'inline' );
-		update_post_meta( $prompt_id, 'trigger_type', 'blocks_count' );
-		update_post_meta( $prompt_id, 'trigger_blocks_count', (string) $position );
+		//
+		// Frequency is deliberately NOT re-asserted: 'always' is only a creation
+		// default, and capping frequency per-prompt is a supported publisher choice.
+		$options_result = Newspack_Popups_Model::set_popup_options(
+			$prompt_id,
+			[
+				'placement'            => 'inline',
+				'trigger_type'         => 'blocks_count',
+				'trigger_blocks_count' => (string) $position,
+			]
+		);
+		if ( is_wp_error( $options_result ) ) {
+			return $options_result;
+		}
+
+		// Keep it filed under the Contextual Prompts group so it stays identifiable
+		// in the wizard and in Insights, even if it was un-filed after creation.
+		self::assign_campaign_group( $prompt_id );
+
 		self::store_prompt_fields( $prompt_id, $body, $button_label, $button_url );
 		if ( isset( $args['ai_edited'] ) ) {
 			update_post_meta( $prompt_id, self::META_AI_EDITED, ! empty( $args['ai_edited'] ) );
@@ -323,7 +339,9 @@ final class Newspack_Popups_Post_Scope {
 			$term_id = $term->term_id;
 		}
 
-		wp_set_post_terms( $prompt_id, [ (int) $term_id ], $taxonomy );
+		// Append rather than replace: this also runs on update, and a publisher may
+		// have deliberately filed the prompt under an additional campaign group.
+		wp_set_post_terms( $prompt_id, [ (int) $term_id ], $taxonomy, true );
 	}
 
 	/**
