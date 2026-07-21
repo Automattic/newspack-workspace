@@ -635,6 +635,9 @@ importers:
 
   themes/newspack-block-theme:
     devDependencies:
+      '@rushstack/eslint-patch':
+        specifier: ^1.16.1
+        version: 1.16.1
       newspack-components:
         specifier: workspace:*
         version: link:../../packages/components

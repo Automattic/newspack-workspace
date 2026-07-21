@@ -44,6 +44,7 @@
 		"typescript:check": "newspack-scripts typescript-check"
 	},
 	"devDependencies": {
+		"@rushstack/eslint-patch": "^1.16.1",
 		"newspack-components": "workspace:*",
 		"newspack-scripts": "workspace:*"
 	}
