@@ -75,9 +75,12 @@ window.newspackRAS.push( readerActivation => {
 					readerActivation.store.set( 'is_newsletter_subscriber', true );
 				}
 			} )
-			.catch( () => {
-				// Allow retry on a later submit after a transient failure.
-				captured.delete( email );
+			.catch( error => {
+				// Allow retry after transient failures; an existing-reader
+				// conflict is permanent for this pageview.
+				if ( 'reader_already_exists' !== error?.code ) {
+					captured.delete( email );
+				}
 			} );
 	};
 
