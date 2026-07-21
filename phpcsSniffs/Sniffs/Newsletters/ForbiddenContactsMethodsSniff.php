@@ -14,6 +14,10 @@ namespace phpcsSniffs\Sniffs\Newsletters;
 use PHP_CodeSniffer\Files\File;
 use PHP_CodeSniffer\Sniffs\Sniff;
 
+/**
+ * Flags newsletter-internal calls that bypass Newspack_Newsletters_Contacts,
+ * exempting the service-provider integrations that must call them directly.
+ */
 class ForbiddenContactsMethodsSniff implements Sniff {
 
 	const ERROR_CODE    = 'ForbiddenContactsMethods';
@@ -63,10 +67,22 @@ class ForbiddenContactsMethodsSniff implements Sniff {
 	 */
 	private $current_file = '';
 
+	/**
+	 * Tokens this sniff listens for.
+	 *
+	 * @return array<int|string>
+	 */
 	public function register() {
 		return [ T_CLASS, T_STRING ];
 	}
 
+	/**
+	 * Processes a token, reporting forbidden method calls.
+	 *
+	 * @param File $phpcs_file The file being scanned.
+	 * @param int  $stack_ptr  Position of the current token in the stack.
+	 * @return void
+	 */
 	public function process( File $phpcs_file, $stack_ptr ) {
 		// PHPCS reuses a single sniff instance for every file in the run, so
 		// $current_class would otherwise carry over. A file that declares no

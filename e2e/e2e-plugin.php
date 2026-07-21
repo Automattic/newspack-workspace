@@ -32,7 +32,7 @@ if ( ! defined( 'NEWSPACK_IS_E2E' ) || ! NEWSPACK_IS_E2E ) {
 	return;
 }
 
-// Prevent the admin email confirmation screen
+// Prevent the admin email confirmation screen.
 add_filter( 'admin_email_check_interval', '__return_false' );
 
 // Register custom post type for email logs.
@@ -54,7 +54,7 @@ add_action(
 		];
 		$result = register_post_type( 'email_log', $args );
 		if ( is_wp_error( $result ) ) {
-			error_log( 'Failed to create the email_log CPT.' );
+			error_log( 'Failed to create the email_log CPT.' ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Test harness; surfacing setup failure in the container log is the point.
 		}
 	}
 );
@@ -63,9 +63,10 @@ add_action(
 add_action(
 	'init',
 	function () {
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Logging out without a nonce is precisely what this e2e-only endpoint provides.
 		if ( isset( $_GET['action'] ) && $_GET['action'] === 'logout_without_nonce' ) {
 			wp_logout();
-			wp_redirect( home_url() );
+			wp_safe_redirect( home_url() );
 			exit;
 		}
 	}
@@ -113,7 +114,8 @@ add_filter(
 add_action(
 	'init',
 	function () {
-		if ( isset( $_SERVER['REQUEST_URI'] ) && strpos( $_SERVER['REQUEST_URI'], '/_email' ) === 0 ) {
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Compared against a literal prefix and never output; a sanitizer would alter the string being matched.
+		if ( isset( $_SERVER['REQUEST_URI'] ) && str_starts_with( wp_unslash( $_SERVER['REQUEST_URI'] ), '/_email' ) ) {
 			header( 'Content-Type: text/html' );
 			?>
 			<html><head><title>Email Sendbox</title></head><body>
@@ -128,6 +130,7 @@ add_action(
 
 			global $wpdb;
 
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- DirectQuery: reads every captured email in one pass, whatever its post status. NoCaching: the sendbox must see rows the test wrote moments ago.
 			$results = $wpdb->get_results( "SELECT * FROM {$wpdb->prefix}posts WHERE post_type = 'email_log' ORDER BY post_date DESC", ARRAY_A );
 
 			if ( ! empty( $results ) ) {
@@ -140,7 +143,7 @@ add_action(
 								<strong><?php echo esc_html( $email['post_title'] ); ?></strong> - <?php echo esc_html( $email['post_date'] ); ?>
 							</summary>
 							<div class="email-content">
-								<?php echo $email['post_content']; ?>
+								<?php echo $email['post_content']; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Captured email HTML is rendered verbatim so tests can assert on its markup. ?>
 							</div>
 						</details>
 					</div>
