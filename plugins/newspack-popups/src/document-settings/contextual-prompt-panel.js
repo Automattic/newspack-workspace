@@ -51,6 +51,7 @@ const ContextualPromptPanel = () => {
 	const [ error, setError ] = useState( '' );
 
 	const optedIn = window.newspackPopupsContextualPrompt?.enabled;
+	const donationsNative = window.newspackPopupsContextualPrompt?.donationsNative;
 	const isPrompt = 'newspack_popups_cpt' === postType;
 
 	// Load an existing Contextual Prompt for this post, if any.
@@ -219,8 +220,25 @@ const ContextualPromptPanel = () => {
 					{ editing && (
 						<VStack spacing={ 3 } className="newspack-contextual-prompt__edit">
 							<TextareaControl label={ __( 'Prompt copy', 'newspack-popups' ) } rows={ 4 } value={ body } onChange={ setBody } />
-							<TextControl label={ __( 'Button label', 'newspack-popups' ) } value={ buttonLabel } onChange={ setButtonLabel } />
-							<TextControl label={ __( 'Donate URL', 'newspack-popups' ) } type="url" value={ buttonUrl } onChange={ setButtonUrl } />
+							{ donationsNative ? (
+								<p style={ { margin: 0, fontStyle: 'italic' } }>
+									{ __( 'Uses your Newspack donation form, so gifts are tracked as donations.', 'newspack-popups' ) }
+								</p>
+							) : (
+								<>
+									<TextControl
+										label={ __( 'Button label', 'newspack-popups' ) }
+										value={ buttonLabel }
+										onChange={ setButtonLabel }
+									/>
+									<TextControl
+										label={ __( 'Donate URL', 'newspack-popups' ) }
+										type="url"
+										value={ buttonUrl }
+										onChange={ setButtonUrl }
+									/>
+								</>
+							) }
 							<TextControl
 								label={ __( 'Position (paragraph)', 'newspack-popups' ) }
 								help={ __( 'Set automatically from the suggestion’s framing; adjust as needed.', 'newspack-popups' ) }

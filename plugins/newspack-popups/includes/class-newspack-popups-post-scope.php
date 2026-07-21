@@ -238,26 +238,50 @@ final class Newspack_Popups_Post_Scope {
 	}
 
 	/**
-	 * Build the block markup for a scoped prompt: the appeal copy and, when a
-	 * URL is given, a button, wrapped in a default styled call-out so it reads
-	 * as a deliberate donation ask rather than inline body text.
+	 * Whether to render the native Newspack donate block rather than a plain
+	 * button. Defaults to true when the publisher uses Newspack (WooCommerce)
+	 * donations — then reader conversions classify as donations in analytics /
+	 * Insights. Falls back to a plain button + URL for off-site donation setups.
 	 *
-	 * This is a sensible default treatment (light card with a border and
-	 * padding); publishers can restyle any individual prompt in Advanced
-	 * settings, and the final design will be refined with design input.
+	 * @return bool
+	 */
+	public static function use_donate_block() {
+		$default = method_exists( '\Newspack\Donations', 'is_platform_wc' ) && \Newspack\Donations::is_platform_wc();
+
+		/**
+		 * Filters whether Contextual Prompts render the native donate block.
+		 *
+		 * @param bool $use_donate_block Whether to use the donate block.
+		 */
+		return (bool) apply_filters( 'newspack_contextual_prompts_use_donate_block', $default );
+	}
+
+	/**
+	 * Build the block markup for a scoped prompt: the appeal copy plus a
+	 * donation CTA, wrapped in a default styled call-out so it reads as a
+	 * deliberate donation ask rather than inline body text.
+	 *
+	 * When the publisher uses Newspack donations, the CTA is the native donate
+	 * block (so conversions are tracked as donations); otherwise it's a plain
+	 * button linking to the provided donate URL. Publishers can restyle any
+	 * individual prompt in Advanced settings, and the final visual design will
+	 * be refined with design input.
 	 *
 	 * @param string $body         Appeal copy.
-	 * @param string $button_label Button label.
-	 * @param string $button_url   Button URL, or '' to render copy only.
+	 * @param string $button_label Button label (plain-button fallback only).
+	 * @param string $button_url   Button URL (plain-button fallback only).
 	 * @return string Serialized block markup.
 	 */
 	private static function build_prompt_content( $body, $button_label, $button_url ) {
-		$inner = "<!-- wp:paragraph {\"style\":{\"spacing\":{\"margin\":{\"top\":\"0\",\"bottom\":\"0\"}}}} -->\n"
-			. '<p style="margin-top:0;margin-bottom:0">' . esc_html( $body ) . "</p>\n<!-- /wp:paragraph -->";
+		$inner = "<!-- wp:paragraph {\"style\":{\"spacing\":{\"margin\":{\"top\":\"0\",\"bottom\":\"16px\"}}}} -->\n"
+			. '<p style="margin-top:0;margin-bottom:16px">' . esc_html( $body ) . "</p>\n<!-- /wp:paragraph -->";
 
-		if ( '' !== trim( $button_url ) ) {
-			$inner .= "\n<!-- wp:buttons {\"style\":{\"spacing\":{\"margin\":{\"top\":\"16px\"}}}} -->\n"
-				. '<div class="wp-block-buttons" style="margin-top:16px"><!-- wp:button -->'
+		if ( self::use_donate_block() ) {
+			// Native Newspack donation form; uses the site's donation settings.
+			$inner .= "\n<!-- wp:newspack-blocks/donate /-->";
+		} elseif ( '' !== trim( $button_url ) ) {
+			$inner .= "\n<!-- wp:buttons -->\n"
+				. '<div class="wp-block-buttons"><!-- wp:button -->'
 				. '<div class="wp-block-button"><a class="wp-block-button__link wp-element-button" href="' . esc_url( $button_url ) . '">'
 				. esc_html( $button_label )
 				. "</a></div>\n<!-- /wp:button --></div>\n<!-- /wp:buttons -->";

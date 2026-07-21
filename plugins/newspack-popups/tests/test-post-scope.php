@@ -281,4 +281,40 @@ class PostScopeTest extends WP_UnitTestCase {
 	public function test_fetch_returns_null_when_none() {
 		$this->assertNull( Newspack_Popups_Post_Scope::get_scoped_prompt_for_post( self::$post_b ) );
 	}
+
+	/**
+	 * When Newspack donations are in use, the CTA is the native donate block (so
+	 * conversions classify as donations); otherwise a plain button + URL.
+	 */
+	public function test_donate_block_vs_button() {
+		$post_id = self::factory()->post->create( [ 'post_type' => 'post' ] );
+
+		// Native donations: donate block, no plain button.
+		add_filter( 'newspack_contextual_prompts_use_donate_block', '__return_true' );
+		$with_block = Newspack_Popups_Post_Scope::create_scoped_prompt(
+			[
+				'post_id'    => $post_id,
+				'body'       => 'Fund the reporting.',
+				'button_url' => 'https://example.com/donate',
+			]
+		);
+		$content = get_post_field( 'post_content', $with_block );
+		$this->assertStringContainsString( 'wp:newspack-blocks/donate', $content );
+		$this->assertStringNotContainsString( 'wp-block-button', $content );
+		remove_filter( 'newspack_contextual_prompts_use_donate_block', '__return_true' );
+
+		// Off-site donations: plain button linking to the URL, no donate block.
+		$other_post = self::factory()->post->create( [ 'post_type' => 'post' ] );
+		$with_button = Newspack_Popups_Post_Scope::create_scoped_prompt(
+			[
+				'post_id'    => $other_post,
+				'body'       => 'Fund the reporting.',
+				'button_url' => 'https://example.com/donate',
+			]
+		);
+		$content = get_post_field( 'post_content', $with_button );
+		$this->assertStringContainsString( 'wp-block-button', $content );
+		$this->assertStringContainsString( 'https://example.com/donate', $content );
+		$this->assertStringNotContainsString( 'newspack-blocks/donate', $content );
+	}
 }

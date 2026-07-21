@@ -819,7 +819,10 @@ final class Newspack_Popups {
 				\wp_localize_script(
 					'newspack-popups',
 					'newspackPopupsContextualPrompt',
-					[ 'enabled' => Newspack_Popups_Settings::is_ai_copy_assistant_enabled() ]
+					[
+						'enabled'         => Newspack_Popups_Settings::is_ai_copy_assistant_enabled(),
+						'donationsNative' => Newspack_Popups_Post_Scope::use_donate_block(),
+					]
 				);
 			}
 
