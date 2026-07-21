@@ -22,10 +22,10 @@ export default function CustomAccess( { customAccess, onChange, isNewsletter = f
 
 	const handleChange = useCallback(
 		( value: Partial< CustomAccess > ) => {
+			// Spread the full object so fields this screen doesn't manage
+			// (e.g. gate_layout_id) survive the update and the next save.
 			onChange( {
-				active: customAccess.active,
-				metering: customAccess.metering,
-				access_rules: customAccess.access_rules,
+				...customAccess,
 				...value,
 			} );
 		},

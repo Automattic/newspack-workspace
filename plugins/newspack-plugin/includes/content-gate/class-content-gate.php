@@ -446,8 +446,8 @@ class Content_Gate {
 			if ( is_singular() && self::has_gate() && self::is_post_restricted() && Metering::is_frontend_metering() ) {
 				$asset['dependencies'][] = 'newspack-content-gate-metering';
 			}
-			wp_enqueue_script( 'newspack-content-banner', Newspack::plugin_url() . '/dist/content-banner.js', $asset['dependencies'], NEWSPACK_PLUGIN_VERSION, true );
-			wp_enqueue_style( 'newspack-content-banner', Newspack::plugin_url() . '/dist/content-banner.css', [], NEWSPACK_PLUGIN_VERSION );
+			wp_enqueue_script( 'newspack-content-banner', Newspack::plugin_url() . '/dist/content-banner.js', $asset['dependencies'], Newspack::asset_version( 'content-banner' ), true );
+			wp_enqueue_style( 'newspack-content-banner', Newspack::plugin_url() . '/dist/content-banner.css', [], Newspack::asset_version( 'content-banner' ) );
 		}
 	}
 
@@ -692,9 +692,9 @@ class Content_Gate {
 	public static function create_gate( $gate, $post_type = self::GATE_CPT, $is_newsletter = false ) {
 		$all_gates = self::get_gates();
 		$args      = [
-			'post_title'   => $gate['title'],
+			'post_title'   => $gate['title'] ?? __( 'Untitled Content Gate', 'newspack-plugin' ),
 			'post_type'    => $post_type,
-			'post_status'  => 'publish',
+			'post_status'  => isset( $gate['status'] ) && in_array( $gate['status'], self::get_post_statuses(), true ) ? $gate['status'] : 'publish',
 			'post_content' => '',
 			'meta_input'   => [
 				'gate_priority' => count( $all_gates ),
@@ -1106,7 +1106,7 @@ class Content_Gate {
 
 		return [
 			'active'               => isset( $registration['active'] ) ? (bool) $registration['active'] : false,
-			'metering'             => isset( $registration['metering'] ) ? $registration['metering'] : $default_metering,
+			'metering'             => isset( $registration['metering'] ) && is_array( $registration['metering'] ) ? wp_parse_args( $registration['metering'], $default_metering ) : $default_metering,
 			'require_verification' => isset( $registration['require_verification'] ) ? (bool) $registration['require_verification'] : false,
 			'gate_layout_id'       => isset( $registration['gate_layout_id'] ) ? (int) $registration['gate_layout_id'] : 0,
 		];
@@ -1141,6 +1141,9 @@ class Content_Gate {
 	public static function update_registration_settings( $gate_id, $settings ) {
 		$registration = get_post_meta( $gate_id, 'registration', true );
 		if ( $registration ) {
+			if ( isset( $settings['metering'], $registration['metering'] ) && is_array( $settings['metering'] ) && is_array( $registration['metering'] ) ) {
+				$settings['metering'] = wp_parse_args( $settings['metering'], $registration['metering'] );
+			}
 			$settings = wp_parse_args( $settings, $registration );
 		}
 		\update_post_meta( $gate_id, 'registration', $settings );
@@ -1172,7 +1175,7 @@ class Content_Gate {
 
 		return [
 			'active'         => isset( $custom_access['active'] ) ? (bool) $custom_access['active'] : false,
-			'metering'       => isset( $custom_access['metering'] ) ? $custom_access['metering'] : $default_metering,
+			'metering'       => isset( $custom_access['metering'] ) && is_array( $custom_access['metering'] ) ? wp_parse_args( $custom_access['metering'], $default_metering ) : $default_metering,
 			'access_rules'   => $access_rules,
 			'gate_layout_id' => isset( $custom_access['gate_layout_id'] ) ? (int) $custom_access['gate_layout_id'] : 0,
 		];
@@ -1189,6 +1192,9 @@ class Content_Gate {
 	public static function update_custom_access_settings( $gate_id, $settings ) {
 		$custom_access = get_post_meta( $gate_id, 'custom_access', true );
 		if ( $custom_access ) {
+			if ( isset( $settings['metering'], $custom_access['metering'] ) && is_array( $settings['metering'] ) && is_array( $custom_access['metering'] ) ) {
+				$settings['metering'] = wp_parse_args( $settings['metering'], $custom_access['metering'] );
+			}
 			$settings = wp_parse_args( $settings, $custom_access );
 		}
 		\update_post_meta( $gate_id, 'custom_access', $settings );
@@ -1288,16 +1294,19 @@ class Content_Gate {
 		}
 
 		// Update title, priority, and status.
-		wp_update_post(
-			[
-				'ID'          => $id,
-				'post_title'  => $gate['title'],
-				'post_status' => isset( $gate['status'] ) ? $gate['status'] : $post->post_status,
-				'meta_input'  => [
-					'gate_priority' => $gate['priority'],
-				],
-			]
-		);
+		$update_args = [
+			'ID'          => $id,
+			'post_status' => isset( $gate['status'] ) ? $gate['status'] : $post->post_status,
+		];
+		if ( isset( $gate['title'] ) ) {
+			$update_args['post_title'] = $gate['title'];
+		}
+		if ( isset( $gate['priority'] ) ) {
+			$update_args['meta_input'] = [
+				'gate_priority' => $gate['priority'],
+			];
+		}
+		wp_update_post( $update_args );
 
 		// Update content rules.
 		if ( isset( $gate['content_rules'] ) ) {
@@ -1334,6 +1343,84 @@ class Content_Gate {
 		 * @param array $valid_post_statuses Valid gate post statuses.
 		 */
 		return apply_filters( 'newspack_content_gate_valid_post_statuses', self::$valid_gate_post_statuses );
+	}
+
+	/**
+	 * Option name storing the default status applied to newly created gates.
+	 */
+	const DEFAULT_STATUS_OPTION = 'newspack_content_gate_default_status';
+
+	/**
+	 * Get the default status ('publish' or 'draft') for newly created gates.
+	 *
+	 * Defaults to 'draft' (inactive) so new gates are set up before going live.
+	 * Only affects gates created going forward; existing gates keep their own
+	 * status. Publishers can change this default in the Access control preferences.
+	 *
+	 * @return string
+	 */
+	public static function get_default_new_gate_status() {
+		$value = get_option( self::DEFAULT_STATUS_OPTION, 'draft' );
+		return in_array( $value, [ 'publish', 'draft' ], true ) ? $value : 'draft';
+	}
+
+	/**
+	 * Set the default status for newly created gates.
+	 *
+	 * @param string $status Either 'publish' or 'draft'.
+	 *
+	 * @return string The stored status.
+	 */
+	public static function set_default_new_gate_status( $status ) {
+		$status = in_array( $status, [ 'publish', 'draft' ], true ) ? $status : 'draft';
+		update_option( self::DEFAULT_STATUS_OPTION, $status, false );
+		return $status;
+	}
+
+	/**
+	 * Fill in the site-wide default status on a new-gate payload when none was provided.
+	 *
+	 * For REST create endpoints only. Direct PHP callers of create_gate() (e.g. the
+	 * WooCommerce Memberships auto-gate creators) rely on its 'publish' fallback,
+	 * which must not be routed through this option.
+	 *
+	 * @param array $gate Gate payload.
+	 *
+	 * @return array The gate payload with a status.
+	 */
+	public static function with_default_new_gate_status( $gate ) {
+		if ( is_array( $gate ) && ! isset( $gate['status'] ) ) {
+			$gate['status'] = self::get_default_new_gate_status();
+		}
+		return $gate;
+	}
+
+	/**
+	 * User meta key for the pre-save checklist preference.
+	 */
+	const PRESAVE_CHECKS_META_KEY = 'np_gate_presave_checks';
+
+	/**
+	 * Whether the current user should see the gate pre-save checklist panel.
+	 *
+	 * Defaults to enabled (true) when the user has never set the preference.
+	 *
+	 * @return bool
+	 */
+	public static function get_presave_checks_enabled() {
+		$value = get_user_meta( get_current_user_id(), self::PRESAVE_CHECKS_META_KEY, true );
+		return '' === $value ? true : '1' === $value;
+	}
+
+	/**
+	 * Set the pre-save checklist preference for the current user.
+	 *
+	 * @param bool $enabled Whether the pre-save checklist is enabled.
+	 *
+	 * @return void
+	 */
+	public static function set_presave_checks_enabled( $enabled ) {
+		update_user_meta( get_current_user_id(), self::PRESAVE_CHECKS_META_KEY, $enabled ? '1' : '0' );
 	}
 
 	/**

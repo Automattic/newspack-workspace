@@ -21,6 +21,7 @@ bin/newspack-network/nodes-keys.json
 bin/newspack-network/service-accounts.secret
 rootCA.pem
 worktrees
+worktrees-repos
 envs
 docker-compose.env-*.yml
 .claude/settings.local.json
@@ -36,3 +37,6 @@ plugins/*/package-lock.json
 themes/*/package-lock.json
 packages/*/package-lock.json
 .cursorignore
+# Per-checkout personal hooks run by .husky/pre-commit (see AGENTS.md).
+# `*.local*` also covers editor backups like pre-commit.local~ / .local.bak.
+.husky/*.local*
