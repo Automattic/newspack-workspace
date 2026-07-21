@@ -508,13 +508,16 @@ function acquireV2InvisibleToken( siteKey ) {
 /**
  * Register a reader via a frontend integration.
  *
- * @param {string} email                  Reader email address.
- * @param {string} integrationId          Registered integration ID.
- * @param {Object} profileFields          Optional profile fields: { first_name, last_name, metadata }.
- * @param {Object} profileFields.metadata Optional arbitrary key-value pairs to store as user meta.
+ * @param {string}  email                  Reader email address.
+ * @param {string}  integrationId          Registered integration ID.
+ * @param {Object}  profileFields          Optional profile fields: { first_name, last_name, metadata }.
+ * @param {Object}  profileFields.metadata Optional arbitrary key-value pairs to store as user meta.
+ * @param {Object}  options                Optional transport options.
+ * @param {boolean} options.keepalive      Keep the request alive through page navigation.
+ * @param {string}  options.captchaToken   Pre-acquired reCAPTCHA token, skips acquisition.
  * @return {Promise} Resolves with reader data on success, rejects with error on failure.
  */
-function register( email, integrationId, profileFields = {} ) {
+export function register( email, integrationId, profileFields = {}, options = {} ) {
 	const config = newspack_ras_config?.frontend_registration_integrations || {};
 	const integration = config[ integrationId ];
 
@@ -544,7 +547,10 @@ function register( email, integrationId, profileFields = {} ) {
 	const captchaVersion = newspack_ras_config?.captcha_version;
 	let captchaPromise;
 
-	if ( captchaSiteKey ) {
+	if ( options.captchaToken ) {
+		// Pre-acquired token (e.g. warmed before a page-navigating form submit).
+		captchaPromise = Promise.resolve( options.captchaToken );
+	} else if ( captchaSiteKey ) {
 		if ( ! window.grecaptcha ) {
 			return Promise.reject( new Error( 'reCAPTCHA is configured but not loaded.' ) );
 		}
@@ -586,6 +592,7 @@ function register( email, integrationId, profileFields = {} ) {
 				method: 'POST',
 				headers,
 				credentials: 'same-origin',
+				keepalive: Boolean( options.keepalive ),
 				body: JSON.stringify( body ),
 			} );
 		} )
