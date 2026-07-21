@@ -206,11 +206,17 @@ class Metering {
 	/**
 	 * Whether the registration wall is the rule that gates the current reader.
 	 *
-	 * Mirrors the gate-layout selection in
-	 * `Content_Restriction_Control::is_post_restricted()`, which restricts with the
-	 * registration layout - and skips the `custom_access` rules entirely - for both
-	 * anonymous visitors and signed-in readers who have not verified their email on a
-	 * wall that requires verification.
+	 * Follows the same registration-vs-`custom_access` split as the gate-layout
+	 * selection in `Content_Restriction_Control::is_post_restricted()`, which restricts
+	 * with the registration layout - and skips the `custom_access` rules entirely - for
+	 * both anonymous visitors and signed-in readers who have not verified their email on
+	 * a wall that requires verification.
+	 *
+	 * This assumes the reader is already known to be restricted; it is a settings
+	 * selector, not a restriction check. In particular it does not re-check the
+	 * anonymous `supports_anonymous` bypass (e.g. institutional access) that
+	 * `is_post_restricted()` applies before ever restricting an anonymous visitor - a
+	 * bypassed reader is not restricted, so no metering surface consults this for them.
 	 *
 	 * @param int  $gate_id      Gate ID.
 	 * @param bool $is_logged_in Whether to evaluate for a logged-in reader.
@@ -228,8 +234,11 @@ class Metering {
 		if ( ! $registration['require_verification'] ) {
 			return false;
 		}
-		// Non-reader users (admins, editors) are exempt, matching the same carve-out in
-		// `is_logged_in_metering_allowed()`.
+		// Exempt non-reader users (admins, editors). This reuses the reader/verified
+		// checks from `is_logged_in_metering_allowed()`'s verification bail; note that
+		// bail keys off `Content_Gate::requires_account_verification()`, which reads
+		// `require_verification` without the `active` guard applied above, so the two
+		// only fully agree while the wall is active.
 		$user = \wp_get_current_user();
 		return Reader_Activation::is_user_reader( $user ) && ! Reader_Activation::is_reader_verified( $user );
 	}
@@ -253,7 +262,7 @@ class Metering {
 	 * @param int  $gate_id      Gate ID.
 	 * @param bool $is_logged_in Whether to evaluate for a logged-in reader.
 	 *
-	 * @return array Metering settings.
+	 * @return array{enabled: bool, count: int, period: string} Metering settings.
 	 */
 	private static function get_effective_settings( $gate_id, $is_logged_in ) {
 		if ( Memberships::is_active() ) {
@@ -437,7 +446,13 @@ class Metering {
 		}
 
 		$gate_post_id = Content_Gate::get_gate_post_id();
-		$settings     = self::get_registered_settings( $gate_post_id );
+		// Read through the same helper as every reporting surface, so the enablement
+		// check here can never advertise a different allowance than they display. For
+		// every state that reaches this line the reader is either verified, a
+		// non-reader, or on a gate without a verification requirement - the verification
+		// bail above has already returned for the one state where the registration wall
+		// would govern - so this is behavior-identical to a direct paid-settings read.
+		$settings = self::get_effective_settings( $gate_post_id, true );
 
 		// Bail if metering is not enabled.
 		if ( ! $settings['enabled'] || $settings['count'] <= 0 ) {
@@ -537,7 +552,12 @@ class Metering {
 	}
 
 	/**
-	 * Get the metering period for a post.
+	 * Get the metering period for the current reader on a post.
+	 *
+	 * Resolves against the settings that govern the current reader, so the result is
+	 * auth-state dependent (via `is_user_logged_in()`, and verification state for
+	 * logged-in readers) - not a pure per-post value. Callers caching or comparing
+	 * periods across readers should key on the reader as well as the post.
 	 *
 	 * @param int|null $post_id Post ID. Default is current post.
 	 *

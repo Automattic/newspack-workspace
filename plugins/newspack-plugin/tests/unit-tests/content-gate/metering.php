@@ -891,7 +891,7 @@ class Test_Metering extends \WP_UnitTestCase {
 
 		// Register and verify the reader.
 		$user_id = $this->register_reader( 'verified-reader@metering-test.com' );
-		\update_user_meta( $user_id, Reader_Activation::EMAIL_VERIFIED, true );
+		Reader_Activation::set_reader_verified( $user_id );
 		wp_set_current_user( $user_id );
 		$this->assertTrue( Reader_Activation::is_reader_verified( wp_get_current_user() ), 'Reader should be verified' );
 
