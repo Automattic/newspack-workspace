@@ -137,9 +137,9 @@ class WooCommerce_Subscriptions {
 	 * manual renewals). The remaining checks mirror the non-status half of
 	 * WCS's own is_action_allowed().
 	 *
-	 * @param bool                         $can_switch   Whether the item can be switched.
-	 * @param \WC_Order_Item_Product|array $item         An order item on the subscription to switch, or cart item to add.
-	 * @param \WC_Subscription             $subscription An instance of WC_Subscription.
+	 * @param bool                   $can_switch   Whether the item can be switched.
+	 * @param \WC_Order_Item_Product $item         An order item on the subscription to switch.
+	 * @param \WC_Subscription       $subscription An instance of WC_Subscription.
 	 *
 	 * @return bool Whether the item can be switched.
 	 */
