@@ -6,6 +6,16 @@
  * with any form tool) and registers them as readers via the frontend
  * registration endpoint. Inbound-only: it is not a sync destination.
  *
+ * Capture semantics publishers must understand before opting a form in:
+ * - Capture fires on the browser's submit event (native validity checked)
+ *   and is decoupled from the form tool's own validation and outcome — a
+ *   submission the vendor's JS or server later rejects may still have
+ *   registered the reader.
+ * - Programmatic HTMLFormElement.submit() dispatches no submit event and
+ *   is not captured.
+ * - Forms that collect somebody else's email address (e.g. "email a
+ *   friend") must never be opted in.
+ *
  * @package Newspack
  */
 
@@ -78,7 +88,7 @@ class Form_Capture extends Integration {
 				'key'         => 'selectors',
 				'type'        => 'textarea',
 				'label'       => __( 'Form selectors', 'newspack-plugin' ),
-				'description' => __( 'CSS selectors (one per line) of forms to capture, in addition to any form with the newspack-form-capture class.', 'newspack-plugin' ),
+				'description' => __( 'CSS selectors (one per line) of forms to capture, in addition to any form with the newspack-form-capture class. Only opt in forms whose submissions should always create a reader account: capture runs even if the form tool itself later rejects the submission.', 'newspack-plugin' ),
 				'default'     => '',
 			],
 			[
