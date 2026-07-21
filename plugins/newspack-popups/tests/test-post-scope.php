@@ -128,4 +128,92 @@ class PostScopeTest extends WP_UnitTestCase {
 		$this->assertSame( 0, $args['post_parent'], 'Eligible query is restricted to top-level (site-wide) prompts.' );
 		$this->assertSame( 100, $args['posts_per_page'], 'Existing args are preserved.' );
 	}
+
+	/**
+	 * Creating a scoped prompt from an approved candidate produces an inline,
+	 * post-scoped prompt with the copy, button, campaign group, and audit meta.
+	 */
+	public function test_create_scoped_prompt() {
+		$prompt_id = Newspack_Popups_Post_Scope::create_scoped_prompt(
+			[
+				'post_id'          => self::$post_a,
+				'body'             => 'Fund the reporting behind this story.',
+				'button_label'     => 'Fund this reporting',
+				'button_url'       => 'https://example.com/donate',
+				'position'         => 2,
+				'ai_generated'     => true,
+				'template_version' => 'donation/2026-07-scaffold',
+				'request_id'       => 'req-123',
+			]
+		);
+
+		$this->assertIsInt( $prompt_id );
+
+		// Scoped to its post, and inline at the requested position.
+		$this->assertSame( self::$post_a, (int) get_post_field( 'post_parent', $prompt_id ) );
+		$this->assertSame( 'inline', get_post_meta( $prompt_id, 'placement', true ) );
+		$this->assertSame( 'blocks_count', get_post_meta( $prompt_id, 'trigger_type', true ) );
+		$this->assertSame( '2', (string) get_post_meta( $prompt_id, 'trigger_blocks_count', true ) );
+
+		// Content carries the copy and the button.
+		$content = get_post_field( 'post_content', $prompt_id );
+		$this->assertStringContainsString( 'Fund the reporting behind this story.', $content );
+		$this->assertStringContainsString( 'https://example.com/donate', $content );
+		$this->assertStringContainsString( 'Fund this reporting', $content );
+
+		// Collected under the Contextual Prompts campaign group.
+		$terms = wp_get_post_terms( $prompt_id, Newspack_Popups::NEWSPACK_POPUPS_TAXONOMY, [ 'fields' => 'names' ] );
+		$this->assertContains( Newspack_Popups_Post_Scope::CAMPAIGN_GROUP_NAME, $terms );
+
+		// Audit trail.
+		$this->assertSame( '1', (string) get_post_meta( $prompt_id, Newspack_Popups_Post_Scope::META_AI_GENERATED, true ) );
+		$this->assertSame( 'donation/2026-07-scaffold', get_post_meta( $prompt_id, Newspack_Popups_Post_Scope::META_AI_TEMPLATE_VERSION, true ) );
+		$this->assertSame( 'req-123', get_post_meta( $prompt_id, Newspack_Popups_Post_Scope::META_AI_REQUEST_ID, true ) );
+
+		// It is excluded from the general query but retrievable for its post.
+		$eligible_ids = wp_list_pluck( Newspack_Popups_Model::retrieve_eligible_popups(), 'id' );
+		$this->assertNotContains( $prompt_id, $eligible_ids );
+		$scoped_ids = wp_list_pluck( Newspack_Popups_Model::retrieve_scoped_popups( self::$post_a ), 'id' );
+		$this->assertContains( $prompt_id, $scoped_ids );
+	}
+
+	/**
+	 * With no button URL, the prompt renders copy only (no button block).
+	 */
+	public function test_create_scoped_prompt_without_button() {
+		$prompt_id = Newspack_Popups_Post_Scope::create_scoped_prompt(
+			[
+				'post_id' => self::$post_a,
+				'body'    => 'Copy only, no button.',
+			]
+		);
+
+		$content = get_post_field( 'post_content', $prompt_id );
+		$this->assertStringContainsString( 'Copy only, no button.', $content );
+		$this->assertStringNotContainsString( 'wp-block-button', $content );
+	}
+
+	/**
+	 * Creation validates its inputs.
+	 */
+	public function test_create_scoped_prompt_validation() {
+		$this->assertWPError(
+			Newspack_Popups_Post_Scope::create_scoped_prompt(
+				[
+					'post_id' => 0,
+					'body'    => 'x',
+				] 
+			),
+			'A missing post is rejected.'
+		);
+		$this->assertWPError(
+			Newspack_Popups_Post_Scope::create_scoped_prompt(
+				[
+					'post_id' => self::$post_a,
+					'body'    => '   ',
+				] 
+			),
+			'Empty copy is rejected.'
+		);
+	}
 }

@@ -120,6 +120,84 @@ final class Newspack_Popups_API {
 				'permission_callback' => [ $this, 'permission_callback' ],
 			]
 		);
+		register_rest_route(
+			'newspack-popups/v1',
+			'/contextual-prompt',
+			[
+				'methods'             => \WP_REST_Server::CREATABLE,
+				'callback'            => [ __CLASS__, 'api_create_contextual_prompt' ],
+				'permission_callback' => [ __CLASS__, 'contextual_prompt_permission_callback' ],
+				'args'                => [
+					'post_id'          => [
+						'required'          => true,
+						'sanitize_callback' => 'absint',
+					],
+					'body'             => [
+						'required'          => true,
+						'sanitize_callback' => 'sanitize_textarea_field',
+					],
+					'button_label'     => [ 'sanitize_callback' => 'sanitize_text_field' ],
+					'button_url'       => [ 'sanitize_callback' => 'esc_url_raw' ],
+					'position'         => [ 'sanitize_callback' => 'absint' ],
+					'template_version' => [ 'sanitize_callback' => 'sanitize_text_field' ],
+					'request_id'       => [ 'sanitize_callback' => 'sanitize_text_field' ],
+					'ai_generated'     => [ 'sanitize_callback' => 'rest_sanitize_boolean' ],
+					'ai_edited'        => [ 'sanitize_callback' => 'rest_sanitize_boolean' ],
+				],
+			]
+		);
+	}
+
+	/**
+	 * Permission check for creating a Contextual Prompt: the user must be able to
+	 * edit the article the prompt will be scoped to.
+	 *
+	 * @param WP_REST_Request $request Request object.
+	 * @return bool|WP_Error
+	 */
+	public static function contextual_prompt_permission_callback( $request ) {
+		$post_id = (int) $request['post_id'];
+		if ( $post_id && current_user_can( 'edit_post', $post_id ) ) {
+			return true;
+		}
+		return new \WP_Error(
+			'newspack_rest_forbidden',
+			esc_html__( 'You cannot add a prompt to this post.', 'newspack-popups' ),
+			[ 'status' => 403 ]
+		);
+	}
+
+	/**
+	 * Create a Contextual Prompt scoped to a post from an approved candidate.
+	 *
+	 * @param WP_REST_Request $request Request object.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public static function api_create_contextual_prompt( $request ) {
+		$prompt_id = Newspack_Popups_Post_Scope::create_scoped_prompt(
+			[
+				'post_id'          => $request['post_id'],
+				'body'             => $request['body'],
+				'button_label'     => $request['button_label'] ?? '',
+				'button_url'       => $request['button_url'] ?? '',
+				'position'         => $request['position'] ?? 3,
+				'template_version' => $request['template_version'] ?? '',
+				'request_id'       => $request['request_id'] ?? '',
+				'ai_generated'     => $request['ai_generated'] ?? false,
+				'ai_edited'        => $request['ai_edited'] ?? false,
+			]
+		);
+
+		if ( is_wp_error( $prompt_id ) ) {
+			return $prompt_id;
+		}
+
+		return rest_ensure_response(
+			[
+				'id'        => $prompt_id,
+				'edit_link' => get_edit_post_link( $prompt_id, 'rest' ),
+			]
+		);
 	}
 
 	/**
