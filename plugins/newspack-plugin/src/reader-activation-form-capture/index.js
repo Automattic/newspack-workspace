@@ -103,8 +103,13 @@ window.newspackRAS.push( readerActivation => {
 	// Form plugins render/replace forms after load (multi-page, AJAX embeds).
 	// Coalesce mutation bursts (infinite scroll, ad refresh) into one scan.
 	let scanScheduled = false;
-	const observer = new MutationObserver( () => {
+	const observer = new MutationObserver( mutations => {
 		if ( scanScheduled ) {
+			return;
+		}
+		// Only added elements can introduce forms — ignore removals and
+		// text-only bursts so steady-state pages don't pay for re-scans.
+		if ( ! mutations.some( mutation => Array.from( mutation.addedNodes ).some( node => 1 === node.nodeType ) ) ) {
 			return;
 		}
 		scanScheduled = true;
