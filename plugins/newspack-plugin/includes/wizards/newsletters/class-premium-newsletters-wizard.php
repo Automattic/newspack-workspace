@@ -14,6 +14,8 @@ defined( 'ABSPATH' ) || exit;
  */
 class Premium_Newsletters_Wizard extends Wizard {
 
+	use Wizards\Traits\Content_Gate_Preferences;
+
 	/**
 	 * Admin page slug.
 	 *
@@ -137,6 +139,8 @@ class Premium_Newsletters_Wizard extends Wizard {
 				],
 			]
 		);
+
+		$this->register_preferences_route();
 	}
 
 	/**
@@ -205,6 +209,8 @@ class Premium_Newsletters_Wizard extends Wizard {
 				'api'                     => '/' . NEWSPACK_API_NAMESPACE . '/wizard/' . $this->slug,
 				'available_access_rules'  => Access_Rules::get_access_rules(),
 				'available_content_rules' => Content_Rules::get_premium_newsletter_rules(),
+				'presave_checks_enabled'  => Content_Gate::get_presave_checks_enabled(),
+				'default_gate_status'     => Content_Gate::get_default_new_gate_status(),
 			]
 		);
 
@@ -324,7 +330,7 @@ class Premium_Newsletters_Wizard extends Wizard {
 	 * @return \WP_REST_Response|\WP_Error
 	 */
 	public function create_gate( $request ) {
-		$gate = Content_Gate::create_gate( $request->get_param( 'gate' ), Content_Gate::GATE_CPT, true );
+		$gate = Content_Gate::create_gate( Content_Gate::with_default_new_gate_status( $request->get_param( 'gate' ) ), Content_Gate::GATE_CPT, true );
 		if ( is_wp_error( $gate ) ) {
 			return $gate;
 		}

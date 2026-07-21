@@ -101,8 +101,8 @@ describe( 'ContentGateSettings per-gate actions', () => {
 		const ContentGateSettings = require( './content-gate-settings' ).default;
 		render( <ContentGateSettings gate={ mockGate } updateGatesData={ () => {} } /> );
 
-		// gate.status === 'publish' -> the toggle action is labelled "Deactivate".
-		fireEvent.click( screen.getByRole( 'button', { name: 'Deactivate' } ) );
+		// gate.status === 'publish' -> the toggle action is labelled "Set to inactive".
+		fireEvent.click( screen.getByRole( 'button', { name: 'Set to inactive' } ) );
 
 		await waitFor( () => {
 			expect( mockAddNotice ).toHaveBeenCalledWith(

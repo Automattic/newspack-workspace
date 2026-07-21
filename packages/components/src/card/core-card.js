@@ -80,11 +80,16 @@ const CoreCard = ( {
 	if ( noBorder ) {
 		otherProps.isBorderless = true;
 	}
+	// A button header would nest its interactive children (toggle, header action, actions menu, or
+	// drag controls) inside a <button>, which is invalid. Only render the header as a button when a
+	// real click handler is supplied and the header has no interactive children of its own.
+	const hasInteractiveHeaderChildren = actionType === 'toggle' || !! headerAction || actions?.length > 0 || isDraggable;
+	const headerIsButton = !! onHeaderClick && ! hasInteractiveHeaderChildren;
 	return (
 		<CardWrapper as={ as } className={ classes } { ...otherProps }>
 			{ ( header || icon ) && (
 				<CardHeader
-					as={ onHeaderClick ? 'button' : undefined }
+					as={ headerIsButton ? 'button' : undefined }
 					className={ classNames(
 						'newspack-card--core__header',
 						isDraggable && 'newspack-card--core__header--is-draggable',
@@ -93,9 +98,9 @@ const CoreCard = ( {
 					style={ headerStyle }
 					size={ sizeProps }
 					gap={ 4 }
-					onClick={ disabled ? undefined : onHeaderClick }
-					disabled={ onHeaderClick && disabled ? true : undefined }
-					aria-disabled={ onHeaderClick && disabled ? true : undefined }
+					onClick={ headerIsButton && ! disabled ? onHeaderClick : undefined }
+					disabled={ headerIsButton && disabled ? true : undefined }
+					aria-disabled={ headerIsButton && disabled ? true : undefined }
 				>
 					{ isDraggable && (
 						<div className="newspack-card--core__header__draggable-controls">
