@@ -65,4 +65,21 @@ class Test_Contact_Pull_Dry_Run extends WP_UnitTestCase {
 		$this->assertInstanceOf( \WP_Error::class, $result );
 		$this->assertSame( 'mock_pull_error', $result->get_error_code() );
 	}
+
+	/**
+	 * A pull whose Reader_Data write is rejected is a failed pull: fetching
+	 * alone must not count as success (NPPD-2076).
+	 */
+	public function test_write_failure_returns_wp_error() {
+		// Fill the reader to the data-key cap so the pull's write is rejected.
+		for ( $i = 0; $i < Reader_Data::MAX_ITEMS; $i++ ) {
+			Reader_Data::update_item( $this->user_id, "filler_{$i}", '"x"' );
+		}
+
+		$result = Contact_Pull::pull_single_integration( $this->user_id, $this->integration );
+
+		$this->assertInstanceOf( \WP_Error::class, $result, 'A pull that cannot persist is a failed pull.' );
+		$this->assertSame( 'reader_data_write_failed', $result->get_error_code() );
+		$this->assertSame( 1, Failing_Sample_Integration::$pull_count, 'The fetch still happened.' );
+	}
 }

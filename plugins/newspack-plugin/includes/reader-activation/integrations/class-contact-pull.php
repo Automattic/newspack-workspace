@@ -250,6 +250,10 @@ class Contact_Pull {
 	/**
 	 * Pull data from a single integration and store selected fields.
 	 *
+	 * A pull whose reader-data writes fail returns a WP_Error: fetching alone
+	 * does not count as success, so batch callers tally the reader as an error
+	 * and the organic path schedules its usual bounded retries.
+	 *
 	 * @param int                                     $user_id     WordPress user ID.
 	 * @param \Newspack\Reader_Activation\Integration $integration The integration instance.
 	 * @param bool                                    $dry_run     Optional. When true, fetch and filter but skip
@@ -282,12 +286,35 @@ class Contact_Pull {
 			$data          = array_intersect_key( $data, $selected_keys );
 			Logger::log( 'Pulled data from ' . $integration->get_id() . ': ' . wp_json_encode( $data ) );
 
+			$write_errors = [];
 			foreach ( $data as $key => $value ) {
 				if ( $dry_run ) {
 					Logger::log( sprintf( '[dry-run] Would store reader data "%s" for user %d.', $key, $user_id ), self::LOGGER_HEADER );
 					continue;
 				}
-				\Newspack\Reader_Data::update_item( $user_id, $key, wp_json_encode( $value ) );
+				$stored = \Newspack\Reader_Data::update_item( $user_id, $key, wp_json_encode( $value ) );
+				if ( is_wp_error( $stored ) ) {
+					Logger::log( sprintf( 'Failed storing reader data "%s" for user %d: %s', $key, $user_id, $stored->get_error_message() ), self::LOGGER_HEADER );
+					$write_errors[] = sprintf( '"%s": %s', $key, $stored->get_error_message() );
+				}
+			}
+
+			// A pull that fetched but could not persist is a failed pull: callers
+			// tally or retry on WP_Error, and the CLI backfill's recovery model
+			// (re-run the window for tallied errors) needs write failures visible
+			// rather than counted as processed.
+			if ( ! empty( $write_errors ) ) {
+				return new \WP_Error(
+					'reader_data_write_failed',
+					sprintf(
+						'Failed storing %1$d of %2$d reader data item(s) for user %3$d from %4$s: %5$s',
+						count( $write_errors ),
+						count( $data ),
+						$user_id,
+						$integration->get_id(),
+						implode( '; ', $write_errors )
+					)
+				);
 			}
 
 			return true;
