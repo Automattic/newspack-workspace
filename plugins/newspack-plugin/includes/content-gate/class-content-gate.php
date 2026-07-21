@@ -65,7 +65,7 @@ class Content_Gate {
 	 *
 	 * @var array<int, array{teaser: string, gate: string}>
 	 */
-	private static $restricted_content = [];
+	private static array $restricted_content = [];
 
 	/**
 	 * Post IDs whose teaser has been substituted into a 'the_content' pass that has
@@ -80,7 +80,7 @@ class Content_Gate {
 	 *
 	 * @var int[]
 	 */
-	private static $teaser_stack = [];
+	private static array $teaser_stack = [];
 
 	/**
 	 * Priority at which a restricted post's content is swapped for its teaser.
