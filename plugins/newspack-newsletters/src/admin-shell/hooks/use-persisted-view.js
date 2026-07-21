@@ -39,8 +39,9 @@ export default function usePersistedView( screenKey, defaultView ) {
 			return;
 		}
 		// One at a time — concurrent writes could land out of order.
-		const save = perPage => {
+		const save = ( perPage, attempt = 0 ) => {
 			inFlightRef.current = true;
+			let failed = false;
 			apiFetch( {
 				path: PREFERENCES_PATH,
 				method: 'POST',
@@ -49,11 +50,18 @@ export default function usePersistedView( screenKey, defaultView ) {
 				.then( () => {
 					lastSavedRef.current = perPage;
 				} )
-				.catch( () => {} )
+				.catch( () => {
+					failed = true;
+				} )
 				.finally( () => {
 					inFlightRef.current = false;
 					if ( desiredRef.current !== perPage && isValidPerPage( desiredRef.current ) ) {
 						save( desiredRef.current );
+						return;
+					}
+					// Nothing else will retrigger the effect, so retry once.
+					if ( failed && attempt < 1 ) {
+						save( perPage, attempt + 1 );
 					}
 				} );
 		};

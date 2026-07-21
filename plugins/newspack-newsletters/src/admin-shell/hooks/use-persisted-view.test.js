@@ -51,7 +51,7 @@ describe( 'usePersistedView', () => {
 		expect( apiFetch ).not.toHaveBeenCalled();
 	} );
 
-	it( 'retries a rejected save on a subsequent identical change', async () => {
+	it( 'retries once when a save fails and nothing else would retrigger it', async () => {
 		apiFetch.mockRejectedValueOnce( new Error( 'save failed' ) );
 
 		const { result } = renderHook( () => usePersistedView( 'newsletters-list', DEFAULT_VIEW ) );
@@ -59,19 +59,15 @@ describe( 'usePersistedView', () => {
 		await act( async () => {
 			result.current[ 1 ]( current => ( { ...current, perPage: 50 } ) );
 			await Promise.resolve();
-		} );
-		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
-
-		act( () => {
-			result.current[ 1 ]( current => ( { ...current, perPage: 25 } ) );
-		} );
-		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
-
-		await act( async () => {
-			result.current[ 1 ]( current => ( { ...current, perPage: 50 } ) );
 			await Promise.resolve();
 		} );
+
 		expect( apiFetch ).toHaveBeenCalledTimes( 2 );
+		expect( apiFetch ).toHaveBeenLastCalledWith( {
+			path: '/newspack-newsletters/v1/admin-shell/preferences',
+			method: 'POST',
+			data: { screen: 'newsletters-list', prefs: { perPage: 50 } },
+		} );
 	} );
 
 	it( 'never has two saves in flight, so writes cannot reach the server out of order', async () => {
