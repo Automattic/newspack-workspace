@@ -1,0 +1,220 @@
+<?php // phpcs:disable Squiz.Commenting.FunctionComment.Missing, Squiz.Commenting.ClassComment.Missing, Squiz.Commenting.VariableComment.Missing, Squiz.Commenting.FileComment.Missing, Generic.Files.OneObjectStructurePerFile.MultipleFound
+/**
+ * Tests the `wp newspack integrations backfill` pull batch driver (NPPD-2076).
+ *
+ * @package Newspack\Tests
+ */
+
+use Newspack\CLI\RAS_Contact_Sync;
+use Newspack\Reader_Activation;
+use Newspack\Reader_Activation\Integrations;
+use Newspack\Reader_Activation\Integrations\Contact_Pull;
+use Newspack\Reader_Data;
+
+require_once dirname( __DIR__, 3 ) . '/includes/cli/class-ras-contact-sync.php';
+require_once dirname( __DIR__ ) . '/integrations/class-failing-sample-integration.php';
+
+// Minimal WP_CLI stub (same shape as the sibling tally test; guarded so whichever
+// file loads first wins).
+if ( ! class_exists( 'WP_CLI' ) ) {
+	class WP_CLI {
+		public static function log( $message ) {}
+		public static function line( $message = '' ) {}
+		public static function success( $message ) {}
+		public static function error( $message ) {
+			throw new \Exception( esc_html( $message ) );
+		}
+	}
+}
+
+/**
+ * Batch pull driver: tallies, scoping, dry-run, batching, no AS retries.
+ *
+ * @group Integrations_Backfill
+ */
+class Test_RAS_Integrations_Backfill_Pull extends WP_UnitTestCase {
+
+	public static function set_up_before_class() {
+		parent::set_up_before_class();
+		require_once dirname( __DIR__, 2 ) . '/mocks/wc-mocks.php';
+	}
+
+	public function set_up() {
+		parent::set_up();
+		global $subscriptions_database;
+		$subscriptions_database = [];
+		Integrations::disable( 'esp' );
+		Failing_Sample_Integration::reset();
+		Integrations::register( new Failing_Sample_Integration( 'pull_cli_mock', 'Pull CLI Mock' ) );
+		Integrations::enable( 'pull_cli_mock' );
+		update_option( 'newspack_integration_incoming_fields_pull_cli_mock', [ 'field_a' => [ 'name' => 'Field A' ] ] );
+		Failing_Sample_Integration::$pull_data = [ 'field_a' => 'gold' ];
+	}
+
+	public function tear_down() {
+		global $subscriptions_database;
+		$subscriptions_database = [];
+		delete_option( 'newspack_integration_incoming_fields_pull_cli_mock' );
+		Integrations::disable( 'pull_cli_mock' );
+		Integrations::enable( 'esp' );
+		Failing_Sample_Integration::reset();
+		parent::tear_down();
+	}
+
+	/**
+	 * Create a verified subscriber-role reader.
+	 *
+	 * @return int User ID.
+	 */
+	private function create_reader() {
+		$user_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		Reader_Activation::set_reader_verified( $user_id );
+		return $user_id;
+	}
+
+	/**
+	 * Invoke the private static pull_contacts() via reflection.
+	 *
+	 * @param array $config Pull batch configuration.
+	 * @return array|\WP_Error
+	 */
+	private function run_pull( array $config ) {
+		$method = new \ReflectionMethod( RAS_Contact_Sync::class, 'pull_contacts' );
+		$method->setAccessible( true );
+		return $method->invoke( null, $config );
+	}
+
+	public function test_pulls_given_user_ids_and_tallies_processed() {
+		$user_a = $this->create_reader();
+		$user_b = $this->create_reader();
+
+		$tally = $this->run_pull( [ 'user_ids' => [ $user_a, $user_b ] ] );
+
+		$this->assertSame(
+			[
+				'processed' => 2,
+				'errors'    => 0,
+				'skipped'   => 0,
+			],
+			$tally
+		);
+		$this->assertSame( 2, Failing_Sample_Integration::$pull_count );
+		$this->assertSame( '"gold"', Reader_Data::get_data( $user_a, 'field_a' ) );
+	}
+
+	public function test_dry_run_pull_fetches_without_persisting() {
+		$user_a = $this->create_reader();
+
+		$tally = $this->run_pull(
+			[
+				'user_ids'   => [ $user_a ],
+				'is_dry_run' => true,
+			]
+		);
+
+		$this->assertSame( 1, $tally['processed'] );
+		$this->assertSame( 1, Failing_Sample_Integration::$pull_count );
+		$this->assertFalse( Reader_Data::get_data( $user_a, 'field_a' ) );
+	}
+
+	public function test_missing_user_id_is_skipped() {
+		$tally = $this->run_pull( [ 'user_ids' => [ 99999999 ] ] );
+		$this->assertSame( 1, $tally['skipped'] );
+		$this->assertSame( 0, Failing_Sample_Integration::$pull_count );
+	}
+
+	public function test_pull_failure_tallies_error_and_schedules_no_retries() {
+		Failing_Sample_Integration::$pull_should_fail = true;
+		$user_a = $this->create_reader();
+
+		$tally = $this->run_pull( [ 'user_ids' => [ $user_a ] ] );
+
+		$this->assertSame( 1, $tally['errors'] );
+		$this->assertSame( 0, $tally['processed'] );
+		if ( function_exists( 'as_get_scheduled_actions' ) ) {
+			$pending = as_get_scheduled_actions(
+				[
+					'hook'   => Contact_Pull::RETRY_HOOK,
+					'status' => \ActionScheduler_Store::STATUS_PENDING,
+				]
+			);
+			$this->assertCount( 0, $pending, 'CLI bulk pulls must not schedule AS retries.' );
+		}
+	}
+
+	public function test_integration_scoping_limits_pull_targets() {
+		Integrations::register( new Failing_Sample_Integration( 'pull_cli_other', 'Pull CLI Other' ) );
+		Integrations::enable( 'pull_cli_other' );
+		update_option( 'newspack_integration_incoming_fields_pull_cli_other', [ 'field_a' => [ 'name' => 'Field A' ] ] );
+		$user_a = $this->create_reader();
+
+		$unscoped_tally = $this->run_pull( [ 'user_ids' => [ $user_a ] ] );
+		$unscoped_count = Failing_Sample_Integration::$pull_count;
+		$scoped_tally   = $this->run_pull(
+			[
+				'user_ids'       => [ $user_a ],
+				'integration_id' => 'pull_cli_mock',
+			]
+		);
+
+		delete_option( 'newspack_integration_incoming_fields_pull_cli_other' );
+		Integrations::disable( 'pull_cli_other' );
+
+		$this->assertSame( 2, $unscoped_count, 'Unscoped: both integrations pulled.' );
+		$this->assertSame( 3, Failing_Sample_Integration::$pull_count, 'Scoped: only one more pull happened.' );
+		$this->assertSame( 1, $unscoped_tally['processed'] );
+		$this->assertSame( 1, $scoped_tally['processed'] );
+	}
+
+	public function test_no_pull_targets_returns_wp_error() {
+		delete_option( 'newspack_integration_incoming_fields_pull_cli_mock' );
+		$user_a = $this->create_reader();
+
+		$result = $this->run_pull( [ 'user_ids' => [ $user_a ] ] );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'newspack_backfill_no_pull_targets', $result->get_error_code() );
+	}
+
+	public function test_active_only_skips_readers_without_active_subscription() {
+		$active_user   = $this->create_reader();
+		$inactive_user = $this->create_reader();
+		wcs_create_subscription(
+			[
+				'customer_id' => $active_user,
+				'status'      => 'active',
+			]
+		);
+
+		$tally = $this->run_pull(
+			[
+				'user_ids'    => [ $active_user, $inactive_user ],
+				'active_only' => true,
+			]
+		);
+
+		$this->assertSame(
+			[
+				'processed' => 1,
+				'errors'    => 0,
+				'skipped'   => 1,
+			],
+			$tally
+		);
+	}
+
+	public function test_all_readers_batching_honors_max_batches() {
+		$this->create_reader();
+		$this->create_reader();
+		$this->create_reader();
+
+		$tally = $this->run_pull(
+			[
+				'batch_size'  => 1,
+				'max_batches' => 2,
+			]
+		);
+
+		$this->assertSame( 2, $tally['processed'], 'batch_size=1 with max_batches=2 processes exactly 2 readers.' );
+	}
+}

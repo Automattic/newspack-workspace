@@ -11,6 +11,7 @@ use WP_CLI;
 use Newspack\Reader_Activation;
 use Newspack\Reader_Activation\Contact_Sync;
 use Newspack\Reader_Activation\Integrations;
+use Newspack\Reader_Activation\Integrations\Contact_Pull;
 use Newspack\Reader_Activation\Sync\Metadata;
 use Newspack_Subscription_Migrations\CSV_Importers\CSV_Importer;
 use Newspack_Subscription_Migrations\Stripe_Sync;
@@ -285,6 +286,162 @@ class RAS_Contact_Sync {
 		}
 
 		return static::$results;
+	}
+
+	/**
+	 * Pull incoming contact data from integrations for a batch of readers.
+	 *
+	 * Unlike the organic pull pipeline (Contact_Pull::pull_all()), this batch
+	 * driver never schedules ActionScheduler retries: a bulk run against a flaky
+	 * API would flood the queue with per-user retry chains. Errors are tallied
+	 * and logged; operators re-run the affected --offset window instead. Readers
+	 * with pending organic pull retries are still pulled — Reader_Data writes
+	 * are idempotent and a comprehensive backfill beats hole-avoidance.
+	 *
+	 * @param array $config {
+	 *   Configuration options.
+	 *
+	 *   @type bool        $config['active_only'] True to only pull readers with active subscriptions.
+	 *   @type array|bool  $config['user_ids'] If set, only pull the given user IDs.
+	 *   @type int         $config['batch_size'] Number of readers to query/process at once.
+	 *   @type int         $config['offset'] Number of readers to skip.
+	 *   @type int         $config['max_batches'] Maximum number of batches to process.
+	 *   @type bool        $config['is_dry_run'] True if a dry run (fetch, no persistence).
+	 *   @type string|null $config['integration_id'] Only pull from this integration.
+	 * }
+	 *
+	 * @return array|\WP_Error Results tally ( `processed`, `errors`, `skipped` ) or WP_Error.
+	 */
+	private static function pull_contacts( $config ) {
+		$default_config = [
+			'active_only'    => false,
+			'user_ids'       => false,
+			'batch_size'     => 10,
+			'offset'         => 0,
+			'max_batches'    => 0,
+			'is_dry_run'     => false,
+			'integration_id' => null,
+		];
+		$config = \wp_parse_args( $config, $default_config );
+
+		$integrations = Integrations::get_active_configured_integrations();
+		if ( ! empty( $config['integration_id'] ) ) {
+			$integrations = array_intersect_key( $integrations, [ $config['integration_id'] => true ] );
+		}
+
+		// Only integrations with enabled incoming fields can be pulled (matches
+		// Contact_Pull::pull_all() semantics); the rest are skipped with a notice.
+		$pull_targets = [];
+		foreach ( $integrations as $id => $integration ) {
+			if ( empty( $integration->get_enabled_incoming_fields() ) ) {
+				static::log(
+					sprintf(
+						// Translators: %s is the integration id.
+						__( 'Skipping integration "%s": no enabled incoming fields.', 'newspack-plugin' ),
+						$id
+					)
+				);
+				continue;
+			}
+			$pull_targets[ $id ] = $integration;
+		}
+
+		if ( empty( $pull_targets ) ) {
+			return new \WP_Error(
+				'newspack_backfill_no_pull_targets',
+				__( 'No active integrations with enabled incoming fields to pull from.', 'newspack-plugin' )
+			);
+		}
+
+		$tally = [
+			'processed' => 0,
+			'errors'    => 0,
+			'skipped'   => 0,
+		];
+
+		if ( ! empty( $config['user_ids'] ) ) {
+			static::log( __( 'Pulling by user ID...', 'newspack-plugin' ) );
+			foreach ( $config['user_ids'] as $user_id ) {
+				self::pull_contact( (int) $user_id, $pull_targets, $config, $tally );
+			}
+			return $tally;
+		}
+
+		static::log( __( 'Pulling all readers...', 'newspack-plugin' ) );
+		$user_ids = self::get_batch_of_readers( $config['batch_size'], $config['offset'] );
+		$batches  = 0;
+
+		while ( $user_ids ) {
+			$user_id = array_shift( $user_ids );
+			self::pull_contact( $user_id, $pull_targets, $config, $tally );
+
+			// Get the next batch.
+			if ( empty( $user_ids ) ) {
+				$batches++;
+
+				if ( $config['max_batches'] && $batches >= $config['max_batches'] ) {
+					break;
+				}
+
+				$user_ids = self::get_batch_of_readers( $config['batch_size'], $config['offset'] + ( $batches * $config['batch_size'] ) );
+			}
+		}
+
+		return $tally;
+	}
+
+	/**
+	 * Pull a single reader from every target integration and record the outcome.
+	 *
+	 * A reader counts as an error if any target integration's pull failed,
+	 * mirroring the push leg where a contact is an error if any integration
+	 * rejected it.
+	 *
+	 * @param int                                       $user_id      WordPress user ID.
+	 * @param \Newspack\Reader_Activation\Integration[] $pull_targets Integrations to pull from, keyed by id.
+	 * @param array                                     $config       Batch configuration (active_only, is_dry_run).
+	 * @param array                                     $tally        Results tally, passed by reference.
+	 */
+	private static function pull_contact( $user_id, $pull_targets, $config, &$tally ) {
+		if ( ! \get_userdata( $user_id ) ) {
+			static::log(
+				sprintf(
+					// Translators: %d is the user ID.
+					__( 'No user with ID %d. Skipping.', 'newspack-plugin' ),
+					$user_id
+				)
+			);
+			$tally['skipped']++;
+			return;
+		}
+
+		if ( $config['active_only'] && ! self::user_has_active_subscriptions( $user_id ) ) {
+			$tally['skipped']++;
+			return;
+		}
+
+		$errors = 0;
+		foreach ( $pull_targets as $id => $integration ) {
+			$result = Contact_Pull::pull_single_integration( $user_id, $integration, $config['is_dry_run'] );
+			if ( \is_wp_error( $result ) ) {
+				static::log(
+					sprintf(
+						// Translators: 1: integration id, 2: user ID, 3: error message.
+						__( 'Error pulling contact data from "%1$s" for user ID %2$d. %3$s', 'newspack-plugin' ),
+						$id,
+						$user_id,
+						$result->get_error_message()
+					)
+				);
+				$errors++;
+			}
+		}
+
+		if ( $errors ) {
+			$tally['errors']++;
+		} else {
+			$tally['processed']++;
+		}
 	}
 
 	/**
