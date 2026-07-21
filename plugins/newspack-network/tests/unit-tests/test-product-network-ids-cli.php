@@ -202,8 +202,8 @@ class TestProductNetworkIdsCLI extends WP_UnitTestCase {
 	/**
 	 * --map parsing coerces JSON string keys to integer product IDs and sanitizes Network ID values.
 	 *
-	 * ( The empty-value and non-scalar branches call WP_CLI::warning, which is unavailable under PHPUnit,
-	 * so they are exercised via the CLI end-to-end rather than here. )
+	 * ( The rejected-input branches are covered in TestProductNetworkIdsCLICommands, which drives the
+	 * commands through the WP_CLI shim. )
 	 */
 	public function test_parse_map() {
 		$parse_map_method = new ReflectionMethod( Product_Network_Ids::class, 'parse_map' );

@@ -34,11 +34,41 @@ class Product_Network_Ids {
 	const PLAN_PRODUCT_IDS_META_KEY = '_product_ids';
 
 	/**
-	 * Initialize this class and register the WP-CLI commands.
+	 * How many product writes to make before flushing the Data Events dispatch queue.
+	 *
+	 * Data_Events::dispatch() only queues; the queue is drained on shutdown. Flushing periodically
+	 * keeps the queued payloads from accumulating in memory for the whole run and means a run that
+	 * dies mid-way has already propagated everything up to the last flush.
+	 *
+	 * @var int
+	 */
+	const DISPATCH_FLUSH_INTERVAL = 100;
+
+	/**
+	 * How many posts to prime the meta cache for at a time.
+	 *
+	 * Priming loads every meta row of every listed post, so it is chunked to bound peak memory on
+	 * stores with many products.
+	 *
+	 * @var int
+	 */
+	const META_CACHE_CHUNK_SIZE = 500;
+
+	/**
+	 * Initialize this class and register hooks.
 	 *
 	 * @return void
 	 */
 	public static function init() {
+		add_action( 'init', [ __CLASS__, 'register_commands' ] );
+	}
+
+	/**
+	 * Register the WP-CLI commands.
+	 *
+	 * @return void
+	 */
+	public static function register_commands() {
 		if ( defined( 'WP_CLI' ) && WP_CLI ) {
 			// These are migration tooling, so they take the migration flow's --apply flag ( dry-run by default )
 			// rather than this plugin's older data-* commands' --live flag.
@@ -56,17 +86,31 @@ class Product_Network_Ids {
 	 * two plans with different Network IDs is ambiguous: it is withheld from the assignments and
 	 * reported as a conflict rather than guessed.
 	 *
+	 * Plan Network IDs are sanitized here, before the emptiness check, so a whitespace-only ( or
+	 * markup-only ) plan value is treated as "no Network ID" rather than surviving as an assignment
+	 * that later sanitizes down to '' and blanks a product.
+	 *
 	 * @param array $plans Array of [ 'network_id' => string, 'product_ids' => int[] ].
 	 * @return array {
 	 *     @type array $assignments Map of product ID => Network ID.
 	 *     @type array $conflicts   Map of product ID => list of the distinct Network IDs claiming it.
+	 *     @type array $stats       Per-plan diagnostics: total, without_network_id, without_products.
 	 * }
 	 */
 	public static function derive_assignments_from_plans( array $plans ) {
-		$claims = []; // Product ID => list of distinct Network IDs claiming it.
+		$claims             = []; // Product ID => list of distinct Network IDs claiming it.
+		$without_network_id = 0;
+		$without_products   = 0;
+
 		foreach ( $plans as $plan ) {
-			$network_id  = (string) ( $plan['network_id'] ?? '' );
+			$network_id  = sanitize_text_field( (string) ( $plan['network_id'] ?? '' ) );
 			$product_ids = $plan['product_ids'] ?? [];
+			if ( '' === $network_id ) {
+				$without_network_id++;
+			}
+			if ( empty( $product_ids ) ) {
+				$without_products++;
+			}
 			if ( '' === $network_id || empty( $product_ids ) ) {
 				continue;
 			}
@@ -94,6 +138,11 @@ class Product_Network_Ids {
 		return [
 			'assignments' => $assignments,
 			'conflicts'   => $conflicts,
+			'stats'       => [
+				'total'              => count( $plans ),
+				'without_network_id' => $without_network_id,
+				'without_products'   => $without_products,
+			],
 		];
 	}
 
@@ -170,6 +219,10 @@ class Product_Network_Ids {
 	 * written to every product the plan links ). Pass --map to assign an explicit operator mapping
 	 * instead. Runs in dry-run mode unless --apply is given.
 	 *
+	 * Exits non-zero when anything could not be assigned ( a plan carrying no Network ID, a product
+	 * claimed by two plans with different IDs, a product already carrying a different ID without
+	 * --overwrite ), so a scripted migration cannot record a green step for a partial run.
+	 *
 	 * ## OPTIONS
 	 *
 	 * [--map=<map>]
@@ -180,6 +233,10 @@ class Product_Network_Ids {
 	 * : Overwrite a product's existing Network ID when it differs from the derived/mapped value.
 	 * By default, existing differing values are left untouched and reported.
 	 *
+	 * [--repropagate]
+	 * : Also emit a product_updated event for products that already carry the target Network ID.
+	 * Use this to re-sync an already-tagged but desynced product, which otherwise fires no event.
+	 *
 	 * [--apply]
 	 * : Write the changes. Without this flag the command only reports what it would do.
 	 *
@@ -188,6 +245,7 @@ class Product_Network_Ids {
 	 *     wp newspack-network assign-product-network-ids
 	 *     wp newspack-network assign-product-network-ids --apply
 	 *     wp newspack-network assign-product-network-ids --map='{"123":"premium","456":"premium"}' --apply
+	 *     wp newspack-network assign-product-network-ids --apply --repropagate
 	 *
 	 * @param array $args       Positional arguments ( unused ).
 	 * @param array $assoc_args Associative arguments.
@@ -196,8 +254,10 @@ class Product_Network_Ids {
 	public static function assign( $args, $assoc_args ) {
 		self::require_network_site();
 
-		$apply     = isset( $assoc_args['apply'] );
-		$overwrite = isset( $assoc_args['overwrite'] );
+		$apply       = (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'apply', false );
+		$overwrite   = (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'overwrite', false );
+		$repropagate = (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'repropagate', false );
+		$map         = \WP_CLI\Utils\get_flag_value( $assoc_args, 'map', null );
 
 		// Writing the meta only propagates across the network through the newspack_network_product_updated
 		// listener, which registers only when Newspack\Data_Events is loaded and emits only when wc_get_product
@@ -215,18 +275,48 @@ class Product_Network_Ids {
 
 		if ( ! $can_propagate ) {
 			WP_CLI::warning(
-				'Cross-site propagation is unavailable here ( newspack_network_product_updated needs Newspack\\Data_Events and WooCommerce active ). Network IDs will be written to this site only; propagate them afterwards with "wp newspack-network data-backfill newspack_network_product_updated --live".'
+				'Cross-site propagation is unavailable here ( newspack_network_product_updated needs Newspack\\Data_Events and WooCommerce active ). Network IDs will be written to this site only; once both are active, re-run this command with --apply --repropagate to emit the events.'
 			);
 			WP_CLI::line( '' );
 		}
 
-		if ( isset( $assoc_args['map'] ) ) {
-			$assignments = self::parse_map( $assoc_args['map'] );
+		// Everything this command cannot resolve. Reported per item below and rolled into a non-zero
+		// exit at the end so "assign, then verify" cannot record a green step on a partial run.
+		$unresolved  = 0;
+		$plans_found = 0;
+
+		if ( null !== $map ) {
+			$assignments = self::parse_map( $map );
 			WP_CLI::line( sprintf( 'Using explicit operator mapping ( %d product(s) ).', count( $assignments ) ) );
 		} else {
-			$derived     = self::derive_assignments_from_plans( self::get_plans() );
+			$plans       = self::get_plans();
+			$plans_found = count( $plans );
+			$derived     = self::derive_assignments_from_plans( $plans );
 			$assignments = $derived['assignments'];
+			$stats       = $derived['stats'];
+
+			WP_CLI::line(
+				sprintf(
+					'Found %d membership plan(s): %d carry no Network ID, %d link no products.',
+					$stats['total'],
+					$stats['without_network_id'],
+					$stats['without_products']
+				)
+			);
 			WP_CLI::line( sprintf( 'Derived %d assignment(s) from membership plans.', count( $assignments ) ) );
+
+			// A plan nobody ever tagged is the NPPD-2057 field condition, and this is the only place in
+			// the system positioned to see it -- so it is reported, not silently skipped.
+			if ( $stats['without_network_id'] > 0 ) {
+				WP_CLI::warning(
+					sprintf(
+						'%d membership plan(s) carry no Network ID, so their products cannot be derived. Set the plan Network ID on every site ( the same value on matching plans ), or assign the products via --map.',
+						$stats['without_network_id']
+					)
+				);
+				$unresolved += $stats['without_network_id'];
+			}
+
 			foreach ( $derived['conflicts'] as $product_id => $network_ids ) {
 				WP_CLI::warning(
 					sprintf(
@@ -235,37 +325,82 @@ class Product_Network_Ids {
 						implode( ', ', $network_ids )
 					)
 				);
+				$unresolved++;
 			}
 		}
 		WP_CLI::line( '' );
 
+		// One query for the whole working set: the loop below reads the post type and the Network ID
+		// meta of every assignment, which would otherwise be two DB round trips per product.
+		self::prime_post_caches( array_keys( $assignments ) );
+
+		// A plan may link variation IDs; the Network ID lives on the parent product ( that is where
+		// Product_Admin::get_network_id resolves it from ), so fold them in rather than skipping them.
+		$folded      = self::fold_variations_into_parents( $assignments );
+		$assignments = $folded['assignments'];
+		foreach ( $folded['conflicts'] as $product_id => $network_ids ) {
+			WP_CLI::warning(
+				sprintf(
+					'Product #%d is claimed with different Network IDs ( %s ) once its variations are resolved to it - skipped. Resolve manually or via --map.',
+					$product_id,
+					implode( ', ', $network_ids )
+				)
+			);
+			$unresolved++;
+		}
+
 		if ( empty( $assignments ) ) {
 			WP_CLI::warning( 'No assignments to make.' );
+			if ( $plans_found > 0 || null !== $map || $unresolved > 0 ) {
+				// Plans ( or a map ) exist but nothing could be derived from them: a no-op here reads as
+				// "already migrated" if it exits 0, so fail instead.
+				WP_CLI::error( 'Nothing could be assigned. Cross-site paid access will grant nothing here.' );
+			}
 			return;
 		}
 
-		$skipped  = 0;
-		$already  = 0;
-		$to_write = 0;
+		$skipped      = 0;
+		$already      = 0;
+		$to_write     = 0;
+		$inapplicable = 0;
+		$dispatched   = 0;
 		foreach ( $assignments as $product_id => $network_id ) {
 			$product_id = (int) $product_id;
 			// Sanitize at the write path so the meta is consistent whatever the source ( plan meta or --map ),
 			// matching the product metabox's sanitize_text_field(). Done before the preview so dry-run matches apply.
 			$network_id = sanitize_text_field( (string) $network_id );
 
-			$post_type = get_post_type( $product_id );
-			if ( 'product' !== $post_type ) {
-				// The Network ID lives on the parent product; variations resolve to it via Product_Admin::get_network_id.
-				$reason = 'product_variation' === $post_type ? 'a product variation ( set the Network ID on its parent product )' : 'not a product';
-				WP_CLI::warning( sprintf( 'Skipping #%d: %s.', $product_id, $reason ) );
+			// Never write a blank Network ID: it is indistinguishable from "untagged", and with --overwrite
+			// it would replace a correct value and propagate the blank to every site.
+			if ( '' === $network_id ) {
+				WP_CLI::warning( sprintf( 'Skipping #%d: the Network ID is empty - refusing to write a blank value.', $product_id ) );
 				$skipped++;
 				continue;
 			}
 
+			if ( 'product' !== get_post_type( $product_id ) ) {
+				WP_CLI::warning( sprintf( 'Skipping #%d: not a product.', $product_id ) );
+				$skipped++;
+				continue;
+			}
+
+			// Access only ever grants from a reader's synced subscriptions, and the product metabox only
+			// writes for these types, so tagging anything else would just bloat every site's synced map.
+			if ( ! self::is_taggable_product( $product_id ) ) {
+				WP_CLI::line( sprintf( '  #%d is not a subscription product; a Network ID would grant nothing - left alone.', $product_id ) );
+				$inapplicable++;
+				continue;
+			}
+
 			$current = (string) get_post_meta( $product_id, Product_Admin::NETWORK_ID_META_KEY, true );
-			if ( $current === (string) $network_id ) {
+			if ( $current === $network_id ) {
 				WP_CLI::line( sprintf( '  #%d already set to "%s".', $product_id, $network_id ) );
 				$already++;
+				if ( $apply && $repropagate ) {
+					do_action( 'newspack_network_save_product', $product_id );
+					$dispatched++;
+					self::maybe_flush_dispatch_queue( $dispatched );
+				}
 				continue;
 			}
 			if ( '' !== $current && ! $overwrite ) {
@@ -283,22 +418,63 @@ class Product_Network_Ids {
 				update_post_meta( $product_id, Product_Admin::NETWORK_ID_META_KEY, $network_id );
 				// Fire the same action the product metabox fires, so the existing emitter propagates the change.
 				do_action( 'newspack_network_save_product', $product_id );
+				$dispatched++;
+				self::maybe_flush_dispatch_queue( $dispatched );
 			}
+		}
+		$unresolved += $skipped;
+
+		if ( $dispatched > 0 ) {
+			self::flush_dispatch_queue();
 		}
 
 		WP_CLI::line( '' );
 		if ( $apply ) {
-			WP_CLI::success( sprintf( 'Wrote %d product Network ID(s), skipped %d, %d already set.', $to_write, $skipped, $already ) );
+			WP_CLI::line(
+				sprintf(
+					'Wrote %d product Network ID(s), skipped %d, %d already set, %d not applicable.',
+					$to_write,
+					$skipped,
+					$already,
+					$inapplicable
+				)
+			);
 			if ( ! $can_propagate ) {
-				WP_CLI::warning( 'These writes were NOT propagated ( see the warning above ). Once Data Events and WooCommerce are active, replay propagation with:' );
-			} else {
-				// A product already carrying the target Network ID fires no event, so this command cannot
-				// re-propagate an already-tagged-but-desynced product. Point operators at the backfill for that.
-				WP_CLI::line( 'Products already carrying the target Network ID fire no event; if propagation may have been missed ( including for already-set products ), replay it with:' );
+				WP_CLI::warning( 'These writes were NOT propagated ( see the warning above ). Once Data Events and WooCommerce are active, re-run with --apply --repropagate to emit the events.' );
+			} elseif ( ! $repropagate ) {
+				// A product already carrying the target Network ID fires no event, so a plain run cannot
+				// re-sync an already-tagged-but-desynced product.
+				WP_CLI::line( 'Products already carrying the target Network ID fired no event. To re-emit for every assigned product, re-run with --apply --repropagate.' );
+				WP_CLI::line( 'Note: "data-backfill newspack_network_product_updated --live" is not a reliable replay for this - on a Hub it dedupes against the event log on the product\'s post_modified_gmt timestamp, which writing this meta does not change.' );
 			}
-			WP_CLI::line( '  wp newspack-network data-backfill newspack_network_product_updated --live' );
 		} else {
-			WP_CLI::success( sprintf( 'Dry run: %d product Network ID(s) would be written, %d skipped, %d already set. Re-run with --apply.', $to_write, $skipped, $already ) );
+			WP_CLI::line(
+				sprintf(
+					'Dry run: %d product Network ID(s) would be written, %d skipped, %d already set, %d not applicable.',
+					$to_write,
+					$skipped,
+					$already,
+					$inapplicable
+				)
+			);
+		}
+		WP_CLI::line( '' );
+
+		if ( $unresolved > 0 ) {
+			// Exit non-zero so a scripted migration cannot treat a partial assignment as done: everything
+			// withheld here is a product ( or plan ) that will grant nothing across the network.
+			WP_CLI::error(
+				sprintf(
+					'%d item(s) could not be assigned ( see the warnings above ). Resolve them ( e.g. via --map ) and re-run; verify-product-network-ids will fail until they are.',
+					$unresolved
+				)
+			);
+		}
+
+		if ( $apply ) {
+			WP_CLI::success( 'Every derived product Network ID is assigned.' );
+		} else {
+			WP_CLI::success( 'Dry run complete: every derived product Network ID can be assigned. Re-run with --apply.' );
 		}
 		WP_CLI::line( '' );
 	}
@@ -312,6 +488,11 @@ class Product_Network_Ids {
 	 * or not tagged at all, so the cross-site grant resolves to nothing ). Run it on every site: each
 	 * site's linkage check confirms the other sites' products are present in its synced map.
 	 *
+	 * The default product set is every product the site's membership plans link, plus every product that
+	 * already carries a Network ID -- not just the tagged ones. Checking only tagged products would hide
+	 * exactly what assign-product-network-ids withholds ( conflicts, skipped products ), so a network
+	 * that assign could not finish would still verify green.
+	 *
 	 * Limitation: the synced products option is append-only ( there is no product-deleted listener ), so a
 	 * stale entry for a since-removed product or site can still report as "linked" -- the same class of
 	 * caveat as relying on the site's URL staying byte-identical as the map key.
@@ -319,9 +500,9 @@ class Product_Network_Ids {
 	 * ## OPTIONS
 	 *
 	 * [--products=<ids>]
-	 * : Comma-separated product IDs to check ( e.g. a gate's products ). Defaults to every local product
-	 * that carries a Network ID. To gate a flip, pass the gate's product IDs: the bare form only looks at
-	 * already-tagged products, so a site with zero tagged products ( the NPPD-2057 failure ) passes it.
+	 * : Comma-separated product IDs to check ( e.g. a gate's products ). Defaults to every product linked
+	 * by a membership plan plus every product that already carries a Network ID. Pass a gate's product IDs
+	 * to check exactly what the gate depends on.
 	 *
 	 * ## EXAMPLES
 	 *
@@ -341,10 +522,16 @@ class Product_Network_Ids {
 			$network_products = [];
 		}
 
-		$explicit_products = isset( $assoc_args['products'] );
-		$local_products    = self::get_products_to_check(
-			$explicit_products ? wp_parse_id_list( $assoc_args['products'] ) : null
-		);
+		$product_ids = null;
+		if ( isset( $assoc_args['products'] ) ) {
+			$product_ids = wp_parse_id_list( $assoc_args['products'] );
+			if ( empty( $product_ids ) ) {
+				// An unset shell variable ( --products="$GATE_PRODUCTS" ) must never read as "nothing to
+				// check, all good": this is the path a scripted flip gate runs.
+				WP_CLI::error( '--products was passed but no product IDs could be parsed from it. Pass a comma-separated list of product IDs, or omit --products to check every plan-linked and tagged product.' );
+			}
+		}
+		$local_products = self::get_products_to_check( $product_ids );
 
 		WP_CLI::line( '' );
 		WP_CLI::line( sprintf( 'Verifying product Network IDs for %s.', $current_site ) );
@@ -353,15 +540,13 @@ class Product_Network_Ids {
 		WP_CLI::line( '' );
 
 		if ( empty( $local_products ) ) {
-			WP_CLI::warning( 'No products carry a Network ID on this site. Cross-site paid access will grant nothing here. Run assign-product-network-ids first.' );
-			return;
+			WP_CLI::error( 'No products to check: no membership plan links a subscription product and no product carries a Network ID. Cross-site paid access will grant nothing here. Run assign-product-network-ids first, or pass --products with the gate\'s products.' );
 		}
 
 		$findings = self::verify_products( $local_products, $network_products, $current_site );
 		$untagged = 0;
 		$unlinked = 0;
 		foreach ( $findings as $product_id => $finding ) {
-			// An untagged product ( only reachable when passed explicitly via --products ) is the NPPD-2057 failure itself.
 			if ( '' === $finding['network_id'] ) {
 				WP_CLI::warning( sprintf( '#%d: no Network ID set ( cross-site access grants nothing ). Run assign-product-network-ids.', $product_id ) );
 				$untagged++;
@@ -383,8 +568,8 @@ class Product_Network_Ids {
 		WP_CLI::line( '' );
 		WP_CLI::line( sprintf( 'Checked %d product(s): %d untagged, %d unlinked.', count( $findings ), $untagged, $unlinked ) );
 		if ( $unlinked > 0 ) {
-			WP_CLI::line( 'For unlinked products, make sure every site has run assign-product-network-ids and its product_updated events have propagated:' );
-			WP_CLI::line( '  wp newspack-network data-backfill newspack_network_product_updated --live' );
+			WP_CLI::line( 'For unlinked products, make sure every site has run assign-product-network-ids, then re-emit the events from those sites with:' );
+			WP_CLI::line( '  wp newspack-network assign-product-network-ids --apply --repropagate' );
 		}
 		if ( $untagged > 0 || $unlinked > 0 ) {
 			// Exit non-zero so callers can gate a flip on this check.
@@ -424,6 +609,8 @@ class Product_Network_Ids {
 			]
 		);
 
+		self::prime_post_caches( $plan_posts );
+
 		$plans = [];
 		foreach ( $plan_posts as $plan_id ) {
 			$product_ids = get_post_meta( $plan_id, self::PLAN_PRODUCT_IDS_META_KEY, true );
@@ -436,13 +623,106 @@ class Product_Network_Ids {
 	}
 
 	/**
+	 * Every product ID linked by a membership plan, whatever the plan's Network ID.
+	 *
+	 * @return int[]
+	 */
+	private static function get_plan_linked_product_ids() {
+		$product_ids = [];
+		foreach ( self::get_plans() as $plan ) {
+			foreach ( $plan['product_ids'] as $product_id ) {
+				$product_ids[] = (int) $product_id;
+			}
+		}
+		return array_values( array_unique( $product_ids ) );
+	}
+
+	/**
+	 * Resolve a variation ID to its parent product ID, leaving anything else untouched.
+	 *
+	 * The Network ID lives on the parent product; Product_Admin::get_network_id() performs the same
+	 * resolution when reading. Uses the post parent rather than wc_get_product() so it also works with
+	 * WooCommerce deactivated mid-migration.
+	 *
+	 * @param int $product_id The product or variation ID.
+	 * @return int
+	 */
+	private static function resolve_to_parent_product_id( $product_id ) {
+		$product_id = (int) $product_id;
+		if ( 'product_variation' !== get_post_type( $product_id ) ) {
+			return $product_id;
+		}
+		$parent_id = (int) wp_get_post_parent_id( $product_id );
+		return $parent_id ? $parent_id : $product_id;
+	}
+
+	/**
+	 * Fold variation IDs in an assignment map into their parent products.
+	 *
+	 * A parent that ends up claimed with two different Network IDs is ambiguous and is withheld as a
+	 * conflict, exactly like a product claimed by two plans.
+	 *
+	 * @param array $assignments Map of product ID => Network ID.
+	 * @return array {
+	 *     @type array $assignments Map of parent product ID => Network ID.
+	 *     @type array $conflicts   Map of parent product ID => the distinct Network IDs claiming it.
+	 * }
+	 */
+	private static function fold_variations_into_parents( array $assignments ) {
+		$claims = [];
+		foreach ( $assignments as $product_id => $network_id ) {
+			$target_id = self::resolve_to_parent_product_id( $product_id );
+			if ( ! isset( $claims[ $target_id ] ) ) {
+				$claims[ $target_id ] = [];
+			}
+			if ( ! in_array( $network_id, $claims[ $target_id ], true ) ) {
+				$claims[ $target_id ][] = $network_id;
+			}
+		}
+
+		$folded    = [];
+		$conflicts = [];
+		foreach ( $claims as $product_id => $network_ids ) {
+			if ( 1 === count( $network_ids ) ) {
+				$folded[ $product_id ] = $network_ids[0];
+			} else {
+				$conflicts[ $product_id ] = $network_ids;
+			}
+		}
+
+		return [
+			'assignments' => $folded,
+			'conflicts'   => $conflicts,
+		];
+	}
+
+	/**
+	 * Whether a Network ID on this product could ever grant cross-site access.
+	 *
+	 * Access resolves grants from a reader's synced subscriptions, and the product metabox only writes
+	 * the meta for subscription products, so tagging any other type would only bloat every site's synced
+	 * product map. With WooCommerce deactivated the type is unknowable, so nothing is filtered out.
+	 *
+	 * @param int $product_id The product ID.
+	 * @return bool
+	 */
+	private static function is_taggable_product( $product_id ) {
+		if ( ! function_exists( 'wc_get_product' ) ) {
+			return true;
+		}
+		$product = wc_get_product( $product_id );
+		return $product && $product->is_type( [ 'subscription', 'variable-subscription' ] );
+	}
+
+	/**
 	 * Read the products to verify as a product ID => Network ID map.
 	 *
-	 * With an explicit list ( e.g. a gate's products ) every ID is returned, including untagged ones
-	 * ( Network ID '' ) so verify can flag them as the failure they are. With null, only products that
-	 * already carry a Network ID are returned.
+	 * With an explicit list ( e.g. a gate's products ) every ID is returned as passed, including untagged
+	 * ones ( Network ID '' ) so verify can flag them as the failure they are. With null, the set is every
+	 * plan-linked subscription product plus every product that already carries a Network ID -- so products
+	 * that assign-product-network-ids could not resolve are checked rather than defined away.
 	 *
-	 * @param array|null $product_ids Explicit product IDs to look up; null reads every tagged product.
+	 * @param array|null $product_ids Explicit product IDs to look up; null builds the default set.
 	 * @return array
 	 */
 	private static function get_products_to_check( $product_ids = null ) {
@@ -470,16 +750,72 @@ class Product_Network_Ids {
 			]
 		);
 
-		// Prime the postmeta cache in a single query so the get_network_id() reads below hit the cache
-		// instead of one get_post_meta() DB round-trip per product ( fields => 'ids' skips WP's own priming ).
-		update_meta_cache( 'post', $tagged_ids );
+		$candidate_ids = array_values( array_unique( array_merge( array_map( 'intval', $tagged_ids ), self::get_plan_linked_product_ids() ) ) );
 
-		// The meta_query already excludes empty/absent Network IDs, so every ID here is tagged.
-		$tagged = [];
-		foreach ( $tagged_ids as $product_id ) {
-			$tagged[ (int) $product_id ] = Product_Admin::get_network_id( $product_id );
+		// Prime the post and postmeta caches so the reads below hit the cache instead of one DB round
+		// trip per product ( fields => 'ids' skips WP's own priming ).
+		self::prime_post_caches( $candidate_ids );
+
+		$products = [];
+		foreach ( $candidate_ids as $candidate_id ) {
+			// A plan can link a variation, or a product that has since been deleted.
+			$product_id = self::resolve_to_parent_product_id( $candidate_id );
+			if ( 'product' !== get_post_type( $product_id ) ) {
+				continue;
+			}
+			// A plan-linked product that could never grant cross-site access is not a flip blocker.
+			if ( ! self::is_taggable_product( $product_id ) ) {
+				continue;
+			}
+			$products[ $product_id ] = Product_Admin::get_network_id( $product_id );
 		}
-		return $tagged;
+		return $products;
+	}
+
+	/**
+	 * Prime the post and postmeta caches for a set of post IDs, in chunks.
+	 *
+	 * Priming pulls every meta row of every listed post, so the chunking bounds peak memory on stores
+	 * with thousands of products.
+	 *
+	 * @param array $post_ids The post IDs.
+	 * @return void
+	 */
+	private static function prime_post_caches( array $post_ids ) {
+		$post_ids = array_map( 'intval', $post_ids );
+		if ( empty( $post_ids ) ) {
+			return;
+		}
+		foreach ( array_chunk( $post_ids, self::META_CACHE_CHUNK_SIZE ) as $chunk ) {
+			_prime_post_caches( $chunk, false, true );
+		}
+	}
+
+	/**
+	 * Flush the Data Events dispatch queue every DISPATCH_FLUSH_INTERVAL dispatches.
+	 *
+	 * @param int $dispatched How many events have been dispatched so far.
+	 * @return void
+	 */
+	private static function maybe_flush_dispatch_queue( $dispatched ) {
+		if ( 0 === $dispatched % self::DISPATCH_FLUSH_INTERVAL ) {
+			self::flush_dispatch_queue();
+		}
+	}
+
+	/**
+	 * Send the events queued so far by Data Events.
+	 *
+	 * Data_Events::dispatch() only appends to an in-memory queue drained on shutdown, so a long
+	 * migration would hold every payload in memory and propagate nothing at all if the process were
+	 * killed before shutdown -- exactly the "wrote but didn't sync" state this command exists to avoid.
+	 *
+	 * @return void
+	 */
+	private static function flush_dispatch_queue() {
+		if ( method_exists( 'Newspack\Data_Events', 'execute_queued_dispatches' ) ) {
+			\Newspack\Data_Events::execute_queued_dispatches();
+		}
 	}
 
 	/**
@@ -496,18 +832,31 @@ class Product_Network_Ids {
 		}
 		$decoded = json_decode( (string) $map, true );
 		if ( ! is_array( $decoded ) ) {
-			WP_CLI::error( 'Invalid --map: expected a JSON object of { product_id: network_id } or a path to such a file.' );
+			WP_CLI::error( 'Invalid --map: expected a JSON object of { "product_id": "network_id" } or a path to such a file.' );
+		}
+		if ( empty( $decoded ) ) {
+			WP_CLI::error( 'Invalid --map: the mapping is empty.' );
+		}
+		// A JSON list is an array too, and its 0..n-1 keys would silently become product IDs.
+		if ( array_keys( $decoded ) === range( 0, count( $decoded ) - 1 ) ) {
+			WP_CLI::error( 'Invalid --map: expected a JSON object keyed by product ID, got a JSON list.' );
 		}
 
 		$assignments = [];
 		foreach ( $decoded as $product_id => $network_id ) {
+			// JSON object keys arrive as PHP int keys only when they are canonical integers; anything else
+			// ( "abc", "12abc" ) would cast to a real, unrelated product ID.
+			if ( ! preg_match( '/^[1-9][0-9]*$/', (string) $product_id ) ) {
+				WP_CLI::warning( sprintf( 'Skipping --map entry "%s": keys must be positive integer product IDs.', $product_id ) );
+				continue;
+			}
 			if ( ! is_scalar( $network_id ) ) {
-				WP_CLI::warning( sprintf( 'Skipping product #%d in --map: Network ID must be a string.', (int) $product_id ) );
+				WP_CLI::warning( sprintf( 'Skipping product #%s in --map: Network ID must be a string.', $product_id ) );
 				continue;
 			}
 			$network_id = sanitize_text_field( (string) $network_id );
 			if ( '' === $network_id ) {
-				WP_CLI::warning( sprintf( 'Skipping product #%d in --map: empty Network ID.', (int) $product_id ) );
+				WP_CLI::warning( sprintf( 'Skipping product #%s in --map: empty Network ID.', $product_id ) );
 				continue;
 			}
 			$assignments[ (int) $product_id ] = $network_id;
