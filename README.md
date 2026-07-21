@@ -267,7 +267,8 @@ n worktree add newspack-plugin fix/my-feature
 # 2. Create an environment pointing to that worktree
 n env create my-feature --worktree newspack-plugin:fix/my-feature
 
-# 3. Start it (--build installs deps and compiles assets)
+# 3. Start it (--build seeds deps and built assets from the main checkout,
+#    warning if they're stale; --rebuild also rebuilds stale JS on the host)
 n env up my-feature --build
 
 # 4. Visit http://localhost:8081 — this site uses the worktree branch
@@ -286,7 +287,9 @@ n worktree remove <plugin> <branch> # Remove a worktree
 
 ```BASH
 n env create <name> --worktree <repo>:<branch> [--worktree ...] [--port <port>]
-n env up <name> [--build]           # Start the environment (--build installs deps)
+n env up <name> [--build]           # Start the environment (--build seeds built assets
+                                    #   from the main checkout and warns when they're stale)
+n env up <name> --rebuild           # --build + rebuild stale worktree JS on the host
 n env down <name>                   # Stop the environment
 n env destroy <name>                # Stop and remove the environment
 n env list                          # List all environments and their status

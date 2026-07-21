@@ -127,6 +127,155 @@ each_worktree_in_env() {
     done < <(grep -E '^[[:space:]]*-[[:space:]]+\./worktrees(-repos)?/[^[:space:]:]+:/newspack-(repos|plugins|themes)/[^[:space:]:]+' "$file" 2>/dev/null)
 }
 
+# Newest file mtime (epoch seconds) across the given directories, skipping
+# ones that don't exist. Prints nothing when no files are found. BSD and GNU
+# stat disagree on the mtime flag, so probe which flavor is available.
+newest_mtime_in() {
+    local d dirs=()
+    for d in "$@"; do
+        [[ -d "$d" ]] && dirs+=("$d")
+    done
+    [[ ${#dirs[@]} -eq 0 ]] && return 0
+    if stat -f %m . >/dev/null 2>&1; then
+        find "${dirs[@]}" -type f -exec stat -f %m {} + 2>/dev/null | sort -rn | head -1
+    else
+        find "${dirs[@]}" -type f -exec stat -c %Y {} + 2>/dev/null | sort -rn | head -1
+    fi
+}
+
+# Format an epoch timestamp as YYYY-MM-DD (BSD date -r vs GNU date -d).
+epoch_to_date() {
+    date -r "$1" +%Y-%m-%d 2>/dev/null || date -d "@$1" +%Y-%m-%d
+}
+
+# Seed built assets (node_modules, vendor, dist, build) from the main
+# checkout's copy of each worktree-mounted repo into the env's worktrees
+# (`n env up --build`). The copy preserves mtimes, so the seeded dist/build
+# are exactly as old as the main checkout's last build — which may be much
+# older than the worktree's source. Every copy reports that build date, and
+# a prominent warning fires when the assets predate the worktree's last
+# source commit (the env would serve outdated compiled JS/CSS over current
+# PHP — easy to misdiagnose as a branch-sync problem).
+#
+# When $3 (auto_rebuild) is true, stale monorepo worktrees are rebuilt from
+# their own source after seeding. The rebuild MUST run on the host — env
+# worktrees can't be built in-container — and goes through corepack pnpm,
+# filtered by workspace PATH (package.json names don't match repo dir names,
+# e.g. newspack-plugin's package is named "newspack").
+seed_worktree_assets() {
+    local compose_file="$1"
+    local env_name="$2"
+    local auto_rebuild="$3"
+    local now_ts line wt_path container_path repo repo_host_path src dst wt_root
+    local built_ts age_days age_label src_ts dir entry rel_path
+    local stale_mono=()
+    now_ts=$(date +%s)
+    # Anchored regex (matching each_worktree_in_env / get_target_container
+    # in n) so commented-out volume lines don't false-match and trigger
+    # spurious copies.
+    while read -r line; do
+        # Parse volume line: "- ./worktrees[-repos]/…:/newspack-{plugins,themes,repos}/repo"
+        # Strip leading whitespace + dash with the same [[:space:]] class
+        # the grep above uses. `env create` only emits 6-space-indented
+        # mounts, so a tab here arises only from a hand-edited compose
+        # file — this keeps the strip in step with the grep for that case.
+        wt_path=$(echo "$line" | sed -E 's/^[[:space:]]*-[[:space:]]*//' | cut -d: -f1)
+        container_path=$(echo "$line" | cut -d: -f2)
+        repo=$(basename "$container_path")
+        # Resolve the source: monorepo layout first, else the standalone repos/ dir.
+        repo_host_path=$(get_repo_host_path "$repo")
+        [[ -z "$repo_host_path" ]] && repo_host_path=$(get_standalone_repo_host_path "$repo")
+        if [[ -z "$repo_host_path" ]]; then
+            echo "Skipping built assets for $repo (no main-checkout copy to seed from)."
+            continue
+        fi
+        src="$NABSPATH/$repo_host_path"
+        dst="$NABSPATH/${wt_path#./}"
+        # Monorepo mounts nest the repo at <worktree root>/{plugins,themes}/<repo>;
+        # that root is where host-side pnpm runs. When the suffix doesn't strip
+        # (standalone repos/ and legacy mounts), the repo isn't a pnpm workspace
+        # member and can't be rebuilt via --filter.
+        wt_root="${dst%/$repo_host_path}"
+        # The newest mtime among the seeded dist/build IS their build date
+        # (mtimes are preserved by the copy).
+        built_ts=$(newest_mtime_in "$src/dist" "$src/build")
+        if [[ -n "$built_ts" ]]; then
+            age_days=$(( (now_ts - built_ts) / 86400 ))
+            age_label="${age_days} days"
+            [[ "$age_days" -eq 1 ]] && age_label="1 day"
+            echo "Copying built assets for $repo (built $(epoch_to_date "$built_ts"), $age_label ago)..."
+        else
+            echo "Copying built assets for $repo (no dist/build in $repo_host_path)..."
+        fi
+        for dir in node_modules vendor dist build; do
+            if [[ -d "$src/$dir" ]]; then
+                cp -al "$src/$dir" "$dst/$dir" 2>/dev/null || cp -a "$src/$dir" "$dst/$dir"
+            fi
+        done
+        # Stale when the seeded dist/build predate the worktree's last source
+        # commit. Compare against the commit date, not source file mtimes — a
+        # fresh worktree checkout stamps every file with the checkout time,
+        # which would false-flag assets built moments earlier.
+        src_ts=$(git -C "$dst" log -1 --format=%ct -- . 2>/dev/null)
+        if [[ -n "$built_ts" && -n "$src_ts" && "$built_ts" -lt "$src_ts" ]]; then
+            log_warning "Seeded assets for $repo are STALE: built $(epoch_to_date "$built_ts") ($age_label ago), but the worktree's source last changed $(epoch_to_date "$src_ts")."
+            log_warning "This env would serve outdated compiled JS/CSS for $repo."
+            if [[ "$wt_root" != "$dst" ]]; then
+                if [[ "$auto_rebuild" == true ]]; then
+                    echo "  Queued for rebuild from the worktree's own source (--rebuild)."
+                    stale_mono+=("$wt_root|$repo_host_path|$repo")
+                else
+                    echo "  Rebuild on the host:"
+                    echo "    cd $wt_root \\"
+                    echo "      && COREPACK_INTEGRITY_KEYS=0 corepack pnpm install \\"
+                    echo "      && COREPACK_INTEGRITY_KEYS=0 corepack pnpm --filter ./$repo_host_path run build"
+                    echo "  Or re-run with: n env up $env_name --rebuild"
+                fi
+            else
+                echo "  This is a standalone repos/ worktree; rebuild it on the host with that"
+                echo "  repo's own tooling (e.g.: cd $dst && npm ci && npm run build)."
+            fi
+        fi
+    done < <(grep -E '^[[:space:]]*-[[:space:]]+\./worktrees(-repos)?/[^[:space:]:]+:/newspack-(repos|plugins|themes)/[^[:space:]:]+' "$compose_file" 2>/dev/null)
+    [[ "$auto_rebuild" == true ]] || return 0
+    if [[ ${#stale_mono[@]} -eq 0 ]]; then
+        echo "--rebuild: no stale monorepo worktree assets; nothing to rebuild."
+        return 0
+    fi
+    if ! command -v corepack >/dev/null 2>&1; then
+        log_error "--rebuild needs corepack on the host (bundled with Node.js >= 16.9); stale assets were left in place."
+        return 0
+    fi
+    # pnpm install once per worktree root, then rebuild each stale repo,
+    # filtered by workspace path. The seeded dist/build may be hardlinked into
+    # the main checkout, so they're removed first — a rebuild writing through
+    # a shared inode would clobber the main checkout's files.
+    local installed_roots="|"
+    local failed_roots="|"
+    for entry in "${stale_mono[@]}"; do
+        IFS='|' read -r wt_root rel_path repo <<< "$entry"
+        [[ "$failed_roots" == *"|$wt_root|"* ]] && continue
+        if [[ "$installed_roots" != *"|$wt_root|"* ]]; then
+            echo "Installing JS dependencies in ${wt_root#"$NABSPATH"/} (host-side pnpm)..."
+            if (cd "$wt_root" && COREPACK_INTEGRITY_KEYS=0 COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack pnpm install); then
+                installed_roots+="$wt_root|"
+            else
+                log_error "pnpm install failed in $wt_root; skipping rebuilds there (assets remain stale)."
+                failed_roots+="$wt_root|"
+                continue
+            fi
+        fi
+        echo "Rebuilding $repo from the worktree's source..."
+        rm -rf "$wt_root/$rel_path/dist" "$wt_root/$rel_path/build"
+        if (cd "$wt_root" && COREPACK_INTEGRITY_KEYS=0 COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack pnpm --filter "./$rel_path" run build); then
+            log_success "Rebuilt $repo from worktree source."
+        else
+            log_error "Rebuild failed for $repo. Its stale dist/build were removed before the rebuild; re-run 'n env up $env_name --build' to re-seed, or build manually in $wt_root."
+        fi
+    done
+    return 0
+}
+
 case $1 in
     create)
         env_name="$2"
@@ -363,8 +512,8 @@ YAML
     up)
         env_name="$2"
         if [[ -z "$env_name" ]]; then
-            echo "Usage: n env up <name> [--build]"
-            echo "       n env up --all [--build]"
+            echo "Usage: n env up <name> [--build] [--rebuild]"
+            echo "       n env up --all [--build] [--rebuild]"
             exit 1
         fi
         # --all: start all existing environments.
@@ -394,9 +543,12 @@ YAML
         validate_env_name "$env_name"
         shift 2
         auto_build=false
+        auto_rebuild=false
         while [[ $# -gt 0 ]]; do
             case $1 in
                 --build) auto_build=true; shift ;;
+                # --rebuild implies --build: it acts on the assets the copy seeds.
+                --rebuild) auto_build=true; auto_rebuild=true; shift ;;
                 *) echo "Unknown option: $1"; exit 1 ;;
             esac
         done
@@ -556,32 +708,10 @@ MIGRATE
         # Reload Apache to pick up SSL config (it's running by now).
         docker exec "$container_name" apachectl graceful 2>/dev/null
         echo "Environment '$env_name' is ready at https://${domain}/"
-        # Copy built assets from main repos into worktrees.
+        # Copy built assets from main repos into worktrees, reporting their
+        # build age (and rebuilding stale ones when --rebuild was given).
         if [[ "$auto_build" == true ]]; then
-            # Anchored regex (matching each_worktree_in_env / get_target_container
-            # in n) so commented-out volume lines don't false-match and trigger
-            # spurious copies.
-            grep -E '^[[:space:]]*-[[:space:]]+\./worktrees(-repos)?/[^[:space:]:]+:/newspack-(repos|plugins|themes)/[^[:space:]:]+' "$compose_file" 2>/dev/null | while read -r line; do
-                # Parse volume line: "- ./worktrees[-repos]/…:/newspack-{plugins,themes,repos}/repo"
-                # Strip leading whitespace + dash with the same [[:space:]] class
-                # the grep above uses. `env create` only emits 6-space-indented
-                # mounts, so a tab here arises only from a hand-edited compose
-                # file — this keeps the strip in step with the grep for that case.
-                wt_path=$(echo "$line" | sed -E 's/^[[:space:]]*-[[:space:]]*//' | cut -d: -f1)
-                container_path=$(echo "$line" | cut -d: -f2)
-                repo=$(basename "$container_path")
-                # Resolve the source: monorepo layout first, else the standalone repos/ dir.
-                repo_host_path=$(get_repo_host_path "$repo")
-                [[ -z "$repo_host_path" ]] && repo_host_path=$(get_standalone_repo_host_path "$repo")
-                src="$NABSPATH/$repo_host_path"
-                dst="$NABSPATH/${wt_path#./}"
-                echo "Copying built assets for $repo..."
-                for dir in node_modules vendor dist build; do
-                    if [[ -d "$src/$dir" ]]; then
-                        cp -al "$src/$dir" "$dst/$dir" 2>/dev/null || cp -a "$src/$dir" "$dst/$dir"
-                    fi
-                done
-            done
+            seed_worktree_assets "$compose_file" "$env_name" "$auto_rebuild"
         fi
         ;;
     down)
@@ -818,9 +948,13 @@ MIGRATE
         ;;
     *)
         echo "Usage: n env <create|up|down|destroy|list|cleanup|e2e-setup>"
-        echo "  up <name> [--build]      Start an environment"
-        echo "  up --all [--build]       Start all environments"
-        echo "  cleanup [--all] [--yes]  Remove environments (--all selects everything, --yes skips confirmation)"
-        echo "  e2e-setup <name> [opts]  Build a ready-to-run local e2e-tests environment (see --help)"
+        echo "  up <name> [--build] [--rebuild]  Start an environment"
+        echo "      --build                      Seed built assets (node_modules/vendor/dist/build) from the"
+        echo "                                   main checkout into the env's worktrees, reporting their build"
+        echo "                                   date and warning when they predate the worktree's source"
+        echo "      --rebuild                    Implies --build; also rebuilds stale worktree JS on the host"
+        echo "  up --all [--build] [--rebuild]   Start all environments"
+        echo "  cleanup [--all] [--yes]          Remove environments (--all selects everything, --yes skips confirmation)"
+        echo "  e2e-setup <name> [opts]          Build a ready-to-run local e2e-tests environment (see --help)"
         ;;
 esac

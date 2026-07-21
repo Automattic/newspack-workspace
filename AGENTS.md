@@ -277,8 +277,15 @@ n env create <name> [options]  # Create environment config
                                #   so other envs keep the base checkout.
   --domain <domain>            #   Custom domain (default: <name>.test)
   --up                         #   Start the environment immediately after creation
-n env up <name> [--build]      # Start environment (creates DB, installs WP, sets up SSL)
-n env up --all [--build]       # Start all existing environments at once
+n env up <name> [options]      # Start environment (creates DB, installs WP, sets up SSL)
+  --build                      #   Seed built assets (node_modules/vendor/dist/build) from the
+                               #   main checkout into the env's worktrees. Prints each repo's
+                               #   asset build date and warns prominently when the assets
+                               #   predate the worktree's source (stale compiled JS/CSS).
+  --rebuild                    #   Implies --build; after seeding, rebuilds stale monorepo
+                               #   worktree JS from the worktree's own source on the HOST via
+                               #   corepack pnpm (env worktrees cannot be built in-container).
+n env up --all [options]       # Start all existing environments at once
 n env down <name>              # Stop environment
 n env destroy <name>           # Remove environment, DB, worktrees, and files
 n env list                     # List environments with status, URLs, and worktrees
