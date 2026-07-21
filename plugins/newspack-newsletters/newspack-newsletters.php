@@ -91,6 +91,7 @@ require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/admin/class-newslette
 require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/admin/class-ads-list-rest.php';
 require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/admin/class-advertisers-list-rest.php';
 require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/admin/class-settings-rest.php';
+require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/admin/class-admin-shell-preferences.php';
 require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/admin/class-asset-loader.php';
 require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/admin/class-admin-shell-menu.php';
 require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/admin/class-admin-shell-legacy-redirect.php';
@@ -107,3 +108,4 @@ require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/class-wizard-bridge.p
 \Newspack\Newsletters\Admin\Ads_List_REST::init();
 \Newspack\Newsletters\Admin\Advertisers_List_REST::init();
 \Newspack\Newsletters\Admin\Settings_REST::init();
+\Newspack\Newsletters\Admin\Admin_Shell_Preferences::init();
