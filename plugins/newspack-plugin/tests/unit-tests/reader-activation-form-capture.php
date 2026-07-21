@@ -101,6 +101,21 @@ class Test_Form_Capture extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The registration method format is a public contract shared with the
+	 * frontend registration endpoint (and stored in user meta on live
+	 * sites) — pin the literal so accidental drift on either side of the
+	 * shared helper fails loudly.
+	 */
+	public function test_registration_method_format_is_pinned() {
+		$this->assertSame( 'integration-registration-form-capture', Form_Capture::get_registration_method() );
+		$this->assertSame(
+			Reader_Registration::get_registration_method_for( Form_Capture::ID ),
+			Form_Capture::get_registration_method(),
+			'Integration and endpoint must derive the method string from the same helper.'
+		);
+	}
+
+	/**
 	 * Verify can_sync() honors the base contract: WP_Error when $return_errors
 	 * is true — has_one_syncable_integration() calls ->has_errors() on it unguarded.
 	 */

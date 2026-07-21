@@ -261,6 +261,20 @@ final class Reader_Registration {
 	}
 
 	/**
+	 * Get the registration method string stamped on registrations from a
+	 * frontend integration. Integrations scope their behavior (metadata
+	 * filters, magic link suppression, sync decisions) by comparing against
+	 * this exact format, so both sides must derive it from this helper.
+	 *
+	 * @param string $integration_id The integration ID.
+	 *
+	 * @return string The registration method string.
+	 */
+	public static function get_registration_method_for( $integration_id ) {
+		return 'integration-registration-' . $integration_id;
+	}
+
+	/**
 	 * REST API handler for frontend integration reader registration.
 	 *
 	 * Validation sequence:
@@ -407,7 +421,7 @@ final class Reader_Registration {
 		$referer          = is_array( $referer ) ? $referer : [];
 		$current_page_url = ! empty( $referer['path'] ) ? \esc_url( \home_url( $referer['path'] ) ) : '';
 		$metadata         = [
-			'registration_method' => 'integration-registration-' . $integration_id,
+			'registration_method' => self::get_registration_method_for( $integration_id ),
 			'current_page_url'    => $current_page_url,
 		];
 

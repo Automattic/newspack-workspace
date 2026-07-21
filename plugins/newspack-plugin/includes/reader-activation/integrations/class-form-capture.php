@@ -13,6 +13,7 @@ namespace Newspack\Reader_Activation\Integrations;
 
 use Newspack\Newspack;
 use Newspack\Reader_Activation;
+use Newspack\Reader_Registration;
 use Newspack\Reader_Activation\Integration;
 use Newspack\Reader_Activation\Integrations;
 use Newspack\Reader_Activation\Contact_Sync;
@@ -56,12 +57,14 @@ class Form_Capture extends Integration {
 
 	/**
 	 * The registration method string the frontend registration endpoint
-	 * stamps on registrations from this integration.
+	 * stamps on registrations from this integration. Derived from the same
+	 * helper the endpoint uses, so the scoping predicates in this class
+	 * cannot drift from what register_reader() actually receives.
 	 *
 	 * @return string
 	 */
 	public static function get_registration_method() {
-		return 'integration-registration-' . self::ID;
+		return Reader_Registration::get_registration_method_for( self::ID );
 	}
 
 	/**
