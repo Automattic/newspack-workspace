@@ -237,7 +237,12 @@ final class Newspack_Popups_Post_Scope {
 
 	/**
 	 * Build the block markup for a scoped prompt: the appeal copy and, when a
-	 * URL is given, a button.
+	 * URL is given, a button, wrapped in a default styled call-out so it reads
+	 * as a deliberate donation ask rather than inline body text.
+	 *
+	 * This is a sensible default treatment (light card with a border and
+	 * padding); publishers can restyle any individual prompt in Advanced
+	 * settings, and the final design will be refined with design input.
 	 *
 	 * @param string $body         Appeal copy.
 	 * @param string $button_label Button label.
@@ -245,16 +250,23 @@ final class Newspack_Popups_Post_Scope {
 	 * @return string Serialized block markup.
 	 */
 	private static function build_prompt_content( $body, $button_label, $button_url ) {
-		$content = "<!-- wp:paragraph -->\n<p>" . esc_html( $body ) . "</p>\n<!-- /wp:paragraph -->";
+		$inner = "<!-- wp:paragraph {\"style\":{\"spacing\":{\"margin\":{\"top\":\"0\",\"bottom\":\"0\"}}}} -->\n"
+			. '<p style="margin-top:0;margin-bottom:0">' . esc_html( $body ) . "</p>\n<!-- /wp:paragraph -->";
 
 		if ( '' !== trim( $button_url ) ) {
-			$content .= "\n<!-- wp:buttons -->\n<div class=\"wp-block-buttons\"><!-- wp:button -->"
+			$inner .= "\n<!-- wp:buttons {\"style\":{\"spacing\":{\"margin\":{\"top\":\"16px\"}}}} -->\n"
+				. '<div class="wp-block-buttons" style="margin-top:16px"><!-- wp:button -->'
 				. '<div class="wp-block-button"><a class="wp-block-button__link wp-element-button" href="' . esc_url( $button_url ) . '">'
 				. esc_html( $button_label )
 				. "</a></div>\n<!-- /wp:button --></div>\n<!-- /wp:buttons -->";
 		}
 
-		return $content;
+		$group_open = '<!-- wp:group {"className":"newspack-contextual-prompt","style":{"color":{"background":"#f7f7f8"},"border":{"color":"#e2e4e7","width":"1px","radius":"8px"},"spacing":{"padding":{"top":"24px","right":"24px","bottom":"24px","left":"24px"}}},"layout":{"type":"constrained"}} -->' . "\n"
+			. '<div class="wp-block-group newspack-contextual-prompt has-border-color has-background" '
+			. 'style="border-color:#e2e4e7;border-width:1px;border-radius:8px;background-color:#f7f7f8;'
+			. 'padding-top:24px;padding-right:24px;padding-bottom:24px;padding-left:24px">';
+
+		return $group_open . "\n" . $inner . "\n</div>\n<!-- /wp:group -->";
 	}
 
 	/**
