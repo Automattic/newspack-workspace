@@ -236,6 +236,8 @@ class Test_Form_Capture extends WP_UnitTestCase {
 	public function test_capture_script_enqueued_only_when_enabled() {
 		$integration = Integrations::get_integration( Form_Capture::ID );
 
+		$this->assertSame( 20, has_action( 'wp_enqueue_scripts', [ $integration, 'enqueue_scripts' ] ), 'Enqueue must be hooked at priority 20.' );
+
 		$integration->enqueue_scripts();
 		$this->assertFalse( wp_script_is( Form_Capture::SCRIPT_HANDLE, 'enqueued' ) );
 
