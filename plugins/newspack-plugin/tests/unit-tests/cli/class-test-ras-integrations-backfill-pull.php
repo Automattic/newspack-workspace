@@ -205,4 +205,48 @@ class Test_RAS_Integrations_Backfill_Pull extends WP_UnitTestCase {
 
 		$this->assertSame( 2, $tally['processed'], 'batch_size=1 with max_batches=2 processes exactly 2 readers.' );
 	}
+
+	/**
+	 * A reader whose Reader_Data writes are rejected must tally as an error,
+	 * not processed — the documented "re-run the affected --offset window"
+	 * recovery only revisits tallied errors (NPPD-2076).
+	 */
+	public function test_reader_data_write_failure_tallies_error() {
+		$user_a = $this->create_reader();
+		// Fill the reader to the data-key cap so the pull's write is rejected.
+		for ( $i = 0; $i < Reader_Data::MAX_ITEMS; $i++ ) {
+			Reader_Data::update_item( $user_a, "filler_{$i}", '"x"' );
+		}
+
+		$tally = $this->run_pull( [ 'user_ids' => [ $user_a ] ] );
+
+		$this->assertSame( 1, $tally['errors'], 'A reader whose writes were rejected is an error, not processed.' );
+		$this->assertSame( 0, $tally['processed'] );
+		$this->assertSame( 1, Failing_Sample_Integration::$pull_count, 'The fetch still happened.' );
+	}
+
+	/**
+	 * `--direction=both` through the public command entry point runs push then
+	 * pull and joins both summaries into one success line (NPPD-2076).
+	 */
+	public function test_cli_backfill_direction_both_runs_push_then_pull() {
+		WP_CLI::reset();
+		$user_id = $this->create_reader();
+
+		RAS_Contact_Sync::cli_backfill(
+			[],
+			[
+				'direction' => 'both',
+				'dry-run'   => true,
+				'user-ids'  => (string) $user_id,
+			]
+		);
+
+		$this->assertSame( 1, Failing_Sample_Integration::$pull_count, 'The pull leg ran.' );
+		$this->assertSame(
+			[ 'Would sync 1 contacts (0 errors, 0 skipped). Would pull 1 contacts (0 errors, 0 skipped).' ],
+			WP_CLI::$successes,
+			'Push and pull summaries are joined into one success line, push first.'
+		);
+	}
 }

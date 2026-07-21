@@ -186,4 +186,31 @@ class Test_RAS_Contact_Sync_Tally extends WP_UnitTestCase {
 			'A second run must not accumulate the first run into its tally.'
 		);
 	}
+
+	/**
+	 * `wp newspack esp sync` is a legacy alias: it must announce itself first
+	 * and keep the exact historical summary wording that operator tooling
+	 * greps (NPPD-2076).
+	 */
+	public function test_esp_sync_alias_prints_notice_and_frozen_summary() {
+		WP_CLI::reset();
+		Integrations::get_integration( 'tally_mock' )->update_enabled_outgoing_fields( [ 'Content Access' ] );
+
+		RAS_Contact_Sync::cli_sync_contacts(
+			[],
+			[
+				'dry-run'  => true,
+				'user-ids' => (string) $this->active_user_id,
+				'fields'   => 'Content Access',
+			]
+		);
+
+		$this->assertNotEmpty( WP_CLI::$logs );
+		$this->assertStringContainsString( 'legacy alias of `wp newspack integrations backfill`', WP_CLI::$logs[0], 'The alias announces itself first.' );
+		$this->assertSame(
+			[ 'Would sync 1 contacts (0 errors, 0 skipped).' ],
+			WP_CLI::$successes,
+			'The alias summary keeps the exact historical `esp sync` wording.'
+		);
+	}
 }
