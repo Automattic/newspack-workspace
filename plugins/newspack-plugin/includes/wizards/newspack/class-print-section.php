@@ -107,12 +107,15 @@ class Print_Section extends Wizard_Section {
 			// the effective value the reader returns. Safe at this layer: REST runs
 			// long after `init`, so the available list is complete.
 			$available_post_types = array_column( InDesign_Exporter::get_available_post_types(), 'value' );
-			$post_types           = array_values( array_unique( $post_types ) );
 			foreach ( $post_types as $slug ) {
 				if ( ! is_string( $slug ) || ! in_array( $slug, $available_post_types, true ) ) {
 					return new \WP_Error( 'invalid_param', __( 'Invalid parameter for indesign_post_types.', 'newspack-plugin' ), [ 'status' => 400 ] );
 				}
 			}
+			// Dedupe only after every element is known to be a string —
+			// array_unique() stringifies elements while comparing, which would
+			// raise "Array to string conversion" on a nested-array entry.
+			$post_types = array_values( array_unique( $post_types ) );
 		}
 
 		$has_exclude_captions_param = $request->has_param( 'indesign_exclude_captions' );

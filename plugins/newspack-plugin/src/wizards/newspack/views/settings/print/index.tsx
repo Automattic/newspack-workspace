@@ -40,6 +40,13 @@ function Print() {
 		description: __( 'Allows editors to export article content in Adobe InDesign Tagged Text format.', 'newspack-plugin' ),
 	} );
 
+	// Latest server-acknowledged settings, readable from timers and promise
+	// callbacks without closing over a render-time snapshot.
+	const apiDataRef = useRef( apiData );
+	useEffect( () => {
+		apiDataRef.current = apiData;
+	}, [ apiData ] );
+
 	// Optimistic mirror of the post-type selection so a checkbox flips on click
 	// instead of waiting for the round trip. Kept in sync with the server value
 	// on load and after every successful save.
@@ -49,24 +56,28 @@ function Print() {
 	}, [ apiData.indesign_post_types ] );
 
 	const saveTimer = useRef< ReturnType< typeof setTimeout > | undefined >();
+	const pendingSave = useRef< ( () => void ) | undefined >();
 	useEffect(
 		() => () => {
 			if ( saveTimer.current ) {
 				clearTimeout( saveTimer.current );
 			}
+			// Flush rather than drop a pending save, so a change made within the
+			// debounce window of leaving the view still persists.
+			pendingSave.current?.();
 		},
 		[]
 	);
 
 	/**
-	 * Persist a change, sending only the writable fields. `available_post_types`
-	 * is derived server-side (read-only), so it is stripped from the payload.
+	 * Persist a change. The payload carries only the module flag (which the
+	 * endpoint requires) plus the explicitly changed fields — never a full
+	 * snapshot — so a save can't write back other settings from a stale render
+	 * or timer closure. The module flag is read at send time for the same
+	 * reason. The response (always the full settings object) re-syncs state.
 	 */
-	const save = ( overrides: Partial< PrintData > ) => {
-		// eslint-disable-next-line @typescript-eslint/no-unused-vars
-		const { available_post_types, ...writable } = { ...apiData, ...overrides };
-		apiFetchToggle( writable, true );
-	};
+	const save = ( overrides: Partial< PrintData > ) =>
+		apiFetchToggle( { module_enabled_print: apiDataRef.current.module_enabled_print, ...overrides }, true );
 
 	const togglePostType = ( slug: string, checked: boolean ) => {
 		const next = new Set( selectedPostTypes );
@@ -84,7 +95,14 @@ function Print() {
 		if ( saveTimer.current ) {
 			clearTimeout( saveTimer.current );
 		}
-		saveTimer.current = setTimeout( () => save( { indesign_post_types: nextPostTypes } ), POST_TYPES_SAVE_DEBOUNCE_MS );
+		pendingSave.current = () => {
+			pendingSave.current = undefined;
+			// A failed save leaves `apiData` untouched, so the optimistic mirror
+			// would keep showing a selection that never persisted — snap it back
+			// to the last server-acknowledged value.
+			save( { indesign_post_types: nextPostTypes } ).catch( () => setSelectedPostTypes( apiDataRef.current.indesign_post_types ) );
+		};
+		saveTimer.current = setTimeout( () => pendingSave.current?.(), POST_TYPES_SAVE_DEBOUNCE_MS );
 	};
 
 	return (

@@ -48,6 +48,8 @@ function useWizardApiFetchToggle< T >( {
 	 *
 	 * @param dataToSend Data to send to endpoint.
 	 * @param isToggleOn If set method will default to POST, otherwise GET.
+	 * @return The request promise, so callers can react to failures. Rejects
+	 *         with the API error (already surfaced via `errorMessage`).
 	 */
 	function apiFetchToggle( dataToSend?: Partial< T >, isToggleOn?: boolean ) {
 		const method = typeof isToggleOn === 'boolean' && isToggleOn ? 'POST' : 'GET';
@@ -59,7 +61,14 @@ function useWizardApiFetchToggle< T >( {
 		if ( dataToSend ) {
 			options.data = dataToSend;
 		}
-		wizardApiFetch< T >( options, {
+		if ( method === 'POST' ) {
+			// Mirror a successful save into the store's GET cache. The mount
+			// GET is served from that cache, so without this a remount (e.g.
+			// revisiting a settings tab) would show — and a later save could
+			// write back — the stale first-load snapshot.
+			options.updateCacheMethods = [ 'GET' ];
+		}
+		return wizardApiFetch< T >( options, {
 			onSuccess: setApiData,
 			onFinally() {
 				if ( refreshOn.includes( method ) ) {

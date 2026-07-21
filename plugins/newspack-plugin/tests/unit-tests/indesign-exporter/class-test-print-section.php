@@ -208,6 +208,23 @@ class Test_Print_Section extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test that a nested-array entry is rejected with a 400. Validation must run
+	 * before dedupe: array_unique() stringifies elements while comparing, so
+	 * deduping first would raise "Array to string conversion" on this input.
+	 */
+	public function test_api_update_print_settings_rejects_nested_array_post_types() {
+		$request = new WP_REST_Request();
+		$request->set_param( 'module_enabled_print', true );
+		$request->set_param( 'indesign_post_types', [ 'post', [ 'post' ] ] );
+
+		$result = $this->section->api_update_print_settings( $request );
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'invalid_param', $result->get_error_code() );
+		$this->assertSame( 400, $result->get_error_data()['status'] );
+	}
+
+	/**
 	 * Test that a valid but duplicated selection is de-duplicated before saving.
 	 */
 	public function test_api_update_print_settings_dedupes_post_types() {

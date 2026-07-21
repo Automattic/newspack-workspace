@@ -62,6 +62,15 @@ class Newspack_Test_InDesign_Exporter extends WP_UnitTestCase {
 			}
 		}
 
+		// Filters added by the register_list_table_actions() test. Removing a
+		// filter that was never added is a no-op, so this is safe to run
+		// unconditionally — and here (rather than inline after the test's
+		// assertions) so a mid-test failure can't leak the hooks.
+		remove_filter( 'bulk_actions-edit-reviewcpt', [ InDesign_Exporter::class, 'add_bulk_action' ] );
+		remove_filter( 'handle_bulk_actions-edit-reviewcpt', [ InDesign_Exporter::class, 'handle_bulk_action' ], 100 );
+		remove_filter( 'post_row_actions', [ InDesign_Exporter::class, 'add_row_action' ], 10 );
+		remove_filter( 'page_row_actions', [ InDesign_Exporter::class, 'add_row_action' ], 10 );
+
 		if ( null === $this->original_user_agent ) {
 			unset( $_SERVER['HTTP_USER_AGENT'] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__HTTP_USER_AGENT__
 		} else {
@@ -1077,12 +1086,8 @@ class Newspack_Test_InDesign_Exporter extends WP_UnitTestCase {
 		$this->assertNotFalse(
 			has_filter( 'handle_bulk_actions-edit-reviewcpt', [ InDesign_Exporter::class, 'handle_bulk_action' ] )
 		);
-
-		// Remove the filters this test added (options/CPTs are handled in tear_down).
-		remove_filter( 'bulk_actions-edit-reviewcpt', [ InDesign_Exporter::class, 'add_bulk_action' ] );
-		remove_filter( 'handle_bulk_actions-edit-reviewcpt', [ InDesign_Exporter::class, 'handle_bulk_action' ], 100 );
-		remove_filter( 'post_row_actions', [ InDesign_Exporter::class, 'add_row_action' ], 10 );
-		remove_filter( 'page_row_actions', [ InDesign_Exporter::class, 'add_row_action' ], 10 );
+		// The filters registered here are removed in tear_down(), so a failed
+		// assertion above can't leak them into later tests.
 	}
 
 	/**
