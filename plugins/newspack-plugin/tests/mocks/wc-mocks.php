@@ -267,6 +267,19 @@ class WC_Order_Item_Product implements ArrayAccess {
 		$product_id = $this->data['product_id'] ?? 0;
 		return $products_database[ $product_id ] ?? false;
 	}
+	public function set_product( $product ) {
+		$this->data['product_id'] = $product->get_id();
+		$this->data['name']       = $product->get_name();
+	}
+	public function set_quantity( $quantity ) {
+		$this->data['quantity'] = $quantity;
+	}
+	public function set_subtotal( $subtotal ) {
+		$this->data['subtotal'] = $subtotal;
+	}
+	public function set_total( $total ) {
+		$this->data['total'] = $total;
+	}
 	public function get_meta( $key, $single = true ) {
 		return $this->meta[ $key ] ?? '';
 	}
@@ -523,6 +536,15 @@ class WC_Subscription {
 	}
 	public function set_status( $status ) {
 		$this->data['status'] = $status;
+	}
+	public function get_created_via() {
+		return $this->data['created_via'] ?? '';
+	}
+	public function set_total( $total ) {
+		$this->data['total'] = $total;
+	}
+	public function add_item( $item ) {
+		$this->data['items'][] = $item;
 	}
 	/**
 	 * Stageable stand-in for WC_Subscription::can_be_updated_to(): pass a
@@ -1037,6 +1059,11 @@ function wc_get_order( $order_id ) {
 function wc_get_product( $product_id ) {
 	global $products_database;
 	return $products_database[ $product_id ] ?? false;
+}
+if ( ! function_exists( 'get_woocommerce_currency' ) ) {
+	function get_woocommerce_currency() {
+		return 'USD';
+	}
 }
 /**
  * Recording mock: notices land on the $wc_mock_notices global so tests can

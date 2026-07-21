@@ -39,6 +39,18 @@ class Teams_Migration {
 	const TEAM_ROLE_META_KEY_TEMPLATE = '_wc_memberships_for_teams_team_%d_role';
 
 	/**
+	 * Subscription statuses that count as "live" for the
+	 * --only-without-live-subscription member filter: a member holding a
+	 * subscription in any of these keeps their access without a migration
+	 * subscription. Dead statuses (cancelled, expired, ...) deliberately do not
+	 * count — an active membership over a lapsed subscription is the comp/legacy
+	 * residual the filter exists to include.
+	 *
+	 * @var string[]
+	 */
+	const LIVE_SUBSCRIPTION_STATUSES = [ 'active', 'on-hold', 'pending-cancel' ];
+
+	/**
 	 * Migrate all active team memberships to Newspack group subscriptions.
 	 *
 	 * For teams already linked to an active subscription: enables the group
@@ -555,16 +567,27 @@ class Teams_Migration {
 	}
 
 	/**
-	 * Create free subscriptions for users with manually-assigned memberships.
+	 * Create free subscriptions for users with active memberships that no live
+	 * subscription backs.
 	 *
-	 * Iterates through membership plans with manual-only access and creates free
-	 * WooCommerce Subscriptions for active members who do not have the
-	 * `edit_others_posts` capability (i.e. are not administrators/editors).
+	 * By default, iterates through membership plans with manual-only access and
+	 * creates free WooCommerce Subscriptions for active members who do not have
+	 * the `edit_others_posts` capability (i.e. are not administrators/editors).
 	 *
-	 * Unlike migrate-teams, this command is NOT idempotent: it creates a new
-	 * subscription on every run (a per-plan group subscription under --as-group,
-	 * one per member otherwise). Run it once per plan set; re-running duplicates
-	 * subscriptions. Dry-run by default; pass --live to write.
+	 * Plans with purchase/signup access can only be targeted with a member
+	 * selection flag — --only-without-live-subscription and/or
+	 * --user-ids/--user-ids-file — because blanket-processing them would create
+	 * $0 subscriptions for every active member, including real paying
+	 * subscribers. The comp/legacy residual class both flags target is
+	 * "membership active, but no subscription in a live status": that includes
+	 * members with no subscription at all AND members whose subscriptions exist
+	 * only in dead states (cancelled/expired) — the latter cohort is often the
+	 * larger one.
+	 *
+	 * Group mode (--as-group) is NOT idempotent: it creates a new group
+	 * subscription on every run. Individual mode is re-run safe — members who
+	 * already hold an active migration-created subscription for the product are
+	 * skipped. Dry-run by default; pass --live to write.
 	 *
 	 * Under --as-group, members are added through the group data layer, which adds
 	 * readers only — a member on a non-reader role is skipped (reported inline),
@@ -576,7 +599,16 @@ class Teams_Migration {
 	 * : The product ID to use when creating the new subscriptions.
 	 *
 	 * [--plan-ids=<ids>]
-	 * : Comma-delimited list of membership plan IDs to process. If omitted, all published plans with _access_method = manual-only are used.
+	 * : Comma-delimited list of membership plan IDs to process. If omitted, all published plans with _access_method = manual-only are used — or ALL published plans when --only-without-live-subscription or --user-ids/--user-ids-file is passed.
+	 *
+	 * [--only-without-live-subscription]
+	 * : Only process members who do NOT own a subscription in a live status (active, on-hold, pending-cancel). Members whose subscriptions are all in dead states (cancelled, expired, ...) are included, same as members with no subscription at all. Skipped members are counted so the output reconciles against a parity diff.
+	 *
+	 * [--user-ids=<ids>]
+	 * : Comma-delimited list of user IDs to process (explicit input mode). Only active members of the processed plans whose user ID is on this list are handled; list entries never matched are reported at the end. Combines with --user-ids-file.
+	 *
+	 * [--user-ids-file=<path>]
+	 * : Path to a file of user IDs to process (comma-, space-, or newline-delimited). Combines with --user-ids.
 	 *
 	 * [--skip-domains=<domains>]
 	 * : Comma-delimited list of email domains to skip (e.g. example.com,example.org). Any user whose email address belongs to one of these domains will be skipped.
@@ -596,6 +628,9 @@ class Teams_Migration {
 	 *     wp newspack migrate-manual-members --product-id=519858 --live
 	 *     wp newspack migrate-manual-members --product-id=519858 --plan-ids=12,34,56 --live
 	 *     wp newspack migrate-manual-members --product-id=519858 --as-group --group-owner-id=1 --live
+	 *     wp newspack migrate-manual-members --product-id=519858 --plan-ids=78 --only-without-live-subscription --live
+	 *     wp newspack migrate-manual-members --product-id=519858 --user-ids=101,102,103 --live
+	 *     wp newspack migrate-manual-members --product-id=519858 --user-ids-file=/tmp/residual-user-ids.txt --live
 	 *
 	 * @param array $args       Positional args (unused).
 	 * @param array $assoc_args Named args.
@@ -603,13 +638,16 @@ class Teams_Migration {
 	 * @return void
 	 */
 	public function migrate_manual_members( $args, $assoc_args ) {
-		$dry_run        = ! (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'live', false );
-		$as_group       = (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'as-group', false );
-		$group_owner_id = (int) \WP_CLI\Utils\get_flag_value( $assoc_args, 'group-owner-id', 0 );
-		$product_id     = (int) \WP_CLI\Utils\get_flag_value( $assoc_args, 'product-id', 0 );
-		$plan_ids       = \WP_CLI\Utils\get_flag_value( $assoc_args, 'plan-ids', '' );
-		$skip_domains   = \WP_CLI\Utils\get_flag_value( $assoc_args, 'skip-domains', '' );
-		$skip_domains   = ! empty( $skip_domains )
+		$dry_run                        = ! (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'live', false );
+		$as_group                       = (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'as-group', false );
+		$group_owner_id                 = (int) \WP_CLI\Utils\get_flag_value( $assoc_args, 'group-owner-id', 0 );
+		$product_id                     = (int) \WP_CLI\Utils\get_flag_value( $assoc_args, 'product-id', 0 );
+		$plan_ids                       = \WP_CLI\Utils\get_flag_value( $assoc_args, 'plan-ids', '' );
+		$only_without_live_subscription = (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'only-without-live-subscription', false );
+		$user_ids_csv                   = \WP_CLI\Utils\get_flag_value( $assoc_args, 'user-ids', '' );
+		$user_ids_file                  = \WP_CLI\Utils\get_flag_value( $assoc_args, 'user-ids-file', '' );
+		$skip_domains                   = \WP_CLI\Utils\get_flag_value( $assoc_args, 'skip-domains', '' );
+		$skip_domains                   = ! empty( $skip_domains )
 			? array_filter( array_map( 'trim', explode( ',', strtolower( $skip_domains ) ) ) )
 			: [];
 
@@ -619,6 +657,15 @@ class Teams_Migration {
 
 		if ( ! $product_id ) {
 			WP_CLI::error( 'Missing required option: --product-id=<id>.' );
+		}
+
+		$target_user_ids = self::parse_user_ids( $user_ids_csv, $user_ids_file );
+		if ( \is_wp_error( $target_user_ids ) ) {
+			WP_CLI::error( $target_user_ids->get_error_message() );
+		}
+		$explicit_users_mode = ! empty( $target_user_ids );
+		if ( ! $explicit_users_mode && ( '' !== trim( (string) $user_ids_csv ) || '' !== trim( (string) $user_ids_file ) ) ) {
+			WP_CLI::error( 'The --user-ids/--user-ids-file input resolved to no user IDs.' );
 		}
 
 		$product = \wc_get_product( $product_id );
@@ -649,6 +696,10 @@ class Teams_Migration {
 
 		if ( ! empty( $plan_ids ) ) {
 			$plan_ids = array_filter( array_map( 'absint', explode( ',', $plan_ids ) ) );
+		} elseif ( $explicit_users_mode || $only_without_live_subscription ) {
+			// The residuals the selection flags target live on purchase plans, so the
+			// default scope widens to every published plan.
+			$plan_ids = self::get_published_plan_ids();
 		} else {
 			$plan_ids = self::get_manual_only_plan_ids();
 		}
@@ -658,10 +709,30 @@ class Teams_Migration {
 			return;
 		}
 
+		// Refuse to blanket-process a plan members can purchase or sign up for:
+		// without a member selection flag, every active member would get a $0
+		// subscription — including real paying subscribers.
+		if ( ! $explicit_users_mode && ! $only_without_live_subscription ) {
+			$non_manual_plan_ids = array_values(
+				array_filter(
+					$plan_ids,
+					function ( $plan_id ) {
+						$plan_post = \get_post( $plan_id );
+						return $plan_post && 'wc_membership_plan' === $plan_post->post_type && 'manual-only' !== \get_post_meta( $plan_id, '_access_method', true );
+					}
+				)
+			);
+			if ( ! empty( $non_manual_plan_ids ) ) {
+				WP_CLI::error( sprintf( 'Plan(s) %s are not manual-only. Pass --only-without-live-subscription and/or --user-ids/--user-ids-file to target them without granting $0 subscriptions to paying members.', implode( ', ', $non_manual_plan_ids ) ) );
+			}
+		}
+
 		WP_CLI::line( sprintf( 'Processing %d plan(s): %s', count( $plan_ids ), implode( ', ', $plan_ids ) ) );
 		WP_CLI::line( '' );
 
-		$summary = [];
+		$summary                         = [];
+		$skipped_live_subscription_count = 0;
+		$matched_user_ids                = [];
 
 		foreach ( $plan_ids as $plan_id ) {
 			$plan = \get_post( $plan_id );
@@ -712,6 +783,17 @@ class Teams_Migration {
 				$membership_post = \get_post( $membership_id );
 				$user_id         = (int) $membership_post->post_author;
 
+				// Explicit input mode: only members on the reviewed user-ID list are
+				// processed. Skipping the rest silently keeps the output proportional to
+				// the list, not the plan size; matches are tracked so unmatched list
+				// entries can be reported at the end.
+				if ( $explicit_users_mode ) {
+					if ( ! in_array( $user_id, $target_user_ids, true ) ) {
+						continue;
+					}
+					$matched_user_ids[ $user_id ] = true;
+				}
+
 				// Skip users with edit_others_posts (admins/editors).
 				if ( \user_can( $user_id, 'edit_others_posts' ) ) {
 					WP_CLI::line( sprintf( '  Membership %d (user %d): skipped — user has edit_others_posts.', $membership_id, $user_id ) );
@@ -734,6 +816,15 @@ class Teams_Migration {
 						WP_CLI::line( sprintf( '  Membership %d (user %d, %s): skipped — domain in skip list.', $membership_id, $user_id, $user->user_email ) );
 						continue;
 					}
+				}
+
+				// Skip members who already own a subscription in a live status. Dead
+				// statuses (cancelled/expired) do NOT count — a membership left active
+				// over a lapsed subscription is exactly the residual this flag targets.
+				if ( $only_without_live_subscription && self::member_has_live_subscription( $user_id ) ) {
+					WP_CLI::line( sprintf( '  Membership %d (user %d, %s): skipped — holds a live subscription.', $membership_id, $user_id, $user->user_email ) );
+					++$skipped_live_subscription_count;
+					continue;
 				}
 
 				// Group mode: add the user as a group member.
@@ -803,6 +894,22 @@ class Teams_Migration {
 				];
 			}
 
+			WP_CLI::line( '' );
+		}
+
+		// Reconciliation output — printed even when nothing was created, so the run
+		// can be checked against the parity diff that produced its inputs.
+		if ( $only_without_live_subscription ) {
+			WP_CLI::line( sprintf( 'Skipped %d member(s) holding a live (%s) subscription.', $skipped_live_subscription_count, implode( '/', self::LIVE_SUBSCRIPTION_STATUSES ) ) );
+			WP_CLI::line( '' );
+		}
+		if ( $explicit_users_mode ) {
+			$unmatched_user_ids = array_values( array_diff( $target_user_ids, array_keys( $matched_user_ids ) ) );
+			if ( ! empty( $unmatched_user_ids ) ) {
+				WP_CLI::warning( sprintf( '%d of %d requested user id(s) not found among active members of the processed plan(s): %s.', count( $unmatched_user_ids ), count( $target_user_ids ), implode( ', ', $unmatched_user_ids ) ) );
+			} else {
+				WP_CLI::line( sprintf( 'All %d requested user id(s) were found among active members of the processed plan(s).', count( $target_user_ids ) ) );
+			}
 			WP_CLI::line( '' );
 		}
 
@@ -1442,6 +1549,94 @@ class Teams_Migration {
 				],
 			]
 		);
+	}
+
+	/**
+	 * Return IDs of all published membership plans, regardless of access method.
+	 *
+	 * The default scope for the member selection flags
+	 * (--only-without-live-subscription, --user-ids), whose residuals live on
+	 * purchase plans.
+	 *
+	 * @return int[]
+	 */
+	private static function get_published_plan_ids() {
+		return \get_posts(
+			[
+				'post_type'      => 'wc_membership_plan',
+				'post_status'    => 'publish',
+				'posts_per_page' => -1,
+				'fields'         => 'ids',
+				'no_found_rows'  => true,
+				'orderby'        => 'ID',
+				'order'          => 'ASC',
+			]
+		);
+	}
+
+	/**
+	 * Whether a user owns a subscription in a live status (see
+	 * LIVE_SUBSCRIPTION_STATUSES). Subscriptions existing only in dead states
+	 * (cancelled, expired, ...) return false.
+	 *
+	 * @param int $user_id The member user ID.
+	 *
+	 * @return bool
+	 */
+	public static function member_has_live_subscription( $user_id ) {
+		$user_id = absint( $user_id );
+		if ( ! $user_id || ! function_exists( 'wcs_get_users_subscriptions' ) ) {
+			return false;
+		}
+		foreach ( \wcs_get_users_subscriptions( $user_id ) as $subscription ) {
+			// wcs_get_users_subscriptions is filtered to include member-only groups; require ownership.
+			if ( (int) $subscription->get_user_id() !== $user_id ) {
+				continue;
+			}
+			if ( in_array( $subscription->get_status(), self::LIVE_SUBSCRIPTION_STATUSES, true ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Parse the --user-ids CSV and/or --user-ids-file input into a unique list of
+	 * user IDs.
+	 *
+	 * Tokens may be separated by commas and/or whitespace (so a one-ID-per-line
+	 * file works as-is). Parsing is strict: a non-numeric token fails the whole
+	 * input rather than being dropped, since a malformed reviewed list should
+	 * halt the run, not silently shrink it.
+	 *
+	 * @param string $user_ids_csv  Comma-delimited user IDs, '' for none.
+	 * @param string $user_ids_file Path to a file of user IDs, '' for none.
+	 *
+	 * @return int[]|\WP_Error Unique user IDs in input order, or an error.
+	 */
+	public static function parse_user_ids( $user_ids_csv, $user_ids_file ) {
+		$raw_input = trim( (string) $user_ids_csv );
+		if ( '' !== trim( (string) $user_ids_file ) ) {
+			if ( ! is_readable( $user_ids_file ) || is_dir( $user_ids_file ) ) {
+				return new \WP_Error( 'newspack_migration_user_ids_file', sprintf( 'User IDs file %s could not be read.', $user_ids_file ) );
+			}
+			$raw_input .= ' ' . file_get_contents( $user_ids_file ); // phpcs:ignore WordPressVIPMinimum.Performance.FetchingRemoteData.FileGetContentsUnknown
+		}
+		$raw_input = trim( $raw_input );
+		if ( '' === $raw_input ) {
+			return [];
+		}
+		$user_ids = [];
+		foreach ( preg_split( '/[\s,]+/', $raw_input ) as $token ) {
+			if ( '' === $token ) {
+				continue;
+			}
+			if ( ! ctype_digit( $token ) || 0 === (int) $token ) {
+				return new \WP_Error( 'newspack_migration_user_ids_token', sprintf( '"%s" is not a valid user ID — fix the --user-ids/--user-ids-file input.', $token ) );
+			}
+			$user_ids[] = (int) $token;
+		}
+		return array_values( array_unique( $user_ids ) );
 	}
 
 	/**
