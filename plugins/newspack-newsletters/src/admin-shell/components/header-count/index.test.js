@@ -30,6 +30,11 @@ describe( 'HeaderCount', () => {
 		expect( getHeading().querySelector( '.newspack-newsletters-header-count' ).textContent ).toBe( '' );
 	} );
 
+	it( 'renders nothing when the count is zero', () => {
+		render( <HeaderCount count={ 0 } /> );
+		expect( getHeading().querySelector( '.newspack-newsletters-header-count' ).textContent ).toBe( '' );
+	} );
+
 	it( 'removes its container on unmount', () => {
 		const { unmount } = render( <HeaderCount count={ 112 } /> );
 		unmount();

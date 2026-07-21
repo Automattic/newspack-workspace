@@ -14,6 +14,7 @@ import { __ } from '@wordpress/i18n';
 import { store } from '@wordpress/icons';
 
 import EmptyState from '../../components/empty-state';
+import HeaderCount from '../../components/header-count';
 import ItemsPerPage from '../../components/items-per-page';
 import { useHeaderActions } from '../../header-actions-context';
 import usePersistedView from '../../hooks/use-persisted-view';
@@ -98,6 +99,7 @@ export default function AdvertisersListScreen() {
 
 	return (
 		<>
+			<HeaderCount count={ paginationInfo.totalItems } />
 			{ isStrictEmpty ? (
 				<EmptyState
 					icon={ store }

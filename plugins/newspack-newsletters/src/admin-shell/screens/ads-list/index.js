@@ -10,6 +10,7 @@ import { emailAd } from 'newspack-icons';
 
 import { getAdminUrl } from '../../admin-globals';
 import EmptyState from '../../components/empty-state';
+import HeaderCount from '../../components/header-count';
 import ItemsPerPage from '../../components/items-per-page';
 import { useHeaderActions } from '../../header-actions-context';
 import usePersistedView from '../../hooks/use-persisted-view';
@@ -127,6 +128,7 @@ export default function AdsListScreen() {
 
 	return (
 		<>
+			<HeaderCount count={ paginationInfo.totalItems } />
 			<DataViews
 				className="newspack-newsletters-list newspack-newsletters-ads-list"
 				data={ data }

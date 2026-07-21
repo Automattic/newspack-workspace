@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 
 import { getAdminUrl } from '../../admin-globals';
+import HeaderCount from '../../components/header-count';
 import ItemsPerPage from '../../components/items-per-page';
 import { useHeaderActions } from '../../header-actions-context';
 import usePersistedView from '../../hooks/use-persisted-view';
@@ -286,27 +287,30 @@ export default function LayoutsListScreen() {
 	}
 
 	return (
-		<DataViews
-			className="newspack-newsletters-list newspack-newsletters-layouts-list"
-			data={ data }
-			fields={ fields }
-			view={ view }
-			onChangeView={ onChangeView }
-			actions={ actions }
-			paginationInfo={ paginationInfo }
-			defaultLayouts={ DEFAULT_LAYOUTS }
-			isLoading={ isLoading || isPrebuiltLoading }
-			getItemId={ item => String( item.id ) }
-			search
-			config={ DATAVIEWS_CONFIG }
-			header={
-				<ItemsPerPage
-					value={ view.perPage }
-					options={ PER_PAGE_OPTIONS }
-					progress={ progress }
-					onChange={ perPage => setView( current => ( { ...current, perPage, page: 1 } ) ) }
-				/>
-			}
-		/>
+		<>
+			<HeaderCount count={ paginationInfo.totalItems } />
+			<DataViews
+				className="newspack-newsletters-list newspack-newsletters-layouts-list"
+				data={ data }
+				fields={ fields }
+				view={ view }
+				onChangeView={ onChangeView }
+				actions={ actions }
+				paginationInfo={ paginationInfo }
+				defaultLayouts={ DEFAULT_LAYOUTS }
+				isLoading={ isLoading || isPrebuiltLoading }
+				getItemId={ item => String( item.id ) }
+				search
+				config={ DATAVIEWS_CONFIG }
+				header={
+					<ItemsPerPage
+						value={ view.perPage }
+						options={ PER_PAGE_OPTIONS }
+						progress={ progress }
+						onChange={ perPage => setView( current => ( { ...current, perPage, page: 1 } ) ) }
+					/>
+				}
+			/>
+		</>
 	);
 }

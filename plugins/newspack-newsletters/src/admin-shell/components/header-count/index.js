@@ -11,11 +11,10 @@ import { createPortal, useEffect, useState } from '@wordpress/element';
 const CONTAINER_CLASS = 'newspack-newsletters-header-count';
 
 /**
- * @param {Object}  props
- * @param {number}  props.count      Total items matching the current filters.
- * @param {boolean} props.isRealized Whether `count` reflects a resolved fetch — before that it would flash "(0)".
+ * @param {Object} props
+ * @param {number} props.count Total items matching the current filters.
  */
-export default function HeaderCount( { count, isRealized = true } ) {
+export default function HeaderCount( { count } ) {
 	const [ target, setTarget ] = useState( null );
 
 	useEffect( () => {
@@ -46,7 +45,8 @@ export default function HeaderCount( { count, isRealized = true } ) {
 		};
 	}, [] );
 
-	if ( ! target || ! isRealized || typeof count !== 'number' ) {
+	// Hidden at zero: an empty list says so itself, and the pre-load count is 0.
+	if ( ! target || typeof count !== 'number' || count === 0 ) {
 		return null;
 	}
 
