@@ -191,14 +191,18 @@ class WC_Order_Item_Product implements ArrayAccess {
 		}
 	}
 	/**
-	 * Real WC_Order_Item implements ArrayAccess and delegates array reads to
-	 * getters, which is how consumers like `$item['type']` work.
+	 * Real WC_Order_Item implements ArrayAccess with an asymmetry this mock
+	 * must preserve: offsetGet() resolves getter-backed virtual keys (so
+	 * `$item['type']` returns 'line_item'), but offsetExists() reports only
+	 * keys actually present in the item's data — `isset( $item['type'] )` is
+	 * FALSE on a real order item. Consumers must therefore read such keys
+	 * bare, never behind isset()/`??`.
 	 *
 	 * @param mixed $offset Array key.
 	 */
 	#[\ReturnTypeWillChange]
 	public function offsetExists( $offset ) {
-		return is_callable( [ $this, "get_$offset" ] ) || isset( $this->data[ $offset ] );
+		return array_key_exists( $offset, $this->data );
 	}
 	/**
 	 * Array read, delegated to the matching getter like real WC_Order_Item.

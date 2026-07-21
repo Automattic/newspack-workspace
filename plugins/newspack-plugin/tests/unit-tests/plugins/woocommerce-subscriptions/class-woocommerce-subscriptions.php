@@ -1201,6 +1201,20 @@ class Newspack_Test_WooCommerce_Subscriptions extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Pins the real WC_Order_Item ArrayAccess asymmetry the eligibility filter
+	 * depends on: `$item['type']` resolves through the getter, but
+	 * `isset( $item['type'] )` is false because offsetExists() does not report
+	 * getter-backed virtual keys. Reading the type behind isset() denied every
+	 * real switch while the (previously over-permissive) mock kept tests green.
+	 */
+	public function test_order_item_type_read_matches_real_wc_asymmetry() {
+		$item = new WC_Order_Item_Product( [ 'product_id' => 77 ] );
+
+		$this->assertSame( 'line_item', $item['type'] );
+		$this->assertFalse( isset( $item['type'] ), 'Real WC_Order_Item::offsetExists() does not report getter-backed keys; the mock must not either.' );
+	}
+
+	/**
 	 * An already-eligible switch passes through untouched, and non-pending-cancel
 	 * statuses are left to WCS's own verdict.
 	 */

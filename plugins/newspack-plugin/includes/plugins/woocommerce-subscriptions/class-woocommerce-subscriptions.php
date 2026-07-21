@@ -161,8 +161,12 @@ class WooCommerce_Subscriptions {
 		}
 
 		// The non-status checks from WC_Subscriptions_Switcher::is_action_allowed().
+		// The type read must be bare, like WCS's own and allow_migrated_subscription_switch()'s:
+		// WC_Order_Item::offsetGet() resolves getter-backed keys such as `type`, but
+		// offsetExists() does not report them, so an isset() here is false on a real
+		// order item and would deny every switch.
 		$product_id            = wcs_get_canonical_product_id( $item );
-		$is_product_switchable = isset( $item['type'] ) && 'line_item' === $item['type'] && wcs_is_product_switchable_type( $product_id );
+		$is_product_switchable = 'line_item' === $item['type'] && wcs_is_product_switchable_type( $product_id );
 		$has_last_order        = 0 !== $subscription->get_date( 'last_order_date_created' );
 		$can_be_updated        = $subscription->payment_method_supports( 'subscription_amount_changes' ) && $subscription->payment_method_supports( 'subscription_date_changes' );
 
