@@ -1,3 +1,10 @@
+## newspack-newsletters [3.37.1](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.37.0...newspack-newsletters@3.37.1) (2026-07-21)
+
+
+### Bug Fixes
+
+* **active-campaign:** keep signups working after field tag edits ([#573](https://github.com/Automattic/newspack-workspace/issues/573)) ([f6f84a3](https://github.com/Automattic/newspack-workspace/commit/f6f84a3f7e52f6da7c34425d8033a46a00b4d72c))
+
 # newspack-newsletters [3.37.0](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.36.0...newspack-newsletters@3.37.0) (2026-07-20)
 
 
