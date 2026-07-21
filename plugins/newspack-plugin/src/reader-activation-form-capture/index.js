@@ -68,10 +68,14 @@ window.newspackRAS.push( readerActivation => {
 		}
 		readerActivation
 			.register( email, 'form-capture', getNameValues( form ), options )
-			.then( () => {
+			.then( data => {
+				// Only 'created' responses got the configured lists injected.
+				// The endpoint also resolves with status 'existing' for a
+				// logged-in caller — a short-circuit that registers and
+				// subscribes nobody, so it must not flag the reader.
 				// has_lists arrives as a stringy boolean ('1'/'') via
 				// wp_localize_script — truthiness check only.
-				if ( config.has_lists ) {
+				if ( config.has_lists && 'created' === data?.status ) {
 					readerActivation.store.set( 'is_newsletter_subscriber', true );
 				}
 			} )
