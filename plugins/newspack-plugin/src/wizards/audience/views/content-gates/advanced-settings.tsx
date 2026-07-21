@@ -19,6 +19,10 @@ import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/w
 import { useWizardApiFetch } from '../../../hooks/use-wizard-api-fetch';
 import { AUDIENCE_CONTENT_GATES_WIZARD_SLUG } from './consts';
 
+// Modes and their labels come from PHP, where the same list backs the REST
+// schema's enum and the storage sanitizer.
+const feedRestrictionModes = window.newspackAudienceContentGates?.feed_restriction_modes || [];
+
 const AdvancedSettings = ( { closeModal, showModal }: { closeModal: () => void; showModal: boolean } ) => {
 	const wizardData = useWizardData( AUDIENCE_CONTENT_GATES_WIZARD_SLUG ) as WizardData;
 	const initialConfig = {
@@ -90,20 +94,12 @@ const AdvancedSettings = ( { closeModal, showModal }: { closeModal: () => void; 
 						checked={ config?.restrict_feeds }
 						onChange={ value => setConfig( { ...config, restrict_feeds: value } ) }
 					/>
-					{ config?.restrict_feeds && (
+					{ config?.restrict_feeds && feedRestrictionModes.length > 0 && (
 						<SelectControl
-							label={ __( 'In feeds, restricted articles should', 'newspack-plugin' ) }
-							help={ __(
-								'Remove the article from the feed entirely, or keep it listed with the same teaser readers see on the site.',
-								'newspack-plugin'
-							) }
-							value={ config?.feed_restriction_mode || 'exclude' }
-							options={
-								[
-									{ label: __( 'Be removed from the feed', 'newspack-plugin' ), value: 'exclude' },
-									{ label: __( 'Show a truncated preview', 'newspack-plugin' ), value: 'truncate' },
-								] as { label: string; value: FeedRestrictionMode }[]
-							}
+							label={ __( 'Restricted articles in feeds', 'newspack-plugin' ) }
+							help={ __( 'The teaser is the same free preview readers see on the site.', 'newspack-plugin' ) }
+							value={ config?.feed_restriction_mode || feedRestrictionModes[ 0 ].value }
+							options={ feedRestrictionModes }
 							onChange={ ( value: string ) => setConfig( { ...config, feed_restriction_mode: value as FeedRestrictionMode } ) }
 						/>
 					) }

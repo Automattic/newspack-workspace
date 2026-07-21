@@ -602,6 +602,198 @@ class Test_Feed_Restriction extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * The REST endpoint rejects an unknown feed restriction mode with a 400,
+	 * rather than accepting it and letting the storage sanitizer quietly coerce
+	 * it to the default. Covers the args schema (nested enum + validate_callback)
+	 * that the storage-level sanitizer test cannot reach.
+	 */
+	public function test_rest_rejects_invalid_feed_restriction_mode() {
+		wp_set_current_user( $this->factory->user->create( [ 'role' => 'administrator' ] ) );
+		do_action( 'rest_api_init' );
+
+		$request = new \WP_REST_Request( 'POST', '/newspack/v1/wizard/newspack-audience-access-control/settings' );
+		$request->set_body_params( [ 'advanced_settings' => [ 'feed_restriction_mode' => 'not-a-real-mode' ] ] );
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 400, $response->get_status(), 'An unknown mode must be rejected by the REST schema.' );
+		$this->assertSame(
+			'exclude',
+			Content_Gate_Advanced_Settings::get_feed_restriction_mode(),
+			'The rejected request must not have changed the stored mode.'
+		);
+	}
+
+	/**
+	 * The REST response for a successful save is shaped like the GET config
+	 * (booleans, not the 0/1 integers used in storage) — the wizard writes it
+	 * into the same store slot it read the config from and compares the two.
+	 */
+	public function test_rest_update_returns_get_config_shape() {
+		wp_set_current_user( $this->factory->user->create( [ 'role' => 'administrator' ] ) );
+		do_action( 'rest_api_init' );
+
+		$request = new \WP_REST_Request( 'POST', '/newspack/v1/wizard/newspack-audience-access-control/settings' );
+		$request->set_body_params(
+			[
+				'advanced_settings' => [
+					'restrict_feeds'        => true,
+					'feed_restriction_mode' => 'truncate',
+				],
+			]
+		);
+		$updated = rest_get_server()->dispatch( $request )->get_data();
+
+		$get_request = new \WP_REST_Request( 'GET', '/newspack/v1/wizard/newspack-audience-access-control' );
+		$config      = rest_get_server()->dispatch( $get_request )->get_data();
+
+		$this->assertSame(
+			$config['config']['advanced_settings'],
+			$updated,
+			'The update response must match the GET config shape, or the wizard stays dirty after saving.'
+		);
+	}
+
+	/**
+	 * Secondary (non-main) feed queries still have restricted items dropped —
+	 * just without the back-fill, which is reserved for the main feed query.
+	 */
+	public function test_secondary_feed_query_drops_restricted_posts() {
+		$free_post_id = $this->factory->post->create(
+			[
+				'post_status'  => 'publish',
+				'post_date'    => '2017-05-01 00:00:00',
+				'post_content' => self::POST_CONTENT,
+			]
+		);
+		$grant_access = function ( $restricted, $post_id ) use ( $free_post_id ) {
+			return $post_id === $free_post_id ? false : $restricted;
+		};
+		add_filter( 'newspack_is_post_restricted', $grant_access, 99, 2 );
+
+		$secondary_feed_query = new \WP_Query(
+			[
+				'feed'           => 'rss2',
+				'post_type'      => 'post',
+				'posts_per_page' => 10,
+			]
+		);
+		$ids = wp_list_pluck( $secondary_feed_query->posts, 'ID' );
+		wp_reset_postdata();
+
+		remove_filter( 'newspack_is_post_restricted', $grant_access, 99 );
+		wp_delete_post( $free_post_id, true );
+
+		$this->assertTrue( $secondary_feed_query->is_feed(), 'Sanity: this is a feed query.' );
+		$this->assertFalse( $secondary_feed_query->is_main_query(), 'Sanity: this is not the main query.' );
+		$this->assertContains( $free_post_id, $ids, 'Unrestricted post should survive a secondary feed query.' );
+		$this->assertNotContains( $this->post_id, $ids, 'Restricted post should be dropped from a secondary feed query.' );
+	}
+
+	/**
+	 * The comment feed is left intact end-to-end: driving a real comment-feed
+	 * request (rather than calling the filter directly) also proves the
+	 * `the_posts` callback is registered on the path it claims to guard.
+	 */
+	public function test_comment_feed_keeps_its_post() {
+		$this->factory->comment->create( [ 'comment_post_ID' => $this->post_id ] );
+
+		$this->go_to( get_post_comments_feed_link( $this->post_id ) );
+		$this->assertTrue( $GLOBALS['wp_query']->is_comment_feed(), 'Sanity: should be a comment feed.' );
+
+		$ids = wp_list_pluck( $GLOBALS['wp_query']->posts, 'ID' );
+		wp_reset_postdata();
+
+		// The gated post is restricted, so an exclude-mode drop would blank the
+		// feed's title and link without withholding a single comment.
+		$this->assertContains( $this->post_id, $ids, 'A comment feed must keep the post its comments were queried from.' );
+	}
+
+	/**
+	 * With no published gate and no Memberships, nothing on the site can
+	 * restrict a post, so the feed hooks do no work at all: no over-fetch, and
+	 * no per-item restriction evaluation. Guards against every Newspack site
+	 * paying for a feature it cannot even see.
+	 */
+	public function test_no_overfetch_without_a_restriction_source() {
+		foreach ( Content_Gate::get_gates() as $gate ) {
+			wp_delete_post( $gate['id'], true );
+		}
+		$this->reset_restriction_cache();
+		Content_Gate_Advanced_Settings::reset_cache();
+		update_option( 'posts_per_rss', 3 );
+
+		$this->assertSame( 0, $this->captured_overfetch(), 'A site with no restriction source must not over-fetch its feed.' );
+	}
+
+	/**
+	 * The trim back to the requested length does not depend on the mode
+	 * resolving the same way twice: if a filter flips the mode between
+	 * `pre_get_posts` and `the_posts`, the already over-fetched page is still
+	 * trimmed rather than shipping up to FEED_OVERFETCH_MAX items.
+	 */
+	public function test_overfetched_page_is_trimmed_even_if_the_mode_changes() {
+		update_option( 'posts_per_rss', 2 );
+
+		$free_ids = [];
+		foreach ( range( 1, 6 ) as $day ) {
+			$free_ids[] = $this->factory->post->create(
+				[
+					'post_status' => 'publish',
+					'post_date'   => sprintf( '2016-04-%02d 00:00:00', $day ),
+				]
+			);
+		}
+
+		// Resolves to exclude while the over-fetch runs, then to truncate by the
+		// time the page comes back.
+		$flip_after_query = function ( $mode ) {
+			return did_action( 'pre_get_posts' ) && doing_filter( 'the_posts' ) ? 'truncate' : $mode;
+		};
+		add_filter( 'newspack_content_gate_feed_restriction_mode', $flip_after_query );
+
+		$feed_ids = $this->feed_post_ids();
+
+		remove_filter( 'newspack_content_gate_feed_restriction_mode', $flip_after_query );
+		foreach ( $free_ids as $id ) {
+			wp_delete_post( $id, true );
+		}
+
+		$this->assertCount( 2, $feed_ids, 'An over-fetched page must be trimmed to the requested length regardless of the mode.' );
+	}
+
+	/**
+	 * A paginated feed page whose whole window is restricted returns an empty
+	 * feed page, not a 404: back-fill is deliberately limited to page 1, so
+	 * without this the pairing would turn a previously short page into an error.
+	 */
+	public function test_emptied_paginated_feed_page_is_not_a_404() {
+		update_option( 'posts_per_rss', 1 );
+
+		// Two more restricted posts so page 2 exists and is entirely restricted.
+		$restricted_ids = [];
+		foreach ( range( 1, 2 ) as $day ) {
+			$restricted_ids[] = $this->factory->post->create(
+				[
+					'post_status' => 'publish',
+					'post_date'   => sprintf( '2015-06-%02d 00:00:00', $day ),
+				]
+			);
+		}
+
+		$this->go_to( add_query_arg( 'paged', 2, get_feed_link( 'rss2' ) ) );
+		$GLOBALS['wp']->handle_404();
+		$is_404 = is_404();
+		wp_reset_postdata();
+
+		foreach ( $restricted_ids as $id ) {
+			wp_delete_post( $id, true );
+		}
+
+		$this->assertEmpty( $GLOBALS['wp_query']->posts, 'Sanity: the page should have been emptied by exclusion.' );
+		$this->assertFalse( $is_404, 'A feed page emptied by exclusion must stay a valid, empty feed page.' );
+	}
+
+	/**
 	 * A non-positive over-fetch multiplier is clamped to 1 (max( 1, … )), so the
 	 * over-fetch collapses to the requested length and no inflation happens: a
 	 * rogue filter return can never shorten or empty the feed.

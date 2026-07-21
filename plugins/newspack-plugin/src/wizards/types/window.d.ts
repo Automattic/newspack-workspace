@@ -81,6 +81,7 @@ declare global {
 			// wp_localize_script() stringifies booleans ('1'/''); the wizard writes real booleans back.
 			presave_checks_enabled: boolean | string;
 			default_gate_status: GateStatus;
+			feed_restriction_modes: { value: FeedRestrictionMode; label: string }[];
 		};
 	}
 }
