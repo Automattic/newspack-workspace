@@ -49,7 +49,7 @@ class Subscriptions_Tiers {
 		// params (priority 10). Both no-op unless the switch targets a product the
 		// current user's own subscription already holds.
 		add_filter( 'woocommerce_add_to_cart_validation', [ __CLASS__, 'prevent_switch_to_same_subscription' ], 10, 4 );
-		add_filter( 'woocommerce_add_cart_item_data', [ __CLASS__, 'prevent_switch_to_same_subscription_cart_item_data' ], 9, 4 );
+		add_filter( 'woocommerce_add_cart_item_data', [ __CLASS__, 'prevent_switch_to_same_subscription_cart_item_data' ], 9, 3 );
 
 		// Unhook Upgrade/Downgrade switch direction text.
 		add_action(
@@ -474,16 +474,25 @@ class Subscriptions_Tiers {
 	 * @param bool        $selected                  Whether the product should be checked.
 	 */
 	private static function render_product_card( $product, $show_variation_attributes = false, $current = false, $selected = false ) {
-		if ( function_exists( 'wcs_price_string' ) ) {
-			$price = wcs_price_string(
-				[
-					'recurring_amount'      => $product->get_price(),
-					'subscription_period'   => $product->get_meta( '_subscription_period' ),
-					'subscription_interval' => $product->get_meta( '_subscription_period_interval' ),
-				]
-			);
-		} else {
-			$price = $product->get_price_html();
+		// A name-your-price product has no fixed price to print — get_price() is
+		// empty, so wcs_price_string() would render a bare "/ month" — and the
+		// amount is carried by the form's own input instead.
+		$is_nyp = class_exists( '\WC_Name_Your_Price_Helpers' )
+			? \WC_Name_Your_Price_Helpers::is_nyp( $product->get_id() )
+			: 'yes' === $product->get_meta( '_nyp' );
+		$price  = '';
+		if ( ! $is_nyp ) {
+			if ( function_exists( 'wcs_price_string' ) ) {
+				$price = wcs_price_string(
+					[
+						'recurring_amount'      => $product->get_price(),
+						'subscription_period'   => $product->get_meta( '_subscription_period' ),
+						'subscription_interval' => $product->get_meta( '_subscription_period_interval' ),
+					]
+				);
+			} else {
+				$price = $product->get_price_html();
+			}
 		}
 
 		/**
@@ -510,7 +519,9 @@ class Subscriptions_Tiers {
 			<?php if ( $should_render_description && $description ) : ?>
 				<span class="newspack-ui__helper-text"><?php echo $description; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></span>
 			<?php endif; ?>
-			<span class="newspack-ui__helper-text"><?php echo $price; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></span>
+			<?php if ( $price ) : ?>
+				<span class="newspack-ui__helper-text"><?php echo $price; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></span>
+			<?php endif; ?>
 		</label>
 		<?php
 	}
@@ -550,7 +561,7 @@ class Subscriptions_Tiers {
 			<label for="nyp_amount"><?php _e( 'Amount', 'newspack-plugin' ); ?></label>
 			<div class="newspack-ui__currency-input">
 				<span class="newspack-ui__currency-input__currency"><?php echo esc_html( $symbol ); ?></span>
-				<input type="number" name="price" id="nyp_amount" value="<?php echo esc_attr( $value ); ?>" data-original-value="<?php echo esc_attr( $value ); ?>" data-currency="<?php echo esc_attr( $currency ); ?>" data-frequency="<?php echo esc_attr( $frequency ); ?>" class="<?php echo esc_attr( $current ? 'current' : '' ); ?>">
+				<input type="number" name="price" id="nyp_amount" value="<?php echo esc_attr( $value ); ?>" data-original-value="<?php echo esc_attr( $value ); ?>" data-currency="<?php echo esc_attr( $currency ); ?>" data-price-decimals="<?php echo esc_attr( wc_get_price_decimals() ); ?>" data-frequency="<?php echo esc_attr( $frequency ); ?>" class="<?php echo esc_attr( $current ? 'current' : '' ); ?>">
 			</div>
 		</p>
 		<?php
@@ -905,7 +916,7 @@ class Subscriptions_Tiers {
 	 *
 	 * @param bool $passed       Whether add-to-cart validation has passed so far.
 	 * @param int  $product_id   The product being added to the cart.
-	 * @param int  $quantity     The quantity (unused).
+	 * @param int  $quantity     The quantity (unused; a deliberate quantity change is read from the request).
 	 * @param int  $variation_id The variation being added, if any.
 	 *
 	 * @return bool Whether the product may be added to the cart.
@@ -914,7 +925,7 @@ class Subscriptions_Tiers {
 		if ( true !== $passed ) {
 			return $passed;
 		}
-		$error = self::get_same_subscription_switch_error( $product_id, $quantity, $variation_id );
+		$error = self::get_same_subscription_switch_error( $product_id, $variation_id );
 		if ( null !== $error ) {
 			if ( function_exists( 'wc_add_notice' ) ) {
 				wc_add_notice( $error, 'error' );
@@ -938,14 +949,21 @@ class Subscriptions_Tiers {
 	 * @param array $cart_item_data Cart item data.
 	 * @param int   $product_id     The product being added to the cart.
 	 * @param int   $variation_id   The variation being added, if any.
-	 * @param int   $quantity       The quantity being added.
 	 *
 	 * @throws \Exception When the request is a switch onto the subscription the reader already owns.
 	 *
 	 * @return array Cart item data, unchanged.
 	 */
-	public static function prevent_switch_to_same_subscription_cart_item_data( $cart_item_data, $product_id, $variation_id = 0, $quantity = 1 ) {
-		$error = self::get_same_subscription_switch_error( $product_id, $quantity, $variation_id );
+	public static function prevent_switch_to_same_subscription_cart_item_data( $cart_item_data, $product_id, $variation_id = 0 ) {
+		// The Store API applies this filter outside `WC_Cart::add_to_cart()`'s
+		// try/catch (StoreApi CartController::filter_request_data()), where a throw
+		// surfaces as a generic 500 instead of a clean cart error — and the same
+		// applies to any non-WC_Cart caller. Let the validation-filter registration
+		// handle REST requests: on the Store API path it runs right after this one.
+		if ( defined( 'REST_REQUEST' ) && REST_REQUEST ) {
+			return $cart_item_data;
+		}
+		$error = self::get_same_subscription_switch_error( $product_id, $variation_id );
 		if ( null !== $error ) {
 			throw new \Exception( esc_html( $error ) );
 		}
@@ -961,12 +979,11 @@ class Subscriptions_Tiers {
 	 * product, variation or quantity, or a name-your-price amount change.
 	 *
 	 * @param int $product_id   The product being added to the cart.
-	 * @param int $quantity     The quantity being added.
 	 * @param int $variation_id The variation being added, if any.
 	 *
 	 * @return string|null Error message when the switch must be blocked, null otherwise.
 	 */
-	private static function get_same_subscription_switch_error( $product_id, $quantity = 1, $variation_id = 0 ) {
+	private static function get_same_subscription_switch_error( $product_id, $variation_id = 0 ) {
 		if ( ! function_exists( 'wcs_get_subscription' ) ) {
 			return null;
 		}
@@ -1016,9 +1033,14 @@ class Subscriptions_Tiers {
 		}
 
 		// WCS treats a switch as identical only when product, variation *and* quantity
-		// all match, so a quantity change on the same plan is a legitimate switch.
+		// all match, so a deliberate quantity change on the same plan is a legitimate
+		// switch. Only an explicitly submitted quantity counts as deliberate: the
+		// tiers modal has no quantity input and its checkout path hardcodes an add of
+		// one, so comparing that fixed value against a multi-seat line item would
+		// bail out here and skip the product and amount checks below for exactly the
+		// crafted-request and no-JavaScript cases this backstop exists for.
 		$line_quantity = max( 1, (int) $line_item->get_quantity() );
-		if ( (int) $quantity !== $line_quantity ) {
+		if ( isset( $_REQUEST['quantity'] ) && absint( wp_unslash( $_REQUEST['quantity'] ) ) !== $line_quantity ) {
 			return null;
 		}
 
@@ -1045,9 +1067,21 @@ class Subscriptions_Tiers {
 		if ( $target_is_nyp && isset( $_REQUEST['price'] ) ) {
 			$price_param = sanitize_text_field( wp_unslash( $_REQUEST['price'] ) );
 			if ( '' !== $price_param ) {
-				$interval       = max( 1, (int) $target_product->get_meta( '_subscription_period_interval' ) );
+				// WCS's canonical interval accessor, like the `_nyp` helper above:
+				// it normalizes empty meta to 1 and applies WCS's product filters,
+				// so the per-period basis tracks whatever WCS itself would use.
+				$interval       = max(
+					1,
+					(int) ( class_exists( '\WC_Subscriptions_Product' )
+						? \WC_Subscriptions_Product::get_interval( $target_product )
+						: $target_product->get_meta( '_subscription_period_interval' ) )
+				);
 				$target_amount  = (float) $price_param;
-				$current_amount = (float) $line_item->get_total() / $interval / $line_quantity;
+				// get_subtotal() is the pre-discount line amount. A coupon on the
+				// existing subscription discounts get_total(), which would make an
+				// unchanged name-your-price re-submission compare unequal and skip
+				// the guard.
+				$current_amount = (float) $line_item->get_subtotal() / $interval / $line_quantity;
 			}
 		}
 		// phpcs:enable WordPress.Security.NonceVerification.Recommended

@@ -20,16 +20,17 @@ class Newspack_Test_Subscriptions_Tiers extends WP_UnitTestCase {
 	 */
 	public function set_up() {
 		parent::set_up();
-		global $subscriptions_database, $products_database, $order_items_database, $wc_mock_notices;
+		global $subscriptions_database, $products_database;
 		$subscriptions_database = [];
 		$products_database      = [];
-		$order_items_database   = [];
-		$wc_mock_notices        = [];
+		wc_mocks_reset_order_items();
+		wc_mocks_reset_notices();
 		wp_set_current_user( 0 );
 		unset(
 			$_REQUEST['switch-subscription'],
 			$_REQUEST['item'],
-			$_REQUEST['price']
+			$_REQUEST['price'],
+			$_REQUEST['quantity']
 		);
 	}
 
@@ -41,7 +42,8 @@ class Newspack_Test_Subscriptions_Tiers extends WP_UnitTestCase {
 		unset(
 			$_REQUEST['switch-subscription'],
 			$_REQUEST['item'],
-			$_REQUEST['price']
+			$_REQUEST['price'],
+			$_REQUEST['quantity']
 		);
 		parent::tear_down();
 	}
@@ -233,6 +235,8 @@ class Newspack_Test_Subscriptions_Tiers extends WP_UnitTestCase {
 				'id'           => 555,
 				'product_id'   => $product_id,
 				'variation_id' => $variation_id,
+				// No discount on the fixture: pre-discount subtotal equals total.
+				'subtotal'     => $amount ?? 0,
 				'total'        => $amount ?? 0,
 				'quantity'     => $quantity,
 			]
@@ -579,18 +583,36 @@ class Newspack_Test_Subscriptions_Tiers extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A quantity change on the same plan is a legitimate switch in WCS's native
-	 * flow (product, variation and quantity must all match to be "identical"), so
-	 * the backstop steps aside for it.
+	 * A deliberate quantity change on the same plan is a legitimate switch in
+	 * WCS's native flow (product, variation and quantity must all match to be
+	 * "identical"), so the backstop steps aside for it. WCS's switch form
+	 * submits the quantity, which is what marks the change as deliberate.
 	 */
 	public function test_prevent_switch_allows_quantity_change() {
 		$user_id = self::factory()->user->create();
 		wp_set_current_user( $user_id );
 		$subscription                    = $this->make_subscription( $user_id, 'active', 102, null, [], 0, 1 );
 		$_REQUEST['switch-subscription'] = (string) $subscription->get_id();
+		$_REQUEST['quantity']            = '3';
 
 		// Seat change from 1 to 3 on the same product: a real switch, allowed.
 		$this->assertTrue( Subscriptions_Tiers::prevent_switch_to_same_subscription( true, 102, 3 ) );
+	}
+
+	/**
+	 * Without a submitted quantity there is no deliberate seat change: the modal
+	 * has no quantity input and its checkout path hardcodes an add of one, so a
+	 * multi-seat line item must not make the guard bail on the quantity check
+	 * and skip the same-product comparison.
+	 */
+	public function test_prevent_switch_blocks_multi_seat_line_item_without_submitted_quantity() {
+		$user_id = self::factory()->user->create();
+		wp_set_current_user( $user_id );
+		// The reader's line item holds 3 seats; the modal-style request adds 1.
+		$subscription                    = $this->make_subscription( $user_id, 'active', 102, null, [], 0, 3 );
+		$_REQUEST['switch-subscription'] = (string) $subscription->get_id();
+
+		$this->assertFalse( Subscriptions_Tiers::prevent_switch_to_same_subscription( true, 102 ) );
 	}
 
 	/**
@@ -610,6 +632,48 @@ class Newspack_Test_Subscriptions_Tiers extends WP_UnitTestCase {
 
 		$_REQUEST['price'] = '12'; // Changed per-unit amount.
 		$this->assertTrue( Subscriptions_Tiers::prevent_switch_to_same_subscription( true, 102, 2 ) );
+	}
+
+	/**
+	 * The name-your-price comparison uses the pre-discount subtotal: a coupon on
+	 * the existing subscription discounts the line total, which must not make an
+	 * unchanged amount re-submission look like a genuine change.
+	 */
+	public function test_prevent_switch_nyp_compares_pre_discount_amount() {
+		$user_id = self::factory()->user->create();
+		wp_set_current_user( $user_id );
+		wc_create_mock_product(
+			[
+				'id'   => 102,
+				'type' => 'subscription',
+				'name' => 'Tier 102',
+				'meta' => [ '_nyp' => 'yes' ],
+			]
+		);
+		// Reader chose $10/month; a 20% coupon discounts the line total to $8.
+		$item         = new WC_Order_Item_Product(
+			[
+				'id'         => 555,
+				'product_id' => 102,
+				'subtotal'   => 10.00,
+				'total'      => 8.00,
+			]
+		);
+		$subscription = wcs_create_subscription(
+			[
+				'customer_id' => $user_id,
+				'status'      => 'active',
+				'products'    => [ 102 ],
+				'items'       => [ $item ],
+			]
+		);
+		$_REQUEST['switch-subscription'] = (string) $subscription->get_id();
+
+		$_REQUEST['price'] = '10'; // The amount the reader actually chose: unchanged → blocked.
+		$this->assertFalse( Subscriptions_Tiers::prevent_switch_to_same_subscription( true, 102 ) );
+
+		$_REQUEST['price'] = '12'; // A genuine change is still allowed.
+		$this->assertTrue( Subscriptions_Tiers::prevent_switch_to_same_subscription( true, 102 ) );
 	}
 
 	/**

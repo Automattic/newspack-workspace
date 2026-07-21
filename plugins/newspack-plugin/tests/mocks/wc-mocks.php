@@ -146,8 +146,36 @@ $orders_database = [];
 $subscriptions_database = [];
 $products_database = [];
 $order_items_database = [];
+$wc_mock_notices = [];
 
-class WC_Order_Item_Product {
+/**
+ * Reset the order-item lookup table.
+ *
+ * Every WC_Order_Item_Product construction across the whole suite registers
+ * itself in $order_items_database (mirroring WooCommerce, where order item IDs
+ * are globally unique), and test fixtures reuse low integer IDs across files —
+ * call this from a test class's set_up() before staging order items so a stale
+ * item created by an unrelated suite can't resolve.
+ */
+function wc_mocks_reset_order_items() {
+	global $order_items_database;
+	$order_items_database = [];
+}
+
+/**
+ * Reset the notices recorded by the wc_add_notice() mock.
+ *
+ * The mock is defined unconditionally, which flips every
+ * function_exists( 'wc_add_notice' ) gate in production code from "skip" to
+ * "execute" for the whole suite — any test exercising such a path should call
+ * this from set_up() so it never asserts against another test's notices.
+ */
+function wc_mocks_reset_notices() {
+	global $wc_mock_notices;
+	$wc_mock_notices = [];
+}
+
+class WC_Order_Item_Product implements ArrayAccess {
 	private $data = [];
 	private $meta = [];
 	public function __construct( $data = [] ) {
@@ -161,6 +189,53 @@ class WC_Order_Item_Product {
 			global $order_items_database;
 			$order_items_database[ (int) $data['id'] ] = $this;
 		}
+	}
+	/**
+	 * Real WC_Order_Item implements ArrayAccess and delegates array reads to
+	 * getters, which is how consumers like `$item['type']` work.
+	 *
+	 * @param mixed $offset Array key.
+	 */
+	#[\ReturnTypeWillChange]
+	public function offsetExists( $offset ) {
+		return is_callable( [ $this, "get_$offset" ] ) || isset( $this->data[ $offset ] );
+	}
+	/**
+	 * Array read, delegated to the matching getter like real WC_Order_Item.
+	 *
+	 * @param mixed $offset Array key.
+	 */
+	#[\ReturnTypeWillChange]
+	public function offsetGet( $offset ) {
+		if ( is_callable( [ $this, "get_$offset" ] ) ) {
+			return $this->{"get_$offset"}();
+		}
+		return $this->data[ $offset ] ?? null;
+	}
+	/**
+	 * Array write, stored on the raw data like real WC_Order_Item's setters.
+	 *
+	 * @param mixed $offset Array key.
+	 * @param mixed $value  Value to set.
+	 */
+	#[\ReturnTypeWillChange]
+	public function offsetSet( $offset, $value ) {
+		$this->data[ $offset ] = $value;
+	}
+	/**
+	 * Array unset.
+	 *
+	 * @param mixed $offset Array key.
+	 */
+	#[\ReturnTypeWillChange]
+	public function offsetUnset( $offset ) {
+		unset( $this->data[ $offset ] );
+	}
+	/**
+	 * Real WC_Order_Item_Product::get_type() is always 'line_item'.
+	 */
+	public function get_type() {
+		return $this->data['type'] ?? 'line_item';
 	}
 	public function get_name() {
 		return $this->data['name'] ?? '';
@@ -341,6 +416,9 @@ class WC_Order {
 	public function get_coupon_codes() {
 		return $this->data['coupon_codes'] ?? [];
 	}
+	public function update_meta_data( $field_name, $value ) {
+		$this->meta[ $field_name ] = $value;
+	}
 	public function delete_meta_data( $field_name ) {
 		unset( $this->meta[ $field_name ] );
 	}
@@ -393,6 +471,19 @@ class WC_Subscription {
 	public function get_payment_method() {
 		return $this->data['payment_method'] ?? '';
 	}
+	/**
+	 * Stageable stand-in for WC_Subscription::payment_method_supports(): pass a
+	 * `payment_method_supports` array of supported features to restrict them;
+	 * without it every feature is supported.
+	 *
+	 * @param string $feature Payment gateway feature to check.
+	 */
+	public function payment_method_supports( $feature ) {
+		if ( isset( $this->data['payment_method_supports'] ) ) {
+			return in_array( $feature, (array) $this->data['payment_method_supports'], true );
+		}
+		return true;
+	}
 	public function has_product( $product_id ) {
 		return in_array( $product_id, $this->products, true );
 	}
@@ -428,6 +519,36 @@ class WC_Subscription {
 	}
 	public function set_status( $status ) {
 		$this->data['status'] = $status;
+	}
+	/**
+	 * Stageable stand-in for WC_Subscription::can_be_updated_to(): pass a
+	 * `can_update_to` array of allowed target statuses to restrict transitions;
+	 * without it every transition is allowed (real gating lives in WCS).
+	 *
+	 * @param string $status Target status.
+	 */
+	public function can_be_updated_to( $status ) {
+		if ( isset( $this->data['can_update_to'] ) ) {
+			return in_array( $status, (array) $this->data['can_update_to'], true );
+		}
+		return true;
+	}
+	/**
+	 * Recording stand-in for WC_Subscription::update_status(): applies the
+	 * status and records the transition with its note on `status_updates`.
+	 *
+	 * @param string $status New status.
+	 * @param string $note   Optional transition note.
+	 */
+	public function update_status( $status, $note = '' ) {
+		$this->data['status']           = $status;
+		$this->data['status_updates'][] = [
+			'status' => $status,
+			'note'   => $note,
+		];
+	}
+	public function add_order_note( $note ) {
+		$this->data['order_notes'][] = $note;
 	}
 	public function get_billing_period() {
 		return $this->data['billing_period'];
@@ -546,9 +667,18 @@ if ( ! class_exists( 'WC_Subscriptions_Switcher' ) ) {
 	 * caller passed the expected sign-up-fee mode and orders_to_include list.
 	 */
 	class WC_Subscriptions_Switcher {
+		/**
+		 * Stageable: set the $wcs_mock_cart_switches global to an array of
+		 * switch-details arrays (keyed by cart item key, each carrying at least
+		 * `subscription_id`) to simulate a cart holding switch items. Defaults
+		 * to false — no switches — like an empty cart.
+		 *
+		 * @param string $item_action Type of switch items to include (ignored).
+		 */
 		public static function cart_contains_switches( $item_action = 'any' ) {
 			unset( $item_action );
-			return false;
+			global $wcs_mock_cart_switches;
+			return $wcs_mock_cart_switches ?? false;
 		}
 
 		public static function calculate_total_paid_since_last_order( $subscription, $subscription_item, $include_sign_up_fees = 'include_sign_up_fees', $orders_to_include = [] ) {
@@ -797,6 +927,18 @@ function wcs_get_canonical_product_id( $item ) {
 		return $item->get_product_id();
 	}
 	return null;
+}
+/**
+ * Stageable: set the $wcs_mock_product_switchable global to false to simulate
+ * a product type that WCS does not allow switching (real WCS checks the
+ * product type against the store's switching settings).
+ *
+ * @param WC_Product|int $product Product to check (ignored).
+ */
+function wcs_is_product_switchable_type( $product ) {
+	unset( $product );
+	global $wcs_mock_product_switchable;
+	return $wcs_mock_product_switchable ?? true;
 }
 function wcs_get_days_in_cycle( $period, $interval ) {
 	$days_per_period = [
