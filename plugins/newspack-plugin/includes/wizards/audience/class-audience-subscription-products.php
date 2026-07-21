@@ -1015,11 +1015,13 @@ class Audience_Subscription_Products extends Wizard {
 	}
 
 	/**
-	 * Resolve a product's policy stack, guarding an unset base price.
+	 * Resolve a product's policy stack through the integration seam.
 	 *
-	 * A null base price means "not priced" — resolving it would coerce to 0.0 and
-	 * fabricate a free price (priming the engine against it), so return an empty
-	 * resolution instead and let the UI render an em dash.
+	 * A null base price (no `_subscription_price` meta) is forwarded as-is rather
+	 * than gatekeeping the resolver: with the engine active the resolver derives
+	 * its own base, so a product the catalog meta doesn't price can still resolve;
+	 * when nothing can price it, the resolver reports null pricing and the UI
+	 * renders an em dash — never a fabricated free price.
 	 *
 	 * @param int        $id            The product/variation ID (0 when none).
 	 * @param float|null $base_price    The base recurring price, or null when unset.
@@ -1029,9 +1031,6 @@ class Audience_Subscription_Products extends Wizard {
 	 * @return array A policy resolution payload.
 	 */
 	private static function resolve_policy( $id, $base_price, $cycle, $currency_code ) {
-		if ( null === $base_price ) {
-			return self::empty_policy( $currency_code );
-		}
 		return Subscription_Policy_Resolver::resolve(
 			$id,
 			[
@@ -1304,8 +1303,8 @@ class Audience_Subscription_Products extends Wizard {
 		if ( isset( $variations[0]['policy'] ) ) {
 			return $variations[0]['policy'];
 		}
-		// No priced variations — resolve_policy() returns an empty resolution when the base
-		// price is unset (null), so the UI renders an em dash rather than a fabricated $0.
+		// No priced variations — id 0 is not a resolvable product, so the resolver
+		// reports null pricing and the UI renders an em dash rather than a fabricated $0.
 		return self::resolve_policy( 0, $base_price, '', $currency_code );
 	}
 

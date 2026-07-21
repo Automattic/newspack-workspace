@@ -16,7 +16,9 @@ status / category), client-side `filterSortAndPaginate`, row action → edit mod
 
 **Layer 2 (policy stack + effective price).** Each product (and, for variable
 subscriptions, **each variation**) shows the applied pricing policies as chips —
-the winning policy distinguished — plus base → effective price.
+each linking to the rule's edit view — plus base → effective price. No winner is
+singled out: different rules can win at different cycles, so the schedule popover
+carries only per-cycle amounts.
 
 ## Grouping chip-bar: Subscriptions / Donations / All
 
@@ -169,11 +171,12 @@ Subscription_Policy_Resolver::resolve( $product_id, [
 
 Reads the **live** `woocommerce-dynamic-pricing` engine (`IS_MOCK = false`): it composes
 all active rules over the product's purchase cycle for the effective price and lists the
-matching rules with the winner flagged, resolved **per variation** for variable
-subscriptions. When the engine plugin is inactive (or the product is invalid or
-engine-excluded, e.g. donations) it reports the base price with no rules. This is the
-single boundary — route every policy read through `resolve()` (or override via the
-`newspack_subscription_policy_resolution` filter); keep the return shape stable.
+matching rules, resolved **per variation** for variable subscriptions. When the engine
+plugin is inactive (or the product is invalid or engine-excluded, e.g. donations) it
+reports the base price with no rules — or null pricing (rendered as an em dash) when the
+catalog carries no price either. This is the single boundary — route every policy read
+through `resolve()` (or override via the `newspack_subscription_policy_resolution`
+filter); keep the return shape stable.
 
 ## Staging seed (both production shapes)
 

@@ -3,8 +3,9 @@
  *
  * These read only the `policy` field of a product row, which comes from the PHP
  * integration seam (Subscription_Policy_Resolver) — now backed by the live
- * pricing-rule engine. The chips list every applied rule (the per-cycle winner is
- * shown in the effective-price schedule).
+ * pricing-rule engine. The chips list every applied rule, each linking to its
+ * edit view; the schedule popover carries only per-cycle amounts (no winner
+ * attribution — segment 0 is the headline effective price).
  */
 
 /**
@@ -32,9 +33,10 @@ export function formatAmount( amount: number, currency: SubscriptionProductsCurr
 }
 
 /**
- * Renders the applied pricing rules as chips. Every rule that applies to the
- * product is shown with the success label — different rules can win at different
- * cycles (see the effective-price schedule), so the column doesn't single one out.
+ * Renders the applied pricing rules as chips linking to the rule's edit view.
+ * Every rule that applies to the product is shown with the success label —
+ * different rules can win at different cycles (see the effective-price
+ * schedule), so the column doesn't single one out.
  */
 export function PolicyChips( { policy }: { policy: SubscriptionPolicyResolution } ) {
 	if ( ! policy?.policies?.length ) {
@@ -44,9 +46,14 @@ export function PolicyChips( { policy }: { policy: SubscriptionPolicyResolution 
 	return (
 		<div className="newspack-subscription-products__policy-chips">
 			{ policy.policies.map( p => (
-				<span key={ p.id } className="newspack-subscription-products__policy-chip" title={ `${ p.label } — ${ p.adjustment_label }` }>
+				<a
+					key={ p.id }
+					className="newspack-subscription-products__policy-chip"
+					href={ `admin.php?page=newspack-audience-pricing-rules#/edit/${ p.id }` }
+					title={ `${ p.label } — ${ p.adjustment_label }` }
+				>
 					<Badge level="success" text={ p.label } />
-				</span>
+				</a>
 			) ) }
 		</div>
 	);
@@ -90,13 +97,19 @@ function ScheduleList( { schedule, currency }: { schedule: SubscriptionPolicySeg
 /**
  * Renders the base price and, when rules change it, the resulting effective price.
  * A multi-cycle schedule (the price changes across renewals) reveals the full
- * per-cycle trajectory + winning rule in a Popover on hover/focus/click — it can't
- * fit the column.
+ * per-cycle trajectory in a Popover on hover/focus/click — it can't fit the column.
  */
 export function EffectivePrice( { policy, currency }: { policy: SubscriptionPolicyResolution; currency: SubscriptionProductsCurrency } ) {
 	const [ showSchedule, setShowSchedule ] = useState( false );
 
-	if ( ! policy || policy.base_price === null || policy.base_price === undefined ) {
+	// Null pricing means "unpriced" (nothing could price the product) — the two
+	// fields are always null together, but narrow both for the formatter.
+	if (
+		policy?.base_price === null ||
+		policy?.base_price === undefined ||
+		policy.effective_price === null ||
+		policy.effective_price === undefined
+	) {
 		return <span className="newspack-subscription-products__muted">&mdash;</span>;
 	}
 

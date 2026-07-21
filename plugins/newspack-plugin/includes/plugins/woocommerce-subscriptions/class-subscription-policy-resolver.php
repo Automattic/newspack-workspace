@@ -41,25 +41,29 @@ class Subscription_Policy_Resolver {
 	 *
 	 * @param int   $product_id The subscription product (or variation) ID.
 	 * @param array $context    Optional resolution context. Recognised keys:
-	 *                          - base_price (float)  Base recurring price for the cycle.
+	 *                          - base_price (float|null) Catalog recurring price for the
+	 *                            cycle; null when the catalog has no price (the engine
+	 *                            derives its own base, or the resolution reports null
+	 *                            pricing).
 	 *                          - cycle      (string) Billing period slug, e.g. 'month'.
 	 *                          - currency   (string) ISO currency code.
 	 *
 	 * @return array {
 	 *     Resolved pricing for the product.
 	 *
-	 *     @type bool   $is_mock         Whether this is mock data.
-	 *     @type float  $base_price      The unmodified base price.
-	 *     @type float  $effective_price The price after the winning policy is applied.
-	 *     @type string $currency        ISO currency code.
-	 *     @type string $cycle           Billing period slug.
-	 *     @type array  $policies        List of applied policies, each: {
+	 *     @type bool       $is_mock         Whether this is mock data.
+	 *     @type float|null $base_price      The unmodified base price; null when unpriced.
+	 *     @type float|null $effective_price The composed price after applied rules; null when unpriced.
+	 *     @type string     $currency        ISO currency code.
+	 *     @type string     $cycle           Billing period slug.
+	 *     @type array      $policies        List of applied policies, each: {
 	 *         @type string $id               Stable policy id.
 	 *         @type string $slug             Machine slug.
 	 *         @type string $label            Human label.
-	 *         @type string $type             Policy type: promo|season|winback|loyalty.
+	 *         @type string $type             The rule's strategy id (e.g. simple_price, stepped_by_cycle).
 	 *         @type string $adjustment_label Short description of the adjustment.
 	 *     }
+	 *     @type array      $schedule        Per-cycle price segments, each { from_cycle, amount }.
 	 * }
 	 */
 	public static function resolve( $product_id, $context = [] ) {
@@ -97,7 +101,10 @@ class Subscription_Policy_Resolver {
 	private static function get_resolution( $product_id, $context ) {
 		$currency = isset( $context['currency'] ) ? $context['currency'] : get_woocommerce_currency();
 		$cycle    = isset( $context['cycle'] ) ? $context['cycle'] : 'month';
-		$base     = isset( $context['base_price'] ) ? (float) $context['base_price'] : 0.0;
+		// Null (or omitted) means the catalog carries no price for the product. Only
+		// the engine can price it then, so the no-engine paths below report null
+		// pricing (rendered as an em dash) instead of coercing to a fabricated 0.0.
+		$injected = isset( $context['base_price'] ) ? (float) $context['base_price'] : null;
 
 		$product = function_exists( 'wc_get_product' ) ? wc_get_product( (int) $product_id ) : null;
 		$engine  = class_exists( '\Automattic\WooCommerce\DynamicPricing\Pricing_Engine' )
@@ -107,7 +114,7 @@ class Subscription_Policy_Resolver {
 		// No engine / invalid product / engine-excluded product (e.g. donations the
 		// engine never prices) → base price, no rules, rather than a fabricated one.
 		if ( ! $engine || ! $product instanceof \WC_Product || $engine->is_excluded( $product ) ) {
-			return self::build( $base, $base, $currency, $cycle, [], [] );
+			return self::build( $injected, $injected, $currency, $cycle, [], [] );
 		}
 
 		// Derive the base the way every other engine surface does, instead of trusting
@@ -119,6 +126,10 @@ class Subscription_Policy_Resolver {
 		// Project the composed price across the subscription's cycles with the engine's
 		// public projector — the same walk the admin inspector uses, sharing its
 		// per-request memo. Segment 0 (the purchase cycle) is the headline effective price.
+		// Cost note: the memo dedupes repeat lookups of the SAME product within the
+		// request, not distinct products — a list request still walks the full cycle
+		// horizon once per product/variation row. Fine for an admin catalog read; a
+		// per-reader or storefront caller would need a broader cache first.
 		$schedule  = \Automattic\WooCommerce\DynamicPricing\Schedule_Projector::project_for_product( $product );
 		$effective = ! empty( $schedule ) ? (float) $schedule[0]['amount'] : $base;
 
@@ -136,6 +147,13 @@ class Subscription_Policy_Resolver {
 				html_entity_decode( get_the_title( (int) $rule_id ), ENT_QUOTES ),
 				self::strategy_label( (string) $rule->strategy_id )
 			);
+		}
+
+		// Genuinely unpriced: the catalog has no price, the engine can't derive a
+		// base, and no rule prices it either — report null pricing (em dash) rather
+		// than a fabricated $0.00 row.
+		if ( null === $injected && 0.0 >= $base && empty( $rules ) ) {
+			return self::build( null, null, $currency, $cycle, [], [] );
 		}
 
 		return self::build( $base, $effective, $currency, $cycle, $rules, $schedule );
@@ -166,12 +184,12 @@ class Subscription_Policy_Resolver {
 	/**
 	 * Assemble a resolution payload in the shape resolve() documents.
 	 *
-	 * @param float  $base_price      The unmodified base price.
-	 * @param float  $effective_price The composed price after rules.
-	 * @param string $currency        ISO currency code.
-	 * @param string $cycle           Billing period slug.
-	 * @param array  $rules           Applied-rule entries (see policy()).
-	 * @param array  $schedule        Per-cycle price trajectory (from Schedule_Projector).
+	 * @param float|null $base_price      The unmodified base price (null = unpriced).
+	 * @param float|null $effective_price The composed price after rules (null = unpriced).
+	 * @param string     $currency        ISO currency code.
+	 * @param string     $cycle           Billing period slug.
+	 * @param array      $rules           Applied-rule entries (see policy()).
+	 * @param array      $schedule        Per-cycle price trajectory (from Schedule_Projector).
 	 *
 	 * @return array The resolution payload.
 	 */
@@ -179,8 +197,11 @@ class Subscription_Policy_Resolver {
 		$decimals = function_exists( 'wc_get_price_decimals' ) ? wc_get_price_decimals() : 2;
 		return [
 			'is_mock'         => self::IS_MOCK,
-			'base_price'      => $base_price,
-			'effective_price' => round( (float) $effective_price, $decimals ),
+			// Round both prices to store decimals: the UI draws the base → effective
+			// arrow off a strict comparison, so an unrounded base against a rounded
+			// effective would render a pointless "$20.00 → $20.00".
+			'base_price'      => null === $base_price ? null : round( (float) $base_price, $decimals ),
+			'effective_price' => null === $effective_price ? null : round( (float) $effective_price, $decimals ),
 			'currency'        => $currency,
 			'cycle'           => $cycle,
 			'policies'        => $rules,
@@ -210,7 +231,7 @@ class Subscription_Policy_Resolver {
 	 * Build a single policy entry.
 	 *
 	 * @param string $id               Stable policy id.
-	 * @param string $type             Policy type.
+	 * @param string $type             The rule's strategy id.
 	 * @param string $label            Human label.
 	 * @param string $adjustment_label Short description of the adjustment.
 	 *

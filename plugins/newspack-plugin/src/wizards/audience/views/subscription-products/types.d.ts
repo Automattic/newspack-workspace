@@ -12,7 +12,8 @@ interface SubscriptionPolicy {
 	id: string;
 	slug: string;
 	label: string;
-	type: 'promo' | 'season' | 'winback' | 'loyalty' | string;
+	// The rule's strategy id (e.g. 'simple_price', 'stepped_by_cycle').
+	type: string;
 	adjustment_label: string;
 }
 
@@ -32,8 +33,9 @@ interface SubscriptionPolicySegment {
  */
 interface SubscriptionPolicyResolution {
 	is_mock: boolean;
-	base_price: number;
-	effective_price: number;
+	// Null when the product is unpriced (nothing can price it) — rendered as an em dash.
+	base_price: number | null;
+	effective_price: number | null;
 	currency: string;
 	cycle: string;
 	policies: SubscriptionPolicy[];
