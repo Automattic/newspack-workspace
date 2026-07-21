@@ -119,6 +119,7 @@ type CustomAccess = {
 	metering: Metering;
 	gate_layout_id: number;
 	access_rules: GateAccessRuleGroup[];
+	payment_recovery_grace: boolean;
 };
 
 type ContentGiftingConfig = {

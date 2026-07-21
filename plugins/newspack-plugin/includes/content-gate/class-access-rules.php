@@ -24,6 +24,16 @@ class Access_Rules {
 	private static $rules = [];
 
 	/**
+	 * Context for the evaluation currently in progress, set by evaluate_rules()
+	 * / evaluate_rule() from the settings of the gate being evaluated. Rule
+	 * callbacks read it via get_evaluation_context(). Empty outside an
+	 * evaluation, so callbacks must always provide a default.
+	 *
+	 * @var array
+	 */
+	private static $evaluation_context = [];
+
+	/**
 	 * Initialize hooks.
 	 */
 	public static function init() {
@@ -155,13 +165,18 @@ class Access_Rules {
 	/**
 	 * Evaluate whether the given or current user can bypass the given access rule.
 	 *
-	 * @param string   $rule_slug Access rule slug.
-	 * @param mixed    $args      Additional arguments for the access rule callback.
-	 * @param int|null $user_id   User ID. If not given, checks the current user.
+	 * @param string     $rule_slug Access rule slug.
+	 * @param mixed      $args      Additional arguments for the access rule callback.
+	 * @param int|null   $user_id   User ID. If not given, checks the current user.
+	 * @param array|null $context   Optional evaluation context (e.g. the gate's
+	 *                              custom_access settings relevant to rule callbacks,
+	 *                              such as `payment_recovery_grace`). If null, the
+	 *                              context already in place (set by evaluate_rules())
+	 *                              is left untouched.
 	 *
 	 * @return bool
 	 */
-	public static function evaluate_rule( $rule_slug, $args = null, $user_id = null ) {
+	public static function evaluate_rule( $rule_slug, $args = null, $user_id = null, $context = null ) {
 		$rule = self::get_rule( $rule_slug );
 
 		// Rule doesn't exist or lacks a callback function to execute, don't block access for it.
@@ -180,7 +195,29 @@ class Access_Rules {
 			return false;
 		}
 
-		return call_user_func( $rule['callback'], $user_id, $args );
+		if ( null === $context ) {
+			return call_user_func( $rule['callback'], $user_id, $args );
+		}
+
+		$previous_context         = self::$evaluation_context;
+		self::$evaluation_context = $context;
+		$passes                   = call_user_func( $rule['callback'], $user_id, $args );
+		self::$evaluation_context = $previous_context;
+
+		return $passes;
+	}
+
+	/**
+	 * Get a value from the context of the evaluation currently in progress.
+	 *
+	 * @param string $key           Context key.
+	 * @param mixed  $default_value Value to return when the key isn't part of the
+	 *                              current context (or no evaluation is in progress).
+	 *
+	 * @return mixed
+	 */
+	public static function get_evaluation_context( $key, $default_value = null ) {
+		return self::$evaluation_context[ $key ] ?? $default_value;
 	}
 
 	/**
@@ -246,10 +283,13 @@ class Access_Rules {
 	 *
 	 * @param array $access_rules The access rules (array of groups, each group is an array of rules).
 	 * @param int   $user_id     Optional. User ID to evaluate rules for. Defaults to current user.
+	 * @param array $context     Optional evaluation context made available to rule
+	 *                           callbacks via get_evaluation_context() (e.g. the
+	 *                           gate's `payment_recovery_grace` setting).
 	 *
 	 * @return bool True if access is granted, false if restricted.
 	 */
-	public static function evaluate_rules( $access_rules, $user_id = null ) {
+	public static function evaluate_rules( $access_rules, $user_id = null, $context = [] ) {
 		if ( empty( $access_rules ) ) {
 			return true;
 		}
@@ -257,15 +297,21 @@ class Access_Rules {
 		// Normalize legacy flat rules structure to grouped format.
 		$access_rules = self::normalize_rules( $access_rules );
 
+		$previous_context         = self::$evaluation_context;
+		self::$evaluation_context = $context;
+
 		// Evaluate each group with OR logic - if any group passes, grant access.
+		$granted = false;
 		foreach ( $access_rules as $group ) {
 			if ( self::evaluate_rules_group( $group, $user_id ) ) {
-				return true;
+				$granted = true;
+				break;
 			}
 		}
 
-		// No group passed - restrict access.
-		return false;
+		self::$evaluation_context = $previous_context;
+
+		return $granted;
 	}
 
 	/**
@@ -373,8 +419,15 @@ class Access_Rules {
 	public static function has_active_subscription( $user_id, $product_ids, $strict = false ) {
 		$has_subscription = false;
 
+		// Whether on-hold subscriptions in payment recovery (failed-payment retry
+		// window) still grant access. Controlled per-gate by the custom_access
+		// `payment_recovery_grace` setting; defaults to ON so gates saved before
+		// the setting existed — and evaluations outside a gate context — keep
+		// paying readers' access while their payment is being retried.
+		$payment_recovery_grace = (bool) self::get_evaluation_context( 'payment_recovery_grace', true );
+
 		// Check user's own subscriptions.
-		if ( ! empty( WooCommerce_Connection::get_active_subscriptions_for_user( $user_id, $product_ids ) ) ) {
+		if ( ! empty( WooCommerce_Connection::get_active_subscriptions_for_user( $user_id, $product_ids, $payment_recovery_grace ) ) ) {
 			$has_subscription = true;
 		}
 
@@ -382,7 +435,12 @@ class Access_Rules {
 		if ( ! $strict && ! $has_subscription && function_exists( 'wcs_get_subscription' ) ) {
 			$group_subscriptions = Group_Subscription::get_group_subscriptions_for_user( $user_id );
 			foreach ( $group_subscriptions as $subscription ) {
-				if ( ! $subscription || ! $subscription->has_status( WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES ) ) {
+				if ( ! $subscription ) {
+					continue;
+				}
+				$grants_access = $subscription->has_status( WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES )
+					|| ( $payment_recovery_grace && WooCommerce_Connection::is_subscription_in_payment_recovery( $subscription ) );
+				if ( ! $grants_access ) {
 					continue;
 				}
 				// If no product filter, any active group subscription grants access.

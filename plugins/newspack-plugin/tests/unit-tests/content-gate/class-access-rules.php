@@ -6,6 +6,7 @@
  */
 
 use Newspack\Access_Rules;
+use Newspack\Content_Gate;
 use Newspack\Group_Subscription;
 use Newspack\Reader_Activation;
 use Newspack\WooCommerce_Connection;
@@ -357,5 +358,171 @@ class Newspack_Test_Access_Rules extends WP_UnitTestCase {
 		);
 
 		wp_set_current_user( 0 );
+	}
+
+	// =========================================================================
+	// Payment-recovery grace (NPPD-2052): on-hold subscriptions inside the Woo
+	// Subscriptions failed-payment retry window keep granting access.
+	// =========================================================================
+
+	/**
+	 * Test that an owner keeps access while their on-hold subscription has a
+	 * future payment retry scheduled (the dunning window), by default.
+	 */
+	public function test_owner_keeps_access_during_payment_recovery() {
+		$this->create_subscription(
+			[
+				'status' => 'on-hold',
+				'times'  => [ 'payment_retry' => time() + HOUR_IN_SECONDS ],
+			]
+		);
+
+		$has_access = Access_Rules::has_active_subscription( self::$owner_user_id, [ self::$product_id ] );
+
+		$this->assertTrue( $has_access, 'Owner should keep access while a payment retry is scheduled for their on-hold subscription.' );
+	}
+
+	/**
+	 * Test that an on-hold subscription with no scheduled payment retry does
+	 * not grant access — the retry window has passed or never existed.
+	 */
+	public function test_owner_denied_when_on_hold_without_scheduled_retry() {
+		$this->create_subscription( [ 'status' => 'on-hold' ] );
+
+		$has_access = Access_Rules::has_active_subscription( self::$owner_user_id, [ self::$product_id ] );
+
+		$this->assertFalse( $has_access, 'Owner should not have access when their on-hold subscription has no scheduled payment retry.' );
+	}
+
+	/**
+	 * Test that an on-hold subscription with a payment retry scheduled in the
+	 * past does not grant access.
+	 */
+	public function test_owner_denied_when_retry_date_is_past() {
+		$this->create_subscription(
+			[
+				'status' => 'on-hold',
+				'times'  => [ 'payment_retry' => time() - HOUR_IN_SECONDS ],
+			]
+		);
+
+		$has_access = Access_Rules::has_active_subscription( self::$owner_user_id, [ self::$product_id ] );
+
+		$this->assertFalse( $has_access, 'Owner should not have access when the last scheduled payment retry is in the past.' );
+	}
+
+	/**
+	 * Test that the per-gate `payment_recovery_grace` setting disables the
+	 * grace when evaluated with it off, and grants with it on.
+	 */
+	public function test_payment_recovery_grace_setting_controls_access() {
+		$this->create_subscription(
+			[
+				'status' => 'on-hold',
+				'times'  => [ 'payment_retry' => time() + HOUR_IN_SECONDS ],
+			]
+		);
+
+		$subscription_access_rules = [
+			[
+				[
+					'slug'  => 'subscription',
+					'value' => [ self::$product_id ],
+				],
+			],
+		];
+
+		$this->assertFalse(
+			Access_Rules::evaluate_rules( $subscription_access_rules, self::$owner_user_id, [ 'payment_recovery_grace' => false ] ),
+			'Grace disabled: an on-hold subscription in the retry window should not grant access.'
+		);
+
+		$this->assertTrue(
+			Access_Rules::evaluate_rules( $subscription_access_rules, self::$owner_user_id, [ 'payment_recovery_grace' => true ] ),
+			'Grace enabled: an on-hold subscription in the retry window should grant access.'
+		);
+
+		$this->assertTrue(
+			Access_Rules::evaluate_rules( $subscription_access_rules, self::$owner_user_id ),
+			'No context given: the grace should default to ON.'
+		);
+	}
+
+	/**
+	 * Test that the evaluation context does not leak out of evaluate_rules —
+	 * a later call without context must fall back to the default (grace ON).
+	 */
+	public function test_evaluation_context_does_not_leak_between_calls() {
+		$this->create_subscription(
+			[
+				'status' => 'on-hold',
+				'times'  => [ 'payment_retry' => time() + HOUR_IN_SECONDS ],
+			]
+		);
+
+		$subscription_access_rules = [
+			[
+				[
+					'slug'  => 'subscription',
+					'value' => [ self::$product_id ],
+				],
+			],
+		];
+
+		Access_Rules::evaluate_rules( $subscription_access_rules, self::$owner_user_id, [ 'payment_recovery_grace' => false ] );
+
+		$this->assertTrue(
+			Access_Rules::evaluate_rules( $subscription_access_rules, self::$owner_user_id ),
+			'A previous grace-off evaluation must not leak into a later default evaluation.'
+		);
+	}
+
+	/**
+	 * Test that a group member keeps access while the group subscription is in
+	 * payment recovery.
+	 */
+	public function test_group_member_keeps_access_during_payment_recovery() {
+		$subscription = $this->create_subscription(
+			[
+				'status' => 'on-hold',
+				'times'  => [ 'payment_retry' => time() + HOUR_IN_SECONDS ],
+			]
+		);
+		$this->enable_group_subscription( $subscription );
+		$this->add_group_member( self::$member_user_id, $subscription->get_id() );
+
+		$has_access = Access_Rules::has_active_subscription( self::$member_user_id, [ self::$product_id ] );
+
+		$this->assertTrue( $has_access, 'Group member should keep access while the group subscription is in payment recovery.' );
+	}
+
+	/**
+	 * Test that gates saved before the setting existed default to grace ON,
+	 * and that a stored `false` is respected.
+	 */
+	public function test_custom_access_settings_payment_recovery_grace_default() {
+		$legacy_gate_id = wp_insert_post(
+			[
+				'post_type'   => Content_Gate::GATE_CPT,
+				'post_title'  => 'Legacy Gate',
+				'post_status' => 'publish',
+			]
+		);
+
+		// Simulate a gate saved before the setting existed.
+		update_post_meta( $legacy_gate_id, 'custom_access', [ 'active' => true ] );
+		$legacy_settings = Content_Gate::get_custom_access_settings( $legacy_gate_id );
+		$this->assertTrue( $legacy_settings['payment_recovery_grace'], 'Gates lacking the setting key should default to grace ON.' );
+
+		update_post_meta(
+			$legacy_gate_id,
+			'custom_access',
+			[
+				'active'                 => true,
+				'payment_recovery_grace' => false,
+			]
+		);
+		$opted_out_settings = Content_Gate::get_custom_access_settings( $legacy_gate_id );
+		$this->assertFalse( $opted_out_settings['payment_recovery_grace'], 'A stored false must be respected.' );
 	}
 }

@@ -363,7 +363,8 @@ class Block_Visibility {
 
 		$access_passes = true;
 		if ( ! empty( $custom_access['active'] ) && ! empty( $custom_access['access_rules'] ) ) {
-			$access_passes = Access_Rules::evaluate_rules( $custom_access['access_rules'], $user_id );
+			$rule_context  = [ 'payment_recovery_grace' => $custom_access['payment_recovery_grace'] ?? true ];
+			$access_passes = Access_Rules::evaluate_rules( $custom_access['access_rules'], $user_id, $rule_context );
 		}
 
 		// AND logic: both must pass when both are configured.

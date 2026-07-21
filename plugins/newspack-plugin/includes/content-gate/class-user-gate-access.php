@@ -76,7 +76,12 @@ class User_Gate_Access {
 					continue;
 				}
 				$rule_config = Access_Rules::get_rule( $rule['slug'] );
-				$passes      = Access_Rules::evaluate_rule( $rule['slug'], $rule['value'] ?? null, $user_id );
+				$passes      = Access_Rules::evaluate_rule(
+					$rule['slug'],
+					$rule['value'] ?? null,
+					$user_id,
+					[ 'payment_recovery_grace' => $gate['custom_access']['payment_recovery_grace'] ?? true ]
+				);
 
 				if ( ! $passes ) {
 					$group_passes = false;

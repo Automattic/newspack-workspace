@@ -1431,10 +1431,13 @@ class Content_Gate {
 		];
 
 		return [
-			'active'         => isset( $custom_access['active'] ) ? (bool) $custom_access['active'] : false,
-			'metering'       => isset( $custom_access['metering'] ) && is_array( $custom_access['metering'] ) ? wp_parse_args( $custom_access['metering'], $default_metering ) : $default_metering,
-			'access_rules'   => $access_rules,
-			'gate_layout_id' => isset( $custom_access['gate_layout_id'] ) ? (int) $custom_access['gate_layout_id'] : 0,
+			'active'                 => isset( $custom_access['active'] ) ? (bool) $custom_access['active'] : false,
+			'metering'               => isset( $custom_access['metering'] ) && is_array( $custom_access['metering'] ) ? wp_parse_args( $custom_access['metering'], $default_metering ) : $default_metering,
+			'access_rules'           => $access_rules,
+			'gate_layout_id'         => isset( $custom_access['gate_layout_id'] ) ? (int) $custom_access['gate_layout_id'] : 0,
+			// Defaults to ON so gates saved before the setting existed keep granting
+			// access to readers whose subscription is in payment recovery.
+			'payment_recovery_grace' => isset( $custom_access['payment_recovery_grace'] ) ? (bool) $custom_access['payment_recovery_grace'] : true,
 		];
 	}
 

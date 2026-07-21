@@ -1,8 +1,9 @@
 /**
  * WordPress dependencies.
  */
-import { CardBody, CardDivider } from '@wordpress/components';
+import { CardBody, CardDivider, ToggleControl } from '@wordpress/components';
 import { useCallback } from '@wordpress/element';
+import { __ } from '@wordpress/i18n';
 
 /**
  * Internal dependencies
@@ -40,6 +41,8 @@ export default function CustomAccess( { customAccess, onChange, isNewsletter = f
 		[ handleChange ]
 	);
 
+	const hasSubscriptionRule = currentRules.some( rule => rule.slug === 'subscription' );
+
 	return (
 		<>
 			{ ! isNewsletter && (
@@ -51,6 +54,22 @@ export default function CustomAccess( { customAccess, onChange, isNewsletter = f
 				</>
 			) }
 			<AccessRules rules={ currentRules } onChange={ handleRulesChange } />
+			{ hasSubscriptionRule && (
+				<>
+					<CardDivider />
+					<CardBody size="small">
+						<ToggleControl
+							label={ __( 'Grace during payment recovery', 'newspack-plugin' ) }
+							help={ __(
+								'Keep access for readers whose subscription renewal payment failed while it is being retried automatically.',
+								'newspack-plugin'
+							) }
+							checked={ customAccess.payment_recovery_grace ?? true }
+							onChange={ () => handleChange( { payment_recovery_grace: ! ( customAccess.payment_recovery_grace ?? true ) } ) }
+						/>
+					</CardBody>
+				</>
+			) }
 		</>
 	);
 }

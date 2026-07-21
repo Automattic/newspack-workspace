@@ -94,6 +94,31 @@ class WooCommerce_Connection {
 	}
 
 	/**
+	 * Whether a subscription is in payment recovery: on-hold after a failed
+	 * renewal payment, with a future retry scheduled by the Woo Subscriptions
+	 * failed-payment retry system (the dunning window). Once retries are
+	 * exhausted the `payment_retry` date stops being renewed, so the recovery
+	 * window closes on its own.
+	 *
+	 * @param \WC_Subscription|false $subscription Subscription object.
+	 *
+	 * @return bool
+	 */
+	public static function is_subscription_in_payment_recovery( $subscription ) {
+		$in_payment_recovery = $subscription
+			&& $subscription->has_status( 'on-hold' )
+			&& (int) $subscription->get_time( 'payment_retry' ) > time();
+
+		/**
+		 * Filters whether a subscription counts as being in payment recovery.
+		 *
+		 * @param bool                   $in_payment_recovery Whether the subscription is in payment recovery.
+		 * @param \WC_Subscription|false $subscription        Subscription object.
+		 */
+		return (bool) apply_filters( 'newspack_is_subscription_in_payment_recovery', $in_payment_recovery, $subscription );
+	}
+
+	/**
 	 * Register CLI command
 	 *
 	 * @return void
@@ -390,19 +415,23 @@ class WooCommerce_Connection {
 	 *
 	 * @param int   $user_id User ID.
 	 * @param array $product_ids Optional array of product IDs to filter by.
+	 * @param bool  $include_payment_recovery Whether to also count on-hold subscriptions in payment recovery (see is_subscription_in_payment_recovery()).
 	 *
 	 * @return int[] Array of active subscription IDs.
 	 */
-	public static function get_active_subscriptions_for_user( $user_id, $product_ids = [] ) {
+	public static function get_active_subscriptions_for_user( $user_id, $product_ids = [], $include_payment_recovery = false ) {
 		if ( ! function_exists( 'wcs_get_users_subscriptions' ) ) {
 			return [];
 		}
 		$subcriptions = array_reduce(
 			array_keys( \wcs_get_users_subscriptions( $user_id ) ),
-			function( $acc, $subscription_id ) use ( $product_ids, $user_id ) {
+			function( $acc, $subscription_id ) use ( $product_ids, $user_id, $include_payment_recovery ) {
 				$subscription = \wcs_get_subscription( $subscription_id );
 				$has_required_products = false;
-				if ( $subscription->has_status( self::ACTIVE_SUBSCRIPTION_STATUSES ) ) {
+				if (
+					$subscription->has_status( self::ACTIVE_SUBSCRIPTION_STATUSES )
+					|| ( $include_payment_recovery && self::is_subscription_in_payment_recovery( $subscription ) )
+				) {
 					if ( ! empty( $product_ids ) ) {
 						foreach ( $product_ids as $product_id ) {
 							if ( $subscription->has_product( $product_id ) ) {
