@@ -7,6 +7,7 @@
  */
 import { __ } from '@wordpress/i18n';
 import { useEffect, useState, Fragment } from '@wordpress/element';
+import { __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 
 /**
  * Internal dependencies
@@ -77,7 +78,7 @@ function Webhooks() {
 
 	return (
 		<Card noBorder className="newspack-webhooks">
-			<div className="flex justify-between items-end mb4">
+			<HStack justify="space-between" alignment="bottom" spacing={ 4 } className="newspack-webhooks__header">
 				<SectionHeader
 					title={ __( 'Webhook Endpoints', 'newspack-plugin' ) }
 					heading={ 3 }
@@ -90,7 +91,7 @@ function Webhooks() {
 				<Button variant="primary" onClick={ () => setActionHandler( 'new' ) } disabled={ inFlight }>
 					{ inFlight ? __( 'Loading…', 'newspack-plugin' ) : __( 'Add Endpoint', 'newspack-plugin' ) }
 				</Button>
-			</div>
+			</HStack>
 			{ ! inFlight &&
 				( endpoints && endpoints.length > 0 ? (
 					<Fragment>

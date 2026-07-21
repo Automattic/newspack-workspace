@@ -2,9 +2,9 @@
 /**
  * Audience Subscription Products Wizard.
  *
- * DataViews management page that lists Woo Subscriptions products with a
+ * DataViews management page that lists WooCommerce Subscriptions products with a
  * productized, consolidated model (price + period, active subscriber counts,
- * category, status).
+ * category, status) plus the applied-rule stack + effective price.
  *
  * @package Newspack
  */
@@ -183,6 +183,7 @@ class Audience_Subscription_Products extends Wizard {
 		$response = [
 			'products'                    => [],
 			'currency'                    => self::get_currency(),
+			'policy_source_is_mock'       => Subscription_Policy_Resolver::IS_MOCK,
 			'available_categories'        => self::get_all_product_categories(),
 			'group_subscriptions_enabled' => self::group_subscription_available(),
 		];
@@ -920,11 +921,37 @@ class Audience_Subscription_Products extends Wizard {
 	 * @return array The row.
 	 */
 	public function prepare_product( $product ) {
-		$type       = $product->get_type();
-		$categories = self::get_categories( $product->get_id() );
-		$pricing    = self::get_pricing( $product );
+		$type          = $product->get_type();
+		$categories    = self::get_categories( $product->get_id() );
+		$pricing       = self::get_pricing( $product );
+		$currency_code = self::get_currency()['code'];
 
 		$is_grouped = $product->is_type( 'grouped' );
+
+		// Resolve the applied-rule stack + effective price through the integration seam.
+		// Variable subscriptions resolve PER VARIATION — each plan (monthly/annual/…) can
+		// carry a different rule and effective price. Grouped products and one-time (simple)
+		// products aren't recurring, so they get an empty (no-rule) resolution.
+		if ( $is_grouped || $product->is_type( 'simple' ) ) {
+			$policy = self::empty_policy( $currency_code );
+		} elseif ( $product->is_type( 'variable-subscription' ) ) {
+			foreach ( $pricing['variations'] as $index => $variation ) {
+				$pricing['variations'][ $index ]['policy'] = self::resolve_policy(
+					$variation['id'],
+					$variation['base_price'],
+					$variation['period'],
+					$currency_code
+				);
+			}
+			$policy = self::representative_variation_policy( $pricing['variations'], $pricing['base_price'], $currency_code );
+		} else {
+			$policy = self::resolve_policy(
+				$product->get_id(),
+				$pricing['base_price'],
+				$pricing['period'],
+				$currency_code
+			);
+		}
 
 		$availability = self::derive_availability( $pricing['base_price'], $categories );
 		$gate_map     = self::get_product_gate_map();
@@ -964,7 +991,54 @@ class Audience_Subscription_Products extends Wizard {
 			'category_label'        => implode( ', ', wp_list_pluck( $categories, 'name' ) ),
 			'active_subscriptions'  => self::get_active_subscription_count( $product ),
 			'edit_url'              => html_entity_decode( (string) get_edit_post_link( $product->get_id(), 'raw' ) ),
+			'policy'                => $policy,
 		];
+	}
+
+	/**
+	 * An empty (no-policy) resolution payload, for products that aren't directly priced.
+	 *
+	 * @param string $currency_code The store currency code.
+	 *
+	 * @return array A resolution payload with no policies and null pricing.
+	 */
+	private static function empty_policy( $currency_code ) {
+		return [
+			'is_mock'         => Subscription_Policy_Resolver::IS_MOCK,
+			'base_price'      => null,
+			'effective_price' => null,
+			'currency'        => $currency_code,
+			'cycle'           => '',
+			'policies'        => [],
+			'schedule'        => [],
+		];
+	}
+
+	/**
+	 * Resolve a product's policy stack through the integration seam.
+	 *
+	 * A null base price (no `_subscription_price` meta) is forwarded as-is rather
+	 * than gatekeeping the resolver: with the engine active the resolver derives
+	 * its own base, so a product the catalog meta doesn't price can still resolve;
+	 * when nothing can price it, the resolver reports null pricing and the UI
+	 * renders an em dash — never a fabricated free price.
+	 *
+	 * @param int        $id            The product/variation ID (0 when none).
+	 * @param float|null $base_price    The base recurring price, or null when unset.
+	 * @param string     $cycle         Billing period slug.
+	 * @param string     $currency_code Store currency code.
+	 *
+	 * @return array A policy resolution payload.
+	 */
+	private static function resolve_policy( $id, $base_price, $cycle, $currency_code ) {
+		return Subscription_Policy_Resolver::resolve(
+			$id,
+			[
+				'base_price' => $base_price,
+				'cycle'      => $cycle,
+				'currency'   => $currency_code,
+			]
+		);
 	}
 
 	/**
@@ -1208,6 +1282,33 @@ class Audience_Subscription_Products extends Wizard {
 	}
 
 	/**
+	 * Pick the representative policy for a variable subscription row.
+	 *
+	 * The row in the table shows the entry (lowest-price) plan, so the row-level policy
+	 * mirrors that variation. Falls back to the first variation, then to an empty
+	 * resolution, so a variable product with no priced variations still renders cleanly.
+	 *
+	 * @param array      $variations    Variations, each already carrying a resolved 'policy'.
+	 * @param float|null $base_price    The representative (lowest) base price.
+	 * @param string     $currency_code The store currency code.
+	 *
+	 * @return array A policy resolution payload.
+	 */
+	private static function representative_variation_policy( $variations, $base_price, $currency_code ) {
+		foreach ( $variations as $variation ) {
+			if ( isset( $variation['policy'], $variation['base_price'] ) && $variation['base_price'] === $base_price ) {
+				return $variation['policy'];
+			}
+		}
+		if ( isset( $variations[0]['policy'] ) ) {
+			return $variations[0]['policy'];
+		}
+		// No priced variations — id 0 is not a resolvable product, so the resolver
+		// reports null pricing and the UI renders an em dash rather than a fabricated $0.
+		return self::resolve_policy( 0, $base_price, '', $currency_code );
+	}
+
+	/**
 	 * Read a product's base subscription price.
 	 *
 	 * Distinguishes "not set" (null) from an explicit 0 so the UI can render the
@@ -1378,10 +1479,15 @@ class Audience_Subscription_Products extends Wizard {
 	 * @return array { code, symbol, decimals }.
 	 */
 	private static function get_currency() {
+		global $wp_locale;
 		return [
-			'code'     => function_exists( 'get_woocommerce_currency' ) ? get_woocommerce_currency() : 'USD',
-			'symbol'   => function_exists( 'get_woocommerce_currency_symbol' ) ? html_entity_decode( get_woocommerce_currency_symbol() ) : '$',
-			'decimals' => function_exists( 'wc_get_price_decimals' ) ? wc_get_price_decimals() : 2,
+			'code'               => function_exists( 'get_woocommerce_currency' ) ? get_woocommerce_currency() : 'USD',
+			'symbol'             => function_exists( 'get_woocommerce_currency_symbol' ) ? html_entity_decode( get_woocommerce_currency_symbol() ) : '$',
+			'decimals'           => function_exists( 'wc_get_price_decimals' ) ? wc_get_price_decimals() : 2,
+			// Separators number_format_i18n() uses, so the JS-formatted effective price matches
+			// the PHP-formatted base price_label.
+			'decimal_separator'  => isset( $wp_locale ) ? $wp_locale->number_format['decimal_point'] : '.',
+			'thousand_separator' => isset( $wp_locale ) ? $wp_locale->number_format['thousands_sep'] : ',',
 		];
 	}
 
@@ -1710,6 +1816,7 @@ class Audience_Subscription_Products extends Wizard {
 			[
 				'new_product_url'                  => admin_url( 'post-new.php?post_type=product' ),
 				'manage_products_url'              => admin_url( 'edit.php?post_type=product' ),
+				'policy_source_is_mock'            => Subscription_Policy_Resolver::IS_MOCK,
 				'woocommerce_subscriptions_active' => function_exists( 'wcs_get_subscriptions' ),
 			]
 		);

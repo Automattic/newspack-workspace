@@ -21,7 +21,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-$settings            = Group_Subscription_Settings::get_subscription_settings( $subscription );
+$settings = Group_Subscription_Settings::get_subscription_settings( $subscription );
+// The raw custom-name override (empty when the displayed name is an inherited fallback), so the
+// rename input shows the editable custom name and uses the resolved fallback as its placeholder.
+$custom_name         = (string) $subscription->get_meta( Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'name', true );
+$group_label_lower   = Group_Subscription::get_label_lower( 'singular' );
 $user_id             = get_current_user_id();
 $managed             = Group_Subscription::get_managed_subscriptions_for_user( $user_id );
 $multi_group         = count( $managed ) > 1;
@@ -54,7 +58,19 @@ if ( in_array( $subscription_status, [ 'cancelled', 'expired' ], true ) ) {
 					<?php Newspack_UI_Icons::print_svg( 'chevronLeft' ); ?>
 				</a>
 			<?php endif; ?>
-			<h2 class="newspack-ui__font--m"><?php echo esc_html( $settings['name'] ); ?></h2>
+			<h2 class="newspack-ui__font--m" data-group-name><?php echo esc_html( $settings['name'] ); ?></h2>
+			<?php
+			/* translators: %s: lowercase singular group label (e.g. "group", "team"). */
+			$rename_label = sprintf( __( 'Rename %s', 'newspack-plugin' ), $group_label_lower );
+			?>
+			<button
+				type="button"
+				class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--icon newspack-ui__button--small newspack-my-account__group--rename"
+				title="<?php echo esc_attr( $rename_label ); ?>"
+				aria-label="<?php echo esc_attr( $rename_label ); ?>"
+			>
+				<?php Newspack_UI_Icons::print_svg( 'edit' ); ?>
+			</button>
 			<span class="<?php echo esc_attr( implode( ' ', $status_badge_classes ) ); ?>">
 				<?php echo esc_html( wcs_get_subscription_status_name( $subscription_status ) ); ?>
 			</span>
@@ -106,4 +122,45 @@ if ( in_array( $subscription_status, [ 'cancelled', 'expired' ], true ) ) {
 		);
 		?>
 	</div>
+
+	<!-- .newspack-ui__modal: rename group -->
+	<div id="newspack-my-account__group_subscription--rename" class="newspack-ui__modal-container">
+		<div class="newspack-ui__modal-container__overlay"></div>
+		<div class="newspack-ui__modal newspack-ui__modal--small">
+			<header class="newspack-ui__modal__header">
+				<h2><?php echo esc_html( $rename_label ); ?></h2>
+				<button class="newspack-ui__button newspack-ui__button--icon newspack-ui__button--ghost newspack-ui__modal__close">
+					<span class="screen-reader-text"><?php esc_html_e( 'Close', 'newspack-plugin' ); ?></span>
+					<?php Newspack_UI_Icons::print_svg( 'close' ); ?>
+				</button>
+			</header>
+
+			<form
+				class="newspack-ui__modal__content newspack-my-account__group--rename-form"
+				data-subscription-id="<?php echo esc_attr( $subscription->get_id() ); ?>"
+				data-error-text="<?php echo esc_attr( __( 'Could not rename. Please try again.', 'newspack-plugin' ) ); ?>"
+			>
+				<p>
+					<label for="newspack-my-account__group--rename-input" class="screen-reader-text">
+						<?php
+						/* translators: %s: capitalized singular group label (e.g. "Group", "Team"). */
+						printf( esc_html__( '%s name', 'newspack-plugin' ), esc_html( Group_Subscription::get_label( 'singular' ) ) );
+						?>
+					</label>
+					<input
+						type="text"
+						id="newspack-my-account__group--rename-input"
+						class="newspack-my-account__group--rename-input"
+						name="group_name"
+						value="<?php echo esc_attr( $custom_name ); ?>"
+						placeholder="<?php echo esc_attr( $settings['name'] ); ?>"
+						maxlength="<?php echo esc_attr( Group_Subscription_Settings::GROUP_NAME_MAX_LENGTH ); ?>"
+						autocomplete="off"
+					/>
+				</p>
+				<button type="submit" class="newspack-ui__button newspack-ui__button--primary newspack-ui__button--wide newspack-my-account__group--rename-save"><span><?php esc_html_e( 'Save', 'newspack-plugin' ); ?></span></button>
+				<button type="button" class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--wide newspack-ui__modal__close"><?php esc_html_e( 'Cancel', 'newspack-plugin' ); ?></button>
+			</form>
+		</div><!-- .newspack-ui__modal--small -->
+	</div> <!-- .newspack-ui__modal-container -->
 </div>

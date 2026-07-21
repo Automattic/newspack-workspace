@@ -1,3 +1,21 @@
+# @automattic/newspack-blocks [4.28.0](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.27.1...newspack-blocks@4.28.0) (2026-07-20)
+
+
+### Bug Fixes
+
+* **checkout:** sync repeat trial pricing in modal checkout ([#264](https://github.com/Automattic/newspack-workspace/issues/264)) ([ce943c6](https://github.com/Automattic/newspack-workspace/commit/ce943c61d137f81326704deb7be0b73d82da3f17))
+
+
+### Features
+
+* add tag labels support to Content Loop block ([#2282](https://github.com/Automattic/newspack-workspace/issues/2282)) ([b5ef988](https://github.com/Automattic/newspack-workspace/commit/b5ef988bc2007bdc509ef872ffc54e6220216786))
+* **newsletters:** add redirect-to-URL option to subscription form ([#432](https://github.com/Automattic/newspack-workspace/issues/432)) ([5c56caa](https://github.com/Automattic/newspack-workspace/commit/5c56caa5c3e8dc93eb09548f45ffb93084ce42ee))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.5.0
+
 ## @automattic/newspack-blocks [4.27.1](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.27.0...newspack-blocks@4.27.1) (2026-07-14)
 
 

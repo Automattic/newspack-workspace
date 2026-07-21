@@ -1999,8 +1999,50 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 			$existing_fields = $this->get_all_contact_fields();
 			foreach ( $contact['metadata'] as $field_title => $value ) {
 				$field_perstag = strtoupper( str_replace( '-', '_', sanitize_title( $field_title ) ) );
-				/** For optimization, don't add the field if it already exists. */
-				if ( is_wp_error( $existing_fields ) || false === array_search( $field_perstag, array_column( $existing_fields, 'perstag' ) ) ) {
+
+				/**
+				 * For optimization, don't add the field if it already exists.
+				 * Match by perstag first, then by title — an ActiveCampaign
+				 * admin may have renamed a field's perstag, and creating a
+				 * field with a duplicate title fails.
+				 */
+				$existing_index = false;
+				if ( ! is_wp_error( $existing_fields ) ) {
+					// Index-preserving lookups: array_column() would reindex and skip
+					// rows missing the key, mapping a match to the wrong field.
+					// A row with an empty perstag can't supply a usable payload key, so
+					// it must never match — `! empty()` rather than `isset()`.
+					foreach ( $existing_fields as $index => $existing_field ) {
+						if ( ! empty( $existing_field['perstag'] ) && $existing_field['perstag'] === $field_perstag ) {
+							$existing_index = $index;
+							break;
+						}
+					}
+					if ( false === $existing_index ) {
+						foreach ( $existing_fields as $index => $existing_field ) {
+							if (
+								! empty( $existing_field['title'] ) && ! empty( $existing_field['perstag'] ) &&
+								0 === strcasecmp( trim( $existing_field['title'] ), trim( $field_title ) )
+							) {
+								$existing_index = $index;
+								break;
+							}
+						}
+					}
+				}
+
+				if ( false !== $existing_index ) {
+					/** Use the existing field's actual perstag — it may differ from the generated one. */
+					$field_perstag = $existing_fields[ $existing_index ]['perstag'];
+				} elseif ( empty( $field_perstag ) ) {
+					/**
+					 * The title sanitized down to nothing, so there's no perstag to create the
+					 * field under and no valid payload key to write to. Skip rather than emit a
+					 * malformed `field[%%,0]` key that two such fields would collide on.
+					 */
+					error_log( '[NEWSPACK-NEWSLETTERS]: Skipped ActiveCampaign field "' . sanitize_text_field( $field_title ) . '": title produced an empty perstag.' ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+					continue;
+				} else {
 					$field_res = $this->api_v3_request(
 						'fields',
 						'POST',
@@ -2018,7 +2060,20 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 						]
 					);
 					if ( \is_wp_error( $field_res ) ) {
-						return $field_res;
+						/**
+						 * A field that can't be registered must never block the signup — sync the
+						 * contact without it.
+						 *
+						 * Logged with error_log() rather than Newspack_Newsletters_Logger, which
+						 * no-ops unless NEWSPACK_LOG_LEVEL is defined — undefined on a default
+						 * production site. The dropped field carries Reader Activation data that
+						 * segments and automations key on, so it must stay diagnosable.
+						 *
+						 * Both interpolated values are sanitized: the error message is remote
+						 * API text, and a newline in it would forge a second log line.
+						 */
+						error_log( '[NEWSPACK-NEWSLETTERS]: Error creating ActiveCampaign field "' . sanitize_text_field( $field_title ) . '": ' . sanitize_text_field( $field_res->get_error_message() ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+						continue;
 					}
 					/** Set list relation. */
 					$this->api_v3_request(

@@ -688,6 +688,55 @@ class Content_Gate {
 	}
 
 	/**
+	 * Get the priority to give a new gate, placing it after the last gate of its own bucket.
+	 *
+	 * Content gates and premium newsletter gates are prioritized separately, so a gate is
+	 * numbered against the others in its bucket. Derived from the highest priority in use
+	 * rather than the gate count: priorities are positions, not a counter, so a count would
+	 * collide with an existing gate as soon as one has been deleted from the middle of the
+	 * list — and priority is what orders overlapping gates, so a tie leaves an arbitrary gate
+	 * deciding what a reader sees.
+	 *
+	 * This reads the current max and returns max + 1, a check-then-act pair that isn't atomic:
+	 * two concurrent creations could read the same max and both claim it. Gate creation is a
+	 * one-at-a-time admin action, so that race can't realistically happen and no lock is warranted.
+	 *
+	 * Only the single highest-priority gate in the bucket is queried (its ID and priority meta),
+	 * rather than hydrating every gate, since that top priority is all this needs.
+	 *
+	 * @param string $post_type     Post type whose bucket the new gate belongs to. Defaults to self::GATE_CPT.
+	 * @param bool   $is_newsletter Whether the new gate is a premium newsletter gate.
+	 *
+	 * @return int
+	 */
+	public static function get_next_gate_priority( $post_type = self::GATE_CPT, $is_newsletter = false ) {
+		$top_gate_ids = get_posts(
+			[
+				'post_type'      => $post_type,
+				'post_status'    => self::get_post_statuses(),
+				'posts_per_page' => 1,
+				'fields'         => 'ids',
+				'orderby'        => [ 'priority' => 'DESC' ],
+				'meta_query'     => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+					'relation' => 'AND',
+					'priority' => [
+						'key'  => 'gate_priority',
+						'type' => 'NUMERIC',
+					],
+					[
+						'key'     => 'is_newsletter',
+						'compare' => $is_newsletter ? 'EXISTS' : 'NOT EXISTS',
+					],
+				],
+			]
+		);
+		if ( empty( $top_gate_ids ) ) {
+			return 0;
+		}
+		return (int) get_post_meta( $top_gate_ids[0], 'gate_priority', true ) + 1;
+	}
+
+	/**
 	 * Create a new gate post.
 	 *
 	 * @param array  $gate Gate settings.
@@ -697,14 +746,13 @@ class Content_Gate {
 	 * @return int|\WP_Error The gate post ID or error if not created.
 	 */
 	public static function create_gate( $gate, $post_type = self::GATE_CPT, $is_newsletter = false ) {
-		$all_gates = self::get_gates();
-		$args      = [
+		$args = [
 			'post_title'   => $gate['title'] ?? __( 'Untitled Content Gate', 'newspack-plugin' ),
 			'post_type'    => $post_type,
 			'post_status'  => isset( $gate['status'] ) && in_array( $gate['status'], self::get_post_statuses(), true ) ? $gate['status'] : 'publish',
 			'post_content' => '',
 			'meta_input'   => [
-				'gate_priority' => count( $all_gates ),
+				'gate_priority' => self::get_next_gate_priority( $post_type, $is_newsletter ),
 			],
 		];
 		if ( $is_newsletter ) {

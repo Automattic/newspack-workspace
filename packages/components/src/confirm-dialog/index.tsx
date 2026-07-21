@@ -58,6 +58,7 @@ function ConfirmDialog(
 		onCancel = noOp,
 		when = false,
 		isOpen = false,
+		children,
 		...otherProps
 	}: ConfirmDialogProps,
 	ref: React.Ref< HTMLDivElement >
@@ -150,7 +151,9 @@ function ConfirmDialog(
 			onConfirm={ handleOnConfirm }
 			onCancel={ handleOnCancel }
 			__experimentalHideHeader={ false }
-		/>
+		>
+			{ children }
+		</BaseComponent>
 	);
 }
 export default forwardRef( ConfirmDialog );

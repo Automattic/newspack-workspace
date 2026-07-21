@@ -9,7 +9,15 @@ import '../../shared/js/public-path';
 /**
  * WordPress dependencies.
  */
-import { CardBody, CardDivider, CardMedia, ExternalLink, ToggleControl, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import {
+	CardBody,
+	CardDivider,
+	CardMedia,
+	ExternalLink,
+	ToggleControl,
+	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
+	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
+} from '@wordpress/components';
 import { Component, Fragment, render, createInterpolateElement, createRef } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { Icon, plus, postList, settings } from '@wordpress/icons';
@@ -177,7 +185,7 @@ class ComponentsDemo extends Component {
 						</Card>
 						<Card>
 							<h2>{ __( 'Web Previews', 'newspack-plugin' ) }</h2>
-							<Card buttonsCard noBorder className="items-center">
+							<HStack justify="flex-start" alignment="center" spacing={ 4 } wrap>
 								<WebPreview url="//newspack.com/" label={ __( 'Preview Newspack Site', 'newspack-plugin' ) } variant="primary" />
 								<WebPreview
 									url="//newspack.com/"
@@ -188,24 +196,22 @@ class ComponentsDemo extends Component {
 									) }
 									title={ __( 'Preview Newspack Site', 'newspack-plugin' ) }
 								/>
-							</Card>
+							</HStack>
 						</Card>
 						<Card>
 							<h2>{ __( 'Waiting', 'newspack-plugin' ) }</h2>
-							<Card buttonsCard noBorder>
-								<Grid columns={ 1 } gutter={ 16 } className="w-100">
-									<Waiting />
-									<div className="flex items-center">
-										<Waiting isLeft />
-										{ __( 'Spinner on the left', 'newspack-plugin' ) }
-									</div>
-									<div className="flex items-center">
-										<Waiting isRight />
-										{ __( 'Spinner on the right', 'newspack-plugin' ) }
-									</div>
-									<Waiting isCenter />
-								</Grid>
-							</Card>
+							<Grid columns={ 1 } gutter={ 16 }>
+								<Waiting />
+								<HStack justify="flex-start" alignment="center" spacing={ 2 } expanded={ false }>
+									<Waiting isLeft />
+									<span>{ __( 'Spinner on the left', 'newspack-plugin' ) }</span>
+								</HStack>
+								<HStack justify="flex-start" alignment="center" spacing={ 2 } expanded={ false }>
+									<Waiting isRight />
+									<span>{ __( 'Spinner on the right', 'newspack-plugin' ) }</span>
+								</HStack>
+								<Waiting isCenter />
+							</Grid>
 						</Card>
 						<Card>
 							<h2>{ __( 'Color picker', 'newspack-plugin' ) }</h2>
@@ -217,7 +223,7 @@ class ComponentsDemo extends Component {
 						</Card>
 						<Card>
 							<h2>{ __( 'Handoff Buttons', 'newspack-plugin' ) }</h2>
-							<Card buttonsCard noBorder>
+							<HStack justify="flex-start" spacing={ 4 } wrap>
 								<Handoff plugin="jetpack" />
 								<Handoff plugin="google-site-kit" />
 								<Handoff plugin="woocommerce" />
@@ -231,15 +237,15 @@ class ComponentsDemo extends Component {
 								>
 									{ __( 'Go to Dashboard', 'newspack-plugin' ) }
 								</Handoff>
-							</Card>
+							</HStack>
 						</Card>
 						<Card>
 							<h2>{ __( 'Modal', 'newspack-plugin' ) }</h2>
-							<Card buttonsCard noBorder>
+							<HStack justify="flex-start" spacing={ 4 } wrap>
 								<Button isPrimary onClick={ () => this.setState( { modalShown: true } ) }>
 									{ __( 'Open modal', 'newspack-plugin' ) }
 								</Button>
-							</Card>
+							</HStack>
 							{ modalShown && (
 								<Modal
 									title={ __( 'This is the modal title', 'newspack-plugin' ) }
@@ -251,14 +257,14 @@ class ComponentsDemo extends Component {
 											'newspack-plugin'
 										) }
 									</p>
-									<Card buttonsCard noBorder className="justify-end">
+									<HStack justify="flex-end" spacing={ 4 } wrap className="newspack-modal__footer">
 										<Button isPrimary onClick={ () => this.setState( { modalShown: false } ) }>
 											{ __( 'Dismiss', 'newspack-plugin' ) }
 										</Button>
 										<Button isSecondary onClick={ () => this.setState( { modalShown: false } ) }>
 											{ __( 'Also dismiss', 'newspack-plugin' ) }
 										</Button>
-									</Card>
+									</HStack>
 								</Modal>
 							) }
 						</Card>
@@ -604,18 +610,18 @@ class ComponentsDemo extends Component {
 								<p>
 									<strong>{ __( 'Default', 'newspack-plugin' ) }</strong>
 								</p>
-								<Card buttonsCard noBorder>
+								<HStack justify="flex-start" spacing={ 4 } wrap>
 									<Button variant="primary">{ __( 'Primary', 'newspack-plugin' ) }</Button>
 									<Button variant="secondary">{ __( 'Secondary', 'newspack-plugin' ) }</Button>
 									<Button variant="tertiary">{ __( 'Tertiary', 'newspack-plugin' ) }</Button>
 									<Button>{ __( 'Default', 'newspack-plugin' ) }</Button>
 									<Button isLink>{ __( 'isLink', 'newspack-plugin' ) }</Button>
-								</Card>
+								</HStack>
 								<Divider variant="tertiary" />
 								<p>
 									<strong>{ __( 'Disabled', 'newspack-plugin' ) }</strong>
 								</p>
-								<Card buttonsCard noBorder>
+								<HStack justify="flex-start" spacing={ 4 } wrap>
 									<Button variant="primary" disabled>
 										{ __( 'Primary', 'newspack-plugin' ) }
 									</Button>
@@ -629,12 +635,12 @@ class ComponentsDemo extends Component {
 									<Button isLink disabled>
 										{ __( 'isLink', 'newspack-plugin' ) }
 									</Button>
-								</Card>
+								</HStack>
 								<Divider variant="tertiary" />
 								<p>
 									<strong>{ __( 'Small', 'newspack-plugin' ) }</strong>
 								</p>
-								<Card buttonsCard noBorder>
+								<HStack justify="flex-start" spacing={ 4 } wrap>
 									<Button variant="primary" isSmall>
 										{ __( 'isPrimary', 'newspack-plugin' ) }
 									</Button>
@@ -648,7 +654,7 @@ class ComponentsDemo extends Component {
 									<Button isLink isSmall>
 										{ __( 'isLink', 'newspack-plugin' ) }
 									</Button>
-								</Card>
+								</HStack>
 							</Grid>
 						</Card>
 						<Card>
@@ -1075,12 +1081,12 @@ class ComponentsDemo extends Component {
 									}
 								) }
 							</p>
-							<Grid columns={ 4 } gutter={ 16 } className="items-start">
+							<Grid columns={ 4 } gutter={ 16 }>
 								{ Object.entries( newspackIcons ).map( ( [ name, icon ] ) => (
-									<div key={ name } className="flex flex-column items-center tc">
+									<VStack key={ name } alignment="center" spacing={ 2 }>
 										<Icon icon={ icon } />
-										<code style={ { marginTop: 8 } }>{ name }</code>
-									</div>
+										<code>{ name }</code>
+									</VStack>
 								) ) }
 							</Grid>
 						</Card>

@@ -1,3 +1,10 @@
+# newspack-network [2.21.0](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.20.6...newspack-network@2.21.0) (2026-07-20)
+
+
+### Features
+
+* **integrity-check:** add --fix flag to reconcile membership discrepancies ([#307](https://github.com/Automattic/newspack-workspace/issues/307), NPPM-386) ([e8d26af](https://github.com/Automattic/newspack-workspace/commit/e8d26af6e0aa3a4f26b289f92c7a2ec9392e7450))
+
 ## newspack-network [2.20.6](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.20.5...newspack-network@2.20.6) (2026-07-13)
 
 

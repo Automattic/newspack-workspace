@@ -10,18 +10,22 @@
 const fs = require( 'fs' );
 const getBaseWebpackConfig = require( 'newspack-scripts/config/getWebpackConfig' );
 const path = require( 'path' );
+const { findSourceFile, resolveSourceFile } = require( 'newspack-scripts/config/resolveSource' );
 const wizardsDir = path.join( __dirname, 'src', 'wizards' );
+
+// Entry sources are declared extensionless; the file on disk may be TS or JS.
+const findSource = ( ...segments ) => findSourceFile( path.join( __dirname, ...segments ) );
+const resolveSource = ( ...segments ) => resolveSourceFile( path.join( __dirname, ...segments ) );
+
+// Shared modules living under src/wizards that are not wizard app entries.
+const NON_WIZARD_DIRS = [ 'errors', 'types' ];
 
 // Get files for wizards scripts.
 const wizardsScripts = fs
 	.readdirSync( wizardsDir )
-	.filter(
-		wizard =>
-			fs.existsSync( path.join( __dirname, 'src', 'wizards', wizard, 'index.js' ) ) ||
-			fs.existsSync( path.join( __dirname, 'src', 'wizards', wizard, 'index.tsx' ) )
-	);
+	.filter( wizard => ! NON_WIZARD_DIRS.includes( wizard ) && findSource( 'src', 'wizards', wizard, 'index' ) );
 const wizardsScriptFiles = {
-	'plugins-screen': path.join( __dirname, 'src', 'plugins-screen', 'plugins-screen.js' ),
+	'plugins-screen': resolveSource( 'src', 'plugins-screen', 'plugins-screen' ),
 };
 wizardsScripts.forEach( function ( wizard ) {
 	let wizardFileName = wizard;
@@ -29,62 +33,56 @@ wizardsScripts.forEach( function ( wizard ) {
 		// "advertising.js" might be blocked by ad-blocking extensions.
 		wizardFileName = 'billboard';
 	}
-	wizardsScriptFiles[ wizardFileName ] = path.join(
-		__dirname,
-		'src',
-		'wizards',
-		wizard,
-		fs.existsSync( path.join( __dirname, 'src', 'wizards', wizard, 'index.tsx' ) ) ? 'index.tsx' : 'index.js'
-	);
+	wizardsScriptFiles[ wizardFileName ] = resolveSource( 'src', 'wizards', wizard, 'index' );
 } );
 
 const entry = {
-	'reader-activation': path.join( __dirname, 'src', 'reader-activation', 'index.js' ),
-	'reader-auth': path.join( __dirname, 'src', 'reader-activation-auth', 'index.js' ),
-	'newsletters-signup': path.join( __dirname, 'src', 'reader-activation-newsletters', 'index.js' ),
-	'reader-registration-block': path.join( __dirname, 'src', 'blocks', 'reader-registration', 'view.js' ),
-	'correction-box-block': path.join( __dirname, 'src', 'blocks', 'correction-box', 'index.js' ),
-	'correction-item-block': path.join( __dirname, 'src', 'blocks', 'correction-item', 'index.js' ),
-	'content-gate-countdown-block': path.join( __dirname, 'src', 'blocks', 'content-gate', 'countdown', 'view.js' ),
-	'overlay-menu-block': path.join( __dirname, 'src', 'blocks', 'overlay-menu', 'view.js' ),
-	'overlay-search-block': path.join( __dirname, 'src', 'blocks', 'overlay-search', 'view.js' ),
-	'content-gate-countdown-box-block': path.join( __dirname, 'src', 'blocks', 'content-gate', 'countdown-box', 'index.js' ),
-	'contribution-meter-block': path.join( __dirname, 'src', 'blocks', 'contribution-meter', 'index.js' ),
-	'avatar-block': path.join( __dirname, 'src', 'blocks', 'avatar', 'index.js' ),
-	'my-account': path.join( __dirname, 'src', 'my-account', 'index.js' ),
-	'my-account-v0': path.join( __dirname, 'src', 'my-account', 'v0', 'index.js' ),
-	'my-account-v1': path.join( __dirname, 'src', 'my-account', 'v1', 'index.js' ),
-	'account-frontend': path.join( __dirname, 'src', 'my-account', 'v1', 'frontend.js' ),
-	admin: path.join( __dirname, 'src', 'admin', 'index.js' ),
-	'content-gate': path.join( __dirname, 'src', 'content-gate', 'gate.js' ),
-	'content-gate-metering': path.join( __dirname, 'src', 'content-gate', 'metering.js' ),
-	'indesign-export': path.join( __dirname, 'src', 'indesign-export', 'index.js' ),
+	'reader-activation': resolveSource( 'src', 'reader-activation', 'index' ),
+	'reader-auth': resolveSource( 'src', 'reader-activation-auth', 'index' ),
+	'newsletters-signup': resolveSource( 'src', 'reader-activation-newsletters', 'index' ),
+	'reader-registration-block': resolveSource( 'src', 'blocks', 'reader-registration', 'view' ),
+	'correction-box-block': resolveSource( 'src', 'blocks', 'correction-box', 'index' ),
+	'correction-item-block': resolveSource( 'src', 'blocks', 'correction-item', 'index' ),
+	'content-gate-countdown-block': resolveSource( 'src', 'blocks', 'content-gate', 'countdown', 'view' ),
+	'overlay-menu-block': resolveSource( 'src', 'blocks', 'overlay-menu', 'view' ),
+	'overlay-search-block': resolveSource( 'src', 'blocks', 'overlay-search', 'view' ),
+	'content-gate-countdown-box-block': resolveSource( 'src', 'blocks', 'content-gate', 'countdown-box', 'index' ),
+	'contribution-meter-block': resolveSource( 'src', 'blocks', 'contribution-meter', 'index' ),
+	'avatar-block': resolveSource( 'src', 'blocks', 'avatar', 'index' ),
+	'my-account': resolveSource( 'src', 'my-account', 'index' ),
+	'my-account-v0': resolveSource( 'src', 'my-account', 'v0', 'index' ),
+	'my-account-v1': resolveSource( 'src', 'my-account', 'v1', 'index' ),
+	'account-frontend': resolveSource( 'src', 'my-account', 'v1', 'frontend' ),
+	admin: resolveSource( 'src', 'admin', 'index' ),
+	'content-gate': resolveSource( 'src', 'content-gate', 'gate' ),
+	'content-gate-metering': resolveSource( 'src', 'content-gate', 'metering' ),
+	'indesign-export': resolveSource( 'src', 'indesign-export', 'index' ),
 
 	// Newspack wizard assets.
 	...wizardsScriptFiles,
-	blocks: path.join( __dirname, 'src', 'blocks', 'index.js' ),
-	'content-gate-editor': path.join( __dirname, 'src', 'content-gate', 'editor', 'editor.js' ),
-	'content-gate-editor-memberships': path.join( __dirname, 'src', 'content-gate', 'editor', 'memberships.js' ),
-	'content-gate-editor-metering': path.join( __dirname, 'src', 'content-gate', 'editor', 'metering-settings.js' ),
-	'content-gate-block-patterns': path.join( __dirname, 'src', 'content-gate', 'editor', 'block-patterns.js' ),
-	'content-gate-block-visibility': path.join( __dirname, 'src', 'content-gate', 'editor', 'block-visibility.tsx' ),
-	'content-gate-post-settings': path.join( __dirname, 'src', 'content-gate', 'editor', 'post-settings.js' ),
-	'content-banner': path.join( __dirname, 'src', 'content-gate', 'content-banner.js' ),
-	wizards: path.join( __dirname, 'src', 'wizards', 'index.tsx' ),
-	'newspack-ui': path.join( __dirname, 'src', 'newspack-ui', 'index.js' ),
-	bylines: path.join( __dirname, 'src', 'bylines', 'index.js' ),
-	'nicename-change': path.join( __dirname, 'src', 'nicename-change', 'index.js' ),
-	'collections-admin': path.join( __dirname, 'src', 'collections', 'admin', 'index.js' ),
-	'collections-frontend': path.join( __dirname, 'src', 'collections', 'frontend', 'index.js' ),
-	'group-subscription-admin': path.join( __dirname, 'src', 'group-subscription', 'admin.js' ),
+	blocks: resolveSource( 'src', 'blocks', 'index' ),
+	'content-gate-editor': resolveSource( 'src', 'content-gate', 'editor', 'editor' ),
+	'content-gate-editor-memberships': resolveSource( 'src', 'content-gate', 'editor', 'memberships' ),
+	'content-gate-editor-metering': resolveSource( 'src', 'content-gate', 'editor', 'metering-settings' ),
+	'content-gate-block-patterns': resolveSource( 'src', 'content-gate', 'editor', 'block-patterns' ),
+	'content-gate-block-visibility': resolveSource( 'src', 'content-gate', 'editor', 'block-visibility' ),
+	'content-gate-post-settings': resolveSource( 'src', 'content-gate', 'editor', 'post-settings' ),
+	'content-banner': resolveSource( 'src', 'content-gate', 'content-banner' ),
+	wizards: resolveSource( 'src', 'wizards', 'index' ),
+	'newspack-ui': resolveSource( 'src', 'newspack-ui', 'index' ),
+	bylines: resolveSource( 'src', 'bylines', 'index' ),
+	'nicename-change': resolveSource( 'src', 'nicename-change', 'index' ),
+	'collections-admin': resolveSource( 'src', 'collections', 'admin', 'index' ),
+	'collections-frontend': resolveSource( 'src', 'collections', 'frontend', 'index' ),
+	'group-subscription-admin': resolveSource( 'src', 'group-subscription', 'admin' ),
 };
 
 // Get files for other scripts.
 const otherScripts = fs
 	.readdirSync( path.join( __dirname, 'src', 'other-scripts' ) )
-	.filter( script => fs.existsSync( path.join( __dirname, 'src', 'other-scripts', script, 'index.js' ) ) );
+	.filter( script => findSource( 'src', 'other-scripts', script, 'index' ) );
 otherScripts.forEach( function ( script ) {
-	entry[ `other-scripts/${ script }` ] = path.join( __dirname, 'src', 'other-scripts', script, 'index.js' );
+	entry[ `other-scripts/${ script }` ] = resolveSource( 'src', 'other-scripts', script, 'index' );
 } );
 
 const webpackConfig = getBaseWebpackConfig( {

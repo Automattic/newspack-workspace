@@ -902,6 +902,11 @@ class Teams_Migration {
 
 		foreach ( $teams as $team_id ) {
 			$progress->tick();
+
+			// Free the per-request object cache accumulated by prior iterations so
+			// memory stays bounded across a large team list.
+			\WP_CLI\Utils\wp_clear_object_cache();
+
 			$result = self::backfill_team_managers_for_team( $team_id, $live );
 
 			if ( ! $result['resolved'] ) {
