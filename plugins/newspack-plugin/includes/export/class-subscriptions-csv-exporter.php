@@ -202,11 +202,16 @@ class Subscriptions_CSV_Exporter extends CSV_Batch_Exporter {
 	 * WCS resolves this via wcs_get_subscriptions_for_product(), an unpaged
 	 * (LIMIT -1) query that — unlike the customer store — it does not cache, so
 	 * a paged export would otherwise re-run it (and pass the full ID set as
-	 * post__in) on every page. When a per-run cache key is given, the result
-	 * is stored in a
-	 * short-lived transient so it resolves once per run instead of once per
-	 * page. The key is the export filename, which is unique per run, so a later
-	 * run always re-resolves against current data.
+	 * post__in) on every page. When a per-run cache key is given, the result is
+	 * stored in a short-lived transient so it resolves once per run instead of
+	 * once per page. The key is the export filename, which is unique per run,
+	 * so a later run always re-resolves against current data.
+	 *
+	 * The cached set is as large as the product's subscription count, so on a
+	 * very large site it can outgrow an object cache's per-entry ceiling — in
+	 * which case set_transient() simply doesn't stick and every page re-runs
+	 * the query, i.e. the pre-cache behavior. The same unbounded set is handed
+	 * to post__in either way; that is inherent to WCS's product filter.
 	 *
 	 * @param int    $product_id Product ID.
 	 * @param string $cache_key  Per-run cache key, or '' to skip caching.
@@ -246,7 +251,9 @@ class Subscriptions_CSV_Exporter extends CSV_Batch_Exporter {
 		// and its product_id path runs an unpaged limit=-1 query.
 		$results = \wcs_get_orders_with_meta_query( $args );
 
-		$this->total_rows = (int) $results->total;
+		// Pinned to page 1's count so a set that shrinks mid-run can't end the
+		// export early with a truncated CSV (see pin_total_rows()).
+		$this->pin_total_rows( (int) $results->total );
 
 		// Hydrate the page first (one wcs_get_subscription() per ID is
 		// unavoidable), then prime the user cache in one query so the

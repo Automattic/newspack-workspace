@@ -43,7 +43,9 @@ document.addEventListener( 'DOMContentLoaded', () => {
 						return;
 					}
 					if ( 'done' === response.data.step ) {
-						setStatus( newspackCsvExport.labels.done, true );
+						// The server sends a notice when the exported set shrank
+						// mid-run, so a short file isn't presented as complete.
+						setStatus( response.data.notice || newspackCsvExport.labels.done, true );
 						window.location = response.data.url;
 						// Keep the button disabled while the download is served;
 						// an immediate second click would restart the whole export.

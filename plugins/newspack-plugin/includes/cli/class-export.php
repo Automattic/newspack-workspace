@@ -156,8 +156,10 @@ class Export {
 			$percent  = $exporter->get_percent_complete();
 			$exported = $exporter->get_total_exported();
 			WP_CLI::log( sprintf( '%d rows (%d%%)', $exported, min( 100, $percent ) ) );
-			// Guard against a stall if the underlying data changes mid-export.
-			if ( $percent < 100 && $exported <= ( $page - 1 ) * $exporter->get_limit() ) {
+			// Guard against a stall if the underlying data changes mid-export:
+			// the run's total is pinned to page 1, so a shrinking set ends with
+			// an empty page rather than a shrinking total.
+			if ( $percent < 100 && $exporter->page_was_empty() ) {
 				WP_CLI::warning( 'No progress in the last batch; finishing early. The data may have changed during the export.' );
 				break;
 			}

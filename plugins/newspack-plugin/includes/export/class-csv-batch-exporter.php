@@ -35,6 +35,56 @@ abstract class CSV_Batch_Exporter extends \WC_CSV_Batch_Exporter {
 	}
 
 	/**
+	 * Set the run's total row count, pinned to what the first page counted.
+	 *
+	 * Paging is by offset over a live query, so the total is recounted on
+	 * every page. That is fine while the result set only grows (new rows are
+	 * ID-ascending and land past the moving window), but a set that *shrinks*
+	 * mid-run — a hard delete, or more commonly a status change dropping a row
+	 * out of a status-filtered view when a renewal/expiration action fires —
+	 * shrinks the total too, and the run's cumulative exported count can pass
+	 * it. The export would then report 100% and hand the publisher a truncated
+	 * CSV presented as complete.
+	 *
+	 * Pinning the total to page 1 keeps the run paging until a page comes back
+	 * empty (see CSV_Exports::ajax_export() and the CLI's no-progress guard),
+	 * which is where both surfaces flag the result as a possibly-incomplete
+	 * snapshot. Rows that slid back into an already-consumed offset are still
+	 * missed — closing that would mean snapshotting the entire ID set and
+	 * replaying it as post__in on every page, which does not scale on the
+	 * large sites where the race is likeliest.
+	 *
+	 * The pin is a single int in a transient keyed by the export filename,
+	 * which is unique per run, so a later run always recounts.
+	 *
+	 * @param int $live_total Total rows the current page's query reported.
+	 */
+	protected function pin_total_rows( int $live_total ): void {
+		$transient = 'newspack_export_total_' . md5( $this->get_filename() );
+		if ( 1 === $this->get_page() ) {
+			\set_transient( $transient, $live_total, HOUR_IN_SECONDS );
+			$this->total_rows = $live_total;
+			return;
+		}
+		$pinned           = \get_transient( $transient );
+		$this->total_rows = false === $pinned ? $live_total : (int) $pinned;
+	}
+
+	/**
+	 * Whether the page just generated wrote no rows at all, meaning the offset
+	 * walked past the end of a result set that shrank mid-run.
+	 *
+	 * The parent's get_total_exported() assumes every prior page was full, so
+	 * comparing it against the pages already consumed isolates exactly "this
+	 * page contributed nothing".
+	 *
+	 * @return bool
+	 */
+	public function page_was_empty(): bool {
+		return $this->get_total_exported() <= ( $this->get_page() - 1 ) * $this->get_limit();
+	}
+
+	/**
 	 * The billing/shipping address columns shared by the exporters
 	 * (subscriptions read them from the subscription, users from user meta).
 	 *

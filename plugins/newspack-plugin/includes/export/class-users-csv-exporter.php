@@ -153,9 +153,11 @@ class Users_CSV_Exporter extends CSV_Batch_Exporter {
 
 		$query = new \WP_User_Query( $args );
 
-		$this->total_rows = (int) $query->get_total();
-		$this->row_data   = [];
-		$users            = $query->get_results();
+		// Pinned to page 1's count so a set that shrinks mid-run can't end the
+		// export early with a truncated CSV (see pin_total_rows()).
+		$this->pin_total_rows( (int) $query->get_total() );
+		$this->row_data = [];
+		$users          = $query->get_results();
 		// WP_User_Query doesn't prime user meta; batch it to one query
 		// instead of one meta-cache load per exported row.
 		if ( ! empty( $users ) ) {

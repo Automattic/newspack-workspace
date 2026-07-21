@@ -215,7 +215,10 @@ final class CSV_Exports {
 	 * Render an export button with its status element.
 	 *
 	 * The export follows the list's current filters; list sorting is not
-	 * carried over (rows are ordered by ID for stable pagination).
+	 * carried over (rows are ordered by ID for stable pagination). It is a
+	 * point-in-time snapshot: rows added while it runs land past the moving
+	 * window, and rows that leave the filtered set mid-run trigger the
+	 * incomplete-export notice in ajax_export().
 	 *
 	 * @param string $type Export type: 'subscriptions' or 'users'.
 	 */
@@ -224,7 +227,7 @@ final class CSV_Exports {
 			'<div class="alignleft actions newspack-csv-export-wrap"><button type="button" class="button newspack-csv-export" data-export="%1$s" aria-describedby="newspack-csv-export-desc-%1$s">%2$s</button> <span id="newspack-csv-export-desc-%1$s" class="screen-reader-text">%3$s</span><span class="newspack-csv-export__status" hidden></span><span class="newspack-csv-export__announce screen-reader-text" role="status"></span></div>',
 			\esc_attr( $type ),
 			\esc_html__( 'Export CSV', 'newspack-plugin' ),
-			\esc_html__( 'Exports the current filtered view as CSV. List sorting is not applied to the export.', 'newspack-plugin' )
+			\esc_html__( 'Exports the current filtered view as CSV, as a point-in-time snapshot. List sorting is not applied to the export.', 'newspack-plugin' )
 		);
 	}
 
@@ -329,7 +332,12 @@ final class CSV_Exports {
 		$exporter->generate_file();
 
 		$percent = $exporter->get_percent_complete();
-		if ( $percent >= 100 ) {
+		// The run's total is pinned to page 1 (see CSV_Batch_Exporter::
+		// pin_total_rows()), so a result set that shrinks mid-run ends with an
+		// empty page rather than a percentage that quietly overshoots 100.
+		// Finish on either, and say so when the run stopped short.
+		$page_was_empty = $exporter->page_was_empty();
+		if ( $percent >= 100 || $page_was_empty ) {
 			// An unwritable uploads dir fails silently in the WC exporter;
 			// surface it instead of serving an empty CSV.
 			$file_path = $exporter->get_export_file_path();
@@ -342,6 +350,9 @@ final class CSV_Exports {
 				[
 					'step'       => 'done',
 					'percentage' => 100,
+					'notice'     => $percent < 100
+						? __( 'Rows were removed or changed while the export was running, so this file may be incomplete. Run the export again for a fresh snapshot.', 'newspack-plugin' )
+						: '',
 					'url'        => \add_query_arg(
 						[
 							'action'   => self::DOWNLOAD_ACTION,

@@ -372,7 +372,10 @@ class Newspack_Test_Subscriptions_CSV_Exporter extends WP_UnitTestCase {
 			);
 		}
 
+		// A filename per exporter keeps each one its own "run" (the pinned
+		// total is keyed by filename).
 		$reused = new Subscriptions_CSV_Exporter();
+		$reused->set_filename( 'newspack-subscriptions-export-reused.csv' );
 		$reused->set_limit( 2 );
 		$reused->set_page( 1 );
 		$reused->generate_file();
@@ -383,6 +386,7 @@ class Newspack_Test_Subscriptions_CSV_Exporter extends WP_UnitTestCase {
 		$this->assertSame( 6, $reused->get_total_exported() );
 
 		$fresh = new Subscriptions_CSV_Exporter();
+		$fresh->set_filename( 'newspack-subscriptions-export-fresh.csv' );
 		$fresh->set_limit( 2 );
 		$fresh->set_page( 2 );
 		$fresh->generate_file();
@@ -474,6 +478,7 @@ class Newspack_Test_Subscriptions_CSV_Exporter extends WP_UnitTestCase {
 		}
 
 		$exporter = new Subscriptions_CSV_Exporter();
+		$exporter->set_filename( 'newspack-subscriptions-export-offset.csv' );
 		$exporter->set_limit( 2 );
 		$exporter->set_page( 2 );
 		$exporter->prepare_data_to_export();
@@ -492,5 +497,50 @@ class Newspack_Test_Subscriptions_CSV_Exporter extends WP_UnitTestCase {
 		$exporter->mock_export_rows();
 		$this->assertSame( 4, $exporter->get_total_exported() );
 		$this->assertSame( 80, $exporter->get_percent_complete() );
+	}
+
+	/**
+	 * A result set that shrinks mid-run (rows deleted, or a status change
+	 * dropping them out of a status-filtered view) must not cut the export
+	 * short: the total stays pinned to what page 1 counted, so the run ends on
+	 * an empty page — which both the AJAX handler and the CLI report as a
+	 * possibly-incomplete snapshot — instead of reporting a truthful-looking
+	 * 100% over a half-written CSV.
+	 */
+	public function test_total_rows_pinned_across_a_shrinking_run() {
+		global $subscriptions_database;
+		for ( $i = 1; $i <= 4; $i++ ) {
+			$this->create_full_subscription(
+				[
+					'id'          => $i,
+					'customer_id' => 0,
+				]
+			);
+		}
+		$filename = 'newspack-subscriptions-export-pinned.csv';
+
+		// Page 1 exports 2 of 4 rows.
+		$page_one = new Subscriptions_CSV_Exporter();
+		$page_one->set_filename( $filename );
+		$page_one->set_limit( 2 );
+		$page_one->set_page( 1 );
+		$page_one->generate_file();
+		$this->assertSame( 4, $page_one->get_mock_total_rows() );
+		$this->assertSame( 50, $page_one->get_percent_complete() );
+
+		// The two unexported subscriptions leave the filtered set.
+		unset( $subscriptions_database[3], $subscriptions_database[4] );
+
+		$page_two = new Subscriptions_CSV_Exporter();
+		$page_two->set_filename( $filename );
+		$page_two->set_limit( 2 );
+		$page_two->set_page( 2 );
+		$page_two->generate_file();
+
+		// Recounting live would give a total of 2 against 2 exported rows —
+		// 100%, export "complete", half the rows missing.
+		$this->assertSame( 4, $page_two->get_mock_total_rows() );
+		$this->assertSame( 50, $page_two->get_percent_complete() );
+		$this->assertTrue( $page_two->page_was_empty(), 'The offset walked past the shrunken set, so the run must end on an empty page.' );
 	}
 }
