@@ -217,7 +217,9 @@ final class Newspack_Popups_Post_Scope {
 				'placement'            => 'inline',
 				'trigger_type'         => 'blocks_count',
 				'trigger_blocks_count' => (string) $position,
-				'frequency'            => 'once',
+				// Inline story CTAs show on every visit by default (like EngageLine);
+				// publishers can cap frequency per-prompt in Advanced settings.
+				'frequency'            => 'always',
 			]
 		);
 		if ( is_wp_error( $options_result ) ) {
