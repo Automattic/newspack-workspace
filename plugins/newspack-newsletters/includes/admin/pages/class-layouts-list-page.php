@@ -83,12 +83,15 @@ class Layouts_List_Page extends React_List_Page {
 	}
 
 	/**
-	 * Wizard breadcrumb label.
+	 * Explicit admin-header breadcrumb trail.
 	 *
-	 * @return string
+	 * @return array<array{label: string}>
 	 */
-	public function get_wizard_header_label(): ?string {
-		return __( 'Newsletters / Layouts', 'newspack-newsletters' );
+	public function get_wizard_breadcrumbs(): ?array {
+		return [
+			[ 'label' => __( 'Newsletters', 'newspack-newsletters' ) ],
+			[ 'label' => __( 'Layouts', 'newspack-newsletters' ) ],
+		];
 	}
 
 	/**

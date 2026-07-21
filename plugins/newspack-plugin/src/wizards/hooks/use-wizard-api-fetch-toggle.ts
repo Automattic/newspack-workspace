@@ -59,7 +59,7 @@ function useWizardApiFetchToggle< T >( {
 			onSuccess: setApiData,
 			onFinally() {
 				if ( refreshOn.includes( method ) ) {
-					setActionText( createElement( 'span', { className: 'gray' }, __( 'Page reloading…', 'newspack-plugin' ) ) );
+					setActionText( createElement( 'span', { className: 'newspack-text-muted' }, __( 'Page reloading…', 'newspack-plugin' ) ) );
 					if ( ! errorMessage ) {
 						window.location.reload();
 					}

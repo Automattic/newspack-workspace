@@ -31,6 +31,7 @@ class Initializer {
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-woocommerce-subscriptions.php';
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-ga4-dimensions.php';
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-teams-for-memberships-diagnostics.php';
+		include_once NEWSPACK_ABSPATH . 'includes/cli/class-teams-migration.php';
 	}
 
 	/**
@@ -90,6 +91,16 @@ class Initializer {
 				'newspack teams-for-memberships diagnostics',
 				[ 'Newspack\CLI\Teams_For_Memberships_Diagnostics', 'diagnostics' ]
 			);
+		}
+
+		// WooCommerce Memberships → Access Control group subscription migration commands.
+		// Only register them where WooCommerce Memberships is active — they operate on
+		// Memberships teams/plans and are useless (and clutter `wp help`) otherwise.
+		if ( \Newspack\Memberships::is_active() ) {
+			WP_CLI::add_command( 'newspack migrate-teams', [ 'Newspack\CLI\Teams_Migration', 'migrate_teams' ] );
+			WP_CLI::add_command( 'newspack migrate-team-products', [ 'Newspack\CLI\Teams_Migration', 'migrate_team_products' ] );
+			WP_CLI::add_command( 'newspack migrate-manual-members', [ 'Newspack\CLI\Teams_Migration', 'migrate_manual_members' ] );
+			WP_CLI::add_command( 'newspack backfill-team-managers', [ 'Newspack\CLI\Teams_Migration', 'backfill_team_managers' ] );
 		}
 
 		Optional_Modules::register_commands();

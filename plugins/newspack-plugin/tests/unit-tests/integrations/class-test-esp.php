@@ -40,6 +40,7 @@ class Test_ESP extends \WP_UnitTestCase {
 	 */
 	public function tear_down() {
 		\Newspack_Newsletters_Contacts::reset_calls();
+		\Newspack_Newsletters::$is_service_provider_configured = true;
 		remove_all_filters( 'newspack_ras_metadata_keys' );
 		remove_all_filters( 'newspack_ras_metadata_prefix' );
 		\delete_option( 'newspack_integration_incoming_fields_esp' );
@@ -566,5 +567,36 @@ class Test_ESP extends \WP_UnitTestCase {
 		$this->assertCount( 1, $required );
 		$this->assertFalse( $required[0]['is_active'] );
 		$this->assertFalse( $required[0]['is_installed'] );
+	}
+
+	/**
+	 * Only a configured provider (stored config) — not the master list — makes
+	 * is_connected() true, which is what separates it from is_set_up(). Drives the
+	 * Connect-vs-Enable branch on the Integrations card.
+	 */
+	public function test_is_connected_reflects_provider_configuration() {
+		$esp = new ESP();
+
+		\Newspack_Newsletters::$is_service_provider_configured = true;
+		$this->assertTrue( $esp->is_connected(), 'Connected when a newsletters provider is configured.' );
+
+		\Newspack_Newsletters::$is_service_provider_configured = false;
+		$this->assertFalse( $esp->is_connected(), 'Not connected when no provider is configured.' );
+	}
+
+	/**
+	 * Requires a stored master list on top of a connected provider, so a
+	 * connected-but-audience-less ESP is connected yet not set up — exactly the
+	 * state the Enable modal exists to resolve.
+	 */
+	public function test_is_set_up_requires_master_list_on_top_of_connection() {
+		\Newspack_Newsletters::$is_service_provider_configured = true;
+
+		$without_list = new ESP();
+		$this->assertTrue( $without_list->is_connected(), 'Sanity: provider is connected.' );
+		$this->assertFalse( $without_list->is_set_up(), 'Connected but no master list is not set up.' );
+
+		$with_list = $this->make_esp_with_master_list( 'list-123' );
+		$this->assertTrue( $with_list->is_set_up(), 'Connected with a master list is set up.' );
 	}
 }
