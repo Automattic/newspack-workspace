@@ -252,9 +252,12 @@ class Contact_Pull {
 	 *
 	 * @param int                                     $user_id     WordPress user ID.
 	 * @param \Newspack\Reader_Activation\Integration $integration The integration instance.
+	 * @param bool                                    $dry_run     Optional. When true, fetch and filter but skip
+	 *                                                             persistence, logging the would-be writes instead.
+	 *                                                             The external read still happens. Default false.
 	 * @return true|\WP_Error True on success, WP_Error on failure.
 	 */
-	public static function pull_single_integration( $user_id, $integration ) {
+	public static function pull_single_integration( $user_id, $integration, $dry_run = false ) {
 		$selected_fields = $integration->get_enabled_incoming_fields();
 		if ( empty( $selected_fields ) ) {
 			return new \WP_Error( 'no_selected_incoming_fields', 'No selected incoming fields for ' . $integration->get_id() );
@@ -280,6 +283,10 @@ class Contact_Pull {
 			Logger::log( 'Pulled data from ' . $integration->get_id() . ': ' . wp_json_encode( $data ) );
 
 			foreach ( $data as $key => $value ) {
+				if ( $dry_run ) {
+					Logger::log( sprintf( '[dry-run] Would store reader data "%s" for user %d.', $key, $user_id ), self::LOGGER_HEADER );
+					continue;
+				}
 				\Newspack\Reader_Data::update_item( $user_id, $key, wp_json_encode( $value ) );
 			}
 
