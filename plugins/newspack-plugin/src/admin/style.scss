@@ -1,5 +1,5 @@
-@use "../../node_modules/tachyons/css/tachyons.min.css";
 @use "~@wordpress/base-styles/colors" as wp-colors;
+@use "~@wordpress/base-styles/variables" as wp-vars;
 
 :root {
 	/* Sections */
@@ -153,15 +153,19 @@ h1 {
 	background: #{wp-colors.$white};
 }
 
-// Only apply styles if there are sections and is immediate descendent.
+.newspack-wizard,
+.newspack-wizard *,
+.newspack-wizard__content,
+.newspack-wizard__content *,
+#newspack-wizards-admin-header,
+#newspack-wizards-admin-header * {
+	box-sizing: border-box;
+}
+
 .newspack-wizard__content:has(> .newspack-wizard__sections) {
 	margin: 0;
 	max-width: 100%;
 	padding: 0 0 32px;
-
-	* {
-		box-sizing: border-box;
-	}
 }
 .newspack-wizard-page:not(.newspack-admin-header) {
 	#screen-meta-links {
@@ -269,10 +273,25 @@ h1 {
 	}
 }
 
-// tachyons overrides
-table.fixed {
-	position: static;
-	table-layout: fixed;
+// Notice spacing inside wizard layouts.
+.newspack-notice--flush {
+	margin: 0;
+}
+
+.newspack-notice--spaced-top {
+	margin: wp-vars.$grid-unit-10 0 0;
+}
+
+.newspack-notice--spaced-bottom {
+	margin: 0 0 wp-vars.$grid-unit-10;
+}
+
+.newspack-text-muted {
+	color: wp-colors.$gray-700;
+}
+
+.newspack-is-dimmed {
+	opacity: 0.5;
 }
 
 // Overrides

@@ -165,12 +165,6 @@ domReady( () => {
 		onCheckoutPlaceOrderError( container, hideProcessingPaymentScreen );
 
 		onCheckoutReady( container, () => {
-			// Make sure the order summary renders the correct text.
-			const summaryTextNode = productDetails?.querySelector( 'strong' );
-			if ( summaryTextNode ) {
-				summaryTextNode.textContent = checkoutData.price_summary;
-			}
-
 			// Display initial errors if any.
 			if ( modalCheckout.initialErrors ) {
 				const errorContainer = document.createElement( 'div' );

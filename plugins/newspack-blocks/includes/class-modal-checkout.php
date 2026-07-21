@@ -30,6 +30,14 @@ final class Modal_Checkout {
 	const CHECKOUT_REGISTRATION_ORDER_META_KEY = '_newspack_checkout_registration_meta';
 
 	/**
+	 * Session key tracking a coupon auto-applied from a Checkout Button block,
+	 * used to hide the in-modal coupon form for that coupon.
+	 *
+	 * @var string
+	 */
+	const AUTO_APPLIED_COUPON_SESSION_KEY = 'newspack_blocks_auto_applied_coupon';
+
+	/**
 	 * Billing fields with server-side format validation in the Store API,
 	 * mapped from their classic checkout keys to Store API address keys.
 	 *
@@ -448,6 +456,13 @@ final class Modal_Checkout {
 
 		\WC()->cart->empty_cart();
 		$cart_item_key = \WC()->cart->add_to_cart( $product_id, 1, 0, [], $cart_item_data );
+
+		// Auto-apply a coupon attached to the Checkout Button block, if present and
+		// valid. Read with a sanitizing filter (satisfies input-sanitization
+		// checks); the validate-and-apply gate lives in maybe_auto_apply_coupon()
+		// so it can be unit-tested in isolation.
+		$coupon_code = (string) filter_input( INPUT_GET, 'coupon', FILTER_SANITIZE_FULL_SPECIAL_CHARS );
+		self::maybe_auto_apply_coupon( $coupon_code );
 
 		// Set checkout registration flag if user is logged not logged in.
 		if ( ! is_user_logged_in() ) {
@@ -1698,6 +1713,68 @@ final class Modal_Checkout {
 				}
 			}
 		}
+	}
+
+	/**
+	 * Auto-apply a coupon attached to a Checkout Button block to the current
+	 * cart, gated on validation.
+	 *
+	 * The reader never typed the code, so anything that would surface it is kept
+	 * silent: an invalid, expired, restricted or usage-capped coupon is skipped
+	 * with no error notice (validation runs before apply), and the "applied
+	 * successfully" success notice that WC_Cart::apply_coupon() queues is
+	 * cleared. A successful application is tracked in the session so the modal
+	 * can hide its coupon form for that coupon (see should_hide_coupon_form());
+	 * any prior marker is reset first.
+	 *
+	 * @param string $coupon_code Raw coupon code from the request (already
+	 *                            sanitized by the caller, e.g. via filter_input()).
+	 *
+	 * @return void
+	 */
+	public static function maybe_auto_apply_coupon( $coupon_code ) {
+		if ( ! function_exists( 'WC' ) || ! \WC()->cart ) {
+			return;
+		}
+		if ( \WC()->session ) {
+			\WC()->session->set( self::AUTO_APPLIED_COUPON_SESSION_KEY, null );
+		}
+		// Decode entities so a literal code (e.g. one containing "&") still
+		// matches. The strict empty-string check keeps a coupon code of "0" valid.
+		$coupon_code = html_entity_decode( (string) $coupon_code, ENT_QUOTES );
+		if ( '' === $coupon_code || ! function_exists( 'wc_coupons_enabled' ) || ! \wc_coupons_enabled() ) {
+			return;
+		}
+		$coupon    = new \WC_Coupon( $coupon_code );
+		$discounts = new \WC_Discounts( \WC()->cart );
+		if ( true === $discounts->is_coupon_valid( $coupon ) && \WC()->cart->apply_coupon( $coupon_code ) ) {
+			// apply_coupon() queues a "Coupon code applied successfully." success
+			// notice; clear it so the auto-apply stays silent for the reader.
+			if ( function_exists( 'wc_clear_notices' ) ) {
+				\wc_clear_notices();
+			}
+			if ( \WC()->session ) {
+				\WC()->session->set( self::AUTO_APPLIED_COUPON_SESSION_KEY, \wc_format_coupon_code( $coupon_code ) );
+			}
+		}
+	}
+
+	/**
+	 * Whether the in-modal coupon form should be hidden.
+	 *
+	 * True when a coupon was auto-applied from a Checkout Button block (tracked
+	 * in the session) and is still applied to the cart. The reader never entered
+	 * the code, so they should not be prompted to add or stack coupons. If they
+	 * remove the auto-applied coupon, the form is shown again.
+	 *
+	 * @return bool
+	 */
+	public static function should_hide_coupon_form() {
+		if ( ! function_exists( 'WC' ) || ! \WC()->session || ! \WC()->cart ) {
+			return false;
+		}
+		$auto_applied = \WC()->session->get( self::AUTO_APPLIED_COUPON_SESSION_KEY );
+		return ! empty( $auto_applied ) && in_array( $auto_applied, \WC()->cart->get_applied_coupons(), true );
 	}
 
 	/**

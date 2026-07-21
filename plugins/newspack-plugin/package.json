@@ -46,8 +46,7 @@
 		"moment-range": "^3.1.1",
 		"qs": "^6.15.2",
 		"react-router-dom": "^5.3.4",
-		"recursive-copy": "^2.0.14",
-		"tachyons": "^4.12.0"
+		"recursive-copy": "^2.0.14"
 	},
 	"devDependencies": {
 		"clsx": "^2.1.0",

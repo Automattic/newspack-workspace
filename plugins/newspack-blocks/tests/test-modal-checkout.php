@@ -67,6 +67,13 @@ if ( ! function_exists( 'WC' ) ) {
 				public $cart = null;
 
 				/**
+				 * Session double, set by tests.
+				 *
+				 * @var object|null
+				 */
+				public $session = null;
+
+				/**
 				 * Countries double exposing a US-only states list.
 				 *
 				 * @var object
@@ -145,15 +152,158 @@ if ( ! function_exists( 'wc_get_checkout_url' ) ) {
 	}
 }
 
+if ( ! function_exists( 'wc_coupons_enabled' ) ) {
+	/**
+	 * Mock WooCommerce coupons-enabled flag. Defaults to enabled; a test can
+	 * force it off via the $newspack_blocks_test_coupons_enabled global.
+	 *
+	 * @return bool
+	 */
+	function wc_coupons_enabled() { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- Mock WooCommerce global.
+		global $newspack_blocks_test_coupons_enabled;
+		return null === $newspack_blocks_test_coupons_enabled ? true : (bool) $newspack_blocks_test_coupons_enabled;
+	}
+}
+
+if ( ! function_exists( 'wc_format_coupon_code' ) ) {
+	/**
+	 * Mock WooCommerce coupon code formatter (lowercase + trim, as core does).
+	 *
+	 * @param string $code Coupon code.
+	 *
+	 * @return string
+	 */
+	function wc_format_coupon_code( $code ) { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- Mock WooCommerce global.
+		return strtolower( trim( (string) $code ) );
+	}
+}
+
+if ( ! function_exists( 'wc_add_notice' ) ) {
+	/**
+	 * Mock WooCommerce notice queue: record notices in a global.
+	 *
+	 * @param string $message     Notice message.
+	 * @param string $notice_type Notice type.
+	 *
+	 * @return void
+	 */
+	function wc_add_notice( $message, $notice_type = 'success' ) { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- Mock WooCommerce global.
+		global $newspack_blocks_test_notices;
+		if ( ! is_array( $newspack_blocks_test_notices ) ) {
+			$newspack_blocks_test_notices = [];
+		}
+		$newspack_blocks_test_notices[] = [
+			'message' => $message,
+			'type'    => $notice_type,
+		];
+	}
+}
+
+if ( ! function_exists( 'wc_clear_notices' ) ) {
+	/**
+	 * Mock WooCommerce notice clearing: empty the queue and count the calls so
+	 * tests can assert the auto-apply cleared the success notice.
+	 *
+	 * @return void
+	 */
+	function wc_clear_notices() { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- Mock WooCommerce global.
+		global $newspack_blocks_test_notices, $newspack_blocks_test_cleared_notices_count;
+		$newspack_blocks_test_notices               = [];
+		$newspack_blocks_test_cleared_notices_count = (int) $newspack_blocks_test_cleared_notices_count + 1;
+	}
+}
+
+if ( ! class_exists( 'WC_Coupon' ) ) {
+	/**
+	 * Minimal WooCommerce coupon stub carrying its code.
+	 */
+	class WC_Coupon {
+		/**
+		 * Coupon code.
+		 *
+		 * @var string
+		 */
+		private $code;
+
+		/**
+		 * Constructor.
+		 *
+		 * @param string $code Coupon code.
+		 */
+		public function __construct( $code = '' ) {
+			$this->code = $code;
+		}
+
+		/**
+		 * Get the coupon code.
+		 *
+		 * @return string
+		 */
+		public function get_code() {
+			return $this->code;
+		}
+	}
+}
+
+if ( ! class_exists( 'WC_Discounts' ) ) {
+	/**
+	 * Minimal WooCommerce discounts stub. A coupon is valid only when its code
+	 * is in the test-configured valid list; otherwise a WP_Error is returned,
+	 * matching WC_Discounts::is_coupon_valid().
+	 */
+	class WC_Discounts {
+		/**
+		 * Constructor.
+		 *
+		 * @param mixed $cart Cart (unused by the stub).
+		 */
+		public function __construct( $cart = null ) {
+			unset( $cart );
+		}
+
+		/**
+		 * Whether a coupon is valid.
+		 *
+		 * @param WC_Coupon $coupon Coupon.
+		 *
+		 * @return bool|WP_Error
+		 */
+		public function is_coupon_valid( $coupon ) {
+			global $newspack_blocks_test_valid_coupons;
+			$valid = is_array( $newspack_blocks_test_valid_coupons ) ? $newspack_blocks_test_valid_coupons : [];
+			if ( in_array( $coupon->get_code(), $valid, true ) ) {
+				return true;
+			}
+			return new WP_Error( 'invalid_coupon', 'Invalid coupon.' );
+		}
+	}
+}
+
 class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
+	/**
+	 * Reset coupon/notice test state to deterministic defaults before each test.
+	 */
+	public function set_up() {
+		parent::set_up();
+		global $newspack_blocks_test_notices, $newspack_blocks_test_cleared_notices_count, $newspack_blocks_test_valid_coupons, $newspack_blocks_test_coupons_enabled;
+		$newspack_blocks_test_notices               = [];
+		$newspack_blocks_test_cleared_notices_count = 0;
+		$newspack_blocks_test_valid_coupons         = [];
+		$newspack_blocks_test_coupons_enabled       = null;
+	}
+
 	/**
 	 * Clean up request data.
 	 */
 	public function tear_down() {
-		global $newspack_blocks_test_limited_product_id, $newspack_blocks_test_limited_user_id, $newspack_blocks_test_wc;
-		$newspack_blocks_test_limited_product_id = null;
-		$newspack_blocks_test_limited_user_id    = null;
-		$newspack_blocks_test_wc                 = null;
+		global $newspack_blocks_test_limited_product_id, $newspack_blocks_test_limited_user_id, $newspack_blocks_test_wc, $newspack_blocks_test_notices, $newspack_blocks_test_cleared_notices_count, $newspack_blocks_test_valid_coupons, $newspack_blocks_test_coupons_enabled;
+		$newspack_blocks_test_limited_product_id    = null;
+		$newspack_blocks_test_limited_user_id       = null;
+		$newspack_blocks_test_wc                    = null;
+		$newspack_blocks_test_notices               = [];
+		$newspack_blocks_test_cleared_notices_count = 0;
+		$newspack_blocks_test_valid_coupons         = [];
+		$newspack_blocks_test_coupons_enabled       = null;
 		if ( property_exists( \Newspack\WooCommerce_My_Account::class, 'is_from_my_account' ) ) {
 			\Newspack\WooCommerce_My_Account::$is_from_my_account = false;
 		}
@@ -789,5 +939,239 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		$this->set_configured_billing_fields( [ 'billing_first_name', 'billing_email' ] );
 		$this->set_mock_checkout_cart( true );
 		$this->assertSame( $locale, \Newspack_Blocks\Modal_Checkout::relax_configured_off_locale_fields( $locale ), 'Shipping carts should not be relaxed.' );
+	}
+
+	/**
+	 * Set WC()->cart to a coupon-aware cart double.
+	 *
+	 * @param string[] $applied Initially-applied coupon codes.
+	 */
+	private function set_mock_coupon_cart( $applied = [] ) {
+		WC()->cart = new class( $applied ) {
+			/**
+			 * Applied coupon codes.
+			 *
+			 * @var string[]
+			 */
+			private $applied;
+
+			/**
+			 * Constructor.
+			 *
+			 * @param string[] $applied Applied coupon codes.
+			 */
+			public function __construct( $applied ) {
+				$this->applied = $applied;
+			}
+
+			/**
+			 * Apply a coupon: record it (formatted) and queue a success notice,
+			 * mirroring WC_Cart::apply_coupon().
+			 *
+			 * @param string $code Coupon code.
+			 *
+			 * @return bool
+			 */
+			public function apply_coupon( $code ) {
+				$this->applied[] = wc_format_coupon_code( $code );
+				wc_add_notice( 'Coupon code applied successfully.', 'success' );
+				return true;
+			}
+
+			/**
+			 * Get the applied coupon codes.
+			 *
+			 * @return string[]
+			 */
+			public function get_applied_coupons() {
+				return $this->applied;
+			}
+		};
+	}
+
+	/**
+	 * Set WC()->session to a simple array-backed session double.
+	 *
+	 * @param array $data Initial session data.
+	 */
+	private function set_mock_session( $data = [] ) {
+		WC()->session = new class( $data ) {
+			/**
+			 * Session data.
+			 *
+			 * @var array
+			 */
+			private $data;
+
+			/**
+			 * Constructor.
+			 *
+			 * @param array $data Session data.
+			 */
+			public function __construct( $data ) {
+				$this->data = $data;
+			}
+
+			/**
+			 * Get a session value.
+			 *
+			 * @param string $key           Key.
+			 * @param mixed  $default_value Default value.
+			 *
+			 * @return mixed
+			 */
+			public function get( $key, $default_value = null ) {
+				return array_key_exists( $key, $this->data ) ? $this->data[ $key ] : $default_value;
+			}
+
+			/**
+			 * Set a session value.
+			 *
+			 * @param string $key   Key.
+			 * @param mixed  $value Value.
+			 */
+			public function set( $key, $value ) {
+				$this->data[ $key ] = $value;
+			}
+		};
+	}
+
+	/**
+	 * Configure which coupon codes the WC_Discounts stub treats as valid.
+	 *
+	 * @param string[] $codes Valid coupon codes.
+	 */
+	private function set_valid_coupons( $codes ) {
+		global $newspack_blocks_test_valid_coupons;
+		$newspack_blocks_test_valid_coupons = $codes;
+	}
+
+	/**
+	 * A valid attached coupon is applied to the cart, tracked in the session
+	 * (formatted), and its success notice is cleared so the auto-apply is silent.
+	 */
+	public function test_auto_apply_valid_coupon_applies_and_tracks_silently() {
+		global $newspack_blocks_test_notices, $newspack_blocks_test_cleared_notices_count;
+		$this->set_mock_coupon_cart();
+		$this->set_mock_session();
+		$this->set_valid_coupons( [ 'SUMMER25' ] );
+
+		\Newspack_Blocks\Modal_Checkout::maybe_auto_apply_coupon( 'SUMMER25' );
+
+		$this->assertContains( 'summer25', WC()->cart->get_applied_coupons(), 'A valid coupon should be applied to the cart.' );
+		$this->assertSame(
+			'summer25',
+			WC()->session->get( \Newspack_Blocks\Modal_Checkout::AUTO_APPLIED_COUPON_SESSION_KEY ),
+			'The applied coupon should be tracked in the session as the formatted code.'
+		);
+		$this->assertSame( [], $newspack_blocks_test_notices, 'The success notice should be cleared so the auto-apply is silent.' );
+		$this->assertSame( 1, $newspack_blocks_test_cleared_notices_count, 'wc_clear_notices() should be called once on a successful auto-apply.' );
+	}
+
+	/**
+	 * An invalid coupon (one that fails validation) is never applied, tracks
+	 * nothing, and surfaces no error notice — the reader never typed it.
+	 */
+	public function test_auto_apply_invalid_coupon_is_skipped_silently() {
+		global $newspack_blocks_test_notices;
+		$this->set_mock_coupon_cart();
+		$this->set_mock_session();
+		$this->set_valid_coupons( [ 'SUMMER25' ] );
+
+		\Newspack_Blocks\Modal_Checkout::maybe_auto_apply_coupon( 'BOGUS' );
+
+		$this->assertSame( [], WC()->cart->get_applied_coupons(), 'An invalid coupon should not be applied.' );
+		$this->assertNull(
+			WC()->session->get( \Newspack_Blocks\Modal_Checkout::AUTO_APPLIED_COUPON_SESSION_KEY ),
+			'No coupon should be tracked for an invalid code.'
+		);
+		$this->assertSame( [], $newspack_blocks_test_notices, 'No error notice should be shown for a coupon the reader never typed.' );
+	}
+
+	/**
+	 * An empty coupon code applies nothing and clears any prior auto-apply
+	 * marker from the session.
+	 */
+	public function test_auto_apply_empty_coupon_resets_tracking() {
+		$this->set_mock_coupon_cart();
+		$this->set_mock_session( [ \Newspack_Blocks\Modal_Checkout::AUTO_APPLIED_COUPON_SESSION_KEY => 'stale' ] );
+		$this->set_valid_coupons( [ 'SUMMER25' ] );
+
+		\Newspack_Blocks\Modal_Checkout::maybe_auto_apply_coupon( '' );
+
+		$this->assertNull(
+			WC()->session->get( \Newspack_Blocks\Modal_Checkout::AUTO_APPLIED_COUPON_SESSION_KEY ),
+			'An empty coupon should clear any prior auto-apply marker.'
+		);
+	}
+
+	/**
+	 * When coupons are disabled site-wide, no coupon is applied or tracked.
+	 */
+	public function test_auto_apply_skipped_when_coupons_disabled() {
+		global $newspack_blocks_test_coupons_enabled;
+		$newspack_blocks_test_coupons_enabled = false;
+		$this->set_mock_coupon_cart();
+		$this->set_mock_session();
+		$this->set_valid_coupons( [ 'SUMMER25' ] );
+
+		\Newspack_Blocks\Modal_Checkout::maybe_auto_apply_coupon( 'SUMMER25' );
+
+		$this->assertSame( [], WC()->cart->get_applied_coupons(), 'No coupon should be applied when coupons are disabled.' );
+		$this->assertNull(
+			WC()->session->get( \Newspack_Blocks\Modal_Checkout::AUTO_APPLIED_COUPON_SESSION_KEY ),
+			'No coupon should be tracked when coupons are disabled.'
+		);
+	}
+
+	/**
+	 * The coupon form is hidden when an auto-applied coupon is still on the cart.
+	 */
+	public function test_should_hide_coupon_form_true_when_auto_applied_and_in_cart() {
+		$this->set_mock_coupon_cart( [ 'summer25' ] );
+		$this->set_mock_session( [ \Newspack_Blocks\Modal_Checkout::AUTO_APPLIED_COUPON_SESSION_KEY => 'summer25' ] );
+
+		$this->assertTrue( \Newspack_Blocks\Modal_Checkout::should_hide_coupon_form() );
+	}
+
+	/**
+	 * The coupon form reappears when the reader removes the auto-applied coupon.
+	 */
+	public function test_should_hide_coupon_form_false_when_auto_applied_coupon_removed() {
+		$this->set_mock_coupon_cart( [] );
+		$this->set_mock_session( [ \Newspack_Blocks\Modal_Checkout::AUTO_APPLIED_COUPON_SESSION_KEY => 'summer25' ] );
+
+		$this->assertFalse( \Newspack_Blocks\Modal_Checkout::should_hide_coupon_form() );
+	}
+
+	/**
+	 * A coupon the reader typed themselves (no session marker) does not hide the
+	 * form, even though it is applied to the cart.
+	 */
+	public function test_should_hide_coupon_form_false_without_auto_applied_marker() {
+		$this->set_mock_coupon_cart( [ 'summer25' ] );
+		$this->set_mock_session();
+
+		$this->assertFalse( \Newspack_Blocks\Modal_Checkout::should_hide_coupon_form() );
+	}
+
+	/**
+	 * With no session, the form is shown (never hidden).
+	 */
+	public function test_should_hide_coupon_form_false_without_session() {
+		$this->set_mock_coupon_cart( [ 'summer25' ] );
+		WC()->session = null;
+
+		$this->assertFalse( \Newspack_Blocks\Modal_Checkout::should_hide_coupon_form() );
+	}
+
+	/**
+	 * With no cart, the form is shown (never hidden).
+	 */
+	public function test_should_hide_coupon_form_false_without_cart() {
+		$this->set_mock_session( [ \Newspack_Blocks\Modal_Checkout::AUTO_APPLIED_COUPON_SESSION_KEY => 'summer25' ] );
+		WC()->cart = null;
+
+		$this->assertFalse( \Newspack_Blocks\Modal_Checkout::should_hide_coupon_form() );
 	}
 }
