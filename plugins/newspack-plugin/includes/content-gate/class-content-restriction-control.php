@@ -61,6 +61,36 @@ class Content_Restriction_Control {
 		add_action( 'init', [ __CLASS__, 'register_meta' ] );
 		add_action( 'init', [ __CLASS__, 'register_meta_guards' ] );
 		add_filter( 'newspack_is_post_restricted', [ __CLASS__, 'is_post_restricted' ], 10, 2 );
+		add_filter( 'newspack_post_has_restrictions', [ __CLASS__, 'post_has_restrictions' ], 10, 2 );
+	}
+
+	/**
+	 * Whether the post is covered by content gating rules, regardless of the
+	 * current user's own access. The user-agnostic counterpart of
+	 * is_post_restricted(), consumed e.g. by integrations that must advertise
+	 * a post as gated (Google Extended Access' isAccessibleForFree schema).
+	 *
+	 * @param bool $has_restrictions Whether the post has restrictions.
+	 * @param int  $post_id          Post ID.
+	 *
+	 * @return bool
+	 */
+	public static function post_has_restrictions( $has_restrictions, $post_id = null ) {
+		// Don't apply our restriction strategy if Woo Memberships is active.
+		if ( Memberships::is_active() ) {
+			return $has_restrictions;
+		}
+		if ( $has_restrictions ) {
+			return $has_restrictions;
+		}
+		$post_id = $post_id ? $post_id : get_the_ID();
+		if ( ! $post_id ) {
+			return false;
+		}
+		if ( get_post_meta( $post_id, self::IS_EXEMPT_META_KEY, true ) ) {
+			return false;
+		}
+		return ! empty( self::get_post_gates( $post_id ) );
 	}
 
 	/**
