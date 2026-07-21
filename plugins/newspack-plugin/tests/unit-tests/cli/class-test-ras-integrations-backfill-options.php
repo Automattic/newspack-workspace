@@ -1,4 +1,4 @@
-<?php // phpcs:disable Squiz.Commenting.FunctionComment.Missing, Squiz.Commenting.ClassComment.Missing, Squiz.Commenting.VariableComment.Missing, Squiz.Commenting.FileComment.Missing, Generic.Files.OneObjectStructurePerFile.MultipleFound
+<?php // phpcs:disable Squiz.Commenting.FunctionComment.Missing, Squiz.Commenting.ClassComment.Missing, Squiz.Commenting.VariableComment.Missing, Squiz.Commenting.FileComment.Missing
 /**
  * Tests the `wp newspack integrations backfill` pre-flight parser (NPPD-2076).
  *
@@ -10,19 +10,7 @@ use Newspack\Reader_Activation\Integrations;
 
 require_once dirname( __DIR__, 3 ) . '/includes/cli/class-ras-contact-sync.php';
 require_once dirname( __DIR__ ) . '/integrations/class-failing-sample-integration.php';
-
-// Minimal WP_CLI stub (same shape as the sibling tally test; guarded so whichever
-// file loads first wins).
-if ( ! class_exists( 'WP_CLI' ) ) {
-	class WP_CLI {
-		public static function log( $message ) {}
-		public static function line( $message = '' ) {}
-		public static function success( $message ) {}
-		public static function error( $message ) {
-			throw new \Exception( esc_html( $message ) );
-		}
-	}
-}
+require_once dirname( __DIR__, 2 ) . '/mocks/wp-cli-mock.php';
 
 /**
  * Pre-flight parsing of --direction / --integration and push-only flag rejection.
