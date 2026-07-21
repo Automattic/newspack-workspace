@@ -2581,9 +2581,17 @@ final class Reader_Activation {
 			}
 
 			// Don't send OTP email for newsletter signup, or if the reader has a password set.
-			if ( self::is_reader_without_password( $existing_user ) &&
-				( ! isset( $metadata['registration_method'] ) || false === strpos( $metadata['registration_method'], 'newsletters-subscription' ) )
-			) {
+			$should_send_magic_link = self::is_reader_without_password( $existing_user ) &&
+				( ! isset( $metadata['registration_method'] ) || false === strpos( $metadata['registration_method'], 'newsletters-subscription' ) );
+			/**
+			 * Filters whether to send a magic link to an existing reader attempting to register again.
+			 *
+			 * @param bool     $should_send_magic_link Whether to send the magic link email.
+			 * @param \WP_User $existing_user          The existing reader account.
+			 * @param array    $metadata               Registration metadata.
+			 */
+			$should_send_magic_link = \apply_filters( 'newspack_reader_activation_send_magic_link_on_reregistration', $should_send_magic_link, $existing_user, $metadata );
+			if ( $should_send_magic_link ) {
 				Logger::log( "User with $email already exists. Sending magic link." );
 				$redirect = isset( $metadata['current_page_url'] ) ? $metadata['current_page_url'] : '';
 				Magic_Link::send_email( $existing_user, $redirect );
