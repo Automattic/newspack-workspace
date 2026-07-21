@@ -552,7 +552,9 @@ class RAS_Contact_Sync {
 	private static function build_sync_config( $assoc_args ) {
 		return [
 			'is_dry_run'       => ! empty( $assoc_args['dry-run'] ),
-			'active_only'      => ! empty( $assoc_args['active-only'] ),
+			// `active-subs-only` is the flag on `integrations backfill`; `active-only`
+			// is the legacy spelling kept on the `esp sync` alias.
+			'active_only'      => ! empty( $assoc_args['active-subs-only'] ) || ! empty( $assoc_args['active-only'] ),
 			'migrated_only'    => ! empty( $assoc_args['migrated-subscriptions'] ) ? $assoc_args['migrated-subscriptions'] : false,
 			'subscription_ids' => ! empty( $assoc_args['subscription-ids'] ) ? explode( ',', $assoc_args['subscription-ids'] ) : false,
 			'user_ids'         => ! empty( $assoc_args['user-ids'] ) ? explode( ',', $assoc_args['user-ids'] ) : false,
@@ -684,8 +686,8 @@ class RAS_Contact_Sync {
 	 * [--dry-run]
 	 * : Output results but do not persist anything. NOTE: a pull dry-run still performs the external API reads (that is what previewing a pull means); it only skips writing reader data. On the push side, combined with `--skip-lists`/`--fields`, the preview runs the `newspack_esp_sync_contact` filter for fidelity.
 	 *
-	 * [--active-only]
-	 * : Only process users who have active subscriptions.
+	 * [--active-subs-only]
+	 * : Only process users who have active WooCommerce subscriptions (statuses: active, pending, pending-cancel). Requires WooCommerce Subscriptions — without it, every reader is skipped. (The legacy `esp sync` alias spells this `--active-only`.)
 	 *
 	 * [--user-ids=<id1,id2,etc>]
 	 * : Comma-delimited list of user IDs to process.

@@ -126,6 +126,28 @@ class Test_RAS_Integrations_Backfill_Options extends WP_UnitTestCase {
 		$this->assertIsArray( $parsed, 'parse_backfill_options only routes; push-only flag validity is parse_sync_options\'s job.' );
 	}
 
+	/**
+	 * Invoke the private static build_sync_config() via reflection.
+	 *
+	 * @param array $assoc_args Associative CLI args.
+	 * @return array
+	 */
+	private function build_config( array $assoc_args ) {
+		$method = new \ReflectionMethod( RAS_Contact_Sync::class, 'build_sync_config' );
+		$method->setAccessible( true );
+		return $method->invoke( null, $assoc_args );
+	}
+
+	/**
+	 * The new command documents --active-subs-only; the legacy `esp sync` alias
+	 * keeps --active-only. The shared config builder honors either spelling.
+	 */
+	public function test_active_subs_only_flag_spellings() {
+		$this->assertFalse( $this->build_config( [] )['active_only'] );
+		$this->assertTrue( $this->build_config( [ 'active-subs-only' => true ] )['active_only'], 'New spelling (integrations backfill).' );
+		$this->assertTrue( $this->build_config( [ 'active-only' => true ] )['active_only'], 'Legacy spelling (esp sync alias).' );
+	}
+
 	public function test_cli_backfill_rejects_invalid_direction_via_error() {
 		$this->expectException( \Exception::class );
 		$this->expectExceptionMessage( 'Invalid --direction' );
