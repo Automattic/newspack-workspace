@@ -47,10 +47,114 @@ final class Newspack_Popups_Post_Scope {
 	const META_AI_EDITED = 'newspack_ai_edited';
 
 	/**
+	 * Prompt meta: the raw approved copy, button label, and button URL. Stored
+	 * alongside the rendered block content so the editor panel can round-trip
+	 * (load and edit) the prompt without parsing block markup.
+	 */
+	const META_BODY         = 'newspack_cp_body';
+	const META_BUTTON_LABEL = 'newspack_cp_button_label';
+	const META_BUTTON_URL   = 'newspack_cp_button_url';
+
+	/**
 	 * Register hooks.
 	 */
 	public static function init() {
 		add_filter( 'newspack_popups_should_display_prompt', [ __CLASS__, 'filter_should_display' ], 10, 2 );
+	}
+
+	/**
+	 * The single Contextual Prompt scoped to a post, as editable fields, or null.
+	 *
+	 * @param int $post_id The article.
+	 * @return array|null { id, body, button_label, button_url, position, edit_link } or null.
+	 */
+	public static function get_scoped_prompt_for_post( $post_id ) {
+		$post_id = (int) $post_id;
+		if ( ! $post_id ) {
+			return null;
+		}
+
+		$ids = get_posts(
+			[
+				'post_type'        => Newspack_Popups::NEWSPACK_POPUPS_CPT,
+				'post_parent'      => $post_id,
+				'post_status'      => [ 'publish', 'draft', 'pending', 'future' ],
+				'posts_per_page'   => 1,
+				'fields'           => 'ids',
+				'suppress_filters' => false,
+			]
+		);
+		if ( empty( $ids ) ) {
+			return null;
+		}
+
+		$prompt_id = (int) $ids[0];
+		return [
+			'id'           => $prompt_id,
+			'body'         => (string) get_post_meta( $prompt_id, self::META_BODY, true ),
+			'button_label' => (string) get_post_meta( $prompt_id, self::META_BUTTON_LABEL, true ),
+			'button_url'   => (string) get_post_meta( $prompt_id, self::META_BUTTON_URL, true ),
+			'position'     => (int) get_post_meta( $prompt_id, 'trigger_blocks_count', true ),
+			'edit_link'    => get_edit_post_link( $prompt_id, 'rest' ),
+		];
+	}
+
+	/**
+	 * Update an existing scoped prompt's copy, button, and position.
+	 *
+	 * @param int   $prompt_id The scoped prompt.
+	 * @param array $args      { body, button_label, button_url, position, ai_edited }.
+	 * @return int|\WP_Error The prompt ID, or an error.
+	 */
+	public static function update_scoped_prompt( $prompt_id, array $args ) {
+		$prompt_id = (int) $prompt_id;
+		$prompt    = $prompt_id ? get_post( $prompt_id ) : null;
+
+		if ( ! $prompt || Newspack_Popups::NEWSPACK_POPUPS_CPT !== $prompt->post_type || ! $prompt->post_parent ) {
+			return new \WP_Error( 'newspack_popups_invalid_prompt', __( 'Not a Contextual Prompt.', 'newspack-popups' ), [ 'status' => 400 ] );
+		}
+		$body = trim( (string) ( $args['body'] ?? '' ) );
+		if ( '' === $body ) {
+			return new \WP_Error( 'newspack_popups_empty_body', __( 'Prompt copy cannot be empty.', 'newspack-popups' ), [ 'status' => 400 ] );
+		}
+
+		$button_label = (string) ( $args['button_label'] ?? __( 'Donate', 'newspack-popups' ) );
+		$button_url   = (string) ( $args['button_url'] ?? '' );
+		$position     = max( 0, (int) ( $args['position'] ?? 3 ) );
+
+		$updated = wp_update_post(
+			[
+				'ID'           => $prompt_id,
+				'post_content' => self::build_prompt_content( $body, $button_label, $button_url ),
+			],
+			true
+		);
+		if ( is_wp_error( $updated ) ) {
+			return $updated;
+		}
+
+		update_post_meta( $prompt_id, 'trigger_blocks_count', (string) $position );
+		self::store_prompt_fields( $prompt_id, $body, $button_label, $button_url );
+		if ( isset( $args['ai_edited'] ) ) {
+			update_post_meta( $prompt_id, self::META_AI_EDITED, ! empty( $args['ai_edited'] ) );
+		}
+
+		return $prompt_id;
+	}
+
+	/**
+	 * Store the raw copy/button meta for round-tripping.
+	 *
+	 * @param int    $prompt_id    Prompt ID.
+	 * @param string $body         Copy.
+	 * @param string $button_label Button label.
+	 * @param string $button_url   Button URL.
+	 * @return void
+	 */
+	private static function store_prompt_fields( $prompt_id, $body, $button_label, $button_url ) {
+		update_post_meta( $prompt_id, self::META_BODY, sanitize_textarea_field( $body ) );
+		update_post_meta( $prompt_id, self::META_BUTTON_LABEL, sanitize_text_field( $button_label ) );
+		update_post_meta( $prompt_id, self::META_BUTTON_URL, esc_url_raw( $button_url ) );
 	}
 
 	/**
@@ -121,6 +225,7 @@ final class Newspack_Popups_Post_Scope {
 		}
 
 		self::assign_campaign_group( $prompt_id );
+		self::store_prompt_fields( $prompt_id, $body, $button_label, $button_url );
 
 		update_post_meta( $prompt_id, self::META_AI_GENERATED, ! empty( $args['ai_generated'] ) );
 		update_post_meta( $prompt_id, self::META_AI_TEMPLATE_VERSION, sanitize_text_field( (string) ( $args['template_version'] ?? '' ) ) );

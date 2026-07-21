@@ -1,16 +1,17 @@
 /**
  * Contextual Prompt editor panel.
  *
- * Generates story-specific donation calls-to-action for the post being edited
- * (via the Newspack Manager editorial-assistant), lets the editor pick and edit
- * one, and creates a post-scoped Campaigns prompt from it.
+ * Generates story-specific donation prompts for the post being edited (via the
+ * Newspack Manager editorial-assistant), lets the editor pick and edit one, and
+ * creates or updates a post-scoped Campaigns prompt from it — all without
+ * leaving the story.
  */
 
 /**
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { useState } from '@wordpress/element';
+import { useState, useEffect } from '@wordpress/element';
 import { useSelect } from '@wordpress/data';
 import { PluginDocumentSettingPanel } from '@wordpress/edit-post';
 import { Button, TextControl, TextareaControl, Notice, Spinner, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
@@ -33,41 +34,66 @@ const ContextualPromptPanel = () => {
 		};
 	}, [] );
 
-	const [ generating, setGenerating ] = useState( false );
+	const [ loading, setLoading ] = useState( true );
+	const [ promptId, setPromptId ] = useState( null );
+	const [ editLink, setEditLink ] = useState( '' );
 	const [ candidates, setCandidates ] = useState( [] );
 	const [ templateVersion, setTemplateVersion ] = useState( '' );
-	const [ selected, setSelected ] = useState( null );
-	const [ edited, setEdited ] = useState( false );
+	const [ body, setBody ] = useState( '' );
+	const [ originalBody, setOriginalBody ] = useState( '' );
 	const [ buttonLabel, setButtonLabel ] = useState( '' );
 	const [ buttonUrl, setButtonUrl ] = useState( '' );
 	const [ position, setPosition ] = useState( 3 );
-	const [ creating, setCreating ] = useState( false );
-	const [ created, setCreated ] = useState( null );
+	const [ editing, setEditing ] = useState( false );
+	const [ generating, setGenerating ] = useState( false );
+	const [ saving, setSaving ] = useState( false );
+	const [ saved, setSaved ] = useState( false );
 	const [ error, setError ] = useState( '' );
 
-	// Hidden until an administrator opts the site into AI use (see Campaigns >
-	// Settings). Also never shown while editing a prompt itself.
 	const optedIn = window.newspackPopupsContextualPrompt?.enabled;
-	if ( ! optedIn || 'newspack_popups_cpt' === postType ) {
+	const isPrompt = 'newspack_popups_cpt' === postType;
+
+	// Load an existing Contextual Prompt for this post, if any.
+	useEffect( () => {
+		if ( ! optedIn || isPrompt || ! postId ) {
+			setLoading( false );
+			return;
+		}
+		apiFetch( { path: `/newspack-popups/v1/contextual-prompt?post_id=${ postId }` } )
+			.then( ( { prompt } ) => {
+				if ( prompt ) {
+					setPromptId( prompt.id );
+					setEditLink( prompt.edit_link );
+					setBody( prompt.body );
+					setOriginalBody( prompt.body );
+					setButtonLabel( prompt.button_label );
+					setButtonUrl( prompt.button_url );
+					setPosition( prompt.position );
+					setEditing( true );
+				}
+			} )
+			.catch( () => {} )
+			.finally( () => setLoading( false ) );
+	}, [ optedIn, isPrompt, postId ] );
+
+	// Hidden until an administrator opts the site into AI use; never on a prompt.
+	if ( ! optedIn || isPrompt ) {
 		return null;
 	}
 
 	const generate = async () => {
 		setGenerating( true );
 		setError( '' );
-		setCreated( null );
 		try {
 			const response = await apiFetch( {
 				path: '/wp/v2/newspack-editorial-assistant/generate/donation',
 				method: 'POST',
 				data: { post_id: postId, content },
 			} );
-			// Fresh responses are wrapped in { data }, cached ones are the raw result.
 			const payload = response && response.data ? response.data : response;
 			const list = ( payload && payload.candidates ) || [];
 			setCandidates( list );
 			setTemplateVersion( ( payload && payload.templateVersion ) || '' );
-			setSelected( null );
 			if ( ! list.length ) {
 				setError( __( 'No suggestions were returned. Try generating again.', 'newspack-popups' ) );
 			}
@@ -78,28 +104,27 @@ const ContextualPromptPanel = () => {
 		}
 	};
 
-	const chooseCandidate = index => {
-		setSelected( index );
-		setEdited( false );
-		if ( ! buttonLabel && candidates[ index ]?.buttonLabel ) {
-			setButtonLabel( candidates[ index ].buttonLabel );
+	// A framing implies where the prompt should sit; default the position to match.
+	const chooseCandidate = candidate => {
+		setBody( candidate.body );
+		setOriginalBody( candidate.body );
+		if ( candidate.buttonLabel ) {
+			setButtonLabel( candidate.buttonLabel );
 		}
+		const count = ( content.match( /<!-- wp:paragraph/g ) || [] ).length;
+		let framePosition = Math.max( 1, Math.floor( count / 2 ) );
+		if ( 'top' === candidate.framing ) {
+			framePosition = 0;
+		} else if ( 'end' === candidate.framing ) {
+			framePosition = count;
+		}
+		setPosition( framePosition );
+		setEditing( true );
+		setSaved( false );
 	};
 
-	const updateBody = ( index, value ) => {
-		const next = [ ...candidates ];
-		next[ index ] = { ...next[ index ], body: value };
-		setCandidates( next );
-		if ( index === selected ) {
-			setEdited( true );
-		}
-	};
-
-	const create = async () => {
-		if ( null === selected ) {
-			return;
-		}
-		setCreating( true );
+	const save = async () => {
+		setSaving( true );
 		setError( '' );
 		try {
 			const response = await apiFetch( {
@@ -107,103 +132,112 @@ const ContextualPromptPanel = () => {
 				method: 'POST',
 				data: {
 					post_id: postId,
-					body: candidates[ selected ].body,
+					prompt_id: promptId || undefined,
+					body,
 					button_label: buttonLabel,
 					button_url: buttonUrl,
 					position,
 					template_version: templateVersion,
-					ai_generated: true,
-					ai_edited: edited,
+					ai_generated: ! promptId,
+					ai_edited: body !== originalBody,
 				},
 			} );
-			setCreated( response );
+			setPromptId( response.id );
+			setEditLink( response.edit_link );
+			setCandidates( [] );
+			setSaved( true );
 		} catch ( e ) {
-			setError( e.message || __( 'Could not create the prompt.', 'newspack-popups' ) );
+			setError( e.message || __( 'Could not save the prompt.', 'newspack-popups' ) );
 		} finally {
-			setCreating( false );
+			setSaving( false );
 		}
 	};
 
+	const generateLabel =
+		candidates.length || editing ? __( 'Regenerate suggestions', 'newspack-popups' ) : __( 'Generate suggestions', 'newspack-popups' );
+	const saveLabel = promptId ? __( 'Update prompt', 'newspack-popups' ) : __( 'Create prompt', 'newspack-popups' );
+
 	return (
 		<PluginDocumentSettingPanel name="newspack-contextual-prompt" title={ __( 'Contextual Prompt', 'newspack-popups' ) }>
-			<VStack spacing={ 4 }>
-				<p style={ { margin: 0 } }>{ __( 'Generate a story-specific donation prompt for this post.', 'newspack-popups' ) }</p>
+			{ loading ? (
+				<Spinner />
+			) : (
+				<VStack spacing={ 4 }>
+					{ ! editing && ! candidates.length && (
+						<p style={ { margin: 0 } }>{ __( 'Generate a story-specific donation prompt for this post.', 'newspack-popups' ) }</p>
+					) }
 
-				{ error && (
-					<Notice status="error" isDismissible={ false }>
-						{ error }
-					</Notice>
-				) }
+					{ error && (
+						<Notice status="error" isDismissible={ false }>
+							{ error }
+						</Notice>
+					) }
 
-				{ created ? (
-					<Notice status="success" isDismissible={ false }>
-						<p style={ { margin: 0 } }>
-							{ __( 'Prompt created. Readers will see it on this story at the position you chose.', 'newspack-popups' ) }
-						</p>
-						<p style={ { margin: '8px 0 0' } }>
-							{ postLink && (
-								<a href={ postLink } target="_blank" rel="noreferrer">
-									{ __( 'View story', 'newspack-popups' ) }
-								</a>
-							) }
-							{ postLink && created.edit_link && ' · ' }
-							{ created.edit_link && (
-								<a href={ created.edit_link } target="_blank" rel="noreferrer">
-									{ __( 'Edit prompt settings', 'newspack-popups' ) }
-								</a>
-							) }
-						</p>
-					</Notice>
-				) : (
-					<>
-						<Button variant="secondary" onClick={ generate } disabled={ generating }>
-							{ generating && <Spinner /> }
-							{ generating ? __( 'Generating…', 'newspack-popups' ) : __( 'Generate suggestions', 'newspack-popups' ) }
-						</Button>
-
-						{ candidates.map( ( candidate, index ) => (
-							<VStack key={ index } spacing={ 2 } className="newspack-contextual-prompt__candidate">
-								<strong>{ FRAMING_LABELS[ candidate.framing ] || candidate.framing }</strong>
-								{ candidate.flags?.includes( 'over_word_cap' ) && (
-									<Notice status="warning" isDismissible={ false }>
-										{ __( 'This suggestion is longer than recommended.', 'newspack-popups' ) }
-									</Notice>
+					{ saved && (
+						<Notice status="success" isDismissible={ false }>
+							<p style={ { margin: 0 } }>
+								{ __( 'Saved. Readers see it on this story at the position you chose.', 'newspack-popups' ) }
+							</p>
+							<p style={ { margin: '8px 0 0' } }>
+								{ postLink && (
+									<a href={ postLink } target="_blank" rel="noreferrer">
+										{ __( 'View story', 'newspack-popups' ) }
+									</a>
 								) }
-								<TextareaControl rows={ 4 } value={ candidate.body } onChange={ value => updateBody( index, value ) } />
-								<div>
-									<Button variant={ selected === index ? 'primary' : 'secondary' } onClick={ () => chooseCandidate( index ) }>
-										{ selected === index ? __( 'Selected', 'newspack-popups' ) : __( 'Use this', 'newspack-popups' ) }
-									</Button>
-								</div>
-							</VStack>
-						) ) }
+								{ postLink && editLink && ' · ' }
+								{ editLink && (
+									<a href={ editLink } target="_blank" rel="noreferrer">
+										{ __( 'Advanced settings', 'newspack-popups' ) }
+									</a>
+								) }
+							</p>
+						</Notice>
+					) }
 
-						{ null !== selected && (
-							<VStack spacing={ 3 } className="newspack-contextual-prompt__placement">
-								<TextControl label={ __( 'Button label', 'newspack-popups' ) } value={ buttonLabel } onChange={ setButtonLabel } />
-								<TextControl
-									label={ __( 'Donate URL', 'newspack-popups' ) }
-									type="url"
-									value={ buttonUrl }
-									onChange={ setButtonUrl }
-								/>
-								<TextControl
-									label={ __( 'Position (paragraph)', 'newspack-popups' ) }
-									type="number"
-									min={ 0 }
-									value={ position }
-									onChange={ value => setPosition( parseInt( value, 10 ) || 0 ) }
-								/>
-								<div>
-									<Button variant="primary" onClick={ create } disabled={ creating }>
-										{ creating ? __( 'Creating…', 'newspack-popups' ) : __( 'Create prompt', 'newspack-popups' ) }
-									</Button>
-								</div>
-							</VStack>
-						) }
-					</>
-				) }
-			</VStack>
+					<Button variant="secondary" onClick={ generate } disabled={ generating }>
+						{ generating && <Spinner /> }
+						{ generating ? __( 'Generating…', 'newspack-popups' ) : generateLabel }
+					</Button>
+
+					{ candidates.map( ( candidate, index ) => (
+						<VStack key={ index } spacing={ 2 } className="newspack-contextual-prompt__candidate">
+							<strong>{ FRAMING_LABELS[ candidate.framing ] || candidate.framing }</strong>
+							{ candidate.flags?.includes( 'over_word_cap' ) && (
+								<Notice status="warning" isDismissible={ false }>
+									{ __( 'This suggestion is longer than recommended.', 'newspack-popups' ) }
+								</Notice>
+							) }
+							<p style={ { margin: 0 } }>{ candidate.body }</p>
+							<div>
+								<Button variant="secondary" onClick={ () => chooseCandidate( candidate ) }>
+									{ __( 'Use this', 'newspack-popups' ) }
+								</Button>
+							</div>
+						</VStack>
+					) ) }
+
+					{ editing && (
+						<VStack spacing={ 3 } className="newspack-contextual-prompt__edit">
+							<TextareaControl label={ __( 'Prompt copy', 'newspack-popups' ) } rows={ 4 } value={ body } onChange={ setBody } />
+							<TextControl label={ __( 'Button label', 'newspack-popups' ) } value={ buttonLabel } onChange={ setButtonLabel } />
+							<TextControl label={ __( 'Donate URL', 'newspack-popups' ) } type="url" value={ buttonUrl } onChange={ setButtonUrl } />
+							<TextControl
+								label={ __( 'Position (paragraph)', 'newspack-popups' ) }
+								help={ __( 'Set automatically from the suggestion’s framing; adjust as needed.', 'newspack-popups' ) }
+								type="number"
+								min={ 0 }
+								value={ position }
+								onChange={ value => setPosition( parseInt( value, 10 ) || 0 ) }
+							/>
+							<div>
+								<Button variant="primary" onClick={ save } disabled={ saving || ! body.trim() }>
+									{ saving ? __( 'Saving…', 'newspack-popups' ) : saveLabel }
+								</Button>
+							</div>
+						</VStack>
+					) }
+				</VStack>
+			) }
 		</PluginDocumentSettingPanel>
 	);
 };

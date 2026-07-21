@@ -211,9 +211,74 @@ class PostScopeTest extends WP_UnitTestCase {
 				[
 					'post_id' => self::$post_a,
 					'body'    => '   ',
-				] 
+				]
 			),
 			'Empty copy is rejected.'
 		);
+	}
+
+	/**
+	 * A created prompt can be fetched back as editable fields and updated in place.
+	 */
+	public function test_fetch_and_update_scoped_prompt() {
+		// A fresh post with no scoped prompt from set_up.
+		$post_id   = self::factory()->post->create( [ 'post_type' => 'post' ] );
+		$prompt_id = Newspack_Popups_Post_Scope::create_scoped_prompt(
+			[
+				'post_id'      => $post_id,
+				'body'         => 'Original copy.',
+				'button_label' => 'Give',
+				'button_url'   => 'https://example.com/a',
+				'position'     => 2,
+			]
+		);
+
+		// Round-trip: fetch the editable fields for the post.
+		$fetched = Newspack_Popups_Post_Scope::get_scoped_prompt_for_post( $post_id );
+		$this->assertSame( $prompt_id, $fetched['id'] );
+		$this->assertSame( 'Original copy.', $fetched['body'] );
+		$this->assertSame( 'Give', $fetched['button_label'] );
+		$this->assertSame( 'https://example.com/a', $fetched['button_url'] );
+		$this->assertSame( 2, $fetched['position'] );
+
+		// Update in place (same prompt, no new one created).
+		$updated = Newspack_Popups_Post_Scope::update_scoped_prompt(
+			$prompt_id,
+			[
+				'body'         => 'Edited copy.',
+				'button_label' => 'Donate now',
+				'button_url'   => 'https://example.com/b',
+				'position'     => 5,
+			]
+		);
+		$this->assertSame( $prompt_id, $updated );
+
+		$refetched = Newspack_Popups_Post_Scope::get_scoped_prompt_for_post( $post_id );
+		$this->assertSame( $prompt_id, $refetched['id'], 'Updates the existing prompt, not a new one.' );
+		$this->assertSame( 'Edited copy.', $refetched['body'] );
+		$this->assertSame( 5, $refetched['position'] );
+		$this->assertStringContainsString( 'Edited copy.', get_post_field( 'post_content', $prompt_id ) );
+		$this->assertStringContainsString( 'https://example.com/b', get_post_field( 'post_content', $prompt_id ) );
+	}
+
+	/**
+	 * Updating something that isn't a scoped prompt is rejected.
+	 */
+	public function test_update_rejects_non_scoped_prompt() {
+		$this->assertWPError(
+			Newspack_Popups_Post_Scope::update_scoped_prompt( self::$unscoped_id, [ 'body' => 'x' ] ),
+			'A site-wide prompt is not a scoped prompt.'
+		);
+		$this->assertWPError(
+			Newspack_Popups_Post_Scope::update_scoped_prompt( self::$post_a, [ 'body' => 'x' ] ),
+			'A regular post is not a prompt.'
+		);
+	}
+
+	/**
+	 * No scoped prompt yet: fetch returns null.
+	 */
+	public function test_fetch_returns_null_when_none() {
+		$this->assertNull( Newspack_Popups_Post_Scope::get_scoped_prompt_for_post( self::$post_b ) );
 	}
 }

@@ -166,6 +166,21 @@ final class Newspack_Popups_API {
 			'newspack-popups/v1',
 			'/contextual-prompt',
 			[
+				'methods'             => \WP_REST_Server::READABLE,
+				'callback'            => [ __CLASS__, 'api_get_scoped_prompt' ],
+				'permission_callback' => [ __CLASS__, 'contextual_prompt_permission_callback' ],
+				'args'                => [
+					'post_id' => [
+						'required'          => true,
+						'sanitize_callback' => 'absint',
+					],
+				],
+			]
+		);
+		register_rest_route(
+			'newspack-popups/v1',
+			'/contextual-prompt',
+			[
 				'methods'             => \WP_REST_Server::CREATABLE,
 				'callback'            => [ __CLASS__, 'api_create_contextual_prompt' ],
 				'permission_callback' => [ __CLASS__, 'contextual_prompt_permission_callback' ],
@@ -174,6 +189,7 @@ final class Newspack_Popups_API {
 						'required'          => true,
 						'sanitize_callback' => 'absint',
 					],
+					'prompt_id'        => [ 'sanitize_callback' => 'absint' ],
 					'body'             => [
 						'required'          => true,
 						'sanitize_callback' => 'sanitize_textarea_field',
@@ -256,7 +272,22 @@ final class Newspack_Popups_API {
 	}
 
 	/**
-	 * Create a Contextual Prompt scoped to a post from an approved candidate.
+	 * Get the Contextual Prompt scoped to a post (for editing), or null.
+	 *
+	 * @param WP_REST_Request $request Request object.
+	 * @return WP_REST_Response
+	 */
+	public static function api_get_scoped_prompt( $request ) {
+		return rest_ensure_response(
+			[
+				'prompt' => Newspack_Popups_Post_Scope::get_scoped_prompt_for_post( $request['post_id'] ),
+			]
+		);
+	}
+
+	/**
+	 * Create a Contextual Prompt scoped to a post, or update the existing one
+	 * when a prompt_id is supplied.
 	 *
 	 * @param WP_REST_Request $request Request object.
 	 * @return WP_REST_Response|WP_Error
@@ -270,28 +301,43 @@ final class Newspack_Popups_API {
 			);
 		}
 
-		$prompt_id = Newspack_Popups_Post_Scope::create_scoped_prompt(
-			[
-				'post_id'          => $request['post_id'],
-				'body'             => $request['body'],
-				'button_label'     => $request['button_label'] ?? '',
-				'button_url'       => $request['button_url'] ?? '',
-				'position'         => $request['position'] ?? 3,
-				'template_version' => $request['template_version'] ?? '',
-				'request_id'       => $request['request_id'] ?? '',
-				'ai_generated'     => $request['ai_generated'] ?? false,
-				'ai_edited'        => $request['ai_edited'] ?? false,
-			]
-		);
+		$prompt_id = (int) ( $request['prompt_id'] ?? 0 );
 
-		if ( is_wp_error( $prompt_id ) ) {
-			return $prompt_id;
+		if ( $prompt_id ) {
+			$result = Newspack_Popups_Post_Scope::update_scoped_prompt(
+				$prompt_id,
+				[
+					'body'         => $request['body'],
+					'button_label' => $request['button_label'] ?? '',
+					'button_url'   => $request['button_url'] ?? '',
+					'position'     => $request['position'] ?? 3,
+					'ai_edited'    => $request['ai_edited'] ?? false,
+				]
+			);
+		} else {
+			$result = Newspack_Popups_Post_Scope::create_scoped_prompt(
+				[
+					'post_id'          => $request['post_id'],
+					'body'             => $request['body'],
+					'button_label'     => $request['button_label'] ?? '',
+					'button_url'       => $request['button_url'] ?? '',
+					'position'         => $request['position'] ?? 3,
+					'template_version' => $request['template_version'] ?? '',
+					'request_id'       => $request['request_id'] ?? '',
+					'ai_generated'     => $request['ai_generated'] ?? false,
+					'ai_edited'        => $request['ai_edited'] ?? false,
+				]
+			);
+		}
+
+		if ( is_wp_error( $result ) ) {
+			return $result;
 		}
 
 		return rest_ensure_response(
 			[
-				'id'        => $prompt_id,
-				'edit_link' => get_edit_post_link( $prompt_id, 'rest' ),
+				'id'        => $result,
+				'edit_link' => get_edit_post_link( $result, 'rest' ),
 			]
 		);
 	}
