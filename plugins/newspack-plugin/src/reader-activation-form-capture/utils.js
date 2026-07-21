@@ -32,17 +32,27 @@ export function getMatchedForms( selectors, root = document ) {
 
 /**
  * Get a valid email value from a form, preferring input[type=email] and
- * falling back to name/id/autocomplete heuristics on text inputs.
+ * falling back to name/id/autocomplete heuristics on text inputs. Iterates
+ * all candidates in order and returns the first one with a valid value, so
+ * an empty honeypot or confirmation field ahead of the real one is skipped.
  *
  * @param {HTMLFormElement} form Form element.
  * @return {string} The email value, or empty string.
  */
 export function getEmailValue( form ) {
-	const input =
-		form.querySelector( 'input[type="email"]' ) ||
-		Array.from( form.querySelectorAll( 'input[type="text"], input:not([type])' ) ).find( candidate => /e-?mail/i.test( attrs( candidate ) ) );
-	const value = input?.value?.trim() || '';
-	return EMAIL_PATTERN.test( value ) ? value : '';
+	const candidates = [
+		...form.querySelectorAll( 'input[type="email"]' ),
+		...Array.from( form.querySelectorAll( 'input[type="text"], input:not([type])' ) ).filter( candidate =>
+			/e-?mail/i.test( attrs( candidate ) )
+		),
+	];
+	for ( const input of candidates ) {
+		const value = input?.value?.trim() || '';
+		if ( EMAIL_PATTERN.test( value ) ) {
+			return value;
+		}
+	}
+	return '';
 }
 
 /**

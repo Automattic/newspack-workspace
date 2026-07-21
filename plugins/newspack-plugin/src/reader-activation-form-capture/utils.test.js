@@ -36,6 +36,20 @@ describe( 'getEmailValue', () => {
 		document.body.innerHTML = `<form><input type="text" name="city" value="Lisbon"></form>`;
 		expect( getEmailValue( document.querySelector( 'form' ) ) ).toBe( '' );
 	} );
+	it( 'skips an empty honeypot text input and returns the first valid email value', () => {
+		document.body.innerHTML = `<form>
+			<input type="text" name="email" value="" style="display:none">
+			<input type="text" name="your-email" value="reader@example.com">
+		</form>`;
+		expect( getEmailValue( document.querySelector( 'form' ) ) ).toBe( 'reader@example.com' );
+	} );
+	it( 'skips an empty first email input (confirmation layouts) for a later valid one', () => {
+		document.body.innerHTML = `<form>
+			<input type="email" value="">
+			<input type="email" value="reader@example.com">
+		</form>`;
+		expect( getEmailValue( document.querySelector( 'form' ) ) ).toBe( 'reader@example.com' );
+	} );
 } );
 
 describe( 'getNameValues', () => {
