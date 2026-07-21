@@ -84,13 +84,19 @@ class Form_Capture extends Integration {
 	}
 
 	/**
-	 * Whether contacts can be synced. Inbound-only integration: nothing to gate.
+	 * Whether contacts can be synced. Inbound-only integration: there are no
+	 * prerequisites to gate, so this never errors — the inbound-only intent is
+	 * expressed by the no-op push_contact_data(), not by failing this gate.
 	 *
 	 * @param bool $return_errors Optional. Whether to return a WP_Error object. Default false.
 	 *
-	 * @return bool True.
+	 * @return bool|\WP_Error True, or an empty WP_Error when $return_errors is true.
 	 */
 	public function can_sync( $return_errors = false ) {
+		$errors = new \WP_Error();
+		if ( $return_errors ) {
+			return $errors;
+		}
 		return true;
 	}
 

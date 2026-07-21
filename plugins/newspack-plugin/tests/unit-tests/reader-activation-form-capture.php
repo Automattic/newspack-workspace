@@ -6,6 +6,7 @@
  */
 
 use Newspack\Reader_Activation;
+use Newspack\Reader_Activation\Contact_Sync;
 use Newspack\Reader_Activation\Integrations;
 use Newspack\Reader_Activation\Integrations\Form_Capture;
 use Newspack\Reader_Registration;
@@ -33,6 +34,7 @@ class Test_Form_Capture extends WP_UnitTestCase {
 		wp_set_current_user( 0 );
 		remove_all_filters( 'newspack_magic_link_rate_interval' );
 		remove_all_filters( 'newspack_reader_activation_send_magic_link_on_reregistration' );
+		remove_all_filters( 'newspack_reader_activation_is_syncing_allowed' );
 		parent::tear_down();
 	}
 
@@ -96,5 +98,24 @@ class Test_Form_Capture extends WP_UnitTestCase {
 		$this->assertSame( [], $integration->get_lists() );
 		$integration->update_settings_field_value( 'lists', ' list-1, list-2 ,, ' );
 		$this->assertSame( [ 'list-1', 'list-2' ], $integration->get_lists() );
+	}
+
+	/**
+	 * Verify can_sync() honors the base contract: WP_Error when $return_errors
+	 * is true — has_one_syncable_integration() calls ->has_errors() on it unguarded.
+	 */
+	public function test_can_sync_honors_wp_error_contract() {
+		Integrations::enable( Form_Capture::ID );
+		$integration = Integrations::get_integration( Form_Capture::ID );
+
+		$this->assertTrue( $integration->can_sync() );
+		$errors = $integration->can_sync( true );
+		$this->assertInstanceOf( \WP_Error::class, $errors );
+		$this->assertFalse( $errors->has_errors(), 'Inbound-only integration has no sync prerequisites to fail.' );
+
+		add_filter( 'newspack_reader_activation_is_syncing_allowed', '__return_true' );
+		$this->assertTrue( Contact_Sync::has_one_syncable_integration() );
+
+		Integrations::disable( Form_Capture::ID );
 	}
 }
