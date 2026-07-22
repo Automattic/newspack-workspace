@@ -133,6 +133,29 @@ class Test_Integration_Outbound_Legacy extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Only the known sync-control keys pass through unprefixed; any other
+	 * unprefixed key is dropped so it cannot bypass the outbound selection
+	 * filter.
+	 */
+	public function test_unknown_unprefixed_keys_are_dropped() {
+		$this->integration->update_enabled_outgoing_fields( [ 'Membership Status' ] );
+
+		$contact                              = $this->legacy_contact();
+		$contact['metadata']['internal_flag'] = 'should-not-sync';
+
+		$prepared = $this->integration->prepare_contact( $contact );
+
+		$this->assertSame(
+			[
+				'NP_Membership Status' => 'Monthly Donor',
+				'status_if_new'        => 'transactional',
+			],
+			$prepared['metadata'],
+			'Unprefixed keys outside SYNC_CONTROL_KEYS are dropped.'
+		);
+	}
+
+	/**
 	 * With no ESP integration in the registry (pre-init or a directly
 	 * constructed integration), inheritance mirrors the ESP integration's
 	 * own fallback chain — legacy global option first — rather than failing

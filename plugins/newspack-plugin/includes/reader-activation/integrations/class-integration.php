@@ -1033,9 +1033,10 @@ abstract class Integration {
 	 * data actually carries — not this integration's own, which may differ)
 	 * and matched against enabled labels: exact match, or prefix match for
 	 * labels ending in `: ` (the UTM shape, e.g. enabled `Signup UTM: `
-	 * matches `Signup UTM: source`). Unprefixed keys (`status`,
-	 * `status_if_new`) are sync-control semantics, not outbound metadata
-	 * fields, and always pass through.
+	 * matches `Signup UTM: source`). Unprefixed sync-control keys
+	 * (Legacy_Metadata::SYNC_CONTROL_KEYS — `status`, `status_if_new`) always
+	 * pass through; any other unprefixed key is dropped, so future unprefixed
+	 * metadata cannot bypass the outbound selection filter.
 	 *
 	 * @param array $contact Contact data with prefixed legacy metadata.
 	 * @return array Contact data with metadata narrowed to enabled fields.
@@ -1051,7 +1052,9 @@ abstract class Integration {
 
 		foreach ( $contact['metadata'] as $key => $value ) {
 			if ( 0 !== strpos( $key, $prefix ) ) {
-				$prepared[ $key ] = $value;
+				if ( in_array( $key, Sync\Legacy_Metadata::SYNC_CONTROL_KEYS, true ) ) {
+					$prepared[ $key ] = $value;
+				}
 				continue;
 			}
 			$field_name = substr( $key, strlen( $prefix ) );

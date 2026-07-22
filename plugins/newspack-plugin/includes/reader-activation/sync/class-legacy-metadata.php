@@ -23,6 +23,15 @@ defined( 'ABSPATH' ) || exit;
 class Legacy_Metadata {
 
 	/**
+	 * Metadata keys that carry sync-control semantics rather than field data.
+	 * They pass through syncing unprefixed and are never subject to outbound
+	 * field selection.
+	 *
+	 * @var string[]
+	 */
+	const SYNC_CONTROL_KEYS = [ 'status', 'status_if_new' ];
+
+	/**
 	 * Metadata keys map for Reader Activation.
 	 *
 	 * @var array
@@ -228,7 +237,7 @@ class Legacy_Metadata {
 		$normalized_metadata = [];
 
 		// Keys allowed to pass through without prefixing.
-		$allowed_keys = [ 'status', 'status_if_new' ];
+		$allowed_keys = self::SYNC_CONTROL_KEYS;
 
 		// UTM keys must be suffixed.
 		$disallowed_keys = [
