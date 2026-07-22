@@ -74,6 +74,14 @@ root-cause area, repro plan, env provisioning needs (`--woocommerce`,
 `--campaigns`, …), bug/feature classification (bugs → hotfix flow per the
 repo's review/release guidelines).
 
+**Prior-art scan first** (before settling the root-cause hypothesis): search
+Linear for related/duplicate/prior issues (including your completed tasks),
+git log + PR history for the touched files — **including reverted or abandoned
+attempts, which have repeatedly exposed hidden requirements** — and the
+knowledge trees (`.agent-knowledge/`, `LEARNINGS.md`) + auto-memory. Use the
+`librarian` skill as the search front-end. Record approach-shaping findings as
+`decisions` entries (with `basis`).
+
 Validate `affected_repo` **immediately** — it must exist under `plugins/` or
 `themes/` (or the `repos/` tier) and not be archived/out of scope, so a
 misclassification fails here rather than during env provisioning:
@@ -210,6 +218,14 @@ All required, in order:
    contract (data-events, reader-activation, reader-revenue,
    configuration-managers, content-gate, rest-api, …) — the hotfix
    cross-publisher rule.
+6. **Adjacent-input probe** — injection/parsing/boundary bugs only. After the
+   signal passes, probe sibling inputs and code paths sharing the fixed sink
+   (other characters/encodings that break the same boundary, other call sites
+   of the fixed function). An in-repo sibling that reproduces loops back into
+   Stage 3 within the 3-iteration bound. A cross-repo sibling does **not**
+   widen this run (single-repo guardrail holds) — capture it as a run-report
+   follow-up and a Linear follow-up issue (the NPPM-3007-under-NPPM-3006
+   pattern). Non-injection bugs skip this.
 
 ### Loop bound (shared with Stage 5)
 
