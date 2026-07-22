@@ -364,6 +364,12 @@ final class Newspack_Popups_Post_Scope {
 	 * shows on its parent post regardless of those, and nowhere else. Non-scoped
 	 * prompts are returned unchanged.
 	 *
+	 * Discarding the context match is deliberate — "this one article" is the whole
+	 * contract of a post-scoped prompt, so category/post-type targeting is not
+	 * meaningful for it. This does not widen where prompts may appear: the
+	 * account-related-post guard (checkout, my-account) runs upstream of this
+	 * filter, so those surfaces stay suppressed.
+	 *
 	 * @param bool  $should_display Result of the prior should_display checks.
 	 * @param array $popup          The popup being assessed.
 	 * @return bool

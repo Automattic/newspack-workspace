@@ -24,13 +24,19 @@ const FRAMING_LABELS = {
 };
 
 const ContextualPromptPanel = () => {
-	const { postId, postType, postLink, content } = useSelect( select => {
+	const { postId, postType, postLink, content, paragraphCount } = useSelect( select => {
 		const editor = select( 'core/editor' );
+		// Count top-level paragraphs from the block tree rather than by matching
+		// `<!-- wp:paragraph` in the serialized content: paragraphs nested inside
+		// columns, groups or reusable blocks would inflate a raw match and push the
+		// suggested mid/end position past the visible body.
+		const blocks = select( 'core/block-editor' ).getBlocks() || [];
 		return {
 			postId: editor.getCurrentPostId(),
 			postType: editor.getCurrentPostType(),
 			postLink: editor.getPermalink(),
 			content: editor.getEditedPostContent(),
+			paragraphCount: blocks.filter( block => 'core/paragraph' === block.name ).length,
 		};
 	}, [] );
 
@@ -112,12 +118,11 @@ const ContextualPromptPanel = () => {
 		if ( candidate.buttonLabel ) {
 			setButtonLabel( candidate.buttonLabel );
 		}
-		const count = ( content.match( /<!-- wp:paragraph/g ) || [] ).length;
-		let framePosition = Math.max( 1, Math.floor( count / 2 ) );
+		let framePosition = Math.max( 1, Math.floor( paragraphCount / 2 ) );
 		if ( 'top' === candidate.framing ) {
 			framePosition = 0;
 		} else if ( 'end' === candidate.framing ) {
-			framePosition = count;
+			framePosition = paragraphCount;
 		}
 		setPosition( framePosition );
 		setEditing( true );

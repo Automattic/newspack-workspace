@@ -113,6 +113,31 @@ class AiCopyAssistantSettingsTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A malformed (non-scalar) value must not silently wipe a saved profile field —
+	 * sanitize_textarea_field() would return '' for it without warning.
+	 */
+	public function test_profile_save_ignores_non_scalar_values() {
+		update_option( 'newspack_contextual_prompts_coverage_area', 'San Diego County' );
+
+		Newspack_Popups_Settings::save_ai_copy_assistant_fields(
+			[
+				'newspack_contextual_prompts_coverage_area' => [ 'unexpected', 'array' ],
+			]
+		);
+		$this->assertSame(
+			'San Diego County',
+			get_option( 'newspack_contextual_prompts_coverage_area' ),
+			'A non-scalar value must be skipped, not blank the existing setting.'
+		);
+
+		// A normal scalar still saves.
+		Newspack_Popups_Settings::save_ai_copy_assistant_fields(
+			[ 'newspack_contextual_prompts_coverage_area' => 'Riverside County' ]
+		);
+		$this->assertSame( 'Riverside County', get_option( 'newspack_contextual_prompts_coverage_area' ) );
+	}
+
+	/**
 	 * Opt-in gating is symmetric: the profile-save and scoped-prompt-read endpoints
 	 * are inert before opt-in too, not just the create endpoint. The feature must
 	 * read and write nothing until an administrator opts in.

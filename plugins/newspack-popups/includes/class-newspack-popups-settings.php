@@ -89,9 +89,17 @@ class Newspack_Popups_Settings {
 	public static function save_ai_copy_assistant_fields( $fields ) {
 		$allowed = wp_list_pluck( self::get_ai_copy_assistant_fields(), 'key' );
 		foreach ( (array) $fields as $key => $value ) {
-			if ( in_array( $key, $allowed, true ) ) {
-				update_option( $key, sanitize_textarea_field( $value ) );
+			if ( ! in_array( $key, $allowed, true ) ) {
+				continue;
 			}
+			// The REST arg is a bare object with no per-property schema, so a
+			// non-scalar value can reach here. sanitize_textarea_field() returns ''
+			// for those, which would silently wipe a saved profile field — skip
+			// instead, so a malformed payload leaves the existing value intact.
+			if ( ! is_scalar( $value ) ) {
+				continue;
+			}
+			update_option( $key, sanitize_textarea_field( (string) $value ) );
 		}
 	}
 
