@@ -1,6 +1,7 @@
 /**
  * Flow — Global discount settings: whether subscriber discounts stack on top of
- * sale prices, and how overlapping discounts on the same product resolve.
+ * sale prices, how overlapping discounts on the same product resolve, and
+ * whether discounts kick in while the subscription is still in the cart.
  */
 
 import { useState } from '@wordpress/element';
@@ -40,6 +41,16 @@ export default function DiscountSettingsFlow( { onClose, onSaved } ) {
 					help={ __( 'Subscribers get their discount even on products that are already on sale.', 'newspack-plugin' ) }
 					checked={ draft.applyOnSale }
 					onChange={ applyOnSale => setDraft( { ...draft, applyOnSale } ) }
+					__nextHasNoMarginBottom
+				/>
+				<ToggleControl
+					label={ __( 'Apply discounts at checkout', 'newspack-plugin' ) }
+					help={ __(
+						'Give readers their subscriber prices as soon as a subscription is in their cart, before they’ve completed the purchase.',
+						'newspack-plugin'
+					) }
+					checked={ draft.applyAtCheckout }
+					onChange={ applyAtCheckout => setDraft( { ...draft, applyAtCheckout } ) }
 					__nextHasNoMarginBottom
 				/>
 				<HStack spacing={ 2 } justify="flex-end">

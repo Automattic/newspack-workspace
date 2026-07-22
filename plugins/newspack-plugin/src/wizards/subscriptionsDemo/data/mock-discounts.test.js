@@ -95,9 +95,9 @@ describe( 'storage-backed mutations', () => {
 	} );
 
 	it( 'round-trips settings', () => {
-		expect( getDiscountSettings() ).toEqual( { applyOnSale: false, overlap: 'best' } );
-		saveDiscountSettings( { applyOnSale: true, overlap: 'combine' } );
-		expect( getDiscountSettings() ).toEqual( { applyOnSale: true, overlap: 'combine' } );
+		expect( getDiscountSettings() ).toEqual( { applyOnSale: false, applyAtCheckout: false, overlap: 'best' } );
+		saveDiscountSettings( { applyOnSale: true, applyAtCheckout: true, overlap: 'combine' } );
+		expect( getDiscountSettings() ).toEqual( { applyOnSale: true, applyAtCheckout: true, overlap: 'combine' } );
 	} );
 } );
 

@@ -143,7 +143,7 @@ export function setDiscountActive( id, active ) {
 
 // ---- Global settings. ----
 
-const DEFAULT_SETTINGS = { applyOnSale: false, overlap: 'best' };
+const DEFAULT_SETTINGS = { applyOnSale: false, applyAtCheckout: false, overlap: 'best' };
 
 export const getDiscountSettings = () => ( { ...DEFAULT_SETTINGS, ...readStore( SETTINGS_KEY ) } );
 
