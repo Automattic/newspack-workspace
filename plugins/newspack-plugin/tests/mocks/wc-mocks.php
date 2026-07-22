@@ -408,6 +408,14 @@ class WC_Order {
 		}
 		return new WC_DateTime( $this->data['date_paid'] );
 	}
+	public function get_date_created() {
+		// Fall back to date_paid like fixtures that predate the date_created key.
+		$date_created = $this->data['date_created'] ?? $this->data['date_paid'];
+		if ( empty( $date_created ) ) {
+			return null;
+		}
+		return new WC_DateTime( $date_created );
+	}
 	public function get_date_completed() {
 		return new WC_DateTime( $this->data['date_completed'] );
 	}
@@ -973,6 +981,12 @@ function wc_prices_include_tax() {
 	global $wcs_mock_prices_include_tax;
 	return ! empty( $wcs_mock_prices_include_tax );
 }
+/**
+ * Real WC: order statuses considered "paid" (payment received).
+ */
+function wc_get_is_paid_statuses() {
+	return [ 'processing', 'completed' ];
+}
 function wc_get_orders( $args ) {
 	global $orders_database;
 	// For simplicity, this mock will only return a single page of results.
@@ -983,18 +997,36 @@ function wc_get_orders( $args ) {
 	if ( isset( $args['customer_id'] ) ) {
 		// Filter by customer.
 		$orders = array_filter(
-			$orders_database,
+			$orders,
 			function( $order ) use ( $args ) {
 				return $order->get_customer_id() === $args['customer_id'];
 			}
 		);
 	}
 	if ( isset( $args['status'] ) ) {
-		// Filter by status.
+		// Filter by status. Real wc_get_orders accepts statuses with or without
+		// the 'wc-' prefix; normalize both sides so either form matches.
+		$statuses = array_map(
+			function( $status ) {
+				return preg_replace( '/^wc-/', '', $status );
+			},
+			(array) $args['status']
+		);
+		$orders   = array_filter(
+			$orders,
+			function( $order ) use ( $statuses ) {
+				return in_array( $order->get_status(), $statuses, true );
+			}
+		);
+	}
+	if ( isset( $args['date_created'] ) && is_string( $args['date_created'] ) && str_starts_with( $args['date_created'], '>' ) ) {
+		// Support the '>{timestamp}' comparison form used by date-bounded queries.
+		$cutoff = (int) substr( $args['date_created'], 1 );
 		$orders = array_filter(
-			$orders_database,
-			function( $order ) use ( $args ) {
-				return 'wc-' . $order->get_status() === $args['status'][0];
+			$orders,
+			function( $order ) use ( $cutoff ) {
+				$date_created = $order->get_date_created();
+				return $date_created && $date_created->getTimestamp() > $cutoff;
 			}
 		);
 	}
@@ -1004,6 +1036,9 @@ function wc_get_orders( $args ) {
 			return $b->get_date_paid()->getTimestamp() <=> $a->get_date_paid()->getTimestamp();
 		}
 	);
+	if ( isset( $args['limit'] ) && (int) $args['limit'] > 0 ) {
+		$orders = array_slice( $orders, 0, (int) $args['limit'] );
+	}
 	return $orders;
 }
 
@@ -1013,8 +1048,13 @@ function wc_customer_bought_product( $customer_email, $user_id, $product_id ) {
 		if ( $order->get_customer_id() !== $user_id ) {
 			continue;
 		}
+		// Real WC only counts orders in paid statuses (processing/completed).
+		if ( ! $order->has_status( wc_get_is_paid_statuses() ) ) {
+			continue;
+		}
 		foreach ( $order->get_items() as $item ) {
-			if ( $item->get_product_id() === $product_id ) {
+			// Real WC matches both _product_id and _variation_id order item meta.
+			if ( $item->get_product_id() === $product_id || ( $item->get_variation_id() && $item->get_variation_id() === $product_id ) ) {
 				return true;
 			}
 		}

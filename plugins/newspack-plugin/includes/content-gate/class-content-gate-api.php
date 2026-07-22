@@ -90,7 +90,7 @@ class Content_Gate_API {
 							'type'       => 'object',
 							'properties' => [
 								'slug'  => [ 'type' => 'string' ],
-								'value' => [ 'type' => [ 'string', 'array' ] ],
+								'value' => [ 'type' => [ 'string', 'array', 'object' ] ],
 							],
 						],
 					],
@@ -304,6 +304,13 @@ class Content_Gate_API {
 
 		$value = null;
 		$rule  = $rules[ $slug ];
+		// Rules with a composite value shape sanitize it themselves.
+		if ( ! empty( $rule['sanitize_callback'] ) && is_callable( $rule['sanitize_callback'] ) ) {
+			return [
+				'slug'  => $slug,
+				'value' => call_user_func( $rule['sanitize_callback'], $access_rule['value'] ?? null ),
+			];
+		}
 		if ( $rule['is_boolean'] ) {
 			$value = true; // Boolean rules are always true.
 		} elseif ( ! empty( $rule['options'] ) ) {

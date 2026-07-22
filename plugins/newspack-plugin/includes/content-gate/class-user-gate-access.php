@@ -120,19 +120,23 @@ class User_Gate_Access {
 		}
 
 		if ( 'subscription' === $slug && is_array( $value ) ) {
-			$names = array_map(
-				function( $product_id ) {
-					if ( function_exists( 'wc_get_product' ) ) {
-						$product = wc_get_product( $product_id );
-						if ( $product ) {
-							return $product->get_name();
-						}
-					}
-					return '#' . $product_id;
-				},
-				$value
+			return self::format_product_names( $value );
+		}
+
+		if ( 'one_time_purchase' === $slug && is_array( $value ) ) {
+			$sanitized_value = Access_Rules::sanitize_one_time_purchase_value( $value );
+			$products_label  = self::format_product_names( $sanitized_value['product_ids'] );
+			if ( 'forever' === $sanitized_value['duration_unit'] ) {
+				/* translators: %s: list of product names. */
+				return sprintf( __( '%s (forever)', 'newspack-plugin' ), $products_label );
+			}
+			return sprintf(
+				/* translators: 1: list of product names, 2: duration count, 3: duration unit (days or months). */
+				__( '%1$s (%2$d %3$s from purchase)', 'newspack-plugin' ),
+				$products_label,
+				$sanitized_value['duration_value'],
+				'days' === $sanitized_value['duration_unit'] ? __( 'days', 'newspack-plugin' ) : __( 'months', 'newspack-plugin' )
 			);
-			return implode( ', ', $names );
 		}
 
 		if ( is_array( $value ) ) {
@@ -140,6 +144,29 @@ class User_Gate_Access {
 		}
 
 		return (string) $value;
+	}
+
+	/**
+	 * Format a list of product IDs as a comma-separated list of product names.
+	 *
+	 * @param array $product_ids Product IDs.
+	 *
+	 * @return string Comma-separated product names.
+	 */
+	private static function format_product_names( $product_ids ) {
+		$names = array_map(
+			function( $product_id ) {
+				if ( function_exists( 'wc_get_product' ) ) {
+					$product = wc_get_product( $product_id );
+					if ( $product ) {
+						return $product->get_name();
+					}
+				}
+				return '#' . $product_id;
+			},
+			$product_ids
+		);
+		return implode( ', ', $names );
 	}
 
 	/**

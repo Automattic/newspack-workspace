@@ -17,17 +17,22 @@ type AccessRuleOption = {
 	value: string | number;
 	label: string;
 };
+type EditorOneTimePurchaseRuleValue = {
+	product_ids: Array< string | number >;
+	duration_value: number;
+	duration_unit: 'days' | 'months' | 'forever';
+};
 type AccessRuleConfig = {
 	name: string;
 	description: string;
-	default: string | Array< string | number >;
+	default: string | Array< string | number > | EditorOneTimePurchaseRuleValue;
 	is_boolean?: boolean;
 	placeholder?: string;
 	options?: AccessRuleOption[];
 };
 type ActiveRule = {
 	slug: string;
-	value: string | Array< string | number > | null;
+	value: string | Array< string | number > | EditorOneTimePurchaseRuleValue | null;
 };
 type RegistrationRule = {
 	active: boolean;

@@ -23,6 +23,7 @@ import { __, sprintf } from '@wordpress/i18n';
  * Internal dependencies
  */
 import './block-visibility.scss';
+import OneTimePurchaseRuleControl from '../components/one-time-purchase-rule-control';
 
 /**
  * Target block types that receive access control attributes.
@@ -185,6 +186,10 @@ const AccessRuleValueControl = ( {
 			cancelled = true;
 		};
 	}, [ slug ] ); // eslint-disable-line react-hooks/exhaustive-deps
+
+	if ( 'one_time_purchase' === slug ) {
+		return <OneTimePurchaseRuleControl value={ value } onChange={ onChange } options={ options } productsLabel={ config.name } />;
+	}
 
 	if ( options.length > 0 ) {
 		// Map stored IDs to labels for display; silently drop IDs with no matching option.

@@ -12,7 +12,12 @@ type HeaderAction = {
 	separator?: boolean;
 };
 
-type GateAccessRuleValue = string | string[] | boolean;
+type OneTimePurchaseRuleValue = {
+	product_ids: Array<string | number>;
+	duration_value: number;
+	duration_unit: 'days' | 'months' | 'forever';
+};
+type GateAccessRuleValue = string | string[] | boolean | OneTimePurchaseRuleValue;
 type AccessRule = {
 	name: string;
 	default: GateAccessRuleValue;

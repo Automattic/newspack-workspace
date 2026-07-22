@@ -12,10 +12,46 @@ import { __, sprintf } from '@wordpress/i18n';
  * Internal dependencies.
  */
 import ContentRuleControl from './edit/content-rule-control';
+import { normalizeOneTimePurchaseValue } from '../../../../content-gate/components/one-time-purchase-rule-control';
 
 const availableAccessRules = window.newspackAudienceContentGates.available_access_rules || {};
 
 const noOp = () => {};
+
+/**
+ * Map option values to labels, falling back to the raw value.
+ */
+const getOptionLabels = ( values: Array< string | number >, options: { value: string | number; label: string }[] = [] ) =>
+	values.map( value => options.find( option => String( option.value ) === String( value ) )?.label ?? String( value ) ).join( ', ' );
+
+/**
+ * Human-readable summary for an access rule value.
+ */
+const formatAccessRuleValue = ( rule: GateAccessRule ): string => {
+	const config = availableAccessRules[ rule.slug ];
+	if ( 'one_time_purchase' === rule.slug ) {
+		const { product_ids: productIds, duration_value: durationValue, duration_unit: durationUnit } = normalizeOneTimePurchaseValue( rule.value );
+		const products = getOptionLabels( productIds, config?.options );
+		if ( 'forever' === durationUnit ) {
+			return sprintf(
+				// translators: %s: list of product names.
+				__( '%s (forever)', 'newspack-plugin' ),
+				products
+			);
+		}
+		return sprintf(
+			// translators: 1: list of product names, 2: duration count, 3: duration unit (days or months).
+			__( '%1$s (%2$d %3$s from purchase)', 'newspack-plugin' ),
+			products,
+			durationValue,
+			'days' === durationUnit ? __( 'days', 'newspack-plugin' ) : __( 'months', 'newspack-plugin' )
+		);
+	}
+	if ( Array.isArray( rule.value ) && config?.options ) {
+		return getOptionLabels( rule.value, config.options );
+	}
+	return String( rule.value );
+};
 
 export type GateSummarySection = {
 	key: string;
@@ -93,15 +129,7 @@ export const getGateSummarySections = ( gate: Gate, isNewsletter = false ): Gate
 						ruleGroup.map( rule =>
 							availableAccessRules[ rule.slug ]?.name ? (
 								<p key={ `${ groupIndex }-${ rule.slug }` }>
-									<strong>{ availableAccessRules[ rule.slug ].name }:</strong>{ ' ' }
-									{ Array.isArray( rule.value ) && availableAccessRules[ rule.slug ]?.options
-										? rule.value
-												.map(
-													value =>
-														availableAccessRules[ rule.slug ].options?.find( option => option.value === value )?.label
-												)
-												.join( ', ' )
-										: rule.value }
+									<strong>{ availableAccessRules[ rule.slug ].name }:</strong> { formatAccessRuleValue( rule ) }
 								</p>
 							) : null
 						)
