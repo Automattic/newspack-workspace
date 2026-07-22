@@ -209,13 +209,16 @@ class TestProductNetworkIdsCLI extends WP_UnitTestCase {
 		$parse_map_method = new ReflectionMethod( Product_Network_Ids::class, 'parse_map' );
 		$parse_map_method->setAccessible( true );
 
-		$parsed = $parse_map_method->invoke( null, '{"5":"premium","6":" basic "}' );
+		$parsed = $parse_map_method->invoke( null, '{"5":"premium","6":" basic ","7":"  "}' );
 
 		// JSON object keys arrive as strings; they must become integer product IDs.
-		$this->assertSame( [ 5, 6 ], array_keys( $parsed ) );
-		$this->assertSame( 'premium', $parsed[5] );
+		$this->assertSame( [ 5, 6 ], array_keys( $parsed['assignments'] ) );
+		$this->assertSame( 'premium', $parsed['assignments'][5] );
 		// Values are sanitized ( sanitize_text_field trims surrounding whitespace ).
-		$this->assertSame( 'basic', $parsed[6] );
+		$this->assertSame( 'basic', $parsed['assignments'][6] );
+		// #7 sanitizes to '', so it is withheld -- and counted, so assign() can fail the run rather than
+		// letting an entry the operator listed vanish into a warning.
+		$this->assertSame( 1, $parsed['skipped'] );
 	}
 
 	/**
@@ -237,7 +240,7 @@ class TestProductNetworkIdsCLI extends WP_UnitTestCase {
 
 		$parsed = $parse_map_method->invoke( null, $long_map );
 
-		$this->assertSame( count( $pairs ), count( $parsed ) );
-		$this->assertSame( 'premium', reset( $parsed ) );
+		$this->assertSame( count( $pairs ), count( $parsed['assignments'] ) );
+		$this->assertSame( 'premium', reset( $parsed['assignments'] ) );
 	}
 }
