@@ -1603,12 +1603,44 @@ final class Newspack_Newsletters {
 				false,
 				false
 			);
-			// Force a page refresh on the front-end.
-			if ( ! is_admin() ) {
+			// Force a page refresh, but only on a genuine front-end page view.
+			// During REST, AJAX, cron or WP-CLI the `exit` would truncate the
+			// current request (e.g. a REST collection would return a partial,
+			// short-circuited response), so restrict it to real page loads.
+			if ( self::is_front_end_page_request() ) {
 				header( 'Refresh:0' );
 				exit;
 			}
 		}
+	}
+
+	/**
+	 * Whether the current request is a genuine front-end page view, as opposed
+	 * to an admin screen, REST or AJAX request, cron run, or WP-CLI invocation.
+	 *
+	 * Used to decide whether it is safe to `exit` the request: on a page view a
+	 * redirect is the intended behavior, but on any programmatic request an
+	 * `exit` would truncate the response mid-flight.
+	 *
+	 * @return bool True on a front-end page request, false otherwise.
+	 */
+	private static function is_front_end_page_request() {
+		if ( is_admin() ) {
+			return false;
+		}
+		if ( defined( 'REST_REQUEST' ) && REST_REQUEST ) {
+			return false;
+		}
+		if ( wp_doing_ajax() ) {
+			return false;
+		}
+		if ( wp_doing_cron() ) {
+			return false;
+		}
+		if ( defined( 'WP_CLI' ) && WP_CLI ) {
+			return false;
+		}
+		return true;
 	}
 
 	/**
