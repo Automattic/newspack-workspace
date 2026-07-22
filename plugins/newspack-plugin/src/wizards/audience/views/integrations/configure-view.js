@@ -133,10 +133,12 @@ export const reconcileOperators = ( currentMap, options ) => {
 // in JS, so the falsy string forms are matched explicitly.
 const toBool = value => ( typeof value === 'string' ? ! [ '', '0', 'false' ].includes( value.toLowerCase() ) : Boolean( value ) );
 
-// Account-deletion sync travels the push pipeline (see get_account_deletion_fields()
-// in class-integration.php), so these Settings-group controls follow the outbound
-// pause: the dispatcher skips a paused integration before reading them.
-const ACCOUNT_DELETION_KEYS = [ 'sync_account_deletion', 'account_deletion_handling' ];
+// Push-pipeline settings that render inside the Outbound section: the metadata
+// prefix is only read on push paths (prepare_contact()) and account-deletion
+// sync travels the push pipeline (see get_account_deletion_fields() /
+// get_metadata_fields() in class-integration.php), so they belong with — and
+// pause with — outbound sync.
+const OUTBOUND_SETTINGS_KEYS = [ 'metadata_prefix', 'sync_account_deletion', 'account_deletion_handling' ];
 
 // True for a plain `{ key => value }` map (the shape `incoming_metadata_fields`
 // uses), excluding arrays and null so those keep their own comparison branches.
@@ -214,13 +216,22 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 	};
 
 	// Split settings into groups. The per-direction enable toggles are pulled
-	// out of the generic Settings group so they render inside their section.
-	const { settingsFields, inboundField, outboundField, inboundToggleField, outboundToggleField } = useMemo( () => {
-		const empty = { settingsFields: [], inboundField: null, outboundField: null, inboundToggleField: null, outboundToggleField: null };
+	// out of the generic Settings group so they render inside their section, and
+	// the push-pipeline settings (metadata prefix, account-deletion sync) render
+	// inside the Outbound section they act on.
+	const { settingsFields, outboundSettingsFields, inboundField, outboundField, inboundToggleField, outboundToggleField } = useMemo( () => {
+		const empty = {
+			settingsFields: [],
+			outboundSettingsFields: [],
+			inboundField: null,
+			outboundField: null,
+			inboundToggleField: null,
+			outboundToggleField: null,
+		};
 		if ( ! integration?.settings ) {
 			return empty;
 		}
-		const groups = { ...empty, settingsFields: [] };
+		const groups = { ...empty, settingsFields: [], outboundSettingsFields: [] };
 		for ( const field of integration.settings ) {
 			if ( field.key === 'incoming_metadata_fields' ) {
 				groups.inboundField = field;
@@ -230,19 +241,21 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 				groups.inboundToggleField = field;
 			} else if ( field.key === 'outgoing_sync_enabled' ) {
 				groups.outboundToggleField = field;
+			} else if ( OUTBOUND_SETTINGS_KEYS.includes( field.key ) ) {
+				groups.outboundSettingsFields.push( field );
 			} else {
 				groups.settingsFields.push( field );
 			}
 		}
-		// A toggle renders only inside its direction section; without the paired
-		// metadata field there is no section, so fall the toggle through to the
-		// generic Settings group instead of shipping a field the view can neither
-		// display nor edit.
+		// A toggle renders only inside its direction section; when the section
+		// has no other content there is no section at all, so fall the toggle
+		// through to the generic Settings group instead of shipping a field the
+		// view can neither display nor edit.
 		if ( groups.inboundToggleField && ! groups.inboundField ) {
 			groups.settingsFields.push( groups.inboundToggleField );
 			groups.inboundToggleField = null;
 		}
-		if ( groups.outboundToggleField && ! groups.outboundField ) {
+		if ( groups.outboundToggleField && ! groups.outboundField && ! groups.outboundSettingsFields.length ) {
 			groups.settingsFields.push( groups.outboundToggleField );
 			groups.outboundToggleField = null;
 		}
@@ -386,7 +399,9 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 		if ( ! field.condition || typeof field.condition !== 'object' ) {
 			return true;
 		}
-		const ref = settingsFields.find( f => f.key === field.condition.field );
+		// Condition refs may point at a field in any group (e.g. the deletion
+		// handling's ref lives in the Outbound group), so search the full payload.
+		const ref = ( integration?.settings || [] ).find( f => f.key === field.condition.field );
 		if ( ! ref ) {
 			return true;
 		}
@@ -407,12 +422,7 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 	const inboundEnabled = ! inboundToggleField || toBool( getFieldValue( inboundToggleField ) );
 	const outboundEnabled = ! outboundToggleField || toBool( getFieldValue( outboundToggleField ) );
 
-	// While outbound sync is paused, hide the account-deletion controls along
-	// with the outgoing picker: the dispatcher skips them, and leaving them
-	// active would present deletion sync as live. Stored values are preserved.
-	const visibleSettingsFields = settingsFields.filter(
-		field => fieldIsVisible( field ) && ( outboundEnabled || ! ACCOUNT_DELETION_KEYS.includes( field.key ) )
-	);
+	const visibleSettingsFields = settingsFields.filter( fieldIsVisible );
 
 	const renderSectionToggle = toggleSetting =>
 		toggleSetting && (
@@ -505,14 +515,25 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 				) }
 
 				{ /* Section 3: Outbound */ }
-				{ outboundField && (
+				{ ( outboundField || outboundSettingsFields.length > 0 ) && (
 					<>
 						<Divider alignment="full-width" variant="tertiary" marginTop={ 64 } marginBottom={ 64 } />
 						<Grid columns={ 2 } gutter={ 32 } noMargin>
 							<SectionHeader heading={ 2 } title={ __( 'Outbound', 'newspack-plugin' ) } noMargin />
 							<Grid columns={ 1 } rowGap={ 16 } noMargin>
 								{ renderSectionToggle( outboundToggleField ) }
-								{ outboundEnabled && (
+								{ outboundEnabled &&
+									outboundSettingsFields
+										.filter( fieldIsVisible )
+										.map( field => (
+											<SettingsField
+												key={ field.key }
+												field={ field }
+												value={ getFieldValue( field ) }
+												onChange={ val => handleFieldChange( field.key, val ) }
+											/>
+										) ) }
+								{ outboundEnabled && outboundField && (
 									<Accordion hideSingleTitle>
 										{ ( outboundField.grouped_options || [] ).map( ( group, index ) => {
 											const currentValue = getFieldValue( outboundField );

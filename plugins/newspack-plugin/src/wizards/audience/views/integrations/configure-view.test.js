@@ -598,9 +598,10 @@ describe( 'ConfigureView per-direction sections', () => {
 		expect( screen.getByLabelText( 'VIP' ) ).toBeInTheDocument();
 	} );
 
-	// Deletion sync travels the push pipeline, so its Settings-group controls
-	// follow the outbound pause the same way the outgoing picker does.
-	it( 'hides the account-deletion controls while outbound sync is paused', () => {
+	// The push-pipeline settings (metadata prefix, account-deletion sync) render
+	// inside the Outbound section and follow the outbound pause the same way the
+	// outgoing picker does.
+	it( 'renders push settings in the Outbound section and hides them while paused', () => {
 		const integrations = bidirectionalIntegration();
 		integrations.esp.settings = [
 			{ key: 'sync_account_deletion', type: 'checkbox', label: 'Sync account deletion', value: true },
@@ -615,20 +616,45 @@ describe( 'ConfigureView per-direction sections', () => {
 				],
 				condition: { field: 'sync_account_deletion', equals: true },
 			},
+			{ key: 'metadata_prefix', type: 'text', label: 'Metadata field prefix', value: 'NP_' },
 			...integrations.esp.settings,
 		];
 		renderConfigureView( { integrations } );
 		expect( screen.getByLabelText( 'Sync account deletion' ).checked ).toBe( true );
 		expect( screen.getByLabelText( 'Deletion handling' ) ).toBeInTheDocument();
 
+		// Document order pins the placement: own settings first, then the Inbound
+		// picker, then the push settings inside the Outbound section.
+		const order = screen
+			.getAllByLabelText( /^(Audience ID|VIP|Sync account deletion|Metadata field prefix)$/ )
+			.map( el => el.getAttribute( 'aria-label' ) );
+		expect( order ).toEqual( [ 'Audience ID', 'VIP', 'Sync account deletion', 'Metadata field prefix' ] );
+
 		fireEvent.click( screen.getByLabelText( 'Enable outbound sync' ) );
 		expect( screen.queryByLabelText( 'Sync account deletion' ) ).toBeNull();
 		expect( screen.queryByLabelText( 'Deletion handling' ) ).toBeNull();
+		expect( screen.queryByLabelText( 'Metadata field prefix' ) ).toBeNull();
 		// The integration's own settings stay put.
 		expect( screen.getByLabelText( 'Audience ID' ) ).toBeInTheDocument();
 
 		fireEvent.click( screen.getByLabelText( 'Enable outbound sync' ) );
 		expect( screen.getByLabelText( 'Sync account deletion' ).checked ).toBe( true );
+		expect( screen.getByLabelText( 'Metadata field prefix' ).value ).toBe( 'NP_' );
+	} );
+
+	// With push-group settings but no picker (a partial third-party override),
+	// the Outbound section still renders its toggle and settings.
+	it( 'renders the Outbound section for push settings without a picker', () => {
+		const integrations = bidirectionalIntegration();
+		integrations.esp.settings = [
+			{ key: 'metadata_prefix', type: 'text', label: 'Metadata field prefix', value: 'NP_' },
+			...integrations.esp.settings.filter( f => f.key !== 'outgoing_metadata_fields' ),
+		];
+		renderConfigureView( { integrations } );
+		expect( screen.getByLabelText( 'Metadata field prefix' ) ).toBeInTheDocument();
+
+		fireEvent.click( screen.getByLabelText( 'Enable outbound sync' ) );
+		expect( screen.queryByLabelText( 'Metadata field prefix' ) ).toBeNull();
 	} );
 
 	// A toggle whose paired metadata field is missing (a third-party
