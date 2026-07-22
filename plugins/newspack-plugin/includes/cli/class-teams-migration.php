@@ -42,9 +42,11 @@ class Teams_Migration {
 	 * Subscription statuses that count as "live" for the
 	 * --only-without-live-subscription member filter: a member holding a
 	 * subscription in any of these keeps their access without a migration
-	 * subscription. Dead statuses (cancelled, expired, ...) deliberately do not
-	 * count — an active membership over a lapsed subscription is the comp/legacy
-	 * residual the filter exists to include.
+	 * subscription. Dead statuses deliberately do not count — an active
+	 * membership over a lapsed subscription is the comp/legacy residual the
+	 * filter exists to include. `pending` is dead too: a checkout that never
+	 * completed grants no access, so such a member loses out at the flip exactly
+	 * like one with no subscription at all.
 	 *
 	 * @var string[]
 	 */
@@ -581,8 +583,15 @@ class Teams_Migration {
 	 * subscribers. The comp/legacy residual class both flags target is
 	 * "membership active, but no subscription in a live status": that includes
 	 * members with no subscription at all AND members whose subscriptions exist
-	 * only in dead states (cancelled/expired) — the latter cohort is often the
+	 * only in dead states (cancelled/expired — and `pending`, since a checkout
+	 * that never completed grants no access) — the lapsed cohort is often the
 	 * larger one.
+	 *
+	 * Teams sites: run migrate-teams BEFORE a broad sweep. A live group
+	 * subscription a member belongs to counts as live (no redundant personal $0
+	 * subscription), but that only holds once migrate-teams has created the
+	 * group subscriptions; before that, team members look like residuals.
+	 * Constrain with --plan-ids if unsure.
 	 *
 	 * Group mode (--as-group) is NOT idempotent: it creates a new group
 	 * subscription on every run. Individual mode is re-run safe — members who
@@ -602,7 +611,7 @@ class Teams_Migration {
 	 * : Comma-delimited list of membership plan IDs to process. If omitted, all published plans with _access_method = manual-only are used — or ALL published plans when --only-without-live-subscription or --user-ids/--user-ids-file is passed.
 	 *
 	 * [--only-without-live-subscription]
-	 * : Only process members who do NOT own a subscription in a live status (active, on-hold, pending-cancel). Members whose subscriptions are all in dead states (cancelled, expired, ...) are included, same as members with no subscription at all. Skipped members are counted so the output reconciles against a parity diff.
+	 * : Only process members who do NOT own (or belong to a group on) a subscription in a live status (active, on-hold, pending-cancel). Members whose subscriptions are all in dead states (cancelled, expired, pending, ...) are included, same as members with no subscription at all. Skipped members are counted per user so the output reconciles against a parity diff.
 	 *
 	 * [--user-ids=<ids>]
 	 * : Comma-delimited list of user IDs to process (explicit input mode). Only active members of the processed plans whose user ID is on this list are handled; list entries never matched are reported at the end. Combines with --user-ids-file.
@@ -614,7 +623,7 @@ class Teams_Migration {
 	 * : Comma-delimited list of email domains to skip (e.g. example.com,example.org). Any user whose email address belongs to one of these domains will be skipped.
 	 *
 	 * [--as-group]
-	 * : Instead of creating one subscription per member, create a single $0 group subscription per plan and add all qualifying members as group members. Requires --group-owner-id.
+	 * : Instead of creating one subscription per member, create a single $0 group subscription per plan and add all qualifying members as group members. Requires --group-owner-id, and explicit --plan-ids when combined with a member selection flag.
 	 *
 	 * [--group-owner-id=<id>]
 	 * : User ID to set as the owner of each group subscription created when --as-group is used. Required when --as-group is present.
@@ -655,6 +664,13 @@ class Teams_Migration {
 			WP_CLI::error( 'WooCommerce Subscriptions is not active. Aborting.' );
 		}
 
+		// Without WooCommerce Memberships the wcm-active post status is
+		// unregistered, so the member queries return zero rows and the run would
+		// masquerade as a clean no-op.
+		if ( ! class_exists( 'WC_Memberships_User_Membership' ) ) {
+			WP_CLI::error( 'WooCommerce Memberships is not active. Aborting.' );
+		}
+
 		if ( ! $product_id ) {
 			WP_CLI::error( 'Missing required option: --product-id=<id>.' );
 		}
@@ -664,7 +680,7 @@ class Teams_Migration {
 			WP_CLI::error( $target_user_ids->get_error_message() );
 		}
 		$explicit_users_mode = ! empty( $target_user_ids );
-		if ( ! $explicit_users_mode && ( '' !== trim( (string) $user_ids_csv ) || '' !== trim( (string) $user_ids_file ) ) ) {
+		if ( ! $explicit_users_mode && ( ( is_string( $user_ids_csv ) && '' !== trim( $user_ids_csv ) ) || ( is_string( $user_ids_file ) && '' !== trim( $user_ids_file ) ) ) ) {
 			WP_CLI::error( 'The --user-ids/--user-ids-file input resolved to no user IDs.' );
 		}
 
@@ -679,6 +695,13 @@ class Teams_Migration {
 			}
 			if ( ! \get_userdata( $group_owner_id ) ) {
 				WP_CLI::error( sprintf( 'User %d (--group-owner-id) could not be found.', $group_owner_id ) );
+			}
+			// The selection flags widen the default plan scope to every published
+			// plan, and group mode creates one group subscription per processed plan
+			// before members are filtered — a broad sweep would leave an orphan empty
+			// group subscription on every plan without qualifying members.
+			if ( ( $explicit_users_mode || $only_without_live_subscription ) && empty( $plan_ids ) ) {
+				WP_CLI::error( '--as-group combined with --only-without-live-subscription or --user-ids/--user-ids-file requires explicit --plan-ids.' );
 			}
 		}
 
@@ -730,9 +753,10 @@ class Teams_Migration {
 		WP_CLI::line( sprintf( 'Processing %d plan(s): %s', count( $plan_ids ), implode( ', ', $plan_ids ) ) );
 		WP_CLI::line( '' );
 
-		$summary                         = [];
-		$skipped_live_subscription_count = 0;
-		$matched_user_ids                = [];
+		$summary                            = [];
+		$skipped_live_subscription_user_ids = [];
+		$granted_user_ids                   = [];
+		$matched_user_ids                   = [];
 
 		foreach ( $plan_ids as $plan_id ) {
 			$plan = \get_post( $plan_id );
@@ -818,12 +842,24 @@ class Teams_Migration {
 					}
 				}
 
+				// Individual mode: skip a member who already owns an active subscription
+				// this migration created for the same product, so a re-run is safe and
+				// doesn't stack duplicate $0 subscriptions. Checked before the
+				// live-subscription filter so a re-run reports these as already-migrated
+				// instead of inflating the live-subscription count.
+				if ( ! $as_group && self::member_has_migration_subscription( $user_id, $product_id ) ) {
+					WP_CLI::line( sprintf( '  Membership %d (user %d, %s): skipped — already has an active migration subscription for this product.', $membership_id, $user_id, $user->user_email ) );
+					continue;
+				}
+
 				// Skip members who already own a subscription in a live status. Dead
 				// statuses (cancelled/expired) do NOT count — a membership left active
 				// over a lapsed subscription is exactly the residual this flag targets.
+				// Tracked per user, not per membership, so the reported count reconciles
+				// against a per-reader parity diff.
 				if ( $only_without_live_subscription && self::member_has_live_subscription( $user_id ) ) {
 					WP_CLI::line( sprintf( '  Membership %d (user %d, %s): skipped — holds a live subscription.', $membership_id, $user_id, $user->user_email ) );
-					++$skipped_live_subscription_count;
+					$skipped_live_subscription_user_ids[ $user_id ] = true;
 					continue;
 				}
 
@@ -847,11 +883,13 @@ class Teams_Migration {
 					continue;
 				}
 
-				// Individual mode: skip a member who already owns an active subscription
-				// this migration created for the same product, so a re-run is safe and
-				// doesn't stack duplicate $0 subscriptions.
-				if ( self::member_has_migration_subscription( $user_id, $product_id ) ) {
-					WP_CLI::line( sprintf( '  Membership %d (user %d, %s): skipped — already has an active migration subscription for this product.', $membership_id, $user_id, $user->user_email ) );
+				// Individual mode: a member can hold active memberships on several
+				// in-scope plans, but each user gets at most one $0 subscription per
+				// run (live runs also enforce this via the migration-subscription
+				// guard above). Deduplicating here keeps dry-run would-create counts
+				// per user, so they reconcile against a parity diff.
+				if ( isset( $granted_user_ids[ $user_id ] ) ) {
+					WP_CLI::line( sprintf( '  Membership %d (user %d, %s): skipped — a subscription for this user was already %s in this run.', $membership_id, $user_id, $user->user_email, $dry_run ? 'planned' : 'created' ) );
 					continue;
 				}
 
@@ -863,6 +901,7 @@ class Teams_Migration {
 				$has_end_date   = ! empty( $end_date ) && strtotime( $end_date ) > time();
 
 				if ( $dry_run ) {
+					$granted_user_ids[ $user_id ] = true;
 					WP_CLI::line( sprintf( '  [DRY RUN] Would create subscription for user %d (%s): start=%s%s', $user_id, $user->user_email, $start_date, $has_end_date ? ', end=' . $end_date : ' (no end date)' ) );
 					$summary[] = [
 						'membership_id' => $membership_id,
@@ -880,6 +919,8 @@ class Teams_Migration {
 					WP_CLI::warning( sprintf( '  Membership %d (user %d): failed to create subscription — %s', $membership_id, $user_id, $subscription->get_error_message() ) );
 					continue;
 				}
+
+				$granted_user_ids[ $user_id ] = true;
 
 				$sub_id = $subscription->get_id();
 				WP_CLI::success( sprintf( '  Membership %d → subscription %d created for user %d (%s).', $membership_id, $sub_id, $user_id, $user->user_email ) );
@@ -900,7 +941,7 @@ class Teams_Migration {
 		// Reconciliation output — printed even when nothing was created, so the run
 		// can be checked against the parity diff that produced its inputs.
 		if ( $only_without_live_subscription ) {
-			WP_CLI::line( sprintf( 'Skipped %d member(s) holding a live (%s) subscription.', $skipped_live_subscription_count, implode( '/', self::LIVE_SUBSCRIPTION_STATUSES ) ) );
+			WP_CLI::line( sprintf( 'Skipped %d member(s) holding a live (%s) subscription.', count( $skipped_live_subscription_user_ids ), implode( '/', self::LIVE_SUBSCRIPTION_STATUSES ) ) );
 			WP_CLI::line( '' );
 		}
 		if ( $explicit_users_mode ) {
@@ -1575,8 +1616,11 @@ class Teams_Migration {
 	}
 
 	/**
-	 * Whether a user owns a subscription in a live status (see
-	 * LIVE_SUBSCRIPTION_STATUSES). Subscriptions existing only in dead states
+	 * Whether a user's access is backed by a subscription in a live status (see
+	 * LIVE_SUBSCRIPTION_STATUSES): either a subscription they own, or a
+	 * group-enabled subscription they are a member of (a team member migrated by
+	 * migrate-teams rides the owner's subscription and must not also get a
+	 * personal $0 subscription). Subscriptions existing only in dead states
 	 * (cancelled, expired, ...) return false.
 	 *
 	 * @param int $user_id The member user ID.
@@ -1589,11 +1633,19 @@ class Teams_Migration {
 			return false;
 		}
 		foreach ( \wcs_get_users_subscriptions( $user_id ) as $subscription ) {
-			// wcs_get_users_subscriptions is filtered to include member-only groups; require ownership.
+			// wcs_get_users_subscriptions can be filtered to include member-only groups; require ownership
+			// here — group memberships are evaluated explicitly below, in every context.
 			if ( (int) $subscription->get_user_id() !== $user_id ) {
 				continue;
 			}
 			if ( in_array( $subscription->get_status(), self::LIVE_SUBSCRIPTION_STATUSES, true ) ) {
+				return true;
+			}
+		}
+		// Group memberships: the My Account injection filter doesn't run on CLI, so
+		// ask the group data layer directly.
+		foreach ( Group_Subscription::get_group_subscriptions_for_user( $user_id ) as $group_subscription ) {
+			if ( in_array( $group_subscription->get_status(), self::LIVE_SUBSCRIPTION_STATUSES, true ) ) {
 				return true;
 			}
 		}
@@ -1615,7 +1667,12 @@ class Teams_Migration {
 	 * @return int[]|\WP_Error Unique user IDs in input order, or an error.
 	 */
 	public static function parse_user_ids( $user_ids_csv, $user_ids_file ) {
-		$raw_input = trim( (string) $user_ids_csv );
+		// A bare `--user-ids` (no `=value`) arrives as boolean true, which a string
+		// cast would turn into '1' — silently targeting user ID 1.
+		if ( ! is_string( $user_ids_csv ) || ! is_string( $user_ids_file ) ) {
+			return new \WP_Error( 'newspack_migration_user_ids_flag', 'The --user-ids/--user-ids-file flags require a value (e.g. --user-ids=101,102).' );
+		}
+		$raw_input = trim( $user_ids_csv );
 		if ( '' !== trim( (string) $user_ids_file ) ) {
 			if ( ! is_readable( $user_ids_file ) || is_dir( $user_ids_file ) ) {
 				return new \WP_Error( 'newspack_migration_user_ids_file', sprintf( 'User IDs file %s could not be read.', $user_ids_file ) );

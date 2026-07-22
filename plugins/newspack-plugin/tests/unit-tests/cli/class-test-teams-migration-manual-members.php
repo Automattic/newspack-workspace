@@ -16,6 +16,8 @@
  */
 
 use Newspack\CLI\Teams_Migration;
+use Newspack\Group_Subscription;
+use Newspack\Group_Subscription_Settings;
 
 /**
  * Test migrate-manual-members' member-selection logic for comp/legacy parity
@@ -46,6 +48,9 @@ class Test_Teams_Migration_Manual_Members extends WP_UnitTestCase {
 		parent::set_up_before_class();
 		require_once dirname( __DIR__, 2 ) . '/mocks/wc-mocks.php';
 		require_once dirname( __DIR__, 2 ) . '/mocks/wp-cli-mocks.php';
+		// Provides the guarded WC_Memberships_User_Membership stub — the class the
+		// command's WCM pre-flight checks for.
+		require_once dirname( __DIR__, 2 ) . '/mocks/teams-for-memberships-membership-mocks.php';
 	}
 
 	/**
@@ -57,6 +62,7 @@ class Test_Teams_Migration_Manual_Members extends WP_UnitTestCase {
 		$subscriptions_database = [];
 		$products_database      = [];
 		WP_CLI::reset();
+		Group_Subscription::reset_cache();
 		// The membership fixtures use WCM's custom post status; register it so the
 		// explicit post_status query in the command resolves it like on a live site.
 		register_post_status( 'wcm-active' );
@@ -119,7 +125,22 @@ class Test_Teams_Migration_Manual_Members extends WP_UnitTestCase {
 		);
 		$this->assertNotWPError( $user_id, 'Fixture user creation should succeed.' );
 		$this->user_ids[] = $user_id;
-		$membership_id    = wp_insert_post(
+		// Mark the member as a reader so the group data layer (used by the
+		// group-membership live check and --as-group mode) accepts them.
+		update_user_meta( $user_id, '_newspack_reader', true );
+		$this->create_membership( $plan_id, $user_id );
+		return $user_id;
+	}
+
+	/**
+	 * Create an additional active membership on a plan for an existing user.
+	 *
+	 * @param int $plan_id Plan post ID.
+	 * @param int $user_id User ID.
+	 * @return int Membership post ID.
+	 */
+	private function create_membership( int $plan_id, int $user_id ): int {
+		$membership_id = wp_insert_post(
 			[
 				'post_type'   => 'wc_user_membership',
 				'post_status' => 'wcm-active',
@@ -129,6 +150,27 @@ class Test_Teams_Migration_Manual_Members extends WP_UnitTestCase {
 			]
 		);
 		$this->assertNotWPError( $membership_id, 'Fixture membership creation should succeed.' );
+		update_post_meta( $membership_id, '_start_date', gmdate( 'Y-m-d H:i:s', strtotime( '-6 months' ) ) );
+		return $membership_id;
+	}
+
+	/**
+	 * Create a reader user with no membership (e.g. a group owner).
+	 *
+	 * @return int User ID.
+	 */
+	private function create_reader_user(): int {
+		$user_id = wp_insert_user(
+			[
+				'user_login' => 'reader-' . wp_generate_password( 8, false ),
+				'user_pass'  => wp_generate_password(),
+				'user_email' => 'reader-' . wp_generate_password( 8, false ) . '@test.com',
+				'role'       => 'subscriber',
+			]
+		);
+		$this->assertNotWPError( $user_id, 'Fixture reader creation should succeed.' );
+		$this->user_ids[] = $user_id;
+		update_user_meta( $user_id, '_newspack_reader', true );
 		return $user_id;
 	}
 
@@ -435,5 +477,235 @@ class Test_Teams_Migration_Manual_Members extends WP_UnitTestCase {
 
 		$garbage_result = Teams_Migration::parse_user_ids( '1,abc,3', '' );
 		$this->assertWPError( $garbage_result, 'A non-numeric token must produce a WP_Error, not be silently dropped.' );
+	}
+
+	/**
+	 * A bare --user-ids / --user-ids-file (no =value) arrives as boolean true; a
+	 * string cast would turn it into '1' and silently target user ID 1 while
+	 * bypassing the purchase-plan refusal. It must abort instead.
+	 */
+	public function test_bare_user_ids_flag_is_rejected() {
+		$this->assertWPError( Teams_Migration::parse_user_ids( true, '' ), 'A bare --user-ids flag must produce a WP_Error.' );
+		$this->assertWPError( Teams_Migration::parse_user_ids( '', true ), 'A bare --user-ids-file flag must produce a WP_Error.' );
+
+		$purchase_plan_id = $this->create_plan( 'purchase' );
+		$paying_member    = $this->create_member( $purchase_plan_id );
+		$this->create_subscription_with_status( $paying_member, 'active' );
+
+		$refused = false;
+		try {
+			$this->run_migrate_manual_members(
+				[
+					'plan-ids' => (string) $purchase_plan_id,
+					'user-ids' => true,
+					'live'     => true,
+				]
+			);
+		} catch ( WP_CLI_Mock_Exception $abort ) {
+			$refused = true;
+			$this->assertStringContainsString( 'require a value', $abort->getMessage(), 'The abort must say the flag needs a value.' );
+		}
+		$this->assertTrue( $refused, 'A bare --user-ids flag must abort the run.' );
+		$this->assertEmpty( $this->get_migration_subscription_ids_for_user( $paying_member ), 'No subscription may be created on the aborted run.' );
+	}
+
+	/**
+	 * A --user-ids value that parses to no IDs at all (e.g. only delimiters)
+	 * aborts rather than silently degrading into blanket plan processing.
+	 */
+	public function test_empty_user_ids_input_aborts() {
+		$purchase_plan_id = $this->create_plan( 'purchase' );
+		$this->create_member( $purchase_plan_id );
+
+		$this->expectException( WP_CLI_Mock_Exception::class );
+		$this->expectExceptionMessage( 'resolved to no user IDs' );
+		$this->run_migrate_manual_members(
+			[
+				'plan-ids' => (string) $purchase_plan_id,
+				'user-ids' => ',,,',
+				'live'     => true,
+			]
+		);
+	}
+
+	/**
+	 * A member active on several in-scope plans is counted once in dry-run and
+	 * granted once on a live run, so both reconcile per user against a parity
+	 * diff.
+	 */
+	public function test_multi_plan_member_is_counted_and_granted_once() {
+		$first_plan_id     = $this->create_plan( 'purchase' );
+		$second_plan_id    = $this->create_plan( 'purchase' );
+		$multi_plan_member = $this->create_member( $first_plan_id );
+		$this->create_membership( $second_plan_id, $multi_plan_member );
+
+		$flags = [
+			'plan-ids'                       => $first_plan_id . ',' . $second_plan_id,
+			'only-without-live-subscription' => true,
+		];
+
+		$dry_run_output = $this->run_migrate_manual_members( $flags );
+		$this->assertSame( 1, substr_count( $dry_run_output, '[DRY RUN] Would create subscription' ), 'Dry-run must count a multi-plan member once.' );
+		$this->assertStringContainsString( 'already planned in this run', $dry_run_output, 'The second membership must be reported as already planned.' );
+
+		WP_CLI::reset();
+		$this->run_migrate_manual_members( array_merge( $flags, [ 'live' => true ] ) );
+		$this->assertCount( 1, $this->get_migration_subscription_ids_for_user( $multi_plan_member ), 'A live run must create exactly one subscription for a multi-plan member.' );
+	}
+
+	/**
+	 * The live-subscription skip count is per member, not per membership: one
+	 * subscribed reader on two plans is one skipped member (though each
+	 * membership still gets its own skip line).
+	 */
+	public function test_live_subscription_skip_count_is_per_member_not_per_membership() {
+		$first_plan_id      = $this->create_plan( 'purchase' );
+		$second_plan_id     = $this->create_plan( 'purchase' );
+		$member_with_active = $this->create_member( $first_plan_id );
+		$this->create_membership( $second_plan_id, $member_with_active );
+		$this->create_subscription_with_status( $member_with_active, 'active' );
+
+		$output = $this->run_migrate_manual_members(
+			[
+				'plan-ids'                       => $first_plan_id . ',' . $second_plan_id,
+				'only-without-live-subscription' => true,
+			]
+		);
+
+		$this->assertSame( 2, substr_count( $output, 'holds a live subscription' ), 'Each membership still reports its own skip line.' );
+		$this->assertStringContainsString( 'Skipped 1 member(s) holding a live (active/on-hold/pending-cancel) subscription.', $output, 'The reconciliation count must be per member.' );
+	}
+
+	/**
+	 * On a re-run, members migrated by a previous run are reported through the
+	 * idempotency guard ("already migrated"), not folded into the
+	 * live-subscription skip count — that count keeps meaning "genuinely
+	 * already-subscribed".
+	 */
+	public function test_rerun_reports_migrated_members_as_already_migrated_not_live_skipped() {
+		$purchase_plan_id   = $this->create_plan( 'purchase' );
+		$member_without_sub = $this->create_member( $purchase_plan_id );
+		$member_with_active = $this->create_member( $purchase_plan_id );
+		$this->create_subscription_with_status( $member_with_active, 'active' );
+
+		$flags = [
+			'plan-ids'                       => (string) $purchase_plan_id,
+			'only-without-live-subscription' => true,
+			'live'                           => true,
+		];
+
+		$first_run_output = $this->run_migrate_manual_members( $flags );
+		$this->assertStringContainsString( 'Skipped 1 member(s) holding a live', $first_run_output, 'The first run skips only the genuinely-subscribed member.' );
+		$this->assertCount( 1, $this->get_migration_subscription_ids_for_user( $member_without_sub ), 'The first run migrates the residual member.' );
+
+		WP_CLI::reset();
+		$second_run_output = $this->run_migrate_manual_members( $flags );
+		$this->assertStringContainsString( 'already has an active migration subscription', $second_run_output, 'The migrated member must be reported via the idempotency guard.' );
+		$this->assertStringContainsString( 'Skipped 1 member(s) holding a live', $second_run_output, 'The live-skip count must not absorb previously-migrated members.' );
+		$this->assertCount( 1, $this->get_migration_subscription_ids_for_user( $member_without_sub ), 'No duplicate subscription on the re-run.' );
+	}
+
+	/**
+	 * --user-ids combines with --only-without-live-subscription: a listed member
+	 * holding a live subscription counts as matched (no unmatched warning) AND is
+	 * skipped by the live filter.
+	 */
+	public function test_user_ids_combined_with_live_filter_reports_matched_and_skipped() {
+		$purchase_plan_id   = $this->create_plan( 'purchase' );
+		$listed_live_member = $this->create_member( $purchase_plan_id );
+		$this->create_subscription_with_status( $listed_live_member, 'active' );
+
+		$output = $this->run_migrate_manual_members(
+			[
+				'plan-ids'                       => (string) $purchase_plan_id,
+				'user-ids'                       => (string) $listed_live_member,
+				'only-without-live-subscription' => true,
+				'live'                           => true,
+			]
+		);
+
+		$this->assertEmpty( $this->get_migration_subscription_ids_for_user( $listed_live_member ), 'The listed live member must not get a subscription.' );
+		$this->assertStringContainsString( 'All 1 requested user id(s) were found', $output, 'A live-skipped listed member still counts as matched.' );
+		$this->assertStringContainsString( 'Skipped 1 member(s) holding a live', $output, 'The live skip must be counted.' );
+	}
+
+	/**
+	 * A member of a live group-enabled subscription (the Teams-migration outcome)
+	 * counts as live — no redundant personal $0 subscription — while a member of
+	 * only a cancelled group subscription does not.
+	 */
+	public function test_member_of_live_group_subscription_counts_as_live() {
+		$purchase_plan_id = $this->create_plan( 'purchase' );
+		$group_member     = $this->create_member( $purchase_plan_id );
+		$group_owner_id   = $this->create_reader_user();
+
+		$group_subscription = wcs_create_subscription(
+			[
+				'customer_id'    => $group_owner_id,
+				'status'         => 'active',
+				'billing_period' => 'month',
+			]
+		);
+		$group_subscription->update_meta_data( Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'enabled', 'yes' );
+		add_user_meta( $group_member, Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY, $group_subscription->get_id() );
+		Group_Subscription::reset_cache();
+
+		$this->assertTrue( Teams_Migration::member_has_live_subscription( $group_member ), 'A member of a live group subscription is live.' );
+
+		$group_subscription->set_status( 'cancelled' );
+		Group_Subscription::reset_cache();
+		$this->assertFalse( Teams_Migration::member_has_live_subscription( $group_member ), 'A member of only a cancelled group subscription is not live.' );
+	}
+
+	/**
+	 * --as-group with a member selection flag and no explicit --plan-ids is
+	 * refused — the widened all-plans default would create an orphan empty group
+	 * subscription per plan.
+	 */
+	public function test_as_group_with_selection_flag_requires_explicit_plan_ids() {
+		$group_owner_id = $this->create_reader_user();
+
+		$this->expectException( WP_CLI_Mock_Exception::class );
+		$this->expectExceptionMessage( 'requires explicit --plan-ids' );
+		$this->run_migrate_manual_members(
+			[
+				'as-group'                       => true,
+				'group-owner-id'                 => $group_owner_id,
+				'only-without-live-subscription' => true,
+				'live'                           => true,
+			]
+		);
+	}
+
+	/**
+	 * The new member filters run before the group-mode branch: under --as-group,
+	 * a live-subscription member is filtered out before the group add while the
+	 * residual member joins the group.
+	 */
+	public function test_as_group_applies_the_new_member_filters() {
+		$purchase_plan_id   = $this->create_plan( 'purchase' );
+		$member_with_active = $this->create_member( $purchase_plan_id );
+		$member_without_sub = $this->create_member( $purchase_plan_id );
+		$this->create_subscription_with_status( $member_with_active, 'active' );
+		$group_owner_id = $this->create_reader_user();
+
+		$output = $this->run_migrate_manual_members(
+			[
+				'plan-ids'                       => (string) $purchase_plan_id,
+				'as-group'                       => true,
+				'group-owner-id'                 => $group_owner_id,
+				'only-without-live-subscription' => true,
+				'live'                           => true,
+			]
+		);
+
+		$owner_group_subscription_ids = $this->get_migration_subscription_ids_for_user( $group_owner_id );
+		$this->assertCount( 1, $owner_group_subscription_ids, 'One group subscription is created for the plan.' );
+		global $subscriptions_database;
+		$group_subscription = $subscriptions_database[ $owner_group_subscription_ids[0] ];
+		Group_Subscription::reset_cache();
+		$this->assertTrue( (bool) Group_Subscription::user_is_member( $member_without_sub, $group_subscription ), 'The residual member must join the group.' );
+		$this->assertFalse( (bool) Group_Subscription::user_is_member( $member_with_active, $group_subscription ), 'The live-subscription member must be filtered out before the group add.' );
+		$this->assertStringContainsString( 'Skipped 1 member(s) holding a live', $output, 'The live skip must be reported in group mode too.' );
 	}
 }
