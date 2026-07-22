@@ -71,8 +71,11 @@ class Newsletter_Controlled_Statuses_Test extends WP_UnitTestCase {
 
 	/**
 	 * The front-end refresh/exit in fix_public_status() must be suppressed on
-	 * programmatic requests (REST, AJAX, cron, WP-CLI), where an exit would
-	 * truncate the response.
+	 * programmatic requests (REST, AJAX, cron, WP-CLI, XML-RPC) and feed
+	 * renders, where an exit would truncate the response mid-flight. The
+	 * REST_REQUEST, WP_CLI, and XMLRPC_REQUEST branches hinge on `define()`
+	 * constants that cannot be toggled per-test, so they are covered by the
+	 * filter-toggleable AJAX/cron/feed branches that share the same guard.
 	 */
 	public function test_public_status_refresh_suppressed_off_page() {
 		$is_front_end = new ReflectionMethod( 'Newspack_Newsletters', 'is_front_end_page_request' );
@@ -90,6 +93,12 @@ class Newsletter_Controlled_Statuses_Test extends WP_UnitTestCase {
 		add_filter( 'wp_doing_cron', '__return_true' );
 		$this->assertFalse( $is_front_end->invoke( null ), 'Refresh must be suppressed during cron.' );
 		remove_filter( 'wp_doing_cron', '__return_true' );
+
+		// A feed render must suppress the refresh (an exit would truncate the XML).
+		global $wp_query;
+		$wp_query->is_feed = true;
+		$this->assertFalse( $is_front_end->invoke( null ), 'Refresh must be suppressed during a feed render.' );
+		$wp_query->is_feed = false;
 	}
 
 	/**

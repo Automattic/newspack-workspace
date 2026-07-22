@@ -1616,11 +1616,12 @@ final class Newspack_Newsletters {
 
 	/**
 	 * Whether the current request is a genuine front-end page view, as opposed
-	 * to an admin screen, REST or AJAX request, cron run, or WP-CLI invocation.
+	 * to an admin screen, REST/AJAX/XML-RPC request, cron run, WP-CLI
+	 * invocation, or feed render.
 	 *
 	 * Used to decide whether it is safe to `exit` the request: on a page view a
-	 * redirect is the intended behavior, but on any programmatic request an
-	 * `exit` would truncate the response mid-flight.
+	 * redirect is the intended behavior, but on any programmatic request or
+	 * streamed response an `exit` would truncate the output mid-flight.
 	 *
 	 * @return bool True on a front-end page request, false otherwise.
 	 */
@@ -1638,6 +1639,15 @@ final class Newspack_Newsletters {
 			return false;
 		}
 		if ( defined( 'WP_CLI' ) && WP_CLI ) {
+			return false;
+		}
+		if ( defined( 'XMLRPC_REQUEST' ) && XMLRPC_REQUEST ) {
+			return false;
+		}
+		// A feed is a front-end request but not a page view; an `exit` here
+		// would truncate the feed's XML mid-document. Newsletters can appear in
+		// feeds via `display_newsletters_in_archives()`.
+		if ( is_feed() ) {
 			return false;
 		}
 		return true;
