@@ -17,7 +17,24 @@ jest.mock( '@wordpress/data', () => ( {
 // Stub the components barrel: with @wordpress/data mocked, the real barrel eagerly loads @wordpress/rich-text, whose module-load combineReducers() call throws.
 // Cover everything SettingsField imports so a future select/oauth/textarea fixture renders a stub, not `undefined`.
 jest.mock( '@wordpress/components', () => ( {
-	CheckboxControl: () => null,
+	// Real inputs (not null stubs) so the per-direction section tests can assert
+	// on picker visibility and drive the enable toggles.
+	CheckboxControl: ( { label, checked, onChange } ) => (
+		<input
+			type="checkbox"
+			aria-label={ typeof label === 'string' ? label : undefined }
+			checked={ !! checked }
+			onChange={ e => onChange( e.target.checked ) }
+		/>
+	),
+	ToggleControl: ( { label, checked, onChange } ) => (
+		<input
+			type="checkbox"
+			aria-label={ typeof label === 'string' ? label : undefined }
+			checked={ !! checked }
+			onChange={ e => onChange( e.target.checked ) }
+		/>
+	),
 	ExternalLink: ( { children } ) => children,
 	TextareaControl: ( { label, value, onChange } ) => (
 		<textarea aria-label={ label } value={ value || '' } onChange={ e => onChange( e.target.value ) } />
@@ -482,5 +499,102 @@ describe( 'incoming-field operator reconciliation on save', () => {
 			getLatestSaveAction()();
 		} );
 		expect( onSave ).toHaveBeenCalledWith( 'esp', { mailchimp_audience_id: 'abc123' } );
+	} );
+} );
+
+describe( 'ConfigureView per-direction sections', () => {
+	beforeEach( () => {
+		mockSetHeaderData.mockClear();
+		useUnsavedChangesDialog.mockClear();
+		useUnsavedChangesDialog.mockReturnValue( { confirmDialog: null, requestConfirm: jest.fn() } );
+	} );
+
+	// A bidirectional integration as the capability-aware backend declares it:
+	// each direction carries its enable toggle alongside its metadata field.
+	const bidirectionalIntegration = () => ( {
+		esp: {
+			...INTEGRATION,
+			settings: [
+				{ key: 'mailchimp_audience_id', type: 'text', label: 'Audience ID', value: '' },
+				{ key: 'outgoing_sync_enabled', type: 'checkbox', label: 'Enable outbound sync', value: true },
+				{
+					key: 'outgoing_metadata_fields',
+					type: 'metadata',
+					label: 'Outgoing metadata fields',
+					value: [ 'Full Name' ],
+					grouped_options: [ { section: 'Basic', fields: [ 'Full Name', 'Signup Date' ] } ],
+				},
+				{ key: 'incoming_sync_enabled', type: 'checkbox', label: 'Enable inbound sync', value: true },
+				{
+					key: 'incoming_metadata_fields',
+					type: 'metadata',
+					label: 'Incoming metadata fields',
+					value: { vip: 'default' },
+					options: [ { value: 'vip', label: 'VIP', matching_function: 'default', has_options: false } ],
+				},
+			],
+		},
+	} );
+
+	// The backend omits a direction's fields when the integration lacks the
+	// capability, so the view must simply not render that section.
+	it( 'renders no direction sections for an integration that declares neither', () => {
+		renderConfigureView();
+		expect( screen.queryByLabelText( 'Enable outbound sync' ) ).toBeNull();
+		expect( screen.queryByLabelText( 'Enable inbound sync' ) ).toBeNull();
+		expect( screen.queryByLabelText( 'Full Name' ) ).toBeNull();
+		expect( screen.queryByLabelText( 'VIP' ) ).toBeNull();
+	} );
+
+	it( 'renders both sections with their toggles and pickers when enabled', () => {
+		renderConfigureView( { integrations: bidirectionalIntegration() } );
+		expect( screen.getByLabelText( 'Enable outbound sync' ).checked ).toBe( true );
+		expect( screen.getByLabelText( 'Enable inbound sync' ).checked ).toBe( true );
+		expect( screen.getByLabelText( 'Full Name' ).checked ).toBe( true );
+		expect( screen.getByLabelText( 'Signup Date' ).checked ).toBe( false );
+		expect( screen.getByLabelText( 'VIP' ).checked ).toBe( true );
+	} );
+
+	it( 'hides only the outbound picker when outbound sync is toggled off and submits just the toggle', async () => {
+		const onSave = jest.fn( () => Promise.resolve() );
+		renderConfigureView( { integrations: bidirectionalIntegration(), onSave } );
+
+		fireEvent.click( screen.getByLabelText( 'Enable outbound sync' ) );
+		expect( screen.queryByLabelText( 'Full Name' ) ).toBeNull();
+		expect( screen.getByLabelText( 'VIP' ) ).toBeInTheDocument();
+
+		await act( async () => {
+			getLatestSaveAction()();
+		} );
+		// The field selection is not part of the payload: pausing must not
+		// rewrite (or clear) the stored outgoing_metadata_fields option.
+		expect( onSave ).toHaveBeenCalledWith( 'esp', { outgoing_sync_enabled: false } );
+	} );
+
+	it( 'restores the inbound selection after toggling the direction off and back on', () => {
+		renderConfigureView( { integrations: bidirectionalIntegration() } );
+
+		const toggle = () => screen.getByLabelText( 'Enable inbound sync' );
+		fireEvent.click( toggle() );
+		expect( screen.queryByLabelText( 'VIP' ) ).toBeNull();
+		expect( screen.getByLabelText( 'Full Name' ) ).toBeInTheDocument();
+		expect( useUnsavedChangesDialog ).toHaveBeenLastCalledWith( { when: true } );
+
+		fireEvent.click( toggle() );
+		expect( screen.getByLabelText( 'VIP' ).checked ).toBe( true );
+		// A net-zero toggle leaves nothing pending.
+		expect( useUnsavedChangesDialog ).toHaveBeenLastCalledWith( { when: false } );
+	} );
+
+	// Payloads predating the toggles (or an integration that opted out of them)
+	// must keep rendering the pickers unconditionally.
+	it( 'renders pickers without toggles for a payload lacking the toggle fields', () => {
+		const integrations = bidirectionalIntegration();
+		integrations.esp.settings = integrations.esp.settings.filter( f => ! f.key.endsWith( '_sync_enabled' ) );
+		renderConfigureView( { integrations } );
+		expect( screen.queryByLabelText( 'Enable outbound sync' ) ).toBeNull();
+		expect( screen.queryByLabelText( 'Enable inbound sync' ) ).toBeNull();
+		expect( screen.getByLabelText( 'Full Name' ) ).toBeInTheDocument();
+		expect( screen.getByLabelText( 'VIP' ) ).toBeInTheDocument();
 	} );
 } );

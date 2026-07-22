@@ -166,6 +166,33 @@ class Sync {
 		$result = new \WP_Error();
 
 		foreach ( $integrations as $integration ) {
+			// This predicate answers "can at least one integration receive contact
+			// data" — a push-path question, so integrations without an (enabled)
+			// push never satisfy it, even when their can_sync() reports no errors
+			// (an inbound-only integration has nothing to gate there).
+			if ( ! $integration->is_push_enabled() ) {
+				if ( $integration->supports_push() ) {
+					$result->add(
+						'integration_push_disabled',
+						sprintf(
+							/* translators: %s: integration name. */
+							__( 'Outbound sync is disabled for the %s integration.', 'newspack-plugin' ),
+							$integration->get_name()
+						)
+					);
+				} else {
+					$result->add(
+						'integration_push_not_supported',
+						sprintf(
+							/* translators: %s: integration name. */
+							__( 'The %s integration does not support outbound sync.', 'newspack-plugin' ),
+							$integration->get_name()
+						)
+					);
+				}
+				continue;
+			}
+
 			$can_sync_integration = $integration->can_sync( true );
 
 			// If any integration can sync, return true.

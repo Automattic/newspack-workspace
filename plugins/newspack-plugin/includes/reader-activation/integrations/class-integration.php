@@ -319,6 +319,65 @@ abstract class Integration {
 	abstract public function can_sync( $return_errors = false );
 
 	/**
+	 * Whether this integration can push (outbound) contact data to its external
+	 * destination.
+	 *
+	 * Push-capable integrations get the Outbound settings section, the
+	 * account-deletion sync fields and the metadata field prefix, and count
+	 * toward Sync::has_one_syncable_integration(). Inbound-only integrations
+	 * (those whose push_contact_data() is a deliberate no-op) should override
+	 * this to return false so the settings UI shows no dead outbound controls
+	 * and the sync framework skips the push path entirely.
+	 *
+	 * @return bool True if the integration can push contact data.
+	 */
+	public function supports_push(): bool {
+		return true;
+	}
+
+	/**
+	 * Whether this integration can pull (inbound) contact data from its
+	 * external source.
+	 *
+	 * Pull-capable integrations get the Inbound settings section and are
+	 * included in the Contact_Pull dispatch. Integrations that don't implement
+	 * pull_contact_data()/get_available_incoming_fields() should override this
+	 * to return false.
+	 *
+	 * @return bool True if the integration can pull contact data.
+	 */
+	public function supports_pull(): bool {
+		return true;
+	}
+
+	/**
+	 * Whether outbound (push) sync should currently run for this integration.
+	 *
+	 * Combines the push capability with the `outgoing_sync_enabled` toggle,
+	 * which pauses the direction while preserving the configured outgoing
+	 * field selection. Every push dispatch site must consult this — including
+	 * account-deletion propagation, which travels the push pipeline.
+	 *
+	 * @return bool True if pushes should run.
+	 */
+	final public function is_push_enabled(): bool {
+		return $this->supports_push() && (bool) $this->get_settings_field_value( 'outgoing_sync_enabled' );
+	}
+
+	/**
+	 * Whether inbound (pull) sync should currently run for this integration.
+	 *
+	 * Combines the pull capability with the `incoming_sync_enabled` toggle,
+	 * which pauses the direction while preserving the configured incoming
+	 * field selection. Every pull dispatch site must consult this.
+	 *
+	 * @return bool True if pulls should run.
+	 */
+	final public function is_pull_enabled(): bool {
+		return $this->supports_pull() && (bool) $this->get_settings_field_value( 'incoming_sync_enabled' );
+	}
+
+	/**
 	 * Push contact data to the integration destination.
 	 *
 	 * This method should be implemented by child classes to send
@@ -830,9 +889,11 @@ abstract class Integration {
 	/**
 	 * Get the account-deletion fields declared by this integration.
 	 *
-	 * Auto-appended to every integration's settings. The first field is a top-level
-	 * toggle; the second field is gated by the first via the `condition` predicate
-	 * honored by the frontend renderer.
+	 * Auto-appended to push-capable integrations' settings (see
+	 * get_settings_fields()): deletion propagates through the push pipeline, so
+	 * for a push-less integration these would be dead controls. The first field
+	 * is a top-level toggle; the second field is gated by the first via the
+	 * `condition` predicate honored by the frontend renderer.
 	 *
 	 * @return array Array of settings field declarations.
 	 */
@@ -885,30 +946,55 @@ abstract class Integration {
 	/**
 	 * Get the metadata fields declared by this integration.
 	 *
+	 * Capability-aware: the outbound group (metadata prefix, outbound sync
+	 * toggle, outgoing fields) is declared only for push-capable integrations —
+	 * the prefix is only ever read on push paths (prepare_contact()) — and the
+	 * inbound group (inbound sync toggle, incoming fields) only for
+	 * pull-capable ones, so an integration lacking a direction gets no dead
+	 * controls for it.
+	 *
 	 * @return array Array of settings field declarations.
 	 */
 	public function get_metadata_fields() {
-		return [
-			[
+		$fields = [];
+		if ( $this->supports_push() ) {
+			$fields[] = [
 				'key'         => 'metadata_prefix',
 				'type'        => 'text',
 				'label'       => __( 'Metadata field prefix', 'newspack-plugin' ),
 				'description' => __( 'A string to prefix metadata fields synced to the integration. Required to ensure that metadata field names are unique. Default: NP_', 'newspack-plugin' ),
 				'default'     => 'NP_',
-			],
-			[
+			];
+			$fields[] = [
+				'key'         => 'outgoing_sync_enabled',
+				'type'        => 'checkbox',
+				'label'       => __( 'Enable outbound sync', 'newspack-plugin' ),
+				'description' => __( 'Sync reader data to this integration. Disabling pauses outbound sync, including account-deletion sync, and preserves the outgoing field selection.', 'newspack-plugin' ),
+				'default'     => true,
+			];
+			$fields[] = [
 				'key'     => 'outgoing_metadata_fields',
 				'type'    => 'metadata',
 				'label'   => __( 'Outgoing metadata fields', 'newspack-plugin' ),
 				'default' => [],
-			],
-			[
+			];
+		}
+		if ( $this->supports_pull() ) {
+			$fields[] = [
+				'key'         => 'incoming_sync_enabled',
+				'type'        => 'checkbox',
+				'label'       => __( 'Enable inbound sync', 'newspack-plugin' ),
+				'description' => __( 'Pull contact data from this integration. Disabling pauses inbound sync and preserves the incoming field selection.', 'newspack-plugin' ),
+				'default'     => true,
+			];
+			$fields[] = [
 				'key'     => 'incoming_metadata_fields',
 				'type'    => 'metadata',
 				'label'   => __( 'Incoming metadata fields', 'newspack-plugin' ),
 				'default' => [],
-			],
-		];
+			];
+		}
+		return $fields;
 	}
 
 	/**
@@ -993,14 +1079,20 @@ abstract class Integration {
 	/**
 	 * Get the settings fields declared by this integration.
 	 *
+	 * The account-deletion group follows the push capability: deletion sync
+	 * routes through push_contact_data()/delete_contact(), so a push-less
+	 * integration gets neither field (and its `sync_account_deletion` value
+	 * reads as null/falsy, which the deletion dispatcher treats as disabled).
+	 * The metadata groups are capability-gated in get_metadata_fields().
+	 *
 	 * @return array Array of settings field declarations.
 	 */
 	public function get_settings_fields() {
-		return array_merge(
-			$this->settings_fields,
-			$this->get_account_deletion_fields(),
-			$this->get_metadata_fields()
-		);
+		$fields = $this->settings_fields;
+		if ( $this->supports_push() ) {
+			$fields = array_merge( $fields, $this->get_account_deletion_fields() );
+		}
+		return array_merge( $fields, $this->get_metadata_fields() );
 	}
 
 	/**

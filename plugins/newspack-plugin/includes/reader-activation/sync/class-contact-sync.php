@@ -285,6 +285,13 @@ class Contact_Sync extends Sync {
 		}
 
 		foreach ( $integrations as $integration_id => $integration ) {
+			// Skip integrations without an (enabled) push: pausing the outbound
+			// toggle stops pushes while the stored outgoing-field selection waits
+			// for re-enable, and push-less integrations have nothing to push to.
+			if ( ! $integration->is_push_enabled() ) {
+				continue;
+			}
+
 			$integration_contact = self::prepare_contact_for_integration( $integration, $contact, $options );
 
 			// Added logging here to more easily monitor integration sync data. Can be removed once integrations are released.
@@ -424,6 +431,12 @@ class Contact_Sync extends Sync {
 		$flag_contact = \apply_filters( 'newspack_esp_sync_contact', $flag_contact, $context );
 
 		foreach ( $integrations as $integration_id => $integration ) {
+			// Deletion propagates through the push pipeline (delete_contact() /
+			// flag-mode push_contact_data()), so it follows the push capability
+			// and the outbound toggle like any other outbound sync.
+			if ( ! $integration->is_push_enabled() ) {
+				continue;
+			}
 			if ( ! $integration->get_settings_field_value( 'sync_account_deletion' ) ) {
 				continue;
 			}
@@ -685,6 +698,11 @@ class Contact_Sync extends Sync {
 			return;
 		}
 
+		if ( ! $integration->is_push_enabled() ) {
+			static::log( sprintf( 'Outbound sync disabled for integration "%s" on retry %d; aborting retry chain.', $integration_id, $retry_count ) );
+			return;
+		}
+
 		static::log( sprintf( 'Executing retry %d/%d for integration "%s" sync of user %d (%s).', $retry_count, self::MAX_RETRIES, $integration_id, $user_id, $contact['email'] ?? 'unknown' ) );
 
 		/** This filter is documented in includes/reader-activation/sync/class-contact-sync.php */
@@ -893,6 +911,11 @@ class Contact_Sync extends Sync {
 
 		if ( ! $integration->is_set_up() ) {
 			static::log( sprintf( 'Integration "%s" no longer set up on deletion retry %d; aborting retry chain.', $integration_id, $retry_count ) );
+			return;
+		}
+
+		if ( ! $integration->is_push_enabled() ) {
+			static::log( sprintf( 'Outbound sync disabled for integration "%s" on deletion retry %d; aborting retry chain.', $integration_id, $retry_count ) );
 			return;
 		}
 
