@@ -214,7 +214,8 @@ final class Newspack_Popups_Segmentation {
 	 * inbound click carries e.g. `?np_seg_donor=true`. Skips when the Newsletters
 	 * tracking helper is unavailable, the post isn't a newsletter (ad links are
 	 * proxied separately and wouldn't forward the param), the link is
-	 * third-party, no donor merge field is configured, or the ESP is unsupported.
+	 * third-party, no donor merge field is configured, the ESP is unsupported, or
+	 * the ESP's tag syntax can't survive in a URL (see is_url_safe_merge_tag()).
 	 *
 	 * @param string        $url          Processed URL (may already carry other params).
 	 * @param string        $original_url Original URL before processing.
@@ -240,7 +241,12 @@ final class Newspack_Popups_Segmentation {
 		// Read the option directly rather than via Newspack_Popups_Settings::get_setting(),
 		// which builds the whole settings array (including a WP_Query over all pages)
 		// on every call — wasteful here since this filter fires once per newsletter link.
-		$donor_merge_field = get_option( 'newspack_popups_mc_donor_merge_field', Newspack_Popups_Settings::DEFAULT_DONOR_MERGE_FIELD );
+		// No default: DEFAULT_DONOR_MERGE_FIELD ('DONAT') is a *name fragment* for the
+		// substring matching below, not an ESP merge tag, and it only ever applied to
+		// Mailchimp. Falling back to it here decorated links on every site that had
+		// never configured the setting, with a tag no ESP resolves — see NPPM-3032.
+		// This feature is opt-in: without an explicitly configured field, do nothing.
+		$donor_merge_field = get_option( 'newspack_popups_mc_donor_merge_field', '' );
 		// This setting is a comma-delimited list of name fragments used for substring
 		// matching at login (see reader_logged_in()). Building a query-param merge tag
 		// instead needs a single exact ESP merge tag — a multi-value list can't map to
@@ -254,6 +260,9 @@ final class Newspack_Popups_Segmentation {
 		if ( empty( $merge_tag ) ) {
 			return $url;
 		}
+		if ( ! self::is_url_safe_merge_tag( $merge_tag ) ) {
+			return $url;
+		}
 		$url = add_query_arg( self::DONOR_SEGMENT_QUERY_PARAM, $merge_tag, $url );
 		// add_query_arg() URL-encodes the value, but ESPs substitute only the raw
 		// merge-tag syntax: Mailchimp leaves the percent-encoded form (%2A%7C...%7C%2A)
@@ -261,6 +270,35 @@ final class Newspack_Popups_Segmentation {
 		// Restore the raw tag so the ESP substitutes the recipient's value at send
 		// time. An unsubstituted literal is ignored client-side, so this stays fail-safe.
 		return str_replace( urlencode( $merge_tag ), $merge_tag, $url );
+	}
+
+	/**
+	 * Whether a merge tag can be placed raw in a URL without corrupting it.
+	 *
+	 * The tag is written to the query string unencoded so the ESP can substitute
+	 * it, which means its literal characters must be valid there. ActiveCampaign's
+	 * `%FIELD%` syntax is not: `%DO` is not a well-formed `%XX` escape, so any
+	 * consumer that percent-decodes query params throws on it. Jetpack Instant
+	 * Search does exactly that on every page load with no try/catch, so the
+	 * exception blanks the page (NPPM-3032).
+	 *
+	 * This is not limited to a misconfigured field. A tag survives into the live
+	 * URL whenever the ESP doesn't substitute it — an unknown field, a recipient
+	 * missing the value, a forwarded or previewed email — so for a provider whose
+	 * delimiter is `%` the broken URL is a routine outcome, not an edge case.
+	 * Skipping the param costs that provider donor segmentation on newsletter
+	 * clicks; emitting it risks breaking the page the reader landed on.
+	 *
+	 * @param string $merge_tag Raw ESP merge tag, e.g. '*|DONOR|*' or '%DONOR%'.
+	 *
+	 * @return bool
+	 */
+	private static function is_url_safe_merge_tag( $merge_tag ) {
+		if ( false === strpos( $merge_tag, '%' ) ) {
+			return true;
+		}
+		// Every '%' must introduce a well-formed two-hex-digit escape, or decoding fails.
+		return 1 === preg_match( '/^(?:[^%]|%[0-9A-Fa-f]{2})*$/', $merge_tag );
 	}
 
 	/**

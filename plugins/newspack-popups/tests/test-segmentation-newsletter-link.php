@@ -18,11 +18,12 @@ class SegmentationNewsletterLinkTest extends WP_UnitTestCase {
 	const DONOR_FIELD = 'HUB-MEMBER';
 
 	/**
-	 * Set up: configure a donor merge field.
+	 * Set up: configure a donor merge field and a Mailchimp-syntax provider.
 	 */
 	public function set_up() {
 		parent::set_up();
 		update_option( 'newspack_popups_mc_donor_merge_field', self::DONOR_FIELD );
+		\Newspack_Newsletters\Tracking\Utils::$syntax = '*|%s|*';
 	}
 
 	/**
@@ -78,6 +79,49 @@ class SegmentationNewsletterLinkTest extends WP_UnitTestCase {
 			$url,
 			Newspack_Popups_Segmentation::append_donor_segment_param( $url, $url, $this->make_newsletter() )
 		);
+	}
+
+	/**
+	 * The feature is opt-in: a site that never configured the setting must not
+	 * fall back to DEFAULT_DONOR_MERGE_FIELD. That default is a name fragment for
+	 * the Mailchimp substring matching in reader_logged_in(), not a merge tag, so
+	 * using it here decorated links on every unconfigured site with a tag no ESP
+	 * resolves (NPPM-3032).
+	 */
+	public function test_skips_when_donor_field_option_absent() {
+		delete_option( 'newspack_popups_mc_donor_merge_field' );
+		$url = home_url( '/some-article/' );
+		$this->assertSame(
+			$url,
+			Newspack_Popups_Segmentation::append_donor_segment_param( $url, $url, $this->make_newsletter() )
+		);
+	}
+
+	/**
+	 * ActiveCampaign's `%FIELD%` syntax is a malformed percent-escape once it sits
+	 * raw in a URL, so anything that percent-decodes query params throws on it —
+	 * blanking the page under Jetpack Instant Search (NPPM-3032). Skip the param
+	 * rather than emit a URL that can break the page the reader landed on.
+	 */
+	public function test_skips_provider_whose_tag_breaks_url_decoding() {
+		\Newspack_Newsletters\Tracking\Utils::$syntax = '%%%s%%';
+		$url = home_url( '/some-article/' );
+		$this->assertSame(
+			$url,
+			Newspack_Popups_Segmentation::append_donor_segment_param( $url, $url, $this->make_newsletter() )
+		);
+	}
+
+	/**
+	 * Bracket-delimited providers (Constant Contact, Campaign Monitor) carry no
+	 * percent sign, so they stay supported by the guard above.
+	 */
+	public function test_appends_for_bracket_syntax_provider() {
+		\Newspack_Newsletters\Tracking\Utils::$syntax = '[[%s]]';
+		$url    = home_url( '/some-article/' );
+		$result = Newspack_Popups_Segmentation::append_donor_segment_param( $url, $url, $this->make_newsletter() );
+
+		$this->assertStringContainsString( 'np_seg_donor=[[' . self::DONOR_FIELD . ']]', $result );
 	}
 
 	/**
