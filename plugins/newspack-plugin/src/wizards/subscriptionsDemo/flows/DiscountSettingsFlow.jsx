@@ -25,34 +25,44 @@ export default function DiscountSettingsFlow( { onClose, onSaved } ) {
 
 	return (
 		<Modal title={ __( 'Discount settings', 'newspack-plugin' ) } onRequestClose={ onClose } size="small">
-			<VStack spacing={ 4 }>
-				<RadioControl
-					label={ __( 'Overlapping discounts', 'newspack-plugin' ) }
-					help={ __( 'What happens when more than one discount applies to the same product.', 'newspack-plugin' ) }
-					selected={ draft.overlap }
-					options={ [
-						{ label: __( 'Apply the best discount only', 'newspack-plugin' ), value: 'best' },
-						{ label: __( 'Combine discounts', 'newspack-plugin' ), value: 'combine' },
-					] }
-					onChange={ overlap => setDraft( { ...draft, overlap } ) }
-				/>
-				<ToggleControl
-					label={ __( 'Apply on top of sale prices', 'newspack-plugin' ) }
-					help={ __( 'Subscribers get their discount even on products that are already on sale.', 'newspack-plugin' ) }
-					checked={ draft.applyOnSale }
-					onChange={ applyOnSale => setDraft( { ...draft, applyOnSale } ) }
-					__nextHasNoMarginBottom
-				/>
-				<ToggleControl
-					label={ __( 'Apply discounts at checkout', 'newspack-plugin' ) }
-					help={ __(
-						'Give readers their subscriber prices as soon as a subscription is in their cart, before they’ve completed the purchase.',
-						'newspack-plugin'
-					) }
-					checked={ draft.applyAtCheckout }
-					onChange={ applyAtCheckout => setDraft( { ...draft, applyAtCheckout } ) }
-					__nextHasNoMarginBottom
-				/>
+			<VStack spacing={ 6 }>
+				<VStack spacing={ 4 }>
+					<h3 className="newspack-subscribers-demo__settings-group-title">
+						{ __( 'Combining discounts', 'newspack-plugin' ) }
+					</h3>
+					<RadioControl
+						label={ __( 'Overlapping discounts', 'newspack-plugin' ) }
+						help={ __( 'What happens when more than one discount applies to the same product.', 'newspack-plugin' ) }
+						selected={ draft.overlap }
+						options={ [
+							{ label: __( 'Apply the best discount only', 'newspack-plugin' ), value: 'best' },
+							{ label: __( 'Combine discounts', 'newspack-plugin' ), value: 'combine' },
+						] }
+						onChange={ overlap => setDraft( { ...draft, overlap } ) }
+					/>
+					<ToggleControl
+						label={ __( 'Apply on top of sale prices', 'newspack-plugin' ) }
+						help={ __( 'Subscribers get their discount even on products that are already on sale.', 'newspack-plugin' ) }
+						checked={ draft.applyOnSale }
+						onChange={ applyOnSale => setDraft( { ...draft, applyOnSale } ) }
+						__nextHasNoMarginBottom
+					/>
+				</VStack>
+				<VStack spacing={ 4 }>
+					<h3 className="newspack-subscribers-demo__settings-group-title">
+						{ __( 'Timing', 'newspack-plugin' ) }
+					</h3>
+					<ToggleControl
+						label={ __( 'Apply discounts at checkout', 'newspack-plugin' ) }
+						help={ __(
+							'Give readers their subscriber prices as soon as a subscription is in their cart, before they’ve completed the purchase.',
+							'newspack-plugin'
+						) }
+						checked={ draft.applyAtCheckout }
+						onChange={ applyAtCheckout => setDraft( { ...draft, applyAtCheckout } ) }
+						__nextHasNoMarginBottom
+					/>
+				</VStack>
 				<HStack spacing={ 2 } justify="flex-end">
 					<Button variant="tertiary" size="compact" onClick={ onClose }>
 						{ __( 'Cancel', 'newspack-plugin' ) }

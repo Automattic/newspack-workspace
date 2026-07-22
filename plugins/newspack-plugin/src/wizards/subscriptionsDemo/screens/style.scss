@@ -183,6 +183,14 @@
 	margin-block: wp-vars.$grid-unit-30 wp-vars.$grid-unit-15;
 }
 
+// Group heading inside the settings modal: one step up from the 13px control
+// labels beneath it, without competing with the modal title.
+.newspack-subscribers-demo__settings-group-title {
+	font-size: wp-vars.$font-size-large;
+	font-weight: wp-vars.$font-weight-medium;
+	margin: 0;
+}
+
 // Seat count beside the "Members" heading: same size/line-height as the title,
 // lighter weight and gray so it reads as secondary.
 .newspack-subscribers-demo__seat-count {
