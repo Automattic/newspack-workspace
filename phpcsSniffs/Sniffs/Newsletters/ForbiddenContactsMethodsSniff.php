@@ -55,11 +55,28 @@ class ForbiddenContactsMethodsSniff implements Sniff {
 	 */
 	private $current_class = '';
 
+	/**
+	 * Path of the file $current_class was read from, used to detect when PHPCS
+	 * has moved on to the next file.
+	 *
+	 * @var string
+	 */
+	private $current_file = '';
+
 	public function register() {
 		return [ T_CLASS, T_STRING ];
 	}
 
 	public function process( File $phpcs_file, $stack_ptr ) {
+		// PHPCS reuses a single sniff instance for every file in the run, so
+		// $current_class would otherwise carry over. A file that declares no
+		// class of its own would then be judged against the previous file's
+		// class — and silently exempted whenever that class was an allowed one.
+		if ( $phpcs_file->path !== $this->current_file ) {
+			$this->current_file  = $phpcs_file->path;
+			$this->current_class = '';
+		}
+
 		// Service-provider classes legitimately call internal methods.
 		$path_parts = explode( DIRECTORY_SEPARATOR, $phpcs_file->path );
 		$count      = count( $path_parts );
