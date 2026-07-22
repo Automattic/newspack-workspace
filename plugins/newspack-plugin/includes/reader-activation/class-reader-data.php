@@ -294,7 +294,7 @@ final class Reader_Data {
 		 * @param string $value     Value.
 		 */
 		$max_items = apply_filters( 'newspack_reader_data_max_items', self::MAX_ITEMS, $user_id, $key, $value );
-		if ( count( $user_keys ) >= self::MAX_ITEMS ) {
+		if ( count( $user_keys ) >= $max_items ) {
 			return new \WP_Error( 'too_many_items', __( 'Too many items.', 'newspack' ), [ 'status' => 400 ] );
 		}
 

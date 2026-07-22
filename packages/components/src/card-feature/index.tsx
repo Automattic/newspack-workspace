@@ -39,7 +39,7 @@ type CardFeatureIcon = {
 type MoreControl = {
 	title: string;
 	onClick: () => void;
-	icon?: React.ReactNode;
+	icon?: JSX.Element;
 };
 
 type CardFeatureProps = {
@@ -138,6 +138,23 @@ const CardFeature = ( {
 		  } )
 		: undefined;
 
+	let renderedIcon = null;
+	if ( isValidElement( icon ) ) {
+		renderedIcon = icon;
+	} else if ( iconDescriptor ) {
+		renderedIcon = (
+			<div
+				className={ iconClasses }
+				style={ {
+					backgroundColor: iconDescriptor.backgroundColor,
+					color: iconDescriptor.fill,
+				} }
+			>
+				{ iconDescriptor.node }
+			</div>
+		);
+	}
+
 	return (
 		<Card
 			className={ classes }
@@ -151,20 +168,7 @@ const CardFeature = ( {
 								<h2 className="newspack-card-feature__title">{ title }</h2>
 								{ description && <p className="newspack-card-feature__description">{ description }</p> }
 							</div>
-							{ icon &&
-								( iconDescriptor ? (
-									<div
-										className={ iconClasses }
-										style={ {
-											backgroundColor: iconDescriptor.backgroundColor,
-											color: iconDescriptor.fill,
-										} }
-									>
-										{ iconDescriptor.node }
-									</div>
-								) : (
-									icon
-								) ) }
+							{ renderedIcon }
 						</HStack>
 						<HStack alignment="edge">
 							<HStack expanded={ false } spacing="8px">

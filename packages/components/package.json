@@ -58,8 +58,8 @@
 		"@babel/preset-env": "^7.29.7",
 		"@babel/preset-react": "^7.29.7",
 		"@babel/preset-typescript": "^7.29.7",
-		"recursive-copy": "^2.0.0",
-		"newspack-scripts": "workspace:*"
+		"newspack-scripts": "workspace:*",
+		"recursive-copy": "^2.0.0"
 	},
 	"babel": {
 		"ignore": [
@@ -76,6 +76,7 @@
 		"test": "newspack-scripts test",
 		"prepublishOnly": "npm run clean && npm run compile && node copy-styles.js",
 		"postpublish": "npm run clean",
-		"build": "npm run clean && npm run compile && node copy-styles.js"
+		"build": "npm run clean && npm run compile && node copy-styles.js",
+		"typescript:check": "newspack-scripts typescript-check"
 	}
 }

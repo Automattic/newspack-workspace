@@ -118,6 +118,34 @@ class MailchimpIntegrationsSchemaTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Value-type mapping (and the numeric `range` default) is derived from Mailchimp's
+	 * merge-field type so the framework constrains the segment operator per field
+	 * shape instead of treating every field as free text. Mirrors the AC mapper.
+	 */
+	public function test_value_type_by_type() {
+		$cases = [
+			'text'     => [ 'string', 'default' ],
+			'number'   => [ 'number', 'range' ],
+			'date'     => [ 'date', 'default' ],
+			'birthday' => [ 'date', 'default' ],
+			'dropdown' => [ 'select', 'default' ],
+			'radio'    => [ 'select', 'default' ],
+			'phone'    => [ 'string', 'default' ],
+			'zip'      => [ 'string', 'default' ],
+		];
+		foreach ( $cases as $type => $expected ) {
+			$mapped = $this->map_field(
+				[
+					'tag'  => 'T',
+					'type' => $type,
+				]
+			);
+			$this->assertSame( $expected[0], $mapped['value_type'], "$type value_type" );
+			$this->assertSame( $expected[1], $mapped['matching_function'], "$type matching_function" );
+		}
+	}
+
+	/**
 	 * Schema shape — every key the consumer (newspack-plugin) reads must be present.
 	 */
 	public function test_returned_schema_shape() {
@@ -147,7 +175,7 @@ class MailchimpIntegrationsSchemaTest extends WP_UnitTestCase {
 
 		$this->assertSame( 'FAVCOLOR', $mapped['key'] );
 		$this->assertSame( 'Favorite Color', $mapped['name'] );
-		$this->assertSame( 'string', $mapped['value_type'] );
+		$this->assertSame( 'select', $mapped['value_type'], 'a dropdown maps to the select value_type' );
 		$this->assertSame( 'default', $mapped['matching_function'] );
 		$this->assertSame( 'Picked at signup', $mapped['description'] );
 	}

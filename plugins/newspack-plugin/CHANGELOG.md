@@ -1,3 +1,10 @@
+## newspack [6.46.1](https://github.com/Automattic/newspack-workspace/compare/newspack@6.46.0...newspack@6.46.1) (2026-07-21)
+
+
+### Bug Fixes
+
+* **content-gate:** keep anonymous metering tied to registered access ([#671](https://github.com/Automattic/newspack-workspace/issues/671)) ([8561061](https://github.com/Automattic/newspack-workspace/commit/856106166a11585b55b63d0290d6e8ed03891078))
+
 # newspack [6.46.0](https://github.com/Automattic/newspack-workspace/compare/newspack@6.45.3...newspack@6.46.0) (2026-07-20)
 
 

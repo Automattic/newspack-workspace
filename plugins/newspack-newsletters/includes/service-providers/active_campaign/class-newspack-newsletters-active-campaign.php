@@ -2475,9 +2475,11 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 	 * but not promoted by default.
 	 *
 	 * Matching function depends on selection cardinality. Per AC's Contact Custom Fields API
-	 * Guide, dropdown / radio / listbox are single-selection types (their stored value is the
-	 * raw chosen option), so 'default' (strict equality) matching is correct. Checkbox and
-	 * multiselect are multi-selection types: AC stores the chosen options with a `||` delimiter
+	 * Guide, dropdown / radio are single-selection types (their stored value is the raw chosen
+	 * option), so 'default' (strict equality) matching is correct. Checkbox, listbox and
+	 * multiselect are multi-selection types — AC's "Checkbox" is a multi-select checkbox group
+	 * (not a boolean toggle) and its "List Box" is a multi-select list, so a contact can hold
+	 * several values for either. AC stores the chosen options with a `||` delimiter
 	 * (e.g. `||Option A||Option C||`), which `default` matching cannot resolve — those types
 	 * use 'list__in', and the consumer's parse_list_value() recognizes the delimiter.
 	 *
@@ -2491,8 +2493,8 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 		}
 
 		$type                       = isset( $field['type'] ) ? $field['type'] : 'text';
-		$single_select_enum_types   = [ 'dropdown', 'radio', 'listbox' ];
-		$multi_select_enum_types    = [ 'checkbox', 'multiselect' ];
+		$single_select_enum_types   = [ 'dropdown', 'radio' ];
+		$multi_select_enum_types    = [ 'checkbox', 'listbox', 'multiselect' ];
 		$enumerated_types           = array_merge( $single_select_enum_types, $multi_select_enum_types );
 		$eligible_types             = array_merge( [ 'text', 'textarea', 'date', 'datetime' ], $enumerated_types );
 		$is_promoted_by_default     = in_array( $type, $eligible_types, true );
@@ -2503,10 +2505,26 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 			$options = $this->fetch_field_options( $field['id'] );
 		}
 
+		// Derive value_type from AC's field type so the framework constrains the
+		// operator dropdown to the field shape (a date field can't be typed
+		// "Number"). Mirrors newspack-manager's ActiveCampaign integration so the
+		// same field types identically whether a contact syncs through this ESP
+		// path or the managed integration.
+		$value_type = 'string';
+		if ( $is_multi_select ) {
+			$value_type = 'multiselect';
+		} elseif ( in_array( $type, $single_select_enum_types, true ) ) {
+			$value_type = 'select';
+		} elseif ( 'datetime' === $type ) {
+			$value_type = 'datetime';
+		} elseif ( 'date' === $type || false !== strpos( (string) $type, 'date' ) ) {
+			$value_type = 'date';
+		}
+
 		return [
 			'key'                 => $perstag,
 			'name'                => ! empty( $field['title'] ) ? $field['title'] : $perstag,
-			'value_type'          => 'string',
+			'value_type'          => $value_type,
 			'matching_function'   => $is_multi_select ? 'list__in' : 'default',
 			'options'             => $options,
 			'description'         => ! empty( $field['descript'] ) ? $field['descript'] : '',
