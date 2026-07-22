@@ -3,7 +3,7 @@ set -euo pipefail
 . "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
 require jq
 
-usage() { die "usage: ledger.sh init|path|get|set|history|drift|evidence|reclaim <run_id> ..."; }
+usage() { die "usage: ledger.sh init|path|get|set|history|drift|evidence|reclaim|validate <run_id> ..."; }
 [ $# -ge 2 ] || usage
 cmd="$1"; run_id="$2"; shift 2
 dir="$RUNS_DIR/$run_id"; file="$dir/ledger.json"; lockdir="$dir/.lock"
@@ -35,7 +35,8 @@ case "$cmd" in
     mkdir -p "$dir"
     [ -f "$file" ] && die "ledger already exists: $file"
     jq -n --arg run_id "$run_id" --arg issue "$issue" --arg mode "$mode" '{
-      run_id:$run_id, issue:$issue, mode:$mode, stage:"intake",
+      run_id:$run_id, issue:$issue, mode:$mode, secure:($mode == "secure"),
+      stage:"intake",
       stage_history:[], decisions:[], linear_prior:null, evidence:[],
       env:null, branch:null, pr:null,
       loop_counts:{fix_iterations:0, repro_hypotheses:0}, loop_started_at:null,
@@ -57,6 +58,14 @@ case "$cmd" in
     kind="${1:?}"; path="${2:?}"; ecmd="${3:-}"
     mutate '.evidence += [{kind:$k, path:$p, cmd:$c, captured_at:$t}]' \
       --arg k "$kind" --arg p "$path" --arg c "$ecmd" --arg t "$(now_utc)" ;;
+  validate)
+    # consistency guard (spec magi #8): .mode and .secure must agree. Optional,
+    # belt-and-suspenders; init keeps them aligned by construction.
+    [ -f "$file" ] || die "no ledger for $run_id"
+    m="$(jq -r '.mode' "$file")"; s="$(jq -r '.secure // false' "$file")"
+    exp="$([ "$m" = secure ] && echo true || echo false)"
+    [ "$s" = "$exp" ] || die "ledger inconsistent for $run_id: mode=$m but secure=$s (expected $exp)"
+    echo ok ;;
   reclaim)
     [ -d "$lockdir" ] || { log "no lock on $run_id"; exit 0; }
     pid=""; host=""

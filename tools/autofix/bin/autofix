@@ -73,7 +73,7 @@ mint_run_id() { # issue-id
   done
 }
 
-cmd="${1:?usage: autofix intake|run|resume|cleanup ...}"; shift
+cmd="${1:?usage: autofix intake|run|run-secure|resume|cleanup ...}"; shift
 case "$cmd" in
   intake) exec bash "$BIN/intake.sh" queue "$@" ;;
   run)
@@ -87,12 +87,34 @@ case "$cmd" in
     bash "$BIN/claim.sh" claim "$issue" "$rid"
     echo "RUN_ID=$rid"
     echo "NEXT: stages 1-7 are orchestrated by the autofix skill (see .claude/skills/autofix/SKILL.md)" ;;
+  run-secure)
+    # supervised, disclosure-hardened path for Security-labeled issues.
+    # Entry ack (spec Piece 1): a deliberate second signal, so a Security issue
+    # is never picked up casually. Enforcement is ledger-driven thereafter.
+    [ "${AUTOFIX_SECURE:-}" = 1 ] \
+      || die "run-secure requires AUTOFIX_SECURE=1 in the environment (deliberate entry ack)"
+    issue="${1:?issue id}"; shift
+    sweep
+    summary="$(bash "$BIN/intake.sh" check-secure "$issue" "$@")" || exit $?
+    rid="$(mint_run_id "$issue")"
+    bash "$BIN/ledger.sh" init "$rid" "$issue" secure >/dev/null
+    stem="$(printf '%s' "$summary" | jq -r .branchName)"
+    bash "$BIN/ledger.sh" set "$rid" '.decisions += [{key:"branch_stem", value:$v}]' --arg v "$stem"
+    bash "$BIN/claim.sh" claim "$issue" "$rid"
+    echo "RUN_ID=$rid"
+    echo "SECURE=true"
+    echo "NEXT: stages 1-7 via the autofix-secure skill; disclosing writes are gated (see .claude/skills/autofix-secure/SKILL.md)" ;;
   resume)
     rid="${1:?run id}"
     bash "$BIN/ledger.sh" reclaim "$rid" || true
     log "stage: $(bash "$BIN/ledger.sh" get "$rid" .stage) terminal: $(bash "$BIN/ledger.sh" get "$rid" '.terminal // "none"')"
     echo "RUN_ID=$rid"
-    echo "NEXT: reconcile against Linear/GitHub/env state, then continue from the recorded stage (autofix skill)" ;;
+    if is_secure "$rid"; then
+      echo "SECURE=true"
+      echo "NEXT: reconcile state, then continue via the autofix-secure skill — gates remain active (ledger-driven)"
+    else
+      echo "NEXT: reconcile against Linear/GitHub/env state, then continue from the recorded stage (autofix skill)"
+    fi ;;
   cleanup) sweep ;;
   *) die "unknown command: $cmd" ;;
 esac
