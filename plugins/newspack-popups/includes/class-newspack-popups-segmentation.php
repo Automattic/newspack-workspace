@@ -373,18 +373,56 @@ final class Newspack_Popups_Segmentation {
 		if ( ! isset( $_GET[ self::DONOR_SEGMENT_QUERY_PARAM ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			return;
 		}
-		$value = sanitize_text_field( wp_unslash( $_GET[ self::DONOR_SEGMENT_QUERY_PARAM ] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		if ( ! self::is_unsubstituted_merge_tag( $value ) ) {
+		$request_uri = esc_url_raw( wp_unslash( $_SERVER['REQUEST_URI'] ) );
+		// Match against BOTH the raw query value and the percent-decoded one. PHP
+		// decodes $_GET before this runs, so a tag whose field name begins with a hex
+		// pair — `%CAFE%`, `%ABCD%` — arrives already mangled (`%CA` becomes one byte)
+		// and no longer looks like a `%…%` tag, yet the raw URL still throws in a
+		// strict client-side decoder (decodeURIComponent) and blanks the page. The raw
+		// REQUEST_URI query preserves the literal `%XX` so the check can catch it. The
+		// decoded value is still checked too, so a merge tag whose delimiters were
+		// percent-encoded in transit (e.g. `%2A%7C…%7C%2A` for Mailchimp) is not
+		// missed. See NPPM-3032.
+		$raw_value     = self::get_raw_query_param( $request_uri, self::DONOR_SEGMENT_QUERY_PARAM );
+		$decoded_value = sanitize_text_field( wp_unslash( $_GET[ self::DONOR_SEGMENT_QUERY_PARAM ] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( ! self::is_unsubstituted_merge_tag( $raw_value ) && ! self::is_unsubstituted_merge_tag( $decoded_value ) ) {
 			return;
 		}
 		$clean_url = remove_query_arg(
 			self::DONOR_SEGMENT_QUERY_PARAM,
-			esc_url_raw( wp_unslash( $_SERVER['REQUEST_URI'] ) )
+			$request_uri
 		);
 		// Temporary: the param is a property of this one link, not of the page, so
 		// nothing should cache the mapping permanently.
 		wp_safe_redirect( $clean_url, 302 );
 		exit;
+	}
+
+	/**
+	 * Read a single query parameter's value from a URL *without* percent-decoding
+	 * it, so a malformed escape (e.g. `%CAFE%`) survives intact for inspection.
+	 *
+	 * `$_GET`, parse_str() and wp_parse_args() all percent-decode, which is exactly
+	 * what must be avoided when deciding whether a value is a raw merge tag that
+	 * would break client-side decoding — see scrub_unsubstituted_donor_param().
+	 *
+	 * @param string $url   URL or path carrying a query string.
+	 * @param string $param Parameter name to read.
+	 *
+	 * @return string Raw (still-encoded) value, or '' when the param is absent.
+	 */
+	private static function get_raw_query_param( $url, $param ) {
+		$query = (string) wp_parse_url( $url, PHP_URL_QUERY );
+		if ( '' === $query ) {
+			return '';
+		}
+		foreach ( explode( '&', $query ) as $pair ) {
+			$parts = explode( '=', $pair, 2 );
+			if ( $param === $parts[0] ) {
+				return isset( $parts[1] ) ? $parts[1] : '';
+			}
+		}
+		return '';
 	}
 
 	/**

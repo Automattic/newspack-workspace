@@ -213,6 +213,37 @@ class SegmentationNewsletterLinkTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * ActiveCampaign tags whose field name begins with a hex pair (`%CAFE%`,
+	 * `%ABCD%`, …) must be scrubbed too. PHP percent-decodes `$_GET` before the
+	 * handler runs, so the leading `%XX` is consumed and the value no longer looks
+	 * like a `%…%` tag — yet the raw URL still throws in `decodeURIComponent`, so
+	 * it blanks the page exactly like `%DONAT%`. The detection therefore has to run
+	 * against the raw query string, not the decoded `$_GET` (NPPM-3032).
+	 *
+	 * @param string $tag Raw merge tag as it arrives in the query string.
+	 *
+	 * @dataProvider hex_shaped_tag_provider
+	 */
+	public function test_scrub_strips_hex_shaped_activecampaign_tag( $tag ) {
+		$this->assertSame( '/p/?a=1', $this->scrub( '/p/?a=1&np_seg_donor=' . $tag ) );
+	}
+
+	/**
+	 * ActiveCampaign tags whose field name starts with two hex digits — the class
+	 * PHP's `$_GET` decode would mangle before the check sees it.
+	 *
+	 * @return array[]
+	 */
+	public function hex_shaped_tag_provider() {
+		return [
+			'CAFE' => [ '%CAFE%' ],
+			'ABCD' => [ '%ABCD%' ],
+			'DEAD' => [ '%DEAD%' ],
+			'12AB' => [ '%12AB%' ],
+		];
+	}
+
+	/**
 	 * Unsubstituted tags from the other supported ESPs are dropped too: they
 	 * carry no donor signal either, and leaving them would keep junk in the URL.
 	 *
