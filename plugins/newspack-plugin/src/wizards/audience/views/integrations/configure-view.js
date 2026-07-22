@@ -426,9 +426,10 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 
 	// The divider separates the toggle from the section content below it, so it
 	// only renders when there is content to divide: the caller passes false for a
-	// paused direction or an empty section. `dividerMarginBottom` compensates for
-	// the sections' different grid rowGaps so both net the same visual spacing.
-	const renderSectionToggle = ( toggleSetting, showDivider, dividerMarginBottom = 0 ) =>
+	// paused direction or an empty section. `dividerMargin` (applied above and
+	// below) compensates for the sections' different grid rowGaps — Inbound's 8
+	// vs Outbound's 16 — so both sections net the same 16px around the rule.
+	const renderSectionToggle = ( toggleSetting, showDivider, dividerMargin = 0 ) =>
 		toggleSetting && (
 			<>
 				<ToggleControl
@@ -438,7 +439,7 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 					onChange={ checked => handleFieldChange( toggleSetting.key, checked ) }
 					__nextHasNoMarginBottom
 				/>
-				{ showDivider && <Divider variant="tertiary" marginTop={ 0 } marginBottom={ dividerMarginBottom } /> }
+				{ showDivider && <Divider variant="tertiary" marginTop={ dividerMargin } marginBottom={ dividerMargin } /> }
 			</>
 		);
 
