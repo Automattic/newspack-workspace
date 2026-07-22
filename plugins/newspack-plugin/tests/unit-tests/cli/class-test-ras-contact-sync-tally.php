@@ -17,18 +17,9 @@ use Newspack\Reader_Activation\Integrations;
 require_once dirname( __DIR__, 3 ) . '/includes/cli/class-ras-contact-sync.php';
 require_once dirname( __DIR__ ) . '/integrations/class-failing-sample-integration.php';
 
-// Minimal WP_CLI stub: sync_contacts() logs progress via WP_CLI::log(), which is
-// not loaded under PHPUnit. Only the logging surface the sync path touches is stubbed.
-if ( ! class_exists( 'WP_CLI' ) ) {
-	class WP_CLI {
-		public static function log( $message ) {}
-		public static function line( $message = '' ) {}
-		public static function success( $message ) {}
-		public static function error( $message ) {
-			throw new \Exception( esc_html( $message ) );
-		}
-	}
-}
+// Shared WP_CLI stub: sync_contacts() logs progress via WP_CLI::log(), which is
+// not loaded under PHPUnit.
+require_once dirname( __DIR__, 2 ) . '/mocks/wp-cli-mocks.php';
 
 /**
  * Results tally of the batch sync driver.

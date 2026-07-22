@@ -14,8 +14,10 @@
 use Newspack\CLI\Institutions_Migration;
 use Newspack\Institution;
 
+require_once dirname( __DIR__, 2 ) . '/mocks/wp-cli-mocks.php';
+
 /**
- * Test the migrate-institutions data-layer helpers.
+ * Test the migrate-institutions data-layer helpers and command-level reporting.
  */
 class Test_Institutions_Migration extends WP_UnitTestCase {
 
@@ -48,6 +50,7 @@ class Test_Institutions_Migration extends WP_UnitTestCase {
 		parent::set_up();
 		global $subscriptions_database;
 		$subscriptions_database = [];
+		WP_CLI::reset();
 	}
 
 	/**
@@ -75,7 +78,8 @@ class Test_Institutions_Migration extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Get all institution posts.
+	 * Get all institution posts, every status included (trash too, so the
+	 * trashed-institution idempotency test can count accurately).
 	 *
 	 * @return WP_Post[]
 	 */
@@ -83,7 +87,7 @@ class Test_Institutions_Migration extends WP_UnitTestCase {
 		return get_posts(
 			[
 				'post_type'      => Institution::POST_TYPE,
-				'post_status'    => 'any',
+				'post_status'    => array_keys( get_post_stati() ),
 				'posts_per_page' => -1,
 			]
 		);
@@ -258,6 +262,11 @@ class Test_Institutions_Migration extends WP_UnitTestCase {
 		$this->assertNotEmpty( $migration_result['reason'], 'The unmappable reason should be populated for reporting.' );
 		$this->assertSame( [ 'not-an-ip-range' ], $migration_result['invalid_ranges'], 'The rejected ranges should be surfaced.' );
 		$this->assertCount( 0, $this->get_all_institutions(), 'No institution should be created for an unmappable team.' );
+
+		// When no --domains-csv was supplied at all, the reason must not claim the
+		// CSV lacked the team — there was no CSV to lack it.
+		$no_csv_result = Institutions_Migration::migrate_team( $team_id, '', [], true, false );
+		$this->assertStringContainsString( 'no domains CSV supplied', $no_csv_result['reason'], 'The reason wording should reflect that no CSV was passed.' );
 	}
 
 	/**
@@ -296,5 +305,94 @@ class Test_Institutions_Migration extends WP_UnitTestCase {
 		$this->assertSame( $institution_id, $second_run_result['institution_id'], 'The existing institution should be referenced.' );
 		$this->assertCount( 1, $this->get_all_institutions(), 'No duplicate institution should be created.' );
 		$this->assertSame( '203.0.113.7', get_post_meta( $institution_id, Institution::META_PREFIX . 'ip_range', true ), 'The operator-edited ranges must survive the re-run.' );
+		$this->assertSame( [ '203.0.113.7' ], $second_run_result['ip_ranges'], 'The re-run must report the institution\'s CURRENT ranges (the operator edit), not the stale source ranges.' );
+		$this->assertSame( [], $second_run_result['invalid_ranges'], 'Source-data range warnings are irrelevant for an already-migrated team.' );
+	}
+
+	/**
+	 * A trashed migrated institution still counts as migrated: a re-run must not
+	 * create a duplicate, and the found institution's status is reported.
+	 */
+	public function test_migrate_team_treats_trashed_institution_as_migrated() {
+		$team_id = $this->create_team( 'Trashed University' );
+
+		$first_run_result = Institutions_Migration::migrate_team( $team_id, '10.3.0.0/16', [], true );
+		$institution_id   = $first_run_result['institution_id'];
+		wp_trash_post( $institution_id );
+
+		$second_run_result = Institutions_Migration::migrate_team( $team_id, '10.3.0.0/16', [], true );
+
+		$this->assertSame( 'exists', $second_run_result['status'], 'A trashed institution must still count as migrated.' );
+		$this->assertSame( $institution_id, $second_run_result['institution_id'], 'The trashed institution should be the one referenced.' );
+		$this->assertSame( 'trash', $second_run_result['institution_status'], 'The found institution\'s status should be reported.' );
+		$this->assertCount( 1, $this->get_all_institutions(), 'No duplicate institution should be created for a trashed one.' );
+	}
+
+	/**
+	 * When Institution::create fails, the result is an explicit 'error' status
+	 * carrying the WP_Error reason — never a fake success.
+	 */
+	public function test_migrate_team_reports_create_failure_as_error() {
+		$team_id = $this->create_team( 'Erroring University' );
+
+		// Force wp_insert_post (inside Institution::create) to fail.
+		add_filter( 'wp_insert_post_empty_content', '__return_true' );
+		$migration_result = Institutions_Migration::migrate_team( $team_id, '10.4.0.0/16', [], true );
+		remove_filter( 'wp_insert_post_empty_content', '__return_true' );
+
+		$this->assertSame( 'error', $migration_result['status'], 'A failed create must surface as an error status.' );
+		$this->assertNotEmpty( $migration_result['reason'], 'The WP_Error reason must be carried for reporting.' );
+		$this->assertSame( 0, $migration_result['institution_id'], 'No institution ID should be reported on failure.' );
+		$this->assertCount( 0, $this->get_all_institutions(), 'No institution should exist after a failed create.' );
+	}
+
+	/**
+	 * Command-level: a live run where creation fails prints a FAILED warning with
+	 * the reason and tallies the error in the Done line — it must never render as
+	 * a success in an access-granting migration.
+	 */
+	public function test_migrate_institutions_command_reports_create_errors() {
+		$team_id = $this->create_team( 'Command Error University' );
+		update_option( Institutions_Migration::ACCESS_BY_IP_OPTION, [ $team_id => '10.5.0.0/16' ] );
+
+		add_filter( 'wp_insert_post_empty_content', '__return_true' );
+		( new Institutions_Migration() )->migrate_institutions( [], [ 'live' => true ] );
+		remove_filter( 'wp_insert_post_empty_content', '__return_true' );
+
+		$warning_messages = array_column( array_filter( WP_CLI::$messages, fn( $entry ) => 'warning' === $entry[0] ), 1 );
+		$success_messages = array_column( array_filter( WP_CLI::$messages, fn( $entry ) => 'success' === $entry[0] ), 1 );
+
+		$failed_warnings = array_filter( $warning_messages, fn( $message ) => str_contains( $message, 'FAILED to create institution' ) );
+		$this->assertCount( 1, $failed_warnings, 'The failed create must be reported as a warning.' );
+		$this->assertStringContainsString( 'empty', reset( $failed_warnings ), 'The WP_Error reason must be printed.' );
+
+		foreach ( $success_messages as $success_message ) {
+			$this->assertStringNotContainsString( 'created institution', $success_message, 'A failed create must never print as a created-institution success.' );
+		}
+
+		$done_warnings = array_filter( $warning_messages, fn( $message ) => str_contains( $message, '1 error(s)' ) );
+		$this->assertCount( 1, $done_warnings, 'The Done tally must count the error and be emitted as a warning.' );
+		$this->assertCount( 0, $this->get_all_institutions(), 'Nothing should have been created.' );
+	}
+
+	/**
+	 * BOM handling: a UTF-8 BOM at the start of a headerless CSV (Excel/Sheets
+	 * exports) must not swallow the first data row.
+	 */
+	public function test_parse_domains_csv_strips_utf8_bom() {
+		$csv_path = $this->write_csv( "\xEF\xBB\xBF12,uni.edu\n34,example.com\n" );
+
+		$parse_result = Institutions_Migration::parse_domains_csv( $csv_path );
+
+		$this->assertNotWPError( $parse_result );
+		$this->assertSame(
+			[
+				12 => [ 'uni.edu' ],
+				34 => [ 'example.com' ],
+			],
+			$parse_result['map'],
+			'The BOM must be stripped so row 1 parses as data.'
+		);
+		$this->assertSame( [], $parse_result['errors'] );
 	}
 }
