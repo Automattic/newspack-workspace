@@ -14,6 +14,24 @@
 
 defined( 'ABSPATH' ) || exit;
 
+/*
+ * Refuse to do anything unless the site was provisioned as an e2e target.
+ *
+ * Everything below is destructive outside a throwaway site: /_email publishes
+ * every captured message — password-reset and magic links included — to
+ * unauthenticated visitors, pre_wp_mail swallows all outgoing mail while
+ * reporting success, and the logout endpoint answers without a nonce. Those are
+ * the behaviours the suite needs, so the safeguard is refusing to run anywhere
+ * else rather than softening them.
+ *
+ * e2e-setup.sh writes this constant to wp-config.php before it installs and
+ * activates this plugin, so a correctly provisioned site always has it and a
+ * stray copy onto any other site is inert.
+ */
+if ( ! defined( 'NEWSPACK_IS_E2E' ) || ! NEWSPACK_IS_E2E ) {
+	return;
+}
+
 // Prevent the admin email confirmation screen
 add_filter( 'admin_email_check_interval', '__return_false' );
 
