@@ -424,15 +424,20 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 
 	const visibleSettingsFields = settingsFields.filter( fieldIsVisible );
 
-	const renderSectionToggle = toggleSetting =>
+	// The divider only renders while the direction is enabled: it separates the
+	// toggle from the section content below it, and a paused section has none.
+	const renderSectionToggle = ( toggleSetting, showDivider ) =>
 		toggleSetting && (
-			<ToggleControl
-				label={ toggleSetting.label }
-				help={ toggleSetting.description }
-				checked={ toBool( getFieldValue( toggleSetting ) ) }
-				onChange={ checked => handleFieldChange( toggleSetting.key, checked ) }
-				__nextHasNoMarginBottom
-			/>
+			<>
+				<ToggleControl
+					label={ toggleSetting.label }
+					help={ toggleSetting.description }
+					checked={ toBool( getFieldValue( toggleSetting ) ) }
+					onChange={ checked => handleFieldChange( toggleSetting.key, checked ) }
+					__nextHasNoMarginBottom
+				/>
+				{ showDivider && <Divider variant="tertiary" marginTop={ 0 } marginBottom={ 0 } /> }
+			</>
 		);
 
 	return (
@@ -463,7 +468,7 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 						<Grid columns={ 2 } gutter={ 32 } noMargin>
 							<SectionHeader heading={ 2 } title={ __( 'Inbound', 'newspack-plugin' ) } noMargin />
 							<Grid columns={ 1 } rowGap={ 8 } noMargin>
-								{ renderSectionToggle( inboundToggleField ) }
+								{ renderSectionToggle( inboundToggleField, inboundEnabled ) }
 								{ inboundEnabled &&
 									( inboundField.options || [] ).map( option => {
 										// Options are always { value, label, matching_function, has_options } objects
@@ -521,7 +526,7 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 						<Grid columns={ 2 } gutter={ 32 } noMargin>
 							<SectionHeader heading={ 2 } title={ __( 'Outbound', 'newspack-plugin' ) } noMargin />
 							<Grid columns={ 1 } rowGap={ 16 } noMargin>
-								{ renderSectionToggle( outboundToggleField ) }
+								{ renderSectionToggle( outboundToggleField, outboundEnabled ) }
 								{ outboundEnabled &&
 									outboundSettingsFields
 										.filter( fieldIsVisible )
