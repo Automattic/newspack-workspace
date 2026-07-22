@@ -86,6 +86,13 @@ final class Newspack_Popups_Segmentation {
 		// The handler self-guards on the donor merge field being configured and
 		// the ESP being supported, so it's cheap to register unconditionally.
 		add_filter( 'newspack_newsletters_process_link', [ __CLASS__, 'append_donor_segment_param' ], 30, 3 );
+
+		// Strip unsubstituted donor merge tags from inbound URLs. Newsletters
+		// already delivered carry tags this plugin can no longer stop emitting, and
+		// an unresolved `%FIELD%` is a malformed percent-escape that crashes
+		// consumers which decode query params strictly — see NPPM-3032. Priority 1
+		// so it runs before redirect_canonical() and before any HTML is generated.
+		add_action( 'template_redirect', [ __CLASS__, 'scrub_unsubstituted_donor_param' ], 1 );
 	}
 
 	/**
@@ -299,6 +306,81 @@ final class Newspack_Popups_Segmentation {
 		}
 		// Every '%' must introduce a well-formed two-hex-digit escape, or decoding fails.
 		return 1 === preg_match( '/^(?:[^%]|%[0-9A-Fa-f]{2})*$/', $merge_tag );
+	}
+
+	/**
+	 * Whether a query-param value is still raw ESP merge-tag syntax — i.e. the
+	 * sending service never replaced it with the recipient's value.
+	 *
+	 * Mirrors isUnsubstitutedMergeTag() in src/criteria/default/donation.js —
+	 * keep the two in sync. The JS side uses this to ignore the value for
+	 * segmentation; this side uses it to decide the param is safe to drop.
+	 *
+	 * Matching the bare-bracket Campaign Monitor form would be risky for an
+	 * arbitrary query value, but `np_seg_donor` only ever carries a donor-status
+	 * value (e.g. `true`, `monthly`, `$50.00`) — never a `[…]`-wrapped string.
+	 *
+	 * @param string $value Decoded query-param value.
+	 *
+	 * @return bool
+	 */
+	public static function is_unsubstituted_merge_tag( $value ) {
+		$patterns = [
+			'/^\*\|[^|]+\|\*$/',  // Mailchimp.
+			'/^\[\[[^\]]+\]\]$/', // Constant Contact.
+			'/^%[^%]+%$/',        // ActiveCampaign.
+			'/^\[[^\][]+\]$/',    // Campaign Monitor.
+		];
+		foreach ( $patterns as $pattern ) {
+			if ( 1 === preg_match( $pattern, (string) $value ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Action callback: redirect away any inbound URL still carrying an
+	 * unsubstituted donor merge tag.
+	 *
+	 * Newsletters sent before the tag stopped being emitted are already in
+	 * inboxes, so their links keep arriving with e.g. `?np_seg_donor=%DONAT%`.
+	 * That value is a malformed percent-escape: `decodeURIComponent( '%DONAT%' )`
+	 * throws, and Jetpack Instant Search decodes every query param on load with
+	 * no try/catch, so the exception blanks the page (NPPM-3032). Redirecting
+	 * before any output means no such consumer ever sees the param.
+	 *
+	 * Dropping the value costs nothing: an unsubstituted tag is not a donor
+	 * signal, and the criteria script already ignores it (see
+	 * isUnsubstitutedMergeTag() in donation.js). Substituted values — the ones
+	 * that actually segment — are left alone, as is every other query param.
+	 */
+	public static function scrub_unsubstituted_donor_param() {
+		// Redirecting a POST would discard its body, and a redirect is only
+		// meaningful for a document request in a browser.
+		if ( ! isset( $_SERVER['REQUEST_METHOD'] ) || 'GET' !== $_SERVER['REQUEST_METHOD'] ) {
+			return;
+		}
+		if ( ! isset( $_SERVER['REQUEST_URI'] ) ) {
+			return;
+		}
+		// Reading a URL param to decide whether the URL itself is malformed; there
+		// is no form submission or state change here to nonce-verify.
+		if ( ! isset( $_GET[ self::DONOR_SEGMENT_QUERY_PARAM ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			return;
+		}
+		$value = sanitize_text_field( wp_unslash( $_GET[ self::DONOR_SEGMENT_QUERY_PARAM ] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( ! self::is_unsubstituted_merge_tag( $value ) ) {
+			return;
+		}
+		$clean_url = remove_query_arg(
+			self::DONOR_SEGMENT_QUERY_PARAM,
+			esc_url_raw( wp_unslash( $_SERVER['REQUEST_URI'] ) )
+		);
+		// Temporary: the param is a property of this one link, not of the page, so
+		// nothing should cache the mapping permanently.
+		wp_safe_redirect( $clean_url, 302 );
+		exit;
 	}
 
 	/**

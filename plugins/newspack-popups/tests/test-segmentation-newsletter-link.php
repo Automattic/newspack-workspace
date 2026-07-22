@@ -10,6 +10,7 @@
 // popups test suite loads only newspack-popups.
 require_once __DIR__ . '/mocks/class-newspack-newsletters.php';
 require_once __DIR__ . '/mocks/class-utils.php';
+require_once __DIR__ . '/mocks/class-segmentation-redirect-exception.php';
 
 /**
  * Test appending segment params to newsletter links.
@@ -122,6 +123,137 @@ class SegmentationNewsletterLinkTest extends WP_UnitTestCase {
 		$result = Newspack_Popups_Segmentation::append_donor_segment_param( $url, $url, $this->make_newsletter() );
 
 		$this->assertStringContainsString( 'np_seg_donor=[[' . self::DONOR_FIELD . ']]', $result );
+	}
+
+	/**
+	 * Run the inbound scrub against a simulated request, capturing any redirect
+	 * instead of letting the handler exit.
+	 *
+	 * @param string $request_uri Request URI, including query string.
+	 * @param string $method      HTTP method.
+	 *
+	 * @return string|null Redirect target, or null when no redirect was issued.
+	 */
+	private function scrub( $request_uri, $method = 'GET' ) {
+		$captured = null;
+		$filter   = function ( $location ) use ( &$captured ) {
+			$captured = $location;
+			throw new Segmentation_Redirect_Exception();
+		};
+
+		// Simulating an inbound request, so populating the superglobals the handler
+		// reads is the point of this helper.
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended
+		$_SERVER['REQUEST_URI']    = $request_uri;
+		$_SERVER['REQUEST_METHOD'] = $method;
+		$_GET                      = [];
+		$query                     = wp_parse_url( $request_uri, PHP_URL_QUERY );
+		if ( $query ) {
+			parse_str( $query, $_GET );
+		}
+		// phpcs:enable WordPress.Security.NonceVerification.Recommended
+
+		add_filter( 'wp_redirect', $filter );
+		try {
+			Newspack_Popups_Segmentation::scrub_unsubstituted_donor_param();
+		} catch ( Segmentation_Redirect_Exception $e ) {
+			unset( $e ); // Expected: stands in for the exit() after the redirect.
+		} finally {
+			remove_filter( 'wp_redirect', $filter );
+			unset( $_SERVER['REQUEST_URI'], $_SERVER['REQUEST_METHOD'] );
+			$_GET = [];
+		}
+
+		return $captured;
+	}
+
+	/**
+	 * The live incident: an ActiveCampaign tag that the ESP never substituted is
+	 * a malformed percent-escape, so it must be gone before anything decodes the
+	 * query string. Every other param — notably the `npnl` newsletter pass — has
+	 * to survive.
+	 */
+	public function test_scrub_strips_activecampaign_tag_and_keeps_other_params() {
+		$this->assertSame(
+			'/2026/07/20/some-post/?utm_medium=email&npnl=ABC123&utm_source=ActiveCampaign',
+			$this->scrub( '/2026/07/20/some-post/?utm_medium=email&npnl=ABC123&np_seg_donor=%DONAT%&utm_source=ActiveCampaign' )
+		);
+	}
+
+	/**
+	 * Unsubstituted tags from the other supported ESPs are dropped too: they
+	 * carry no donor signal either, and leaving them would keep junk in the URL.
+	 *
+	 * @param string $tag Raw merge tag as it arrives in the query string.
+	 *
+	 * @dataProvider unsubstituted_tag_provider
+	 */
+	public function test_scrub_strips_unsubstituted_tag_from_any_esp( $tag ) {
+		$this->assertSame( '/p/?a=1', $this->scrub( '/p/?a=1&np_seg_donor=' . $tag ) );
+	}
+
+	/**
+	 * Unsubstituted merge tags, one per supported ESP.
+	 *
+	 * @return array[]
+	 */
+	public function unsubstituted_tag_provider() {
+		return [
+			'mailchimp'        => [ '*|DONAT|*' ],
+			'constant contact' => [ '[[DONAT]]' ],
+			'active campaign'  => [ '%DONAT%' ],
+			'campaign monitor' => [ '[DONAT]' ],
+		];
+	}
+
+	/**
+	 * A substituted value is the whole point of the param — it must reach the
+	 * criteria script untouched.
+	 *
+	 * @param string $value Substituted donor value.
+	 *
+	 * @dataProvider substituted_value_provider
+	 */
+	public function test_scrub_leaves_substituted_value_alone( $value ) {
+		$this->assertNull( $this->scrub( '/p/?np_seg_donor=' . $value ) );
+	}
+
+	/**
+	 * Values an ESP actually substitutes, positive and negative.
+	 *
+	 * @return array[]
+	 */
+	public function substituted_value_provider() {
+		return [
+			'true'    => [ 'true' ],
+			'monthly' => [ 'monthly' ],
+			'amount'  => [ '50.00' ],
+			'falsy'   => [ 'false' ],
+		];
+	}
+
+	/**
+	 * No param, nothing to do — the overwhelmingly common request.
+	 */
+	public function test_scrub_ignores_request_without_the_param() {
+		$this->assertNull( $this->scrub( '/p/?utm_medium=email' ) );
+	}
+
+	/**
+	 * Redirecting a POST would discard its body.
+	 */
+	public function test_scrub_ignores_non_get_requests() {
+		$this->assertNull( $this->scrub( '/p/?np_seg_donor=%DONAT%', 'POST' ) );
+	}
+
+	/**
+	 * The scrubbed URL must not itself trigger another scrub, or the redirect
+	 * would loop.
+	 */
+	public function test_scrub_result_does_not_redirect_again() {
+		$once = $this->scrub( '/p/?a=1&np_seg_donor=%DONAT%' );
+		$this->assertSame( '/p/?a=1', $once );
+		$this->assertNull( $this->scrub( $once ) );
 	}
 
 	/**
