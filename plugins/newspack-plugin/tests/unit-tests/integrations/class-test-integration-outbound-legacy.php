@@ -5,6 +5,7 @@
  * @package Newspack\Tests
  */
 
+use Newspack\Reader_Activation\Integrations;
 use Newspack\Reader_Activation\Sync\Metadata;
 
 require_once __DIR__ . '/class-failing-sample-integration.php';
@@ -54,15 +55,42 @@ class Test_Integration_Outbound_Legacy extends WP_UnitTestCase {
 
 	/**
 	 * The bug this file guards against (NPPD-2107): an integration whose
-	 * Outbound selection is empty must not receive the full legacy field set.
+	 * Outbound selection was explicitly saved as empty must not receive the
+	 * full legacy field set.
 	 */
-	public function test_empty_selection_strips_all_prefixed_fields() {
+	public function test_explicit_empty_selection_strips_all_prefixed_fields() {
+		$this->integration->update_enabled_outgoing_fields( [] );
+
 		$prepared = $this->integration->prepare_contact( $this->legacy_contact() );
 
 		$this->assertSame(
 			[ 'status_if_new' => 'transactional' ],
 			$prepared['metadata'],
-			'With no outbound fields selected, only unprefixed sync-control keys survive.'
+			'With an explicitly empty outbound selection, only unprefixed sync-control keys survive.'
+		);
+	}
+
+	/**
+	 * An integration that never saved an outbound selection inherits the ESP
+	 * integration's effective selection in legacy mode, preserving what
+	 * pre-existing legacy sites sync (and what the Outbound UI shows).
+	 */
+	public function test_unsaved_selection_inherits_esp_selection() {
+		$esp = Integrations::get_integration( 'esp' );
+		$this->assertNotNull( $esp, 'The built-in esp integration must be registered.' );
+		$esp->update_enabled_outgoing_fields( [ 'Membership Status' ] );
+
+		$prepared = $this->integration->prepare_contact( $this->legacy_contact() );
+
+		delete_option( 'newspack_integration_outgoing_fields_esp' );
+
+		$this->assertSame(
+			[
+				'NP_Membership Status' => 'Monthly Donor',
+				'status_if_new'        => 'transactional',
+			],
+			$prepared['metadata'],
+			'With no saved selection of its own, the integration filters by the ESP selection.'
 		);
 	}
 

@@ -706,10 +706,29 @@ abstract class Integration {
 	/**
 	 * Get the enabled outgoing metadata fields for this integration.
 	 *
+	 * In legacy metadata mode an integration with no saved selection of its
+	 * own inherits the ESP integration's effective selection — the set the
+	 * legacy pipeline filters by — so pre-existing legacy sites keep syncing
+	 * exactly what they did before per-integration selection existed, and
+	 * the Outbound UI reflects what is actually pushed. An explicitly saved
+	 * selection (even an empty one) always wins (NPPD-2107).
+	 *
 	 * @return string[] List of enabled field names.
 	 */
 	public function get_enabled_outgoing_fields() {
-		return array_values( \get_option( self::OUTGOING_FIELDS_OPTION_PREFIX . $this->id, [] ) );
+		$stored = \get_option( self::OUTGOING_FIELDS_OPTION_PREFIX . $this->id, null );
+		if ( null !== $stored && is_array( $stored ) ) {
+			return array_values( $stored );
+		}
+
+		if ( 'legacy' === Sync\Metadata::get_version() && 'esp' !== $this->get_id() ) {
+			$esp = Integrations::get_integration( 'esp' );
+			if ( $esp ) {
+				return $esp->get_enabled_outgoing_fields();
+			}
+		}
+
+		return [];
 	}
 
 	/**
@@ -987,8 +1006,11 @@ abstract class Integration {
 	 * Legacy metadata arrives already prefixed and filtered — by the ESP
 	 * integration's field config. The `esp` integration therefore takes it
 	 * unchanged, but any other integration must still narrow the set to its
-	 * own enabled outgoing fields: an empty Outbound selection means no
-	 * metadata fields, not all of them (NPPD-2107).
+	 * own enabled outgoing fields: an explicitly saved empty Outbound
+	 * selection means no metadata fields, not all of them. An integration
+	 * that never saved a selection inherits the ESP integration's effective
+	 * selection via get_enabled_outgoing_fields(), preserving pre-existing
+	 * legacy behavior (NPPD-2107).
 	 *
 	 * Keys are de-prefixed with the legacy pipeline's prefix (the one the
 	 * data actually carries — not this integration's own, which may differ)
