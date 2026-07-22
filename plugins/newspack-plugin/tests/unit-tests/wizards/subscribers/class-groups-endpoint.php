@@ -167,6 +167,9 @@ class Test_Subscribers_Wizard_Groups_Endpoint extends WP_UnitTestCase {
 		// subscription object can't resolve an edit URL, e.g. under the mock).
 		$this->assertArrayHasKey( 'editUrl', $group );
 		$this->assertIsString( $group['editUrl'] );
+		// The owner carries their own target: a person's name links to the person,
+		// the plan name links to the subscription above.
+		$this->assertStringContainsString( 'user_id=' . $owner_id, $group['owner']['editUrl'] );
 		$this->assertNull( $group['seatRequest'] );
 	}
 

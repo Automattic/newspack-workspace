@@ -6,8 +6,10 @@
  * endpoint (via useSubscribers), not a client-side array, so the table scales to
  * large reader bases. Each row's group memberships arrive embedded on the item
  * (item.groups), so the Status/Subscription/Group-role columns resolve without a
- * second lookup. Row click-through opens the native user-edit screen until the
- * in-wizard person profile lands (NPPD-1753 PR 5).
+ * second lookup. Click targets follow the rule both tabs share: the row (and the
+ * subscriber name in it) opens that person's user-edit screen, while a plan name
+ * in the Subscription column opens that subscription. Both are the native admin
+ * screens until the in-wizard person profile lands (NPPD-1753 PR 5).
  */
 
 /**
@@ -28,12 +30,13 @@ import { SHOW_AVATARS, useAvatars } from '../data/use-avatars';
 import { useSubscribers } from '../data/use-subscribers';
 import { WIZARD_STORE_NAMESPACE } from '../../../../packages/components/src/wizard/store';
 import { GROUP_LABEL, ROLE_LABELS } from '../labels';
+import { SubscriptionLink } from '../links';
 import { STATUS_LABELS, STATUS_BADGE_LEVEL, STATUS_RANK, displayStatuses } from '../status';
 
 // A subscriber's group memberships, in the shape the column helpers expect
 // ([{ group, role }]). The endpoint embeds them flat on the item as
-// item.groups = [{ id, plan, status, role }].
-const groupEntriesOf = item => ( item.groups || [] ).map( g => ( { group: { plan: g.plan, status: g.status }, role: g.role } ) );
+// item.groups = [{ id, plan, status, role, editUrl }].
+const groupEntriesOf = item => ( item.groups || [] ).map( g => ( { group: { plan: g.plan, status: g.status, editUrl: g.editUrl }, role: g.role } ) );
 
 // Every subscription a subscriber has, group and individual alike: cohorts they
 // own or belong to (tagged by role) plus their own individual subscriptions.
@@ -43,11 +46,13 @@ const planEntries = ( item, groupEntries ) => {
 	const cohorts = ( groupEntries || [] ).map( ( { group, role } ) => ( {
 		plan: group.plan,
 		status: group.status,
+		editUrl: group.editUrl,
 		role,
 	} ) );
 	const individual = ( item.subscriptions || [] ).map( s => ( {
 		plan: s.plan,
 		status: s.status,
+		editUrl: s.editUrl,
 		role: null,
 	} ) );
 	// Active subscriptions list first, then on-hold, then cancelled.
@@ -176,12 +181,14 @@ export default function SubscriberList() {
 					}
 					// 8px between subscriptions so each reads as a distinct block. A
 					// group entry is tagged "(Group)"; the subscriber's role in it is
-					// L1 information (profile card, group members table).
+					// L1 information (profile card, group members table). The plan
+					// name links to that subscription while the row resolves to the
+					// person, so the two affordances stay distinct — see links.jsx.
 					return (
 						<VStack spacing={ 2 } alignment="left">
 							{ entries.map( ( e, i ) => (
 								<div key={ i }>
-									{ e.plan }
+									<SubscriptionLink href={ e.editUrl }>{ e.plan }</SubscriptionLink>
 									{ e.role && <>&nbsp;{ `(${ GROUP_LABEL })` }</> }
 								</div>
 							) ) }

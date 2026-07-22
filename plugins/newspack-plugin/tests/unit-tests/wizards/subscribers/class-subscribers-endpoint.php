@@ -314,6 +314,7 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 		$this->assertSame( 'owner', $by_id[ $owner_id ]['groups'][0]['role'] );
 		$this->assertSame( 'Acme Team', $by_id[ $owner_id ]['groups'][0]['plan'] );
 		$this->assertSame( 'active', $by_id[ $owner_id ]['groups'][0]['status'] );
+		$this->assertArrayHasKey( 'editUrl', $by_id[ $owner_id ]['groups'][0], 'A group membership carries the subscription click target.' );
 		$this->assertEmpty( $by_id[ $owner_id ]['subscriptions'], 'A group sub is not an individual subscription.' );
 
 		$this->assertCount( 1, $by_id[ $member_id ]['groups'] );
@@ -340,6 +341,10 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 		$this->assertCount( 1, $item['subscriptions'] );
 		$this->assertSame( 'on-hold', $item['subscriptions'][0]['status'] );
 		$this->assertArrayHasKey( 'plan', $item['subscriptions'][0] );
+		// The plan name is its own click target, distinct from the row's person
+		// target; always present, empty when no edit URL resolves (as under the mock).
+		$this->assertArrayHasKey( 'editUrl', $item['subscriptions'][0] );
+		$this->assertIsString( $item['subscriptions'][0]['editUrl'] );
 		$this->assertEmpty( $item['groups'] );
 	}
 

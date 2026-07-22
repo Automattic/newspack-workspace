@@ -370,9 +370,12 @@ class Subscribers_Wizard extends Wizard {
 			'id'          => (int) $subscription->get_id(),
 			'ownerId'     => $owner_id,
 			'owner'       => $owner ? [
-				'id'    => $owner_id,
-				'name'  => $owner->display_name,
-				'email' => $owner->user_email,
+				'id'      => $owner_id,
+				'name'    => $owner->display_name,
+				'email'   => $owner->user_email,
+				// The owner's name links to the person, not to the subscription —
+				// see the group list's `editUrl` for the subscription itself.
+				'editUrl' => (string) get_edit_user_link( $owner_id ),
 			] : null,
 			'plan'        => (string) $settings['name'],
 			'status'      => self::map_subscription_status( $subscription->get_status() ),
@@ -383,10 +386,25 @@ class Subscribers_Wizard extends Wizard {
 			'createdAt'   => $created_at,
 			// Interim click-through target: the WooCommerce subscription edit
 			// screen (HPOS-safe), until the in-wizard group detail lands (PR 4).
-			'editUrl'     => method_exists( $subscription, 'get_edit_order_url' ) ? $subscription->get_edit_order_url() : '',
+			'editUrl'     => $this->subscription_edit_url( $subscription ),
 			// Seat requests are surfaced in a later slice (NPPD-1753 PR 7).
 			'seatRequest' => null,
 		];
+	}
+
+	/**
+	 * The admin edit-screen URL for a subscription (HPOS-safe).
+	 *
+	 * Every subscription the wizard surfaces — a group, a group membership, or an
+	 * individual plan — carries this so a plan name always links to that plan,
+	 * while a person's name always links to that person.
+	 *
+	 * @param \WC_Subscription $subscription The subscription.
+	 *
+	 * @return string The edit URL, or '' when it can't be resolved.
+	 */
+	private function subscription_edit_url( $subscription ) {
+		return method_exists( $subscription, 'get_edit_order_url' ) ? (string) $subscription->get_edit_order_url() : '';
 	}
 
 	/**
@@ -516,7 +534,7 @@ class Subscribers_Wizard extends Wizard {
 	}
 
 	/**
-	 * A reader's own (non-group) subscriptions, shaped as { id, plan, status }.
+	 * A reader's own (non-group) subscriptions, shaped as { id, plan, status, editUrl }.
 	 *
 	 * The wcs_get_users_subscriptions() list is filtered to also surface subs the
 	 * user is only a member of; those are excluded here (they belong to
@@ -539,9 +557,10 @@ class Subscribers_Wizard extends Wizard {
 				continue; // Group subscriptions are surfaced via get_group_memberships().
 			}
 			$out[] = [
-				'id'     => (int) $subscription->get_id(),
-				'plan'   => $this->individual_plan_name( $subscription ),
-				'status' => self::map_subscription_status( $subscription->get_status() ),
+				'id'      => (int) $subscription->get_id(),
+				'plan'    => $this->individual_plan_name( $subscription ),
+				'status'  => self::map_subscription_status( $subscription->get_status() ),
+				'editUrl' => $this->subscription_edit_url( $subscription ),
 			];
 		}
 		return $out;
@@ -564,7 +583,7 @@ class Subscribers_Wizard extends Wizard {
 	}
 
 	/**
-	 * A reader's group memberships, shaped as { id, plan, status, role }.
+	 * A reader's group memberships, shaped as { id, plan, status, role, editUrl }.
 	 *
 	 * Read from the per-request membership index rather than re-querying the
 	 * user's owned/managed/member subscriptions per row.
@@ -580,7 +599,7 @@ class Subscribers_Wizard extends Wizard {
 
 	/**
 	 * Build (once per request) a map of user ID → their group memberships, each
-	 * shaped as { id, plan, status, role }.
+	 * shaped as { id, plan, status, role, editUrl }.
 	 *
 	 * Iterating the site's (few, memoized) groups and reading each group's people
 	 * once is far cheaper than resolving every subscriber's owned/managed/member
@@ -601,9 +620,10 @@ class Subscribers_Wizard extends Wizard {
 				$owner_id     = (int) $subscription->get_user_id();
 				$managers     = array_map( 'intval', Group_Subscription::get_managers( $subscription ) );
 				$entry        = [
-					'id'     => (int) $subscription->get_id(),
-					'plan'   => (string) $group['settings']['name'],
-					'status' => self::map_subscription_status( $subscription->get_status() ),
+					'id'      => (int) $subscription->get_id(),
+					'plan'    => (string) $group['settings']['name'],
+					'status'  => self::map_subscription_status( $subscription->get_status() ),
+					'editUrl' => $this->subscription_edit_url( $subscription ),
 				];
 				foreach ( array_map( 'intval', Group_Subscription::get_all_members( $subscription ) ) as $member_id ) {
 					if ( $member_id === $owner_id ) {

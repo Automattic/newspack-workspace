@@ -4,9 +4,11 @@
  *
  * Admin-facing list of every group/team subscription on the site. Unlike the
  * subscriber list, the group set is small enough to load in full and filter,
- * sort and paginate client-side. Filterable by status and plan, sortable,
- * click-through to the native subscription edit screen until the in-wizard group
- * detail lands (NPPD-1753 PR 4).
+ * sort and paginate client-side. Filterable by status and plan, sortable. Click
+ * targets follow the rule both tabs share: the row (and the owner name in it)
+ * opens that person's user-edit screen, while the plan name — under the owner and
+ * in the Subscription column — opens that group's subscription. Both are the
+ * native admin screens until the in-wizard group detail lands (NPPD-1753 PR 4).
  */
 
 /**
@@ -29,6 +31,7 @@ import { useGroups } from '../data/use-groups';
 import { WIZARD_STORE_NAMESPACE } from '../../../../packages/components/src/wizard/store';
 import { STATUS_LABELS, STATUS_BADGE_LEVEL } from '../status';
 import { GROUP_LABEL_PLURAL } from '../labels';
+import { SubscriptionLink } from '../links';
 
 const DEFAULT_VIEW = {
 	type: 'table',
@@ -52,11 +55,16 @@ export default function GroupList() {
 
 	const { groups, loading: groupsLoading, error, reload } = useGroups();
 
-	const openGroup = item => {
-		if ( item?.editUrl ) {
-			window.location.href = item.editUrl;
+	// The row's title is the owner, so the row resolves to that person. The group
+	// itself is reachable from the plan name, which links to its subscription.
+	// A group whose owner no longer exists has nothing to open, so its row is not
+	// clickable (isItemClickable below) rather than silently doing nothing.
+	const openOwner = item => {
+		if ( item?.owner?.editUrl ) {
+			window.location.href = item.owner.editUrl;
 		}
 	};
+	const hasOwnerLink = item => !! item?.owner?.editUrl;
 
 	// Resolve owner avatar URLs, keyed by group id. The table renders immediately
 	// with the avatar placeholder and each avatar fills in as it resolves.
@@ -101,7 +109,9 @@ export default function GroupList() {
 									/>
 								) }
 							</HStack>
-							<div className="newspack-subscribers__email">{ item.plan }</div>
+							<div className="newspack-subscribers__email">
+								<SubscriptionLink href={ item.editUrl }>{ item.plan }</SubscriptionLink>
+							</div>
 						</div>
 					);
 					if ( ! SHOW_AVATARS ) {
@@ -126,7 +136,7 @@ export default function GroupList() {
 				elements: planElements,
 				filterBy: { operators: [ 'isAny' ] },
 				getValue: ( { item } ) => item.plan,
-				render: ( { item } ) => <span>{ item.plan }</span>,
+				render: ( { item } ) => <SubscriptionLink href={ item.editUrl }>{ item.plan }</SubscriptionLink>,
 				enableSorting: false,
 			},
 			{
@@ -166,7 +176,9 @@ export default function GroupList() {
 
 	const { data: processedData, paginationInfo } = useMemo( () => filterSortAndPaginate( groups, view, fields ), [ groups, view, fields ] );
 
-	// Whole-row click → subscription edit (DataViews only wires up the title cell).
+	// Whole-row click → the owner's user edit (DataViews only wires up the title
+	// cell). The plan name inside the row is a real link and is skipped by the
+	// `a` guard below, so it keeps its own subscription target.
 	//
 	// DEPENDS ON DATAVIEWS INTERNAL MARKUP: the row is located by the
 	// `dataviews-view-table__row` class, which DataViews owns and could rename on
@@ -186,7 +198,7 @@ export default function GroupList() {
 		const id = row.querySelector( '[data-group-id]' )?.getAttribute( 'data-group-id' );
 		const item = groups.find( g => String( g.id ) === String( id ) );
 		if ( item ) {
-			openGroup( item );
+			openOwner( item );
 		}
 	};
 
@@ -240,7 +252,8 @@ export default function GroupList() {
 				paginationInfo={ paginationInfo }
 				defaultLayouts={ { table: {} } }
 				getItemId={ item => item.id }
-				onClickItem={ openGroup }
+				onClickItem={ openOwner }
+				isItemClickable={ hasOwnerLink }
 				search
 			/>
 		</div>
