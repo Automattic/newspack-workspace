@@ -50,7 +50,9 @@ const inScope = ( item: SubscriptionProduct, scope: Scope ): boolean => {
 	return scope === 'donations' ? item.is_donation : ! item.is_donation;
 };
 
-const DEFAULT_VIEW: View = {
+// `fields` is optional on `View`, but this default always declares it — the scope
+// filter below narrows it, so keep it non-optional here.
+const DEFAULT_VIEW: View & { fields: string[] } = {
 	type: 'table',
 	page: 1,
 	perPage: 25,

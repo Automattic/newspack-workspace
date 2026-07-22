@@ -67,7 +67,7 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 	const { setHeaderData, addNotice } = useDispatch( WIZARD_STORE_NAMESPACE );
 
 	const [ title, setTitle ] = useState( rule?.title ?? '' );
-	const [ status, setStatus ] = useState( rule?.status === 'publish' ? 'publish' : 'draft' );
+	const [ status, setStatus ] = useState< 'publish' | 'draft' >( rule?.status === 'publish' ? 'publish' : 'draft' );
 	const [ calcType, setCalcType ] = useState( rule?.simple?.calc_type ?? vocab.calc_types[ 0 ]?.value ?? 'fixed_price' );
 	const [ value, setValue ] = useState( String( rule?.simple?.value ?? '' ) );
 	const [ cyclesLimit, setCyclesLimit ] = useState( String( rule?.simple?.cycles_limit ?? 0 ) );
@@ -94,9 +94,13 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 	const [ scopeType, setScopeType ] = useState( rule?.scope_type ?? vocab.scopes[ 0 ]?.id ?? 'all_products' );
 	const [ scopeIds, setScopeIds ] = useState< number[] >( rule?.scope_ids ?? [] );
 	const [ priority, setPriority ] = useState( String( rule?.priority ?? 100 ) );
-	const [ composeMode, setComposeMode ] = useState( rule?.compose_mode ?? 'min' );
+	const [ composeMode, setComposeMode ] = useState< 'min' | 'priority_exclusive' >(
+		rule?.compose_mode === 'priority_exclusive' ? 'priority_exclusive' : 'min'
+	);
 	const [ application, setApplication ] = useState( rule?.application === 'locked' ? 'locked' : 'current' );
-	const [ cycleAnchor, setCycleAnchor ] = useState( rule?.cycle_anchor === 'rule_application' ? 'rule_application' : 'subscription_start' );
+	const [ cycleAnchor, setCycleAnchor ] = useState< 'subscription_start' | 'rule_application' >(
+		rule?.cycle_anchor === 'rule_application' ? 'rule_application' : 'subscription_start'
+	);
 	const [ publicize, setPublicize ] = useState( Boolean( rule?.publicize ) );
 	const [ path, setPath ] = useState< string >( rule?.intent ?? ( isNew ? '' : 'custom' ) );
 	const [ intentNote, setIntentNote ] = useState( rule?.intent_note ?? '' );

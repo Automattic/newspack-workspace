@@ -38,7 +38,7 @@ import './style.scss';
  *                                          the sticky header block and the page children render
  *                                          inside its active tab panel.
  * @param {string} [props.className]
- * @param {*}      props.children
+ * @param {*}      [props.children]
  * @return {JSX.Element} Page component.
  */
 const Page = ( { breadcrumbItems = [], badges, subTitle, actions, tabbedNavigation, className, children } ) => {

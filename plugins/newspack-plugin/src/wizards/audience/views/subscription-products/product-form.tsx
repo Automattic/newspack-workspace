@@ -98,7 +98,7 @@ export default function ProductForm( {
 
 	const [ name, setName ] = useState( initial?.name ?? '' );
 	const [ type, setType ] = useState< ProductType >( ( initial?.type as ProductType ) ?? 'subscription' );
-	const [ status, setStatus ] = useState( initial?.status === 'draft' ? 'draft' : 'publish' );
+	const [ status, setStatus ] = useState< 'publish' | 'draft' >( initial?.status === 'draft' ? 'draft' : 'publish' );
 	const [ isDonation, setIsDonation ] = useState( initial?.is_donation ?? false );
 	const [ availability, setAvailability ] = useState( initial?.availability ?? 'public' );
 

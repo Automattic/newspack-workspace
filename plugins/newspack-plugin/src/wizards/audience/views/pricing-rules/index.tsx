@@ -22,10 +22,8 @@ import './style.scss';
 const AudiencePricingRules = ( props: object, ref: React.Ref< HTMLDivElement > ) => {
 	return (
 		<Wizard
-			title={ __( 'Pricing Rules', 'newspack-plugin' ) }
 			headerText={ __( 'Audience Management / Pricing Rules', 'newspack-plugin' ) }
 			ref={ ref }
-			fixedHeader
 			sections={ [
 				{ path: '/', render: PricingRulesList, exact: true, fullWidth: true },
 				{ path: '/new', render: RuleEdit, isHidden: true, exact: true, backNav: '#/', title: __( 'Add rule', 'newspack-plugin' ) },

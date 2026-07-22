@@ -25,10 +25,8 @@ import './style.scss';
 const AudienceSubscriptionProducts = ( props: object, ref: React.Ref< HTMLDivElement > ) => {
 	return (
 		<Wizard
-			title={ __( 'Plans', 'newspack-plugin' ) }
 			headerText={ __( 'Audience Management / Plans', 'newspack-plugin' ) }
 			ref={ ref }
-			fixedHeader
 			sections={ [
 				// Scope tabs. Each renders the same list, filtered to its scope (passed via
 				// `props`). The first two are *individual* products by purpose; "Plan bundles"
