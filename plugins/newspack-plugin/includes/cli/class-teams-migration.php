@@ -224,7 +224,7 @@ class Teams_Migration {
 					}
 				} else {
 					$status_label = $existing_sub ? $existing_sub->get_status() : 'not found';
-					WP_CLI::warning( sprintf( 'Team %d: linked subscription %d is not active (status: %s) — searching for an existing group subscription owned by the team owner.', $team_id, $raw_sub_id, $status_label ) );
+					WP_CLI::warning( sprintf( 'Team %d: linked subscription %d is not active (status: %s) — searching for the group subscription this team was previously migrated to.', $team_id, $raw_sub_id, $status_label ) );
 				}
 			}
 
@@ -234,16 +234,28 @@ class Teams_Migration {
 			// subscriptions. An owner who owns several teams therefore keeps one group
 			// subscription per team rather than merging them all into one.
 			if ( ! $subscription ) {
-				$reusable_sub = self::find_reusable_group_subscription( $team_id, $owner_id, $used_owner_fallback );
+				$reuse        = self::find_reusable_group_subscription( $team_id, $owner_id );
+				$reusable_sub = $reuse['subscription'];
 				if ( $reusable_sub ) {
 					$subscription = $reusable_sub;
-					if ( $used_owner_fallback ) {
-						// The only groups lacking the team marker are from migrator runs
-						// predating per-team marking. Adopt one for this team (it is marked
-						// below), and warn: for a multi-team owner only the first team can
-						// adopt the legacy group, and if it was another team's group the
-						// name changes.
-						WP_CLI::warning( sprintf( 'Team %d ("%s"): no group subscription marked for this team; adopting unmarked group subscription %d owned by owner %d (legacy migrator run) and marking it for this team.', $team_id, $team->post_title, $reusable_sub->get_id(), $owner_id ) );
+					if ( $reuse['used_owner_fallback'] ) {
+						// A group carrying no team marker is usually one from a migrator run
+						// predating per-team marking. Adopt it for this team (it is marked
+						// below) and warn — the operator has to confirm it is not a group
+						// that belongs elsewhere, since adopting it renames it and merges
+						// this team's members into it.
+						$linked_team_id = self::find_team_linked_to_subscription( $reusable_sub->get_id() );
+						$linked_note    = '';
+						if ( $linked_team_id && $linked_team_id !== $team_id ) {
+							$linked_team = \get_post( $linked_team_id );
+							$linked_note = sprintf( ' It is currently linked to team %d ("%s") — check this is not a cross-team merge before running --live.', $linked_team_id, $linked_team ? $linked_team->post_title : '?' );
+						}
+						WP_CLI::warning( sprintf( 'Team %d ("%s"): no group subscription marked for this team; adopting unmarked group subscription %d owned by owner %d and marking it for this team.%s', $team_id, $team->post_title, $reusable_sub->get_id(), $owner_id, $linked_note ) );
+					} elseif ( $reuse['reused_inactive'] ) {
+						// Reusing the team's own group even though it is no longer active
+						// keeps one group per team; creating a second one would split the
+						// team's members across two groups. It is not reactivated here.
+						WP_CLI::warning( sprintf( 'Team %d: reusing group subscription %d migrated from this team, but its status is "%s" — members added below get no access until it is active again.', $team_id, $reusable_sub->get_id(), $reusable_sub->get_status() ) );
 					} else {
 						WP_CLI::line( sprintf( 'Team %d: found existing group subscription %d migrated from this team — re-updating.', $team_id, $reusable_sub->get_id() ) );
 					}
@@ -1161,9 +1173,9 @@ class Teams_Migration {
 	 *
 	 * Mirrors migrate-teams: prefer the team's linked active group subscription, else
 	 * the group subscription this team was migrated to (by team marker, so a multi-team
-	 * owner's managers are never promoted into a sibling team's group), else an unmarked
-	 * group subscription owned by the team owner (legacy pre-marker groups). Never
-	 * creates one.
+	 * owner's managers are never promoted into a sibling team's group — including a
+	 * marked group that is no longer active, which would otherwise report as unresolved),
+	 * else an unmarked group subscription owned by the team owner. Never creates one.
 	 *
 	 * @param int $team_id  The team post ID.
 	 * @param int $owner_id The team owner user ID.
@@ -1178,7 +1190,7 @@ class Teams_Migration {
 				return $subscription;
 			}
 		}
-		return self::find_reusable_group_subscription( $team_id, $owner_id );
+		return self::find_reusable_group_subscription( $team_id, $owner_id )['subscription'];
 	}
 
 	/**
@@ -1187,9 +1199,21 @@ class Teams_Migration {
 	 *
 	 * Prefers the group subscription this team was previously migrated to (stamped with
 	 * MIGRATED_TEAM_ID_META_KEY), so reuse keys on the team and a multi-team owner keeps
-	 * one group subscription per team. Falls back to an unmarked active group
-	 * subscription owned by the team owner — only groups from migrator runs predating
-	 * per-team marking lack the marker — and flags that fallback so the caller can warn.
+	 * one group subscription per team. A marker match wins whatever its status: a team
+	 * whose group has since expired or been put on hold must reuse that group rather
+	 * than get a second, duplicate one on the next run (the caller is told via
+	 * `reused_inactive` so it can warn). Falls back to an active group subscription
+	 * owned by the team owner that carries no marker, and flags that fallback so the
+	 * caller can warn.
+	 *
+	 * The fallback additionally requires the subscription's *own*
+	 * `_newspack_group_subscription_enabled` meta, not just
+	 * Group_Subscription::is_group_subscription(): that reads through to product-level
+	 * settings, and migrate-team-products stamps group meta on every team product, so
+	 * after the companion product migration a sibling team's live linked subscription
+	 * would otherwise look adoptable and get merged into this team's group. Only a group
+	 * an earlier migrator run (or a publisher) explicitly enabled carries the meta on
+	 * the subscription itself.
 	 *
 	 * Both lookups run over a single pass of the owner's subscriptions. Discovery is
 	 * scoped to the team's current owner (migrated groups are owned by their team owner),
@@ -1198,32 +1222,37 @@ class Teams_Migration {
 	 * fresh group for the team rather than reusing the original.
 	 *
 	 * Dry-run caveat: migrate-teams stamps the marker only on a live run, so a dry-run
-	 * preview of an owner whose only group predates per-team marking shows each of their
-	 * teams adopting that one legacy group (the live run avoids the merge by marking it
-	 * on the first team). The preview over-reports the merge rather than hiding one, so
-	 * the live outcome is always safe.
+	 * preview of an owner whose only group carries no marker shows each of their teams
+	 * adopting that one group (the live run avoids the merge by marking it on the first
+	 * team). The preview over-reports the merge rather than hiding one, so the live
+	 * outcome is always safe.
 	 *
-	 * @param int  $team_id             The team post ID.
-	 * @param int  $owner_id            The team owner user ID.
-	 * @param bool $used_owner_fallback Set true when the unmarked owner fallback matched. Passed by reference.
+	 * @param int $team_id  The team post ID.
+	 * @param int $owner_id The team owner user ID.
 	 *
-	 * @return \WC_Subscription|null
+	 * @return array {
+	 *     @type \WC_Subscription|null $subscription        The subscription to reuse, or null.
+	 *     @type bool                  $used_owner_fallback Whether the unmarked owner fallback matched.
+	 *     @type bool                  $reused_inactive     Whether the marker match is not active.
+	 * }
 	 */
-	public static function find_reusable_group_subscription( $team_id, $owner_id, &$used_owner_fallback = false ) {
-		$used_owner_fallback = false;
-		$team_id             = absint( $team_id );
-		$owner_id            = absint( $owner_id );
+	public static function find_reusable_group_subscription( $team_id, $owner_id ) {
+		$none     = [
+			'subscription'        => null,
+			'used_owner_fallback' => false,
+			'reused_inactive'     => false,
+		];
+		$team_id  = absint( $team_id );
+		$owner_id = absint( $owner_id );
 		if ( ! $team_id || ! $owner_id || ! function_exists( 'wcs_get_users_subscriptions' ) ) {
-			return null;
+			return $none;
 		}
 
-		$unmarked_group_sub = null;
+		$inactive_marked_sub = null;
+		$unmarked_group_sub  = null;
 		foreach ( \wcs_get_users_subscriptions( $owner_id ) as $subscription ) {
 			// wcs_get_users_subscriptions is filtered to include member-only groups; require ownership.
 			if ( (int) $subscription->get_user_id() !== $owner_id ) {
-				continue;
-			}
-			if ( 'active' !== $subscription->get_status() ) {
 				continue;
 			}
 			if ( ! Group_Subscription::is_group_subscription( $subscription ) ) {
@@ -1231,23 +1260,87 @@ class Teams_Migration {
 			}
 			$marked_team_id = (int) $subscription->get_meta( self::MIGRATED_TEAM_ID_META_KEY );
 			// A group already migrated from this team wins outright — reuse keys on the
-			// source team, so a sibling team of the same owner never merges into it.
+			// source team, so a sibling team of the same owner never merges into it, and
+			// an unmarked group appearing earlier in the iteration never pre-empts it.
 			if ( $marked_team_id === $team_id ) {
-				return $subscription;
+				if ( 'active' === $subscription->get_status() ) {
+					return [
+						'subscription'        => $subscription,
+						'used_owner_fallback' => false,
+						'reused_inactive'     => false,
+					];
+				}
+				// Hold on to it in case the team has no active marked group at all, but
+				// keep scanning — an active one, if it exists, is the better match.
+				$inactive_marked_sub = $inactive_marked_sub ?? $subscription;
+				continue;
 			}
-			// Remember the first unmarked group as the legacy fallback. A group already
+			// Remember the first unmarked group as the owner fallback. A group already
 			// marked for a different team is skipped so it is never merged into.
-			if ( null === $unmarked_group_sub && 0 === $marked_team_id ) {
+			if ( null === $unmarked_group_sub && 0 === $marked_team_id && 'active' === $subscription->get_status() && self::has_own_group_enabled_meta( $subscription ) ) {
 				$unmarked_group_sub = $subscription;
 			}
 		}
 
-		if ( $unmarked_group_sub ) {
-			$used_owner_fallback = true;
-			return $unmarked_group_sub;
+		if ( $inactive_marked_sub ) {
+			return [
+				'subscription'        => $inactive_marked_sub,
+				'used_owner_fallback' => false,
+				'reused_inactive'     => true,
+			];
 		}
 
-		return null;
+		if ( $unmarked_group_sub ) {
+			return [
+				'subscription'        => $unmarked_group_sub,
+				'used_owner_fallback' => true,
+				'reused_inactive'     => false,
+			];
+		}
+
+		return $none;
+	}
+
+	/**
+	 * Whether a subscription carries group-enabled meta of its own.
+	 *
+	 * Group_Subscription::is_group_subscription() falls through to the product's
+	 * settings when the subscription has no meta of its own, so it is true for every
+	 * subscription on a group-enabled product. This is the stricter test: only a
+	 * subscription explicitly enabled as a group in its own right passes.
+	 *
+	 * @param \WC_Subscription $subscription The subscription.
+	 *
+	 * @return bool
+	 */
+	private static function has_own_group_enabled_meta( $subscription ) {
+		$enabled_meta = $subscription->get_meta( '_newspack_group_subscription_enabled' );
+		return '' !== $enabled_meta && \wc_string_to_bool( $enabled_meta );
+	}
+
+	/**
+	 * Find the team, if any, currently linked to a subscription.
+	 *
+	 * Used to name the other team in the owner-fallback warning, so an operator reading
+	 * a dry-run preview can tell a stale pre-marker group from a sibling team's live one.
+	 *
+	 * @param int $subscription_id The subscription ID.
+	 *
+	 * @return int The team post ID, or 0 if none is linked.
+	 */
+	private static function find_team_linked_to_subscription( $subscription_id ) {
+		$team_ids = \get_posts(
+			[
+				'post_type'      => 'wc_memberships_team',
+				'post_status'    => 'any',
+				'posts_per_page' => 1,
+				'fields'         => 'ids',
+				'no_found_rows'  => true,
+				'meta_key'       => '_subscription_id', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+				'meta_value'     => (int) $subscription_id, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+			]
+		);
+		return ! empty( $team_ids ) ? (int) $team_ids[0] : 0;
 	}
 
 	/**

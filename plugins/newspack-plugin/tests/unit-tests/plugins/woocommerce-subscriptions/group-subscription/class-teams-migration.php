@@ -564,20 +564,96 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 		$first_team_group  = $this->create_migrated_group_subscription( $owner, $first_team_id );
 		$second_team_group = $this->create_migrated_group_subscription( $owner, $second_team_id );
 
-		$used_owner_fallback = null;
+		$first_reuse = Teams_Migration::find_reusable_group_subscription( $first_team_id, $owner );
 		$this->assertSame(
 			$first_team_group->get_id(),
-			Teams_Migration::find_reusable_group_subscription( $first_team_id, $owner, $used_owner_fallback )->get_id(),
+			$first_reuse['subscription']->get_id(),
 			'The first team should resolve to the subscription marked with its own team ID.'
 		);
-		$this->assertFalse( $used_owner_fallback, 'A marker match is not an owner fallback.' );
+		$this->assertFalse( $first_reuse['used_owner_fallback'], 'A marker match is not an owner fallback.' );
 
+		$second_reuse = Teams_Migration::find_reusable_group_subscription( $second_team_id, $owner );
 		$this->assertSame(
 			$second_team_group->get_id(),
-			Teams_Migration::find_reusable_group_subscription( $second_team_id, $owner, $used_owner_fallback )->get_id(),
+			$second_reuse['subscription']->get_id(),
 			'The second team should resolve to its own marked subscription, not the first team\'s.'
 		);
-		$this->assertFalse( $used_owner_fallback, 'A marker match is not an owner fallback.' );
+		$this->assertFalse( $second_reuse['used_owner_fallback'], 'A marker match is not an owner fallback.' );
+	}
+
+	/**
+	 * A marker match wins over an unmarked (fallback-eligible) group of the same owner
+	 * even when the unmarked one is iterated first. This is the load-bearing ordering
+	 * property of the resolver: the fallback is only ever *remembered*, never returned
+	 * early, so a "return the first eligible subscription" refactor cannot creep back in.
+	 */
+	public function test_marked_group_wins_over_earlier_iterated_unmarked_group() {
+		$owner   = $this->create_reader();
+		$team_id = $this->create_team( $owner, [] );
+		// wcs_get_users_subscriptions() iterates in creation order, so the unmarked group
+		// is seen before the team's own marked one.
+		$unmarked_group = $this->create_group_subscription( $owner );
+		$marked_group   = $this->create_migrated_group_subscription( $owner, $team_id );
+
+		$reuse = Teams_Migration::find_reusable_group_subscription( $team_id, $owner );
+
+		$this->assertSame( $marked_group->get_id(), $reuse['subscription']->get_id(), 'The group marked for this team must win over the earlier-iterated unmarked group ' . $unmarked_group->get_id() . '.' );
+		$this->assertFalse( $reuse['used_owner_fallback'], 'A marker match is not an owner fallback.' );
+	}
+
+	/**
+	 * The team's own marked group is reused even once it is no longer active — its end
+	 * date passing (migrate-teams sets one from the team's membership end) must not make
+	 * it invisible, or a re-run would create a second group for the same team and split
+	 * its members across the two.
+	 */
+	public function test_inactive_marked_group_is_reused_rather_than_duplicated() {
+		$owner   = $this->create_reader();
+		$team_id = $this->create_team( $owner, [] );
+		$expired = $this->create_migrated_group_subscription( $owner, $team_id );
+		$expired->set_status( 'expired' );
+		$expired->save();
+
+		$reuse = Teams_Migration::find_reusable_group_subscription( $team_id, $owner );
+
+		$this->assertSame( $expired->get_id(), $reuse['subscription']->get_id(), 'An expired group marked for this team should still be reused.' );
+		$this->assertTrue( $reuse['reused_inactive'], 'Reusing a non-active group must be flagged so the caller warns.' );
+		$this->assertFalse( $reuse['used_owner_fallback'], 'A marker match is not an owner fallback.' );
+	}
+
+	/**
+	 * The owner fallback requires the subscription's own group meta, not just
+	 * Group_Subscription::is_group_subscription() — that reads through to the product,
+	 * and migrate-team-products enables groups on every team product. Without this,
+	 * a sibling team's live linked subscription would look like an adoptable legacy
+	 * group and this team's members would be merged into it.
+	 */
+	public function test_fallback_ignores_group_enabled_only_via_product() {
+		$owner   = $this->create_reader();
+		$team_id = $this->create_team( $owner, [] );
+		$product_level_group = wcs_create_subscription(
+			[
+				'customer_id'    => $owner,
+				'status'         => 'active',
+				'billing_period' => 'month',
+			]
+		);
+		// Stand in for the product-level `_newspack_group_subscription_enabled` meta that
+		// migrate-team-products stamps: group-enabled with no subscription-level meta.
+		$enable_via_product = function ( $settings, $subscription ) use ( $product_level_group ) {
+			if ( $subscription->get_id() === $product_level_group->get_id() ) {
+				$settings['enabled'] = true;
+			}
+			return $settings;
+		};
+		add_filter( 'newspack_group_subscription_settings', $enable_via_product, 10, 2 );
+
+		$reuse = Teams_Migration::find_reusable_group_subscription( $team_id, $owner );
+
+		remove_filter( 'newspack_group_subscription_settings', $enable_via_product, 10 );
+
+		$this->assertNull( $reuse['subscription'], 'A subscription group-enabled only through its product must not be adopted as a legacy group.' );
+		$this->assertFalse( $reuse['used_owner_fallback'], 'No eligible fallback exists here.' );
 	}
 
 	/**
@@ -594,11 +670,10 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 		// Only the first team has been migrated so far.
 		$this->create_migrated_group_subscription( $owner, $first_team_id );
 
-		$used_owner_fallback = null;
-		$resolved            = Teams_Migration::find_reusable_group_subscription( $second_team_id, $owner, $used_owner_fallback );
+		$reuse = Teams_Migration::find_reusable_group_subscription( $second_team_id, $owner );
 
-		$this->assertNull( $resolved, 'The second team must not reuse the first team\'s group subscription — a new group is created for it.' );
-		$this->assertFalse( $used_owner_fallback, 'A subscription already claimed by another team is not an eligible owner fallback.' );
+		$this->assertNull( $reuse['subscription'], 'The second team must not reuse the first team\'s group subscription — a new group is created for it.' );
+		$this->assertFalse( $reuse['used_owner_fallback'], 'A subscription already claimed by another team is not an eligible owner fallback.' );
 	}
 
 	/**
@@ -613,11 +688,10 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 		// A pre-existing, unmarked group subscription (no MIGRATED_TEAM_ID_META_KEY).
 		$legacy_group = $this->create_group_subscription( $owner );
 
-		$used_owner_fallback = null;
-		$resolved            = Teams_Migration::find_reusable_group_subscription( $team_id, $owner, $used_owner_fallback );
+		$reuse = Teams_Migration::find_reusable_group_subscription( $team_id, $owner );
 
-		$this->assertSame( $legacy_group->get_id(), $resolved->get_id(), 'An unmarked owner-owned group subscription should be adopted.' );
-		$this->assertTrue( $used_owner_fallback, 'Adopting an unmarked owner subscription must flag the owner fallback so the caller warns.' );
+		$this->assertSame( $legacy_group->get_id(), $reuse['subscription']->get_id(), 'An unmarked owner-owned group subscription should be adopted.' );
+		$this->assertTrue( $reuse['used_owner_fallback'], 'Adopting an unmarked owner subscription must flag the owner fallback so the caller warns.' );
 	}
 
 	/**
@@ -648,11 +722,12 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 			]
 		);
 
-		$used_owner_fallback = null;
+		$reuse = Teams_Migration::find_reusable_group_subscription( $fresh_team_id, $owner );
+
 		$this->assertNull(
-			Teams_Migration::find_reusable_group_subscription( $fresh_team_id, $owner, $used_owner_fallback ),
+			$reuse['subscription'],
 			'A fresh team should find no reusable group among another team\'s marked group, a cancelled group, and a non-group subscription.'
 		);
-		$this->assertFalse( $used_owner_fallback, 'No eligible fallback exists here.' );
+		$this->assertFalse( $reuse['used_owner_fallback'], 'No eligible fallback exists here.' );
 	}
 }
