@@ -8,7 +8,7 @@
  */
 import apiFetch from '@wordpress/api-fetch';
 import { sprintf, __ } from '@wordpress/i18n';
-import { CardMedia } from '@wordpress/components';
+import { CardMedia, __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 import { useEffect, useState, Fragment } from '@wordpress/element';
 import { decodeEntities } from '@wordpress/html-entities';
 import { moreVertical, settings } from '@wordpress/icons';
@@ -16,7 +16,7 @@ import { moreVertical, settings } from '@wordpress/icons';
 /**
  * Internal dependencies.
  */
-import { ActionCard, Button, Card, Modal, Notice, TextControl } from '../../../../../packages/components/src';
+import { ActionCard, Button, Modal, Notice, TextControl } from '../../../../../packages/components/src';
 import PrimaryPromptPopover from '../prompt-popovers/primary';
 import PromptSettingsModal from '../settings-modal';
 import { placementForPopup } from '../../views/campaigns/utils';
@@ -127,7 +127,7 @@ const PromptActionCard = props => {
 							{ ! campaignGroups && (
 								<Notice isWarning noticeText={ __( 'This prompt is currently not assigned to any campaign.', 'newspack-plugin' ) } />
 							) }
-							<Card buttonsCard noBorder className="justify-end">
+							<HStack justify="flex-end" spacing={ 4 } wrap className="newspack-modal__footer">
 								<Button
 									isSecondary
 									onClick={ () => {
@@ -141,7 +141,7 @@ const PromptActionCard = props => {
 								<Button isPrimary href={ `/wp-admin/post.php?post=${ duplicated }&action=edit` }>
 									{ __( 'Edit', 'newspack-plugin' ) }
 								</Button>
-							</Card>
+							</HStack>
 						</>
 					) : (
 						<>
@@ -154,7 +154,7 @@ const PromptActionCard = props => {
 								value={ duplicateTitle }
 								onChange={ value => setDuplicateTitle( value ) }
 							/>
-							<Card buttonsCard noBorder className="justify-end">
+							<HStack justify="flex-end" spacing={ 4 } wrap className="newspack-modal__footer">
 								<Button
 									disabled={ inFlight }
 									isSecondary
@@ -176,7 +176,7 @@ const PromptActionCard = props => {
 								>
 									{ __( 'Duplicate', 'newspack-plugin' ) }
 								</Button>
-							</Card>
+							</HStack>
 						</>
 					) }
 				</Modal>

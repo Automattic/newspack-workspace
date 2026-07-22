@@ -25,7 +25,11 @@ if [ $# -eq 0 ]; then
 fi
 
 PROJECT_DIR=$(find_project "$1")
-PKG=$(basename "$PROJECT_DIR")
+# Derive the pnpm package name from package.json — it can differ from the
+# directory name (e.g. plugins/newspack-plugin is the package "newspack"),
+# and pnpm --filter matches by package name, not directory.
+PKG=$(node -p "require('$PROJECT_DIR/package.json').name" 2>/dev/null)
+[ -z "$PKG" ] && PKG=$(basename "$PROJECT_DIR")
 
 cd "$MONOREPO_ROOT"
 pnpm install

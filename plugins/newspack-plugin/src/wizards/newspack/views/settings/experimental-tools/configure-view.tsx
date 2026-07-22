@@ -259,7 +259,7 @@ export default function ConfigureView( {
 		>
 			<div className="experimental-tools__configure-header">
 				<Button icon={ chevronLeft } label={ __( 'Back', 'newspack-plugin' ) } onClick={ onBack } isLink />
-				<h1>{ tool.label }</h1>
+				<h2 className="newspack-wizard__heading">{ tool.label }</h2>
 			</div>
 			<p className="newspack-wizard__sections__description">{ tool.description }</p>
 

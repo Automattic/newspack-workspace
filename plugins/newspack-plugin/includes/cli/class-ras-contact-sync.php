@@ -10,6 +10,8 @@ namespace Newspack\CLI;
 use WP_CLI;
 use Newspack\Reader_Activation;
 use Newspack\Reader_Activation\Contact_Sync;
+use Newspack\Reader_Activation\Integrations;
+use Newspack\Reader_Activation\Sync\Metadata;
 use Newspack_Subscription_Migrations\CSV_Importers\CSV_Importer;
 use Newspack_Subscription_Migrations\Stripe_Sync;
 
@@ -34,7 +36,22 @@ class RAS_Contact_Sync {
 	 */
 	protected static $results = [
 		'processed' => 0,
+		'errors'    => 0,
+		'skipped'   => 0,
 	];
+
+	/**
+	 * Record the outcome of a single sync_contact() call in the results tally.
+	 *
+	 * @param true|\WP_Error $result The value returned by Contact_Sync::sync_contact().
+	 */
+	protected static function record_result( $result ) {
+		if ( \is_wp_error( $result ) ) {
+			static::$results['errors']++;
+		} else {
+			static::$results['processed']++;
+		}
+	}
 
 	/**
 	 * Log to WP CLI.
@@ -68,9 +85,10 @@ class RAS_Contact_Sync {
 	 *   @type int         $config['max_batches'] Maximum number of batches to process.
 	 *   @type bool        $config['is_dry_run'] True if a dry run.
 	 *   @type string      $config['context'] Context of the sync.
+	 *   @type array       $config['options'] Sync options ( `skip_lists` bool, `fields` string[]|null ).
 	 * }
 	 *
-	 * @return int|\WP_Error Number of synced contacts or WP_Error.
+	 * @return array|\WP_Error Results tally ( `processed`, `errors`, `skipped` ) or WP_Error.
 	 */
 	private static function sync_contacts( $config ) {
 		$default_config = [
@@ -84,8 +102,18 @@ class RAS_Contact_Sync {
 			'max_batches'      => 0,
 			'is_dry_run'       => false,
 			'context'          => static::$context,
+			'options'          => [],
 		];
-		$config = \wp_parse_args( $config, $default_config );
+		$config  = \wp_parse_args( $config, $default_config );
+		$options = $config['options'];
+
+		// Reset the tally at entry so the counts reflect this run only (the class is
+		// static, so a second call in the same process would otherwise accumulate).
+		static::$results = [
+			'processed' => 0,
+			'errors'    => 0,
+			'skipped'   => 0,
+		];
 
 		static::$context = $config['context'];
 
@@ -120,11 +148,12 @@ class RAS_Contact_Sync {
 							$subscription_id
 						)
 					);
+					static::$results['skipped']++;
 
 					continue;
 				}
 
-				$result = Contact_Sync::sync_contact( $subscription, self::$context, $config['is_dry_run'] );
+				$result = Contact_Sync::sync_contact( $subscription, self::$context, $config['is_dry_run'], $options );
 				if ( \is_wp_error( $result ) ) {
 					static::log(
 						sprintf(
@@ -135,6 +164,7 @@ class RAS_Contact_Sync {
 						)
 					);
 				}
+				static::record_result( $result );
 
 				// Get the next batch.
 				if ( $config['migrated_only'] && empty( $config['subscription_ids'] ) ) {
@@ -164,11 +194,12 @@ class RAS_Contact_Sync {
 							$order_id
 						)
 					);
+					static::$results['skipped']++;
 
 					continue;
 				}
 
-				$result = Contact_Sync::sync_contact( $order, self::$context, $config['is_dry_run'] );
+				$result = Contact_Sync::sync_contact( $order, self::$context, $config['is_dry_run'], $options );
 				if ( \is_wp_error( $result ) ) {
 					static::log(
 						sprintf(
@@ -178,9 +209,8 @@ class RAS_Contact_Sync {
 							$result->get_error_message()
 						)
 					);
-				} elseif ( ! empty( static::$results ) ) {
-					static::$results['processed']++;
 				}
+				static::record_result( $result );
 			}
 		}
 
@@ -189,7 +219,7 @@ class RAS_Contact_Sync {
 			static::log( __( 'Syncing by customer user ID...', 'newspack-plugin' ) );
 			foreach ( $config['user_ids'] as $user_id ) {
 				if ( ! $config['active_only'] || self::user_has_active_subscriptions( $user_id ) ) {
-					$result = Contact_Sync::sync_contact( $user_id, self::$context, $config['is_dry_run'] );
+					$result = Contact_Sync::sync_contact( $user_id, self::$context, $config['is_dry_run'], $options );
 					if ( \is_wp_error( $result ) ) {
 						static::log(
 							sprintf(
@@ -200,6 +230,9 @@ class RAS_Contact_Sync {
 							)
 						);
 					}
+					static::record_result( $result );
+				} else {
+					static::$results['skipped']++;
 				}
 			}
 		}
@@ -222,17 +255,20 @@ class RAS_Contact_Sync {
 			while ( $user_ids ) {
 				$user_id = array_shift( $user_ids );
 				if ( ! $config['active_only'] || self::user_has_active_subscriptions( $user_id ) ) {
-					$result = Contact_Sync::sync_contact( $user_id, self::$context, $config['is_dry_run'] );
+					$result = Contact_Sync::sync_contact( $user_id, self::$context, $config['is_dry_run'], $options );
 					if ( \is_wp_error( $result ) ) {
 						static::log(
 							sprintf(
-								// Translators: $1$s is the contact's user ID. %2$s is the error message.
-								__( 'Error syncing contact info for user ID %1$d. %2$s' ),
+								// Translators: %1$d is the contact's user ID. %2$s is the error message.
+								__( 'Error syncing contact info for user ID %1$d. %2$s', 'newspack-plugin' ),
 								$user_id,
 								$result->get_error_message()
 							)
 						);
 					}
+					static::record_result( $result );
+				} else {
+					static::$results['skipped']++;
 				}
 
 				// Get the next batch.
@@ -248,7 +284,7 @@ class RAS_Contact_Sync {
 			}
 		}
 
-		return static::$results['processed'];
+		return static::$results;
 	}
 
 	/**
@@ -354,7 +390,7 @@ class RAS_Contact_Sync {
 	 * ## OPTIONS
 	 *
 	 * [--dry-run]
-	 * : If passed, output results but do not execute the sync.
+	 * : If passed, output results but do not execute the sync. When combined with `--skip-lists`/`--fields`, the preview runs the `newspack_esp_sync_contact` filter for fidelity, so a third-party filter that performs I/O would still run under a dry run.
 	 *
 	 * [--active-only]
 	 * : If passed, only sync users who have active subscriptions, otherwise resync all users.
@@ -380,6 +416,21 @@ class RAS_Contact_Sync {
 	 * [--offset=<number>]
 	 * : Offset value passed to the subscription query. Use with `--batch-size` and `--max-batches` to run multiple processes in parallel.
 	 *
+	 * [--sync-context=<string>]
+	 * : Label recorded as the sync context (e.g. in ESP activity logs). Defaults to a generic CLI context.
+	 *
+	 * [--skip-lists]
+	 * : Upsert each contact WITHOUT a master list, so an unsubscribed contact is not resubscribed. Missing contacts are still created (list-less). Use for backfills that must not alter list membership. Honored only by integrations that read the sync options (the built-in ESP integration does); a third-party integration implementing the 3-argument `push_contact_data()` contract will still add to its own lists. Not supported on Mailchimp, which rejects a list-less upsert before writing any metadata — the pre-flight errors out.
+	 *
+	 * [--fields=<name1,name2>]
+	 * : Comma-delimited metadata fields (raw keys or display labels, any case) to sync. Restricts both what is computed and what is pushed to just these fields; all other metadata — and the reader's name — is left untouched. Every requested field must be enabled as an outgoing field on each active integration. The `newspack_esp_sync_contact` filter still runs, but any metadata it adds outside `--fields` is dropped.
+	 *
+	 * ## NOTES
+	 *
+	 * When `--skip-lists` or `--fields` is passed, failed pushes are NOT auto-retried
+	 * (the retry path would rebuild the full contact and push it with the master list,
+	 * undoing the intent). Re-run the affected `--offset` window instead.
+	 *
 	 * @param array $args Positional args.
 	 * @param array $assoc_args Associative args.
 	 */
@@ -396,22 +447,101 @@ class RAS_Contact_Sync {
 		$config['max_batches']      = ! empty( $assoc_args['max-batches'] ) ? intval( $assoc_args['max-batches'] ) : 0;
 		$config['context']          = ! empty( $assoc_args['sync-context'] ) ? $assoc_args['sync-context'] : static::$context;
 
-		$processed = self::sync_contacts( $config );
+		$options = self::parse_sync_options( $assoc_args );
+		if ( \is_wp_error( $options ) ) {
+			WP_CLI::error( $options->get_error_message() );
+			return;
+		}
+		$config['options'] = $options;
 
-		if ( \is_wp_error( $processed ) ) {
-			WP_CLI::error( $processed->get_error_message() );
+		$results = self::sync_contacts( $config );
+
+		if ( \is_wp_error( $results ) ) {
+			WP_CLI::error( $results->get_error_message() );
 			return;
 		}
 		WP_CLI::line( "\n" );
 		WP_CLI::success(
 			sprintf(
-				// Translators: total number of synced contacts.
-				__(
-					'Synced %d contacts.',
-					'newspack-plugin'
-				),
-				$processed
+				// Translators: 1: verb (Synced/Would sync), 2: processed count, 3: error count, 4: skipped count.
+				__( '%1$s %2$d contacts (%3$d errors, %4$d skipped).', 'newspack-plugin' ),
+				$config['is_dry_run'] ? __( 'Would sync', 'newspack-plugin' ) : __( 'Synced', 'newspack-plugin' ),
+				$results['processed'],
+				$results['errors'],
+				$results['skipped']
 			)
 		);
+	}
+
+	/**
+	 * Parse and validate the `--skip-lists` / `--fields` options (pre-flight).
+	 *
+	 * Runs even under `--dry-run` so misconfiguration surfaces before any batch.
+	 * When `--fields` is set, tokens are resolved to canonical labels and each must
+	 * be enabled as an outgoing field on every active, configured integration —
+	 * disabled fields are silently dropped downstream, so a run would otherwise
+	 * "succeed" while pushing empty metadata.
+	 *
+	 * @param array $assoc_args Associative CLI args.
+	 *
+	 * @return array|\WP_Error `[ 'skip_lists' => bool, 'fields' => string[]|null ]` or WP_Error.
+	 */
+	private static function parse_sync_options( $assoc_args ): array|\WP_Error {
+		$options = [
+			'skip_lists' => ! empty( $assoc_args['skip-lists'] ),
+			'fields'     => null,
+		];
+
+		// Mailchimp cannot do a list-less upsert: its upsert_contact() override
+		// returns a "No lists found." WP_Error before writing any merge fields, so a
+		// --skip-lists backfill on Mailchimp would push metadata for no one (every
+		// contact tallied as an error). Fail the pre-flight with an actionable message
+		// rather than letting the whole run fail contact-by-contact.
+		if (
+			$options['skip_lists'] &&
+			class_exists( 'Newspack_Newsletters' ) &&
+			'mailchimp' === \Newspack_Newsletters::service_provider()
+		) {
+			return new \WP_Error(
+				'newspack_esp_sync_skip_lists_mailchimp',
+				__( 'The --skip-lists option is not supported on Mailchimp: a list-less upsert is rejected before any metadata is written, so no fields would be synced. Mailchimp requires each contact to belong to an audience.', 'newspack-plugin' )
+			);
+		}
+
+		if ( empty( $assoc_args['fields'] ) ) {
+			return $options;
+		}
+
+		$labels = Metadata::resolve_field_labels( explode( ',', $assoc_args['fields'] ) );
+		if ( \is_wp_error( $labels ) ) {
+			return $labels;
+		}
+		if ( empty( $labels ) ) {
+			return new \WP_Error( 'newspack_esp_sync_no_fields', __( 'No valid fields were provided to --fields.', 'newspack-plugin' ) );
+		}
+		$options['fields'] = $labels;
+
+		// Deliberately fail if ANY active configured integration lacks a requested
+		// field: a disabled outgoing field is silently dropped downstream, so a run
+		// that "succeeds" while pushing empty metadata to one integration is worse
+		// than a hard error the operator can resolve by enabling the field.
+		$integrations = Integrations::get_active_configured_integrations();
+		foreach ( $integrations as $integration_id => $integration ) {
+			$enabled = $integration->get_enabled_outgoing_fields();
+			$missing = array_values( array_diff( $labels, $enabled ) );
+			if ( ! empty( $missing ) ) {
+				return new \WP_Error(
+					'newspack_esp_sync_fields_not_enabled',
+					sprintf(
+						// Translators: 1: integration id, 2: comma-separated field labels.
+						__( 'These fields are not enabled as outgoing fields for integration "%1$s": %2$s. Enable them under Audience > Access control / metadata settings, then re-run.', 'newspack-plugin' ),
+						$integration_id,
+						implode( ', ', $missing )
+					)
+				);
+			}
+		}
+
+		return $options;
 	}
 }

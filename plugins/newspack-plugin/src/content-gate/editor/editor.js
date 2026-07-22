@@ -15,6 +15,7 @@ import { registerPlugin } from '@wordpress/plugins';
  */
 import PositionControl from '../../../packages/components/src/position-control';
 import utils from '../../../packages/components/src/utils';
+import GatePreview from './preview';
 import './editor.scss';
 
 const { addToolbarBackButton } = utils;
@@ -61,6 +62,9 @@ function GateEdit() {
 	}, [ meta.style, meta.overlay_size ] );
 	return (
 		<Fragment>
+			<PluginPostStatusInfo>
+				<GatePreview />
+			</PluginPostStatusInfo>
 			{ newspack_content_gate.has_campaigns && (
 				<PluginPostStatusInfo>
 					<p>{ __( "Newspack Campaign prompts won't be displayed when rendering gated content.", 'newspack-plugin' ) }</p>
