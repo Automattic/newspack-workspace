@@ -344,6 +344,45 @@ class PostScopeTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Model output is untrusted. It is escaped where it is baked into the prompt's
+	 * block content, so it cannot introduce executable markup — the prompt CPT's
+	 * content is rendered with dangerouslySetInnerHTML by the single-prompt block.
+	 */
+	public function test_model_output_cannot_inject_markup() {
+		add_filter( 'newspack_contextual_prompts_use_donate_block', '__return_false' );
+
+		$post_id   = self::factory()->post->create( [ 'post_type' => 'post' ] );
+		$prompt_id = Newspack_Popups_Post_Scope::create_scoped_prompt(
+			[
+				'post_id'      => $post_id,
+				'body'         => '<script>alert(1)</script><img src=x onerror=alert(2)>Fund it',
+				'button_label' => '<b onmouseover=alert(3)>Give</b>',
+				'button_url'   => 'javascript:alert(4)',
+				'position'     => 1,
+			]
+		);
+		$content = get_post_field( 'post_content', $prompt_id );
+
+		// The model-derived regions carry no raw markup, only escaped entities.
+		preg_match( '#<p[^>]*>(.*?)</p>#s', $content, $paragraph );
+		$this->assertStringNotContainsString( '<', $paragraph[1], 'Model copy is escaped.' );
+		$this->assertStringContainsString( '&lt;script&gt;', $paragraph[1] );
+
+		// No event handler survives on a real tag, and the javascript: URL is dropped.
+		$this->assertSame( 0, preg_match( '#<[a-zA-Z][^>]*\son[a-z]+\s*=#i', $content ), 'No inline event handlers.' );
+		$this->assertSame( 0, preg_match( '#href=["\']javascript:#i', $content ), 'javascript: URLs are stripped.' );
+
+		// Only our own wrapper tags are raw in the document.
+		preg_match_all( '#<([a-zA-Z][a-zA-Z0-9]*)#', $content, $tags );
+		$this->assertEmpty(
+			array_diff( array_unique( $tags[1] ), [ 'div', 'p', 'a' ] ),
+			'No unexpected raw tags reached the stored content.'
+		);
+
+		remove_filter( 'newspack_contextual_prompts_use_donate_block', '__return_false' );
+	}
+
+	/**
 	 * Updating something that isn't a scoped prompt is rejected.
 	 */
 	public function test_update_rejects_non_scoped_prompt() {
