@@ -87,6 +87,120 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test that repeat permanent config failures for the same integration are
+	 * deduped within the alert window — a config failure is site-level, so an
+	 * account-wide ESP outage must not page once per contact.
+	 */
+	public function test_permanent_config_failure_alert_deduped_per_integration() {
+		$alerts = [];
+		add_action(
+			'newspack_alert',
+			function ( $data ) use ( &$alerts ) {
+				$alerts[] = $data;
+			}
+		);
+
+		$payload = [
+			'integration_id' => 'esp',
+			'user_id'        => 1,
+			'context'        => 'Reader registered',
+			'reason'         => 'Payment Required',
+			'error_class'    => 'permanent_config',
+		];
+		do_action( 'newspack_sync_permanent_failure', $payload );
+		do_action( 'newspack_sync_permanent_failure', $payload );
+
+		$this->assertCount( 1, $alerts, 'Repeat config failures for the same integration should emit one alert.' );
+
+		do_action(
+			'newspack_sync_permanent_failure',
+			array_merge( $payload, [ 'integration_id' => 'other_esp' ] )
+		);
+
+		$this->assertCount( 2, $alerts, 'A different integration should alert independently.' );
+	}
+
+	/**
+	 * Test that severity derives from the failure class: config failures page
+	 * (error → Slack) while deletion-path contact-data failures surface as
+	 * warnings (Watch), observable without paging — and are not deduped, since
+	 * each concerns a distinct contact.
+	 */
+	public function test_permanent_failure_severity_derives_from_class() {
+		$alerts = [];
+		add_action(
+			'newspack_alert',
+			function ( $data ) use ( &$alerts ) {
+				$alerts[] = $data;
+			}
+		);
+
+		$contact_payload = [
+			'integration_id' => 'esp',
+			'email'          => 'gone@example.com',
+			'mode'           => 'flag',
+			'context'        => 'Account deletion',
+			'reason'         => 'Your merge fields were invalid.',
+			'error_class'    => 'permanent_contact',
+		];
+		do_action( 'newspack_sync_permanent_failure', $contact_payload );
+		do_action( 'newspack_sync_permanent_failure', $contact_payload );
+
+		$this->assertCount( 2, $alerts, 'Contact-class permanent failures should not be deduped.' );
+		$this->assertEquals( 'warning', $alerts[0]['severity'], 'Contact-class permanent failures should not page.' );
+
+		do_action(
+			'newspack_sync_permanent_failure',
+			[
+				'integration_id' => 'esp',
+				'user_id'        => 1,
+				'context'        => 'Reader registered',
+				'reason'         => 'Payment Required',
+				'error_class'    => 'permanent_config',
+			]
+		);
+
+		$this->assertCount( 3, $alerts );
+		$this->assertEquals( 'error', $alerts[2]['severity'], 'Config-class permanent failures should page.' );
+	}
+
+	/**
+	 * Test that non-transient failure classes stay out of the failure log so
+	 * never-fixable failures cannot trip the hourly pattern rules.
+	 */
+	public function test_record_failure_skips_non_transient_classes() {
+		foreach ( [ 'benign', 'permanent_contact', 'permanent_config' ] as $error_class ) {
+			Alert_Manager::record_failure(
+				[
+					'integration_id' => 'esp',
+					'contact'        => [ 'email' => 'test@example.com' ],
+					'reason'         => 'Some error',
+					'error_class'    => $error_class,
+				]
+			);
+		}
+
+		$this->assertEmpty( get_option( Alert_Manager::FAILURE_LOG_OPTION, [] ), 'Non-transient classes must not be recorded.' );
+
+		Alert_Manager::record_failure(
+			[
+				'integration_id' => 'esp',
+				'contact'        => [ 'email' => 'test@example.com' ],
+				'reason'         => 'Some error',
+				'error_class'    => 'transient',
+			]
+		);
+		Alert_Manager::record_failure(
+			[
+				'action_name' => 'reader_registered',
+				'reason'      => 'Handler failed',
+			]
+		);
+
+		$this->assertCount( 2, get_option( Alert_Manager::FAILURE_LOG_OPTION, [] ), 'Transient and unclassified failures must be recorded.' );
+	}
+
+	/**
 	 * Test that data event retry exhaustion triggers unified newspack_alert.
 	 */
 	public function test_data_event_exhaustion_triggers_unified_alert() {

@@ -84,12 +84,15 @@ class Contact_Sync extends Sync {
 	const RETRY_BACKOFF = [ 30, 120, 480, 1800, 7200 ];
 
 	/**
-	 * Substring signatures (lowercase) that classify an ESP error message.
+	 * Substring signatures (lowercase) that classify an ESP error message on
+	 * the push/upsert direction.
 	 *
 	 * Matched in order against the lowercased error message. The HTTP status
 	 * code that would identify these cleanly is discarded upstream by the ESP
 	 * layer (only a "{Title}: {detail}" string survives), so classification is
-	 * necessarily string-based. Extend the lists as ESP error copy evolves.
+	 * necessarily string-based. Extend the lists as ESP error copy evolves —
+	 * they are private so they can do so without becoming public API (tests
+	 * reach classify_error() via reflection).
 	 *
 	 *   - permanent_contact: bad contact data; retrying can never succeed.
 	 *   - permanent_config:  site-level ESP account problem; actionable.
@@ -97,7 +100,7 @@ class Contact_Sync extends Sync {
 	 *
 	 * Anything not matched here is treated as 'transient' and retried.
 	 */
-	const ERROR_SIGNATURES = [
+	private const ERROR_SIGNATURES = [
 		'permanent_contact' => [
 			'was permanently deleted',
 			'looks fake or invalid',
@@ -112,6 +115,33 @@ class Contact_Sync extends Sync {
 		'benign'            => [
 			'member exists',
 			'already a list member',
+		],
+	];
+
+	/**
+	 * Signature map for the deletion direction, where two push-oriented classes
+	 * invert their meaning:
+	 *
+	 *   - 'member exists' / 'already a list member' are deliberately absent: on
+	 *     a deletion push they mean the ESP contact still exists WITHOUT the
+	 *     account_deleted/membership_status flags, so the push must be retried
+	 *     (they fall through to 'transient') rather than skipped as benign.
+	 *   - 'was permanently deleted' is benign here: the contact is already gone
+	 *     from the ESP, which is the deletion end-state for both modes.
+	 */
+	private const DELETION_ERROR_SIGNATURES = [
+		'permanent_contact' => [
+			'looks fake or invalid',
+			'merge fields were invalid',
+			'please provide a valid email',
+			'contact email address is not valid',
+		],
+		'permanent_config'  => [
+			'api access has been disabled',
+			'payment required',
+		],
+		'benign'            => [
+			'was permanently deleted',
 		],
 	];
 
@@ -339,6 +369,10 @@ class Contact_Sync extends Sync {
 				 *     @type array  $contact        The contact data that failed to sync.
 				 *     @type string $context        The sync context.
 				 *     @type string $reason         The error message.
+				 *     @type string $error_class    Error classification — 'transient', 'benign',
+				 *                                  'permanent_contact' or 'permanent_config' — so
+				 *                                  consumers can keep never-fixable failures out
+				 *                                  of pattern detection.
 				 * }
 				 */
 				do_action(
@@ -348,6 +382,7 @@ class Contact_Sync extends Sync {
 						'contact'        => $contact,
 						'context'        => $context,
 						'reason'         => $result->get_error_message(),
+						'error_class'    => self::classify_error( $result ),
 					]
 				);
 				if ( self::options_are_default( $options ) ) {
@@ -466,7 +501,7 @@ class Contact_Sync extends Sync {
 				if ( \is_wp_error( $result ) ) {
 					$errors[] = sprintf( '[%s] %s', $integration_id, $result->get_error_message() );
 					static::log( sprintf( 'Delete failed for integration "%s" of %s: %s', $integration_id, $email, $result->get_error_message() ) );
-					self::schedule_deletion_retry( $integration_id, 'delete', $email, [], $context, 0, $result );
+					$error_class = self::schedule_deletion_retry( $integration_id, 'delete', $email, [], $context, 0, $result );
 					/**
 					 * Fires when a contact deletion sync fails.
 					 *
@@ -482,6 +517,8 @@ class Contact_Sync extends Sync {
 					 *     @type string $context        The sync context.
 					 *     @type string $reason         The error message.
 					 *     @type string $mode           The deletion mode: 'delete' or 'flag'.
+					 *     @type string $error_class    Error classification, from the
+					 *                                  deletion-direction signature map.
 					 * }
 					 */
 					do_action(
@@ -492,6 +529,7 @@ class Contact_Sync extends Sync {
 							'context'        => $context,
 							'reason'         => $result->get_error_message(),
 							'mode'           => 'delete',
+							'error_class'    => $error_class,
 						]
 					);
 					if ( self::$current_as_action_id ) {
@@ -535,7 +573,7 @@ class Contact_Sync extends Sync {
 					// Stash the already-prepared payload so the retry re-pushes the
 					// exact contact (prefix + Account_Deleted re-injection) without
 					// rebuilding it from a user that no longer exists.
-					self::schedule_deletion_retry( $integration_id, 'flag', $email, $integration_contact, $context, 0, $result );
+					$error_class = self::schedule_deletion_retry( $integration_id, 'flag', $email, $integration_contact, $context, 0, $result );
 					/** This action is documented above in the 'delete' branch of this method. */
 					do_action(
 						'newspack_sync_contact_failed',
@@ -545,6 +583,7 @@ class Contact_Sync extends Sync {
 							'context'        => $context,
 							'reason'         => $result->get_error_message(),
 							'mode'           => 'flag',
+							'error_class'    => $error_class,
 						]
 					);
 					if ( self::$current_as_action_id ) {
@@ -576,14 +615,24 @@ class Contact_Sync extends Sync {
 	/**
 	 * Classify an ESP sync error to decide retry behavior.
 	 *
-	 * @param string|\WP_Error $error The error from a failed push.
+	 * Matches against every message carried by the error — the ESP layer
+	 * aggregates messages (invalid-list errors, exception detail) ahead of the
+	 * provider's own error, so reading only the first message would miss a
+	 * real signature exactly when a site is misconfigured.
+	 *
+	 * @param string|\WP_Error $error     The error from a failed push.
+	 * @param string           $direction The sync direction: 'push' (default) or 'deletion'.
+	 *                                    Deletion uses its own signature map because some
+	 *                                    push-oriented classes invert their meaning on the
+	 *                                    removal path.
 	 * @return string One of 'permanent_contact', 'permanent_config', 'benign', or 'transient'.
 	 */
-	private static function classify_error( $error ) {
-		$message  = $error instanceof \WP_Error ? $error->get_error_message() : (string) $error;
+	private static function classify_error( $error, $direction = 'push' ) {
+		$message  = $error instanceof \WP_Error ? implode( ' ', $error->get_error_messages() ) : (string) $error;
 		$haystack = strtolower( $message );
 
-		foreach ( self::ERROR_SIGNATURES as $class => $signatures ) {
+		$signature_map = 'deletion' === $direction ? self::DELETION_ERROR_SIGNATURES : self::ERROR_SIGNATURES;
+		foreach ( $signature_map as $class => $signatures ) {
 			foreach ( $signatures as $signature ) {
 				if ( str_contains( $haystack, $signature ) ) {
 					return $class;
@@ -598,27 +647,32 @@ class Contact_Sync extends Sync {
 	 * Schedule a retry for a failed integration sync via ActionScheduler.
 	 *
 	 * @param string           $integration_id The integration ID.
-	 * @param int              $user_id        The WordPress user ID.
+	 * @param int              $user_id        The WordPress user ID (0 when the contact has no
+	 *                                         resolvable WP user).
 	 * @param string           $context        The sync context.
 	 * @param int              $retry_count    Current retry count (0 = first failure).
 	 * @param string|\WP_Error $error          The error from the failure.
 	 * @param string           $previous_email Optional. Previous email for email-change retries.
+	 *
+	 * @return string The error classification that decided the retry handling — one of
+	 *                'benign', 'permanent_contact', 'permanent_config' or 'transient'.
+	 *                Callers use 'benign' to detect a deliberately-ended retry chain.
 	 */
 	private static function schedule_integration_retry( $integration_id, $user_id, $context, $retry_count, $error, $previous_email = '' ) {
-		if ( ! function_exists( 'as_schedule_single_action' ) ) {
-			return;
-		}
-
-		$user = ! empty( $user_id ) ? get_userdata( $user_id ) : false;
-		if ( ! $user ) {
-			static::log( sprintf( 'Cannot schedule retry for integration "%s": user %d not found.', $integration_id, $user_id ) );
-			return;
-		}
-
 		$error_message = $error instanceof \WP_Error ? $error->get_error_message() : (string) $error;
-		$user_email    = $user ? $user->user_email : 'unknown';
+		$error_class   = self::classify_error( $error );
 
-		$error_class = self::classify_error( $error );
+		if ( ! function_exists( 'as_schedule_single_action' ) ) {
+			return $error_class;
+		}
+
+		// Classification handling runs before the user-existence bail below so
+		// benign and permanent results — including the actionable permanent_config
+		// alert — apply even to syncs without a resolvable WP user (guest
+		// checkouts, users deleted mid-flight).
+		$user       = ! empty( $user_id ) ? get_userdata( $user_id ) : false;
+		$user_email = $user ? $user->user_email : 'unknown';
+
 		if ( 'benign' === $error_class ) {
 			static::log(
 				sprintf(
@@ -629,7 +683,13 @@ class Contact_Sync extends Sync {
 					$error_message
 				)
 			);
-			return;
+			if ( self::$current_as_action_id ) {
+				\ActionScheduler_Logger::instance()->log(
+					self::$current_as_action_id,
+					'Benign result (contact already synced); retry chain deliberately ended.'
+				);
+			}
+			return $error_class;
 		}
 		if ( 'transient' !== $error_class ) {
 			static::log(
@@ -652,17 +712,23 @@ class Contact_Sync extends Sync {
 				/**
 				 * Fires when a contact sync fails with a permanent config-level
 				 * error (disabled/unpaid ESP account) that can never succeed on
-				 * retry. Permanent contact-data errors are skipped silently; only
-				 * actionable config failures are surfaced.
+				 * retry. Permanent contact-data errors are skipped silently on
+				 * this path — the contact re-syncs on the reader's next event;
+				 * only actionable config failures are surfaced. (The deletion
+				 * path also fires this hook for permanent contact-data errors —
+				 * see schedule_deletion_retry().)
 				 *
 				 * @param array $alert_data {
 				 *     Alert data.
 				 *
 				 *     @type string $integration_id The integration that failed.
-				 *     @type int    $user_id        The WordPress user ID.
-				 *     @type string $email          The contact's email address.
+				 *     @type int    $user_id        The WordPress user ID (0 when the contact
+				 *                                  has no resolvable WP user).
+				 *     @type string $email          The contact's email address; empty when no
+				 *                                  WP user could be resolved.
 				 *     @type string $context        The sync context.
 				 *     @type string $reason         The final error message.
+				 *     @type string $error_class    'permanent_config' on this path.
 				 * }
 				 */
 				do_action(
@@ -670,13 +736,19 @@ class Contact_Sync extends Sync {
 					[
 						'integration_id' => $integration_id,
 						'user_id'        => $user_id,
-						'email'          => $user_email,
+						'email'          => $user ? $user->user_email : '',
 						'context'        => $context,
 						'reason'         => $error_message,
+						'error_class'    => $error_class,
 					]
 				);
 			}
-			return;
+			return $error_class;
+		}
+
+		if ( ! $user ) {
+			static::log( sprintf( 'Cannot schedule retry for integration "%s": user %d not found.', $integration_id, $user_id ) );
+			return $error_class;
 		}
 
 		$next_retry = $retry_count + 1;
@@ -720,7 +792,7 @@ class Contact_Sync extends Sync {
 					'reason'         => $error_message,
 				]
 			);
-			return;
+			return $error_class;
 		}
 
 		$backoff_index   = min( $retry_count, count( self::RETRY_BACKOFF ) - 1 );
@@ -755,6 +827,7 @@ class Contact_Sync extends Sync {
 				$error_message
 			)
 		);
+		return $error_class;
 	}
 
 	/**
@@ -826,7 +899,7 @@ class Contact_Sync extends Sync {
 					$error_messages
 				)
 			);
-			self::schedule_integration_retry(
+			$error_class   = self::schedule_integration_retry(
 				$integration_id,
 				$user_id,
 				$context,
@@ -851,7 +924,9 @@ class Contact_Sync extends Sync {
 			}
 			// Only throw on the last retry so ActionScheduler marks it as "failed".
 			// Intermediate retries schedule the next attempt and complete normally.
-			if ( $retry_count >= self::MAX_RETRIES ) {
+			// A benign result is an effectively-synced outcome, not a failure, so
+			// its deliberately-ended chain must not mark the action as failed.
+			if ( $retry_count >= self::MAX_RETRIES && 'benign' !== $error_class ) {
 				throw new \Exception( esc_html( $error_message ) );
 			}
 		} else {
@@ -883,26 +958,36 @@ class Contact_Sync extends Sync {
 	 * @param string           $context        The sync context.
 	 * @param int              $retry_count    Current retry count (0 = first failure).
 	 * @param string|\WP_Error $error          The error from the failure.
+	 *
+	 * @return string The error classification that decided the retry handling — one of
+	 *                'benign', 'permanent_contact', 'permanent_config' or 'transient'.
+	 *                Callers use 'benign' to detect a deliberately-ended retry chain.
 	 */
 	private static function schedule_deletion_retry( $integration_id, $mode, $email, $contact, $context, $retry_count, $error ) {
+		$error_message = $error instanceof \WP_Error ? $error->get_error_message() : (string) $error;
+		$error_class   = self::classify_error( $error, 'deletion' );
+
 		if ( ! function_exists( 'as_schedule_single_action' ) ) {
-			return;
+			return $error_class;
 		}
 
-		$error_message = $error instanceof \WP_Error ? $error->get_error_message() : (string) $error;
-
-		$error_class = self::classify_error( $error );
 		if ( 'benign' === $error_class ) {
 			static::log(
 				sprintf(
-					'Skipping retry for deletion (%s) sync of %s in integration "%s"; ESP reports contact already synced. Detail: %s',
+					'Skipping retry for deletion (%s) sync of %s in integration "%s"; ESP reports the contact is already gone. Detail: %s',
 					$mode,
 					$email,
 					$integration_id,
 					$error_message
 				)
 			);
-			return;
+			if ( self::$current_as_action_id ) {
+				\ActionScheduler_Logger::instance()->log(
+					self::$current_as_action_id,
+					'Benign result (contact already gone from the ESP); retry chain deliberately ended.'
+				);
+			}
+			return $error_class;
 		}
 		if ( 'transient' !== $error_class ) {
 			static::log(
@@ -921,24 +1006,40 @@ class Contact_Sync extends Sync {
 					sprintf( 'Permanent failure (%s); not retrying.', $error_class )
 				);
 			}
-			if ( 'permanent_config' === $error_class ) {
-				/**
-				 * This action is documented in schedule_integration_retry(). The
-				 * deletion path substitutes `email` + `mode` for `user_id`, since
-				 * the WP user is already gone.
-				 */
-				do_action(
-					'newspack_sync_permanent_failure',
-					[
-						'integration_id' => $integration_id,
-						'email'          => $email,
-						'mode'           => $mode,
-						'context'        => $context,
-						'reason'         => $error_message,
-					]
-				);
-			}
-			return;
+			/**
+			 * Fires when a deletion sync fails with a permanent (non-retryable) error.
+			 *
+			 * Mirrors `newspack_sync_permanent_failure` on the contact-sync path
+			 * (documented in includes/reader-activation/sync/class-contact-sync.php)
+			 * with two differences: the payload substitutes `email` + `mode` for
+			 * `user_id`, since the WP user is already gone, and the hook also fires
+			 * for permanent contact-data errors — a skipped deletion retry has no
+			 * natural re-trigger, so the dropped deletion signal must stay
+			 * observable.
+			 *
+			 * @param array $alert_data {
+			 *     Alert data.
+			 *
+			 *     @type string $integration_id The integration that failed.
+			 *     @type string $email          Email of the deleted reader.
+			 *     @type string $mode           Deletion mode: 'delete' or 'flag'.
+			 *     @type string $context        The sync context.
+			 *     @type string $reason         The final error message.
+			 *     @type string $error_class    'permanent_config' or 'permanent_contact'.
+			 * }
+			 */
+			do_action(
+				'newspack_sync_permanent_failure',
+				[
+					'integration_id' => $integration_id,
+					'email'          => $email,
+					'mode'           => $mode,
+					'context'        => $context,
+					'reason'         => $error_message,
+					'error_class'    => $error_class,
+				]
+			);
+			return $error_class;
 		}
 
 		$next_retry = $retry_count + 1;
@@ -987,7 +1088,7 @@ class Contact_Sync extends Sync {
 					'reason'         => $error_message,
 				]
 			);
-			return;
+			return $error_class;
 		}
 
 		$backoff_index   = min( $retry_count, count( self::RETRY_BACKOFF ) - 1 );
@@ -1023,6 +1124,7 @@ class Contact_Sync extends Sync {
 				$error_message
 			)
 		);
+		return $error_class;
 	}
 
 	/**
@@ -1084,7 +1186,7 @@ class Contact_Sync extends Sync {
 					$error_messages
 				)
 			);
-			self::schedule_deletion_retry( $integration_id, $mode, $email, $contact, $context, $retry_count, $result );
+			$error_class   = self::schedule_deletion_retry( $integration_id, $mode, $email, $contact, $context, $retry_count, $result );
 			$error_message = sprintf(
 				'Retry %d/%d failed for deletion (%s) sync of %s in integration "%s": %s',
 				$retry_count,
@@ -1099,7 +1201,10 @@ class Contact_Sync extends Sync {
 			}
 			// Only throw on the last retry so ActionScheduler marks it as "failed".
 			// Intermediate retries schedule the next attempt and complete normally.
-			if ( $retry_count >= self::MAX_RETRIES ) {
+			// A benign result (contact already gone from the ESP) is the deletion
+			// end-state, not a failure, so its deliberately-ended chain must not
+			// mark the action as failed.
+			if ( $retry_count >= self::MAX_RETRIES && 'benign' !== $error_class ) {
 				throw new \Exception( esc_html( $error_message ) );
 			}
 		} else {
