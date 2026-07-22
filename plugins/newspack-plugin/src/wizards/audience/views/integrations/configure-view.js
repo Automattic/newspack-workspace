@@ -424,9 +424,11 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 
 	const visibleSettingsFields = settingsFields.filter( fieldIsVisible );
 
-	// The divider only renders while the direction is enabled: it separates the
-	// toggle from the section content below it, and a paused section has none.
-	const renderSectionToggle = ( toggleSetting, showDivider ) =>
+	// The divider separates the toggle from the section content below it, so it
+	// only renders when there is content to divide: the caller passes false for a
+	// paused direction or an empty section. `dividerMarginBottom` compensates for
+	// the sections' different grid rowGaps so both net the same visual spacing.
+	const renderSectionToggle = ( toggleSetting, showDivider, dividerMarginBottom = 0 ) =>
 		toggleSetting && (
 			<>
 				<ToggleControl
@@ -436,7 +438,7 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 					onChange={ checked => handleFieldChange( toggleSetting.key, checked ) }
 					__nextHasNoMarginBottom
 				/>
-				{ showDivider && <Divider variant="tertiary" marginTop={ 0 } marginBottom={ 0 } /> }
+				{ showDivider && <Divider variant="tertiary" marginTop={ 0 } marginBottom={ dividerMarginBottom } /> }
 			</>
 		);
 
@@ -468,7 +470,7 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 						<Grid columns={ 2 } gutter={ 32 } noMargin>
 							<SectionHeader heading={ 2 } title={ __( 'Inbound', 'newspack-plugin' ) } noMargin />
 							<Grid columns={ 1 } rowGap={ 8 } noMargin>
-								{ renderSectionToggle( inboundToggleField, inboundEnabled ) }
+								{ renderSectionToggle( inboundToggleField, inboundEnabled && ( inboundField.options || [] ).length > 0, 8 ) }
 								{ inboundEnabled &&
 									( inboundField.options || [] ).map( option => {
 										// Options are always { value, label, matching_function, has_options } objects
