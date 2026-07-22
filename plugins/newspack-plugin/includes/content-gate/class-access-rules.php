@@ -195,14 +195,26 @@ class Access_Rules {
 			return false;
 		}
 
+		// Context defaults differ on purpose between the two entry points: this
+		// method is also the inner primitive invoked during a group evaluation,
+		// so its null default means "inherit whatever context evaluate_rules()
+		// already established" — while evaluate_rules() defaults to `[]`, always
+		// establishing a fresh context so a caller that passes nothing gets the
+		// rule callbacks' own defaults rather than a stale outer context.
 		if ( null === $context ) {
 			return call_user_func( $rule['callback'], $user_id, $args );
 		}
 
 		$previous_context         = self::$evaluation_context;
 		self::$evaluation_context = $context;
-		$passes                   = call_user_func( $rule['callback'], $user_id, $args );
-		self::$evaluation_context = $previous_context;
+		try {
+			// Rule callbacks are third-party-registerable; restoring in a finally
+			// block guarantees a throwing callback can't leak this context into
+			// later evaluations in the same request.
+			$passes = call_user_func( $rule['callback'], $user_id, $args );
+		} finally {
+			self::$evaluation_context = $previous_context;
+		}
 
 		return $passes;
 	}
@@ -299,17 +311,21 @@ class Access_Rules {
 
 		$previous_context         = self::$evaluation_context;
 		self::$evaluation_context = $context;
-
-		// Evaluate each group with OR logic - if any group passes, grant access.
-		$granted = false;
-		foreach ( $access_rules as $group ) {
-			if ( self::evaluate_rules_group( $group, $user_id ) ) {
-				$granted = true;
-				break;
+		try {
+			// Evaluate each group with OR logic - if any group passes, grant access.
+			// Rule callbacks are third-party-registerable; restoring in a finally
+			// block guarantees a throwing callback can't leak this context into
+			// later evaluations in the same request.
+			$granted = false;
+			foreach ( $access_rules as $group ) {
+				if ( self::evaluate_rules_group( $group, $user_id ) ) {
+					$granted = true;
+					break;
+				}
 			}
+		} finally {
+			self::$evaluation_context = $previous_context;
 		}
-
-		self::$evaluation_context = $previous_context;
 
 		return $granted;
 	}

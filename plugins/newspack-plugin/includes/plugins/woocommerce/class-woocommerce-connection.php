@@ -112,6 +112,13 @@ class WooCommerce_Connection {
 		/**
 		 * Filters whether a subscription counts as being in payment recovery.
 		 *
+		 * Note the `payment_retry` date is only set by the Woo Subscriptions retry
+		 * system, which is OFF by default (`woocommerce_subscriptions_enable_retry`
+		 * defaults to 'no'; Newspack force-enables it via
+		 * `force_allow_failed_payment_retry`). Sites relying on gateway-managed
+		 * retries instead (e.g. Stripe smart retries) get no recovery window from
+		 * the default logic and should hook this filter to define their own.
+		 *
 		 * @param bool                   $in_payment_recovery Whether the subscription is in payment recovery.
 		 * @param \WC_Subscription|false $subscription        Subscription object.
 		 */

@@ -7,6 +7,7 @@
 
 use Newspack\Access_Rules;
 use Newspack\Content_Gate;
+use Newspack\Content_Restriction_Control;
 use Newspack\Group_Subscription;
 use Newspack\Reader_Activation;
 use Newspack\WooCommerce_Connection;
@@ -524,5 +525,84 @@ class Newspack_Test_Access_Rules extends WP_UnitTestCase {
 		);
 		$opted_out_settings = Content_Gate::get_custom_access_settings( $legacy_gate_id );
 		$this->assertFalse( $opted_out_settings['payment_recovery_grace'], 'A stored false must be respected.' );
+	}
+
+	/**
+	 * Reset Content_Restriction_Control's static per-post caches so consecutive
+	 * is_post_restricted() calls in one test re-read gate settings.
+	 */
+	private function reset_restriction_cache() {
+		foreach ( [ 'post_gate_id_map', 'post_gate_layout_id_map', 'post_gates_map', 'term_descendants_map' ] as $static_cache_prop ) {
+			$reflection_prop = new \ReflectionProperty( Content_Restriction_Control::class, $static_cache_prop );
+			$reflection_prop->setAccessible( true );
+			$reflection_prop->setValue( null, [] );
+		}
+	}
+
+	/**
+	 * Call-site plumbing test: the front-end restriction path must build its
+	 * evaluation context from the gate's STORED `payment_recovery_grace`
+	 * setting. Every fallback in the chain is grace-ON, so if a call site
+	 * dropped its context argument the engine tests would still pass while the
+	 * publisher's off-switch silently stopped working — this test pins it.
+	 */
+	public function test_stored_grace_off_restricts_via_content_restriction_control() {
+		// Reader's subscription is on-hold inside the retry window.
+		$this->create_subscription(
+			[
+				'status' => 'on-hold',
+				'times'  => [ 'payment_retry' => time() + HOUR_IN_SECONDS ],
+			]
+		);
+
+		$gated_post_id = $this->factory->post->create( [ 'post_type' => 'post' ] );
+
+		// create_gate() (rather than a bare wp_insert_post) so the gate gets its
+		// default layouts — is_post_restricted() only records a restriction when
+		// the gate resolves a layout to render.
+		$plumbing_gate_id = Content_Gate::create_gate( [ 'title' => 'Plumbing Gate' ] );
+		Content_Gate::update_gate_settings(
+			$plumbing_gate_id,
+			[
+				'status'        => 'publish',
+				'content_rules' => [
+					[
+						'slug'  => 'post_types',
+						'value' => [ 'post' ],
+					],
+				],
+				'custom_access' => [
+					'active'                 => true,
+					'access_rules'           => [
+						[
+							[
+								'slug'  => 'subscription',
+								'value' => [ self::$product_id ],
+							],
+						],
+					],
+					'payment_recovery_grace' => false,
+				],
+			]
+		);
+
+		$this->reset_restriction_cache();
+		$restricted_with_grace_off = Content_Restriction_Control::is_post_restricted( false, $gated_post_id, self::$owner_user_id );
+		$this->assertTrue(
+			$restricted_with_grace_off,
+			'A gate with stored payment_recovery_grace=false must restrict an on-hold-in-retry reader through the front-end path.'
+		);
+
+		// Flip only the stored setting; the same reader must now pass — proving
+		// the call site reads the stored value rather than a hardcoded default.
+		Content_Gate::update_custom_access_settings( $plumbing_gate_id, [ 'payment_recovery_grace' => true ] );
+		$this->reset_restriction_cache();
+		$restricted_with_grace_on = Content_Restriction_Control::is_post_restricted( false, $gated_post_id, self::$owner_user_id );
+		$this->assertFalse(
+			$restricted_with_grace_on,
+			'Flipping the stored setting to grace-ON must let the same on-hold-in-retry reader through.'
+		);
+
+		wp_delete_post( $plumbing_gate_id, true );
 	}
 }
