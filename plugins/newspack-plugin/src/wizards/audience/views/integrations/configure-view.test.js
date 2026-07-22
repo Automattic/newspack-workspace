@@ -597,4 +597,58 @@ describe( 'ConfigureView per-direction sections', () => {
 		expect( screen.getByLabelText( 'Full Name' ) ).toBeInTheDocument();
 		expect( screen.getByLabelText( 'VIP' ) ).toBeInTheDocument();
 	} );
+
+	// Deletion sync travels the push pipeline, so its Settings-group controls
+	// follow the outbound pause the same way the outgoing picker does.
+	it( 'hides the account-deletion controls while outbound sync is paused', () => {
+		const integrations = bidirectionalIntegration();
+		integrations.esp.settings = [
+			{ key: 'sync_account_deletion', type: 'checkbox', label: 'Sync account deletion', value: true },
+			{
+				key: 'account_deletion_handling',
+				type: 'select',
+				label: 'Deletion handling',
+				value: 'flag',
+				options: [
+					{ value: 'flag', label: 'Flag' },
+					{ value: 'delete', label: 'Delete' },
+				],
+				condition: { field: 'sync_account_deletion', equals: true },
+			},
+			...integrations.esp.settings,
+		];
+		renderConfigureView( { integrations } );
+		expect( screen.getByLabelText( 'Sync account deletion' ).checked ).toBe( true );
+		expect( screen.getByLabelText( 'Deletion handling' ) ).toBeInTheDocument();
+
+		fireEvent.click( screen.getByLabelText( 'Enable outbound sync' ) );
+		expect( screen.queryByLabelText( 'Sync account deletion' ) ).toBeNull();
+		expect( screen.queryByLabelText( 'Deletion handling' ) ).toBeNull();
+		// The integration's own settings stay put.
+		expect( screen.getByLabelText( 'Audience ID' ) ).toBeInTheDocument();
+
+		fireEvent.click( screen.getByLabelText( 'Enable outbound sync' ) );
+		expect( screen.getByLabelText( 'Sync account deletion' ).checked ).toBe( true );
+	} );
+
+	// A toggle whose paired metadata field is missing (a third-party
+	// get_settings_fields() override) must stay visible and editable rather
+	// than shipping a field the view can neither display nor save.
+	it( 'falls an orphaned direction toggle through to the generic Settings group', async () => {
+		const onSave = jest.fn( () => Promise.resolve() );
+		const integrations = bidirectionalIntegration();
+		integrations.esp.settings = integrations.esp.settings.filter( f => f.key !== 'outgoing_metadata_fields' );
+		renderConfigureView( { integrations, onSave } );
+
+		// No Outbound section without the picker field, but the toggle survives.
+		expect( screen.queryByLabelText( 'Full Name' ) ).toBeNull();
+		const toggle = screen.getByLabelText( 'Enable outbound sync' );
+		expect( toggle.checked ).toBe( true );
+
+		fireEvent.click( toggle );
+		await act( async () => {
+			getLatestSaveAction()();
+		} );
+		expect( onSave ).toHaveBeenCalledWith( 'esp', { outgoing_sync_enabled: false } );
+	} );
 } );

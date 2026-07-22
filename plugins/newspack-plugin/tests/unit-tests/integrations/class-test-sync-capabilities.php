@@ -8,6 +8,7 @@
 namespace Newspack\Tests\Unit\Integrations;
 
 use Newspack\Reader_Activation\Contact_Sync;
+use Newspack\Reader_Activation\Integration;
 use Newspack\Reader_Activation\Integrations;
 use Newspack\Reader_Activation\Integrations\Contact_Pull;
 use Newspack\Reader_Activation\Sync;
@@ -78,6 +79,19 @@ class Test_Sync_Capabilities extends \WP_UnitTestCase {
 		$property   = $reflection->getProperty( 'integrations' );
 		$property->setAccessible( true );
 		$property->setValue( null, [] );
+	}
+
+	/**
+	 * Build the wp_options name backing an integration settings field from the
+	 * real prefix and joining scheme, so forced option rows stay coupled to the
+	 * actual storage path.
+	 *
+	 * @param string $integration_id Integration ID.
+	 * @param string $key            Settings field key.
+	 * @return string Option name.
+	 */
+	private function settings_option_name( $integration_id, $key ) {
+		return Integration::SETTINGS_OPTION_PREFIX . $integration_id . '_' . $key;
 	}
 
 	/**
@@ -240,7 +254,7 @@ class Test_Sync_Capabilities extends \WP_UnitTestCase {
 
 		// Even a directly-forced option row must not re-enable a direction the
 		// integration does not support.
-		update_option( 'newspack_integration_settings_cap-forced_outgoing_sync_enabled', true );
+		update_option( $this->settings_option_name( 'cap-forced', 'outgoing_sync_enabled' ), true );
 		$this->assertFalse( $integration->is_push_enabled() );
 	}
 
@@ -307,6 +321,28 @@ class Test_Sync_Capabilities extends \WP_UnitTestCase {
 		$errors = Sync::has_one_syncable_integration( true );
 		$this->assertWPError( $errors );
 		$this->assertContains( 'integration_push_not_supported', $errors->get_error_codes() );
+	}
+
+	/**
+	 * Non-syncable integrations ordered before a healthy one must not poison the
+	 * success return: in errors mode the accumulated reasons are only surfaced
+	 * when nothing syncable exists, so has_errors() stays false on success.
+	 */
+	public function test_has_one_syncable_integration_ignores_earlier_non_syncable() {
+		$pull_only = $this->create_pull_only_integration( 'cap-mixed-inbound', 'Cap Mixed Inbound' );
+		$paused    = new \Sample_Integration( 'cap-mixed-paused', 'Cap Mixed Paused' );
+		$healthy   = new \Sample_Integration( 'cap-mixed-esp', 'Cap Mixed ESP' );
+		Integrations::register( $pull_only );
+		Integrations::register( $paused );
+		Integrations::register( $healthy );
+		update_option( Integrations::OPTION_NAME, [ 'cap-mixed-inbound', 'cap-mixed-paused', 'cap-mixed-esp' ] );
+		$paused->update_settings_field_value( 'outgoing_sync_enabled', false );
+
+		$this->assertTrue( Sync::has_one_syncable_integration(), 'A later healthy integration keeps the predicate true.' );
+
+		$result = Sync::has_one_syncable_integration( true );
+		$this->assertWPError( $result );
+		$this->assertFalse( $result->has_errors(), 'Success must not carry reasons collected from skipped integrations.' );
 	}
 
 	/**
@@ -387,8 +423,8 @@ class Test_Sync_Capabilities extends \WP_UnitTestCase {
 		Integrations::register( $spy );
 		update_option( Integrations::OPTION_NAME, [ 'cap-del-incapable' ] );
 		// Force option rows that would enable deletion sync if the fields were declared.
-		update_option( 'newspack_integration_settings_cap-del-incapable_sync_account_deletion', true );
-		update_option( 'newspack_integration_settings_cap-del-incapable_account_deletion_handling', 'delete' );
+		update_option( $this->settings_option_name( 'cap-del-incapable', 'sync_account_deletion' ), true );
+		update_option( $this->settings_option_name( 'cap-del-incapable', 'account_deletion_handling' ), 'delete' );
 
 		Contact_Sync::handle_account_deletion(
 			'reader@example.com',
@@ -401,6 +437,55 @@ class Test_Sync_Capabilities extends \WP_UnitTestCase {
 
 		$this->assertCount( 0, $spy->delete_calls );
 		$this->assertCount( 0, $spy->push_calls );
+	}
+
+	/**
+	 * The sync retry chain aborts while outbound sync is paused and resumes
+	 * pushing once the toggle is re-enabled.
+	 */
+	public function test_sync_retry_aborts_when_push_disabled() {
+		$spy = new \Deletion_Spy_Integration( 'cap-retry-spy', 'Cap Retry Spy' );
+		Integrations::register( $spy );
+		update_option( Integrations::OPTION_NAME, [ 'cap-retry-spy' ] );
+		$user_id    = $this->factory()->user->create();
+		$retry_data = [
+			'integration_id' => 'cap-retry-spy',
+			'user_id'        => $user_id,
+			'context'        => 'TestContext',
+			'retry_count'    => 1,
+		];
+
+		$spy->update_settings_field_value( 'outgoing_sync_enabled', false );
+		Contact_Sync::execute_integration_retry( $retry_data );
+		$this->assertCount( 0, $spy->push_calls, 'Paused outbound sync must abort the retry chain.' );
+
+		$spy->update_settings_field_value( 'outgoing_sync_enabled', true );
+		Contact_Sync::execute_integration_retry( $retry_data );
+		$this->assertCount( 1, $spy->push_calls, 'Re-enabled outbound sync retries the push.' );
+	}
+
+	/**
+	 * The deletion retry chain aborts while outbound sync is paused and resumes
+	 * once the toggle is re-enabled.
+	 */
+	public function test_deletion_retry_aborts_when_push_disabled() {
+		$spy = new \Deletion_Spy_Integration( 'cap-delretry-spy', 'Cap Del Retry Spy' );
+		Integrations::register( $spy );
+		update_option( Integrations::OPTION_NAME, [ 'cap-delretry-spy' ] );
+		$retry_data = [
+			'integration_id' => 'cap-delretry-spy',
+			'email'          => 'reader@example.com',
+			'mode'           => 'delete',
+			'retry_count'    => 1,
+		];
+
+		$spy->update_settings_field_value( 'outgoing_sync_enabled', false );
+		Contact_Sync::execute_deletion_retry( $retry_data );
+		$this->assertCount( 0, $spy->delete_calls, 'Paused outbound sync must abort the deletion retry chain.' );
+
+		$spy->update_settings_field_value( 'outgoing_sync_enabled', true );
+		Contact_Sync::execute_deletion_retry( $retry_data );
+		$this->assertCount( 1, $spy->delete_calls, 'Re-enabled outbound sync retries the deletion.' );
 	}
 
 	/**
@@ -440,5 +525,88 @@ class Test_Sync_Capabilities extends \WP_UnitTestCase {
 		$integration->update_settings_field_value( 'incoming_sync_enabled', true );
 		Contact_Pull::pull_all( $user_id );
 		$this->assertCount( 1, $integration->pull_calls, 'Re-enabled inbound sync pulls again.' );
+	}
+
+	/**
+	 * The pull retry chain aborts while inbound sync is paused and resumes
+	 * pulling once the toggle is re-enabled.
+	 */
+	public function test_pull_retry_aborts_when_pull_disabled() {
+		$integration = new class( 'cap-pullretry-spy', 'Cap Pull Retry Spy' ) extends \Sample_Integration {
+			/**
+			 * Captured pull_contact_data() calls.
+			 *
+			 * @var array
+			 */
+			public $pull_calls = [];
+
+			/**
+			 * Pull contact data (records the call).
+			 *
+			 * @param int $user_id WordPress user ID.
+			 * @return array
+			 */
+			public function pull_contact_data( $user_id ) {
+				$this->pull_calls[] = $user_id;
+				return [ 'vip_level' => 'gold' ];
+			}
+		};
+		Integrations::register( $integration );
+		update_option( Integrations::OPTION_NAME, [ 'cap-pullretry-spy' ] );
+		$integration->update_enabled_incoming_fields( [ 'vip_level' ] );
+		$user_id    = $this->factory()->user->create();
+		$retry_data = [
+			'integration_id' => 'cap-pullretry-spy',
+			'user_id'        => $user_id,
+			'retry_count'    => 1,
+		];
+
+		$integration->update_settings_field_value( 'incoming_sync_enabled', false );
+		Contact_Pull::execute_integration_retry( $retry_data );
+		$this->assertCount( 0, $integration->pull_calls, 'Paused inbound sync must abort the pull retry chain.' );
+
+		$integration->update_settings_field_value( 'incoming_sync_enabled', true );
+		Contact_Pull::execute_integration_retry( $retry_data );
+		$this->assertCount( 1, $integration->pull_calls, 'Re-enabled inbound sync retries the pull.' );
+	}
+
+	/**
+	 * The synchronous (loopback) pull skips integrations whose inbound sync is
+	 * paused: no loopback request is fired for them.
+	 */
+	public function test_pull_sync_skips_pull_disabled_integration() {
+		$integration = new \Sample_Integration( 'cap-loopback', 'Cap Loopback' );
+		Integrations::register( $integration );
+		update_option( Integrations::OPTION_NAME, [ 'cap-loopback' ] );
+		$integration->update_enabled_incoming_fields( [ 'vip_level' ] );
+
+		$requests  = 0;
+		$intercept = function ( $preempt ) use ( &$requests ) {
+			if ( false !== $preempt ) {
+				return $preempt;
+			}
+			$requests++;
+			return [
+				'headers'  => [],
+				'body'     => '',
+				'response' => [
+					'code'    => 200,
+					'message' => 'OK',
+				],
+				'cookies'  => [],
+				'filename' => null,
+			];
+		};
+		add_filter( 'pre_http_request', $intercept );
+
+		$integration->update_settings_field_value( 'incoming_sync_enabled', false );
+		Contact_Pull::pull_sync();
+		$this->assertSame( 0, $requests, 'Paused inbound sync must not fire a loopback pull.' );
+
+		$integration->update_settings_field_value( 'incoming_sync_enabled', true );
+		Contact_Pull::pull_sync();
+		$this->assertSame( 1, $requests, 'Re-enabled inbound sync fires the loopback pull.' );
+
+		remove_filter( 'pre_http_request', $intercept );
 	}
 }

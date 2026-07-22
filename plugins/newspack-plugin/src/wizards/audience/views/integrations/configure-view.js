@@ -133,6 +133,11 @@ export const reconcileOperators = ( currentMap, options ) => {
 // in JS, so the falsy string forms are matched explicitly.
 const toBool = value => ( typeof value === 'string' ? ! [ '', '0', 'false' ].includes( value.toLowerCase() ) : Boolean( value ) );
 
+// Account-deletion sync travels the push pipeline (see get_account_deletion_fields()
+// in class-integration.php), so these Settings-group controls follow the outbound
+// pause: the dispatcher skips a paused integration before reading them.
+const ACCOUNT_DELETION_KEYS = [ 'sync_account_deletion', 'account_deletion_handling' ];
+
 // True for a plain `{ key => value }` map (the shape `incoming_metadata_fields`
 // uses), excluding arrays and null so those keep their own comparison branches.
 const isMap = value => null !== value && 'object' === typeof value && ! Array.isArray( value );
@@ -228,6 +233,18 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 			} else {
 				groups.settingsFields.push( field );
 			}
+		}
+		// A toggle renders only inside its direction section; without the paired
+		// metadata field there is no section, so fall the toggle through to the
+		// generic Settings group instead of shipping a field the view can neither
+		// display nor edit.
+		if ( groups.inboundToggleField && ! groups.inboundField ) {
+			groups.settingsFields.push( groups.inboundToggleField );
+			groups.inboundToggleField = null;
+		}
+		if ( groups.outboundToggleField && ! groups.outboundField ) {
+			groups.settingsFields.push( groups.outboundToggleField );
+			groups.outboundToggleField = null;
 		}
 		return groups;
 	}, [ integration?.settings ] );
@@ -390,6 +407,13 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 	const inboundEnabled = ! inboundToggleField || toBool( getFieldValue( inboundToggleField ) );
 	const outboundEnabled = ! outboundToggleField || toBool( getFieldValue( outboundToggleField ) );
 
+	// While outbound sync is paused, hide the account-deletion controls along
+	// with the outgoing picker: the dispatcher skips them, and leaving them
+	// active would present deletion sync as live. Stored values are preserved.
+	const visibleSettingsFields = settingsFields.filter(
+		field => fieldIsVisible( field ) && ( outboundEnabled || ! ACCOUNT_DELETION_KEYS.includes( field.key ) )
+	);
+
 	const renderSectionToggle = toggleSetting =>
 		toggleSetting && (
 			<ToggleControl
@@ -406,11 +430,11 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 			{ navBlockDialog }
 			<div className="newspack-configure-view">
 				{ /* Section 1: Settings */ }
-				{ settingsFields.length > 0 && (
+				{ visibleSettingsFields.length > 0 && (
 					<Grid columns={ 2 } gutter={ 32 }>
 						<SectionHeader heading={ 2 } title={ __( 'Settings', 'newspack-plugin' ) } />
 						<Grid columns={ 1 } gutter={ 24 }>
-							{ settingsFields.filter( fieldIsVisible ).map( field => (
+							{ visibleSettingsFields.map( field => (
 								<SettingsField
 									key={ field.key }
 									field={ field }

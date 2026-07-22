@@ -988,7 +988,7 @@ abstract class Integration {
 				'key'         => 'outgoing_sync_enabled',
 				'type'        => 'checkbox',
 				'label'       => __( 'Enable outbound sync', 'newspack-plugin' ),
-				'description' => __( 'Sync reader data to this integration. Disabling pauses outbound sync, including account-deletion sync, and preserves the outgoing field selection.', 'newspack-plugin' ),
+				'description' => __( 'Sync reader data to this integration. Disabling pauses outbound sync, including account-deletion sync, and preserves the outgoing field selection. Changes and deletions that occur while paused are not sent retroactively on re-enable.', 'newspack-plugin' ),
 				'default'     => true,
 			];
 			$fields[] = [

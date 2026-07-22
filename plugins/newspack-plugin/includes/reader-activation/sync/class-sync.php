@@ -195,10 +195,13 @@ class Sync {
 
 			$can_sync_integration = $integration->can_sync( true );
 
-			// If any integration can sync, return true.
+			// If any integration can sync, report success. In errors mode that must
+			// be a fresh WP_Error: $result may already hold reasons collected from
+			// integrations skipped or failed above, and every $return_errors caller
+			// reads has_errors() as "cannot sync".
 			if ( ! $can_sync_integration->has_errors() ) {
 				if ( $return_errors ) {
-					return $result;
+					return new \WP_Error();
 				} else {
 					return true;
 				}
