@@ -16,19 +16,19 @@ import {
 	__experimentalVStack as VStack,
 	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 	__experimentalHStack as HStack,
-	FormTokenField,
-	RadioControl,
 	TextControl,
 } from '@wordpress/components';
 import { close } from '@wordpress/icons';
 import { Button, Modal, SelectControl } from '../../../../packages/components/src';
-import { CATEGORIES, PRODUCTS, getProductById } from '../data/mock-catalog';
-import { saveDiscount, subscriberPrice, productsForRule } from '../data/mock-discounts';
+import { CATEGORIES } from '../data/mock-catalog';
+import { saveDiscount, subscriberPrice } from '../data/mock-discounts';
+import { productsForRule } from '../data/targeting';
 import { DIGITAL_PLANS, PRINT_PLANS } from '../data/mock-subscribers';
 import { TEAM_PLANS } from '../data/mock-groups';
 import { GROUP_LABEL } from '../labels';
 import { fmtCurrency } from '../format';
 import ConfirmFlow from './ConfirmFlow';
+import TargetingFields from './TargetingFields';
 
 // Every subscription, in list order. Group (team) subscriptions are tagged
 // "(Group)" — matching how the Subscribers demo marks them — while individual
@@ -71,17 +71,24 @@ export default function DiscountRuleFlow( { rule, onClose, onSaved } ) {
 	const [ busy, setBusy ] = useState( false );
 	const [ confirmDiscard, setConfirmDiscard ] = useState( false );
 
-	const onProductsChange = names => {
-		setProductIds( names.map( name => PRODUCTS.find( p => p.name === name )?.id ).filter( Boolean ) );
+	const onTargetChange = patch => {
+		if ( patch.targeting !== undefined ) {
+			setTargeting( patch.targeting );
+		}
+		if ( patch.productIds !== undefined ) {
+			setProductIds( patch.productIds );
+		}
+		if ( patch.category !== undefined ) {
+			setCategory( patch.category );
+		}
+		if ( patch.excludedIds !== undefined ) {
+			setExcludedIds( patch.excludedIds );
+		}
 	};
 
 	// Products currently in scope with no exclusions applied yet, so the
 	// exclusion picker only ever offers what could actually be excluded.
 	const scopeProducts = productsForRule( { targeting, productIds, category, excludedIds: [] } );
-
-	const onExcludedChange = names => {
-		setExcludedIds( names.map( name => scopeProducts.find( p => p.name === name )?.id ).filter( Boolean ) );
-	};
 
 	// Drop exclusions no longer in scope (e.g. left over after switching targeting
 	// or category) so the saved rule and its "N excluded" label never count
@@ -171,49 +178,12 @@ export default function DiscountRuleFlow( { rule, onClose, onSaved } ) {
 					__next40pxDefaultSize
 				/>
 			) }
-			<RadioControl
-				label={ __( 'Applies to', 'newspack-plugin' ) }
-				help={ __( 'Choose which store products this discount applies to.', 'newspack-plugin' ) }
-				selected={ targeting }
-				onChange={ setTargeting }
-				options={ [
-					{ value: 'products', label: __( 'Specific products', 'newspack-plugin' ) },
-					{ value: 'category', label: __( 'Category', 'newspack-plugin' ) },
-					{ value: 'all', label: __( 'All products', 'newspack-plugin' ) },
-				] }
+			<TargetingFields
+				value={ { targeting, productIds, category, excludedIds } }
+				onChange={ onTargetChange }
+				appliesHelp={ __( 'Choose which products this discount applies to.', 'newspack-plugin' ) }
+				categoryHelp={ __( 'Subscribers get the discount on every product in this category.', 'newspack-plugin' ) }
 			/>
-			{ targeting === 'products' && (
-				<FormTokenField
-					label={ __( 'Products', 'newspack-plugin' ) }
-					value={ productIds.map( id => getProductById( id )?.name ).filter( Boolean ) }
-					suggestions={ PRODUCTS.map( p => p.name ) }
-					onChange={ onProductsChange }
-					__experimentalExpandOnFocus
-					__next40pxDefaultSize
-					__nextHasNoMarginBottom
-				/>
-			) }
-			{ targeting === 'category' && (
-				<SelectControl
-					label={ __( 'Category', 'newspack-plugin' ) }
-					help={ __( 'Subscribers get the discount on every product in this category.', 'newspack-plugin' ) }
-					value={ category }
-					options={ CATEGORIES.map( c => ( { label: c, value: c } ) ) }
-					onChange={ setCategory }
-					__next40pxDefaultSize
-				/>
-			) }
-			{ targeting !== 'products' && (
-				<FormTokenField
-					label={ __( 'Excluded products', 'newspack-plugin' ) }
-					value={ excludedIds.map( id => scopeProducts.find( p => p.id === id )?.name ).filter( Boolean ) }
-					suggestions={ scopeProducts.map( p => p.name ) }
-					onChange={ onExcludedChange }
-					__experimentalExpandOnFocus
-					__next40pxDefaultSize
-					__nextHasNoMarginBottom
-				/>
-			) }
 			<ToggleGroupControl
 				label={ __( 'Discount type', 'newspack-plugin' ) }
 				value={ type }

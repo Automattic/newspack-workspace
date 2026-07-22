@@ -1,16 +1,15 @@
 /**
- * L0 — Discounts empty state (onboarding).
+ * L0 — Restrictions empty state (onboarding).
  *
- * Shown when there are no discount rules: a genuinely empty store, or the
- * `?empty=1` preview param on the discounts tab. Mirrors the audience
- * institutions onboarding so it reads as part of the design system.
+ * Shown when there are no restrictions: a genuinely empty store, or the
+ * `?empty=1` preview param on the subscriber-only tab. Mirrors EmptyDiscounts.
  */
 
 /**
  * WordPress dependencies.
  */
 import { __ } from '@wordpress/i18n';
-import { percent } from '@wordpress/icons';
+import { store } from '@wordpress/icons';
 // eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 import { __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components';
 
@@ -19,7 +18,7 @@ import { __experimentalHStack as HStack, __experimentalVStack as VStack } from '
  */
 import { Button, Grid, SectionHeader } from '../../../../packages/components/src';
 
-export default function EmptyDiscounts( { onAdd } ) {
+export default function EmptyRestrictions( { onAdd } ) {
 	return (
 		<div
 			style={ {
@@ -31,10 +30,10 @@ export default function EmptyDiscounts( { onAdd } ) {
 			<Grid columns={ 4 } noMargin>
 				<VStack start={ 2 } end={ 4 } spacing={ 8 }>
 					<SectionHeader
-						icon={ percent }
-						title={ __( 'Get started with subscriber discounts', 'newspack-plugin' ) }
+						icon={ store }
+						title={ __( 'Get started with subscriber-only products', 'newspack-plugin' ) }
 						description={ __(
-							'Offer subscribers a discount on your products. Create your first rule to choose which plan gets what off which products.',
+							'Make products available exclusively to subscribers. Create your first restriction to choose which products are subscriber-only and which subscriptions unlock them.',
 							'newspack-plugin'
 						) }
 						pageHeader
@@ -42,7 +41,7 @@ export default function EmptyDiscounts( { onAdd } ) {
 					/>
 					<HStack alignment="center">
 						<Button variant="primary" onClick={ onAdd }>
-							{ __( 'Add discount', 'newspack-plugin' ) }
+							{ __( 'Add restriction', 'newspack-plugin' ) }
 						</Button>
 					</HStack>
 				</VStack>

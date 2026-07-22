@@ -8,15 +8,16 @@
 /**
  * WordPress dependencies.
  */
-import { __, sprintf, _n } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 
 /**
  * Internal dependencies.
  */
 import { STORAGE_PREFIX, readStore, writeStore } from './storage';
-import { PRODUCTS, getProductById } from './mock-catalog';
 import { TEAM_PLANS } from './mock-groups';
 import { fmtCurrency } from '../format';
+
+export { productsForRule, targetingBaseLabel, excludedLabel, targetingLabel } from './targeting';
 
 const DISCOUNTS_KEY = STORAGE_PREFIX + 'discounts';
 const SETTINGS_KEY = STORAGE_PREFIX + 'discount-settings';
@@ -156,58 +157,12 @@ export function subscriberPrice( price, rule ) {
 	return Math.max( 0, Math.round( value * 100 ) / 100 );
 }
 
-export function productsForRule( rule ) {
-	let matches;
-	if ( rule.targeting === 'products' ) {
-		matches = ( rule.productIds || [] ).map( getProductById ).filter( Boolean );
-	} else {
-		matches = PRODUCTS.filter( p => rule.targeting === 'all' || p.category === rule.category );
-	}
-	// A variable product is sold through its variations, so previews and
-	// exclusions operate on those instead of the parent.
-	const expanded = matches.flatMap( p => ( ( p.variations || [] ).length ? p.variations.map( v => getProductById( v.id ) ) : [ p ] ) );
-	const excluded = new Set( rule.excludedIds || [] );
-	return expanded.filter( p => ! excluded.has( p.id ) && ! excluded.has( p.parentId ) );
-}
-
 export function discountLabel( rule ) {
 	if ( rule.type === 'percent' ) {
 		// translators: %s: percentage number.
 		return sprintf( __( '%s%%', 'newspack-plugin' ), rule.amount );
 	}
 	return fmtCurrency( rule.amount );
-}
-
-export function targetingBaseLabel( rule ) {
-	if ( rule.targeting === 'all' ) {
-		return __( 'All products', 'newspack-plugin' );
-	}
-	if ( rule.targeting === 'category' ) {
-		// translators: %s: product category name.
-		return sprintf( __( '%s category', 'newspack-plugin' ), rule.category );
-	}
-	const count = ( rule.productIds || [] ).length;
-	// translators: %d: number of products.
-	return sprintf( _n( '%d product', '%d products', count, 'newspack-plugin' ), count );
-}
-
-export function excludedLabel( rule ) {
-	const excluded = ( rule.excludedIds || [] ).length;
-	if ( ! excluded ) {
-		return '';
-	}
-	// translators: %d: number of excluded products.
-	return sprintf( __( '%d excluded', 'newspack-plugin' ), excluded );
-}
-
-export function targetingLabel( rule ) {
-	const base = targetingBaseLabel( rule );
-	const excluded = excludedLabel( rule );
-	if ( excluded ) {
-		// translators: %1$s: targeting label, %2$s: excluded products label.
-		return sprintf( __( '%1$s · %2$s', 'newspack-plugin' ), base, excluded );
-	}
-	return base;
 }
 
 export const benefitsForPlans = planNames => getAllDiscounts().filter( rule => rule.active && ( planNames || [] ).includes( rule.audience ) );

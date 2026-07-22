@@ -5,9 +5,9 @@ import '../../shared/js/public-path';
  * people-first subscriber management prototype, transplanted from the
  * discounts demo (PR #544).
  *
- * Entry point: mounts a Wizard with two visible tabs — Subscriptions (plan
- * list) and Discounts — plus hidden plan-detail, subscriber-profile, and
- * group-detail routes reached by row click.
+ * Entry point: mounts a Wizard with three visible tabs — Subscriptions (plan
+ * list), Discounts, and Subscriber-only products — plus hidden plan-detail,
+ * subscriber-profile, and group-detail routes reached by row click.
  */
 
 /**
@@ -22,6 +22,7 @@ import { __ } from '@wordpress/i18n';
 import { Wizard } from '../../../packages/components/src';
 import SubscriptionList from './screens/SubscriptionList';
 import DiscountList from './screens/DiscountList';
+import RestrictionList from './screens/RestrictionList';
 import { purgeStaleStorage } from './data/storage';
 
 function SubscribersDemoApp() {
@@ -42,6 +43,13 @@ function SubscribersDemoApp() {
 					exact: true,
 					fullWidth: true,
 					render: DiscountList,
+				},
+				{
+					label: __( 'Subscriber-only products', 'newspack-plugin' ),
+					path: '/subscriber-only',
+					exact: true,
+					fullWidth: true,
+					render: RestrictionList,
 				},
 			] }
 		/>

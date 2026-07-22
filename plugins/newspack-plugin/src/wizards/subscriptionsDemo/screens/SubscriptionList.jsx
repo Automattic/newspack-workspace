@@ -26,6 +26,7 @@ import { WIZARD_STORE_NAMESPACE } from '../../../../packages/components/src/wiza
 import { getAllPlans, getPlanStats } from '../data/plan-stats';
 import { GROUP_LABEL } from '../labels';
 import DiscountRuleFlow from '../flows/DiscountRuleFlow';
+import RestrictionFlow from '../flows/RestrictionFlow';
 
 // Product status labels; retired plans are no longer sold but keep existing
 // subscribers.
@@ -86,6 +87,7 @@ const DEFAULT_VIEW = {
 export default function SubscriptionList() {
 	const { setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const [ editorRule, setEditorRule ] = useState( null );
+	const [ editorRestriction, setEditorRestriction ] = useState( null );
 	const [ snackbar, setSnackbar ] = useState( null );
 	// Bumped after a discount is saved so statsByPlan (below) re-reads
 	// getPlanStats(), which pulls discount rules from localStorage and isn't
@@ -221,6 +223,11 @@ export default function SubscriptionList() {
 				callback: items => setEditorRule( { audience: items[ 0 ].name } ),
 			},
 			{
+				id: 'add-restriction',
+				label: __( 'Add subscriber-only products', 'newspack-plugin' ),
+				callback: items => setEditorRestriction( { subscriptions: [ items[ 0 ].name ] } ),
+			},
+			{
 				id: 'view-in-woocommerce',
 				label: __( 'View in WooCommerce', 'newspack-plugin' ),
 				callback: items => openWooCommerce( items[ 0 ].name ),
@@ -285,6 +292,16 @@ export default function SubscriptionList() {
 						setEditorRule( null );
 						setSnackbar( { message } );
 						setStatsRevision( n => n + 1 );
+					} }
+				/>
+			) }
+			{ editorRestriction !== null && (
+				<RestrictionFlow
+					rule={ editorRestriction }
+					onClose={ () => setEditorRestriction( null ) }
+					onSaved={ message => {
+						setEditorRestriction( null );
+						setSnackbar( { message } );
 					} }
 				/>
 			) }
