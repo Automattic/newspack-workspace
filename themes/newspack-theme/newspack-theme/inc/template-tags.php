@@ -468,9 +468,13 @@ if ( ! function_exists( 'newspack_post_thumbnail_caption' ) ) {
 
 		// Check the existence of the caption separately, so filters -- like ones that add ads -- don't interfere.
 		$thumbnail = get_post( get_post_thumbnail_id() );
-		// Check for a per-post custom caption first. This meta is stored on the post
-		// (see newspack_register_meta()), not on the attachment.
-		$caption = get_post_meta( get_the_ID(), 'newspack_featured_image_caption', true );
+		$caption   = '';
+
+		// Use the per-post custom caption only when the editor has enabled the override.
+		// Both meta are stored on the post (see newspack_register_meta()), not the attachment.
+		if ( get_post_meta( get_the_ID(), 'newspack_featured_image_caption_enabled', true ) ) {
+			$caption = get_post_meta( get_the_ID(), 'newspack_featured_image_caption', true );
+		}
 
 		if ( ! $caption && $thumbnail && $thumbnail->post_excerpt ) {
 			$caption = get_the_excerpt( get_post_thumbnail_id() );

@@ -928,6 +928,17 @@ function newspack_register_meta() {
 
 	register_post_meta(
 		'post',
+		'newspack_featured_image_caption_enabled',
+		array(
+			'show_in_rest' => true,
+			'single'       => true,
+			'type'         => 'boolean',
+			'default'      => false,
+		)
+	);
+
+	register_post_meta(
+		'post',
 		'newspack_featured_image_caption',
 		array(
 			'show_in_rest' => true,
