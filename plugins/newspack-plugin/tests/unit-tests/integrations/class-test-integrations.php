@@ -1690,7 +1690,11 @@ class Test_Integrations extends \WP_UnitTestCase {
 			]
 		);
 		$this->assertSame( 'range', $out['amount'] );
-		$this->assertSame( 'default', $out['evil'] ); // Unknown operator falls back to 'default'.
+		// An unknown operator maps to null (no override) rather than 'default', which is
+		// itself a valid operator: coercing would silently downgrade a typed field's
+		// provider default (e.g. list__in) to exact match. The field stays enabled.
+		$this->assertArrayHasKey( 'evil', $out );
+		$this->assertNull( $out['evil'] );
 
 		$outgoing_field = [
 			'key'     => 'outgoing_metadata_fields',

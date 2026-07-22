@@ -89,22 +89,76 @@ export const toggleField = ( currentMap, option, checked ) => {
 	return next;
 };
 
+/**
+ * Reconcile stored operators against each field's declared `value_type`.
+ *
+ * A field enabled before its integration declared a `value_type` keeps whatever
+ * operator was stored then (typically `default`), which may no longer be offered
+ * for that type. The row already *displays* the first valid option, but when
+ * that's the only option the SelectControl can never fire `onChange` to persist
+ * it — leaving the label ('Number') disagreeing with the effective operator
+ * ('default'/exact match). Folding the repair into the next save keeps the two
+ * in step without arming the unsaved-changes guard on mere page load.
+ *
+ * Only enabled fields (keys present in the map) are touched.
+ *
+ * @param {Object}   currentMap The stored { key => operator } map.
+ * @param {Object[]} options    The inbound field's option objects.
+ * @return {Object} The reconciled map, or `currentMap` itself when nothing changed.
+ */
+export const reconcileOperators = ( currentMap, options ) => {
+	const map = currentMap || {};
+	const next = { ...map };
+	let changed = false;
+	( options || [] ).forEach( option => {
+		const key = option?.value;
+		if ( ! key || ! Object.prototype.hasOwnProperty.call( map, key ) ) {
+			return;
+		}
+		const valid = operatorOptionsForField( option );
+		if ( valid.some( o => o.value === map[ key ] ) ) {
+			return;
+		}
+		const fallback = valid[ 0 ]?.value;
+		if ( undefined !== fallback && fallback !== map[ key ] ) {
+			next[ key ] = fallback;
+			changed = true;
+		}
+	} );
+	return changed ? next : map;
+};
+
 // Coerce a value to boolean. Values can arrive from WP options as scalar
 // strings (`'1'`/`'0'`/`'true'`/`'false'`/`''`); note `Boolean( '0' )` is `true`
 // in JS, so the falsy string forms are matched explicitly.
 const toBool = value => ( typeof value === 'string' ? ! [ '', '0', 'false' ].includes( value.toLowerCase() ) : Boolean( value ) );
 
+// True for a plain `{ key => value }` map (the shape `incoming_metadata_fields`
+// uses), excluding arrays and null so those keep their own comparison branches.
+const isMap = value => null !== value && 'object' === typeof value && ! Array.isArray( value );
+
 // Compare two field values for equivalence. Field values are scalars
-// (string/boolean) or arrays of strings (metadata/checkbox lists). The backend
-// can round-trip these unfaithfully — metadata arrays come back in canonical
-// order (`array_intersect`), and booleans as `'1'`/`''` — so arrays are compared
-// as sets and booleans are coerced, else a saved field would stay stuck "dirty".
+// (string/boolean), arrays of strings (metadata/checkbox lists), or a
+// `{ key => operator }` map (incoming metadata fields). The backend can
+// round-trip these unfaithfully — metadata arrays come back in canonical order
+// (`array_intersect`), and booleans as `'1'`/`''` — so arrays are compared as
+// sets, booleans are coerced, and maps are compared key-by-key, else a saved
+// field would stay stuck "dirty". Maps need their own branch because reference
+// equality would report a net-zero edit (toggle a field on then off, or change
+// an operator and change it back) as pending, keeping the Save action and the
+// unsaved-changes guard armed for semantically-unchanged settings.
 const valuesMatch = ( a, b ) => {
 	if ( Array.isArray( a ) && Array.isArray( b ) ) {
 		return a.length === b.length && a.every( value => b.includes( value ) );
 	}
 	if ( typeof a === 'boolean' || typeof b === 'boolean' ) {
 		return toBool( a ) === toBool( b );
+	}
+	if ( isMap( a ) && isMap( b ) ) {
+		const keys = Object.keys( a );
+		return (
+			keys.length === Object.keys( b ).length && keys.every( key => Object.prototype.hasOwnProperty.call( b, key ) && a[ key ] === b[ key ] )
+		);
 	}
 	return a === b;
 };
@@ -174,6 +228,28 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 		return { settingsFields: settings, inboundField: inbound, outboundField: outbound };
 	}, [ integration?.settings ] );
 
+	// Save submits the draft plus, when it needs repair, a reconciled inbound
+	// operator map (see reconcileOperators). Read through a ref for the same reason
+	// the draft is: the Save action closure is only re-registered on a
+	// hasPending/saving transition. Piggybacking on a save the user already asked
+	// for avoids both a write-on-load and a guard armed by settings nobody touched.
+	const buildSavePayloadRef = useRef( null );
+	buildSavePayloadRef.current = () => {
+		const payload = { ...draftRef.current };
+		if ( ! inboundField ) {
+			return payload;
+		}
+		const currentMap = ( inboundField.key in payload ? payload[ inboundField.key ] : inboundField.value ) || {};
+		if ( ! isMap( currentMap ) ) {
+			return payload;
+		}
+		const reconciled = reconcileOperators( currentMap, inboundField.options );
+		if ( reconciled !== currentMap ) {
+			payload[ inboundField.key ] = reconciled;
+		}
+		return payload;
+	};
+
 	// The parent clears the retry buffer on save success; drop submitted keys not
 	// re-edited since. Matching the submitted value (not the server's) survives
 	// backend normalization (`'' → 'NP_'`, `'5' → 5`) that equality would misread.
@@ -236,7 +312,7 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 					action: () => {
 						// The draft clears via the reconcile effect once the parent
 						// reflects the saved values; on failure the draft is retained.
-						onSave( integrationId, draftRef.current ).catch( () => {} );
+						onSave( integrationId, buildSavePayloadRef.current() ).catch( () => {} );
 					},
 					disabled: ! hasPending || integrationSaving,
 				},

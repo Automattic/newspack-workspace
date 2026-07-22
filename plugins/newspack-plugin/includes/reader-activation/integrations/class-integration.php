@@ -1274,7 +1274,11 @@ abstract class Integration {
 							if ( '' === $key ) {
 								continue;
 							}
-							$sanitized[ $key ] = ( is_string( $operator ) && in_array( $operator, self::ALLOWED_INCOMING_MATCHING_FUNCTIONS, true ) ) ? $operator : 'default';
+							// An operator outside the allowlist maps to null (no override) rather than
+							// 'default', which is itself a valid operator: coercing would silently
+							// downgrade a typed field's provider default (e.g. list__in for a
+							// multiselect) to exact match, which never matches such a field.
+							$sanitized[ $key ] = ( is_string( $operator ) && in_array( $operator, self::ALLOWED_INCOMING_MATCHING_FUNCTIONS, true ) ) ? $operator : null;
 						}
 					}
 					return $sanitized;
