@@ -12,6 +12,10 @@
  *   - Variant B (trashed product): the line item points at a product in the trash, which
  *     the gate's product picker can never offer, so no gate can be configured with it.
  *
+ * The exception to variant B is a product ID a gate already stores: gates match raw IDs and
+ * never re-validate them, so such a reader has access today and must neither be counted as
+ * at risk nor repaired.
+ *
  * These tests exercise the pure audit/repair helpers directly (the WP-CLI command method
  * is thin glue verified end-to-end on a real site). The WC mocks model line items via the
  * `items` key on WC_Subscription and the `$products_database` global.
@@ -21,8 +25,10 @@
  */
 
 use Newspack\CLI\WooCommerce_Subscriptions;
+use Newspack\Access_Rules;
 
 require_once __DIR__ . '/../../../mocks/wc-mocks.php';
+require_once __DIR__ . '/../../../mocks/wp-cli-utils-mocks.php';
 
 /**
  * Test the subscription-product audit and operator-mapped repair.
@@ -145,7 +151,7 @@ class Newspack_Test_Audit_Subscription_Products extends WP_UnitTestCase {
 		$orphan_row = $rows[0];
 		$this->assertSame( 51, $orphan_row['subscription_id'] );
 		$this->assertSame( 'A', $orphan_row['variant'] );
-		$this->assertSame( $live_annual_id, $orphan_row['guess_product_id'], 'The guess should match the live product with the same name.' );
+		$this->assertSame( [ $live_annual_id ], $orphan_row['guess_product_ids'], 'The guess should match the live product with the same name.' );
 	}
 
 	/**
@@ -173,7 +179,7 @@ class Newspack_Test_Audit_Subscription_Products extends WP_UnitTestCase {
 		$trashed_row = $rows[0];
 		$this->assertSame( 73, $trashed_row['subscription_id'] );
 		$this->assertSame( 'B', $trashed_row['variant'] );
-		$this->assertSame( $replacement_product_id, $trashed_row['guess_product_id'], 'The guess should point at the live replacement product.' );
+		$this->assertSame( [ $replacement_product_id ], $trashed_row['guess_product_ids'], 'The guess should point at the live replacement product.' );
 	}
 
 	/**
@@ -199,7 +205,7 @@ class Newspack_Test_Audit_Subscription_Products extends WP_UnitTestCase {
 		$this->assertCount( 1, $rows, 'A line item on a hard-deleted product should be flagged.' );
 		$deleted_row = $rows[0];
 		$this->assertSame( 'A', $deleted_row['variant'] );
-		$this->assertSame( $live_annual_id, $deleted_row['guess_product_id'] );
+		$this->assertSame( [ $live_annual_id ], $deleted_row['guess_product_ids'] );
 	}
 
 	/**
@@ -340,7 +346,7 @@ class Newspack_Test_Audit_Subscription_Products extends WP_UnitTestCase {
 
 		$this->assertCount( 1, $rows, 'A subscription with no line items must be flagged.' );
 		$this->assertSame( 'A', $rows[0]['variant'] );
-		$this->assertNull( $rows[0]['guess_product_id'], 'A subscription with no line items has no name to guess from.' );
+		$this->assertSame( [], $rows[0]['guess_product_ids'], 'A subscription with no line items has no name to guess from.' );
 	}
 
 	/**
@@ -388,7 +394,7 @@ class Newspack_Test_Audit_Subscription_Products extends WP_UnitTestCase {
 		);
 
 		$this->assertCount( 1, $rows );
-		$this->assertNull( $rows[0]['guess_product_id'], 'No matching live product means no guess.' );
+		$this->assertSame( [], $rows[0]['guess_product_ids'], 'No matching live product means no guess.' );
 	}
 
 	/**
@@ -575,6 +581,173 @@ class Newspack_Test_Audit_Subscription_Products extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A trashed line-item product that a published, active gate still references is NOT at
+	 * risk: gates store raw product IDs and `has_active_subscription()` never re-validates
+	 * them, so the reader is matched today. The row is reported as fragile instead, naming
+	 * the gate that still holds the ID.
+	 */
+	public function test_gate_referenced_product_is_not_at_risk() {
+		$trashed_product_id = 36426;
+		$this->register_product( $trashed_product_id, 'VAN Membership', 'trash' );
+		$this->register_subscription( 75, [ $this->line_item( 'VAN Membership', $trashed_product_id ) ] );
+
+		$rows = WooCommerce_Subscriptions::build_audit_rows(
+			[ 75 => $GLOBALS['subscriptions_database'][75] ],
+			[],
+			[ $trashed_product_id => [ 42 ] ]
+		);
+
+		$this->assertCount( 1, $rows );
+		$this->assertSame( 'gate_referenced', $rows[0]['status'], 'A gate-referenced product still grants access, so the row must not be counted as at risk.' );
+		$this->assertStringContainsString( '#42', $rows[0]['evidence'], 'The evidence should name the gate still holding the product ID.' );
+	}
+
+	/**
+	 * The same gate cross-check applies to a hard-deleted product: `has_product()` compares
+	 * raw IDs, so a gate listing the ID keeps matching even with no product behind it.
+	 */
+	public function test_gate_referenced_deleted_product_is_not_at_risk() {
+		$deleted_product_id = 77777; // Never registered — the product post is gone.
+		$this->register_subscription( 76, [ $this->line_item( 'Ghost Plan', $deleted_product_id ) ] );
+
+		$rows = WooCommerce_Subscriptions::build_audit_rows(
+			[ 76 => $GLOBALS['subscriptions_database'][76] ],
+			[],
+			[ $deleted_product_id => [ 42 ] ]
+		);
+
+		$this->assertSame( 'gate_referenced', $rows[0]['status'] );
+	}
+
+	/**
+	 * Repairing a gate-referenced subscription would move it off the very ID the gate
+	 * matches on and revoke the access it has today, so --map refuses it.
+	 */
+	public function test_repair_refuses_gate_referenced_subscription() {
+		$trashed_product_id     = 36426;
+		$replacement_product_id = 500;
+		$this->register_product( $trashed_product_id, 'VAN Membership', 'trash' );
+		$this->register_product( $replacement_product_id, 'VAN Membership', 'publish' );
+		$subscription = $this->register_subscription( 75, [ $this->line_item( 'VAN Membership', $trashed_product_id ) ] );
+
+		$result = WooCommerce_Subscriptions::repair_subscription_product(
+			$subscription,
+			$replacement_product_id,
+			false,
+			[ $trashed_product_id => [ 42 ] ]
+		);
+
+		$this->assertFalse( $result['ok'], 'A subscription a gate still matches must never be repaired.' );
+		$items = $subscription->get_items();
+		$this->assertSame( $trashed_product_id, $items[0]->get_product_id(), 'The line item must keep the ID the gate matches on.' );
+	}
+
+	/**
+	 * Two live products sharing the broken line item's name are both surfaced: the guess is
+	 * the only column an operator acts on, so silently picking one could send a --map onto
+	 * the wrong twin.
+	 */
+	public function test_ambiguous_name_guess_returns_every_match() {
+		$this->register_subscription( 77, [ $this->line_item( 'Monthly Membership', 0 ) ] );
+
+		$rows = WooCommerce_Subscriptions::build_audit_rows(
+			[ 77 => $GLOBALS['subscriptions_database'][77] ],
+			[
+				[
+					'id'   => 33,
+					'name' => 'Monthly Membership',
+				],
+				[
+					'id'   => 91,
+					'name' => 'Monthly Membership',
+				],
+			]
+		);
+
+		$this->assertSame( [ 33, 91 ], $rows[0]['guess_product_ids'], 'Every name match must be surfaced, not just the first.' );
+	}
+
+	/**
+	 * A line item carrying a variation ID is refused rather than repaired: the variation ID
+	 * is the only record of which variation the reader bought and is read by the team
+	 * renewal match, the membership-expiry safeguard and the tier switch lookup.
+	 */
+	public function test_repair_refuses_line_item_with_a_variation_id() {
+		$trashed_parent_id      = 800;
+		$live_variation_id      = 801;
+		$replacement_product_id = 500;
+		$this->register_product( $trashed_parent_id, 'Membership Variable', 'trash' );
+		$this->register_product( $replacement_product_id, 'Membership Variable', 'publish', 'variable-subscription' );
+		$subscription = $this->register_subscription( 92, [ $this->line_item( 'Membership Variable - Annual', $trashed_parent_id, $live_variation_id ) ] );
+
+		$result = WooCommerce_Subscriptions::repair_subscription_product( $subscription, $replacement_product_id, false );
+
+		$this->assertFalse( $result['ok'], 'A line item carrying a variation ID must be refused.' );
+		$items = $subscription->get_items();
+		$this->assertSame( $trashed_parent_id, $items[0]->get_product_id(), 'A refused repair must not touch the line item.' );
+		$this->assertSame( $live_variation_id, $items[0]->get_variation_id(), 'The variation ID must survive a refused repair.' );
+	}
+
+	/**
+	 * An applied repair writes an order note recording the prior product ID, so a --live run
+	 * remains reconstructible after the terminal session is gone.
+	 */
+	public function test_applied_repair_records_an_order_note() {
+		$trashed_product_id     = 36426;
+		$replacement_product_id = 500;
+		$this->register_product( $trashed_product_id, 'VAN Membership', 'trash' );
+		$this->register_product( $replacement_product_id, 'VAN Membership', 'publish' );
+		$subscription = $this->register_subscription( 78, [ $this->line_item( 'VAN Membership', $trashed_product_id ) ] );
+
+		WooCommerce_Subscriptions::repair_subscription_product( $subscription, $replacement_product_id, false );
+
+		$order_notes = $subscription->data['order_notes'] ?? [];
+		$this->assertCount( 1, $order_notes, 'An applied repair must leave a durable record on the subscription.' );
+		$this->assertStringContainsString( (string) $trashed_product_id, $order_notes[0], 'The note must record the prior product ID.' );
+		$this->assertStringContainsString( (string) $replacement_product_id, $order_notes[0], 'The note must record the new product ID.' );
+	}
+
+	/**
+	 * A dry run writes no order note either.
+	 */
+	public function test_dry_run_repair_records_no_order_note() {
+		$live_annual_id = 1234;
+		$this->register_product( $live_annual_id, 'Digital Annual' );
+		$subscription = $this->register_subscription( 79, [ $this->line_item( 'Digital Annual', 0 ) ] );
+
+		WooCommerce_Subscriptions::repair_subscription_product( $subscription, $live_annual_id, true );
+
+		$this->assertSame( [], $subscription->data['order_notes'] ?? [], 'A dry run must write nothing at all.' );
+	}
+
+	/**
+	 * The CLI's live-product set must stay identical to the gate picker's. The allowlist
+	 * constants restate `Access_Rules::get_subscription_products_options()`'s implicit
+	 * defaults, so this pins the mirror: a `status` argument or a third type added there
+	 * (and not here) makes the sets diverge and this test fail.
+	 */
+	public function test_live_product_set_matches_the_gate_picker() {
+		$this->register_product( 10, 'Published Sub', 'publish' );
+		$this->register_product( 11, 'Draft Sub', 'draft' );
+		$this->register_product( 12, 'Pending Sub', 'pending' );
+		$this->register_product( 13, 'Private Sub', 'private' );
+		$this->register_product( 14, 'Variable Sub', 'publish', 'variable-subscription' );
+		$this->register_product( 15, 'Trashed Sub', 'trash' );
+		$this->register_product( 16, 'Simple Product', 'publish', 'simple' );
+
+		$get_live_subscription_products = new ReflectionMethod( WooCommerce_Subscriptions::class, 'get_live_subscription_products' );
+		$get_live_subscription_products->setAccessible( true );
+		$cli_ids = wp_list_pluck( $get_live_subscription_products->invoke( null ), 'id' );
+
+		$picker_ids = wp_list_pluck( Access_Rules::get_subscription_products_options(), 'value' );
+
+		sort( $cli_ids );
+		sort( $picker_ids );
+		$this->assertSame( [ 10, 11, 12, 13, 14 ], $cli_ids, 'Only gate-selectable types and statuses belong in the live set.' );
+		$this->assertSame( $picker_ids, $cli_ids, 'The audit\'s live-product set must be exactly what the gate picker offers.' );
+	}
+
+	/**
 	 * The --map argument parser accepts explicit sub:product pairs and ignores blanks;
 	 * malformed tokens are dropped so only well-formed operator mappings are executed.
 	 */
@@ -592,10 +765,35 @@ class Newspack_Test_Audit_Subscription_Products extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Every discarded token is handed back so the caller can warn about it: a silently
+	 * dropped typo plus a zero exit reads as "the repair ran and there was nothing to do".
+	 * A repeated subscription ID is reported too, rather than last-write-wins.
+	 */
+	public function test_parse_map_argument_reports_discarded_tokens() {
+		$parsed = WooCommerce_Subscriptions::parse_map_argument_verbose( '51:1234,51-1234, 73:abc ,,90:,73:500,73:600' );
+
+		$this->assertSame(
+			[
+				51 => 1234,
+				73 => 500,
+			],
+			$parsed['map']
+		);
+		$this->assertSame(
+			[ '51-1234', '73:abc', '90:', '73:600' ],
+			$parsed['rejected'],
+			'Malformed tokens and a duplicate subscription ID must be reported, not dropped in silence.'
+		);
+	}
+
+	/**
 	 * The audit paginates: with the page size exactly filled by healthy subscriptions, an
 	 * at-risk one on the next page is still found — proving the loop continues past a full
-	 * first page and terminates on the short final page (drives the mock's status/paging
-	 * support).
+	 * first page and terminates on the short final page.
+	 *
+	 * The mock implements `offset` and deliberately not `paged`, matching the real
+	 * `wcs_get_subscriptions()`, so a loop that regressed to `paged` would re-fetch page one
+	 * forever here rather than passing quietly.
 	 */
 	public function test_audit_paginates_through_multiple_pages() {
 		$live_annual_id = 1234;
