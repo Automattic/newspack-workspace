@@ -935,19 +935,23 @@ abstract class Integration {
 	 * Prepare contact data for this integration by filtering to enabled
 	 * outgoing fields and adding the metadata prefix.
 	 *
-	 * In legacy mode, metadata classes already return filtered and prefixed
-	 * data, so the contact is returned unchanged.
+	 * In legacy mode the metadata classes return data already filtered and
+	 * prefixed — but filtered by the ESP integration's own field config, so
+	 * only the `esp` integration takes it as-is. Every other integration
+	 * still applies its enabled-outgoing selection via
+	 * prepare_contact_legacy(); otherwise an integration with an empty
+	 * Outbound selection would receive (and push) the full default field set.
 	 *
 	 * @param array $contact Contact data with raw metadata keys.
 	 * @return array Contact data with filtered, prefixed metadata.
 	 */
 	public function prepare_contact( $contact ) {
-		if ( 'legacy' === Sync\Metadata::get_version() ) {
+		if ( empty( $contact['metadata'] ) ) {
 			return $contact;
 		}
 
-		if ( empty( $contact['metadata'] ) ) {
-			return $contact;
+		if ( 'legacy' === Sync\Metadata::get_version() ) {
+			return $this->prepare_contact_legacy( $contact );
 		}
 
 		$enabled_fields = $this->get_enabled_outgoing_fields();
@@ -970,6 +974,56 @@ abstract class Integration {
 			// Otherwise, prefix raw keys that are in the keys map and enabled.
 			if ( isset( $keys_map[ $key ] ) && in_array( $keys_map[ $key ], $enabled_fields, true ) ) {
 				$prepared[ $prefix . $keys_map[ $key ] ] = $value;
+			}
+		}
+
+		$contact['metadata'] = $prepared;
+		return $contact;
+	}
+
+	/**
+	 * Apply this integration's outgoing-field selection to legacy-pipeline data.
+	 *
+	 * Legacy metadata arrives already prefixed and filtered — by the ESP
+	 * integration's field config. The `esp` integration therefore takes it
+	 * unchanged, but any other integration must still narrow the set to its
+	 * own enabled outgoing fields: an empty Outbound selection means no
+	 * metadata fields, not all of them (NPPD-2107).
+	 *
+	 * Keys are de-prefixed with the legacy pipeline's prefix (the one the
+	 * data actually carries — not this integration's own, which may differ)
+	 * and matched against enabled labels: exact match, or prefix match for
+	 * labels ending in `: ` (the UTM shape, e.g. enabled `Signup UTM: `
+	 * matches `Signup UTM: source`). Unprefixed keys (`status`,
+	 * `status_if_new`) are sync-control semantics, not outbound metadata
+	 * fields, and always pass through.
+	 *
+	 * @param array $contact Contact data with prefixed legacy metadata.
+	 * @return array Contact data with metadata narrowed to enabled fields.
+	 */
+	private function prepare_contact_legacy( $contact ) {
+		if ( 'esp' === $this->get_id() ) {
+			return $contact;
+		}
+
+		$enabled_fields = $this->get_enabled_outgoing_fields();
+		$prefix         = Sync\Metadata::get_prefix();
+		$prepared       = [];
+
+		foreach ( $contact['metadata'] as $key => $value ) {
+			if ( 0 !== strpos( $key, $prefix ) ) {
+				$prepared[ $key ] = $value;
+				continue;
+			}
+			$field_name = substr( $key, strlen( $prefix ) );
+			foreach ( $enabled_fields as $enabled_field ) {
+				if (
+					$field_name === $enabled_field ||
+					( str_ends_with( $enabled_field, ': ' ) && 0 === strpos( $field_name, $enabled_field ) )
+				) {
+					$prepared[ $key ] = $value;
+					break;
+				}
 			}
 		}
 
