@@ -44,6 +44,12 @@ class Membership_Gates_Migration {
 	 *
 	 * Dry-run by default; pass --live to write.
 	 *
+	 * On --live each written gate is re-read and checked against the conditions the
+	 * frontend evaluator applies, and any gate that would not restrict is reported as
+	 * a WARN row rather than counted as a plain success. Migrated gates stay dormant
+	 * until WooCommerce Memberships is deactivated, so without this an unenforceable
+	 * gate would look migrated for as long as it takes someone to notice at cutover.
+	 *
 	 * Re-running is NOT edit-preserving: an existing gate matched by title has its
 	 * content rules and layout content overwritten with freshly extracted markup, so
 	 * any customization made in the admin after a previous run is lost.
@@ -239,11 +245,31 @@ class Membership_Gates_Migration {
 				}
 			}
 
+			// Post-write verification. The writes above only report that nothing
+			// errored; they say nothing about whether the resulting gate will
+			// actually restrict once WooCommerce Memberships is deactivated. Because
+			// migrated gates lie dormant until that cutover, an unenforceable gate
+			// would otherwise be reported as a success today and go unnoticed for
+			// weeks.
+			$verification_issues = [];
+			if ( ! $dry_run && empty( $layout_errors ) && $gate_id ) {
+				$verification_issues = self::verify_migrated_gate( $gate_id );
+				foreach ( $verification_issues as $issue ) {
+					WP_CLI::warning( sprintf( '"%s" (gate %d) will not restrict: %s', $gate_title, $gate_id, $issue ) );
+				}
+			}
+
+			if ( ! empty( $layout_errors ) ) {
+				$row_action = 'ERROR: could not write ' . implode( ' + ', $layout_errors );
+			} elseif ( ! empty( $verification_issues ) ) {
+				$row_action = 'WARN: ' . implode( '; ', $verification_issues );
+			} else {
+				$row_action = $dry_run ? $action . ' (dry-run)' : $action;
+			}
+
 			$summary[] = [
 				'plan_name'     => $gate_title,
-				'action'        => empty( $layout_errors )
-					? ( $dry_run ? $action . ' (dry-run)' : $action )
-					: 'ERROR: could not write ' . implode( ' + ', $layout_errors ),
+				'action'        => $row_action,
 				'gate_id'       => $gate_id ?? '(pending)',
 				'content_rules' => count( $ac_rules ),
 				'access_type'   => $access_type,
@@ -279,6 +305,12 @@ class Membership_Gates_Migration {
 				fn( $r ) => ! str_starts_with( $r['action'], 'ERROR' )
 			)
 		);
+		$unenforceable = count(
+			array_filter(
+				$summary,
+				fn( $r ) => str_starts_with( $r['action'], 'WARN' )
+			)
+		);
 		WP_CLI::success(
 			sprintf(
 				'Done. %d gate(s) %s.',
@@ -286,6 +318,96 @@ class Membership_Gates_Migration {
 				$dry_run ? 'would be created/updated' : 'created/updated'
 			)
 		);
+		// Written but unenforceable is worse than not written at all — it looks
+		// migrated. Call it out after the success line so it is not lost in the table.
+		if ( $unenforceable ) {
+			WP_CLI::warning(
+				sprintf(
+					'%d of those gate(s) will not restrict anything as written (see the WARN rows above). Fix them before deactivating WooCommerce Memberships.',
+					$unenforceable
+				)
+			);
+		}
+	}
+
+	/**
+	 * Re-read a freshly written gate and report why it would fail to restrict.
+	 *
+	 * Mirrors the conditions Content_Restriction_Control::get_post_gates() applies
+	 * when deciding whether a gate applies to a post, so a gate that passes here is
+	 * one the evaluator can actually act on.
+	 *
+	 * @param int $gate_id The content gate post ID.
+	 *
+	 * @return string[] Human-readable problems; empty when the gate is enforceable.
+	 */
+	private static function verify_migrated_gate( int $gate_id ): array {
+		$issues = [];
+
+		if ( 'publish' !== \get_post_status( $gate_id ) ) {
+			$issues[] = 'the gate is not published';
+		}
+
+		// get_gate_content_rules() drops rules with an empty value, so anything left
+		// is a rule with content behind it — but the evaluator still has to be able
+		// to resolve the slug, which is where the NPPD-2063 slug mistranslation bites.
+		$content_rules = \Newspack\Content_Rules::get_gate_content_rules( $gate_id );
+		$unresolvable  = array_values(
+			array_filter(
+				array_column( $content_rules, 'slug' ),
+				fn( $slug ) => ! self::is_content_rule_slug_resolvable( $slug )
+			)
+		);
+		if ( empty( $content_rules ) ) {
+			// get_gate_content_rules() drops empty-value rules, so a gate can be written
+			// with rules and still evaluate as having none — say which of the two it is,
+			// because the summary's Content Rules column reports the pre-write count.
+			$written_rules = \get_post_meta( $gate_id, 'content_rules', true );
+			$issues[]      = empty( $written_rules )
+				? 'it has no content rules'
+				: 'none of its content rules select any content';
+		} elseif ( count( $unresolvable ) === count( $content_rules ) ) {
+			$issues[] = sprintf(
+				'none of its content rules resolve to a post type or taxonomy the evaluator can match (%s)',
+				implode( ', ', $unresolvable )
+			);
+		}
+
+		// A gate with neither mode active is skipped outright; an active mode with no
+		// layout post is skipped too, so it restricts nothing while looking configured.
+		$registration  = \Newspack\Content_Gate::get_registration_settings( $gate_id );
+		$custom_access = \Newspack\Content_Gate::get_custom_access_settings( $gate_id );
+		if ( empty( $registration['active'] ) && empty( $custom_access['active'] ) ) {
+			$issues[] = 'neither the registration nor the paid access mode is active';
+		}
+		foreach ( [
+			'registration' => $registration,
+			'paid access'  => $custom_access,
+		] as $label => $settings ) {
+			if ( ! empty( $settings['active'] ) && empty( $settings['gate_layout_id'] ) ) {
+				$issues[] = sprintf( 'the %s mode is active with no layout', $label );
+			}
+		}
+
+		return $issues;
+	}
+
+	/**
+	 * Whether the gate evaluator can resolve a content-rule slug to real content.
+	 *
+	 * Content_Restriction_Control handles 'post_types', 'specific_posts' and
+	 * 'newsletters' by name and treats every other slug as a taxonomy — an
+	 * unregistered slug therefore matches no post at all.
+	 *
+	 * @param string $slug The content-rule slug.
+	 *
+	 * @return bool
+	 */
+	private static function is_content_rule_slug_resolvable( string $slug ): bool {
+		if ( in_array( $slug, [ 'post_types', 'specific_posts', 'newsletters' ], true ) ) {
+			return true;
+		}
+		return (bool) \get_taxonomy( $slug );
 	}
 
 	/**

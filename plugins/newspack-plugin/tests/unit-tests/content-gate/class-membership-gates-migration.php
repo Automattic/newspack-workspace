@@ -317,6 +317,135 @@ HTML;
 	}
 
 	/**
+	 * A gate whose every content rule carries a slug the evaluator cannot resolve is
+	 * reported as unenforceable.
+	 *
+	 * This is the NPPD-2063 slug mistranslation seen from the operator's side: the
+	 * migration writes rules with the raw WooCommerce content-type name ('post'), and
+	 * Content_Restriction_Control::rule_matches_post() falls through to
+	 * get_taxonomy( 'post' ) — which is null — so the gate matches no post at all.
+	 */
+	public function test_verify_migrated_gate_flags_content_rules_the_evaluator_cannot_resolve() {
+		$gate_id = $this->create_enforceable_gate(
+			[
+				[
+					'slug'  => 'post',
+					'value' => [ '1' ],
+				],
+			] 
+		);
+
+		$issues = $this->invoke_private_static( 'verify_migrated_gate', [ $gate_id ] );
+
+		$this->assertCount( 1, $issues );
+		$this->assertStringContainsString( 'none of its content rules resolve', $issues[0] );
+		$this->assertStringContainsString( 'post', $issues[0] );
+	}
+
+	/**
+	 * A gate written with rule slugs the evaluator handles by name, an active mode and
+	 * a layout post passes verification with no issues.
+	 */
+	public function test_verify_migrated_gate_passes_for_an_enforceable_gate() {
+		$gate_id = $this->create_enforceable_gate(
+			[
+				[
+					'slug'  => 'post_types',
+					'value' => [ 'post' ],
+				],
+			] 
+		);
+
+		$this->assertSame( [], $this->invoke_private_static( 'verify_migrated_gate', [ $gate_id ] ) );
+	}
+
+	/**
+	 * An active mode pointing at no layout post restricts nothing —
+	 * Content_Restriction_Control requires a truthy gate_layout_id — so it is flagged.
+	 */
+	public function test_verify_migrated_gate_flags_an_active_mode_with_no_layout() {
+		$gate_id = $this->create_enforceable_gate(
+			[
+				[
+					'slug'  => 'post_types',
+					'value' => [ 'post' ],
+				],
+			] 
+		);
+		\Newspack\Content_Gate::update_registration_settings(
+			$gate_id,
+			[
+				'active'         => true,
+				'gate_layout_id' => 0,
+			]
+		);
+
+		$issues = $this->invoke_private_static( 'verify_migrated_gate', [ $gate_id ] );
+
+		$this->assertContains( 'the registration mode is active with no layout', $issues );
+	}
+
+	/**
+	 * A gate whose modes are all inactive is skipped outright by the evaluator.
+	 */
+	public function test_verify_migrated_gate_flags_a_gate_with_no_active_mode() {
+		$gate_id = $this->create_enforceable_gate(
+			[
+				[
+					'slug'  => 'post_types',
+					'value' => [ 'post' ],
+				],
+			] 
+		);
+		\Newspack\Content_Gate::update_registration_settings( $gate_id, [ 'active' => false ] );
+
+		$issues = $this->invoke_private_static( 'verify_migrated_gate', [ $gate_id ] );
+
+		$this->assertContains( 'neither the registration nor the paid access mode is active', $issues );
+	}
+
+	/**
+	 * Slug resolvability mirrors Content_Restriction_Control::rule_matches_post():
+	 * three slugs are handled by name and everything else must be a registered
+	 * taxonomy.
+	 */
+	public function test_is_content_rule_slug_resolvable_matches_the_evaluator() {
+		foreach ( [ 'post_types', 'specific_posts', 'newsletters', 'category', 'post_tag' ] as $resolvable_slug ) {
+			$this->assertTrue(
+				$this->invoke_private_static( 'is_content_rule_slug_resolvable', [ $resolvable_slug ] ),
+				sprintf( 'Expected "%s" to be resolvable.', $resolvable_slug )
+			);
+		}
+		foreach ( [ 'post', 'page', 'not_a_taxonomy' ] as $unresolvable_slug ) {
+			$this->assertFalse(
+				$this->invoke_private_static( 'is_content_rule_slug_resolvable', [ $unresolvable_slug ] ),
+				sprintf( 'Expected "%s" to be unresolvable.', $unresolvable_slug )
+			);
+		}
+	}
+
+	/**
+	 * Create a published gate with an active registration mode pointing at a real
+	 * layout post — i.e. enforceable except for the content rules under test.
+	 *
+	 * @param array[] $content_rules AC-format content rules.
+	 *
+	 * @return int The gate post ID.
+	 */
+	private function create_enforceable_gate( array $content_rules ): int {
+		$gate_id = \Newspack\Content_Gate::create_gate( [ 'title' => 'Verification fixture' ] );
+		\Newspack\Content_Rules::update_gate_content_rules( $gate_id, $content_rules );
+		\Newspack\Content_Gate::update_registration_settings(
+			$gate_id,
+			[
+				'active'         => true,
+				'gate_layout_id' => \Newspack\Content_Gate::create_gate_layout( 'Verification fixture layout', '' ),
+			]
+		);
+		return $gate_id;
+	}
+
+	/**
 	 * Create a published post carrying the given block content, standing in for an
 	 * np_memberships_gate.
 	 *
