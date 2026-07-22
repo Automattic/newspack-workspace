@@ -16,7 +16,12 @@ import { Flex, FlexBlock, FormTokenField as CoreFormTokenField, SelectControl, T
 
 const DURATION_UNITS = [ 'days', 'months', 'forever' ] as const;
 
-export type OneTimePurchaseDurationUnit = ( typeof DURATION_UNITS )[ number ];
+/**
+ * '' marks an unrecognized or missing stored unit. The server fails closed on
+ * it (the rule never grants), so the UI must not silently coerce it into a
+ * granting unit either.
+ */
+export type OneTimePurchaseDurationUnit = ( typeof DURATION_UNITS )[ number ] | '';
 
 export type OneTimePurchaseValue = {
 	product_ids: Array< string | number >;
@@ -28,16 +33,17 @@ type RuleOption = { value: string | number; label: string };
 
 /**
  * Normalize any stored rule value (including legacy/empty shapes) to the
- * composite one-time purchase value.
+ * composite one-time purchase value. An unrecognized duration unit maps to ''
+ * (invalid, never grants), mirroring the server-side sanitizer.
  */
 export function normalizeOneTimePurchaseValue( value: unknown ): OneTimePurchaseValue {
 	const raw = ( value && typeof value === 'object' && ! Array.isArray( value ) ? value : {} ) as Partial< OneTimePurchaseValue >;
 	return {
 		product_ids: Array.isArray( raw.product_ids ) ? raw.product_ids : [],
 		duration_value: Number( raw.duration_value ) || 0,
-		duration_unit: DURATION_UNITS.includes( raw.duration_unit as OneTimePurchaseDurationUnit )
+		duration_unit: ( DURATION_UNITS as readonly string[] ).includes( raw.duration_unit as string )
 			? ( raw.duration_unit as OneTimePurchaseDurationUnit )
-			: 'forever',
+			: '',
 	};
 }
 
@@ -56,9 +62,17 @@ export default function OneTimePurchaseRuleControl( {
 	TokenField?: React.ComponentType< any >;
 } ) {
 	const currentValue = normalizeOneTimePurchaseValue( value );
+	const isFiniteDuration = 'days' === currentValue.duration_unit || 'months' === currentValue.duration_unit;
 	const selectedLabels = options
 		.filter( option => currentValue.product_ids.some( id => String( id ) === String( option.value ) ) )
 		.map( option => option.label );
+
+	let durationHelp = __( 'How long a purchase grants access, counted from the order date.', 'newspack-plugin' );
+	if ( 'forever' === currentValue.duration_unit ) {
+		durationHelp = __( 'Purchasers keep access forever.', 'newspack-plugin' );
+	} else if ( '' === currentValue.duration_unit ) {
+		durationHelp = __( 'The stored duration is invalid and grants no access. Pick a duration to fix this rule.', 'newspack-plugin' );
+	}
 
 	return (
 		<>
@@ -81,13 +95,14 @@ export default function OneTimePurchaseRuleControl( {
 				<FlexBlock>
 					<SelectControl
 						label={ __( 'Access duration', 'newspack-plugin' ) }
-						help={
-							'forever' === currentValue.duration_unit
-								? __( 'Purchasers keep access forever.', 'newspack-plugin' )
-								: __( 'How long a purchase grants access, counted from the order date.', 'newspack-plugin' )
-						}
+						help={ durationHelp }
 						value={ currentValue.duration_unit }
 						options={ [
+							// Surface an invalid stored unit honestly instead of masking it
+							// as a granting choice; selecting any real option clears it.
+							...( '' === currentValue.duration_unit
+								? [ { value: '', label: __( 'Invalid (grants no access)', 'newspack-plugin' ), disabled: true } ]
+								: [] ),
 							{ value: 'forever', label: __( 'Forever', 'newspack-plugin' ) },
 							{ value: 'days', label: __( 'Days from purchase', 'newspack-plugin' ) },
 							{ value: 'months', label: __( 'Months from purchase', 'newspack-plugin' ) },
@@ -105,7 +120,7 @@ export default function OneTimePurchaseRuleControl( {
 						__nextHasNoMarginBottom
 					/>
 				</FlexBlock>
-				{ 'forever' !== currentValue.duration_unit && (
+				{ isFiniteDuration && (
 					<FlexBlock>
 						<TextControl
 							label={
@@ -116,6 +131,11 @@ export default function OneTimePurchaseRuleControl( {
 							type="number"
 							min={ 1 }
 							value={ currentValue.duration_value || '' }
+							help={
+								currentValue.duration_value < 1
+									? __( 'Enter a duration of at least 1. Until then, purchases do not grant access.', 'newspack-plugin' )
+									: undefined
+							}
 							onChange={ ( duration_value: string ) =>
 								onChange( {
 									...currentValue,

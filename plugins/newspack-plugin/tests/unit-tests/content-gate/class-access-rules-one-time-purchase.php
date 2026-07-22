@@ -157,8 +157,6 @@ class Newspack_Test_Access_Rules_One_Time_Purchase extends WP_UnitTestCase {
 			'A purchase 11 months ago should grant access with a 12-month duration.'
 		);
 
-		Access_Rules::flush_one_time_purchase_memo();
-
 		$value_within_six_months = $this->get_rule_value(
 			[
 				'duration_value' => 6,
@@ -391,9 +389,10 @@ class Newspack_Test_Access_Rules_One_Time_Purchase extends WP_UnitTestCase {
 	}
 
 	/**
-	 * API sanitization falls back to "forever" for an invalid duration unit.
+	 * API sanitization preserves an invalid duration unit as '' (never as a
+	 * granting unit) so evaluation fails closed.
 	 */
-	public function test_sanitize_access_rule_defaults_invalid_duration_unit_to_forever() {
+	public function test_sanitize_access_rule_marks_invalid_duration_unit_as_invalid() {
 		$sanitized_rule = Content_Gate_API::sanitize_access_rule(
 			[
 				'slug'  => 'one_time_purchase',
@@ -405,6 +404,51 @@ class Newspack_Test_Access_Rules_One_Time_Purchase extends WP_UnitTestCase {
 			]
 		);
 
-		$this->assertSame( 'forever', $sanitized_rule['value']['duration_unit'], 'An invalid duration unit should fall back to forever.' );
+		$this->assertSame( '', $sanitized_rule['value']['duration_unit'], 'An invalid duration unit must sanitize to the invalid marker, not to a granting unit.' );
+	}
+
+	/**
+	 * An unrecognized or missing duration unit denies access even with a
+	 * qualifying purchase — malformed input must fail closed, never widen a
+	 * finite grant into a lifetime one.
+	 */
+	public function test_invalid_or_missing_duration_unit_denies_access() {
+		$this->create_one_time_order();
+
+		$this->assertFalse(
+			Access_Rules::has_one_time_purchase( self::$purchaser_user_id, $this->get_rule_value( [ 'duration_unit' => 'fortnights' ] ) ),
+			'An unrecognized duration unit should deny access despite a qualifying purchase.'
+		);
+
+		$value_without_unit = $this->get_rule_value();
+		unset( $value_without_unit['duration_unit'] );
+		$this->assertFalse(
+			Access_Rules::has_one_time_purchase( self::$purchaser_user_id, $value_without_unit ),
+			'A missing duration unit should deny access despite a qualifying purchase.'
+		);
+	}
+
+	/**
+	 * A guest order (customer_id 0) matched by billing email grants access on
+	 * both the finite-duration and forever paths.
+	 */
+	public function test_guest_order_grants_access_via_billing_email() {
+		$purchaser_email = get_userdata( self::$purchaser_user_id )->user_email;
+		$this->create_one_time_order(
+			[
+				'customer_id'   => 0,
+				'billing_email' => $purchaser_email,
+				'date_created'  => gmdate( 'Y-m-d H:i:s', strtotime( '-10 days' ) ),
+			]
+		);
+
+		$this->assertTrue(
+			Access_Rules::has_one_time_purchase( self::$purchaser_user_id, $this->get_rule_value() ),
+			'A guest order matching the reader billing email should grant access within a finite duration.'
+		);
+		$this->assertTrue(
+			Access_Rules::has_one_time_purchase( self::$purchaser_user_id, $this->get_rule_value( [ 'duration_unit' => 'forever' ] ) ),
+			'A guest order matching the reader billing email should grant lifetime access.'
+		);
 	}
 }

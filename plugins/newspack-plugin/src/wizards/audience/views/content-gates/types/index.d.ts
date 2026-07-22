@@ -12,11 +12,8 @@ type HeaderAction = {
 	separator?: boolean;
 };
 
-type OneTimePurchaseRuleValue = {
-	product_ids: Array<string | number>;
-	duration_value: number;
-	duration_unit: 'days' | 'months' | 'forever';
-};
+// Single source of truth for the composite value shape lives with the control.
+type OneTimePurchaseRuleValue = import( '../../../../../content-gate/components/one-time-purchase-rule-control' ).OneTimePurchaseValue;
 type GateAccessRuleValue = string | string[] | boolean | OneTimePurchaseRuleValue;
 type AccessRule = {
 	name: string;

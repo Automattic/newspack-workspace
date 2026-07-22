@@ -58,6 +58,10 @@ class Access_Rules {
 	 *     @type mixed    $default            The rule default value.
 	 *     @type array    $options            The rule options.
 	 *     @type callable $callback           The rule callback.
+	 *     @type callable $sanitize_callback  Optional. Sanitizes the rule's stored value; rules
+	 *                                        with composite (non-scalar, non-list) value shapes
+	 *                                        must provide one — Content_Gate_API delegates to it
+	 *                                        instead of the generic list/scalar sanitization.
 	 *     @type bool     $is_boolean         Whether the rule is a boolean rule.
 	 *     @type bool     $supports_anonymous Whether the rule's callback can evaluate access for
 	 *                                        a logged-out visitor (`user_id = 0`). Defaults to
@@ -167,6 +171,22 @@ class Access_Rules {
 				return $rule;
 			},
 			self::$rules
+		);
+	}
+
+	/**
+	 * Get the access rules with PHP callables stripped, for client-side payloads
+	 * (wp_localize_script and similar).
+	 *
+	 * @return array The registered rules with resolved options and no callables.
+	 */
+	public static function get_access_rules_for_client() {
+		return array_map(
+			function( $rule ) {
+				unset( $rule['callback'], $rule['sanitize_callback'] );
+				return $rule;
+			},
+			self::get_access_rules()
 		);
 	}
 
@@ -446,6 +466,13 @@ class Access_Rules {
 	 * @return array Product options as label/value pairs.
 	 */
 	public static function get_one_time_purchase_products_options() {
+		// Request-scoped memo: the full-catalog query would otherwise run once per
+		// rule sanitized on a gate save (Content_Gate_API resolves all rule options
+		// for each rule in the payload).
+		static $options = null;
+		if ( null !== $options ) {
+			return $options;
+		}
 		if ( ! function_exists( 'wc_get_products' ) ) {
 			return [];
 		}
@@ -468,6 +495,10 @@ class Access_Rules {
 	/**
 	 * Sanitize the one-time purchase rule value.
 	 *
+	 * An unrecognized or missing duration unit is preserved as an empty string so
+	 * evaluation fails closed — malformed input must never widen a finite grant
+	 * into a lifetime one.
+	 *
 	 * @param mixed $value Raw rule value.
 	 *
 	 * @return array Sanitized value with product_ids, duration_value, and duration_unit keys.
@@ -476,11 +507,11 @@ class Access_Rules {
 		if ( ! is_array( $value ) ) {
 			$value = [];
 		}
-		$duration_unit = $value['duration_unit'] ?? 'forever';
+		$duration_unit = $value['duration_unit'] ?? '';
 		return [
 			'product_ids'    => array_values( array_filter( array_map( 'absint', (array) ( $value['product_ids'] ?? [] ) ) ) ),
 			'duration_value' => absint( $value['duration_value'] ?? 0 ),
-			'duration_unit'  => in_array( $duration_unit, self::ONE_TIME_PURCHASE_DURATION_UNITS, true ) ? $duration_unit : 'forever',
+			'duration_unit'  => in_array( $duration_unit, self::ONE_TIME_PURCHASE_DURATION_UNITS, true ) ? $duration_unit : '',
 		];
 	}
 
@@ -520,21 +551,27 @@ class Access_Rules {
 			if ( isset( self::$one_time_purchase_memo[ $memo_key ] ) ) {
 				$has_purchase = self::$one_time_purchase_memo[ $memo_key ];
 			} else {
+				$user  = \get_userdata( $user_id );
+				$email = $user ? $user->user_email : '';
 				if ( 'forever' === $value['duration_unit'] ) {
 					// Lifetime access: any paid order ever. wc_customer_bought_product()
-					// is exhaustive across the customer's order history, runs SQL-side,
+					// is exhaustive across the customer's order history (matching both
+					// user ID and billing email, so guest orders count), runs SQL-side,
 					// and is cached by WooCommerce with invalidation on order writes.
-					$user  = \get_userdata( $user_id );
-					$email = $user ? $user->user_email : '';
 					foreach ( $value['product_ids'] as $product_id ) {
 						if ( \wc_customer_bought_product( $email, $user_id, $product_id ) ) {
 							$has_purchase = true;
 							break;
 						}
 					}
-				} elseif ( $value['duration_value'] > 0 ) {
-					$has_purchase = self::customer_bought_product_after( $user_id, $value['product_ids'], strtotime( sprintf( '-%d %s', $value['duration_value'], $value['duration_unit'] ) ) );
+				} elseif ( in_array( $value['duration_unit'], [ 'days', 'months' ], true ) && $value['duration_value'] > 0 ) {
+					// Note: month arithmetic follows strtotime()'s rollover semantics
+					// (e.g. "-1 month" from July 31 normalizes through June 31 to July 1).
+					$cutoff       = strtotime( sprintf( '-%d %s', $value['duration_value'], $value['duration_unit'] ) );
+					$has_purchase = self::customer_bought_product_after( $user_id, $email, $value['product_ids'], $cutoff );
 				}
+				// Any other duration configuration (missing/unrecognized unit, zero
+				// finite duration) is misconfigured and fails closed.
 				self::$one_time_purchase_memo[ $memo_key ] = $has_purchase;
 			}
 		}
@@ -554,19 +591,22 @@ class Access_Rules {
 	 * created after the given cutoff timestamp.
 	 *
 	 * The query is bounded by customer, paid statuses, and the date window, so it
-	 * stays cheap on front-end requests even without a persistent cache.
+	 * stays cheap on front-end requests even without a persistent cache. The
+	 * `customer` parameter matches the user ID or the billing email, so guest
+	 * orders count — mirroring wc_customer_bought_product() on the lifetime path.
 	 *
-	 * @param int   $user_id     User ID.
-	 * @param int[] $product_ids Product IDs to look for.
-	 * @param int   $cutoff      Unix timestamp orders must be created after.
+	 * @param int    $user_id     User ID.
+	 * @param string $email       User email, to match guest orders.
+	 * @param int[]  $product_ids Product IDs to look for.
+	 * @param int    $cutoff      Unix timestamp orders must be created after.
 	 *
 	 * @return bool
 	 */
-	private static function customer_bought_product_after( $user_id, $product_ids, $cutoff ) {
+	private static function customer_bought_product_after( $user_id, $email, $product_ids, $cutoff ) {
 		$paid_statuses = function_exists( 'wc_get_is_paid_statuses' ) ? \wc_get_is_paid_statuses() : [ 'processing', 'completed' ];
 		$orders        = \wc_get_orders(
 			[
-				'customer_id'  => $user_id,
+				'customer'     => array_values( array_filter( [ $user_id, $email ] ) ),
 				'status'       => $paid_statuses,
 				'date_created' => '>' . $cutoff,
 				'limit'        => -1,

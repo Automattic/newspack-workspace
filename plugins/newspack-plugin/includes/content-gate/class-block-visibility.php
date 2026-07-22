@@ -198,13 +198,7 @@ class Block_Visibility {
 			'newspackBlockVisibility',
 			[
 				'target_blocks'          => self::get_target_blocks(),
-				'available_access_rules' => array_map(
-					function( $rule ) {
-						unset( $rule['callback'] );
-						return $rule;
-					},
-					Access_Rules::get_access_rules()
-				),
+				'available_access_rules' => Access_Rules::get_access_rules_for_client(),
 				'available_gates'        => array_values(
 					array_map(
 						function( $gate ) {

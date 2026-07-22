@@ -6,7 +6,7 @@
 /**
  * WordPress dependencies.
  */
-import { __, sprintf } from '@wordpress/i18n';
+import { __, _n, sprintf } from '@wordpress/i18n';
 
 /**
  * Internal dependencies.
@@ -39,16 +39,35 @@ const formatAccessRuleValue = ( rule: GateAccessRule ): string => {
 				products
 			);
 		}
+		if ( 'days' === durationUnit ) {
+			return sprintf(
+				// translators: 1: list of product names, 2: number of days.
+				_n( '%1$s (%2$d day from purchase)', '%1$s (%2$d days from purchase)', durationValue, 'newspack-plugin' ),
+				products,
+				durationValue
+			);
+		}
+		if ( 'months' === durationUnit ) {
+			return sprintf(
+				// translators: 1: list of product names, 2: number of months.
+				_n( '%1$s (%2$d month from purchase)', '%1$s (%2$d months from purchase)', durationValue, 'newspack-plugin' ),
+				products,
+				durationValue
+			);
+		}
 		return sprintf(
-			// translators: 1: list of product names, 2: duration count, 3: duration unit (days or months).
-			__( '%1$s (%2$d %3$s from purchase)', 'newspack-plugin' ),
-			products,
-			durationValue,
-			'days' === durationUnit ? __( 'days', 'newspack-plugin' ) : __( 'months', 'newspack-plugin' )
+			// translators: %s: list of product names. Shown when the stored duration is unrecognized; the rule then never grants access.
+			__( '%s (invalid duration, grants no access)', 'newspack-plugin' ),
+			products
 		);
 	}
 	if ( Array.isArray( rule.value ) && config?.options ) {
 		return getOptionLabels( rule.value, config.options );
+	}
+	// Boolean rules carry no displayable value (mirrors the pre-formatter
+	// rendering, where React printed nothing for a boolean child).
+	if ( 'boolean' === typeof rule.value ) {
+		return '';
 	}
 	return String( rule.value );
 };

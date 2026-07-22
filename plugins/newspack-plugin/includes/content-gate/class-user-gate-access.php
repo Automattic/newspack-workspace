@@ -125,18 +125,24 @@ class User_Gate_Access {
 
 		if ( 'one_time_purchase' === $slug && is_array( $value ) ) {
 			$sanitized_value = Access_Rules::sanitize_one_time_purchase_value( $value );
-			$products_label  = self::format_product_names( $sanitized_value['product_ids'] );
+			$products_label  = empty( $sanitized_value['product_ids'] )
+				? __( '(no products selected)', 'newspack-plugin' )
+				: self::format_product_names( $sanitized_value['product_ids'] );
 			if ( 'forever' === $sanitized_value['duration_unit'] ) {
 				/* translators: %s: list of product names. */
 				return sprintf( __( '%s (forever)', 'newspack-plugin' ), $products_label );
 			}
-			return sprintf(
-				/* translators: 1: list of product names, 2: duration count, 3: duration unit (days or months). */
-				__( '%1$s (%2$d %3$s from purchase)', 'newspack-plugin' ),
-				$products_label,
-				$sanitized_value['duration_value'],
-				'days' === $sanitized_value['duration_unit'] ? __( 'days', 'newspack-plugin' ) : __( 'months', 'newspack-plugin' )
-			);
+			$duration_value = $sanitized_value['duration_value'];
+			if ( 'days' === $sanitized_value['duration_unit'] ) {
+				/* translators: 1: list of product names, 2: number of days. */
+				return sprintf( _n( '%1$s (%2$d day from purchase)', '%1$s (%2$d days from purchase)', $duration_value, 'newspack-plugin' ), $products_label, $duration_value );
+			}
+			if ( 'months' === $sanitized_value['duration_unit'] ) {
+				/* translators: 1: list of product names, 2: number of months. */
+				return sprintf( _n( '%1$s (%2$d month from purchase)', '%1$s (%2$d months from purchase)', $duration_value, 'newspack-plugin' ), $products_label, $duration_value );
+			}
+			/* translators: %s: list of product names. Shown when the stored duration is unrecognized; the rule then never grants access. */
+			return sprintf( __( '%s (invalid duration, grants no access)', 'newspack-plugin' ), $products_label );
 		}
 
 		if ( is_array( $value ) ) {

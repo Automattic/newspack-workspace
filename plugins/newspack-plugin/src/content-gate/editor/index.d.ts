@@ -17,11 +17,8 @@ type AccessRuleOption = {
 	value: string | number;
 	label: string;
 };
-type EditorOneTimePurchaseRuleValue = {
-	product_ids: Array< string | number >;
-	duration_value: number;
-	duration_unit: 'days' | 'months' | 'forever';
-};
+// Single source of truth for the composite value shape lives with the control.
+type EditorOneTimePurchaseRuleValue = import( '../components/one-time-purchase-rule-control' ).OneTimePurchaseValue;
 type AccessRuleConfig = {
 	name: string;
 	description: string;

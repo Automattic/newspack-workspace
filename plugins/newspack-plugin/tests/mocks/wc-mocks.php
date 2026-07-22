@@ -1003,6 +1003,26 @@ function wc_get_orders( $args ) {
 			}
 		);
 	}
+	if ( isset( $args['customer'] ) ) {
+		// Real WC: 'customer' accepts a user ID or billing email (or an array of
+		// either) and matches orders belonging to ANY of the values — guest
+		// orders (customer_id 0) match via their billing email.
+		$customer_values = (array) $args['customer'];
+		$orders          = array_filter(
+			$orders,
+			function( $order ) use ( $customer_values ) {
+				foreach ( $customer_values as $customer_value ) {
+					if ( is_numeric( $customer_value ) && $order->get_customer_id() === (int) $customer_value ) {
+						return true;
+					}
+					if ( is_string( $customer_value ) && ! is_numeric( $customer_value ) && $order->get_billing_email() === $customer_value ) {
+						return true;
+					}
+				}
+				return false;
+			}
+		);
+	}
 	if ( isset( $args['status'] ) ) {
 		// Filter by status. Real wc_get_orders accepts statuses with or without
 		// the 'wc-' prefix; normalize both sides so either form matches.
@@ -1045,7 +1065,11 @@ function wc_get_orders( $args ) {
 function wc_customer_bought_product( $customer_email, $user_id, $product_id ) {
 	global $orders_database;
 	foreach ( $orders_database as $order ) {
-		if ( $order->get_customer_id() !== $user_id ) {
+		// Real WC matches the customer user ID OR the billing email, so guest
+		// orders count toward the buyer's history.
+		$matches_user  = $user_id && $order->get_customer_id() === $user_id;
+		$matches_email = $customer_email && $order->get_billing_email() === $customer_email;
+		if ( ! $matches_user && ! $matches_email ) {
 			continue;
 		}
 		// Real WC only counts orders in paid statuses (processing/completed).
