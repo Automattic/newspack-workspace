@@ -1,3 +1,10 @@
+## newspack-popups [3.15.1](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.15.0...newspack-popups@3.15.1) (2026-07-22)
+
+
+### Bug Fixes
+
+* **segmentation:** stop emitting and scrub bad donor merge tags ([#697](https://github.com/Automattic/newspack-workspace/issues/697)) ([b2ab8ed](https://github.com/Automattic/newspack-workspace/commit/b2ab8ed7886a95927622776904586090de64c245))
+
 # newspack-popups [3.15.0](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.14.1...newspack-popups@3.15.0) (2026-07-20)
 
 
