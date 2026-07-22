@@ -166,11 +166,16 @@ class Outgoing_Post {
 
 		// If there are urls not already in the config, add them. Note that we don't support
 		// removing urls from the config.
+		$existing     = $distribution;
 		$distribution = array_unique( array_merge( $distribution, $site_urls ) );
+
+		// update_post_meta() returns false both on failure and when the value is
+		// unchanged. Distributing to sites already in the config is a valid no-op.
+		$unchanged = array_values( $existing ) === array_values( $distribution );
 
 		$updated = update_post_meta( $this->post->ID, self::DISTRIBUTED_POST_META, $distribution );
 
-		if ( ! $updated ) {
+		if ( ! $updated && ! $unchanged ) {
 			return new WP_Error( 'update_failed', __( 'Failed to update post distribution.', 'newspack-network' ) );
 		}
 

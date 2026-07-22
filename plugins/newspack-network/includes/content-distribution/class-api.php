@@ -51,8 +51,8 @@ class API {
 						'default' => 'draft',
 					],
 				],
-				'permission_callback' => function () {
-					return current_user_can( Admin::CAPABILITY );
+				'permission_callback' => function ( $request ) {
+					return current_user_can( Admin::CAPABILITY ) && current_user_can( 'edit_post', $request['post_id'] );
 				},
 			]
 		);
@@ -152,6 +152,11 @@ class API {
 	 * @return WP_REST_Response|WP_Error The REST response or error.
 	 */
 	public static function distribute( $request ) {
+		// Re-distributing a syndicated copy would give it a second lineage.
+		if ( Content_Distribution_Class::is_post_incoming( $request->get_param( 'post_id' ) ) ) {
+			return new WP_Error( 'newspack_network_content_distribution_error', __( 'A post received from the network cannot be distributed.', 'newspack-network' ), [ 'status' => 400 ] );
+		}
+
 		if ( ! class_exists( 'Newspack\Data_Events' ) ) {
 			return new WP_Error( 'newspack_network_content_distribution_error', __( 'Data Events class not found.', 'newspack-network' ), [ 'status' => 400 ] );
 		}

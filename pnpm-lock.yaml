@@ -459,6 +459,10 @@ importers:
         version: 4.0.9(postcss@8.5.15)
 
   plugins/newspack-network:
+    dependencies:
+      newspack-icons:
+        specifier: workspace:*
+        version: link:../../packages/icons
     devDependencies:
       clsx:
         specifier: ^2.1.0

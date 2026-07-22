@@ -94,6 +94,22 @@ class TestOutgoingPost extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Distributing to sites already in the config is a no-op, not an error.
+	 *
+	 * WordPress returns false from update_post_meta() when the value is unchanged, which would
+	 * otherwise surface as 'update_failed' on a retried request.
+	 */
+	public function test_set_distribution_is_idempotent() {
+		$urls = [ $this->network[0]['url'], $this->network[1]['url'] ];
+
+		$this->outgoing_post->set_distribution( $urls );
+
+		$result = $this->outgoing_post->set_distribution( $urls );
+		$this->assertFalse( is_wp_error( $result ) );
+		$this->assertEqualSets( $urls, $this->outgoing_post->get_distribution() );
+	}
+
+	/**
 	 * Test remove distribution.
 	 */
 	public function test_remove_distribution() {

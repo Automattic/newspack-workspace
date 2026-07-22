@@ -42,6 +42,9 @@
 		"*.scss": "npm run lint:scss:staged",
 		"*.php": "npm run lint:php:staged"
 	},
+	"dependencies": {
+		"newspack-icons": "workspace:*"
+	},
 	"devDependencies": {
 		"clsx": "^2.1.0",
 		"newspack-scripts": "workspace:*"
