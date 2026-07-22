@@ -358,10 +358,21 @@ abstract class Integration {
 	 * field selection. Every push dispatch site must consult this — including
 	 * account-deletion propagation, which travels the push pipeline.
 	 *
+	 * An undeclared toggle field (e.g. a subclass overriding
+	 * get_settings_fields() without the base metadata group) reads as null and
+	 * counts as enabled: the toggle can only ever pause sync explicitly,
+	 * mirroring the frontend's missing-toggle-means-enabled rendering. A
+	 * declared field never resolves to null — get_settings_field_value() falls
+	 * back to the field default.
+	 *
 	 * @return bool True if pushes should run.
 	 */
 	final public function is_push_enabled(): bool {
-		return $this->supports_push() && (bool) $this->get_settings_field_value( 'outgoing_sync_enabled' );
+		if ( ! $this->supports_push() ) {
+			return false;
+		}
+		$enabled = $this->get_settings_field_value( 'outgoing_sync_enabled' );
+		return null === $enabled || (bool) $enabled;
 	}
 
 	/**
@@ -371,10 +382,18 @@ abstract class Integration {
 	 * which pauses the direction while preserving the configured incoming
 	 * field selection. Every pull dispatch site must consult this.
 	 *
+	 * As with is_push_enabled(), an undeclared toggle field reads as null and
+	 * counts as enabled — only an explicit stored value can pause the
+	 * direction.
+	 *
 	 * @return bool True if pulls should run.
 	 */
 	final public function is_pull_enabled(): bool {
-		return $this->supports_pull() && (bool) $this->get_settings_field_value( 'incoming_sync_enabled' );
+		if ( ! $this->supports_pull() ) {
+			return false;
+		}
+		$enabled = $this->get_settings_field_value( 'incoming_sync_enabled' );
+		return null === $enabled || (bool) $enabled;
 	}
 
 	/**

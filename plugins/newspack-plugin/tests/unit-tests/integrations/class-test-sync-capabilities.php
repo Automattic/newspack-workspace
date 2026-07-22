@@ -199,6 +199,33 @@ class Test_Sync_Capabilities extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * An integration that does not declare the toggle fields at all (e.g. a
+	 * subclass overriding get_settings_fields() without the base metadata
+	 * group) stays enabled in both directions: the toggles can only pause
+	 * sync explicitly, so pre-toggle third-party integrations keep syncing.
+	 */
+	public function test_undeclared_toggle_fields_leave_directions_enabled() {
+		$integration = new class( 'cap-no-toggles', 'Cap No Toggles' ) extends \Sample_Integration {
+			/**
+			 * Declare only the integration's own fields, omitting the base
+			 * account-deletion and metadata groups (and their toggles).
+			 *
+			 * @return array
+			 */
+			public function get_settings_fields() {
+				return $this->settings_fields;
+			}
+		};
+
+		$this->assertNull(
+			$integration->get_settings_field_value( 'outgoing_sync_enabled' ),
+			'Precondition: the toggle field is not declared.'
+		);
+		$this->assertTrue( $integration->is_push_enabled(), 'Undeclared outbound toggle must not pause push.' );
+		$this->assertTrue( $integration->is_pull_enabled(), 'Undeclared inbound toggle must not pause pull.' );
+	}
+
+	/**
 	 * A missing capability wins over any stored toggle value: the toggle field
 	 * isn't declared, its value can't be written through the settings API, and
 	 * is_push_enabled() stays false even with a forced option row.
