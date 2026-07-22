@@ -296,16 +296,20 @@ final class Newspack_Popups_Segmentation {
 	 * Skipping the param costs that provider donor segmentation on newsletter
 	 * clicks; emitting it risks breaking the page the reader landed on.
 	 *
+	 * Any `%` is rejected, rather than only malformed `%XX` shapes: a hex-shaped
+	 * escape can still be invalid UTF-8 — `decodeURIComponent( '%FF' )` and
+	 * `decodeURIComponent( '%C0%AF' )` both throw — so shape alone is not enough,
+	 * and validating decoded UTF-8 here would be a lot of machinery to license a
+	 * character no supported ESP needs. ActiveCampaign's `%FIELD%` delimiters are
+	 * rejected wholesale regardless, and a `%` inside a Mailchimp / Constant
+	 * Contact / Campaign Monitor field name is not a real merge field.
+	 *
 	 * @param string $merge_tag Raw ESP merge tag, e.g. '*|DONOR|*' or '%DONOR%'.
 	 *
 	 * @return bool
 	 */
 	private static function is_url_safe_merge_tag( $merge_tag ) {
-		if ( false === strpos( $merge_tag, '%' ) ) {
-			return true;
-		}
-		// Every '%' must introduce a well-formed two-hex-digit escape, or decoding fails.
-		return 1 === preg_match( '/^(?:[^%]|%[0-9A-Fa-f]{2})*$/', $merge_tag );
+		return false === strpos( (string) $merge_tag, '%' );
 	}
 
 	/**

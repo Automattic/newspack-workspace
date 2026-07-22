@@ -114,6 +114,38 @@ class SegmentationNewsletterLinkTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A percent escape that is hex-shaped is still not necessarily decodable:
+	 * `decodeURIComponent( '%FF' )` throws because 0xFF is never valid UTF-8, and
+	 * `%C0%AF` is an overlong encoding. Checking escape *shape* alone would let
+	 * these through, so the guard rejects any `%` at all.
+	 *
+	 * @param string $field Donor merge field containing a percent sign.
+	 *
+	 * @dataProvider hex_shaped_field_provider
+	 */
+	public function test_skips_hex_shaped_but_undecodable_tag( $field ) {
+		update_option( 'newspack_popups_mc_donor_merge_field', $field );
+		$url = home_url( '/some-article/' );
+		$this->assertSame(
+			$url,
+			Newspack_Popups_Segmentation::append_donor_segment_param( $url, $url, $this->make_newsletter() )
+		);
+	}
+
+	/**
+	 * Field names whose percent escapes are well-formed but not valid UTF-8.
+	 *
+	 * @return array[]
+	 */
+	public function hex_shaped_field_provider() {
+		return [
+			'invalid utf-8 byte' => [ '%FF' ],
+			'overlong encoding'  => [ '%C0%AF' ],
+			'valid escape'       => [ '%20' ],
+		];
+	}
+
+	/**
 	 * Bracket-delimited providers (Constant Contact, Campaign Monitor) carry no
 	 * percent sign, so they stay supported by the guard above.
 	 */
