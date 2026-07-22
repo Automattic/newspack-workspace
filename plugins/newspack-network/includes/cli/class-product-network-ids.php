@@ -16,6 +16,7 @@
 namespace Newspack_Network\CLI;
 
 use Newspack_Network\Site_Role;
+use Newspack_Network\Hub\Nodes as Hub_Nodes;
 use Newspack_Network\Woocommerce\Product_Admin;
 use Newspack_Network\Woocommerce_Memberships\Admin as Memberships_Admin;
 use Newspack_Network\Incoming_Events\Product_Updated;
@@ -183,12 +184,19 @@ class Product_Network_Ids {
 	 * a Hub-only Network ID would read as linked and produce a false "ready to flip". ( A Node has no such
 	 * self-entry -- it never receives its own events back -- so the exclusion is simply a no-op there. )
 	 *
+	 * Being linked to *some* other site is a weaker guarantee than access needs: a reader is only
+	 * granted access from the specific site their subscription lives on, so a product linked hub<->node1
+	 * grants nothing to a node2 subscriber. Pass $expected_sites ( the network's known sites ) to also
+	 * get, per product, which of them are missing the Network ID -- that is what an operator has to act
+	 * on, and what --expect-sites gates the exit code on.
+	 *
 	 * @param array  $local_products   Map of product ID => Network ID, from local postmeta ( '' for untagged ).
 	 * @param array  $network_products The Product_Updated option value.
 	 * @param string $current_site     This site's URL ( the key it uses in the map ).
-	 * @return array Map of product ID => [ 'network_id' => string, 'linked_sites' => string[] ].
+	 * @param array  $expected_sites   Site URLs the network is known to contain, excluding this one. Empty when unknown.
+	 * @return array Map of product ID => [ 'network_id' => string, 'linked_sites' => string[], 'missing_sites' => string[] ].
 	 */
-	public static function verify_products( array $local_products, array $network_products, $current_site ) {
+	public static function verify_products( array $local_products, array $network_products, $current_site, array $expected_sites = [] ) {
 		$index    = self::index_network_products_by_network_id( $network_products );
 		$findings = [];
 
@@ -198,18 +206,70 @@ class Product_Network_Ids {
 			// Other sites in the map that carry the same Network ID ( excluding this site's own entry -- see the docblock ).
 			$linked_sites = [];
 			foreach ( array_keys( $index[ $network_id ] ?? [] ) as $site ) {
-				if ( $site !== $current_site ) {
+				if ( self::normalize_site_url( $site ) !== self::normalize_site_url( $current_site ) ) {
 					$linked_sites[] = $site;
 				}
 			}
 
+			// Known network sites whose products never arrived carrying this ID. Compared on the
+			// normalized URL: the map is keyed by each site's own get_bloginfo( 'url' ), while the
+			// expected list comes from the Nodes CPT, so the two can differ by a trailing slash.
+			$linked_lookup = [];
+			foreach ( $linked_sites as $site ) {
+				$linked_lookup[ self::normalize_site_url( $site ) ] = true;
+			}
+			$missing_sites = [];
+			if ( '' !== (string) $network_id ) {
+				foreach ( $expected_sites as $expected_site ) {
+					if ( ! isset( $linked_lookup[ self::normalize_site_url( $expected_site ) ] ) ) {
+						$missing_sites[] = $expected_site;
+					}
+				}
+			}
+
 			$findings[ $product_id ] = [
-				'network_id'   => (string) $network_id,
-				'linked_sites' => $linked_sites,
+				'network_id'    => (string) $network_id,
+				'linked_sites'  => $linked_sites,
+				'missing_sites' => $missing_sites,
 			];
 		}
 
 		return $findings;
+	}
+
+	/**
+	 * Normalize a site URL for comparison between the synced map's keys and the Nodes CPT's URLs.
+	 *
+	 * @param string $url The site URL.
+	 * @return string
+	 */
+	private static function normalize_site_url( $url ) {
+		return untrailingslashit( strtolower( trim( (string) $url ) ) );
+	}
+
+	/**
+	 * The other sites this network is known to contain.
+	 *
+	 * Only a Hub knows the network's membership ( the Nodes CPT ); a Node can see nothing but its own
+	 * synced map, which is why --expect-sites also takes a plain count.
+	 *
+	 * @return string[] Node URLs, or an empty array when the membership is not knowable here.
+	 */
+	private static function get_known_network_sites() {
+		if ( ! Site_Role::is_hub() ) {
+			return [];
+		}
+		$urls = [];
+		foreach ( Hub_Nodes::get_all_nodes() as $node ) {
+			$url = untrailingslashit( (string) $node->get_url() );
+			if ( '' !== $url ) {
+				$urls[ self::normalize_site_url( $url ) ] = $url;
+			}
+		}
+		// Sorted so the reported ( and JSON ) site list is stable across runs rather than following the
+		// Nodes CPT's post order, which makes two sites' reports diffable.
+		ksort( $urls );
+		return array_values( $urls );
 	}
 
 	/**
@@ -286,7 +346,12 @@ class Product_Network_Ids {
 		$plans_found = 0;
 
 		if ( null !== $map ) {
-			$assignments = self::parse_map( $map );
+			$parsed      = self::parse_map( $map );
+			$assignments = $parsed['assignments'];
+			// An entry the operator wrote but this command could not use is a product they believe is
+			// covered and which grants nothing -- it has to reach the non-zero exit like any other
+			// withheld item, not just scroll past as a warning.
+			$unresolved += $parsed['skipped'];
 			WP_CLI::line( sprintf( 'Using explicit operator mapping ( %d product(s) ).', count( $assignments ) ) );
 		} else {
 			$plans       = self::get_plans();
@@ -493,6 +558,11 @@ class Product_Network_Ids {
 	 * exactly what assign-product-network-ids withholds ( conflicts, skipped products ), so a network
 	 * that assign could not finish would still verify green.
 	 *
+	 * By default a product passes once *any* other site carries its Network ID, which is weaker than what
+	 * access needs: a reader is only granted from the specific site their subscription lives on, so a
+	 * product linked Hub<->node1 grants nothing to a node2 subscriber. Pass --expect-sites to gate the
+	 * exit code on real coverage -- "all" ( on a Hub, every registered Node ) or an explicit count.
+	 *
 	 * Limitation: the synced products option is append-only ( there is no product-deleted listener ), so a
 	 * stale entry for a since-removed product or site can still report as "linked" -- the same class of
 	 * caveat as relying on the site's URL staying byte-identical as the map key.
@@ -504,10 +574,28 @@ class Product_Network_Ids {
 	 * by a membership plan plus every product that already carries a Network ID. Pass a gate's product IDs
 	 * to check exactly what the gate depends on.
 	 *
+	 * [--expect-sites=<count|all>]
+	 * : How many *other* sites each product must be linked on to pass. "all" requires every Node registered
+	 * on this Hub ( unavailable on a Node, which cannot read the network's membership -- pass a count there ).
+	 * Defaults to 1, which only proves the product is linked somewhere.
+	 *
+	 * [--format=<format>]
+	 * : Output format. "json" prints a single machine-readable report ( per-product findings plus the summary
+	 * and the pass/fail verdict ) instead of the human-readable log, for aggregating this per-site gate
+	 * across a network. The exit code is the same either way.
+	 * ---
+	 * default: human
+	 * options:
+	 *   - human
+	 *   - json
+	 * ---
+	 *
 	 * ## EXAMPLES
 	 *
 	 *     wp newspack-network verify-product-network-ids
 	 *     wp newspack-network verify-product-network-ids --products=123,456
+	 *     wp newspack-network verify-product-network-ids --expect-sites=all
+	 *     wp newspack-network verify-product-network-ids --expect-sites=3 --format=json
 	 *
 	 * @param array $args       Positional arguments ( unused ).
 	 * @param array $assoc_args Associative arguments.
@@ -522,6 +610,15 @@ class Product_Network_Ids {
 			$network_products = [];
 		}
 
+		$format = (string) \WP_CLI\Utils\get_flag_value( $assoc_args, 'format', 'human' );
+		if ( ! in_array( $format, [ 'human', 'json' ], true ) ) {
+			WP_CLI::error( sprintf( 'Invalid --format "%s": expected "human" or "json".', $format ) );
+		}
+		$is_json = 'json' === $format;
+
+		$known_sites = self::get_known_network_sites();
+		$expectation = self::parse_expected_sites( \WP_CLI\Utils\get_flag_value( $assoc_args, 'expect-sites', null ), $known_sites );
+
 		$product_ids = null;
 		if ( isset( $assoc_args['products'] ) ) {
 			$product_ids = wp_parse_id_list( $assoc_args['products'] );
@@ -533,51 +630,193 @@ class Product_Network_Ids {
 		}
 		$local_products = self::get_products_to_check( $product_ids );
 
-		WP_CLI::line( '' );
-		WP_CLI::line( sprintf( 'Verifying product Network IDs for %s.', $current_site ) );
-		WP_CLI::line( 'Checked: whether this site\'s products carry a Network ID, and whether other sites in the synced map share it.' );
-		WP_CLI::line( 'Not checked from here: other sites\' databases ( only their synced map entries are visible ). Run this on every site.' );
-		WP_CLI::line( '' );
+		if ( ! $is_json ) {
+			WP_CLI::line( '' );
+			WP_CLI::line( sprintf( 'Verifying product Network IDs for %s.', $current_site ) );
+			WP_CLI::line( 'Checked: whether this site\'s products carry a Network ID, and whether other sites in the synced map share it.' );
+			WP_CLI::line( 'Not checked from here: other sites\' databases ( only their synced map entries are visible ). Run this on every site.' );
+			if ( ! empty( $known_sites ) ) {
+				WP_CLI::line( sprintf( 'Network sites registered on this Hub: %s.', implode( ', ', $known_sites ) ) );
+			}
+			WP_CLI::line( sprintf( 'Passing requires each product to be linked on %s.', $expectation['label'] ) );
+			WP_CLI::line( '' );
+		}
 
 		if ( empty( $local_products ) ) {
 			WP_CLI::error( 'No products to check: no membership plan links a subscription product and no product carries a Network ID. Cross-site paid access will grant nothing here. Run assign-product-network-ids first, or pass --products with the gate\'s products.' );
 		}
 
-		$findings = self::verify_products( $local_products, $network_products, $current_site );
+		$findings = self::verify_products( $local_products, $network_products, $current_site, $known_sites );
 		$untagged = 0;
 		$unlinked = 0;
+		$report   = [];
 		foreach ( $findings as $product_id => $finding ) {
+			$linked_sites  = $finding['linked_sites'];
+			$missing_sites = $finding['missing_sites'];
+
 			if ( '' === $finding['network_id'] ) {
-				WP_CLI::warning( sprintf( '#%d: no Network ID set ( cross-site access grants nothing ). Run assign-product-network-ids.', $product_id ) );
 				$untagged++;
+				$report[] = self::build_verify_report_row( $product_id, $finding, 'untagged' );
+				if ( ! $is_json ) {
+					WP_CLI::warning( sprintf( '#%d: no Network ID set ( cross-site access grants nothing ). Run assign-product-network-ids.', $product_id ) );
+				}
 				continue;
 			}
 
-			if ( empty( $finding['linked_sites'] ) ) {
-				WP_CLI::warning(
-					sprintf( '#%d "%s": no other site carries this Network ID ( cross-site access grants nothing ).', $product_id, $finding['network_id'] )
-				);
+			$passes = $expectation['require_all'] ? empty( $missing_sites ) : count( $linked_sites ) >= $expectation['minimum'];
+			if ( ! $passes ) {
 				$unlinked++;
-			} else {
+				$report[] = self::build_verify_report_row( $product_id, $finding, 'unlinked' );
+				if ( ! $is_json ) {
+					WP_CLI::warning( self::describe_unlinked_product( $product_id, $finding, $expectation ) );
+				}
+				continue;
+			}
+
+			$report[] = self::build_verify_report_row( $product_id, $finding, 'ok' );
+			if ( ! $is_json ) {
 				WP_CLI::line(
-					sprintf( '  ✓ #%d "%s" linked on: %s', $product_id, $finding['network_id'], implode( ', ', $finding['linked_sites'] ) )
+					sprintf( '  ✓ #%d "%s" linked on: %s', $product_id, $finding['network_id'], implode( ', ', $linked_sites ) )
 				);
+				// A pass under the default expectation still leaves known sites uncovered; those are what an
+				// operator has to act on, so name them even though they did not fail the run.
+				if ( ! empty( $missing_sites ) ) {
+					WP_CLI::line(
+						sprintf( '    not carried by: %s ( readers subscribing there are granted nothing ).', implode( ', ', $missing_sites ) )
+					);
+				}
 			}
 		}
 
-		WP_CLI::line( '' );
-		WP_CLI::line( sprintf( 'Checked %d product(s): %d untagged, %d unlinked.', count( $findings ), $untagged, $unlinked ) );
-		if ( $unlinked > 0 ) {
-			WP_CLI::line( 'For unlinked products, make sure every site has run assign-product-network-ids, then re-emit the events from those sites with:' );
-			WP_CLI::line( '  wp newspack-network assign-product-network-ids --apply --repropagate' );
+		$has_issues = $untagged > 0 || $unlinked > 0;
+
+		if ( $is_json ) {
+			WP_CLI::line(
+				(string) wp_json_encode(
+					[
+						'site'          => $current_site,
+						'expect_sites'  => $expectation['require_all'] ? 'all' : $expectation['minimum'],
+						'known_sites'   => $known_sites,
+						'checked'       => count( $findings ),
+						'untagged'      => $untagged,
+						'unlinked'      => $unlinked,
+						'ready_to_flip' => ! $has_issues,
+						'products'      => $report,
+					]
+				)
+			);
+		} else {
+			WP_CLI::line( '' );
+			WP_CLI::line( sprintf( 'Checked %d product(s): %d untagged, %d unlinked.', count( $findings ), $untagged, $unlinked ) );
+			if ( $unlinked > 0 ) {
+				WP_CLI::line( 'For unlinked products, make sure every site has run assign-product-network-ids, then re-emit the events from those sites with:' );
+				WP_CLI::line( '  wp newspack-network assign-product-network-ids --apply --repropagate' );
+			}
 		}
-		if ( $untagged > 0 || $unlinked > 0 ) {
+
+		if ( $has_issues ) {
 			// Exit non-zero so callers can gate a flip on this check.
 			WP_CLI::error( 'Verification found issues ( see above ). Not ready to flip.' );
 		}
-		// A green run proves each product is linked to at least one other visible site, not the full mesh:
-		// this site cannot see whether every other site received its products. Run on every site for full coverage.
-		WP_CLI::success( 'All checked products carry a Network ID and are linked to at least one other site ( see the listed sites above ).' );
+
+		WP_CLI::success( sprintf( 'All checked products carry a Network ID and are linked on %s.', $expectation['label'] ) );
+		if ( ! $is_json && ! $expectation['require_all'] && 1 === $expectation['minimum'] ) {
+			// Being linked *somewhere* is not the guarantee operators read into a green run: access is only
+			// granted from the site a reader's own subscription lives on.
+			WP_CLI::line( 'Note: this only proves each product is linked somewhere, not that every site a reader may subscribe on carries the ID. Re-run with --expect-sites=all ( on the Hub ) or --expect-sites=<count> to gate on real coverage.' );
+		}
+	}
+
+	/**
+	 * Resolve --expect-sites into the coverage each product must have to pass.
+	 *
+	 * @param mixed $raw         The raw flag value: null, "all", or a positive integer.
+	 * @param array $known_sites The network's other known sites ( empty when not knowable here ).
+	 * @return array {
+	 *     @type bool   $require_all Whether every known site must carry the Network ID.
+	 *     @type int    $minimum     The minimum number of other linked sites, when not requiring all.
+	 *     @type string $label       Human description of the requirement.
+	 * }
+	 */
+	private static function parse_expected_sites( $raw, array $known_sites ) {
+		if ( null === $raw ) {
+			return [
+				'require_all' => false,
+				'minimum'     => 1,
+				'label'       => 'at least 1 other site',
+			];
+		}
+
+		if ( 'all' === $raw ) {
+			if ( empty( $known_sites ) ) {
+				// A Node cannot read the network's membership, so "all" there would silently mean "any".
+				WP_CLI::error( '--expect-sites=all needs the network\'s registered Nodes, which are only readable on a Hub with Nodes registered. Run it on the Hub, or pass an explicit count ( e.g. --expect-sites=3 ).' );
+			}
+			return [
+				'require_all' => true,
+				'minimum'     => count( $known_sites ),
+				'label'       => sprintf( 'every registered network site ( %s )', implode( ', ', $known_sites ) ),
+			];
+		}
+
+		if ( ! preg_match( '/^[1-9][0-9]*$/', (string) $raw ) ) {
+			WP_CLI::error( 'Invalid --expect-sites: pass "all" or a positive integer ( how many other sites each product must be linked on ).' );
+		}
+
+		return [
+			'require_all' => false,
+			'minimum'     => (int) $raw,
+			'label'       => sprintf( 'at least %d other site(s)', (int) $raw ),
+		];
+	}
+
+	/**
+	 * Build one product's row of the machine-readable verify report.
+	 *
+	 * @param int    $product_id The product ID.
+	 * @param array  $finding    The verify_products() finding.
+	 * @param string $status     One of 'ok', 'untagged', 'unlinked'.
+	 * @return array
+	 */
+	private static function build_verify_report_row( $product_id, array $finding, $status ) {
+		return [
+			'id'            => (int) $product_id,
+			'network_id'    => $finding['network_id'],
+			'status'        => $status,
+			'linked_sites'  => array_values( $finding['linked_sites'] ),
+			'missing_sites' => array_values( $finding['missing_sites'] ),
+		];
+	}
+
+	/**
+	 * The warning for a product that did not meet the coverage requirement.
+	 *
+	 * @param int   $product_id  The product ID.
+	 * @param array $finding     The verify_products() finding.
+	 * @param array $expectation The parse_expected_sites() result.
+	 * @return string
+	 */
+	private static function describe_unlinked_product( $product_id, array $finding, array $expectation ) {
+		if ( empty( $finding['linked_sites'] ) ) {
+			return sprintf( '#%d "%s": no other site carries this Network ID ( cross-site access grants nothing ).', $product_id, $finding['network_id'] );
+		}
+		if ( $expectation['require_all'] ) {
+			return sprintf(
+				'#%d "%s": not carried by %s ( readers subscribing there are granted nothing ). Linked on: %s.',
+				$product_id,
+				$finding['network_id'],
+				implode( ', ', $finding['missing_sites'] ),
+				implode( ', ', $finding['linked_sites'] )
+			);
+		}
+		return sprintf(
+			'#%d "%s": linked on %d other site(s), fewer than the %d required. Linked on: %s.',
+			$product_id,
+			$finding['network_id'],
+			count( $finding['linked_sites'] ),
+			$expectation['minimum'],
+			implode( ', ', $finding['linked_sites'] )
+		);
 	}
 
 	/**
@@ -821,8 +1060,15 @@ class Product_Network_Ids {
 	/**
 	 * Parse the --map value ( inline JSON or a path to a JSON file ) into a product ID => Network ID map.
 	 *
+	 * Entries that cannot be used are reported and counted rather than dropped: the operator wrote them
+	 * because they believe those products are covered, so they have to reach the caller's non-zero exit
+	 * like any other withheld item.
+	 *
 	 * @param string $map The raw --map argument.
-	 * @return array
+	 * @return array {
+	 *     @type array $assignments Map of product ID => Network ID.
+	 *     @type int   $skipped     How many entries could not be used.
+	 * }
 	 */
 	private static function parse_map( $map ) {
 		// Only treat the argument as a path when it's short enough to be one: passing a long inline-JSON
@@ -843,24 +1089,31 @@ class Product_Network_Ids {
 		}
 
 		$assignments = [];
+		$skipped     = 0;
 		foreach ( $decoded as $product_id => $network_id ) {
 			// JSON object keys arrive as PHP int keys only when they are canonical integers; anything else
 			// ( "abc", "12abc" ) would cast to a real, unrelated product ID.
 			if ( ! preg_match( '/^[1-9][0-9]*$/', (string) $product_id ) ) {
 				WP_CLI::warning( sprintf( 'Skipping --map entry "%s": keys must be positive integer product IDs.', $product_id ) );
+				$skipped++;
 				continue;
 			}
 			if ( ! is_scalar( $network_id ) ) {
 				WP_CLI::warning( sprintf( 'Skipping product #%s in --map: Network ID must be a string.', $product_id ) );
+				$skipped++;
 				continue;
 			}
 			$network_id = sanitize_text_field( (string) $network_id );
 			if ( '' === $network_id ) {
 				WP_CLI::warning( sprintf( 'Skipping product #%s in --map: empty Network ID.', $product_id ) );
+				$skipped++;
 				continue;
 			}
 			$assignments[ (int) $product_id ] = $network_id;
 		}
-		return $assignments;
+		return [
+			'assignments' => $assignments,
+			'skipped'     => $skipped,
+		];
 	}
 }

@@ -15,6 +15,7 @@ use Newspack_Network\Site_Role;
 use Newspack_Network\Woocommerce\Product_Admin;
 use Newspack_Network\Woocommerce_Memberships\Admin as Memberships_Admin;
 use Newspack_Network\Incoming_Events\Product_Updated;
+use Newspack_Network\Hub\Nodes as Hub_Nodes;
 
 /**
  * Test the assign and verify commands.
@@ -31,6 +32,7 @@ class TestProductNetworkIdsCLICommands extends WP_UnitTestCase {
 		register_post_type( 'product', [ 'public' => true ] );
 		register_post_type( 'product_variation', [ 'public' => true ] );
 		register_post_type( Memberships_Admin::MEMBERSHIP_PLANS_CPT, [ 'public' => true ] );
+		register_post_type( Hub_Nodes::POST_TYPE_SLUG, [ 'public' => false ] );
 
 		WP_CLI::reset();
 	}
@@ -232,6 +234,121 @@ class TestProductNetworkIdsCLICommands extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Register a Node on this Hub, so the network's membership is knowable.
+	 *
+	 * @param string $url The node's site URL.
+	 * @return int The node post ID.
+	 */
+	private function create_node( $url ) {
+		$node_id = self::factory()->post->create( [ 'post_type' => Hub_Nodes::POST_TYPE_SLUG ] );
+		update_post_meta( $node_id, 'node-url', untrailingslashit( $url ) );
+		return $node_id;
+	}
+
+	/**
+	 * A product linked to only one Node of several passes the default check but fails --expect-sites=all:
+	 * access is granted from the site the reader's own subscription lives on, so a product missing from
+	 * node2 grants a node2 subscriber nothing, however green the default run looks.
+	 */
+	public function test_verify_expect_sites_all_fails_on_a_node_missing_the_network_id() {
+		$product_id = $this->create_product( 'gold' );
+		$this->create_plan( 'gold', [ $product_id ] );
+		$this->create_node( 'https://node-one.test' );
+		$this->create_node( 'https://node-two.test' );
+		update_option(
+			Product_Updated::OPTION_NAME,
+			[
+				'https://node-one.test' => [
+					9001 => [
+						'id'         => 9001,
+						'network_id' => 'gold',
+					],
+				],
+			]
+		);
+
+		// Linked to one other site, so the default expectation passes -- while naming the gap.
+		Product_Network_Ids::verify( [], [] );
+		$this->assertStringContainsString( 'Success:', WP_CLI::get_output() );
+		$this->assertStringContainsString( 'not carried by: https://node-two.test', WP_CLI::get_output() );
+
+		WP_CLI::reset();
+		$this->expectException( WP_CLI_Halt::class );
+		try {
+			Product_Network_Ids::verify( [], [ 'expect-sites' => 'all' ] );
+		} finally {
+			$output = WP_CLI::get_output();
+			$this->assertStringContainsString( 'not carried by https://node-two.test', $output );
+			$this->assertStringContainsString( 'Not ready to flip', $output );
+		}
+	}
+
+	/**
+	 * --expect-sites=all is refused where the network's membership cannot be read, rather than silently
+	 * degrading to "any one site" -- a Node has no Nodes list, and that is the site a flip gate runs on.
+	 */
+	public function test_verify_expect_sites_all_errors_without_a_known_network_membership() {
+		$this->create_product( 'gold' );
+
+		$this->expectException( WP_CLI_Halt::class );
+		try {
+			Product_Network_Ids::verify( [], [ 'expect-sites' => 'all' ] );
+		} finally {
+			$this->assertStringContainsString( 'only readable on a Hub', WP_CLI::get_output() );
+		}
+	}
+
+	/**
+	 * --format=json emits one machine-readable report ( including the per-product missing sites ) so the
+	 * per-site gate can be aggregated across the network instead of scraped from prose.
+	 */
+	public function test_verify_json_format_reports_missing_sites() {
+		$product_id = $this->create_product( 'gold' );
+		$this->create_plan( 'gold', [ $product_id ] );
+		$this->create_node( 'https://node-one.test' );
+		$this->create_node( 'https://node-two.test' );
+		update_option(
+			Product_Updated::OPTION_NAME,
+			[
+				'https://node-one.test' => [
+					9001 => [
+						'id'         => 9001,
+						'network_id' => 'gold',
+					],
+				],
+			]
+		);
+
+		Product_Network_Ids::verify( [], [ 'format' => 'json' ] );
+
+		$json_lines = array_values(
+			array_filter(
+				WP_CLI::$output,
+				function ( $line ) {
+					return str_starts_with( $line, '{' );
+				}
+			)
+		);
+		$this->assertCount( 1, $json_lines, 'Only the report itself should be printed in JSON mode.' );
+
+		$report = json_decode( $json_lines[0], true );
+		$this->assertTrue( $report['ready_to_flip'] );
+		$this->assertSame( [ 'https://node-one.test', 'https://node-two.test' ], $report['known_sites'] );
+		$this->assertSame(
+			[
+				[
+					'id'            => $product_id,
+					'network_id'    => 'gold',
+					'status'        => 'ok',
+					'linked_sites'  => [ 'https://node-one.test' ],
+					'missing_sites' => [ 'https://node-two.test' ],
+				],
+			],
+			$report['products']
+		);
+	}
+
+	/**
 	 * --map must be a JSON object keyed by product ID: a JSON list's 0..n-1 keys would otherwise be
 	 * taken for product IDs.
 	 */
@@ -246,26 +363,32 @@ class TestProductNetworkIdsCLICommands extends WP_UnitTestCase {
 
 	/**
 	 * A non-integer --map key is reported and skipped rather than cast to an unrelated product ID
-	 * ( "12abc" would otherwise write to product 12 ).
+	 * ( "12abc" would otherwise write to product 12 ) -- and the skip counts as unresolved, so the
+	 * operator's other entries landing does not green a run that left a product they listed untagged.
 	 */
 	public function test_assign_skips_map_entries_with_non_integer_keys() {
 		$product_id = $this->create_product();
 
-		Product_Network_Ids::assign(
-			[],
-			[
-				'map'   => wp_json_encode(
-					[
-						'12abc'              => 'premium',
-						(string) $product_id => 'premium',
-					]
-				),
-				'apply' => true,
-			]
-		);
-
-		$this->assertSame( 'premium', $this->get_network_id( $product_id ) );
-		$this->assertSame( '', (string) get_post_meta( 12, Product_Admin::NETWORK_ID_META_KEY, true ) );
-		$this->assertStringContainsString( 'Skipping --map entry "12abc"', WP_CLI::get_output() );
+		$this->expectException( WP_CLI_Halt::class );
+		try {
+			Product_Network_Ids::assign(
+				[],
+				[
+					'map'   => wp_json_encode(
+						[
+							'12abc'              => 'premium',
+							(string) $product_id => 'premium',
+						]
+					),
+					'apply' => true,
+				]
+			);
+		} finally {
+			$output = WP_CLI::get_output();
+			$this->assertSame( 'premium', $this->get_network_id( $product_id ) );
+			$this->assertSame( '', (string) get_post_meta( 12, Product_Admin::NETWORK_ID_META_KEY, true ) );
+			$this->assertStringContainsString( 'Skipping --map entry "12abc"', $output );
+			$this->assertStringContainsString( '1 item(s) could not be assigned', $output );
+		}
 	}
 }
