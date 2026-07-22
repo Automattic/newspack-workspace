@@ -54,6 +54,14 @@ class Failing_Sample_Integration extends Integration {
 	public static $pull_should_fail = false;
 
 	/**
+	 * Count of get_enabled_incoming_fields() calls, so tests can pin that
+	 * batch drivers resolve fields once per integration, not once per reader.
+	 *
+	 * @var int
+	 */
+	public static $enabled_incoming_fields_calls = 0;
+
+	/**
 	 * Value returned by is_set_up(). Tests that simulate an
 	 * enabled-but-unconfigured integration set this to false.
 	 *
@@ -101,6 +109,16 @@ class Failing_Sample_Integration extends Integration {
 	}
 
 	/**
+	 * Count field resolutions on top of the parent behavior.
+	 *
+	 * @return \Newspack\Reader_Activation\Integrations\Incoming_Field[]
+	 */
+	public function get_enabled_incoming_fields() {
+		self::$enabled_incoming_fields_calls++;
+		return parent::get_enabled_incoming_fields();
+	}
+
+	/**
 	 * Whether this integration's external prerequisites are configured.
 	 *
 	 * @return bool
@@ -132,12 +150,13 @@ class Failing_Sample_Integration extends Integration {
 	 * Reset state between tests.
 	 */
 	public static function reset() {
-		self::$should_fail      = false;
-		self::$push_count       = 0;
-		self::$pull_count       = 0;
-		self::$push_ids         = [];
-		self::$pull_data        = [];
-		self::$pull_should_fail = false;
-		self::$is_set_up_value  = true;
+		self::$should_fail                   = false;
+		self::$push_count                    = 0;
+		self::$pull_count                    = 0;
+		self::$push_ids                      = [];
+		self::$pull_data                     = [];
+		self::$pull_should_fail              = false;
+		self::$enabled_incoming_fields_calls = 0;
+		self::$is_set_up_value               = true;
 	}
 }

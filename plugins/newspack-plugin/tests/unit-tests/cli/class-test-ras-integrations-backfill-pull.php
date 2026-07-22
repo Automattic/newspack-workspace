@@ -154,6 +154,23 @@ class Test_RAS_Integrations_Backfill_Pull extends WP_UnitTestCase {
 		$this->assertSame( 1, $scoped_tally['processed'] );
 	}
 
+	/**
+	 * Enabled incoming fields are resolved once per integration for the whole
+	 * run — not once per reader — since resolution may hit the provider's API
+	 * on legacy-shaped settings (NPPD-2076 review).
+	 */
+	public function test_fields_resolved_once_per_integration_for_the_run() {
+		$user_a = $this->create_reader();
+		$user_b = $this->create_reader();
+		$user_c = $this->create_reader();
+		Failing_Sample_Integration::$enabled_incoming_fields_calls = 0;
+
+		$this->run_pull( [ 'user_ids' => [ $user_a, $user_b, $user_c ] ] );
+
+		$this->assertSame( 1, Failing_Sample_Integration::$enabled_incoming_fields_calls, 'One resolution for the run, regardless of reader count.' );
+		$this->assertSame( 3, Failing_Sample_Integration::$pull_count, 'Every reader was still pulled.' );
+	}
+
 	public function test_no_pull_targets_returns_wp_error() {
 		delete_option( 'newspack_integration_incoming_fields_pull_cli_mock' );
 		$user_a = $this->create_reader();

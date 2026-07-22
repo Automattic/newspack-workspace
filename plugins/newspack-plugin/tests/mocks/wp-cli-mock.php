@@ -13,13 +13,18 @@ if ( ! class_exists( 'WP_CLI' ) ) {
 	class WP_CLI {
 		public static $logs      = [];
 		public static $successes = [];
+		public static $warnings  = [];
 
 		public static function reset() {
 			self::$logs      = [];
 			self::$successes = [];
+			self::$warnings  = [];
 		}
 		public static function log( $message ) {
 			self::$logs[] = $message;
+		}
+		public static function warning( $message ) {
+			self::$warnings[] = $message;
 		}
 		public static function line( $message = '' ) {
 			self::$logs[] = $message;

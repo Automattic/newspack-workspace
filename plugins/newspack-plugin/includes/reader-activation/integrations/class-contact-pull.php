@@ -166,9 +166,13 @@ class Contact_Pull {
 			if ( empty( $selected_fields ) ) {
 				continue;
 			}
-			$result = self::pull_single_integration( $user_id, $integration );
+			$result = self::pull_single_integration( $user_id, $integration, false, $selected_fields );
 			if ( is_wp_error( $result ) ) {
-				self::schedule_integration_retry( $integration->get_id(), $user_id, 0, $result );
+				if ( self::is_permanent_pull_error( $result ) ) {
+					Logger::log( sprintf( 'Not scheduling pull retries for integration "%s" of user %d — the failure is permanent: %s', $integration->get_id(), $user_id, $result->get_error_message() ), self::LOGGER_HEADER );
+				} else {
+					self::schedule_integration_retry( $integration->get_id(), $user_id, 0, $result );
+				}
 				$errors[] = sprintf( '[%s] %s', $integration->get_id(), $result->get_error_message() );
 			}
 		}
@@ -251,18 +255,27 @@ class Contact_Pull {
 	 * Pull data from a single integration and store selected fields.
 	 *
 	 * A pull whose reader-data writes fail returns a WP_Error: fetching alone
-	 * does not count as success, so batch callers tally the reader as an error
-	 * and the organic path schedules its usual bounded retries.
+	 * does not count as success, so batch callers tally the reader as an error.
+	 * The organic path schedules its usual bounded retries for transient
+	 * failures, but not for permanent ones (see is_permanent_pull_error()).
 	 *
-	 * @param int                                     $user_id     WordPress user ID.
-	 * @param \Newspack\Reader_Activation\Integration $integration The integration instance.
-	 * @param bool                                    $dry_run     Optional. When true, fetch and filter but skip
-	 *                                                             persistence, logging the would-be writes instead.
-	 *                                                             The external read still happens. Default false.
+	 * @param int                                     $user_id         WordPress user ID.
+	 * @param \Newspack\Reader_Activation\Integration $integration     The integration instance.
+	 * @param bool                                    $dry_run         Optional. When true, fetch and filter but skip
+	 *                                                                 persistence, logging the would-be writes instead.
+	 *                                                                 The external read still happens. Default false.
+	 * @param Incoming_Field[]|null                   $selected_fields Optional. Pre-resolved enabled incoming fields.
+	 *                                                                 Batch callers resolve once per integration and
+	 *                                                                 pass them in: resolution may hit the provider's
+	 *                                                                 API on legacy-shaped settings, so re-resolving
+	 *                                                                 per reader multiplies external requests. Default
+	 *                                                                 null (resolve here).
 	 * @return true|\WP_Error True on success, WP_Error on failure.
 	 */
-	public static function pull_single_integration( $user_id, $integration, $dry_run = false ) {
-		$selected_fields = $integration->get_enabled_incoming_fields();
+	public static function pull_single_integration( $user_id, $integration, $dry_run = false, $selected_fields = null ) {
+		if ( null === $selected_fields ) {
+			$selected_fields = $integration->get_enabled_incoming_fields();
+		}
 		if ( empty( $selected_fields ) ) {
 			return new \WP_Error( 'no_selected_incoming_fields', 'No selected incoming fields for ' . $integration->get_id() );
 		}
@@ -364,6 +377,22 @@ class Contact_Pull {
 	}
 
 	/**
+	 * Whether a pull failure is permanent — retrying cannot succeed.
+	 *
+	 * Reader_Data::update_item() rejections are validation-level and
+	 * deterministic (`invalid_value` for values whose sanitized JSON encoding
+	 * is falsy, `too_many_items` at the per-reader key cap), so a retry would
+	 * re-fetch from the provider only to fail the exact same write again.
+	 * Fetch-side errors (network, provider 5xx/429) stay retryable.
+	 *
+	 * @param \WP_Error|mixed $error The pull result.
+	 * @return bool True when the error can never be resolved by retrying.
+	 */
+	private static function is_permanent_pull_error( $error ) {
+		return $error instanceof \WP_Error && 'reader_data_write_failed' === $error->get_error_code();
+	}
+
+	/**
 	 * Schedule a retry for a failed integration pull via ActionScheduler.
 	 *
 	 * @param string           $integration_id The integration ID.
@@ -436,7 +465,9 @@ class Contact_Pull {
 	 *
 	 * @param array $retry_data The retry data.
 	 *
-	 * @throws \Exception When the final retry fails, so ActionScheduler marks the action as "failed".
+	 * @throws \Exception When the final retry fails — or the failure is permanent and
+	 *                    further retries cannot succeed — so ActionScheduler marks the
+	 *                    action as "failed".
 	 */
 	public static function execute_integration_retry( $retry_data ) {
 		if ( ! is_array( $retry_data ) || empty( $retry_data['integration_id'] ) || empty( $retry_data['user_id'] ) ) {
@@ -478,6 +509,15 @@ class Contact_Pull {
 				$result->get_error_message()
 			);
 			Logger::log( $error_message, self::LOGGER_HEADER );
+
+			// A permanent failure (e.g. the reader-data write is rejected by
+			// validation) fails identically on every attempt: end the chain now
+			// so ActionScheduler marks the action failed, instead of burning the
+			// remaining retries on provider re-fetches that cannot succeed.
+			if ( self::is_permanent_pull_error( $result ) ) {
+				throw new \Exception( esc_html( $error_message ) );
+			}
+
 			self::schedule_integration_retry( $integration_id, $user_id, $retry_count, $result );
 
 			if ( $retry_count >= self::MAX_RETRIES ) {

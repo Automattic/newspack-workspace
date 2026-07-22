@@ -88,6 +88,21 @@ class Test_RAS_Integrations_Backfill_Options extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A bare `--integration` (no value) reaches the parser as boolean true; it
+	 * must get a usage hint, not a lookup failure for integration "1". An
+	 * explicit empty value gets the same treatment.
+	 */
+	public function test_bare_integration_flag_errors_with_usage_hint() {
+		foreach ( [ true, '' ] as $value ) {
+			$result = $this->parse( [ 'integration' => $value ] );
+			$this->assertInstanceOf( \WP_Error::class, $result, 'A valueless --integration must not parse.' );
+			$this->assertSame( 'newspack_backfill_invalid_integration', $result->get_error_code() );
+			$this->assertStringContainsString( '--integration=esp', $result->get_error_message() );
+			$this->assertStringNotContainsString( '"1"', $result->get_error_message() );
+		}
+	}
+
+	/**
 	 * Push-only flags must hard-error when the direction includes pull — no
 	 * silent partial application.
 	 */

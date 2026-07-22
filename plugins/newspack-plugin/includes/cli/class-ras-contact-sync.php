@@ -280,6 +280,7 @@ class RAS_Contact_Sync {
 						break;
 					}
 
+					self::batch_boundary_pause();
 					$user_ids = self::get_batch_of_readers( $config['batch_size'], $config['offset'] + ( $batches * $config['batch_size'] ) );
 				}
 			}
@@ -331,9 +332,13 @@ class RAS_Contact_Sync {
 
 		// Only integrations with enabled incoming fields can be pulled (matches
 		// Contact_Pull::pull_all() semantics); the rest are skipped with a notice.
+		// The fields are resolved once per integration here and threaded into
+		// every pull: resolution may hit the provider's API on legacy-shaped
+		// settings, so re-resolving per reader would multiply external requests.
 		$pull_targets = [];
 		foreach ( $integrations as $id => $integration ) {
-			if ( empty( $integration->get_enabled_incoming_fields() ) ) {
+			$fields = $integration->get_enabled_incoming_fields();
+			if ( empty( $fields ) ) {
 				static::log(
 					sprintf(
 						// Translators: %s is the integration id.
@@ -343,7 +348,10 @@ class RAS_Contact_Sync {
 				);
 				continue;
 			}
-			$pull_targets[ $id ] = $integration;
+			$pull_targets[ $id ] = [
+				'integration' => $integration,
+				'fields'      => $fields,
+			];
 		}
 
 		if ( empty( $pull_targets ) ) {
@@ -398,10 +406,12 @@ class RAS_Contact_Sync {
 	 * mirroring the push leg where a contact is an error if any integration
 	 * rejected it.
 	 *
-	 * @param int                                       $user_id      WordPress user ID.
-	 * @param \Newspack\Reader_Activation\Integration[] $pull_targets Integrations to pull from, keyed by id.
-	 * @param array                                     $config       Batch configuration (active_only, is_dry_run).
-	 * @param array                                     $tally        Results tally, passed by reference.
+	 * @param int   $user_id      WordPress user ID.
+	 * @param array $pull_targets Pull targets keyed by integration id: `integration`
+	 *                            (the Integration instance) and `fields` (its
+	 *                            pre-resolved enabled incoming fields).
+	 * @param array $config       Batch configuration (active_only, is_dry_run).
+	 * @param array $tally        Results tally, passed by reference.
 	 */
 	private static function pull_contact( $user_id, $pull_targets, $config, &$tally ) {
 		if ( ! \get_userdata( $user_id ) ) {
@@ -422,8 +432,8 @@ class RAS_Contact_Sync {
 		}
 
 		$errors = 0;
-		foreach ( $pull_targets as $id => $integration ) {
-			$result = Contact_Pull::pull_single_integration( $user_id, $integration, $config['is_dry_run'] );
+		foreach ( $pull_targets as $id => $target ) {
+			$result = Contact_Pull::pull_single_integration( $user_id, $target['integration'], $config['is_dry_run'], $target['fields'] );
 			if ( \is_wp_error( $result ) ) {
 				static::log(
 					sprintf(
@@ -446,15 +456,17 @@ class RAS_Contact_Sync {
 	}
 
 	/**
-	 * Inter-batch hygiene for the bulk pull loop.
+	 * Inter-batch hygiene for the bulk reader loops (push and pull).
 	 *
 	 * A long CLI run accumulates every get_userdata() result in the runtime
 	 * object cache and fires an unspaced external request stream (one per
-	 * reader per pull target) — and since pull errors are deliberately not
+	 * reader per integration) — and since pull errors are deliberately not
 	 * retried, tripping a provider rate limit turns straight into tallied
 	 * errors the operator must re-run. Free the cache and pause for a second
-	 * at each batch boundary. No-op outside a real WP-CLI runtime (the WP_CLI
-	 * constant is not defined under PHPUnit), so tests are unaffected.
+	 * at each batch boundary. The pause costs one second per batch, so large
+	 * runs should raise --batch-size to keep the total negligible. No-op
+	 * outside a real WP-CLI runtime (the WP_CLI constant is not defined under
+	 * PHPUnit), so tests are unaffected.
 	 */
 	private static function batch_boundary_pause() {
 		if ( ! defined( 'WP_CLI' ) || ! WP_CLI ) {
@@ -652,7 +664,7 @@ class RAS_Contact_Sync {
 	 * : Comma-delimited list of order IDs. If passed, will only process subscriptions associated with those specific orders.
 	 *
 	 * [--batch-size=<number>]
-	 * : Number of subscriptions to query/process at once.
+	 * : Number of subscriptions to query/process at once. Defaults to 10. Each batch boundary pauses for one second, so raise this on large runs (e.g. 500) to keep the added wall time negligible.
 	 *
 	 * [--max-batches=<number>]
 	 * : Maximum number of batches to process.
@@ -679,7 +691,9 @@ class RAS_Contact_Sync {
 	 * @param array $assoc_args Associative args.
 	 */
 	public static function cli_sync_contacts( $args, $assoc_args ) {
-		WP_CLI::log( __( 'Note: `wp newspack esp sync` is a legacy alias of `wp newspack integrations backfill`.', 'newspack-plugin' ) );
+		// The alias notice goes to STDERR (warning) so the alias's STDOUT stays
+		// byte-identical for operator tooling that pipes or parses it.
+		WP_CLI::warning( __( '`wp newspack esp sync` is a legacy alias of `wp newspack integrations backfill`.', 'newspack-plugin' ) );
 
 		$config  = self::build_sync_config( $assoc_args );
 		$options = self::parse_sync_options( $assoc_args );
@@ -733,7 +747,7 @@ class RAS_Contact_Sync {
 	 * : (push only) Only process subscriptions migrated via the Newspack Subscription Migrations plugin. That plugin must be active.
 	 *
 	 * [--batch-size=<number>]
-	 * : Number of contacts to query/process at once.
+	 * : Number of contacts to query/process at once. Defaults to 10. Each batch boundary pauses for one second, so raise this on large runs (e.g. 500) to keep the added wall time negligible.
 	 *
 	 * [--max-batches=<number>]
 	 * : Maximum number of batches to process.
@@ -929,7 +943,19 @@ class RAS_Contact_Sync {
 			);
 		}
 
-		$integration_id = isset( $assoc_args['integration'] ) ? (string) $assoc_args['integration'] : '';
+		$integration_id = '';
+		if ( isset( $assoc_args['integration'] ) ) {
+			// WP-CLI passes a bare `--integration` (no value) as boolean true, which
+			// would otherwise cast to the baffling id "1"; an explicit empty value
+			// is equally meaningless. Ask for an id instead.
+			if ( ! is_string( $assoc_args['integration'] ) || '' === $assoc_args['integration'] ) {
+				return new \WP_Error(
+					'newspack_backfill_invalid_integration',
+					__( '--integration requires an integration id, e.g. --integration=esp.', 'newspack-plugin' )
+				);
+			}
+			$integration_id = $assoc_args['integration'];
+		}
 		if ( '' !== $integration_id ) {
 			$active = Integrations::get_active_configured_integrations();
 			if ( ! isset( $active[ $integration_id ] ) ) {

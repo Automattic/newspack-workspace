@@ -280,6 +280,8 @@ The pull pipeline (`Contact_Pull` + `Contact_Cron`) runs on every logged-in page
 
 `Contact_Pull` schedules per-integration retries with a `30s → 2min → 8min → 30min → 2h` backoff for up to 5 attempts. Retries run under the integration's ActionScheduler group (`newspack-integration-{id}`) using the hook `newspack_contact_pull_retry`.
 
+Only transient failures (network errors, provider 5xx/429) are retried. A rejected reader-data write (`reader_data_write_failed`) is permanent — the value is unwriteable by validation, so retrying would re-fetch from the provider only to fail the same write again. Permanent failures surface as errors without scheduling a retry, and one surfacing mid-chain fails its action immediately instead of burning the remaining attempts.
+
 ### Incoming fields
 
 `get_available_incoming_fields()` returns the schema offered by the external system. Each field is an `Incoming_Field`:

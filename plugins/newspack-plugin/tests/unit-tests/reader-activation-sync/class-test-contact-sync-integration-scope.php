@@ -79,4 +79,20 @@ class Test_Contact_Sync_Integration_Scope extends WP_UnitTestCase {
 		$this->assertTrue( $result );
 		$this->assertSame( 0, Failing_Sample_Integration::$push_count );
 	}
+
+	/**
+	 * The failure path must honor the scope too. Retry scheduling lives inside
+	 * the fan-out loop (one schedule per failed integration), so proving the
+	 * excluded integration sees no attempt at all on a scoped failure also
+	 * proves no retry can be created for it — pinning the docblock's "retries
+	 * for it are scheduled normally" at the observable seam (NPPD-2076).
+	 */
+	public function test_scoped_push_failure_touches_only_the_target_integration() {
+		Failing_Sample_Integration::$should_fail = true;
+
+		$result = $this->sync_with_options( [ 'integration_id' => 'scope_b' ] );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( [ 'scope_b' ], Failing_Sample_Integration::$push_ids, 'Only the scoped integration was attempted on the failure path.' );
+	}
 }
