@@ -713,6 +713,12 @@ abstract class Integration {
 	 * the Outbound UI reflects what is actually pushed. An explicitly saved
 	 * selection (even an empty one) always wins (NPPD-2107).
 	 *
+	 * Two legacy-mode caveats, accepted for this transitional schema: the
+	 * legacy pipeline upstream-filters by the ESP selection, so an explicit
+	 * selection can only narrow that set (a field the ESP integration has
+	 * disabled never syncs even when enabled here); and once a selection is
+	 * saved, only deleting the integration's option restores inheritance.
+	 *
 	 * @return string[] List of enabled field names.
 	 */
 	public function get_enabled_outgoing_fields() {
@@ -724,8 +730,19 @@ abstract class Integration {
 		if ( 'legacy' === Sync\Metadata::get_version() && 'esp' !== $this->get_id() ) {
 			$esp = Integrations::get_integration( 'esp' );
 			if ( $esp ) {
-				return $esp->get_enabled_outgoing_fields();
+				return array_values( $esp->get_enabled_outgoing_fields() );
 			}
+
+			// Registry miss (pre-init or a directly constructed integration —
+			// integrations register on init priority 5): mirror the ESP
+			// integration's own fallback chain instead of failing closed to an
+			// empty selection, which would strip every field where the
+			// pre-selection behavior was full passthrough.
+			$legacy = \get_option( Sync\Metadata::FIELDS_OPTION, null );
+			if ( null !== $legacy && is_array( $legacy ) ) {
+				return array_values( $legacy );
+			}
+			return Sync\Metadata::get_default_fields();
 		}
 
 		return [];
@@ -1023,7 +1040,7 @@ abstract class Integration {
 	 * @param array $contact Contact data with prefixed legacy metadata.
 	 * @return array Contact data with metadata narrowed to enabled fields.
 	 */
-	private function prepare_contact_legacy( $contact ) {
+	private function prepare_contact_legacy( array $contact ): array {
 		if ( 'esp' === $this->get_id() ) {
 			return $contact;
 		}

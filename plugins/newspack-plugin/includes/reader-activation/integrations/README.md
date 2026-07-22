@@ -235,13 +235,13 @@ The configure-view in `src/wizards/audience/views/integrations/` honors this pre
 
 ## Push (Outgoing Sync)
 
-When a contact needs to be synced, the framework calls `push_contact_data()` on every active integration. The contact array is the Newspack canonical form (email, name, metadata, etc.). Implementations should call `$this->prepare_contact( $contact )` first, which:
+When a contact needs to be synced, the framework calls `push_contact_data()` on every active integration. The contact array is the Newspack canonical form (email, name, metadata, etc.). Implementations should call `$this->prepare_contact( $contact )` first, which, on the v1 metadata schema:
 
 1. Filters `$contact['metadata']` to the keys enabled on this integration.
 2. Renames keys using the integration's metadata prefix.
 3. Preserves keys already in prefixed form if the underlying field is enabled.
 
-`prepare_contact()` is a no-op when the site is still on the legacy metadata schema (where the metadata classes pre-filter), which keeps newly-built integrations compatible with un-migrated sites.
+On the legacy metadata schema (sites without `NEWSPACK_SYNC_METADATA_VERSION`), the metadata classes pre-filter and prefix the data by the **ESP integration's** field selection before it reaches `prepare_contact()`. The `esp` integration takes it unchanged; every other integration still narrows the set to its own enabled Outbound fields — matching de-prefixed labels, including the `Label: ` prefix shape for UTM sub-keys, with unprefixed sync-control keys (`status`, `status_if_new`) always passing through. An integration that has **never saved** an Outbound selection inherits the ESP integration's effective selection, so un-migrated sites keep their pre-existing payloads; an explicitly saved selection always wins, and saving with nothing checked genuinely means "push no metadata fields". Two legacy-mode caveats: the upstream pre-filter runs first, so an explicit selection can only narrow the ESP's set; and once a selection is saved, inheritance only returns if the integration's `newspack_integration_outgoing_fields_*` option is deleted (NPPD-2107).
 
 ### Optional `$options` parameter
 
