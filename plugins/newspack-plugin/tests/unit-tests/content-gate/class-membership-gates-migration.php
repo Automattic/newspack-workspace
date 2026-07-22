@@ -243,6 +243,41 @@ HTML;
 	}
 
 	/**
+	 * A gate post may interleave several top-level wrappers of the same type (a post
+	 * mixing public and members-only sections). Every wrapper's content is kept, in
+	 * document order, for both wrapper types — no wrapper silently wins over another.
+	 */
+	public function test_extract_gate_layouts_concatenates_repeated_top_level_wrappers() {
+		$gate_content = <<<'HTML'
+<!-- wp:woocommerce-memberships/non-member-content -->
+<!-- wp:paragraph --><p>First upsell.</p><!-- /wp:paragraph -->
+<!-- /wp:woocommerce-memberships/non-member-content -->
+<!-- wp:woocommerce-memberships/member-content -->
+<!-- wp:paragraph --><p>First members-only section.</p><!-- /wp:paragraph -->
+<!-- /wp:woocommerce-memberships/member-content -->
+<!-- wp:woocommerce-memberships/non-member-content -->
+<!-- wp:paragraph --><p>Second upsell.</p><!-- /wp:paragraph -->
+<!-- /wp:woocommerce-memberships/non-member-content -->
+<!-- wp:woocommerce-memberships/member-content -->
+<!-- wp:paragraph --><p>Second members-only section.</p><!-- /wp:paragraph -->
+<!-- /wp:woocommerce-memberships/member-content -->
+HTML;
+		$gate_post = $this->create_gate_post( $gate_content );
+
+		$layouts = $this->invoke_private_static( 'extract_gate_layouts', [ $gate_post ] );
+
+		$this->assertStringContainsString( 'First upsell.', $layouts['registration'] );
+		$this->assertStringContainsString( 'Second upsell.', $layouts['registration'] );
+		$this->assertStringContainsString( 'First members-only section.', $layouts['custom_access'] );
+		$this->assertStringContainsString( 'Second members-only section.', $layouts['custom_access'] );
+		$this->assertLessThan(
+			strpos( $layouts['registration'], 'Second upsell.' ),
+			strpos( $layouts['registration'], 'First upsell.' ),
+			'Wrappers are concatenated in document order.'
+		);
+	}
+
+	/**
 	 * NPPD-2058: only top-level wrapper blocks are inspected, so a gate whose
 	 * non-member-content wrapper is nested inside another block (here a group)
 	 * migrates as an EMPTY registration layout. The stacked NPPD-2058 fix walks

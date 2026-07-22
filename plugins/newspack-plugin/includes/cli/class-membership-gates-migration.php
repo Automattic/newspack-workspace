@@ -4,8 +4,10 @@
  * layouts to Newspack Access Control content gates.
  *
  * Ported from the standalone `migrate-memberships` drop-in so the tooling ships
- * with the plugin (the CLI class loads only under WP_CLI, so there is no
- * web-request cost). The command reads each published Membership plan's content
+ * with the plugin. The class file is included on every request (like the other
+ * CLI classes), but only the command registration is gated on WP_CLI, so the
+ * runtime cost outside CLI is a class definition. The command reads each
+ * published Membership plan's content
  * restriction rules plus the `np_memberships_gate` layout posts and writes the
  * equivalent Access Control gate(s), content rules, and gate layouts through the
  * Content_Gate / Content_Rules data layer.
@@ -42,6 +44,10 @@ class Membership_Gates_Migration {
 	 *
 	 * Dry-run by default; pass --live to write.
 	 *
+	 * Re-running is NOT edit-preserving: an existing gate matched by title has its
+	 * content rules and layout content overwritten with freshly extracted markup, so
+	 * any customization made in the admin after a previous run is lost.
+	 *
 	 * ## OPTIONS
 	 *
 	 * [--live]
@@ -63,7 +69,17 @@ class Membership_Gates_Migration {
 	 */
 	public function migrate_membership_gates( $args, $assoc_args ) {
 		$dry_run = ! (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'live', false );
-		$plan_id = (int) \WP_CLI\Utils\get_flag_value( $assoc_args, 'plan', 0 );
+
+		// A mistyped --plan must never silently widen the run to every plan, so an
+		// unusable value is a hard error rather than a fallback to "no filter".
+		$plan_arg = \WP_CLI\Utils\get_flag_value( $assoc_args, 'plan', null );
+		$plan_id  = 0;
+		if ( null !== $plan_arg ) {
+			if ( ! is_numeric( $plan_arg ) || (int) $plan_arg <= 0 ) {
+				WP_CLI::error( sprintf( 'Invalid --plan value "%s". Pass a positive membership plan post ID.', $plan_arg ) );
+			}
+			$plan_id = (int) $plan_arg;
+		}
 
 		// Pre-flight checks.
 		if ( ! class_exists( 'Newspack\Content_Gate' ) ) {
@@ -74,15 +90,6 @@ class Membership_Gates_Migration {
 		}
 		if ( ! function_exists( 'wc_memberships' ) ) {
 			WP_CLI::error( 'WooCommerce Memberships is not active. Aborting.' );
-		}
-
-		// The standalone `migrate-memberships` drop-in registers the same command
-		// name (defaulting to WRITE — the inverse of this port's dry-run default).
-		// This port's `init` registration overrides the drop-in's `plugins_loaded`
-		// one, so this callback is the one running — but the ambiguity is a footgun,
-		// so warn loudly and tell the operator to deactivate the drop-in.
-		if ( class_exists( 'Newspack_Migrate_Membership_Gates_Command' ) ) {
-			WP_CLI::warning( 'The standalone `migrate-memberships` drop-in is also active and registers this same command (with the opposite, write-by-default flag convention). This in-plugin command is running, but deactivate/delete the drop-in to avoid confusion.' );
 		}
 
 		if ( $dry_run ) {
@@ -103,14 +110,17 @@ class Membership_Gates_Migration {
 		WP_CLI::line( sprintf( 'Found %d membership plan(s). Starting migration…', $total ) );
 		WP_CLI::line( '' );
 
-		// Pre-load existing gates indexed by lower-cased title.
+		// Pre-load existing gates indexed by lower-cased title. Only published gates
+		// are considered: the frontend enforces nothing else, so writing into a
+		// draft/trashed title match would produce a gate that never restricts.
 		$existing_gates = [];
-		foreach ( \Newspack\Content_Gate::get_gates() as $gate ) {
+		foreach ( \Newspack\Content_Gate::get_gates( \Newspack\Content_Gate::GATE_CPT, 'publish' ) as $gate ) {
 			$existing_gates[ trim( strtolower( $gate['title'] ) ) ] = $gate['id'];
 		}
 
-		$summary = [];
-		$skipped = [];
+		$summary        = [];
+		$skipped        = [];
+		$titles_written = [];
 
 		// Phase 1: group plans by content-rule fingerprint.
 		$plan_groups = self::group_plans_by_fingerprint( $plan_ids, $skipped );
@@ -126,17 +136,20 @@ class Membership_Gates_Migration {
 		foreach ( $plan_groups as $group ) {
 			$progress->tick();
 
-			$ac_rules     = $group[0]['ac_rules'];
-			$gate_title   = implode( ' | ', array_column( $group, 'name' ) );
-			$gate_key     = trim( strtolower( $gate_title ) );
-			$has_purchase = ! empty(
+			$layout_errors = [];
+			$ac_rules      = $group[0]['ac_rules'];
+			$gate_title    = implode( ' | ', array_column( $group, 'name' ) );
+			$gate_key      = trim( strtolower( $gate_title ) );
+			$has_purchase  = ! empty(
 				array_filter( $group, fn( $g ) => 'purchase' === $g['access_method'] )
 			);
 			$access_type = $has_purchase ? 'purchase' : 'signup';
 
+			// Cast to int for parity with the REST write path, which stores subscription
+			// access-rule values as ints; raw `_product_ids` meta can hold strings.
 			$merged_product_ids = array_values(
 				array_unique(
-					array_merge( ...array_column( $group, 'product_ids' ) )
+					array_map( 'absint', array_merge( ...array_column( $group, 'product_ids' ) ) )
 				)
 			);
 			// Drop product variations — gates should reference parent products only.
@@ -147,14 +160,28 @@ class Membership_Gates_Migration {
 				)
 			);
 
-			$action  = isset( $existing_gates[ $gate_key ] ) ? 'updated' : 'created';
+			// Gate identity is the title, but groups are keyed by rule fingerprint —
+			// so two same-named plans with different rules land in different groups
+			// and would silently overwrite each other's rules and layouts.
+			if ( isset( $titles_written[ $gate_key ] ) ) {
+				WP_CLI::warning(
+					sprintf(
+						'Two plan groups resolve to the gate title "%s" (same plan name(s), different content rules). The later group overwrites the earlier one — rename one of the plans and re-run.',
+						$gate_title
+					)
+				);
+			}
+			$titles_written[ $gate_key ] = true;
+
+			$action  = array_key_exists( $gate_key, $existing_gates ) ? 'updated' : 'created';
 			$gate_id = $existing_gates[ $gate_key ] ?? null;
 
-			// Keep $existing_gates consistent for both live and dry-run passes so
-			// subsequent groups with the same title (theoretically impossible given
-			// unique fingerprints, but defensive) are correctly detected as 'updated'.
-			if ( null === $gate_id ) {
-				$existing_gates[ $gate_key ] = -1; // Sentinel: gate does not exist yet.
+			// Keep $existing_gates consistent for both live and dry-run passes so a
+			// later group with the same title is reported as 'updated'. A null value
+			// means "claimed by this run but not created yet" (dry-run, or an earlier
+			// group in the same pass), which the summary prints as '(pending)'.
+			if ( ! array_key_exists( $gate_key, $existing_gates ) ) {
+				$existing_gates[ $gate_key ] = null;
 			}
 
 			// Resolve layout content — try each plan in the group for a plan-specific gate.
@@ -192,21 +219,31 @@ class Membership_Gates_Migration {
 				}
 				$existing_gates[ $gate_key ] = $gate_id;
 
-				// Set content rules.
+				// Set content rules. WooCommerce Memberships restricts the *union* of a
+				// plan's restriction rules, while the gate evaluator defaults an unset
+				// match mode to AND — so the mode has to be written explicitly or every
+				// multi-rule plan under-gates after cutover.
 				\Newspack\Content_Rules::update_gate_content_rules( $gate_id, $ac_rules );
+				\Newspack\Content_Rules::update_gate_content_rules_match( $gate_id, 'any' );
 
 				// Registration layout (always).
-				self::apply_layout( $gate_id, $gate_title, 'registration', $layouts['registration'] );
+				if ( ! self::apply_layout( $gate_id, $gate_title, 'registration', $layouts['registration'] ) ) {
+					$layout_errors[] = 'registration layout';
+				}
 
 				// Custom access layout (purchase plans only).
 				if ( $has_purchase && null !== $layouts['custom_access'] ) {
-					self::apply_layout( $gate_id, $gate_title, 'custom_access', $layouts['custom_access'], $merged_product_ids );
+					if ( ! self::apply_layout( $gate_id, $gate_title, 'custom_access', $layouts['custom_access'], $merged_product_ids ) ) {
+						$layout_errors[] = 'paid access layout';
+					}
 				}
 			}
 
 			$summary[] = [
 				'plan_name'     => $gate_title,
-				'action'        => $dry_run ? $action . ' (dry-run)' : $action,
+				'action'        => empty( $layout_errors )
+					? ( $dry_run ? $action . ' (dry-run)' : $action )
+					: 'ERROR: could not write ' . implode( ' + ', $layout_errors ),
 				'gate_id'       => $gate_id ?? '(pending)',
 				'content_rules' => count( $ac_rules ),
 				'access_type'   => $access_type,
@@ -254,7 +291,7 @@ class Membership_Gates_Migration {
 	/**
 	 * Group published plans by the fingerprint of their mapped content rules.
 	 *
-	 * Manual-only plans (no content gate) and non-signup plans with no restrictions
+	 * Manual-only plans (no content gate) and plans with no content restriction rules
 	 * are collected into $skipped instead of grouped. Plans that map to the same
 	 * canonical rule fingerprint share a group (and therefore a single gate).
 	 *
@@ -275,7 +312,20 @@ class Membership_Gates_Migration {
 		$plan_groups = [];
 
 		foreach ( $plan_ids as $pid ) {
-			$plan          = new \WC_Memberships_Membership_Plan( $pid );
+			// The factory validates the post and lets WC Memberships integrations
+			// substitute their own plan subclasses (e.g. the Subscriptions-aware one),
+			// which direct construction bypasses.
+			$plan = \wc_memberships_get_membership_plan( $pid );
+			if ( ! $plan ) {
+				$skipped[] = [
+					'plan_name'     => sprintf( '(plan %d)', $pid ),
+					'action'        => 'skipped (not a valid membership plan)',
+					'gate_id'       => '—',
+					'content_rules' => '—',
+					'access_type'   => '—',
+				];
+				continue;
+			}
 			$plan_name     = $plan->get_name();
 			$access_method = $plan->get_access_method();
 
@@ -294,10 +344,11 @@ class Membership_Gates_Migration {
 			$wc_rules = $plan->get_content_restriction_rules();
 			$ac_rules = self::map_rules_to_ac_format( $wc_rules );
 
-			// Allow signup plans with no explicit content rules to proceed — a
-			// free-registration gate may gate all content implicitly without needing
-			// specific rule entries.
-			if ( empty( $ac_rules ) && 'signup' !== $access_method ) {
+			// A plan with no content restriction rules restricts nothing in WooCommerce
+			// Memberships, and a gate with empty content_rules is skipped for every post
+			// by Content_Restriction_Control::get_post_gates() — so migrating one would
+			// only publish an inert gate the summary misreports as created.
+			if ( empty( $ac_rules ) ) {
 				$skipped[] = [
 					'plan_name'     => $plan_name,
 					'action'        => 'skipped (no restrictions)',
@@ -308,10 +359,6 @@ class Membership_Gates_Migration {
 				continue;
 			}
 
-			// Note: signup plans with no content rules all share the same empty
-			// fingerprint and are merged into a single gate with a combined title.
-			// This is intentional — a free-registration gate that restricts no
-			// specific content applies site-wide.
 			$fingerprint                   = self::compute_rules_fingerprint( $ac_rules );
 			$plan_groups[ $fingerprint ][] = [
 				'pid'           => $pid,
@@ -335,9 +382,11 @@ class Membership_Gates_Migration {
 	 * @param string     $content     The block markup for the layout.
 	 * @param int[]|null $product_ids Merged parent product IDs for custom_access purchase rules.
 	 *
-	 * @return void
+	 * @return bool True when the mode was activated against a usable layout post. False
+	 *              when no layout could be written — the mode is then left untouched,
+	 *              since activating it with no layout yields a gate that never restricts.
 	 */
-	private static function apply_layout( int $gate_id, string $gate_title, string $mode, string $content, ?array $product_ids = null ): void {
+	private static function apply_layout( int $gate_id, string $gate_title, string $mode, string $content, ?array $product_ids = null ): bool {
 		if ( 'custom_access' === $mode ) {
 			$settings  = \Newspack\Content_Gate::get_custom_access_settings( $gate_id );
 			$layout_id = $settings['gate_layout_id'] ?? 0;
@@ -348,6 +397,14 @@ class Membership_Gates_Migration {
 			$label     = 'Registration Layout';
 		}
 
+		// Gate content authored by an admin with unfiltered_html can legitimately
+		// contain iframes/embeds/Custom HTML. A WP-CLI run has no user, so kses would
+		// strip those on re-save and the migrated layout would not match its source.
+		$kses_was_active = \has_filter( 'content_save_pre', 'wp_filter_post_kses' );
+		if ( $kses_was_active ) {
+			\kses_remove_filters();
+		}
+
 		if ( $layout_id ) {
 			// The overwrite is unconditional even when $content is '' — mirroring the
 			// drop-in. Content_Gate::create_gate() seeds a default block-pattern layout,
@@ -355,12 +412,26 @@ class Membership_Gates_Migration {
 			// np_memberships_gate found for the group, or a nested/reusable wrapper) thus
 			// blanks that default. Preserving those defaults on empty content is the
 			// empty-layout fix tracked in NPPD-2058; kept faithful here.
-			\wp_update_post(
+			$updated = \wp_update_post(
 				[
 					'ID'           => $layout_id,
 					'post_content' => $content,
-				]
+				],
+				true // Return WP_Error on failure.
 			);
+			if ( \is_wp_error( $updated ) || ! $updated ) {
+				// A stale gate_layout_id pointing at a deleted post makes this a no-op.
+				WP_CLI::warning(
+					sprintf(
+						'Could not update %s (post %d) for "%s": %s',
+						strtolower( $label ),
+						$layout_id,
+						$gate_title,
+						\is_wp_error( $updated ) ? $updated->get_error_message() : 'the layout post no longer exists'
+					)
+				);
+				$layout_id = 0;
+			}
 		} else {
 			$layout_id = \Newspack\Content_Gate::create_gate_layout(
 				sprintf( '%s — %s', $gate_title, $label ),
@@ -368,17 +439,27 @@ class Membership_Gates_Migration {
 			);
 			if ( \is_wp_error( $layout_id ) ) {
 				WP_CLI::warning( sprintf( 'Could not create %s for "%s": %s', strtolower( $label ), $gate_title, $layout_id->get_error_message() ) );
+				$layout_id = 0;
 			}
 		}
 
-		$resolved_layout_id = \is_wp_error( $layout_id ) ? 0 : $layout_id;
+		if ( $kses_was_active ) {
+			\kses_init_filters();
+		}
+
+		// Without a layout post the mode must stay as it is: Content_Restriction_Control
+		// requires a truthy gate_layout_id, so activating it here would publish a gate
+		// that silently never restricts.
+		if ( ! $layout_id ) {
+			return false;
+		}
 
 		if ( 'custom_access' === $mode ) {
 			\Newspack\Content_Gate::update_custom_access_settings(
 				$gate_id,
 				[
 					'active'         => true,
-					'gate_layout_id' => $resolved_layout_id,
+					'gate_layout_id' => $layout_id,
 					'access_rules'   => ! empty( $product_ids )
 						? [
 							[
@@ -396,10 +477,12 @@ class Membership_Gates_Migration {
 				$gate_id,
 				[
 					'active'         => true,
-					'gate_layout_id' => $resolved_layout_id,
+					'gate_layout_id' => $layout_id,
 				]
 			);
 		}
+
+		return true;
 	}
 
 	/**
@@ -471,7 +554,8 @@ class Membership_Gates_Migration {
 	 * Find the np_memberships_gate post for a given plan ID.
 	 *
 	 * Looks for a plan-specific gate first, then optionally falls back to the
-	 * "Primary" gate (the one with no `plans` meta).
+	 * "Primary" gate recorded in the `newspack_memberships_gate_post_id` option
+	 * (and, if that is unset or stale, to the newest gate with no `plans` meta).
 	 *
 	 * @param int  $plan_id          The membership plan post ID.
 	 * @param bool $primary_fallback Whether to fall back to the Primary gate.
@@ -503,7 +587,23 @@ class Membership_Gates_Migration {
 			return null;
 		}
 
-		// Fall back to the Primary gate (no `plans` meta).
+		// Fall back to the Primary gate, which the plugin records by option. Prefer
+		// that over inferring it from the absence of `plans` meta — "no plans meta"
+		// is incidental, and the meta query below just returns the newest plan-less
+		// gate, which diverges as soon as more than one exists.
+		$primary_gate_id = \Newspack\Memberships::get_gate_post_id();
+		if ( $primary_gate_id ) {
+			$primary_gate = \get_post( $primary_gate_id );
+			if (
+				$primary_gate instanceof \WP_Post
+				&& \Newspack\Memberships::GATE_CPT === $primary_gate->post_type
+				&& 'publish' === $primary_gate->post_status
+			) {
+				return $primary_gate;
+			}
+		}
+
+		// The option is unset or stale — fall back to the newest plan-less gate.
 		$primary_gates = \get_posts(
 			[
 				'post_type'      => 'np_memberships_gate',
@@ -551,10 +651,14 @@ class Membership_Gates_Migration {
 	 * np_memberships_gate post.
 	 *
 	 * - Registration layout: inner block content of the top-level
-	 *   `woocommerce-memberships/non-member-content` block (the gate/upsell shown to
+	 *   `woocommerce-memberships/non-member-content` block(s) (the gate/upsell shown to
 	 *   non-members).
 	 * - Custom access layout: inner block content of the top-level
-	 *   `woocommerce-memberships/member-content` block (shown to paying members).
+	 *   `woocommerce-memberships/member-content` block(s) (shown to paying members).
+	 *
+	 * A gate post may interleave several top-level wrappers of the same type — a post
+	 * mixing public and members-only sections. Each type's wrappers are concatenated in
+	 * document order so no authored content is dropped.
 	 *
 	 * This is the layout-extraction seam for NPPD-2058: only top-level wrapper
 	 * blocks are inspected, so gates whose wrappers are nested (e.g. inside a group
@@ -571,11 +675,11 @@ class Membership_Gates_Migration {
 		$custom_access_markup = null;
 
 		foreach ( $blocks as $block ) {
-			if ( 'woocommerce-memberships/non-member-content' === $block['blockName'] && null === $registration_markup ) {
-				$registration_markup = self::serialize_gate_inner_blocks( $block['innerBlocks'] );
+			if ( 'woocommerce-memberships/non-member-content' === $block['blockName'] ) {
+				$registration_markup = ( $registration_markup ?? '' ) . self::serialize_gate_inner_blocks( $block['innerBlocks'] );
 			}
 			if ( 'woocommerce-memberships/member-content' === $block['blockName'] ) {
-				$custom_access_markup = self::serialize_gate_inner_blocks( $block['innerBlocks'] );
+				$custom_access_markup = ( $custom_access_markup ?? '' ) . self::serialize_gate_inner_blocks( $block['innerBlocks'] );
 			}
 		}
 

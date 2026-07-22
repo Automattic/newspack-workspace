@@ -102,6 +102,14 @@ class Initializer {
 			WP_CLI::add_command( 'newspack migrate-team-products', [ 'Newspack\CLI\Teams_Migration', 'migrate_team_products' ] );
 			WP_CLI::add_command( 'newspack migrate-manual-members', [ 'Newspack\CLI\Teams_Migration', 'migrate_manual_members' ] );
 			WP_CLI::add_command( 'newspack backfill-team-managers', [ 'Newspack\CLI\Teams_Migration', 'backfill_team_managers' ] );
+			// The standalone `migrate-memberships` drop-in registers the same command
+			// name with the opposite, write-by-default flag convention. Registration is
+			// last-wins with no error, so warn here — at registration time, before any
+			// command is dispatched — rather than inside the callback, which only runs
+			// when this registration happens to be the one that won.
+			if ( class_exists( 'Newspack_Migrate_Membership_Gates_Command' ) ) {
+				WP_CLI::warning( 'The standalone `migrate-memberships` drop-in is active and registers `newspack migrate-membership-gates` too, with the opposite (write-by-default) flag convention. Deactivate/delete the drop-in so it is unambiguous which command runs.' );
+			}
 			WP_CLI::add_command( 'newspack migrate-membership-gates', [ 'Newspack\CLI\Membership_Gates_Migration', 'migrate_membership_gates' ] );
 		}
 
