@@ -201,7 +201,7 @@ export default function SubscriberList() {
 				// translators: %s: singular group label (publisher-customisable).
 				label: sprintf( __( '%s role', 'newspack-plugin' ), GROUP_LABEL ),
 				// Hidden by default (not in DEFAULT_VIEW fields). Display-only until
-				// the endpoint gains a group-role filter (a later slice). One line per
+				// the endpoint gains a group-role filter (NPPD-2111). One line per
 				// group, plan-qualified only when the reader belongs to more than one.
 				enableSorting: false,
 				render: ( { item } ) => {
