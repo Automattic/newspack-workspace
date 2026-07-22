@@ -1,50 +1,114 @@
-<?php // phpcs:disable Squiz.Commenting.FunctionComment.Missing, Squiz.Commenting.ClassComment.Missing, Squiz.Commenting.VariableComment.Missing, Generic.Files.OneObjectStructurePerFile.MultipleFound, Universal.Files.SeparateFunctionsFromOO.Mixed, Universal.Namespaces.DisallowCurlyBraceSyntax.Forbidden, Universal.Namespaces.DisallowDeclarationWithoutName.Forbidden, Universal.Namespaces.OneDeclarationPerFile.MultipleFound -- Curly-brace namespace blocks are the only way to stub both the WP_CLI\Utils functions and the global WP_CLI class in one file.
+<?php // phpcs:ignoreFile
 /**
- * Minimal WP_CLI stubs for exercising CLI command classes under PHPUnit, where
- * the real WP_CLI runtime is not loaded. Shared by every test that drives a
- * `Newspack\CLI\*` command method directly. Output is captured in
- * `WP_CLI::$messages` as `[ level, message ]` pairs so tests can assert on the
- * reporting surface; `error()` throws, matching the real abort semantics.
+ * Minimal WP-CLI mocks so CLI command methods can be exercised in unit tests,
+ * where the real WP-CLI runtime is not loaded. Shared by every test that drives
+ * a `Newspack\CLI\*` command method directly.
+ *
+ * The WP_CLI class records every emitted message on two surfaces so different
+ * suites can assert in the style that fits them:
+ *
+ * - WP_CLI::$output   — flat rendered strings ('Warning: ...', 'Success: ...'),
+ *                       convenient for whole-transcript substring assertions.
+ * - WP_CLI::$messages — raw `[ level, message ]` pairs ('line', 'log',
+ *                       'warning', 'success', and 'table' for format_items),
+ *                       convenient for level-filtered assertions.
+ *
+ * WP_CLI::error() throws WP_CLI_Mock_Exception (an \Exception subclass) so
+ * tests can assert an abort — real WP-CLI exits the process. Only the surface
+ * used by the Newspack CLI classes is implemented.
  *
  * @package Newspack\Tests
  */
 
-namespace WP_CLI\Utils {
-	if ( ! function_exists( 'WP_CLI\Utils\get_flag_value' ) ) {
-		function get_flag_value( $assoc_args, $flag, $default = null ) {
-			return isset( $assoc_args[ $flag ] ) ? $assoc_args[ $flag ] : $default;
-		}
+namespace {
+	if ( ! class_exists( 'WP_CLI_Mock_Exception' ) ) {
+		/**
+		 * Thrown by the WP_CLI::error() mock in place of a process exit.
+		 */
+		class WP_CLI_Mock_Exception extends \Exception {}
 	}
-	if ( ! function_exists( 'WP_CLI\Utils\format_items' ) ) {
-		function format_items( $format, $items, $fields ) {
-			\WP_CLI::$messages[] = [ 'table', wp_json_encode( array_values( $items ) ) ];
+
+	if ( ! class_exists( 'WP_CLI' ) ) {
+		/**
+		 * Recording mock of the WP_CLI logger surface.
+		 */
+		class WP_CLI {
+			/**
+			 * Every line emitted through the mock as a rendered string, in order.
+			 *
+			 * @var string[]
+			 */
+			public static $output = [];
+
+			/**
+			 * Every message emitted through the mock as a `[ level, message ]`
+			 * pair, in order.
+			 *
+			 * @var array[]
+			 */
+			public static $messages = [];
+
+			/**
+			 * Clear recorded output. Call from a test's set_up().
+			 */
+			public static function reset() {
+				self::$output   = [];
+				self::$messages = [];
+			}
+
+			public static function line( $message = '' ) {
+				self::$output[]   = (string) $message;
+				self::$messages[] = [ 'line', (string) $message ];
+			}
+
+			public static function log( $message ) {
+				self::$output[]   = (string) $message;
+				self::$messages[] = [ 'log', (string) $message ];
+			}
+
+			public static function warning( $message ) {
+				self::$output[]   = 'Warning: ' . $message;
+				self::$messages[] = [ 'warning', (string) $message ];
+			}
+
+			public static function success( $message ) {
+				self::$output[]   = 'Success: ' . $message;
+				self::$messages[] = [ 'success', (string) $message ];
+			}
+
+			/**
+			 * Real WP_CLI::error() prints and exits; the mock throws instead so the
+			 * abort is observable and the test process survives.
+			 *
+			 * @param string $message Error message.
+			 * @throws WP_CLI_Mock_Exception Always.
+			 */
+			public static function error( $message ) {
+				throw new \WP_CLI_Mock_Exception( (string) $message );
+			}
 		}
 	}
 }
 
-namespace {
-	if ( ! class_exists( 'WP_CLI' ) ) {
-		class WP_CLI {
-			public static $messages = [];
+namespace WP_CLI\Utils {
+	if ( ! function_exists( 'WP_CLI\Utils\get_flag_value' ) ) {
+		// isset(), not array_key_exists() — matching real WP-CLI's implementation.
+		function get_flag_value( $assoc_args, $flag, $default = null ) {
+			return isset( $assoc_args[ $flag ] ) ? $assoc_args[ $flag ] : $default;
+		}
+	}
 
-			public static function reset() {
-				self::$messages = [];
-			}
-			public static function log( $message ) {
-				self::$messages[] = [ 'log', (string) $message ];
-			}
-			public static function line( $message = '' ) {
-				self::$messages[] = [ 'line', (string) $message ];
-			}
-			public static function success( $message ) {
-				self::$messages[] = [ 'success', (string) $message ];
-			}
-			public static function warning( $message ) {
-				self::$messages[] = [ 'warning', (string) $message ];
-			}
-			public static function error( $message ) {
-				throw new \Exception( esc_html( $message ) );
-			}
+	if ( ! function_exists( 'WP_CLI\Utils\format_items' ) ) {
+		function format_items( $format, $items, $fields ) {
+			$items               = is_array( $items ) ? $items : iterator_to_array( $items );
+			\WP_CLI::$output[]   = sprintf( '(%s: %d row(s))', $format, count( $items ) );
+			\WP_CLI::$messages[] = [ 'table', wp_json_encode( array_values( $items ) ) ];
+		}
+	}
+
+	if ( ! function_exists( 'WP_CLI\Utils\wp_clear_object_cache' ) ) {
+		function wp_clear_object_cache() {
+			// No-op: the real helper trims caches to bound long-running CLI memory.
 		}
 	}
 }
