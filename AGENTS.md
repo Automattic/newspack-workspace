@@ -1,440 +1,180 @@
 # AI Agent Instructions
 
-This file provides guidance to AI coding agents working with code in this repository. It is the single source of truth for shared conventions across all Newspack repos. Tool-specific files (`CLAUDE.md`, `.github/copilot-instructions.md`, etc.) reference this file.
+Guidance for AI coding agents working in this repository, and the single source of truth for conventions shared across Newspack repos. Tool-specific files (`CLAUDE.md`, `.github/copilot-instructions.md`) reference this file.
 
 ## Overview
 
-newspack-workspace is the Newspack monorepo. It contains all product plugins, themes, and shared packages in a single repository, plus a Docker-based local development environment with containerized PHP/Apache/MySQL.
+newspack-workspace is the Newspack monorepo: every product plugin, theme and shared package in one repository, plus a Docker-based local dev environment (PHP/Apache/MariaDB).
 
-**This is a pnpm workspace.** Plugins live in `plugins/`, themes in `themes/`, shared packages (newspack-scripts, newspack-components, newspack-colors, newspack-icons) in `packages/`. All workspace packages share a single lockfile and hoisted dependencies.
+It is a **pnpm workspace** (`plugins/*`, `themes/*`, `packages/*`) with one lockfile and hoisted dependencies. Because it is one repo, cross-plugin changes are one branch and one PR.
 
-## Workspace Layout
+## Workspace layout
 
-### Directory Structure
+| Path | Contents | In-container path |
+| --- | --- | --- |
+| `plugins/<name>/` | 12 product plugins | `/newspack-plugins/` |
+| `themes/<name>/` | `newspack-theme` (classic; style variations nested inside it) and `newspack-block-theme` (FSE) | `/newspack-themes/` |
+| `packages/<name>/` | `scripts`, `components`, `colors`, `icons` — note the directories are unprefixed, the npm packages are `newspack-<name>` | – |
+| `repos/plugins/<name>/`, `repos/themes/<name>/` | Checkouts that live outside the monorepo | `/newspack-repos` |
+| `html/` | Main WordPress site | `/var/www/html` |
+| `bin/` | Shell scripts | `/var/scripts/` |
+| `config/` | Apache, PHP, MySQL config | – |
 
-- `plugins/<name>/` - Product plugins (12 total).
-- `themes/<name>/` - Themes (newspack-theme, newspack-block-theme).
-- `packages/<name>/` - Shared libraries (scripts, components, colors, icons).
-- `repos/plugins/<name>/`, `repos/themes/<name>/` - Standalone/local plugin and theme checkouts that live outside the monorepo (e.g. private or customer-specific plugins, `newspack-manager`, licensed WooCommerce extensions). The `repos/plugins` and `repos/themes` directories are tracked (`.gitkeep`); anything you drop inside them is gitignored. Mounted at `/newspack-repos` and symlinked into the active site (`wp-content/plugins/`, `wp-content/themes/`) by `bin/link-repos.sh`. **Any directory works with no registration** - `n` commands (`n build`, `n composer`, `n watch`, cwd-detection) discover `repos/` checkouts by path, so there's no need to edit `bin/repos.sh`. If a name also exists in the monorepo `plugins/`/`themes/`, the **tracked copy wins** and the `repos/` duplicate is skipped. Workflow: drop a real checkout in (clone/unzip directly, or `git worktree add`), build it, then `n restart`/`n start` to pick it up. A symlink *inside* `repos/` pointing outside the workspace will dangle in the container - use a real directory.
+Each plugin/theme directory is standalone and can be zipped and installed on its own.
 
-Each directory is a standalone WordPress plugin/theme that can be zipped and installed independently.
+**`repos/`** holds private, customer-specific or licensed checkouts (e.g. `newspack-manager`). Drop a real directory in — no registration needed, `n` commands discover them by path — then `n restart`; `bin/link-repos.sh` symlinks them into the active site. If a name also exists in `plugins/`/`themes/`, the tracked copy wins. Contents are gitignored, and a symlink *inside* `repos/` pointing outside the workspace will dangle in the container.
 
-### Plugins and Themes
+### Plugins
 
-The Newspack product consists of these interconnected plugins and themes:
+| Plugin | Purpose |
+| --- | --- |
+| `newspack-plugin` | **Foundation.** Setup wizard, reader activation, donations, Data Events API, webhooks, content gating, and the configuration managers other plugins consume. |
+| `newspack-blocks` | Gutenberg blocks (Homepage Posts, Carousel, Author List…) |
+| `newspack-popups` | Campaigns/prompts; uses reader data from newspack-plugin for targeting |
+| `newspack-newsletters` | Newsletter authoring and ESP integrations (Mailchimp, ActiveCampaign…) |
+| `newspack-ads` | Google Ad Manager integration and ad placements |
+| `newspack-network` | Multi-site Hub/Node sync, built on the Data Events API |
+| `newspack-multibranded-site` | Multiple brands within one site |
+| `newspack-listings` | Directories and listings |
+| `newspack-sponsors` | Sponsored content and labelling |
+| `newspack-story-budget` | Newsroom editorial planning |
+| `republication-tracker-tool` | Tracks republished content |
+| `super-cool-ad-inserter` | Programmatic ad insertion |
 
-**Core Plugin:**
-- `newspack-plugin` - The main Newspack plugin. Provides the setup wizard, reader management, donations, data events API, and integrations with other plugins. Most other plugins depend on utilities from this plugin.
+**Not in this monorepo** (separate repos): `newspack-manager-admin` (hub UI on newspack.com) and `newspack-manager` (companion plugin on each managed site).
 
-**Content & Publishing:**
-- `newspack-blocks` - Custom Gutenberg blocks for news sites (Homepage Posts, Carousel, Author List, etc.)
-- `newspack-listings` - Directory and listing functionality for events, places, and marketplaces
-- `newspack-sponsors` - Sponsored content management and labeling
-- `newspack-story-budget` - Newsroom editorial planning and story budgeting
+Most cross-plugin coupling runs through `newspack-plugin`. Before changing something there, find its consumers — `grep -rn "Data_Events" plugins/` and similar. Read the class you intend to call rather than trusting a remembered signature; these APIs move.
 
-**Reader Revenue:**
-- `newspack-popups` - Campaigns/prompts system for reader engagement (popups, inline prompts, overlays)
+## Conventions
 
-**Newsletters:**
-- `newspack-newsletters` - Newsletter authoring and sending via ESP integrations (Mailchimp, ActiveCampaign, Constant Contact, etc.)
+**File structure**
 
-**Advertising:**
-- `newspack-ads` - Google Ad Manager integration and ad placement management
-- `super-cool-ad-inserter` - Programmatic ad insertion into content
-
-**Multi-site & Network:**
-- `newspack-network` - Synchronization system for multi-site Newspack networks (Hub/Node architecture)
-- `newspack-multibranded-site` - Support for multiple brands within a single WordPress site
-
-**Manager (SaaS) — not in this monorepo, separate repos:**
-- `newspack-manager-admin` - Admin UI on the central hub site (newspack.com); manages and monitors all Newspack sites
-- `newspack-manager` - Companion plugin installed on every managed site; reports data back to the hub
-
-**Syndication:**
-- `republication-tracker-tool` - Tracks content republication across sites
-
-**Themes:**
-- `newspack-theme` - Classic theme and base for style variations
-- `newspack-joseph`, `newspack-katharine`, `newspack-nelson`, `newspack-sacha`, `newspack-scott` - Theme variations built on `newspack-theme`
-- `newspack-block-theme` - FSE block theme for Newspack sites
-
-### Plugin Relationships
-
-Understanding how plugins interact is crucial for cross-plugin changes:
-
-- **newspack-plugin** is the foundation. It provides:
-  - Data Events API (used by newspack-network, newspack-newsletters)
-  - Reader data management (used by newspack-popups, newspack-newsletters)
-  - Webhooks system (used by newspack-network)
-  - Configuration managers for other plugins
-
-- **newspack-popups** uses reader data from newspack-plugin to target campaigns
-
-- **newspack-newsletters** integrates with newspack-popups for subscription prompts
-
-- **newspack-network** uses the Data Events API from newspack-plugin to sync data across sites
-
-- **newspack-blocks** is used across all Newspack sites for content presentation
-
-### Common Patterns Across Repos
-
-**File Structure:**
 ```
 <plugin-name>/
 ├── <plugin-name>.php      # Main plugin file with header and bootstrap
-├── includes/              # PHP classes
-│   ├── class-<name>.php   # Main plugin class
-│   └── class-*.php        # Feature classes
+├── includes/              # PHP classes: class-<name>.php
 ├── src/                   # JavaScript/React source
 ├── dist/ or build/        # Compiled assets (gitignored)
-├── composer.json          # PHP dependencies
-├── package.json           # JS dependencies
-└── phpunit.xml            # Test configuration
+├── composer.json
+├── package.json
+└── phpunit.xml
 ```
 
-**Naming Conventions:**
-- PHP classes: `class-newspack-<feature>.php` with `Newspack_<Feature>` class name
-- Hooks: `newspack_<plugin>_<action>` for actions, same for filters
-- Options: `newspack_<plugin>_<option_name>`
+**Naming** — PHP classes `class-newspack-<feature>.php` holding `Newspack_<Feature>`; hooks and options `newspack_<plugin>_<name>`.
 
-**Coding Standards:**
-- **PHP**: WordPress-Extra, WordPress-Docs, WordPress-VIP-Go standards. Short array syntax `[]` is allowed. Yoda conditions not required.
-- **JavaScript/TypeScript**: ESLint via `newspack-scripts`
-- **SCSS**: Stylelint via `newspack-scripts`
-- **Formatting**: Prettier — specifically the `wp-prettier` fork (the WordPress house style needs `parenSpacing`, e.g. `( value )`), pinned workspace-wide via a `pnpm` override so editors and CI use the same engine. Canonical config is `newspack-scripts/config/prettier.config.js`. See [docs/code-formatting.md](docs/code-formatting.md) for the editor settings required to keep IDE formatting and CI lint in agreement.
-- **Commits**: Conventional commits (`<type>(<scope>): <subject>`) enforced via commitlint. Types: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`, `revert`. Releases are automated via semantic-release: `feat` triggers a minor release, `fix` triggers a patch release.
-- A husky pre-commit hook runs `lint-staged` on every `git commit` (installed via `prepare` on `pnpm install` at the workspace root). It **checks** staged files — JS/TS with ESLint, SCSS with Stylelint, PHP with PHP_CodeSniffer (via `bin/precommit-phpcs.sh` → `vendor/bin/phpcs` against the shared root `phpcs.xml`) — and **blocks the commit on any lint failure** — i.e. a non-zero linter exit; it does not auto-fix. Stylelint and PHPCS exit non-zero on warnings as well as errors, so warnings block for SCSS/PHP; only ESLint treats warnings as non-blocking. All staged files use the single root config (`.lintstagedrc.json`, forced via `lint-staged --config`), so behavior is uniform across every package. Each linter runs through a small `bin/precommit-*.sh` wrapper that **skips files with no resolvable lint config** (e.g. release tooling under `config/`, config-less shared packages, plugins that ship no lint config) — those would otherwise make ESLint/Stylelint *error* on an otherwise-clean commit, and skipping them keeps the hook in step with CI, which only lints packages that carry a config. The PHP check uses the WP coding standards in the workspace-root `vendor/`, provisioned by `n ci-build all` during setup (or run `composer install` once at the workspace root). **`phpcs.xml`'s `<file>` elements are the single source of truth for which PHP is linted** — `plugins`, `themes`, `packages`, `config`, `e2e`, `phpcsSniffs`. CI lints the workspace three per-package and derives the rest from those same `<file>` elements for the `PHPCS / non-workspace` job; the pre-commit hook derives its scope the same way and drops staged files outside it. The guarantee that buys is one-directional: **the hook never blocks a commit over a file CI would not lint.** (It is not full parity — CI lints whole packages and only changed ones, the hook lints individual staged files.) `bin/` is deliberately excluded: it is Docker dev tooling rather than WordPress runtime code, and the VIP standard's assumptions (read-only filesystem, HTML output context, restricted hooks) don't hold for CLI scripts. The wrappers resolve their tooling preferring the current checkout and falling back to the **main checkout**, so the hook also works when committing from a `git worktree` (which typically has `node_modules` from pnpm but no `vendor/` from composer). The lint is **skipped while a merge is in progress** (`MERGE_HEAD` present): completing a merge stages the entire base integration, so linting it would judge the merge commit against the base branch's pre-existing lint debt and block it over files nobody touched. Rebase, cherry-pick and revert are not exempt — they stage one commit's worth of changes that the committer is deliberately introducing, so "lint what the author staged" still holds. CI lints the pushed head either way. Run the affected package's `fix:js` / `format:scss` / `fix:php` script (e.g. `pnpm --filter <package> run format:scss`) to auto-fix, or `git commit --no-verify` to bypass. GUI git clients (Tower, GitHub Desktop, IDE integrations) may launch the hook without `pnpm` on PATH and fail with `pnpm: command not found` — commit from the terminal or use `--no-verify` in that case. (Only `.scss` is linted, not plain `.css`.) To run your own personal hooks alongside the lint (husky owns `core.hooksPath`, so a custom one would otherwise be overwritten), put them in `.husky/pre-commit.local` — a gitignored, per-checkout file (`.husky/pre-commit` is tracked, so each `git worktree` needs its own `.local`). It runs **after** the lint as a POSIX-`sh` snippet (its shebang is ignored) and exits non-zero to block; keep it from mutating staged files, since edits it makes then won't be re-linted (CI re-lints the PR regardless). Direct pushes to `main` are blocked.
-- **Skipping the pre-commit hook** (for agents/automation that must commit without linting, or if the hook ever misbehaves): pass `--no-verify` (or `-n`) to bypass it for a single commit, or set `HUSKY=0` to disable it for one command or a whole shell session (`HUSKY=0 git commit …`, or `export HUSKY=0`; put `export HUSKY=0` in `~/.config/husky/init.sh` to disable it machine-wide without touching the repo). CI re-lints every PR regardless, so skipping the hook locally never lands unlinted code — it only trades the early local check for the CI one.
-- Reference issue numbers in commits and PR descriptions.
-- Do not modify changelog files or `.pot` translation files. These are auto-generated by CI workflows.
+**Standards** — PHP: WordPress-Extra, WordPress-Docs, WordPress-VIP-Go; short array syntax allowed, Yoda conditions not required. JS/TS: ESLint; SCSS: Stylelint; both via `newspack-scripts`. Formatting uses the `wp-prettier` fork (WordPress style needs `parenSpacing`, e.g. `( value )`), pinned workspace-wide via a pnpm override, config at `packages/scripts/config/prettier.config.js`. See [docs/code-formatting.md](docs/code-formatting.md) for the editor settings that keep IDE formatting and CI lint in agreement.
 
-## Key Commands
+**Commits** — Conventional commits (`<type>(<scope>): <subject>`), enforced by commitlint. Subject on one line, max 72 chars, no body; `Co-Authored-By` trailers after a blank line. `feat` triggers a minor release and `fix` a patch release via semantic-release, so use those only for publisher-visible change; otherwise `chore`, `ci`, `docs`, `test`, `refactor`, `perf`, `build`, `style`, `revert`. Reference issue numbers in commits and PR descriptions.
 
-All commands use the `n` script from the repository root. The `n` script is context-aware: it detects your current working directory and targets the appropriate project/container automatically. It works in both interactive terminals and non-interactive contexts (CI, AI agents).
+**Never modify** changelog or `.pot` files — CI generates them.
 
-### Container Management
+### Pre-commit hook
+
+A husky hook runs `lint-staged` on every `git commit` (installed by `pnpm install` at the root). It **checks** staged files and **blocks the commit** on any linter failure; it does not auto-fix. ESLint warnings are non-blocking, but Stylelint and PHPCS exit non-zero on warnings too. Only `.scss` is linted, not `.css`.
+
+- **Auto-fix** with the package's own script: `pnpm --filter <package> run fix:js` / `format:scss` / `fix:php`.
+- **Bypass** with `git commit --no-verify`, or `HUSKY=0` for one command or a whole shell. CI re-lints every PR, so skipping locally never lands unlinted code.
+- **PHP scope** comes from `phpcs.xml`'s `<file>` elements, for both the hook and CI, so the hook never blocks a commit over a file CI would not lint. `bin/` is deliberately excluded: it is dev tooling, and the VIP standard's assumptions don't hold for CLI scripts.
+- **Skipped during a merge.** Completing a merge stages the entire base integration, which no author wrote, so linting it would judge the merge against the base branch's lint debt. Rebase, cherry-pick and revert are not exempt.
+- **Personal hooks** go in `.husky/pre-commit.local` — gitignored and per-checkout, so each worktree needs its own. Runs after the lint as a POSIX-`sh` snippet; exit non-zero to block.
+- **`pnpm: command not found`** from a GUI git client means `pnpm` is not on its PATH; commit from a terminal.
+
+Direct pushes to `main` are blocked.
+
+## Key commands
+
+Everything goes through the `n` script at the repository root. It is context-aware: run it from inside `plugins/<project>/`, `themes/<project>/`, `additional-sites-html/<site>/` or `manager-html/` and it targets that project or site, otherwise the main site. It works in interactive and non-interactive (CI, agent) contexts. `ncd <name>` jumps between projects (install with `n cd-install`).
+
 ```bash
-n start           # Start containers (PHP 8.3)
-n start 8.2       # Start with PHP 8.2
-n stop            # Stop containers
-n restart         # Stop and start
+n start [8.2]                 # Start containers (default PHP 8.3)
+n stop | n restart
+
+n build [name]                # Build current project, or a named one ('newspack-' optional)
+n ci-build [all]              # npm ci + build
+n watch [name]                # Rebuild on change
+
+n test-php [--group X | --filter Y | --list-groups]
+n test-js
+
+n wp <command>                # WP-CLI (--allow-root added automatically)
+n sh [env]                    # Shell into a container
+
+n sites-add|sites-list|sites-drop <name>   # Extra sites at <name>.test, sharing the container
 ```
 
-#### Customizing the main dev stack (docker-compose.override.yml)
+Run any command with `--help` for its full options.
 
-`n start` invokes Compose with an explicit `-f`, which disables Compose's automatic loading of an override file. To customize the **main** dev container (extra bind mounts, env vars, ports, etc.) without editing the tracked `docker-compose.yml`, create a `docker-compose.override.yml` at the workspace root. When present, `n start` appends it (`-f docker-compose.override.yml`) so its settings merge over the base stack; when absent, nothing changes. The file is gitignored, so it stays a per-developer customization.
+**First-time setup**
 
-Example – add a host directory as a bind mount on the `wordpress` service:
-```yaml
-services:
-  wordpress:
-    volumes:
-      - /Users/me/some-local-dir:/var/www/extra
-```
-
-This override applies only to the main stack (`newspack_dev`). Isolated environments (`n env`) do **not** load it; they layer their own generated `docker-compose.env-*.yml` files instead, so a root override can't clobber env-specific config.
-
-### First-Time Setup
 ```bash
-cp default.env .env           # Create local config
-./build-image.sh              # Build Docker image (PHP 8.3)
-./build-image-82.sh           # Build PHP 8.2 image
-n start                       # Launch containers
-n install                     # Install WordPress
-n ci-build all                # Build all projects
+cp default.env .env
+./build-image.sh              # or ./build-image-82.sh for PHP 8.2
+n start && n install
+n ci-build all
 n setup --yes                 # Bootstrap site with content and plugins
 ```
 
-### Building Projects
+`n setup` resets the database and builds a working site: theme, plugins, posts, categories, homepage, users, menus. Add `--woocommerce` for donations/memberships/subscriptions and `--campaigns` for prompts (both off by default), or `--block-theme` for the FSE theme.
+
+**`n wp` cannot take arguments containing spaces** — they get word-split. For SQL or `wp eval`, use `docker exec`:
+
 ```bash
-n build                       # Build current project (from within repo folder)
-n build newspack-plugin       # Build specific project
-n build newsletters           # 'newspack-' prefix can be omitted
-n ci-build                    # npm ci + build for current project
-n ci-build all                # Build all projects
-```
-
-### Testing
-```bash
-n test-php                          # Run all PHPUnit tests (from within repo folder)
-n test-php --group byline-block     # Run tests by group
-n test-php --filter test_name       # Run a specific test method
-n test-php --list-groups            # List available test groups
-n test-js                           # Run JS tests
-```
-
-`n test-php` provisions its own test database, separate from the site database:
-`wp_tests` for the main checkout, and `wp_tests_<env>` inside an isolated env.
-All containers share one MariaDB server, so the per-env name is what keeps
-concurrent `n test-php` runs in different envs from truncating each other's
-tables mid-run. It is created on the env's first test run and dropped by
-`n env destroy`.
-
-#### End-to-end (Playwright) tests
-The Playwright end-to-end suite lives in [`e2e/`](e2e/) — a self-contained npm
-project deliberately kept out of the pnpm workspace, so the per-package lint/build/
-test CI never tries to run it (it needs a live site). It runs nightly on TeamCity
-against a staging site and can also run against a local env. See
-[`e2e/README.md`](e2e/README.md) and [`e2e/AGENTS.md`](e2e/AGENTS.md) for setup and
-the from-scratch provisioning model (`site-setup.sh` / `e2e-setup.sh`).
-
-### Development
-```bash
-n watch <name>                # Watch & rebuild a single project (or run `n watch` from inside its folder)
-n watch                       # From the root: watch every plugin/theme/package and rebuild the changed unit
-n composer <cmd>              # Run composer in current project
-n npm <cmd>                   # Run npm in current project
-```
-
-`n watch` with no project (run from the monorepo root) starts a single global
-dispatcher that watches source files across `plugins/`, `themes/` and
-`packages/`. Webpack watchers are spawned **lazily**: the first time you edit a
-unit, that unit's own incremental watcher (`wp-scripts start`) is started and
-owns its rebuilds from then on — so only units you actually touch get a watcher,
-never all of them at once. Units without a `watch` script fall back to a one-off
-`build` when files under their `src/` change; units with neither are skipped.
-
-When you're iterating hard on a single project, prefer `n watch <name>` (or
-`n watch` from inside it): the warm webpack watcher rebuilds incrementally in
-well under a second, whereas the global watch pays a fresh build the first time
-it sees a unit that has no incremental `watch` script.
-
-### WordPress CLI
-```bash
-n wp <command>                # Run WP-CLI command (--allow-root is added automatically)
-```
-
-**Quoting limitation**: `n wp` does not support arguments with spaces (SQL queries, `wp eval` code, etc.) because they get word-split. For these, use `docker exec` directly:
-```bash
-docker exec newspack_dev sh -c "wp db query 'SELECT * FROM wp_options WHERE option_name=\"siteurl\";' --allow-root"
 docker exec newspack_dev sh -c "wp eval 'echo get_option(\"blogname\");' --allow-root"
 ```
-The main container is `newspack_dev`. For isolated environments, the container name is `newspack_env_<name>` where `<name>` matches what was passed to `n env create <name>`, with dashes replaced by underscores (e.g., `n env create my-feature` creates container `newspack_env_my_feature`).
 
-### Multi-Site
+The main container is `newspack_dev`; an isolated env is `newspack_env_<name>`, dashes replaced by underscores.
+
+**`n test-php`** uses its own database (`wp_tests`, or `wp_tests_<env>` in an isolated env), separate from the site DB. All containers share one MariaDB server, so the per-env name is what stops concurrent test runs truncating each other's tables.
+
+**`n watch`** from inside a project runs that project's incremental webpack watcher — sub-second rebuilds, and the right choice when iterating on one thing. From the root with no argument it starts a global dispatcher that spawns a watcher lazily the first time you touch a unit, so only units you actually edit get one.
+
+**End-to-end tests** live in [`e2e/`](e2e/), a self-contained npm project deliberately outside the pnpm workspace (it needs a live site, so per-package CI must not run it). It runs nightly on TeamCity against a staging site, and can run against a local env. See [`e2e/AGENTS.md`](e2e/AGENTS.md).
+
+## Local environment
+
+**Services** — `wordpress` (`newspack_dev`, Apache + PHP), `db` (MariaDB 11.8.6), `mailhog` (http://localhost:8025), `adminer` (http://localhost:8088). Memcached object cache and Batcache page cache are enabled. Xdebug is on port 9003 with IDE key `DOCKERDEBUG`, mapping `/newspack-plugins/<project>` to `plugins/<project>`.
+
+To customise the **main** stack without touching the tracked `docker-compose.yml`, create a gitignored `docker-compose.override.yml` at the root; `n start` merges it over the base stack. It does not apply to isolated envs, which layer their own generated files.
+
+### Isolated environments
+
+Each env is its own container, WordPress install and database, so branches run in parallel without interfering. Prefer one over the shared dev site for anything you intend to test or reproduce.
+
 ```bash
-n sites-add <name>            # Create additional site at name.test
-n sites-list                  # List additional sites
-n sites-drop <name>           # Remove site
+n env create <name> --worktree <repo>:<branch>   # repeatable; --domain, --up
+n env up <name> [--build]     # or --all
+n setup --env <name> --yes
+n env down|destroy <name>
+n env list [--porcelain]
+n env cleanup                 # Interactive bulk cleanup
 ```
 
-**Note:** Additional sites run in the same container and share plugin code — use them for multi-site/manager workflows. For branch isolation (different plugin versions), use isolated environments instead (see below).
+- Reachable at `https://<name>.test` (mkcert HTTPS) on its own loopback IP. `n start` pre-creates the aliases so envs can be created without sudo; `./bin/setup-networking.sh` removes the remaining password prompts.
+- Own database (`wordpress_<name>`), own `WP_CACHE_KEY_SALT`, own `envs/<name>/html/`.
+- Worktrees override individual plugins while the rest are shared. Monorepo worktrees live in `worktrees/<branch>/`; standalone `repos/` worktrees in `worktrees-repos/<name>/<branch>/`, mounted over just that path so other envs keep the base checkout. Destroying a monorepo worktree deletes its branch; a `repos/` worktree keeps it.
+- All env containers share the `newspack_envs` bridge network with their domain as a DNS alias, so they can reach each other (hub/node setups).
+- `n env destroy` removes the container, DB, html dir, hosts entry and worktrees.
 
-## Architecture
+With the `newspack` Claude Code plugin installed, `newspack:env-create`, `newspack:env-destroy` and `newspack:worktree` wrap these.
 
-### Directory Structure
-- `plugins/` - Product plugins, mounted at `/newspack-plugins/` in container
-- `themes/` - Themes, mounted at `/newspack-themes/` in container
-- `packages/` - Shared libraries (scripts, components, colors, icons)
-- `html/` - Main WordPress site, mounted at `/var/www/html`
-- `additional-sites-html/` - Additional WordPress sites
-- `manager-html/` - Newspack Manager site
-- `bin/` - Shell scripts mounted at `/var/scripts/` in container
-- `config/` - Apache, PHP, MySQL configuration
+## Cross-plugin changes
 
-### Docker Services
-- `wordpress` (container: `newspack_dev`) - Apache + PHP + WordPress
-- `db` - MariaDB 11.8.6
-- `mailhog` - Email capture at http://localhost:8025
-- `adminer` - Database UI at http://localhost:8088
+One repository, so a cross-plugin change is one branch and one PR. Before changing shared code in `newspack-plugin`, find its consumers (`grep -rn "<hook or class>" plugins/`) — hooks, filters and direct calls all cross plugin boundaries. Build and test dependencies before dependents: `n build <plugin>`, then `n test-php` in each affected plugin.
 
-### Context-Aware Commands
-The `n` script detects your current working directory:
-- From `plugins/<project>/` or `themes/<project>/` - commands target that project
-- From `additional-sites-html/<site>/` - commands target that site
-- From `manager-html/` - commands target the manager site
-- Otherwise - commands target the main site
+## Pull requests
 
-Use `ncd <name>` (install with `n cd-install`) for quick navigation between projects.
+- **Squash merge** (`gh pr merge --squash`). The exception is branch promotions between `main`, `alpha` and `release`, which use merge commits to preserve history.
+- **Never push or merge unless asked.**
+- **One Copilot pass per PR**, requested when the PR opens. After addressing its feedback do not re-request it; the next review should be a human's.
 
-### Caching
-- Memcached enabled via `html/wp-content/object-cache.php`
-- Batcache for page caching via `advanced-cache.php`
-
-### Xdebug
-Configured on port 9003 with IDE key `DOCKERDEBUG`. Path mapping: `/newspack-plugins/<project>` maps to local `plugins/<project>`, `/newspack-themes/<project>` maps to local `themes/<project>`.
-
-## Isolated Environments for Parallel Development
-
-Each isolated environment gets its own Docker container, WordPress installation, and database — completely independent of the main site. This enables parallel development and testing without interference.
-
-### Quick Start
-```bash
-n env create myenv --worktree newspack-plugin:mybranch
-n env up myenv
-n setup --env myenv --yes     # fully configured Newspack site
-# → https://myenv.test/  (override with --domain)
-```
-
-### Environment Commands
-```bash
-n env create <name> [options]  # Create environment config
-  --worktree <repo>:<branch>   #   Mount a worktree (repeatable for multiple repos).
-                               #   <repo> may be a monorepo plugin/theme OR a standalone
-                               #   checkout under repos/ that is its own git repo (e.g.
-                               #   newspack-manager); the latter is worktree'd from that repo
-                               #   and mounted over just its /newspack-repos/<kind>/<name> path,
-                               #   so other envs keep the base checkout.
-  --domain <domain>            #   Custom domain (default: <name>.test)
-  --up                         #   Start the environment immediately after creation
-n env up <name> [--build]      # Start environment (creates DB, installs WP, sets up SSL)
-n env up --all [--build]       # Start all existing environments at once
-n env down <name>              # Stop environment
-n env destroy <name>           # Remove environment, DB, worktrees, and files
-n env list                     # List environments with status, URLs, and worktrees
-n env list --porcelain         # Machine-readable tab-separated output (name, status, url, worktrees)
-n env cleanup                  # Interactive bulk cleanup of environments
-```
-
-### Site Setup
-```bash
-n setup [options]              # Bootstrap current site with full Newspack config
-n setup --env <name> [options] # Bootstrap an isolated environment
-  --yes                        #   Skip confirmation (destructive: resets DB)
-  --url <url>                  #   Override site URL (default: auto-detect)
-  --block-theme                #   Use newspack-block-theme instead of newspack-theme
-  --woocommerce                #   Enable WooCommerce + donations + subscriptions (off by default)
-  --campaigns                  #   Enable campaign/prompt setup (off by default)
-  --no-posts                   #   Skip post/category creation
-  --posts-count N              #   Number of posts (default: 10)
-  --customers-count N          #   Number of WooCommerce customers (default: 10)
-```
-
-Run `n setup --help` for all available options.
-
-`n setup` resets the database and creates a site with: theme, Newspack plugins, posts with categories, homepage, users, and menus. Use `--woocommerce` to add donations/memberships/subscriptions, and `--campaigns` for prompts.
-
-### Shell Access
-```bash
-n sh                           # Shell into main container
-n sh <name>                    # Shell into environment container
-```
-
-### How It Works
-- Each env binds to a unique loopback IP (127.0.0.2+) on ports 80/443 with HTTPS via mkcert
-- Domain defaults to the loopback IP, overridable with `--domain`
-- `n start` pre-creates loopback aliases (127.0.0.2–100) so agents can create envs without sudo. If `newspack-manage-host` is installed (via `./bin/setup-networking.sh`), networking is set up without password prompts -- otherwise `sudo` is required
-- Each env mounts `envs/<name>/html/` as `/var/www/html` (isolated from `./html/`)
-- Each env gets its own database (`wordpress_<name>`) in the shared MariaDB server
-- Each env gets a unique `WP_CACHE_KEY_SALT` to prevent memcached key collisions
-- Worktrees override specific plugins (e.g., `newspack-plugin`) while sharing the rest from `./plugins/`. Monorepo worktrees live in `worktrees/<safe_branch>/` (a worktree of the whole workspace repo); standalone `repos/` worktrees live in `worktrees-repos/<name>/<safe_branch>/` (a worktree of that repo) and are mounted over just their `/newspack-repos/<kind>/<name>` subpath, leaving the base `repos/` checkout intact for other envs. Destroying a monorepo worktree deletes its branch; destroying a `repos/` worktree keeps the branch (standalone repos carry long-lived branches)
-- All env containers join a shared `newspack_envs` Docker bridge network with their domain as a DNS alias, enabling inter-container communication (e.g., hub/node setups)
-- `n env destroy` cleans up everything: container, DB, html dir, hosts entry, and worktrees
-
-### Claude Code Plugin Skills
-
-If the `newspack` Claude Code plugin is installed, these skills wrap the commands above:
-- `newspack:worktree` — Create or remove git worktrees for branch isolation
-- `newspack:env-create` — Create worktrees + isolated Docker environment with HTTPS domain
-- `newspack:env-destroy` — Destroy environment and clean up worktrees
-
-## Cross-Plugin Workflow
-
-When making changes that span multiple plugins:
-
-### 1. Understand the Change Scope
-Before making changes, identify which plugins are affected:
-- Check for hooks/filters that connect plugins (grep for `do_action`, `apply_filters`, `add_action`, `add_filter`)
-- Look for direct function calls between plugins
-- Check if changing an API that other plugins consume
-
-### 2. Make Changes in Dependency Order
-If Plugin A depends on Plugin B:
-1. Make changes to Plugin B first
-2. Build Plugin B: `n build <plugin-b>`
-3. Test Plugin B in isolation
-4. Make changes to Plugin A
-5. Build and test Plugin A
-
-### 3. Testing Cross-Plugin Changes
-```bash
-# Rebuild affected plugins
-n build newspack-plugin
-n build newspack-popups
-
-# Run PHP tests for each
-cd plugins/newspack-plugin && n test-php
-cd plugins/newspack-popups && n test-php
-```
-
-### 4. Git Workflow for Multi-Repo Changes
-Everything is in a single repository. Cross-plugin changes happen in one branch and one PR.
-
-### 5. Finding Code Across Plugins
-```bash
-# Search all plugins for a hook
-grep -r "newspack_reader_logged_in" plugins/
-
-# Find where a function is defined
-grep -rn "function get_reader_data" plugins/
-
-# Find all usages of a class
-grep -rn "Newspack_Popups" plugins/
-```
-
-## Common Integration Points
-
-### Data Events API (newspack-plugin)
-Used for async event processing:
-```php
-// Registering an event handler
-Newspack\Data_Events::register_handler('reader_logged_in', 'my_handler');
-
-// Dispatching an event
-Newspack\Data_Events::dispatch('reader_logged_in', $data);
-```
-
-### Reader Data (newspack-plugin)
-Central reader/user management:
-```php
-// Get current reader
-$reader = Newspack\Reader_Activation::get_current_reader();
-
-// Check reader status
-Newspack\Reader_Activation::is_reader_logged_in();
-```
-
-### Webhooks (newspack-plugin)
-For external integrations:
-```php
-Newspack\Webhooks::send('endpoint_id', $payload);
-```
-
-### Configuration Managers
-newspack-plugin provides configuration managers for other plugins:
-- `Newspack_Popups_Configuration_Manager`
-- `Newspack_Ads_Configuration_Manager`
-- `Newspack_Theme_Configuration_Manager`
-
-## Git & Commit Rules
-
-- **Merge strategy**: Always use **squash merge** (`gh pr merge --squash`) when merging PRs. The only exceptions are branch promotions (`main` to `alpha`, `alpha` to `release`, `release` to `main`, `release` to `alpha`), which use merge commits to preserve history.
-- **Commit messages**: Subject must be a single line, max 72 characters, in conventional commit format: `<type>(<scope>): <subject>`. No body. `Co-Authored-By` trailers are required after a blank line.
-- **Never push automatically**. Always ask for confirmation before pushing to remote.
-
-## Claude Code Plugin
-
-The `newspack` plugin provides Newspack-specific skills for PR workflows and development tasks. See the [newspack-devkit README](https://github.com/Automattic/newspack-devkit) for the full list of available skills.
-
-If the plugin is not installed, run `n setup-agents` to install all recommended plugins, or add it manually:
+With the `newspack` plugin installed: `newspack:pr-create` → `newspack:pr-feedback` → `newspack:pr-ready` → `newspack:pr-merge`, plus `newspack:pr-test` to test a PR in an isolated env. Install it with `n setup-agents`, or:
 
 ```
 /plugin marketplace add Automattic/newspack-devkit
 /plugin install newspack@newspack-devkit
 ```
 
-## Pull Requests
+## External tools
 
-Use the `newspack` plugin skills for the full PR lifecycle:
-1. `newspack:pr-create` — Create draft PR and request Copilot review
-2. `newspack:pr-feedback` — Address review comments and resolve threads
-3. `newspack:pr-ready` — Mark ready for human review and apply label
-4. `newspack:pr-merge` — Merge after approval and checks pass
-5. `newspack:pr-test` — Test a PR in an isolated environment with automated checks and code review
-
-**One Copilot pass per PR.** Request a Copilot review once, when the PR is opened. After addressing its feedback, do **not** re-request Copilot by default — one automated pass is enough, and the next review should come from a human. Re-request Copilot only when a reviewer explicitly asks for another pass.
-
-## External Tools
-
-- **Linear**: Use MCP tools for Linear operations when available. Write operations (creating or updating issues, comments, etc.) require explicit user confirmation.
-- **GitHub**: Always use `gh` CLI for GitHub operations (PRs, issues, checks, releases, etc.).
+- **Linear** — use the MCP tools. Creating or updating issues and comments requires explicit user confirmation.
+- **GitHub** — use the `gh` CLI.
