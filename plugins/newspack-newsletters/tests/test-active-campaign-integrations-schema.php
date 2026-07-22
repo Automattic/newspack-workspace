@@ -46,10 +46,10 @@ class ActiveCampaignIntegrationsSchemaTest extends WP_UnitTestCase {
 	/**
 	 * Single-selection enumerated types use 'default' matching (strict equality
 	 * against the chosen option). Per AC's Contact Custom Fields API Guide:
-	 * dropdown / radio / listbox are single selection.
+	 * dropdown / radio are single selection.
 	 */
 	public function test_single_select_types_use_default_matching() {
-		foreach ( [ 'dropdown', 'radio', 'listbox' ] as $type ) {
+		foreach ( [ 'dropdown', 'radio' ] as $type ) {
 			$mapped = $this->map_field(
 				[
 					'perstag' => 'X',
@@ -64,9 +64,13 @@ class ActiveCampaignIntegrationsSchemaTest extends WP_UnitTestCase {
 	 * Multi-selection enumerated types use 'list__in'. AC stores their value
 	 * with `||` delimiters; the consumer's parse_list_value() recognizes that
 	 * format. Strict equality cannot match `||A||B||` against `'A'`.
+	 *
+	 * AC's "Checkbox" type is a multi-select checkbox group (not a boolean
+	 * toggle) and its "List Box" is a multi-select list — per AC's docs a
+	 * contact can hold several ||-delimited values for either.
 	 */
 	public function test_multi_select_types_use_list_in_matching() {
-		foreach ( [ 'checkbox', 'multiselect' ] as $type ) {
+		foreach ( [ 'checkbox', 'listbox', 'multiselect' ] as $type ) {
 			$mapped = $this->map_field(
 				[
 					'perstag' => 'X',
@@ -89,7 +93,7 @@ class ActiveCampaignIntegrationsSchemaTest extends WP_UnitTestCase {
 			'hidden'      => 'string',
 			'dropdown'    => 'select',
 			'radio'       => 'select',
-			'listbox'     => 'select',
+			'listbox'     => 'multiselect',
 			'checkbox'    => 'multiselect',
 			'multiselect' => 'multiselect',
 			'date'        => 'date',
