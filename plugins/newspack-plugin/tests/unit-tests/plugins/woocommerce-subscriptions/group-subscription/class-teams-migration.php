@@ -14,9 +14,12 @@
  */
 
 use Newspack\CLI\Teams_Migration;
+use Newspack\Emails;
 use Newspack\Group_Subscription;
 use Newspack\Group_Subscription_Invite;
 use Newspack\Group_Subscription_Settings;
+
+require_once dirname( __DIR__, 4 ) . '/mocks/newsletters-mocks.php';
 
 /**
  * Test the migration data-layer helpers and the manager backfill.
@@ -60,13 +63,64 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Reset the mock subscription store and the per-request cache between tests.
+	 * The invitation email config callback registered in set_up.
+	 *
+	 * @var callable|null
+	 */
+	private $email_config_filter = null;
+
+	/**
+	 * Post ID of the published invitation email post created in set_up.
+	 *
+	 * @var int|null
+	 */
+	private $email_post_id = null;
+
+	/**
+	 * Reset the mock subscription store and the per-request cache between tests, and
+	 * make the invitation email genuinely sendable.
+	 *
+	 * Group_Subscription_Invite::init() early-returns without the Access Control feature
+	 * flag, so in the suite the invitation email config is never registered and every
+	 * send returns false before a single wp_mail() call. Registering the config and
+	 * publishing its email post here is what makes the mail assertions below mean
+	 * something: without it they would pass just as happily against a run that emails
+	 * nobody — which is exactly the failure the migration must not report as success.
 	 */
 	public function set_up() {
 		parent::set_up();
 		global $subscriptions_database;
 		$subscriptions_database = [];
 		Group_Subscription::reset_cache();
+
+		reset_phpmailer_instance();
+		$this->email_config_filter = function ( $configs ) {
+			return Group_Subscription_Invite::add_email_config( $configs );
+		};
+		add_filter( 'newspack_email_configs', $this->email_config_filter );
+		Emails::reset_email_configs_cache();
+		$this->email_post_id = wp_insert_post(
+			[
+				'post_type'   => Emails::POST_TYPE,
+				'post_status' => 'publish',
+				'post_title'  => 'Group subscription invitation (test)',
+				'meta_input'  => [
+					Emails::EMAIL_CONFIG_NAME_META         => Group_Subscription_Invite::EMAIL_TYPE,
+					// serialize_email() returns false without an HTML payload, which
+					// would make the email unsendable again.
+					\Newspack_Newsletters::EMAIL_HTML_META => '<p>*INVITE_URL*</p>',
+				],
+			]
+		);
+	}
+
+	/**
+	 * Count the emails dispatched so far in this test.
+	 *
+	 * @return array[] The mailer's sent-message records.
+	 */
+	private function get_sent_emails(): array {
+		return tests_retrieve_phpmailer_instance()->mock_sent;
 	}
 
 	/**
@@ -75,6 +129,17 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 	public function tear_down() {
 		global $subscriptions_database;
 		$subscriptions_database = [];
+		if ( $this->email_config_filter ) {
+			remove_filter( 'newspack_email_configs', $this->email_config_filter );
+			$this->email_config_filter = null;
+		}
+		Emails::reset_email_configs_cache();
+		if ( $this->email_post_id ) {
+			wp_delete_post( $this->email_post_id, true );
+			$this->email_post_id = null;
+		}
+		remove_filter( 'pre_wp_mail', '__return_false' );
+		reset_phpmailer_instance();
 		foreach ( $this->user_ids as $user_id ) {
 			wp_delete_user( $user_id );
 		}
@@ -541,7 +606,8 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 		$this->create_team_invitation( $team_id, $pending_two );
 		// A second pending invitation for the same address is deduped, not returned twice.
 		$this->create_team_invitation( $team_id, $pending_one );
-		// A case variant of the same mailbox is deduped too (emails are lowercased).
+		// A case variant of the same mailbox is deduped too (matching is case-insensitive,
+		// though the address that survives keeps the casing it was stored with).
 		$this->create_team_invitation( $team_id, 'Pending-One@TEST.com' );
 		// Non-pending invitations are not carried over.
 		$this->create_team_invitation( $team_id, 'accepted@test.com', 'wcmti-accepted' );
@@ -618,16 +684,15 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 		$new_email = 'fresh-invitee@test.com';
 		$this->create_team_invitation( $team_id, $new_email );
 
-		// A current group member — re-inviting a member is rejected. Emails are keyed
-		// lowercase (see get_pending_team_invitation_emails()), so match on that.
+		// A current group member — re-inviting a member is rejected.
 		$member       = $this->create_reader();
-		$member_email = strtolower( get_userdata( $member )->user_email );
+		$member_email = get_userdata( $member )->user_email;
 		Teams_Migration::add_group_member( $subscription, $member );
 		$this->create_team_invitation( $team_id, $member_email );
 
 		// A non-reader account (editor) — not a valid reader target.
 		$editor       = $this->create_editor();
-		$editor_email = strtolower( get_userdata( $editor )->user_email );
+		$editor_email = get_userdata( $editor )->user_email;
 		$this->create_team_invitation( $team_id, $editor_email );
 
 		$result = Teams_Migration::migrate_team_invitations( $subscription, $team_id, true );
@@ -682,5 +747,115 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 		$this->assertSame( [], $second['sent'], 'The second team must not re-send the shared invite.' );
 		$this->assertArrayHasKey( $shared, $second['skipped'], 'The shared invitee should be skipped on the second team.' );
 		$this->assertCount( 1, Group_Subscription_Invite::get_invites( $subscription ), 'Only one invite should exist for the shared email.' );
+	}
+
+	/**
+	 * The feature's whole point is the email: with sending disabled no mail is dispatched,
+	 * and with it enabled exactly one message goes out per invitee. Asserted on the mailer
+	 * rather than on invite meta, because an invite row is written whether or not anything
+	 * is actually delivered.
+	 */
+	public function test_migrate_team_invitations_dispatches_one_email_per_invitee_only_when_sending() {
+		$owner        = $this->create_reader();
+		$subscription = $this->create_group_subscription( $owner );
+		$team_id      = $this->create_team( $owner, [], $subscription->get_id() );
+		$invitee_one  = 'mail-one@test.com';
+		$invitee_two  = 'mail-two@test.com';
+		$this->create_team_invitation( $team_id, $invitee_one );
+		$this->create_team_invitation( $team_id, $invitee_two );
+
+		Teams_Migration::migrate_team_invitations( $subscription, $team_id, false );
+		$this->assertCount( 0, $this->get_sent_emails(), 'A listing-only run must email nobody.' );
+
+		$result = Teams_Migration::migrate_team_invitations( $subscription, $team_id, true );
+
+		$this->assertCount( 2, $result['sent'], 'Both invitees should be reported as sent.' );
+		$recipients = array_map(
+			function ( $mail ) {
+				return $mail['to'][0][0];
+			},
+			$this->get_sent_emails()
+		);
+		sort( $recipients );
+		$this->assertSame( [ $invitee_one, $invitee_two ], $recipients, 'Exactly one invitation email should go to each invitee.' );
+	}
+
+	/**
+	 * An invite whose email did not go out must not be reported as sent, and must not be
+	 * left on the subscription: a stored invite makes the already-invited gate answer
+	 * "Already invited." forever, so the corrective re-run could never reach the reader.
+	 */
+	public function test_migrate_team_invitations_rolls_back_an_invite_whose_email_failed() {
+		$owner        = $this->create_reader();
+		$subscription = $this->create_group_subscription( $owner );
+		$team_id      = $this->create_team( $owner, [], $subscription->get_id() );
+		$invitee      = 'undeliverable@test.com';
+		$this->create_team_invitation( $team_id, $invitee );
+
+		add_filter( 'pre_wp_mail', '__return_false' );
+		$failed_run = Teams_Migration::migrate_team_invitations( $subscription, $team_id, true );
+		remove_filter( 'pre_wp_mail', '__return_false' );
+
+		$this->assertSame( [], $failed_run['sent'], 'An undelivered invitation must not be counted as sent.' );
+		$this->assertArrayHasKey( $invitee, $failed_run['failed'], 'The undelivered invitee should be reported as failed.' );
+		$this->assertEmpty( Group_Subscription_Invite::get_invites( $subscription ), 'The invite must be rolled back so a re-run can retry it.' );
+
+		// The retry the operator is told to run now actually reaches the reader.
+		$retry = Teams_Migration::migrate_team_invitations( $subscription, $team_id, true );
+		$this->assertSame( [ $invitee ], $retry['sent'], 'The re-run must be able to send the invitation that failed.' );
+		$this->assertCount( 1, $this->get_sent_emails(), 'The retry is the only message that leaves.' );
+	}
+
+	/**
+	 * The address is stored and emailed in its original casing. The acceptance handler
+	 * compares it strictly against the reader's stored user_email, which WordPress keeps
+	 * in whatever case they registered with — a lowercased invite would send a reader
+	 * with a mixed-case account a link they can never accept.
+	 */
+	public function test_migrate_team_invitations_preserves_invitee_email_case() {
+		$owner        = $this->create_reader();
+		$subscription = $this->create_group_subscription( $owner );
+		$team_id      = $this->create_team( $owner, [], $subscription->get_id() );
+		$mixed_case   = 'Dana.Smith@Example.com';
+		$this->create_team_invitation( $team_id, $mixed_case );
+
+		$result = Teams_Migration::migrate_team_invitations( $subscription, $team_id, true );
+
+		$this->assertSame( [ $mixed_case ], $result['sent'], 'The invitee should be reported with the casing they were invited with.' );
+		$this->assertSame(
+			[ $mixed_case ],
+			array_column( Group_Subscription_Invite::get_invites( $subscription ), 'email' ),
+			'The stored invite must keep the original casing so the acceptance check can match the account email.'
+		);
+		$this->assertSame( $mixed_case, $this->get_sent_emails()[0]['to'][0][0], 'The email must go to the original-cased address.' );
+	}
+
+	/**
+	 * The already-invited gate reads live invites only, so it guarantees "a re-run emails
+	 * nobody twice" for as long as an invite lives, not forever. Past that window the
+	 * invitee is invited again — reported separately so the operator can see who is being
+	 * emailed a second time.
+	 */
+	public function test_migrate_team_invitations_reports_a_reinvite_after_the_invite_lapsed() {
+		$owner        = $this->create_reader();
+		$subscription = $this->create_group_subscription( $owner );
+		$team_id      = $this->create_team( $owner, [], $subscription->get_id() );
+		$invitee      = 'lapsed-invitee@test.com';
+		$this->create_team_invitation( $team_id, $invitee );
+
+		Teams_Migration::migrate_team_invitations( $subscription, $team_id, true );
+
+		// Age the stored invite past its expiry.
+		$invites = Group_Subscription_Invite::get_invites( $subscription );
+		foreach ( array_keys( $invites ) as $key ) {
+			$invites[ $key ]['expiration'] = time() - HOUR_IN_SECONDS;
+		}
+		$subscription->update_meta_data( Group_Subscription_Invite::META, $invites );
+		$subscription->save();
+
+		$rerun = Teams_Migration::migrate_team_invitations( $subscription, $team_id, true );
+
+		$this->assertSame( [ $invitee ], $rerun['sent'], 'A lapsed invitation should be reissued.' );
+		$this->assertSame( [ $invitee ], $rerun['resent'], 'The reissue must be reported as a re-invite, not as a first contact.' );
 	}
 }

@@ -19,6 +19,7 @@
 
 namespace Newspack\CLI;
 
+use Newspack\Emails;
 use Newspack\Group_Subscription;
 use Newspack\Group_Subscription_Invite;
 use Newspack\Reader_Activation;
@@ -72,7 +73,10 @@ class Teams_Migration {
 	 * : Only process teams that have no linked subscription. Use to safely re-run the command for previously skipped teams.
 	 *
 	 * [--migrate-invitations]
-	 * : Also carry each team's pending (unaccepted) WooCommerce Teams invitations over as group-subscription invites, which SENDS an invitation email to every pending invitee. Off by default because it emails readers; the pending invitees are always listed at the end of the run regardless of this flag. Ignored in dry-run mode (nothing is sent).
+	 * : Also carry each team's pending (unaccepted) WooCommerce Teams invitations over as group-subscription invites, which SENDS an invitation email to every pending invitee. Off by default because it emails readers; the pending invitees are always listed at the end of the run regardless of this flag. Ignored in dry-run mode (nothing is sent). The run asks for confirmation before the first email goes out, and aborts up front if the invitation email is not sendable on this site. Re-running is safe while the invites it wrote are still live (30 days by default) — an invitee whose invite has lapsed is invited again, and those are reported separately.
+	 *
+	 * [--yes]
+	 * : Skip the confirmation prompt shown before invitation emails are sent. Auto-handled by WP_CLI::confirm.
 	 *
 	 * ## EXAMPLES
 	 *
@@ -88,10 +92,10 @@ class Teams_Migration {
 	 * @return void
 	 */
 	public function migrate_teams( $args, $assoc_args ) {
-		$product_id         = (int) \WP_CLI\Utils\get_flag_value( $assoc_args, 'product-id', 0 );
-		$dry_run            = ! (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'live', false );
-		$skip_unlinked      = (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'skip-unlinked', false );
-		$only_unlinked      = (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'only-unlinked', false );
+		$product_id          = (int) \WP_CLI\Utils\get_flag_value( $assoc_args, 'product-id', 0 );
+		$dry_run             = ! (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'live', false );
+		$skip_unlinked       = (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'skip-unlinked', false );
+		$only_unlinked       = (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'only-unlinked', false );
 		$migrate_invitations = (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'migrate-invitations', false );
 
 		// Sending is gated behind the opt-in flag and never happens in a dry-run — but
@@ -155,12 +159,50 @@ class Teams_Migration {
 		WP_CLI::line( sprintf( 'Found %d active team membership(s). Starting migration…', $total ) );
 		WP_CLI::line( '' );
 
-		$summary          = [];
-		$skipped          = [];
-		$invitation_rows  = []; // Re-invite list rows: team → invitee email → outcome.
-		$invites_sent     = 0;
-		$invites_skipped  = 0;
-		$progress         = \WP_CLI\Utils\make_progress_bar( 'Migrating teams', $total );
+		// Read every team's pending invitations up front, before the loop's skip
+		// branches: a team the flags skip still has its invitees reported (below), and
+		// the confirmation prompt needs a truthful recipient count before the first
+		// email goes out.
+		$pending_invitations = [];
+		foreach ( $teams as $team_id ) {
+			$team_emails = self::get_pending_team_invitation_emails( $team_id );
+			if ( ! empty( $team_emails ) ) {
+				$pending_invitations[ $team_id ] = $team_emails;
+			}
+		}
+
+		if ( $send_invitations ) {
+			// Gate on the send-precondition before anything is written, the same way
+			// card_expiry_warning_backfill() does: generate_invite() stores the invite
+			// whether or not the email goes out, so without this an unsendable site
+			// would report hundreds of invitations sent with nobody contacted.
+			if ( ! Emails::can_send_email( Group_Subscription_Invite::EMAIL_TYPE ) ) {
+				WP_CLI::error( 'The group subscription invitation email is not currently sendable. The email post may be in draft status, Newspack Newsletters may be inactive, or the Access Control feature (NEWSPACK_CONTENT_GATES) may be off — which leaves the invitation email unregistered. Fix that and re-run, or drop --migrate-invitations to migrate without sending.' );
+			}
+
+			// Upper bound: an invitee who is already invited, already a member, or over
+			// the group's seat limit is rejected without an email.
+			$recipient_count = 0;
+			foreach ( $pending_invitations as $team_id => $team_emails ) {
+				if ( ! self::team_is_skipped_by_flags( $team_id, $skip_unlinked, $only_unlinked ) ) {
+					$recipient_count += count( $team_emails );
+				}
+			}
+			if ( $recipient_count ) {
+				WP_CLI::confirm( sprintf( 'This will send group subscription invitation emails to up to %d reader(s). Continue?', $recipient_count ), $assoc_args );
+			}
+		}
+
+		$summary               = [];
+		$skipped               = [];
+		$invitation_rows       = []; // Re-invite list rows: team → invitee email → outcome.
+		$invites_sent          = 0;
+		$invites_resent        = 0;
+		$invites_skipped       = 0;
+		$invites_failed        = 0;
+		$invite_skip_reasons   = []; // Reason => count, so "already invited" and "group full" stay distinguishable.
+		$invitation_teams_seen = []; // Teams whose invitees already have rows, so the skipped-team pass doesn't double-report.
+		$progress              = \WP_CLI\Utils\make_progress_bar( 'Migrating teams', $total );
 
 		foreach ( $teams as $team_id ) {
 			$team = \get_post( $team_id );
@@ -359,15 +401,39 @@ class Teams_Migration {
 
 			// Carry over pending (unaccepted) team invitations. The re-invite list is
 			// always collected so it survives into the summary; invites are only sent
-			// when opted in via --migrate-invitations on a --live run.
-			$invitation_result = self::migrate_team_invitations( $subscription, $team_id, $send_invitations );
-			$invites_sent     += count( $invitation_result['sent'] );
-			$invites_skipped  += count( $invitation_result['skipped'] );
+			// when opted in via --migrate-invitations on a --live run. A throw escaping
+			// the invite path is recorded as a team error rather than aborting the run,
+			// which would take every summary table below down with it.
+			$team_emails                       = $pending_invitations[ $team_id ] ?? [];
+			$invitation_teams_seen[ $team_id ] = true;
+			try {
+				$invitation_result = self::migrate_team_invitations( $subscription, $team_id, $send_invitations, $team_emails );
+			} catch ( \Throwable $e ) {
+				$errors[]          = sprintf( 'invitations: %s', $e->getMessage() );
+				$invitation_result = [
+					'emails'  => $team_emails,
+					'sent'    => [],
+					'resent'  => [],
+					'skipped' => [],
+					'failed'  => [],
+				];
+			}
+			$invites_sent    += count( $invitation_result['sent'] );
+			$invites_resent  += count( $invitation_result['resent'] );
+			$invites_skipped += count( $invitation_result['skipped'] );
+			$invites_failed  += count( $invitation_result['failed'] );
+			foreach ( $invitation_result['skipped'] as $skip_reason ) {
+				$invite_skip_reasons[ $skip_reason ] = ( $invite_skip_reasons[ $skip_reason ] ?? 0 ) + 1;
+			}
 			foreach ( $invitation_result['emails'] as $invitee_email ) {
-				if ( in_array( $invitee_email, $invitation_result['sent'], true ) ) {
+				if ( in_array( $invitee_email, $invitation_result['resent'], true ) ) {
+					$outcome = 'invite sent (earlier invite had lapsed)';
+				} elseif ( in_array( $invitee_email, $invitation_result['sent'], true ) ) {
 					$outcome = 'invite sent';
 				} elseif ( isset( $invitation_result['skipped'][ $invitee_email ] ) ) {
 					$outcome = 'skipped — ' . $invitation_result['skipped'][ $invitee_email ];
+				} elseif ( isset( $invitation_result['failed'][ $invitee_email ] ) ) {
+					$outcome = 'FAILED — ' . $invitation_result['failed'][ $invitee_email ];
 				} elseif ( ! $migrate_invitations ) {
 					$outcome = 'not sent (pass --migrate-invitations to send)';
 				} else {
@@ -379,6 +445,9 @@ class Teams_Migration {
 					'invitee' => $invitee_email,
 					'outcome' => $outcome,
 				];
+			}
+			if ( ! empty( $invitation_result['failed'] ) ) {
+				WP_CLI::warning( sprintf( 'Team %d: %d invitation(s) could not be delivered — see the re-invite list below; re-run to retry them.', $team_id, count( $invitation_result['failed'] ) ) );
 			}
 
 			$verb = $created_new ? 'new' : 'existing';
@@ -447,6 +516,28 @@ class Teams_Migration {
 			\WP_CLI\Utils\format_items( 'table', $skipped, [ 'team_id', 'owner', 'seat_limit', 'created', 'expires' ] );
 		}
 
+		// Invitees of teams the run never reached — skipped by --skip-unlinked or
+		// --only-unlinked, or errored out for having no subscription to migrate into.
+		// They are listed too, so "the pending invitees are always listed" holds for
+		// every team rather than only the processed ones.
+		$skipped_team_ids = array_column( $skipped, 'team_id' );
+		foreach ( $pending_invitations as $team_id => $team_emails ) {
+			if ( isset( $invitation_teams_seen[ $team_id ] ) ) {
+				continue;
+			}
+			$outcome = in_array( $team_id, $skipped_team_ids, true )
+				? 'not processed (team skipped)'
+				: 'not processed (team not migrated)';
+			foreach ( $team_emails as $invitee_email ) {
+				$invitation_rows[] = [
+					'team_id' => $team_id,
+					'sub'     => '—',
+					'invitee' => $invitee_email,
+					'outcome' => $outcome,
+				];
+			}
+		}
+
 		// Pending-invitation re-invite list. Emitted whenever any team carried pending
 		// invitations, whether or not --migrate-invitations was passed, so the invitees
 		// are never lost silently — an operator can act on this list even if they chose
@@ -465,7 +556,35 @@ class Teams_Migration {
 		WP_CLI::line( '' );
 		WP_CLI::success( sprintf( 'Done. %d team(s) processed: %d used existing subscriptions, %d had new subscriptions created, %d skipped, %d had error(s).', count( $summary ), count( $summary ) - $new_count, $new_count, count( $skipped ), count( $errored_rows ) ) );
 		if ( ! empty( $invitation_rows ) ) {
-			WP_CLI::success( sprintf( 'Pending invitations: %d %s, %d skipped, %d listed only.', $invites_sent, ( $dry_run && $migrate_invitations ) ? 'would be sent' : 'sent', $invites_skipped, count( $invitation_rows ) - $invites_sent - $invites_skipped ) );
+			// On a dry run with the flag, nothing is attempted, so the send total is the
+			// number of rows the table shows as "would send" rather than 0 — which would
+			// contradict the table it sits under.
+			$would_send = $dry_run && $migrate_invitations;
+			$sent_count = $would_send
+				? count( array_filter( $invitation_rows, fn( $row ) => 'would send (dry run)' === $row['outcome'] ) )
+				: $invites_sent;
+			WP_CLI::success(
+				sprintf(
+					'Pending invitations: %d %s, %d skipped, %d failed, %d listed only.',
+					$sent_count,
+					$would_send ? 'would be sent' : 'sent',
+					$invites_skipped,
+					$invites_failed,
+					count( $invitation_rows ) - $sent_count - $invites_skipped - $invites_failed
+				)
+			);
+			if ( $invites_resent ) {
+				WP_CLI::warning( sprintf( '%d of the invitations sent went to readers whose earlier invitation had lapsed (invites expire after %s) — they were emailed a second time.', $invites_resent, Group_Subscription_Invite::get_expiration_label() ) );
+			}
+			// Break the skipped total down: "already invited, nothing to do" and "the
+			// group had no seats left, so these people were dropped" are the same number
+			// otherwise, and only one of them needs the operator's attention.
+			if ( ! empty( $invite_skip_reasons ) ) {
+				arsort( $invite_skip_reasons );
+				foreach ( $invite_skip_reasons as $skip_reason => $skip_count ) {
+					WP_CLI::line( sprintf( '  skipped — %s: %d', $skip_reason, $skip_count ) );
+				}
+			}
 		}
 	}
 
@@ -1162,6 +1281,26 @@ class Teams_Migration {
 	}
 
 	/**
+	 * Whether --skip-unlinked / --only-unlinked will move past this team.
+	 *
+	 * Mirrors the two flag gates at the top of the migration loop, for the pre-pass that
+	 * counts the readers a run is about to email. It deliberately does not model the
+	 * "no reusable subscription and no --product-id" error path, which needs the
+	 * subscription lookup the loop performs — so the count is an upper bound, as the
+	 * prompt says.
+	 *
+	 * @param int  $team_id       The team post ID.
+	 * @param bool $skip_unlinked Whether --skip-unlinked was passed.
+	 * @param bool $only_unlinked Whether --only-unlinked was passed.
+	 *
+	 * @return bool
+	 */
+	private static function team_is_skipped_by_flags( $team_id, $skip_unlinked, $only_unlinked ) {
+		$raw_sub_id = (int) \get_post_meta( $team_id, '_subscription_id', true );
+		return ( $skip_unlinked && ! $raw_sub_id ) || ( $only_unlinked && $raw_sub_id );
+	}
+
+	/**
 	 * Carry a team's pending invitations over to its group subscription.
 	 *
 	 * Always returns the list of pending invitee emails so the migration can surface a
@@ -1171,28 +1310,53 @@ class Teams_Migration {
 	 * (already a member, non-reader account, group at its member limit) are recorded as
 	 * skipped with the reason rather than fataling. Exposed for testing.
 	 *
+	 * Only an invitee whose invitation email actually went out is counted as sent.
+	 * generate_invite() writes the invite row before it dispatches the email and reports
+	 * the delivery result in `email_sent`; when that is false the invite here is rolled
+	 * back with cancel_invite(), because a stored invite would otherwise make the
+	 * already-invited gate below answer "Already invited." forever and leave a reader who
+	 * was never contacted unreachable by a corrective re-run.
+	 *
+	 * A per-invitee try/catch keeps one throwing address (a mail plugin throwing off
+	 * `phpmailer_init`, a save failing inside WooCommerce) from aborting the run and
+	 * destroying the report for the hundreds of invitees behind it.
+	 *
 	 * An email that already holds a live (non-expired) invite on the subscription is
 	 * skipped without re-inviting: generate_invite() replaces and re-sends unconditionally,
 	 * so this gate is what keeps a re-run (the endorsed recovery path) — and two teams
 	 * merged into one subscription sharing a pending invitee — from re-emailing a reader
-	 * who was already invited.
+	 * who was already invited. The gate reads live invites only, so it holds for as long
+	 * as an invite lives (30 days by default, filterable via
+	 * `newspack_group_subscription_invite_expiration_time`): past that window a re-run
+	 * legitimately re-invites the lapsed invitee, and those addresses are reported
+	 * separately in `resent` so the operator can see who is being emailed a second time.
+	 *
+	 * Addresses are compared case-insensitively but invited in their original casing:
+	 * the acceptance handler compares the invite address strictly against the reader's
+	 * stored `user_email`, which WordPress keeps in whatever case the reader registered
+	 * with, so a lowercased invite would be unacceptable for a mixed-case account.
 	 *
 	 * @param \WC_Subscription|null $subscription The resolved group subscription, or null (e.g. a dry-run new subscription).
 	 * @param int                   $team_id      The team post ID.
 	 * @param bool                  $send         Whether to actually create and send invites.
+	 * @param string[]|null         $emails       Pre-read pending invitee emails; read from the team when null.
 	 *
 	 * @return array {
 	 *     @type string[]              $emails  Pending invitee emails for the team.
-	 *     @type string[]              $sent    Emails an invite was created and sent for.
+	 *     @type string[]              $sent    Emails an invite was created and emailed for.
+	 *     @type string[]              $resent  Subset of $sent that was invited again because an earlier invite had lapsed.
 	 *     @type array<string, string> $skipped Email => skip reason for invitees that were not sent.
+	 *     @type array<string, string> $failed  Email => failure reason for invitees whose invite could not be delivered.
 	 * }
 	 */
-	public static function migrate_team_invitations( $subscription, $team_id, $send ) {
-		$emails = self::get_pending_team_invitation_emails( $team_id );
+	public static function migrate_team_invitations( $subscription, $team_id, $send, $emails = null ) {
+		$emails = null === $emails ? self::get_pending_team_invitation_emails( $team_id ) : $emails;
 		$result = [
 			'emails'  => $emails,
 			'sent'    => [],
+			'resent'  => [],
 			'skipped' => [],
+			'failed'  => [],
 		];
 
 		if ( ! $send || ! $subscription ) {
@@ -1200,26 +1364,49 @@ class Teams_Migration {
 		}
 
 		// Emails that already hold a live invite on the subscription (from a prior run, or
-		// an earlier team merged into the same subscription this run). Keyed lowercase so
-		// case variants of the same mailbox collapse.
+		// an earlier team merged into the same subscription this run), and those whose
+		// invite has lapsed and so will be sent again. Keyed lowercase so case variants of
+		// the same mailbox collapse.
 		$already_invited = [];
-		foreach ( Group_Subscription_Invite::get_invites( $subscription, false ) as $invite ) {
-			if ( ! empty( $invite['email'] ) ) {
+		$lapsed_invites  = [];
+		foreach ( Group_Subscription_Invite::get_invites( $subscription ) as $invite ) {
+			if ( empty( $invite['email'] ) ) {
+				continue;
+			}
+			if ( Group_Subscription_Invite::is_invite_expired( $invite ) ) {
+				$lapsed_invites[ strtolower( $invite['email'] ) ] = true;
+			} else {
 				$already_invited[ strtolower( $invite['email'] ) ] = true;
 			}
 		}
 
 		foreach ( $emails as $email ) {
-			if ( isset( $already_invited[ strtolower( $email ) ] ) ) {
+			$key = strtolower( $email );
+			if ( isset( $already_invited[ $key ] ) ) {
 				$result['skipped'][ $email ] = __( 'Already invited.', 'newspack-plugin' );
 				continue;
 			}
-			$invite = Group_Subscription_Invite::generate_invite( $subscription, $email );
-			if ( \is_wp_error( $invite ) ) {
-				$result['skipped'][ $email ] = $invite->get_error_message();
-			} else {
-				$result['sent'][]                        = $email;
-				$already_invited[ strtolower( $email ) ] = true;
+			try {
+				$invite = Group_Subscription_Invite::generate_invite( $subscription, $email );
+				if ( \is_wp_error( $invite ) ) {
+					$result['skipped'][ $email ] = $invite->get_error_message();
+					continue;
+				}
+				if ( empty( $invite['email_sent'] ) ) {
+					// Roll the invite back so it can't answer "Already invited." on the
+					// re-run that is meant to reach this reader.
+					Group_Subscription_Invite::cancel_invite( $subscription, $email );
+					$result['failed'][ $email ] = __( 'Invitation email was not sent — the invite was rolled back so a re-run can retry.', 'newspack-plugin' );
+					continue;
+				}
+			} catch ( \Throwable $e ) {
+				$result['failed'][ $email ] = $e->getMessage();
+				continue;
+			}
+			$result['sent'][]        = $email;
+			$already_invited[ $key ] = true;
+			if ( isset( $lapsed_invites[ $key ] ) ) {
+				$result['resent'][] = $email;
 			}
 		}
 
@@ -1232,9 +1419,13 @@ class Teams_Migration {
 	 * Invitations are stored as `wc_team_invitation` posts parented to the team, with the
 	 * invitee email in the post title and a `wcmti-pending` status while unaccepted. Read
 	 * directly (rather than through the Teams API) so the migration does not depend on the
-	 * Teams plugin being active. Malformed addresses are dropped and emails are lowercased,
-	 * so case variants of one mailbox dedupe to a single entry — matching the case-insensitive
-	 * already-invited gate in migrate_team_invitations(). Exposed for testing.
+	 * Teams plugin being active. Malformed addresses are dropped and case variants of one
+	 * mailbox dedupe to a single entry (first one wins) — matching the case-insensitive
+	 * already-invited gate in migrate_team_invitations(). The address itself is returned in
+	 * its original casing: it is what gets stored on the invite and emailed, and the
+	 * acceptance handler compares it strictly against the reader's stored `user_email`, so
+	 * lowercasing it would strand every invitee whose account email carries uppercase
+	 * characters. Exposed for testing.
 	 *
 	 * The `post_status` query filter only narrows the result when the status is
 	 * registered: WooCommerce Teams registers `wcmti-pending` on `init`, so during a
@@ -1246,7 +1437,7 @@ class Teams_Migration {
 	 *
 	 * @param int $team_id The team post ID.
 	 *
-	 * @return string[] Unique, lowercased, sanitised pending invitee emails.
+	 * @return string[] Sanitised pending invitee emails in their original casing, deduped case-insensitively.
 	 */
 	public static function get_pending_team_invitation_emails( $team_id ) {
 		$invitations = \get_posts(
@@ -1264,17 +1455,24 @@ class Teams_Migration {
 		);
 
 		$emails = [];
+		$seen   = [];
 		foreach ( $invitations as $invitation ) {
 			if ( 'wcmti-pending' !== $invitation->post_status ) {
 				continue;
 			}
 			$email = \is_email( $invitation->post_title );
-			if ( $email ) {
-				$emails[] = strtolower( $email );
+			if ( ! $email ) {
+				continue;
 			}
+			$key = strtolower( $email );
+			if ( isset( $seen[ $key ] ) ) {
+				continue;
+			}
+			$seen[ $key ] = true;
+			$emails[]     = $email;
 		}
 
-		return array_values( array_unique( $emails ) );
+		return $emails;
 	}
 
 	/**
