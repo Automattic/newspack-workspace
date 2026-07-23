@@ -520,12 +520,14 @@ class Teams_Migration {
 		// --only-unlinked, or errored out for having no subscription to migrate into.
 		// They are listed too, so "the pending invitees are always listed" holds for
 		// every team rather than only the processed ones.
-		$skipped_team_ids = array_column( $skipped, 'team_id' );
+		// The flag check, not the SKIPPED TEAMS table, is what tells the two cases apart:
+		// only --skip-unlinked records a row there, so --only-unlinked's teams would
+		// otherwise be reported as failures rather than as the deliberate filter they are.
 		foreach ( $pending_invitations as $team_id => $team_emails ) {
 			if ( isset( $invitation_teams_seen[ $team_id ] ) ) {
 				continue;
 			}
-			$outcome = in_array( $team_id, $skipped_team_ids, true )
+			$outcome = self::team_is_skipped_by_flags( $team_id, $skip_unlinked, $only_unlinked )
 				? 'not processed (team skipped)'
 				: 'not processed (team not migrated)';
 			foreach ( $team_emails as $invitee_email ) {

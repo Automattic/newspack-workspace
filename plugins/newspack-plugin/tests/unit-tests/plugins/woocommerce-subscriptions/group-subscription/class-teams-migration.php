@@ -158,14 +158,16 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 	/**
 	 * Create a reader user (a valid group member).
 	 *
+	 * @param string|null $email Account email; a unique lowercase one is generated when null.
+	 *                           Pass an explicit address to pin case-sensitive behaviour.
 	 * @return int User ID.
 	 */
-	private function create_reader(): int {
+	private function create_reader( ?string $email = null ): int {
 		$user_id = wp_insert_user(
 			[
 				'user_login' => 'user-' . wp_generate_password( 6, false ),
 				'user_pass'  => wp_generate_password(),
-				'user_email' => 'user-' . wp_generate_password( 6, false ) . '@test.com',
+				'user_email' => $email ?? 'user-' . wp_generate_password( 6, false ) . '@test.com',
 				'role'       => 'subscriber',
 			]
 		);
@@ -828,6 +830,36 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 			'The stored invite must keep the original casing so the acceptance check can match the account email.'
 		);
 		$this->assertSame( $mixed_case, $this->get_sent_emails()[0]['to'][0][0], 'The email must go to the original-cased address.' );
+	}
+
+	/**
+	 * The reason the casing is preserved: an invitee whose *account* email carries
+	 * uppercase characters must be able to accept what the migration sent them.
+	 * accept_invite() compares the stored invite address strictly against the address in
+	 * the link, and process_invite_request() compares that address strictly against the
+	 * logged-in reader's user_email — so a lowercased invite would be unacceptable for
+	 * this reader, and only an end-to-end accept proves it isn't.
+	 */
+	public function test_migrate_team_invitations_invite_is_acceptable_by_a_mixed_case_account() {
+		$owner        = $this->create_reader();
+		$subscription = $this->create_group_subscription( $owner );
+		$team_id      = $this->create_team( $owner, [], $subscription->get_id() );
+
+		$account_email = 'Dana.Smith@Example.com';
+		$invitee       = $this->create_reader( $account_email );
+		$this->assertSame( $account_email, get_userdata( $invitee )->user_email, 'WordPress stores the account email in the case it was registered with.' );
+		$this->create_team_invitation( $team_id, $account_email );
+
+		$result = Teams_Migration::migrate_team_invitations( $subscription, $team_id, true );
+		$this->assertSame( [ $account_email ], $result['sent'], 'The mixed-case invitee should be invited.' );
+
+		$invites    = Group_Subscription_Invite::get_invites( $subscription );
+		$invite_key = array_key_first( $invites );
+		$this->assertSame( $account_email, $invites[ $invite_key ]['email'], 'The stored invite must carry the address in the account\'s own casing.' );
+
+		$accepted = Group_Subscription_Invite::accept_invite( $subscription, $invite_key, $account_email );
+		$this->assertTrue( $accepted, 'The reader must be able to accept the invitation the migration sent them.' );
+		$this->assertContains( $invitee, array_map( 'absint', Group_Subscription::get_members( $subscription ) ), 'Accepting should make the mixed-case reader a group member.' );
 	}
 
 	/**
