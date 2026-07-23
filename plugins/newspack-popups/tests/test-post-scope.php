@@ -831,6 +831,91 @@ class PostScopeTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Changing the site's donation platform must not retroactively mark every
+	 * pristine prompt as customized — that would claim a custom design the publisher
+	 * never made and route copy edits onto the in-place updater.
+	 */
+	public function test_customized_detection_survives_donation_platform_change() {
+		add_filter( 'newspack_contextual_prompts_use_donate_block', '__return_true' );
+
+		$post_id   = self::factory()->post->create( [ 'post_type' => 'post' ] );
+		$prompt_id = Newspack_Popups_Post_Scope::create_scoped_prompt(
+			[
+				'post_id'  => $post_id,
+				'body'     => 'Fund this reporting.',
+				'position' => 1,
+			]
+		);
+		$this->assertFalse( Newspack_Popups_Post_Scope::is_customized( $prompt_id ), 'Freshly built prompt is pristine.' );
+
+		// The publisher moves donations off-platform.
+		remove_filter( 'newspack_contextual_prompts_use_donate_block', '__return_true' );
+		add_filter( 'newspack_contextual_prompts_use_donate_block', '__return_false' );
+
+		$this->assertFalse(
+			Newspack_Popups_Post_Scope::is_customized( $prompt_id ),
+			'Still pristine — the baseline uses the mode the prompt was built with.'
+		);
+
+		// And a copy edit still goes down the regenerate path, not the in-place one.
+		$updated = Newspack_Popups_Post_Scope::update_scoped_prompt(
+			$prompt_id,
+			[
+				'body'     => 'Edited copy.',
+				'position' => 1,
+			]
+		);
+		$this->assertNotWPError( $updated );
+		$this->assertStringContainsString( 'Edited copy.', get_post_field( 'post_content', $prompt_id ) );
+
+		remove_filter( 'newspack_contextual_prompts_use_donate_block', '__return_false' );
+	}
+
+	/**
+	 * If the copy block was removed while customizing, the edit fails loudly rather
+	 * than reporting success while the story keeps serving the old copy.
+	 */
+	public function test_missing_copy_block_reports_an_error() {
+		add_filter( 'newspack_contextual_prompts_use_donate_block', '__return_false' );
+
+		$post_id   = self::factory()->post->create( [ 'post_type' => 'post' ] );
+		$prompt_id = Newspack_Popups_Post_Scope::create_scoped_prompt(
+			[
+				'post_id'  => $post_id,
+				'body'     => 'Original copy.',
+				'position' => 1,
+			]
+		);
+
+		// Customize it AND remove the copy hook, as a publisher rebuilding the card would.
+		wp_update_post(
+			[
+				'ID'           => $prompt_id,
+				'post_content' => "<!-- wp:paragraph -->\n<p>Hand-built card.</p>\n<!-- /wp:paragraph -->",
+			]
+		);
+		$this->assertTrue( Newspack_Popups_Post_Scope::is_customized( $prompt_id ) );
+
+		$result = Newspack_Popups_Post_Scope::update_scoped_prompt(
+			$prompt_id,
+			[
+				'body'     => 'New copy that has nowhere to go.',
+				'position' => 1,
+			]
+		);
+
+		$this->assertWPError( $result, 'A no-op edit is reported, not swallowed.' );
+		$this->assertSame( 'newspack_popups_copy_block_missing', $result->get_error_code() );
+		$this->assertStringContainsString(
+			'Hand-built card.',
+			get_post_field( 'post_content', $prompt_id ),
+			'The publisher content is left untouched.'
+		);
+
+		remove_filter( 'newspack_contextual_prompts_use_donate_block', '__return_false' );
+	}
+
+	/**
 	 * Updating something that isn't a scoped prompt is rejected.
 	 */
 	public function test_update_rejects_non_scoped_prompt() {

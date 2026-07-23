@@ -64,6 +64,15 @@ final class Newspack_Popups_Post_Scope {
 	const META_BUTTON_URL   = 'newspack_cp_button_url';
 
 	/**
+	 * The CTA mode a prompt's content was generated with, so the pristine baseline
+	 * survives a change of donation platform.
+	 */
+	const META_CTA_MODE = 'newspack_cp_cta_mode';
+
+	const CTA_MODE_DONATE_BLOCK = 'donate_block';
+	const CTA_MODE_BUTTON       = 'button';
+
+	/**
 	 * Register hooks.
 	 */
 	public static function init() {
@@ -242,9 +251,24 @@ final class Newspack_Popups_Post_Scope {
 		// (and any blocks they added) survives an edit made from the panel.
 		if ( self::is_customized( $prompt_id ) ) {
 			$result = self::update_copy_in_place( $prompt->post_content, $body, $button_label, $button_url );
+
+			// If the copy block was removed while customizing, there is nowhere to put
+			// the new wording. Failing loudly beats a silent no-op: the panel would
+			// otherwise reload from meta showing the edit while the story kept serving
+			// the old copy, with nothing to reveal the divergence.
+			if ( ! $result['copy_found'] ) {
+				return new \WP_Error(
+					'newspack_popups_copy_block_missing',
+					__( 'This prompt was customized in Advanced settings and its copy block was removed, so the copy can no longer be edited here. Edit it in Advanced settings, or reset it to the default design.', 'newspack-popups' ),
+					[ 'status' => 409 ]
+				);
+			}
+
 			$content = $result['content'];
 		} else {
-			$content = self::build_prompt_content( $body, $button_label, $button_url );
+			// Keep the mode this prompt was built with, so regenerating never silently
+			// swaps its CTA out from under the publisher.
+			$content = self::build_prompt_content( $body, $button_label, $button_url, self::get_cta_mode( $prompt_id ) );
 		}
 
 		$updated = wp_update_post(
@@ -343,6 +367,8 @@ final class Newspack_Popups_Post_Scope {
 		$button_url   = (string) ( $args['button_url'] ?? '' );
 		$position     = max( 0, (int) ( $args['position'] ?? 3 ) );
 
+		$cta_mode = self::use_donate_block() ? self::CTA_MODE_DONATE_BLOCK : self::CTA_MODE_BUTTON;
+
 		$prompt_id = wp_insert_post(
 			[
 				'post_type'    => Newspack_Popups::NEWSPACK_POPUPS_CPT,
@@ -350,7 +376,7 @@ final class Newspack_Popups_Post_Scope {
 				'post_parent'  => $post_id,
 				/* translators: %s: parent post title. */
 				'post_title'   => sprintf( __( 'Contextual prompt: %s', 'newspack-popups' ), get_the_title( $post_id ) ),
-				'post_content' => self::build_prompt_content( $body, $button_label, $button_url ),
+				'post_content' => self::build_prompt_content( $body, $button_label, $button_url, $cta_mode ),
 			],
 			true
 		);
@@ -358,6 +384,10 @@ final class Newspack_Popups_Post_Scope {
 		if ( is_wp_error( $prompt_id ) ) {
 			return $prompt_id;
 		}
+
+		// Recorded so is_customized() can rebuild the same baseline later even if the
+		// site's donation platform changes in the meantime.
+		update_post_meta( $prompt_id, self::META_CTA_MODE, $cta_mode );
 
 		$options_result = Newspack_Popups_Model::set_popup_options(
 			$prompt_id,
@@ -418,9 +448,14 @@ final class Newspack_Popups_Post_Scope {
 	 * @param string $body         Appeal copy.
 	 * @param string $button_label Button label (plain-button fallback only).
 	 * @param string $button_url   Button URL (plain-button fallback only).
+	 * @param string $cta_mode     CTA mode to build; defaults to the site's current one.
 	 * @return string Serialized block markup.
 	 */
-	private static function build_prompt_content( $body, $button_label, $button_url ) {
+	private static function build_prompt_content( $body, $button_label, $button_url, $cta_mode = null ) {
+		if ( null === $cta_mode ) {
+			$cta_mode = self::use_donate_block() ? self::CTA_MODE_DONATE_BLOCK : self::CTA_MODE_BUTTON;
+		}
+
 		// The __copy / __cta classes are stable anchors: once a publisher has
 		// customized a prompt in the block editor we no longer regenerate its
 		// content, and instead update just these blocks in place (see
@@ -428,7 +463,7 @@ final class Newspack_Popups_Post_Scope {
 		$inner = '<!-- wp:paragraph {"className":"' . self::COPY_CLASS . '","style":{"spacing":{"margin":{"top":"0","bottom":"16px"}}}} -->' . "\n"
 			. '<p class="' . self::COPY_CLASS . '" style="margin-top:0;margin-bottom:16px">' . esc_html( $body ) . "</p>\n<!-- /wp:paragraph -->";
 
-		if ( self::use_donate_block() ) {
+		if ( self::CTA_MODE_DONATE_BLOCK === $cta_mode ) {
 			// Native Newspack donation form; uses the site's donation settings.
 			$inner .= "\n<!-- wp:newspack-blocks/donate /-->";
 		} elseif ( '' !== trim( $button_url ) ) {
@@ -471,13 +506,41 @@ final class Newspack_Popups_Post_Scope {
 			return false;
 		}
 
+		// Rebuild the baseline with the CTA mode this prompt was BUILT with, not the
+		// site's current one. Both are derived from Newspack donations being active,
+		// so a publisher moving donations off-platform would otherwise flip every
+		// pristine prompt to "customized" at once — each one then claiming a custom
+		// design the publisher never made, and routing its copy edits onto the
+		// in-place updater, where the CTA hooks no longer match.
 		$pristine = self::build_prompt_content(
 			(string) get_post_meta( $prompt_id, self::META_BODY, true ),
 			(string) get_post_meta( $prompt_id, self::META_BUTTON_LABEL, true ),
-			(string) get_post_meta( $prompt_id, self::META_BUTTON_URL, true )
+			(string) get_post_meta( $prompt_id, self::META_BUTTON_URL, true ),
+			self::get_cta_mode( $prompt_id )
 		);
 
 		return trim( $prompt->post_content ) !== trim( $pristine );
+	}
+
+	/**
+	 * The CTA mode a prompt's content was generated with.
+	 *
+	 * Recorded at build time so the pristine baseline stays stable when the site's
+	 * donation platform changes. Prompts created before this was stored fall back to
+	 * detecting the mode from their own content.
+	 *
+	 * @param int $prompt_id Prompt ID.
+	 * @return string 'donate_block' or 'button'.
+	 */
+	private static function get_cta_mode( $prompt_id ) {
+		$stored = (string) get_post_meta( $prompt_id, self::META_CTA_MODE, true );
+		if ( '' !== $stored ) {
+			return $stored;
+		}
+
+		return false !== strpos( (string) get_post_field( 'post_content', $prompt_id ), 'newspack-blocks/donate' )
+			? self::CTA_MODE_DONATE_BLOCK
+			: self::CTA_MODE_BUTTON;
 	}
 
 	/**
