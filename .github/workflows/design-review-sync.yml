@@ -39,10 +39,19 @@ jobs:
             const { owner, repo } = context.repo;
             const number = context.payload.pull_request.number;
 
+            // Label writes are best-effort. On a fork-head PR the GITHUB_TOKEN is
+            // read-only and every write returns 403; that is not worth failing a run
+            // over (this is label hygiene, not a gate), so warn and continue. Any
+            // other error is a real problem and still throws.
             const addLabel = async ( name ) => {
-              await github.rest.issues.addLabels(
-                { owner, repo, issue_number: number, labels: [ name ] }
-              );
+              try {
+                await github.rest.issues.addLabels(
+                  { owner, repo, issue_number: number, labels: [ name ] }
+                );
+              } catch ( error ) {
+                if ( error.status !== 403 ) throw error;
+                core.warning( `No permission to add label "${ name }" (read-only token?).` );
+              }
             };
 
             const removeLabelSafe = async ( name ) => {
@@ -51,7 +60,10 @@ jobs:
                   { owner, repo, issue_number: number, name }
                 );
               } catch ( error ) {
-                if ( error.status !== 404 ) throw error;
+                // 404 = label not on the PR; 403 = read-only token (fork-head PR).
+                if ( error.status === 404 ) return;
+                if ( error.status !== 403 ) throw error;
+                core.warning( `No permission to remove label "${ name }" (read-only token?).` );
               }
             };
 
