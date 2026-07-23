@@ -1005,13 +1005,16 @@ body:not(.wp-child-theme-newspack-joseph):not(.wp-child-theme-newspack-nelson) .
 
 	&.alignright figcaption,
 	.alignright figcaption {
+		/* rtl:ignore */
 		text-align: right;
 	}
 
 	&.alignleft figcaption,
 	.alignleft figcaption {
+		/* rtl:ignore */
 		text-align: left;
 	}
+
 	img:not([style*="object-fit"]) {
 		height: auto !important; // !important to override inline styles.
 	}
