@@ -197,14 +197,47 @@ class Test_Subscribers_Wizard_Groups_Endpoint extends WP_UnitTestCase {
 	}
 
 	/**
-	 * WCS statuses collapse to the prototype vocabulary (active / on-hold / cancelled).
+	 * WCS statuses collapse onto the four values the list has labels and badges for
+	 * (active / pending / on-hold / cancelled).
+	 *
+	 * A group awaiting its first payment is a real, reachable state, and it is the
+	 * one that bites: it maps to `pending`, so both the status badge and the list's
+	 * default status filter have to know about it, or such a group renders with an
+	 * empty status — or is hidden outright.
 	 */
 	public function test_maps_wcs_status_to_prototype_vocabulary() {
 		wp_set_current_user( $this->create_reader_user( 'administrator' ) );
-		$this->create_group_subscription( $this->create_reader_user(), 3, 'cancelled' );
+
+		$prototype_status_by_wcs_status = [
+			'active'         => 'active',
+			// Cancelled at period end, but still entitled until then.
+			'pending-cancel' => 'active',
+			'pending'        => 'pending',
+			'on-hold'        => 'on-hold',
+			'cancelled'      => 'cancelled',
+			'expired'        => 'cancelled',
+			// An unrecognised WCS slug lands in the "needs attention" bucket rather
+			// than reaching the UI as a status it cannot label.
+			'switched'       => 'on-hold',
+		];
+
+		$wcs_status_by_group_id = [];
+		foreach ( array_keys( $prototype_status_by_wcs_status ) as $wcs_status ) {
+			$group = $this->create_group_subscription( $this->create_reader_user(), 3, $wcs_status );
+
+			$wcs_status_by_group_id[ $group->get_id() ] = $wcs_status;
+		}
 
 		$data = $this->dispatch()->get_data();
-		$this->assertSame( 'cancelled', $data['items'][0]['status'] );
+		$this->assertCount( count( $prototype_status_by_wcs_status ), $data['items'] );
+		foreach ( $data['items'] as $group ) {
+			$wcs_status = $wcs_status_by_group_id[ $group['id'] ];
+			$this->assertSame(
+				$prototype_status_by_wcs_status[ $wcs_status ],
+				$group['status'],
+				sprintf( 'WCS status "%s" should surface as "%s".', $wcs_status, $prototype_status_by_wcs_status[ $wcs_status ] )
+			);
+		}
 	}
 
 	/**
