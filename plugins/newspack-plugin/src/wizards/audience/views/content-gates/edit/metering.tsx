@@ -46,7 +46,7 @@ export default function Metering( { description, metering, onChange }: MeteringP
 					<NumberControl
 						label={ __( 'Free views', 'newspack-plugin' ) }
 						help={ __( 'Free views before the gate appears.', 'newspack-plugin' ) }
-						min={ 1 }
+						min={ 0 }
 						value={ count }
 						onChange={ v => onChange( { ...metering, count: v !== undefined ? Number( v ) : 0 } ) }
 						__next40pxDefaultSize
