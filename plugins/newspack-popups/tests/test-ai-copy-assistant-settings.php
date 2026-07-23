@@ -67,6 +67,32 @@ class AiCopyAssistantSettingsTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The override button label and URL are plain-button-only: they are offered when
+	 * donations are off-site, and hidden when Newspack donations are native (the
+	 * donate block owns its own destination, so they would do nothing).
+	 */
+	public function test_override_button_fields_are_plain_button_only() {
+		$button_keys = [ 'newspack_contextual_prompts_override_label', 'newspack_contextual_prompts_override_url' ];
+
+		add_filter( 'newspack_contextual_prompts_use_donate_block', '__return_false' );
+		$plain_keys = wp_list_pluck( Newspack_Popups_Settings::get_ai_copy_assistant_fields(), 'key' );
+		foreach ( $button_keys as $key ) {
+			$this->assertContains( $key, $plain_keys, 'Plain-button sites expose the override button fields.' );
+		}
+		remove_filter( 'newspack_contextual_prompts_use_donate_block', '__return_false' );
+
+		add_filter( 'newspack_contextual_prompts_use_donate_block', '__return_true' );
+		$native_keys = wp_list_pluck( Newspack_Popups_Settings::get_ai_copy_assistant_fields(), 'key' );
+		foreach ( $button_keys as $key ) {
+			$this->assertNotContains( $key, $native_keys, 'Native-donation sites hide the override button fields.' );
+		}
+		// The override toggle and copy still apply in native mode.
+		$this->assertContains( Newspack_Popups_Settings::OVERRIDE_ENABLED_OPTION, $native_keys );
+		$this->assertContains( 'newspack_contextual_prompts_override_body', $native_keys );
+		remove_filter( 'newspack_contextual_prompts_use_donate_block', '__return_true' );
+	}
+
+	/**
 	 * Saving persists known keys and ignores anything else.
 	 */
 	public function test_save_profile_fields() {

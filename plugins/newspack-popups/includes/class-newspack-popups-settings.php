@@ -125,18 +125,36 @@ class Newspack_Popups_Settings {
 			[
 				'key'     => 'newspack_contextual_prompts_override_label',
 				'label'   => __( 'Override button label', 'newspack-popups' ),
-				'help'    => __( 'Used when prompts render a plain button instead of the Newspack donation form.', 'newspack-popups' ),
+				'help'    => __( 'The label for the override button.', 'newspack-popups' ),
 				'type'    => 'text',
 				'section' => 'override',
 			],
 			[
 				'key'     => 'newspack_contextual_prompts_override_url',
 				'label'   => __( 'Override button URL', 'newspack-popups' ),
-				'help'    => __( 'Where the override button links. Ignored when prompts use the Newspack donation form.', 'newspack-popups' ),
+				'help'    => __( 'Where the override button links.', 'newspack-popups' ),
 				'type'    => 'text',
 				'section' => 'override',
 			],
 		];
+
+		// The override button label and URL drive the plain-button CTA only. When
+		// Newspack donations are native the CTA is the donate block, which owns its
+		// own destination, so those two fields would do nothing — drop them.
+		if ( Newspack_Popups_Contextual_Prompt_Block::use_donate_block() ) {
+			$fields = array_values(
+				array_filter(
+					$fields,
+					function ( $field ) {
+						return ! in_array(
+							$field['key'],
+							[ 'newspack_contextual_prompts_override_label', 'newspack_contextual_prompts_override_url' ],
+							true
+						);
+					}
+				)
+			);
+		}
 
 		foreach ( $fields as &$field ) {
 			$field['section'] = $field['section'] ?? 'profile';

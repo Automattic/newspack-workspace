@@ -229,17 +229,17 @@ final class Newspack_Popups_Contextual_Prompt_Block {
 			1
 		);
 
-		// The native donate block carries its own destination and follows the site's
-		// donation settings, so only the plain-button CTA needs repointing. Its href
-		// and label come from the override settings; is_override_active() already
-		// guarantees the URL is present in this mode.
-		if ( ! self::use_donate_block() ) {
-			$block_content = self::apply_override_to_button(
-				$block_content,
-				(string) get_option( 'newspack_contextual_prompts_override_url', '' ),
-				trim( (string) get_option( 'newspack_contextual_prompts_override_label', '' ) )
-			);
-		}
+		// Repoint the CTA from what the block actually renders, not the site's current
+		// donation platform: a block's CTA type is fixed when it is inserted, so a
+		// plain-button prompt inserted before a switch to native donations still needs
+		// its button repointed. apply_override_to_button() targets only the plain-button
+		// anchor and no-ops on the native donate block (which owns its own destination),
+		// so this is safe to run in either mode.
+		$block_content = self::apply_override_to_button(
+			$block_content,
+			(string) get_option( 'newspack_contextual_prompts_override_url', '' ),
+			trim( (string) get_option( 'newspack_contextual_prompts_override_label', '' ) )
+		);
 
 		return $block_content;
 	}

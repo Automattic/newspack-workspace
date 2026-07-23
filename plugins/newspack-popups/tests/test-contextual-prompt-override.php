@@ -87,6 +87,25 @@ class ContextualPromptOverrideTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A block's CTA type is fixed at insertion, so the repoint follows the block's
+	 * actual markup, not the site's current donation platform: a plain-button prompt
+	 * that predates a switch to native donations is still repointed.
+	 */
+	public function test_repoint_follows_block_not_current_platform() {
+		// Site is now on native donations, but this block was inserted as a plain button.
+		add_filter( 'newspack_contextual_prompts_use_donate_block', '__return_true' );
+		update_option( Newspack_Popups_Settings::OVERRIDE_ENABLED_OPTION, true );
+		update_option( 'newspack_contextual_prompts_override_body', 'Fund the newsroom.' );
+		update_option( 'newspack_contextual_prompts_override_url', 'https://example.com/fund-drive/' );
+		update_option( 'newspack_contextual_prompts_override_label', 'Give now' );
+
+		$result = Newspack_Popups_Contextual_Prompt_Block::maybe_apply_override( self::PLAIN_BUTTON_BLOCK );
+
+		$this->assertStringContainsString( 'href="https://example.com/fund-drive/"', $result, 'Stale plain button is still repointed.' );
+		$this->assertStringContainsString( '>Give now</a>', $result );
+	}
+
+	/**
 	 * The native donate block owns its own URL, so the override only swaps the copy
 	 * and leaves the donation markup untouched.
 	 */
