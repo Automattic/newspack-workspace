@@ -94,7 +94,14 @@ final class Newspack_Popups_Post_Scope {
 	 * @return void
 	 */
 	public static function delete_scoped_prompts_for_post( $post_id ) {
-		foreach ( self::get_scoped_prompt_ids( $post_id ) as $prompt_id ) {
+		// Includes 'trash': the ordinary route to permanent deletion is trash, then
+		// Empty Trash (or wp_scheduled_delete), by which point trashed_post has
+		// already moved the prompt to trash. Without it the common path orphans the
+		// prompt — the exact case these handlers exist to prevent. Note 'any' would
+		// not do: it omits statuses registered exclude_from_search, i.e. trash.
+		$statuses = [ 'publish', 'draft', 'pending', 'future', 'private', 'trash', 'auto-draft' ];
+
+		foreach ( self::get_scoped_prompt_ids( $post_id, $statuses ) as $prompt_id ) {
 			wp_delete_post( $prompt_id, true );
 		}
 	}
@@ -705,10 +712,15 @@ final class Newspack_Popups_Post_Scope {
 		$updated = wp_update_post(
 			[
 				'ID'           => $prompt_id,
+				// Pinned to the mode this prompt was built with, so the rebuilt content
+				// matches the baseline is_customized() compares against. Building with
+				// the site's current mode instead would leave the prompt reading as
+				// "customized" the instant the reset finished.
 				'post_content' => self::build_prompt_content(
 					(string) get_post_meta( $prompt_id, self::META_BODY, true ),
 					(string) get_post_meta( $prompt_id, self::META_BUTTON_LABEL, true ),
-					(string) get_post_meta( $prompt_id, self::META_BUTTON_URL, true )
+					(string) get_post_meta( $prompt_id, self::META_BUTTON_URL, true ),
+					self::get_cta_mode( $prompt_id )
 				),
 			],
 			true

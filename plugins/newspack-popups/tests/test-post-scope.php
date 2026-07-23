@@ -831,6 +831,93 @@ class PostScopeTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The ordinary deletion route is trash, then Empty Trash. By then the prompt is
+	 * already trashed, so a delete lookup that omits 'trash' finds nothing and the
+	 * prompt outlives its article.
+	 */
+	public function test_trash_then_permanent_delete_removes_the_prompt() {
+		$post_id   = self::factory()->post->create( [ 'post_type' => 'post' ] );
+		$prompt_id = Newspack_Popups_Post_Scope::create_scoped_prompt(
+			[
+				'post_id'  => $post_id,
+				'body'     => 'Fund this reporting.',
+				'position' => 1,
+			]
+		);
+
+		wp_trash_post( $post_id );
+		$this->assertSame( 'trash', get_post_status( $prompt_id ), 'Precondition: the prompt is trashed with the article.' );
+
+		wp_delete_post( $post_id, true ); // Empty Trash.
+		$this->assertNull( get_post( $prompt_id ), 'Emptying the trash removes the prompt too, rather than orphaning it.' );
+	}
+
+	/**
+	 * Activating a campaign group drafts every published prompt not in the supplied
+	 * id list — and scoped prompts are excluded from the listing those ids come
+	 * from, so without the same exclusion here they would all be silently disabled.
+	 */
+	public function test_batch_publish_leaves_scoped_prompts_alone() {
+		$post_id = self::factory()->post->create( [ 'post_type' => 'post' ] );
+		$scoped  = Newspack_Popups_Post_Scope::create_scoped_prompt(
+			[
+				'post_id'  => $post_id,
+				'body'     => 'Fund this reporting.',
+				'position' => 1,
+			]
+		);
+		$sitewide = self::factory()->post->create(
+			[
+				'post_type'   => Newspack_Popups::NEWSPACK_POPUPS_CPT,
+				'post_status' => 'publish',
+			]
+		);
+
+		Newspack_Popups_Settings::batch_publish( [ $sitewide ] );
+
+		$this->assertSame( 'publish', get_post_status( $scoped ), 'The story prompt is untouched by a campaign activation.' );
+		$this->assertSame( 'publish', get_post_status( $sitewide ) );
+	}
+
+	/**
+	 * Resetting a prompt returns it to pristine even when the site's donation
+	 * platform has changed since it was created — otherwise the reset leaves it
+	 * reading as customized and the reset link never clears.
+	 */
+	public function test_reset_returns_prompt_to_pristine_after_platform_change() {
+		add_filter( 'newspack_contextual_prompts_use_donate_block', '__return_true' );
+
+		$post_id   = self::factory()->post->create( [ 'post_type' => 'post' ] );
+		$prompt_id = Newspack_Popups_Post_Scope::create_scoped_prompt(
+			[
+				'post_id'  => $post_id,
+				'body'     => 'Fund this reporting.',
+				'position' => 1,
+			]
+		);
+		wp_update_post(
+			[
+				'ID'           => $prompt_id,
+				'post_content' => str_replace( 'wp-block-group', 'wp-block-group custom-shell', get_post_field( 'post_content', $prompt_id ) ),
+			]
+		);
+		$this->assertTrue( Newspack_Popups_Post_Scope::is_customized( $prompt_id ) );
+
+		// The publisher moves donations off-platform, then resets the design.
+		remove_filter( 'newspack_contextual_prompts_use_donate_block', '__return_true' );
+		add_filter( 'newspack_contextual_prompts_use_donate_block', '__return_false' );
+
+		Newspack_Popups_Post_Scope::reset_prompt_design( $prompt_id );
+
+		$this->assertFalse(
+			Newspack_Popups_Post_Scope::is_customized( $prompt_id ),
+			'Reset restores the pristine baseline rather than leaving it stuck as customized.'
+		);
+
+		remove_filter( 'newspack_contextual_prompts_use_donate_block', '__return_false' );
+	}
+
+	/**
 	 * Changing the site's donation platform must not retroactively mark every
 	 * pristine prompt as customized — that would claim a custom design the publisher
 	 * never made and route copy edits onto the in-place updater.

@@ -351,6 +351,27 @@ final class Newspack_Popups_API {
 
 		$prompt_id = (int) ( $request['prompt_id'] ?? 0 );
 
+		// Reset-design and show/hide are independent of the copy, so they run BEFORE
+		// the content update rather than after it. Otherwise a prompt whose copy
+		// block was removed while customizing — the one case that makes the update
+		// fail — could no longer be reset or hidden either, even though the failure
+		// message points the publisher at exactly those actions.
+		if ( $prompt_id ) {
+			if ( ! empty( $request['reset_design'] ) ) {
+				$reset = Newspack_Popups_Post_Scope::reset_prompt_design( $prompt_id );
+				if ( is_wp_error( $reset ) ) {
+					return $reset;
+				}
+			}
+
+			if ( isset( $request['enabled'] ) ) {
+				$status_result = Newspack_Popups_Post_Scope::set_scoped_prompt_enabled( $prompt_id, (bool) $request['enabled'] );
+				if ( is_wp_error( $status_result ) ) {
+					return $status_result;
+				}
+			}
+		}
+
 		if ( $prompt_id ) {
 			$result = Newspack_Popups_Post_Scope::update_scoped_prompt(
 				$prompt_id,
@@ -382,18 +403,9 @@ final class Newspack_Popups_API {
 			return $result;
 		}
 
-		// Discard custom design before anything else, so a reset combined with a
-		// copy edit ends up with the default treatment carrying the new copy.
-		if ( ! empty( $request['reset_design'] ) ) {
-			$reset = Newspack_Popups_Post_Scope::reset_prompt_design( $result );
-			if ( is_wp_error( $reset ) ) {
-				return $reset;
-			}
-		}
-
-		// Per-story show/hide: apply after create-or-update so the toggle can ride
-		// the same request as a copy edit.
-		if ( isset( $request['enabled'] ) ) {
+		// A newly-created prompt can still carry an initial visibility choice; for an
+		// existing one this was already applied above.
+		if ( ! $prompt_id && isset( $request['enabled'] ) ) {
 			$status_result = Newspack_Popups_Post_Scope::set_scoped_prompt_enabled( $result, (bool) $request['enabled'] );
 			if ( is_wp_error( $status_result ) ) {
 				return $status_result;
