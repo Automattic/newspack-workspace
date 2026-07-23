@@ -3,6 +3,8 @@ name: Sync design-review labels and reviewers
 on:
   pull_request:
     types: [labeled, review_requested]
+  pull_request_review:
+    types: [submitted]
 
 permissions:
   contents: read
@@ -22,21 +24,20 @@ jobs:
             const NEEDS_CHANGES   = '[Status] Needs Changes or Feedback';
             const TEAM_SLUG       = 'newspack-design';
 
-            // Behavior 1 requests an INDIVIDUAL reviewer instead of the
-            // @Automattic/newspack-design team. The automatic GITHUB_TOKEN is
-            // repo-scoped and cannot resolve an org team, so requesting the team
-            // fails with 422 "Could not resolve to a node"; org/team read cannot
-            // be granted to GITHUB_TOKEN. 'thomasguillot' is currently the sole
-            // member of the newspack-design team, so requesting them fulfills the
-            // intent (route the PR to design review) without an org-scoped token.
-            // IMPORTANT: if that username changes, or the design team gains/loses
-            // members, UPDATE THIS VALUE — or migrate Behavior 1 to an org-scoped
-            // token / GitHub App that can request the team directly.
+            // This workflow stands in for the @Automattic/newspack-design team using
+            // a single hardcoded reviewer. The automatic GITHUB_TOKEN is repo-scoped:
+            // it cannot resolve/request an org TEAM (requesting one returns 422
+            // "Could not resolve to a node") nor read org team membership, and those
+            // org permissions cannot be granted to GITHUB_TOKEN. Requesting an
+            // INDIVIDUAL reviewer and comparing a review author's login DO work with
+            // it, so we target the team's sole current member instead.
+            // 'thomasguillot' is that member. IMPORTANT: update this value if that
+            // username changes or the design team gains/loses members — or migrate to
+            // an org-scoped token / GitHub App that can address the team directly.
             const DESIGN_REVIEWER = 'thomasguillot';
 
             const { owner, repo } = context.repo;
             const number = context.payload.pull_request.number;
-            const action = context.payload.action;
 
             const addLabel = async ( name ) => {
               await github.rest.issues.addLabels(
@@ -73,14 +74,43 @@ jobs:
               return [ ...latestByUser.values() ].includes( 'CHANGES_REQUESTED' );
             };
 
+            // Design sign-off reached: drop the "needs design review" label, and drop
+            // the "needs changes" label unless another reviewer still requests changes.
+            // Shared by Behavior 3 (label added) and Behavior 4 (reviewer approved).
+            const cleanupAfterDesignApproval = async () => {
+              await removeLabelSafe( NEEDS_DESIGN );
+              if ( ! ( await hasOutstandingChangesRequested() ) ) {
+                await removeLabelSafe( NEEDS_CHANGES );
+              }
+            };
+
+            // Behavior 4: the design reviewer approved the PR.
+            if ( context.eventName === 'pull_request_review' ) {
+              const review = context.payload.review;
+              if (
+                review.state === 'approved' &&
+                review.user &&
+                review.user.login === DESIGN_REVIEWER
+              ) {
+                await addLabel( DESIGN_APPROVED );
+                await cleanupAfterDesignApproval();
+              }
+              return;
+            }
+
+            const action = context.payload.action;
+
             if ( action === 'labeled' ) {
               const label = context.payload.label && context.payload.label.name;
 
+              // Behavior 1: someone flagged the PR for design review.
               if ( label === NEEDS_DESIGN ) {
                 await removeLabelSafe( DESIGN_APPROVED );
-                // GitHub rejects requesting the PR author as their own reviewer,
-                // so skip that case. Failures to request a reviewer should not
-                // fail the run (this is label hygiene, not a gate) — warn instead.
+                // GitHub rejects requesting the PR author as their own reviewer, so
+                // skip that case. A failed reviewer request should not fail the run
+                // (this is label hygiene, not a gate) — warn instead. Requesting via
+                // GITHUB_TOKEN also means this does not re-trigger the workflow, so
+                // Behavior 2 below does not double-fire from this request.
                 if ( context.payload.pull_request.user.login !== DESIGN_REVIEWER ) {
                   try {
                     await github.rest.pulls.requestReviewers(
@@ -95,20 +125,23 @@ jobs:
                 return;
               }
 
+              // Behavior 3: design sign-off was applied via the label.
               if ( label === DESIGN_APPROVED ) {
-                await removeLabelSafe( NEEDS_DESIGN );
-                if ( ! ( await hasOutstandingChangesRequested() ) ) {
-                  await removeLabelSafe( NEEDS_CHANGES );
-                }
+                await cleanupAfterDesignApproval();
                 return;
               }
 
               return;
             }
 
+            // Behavior 2: a design review was requested — either the newspack-design
+            // team or the hardcoded design reviewer as an individual.
             if ( action === 'review_requested' ) {
               const team = context.payload.requested_team;
-              if ( ! team || team.slug !== TEAM_SLUG ) return;
+              const reviewer = context.payload.requested_reviewer;
+              const isDesignTeam = team && team.slug === TEAM_SLUG;
+              const isDesignReviewer = reviewer && reviewer.login === DESIGN_REVIEWER;
+              if ( ! isDesignTeam && ! isDesignReviewer ) return;
               await addLabel( NEEDS_DESIGN );
               await removeLabelSafe( DESIGN_APPROVED );
               return;
