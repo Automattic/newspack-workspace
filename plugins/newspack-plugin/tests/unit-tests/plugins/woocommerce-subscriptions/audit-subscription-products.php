@@ -49,19 +49,22 @@ class Newspack_Test_Audit_Subscription_Products extends WP_UnitTestCase {
 	 */
 	public function set_up() {
 		parent::set_up();
-		global $subscriptions_database, $products_database;
+		global $subscriptions_database, $products_database, $wcs_mock_ignore_offset;
 		$subscriptions_database = [];
 		$products_database      = [];
-		$this->user_id          = self::factory()->user->create( [ 'role' => 'subscriber' ] );
+		$wcs_mock_ignore_offset = false;
+		WP_CLI::reset();
+		$this->user_id = self::factory()->user->create( [ 'role' => 'subscriber' ] );
 	}
 
 	/**
 	 * Clean up the mock databases after each test.
 	 */
 	public function tear_down() {
-		global $subscriptions_database, $products_database;
+		global $subscriptions_database, $products_database, $wcs_mock_ignore_offset;
 		$subscriptions_database = [];
 		$products_database      = [];
+		$wcs_mock_ignore_offset = false;
 		parent::tear_down();
 	}
 
@@ -819,5 +822,30 @@ class Newspack_Test_Audit_Subscription_Products extends WP_UnitTestCase {
 
 		$this->assertCount( 1, $rows, 'The at-risk subscription on the second page must be found — pagination must continue past a full first page.' );
 		$this->assertSame( 101, $rows[0]['subscription_id'] );
+	}
+
+	/**
+	 * A query that stops advancing — the `paged` shape, or a third-party
+	 * `woocommerce_get_subscriptions_query_args` filter dropping `offset` — must halt the
+	 * audit rather than loop forever on a publisher's site. Halting (rather than breaking
+	 * out quietly) also stops an incomplete scan from being read as a clean bill of health.
+	 */
+	public function test_audit_halts_when_the_query_stops_advancing() {
+		global $wcs_mock_ignore_offset;
+		$live_annual_id = 1234;
+		$this->register_product( $live_annual_id, 'Digital Annual' );
+		// A full first page, so the loop asks for a second one.
+		for ( $sub_id = 1; $sub_id <= 100; $sub_id++ ) {
+			$this->register_subscription( $sub_id, [ $this->line_item( 'Digital Annual', $live_annual_id ) ] );
+		}
+		$wcs_mock_ignore_offset = true;
+
+		$audit_active_subscriptions = new ReflectionMethod( WooCommerce_Subscriptions::class, 'audit_active_subscriptions' );
+		$audit_active_subscriptions->setAccessible( true );
+
+		// The WP_CLI stub throws on error() the way real WP-CLI halts non-zero.
+		$this->expectException( Exception::class );
+		$this->expectExceptionMessageMatches( '/stopped advancing/' );
+		$audit_active_subscriptions->invoke( null, [] );
 	}
 }

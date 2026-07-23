@@ -946,7 +946,12 @@ function wcs_get_subscriptions( $args = [] ) {
 	// Page the results so a caller looping `offset` terminates on a short final page.
 	$per_page = isset( $args['subscriptions_per_page'] ) ? (int) $args['subscriptions_per_page'] : 0;
 	if ( $per_page > 0 ) {
-		$matches = array_slice( $matches, max( 0, (int) ( $args['offset'] ?? 0 ) ), $per_page, true );
+		// Stageable: set $wcs_mock_ignore_offset to reproduce a query that never advances —
+		// what the real function does when handed `paged`, and what a third-party
+		// `woocommerce_get_subscriptions_query_args` filter dropping `offset` would do.
+		global $wcs_mock_ignore_offset;
+		$offset  = empty( $wcs_mock_ignore_offset ) ? max( 0, (int) ( $args['offset'] ?? 0 ) ) : 0;
+		$matches = array_slice( $matches, $offset, $per_page, true );
 	}
 	return $matches;
 }

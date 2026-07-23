@@ -222,16 +222,19 @@ class WooCommerce_Subscriptions {
 			}
 			$subscriptions = self::get_subscriptions( ++$page );
 		}
-		// Update flagged subscriptions.
-		$flagged_subscriptions = self::get_flagged_subscriptions();
+		// Update flagged subscriptions. Live only: the loop terminates by clearing each
+		// subscription's flag meta, and that write only happens in live mode — a dry run over
+		// a subscription still flagged by an interrupted live run would re-query the same set
+		// forever while doing nothing.
+		if ( self::$live ) {
+			$flagged_subscriptions = self::get_flagged_subscriptions();
 
-		if ( self::$verbose ) {
-			WP_CLI::line( '' );
-			WP_CLI::line( 'Processing flagged subscriptions:' );
-		}
-		while ( ! empty( $flagged_subscriptions ) ) {
-			foreach ( $flagged_subscriptions as $flagged_subscription ) {
-				if ( self::$live ) {
+			if ( self::$verbose ) {
+				WP_CLI::line( '' );
+				WP_CLI::line( 'Processing flagged subscriptions:' );
+			}
+			while ( ! empty( $flagged_subscriptions ) ) {
+				foreach ( $flagged_subscriptions as $flagged_subscription ) {
 					$end_date  = $flagged_subscription->get_meta( '_newspack_cli_end_date' );
 					$to_status = $flagged_subscription->get_meta( '_newspack_cli_to_status' );
 					$flagged_subscription->update_status( $to_status, __( 'Subscription status updated by Newspack CLI command.', 'newspack-plugin' ) );
@@ -244,8 +247,8 @@ class WooCommerce_Subscriptions {
 						WP_CLI::line( 'Updated subscription ' . $flagged_subscription->get_id() . ' to ' . $to_status );
 					}
 				}
+				$flagged_subscriptions = self::get_flagged_subscriptions();
 			}
-			$flagged_subscriptions = self::get_flagged_subscriptions();
 		}
 		WP_CLI::success( 'Finished processing subscriptions. ' . $updated . ' subscriptions updated. ' . $scheduled . ' retries scheduled. ' . $trashed . ' subscriptions trashed.' );
 		if ( ! self::$live ) {
@@ -706,7 +709,7 @@ class WooCommerce_Subscriptions {
 	 * subscriptions with more than one broken line item, the no-line-items case, line items
 	 * carrying a variation ID, and subscriptions a gate still matches, so the operator
 	 * resolves those by hand. This edits billing-relevant data, so an order note records the
-	 * prior product/variation IDs and the caller logs exactly what changed.
+	 * prior product ID and the caller logs exactly what changed.
 	 *
 	 * @param \WC_Subscription $subscription     The subscription to repair.
 	 * @param int              $product_id       The live product ID to attach.
@@ -1110,9 +1113,10 @@ class WooCommerce_Subscriptions {
 	 * @return array List of audit rows.
 	 */
 	private static function audit_active_subscriptions( array $live_products, array $gate_product_ids = [] ): array {
-		$per_page = 100;
-		$offset   = 0;
-		$rows     = [];
+		$per_page       = 100;
+		$offset         = 0;
+		$rows           = [];
+		$previous_batch = [];
 		do {
 			$batch = wcs_get_subscriptions(
 				[
@@ -1121,9 +1125,24 @@ class WooCommerce_Subscriptions {
 					'offset'                 => $offset,
 				]
 			);
-			$batch_size = count( $batch );
-			$rows       = array_merge( $rows, self::build_audit_rows( $batch, $live_products, $gate_product_ids ) );
-			$offset    += $per_page;
+			// `wcs_get_subscriptions()` keys its return by subscription ID, so an identical
+			// key set means the query stopped advancing. That is what the `paged` shape did,
+			// and a third-party `woocommerce_get_subscriptions_query_args` filter dropping
+			// `offset` can still produce it. Halt loudly: looping forever would pin a
+			// publisher's CLI, and continuing would report a scan that silently stopped short.
+			$batch_ids = array_keys( $batch );
+			if ( ! empty( $batch_ids ) && $batch_ids === $previous_batch ) {
+				WP_CLI::error(
+					sprintf(
+						'The subscription query stopped advancing at offset %d — it returned the same page twice. Aborting; the audit is incomplete and its results must not be trusted.',
+						$offset
+					)
+				);
+			}
+			$previous_batch = $batch_ids;
+			$batch_size     = count( $batch );
+			$rows           = array_merge( $rows, self::build_audit_rows( $batch, $live_products, $gate_product_ids ) );
+			$offset        += $per_page;
 			// A long scan is otherwise indistinguishable from a hung one; there is no total
 			// to drive a real progress bar, since the query is paginated blind.
 			WP_CLI::log( sprintf( 'Scanned %d active subscription(s), %d flagged so far...', $offset - $per_page + $batch_size, count( $rows ) ) );
