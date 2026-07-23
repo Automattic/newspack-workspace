@@ -18,8 +18,14 @@ import { fetchAllTerms, initialSelectionsForTaxonomy, resolveTokens, selectionsF
 
 const POSTS_PATH = '/wp/v2/newspack_nl_ads_cpt';
 
+// `hasLoaded` tracks the fetch settling rather than succeeding:
+// `fetchAllTerms` swallows request failures and returns whatever it
+// collected, so a partial list is indistinguishable from a complete one
+// here. What the panel can tell is whether the settled list accounts for
+// the ad's stored category IDs.
 function useQuickEditCategories() {
 	const [ categories, setCategories ] = useState( [] );
+	const [ hasLoaded, setHasLoaded ] = useState( false );
 	useEffect( () => {
 		let cancelled = false;
 		fetchAllTerms( '/wp/v2/categories' )
@@ -28,16 +34,21 @@ function useQuickEditCategories() {
 					setCategories( Array.isArray( terms ) ? terms : [] );
 				}
 			} )
-			.catch( () => {} );
+			.catch( () => {} )
+			.finally( () => {
+				if ( ! cancelled ) {
+					setHasLoaded( true );
+				}
+			} );
 		return () => {
 			cancelled = true;
 		};
 	}, [] );
-	return categories;
+	return { categories, hasLoaded };
 }
 
 export default function AdsQuickEditPanel( { item, advertisers, placements, onClose, onSaved } ) {
-	const categories = useQuickEditCategories();
+	const { categories, hasLoaded: categoriesLoaded } = useQuickEditCategories();
 	// Terms are only embedded when a taxonomy column is visible, so each
 	// field falls back to resolving the post's raw term IDs against the
 	// options list. Without this a hidden column would seed an empty
@@ -105,6 +116,12 @@ export default function AdsQuickEditPanel( { item, advertisers, placements, onCl
 			setCategorySelections( initialCategorySelections );
 		}
 	}, [ initialCategorySelections ] );
+
+	// Once the embed is skipped the options list is the only source for
+	// this field, so a settled list that can't account for the ad's stored
+	// categories means the field would show an empty box on an ad that has
+	// them. Say so and make it read-only instead of lying quietly.
+	const categoriesUnavailable = categoriesLoaded && unresolvedCategoryIds.length > 0;
 
 	const advertiserDirty = ! sortedIdsEqual( advertiserSelections, initialAdvertiserSelections );
 	const placementDirty = ! sortedIdsEqual( placementSelections, initialPlacementSelections );
@@ -226,6 +243,7 @@ export default function AdsQuickEditPanel( { item, advertisers, placements, onCl
 				label={ __( 'Categories', 'newspack-newsletters' ) }
 				value={ categoryTokens }
 				suggestions={ categorySuggestions }
+				disabled={ categoriesUnavailable }
 				onChange={ next => {
 					hasEditedCategoriesRef.current = true;
 					setCategorySelections( resolveTokens( next, categorySelections, categories ) );
@@ -235,6 +253,13 @@ export default function AdsQuickEditPanel( { item, advertisers, placements, onCl
 				__next40pxDefaultSize
 				__nextHasNoMarginBottom
 			/>
+			{ /* `FormTokenField`'s own `help` prop is not rendered by the
+			     runtime (WP core) build, so the message stands on its own. */ }
+			{ categoriesUnavailable && (
+				<p className="components-base-control__help">
+					{ __( 'Categories could not be loaded. Edit this ad to change them.', 'newspack-newsletters' ) }
+				</p>
+			) }
 			<TextControl
 				type="date"
 				label={ __( 'Start date', 'newspack-newsletters' ) }

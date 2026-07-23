@@ -195,6 +195,32 @@ describe( 'AdsQuickEditPanel taxonomy handling', () => {
 		expect( postCall().data ).not.toHaveProperty( 'ad_placement' );
 	} );
 
+	// The categories fetch is the only source for that field once the embed
+	// is skipped, and `fetchAllTerms` returns a partial list rather than
+	// throwing, so a failure would otherwise show an empty field on an ad
+	// that has categories.
+	it( 'flags the Categories field read-only when its options cannot account for the stored terms', async () => {
+		renderPanel( { ...makeItem( 'publish' ), categories: [ 77 ] } );
+		expect( await screen.findByText( 'Categories could not be loaded. Edit this ad to change them.' ) ).toBeInTheDocument();
+		expect( screen.getByLabelText( 'Categories' ) ).toBeDisabled();
+	} );
+
+	it( 'leaves the Categories field alone when there are no stored categories', async () => {
+		renderPanel( withRawTerms() );
+		await screen.findByText( 'Acme' );
+		expect( screen.queryByText( 'Categories could not be loaded. Edit this ad to change them.' ) ).toBeNull();
+		expect( screen.getByLabelText( 'Categories' ) ).not.toBeDisabled();
+	} );
+
+	it( 'still refuses to send the unshowable categories on save', async () => {
+		const onSaved = jest.fn();
+		renderPanel( { ...makeItem( 'publish' ), categories: [ 77 ] }, { onSaved } );
+		fireEvent.click( await screen.findByRole( 'radio', { name: 'Inactive' } ) );
+		fireEvent.click( screen.getByTestId( 'panel-save' ) );
+		await waitFor( () => expect( onSaved ).toHaveBeenCalled() );
+		expect( postCall().data ).not.toHaveProperty( 'categories' );
+	} );
+
 	it( 'keeps term IDs that cannot be resolved to an option', async () => {
 		const onSaved = jest.fn();
 		// 99 is not in ADVERTISERS, so it can be neither shown nor removed.
