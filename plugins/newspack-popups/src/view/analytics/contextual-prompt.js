@@ -94,9 +94,7 @@ const trackClicked = element => {
 		// button_text and link_url are meaningful only in plain-button mode (the
 		// donate block has no single label or href). Read from the actual link,
 		// like EngageLine did.
-		const extra = link
-			? { button_text: clamp( ( link.innerText || '' ).trim() ), link_url: clamp( link.href || '' ) }
-			: {};
+		const extra = link ? { button_text: clamp( ( link.innerText || '' ).trim() ), link_url: clamp( link.href || '' ) } : {};
 		sendEvent( payloadFor( element, 'clicked', extra ), EVENT_NAME );
 	} );
 };

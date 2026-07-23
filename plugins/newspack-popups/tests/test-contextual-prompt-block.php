@@ -125,5 +125,4 @@ class ContextualPromptBlockTest extends WP_UnitTestCase {
 		$this->assertSame( 1, substr_count( $rendered, 'data-newspack-cp-post-id' ), 'Stamped exactly once.' );
 		$this->assertStringContainsString( '<p>1 < 2 always.</p>', $rendered, 'Inner content is untouched.' );
 	}
-
 }
