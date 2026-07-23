@@ -67,19 +67,23 @@ class ImageSizesTest extends WP_UnitTestCase { // phpcs:ignore
 			array_filter(
 				array_keys( $sizes ),
 				function ( $key ) {
-					return 0 === strpos( $key, 'newspack-article-block-' );
+					return str_starts_with( $key, 'newspack-article-block-' );
 				}
 			)
 		);
 	}
 
 	/**
-	 * Default (not skipping): all article block crops are left in place.
+	 * Default (no filter, no on-the-fly image CDN detected): all article block crops
+	 * are left in place.
+	 *
+	 * With no filter attached this exercises the real default — `is_wpcom_image_cdn_active()`,
+	 * which returns false in the test env because the Jetpack Status\Host and Jetpack classes
+	 * aren't loaded — so it also covers the `class_exists` guard, the branch most likely to
+	 * regress.
 	 */
 	public function test_article_block_subsizes_kept_by_default() {
-		add_filter( 'newspack_blocks_skip_article_image_subsizes', '__return_false' );
 		$filtered = apply_filters( 'intermediate_image_sizes_advanced', $this->sample_sizes(), [], 0 );
-		remove_filter( 'newspack_blocks_skip_article_image_subsizes', '__return_false' );
 
 		$this->assertCount( 16, $this->article_block_keys( $filtered ), 'All 16 article block crops should be retained.' );
 	}
