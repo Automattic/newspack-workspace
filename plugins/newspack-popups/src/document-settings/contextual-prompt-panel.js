@@ -1,10 +1,10 @@
 /**
- * Contextual Prompt editor panel — in-content prototype.
+ * Contextual Prompt editor panel.
  *
- * The prompt is a synced-pattern instance living in the post content, so the
- * canvas is the source of truth: copy is edited inline, position is the block's
- * position, and the design belongs to the pattern. The panel's only jobs are
- * AI generation and managing that one block.
+ * The prompt is a block living in the post content, so the canvas is the source
+ * of truth: copy is edited inline, position is the block's position, and the
+ * design comes from block supports. The panel's only jobs are AI generation and
+ * managing that one block.
  */
 
 /**
@@ -175,7 +175,7 @@ const ContextualPromptPanel = () => {
 				</Button>
 
 				{ candidates.map( ( candidate, index ) => (
-					<VStack key={ index } spacing={ 2 } className="newspack-contextual-prompt__candidate">
+					<VStack key={ index } spacing={ 2 }>
 						<strong>{ FRAMING_LABELS[ candidate.framing ] || candidate.framing }</strong>
 						<p style={ { margin: 0 } }>{ candidate.body }</p>
 						<div>
