@@ -22,6 +22,18 @@ jobs:
             const NEEDS_CHANGES   = '[Status] Needs Changes or Feedback';
             const TEAM_SLUG       = 'newspack-design';
 
+            // Behavior 1 requests an INDIVIDUAL reviewer instead of the
+            // @Automattic/newspack-design team. The automatic GITHUB_TOKEN is
+            // repo-scoped and cannot resolve an org team, so requesting the team
+            // fails with 422 "Could not resolve to a node"; org/team read cannot
+            // be granted to GITHUB_TOKEN. 'thomasguillot' is currently the sole
+            // member of the newspack-design team, so requesting them fulfills the
+            // intent (route the PR to design review) without an org-scoped token.
+            // IMPORTANT: if that username changes, or the design team gains/loses
+            // members, UPDATE THIS VALUE — or migrate Behavior 1 to an org-scoped
+            // token / GitHub App that can request the team directly.
+            const DESIGN_REVIEWER = 'thomasguillot';
+
             const { owner, repo } = context.repo;
             const number = context.payload.pull_request.number;
             const action = context.payload.action;
@@ -66,9 +78,20 @@ jobs:
 
               if ( label === NEEDS_DESIGN ) {
                 await removeLabelSafe( DESIGN_APPROVED );
-                await github.rest.pulls.requestReviewers(
-                  { owner, repo, pull_number: number, team_reviewers: [ TEAM_SLUG ] }
-                );
+                // GitHub rejects requesting the PR author as their own reviewer,
+                // so skip that case. Failures to request a reviewer should not
+                // fail the run (this is label hygiene, not a gate) — warn instead.
+                if ( context.payload.pull_request.user.login !== DESIGN_REVIEWER ) {
+                  try {
+                    await github.rest.pulls.requestReviewers(
+                      { owner, repo, pull_number: number, reviewers: [ DESIGN_REVIEWER ] }
+                    );
+                  } catch ( error ) {
+                    core.warning(
+                      `Could not request review from ${ DESIGN_REVIEWER }: ${ error.message }`
+                    );
+                  }
+                }
                 return;
               }
 
