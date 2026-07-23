@@ -13,7 +13,6 @@ import { useEffect, useRef, useState } from '@wordpress/element';
 /**
  * Internal dependencies
  */
-import Router from '../../../../../packages/components/src/proxied-imports/router';
 import { Divider, Grid } from '../../../../../packages/components/src';
 import { useWizardData } from '../../../../../packages/components/src/wizard/store/utils';
 import { useWizardApiFetch } from '../../../hooks/use-wizard-api-fetch';
@@ -26,10 +25,7 @@ import SettingsCard from './settings-card';
 import { AUDIENCE_CONTENT_GATES_WIZARD_SLUG } from './consts';
 import './style.scss';
 
-const { useHistory } = Router;
-
 const ContentGates = ( { updateGatesData }: { updateGatesData: ( gates: Gate[] ) => void } ) => {
-	const history = useHistory();
 	const wizardData = useWizardData( AUDIENCE_CONTENT_GATES_WIZARD_SLUG ) as WizardData;
 	const { wizardApiFetch, isFetching, errorMessage, resetError } = useWizardApiFetch( AUDIENCE_CONTENT_GATES_WIZARD_SLUG );
 	const { addNotice, resetNotices, resetHeaderData, setHeaderData, updateWizardSettings } = useDispatch( WIZARD_STORE_NAMESPACE );
@@ -39,6 +35,7 @@ const ContentGates = ( { updateGatesData }: { updateGatesData: ( gates: Gate[] )
 	const gates = ( wizardData?.gates || [] ) as Gate[];
 	const config = ( wizardData?.config || {} ) as GateSettings;
 	const hasMetering = gates.some( gate => gate.registration?.metering?.enabled || gate.custom_access?.metering?.enabled );
+	const hasInstitutions = !! config.has_institutions;
 
 	useEffect( () => {
 		if ( isFetching ) {
@@ -48,16 +45,21 @@ const ContentGates = ( { updateGatesData }: { updateGatesData: ( gates: Gate[] )
 			resetHeaderData();
 			return;
 		}
-		const sectionMenu = [
-			{
-				label: __( 'Institutions', 'newspack-plugin' ),
-				action: () => history.push( '/institutions' ),
-			},
+		const institutionsMenuItem: { label: string; action?: () => void; href?: string } = {
+			label: __( 'Institutions', 'newspack-plugin' ),
+			href: '#/institutions',
+		};
+		const sectionMenu: { label: string; action?: () => void; href?: string }[] = [
 			{
 				label: __( 'Advanced Settings', 'newspack-plugin' ),
 				action: () => setShowAdvancedSettings( true ),
 			},
 		];
+		// Institutions in use get a visible entry point next to the section
+		// title; otherwise the link stays tucked away in the kebab menu.
+		if ( ! hasInstitutions ) {
+			sectionMenu.unshift( institutionsMenuItem );
+		}
 		if ( gates.length > 1 ) {
 			sectionMenu.unshift( {
 				label: __( 'Gate Priority', 'newspack-plugin' ),
@@ -78,8 +80,9 @@ const ContentGates = ( { updateGatesData }: { updateGatesData: ( gates: Gate[] )
 				'newspack-plugin'
 			),
 			sectionMenu,
+			sectionSecondaryAction: hasInstitutions ? institutionsMenuItem : undefined,
 		} );
-	}, [ isFetching, gates ] );
+	}, [ isFetching, gates, hasInstitutions ] );
 
 	const toggleCountdownBanner = useRef< () => void >();
 	const handleToggleCountdownBanner = () => {

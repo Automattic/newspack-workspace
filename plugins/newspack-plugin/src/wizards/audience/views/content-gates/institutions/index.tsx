@@ -18,6 +18,7 @@ import { Button, Spinner } from '@wordpress/components';
  */
 import { DataViews, Router } from '../../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
+import { AUDIENCE_CONTENT_GATES_WIZARD_SLUG } from '../consts';
 import InstitutionsOnboarding from './onboarding';
 
 const { useHistory } = Router;
@@ -40,7 +41,7 @@ const DEFAULT_VIEW: View = {
 
 export default function Institutions() {
 	const history = useHistory();
-	const { setHeaderData, addNotice } = useDispatch( WIZARD_STORE_NAMESPACE );
+	const { setHeaderData, addNotice, updateWizardSettings } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const [ data, setData ] = useState< Institution[] >( [] );
 	const [ isLoading, setIsLoading ] = useState( true );
 	const [ view, setView ] = useState< View >( DEFAULT_VIEW );
@@ -69,7 +70,17 @@ export default function Institutions() {
 	const fetchData = useCallback( () => {
 		setIsLoading( true );
 		apiFetch< Institution[] >( { path: `${ API_PATH }?per_page=100&context=edit&_embed=wp:featuredmedia` } )
-			.then( setData )
+			.then( institutions => {
+				setData( institutions );
+				// Keep the gates screen header in sync: it promotes the
+				// Institutions entry point out of the kebab menu when the site
+				// has at least one institution.
+				updateWizardSettings( {
+					slug: AUDIENCE_CONTENT_GATES_WIZARD_SLUG,
+					path: [ 'config', 'has_institutions' ],
+					value: institutions.length > 0,
+				} );
+			} )
 			.catch( () => {
 				addNotice( {
 					message: __( 'Failed to load institutions. Please refresh the page.', 'newspack-plugin' ),
@@ -78,7 +89,7 @@ export default function Institutions() {
 				} );
 			} )
 			.finally( () => setIsLoading( false ) );
-	}, [ addNotice ] );
+	}, [ addNotice, updateWizardSettings ] );
 
 	useEffect( () => {
 		fetchData();

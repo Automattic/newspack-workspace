@@ -402,6 +402,7 @@ class Audience_Content_Gates extends Wizard {
 				'content_gifting'   => Content_Gifting::get_settings(),
 				'advanced_settings' => $advanced_settings_response,
 				'has_newsletters'   => Reader_Activation::is_esp_configured(),
+				'has_institutions'  => count( Institution::get_cached_institutions() ) > 0,
 			],
 		];
 		return rest_ensure_response( $config );

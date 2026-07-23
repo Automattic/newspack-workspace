@@ -154,6 +154,7 @@ type GateSettings = {
 	content_gifting?: ContentGiftingConfig;
 	countdown_banner?: MeteringCountdownConfig;
 	advanced_settings?: AdvancedSettingsConfig;
+	has_institutions?: boolean;
 };
 
 type GateConfig = {
