@@ -38,7 +38,13 @@ class Membership_Gates_Migration {
 	 * - Creates a new content gate (or updates an existing one matched by title).
 	 * - Sets content rules from the shared restriction rules.
 	 * - Enables registration settings (always) and custom_access settings (if any
-	 *   plan in the group requires a purchase).
+	 *   plan in the group requires a purchase). Paid-access rules are derived from
+	 *   the plans' linked products: subscription products map to a 'subscription'
+	 *   rule, simple (one-time) products map to a 'one_time_purchase' rule whose
+	 *   duration is the plan's membership length (unlimited → forever), with the
+	 *   rules OR-ed on the gate. A purchase group whose paid rules cannot be
+	 *   mapped at all is flagged as a WARN row and its paid access mode is left
+	 *   untouched — never activated with an empty (unrestricted) rule set.
 	 * - Copies block content from the first plan's np_memberships_gate post (falling
 	 *   back to the Primary gate) into the gate's registration / paid-access layouts.
 	 *
@@ -151,20 +157,18 @@ class Membership_Gates_Migration {
 			);
 			$access_type = $has_purchase ? 'purchase' : 'signup';
 
-			// Cast to int for parity with the REST write path, which stores subscription
-			// access-rule values as ints; raw `_product_ids` meta can hold strings.
-			$merged_product_ids = array_values(
-				array_unique(
-					array_map( 'absint', array_merge( ...array_column( $group, 'product_ids' ) ) )
-				)
-			);
-			// Drop product variations — gates should reference parent products only.
-			$merged_product_ids = array_values(
-				array_filter(
-					$merged_product_ids,
-					fn( $id ) => 'product_variation' !== \get_post_type( $id )
-				)
-			);
+			// Paid-access mapping: subscription products go to the 'subscription' rule,
+			// simple (one-time) products to a 'one_time_purchase' rule whose duration
+			// comes from the plan's membership length (NPPD-2106).
+			$paid_access_rules = self::build_paid_access_rules( self::get_group_paid_descriptors( $group ) );
+
+			// A purchase group whose paid rules all failed to map must not activate
+			// the paid access mode with an empty rule set — both gate evaluators
+			// treat empty access rules as unrestricted, so the "paid" gate would be
+			// open to every registered reader. apply_paid_access() skips the write
+			// (leaving any previously written rules untouched) and the row is
+			// flagged as a WARN below.
+			$paid_rules_missing = $has_purchase && empty( $paid_access_rules );
 
 			// Gate identity is the title, but groups are keyed by rule fingerprint —
 			// so two same-named plans with different rules land in different groups
@@ -237,11 +241,9 @@ class Membership_Gates_Migration {
 					$layout_errors[] = 'registration layout';
 				}
 
-				// Custom access layout (purchase plans only).
-				if ( $has_purchase && null !== $layouts['custom_access'] ) {
-					if ( ! self::apply_layout( $gate_id, $gate_title, 'custom_access', $layouts['custom_access'], $merged_product_ids ) ) {
-						$layout_errors[] = 'paid access layout';
-					}
+				// Paid access mode (purchase plans only).
+				if ( $has_purchase && 'error' === self::apply_paid_access( $gate_id, $gate_title, $layouts['custom_access'], $paid_access_rules ) ) {
+					$layout_errors[] = 'paid access layout';
 				}
 			}
 
@@ -252,8 +254,18 @@ class Membership_Gates_Migration {
 			// would otherwise be reported as a success today and go unnoticed for
 			// weeks.
 			$verification_issues = [];
+			if ( $paid_rules_missing ) {
+				// Distinguish "nothing was ever configured" from a re-run that skipped
+				// the write but left a previous run's correct rules in place.
+				$existing_custom_access = $gate_id ? \Newspack\Content_Gate::get_custom_access_settings( $gate_id ) : [];
+				if ( ! empty( $existing_custom_access['active'] ) && ! empty( $existing_custom_access['access_rules'] ) ) {
+					$verification_issues[] = 'no mappable paid access rules — the gate\'s existing paid access settings were left untouched';
+				} else {
+					$verification_issues[] = 'paid access is NOT configured (no mappable paid access rules) — registered readers would not be restricted';
+				}
+			}
 			if ( ! $dry_run && empty( $layout_errors ) && $gate_id ) {
-				$verification_issues = self::verify_migrated_gate( $gate_id );
+				$verification_issues = array_merge( $verification_issues, self::verify_migrated_gate( $gate_id ) );
 				foreach ( $verification_issues as $issue ) {
 					WP_CLI::warning( sprintf( '"%s" (gate %d) will not restrict: %s', $gate_title, $gate_id, $issue ) );
 				}
@@ -267,12 +279,21 @@ class Membership_Gates_Migration {
 				$row_action = $dry_run ? $action . ' (dry-run)' : $action;
 			}
 
+			// The paid rules are only written when the source gate yields a paid access
+			// layout, so a mapping the run cannot apply is labeled as such instead of
+			// looking migrated in the summary.
+			$paid_rules_label = self::describe_paid_access_rules( $paid_access_rules );
+			if ( '—' !== $paid_rules_label && null === $layouts['custom_access'] ) {
+				$paid_rules_label .= ' (NOT applied: no paid access layout in the source gate)';
+			}
+
 			$summary[] = [
 				'plan_name'     => $gate_title,
 				'action'        => $row_action,
 				'gate_id'       => $gate_id ?? '(pending)',
 				'content_rules' => count( $ac_rules ),
 				'access_type'   => $access_type,
+				'paid_rules'    => $paid_rules_label,
 			];
 		}
 
@@ -292,10 +313,11 @@ class Membership_Gates_Migration {
 					'Gate ID'       => $row['gate_id'],
 					'Content Rules' => $row['content_rules'],
 					'Access Type'   => $row['access_type'],
+					'Paid Access'   => $row['paid_rules'] ?? '—',
 				],
 				array_merge( $summary, $skipped )
 			),
-			[ 'Plan Name', 'Action', 'Gate ID', 'Content Rules', 'Access Type' ]
+			[ 'Plan Name', 'Action', 'Gate ID', 'Content Rules', 'Access Type', 'Paid Access' ]
 		);
 
 		WP_CLI::line( '' );
@@ -389,6 +411,13 @@ class Membership_Gates_Migration {
 			}
 		}
 
+		// Both gate evaluators (Content_Restriction_Control and User_Gate_Access)
+		// treat empty access rules as unrestricted, so an active paid mode with no
+		// rules is a "paid" gate every registered reader walks through.
+		if ( ! empty( $custom_access['active'] ) && empty( $custom_access['access_rules'] ) ) {
+			$issues[] = 'the paid access mode is active with no access rules — registered readers are not restricted by it';
+		}
+
 		return $issues;
 	}
 
@@ -428,7 +457,8 @@ class Membership_Gates_Migration {
 	 * @param array $skipped  Skipped-plan summary rows, appended to by reference.
 	 *
 	 * @return array<string,array> Map of fingerprint => list of plan descriptors, each
-	 *                             [ 'pid', 'name', 'access_method', 'ac_rules', 'product_ids' ].
+	 *                             [ 'pid', 'name', 'access_method', 'ac_rules', 'product_ids',
+	 *                             'access_length_amount', 'access_length_period', 'access_length_type' ].
 	 */
 	private static function group_plans_by_fingerprint( array $plan_ids, array &$skipped ): array {
 		$plan_groups = [];
@@ -483,11 +513,16 @@ class Membership_Gates_Migration {
 
 			$fingerprint                   = self::compute_rules_fingerprint( $ac_rules );
 			$plan_groups[ $fingerprint ][] = [
-				'pid'           => $pid,
-				'name'          => $plan_name,
-				'access_method' => $access_method,
-				'ac_rules'      => $ac_rules,
-				'product_ids'   => 'purchase' === $access_method ? array_values( $plan->get_product_ids() ) : [],
+				'pid'                  => $pid,
+				'name'                 => $plan_name,
+				'access_method'        => $access_method,
+				'ac_rules'             => $ac_rules,
+				'product_ids'          => 'purchase' === $access_method ? array_values( $plan->get_product_ids() ) : [],
+				// The membership length feeds the one_time_purchase rule duration for
+				// simple (one-time) products; '' amount/period means unlimited.
+				'access_length_amount' => $plan->get_access_length_amount(),
+				'access_length_period' => $plan->get_access_length_period(),
+				'access_length_type'   => $plan->get_access_length_type(),
 			];
 		}
 
@@ -495,20 +530,327 @@ class Membership_Gates_Migration {
 	}
 
 	/**
+	 * Build the per-plan paid-access descriptors for a plan group: normalized product
+	 * IDs partitioned into subscription vs. one-time products, plus the plan's
+	 * membership length mapped onto the one_time_purchase duration schema.
+	 *
+	 * Warns (in both dry-run and live passes) when a plan's product variations are
+	 * dropped, when a fixed-date length is approximated by an order-date-anchored
+	 * duration, and when one-time products cannot be mapped at all (rule not
+	 * registered on this build, or an unrecognized access length period). Dropped
+	 * mappings fail closed: the products contribute no rule, and a group left with
+	 * no paid rules skips paid access configuration entirely — the mode is never
+	 * activated with an empty rule set (see apply_paid_access()).
+	 *
+	 * @param array $group Plan descriptors from group_plans_by_fingerprint().
+	 *
+	 * @return array[] Descriptors for build_paid_access_rules(), each
+	 *                 [ 'subscription_product_ids', 'one_time_product_ids', 'duration' ].
+	 */
+	private static function get_group_paid_descriptors( array $group ): array {
+		$descriptors = [];
+
+		// A rule slug the evaluator does not recognize is treated as "don't block"
+		// (Access_Rules::evaluate_rule() returns true for it), so writing a
+		// one_time_purchase rule on a build that has not registered the rule yet
+		// would leave the paid gate open to every logged-in reader. Drop the
+		// mapping instead — the products contribute no rule, so paid access is
+		// left unconfigured (or untouched on a re-run) and the gate row is
+		// flagged, telling the operator to upgrade the plugin and re-run.
+		$one_time_rule_registered = (bool) \Newspack\Access_Rules::get_rule( 'one_time_purchase' );
+
+		foreach ( $group as $group_plan ) {
+			if ( 'purchase' !== $group_plan['access_method'] ) {
+				continue;
+			}
+
+			// Cast to int for parity with the REST write path, which stores access-rule
+			// product IDs as ints; raw `_product_ids` meta can hold strings.
+			$unique_product_ids = array_values(
+				array_filter( array_unique( array_map( 'absint', $group_plan['product_ids'] ) ) )
+			);
+			// Gates reference parent products only, so variations are dropped — loudly,
+			// since a plan granted via specific variations loses those grants here.
+			$variation_ids = array_values(
+				array_filter(
+					$unique_product_ids,
+					fn( $id ) => 'product_variation' === \get_post_type( $id )
+				)
+			);
+			$product_ids   = array_values( array_diff( $unique_product_ids, $variation_ids ) );
+			if ( ! empty( $variation_ids ) ) {
+				WP_CLI::warning(
+					sprintf(
+						'"%s": dropped linked product variation(s) %s — access rules do not support specific variations. Add the parent product(s) to the gate manually if those variations should grant access.',
+						$group_plan['name'],
+						implode( ', ', $variation_ids )
+					)
+				);
+			}
+
+			$subscription_product_ids = [];
+			$one_time_product_ids     = [];
+			foreach ( $product_ids as $product_id ) {
+				if ( self::is_subscription_product( $product_id ) ) {
+					$subscription_product_ids[] = $product_id;
+				} else {
+					$one_time_product_ids[] = $product_id;
+				}
+			}
+
+			$duration = self::map_access_length_to_duration( $group_plan['access_length_amount'], $group_plan['access_length_period'] );
+
+			if ( ! empty( $one_time_product_ids ) && ! $one_time_rule_registered ) {
+				WP_CLI::warning(
+					sprintf(
+						'"%s" grants access from one-time product(s) (%s), but this Newspack Plugin build does not register the one_time_purchase access rule. The product(s) were NOT mapped — update the plugin and re-run the migration.',
+						$group_plan['name'],
+						implode( ', ', $one_time_product_ids )
+					)
+				);
+				$one_time_product_ids = [];
+			}
+
+			if ( ! empty( $one_time_product_ids ) ) {
+				if ( null === $duration ) {
+					WP_CLI::warning(
+						sprintf(
+							'"%s" has an access length period ("%s") the one_time_purchase rule cannot express. Its one-time product(s) (%s) were NOT mapped — configure a one_time_purchase rule on the gate manually.',
+							$group_plan['name'],
+							$group_plan['access_length_period'],
+							implode( ', ', $one_time_product_ids )
+						)
+					);
+				} elseif ( 'fixed' === $group_plan['access_length_type'] ) {
+					// WCM reports a fixed-date plan's length as the days from its access
+					// start date (or now, when no start is set) to its end date, so the
+					// mapped duration approximates the plan's window length — but the
+					// one_time_purchase rule re-anchors it on each order date, so a late
+					// purchase can grant access past the plan's original calendar end.
+					WP_CLI::warning(
+						sprintf(
+							'"%s" uses fixed access dates; the one_time_purchase rule instead grants %d %s from each order date. Adjust the gate manually if the fixed end date matters.',
+							$group_plan['name'],
+							$duration['duration_value'],
+							$duration['duration_unit']
+						)
+					);
+				}
+			}
+
+			$descriptors[] = [
+				'subscription_product_ids' => $subscription_product_ids,
+				'one_time_product_ids'     => $one_time_product_ids,
+				'duration'                 => $duration,
+			];
+		}
+
+		return $descriptors;
+	}
+
+	/**
+	 * Whether a product grants access via a subscription (vs. a one-time purchase).
+	 *
+	 * Mirrors WC_Memberships_Membership_Plan::get_products(): prefer the WooCommerce
+	 * Subscriptions detector (which accounts for custom subscription product types),
+	 * falling back to the core subscription product types.
+	 *
+	 * @param int $product_id The product ID.
+	 *
+	 * @return bool
+	 */
+	private static function is_subscription_product( int $product_id ): bool {
+		if ( is_callable( 'WC_Subscriptions_Product::is_subscription' ) ) {
+			return (bool) \WC_Subscriptions_Product::is_subscription( $product_id );
+		}
+		$product = function_exists( 'wc_get_product' ) ? \wc_get_product( $product_id ) : false;
+		return $product && $product->is_type( [ 'subscription', 'variable-subscription', 'subscription_variation' ] );
+	}
+
+	/**
+	 * Map a WooCommerce Memberships access length onto the one_time_purchase rule's
+	 * duration schema, which only supports 'days', 'months', and 'forever':
+	 *
+	 * - no length (unlimited plan) → forever
+	 * - days → days; weeks → days × 7
+	 * - months → months; years → months × 12
+	 *
+	 * @param int|string $amount WCM access length amount ('' when the plan is unlimited).
+	 * @param string     $period WCM access length period ('' when the plan is unlimited).
+	 *
+	 * @return array|null [ 'duration_value' => int, 'duration_unit' => string ], or null
+	 *                    for an unrecognized period — the caller must fail closed, since
+	 *                    guessing here could widen a finite grant into a lifetime one.
+	 */
+	private static function map_access_length_to_duration( $amount, string $period ): ?array {
+		$amount = (int) $amount;
+		if ( $amount <= 0 || '' === $period ) {
+			return [
+				'duration_value' => 0,
+				'duration_unit'  => 'forever',
+			];
+		}
+		switch ( $period ) {
+			case 'days':
+				return [
+					'duration_value' => $amount,
+					'duration_unit'  => 'days',
+				];
+			case 'weeks':
+				return [
+					'duration_value' => $amount * 7,
+					'duration_unit'  => 'days',
+				];
+			case 'months':
+				return [
+					'duration_value' => $amount,
+					'duration_unit'  => 'months',
+				];
+			case 'years':
+				return [
+					'duration_value' => $amount * 12,
+					'duration_unit'  => 'months',
+				];
+		}
+		return null;
+	}
+
+	/**
+	 * Build the gate's paid-access rule groups from per-plan descriptors.
+	 *
+	 * Subscription products across the group merge into a single 'subscription' rule.
+	 * One-time products bucket by mapped duration into 'one_time_purchase' rules —
+	 * plans sharing a duration share a rule; distinct durations get distinct rules.
+	 * Every rule sits in its own OR group, so an active subscription OR any
+	 * qualifying one-time purchase grants access. Descriptors with a null duration
+	 * contribute no one_time_purchase rule (fail closed; the operator was warned).
+	 *
+	 * @param array[] $plan_descriptors Descriptors from get_group_paid_descriptors().
+	 *
+	 * @return array[] Access rule groups for the gate's custom_access settings.
+	 */
+	private static function build_paid_access_rules( array $plan_descriptors ): array {
+		$subscription_product_ids = [];
+		$one_time_rule_buckets    = [];
+
+		foreach ( $plan_descriptors as $descriptor ) {
+			$subscription_product_ids = array_merge( $subscription_product_ids, $descriptor['subscription_product_ids'] );
+
+			if ( empty( $descriptor['one_time_product_ids'] ) || null === $descriptor['duration'] ) {
+				continue;
+			}
+
+			$bucket_key = $descriptor['duration']['duration_value'] . ' ' . $descriptor['duration']['duration_unit'];
+			if ( ! isset( $one_time_rule_buckets[ $bucket_key ] ) ) {
+				$one_time_rule_buckets[ $bucket_key ] = [
+					'product_ids'    => [],
+					'duration_value' => $descriptor['duration']['duration_value'],
+					'duration_unit'  => $descriptor['duration']['duration_unit'],
+				];
+			}
+			$one_time_rule_buckets[ $bucket_key ]['product_ids'] = array_values(
+				array_unique(
+					array_merge( $one_time_rule_buckets[ $bucket_key ]['product_ids'], $descriptor['one_time_product_ids'] )
+				)
+			);
+		}
+
+		$access_rules             = [];
+		$subscription_product_ids = array_values( array_unique( $subscription_product_ids ) );
+		if ( ! empty( $subscription_product_ids ) ) {
+			$access_rules[] = [
+				[
+					'slug'  => 'subscription',
+					'value' => $subscription_product_ids,
+				],
+			];
+		}
+		foreach ( $one_time_rule_buckets as $bucket ) {
+			$access_rules[] = [
+				[
+					'slug'  => 'one_time_purchase',
+					'value' => $bucket,
+				],
+			];
+		}
+
+		return $access_rules;
+	}
+
+	/**
+	 * Render the paid-access rule groups as a compact summary-table cell, so the
+	 * product→rule mapping is visible in dry-run output before anything is written.
+	 *
+	 * @param array[] $access_rules Rule groups from build_paid_access_rules().
+	 *
+	 * @return string E.g. "subscription(12, 15) OR one_time_purchase(18; 12 months)"; '—' when empty.
+	 */
+	private static function describe_paid_access_rules( array $access_rules ): string {
+		if ( empty( $access_rules ) ) {
+			return '—';
+		}
+		$parts = [];
+		foreach ( $access_rules as $group_rules ) {
+			foreach ( $group_rules as $rule ) {
+				if ( 'one_time_purchase' === $rule['slug'] ) {
+					$duration = 'forever' === $rule['value']['duration_unit']
+						? 'forever'
+						: sprintf( '%d %s', $rule['value']['duration_value'], $rule['value']['duration_unit'] );
+					$parts[]  = sprintf( '%s(%s; %s)', $rule['slug'], implode( ', ', $rule['value']['product_ids'] ), $duration );
+				} else {
+					$parts[] = sprintf( '%s(%s)', $rule['slug'], implode( ', ', (array) $rule['value'] ) );
+				}
+			}
+		}
+		return implode( ' OR ', $parts );
+	}
+
+	/**
+	 * Configure the gate's paid access (custom_access) mode from the mapped rules.
+	 *
+	 * With no mappable rules the mode is left exactly as it is: it is never
+	 * activated with an empty rule set — both gate evaluators treat empty access
+	 * rules as unrestricted, so that would open the "paid" gate to every
+	 * registered reader — and a re-run never overwrites rules a previous,
+	 * correctly-equipped run wrote. A missing source layout also skips, matching
+	 * the registration-side behavior of never activating a mode without a layout.
+	 *
+	 * @param int         $gate_id        The content gate post ID.
+	 * @param string      $gate_title     The gate title (used to name new layout posts).
+	 * @param string|null $layout_content Paid access layout markup, or null when the
+	 *                                    source gate has no member-content wrapper.
+	 * @param array       $access_rules   Rule groups from build_paid_access_rules().
+	 *
+	 * @return string 'configured', 'skipped_no_rules', 'skipped_no_layout', or 'error'.
+	 */
+	private static function apply_paid_access( int $gate_id, string $gate_title, ?string $layout_content, array $access_rules ): string {
+		if ( empty( $access_rules ) ) {
+			return 'skipped_no_rules';
+		}
+		if ( null === $layout_content ) {
+			return 'skipped_no_layout';
+		}
+		return self::apply_layout( $gate_id, $gate_title, 'custom_access', $layout_content, $access_rules )
+			? 'configured'
+			: 'error';
+	}
+
+	/**
 	 * Create or update a gate layout post and point the gate's registration or
 	 * custom_access settings at it.
 	 *
-	 * @param int        $gate_id     The content gate post ID.
-	 * @param string     $gate_title  The gate title (used to name new layout posts).
-	 * @param string     $mode        Either 'registration' or 'custom_access'.
-	 * @param string     $content     The block markup for the layout.
-	 * @param int[]|null $product_ids Merged parent product IDs for custom_access purchase rules.
+	 * @param int        $gate_id      The content gate post ID.
+	 * @param string     $gate_title   The gate title (used to name new layout posts).
+	 * @param string     $mode         Either 'registration' or 'custom_access'.
+	 * @param string     $content      The block markup for the layout.
+	 * @param array|null $access_rules Paid-access rule groups (from build_paid_access_rules())
+	 *                                 for the custom_access mode.
 	 *
 	 * @return bool True when the mode was activated against a usable layout post. False
 	 *              when no layout could be written — the mode is then left untouched,
 	 *              since activating it with no layout yields a gate that never restricts.
 	 */
-	private static function apply_layout( int $gate_id, string $gate_title, string $mode, string $content, ?array $product_ids = null ): bool {
+	private static function apply_layout( int $gate_id, string $gate_title, string $mode, string $content, ?array $access_rules = null ): bool {
 		if ( 'custom_access' === $mode ) {
 			$settings  = \Newspack\Content_Gate::get_custom_access_settings( $gate_id );
 			$layout_id = $settings['gate_layout_id'] ?? 0;
@@ -582,16 +924,7 @@ class Membership_Gates_Migration {
 				[
 					'active'         => true,
 					'gate_layout_id' => $layout_id,
-					'access_rules'   => ! empty( $product_ids )
-						? [
-							[
-								[
-									'slug'  => 'subscription',
-									'value' => $product_ids,
-								],
-							],
-						]
-						: [],
+					'access_rules'   => $access_rules ?? [],
 				]
 			);
 		} else {

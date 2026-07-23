@@ -29,6 +29,7 @@ namespace Newspack\Tests\Content_Gate;
 
 use Newspack\CLI\Membership_Gates_Migration;
 
+require_once dirname( __DIR__, 2 ) . '/mocks/wp-cli-mock.php';
 require_once dirname( __DIR__, 3 ) . '/includes/cli/class-membership-gates-migration.php';
 
 /**
@@ -422,6 +423,509 @@ HTML;
 				sprintf( 'Expected "%s" to be unresolvable.', $unresolvable_slug )
 			);
 		}
+	}
+
+	/**
+	 * NPPD-2106: WCM access lengths map onto the one_time_purchase duration schema —
+	 * days stay days, weeks convert to days, months stay months, years convert to
+	 * months (the rule's only units are 'days', 'months', and 'forever').
+	 */
+	public function test_map_access_length_to_duration_maps_wcm_periods_to_rule_units() {
+		$expected_durations_by_length = [
+			'30 days'  => [
+				'duration_value' => 30,
+				'duration_unit'  => 'days',
+			],
+			'2 weeks'  => [
+				'duration_value' => 14,
+				'duration_unit'  => 'days',
+			],
+			'6 months' => [
+				'duration_value' => 6,
+				'duration_unit'  => 'months',
+			],
+			'1 years'  => [
+				'duration_value' => 12,
+				'duration_unit'  => 'months',
+			],
+		];
+		foreach ( $expected_durations_by_length as $wcm_length => $expected_duration ) {
+			[ $amount, $period ] = explode( ' ', $wcm_length );
+			$this->assertSame(
+				$expected_duration,
+				$this->invoke_private_static( 'map_access_length_to_duration', [ (int) $amount, $period ] ),
+				sprintf( 'WCM access length "%s" should map to %s.', $wcm_length, wp_json_encode( $expected_duration ) )
+			);
+		}
+	}
+
+	/**
+	 * NPPD-2106: a plan with no access length is unlimited in WCM
+	 * (get_access_length_amount()/period() return '') and maps to 'forever'.
+	 */
+	public function test_map_access_length_to_duration_treats_missing_length_as_forever() {
+		$forever_duration = [
+			'duration_value' => 0,
+			'duration_unit'  => 'forever',
+		];
+
+		$this->assertSame( $forever_duration, $this->invoke_private_static( 'map_access_length_to_duration', [ '', '' ] ) );
+		$this->assertSame( $forever_duration, $this->invoke_private_static( 'map_access_length_to_duration', [ 0, 'days' ] ) );
+	}
+
+	/**
+	 * NPPD-2106: an unrecognized period (a filtered custom WCM period) must not be
+	 * guessed at — especially not widened to 'forever'. The mapper returns null so
+	 * the caller can fail closed and warn the operator.
+	 */
+	public function test_map_access_length_to_duration_returns_null_for_unrecognized_period() {
+		$this->assertNull( $this->invoke_private_static( 'map_access_length_to_duration', [ 3, 'fortnights' ] ) );
+	}
+
+	/**
+	 * NPPD-2106: a group with only subscription products keeps the pre-existing
+	 * mapping — a single OR group holding one 'subscription' rule with the merged
+	 * product IDs.
+	 */
+	public function test_build_paid_access_rules_maps_subscription_products_to_the_subscription_rule() {
+		$access_rules = $this->invoke_private_static(
+			'build_paid_access_rules',
+			[
+				[
+					$this->make_paid_descriptor( [ 101, 102 ], [], null ),
+					$this->make_paid_descriptor( [ 102, 103 ], [], null ),
+				],
+			]
+		);
+
+		$this->assertSame(
+			[
+				[
+					[
+						'slug'  => 'subscription',
+						'value' => [ 101, 102, 103 ],
+					],
+				],
+			],
+			$access_rules,
+			'Subscription products keep the existing subscription-rule mapping, de-duplicated across the group.'
+		);
+	}
+
+	/**
+	 * NPPD-2106: simple (non-subscription) products with a membership length map to a
+	 * one_time_purchase rule carrying the #693 value schema — product_ids +
+	 * duration_value + duration_unit.
+	 */
+	public function test_build_paid_access_rules_maps_simple_products_to_a_one_time_purchase_rule() {
+		$access_rules = $this->invoke_private_static(
+			'build_paid_access_rules',
+			[
+				[
+					$this->make_paid_descriptor(
+						[],
+						[ 201 ],
+						[
+							'duration_value' => 12,
+							'duration_unit'  => 'months',
+						]
+					),
+				],
+			]
+		);
+
+		$this->assertSame(
+			[
+				[
+					[
+						'slug'  => 'one_time_purchase',
+						'value' => [
+							'product_ids'    => [ 201 ],
+							'duration_value' => 12,
+							'duration_unit'  => 'months',
+						],
+					],
+				],
+			],
+			$access_rules
+		);
+	}
+
+	/**
+	 * NPPD-2106: a mixed plan (subscription + simple products) yields both rules as
+	 * separate OR groups on the same gate — an active subscription OR a qualifying
+	 * one-time purchase grants access.
+	 */
+	public function test_build_paid_access_rules_puts_subscription_and_one_time_rules_in_separate_or_groups() {
+		$access_rules = $this->invoke_private_static(
+			'build_paid_access_rules',
+			[
+				[
+					$this->make_paid_descriptor(
+						[ 101 ],
+						[ 201 ],
+						[
+							'duration_value' => 0,
+							'duration_unit'  => 'forever',
+						]
+					),
+				],
+			]
+		);
+
+		$this->assertCount( 2, $access_rules, 'Subscription and one-time rules are separate OR groups.' );
+		$this->assertCount( 1, $access_rules[0], 'Each OR group holds a single rule (no AND-ing of the two).' );
+		$this->assertSame( 'subscription', $access_rules[0][0]['slug'] );
+		$this->assertSame( 'one_time_purchase', $access_rules[1][0]['slug'] );
+		$this->assertSame( [ 101 ], $access_rules[0][0]['value'], 'Simple products must not leak into the subscription rule.' );
+		$this->assertSame( [ 201 ], $access_rules[1][0]['value']['product_ids'] );
+	}
+
+	/**
+	 * NPPD-2106: plans sharing a duration merge their simple products into one
+	 * one_time_purchase rule; a plan with a different duration gets its own rule, so
+	 * one gate can carry e.g. an annual day-pass product and a lifetime product.
+	 */
+	public function test_build_paid_access_rules_buckets_one_time_products_by_duration() {
+		$twelve_months = [
+			'duration_value' => 12,
+			'duration_unit'  => 'months',
+		];
+		$forever       = [
+			'duration_value' => 0,
+			'duration_unit'  => 'forever',
+		];
+
+		$access_rules = $this->invoke_private_static(
+			'build_paid_access_rules',
+			[
+				[
+					$this->make_paid_descriptor( [], [ 201, 202 ], $twelve_months ),
+					$this->make_paid_descriptor( [], [ 202, 203 ], $twelve_months ),
+					$this->make_paid_descriptor( [], [ 301 ], $forever ),
+				],
+			]
+		);
+
+		$this->assertCount( 2, $access_rules );
+		$this->assertSame(
+			[
+				'product_ids'    => [ 201, 202, 203 ],
+				'duration_value' => 12,
+				'duration_unit'  => 'months',
+			],
+			$access_rules[0][0]['value'],
+			'Same-duration plans share one rule with merged, de-duplicated product IDs.'
+		);
+		$this->assertSame(
+			[
+				'product_ids'    => [ 301 ],
+				'duration_value' => 0,
+				'duration_unit'  => 'forever',
+			],
+			$access_rules[1][0]['value'],
+			'A different duration gets its own OR group.'
+		);
+	}
+
+	/**
+	 * NPPD-2106: no products at all (or descriptors for signup plans only) produce no
+	 * paid access rules — output unchanged from the pre-2106 behavior.
+	 */
+	public function test_build_paid_access_rules_returns_empty_for_no_products() {
+		$this->assertSame( [], $this->invoke_private_static( 'build_paid_access_rules', [ [] ] ) );
+		$this->assertSame(
+			[],
+			$this->invoke_private_static(
+				'build_paid_access_rules',
+				[ [ $this->make_paid_descriptor( [], [], null ) ] ]
+			)
+		);
+	}
+
+	/**
+	 * NPPD-2106: a null duration (unmappable WCM access length) fails closed — the
+	 * plan's simple products are excluded from the one_time_purchase rule rather than
+	 * silently granted forever. The caller is responsible for warning the operator.
+	 */
+	public function test_build_paid_access_rules_skips_one_time_products_with_a_null_duration() {
+		$access_rules = $this->invoke_private_static(
+			'build_paid_access_rules',
+			[
+				[
+					$this->make_paid_descriptor( [ 101 ], [ 201 ], null ),
+				],
+			]
+		);
+
+		$this->assertCount( 1, $access_rules, 'Only the subscription rule is emitted.' );
+		$this->assertSame( 'subscription', $access_rules[0][0]['slug'] );
+	}
+
+	/**
+	 * NPPD-2106: the summary-table description of the paid access rules, so dry-run
+	 * reporting shows the mapping before anything is written.
+	 */
+	public function test_describe_paid_access_rules_summarizes_rules_for_the_summary_table() {
+		$this->assertSame( '—', $this->invoke_private_static( 'describe_paid_access_rules', [ [] ] ) );
+
+		$description = $this->invoke_private_static(
+			'describe_paid_access_rules',
+			[
+				[
+					[
+						[
+							'slug'  => 'subscription',
+							'value' => [ 101, 102 ],
+						],
+					],
+					[
+						[
+							'slug'  => 'one_time_purchase',
+							'value' => [
+								'product_ids'    => [ 201 ],
+								'duration_value' => 12,
+								'duration_unit'  => 'months',
+							],
+						],
+					],
+					[
+						[
+							'slug'  => 'one_time_purchase',
+							'value' => [
+								'product_ids'    => [ 301 ],
+								'duration_value' => 0,
+								'duration_unit'  => 'forever',
+							],
+						],
+					],
+				],
+			]
+		);
+
+		$this->assertSame(
+			'subscription(101, 102) OR one_time_purchase(201; 12 months) OR one_time_purchase(301; forever)',
+			$description
+		);
+	}
+
+	/**
+	 * NPPD-2106 review: both gate evaluators treat empty access rules as
+	 * unrestricted, so a paid access mode that is active with no rules leaves the
+	 * gate open to every registered reader — verify_migrated_gate() must flag it.
+	 */
+	public function test_verify_migrated_gate_flags_an_active_paid_access_mode_with_no_access_rules() {
+		$gate_id = $this->create_enforceable_gate(
+			[
+				[
+					'slug'  => 'post_types',
+					'value' => [ 'post' ],
+				],
+			]
+		);
+		\Newspack\Content_Gate::update_custom_access_settings(
+			$gate_id,
+			[
+				'active'         => true,
+				'gate_layout_id' => \Newspack\Content_Gate::create_gate_layout( 'Paid fixture layout', '' ),
+				'access_rules'   => [],
+			]
+		);
+
+		$issues = $this->invoke_private_static( 'verify_migrated_gate', [ $gate_id ] );
+
+		$this->assertContains(
+			'the paid access mode is active with no access rules — registered readers are not restricted by it',
+			$issues
+		);
+	}
+
+	/**
+	 * NPPD-2106 review: a run that maps NO paid rules must leave the paid access
+	 * mode exactly as it is — never activate it with an empty rule set, and never
+	 * clobber rules a previous (correctly equipped) run already wrote. This is the
+	 * re-run-from-a-pre-one_time_purchase-build scenario.
+	 */
+	public function test_apply_paid_access_skips_and_preserves_existing_rules_when_no_rules_are_mapped() {
+		$gate_id                 = \Newspack\Content_Gate::create_gate( [ 'title' => 'Paid preservation fixture' ] );
+		$existing_one_time_rules = [
+			[
+				[
+					'slug'  => 'one_time_purchase',
+					'value' => [
+						'product_ids'    => [ 12 ],
+						'duration_value' => 0,
+						'duration_unit'  => 'forever',
+					],
+				],
+			],
+		];
+		\Newspack\Content_Gate::update_custom_access_settings(
+			$gate_id,
+			[
+				'active'         => true,
+				'gate_layout_id' => \Newspack\Content_Gate::create_gate_layout( 'Existing paid layout', '<!-- wp:paragraph --><p>Existing.</p><!-- /wp:paragraph -->' ),
+				'access_rules'   => $existing_one_time_rules,
+			]
+		);
+
+		$result = $this->invoke_private_static(
+			'apply_paid_access',
+			[ $gate_id, 'Paid preservation fixture', '<!-- wp:paragraph --><p>New.</p><!-- /wp:paragraph -->', [] ]
+		);
+
+		$settings_after = \Newspack\Content_Gate::get_custom_access_settings( $gate_id );
+		$this->assertSame( 'skipped_no_rules', $result );
+		$this->assertSame(
+			$existing_one_time_rules,
+			$settings_after['access_rules'],
+			'A run with no mappable paid rules must not overwrite previously written rules.'
+		);
+		$this->assertNotEmpty( $settings_after['active'], 'The previously active mode stays active.' );
+	}
+
+	/**
+	 * NPPD-2106 review: with mapped rules the paid access mode is configured (and a
+	 * missing source layout still skips, matching the pre-existing behavior).
+	 */
+	public function test_apply_paid_access_configures_the_mode_when_rules_are_mapped() {
+		$gate_id      = \Newspack\Content_Gate::create_gate( [ 'title' => 'Paid configure fixture' ] );
+		$mapped_rules = [
+			[
+				[
+					'slug'  => 'subscription',
+					'value' => [ 101 ],
+				],
+			],
+		];
+
+		$this->assertSame(
+			'skipped_no_layout',
+			$this->invoke_private_static( 'apply_paid_access', [ $gate_id, 'Paid configure fixture', null, $mapped_rules ] ),
+			'No member-content layout in the source gate skips the mode (pre-existing behavior).'
+		);
+		$this->assertEmpty(
+			\Newspack\Content_Gate::get_custom_access_settings( $gate_id )['active'],
+			'A skip leaves the mode untouched.'
+		);
+
+		$result = $this->invoke_private_static(
+			'apply_paid_access',
+			[ $gate_id, 'Paid configure fixture', '<!-- wp:paragraph --><p>Members.</p><!-- /wp:paragraph -->', $mapped_rules ]
+		);
+
+		$settings_after = \Newspack\Content_Gate::get_custom_access_settings( $gate_id );
+		$this->assertSame( 'configured', $result );
+		$this->assertSame( $mapped_rules, $settings_after['access_rules'] );
+		$this->assertNotEmpty( $settings_after['active'] );
+		$this->assertNotEmpty( $settings_after['gate_layout_id'] );
+	}
+
+	/**
+	 * NPPD-2106 guard path: on a build that has not registered the
+	 * one_time_purchase access rule, a plan's one-time products are dropped from
+	 * the mapping (with a warning), and the group yields no paid rules at all — so
+	 * paid access configuration is skipped rather than written empty.
+	 */
+	public function test_get_group_paid_descriptors_drops_one_time_products_when_the_rule_is_unregistered() {
+		$rules_property = new \ReflectionProperty( \Newspack\Access_Rules::class, 'rules' );
+		$rules_property->setAccessible( true );
+		$original_rules         = (array) $rules_property->getValue();
+		$rules_without_one_time = $original_rules;
+		unset( $rules_without_one_time['one_time_purchase'] );
+		$rules_property->setValue( null, $rules_without_one_time );
+		\WP_CLI::$warnings = [];
+
+		try {
+			$descriptors = $this->invoke_private_static(
+				'get_group_paid_descriptors',
+				[ [ $this->make_group_plan( [ 201 ] ) ] ]
+			);
+		} finally {
+			$rules_property->setValue( null, $original_rules );
+		}
+
+		$this->assertSame( [], $descriptors[0]['one_time_product_ids'], 'One-time products are dropped when the rule is not registered (fail closed).' );
+		$this->assertSame(
+			[],
+			$this->invoke_private_static( 'build_paid_access_rules', [ $descriptors ] ),
+			'The group yields no paid rules, so the migration skips paid access configuration.'
+		);
+		$this->assertCount( 1, \WP_CLI::$warnings );
+		$this->assertStringContainsString( 'does not register the one_time_purchase access rule', \WP_CLI::$warnings[0] );
+	}
+
+	/**
+	 * NPPD-2106 review: dropping a linked product variation is no longer silent —
+	 * the operator is told which variation IDs were dropped and that the parent
+	 * product can be added to the gate manually.
+	 */
+	public function test_get_group_paid_descriptors_warns_when_dropping_product_variations() {
+		$variation_id = self::factory()->post->create( [ 'post_type' => 'product_variation' ] );
+
+		// Register a stub one_time_purchase rule so the unregistered-rule guard does
+		// not also fire and muddy the warning assertions.
+		$rules_property = new \ReflectionProperty( \Newspack\Access_Rules::class, 'rules' );
+		$rules_property->setAccessible( true );
+		$original_rules = (array) $rules_property->getValue();
+		$rules_property->setValue( null, array_merge( $original_rules, [ 'one_time_purchase' => [ 'name' => 'One-time purchase' ] ] ) );
+		\WP_CLI::$warnings = [];
+
+		try {
+			$descriptors = $this->invoke_private_static(
+				'get_group_paid_descriptors',
+				[ [ $this->make_group_plan( [ $variation_id, 201 ] ) ] ]
+			);
+		} finally {
+			$rules_property->setValue( null, $original_rules );
+		}
+
+		$this->assertSame( [ 201 ], $descriptors[0]['one_time_product_ids'], 'The non-variation product stays mapped.' );
+		$this->assertCount( 1, \WP_CLI::$warnings );
+		$this->assertStringContainsString( (string) $variation_id, \WP_CLI::$warnings[0] );
+		$this->assertStringContainsString( 'parent product', \WP_CLI::$warnings[0] );
+	}
+
+	/**
+	 * Build a plan descriptor shaped like group_plans_by_fingerprint() output, for
+	 * exercising get_group_paid_descriptors() without WooCommerce Memberships.
+	 *
+	 * @param int[]      $product_ids          Linked product IDs.
+	 * @param int|string $access_length_amount WCM access length amount ('' = unlimited).
+	 * @param string     $access_length_period WCM access length period ('' = unlimited).
+	 * @param string     $access_length_type   WCM access length type.
+	 *
+	 * @return array The plan descriptor.
+	 */
+	private function make_group_plan( array $product_ids, $access_length_amount = '', string $access_length_period = '', string $access_length_type = 'unlimited' ): array {
+		return [
+			'pid'                  => 0,
+			'name'                 => 'Guard fixture plan',
+			'access_method'        => 'purchase',
+			'ac_rules'             => [],
+			'product_ids'          => $product_ids,
+			'access_length_amount' => $access_length_amount,
+			'access_length_period' => $access_length_period,
+			'access_length_type'   => $access_length_type,
+		];
+	}
+
+	/**
+	 * Build a per-plan paid-access descriptor as the migration loop hands it to
+	 * build_paid_access_rules().
+	 *
+	 * @param int[]      $subscription_product_ids Subscription product IDs.
+	 * @param int[]      $one_time_product_ids     Simple (one-time) product IDs.
+	 * @param array|null $duration                 Mapped duration, or null when unmappable.
+	 *
+	 * @return array The descriptor.
+	 */
+	private function make_paid_descriptor( array $subscription_product_ids, array $one_time_product_ids, ?array $duration ): array {
+		return [
+			'subscription_product_ids' => $subscription_product_ids,
+			'one_time_product_ids'     => $one_time_product_ids,
+			'duration'                 => $duration,
+		];
 	}
 
 	/**
