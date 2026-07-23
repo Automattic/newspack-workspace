@@ -199,9 +199,10 @@ final class Newspack_Popups_Contextual_Prompt_Block {
 	}
 
 	/**
-	 * Site-wide override ("fund-drive mode"): while active, replace the copy of
-	 * every Contextual Prompt block at render time. Stored copy is untouched, so
-	 * turning the override off restores each story's own prompt.
+	 * Site-wide override ("fund-drive mode"): while active, replace the copy — and,
+	 * on plain-button sites, the CTA destination — of every Contextual Prompt block
+	 * at render time. Stored copy and button are untouched, so turning the override
+	 * off restores each story's own prompt.
 	 *
 	 * @param string $block_content Rendered block markup.
 	 * @return string
@@ -211,12 +212,78 @@ final class Newspack_Popups_Contextual_Prompt_Block {
 			return $block_content;
 		}
 
-		$override = trim( (string) get_option( 'newspack_contextual_prompts_override_body', '' ) );
-		if ( '' === $override ) {
+		$body = trim( (string) get_option( 'newspack_contextual_prompts_override_body', '' ) );
+		if ( '' === $body ) {
 			return $block_content;
 		}
 
-		// Swap the copy paragraph's text; structure and CTA stay untouched.
-		return preg_replace( '/(<p\b[^>]*>).*?(<\/p>)/s', '$1' . esc_html( $override ) . '$2', $block_content, 1 );
+		// Swap the copy paragraph's text. preg_replace_callback, not preg_replace, so a
+		// literal $1 / ${1} / \1 in the override copy — "Give $5 today" — is never
+		// expanded as a backreference.
+		$block_content = preg_replace_callback(
+			'#(<p\b[^>]*>).*?(</p>)#s',
+			function ( $matches ) use ( $body ) {
+				return $matches[1] . esc_html( $body ) . $matches[2];
+			},
+			$block_content,
+			1
+		);
+
+		// The native donate block carries its own destination and follows the site's
+		// donation settings, so only the plain-button CTA needs repointing. Its href
+		// and label come from the override settings; is_override_active() already
+		// guarantees the URL is present in this mode.
+		if ( ! self::use_donate_block() ) {
+			$block_content = self::apply_override_to_button(
+				$block_content,
+				(string) get_option( 'newspack_contextual_prompts_override_url', '' ),
+				trim( (string) get_option( 'newspack_contextual_prompts_override_label', '' ) )
+			);
+		}
+
+		return $block_content;
+	}
+
+	/**
+	 * Repoint the plain-button CTA at the override destination and label.
+	 *
+	 * The button renders as `<a class="wp-block-button__link …" href="…">Label</a>`.
+	 * The href is set with the HTML API (safe attribute handling), and the label with
+	 * preg_replace_callback so a `$1`/`\1` sequence in publisher copy can't expand.
+	 *
+	 * @param string $html  Rendered block markup.
+	 * @param string $url   Override button URL.
+	 * @param string $label Override button label.
+	 * @return string
+	 */
+	private static function apply_override_to_button( $html, $url, $label ) {
+		$url   = trim( $url );
+		$label = trim( $label );
+
+		if ( '' !== $url && class_exists( 'WP_HTML_Tag_Processor' ) ) {
+			$tags = new \WP_HTML_Tag_Processor( $html );
+			if ( $tags->next_tag(
+				[
+					'tag_name'   => 'a',
+					'class_name' => 'wp-block-button__link',
+				]
+			) ) {
+				$tags->set_attribute( 'href', esc_url( $url ) );
+				$html = $tags->get_updated_html();
+			}
+		}
+
+		if ( '' !== $label ) {
+			$html = preg_replace_callback(
+				'#(<a\b[^>]*\bwp-block-button__link\b[^>]*>).*?(</a>)#is',
+				function ( $matches ) use ( $label ) {
+					return $matches[1] . esc_html( $label ) . $matches[2];
+				},
+				$html,
+				1
+			);
+		}
+
+		return $html;
 	}
 }
