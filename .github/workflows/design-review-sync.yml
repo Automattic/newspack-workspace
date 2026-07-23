@@ -1,0 +1,92 @@
+name: Sync design-review labels and reviewers
+
+on:
+  pull_request:
+    types: [labeled, review_requested]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  sync:
+    name: Sync design-review labels and reviewers
+    runs-on: ubuntu-latest
+    steps:
+      - name: Sync labels and reviewers
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const NEEDS_DESIGN    = '[Status] Needs Design Review';
+            const DESIGN_APPROVED = '[Status] Design Approved';
+            const NEEDS_CHANGES   = '[Status] Needs Changes or Feedback';
+            const TEAM_SLUG       = 'newspack-design';
+
+            const { owner, repo } = context.repo;
+            const number = context.payload.pull_request.number;
+            const action = context.payload.action;
+
+            const addLabel = async ( name ) => {
+              await github.rest.issues.addLabels(
+                { owner, repo, issue_number: number, labels: [ name ] }
+              );
+            };
+
+            const removeLabelSafe = async ( name ) => {
+              try {
+                await github.rest.issues.removeLabel(
+                  { owner, repo, issue_number: number, name }
+                );
+              } catch ( error ) {
+                if ( error.status !== 404 ) throw error;
+              }
+            };
+
+            // Latest non-comment review per reviewer; true if any is CHANGES_REQUESTED.
+            // listReviews returns reviews in ascending submission order, so the last
+            // write per reviewer id wins.
+            const hasOutstandingChangesRequested = async () => {
+              const reviews = await github.paginate(
+                github.rest.pulls.listReviews,
+                { owner, repo, pull_number: number }
+              );
+              const latestByUser = new Map();
+              for ( const review of reviews ) {
+                if ( ! review.user ) continue;
+                if ( ! [ 'APPROVED', 'CHANGES_REQUESTED', 'DISMISSED' ].includes( review.state ) ) {
+                  continue;
+                }
+                latestByUser.set( review.user.id, review.state );
+              }
+              return [ ...latestByUser.values() ].includes( 'CHANGES_REQUESTED' );
+            };
+
+            if ( action === 'labeled' ) {
+              const label = context.payload.label && context.payload.label.name;
+
+              if ( label === NEEDS_DESIGN ) {
+                await removeLabelSafe( DESIGN_APPROVED );
+                await github.rest.pulls.requestReviewers(
+                  { owner, repo, pull_number: number, team_reviewers: [ TEAM_SLUG ] }
+                );
+                return;
+              }
+
+              if ( label === DESIGN_APPROVED ) {
+                await removeLabelSafe( NEEDS_DESIGN );
+                if ( ! ( await hasOutstandingChangesRequested() ) ) {
+                  await removeLabelSafe( NEEDS_CHANGES );
+                }
+                return;
+              }
+
+              return;
+            }
+
+            if ( action === 'review_requested' ) {
+              const team = context.payload.requested_team;
+              if ( ! team || team.slug !== TEAM_SLUG ) return;
+              await addLabel( NEEDS_DESIGN );
+              await removeLabelSafe( DESIGN_APPROVED );
+              return;
+            }
