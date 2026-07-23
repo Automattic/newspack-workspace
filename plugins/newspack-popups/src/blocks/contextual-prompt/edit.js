@@ -34,14 +34,17 @@ const FRAMING_LABELS = {
 };
 
 // The CTA follows the site's reader-revenue setup: the donate block when
-// Newspack donations are native, a plain button otherwise.
+// Newspack donations are native, a plain button otherwise. The button defaults
+// to the donor landing page configured in Campaigns settings, so conversions
+// through it count the reader as a donor; publishers can retarget it per-story.
 const DONATIONS_NATIVE = window.newspack_popups_blocks_data?.donations_native ?? true;
+const DONOR_LANDING_URL = window.newspack_popups_blocks_data?.donor_landing_url || undefined;
 
 export const getTemplate = () => [
 	[ 'core/paragraph', {} ],
 	DONATIONS_NATIVE
 		? [ 'newspack-blocks/donate', { className: 'is-style-modern' } ]
-		: [ 'core/buttons', {}, [ [ 'core/button', { text: __( 'Donate', 'newspack-popups' ) } ] ] ],
+		: [ 'core/buttons', {}, [ [ 'core/button', { text: __( 'Donate', 'newspack-popups' ), url: DONOR_LANDING_URL } ] ] ],
 ];
 
 /**

@@ -122,6 +122,19 @@ final class Newspack_Popups {
 	}
 
 	/**
+	 * Permalink of the configured donor landing page, or an empty string.
+	 *
+	 * @return string
+	 */
+	public static function get_donor_landing_url() {
+		$page_id = (int) Newspack_Popups_Settings::donor_landing_page();
+		if ( ! $page_id || 'publish' !== get_post_status( $page_id ) ) {
+			return '';
+		}
+		return (string) get_permalink( $page_id );
+	}
+
+	/**
 	 * Lowercased singular label of the post type being edited, for prompt UI
 	 * strings ("post", "page", "listing"…). Falls back to "post".
 	 *
@@ -758,6 +771,9 @@ final class Newspack_Popups {
 				// Whether the Contextual Prompt CTA is the native donate block
 				// or a plain button.
 				'donations_native'  => Newspack_Popups_Post_Scope::use_donate_block(),
+				// Default target for the plain-button CTA: the donor landing
+				// page, when one is configured in Campaigns settings.
+				'donor_landing_url' => self::get_donor_landing_url(),
 			]
 		);
 
