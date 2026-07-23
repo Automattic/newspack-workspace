@@ -36,13 +36,6 @@ class Newspack_Popups_Settings {
 	const OVERRIDE_ENABLED_OPTION = 'newspack_contextual_prompts_override_enabled';
 
 	/**
-	 * Default-design tokens. Applied at render time so a change restyles every
-	 * Contextual Prompt, including already-published ones.
-	 */
-	const DESIGN_BACKGROUND_OPTION = 'newspack_contextual_prompts_design_background';
-	const DESIGN_ACCENT_OPTION     = 'newspack_contextual_prompts_design_accent';
-
-	/**
 	 * Whether the AI Copy Assistant has been opted into on this site.
 	 *
 	 * @return bool
@@ -143,66 +136,14 @@ class Newspack_Popups_Settings {
 				'type'    => 'text',
 				'section' => 'override',
 			],
-			// Default design. Applied at render time (see
-			// Newspack_Popups_Post_Scope::get_design_css()), so changing these
-			// restyles every Contextual Prompt, including already-published ones.
-			// Deliberately a small set for now — the full treatment is in design
-			// (NPPD-2101); more properties can be promoted to fields from the
-			// constants in get_design_css().
-			[
-				'key'     => self::DESIGN_BACKGROUND_OPTION,
-				'label'   => __( 'Background color', 'newspack-popups' ),
-				'help'    => __( 'The card background behind the prompt copy.', 'newspack-popups' ),
-				'type'    => 'color',
-				'section' => 'design',
-			],
-			[
-				'key'     => self::DESIGN_ACCENT_OPTION,
-				'label'   => __( 'Accent color', 'newspack-popups' ),
-				'help'    => __( 'Used for the button. Defaults to your theme\'s primary color. Ignored where prompts use the Newspack donation form, which follows your donation settings.', 'newspack-popups' ),
-				'type'    => 'color',
-				'section' => 'design',
-			],
 		];
-
-		$defaults = self::get_design_defaults();
 
 		foreach ( $fields as &$field ) {
 			$field['section'] = $field['section'] ?? 'profile';
 			$field['value']   = (string) get_option( $field['key'], '' );
-			// Surface the resolved default so the color controls show the colour
-			// actually in effect rather than an empty swatch.
-			if ( 'color' === $field['type'] && '' === $field['value'] ) {
-				$field['value'] = (string) ( $defaults[ $field['key'] ] ?? '' );
-			}
 		}
 
 		return $fields;
-	}
-
-	/**
-	 * Resolved defaults for the design tokens.
-	 *
-	 * Inherits the theme's primary color for the accent when newspack-plugin is
-	 * present (Campaigns can run without it), falling back to neutrals that match
-	 * the original hardcoded card.
-	 *
-	 * @return array Option key => default value.
-	 */
-	public static function get_design_defaults() {
-		$accent = '#1e1e1e';
-
-		if ( function_exists( 'Newspack\newspack_get_theme_colors' ) ) {
-			$colors = \Newspack\newspack_get_theme_colors();
-			if ( ! empty( $colors['primary_color'] ) ) {
-				$accent = $colors['primary_color'];
-			}
-		}
-
-		return [
-			self::DESIGN_BACKGROUND_OPTION => '#f7f7f8',
-			self::DESIGN_ACCENT_OPTION     => $accent,
-		];
 	}
 
 	/**
@@ -226,11 +167,6 @@ class Newspack_Popups_Settings {
 			}
 			if ( 'newspack_contextual_prompts_override_url' === $key ) {
 				$sanitized = esc_url_raw( (string) $value );
-			} elseif ( in_array( $key, [ self::DESIGN_BACKGROUND_OPTION, self::DESIGN_ACCENT_OPTION ], true ) ) {
-				// sanitize_hex_color() returns null for anything that isn't a valid
-				// hex colour; store '' so the render falls back to the default
-				// rather than emitting a broken declaration.
-				$sanitized = (string) sanitize_hex_color( (string) $value );
 			} else {
 				$sanitized = sanitize_textarea_field( (string) $value );
 			}

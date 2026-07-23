@@ -106,22 +106,6 @@ class AiCopyAssistantSettingsTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Design colors are validated: a bad value is stored empty so the render
-	 * falls back to the default rather than emitting a broken CSS declaration.
-	 */
-	public function test_design_colors_are_sanitized() {
-		Newspack_Popups_Settings::save_ai_copy_assistant_fields(
-			[
-				Newspack_Popups_Settings::DESIGN_BACKGROUND_OPTION => '#abcdef',
-				Newspack_Popups_Settings::DESIGN_ACCENT_OPTION => 'red; } body { display:none',
-			]
-		);
-
-		$this->assertSame( '#abcdef', get_option( Newspack_Popups_Settings::DESIGN_BACKGROUND_OPTION ) );
-		$this->assertSame( '', get_option( Newspack_Popups_Settings::DESIGN_ACCENT_OPTION ), 'A non-hex value is rejected.' );
-	}
-
-	/**
 	 * A malformed (non-scalar) value must not silently wipe a saved profile field —
 	 * sanitize_textarea_field() would return '' for it without warning.
 	 */

@@ -30,7 +30,7 @@ import { chevronLeft } from '@wordpress/icons';
 /**
  * Internal dependencies
  */
-import { CardFeature, Button, ColorPicker, Grid, Modal, Waiting } from '../../../../../../packages/components/src';
+import { CardFeature, Button, Grid, Modal, Waiting } from '../../../../../../packages/components/src';
 
 const DISCLOSURE = __(
 	'Enabling Contextual Prompts lets editors generate donation call-to-action copy for their stories using AI. When used, the content of the post is sent to a third-party AI provider to draft suggestions. It is retained by the provider for up to 30 days for abuse monitoring, is not used to train AI models, and never appears in other AI products. Every suggestion is a draft an editor reviews and approves — nothing is ever published automatically.',
@@ -111,17 +111,6 @@ const ContextualPromptsSettings = ( { configuring, onConfigure } ) => {
 						/>
 					);
 				}
-				if ( 'color' === field.type ) {
-					return (
-						<ColorPicker
-							key={ field.key }
-							label={ field.label }
-							help={ field.help }
-							color={ values[ field.key ] || undefined }
-							onChange={ value => setValue( field.key, value ) }
-						/>
-					);
-				}
 				const Control = 'textarea' === field.type ? TextareaControl : TextControl;
 				return (
 					<Control
@@ -161,17 +150,6 @@ const ContextualPromptsSettings = ( { configuring, onConfigure } ) => {
 					) }
 
 					{ renderFields( 'profile' ) }
-
-					<hr style={ { margin: 0, border: 0, borderTop: '1px solid #ddd' } } />
-
-					<div>
-						<h3 style={ { margin: '0 0 4px' } }>{ __( 'Default design', 'newspack-plugin' ) }</h3>
-						<p style={ { margin: 0 } }>
-							{ __( 'Sets the look of every Contextual Prompt, including ones already published.', 'newspack-plugin' ) }
-						</p>
-					</div>
-
-					{ renderFields( 'design' ) }
 
 					<hr style={ { margin: 0, border: 0, borderTop: '1px solid #ddd' } } />
 
