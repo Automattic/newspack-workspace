@@ -8,6 +8,8 @@
 
 export const PER_PAGE_ALL = -1;
 
+// Mirrors `Admin_Shell_Preferences::PER_PAGE_MAX` (the REST cap the
+// server validates stored preferences against) — change both together.
 export const FETCH_ALL_CHUNK_SIZE = 100;
 
 // Caps the "All" walk so a very large site can't lock the tab with an

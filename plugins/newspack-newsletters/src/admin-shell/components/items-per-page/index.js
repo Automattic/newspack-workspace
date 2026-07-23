@@ -14,6 +14,7 @@
  * closed during a walk, and the header offers no room for it).
  */
 
+import { speak } from '@wordpress/a11y';
 import {
 	Spinner,
 	__experimentalText as Text, // eslint-disable-line @wordpress/no-unsafe-wp-apis
@@ -21,7 +22,7 @@ import {
 	__experimentalToggleGroupControlOption as ToggleGroupControlOption, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
-import { createPortal, useEffect, useState } from '@wordpress/element';
+import { createPortal, useEffect, useRef, useState } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
 
 import { DEFAULT_PER_PAGE_OPTIONS, PER_PAGE_ALL } from '../../utils/per-page';
@@ -33,6 +34,11 @@ const optionLabel = option => ( option === PER_PAGE_ALL ? __( 'All', 'newspack-n
 // Watch for the "View options" popover and hand back a container placed
 // where the built-in items-per-page control renders: inside
 // `.dataviews-view-config`, before the Properties block.
+//
+// The popover renders in a `Popover` slot outside the DataViews root, so
+// the observer has to sit on `body` — it's scoped to `childList` only
+// (no attribute or character-data churn) and the callback is a pair of
+// querySelectors that bail on the first one when the popover is closed.
 function usePopoverSlot() {
 	const [ slot, setSlot ] = useState( null );
 
@@ -76,6 +82,24 @@ function usePopoverSlot() {
  */
 export default function ItemsPerPage( { value, onChange, options = DEFAULT_PER_PAGE_OPTIONS, progress = null } ) {
 	const slot = usePopoverSlot();
+	const isLoadingAll = !! progress;
+
+	// The visible message updates once per batch — up to ~100 times on a
+	// full walk — so it is not a live region. Announce the two moments
+	// that matter instead.
+	const wasLoadingAllRef = useRef( false );
+	useEffect( () => {
+		if ( isLoadingAll === wasLoadingAllRef.current ) {
+			return;
+		}
+		wasLoadingAllRef.current = isLoadingAll;
+		speak(
+			isLoadingAll
+				? __( 'Loading all items. This may take a moment.', 'newspack-newsletters' )
+				: __( 'Finished loading items.', 'newspack-newsletters' ),
+			'polite'
+		);
+	}, [ isLoadingAll ] );
 
 	// Center on the admin content area, not the viewport — otherwise the
 	// admin menu skews the overlay off-center.
@@ -89,7 +113,6 @@ export default function ItemsPerPage( { value, onChange, options = DEFAULT_PER_P
 						className="newspack-newsletters-fetch-all-progress"
 						spacing={ 3 }
 						alignment="center"
-						aria-live="polite"
 						style={ wpbodyRect ? { left: wpbodyRect.left + wpbodyRect.width / 2 } : undefined }
 					>
 						<Spinner />
@@ -97,8 +120,8 @@ export default function ItemsPerPage( { value, onChange, options = DEFAULT_PER_P
 							{ sprintf(
 								/* translators: 1: number of items loaded so far, 2: total number of items. */
 								__( 'Loading %1$s of %2$s…', 'newspack-newsletters' ),
-								progress.loaded,
-								progress.total
+								progress.loaded.toLocaleString(),
+								progress.total.toLocaleString()
 							) }
 						</Text>
 					</VStack>,

@@ -53,6 +53,10 @@ export function buildQueryParams( view = {} ) {
 		// `_links` stays in the list — `_embed` only expands links that
 		// survive the `_fields` filter.
 		extraParams: {
+			// Unconditional, unlike the newsletters list: Quick Edit here
+			// hydrates advertiser and placement from the embedded terms
+			// alone and sends both taxonomies on every save, so dropping
+			// the embed when those columns are hidden would clear them.
 			_embed: 'wp:term',
 			_fields: 'id,status,title,date,meta,newspack_newsletters_ad_status,_links',
 		},

@@ -61,8 +61,15 @@ class Admin_Shell_Preferences {
 							'required' => true,
 						],
 						'prefs'  => [
-							'type'     => 'object',
-							'required' => true,
+							'type'                 => 'object',
+							'required'             => true,
+							'additionalProperties' => false,
+							'properties'           => [
+								'perPage' => [
+									'type'     => 'integer',
+									'required' => true,
+								],
+							],
 						],
 					],
 				],
@@ -71,7 +78,10 @@ class Admin_Shell_Preferences {
 	}
 
 	/**
-	 * Capability gate — matches the list screens themselves.
+	 * Capability gate — the floor for reaching any list screen. Some
+	 * screens require more (layouts needs `edit_others_posts`), but a
+	 * preference for a screen the user can't open is never read back, so
+	 * the shared floor is enough.
 	 *
 	 * @return bool
 	 */

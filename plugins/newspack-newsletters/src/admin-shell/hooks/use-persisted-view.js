@@ -14,19 +14,24 @@ import apiFetch from '@wordpress/api-fetch';
 import { useEffect, useRef, useState } from '@wordpress/element';
 
 import { getViewPrefs } from '../admin-globals';
-import { isValidPerPage } from '../utils/per-page';
+import { DEFAULT_PER_PAGE_OPTIONS, isValidPerPage } from '../utils/per-page';
 
 const PREFERENCES_PATH = '/newspack-newsletters/v1/admin-shell/preferences';
 
 /**
- * @param {string} screenKey   Screen identifier (allowlisted server-side).
- * @param {Object} defaultView Default view state.
+ * @param {string}        screenKey        Screen identifier (allowlisted server-side).
+ * @param {Object}        defaultView      Default view state.
+ * @param {Array<number>} [perPageOptions] Values this screen's control offers.
  * @return {[Object, Function]} `[ view, setView ]` pair.
  */
-export default function usePersistedView( screenKey, defaultView ) {
+export default function usePersistedView( screenKey, defaultView, perPageOptions = DEFAULT_PER_PAGE_OPTIONS ) {
 	const [ view, setView ] = useState( () => {
 		const perPage = getViewPrefs()[ screenKey ]?.perPage;
-		return isValidPerPage( perPage ) ? { ...defaultView, perPage } : defaultView;
+		// The server validates a range, not a per-screen set — a stored
+		// value this screen doesn't offer (a legacy value, or one saved
+		// on a screen with different steps) would leave the control with
+		// nothing highlighted, so fall back to the default.
+		return isValidPerPage( perPage ) && perPageOptions.includes( perPage ) ? { ...defaultView, perPage } : defaultView;
 	} );
 
 	const lastSavedRef = useRef( view.perPage );

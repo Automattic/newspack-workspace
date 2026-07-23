@@ -79,7 +79,7 @@ export default function LayoutsListScreen() {
 		ensureCoreBlocksRegistered();
 	}, [] );
 
-	const [ view, setView ] = usePersistedView( 'layouts-list', DEFAULT_VIEW );
+	const [ view, setView ] = usePersistedView( 'layouts-list', DEFAULT_VIEW, PER_PAGE_OPTIONS );
 	const [ renamingId, setRenamingId ] = useState( null );
 	// Bumping this forces every write path to refetch the saved data.
 	const [ mutationKey, setMutationKey ] = useState( 0 );

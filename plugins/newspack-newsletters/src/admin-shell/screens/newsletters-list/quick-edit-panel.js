@@ -64,15 +64,20 @@ export default function NewslettersQuickEditPanel( { item, onClose, onSaved } ) 
 	const [ tagSelections, setTagSelections ] = useState( initialTagSelections );
 	const [ visibility, setVisibility ] = useState( initialVisibility );
 	const [ isBusy, setIsBusy ] = useState( false );
-	const hasEditedTermsRef = useRef( false );
+	// One ref per taxonomy: when a column is hidden the baselines seed
+	// asynchronously as each taxonomy's options resolve, so a shared ref
+	// would let an edit to one freeze the other at its pre-resolution
+	// (empty) value — and a later edit there would then drop real terms.
+	const hasEditedCategoriesRef = useRef( false );
+	const hasEditedTagsRef = useRef( false );
 
 	useEffect( () => {
-		if ( ! hasEditedTermsRef.current ) {
+		if ( ! hasEditedCategoriesRef.current ) {
 			setCategorySelections( initialCategorySelections );
 		}
 	}, [ initialCategorySelections ] );
 	useEffect( () => {
-		if ( ! hasEditedTermsRef.current ) {
+		if ( ! hasEditedTagsRef.current ) {
 			setTagSelections( initialTagSelections );
 		}
 	}, [ initialTagSelections ] );
@@ -132,7 +137,7 @@ export default function NewslettersQuickEditPanel( { item, onClose, onSaved } ) 
 				value={ categoryTokens }
 				suggestions={ categoryNames }
 				onChange={ next => {
-					hasEditedTermsRef.current = true;
+					hasEditedCategoriesRef.current = true;
 					setCategorySelections( resolveTokens( next, categorySelections, categories ) );
 				} }
 				__experimentalValidateInput={ validateCategory }
@@ -145,7 +150,7 @@ export default function NewslettersQuickEditPanel( { item, onClose, onSaved } ) 
 				value={ tagTokens }
 				suggestions={ tagNames }
 				onChange={ next => {
-					hasEditedTermsRef.current = true;
+					hasEditedTagsRef.current = true;
 					setTagSelections( resolveTokens( next, tagSelections, tags ) );
 				} }
 				__experimentalValidateInput={ validateTag }
