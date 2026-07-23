@@ -44,6 +44,10 @@ describe( 'ads buildQueryParams', () => {
 		expect( fields ).toEqual( expect.arrayContaining( [ 'newspack_nl_advertiser', 'ad_placement', 'categories' ] ) );
 	} );
 
+	it( 'drops _links along with the embed, since nothing else reads it', () => {
+		expect( buildQueryParams( { fields: [ 'title' ] } )._fields.split( ',' ) ).not.toContain( '_links' );
+	} );
+
 	it( 'defaults to writable statuses (no trash) when no kind filter is set', () => {
 		const { status, newspack_newsletters_ad_status: kindParam } = buildQueryParams( {} );
 		expect( status.split( ',' ) ).toEqual( expect.arrayContaining( [ 'publish', 'private', 'future', 'draft', 'pending' ] ) );
