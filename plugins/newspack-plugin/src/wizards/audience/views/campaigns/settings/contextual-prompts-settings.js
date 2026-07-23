@@ -24,6 +24,8 @@ import {
 	ToggleControl,
 	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
+	__experimentalToggleGroupControl as ToggleGroupControl, // eslint-disable-line @wordpress/no-unsafe-wp-apis
+	__experimentalToggleGroupControlOption as ToggleGroupControlOption, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
 import { chevronLeft } from '@wordpress/icons';
 
@@ -41,6 +43,12 @@ const CONFIRMATION = __(
 	'Some newsrooms have policies or union agreements that restrict the use of AI. By enabling this, you confirm your organization permits it. Only administrators can change this setting, and you can turn it off at any time.',
 	'newspack-plugin'
 );
+
+// The override CTA choice and the button fields it reveals. The toggle is only
+// sent for sites with native Newspack donations; without it the CTA is always a
+// button, so the button fields show unconditionally.
+const OVERRIDE_CTA_KEY = 'newspack_contextual_prompts_override_cta';
+const OVERRIDE_BUTTON_KEYS = [ 'newspack_contextual_prompts_override_label', 'newspack_contextual_prompts_override_url' ];
 
 const fieldsToValues = fields => ( fields || [] ).reduce( ( acc, field ) => ( { ...acc, [ field.key ]: field.value ?? '' } ), {} );
 
@@ -94,12 +102,34 @@ const ContextualPromptsSettings = ( { configuring, onConfigure } ) => {
 
 	const setValue = ( key, value ) => setValues( prev => ( { ...prev, [ key ]: value } ) );
 
+	const hasCtaToggle = ( fields || [] ).some( field => OVERRIDE_CTA_KEY === field.key );
+	const effectiveCta = hasCtaToggle ? values[ OVERRIDE_CTA_KEY ] || 'form' : 'button';
+
 	// Fields are grouped by section server-side so the override controls can sit
 	// under their own heading rather than trailing the publisher profile.
 	const renderFields = section =>
 		( fields || [] )
 			.filter( field => ( field.section || 'profile' ) === section )
+			// The button label/URL only apply when the override CTA is a button.
+			.filter( field => 'button' === effectiveCta || ! OVERRIDE_BUTTON_KEYS.includes( field.key ) )
 			.map( field => {
+				if ( 'togglegroup' === field.type ) {
+					return (
+						<ToggleGroupControl
+							key={ field.key }
+							label={ field.label }
+							help={ field.help }
+							value={ values[ field.key ] || 'form' }
+							onChange={ next => setValue( field.key, next ) }
+							isBlock
+							__nextHasNoMarginBottom
+						>
+							{ ( field.options || [] ).map( option => (
+								<ToggleGroupControlOption key={ option.value } value={ option.value } label={ option.label } />
+							) ) }
+						</ToggleGroupControl>
+					);
+				}
 				if ( 'toggle' === field.type ) {
 					return (
 						<ToggleControl
