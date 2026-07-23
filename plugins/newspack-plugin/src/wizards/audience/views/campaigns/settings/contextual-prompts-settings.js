@@ -44,9 +44,11 @@ const CONFIRMATION = __(
 	'newspack-plugin'
 );
 
-// The override CTA choice and the button fields it reveals. The toggle is only
-// sent for sites with native Newspack donations; without it the CTA is always a
-// button, so the button fields show unconditionally.
+// The override's enable toggle gates its whole section: copy and CTA fields
+// only show while the override is on. The CTA choice is only sent for sites
+// with native Newspack donations; without it the CTA is always a button, so
+// the button fields follow the enable toggle alone.
+const OVERRIDE_ENABLED_KEY = 'newspack_contextual_prompts_override_enabled';
 const OVERRIDE_CTA_KEY = 'newspack_contextual_prompts_override_cta';
 const OVERRIDE_BUTTON_KEYS = [ 'newspack_contextual_prompts_override_label', 'newspack_contextual_prompts_override_url' ];
 
@@ -104,12 +106,15 @@ const ContextualPromptsSettings = ( { configuring, onConfigure } ) => {
 
 	const hasCtaToggle = ( fields || [] ).some( field => OVERRIDE_CTA_KEY === field.key );
 	const effectiveCta = hasCtaToggle ? values[ OVERRIDE_CTA_KEY ] || 'form' : 'button';
+	const overrideEnabled = !! values[ OVERRIDE_ENABLED_KEY ];
 
 	// Fields are grouped by section server-side so the override controls can sit
 	// under their own heading rather than trailing the publisher profile.
 	const renderFields = section =>
 		( fields || [] )
 			.filter( field => ( field.section || 'profile' ) === section )
+			// Until the override is on, only its enable toggle shows.
+			.filter( field => 'override' !== ( field.section || 'profile' ) || OVERRIDE_ENABLED_KEY === field.key || overrideEnabled )
 			// The button label/URL only apply when the override CTA is a button.
 			.filter( field => 'button' === effectiveCta || ! OVERRIDE_BUTTON_KEYS.includes( field.key ) )
 			.map( field => {
@@ -164,9 +169,14 @@ const ContextualPromptsSettings = ( { configuring, onConfigure } ) => {
 					saveProfile();
 				} }
 			>
-				<HStack justify="flex-start" spacing={ 2 }>
-					<Button icon={ chevronLeft } label={ __( 'Back', 'newspack-plugin' ) } onClick={ () => onConfigure( false ) } isLink />
-					<h2 className="newspack-wizard__heading">{ __( 'Contextual Prompts', 'newspack-plugin' ) }</h2>
+				<HStack justify="space-between" spacing={ 2 }>
+					<HStack justify="flex-start" spacing={ 2 }>
+						<Button icon={ chevronLeft } label={ __( 'Back', 'newspack-plugin' ) } onClick={ () => onConfigure( false ) } isLink />
+						<h2 className="newspack-wizard__heading">{ __( 'Contextual Prompts', 'newspack-plugin' ) }</h2>
+					</HStack>
+					<Button variant="primary" type="submit" disabled={ inFlight }>
+						{ inFlight ? __( 'Saving…', 'newspack-plugin' ) : __( 'Save', 'newspack-plugin' ) }
+					</Button>
 				</HStack>
 				<VStack spacing={ 6 } style={ { marginTop: 16 } }>
 					<p style={ { margin: 0 } }>
@@ -194,12 +204,6 @@ const ContextualPromptsSettings = ( { configuring, onConfigure } ) => {
 					</div>
 
 					{ renderFields( 'override' ) }
-
-					<div>
-						<Button variant="primary" type="submit" disabled={ inFlight }>
-							{ inFlight ? __( 'Saving…', 'newspack-plugin' ) : __( 'Save', 'newspack-plugin' ) }
-						</Button>
-					</div>
 				</VStack>
 			</form>
 		);
