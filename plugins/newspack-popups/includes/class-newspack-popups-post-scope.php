@@ -94,14 +94,13 @@ final class Newspack_Popups_Post_Scope {
 	 * @return void
 	 */
 	public static function delete_scoped_prompts_for_post( $post_id ) {
-		// Includes 'trash': the ordinary route to permanent deletion is trash, then
-		// Empty Trash (or wp_scheduled_delete), by which point trashed_post has
-		// already moved the prompt to trash. Without it the common path orphans the
-		// prompt — the exact case these handlers exist to prevent. Note 'any' would
-		// not do: it omits statuses registered exclude_from_search, i.e. trash.
-		$statuses = [ 'publish', 'draft', 'pending', 'future', 'private', 'trash', 'auto-draft' ];
-
-		foreach ( self::get_scoped_prompt_ids( $post_id, $statuses ) as $prompt_id ) {
+		// Every registered status, so nothing is left behind: the ordinary route to
+		// permanent deletion is trash, then Empty Trash (or wp_scheduled_delete), by
+		// which point trashed_post has already moved the prompt to trash. Note 'any'
+		// would not do — it omits statuses registered exclude_from_search, i.e.
+		// exactly trash and auto-draft. Enumerating instead of hard-coding also keeps
+		// custom statuses (editorial-workflow plugins) from escaping the cascade.
+		foreach ( self::get_scoped_prompt_ids( $post_id, array_keys( get_post_stati() ) ) as $prompt_id ) {
 			wp_delete_post( $prompt_id, true );
 		}
 	}
@@ -147,13 +146,14 @@ final class Newspack_Popups_Post_Scope {
 
 		return get_posts(
 			[
-				'post_type'        => Newspack_Popups::NEWSPACK_POPUPS_CPT,
-				'post_status'      => $statuses,
-				'post_parent'      => $post_id,
-				'posts_per_page'   => 100,
-				'fields'           => 'ids',
-				'no_found_rows'    => true,
-				'suppress_filters' => false,
+				'post_type'      => Newspack_Popups::NEWSPACK_POPUPS_CPT,
+				'post_status'    => $statuses,
+				'post_parent'    => $post_id,
+				// Unbounded on purpose: this backs the delete cascade, where a silent
+				// truncation would leave exactly the orphans it exists to prevent. The
+				// result set is one prompt per article in practice.
+				'posts_per_page' => -1,
+				'fields'         => 'ids',
 			]
 		);
 	}
@@ -373,6 +373,24 @@ final class Newspack_Popups_Post_Scope {
 		$button_label = (string) ( $args['button_label'] ?? __( 'Donate', 'newspack-popups' ) );
 		$button_url   = (string) ( $args['button_url'] ?? '' );
 		$position     = max( 0, (int) ( $args['position'] ?? 3 ) );
+
+		// Upsert: a story has at most one Contextual Prompt. Creating blindly makes
+		// this endpoint non-idempotent, and a duplicate would be unreachable — the
+		// panel only ever reads the first prompt, while the display query returns
+		// them all, so both would render with only one editable.
+		$existing = self::get_scoped_prompt_ids( $post_id, [ 'publish', 'draft', 'pending', 'future', 'private' ] );
+		if ( ! empty( $existing ) ) {
+			return self::update_scoped_prompt(
+				$existing[0],
+				[
+					'body'         => $body,
+					'button_label' => $button_label,
+					'button_url'   => $button_url,
+					'position'     => $position,
+					'ai_edited'    => $args['ai_edited'] ?? false,
+				]
+			);
+		}
 
 		$cta_mode = self::use_donate_block() ? self::CTA_MODE_DONATE_BLOCK : self::CTA_MODE_BUTTON;
 

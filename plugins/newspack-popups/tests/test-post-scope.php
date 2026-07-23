@@ -134,9 +134,11 @@ class PostScopeTest extends WP_UnitTestCase {
 	 * post-scoped prompt with the copy, button, campaign group, and audit meta.
 	 */
 	public function test_create_scoped_prompt() {
+		// post_b, not post_a: set_up already scopes a prompt to post_a, and a story
+		// has at most one Contextual Prompt — creating against it would upsert.
 		$prompt_id = Newspack_Popups_Post_Scope::create_scoped_prompt(
 			[
-				'post_id'          => self::$post_a,
+				'post_id'          => self::$post_b,
 				'body'             => 'Fund the reporting behind this story.',
 				'button_label'     => 'Fund this reporting',
 				'button_url'       => 'https://example.com/donate',
@@ -150,7 +152,7 @@ class PostScopeTest extends WP_UnitTestCase {
 		$this->assertIsInt( $prompt_id );
 
 		// Scoped to its post, and inline at the requested position.
-		$this->assertSame( self::$post_a, (int) get_post_field( 'post_parent', $prompt_id ) );
+		$this->assertSame( self::$post_b, (int) get_post_field( 'post_parent', $prompt_id ) );
 		$this->assertSame( 'inline', get_post_meta( $prompt_id, 'placement', true ) );
 		$this->assertSame( 'blocks_count', get_post_meta( $prompt_id, 'trigger_type', true ) );
 		$this->assertSame( '2', (string) get_post_meta( $prompt_id, 'trigger_blocks_count', true ) );
@@ -173,7 +175,7 @@ class PostScopeTest extends WP_UnitTestCase {
 		// It is excluded from the general query but retrievable for its post.
 		$eligible_ids = wp_list_pluck( Newspack_Popups_Model::retrieve_eligible_popups(), 'id' );
 		$this->assertNotContains( $prompt_id, $eligible_ids );
-		$scoped_ids = wp_list_pluck( Newspack_Popups_Model::retrieve_scoped_popups( self::$post_a ), 'id' );
+		$scoped_ids = wp_list_pluck( Newspack_Popups_Model::retrieve_scoped_popups( self::$post_b ), 'id' );
 		$this->assertContains( $prompt_id, $scoped_ids );
 	}
 
@@ -181,9 +183,11 @@ class PostScopeTest extends WP_UnitTestCase {
 	 * With no button URL, the prompt renders copy only (no button block).
 	 */
 	public function test_create_scoped_prompt_without_button() {
+		// post_b, not post_a: set_up already scopes a prompt to post_a, and a story
+		// has at most one Contextual Prompt — creating against it would upsert.
 		$prompt_id = Newspack_Popups_Post_Scope::create_scoped_prompt(
 			[
-				'post_id' => self::$post_a,
+				'post_id' => self::$post_b,
 				'body'    => 'Copy only, no button.',
 			]
 		);
@@ -674,6 +678,9 @@ class PostScopeTest extends WP_UnitTestCase {
 
 		update_option( Newspack_Popups_Settings::OVERRIDE_ENABLED_OPTION, true );
 		update_option( 'newspack_contextual_prompts_override_body', 'Spring drive.' );
+		// A URL is required for the override to be active in plain-button mode,
+		// otherwise it would replace every prompt with an ask nobody can act on.
+		update_option( 'newspack_contextual_prompts_override_url', 'https://example.com/drive' );
 
 		$rendered = Newspack_Popups_Post_Scope::get_scoped_popups_for_current_post()[0]['content'];
 		$this->assertStringContainsString( 'Spring drive.', $rendered );
@@ -873,10 +880,74 @@ class PostScopeTest extends WP_UnitTestCase {
 			]
 		);
 
+		// A second site-wide prompt NOT in the id list: batch_publish must still
+		// deactivate it, otherwise this test would also pass if the exclusion broke
+		// the query outright or gutted batch_publish into a no-op.
+		$other_sitewide = self::factory()->post->create(
+			[
+				'post_type'   => Newspack_Popups::NEWSPACK_POPUPS_CPT,
+				'post_status' => 'publish',
+			]
+		);
+
 		Newspack_Popups_Settings::batch_publish( [ $sitewide ] );
 
 		$this->assertSame( 'publish', get_post_status( $scoped ), 'The story prompt is untouched by a campaign activation.' );
 		$this->assertSame( 'publish', get_post_status( $sitewide ) );
+		$this->assertSame( 'draft', get_post_status( $other_sitewide ), 'Site-wide prompts outside the list are still deactivated.' );
+	}
+
+	/**
+	 * A story has at most one Contextual Prompt: a create for a post that already
+	 * has one updates it rather than minting an unreachable duplicate.
+	 */
+	public function test_create_upserts_an_existing_prompt() {
+		$post_id = self::factory()->post->create( [ 'post_type' => 'post' ] );
+
+		$first = Newspack_Popups_Post_Scope::create_scoped_prompt(
+			[
+				'post_id'  => $post_id,
+				'body'     => 'First copy.',
+				'position' => 1,
+			]
+		);
+		$second = Newspack_Popups_Post_Scope::create_scoped_prompt(
+			[
+				'post_id'  => $post_id,
+				'body'     => 'Second copy.',
+				'position' => 2,
+			]
+		);
+
+		$this->assertSame( $first, $second, 'The second create returns the same prompt.' );
+		$this->assertCount(
+			1,
+			Newspack_Popups_Model::retrieve_scoped_popups( $post_id ),
+			'Only one prompt exists for the story, so only one renders.'
+		);
+		$this->assertStringContainsString( 'Second copy.', get_post_field( 'post_content', $first ) );
+	}
+
+	/**
+	 * A site-wide override with no URL would replace every prompt with an ask that
+	 * has nothing to click — on exactly the sites where the button is the donation
+	 * path. It counts as inactive, like an override with no copy.
+	 */
+	public function test_override_without_a_url_is_inactive_in_button_mode() {
+		add_filter( 'newspack_contextual_prompts_use_donate_block', '__return_false' );
+		update_option( Newspack_Popups_Settings::OVERRIDE_ENABLED_OPTION, true );
+		update_option( 'newspack_contextual_prompts_override_body', 'Give today.' );
+		update_option( 'newspack_contextual_prompts_override_url', '' );
+
+		$this->assertFalse(
+			Newspack_Popups_Settings::is_override_active(),
+			'No URL in button mode means the override would strip the CTA, so it stays inactive.'
+		);
+
+		update_option( 'newspack_contextual_prompts_override_url', 'https://example.com/fund-drive' );
+		$this->assertTrue( Newspack_Popups_Settings::is_override_active() );
+
+		remove_filter( 'newspack_contextual_prompts_use_donate_block', '__return_false' );
 	}
 
 	/**

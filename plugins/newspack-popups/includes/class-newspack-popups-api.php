@@ -399,8 +399,22 @@ final class Newspack_Popups_API {
 			);
 		}
 
+		// A failed copy edit must not be reported as a failed request once the
+		// independent actions above have already been committed — the client would
+		// roll its UI back and end up disagreeing with the database about whether the
+		// prompt is showing. Report it as a per-action result instead, alongside the
+		// prompt's true state. A failure on the create path has nothing to report
+		// against, so it stays an error.
+		$copy_error = null;
 		if ( is_wp_error( $result ) ) {
-			return $result;
+			if ( ! $prompt_id ) {
+				return $result;
+			}
+			$copy_error = [
+				'code'    => $result->get_error_code(),
+				'message' => $result->get_error_message(),
+			];
+			$result     = $prompt_id;
 		}
 
 		// A newly-created prompt can still carry an initial visibility choice; for an
@@ -418,6 +432,7 @@ final class Newspack_Popups_API {
 				'edit_link'  => get_edit_post_link( $result, 'rest' ),
 				'enabled'    => 'publish' === get_post_status( $result ),
 				'customized' => Newspack_Popups_Post_Scope::is_customized( $result ),
+				'copy_error' => $copy_error,
 			]
 		);
 	}

@@ -229,6 +229,48 @@ class AiCopyAssistantSettingsTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * When only the copy edit fails, the request reports the prompt's true state
+	 * rather than failing outright — otherwise the panel rolls its toggle back and
+	 * ends up disagreeing with the database about whether the prompt is showing.
+	 */
+	public function test_failed_copy_edit_still_reports_true_visibility() {
+		update_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION, true );
+		add_filter( 'newspack_contextual_prompts_use_donate_block', '__return_false' );
+
+		$post_id   = self::factory()->post->create( [ 'post_type' => 'post' ] );
+		$prompt_id = Newspack_Popups_Post_Scope::create_scoped_prompt(
+			[
+				'post_id'  => $post_id,
+				'body'     => 'Original copy.',
+				'position' => 1,
+			]
+		);
+		wp_update_post(
+			[
+				'ID'           => $prompt_id,
+				'post_content' => "<!-- wp:paragraph -->\n<p>Hand-built.</p>\n<!-- /wp:paragraph -->",
+			]
+		);
+
+		$request = new WP_REST_Request( 'POST', '/newspack-popups/v1/contextual-prompt' );
+		$request->set_param( 'post_id', $post_id );
+		$request->set_param( 'prompt_id', $prompt_id );
+		$request->set_param( 'body', 'Copy that cannot land.' );
+		$request->set_param( 'enabled', false );
+
+		$response = Newspack_Popups_Api::api_create_contextual_prompt( $request );
+		$this->assertNotWPError( $response, 'A committed visibility change is not reported as a failed request.' );
+
+		$data = $response->get_data();
+		$this->assertFalse( $data['enabled'], 'The response reports the visibility actually stored.' );
+		$this->assertSame( 'draft', get_post_status( $prompt_id ), '…and it matches the database.' );
+		$this->assertNotEmpty( $data['copy_error'], 'The copy failure is still surfaced.' );
+		$this->assertSame( 'newspack_popups_copy_block_missing', $data['copy_error']['code'] );
+
+		remove_filter( 'newspack_contextual_prompts_use_donate_block', '__return_false' );
+	}
+
+	/**
 	 * A prompt_id is authorized against the article that prompt actually belongs to,
 	 * not the post_id the caller supplied. Otherwise anyone able to edit a single
 	 * post of their own could pass another story's prompt_id and rewrite its copy or

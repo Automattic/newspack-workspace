@@ -183,6 +183,15 @@ const ContextualPromptPanel = () => {
 		setPromptId( response.id );
 		setEditLink( response.edit_link );
 		setCustomized( Boolean( response.customized ) );
+		// The server is authoritative about visibility — reset and show/hide are
+		// applied independently of the copy, so a copy failure must not leave the
+		// toggle showing something the database disagrees with.
+		if ( undefined !== response.enabled ) {
+			setEnabled( Boolean( response.enabled ) );
+		}
+		if ( response.copy_error ) {
+			setError( response.copy_error.message );
+		}
 		return response;
 	};
 
@@ -224,6 +233,8 @@ const ContextualPromptPanel = () => {
 		setSaving( true );
 		setError( '' );
 		try {
+			// persist() reconciles the toggle with the server's own state, so a
+			// partially-applied request can't leave the panel out of step.
 			await persist( { enabled: next } );
 		} catch ( e ) {
 			setEnabled( ! next );

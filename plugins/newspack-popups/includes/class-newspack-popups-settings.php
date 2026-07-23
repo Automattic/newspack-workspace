@@ -59,8 +59,24 @@ class Newspack_Popups_Settings {
 	 * @return bool
 	 */
 	public static function is_override_active() {
-		return (bool) get_option( self::OVERRIDE_ENABLED_OPTION, false )
-			&& '' !== trim( (string) get_option( 'newspack_contextual_prompts_override_body', '' ) );
+		if ( ! (bool) get_option( self::OVERRIDE_ENABLED_OPTION, false ) ) {
+			return false;
+		}
+
+		// An enabled override with no copy would blank every prompt, so it counts as
+		// inactive. The same applies to a missing URL when the CTA is a plain button:
+		// the button is only emitted when it has somewhere to point, so an override
+		// without one would replace every prompt with an ask nobody can act on — on
+		// exactly the sites where that button IS the donation path.
+		if ( '' === trim( (string) get_option( 'newspack_contextual_prompts_override_body', '' ) ) ) {
+			return false;
+		}
+
+		if ( ! Newspack_Popups_Post_Scope::use_donate_block() ) {
+			return '' !== trim( (string) get_option( 'newspack_contextual_prompts_override_url', '' ) );
+		}
+
+		return true;
 	}
 
 	/**
