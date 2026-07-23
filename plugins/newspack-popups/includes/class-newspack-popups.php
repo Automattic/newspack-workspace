@@ -106,6 +106,8 @@ final class Newspack_Popups {
 		include_once __DIR__ . '/class-newspack-popups-presets.php';
 		include_once __DIR__ . '/class-newspack-popups-post-scope.php';
 		Newspack_Popups_Post_Scope::init();
+		include_once __DIR__ . '/class-newspack-popups-contextual-prompt-block.php';
+		Newspack_Popups_Contextual_Prompt_Block::init();
 		include_once __DIR__ . '/class-newspack-popups-inserter.php';
 		include_once __DIR__ . '/class-newspack-popups-api.php';
 		include_once __DIR__ . '/class-newspack-popups-settings.php';
@@ -117,6 +119,20 @@ final class Newspack_Popups {
 		include_once __DIR__ . '/class-newspack-popups-expiry.php';
 		include_once __DIR__ . '/merge-tags/class-merge-tag.php';
 		include_once __DIR__ . '/merge-tags/class-merge-tags.php';
+	}
+
+	/**
+	 * Lowercased singular label of the post type being edited, for prompt UI
+	 * strings ("post", "page", "listing"…). Falls back to "post".
+	 *
+	 * @return string
+	 */
+	public static function get_current_post_type_label() {
+		$post_type_object = get_post_type_object( (string) get_post_type() );
+		if ( $post_type_object && ! empty( $post_type_object->labels->singular_name ) ) {
+			return strtolower( $post_type_object->labels->singular_name );
+		}
+		return __( 'post', 'newspack-popups' );
 	}
 
 	/**
@@ -733,6 +749,12 @@ final class Newspack_Popups {
 				'endpoint'          => '/newspack-popups/v1/prompts',
 				'post_type'         => self::NEWSPACK_POPUPS_CPT,
 				'is_prompt'         => self::NEWSPACK_POPUPS_CPT == get_post_type(),
+				// So the editor previews the Contextual Prompt CTA in the same
+				// accent the front end resolves at render.
+				'accent_color'      => Newspack_Popups_Contextual_Prompt_Block::get_accent_color(),
+				// The edited content's own noun ("post", "page", "listing"…), so
+				// prompt UI strings speak the publisher's language.
+				'post_type_label'   => self::get_current_post_type_label(),
 			]
 		);
 
@@ -839,6 +861,7 @@ final class Newspack_Popups {
 					[
 						'enabled'         => Newspack_Popups_Settings::is_ai_copy_assistant_enabled(),
 						'donationsNative' => Newspack_Popups_Post_Scope::use_donate_block(),
+						'postTypeLabel'   => self::get_current_post_type_label(),
 					]
 				);
 			}

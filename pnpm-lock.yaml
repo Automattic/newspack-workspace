@@ -568,6 +568,9 @@ importers:
       js-cookie:
         specifier: ^3.0.8
         version: 3.0.8
+      newspack-colors:
+        specifier: workspace:*
+        version: link:../../packages/colors
       newspack-components:
         specifier: workspace:*
         version: link:../../packages/components
