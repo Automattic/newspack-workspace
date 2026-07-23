@@ -34,7 +34,7 @@
 	},
 	"devDependencies": {
 		"@types/react": "^18.0.0",
-		"newspack-scripts": "5.10.0-alpha.1"
+		"newspack-scripts": "workspace:*"
 	},
 	"scripts": {
 		"build-types": "node build-types.js",
