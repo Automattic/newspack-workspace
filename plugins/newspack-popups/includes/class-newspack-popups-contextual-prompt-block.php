@@ -4,7 +4,9 @@
  *
  * Server side of the newspack-popups/contextual-prompt block: registration so
  * Global Styles can target it, the default design expressed as theme.json data
- * (block supports only — no CSS), and the site-wide override applied at render.
+ * (block supports only — no CSS), and the render pipeline that normalizes each
+ * prompt's CTA to the site's donation platform and applies the site-wide
+ * override, all at the parsed-block level.
  *
  * @package Newspack
  */
@@ -23,7 +25,7 @@ final class Newspack_Popups_Contextual_Prompt_Block {
 	public static function init() {
 		add_action( 'init', [ __CLASS__, 'register_block' ] );
 		add_filter( 'wp_theme_json_data_default', [ __CLASS__, 'default_design' ] );
-		add_filter( 'render_block_' . self::BLOCK_NAME, [ __CLASS__, 'maybe_apply_override' ] );
+		add_filter( 'render_block_data', [ __CLASS__, 'prepare_block_data' ] );
 		add_filter( 'render_block_data', [ __CLASS__, 'inherit_accent_color' ], 10, 3 );
 	}
 
@@ -199,91 +201,242 @@ final class Newspack_Popups_Contextual_Prompt_Block {
 	}
 
 	/**
-	 * Site-wide override ("fund-drive mode"): while active, replace the copy — and,
-	 * on plain-button sites, the CTA destination — of every Contextual Prompt block
-	 * at render time. Stored copy and button are untouched, so turning the override
-	 * off restores each story's own prompt.
+	 * Shape every Contextual Prompt for render: normalize its CTA to the site's
+	 * current donation platform, then apply the site-wide override when active.
+	 * Operates on parsed block data, so children are swapped structurally rather
+	 * than by regexing rendered markup.
 	 *
-	 * @param string $block_content Rendered block markup.
-	 * @return string
+	 * @param array $parsed_block The block being rendered.
+	 * @return array
 	 */
-	public static function maybe_apply_override( $block_content ) {
-		if ( ! class_exists( 'Newspack_Popups_Settings' ) || ! Newspack_Popups_Settings::is_override_active() ) {
-			return $block_content;
+	public static function prepare_block_data( $parsed_block ) {
+		if ( self::BLOCK_NAME !== ( $parsed_block['blockName'] ?? '' ) ) {
+			return $parsed_block;
 		}
 
-		$body = trim( (string) get_option( 'newspack_contextual_prompts_override_body', '' ) );
-		if ( '' === $body ) {
-			return $block_content;
+		$parsed_block = self::normalize_cta( $parsed_block );
+
+		if ( class_exists( 'Newspack_Popups_Settings' ) && Newspack_Popups_Settings::is_override_active() ) {
+			$parsed_block = self::apply_override( $parsed_block );
 		}
 
-		// Swap the copy paragraph's text. preg_replace_callback, not preg_replace, so a
-		// literal $1 / ${1} / \1 in the override copy — "Give $5 today" — is never
-		// expanded as a backreference.
-		$block_content = preg_replace_callback(
-			'#(<p\b[^>]*>).*?(</p>)#s',
-			function ( $matches ) use ( $body ) {
-				return $matches[1] . esc_html( $body ) . $matches[2];
-			},
-			$block_content,
-			1
-		);
-
-		// Repoint the CTA from what the block actually renders, not the site's current
-		// donation platform: a block's CTA type is fixed when it is inserted, so a
-		// plain-button prompt inserted before a switch to native donations still needs
-		// its button repointed. apply_override_to_button() targets only the plain-button
-		// anchor and no-ops on the native donate block (which owns its own destination),
-		// so this is safe to run in either mode.
-		$block_content = self::apply_override_to_button(
-			$block_content,
-			(string) get_option( 'newspack_contextual_prompts_override_url', '' ),
-			trim( (string) get_option( 'newspack_contextual_prompts_override_label', '' ) )
-		);
-
-		return $block_content;
+		return $parsed_block;
 	}
 
 	/**
-	 * Repoint the plain-button CTA at the override destination and label.
+	 * Locate the CTA child: the donate block or the buttons wrapper.
 	 *
-	 * The button renders as `<a class="wp-block-button__link …" href="…">Label</a>`.
-	 * The href is set with the HTML API (safe attribute handling), and the label with
-	 * preg_replace_callback so a `$1`/`\1` sequence in publisher copy can't expand.
-	 *
-	 * @param string $html  Rendered block markup.
-	 * @param string $url   Override button URL.
-	 * @param string $label Override button label.
-	 * @return string
+	 * @param array $parsed_block Parsed prompt block.
+	 * @return array|null [ 'index' => int, 'name' => string ], or null.
 	 */
-	private static function apply_override_to_button( $html, $url, $label ) {
-		$url   = trim( $url );
-		$label = trim( $label );
+	private static function find_cta( $parsed_block ) {
+		foreach ( $parsed_block['innerBlocks'] ?? [] as $index => $child ) {
+			if ( in_array( $child['blockName'] ?? '', [ 'newspack-blocks/donate', 'core/buttons' ], true ) ) {
+				return [
+					'index' => $index,
+					'name'  => $child['blockName'],
+				];
+			}
+		}
+		return null;
+	}
 
-		if ( '' !== $url && class_exists( 'WP_HTML_Tag_Processor' ) ) {
-			$tags = new \WP_HTML_Tag_Processor( $html );
-			if ( $tags->next_tag(
-				[
-					'tag_name'   => 'a',
-					'class_name' => 'wp-block-button__link',
-				]
-			) ) {
-				$tags->set_attribute( 'href', esc_url( $url ) );
-				$html = $tags->get_updated_html();
+	/**
+	 * A block's CTA type is fixed when it is inserted, so after a change of
+	 * donation platform the stored CTA can disagree with the site. Normalize at
+	 * render: the native platform renders the donate form, off-site renders a
+	 * button to the donor landing page — or copy only when none is configured.
+	 * Matching CTAs pass through untouched, preserving per-story customization.
+	 *
+	 * @param array $parsed_block Parsed prompt block.
+	 * @return array
+	 */
+	private static function normalize_cta( $parsed_block ) {
+		$cta = self::find_cta( $parsed_block );
+		if ( null === $cta ) {
+			return $parsed_block;
+		}
+
+		if ( self::use_donate_block() ) {
+			if ( 'core/buttons' === $cta['name'] ) {
+				$parsed_block['innerBlocks'][ $cta['index'] ] = self::build_donate_child();
+			}
+			return $parsed_block;
+		}
+
+		if ( 'newspack-blocks/donate' === $cta['name'] ) {
+			$url = Newspack_Popups::get_donor_landing_url();
+			if ( '' === $url ) {
+				// No destination to point a button at: render the copy alone
+				// rather than a dead button or a form on a disabled platform.
+				return self::remove_child( $parsed_block, $cta['index'] );
+			}
+			$parsed_block['innerBlocks'][ $cta['index'] ] = self::build_buttons_child( $url, __( 'Donate', 'newspack-popups' ) );
+		}
+
+		return $parsed_block;
+	}
+
+	/**
+	 * Site-wide override ("fund-drive mode"): swap the copy of every prompt, and
+	 * in button mode replace the CTA with the override button. Stored content is
+	 * untouched — turning the override off restores each story's own prompt.
+	 *
+	 * @param array $parsed_block Parsed prompt block, already normalized.
+	 * @return array
+	 */
+	private static function apply_override( $parsed_block ) {
+		$body = trim( (string) get_option( 'newspack_contextual_prompts_override_body', '' ) );
+		if ( '' !== $body ) {
+			$parsed_block = self::replace_copy( $parsed_block, $body );
+		}
+
+		if ( 'button' === Newspack_Popups_Settings::get_override_cta() ) {
+			$label = trim( (string) get_option( 'newspack_contextual_prompts_override_label', '' ) );
+			$child = self::build_buttons_child(
+				(string) get_option( 'newspack_contextual_prompts_override_url', '' ),
+				'' !== $label ? $label : __( 'Donate', 'newspack-popups' )
+			);
+
+			$cta = self::find_cta( $parsed_block );
+			if ( null !== $cta ) {
+				$parsed_block['innerBlocks'][ $cta['index'] ] = $child;
+			} else {
+				$parsed_block = self::append_child( $parsed_block, $child );
 			}
 		}
 
-		if ( '' !== $label ) {
-			$html = preg_replace_callback(
-				'#(<a\b[^>]*\bwp-block-button__link\b[^>]*>).*?(</a>)#is',
-				function ( $matches ) use ( $label ) {
-					return $matches[1] . esc_html( $label ) . $matches[2];
-				},
-				$html,
-				1
-			);
+		return $parsed_block;
+	}
+
+	/**
+	 * Replace the text of the first paragraph child.
+	 *
+	 * Uses preg_replace_callback, not preg_replace, so a literal $1 / ${1} / \1
+	 * in the override copy — "Give $5 today" — is never expanded as a
+	 * backreference.
+	 *
+	 * @param array  $parsed_block Parsed prompt block.
+	 * @param string $body         Replacement copy, unescaped.
+	 * @return array
+	 */
+	private static function replace_copy( $parsed_block, $body ) {
+		foreach ( $parsed_block['innerBlocks'] ?? [] as $index => $child ) {
+			if ( 'core/paragraph' !== ( $child['blockName'] ?? '' ) ) {
+				continue;
+			}
+			$swap = function ( $html ) use ( $body ) {
+				return preg_replace_callback(
+					'#(<p\b[^>]*>).*?(</p>)#s',
+					function ( $matches ) use ( $body ) {
+						return $matches[1] . esc_html( $body ) . $matches[2];
+					},
+					(string) $html,
+					1
+				);
+			};
+
+			$child['innerHTML'] = $swap( $child['innerHTML'] );
+			foreach ( $child['innerContent'] as $chunk_index => $chunk ) {
+				if ( is_string( $chunk ) && '' !== trim( $chunk ) ) {
+					$child['innerContent'][ $chunk_index ] = $swap( $chunk );
+				}
+			}
+			$parsed_block['innerBlocks'][ $index ] = $child;
+			break;
 		}
 
-		return $html;
+		return $parsed_block;
+	}
+
+	/**
+	 * Parsed newspack-blocks/donate child in the block's default style. The
+	 * accent color is stamped when it renders, by inherit_accent_color().
+	 *
+	 * @return array
+	 */
+	private static function build_donate_child() {
+		return [
+			'blockName'    => 'newspack-blocks/donate',
+			'attrs'        => [ 'className' => 'is-style-modern' ],
+			'innerBlocks'  => [],
+			'innerHTML'    => '',
+			'innerContent' => [],
+		];
+	}
+
+	/**
+	 * Parsed core/buttons child holding a single link button.
+	 *
+	 * @param string $url   Button destination.
+	 * @param string $label Button label, unescaped.
+	 * @return array
+	 */
+	private static function build_buttons_child( $url, $label ) {
+		$anchor = '<div class="wp-block-button"><a class="wp-block-button__link wp-element-button" href="' . esc_url( $url ) . '">' . esc_html( $label ) . '</a></div>';
+		return [
+			'blockName'    => 'core/buttons',
+			'attrs'        => [],
+			'innerBlocks'  => [
+				[
+					'blockName'    => 'core/button',
+					'attrs'        => [ 'url' => $url ],
+					'innerBlocks'  => [],
+					'innerHTML'    => $anchor,
+					'innerContent' => [ $anchor ],
+				],
+			],
+			'innerHTML'    => '<div class="wp-block-buttons"></div>',
+			'innerContent' => [ '<div class="wp-block-buttons">', null, '</div>' ],
+		];
+	}
+
+	/**
+	 * Remove the Nth child and its innerContent placeholder.
+	 *
+	 * The innerContent array interleaves HTML chunks with one null placeholder
+	 * per child, in order — the placeholder count must track the child count or
+	 * the block renders misaligned.
+	 *
+	 * @param array $parsed_block Parsed block.
+	 * @param int   $index        Child index to remove.
+	 * @return array
+	 */
+	private static function remove_child( $parsed_block, $index ) {
+		array_splice( $parsed_block['innerBlocks'], $index, 1 );
+
+		$seen = 0;
+		foreach ( $parsed_block['innerContent'] as $chunk_index => $chunk ) {
+			if ( null !== $chunk ) {
+				continue;
+			}
+			if ( $seen === $index ) {
+				array_splice( $parsed_block['innerContent'], $chunk_index, 1 );
+				break;
+			}
+			++$seen;
+		}
+
+		return $parsed_block;
+	}
+
+	/**
+	 * Append a child, inserting its innerContent placeholder before the block's
+	 * closing markup chunk.
+	 *
+	 * @param array $parsed_block Parsed block.
+	 * @param array $child        Parsed child block.
+	 * @return array
+	 */
+	private static function append_child( $parsed_block, $child ) {
+		$parsed_block['innerBlocks'][] = $child;
+
+		$last_chunk = count( $parsed_block['innerContent'] ) - 1;
+		while ( $last_chunk >= 0 && null === $parsed_block['innerContent'][ $last_chunk ] ) {
+			--$last_chunk;
+		}
+		array_splice( $parsed_block['innerContent'], max( 0, $last_chunk ), 0, [ null ] );
+
+		return $parsed_block;
 	}
 }
