@@ -755,6 +755,9 @@ final class Newspack_Popups {
 				// The edited content's own noun ("post", "page", "listing"…), so
 				// prompt UI strings speak the publisher's language.
 				'post_type_label'   => self::get_current_post_type_label(),
+				// Whether the Contextual Prompt CTA is the native donate block
+				// or a plain button.
+				'donations_native'  => Newspack_Popups_Post_Scope::use_donate_block(),
 			]
 		);
 

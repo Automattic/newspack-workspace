@@ -33,9 +33,15 @@ const FRAMING_LABELS = {
 	end: sprintf( __( 'End of %s', 'newspack-popups' ), POST_TYPE_LABEL ),
 };
 
-export const TEMPLATE = [
+// The CTA follows the site's reader-revenue setup: the donate block when
+// Newspack donations are native, a plain button otherwise.
+const DONATIONS_NATIVE = window.newspack_popups_blocks_data?.donations_native ?? true;
+
+export const getTemplate = () => [
 	[ 'core/paragraph', {} ],
-	[ 'newspack-blocks/donate', { className: 'is-style-modern' } ],
+	DONATIONS_NATIVE
+		? [ 'newspack-blocks/donate', { className: 'is-style-modern' } ]
+		: [ 'core/buttons', {}, [ [ 'core/button', { text: __( 'Donate', 'newspack-popups' ) } ] ] ],
 ];
 
 /**
@@ -45,7 +51,7 @@ export const TEMPLATE = [
  * @return {Object} The block.
  */
 export const createPromptBlock = copy => {
-	const template = JSON.parse( JSON.stringify( TEMPLATE ) );
+	const template = getTemplate();
 	// The copy paragraph is the first child.
 	template[ 0 ][ 1 ].content = copy;
 	return createBlock( 'newspack-popups/contextual-prompt', {}, createBlocksFromInnerBlocksTemplate( template ) );
@@ -54,7 +60,7 @@ export const createPromptBlock = copy => {
 export const ContextualPromptEditor = ( { clientId } ) => {
 	const blockProps = useBlockProps();
 	const innerBlocksProps = useInnerBlocksProps( blockProps, {
-		template: TEMPLATE,
+		template: getTemplate(),
 		templateLock: 'all',
 	} );
 
@@ -84,10 +90,10 @@ export const ContextualPromptEditor = ( { clientId } ) => {
 		},
 		[ clientId ]
 	);
-	const { updateBlockAttributes, setBlockEditingMode } = useDispatch( blockEditorStore );
+	const { updateBlockAttributes } = useDispatch( blockEditorStore );
 
-	// The CTA renders from site settings and is not editable per-story: disable
-	// it entirely so it cannot even be selected.
+	// Both children stay selectable so publishers can tweak them per-story; the
+	// template lock prevents moving or removing them.
 	const ctaClientId = useSelect(
 		select => {
 			const blockEditor = select( blockEditorStore );
@@ -95,11 +101,6 @@ export const ContextualPromptEditor = ( { clientId } ) => {
 		},
 		[ clientId ]
 	);
-	useEffect( () => {
-		if ( ctaClientId && setBlockEditingMode ) {
-			setBlockEditingMode( ctaClientId, 'disabled' );
-		}
-	}, [ ctaClientId, setBlockEditingMode ] );
 
 	// Editor/front-end parity: stamp the resolved theme accent onto the CTA so
 	// the canvas preview matches the render-time color. The stored value is

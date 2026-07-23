@@ -103,6 +103,7 @@ final class Newspack_Popups_Contextual_Prompt_Block {
 				'supports'    => [
 					'align'                => [ 'wide', 'full' ],
 					'html'                 => false,
+					'lock'                 => false,
 					'multiple'             => false,
 					'reusable'             => false,
 					'layout'               => [

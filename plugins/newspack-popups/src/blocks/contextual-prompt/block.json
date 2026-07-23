@@ -59,6 +59,7 @@
 				"fontSize": true
 			}
 		},
-		"shadow": true
+		"shadow": true,
+		"lock": false
 	}
 }
