@@ -36,6 +36,18 @@ class ContextualPromptOverrideTest extends WP_UnitTestCase {
 <!-- wp:newspack-blocks/donate {"className":"is-style-modern"} /--></div>
 <!-- /wp:newspack-popups/contextual-prompt -->';
 
+	const URLLESS_BUTTON_PROMPT = '<!-- wp:newspack-popups/contextual-prompt -->
+<div class="wp-block-newspack-popups-contextual-prompt"><!-- wp:paragraph -->
+<p>Original story copy.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:buttons -->
+<div class="wp-block-buttons"><!-- wp:button -->
+<div class="wp-block-button"><a class="wp-block-button__link wp-element-button">Donate</a></div>
+<!-- /wp:button --></div>
+<!-- /wp:buttons --></div>
+<!-- /wp:newspack-popups/contextual-prompt -->';
+
 	/**
 	 * Reset override options, donor landing page and platform filters.
 	 */
@@ -135,6 +147,33 @@ class ContextualPromptOverrideTest extends WP_UnitTestCase {
 
 		$parsed = $this->parse_prompt( self::PLAIN_BUTTON_PROMPT );
 		$this->assertSame( $parsed, Newspack_Popups_Contextual_Prompt_Block::prepare_block_data( $parsed ) );
+	}
+
+	/**
+	 * Off-site platform: a button that never got a destination (fresh insert
+	 * before any donor landing page existed) is repointed at the landing page.
+	 */
+	public function test_offsite_urlless_button_repointed_to_landing_page() {
+		add_filter( 'newspack_contextual_prompts_use_donate_block', '__return_false' );
+		$permalink = $this->set_donor_landing_page();
+
+		$result = Newspack_Popups_Contextual_Prompt_Block::prepare_block_data( $this->parse_prompt( self::URLLESS_BUTTON_PROMPT ) );
+
+		$this->assertSame( 'core/buttons', $result['innerBlocks'][1]['blockName'] );
+		$this->assertStringContainsString( 'href="' . esc_url( $permalink ) . '"', $result['innerBlocks'][1]['innerBlocks'][0]['innerHTML'] );
+	}
+
+	/**
+	 * Off-site platform, no destination anywhere: a URL-less button is dropped —
+	 * copy only, never a dead Donate button.
+	 */
+	public function test_offsite_urlless_button_without_landing_page_drops_cta() {
+		add_filter( 'newspack_contextual_prompts_use_donate_block', '__return_false' );
+
+		$result = Newspack_Popups_Contextual_Prompt_Block::prepare_block_data( $this->parse_prompt( self::URLLESS_BUTTON_PROMPT ) );
+
+		$this->assertCount( 1, $result['innerBlocks'], 'Only the copy paragraph remains.' );
+		$this->assertStringNotContainsString( 'wp-block-button', do_blocks( self::URLLESS_BUTTON_PROMPT ) );
 	}
 
 	/**

@@ -264,7 +264,13 @@ final class Newspack_Popups_Contextual_Prompt_Block {
 			return $parsed_block;
 		}
 
-		if ( 'newspack-blocks/donate' === $cta['name'] ) {
+		$needs_destination = 'newspack-blocks/donate' === $cta['name']
+			// A plain-button CTA without a destination anywhere — a fresh insert
+			// made before a donor landing page was configured — is a dead ask.
+			// Buttons carrying any URL pass through untouched.
+			|| ! self::buttons_have_destination( $parsed_block['innerBlocks'][ $cta['index'] ] );
+
+		if ( $needs_destination ) {
 			$url = Newspack_Popups::get_donor_landing_url();
 			if ( '' === $url ) {
 				// No destination to point a button at: render the copy alone
@@ -275,6 +281,28 @@ final class Newspack_Popups_Contextual_Prompt_Block {
 		}
 
 		return $parsed_block;
+	}
+
+	/**
+	 * Whether a buttons wrapper contains at least one button with a destination,
+	 * as a URL attribute or an href in its markup.
+	 *
+	 * @param array $buttons Parsed core/buttons child.
+	 * @return bool
+	 */
+	private static function buttons_have_destination( $buttons ) {
+		foreach ( $buttons['innerBlocks'] ?? [] as $child ) {
+			if ( '' !== trim( (string) ( $child['attrs']['url'] ?? '' ) ) ) {
+				return true;
+			}
+			if ( false !== strpos( (string) ( $child['innerHTML'] ?? '' ), 'href=' ) ) {
+				return true;
+			}
+			if ( ! empty( $child['innerBlocks'] ) && self::buttons_have_destination( $child ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
