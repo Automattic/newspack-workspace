@@ -747,6 +747,23 @@ final class Newspack_Popups {
 			wp_style_add_data( 'newspack-popups-blocks', 'rtl', 'replace' );
 			wp_enqueue_style( 'newspack-popups-blocks' );
 		}
+
+		// Styles for the Contextual Prompt sidebar preview and the in-editor
+		// placement indicator. Enqueued here rather than on
+		// enqueue_block_editor_assets because the block canvas is iframed: editor
+		// styles only reach the surrounding chrome, so the indicator — which
+		// renders inside the block list — would otherwise be unstyled.
+		$document_settings_style_path = trailingslashit( $dist_dir ) . 'documentSettings.css';
+		if ( self::build_assets_exist( [ $document_settings_style_path ] ) ) {
+			\wp_register_style(
+				'newspack-popups-document-settings',
+				plugins_url( '../dist/documentSettings.css', __FILE__ ),
+				[],
+				filemtime( $document_settings_style_path )
+			);
+			wp_style_add_data( 'newspack-popups-document-settings', 'rtl', 'replace' );
+			wp_enqueue_style( 'newspack-popups-document-settings' );
+		}
 	}
 
 	/**

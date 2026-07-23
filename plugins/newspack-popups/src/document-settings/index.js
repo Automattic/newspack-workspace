@@ -12,6 +12,8 @@ import { ToggleControl } from '@wordpress/components';
  * Internal dependencies
  */
 import ContextualPromptPanel from './contextual-prompt-panel';
+import registerContextualPromptPlacement from './contextual-prompt-placement';
+import './style.scss';
 
 const PopupsSettingsPanel = ( { hasDisabledPopups, onChange } ) => (
 	<PluginDocumentSettingPanel name="newsletters-popups-settings-panel" title={ __( 'Newspack Campaigns Settings', 'newspack-popups' ) }>
@@ -48,3 +50,9 @@ registerPlugin( 'newspack-contextual-prompt', {
 	render: ContextualPromptPanel,
 	icon: false,
 } );
+
+// Ghost preview showing where the prompt lands in the story. Gated on opt-in
+// and skipped on the prompt CPT itself, matching the panel.
+if ( window.newspackPopupsContextualPrompt?.enabled ) {
+	registerContextualPromptPlacement();
+}
