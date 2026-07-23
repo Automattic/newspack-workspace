@@ -1595,6 +1595,14 @@ final class Newspack_Newsletters {
 		}
 		$is_public = (bool) get_post_meta( $post->ID, 'is_public', true );
 		if ( 'publish' === $post->post_status && ! $is_public ) {
+			// Correcting to `private` does NOT trigger an ESP send. A
+			// publish -> private transition stays within the controlled
+			// statuses (`['publish', 'private']`), so neither `pre_post_update()`
+			// (which sends when a newsletter moves out of / into that set) nor
+			// `transition_post_status()` (which sends only when `$old_status` is
+			// `'future'`) fires. This matters because, with the `exit` below now
+			// scoped to page views, a single request can correct many rows
+			// instead of stopping at the first — many corrections, still no sends.
 			wp_update_post(
 				[
 					'ID'          => $post->ID,
@@ -1646,7 +1654,19 @@ final class Newspack_Newsletters {
 		}
 		// A feed is a front-end request but not a page view; an `exit` here
 		// would truncate the feed's XML mid-document. Newsletters can appear in
-		// feeds via `display_newsletters_in_archives()`.
+		// feeds via `display_newsletters_in_archives()`. Behaviour change worth
+		// naming: a feed containing a just-corrected newsletter now serves that
+		// item once in the current response (a reader hitting the feed at that
+		// moment sees it) rather than emitting invalid XML, and it drops out of
+		// subsequent requests once healed — one slightly-stale item beats broken
+		// XML.
+		//
+		// This check MUST stay after the REST/AJAX/cron/CLI/XML-RPC returns
+		// above — the ordering is load-bearing, not stylistic. `is_feed()` is a
+		// main-query conditional; called with `$wp_query` unset (e.g. mid-REST)
+		// it triggers `_doing_it_wrong()` and returns false, which would let the
+		// `exit` through in exactly the contexts this guard protects. Do not
+		// reorder these into alphabetical / "cheapest check first" order.
 		if ( is_feed() ) {
 			return false;
 		}

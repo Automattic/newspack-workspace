@@ -72,10 +72,11 @@ class Newsletter_Controlled_Statuses_Test extends WP_UnitTestCase {
 	/**
 	 * The front-end refresh/exit in fix_public_status() must be suppressed on
 	 * programmatic requests (REST, AJAX, cron, WP-CLI, XML-RPC) and feed
-	 * renders, where an exit would truncate the response mid-flight. The
-	 * REST_REQUEST, WP_CLI, and XMLRPC_REQUEST branches hinge on `define()`
-	 * constants that cannot be toggled per-test, so they are covered by the
-	 * filter-toggleable AJAX/cron/feed branches that share the same guard.
+	 * renders, where an exit would truncate the response mid-flight. The REST
+	 * branch — the actual regression this fixes — is pinned separately in
+	 * test_public_status_refresh_suppressed_during_rest(); the WP_CLI and
+	 * XMLRPC_REQUEST branches hinge on `define()` constants and share this same
+	 * guard, so the filter-toggleable AJAX/cron/feed branches cover them here.
 	 */
 	public function test_public_status_refresh_suppressed_off_page() {
 		$is_front_end = new ReflectionMethod( 'Newspack_Newsletters', 'is_front_end_page_request' );
@@ -99,6 +100,21 @@ class Newsletter_Controlled_Statuses_Test extends WP_UnitTestCase {
 		$wp_query->is_feed = true;
 		$this->assertFalse( $is_front_end->invoke( null ), 'Refresh must be suppressed during a feed render.' );
 		$wp_query->is_feed = false;
+	}
+
+	/**
+	 * Pins the REST branch — the exact regression this fix addresses — in CI.
+	 * `REST_REQUEST` is a `define()` constant, so this runs in a separate
+	 * process to set it without leaking the constant into other tests.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_public_status_refresh_suppressed_during_rest() {
+		define( 'REST_REQUEST', true );
+		$is_front_end = new ReflectionMethod( 'Newspack_Newsletters', 'is_front_end_page_request' );
+		$is_front_end->setAccessible( true );
+		$this->assertFalse( $is_front_end->invoke( null ), 'Refresh must be suppressed during a REST request.' );
 	}
 
 	/**
