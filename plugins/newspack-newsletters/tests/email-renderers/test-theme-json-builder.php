@@ -258,6 +258,24 @@ class Test_Theme_Json_Builder extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The font-size and spacing scales share a single source of truth with the legacy
+	 * renderer, so the WC and MJML engines cannot resolve a preset to different values.
+	 * Guards against a future re-inlined copy silently drifting from the legacy scale.
+	 */
+	public function test_scales_match_legacy_renderer_single_source() {
+		$this->assertSame(
+			\Newspack_Newsletters_Renderer::FONT_SIZES,
+			Theme_Json_Builder::FONT_SIZES,
+			'Theme_Json_Builder::FONT_SIZES must stay sourced from Newspack_Newsletters_Renderer::FONT_SIZES.'
+		);
+		$this->assertSame(
+			\Newspack_Newsletters_Renderer::SPACING_SIZES,
+			Theme_Json_Builder::SPACING_SIZES,
+			'Theme_Json_Builder::SPACING_SIZES must stay sourced from Newspack_Newsletters_Renderer::SPACING_SIZES.'
+		);
+	}
+
+	/**
 	 * Helper: call the protected resolve_button_border_radius_from_raw() method.
 	 *
 	 * @param array $raw Raw theme.json data to pass to the resolver.

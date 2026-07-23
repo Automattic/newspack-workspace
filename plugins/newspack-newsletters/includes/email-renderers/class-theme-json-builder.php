@@ -15,42 +15,22 @@ defined( 'ABSPATH' ) || exit;
  */
 class Theme_Json_Builder {
 	/**
-	 * Font-size scale (slug => CSS size). Mirrors Newspack_Newsletters_Renderer::get_font_size()
-	 * so presets resolve to the same pixel values as the legacy editor.
+	 * Font-size scale (slug => CSS size). Sourced from the legacy renderer's constant so
+	 * the WC and MJML engines share one scale and cannot drift; see
+	 * Newspack_Newsletters_Renderer::FONT_SIZES.
 	 *
 	 * @var array
 	 */
-	const FONT_SIZES = [
-		'xx-small'     => '8px',
-		'x-small'      => '10px',
-		'small'        => '12px',
-		'normal'       => '16px',
-		'medium'       => '16px',
-		'large'        => '24px',
-		'huge'         => '36px',
-		'x-large'      => '36px',
-		'xx-large'     => '40px',
-		'xxx-large'    => '48px',
-		'xxxx-large'   => '56px',
-		'xxxxx-large'  => '64px',
-		'xxxxxx-large' => '72px',
-	];
+	const FONT_SIZES = \Newspack_Newsletters_Renderer::FONT_SIZES;
 
 	/**
-	 * Spacing scale (slug => CSS size). Mirrors Newspack_Newsletters_Renderer::get_spacing_value()
-	 * so var:preset|spacing|* references resolve to the same values.
+	 * Spacing scale (slug => CSS size). Sourced from the legacy renderer's constant so
+	 * `var:preset|spacing|*` resolves identically in both engines; see
+	 * Newspack_Newsletters_Renderer::SPACING_SIZES.
 	 *
 	 * @var array
 	 */
-	const SPACING_SIZES = [
-		'20' => '8px',
-		'30' => '16px',
-		'40' => '24px',
-		'50' => '32px',
-		'60' => '32px',
-		'70' => '48px',
-		'80' => '64px',
-	];
+	const SPACING_SIZES = \Newspack_Newsletters_Renderer::SPACING_SIZES;
 
 	/**
 	 * Default heading font stack when meta is absent/unsupported.
