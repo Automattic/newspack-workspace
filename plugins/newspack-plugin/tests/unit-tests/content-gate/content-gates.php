@@ -64,6 +64,10 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 	 */
 	public function set_up() {
 		parent::set_up();
+		// Post IDs are reused across test cases (each case is rolled back), so a
+		// gate lookup cached for the same ID by an earlier case would otherwise be
+		// served here — reporting "no gates" for a post that has one.
+		Content_Restriction_Control::flush_request_cache();
 		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPressVIPMinimum.Variables.ServerVariables.UserControlledHeaders, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__REMOTE_ADDR__
 		$this->original_remote_addr = isset( $_SERVER['REMOTE_ADDR'] ) ? $_SERVER['REMOTE_ADDR'] : null;
 		$this->gate_ids[] = Content_Gate::create_gate( [ 'title' => 'Draft Gate' ] );

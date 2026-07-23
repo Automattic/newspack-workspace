@@ -9,6 +9,7 @@
 namespace Newspack\Tests\Content_Gate;
 
 use Newspack\Content_Gate;
+use Newspack\Content_Restriction_Control;
 use Newspack\Content_Rules;
 use Newspack\Data_Events;
 use Newspack\Premium_Newsletters;
@@ -53,6 +54,10 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 	 */
 	public function set_up() {
 		parent::set_up();
+		// Post IDs are reused across test cases (each case is rolled back), so a
+		// gate lookup cached for the same ID by an earlier case would otherwise be
+		// served here — reporting "no gates" for a post that has one.
+		Content_Restriction_Control::flush_request_cache();
 		\Newspack_Newsletters_Contacts::reset_calls();
 		\Newspack_Newsletters_Subscription::reset_calls();
 		$prop = new \ReflectionProperty( Premium_Newsletters::class, 'restricted_lists' );
