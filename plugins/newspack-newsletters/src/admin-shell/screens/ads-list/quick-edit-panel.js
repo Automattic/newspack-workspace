@@ -193,17 +193,19 @@ export default function AdsQuickEditPanel( { item, advertisers, placements, term
 			expiry_date: expiryDate,
 			price: price === '' ? 0 : Number( price ),
 		};
-		// Only send a taxonomy the user actually touched: an untouched
-		// field must never overwrite what is stored, whatever the options
-		// lists managed to resolve.
+		// Only send a taxonomy the user actually touched. The edited ref is
+		// the load-bearing half: a dirty diff alone would also be true in
+		// the moment a late-resolving baseline overtakes the selection
+		// state, which would let a status-only save serialise the stale
+		// value. An untouched field must never overwrite what is stored.
 		const data = { meta };
-		if ( advertiserDirty ) {
+		if ( hasEditedAdvertiserRef.current && advertiserDirty ) {
 			data.newspack_nl_advertiser = [ ...advertiserSelections.map( s => s.id ), ...unresolvedAdvertiserIds ];
 		}
-		if ( placementDirty ) {
+		if ( hasEditedPlacementRef.current && placementDirty ) {
 			data.ad_placement = [ ...placementSelections.map( s => s.id ), ...unresolvedPlacementIds ];
 		}
-		if ( categoriesDirty ) {
+		if ( hasEditedCategoriesRef.current && categoriesDirty ) {
 			data.categories = [ ...categorySelections.map( s => s.id ), ...unresolvedCategoryIds ];
 		}
 		if ( status !== initialStatus ) {
