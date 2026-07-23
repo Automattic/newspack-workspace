@@ -664,18 +664,12 @@ class Newspack_Popups_Settings {
 			);
 		}
 
-		// This drafts every published prompt NOT in $ids, and $ids comes from the
-		// wizard listing — which excludes post-scoped prompts. Without the same
-		// exclusion here, activating any campaign group would silently unpublish
-		// every Contextual Prompt on the site.
 		$all_campaigns = new \WP_Query(
-			Newspack_Popups_Post_Scope::exclude_scoped_from_args(
-				[
-					'post_type'      => Newspack_Popups::NEWSPACK_POPUPS_CPT,
-					'post_status'    => [ 'draft', 'pending', 'future', 'publish' ],
-					'posts_per_page' => 100,
-				]
-			)
+			[
+				'post_type'      => Newspack_Popups::NEWSPACK_POPUPS_CPT,
+				'post_status'    => [ 'draft', 'pending', 'future', 'publish' ],
+				'posts_per_page' => 100,
+			]
 		);
 
 		if ( $all_campaigns->have_posts() ) {

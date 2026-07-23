@@ -75,12 +75,6 @@ final class Newspack_Popups_Model {
 			$args['post_status'][] = 'trash';
 		}
 
-		// Post-scoped prompts (Contextual Prompts) are one per article, so a site can
-		// accumulate thousands. Left in, they would fill this capped, date-ordered
-		// query and push real site-wide campaigns out of the Campaigns wizard listing
-		// and the exporter — both of which read through here.
-		$args = Newspack_Popups_Post_Scope::exclude_scoped_from_args( $args );
-
 		$popups = self::retrieve_popups_with_query( new WP_Query( $args ), true );
 		return $popups;
 	}
@@ -91,15 +85,11 @@ final class Newspack_Popups_Model {
 	public static function retrieve_active_popups() {
 		return self::retrieve_popups_with_query(
 			new WP_Query(
-				// Unbounded, and runs on front-end requests — scoped prompts must stay
-				// out of it or every page view hydrates one prompt per article.
-				Newspack_Popups_Post_Scope::exclude_scoped_from_args(
-					[
-						'post_type'      => Newspack_Popups::NEWSPACK_POPUPS_CPT,
-						'post_status'    => 'publish',
-						'posts_per_page' => -1,
-					]
-				)
+				[
+					'post_type'      => Newspack_Popups::NEWSPACK_POPUPS_CPT,
+					'post_status'    => 'publish',
+					'posts_per_page' => -1,
+				]
 			),
 			true
 		);
@@ -248,40 +238,6 @@ final class Newspack_Popups_Model {
 
 			$args['tax_query'] = [ $tax_query ]; // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query
 		}
-
-		// Keep post-scoped prompts (Contextual Prompts) out of the general query;
-		// they are injected only on their parent post. See Newspack_Popups_Post_Scope.
-		$args = Newspack_Popups_Post_Scope::exclude_scoped_from_args( $args );
-
-		return self::retrieve_popups_with_query( new WP_Query( $args ) );
-	}
-
-	/**
-	 * Retrieve the prompts scoped to a given post (Contextual Prompts).
-	 *
-	 * @param int  $post_id             The post the prompts are scoped to.
-	 * @param bool $include_unpublished Whether to include unpublished prompts.
-	 * @return array Eligible popup objects.
-	 */
-	public static function retrieve_scoped_popups( $post_id, $include_unpublished = false ) {
-		$post_id = (int) $post_id;
-		if ( ! $post_id ) {
-			return [];
-		}
-
-		$args = [
-			'post_type'      => Newspack_Popups::NEWSPACK_POPUPS_CPT,
-			'post_status'    => $include_unpublished ? [ 'draft', 'pending', 'future', 'publish' ] : 'publish',
-			'posts_per_page' => 100,
-			'post_parent'    => $post_id,
-			// Scoped prompts are in-article asks. Constrain to inline placements so a
-			// prompt whose placement drifted to an overlay value (e.g. edited in the
-			// prompt CPT editor) can never render as a full-screen takeover on the story.
-			'meta_key'       => 'placement',
-			// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
-			'meta_value'     => self::$inline_placements,
-			'meta_compare'   => 'IN',
-		];
 
 		return self::retrieve_popups_with_query( new WP_Query( $args ) );
 	}
