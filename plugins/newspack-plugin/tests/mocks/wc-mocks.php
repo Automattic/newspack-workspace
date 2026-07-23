@@ -649,6 +649,9 @@ class WC_Subscription {
 	public function needs_payment() {
 		return ! empty( $this->data['needs_payment'] );
 	}
+	public function is_manual() {
+		return ! empty( $this->data['is_manual'] );
+	}
 	public function get_view_order_url() {
 		return $this->data['view_order_url'] ?? 'https://example.test/my-account/view-order/' . $this->get_id();
 	}
