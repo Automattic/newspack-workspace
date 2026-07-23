@@ -36,6 +36,12 @@ class Newspack_Popups_Settings {
 	const OVERRIDE_ENABLED_OPTION = 'newspack_contextual_prompts_override_enabled';
 
 	/**
+	 * Option storing which CTA the site-wide override renders on sites with
+	 * native Newspack donations: the donate form or a plain button.
+	 */
+	const OVERRIDE_CTA_OPTION = 'newspack_contextual_prompts_override_cta';
+
+	/**
 	 * Whether the AI Copy Assistant has been opted into on this site.
 	 *
 	 * @return bool
@@ -57,7 +63,7 @@ class Newspack_Popups_Settings {
 		}
 
 		// An enabled override with no copy would blank every prompt, so it counts as
-		// inactive. The same applies to a missing URL when the CTA is a plain button:
+		// inactive. The same applies to a missing URL when the override CTA is a button:
 		// the button is only emitted when it has somewhere to point, so an override
 		// without one would replace every prompt with an ask nobody can act on — on
 		// exactly the sites where that button IS the donation path.
@@ -65,11 +71,25 @@ class Newspack_Popups_Settings {
 			return false;
 		}
 
-		if ( ! Newspack_Popups_Contextual_Prompt_Block::use_donate_block() ) {
+		if ( 'button' === self::get_override_cta() ) {
 			return '' !== trim( (string) get_option( 'newspack_contextual_prompts_override_url', '' ) );
 		}
 
 		return true;
+	}
+
+	/**
+	 * The CTA the site-wide override renders: 'form' (the native donate form) or
+	 * 'button'. Sites without native Newspack donations have no form to offer,
+	 * so they are always 'button'; native sites choose via the settings toggle.
+	 *
+	 * @return string 'form' or 'button'.
+	 */
+	public static function get_override_cta() {
+		if ( ! Newspack_Popups_Contextual_Prompt_Block::use_donate_block() ) {
+			return 'button';
+		}
+		return 'button' === get_option( self::OVERRIDE_CTA_OPTION, 'form' ) ? 'button' : 'form';
 	}
 
 	/**
@@ -123,6 +143,23 @@ class Newspack_Popups_Settings {
 				'section' => 'override',
 			],
 			[
+				'key'     => self::OVERRIDE_CTA_OPTION,
+				'label'   => __( 'Override call to action', 'newspack-popups' ),
+				'help'    => __( 'What the override shows under its copy: your donation form, or a button — for example to route a fund drive to a campaign landing page.', 'newspack-popups' ),
+				'type'    => 'togglegroup',
+				'options' => [
+					[
+						'value' => 'form',
+						'label' => __( 'Donate Form', 'newspack-popups' ),
+					],
+					[
+						'value' => 'button',
+						'label' => __( 'Donate Button', 'newspack-popups' ),
+					],
+				],
+				'section' => 'override',
+			],
+			[
 				'key'     => 'newspack_contextual_prompts_override_label',
 				'label'   => __( 'Override button label', 'newspack-popups' ),
 				'help'    => __( 'The label for the override button.', 'newspack-popups' ),
@@ -138,19 +175,14 @@ class Newspack_Popups_Settings {
 			],
 		];
 
-		// The override button label and URL drive the plain-button CTA only. When
-		// Newspack donations are native the CTA is the donate block, which owns its
-		// own destination, so those two fields would do nothing — drop them.
-		if ( Newspack_Popups_Contextual_Prompt_Block::use_donate_block() ) {
+		// The form/button choice only exists where a native donate form exists;
+		// off-site sites are always button mode.
+		if ( ! Newspack_Popups_Contextual_Prompt_Block::use_donate_block() ) {
 			$fields = array_values(
 				array_filter(
 					$fields,
 					function ( $field ) {
-						return ! in_array(
-							$field['key'],
-							[ 'newspack_contextual_prompts_override_label', 'newspack_contextual_prompts_override_url' ],
-							true
-						);
+						return self::OVERRIDE_CTA_OPTION !== $field['key'];
 					}
 				)
 			);
@@ -159,6 +191,9 @@ class Newspack_Popups_Settings {
 		foreach ( $fields as &$field ) {
 			$field['section'] = $field['section'] ?? 'profile';
 			$field['value']   = (string) get_option( $field['key'], '' );
+			if ( self::OVERRIDE_CTA_OPTION === $field['key'] && '' === $field['value'] ) {
+				$field['value'] = 'form';
+			}
 		}
 
 		return $fields;
@@ -185,6 +220,9 @@ class Newspack_Popups_Settings {
 			}
 			if ( 'newspack_contextual_prompts_override_url' === $key ) {
 				$sanitized = esc_url_raw( (string) $value );
+			} elseif ( self::OVERRIDE_CTA_OPTION === $key ) {
+				// Whitelist: anything but 'button' collapses to the default 'form'.
+				$sanitized = 'button' === $value ? 'button' : 'form';
 			} else {
 				$sanitized = sanitize_textarea_field( (string) $value );
 			}

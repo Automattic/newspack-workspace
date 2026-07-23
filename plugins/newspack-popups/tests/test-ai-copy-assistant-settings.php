@@ -15,13 +15,20 @@
 class AiCopyAssistantSettingsTest extends WP_UnitTestCase {
 
 	/**
-	 * Reset the opt-in and profile options between tests.
+	 * Reset the opt-in, profile and override options between tests.
 	 */
 	public function tear_down() {
 		delete_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION );
+		delete_option( Newspack_Popups_Settings::OVERRIDE_ENABLED_OPTION );
+		delete_option( Newspack_Popups_Settings::OVERRIDE_CTA_OPTION );
+		delete_option( 'newspack_contextual_prompts_override_body' );
+		delete_option( 'newspack_contextual_prompts_override_label' );
+		delete_option( 'newspack_contextual_prompts_override_url' );
 		foreach ( wp_list_pluck( Newspack_Popups_Settings::get_ai_copy_assistant_fields(), 'key' ) as $key ) {
 			delete_option( $key );
 		}
+		remove_filter( 'newspack_contextual_prompts_use_donate_block', '__return_true' );
+		remove_filter( 'newspack_contextual_prompts_use_donate_block', '__return_false' );
 		parent::tear_down();
 	}
 
@@ -67,29 +74,62 @@ class AiCopyAssistantSettingsTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The override button label and URL are plain-button-only: they are offered when
-	 * donations are off-site, and hidden when Newspack donations are native (the
-	 * donate block owns its own destination, so they would do nothing).
+	 * The override CTA toggle exists only where a native donate form exists; the
+	 * button label/URL fields are always present, and therefore always saveable.
 	 */
-	public function test_override_button_fields_are_plain_button_only() {
-		$button_keys = [ 'newspack_contextual_prompts_override_label', 'newspack_contextual_prompts_override_url' ];
-
-		add_filter( 'newspack_contextual_prompts_use_donate_block', '__return_false' );
-		$plain_keys = wp_list_pluck( Newspack_Popups_Settings::get_ai_copy_assistant_fields(), 'key' );
-		foreach ( $button_keys as $key ) {
-			$this->assertContains( $key, $plain_keys, 'Plain-button sites expose the override button fields.' );
-		}
-		remove_filter( 'newspack_contextual_prompts_use_donate_block', '__return_false' );
-
+	public function test_override_cta_toggle_only_on_native_sites() {
 		add_filter( 'newspack_contextual_prompts_use_donate_block', '__return_true' );
 		$native_keys = wp_list_pluck( Newspack_Popups_Settings::get_ai_copy_assistant_fields(), 'key' );
-		foreach ( $button_keys as $key ) {
-			$this->assertNotContains( $key, $native_keys, 'Native-donation sites hide the override button fields.' );
-		}
-		// The override toggle and copy still apply in native mode.
-		$this->assertContains( Newspack_Popups_Settings::OVERRIDE_ENABLED_OPTION, $native_keys );
-		$this->assertContains( 'newspack_contextual_prompts_override_body', $native_keys );
+		$this->assertContains( Newspack_Popups_Settings::OVERRIDE_CTA_OPTION, $native_keys );
+		$this->assertContains( 'newspack_contextual_prompts_override_label', $native_keys );
+		$this->assertContains( 'newspack_contextual_prompts_override_url', $native_keys );
 		remove_filter( 'newspack_contextual_prompts_use_donate_block', '__return_true' );
+
+		add_filter( 'newspack_contextual_prompts_use_donate_block', '__return_false' );
+		$button_keys = wp_list_pluck( Newspack_Popups_Settings::get_ai_copy_assistant_fields(), 'key' );
+		$this->assertNotContains( Newspack_Popups_Settings::OVERRIDE_CTA_OPTION, $button_keys );
+		$this->assertContains( 'newspack_contextual_prompts_override_label', $button_keys );
+		$this->assertContains( 'newspack_contextual_prompts_override_url', $button_keys );
+	}
+
+	/**
+	 * The CTA choice is whitelisted: anything but 'button' stores 'form'.
+	 */
+	public function test_override_cta_is_whitelisted() {
+		add_filter( 'newspack_contextual_prompts_use_donate_block', '__return_true' );
+
+		Newspack_Popups_Settings::save_ai_copy_assistant_fields( [ Newspack_Popups_Settings::OVERRIDE_CTA_OPTION => 'button' ] );
+		$this->assertSame( 'button', get_option( Newspack_Popups_Settings::OVERRIDE_CTA_OPTION ) );
+		$this->assertSame( 'button', Newspack_Popups_Settings::get_override_cta() );
+
+		Newspack_Popups_Settings::save_ai_copy_assistant_fields( [ Newspack_Popups_Settings::OVERRIDE_CTA_OPTION => '<script>alert(1)</script>' ] );
+		$this->assertSame( 'form', get_option( Newspack_Popups_Settings::OVERRIDE_CTA_OPTION ) );
+		$this->assertSame( 'form', Newspack_Popups_Settings::get_override_cta() );
+	}
+
+	/**
+	 * Gating follows the effective CTA: button mode requires a URL, form mode
+	 * activates on body copy alone, off-site sites are always button mode.
+	 */
+	public function test_override_active_requires_url_only_in_button_mode() {
+		update_option( Newspack_Popups_Settings::OVERRIDE_ENABLED_OPTION, true );
+		update_option( 'newspack_contextual_prompts_override_body', 'Fund us.' );
+
+		add_filter( 'newspack_contextual_prompts_use_donate_block', '__return_true' );
+		update_option( Newspack_Popups_Settings::OVERRIDE_CTA_OPTION, 'form' );
+		$this->assertTrue( Newspack_Popups_Settings::is_override_active(), 'Native + form: body alone activates.' );
+
+		update_option( Newspack_Popups_Settings::OVERRIDE_CTA_OPTION, 'button' );
+		$this->assertFalse( Newspack_Popups_Settings::is_override_active(), 'Button mode without a URL stays inactive.' );
+
+		update_option( 'newspack_contextual_prompts_override_url', 'https://example.com/drive/' );
+		$this->assertTrue( Newspack_Popups_Settings::is_override_active() );
+		remove_filter( 'newspack_contextual_prompts_use_donate_block', '__return_true' );
+
+		delete_option( 'newspack_contextual_prompts_override_url' );
+		add_filter( 'newspack_contextual_prompts_use_donate_block', '__return_false' );
+		update_option( Newspack_Popups_Settings::OVERRIDE_CTA_OPTION, 'form' );
+		$this->assertFalse( Newspack_Popups_Settings::is_override_active(), 'Off-site sites are always button mode: no URL, no override.' );
 	}
 
 	/**
