@@ -68,6 +68,78 @@ final class Newspack_Popups_Post_Scope {
 	 */
 	public static function init() {
 		add_filter( 'newspack_popups_should_display_prompt', [ __CLASS__, 'filter_should_display' ], 10, 2 );
+
+		// A scoped prompt only means anything alongside its article. Core cascades
+		// nothing here — wp_delete_post() only re-parents children of the same post
+		// type — so without these the prompt outlives the article forever: invisible
+		// to readers but still counted in the Prompts list, exports and reporting.
+		add_action( 'before_delete_post', [ __CLASS__, 'delete_scoped_prompts_for_post' ] );
+		add_action( 'trashed_post', [ __CLASS__, 'trash_scoped_prompts_for_post' ] );
+		add_action( 'untrashed_post', [ __CLASS__, 'untrash_scoped_prompts_for_post' ] );
+	}
+
+	/**
+	 * Delete the prompts scoped to a post when that post is permanently deleted.
+	 *
+	 * @param int $post_id The post being deleted.
+	 * @return void
+	 */
+	public static function delete_scoped_prompts_for_post( $post_id ) {
+		foreach ( self::get_scoped_prompt_ids( $post_id ) as $prompt_id ) {
+			wp_delete_post( $prompt_id, true );
+		}
+	}
+
+	/**
+	 * Trash the prompts scoped to a post when that post is trashed, so a trashed
+	 * article stops serving its prompt.
+	 *
+	 * @param int $post_id The post being trashed.
+	 * @return void
+	 */
+	public static function trash_scoped_prompts_for_post( $post_id ) {
+		foreach ( self::get_scoped_prompt_ids( $post_id ) as $prompt_id ) {
+			wp_trash_post( $prompt_id );
+		}
+	}
+
+	/**
+	 * Restore the prompts scoped to a post when that post is restored, so an
+	 * untrashed article comes back with a working prompt.
+	 *
+	 * @param int $post_id The post being restored.
+	 * @return void
+	 */
+	public static function untrash_scoped_prompts_for_post( $post_id ) {
+		foreach ( self::get_scoped_prompt_ids( $post_id, [ 'trash' ] ) as $prompt_id ) {
+			wp_untrash_post( $prompt_id );
+		}
+	}
+
+	/**
+	 * Prompt IDs scoped to a post, in any status.
+	 *
+	 * @param int   $post_id  The article.
+	 * @param array $statuses Post statuses to match.
+	 * @return int[]
+	 */
+	private static function get_scoped_prompt_ids( $post_id, $statuses = [ 'publish', 'draft', 'pending', 'future', 'private' ] ) {
+		$post_id = (int) $post_id;
+		if ( ! $post_id ) {
+			return [];
+		}
+
+		return get_posts(
+			[
+				'post_type'        => Newspack_Popups::NEWSPACK_POPUPS_CPT,
+				'post_status'      => $statuses,
+				'post_parent'      => $post_id,
+				'posts_per_page'   => 100,
+				'fields'           => 'ids',
+				'no_found_rows'    => true,
+				'suppress_filters' => false,
+			]
+		);
 	}
 
 	/**
@@ -477,7 +549,17 @@ final class Newspack_Popups_Post_Scope {
 	}
 
 	/**
-	 * Rewrite the first text node (and optionally an href) in a markup chunk.
+	 * Replace an element's children (and optionally an href) in a markup chunk.
+	 *
+	 * Uses preg_replace_callback throughout: the replacement text is untrusted model
+	 * output, and preg_replace() would expand `$1` / `${1}` / `\1` sequences inside it
+	 * — mangling ordinary donation copy ("Give $5 today" loses the amount) and letting
+	 * `${n}` syntax reconstruct markup that esc_html() had already neutralised.
+	 *
+	 * Targets the element that actually holds the text rather than the first `>…<`
+	 * span: in button markup (`<div><a …>Label</a></div>`) the first span is the empty
+	 * one before `<a`, so a naive match writes the new label outside the link and
+	 * leaves the old one in place.
 	 *
 	 * @param string $html Markup.
 	 * @param string $text Already-escaped replacement text.
@@ -486,9 +568,35 @@ final class Newspack_Popups_Post_Scope {
 	 */
 	private static function replace_inner_text( $html, $text, $href = null ) {
 		if ( null !== $href && '' !== $href ) {
-			$html = preg_replace( '#(href=")[^"]*(")#', '${1}' . $href . '${2}', $html, 1 );
+			$replaced = preg_replace_callback(
+				'#(href=")[^"]*(")#',
+				function ( $matches ) use ( $href ) {
+					return $matches[1] . $href . $matches[2];
+				},
+				$html,
+				1
+			);
+			if ( null !== $replaced ) {
+				$html = $replaced;
+			}
 		}
-		return preg_replace( '#(>)[^<>]*(<)#', '${1}' . $text . '${2}', $html, 1 );
+
+		// An anchor owns its label; otherwise replace the outermost element's children.
+		$pattern = preg_match( '#<a\b[^>]*>#i', $html )
+			? '#(<a\b[^>]*>).*(</a>)#is'
+			: '#(<([a-z][a-z0-9]*)\b[^>]*>).*(</\2>)#is';
+
+		$replaced = preg_replace_callback(
+			$pattern,
+			function ( $matches ) use ( $text ) {
+				// Closing tag is the last capture in either pattern.
+				return $matches[1] . $text . $matches[ count( $matches ) - 1 ];
+			},
+			$html,
+			1
+		);
+
+		return null === $replaced ? $html : $replaced;
 	}
 
 	/**

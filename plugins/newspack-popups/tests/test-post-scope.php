@@ -696,6 +696,141 @@ class PostScopeTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Copy is written verbatim into a customized prompt. The in-place updater feeds
+	 * the copy to preg_replace as a *replacement* string, where `$n` / `${n}` are
+	 * backreferences — so an ordinary dollar amount was being deleted, and `${n}`
+	 * syntax could rebuild markup that esc_html() had already neutralised.
+	 */
+	public function test_in_place_update_preserves_dollar_amounts_and_blocks_backrefs() {
+		add_filter( 'newspack_contextual_prompts_use_donate_block', '__return_false' );
+
+		$post_id   = self::factory()->post->create( [ 'post_type' => 'post' ] );
+		$prompt_id = Newspack_Popups_Post_Scope::create_scoped_prompt(
+			[
+				'post_id'      => $post_id,
+				'body'         => 'Original.',
+				'button_label' => 'Give',
+				'button_url'   => 'https://example.com/old',
+				'position'     => 1,
+			]
+		);
+
+		// Make it "customized" so the in-place path is the one exercised.
+		wp_update_post(
+			[
+				'ID'           => $prompt_id,
+				'post_content' => str_replace( 'wp-block-group', 'wp-block-group custom-shell', get_post_field( 'post_content', $prompt_id ) ),
+			]
+		);
+		$this->assertTrue( Newspack_Popups_Post_Scope::is_customized( $prompt_id ), 'Precondition: prompt is customized.' );
+
+		Newspack_Popups_Post_Scope::update_scoped_prompt(
+			$prompt_id,
+			[
+				'body'         => 'Give $5 today — ${2}img src=x onerror=alert(1)${1} keeps reporting free.',
+				'button_label' => 'Donate now',
+				'button_url'   => 'https://example.com/new',
+				'position'     => 1,
+			]
+		);
+		$content = get_post_field( 'post_content', $prompt_id );
+
+		$this->assertStringContainsString( 'Give $5 today', $content, 'Dollar amounts survive.' );
+		$this->assertStringContainsString( '${2}img', $content, 'Backreference syntax is kept literal.' );
+		$this->assertSame( 0, preg_match( '#<img\b#i', $content ), 'No real <img> tag is reconstructed.' );
+		$this->assertSame( 0, preg_match( '#<[a-zA-Z][^>]*\son[a-z]+\s*=#i', $content ), 'No inline event handler.' );
+		$this->assertStringContainsString( 'custom-shell', $content, 'The custom design survives the copy edit.' );
+
+		remove_filter( 'newspack_contextual_prompts_use_donate_block', '__return_false' );
+	}
+
+	/**
+	 * The button label is rewritten inside the anchor, replacing the old one — the
+	 * naive first-match replacement wrote it before `<a>` and left the old label.
+	 */
+	public function test_in_place_update_replaces_button_label_inside_the_link() {
+		add_filter( 'newspack_contextual_prompts_use_donate_block', '__return_false' );
+
+		$post_id   = self::factory()->post->create( [ 'post_type' => 'post' ] );
+		$prompt_id = Newspack_Popups_Post_Scope::create_scoped_prompt(
+			[
+				'post_id'      => $post_id,
+				'body'         => 'Original.',
+				'button_label' => 'OLDLABEL',
+				'button_url'   => 'https://example.com/old',
+				'position'     => 1,
+			]
+		);
+		wp_update_post(
+			[
+				'ID'           => $prompt_id,
+				'post_content' => str_replace( 'wp-block-group', 'wp-block-group custom-shell', get_post_field( 'post_content', $prompt_id ) ),
+			]
+		);
+
+		Newspack_Popups_Post_Scope::update_scoped_prompt(
+			$prompt_id,
+			[
+				'body'         => 'Original.',
+				'button_label' => 'NEWLABEL',
+				'button_url'   => 'https://example.com/new',
+				'position'     => 1,
+			]
+		);
+		$content = get_post_field( 'post_content', $prompt_id );
+
+		$this->assertStringNotContainsString( 'OLDLABEL', $content, 'The old label is gone, not merely joined by the new one.' );
+		$this->assertMatchesRegularExpression( '#<a[^>]*>\s*NEWLABEL\s*</a>#', $content, 'The new label sits inside the anchor.' );
+		$this->assertStringContainsString( 'https://example.com/new', $content );
+
+		remove_filter( 'newspack_contextual_prompts_use_donate_block', '__return_false' );
+	}
+
+	/**
+	 * Scoped prompts stay out of the wizard/exporter listing and the unbounded
+	 * active-popups query, which is the scale premise the whole design rests on.
+	 */
+	public function test_scoped_prompts_excluded_from_general_queries() {
+		$post_id = self::factory()->post->create( [ 'post_type' => 'post' ] );
+		$scoped  = Newspack_Popups_Post_Scope::create_scoped_prompt(
+			[
+				'post_id'  => $post_id,
+				'body'     => 'Scoped.',
+				'position' => 1,
+			]
+		);
+
+		$listed = wp_list_pluck( Newspack_Popups_Model::retrieve_popups(), 'id' );
+		$this->assertNotContains( $scoped, $listed, 'Excluded from the Campaigns wizard / exporter listing.' );
+
+		$active = wp_list_pluck( Newspack_Popups_Model::retrieve_active_popups(), 'id' );
+		$this->assertNotContains( $scoped, $active, 'Excluded from the unbounded front-end query.' );
+	}
+
+	/**
+	 * A prompt does not outlive its article.
+	 */
+	public function test_scoped_prompt_follows_parent_lifecycle() {
+		$post_id   = self::factory()->post->create( [ 'post_type' => 'post' ] );
+		$prompt_id = Newspack_Popups_Post_Scope::create_scoped_prompt(
+			[
+				'post_id'  => $post_id,
+				'body'     => 'Fund this reporting.',
+				'position' => 1,
+			]
+		);
+
+		wp_trash_post( $post_id );
+		$this->assertSame( 'trash', get_post_status( $prompt_id ), 'Trashing the article trashes its prompt.' );
+
+		wp_untrash_post( $post_id );
+		$this->assertNotSame( 'trash', get_post_status( $prompt_id ), 'Restoring the article restores its prompt.' );
+
+		wp_delete_post( $post_id, true );
+		$this->assertNull( get_post( $prompt_id ), 'Deleting the article deletes its prompt.' );
+	}
+
+	/**
 	 * Updating something that isn't a scoped prompt is rejected.
 	 */
 	public function test_update_rejects_non_scoped_prompt() {

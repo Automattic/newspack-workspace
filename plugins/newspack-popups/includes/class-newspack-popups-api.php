@@ -217,14 +217,31 @@ final class Newspack_Popups_API {
 	 */
 	public static function contextual_prompt_permission_callback( $request ) {
 		$post_id = (int) $request['post_id'];
-		if ( $post_id && current_user_can( 'edit_post', $post_id ) ) {
-			return true;
+		if ( ! $post_id || ! current_user_can( 'edit_post', $post_id ) ) {
+			return new \WP_Error(
+				'newspack_rest_forbidden',
+				esc_html__( 'You cannot add a prompt to this post.', 'newspack-popups' ),
+				[ 'status' => 403 ]
+			);
 		}
-		return new \WP_Error(
-			'newspack_rest_forbidden',
-			esc_html__( 'You cannot add a prompt to this post.', 'newspack-popups' ),
-			[ 'status' => 403 ]
-		);
+
+		// When the request targets an existing prompt, authorize against the article
+		// that prompt actually belongs to — not the post_id the caller supplied.
+		// Otherwise anyone who can edit a single post of their own could pass another
+		// story's prompt_id and rewrite its copy or repoint its donate URL.
+		$prompt_id = (int) ( $request['prompt_id'] ?? 0 );
+		if ( $prompt_id ) {
+			$parent_id = Newspack_Popups_Post_Scope::get_scoped_post_id( [ 'id' => $prompt_id ] );
+			if ( ! $parent_id || ! current_user_can( 'edit_post', $parent_id ) ) {
+				return new \WP_Error(
+					'newspack_rest_forbidden',
+					esc_html__( 'You cannot edit this prompt.', 'newspack-popups' ),
+					[ 'status' => 403 ]
+				);
+			}
+		}
+
+		return true;
 	}
 
 	/**

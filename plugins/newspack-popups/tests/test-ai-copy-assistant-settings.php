@@ -170,6 +170,65 @@ class AiCopyAssistantSettingsTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A prompt_id is authorized against the article that prompt actually belongs to,
+	 * not the post_id the caller supplied. Otherwise anyone able to edit a single
+	 * post of their own could pass another story's prompt_id and rewrite its copy or
+	 * repoint its donate URL.
+	 */
+	public function test_prompt_id_is_authorized_against_its_own_parent() {
+		update_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION, true );
+
+		$owner   = self::factory()->user->create( [ 'role' => 'editor' ] );
+		$outsider = self::factory()->user->create( [ 'role' => 'author' ] );
+
+		// A story owned by someone else, carrying a prompt.
+		wp_set_current_user( $owner );
+		$victim_post = self::factory()->post->create(
+			[
+				'post_type'   => 'post',
+				'post_author' => $owner,
+			]
+		);
+		$victim_prompt = Newspack_Popups_Post_Scope::create_scoped_prompt(
+			[
+				'post_id'  => $victim_post,
+				'body'     => 'Original copy.',
+				'position' => 1,
+			]
+		);
+
+		// The outsider's own post — which they legitimately may edit.
+		wp_set_current_user( $outsider );
+		$own_post = self::factory()->post->create(
+			[
+				'post_type'   => 'post',
+				'post_author' => $outsider,
+			]
+		);
+
+		$request = new WP_REST_Request( 'POST', '/newspack-popups/v1/contextual-prompt' );
+		$request->set_param( 'post_id', $own_post ); // Authorized.
+		$request->set_param( 'prompt_id', $victim_prompt ); // Someone else's prompt.
+		$request->set_param( 'body', 'Hijacked copy.' );
+		$request->set_param( 'button_url', 'https://attacker.example/donate' );
+
+		$allowed = Newspack_Popups_Api::contextual_prompt_permission_callback( $request );
+		$this->assertWPError( $allowed, 'Cross-post prompt edits are refused.' );
+		$this->assertSame( 'newspack_rest_forbidden', $allowed->get_error_code() );
+
+		// The victim's prompt is untouched.
+		$this->assertStringContainsString( 'Original copy.', get_post_field( 'post_content', $victim_prompt ) );
+
+		// The owner is still allowed to edit their own story's prompt.
+		wp_set_current_user( $owner );
+		$ok_request = new WP_REST_Request( 'POST', '/newspack-popups/v1/contextual-prompt' );
+		$ok_request->set_param( 'post_id', $victim_post );
+		$ok_request->set_param( 'prompt_id', $victim_prompt );
+		$ok_request->set_param( 'body', 'Legitimate edit.' );
+		$this->assertTrue( Newspack_Popups_Api::contextual_prompt_permission_callback( $ok_request ) );
+	}
+
+	/**
 	 * Opt-in gating is symmetric: the profile-save and scoped-prompt-read endpoints
 	 * are inert before opt-in too, not just the create endpoint. The feature must
 	 * read and write nothing until an administrator opts in.

@@ -75,6 +75,12 @@ final class Newspack_Popups_Model {
 			$args['post_status'][] = 'trash';
 		}
 
+		// Post-scoped prompts (Contextual Prompts) are one per article, so a site can
+		// accumulate thousands. Left in, they would fill this capped, date-ordered
+		// query and push real site-wide campaigns out of the Campaigns wizard listing
+		// and the exporter — both of which read through here.
+		$args = Newspack_Popups_Post_Scope::exclude_scoped_from_args( $args );
+
 		$popups = self::retrieve_popups_with_query( new WP_Query( $args ), true );
 		return $popups;
 	}
@@ -85,11 +91,15 @@ final class Newspack_Popups_Model {
 	public static function retrieve_active_popups() {
 		return self::retrieve_popups_with_query(
 			new WP_Query(
-				[
-					'post_type'      => Newspack_Popups::NEWSPACK_POPUPS_CPT,
-					'post_status'    => 'publish',
-					'posts_per_page' => -1,
-				]
+				// Unbounded, and runs on front-end requests — scoped prompts must stay
+				// out of it or every page view hydrates one prompt per article.
+				Newspack_Popups_Post_Scope::exclude_scoped_from_args(
+					[
+						'post_type'      => Newspack_Popups::NEWSPACK_POPUPS_CPT,
+						'post_status'    => 'publish',
+						'posts_per_page' => -1,
+					]
+				)
 			),
 			true
 		);
