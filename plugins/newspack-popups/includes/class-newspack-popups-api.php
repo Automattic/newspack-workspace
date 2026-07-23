@@ -201,6 +201,8 @@ final class Newspack_Popups_API {
 					'request_id'       => [ 'sanitize_callback' => 'sanitize_text_field' ],
 					'ai_generated'     => [ 'sanitize_callback' => 'rest_sanitize_boolean' ],
 					'ai_edited'        => [ 'sanitize_callback' => 'rest_sanitize_boolean' ],
+					'enabled'          => [ 'sanitize_callback' => 'rest_sanitize_boolean' ],
+					'reset_design'     => [ 'sanitize_callback' => 'rest_sanitize_boolean' ],
 				],
 			]
 		);
@@ -243,9 +245,10 @@ final class Newspack_Popups_API {
 	 */
 	private static function contextual_prompt_status() {
 		return [
-			'enabled'    => Newspack_Popups_Settings::is_ai_copy_assistant_enabled(),
-			'can_manage' => current_user_can( 'manage_options' ),
-			'fields'     => Newspack_Popups_Settings::get_ai_copy_assistant_fields(),
+			'enabled'         => Newspack_Popups_Settings::is_ai_copy_assistant_enabled(),
+			'can_manage'      => current_user_can( 'manage_options' ),
+			'fields'          => Newspack_Popups_Settings::get_ai_copy_assistant_fields(),
+			'override_active' => Newspack_Popups_Settings::is_override_active(),
 		];
 	}
 
@@ -310,7 +313,8 @@ final class Newspack_Popups_API {
 
 		return rest_ensure_response(
 			[
-				'prompt' => Newspack_Popups_Post_Scope::get_scoped_prompt_for_post( $request['post_id'] ),
+				'prompt'          => Newspack_Popups_Post_Scope::get_scoped_prompt_for_post( $request['post_id'] ),
+				'override_active' => Newspack_Popups_Settings::is_override_active(),
 			]
 		);
 	}
@@ -361,10 +365,30 @@ final class Newspack_Popups_API {
 			return $result;
 		}
 
+		// Discard custom design before anything else, so a reset combined with a
+		// copy edit ends up with the default treatment carrying the new copy.
+		if ( ! empty( $request['reset_design'] ) ) {
+			$reset = Newspack_Popups_Post_Scope::reset_prompt_design( $result );
+			if ( is_wp_error( $reset ) ) {
+				return $reset;
+			}
+		}
+
+		// Per-story show/hide: apply after create-or-update so the toggle can ride
+		// the same request as a copy edit.
+		if ( isset( $request['enabled'] ) ) {
+			$status_result = Newspack_Popups_Post_Scope::set_scoped_prompt_enabled( $result, (bool) $request['enabled'] );
+			if ( is_wp_error( $status_result ) ) {
+				return $status_result;
+			}
+		}
+
 		return rest_ensure_response(
 			[
-				'id'        => $result,
-				'edit_link' => get_edit_post_link( $result, 'rest' ),
+				'id'         => $result,
+				'edit_link'  => get_edit_post_link( $result, 'rest' ),
+				'enabled'    => 'publish' === get_post_status( $result ),
+				'customized' => Newspack_Popups_Post_Scope::is_customized( $result ),
 			]
 		);
 	}

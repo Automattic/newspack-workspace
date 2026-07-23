@@ -1109,6 +1109,12 @@ final class Newspack_Popups_Inserter {
 		\wp_style_add_data( $script_handle, 'rtl', 'replace' );
 		\wp_enqueue_style( $script_handle );
 
+		// The Contextual Prompts default design, applied at render time so a
+		// settings change restyles every prompt, published ones included.
+		if ( Newspack_Popups_Settings::is_ai_copy_assistant_enabled() ) {
+			\wp_add_inline_style( $script_handle, Newspack_Popups_Post_Scope::get_design_css() );
+		}
+
 		// Enqueue Jetpack contact form styles if any active popups contain contact forms.
 		self::maybe_enqueue_contact_form_styles();
 	}

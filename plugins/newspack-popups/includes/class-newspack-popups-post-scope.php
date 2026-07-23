@@ -27,6 +27,14 @@ final class Newspack_Popups_Post_Scope {
 	const CAMPAIGN_GROUP_NAME = 'Contextual Prompts';
 
 	/**
+	 * Stable class hooks on the generated blocks. Once a prompt has been
+	 * customized in the block editor its content is no longer regenerated, so
+	 * these are how the panel finds the copy and CTA to update in place.
+	 */
+	const COPY_CLASS = 'newspack-contextual-prompt__copy';
+	const CTA_CLASS  = 'newspack-contextual-prompt__cta';
+
+	/**
 	 * Prompt meta: whether the copy was AI-generated.
 	 */
 	const META_AI_GENERATED = 'newspack_ai_generated';
@@ -96,7 +104,42 @@ final class Newspack_Popups_Post_Scope {
 			'button_url'   => (string) get_post_meta( $prompt_id, self::META_BUTTON_URL, true ),
 			'position'     => (int) get_post_meta( $prompt_id, 'trigger_blocks_count', true ),
 			'edit_link'    => get_edit_post_link( $prompt_id, 'rest' ),
+			'enabled'      => 'publish' === get_post_status( $prompt_id ),
+			'customized'   => self::is_customized( $prompt_id ),
 		];
+	}
+
+	/**
+	 * Show or hide a scoped prompt on its story without deleting it.
+	 *
+	 * Hidden = draft: drafts are already excluded from retrieve_scoped_popups(),
+	 * so no display-side machinery is needed. Mirrors the wizard's own
+	 * activate/deactivate behavior for prompts.
+	 *
+	 * @param int  $prompt_id The scoped prompt.
+	 * @param bool $enabled   Whether the prompt should show on its story.
+	 * @return int|\WP_Error The prompt ID, or an error.
+	 */
+	public static function set_scoped_prompt_enabled( $prompt_id, $enabled ) {
+		$prompt_id = (int) $prompt_id;
+		$prompt    = $prompt_id ? get_post( $prompt_id ) : null;
+
+		if ( ! $prompt || Newspack_Popups::NEWSPACK_POPUPS_CPT !== $prompt->post_type || ! $prompt->post_parent ) {
+			return new \WP_Error( 'newspack_popups_invalid_prompt', __( 'Not a Contextual Prompt.', 'newspack-popups' ), [ 'status' => 400 ] );
+		}
+
+		if ( $enabled ) {
+			wp_publish_post( $prompt_id );
+		} else {
+			wp_update_post(
+				[
+					'ID'          => $prompt_id,
+					'post_status' => 'draft',
+				]
+			);
+		}
+
+		return $prompt_id;
 	}
 
 	/**
@@ -122,10 +165,20 @@ final class Newspack_Popups_Post_Scope {
 		$button_url   = (string) ( $args['button_url'] ?? '' );
 		$position     = max( 0, (int) ( $args['position'] ?? 3 ) );
 
+		// A prompt the publisher has restyled in the block editor is no longer ours
+		// to regenerate: rewrite only the copy and CTA in place, so custom design
+		// (and any blocks they added) survives an edit made from the panel.
+		if ( self::is_customized( $prompt_id ) ) {
+			$result = self::update_copy_in_place( $prompt->post_content, $body, $button_label, $button_url );
+			$content = $result['content'];
+		} else {
+			$content = self::build_prompt_content( $body, $button_label, $button_url );
+		}
+
 		$updated = wp_update_post(
 			[
 				'ID'           => $prompt_id,
-				'post_content' => self::build_prompt_content( $body, $button_label, $button_url ),
+				'post_content' => $content,
 			],
 			true
 		);
@@ -296,26 +349,246 @@ final class Newspack_Popups_Post_Scope {
 	 * @return string Serialized block markup.
 	 */
 	private static function build_prompt_content( $body, $button_label, $button_url ) {
-		$inner = "<!-- wp:paragraph {\"style\":{\"spacing\":{\"margin\":{\"top\":\"0\",\"bottom\":\"16px\"}}}} -->\n"
-			. '<p style="margin-top:0;margin-bottom:16px">' . esc_html( $body ) . "</p>\n<!-- /wp:paragraph -->";
+		// The __copy / __cta classes are stable anchors: once a publisher has
+		// customized a prompt in the block editor we no longer regenerate its
+		// content, and instead update just these blocks in place (see
+		// update_copy_in_place()). They double as precise CSS handles.
+		$inner = '<!-- wp:paragraph {"className":"' . self::COPY_CLASS . '","style":{"spacing":{"margin":{"top":"0","bottom":"16px"}}}} -->' . "\n"
+			. '<p class="' . self::COPY_CLASS . '" style="margin-top:0;margin-bottom:16px">' . esc_html( $body ) . "</p>\n<!-- /wp:paragraph -->";
 
 		if ( self::use_donate_block() ) {
 			// Native Newspack donation form; uses the site's donation settings.
 			$inner .= "\n<!-- wp:newspack-blocks/donate /-->";
 		} elseif ( '' !== trim( $button_url ) ) {
-			$inner .= "\n<!-- wp:buttons -->\n"
-				. '<div class="wp-block-buttons"><!-- wp:button -->'
+			$inner .= "\n" . '<!-- wp:buttons {"className":"' . self::CTA_CLASS . '"} -->' . "\n"
+				. '<div class="wp-block-buttons ' . self::CTA_CLASS . '"><!-- wp:button -->'
 				. '<div class="wp-block-button"><a class="wp-block-button__link wp-element-button" href="' . esc_url( $button_url ) . '">'
 				. esc_html( $button_label )
 				. "</a></div>\n<!-- /wp:button --></div>\n<!-- /wp:buttons -->";
 		}
 
-		$group_open = '<!-- wp:group {"className":"newspack-contextual-prompt","style":{"color":{"background":"#f7f7f8"},"border":{"color":"#e2e4e7","width":"1px","radius":"8px"},"spacing":{"padding":{"top":"24px","right":"24px","bottom":"24px","left":"24px"}}},"layout":{"type":"constrained"}} -->' . "\n"
-			. '<div class="wp-block-group newspack-contextual-prompt has-border-color has-background" '
-			. 'style="border-color:#e2e4e7;border-width:1px;border-radius:8px;background-color:#f7f7f8;'
-			. 'padding-top:24px;padding-right:24px;padding-bottom:24px;padding-left:24px">';
+		// Structural only — no baked styling. The look comes from get_design_css()
+		// at render time, keyed off the `newspack-contextual-prompt` class, so
+		// changing the default design in Campaigns settings restyles every prompt
+		// including ones already published (rather than only newly-created ones).
+		$group_open = '<!-- wp:group {"className":"newspack-contextual-prompt","layout":{"type":"constrained"}} -->' . "\n"
+			. '<div class="wp-block-group newspack-contextual-prompt">';
 
 		return $group_open . "\n" . $inner . "\n</div>\n<!-- /wp:group -->";
+	}
+
+	/**
+	 * Whether a prompt has been customized in the block editor.
+	 *
+	 * Self-detecting: compare the stored content against what we would generate
+	 * from the prompt's own copy/button meta. Identical means untouched; anything
+	 * else means a publisher has styled or restructured it via "Advanced
+	 * settings", and we must stop regenerating it.
+	 *
+	 * Deliberately errs toward "customized" — if the block editor re-serializes
+	 * markup on an otherwise no-op save, we preserve the publisher's version
+	 * rather than overwriting work.
+	 *
+	 * @param int $prompt_id The scoped prompt.
+	 * @return bool
+	 */
+	public static function is_customized( $prompt_id ) {
+		$prompt_id = (int) $prompt_id;
+		$prompt    = $prompt_id ? get_post( $prompt_id ) : null;
+		if ( ! $prompt ) {
+			return false;
+		}
+
+		$pristine = self::build_prompt_content(
+			(string) get_post_meta( $prompt_id, self::META_BODY, true ),
+			(string) get_post_meta( $prompt_id, self::META_BUTTON_LABEL, true ),
+			(string) get_post_meta( $prompt_id, self::META_BUTTON_URL, true )
+		);
+
+		return trim( $prompt->post_content ) !== trim( $pristine );
+	}
+
+	/**
+	 * Update the copy and CTA of a customized prompt without disturbing anything
+	 * else the publisher has done to it.
+	 *
+	 * Targets the generated blocks by their class hooks and rewrites only their
+	 * inner text/href, so custom styling, wrapper changes and any extra blocks
+	 * (a custom HTML block carrying the newsroom's own CSS, for example) survive.
+	 *
+	 * @param string $content      Existing block markup.
+	 * @param string $body         New copy.
+	 * @param string $button_label New button label.
+	 * @param string $button_url   New button URL.
+	 * @return array { string $content, bool $copy_found }
+	 */
+	private static function update_copy_in_place( $content, $body, $button_label, $button_url ) {
+		$blocks     = parse_blocks( $content );
+		$copy_found = self::replace_in_blocks( $blocks, self::COPY_CLASS, esc_html( $body ) );
+
+		if ( '' !== trim( $button_url ) || '' !== trim( $button_label ) ) {
+			self::replace_in_blocks( $blocks, self::CTA_CLASS, esc_html( $button_label ), esc_url( $button_url ) );
+		}
+
+		return [
+			'content'    => serialize_blocks( $blocks ),
+			'copy_found' => $copy_found,
+		];
+	}
+
+	/**
+	 * Recursively find the block carrying a class hook and rewrite its text (and
+	 * optionally its link href), leaving every other block untouched.
+	 *
+	 * @param array  $blocks Blocks, by reference.
+	 * @param string $class  Class hook to look for.
+	 * @param string $text   Already-escaped replacement text.
+	 * @param string $href   Already-escaped replacement href, if any.
+	 * @return bool Whether a matching block was found.
+	 */
+	private static function replace_in_blocks( &$blocks, $class, $text, $href = null ) {
+		foreach ( $blocks as &$block ) {
+			$class_name = $block['attrs']['className'] ?? '';
+
+			if ( is_string( $class_name ) && false !== strpos( $class_name, $class ) ) {
+				// Swap the innermost text node, preserving surrounding markup.
+				$block['innerHTML'] = self::replace_inner_text( $block['innerHTML'], $text, $href );
+				foreach ( $block['innerContent'] as &$chunk ) {
+					if ( is_string( $chunk ) && '' !== trim( $chunk ) ) {
+						$chunk = self::replace_inner_text( $chunk, $text, $href );
+					}
+				}
+				unset( $chunk );
+
+				// A buttons wrapper holds the link in a nested button block.
+				if ( null !== $href && ! empty( $block['innerBlocks'] ) ) {
+					self::replace_link_in_blocks( $block['innerBlocks'], $text, $href );
+				}
+				return true;
+			}
+
+			if ( ! empty( $block['innerBlocks'] ) && self::replace_in_blocks( $block['innerBlocks'], $class, $text, $href ) ) {
+				return true;
+			}
+		}
+		unset( $block );
+
+		return false;
+	}
+
+	/**
+	 * Rewrite the first text node (and optionally an href) in a markup chunk.
+	 *
+	 * @param string $html Markup.
+	 * @param string $text Already-escaped replacement text.
+	 * @param string $href Already-escaped replacement href, if any.
+	 * @return string
+	 */
+	private static function replace_inner_text( $html, $text, $href = null ) {
+		if ( null !== $href && '' !== $href ) {
+			$html = preg_replace( '#(href=")[^"]*(")#', '${1}' . $href . '${2}', $html, 1 );
+		}
+		return preg_replace( '#(>)[^<>]*(<)#', '${1}' . $text . '${2}', $html, 1 );
+	}
+
+	/**
+	 * Update the link inside a nested button block.
+	 *
+	 * @param array  $blocks Blocks, by reference.
+	 * @param string $text   Already-escaped label.
+	 * @param string $href   Already-escaped href.
+	 * @return void
+	 */
+	private static function replace_link_in_blocks( &$blocks, $text, $href ) {
+		foreach ( $blocks as &$block ) {
+			if ( 'core/button' === ( $block['blockName'] ?? '' ) ) {
+				$block['innerHTML'] = self::replace_inner_text( $block['innerHTML'], $text, $href );
+				foreach ( $block['innerContent'] as &$chunk ) {
+					if ( is_string( $chunk ) && '' !== trim( $chunk ) ) {
+						$chunk = self::replace_inner_text( $chunk, $text, $href );
+					}
+				}
+				unset( $chunk );
+			}
+			if ( ! empty( $block['innerBlocks'] ) ) {
+				self::replace_link_in_blocks( $block['innerBlocks'], $text, $href );
+			}
+		}
+		unset( $block );
+	}
+
+	/**
+	 * Discard a prompt's custom design, restoring the default treatment.
+	 *
+	 * @param int $prompt_id The scoped prompt.
+	 * @return int|\WP_Error The prompt ID, or an error.
+	 */
+	public static function reset_prompt_design( $prompt_id ) {
+		$prompt_id = (int) $prompt_id;
+		$prompt    = $prompt_id ? get_post( $prompt_id ) : null;
+
+		if ( ! $prompt || Newspack_Popups::NEWSPACK_POPUPS_CPT !== $prompt->post_type || ! $prompt->post_parent ) {
+			return new \WP_Error( 'newspack_popups_invalid_prompt', __( 'Not a Contextual Prompt.', 'newspack-popups' ), [ 'status' => 400 ] );
+		}
+
+		$updated = wp_update_post(
+			[
+				'ID'           => $prompt_id,
+				'post_content' => self::build_prompt_content(
+					(string) get_post_meta( $prompt_id, self::META_BODY, true ),
+					(string) get_post_meta( $prompt_id, self::META_BUTTON_LABEL, true ),
+					(string) get_post_meta( $prompt_id, self::META_BUTTON_URL, true )
+				),
+			],
+			true
+		);
+
+		return is_wp_error( $updated ) ? $updated : $prompt_id;
+	}
+
+	/**
+	 * CSS for the default Contextual Prompt design, built from the design tokens.
+	 *
+	 * Emitted at render time (see Newspack_Popups::enqueue_contextual_prompt_design())
+	 * rather than baked into each prompt's content, so a settings change applies to
+	 * every prompt on the site immediately — including already-published ones.
+	 *
+	 * Only background and accent are publisher-editable today; the rest are
+	 * constants here so the out-of-the-box look is unchanged. Promoting one to a
+	 * setting means adding a field in Newspack_Popups_Settings and reading it here.
+	 * Full visual design is in progress (NPPD-2101).
+	 *
+	 * @return string CSS.
+	 */
+	public static function get_design_css() {
+		$defaults   = Newspack_Popups_Settings::get_design_defaults();
+		$background = (string) get_option( Newspack_Popups_Settings::DESIGN_BACKGROUND_OPTION, '' );
+		$accent     = (string) get_option( Newspack_Popups_Settings::DESIGN_ACCENT_OPTION, '' );
+
+		$background = '' !== $background ? $background : $defaults[ Newspack_Popups_Settings::DESIGN_BACKGROUND_OPTION ];
+		$accent     = '' !== $accent ? $accent : $defaults[ Newspack_Popups_Settings::DESIGN_ACCENT_OPTION ];
+
+		// Not yet publisher-editable.
+		$border_color  = '#e2e4e7';
+		$border_width  = '1px';
+		$border_radius = '8px';
+		$padding       = '24px';
+
+		$css = '.newspack-contextual-prompt{'
+			. 'background-color:' . $background . ';'
+			. 'border:' . $border_width . ' solid ' . $border_color . ';'
+			. 'border-radius:' . $border_radius . ';'
+			. 'padding:' . $padding . ';'
+			. '}';
+
+		// Plain-button mode only. Prompts using the native donate block follow the
+		// site's donation settings, so we deliberately don't restyle those.
+		$css .= '.newspack-contextual-prompt .wp-block-button__link{'
+			. 'background-color:' . $accent . ';'
+			. 'border-color:' . $accent . ';'
+			. '}';
+
+		return $css;
 	}
 
 	/**
@@ -408,6 +681,37 @@ final class Newspack_Popups_Post_Scope {
 		if ( ! is_singular() ) {
 			return [];
 		}
-		return Newspack_Popups_Model::retrieve_scoped_popups( get_the_ID(), $include_unpublished );
+		$popups = Newspack_Popups_Model::retrieve_scoped_popups( get_the_ID(), $include_unpublished );
+
+		return array_map( [ __CLASS__, 'maybe_apply_override' ], $popups );
+	}
+
+	/**
+	 * Swap a scoped prompt's content for the site-wide override CTA when the
+	 * override ("fund-drive mode") is active.
+	 *
+	 * Only the content is swapped — position, frequency, campaign group and the
+	 * prompt id (and therefore analytics attribution) remain the underlying
+	 * prompt's own, so the override "takes over the positions" the way
+	 * EngageLine's V1 campaign override did. Stories without a Contextual
+	 * Prompt are unaffected.
+	 *
+	 * @param array $popup A popup object from retrieve_scoped_popups().
+	 * @return array The popup, with content swapped while the override is active.
+	 */
+	private static function maybe_apply_override( $popup ) {
+		if ( ! Newspack_Popups_Settings::is_override_active() ) {
+			return $popup;
+		}
+
+		$label = (string) get_option( 'newspack_contextual_prompts_override_label', '' );
+
+		$popup['content'] = self::build_prompt_content(
+			(string) get_option( 'newspack_contextual_prompts_override_body', '' ),
+			'' !== trim( $label ) ? $label : __( 'Donate', 'newspack-popups' ),
+			(string) get_option( 'newspack_contextual_prompts_override_url', '' )
+		);
+
+		return $popup;
 	}
 }

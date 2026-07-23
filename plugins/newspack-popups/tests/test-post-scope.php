@@ -383,6 +383,319 @@ class PostScopeTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Per-story show/hide: hiding a prompt keeps it editable in the panel but
+	 * takes it off the story. Hidden == draft, so the existing published-only
+	 * scoped query does the work.
+	 */
+	public function test_show_hide_toggle() {
+		$post_id   = self::factory()->post->create( [ 'post_type' => 'post' ] );
+		$prompt_id = Newspack_Popups_Post_Scope::create_scoped_prompt(
+			[
+				'post_id'  => $post_id,
+				'body'     => 'Fund this reporting.',
+				'position' => 2,
+			]
+		);
+
+		$this->assertTrue( Newspack_Popups_Post_Scope::get_scoped_prompt_for_post( $post_id )['enabled'] );
+		$this->assertCount( 1, Newspack_Popups_Model::retrieve_scoped_popups( $post_id ) );
+
+		// Hide it.
+		Newspack_Popups_Post_Scope::set_scoped_prompt_enabled( $prompt_id, false );
+		$this->assertCount( 0, Newspack_Popups_Model::retrieve_scoped_popups( $post_id ), 'A hidden prompt is off the story.' );
+
+		$hidden = Newspack_Popups_Post_Scope::get_scoped_prompt_for_post( $post_id );
+		$this->assertSame( $prompt_id, $hidden['id'], 'A hidden prompt is still editable in the panel.' );
+		$this->assertFalse( $hidden['enabled'] );
+		$this->assertSame( 'Fund this reporting.', $hidden['body'], 'Its copy survives being hidden.' );
+
+		// Show it again.
+		Newspack_Popups_Post_Scope::set_scoped_prompt_enabled( $prompt_id, true );
+		$this->assertTrue( Newspack_Popups_Post_Scope::get_scoped_prompt_for_post( $post_id )['enabled'] );
+		$this->assertCount( 1, Newspack_Popups_Model::retrieve_scoped_popups( $post_id ) );
+	}
+
+	/**
+	 * Toggling something that isn't a scoped prompt is rejected.
+	 */
+	public function test_toggle_rejects_non_scoped_prompt() {
+		$plain = self::factory()->post->create( [ 'post_type' => 'post' ] );
+		$this->assertWPError( Newspack_Popups_Post_Scope::set_scoped_prompt_enabled( $plain, false ) );
+	}
+
+	/**
+	 * Site-wide override swaps the copy of every Contextual Prompt while active,
+	 * without disturbing placement, id, or the underlying prompt's stored copy.
+	 */
+	public function test_site_wide_override_swaps_copy() {
+		add_filter( 'newspack_contextual_prompts_use_donate_block', '__return_false' );
+
+		$post_id   = self::factory()->post->create( [ 'post_type' => 'post' ] );
+		$prompt_id = Newspack_Popups_Post_Scope::create_scoped_prompt(
+			[
+				'post_id'      => $post_id,
+				'body'         => 'Story-specific ask.',
+				'button_label' => 'Give',
+				'button_url'   => 'https://example.com/story',
+				'position'     => 3,
+			]
+		);
+		$this->go_to( get_permalink( $post_id ) );
+
+		// Off by default.
+		$before = Newspack_Popups_Post_Scope::get_scoped_popups_for_current_post();
+		$this->assertStringContainsString( 'Story-specific ask.', $before[0]['content'] );
+
+		// An enabled override with no copy must not blank prompts.
+		update_option( Newspack_Popups_Settings::OVERRIDE_ENABLED_OPTION, true );
+		$empty = Newspack_Popups_Post_Scope::get_scoped_popups_for_current_post();
+		$this->assertStringContainsString( 'Story-specific ask.', $empty[0]['content'], 'An empty override is inactive.' );
+
+		update_option( 'newspack_contextual_prompts_override_body', 'Our spring drive is on.' );
+		update_option( 'newspack_contextual_prompts_override_label', 'Join the drive' );
+		update_option( 'newspack_contextual_prompts_override_url', 'https://example.com/drive' );
+
+		$after = Newspack_Popups_Post_Scope::get_scoped_popups_for_current_post();
+		$this->assertStringContainsString( 'Our spring drive is on.', $after[0]['content'] );
+		$this->assertStringContainsString( 'Join the drive', $after[0]['content'] );
+		$this->assertStringNotContainsString( 'Story-specific ask.', $after[0]['content'] );
+
+		// Placement and identity are untouched — the override takes over the
+		// position rather than creating a prompt of its own.
+		$this->assertSame( $prompt_id, $after[0]['id'] );
+		$this->assertSame( '3', (string) get_post_meta( $prompt_id, 'trigger_blocks_count', true ) );
+
+		// The story's own copy is preserved for when the override is lifted.
+		$this->assertSame(
+			'Story-specific ask.',
+			Newspack_Popups_Post_Scope::get_scoped_prompt_for_post( $post_id )['body']
+		);
+
+		update_option( Newspack_Popups_Settings::OVERRIDE_ENABLED_OPTION, false );
+		$restored = Newspack_Popups_Post_Scope::get_scoped_popups_for_current_post();
+		$this->assertStringContainsString( 'Story-specific ask.', $restored[0]['content'] );
+
+		remove_filter( 'newspack_contextual_prompts_use_donate_block', '__return_false' );
+	}
+
+	/**
+	 * The default design is applied at render time, not baked into each prompt —
+	 * so changing it restyles prompts that already exist. This is the property the
+	 * whole "default design in settings" feature rests on.
+	 */
+	public function test_design_is_render_time_not_baked() {
+		add_filter( 'newspack_contextual_prompts_use_donate_block', '__return_false' );
+
+		$post_id   = self::factory()->post->create( [ 'post_type' => 'post' ] );
+		$prompt_id = Newspack_Popups_Post_Scope::create_scoped_prompt(
+			[
+				'post_id'      => $post_id,
+				'body'         => 'Fund this reporting.',
+				'button_label' => 'Give',
+				'button_url'   => 'https://example.com/donate',
+				'position'     => 1,
+			]
+		);
+		$content = get_post_field( 'post_content', $prompt_id );
+
+		// The prompt carries the styling hook but no baked colours.
+		$this->assertStringContainsString( 'newspack-contextual-prompt', $content );
+		$this->assertStringNotContainsString( 'background-color:', $content, 'Styling must not be baked into prompt content.' );
+		$this->assertStringNotContainsString( '#f7f7f8', $content );
+
+		// Default CSS uses the fallback background.
+		$this->assertStringContainsString( '#f7f7f8', Newspack_Popups_Post_Scope::get_design_css() );
+
+		// Changing the setting changes the CSS for the ALREADY-CREATED prompt,
+		// with no rewrite of its content.
+		update_option( Newspack_Popups_Settings::DESIGN_BACKGROUND_OPTION, '#112233' );
+		update_option( Newspack_Popups_Settings::DESIGN_ACCENT_OPTION, '#445566' );
+		$css = Newspack_Popups_Post_Scope::get_design_css();
+		$this->assertStringContainsString( '#112233', $css );
+		$this->assertStringContainsString( '#445566', $css );
+		$this->assertStringContainsString( '.newspack-contextual-prompt', $css );
+		$this->assertSame(
+			$content,
+			get_post_field( 'post_content', $prompt_id ),
+			'Restyling must not touch existing prompt content.'
+		);
+
+		remove_filter( 'newspack_contextual_prompts_use_donate_block', '__return_false' );
+	}
+
+	/**
+	 * Create a prompt and customize it the way a publisher would in the block
+	 * editor: restyle the wrapper and drop in an extra block.
+	 *
+	 * @param int $post_id Story ID.
+	 * @return int Prompt ID.
+	 */
+	private function create_customized_prompt( $post_id ) {
+		$prompt_id = Newspack_Popups_Post_Scope::create_scoped_prompt(
+			[
+				'post_id'      => $post_id,
+				'body'         => 'Original copy.',
+				'button_label' => 'Give',
+				'button_url'   => 'https://example.com/a',
+				'position'     => 1,
+			]
+		);
+
+		$custom = str_replace(
+			'<div class="wp-block-group newspack-contextual-prompt">',
+			'<div class="wp-block-group newspack-contextual-prompt has-background" style="background-color:#004400">',
+			get_post_field( 'post_content', $prompt_id )
+		);
+		$custom = str_replace(
+			"</div>\n<!-- /wp:group -->",
+			"<!-- wp:html --><div class=\"publisher-custom\">custom</div><!-- /wp:html -->\n</div>\n<!-- /wp:group -->",
+			$custom
+		);
+		wp_update_post(
+			[
+				'ID'           => $prompt_id,
+				'post_content' => $custom,
+			]
+		);
+
+		return $prompt_id;
+	}
+
+	/**
+	 * A prompt restyled in the block editor keeps its design when an editor later
+	 * edits the copy from the panel. Without this, per-prompt customization is
+	 * silently wiped by the next save.
+	 */
+	public function test_customized_prompt_survives_copy_edit() {
+		add_filter( 'newspack_contextual_prompts_use_donate_block', '__return_false' );
+
+		$post_id   = self::factory()->post->create( [ 'post_type' => 'post' ] );
+		$prompt_id = Newspack_Popups_Post_Scope::create_scoped_prompt(
+			[
+				'post_id'  => $post_id,
+				'body'     => 'Pristine.',
+				'position' => 1,
+			]
+		);
+		$this->assertFalse( Newspack_Popups_Post_Scope::is_customized( $prompt_id ), 'A freshly created prompt is pristine.' );
+		wp_delete_post( $prompt_id, true );
+
+		$prompt_id = $this->create_customized_prompt( $post_id );
+		$this->assertTrue( Newspack_Popups_Post_Scope::is_customized( $prompt_id ) );
+
+		Newspack_Popups_Post_Scope::update_scoped_prompt(
+			$prompt_id,
+			[
+				'body'         => 'Updated from the panel.',
+				'button_label' => 'Donate now',
+				'button_url'   => 'https://example.com/b',
+				'position'     => 2,
+			]
+		);
+		$content = get_post_field( 'post_content', $prompt_id );
+
+		// Copy and CTA are updated.
+		$this->assertStringContainsString( 'Updated from the panel.', $content );
+		$this->assertStringNotContainsString( 'Original copy.', $content );
+		$this->assertStringContainsString( 'Donate now', $content );
+		$this->assertStringContainsString( 'example.com/b', $content );
+
+		// The publisher's own work is untouched.
+		$this->assertStringContainsString( '#004400', $content, 'Custom styling must survive.' );
+		$this->assertStringContainsString( 'publisher-custom', $content, 'Publisher-added blocks must survive.' );
+
+		// Scoped-prompt invariants are meta, so they still apply.
+		$this->assertSame( '2', (string) get_post_meta( $prompt_id, 'trigger_blocks_count', true ) );
+		$this->assertSame( 'inline', get_post_meta( $prompt_id, 'placement', true ) );
+
+		remove_filter( 'newspack_contextual_prompts_use_donate_block', '__return_false' );
+	}
+
+	/**
+	 * Resetting discards the custom design but keeps the current copy.
+	 */
+	public function test_reset_prompt_design() {
+		add_filter( 'newspack_contextual_prompts_use_donate_block', '__return_false' );
+
+		$post_id   = self::factory()->post->create( [ 'post_type' => 'post' ] );
+		$prompt_id = $this->create_customized_prompt( $post_id );
+
+		Newspack_Popups_Post_Scope::reset_prompt_design( $prompt_id );
+		$content = get_post_field( 'post_content', $prompt_id );
+
+		$this->assertStringNotContainsString( '#004400', $content );
+		$this->assertStringNotContainsString( 'publisher-custom', $content );
+		$this->assertStringContainsString( 'Original copy.', $content, 'Reset keeps the copy, only the design goes.' );
+		$this->assertFalse( Newspack_Popups_Post_Scope::is_customized( $prompt_id ) );
+
+		remove_filter( 'newspack_contextual_prompts_use_donate_block', '__return_false' );
+	}
+
+	/**
+	 * The in-place update is a second path that writes model output into content,
+	 * so it must escape exactly as the generated path does.
+	 */
+	public function test_in_place_update_escapes_model_output() {
+		add_filter( 'newspack_contextual_prompts_use_donate_block', '__return_false' );
+
+		$post_id   = self::factory()->post->create( [ 'post_type' => 'post' ] );
+		$prompt_id = $this->create_customized_prompt( $post_id );
+
+		Newspack_Popups_Post_Scope::update_scoped_prompt(
+			$prompt_id,
+			[
+				'body'         => '<script>alert(1)</script><img src=x onerror=alert(2)>Fund it',
+				'button_label' => '<b onmouseover=alert(3)>Give</b>',
+				'button_url'   => 'https://example.com/ok',
+				'position'     => 1,
+			]
+		);
+		$content = get_post_field( 'post_content', $prompt_id );
+
+		$this->assertSame( 0, preg_match( '#<script#i', $content ), 'No script tag may be written.' );
+		$this->assertSame( 0, preg_match( '#<[a-zA-Z][^>]*\son[a-z]+\s*=#i', $content ), 'No inline event handlers.' );
+		$this->assertStringContainsString( '&lt;script&gt;', $content, 'Model output is escaped.' );
+
+		remove_filter( 'newspack_contextual_prompts_use_donate_block', '__return_false' );
+	}
+
+	/**
+	 * The site-wide override takes over a customized prompt too, and does so
+	 * without touching stored content — so the custom design returns when the
+	 * override is switched off.
+	 */
+	public function test_override_takes_over_customized_prompt() {
+		add_filter( 'newspack_contextual_prompts_use_donate_block', '__return_false' );
+
+		$post_id   = self::factory()->post->create( [ 'post_type' => 'post' ] );
+		$prompt_id = $this->create_customized_prompt( $post_id );
+		$stored    = get_post_field( 'post_content', $prompt_id );
+		$this->go_to( get_permalink( $post_id ) );
+
+		update_option( Newspack_Popups_Settings::OVERRIDE_ENABLED_OPTION, true );
+		update_option( 'newspack_contextual_prompts_override_body', 'Spring drive.' );
+
+		$rendered = Newspack_Popups_Post_Scope::get_scoped_popups_for_current_post()[0]['content'];
+		$this->assertStringContainsString( 'Spring drive.', $rendered );
+		$this->assertStringNotContainsString( '#004400', $rendered, 'Override takes over the design too.' );
+		$this->assertSame( $stored, get_post_field( 'post_content', $prompt_id ), 'Override must not rewrite stored content.' );
+
+		update_option( Newspack_Popups_Settings::OVERRIDE_ENABLED_OPTION, false );
+		$restored = Newspack_Popups_Post_Scope::get_scoped_popups_for_current_post()[0]['content'];
+		$this->assertStringContainsString( '#004400', $restored, 'Custom design returns when the override is off.' );
+
+		remove_filter( 'newspack_contextual_prompts_use_donate_block', '__return_false' );
+	}
+
+	/**
+	 * The default design must stay overridable by a prompt's own inline styles —
+	 * adding !important here would silently break per-prompt customization.
+	 */
+	public function test_design_css_stays_overridable() {
+		$this->assertStringNotContainsString( '!important', Newspack_Popups_Post_Scope::get_design_css() );
+	}
+
+	/**
 	 * Updating something that isn't a scoped prompt is rejected.
 	 */
 	public function test_update_rejects_non_scoped_prompt() {

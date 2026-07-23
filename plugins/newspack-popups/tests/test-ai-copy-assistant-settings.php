@@ -91,7 +91,39 @@ class AiCopyAssistantSettingsTest extends WP_UnitTestCase {
 		$this->assertArrayHasKey( 'enabled', $data );
 		$this->assertArrayHasKey( 'can_manage', $data );
 		$this->assertArrayHasKey( 'fields', $data );
-		$this->assertCount( 4, $data['fields'] );
+		$this->assertArrayHasKey( 'override_active', $data );
+
+		// Assert on the contract (which fields, grouped how) rather than a count,
+		// so adding a field doesn't fail this test spuriously.
+		$by_section = [];
+		foreach ( $data['fields'] as $field ) {
+			$by_section[ $field['section'] ][] = $field['key'];
+		}
+		$this->assertContains( 'newspack_contextual_prompts_publisher_name', $by_section['profile'] );
+		$this->assertContains( 'newspack_contextual_prompts_additional_guidance', $by_section['profile'] );
+		$this->assertContains( Newspack_Popups_Settings::OVERRIDE_ENABLED_OPTION, $by_section['override'] );
+		$this->assertContains( 'newspack_contextual_prompts_override_body', $by_section['override'] );
+	}
+
+	/**
+	 * Design colors are validated: a bad value is stored empty so the render
+	 * falls back to the default rather than emitting a broken CSS declaration.
+	 */
+	public function test_design_colors_are_sanitized() {
+		Newspack_Popups_Settings::save_ai_copy_assistant_fields(
+			[
+				Newspack_Popups_Settings::DESIGN_BACKGROUND_OPTION => '#abcdef',
+				Newspack_Popups_Settings::DESIGN_ACCENT_OPTION => 'red; } body { display:none',
+			]
+		);
+
+		$this->assertSame( '#abcdef', get_option( Newspack_Popups_Settings::DESIGN_BACKGROUND_OPTION ) );
+		$this->assertSame( '', get_option( Newspack_Popups_Settings::DESIGN_ACCENT_OPTION ), 'A non-hex value is rejected.' );
+
+		// The rejected value must not reach the stylesheet.
+		$css = Newspack_Popups_Post_Scope::get_design_css();
+		$this->assertStringNotContainsString( 'display:none', $css );
+		$this->assertStringContainsString( '#abcdef', $css );
 	}
 
 	/**
