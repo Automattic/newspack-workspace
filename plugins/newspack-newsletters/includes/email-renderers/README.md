@@ -71,6 +71,8 @@ Boots the package and wires it to the newsletters CPT. `init()` is idempotent an
 4. Wires per-newsletter theme.json via `woocommerce_email_editor_theme_json` → `Theme_Json_Builder::build()`.
 5. Wires the override registry (`Block_Renderer_Registry::init()`).
 
+**Why it boots unconditionally (not behind the flag).** The trade is a single boot path for both flag states rather than a conditional boot. The editor takeover — asset enqueuing, theme.json overrides, the block allow-list, the `use_woo_renderer` editor flag — is gated on `Feature_Flag::is_enabled()` in `Newspack_Newsletters_Editor`, so on a flag-off site the WC canvas never engages and the boot is **behaviourally inert** — inert, not absent: the package's `Bootstrap::init()` registers a global `block_type_metadata_settings` filter that adds `supports.email` + `render_email_callback` to core block settings site-wide, but both are additive and unused until the renderer runs. The `init:11` CPT re-assertion (step 2) exists *only because* this boot opts the CPT into the package in the first place — gating the boot would remove the opt-in and the re-assertion together, so it is not a reason to keep the boot unconditional.
+
 ### `Theme_Json_Builder` — `class-theme-json-builder.php`
 Translates a newsletter's configured theme into a theme.json array. **Read-only.** `build( WP_Post ): array` maps:
 
