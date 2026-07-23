@@ -574,6 +574,48 @@ class Test_Feed_Restriction extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * The other idiom for setting feed length is a `post_limits` filter, which
+	 * fires after `pre_get_posts` and so has the last word on the page size.
+	 * verify_feed_overfetch_limit() drops the trim target when the final LIMIT is
+	 * no longer the inflated one, so that plugin's 6-item feed is served whole
+	 * instead of being trimmed back to posts_per_rss (3).
+	 */
+	public function test_trim_is_dropped_when_a_post_limits_writer_sets_the_length() {
+		update_option( 'posts_per_rss', 3 );
+
+		$set_feed_limit = function ( $limits, $query ) {
+			return $query->is_feed() && $query->is_main_query() ? 'LIMIT 0, 6' : $limits;
+		};
+		add_filter( 'post_limits', $set_feed_limit, 10, 2 );
+
+		// Nothing restricted, so the page size is governed purely by the LIMIT.
+		$grant_all = function () {
+			return false;
+		};
+		add_filter( 'newspack_is_post_restricted', $grant_all, 99 );
+
+		$free_ids = [];
+		foreach ( range( 1, 7 ) as $day ) {
+			$free_ids[] = $this->factory->post->create(
+				[
+					'post_status' => 'publish',
+					'post_date'   => sprintf( '2017-05-%02d 00:00:00', $day ),
+				]
+			);
+		}
+
+		$feed_ids = $this->feed_post_ids();
+
+		remove_filter( 'post_limits', $set_feed_limit, 10 );
+		remove_filter( 'newspack_is_post_restricted', $grant_all, 99 );
+		foreach ( $free_ids as $id ) {
+			wp_delete_post( $id, true );
+		}
+
+		$this->assertCount( 6, $feed_ids, "A post_limits writer's feed length must survive: no trim back to posts_per_rss (3)." );
+	}
+
+	/**
 	 * Paginated feed pages (paged > 1) are not over-fetched: inflating
 	 * posts_per_rss there would push core's offset past unrestricted posts. The
 	 * page keeps its requested length so later pages fall back to plain drop.
@@ -723,6 +765,36 @@ class Test_Feed_Restriction extends \WP_UnitTestCase {
 		update_option( 'posts_per_rss', 3 );
 
 		$this->assertSame( 0, $this->captured_overfetch(), 'A site with no restriction source must not over-fetch its feed.' );
+	}
+
+	/**
+	 * The same guard covers the other half of the cost: with nothing that can
+	 * restrict a post, `the_posts` must not evaluate is_post_restricted() once
+	 * per feed item either. Asserted by counting the `newspack_is_post_restricted`
+	 * filter fires across a whole feed request rather than by inspecting the
+	 * output, since the unguarded version returns the identical feed — the cost
+	 * is the regression, not the result.
+	 */
+	public function test_no_per_item_restriction_check_without_a_restriction_source() {
+		foreach ( Content_Gate::get_gates() as $gate ) {
+			wp_delete_post( $gate['id'], true );
+		}
+		$this->reset_restriction_cache();
+		Content_Gate_Advanced_Settings::reset_cache();
+
+		$checks       = 0;
+		$count_checks = function ( $is_restricted ) use ( &$checks ) {
+			++$checks;
+			return $is_restricted;
+		};
+		add_filter( 'newspack_is_post_restricted', $count_checks );
+
+		$feed_ids = $this->feed_post_ids();
+
+		remove_filter( 'newspack_is_post_restricted', $count_checks );
+
+		$this->assertContains( $this->post_id, $feed_ids, 'Sanity: with no gate published the post stays in the feed.' );
+		$this->assertSame( 0, $checks, 'A site with no restriction source must not evaluate restriction per feed item.' );
 	}
 
 	/**
