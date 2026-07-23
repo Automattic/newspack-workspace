@@ -12,10 +12,24 @@
  */
 import { __ } from '@wordpress/i18n';
 import { useState, useEffect } from '@wordpress/element';
-import { useSelect } from '@wordpress/data';
+import { useSelect, useDispatch } from '@wordpress/data';
 import { PluginDocumentSettingPanel } from '@wordpress/edit-post';
-import { Button, TextControl, TextareaControl, Notice, Spinner, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import {
+	Button,
+	TextControl,
+	TextareaControl,
+	ToggleControl,
+	Notice,
+	Spinner,
+	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
+} from '@wordpress/components';
 import apiFetch from '@wordpress/api-fetch';
+
+/**
+ * Internal dependencies
+ */
+import ContextualPromptPreview from './contextual-prompt-preview';
+import { STORE_NAME } from './contextual-prompt-store';
 
 const FRAMING_LABELS = {
 	top: __( 'Top of story', 'newspack-popups' ),
@@ -55,10 +69,27 @@ const ContextualPromptPanel = () => {
 	const [ saving, setSaving ] = useState( false );
 	const [ saved, setSaved ] = useState( false );
 	const [ error, setError ] = useState( '' );
+	const [ enabled, setEnabled ] = useState( true );
+	const [ overrideActive, setOverrideActive ] = useState( false );
+	const [ customized, setCustomized ] = useState( false );
 
 	const optedIn = window.newspackPopupsContextualPrompt?.enabled;
 	const donationsNative = window.newspackPopupsContextualPrompt?.donationsNative;
 	const isPrompt = 'newspack_popups_cpt' === postType;
+
+	// Publish what the prompt looks like and where it lands, so the in-editor
+	// placement indicator can draw it in the block list.
+	const { setPreview } = useDispatch( STORE_NAME );
+	useEffect( () => {
+		setPreview( {
+			active: Boolean( optedIn && ! isPrompt && editing && enabled ),
+			position,
+			body,
+			buttonLabel,
+			donationsNative: Boolean( donationsNative ),
+			overrideActive,
+		} );
+	}, [ optedIn, isPrompt, editing, enabled, position, body, buttonLabel, donationsNative, overrideActive, setPreview ] );
 
 	// Load an existing Contextual Prompt for this post, if any.
 	useEffect( () => {
@@ -67,7 +98,8 @@ const ContextualPromptPanel = () => {
 			return;
 		}
 		apiFetch( { path: `/newspack-popups/v1/contextual-prompt?post_id=${ postId }` } )
-			.then( ( { prompt } ) => {
+			.then( ( { prompt, override_active: isOverridden } ) => {
+				setOverrideActive( Boolean( isOverridden ) );
 				if ( prompt ) {
 					setPromptId( prompt.id );
 					setEditLink( prompt.edit_link );
@@ -76,6 +108,8 @@ const ContextualPromptPanel = () => {
 					setButtonLabel( prompt.button_label );
 					setButtonUrl( prompt.button_url );
 					setPosition( prompt.position );
+					setEnabled( false !== prompt.enabled );
+					setCustomized( Boolean( prompt.customized ) );
 					setEditing( true );
 				}
 			} )
@@ -129,31 +163,71 @@ const ContextualPromptPanel = () => {
 		setSaved( false );
 	};
 
+	const persist = async ( overrides = {} ) => {
+		const response = await apiFetch( {
+			path: '/newspack-popups/v1/contextual-prompt',
+			method: 'POST',
+			data: {
+				post_id: postId,
+				prompt_id: promptId || undefined,
+				body,
+				button_label: buttonLabel,
+				button_url: buttonUrl,
+				position,
+				template_version: templateVersion,
+				ai_generated: ! promptId,
+				ai_edited: body !== originalBody,
+				...overrides,
+			},
+		} );
+		setPromptId( response.id );
+		setEditLink( response.edit_link );
+		setCustomized( Boolean( response.customized ) );
+		return response;
+	};
+
+	// Discard this prompt's custom design and go back to the site default.
+	const resetDesign = async () => {
+		// eslint-disable-next-line no-alert
+		if ( ! window.confirm( __( 'Discard this prompt’s custom design and use the site default?', 'newspack-popups' ) ) ) {
+			return;
+		}
+		setSaving( true );
+		setError( '' );
+		try {
+			await persist( { reset_design: true } );
+		} catch ( e ) {
+			setError( e.message || __( 'Could not reset the design.', 'newspack-popups' ) );
+		} finally {
+			setSaving( false );
+		}
+	};
+
 	const save = async () => {
 		setSaving( true );
 		setError( '' );
 		try {
-			const response = await apiFetch( {
-				path: '/newspack-popups/v1/contextual-prompt',
-				method: 'POST',
-				data: {
-					post_id: postId,
-					prompt_id: promptId || undefined,
-					body,
-					button_label: buttonLabel,
-					button_url: buttonUrl,
-					position,
-					template_version: templateVersion,
-					ai_generated: ! promptId,
-					ai_edited: body !== originalBody,
-				},
-			} );
-			setPromptId( response.id );
-			setEditLink( response.edit_link );
+			await persist();
 			setCandidates( [] );
 			setSaved( true );
 		} catch ( e ) {
 			setError( e.message || __( 'Could not save the prompt.', 'newspack-popups' ) );
+		} finally {
+			setSaving( false );
+		}
+	};
+
+	// Show/hide takes effect immediately — an editor pulling a CTA from a story
+	// shouldn't have to also remember to save.
+	const toggleEnabled = async next => {
+		setEnabled( next );
+		setSaving( true );
+		setError( '' );
+		try {
+			await persist( { enabled: next } );
+		} catch ( e ) {
+			setEnabled( ! next );
+			setError( e.message || __( 'Could not update the prompt.', 'newspack-popups' ) );
 		} finally {
 			setSaving( false );
 		}
@@ -179,23 +253,19 @@ const ContextualPromptPanel = () => {
 						</Notice>
 					) }
 
+					{ overrideActive && (
+						<Notice status="warning" isDismissible={ false }>
+							{ __(
+								'A site-wide override is currently replacing every Contextual Prompt. This story will show the override copy instead of its own until the override is turned off in Campaigns → Settings.',
+								'newspack-popups'
+							) }
+						</Notice>
+					) }
+
 					{ saved && (
 						<Notice status="success" isDismissible={ false }>
 							<p style={ { margin: 0 } }>
 								{ __( 'Saved. Readers see it on this story at the position you chose.', 'newspack-popups' ) }
-							</p>
-							<p style={ { margin: '8px 0 0' } }>
-								{ postLink && (
-									<a href={ postLink } target="_blank" rel="noreferrer">
-										{ __( 'View story', 'newspack-popups' ) }
-									</a>
-								) }
-								{ postLink && editLink && ' · ' }
-								{ editLink && (
-									<a href={ editLink } target="_blank" rel="noreferrer">
-										{ __( 'Advanced settings', 'newspack-popups' ) }
-									</a>
-								) }
 							</p>
 						</Notice>
 					) }
@@ -224,6 +294,52 @@ const ContextualPromptPanel = () => {
 
 					{ editing && (
 						<VStack spacing={ 3 } className="newspack-contextual-prompt__edit">
+							{ customized && (
+								<Notice status="info" isDismissible={ false }>
+									<p style={ { margin: 0 } }>
+										{ __(
+											'This prompt uses a custom design you made in Advanced settings, instead of your site’s default. Editing the copy here updates the wording and leaves that design as it is.',
+											'newspack-popups'
+										) }
+									</p>
+									<p style={ { margin: '8px 0 0' } }>
+										<Button variant="link" onClick={ resetDesign } disabled={ saving }>
+											{ __( 'Reset to default design', 'newspack-popups' ) }
+										</Button>
+									</p>
+								</Notice>
+							) }
+
+							{ promptId && (
+								<ToggleControl
+									label={ __( 'Show on this story', 'newspack-popups' ) }
+									help={
+										enabled
+											? __( 'Readers see this prompt on the story.', 'newspack-popups' )
+											: __( 'Hidden from readers. The copy is kept so you can show it again.', 'newspack-popups' )
+									}
+									checked={ enabled }
+									disabled={ saving }
+									onChange={ toggleEnabled }
+								/>
+							) }
+
+							{ /* Roughly phone-width, where awkward line breaks show up. */ }
+							<div>
+								<p
+									style={ {
+										margin: '0 0 4px',
+										fontSize: 11,
+										textTransform: 'uppercase',
+										letterSpacing: '0.4px',
+										color: '#757575',
+									} }
+								>
+									{ __( 'Preview', 'newspack-popups' ) }
+								</p>
+								<ContextualPromptPreview body={ body } buttonLabel={ buttonLabel } donationsNative={ donationsNative } narrow />
+							</div>
+
 							<TextareaControl label={ __( 'Prompt copy', 'newspack-popups' ) } rows={ 4 } value={ body } onChange={ setBody } />
 							{ donationsNative ? (
 								<p style={ { margin: 0, fontStyle: 'italic' } }>
@@ -257,6 +373,24 @@ const ContextualPromptPanel = () => {
 									{ saving ? __( 'Saving…', 'newspack-popups' ) : saveLabel }
 								</Button>
 							</div>
+
+							{ /* Always reachable once a prompt exists — Advanced settings is where
+							     design is edited, so it must not be a one-time post-save link. */ }
+							{ promptId && ( postLink || editLink ) && (
+								<p style={ { margin: 0 } }>
+									{ postLink && (
+										<a href={ postLink } target="_blank" rel="noreferrer">
+											{ __( 'View story', 'newspack-popups' ) }
+										</a>
+									) }
+									{ postLink && editLink && ' · ' }
+									{ editLink && (
+										<a href={ editLink } target="_blank" rel="noreferrer">
+											{ __( 'Edit design in Advanced settings', 'newspack-popups' ) }
+										</a>
+									) }
+								</p>
+							) }
 						</VStack>
 					) }
 				</VStack>

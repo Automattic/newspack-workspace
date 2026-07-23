@@ -17,13 +17,20 @@
 import { __ } from '@wordpress/i18n';
 import { useState, useEffect } from '@wordpress/element';
 import apiFetch from '@wordpress/api-fetch';
-import { Notice, TextControl, TextareaControl, __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import {
+	Notice,
+	TextControl,
+	TextareaControl,
+	ToggleControl,
+	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
+	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
+} from '@wordpress/components';
 import { chevronLeft } from '@wordpress/icons';
 
 /**
  * Internal dependencies
  */
-import { CardFeature, Button, Grid, Modal, Waiting } from '../../../../../../packages/components/src';
+import { CardFeature, Button, ColorPicker, Grid, Modal, Waiting } from '../../../../../../packages/components/src';
 
 const DISCLOSURE = __(
 	'Enabling Contextual Prompts lets editors generate donation call-to-action copy for their stories using AI. When used, the content of the post is sent to a third-party AI provider to draft suggestions. It is retained by the provider for up to 30 days for abuse monitoring, is not used to train AI models, and never appears in other AI products. Every suggestion is a draft an editor reviews and approves — nothing is ever published automatically.',
@@ -85,6 +92,48 @@ const ContextualPromptsSettings = ( { configuring, onConfigure } ) => {
 
 	const { enabled, can_manage: canManage, fields } = status;
 
+	const setValue = ( key, value ) => setValues( prev => ( { ...prev, [ key ]: value } ) );
+
+	// Fields are grouped by section server-side so the override controls can sit
+	// under their own heading rather than trailing the publisher profile.
+	const renderFields = section =>
+		( fields || [] )
+			.filter( field => ( field.section || 'profile' ) === section )
+			.map( field => {
+				if ( 'toggle' === field.type ) {
+					return (
+						<ToggleControl
+							key={ field.key }
+							label={ field.label }
+							help={ field.help }
+							checked={ !! values[ field.key ] }
+							onChange={ next => setValue( field.key, next ? '1' : '' ) }
+						/>
+					);
+				}
+				if ( 'color' === field.type ) {
+					return (
+						<ColorPicker
+							key={ field.key }
+							label={ field.label }
+							help={ field.help }
+							color={ values[ field.key ] || undefined }
+							onChange={ value => setValue( field.key, value ) }
+						/>
+					);
+				}
+				const Control = 'textarea' === field.type ? TextareaControl : TextControl;
+				return (
+					<Control
+						key={ field.key }
+						label={ field.label }
+						help={ field.help }
+						value={ values[ field.key ] ?? '' }
+						onChange={ value => setValue( field.key, value ) }
+					/>
+				);
+			} );
+
 	// Configure view: the publisher-profile fields, mirroring the Experimental
 	// Tools configure screen. The parent hides the rest of Campaigns settings.
 	if ( configuring ) {
@@ -111,18 +160,32 @@ const ContextualPromptsSettings = ( { configuring, onConfigure } ) => {
 						</Notice>
 					) }
 
-					{ ( fields || [] ).map( field => {
-						const Control = 'textarea' === field.type ? TextareaControl : TextControl;
-						return (
-							<Control
-								key={ field.key }
-								label={ field.label }
-								help={ field.help }
-								value={ values[ field.key ] ?? '' }
-								onChange={ value => setValues( prev => ( { ...prev, [ field.key ]: value } ) ) }
-							/>
-						);
-					} ) }
+					{ renderFields( 'profile' ) }
+
+					<hr style={ { margin: 0, border: 0, borderTop: '1px solid #ddd' } } />
+
+					<div>
+						<h3 style={ { margin: '0 0 4px' } }>{ __( 'Default design', 'newspack-plugin' ) }</h3>
+						<p style={ { margin: 0 } }>
+							{ __( 'Sets the look of every Contextual Prompt, including ones already published.', 'newspack-plugin' ) }
+						</p>
+					</div>
+
+					{ renderFields( 'design' ) }
+
+					<hr style={ { margin: 0, border: 0, borderTop: '1px solid #ddd' } } />
+
+					<div>
+						<h3 style={ { margin: '0 0 4px' } }>{ __( 'Site-wide override', 'newspack-plugin' ) }</h3>
+						<p style={ { margin: 0 } }>
+							{ __(
+								'Temporarily replace every Contextual Prompt with a single call to action — for example during a fund drive. Each story keeps its own prompt, which returns when you turn the override off.',
+								'newspack-plugin'
+							) }
+						</p>
+					</div>
+
+					{ renderFields( 'override' ) }
 
 					<div>
 						<Button variant="primary" type="submit" disabled={ inFlight }>
