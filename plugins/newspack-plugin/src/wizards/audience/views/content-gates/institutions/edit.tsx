@@ -5,7 +5,7 @@
 /**
  * WordPress dependencies
  */
-import { __ } from '@wordpress/i18n';
+import { __, _n, sprintf } from '@wordpress/i18n';
 import { __experimentalVStack as VStack, TextareaControl, CardBody, Spinner } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 import { useDispatch } from '@wordpress/data';
 import { useState, useEffect, useCallback } from '@wordpress/element';
@@ -20,11 +20,13 @@ import {
 	Divider,
 	Grid,
 	ImageUpload,
+	Notice,
 	Router,
 	SectionHeader,
 	TextControl,
 	useConfirmDialog,
 } from '../../../../../../packages/components/src';
+import { getInvalidIpRangeEntries } from './utils';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
 
 const { useHistory } = Router;
@@ -232,6 +234,7 @@ export default function InstitutionEdit( { match }: { match: { params: { id?: st
 	const description = institution.excerpt.raw;
 	const meta = institution.meta || EMPTY_INSTITUTION.meta;
 	const { np_institution_email_domain: emailDomain, np_institution_ip_range: ipRange, np_institution_reader_data: readerData } = meta;
+	const invalidIpEntries = getInvalidIpRangeEntries( ipRange || '' );
 
 	return (
 		<div className="newspack-institution__edit">
@@ -307,7 +310,7 @@ export default function InstitutionEdit( { match }: { match: { params: { id?: st
 
 					<CardSettingsGroup
 						title={ __( 'IP range', 'newspack-plugin' ) }
-						description={ __( 'Match visitors by IP address or CIDR block', 'newspack-plugin' ) }
+						description={ __( 'Match visitors by IP address, CIDR block, or IP range', 'newspack-plugin' ) }
 						icon={ globe }
 						actionType="toggle"
 						isActive={ enabledRules.np_institution_ip_range }
@@ -315,11 +318,29 @@ export default function InstitutionEdit( { match }: { match: { params: { id?: st
 					>
 						<CardBody size="small">
 							<TextControl
-								label={ __( 'IPs / CIDR blocks (comma-separated)', 'newspack-plugin' ) }
+								label={ __( 'IPs, CIDR blocks, or IP ranges (comma-separated)', 'newspack-plugin' ) }
 								value={ ipRange }
 								onChange={ ( val: string ) => updateMeta( 'np_institution_ip_range', val ) }
-								placeholder="192.168.1.0/24, 10.0.0.5"
+								placeholder="192.168.1.0/24, 142.74.1.0-142.74.1.255, 10.0.0.5"
 							/>
+							{ invalidIpEntries.length > 0 && (
+								<Notice
+									isWarning
+									noticeText={ sprintf(
+										/* translators: %1$s: comma-separated list of invalid IP entries. %2$s: single IP example. %3$s: CIDR block example. %4$s: IP range example. */
+										_n(
+											'This entry is invalid and will never grant access: %1$s. Use a single IPv4 address (e.g. %2$s), a CIDR block (e.g. %3$s), or an IP range from lowest to highest (e.g. %4$s).',
+											'These entries are invalid and will never grant access: %1$s. Use a single IPv4 address (e.g. %2$s), a CIDR block (e.g. %3$s), or an IP range from lowest to highest (e.g. %4$s).',
+											invalidIpEntries.length,
+											'newspack-plugin'
+										),
+										invalidIpEntries.join( ', ' ),
+										'10.0.0.5',
+										'192.168.1.0/24',
+										'142.74.1.0-142.74.1.255'
+									) }
+								/>
+							) }
 						</CardBody>
 					</CardSettingsGroup>
 

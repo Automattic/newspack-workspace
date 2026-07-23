@@ -89,6 +89,139 @@ class Newspack_Test_IP_Access_Rule extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test dash-range matching, including both boundaries.
+	 */
+	public function test_dash_range_match() {
+		$range = '142.74.1.0-142.74.1.255';
+		// Both boundaries are inclusive.
+		$this->assertTrue( IP_Access_Rule::ip_matches_ranges( '142.74.1.0', $range ) );
+		$this->assertTrue( IP_Access_Rule::ip_matches_ranges( '142.74.1.255', $range ) );
+		// Inside the range.
+		$this->assertTrue( IP_Access_Rule::ip_matches_ranges( '142.74.1.128', $range ) );
+		// Just outside either boundary.
+		$this->assertFalse( IP_Access_Rule::ip_matches_ranges( '142.74.0.255', $range ) );
+		$this->assertFalse( IP_Access_Rule::ip_matches_ranges( '142.74.2.0', $range ) );
+	}
+
+	/**
+	 * Test a dash range spanning octet boundaries (not expressible as one CIDR).
+	 */
+	public function test_dash_range_spanning_octets() {
+		$range = '10.0.0.200-10.0.1.100';
+		$this->assertTrue( IP_Access_Rule::ip_matches_ranges( '10.0.0.200', $range ) );
+		$this->assertTrue( IP_Access_Rule::ip_matches_ranges( '10.0.0.255', $range ) );
+		$this->assertTrue( IP_Access_Rule::ip_matches_ranges( '10.0.1.0', $range ) );
+		$this->assertTrue( IP_Access_Rule::ip_matches_ranges( '10.0.1.100', $range ) );
+		$this->assertFalse( IP_Access_Rule::ip_matches_ranges( '10.0.0.199', $range ) );
+		$this->assertFalse( IP_Access_Rule::ip_matches_ranges( '10.0.1.101', $range ) );
+	}
+
+	/**
+	 * Test a reversed dash range (end < start) is treated as invalid and
+	 * never matches — not even its own endpoints. A reversed range is most
+	 * likely a typo, and silently normalizing it could grant a much larger
+	 * range than intended; the UI warns about it instead.
+	 */
+	public function test_reversed_dash_range_never_matches() {
+		$range = '142.74.1.255-142.74.1.0';
+		$this->assertFalse( IP_Access_Rule::ip_matches_ranges( '142.74.1.0', $range ) );
+		$this->assertFalse( IP_Access_Rule::ip_matches_ranges( '142.74.1.128', $range ) );
+		$this->assertFalse( IP_Access_Rule::ip_matches_ranges( '142.74.1.255', $range ) );
+	}
+
+	/**
+	 * Test a single-address dash range (start === end) matches exactly that IP.
+	 */
+	public function test_single_address_dash_range() {
+		$this->assertTrue( IP_Access_Rule::ip_matches_ranges( '10.0.0.5', '10.0.0.5-10.0.0.5' ) );
+		$this->assertFalse( IP_Access_Rule::ip_matches_ranges( '10.0.0.6', '10.0.0.5-10.0.0.5' ) );
+	}
+
+	/**
+	 * Test whitespace around the dash separator is tolerated, mirroring the
+	 * CIDR slash behavior.
+	 */
+	public function test_dash_range_tolerates_whitespace_around_dash() {
+		$this->assertTrue( IP_Access_Rule::ip_matches_ranges( '10.0.0.5', '10.0.0.1 - 10.0.0.9' ) );
+		$this->assertTrue( IP_Access_Rule::ip_matches_ranges( '10.0.0.5', '10.0.0.1- 10.0.0.9' ) );
+		$this->assertTrue( IP_Access_Rule::ip_matches_ranges( '10.0.0.5', '10.0.0.1 -10.0.0.9' ) );
+	}
+
+	/**
+	 * Test malformed dash ranges are inert: they never match and never
+	 * produce a PHP warning/notice/fatal.
+	 */
+	public function test_malformed_dash_range_is_inert() {
+		$this->assertFalse( IP_Access_Rule::ip_matches_ranges( '10.0.0.5', '10.0.0.1-' ) );
+		$this->assertFalse( IP_Access_Rule::ip_matches_ranges( '10.0.0.5', '-10.0.0.9' ) );
+		$this->assertFalse( IP_Access_Rule::ip_matches_ranges( '10.0.0.5', '10.0.0.1-banana' ) );
+		$this->assertFalse( IP_Access_Rule::ip_matches_ranges( '10.0.0.5', '10.0.0.1-10.0.0.4-10.0.0.9' ) );
+		$this->assertFalse( IP_Access_Rule::ip_matches_ranges( '10.0.0.5', '-' ) );
+		$this->assertFalse( IP_Access_Rule::ip_matches_ranges( '10.0.0.5', '999.0.0.1-10.0.0.9' ) );
+	}
+
+	/**
+	 * Test a mixed list of CIDR, dash range, and single IP entries.
+	 */
+	public function test_mixed_cidr_dash_and_single_entries() {
+		$ranges = '192.168.1.0/24, 142.74.1.0-142.74.1.255, 10.0.0.5';
+		$this->assertTrue( IP_Access_Rule::ip_matches_ranges( '192.168.1.77', $ranges ) );
+		$this->assertTrue( IP_Access_Rule::ip_matches_ranges( '142.74.1.42', $ranges ) );
+		$this->assertTrue( IP_Access_Rule::ip_matches_ranges( '10.0.0.5', $ranges ) );
+		$this->assertFalse( IP_Access_Rule::ip_matches_ranges( '172.16.0.1', $ranges ) );
+	}
+
+	/**
+	 * Test an invalid entry in a list does not disable the valid entries
+	 * around it.
+	 */
+	public function test_invalid_entry_does_not_disable_valid_neighbors() {
+		$ranges = 'garbage, 142.74.1.0-142.74.1.255, 10.0.0.0/nope';
+		$this->assertTrue( IP_Access_Rule::ip_matches_ranges( '142.74.1.42', $ranges ) );
+		$this->assertFalse( IP_Access_Rule::ip_matches_ranges( '10.0.0.5', $ranges ) );
+	}
+
+	/**
+	 * Test IPv4-mapped IPv6 notation is out of scope: the matcher is
+	 * IPv4-only, so `::ffff:a.b.c.d` visitors do not match (documents the
+	 * current IPv6 gap rather than asserting desired behavior).
+	 */
+	public function test_ipv4_mapped_ipv6_does_not_match() {
+		$this->assertFalse( IP_Access_Rule::ip_matches_ranges( '::ffff:10.0.0.5', '10.0.0.0/8' ) );
+		$this->assertFalse( IP_Access_Rule::ip_matches_ranges( '::ffff:10.0.0.5', '10.0.0.1-10.0.0.9' ) );
+	}
+
+	/**
+	 * Test the allowlist endpoint emits dash ranges in normalized
+	 * (whitespace-stripped) form and drops reversed/malformed ones.
+	 */
+	public function test_ip_allowlist_includes_valid_dash_ranges() {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+
+		$inst_id = \Newspack\Institution::create(
+			'Dash Range Library',
+			'',
+			[ 'ip_range' => '142.74.1.0 - 142.74.1.255, 10.0.0.9-10.0.0.1, 10.0.0.1-, 192.168.1.0/24' ]
+		);
+		$this->assertIsInt( $inst_id );
+		delete_transient( \Newspack\Institution::TRANSIENT_KEY );
+
+		$route    = '/' . NEWSPACK_API_NAMESPACE . IP_Access_Rule::REST_ROUTE_IP_ALLOWLIST;
+		$request  = new WP_REST_Request( 'GET', $route );
+		$response = rest_do_request( $request );
+
+		$entry = null;
+		foreach ( $response->get_data() as $item ) {
+			if ( $item['id'] === $inst_id ) {
+				$entry = $item;
+				break;
+			}
+		}
+		$this->assertNotNull( $entry );
+		$this->assertSame( [ '142.74.1.0-142.74.1.255', '192.168.1.0/24' ], $entry['ip_ranges'] );
+	}
+
+	/**
 	 * Test the bypass cookie lifetime is long enough to keep institutional
 	 * access persistent (see the COOKIE_EXPIRATION docblock).
 	 */

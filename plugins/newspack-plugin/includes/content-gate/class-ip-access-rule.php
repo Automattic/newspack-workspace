@@ -246,9 +246,9 @@ class IP_Access_Rule {
 	/**
 	 * REST API callback for the institutional IP allowlist.
 	 *
-	 * Returns one entry per institution that has at least one valid IPv4 or
-	 * CIDR range. Malformed entries are dropped silently. Email-domain and
-	 * reader-data rules are not exposed.
+	 * Returns one entry per institution that has at least one valid IPv4
+	 * address, CIDR block, or dash range. Malformed entries are dropped
+	 * silently. Email-domain and reader-data rules are not exposed.
 	 *
 	 * @return \WP_REST_Response
 	 */
@@ -300,7 +300,7 @@ class IP_Access_Rule {
 					'readonly'    => true,
 				],
 				'ip_ranges' => [
-					'description' => __( 'Validated IPv4 addresses or CIDR blocks granting access.', 'newspack-plugin' ),
+					'description' => __( 'Validated IPv4 addresses, CIDR blocks, or dash ranges granting access.', 'newspack-plugin' ),
 					'type'        => 'array',
 					'items'       => [ 'type' => 'string' ],
 					'readonly'    => true,
@@ -620,14 +620,15 @@ class IP_Access_Rule {
 	}
 
 	/**
-	 * Parse a comma-separated list of IPs and CIDR blocks.
+	 * Parse a comma-separated list of IPs, CIDR blocks, and dash ranges.
 	 *
-	 * Trims whitespace (around tokens and around the `/` separator), drops
-	 * empty tokens, and discards anything that isn't a valid IPv4 address or
-	 * CIDR block (`<ipv4>/<0-32>`). Returned CIDR entries are emitted in their
+	 * Trims whitespace (around tokens and around the `/` and `-` separators),
+	 * drops empty tokens, and discards anything that isn't a valid IPv4
+	 * address, CIDR block (`<ipv4>/<0-32>`), or dash range
+	 * (`<ipv4>-<ipv4>` with start <= end). Entries are emitted in their
 	 * trimmed form.
 	 *
-	 * @param string $raw Comma-separated list (e.g. `"192.168.1.0/24,10.0.0.5"`).
+	 * @param string $raw Comma-separated list (e.g. `"192.168.1.0/24,10.0.0.5,142.74.1.0-142.74.1.255"`).
 	 *
 	 * @return string[] Validated entries.
 	 */
@@ -649,6 +650,18 @@ class IP_Access_Rule {
 					continue;
 				}
 				$valid[] = $subnet . '/' . $bits;
+			} elseif ( strpos( $token, '-' ) !== false ) {
+				list( $start, $end ) = explode( '-', $token, 2 );
+				$start = trim( $start );
+				$end   = trim( $end );
+				if ( ! filter_var( $start, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 ) || ! filter_var( $end, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 ) ) {
+					continue;
+				}
+				// A reversed range (end < start) is most likely a typo; treat it as invalid rather than silently swapping the bounds.
+				if ( ip2long( $start ) > ip2long( $end ) ) {
+					continue;
+				}
+				$valid[] = $start . '-' . $end;
 			} elseif ( filter_var( $token, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 ) ) {
 				$valid[] = $token;
 			}
@@ -660,7 +673,7 @@ class IP_Access_Rule {
 	 * Check if an IP address matches any of the given ranges.
 	 *
 	 * @param string $ip     The IP address to check.
-	 * @param string $ranges Comma-separated list of IPs and/or CIDR blocks.
+	 * @param string $ranges Comma-separated list of IPs, CIDR blocks, and/or dash ranges.
 	 *
 	 * @return bool Whether the IP matches any range.
 	 */
@@ -676,6 +689,11 @@ class IP_Access_Rule {
 				$subnet_long = ip2long( $subnet );
 				$mask        = -1 << ( 32 - (int) $bits );
 				if ( ( $ip_long & $mask ) === ( $subnet_long & $mask ) ) {
+					return true;
+				}
+			} elseif ( strpos( $range, '-' ) !== false ) {
+				list( $start, $end ) = explode( '-', $range, 2 );
+				if ( ip2long( $start ) <= $ip_long && $ip_long <= ip2long( $end ) ) {
 					return true;
 				}
 			} elseif ( $ip_long === ip2long( $range ) ) {
