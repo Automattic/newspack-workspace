@@ -44,8 +44,12 @@ const ADS_CPT = 'newspack_nl_ads_cpt';
 // Filter-dropdown taxonomy terms (advertisers + placements). Paginated
 // so sites with many terms still get a complete list. Categories are
 // fetched lazily inside the Quick Edit panel.
+// `hasLoaded` reports the fetch settling, not succeeding: `fetchAllTerms`
+// swallows request failures and returns what it collected, so Quick Edit
+// judges completeness by whether the settled lists account for an ad's
+// stored term IDs.
 function useFilterTerms() {
-	const [ terms, setTerms ] = useState( { advertisers: [], placements: [] } );
+	const [ terms, setTerms ] = useState( { advertisers: [], placements: [], hasLoaded: false } );
 
 	useEffect( () => {
 		let cancelled = false;
@@ -57,9 +61,14 @@ function useFilterTerms() {
 				setTerms( {
 					advertisers: Array.isArray( advertisers ) ? advertisers : [],
 					placements: Array.isArray( placements ) ? placements : [],
+					hasLoaded: true,
 				} );
 			} )
-			.catch( () => {} );
+			.catch( () => {
+				if ( ! cancelled ) {
+					setTerms( { advertisers: [], placements: [], hasLoaded: true } );
+				}
+			} );
 		return () => {
 			cancelled = true;
 		};
@@ -156,6 +165,7 @@ export default function AdsListScreen() {
 					item={ quickEditItem }
 					advertisers={ filterTerms.advertisers }
 					placements={ filterTerms.placements }
+					termsLoaded={ filterTerms.hasLoaded }
 					onClose={ () => setQuickEditItem( null ) }
 					onSaved={ () => {
 						refresh();

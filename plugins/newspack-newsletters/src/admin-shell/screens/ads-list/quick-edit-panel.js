@@ -7,7 +7,7 @@
  */
 
 import apiFetch from '@wordpress/api-fetch';
-import { FormTokenField, RadioControl, TextControl } from '@wordpress/components';
+import { FormTokenField, Notice, RadioControl, TextControl } from '@wordpress/components';
 import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { emailAd } from 'newspack-icons';
@@ -47,24 +47,45 @@ function useQuickEditCategories() {
 	return { categories, hasLoaded };
 }
 
-export default function AdsQuickEditPanel( { item, advertisers, placements, onClose, onSaved } ) {
+// Resolve the post's stored term IDs through the embed first, then the
+// options list. The `wp:term` embed caps at 10 terms per taxonomy (the
+// REST default `per_page`, and the embed link sets none), so a truncated
+// embed must not shadow a fully-paginated options list.
+const selectionsForTaxonomy = ( item, ids, taxonomy, options ) => {
+	const embedded = initialSelectionsForTaxonomy( item, taxonomy );
+	if ( ! Array.isArray( ids ) ) {
+		return embedded;
+	}
+	const byId = new Map( [ ...selectionsFromIds( ids, options ), ...embedded ].map( selection => [ selection.id, selection ] ) );
+	return ids.map( id => byId.get( id ) ).filter( Boolean );
+};
+
+// A settled options list that still can't account for every stored term
+// means the field would misrepresent the ad, so it goes read-only rather
+// than showing a quietly wrong value.
+function TermsUnavailableNotice( { children } ) {
+	return (
+		<Notice status="warning" isDismissible={ false } politeness="polite" spokenMessage={ children }>
+			{ children }
+		</Notice>
+	);
+}
+
+export default function AdsQuickEditPanel( { item, advertisers, placements, termsLoaded = false, onClose, onSaved } ) {
 	const { categories, hasLoaded: categoriesLoaded } = useQuickEditCategories();
 	// Terms are only embedded when a taxonomy column is visible, so each
-	// field falls back to resolving the post's raw term IDs against the
-	// options list. Without this a hidden column would seed an empty
-	// field, and saving would strip the terms it never showed.
-	const initialAdvertiserSelections = useMemo( () => {
-		const embedded = initialSelectionsForTaxonomy( item, 'newspack_nl_advertiser' );
-		return embedded.length ? embedded : selectionsFromIds( item?.newspack_nl_advertiser, advertisers );
-	}, [ item, advertisers ] );
-	const initialPlacementSelections = useMemo( () => {
-		const embedded = initialSelectionsForTaxonomy( item, 'newspack_nl_ad_placement' );
-		return embedded.length ? embedded : selectionsFromIds( item?.ad_placement, placements );
-	}, [ item, placements ] );
-	const initialCategorySelections = useMemo( () => {
-		const embedded = initialSelectionsForTaxonomy( item, 'category' );
-		return embedded.length ? embedded : selectionsFromIds( item?.categories, categories );
-	}, [ item, categories ] );
+	// field also resolves the post's raw term IDs against the options
+	// list. Without this a hidden column would seed an empty field, and
+	// saving would strip the terms it never showed.
+	const initialAdvertiserSelections = useMemo(
+		() => selectionsForTaxonomy( item, item?.newspack_nl_advertiser, 'newspack_nl_advertiser', advertisers ),
+		[ item, advertisers ]
+	);
+	const initialPlacementSelections = useMemo(
+		() => selectionsForTaxonomy( item, item?.ad_placement, 'newspack_nl_ad_placement', placements ),
+		[ item, placements ]
+	);
+	const initialCategorySelections = useMemo( () => selectionsForTaxonomy( item, item?.categories, 'category', categories ), [ item, categories ] );
 	// Unresolvable terms can't be shown or removed, so they ride along on save.
 	const unresolvedAdvertiserIds = useMemo(
 		() => unresolvedIds( item?.newspack_nl_advertiser, initialAdvertiserSelections ),
@@ -117,10 +138,10 @@ export default function AdsQuickEditPanel( { item, advertisers, placements, onCl
 		}
 	}, [ initialCategorySelections ] );
 
-	// Once the embed is skipped the options list is the only source for
-	// this field, so a settled list that can't account for the ad's stored
-	// categories means the field would show an empty box on an ad that has
-	// them. Say so and make it read-only instead of lying quietly.
+	// Gated on the fetch having settled so a slow load can't flash a
+	// warning before the options arrive.
+	const advertiserUnavailable = termsLoaded && unresolvedAdvertiserIds.length > 0;
+	const placementUnavailable = termsLoaded && unresolvedPlacementIds.length > 0;
 	const categoriesUnavailable = categoriesLoaded && unresolvedCategoryIds.length > 0;
 
 	const advertiserDirty = ! sortedIdsEqual( advertiserSelections, initialAdvertiserSelections );
@@ -217,6 +238,7 @@ export default function AdsQuickEditPanel( { item, advertisers, placements, onCl
 				label={ __( 'Advertiser', 'newspack-newsletters' ) }
 				value={ advertiserTokens }
 				suggestions={ advertiserSuggestions }
+				disabled={ advertiserUnavailable }
 				onChange={ next => {
 					hasEditedAdvertiserRef.current = true;
 					setAdvertiserSelections( resolveTokens( next, advertiserSelections, advertisers ) );
@@ -226,10 +248,16 @@ export default function AdsQuickEditPanel( { item, advertisers, placements, onCl
 				__next40pxDefaultSize
 				__nextHasNoMarginBottom
 			/>
+			{ advertiserUnavailable && (
+				<TermsUnavailableNotice>
+					{ __( 'Advertisers could not be loaded. Edit this ad to change them.', 'newspack-newsletters' ) }
+				</TermsUnavailableNotice>
+			) }
 			<FormTokenField
 				label={ __( 'Ad placement', 'newspack-newsletters' ) }
 				value={ placementTokens }
 				suggestions={ placementSuggestions }
+				disabled={ placementUnavailable }
 				onChange={ next => {
 					hasEditedPlacementRef.current = true;
 					setPlacementSelections( resolveTokens( next, placementSelections, placements ) );
@@ -239,6 +267,11 @@ export default function AdsQuickEditPanel( { item, advertisers, placements, onCl
 				__next40pxDefaultSize
 				__nextHasNoMarginBottom
 			/>
+			{ placementUnavailable && (
+				<TermsUnavailableNotice>
+					{ __( 'Ad placements could not be loaded. Edit this ad to change them.', 'newspack-newsletters' ) }
+				</TermsUnavailableNotice>
+			) }
 			<FormTokenField
 				label={ __( 'Categories', 'newspack-newsletters' ) }
 				value={ categoryTokens }
@@ -253,12 +286,10 @@ export default function AdsQuickEditPanel( { item, advertisers, placements, onCl
 				__next40pxDefaultSize
 				__nextHasNoMarginBottom
 			/>
-			{ /* `FormTokenField`'s own `help` prop is not rendered by the
-			     runtime (WP core) build, so the message stands on its own. */ }
 			{ categoriesUnavailable && (
-				<p className="components-base-control__help">
+				<TermsUnavailableNotice>
 					{ __( 'Categories could not be loaded. Edit this ad to change them.', 'newspack-newsletters' ) }
-				</p>
+				</TermsUnavailableNotice>
 			) }
 			<TextControl
 				type="date"

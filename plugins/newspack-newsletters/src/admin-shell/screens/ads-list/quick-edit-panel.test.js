@@ -44,6 +44,24 @@ const makeItem = status => ( { id: 42, status, title: { raw: 'Summer sale' }, me
 
 const postCall = () => apiFetch.mock.calls.find( call => call[ 0 ]?.method === 'POST' )?.[ 0 ];
 
+// Scoped to the rendered notices: `Notice` also announces through the
+// shared `a11y-speak` live region, which survives between tests in the
+// same document and would otherwise satisfy a plain text query.
+const visibleNotices = () => [ ...document.querySelectorAll( '.components-notice__content' ) ].map( n => n.textContent.trim() );
+
+const ADVERTISERS_UNAVAILABLE = 'Advertisers could not be loaded. Edit this ad to change them.';
+const CATEGORIES_UNAVAILABLE = 'Categories could not be loaded. Edit this ad to change them.';
+
+// `fetchAllTerms` reads `parse: false` responses, so the categories fetch
+// needs a Response-alike rather than a plain object.
+const mockCategoriesFetch = terms =>
+	apiFetch.mockImplementation( options => {
+		if ( typeof options?.path === 'string' && options.path.startsWith( '/wp/v2/categories' ) ) {
+			return Promise.resolve( { json: () => Promise.resolve( terms ), headers: { get: () => '1' } } );
+		}
+		return Promise.resolve( {} );
+	} );
+
 describe( 'AdsQuickEditPanel status control', () => {
 	beforeEach( () => {
 		apiFetch.mockReset();
@@ -201,15 +219,46 @@ describe( 'AdsQuickEditPanel taxonomy handling', () => {
 	// that has categories.
 	it( 'flags the Categories field read-only when its options cannot account for the stored terms', async () => {
 		renderPanel( { ...makeItem( 'publish' ), categories: [ 77 ] } );
-		expect( await screen.findByText( 'Categories could not be loaded. Edit this ad to change them.' ) ).toBeInTheDocument();
+		await waitFor( () => expect( visibleNotices() ).toContain( CATEGORIES_UNAVAILABLE ) );
 		expect( screen.getByLabelText( 'Categories' ) ).toBeDisabled();
 	} );
 
 	it( 'leaves the Categories field alone when there are no stored categories', async () => {
 		renderPanel( withRawTerms() );
 		await screen.findByText( 'Acme' );
-		expect( screen.queryByText( 'Categories could not be loaded. Edit this ad to change them.' ) ).toBeNull();
+		await waitFor( () => expect( screen.getByLabelText( 'Categories' ) ).not.toBeDisabled() );
+		expect( visibleNotices() ).not.toContain( CATEGORIES_UNAVAILABLE );
+	} );
+
+	// The `wp:term` embed caps at 10 terms per taxonomy, so an ad with more
+	// than that arrives with a truncated embed. The fetched options list is
+	// complete and must be allowed to fill the gap, rather than the short
+	// embed making the field look broken.
+	it( 'fills the gap when the embed truncates at 10 terms', async () => {
+		const allCategories = Array.from( { length: 11 }, ( _, i ) => ( { id: i + 1, name: `Cat ${ i + 1 }` } ) );
+		mockCategoriesFetch( allCategories );
+		renderPanel( {
+			...makeItem( 'publish' ),
+			categories: allCategories.map( c => c.id ),
+			_embedded: { 'wp:term': [ allCategories.slice( 0, 10 ).map( c => ( { ...c, taxonomy: 'category' } ) ) ] },
+		} );
+
+		expect( await screen.findByText( 'Cat 11' ) ).toBeInTheDocument();
+		expect( visibleNotices() ).not.toContain( CATEGORIES_UNAVAILABLE );
 		expect( screen.getByLabelText( 'Categories' ) ).not.toBeDisabled();
+	} );
+
+	it( 'flags Advertiser read-only once its options have settled without the stored term', async () => {
+		renderPanel( { ...makeItem( 'publish' ), newspack_nl_advertiser: [ 99 ] }, { termsLoaded: true } );
+		await waitFor( () => expect( visibleNotices() ).toContain( ADVERTISERS_UNAVAILABLE ) );
+		expect( screen.getByLabelText( 'Advertiser' ) ).toBeDisabled();
+	} );
+
+	it( 'does not warn about Advertiser while its options are still loading', async () => {
+		renderPanel( { ...makeItem( 'publish' ), newspack_nl_advertiser: [ 99 ] }, { termsLoaded: false } );
+		await screen.findByLabelText( 'Advertiser' );
+		expect( visibleNotices() ).not.toContain( ADVERTISERS_UNAVAILABLE );
+		expect( screen.getByLabelText( 'Advertiser' ) ).not.toBeDisabled();
 	} );
 
 	it( 'still refuses to send the unshowable categories on save', async () => {
