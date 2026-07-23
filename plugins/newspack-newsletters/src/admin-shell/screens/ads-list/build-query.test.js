@@ -31,6 +31,19 @@ describe( 'ads buildQueryParams', () => {
 		expect( buildQueryParams( {} )._embed ).toBe( 'wp:term' );
 	} );
 
+	it.each( [ 'advertiser', 'ad_placement', 'categories' ] )( 'embeds wp:term while the %s column is visible', field => {
+		expect( buildQueryParams( { fields: [ 'title', field ] } )._embed ).toBe( 'wp:term' );
+	} );
+
+	it( 'drops the embed when no term-backed column is visible', () => {
+		expect( buildQueryParams( { fields: [ 'title', 'start_date', 'price' ] } )._embed ).toBeUndefined();
+	} );
+
+	it( 'always requests the raw term IDs so Quick Edit can hydrate without the embed', () => {
+		const fields = buildQueryParams( { fields: [ 'title' ] } )._fields.split( ',' );
+		expect( fields ).toEqual( expect.arrayContaining( [ 'newspack_nl_advertiser', 'ad_placement', 'categories' ] ) );
+	} );
+
 	it( 'defaults to writable statuses (no trash) when no kind filter is set', () => {
 		const { status, newspack_newsletters_ad_status: kindParam } = buildQueryParams( {} );
 		expect( status.split( ',' ) ).toEqual( expect.arrayContaining( [ 'publish', 'private', 'future', 'draft', 'pending' ] ) );

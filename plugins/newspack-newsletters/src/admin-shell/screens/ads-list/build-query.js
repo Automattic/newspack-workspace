@@ -30,6 +30,10 @@ const FIELD_TO_QUERY_PARAM = {
 
 // Meta-backed values are virtual tokens; the server applies the
 // sort via a posts_clauses LEFT JOIN on the underlying meta key.
+// Columns that read `_embedded['wp:term']`; the embed is only worth its
+// cost when one of them is on screen.
+const TERM_BACKED_FIELDS = [ 'advertiser', 'ad_placement', 'categories' ];
+
 const SORT_FIELD_TO_ORDERBY = {
 	title: 'title',
 	date: 'date',
@@ -41,6 +45,11 @@ const SORT_FIELD_TO_ORDERBY = {
 };
 
 export function buildQueryParams( view = {} ) {
+	// Term embeds cost ~2 internal REST dispatches per row per taxonomy,
+	// and this screen carries three of them.
+	const visibleFields = Array.isArray( view.fields ) ? view.fields : null;
+	const needsTerms = ! visibleFields || TERM_BACKED_FIELDS.some( field => visibleFields.includes( field ) );
+
 	return baseBuildQueryParams( view, {
 		fieldToQueryParam: FIELD_TO_QUERY_PARAM,
 		sortFieldToOrderby: SORT_FIELD_TO_ORDERBY,
@@ -53,12 +62,12 @@ export function buildQueryParams( view = {} ) {
 		// `_links` stays in the list — `_embed` only expands links that
 		// survive the `_fields` filter.
 		extraParams: {
-			// Unconditional, unlike the newsletters list: Quick Edit here
-			// hydrates advertiser and placement from the embedded terms
-			// alone and sends both taxonomies on every save, so dropping
-			// the embed when those columns are hidden would clear them.
-			_embed: 'wp:term',
-			_fields: 'id,status,title,date,meta,newspack_newsletters_ad_status,_links',
+			// Omitted entirely when no term-backed column shows: nothing
+			// else on this screen reads `_embedded`.
+			_embed: needsTerms ? 'wp:term' : undefined,
+			// The raw taxonomy ID arrays ride along unconditionally so
+			// Quick Edit can hydrate its fields when the embed is skipped.
+			_fields: 'id,status,title,date,meta,newspack_nl_advertiser,ad_placement,categories,newspack_newsletters_ad_status,_links',
 		},
 	} );
 }

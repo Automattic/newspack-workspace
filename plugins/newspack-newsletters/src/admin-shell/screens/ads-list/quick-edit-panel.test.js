@@ -132,3 +132,82 @@ describe( 'AdsQuickEditPanel status control', () => {
 		expect( screen.getByTestId( 'panel-dirty' ) ).toHaveTextContent( 'true' );
 	} );
 } );
+
+// The list only embeds terms while a taxonomy column is visible, so the
+// panel has to hydrate from the post's raw term IDs — and must never send
+// a taxonomy the user did not touch, or a status-only save would wipe the
+// terms it never displayed.
+describe( 'AdsQuickEditPanel taxonomy handling', () => {
+	beforeEach( () => {
+		apiFetch.mockReset();
+		apiFetch.mockResolvedValue( {} );
+	} );
+
+	const withRawTerms = () => ( {
+		...makeItem( 'publish' ),
+		newspack_nl_advertiser: [ 10 ],
+		ad_placement: [ 20 ],
+	} );
+
+	const withEmbeddedTerms = () => ( {
+		...makeItem( 'publish' ),
+		newspack_nl_advertiser: [ 10 ],
+		_embedded: { 'wp:term': [ [ { id: 10, name: 'Acme', taxonomy: 'newspack_nl_advertiser' } ] ] },
+	} );
+
+	it( 'hydrates the fields from raw term IDs when the embed is absent', async () => {
+		renderPanel( withRawTerms() );
+		expect( await screen.findByText( 'Acme' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Header' ) ).toBeInTheDocument();
+	} );
+
+	it( 'still reads embedded terms when they are present', async () => {
+		renderPanel( withEmbeddedTerms() );
+		expect( await screen.findByText( 'Acme' ) ).toBeInTheDocument();
+	} );
+
+	it( 'omits untouched taxonomies from a status-only save', async () => {
+		const onSaved = jest.fn();
+		renderPanel( withRawTerms(), { onSaved } );
+		fireEvent.click( await screen.findByRole( 'radio', { name: 'Inactive' } ) );
+		fireEvent.click( screen.getByTestId( 'panel-save' ) );
+		await waitFor( () => expect( onSaved ).toHaveBeenCalled() );
+
+		expect( postCall().data.status ).toBe( 'draft' );
+		expect( postCall().data ).not.toHaveProperty( 'newspack_nl_advertiser' );
+		expect( postCall().data ).not.toHaveProperty( 'ad_placement' );
+		expect( postCall().data ).not.toHaveProperty( 'categories' );
+	} );
+
+	it( 'sends only the taxonomy the user edited', async () => {
+		const onSaved = jest.fn();
+		renderPanel( { ...makeItem( 'publish' ), ad_placement: [ 20 ] }, { onSaved } );
+
+		const input = await screen.findByLabelText( 'Advertiser' );
+		fireEvent.change( input, { target: { value: 'Acme' } } );
+		fireEvent.keyDown( input, { key: 'Enter', keyCode: 13 } );
+		await screen.findByText( 'Acme' );
+
+		fireEvent.click( screen.getByTestId( 'panel-save' ) );
+		await waitFor( () => expect( onSaved ).toHaveBeenCalled() );
+
+		expect( postCall().data.newspack_nl_advertiser ).toEqual( [ 10 ] );
+		expect( postCall().data ).not.toHaveProperty( 'ad_placement' );
+	} );
+
+	it( 'keeps term IDs that cannot be resolved to an option', async () => {
+		const onSaved = jest.fn();
+		// 99 is not in ADVERTISERS, so it can be neither shown nor removed.
+		renderPanel( { ...makeItem( 'publish' ), newspack_nl_advertiser: [ 99 ] }, { onSaved } );
+
+		const input = await screen.findByLabelText( 'Advertiser' );
+		fireEvent.change( input, { target: { value: 'Acme' } } );
+		fireEvent.keyDown( input, { key: 'Enter', keyCode: 13 } );
+		await screen.findByText( 'Acme' );
+
+		fireEvent.click( screen.getByTestId( 'panel-save' ) );
+		await waitFor( () => expect( onSaved ).toHaveBeenCalled() );
+
+		expect( postCall().data.newspack_nl_advertiser ).toEqual( expect.arrayContaining( [ 10, 99 ] ) );
+	} );
+} );

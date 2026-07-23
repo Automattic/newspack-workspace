@@ -8,13 +8,13 @@
 
 import apiFetch from '@wordpress/api-fetch';
 import { FormTokenField, RadioControl, TextControl } from '@wordpress/components';
-import { useEffect, useMemo, useState } from '@wordpress/element';
+import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { emailAd } from 'newspack-icons';
 
 import QuickEditPanel from '../../components/quick-edit-panel';
 import { notifyError, notifySuccess } from '../../notices';
-import { fetchAllTerms, initialSelectionsForTaxonomy, resolveTokens, sortedIdsEqual } from '../../utils/terms';
+import { fetchAllTerms, initialSelectionsForTaxonomy, resolveTokens, selectionsFromIds, sortedIdsEqual, unresolvedIds } from '../../utils/terms';
 
 const POSTS_PATH = '/wp/v2/newspack_nl_ads_cpt';
 
@@ -38,9 +38,32 @@ function useQuickEditCategories() {
 
 export default function AdsQuickEditPanel( { item, advertisers, placements, onClose, onSaved } ) {
 	const categories = useQuickEditCategories();
-	const initialAdvertiserSelections = useMemo( () => initialSelectionsForTaxonomy( item, 'newspack_nl_advertiser' ), [ item ] );
-	const initialPlacementSelections = useMemo( () => initialSelectionsForTaxonomy( item, 'newspack_nl_ad_placement' ), [ item ] );
-	const initialCategorySelections = useMemo( () => initialSelectionsForTaxonomy( item, 'category' ), [ item ] );
+	// Terms are only embedded when a taxonomy column is visible, so each
+	// field falls back to resolving the post's raw term IDs against the
+	// options list. Without this a hidden column would seed an empty
+	// field, and saving would strip the terms it never showed.
+	const initialAdvertiserSelections = useMemo( () => {
+		const embedded = initialSelectionsForTaxonomy( item, 'newspack_nl_advertiser' );
+		return embedded.length ? embedded : selectionsFromIds( item?.newspack_nl_advertiser, advertisers );
+	}, [ item, advertisers ] );
+	const initialPlacementSelections = useMemo( () => {
+		const embedded = initialSelectionsForTaxonomy( item, 'newspack_nl_ad_placement' );
+		return embedded.length ? embedded : selectionsFromIds( item?.ad_placement, placements );
+	}, [ item, placements ] );
+	const initialCategorySelections = useMemo( () => {
+		const embedded = initialSelectionsForTaxonomy( item, 'category' );
+		return embedded.length ? embedded : selectionsFromIds( item?.categories, categories );
+	}, [ item, categories ] );
+	// Unresolvable terms can't be shown or removed, so they ride along on save.
+	const unresolvedAdvertiserIds = useMemo(
+		() => unresolvedIds( item?.newspack_nl_advertiser, initialAdvertiserSelections ),
+		[ item, initialAdvertiserSelections ]
+	);
+	const unresolvedPlacementIds = useMemo(
+		() => unresolvedIds( item?.ad_placement, initialPlacementSelections ),
+		[ item, initialPlacementSelections ]
+	);
+	const unresolvedCategoryIds = useMemo( () => unresolvedIds( item?.categories, initialCategorySelections ), [ item, initialCategorySelections ] );
 	// Slice to `Y-m-d` so legacy datetime meta still fills the date input.
 	const initialStartDate = ( item?.meta?.start_date || '' ).slice( 0, 10 );
 	const initialExpiryDate = ( item?.meta?.expiry_date || '' ).slice( 0, 10 );
@@ -60,14 +83,41 @@ export default function AdsQuickEditPanel( { item, advertisers, placements, onCl
 	const [ price, setPrice ] = useState( initialPrice );
 	const [ isBusy, setIsBusy ] = useState( false );
 
+	// One ref per taxonomy: the three options lists resolve independently,
+	// so a shared flag would let an edit to one freeze another's baseline
+	// at its pre-resolution (empty) value.
+	const hasEditedAdvertiserRef = useRef( false );
+	const hasEditedPlacementRef = useRef( false );
+	const hasEditedCategoriesRef = useRef( false );
+
+	useEffect( () => {
+		if ( ! hasEditedAdvertiserRef.current ) {
+			setAdvertiserSelections( initialAdvertiserSelections );
+		}
+	}, [ initialAdvertiserSelections ] );
+	useEffect( () => {
+		if ( ! hasEditedPlacementRef.current ) {
+			setPlacementSelections( initialPlacementSelections );
+		}
+	}, [ initialPlacementSelections ] );
+	useEffect( () => {
+		if ( ! hasEditedCategoriesRef.current ) {
+			setCategorySelections( initialCategorySelections );
+		}
+	}, [ initialCategorySelections ] );
+
+	const advertiserDirty = ! sortedIdsEqual( advertiserSelections, initialAdvertiserSelections );
+	const placementDirty = ! sortedIdsEqual( placementSelections, initialPlacementSelections );
+	const categoriesDirty = ! sortedIdsEqual( categorySelections, initialCategorySelections );
+
 	const isDirty =
 		status !== initialStatus ||
 		startDate !== initialStartDate ||
 		expiryDate !== initialExpiryDate ||
 		price !== initialPrice ||
-		! sortedIdsEqual( advertiserSelections, initialAdvertiserSelections ) ||
-		! sortedIdsEqual( placementSelections, initialPlacementSelections ) ||
-		! sortedIdsEqual( categorySelections, initialCategorySelections );
+		advertiserDirty ||
+		placementDirty ||
+		categoriesDirty;
 
 	const advertiserSuggestions = useMemo( () => advertisers.map( t => String( t.name ) ), [ advertisers ] );
 	const placementSuggestions = useMemo( () => placements.map( t => String( t.name ) ), [ placements ] );
@@ -96,12 +146,19 @@ export default function AdsQuickEditPanel( { item, advertisers, placements, onCl
 			expiry_date: expiryDate,
 			price: price === '' ? 0 : Number( price ),
 		};
-		const data = {
-			newspack_nl_advertiser: advertiserSelections.map( s => s.id ),
-			ad_placement: placementSelections.map( s => s.id ),
-			categories: categorySelections.map( s => s.id ),
-			meta,
-		};
+		// Only send a taxonomy the user actually touched: an untouched
+		// field must never overwrite what is stored, whatever the options
+		// lists managed to resolve.
+		const data = { meta };
+		if ( advertiserDirty ) {
+			data.newspack_nl_advertiser = [ ...advertiserSelections.map( s => s.id ), ...unresolvedAdvertiserIds ];
+		}
+		if ( placementDirty ) {
+			data.ad_placement = [ ...placementSelections.map( s => s.id ), ...unresolvedPlacementIds ];
+		}
+		if ( categoriesDirty ) {
+			data.categories = [ ...categorySelections.map( s => s.id ), ...unresolvedCategoryIds ];
+		}
 		if ( status !== initialStatus ) {
 			data.status = status === 'active' ? 'publish' : 'draft';
 		}
@@ -143,7 +200,10 @@ export default function AdsQuickEditPanel( { item, advertisers, placements, onCl
 				label={ __( 'Advertiser', 'newspack-newsletters' ) }
 				value={ advertiserTokens }
 				suggestions={ advertiserSuggestions }
-				onChange={ next => setAdvertiserSelections( resolveTokens( next, advertiserSelections, advertisers ) ) }
+				onChange={ next => {
+					hasEditedAdvertiserRef.current = true;
+					setAdvertiserSelections( resolveTokens( next, advertiserSelections, advertisers ) );
+				} }
 				__experimentalValidateInput={ validateAdvertiser }
 				__experimentalShowHowTo={ false }
 				__next40pxDefaultSize
@@ -153,7 +213,10 @@ export default function AdsQuickEditPanel( { item, advertisers, placements, onCl
 				label={ __( 'Ad placement', 'newspack-newsletters' ) }
 				value={ placementTokens }
 				suggestions={ placementSuggestions }
-				onChange={ next => setPlacementSelections( resolveTokens( next, placementSelections, placements ) ) }
+				onChange={ next => {
+					hasEditedPlacementRef.current = true;
+					setPlacementSelections( resolveTokens( next, placementSelections, placements ) );
+				} }
 				__experimentalValidateInput={ validatePlacement }
 				__experimentalShowHowTo={ false }
 				__next40pxDefaultSize
@@ -163,7 +226,10 @@ export default function AdsQuickEditPanel( { item, advertisers, placements, onCl
 				label={ __( 'Categories', 'newspack-newsletters' ) }
 				value={ categoryTokens }
 				suggestions={ categorySuggestions }
-				onChange={ next => setCategorySelections( resolveTokens( next, categorySelections, categories ) ) }
+				onChange={ next => {
+					hasEditedCategoriesRef.current = true;
+					setCategorySelections( resolveTokens( next, categorySelections, categories ) );
+				} }
 				__experimentalValidateInput={ validateCategory }
 				__experimentalShowHowTo={ false }
 				__next40pxDefaultSize
