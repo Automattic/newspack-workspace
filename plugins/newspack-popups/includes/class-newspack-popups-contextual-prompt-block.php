@@ -24,7 +24,93 @@ final class Newspack_Popups_Contextual_Prompt_Block {
 		add_action( 'init', [ __CLASS__, 'register_block' ] );
 		add_filter( 'wp_theme_json_data_default', [ __CLASS__, 'default_design' ] );
 		add_filter( 'render_block_' . self::BLOCK_NAME, [ __CLASS__, 'maybe_apply_override' ] );
+		add_filter( 'render_block_' . self::BLOCK_NAME, [ __CLASS__, 'add_analytics_attributes' ], 10, 2 );
 		add_filter( 'render_block_data', [ __CLASS__, 'inherit_accent_color' ], 10, 3 );
+	}
+
+	/**
+	 * Stamp analytics hooks on the rendered wrapper so the view script can report
+	 * seen/clicked events. Done at render (not in saved content) so the values stay
+	 * live and the markup carries no stale ids.
+	 *
+	 * @param string $block_content Rendered block markup.
+	 * @param array  $block         The parsed block.
+	 * @return string
+	 */
+	public static function add_analytics_attributes( $block_content, $block = [] ) {
+		if ( '' === trim( (string) $block_content ) ) {
+			return $block_content;
+		}
+
+		$post_id  = (int) get_the_ID();
+		$cta_type = self::use_donate_block() ? 'donate_block' : 'button';
+
+		// Add the data attributes to the opening tag of the wrapper only.
+		return preg_replace(
+			'/^(\s*<[a-z0-9]+)\b/i',
+			'$1'
+				. ' data-newspack-cp-post-id="' . esc_attr( (string) $post_id ) . '"'
+				. ' data-newspack-cp-cta="' . esc_attr( $cta_type ) . '"'
+				. ' data-newspack-cp-placement="' . esc_attr( self::get_placement( $post_id ) ) . '"',
+			$block_content,
+			1
+		);
+	}
+
+	/**
+	 * Where the prompt sits in the story, as a coarse bucket: top / mid / end.
+	 *
+	 * The block is body content and there is exactly one per post (multiple:false),
+	 * so placement is its position among the article's top-level blocks — measured,
+	 * not the framing the editor first chose, since the block can be moved after
+	 * insertion. This is the "which placement converts best" grant metric.
+	 *
+	 * @param int $post_id The article.
+	 * @return string 'top' | 'mid' | 'end' | 'unknown'.
+	 */
+	public static function get_placement( $post_id ) {
+		$post = $post_id ? get_post( $post_id ) : null;
+		if ( ! $post ) {
+			return 'unknown';
+		}
+
+		$blocks = array_values(
+			array_filter(
+				parse_blocks( $post->post_content ),
+				function ( $block ) {
+					return ! empty( $block['blockName'] );
+				}
+			)
+		);
+		$total = count( $blocks );
+		if ( $total < 1 ) {
+			return 'unknown';
+		}
+
+		$index = null;
+		foreach ( $blocks as $i => $block ) {
+			if ( self::BLOCK_NAME === $block['blockName'] ) {
+				$index = $i;
+				break;
+			}
+		}
+		if ( null === $index ) {
+			// Nested inside a group/columns — position can't be bucketed cleanly.
+			return 'unknown';
+		}
+
+		if ( 1 === $total ) {
+			return 'top';
+		}
+
+		$ratio = $index / ( $total - 1 );
+		if ( $ratio <= 1 / 3 ) {
+			return 'top';
+		}
+		if ( $ratio >= 2 / 3 ) {
+			return 'end';
+		}
+		return 'mid';
 	}
 
 	/**
@@ -216,7 +302,18 @@ final class Newspack_Popups_Contextual_Prompt_Block {
 			return $block_content;
 		}
 
-		// Swap the copy paragraph's text; structure and CTA stay untouched.
-		return preg_replace( '/(<p\b[^>]*>).*?(<\/p>)/s', '$1' . esc_html( $override ) . '$2', $block_content, 1 );
+		// Swap the copy paragraph's text; structure and CTA stay untouched. The
+		// callback form is required: the override is admin-entered text that could
+		// contain `$`, which preg_replace would misread as a backreference (so an
+		// override like "Give $5" would be corrupted), and esc_html does not escape it.
+		$escaped = esc_html( $override );
+		return preg_replace_callback(
+			'/(<p\b[^>]*>).*?(<\/p>)/s',
+			function ( $matches ) use ( $escaped ) {
+				return $matches[1] . $escaped . $matches[2];
+			},
+			$block_content,
+			1
+		);
 	}
 }

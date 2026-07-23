@@ -150,6 +150,15 @@ final class GA4_Custom_Dimensions {
 			'is_donor'                    => 'Is Donor',
 			'is_newsletter_subscriber'    => 'Is Newsletter Subscriber',
 			'newspack_popup_id'           => 'Newspack Popup ID',
+			'contextual_prompt_post_id'   => 'Contextual Prompt Post ID',
+			'contextual_prompt_placement' => 'Contextual Prompt Placement',
+			'button_text'                 => 'Button Text',
+			// prompt_text and link_url are sent on np_contextual_prompt_interaction
+			// as event params but deliberately NOT registered as custom dimensions:
+			// prompt_text is high-cardinality (GA4 would bucket it into "(other)")
+			// and link_url is near-constant, so neither earns a scarce dimension slot.
+			// Both remain available in the raw GA4 / BigQuery export for point-in-time
+			// analysis. Register here only if UI-reporting need proves out.
 			'prompt_placement'            => 'Prompt Placement',
 			'prompt_frequency'            => 'Prompt Frequency',
 			'prompt_title'                => 'Prompt Title',
