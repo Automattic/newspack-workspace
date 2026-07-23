@@ -31,6 +31,17 @@ The suite provisions the site from scratch each phase rather than restoring a DB
 dump. This keeps it drift-free: the site is always rebuilt against the currently
 installed plugin code, so a plugin/core update can't leave a stale fixture behind.
 
+> **Specs run against the *installed* plugin version, and the nightly's site is
+> pinned to the stable release channel. Write specs against the release-channel
+> UI, and only that.** Specs land on `main` (which tracks `alpha`), so it is
+> tempting to drive the newest UI – but a spec that drives a feature not yet
+> shipped to stable fails every night until it ships. Don't paper over the gap
+> with feature-detection, channel branching, or `test.skip()`: a spec must not
+> fork on release vs `alpha`/`main`. If a feature is alpha-only, hold its coverage
+> until it reaches the release channel; when that UI later lands on release,
+> update the spec to match. The suite's one job is to prove the release channel
+> works, so a spec that no longer matches release is a spec to fix, not to branch.
+
 - **`site-setup.sh`** (this repo) is the from-scratch Newspack bootstrap (DB reset +
   fresh install + posts/users/WooCommerce+donations/memberships/subscriptions/
   campaigns/menus). It's a generic dev provisioner, parameterised by `--url`,

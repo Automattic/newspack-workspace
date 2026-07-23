@@ -32,7 +32,8 @@
 		"format:php": "./vendor/bin/phpcbf .",
 		"lint:php:staged": "./vendor/bin/phpcs",
 		"release": "npm run build && npm run semantic-release",
-		"release:archive": "rm -rf release && mkdir -p release && rsync -r . ./release/newspack-network --exclude-from='./.distignore' && cd release && zip -r newspack-network.zip newspack-network"
+		"release:archive": "rm -rf release && mkdir -p release && rsync -r . ./release/newspack-network --exclude-from='./.distignore' && cd release && zip -r newspack-network.zip newspack-network",
+		"typescript:check": "newspack-scripts typescript-check"
 	},
 	"browserslist": [
 		"extends @wordpress/browserslist-config"

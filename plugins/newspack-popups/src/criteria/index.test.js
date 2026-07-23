@@ -80,6 +80,18 @@ describe( 'criteria matching', () => {
 		expect( criteria.matches( { value: { min: 10 } } ) ).toEqual( false );
 		expect( criteria.matches( { value: {} } ) ).toEqual( true );
 	} );
+	it( 'enforces a "range" bound of 0 instead of treating it as unbounded', () => {
+		// A fresh criteria per value — `criteria.value` is snapshotted on first match.
+		// min: 0 must exclude a negative value (0 was previously skipped as falsy).
+		registerCriteria( 'range_min_zero', { matchingFunction: 'range', matchingAttribute: () => -5 } );
+		expect( getCriteria( 'range_min_zero' ).matches( { value: { min: 0 } } ) ).toEqual( false );
+		// max: 0 must exclude a positive value.
+		registerCriteria( 'range_max_zero', { matchingFunction: 'range', matchingAttribute: () => 5 } );
+		expect( getCriteria( 'range_max_zero' ).matches( { value: { max: 0 } } ) ).toEqual( false );
+		// A value of exactly 0 sits within [ 0, 0 ].
+		registerCriteria( 'range_exact_zero', { matchingFunction: 'range', matchingAttribute: () => 0 } );
+		expect( getCriteria( 'range_exact_zero' ).matches( { value: { min: 0, max: 0 } } ) ).toEqual( true );
+	} );
 	it( 'should match "list__in" matching function', () => {
 		setMatchingAttribute( criteriaId, () => 'bar' );
 		setMatchingFunction( criteriaId, 'list__in' );
@@ -115,6 +127,13 @@ describe( 'criteria matching', () => {
 		expect( criteria.matches( { value: [ 1 ] } ) ).toEqual( false );
 		expect( criteria.matches( { value: '1' } ) ).toEqual( false );
 		expect( criteria.matches( { value: 1 } ) ).toEqual( false );
+	} );
+	it( 'parses ActiveCampaign pipe-delimited reader values for list__in', () => {
+		setMatchingAttribute( criteriaId, () => '||foo||bar||' );
+		setMatchingFunction( criteriaId, 'list__in' );
+		const criteria = getCriteria( criteriaId );
+		expect( criteria.matches( { value: [ 'bar' ] } ) ).toEqual( true );
+		expect( criteria.matches( { value: [ 'baz' ] } ) ).toEqual( false );
 	} );
 	it( 'should match "list__not_in" matching function', () => {
 		setMatchingAttribute( criteriaId, () => 'bar' );

@@ -89,7 +89,7 @@ export default ( { onSetupStatus } ) => {
 			<div className={ classes }>
 				<div className="newspack-newsletters-modal__settings-wrapper">
 					{ inFlight && <Spinner /> }
-					<h1>{ __( 'Configure plugin', 'newspack-newsletters' ) }</h1>
+					<h2>{ __( 'Configure plugin', 'newspack-newsletters' ) }</h2>
 					<h4>{ __( 'Select your email service provider', 'newspack-newsletters' ) }</h4>
 					<SelectControl
 						label={ __( 'Service Provider', 'newspack-newsletters' ) }

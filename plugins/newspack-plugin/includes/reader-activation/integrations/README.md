@@ -119,7 +119,9 @@ class My_Integration extends Integration {
 
 | Method | Purpose |
 | --- | --- |
-| `is_set_up()` | Whether external prerequisites (provider chosen, key entered, etc.) are configured. Defaults to `true`. Used by the Integrations UI to mark cards as ready. |
+| `is_set_up()` | Whether the integration is fully configured (external prerequisites **and** the integration's own settings). Defaults to `true`. Used by the Integrations UI to mark cards as ready. |
+| `is_connected()` | Whether the external service prerequisite alone (provider chosen, key entered) is configured at its source. Defaults to `true`. The Integrations UI routes the card's primary action on this: not connected → `get_setup_url()`, connected but not set up → the integration's own settings view ("Finish setup"). |
+| `get_unsupported_reason()` | Non-null string marks the integration as unsupported with the site's current configuration (e.g. the ESP integration while the newsletters provider is "manual"). The Integrations UI shows the string verbatim as the card's error badge and routes the primary action to `get_setup_url()`; the REST layer refuses to enable. Defaults to `null`. |
 | `get_setup_url()` | Admin URL where the integration's prerequisites are configured. Defaults to empty string. |
 | `test_connection()` | Lightweight live API call to verify credentials and reachability. Called as part of `health_check()`. Defaults to `true`. |
 | `pull_contact_data( $user_id )` | Fetch contact data from the external system. Return `array` of `field_key => value` or `WP_Error`. Defaults to `[]`. |
@@ -146,6 +148,7 @@ Settings fields are declared statically in `register_settings_fields()` and stor
     'key'         => 'master_list',
     'type'        => 'select',
     'default'     => '',
+    'required'    => true, // Optional. See below.
     'label'       => __( 'Master List', 'my-plugin' ),
     'description' => __( '...', 'my-plugin' ),
     'options'     => [ ... ], // Required for 'select'.
@@ -153,6 +156,8 @@ Settings fields are declared statically in `register_settings_fields()` and stor
 ```
 
 Supported `type` values: `text`, `password`, `textarea`, `number`, `checkbox`, `select`, `metadata`, `oauth`, `hidden`. The base class sanitizes values per type before persisting.
+
+`required => true` marks a field that must have a value before the integration can be enabled from the Integrations UI. When the card's Enable action runs while a required field is empty, the UI opens a modal that collects the missing required fields, saves them, and then enables the integration in one step. Do not combine `required` with the managed field types (`oauth`, `hidden`) — the Integrations UI cannot collect those, and the settings endpoint refuses client writes for them.
 
 `oauth` and `hidden` are **managed field types**: `Integrations::update_integration_settings()` calls `is_managed_settings_field()` and skips them, so admin clients can't overwrite them by POSTing to the settings REST endpoint. They're writable only from trusted PHP via `update_settings_field_value()`. See `Integration::MANAGED_FIELD_TYPES`.
 
@@ -237,6 +242,15 @@ When a contact needs to be synced, the framework calls `push_contact_data()` on 
 3. Preserves keys already in prefixed form if the underlying field is enabled.
 
 `prepare_contact()` is a no-op when the site is still on the legacy metadata schema (where the metadata classes pre-filter), which keeps newly-built integrations compatible with un-migrated sites.
+
+### Optional `$options` parameter
+
+`Contact_Sync` may pass a fourth `$options` array to `push_contact_data()` carrying operator-driven sync scoping (currently used by the `wp newspack esp sync` CLI):
+
+- `skip_lists` (bool) — upsert the contact without adding it to any list, so an unsubscribed contact isn't resubscribed.
+- `fields` (string[]|null) — the canonical field labels the sync is scoped to (already applied to the metadata before your method is called).
+
+The abstract signature intentionally stays three-parameter (`push_contact_data( $contact, $context, $existing_contact )`). `Contact_Sync::push_to_integrations()` calls every integration with the fourth `$options` argument; PHP discards surplus positional arguments to a method that declares fewer parameters (they remain available via `func_get_args()`) — there is no warning or error, so a three-parameter implementation keeps working unchanged. Adding the fourth parameter to the *abstract* instead would be a fatal "declaration must be compatible" error for every existing three-parameter override, which is why the parameter lives only on the concrete overrides that use it. Add `$options = []` to your override only if the integration needs to react to these flags (the built-in `esp` integration reads `skip_lists`). Integrations that ignore `$options` behave exactly as before.
 
 ### When pushes are triggered
 
