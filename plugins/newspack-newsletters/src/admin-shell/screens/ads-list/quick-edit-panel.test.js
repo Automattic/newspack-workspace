@@ -21,7 +21,7 @@ jest.mock( '../../components/quick-edit-panel', () => ( {
 	),
 } ) );
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import apiFetch from '@wordpress/api-fetch';
 import AdsQuickEditPanel from './quick-edit-panel';
 
@@ -34,6 +34,7 @@ const renderPanel = ( item, extra = {} ) =>
 			item={ item }
 			advertisers={ ADVERTISERS }
 			placements={ PLACEMENTS }
+			termsLoaded
 			onClose={ jest.fn() }
 			onSaved={ jest.fn() }
 			{ ...extra }
@@ -254,11 +255,45 @@ describe( 'AdsQuickEditPanel taxonomy handling', () => {
 		expect( screen.getByLabelText( 'Advertiser' ) ).toBeDisabled();
 	} );
 
-	it( 'does not warn about Advertiser while its options are still loading', async () => {
-		renderPanel( { ...makeItem( 'publish' ), newspack_nl_advertiser: [ 99 ] }, { termsLoaded: false } );
+	// Read-only rather than editable while loading: an edit made against a
+	// baseline that is still growing would drop the terms resolved late.
+	// No warning yet either — nothing has failed, it just hasn't arrived.
+	it( 'holds Advertiser read-only, and silent, while its options are still loading', async () => {
+		renderPanel( { ...makeItem( 'publish' ), newspack_nl_advertiser: [ 10 ] }, { termsLoaded: false } );
 		await screen.findByLabelText( 'Advertiser' );
+		expect( screen.getByLabelText( 'Advertiser' ) ).toBeDisabled();
 		expect( visibleNotices() ).not.toContain( ADVERTISERS_UNAVAILABLE );
-		expect( screen.getByLabelText( 'Advertiser' ) ).not.toBeDisabled();
+	} );
+
+	it( 'keeps Categories read-only until its fetch settles, then opens it with every term', async () => {
+		const allCategories = Array.from( { length: 11 }, ( _, i ) => ( { id: i + 1, name: `Cat ${ i + 1 }` } ) );
+		let release;
+		apiFetch.mockImplementation( options => {
+			if ( typeof options?.path === 'string' && options.path.startsWith( '/wp/v2/categories' ) ) {
+				return new Promise( resolve => {
+					release = () => resolve( { json: () => Promise.resolve( allCategories ), headers: { get: () => '1' } } );
+				} );
+			}
+			return Promise.resolve( {} );
+		} );
+
+		renderPanel( {
+			...makeItem( 'publish' ),
+			categories: allCategories.map( c => c.id ),
+			// The embed caps at 10, so the 11th is missing until the fetch lands.
+			_embedded: { 'wp:term': [ allCategories.slice( 0, 10 ).map( c => ( { ...c, taxonomy: 'category' } ) ) ] },
+		} );
+
+		expect( await screen.findByLabelText( 'Categories' ) ).toBeDisabled();
+		expect( screen.queryByText( 'Cat 11' ) ).toBeNull();
+
+		await act( async () => {
+			release();
+		} );
+
+		await waitFor( () => expect( screen.getByLabelText( 'Categories' ) ).not.toBeDisabled() );
+		expect( screen.getByText( 'Cat 11' ) ).toBeInTheDocument();
+		expect( visibleNotices() ).not.toContain( CATEGORIES_UNAVAILABLE );
 	} );
 
 	it( 'still refuses to send the unshowable categories on save', async () => {
@@ -270,19 +305,18 @@ describe( 'AdsQuickEditPanel taxonomy handling', () => {
 		expect( postCall().data ).not.toHaveProperty( 'categories' );
 	} );
 
-	it( 'keeps term IDs that cannot be resolved to an option', async () => {
+	// A field with unresolvable stored terms is read-only, so it can never
+	// go dirty and is never sent. The ride-along in `handleSave` stays as a
+	// backstop should that guard ever be relaxed.
+	it( 'never sends a taxonomy whose stored terms could not all be resolved', async () => {
 		const onSaved = jest.fn();
-		// 99 is not in ADVERTISERS, so it can be neither shown nor removed.
 		renderPanel( { ...makeItem( 'publish' ), newspack_nl_advertiser: [ 99 ] }, { onSaved } );
 
-		const input = await screen.findByLabelText( 'Advertiser' );
-		fireEvent.change( input, { target: { value: 'Acme' } } );
-		fireEvent.keyDown( input, { key: 'Enter', keyCode: 13 } );
-		await screen.findByText( 'Acme' );
-
+		await waitFor( () => expect( screen.getByLabelText( 'Advertiser' ) ).toBeDisabled() );
+		fireEvent.click( screen.getByRole( 'radio', { name: 'Inactive' } ) );
 		fireEvent.click( screen.getByTestId( 'panel-save' ) );
 		await waitFor( () => expect( onSaved ).toHaveBeenCalled() );
 
-		expect( postCall().data.newspack_nl_advertiser ).toEqual( expect.arrayContaining( [ 10, 99 ] ) );
+		expect( postCall().data ).not.toHaveProperty( 'newspack_nl_advertiser' );
 	} );
 } );

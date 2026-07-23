@@ -144,6 +144,15 @@ export default function AdsQuickEditPanel( { item, advertisers, placements, term
 	const placementUnavailable = termsLoaded && unresolvedPlacementIds.length > 0;
 	const categoriesUnavailable = categoriesLoaded && unresolvedCategoryIds.length > 0;
 
+	// A field is editable only once its options have settled and account
+	// for every stored term. Editing earlier would race the baseline: the
+	// embed caps at 10 terms, so an edit made before the full list arrives
+	// would be diffed against a baseline that grows underneath it, and the
+	// terms resolved late would drop out of the save.
+	const advertiserReadOnly = ! termsLoaded || advertiserUnavailable;
+	const placementReadOnly = ! termsLoaded || placementUnavailable;
+	const categoriesReadOnly = ! categoriesLoaded || categoriesUnavailable;
+
 	const advertiserDirty = ! sortedIdsEqual( advertiserSelections, initialAdvertiserSelections );
 	const placementDirty = ! sortedIdsEqual( placementSelections, initialPlacementSelections );
 	const categoriesDirty = ! sortedIdsEqual( categorySelections, initialCategorySelections );
@@ -238,7 +247,7 @@ export default function AdsQuickEditPanel( { item, advertisers, placements, term
 				label={ __( 'Advertiser', 'newspack-newsletters' ) }
 				value={ advertiserTokens }
 				suggestions={ advertiserSuggestions }
-				disabled={ advertiserUnavailable }
+				disabled={ advertiserReadOnly }
 				onChange={ next => {
 					hasEditedAdvertiserRef.current = true;
 					setAdvertiserSelections( resolveTokens( next, advertiserSelections, advertisers ) );
@@ -257,7 +266,7 @@ export default function AdsQuickEditPanel( { item, advertisers, placements, term
 				label={ __( 'Ad placement', 'newspack-newsletters' ) }
 				value={ placementTokens }
 				suggestions={ placementSuggestions }
-				disabled={ placementUnavailable }
+				disabled={ placementReadOnly }
 				onChange={ next => {
 					hasEditedPlacementRef.current = true;
 					setPlacementSelections( resolveTokens( next, placementSelections, placements ) );
@@ -276,7 +285,7 @@ export default function AdsQuickEditPanel( { item, advertisers, placements, term
 				label={ __( 'Categories', 'newspack-newsletters' ) }
 				value={ categoryTokens }
 				suggestions={ categorySuggestions }
-				disabled={ categoriesUnavailable }
+				disabled={ categoriesReadOnly }
 				onChange={ next => {
 					hasEditedCategoriesRef.current = true;
 					setCategorySelections( resolveTokens( next, categorySelections, categories ) );
