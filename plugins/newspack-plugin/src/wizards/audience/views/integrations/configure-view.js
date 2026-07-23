@@ -426,10 +426,10 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 
 	// The divider separates the toggle from the section content below it, so it
 	// only renders when there is content to divide: the caller passes false for a
-	// paused direction or an empty section. `dividerMargin` (applied above and
-	// below) compensates for the sections' different grid rowGaps — Inbound's 8
-	// vs Outbound's 16 — so both sections net the same 16px around the rule.
-	const renderSectionToggle = ( toggleSetting, showDivider, dividerMargin = 0 ) =>
+	// paused direction or an empty section. Its spacing comes entirely from the
+	// section grid's rowGap — `.newspack-grid > *` zeroes child margins with
+	// !important, so margins set on the divider itself can never take effect.
+	const renderSectionToggle = ( toggleSetting, showDivider ) =>
 		toggleSetting && (
 			<>
 				<ToggleControl
@@ -439,7 +439,7 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 					onChange={ checked => handleFieldChange( toggleSetting.key, checked ) }
 					__nextHasNoMarginBottom
 				/>
-				{ showDivider && <Divider variant="tertiary" marginTop={ dividerMargin } marginBottom={ dividerMargin } /> }
+				{ showDivider && <Divider variant="tertiary" marginTop={ 0 } marginBottom={ 0 } /> }
 			</>
 		);
 
@@ -470,53 +470,56 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 						<Divider alignment="full-width" variant="tertiary" marginTop={ 64 } marginBottom={ 64 } />
 						<Grid columns={ 2 } gutter={ 32 } noMargin>
 							<SectionHeader heading={ 2 } title={ __( 'Inbound', 'newspack-plugin' ) } noMargin />
-							<Grid columns={ 1 } rowGap={ 8 } noMargin>
-								{ renderSectionToggle( inboundToggleField, inboundEnabled && ( inboundField.options || [] ).length > 0, 8 ) }
-								{ inboundEnabled &&
-									( inboundField.options || [] ).map( option => {
-										// Options are always { value, label, matching_function, has_options } objects
-										// for this field (see class-integration.php:get_settings_config()).
-										const optionValue = option.value;
-										const optionLabel = option.label || option.value;
-										// The stored value for this field is a { key => operator } map, not an array:
-										// a key present means enabled, and its value is the chosen matching operator.
-										const currentMap = getFieldValue( inboundField ) || {};
-										const checked = Object.prototype.hasOwnProperty.call( currentMap, optionValue );
-										const operatorOptions = operatorOptionsForField( option );
-										// If the stored operator isn't among the options offered for this field's
-										// current value_type (e.g. a field enabled before it declared a type), fall
-										// back to the first option so the control never shows a value with no option.
-										const selectedOperator = operatorOptions.some( o => o.value === currentMap[ optionValue ] )
-											? currentMap[ optionValue ]
-											: operatorOptions[ 0 ]?.value;
-										return (
-											<div className="newspack-configure-view__inbound-field" key={ optionValue }>
-												<CheckboxControl
-													className="newspack-checkbox-control"
-													label={ optionLabel }
-													checked={ checked }
-													onChange={ isChecked =>
-														handleFieldChange( inboundField.key, toggleField( currentMap, option, isChecked ) )
-													}
-												/>
-												{ checked && (
-													<SelectControl
-														className="newspack-configure-view__inbound-operator"
-														label={ __( 'Segment as', 'newspack-plugin' ) }
-														hideLabelFromVision
-														value={ selectedOperator }
-														options={ operatorOptions }
-														onChange={ operator =>
-															handleFieldChange( inboundField.key, {
-																...currentMap,
-																[ optionValue ]: operator,
-															} )
+							<Grid columns={ 1 } rowGap={ 16 } noMargin>
+								{ renderSectionToggle( inboundToggleField, inboundEnabled && ( inboundField.options || [] ).length > 0 ) }
+								{ inboundEnabled && (
+									<Grid columns={ 1 } rowGap={ 8 } noMargin>
+										{ ( inboundField.options || [] ).map( option => {
+											// Options are always { value, label, matching_function, has_options } objects
+											// for this field (see class-integration.php:get_settings_config()).
+											const optionValue = option.value;
+											const optionLabel = option.label || option.value;
+											// The stored value for this field is a { key => operator } map, not an array:
+											// a key present means enabled, and its value is the chosen matching operator.
+											const currentMap = getFieldValue( inboundField ) || {};
+											const checked = Object.prototype.hasOwnProperty.call( currentMap, optionValue );
+											const operatorOptions = operatorOptionsForField( option );
+											// If the stored operator isn't among the options offered for this field's
+											// current value_type (e.g. a field enabled before it declared a type), fall
+											// back to the first option so the control never shows a value with no option.
+											const selectedOperator = operatorOptions.some( o => o.value === currentMap[ optionValue ] )
+												? currentMap[ optionValue ]
+												: operatorOptions[ 0 ]?.value;
+											return (
+												<div className="newspack-configure-view__inbound-field" key={ optionValue }>
+													<CheckboxControl
+														className="newspack-checkbox-control"
+														label={ optionLabel }
+														checked={ checked }
+														onChange={ isChecked =>
+															handleFieldChange( inboundField.key, toggleField( currentMap, option, isChecked ) )
 														}
 													/>
-												) }
-											</div>
-										);
-									} ) }
+													{ checked && (
+														<SelectControl
+															className="newspack-configure-view__inbound-operator"
+															label={ __( 'Segment as', 'newspack-plugin' ) }
+															hideLabelFromVision
+															value={ selectedOperator }
+															options={ operatorOptions }
+															onChange={ operator =>
+																handleFieldChange( inboundField.key, {
+																	...currentMap,
+																	[ optionValue ]: operator,
+																} )
+															}
+														/>
+													) }
+												</div>
+											);
+										} ) }
+									</Grid>
+								) }
 							</Grid>
 						</Grid>
 					</>
