@@ -72,7 +72,7 @@ class Newspack_Popups_Settings {
 			return false;
 		}
 
-		if ( ! Newspack_Popups_Post_Scope::use_donate_block() ) {
+		if ( ! Newspack_Popups_Contextual_Prompt_Block::use_donate_block() ) {
 			return '' !== trim( (string) get_option( 'newspack_contextual_prompts_override_url', '' ) );
 		}
 

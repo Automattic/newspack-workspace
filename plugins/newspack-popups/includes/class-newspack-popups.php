@@ -104,8 +104,6 @@ final class Newspack_Popups {
 		include_once __DIR__ . '/class-newspack-segments-migration.php';
 		include_once __DIR__ . '/class-newspack-segments-model.php';
 		include_once __DIR__ . '/class-newspack-popups-presets.php';
-		include_once __DIR__ . '/class-newspack-popups-post-scope.php';
-		Newspack_Popups_Post_Scope::init();
 		include_once __DIR__ . '/class-newspack-popups-contextual-prompt-block.php';
 		Newspack_Popups_Contextual_Prompt_Block::init();
 		include_once __DIR__ . '/class-newspack-popups-inserter.php';
@@ -770,7 +768,7 @@ final class Newspack_Popups {
 				'post_type_label'   => self::get_current_post_type_label(),
 				// Whether the Contextual Prompt CTA is the native donate block
 				// or a plain button.
-				'donations_native'  => Newspack_Popups_Post_Scope::use_donate_block(),
+				'donations_native'  => Newspack_Popups_Contextual_Prompt_Block::use_donate_block(),
 				// Default target for the plain-button CTA: the donor landing
 				// page, when one is configured in Campaigns settings.
 				'donor_landing_url' => self::get_donor_landing_url(),

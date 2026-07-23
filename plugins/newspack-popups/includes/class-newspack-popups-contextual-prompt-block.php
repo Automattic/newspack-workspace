@@ -54,6 +54,25 @@ final class Newspack_Popups_Contextual_Prompt_Block {
 	}
 
 	/**
+	 * Whether the CTA is the native Newspack donate block rather than a plain
+	 * button. Defaults to true when the publisher uses Newspack (WooCommerce)
+	 * donations — then reader conversions classify as donations in analytics /
+	 * Insights. Falls back to a plain button for off-site donation setups.
+	 *
+	 * @return bool
+	 */
+	public static function use_donate_block() {
+		$default = method_exists( '\Newspack\Donations', 'is_platform_wc' ) && \Newspack\Donations::is_platform_wc();
+
+		/**
+		 * Filters whether Contextual Prompts render the native donate block.
+		 *
+		 * @param bool $use_donate_block Whether to use the donate block.
+		 */
+		return (bool) apply_filters( 'newspack_contextual_prompts_use_donate_block', $default );
+	}
+
+	/**
 	 * Make the donate CTA inside a Contextual Prompt use the theme's accent
 	 * color instead of the donate block's default. Always resolved at render so
 	 * it tracks theme changes — any stored buttonColor (stamped by the editor

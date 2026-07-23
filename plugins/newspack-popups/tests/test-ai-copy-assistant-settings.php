@@ -4,7 +4,7 @@
  *
  * The feature is hidden until an administrator opts in (union/AI-policy
  * requirement). Its profile lives behind a dedicated endpoint (not the generic
- * Campaigns settings list), and the create endpoint refuses to run until opted in.
+ * Campaigns settings list), which refuses to run until opted in.
  *
  * @package Newspack_Popups
  */
@@ -119,29 +119,6 @@ class AiCopyAssistantSettingsTest extends WP_UnitTestCase {
 
 		$this->assertSame( '#abcdef', get_option( Newspack_Popups_Settings::DESIGN_BACKGROUND_OPTION ) );
 		$this->assertSame( '', get_option( Newspack_Popups_Settings::DESIGN_ACCENT_OPTION ), 'A non-hex value is rejected.' );
-
-		// The rejected value must not reach the stylesheet.
-		$css = Newspack_Popups_Post_Scope::get_design_css();
-		$this->assertStringNotContainsString( 'display:none', $css );
-		$this->assertStringContainsString( '#abcdef', $css );
-	}
-
-	/**
-	 * The create endpoint refuses to run when the feature is not opted into.
-	 */
-	public function test_create_endpoint_blocked_when_disabled() {
-		$post_id = self::factory()->post->create( [ 'post_type' => 'post' ] );
-		$request = new WP_REST_Request( 'POST', '/newspack-popups/v1/contextual-prompt' );
-		$request->set_param( 'post_id', $post_id );
-		$request->set_param( 'body', 'Fund the reporting.' );
-
-		$blocked = Newspack_Popups_Api::api_create_contextual_prompt( $request );
-		$this->assertWPError( $blocked );
-		$this->assertSame( 'newspack_contextual_prompts_disabled', $blocked->get_error_code() );
-
-		update_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION, true );
-		$created = Newspack_Popups_Api::api_create_contextual_prompt( $request );
-		$this->assertNotWPError( $created );
 	}
 
 	/**
@@ -170,173 +147,10 @@ class AiCopyAssistantSettingsTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A prompt whose copy block was removed still has an escape hatch: the reset and
-	 * show/hide actions must not be blocked by the failing copy update, since the
-	 * failure message points the publisher at exactly those actions.
+	 * The profile-save endpoint is inert before opt-in: the feature must read and
+	 * write nothing until an administrator opts in.
 	 */
-	public function test_reset_and_hide_survive_a_failed_copy_edit() {
-		update_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION, true );
-		add_filter( 'newspack_contextual_prompts_use_donate_block', '__return_false' );
-
-		$post_id   = self::factory()->post->create( [ 'post_type' => 'post' ] );
-		$prompt_id = Newspack_Popups_Post_Scope::create_scoped_prompt(
-			[
-				'post_id'  => $post_id,
-				'body'     => 'Original copy.',
-				'position' => 1,
-			]
-		);
-
-		// Customized, with the copy hook removed — the state that makes an edit fail.
-		wp_update_post(
-			[
-				'ID'           => $prompt_id,
-				'post_content' => "<!-- wp:paragraph -->\n<p>Hand-built card.</p>\n<!-- /wp:paragraph -->",
-			]
-		);
-
-		// Reset rides the same request shape as a copy save, and must still apply.
-		$reset_request = new WP_REST_Request( 'POST', '/newspack-popups/v1/contextual-prompt' );
-		$reset_request->set_param( 'post_id', $post_id );
-		$reset_request->set_param( 'prompt_id', $prompt_id );
-		$reset_request->set_param( 'body', 'Original copy.' );
-		$reset_request->set_param( 'reset_design', true );
-		Newspack_Popups_Api::api_create_contextual_prompt( $reset_request );
-
-		$this->assertFalse(
-			Newspack_Popups_Post_Scope::is_customized( $prompt_id ),
-			'The reset applied even though the copy update could not.'
-		);
-		$this->assertStringNotContainsString( 'Hand-built card.', get_post_field( 'post_content', $prompt_id ) );
-
-		// And hiding works on a prompt that is still in the broken state.
-		wp_update_post(
-			[
-				'ID'           => $prompt_id,
-				'post_content' => "<!-- wp:paragraph -->\n<p>Hand-built again.</p>\n<!-- /wp:paragraph -->",
-			]
-		);
-		$hide_request = new WP_REST_Request( 'POST', '/newspack-popups/v1/contextual-prompt' );
-		$hide_request->set_param( 'post_id', $post_id );
-		$hide_request->set_param( 'prompt_id', $prompt_id );
-		$hide_request->set_param( 'body', 'Original copy.' );
-		$hide_request->set_param( 'enabled', false );
-		Newspack_Popups_Api::api_create_contextual_prompt( $hide_request );
-
-		$this->assertSame( 'draft', get_post_status( $prompt_id ), 'The prompt can still be hidden from the story.' );
-
-		remove_filter( 'newspack_contextual_prompts_use_donate_block', '__return_false' );
-	}
-
-	/**
-	 * When only the copy edit fails, the request reports the prompt's true state
-	 * rather than failing outright — otherwise the panel rolls its toggle back and
-	 * ends up disagreeing with the database about whether the prompt is showing.
-	 */
-	public function test_failed_copy_edit_still_reports_true_visibility() {
-		update_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION, true );
-		add_filter( 'newspack_contextual_prompts_use_donate_block', '__return_false' );
-
-		$post_id   = self::factory()->post->create( [ 'post_type' => 'post' ] );
-		$prompt_id = Newspack_Popups_Post_Scope::create_scoped_prompt(
-			[
-				'post_id'  => $post_id,
-				'body'     => 'Original copy.',
-				'position' => 1,
-			]
-		);
-		wp_update_post(
-			[
-				'ID'           => $prompt_id,
-				'post_content' => "<!-- wp:paragraph -->\n<p>Hand-built.</p>\n<!-- /wp:paragraph -->",
-			]
-		);
-
-		$request = new WP_REST_Request( 'POST', '/newspack-popups/v1/contextual-prompt' );
-		$request->set_param( 'post_id', $post_id );
-		$request->set_param( 'prompt_id', $prompt_id );
-		$request->set_param( 'body', 'Copy that cannot land.' );
-		$request->set_param( 'enabled', false );
-
-		$response = Newspack_Popups_Api::api_create_contextual_prompt( $request );
-		$this->assertNotWPError( $response, 'A committed visibility change is not reported as a failed request.' );
-
-		$data = $response->get_data();
-		$this->assertFalse( $data['enabled'], 'The response reports the visibility actually stored.' );
-		$this->assertSame( 'draft', get_post_status( $prompt_id ), '…and it matches the database.' );
-		$this->assertNotEmpty( $data['copy_error'], 'The copy failure is still surfaced.' );
-		$this->assertSame( 'newspack_popups_copy_block_missing', $data['copy_error']['code'] );
-
-		remove_filter( 'newspack_contextual_prompts_use_donate_block', '__return_false' );
-	}
-
-	/**
-	 * A prompt_id is authorized against the article that prompt actually belongs to,
-	 * not the post_id the caller supplied. Otherwise anyone able to edit a single
-	 * post of their own could pass another story's prompt_id and rewrite its copy or
-	 * repoint its donate URL.
-	 */
-	public function test_prompt_id_is_authorized_against_its_own_parent() {
-		update_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION, true );
-
-		$owner   = self::factory()->user->create( [ 'role' => 'editor' ] );
-		$outsider = self::factory()->user->create( [ 'role' => 'author' ] );
-
-		// A story owned by someone else, carrying a prompt.
-		wp_set_current_user( $owner );
-		$victim_post = self::factory()->post->create(
-			[
-				'post_type'   => 'post',
-				'post_author' => $owner,
-			]
-		);
-		$victim_prompt = Newspack_Popups_Post_Scope::create_scoped_prompt(
-			[
-				'post_id'  => $victim_post,
-				'body'     => 'Original copy.',
-				'position' => 1,
-			]
-		);
-
-		// The outsider's own post — which they legitimately may edit.
-		wp_set_current_user( $outsider );
-		$own_post = self::factory()->post->create(
-			[
-				'post_type'   => 'post',
-				'post_author' => $outsider,
-			]
-		);
-
-		$request = new WP_REST_Request( 'POST', '/newspack-popups/v1/contextual-prompt' );
-		$request->set_param( 'post_id', $own_post ); // Authorized.
-		$request->set_param( 'prompt_id', $victim_prompt ); // Someone else's prompt.
-		$request->set_param( 'body', 'Hijacked copy.' );
-		$request->set_param( 'button_url', 'https://attacker.example/donate' );
-
-		$allowed = Newspack_Popups_Api::contextual_prompt_permission_callback( $request );
-		$this->assertWPError( $allowed, 'Cross-post prompt edits are refused.' );
-		$this->assertSame( 'newspack_rest_forbidden', $allowed->get_error_code() );
-
-		// The victim's prompt is untouched.
-		$this->assertStringContainsString( 'Original copy.', get_post_field( 'post_content', $victim_prompt ) );
-
-		// The owner is still allowed to edit their own story's prompt.
-		wp_set_current_user( $owner );
-		$ok_request = new WP_REST_Request( 'POST', '/newspack-popups/v1/contextual-prompt' );
-		$ok_request->set_param( 'post_id', $victim_post );
-		$ok_request->set_param( 'prompt_id', $victim_prompt );
-		$ok_request->set_param( 'body', 'Legitimate edit.' );
-		$this->assertTrue( Newspack_Popups_Api::contextual_prompt_permission_callback( $ok_request ) );
-	}
-
-	/**
-	 * Opt-in gating is symmetric: the profile-save and scoped-prompt-read endpoints
-	 * are inert before opt-in too, not just the create endpoint. The feature must
-	 * read and write nothing until an administrator opts in.
-	 */
-	public function test_profile_and_read_endpoints_blocked_when_disabled() {
-		$post_id = self::factory()->post->create( [ 'post_type' => 'post' ] );
-
+	public function test_profile_endpoint_blocked_when_disabled() {
 		$profile_request = new WP_REST_Request( 'POST', '/newspack-popups/v1/contextual-prompt/profile' );
 		$profile_request->set_param( 'fields', [ 'newspack_contextual_prompts_coverage_area' => 'Somewhere' ] );
 		$blocked_profile = Newspack_Popups_Api::api_save_contextual_prompt_profile( $profile_request );
@@ -348,16 +162,9 @@ class AiCopyAssistantSettingsTest extends WP_UnitTestCase {
 			'A blocked profile save must not write.'
 		);
 
-		$get_request = new WP_REST_Request( 'GET', '/newspack-popups/v1/contextual-prompt' );
-		$get_request->set_param( 'post_id', $post_id );
-		$blocked_get = Newspack_Popups_Api::api_get_scoped_prompt( $get_request );
-		$this->assertWPError( $blocked_get );
-		$this->assertSame( 'newspack_contextual_prompts_disabled', $blocked_get->get_error_code() );
-
-		// Both work once opted in.
+		// It works once opted in.
 		update_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION, true );
 		$this->assertNotWPError( Newspack_Popups_Api::api_save_contextual_prompt_profile( $profile_request ) );
 		$this->assertSame( 'Somewhere', get_option( 'newspack_contextual_prompts_coverage_area', '' ) );
-		$this->assertNotWPError( Newspack_Popups_Api::api_get_scoped_prompt( $get_request ) );
 	}
 }
