@@ -94,7 +94,7 @@ final class Newspack_Newsletters {
 		add_action( 'admin_enqueue_scripts', [ __CLASS__, 'branding_scripts' ] );
 		add_filter( 'newspack_theme_featured_image_post_types', [ __CLASS__, 'support_featured_image_options' ] );
 		add_filter( 'gform_force_hooks_js_output', [ __CLASS__, 'suppress_gravityforms_js_on_newsletters' ] );
-		add_filter( 'render_block', [ __CLASS__, 'remove_email_only_block' ], 10, 2 );
+		add_filter( 'render_block', [ __CLASS__, 'remove_visibility_hidden_block' ], 10, 2 );
 		add_action( 'pre_get_posts', [ __CLASS__, 'display_newsletters_in_archives' ] );
 		add_action( 'the_post', [ __CLASS__, 'fix_public_status' ] );
 	}
@@ -732,6 +732,18 @@ final class Newspack_Newsletters {
 				'render_callback' => [ __CLASS__, 'render_share_block' ],
 			]
 		);
+		// Register the ad block so the WC email renderer can locate its
+		// render_email_callback. Block_Renderer_Registry sets that callback via
+		// the `block_type_metadata_settings` filter (priority 11), which fires
+		// here during register_block_type_from_metadata() — after the registry's
+		// init() has already hooked it at plugin-load time (before `init`). Guard
+		// against a context that re-runs registration (multibranded/network) so we
+		// don't trip a `_doing_it_wrong` notice for a double registration.
+		if ( ! \WP_Block_Type_Registry::get_instance()->is_registered( 'newspack-newsletters/ad' ) ) {
+			register_block_type_from_metadata(
+				__DIR__ . '/../src/editor/blocks/ad/block.json'
+			);
+		}
 	}
 
 	/**
@@ -950,6 +962,22 @@ final class Newspack_Newsletters {
 				],
 			]
 		);
+		\register_rest_route(
+			self::API_NAMESPACE,
+			'post-html',
+			[
+				'methods'             => \WP_REST_Server::READABLE,
+				'callback'            => [ __CLASS__, 'api_get_post_html' ],
+				'permission_callback' => [ __CLASS__, 'api_authoring_permissions_check' ],
+				'args'                => [
+					'post_id' => [
+						'required'          => true,
+						'type'              => 'integer',
+						'sanitize_callback' => 'absint',
+					],
+				],
+			]
+		);
 	}
 
 	/**
@@ -999,6 +1027,41 @@ final class Newspack_Newsletters {
 		}
 		$post->post_content = $request['content'];
 		return \rest_ensure_response( Newspack_Newsletters_Renderer::render_post_to_mjml( $post ) );
+	}
+
+	/**
+	 * Render a newsletter to final email HTML via the WC engine.
+	 *
+	 * Produces email-safe HTML through the block-based WC email-editor engine for
+	 * the editor preview. This is a read-only endpoint: it renders the
+	 * newsletter's saved content and, unlike api_get_mjml(), does not accept a
+	 * live `content` override, because the WC engine re-fetches the post from the
+	 * database by ID at render time (see Post_Content::render_stateless in the
+	 * email-editor package), so an in-memory override would be ignored.
+	 *
+	 * @param WP_REST_Request $request API request object.
+	 * @return WP_REST_Response|WP_Error Response carrying the rendered HTML; a 404
+	 *                                   error when the post is not a newsletter, or
+	 *                                   a 500 error when rendering fails.
+	 */
+	public static function api_get_post_html( $request ) {
+		$post = get_post( $request['post_id'] );
+		if ( ! $post instanceof \WP_Post || ! self::validate_newsletter_id( $post->ID ) ) {
+			return new \WP_Error(
+				'newspack_newsletters_no_post',
+				__( 'Newsletter not found.', 'newspack-newsletters' ),
+				[ 'status' => 404 ]
+			);
+		}
+		$html = \Newspack\Newsletters\Email_Renderers\Renderer_Controller::render_wc( $post );
+		if ( '' === $html ) {
+			return new \WP_Error(
+				'newspack_newsletters_render_failed',
+				__( 'Failed to render the newsletter.', 'newspack-newsletters' ),
+				[ 'status' => 500 ]
+			);
+		}
+		return \rest_ensure_response( [ 'html' => $html ] );
 	}
 
 	/**
@@ -1465,22 +1528,26 @@ final class Newspack_Newsletters {
 	}
 
 	/**
-	 * Do not display blocks that are configured to be email-only.
+	 * Hide blocks whose `newsletterVisibility` doesn't match the current render.
+	 *
+	 * On the web front-end, `email`-only blocks are hidden. During an email render
+	 * (`render_wc`, detected via the rendering-post accessor) it's the opposite:
+	 * `web`-only blocks are hidden and `email`-only blocks are kept. Without the
+	 * email branch, `render_wc` followed the web path and wrongly dropped email-only
+	 * blocks — e.g. the prebuilt layouts' "Support our newsroom" section.
 	 *
 	 * @param string $block_content The block content about to be appended.
 	 * @param array  $block         The full block, including name and attributes.
-	 *
-	 * @return string Transformed block content to be apppended.
+	 * @return string The block content, or '' when the block is hidden in this context.
 	 */
-	public static function remove_email_only_block( $block_content, $block ) {
-		if (
-			self::NEWSPACK_NEWSLETTERS_CPT === get_post_type() &&
-			isset( $block['attrs']['newsletterVisibility'] ) &&
-			'email' === $block['attrs']['newsletterVisibility']
-		) {
-			return '';
+	public static function remove_visibility_hidden_block( $block_content, $block ) {
+		if ( self::NEWSPACK_NEWSLETTERS_CPT !== get_post_type() || empty( $block['attrs']['newsletterVisibility'] ) ) {
+			return $block_content;
 		}
-		return $block_content;
+		$is_email_render   = class_exists( '\Newspack\Newsletters\Email_Renderers\Renderer_Controller' )
+			&& \Newspack\Newsletters\Email_Renderers\Renderer_Controller::get_rendering_post() instanceof \WP_Post;
+		$hidden_visibility = $is_email_render ? 'web' : 'email';
+		return $hidden_visibility === $block['attrs']['newsletterVisibility'] ? '' : $block_content;
 	}
 
 	/**
