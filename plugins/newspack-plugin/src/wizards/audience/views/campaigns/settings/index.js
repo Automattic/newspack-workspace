@@ -34,7 +34,7 @@ const isSectionInfo = setting => ! setting.key || setting.key === 'active';
 // lets us inject a single header Save action while rendering our own content.
 const SettingsScreen = withWizardScreen( ( { children } ) => <>{ children }</> );
 
-const SettingField = ( { setting, onChange } ) => {
+const SettingField = ( { setting, onChange, disabled } ) => {
 	if ( Array.isArray( setting.options ) && setting.options.length ) {
 		return (
 			<SelectControl
@@ -43,12 +43,21 @@ const SettingField = ( { setting, onChange } ) => {
 				value={ setting.value }
 				options={ setting.options.map( option => ( { value: option.value, label: option.name || option.label } ) ) }
 				onChange={ onChange }
+				disabled={ disabled }
 				__next40pxDefaultSize
 			/>
 		);
 	}
 	if ( 'boolean' === setting.type ) {
-		return <ToggleControl label={ setting.description } help={ setting.help || undefined } checked={ !! setting.value } onChange={ onChange } />;
+		return (
+			<ToggleControl
+				label={ setting.description }
+				help={ setting.help || undefined }
+				checked={ !! setting.value }
+				onChange={ onChange }
+				disabled={ disabled }
+			/>
+		);
 	}
 	return (
 		<TextControl
@@ -56,6 +65,7 @@ const SettingField = ( { setting, onChange } ) => {
 			help={ setting.help || undefined }
 			value={ setting.value }
 			onChange={ onChange }
+			disabled={ disabled }
 			withMargin={ false }
 		/>
 	);
@@ -88,7 +98,6 @@ const Settings = props => {
 		setInFlight( true );
 		setError( null );
 		try {
-			let updated = settings;
 			for ( const sectionKey of Object.keys( settings ) ) {
 				const sectionSettings = settings[ sectionKey ].reduce( ( map, setting ) => {
 					if ( setting.key && 'active' !== setting.key ) {
@@ -101,8 +110,8 @@ const Settings = props => {
 					method: 'POST',
 					data: { section: sectionKey, settings: sectionSettings },
 				} );
-				updated = { ...updated, [ sectionKey ]: response[ sectionKey ] };
-				setSettings( updated );
+				// Merge into the latest state so a section response can't clobber unrelated updates.
+				setSettings( previous => ( { ...previous, [ sectionKey ]: response[ sectionKey ] } ) );
 			}
 		} catch ( err ) {
 			setError( err );
@@ -134,7 +143,12 @@ const Settings = props => {
 								<SectionHeader heading={ 2 } title={ sectionInfo?.description } description={ sectionInfo?.help } noMargin />
 								<VStack spacing={ 6 }>
 									{ fields.map( setting => (
-										<SettingField key={ setting.key } setting={ setting } onChange={ handleChange( sectionKey, setting.key ) } />
+										<SettingField
+											key={ setting.key }
+											setting={ setting }
+											onChange={ handleChange( sectionKey, setting.key ) }
+											disabled={ inFlight }
+										/>
 									) ) }
 								</VStack>
 							</Grid>
