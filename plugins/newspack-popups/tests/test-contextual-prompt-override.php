@@ -15,6 +15,14 @@
  * Contextual Prompt render pipeline test.
  */
 class ContextualPromptOverrideTest extends WP_UnitTestCase {
+	/**
+	 * Rendering requires the admin opt-in since the render-time strip keys on it.
+	 */
+	public function set_up() {
+		parent::set_up();
+		update_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION, true );
+	}
+
 
 	const PLAIN_BUTTON_PROMPT = '<!-- wp:newspack-popups/contextual-prompt -->
 <div class="wp-block-newspack-popups-contextual-prompt"><!-- wp:paragraph -->

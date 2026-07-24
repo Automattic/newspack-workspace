@@ -107,11 +107,12 @@ final class Newspack_Popups {
 		include_once __DIR__ . '/class-newspack-popups-contextual-prompt-block.php';
 		if ( self::is_contextual_prompts_enabled() ) {
 			Newspack_Popups_Contextual_Prompt_Block::init();
-		} else {
-			// Feature off: strip any stored Contextual Prompt markup so it never
-			// reaches the front end as an orphaned call to action.
-			add_filter( 'render_block', [ __CLASS__, 'strip_contextual_prompt_block' ], 10, 2 );
 		}
+		// Feature off — rollout flag absent OR admin opt-in withdrawn: strip any
+		// stored Contextual Prompt markup so it never reaches the front end as an
+		// orphaned call to action (or keeps a stale site-wide override alive).
+		// The opt-in is an option, so it is checked at render time.
+		add_filter( 'render_block', [ __CLASS__, 'maybe_strip_contextual_prompt_block' ], 10, 2 );
 		include_once __DIR__ . '/class-newspack-popups-inserter.php';
 		include_once __DIR__ . '/class-newspack-popups-api.php';
 		include_once __DIR__ . '/class-newspack-popups-settings.php';
@@ -761,10 +762,26 @@ final class Newspack_Popups {
 	}
 
 	/**
+	 * Strip Contextual Prompt blocks from rendered output when the feature is
+	 * not fully on: the rollout flag must be defined AND the admin opt-in active.
+	 * Checked at render time because the opt-in is an option an admin can flip
+	 * without a reload; without this, disabling the feature would leave stored
+	 * prompts (and a live site-wide override) rendering with no UI to stop them.
+	 *
+	 * @param string $block_content The block's rendered HTML.
+	 * @param array  $block         The parsed block.
+	 * @return string
+	 */
+	public static function maybe_strip_contextual_prompt_block( $block_content, $block ) {
+		if ( self::is_contextual_prompts_enabled() && Newspack_Popups_Settings::is_ai_copy_assistant_enabled() ) {
+			return $block_content;
+		}
+		return self::strip_contextual_prompt_block( $block_content, $block );
+	}
+
+	/**
 	 * Strip Contextual Prompt blocks from rendered output.
 	 *
-	 * Hooked to `render_block` only when the feature is off (see the boot gate), so
-	 * stored Contextual Prompt markup never renders as an orphaned call to action.
 	 * A pure function: returns '' for a Contextual Prompt block, the content
 	 * unchanged for any other block — so it is testable without toggling the flag.
 	 *

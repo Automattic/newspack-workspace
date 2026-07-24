@@ -14,6 +14,14 @@
  * Contextual Prompt block test case.
  */
 class ContextualPromptBlockTest extends WP_UnitTestCase {
+	/**
+	 * Rendering requires the admin opt-in since the render-time strip keys on it.
+	 */
+	public function set_up() {
+		parent::set_up();
+		update_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION, true );
+	}
+
 
 	/**
 	 * A single top-level contextual-prompt block, wrapped in filler paragraphs.
@@ -151,6 +159,36 @@ class ContextualPromptBlockTest extends WP_UnitTestCase {
 			'<p>No name.</p>',
 			Newspack_Popups::strip_contextual_prompt_block( '<p>No name.</p>', [] ),
 			'A block with no name passes through unchanged.'
+		);
+	}
+
+	/**
+	 * The render-time wrapper keys on the admin opt-in: with the rollout flag on
+	 * (test bootstrap) but the opt-in withdrawn, stored Contextual Prompt markup
+	 * is stripped; with the opt-in active it passes through. Guards against a
+	 * disabled feature leaving prompts (or a live site-wide override) rendering.
+	 */
+	public function test_maybe_strip_follows_the_opt_in() {
+		$content = '<div class="wp-block-newspack-popups-contextual-prompt">Ask.</div>';
+		$block   = [ 'blockName' => Newspack_Popups_Contextual_Prompt_Block::BLOCK_NAME ];
+
+		update_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION, true );
+		$this->assertSame(
+			$content,
+			Newspack_Popups::maybe_strip_contextual_prompt_block( $content, $block ),
+			'With the opt-in active, the block renders.'
+		);
+
+		update_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION, false );
+		$this->assertSame(
+			'',
+			Newspack_Popups::maybe_strip_contextual_prompt_block( $content, $block ),
+			'With the opt-in withdrawn, the block is stripped.'
+		);
+		$this->assertSame(
+			'<p>Unrelated.</p>',
+			Newspack_Popups::maybe_strip_contextual_prompt_block( '<p>Unrelated.</p>', [ 'blockName' => 'core/paragraph' ] ),
+			'Other blocks always pass through.'
 		);
 	}
 }
