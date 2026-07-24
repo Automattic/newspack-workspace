@@ -340,9 +340,11 @@ class Newspack_Blocks {
 	/**
 	 * Enqueue view scripts and styles for a single block.
 	 *
-	 * @param string $type The block's type.
+	 * @param string      $type     The block's type.
+	 * @param string|null $strategy Optional. Script loading strategy to apply to the
+	 *                              view script ('defer' or 'async'). Default null (no strategy).
 	 */
-	public static function enqueue_view_assets( $type ) {
+	public static function enqueue_view_assets( $type, $strategy = null ) {
 		$style_path = apply_filters(
 			'newspack_blocks_enqueue_view_assets',
 			NEWSPACK_BLOCKS__BLOCKS_DIRECTORY . $type . '/view.css',
@@ -362,13 +364,17 @@ class Newspack_Blocks {
 		}
 		$script_data = static::script_enqueue_helper( NEWSPACK_BLOCKS__BLOCKS_DIRECTORY . $type . '/view.js' );
 		if ( $script_data ) {
+			$handle = "newspack-blocks-{$type}";
 			wp_enqueue_script(
-				"newspack-blocks-{$type}",
+				$handle,
 				$script_data['script_path'],
 				$script_data['dependencies'],
 				$script_data['version'],
 				true
 			);
+			if ( $strategy ) {
+				wp_script_add_data( $handle, 'strategy', $strategy );
+			}
 		}
 	}
 
