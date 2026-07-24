@@ -23,7 +23,7 @@ import { stringify } from 'qs';
  */
 import { Button, WebPreview, withWizard } from '../../../../../packages/components/src';
 import Router from '../../../../../packages/components/src/proxied-imports/router';
-import { Campaigns, Settings, Segments } from './views';
+import { Campaigns, ContextualPrompts, Settings, Segments } from './views';
 import AddCampaignAction from './campaigns/add-campaign-action';
 import { CampaignsContext } from '../../contexts';
 
@@ -32,6 +32,8 @@ const { HashRouter, NavLink, Redirect, Route, Switch } = Router;
 const headerText = __( 'Audience Management / Campaigns', 'newspack-plugin' );
 
 const ROOT = [ { label: __( 'Audience Management', 'newspack-plugin' ) } ];
+
+const contextualPromptsEnabled = Boolean( window.newspackAudienceCampaigns?.contextual_prompts_enabled );
 
 const tabbedNavigation = [
 	{
@@ -46,6 +48,16 @@ const tabbedNavigation = [
 		exact: false,
 		breadcrumbs: [ ...ROOT, { label: __( 'Segments', 'newspack-plugin' ) } ],
 	},
+	...( contextualPromptsEnabled
+		? [
+				{
+					label: __( 'Contextual Prompts', 'newspack-plugin' ),
+					path: '/contextual-prompts',
+					exact: true,
+					breadcrumbs: [ ...ROOT, { label: __( 'Contextual Prompts', 'newspack-plugin' ) } ],
+				},
+		  ]
+		: [] ),
 	{
 		label: __( 'Settings', 'newspack-plugin' ),
 		path: '/settings',
@@ -375,6 +387,9 @@ class AudienceCampaigns extends Component {
 										/>
 									) }
 								/>
+								{ contextualPromptsEnabled && (
+									<Route path="/contextual-prompts" exact render={ () => <ContextualPrompts { ...sharedProps } /> } />
+								) }
 								<Route path="/settings" render={ () => <Settings { ...sharedProps } /> } />
 								<Redirect to="/campaigns" />
 							</Switch>

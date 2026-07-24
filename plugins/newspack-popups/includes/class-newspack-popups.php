@@ -105,7 +105,9 @@ final class Newspack_Popups {
 		include_once __DIR__ . '/class-newspack-segments-model.php';
 		include_once __DIR__ . '/class-newspack-popups-presets.php';
 		include_once __DIR__ . '/class-newspack-popups-contextual-prompt-block.php';
-		Newspack_Popups_Contextual_Prompt_Block::init();
+		if ( self::is_contextual_prompts_enabled() ) {
+			Newspack_Popups_Contextual_Prompt_Block::init();
+		}
 		include_once __DIR__ . '/class-newspack-popups-inserter.php';
 		include_once __DIR__ . '/class-newspack-popups-api.php';
 		include_once __DIR__ . '/class-newspack-popups-settings.php';
@@ -728,6 +730,33 @@ final class Newspack_Popups {
 	}
 
 	/**
+	 * Whether the Contextual Prompts feature is enabled.
+	 *
+	 * @return bool
+	 */
+	public static function is_contextual_prompts_enabled() {
+		/**
+		 * Enables the Contextual Prompts feature, which lets editors generate
+		 * story-specific donation call-to-action copy with AI.
+		 *
+		 * @constant NEWSPACK_CONTEXTUAL_PROMPTS
+		 * @type     bool
+		 * @default  Contextual Prompts disabled
+		 * @status   draft
+		 *
+		 * @example define( 'NEWSPACK_CONTEXTUAL_PROMPTS', true );
+		 */
+		if ( defined( 'IS_TEST_ENV' ) && IS_TEST_ENV ) {
+			return defined( 'NEWSPACK_CONTEXTUAL_PROMPTS' ) && NEWSPACK_CONTEXTUAL_PROMPTS;
+		}
+		static $enabled = null;
+		if ( null === $enabled ) {
+			$enabled = defined( 'NEWSPACK_CONTEXTUAL_PROMPTS' ) && NEWSPACK_CONTEXTUAL_PROMPTS;
+		}
+		return $enabled;
+	}
+
+	/**
 	 * Load block assets in the editor.
 	 */
 	public static function enqueue_block_assets() {
@@ -839,7 +868,7 @@ final class Newspack_Popups {
 			// It's not a popup CPT.
 
 			$supported_post_types = Newspack_Popups_Model::get_default_popup_post_types();
-			if ( in_array( $screen->post_type, $supported_post_types, true ) ) {
+			if ( self::is_contextual_prompts_enabled() && in_array( $screen->post_type, $supported_post_types, true ) ) {
 				// But it's a supported post type.
 				$document_settings_asset_path  = dirname( NEWSPACK_POPUPS_PLUGIN_FILE ) . '/dist/documentSettings.asset.php';
 				$document_settings_script_path = dirname( NEWSPACK_POPUPS_PLUGIN_FILE ) . '/dist/documentSettings.js';

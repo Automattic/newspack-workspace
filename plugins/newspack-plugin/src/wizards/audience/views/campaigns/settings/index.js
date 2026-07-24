@@ -24,7 +24,6 @@ import {
 	TextControl,
 } from '../../../../../../packages/components/src';
 import WizardsTab from '../../../../wizards-tab';
-import ContextualPromptsSettings from './contextual-prompts-settings';
 
 const PLUGIN_SLUG = 'newspack-audience-campaigns';
 const SETTINGS_PATH = `/newspack/v1/wizard/${ PLUGIN_SLUG }/settings`;
@@ -63,7 +62,6 @@ const SettingField = ( { setting, onChange } ) => {
 };
 
 const Settings = props => {
-	const [ configuring, setConfiguring ] = useState( false );
 	const [ settings, setSettings ] = useState( {} );
 	const [ inFlight, setInFlight ] = useState( false );
 	const [ error, setError ] = useState( null );
@@ -113,7 +111,7 @@ const Settings = props => {
 		}
 	};
 
-	const headerActions = configuring ? undefined : (
+	const headerActions = (
 		<Button variant="primary" onClick={ handleSave } disabled={ inFlight }>
 			{ __( 'Save', 'newspack-plugin' ) }
 		</Button>
@@ -123,35 +121,27 @@ const Settings = props => {
 
 	return (
 		<SettingsScreen { ...props } headerActions={ headerActions }>
-			<ContextualPromptsSettings configuring={ configuring } onConfigure={ setConfiguring } />
-			{ /* While the Contextual Prompts configure view is open, it replaces the page. */ }
-			{ ! configuring && (
-				<WizardsTab>
-					{ error && <Notice isError noticeText={ error.message } /> }
-					{ sectionKeys.map( ( sectionKey, index ) => {
-						const section = settings[ sectionKey ];
-						const sectionInfo = section.find( isSectionInfo );
-						const fields = section.filter( setting => setting.key && 'active' !== setting.key );
-						return (
-							<Fragment key={ sectionKey }>
-								{ index > 0 && <Divider alignment="full-width" variant="tertiary" /> }
-								<Grid columns={ 2 } gutter={ 32 } noMargin>
-									<SectionHeader heading={ 2 } title={ sectionInfo?.description } description={ sectionInfo?.help } noMargin />
-									<VStack spacing={ 6 }>
-										{ fields.map( setting => (
-											<SettingField
-												key={ setting.key }
-												setting={ setting }
-												onChange={ handleChange( sectionKey, setting.key ) }
-											/>
-										) ) }
-									</VStack>
-								</Grid>
-							</Fragment>
-						);
-					} ) }
-				</WizardsTab>
-			) }
+			<WizardsTab>
+				{ error && <Notice isError noticeText={ error.message } /> }
+				{ sectionKeys.map( ( sectionKey, index ) => {
+					const section = settings[ sectionKey ];
+					const sectionInfo = section.find( isSectionInfo );
+					const fields = section.filter( setting => setting.key && 'active' !== setting.key );
+					return (
+						<Fragment key={ sectionKey }>
+							{ index > 0 && <Divider alignment="full-width" variant="tertiary" /> }
+							<Grid columns={ 2 } gutter={ 32 } noMargin>
+								<SectionHeader heading={ 2 } title={ sectionInfo?.description } description={ sectionInfo?.help } noMargin />
+								<VStack spacing={ 6 }>
+									{ fields.map( setting => (
+										<SettingField key={ setting.key } setting={ setting } onChange={ handleChange( sectionKey, setting.key ) } />
+									) ) }
+								</VStack>
+							</Grid>
+						</Fragment>
+					);
+				} ) }
+			</WizardsTab>
 		</SettingsScreen>
 	);
 };

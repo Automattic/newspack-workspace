@@ -87,18 +87,46 @@ class Audience_Campaigns extends Wizard {
 			'newspack-wizards',
 			'newspackAudienceCampaigns',
 			[
-				'api'                => '/' . NEWSPACK_API_NAMESPACE . '/wizard/' . $this->slug,
-				'preview_post'       => $preview_post,
-				'preview_archive'    => $preview_archive,
-				'frontend_url'       => get_site_url(),
-				'custom_placements'  => $custom_placements,
-				'overlay_placements' => $overlay_placements,
-				'overlay_sizes'      => $overlay_sizes,
-				'preview_query_keys' => $preview_query_keys,
-				'experimental'       => Reader_Activation::is_enabled(),
-				'criteria'           => $criteria,
+				'api'                        => '/' . NEWSPACK_API_NAMESPACE . '/wizard/' . $this->slug,
+				'preview_post'               => $preview_post,
+				'preview_archive'            => $preview_archive,
+				'frontend_url'               => get_site_url(),
+				'custom_placements'          => $custom_placements,
+				'overlay_placements'         => $overlay_placements,
+				'overlay_sizes'              => $overlay_sizes,
+				'preview_query_keys'         => $preview_query_keys,
+				'experimental'               => Reader_Activation::is_enabled(),
+				'criteria'                   => $criteria,
+				'contextual_prompts_enabled' => self::is_contextual_prompts_enabled(),
 			]
 		);
+	}
+
+	/**
+	 * Whether the Contextual Prompts feature is enabled.
+	 *
+	 * @return bool
+	 */
+	private static function is_contextual_prompts_enabled() {
+		/**
+		 * Enables the Contextual Prompts feature, which lets editors generate
+		 * story-specific donation call-to-action copy with AI.
+		 *
+		 * @constant NEWSPACK_CONTEXTUAL_PROMPTS
+		 * @type     bool
+		 * @default  Contextual Prompts disabled
+		 * @status   draft
+		 *
+		 * @example define( 'NEWSPACK_CONTEXTUAL_PROMPTS', true );
+		 */
+		if ( defined( 'IS_TEST_ENV' ) && IS_TEST_ENV ) {
+			return defined( 'NEWSPACK_CONTEXTUAL_PROMPTS' ) && NEWSPACK_CONTEXTUAL_PROMPTS;
+		}
+		static $enabled = null;
+		if ( null === $enabled ) {
+			$enabled = defined( 'NEWSPACK_CONTEXTUAL_PROMPTS' ) && NEWSPACK_CONTEXTUAL_PROMPTS;
+		}
+		return $enabled;
 	}
 
 	/**
