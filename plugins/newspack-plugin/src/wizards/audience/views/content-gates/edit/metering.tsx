@@ -48,7 +48,10 @@ export default function Metering( { description, metering, onChange }: MeteringP
 						help={ __( 'Free views before the gate appears.', 'newspack-plugin' ) }
 						min={ 0 }
 						value={ count }
-						onChange={ v => onChange( { ...metering, count: v !== undefined ? Number( v ) : 0 } ) }
+						// Floor and round here rather than relying on `min`/`step`, which the control only
+						// enforces when it commits (blur/Enter): a raw keystroke would otherwise put a
+						// negative or fractional count into gate state.
+						onChange={ v => onChange( { ...metering, count: Math.max( 0, Math.round( Number( v ) || 0 ) ) } ) }
 						__next40pxDefaultSize
 					/>
 					<ToggleGroupControl
