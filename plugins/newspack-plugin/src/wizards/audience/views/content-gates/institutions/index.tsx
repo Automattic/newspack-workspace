@@ -6,7 +6,7 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { useState, useEffect, useCallback, useMemo } from '@wordpress/element';
+import { useState, useEffect, useCallback, useMemo, useRef } from '@wordpress/element';
 import { useDispatch } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
 import { filterSortAndPaginate } from '@wordpress/dataviews';
@@ -45,6 +45,9 @@ export default function Institutions() {
 	const [ data, setData ] = useState< Institution[] >( [] );
 	const [ isLoading, setIsLoading ] = useState( true );
 	const [ view, setView ] = useState< View >( DEFAULT_VIEW );
+	// The last has_institutions value pushed to the gates screen, so a fetch
+	// that does not change it does not clone the whole wizard payload.
+	const lastHasInstitutions = useRef< boolean | undefined >( undefined );
 
 	useEffect( () => {
 		const actions: HeaderAction[] = [
@@ -74,12 +77,18 @@ export default function Institutions() {
 				setData( institutions );
 				// Keep the gates screen header in sync: it promotes the
 				// Institutions entry point out of the kebab menu when the site
-				// has at least one institution.
-				updateWizardSettings( {
-					slug: AUDIENCE_CONTENT_GATES_WIZARD_SLUG,
-					path: [ 'config', 'has_institutions' ],
-					value: institutions.length > 0,
-				} );
+				// has at least one institution. Only write when the derived
+				// value actually changes, since UPDATE_WIZARD_SETTINGS clones
+				// the whole wizard payload and this runs on every list fetch.
+				const hasInstitutions = institutions.length > 0;
+				if ( hasInstitutions !== lastHasInstitutions.current ) {
+					lastHasInstitutions.current = hasInstitutions;
+					updateWizardSettings( {
+						slug: AUDIENCE_CONTENT_GATES_WIZARD_SLUG,
+						path: [ 'config', 'has_institutions' ],
+						value: hasInstitutions,
+					} );
+				}
 			} )
 			.catch( () => {
 				addNotice( {

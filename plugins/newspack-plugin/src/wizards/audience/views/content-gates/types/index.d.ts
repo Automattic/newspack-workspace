@@ -12,6 +12,11 @@ type HeaderAction = {
 	separator?: boolean;
 };
 
+// An entry in a section's kebab menu, or the header's secondary action. A
+// HeaderAction without the store-assigned `type`: either an `action` callback
+// or an `href` carries the behaviour.
+type SectionMenuItem = Omit< HeaderAction, 'type' >;
+
 type GateAccessRuleValue = string | string[] | boolean;
 type AccessRule = {
 	name: string;

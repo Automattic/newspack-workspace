@@ -45,27 +45,27 @@ const ContentGates = ( { updateGatesData }: { updateGatesData: ( gates: Gate[] )
 			resetHeaderData();
 			return;
 		}
-		const institutionsMenuItem: { label: string; action?: () => void; href?: string } = {
+		const institutionsLink: SectionMenuItem = {
 			label: __( 'Institutions', 'newspack-plugin' ),
 			href: '#/institutions',
 		};
-		const sectionMenu: { label: string; action?: () => void; href?: string }[] = [
-			{
-				label: __( 'Advanced Settings', 'newspack-plugin' ),
-				action: () => setShowAdvancedSettings( true ),
-			},
+		const gatePriorityItem: SectionMenuItem = {
+			label: __( 'Gate Priority', 'newspack-plugin' ),
+			action: () => setShowPriorityModal( true ),
+		};
+		const advancedSettingsItem: SectionMenuItem = {
+			label: __( 'Advanced Settings', 'newspack-plugin' ),
+			action: () => setShowAdvancedSettings( true ),
+		};
+		// Built in display order. Gate Priority only appears once there is more
+		// than one gate to order; Institutions is promoted out of the kebab to
+		// a visible entry point beside the title while it is in use, so it stays
+		// in the menu only when it is not.
+		const sectionMenu: SectionMenuItem[] = [
+			...( gates.length > 1 ? [ gatePriorityItem ] : [] ),
+			...( ! hasInstitutions ? [ institutionsLink ] : [] ),
+			advancedSettingsItem,
 		];
-		// Institutions in use get a visible entry point next to the section
-		// title; otherwise the link stays tucked away in the kebab menu.
-		if ( ! hasInstitutions ) {
-			sectionMenu.unshift( institutionsMenuItem );
-		}
-		if ( gates.length > 1 ) {
-			sectionMenu.unshift( {
-				label: __( 'Gate Priority', 'newspack-plugin' ),
-				action: () => setShowPriorityModal( true ),
-			} );
-		}
 		setHeaderData( {
 			actions: [
 				{
@@ -80,7 +80,7 @@ const ContentGates = ( { updateGatesData }: { updateGatesData: ( gates: Gate[] )
 				'newspack-plugin'
 			),
 			sectionMenu,
-			sectionSecondaryAction: hasInstitutions ? institutionsMenuItem : undefined,
+			sectionSecondaryAction: hasInstitutions ? institutionsLink : undefined,
 		} );
 	}, [ isFetching, gates, hasInstitutions ] );
 
