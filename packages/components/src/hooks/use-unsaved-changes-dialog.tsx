@@ -49,7 +49,7 @@ function useUnsavedChangesDialog( { when }: UseUnsavedChangesDialogOptions ) {
 	const { confirmDialog, requestConfirm } = useConfirmDialog( {
 		when,
 		message: __( 'You have unsaved changes that will be lost. Discard changes?', 'newspack-plugin' ),
-		confirmButtonText: __( 'Discard changes', 'newspack-plugin' ),
+		confirmButtonText: __( 'Discard Changes', 'newspack-plugin' ),
 		hideTitle: true,
 	} );
 

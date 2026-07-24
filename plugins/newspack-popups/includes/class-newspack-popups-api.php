@@ -120,48 +120,50 @@ final class Newspack_Popups_API {
 				'permission_callback' => [ $this, 'permission_callback' ],
 			]
 		);
-		register_rest_route(
-			'newspack-popups/v1',
-			'/contextual-prompt/status',
-			[
-				'methods'             => \WP_REST_Server::READABLE,
-				'callback'            => [ __CLASS__, 'api_get_contextual_prompt_status' ],
-				'permission_callback' => function () {
-					return current_user_can( 'edit_posts' );
-				},
-			]
-		);
-		register_rest_route(
-			'newspack-popups/v1',
-			'/contextual-prompt/enable',
-			[
-				'methods'             => \WP_REST_Server::EDITABLE,
-				// Opting into AI use is an administrator decision.
-				'callback'            => [ __CLASS__, 'api_set_contextual_prompt_enabled' ],
-				'permission_callback' => [ $this, 'permission_callback' ],
-				'args'                => [
-					'enabled' => [
-						'required'          => true,
-						'sanitize_callback' => 'rest_sanitize_boolean',
+		if ( Newspack_Popups::is_contextual_prompts_enabled() ) {
+			register_rest_route(
+				'newspack-popups/v1',
+				'/contextual-prompt/status',
+				[
+					'methods'             => \WP_REST_Server::READABLE,
+					'callback'            => [ __CLASS__, 'api_get_contextual_prompt_status' ],
+					'permission_callback' => function () {
+						return current_user_can( 'edit_posts' );
+					},
+				]
+			);
+			register_rest_route(
+				'newspack-popups/v1',
+				'/contextual-prompt/enable',
+				[
+					'methods'             => \WP_REST_Server::EDITABLE,
+					// Opting into AI use is an administrator decision.
+					'callback'            => [ __CLASS__, 'api_set_contextual_prompt_enabled' ],
+					'permission_callback' => [ $this, 'permission_callback' ],
+					'args'                => [
+						'enabled' => [
+							'required'          => true,
+							'sanitize_callback' => 'rest_sanitize_boolean',
+						],
 					],
-				],
-			]
-		);
-		register_rest_route(
-			'newspack-popups/v1',
-			'/contextual-prompt/profile',
-			[
-				'methods'             => \WP_REST_Server::EDITABLE,
-				'callback'            => [ __CLASS__, 'api_save_contextual_prompt_profile' ],
-				'permission_callback' => [ $this, 'permission_callback' ],
-				'args'                => [
-					'fields' => [
-						'required' => true,
-						'type'     => 'object',
+				]
+			);
+			register_rest_route(
+				'newspack-popups/v1',
+				'/contextual-prompt/profile',
+				[
+					'methods'             => \WP_REST_Server::EDITABLE,
+					'callback'            => [ __CLASS__, 'api_save_contextual_prompt_profile' ],
+					'permission_callback' => [ $this, 'permission_callback' ],
+					'args'                => [
+						'fields' => [
+							'required' => true,
+							'type'     => 'object',
+						],
 					],
-				],
-			]
-		);
+				]
+			);
+		}
 	}
 
 	/**
