@@ -204,7 +204,7 @@ const ContextualPromptsSettings = ( { status, values, error, inFlight, onSetValu
 			<Grid columns={ 2 } gutter={ 32 } noMargin>
 				<SectionHeader
 					heading={ 2 }
-					title={ __( 'Publisher profile', 'newspack-plugin' ) }
+					title={ __( 'Publisher Profile', 'newspack-plugin' ) }
 					description={ __( 'Details used to tailor AI-generated Contextual Prompt copy to your newsroom.', 'newspack-plugin' ) }
 					noMargin
 				/>
@@ -214,7 +214,7 @@ const ContextualPromptsSettings = ( { status, values, error, inFlight, onSetValu
 			<Grid columns={ 2 } gutter={ 32 } noMargin>
 				<SectionHeader
 					heading={ 2 }
-					title={ __( 'Site-wide override', 'newspack-plugin' ) }
+					title={ __( 'Site-Wide Override', 'newspack-plugin' ) }
 					description={ __( 'Temporarily replace every Contextual Prompt with a single call to action.', 'newspack-plugin' ) }
 					noMargin
 				/>

@@ -33,6 +33,9 @@ const headerText = __( 'Audience Management / Campaigns', 'newspack-plugin' );
 
 const ROOT = [ { label: __( 'Audience Management', 'newspack-plugin' ) } ];
 
+// The Campaigns tab as a linked ancestor crumb for its sub-tabs.
+const CAMPAIGNS_CRUMB = { label: __( 'Campaigns', 'newspack-plugin' ), url: '#/campaigns' };
+
 const contextualPromptsEnabled = Boolean( window.newspackAudienceCampaigns?.contextual_prompts_enabled );
 
 const tabbedNavigation = [
@@ -46,7 +49,7 @@ const tabbedNavigation = [
 		label: __( 'Segments', 'newspack-plugin' ),
 		path: '/segments',
 		exact: false,
-		breadcrumbs: [ ...ROOT, { label: __( 'Segments', 'newspack-plugin' ) } ],
+		breadcrumbs: [ ...ROOT, CAMPAIGNS_CRUMB, { label: __( 'Segments', 'newspack-plugin' ) } ],
 	},
 	...( contextualPromptsEnabled
 		? [
@@ -54,7 +57,7 @@ const tabbedNavigation = [
 					label: __( 'Contextual Prompts', 'newspack-plugin' ),
 					path: '/contextual-prompts',
 					exact: true,
-					breadcrumbs: [ ...ROOT, { label: __( 'Contextual Prompts', 'newspack-plugin' ) } ],
+					breadcrumbs: [ ...ROOT, CAMPAIGNS_CRUMB, { label: __( 'Contextual Prompts', 'newspack-plugin' ) } ],
 				},
 		  ]
 		: [] ),
@@ -62,7 +65,7 @@ const tabbedNavigation = [
 		label: __( 'Settings', 'newspack-plugin' ),
 		path: '/settings',
 		exact: true,
-		breadcrumbs: [ ...ROOT, { label: __( 'Settings', 'newspack-plugin' ) } ],
+		breadcrumbs: [ ...ROOT, CAMPAIGNS_CRUMB, { label: __( 'Settings', 'newspack-plugin' ) } ],
 	},
 ];
 

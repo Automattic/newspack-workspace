@@ -102,8 +102,8 @@ describe( 'ContextualPromptsSettings enabled body', () => {
 			/>
 		);
 
-		expect( screen.getByRole( 'heading', { name: 'Publisher profile' } ) ).toBeInTheDocument();
-		expect( screen.getByRole( 'heading', { name: 'Site-wide override' } ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'heading', { name: 'Publisher Profile' } ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'heading', { name: 'Site-Wide Override' } ) ).toBeInTheDocument();
 	} );
 
 	it( 'shows only the enable toggle while the override is off', () => {
