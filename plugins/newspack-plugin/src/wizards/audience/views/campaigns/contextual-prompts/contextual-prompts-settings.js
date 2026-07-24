@@ -151,6 +151,7 @@ const ContextualPromptsSettings = ( { status, values, error, inFlight, onSetValu
 							help={ field.help }
 							value={ values[ field.key ] || 'form' }
 							onChange={ next => onSetValue( field.key, next ) }
+							disabled={ inFlight }
 							isBlock
 							__next40pxDefaultSize
 							__nextHasNoMarginBottom
@@ -169,6 +170,7 @@ const ContextualPromptsSettings = ( { status, values, error, inFlight, onSetValu
 							help={ field.help }
 							checked={ !! values[ field.key ] }
 							onChange={ next => onSetValue( field.key, next ? '1' : '' ) }
+							disabled={ inFlight }
 							__nextHasNoMarginBottom
 						/>
 					);
@@ -181,6 +183,7 @@ const ContextualPromptsSettings = ( { status, values, error, inFlight, onSetValu
 							help={ field.help }
 							value={ values[ field.key ] ?? '' }
 							onChange={ value => onSetValue( field.key, value ) }
+							disabled={ inFlight }
 							__nextHasNoMarginBottom
 						/>
 					);
@@ -192,6 +195,7 @@ const ContextualPromptsSettings = ( { status, values, error, inFlight, onSetValu
 						help={ field.help }
 						value={ values[ field.key ] ?? '' }
 						onChange={ value => onSetValue( field.key, value ) }
+						disabled={ inFlight }
 						__next40pxDefaultSize
 						__nextHasNoMarginBottom
 					/>

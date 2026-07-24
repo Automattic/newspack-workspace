@@ -3,7 +3,7 @@
  */
 import apiFetch from '@wordpress/api-fetch';
 import { Fragment, useEffect, useRef, useState } from '@wordpress/element';
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 import {
 	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 	__experimentalVStack as VStack,
@@ -22,6 +22,7 @@ import {
 	SectionHeader,
 	SelectControl,
 	TextControl,
+	useUnsavedChangesDialog,
 } from '../../../../../../packages/components/src';
 import WizardsTab from '../../../../wizards-tab';
 
@@ -50,6 +51,24 @@ const snapshot = settings =>
 		acc[ key ] = sectionValues( settings[ key ] );
 		return acc;
 	}, {} );
+
+// Sequential per-section saves can partially succeed; name the failed section and
+// note which earlier ones did save, since a retry only re-posts what's still dirty.
+const saveErrorMessage = ( failedTitle, savedTitles ) => {
+	if ( savedTitles.length ) {
+		return sprintf(
+			// translators: 1: the section that failed to save. 2: comma-separated list of sections that did save.
+			__( '“%1$s” could not be saved. Your changes to %2$s were saved. Try saving again.', 'newspack-plugin' ),
+			failedTitle,
+			savedTitles.join( ', ' )
+		);
+	}
+	return sprintf(
+		// translators: %s: the section that failed to save.
+		__( '“%s” could not be saved. Try saving again.', 'newspack-plugin' ),
+		failedTitle
+	);
+};
 
 // The wizard header/breadcrumbs come from withWizardScreen; this wrapper just
 // lets us inject a single header Save action while rendering our own content.
@@ -121,21 +140,31 @@ const Settings = props => {
 	const handleSave = async () => {
 		setInFlight( true );
 		setError( null );
+		const savedTitles = [];
 		try {
 			for ( const sectionKey of Object.keys( settings ) ) {
-				const current = sectionValues( settings[ sectionKey ] );
+				const section = settings[ sectionKey ];
+				const current = sectionValues( section );
 				// Only POST dirty sections, to shrink the stale-overwrite window.
 				if ( mapsEqual( current, savedRef.current[ sectionKey ] || {} ) ) {
 					continue;
 				}
-				const response = await apiFetch( {
-					path: SETTINGS_PATH,
-					method: 'POST',
-					data: { section: sectionKey, settings: current },
-				} );
-				// Merge into the latest state so a section response can't clobber unrelated updates.
-				setSettings( previous => ( { ...previous, [ sectionKey ]: response[ sectionKey ] } ) );
-				savedRef.current = { ...savedRef.current, [ sectionKey ]: sectionValues( response[ sectionKey ] ) };
+				const title = section.find( isSectionInfo )?.description || sectionKey;
+				try {
+					const response = await apiFetch( {
+						path: SETTINGS_PATH,
+						method: 'POST',
+						data: { section: sectionKey, settings: current },
+					} );
+					// Merge into the latest state so a section response can't clobber unrelated updates.
+					setSettings( previous => ( { ...previous, [ sectionKey ]: response[ sectionKey ] } ) );
+					savedRef.current = { ...savedRef.current, [ sectionKey ]: sectionValues( response[ sectionKey ] ) };
+					savedTitles.push( title );
+				} catch ( err ) {
+					// Saved sections keep their refreshed snapshot, so a retry re-posts only this one.
+					setError( { message: saveErrorMessage( title, savedTitles ) } );
+					return;
+				}
 			}
 		} catch ( err ) {
 			setError( err );
@@ -144,8 +173,13 @@ const Settings = props => {
 		}
 	};
 
+	const isDirty = Object.keys( settings ).some(
+		sectionKey => ! mapsEqual( sectionValues( settings[ sectionKey ] ), savedRef.current[ sectionKey ] || {} )
+	);
+	const { confirmDialog } = useUnsavedChangesDialog( { when: isDirty && ! inFlight } );
+
 	const headerActions = (
-		<Button variant="primary" onClick={ handleSave } disabled={ inFlight }>
+		<Button variant="primary" onClick={ handleSave } disabled={ inFlight || ! isDirty }>
 			{ __( 'Save', 'newspack-plugin' ) }
 		</Button>
 	);
@@ -154,6 +188,7 @@ const Settings = props => {
 
 	return (
 		<SettingsScreen { ...props } headerActions={ headerActions }>
+			{ confirmDialog }
 			<WizardsTab>
 				{ error && <Notice isError noticeText={ error.message } /> }
 				{ sectionKeys.map( ( sectionKey, index ) => {

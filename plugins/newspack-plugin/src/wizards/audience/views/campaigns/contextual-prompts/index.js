@@ -2,7 +2,7 @@
  * WordPress dependencies
  */
 import apiFetch from '@wordpress/api-fetch';
-import { useEffect, useState } from '@wordpress/element';
+import { useEffect, useRef, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { DropdownMenu } from '@wordpress/components';
 import { moreVertical } from '@wordpress/icons';
@@ -10,7 +10,7 @@ import { moreVertical } from '@wordpress/icons';
 /**
  * Internal dependencies
  */
-import { withWizardScreen, Button, Notice, Waiting } from '../../../../../../packages/components/src';
+import { withWizardScreen, Button, Notice, Waiting, useUnsavedChangesDialog } from '../../../../../../packages/components/src';
 import ContextualPromptsSettings from './contextual-prompts-settings';
 
 const STATUS_PATH = '/newspack-popups/v1/contextual-prompt/status';
@@ -18,6 +18,12 @@ const ENABLE_PATH = '/newspack-popups/v1/contextual-prompt/enable';
 const PROFILE_PATH = '/newspack-popups/v1/contextual-prompt/profile';
 
 const fieldsToValues = fields => ( fields || [] ).reduce( ( acc, field ) => ( { ...acc, [ field.key ]: field.value ?? '' } ), {} );
+
+// Values are scalars, so key/value equality is a full compare.
+const valuesEqual = ( a, b ) => {
+	const keys = Object.keys( a );
+	return keys.length === Object.keys( b ).length && keys.every( key => a[ key ] === b[ key ] );
+};
 
 // The wizard header/breadcrumbs come from withWizardScreen; this wrapper just
 // lets us inject header actions while rendering our own content.
@@ -29,13 +35,17 @@ const ContextualPrompts = props => {
 	const [ inFlight, setInFlight ] = useState( false );
 	const [ error, setError ] = useState( null );
 	const [ loaded, setLoaded ] = useState( false );
+	// Values as of the last successful status fetch / profile save, to detect dirt.
+	const savedValuesRef = useRef( {} );
 
 	const loadStatus = () => {
 		setError( null );
 		return apiFetch( { path: STATUS_PATH } )
 			.then( next => {
 				setStatus( next );
-				setValues( fieldsToValues( next.fields ) );
+				const nextValues = fieldsToValues( next.fields );
+				setValues( nextValues );
+				savedValuesRef.current = nextValues;
 			} )
 			.catch( setError )
 			.finally( () => setLoaded( true ) );
@@ -52,7 +62,9 @@ const ContextualPrompts = props => {
 		return apiFetch( { path, method: 'POST', data } )
 			.then( next => {
 				setStatus( next );
-				setValues( fieldsToValues( next.fields ) );
+				const nextValues = fieldsToValues( next.fields );
+				setValues( nextValues );
+				savedValuesRef.current = nextValues;
 				return next;
 			} )
 			.catch( err => {
@@ -65,6 +77,9 @@ const ContextualPrompts = props => {
 	const setEnabled = enabled => request( ENABLE_PATH, { enabled } );
 	const saveProfile = () => request( PROFILE_PATH, { fields: values } ).catch( () => {} );
 	const setValue = ( key, value ) => setValues( previous => ( { ...previous, [ key ]: value } ) );
+
+	const isDirty = ! valuesEqual( values, savedValuesRef.current );
+	const { confirmDialog } = useUnsavedChangesDialog( { when: isDirty && ! inFlight } );
 
 	const headerActions = status?.enabled ? (
 		<>
@@ -79,7 +94,7 @@ const ContextualPrompts = props => {
 					},
 				] }
 			/>
-			<Button variant="primary" onClick={ saveProfile } disabled={ inFlight }>
+			<Button variant="primary" onClick={ saveProfile } disabled={ inFlight || ! isDirty }>
 				{ __( 'Save', 'newspack-plugin' ) }
 			</Button>
 		</>
@@ -110,6 +125,7 @@ const ContextualPrompts = props => {
 
 	return (
 		<ContextualPromptsScreen { ...props } headerActions={ headerActions }>
+			{ confirmDialog }
 			{ content }
 		</ContextualPromptsScreen>
 	);
