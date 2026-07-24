@@ -148,6 +148,29 @@ class AiCopyAssistantSettingsTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The publisher name is prefilled with the site title; saving it back stores ''
+	 * so the name keeps following future site-title changes instead of freezing.
+	 */
+	public function test_publisher_name_matching_site_title_stores_empty() {
+		update_option( 'blogname', 'The Daily Example' );
+
+		Newspack_Popups_Settings::save_ai_copy_assistant_fields(
+			[ 'newspack_contextual_prompts_publisher_name' => 'The Daily Example' ]
+		);
+		$this->assertSame(
+			'',
+			get_option( 'newspack_contextual_prompts_publisher_name', '' ),
+			'Saving the site title as the publisher name stores nothing.'
+		);
+
+		// A distinct name is still persisted verbatim.
+		Newspack_Popups_Settings::save_ai_copy_assistant_fields(
+			[ 'newspack_contextual_prompts_publisher_name' => 'Example Newsroom' ]
+		);
+		$this->assertSame( 'Example Newsroom', get_option( 'newspack_contextual_prompts_publisher_name' ) );
+	}
+
+	/**
 	 * The status endpoint reports opt-in state, management capability, and fields.
 	 */
 	public function test_status_endpoint() {

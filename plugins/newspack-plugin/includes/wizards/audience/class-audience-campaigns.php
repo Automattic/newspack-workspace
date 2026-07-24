@@ -105,28 +105,16 @@ class Audience_Campaigns extends Wizard {
 	/**
 	 * Whether the Contextual Prompts feature is enabled.
 	 *
+	 * Defers to the newspack-popups provider (the canonical constant check lives
+	 * on \Newspack_Popups::is_contextual_prompts_enabled()), so an older popups
+	 * that lacks the helper or the CP REST routes never exposes the tab.
+	 *
 	 * @return bool
 	 */
 	private static function is_contextual_prompts_enabled() {
-		/**
-		 * Enables the Contextual Prompts feature, which lets editors generate
-		 * story-specific donation call-to-action copy with AI.
-		 *
-		 * @constant NEWSPACK_CONTEXTUAL_PROMPTS
-		 * @type     bool
-		 * @default  Contextual Prompts disabled
-		 * @status   draft
-		 *
-		 * @example define( 'NEWSPACK_CONTEXTUAL_PROMPTS', true );
-		 */
-		if ( defined( 'IS_TEST_ENV' ) && IS_TEST_ENV ) {
-			return defined( 'NEWSPACK_CONTEXTUAL_PROMPTS' ) && NEWSPACK_CONTEXTUAL_PROMPTS;
-		}
-		static $enabled = null;
-		if ( null === $enabled ) {
-			$enabled = defined( 'NEWSPACK_CONTEXTUAL_PROMPTS' ) && NEWSPACK_CONTEXTUAL_PROMPTS;
-		}
-		return $enabled;
+		return class_exists( 'Newspack_Popups' )
+			&& method_exists( 'Newspack_Popups', 'is_contextual_prompts_enabled' )
+			&& \Newspack_Popups::is_contextual_prompts_enabled();
 	}
 
 	/**

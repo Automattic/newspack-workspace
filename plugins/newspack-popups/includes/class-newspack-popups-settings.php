@@ -230,6 +230,12 @@ class Newspack_Popups_Settings {
 				$sanitized = 'button' === $value ? 'button' : 'form';
 			} else {
 				$sanitized = sanitize_textarea_field( (string) $value );
+				// An empty publisher name means "follow the site title" (the read-side
+				// prefill shows it). If the submission just echoes the current title,
+				// store '' so the name keeps tracking future title changes.
+				if ( 'newspack_contextual_prompts_publisher_name' === $key && $sanitized === sanitize_textarea_field( get_bloginfo( 'name' ) ) ) {
+					$sanitized = '';
+				}
 			}
 			update_option( $key, $sanitized );
 		}

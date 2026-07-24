@@ -2,7 +2,7 @@
  * WordPress dependencies
  */
 import apiFetch from '@wordpress/api-fetch';
-import { Fragment, useEffect, useState } from '@wordpress/element';
+import { Fragment, useEffect, useRef, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import {
 	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
@@ -29,6 +29,27 @@ const PLUGIN_SLUG = 'newspack-audience-campaigns';
 const SETTINGS_PATH = `/newspack/v1/wizard/${ PLUGIN_SLUG }/settings`;
 
 const isSectionInfo = setting => ! setting.key || setting.key === 'active';
+
+// A section's editable key -> value map (the shape POSTed to the endpoint).
+const sectionValues = section =>
+	( section || [] ).reduce( ( map, setting ) => {
+		if ( setting.key && 'active' !== setting.key ) {
+			map[ setting.key ] = setting.value;
+		}
+		return map;
+	}, {} );
+
+// Values are scalars, so key/value equality is a full compare.
+const mapsEqual = ( a, b ) => {
+	const keys = Object.keys( a );
+	return keys.length === Object.keys( b ).length && keys.every( key => a[ key ] === b[ key ] );
+};
+
+const snapshot = settings =>
+	Object.keys( settings ).reduce( ( acc, key ) => {
+		acc[ key ] = sectionValues( settings[ key ] );
+		return acc;
+	}, {} );
 
 // The wizard header/breadcrumbs come from withWizardScreen; this wrapper just
 // lets us inject a single header Save action while rendering our own content.
@@ -75,12 +96,15 @@ const Settings = props => {
 	const [ settings, setSettings ] = useState( {} );
 	const [ inFlight, setInFlight ] = useState( false );
 	const [ error, setError ] = useState( null );
+	// Each section's values as of the last successful load/save, to detect dirt.
+	const savedRef = useRef( {} );
 
 	useEffect( () => {
 		setInFlight( true );
 		apiFetch( { path: SETTINGS_PATH } )
 			.then( fetched => {
 				setSettings( fetched );
+				savedRef.current = snapshot( fetched );
 				setError( null );
 			} )
 			.catch( setError )
@@ -99,19 +123,19 @@ const Settings = props => {
 		setError( null );
 		try {
 			for ( const sectionKey of Object.keys( settings ) ) {
-				const sectionSettings = settings[ sectionKey ].reduce( ( map, setting ) => {
-					if ( setting.key && 'active' !== setting.key ) {
-						map[ setting.key ] = setting.value;
-					}
-					return map;
-				}, {} );
+				const current = sectionValues( settings[ sectionKey ] );
+				// Only POST dirty sections, to shrink the stale-overwrite window.
+				if ( mapsEqual( current, savedRef.current[ sectionKey ] || {} ) ) {
+					continue;
+				}
 				const response = await apiFetch( {
 					path: SETTINGS_PATH,
 					method: 'POST',
-					data: { section: sectionKey, settings: sectionSettings },
+					data: { section: sectionKey, settings: current },
 				} );
 				// Merge into the latest state so a section response can't clobber unrelated updates.
 				setSettings( previous => ( { ...previous, [ sectionKey ]: response[ sectionKey ] } ) );
+				savedRef.current = { ...savedRef.current, [ sectionKey ]: sectionValues( response[ sectionKey ] ) };
 			}
 		} catch ( err ) {
 			setError( err );
