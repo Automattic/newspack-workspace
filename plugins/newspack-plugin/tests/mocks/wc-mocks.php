@@ -512,6 +512,9 @@ class WC_Subscription {
 	public function get_date_created() {
 		return new WC_DateTime( $this->data['date_created'] ?? 'now' );
 	}
+	public function get_edit_order_url() {
+		return admin_url( 'post.php?post=' . $this->get_id() . '&action=edit' );
+	}
 	public function get_date_paid() {
 		return new WC_DateTime( $this->data['date_paid'] );
 	}

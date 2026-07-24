@@ -203,6 +203,38 @@ class Test_Group_Subscription extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The subscriptions list table counts seats, not members: the owner alone fills
+	 * one of the group's seats without being a member, so a limit-of-4 group with no
+	 * other people reads "1 of 4 seats".
+	 */
+	public function test_admin_column_label_counts_seats_not_members() {
+		$owner_id = $this->create_reader_user();
+		$sub      = $this->create_group_subscription( $owner_id, 4 );
+
+		$this->assertStringContainsString(
+			'1 of 4 seats',
+			Group_Subscription_Settings::filter_subscription_column_content( '', $sub, 'order_title' ),
+			'An owner-only group with a limit of 4 should read "1 of 4 seats".'
+		);
+	}
+
+	/**
+	 * An unlimited group has no seat total to count against, so the capacity reads
+	 * "unlimited" in the same seat phrasing.
+	 */
+	public function test_admin_column_label_reads_unlimited_seats_without_a_limit() {
+		$owner_id = $this->create_reader_user();
+		$sub      = $this->create_group_subscription( $owner_id, 0 );
+		$this->add_member( $this->create_reader_user(), $sub );
+
+		$this->assertStringContainsString(
+			'2 of unlimited seats',
+			Group_Subscription_Settings::filter_subscription_column_content( '', $sub, 'order_title' ),
+			'An unlimited group holding the owner and one member should read "2 of unlimited seats".'
+		);
+	}
+
+	/**
 	 * Capacity is the limit whether or not the group has an owner: the owner is one
 	 * of the limited seats, not an extra one, so an ownerless group reads "0 of limit"
 	 * exactly as an owned one would.
