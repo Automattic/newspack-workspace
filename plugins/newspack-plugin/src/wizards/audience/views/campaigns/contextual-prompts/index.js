@@ -49,17 +49,29 @@ const ContextualPrompts = props => {
 	const [ snackbar, setSnackbar ] = useState( null );
 	// Values as of the last successful status fetch / profile save, to detect dirt.
 	const savedValuesRef = useRef( {} );
+	// Monotonic id so a slow status response can't clobber state written by a
+	// newer request or mutation.
+	const statusRequestRef = useRef( 0 );
 
 	const loadStatus = () => {
 		setError( null );
+		setLoaded( false );
+		const requestId = ++statusRequestRef.current;
 		return apiFetch( { path: STATUS_PATH } )
 			.then( next => {
+				if ( requestId !== statusRequestRef.current ) {
+					return;
+				}
 				setStatus( next );
 				const nextValues = fieldsToValues( next.fields );
 				setValues( nextValues );
 				savedValuesRef.current = nextValues;
 			} )
-			.catch( setError )
+			.catch( err => {
+				if ( requestId === statusRequestRef.current ) {
+					setError( err );
+				}
+			} )
 			.finally( () => setLoaded( true ) );
 	};
 
@@ -73,6 +85,8 @@ const ContextualPrompts = props => {
 		setError( null );
 		return apiFetch( { path, method: 'POST', data } )
 			.then( next => {
+				// A mutation supersedes any status request still in flight.
+				statusRequestRef.current++;
 				setStatus( next );
 				const nextValues = fieldsToValues( next.fields );
 				setValues( nextValues );
