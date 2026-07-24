@@ -125,4 +125,32 @@ class ContextualPromptBlockTest extends WP_UnitTestCase {
 		$this->assertSame( 1, substr_count( $rendered, 'data-newspack-cp-post-id' ), 'Stamped exactly once.' );
 		$this->assertStringContainsString( '<p>1 < 2 always.</p>', $rendered, 'Inner content is untouched.' );
 	}
+
+	/**
+	 * When the feature is off, the render_block callback strips Contextual Prompt
+	 * blocks entirely and leaves every other block untouched. Tested directly since
+	 * the test bootstrap keeps the flag on (so the filter itself isn't hooked here).
+	 */
+	public function test_strip_contextual_prompt_block_callback() {
+		$this->assertSame(
+			'',
+			Newspack_Popups::strip_contextual_prompt_block(
+				'<div class="wp-block-newspack-popups-contextual-prompt">Ask.</div>',
+				[ 'blockName' => Newspack_Popups_Contextual_Prompt_Block::BLOCK_NAME ]
+			),
+			'A Contextual Prompt block is stripped to nothing.'
+		);
+
+		$this->assertSame(
+			'<p>Unrelated.</p>',
+			Newspack_Popups::strip_contextual_prompt_block( '<p>Unrelated.</p>', [ 'blockName' => 'core/paragraph' ] ),
+			'A different block passes through unchanged.'
+		);
+
+		$this->assertSame(
+			'<p>No name.</p>',
+			Newspack_Popups::strip_contextual_prompt_block( '<p>No name.</p>', [] ),
+			'A block with no name passes through unchanged.'
+		);
+	}
 }
