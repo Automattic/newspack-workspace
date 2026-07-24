@@ -56,7 +56,7 @@ class Show_Page_On_Front {
 	/**
 	 * Change the query if we want to display a page on front
 	 *
-	 * @param WP_Query $query The WP_Query object.
+	 * @param \WP_Query $query The WP_Query object.
 	 * @return void
 	 */
 	public static function pre_get_posts( &$query ) {
