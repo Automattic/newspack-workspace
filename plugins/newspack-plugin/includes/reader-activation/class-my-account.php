@@ -176,10 +176,7 @@ class My_Account {
 			NEWSPACK_PLUGIN_VERSION,
 			true
 		);
-		// Defer on the front end only; admin and block editor requests (is_admin()) are left untouched.
-		if ( ! \is_admin() ) {
-			\wp_script_add_data( 'newspack-ui', 'strategy', 'defer' );
-		}
+		\wp_script_add_data( 'newspack-ui', 'strategy', 'defer' );
 		\wp_add_inline_script(
 			'newspack-ui',
 			"( function() {
@@ -193,7 +190,8 @@ class My_Account {
 						} );
 					}
 				} );
-			} )();"
+			} )();",
+			'before'
 		);
 	}
 
