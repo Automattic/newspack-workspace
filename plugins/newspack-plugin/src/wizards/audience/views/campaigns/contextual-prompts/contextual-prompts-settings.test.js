@@ -1,14 +1,13 @@
 /**
- * Contextual Prompts settings: the override section's enable-toggle gating, the
- * CTA toggle, and the conditional button label/URL fields in the configure view.
+ * Contextual Prompts settings content: the disabled empty state (admin opt-in
+ * modal, non-admin note), and the enabled settings body's field gating (override
+ * enable toggle, CTA form/button choice, conditional button fields).
  */
 
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import apiFetch from '@wordpress/api-fetch';
+import { useState } from '@wordpress/element';
 import ContextualPromptsSettings from './contextual-prompts-settings';
-
-jest.mock( '@wordpress/api-fetch', () => jest.fn() );
 
 const FIELD_DEFAULTS = { section: 'override', value: '' };
 const ENABLE_FIELD = {
@@ -33,16 +32,84 @@ const TOGGLE_FIELD = {
 const LABEL_FIELD = { ...FIELD_DEFAULTS, key: 'newspack_contextual_prompts_override_label', label: 'Override button label', type: 'text' };
 const URL_FIELD = { ...FIELD_DEFAULTS, key: 'newspack_contextual_prompts_override_url', label: 'Override button URL', type: 'text' };
 
-const mockStatus = fields => apiFetch.mockResolvedValue( { enabled: true, can_manage: true, fields } );
+const fieldsToValues = fields => ( fields || [] ).reduce( ( acc, field ) => ( { ...acc, [ field.key ]: field.value ?? '' } ), {} );
 
-describe( 'ContextualPromptsSettings configure view', () => {
-	beforeEach( () => jest.clearAllMocks() );
+// Enabled body needs live values so the field-gating interactions can be exercised.
+const EnabledHarness = ( { fields } ) => {
+	const [ values, setValues ] = useState( () => fieldsToValues( fields ) );
+	return (
+		<ContextualPromptsSettings
+			status={ { enabled: true, can_manage: true, fields } }
+			values={ values }
+			error={ null }
+			inFlight={ false }
+			onSetValue={ ( key, value ) => setValues( previous => ( { ...previous, [ key ]: value } ) ) }
+			onEnable={ () => Promise.resolve() }
+		/>
+	);
+};
 
-	it( 'shows only the enable toggle while the override is off', async () => {
-		mockStatus( [ { ...ENABLE_FIELD, value: '' }, BODY_FIELD, TOGGLE_FIELD, LABEL_FIELD, URL_FIELD ] );
-		render( <ContextualPromptsSettings configuring onConfigure={ () => {} } /> );
+describe( 'ContextualPromptsSettings empty state', () => {
+	it( 'shows the empty state and opens the disclosure modal, then calls onEnable', () => {
+		const onEnable = jest.fn().mockResolvedValue( undefined );
+		render(
+			<ContextualPromptsSettings
+				status={ { enabled: false, can_manage: true, fields: [] } }
+				values={ {} }
+				error={ null }
+				inFlight={ false }
+				onSetValue={ () => {} }
+				onEnable={ onEnable }
+			/>
+		);
 
-		await waitFor( () => expect( screen.getByText( 'Enable site-wide override' ) ).toBeInTheDocument() );
+		expect( screen.getByText( 'Get started with Contextual Prompts' ) ).toBeInTheDocument();
+		fireEvent.click( screen.getByRole( 'button', { name: 'Enable Contextual Prompts' } ) );
+
+		const dialog = screen.getByRole( 'dialog' );
+		expect( within( dialog ).getByText( /confirm your organization permits it/ ) ).toBeInTheDocument();
+		fireEvent.click( within( dialog ).getByRole( 'button', { name: 'Enable' } ) );
+		expect( onEnable ).toHaveBeenCalled();
+	} );
+
+	it( 'disables the button and shows the note for non-admins', () => {
+		render(
+			<ContextualPromptsSettings
+				status={ { enabled: false, can_manage: false, fields: [] } }
+				values={ {} }
+				error={ null }
+				inFlight={ false }
+				onSetValue={ () => {} }
+				onEnable={ () => Promise.resolve() }
+			/>
+		);
+
+		expect( screen.getByText( 'An administrator must enable this feature.' ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'button', { name: 'Enable Contextual Prompts' } ) ).toBeDisabled();
+	} );
+} );
+
+describe( 'ContextualPromptsSettings enabled body', () => {
+	it( 'renders the two settings sections', () => {
+		render(
+			<ContextualPromptsSettings
+				status={ { enabled: true, can_manage: true, fields: [ ENABLE_FIELD ] } }
+				values={ fieldsToValues( [ ENABLE_FIELD ] ) }
+				error={ null }
+				inFlight={ false }
+				onSetValue={ () => {} }
+				onEnable={ () => Promise.resolve() }
+			/>
+		);
+
+		expect( screen.getByRole( 'heading', { name: 'Publisher profile' } ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'heading', { name: 'Site-wide override' } ) ).toBeInTheDocument();
+	} );
+
+	it( 'shows only the enable toggle while the override is off', () => {
+		render( <EnabledHarness fields={ [ { ...ENABLE_FIELD, value: '' }, BODY_FIELD, TOGGLE_FIELD, LABEL_FIELD, URL_FIELD ] } /> );
+
+		expect( screen.getByText( 'Enable site-wide override' ) ).toBeInTheDocument();
 		expect( screen.queryByText( 'Override copy' ) ).not.toBeInTheDocument();
 		expect( screen.queryByText( 'Donate Form' ) ).not.toBeInTheDocument();
 		expect( screen.queryByText( 'Override button label' ) ).not.toBeInTheDocument();
@@ -52,11 +119,10 @@ describe( 'ContextualPromptsSettings configure view', () => {
 		expect( screen.getByText( 'Donate Form' ) ).toBeInTheDocument();
 	} );
 
-	it( 'hides the button fields under Donate Form and shows them under Donate Button', async () => {
-		mockStatus( [ ENABLE_FIELD, TOGGLE_FIELD, LABEL_FIELD, URL_FIELD ] );
-		render( <ContextualPromptsSettings configuring onConfigure={ () => {} } /> );
+	it( 'hides the button fields under Donate Form and shows them under Donate Button', () => {
+		render( <EnabledHarness fields={ [ ENABLE_FIELD, TOGGLE_FIELD, LABEL_FIELD, URL_FIELD ] } /> );
 
-		await waitFor( () => expect( screen.getByText( 'Donate Form' ) ).toBeInTheDocument() );
+		expect( screen.getByText( 'Donate Form' ) ).toBeInTheDocument();
 		expect( screen.queryByText( 'Override button label' ) ).not.toBeInTheDocument();
 		expect( screen.queryByText( 'Override button URL' ) ).not.toBeInTheDocument();
 
@@ -65,24 +131,11 @@ describe( 'ContextualPromptsSettings configure view', () => {
 		expect( screen.getByText( 'Override button URL' ) ).toBeInTheDocument();
 	} );
 
-	it( 'shows the button fields when no toggle exists (off-site sites)', async () => {
-		mockStatus( [ ENABLE_FIELD, LABEL_FIELD, URL_FIELD ] );
-		render( <ContextualPromptsSettings configuring onConfigure={ () => {} } /> );
+	it( 'shows the button fields when no toggle exists (off-site sites)', () => {
+		render( <EnabledHarness fields={ [ ENABLE_FIELD, LABEL_FIELD, URL_FIELD ] } /> );
 
-		await waitFor( () => expect( screen.getByText( 'Override button label' ) ).toBeInTheDocument() );
+		expect( screen.getByText( 'Override button label' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Override button URL' ) ).toBeInTheDocument();
 		expect( screen.queryByText( 'Donate Form' ) ).not.toBeInTheDocument();
-	} );
-
-	it( 'renders Save in the header row', async () => {
-		mockStatus( [ ENABLE_FIELD ] );
-		const { container } = render( <ContextualPromptsSettings configuring onConfigure={ () => {} } /> );
-
-		await waitFor( () => expect( screen.getByRole( 'button', { name: 'Save' } ) ).toBeInTheDocument() );
-		const save = screen.getByRole( 'button', { name: 'Save' } );
-		const heading = screen.getByRole( 'heading', { name: 'Contextual Prompts' } );
-		expect( save.closest( 'form' ) ).toBe( container.querySelector( 'form' ) );
-		// Same header row as the title, not the end of the form.
-		expect( save.parentElement ).toBe( heading.parentElement.parentElement );
 	} );
 } );

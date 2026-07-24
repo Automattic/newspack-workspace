@@ -194,6 +194,11 @@ class Newspack_Popups_Settings {
 			if ( self::OVERRIDE_CTA_OPTION === $field['key'] && '' === $field['value'] ) {
 				$field['value'] = 'form';
 			}
+			// Surface the effective value: an empty publisher name means the site
+			// title is used, so show it rather than an empty input.
+			if ( 'newspack_contextual_prompts_publisher_name' === $field['key'] && '' === $field['value'] ) {
+				$field['value'] = get_bloginfo( 'name' );
+			}
 		}
 
 		return $fields;

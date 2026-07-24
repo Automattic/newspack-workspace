@@ -1,18 +1,98 @@
 /**
  * WordPress dependencies
  */
-import { useState } from '@wordpress/element';
+import apiFetch from '@wordpress/api-fetch';
+import { useEffect, useState } from '@wordpress/element';
+import { __ } from '@wordpress/i18n';
+import { DropdownMenu } from '@wordpress/components';
+import { moreVertical } from '@wordpress/icons';
 
 /**
  * Internal dependencies
  */
-import { withWizardScreen } from '../../../../../../packages/components/src';
+import { withWizardScreen, Button, Waiting } from '../../../../../../packages/components/src';
 import ContextualPromptsSettings from './contextual-prompts-settings';
 
-const ContextualPrompts = () => {
-	const [ configuring, setConfiguring ] = useState( false );
-	// While the configure view is open, it replaces the tab content.
-	return <ContextualPromptsSettings configuring={ configuring } onConfigure={ setConfiguring } />;
+const STATUS_PATH = '/newspack-popups/v1/contextual-prompt/status';
+const ENABLE_PATH = '/newspack-popups/v1/contextual-prompt/enable';
+const PROFILE_PATH = '/newspack-popups/v1/contextual-prompt/profile';
+
+const fieldsToValues = fields => ( fields || [] ).reduce( ( acc, field ) => ( { ...acc, [ field.key ]: field.value ?? '' } ), {} );
+
+// The wizard header/breadcrumbs come from withWizardScreen; this wrapper just
+// lets us inject header actions while rendering our own content.
+const ContextualPromptsScreen = withWizardScreen( ( { children } ) => <>{ children }</> );
+
+const ContextualPrompts = props => {
+	const [ status, setStatus ] = useState( null );
+	const [ values, setValues ] = useState( {} );
+	const [ inFlight, setInFlight ] = useState( false );
+	const [ error, setError ] = useState( null );
+
+	useEffect( () => {
+		apiFetch( { path: STATUS_PATH } )
+			.then( next => {
+				setStatus( next );
+				setValues( fieldsToValues( next.fields ) );
+			} )
+			.catch( setError );
+	}, [] );
+
+	const request = ( path, data ) => {
+		setInFlight( true );
+		setError( null );
+		return apiFetch( { path, method: 'POST', data } )
+			.then( next => {
+				setStatus( next );
+				setValues( fieldsToValues( next.fields ) );
+				return next;
+			} )
+			.catch( err => {
+				setError( err );
+				throw err;
+			} )
+			.finally( () => setInFlight( false ) );
+	};
+
+	const setEnabled = enabled => request( ENABLE_PATH, { enabled } );
+	const saveProfile = () => request( PROFILE_PATH, { fields: values } ).catch( () => {} );
+	const setValue = ( key, value ) => setValues( previous => ( { ...previous, [ key ]: value } ) );
+
+	const headerActions = status?.enabled ? (
+		<>
+			<DropdownMenu
+				icon={ moreVertical }
+				label={ __( 'More options', 'newspack-plugin' ) }
+				controls={ [
+					{
+						title: __( 'Disable', 'newspack-plugin' ),
+						onClick: () => setEnabled( false ).catch( () => {} ),
+						isDisabled: inFlight,
+					},
+				] }
+			/>
+			<Button variant="primary" onClick={ saveProfile } disabled={ inFlight }>
+				{ __( 'Save', 'newspack-plugin' ) }
+			</Button>
+		</>
+	) : undefined;
+
+	return (
+		<ContextualPromptsScreen { ...props } headerActions={ headerActions }>
+			{ ! status ? (
+				<Waiting />
+			) : (
+				<ContextualPromptsSettings
+					status={ status }
+					values={ values }
+					error={ error }
+					inFlight={ inFlight }
+					onSetValue={ setValue }
+					onEnable={ () => setEnabled( true ) }
+				/>
+			) }
+		</ContextualPromptsScreen>
+	);
 };
 
-export default withWizardScreen( ContextualPrompts );
+export default ContextualPrompts;
