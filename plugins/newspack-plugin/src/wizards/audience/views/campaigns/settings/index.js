@@ -2,11 +2,12 @@
  * WordPress dependencies
  */
 import apiFetch from '@wordpress/api-fetch';
-import { Fragment, useEffect, useRef, useState } from '@wordpress/element';
+import { createPortal, Fragment, useEffect, useRef, useState } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
 import {
 	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 	__experimentalVStack as VStack,
+	Snackbar,
 	ToggleControl,
 } from '@wordpress/components';
 
@@ -115,6 +116,9 @@ const Settings = props => {
 	const [ settings, setSettings ] = useState( {} );
 	const [ inFlight, setInFlight ] = useState( false );
 	const [ error, setError ] = useState( null );
+	// The legacy campaigns wizard has no store snackbar outlet, so success feedback
+	// is a local Snackbar (as the advertising placements screen does).
+	const [ snackbar, setSnackbar ] = useState( null );
 	// Each section's values as of the last successful load/save, to detect dirt.
 	const savedRef = useRef( {} );
 
@@ -166,6 +170,7 @@ const Settings = props => {
 					return;
 				}
 			}
+			setSnackbar( __( 'Settings saved.', 'newspack-plugin' ) );
 		} catch ( err ) {
 			setError( err );
 		} finally {
@@ -215,6 +220,13 @@ const Settings = props => {
 					);
 				} ) }
 			</WizardsTab>
+			{ snackbar &&
+				createPortal(
+					<div className="newspack-wizard__snackbar-list">
+						<Snackbar onRemove={ () => setSnackbar( null ) }>{ snackbar }</Snackbar>
+					</div>,
+					document.body
+				) }
 		</SettingsScreen>
 	);
 };

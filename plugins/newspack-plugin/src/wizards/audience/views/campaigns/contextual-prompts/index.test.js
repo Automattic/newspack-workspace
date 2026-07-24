@@ -65,4 +65,29 @@ describe( 'ContextualPrompts tab', () => {
 		fireEvent.click( screen.getByRole( 'button', { name: 'Save' } ) );
 		await waitFor( () => expect( screen.getByRole( 'textbox', { name: 'Publisher name' } ) ).toBeDisabled() );
 	} );
+
+	it( 'confirms before Disable discards unsaved edits, and cancelling keeps state', async () => {
+		const nameField = {
+			key: 'newspack_contextual_prompts_publisher_name',
+			label: 'Publisher name',
+			type: 'text',
+			section: 'profile',
+			value: '',
+		};
+		apiFetch.mockResolvedValueOnce( { enabled: true, can_manage: true, fields: [ nameField ] } );
+		renderTab();
+
+		await waitFor( () => expect( screen.getByRole( 'textbox', { name: 'Publisher name' } ) ).toBeInTheDocument() );
+		fireEvent.change( screen.getByRole( 'textbox', { name: 'Publisher name' } ), { target: { value: 'Newsroom X' } } );
+
+		// Disable with unsaved edits asks for confirmation instead of acting.
+		fireEvent.click( screen.getByRole( 'button', { name: 'More options' } ) );
+		fireEvent.click( screen.getByRole( 'menuitem', { name: 'Disable' } ) );
+		expect( screen.getByText( /unsaved changes that will be lost/i ) ).toBeInTheDocument();
+
+		// Cancelling leaves the feature enabled (no disable request) and edits intact.
+		fireEvent.click( screen.getByText( 'Cancel' ) );
+		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
+		expect( screen.getByRole( 'textbox', { name: 'Publisher name' } ) ).toHaveValue( 'Newsroom X' );
+	} );
 } );

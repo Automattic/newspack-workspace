@@ -31,12 +31,12 @@ import { Button, Divider, Grid, Modal, SectionHeader } from '../../../../../../p
 import WizardsTab from '../../../../wizards-tab';
 
 const DISCLOSURE = __(
-	'Enabling Contextual Prompts lets editors generate donation call-to-action copy for their stories using AI. When used, the content of the post is sent to a third-party AI provider to draft suggestions. It is retained by the provider for up to 30 days for abuse monitoring, is not used to train AI models, and never appears in other AI products. Every suggestion is a draft an editor reviews and approves — nothing is ever published automatically.',
+	"Contextual Prompts lets editors draft donation call-to-action copy with AI. The story's content is sent to a third-party AI provider, which retains it for up to 30 days for abuse monitoring and never uses it to train AI models or in other AI products. Every suggestion is a draft an editor reviews and approves; nothing is published automatically.",
 	'newspack-plugin'
 );
 
 const CONFIRMATION = __(
-	'Some newsrooms have policies or union agreements that restrict the use of AI. By enabling this, you confirm your organization permits it. Only administrators can change this setting, and you can turn it off at any time.',
+	'Some newsrooms restrict AI use by policy or union agreement; by enabling this, you confirm yours permits it. Only administrators can change this setting, and you can turn it off at any time.',
 	'newspack-plugin'
 );
 
@@ -102,12 +102,14 @@ const ContextualPromptsSettings = ( { status, values, error, inFlight, onSetValu
 						title={ __( 'Enable Contextual Prompts?', 'newspack-plugin' ) }
 						onRequestClose={ () => ! inFlight && setModalOpen( false ) }
 					>
-						<p>{ DISCLOSURE }</p>
-						<Notice status="warning" isDismissible={ false }>
-							{ CONFIRMATION }
-						</Notice>
-						<HStack justify="flex-end" spacing={ 4 } wrap className="newspack-modal__footer">
-							<Button variant="secondary" onClick={ () => setModalOpen( false ) } disabled={ inFlight }>
+						<VStack spacing={ 4 }>
+							<Notice status="warning" isDismissible={ false } style={ { margin: 0 } }>
+								{ CONFIRMATION }
+							</Notice>
+							<p style={ { margin: 0 } }>{ DISCLOSURE }</p>
+						</VStack>
+						<HStack justify="flex-end" spacing={ 2 } wrap className="newspack-modal__footer">
+							<Button variant="tertiary" onClick={ () => setModalOpen( false ) } disabled={ inFlight } __next40pxDefaultSize>
 								{ __( 'Cancel', 'newspack-plugin' ) }
 							</Button>
 							<Button
@@ -118,6 +120,8 @@ const ContextualPromptsSettings = ( { status, values, error, inFlight, onSetValu
 										.catch( () => {} )
 								}
 								disabled={ inFlight }
+								isBusy={ inFlight }
+								__next40pxDefaultSize
 							>
 								{ __( 'Enable', 'newspack-plugin' ) }
 							</Button>

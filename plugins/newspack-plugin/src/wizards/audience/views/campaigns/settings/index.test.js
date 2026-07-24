@@ -43,5 +43,9 @@ describe( 'Campaigns Settings tab', () => {
 
 		fireEvent.change( screen.getByRole( 'textbox', { name: 'Foo' } ), { target: { value: 'baz' } } );
 		expect( screen.getByRole( 'button', { name: 'Save' } ) ).toBeEnabled();
+
+		// Saving surfaces a success snackbar (Snackbar also mirrors the text in an aria-live region).
+		fireEvent.click( screen.getByRole( 'button', { name: 'Save' } ) );
+		await waitFor( () => expect( screen.getAllByText( 'Settings saved.' ).length ).toBeGreaterThan( 0 ) );
 	} );
 } );

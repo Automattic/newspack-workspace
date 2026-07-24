@@ -2,9 +2,14 @@
  * WordPress dependencies
  */
 import apiFetch from '@wordpress/api-fetch';
-import { useEffect, useRef, useState } from '@wordpress/element';
+import { createPortal, useEffect, useRef, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
-import { DropdownMenu } from '@wordpress/components';
+import {
+	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
+	__experimentalVStack as VStack,
+	DropdownMenu,
+	Snackbar,
+} from '@wordpress/components';
 import { moreVertical } from '@wordpress/icons';
 
 /**
@@ -16,6 +21,9 @@ import ContextualPromptsSettings from './contextual-prompts-settings';
 const STATUS_PATH = '/newspack-popups/v1/contextual-prompt/status';
 const ENABLE_PATH = '/newspack-popups/v1/contextual-prompt/enable';
 const PROFILE_PATH = '/newspack-popups/v1/contextual-prompt/profile';
+
+// Minimum time the enable/disable busy state is shown, so it doesn't flash.
+const MIN_TOGGLE_MS = 2000;
 
 const fieldsToValues = fields => ( fields || [] ).reduce( ( acc, field ) => ( { ...acc, [ field.key ]: field.value ?? '' } ), {} );
 
@@ -35,6 +43,10 @@ const ContextualPrompts = props => {
 	const [ inFlight, setInFlight ] = useState( false );
 	const [ error, setError ] = useState( null );
 	const [ loaded, setLoaded ] = useState( false );
+	const [ disabling, setDisabling ] = useState( false );
+	// The legacy campaigns wizard has no store snackbar outlet, so success feedback
+	// is a local Snackbar (as the advertising placements screen does).
+	const [ snackbar, setSnackbar ] = useState( null );
 	// Values as of the last successful status fetch / profile save, to detect dirt.
 	const savedValuesRef = useRef( {} );
 
@@ -74,12 +86,49 @@ const ContextualPrompts = props => {
 			.finally( () => setInFlight( false ) );
 	};
 
-	const setEnabled = enabled => request( ENABLE_PATH, { enabled } );
-	const saveProfile = () => request( PROFILE_PATH, { fields: values } ).catch( () => {} );
+	// Toggling the feature is padded to a minimum so the busy state doesn't flash;
+	// the status flip is held until it resolves so the modal/spinner stays up.
+	const setEnabled = enabled => {
+		setInFlight( true );
+		setError( null );
+		return Promise.all( [
+			apiFetch( { path: ENABLE_PATH, method: 'POST', data: { enabled } } ),
+			new Promise( resolve => setTimeout( resolve, MIN_TOGGLE_MS ) ),
+		] )
+			.then( ( [ next ] ) => {
+				setStatus( next );
+				const nextValues = fieldsToValues( next.fields );
+				setValues( nextValues );
+				savedValuesRef.current = nextValues;
+				return next;
+			} )
+			.catch( err => {
+				setError( err );
+				throw err;
+			} )
+			.finally( () => setInFlight( false ) );
+	};
+	const saveProfile = () =>
+		request( PROFILE_PATH, { fields: values } )
+			.then( () => setSnackbar( __( 'Settings saved.', 'newspack-plugin' ) ) )
+			.catch( () => {} );
 	const setValue = ( key, value ) => setValues( previous => ( { ...previous, [ key ]: value } ) );
 
 	const isDirty = ! valuesEqual( values, savedValuesRef.current );
-	const { confirmDialog } = useUnsavedChangesDialog( { when: isDirty && ! inFlight } );
+	const { confirmDialog, requestConfirm } = useUnsavedChangesDialog( { when: isDirty && ! inFlight } );
+
+	// Disabling refreshes state from the response, discarding local edits, so route
+	// it through the same unsaved-changes guard: it confirms only when dirty, and a
+	// separate confirm dialog would fight this one's navigation block.
+	const disable = () => {
+		setDisabling( true );
+		return setEnabled( false )
+			.then( () => setSnackbar( __( 'Contextual Prompts disabled.', 'newspack-plugin' ) ) )
+			.catch( () => {} )
+			.finally( () => setDisabling( false ) );
+	};
+	const onDisable = () => requestConfirm( disable );
+	const onEnable = () => setEnabled( true ).then( () => setSnackbar( __( 'Contextual Prompts enabled.', 'newspack-plugin' ) ) );
 
 	const headerActions = status?.enabled ? (
 		<>
@@ -89,7 +138,7 @@ const ContextualPrompts = props => {
 				controls={ [
 					{
 						title: __( 'Disable', 'newspack-plugin' ),
-						onClick: () => setEnabled( false ).catch( () => {} ),
+						onClick: onDisable,
 						isDisabled: inFlight,
 					},
 				] }
@@ -101,7 +150,14 @@ const ContextualPrompts = props => {
 	) : undefined;
 
 	let content = <Waiting />;
-	if ( status ) {
+	if ( disabling ) {
+		content = (
+			<VStack alignment="center" spacing={ 4 } style={ { padding: '64px 0' } }>
+				<Waiting />
+				<p style={ { margin: 0, fontWeight: 600 } }>{ __( 'Disabling Contextual Prompts…', 'newspack-plugin' ) }</p>
+			</VStack>
+		);
+	} else if ( status ) {
 		content = (
 			<ContextualPromptsSettings
 				status={ status }
@@ -109,7 +165,7 @@ const ContextualPrompts = props => {
 				error={ error }
 				inFlight={ inFlight }
 				onSetValue={ setValue }
-				onEnable={ () => setEnabled( true ) }
+				onEnable={ onEnable }
 			/>
 		);
 	} else if ( loaded ) {
@@ -127,6 +183,13 @@ const ContextualPrompts = props => {
 		<ContextualPromptsScreen { ...props } headerActions={ headerActions }>
 			{ confirmDialog }
 			{ content }
+			{ snackbar &&
+				createPortal(
+					<div className="newspack-wizard__snackbar-list">
+						<Snackbar onRemove={ () => setSnackbar( null ) }>{ snackbar }</Snackbar>
+					</div>,
+					document.body
+				) }
 		</ContextualPromptsScreen>
 	);
 };
