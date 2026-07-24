@@ -6,9 +6,9 @@
  * subscriber list, the group set is small enough to load in full and filter,
  * sort and paginate client-side. Filterable by status and plan, sortable. Click
  * targets follow the rule both tabs share: the row (and the owner name in it)
- * opens that person's user-edit screen, while the plan name — under the owner and
- * in the Subscription column — opens that group's subscription. Both are the
- * native admin screens until the in-wizard group detail lands (NPPD-1753 PR 4).
+ * opens that person's user-edit screen, while the plan name in the Subscription
+ * column opens that group's subscription. Both are the native admin screens until
+ * the in-wizard group detail lands (NPPD-1753 PR 4).
  */
 
 /**
@@ -39,7 +39,10 @@ const DEFAULT_VIEW = {
 	perPage: 20,
 	sort: { field: 'createdAt', direction: 'desc' },
 	search: '',
-	fields: [ 'members', 'status', 'createdAt' ],
+	// `plan` is visible by default because it is the only place a group's
+	// subscription is reachable — see the owner field below for why the title
+	// cell can't carry that link.
+	fields: [ 'plan', 'members', 'status', 'createdAt' ],
 	// Hide cancelled groups by default: they add noise with little value. Still
 	// reachable by ticking "Cancelled" in the Status filter (or clearing it).
 	// A group awaiting its first payment sits in `pending`, so it stays visible.
@@ -93,6 +96,14 @@ export default function GroupList() {
 				label: __( 'Owner', 'newspack-plugin' ),
 				enableGlobalSearch: true,
 				getValue: ( { item } ) => item.owner?.name || '',
+				// The secondary line is the owner's email, mirroring the subscriber
+				// list's title cell — not the plan. This is the DataViews title
+				// field, which ColumnPrimary wraps in an ItemClickWrapper: a
+				// role="button" whose own Enter/Space handler fires onClickItem
+				// regardless of where the key originated, so a link nested here
+				// resolves to two destinations at once, and ARIA treats descendants
+				// of role="button" as presentational. The plan's link lives in the
+				// `plan` column below, outside the wrapper.
 				render: ( { item } ) => {
 					const details = (
 						<div data-group-id={ item.id }>
@@ -109,9 +120,7 @@ export default function GroupList() {
 									/>
 								) }
 							</HStack>
-							<div className="newspack-subscribers__email">
-								<SubscriptionLink href={ item.editUrl }>{ item.plan }</SubscriptionLink>
-							</div>
+							<div className="newspack-subscribers__email">{ item.owner?.email }</div>
 						</div>
 					);
 					if ( ! SHOW_AVATARS ) {

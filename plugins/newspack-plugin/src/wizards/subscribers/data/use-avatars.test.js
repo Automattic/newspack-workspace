@@ -17,7 +17,8 @@ import { useAvatars } from './use-avatars';
 
 jest.mock( '@wordpress/api-fetch', () => jest.fn() );
 
-// The endpoint caps each request at 200 emails; the hook batches past that.
+// The endpoint's cap, which the wizard localizes onto window as `avatarBatchCap`.
+// With no config present (as in these tests) the hook falls back to the same 200.
 const BATCH_SIZE = 200;
 
 const emailsFor = count => Array.from( { length: count }, ( _, i ) => `reader${ i }@test.com` );
@@ -64,6 +65,27 @@ describe( 'useAvatars', () => {
 		expect( Object.keys( result.current.avatars ) ).toHaveLength( BATCH_SIZE + 50 );
 		expect( result.current.avatars[ emails[ 0 ] ] ).toBe( `https://avatar.test/${ emails[ 0 ] }` );
 		expect( result.current.avatars[ emails[ emails.length - 1 ] ] ).toBe( `https://avatar.test/${ emails[ emails.length - 1 ] }` );
+	} );
+
+	it( 'batches to the cap the server localized, not a client-side copy of it', async () => {
+		// The endpoint silently truncates anything past its own cap, so a client
+		// batching to a larger number loses the overflow with no error anywhere.
+		// A hook holding its own hard-coded 200 would send one batch of 12 here.
+		const serverCap = 5;
+		window.newspackSubscribers = { avatarBatchCap: serverCap };
+		const emails = emailsFor( 12 );
+		apiFetch.mockImplementation( ( { data } ) => Promise.resolve( avatarsResponseFor( data.emails ) ) );
+
+		const { result } = renderHook( () => useAvatars( emails ) );
+
+		await waitFor( () => expect( result.current.loading ).toBe( false ) );
+
+		expect( apiFetch ).toHaveBeenCalledTimes( 3 );
+		expect( apiFetch.mock.calls[ 0 ][ 0 ].data.emails ).toHaveLength( serverCap );
+		expect( apiFetch.mock.calls[ 2 ][ 0 ].data.emails ).toHaveLength( 2 );
+		expect( Object.keys( result.current.avatars ) ).toHaveLength( 12 );
+
+		delete window.newspackSubscribers;
 	} );
 
 	it( 'honors the server saying avatars are off, even for one batch of many', async () => {

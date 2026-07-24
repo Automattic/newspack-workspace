@@ -31,7 +31,7 @@ import { useSubscribers } from '../data/use-subscribers';
 import { WIZARD_STORE_NAMESPACE } from '../../../../packages/components/src/wizard/store';
 import { GROUP_LABEL, ROLE_LABELS } from '../labels';
 import { SubscriptionLink } from '../links';
-import { STATUS_LABELS, STATUS_BADGE_LEVEL, STATUS_RANK, displayStatuses } from '../status';
+import { STATUS_LABELS, STATUS_BADGE_LEVEL, displayStatuses, statusRank } from '../status';
 
 // A subscriber's group memberships, in the shape the column helpers expect
 // ([{ group, role }]). The endpoint embeds them flat on the item as
@@ -56,7 +56,7 @@ const planEntries = ( item, groupEntries ) => {
 		role: null,
 	} ) );
 	// Active subscriptions list first, then on-hold, then cancelled.
-	return [ ...cohorts, ...individual ].sort( ( a, b ) => STATUS_RANK[ a.status ] - STATUS_RANK[ b.status ] );
+	return [ ...cohorts, ...individual ].sort( ( a, b ) => statusRank( a.status ) - statusRank( b.status ) );
 };
 
 // Plan entries to show in the Subscription column: a cancelled plan is dropped
@@ -119,6 +119,11 @@ export default function SubscriberList() {
 			window.location.href = item.editUrl;
 		}
 	};
+	// A subscriber the current admin can't edit has no edit URL (get_edit_user_link()
+	// returns '' without the `edit_user` capability, which is reachable on
+	// multisite), so their row is not clickable rather than focusable-but-inert.
+	// Mirrors hasOwnerLink in GroupList.
+	const hasSubscriberLink = item => !! item?.editUrl;
 
 	const fields = useMemo(
 		() => [
@@ -354,6 +359,7 @@ export default function SubscriberList() {
 				defaultLayouts={ { table: {} } }
 				getItemId={ item => item.id }
 				onClickItem={ openSubscriber }
+				isItemClickable={ hasSubscriberLink }
 				search
 			/>
 		</div>

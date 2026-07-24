@@ -88,19 +88,21 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 	 * @return int The new user ID.
 	 */
 	private function create_reader( string $name = 'Reader', string $role = 'subscriber', string $registered = '' ): int {
-		$suffix  = wp_generate_password( 6, false );
-		$user_id = wp_insert_user(
-			array_filter(
-				[
-					'user_login'      => 'reader-' . $suffix,
-					'user_pass'       => wp_generate_password(),
-					'user_email'      => 'reader-' . $suffix . '@test.com',
-					'display_name'    => $this->scope_token . ' ' . $name,
-					'role'            => $role,
-					'user_registered' => $registered,
-				]
-			)
-		);
+		$suffix = wp_generate_password( 6, false );
+		$args   = [
+			'user_login'   => 'reader-' . $suffix,
+			'user_pass'    => wp_generate_password(),
+			'user_email'   => 'reader-' . $suffix . '@test.com',
+			'display_name' => $this->scope_token . ' ' . $name,
+			'role'         => $role,
+		];
+		// Set only when given, key by key rather than with a blanket array_filter():
+		// that would equally drop a deliberately-empty `role`, which is the
+		// documented way to create a role-less user.
+		if ( $registered ) {
+			$args['user_registered'] = $registered;
+		}
+		$user_id = wp_insert_user( $args );
 		update_user_meta( $user_id, '_newspack_reader', true );
 		$this->user_ids[] = $user_id;
 		return $user_id;
@@ -587,6 +589,90 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 		// The same reader still matches the Active filter (the live axis is unaffected).
 		$active_ids = array_column( $this->dispatch( [ 'status' => [ 'active' ] ] )->get_data()['items'], 'id' );
 		$this->assertContains( $mixed_id, $active_ids );
+	}
+
+	/**
+	 * The filter-side status map is the inverse of the display-side one, and both
+	 * have to stay in step or a filter contradicts the badge it filters on. The
+	 * display direction is pinned in test_reduced_status_prefers_live_over_cancelled;
+	 * this pins the inverse, positively — deleting an entry from wcs_statuses_for()'s
+	 * map must fail a test, not just narrow the results silently.
+	 */
+	public function test_status_filter_maps_wcs_statuses_positively() {
+		$this->login_admin();
+
+		// 'pending' => [ 'pending' ], via an individual subscription and via group
+		// inheritance (a member holds no subscription of their own).
+		$pending_individual = $this->create_reader( 'PendingIndividual' );
+		$this->create_individual_subscription( $pending_individual, 'pending' );
+
+		$pending_group  = $this->create_group_subscription( $this->create_reader( 'PendingGroupOwner' ), 5, 'pending' );
+		$pending_member = $this->create_reader( 'PendingGroupMember' );
+		add_user_meta( $pending_member, Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY, $pending_group->get_id() );
+
+		// 'on-hold' => [ 'on-hold', 'switched' ]: a mid-switch subscription displays
+		// as on-hold, so the On hold filter has to reach it too.
+		$switched = $this->create_reader( 'Switched' );
+		$this->create_individual_subscription( $switched, 'switched' );
+
+		// Active also covers pending-cancel, and Cancelled also covers expired.
+		$pending_cancel = $this->create_reader( 'PendingCancel' );
+		$this->create_individual_subscription( $pending_cancel, 'pending-cancel' );
+
+		$expired = $this->create_reader( 'Expired' );
+		$this->create_individual_subscription( $expired, 'expired' );
+
+		$pending_ids = array_column( $this->dispatch( [ 'status' => [ 'pending' ] ] )->get_data()['items'], 'id' );
+		$this->assertContains( $pending_individual, $pending_ids );
+		$this->assertContains( $pending_member, $pending_ids, 'A member of a pending group inherits its status on the filter axis too.' );
+
+		$on_hold_ids = array_column( $this->dispatch( [ 'status' => [ 'on-hold' ] ] )->get_data()['items'], 'id' );
+		$this->assertContains( $switched, $on_hold_ids, 'A switched subscription displays as on-hold, so On hold must match it.' );
+
+		$active_ids = array_column( $this->dispatch( [ 'status' => [ 'active' ] ] )->get_data()['items'], 'id' );
+		$this->assertContains( $pending_cancel, $active_ids, 'A pending-cancel subscription is still live until it lapses.' );
+
+		$cancelled_ids = array_column( $this->dispatch( [ 'status' => [ 'cancelled' ] ] )->get_data()['items'], 'id' );
+		$this->assertContains( $expired, $cancelled_ids, 'An expired subscription displays as cancelled, so Cancelled must match it.' );
+	}
+
+	/**
+	 * The status filter scans subscriptions a chunk at a time. The walk has to
+	 * advance: wcs_get_subscriptions() strips a `paged` argument before building
+	 * its query, so paging with it silently re-scans the first chunk forever —
+	 * readers past the chunk boundary vanish from the results, and (worse) a
+	 * reader whose only live plan sits past it is wrongly reported as churned.
+	 *
+	 * Seeds one full chunk of active filler, then two readers whose live plans can
+	 * only be found in the second chunk, so a walk that doesn't advance fails both
+	 * assertions rather than merely returning fewer rows.
+	 */
+	public function test_status_filter_scan_advances_past_the_first_chunk() {
+		$this->login_admin();
+
+		// Filler subscriptions are owned by customer IDs with no user behind them:
+		// the scan only reads get_customer_id(), and skipping 500 user inserts keeps
+		// this test cheap. They fill the first chunk of the live-status scan.
+		for ( $i = 0; $i < \Newspack\Subscribers_Wizard::FILTER_SCAN_CHUNK; $i++ ) {
+			$this->create_individual_subscription( 900000 + $i, 'active' );
+		}
+
+		// Only subscription is active and sits in the second chunk.
+		$late_active = $this->create_reader( 'LateActive' );
+		$this->create_individual_subscription( $late_active, 'active' );
+
+		// Cancelled plan in reach, live plan past the boundary. The Cancelled filter
+		// means fully churned, so finding the live plan is what excludes them — miss
+		// it and a paying reader is reported as churned.
+		$late_mixed = $this->create_reader( 'LateMixed' );
+		$this->create_individual_subscription( $late_mixed, 'cancelled' );
+		$this->create_individual_subscription( $late_mixed, 'active' );
+
+		$active_ids = array_column( $this->dispatch( [ 'status' => [ 'active' ] ] )->get_data()['items'], 'id' );
+		$this->assertContains( $late_active, $active_ids, 'A reader whose only subscription sits past the first chunk still matches Active.' );
+
+		$cancelled_ids = array_column( $this->dispatch( [ 'status' => [ 'cancelled' ] ] )->get_data()['items'], 'id' );
+		$this->assertNotContains( $late_mixed, $cancelled_ids, 'A live plan past the chunk boundary still disqualifies the reader from Cancelled.' );
 	}
 
 	/**

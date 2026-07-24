@@ -24,6 +24,11 @@ export const STATUS_BADGE_LEVEL = {
 // Active first, then pending, then on-hold, then cancelled.
 export const STATUS_RANK = { active: 0, pending: 1, 'on-hold': 2, cancelled: 3 };
 
+// Rank of a status, with anything outside the four sorting last instead of
+// yielding NaN (which leaves the comparator's order implementation-defined).
+// Mirrors the `?? 99` guard in Subscribers_Wizard::reduced_status().
+export const statusRank = status => STATUS_RANK[ status ] ?? 99;
+
 /**
  * Reduce a subscriber's many subscription statuses to the badge(s) we show.
  *
@@ -55,5 +60,5 @@ export const displayStatuses = ( statuses, fallback ) => {
 	if ( distinct.some( s => s !== 'cancelled' ) ) {
 		distinct = distinct.filter( s => s !== 'cancelled' );
 	}
-	return distinct.sort( ( a, b ) => STATUS_RANK[ a ] - STATUS_RANK[ b ] );
+	return distinct.sort( ( a, b ) => statusRank( a ) - statusRank( b ) );
 };

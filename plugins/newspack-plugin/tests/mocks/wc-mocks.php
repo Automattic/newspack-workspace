@@ -913,16 +913,20 @@ function wcs_get_users_subscriptions( $user_id ) {
 }
 function wcs_get_subscriptions( $args = [] ) {
 	// Minimal mock: implements the `customer_id` and `subscription_status` filters
-	// plus `subscriptions_per_page`/`paged` paging — the args the code under test
+	// plus `subscriptions_per_page`/`offset` paging — the args the code under test
 	// passes. `subscription_status` accepts a single status or an array; 'any' (or
-	// unset) means no status filter. `meta_query` and `offset` are still ignored —
+	// unset) means no status filter. `meta_query` and `orderby` are still ignored —
 	// extend here rather than relying on this returning the full set if a test
 	// needs them.
+	//
+	// `paged` is deliberately NOT implemented: the real wcs_get_subscriptions()
+	// declares it among its own defaults and strips it before building the query,
+	// so a mock that honored it would make a broken caller look correct.
 	global $subscriptions_database;
 	$customer_id = $args['customer_id'] ?? null;
 	$statuses    = $args['subscription_status'] ?? 'any';
 	$per_page    = isset( $args['subscriptions_per_page'] ) ? (int) $args['subscriptions_per_page'] : 0;
-	$paged       = isset( $args['paged'] ) ? max( 1, (int) $args['paged'] ) : 1;
+	$offset      = isset( $args['offset'] ) ? max( 0, (int) $args['offset'] ) : 0;
 	if ( 'any' === $statuses ) {
 		$statuses = null;
 	} elseif ( null !== $statuses ) {
@@ -938,8 +942,8 @@ function wcs_get_subscriptions( $args = [] ) {
 		}
 		$matches[ $id ] = $subscription;
 	}
-	if ( $per_page > 0 ) {
-		$matches = array_slice( $matches, ( $paged - 1 ) * $per_page, $per_page, true );
+	if ( $per_page > 0 || $offset > 0 ) {
+		$matches = array_slice( $matches, $offset, $per_page > 0 ? $per_page : null, true );
 	}
 	return $matches;
 }

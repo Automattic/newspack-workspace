@@ -3,7 +3,7 @@
 /**
  * External dependencies
  */
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 
 /**
  * WordPress dependencies
@@ -100,15 +100,38 @@ describe( 'useSubscribers', () => {
 		expect( result.current.pages ).toBe( 3 );
 	} );
 
-	it( 'degrades to an empty page when the request fails', async () => {
+	it( 'surfaces the failure instead of passing an empty page off as the answer', async () => {
+		// An empty envelope alone would render as "this site has no subscribers".
+		// The error is what lets the screen say the read failed, so it is the
+		// contract here — not just the empty page beside it.
 		apiFetch.mockRejectedValue( new Error( 'boom' ) );
 
 		const { result } = renderHook( () => useSubscribers( baseView ) );
 
 		await waitFor( () => expect( result.current.loading ).toBe( false ) );
 
+		expect( result.current.error ).toBeTruthy();
 		expect( result.current.items ).toEqual( [] );
 		expect( result.current.total ).toBe( 0 );
 		expect( result.current.pages ).toBe( 0 );
+	} );
+
+	it( 'clears the error and refetches on reload', async () => {
+		// The retry button in the error notice calls reload(); a retry that left
+		// the error set would keep showing the notice over good data.
+		apiFetch.mockRejectedValueOnce( new Error( 'boom' ) );
+
+		const { result } = renderHook( () => useSubscribers( baseView ) );
+
+		await waitFor( () => expect( result.current.error ).toBeTruthy() );
+
+		apiFetch.mockResolvedValue( { items: [ { id: 7 } ], total: 1, pages: 1 } );
+		act( () => result.current.reload() );
+
+		await waitFor( () => expect( result.current.loading ).toBe( false ) );
+
+		expect( apiFetch ).toHaveBeenCalledTimes( 2 );
+		expect( result.current.error ).toBeFalsy();
+		expect( result.current.items ).toEqual( [ { id: 7 } ] );
 	} );
 } );

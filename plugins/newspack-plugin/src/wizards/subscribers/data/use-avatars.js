@@ -18,9 +18,13 @@ const config = ( typeof window !== 'undefined' && window.newspackSubscribers ) |
 
 export const SHOW_AVATARS = config.showAvatars !== false;
 
-// The endpoint caps each request at this many emails; the hook batches larger
-// sets so nothing is silently dropped (e.g. a site with many groups).
-const AVATAR_BATCH_SIZE = 200;
+// The endpoint caps each request at this many emails and silently truncates the
+// overflow, so the batch size has to match it exactly — the wizard localizes its
+// own AVATAR_BATCH_CAP so there is one authority rather than two constants that
+// can drift apart. Read at call time, not at import, so the value doesn't depend
+// on this module loading after the inline config script. The fallback only
+// applies if the config never loaded at all.
+const avatarBatchSize = () => Number( window?.newspackSubscribers?.avatarBatchCap ) || 200;
 
 /**
  * Resolve avatar URLs for a list of emails from the wizard's REST endpoint.
@@ -53,9 +57,10 @@ export function useAvatars( emails, { size } = {} ) {
 		setAvatars( {} );
 		// Batch to the endpoint's per-request cap and merge, so a set larger than
 		// one batch still resolves fully instead of dropping the overflow.
+		const batchSize = avatarBatchSize();
 		const batches = [];
-		for ( let i = 0; i < list.length; i += AVATAR_BATCH_SIZE ) {
-			batches.push( list.slice( i, i + AVATAR_BATCH_SIZE ) );
+		for ( let i = 0; i < list.length; i += batchSize ) {
+			batches.push( list.slice( i, i + batchSize ) );
 		}
 		Promise.all(
 			batches.map( batch =>

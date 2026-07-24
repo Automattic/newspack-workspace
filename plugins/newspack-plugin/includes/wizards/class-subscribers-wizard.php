@@ -825,13 +825,21 @@ class Subscribers_Wizard extends Wizard {
 		// store, and walked a chunk at a time: WooCommerce hands back fully
 		// hydrated WC_Subscription objects and only the customer ID is read here,
 		// so paging keeps peak memory at one chunk instead of the whole cap.
+		//
+		// The walk pages with `offset`, not `paged`: wcs_get_subscriptions()
+		// declares `paged` among its own defaults, so it is stripped from the
+		// extra args and never reaches the WC_Order_Query — passing it would
+		// re-scan the first chunk on every iteration. `orderby => ID` gives the
+		// walk a deterministic tiebreak; the default start-date sort can shuffle
+		// rows sharing a date across a chunk boundary and skip a customer.
 		$wcs_statuses = $this->wcs_statuses_for( $prototype_statuses );
 		if ( ! empty( $wcs_statuses ) && function_exists( 'wcs_get_subscriptions' ) ) {
 			for ( $page = 1; ( $page - 1 ) * self::FILTER_SCAN_CHUNK < self::FILTER_INCLUDE_CAP; $page++ ) {
 				$subs = \wcs_get_subscriptions(
 					[
 						'subscriptions_per_page' => self::FILTER_SCAN_CHUNK,
-						'paged'                  => $page,
+						'offset'                 => ( $page - 1 ) * self::FILTER_SCAN_CHUNK,
+						'orderby'                => 'ID',
 						'subscription_status'    => $wcs_statuses,
 					]
 				);
@@ -1029,6 +1037,11 @@ class Subscribers_Wizard extends Wizard {
 					// Drives the column layout synchronously; the avatar URLs
 					// themselves come from the /avatars REST endpoint.
 					'showAvatars'      => (bool) get_option( 'show_avatars', true ),
+					// The /avatars endpoint truncates anything past this cap rather
+					// than erroring, so the client must batch to the same number. It
+					// is published here so there is one authority instead of two
+					// constants that can drift apart silently.
+					'avatarBatchCap'   => self::AVATAR_BATCH_CAP,
 				]
 			) . ';',
 			'before'
