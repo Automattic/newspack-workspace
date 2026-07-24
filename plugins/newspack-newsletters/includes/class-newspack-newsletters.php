@@ -1662,6 +1662,14 @@ final class Newspack_Newsletters {
 		}
 		$is_public = (bool) get_post_meta( $post->ID, 'is_public', true );
 		if ( 'publish' === $post->post_status && ! $is_public ) {
+			// Correcting to `private` does NOT trigger an ESP send. A
+			// publish -> private transition stays within the controlled
+			// statuses (`['publish', 'private']`), so neither `pre_post_update()`
+			// (which sends when a newsletter moves out of / into that set) nor
+			// `transition_post_status()` (which sends only when `$old_status` is
+			// `'future'`) fires. This matters because, with the `exit` below now
+			// scoped to page views, a single request can correct many rows
+			// instead of stopping at the first — many corrections, still no sends.
 			wp_update_post(
 				[
 					'ID'          => $post->ID,
@@ -1670,12 +1678,66 @@ final class Newspack_Newsletters {
 				false,
 				false
 			);
-			// Force a page refresh on the front-end.
-			if ( ! is_admin() ) {
+			// Force a page refresh, but only on a genuine front-end page view.
+			// During REST, AJAX, cron or WP-CLI the `exit` would truncate the
+			// current request (e.g. a REST collection would return a partial,
+			// short-circuited response), so restrict it to real page loads.
+			if ( self::is_front_end_page_request() ) {
 				header( 'Refresh:0' );
 				exit;
 			}
 		}
+	}
+
+	/**
+	 * Whether the current request is a genuine front-end page view, as opposed
+	 * to an admin screen, REST/AJAX/XML-RPC request, cron run, WP-CLI
+	 * invocation, or feed render.
+	 *
+	 * Used to decide whether it is safe to `exit` the request: on a page view a
+	 * redirect is the intended behavior, but on any programmatic request or
+	 * streamed response an `exit` would truncate the output mid-flight.
+	 *
+	 * @return bool True on a front-end page request, false otherwise.
+	 */
+	private static function is_front_end_page_request() {
+		if ( is_admin() ) {
+			return false;
+		}
+		if ( defined( 'REST_REQUEST' ) && REST_REQUEST ) {
+			return false;
+		}
+		if ( wp_doing_ajax() ) {
+			return false;
+		}
+		if ( wp_doing_cron() ) {
+			return false;
+		}
+		if ( defined( 'WP_CLI' ) && WP_CLI ) {
+			return false;
+		}
+		if ( defined( 'XMLRPC_REQUEST' ) && XMLRPC_REQUEST ) {
+			return false;
+		}
+		// A feed is a front-end request but not a page view; an `exit` here
+		// would truncate the feed's XML mid-document. Newsletters can appear in
+		// feeds via `display_newsletters_in_archives()`. Behaviour change worth
+		// naming: a feed containing a just-corrected newsletter now serves that
+		// item once in the current response (a reader hitting the feed at that
+		// moment sees it) rather than emitting invalid XML, and it drops out of
+		// subsequent requests once healed — one slightly-stale item beats broken
+		// XML.
+		//
+		// This check MUST stay after the REST/AJAX/cron/CLI/XML-RPC returns
+		// above — the ordering is load-bearing, not stylistic. `is_feed()` is a
+		// main-query conditional; called with `$wp_query` unset (e.g. mid-REST)
+		// it triggers `_doing_it_wrong()` and returns false, which would let the
+		// `exit` through in exactly the contexts this guard protects. Do not
+		// reorder these into alphabetical / "cheapest check first" order.
+		if ( is_feed() ) {
+			return false;
+		}
+		return true;
 	}
 
 	/**
