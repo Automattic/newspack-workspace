@@ -215,7 +215,10 @@ final class Media_Kit {
 				Core::plugin_url( 'dist/media-kit-frontend.js' ),
 				[],
 				NEWSPACK_ADS_VERSION,
-				true
+				[
+					'in_footer' => true,
+					'strategy'  => 'defer',
+				]
 			);
 		}
 	}
