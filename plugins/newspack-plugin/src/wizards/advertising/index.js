@@ -150,6 +150,10 @@ class AdvertisingWizard extends Component {
 				label: __( 'Providers', 'newspack-plugin' ),
 				path: '/',
 				exact: true,
+				// The Google Ad Manager screens live under this tab but route to
+				// their own paths. A `/` path always matches exactly, so they
+				// have to be claimed explicitly.
+				activeTabPaths: [ '/google_ad_manager/*' ],
 				breadcrumbs: [ ...ROOT, { label: __( 'Providers', 'newspack-plugin' ) } ],
 			},
 			{

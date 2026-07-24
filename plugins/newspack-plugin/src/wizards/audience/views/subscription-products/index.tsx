@@ -40,6 +40,13 @@ const AudienceSubscriptionProducts = ( props: object, ref: React.Ref< HTMLDivEle
 					render: SubscriptionProductsList,
 					props: { scope: 'subscriptions' },
 					exact: true,
+					// The hidden add/edit screens route to their own paths, which
+					// the exact match above would not claim. They are reachable
+					// from every scope tab, so editing a donation or a bundle
+					// highlights this one too — consistent with their shared
+					// `backNav: '#/'`. These entries also win the first-match
+					// lookup in `activeBreadcrumbs`, shadowing the hidden sections.
+					activeTabPaths: [ '/new', '/edit/*' ],
 					fullWidth: true,
 				},
 				{

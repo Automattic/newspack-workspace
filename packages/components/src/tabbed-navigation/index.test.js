@@ -1,6 +1,7 @@
 /**
  * External dependencies.
  */
+import { useEffect } from 'react';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter, Redirect, useHistory } from 'react-router-dom';
 
@@ -207,6 +208,60 @@ describe( 'TabbedNavigation with routed items', () => {
 		act( () => history.push( '/budgets' ) );
 		expect( getTab( 'Budgets' ) ).toHaveAttribute( 'aria-selected', 'true' );
 		expect( screen.getByText( 'Routed content' ).closest( '[role="tabpanel"]' ).id ).toBe( getTab( 'Budgets' ).getAttribute( 'aria-controls' ) );
+	} );
+
+	it( 'remounts the content when a route stops being owned by a tab', () => {
+		// Leaving a tab's ownership moves the content out of its panel, so React
+		// remounts the subtree — losing its state and re-firing its effects. That
+		// cost is why a tab whose sub-views have their own paths should claim them
+		// via `activeTabPaths` rather than lean on the unowned-content fallback.
+		const historyRef = { current: null };
+		const mounts = { current: 0 };
+		const Content = () => {
+			useEffect( () => {
+				mounts.current++;
+			}, [] );
+			return <div>Routed content</div>;
+		};
+		render(
+			<MemoryRouter initialEntries={ [ '/stories' ] }>
+				<HistoryGrabber historyRef={ historyRef } />
+				<TabbedNavigation items={ [ { label: 'Stories', path: '/stories', exact: true } ] } content={ <Content /> } />
+			</MemoryRouter>
+		);
+		expect( screen.getByText( 'Routed content' ).closest( '[role="tabpanel"]' ) ).not.toBeNull();
+		expect( mounts.current ).toBe( 1 );
+
+		act( () => historyRef.current.push( '/stories/42' ) );
+		expect( screen.getByText( 'Routed content' ).closest( '[role="tabpanel"]' ) ).toBeNull();
+		expect( mounts.current ).toBe( 2 );
+	} );
+
+	it( 'keeps the content in the tab panel across subpaths it claims', () => {
+		// The complement of the test above, and the shape the wizard tabs in this
+		// change adopt: with the subpath claimed the content never leaves the panel,
+		// so no remount happens.
+		const historyRef = { current: null };
+		const mounts = { current: 0 };
+		const Content = () => {
+			useEffect( () => {
+				mounts.current++;
+			}, [] );
+			return <div>Routed content</div>;
+		};
+		render(
+			<MemoryRouter initialEntries={ [ '/stories' ] }>
+				<HistoryGrabber historyRef={ historyRef } />
+				<TabbedNavigation
+					items={ [ { label: 'Stories', path: '/stories', exact: true, activeTabPaths: [ '/stories/*' ] } ] }
+					content={ <Content /> }
+				/>
+			</MemoryRouter>
+		);
+		act( () => historyRef.current.push( '/stories/42' ) );
+		expect( getTab( 'Stories' ) ).toHaveAttribute( 'aria-selected', 'true' );
+		expect( screen.getByText( 'Routed content' ).closest( '[role="tabpanel"]' ) ).not.toBeNull();
+		expect( mounts.current ).toBe( 1 );
 	} );
 } );
 
