@@ -250,6 +250,14 @@ class IP_Access_Rule {
 	 * address, CIDR block, or dash range. Malformed entries are dropped
 	 * silently. Email-domain and reader-data rules are not exposed.
 	 *
+	 * `ip_ranges` is a plain `string[]` carrying three notations with no
+	 * discriminator field: `10.0.0.5`, `10.0.0.0/24` and `10.0.0.1-10.0.0.9`.
+	 * A consumer that only understands the first two ignores dash entries,
+	 * which fails closed (the reader sees the gate). A site running such a
+	 * consumer can rewrite or drop entries through the
+	 * `newspack_content_gate_ip_allowlist` filter below — e.g. expanding dash
+	 * ranges into CIDR blocks — without restricting what admins may type.
+	 *
 	 * @return \WP_REST_Response
 	 */
 	public static function get_ip_allowlist_rest() {
@@ -620,6 +628,22 @@ class IP_Access_Rule {
 	}
 
 	/**
+	 * Convert an IPv4 address to its unsigned 32-bit value.
+	 *
+	 * `ip2long()` returns a signed int, so on a 32-bit PHP build every address
+	 * above 127.255.255.255 comes back negative and a straddling range like
+	 * `10.0.0.0-200.0.0.0` would read as reversed. Formatting with `%u` yields
+	 * the unsigned value on every platform.
+	 *
+	 * @param string $ip Validated IPv4 address.
+	 *
+	 * @return float Unsigned 32-bit value.
+	 */
+	private static function ip_to_unsigned( $ip ) {
+		return (float) sprintf( '%u', ip2long( $ip ) );
+	}
+
+	/**
 	 * Parse a comma-separated list of IPs, CIDR blocks, and dash ranges.
 	 *
 	 * Trims whitespace (around tokens and around the `/` and `-` separators),
@@ -628,7 +652,10 @@ class IP_Access_Rule {
 	 * (`<ipv4>-<ipv4>` with start <= end). Entries are emitted in their
 	 * trimmed form.
 	 *
-	 * @param string $raw Comma-separated list (e.g. `"192.168.1.0/24,10.0.0.5,142.74.1.0-142.74.1.255"`).
+	 * A token carrying both separators (e.g. `10.0.0.0/24-10.0.0.5`) is read as
+	 * a CIDR block and dropped: the `/` branch is checked first.
+	 *
+	 * @param string $raw Comma-separated list (e.g. `"192.168.1.0/24,10.0.0.5,203.0.113.0-203.0.113.255"`).
 	 *
 	 * @return string[] Validated entries.
 	 */
@@ -658,7 +685,7 @@ class IP_Access_Rule {
 					continue;
 				}
 				// A reversed range (end < start) is most likely a typo; treat it as invalid rather than silently swapping the bounds.
-				if ( ip2long( $start ) > ip2long( $end ) ) {
+				if ( self::ip_to_unsigned( $start ) > self::ip_to_unsigned( $end ) ) {
 					continue;
 				}
 				$valid[] = $start . '-' . $end;
@@ -681,7 +708,8 @@ class IP_Access_Rule {
 		if ( ! filter_var( $ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 ) ) {
 			return false;
 		}
-		$ip_long = ip2long( $ip );
+		$ip_long     = ip2long( $ip );
+		$ip_unsigned = self::ip_to_unsigned( $ip );
 
 		foreach ( self::parse_ip_ranges( $ranges ) as $range ) {
 			if ( strpos( $range, '/' ) !== false ) {
@@ -693,7 +721,7 @@ class IP_Access_Rule {
 				}
 			} elseif ( strpos( $range, '-' ) !== false ) {
 				list( $start, $end ) = explode( '-', $range, 2 );
-				if ( ip2long( $start ) <= $ip_long && $ip_long <= ip2long( $end ) ) {
+				if ( self::ip_to_unsigned( $start ) <= $ip_unsigned && $ip_unsigned <= self::ip_to_unsigned( $end ) ) {
 					return true;
 				}
 			} elseif ( $ip_long === ip2long( $range ) ) {

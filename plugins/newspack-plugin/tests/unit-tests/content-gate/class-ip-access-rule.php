@@ -92,15 +92,15 @@ class Newspack_Test_IP_Access_Rule extends WP_UnitTestCase {
 	 * Test dash-range matching, including both boundaries.
 	 */
 	public function test_dash_range_match() {
-		$range = '142.74.1.0-142.74.1.255';
+		$range = '203.0.113.0-203.0.113.255';
 		// Both boundaries are inclusive.
-		$this->assertTrue( IP_Access_Rule::ip_matches_ranges( '142.74.1.0', $range ) );
-		$this->assertTrue( IP_Access_Rule::ip_matches_ranges( '142.74.1.255', $range ) );
+		$this->assertTrue( IP_Access_Rule::ip_matches_ranges( '203.0.113.0', $range ) );
+		$this->assertTrue( IP_Access_Rule::ip_matches_ranges( '203.0.113.255', $range ) );
 		// Inside the range.
-		$this->assertTrue( IP_Access_Rule::ip_matches_ranges( '142.74.1.128', $range ) );
+		$this->assertTrue( IP_Access_Rule::ip_matches_ranges( '203.0.113.128', $range ) );
 		// Just outside either boundary.
-		$this->assertFalse( IP_Access_Rule::ip_matches_ranges( '142.74.0.255', $range ) );
-		$this->assertFalse( IP_Access_Rule::ip_matches_ranges( '142.74.2.0', $range ) );
+		$this->assertFalse( IP_Access_Rule::ip_matches_ranges( '203.0.112.255', $range ) );
+		$this->assertFalse( IP_Access_Rule::ip_matches_ranges( '203.0.114.0', $range ) );
 	}
 
 	/**
@@ -123,10 +123,10 @@ class Newspack_Test_IP_Access_Rule extends WP_UnitTestCase {
 	 * range than intended; the UI warns about it instead.
 	 */
 	public function test_reversed_dash_range_never_matches() {
-		$range = '142.74.1.255-142.74.1.0';
-		$this->assertFalse( IP_Access_Rule::ip_matches_ranges( '142.74.1.0', $range ) );
-		$this->assertFalse( IP_Access_Rule::ip_matches_ranges( '142.74.1.128', $range ) );
-		$this->assertFalse( IP_Access_Rule::ip_matches_ranges( '142.74.1.255', $range ) );
+		$range = '203.0.113.255-203.0.113.0';
+		$this->assertFalse( IP_Access_Rule::ip_matches_ranges( '203.0.113.0', $range ) );
+		$this->assertFalse( IP_Access_Rule::ip_matches_ranges( '203.0.113.128', $range ) );
+		$this->assertFalse( IP_Access_Rule::ip_matches_ranges( '203.0.113.255', $range ) );
 	}
 
 	/**
@@ -161,12 +161,91 @@ class Newspack_Test_IP_Access_Rule extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test a token carrying both separators is inert.
+	 *
+	 * `parse_ip_ranges()` checks for `/` before `-`, so these are read as
+	 * malformed CIDR blocks and dropped. Pinned here because reordering that
+	 * if/elseif chain would silently change how they parse — and the wizard's
+	 * client-side validator flags them on the same assumption.
+	 */
+	public function test_token_with_both_separators_is_inert() {
+		$this->assertFalse( IP_Access_Rule::ip_matches_ranges( '10.0.0.3', '10.0.0.0/24-10.0.0.5' ) );
+		$this->assertFalse( IP_Access_Rule::ip_matches_ranges( '10.0.0.3', '10.0.0.1-10.0.0.9/24' ) );
+	}
+
+	/**
+	 * Test dash ranges spanning the `ip2long()` sign boundary.
+	 *
+	 * `ip2long()` returns a signed int, so addresses above 127.255.255.255 are
+	 * negative on 32-bit PHP builds. Ranges straddling that boundary are where
+	 * a signedness mistake surfaces, as a range silently dropped as "reversed"
+	 * or an IP that fails to match.
+	 */
+	public function test_dash_range_across_ip2long_sign_boundary() {
+		$boundary_range = '127.255.255.255-128.0.0.1';
+		$this->assertTrue( IP_Access_Rule::ip_matches_ranges( '127.255.255.255', $boundary_range ) );
+		$this->assertTrue( IP_Access_Rule::ip_matches_ranges( '128.0.0.0', $boundary_range ) );
+		$this->assertTrue( IP_Access_Rule::ip_matches_ranges( '128.0.0.1', $boundary_range ) );
+		$this->assertFalse( IP_Access_Rule::ip_matches_ranges( '128.0.0.2', $boundary_range ) );
+
+		$full_range = '0.0.0.0-255.255.255.255';
+		$this->assertTrue( IP_Access_Rule::ip_matches_ranges( '0.0.0.0', $full_range ) );
+		$this->assertTrue( IP_Access_Rule::ip_matches_ranges( '200.0.0.1', $full_range ) );
+		$this->assertTrue( IP_Access_Rule::ip_matches_ranges( '255.255.255.255', $full_range ) );
+
+		// A range straddling the boundary must not be read as reversed.
+		$this->assertTrue( IP_Access_Rule::ip_matches_ranges( '150.0.0.1', '10.0.0.0-200.0.0.0' ) );
+	}
+
+	/**
+	 * Test every entry in the shared validation fixture is classified here the
+	 * same way the wizard's client-side validator classifies it.
+	 *
+	 * `tests/fixtures/ip-range-validation-cases.json` is the single source of
+	 * truth for both suites (see `src/wizards/audience/views/content-gates/institutions/utils.test.js`).
+	 * The dangerous direction is the client calling something valid that this
+	 * parser drops: the admin sees no warning and the rule silently never
+	 * grants access. Shared cases turn that drift into a CI failure.
+	 *
+	 * @dataProvider shared_validation_case_provider
+	 *
+	 * @param string $entry    A single (comma-free) allowlist entry.
+	 * @param bool   $is_valid Whether the parser should keep it.
+	 */
+	public function test_shared_validation_fixture_parity( $entry, $is_valid ) {
+		$parse_ip_ranges_method = new ReflectionMethod( IP_Access_Rule::class, 'parse_ip_ranges' );
+		$parse_ip_ranges_method->setAccessible( true );
+		$parsed = $parse_ip_ranges_method->invoke( null, $entry );
+
+		$this->assertCount(
+			$is_valid ? 1 : 0,
+			$parsed,
+			sprintf( 'Entry %s should %sbe kept by parse_ip_ranges().', wp_json_encode( $entry ), $is_valid ? '' : 'not ' )
+		);
+	}
+
+	/**
+	 * Provide the shared client/server validation cases.
+	 *
+	 * @return array[] Keyed by case label: [ entry, is_valid ].
+	 */
+	public function shared_validation_case_provider() {
+		$fixture_path = dirname( __DIR__, 2 ) . '/fixtures/ip-range-validation-cases.json';
+		$fixture      = json_decode( file_get_contents( $fixture_path ), true ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents, WordPressVIPMinimum.Performance.FetchingRemoteData.FileGetContentsUnknown -- Local test fixture.
+		$cases        = [];
+		foreach ( $fixture['cases'] as $case ) {
+			$cases[ $case['label'] ] = [ $case['entry'], $case['valid'] ];
+		}
+		return $cases;
+	}
+
+	/**
 	 * Test a mixed list of CIDR, dash range, and single IP entries.
 	 */
 	public function test_mixed_cidr_dash_and_single_entries() {
-		$ranges = '192.168.1.0/24, 142.74.1.0-142.74.1.255, 10.0.0.5';
+		$ranges = '192.168.1.0/24, 203.0.113.0-203.0.113.255, 10.0.0.5';
 		$this->assertTrue( IP_Access_Rule::ip_matches_ranges( '192.168.1.77', $ranges ) );
-		$this->assertTrue( IP_Access_Rule::ip_matches_ranges( '142.74.1.42', $ranges ) );
+		$this->assertTrue( IP_Access_Rule::ip_matches_ranges( '203.0.113.42', $ranges ) );
 		$this->assertTrue( IP_Access_Rule::ip_matches_ranges( '10.0.0.5', $ranges ) );
 		$this->assertFalse( IP_Access_Rule::ip_matches_ranges( '172.16.0.1', $ranges ) );
 	}
@@ -176,8 +255,8 @@ class Newspack_Test_IP_Access_Rule extends WP_UnitTestCase {
 	 * around it.
 	 */
 	public function test_invalid_entry_does_not_disable_valid_neighbors() {
-		$ranges = 'garbage, 142.74.1.0-142.74.1.255, 10.0.0.0/nope';
-		$this->assertTrue( IP_Access_Rule::ip_matches_ranges( '142.74.1.42', $ranges ) );
+		$ranges = 'garbage, 203.0.113.0-203.0.113.255, 10.0.0.0/nope';
+		$this->assertTrue( IP_Access_Rule::ip_matches_ranges( '203.0.113.42', $ranges ) );
 		$this->assertFalse( IP_Access_Rule::ip_matches_ranges( '10.0.0.5', $ranges ) );
 	}
 
@@ -201,7 +280,7 @@ class Newspack_Test_IP_Access_Rule extends WP_UnitTestCase {
 		$inst_id = \Newspack\Institution::create(
 			'Dash Range Library',
 			'',
-			[ 'ip_range' => '142.74.1.0 - 142.74.1.255, 10.0.0.9-10.0.0.1, 10.0.0.1-, 192.168.1.0/24' ]
+			[ 'ip_range' => '203.0.113.0 - 203.0.113.255, 10.0.0.9-10.0.0.1, 10.0.0.1-, 192.168.1.0/24' ]
 		);
 		$this->assertIsInt( $inst_id );
 		delete_transient( \Newspack\Institution::TRANSIENT_KEY );
@@ -209,6 +288,10 @@ class Newspack_Test_IP_Access_Rule extends WP_UnitTestCase {
 		$route    = '/' . NEWSPACK_API_NAMESPACE . IP_Access_Rule::REST_ROUTE_IP_ALLOWLIST;
 		$request  = new WP_REST_Request( 'GET', $route );
 		$response = rest_do_request( $request );
+
+		// Assert the status first: iterating an error payload would fail with an
+		// array-key notice instead of naming the permission regression.
+		$this->assertSame( 200, $response->get_status() );
 
 		$entry = null;
 		foreach ( $response->get_data() as $item ) {
@@ -218,7 +301,7 @@ class Newspack_Test_IP_Access_Rule extends WP_UnitTestCase {
 			}
 		}
 		$this->assertNotNull( $entry );
-		$this->assertSame( [ '142.74.1.0-142.74.1.255', '192.168.1.0/24' ], $entry['ip_ranges'] );
+		$this->assertSame( [ '203.0.113.0-203.0.113.255', '192.168.1.0/24' ], $entry['ip_ranges'] );
 	}
 
 	/**
