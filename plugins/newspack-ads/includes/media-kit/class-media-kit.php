@@ -197,8 +197,8 @@ final class Media_Kit {
 	public static function enqueue_scripts() {
 		// Get current page content and check for the special class used in the patterns, or block usage.
 		$page_content = get_the_content();
-		$has_pattern = strpos( $page_content, 'media-kit-page__wrapper' ) >= 0;
-		$has_block = strpos( $page_content, '<!-- wp:newspack/tabs' ) >= 0;
+		$has_pattern = false !== strpos( $page_content, 'media-kit-page__wrapper' );
+		$has_block = false !== strpos( $page_content, '<!-- wp:newspack/tabs' );
 		if ( $has_pattern || $has_block ) {
 			\wp_register_style(
 				'newspack-ads-media-kit-frontend',
