@@ -812,8 +812,10 @@ final class Newspack_Popups {
 				'endpoint'                   => '/newspack-popups/v1/prompts',
 				'post_type'                  => self::NEWSPACK_POPUPS_CPT,
 				'is_prompt'                  => self::NEWSPACK_POPUPS_CPT == get_post_type(),
-				// Gates client-side registration of the Contextual Prompt block.
-				'contextual_prompts_enabled' => self::is_contextual_prompts_enabled(),
+				// Gates client-side registration of the Contextual Prompt block:
+				// requires both the rollout flag and the admin opt-in, so the
+				// block cannot be inserted before the AI disclosure is accepted.
+				'contextual_prompts_enabled' => self::is_contextual_prompts_enabled() && Newspack_Popups_Settings::is_ai_copy_assistant_enabled(),
 				// So the editor previews the Contextual Prompt CTA in the same
 				// accent the front end resolves at render.
 				'accent_color'               => Newspack_Popups_Contextual_Prompt_Block::get_accent_color(),

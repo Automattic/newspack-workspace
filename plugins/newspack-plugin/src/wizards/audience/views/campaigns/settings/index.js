@@ -181,7 +181,9 @@ const Settings = props => {
 	const isDirty = Object.keys( settings ).some(
 		sectionKey => ! mapsEqual( sectionValues( settings[ sectionKey ] ), savedRef.current[ sectionKey ] || {} )
 	);
-	const { confirmDialog } = useUnsavedChangesDialog( { when: isDirty && ! inFlight } );
+	// Guard stays active during an in-flight save: the edits are only safe once
+	// a successful response has refreshed the saved snapshot.
+	const { confirmDialog } = useUnsavedChangesDialog( { when: isDirty } );
 
 	const headerActions = (
 		<Button variant="primary" onClick={ handleSave } disabled={ inFlight || ! isDirty }>

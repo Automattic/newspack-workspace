@@ -129,7 +129,9 @@ const ContextualPrompts = props => {
 	const setValue = ( key, value ) => setValues( previous => ( { ...previous, [ key ]: value } ) );
 
 	const isDirty = ! valuesEqual( values, savedValuesRef.current );
-	const { confirmDialog, requestConfirm } = useUnsavedChangesDialog( { when: isDirty && ! inFlight } );
+	// Guard stays active during an in-flight save: the edits are only safe once
+	// a successful response has refreshed the saved snapshot.
+	const { confirmDialog, requestConfirm } = useUnsavedChangesDialog( { when: isDirty } );
 
 	// Disabling refreshes state from the response, discarding local edits, so route
 	// it through the same unsaved-changes guard: it confirms only when dirty, and a
