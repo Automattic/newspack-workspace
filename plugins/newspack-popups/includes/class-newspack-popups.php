@@ -785,22 +785,24 @@ final class Newspack_Popups {
 			'newspack-popups-blocks',
 			'newspack_popups_blocks_data',
 			[
-				'custom_placements' => Newspack_Popups_Custom_Placements::get_custom_placements(),
-				'endpoint'          => '/newspack-popups/v1/prompts',
-				'post_type'         => self::NEWSPACK_POPUPS_CPT,
-				'is_prompt'         => self::NEWSPACK_POPUPS_CPT == get_post_type(),
+				'custom_placements'          => Newspack_Popups_Custom_Placements::get_custom_placements(),
+				'endpoint'                   => '/newspack-popups/v1/prompts',
+				'post_type'                  => self::NEWSPACK_POPUPS_CPT,
+				'is_prompt'                  => self::NEWSPACK_POPUPS_CPT == get_post_type(),
+				// Gates client-side registration of the Contextual Prompt block.
+				'contextual_prompts_enabled' => self::is_contextual_prompts_enabled(),
 				// So the editor previews the Contextual Prompt CTA in the same
 				// accent the front end resolves at render.
-				'accent_color'      => Newspack_Popups_Contextual_Prompt_Block::get_accent_color(),
+				'accent_color'               => Newspack_Popups_Contextual_Prompt_Block::get_accent_color(),
 				// The edited content's own noun ("post", "page", "listing"…), so
 				// prompt UI strings speak the publisher's language.
-				'post_type_label'   => self::get_current_post_type_label(),
+				'post_type_label'            => self::get_current_post_type_label(),
 				// Whether the Contextual Prompt CTA is the native donate block
 				// or a plain button.
-				'donations_native'  => Newspack_Popups_Contextual_Prompt_Block::use_donate_block(),
+				'donations_native'           => Newspack_Popups_Contextual_Prompt_Block::use_donate_block(),
 				// Default target for the plain-button CTA: the donor landing
 				// page, when one is configured in Campaigns settings.
-				'donor_landing_url' => self::get_donor_landing_url(),
+				'donor_landing_url'          => self::get_donor_landing_url(),
 			]
 		);
 

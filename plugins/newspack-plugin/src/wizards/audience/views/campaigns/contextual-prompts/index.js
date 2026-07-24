@@ -10,7 +10,7 @@ import { moreVertical } from '@wordpress/icons';
 /**
  * Internal dependencies
  */
-import { withWizardScreen, Button, Waiting } from '../../../../../../packages/components/src';
+import { withWizardScreen, Button, Notice, Waiting } from '../../../../../../packages/components/src';
 import ContextualPromptsSettings from './contextual-prompts-settings';
 
 const STATUS_PATH = '/newspack-popups/v1/contextual-prompt/status';
@@ -28,14 +28,22 @@ const ContextualPrompts = props => {
 	const [ values, setValues ] = useState( {} );
 	const [ inFlight, setInFlight ] = useState( false );
 	const [ error, setError ] = useState( null );
+	const [ loaded, setLoaded ] = useState( false );
 
-	useEffect( () => {
-		apiFetch( { path: STATUS_PATH } )
+	const loadStatus = () => {
+		setError( null );
+		return apiFetch( { path: STATUS_PATH } )
 			.then( next => {
 				setStatus( next );
 				setValues( fieldsToValues( next.fields ) );
 			} )
-			.catch( setError );
+			.catch( setError )
+			.finally( () => setLoaded( true ) );
+	};
+
+	useEffect( () => {
+		loadStatus();
+		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [] );
 
 	const request = ( path, data ) => {
@@ -77,20 +85,32 @@ const ContextualPrompts = props => {
 		</>
 	) : undefined;
 
+	let content = <Waiting />;
+	if ( status ) {
+		content = (
+			<ContextualPromptsSettings
+				status={ status }
+				values={ values }
+				error={ error }
+				inFlight={ inFlight }
+				onSetValue={ setValue }
+				onEnable={ () => setEnabled( true ) }
+			/>
+		);
+	} else if ( loaded ) {
+		content = (
+			<>
+				<Notice isError noticeText={ error?.message || __( 'Could not load Contextual Prompts.', 'newspack-plugin' ) } />
+				<Button variant="primary" onClick={ loadStatus }>
+					{ __( 'Retry', 'newspack-plugin' ) }
+				</Button>
+			</>
+		);
+	}
+
 	return (
 		<ContextualPromptsScreen { ...props } headerActions={ headerActions }>
-			{ ! status ? (
-				<Waiting />
-			) : (
-				<ContextualPromptsSettings
-					status={ status }
-					values={ values }
-					error={ error }
-					inFlight={ inFlight }
-					onSetValue={ setValue }
-					onEnable={ () => setEnabled( true ) }
-				/>
-			) }
+			{ content }
 		</ContextualPromptsScreen>
 	);
 };
