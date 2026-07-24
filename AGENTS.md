@@ -154,6 +154,7 @@ n env cleanup                 # Interactive bulk cleanup
 - Worktrees override individual plugins while the rest are shared. Monorepo worktrees live in `worktrees/<branch>/`; standalone `repos/` worktrees in `worktrees-repos/<name>/<branch>/`, mounted over just that path so other envs keep the base checkout. Destroying a monorepo worktree deletes its branch; a `repos/` worktree keeps it.
 - All env containers share the `newspack_envs` bridge network with their domain as a DNS alias, so they can reach each other (hub/node setups).
 - `n env destroy` removes the container, DB, html dir, hosts entry and worktrees.
+- **Building a worktree plugin's JS** (`docker exec newspack_env_<name> bash -c "/var/scripts/build-repos.sh <plugin>"`) can fail with exit 1 and completely empty stdout/stderr, leaving `dist/` deleted (the plugin's `build` script runs `clean` before webpack) but not rebuilt. One observed cause: the worktree carries its own `node_modules`, separate from the main checkout's, and it isn't automatically kept in step — a package present in main's install can be missing there, and pnpm/webpack fail silently on the missing module before printing anything. To diagnose, run the same build on the host from the worktree root (`pnpm --filter <pkg> run build`) — it surfaces the real error where the container path doesn't. If it's a missing package, `pnpm install` at the worktree root and rebuild.
 
 With the `newspack` Claude Code plugin installed, `newspack:env-create`, `newspack:env-destroy` and `newspack:worktree` wrap these.
 
