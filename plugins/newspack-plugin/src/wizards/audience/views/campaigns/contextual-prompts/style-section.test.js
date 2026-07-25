@@ -165,7 +165,51 @@ describe( 'StyleSection on a classic theme', () => {
 		expect( groupReset( 'Color' ) ).toBeDisabled();
 		expect( screen.getByRole( 'button', { name: 'Text' } ) ).toBeDisabled();
 		expect( screen.getByLabelText( 'Radius' ) ).toBeDisabled();
-		expect( screen.getByRole( 'button', { name: 'Unlink Corners' } ) ).toBeDisabled();
+		expect( screen.getByRole( 'slider', { name: 'Border radius' } ) ).toBeDisabled();
+	} );
+
+	it( 'offers one border radius input paired with a slider', () => {
+		render( <StyleSection status={ CLASSIC_STATUS } styles={ {} } inFlight={ false } onChangeStyles={ () => {} } /> );
+
+		// The default radius shows in both, and there are no per-corner inputs.
+		expect( screen.getByLabelText( 'Radius' ) ).toHaveValue( 10 );
+		expect( screen.getByRole( 'slider', { name: 'Border radius' } ) ).toHaveValue( '10' );
+		expect( screen.queryByLabelText( 'Top left' ) ).toBeNull();
+	} );
+
+	it( 'writes the border radius as a single string', () => {
+		const onChangeStyles = jest.fn();
+		render( <StyleSection status={ CLASSIC_STATUS } styles={ {} } inFlight={ false } onChangeStyles={ onChangeStyles } /> );
+
+		fireEvent.change( screen.getByLabelText( 'Radius' ), { target: { value: '8' } } );
+
+		expect( onChangeStyles ).toHaveBeenCalledWith( { border: { radius: '8px' } } );
+
+		// The slider moves the number and keeps the unit in play.
+		fireEvent.change( screen.getByRole( 'slider', { name: 'Border radius' } ), { target: { value: '24' } } );
+
+		expect( onChangeStyles ).toHaveBeenLastCalledWith( { border: { radius: '24px' } } );
+	} );
+
+	it( 'replaces a legacy per-corner radius on the first edit, showing nothing until then', () => {
+		const onChangeStyles = jest.fn();
+		const cornerRadius = { topLeft: '4px', topRight: '8px' };
+		render(
+			<StyleSection
+				status={ CLASSIC_STATUS }
+				styles={ { border: { radius: cornerRadius } } }
+				inFlight={ false }
+				onChangeStyles={ onChangeStyles }
+			/>
+		);
+
+		// No single value to show, and nothing written just by rendering.
+		expect( screen.getByLabelText( 'Radius' ) ).toHaveValue( null );
+		expect( onChangeStyles ).not.toHaveBeenCalled();
+
+		fireEvent.change( screen.getByLabelText( 'Radius' ), { target: { value: '12' } } );
+
+		expect( onChangeStyles ).toHaveBeenCalledWith( { border: { radius: '12px' } } );
 	} );
 
 	it( 'warns on a low-contrast pair', () => {

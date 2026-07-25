@@ -9,7 +9,6 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { useState } from '@wordpress/element';
 import {
 	ColorIndicator,
 	ColorPalette,
@@ -18,14 +17,15 @@ import {
 	FlexItem,
 	FontSizePicker,
 	Notice,
+	RangeControl,
 	__experimentalBorderBoxControl as BorderBoxControl, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalBoxControl as BoxControl, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalHeading as Heading, // eslint-disable-line @wordpress/no-unsafe-wp-apis
+	__experimentalParseQuantityAndUnitFromRawValue as parseQuantityAndUnitFromRawValue, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalUnitControl as UnitControl, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
-import { link, linkOff } from '@wordpress/icons';
 
 /**
  * Internal dependencies
@@ -36,12 +36,9 @@ import './style-section.scss';
 
 const MIN_CONTRAST_RATIO = 4.5;
 const PADDING_SIDES = [ 'top', 'right', 'bottom', 'left' ];
-const RADIUS_CORNERS = [
-	[ 'topLeft', __( 'Top left', 'newspack-plugin' ) ],
-	[ 'topRight', __( 'Top right', 'newspack-plugin' ) ],
-	[ 'bottomLeft', __( 'Bottom left', 'newspack-plugin' ) ],
-	[ 'bottomRight', __( 'Bottom right', 'newspack-plugin' ) ],
-];
+// The radius slider works in the value's own number space, capped where core's
+// BorderControl caps its width slider.
+const RADIUS_SLIDER_MAX = 100;
 
 const getPath = ( source, path ) => path.reduce( ( node, key ) => node?.[ key ], source );
 
@@ -135,8 +132,11 @@ const StyleSection = ( { status, styles = {}, inFlight, onChangeStyles } ) => {
 	const effective = path => getPath( styles, path ) ?? getPath( defaults, path );
 
 	const radius = effective( [ 'border', 'radius' ] );
+	// A stored per-corner object predates this single control: show nothing rather
+	// than a wrong number, and leave it stored until an edit replaces it.
 	const isSplitRadius = !! radius && 'object' === typeof radius;
-	const [ radiusLinked, setRadiusLinked ] = useState( ! isSplitRadius );
+	const radiusValue = isSplitRadius ? '' : radius;
+	const [ radiusQuantity, radiusUnit ] = parseQuantityAndUnitFromRawValue( radiusValue );
 
 	const background = resolveColor( effective( [ 'color', 'background' ] ), palette );
 	const text = resolveColor( effective( [ 'color', 'text' ] ), palette );
@@ -166,22 +166,9 @@ const StyleSection = ( { status, styles = {}, inFlight, onChangeStyles } ) => {
 	};
 
 	const setRadius = value => onChangeStyles( setPath( styles, [ 'border', 'radius' ], value || undefined ) );
-	// Unlinking an unsplit radius carries its value onto every corner, so the
-	// corners the publisher does not touch keep what they were showing.
-	const setRadiusCorner = ( corner, value ) => {
-		const next = isSplitRadius ? { ...radius } : {};
-		if ( ! isSplitRadius && radius ) {
-			RADIUS_CORNERS.forEach( ( [ key ] ) => {
-				next[ key ] = radius;
-			} );
-		}
-		if ( value ) {
-			next[ corner ] = value;
-		} else {
-			delete next[ corner ];
-		}
-		onChangeStyles( setPath( styles, [ 'border', 'radius' ], hasKeys( next ) ? next : undefined ) );
-	};
+	// The slider only moves the number, so it writes back with the unit already in
+	// play, as core's BorderControl does for the border width.
+	const setRadiusQuantity = value => setRadius( undefined === value ? undefined : `${ value }${ radiusUnit || 'px' }` );
 
 	// ColorPalette, FontSizePicker, BoxControl and BorderBoxControl take no
 	// `disabled` prop, so the whole stack goes inert while a save is in flight.
@@ -274,37 +261,29 @@ const StyleSection = ( { status, styles = {}, inFlight, onChangeStyles } ) => {
 						onReset={ () => onChangeStyles( setPath( styles, [ 'border', 'radius' ], undefined ) ) }
 						disabled={ inFlight }
 					>
-						<HStack alignment="flex-end" justify="space-between" spacing={ 2 }>
-							{ radiusLinked ? (
-								<UnitControl
-									label={ __( 'Radius', 'newspack-plugin' ) }
-									value={ isSplitRadius ? '' : radius }
-									onChange={ setRadius }
-									min={ 0 }
-									disabled={ inFlight }
-									__next40pxDefaultSize
-								/>
-							) : (
-								<Grid columns={ 2 } gutter={ 8 } noMargin>
-									{ RADIUS_CORNERS.map( ( [ corner, cornerLabel ] ) => (
-										<UnitControl
-											key={ corner }
-											label={ cornerLabel }
-											value={ isSplitRadius ? radius[ corner ] : radius }
-											onChange={ value => setRadiusCorner( corner, value ) }
-											min={ 0 }
-											disabled={ inFlight }
-											__next40pxDefaultSize
-										/>
-									) ) }
-								</Grid>
-							) }
-							<Button
-								icon={ radiusLinked ? link : linkOff }
-								label={ radiusLinked ? __( 'Unlink Corners', 'newspack-plugin' ) : __( 'Link Corners', 'newspack-plugin' ) }
-								onClick={ () => setRadiusLinked( ! radiusLinked ) }
+						<HStack spacing={ 4 } className="newspack-prompt-style-radius">
+							<UnitControl
+								label={ __( 'Radius', 'newspack-plugin' ) }
+								hideLabelFromVision
+								value={ radiusValue }
+								onChange={ setRadius }
+								min={ 0 }
 								disabled={ inFlight }
-								isSmall
+								__next40pxDefaultSize
+							/>
+							<RangeControl
+								label={ __( 'Border radius', 'newspack-plugin' ) }
+								hideLabelFromVision
+								value={ radiusQuantity }
+								onChange={ setRadiusQuantity }
+								min={ 0 }
+								max={ RADIUS_SLIDER_MAX }
+								step={ 'px' === ( radiusUnit || 'px' ) || '%' === radiusUnit ? 1 : 0.1 }
+								initialPosition={ 0 }
+								withInputField={ false }
+								disabled={ inFlight }
+								__nextHasNoMarginBottom
+								__next40pxDefaultSize
 							/>
 						</HStack>
 					</StyleGroup>

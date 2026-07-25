@@ -36,6 +36,18 @@
 	}
 }
 
+// Split the radius row the way core's BorderControl splits its width row:
+// input on the left, slider taking the rest.
+.newspack-prompt-style-radius {
+	.components-unit-control-wrapper {
+		flex: 1 1 40%;
+	}
+
+	.components-range-control {
+		flex: 1 1 60%;
+	}
+}
+
 // Popover content is `width: min-content`, which would collapse the palette to
 // a single column; 260px matches the editor's color panel.
 .newspack-prompt-style-colors__popover.components-dropdown__content .components-popover__content {
