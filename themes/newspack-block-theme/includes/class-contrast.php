@@ -22,11 +22,16 @@ final class Contrast {
 	}
 
 	/**
-	 * Emit --wp--preset--color--accent-contrast on the front end and the editor canvas.
+	 * Emit the derived accent-contrast custom properties on the front end and the
+	 * editor canvas.
 	 *
-	 * The value is derived, not pickable, so it is intentionally not registered
-	 * as a palette preset and never appears in color pickers. enqueue_block_assets
-	 * runs in both the front end and the iframed editor canvas.
+	 * Two properties are derived and each is emitted only when it resolves:
+	 * --wp--preset--color--accent-contrast for the button rest state (scored
+	 * against the accent) and --wp--preset--color--accent-contrast-hover for the
+	 * button hover state (scored against the resolved hover background). The values
+	 * are derived, not pickable, so they are intentionally not registered as palette
+	 * presets and never appear in color pickers. enqueue_block_assets runs in both
+	 * the front end and the iframed editor canvas.
 	 *
 	 * @return void
 	 */
@@ -36,10 +41,21 @@ final class Contrast {
 			return;
 		}
 
+		$declarations = [];
+
 		$contrast = self::get_color_for_contrast( $accent );
-		if ( null === $contrast ) {
-			// The accent is not a parseable hex, so leave the property unset and
-			// let the theme.json base fallback apply.
+		if ( null !== $contrast ) {
+			$declarations[] = sprintf( '--wp--preset--color--accent-contrast: %s;', $contrast );
+		}
+
+		$contrast_hover = self::get_accent_contrast_hover( $accent );
+		if ( null !== $contrast_hover ) {
+			$declarations[] = sprintf( '--wp--preset--color--accent-contrast-hover: %s;', $contrast_hover );
+		}
+
+		if ( empty( $declarations ) ) {
+			// Nothing derivable, so leave the properties unset and let the
+			// theme.json fallbacks apply.
 			return;
 		}
 
@@ -49,21 +65,159 @@ final class Contrast {
 		\wp_add_inline_style(
 			$handle,
 			sprintf(
-				':root, .editor-styles-wrapper { --wp--preset--color--accent-contrast: %s; }',
-				$contrast
+				':root, .editor-styles-wrapper { %s }',
+				implode( ' ', $declarations )
 			)
+		);
+	}
+
+	/**
+	 * Derive the contrast text color for the button hover state.
+	 *
+	 * Reads the resolved hover background of the button element and picks readable
+	 * text against it. The resolved value is interpreted as follows:
+	 *
+	 * - Absent, or a color-mix over the accent var (the theme default darkens the
+	 *   accent by 20% in srgb): score against the accent darkened per channel by
+	 *   0.8, which is exactly what that color-mix produces.
+	 * - A palette reference (var:preset|color|<slug> or var( --wp--preset--color--<slug> )):
+	 *   score against the palette color the slug resolves to.
+	 * - A plain parseable hex: score it directly.
+	 * - Anything else (arbitrary color-mix, rgb()/hsl(), gradients): not derivable.
+	 *
+	 * @param string $accent The resolved accent palette color.
+	 * @return string|null '#000000' or '#ffffff', or null when not derivable.
+	 */
+	private static function get_accent_contrast_hover( $accent ) {
+		$background = self::get_button_hover_background();
+
+		if ( null === $background || self::is_accent_color_mix( $background ) ) {
+			$darkened = self::darken_hex( $accent, 0.8 );
+			return null === $darkened ? null : self::get_color_for_contrast( $darkened );
+		}
+
+		$hex = self::resolve_color_reference( $background );
+		if ( null !== $hex ) {
+			return self::get_color_for_contrast( $hex );
+		}
+
+		return null;
+	}
+
+	/**
+	 * Read the resolved button hover background from global styles.
+	 *
+	 * The ':hover' pseudo key is a first-class key under the button element node,
+	 * so it is addressable directly in the path. A non-string result (an absent
+	 * leaf makes _wp_array_get fall back to the whole styles array) is treated as
+	 * absent.
+	 *
+	 * @return string|null The resolved background value, or null when absent.
+	 */
+	private static function get_button_hover_background() {
+		$value = \wp_get_global_styles( [ 'elements', 'button', ':hover', 'color', 'background' ] );
+
+		if ( ! is_string( $value ) || '' === $value ) {
+			return null;
+		}
+
+		return $value;
+	}
+
+	/**
+	 * Whether a value is a color-mix expression over the accent preset var.
+	 *
+	 * Matches loosely: a color-mix that references the accent preset (in either the
+	 * var:preset|color|accent internal form or the var( --wp--preset--color--accent )
+	 * CSS form). It does not attempt to parse the color-mix, and the accent slug is
+	 * matched exactly so accent-contrast and other accent-prefixed slugs do not
+	 * falsely match.
+	 *
+	 * @param string $value The resolved background value.
+	 * @return bool True when the value is a color-mix over the accent var.
+	 */
+	private static function is_accent_color_mix( $value ) {
+		if ( ! is_string( $value ) || false === stripos( $value, 'color-mix' ) ) {
+			return false;
+		}
+
+		return (bool) preg_match( '/(?:var:preset\|color\|accent|--wp--preset--color--accent)(?![\w-])/', $value );
+	}
+
+	/**
+	 * Resolve a CSS color reference to a hex string.
+	 *
+	 * Accepts a palette reference in either the var:preset|color|<slug> internal
+	 * form or the var( --wp--preset--color--<slug> ) CSS form, resolving the slug
+	 * against the palette, or a plain parseable hex passed through unchanged.
+	 *
+	 * @param string $value The resolved background value.
+	 * @return string|null The hex color, or null when not a resolvable reference.
+	 */
+	private static function resolve_color_reference( $value ) {
+		if ( ! is_string( $value ) || '' === $value ) {
+			return null;
+		}
+		$value = trim( $value );
+
+		if (
+			preg_match( '/^var:preset\|color\|([\w-]+)$/', $value, $matches )
+			|| preg_match( '/^var\(\s*--wp--preset--color--([\w-]+)\s*\)$/', $value, $matches )
+		) {
+			$color = self::resolve_palette_color( $matches[1] );
+			return '' === $color ? null : $color;
+		}
+
+		if ( null !== self::parse_hex_channels( $value ) ) {
+			return $value;
+		}
+
+		return null;
+	}
+
+	/**
+	 * Darken a hex color by multiplying each RGB channel by a factor.
+	 *
+	 * Operates in gamma-encoded srgb, so a 0.8 factor reproduces exactly what
+	 * color-mix( in srgb, <color> 80%, black ) produces.
+	 *
+	 * @param string $hex    Hexadecimal color.
+	 * @param float  $factor Multiplier applied to each channel.
+	 * @return string|null The darkened '#RRGGBB' color, or null when unparseable.
+	 */
+	private static function darken_hex( $hex, $factor ) {
+		$channels = self::parse_hex_channels( $hex );
+		if ( null === $channels ) {
+			return null;
+		}
+
+		return sprintf(
+			'#%02x%02x%02x',
+			(int) round( $channels[0] * $factor ),
+			(int) round( $channels[1] * $factor ),
+			(int) round( $channels[2] * $factor )
 		);
 	}
 
 	/**
 	 * Resolve the effective accent palette color.
 	 *
-	 * Scans the 'custom' (user override) origin before the 'theme' origin so a
-	 * user-selected accent wins.
-	 *
 	 * @return string The accent color, or an empty string if none resolves.
 	 */
 	private static function get_accent_color() {
+		return self::resolve_palette_color( 'accent' );
+	}
+
+	/**
+	 * Resolve a palette color by slug.
+	 *
+	 * Scans the 'custom' (user override) origin before the 'theme' origin so a
+	 * user-selected color wins.
+	 *
+	 * @param string $slug The palette color slug.
+	 * @return string The color, or an empty string if none resolves.
+	 */
+	private static function resolve_palette_color( $slug ) {
 		$palette = \wp_get_global_settings( [ 'color', 'palette' ] );
 
 		foreach ( [ 'custom', 'theme' ] as $origin ) {
@@ -71,7 +225,7 @@ final class Contrast {
 				continue;
 			}
 			foreach ( $palette[ $origin ] as $entry ) {
-				if ( isset( $entry['slug'], $entry['color'] ) && 'accent' === $entry['slug'] ) {
+				if ( isset( $entry['slug'], $entry['color'] ) && $slug === $entry['slug'] ) {
 					return $entry['color'];
 				}
 			}
@@ -105,16 +259,15 @@ final class Contrast {
 	}
 
 	/**
-	 * Compute the soft-clamped APCA screen luminance (Y) of a hex color.
+	 * Parse a hex color into its 0..255 RGB channels.
 	 *
 	 * Accepts #RGB, #RRGGBB and #RRGGBBAA (the alpha pair is stripped), with or
-	 * without the leading #, case-insensitively. Unparseable input returns null so
-	 * callers can leave the contrast property unset and fall back to theme.json.
+	 * without the leading #, case-insensitively. Unparseable input returns null.
 	 *
 	 * @param string $hex Hexadecimal color.
-	 * @return float|null Soft-clamped luminance in the 0..1 range, or null when unparseable.
+	 * @return int[]|null [ $r, $g, $b ] as 0..255 integers, or null when unparseable.
 	 */
-	private static function get_apca_luminance( $hex ) {
+	private static function parse_hex_channels( $hex ) {
 		$hex = ltrim( (string) $hex, '#' );
 		if ( 3 === strlen( $hex ) ) {
 			$hex = $hex[0] . $hex[0] . $hex[1] . $hex[1] . $hex[2] . $hex[2];
@@ -126,9 +279,32 @@ final class Contrast {
 			return null;
 		}
 
-		$r = hexdec( substr( $hex, 0, 2 ) ) / 255;
-		$g = hexdec( substr( $hex, 2, 2 ) ) / 255;
-		$b = hexdec( substr( $hex, 4, 2 ) ) / 255;
+		return [
+			hexdec( substr( $hex, 0, 2 ) ),
+			hexdec( substr( $hex, 2, 2 ) ),
+			hexdec( substr( $hex, 4, 2 ) ),
+		];
+	}
+
+	/**
+	 * Compute the soft-clamped APCA screen luminance (Y) of a hex color.
+	 *
+	 * Accepts #RGB, #RRGGBB and #RRGGBBAA (the alpha pair is stripped), with or
+	 * without the leading #, case-insensitively. Unparseable input returns null so
+	 * callers can leave the contrast property unset and fall back to theme.json.
+	 *
+	 * @param string $hex Hexadecimal color.
+	 * @return float|null Soft-clamped luminance in the 0..1 range, or null when unparseable.
+	 */
+	private static function get_apca_luminance( $hex ) {
+		$channels = self::parse_hex_channels( $hex );
+		if ( null === $channels ) {
+			return null;
+		}
+
+		$r = $channels[0] / 255;
+		$g = $channels[1] / 255;
+		$b = $channels[2] / 255;
 
 		$y = 0.2126729 * pow( $r, 2.4 ) + 0.7151522 * pow( $g, 2.4 ) + 0.0721750 * pow( $b, 2.4 );
 
