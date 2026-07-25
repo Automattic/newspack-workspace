@@ -256,8 +256,11 @@ class ContextualPromptStylesTest extends WP_UnitTestCase {
 
 		$this->assertSame( '#f7f7f7', $defaults['color']['background'] );
 		$this->assertSame( '10px', $defaults['border']['radius'] );
-		// Preset spacing must come back resolved, not as a var:preset reference.
+		// Preset spacing and font size must come back resolved, not as var:preset
+		// references: the wizard's controls read concrete CSS values.
 		$this->assertStringNotContainsString( 'var:preset', (string) $defaults['spacing']['padding']['top'] );
+		$this->assertNotEmpty( $defaults['typography']['fontSize'] );
+		$this->assertStringNotContainsString( 'var:', (string) $defaults['typography']['fontSize'] );
 	}
 
 	/**
