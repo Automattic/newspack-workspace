@@ -29,9 +29,9 @@ body {
 	color: var(--newspack-theme-color-text-main);
 }
 
+// No font-size here: the base size is inherited from the canvas, as on the front
+// end, so a styled container's font-size reaches its paragraphs.
 p {
-	font-size: var(--newspack-theme-font-size-base);
-
 	&.has-background {
 		padding: 20px 30px;
 	}
