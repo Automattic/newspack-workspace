@@ -36,6 +36,13 @@ final class Contrast {
 			return;
 		}
 
+		$contrast = self::get_color_for_contrast( $accent );
+		if ( null === $contrast ) {
+			// The accent is not a parseable hex, so leave the property unset and
+			// let the theme.json base fallback apply.
+			return;
+		}
+
 		$handle = 'newspack-block-theme-accent-contrast';
 		\wp_register_style( $handle, false, [], \wp_get_theme()->get( 'Version' ) );
 		\wp_enqueue_style( $handle );
@@ -43,7 +50,7 @@ final class Contrast {
 			$handle,
 			sprintf(
 				':root, .editor-styles-wrapper { --wp--preset--color--accent-contrast: %s; }',
-				self::get_color_for_contrast( $accent )
+				$contrast
 			)
 		);
 	}
@@ -83,13 +90,16 @@ final class Contrast {
 	 *
 	 * Keep in sync with Newspack_Blocks::get_color_for_contrast().
 	 *
-	 * @param string $hex Hexadecimal background color (#RGB or #RRGGBB, with or without #).
-	 * @return string Either '#000000' or '#ffffff'.
+	 * @param string $hex Hexadecimal background color (#RGB, #RRGGBB or #RRGGBBAA, with or without #).
+	 * @return string|null '#000000' or '#ffffff', or null when the input is not parseable as hex.
 	 */
 	private static function get_color_for_contrast( $hex ) {
 		$background_y = self::get_apca_luminance( $hex );
-		$black_lc     = self::get_apca_contrast( $background_y, self::get_apca_luminance( '#000000' ) );
-		$white_lc     = self::get_apca_contrast( $background_y, self::get_apca_luminance( '#ffffff' ) );
+		if ( null === $background_y ) {
+			return null;
+		}
+		$black_lc = self::get_apca_contrast( $background_y, self::get_apca_luminance( '#000000' ) );
+		$white_lc = self::get_apca_contrast( $background_y, self::get_apca_luminance( '#ffffff' ) );
 
 		return abs( $white_lc ) > abs( $black_lc ) ? '#ffffff' : '#000000';
 	}
@@ -97,19 +107,23 @@ final class Contrast {
 	/**
 	 * Compute the soft-clamped APCA screen luminance (Y) of a hex color.
 	 *
-	 * Accepts #RGB and #RRGGBB, with or without the leading #. Unparseable input
-	 * is treated as white (luminance 1.0) so callers fall back to black text.
+	 * Accepts #RGB, #RRGGBB and #RRGGBBAA (the alpha pair is stripped), with or
+	 * without the leading #, case-insensitively. Unparseable input returns null so
+	 * callers can leave the contrast property unset and fall back to theme.json.
 	 *
 	 * @param string $hex Hexadecimal color.
-	 * @return float Soft-clamped luminance in the 0..1 range.
+	 * @return float|null Soft-clamped luminance in the 0..1 range, or null when unparseable.
 	 */
 	private static function get_apca_luminance( $hex ) {
 		$hex = ltrim( (string) $hex, '#' );
 		if ( 3 === strlen( $hex ) ) {
 			$hex = $hex[0] . $hex[0] . $hex[1] . $hex[1] . $hex[2] . $hex[2];
+		} elseif ( 8 === strlen( $hex ) ) {
+			// Drop the alpha pair from #RRGGBBAA.
+			$hex = substr( $hex, 0, 6 );
 		}
 		if ( 6 !== strlen( $hex ) || ! ctype_xdigit( $hex ) ) {
-			return 1.0;
+			return null;
 		}
 
 		$r = hexdec( substr( $hex, 0, 2 ) ) / 255;
