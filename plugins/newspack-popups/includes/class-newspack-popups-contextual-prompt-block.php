@@ -268,9 +268,14 @@ final class Newspack_Popups_Contextual_Prompt_Block {
 				'styles'  => [
 					'blocks' => [
 						self::BLOCK_NAME => [
-							'border'  => [ 'radius' => '10px' ],
-							'color'   => [ 'background' => '#f7f7f7' ],
-							'spacing' => [
+							'border'     => [ 'radius' => '10px' ],
+							'color'      => [ 'background' => '#f7f7f7' ],
+							// Body copy size. Block themes define `medium` themselves;
+							// classic themes resolve it from core's default set, which
+							// stays available even where the theme's own sizes replace
+							// it in the editor's picker.
+							'typography' => [ 'fontSize' => 'var:preset|font-size|medium' ],
+							'spacing'    => [
 								'padding'  => [
 									'top'    => 'var:preset|spacing|50',
 									'right'  => 'var:preset|spacing|50',

@@ -49,10 +49,22 @@ final class Newspack_Popups_Contextual_Prompt_Styles {
 	const RGB_COLOR_PATTERN = '/^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*(?:,[^)]*)?\)\z/i';
 
 	/**
-	 * The CSS initial text color, used when the site sets no global text color at
-	 * all.
+	 * The CSS initial text color, the last resort when the site sets no global
+	 * text color at all.
 	 */
 	const INITIAL_TEXT_COLOR = '#000000';
+
+	/**
+	 * The classic Newspack theme's template. Its style variations are child
+	 * themes, so they all report this one.
+	 */
+	const NEWSPACK_THEME_TEMPLATE = 'newspack-theme';
+
+	/**
+	 * The body text color the classic Newspack theme renders with. It lives in
+	 * the theme's stylesheet, which the global styles data cannot see.
+	 */
+	const NEWSPACK_THEME_TEXT_COLOR = '#111111';
 
 	/**
 	 * Register hooks. Classic themes only: on block themes Global Styles owns
@@ -241,7 +253,7 @@ final class Newspack_Popups_Contextual_Prompt_Styles {
 	 * A color in none of those shapes hands back nothing rather than a stand-in:
 	 * the wizard would check a chosen background against the wrong color, and a
 	 * contrast warning pointing the wrong way is worse than no warning. Only a site
-	 * with no global text color at all gets the CSS initial one.
+	 * with no global text color at all gets the assumed default.
 	 *
 	 * @return string|null Hex value or preset reference, null when unreadable.
 	 */
@@ -250,12 +262,33 @@ final class Newspack_Popups_Contextual_Prompt_Styles {
 		$text = wp_get_global_styles( [ 'color', 'text' ], [ 'transforms' => [ 'resolve-variables' ] ] );
 		$text = is_string( $text ) ? trim( $text ) : '';
 		if ( '' === $text ) {
-			return self::INITIAL_TEXT_COLOR;
+			return self::get_assumed_text_color();
 		}
 		if ( preg_match( self::WIZARD_COLOR_PATTERN, $text ) ) {
 			return $text;
 		}
 		return self::rgb_to_hex( $text );
+	}
+
+	/**
+	 * The text color to assume when the site declares no global one. A classic
+	 * theme states its body color in CSS, out of the global styles data's reach,
+	 * so the Newspack theme's is named here and other classic themes supply
+	 * theirs through the filter.
+	 *
+	 * @return string Hex value.
+	 */
+	private static function get_assumed_text_color() {
+		$color = self::NEWSPACK_THEME_TEMPLATE === get_template() ? self::NEWSPACK_THEME_TEXT_COLOR : self::INITIAL_TEXT_COLOR;
+
+		/**
+		 * Filters the text color a Contextual Prompt is assumed to inherit when the
+		 * site declares no global text color. Read by the wizard's contrast check,
+		 * so it must be a hex value.
+		 *
+		 * @param string $color Hex color value.
+		 */
+		return apply_filters( 'newspack_popups_contextual_prompt_inherited_text_color', $color );
 	}
 
 	/**

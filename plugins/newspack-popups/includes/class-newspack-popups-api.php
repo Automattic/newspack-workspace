@@ -190,8 +190,12 @@ final class Newspack_Popups_API {
 		// Styles are a keyed object to every client, so no overrides has to travel
 		// as `{}`: an empty PHP array would serialize as `[]` and a client
 		// comparing it against an object it built would never see them as equal.
-		$styles     = Newspack_Popups_Contextual_Prompt_Styles::get_styles();
-		$font_sizes = self::flatten_global_settings_presets( wp_get_global_settings( [ 'typography', 'fontSizes' ] ) );
+		$styles = Newspack_Popups_Contextual_Prompt_Styles::get_styles();
+		// Font sizes take the highest origin holding anything, which is how the
+		// editor's picker resolves the single set it offers; spacing sizes are one
+		// scale built from every origin, as core's own spacing control builds it.
+		$font_sizes    = self::flatten_global_settings_presets( self::get_style_setting( [ 'typography', 'fontSizes' ] ) );
+		$spacing_sizes = self::get_spacing_size_presets();
 		return [
 			'enabled'                => Newspack_Popups_Settings::is_ai_copy_assistant_enabled(),
 			'can_manage'             => current_user_can( 'manage_options' ),
@@ -201,9 +205,51 @@ final class Newspack_Popups_API {
 			'styles'                 => empty( $styles ) ? (object) [] : $styles,
 			'style_defaults'         => Newspack_Popups_Contextual_Prompt_Styles::get_defaults(),
 			'style_palette'          => self::get_palette_presets(),
-			'style_font_sizes'       => self::normalize_preset_font_sizes( $font_sizes ),
+			'style_font_sizes'       => self::normalize_preset_sizes( $font_sizes ),
+			'style_spacing_sizes'    => self::normalize_preset_sizes( $spacing_sizes ),
+			'style_spacing_custom'   => self::is_custom_spacing_size_allowed(),
+			'style_spacing_units'    => self::get_spacing_units(),
 			'site_editor_styles_url' => admin_url( 'site-editor.php?p=%2Fstyles&section=' . rawurlencode( '/blocks/' . rawurlencode( Newspack_Popups_Contextual_Prompt_Block::BLOCK_NAME ) ) ),
 		];
+	}
+
+	/**
+	 * A style setting resolved the way the editor resolves it for a block: the
+	 * block's own `settings.blocks.<block>` value when it has one, the global value
+	 * otherwise. Core's `wp_get_global_settings()` does not do that fallback — given
+	 * a block context it reads the block path alone, and a missing path hands back
+	 * the whole settings tree — so the block path is read from the settings tree and
+	 * only stands in when it is set. Block settings keep the same origin-keyed preset
+	 * shape as global ones, so the flatten/merge helpers read either.
+	 *
+	 * @param array $path Settings path, e.g. `[ 'color', 'palette' ]`.
+	 * @return mixed The setting, or whatever the global lookup hands back.
+	 */
+	private static function get_style_setting( $path ) {
+		$block_path  = array_merge( [ 'blocks', Newspack_Popups_Contextual_Prompt_Block::BLOCK_NAME ], $path );
+		$block_value = self::settings_path_value( wp_get_global_settings(), $block_path );
+		// A block setting of `false` is a setting, as the editor treats it: only an
+		// unset one falls back to the global scope.
+		return null === $block_value ? wp_get_global_settings( $path ) : $block_value;
+	}
+
+	/**
+	 * The value a settings tree holds at a path, or null when the path is not there.
+	 * `wp_get_global_settings()` hands the whole tree back for a missing path, which
+	 * cannot answer whether the path is set at all; this can.
+	 *
+	 * @param mixed $settings Settings tree.
+	 * @param array $path     Settings path.
+	 * @return mixed|null The value, or null when the path is unset.
+	 */
+	private static function settings_path_value( $settings, $path ) {
+		foreach ( $path as $key ) {
+			if ( ! is_array( $settings ) || ! isset( $settings[ $key ] ) ) {
+				return null;
+			}
+			$settings = $settings[ $key ];
+		}
+		return $settings;
 	}
 
 	/**
@@ -216,14 +262,95 @@ final class Newspack_Popups_API {
 	 * @return array Flat preset list.
 	 */
 	private static function get_palette_presets() {
-		$palette = wp_get_global_settings( [ 'color', 'palette' ] );
+		$palette = self::get_style_setting( [ 'color', 'palette' ] );
 		// A missing settings path hands back the whole settings tree, so an absent
 		// `defaultPalette` reads as truthy and the defaults stay, as core's own
 		// default for the setting has them.
-		if ( is_array( $palette ) && isset( $palette['default'] ) && ! wp_get_global_settings( [ 'color', 'defaultPalette' ] ) ) {
+		if ( is_array( $palette ) && isset( $palette['default'] ) && ! self::get_style_setting( [ 'color', 'defaultPalette' ] ) ) {
 			unset( $palette['default'] );
 		}
 		return self::merge_global_settings_presets( $palette );
+	}
+
+	/**
+	 * The spacing presets the wizard's padding rows step through. Core's
+	 * `SpacingSizesControl` builds one scale out of the custom, theme and default
+	 * origins rather than picking one, and `spacing.defaultSpacingSizes` decides
+	 * whether the default origin belongs in it — core turns that off for a theme
+	 * registering its own scale — so the wizard offers the steps the editor offers.
+	 *
+	 * @return array Flat preset list.
+	 */
+	private static function get_spacing_size_presets() {
+		$sizes = self::get_style_setting( [ 'spacing', 'spacingSizes' ] );
+		// As with the palette, a missing settings path hands back the whole settings
+		// tree, so an absent `defaultSpacingSizes` reads as truthy and the defaults
+		// stay, as core's own default for the setting has them.
+		if ( is_array( $sizes ) && isset( $sizes['default'] ) && ! self::get_style_setting( [ 'spacing', 'defaultSpacingSizes' ] ) ) {
+			unset( $sizes['default'] );
+		}
+		return self::sort_spacing_size_presets( self::merge_global_settings_presets( $sizes ) );
+	}
+
+	/**
+	 * Whether the padding rows may offer a custom value at all. `spacing.customSpacingSize`
+	 * is the setting core turns into the editor's `disableCustomSpacingSizes`, which
+	 * leaves its spacing rows preset-only, so the wizard's rows honor the same policy.
+	 *
+	 * @return bool
+	 */
+	private static function is_custom_spacing_size_allowed() {
+		// As with the palette, a missing settings path hands back the whole settings
+		// tree, so an absent `customSpacingSize` reads as truthy and custom values
+		// stay, as core's own default for the setting allows them.
+		return (bool) self::get_style_setting( [ 'spacing', 'customSpacingSize' ] );
+	}
+
+	/**
+	 * The units a custom padding value may be given in. `spacing.units` is what
+	 * core's own spacing control filters its unit list by, and a classic theme
+	 * declaring `custom-units` support narrows it, so the wizard offers no unit the
+	 * editor would refuse.
+	 *
+	 * @return array List of unit strings.
+	 */
+	private static function get_spacing_units() {
+		$units = self::get_style_setting( [ 'spacing', 'units' ] );
+		// A missing settings path hands back the whole settings tree, so anything but
+		// a flat list falls back to core's own default for the setting.
+		if ( ! is_array( $units ) || ! wp_is_numeric_array( $units ) ) {
+			return [ 'px', 'em', 'rem', 'vh', 'vw', '%' ];
+		}
+		return array_values( array_filter( $units, 'is_string' ) );
+	}
+
+	/**
+	 * Spacing presets in the order core's control shows them: by slug, compared as
+	 * numbers, and only while every slug starts with a digit — core leaves a scale
+	 * holding a named step in its origin order rather than sorting it. The step core
+	 * adds for no padding carries the `0` slug, so leaving it out of the list asks
+	 * the same question of it.
+	 *
+	 * Public so the ordering can be exercised directly in tests.
+	 *
+	 * @param array $presets Flat spacing size presets.
+	 * @return array
+	 */
+	public static function sort_spacing_size_presets( $presets ) {
+		foreach ( $presets as $preset ) {
+			$slug = is_array( $preset ) && isset( $preset['slug'] ) ? (string) $preset['slug'] : '';
+			if ( ! preg_match( '/^[0-9]/', $slug ) ) {
+				return $presets;
+			}
+		}
+		// usort is stable, so two slugs comparing equal keep their origin order.
+		usort(
+			$presets,
+			function ( $a, $b ) {
+				return strnatcmp( (string) $a['slug'], (string) $b['slug'] );
+			}
+		);
+		return $presets;
 	}
 
 	/**
@@ -302,16 +429,16 @@ final class Newspack_Popups_API {
 	}
 
 	/**
-	 * Font size presets can carry a plain number: core unit-izes the ones a theme
+	 * Size presets can carry a plain number: core unit-izes the font sizes a theme
 	 * registers with `add_theme_support( 'editor-font-sizes' )`, but not the ones a
 	 * theme.json declares. The wizard stores CSS strings and the style sanitizer
-	 * keeps string leaves only, so a numeric size would be offered in the picker
-	 * and dropped on save. Deliver every size in px, as core's own back-compat does.
+	 * keeps string leaves only, so a numeric size would be offered in a control and
+	 * dropped on save. Deliver every size in px, as core's own back-compat does.
 	 *
-	 * @param array $presets Flat font size presets.
+	 * @param array $presets Flat font size or spacing size presets.
 	 * @return array
 	 */
-	private static function normalize_preset_font_sizes( $presets ) {
+	private static function normalize_preset_sizes( $presets ) {
 		foreach ( $presets as $index => $preset ) {
 			if ( is_array( $preset ) && isset( $preset['size'] ) && is_numeric( $preset['size'] ) ) {
 				$presets[ $index ]['size'] = $preset['size'] . 'px';

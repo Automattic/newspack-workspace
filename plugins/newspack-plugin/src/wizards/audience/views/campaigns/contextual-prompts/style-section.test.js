@@ -7,7 +7,7 @@
 /**
  * External dependencies
  */
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
 
 /**
@@ -53,7 +53,12 @@ describe( 'StyleSection on a block theme', () => {
 			expect.objectContaining( {
 				path: '/newspack/v1/handoff',
 				method: 'POST',
-				data: expect.objectContaining( { destinationUrl: BLOCK_THEME_STATUS.site_editor_styles_url } ),
+				data: expect.objectContaining( {
+					destinationUrl: BLOCK_THEME_STATUS.site_editor_styles_url,
+					// The banner the Site Editor shows carries the way back here.
+					bannerText: 'Return to Contextual Prompts after editing the block styles',
+					bannerButtonText: 'Back to Contextual Prompts',
+				} ),
 			} )
 		);
 	} );
@@ -74,6 +79,13 @@ const NOTICE_CONTENT = '.components-notice__content';
 const openPanelMenu = label => fireEvent.click( screen.getByRole( 'button', { name: `${ label } options` } ) );
 const clickMenuItem = name => fireEvent.click( screen.getByRole( 'menuitem', { name } ) );
 
+// The Border group's own link toggle carries the same label as the padding one,
+// as it does in the editor, so padding queries are scoped to its fieldset.
+const padding = () => within( document.querySelector( '.newspack-prompt-style-padding' ) );
+// Every padding row carries the same toggle labels, so a row is queried by its
+// position: the vertical axis leads, then the horizontal one.
+const paddingRow = index => within( document.querySelectorAll( '.newspack-prompt-style-padding__row' )[ index ] );
+
 const CLASSIC_STATUS = {
 	is_block_theme: false,
 	style_defaults: {
@@ -88,6 +100,13 @@ const CLASSIC_STATUS = {
 	style_font_sizes: [
 		{ name: 'Small', slug: 'small', size: '14px' },
 		{ name: 'Medium', slug: 'medium', size: '18px' },
+	],
+	// Core's default spacing scale, trimmed: the default padding above resolves to
+	// the `40` step, so the sliders open on a preset rather than a custom value.
+	style_spacing_sizes: [
+		{ name: 'Small', slug: '30', size: '10px' },
+		{ name: 'Medium', slug: '40', size: '20px' },
+		{ name: 'Large', slug: '50', size: '30px' },
 	],
 	site_editor_styles_url: 'https://example.test/wp-admin/site-editor.php?p=%2Fstyles',
 };
@@ -176,6 +195,184 @@ describe( 'StyleSection on a classic theme', () => {
 		expect( onChangeStyles ).toHaveBeenCalledWith( {} );
 	} );
 
+	it( 'opens the padding as a linked axial pair, each row on its preset step', () => {
+		render( <StyleSection status={ CLASSIC_STATUS } styles={ {} } inFlight={ false } onChangeStyles={ () => {} } /> );
+
+		// The default padding arrives resolved (20px), which is the third step of the
+		// scale: None, Small, Medium, Large.
+		expect( screen.getByRole( 'slider', { name: 'Vertical padding' } ) ).toHaveValue( '2' );
+		expect( screen.getByRole( 'slider', { name: 'Horizontal padding' } ) ).toHaveValue( '2' );
+		expect( screen.queryByRole( 'slider', { name: 'Top padding' } ) ).toBeNull();
+		// Each row marks the steps between the two ends, as the editor marks them.
+		expect( document.querySelectorAll( '.newspack-prompt-style-padding__row' ) ).toHaveLength( 2 );
+		expect( document.querySelectorAll( '.newspack-prompt-style-padding__row:first-child .components-range-control__mark' ) ).toHaveLength( 2 );
+	} );
+
+	it( 'stores a slider step as a spacing preset on both sides of the axis', () => {
+		const onChangeStyles = jest.fn();
+		render( <StyleSection status={ CLASSIC_STATUS } styles={ {} } inFlight={ false } onChangeStyles={ onChangeStyles } /> );
+
+		fireEvent.change( screen.getByRole( 'slider', { name: 'Vertical padding' } ), { target: { value: '3' } } );
+
+		expect( onChangeStyles ).toHaveBeenCalledWith( {
+			spacing: { padding: { top: 'var:preset|spacing|50', bottom: 'var:preset|spacing|50' } },
+		} );
+
+		// The other axis writes its own pair, leaving the sides it does not own to
+		// the default they still render with.
+		fireEvent.change( screen.getByRole( 'slider', { name: 'Horizontal padding' } ), { target: { value: '1' } } );
+
+		expect( onChangeStyles ).toHaveBeenLastCalledWith( {
+			spacing: { padding: { left: 'var:preset|spacing|30', right: 'var:preset|spacing|30' } },
+		} );
+	} );
+
+	it( 'stores the first step as a plain zero, the way the editor does', () => {
+		const onChangeStyles = jest.fn();
+		render( <StyleSection status={ CLASSIC_STATUS } styles={ {} } inFlight={ false } onChangeStyles={ onChangeStyles } /> );
+
+		// No preset defines it, and clearing instead would only snap the row back to
+		// the default padding.
+		fireEvent.change( screen.getByRole( 'slider', { name: 'Vertical padding' } ), { target: { value: '0' } } );
+
+		expect( onChangeStyles ).toHaveBeenCalledWith( { spacing: { padding: { top: '0', bottom: '0' } } } );
+	} );
+
+	it( 'unlinks the axes into one row per side', () => {
+		render( <StyleSection status={ CLASSIC_STATUS } styles={ {} } inFlight={ false } onChangeStyles={ () => {} } /> );
+
+		fireEvent.click( padding().getByRole( 'button', { name: 'Unlink sides' } ) );
+
+		[ 'Top padding', 'Bottom padding', 'Left padding', 'Right padding' ].forEach( name =>
+			expect( screen.getByRole( 'slider', { name } ) ).toBeInTheDocument()
+		);
+		expect( screen.queryByRole( 'slider', { name: 'Vertical padding' } ) ).toBeNull();
+		expect( padding().getByRole( 'button', { name: 'Link sides' } ) ).toBeInTheDocument();
+	} );
+
+	it( 'writes one side on its own once the sides are unlinked', () => {
+		const onChangeStyles = jest.fn();
+		render( <StyleSection status={ CLASSIC_STATUS } styles={ {} } inFlight={ false } onChangeStyles={ onChangeStyles } /> );
+
+		fireEvent.click( padding().getByRole( 'button', { name: 'Unlink sides' } ) );
+		fireEvent.change( screen.getByRole( 'slider', { name: 'Left padding' } ), { target: { value: '1' } } );
+
+		expect( onChangeStyles ).toHaveBeenCalledWith( { spacing: { padding: { left: 'var:preset|spacing|30' } } } );
+	} );
+
+	it( 'swaps a padding row for an input that writes a raw value', () => {
+		const onChangeStyles = jest.fn();
+		render( <StyleSection status={ CLASSIC_STATUS } styles={ {} } inFlight={ false } onChangeStyles={ onChangeStyles } /> );
+
+		// One toggle per row; the vertical axis leads.
+		fireEvent.click( screen.getAllByRole( 'button', { name: 'Set custom value' } )[ 0 ] );
+
+		expect( screen.queryByRole( 'slider', { name: 'Vertical padding' } ) ).toBeNull();
+		// The input starts from the step the row was on, and its unit stays in play.
+		const input = screen.getByLabelText( 'Vertical padding' );
+		expect( input ).toHaveValue( 20 );
+
+		fireEvent.change( input, { target: { value: '7' } } );
+
+		expect( onChangeStyles ).toHaveBeenCalledWith( { spacing: { padding: { top: '7px', bottom: '7px' } } } );
+	} );
+
+	it( 'starts a row in its input when the value matches no step', () => {
+		const status = {
+			...CLASSIC_STATUS,
+			style_defaults: { ...CLASSIC_STATUS.style_defaults, spacing: { padding: { top: '13px', right: '13px', bottom: '13px', left: '13px' } } },
+		};
+		render( <StyleSection status={ status } styles={ {} } inFlight={ false } onChangeStyles={ () => {} } /> );
+
+		expect( screen.queryByRole( 'slider', { name: 'Vertical padding' } ) ).toBeNull();
+		expect( screen.getByLabelText( 'Vertical padding' ) ).toHaveValue( 13 );
+	} );
+
+	it( 'holds a row on its input while no step represents its value', () => {
+		render(
+			<StyleSection
+				status={ CLASSIC_STATUS }
+				styles={ { spacing: { padding: { top: '7px', bottom: '7px' } } } }
+				inFlight={ false }
+				onChangeStyles={ () => {} }
+			/>
+		);
+
+		// The vertical axis holds a value off the scale, so the way out of its input is
+		// closed: the slider would sit at None with that value still standing, and a
+		// drag from there would overwrite it from a position that was never true.
+		expect( screen.getByLabelText( 'Vertical padding' ) ).toHaveValue( 7 );
+		expect( paddingRow( 0 ).getByRole( 'button', { name: 'Use preset' } ) ).toBeDisabled();
+
+		// The horizontal axis sits on a step, so its own toggle works as before.
+		const toggle = paddingRow( 1 ).getByRole( 'button', { name: 'Set custom value' } );
+		expect( toggle ).toBeEnabled();
+
+		fireEvent.click( toggle );
+
+		expect( screen.queryByRole( 'slider', { name: 'Horizontal padding' } ) ).toBeNull();
+		expect( paddingRow( 1 ).getByRole( 'button', { name: 'Use preset' } ) ).toBeEnabled();
+	} );
+
+	it( 'leaves the padding rows preset-only when the site allows no custom spacing value', () => {
+		const onChangeStyles = jest.fn();
+		render(
+			<StyleSection
+				status={ { ...CLASSIC_STATUS, style_spacing_custom: false } }
+				styles={ {} }
+				inFlight={ false }
+				onChangeStyles={ onChangeStyles }
+			/>
+		);
+
+		// No way into an input, in either direction.
+		expect( screen.queryByRole( 'button', { name: 'Set custom value' } ) ).toBeNull();
+		expect( screen.queryByRole( 'button', { name: 'Use preset' } ) ).toBeNull();
+
+		// The sliders still write their steps.
+		fireEvent.change( screen.getByRole( 'slider', { name: 'Vertical padding' } ), { target: { value: '1' } } );
+
+		expect( onChangeStyles ).toHaveBeenCalledWith( {
+			spacing: { padding: { top: 'var:preset|spacing|30', bottom: 'var:preset|spacing|30' } },
+		} );
+	} );
+
+	it( 'shows a value no step represents at None while the site is preset-only', () => {
+		render(
+			<StyleSection
+				status={ { ...CLASSIC_STATUS, style_spacing_custom: false } }
+				styles={ { spacing: { padding: { top: '7px', bottom: '7px' } } } }
+				inFlight={ false }
+				onChangeStyles={ () => {} }
+			/>
+		);
+
+		// With no input to fall back on, the row sits at the first step until an edit
+		// replaces the stored value — which is the policy's own answer for it.
+		expect( screen.getByRole( 'slider', { name: 'Vertical padding' } ) ).toHaveValue( '0' );
+		expect( screen.getByRole( 'slider', { name: 'Horizontal padding' } ) ).toHaveValue( '2' );
+	} );
+
+	it( 'offers a custom padding value only in the units the site allows', () => {
+		render(
+			<StyleSection
+				status={ { ...CLASSIC_STATUS, style_spacing_units: [ 'px', 'em' ] } }
+				styles={ {} }
+				inFlight={ false }
+				onChangeStyles={ () => {} }
+			/>
+		);
+
+		fireEvent.click( screen.getAllByRole( 'button', { name: 'Set custom value' } )[ 0 ] );
+
+		const unitSelect = paddingRow( 0 ).getByRole( 'combobox', { name: 'Select unit' } );
+		expect( Array.from( unitSelect.options ).map( option => option.value ) ).toEqual( [ 'px', 'em' ] );
+
+		// The radius keeps its own units: the spacing policy is not its policy.
+		const radiusUnits = within( document.querySelector( '.newspack-prompt-style-radius' ) ).getByRole( 'combobox', { name: 'Select unit' } );
+		expect( radiusUnits.options.length ).toBeGreaterThan( 2 );
+	} );
+
 	it( 'keeps the border radius when the border group is reset', () => {
 		const onChangeStyles = jest.fn();
 		render(
@@ -235,6 +432,8 @@ describe( 'StyleSection on a classic theme', () => {
 		expect( screen.getByRole( 'button', { name: 'Text' } ) ).toBeDisabled();
 		expect( screen.getByLabelText( 'Radius' ) ).toBeDisabled();
 		expect( screen.getByRole( 'slider', { name: 'Border radius' } ) ).toBeDisabled();
+		expect( screen.getByRole( 'slider', { name: 'Vertical padding' } ) ).toBeDisabled();
+		expect( padding().getByRole( 'button', { name: 'Unlink sides' } ) ).toBeDisabled();
 	} );
 
 	it( 'offers one border radius input paired with a slider', () => {
