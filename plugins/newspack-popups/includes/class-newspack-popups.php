@@ -114,6 +114,10 @@ final class Newspack_Popups {
 		if ( self::is_contextual_prompts_enabled() ) {
 			Newspack_Popups_Contextual_Prompt_Block::init();
 		}
+		include_once __DIR__ . '/class-newspack-popups-contextual-prompt-styles.php';
+		if ( self::is_contextual_prompts_enabled() ) {
+			Newspack_Popups_Contextual_Prompt_Styles::init();
+		}
 		// Feature off — rollout flag absent OR admin opt-in withdrawn: strip any
 		// stored Contextual Prompt markup so it never reaches the front end as an
 		// orphaned call to action (or keeps a stale site-wide override alive).

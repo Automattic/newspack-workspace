@@ -160,6 +160,10 @@ final class Newspack_Popups_API {
 							'required' => true,
 							'type'     => 'object',
 						],
+						'styles' => [
+							'required' => false,
+							'type'     => 'object',
+						],
 					],
 				]
 			);
@@ -178,17 +182,142 @@ final class Newspack_Popups_API {
 
 	/**
 	 * The Contextual Prompts status payload: opt-in state, whether the user can
-	 * manage it, and the publisher-profile fields.
+	 * manage it, the publisher-profile fields, and the block's style data.
 	 *
 	 * @return array
 	 */
 	private static function contextual_prompt_status() {
+		// Styles are a keyed object to every client, so no overrides has to travel
+		// as `{}`: an empty PHP array would serialize as `[]` and a client
+		// comparing it against an object it built would never see them as equal.
+		$styles     = Newspack_Popups_Contextual_Prompt_Styles::get_styles();
+		$font_sizes = self::flatten_global_settings_presets( wp_get_global_settings( [ 'typography', 'fontSizes' ] ) );
 		return [
-			'enabled'         => Newspack_Popups_Settings::is_ai_copy_assistant_enabled(),
-			'can_manage'      => current_user_can( 'manage_options' ),
-			'fields'          => Newspack_Popups_Settings::get_ai_copy_assistant_fields(),
-			'override_active' => Newspack_Popups_Settings::is_override_active(),
+			'enabled'                => Newspack_Popups_Settings::is_ai_copy_assistant_enabled(),
+			'can_manage'             => current_user_can( 'manage_options' ),
+			'fields'                 => Newspack_Popups_Settings::get_ai_copy_assistant_fields(),
+			'override_active'        => Newspack_Popups_Settings::is_override_active(),
+			'is_block_theme'         => wp_is_block_theme(),
+			'styles'                 => empty( $styles ) ? (object) [] : $styles,
+			'style_defaults'         => Newspack_Popups_Contextual_Prompt_Styles::get_defaults(),
+			'style_palette'          => self::get_palette_presets(),
+			'style_font_sizes'       => self::normalize_preset_font_sizes( $font_sizes ),
+			'site_editor_styles_url' => admin_url( 'site-editor.php?p=%2Fstyles&section=' . rawurlencode( '/blocks/' . rawurlencode( Newspack_Popups_Contextual_Prompt_Block::BLOCK_NAME ) ) ),
 		];
+	}
+
+	/**
+	 * The color presets the wizard's pickers offer, merged across origins. Core's
+	 * `color.defaultPalette` setting decides whether the editor shows the default
+	 * origin at all — it is false whenever a classic theme registers an
+	 * `editor-color-palette`, as newspack-theme does — so the wizard drops that
+	 * origin when the editor would, rather than offering colors the editor does not.
+	 *
+	 * @return array Flat preset list.
+	 */
+	private static function get_palette_presets() {
+		$palette = wp_get_global_settings( [ 'color', 'palette' ] );
+		// A missing settings path hands back the whole settings tree, so an absent
+		// `defaultPalette` reads as truthy and the defaults stay, as core's own
+		// default for the setting has them.
+		if ( is_array( $palette ) && isset( $palette['default'] ) && ! wp_get_global_settings( [ 'color', 'defaultPalette' ] ) ) {
+			unset( $palette['default'] );
+		}
+		return self::merge_global_settings_presets( $palette );
+	}
+
+	/**
+	 * The preset lists that hold something, highest precedence first. Global
+	 * settings key presets by origin (custom > theme > default), each origin holding
+	 * its own list; an already-flat list stands in as its own single origin. Neither
+	 * shape means it is not a preset list at all — a missing settings path hands back
+	 * the whole settings tree — so it offers nothing.
+	 *
+	 * @param mixed $presets Origin-keyed presets, or already-flat array.
+	 * @return array List of preset lists, empty when there is nothing to offer.
+	 */
+	private static function preset_origin_lists( $presets ) {
+		if ( ! is_array( $presets ) ) {
+			return [];
+		}
+		// Not origin-keyed: already a flat preset list.
+		if ( wp_is_numeric_array( $presets ) ) {
+			return empty( $presets ) ? [] : [ array_values( $presets ) ];
+		}
+		$lists = [];
+		foreach ( [ 'custom', 'theme', 'default' ] as $origin ) {
+			if ( ! empty( $presets[ $origin ] ) && is_array( $presets[ $origin ] ) ) {
+				$lists[] = array_values( $presets[ $origin ] );
+			}
+		}
+		return $lists;
+	}
+
+	/**
+	 * One flat preset list, taking the highest origin that holds anything. This is
+	 * how the editor resolves a preset list it offers as a single set — font sizes,
+	 * where `custom ?? theme ?? default` decides — so the wizard offers the same
+	 * sizes its picker does.
+	 *
+	 * Public so the flattening can be exercised directly in tests.
+	 *
+	 * @param mixed $presets Origin-keyed presets, or already-flat array.
+	 * @return array Flat preset list, empty when there is nothing to offer.
+	 */
+	public static function flatten_global_settings_presets( $presets ) {
+		$lists = self::preset_origin_lists( $presets );
+		return empty( $lists ) ? [] : $lists[0];
+	}
+
+	/**
+	 * One flat preset list holding every origin, custom beating theme beating
+	 * default on a shared slug. The editor's color panel shows each origin as its
+	 * own section rather than picking one, and every origin gets a CSS custom
+	 * property, so dropping the lower ones would hide usable colors.
+	 *
+	 * Public so the merge can be exercised directly in tests.
+	 *
+	 * @param mixed $presets Origin-keyed presets, or already-flat array.
+	 * @return array Flat preset list, empty when there is nothing to offer.
+	 */
+	public static function merge_global_settings_presets( $presets ) {
+		$flat  = [];
+		$slugs = [];
+		foreach ( self::preset_origin_lists( $presets ) as $list ) {
+			foreach ( $list as $preset ) {
+				if ( ! is_array( $preset ) ) {
+					continue;
+				}
+				$slug = isset( $preset['slug'] ) ? (string) $preset['slug'] : '';
+				if ( '' !== $slug ) {
+					if ( isset( $slugs[ $slug ] ) ) {
+						continue;
+					}
+					$slugs[ $slug ] = true;
+				}
+				$flat[] = $preset;
+			}
+		}
+		return $flat;
+	}
+
+	/**
+	 * Font size presets can carry a plain number: core unit-izes the ones a theme
+	 * registers with `add_theme_support( 'editor-font-sizes' )`, but not the ones a
+	 * theme.json declares. The wizard stores CSS strings and the style sanitizer
+	 * keeps string leaves only, so a numeric size would be offered in the picker
+	 * and dropped on save. Deliver every size in px, as core's own back-compat does.
+	 *
+	 * @param array $presets Flat font size presets.
+	 * @return array
+	 */
+	private static function normalize_preset_font_sizes( $presets ) {
+		foreach ( $presets as $index => $preset ) {
+			if ( is_array( $preset ) && isset( $preset['size'] ) && is_numeric( $preset['size'] ) ) {
+				$presets[ $index ]['size'] = $preset['size'] . 'px';
+			}
+		}
+		return $presets;
 	}
 
 	/**
@@ -204,6 +333,9 @@ final class Newspack_Popups_API {
 		}
 
 		Newspack_Popups_Settings::save_ai_copy_assistant_fields( (array) $request['fields'] );
+		if ( isset( $request['styles'] ) ) {
+			Newspack_Popups_Contextual_Prompt_Styles::save_styles( (array) $request['styles'] );
+		}
 		return rest_ensure_response( self::contextual_prompt_status() );
 	}
 
