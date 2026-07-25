@@ -64,6 +64,10 @@ const CONTRAST_WARNING = 'This color combination may be hard for people to read.
 // in the document, so the queries below are scoped to the rendered notice.
 const NOTICE_CONTENT = '.components-notice__content';
 
+// Every group renders its Reset beside its own heading, so a group can be reset by
+// name while other groups also hold an override.
+const groupReset = label => screen.getByRole( 'heading', { name: label, level: 3 } ).parentElement.querySelector( 'button' );
+
 const CLASSIC_STATUS = {
 	is_block_theme: false,
 	style_defaults: {
@@ -106,6 +110,49 @@ describe( 'StyleSection on a classic theme', () => {
 		expect( resets ).toHaveLength( 1 );
 		resets[ 0 ].click();
 		expect( onChangeStyles ).toHaveBeenCalledWith( {} );
+	} );
+
+	it( 'prunes the parent node when a nested override is reset', () => {
+		const onChangeStyles = jest.fn();
+		render(
+			<StyleSection
+				status={ CLASSIC_STATUS }
+				styles={ { spacing: { padding: { top: '1px' } } } }
+				inFlight={ false }
+				onChangeStyles={ onChangeStyles }
+			/>
+		);
+
+		expect( screen.getAllByRole( 'button', { name: 'Reset' } ) ).toHaveLength( 1 );
+		groupReset( 'Padding' ).click();
+		expect( onChangeStyles ).toHaveBeenCalledWith( {} );
+	} );
+
+	it( 'keeps the border radius when the border group is reset', () => {
+		const onChangeStyles = jest.fn();
+		render(
+			<StyleSection
+				status={ CLASSIC_STATUS }
+				styles={ { border: { radius: '4px', width: '1px' } } }
+				inFlight={ false }
+				onChangeStyles={ onChangeStyles }
+			/>
+		);
+
+		groupReset( 'Border' ).click();
+		expect( onChangeStyles ).toHaveBeenCalledWith( { border: { radius: '4px' } } );
+	} );
+
+	it( 'disables the controls that take a disabled prop while a save is in flight', () => {
+		render(
+			<StyleSection status={ CLASSIC_STATUS } styles={ { color: { background: '#123456' } } } inFlight={ true } onChangeStyles={ () => {} } />
+		);
+
+		// The pickers rely on the inert wrapper, which jsdom does not honor, so this
+		// covers the controls that receive a real `disabled` prop.
+		expect( groupReset( 'Color' ) ).toBeDisabled();
+		expect( screen.getByLabelText( 'Radius' ) ).toBeDisabled();
+		expect( screen.getByRole( 'button', { name: 'Unlink Corners' } ) ).toBeDisabled();
 	} );
 
 	it( 'warns on a low-contrast pair', () => {
