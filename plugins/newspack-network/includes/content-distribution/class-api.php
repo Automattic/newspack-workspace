@@ -178,8 +178,14 @@ class API {
 			return new WP_Error( 'newspack_network_content_distribution_error', $distribution->get_error_message(), [ 'status' => 400 ] );
 		}
 
-		$payload = $outgoing_post->get_payload( $status_on_publish );
-		Data_Events::dispatch( 'network_post_updated', $payload );
+		$payload    = $outgoing_post->get_payload( $status_on_publish );
+		$dispatched = Data_Events::dispatch( 'network_post_updated', $payload );
+
+		// Bail before storing the payload hash if the dispatch failed, so the next
+		// post update retries the distribution instead of being suppressed by the hash.
+		if ( is_wp_error( $dispatched ) ) {
+			return new WP_Error( 'newspack_network_content_distribution_error', $dispatched->get_error_message(), [ 'status' => 500 ] );
+		}
 
 		// Store payload hash to prevent unnecessary updates.
 		update_post_meta( $post_id, Content_Distribution_Class::PAYLOAD_HASH_META, $outgoing_post->get_payload_hash( $payload ) );
