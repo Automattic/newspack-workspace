@@ -31,6 +31,12 @@ class ColorContrastTest extends WP_UnitTestCase {
 			'shorthand white'          => [ '#fff', 'black' ],
 			'shorthand blue'           => [ '#36c', 'white' ],
 			'unparseable input'        => [ 'not-a-color', 'black' ],
+			// Parity cases shared with the jest fixture table.
+			'unprefixed blue'          => [ '3366cc', 'white' ],
+			'unprefixed green'         => [ '178f15', 'white' ],
+			'empty string'             => [ '', 'black' ],
+			'dark 8-digit hex'         => [ '#33333380', 'white' ],
+			'uppercase amber'          => [ '#FFCC00', 'black' ],
 		];
 	}
 

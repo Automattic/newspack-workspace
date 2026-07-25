@@ -1395,7 +1395,7 @@ class Newspack_Blocks {
 	 *
 	 * Keep in sync with getColorForContrast() in src/blocks/donate/utils.ts.
 	 *
-	 * @param string $hex Hexadecimal background color (#RGB or #RRGGBB, with or without #).
+	 * @param string $hex Hexadecimal background color (#RGB, #RRGGBB or #RRGGBBAA, with or without #).
 	 * @return string Either 'black' or 'white' (literal CSS color keywords).
 	 */
 	public static function get_color_for_contrast( $hex ) {
@@ -1409,8 +1409,9 @@ class Newspack_Blocks {
 	/**
 	 * Compute the soft-clamped APCA screen luminance (Y) of a hex color.
 	 *
-	 * Accepts #RGB and #RRGGBB, with or without the leading #. Unparseable input
-	 * is treated as white (luminance 1.0) so callers fall back to black text.
+	 * Accepts #RGB, #RRGGBB and #RRGGBBAA (the alpha pair is stripped), with or
+	 * without the leading #, case-insensitively. Unparseable input is treated as
+	 * white (luminance 1.0) so callers fall back to black text.
 	 *
 	 * @param string $hex Hexadecimal color.
 	 * @return float Soft-clamped luminance in the 0..1 range.
@@ -1419,6 +1420,9 @@ class Newspack_Blocks {
 		$hex = ltrim( (string) $hex, '#' );
 		if ( 3 === strlen( $hex ) ) {
 			$hex = $hex[0] . $hex[0] . $hex[1] . $hex[1] . $hex[2] . $hex[2];
+		} elseif ( 8 === strlen( $hex ) ) {
+			// Drop the alpha pair from #RRGGBBAA.
+			$hex = substr( $hex, 0, 6 );
 		}
 		if ( 6 !== strlen( $hex ) || ! ctype_xdigit( $hex ) ) {
 			return 1.0;

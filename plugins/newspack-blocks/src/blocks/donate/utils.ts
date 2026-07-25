@@ -1,11 +1,23 @@
 import { __, _x, sprintf } from '@wordpress/i18n';
 import type { DonationFrequencySlug } from './types';
 
+// Normalize a hex color to exactly six lowercase hex digits (no leading #).
+// Accepts #RGB, #RRGGBB and #RRGGBBAA (the alpha pair is stripped), with or
+// without the leading #, case-insensitively; returns null when unparseable.
+// Keep in sync with Newspack_Blocks::get_apca_luminance() in
+// includes/class-newspack-blocks.php.
+const normalizeHex = ( color: string ): string | null => {
+	let hex = color.trim().replace( /^#/, '' ).toLowerCase();
+	if ( hex.length === 3 ) {
+		hex = hex[ 0 ] + hex[ 0 ] + hex[ 1 ] + hex[ 1 ] + hex[ 2 ] + hex[ 2 ];
+	} else if ( hex.length === 8 ) {
+		hex = hex.substring( 0, 6 );
+	}
+	return /^[a-f\d]{6}$/.test( hex ) ? hex : null;
+};
+
 const hexToRGB = ( hex: string ): number[] => {
-	const parts = hex
-		.replace( /^#?([a-f\d])([a-f\d])([a-f\d])$/i, ( m, r, g, b ) => '#' + r + r + g + g + b + b )
-		.substring( 1 )
-		.match( /.{2}/g );
+	const parts = hex.match( /.{2}/g );
 	if ( parts === null ) {
 		return [ 0, 0, 0 ];
 	}
@@ -15,10 +27,12 @@ const hexToRGB = ( hex: string ): number[] => {
 // APCA soft-clamps near-black luminance and treats unparseable input as white
 // (luminance 1) so callers fall back to black text.
 const apcaLuminance = ( color: string ): number => {
-	const [ r, g, b ] = hexToRGB( color );
-	if ( Number.isNaN( r ) || Number.isNaN( g ) || Number.isNaN( b ) ) {
+	const hex = normalizeHex( color );
+	if ( hex === null ) {
 		return 1;
 	}
+
+	const [ r, g, b ] = hexToRGB( hex );
 
 	let y = 0.2126729 * Math.pow( r / 255, 2.4 ) + 0.7151522 * Math.pow( g / 255, 2.4 ) + 0.072175 * Math.pow( b / 255, 2.4 );
 

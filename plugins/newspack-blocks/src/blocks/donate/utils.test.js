@@ -15,6 +15,12 @@ describe( 'getColorForContrast', () => {
 		[ '#fff', '#000000' ],
 		[ '#36c', '#ffffff' ],
 		[ 'not-a-color', '#000000' ],
+		// Parity cases shared with the PHP fixture table.
+		[ '3366cc', '#ffffff' ],
+		[ '178f15', '#ffffff' ],
+		[ '', '#000000' ],
+		[ '#33333380', '#ffffff' ],
+		[ '#FFCC00', '#000000' ],
 	] )( 'picks readable text for %s', ( background, expected ) => {
 		expect( getColorForContrast( background ) ).toBe( expected );
 	} );
