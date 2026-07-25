@@ -15,12 +15,55 @@
  */
 class ContextualPromptStylesTest extends WP_UnitTestCase {
 	/**
+	 * The global text color add_global_text_color() declares.
+	 *
+	 * @var string
+	 */
+	private static $global_text_color = '';
+
+	/**
 	 * The styles class is inert without the admin opt-in.
 	 */
 	public function set_up() {
 		parent::set_up();
 		update_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION, true );
 		delete_option( Newspack_Popups_Contextual_Prompt_Styles::OPTION_NAME );
+	}
+
+	/**
+	 * A test's theme.json data is cached for the whole request, so drop it.
+	 */
+	public function tear_down() {
+		remove_filter( 'wp_theme_json_data_theme', [ __CLASS__, 'add_global_text_color' ] );
+		wp_clean_theme_json_cache();
+		parent::tear_down();
+	}
+
+	/**
+	 * Give the site a global text color for the rest of the test.
+	 *
+	 * @param string $color CSS color value.
+	 */
+	private function set_global_text_color( $color ) {
+		self::$global_text_color = $color;
+		remove_filter( 'wp_theme_json_data_theme', [ __CLASS__, 'add_global_text_color' ] );
+		add_filter( 'wp_theme_json_data_theme', [ __CLASS__, 'add_global_text_color' ] );
+		wp_clean_theme_json_cache();
+	}
+
+	/**
+	 * Declare a global text color in the theme's theme.json data.
+	 *
+	 * @param WP_Theme_JSON_Data $theme_json Theme JSON data.
+	 * @return WP_Theme_JSON_Data
+	 */
+	public static function add_global_text_color( $theme_json ) {
+		return $theme_json->update_with(
+			[
+				'version' => 2,
+				'styles'  => [ 'color' => [ 'text' => self::$global_text_color ] ],
+			]
+		);
 	}
 
 	/**
@@ -233,5 +276,31 @@ class ContextualPromptStylesTest extends WP_UnitTestCase {
 		// This theme sets no global text color either, so the fallback is the CSS
 		// initial one.
 		$this->assertSame( '#000000', $defaults['color']['text'] );
+	}
+
+	/**
+	 * An `rgb()`/`rgba()` global text color is handed over as hex, alpha dropped:
+	 * the wizard's contrast check reads hex.
+	 */
+	public function test_get_defaults_converts_an_rgb_inherited_text_color() {
+		$this->set_global_text_color( 'rgb(18,52,86)' );
+		$this->assertSame( '#123456', Newspack_Popups_Contextual_Prompt_Styles::get_defaults()['color']['text'] );
+
+		$this->set_global_text_color( 'rgba( 18, 52, 86, 0.5 )' );
+		$this->assertSame( '#123456', Newspack_Popups_Contextual_Prompt_Styles::get_defaults()['color']['text'] );
+	}
+
+	/**
+	 * A global text color the wizard cannot read stands nothing in: a contrast
+	 * check run against the wrong color would warn the wrong way, which is worse
+	 * than the warning simply being absent for that pairing.
+	 */
+	public function test_get_defaults_omits_an_unreadable_inherited_text_color() {
+		$this->set_global_text_color( 'rebeccapurple' );
+
+		$defaults = Newspack_Popups_Contextual_Prompt_Styles::get_defaults();
+
+		$this->assertSame( '#f7f7f7', $defaults['color']['background'] );
+		$this->assertArrayNotHasKey( 'text', $defaults['color'] );
 	}
 }

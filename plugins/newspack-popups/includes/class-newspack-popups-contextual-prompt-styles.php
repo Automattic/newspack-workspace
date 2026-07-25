@@ -43,8 +43,14 @@ final class Newspack_Popups_Contextual_Prompt_Styles {
 	const WIZARD_COLOR_PATTERN = '/^(?:#[0-9a-fA-F]{3}|#[0-9a-fA-F]{6}|var:preset\|color\|[a-zA-Z0-9_-]+)\z/';
 
 	/**
-	 * The CSS initial text color, used when the site's global text color is
-	 * missing or in a shape the wizard cannot read.
+	 * An `rgb()`/`rgba()` color with integer channels, the one other shape
+	 * theme.json data hands back for a color. Alpha is matched only to be dropped.
+	 */
+	const RGB_COLOR_PATTERN = '/^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*(?:,[^)]*)?\)\z/i';
+
+	/**
+	 * The CSS initial text color, used when the site sets no global text color at
+	 * all.
 	 */
 	const INITIAL_TEXT_COLOR = '#000000';
 
@@ -214,32 +220,66 @@ final class Newspack_Popups_Contextual_Prompt_Styles {
 		}
 		// The block's default design carries no text color, so a background chosen
 		// in the wizard would have nothing to be checked against. Stand in the
-		// color the prompt actually renders with.
+		// color the prompt actually renders with, when that is one the wizard can
+		// read.
 		if ( empty( $defaults['color']['text'] ) ) {
-			$defaults['color']['text'] = self::get_inherited_text_color();
+			$inherited = self::get_inherited_text_color();
+			if ( null !== $inherited ) {
+				$defaults['color']['text'] = $inherited;
+			}
 		}
 		return $defaults;
 	}
 
 	/**
 	 * The text color a prompt inherits from the site, in a shape the wizard can
-	 * read. The resolve-variables transform hands back a concrete color for a
-	 * preset reference, whichever origin defines the preset; a `var()` lookup only
-	 * survives it when the slug is in no palette, so anything still unreadable here
-	 * falls back to the CSS initial text color.
+	 * read: a hex value, a preset reference, or an `rgb()` color as hex. The
+	 * resolve-variables transform hands back a concrete color for a preset
+	 * reference, whichever origin defines the preset; a `var()` lookup only
+	 * survives it when the slug is in no palette.
 	 *
-	 * @return string
+	 * A color in none of those shapes hands back nothing rather than a stand-in:
+	 * the wizard would check a chosen background against the wrong color, and a
+	 * contrast warning pointing the wrong way is worse than no warning. Only a site
+	 * with no global text color at all gets the CSS initial one.
+	 *
+	 * @return string|null Hex value or preset reference, null when unreadable.
 	 */
 	private static function get_inherited_text_color() {
 		// A missing path hands back the whole styles tree, hence the string check.
 		$text = wp_get_global_styles( [ 'color', 'text' ], [ 'transforms' => [ 'resolve-variables' ] ] );
-		if ( is_string( $text ) ) {
-			$text = trim( $text );
-			if ( '' !== $text && preg_match( self::WIZARD_COLOR_PATTERN, $text ) ) {
-				return $text;
-			}
+		$text = is_string( $text ) ? trim( $text ) : '';
+		if ( '' === $text ) {
+			return self::INITIAL_TEXT_COLOR;
 		}
-		return self::INITIAL_TEXT_COLOR;
+		if ( preg_match( self::WIZARD_COLOR_PATTERN, $text ) ) {
+			return $text;
+		}
+		return self::rgb_to_hex( $text );
+	}
+
+	/**
+	 * An `rgb()`/`rgba()` color as a hex string, alpha dropped: the wizard reads
+	 * hex, and a contrast ratio has no use for alpha. Only the comma-separated
+	 * integer form is handled — the percentage and space-separated CSS Color 4
+	 * forms are not what theme.json data carries.
+	 *
+	 * @param string $value CSS color value.
+	 * @return string|null Hex value, null when this is not such a color.
+	 */
+	private static function rgb_to_hex( $value ) {
+		if ( ! preg_match( self::RGB_COLOR_PATTERN, $value, $matches ) ) {
+			return null;
+		}
+		$hex = '#';
+		foreach ( array_slice( $matches, 1, 3 ) as $channel ) {
+			$channel = (int) $channel;
+			if ( 255 < $channel ) {
+				return null;
+			}
+			$hex .= str_pad( dechex( $channel ), 2, '0', STR_PAD_LEFT );
+		}
+		return $hex;
 	}
 
 	/**

@@ -26,11 +26,13 @@ class ContextualPromptStylesApiTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A test's theme.json data is cached for the whole request, so drop it.
+	 * A test's theme.json data is cached for the whole request — resolved settings
+	 * in the theme_json cache group too — so drop all of it.
 	 */
 	public function tear_down() {
 		remove_filter( 'wp_theme_json_data_theme', [ __CLASS__, 'add_numeric_font_size_preset' ] );
-		WP_Theme_JSON_Resolver::clean_cached_data();
+		remove_filter( 'wp_theme_json_data_theme', [ __CLASS__, 'disable_default_palette' ] );
+		wp_clean_theme_json_cache();
 		parent::tear_down();
 	}
 
@@ -61,7 +63,7 @@ class ContextualPromptStylesApiTest extends WP_UnitTestCase {
 	 */
 	public function test_status_normalizes_numeric_font_size_presets() {
 		add_filter( 'wp_theme_json_data_theme', [ __CLASS__, 'add_numeric_font_size_preset' ] );
-		WP_Theme_JSON_Resolver::clean_cached_data();
+		wp_clean_theme_json_cache();
 
 		// The premise: the number does survive into the global settings.
 		$settings = wp_get_global_settings( [ 'typography', 'fontSizes' ] );
@@ -139,6 +141,44 @@ class ContextualPromptStylesApiTest extends WP_UnitTestCase {
 		$this->assertSame( '#123456', $by_slug['accent'] );
 		$this->assertSame( '#fefefe', $by_slug['base'] );
 		$this->assertSame( '#000000', $by_slug['contrast'] );
+	}
+
+	/**
+	 * The default origin travels only while the editor shows it: core turns
+	 * `color.defaultPalette` off for any classic theme registering an
+	 * editor-color-palette, and the wizard must not offer colors the editor hides.
+	 */
+	public function test_palette_drops_the_default_origin_when_the_editor_hides_it() {
+		$default_slugs = wp_list_pluck( wp_get_global_settings( [ 'color', 'palette' ] )['default'], 'slug' );
+		$this->assertNotEmpty( $default_slugs );
+
+		$palette = rest_do_request( new WP_REST_Request( 'GET', '/newspack-popups/v1/contextual-prompt/status' ) )->get_data()['style_palette'];
+		$this->assertNotEmpty( array_intersect( $default_slugs, wp_list_pluck( $palette, 'slug' ) ) );
+
+		add_filter( 'wp_theme_json_data_theme', [ __CLASS__, 'disable_default_palette' ] );
+		wp_clean_theme_json_cache();
+		// The premise: the presets are still there, the editor just hides them.
+		$this->assertFalse( wp_get_global_settings( [ 'color', 'defaultPalette' ] ) );
+		$this->assertNotEmpty( wp_get_global_settings( [ 'color', 'palette' ] )['default'] );
+
+		$palette = rest_do_request( new WP_REST_Request( 'GET', '/newspack-popups/v1/contextual-prompt/status' ) )->get_data()['style_palette'];
+		$this->assertSame( [], array_intersect( $default_slugs, wp_list_pluck( $palette, 'slug' ) ) );
+	}
+
+	/**
+	 * Hide the default color palette, as core does for a classic theme that
+	 * registers its own.
+	 *
+	 * @param WP_Theme_JSON_Data $theme_json Theme JSON data.
+	 * @return WP_Theme_JSON_Data
+	 */
+	public static function disable_default_palette( $theme_json ) {
+		return $theme_json->update_with(
+			[
+				'version'  => 2,
+				'settings' => [ 'color' => [ 'defaultPalette' => false ] ],
+			]
+		);
 	}
 
 	/**

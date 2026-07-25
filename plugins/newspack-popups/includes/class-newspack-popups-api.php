@@ -200,10 +200,30 @@ final class Newspack_Popups_API {
 			'is_block_theme'         => wp_is_block_theme(),
 			'styles'                 => empty( $styles ) ? (object) [] : $styles,
 			'style_defaults'         => Newspack_Popups_Contextual_Prompt_Styles::get_defaults(),
-			'style_palette'          => self::merge_global_settings_presets( wp_get_global_settings( [ 'color', 'palette' ] ) ),
+			'style_palette'          => self::get_palette_presets(),
 			'style_font_sizes'       => self::normalize_preset_font_sizes( $font_sizes ),
 			'site_editor_styles_url' => admin_url( 'site-editor.php?p=%2Fstyles&section=' . rawurlencode( '/blocks/' . rawurlencode( Newspack_Popups_Contextual_Prompt_Block::BLOCK_NAME ) ) ),
 		];
+	}
+
+	/**
+	 * The color presets the wizard's pickers offer, merged across origins. Core's
+	 * `color.defaultPalette` setting decides whether the editor shows the default
+	 * origin at all — it is false whenever a classic theme registers an
+	 * `editor-color-palette`, as newspack-theme does — so the wizard drops that
+	 * origin when the editor would, rather than offering colors the editor does not.
+	 *
+	 * @return array Flat preset list.
+	 */
+	private static function get_palette_presets() {
+		$palette = wp_get_global_settings( [ 'color', 'palette' ] );
+		// A missing settings path hands back the whole settings tree, so an absent
+		// `defaultPalette` reads as truthy and the defaults stay, as core's own
+		// default for the setting has them.
+		if ( is_array( $palette ) && isset( $palette['default'] ) && ! wp_get_global_settings( [ 'color', 'defaultPalette' ] ) ) {
+			unset( $palette['default'] );
+		}
+		return self::merge_global_settings_presets( $palette );
 	}
 
 	/**
