@@ -190,8 +190,11 @@ final class Newspack_Popups_API {
 		// Styles are a keyed object to every client, so no overrides has to travel
 		// as `{}`: an empty PHP array would serialize as `[]` and a client
 		// comparing it against an object it built would never see them as equal.
-		$styles     = Newspack_Popups_Contextual_Prompt_Styles::get_styles();
-		$font_sizes = self::flatten_global_settings_presets( wp_get_global_settings( [ 'typography', 'fontSizes' ] ) );
+		$styles = Newspack_Popups_Contextual_Prompt_Styles::get_styles();
+		// Both lists take the highest origin holding anything, which is how the
+		// editor resolves the single set its own controls offer.
+		$font_sizes    = self::flatten_global_settings_presets( wp_get_global_settings( [ 'typography', 'fontSizes' ] ) );
+		$spacing_sizes = self::flatten_global_settings_presets( wp_get_global_settings( [ 'spacing', 'spacingSizes' ] ) );
 		return [
 			'enabled'                => Newspack_Popups_Settings::is_ai_copy_assistant_enabled(),
 			'can_manage'             => current_user_can( 'manage_options' ),
@@ -201,7 +204,8 @@ final class Newspack_Popups_API {
 			'styles'                 => empty( $styles ) ? (object) [] : $styles,
 			'style_defaults'         => Newspack_Popups_Contextual_Prompt_Styles::get_defaults(),
 			'style_palette'          => self::get_palette_presets(),
-			'style_font_sizes'       => self::normalize_preset_font_sizes( $font_sizes ),
+			'style_font_sizes'       => self::normalize_preset_sizes( $font_sizes ),
+			'style_spacing_sizes'    => self::normalize_preset_sizes( $spacing_sizes ),
 			'site_editor_styles_url' => admin_url( 'site-editor.php?p=%2Fstyles&section=' . rawurlencode( '/blocks/' . rawurlencode( Newspack_Popups_Contextual_Prompt_Block::BLOCK_NAME ) ) ),
 		];
 	}
@@ -302,16 +306,16 @@ final class Newspack_Popups_API {
 	}
 
 	/**
-	 * Font size presets can carry a plain number: core unit-izes the ones a theme
+	 * Size presets can carry a plain number: core unit-izes the font sizes a theme
 	 * registers with `add_theme_support( 'editor-font-sizes' )`, but not the ones a
 	 * theme.json declares. The wizard stores CSS strings and the style sanitizer
-	 * keeps string leaves only, so a numeric size would be offered in the picker
-	 * and dropped on save. Deliver every size in px, as core's own back-compat does.
+	 * keeps string leaves only, so a numeric size would be offered in a control and
+	 * dropped on save. Deliver every size in px, as core's own back-compat does.
 	 *
-	 * @param array $presets Flat font size presets.
+	 * @param array $presets Flat font size or spacing size presets.
 	 * @return array
 	 */
-	private static function normalize_preset_font_sizes( $presets ) {
+	private static function normalize_preset_sizes( $presets ) {
 		foreach ( $presets as $index => $preset ) {
 			if ( is_array( $preset ) && isset( $preset['size'] ) && is_numeric( $preset['size'] ) ) {
 				$presets[ $index ]['size'] = $preset['size'] . 'px';

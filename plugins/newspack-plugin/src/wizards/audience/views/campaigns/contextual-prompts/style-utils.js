@@ -78,3 +78,48 @@ export const presetRefForColor = ( hex, palette ) => {
 	const entry = ( palette || [] ).find( color => color.color?.toLowerCase() === hex?.toLowerCase() );
 	return entry ? PRESET_COLOR_PREFIX + entry.slug : hex;
 };
+
+const PRESET_SPACING_PREFIX = 'var:preset|spacing|';
+// Step 0 of the spacing scale. Core stores it as the bare string, not a preset
+// reference, since no preset defines it.
+export const SPACING_NONE = '0';
+
+// The spacing steps a slider offers: None, then the site's presets in order, as
+// core's own spacing control builds them.
+export const spacingSteps = ( presets, noneLabel ) => [
+	{ name: noneLabel, slug: SPACING_NONE, size: 0 },
+	...( presets || [] ).map( ( { name, slug, size } ) => ( { name, slug, size } ) ),
+];
+
+export const isSpacingPreset = value => SPACING_NONE === value || ( 'string' === typeof value && value.includes( PRESET_SPACING_PREFIX ) );
+
+// A stored value as a step index, or null when it is a custom value the slider
+// cannot represent.
+export const spacingStepOf = ( value, steps ) => {
+	if ( undefined === value || '' === value ) {
+		return null;
+	}
+	const slug = SPACING_NONE === value ? SPACING_NONE : String( value ).replace( PRESET_SPACING_PREFIX, '' );
+	const index = steps.findIndex( step => String( step.slug ) === slug );
+	return -1 === index ? null : index;
+};
+
+// What a step writes back: None is the bare zero, every other step the preset
+// reference, so the value tracks the preset if the theme redefines it.
+export const spacingRefForStep = ( step, steps ) => ( 0 === step ? SPACING_NONE : `${ PRESET_SPACING_PREFIX }${ steps[ step ]?.slug }` );
+
+// A resolved value (`1.5rem`) as the preset reference it came from, so a default
+// the wizard receives already resolved still lands on its own slider step.
+export const spacingPresetOf = ( value, steps ) => {
+	if ( undefined === value || isSpacingPreset( value ) ) {
+		return value;
+	}
+	const match = steps.find( step => String( step.size ).trim() === String( value ).trim() );
+	return match ? spacingRefForStep( steps.indexOf( match ), steps ) : value;
+};
+
+// The concrete CSS value behind a step, for the custom input to start from.
+export const spacingValueOf = ( value, steps ) => {
+	const step = spacingStepOf( value, steps );
+	return null === step ? value : steps[ step ].size;
+};

@@ -213,6 +213,34 @@ class ContextualPromptStylesTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The padding rows store a spacing preset reference, or a plain zero for the
+	 * scale's first step. Both survive the allowlist and reach the style engine,
+	 * which turns the reference into the preset's custom property.
+	 */
+	public function test_spacing_presets_survive_into_the_css() {
+		Newspack_Popups_Contextual_Prompt_Styles::save_styles(
+			[
+				'spacing' => [
+					'padding' => [
+						'top'    => 'var:preset|spacing|50',
+						'bottom' => 'var:preset|spacing|50',
+						'left'   => '0',
+					],
+				],
+			]
+		);
+		$stored = Newspack_Popups_Contextual_Prompt_Styles::get_styles();
+
+		$this->assertSame( 'var:preset|spacing|50', $stored['spacing']['padding']['top'] );
+		$this->assertSame( '0', $stored['spacing']['padding']['left'] );
+
+		$css = Newspack_Popups_Contextual_Prompt_Styles::get_css();
+
+		$this->assertStringContainsString( 'padding-top:var(--wp--preset--spacing--50)', $css );
+		$this->assertStringContainsString( 'padding-left:0', $css );
+	}
+
+	/**
 	 * No saved styles means no CSS and no editor payload.
 	 */
 	public function test_empty_option_produces_nothing() {

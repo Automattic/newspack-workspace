@@ -52,6 +52,12 @@ class ContextualPromptStylesApiTest extends WP_UnitTestCase {
 		$this->assertArrayHasKey( 'color', $data['style_palette'][0] );
 		$this->assertNotEmpty( $data['style_font_sizes'] );
 		$this->assertArrayHasKey( 'size', $data['style_font_sizes'][0] );
+		// The padding rows step through the site's spacing presets, so they travel
+		// with the name each step shows and the size a resolved default matches on.
+		$this->assertNotEmpty( $data['style_spacing_sizes'] );
+		foreach ( [ 'name', 'slug', 'size' ] as $key ) {
+			$this->assertArrayHasKey( $key, $data['style_spacing_sizes'][0] );
+		}
 		$this->assertStringContainsString( 'site-editor.php', $data['site_editor_styles_url'] );
 	}
 

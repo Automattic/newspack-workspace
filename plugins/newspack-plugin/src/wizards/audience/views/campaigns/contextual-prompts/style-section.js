@@ -25,7 +25,6 @@ import {
 	Notice,
 	RangeControl,
 	__experimentalBorderBoxControl as BorderBoxControl, // eslint-disable-line @wordpress/no-unsafe-wp-apis
-	__experimentalBoxControl as BoxControl, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalParseQuantityAndUnitFromRawValue as parseQuantityAndUnitFromRawValue, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalToolsPanel as ToolsPanel, // eslint-disable-line @wordpress/no-unsafe-wp-apis
@@ -33,19 +32,41 @@ import {
 	__experimentalUnitControl as UnitControl, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
-import { Icon, cornerAll } from '@wordpress/icons';
+import { useEffect, useState } from '@wordpress/element';
+import {
+	Icon,
+	cornerAll,
+	link,
+	linkOff,
+	settings,
+	sidesBottom,
+	sidesHorizontal,
+	sidesLeft,
+	sidesRight,
+	sidesTop,
+	sidesVertical,
+} from '@wordpress/icons';
 
 /**
  * Internal dependencies
  */
 import { Button, Grid, Handoff, SectionHeader } from '../../../../../../packages/components/src';
-import { contrastRatio, perceivedBrightness, presetRefForColor, resolveColor } from './style-utils';
+import {
+	contrastRatio,
+	perceivedBrightness,
+	presetRefForColor,
+	resolveColor,
+	spacingPresetOf,
+	spacingRefForStep,
+	spacingStepOf,
+	spacingSteps,
+	spacingValueOf,
+} from './style-utils';
 import './style-section.scss';
 
 const MIN_CONTRAST_RATIO = 4.5;
 // The size the editor gives the icon in front of a dimension input.
 const ICON_SIZE = 24;
-const PADDING_SIDES = [ 'top', 'right', 'bottom', 'left' ];
 // The radius slider works in the value's own number space, capped where core's
 // BorderControl caps its width slider.
 const RADIUS_SLIDER_MAX = 100;
@@ -53,6 +74,10 @@ const RADIUS_SLIDER_MAX = 100;
 const getPath = ( source, path ) => path.reduce( ( node, key ) => node?.[ key ], source );
 
 const hasKeys = value => !! value && 0 < Object.keys( value ).length;
+
+// Per-side padding only. A theme.json may carry the shorthand string instead,
+// which no per-side row can read, so it stands in as nothing.
+const asSides = value => ( !! value && 'object' === typeof value ? value : {} );
 
 // Immutable deep-set that deletes the key when the value is undefined and prunes
 // nodes left empty: the REST layer replaces the whole object, and an all-empty
@@ -134,6 +159,121 @@ const ColorRow = ( { label, colorValue, disabled, children } ) => (
 	/>
 );
 
+// One padding row: the axis or side icon, then either a slider over the site's
+// spacing presets or, behind the settings toggle, a custom value. Mirrors the
+// editor's spacing row — @wordpress/block-editor owns SpacingSizesControl and is
+// not loaded on the wizard page.
+const SpacingRow = ( { icon, label, steps, value, onChange, disabled } ) => {
+	// A resolved default lands on the step it came from; anything else is custom.
+	const preset = spacingPresetOf( value, steps );
+	const step = spacingStepOf( preset, steps );
+	const hasPresets = 1 < steps.length;
+	const [ isCustom, setIsCustom ] = useState( () => ! hasPresets || ( undefined !== preset && null === step ) );
+
+	// A value the slider cannot land on — a custom default, or one a reset brings
+	// back — moves the row to the input, as the editor's row does.
+	useEffect( () => {
+		if ( undefined !== preset && null === step ) {
+			setIsCustom( true );
+		}
+	}, [ preset, step ] );
+
+	// Core marks every step but the two ends, which the slider's own stops carry.
+	const marks = steps.slice( 1, steps.length - 1 ).map( ( _step, index ) => ( { value: index + 1 } ) );
+
+	return (
+		<HStack className="newspack-prompt-style-padding__row" spacing={ 2 }>
+			<Icon className="newspack-prompt-style-padding__icon" icon={ icon } size={ ICON_SIZE } />
+			{ isCustom ? (
+				<UnitControl
+					label={ label }
+					hideLabelFromVision
+					value={ spacingValueOf( preset, steps ) }
+					onChange={ next => onChange( next || undefined ) }
+					min={ 0 }
+					disabled={ disabled }
+					__next40pxDefaultSize
+				/>
+			) : (
+				<RangeControl
+					label={ label }
+					hideLabelFromVision
+					value={ step ?? 0 }
+					onChange={ next => onChange( spacingRefForStep( next, steps ) ) }
+					min={ 0 }
+					max={ steps.length - 1 }
+					step={ 1 }
+					marks={ marks }
+					initialPosition={ 0 }
+					withInputField={ false }
+					aria-valuetext={ steps[ step ?? 0 ]?.name }
+					renderTooltipContent={ next => steps[ next ]?.name }
+					disabled={ disabled }
+					__nextHasNoMarginBottom
+					__next40pxDefaultSize
+				/>
+			) }
+			{ hasPresets && (
+				<Button
+					size="small"
+					icon={ settings }
+					iconSize={ ICON_SIZE }
+					isPressed={ isCustom }
+					label={ isCustom ? __( 'Use preset', 'newspack-plugin' ) : __( 'Set custom value', 'newspack-plugin' ) }
+					onClick={ () => setIsCustom( ! isCustom ) }
+					disabled={ disabled }
+				/>
+			) }
+		</HStack>
+	);
+};
+
+// Sides move in pairs until the sides are unlinked, which is how the editor
+// opens whenever the two axes each hold one value.
+const PaddingControl = ( { steps, values, onChange, disabled } ) => {
+	const [ isLinked, setIsLinked ] = useState( () => values.top === values.bottom && values.left === values.right );
+	const axialRows = [
+		{ key: 'vertical', sides: [ 'top', 'bottom' ], icon: sidesVertical, label: __( 'Vertical padding', 'newspack-plugin' ) },
+		{ key: 'horizontal', sides: [ 'left', 'right' ], icon: sidesHorizontal, label: __( 'Horizontal padding', 'newspack-plugin' ) },
+	];
+	// The editor's order for the unlinked sides, which is not the CSS shorthand's.
+	const sideRows = [
+		{ key: 'top', sides: [ 'top' ], icon: sidesTop, label: __( 'Top padding', 'newspack-plugin' ) },
+		{ key: 'bottom', sides: [ 'bottom' ], icon: sidesBottom, label: __( 'Bottom padding', 'newspack-plugin' ) },
+		{ key: 'left', sides: [ 'left' ], icon: sidesLeft, label: __( 'Left padding', 'newspack-plugin' ) },
+		{ key: 'right', sides: [ 'right' ], icon: sidesRight, label: __( 'Right padding', 'newspack-plugin' ) },
+	];
+
+	return (
+		<fieldset className="newspack-prompt-style-padding">
+			<HStack className="newspack-prompt-style-padding__header">
+				<BaseControl.VisualLabel as="legend">{ __( 'Padding', 'newspack-plugin' ) }</BaseControl.VisualLabel>
+				<Button
+					size="small"
+					icon={ isLinked ? link : linkOff }
+					iconSize={ ICON_SIZE }
+					label={ isLinked ? __( 'Unlink sides', 'newspack-plugin' ) : __( 'Link sides', 'newspack-plugin' ) }
+					onClick={ () => setIsLinked( ! isLinked ) }
+					disabled={ disabled }
+				/>
+			</HStack>
+			<VStack spacing={ 1 }>
+				{ ( isLinked ? axialRows : sideRows ).map( ( { key, sides, icon, label } ) => (
+					<SpacingRow
+						key={ key }
+						icon={ icon }
+						label={ label }
+						steps={ steps }
+						value={ values[ sides[ 0 ] ] }
+						onChange={ next => onChange( sides, next ) }
+						disabled={ disabled }
+					/>
+				) ) }
+			</VStack>
+		</fieldset>
+	);
+};
+
 const StyleSection = ( { status, styles = {}, inFlight, onChangeStyles } ) => {
 	const {
 		is_block_theme: isBlockTheme,
@@ -141,6 +281,7 @@ const StyleSection = ( { status, styles = {}, inFlight, onChangeStyles } ) => {
 		style_defaults: styleDefaults,
 		style_palette: stylePalette,
 		style_font_sizes: styleFontSizes,
+		style_spacing_sizes: styleSpacingSizes,
 	} = status;
 
 	const defaults = styleDefaults || {};
@@ -149,6 +290,7 @@ const StyleSection = ( { status, styles = {}, inFlight, onChangeStyles } ) => {
 	// controls only take the shapes they document.
 	const paletteColors = palette.map( ( { name, slug, color } ) => ( { name, slug, color } ) );
 	const fontSizes = ( styleFontSizes || [] ).map( ( { name, slug, size } ) => ( { name, slug, size: withPixelUnit( size ) } ) );
+	const paddingSteps = spacingSteps( styleSpacingSizes, __( 'None', 'newspack-plugin' ) );
 	const effective = path => getPath( styles, path ) ?? getPath( defaults, path );
 
 	const radius = effective( [ 'border', 'radius' ] );
@@ -166,14 +308,24 @@ const StyleSection = ( { status, styles = {}, inFlight, onChangeStyles } ) => {
 
 	const setFontSize = value => onChangeStyles( setPath( styles, [ 'typography', 'fontSize' ], value ? withPixelUnit( value ) : undefined ) );
 
-	const setPadding = value => {
-		const sides = {};
-		PADDING_SIDES.forEach( side => {
-			if ( undefined !== value?.[ side ] ) {
-				sides[ side ] = value[ side ];
+	// Each side reads its own effective value, so overriding one leaves the others
+	// showing the default they still render with.
+	const paddingValues = { ...asSides( defaults.spacing?.padding ), ...asSides( styles.spacing?.padding ) };
+
+	const clearPadding = () => onChangeStyles( setPath( styles, [ 'spacing', 'padding' ], undefined ) );
+
+	// Only the sides the row owns are written: the rest keep whatever they had,
+	// default included, so the override stays as small as the edit.
+	const setPaddingSides = ( sides, value ) => {
+		const next = { ...asSides( styles.spacing?.padding ) };
+		sides.forEach( side => {
+			if ( undefined === value ) {
+				delete next[ side ];
+			} else {
+				next[ side ] = value;
 			}
 		} );
-		onChangeStyles( setPath( styles, [ 'spacing', 'padding' ], hasKeys( sides ) ? sides : undefined ) );
+		onChangeStyles( setPath( styles, [ 'spacing', 'padding' ], hasKeys( next ) ? next : undefined ) );
 	};
 
 	const borderOverride = withoutRadius( styles.border );
@@ -263,24 +415,14 @@ const StyleSection = ( { status, styles = {}, inFlight, onChangeStyles } ) => {
 							/>
 						</ToolsPanelItem>
 					</StylePanel>
-					<StylePanel
-						label={ __( 'Padding', 'newspack-plugin' ) }
-						resetAll={ () => onChangeStyles( setPath( styles, [ 'spacing', 'padding' ], undefined ) ) }
-					>
+					<StylePanel label={ __( 'Padding', 'newspack-plugin' ) } resetAll={ clearPadding }>
 						<ToolsPanelItem
 							label={ __( 'Padding', 'newspack-plugin' ) }
 							hasValue={ () => undefined !== styles.spacing?.padding }
-							onDeselect={ () => setPadding() }
+							onDeselect={ clearPadding }
 							isShownByDefault
 						>
-							<BoxControl
-								label={ __( 'Padding', 'newspack-plugin' ) }
-								values={ effective( [ 'spacing', 'padding' ] ) }
-								onChange={ setPadding }
-								splitOnAxis={ false }
-								allowReset={ false }
-								__next40pxDefaultSize
-							/>
+							<PaddingControl steps={ paddingSteps } values={ paddingValues } onChange={ setPaddingSides } disabled={ inFlight } />
 						</ToolsPanelItem>
 					</StylePanel>
 					<StylePanel

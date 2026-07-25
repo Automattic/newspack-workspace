@@ -81,6 +81,32 @@
 		}
 	}
 
+	// The padding rows follow the editor's spacing control: a legend paired with
+	// the link toggle, then one row per axis or side, each led by its icon and
+	// closed by the custom-value toggle, with the control between them.
+	.newspack-prompt-style-padding {
+		border: 0;
+		margin: 0;
+		padding: 0;
+
+		&__header {
+			margin-bottom: wp-vars.$grid-unit-10;
+			min-height: wp-vars.$grid-unit-30;
+		}
+
+		&__icon {
+			fill: currentcolor;
+			flex: none;
+		}
+
+		&__row {
+			.components-range-control,
+			.components-unit-control-wrapper {
+				flex: 1;
+			}
+		}
+	}
+
 	// Split the radius row the way core's BorderControl splits its width row: the
 	// corners icon, then the input, then the slider taking the rest.
 	.newspack-prompt-style-radius {
