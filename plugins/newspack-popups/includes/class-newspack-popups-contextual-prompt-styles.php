@@ -37,6 +37,18 @@ final class Newspack_Popups_Contextual_Prompt_Styles {
 	const SHORTHAND_PATHS = [ 'border.radius' ];
 
 	/**
+	 * Color shapes the wizard can read for its contrast check: a hex value or a
+	 * preset reference.
+	 */
+	const WIZARD_COLOR_PATTERN = '/^(?:#[0-9a-fA-F]{3}|#[0-9a-fA-F]{6}|var:preset\|color\|[a-zA-Z0-9_-]+)\z/';
+
+	/**
+	 * The CSS initial text color, used when the site's global text color is
+	 * missing or in a shape the wizard cannot read.
+	 */
+	const INITIAL_TEXT_COLOR = '#000000';
+
+	/**
 	 * Register hooks. Classic themes only: on block themes Global Styles owns
 	 * the block's styles and this class must stay inert.
 	 */
@@ -196,7 +208,37 @@ final class Newspack_Popups_Contextual_Prompt_Styles {
 			[ 'blocks', Newspack_Popups_Contextual_Prompt_Block::BLOCK_NAME ],
 			[ 'transforms' => [ 'resolve-variables' ] ]
 		);
-		return is_array( $defaults ) ? $defaults : [];
+		$defaults = is_array( $defaults ) ? $defaults : [];
+		if ( ! isset( $defaults['color'] ) || ! is_array( $defaults['color'] ) ) {
+			$defaults['color'] = [];
+		}
+		// The block's default design carries no text color, so a background chosen
+		// in the wizard would have nothing to be checked against. Stand in the
+		// color the prompt actually renders with.
+		if ( empty( $defaults['color']['text'] ) ) {
+			$defaults['color']['text'] = self::get_inherited_text_color();
+		}
+		return $defaults;
+	}
+
+	/**
+	 * The text color a prompt inherits from the site, in a shape the wizard can
+	 * read. Global styles resolve preset references to `var()` lookups, which the
+	 * wizard cannot resolve, so anything unreadable falls back to the CSS initial
+	 * text color.
+	 *
+	 * @return string
+	 */
+	private static function get_inherited_text_color() {
+		// A missing path hands back the whole styles tree, hence the string check.
+		$text = wp_get_global_styles( [ 'color', 'text' ], [ 'transforms' => [ 'resolve-variables' ] ] );
+		if ( is_string( $text ) ) {
+			$text = trim( $text );
+			if ( '' !== $text && preg_match( self::WIZARD_COLOR_PATTERN, $text ) ) {
+				return $text;
+			}
+		}
+		return self::INITIAL_TEXT_COLOR;
 	}
 
 	/**

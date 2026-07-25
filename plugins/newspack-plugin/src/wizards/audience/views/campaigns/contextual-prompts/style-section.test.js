@@ -230,4 +230,16 @@ describe( 'StyleSection on a classic theme', () => {
 		// must consider defaults: expect it present.
 		expect( screen.getByText( CONTRAST_WARNING, { selector: NOTICE_CONTENT } ) ).toBeInTheDocument();
 	} );
+
+	it( 'warns using the inherited text color when only the background is set', () => {
+		// The block's default design carries no text color, so the defaults stand in
+		// the one the prompt inherits from the site; without it a background chosen
+		// on its own would never be checked.
+		const status = {
+			...CLASSIC_STATUS,
+			style_defaults: { ...CLASSIC_STATUS.style_defaults, color: { background: '#f7f7f7', text: '#111111' } },
+		};
+		render( <StyleSection status={ status } styles={ { color: { background: '#7a5c3e' } } } inFlight={ false } onChangeStyles={ () => {} } /> );
+		expect( screen.getByText( CONTRAST_WARNING, { selector: NOTICE_CONTENT } ) ).toBeInTheDocument();
+	} );
 } );

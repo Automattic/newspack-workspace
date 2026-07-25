@@ -216,4 +216,22 @@ class ContextualPromptStylesTest extends WP_UnitTestCase {
 		// Preset spacing must come back resolved, not as a var:preset reference.
 		$this->assertStringNotContainsString( 'var:preset', (string) $defaults['spacing']['padding']['top'] );
 	}
+
+	/**
+	 * The block node carries no text color, so defaults stand in the color the
+	 * prompt inherits: without it the wizard has nothing to check a chosen
+	 * background against.
+	 */
+	public function test_get_defaults_fills_in_the_inherited_text_color() {
+		$block_node = wp_get_global_styles(
+			[ 'blocks', Newspack_Popups_Contextual_Prompt_Block::BLOCK_NAME ],
+			[ 'transforms' => [ 'resolve-variables' ] ]
+		);
+		$this->assertArrayNotHasKey( 'text', $block_node['color'] );
+
+		$defaults = Newspack_Popups_Contextual_Prompt_Styles::get_defaults();
+		// This theme sets no global text color either, so the fallback is the CSS
+		// initial one.
+		$this->assertSame( '#000000', $defaults['color']['text'] );
+	}
 }
