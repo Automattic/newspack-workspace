@@ -20,8 +20,8 @@ const VISIBLE_CLASS = 'newspack-handoff-banner-visible';
 const HEIGHT_PROPERTY = '--newspack-handoff-banner-height';
 
 /**
- * Stop advertising the banner height. Pages that reserve room for the banner
- * fall back to a zero offset.
+ * Stop advertising the space the banner takes. Pages that reserve room for the
+ * banner fall back to a zero offset.
  */
 const clearBannerHeight = () => {
 	document.documentElement.classList.remove( VISIBLE_CLASS );
@@ -38,8 +38,13 @@ export const HandoffBanner = ( {
 	const bannerRef = useRef( null );
 
 	// Full-screen editors lay themselves out against the viewport and ignore the
-	// banner's place in the document flow. Publish the measured height so their
-	// scoped CSS can reserve the space, and take it back when the banner goes.
+	// banner's place in the document flow. Publish the measured space their scoped
+	// CSS has to reserve, and take it back when the banner goes.
+	//
+	// The measurement is the banner's distance from the top of the viewport, not
+	// its own height: anything stacked above it in the flow — the admin bar
+	// padding `html.wp-toolbar` keeps even where the bar itself is hidden, the
+	// WooCommerce header offset below — has to be cleared too.
 	useEffect( () => {
 		const banner = bannerRef.current;
 		if ( ! visibility || ! banner ) {
@@ -48,7 +53,7 @@ export const HandoffBanner = ( {
 		}
 		const updateHeight = () => {
 			document.documentElement.classList.add( VISIBLE_CLASS );
-			document.documentElement.style.setProperty( HEIGHT_PROPERTY, `${ banner.offsetHeight }px` );
+			document.documentElement.style.setProperty( HEIGHT_PROPERTY, `${ Math.ceil( banner.getBoundingClientRect().bottom ) }px` );
 		};
 		updateHeight();
 		if ( typeof window.ResizeObserver !== 'function' ) {

@@ -12,45 +12,58 @@ const VISIBLE_CLASS = 'newspack-handoff-banner-visible';
 const HEIGHT_PROPERTY = '--newspack-handoff-banner-height';
 
 /**
- * Give every element a stable measurable height, the way a browser would.
+ * Place every element at a known spot in the viewport, the way a browser would.
  *
- * @param {number} height Height in pixels reported by `offsetHeight`.
- * @return {Function} Restores the original descriptor.
+ * @param {Object} rect        Geometry to report.
+ * @param {number} rect.top    Distance from the top of the viewport.
+ * @param {number} rect.height Height in pixels.
+ * @return {Function} Restores the original method.
  */
-const mockOffsetHeight = height => {
-	const original = Object.getOwnPropertyDescriptor( window.HTMLElement.prototype, 'offsetHeight' );
-	Object.defineProperty( window.HTMLElement.prototype, 'offsetHeight', {
-		configurable: true,
-		get: () => height,
-	} );
+const mockRect = ( { top, height } ) => {
+	const original = window.Element.prototype.getBoundingClientRect;
+	window.Element.prototype.getBoundingClientRect = function () {
+		return { top, bottom: top + height, height, left: 0, right: 0, width: 0, x: 0, y: top };
+	};
 	return () => {
-		if ( original ) {
-			Object.defineProperty( window.HTMLElement.prototype, 'offsetHeight', original );
-		} else {
-			delete window.HTMLElement.prototype.offsetHeight;
-		}
+		window.Element.prototype.getBoundingClientRect = original;
 	};
 };
 
 describe( 'HandoffBanner', () => {
-	let restoreOffsetHeight;
+	let restoreRect;
 
 	afterEach( () => {
-		if ( restoreOffsetHeight ) {
-			restoreOffsetHeight();
-			restoreOffsetHeight = null;
+		if ( restoreRect ) {
+			restoreRect();
+			restoreRect = null;
 		}
 		document.documentElement.classList.remove( VISIBLE_CLASS );
 		document.documentElement.style.removeProperty( HEIGHT_PROPERTY );
 	} );
 
-	it( 'publishes the measured banner height on the document element', () => {
-		restoreOffsetHeight = mockOffsetHeight( 56 );
+	it( "publishes the banner's viewport bottom on the document element", () => {
+		restoreRect = mockRect( { top: 0, height: 56 } );
 
 		render( <HandoffBanner /> );
 
 		expect( document.documentElement.classList.contains( VISIBLE_CLASS ) ).toBe( true );
 		expect( document.documentElement.style.getPropertyValue( HEIGHT_PROPERTY ) ).toBe( '56px' );
+	} );
+
+	it( 'covers whatever sits above the banner, e.g. the admin bar padding', () => {
+		restoreRect = mockRect( { top: 32, height: 56 } );
+
+		render( <HandoffBanner /> );
+
+		expect( document.documentElement.style.getPropertyValue( HEIGHT_PROPERTY ) ).toBe( '88px' );
+	} );
+
+	it( 'rounds a fractional bottom up so no sliver is left uncovered', () => {
+		restoreRect = mockRect( { top: 32, height: 56.5 } );
+
+		render( <HandoffBanner /> );
+
+		expect( document.documentElement.style.getPropertyValue( HEIGHT_PROPERTY ) ).toBe( '89px' );
 	} );
 
 	it( 're-measures when the banner is resized, e.g. when the text wraps', () => {
@@ -64,35 +77,35 @@ describe( 'HandoffBanner', () => {
 			unobserve() {}
 			disconnect() {}
 		};
-		restoreOffsetHeight = mockOffsetHeight( 56 );
+		restoreRect = mockRect( { top: 32, height: 56 } );
 
 		render( <HandoffBanner /> );
-		expect( document.documentElement.style.getPropertyValue( HEIGHT_PROPERTY ) ).toBe( '56px' );
+		expect( document.documentElement.style.getPropertyValue( HEIGHT_PROPERTY ) ).toBe( '88px' );
 
-		restoreOffsetHeight();
-		restoreOffsetHeight = mockOffsetHeight( 92 );
+		restoreRect();
+		restoreRect = mockRect( { top: 32, height: 92 } );
 		resizeCallback();
 
-		expect( document.documentElement.style.getPropertyValue( HEIGHT_PROPERTY ) ).toBe( '92px' );
+		expect( document.documentElement.style.getPropertyValue( HEIGHT_PROPERTY ) ).toBe( '124px' );
 
 		window.ResizeObserver = originalResizeObserver;
 	} );
 
-	it( 'still publishes a height without ResizeObserver support', () => {
+	it( 'still publishes a value without ResizeObserver support', () => {
 		const originalResizeObserver = window.ResizeObserver;
 		delete window.ResizeObserver;
-		restoreOffsetHeight = mockOffsetHeight( 56 );
+		restoreRect = mockRect( { top: 32, height: 56 } );
 
 		render( <HandoffBanner /> );
 
 		expect( document.documentElement.classList.contains( VISIBLE_CLASS ) ).toBe( true );
-		expect( document.documentElement.style.getPropertyValue( HEIGHT_PROPERTY ) ).toBe( '56px' );
+		expect( document.documentElement.style.getPropertyValue( HEIGHT_PROPERTY ) ).toBe( '88px' );
 
 		window.ResizeObserver = originalResizeObserver;
 	} );
 
-	it( 'clears the class and the height when dismissed', () => {
-		restoreOffsetHeight = mockOffsetHeight( 56 );
+	it( 'clears the class and the value when dismissed', () => {
+		restoreRect = mockRect( { top: 32, height: 56 } );
 
 		render( <HandoffBanner /> );
 		fireEvent.click( screen.getByText( 'Dismiss' ) );
@@ -102,8 +115,8 @@ describe( 'HandoffBanner', () => {
 		expect( document.documentElement.style.getPropertyValue( HEIGHT_PROPERTY ) ).toBe( '' );
 	} );
 
-	it( 'clears the class and the height on unmount', () => {
-		restoreOffsetHeight = mockOffsetHeight( 56 );
+	it( 'clears the class and the value on unmount', () => {
+		restoreRect = mockRect( { top: 32, height: 56 } );
 
 		const { unmount } = render( <HandoffBanner /> );
 		unmount();
