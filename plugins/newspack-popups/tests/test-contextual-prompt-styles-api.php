@@ -26,6 +26,15 @@ class ContextualPromptStylesApiTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A test's theme.json data is cached for the whole request, so drop it.
+	 */
+	public function tear_down() {
+		remove_filter( 'wp_theme_json_data_theme', [ __CLASS__, 'add_numeric_font_size_preset' ] );
+		WP_Theme_JSON_Resolver::clean_cached_data();
+		parent::tear_down();
+	}
+
+	/**
 	 * Status carries the style payload.
 	 */
 	public function test_status_includes_style_payload() {
@@ -42,6 +51,126 @@ class ContextualPromptStylesApiTest extends WP_UnitTestCase {
 		$this->assertNotEmpty( $data['style_font_sizes'] );
 		$this->assertArrayHasKey( 'size', $data['style_font_sizes'][0] );
 		$this->assertStringContainsString( 'site-editor.php', $data['site_editor_styles_url'] );
+	}
+
+	/**
+	 * A theme.json font size preset may be a bare number; core only unit-izes the
+	 * ones registered through add_theme_support. The payload must carry strings
+	 * either way: the picker hands back the shape it was given, and the style
+	 * sanitizer drops anything that is not a string.
+	 */
+	public function test_status_normalizes_numeric_font_size_presets() {
+		add_filter( 'wp_theme_json_data_theme', [ __CLASS__, 'add_numeric_font_size_preset' ] );
+		WP_Theme_JSON_Resolver::clean_cached_data();
+
+		// The premise: the number does survive into the global settings.
+		$settings = wp_get_global_settings( [ 'typography', 'fontSizes' ] );
+		$this->assertSame( 21, $settings['theme'][0]['size'] );
+
+		$response = rest_do_request( new WP_REST_Request( 'GET', '/newspack-popups/v1/contextual-prompt/status' ) );
+		$sizes    = wp_list_pluck( $response->get_data()['style_font_sizes'], 'size', 'slug' );
+
+		$this->assertSame( '21px', $sizes['numeric'] );
+	}
+
+	/**
+	 * Add a font size preset carrying a number rather than a CSS string.
+	 *
+	 * @param WP_Theme_JSON_Data $theme_json Theme JSON data.
+	 * @return WP_Theme_JSON_Data
+	 */
+	public static function add_numeric_font_size_preset( $theme_json ) {
+		return $theme_json->update_with(
+			[
+				'version'  => 2,
+				'settings' => [
+					'typography' => [
+						'fontSizes' => [
+							[
+								'name' => 'Numeric',
+								'slug' => 'numeric',
+								'size' => 21,
+							],
+						],
+					],
+				],
+			]
+		);
+	}
+
+	/**
+	 * Presets are merged across origins: a shared slug is taken from the highest
+	 * origin defining it, and a slug only a lower origin defines still travels.
+	 */
+	public function test_presets_merge_across_origins() {
+		$merged = Newspack_Popups_API::flatten_global_settings_presets(
+			[
+				'default' => [
+					[
+						'slug'  => 'base',
+						'color' => '#ffffff',
+					],
+					[
+						'slug'  => 'contrast',
+						'color' => '#000000',
+					],
+				],
+				'theme'   => [
+					[
+						'slug'  => 'base',
+						'color' => '#fefefe',
+					],
+					[
+						'slug'  => 'accent',
+						'color' => '#178f15',
+					],
+				],
+				'custom'  => [
+					[
+						'slug'  => 'accent',
+						'color' => '#123456',
+					],
+				],
+			]
+		);
+		$by_slug = wp_list_pluck( $merged, 'color', 'slug' );
+
+		$this->assertCount( 3, $merged );
+		$this->assertSame( '#123456', $by_slug['accent'] );
+		$this->assertSame( '#fefefe', $by_slug['base'] );
+		$this->assertSame( '#000000', $by_slug['contrast'] );
+	}
+
+	/**
+	 * Nothing to offer travels as an empty list, never as a list of junk. An
+	 * already-flat list passes through untouched.
+	 */
+	public function test_presets_edge_shapes() {
+		$this->assertSame(
+			[],
+			Newspack_Popups_API::flatten_global_settings_presets(
+				[
+					'default' => [],
+					'theme'   => [],
+					'custom'  => [],
+				]
+			)
+		);
+		// A missing settings path hands back the whole settings tree, which is not a
+		// preset list.
+		$this->assertSame(
+			[],
+			Newspack_Popups_API::flatten_global_settings_presets( [ 'typography' => [ 'fontSizes' => [] ] ] )
+		);
+		$this->assertSame( [], Newspack_Popups_API::flatten_global_settings_presets( 'not an array' ) );
+
+		$flat = [
+			[
+				'slug' => 'small',
+				'size' => '13px',
+			],
+		];
+		$this->assertSame( $flat, Newspack_Popups_API::flatten_global_settings_presets( $flat ) );
 	}
 
 	/**

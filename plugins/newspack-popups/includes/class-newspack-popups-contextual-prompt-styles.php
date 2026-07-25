@@ -223,9 +223,10 @@ final class Newspack_Popups_Contextual_Prompt_Styles {
 
 	/**
 	 * The text color a prompt inherits from the site, in a shape the wizard can
-	 * read. Global styles resolve preset references to `var()` lookups, which the
-	 * wizard cannot resolve, so anything unreadable falls back to the CSS initial
-	 * text color.
+	 * read. The resolve-variables transform hands back a concrete color for a
+	 * preset reference, whichever origin defines the preset; a `var()` lookup only
+	 * survives it when the slug is in no palette, so anything still unreadable here
+	 * falls back to the CSS initial text color.
 	 *
 	 * @return string
 	 */

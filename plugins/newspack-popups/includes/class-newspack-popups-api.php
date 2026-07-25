@@ -190,7 +190,8 @@ final class Newspack_Popups_API {
 		// Styles are a keyed object to every client, so no overrides has to travel
 		// as `{}`: an empty PHP array would serialize as `[]` and a client
 		// comparing it against an object it built would never see them as equal.
-		$styles = Newspack_Popups_Contextual_Prompt_Styles::get_styles();
+		$styles     = Newspack_Popups_Contextual_Prompt_Styles::get_styles();
+		$font_sizes = self::flatten_global_settings_presets( wp_get_global_settings( [ 'typography', 'fontSizes' ] ) );
 		return [
 			'enabled'                => Newspack_Popups_Settings::is_ai_copy_assistant_enabled(),
 			'can_manage'             => current_user_can( 'manage_options' ),
@@ -200,29 +201,72 @@ final class Newspack_Popups_API {
 			'styles'                 => empty( $styles ) ? (object) [] : $styles,
 			'style_defaults'         => Newspack_Popups_Contextual_Prompt_Styles::get_defaults(),
 			'style_palette'          => self::flatten_global_settings_presets( wp_get_global_settings( [ 'color', 'palette' ] ) ),
-			'style_font_sizes'       => self::flatten_global_settings_presets( wp_get_global_settings( [ 'typography', 'fontSizes' ] ) ),
+			'style_font_sizes'       => self::normalize_preset_font_sizes( $font_sizes ),
 			'site_editor_styles_url' => admin_url( 'site-editor.php?p=%2Fstyles&section=' . rawurlencode( '/blocks/' . rawurlencode( Newspack_Popups_Contextual_Prompt_Block::BLOCK_NAME ) ) ),
 		];
 	}
 
 	/**
-	 * Global-settings presets come keyed by origin (custom > theme > default);
-	 * the wizard wants one flat list, first non-empty origin wins.
+	 * Global-settings presets come keyed by origin, each origin holding its own
+	 * list; the wizard wants one flat list. Merge the origins, custom beating theme
+	 * beating default on a shared slug: every origin gets a CSS custom property, so
+	 * a lower-precedence preset is still usable and dropping it would hide it from
+	 * the wizard for no reason. Anything not origin-keyed and not already a flat
+	 * list is not a preset list at all, and yields nothing.
+	 *
+	 * Public so the merge can be exercised directly in tests.
 	 *
 	 * @param mixed $presets Origin-keyed presets, or already-flat array.
-	 * @return array
+	 * @return array Flat preset list, empty when there is nothing to offer.
 	 */
-	private static function flatten_global_settings_presets( $presets ) {
+	public static function flatten_global_settings_presets( $presets ) {
 		if ( ! is_array( $presets ) ) {
 			return [];
 		}
+		// Not origin-keyed: already a flat preset list.
+		if ( wp_is_numeric_array( $presets ) ) {
+			return array_values( $presets );
+		}
+		$flat  = [];
+		$slugs = [];
 		foreach ( [ 'custom', 'theme', 'default' ] as $origin ) {
-			if ( ! empty( $presets[ $origin ] ) && is_array( $presets[ $origin ] ) ) {
-				return array_values( $presets[ $origin ] );
+			if ( empty( $presets[ $origin ] ) || ! is_array( $presets[ $origin ] ) ) {
+				continue;
+			}
+			foreach ( $presets[ $origin ] as $preset ) {
+				if ( ! is_array( $preset ) ) {
+					continue;
+				}
+				$slug = isset( $preset['slug'] ) ? (string) $preset['slug'] : '';
+				if ( '' !== $slug ) {
+					if ( isset( $slugs[ $slug ] ) ) {
+						continue;
+					}
+					$slugs[ $slug ] = true;
+				}
+				$flat[] = $preset;
 			}
 		}
-		// Not origin-keyed: already a flat preset list.
-		return array_values( $presets );
+		return $flat;
+	}
+
+	/**
+	 * Font size presets can carry a plain number: core unit-izes the ones a theme
+	 * registers with `add_theme_support( 'editor-font-sizes' )`, but not the ones a
+	 * theme.json declares. The wizard stores CSS strings and the style sanitizer
+	 * keeps string leaves only, so a numeric size would be offered in the picker
+	 * and dropped on save. Deliver every size in px, as core's own back-compat does.
+	 *
+	 * @param array $presets Flat font size presets.
+	 * @return array
+	 */
+	private static function normalize_preset_font_sizes( $presets ) {
+		foreach ( $presets as $index => $preset ) {
+			if ( is_array( $preset ) && isset( $preset['size'] ) && is_numeric( $preset['size'] ) ) {
+				$presets[ $index ]['size'] = $preset['size'] . 'px';
+			}
+		}
+		return $presets;
 	}
 
 	/**
