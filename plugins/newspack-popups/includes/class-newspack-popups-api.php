@@ -197,7 +197,7 @@ final class Newspack_Popups_API {
 			'style_defaults'         => Newspack_Popups_Contextual_Prompt_Styles::get_defaults(),
 			'style_palette'          => self::flatten_global_settings_presets( wp_get_global_settings( [ 'color', 'palette' ] ) ),
 			'style_font_sizes'       => self::flatten_global_settings_presets( wp_get_global_settings( [ 'typography', 'fontSizes' ] ) ),
-			'site_editor_styles_url' => admin_url( 'site-editor.php?p=%2Fstyles' ),
+			'site_editor_styles_url' => admin_url( 'site-editor.php?p=%2Fstyles&section=' . rawurlencode( '/blocks/' . rawurlencode( Newspack_Popups_Contextual_Prompt_Block::BLOCK_NAME ) ) ),
 		];
 	}
 
