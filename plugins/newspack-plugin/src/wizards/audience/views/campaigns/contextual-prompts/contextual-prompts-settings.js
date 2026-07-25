@@ -3,8 +3,8 @@
  *
  * Presentational: the parent tab owns the fetched status/values and the header
  * Save/Disable actions. When the feature is off this renders an empty state with
- * an admin opt-in (AI-use disclosure modal); when on, the publisher-profile and
- * site-wide override fields in the branch's grid/divider layout.
+ * an admin opt-in (AI-use disclosure modal); when on, the publisher-profile,
+ * site-wide override and style sections in the branch's grid/divider layout.
  */
 
 /**
@@ -29,6 +29,7 @@ import { megaphone } from '@wordpress/icons';
  */
 import { Button, Divider, Grid, Modal, SectionHeader } from '../../../../../../packages/components/src';
 import WizardsTab from '../../../../wizards-tab';
+import StyleSection from './style-section';
 
 const DISCLOSURE = __(
 	"Contextual Prompts lets editors draft donation call-to-action copy with AI. The story's content is sent to a third-party AI provider, which retains it for up to 30 days for abuse monitoring and never uses it to train AI models or in other AI products. Every suggestion is a draft an editor reviews and approves; nothing is published automatically.",
@@ -48,7 +49,7 @@ const OVERRIDE_ENABLED_KEY = 'newspack_contextual_prompts_override_enabled';
 const OVERRIDE_CTA_KEY = 'newspack_contextual_prompts_override_cta';
 const OVERRIDE_BUTTON_KEYS = [ 'newspack_contextual_prompts_override_label', 'newspack_contextual_prompts_override_url' ];
 
-const ContextualPromptsSettings = ( { status, values, error, inFlight, onSetValue, onEnable } ) => {
+const ContextualPromptsSettings = ( { status, values, blockStyles, error, inFlight, onSetValue, onChangeStyles, onEnable } ) => {
 	const [ modalOpen, setModalOpen ] = useState( false );
 	const { enabled, can_manage: canManage, fields } = status;
 
@@ -228,6 +229,8 @@ const ContextualPromptsSettings = ( { status, values, error, inFlight, onSetValu
 				/>
 				<VStack spacing={ 6 }>{ renderFields( 'override' ) }</VStack>
 			</Grid>
+			<Divider alignment="full-width" variant="tertiary" />
+			<StyleSection status={ status } styles={ blockStyles } inFlight={ inFlight } onChangeStyles={ onChangeStyles } />
 		</WizardsTab>
 	);
 };

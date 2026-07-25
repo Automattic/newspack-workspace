@@ -1,4 +1,9 @@
 /**
+ * External dependencies
+ */
+import isEqual from 'lodash/isEqual';
+
+/**
  * WordPress dependencies
  */
 import apiFetch from '@wordpress/api-fetch';
@@ -40,6 +45,7 @@ const ContextualPromptsScreen = withWizardScreen( ( { children } ) => <>{ childr
 const ContextualPrompts = props => {
 	const [ status, setStatus ] = useState( null );
 	const [ values, setValues ] = useState( {} );
+	const [ blockStyles, setBlockStyles ] = useState( {} );
 	const [ inFlight, setInFlight ] = useState( false );
 	const [ error, setError ] = useState( null );
 	const [ loaded, setLoaded ] = useState( false );
@@ -49,6 +55,8 @@ const ContextualPrompts = props => {
 	const [ snackbar, setSnackbar ] = useState( null );
 	// Values as of the last successful status fetch / profile save, to detect dirt.
 	const savedValuesRef = useRef( {} );
+	// Same, for the block style overrides: the save only sends them when they differ.
+	const savedStylesRef = useRef( {} );
 	// Monotonic id so a slow status response can't clobber state written by a
 	// newer request or mutation.
 	const statusRequestRef = useRef( 0 );
@@ -66,6 +74,9 @@ const ContextualPrompts = props => {
 				const nextValues = fieldsToValues( next.fields );
 				setValues( nextValues );
 				savedValuesRef.current = nextValues;
+				const nextStyles = next.styles || {};
+				setBlockStyles( nextStyles );
+				savedStylesRef.current = nextStyles;
 			} )
 			.catch( err => {
 				if ( requestId === statusRequestRef.current ) {
@@ -91,6 +102,9 @@ const ContextualPrompts = props => {
 				const nextValues = fieldsToValues( next.fields );
 				setValues( nextValues );
 				savedValuesRef.current = nextValues;
+				const nextStyles = next.styles || {};
+				setBlockStyles( nextStyles );
+				savedStylesRef.current = nextStyles;
 				return next;
 			} )
 			.catch( err => {
@@ -114,6 +128,9 @@ const ContextualPrompts = props => {
 				const nextValues = fieldsToValues( next.fields );
 				setValues( nextValues );
 				savedValuesRef.current = nextValues;
+				const nextStyles = next.styles || {};
+				setBlockStyles( nextStyles );
+				savedStylesRef.current = nextStyles;
 				return next;
 			} )
 			.catch( err => {
@@ -122,13 +139,21 @@ const ContextualPrompts = props => {
 			} )
 			.finally( () => setInFlight( false ) );
 	};
-	const saveProfile = () =>
-		request( PROFILE_PATH, { fields: values } )
+	// The endpoint replaces the whole styles option when the key is present and
+	// leaves it alone when it is absent, so only an actual edit sends it.
+	const stylesDirty = ! isEqual( blockStyles, savedStylesRef.current );
+	const saveProfile = () => {
+		const data = { fields: values };
+		if ( stylesDirty ) {
+			data.styles = blockStyles;
+		}
+		return request( PROFILE_PATH, data )
 			.then( () => setSnackbar( __( 'Settings saved.', 'newspack-plugin' ) ) )
 			.catch( () => {} );
+	};
 	const setValue = ( key, value ) => setValues( previous => ( { ...previous, [ key ]: value } ) );
 
-	const isDirty = ! valuesEqual( values, savedValuesRef.current );
+	const isDirty = ! valuesEqual( values, savedValuesRef.current ) || stylesDirty;
 	// Guard stays active during an in-flight save: the edits are only safe once
 	// a successful response has refreshed the saved snapshot.
 	const { confirmDialog, requestConfirm } = useUnsavedChangesDialog( { when: isDirty } );
@@ -178,9 +203,11 @@ const ContextualPrompts = props => {
 			<ContextualPromptsSettings
 				status={ status }
 				values={ values }
+				blockStyles={ blockStyles }
 				error={ error }
 				inFlight={ inFlight }
 				onSetValue={ setValue }
+				onChangeStyles={ setBlockStyles }
 				onEnable={ onEnable }
 			/>
 		);
