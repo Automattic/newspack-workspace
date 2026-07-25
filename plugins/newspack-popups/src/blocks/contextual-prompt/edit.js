@@ -24,7 +24,7 @@ import { PanelBody } from '@wordpress/components';
 /**
  * Internal dependencies.
  */
-import { POST_TYPE_LABEL, FRAMING_LABELS, generateCandidates, GenerateButton, CandidateList } from './candidates';
+import { POST_TYPE_LABEL, FRAMING_LABELS, framingForPosition, generateCandidates, GenerateButton, CandidateList } from './candidates';
 
 // The CTA follows the site's reader-revenue setup: the donate block when
 // Newspack donations are native, a plain button otherwise. The button defaults
@@ -65,23 +65,11 @@ export const ContextualPromptEditor = ( { clientId } ) => {
 			const blockEditor = select( blockEditorStore );
 			const copyId = blockEditor.getClientIdsOfDescendants( clientId ).find( id => 'core/paragraph' === blockEditor.getBlockName( id ) );
 			const content = copyId ? blockEditor.getBlockAttributes( copyId ).content : undefined;
-			// The framing follows the block's actual position in the story, with a
-			// small buffer: a prompt sitting two paragraphs in still reads as a
-			// top-of-story ask, and likewise near the end.
-			const FRAMING_BUFFER = 3;
-			const index = blockEditor.getBlockIndex( clientId );
-			const total = blockEditor.getBlockCount();
-			let position = 'mid';
-			if ( index < FRAMING_BUFFER ) {
-				position = 'top';
-			} else if ( index >= total - FRAMING_BUFFER ) {
-				position = 'end';
-			}
 			return {
 				postId: select( 'core/editor' ).getCurrentPostId(),
 				copyClientId: copyId,
 				copyIsEmpty: ! content || ! content.toString().trim(),
-				framing: position,
+				framing: framingForPosition( blockEditor.getBlockIndex( clientId ), blockEditor.getBlockCount() ),
 			};
 		},
 		[ clientId ]

@@ -31,6 +31,26 @@ export const FRAMING_LABELS = {
 };
 
 /**
+ * The framing implied by a block's position among the article's top-level
+ * blocks, with a small buffer: a prompt sitting two paragraphs in still reads
+ * as a top-of-story ask, and likewise near the end.
+ *
+ * @param {number} index Block index.
+ * @param {number} total Top-level block count.
+ * @return {string} One of 'top' | 'mid' | 'end'.
+ */
+export const framingForPosition = ( index, total ) => {
+	const FRAMING_BUFFER = 3;
+	if ( index < FRAMING_BUFFER ) {
+		return 'top';
+	}
+	if ( index >= total - FRAMING_BUFFER ) {
+		return 'end';
+	}
+	return 'mid';
+};
+
+/**
  * Request donation prompt candidates for a post.
  *
  * @param {Object} args           Request arguments.

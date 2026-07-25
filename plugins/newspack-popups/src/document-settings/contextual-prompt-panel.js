@@ -24,7 +24,7 @@ import {
  * Internal dependencies
  */
 import { createPromptBlock } from '../blocks/contextual-prompt/edit';
-import { POST_TYPE_LABEL, generateCandidates, GenerateButton, CandidateList } from '../blocks/contextual-prompt/candidates';
+import { POST_TYPE_LABEL, framingForPosition, generateCandidates, GenerateButton, CandidateList } from '../blocks/contextual-prompt/candidates';
 
 const BLOCK_NAME = 'newspack-popups/contextual-prompt';
 
@@ -43,15 +43,19 @@ const findCopyBlock = blocks => {
 };
 
 const ContextualPromptPanel = () => {
-	const { postId, postType, content, blockCount, instance } = useSelect( select => {
+	const { postId, postType, content, blockCount, instance, instanceFraming } = useSelect( select => {
 		const editor = select( 'core/editor' );
 		const blocks = select( 'core/block-editor' ).getBlocks() || [];
+		const instanceIndex = blocks.findIndex( block => BLOCK_NAME === block.name );
 		return {
 			postId: editor.getCurrentPostId(),
 			postType: editor.getCurrentPostType(),
 			content: editor.getEditedPostContent(),
 			blockCount: blocks.length,
-			instance: blocks.find( block => BLOCK_NAME === block.name ) || null,
+			instance: -1 === instanceIndex ? null : blocks[ instanceIndex ],
+			// Once the prompt is placed, its position decides the framing — the
+			// top/mid/end choice is only on offer before the first insert.
+			instanceFraming: -1 === instanceIndex ? null : framingForPosition( instanceIndex, blocks.length ),
 		};
 	}, [] );
 
@@ -73,7 +77,7 @@ const ContextualPromptPanel = () => {
 		setGenerating( true );
 		setError( '' );
 		try {
-			const list = await generateCandidates( { postId, content } );
+			const list = await generateCandidates( { postId, content, framing: instanceFraming || undefined } );
 			setCandidates( list );
 			if ( ! list.length ) {
 				setError( __( 'No suggestions were returned. Try generating again.', 'newspack-popups' ) );
