@@ -27,6 +27,7 @@ import { Badge, Button, DataViews, Notice, Waiting } from '../../../../packages/
 import './style.scss';
 import { fmtRelative, fmtDate } from '../format';
 import { SHOW_AVATARS, useAvatars } from '../data/use-avatars';
+import { usePlans } from '../data/use-plans';
 import { useSubscribers } from '../data/use-subscribers';
 import { WIZARD_STORE_NAMESPACE } from '../../../../packages/components/src/wizard/store';
 import { GROUP_LABEL, ROLE_LABELS } from '../labels';
@@ -95,10 +96,16 @@ export default function SubscriberList() {
 
 	const { setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
 
+	const plans = usePlans();
+
 	// The server owns filter/sort/paginate; this page's rows come back already
-	// narrowed. Group-role, tag, newsletter and plan filters arrive in later
-	// slices (the endpoint honors status here); sorting is name / member-since.
+	// narrowed. Group-role, tag and newsletter filters arrive in later slices (the
+	// endpoint honors status and plan here); sorting is name / member-since.
 	const { items, total, pages, loading: subscribersLoading, error, reload } = useSubscribers( view );
+
+	// Filter options for the Subscription column: every plan on the site, not just
+	// the ones on this page.
+	const planElements = useMemo( () => plans.map( name => ( { value: name, label: name } ) ), [ plans ] );
 
 	// Resolve avatar URLs for the current page, keyed by subscriber id. The table
 	// renders immediately with the avatar placeholder and each avatar fills in as
@@ -176,8 +183,13 @@ export default function SubscriberList() {
 			{
 				id: 'plans',
 				label: __( 'Subscription', 'newspack-plugin' ),
-				// Plan filtering waits on the plans endpoint (NPPD-1753 PR 6); this is
-				// a display-only column for now.
+				// Options come from the plans endpoint rather than the loaded rows:
+				// this list is server-paginated, so the plans on the current page are
+				// not the plans on the site. Filtering is server-side too — see
+				// viewToParams, which sends this field's value as the `plan` param.
+				elements: planElements,
+				filterBy: { operators: [ 'isAny' ] },
+				getValue: ( { item } ) => visiblePlanEntries( planEntries( item, groupEntriesOf( item ) ) ).map( e => e.plan ),
 				enableSorting: false,
 				render: ( { item } ) => {
 					const entries = visiblePlanEntries( planEntries( item, groupEntriesOf( item ) ) );
@@ -281,7 +293,7 @@ export default function SubscriberList() {
 				render: ( { item } ) => <div>{ ( item.newsletters || [] ).join( ', ' ) }</div>,
 			},
 		],
-		[ avatars ]
+		[ avatars, planElements ]
 	);
 
 	// DataViews only makes the title cell clickable; delegate clicks from the

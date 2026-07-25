@@ -189,6 +189,16 @@ class Subscribers_Wizard extends Wizard {
 
 		register_rest_route(
 			NEWSPACK_API_NAMESPACE,
+			'/wizard/' . $this->slug . '/plans',
+			[
+				'methods'             => \WP_REST_Server::READABLE,
+				'callback'            => [ $this, 'api_get_plans' ],
+				'permission_callback' => [ $this, 'api_permissions_check' ],
+			]
+		);
+
+		register_rest_route(
+			NEWSPACK_API_NAMESPACE,
 			'/wizard/' . $this->slug . '/subscribers',
 			[
 				'methods'             => \WP_REST_Server::READABLE,
@@ -315,6 +325,148 @@ class Subscribers_Wizard extends Wizard {
 				'pages' => 1,
 			]
 		);
+	}
+
+	/**
+	 * GET the plan names the subscriber list can be filtered by.
+	 *
+	 * The subscriber list is server-paginated, so it can't derive its plan filter
+	 * from the rows it happens to be showing the way the group list does — a plan
+	 * nobody on page 1 holds would simply not be offered. This endpoint supplies
+	 * the whole set instead.
+	 *
+	 * Names, not IDs: the `plan` filter on /subscribers matches display names,
+	 * because a group's plan is its configured group name while an individual plan
+	 * is its product's name. The two are only comparable as strings. Names are
+	 * deduplicated, so two groups sharing a name are one option matching the
+	 * members of both.
+	 *
+	 * The contract every option has to meet — pinned by a round-trip test — is that
+	 * filtering on it returns the readers whose Subscription column shows it. That
+	 * is why a group's *product* is not an option (see subscription_product_names):
+	 * a group's members all display the group's name, never the product's, so the
+	 * product would return only the handful of owners who happen to be the
+	 * subscriptions' customers and no returned row would read as the filtered name.
+	 *
+	 * Scope: the plans the site currently offers, plus every configured group name.
+	 * A reader can still hold a plan that isn't listed — one whose product has since
+	 * been unpublished or deleted — because the alternative, deriving the list from
+	 * the subscriptions themselves, means scanning every subscription on the site
+	 * on each load of the list. Tracked as a follow-up rather than solved here.
+	 * Donation products are deliberately not excluded: a recurring donation is a
+	 * subscription and shows in the list's Subscription column, so filtering it out
+	 * here would leave a visible plan unfilterable.
+	 *
+	 * @return \WP_REST_Response
+	 */
+	public function api_get_plans() {
+		$this->group_subscriptions_cache = null;
+		$names                           = [];
+
+		foreach ( $this->get_group_subscriptions() as $group ) {
+			$names[] = (string) $group['settings']['name'];
+		}
+		foreach ( $this->subscription_product_names() as $product_name ) {
+			$names[] = $product_name;
+		}
+
+		$names = array_values( array_unique( array_filter( array_map( 'trim', $names ) ) ) );
+		// Natural, case-insensitive so the dropdown reads the way a person would
+		// sort it ("Tier 2" before "Tier 10").
+		sort( $names, SORT_NATURAL | SORT_FLAG_CASE );
+
+		return rest_ensure_response(
+			[
+				'items' => $names,
+				'total' => count( $names ),
+				'pages' => 1,
+			]
+		);
+	}
+
+	/**
+	 * The names of the site's published, non-group subscription products, variations
+	 * included.
+	 *
+	 * Variations are listed alongside their parent because a subscription bought on
+	 * a variation resolves to that variation (see individual_plan_name(), via
+	 * wcs_get_canonical_product_id) and so displays the variation's name — listing
+	 * only the parent would leave that plan visible in the list but unfilterable.
+	 *
+	 * Restricted to published products to match the filter's other half:
+	 * product_ids_for_names() resolves a name back to `publish` products only, so an
+	 * unpublished product's name would be an option that matches nobody.
+	 *
+	 * Group products are dropped: see is_group_product().
+	 *
+	 * @return string[] Product names, in no particular order and possibly duplicated.
+	 */
+	private function subscription_product_names() {
+		if ( ! function_exists( 'wc_get_products' ) ) {
+			return [];
+		}
+		$names    = [];
+		$products = \wc_get_products(
+			[
+				'type'   => [ 'subscription', 'variable-subscription' ],
+				'status' => 'publish',
+				// Unbounded, as everywhere else this plugin enumerates subscription
+				// products (Access_Rules::get_subscription_products_options,
+				// Subscriptions_Tiers::get_tier_eligible_products): a site sells a
+				// handful of plans, and a cap here would silently hide one.
+				'limit'  => -1,
+			]
+		);
+		foreach ( $products as $product ) {
+			if ( ! $this->is_group_product( $product ) ) {
+				$names[] = (string) $product->get_name();
+			}
+			if ( ! $product->is_type( 'variable-subscription' ) || ! function_exists( 'wc_get_product' ) ) {
+				continue;
+			}
+			// One product load per variation. The bound is the site's whole
+			// subscription catalogue — every variation of every variable
+			// subscription — resolved on each render of the Subscribers tab. That is
+			// a handful of loads on a real Newspack catalogue; a site with hundreds
+			// of variations would want these batched, but capping instead would
+			// silently drop plans from the dropdown, which is the failure this
+			// endpoint exists to avoid.
+			foreach ( $product->get_children() as $variation_id ) {
+				$variation = \wc_get_product( $variation_id );
+				if ( $variation && ! $this->is_group_product( $variation ) ) {
+					$names[] = (string) $variation->get_name();
+				}
+			}
+		}
+		return $names;
+	}
+
+	/**
+	 * Whether a product is sold as a group subscription.
+	 *
+	 * Such a product must not become a filter option. Every member of a group
+	 * displays the group's own name in the Subscription column, so filtering on the
+	 * product behind it would return only the owners — the customers of record on
+	 * those subscriptions — while every other member of every group on that product
+	 * stayed hidden, and not one returned row would show the name that was filtered
+	 * on. The group names themselves are listed instead, which is what members see.
+	 *
+	 * Read from the product's own settings, which is where group enablement lives:
+	 * a variation carries its own setting and does not inherit the parent's (see
+	 * Group_Subscription_Settings::get_group_subscription_ids), so parents and
+	 * variations are both checked individually. A product that isn't itself a group
+	 * product stays listed even if one subscription on it was flagged as a group by
+	 * hand, since the product is still sold — and displayed — as an individual plan.
+	 *
+	 * @param \WC_Product $product The product (or variation).
+	 *
+	 * @return bool
+	 */
+	private function is_group_product( $product ) {
+		if ( ! class_exists( '\Newspack\Group_Subscription_Settings' ) ) {
+			return false;
+		}
+		return ! empty( Group_Subscription_Settings::get_product_settings( $product )['enabled'] );
 	}
 
 	/**

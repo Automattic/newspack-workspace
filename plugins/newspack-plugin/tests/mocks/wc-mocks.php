@@ -290,6 +290,9 @@ class WC_Product {
 	public function get_type() {
 		return $this->data['type'] ?? 'simple';
 	}
+	public function get_status() {
+		return $this->data['status'] ?? 'publish';
+	}
 	public function is_type( $types ) {
 		$types = (array) $types;
 		return in_array( $this->get_type(), $types, true );
@@ -1079,6 +1082,27 @@ function wc_get_order( $order_id ) {
 function wc_get_product( $product_id ) {
 	global $products_database;
 	return $products_database[ $product_id ] ?? false;
+}
+function wc_get_products( $args = [] ) {
+	// Minimal mock: implements the `type`, `status` and `limit` args — the ones the
+	// code under test passes. A mock product has no status of its own, so it counts
+	// as published (see WC_Product::get_status()). Extend here rather than relying
+	// on this returning the full set if a test needs more.
+	global $products_database;
+	$types    = isset( $args['type'] ) ? (array) $args['type'] : null;
+	$statuses = isset( $args['status'] ) ? (array) $args['status'] : null;
+	$limit    = isset( $args['limit'] ) ? (int) $args['limit'] : -1;
+	$matches  = [];
+	foreach ( $products_database as $product ) {
+		if ( null !== $types && ! $product->is_type( $types ) ) {
+			continue;
+		}
+		if ( null !== $statuses && ! in_array( $product->get_status(), $statuses, true ) ) {
+			continue;
+		}
+		$matches[] = $product;
+	}
+	return $limit > 0 ? array_slice( $matches, 0, $limit ) : $matches;
 }
 /**
  * Recording mock: notices land on the $wc_mock_notices global so tests can

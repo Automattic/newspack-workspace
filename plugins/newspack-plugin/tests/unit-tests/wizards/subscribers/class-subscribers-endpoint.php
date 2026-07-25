@@ -1,6 +1,6 @@
 <?php
 /**
- * Tests for the Subscribers wizard subscribers read endpoint.
+ * Tests for the Subscribers wizard read endpoints (subscribers, avatars, plans).
  *
  * @package Newspack\Tests
  * @group WooCommerce_Subscriptions_Integration
@@ -121,20 +121,31 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Create a group subscription owned by $owner_id.
+	 * Create a group subscription owned by $owner_id, on a group-enabled product.
 	 *
-	 * @param int    $owner_id The owner user ID.
-	 * @param int    $limit    Seat limit.
-	 * @param string $status   Subscription status.
+	 * Shaped the way production is: a publisher sells one group product, and each
+	 * buyer names their own group, so a group's display name ("Acme Team") is not
+	 * its product's name ("Team Plan"). A fixture with no product at all — or one
+	 * whose group keeps the product's name, which is what an unnamed group falls
+	 * back to — hides the very defect the plans endpoint has to avoid, because the
+	 * group branch and the product branch of the filter then agree by accident.
+	 *
+	 * @param int    $owner_id     The owner user ID.
+	 * @param int    $limit        Seat limit.
+	 * @param string $status       Subscription status.
+	 * @param string $product_name The backing group product's name.
 	 *
 	 * @return WC_Subscription
 	 */
-	private function create_group_subscription( int $owner_id, int $limit = 5, string $status = 'active' ): WC_Subscription {
-		$sub = wcs_create_subscription(
+	private function create_group_subscription( int $owner_id, int $limit = 5, string $status = 'active', string $product_name = 'Team Plan' ): WC_Subscription {
+		$product_id = $this->create_subscription_product( $product_name, 'subscription', 0, true );
+		$sub        = wcs_create_subscription(
 			[
 				'customer_id'    => $owner_id,
 				'status'         => $status,
 				'billing_period' => 'month',
+				'products'       => [ $product_id ],
+				'items'          => self::line_items_for( $product_id ),
 			]
 		);
 		$sub->update_meta_data( Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'enabled', 'yes' );
@@ -161,8 +172,96 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 		];
 		if ( $product_id ) {
 			$data['products'] = [ $product_id ];
+			$data['items']    = self::line_items_for( $product_id );
 		}
 		return wcs_create_subscription( $data );
+	}
+
+	/**
+	 * The line items a subscription on $product_id carries.
+	 *
+	 * The mock's `products` array only answers has_product(); the plan *name* a
+	 * subscription displays is resolved from its line items
+	 * (WooCommerce_Subscriptions::get_subscription_product_id), so a fixture
+	 * without them shows a blank plan and can't tell one plan from another.
+	 *
+	 * @param int $product_id The subscribed product ID.
+	 *
+	 * @return WC_Order_Item_Product[]
+	 */
+	private static function line_items_for( int $product_id ): array {
+		return [ new WC_Order_Item_Product( [ 'product_id' => $product_id ] ) ];
+	}
+
+	/**
+	 * Create a subscription product as both a published WP post and a mock
+	 * WC_Product under the same ID.
+	 *
+	 * Both halves are needed because the two sides of the plan filter read
+	 * different sources: the plans endpoint enumerates products through
+	 * wc_get_products(), while the subscribers endpoint resolves a plan name back
+	 * to product IDs with a WP_Query on the post title.
+	 *
+	 * @param string $name          The product name (its post title).
+	 * @param string $type          WooCommerce product type.
+	 * @param int    $parent_id     Parent product ID, for a variation.
+	 * @param bool   $group_enabled Whether the product is sold as a group subscription.
+	 * @param string $status        Post status, so an unpublished product can be exercised.
+	 *
+	 * @return int The product ID.
+	 */
+	private function create_subscription_product( string $name, string $type = 'subscription', int $parent_id = 0, bool $group_enabled = false, string $status = 'publish' ): int {
+		$product_id = self::factory()->post->create(
+			[
+				'post_type'   => 'subscription_variation' === $type ? 'product_variation' : 'product',
+				'post_title'  => $name,
+				'post_status' => $status,
+				'post_parent' => $parent_id,
+			]
+		);
+		$group_meta_key = Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'enabled';
+		if ( $group_enabled ) {
+			// On the post for the site-wide group-subscription lookup, and on the
+			// mock product for get_product_settings() — production writes both.
+			update_post_meta( $product_id, $group_meta_key, 'yes' );
+		}
+		wc_create_mock_product(
+			[
+				'id'        => $product_id,
+				'name'      => $name,
+				'type'      => $type,
+				'parent_id' => $parent_id,
+				'status'    => $status,
+				'meta'      => $group_enabled ? [ $group_meta_key => 'yes' ] : [],
+			]
+		);
+		if ( $parent_id ) {
+			// The mock product is immutable, so adding a child means re-registering
+			// the parent. Carry its status and group setting across or the rewrite
+			// silently resets them.
+			$parent         = wc_get_product( $parent_id );
+			$parent_enabled = $parent->get_meta( $group_meta_key );
+			wc_create_mock_product(
+				[
+					'id'       => $parent_id,
+					'name'     => $parent->get_name(),
+					'type'     => $parent->get_type(),
+					'status'   => $parent->get_status(),
+					'meta'     => $parent_enabled ? [ $group_meta_key => $parent_enabled ] : [],
+					'children' => array_merge( $parent->get_children(), [ $product_id ] ),
+				]
+			);
+		}
+		return $product_id;
+	}
+
+	/**
+	 * Dispatch the plans endpoint.
+	 *
+	 * @return WP_REST_Response
+	 */
+	private function dispatch_plans(): WP_REST_Response {
+		return rest_get_server()->dispatch( new WP_REST_Request( 'GET', '/newspack/v1/wizard/newspack-subscribers/plans' ) );
 	}
 
 	/**
@@ -673,6 +772,157 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 
 		$cancelled_ids = array_column( $this->dispatch( [ 'status' => [ 'cancelled' ] ] )->get_data()['items'], 'id' );
 		$this->assertNotContains( $late_mixed, $cancelled_ids, 'A live plan past the chunk boundary still disqualifies the reader from Cancelled.' );
+	}
+
+	/**
+	 * The plans endpoint lists the site's plan names: every group's configured name
+	 * plus the name of every published, non-group subscription product (variations
+	 * included, since a subscription on a variation displays the variation's name).
+	 * Names are deduplicated and alphabetised; non-subscription products are not
+	 * plans, and neither are the products groups are sold on.
+	 */
+	public function test_plans_endpoint_lists_group_and_product_plans() {
+		$this->login_admin();
+
+		// Two groups sharing one plan name plus a second name: the dropdown must
+		// list a plan once however many groups are configured with it. All three are
+		// sold on the "Team Plan" group product, which must not become an option.
+		$this->create_group_subscription( $this->create_reader( 'AcmeOwnerOne' ) ); // "Acme Team".
+		$this->create_group_subscription( $this->create_reader( 'AcmeOwnerTwo' ) ); // "Acme Team" again.
+		$beta = $this->create_group_subscription( $this->create_reader( 'BetaOwner' ) );
+		$beta->update_meta_data( Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'name', 'Beta Team' );
+
+		$this->create_subscription_product( 'Digital Monthly' );
+		$variable_parent_id = $this->create_subscription_product( 'Digital Bundle', 'variable-subscription' );
+		$this->create_subscription_product( 'Digital Bundle - Annual', 'subscription_variation', $variable_parent_id );
+		$this->create_subscription_product( 'Tote Bag', 'simple' );
+
+		$plans = $this->dispatch_plans()->get_data();
+
+		$this->assertSame(
+			[ 'Acme Team', 'Beta Team', 'Digital Bundle', 'Digital Bundle - Annual', 'Digital Monthly' ],
+			$plans['items'],
+			'Group names and non-group subscription product/variation names, deduplicated and alphabetised.'
+		);
+		$this->assertNotContains( 'Tote Bag', $plans['items'], 'A non-subscription product is not a plan.' );
+		$this->assertNotContains(
+			'Team Plan',
+			$plans['items'],
+			'The product a group is sold on is not an option: members display the group name, so filtering on the product would return only the owners and no row would read as the filtered name.'
+		);
+		$this->assertSame( 5, $plans['total'] );
+	}
+
+	/**
+	 * A group product is excluded whether it is sold as a whole product or as a
+	 * variation of one, because group enablement is per product/variation and a
+	 * variation does not inherit its parent's setting. The parent of a group
+	 * variation is still an option: it is not itself a group product.
+	 */
+	public function test_plans_endpoint_excludes_group_variations() {
+		$this->login_admin();
+
+		$bundle_id = $this->create_subscription_product( 'Campus Bundle', 'variable-subscription' );
+		$this->create_subscription_product( 'Campus Bundle - Individual', 'subscription_variation', $bundle_id );
+		$this->create_subscription_product( 'Campus Bundle - Site Licence', 'subscription_variation', $bundle_id, true );
+
+		$items = $this->dispatch_plans()->get_data()['items'];
+
+		$this->assertContains( 'Campus Bundle', $items );
+		$this->assertContains( 'Campus Bundle - Individual', $items );
+		$this->assertNotContains( 'Campus Bundle - Site Licence', $items, 'A group-enabled variation is not an option.' );
+	}
+
+	/**
+	 * Only published products are offered. The filter's other half resolves a plan
+	 * name through a `publish`-only WP_Query, so listing a draft product's name
+	 * would put an option in the dropdown that can never match a reader — and
+	 * nothing else in this suite would notice, since a dead option looks exactly
+	 * like a plan nobody holds.
+	 */
+	public function test_plans_endpoint_omits_unpublished_products() {
+		$this->login_admin();
+
+		$this->create_subscription_product( 'Published Monthly' );
+		$this->create_subscription_product( 'Draft Monthly', 'subscription', 0, false, 'draft' );
+
+		$items = $this->dispatch_plans()->get_data()['items'];
+
+		$this->assertContains( 'Published Monthly', $items );
+		$this->assertNotContains( 'Draft Monthly', $items );
+	}
+
+	/**
+	 * The contract that makes the filter work end to end: every name the plans
+	 * endpoint hands the UI filters to exactly the readers whose Subscription column
+	 * shows that name. If the two ever drift — a differently-shaped label here, a
+	 * product status the filter's title lookup won't match there — the dropdown
+	 * silently offers options that mislead, so this walks the whole list rather than
+	 * spot-checking one entry, and asserts the *displayed* plan of every row it gets
+	 * back rather than trusting the ids.
+	 *
+	 * The group here is production-shaped: sold on a "Team Plan" product and renamed
+	 * to "Acme Team" by its buyer. Offering the product would satisfy an ids-only
+	 * assertion (the owner does hold a subscription on it) while returning one of
+	 * the three members and showing "Acme Team" in the column of the one it does
+	 * return, so the display assertion below is what makes the test bite.
+	 */
+	public function test_plan_names_round_trip_through_the_subscriber_filter() {
+		$this->login_admin();
+
+		$group_owner  = $this->create_reader( 'RoundTripOwner' );
+		$group_member = $this->create_reader( 'RoundTripMember' );
+		$group        = $this->create_group_subscription( $group_owner ); // "Acme Team" on "Team Plan".
+		add_user_meta( $group_member, Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY, $group->get_id() );
+
+		$product_id     = $this->create_subscription_product( 'Digital Monthly' );
+		$product_reader = $this->create_reader( 'RoundTripDigital' );
+		$this->create_individual_subscription( $product_reader, 'active', $product_id );
+
+		$expected_holders = [
+			'Acme Team'       => [ $group_owner, $group_member ],
+			'Digital Monthly' => [ $product_reader ],
+		];
+
+		$plan_names = $this->dispatch_plans()->get_data()['items'];
+		$this->assertSame( array_keys( $expected_holders ), $plan_names, 'The group product "Team Plan" is not offered; the group name and the individual product are.' );
+
+		foreach ( $plan_names as $plan_name ) {
+			$items   = $this->dispatch( [ 'plan' => [ $plan_name ] ] )->get_data()['items'];
+			$matched = array_column( $items, 'id' );
+			sort( $matched );
+			$expected = $expected_holders[ $plan_name ];
+			sort( $expected );
+			$this->assertSame( $expected, $matched, "The '$plan_name' option returned by /plans filters to its holders." );
+
+			foreach ( $items as $item ) {
+				$displayed = array_merge( array_column( $item['groups'], 'plan' ), array_column( $item['subscriptions'], 'plan' ) );
+				$this->assertContains( $plan_name, $displayed, "A row returned for '$plan_name' displays that plan, rather than some other name." );
+			}
+		}
+	}
+
+	/**
+	 * A plan name that matches nothing on the site fails closed — an empty page,
+	 * not the unfiltered list. A stale option in a long-open tab (or a hand-typed
+	 * param) must never widen the result set.
+	 */
+	public function test_unknown_plan_filter_returns_an_empty_page() {
+		$this->login_admin();
+		$this->create_individual_subscription( $this->create_reader( 'Subscribed' ), 'active' );
+
+		$data = $this->dispatch( [ 'plan' => [ 'No Such Plan' ] ] )->get_data();
+		$this->assertSame( [], $data['items'] );
+		$this->assertSame( 0, $data['total'] );
+		$this->assertSame( 0, $data['pages'] );
+	}
+
+	/**
+	 * The plans endpoint enforces the same manage_options gate as the list endpoints.
+	 */
+	public function test_plans_forbidden_for_non_admin() {
+		wp_set_current_user( $this->create_reader( 'NopePlans', 'subscriber' ) );
+		$this->assertSame( 403, $this->dispatch_plans()->get_status() );
 	}
 
 	/**
