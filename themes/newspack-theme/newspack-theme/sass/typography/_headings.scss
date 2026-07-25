@@ -9,6 +9,7 @@
 .discussion-meta-info,
 .entry-meta,
 .cat-links,
+.tag-labels,
 .entry-footer,
 .author-bio .author-link,
 .author-meta,
@@ -62,7 +63,8 @@ h6 {
 }
 
 /* stylelint-disable selector-type-no-unknown  */
-amp-script .cat-links {
+amp-script .cat-links,
+amp-script .tag-labels {
 	font-family: var(--newspack-theme-font-heading);
 }
 /* stylelint-enable */

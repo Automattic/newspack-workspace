@@ -59,7 +59,10 @@ if ( ! function_exists( 'newspack_display_tag_labels' ) ) :
 			// styling (a common per-section pattern on publisher sites) must never
 			// restyle tag labels (NPPM-3048). Layout parity lives in
 			// sass/plugins/newspack-tag-labels.scss.
-			echo wp_kses_post( \Newspack\Tag_Labels::generate_html( $labels, $links, array( 'tag-labels' ), array( 'tag-label', 'flag' ), 'span' ) . ' ' );
+			$labels_html = \Newspack\Tag_Labels::generate_html( $labels, $links, array( 'tag-labels' ), array( 'tag-label', 'flag' ), 'span' );
+			if ( '' !== $labels_html ) {
+				echo wp_kses_post( $labels_html . ' ' );
+			}
 		}
 
 		return null;

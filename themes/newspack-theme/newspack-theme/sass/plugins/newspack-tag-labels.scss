@@ -7,6 +7,10 @@
 .tag-labels {
 	align-items: stretch;
 	display: inline-flex;
+	// Parity with the base `.cat-links` rule the wrapper matched before
+	// NPPM-3048 (labels sized and spaced like the adjacent category chips).
+	font-size: var(--newspack-theme-font-size-xs);
+	margin: 0 0 #{0.75 * structure.$size__spacing-unit};
 	position: relative;
 
 	a,
@@ -23,7 +27,7 @@
 	a,
 	.tag-label {
 		display: inline-block;
-		margin: 0 0.25rem 0.25rem 0;
+		margin: 0 #{0.25 * structure.$size__spacing-unit} #{0.25 * structure.$size__spacing-unit} 0;
 	}
 }
 
@@ -32,7 +36,6 @@
 .search .tag-labels a {
 	font-size: 0.65rem;
 	margin-bottom: 0;
-	padding: 0.25em 0.5em;
 }
 
 /* stylelint-disable selector-type-no-unknown  */
