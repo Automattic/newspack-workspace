@@ -194,7 +194,7 @@ final class Newspack_Popups_API {
 		// Font sizes take the highest origin holding anything, which is how the
 		// editor's picker resolves the single set it offers; spacing sizes are one
 		// scale built from every origin, as core's own spacing control builds it.
-		$font_sizes    = self::flatten_global_settings_presets( wp_get_global_settings( [ 'typography', 'fontSizes' ] ) );
+		$font_sizes    = self::flatten_global_settings_presets( self::get_style_setting( [ 'typography', 'fontSizes' ] ) );
 		$spacing_sizes = self::get_spacing_size_presets();
 		return [
 			'enabled'                => Newspack_Popups_Settings::is_ai_copy_assistant_enabled(),
@@ -214,6 +214,45 @@ final class Newspack_Popups_API {
 	}
 
 	/**
+	 * A style setting resolved the way the editor resolves it for a block: the
+	 * block's own `settings.blocks.<block>` value when it has one, the global value
+	 * otherwise. Core's `wp_get_global_settings()` does not do that fallback — given
+	 * a block context it reads the block path alone, and a missing path hands back
+	 * the whole settings tree — so the block path is read from the settings tree and
+	 * only stands in when it is set. Block settings keep the same origin-keyed preset
+	 * shape as global ones, so the flatten/merge helpers read either.
+	 *
+	 * @param array $path Settings path, e.g. `[ 'color', 'palette' ]`.
+	 * @return mixed The setting, or whatever the global lookup hands back.
+	 */
+	private static function get_style_setting( $path ) {
+		$block_path  = array_merge( [ 'blocks', Newspack_Popups_Contextual_Prompt_Block::BLOCK_NAME ], $path );
+		$block_value = self::settings_path_value( wp_get_global_settings(), $block_path );
+		// A block setting of `false` is a setting, as the editor treats it: only an
+		// unset one falls back to the global scope.
+		return null === $block_value ? wp_get_global_settings( $path ) : $block_value;
+	}
+
+	/**
+	 * The value a settings tree holds at a path, or null when the path is not there.
+	 * `wp_get_global_settings()` hands the whole tree back for a missing path, which
+	 * cannot answer whether the path is set at all; this can.
+	 *
+	 * @param mixed $settings Settings tree.
+	 * @param array $path     Settings path.
+	 * @return mixed|null The value, or null when the path is unset.
+	 */
+	private static function settings_path_value( $settings, $path ) {
+		foreach ( $path as $key ) {
+			if ( ! is_array( $settings ) || ! isset( $settings[ $key ] ) ) {
+				return null;
+			}
+			$settings = $settings[ $key ];
+		}
+		return $settings;
+	}
+
+	/**
 	 * The color presets the wizard's pickers offer, merged across origins. Core's
 	 * `color.defaultPalette` setting decides whether the editor shows the default
 	 * origin at all — it is false whenever a classic theme registers an
@@ -223,11 +262,11 @@ final class Newspack_Popups_API {
 	 * @return array Flat preset list.
 	 */
 	private static function get_palette_presets() {
-		$palette = wp_get_global_settings( [ 'color', 'palette' ] );
+		$palette = self::get_style_setting( [ 'color', 'palette' ] );
 		// A missing settings path hands back the whole settings tree, so an absent
 		// `defaultPalette` reads as truthy and the defaults stay, as core's own
 		// default for the setting has them.
-		if ( is_array( $palette ) && isset( $palette['default'] ) && ! wp_get_global_settings( [ 'color', 'defaultPalette' ] ) ) {
+		if ( is_array( $palette ) && isset( $palette['default'] ) && ! self::get_style_setting( [ 'color', 'defaultPalette' ] ) ) {
 			unset( $palette['default'] );
 		}
 		return self::merge_global_settings_presets( $palette );
@@ -243,11 +282,11 @@ final class Newspack_Popups_API {
 	 * @return array Flat preset list.
 	 */
 	private static function get_spacing_size_presets() {
-		$sizes = wp_get_global_settings( [ 'spacing', 'spacingSizes' ] );
+		$sizes = self::get_style_setting( [ 'spacing', 'spacingSizes' ] );
 		// As with the palette, a missing settings path hands back the whole settings
 		// tree, so an absent `defaultSpacingSizes` reads as truthy and the defaults
 		// stay, as core's own default for the setting has them.
-		if ( is_array( $sizes ) && isset( $sizes['default'] ) && ! wp_get_global_settings( [ 'spacing', 'defaultSpacingSizes' ] ) ) {
+		if ( is_array( $sizes ) && isset( $sizes['default'] ) && ! self::get_style_setting( [ 'spacing', 'defaultSpacingSizes' ] ) ) {
 			unset( $sizes['default'] );
 		}
 		return self::sort_spacing_size_presets( self::merge_global_settings_presets( $sizes ) );
@@ -264,7 +303,7 @@ final class Newspack_Popups_API {
 		// As with the palette, a missing settings path hands back the whole settings
 		// tree, so an absent `customSpacingSize` reads as truthy and custom values
 		// stay, as core's own default for the setting allows them.
-		return (bool) wp_get_global_settings( [ 'spacing', 'customSpacingSize' ] );
+		return (bool) self::get_style_setting( [ 'spacing', 'customSpacingSize' ] );
 	}
 
 	/**
@@ -276,7 +315,7 @@ final class Newspack_Popups_API {
 	 * @return array List of unit strings.
 	 */
 	private static function get_spacing_units() {
-		$units = wp_get_global_settings( [ 'spacing', 'units' ] );
+		$units = self::get_style_setting( [ 'spacing', 'units' ] );
 		// A missing settings path hands back the whole settings tree, so anything but
 		// a flat list falls back to core's own default for the setting.
 		if ( ! is_array( $units ) || ! wp_is_numeric_array( $units ) ) {

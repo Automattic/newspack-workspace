@@ -34,6 +34,8 @@ class ContextualPromptStylesApiTest extends WP_UnitTestCase {
 		remove_filter( 'wp_theme_json_data_theme', [ __CLASS__, 'disable_default_palette' ] );
 		remove_filter( 'wp_theme_json_data_theme', [ __CLASS__, 'disable_default_spacing_sizes' ] );
 		remove_filter( 'wp_theme_json_data_theme', [ __CLASS__, 'restrict_spacing_policy' ] );
+		remove_filter( 'wp_theme_json_data_theme', [ __CLASS__, 'scope_spacing_policy_to_the_block' ] );
+		remove_filter( 'wp_theme_json_data_theme', [ __CLASS__, 'scope_palette_to_the_block' ] );
 		wp_clean_theme_json_cache();
 		parent::tear_down();
 	}
@@ -103,6 +105,109 @@ class ContextualPromptStylesApiTest extends WP_UnitTestCase {
 					'spacing' => [
 						'customSpacingSize' => false,
 						'units'             => [ 'px', 'em' ],
+					],
+				],
+			]
+		);
+	}
+
+	/**
+	 * The policy is read for the block, not just for the site: the editor resolves
+	 * `settings.blocks.<block>` first and falls back to the global scope, so a theme
+	 * scoping a spacing policy to the Contextual Prompt block is the policy the
+	 * payload carries.
+	 */
+	public function test_status_carries_a_block_scoped_spacing_policy() {
+		add_filter( 'wp_theme_json_data_theme', [ __CLASS__, 'scope_spacing_policy_to_the_block' ] );
+		wp_clean_theme_json_cache();
+
+		// The premise: the two scopes disagree, and the block scope really is there.
+		$block_context = [ 'block_name' => Newspack_Popups_Contextual_Prompt_Block::BLOCK_NAME ];
+		$this->assertTrue( wp_get_global_settings( [ 'spacing', 'customSpacingSize' ] ) );
+		$this->assertFalse( wp_get_global_settings( [ 'spacing', 'customSpacingSize' ], $block_context ) );
+
+		$data = rest_do_request( new WP_REST_Request( 'GET', '/newspack-popups/v1/contextual-prompt/status' ) )->get_data();
+
+		$this->assertFalse( $data['style_spacing_custom'] );
+		$this->assertSame( [ 'rem' ], $data['style_spacing_units'] );
+	}
+
+	/**
+	 * Turn custom spacing values off and narrow the units for the block alone, while
+	 * the site keeps allowing both.
+	 *
+	 * @param WP_Theme_JSON_Data $theme_json Theme JSON data.
+	 * @return WP_Theme_JSON_Data
+	 */
+	public static function scope_spacing_policy_to_the_block( $theme_json ) {
+		return $theme_json->update_with(
+			[
+				'version'  => 2,
+				'settings' => [
+					'spacing' => [
+						'customSpacingSize' => true,
+						'units'             => [ 'px', 'em' ],
+					],
+					'blocks'  => [
+						Newspack_Popups_Contextual_Prompt_Block::BLOCK_NAME => [
+							'spacing' => [
+								'customSpacingSize' => false,
+								'units'             => [ 'rem' ],
+							],
+						],
+					],
+				],
+			]
+		);
+	}
+
+	/**
+	 * A palette scoped to the block stands in for the site's, as the editor's own
+	 * pickers resolve it for the block first.
+	 */
+	public function test_status_carries_a_block_scoped_palette() {
+		add_filter( 'wp_theme_json_data_theme', [ __CLASS__, 'scope_palette_to_the_block' ] );
+		wp_clean_theme_json_cache();
+
+		$palette = rest_do_request( new WP_REST_Request( 'GET', '/newspack-popups/v1/contextual-prompt/status' ) )->get_data()['style_palette'];
+		$by_slug = wp_list_pluck( $palette, 'color', 'slug' );
+
+		$this->assertSame( '#0a0a0a', $by_slug['prompt-only'] );
+		$this->assertArrayNotHasKey( 'site-only', $by_slug );
+	}
+
+	/**
+	 * Give the block its own color preset while the site registers another.
+	 *
+	 * @param WP_Theme_JSON_Data $theme_json Theme JSON data.
+	 * @return WP_Theme_JSON_Data
+	 */
+	public static function scope_palette_to_the_block( $theme_json ) {
+		return $theme_json->update_with(
+			[
+				'version'  => 2,
+				'settings' => [
+					'color'  => [
+						'palette' => [
+							[
+								'name'  => 'Site only',
+								'slug'  => 'site-only',
+								'color' => '#f0f0f0',
+							],
+						],
+					],
+					'blocks' => [
+						Newspack_Popups_Contextual_Prompt_Block::BLOCK_NAME => [
+							'color' => [
+								'palette' => [
+									[
+										'name'  => 'Prompt only',
+										'slug'  => 'prompt-only',
+										'color' => '#0a0a0a',
+									],
+								],
+							],
+						],
 					],
 				],
 			]
