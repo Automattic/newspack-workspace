@@ -273,9 +273,44 @@ class ContextualPromptStylesTest extends WP_UnitTestCase {
 		$this->assertArrayNotHasKey( 'text', $block_node['color'] );
 
 		$defaults = Newspack_Popups_Contextual_Prompt_Styles::get_defaults();
-		// This theme sets no global text color either, so the fallback is the CSS
-		// initial one.
+		// This theme sets no global text color either, and is not the Newspack
+		// theme, so the fallback is the CSS initial color.
 		$this->assertSame( '#000000', $defaults['color']['text'] );
+	}
+
+	/**
+	 * On the classic Newspack theme the assumed color is the one its stylesheet
+	 * renders body text with, not the CSS initial black: the theme declares it in
+	 * CSS, where the global styles data cannot see it.
+	 */
+	public function test_get_defaults_assumes_the_newspack_theme_text_color() {
+		$original = get_option( 'template' );
+		update_option( 'template', Newspack_Popups_Contextual_Prompt_Styles::NEWSPACK_THEME_TEMPLATE );
+		$text = Newspack_Popups_Contextual_Prompt_Styles::get_defaults()['color']['text'];
+		update_option( 'template', $original );
+		wp_clean_theme_json_cache();
+
+		$this->assertSame( '#111111', $text );
+	}
+
+	/**
+	 * Another classic theme supplies its own body text color through the filter.
+	 */
+	public function test_get_defaults_lets_a_filter_set_the_assumed_text_color() {
+		add_filter( 'newspack_popups_contextual_prompt_inherited_text_color', [ __CLASS__, 'return_custom_text_color' ] );
+		$text = Newspack_Popups_Contextual_Prompt_Styles::get_defaults()['color']['text'];
+		remove_filter( 'newspack_popups_contextual_prompt_inherited_text_color', [ __CLASS__, 'return_custom_text_color' ] );
+
+		$this->assertSame( '#333333', $text );
+	}
+
+	/**
+	 * A theme's own body text color, for the filter test.
+	 *
+	 * @return string
+	 */
+	public static function return_custom_text_color() {
+		return '#333333';
 	}
 
 	/**
