@@ -309,6 +309,65 @@ describe( 'StyleSection on a classic theme', () => {
 		expect( paddingRow( 1 ).getByRole( 'button', { name: 'Use preset' } ) ).toBeEnabled();
 	} );
 
+	it( 'leaves the padding rows preset-only when the site allows no custom spacing value', () => {
+		const onChangeStyles = jest.fn();
+		render(
+			<StyleSection
+				status={ { ...CLASSIC_STATUS, style_spacing_custom: false } }
+				styles={ {} }
+				inFlight={ false }
+				onChangeStyles={ onChangeStyles }
+			/>
+		);
+
+		// No way into an input, in either direction.
+		expect( screen.queryByRole( 'button', { name: 'Set custom value' } ) ).toBeNull();
+		expect( screen.queryByRole( 'button', { name: 'Use preset' } ) ).toBeNull();
+
+		// The sliders still write their steps.
+		fireEvent.change( screen.getByRole( 'slider', { name: 'Vertical padding' } ), { target: { value: '1' } } );
+
+		expect( onChangeStyles ).toHaveBeenCalledWith( {
+			spacing: { padding: { top: 'var:preset|spacing|30', bottom: 'var:preset|spacing|30' } },
+		} );
+	} );
+
+	it( 'shows a value no step represents at None while the site is preset-only', () => {
+		render(
+			<StyleSection
+				status={ { ...CLASSIC_STATUS, style_spacing_custom: false } }
+				styles={ { spacing: { padding: { top: '7px', bottom: '7px' } } } }
+				inFlight={ false }
+				onChangeStyles={ () => {} }
+			/>
+		);
+
+		// With no input to fall back on, the row sits at the first step until an edit
+		// replaces the stored value — which is the policy's own answer for it.
+		expect( screen.getByRole( 'slider', { name: 'Vertical padding' } ) ).toHaveValue( '0' );
+		expect( screen.getByRole( 'slider', { name: 'Horizontal padding' } ) ).toHaveValue( '2' );
+	} );
+
+	it( 'offers a custom padding value only in the units the site allows', () => {
+		render(
+			<StyleSection
+				status={ { ...CLASSIC_STATUS, style_spacing_units: [ 'px', 'em' ] } }
+				styles={ {} }
+				inFlight={ false }
+				onChangeStyles={ () => {} }
+			/>
+		);
+
+		fireEvent.click( screen.getAllByRole( 'button', { name: 'Set custom value' } )[ 0 ] );
+
+		const unitSelect = paddingRow( 0 ).getByRole( 'combobox', { name: 'Select unit' } );
+		expect( Array.from( unitSelect.options ).map( option => option.value ) ).toEqual( [ 'px', 'em' ] );
+
+		// The radius keeps its own units: the spacing policy is not its policy.
+		const radiusUnits = within( document.querySelector( '.newspack-prompt-style-radius' ) ).getByRole( 'combobox', { name: 'Select unit' } );
+		expect( radiusUnits.options.length ).toBeGreaterThan( 2 );
+	} );
+
 	it( 'keeps the border radius when the border group is reset', () => {
 		const onChangeStyles = jest.fn();
 		render(

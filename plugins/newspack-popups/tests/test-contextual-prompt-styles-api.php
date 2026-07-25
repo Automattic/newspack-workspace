@@ -33,6 +33,7 @@ class ContextualPromptStylesApiTest extends WP_UnitTestCase {
 		remove_filter( 'wp_theme_json_data_theme', [ __CLASS__, 'add_numeric_font_size_preset' ] );
 		remove_filter( 'wp_theme_json_data_theme', [ __CLASS__, 'disable_default_palette' ] );
 		remove_filter( 'wp_theme_json_data_theme', [ __CLASS__, 'disable_default_spacing_sizes' ] );
+		remove_filter( 'wp_theme_json_data_theme', [ __CLASS__, 'restrict_spacing_policy' ] );
 		wp_clean_theme_json_cache();
 		parent::tear_down();
 	}
@@ -60,6 +61,52 @@ class ContextualPromptStylesApiTest extends WP_UnitTestCase {
 			$this->assertArrayHasKey( $key, $data['style_spacing_sizes'][0] );
 		}
 		$this->assertStringContainsString( 'site-editor.php', $data['site_editor_styles_url'] );
+	}
+
+	/**
+	 * The padding rows also carry the site's spacing policy: whether a custom value
+	 * may be given at all, and in which units. Core's own spacing control leaves its
+	 * rows preset-only when `spacing.customSpacingSize` is off and filters its unit
+	 * list by `spacing.units`, so the wizard's rows can honor the same policy.
+	 */
+	public function test_status_carries_the_spacing_policy() {
+		$data = rest_do_request( new WP_REST_Request( 'GET', '/newspack-popups/v1/contextual-prompt/status' ) )->get_data();
+
+		// Core's own defaults for both settings: custom values allowed, offered in the
+		// units core's theme.json declares.
+		$this->assertTrue( $data['style_spacing_custom'] );
+		$this->assertContains( 'px', $data['style_spacing_units'] );
+		// A flat list of unit strings, which is all a unit control can read.
+		$this->assertSame( array_values( $data['style_spacing_units'] ), $data['style_spacing_units'] );
+		$this->assertSame( $data['style_spacing_units'], array_filter( $data['style_spacing_units'], 'is_string' ) );
+
+		add_filter( 'wp_theme_json_data_theme', [ __CLASS__, 'restrict_spacing_policy' ] );
+		wp_clean_theme_json_cache();
+
+		$data = rest_do_request( new WP_REST_Request( 'GET', '/newspack-popups/v1/contextual-prompt/status' ) )->get_data();
+
+		$this->assertFalse( $data['style_spacing_custom'] );
+		$this->assertSame( [ 'px', 'em' ], $data['style_spacing_units'] );
+	}
+
+	/**
+	 * Turn custom spacing values off and narrow the units, as a theme.json may.
+	 *
+	 * @param WP_Theme_JSON_Data $theme_json Theme JSON data.
+	 * @return WP_Theme_JSON_Data
+	 */
+	public static function restrict_spacing_policy( $theme_json ) {
+		return $theme_json->update_with(
+			[
+				'version'  => 2,
+				'settings' => [
+					'spacing' => [
+						'customSpacingSize' => false,
+						'units'             => [ 'px', 'em' ],
+					],
+				],
+			]
+		);
 	}
 
 	/**

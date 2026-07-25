@@ -207,6 +207,8 @@ final class Newspack_Popups_API {
 			'style_palette'          => self::get_palette_presets(),
 			'style_font_sizes'       => self::normalize_preset_sizes( $font_sizes ),
 			'style_spacing_sizes'    => self::normalize_preset_sizes( $spacing_sizes ),
+			'style_spacing_custom'   => self::is_custom_spacing_size_allowed(),
+			'style_spacing_units'    => self::get_spacing_units(),
 			'site_editor_styles_url' => admin_url( 'site-editor.php?p=%2Fstyles&section=' . rawurlencode( '/blocks/' . rawurlencode( Newspack_Popups_Contextual_Prompt_Block::BLOCK_NAME ) ) ),
 		];
 	}
@@ -249,6 +251,38 @@ final class Newspack_Popups_API {
 			unset( $sizes['default'] );
 		}
 		return self::sort_spacing_size_presets( self::merge_global_settings_presets( $sizes ) );
+	}
+
+	/**
+	 * Whether the padding rows may offer a custom value at all. `spacing.customSpacingSize`
+	 * is the setting core turns into the editor's `disableCustomSpacingSizes`, which
+	 * leaves its spacing rows preset-only, so the wizard's rows honor the same policy.
+	 *
+	 * @return bool
+	 */
+	private static function is_custom_spacing_size_allowed() {
+		// As with the palette, a missing settings path hands back the whole settings
+		// tree, so an absent `customSpacingSize` reads as truthy and custom values
+		// stay, as core's own default for the setting allows them.
+		return (bool) wp_get_global_settings( [ 'spacing', 'customSpacingSize' ] );
+	}
+
+	/**
+	 * The units a custom padding value may be given in. `spacing.units` is what
+	 * core's own spacing control filters its unit list by, and a classic theme
+	 * declaring `custom-units` support narrows it, so the wizard offers no unit the
+	 * editor would refuse.
+	 *
+	 * @return array List of unit strings.
+	 */
+	private static function get_spacing_units() {
+		$units = wp_get_global_settings( [ 'spacing', 'units' ] );
+		// A missing settings path hands back the whole settings tree, so anything but
+		// a flat list falls back to core's own default for the setting.
+		if ( ! is_array( $units ) || ! wp_is_numeric_array( $units ) ) {
+			return [ 'px', 'em', 'rem', 'vh', 'vw', '%' ];
+		}
+		return array_values( array_filter( $units, 'is_string' ) );
 	}
 
 	/**

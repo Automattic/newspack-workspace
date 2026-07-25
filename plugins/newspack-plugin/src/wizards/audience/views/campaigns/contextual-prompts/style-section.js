@@ -30,6 +30,7 @@ import {
 	__experimentalToolsPanel as ToolsPanel, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalToolsPanelItem as ToolsPanelItem, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalUnitControl as UnitControl, // eslint-disable-line @wordpress/no-unsafe-wp-apis
+	__experimentalUseCustomUnits as useCustomUnits, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
 import { useEffect, useState } from '@wordpress/element';
@@ -70,6 +71,9 @@ const ICON_SIZE = 24;
 // The radius slider works in the value's own number space, capped where core's
 // BorderControl caps its width slider.
 const RADIUS_SLIDER_MAX = 100;
+// The units a custom padding value may be given in while the site declares none,
+// which is the fallback core's own spacing controls carry for the same setting.
+const DEFAULT_SPACING_UNITS = [ 'px', 'em', 'rem', 'vh', 'vw', '%' ];
 
 const getPath = ( source, path ) => path.reduce( ( node, key ) => node?.[ key ], source );
 
@@ -163,20 +167,23 @@ const ColorRow = ( { label, colorValue, disabled, children } ) => (
 // spacing presets or, behind the settings toggle, a custom value. Mirrors the
 // editor's spacing row — @wordpress/block-editor owns SpacingSizesControl and is
 // not loaded on the wizard page.
-const SpacingRow = ( { icon, label, steps, value, onChange, disabled } ) => {
+const SpacingRow = ( { icon, label, steps, units, allowCustom, value, onChange, disabled } ) => {
 	// A resolved default lands on the step it came from; anything else is custom.
 	const preset = spacingPresetOf( value, steps );
 	const step = spacingStepOf( preset, steps );
 	const hasPresets = 1 < steps.length;
-	const [ isCustom, setIsCustom ] = useState( () => ! hasPresets || ( undefined !== preset && null === step ) );
+	// A site turning `spacing.customSpacingSize` off leaves the row preset-only, as
+	// it leaves the editor's own row: no way into an input, so a value no step
+	// represents shows the slider at None until an edit replaces it.
+	const [ isCustom, setIsCustom ] = useState( () => allowCustom && ( ! hasPresets || ( undefined !== preset && null === step ) ) );
 
 	// A value the slider cannot land on — a custom default, or one a reset brings
 	// back — moves the row to the input, as the editor's row does.
 	useEffect( () => {
-		if ( undefined !== preset && null === step ) {
+		if ( allowCustom && undefined !== preset && null === step ) {
 			setIsCustom( true );
 		}
-	}, [ preset, step ] );
+	}, [ allowCustom, preset, step ] );
 
 	// While no step represents the value, the row stays on its input: the slider
 	// would sit at None with that value still standing, and a drag from there would
@@ -195,6 +202,7 @@ const SpacingRow = ( { icon, label, steps, value, onChange, disabled } ) => {
 					hideLabelFromVision
 					value={ spacingValueOf( preset, steps ) }
 					onChange={ next => onChange( next || undefined ) }
+					units={ units }
 					min={ 0 }
 					disabled={ disabled }
 					__next40pxDefaultSize
@@ -218,7 +226,7 @@ const SpacingRow = ( { icon, label, steps, value, onChange, disabled } ) => {
 					__next40pxDefaultSize
 				/>
 			) }
-			{ hasPresets && (
+			{ allowCustom && hasPresets && (
 				<Button
 					size="small"
 					icon={ settings }
@@ -235,7 +243,7 @@ const SpacingRow = ( { icon, label, steps, value, onChange, disabled } ) => {
 
 // Sides move in pairs until the sides are unlinked, which is how the editor
 // opens whenever the two axes each hold one value.
-const PaddingControl = ( { steps, values, onChange, disabled } ) => {
+const PaddingControl = ( { steps, units, allowCustom, values, onChange, disabled } ) => {
 	const [ isLinked, setIsLinked ] = useState( () => values.top === values.bottom && values.left === values.right );
 	const axialRows = [
 		{ key: 'vertical', sides: [ 'top', 'bottom' ], icon: sidesVertical, label: __( 'Vertical padding', 'newspack-plugin' ) },
@@ -269,6 +277,8 @@ const PaddingControl = ( { steps, values, onChange, disabled } ) => {
 						icon={ icon }
 						label={ label }
 						steps={ steps }
+						units={ units }
+						allowCustom={ allowCustom }
 						value={ values[ sides[ 0 ] ] }
 						onChange={ next => onChange( sides, next ) }
 						disabled={ disabled }
@@ -287,6 +297,8 @@ const StyleSection = ( { status, styles = {}, inFlight, onChangeStyles } ) => {
 		style_palette: stylePalette,
 		style_font_sizes: styleFontSizes,
 		style_spacing_sizes: styleSpacingSizes,
+		style_spacing_custom: styleSpacingCustom = true,
+		style_spacing_units: styleSpacingUnits,
 	} = status;
 
 	const defaults = styleDefaults || {};
@@ -296,6 +308,9 @@ const StyleSection = ( { status, styles = {}, inFlight, onChangeStyles } ) => {
 	const paletteColors = palette.map( ( { name, slug, color } ) => ( { name, slug, color } ) );
 	const fontSizes = ( styleFontSizes || [] ).map( ( { name, slug, size } ) => ( { name, slug, size: withPixelUnit( size ) } ) );
 	const paddingSteps = spacingSteps( styleSpacingSizes, __( 'None', 'newspack-plugin' ) );
+	// A custom padding value is offered in the units the site allows, filtered the
+	// way core's own spacing controls filter theirs.
+	const paddingUnits = useCustomUnits( { availableUnits: styleSpacingUnits || DEFAULT_SPACING_UNITS } );
 	const effective = path => getPath( styles, path ) ?? getPath( defaults, path );
 
 	const radius = effective( [ 'border', 'radius' ] );
@@ -427,7 +442,14 @@ const StyleSection = ( { status, styles = {}, inFlight, onChangeStyles } ) => {
 							onDeselect={ clearPadding }
 							isShownByDefault
 						>
-							<PaddingControl steps={ paddingSteps } values={ paddingValues } onChange={ setPaddingSides } disabled={ inFlight } />
+							<PaddingControl
+								steps={ paddingSteps }
+								units={ paddingUnits }
+								allowCustom={ styleSpacingCustom }
+								values={ paddingValues }
+								onChange={ setPaddingSides }
+								disabled={ inFlight }
+							/>
 						</ToolsPanelItem>
 					</StylePanel>
 					<StylePanel
