@@ -160,6 +160,10 @@ final class Newspack_Popups_API {
 							'required' => true,
 							'type'     => 'object',
 						],
+						'styles' => [
+							'required' => false,
+							'type'     => 'object',
+						],
 					],
 				]
 			);
@@ -178,17 +182,43 @@ final class Newspack_Popups_API {
 
 	/**
 	 * The Contextual Prompts status payload: opt-in state, whether the user can
-	 * manage it, and the publisher-profile fields.
+	 * manage it, the publisher-profile fields, and the block's style data.
 	 *
 	 * @return array
 	 */
 	private static function contextual_prompt_status() {
 		return [
-			'enabled'         => Newspack_Popups_Settings::is_ai_copy_assistant_enabled(),
-			'can_manage'      => current_user_can( 'manage_options' ),
-			'fields'          => Newspack_Popups_Settings::get_ai_copy_assistant_fields(),
-			'override_active' => Newspack_Popups_Settings::is_override_active(),
+			'enabled'                => Newspack_Popups_Settings::is_ai_copy_assistant_enabled(),
+			'can_manage'             => current_user_can( 'manage_options' ),
+			'fields'                 => Newspack_Popups_Settings::get_ai_copy_assistant_fields(),
+			'override_active'        => Newspack_Popups_Settings::is_override_active(),
+			'is_block_theme'         => wp_is_block_theme(),
+			'styles'                 => Newspack_Popups_Contextual_Prompt_Styles::get_styles(),
+			'style_defaults'         => Newspack_Popups_Contextual_Prompt_Styles::get_defaults(),
+			'style_palette'          => self::flatten_global_settings_presets( wp_get_global_settings( [ 'color', 'palette' ] ) ),
+			'style_font_sizes'       => self::flatten_global_settings_presets( wp_get_global_settings( [ 'typography', 'fontSizes' ] ) ),
+			'site_editor_styles_url' => admin_url( 'site-editor.php?p=%2Fstyles' ),
 		];
+	}
+
+	/**
+	 * Global-settings presets come keyed by origin (custom > theme > default);
+	 * the wizard wants one flat list, first non-empty origin wins.
+	 *
+	 * @param mixed $presets Origin-keyed presets, or already-flat array.
+	 * @return array
+	 */
+	private static function flatten_global_settings_presets( $presets ) {
+		if ( ! is_array( $presets ) ) {
+			return [];
+		}
+		foreach ( [ 'custom', 'theme', 'default' ] as $origin ) {
+			if ( ! empty( $presets[ $origin ] ) && is_array( $presets[ $origin ] ) ) {
+				return array_values( $presets[ $origin ] );
+			}
+		}
+		// Not origin-keyed: already a flat preset list.
+		return array_values( $presets );
 	}
 
 	/**
@@ -204,6 +234,9 @@ final class Newspack_Popups_API {
 		}
 
 		Newspack_Popups_Settings::save_ai_copy_assistant_fields( (array) $request['fields'] );
+		if ( isset( $request['styles'] ) ) {
+			Newspack_Popups_Contextual_Prompt_Styles::save_styles( (array) $request['styles'] );
+		}
 		return rest_ensure_response( self::contextual_prompt_status() );
 	}
 
