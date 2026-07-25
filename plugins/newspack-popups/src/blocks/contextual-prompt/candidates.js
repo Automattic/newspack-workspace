@@ -32,19 +32,26 @@ export const FRAMING_LABELS = {
 
 /**
  * The framing implied by a block's position among the article's top-level
- * blocks, with a small buffer: a prompt sitting two paragraphs in still reads
- * as a top-of-story ask, and likewise near the end.
+ * blocks, as a coarse ratio-based bucket: top / mid / end.
+ *
+ * Mirrors get_placement() in class-newspack-popups-contextual-prompt-block.php,
+ * which computes the server-side analytics placement. Keep the two in sync: if
+ * they diverge, the generated copy is framed for a different position than the
+ * one analytics reports.
  *
  * @param {number} index Block index.
  * @param {number} total Top-level block count.
  * @return {string} One of 'top' | 'mid' | 'end'.
  */
 export const framingForPosition = ( index, total ) => {
-	const FRAMING_BUFFER = 3;
-	if ( index < FRAMING_BUFFER ) {
+	if ( total <= 1 ) {
 		return 'top';
 	}
-	if ( index >= total - FRAMING_BUFFER ) {
+	const ratio = index / ( total - 1 );
+	if ( ratio <= 1 / 3 ) {
+		return 'top';
+	}
+	if ( ratio >= 2 / 3 ) {
 		return 'end';
 	}
 	return 'mid';

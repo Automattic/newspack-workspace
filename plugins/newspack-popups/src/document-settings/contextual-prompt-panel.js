@@ -12,7 +12,7 @@
  * WordPress dependencies
  */
 import { __, sprintf } from '@wordpress/i18n';
-import { useState } from '@wordpress/element';
+import { useEffect, useRef, useState } from '@wordpress/element';
 import { useSelect, useDispatch } from '@wordpress/data';
 import { PluginDocumentSettingPanel } from '@wordpress/edit-post';
 import {
@@ -65,6 +65,20 @@ const ContextualPromptPanel = () => {
 	const [ generating, setGenerating ] = useState( false );
 	const [ error, setError ] = useState( '' );
 
+	// The block can be moved after a request is in flight; a request framed for
+	// the old position must not overwrite the current one's candidates.
+	const framingRef = useRef( instanceFraming );
+	useEffect( () => {
+		framingRef.current = instanceFraming;
+	} );
+
+	// Candidates are framed for a specific position, so a move to a different
+	// bucket invalidates any already listed.
+	useEffect( () => {
+		setCandidates( [] );
+		setError( '' );
+	}, [ instanceFraming ] );
+
 	const optedIn = window.newspackPopupsContextualPrompt?.enabled;
 	const isPrompt = 'newspack_popups_cpt' === postType;
 
@@ -76,8 +90,14 @@ const ContextualPromptPanel = () => {
 	const generate = async () => {
 		setGenerating( true );
 		setError( '' );
+		const requestedFraming = instanceFraming || undefined;
 		try {
-			const list = await generateCandidates( { postId, content, framing: instanceFraming || undefined } );
+			const list = await generateCandidates( { postId, content, framing: requestedFraming } );
+			// The block moved to a different framing bucket while the request was
+			// in flight — the response is for a stale position, so drop it.
+			if ( ( framingRef.current || undefined ) !== requestedFraming ) {
+				return;
+			}
 			setCandidates( list );
 			if ( ! list.length ) {
 				setError( __( 'No suggestions were returned. Try generating again.', 'newspack-popups' ) );

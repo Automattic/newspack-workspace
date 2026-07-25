@@ -105,6 +105,19 @@ export const ContextualPromptEditor = ( { clientId } ) => {
 	const [ candidates, setCandidates ] = useState( [] );
 	const autoRan = useRef( false );
 
+	// The block can be moved after a request is in flight; a request framed for
+	// the old position must not overwrite the current one's candidates.
+	const framingRef = useRef( framing );
+	useEffect( () => {
+		framingRef.current = framing;
+	} );
+
+	// Candidates are framed for a specific position, so a move to a different
+	// bucket invalidates any already listed.
+	useEffect( () => {
+		setCandidates( [] );
+	}, [ framing ] );
+
 	const fetchCandidates = async () => {
 		setGenerating( true );
 		try {
@@ -125,7 +138,17 @@ export const ContextualPromptEditor = ( { clientId } ) => {
 		setCandidates( [] );
 	};
 
-	const regenerate = () => fetchCandidates().then( setCandidates );
+	const regenerate = () => {
+		const requestedFraming = framing;
+		return fetchCandidates().then( list => {
+			// The block moved to a different framing bucket while the request was
+			// in flight — the response is for a stale position, so drop it.
+			if ( ( framingRef.current || undefined ) !== ( requestedFraming || undefined ) ) {
+				return;
+			}
+			setCandidates( list );
+		} );
+	};
 
 	// A fresh prompt generates its own copy — inserting the block should never
 	// leave the editor with an empty placeholder to fill by hand.
