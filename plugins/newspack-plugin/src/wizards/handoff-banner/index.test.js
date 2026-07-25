@@ -29,19 +29,42 @@ const mockRect = ( { top, height } ) => {
 	};
 };
 
+/**
+ * Scroll the document, which jsdom otherwise pins at 0.
+ *
+ * @param {number} value Pixels scrolled from the top of the document.
+ * @return {Function} Restores the original descriptor.
+ */
+const mockScrollY = value => {
+	const original = Object.getOwnPropertyDescriptor( window, 'scrollY' );
+	Object.defineProperty( window, 'scrollY', { configurable: true, value } );
+	return () => {
+		if ( original ) {
+			Object.defineProperty( window, 'scrollY', original );
+		} else {
+			delete window.scrollY;
+		}
+	};
+};
+
 describe( 'HandoffBanner', () => {
 	let restoreRect;
+	let restoreScrollY;
 
 	afterEach( () => {
 		if ( restoreRect ) {
 			restoreRect();
 			restoreRect = null;
 		}
+		if ( restoreScrollY ) {
+			restoreScrollY();
+			restoreScrollY = null;
+		}
 		document.documentElement.classList.remove( VISIBLE_CLASS );
 		document.documentElement.style.removeProperty( HEIGHT_PROPERTY );
 	} );
 
-	it( "publishes the banner's viewport bottom on the document element", () => {
+	it( "publishes the banner's bottom edge on the document element", () => {
 		restoreRect = mockRect( { top: 0, height: 56 } );
 
 		render( <HandoffBanner /> );
@@ -52,6 +75,17 @@ describe( 'HandoffBanner', () => {
 
 	it( 'covers whatever sits above the banner, e.g. the admin bar padding', () => {
 		restoreRect = mockRect( { top: 32, height: 56 } );
+
+		render( <HandoffBanner /> );
+
+		expect( document.documentElement.style.getPropertyValue( HEIGHT_PROPERTY ) ).toBe( '88px' );
+	} );
+
+	it( 'stays at rest when the document behind a fixed editor is scrolled', () => {
+		// Scrolled 294px, the banner's viewport bottom has gone negative; the
+		// offset a fixed editor needs is still the same 88px it is at the top.
+		restoreScrollY = mockScrollY( 294 );
+		restoreRect = mockRect( { top: -262, height: 56 } );
 
 		render( <HandoffBanner /> );
 

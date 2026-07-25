@@ -49,9 +49,11 @@
 /*
  * The site editor pins `.edit-site` to the viewport (`position: fixed`, top 0,
  * `100vh` tall), so the banner would sit underneath it instead of pushing it
- * down. `newspack-handoff-banner-visible` and the measured height come from the
- * banner component; shift the editor down and shrink it by that much. The
- * offsets are scoped to this screen, so nothing else reacts to the class.
+ * down. `newspack-handoff-banner-visible` and the measured offset come from the
+ * banner component — the space to clear at the top of the document, which is the
+ * banner plus anything above it, not just its own height. Shift the editor down
+ * and shrink it by that much. The offsets are scoped to this screen, so nothing
+ * else reacts to the class.
  */
 $banner-height: var(--newspack-handoff-banner-height, 0px);
 

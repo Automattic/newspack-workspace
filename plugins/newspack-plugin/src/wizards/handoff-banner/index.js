@@ -23,7 +23,7 @@ const HEIGHT_PROPERTY = '--newspack-handoff-banner-height';
  * Stop advertising the space the banner takes. Pages that reserve room for the
  * banner fall back to a zero offset.
  */
-const clearBannerHeight = () => {
+const clearBannerOffset = () => {
 	document.documentElement.classList.remove( VISIBLE_CLASS );
 	document.documentElement.style.removeProperty( HEIGHT_PROPERTY );
 };
@@ -41,29 +41,35 @@ export const HandoffBanner = ( {
 	// banner's place in the document flow. Publish the measured space their scoped
 	// CSS has to reserve, and take it back when the banner goes.
 	//
-	// The measurement is the banner's distance from the top of the viewport, not
+	// The measurement is the banner's distance from the top of the document, not
 	// its own height: anything stacked above it in the flow — the admin bar
 	// padding `html.wp-toolbar` keeps even where the bar itself is hidden, the
-	// WooCommerce header offset below — has to be cleared too.
+	// WooCommerce header offset below — has to be cleared too. Adding `scrollY`
+	// back keeps the value at rest: the admin document behind a fixed editor can
+	// scroll, and a viewport-relative reading taken mid-scroll would shrink (or
+	// go negative) and drag the editor up under the banner.
 	useEffect( () => {
 		const banner = bannerRef.current;
 		if ( ! visibility || ! banner ) {
-			clearBannerHeight();
+			clearBannerOffset();
 			return;
 		}
-		const updateHeight = () => {
+		const updateOffset = () => {
 			document.documentElement.classList.add( VISIBLE_CLASS );
-			document.documentElement.style.setProperty( HEIGHT_PROPERTY, `${ Math.ceil( banner.getBoundingClientRect().bottom ) }px` );
+			document.documentElement.style.setProperty(
+				HEIGHT_PROPERTY,
+				`${ Math.ceil( banner.getBoundingClientRect().bottom + window.scrollY ) }px`
+			);
 		};
-		updateHeight();
+		updateOffset();
 		if ( typeof window.ResizeObserver !== 'function' ) {
-			return clearBannerHeight;
+			return clearBannerOffset;
 		}
-		const observer = new window.ResizeObserver( updateHeight );
+		const observer = new window.ResizeObserver( updateOffset );
 		observer.observe( banner );
 		return () => {
 			observer.disconnect();
-			clearBannerHeight();
+			clearBannerOffset();
 		};
 	}, [ visibility ] );
 
