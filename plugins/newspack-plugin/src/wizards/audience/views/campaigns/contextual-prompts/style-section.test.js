@@ -77,6 +77,9 @@ const clickMenuItem = name => fireEvent.click( screen.getByRole( 'menuitem', { n
 // The Border group's own link toggle carries the same label as the padding one,
 // as it does in the editor, so padding queries are scoped to its fieldset.
 const padding = () => within( document.querySelector( '.newspack-prompt-style-padding' ) );
+// Every padding row carries the same toggle labels, so a row is queried by its
+// position: the vertical axis leads, then the horizontal one.
+const paddingRow = index => within( document.querySelectorAll( '.newspack-prompt-style-padding__row' )[ index ] );
 
 const CLASSIC_STATUS = {
 	is_block_theme: false,
@@ -278,6 +281,32 @@ describe( 'StyleSection on a classic theme', () => {
 
 		expect( screen.queryByRole( 'slider', { name: 'Vertical padding' } ) ).toBeNull();
 		expect( screen.getByLabelText( 'Vertical padding' ) ).toHaveValue( 13 );
+	} );
+
+	it( 'holds a row on its input while no step represents its value', () => {
+		render(
+			<StyleSection
+				status={ CLASSIC_STATUS }
+				styles={ { spacing: { padding: { top: '7px', bottom: '7px' } } } }
+				inFlight={ false }
+				onChangeStyles={ () => {} }
+			/>
+		);
+
+		// The vertical axis holds a value off the scale, so the way out of its input is
+		// closed: the slider would sit at None with that value still standing, and a
+		// drag from there would overwrite it from a position that was never true.
+		expect( screen.getByLabelText( 'Vertical padding' ) ).toHaveValue( 7 );
+		expect( paddingRow( 0 ).getByRole( 'button', { name: 'Use preset' } ) ).toBeDisabled();
+
+		// The horizontal axis sits on a step, so its own toggle works as before.
+		const toggle = paddingRow( 1 ).getByRole( 'button', { name: 'Set custom value' } );
+		expect( toggle ).toBeEnabled();
+
+		fireEvent.click( toggle );
+
+		expect( screen.queryByRole( 'slider', { name: 'Horizontal padding' } ) ).toBeNull();
+		expect( paddingRow( 1 ).getByRole( 'button', { name: 'Use preset' } ) ).toBeEnabled();
 	} );
 
 	it( 'keeps the border radius when the border group is reset', () => {

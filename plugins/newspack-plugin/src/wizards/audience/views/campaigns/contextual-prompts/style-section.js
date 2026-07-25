@@ -178,6 +178,11 @@ const SpacingRow = ( { icon, label, steps, value, onChange, disabled } ) => {
 		}
 	}, [ preset, step ] );
 
+	// While no step represents the value, the row stays on its input: the slider
+	// would sit at None with that value still standing, and a drag from there would
+	// overwrite it from a position that was never true.
+	const isStepless = null === step && undefined !== preset && '' !== preset;
+
 	// Core marks every step but the two ends, which the slider's own stops carry.
 	const marks = steps.slice( 1, steps.length - 1 ).map( ( _step, index ) => ( { value: index + 1 } ) );
 
@@ -221,7 +226,7 @@ const SpacingRow = ( { icon, label, steps, value, onChange, disabled } ) => {
 					isPressed={ isCustom }
 					label={ isCustom ? __( 'Use preset', 'newspack-plugin' ) : __( 'Set custom value', 'newspack-plugin' ) }
 					onClick={ () => setIsCustom( ! isCustom ) }
-					disabled={ disabled }
+					disabled={ disabled || isStepless }
 				/>
 			) }
 		</HStack>
