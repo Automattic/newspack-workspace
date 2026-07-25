@@ -23,8 +23,9 @@
 		border-top: 1px solid wp-colors.$gray-300;
 	}
 
-	// Direct child only: the palette renders in a popover inside the same
-	// wrapper and its own buttons must keep their sizing.
+	// The row's own toggle fills the row. Direct child only, so the rule stays
+	// tied to that toggle; the palette's buttons are out of reach anyway, since
+	// the popover portals to document.body.
 	&__row > .components-button {
 		border-radius: 0;
 		width: 100%;

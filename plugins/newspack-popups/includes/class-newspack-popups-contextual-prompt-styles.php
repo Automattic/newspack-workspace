@@ -25,7 +25,16 @@ final class Newspack_Popups_Contextual_Prompt_Styles {
 	 * var:preset|…|… refs and var() lookups; rejects anything that could close
 	 * a declaration or rule.
 	 */
-	const VALUE_PATTERN = '/^[a-zA-Z0-9 #%().,\/|:_-]+$/';
+	const VALUE_PATTERN = '/^[a-zA-Z0-9 #%().,\/|:_-]+\z/';
+
+	/**
+	 * Object-schema nodes that also accept a string leaf, as dot paths into the
+	 * schema. `border.radius` is either a shorthand or a per-corner object;
+	 * everywhere else a string would emit a shorthand declaration nobody
+	 * allowlisted (`spacing.padding: '10px'` becoming `padding`), so it is
+	 * dropped.
+	 */
+	const SHORTHAND_PATHS = [ 'border.radius' ];
 
 	/**
 	 * Register hooks. Classic themes only: on block themes Global Styles owns
@@ -33,6 +42,13 @@ final class Newspack_Popups_Contextual_Prompt_Styles {
 	 */
 	public static function init() {
 		if ( wp_is_block_theme() ) {
+			return;
+		}
+		// The rollout flag gates the call to this method; the admin opt-in is an
+		// option, so it is read here — the same point the render-time block strip
+		// reads it. With the opt-in withdrawn no prompt markup renders, so there is
+		// nothing for this CSS to style.
+		if ( ! Newspack_Popups_Settings::is_ai_copy_assistant_enabled() ) {
 			return;
 		}
 		// Same hook and priority as core's wp_enqueue_global_styles on classic
@@ -116,14 +132,15 @@ final class Newspack_Popups_Contextual_Prompt_Styles {
 	/**
 	 * Recursively apply a schema node: keys must exist in the schema; leaves
 	 * must be pattern-safe strings. A schema of `true` accepts a string leaf; a
-	 * schema array accepts either a string leaf (border.radius shorthand) or a
-	 * matching sub-object.
+	 * schema array accepts a matching sub-object, plus a string leaf only at the
+	 * paths in SHORTHAND_PATHS.
 	 *
-	 * @param mixed $node   Incoming value.
-	 * @param mixed $schema Schema node.
+	 * @param mixed  $node   Incoming value.
+	 * @param mixed  $schema Schema node.
+	 * @param string $path   Dot path to $node, for the shorthand allowlist.
 	 * @return array Sanitized node (possibly empty).
 	 */
-	private static function sanitize_node( $node, $schema ) {
+	private static function sanitize_node( $node, $schema, $path = '' ) {
 		$clean = [];
 		if ( ! is_array( $node ) ) {
 			return $clean;
@@ -132,14 +149,16 @@ final class Newspack_Popups_Contextual_Prompt_Styles {
 			if ( ! isset( $schema[ $key ] ) ) {
 				continue;
 			}
+			$key_path = '' === $path ? (string) $key : $path . '.' . $key;
 			if ( is_string( $value ) ) {
-				if ( preg_match( self::VALUE_PATTERN, $value ) ) {
+				$accepts_string = true === $schema[ $key ] || in_array( $key_path, self::SHORTHAND_PATHS, true );
+				if ( $accepts_string && preg_match( self::VALUE_PATTERN, $value ) ) {
 					$clean[ $key ] = $value;
 				}
 				continue;
 			}
 			if ( is_array( $schema[ $key ] ) && is_array( $value ) ) {
-				$sub = self::sanitize_node( $value, $schema[ $key ] );
+				$sub = self::sanitize_node( $value, $schema[ $key ], $key_path );
 				if ( ! empty( $sub ) ) {
 					$clean[ $key ] = $sub;
 				}

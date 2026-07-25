@@ -180,7 +180,7 @@ describe( 'StyleSection on a classic theme', () => {
 		expect( screen.getByText( CONTRAST_WARNING, { selector: NOTICE_CONTENT } ) ).toBeInTheDocument();
 	} );
 
-	it( 'does not warn when only one color resolves', () => {
+	it( 'warns using the default background when only text is set', () => {
 		render( <StyleSection status={ CLASSIC_STATUS } styles={ { color: { text: '#888888' } } } inFlight={ false } onChangeStyles={ () => {} } /> );
 		// Default background #f7f7f7 vs #888888 is below 4.5 too, so the warning
 		// must consider defaults: expect it present.

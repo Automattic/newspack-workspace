@@ -98,6 +98,42 @@ class ContextualPromptStylesTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A string where the schema expects an object is dropped: only the paths in
+	 * SHORTHAND_PATHS (border.radius) take a shorthand, so nothing can smuggle a
+	 * `padding` or `border-top` declaration past the leaf allowlist.
+	 */
+	public function test_sanitize_rejects_unlisted_shorthands() {
+		$sanitized = Newspack_Popups_Contextual_Prompt_Styles::sanitize(
+			[
+				'spacing' => [ 'padding' => '10px' ],
+				'border'  => [ 'top' => '1px' ],
+			]
+		);
+
+		$this->assertSame( [], $sanitized );
+	}
+
+	/**
+	 * Withdrawing the admin opt-in stops the CSS shipping: init registers no
+	 * output hooks at all.
+	 */
+	public function test_init_requires_the_opt_in() {
+		if ( wp_is_block_theme() ) {
+			$this->markTestSkipped( 'Block themes keep the class inert regardless of the opt-in.' );
+		}
+		$callback = [ 'Newspack_Popups_Contextual_Prompt_Styles', 'enqueue_front_end_styles' ];
+		remove_action( 'wp_footer', $callback, 1 );
+
+		delete_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION );
+		Newspack_Popups_Contextual_Prompt_Styles::init();
+		$this->assertFalse( has_action( 'wp_footer', $callback ) );
+
+		update_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION, true );
+		Newspack_Popups_Contextual_Prompt_Styles::init();
+		$this->assertSame( 1, has_action( 'wp_footer', $callback ) );
+	}
+
+	/**
 	 * Values that could break out of a declaration are rejected wholesale.
 	 */
 	public function test_sanitize_rejects_css_injection() {
