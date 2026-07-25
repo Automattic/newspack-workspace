@@ -334,6 +334,22 @@ class Patches {
 	 * @return array Filtered array of capabilities.
 	 */
 	public static function prevent_accidental_page_deletion( $caps, $cap, $user_id, $args ) {
+		// Deletion is the only capability this restricts, so nothing else needs to
+		// be inspected. This filter runs on every meta capability check in the
+		// request, and $args[0] is a post ID only for post capabilities — for
+		// `edit_user` it is a user ID — so the lookup below would otherwise cost a
+		// post query per capability check on ids that are not posts at all.
+		//
+		// Both spellings are matched because core's map_meta_cap() handles
+		// `delete_post` and `delete_page` in one branch, and the `page` post type's
+		// own delete_post capability is literally `delete_page` — the spelling
+		// wp_ajax_delete_page() and the XML-RPC wp_deletePage() ask for. Every
+		// protected ID is a page, so matching only `delete_post` would leave those
+		// routes unguarded.
+		if ( ! in_array( $cap, [ 'delete_post', 'delete_page' ], true ) ) {
+			return $caps;
+		}
+
 		// If no $args to check, bail early.
 		if ( empty( $args ) ) {
 			return $caps;
@@ -346,8 +362,8 @@ class Patches {
 			return $caps;
 		}
 
-		// If the current page ID is protected, and the capability being checked is for deletion, do not allow.
-		if ( 'delete_post' === $cap && in_array( $post_id, self::get_protected_page_ids(), true ) ) {
+		// If the current page ID is protected, do not allow it to be deleted.
+		if ( in_array( $post_id, self::get_protected_page_ids(), true ) ) {
 			$caps[] = 'do_not_allow';
 		}
 
