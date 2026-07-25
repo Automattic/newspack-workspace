@@ -144,8 +144,8 @@ final class Contrast {
 		}
 
 		return (bool) preg_match(
-			'/color-mix\(\s*in\s+srgb\s*,\s*(?:var\(\s*--wp--preset--color--accent(?![\w-])\s*\)|var:preset\|color\|accent(?![\w-]))\s+80%\s*,\s*black\s*\)/i',
-			$value
+			'/^color-mix\(\s*in\s+srgb\s*,\s*(?:var\(\s*--wp--preset--color--accent(?![\w-])\s*\)|var:preset\|color\|accent(?![\w-]))\s+80%\s*,\s*black\s*\)$/i',
+			trim( $value )
 		);
 	}
 
