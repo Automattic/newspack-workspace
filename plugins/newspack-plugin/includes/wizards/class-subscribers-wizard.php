@@ -189,6 +189,24 @@ class Subscribers_Wizard extends Wizard {
 
 		register_rest_route(
 			NEWSPACK_API_NAMESPACE,
+			'/wizard/' . $this->slug . '/groups/(?P<id>\d+)',
+			[
+				'methods'             => \WP_REST_Server::READABLE,
+				'callback'            => [ $this, 'api_get_group' ],
+				'permission_callback' => [ $this, 'api_permissions_check' ],
+				'args'                => [
+					'id' => [
+						'type'              => 'integer',
+						'required'          => true,
+						'sanitize_callback' => 'absint',
+						'validate_callback' => 'rest_validate_request_arg',
+					],
+				],
+			]
+		);
+
+		register_rest_route(
+			NEWSPACK_API_NAMESPACE,
 			'/wizard/' . $this->slug . '/subscribers',
 			[
 				'methods'             => \WP_REST_Server::READABLE,
@@ -425,6 +443,191 @@ class Subscribers_Wizard extends Wizard {
 	 */
 	private function subscription_edit_url( $subscription ) {
 		return method_exists( $subscription, 'get_edit_order_url' ) ? (string) $subscription->get_edit_order_url() : '';
+	}
+
+	/**
+	 * GET one group subscription, hydrated for the in-wizard group detail screen.
+	 *
+	 * The payload is the collection endpoint's group shape (so both screens read
+	 * one contract) plus the detail-only parts a list has no room for: the people
+	 * with their roles, the outstanding invitations, the shareable link's state,
+	 * the committed-seat floor, and the billing shape the "View subscription"
+	 * drawer renders.
+	 *
+	 * Related objects are embedded rather than returned as IDs for the client to
+	 * resolve: the collection endpoint already embeds a full `owner` object, and
+	 * ids-only would force the screen into an N+1 (nothing in the collection
+	 * carries a member's join date or the group's billing).
+	 *
+	 * @param \WP_REST_Request $request The request.
+	 *
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public function api_get_group( $request ): \WP_REST_Response|\WP_Error {
+		$this->group_subscriptions_cache = null;
+		$this->group_membership_index    = null;
+		$this->raw_status_ids_cache      = [];
+
+		$subscription = function_exists( 'wcs_get_subscription' ) ? \wcs_get_subscription( (int) $request->get_param( 'id' ) ) : false;
+		$settings     = $subscription && class_exists( '\Newspack\Group_Subscription_Settings' )
+			? Group_Subscription_Settings::get_subscription_settings( $subscription )
+			: [];
+		// A subscription that isn't group-enabled is not a group. 404 rather than a
+		// half-populated payload the detail screen would render as an empty group.
+		if ( ! $subscription || empty( $settings['enabled'] ) ) {
+			return new \WP_Error(
+				'newspack_subscribers_group_not_found',
+				sprintf(
+					/* translators: %s: lowercase singular group label (e.g. "group", "team"). */
+					__( 'That %s could not be found.', 'newspack-plugin' ),
+					Group_Subscription::get_label_lower( 'singular' )
+				),
+				[ 'status' => 404 ]
+			);
+		}
+
+		return rest_ensure_response(
+			array_merge(
+				$this->prepare_group( $subscription, $settings ),
+				[
+					'memberList'    => $this->prepare_group_members( $subscription ),
+					'invites'       => $this->prepare_group_invites( $subscription ),
+					'inviteLink'    => $this->prepare_group_invite_link( $subscription ),
+					// The floor the seat limit can't be set below. Resolved server-side
+					// by the same helper the write endpoint validates against, so the
+					// form and the rule that rejects it can't disagree.
+					'seatsReserved' => Group_Subscription_API::reserved_seats( $subscription ),
+					'billing'       => $this->subscription_billing( $subscription ),
+				]
+			)
+		);
+	}
+
+	/**
+	 * The group's people, ordered owner → managers → members.
+	 *
+	 * The ordering is resolved here rather than client-side so the table's default
+	 * sort and the role model have one authority. The owner sorts first because
+	 * ownership implies management; promoted managers follow; plain members last.
+	 *
+	 * @param \WC_Subscription $subscription The group subscription.
+	 *
+	 * @return array<int,array> The ordered member entries.
+	 */
+	private function prepare_group_members( $subscription ): array {
+		$owner_id = (int) $subscription->get_user_id();
+		$managers = array_map( 'intval', Group_Subscription::get_managers( $subscription ) );
+
+		$entries = [];
+		foreach ( Group_Subscription::get_all_members( $subscription ) as $user_id ) {
+			$user_id = (int) $user_id;
+			$user    = get_userdata( $user_id );
+			if ( ! $user ) {
+				continue;
+			}
+			if ( $user_id === $owner_id ) {
+				$role = 'owner';
+			} elseif ( in_array( $user_id, $managers, true ) ) {
+				$role = 'manager';
+			} else {
+				$role = 'member';
+			}
+			$joined_at = Group_Subscription::get_member_joined_at( $user_id, $subscription );
+			$entries[] = [
+				'id'       => $user_id,
+				'name'     => $user->display_name,
+				'email'    => $user->user_email,
+				'role'     => $role,
+				// The owner holds no membership record, so they have no join date.
+				'joinedAt' => $joined_at ? gmdate( 'Y-m-d', $joined_at ) : null,
+				// A person's name links to the person, matching the lists.
+				'editUrl'  => (string) get_edit_user_link( $user_id ),
+			];
+		}
+
+		$rank_of = [
+			'owner'   => 0,
+			'manager' => 1,
+			'member'  => 2,
+		];
+		// PHP 8's sort is stable, so people of the same role keep the order the
+		// membership query returned them in.
+		usort(
+			$entries,
+			function ( $a, $b ) use ( $rank_of ) {
+				return $rank_of[ $a['role'] ] <=> $rank_of[ $b['role'] ];
+			}
+		);
+		return $entries;
+	}
+
+	/**
+	 * The group's outstanding email invitations.
+	 *
+	 * Expired invitations are included, flagged rather than dropped: an admin needs
+	 * to see a lapsed invite in order to resend or cancel it. The shareable link is
+	 * never an invitation row — it is a single persistent entry, reported separately
+	 * by prepare_group_invite_link().
+	 *
+	 * @param \WC_Subscription $subscription The group subscription.
+	 *
+	 * @return array<int,array> The invitation entries.
+	 */
+	private function prepare_group_invites( $subscription ): array {
+		$expiration_window = Group_Subscription_Invite::get_expiration_time();
+		$invites           = [];
+		foreach ( Group_Subscription_Invite::get_invites( $subscription ) as $invite ) {
+			$email      = (string) ( $invite['email'] ?? '' );
+			$expiration = isset( $invite['expiration'] ) ? (int) $invite['expiration'] : 0;
+			$invites[]  = [
+				// The invitation's own key is deliberately NOT emitted: with the email
+				// (in this same row) it is exactly the pair Group_Subscription_Invite::
+				// get_invite_url() builds a working accept URL from, and is_valid_invite()
+				// checks nothing else — so leaking it here would let anyone who captured
+				// this admin response consume the invitation without inbox access. The
+				// client keys resend/cancel by email, so the row is identified by email,
+				// which is unique per group (generate_invite() replaces any prior invite
+				// for the same address).
+				'id'        => $email,
+				'email'     => $email,
+				'status'    => $expiration && $expiration >= time() ? 'pending' : 'expired',
+				// Only the expiry is stored, and it is always exactly one window
+				// after the invitation was sent, so the sent date is derived rather
+				// than persisted twice and left to drift.
+				'sentAt'    => $expiration ? gmdate( 'Y-m-d', $expiration - $expiration_window ) : null,
+				'expiresAt' => $expiration ? gmdate( 'Y-m-d', $expiration ) : null,
+			];
+		}
+		return $invites;
+	}
+
+	/**
+	 * The state of the group's shareable invite link.
+	 *
+	 * Reported for the *owner's* link, because that is the one the admin surface
+	 * acts on — an admin is not a manager of the group, so a link minted under
+	 * their own ID would be rejected when an invitee clicked it. This mirrors
+	 * Group_Subscription_API::resolve_link_manager_id(), keeping what the screen
+	 * shows and what its buttons change the same link. A link minted by some other
+	 * manager is deliberately not surfaced here; see NPPD-2120.
+	 *
+	 * @param \WC_Subscription $subscription The group subscription.
+	 *
+	 * @return array{active:bool,url:string}
+	 */
+	private function prepare_group_invite_link( $subscription ): array {
+		$owner_id = (int) $subscription->get_user_id();
+		$entry    = $owner_id ? Group_Subscription_Invite::get_link_invite( $subscription, $owner_id ) : null;
+		if ( ! $entry || empty( $entry['key'] ) ) {
+			return [
+				'active' => false,
+				'url'    => '',
+			];
+		}
+		return [
+			'active' => true,
+			'url'    => Group_Subscription_Invite::get_link_invite_url( $subscription->get_id(), $owner_id, $entry['key'] ),
+		];
 	}
 
 	/**

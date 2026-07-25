@@ -22,3 +22,13 @@ export const ROLE_LABELS = {
 	manager: __( 'Manager', 'newspack-plugin' ),
 	member: __( 'Member', 'newspack-plugin' ),
 };
+
+// Sort order for the members table: owner, then managers, then plain members.
+// Sorting the labels alphabetically would put Manager below Member and strand the
+// owner in the middle, so the rank is explicit. It matches the order
+// Subscribers_Wizard::prepare_group_members() already returns rows in.
+export const ROLE_RANK = {
+	owner: 0,
+	manager: 1,
+	member: 2,
+};

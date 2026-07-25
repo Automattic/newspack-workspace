@@ -348,6 +348,45 @@ class Group_Subscription {
 	}
 
 	/**
+	 * Whether an actor may promote or demote managers of a group.
+	 *
+	 * The single server-side authority for role changes — the My Account
+	 * admin-post handler and the REST endpoint both defer to it, so the
+	 * owner-only rule can't be bypassed by forging a request the UI wouldn't
+	 * offer. It is deliberately stricter than can_actor_remove_member(): a
+	 * manager may maintain plain members, but only the owner decides who else
+	 * holds that power, since the owner is the one paying for the group.
+	 *
+	 * - The owner may change roles in their own group.
+	 * - Store admins (`manage_woocommerce`) may act on the owner's behalf.
+	 * - Managers, plain members and outsiders may not — a manager who could
+	 *   promote could manufacture peers and route around the peer-manager guard
+	 *   that can_actor_remove_member() applies to removals.
+	 *
+	 * @param int                  $actor_id     The user attempting the role change.
+	 * @param \WC_Subscription|int $subscription The subscription object or ID.
+	 *
+	 * @return bool Whether the role change is permitted.
+	 */
+	public static function user_can_manage_roles( $actor_id, $subscription ): bool {
+		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $subscription );
+		if ( ! $subscription ) {
+			return false;
+		}
+		$actor_id = (int) $actor_id;
+
+		// A logged-out / unresolved actor decides nothing — guard before the owner
+		// comparison so an actor of 0 never matches an ownerless (owner 0) group.
+		if ( ! $actor_id ) {
+			return false;
+		}
+		if ( $actor_id === (int) $subscription->get_user_id() ) {
+			return true;
+		}
+		return \user_can( $actor_id, 'manage_woocommerce' );
+	}
+
+	/**
 	 * Get the group subscriptions a user manages.
 	 *
 	 * The reverse of `get_managers()`: a user manages a group either by owning

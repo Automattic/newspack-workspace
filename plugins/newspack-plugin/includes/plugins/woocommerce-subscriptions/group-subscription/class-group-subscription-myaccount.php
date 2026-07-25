@@ -693,10 +693,11 @@ class Group_Subscription_MyAccount {
 		[ $subscription_id, $redirect_url ] = self::get_subscription_context();
 
 		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $subscription_id );
-		// Guard the current-user id so a logged-out request (uid 0) never reads as
-		// the owner of an ownerless (owner 0) subscription.
-		$is_owner = $subscription && get_current_user_id() && get_current_user_id() === (int) $subscription->get_user_id();
-		if ( ! $subscription || ( ! $is_owner && ! current_user_can( 'manage_woocommerce' ) ) ) {
+		// Group_Subscription::user_can_manage_roles() is the single authority for
+		// this rule, shared with the REST endpoint the admin wizard writes through,
+		// so the two surfaces cannot drift. It carries the uid-0 guard that keeps a
+		// logged-out request from reading as the owner of an ownerless subscription.
+		if ( ! Group_Subscription::user_can_manage_roles( get_current_user_id(), $subscription ) ) {
 			$error_message = sprintf(
 				/* translators: %s: lowercase singular group label (e.g. "group", "team"). */
 				__( 'Only the owner can change who manages this %s.', 'newspack-plugin' ),
