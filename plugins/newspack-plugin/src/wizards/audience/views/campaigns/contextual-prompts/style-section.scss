@@ -1,8 +1,10 @@
 /**
  * Contextual Prompts Style section.
  *
- * Color rows mirroring the editor's color panel: a bordered group of flat,
- * full-width toggles, each showing a round indicator and the color's name.
+ * The style groups are core ToolsPanels, stacked into one list the way the
+ * editor's inspector stacks them. Color rows mirror the editor's color panel: a
+ * bordered group of flat, full-width toggles, each showing a round indicator and
+ * the color's name.
  */
 
 @use "~@wordpress/base-styles/colors" as wp-colors;
@@ -13,38 +15,68 @@
 .newspack-prompt-style-controls {
 	max-width: calc(#{wp-variables.$sidebar-width} - #{wp-variables.$grid-unit-20} * 2);
 	width: 100%;
-}
 
-.newspack-prompt-style-colors {
-	border: 1px solid wp-colors.$gray-300;
-	border-radius: 2px;
+	// The panel's own side padding goes: this column is already the width the
+	// controls should be. The first panel drops its separator, which would read as
+	// a stray rule above the column.
+	.newspack-prompt-style-panel {
+		padding-inline: 0;
 
-	> * + * {
-		border-top: 1px solid wp-colors.$gray-300;
+		&:first-child {
+			border-top: 0;
+			padding-top: 0;
+		}
 	}
 
-	// The row's own toggle fills the row. Direct child only, so the rule stays
-	// tied to that toggle; the palette's buttons are out of reach anyway, since
-	// the popover portals to document.body.
-	&__row > .components-button {
-		border-radius: 0;
-		width: 100%;
+	// The color rows butt up against each other into a single bordered list
+	// instead of sitting apart on the panel's row gap.
+	.newspack-prompt-style-panel--color {
+		row-gap: 0;
 	}
 
-	.component-color-indicator {
-		flex-shrink: 0;
-	}
-}
-
-// Split the radius row the way core's BorderControl splits its width row:
-// input on the left, slider taking the rest.
-.newspack-prompt-style-radius {
-	.components-unit-control-wrapper {
-		flex: 1 1 40%;
+	.newspack-prompt-style-notice {
+		grid-column: 1 / -1;
+		margin: wp-variables.$grid-unit-20 0 0;
 	}
 
-	.components-range-control {
-		flex: 1 1 60%;
+	.newspack-prompt-style-colors {
+		border: 1px solid wp-colors.$gray-300;
+		border-top: 0;
+
+		&--first {
+			border-top: 1px solid wp-colors.$gray-300;
+			border-start-start-radius: 2px;
+			border-start-end-radius: 2px;
+		}
+
+		&--last {
+			border-end-start-radius: 2px;
+			border-end-end-radius: 2px;
+		}
+
+		// The row's own toggle fills the row. Direct child only, so the rule stays
+		// tied to that toggle; the palette's buttons are out of reach anyway, since
+		// the popover portals to document.body.
+		&__row > .components-button {
+			border-radius: 0;
+			width: 100%;
+		}
+
+		.component-color-indicator {
+			flex-shrink: 0;
+		}
+	}
+
+	// Split the radius row the way core's BorderControl splits its width row:
+	// input on the left, slider taking the rest.
+	.newspack-prompt-style-radius {
+		.components-unit-control-wrapper {
+			flex: 1 1 40%;
+		}
+
+		.components-range-control {
+			flex: 1 1 60%;
+		}
 	}
 }
 

@@ -54,8 +54,11 @@ const styledStatus = () => ( {
 // With nothing stored, PHP hands back an empty JSON array rather than an object.
 const unstyledStatus = () => ( { ...styledStatus(), styles: [] } );
 
-// Each style group renders its Reset beside its own heading.
-const groupReset = label => screen.getByRole( 'heading', { name: label, level: 3 } ).parentElement.querySelector( 'button' );
+// Each style group resets from the options menu in its ToolsPanel header.
+const resetStyleItem = ( panel, item ) => {
+	fireEvent.click( screen.getByRole( 'button', { name: `${ panel } options` } ) );
+	fireEvent.click( screen.getByRole( 'menuitem', { name: `Reset ${ item }` } ) );
+};
 
 describe( 'ContextualPrompts tab', () => {
 	beforeEach( () => jest.clearAllMocks() );
@@ -171,7 +174,7 @@ describe( 'ContextualPrompts tab', () => {
 		await waitFor( () => expect( screen.getByRole( 'heading', { name: 'Border', level: 3 } ) ).toBeInTheDocument() );
 		expect( screen.getByRole( 'button', { name: 'Save' } ) ).toBeDisabled();
 
-		fireEvent.click( groupReset( 'Border' ) );
+		resetStyleItem( 'Border', 'Border' );
 		expect( screen.getByRole( 'button', { name: 'Save' } ) ).toBeEnabled();
 
 		apiFetch.mockResolvedValueOnce( styledStatus() );

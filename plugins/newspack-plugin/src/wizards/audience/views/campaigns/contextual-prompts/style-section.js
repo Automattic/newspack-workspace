@@ -6,6 +6,11 @@
  */
 
 /**
+ * External dependencies
+ */
+import classnames from 'classnames';
+
+/**
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
@@ -21,8 +26,9 @@ import {
 	__experimentalBorderBoxControl as BorderBoxControl, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalBoxControl as BoxControl, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
-	__experimentalHeading as Heading, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalParseQuantityAndUnitFromRawValue as parseQuantityAndUnitFromRawValue, // eslint-disable-line @wordpress/no-unsafe-wp-apis
+	__experimentalToolsPanel as ToolsPanel, // eslint-disable-line @wordpress/no-unsafe-wp-apis
+	__experimentalToolsPanelItem as ToolsPanelItem, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalUnitControl as UnitControl, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
@@ -79,20 +85,10 @@ const withoutRadius = border => {
 	return next;
 };
 
-const StyleGroup = ( { label, hasOverride, onReset, disabled, children } ) => (
-	<VStack spacing={ 3 }>
-		<HStack justify="space-between" alignment="center" spacing={ 2 }>
-			<Heading level={ 3 } size={ 13 }>
-				{ label }
-			</Heading>
-			{ hasOverride && (
-				<Button variant="tertiary" isSmall onClick={ onReset } disabled={ disabled }>
-					{ __( 'Reset', 'newspack-plugin' ) }
-				</Button>
-			) }
-		</HStack>
-		{ children }
-	</VStack>
+// Each group is one of the editor's block support panels: the group label and the
+// options menu in the header, which offers a reset per item and a Reset all.
+const StylePanel = ( { className, ...props } ) => (
+	<ToolsPanel headingLevel={ 3 } className={ classnames( 'newspack-prompt-style-panel', className ) } { ...props } />
 );
 
 // The editor's color rows, composed from stable primitives: @wordpress/block-editor
@@ -164,6 +160,9 @@ const StyleSection = ( { status, styles = {}, inFlight, onChangeStyles } ) => {
 		}
 		onChangeStyles( setPath( styles, [ 'border' ], hasKeys( next ) ? next : undefined ) );
 	};
+	// The radius is its own group, so clearing the border keeps it.
+	const clearBorder = () =>
+		onChangeStyles( setPath( styles, [ 'border' ], undefined !== styles.border?.radius ? { radius: styles.border.radius } : undefined ) );
 
 	const setRadius = value => onChangeStyles( setPath( styles, [ 'border', 'radius' ], value || undefined ) );
 	// The slider only moves the number, so it writes back with the unit already in
@@ -175,14 +174,21 @@ const StyleSection = ( { status, styles = {}, inFlight, onChangeStyles } ) => {
 	const classicControls = (
 		<Disabled isDisabled={ !! inFlight }>
 			<HStack alignment="top" justify="flex-end">
-				<VStack spacing={ 6 } className="newspack-prompt-style-controls">
-					<StyleGroup
+				<VStack spacing={ 0 } className="newspack-prompt-style-controls">
+					<StylePanel
 						label={ __( 'Color', 'newspack-plugin' ) }
-						hasOverride={ hasKeys( styles.color ) }
-						onReset={ () => onChangeStyles( setPath( styles, [ 'color' ], undefined ) ) }
-						disabled={ inFlight }
+						className="newspack-prompt-style-panel--color"
+						resetAll={ () => onChangeStyles( setPath( styles, [ 'color' ], undefined ) ) }
+						__experimentalFirstVisibleItemClass="newspack-prompt-style-colors--first"
+						__experimentalLastVisibleItemClass="newspack-prompt-style-colors--last"
 					>
-						<VStack spacing={ 0 } className="newspack-prompt-style-colors">
+						<ToolsPanelItem
+							className="newspack-prompt-style-colors"
+							label={ __( 'Text', 'newspack-plugin' ) }
+							hasValue={ () => undefined !== styles.color?.text }
+							onDeselect={ () => setColor( 'text' ) }
+							isShownByDefault
+						>
 							<ColorRow label={ __( 'Text', 'newspack-plugin' ) } colorValue={ text } disabled={ inFlight }>
 								<ColorPalette
 									aria-label={ __( 'Text', 'newspack-plugin' ) }
@@ -191,6 +197,14 @@ const StyleSection = ( { status, styles = {}, inFlight, onChangeStyles } ) => {
 									onChange={ value => setColor( 'text', value ) }
 								/>
 							</ColorRow>
+						</ToolsPanelItem>
+						<ToolsPanelItem
+							className="newspack-prompt-style-colors"
+							label={ __( 'Background', 'newspack-plugin' ) }
+							hasValue={ () => undefined !== styles.color?.background }
+							onDeselect={ () => setColor( 'background' ) }
+							isShownByDefault
+						>
 							<ColorRow label={ __( 'Background', 'newspack-plugin' ) } colorValue={ background } disabled={ inFlight }>
 								<ColorPalette
 									aria-label={ __( 'Background', 'newspack-plugin' ) }
@@ -199,94 +213,107 @@ const StyleSection = ( { status, styles = {}, inFlight, onChangeStyles } ) => {
 									onChange={ value => setColor( 'background', value ) }
 								/>
 							</ColorRow>
-						</VStack>
+						</ToolsPanelItem>
 						{ null !== ratio && ratio < MIN_CONTRAST_RATIO && (
-							<Notice status="warning" isDismissible={ false } style={ { margin: 0 } }>
+							<Notice status="warning" isDismissible={ false } className="newspack-prompt-style-notice">
 								{ __( 'This color combination may be hard for people to read.', 'newspack-plugin' ) }
 							</Notice>
 						) }
-					</StyleGroup>
-					<StyleGroup
+					</StylePanel>
+					<StylePanel
 						label={ __( 'Typography', 'newspack-plugin' ) }
-						hasOverride={ hasKeys( styles.typography ) }
-						onReset={ () => onChangeStyles( setPath( styles, [ 'typography' ], undefined ) ) }
-						disabled={ inFlight }
+						resetAll={ () => onChangeStyles( setPath( styles, [ 'typography' ], undefined ) ) }
 					>
-						<FontSizePicker
-							fontSizes={ fontSizes }
-							value={ effective( [ 'typography', 'fontSize' ] ) }
-							onChange={ setFontSize }
-							withReset={ false }
-							__next40pxDefaultSize
-						/>
-					</StyleGroup>
-					<StyleGroup
+						<ToolsPanelItem
+							label={ __( 'Font Size', 'newspack-plugin' ) }
+							hasValue={ () => undefined !== styles.typography?.fontSize }
+							onDeselect={ () => setFontSize() }
+							isShownByDefault
+						>
+							<FontSizePicker
+								fontSizes={ fontSizes }
+								value={ effective( [ 'typography', 'fontSize' ] ) }
+								onChange={ setFontSize }
+								withReset={ false }
+								__next40pxDefaultSize
+							/>
+						</ToolsPanelItem>
+					</StylePanel>
+					<StylePanel
 						label={ __( 'Padding', 'newspack-plugin' ) }
-						hasOverride={ undefined !== styles.spacing?.padding }
-						onReset={ () => onChangeStyles( setPath( styles, [ 'spacing', 'padding' ], undefined ) ) }
-						disabled={ inFlight }
+						resetAll={ () => onChangeStyles( setPath( styles, [ 'spacing', 'padding' ], undefined ) ) }
 					>
-						<BoxControl
+						<ToolsPanelItem
 							label={ __( 'Padding', 'newspack-plugin' ) }
-							values={ effective( [ 'spacing', 'padding' ] ) }
-							onChange={ setPadding }
-							splitOnAxis={ false }
-							allowReset={ false }
-							__next40pxDefaultSize
-						/>
-					</StyleGroup>
-					<StyleGroup
-						label={ __( 'Border', 'newspack-plugin' ) }
-						hasOverride={ hasKeys( borderOverride ) }
-						onReset={ () =>
-							onChangeStyles(
-								setPath( styles, [ 'border' ], undefined !== styles.border?.radius ? { radius: styles.border.radius } : undefined )
-							)
-						}
-						disabled={ inFlight }
-					>
-						<BorderBoxControl
+							hasValue={ () => undefined !== styles.spacing?.padding }
+							onDeselect={ () => setPadding() }
+							isShownByDefault
+						>
+							<BoxControl
+								label={ __( 'Padding', 'newspack-plugin' ) }
+								values={ effective( [ 'spacing', 'padding' ] ) }
+								onChange={ setPadding }
+								splitOnAxis={ false }
+								allowReset={ false }
+								__next40pxDefaultSize
+							/>
+						</ToolsPanelItem>
+					</StylePanel>
+					<StylePanel label={ __( 'Border', 'newspack-plugin' ) } resetAll={ clearBorder }>
+						<ToolsPanelItem
 							label={ __( 'Border', 'newspack-plugin' ) }
-							hideLabelFromVision
-							colors={ paletteColors }
-							value={ hasKeys( borderOverride ) ? borderOverride : withoutRadius( defaults.border ) }
-							onChange={ setBorder }
-							enableStyle
-							__next40pxDefaultSize
-						/>
-					</StyleGroup>
-					<StyleGroup
+							hasValue={ () => hasKeys( borderOverride ) }
+							onDeselect={ clearBorder }
+							isShownByDefault
+						>
+							<BorderBoxControl
+								label={ __( 'Border', 'newspack-plugin' ) }
+								hideLabelFromVision
+								colors={ paletteColors }
+								value={ hasKeys( borderOverride ) ? borderOverride : withoutRadius( defaults.border ) }
+								onChange={ setBorder }
+								enableStyle
+								__next40pxDefaultSize
+							/>
+						</ToolsPanelItem>
+					</StylePanel>
+					<StylePanel
 						label={ __( 'Border Radius', 'newspack-plugin' ) }
-						hasOverride={ undefined !== styles.border?.radius }
-						onReset={ () => onChangeStyles( setPath( styles, [ 'border', 'radius' ], undefined ) ) }
-						disabled={ inFlight }
+						resetAll={ () => onChangeStyles( setPath( styles, [ 'border', 'radius' ], undefined ) ) }
 					>
-						<HStack spacing={ 4 } className="newspack-prompt-style-radius">
-							<UnitControl
-								label={ __( 'Radius', 'newspack-plugin' ) }
-								hideLabelFromVision
-								value={ radiusValue }
-								onChange={ setRadius }
-								min={ 0 }
-								disabled={ inFlight }
-								__next40pxDefaultSize
-							/>
-							<RangeControl
-								label={ __( 'Border radius', 'newspack-plugin' ) }
-								hideLabelFromVision
-								value={ radiusQuantity }
-								onChange={ setRadiusQuantity }
-								min={ 0 }
-								max={ RADIUS_SLIDER_MAX }
-								step={ 'px' === ( radiusUnit || 'px' ) || '%' === radiusUnit ? 1 : 0.1 }
-								initialPosition={ 0 }
-								withInputField={ false }
-								disabled={ inFlight }
-								__nextHasNoMarginBottom
-								__next40pxDefaultSize
-							/>
-						</HStack>
-					</StyleGroup>
+						<ToolsPanelItem
+							label={ __( 'Radius', 'newspack-plugin' ) }
+							hasValue={ () => undefined !== styles.border?.radius }
+							onDeselect={ () => setRadius() }
+							isShownByDefault
+						>
+							<HStack spacing={ 4 } className="newspack-prompt-style-radius">
+								<UnitControl
+									label={ __( 'Radius', 'newspack-plugin' ) }
+									hideLabelFromVision
+									value={ radiusValue }
+									onChange={ setRadius }
+									min={ 0 }
+									disabled={ inFlight }
+									__next40pxDefaultSize
+								/>
+								<RangeControl
+									label={ __( 'Border radius', 'newspack-plugin' ) }
+									hideLabelFromVision
+									value={ radiusQuantity }
+									onChange={ setRadiusQuantity }
+									min={ 0 }
+									max={ RADIUS_SLIDER_MAX }
+									step={ 'px' === ( radiusUnit || 'px' ) || '%' === radiusUnit ? 1 : 0.1 }
+									initialPosition={ 0 }
+									withInputField={ false }
+									disabled={ inFlight }
+									__nextHasNoMarginBottom
+									__next40pxDefaultSize
+								/>
+							</HStack>
+						</ToolsPanelItem>
+					</StylePanel>
 				</VStack>
 			</HStack>
 		</Disabled>

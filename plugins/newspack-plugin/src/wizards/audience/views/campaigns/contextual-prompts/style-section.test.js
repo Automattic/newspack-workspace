@@ -64,9 +64,10 @@ const CONTRAST_WARNING = 'This color combination may be hard for people to read.
 // in the document, so the queries below are scoped to the rendered notice.
 const NOTICE_CONTENT = '.components-notice__content';
 
-// Every group renders its Reset beside its own heading, so a group can be reset by
-// name while other groups also hold an override.
-const groupReset = label => screen.getByRole( 'heading', { name: label, level: 3 } ).parentElement.querySelector( 'button' );
+// Every group is a ToolsPanel whose header carries an options menu, named after
+// the group: it offers a reset per item holding an override, plus Reset all.
+const openPanelMenu = label => fireEvent.click( screen.getByRole( 'button', { name: `${ label } options` } ) );
+const clickMenuItem = name => fireEvent.click( screen.getByRole( 'menuitem', { name } ) );
 
 const CLASSIC_STATUS = {
 	is_block_theme: false,
@@ -93,6 +94,12 @@ describe( 'StyleSection on a classic theme', () => {
 		expect( screen.queryByRole( 'link', { name: 'Edit Styles' } ) ).toBeNull();
 		expect( screen.getByRole( 'button', { name: 'Text' } ) ).toBeInTheDocument();
 		expect( screen.getByRole( 'button', { name: 'Background' } ) ).toBeInTheDocument();
+
+		// Each group offers its resets from an options menu, not a Reset button.
+		[ 'Color', 'Typography', 'Padding', 'Border', 'Border Radius' ].forEach( label =>
+			expect( screen.getByRole( 'button', { name: `${ label } options` } ) ).toBeInTheDocument()
+		);
+		expect( screen.queryByRole( 'button', { name: 'Reset' } ) ).toBeNull();
 	} );
 
 	it( 'opens a color palette in a popover from a color row', () => {
@@ -107,7 +114,7 @@ describe( 'StyleSection on a classic theme', () => {
 		expect( screen.queryByRole( 'listbox', { name: 'Background' } ) ).toBeNull();
 	} );
 
-	it( 'shows Reset only for groups holding an override, and reset clears the group', () => {
+	it( 'offers a reset only for the item holding an override, and clears just that item', () => {
 		const onChangeStyles = jest.fn();
 		render(
 			<StyleSection
@@ -118,10 +125,32 @@ describe( 'StyleSection on a classic theme', () => {
 			/>
 		);
 
-		const resets = screen.getAllByRole( 'button', { name: 'Reset' } );
-		expect( resets ).toHaveLength( 1 );
-		resets[ 0 ].click();
+		openPanelMenu( 'Color' );
+
+		// Text holds no override, so it is listed as an unset default control.
+		expect( screen.queryByRole( 'menuitem', { name: 'Reset Text' } ) ).toBeNull();
+		expect( screen.getByRole( 'menuitemcheckbox', { name: 'Text' } ) ).toBeInTheDocument();
+
+		clickMenuItem( 'Reset Background' );
 		expect( onChangeStyles ).toHaveBeenCalledWith( {} );
+	} );
+
+	it( 'clears every color in the group from Reset all, leaving other groups alone', () => {
+		const onChangeStyles = jest.fn();
+		render(
+			<StyleSection
+				status={ CLASSIC_STATUS }
+				styles={ { color: { text: '#111111', background: '#123456' }, border: { radius: '4px' } } }
+				inFlight={ false }
+				onChangeStyles={ onChangeStyles }
+			/>
+		);
+
+		openPanelMenu( 'Color' );
+		clickMenuItem( 'Reset all' );
+
+		// The whole object goes back, since the REST layer replaces it wholesale.
+		expect( onChangeStyles ).toHaveBeenCalledWith( { border: { radius: '4px' } } );
 	} );
 
 	it( 'prunes the parent node when a nested override is reset', () => {
@@ -135,8 +164,8 @@ describe( 'StyleSection on a classic theme', () => {
 			/>
 		);
 
-		expect( screen.getAllByRole( 'button', { name: 'Reset' } ) ).toHaveLength( 1 );
-		groupReset( 'Padding' ).click();
+		openPanelMenu( 'Padding' );
+		clickMenuItem( 'Reset Padding' );
 		expect( onChangeStyles ).toHaveBeenCalledWith( {} );
 	} );
 
@@ -151,8 +180,42 @@ describe( 'StyleSection on a classic theme', () => {
 			/>
 		);
 
-		groupReset( 'Border' ).click();
+		// The radius is its own group, so resetting the border leaves it behind.
+		openPanelMenu( 'Border' );
+		clickMenuItem( 'Reset Border' );
 		expect( onChangeStyles ).toHaveBeenCalledWith( { border: { radius: '4px' } } );
+	} );
+
+	it( 'keeps the border radius when the whole border group is reset', () => {
+		const onChangeStyles = jest.fn();
+		render(
+			<StyleSection
+				status={ CLASSIC_STATUS }
+				styles={ { border: { radius: '4px', width: '1px' } } }
+				inFlight={ false }
+				onChangeStyles={ onChangeStyles }
+			/>
+		);
+
+		openPanelMenu( 'Border' );
+		clickMenuItem( 'Reset all' );
+		expect( onChangeStyles ).toHaveBeenCalledWith( { border: { radius: '4px' } } );
+	} );
+
+	it( 'resets only the radius from the Border Radius group', () => {
+		const onChangeStyles = jest.fn();
+		render(
+			<StyleSection
+				status={ CLASSIC_STATUS }
+				styles={ { border: { radius: '4px', width: '1px' } } }
+				inFlight={ false }
+				onChangeStyles={ onChangeStyles }
+			/>
+		);
+
+		openPanelMenu( 'Border Radius' );
+		clickMenuItem( 'Reset Radius' );
+		expect( onChangeStyles ).toHaveBeenCalledWith( { border: { width: '1px' } } );
 	} );
 
 	it( 'disables the controls that take a disabled prop while a save is in flight', () => {
@@ -162,7 +225,6 @@ describe( 'StyleSection on a classic theme', () => {
 
 		// The pickers rely on the inert wrapper, which jsdom does not honor, so this
 		// covers the controls that receive a real `disabled` prop.
-		expect( groupReset( 'Color' ) ).toBeDisabled();
 		expect( screen.getByRole( 'button', { name: 'Text' } ) ).toBeDisabled();
 		expect( screen.getByLabelText( 'Radius' ) ).toBeDisabled();
 		expect( screen.getByRole( 'slider', { name: 'Border radius' } ) ).toBeDisabled();
