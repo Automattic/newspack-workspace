@@ -51,6 +51,9 @@ const styledStatus = () => ( {
 	site_editor_styles_url: 'https://example.test/wp-admin/site-editor.php?p=%2Fstyles',
 } );
 
+// With nothing stored, PHP hands back an empty JSON array rather than an object.
+const unstyledStatus = () => ( { ...styledStatus(), styles: [] } );
+
 // Each style group renders its Reset beside its own heading.
 const groupReset = label => screen.getByRole( 'heading', { name: label, level: 3 } ).parentElement.querySelector( 'button' );
 
@@ -142,6 +145,23 @@ describe( 'ContextualPrompts tab', () => {
 		expect( data.fields ).toEqual( { [ PROFILE_FIELD.key ]: 'Newsroom X' } );
 		// Absent means "leave the stored styles alone"; sending them would be a no-op write.
 		expect( data ).not.toHaveProperty( 'styles' );
+	} );
+
+	it( 'goes clean again when a style edit is undone from an empty array payload', async () => {
+		apiFetch.mockResolvedValueOnce( unstyledStatus() );
+		renderTab();
+
+		await waitFor( () => expect( screen.getByRole( 'button', { name: 'Text' } ) ).toBeInTheDocument() );
+		expect( screen.getByRole( 'button', { name: 'Save' } ) ).toBeDisabled();
+
+		fireEvent.click( screen.getByRole( 'button', { name: 'Text' } ) );
+		fireEvent.click( screen.getByRole( 'option', { name: 'Accent' } ) );
+		expect( screen.getByRole( 'button', { name: 'Save' } ) ).toBeEnabled();
+
+		// Clicking the selected swatch clears it, leaving no overrides at all: the
+		// saved snapshot has to compare equal to that, empty array payload or not.
+		fireEvent.click( screen.getByRole( 'option', { name: 'Accent' } ) );
+		expect( screen.getByRole( 'button', { name: 'Save' } ) ).toBeDisabled();
 	} );
 
 	it( 'includes the whole style object in the save payload when a style is edited', async () => {

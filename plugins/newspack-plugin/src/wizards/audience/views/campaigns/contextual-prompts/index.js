@@ -32,6 +32,11 @@ const MIN_TOGGLE_MS = 2000;
 
 const fieldsToValues = fields => ( fields || [] ).reduce( ( acc, field ) => ( { ...acc, [ field.key ]: field.value ?? '' } ), {} );
 
+// No overrides can arrive as an empty JSON array, and the controls only ever
+// produce plain objects: an array snapshot would never compare equal to one, so
+// edits that net back to nothing would stay dirty forever.
+const normalizeStyles = styles => ( styles && ! Array.isArray( styles ) ? styles : {} );
+
 // Values are scalars, so key/value equality is a full compare.
 const valuesEqual = ( a, b ) => {
 	const keys = Object.keys( a );
@@ -74,7 +79,7 @@ const ContextualPrompts = props => {
 				const nextValues = fieldsToValues( next.fields );
 				setValues( nextValues );
 				savedValuesRef.current = nextValues;
-				const nextStyles = next.styles || {};
+				const nextStyles = normalizeStyles( next.styles );
 				setBlockStyles( nextStyles );
 				savedStylesRef.current = nextStyles;
 			} )
@@ -102,7 +107,7 @@ const ContextualPrompts = props => {
 				const nextValues = fieldsToValues( next.fields );
 				setValues( nextValues );
 				savedValuesRef.current = nextValues;
-				const nextStyles = next.styles || {};
+				const nextStyles = normalizeStyles( next.styles );
 				setBlockStyles( nextStyles );
 				savedStylesRef.current = nextStyles;
 				return next;
@@ -128,7 +133,7 @@ const ContextualPrompts = props => {
 				const nextValues = fieldsToValues( next.fields );
 				setValues( nextValues );
 				savedValuesRef.current = nextValues;
-				const nextStyles = next.styles || {};
+				const nextStyles = normalizeStyles( next.styles );
 				setBlockStyles( nextStyles );
 				savedStylesRef.current = nextStyles;
 				return next;

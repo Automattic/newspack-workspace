@@ -33,7 +33,9 @@ class ContextualPromptStylesApiTest extends WP_UnitTestCase {
 		$data     = $response->get_data();
 
 		$this->assertArrayHasKey( 'is_block_theme', $data );
-		$this->assertSame( [], $data['styles'] );
+		// No overrides travels as an empty object, never an empty array.
+		$this->assertEquals( (object) [], $data['styles'] );
+		$this->assertSame( '{}', wp_json_encode( $data['styles'] ) );
 		$this->assertSame( '#f7f7f7', $data['style_defaults']['color']['background'] );
 		$this->assertNotEmpty( $data['style_palette'] );
 		$this->assertArrayHasKey( 'color', $data['style_palette'][0] );

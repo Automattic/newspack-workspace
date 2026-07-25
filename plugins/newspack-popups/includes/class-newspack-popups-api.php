@@ -187,13 +187,17 @@ final class Newspack_Popups_API {
 	 * @return array
 	 */
 	private static function contextual_prompt_status() {
+		// Styles are a keyed object to every client, so no overrides has to travel
+		// as `{}`: an empty PHP array would serialize as `[]` and a client
+		// comparing it against an object it built would never see them as equal.
+		$styles = Newspack_Popups_Contextual_Prompt_Styles::get_styles();
 		return [
 			'enabled'                => Newspack_Popups_Settings::is_ai_copy_assistant_enabled(),
 			'can_manage'             => current_user_can( 'manage_options' ),
 			'fields'                 => Newspack_Popups_Settings::get_ai_copy_assistant_fields(),
 			'override_active'        => Newspack_Popups_Settings::is_override_active(),
 			'is_block_theme'         => wp_is_block_theme(),
-			'styles'                 => Newspack_Popups_Contextual_Prompt_Styles::get_styles(),
+			'styles'                 => empty( $styles ) ? (object) [] : $styles,
 			'style_defaults'         => Newspack_Popups_Contextual_Prompt_Styles::get_defaults(),
 			'style_palette'          => self::flatten_global_settings_presets( wp_get_global_settings( [ 'color', 'palette' ] ) ),
 			'style_font_sizes'       => self::flatten_global_settings_presets( wp_get_global_settings( [ 'typography', 'fontSizes' ] ) ),
