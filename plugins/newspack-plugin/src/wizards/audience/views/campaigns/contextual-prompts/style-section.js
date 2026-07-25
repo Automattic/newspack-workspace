@@ -11,9 +11,11 @@
 import { __ } from '@wordpress/i18n';
 import { useState } from '@wordpress/element';
 import {
-	BaseControl,
+	ColorIndicator,
 	ColorPalette,
 	Disabled,
+	Dropdown,
+	FlexItem,
 	FontSizePicker,
 	Notice,
 	__experimentalBorderBoxControl as BorderBoxControl, // eslint-disable-line @wordpress/no-unsafe-wp-apis
@@ -30,6 +32,7 @@ import { link, linkOff } from '@wordpress/icons';
  */
 import { Button, Grid, Handoff, SectionHeader } from '../../../../../../packages/components/src';
 import { contrastRatio, presetRefForColor, resolveColor } from './style-utils';
+import './style-section.scss';
 
 const MIN_CONTRAST_RATIO = 4.5;
 const PADDING_SIDES = [ 'top', 'right', 'bottom', 'left' ];
@@ -93,6 +96,25 @@ const StyleGroup = ( { label, hasOverride, onReset, disabled, children } ) => (
 		</HStack>
 		{ children }
 	</VStack>
+);
+
+// The editor's color rows, composed from stable primitives: @wordpress/block-editor
+// owns ColorGradientSettingsDropdown and is not loaded on the wizard page.
+const ColorRow = ( { label, colorValue, disabled, children } ) => (
+	<Dropdown
+		className="newspack-prompt-style-colors__row"
+		contentClassName="newspack-prompt-style-colors__popover"
+		popoverProps={ { placement: 'bottom-start', shift: true } }
+		renderToggle={ ( { isOpen, onToggle } ) => (
+			<Button onClick={ onToggle } aria-expanded={ isOpen } disabled={ disabled } __next40pxDefaultSize>
+				<HStack justify="flex-start" spacing={ 3 }>
+					<ColorIndicator colorValue={ colorValue || undefined } />
+					<FlexItem>{ label }</FlexItem>
+				</HStack>
+			</Button>
+		) }
+		renderContent={ () => children }
+	/>
 );
 
 const StyleSection = ( { status, styles = {}, inFlight, onChangeStyles } ) => {
@@ -172,23 +194,23 @@ const StyleSection = ( { status, styles = {}, inFlight, onChangeStyles } ) => {
 					onReset={ () => onChangeStyles( setPath( styles, [ 'color' ], undefined ) ) }
 					disabled={ inFlight }
 				>
-					<VStack spacing={ 2 }>
-						<BaseControl.VisualLabel>{ __( 'Background', 'newspack-plugin' ) }</BaseControl.VisualLabel>
-						<ColorPalette
-							aria-label={ __( 'Background', 'newspack-plugin' ) }
-							colors={ paletteColors }
-							value={ background ?? undefined }
-							onChange={ value => setColor( 'background', value ) }
-						/>
-					</VStack>
-					<VStack spacing={ 2 }>
-						<BaseControl.VisualLabel>{ __( 'Text', 'newspack-plugin' ) }</BaseControl.VisualLabel>
-						<ColorPalette
-							aria-label={ __( 'Text', 'newspack-plugin' ) }
-							colors={ paletteColors }
-							value={ text ?? undefined }
-							onChange={ value => setColor( 'text', value ) }
-						/>
+					<VStack spacing={ 0 } className="newspack-prompt-style-colors">
+						<ColorRow label={ __( 'Text', 'newspack-plugin' ) } colorValue={ text } disabled={ inFlight }>
+							<ColorPalette
+								aria-label={ __( 'Text', 'newspack-plugin' ) }
+								colors={ paletteColors }
+								value={ text ?? undefined }
+								onChange={ value => setColor( 'text', value ) }
+							/>
+						</ColorRow>
+						<ColorRow label={ __( 'Background', 'newspack-plugin' ) } colorValue={ background } disabled={ inFlight }>
+							<ColorPalette
+								aria-label={ __( 'Background', 'newspack-plugin' ) }
+								colors={ paletteColors }
+								value={ background ?? undefined }
+								onChange={ value => setColor( 'background', value ) }
+							/>
+						</ColorRow>
 					</VStack>
 					{ null !== ratio && ratio < MIN_CONTRAST_RATIO && (
 						<Notice status="warning" isDismissible={ false } style={ { margin: 0 } }>

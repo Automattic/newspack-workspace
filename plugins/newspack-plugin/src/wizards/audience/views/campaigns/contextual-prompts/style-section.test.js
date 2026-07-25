@@ -91,8 +91,20 @@ describe( 'StyleSection on a classic theme', () => {
 		render( <StyleSection status={ CLASSIC_STATUS } styles={ {} } inFlight={ false } onChangeStyles={ () => {} } /> );
 
 		expect( screen.queryByRole( 'link', { name: 'Edit Styles' } ) ).toBeNull();
-		expect( screen.getByText( 'Background' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Text' ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'button', { name: 'Text' } ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'button', { name: 'Background' } ) ).toBeInTheDocument();
+	} );
+
+	it( 'opens a color palette in a popover from a color row', () => {
+		render( <StyleSection status={ CLASSIC_STATUS } styles={ {} } inFlight={ false } onChangeStyles={ () => {} } /> );
+
+		expect( screen.queryByRole( 'listbox', { name: 'Text' } ) ).toBeNull();
+
+		fireEvent.click( screen.getByRole( 'button', { name: 'Text' } ) );
+
+		expect( screen.getByRole( 'listbox', { name: 'Text' } ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'option', { name: 'Accent' } ) ).toBeInTheDocument();
+		expect( screen.queryByRole( 'listbox', { name: 'Background' } ) ).toBeNull();
 	} );
 
 	it( 'shows Reset only for groups holding an override, and reset clears the group', () => {
@@ -151,6 +163,7 @@ describe( 'StyleSection on a classic theme', () => {
 		// The pickers rely on the inert wrapper, which jsdom does not honor, so this
 		// covers the controls that receive a real `disabled` prop.
 		expect( groupReset( 'Color' ) ).toBeDisabled();
+		expect( screen.getByRole( 'button', { name: 'Text' } ) ).toBeDisabled();
 		expect( screen.getByLabelText( 'Radius' ) ).toBeDisabled();
 		expect( screen.getByRole( 'button', { name: 'Unlink Corners' } ) ).toBeDisabled();
 	} );

@@ -1,0 +1,35 @@
+/**
+ * Contextual Prompts Style section.
+ *
+ * Color rows mirroring the editor's color panel: a bordered group of flat,
+ * full-width toggles, each showing a round indicator and the color's name.
+ */
+
+@use "~@wordpress/base-styles/colors" as wp-colors;
+
+.newspack-prompt-style-colors {
+	border: 1px solid wp-colors.$gray-300;
+	border-radius: 2px;
+
+	> * + * {
+		border-top: 1px solid wp-colors.$gray-300;
+	}
+
+	// Direct child only: the palette renders in a popover inside the same
+	// wrapper and its own buttons must keep their sizing.
+	&__row > .components-button {
+		border-radius: 0;
+		width: 100%;
+	}
+
+	.component-color-indicator {
+		flex-shrink: 0;
+	}
+}
+
+// Popover content is `width: min-content`, which would collapse the palette to
+// a single column; 260px matches the editor's color panel.
+.newspack-prompt-style-colors__popover.components-dropdown__content .components-popover__content {
+	padding: 16px;
+	width: 260px;
+}
