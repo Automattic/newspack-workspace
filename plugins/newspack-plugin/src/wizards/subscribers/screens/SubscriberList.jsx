@@ -248,7 +248,8 @@ export default function SubscriberList() {
 			{
 				id: 'lastSeen',
 				label: __( 'Last seen', 'newspack-plugin' ),
-				// Wired to reader activity in a later slice; hidden by default.
+				// The reader's most recent login, from the sessions the site still
+				// holds for them. Hidden by default; not server-sortable in this slice.
 				enableSorting: false,
 				render: ( { item } ) =>
 					item.lastSeen ? (
@@ -263,22 +264,38 @@ export default function SubscriberList() {
 			{
 				id: 'tags',
 				label: __( 'Tags', 'newspack-plugin' ),
-				// Populated in a later slice (NPPD-1753 PR 7); hidden by default.
+				// The labels stored on the reader here on the site. Hidden by default;
+				// display-only until there is a way to filter on them server-side.
 				enableSorting: false,
-				render: ( { item } ) => (
-					<HStack spacing={ 1 } justify="flex-start" wrap>
-						{ ( item.tags || [] ).map( t => (
-							<Badge key={ t } text={ t } />
-						) ) }
-					</HStack>
-				),
+				// The em-dash empty state matches every other column: an empty cell
+				// reads as a rendering fault rather than as "nothing to show".
+				render: ( { item } ) => {
+					const tags = item.tags || [];
+					if ( tags.length === 0 ) {
+						return <span>—</span>;
+					}
+					return (
+						<HStack spacing={ 1 } justify="flex-start" wrap>
+							{ tags.map( t => (
+								<Badge key={ t } text={ t } />
+							) ) }
+						</HStack>
+					);
+				},
 			},
 			{
 				id: 'newsletters',
 				label: __( 'Newsletters', 'newspack-plugin' ),
-				// Populated in a later slice (NPPD-1753 PR 7); hidden by default.
+				// The lists the site records this reader as subscribed to, by title.
+				// Hidden by default; display-only until there is a server-side filter.
 				enableSorting: false,
-				render: ( { item } ) => <div>{ ( item.newsletters || [] ).join( ', ' ) }</div>,
+				render: ( { item } ) => {
+					const newsletters = item.newsletters || [];
+					if ( newsletters.length === 0 ) {
+						return <span>—</span>;
+					}
+					return <div>{ newsletters.join( ', ' ) }</div>;
+				},
 			},
 		],
 		[ avatars ]

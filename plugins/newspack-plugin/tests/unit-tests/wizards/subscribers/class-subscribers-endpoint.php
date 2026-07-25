@@ -38,6 +38,12 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 	public static function set_up_before_class() {
 		parent::set_up_before_class();
 		require_once dirname( __DIR__, 3 ) . '/mocks/wc-mocks.php';
+		// Stands in for the Newsletters plugin's list registry, which the endpoint
+		// resolves subscribed list IDs against for the Newsletters column.
+		require_once dirname( __DIR__, 3 ) . '/mocks/newsletters-namespaced-mocks.php';
+		if ( ! post_type_exists( \Newspack\Newsletters\Subscription_Lists::CPT ) ) {
+			register_post_type( \Newspack\Newsletters\Subscription_Lists::CPT );
+		}
 		// The wizard rides the Access Control feature flag; enable it so its routes register.
 		if ( ! defined( 'NEWSPACK_CONTENT_GATES' ) ) {
 			define( 'NEWSPACK_CONTENT_GATES', true );
@@ -163,6 +169,65 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 			$data['products'] = [ $product_id ];
 		}
 		return wcs_create_subscription( $data );
+	}
+
+	/**
+	 * Create a newsletter subscription list the site knows the title of.
+	 *
+	 * @param string $title The list's display title.
+	 *
+	 * @return string The list's public ID, as stored on a subscribed reader.
+	 */
+	private function create_newsletter_list( string $title ): string {
+		$post_id = self::factory()->post->create(
+			[
+				'post_type'  => \Newspack\Newsletters\Subscription_Lists::CPT,
+				'post_title' => $title,
+			]
+		);
+		return ( new \Newspack\Newsletters\Subscription_List( $post_id ) )->get_public_id();
+	}
+
+	/**
+	 * Create a reader carrying every field this slice hydrates — tags, a newsletter
+	 * subscription and an activity record — so a query-count measurement exercises
+	 * all three lookups.
+	 *
+	 * @param string $name    Human name.
+	 * @param string $list_id Public ID of the list to subscribe them to.
+	 *
+	 * @return int The new user ID.
+	 */
+	private function create_hydrated_reader( string $name, string $list_id ): int {
+		$user_id = $this->create_reader( $name );
+		update_user_meta( $user_id, \Newspack\Subscribers_Wizard::READER_TAGS_META, [ 'vip' ] );
+		\Newspack\Reader_Data::update_item( $user_id, 'last_active', (string) ( strtotime( '2025-11-20 17:30:00' ) * 1000 ) );
+		\Newspack\Reader_Data::update_item( $user_id, 'newsletter_subscribed_lists', wp_json_encode( [ $list_id ] ) );
+		return $user_id;
+	}
+
+	/**
+	 * The number of database queries one dispatch of the subscribers endpoint costs.
+	 *
+	 * Measured from a flushed object cache, because that is the state a real
+	 * request starts in: without a persistent object cache every page load pays
+	 * for its own lookups, so a per-row lookup that a warm in-process cache would
+	 * hide is exactly what needs to show up here.
+	 *
+	 * @param array $params Query params to dispatch with.
+	 *
+	 * @return int Queries issued by the dispatch.
+	 */
+	private function measure_query_cost( array $params ): int {
+		global $wpdb;
+		// A throwaway run first, so any PHP-level static a first-ever request fills
+		// isn't charged to whichever measurement happens to go first.
+		wp_cache_flush();
+		$this->dispatch( $params );
+		wp_cache_flush();
+		$queries_before = $wpdb->num_queries;
+		$this->dispatch( $params );
+		return $wpdb->num_queries - $queries_before;
 	}
 
 	/**
@@ -673,6 +738,128 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 
 		$cancelled_ids = array_column( $this->dispatch( [ 'status' => [ 'cancelled' ] ] )->get_data()['items'], 'id' );
 		$this->assertNotContains( $late_mixed, $cancelled_ids, 'A live plan past the chunk boundary still disqualifies the reader from Cancelled.' );
+	}
+
+	/**
+	 * Tags come from the reader's own record, not from the connected ESP. A stored
+	 * array and a JSON-encoded list both read back as a list of tags — the second
+	 * is what a value written via WP-CLI or the REST meta API looks like on disk,
+	 * and reading it naively yields one tag literally named `["vip","npr"]`.
+	 */
+	public function test_tags_hydrate_from_local_reader_meta() {
+		$this->login_admin();
+		$array_reader = $this->create_reader( 'ArrayTags' );
+		$json_reader  = $this->create_reader( 'JsonTags' );
+		$bare_reader  = $this->create_reader( 'NoTags' );
+		update_user_meta( $array_reader, \Newspack\Subscribers_Wizard::READER_TAGS_META, [ 'vip', 'met-in-person' ] );
+		update_user_meta( $json_reader, \Newspack\Subscribers_Wizard::READER_TAGS_META, wp_json_encode( [ 'vip', 'vip', 'lapsed' ] ) );
+
+		$tags_by_id = array_column( $this->dispatch()->get_data()['items'], 'tags', 'id' );
+
+		$this->assertSame( [ 'vip', 'met-in-person' ], $tags_by_id[ $array_reader ] );
+		$this->assertSame( [ 'vip', 'lapsed' ], $tags_by_id[ $json_reader ], 'A JSON-encoded value is decoded, and duplicates collapse.' );
+		$this->assertSame( [], $tags_by_id[ $bare_reader ] );
+	}
+
+	/**
+	 * The Newsletters column reports the site's own record of what a reader is
+	 * subscribed to (the `newsletter_subscribed_lists` reader-data item), resolved
+	 * to the titles the site shows for those lists. A list the site has no
+	 * definition for falls back to its ID rather than vanishing from the column.
+	 */
+	public function test_newsletters_hydrate_from_local_subscription_state() {
+		$this->login_admin();
+		$daily_list_id  = $this->create_newsletter_list( 'Daily Brief' );
+		$weekly_list_id = $this->create_newsletter_list( 'Weekend Read' );
+
+		$subscribed_reader   = $this->create_reader( 'Subscribed' );
+		$unsubscribed_reader = $this->create_reader( 'Unsubscribed' );
+		// Written through the same path the newsletter data events use.
+		\Newspack\Reader_Data::update_item(
+			$subscribed_reader,
+			'newsletter_subscribed_lists',
+			wp_json_encode( [ $daily_list_id, $weekly_list_id, 'esp-only-list' ] )
+		);
+
+		$newsletters_by_id = array_column( $this->dispatch()->get_data()['items'], 'newsletters', 'id' );
+
+		$this->assertSame(
+			[ 'Daily Brief', 'Weekend Read', 'esp-only-list' ],
+			$newsletters_by_id[ $subscribed_reader ],
+			'Known lists resolve to their titles; an unknown list ID is kept as-is.'
+		);
+		$this->assertSame( [], $newsletters_by_id[ $unsubscribed_reader ] );
+	}
+
+	/**
+	 * Last seen reports the reader's `last_active` record — the value reader
+	 * activation stamps on every page view, and the same one the ESP sync publishes
+	 * as `Last_Active`, so this column and the publisher's ESP agree about a reader.
+	 *
+	 * Reader-data timestamps are JavaScript **milliseconds**. Reading one as a Unix
+	 * timestamp doesn't fail loudly — it silently dates every active reader to the
+	 * year 57000 — so the conversion is the thing worth pinning here.
+	 */
+	public function test_last_seen_reads_the_readers_last_active_record() {
+		$this->login_admin();
+		$active_reader  = $this->create_reader( 'Active' );
+		$dormant_reader = $this->create_reader( 'Dormant' );
+		$garbled_reader = $this->create_reader( 'Garbled' );
+		\Newspack\Reader_Data::update_item( $active_reader, 'last_active', (string) ( strtotime( '2025-11-20 17:30:00' ) * 1000 ) );
+		// last_active is client-written (it is not a read-only key), so a junk value
+		// has to read as unknown rather than as 1970.
+		\Newspack\Reader_Data::update_item( $garbled_reader, 'last_active', 'not-a-timestamp' );
+
+		$last_seen_by_id = array_column( $this->dispatch()->get_data()['items'], 'lastSeen', 'id' );
+
+		$this->assertSame( '2025-11-20', $last_seen_by_id[ $active_reader ] );
+		$this->assertNull( $last_seen_by_id[ $dormant_reader ], 'A reader the site holds no activity record for reads as unknown, not as a guessed date.' );
+		$this->assertNull( $last_seen_by_id[ $garbled_reader ] );
+	}
+
+	/**
+	 * Hydrating a full page costs the same number of database queries as hydrating
+	 * a single row, and resolves the shared newsletter-list registry once for the
+	 * whole page rather than once per reader.
+	 *
+	 * This is the guard that keeps the list usable on a real reader base, and it
+	 * takes both assertions to hold the line. The query count catches a lookup
+	 * that genuinely re-queries per row; the registry-call count catches a per-row
+	 * lookup that an in-request cache happens to absorb today but that still
+	 * rebuilds the whole index 50 times, and would go back to being a query per
+	 * row the moment that caching changed.
+	 *
+	 * The fixture gives every reader newsletters, tags and a session, so all three
+	 * of the lookups this slice added are exercised.
+	 */
+	public function test_a_full_page_costs_no_more_queries_than_a_single_row() {
+		global $newsletter_lists_query_count;
+		$this->login_admin();
+		$list_id = $this->create_newsletter_list( 'Daily Brief' );
+		for ( $i = 0; $i < 50; $i++ ) {
+			$this->create_hydrated_reader( 'Crowd' . $i, $list_id );
+		}
+
+		// One fixture, two page sizes, so the only thing that differs between the
+		// measurements is how many rows get hydrated.
+		$single_row_cost = $this->measure_query_cost( [ 'per_page' => 1 ] );
+		$full_page_cost  = $this->measure_query_cost( [ 'per_page' => 50 ] );
+
+		$newsletter_lists_query_count = 0;
+		$full_page                    = $this->dispatch( [ 'per_page' => 50 ] )->get_data();
+
+		$this->assertCount( 50, $full_page['items'], 'The measured page really is 50 rows.' );
+		$this->assertSame( [ 'Daily Brief' ], $full_page['items'][0]['newsletters'], 'The page really is hydrating the batched columns.' );
+		$this->assertSame(
+			$single_row_cost,
+			$full_page_cost,
+			'Hydrating 50 rows must not cost more queries than hydrating 1 — a per-row lookup crept in.'
+		);
+		$this->assertSame(
+			1,
+			$newsletter_lists_query_count,
+			'The newsletter list registry must be resolved once per request, not once per row.'
+		);
 	}
 
 	/**

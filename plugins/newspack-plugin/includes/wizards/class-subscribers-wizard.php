@@ -91,6 +91,25 @@ class Subscribers_Wizard extends Wizard {
 	private $raw_status_ids_cache = [];
 
 	/**
+	 * Per-request memo of newsletter list public ID → display title, built once
+	 * from the site's own subscription lists. See get_newsletter_list_titles().
+	 *
+	 * @var array<string,string>|null
+	 */
+	private $newsletter_list_titles_cache = null;
+
+	/**
+	 * User meta key holding a reader's tags: short, admin-applied labels
+	 * ("vip", "met-in-person"). Stored on the user as an array of strings.
+	 *
+	 * This is site-local data. The connected ESP also carries per-contact tags,
+	 * but reading those is a per-reader API call — on a 50-row page that is a
+	 * rate-limit and latency problem that needs a batching/caching layer of its
+	 * own, so the column is deliberately fed from local data only.
+	 */
+	const READER_TAGS_META = 'newspack_reader_tags';
+
+	/**
 	 * Constructor.
 	 *
 	 * @param array $args Optional arguments.
@@ -387,7 +406,10 @@ class Subscribers_Wizard extends Wizard {
 			// Interim click-through target: the WooCommerce subscription edit
 			// screen (HPOS-safe), until the in-wizard group detail lands (PR 4).
 			'editUrl'     => $this->subscription_edit_url( $subscription ),
-			// Seat requests are surfaced in a later slice (NPPD-1753 PR 7).
+			// Always null: nothing on the site records a seat-increase request yet,
+			// so there is nothing to report. The field stays in the response because
+			// the group list already renders a badge from it, and it will populate
+			// as soon as such requests are stored.
 			'seatRequest' => null,
 		];
 	}
@@ -425,12 +447,13 @@ class Subscribers_Wizard extends Wizard {
 	 * @return \WP_REST_Response
 	 */
 	public function api_get_subscribers( $request ) {
-		$this->group_subscriptions_cache = null;
-		$this->group_membership_index    = null;
-		$this->raw_status_ids_cache      = [];
-		$per_page                        = (int) $request->get_param( 'per_page' );
-		$page                            = (int) $request->get_param( 'page' );
-		$search                          = trim( (string) $request->get_param( 'search' ) );
+		$this->group_subscriptions_cache    = null;
+		$this->group_membership_index       = null;
+		$this->raw_status_ids_cache         = [];
+		$this->newsletter_list_titles_cache = null;
+		$per_page                           = (int) $request->get_param( 'per_page' );
+		$page                               = (int) $request->get_param( 'page' );
+		$search                             = trim( (string) $request->get_param( 'search' ) );
 
 		$query_args = [
 			'role__in'    => Reader_Activation::get_reader_roles(),
@@ -466,9 +489,18 @@ class Subscribers_Wizard extends Wizard {
 
 		$user_query = new \WP_User_Query( $query_args );
 		$total      = (int) $user_query->get_total();
+		$users      = $user_query->get_results();
+
+		// Prime the whole page's user meta in one query, so the per-row reads
+		// during hydration (tags, newsletter subscriptions, last-active) are cache
+		// hits instead of a query each. WP_User_Query already does this for
+		// `fields => all`, and cache_users() no-ops when the users are cached —
+		// calling it here makes the batching a property of this endpoint rather
+		// than of a WP_User_Query internal that could change under us.
+		cache_users( wp_list_pluck( $users, 'ID' ) );
 
 		$items = [];
-		foreach ( $user_query->get_results() as $user ) {
+		foreach ( $users as $user ) {
 			$items[] = $this->prepare_subscriber( $user );
 		}
 
@@ -523,13 +555,11 @@ class Subscribers_Wizard extends Wizard {
 			'status'        => $this->reduced_status( $subscriptions, $groups ),
 			'memberSince'   => $registered ? gmdate( 'Y-m-d', $registered ) : null,
 			'lastPayment'   => $this->last_payment_date( $user_id ),
-			// Wired to reader activity in a later slice; the column is hidden by default.
-			'lastSeen'      => null,
+			'lastSeen'      => $this->last_seen_date( $user_id ),
 			'subscriptions' => $subscriptions,
 			'groups'        => $groups,
-			// Tags and newsletters are populated in a later slice (NPPD-1753 PR 7).
-			'tags'          => [],
-			'newsletters'   => [],
+			'tags'          => $this->reader_tags( $user_id ),
+			'newsletters'   => $this->reader_newsletters( $user_id ),
 		];
 	}
 
@@ -721,6 +751,120 @@ class Subscribers_Wizard extends Wizard {
 		}
 		$paid = $orders[0]->get_date_paid();
 		return $paid ? gmdate( 'Y-m-d', $paid->getTimestamp() ) : null;
+	}
+
+	/**
+	 * When a reader was last seen, from the site's own record of their activity.
+	 *
+	 * Reads the `last_active` reader-data item, which reader activation stamps on
+	 * every page view (most-recent-wins) and which the ESP sync already publishes
+	 * as `Last_Active`. Reporting the same value here means this column and the
+	 * publisher's ESP tell one story about the same reader, and it tracks reading
+	 * rather than signing in — a reader on a long-lived auth cookie who visits
+	 * daily is last seen today, and logging out doesn't erase the record.
+	 *
+	 * The value is client-asserted: `last_active` is not among
+	 * Reader_Data::get_read_only_keys(), so the browser writes it and a determined
+	 * reader could set it themselves. That is fine for an informational column,
+	 * but nothing that grants access may be decided on it.
+	 *
+	 * @param int $user_id The reader user ID.
+	 *
+	 * @return string|null 'YYYY-MM-DD', or null when the site has no record of them.
+	 */
+	private function last_seen_date( $user_id ) {
+		$last_active = Reader_Data::get_data( $user_id, 'last_active' );
+		if ( empty( $last_active ) || ! is_numeric( $last_active ) ) {
+			return null;
+		}
+		// Reader-data timestamps are JavaScript milliseconds; intdiv() keeps the
+		// conversion integral, since gmdate() takes an int timestamp.
+		return gmdate( 'Y-m-d', intdiv( (int) $last_active, 1000 ) );
+	}
+
+	/**
+	 * A reader's tags — the short labels an admin applies to them, stored locally
+	 * on the user. See READER_TAGS_META on why the ESP's tags are not read here.
+	 *
+	 * @param int $user_id The reader user ID.
+	 *
+	 * @return string[]
+	 */
+	private function reader_tags( $user_id ) {
+		$tags = get_user_meta( $user_id, self::READER_TAGS_META, true );
+		// A JSON-encoded list is accepted alongside a stored array, so a value
+		// written through a JSON-shaped path (WP-CLI, the REST meta API) reads back
+		// as tags rather than as one tag named `["vip"]`.
+		if ( is_string( $tags ) && '' !== $tags ) {
+			$decoded = json_decode( $tags, true );
+			$tags    = is_array( $decoded ) ? $decoded : [ $tags ];
+		}
+		if ( ! is_array( $tags ) ) {
+			return [];
+		}
+		$tags = array_map( 'sanitize_text_field', array_filter( $tags, 'is_scalar' ) );
+		return array_values( array_unique( array_filter( $tags ) ) );
+	}
+
+	/**
+	 * The newsletters a reader is subscribed to, as the titles the site shows for
+	 * them.
+	 *
+	 * The subscription itself is read from the reader's own record — the
+	 * `newsletter_subscribed_lists` reader-data item, which the newsletter data
+	 * events keep in step with the ESP — and the list IDs it holds are resolved
+	 * against the site's own list definitions. No ESP call is made; see
+	 * READER_TAGS_META for why. A list ID with no local definition falls back to
+	 * itself, so a column entry is never silently dropped.
+	 *
+	 * @param int $user_id The reader user ID.
+	 *
+	 * @return string[]
+	 */
+	private function reader_newsletters( $user_id ) {
+		$raw      = Reader_Data::get_data( $user_id, 'newsletter_subscribed_lists' );
+		$list_ids = is_string( $raw ) ? json_decode( $raw, true ) : $raw;
+		if ( ! is_array( $list_ids ) ) {
+			return [];
+		}
+		$titles = $this->get_newsletter_list_titles();
+		$names  = [];
+		foreach ( $list_ids as $list_id ) {
+			if ( ! is_scalar( $list_id ) ) {
+				continue;
+			}
+			$list_id = (string) $list_id;
+			$names[] = $titles[ $list_id ] ?? $list_id;
+		}
+		return array_values( array_unique( array_filter( $names ) ) );
+	}
+
+	/**
+	 * Map of newsletter list public ID → display title, from the site's own
+	 * subscription lists. Memoized for the request.
+	 *
+	 * The site's lists are few and shared by every row, while resolving a list
+	 * on demand costs a query — so the map is built once per request and read
+	 * per row, the same shape the group-membership index uses.
+	 *
+	 * @return array<string,string>
+	 */
+	private function get_newsletter_list_titles() {
+		if ( null !== $this->newsletter_list_titles_cache ) {
+			return $this->newsletter_list_titles_cache;
+		}
+		$titles = [];
+		if ( class_exists( '\Newspack\Newsletters\Subscription_Lists' ) && method_exists( '\Newspack\Newsletters\Subscription_Lists', 'get_all' ) ) {
+			foreach ( \Newspack\Newsletters\Subscription_Lists::get_all() as $list ) {
+				$public_id = (string) $list->get_public_id();
+				$title     = (string) $list->get_title();
+				if ( '' !== $public_id && '' !== $title ) {
+					$titles[ $public_id ] = $title;
+				}
+			}
+		}
+		$this->newsletter_list_titles_cache = $titles;
+		return $titles;
 	}
 
 	/**
