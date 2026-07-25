@@ -32,6 +32,7 @@ class ContextualPromptStylesApiTest extends WP_UnitTestCase {
 	public function tear_down() {
 		remove_filter( 'wp_theme_json_data_theme', [ __CLASS__, 'add_numeric_font_size_preset' ] );
 		remove_filter( 'wp_theme_json_data_theme', [ __CLASS__, 'disable_default_palette' ] );
+		remove_filter( 'wp_theme_json_data_theme', [ __CLASS__, 'disable_default_spacing_sizes' ] );
 		wp_clean_theme_json_cache();
 		parent::tear_down();
 	}
@@ -216,6 +217,115 @@ class ContextualPromptStylesApiTest extends WP_UnitTestCase {
 		// With that origin empty the next one down stands in.
 		$presets['theme'] = [];
 		$this->assertSame( $presets['default'], Newspack_Popups_API::flatten_global_settings_presets( $presets ) );
+	}
+
+	/**
+	 * Spacing sizes are one scale built from every origin, custom beating theme
+	 * beating default on a shared slug, and ordered by slug as numbers rather than
+	 * by the origin that happened to define each step.
+	 */
+	public function test_spacing_presets_combine_origins_in_slug_order() {
+		$presets = [
+			'default' => [
+				[
+					'slug' => '70',
+					'size' => '5.06rem',
+				],
+				[
+					'slug' => '80',
+					'size' => '6.75rem',
+				],
+			],
+			'theme'   => [
+				[
+					'slug' => '20',
+					'size' => '10px',
+				],
+				[
+					'slug' => '40',
+					'size' => '20px',
+				],
+			],
+			'custom'  => [
+				[
+					'slug' => '40',
+					'size' => '24px',
+				],
+				[
+					'slug' => '60',
+					'size' => '30px',
+				],
+			],
+		];
+
+		$sizes = Newspack_Popups_API::sort_spacing_size_presets( Newspack_Popups_API::merge_global_settings_presets( $presets ) );
+
+		$this->assertSame( [ '20', '40', '60', '70', '80' ], wp_list_pluck( $sizes, 'slug' ) );
+		$this->assertSame( '24px', wp_list_pluck( $sizes, 'size', 'slug' )['40'] );
+
+		// A named step leaves the scale in its origin order, which is what core's own
+		// control does rather than sorting a slug that carries no number.
+		$presets['theme'][] = [
+			'slug' => 'huge',
+			'size' => '9rem',
+		];
+		$sizes              = Newspack_Popups_API::sort_spacing_size_presets( Newspack_Popups_API::merge_global_settings_presets( $presets ) );
+
+		$this->assertSame( [ '40', '60', '20', 'huge', '70', '80' ], wp_list_pluck( $sizes, 'slug' ) );
+	}
+
+	/**
+	 * The default origin travels only while the editor shows it: core turns
+	 * `spacing.defaultSpacingSizes` off for a theme registering its own scale, and
+	 * the wizard must not offer steps the editor hides.
+	 */
+	public function test_spacing_presets_drop_the_default_origin_when_the_editor_hides_it() {
+		$default_slugs = wp_list_pluck( wp_get_global_settings( [ 'spacing', 'spacingSizes' ] )['default'], 'slug' );
+		$this->assertNotEmpty( $default_slugs );
+
+		$sizes = rest_do_request( new WP_REST_Request( 'GET', '/newspack-popups/v1/contextual-prompt/status' ) )->get_data()['style_spacing_sizes'];
+		$this->assertNotEmpty( array_intersect( $default_slugs, wp_list_pluck( $sizes, 'slug' ) ) );
+
+		add_filter( 'wp_theme_json_data_theme', [ __CLASS__, 'disable_default_spacing_sizes' ] );
+		wp_clean_theme_json_cache();
+		// The premise: the presets are still there, the editor just hides them.
+		$this->assertFalse( wp_get_global_settings( [ 'spacing', 'defaultSpacingSizes' ] ) );
+		$this->assertNotEmpty( wp_get_global_settings( [ 'spacing', 'spacingSizes' ] )['default'] );
+
+		$sizes = rest_do_request( new WP_REST_Request( 'GET', '/newspack-popups/v1/contextual-prompt/status' ) )->get_data()['style_spacing_sizes'];
+		$slugs = wp_list_pluck( $sizes, 'slug' );
+
+		$this->assertSame( [], array_intersect( $default_slugs, $slugs ) );
+		// The theme's own step stands, so the scale is hidden defaults rather than
+		// nothing at all.
+		$this->assertSame( [ '15' ], $slugs );
+	}
+
+	/**
+	 * Hide the default spacing scale behind a theme's own, as core does for a theme
+	 * registering spacing sizes of its own.
+	 *
+	 * @param WP_Theme_JSON_Data $theme_json Theme JSON data.
+	 * @return WP_Theme_JSON_Data
+	 */
+	public static function disable_default_spacing_sizes( $theme_json ) {
+		return $theme_json->update_with(
+			[
+				'version'  => 2,
+				'settings' => [
+					'spacing' => [
+						'defaultSpacingSizes' => false,
+						'spacingSizes'        => [
+							[
+								'name' => 'Tiny',
+								'slug' => '15',
+								'size' => '4px',
+							],
+						],
+					],
+				],
+			]
+		);
 	}
 
 	/**

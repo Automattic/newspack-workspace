@@ -191,10 +191,11 @@ final class Newspack_Popups_API {
 		// as `{}`: an empty PHP array would serialize as `[]` and a client
 		// comparing it against an object it built would never see them as equal.
 		$styles = Newspack_Popups_Contextual_Prompt_Styles::get_styles();
-		// Both lists take the highest origin holding anything, which is how the
-		// editor resolves the single set its own controls offer.
+		// Font sizes take the highest origin holding anything, which is how the
+		// editor's picker resolves the single set it offers; spacing sizes are one
+		// scale built from every origin, as core's own spacing control builds it.
 		$font_sizes    = self::flatten_global_settings_presets( wp_get_global_settings( [ 'typography', 'fontSizes' ] ) );
-		$spacing_sizes = self::flatten_global_settings_presets( wp_get_global_settings( [ 'spacing', 'spacingSizes' ] ) );
+		$spacing_sizes = self::get_spacing_size_presets();
 		return [
 			'enabled'                => Newspack_Popups_Settings::is_ai_copy_assistant_enabled(),
 			'can_manage'             => current_user_can( 'manage_options' ),
@@ -228,6 +229,55 @@ final class Newspack_Popups_API {
 			unset( $palette['default'] );
 		}
 		return self::merge_global_settings_presets( $palette );
+	}
+
+	/**
+	 * The spacing presets the wizard's padding rows step through. Core's
+	 * `SpacingSizesControl` builds one scale out of the custom, theme and default
+	 * origins rather than picking one, and `spacing.defaultSpacingSizes` decides
+	 * whether the default origin belongs in it — core turns that off for a theme
+	 * registering its own scale — so the wizard offers the steps the editor offers.
+	 *
+	 * @return array Flat preset list.
+	 */
+	private static function get_spacing_size_presets() {
+		$sizes = wp_get_global_settings( [ 'spacing', 'spacingSizes' ] );
+		// As with the palette, a missing settings path hands back the whole settings
+		// tree, so an absent `defaultSpacingSizes` reads as truthy and the defaults
+		// stay, as core's own default for the setting has them.
+		if ( is_array( $sizes ) && isset( $sizes['default'] ) && ! wp_get_global_settings( [ 'spacing', 'defaultSpacingSizes' ] ) ) {
+			unset( $sizes['default'] );
+		}
+		return self::sort_spacing_size_presets( self::merge_global_settings_presets( $sizes ) );
+	}
+
+	/**
+	 * Spacing presets in the order core's control shows them: by slug, compared as
+	 * numbers, and only while every slug starts with a digit — core leaves a scale
+	 * holding a named step in its origin order rather than sorting it. The step core
+	 * adds for no padding carries the `0` slug, so leaving it out of the list asks
+	 * the same question of it.
+	 *
+	 * Public so the ordering can be exercised directly in tests.
+	 *
+	 * @param array $presets Flat spacing size presets.
+	 * @return array
+	 */
+	public static function sort_spacing_size_presets( $presets ) {
+		foreach ( $presets as $preset ) {
+			$slug = is_array( $preset ) && isset( $preset['slug'] ) ? (string) $preset['slug'] : '';
+			if ( ! preg_match( '/^[0-9]/', $slug ) ) {
+				return $presets;
+			}
+		}
+		// usort is stable, so two slugs comparing equal keep their origin order.
+		usort(
+			$presets,
+			function ( $a, $b ) {
+				return strnatcmp( (string) $a['slug'], (string) $b['slug'] );
+			}
+		);
+		return $presets;
 	}
 
 	/**
