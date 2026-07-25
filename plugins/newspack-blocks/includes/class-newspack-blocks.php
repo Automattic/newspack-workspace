@@ -1417,7 +1417,7 @@ class Newspack_Blocks {
 	 * @return float Soft-clamped luminance in the 0..1 range.
 	 */
 	private static function get_apca_luminance( $hex ) {
-		$hex = ltrim( (string) $hex, '#' );
+		$hex = ltrim( trim( (string) $hex ), '#' );
 		if ( 3 === strlen( $hex ) ) {
 			$hex = $hex[0] . $hex[0] . $hex[1] . $hex[1] . $hex[2] . $hex[2];
 		} elseif ( 8 === strlen( $hex ) ) {

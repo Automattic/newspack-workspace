@@ -37,6 +37,7 @@ class ColorContrastTest extends WP_UnitTestCase {
 			'empty string'             => [ '', 'black' ],
 			'dark 8-digit hex'         => [ '#33333380', 'white' ],
 			'uppercase amber'          => [ '#FFCC00', 'black' ],
+			'padded green'             => [ ' #178f15 ', 'white' ],
 		];
 	}
 

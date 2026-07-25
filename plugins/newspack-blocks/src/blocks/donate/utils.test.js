@@ -21,6 +21,7 @@ describe( 'getColorForContrast', () => {
 		[ '', '#000000' ],
 		[ '#33333380', '#ffffff' ],
 		[ '#FFCC00', '#000000' ],
+		[ ' #178f15 ', '#ffffff' ],
 	] )( 'picks readable text for %s', ( background, expected ) => {
 		expect( getColorForContrast( background ) ).toBe( expected );
 	} );

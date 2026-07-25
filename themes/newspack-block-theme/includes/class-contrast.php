@@ -125,23 +125,28 @@ final class Contrast {
 	}
 
 	/**
-	 * Whether a value is a color-mix expression over the accent preset var.
+	 * Whether a value is the theme's exact default accent hover mix.
 	 *
-	 * Matches loosely: a color-mix that references the accent preset (in either the
-	 * var:preset|color|accent internal form or the var( --wp--preset--color--accent )
-	 * CSS form). It does not attempt to parse the color-mix, and the accent slug is
-	 * matched exactly so accent-contrast and other accent-prefixed slugs do not
-	 * falsely match.
+	 * Matches only the theme default: color-mix( in srgb, <accent> 80%, black ),
+	 * where <accent> is the accent preset in either the var:preset|color|accent
+	 * internal form or the var( --wp--preset--color--accent ) CSS form. The match is
+	 * whitespace-flexible and case-insensitive, but every component is anchored: any
+	 * other mix ratio, color space, mixed-in color, or accent-prefixed slug (such as
+	 * accent-2 or accent-contrast) falls through to false, so the caller emits no
+	 * hover property rather than scoring the wrong background.
 	 *
 	 * @param string $value The resolved background value.
-	 * @return bool True when the value is a color-mix over the accent var.
+	 * @return bool True only when the value is the theme's exact default accent mix.
 	 */
 	private static function is_accent_color_mix( $value ) {
 		if ( ! is_string( $value ) || false === stripos( $value, 'color-mix' ) ) {
 			return false;
 		}
 
-		return (bool) preg_match( '/(?:var:preset\|color\|accent|--wp--preset--color--accent)(?![\w-])/', $value );
+		return (bool) preg_match(
+			'/color-mix\(\s*in\s+srgb\s*,\s*(?:var\(\s*--wp--preset--color--accent(?![\w-])\s*\)|var:preset\|color\|accent(?![\w-]))\s+80%\s*,\s*black\s*\)/i',
+			$value
+		);
 	}
 
 	/**
@@ -268,7 +273,7 @@ final class Contrast {
 	 * @return int[]|null [ $r, $g, $b ] as 0..255 integers, or null when unparseable.
 	 */
 	private static function parse_hex_channels( $hex ) {
-		$hex = ltrim( (string) $hex, '#' );
+		$hex = ltrim( trim( (string) $hex ), '#' );
 		if ( 3 === strlen( $hex ) ) {
 			$hex = $hex[0] . $hex[0] . $hex[1] . $hex[1] . $hex[2] . $hex[2];
 		} elseif ( 8 === strlen( $hex ) ) {
