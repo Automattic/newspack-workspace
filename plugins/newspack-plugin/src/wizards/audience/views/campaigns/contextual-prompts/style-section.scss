@@ -1,42 +1,35 @@
 /**
  * Contextual Prompts Style section.
  *
- * The style groups are core ToolsPanels, stacked into one list the way the
+ * The style groups are core ToolsPanels, stacked into one ringed list the way the
  * editor's inspector stacks them. Color rows mirror the editor's color panel: a
  * bordered group of flat, full-width toggles, each showing a round indicator and
  * the color's name.
  */
 
 @use "~@wordpress/base-styles/colors" as wp-colors;
-@use "~@wordpress/base-styles/variables" as wp-variables;
+@use "~@wordpress/base-styles/variables" as wp-vars;
 
-// The controls column hugs the end of the section grid, capped at the editor
-// sidebar's content width: the 280px sidebar less its 16px gutters.
+// The controls column hugs the end of the section grid at the editor sidebar's
+// width, so the panels inside give their controls the width they have there. The
+// ring closes the stack off: the panels only carry the separators between them.
 .newspack-prompt-style-controls {
-	max-width: calc(#{wp-variables.$sidebar-width} - #{wp-variables.$grid-unit-20} * 2);
+	border-radius: wp-vars.$radius-small;
+	box-shadow: 0 0 0 wp-vars.$border-width wp-colors.$gray-300;
+	max-width: wp-vars.$sidebar-width;
+	overflow: hidden;
 	width: 100%;
 
-	// The panel's own side padding goes: this column is already the width the
-	// controls should be. The first panel drops its separator, which would read as
-	// a stray rule above the column.
-	.newspack-prompt-style-panel {
-		padding-inline: 0;
-
-		&:first-child {
-			border-top: 0;
-			padding-top: 0;
-		}
-	}
-
 	// The color rows butt up against each other into a single bordered list
-	// instead of sitting apart on the panel's row gap.
+	// instead of sitting apart on the panel's row gap, which the first row then
+	// restores under the header.
 	.newspack-prompt-style-panel--color {
 		row-gap: 0;
 	}
 
 	.newspack-prompt-style-notice {
 		grid-column: 1 / -1;
-		margin: wp-variables.$grid-unit-20 0 0;
+		margin: wp-vars.$grid-unit-20 0 0;
 	}
 
 	.newspack-prompt-style-colors {
@@ -45,13 +38,20 @@
 
 		&--first {
 			border-top: 1px solid wp-colors.$gray-300;
-			border-start-start-radius: 2px;
-			border-start-end-radius: 2px;
+			border-start-start-radius: wp-vars.$radius-small;
+			border-start-end-radius: wp-vars.$radius-small;
+			margin-top: wp-vars.$grid-unit-20;
 		}
 
 		&--last {
-			border-end-start-radius: 2px;
-			border-end-end-radius: 2px;
+			border-end-start-radius: wp-vars.$radius-small;
+			border-end-end-radius: wp-vars.$radius-small;
+		}
+
+		// A Dropdown is inline-block, so the row has to be told to fill its item,
+		// as the editor's color rows are.
+		&__row {
+			display: block;
 		}
 
 		// The row's own toggle fills the row. Direct child only, so the rule stays
@@ -60,6 +60,20 @@
 		&__row > .components-button {
 			border-radius: 0;
 			width: 100%;
+
+			// The editor's states: hovering only takes the accent text color, which
+			// core gives the button itself, while an open or focused row greys. The
+			// focus ring is inset so it follows the row rather than straddling the
+			// group's border.
+			&[aria-expanded="true"],
+			&:focus-visible {
+				background: wp-colors.$gray-100;
+			}
+
+			&:focus-visible {
+				box-shadow: inset 0 0 0 var(--wp-admin-border-width-focus, #{wp-vars.$border-width-focus-fallback}) var(--wp-admin-theme-color);
+				outline: wp-vars.$border-width-focus-fallback solid transparent;
+			}
 		}
 
 		.component-color-indicator {
@@ -67,9 +81,14 @@
 		}
 	}
 
-	// Split the radius row the way core's BorderControl splits its width row:
-	// input on the left, slider taking the rest.
+	// Split the radius row the way core's BorderControl splits its width row: the
+	// corners icon, then the input, then the slider taking the rest.
 	.newspack-prompt-style-radius {
+		&__icon {
+			fill: currentcolor;
+			flex: none;
+		}
+
 		.components-unit-control-wrapper {
 			flex: 1 1 40%;
 		}

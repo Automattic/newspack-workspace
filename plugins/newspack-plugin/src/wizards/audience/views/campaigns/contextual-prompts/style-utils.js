@@ -27,6 +27,13 @@ const luminance = channels => {
 	return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 };
 
+// WCAG relative luminance, for deciding which way a low-contrast pair should
+// move: null when the value is not a color this module can read.
+export const relativeLuminance = value => {
+	const channels = parseHex( value );
+	return channels ? luminance( channels ) : null;
+};
+
 export const contrastRatio = ( a, b ) => {
 	const channelsA = parseHex( a );
 	const channelsB = parseHex( b );

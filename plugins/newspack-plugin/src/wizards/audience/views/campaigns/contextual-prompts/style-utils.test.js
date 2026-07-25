@@ -1,7 +1,7 @@
 /**
  * Internal dependencies
  */
-import { contrastRatio, presetRefForColor, resolveColor } from './style-utils';
+import { contrastRatio, presetRefForColor, relativeLuminance, resolveColor } from './style-utils';
 
 const PALETTE = [
 	{ name: 'Accent', slug: 'accent', color: '#178f15' },
@@ -20,6 +20,19 @@ describe( 'contrastRatio', () => {
 	} );
 	it( 'returns null for unparseable input', () => {
 		expect( contrastRatio( 'nope', '#ffffff' ) ).toBeNull();
+	} );
+} );
+
+describe( 'relativeLuminance', () => {
+	it( 'runs from black to white', () => {
+		expect( relativeLuminance( '#000000' ) ).toBe( 0 );
+		expect( relativeLuminance( '#ffffff' ) ).toBeCloseTo( 1, 5 );
+	} );
+	it( 'orders a pair, which is what picks the contrast suggestion', () => {
+		expect( relativeLuminance( '#777777' ) ).toBeLessThan( relativeLuminance( '#888888' ) );
+	} );
+	it( 'returns null for unparseable input', () => {
+		expect( relativeLuminance( 'var:preset|color|accent' ) ).toBeNull();
 	} );
 } );
 

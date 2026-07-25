@@ -15,6 +15,7 @@ import classnames from 'classnames';
  */
 import { __ } from '@wordpress/i18n';
 import {
+	BaseControl,
 	ColorIndicator,
 	ColorPalette,
 	Disabled,
@@ -32,15 +33,18 @@ import {
 	__experimentalUnitControl as UnitControl, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
+import { Icon, cornerAll } from '@wordpress/icons';
 
 /**
  * Internal dependencies
  */
 import { Button, Grid, Handoff, SectionHeader } from '../../../../../../packages/components/src';
-import { contrastRatio, presetRefForColor, resolveColor } from './style-utils';
+import { contrastRatio, presetRefForColor, relativeLuminance, resolveColor } from './style-utils';
 import './style-section.scss';
 
 const MIN_CONTRAST_RATIO = 4.5;
+// The size the editor gives the icon in front of a dimension input.
+const ICON_SIZE = 24;
 const PADDING_SIDES = [ 'top', 'right', 'bottom', 'left' ];
 // The radius slider works in the value's own number space, capped where core's
 // BorderControl caps its width slider.
@@ -84,6 +88,19 @@ const withoutRadius = border => {
 	} );
 	return next;
 };
+
+// The editor's contrast warning, verbatim: the suggestion pushes the pair the way
+// it already leans, so a dark background asks for a darker background still.
+const contrastMessage = ( background, text ) =>
+	relativeLuminance( background ) < relativeLuminance( text )
+		? __(
+				'This color combination may be hard for people to read. Try using a darker background color and/or a brighter text color.',
+				'newspack-plugin'
+		  )
+		: __(
+				'This color combination may be hard for people to read. Try using a brighter background color and/or a darker text color.',
+				'newspack-plugin'
+		  );
 
 // Each group is one of the editor's block support panels: the group label and the
 // options menu in the header, which offers a reset per item and a Reset all.
@@ -216,7 +233,7 @@ const StyleSection = ( { status, styles = {}, inFlight, onChangeStyles } ) => {
 						</ToolsPanelItem>
 						{ null !== ratio && ratio < MIN_CONTRAST_RATIO && (
 							<Notice status="warning" isDismissible={ false } className="newspack-prompt-style-notice">
-								{ __( 'This color combination may be hard for people to read.', 'newspack-plugin' ) }
+								{ contrastMessage( background, text ) }
 							</Notice>
 						) }
 					</StylePanel>
@@ -259,7 +276,10 @@ const StyleSection = ( { status, styles = {}, inFlight, onChangeStyles } ) => {
 							/>
 						</ToolsPanelItem>
 					</StylePanel>
-					<StylePanel label={ __( 'Border', 'newspack-plugin' ) } resetAll={ clearBorder }>
+					<StylePanel
+						label={ __( 'Border', 'newspack-plugin' ) }
+						resetAll={ () => onChangeStyles( setPath( styles, [ 'border' ], undefined ) ) }
+					>
 						<ToolsPanelItem
 							label={ __( 'Border', 'newspack-plugin' ) }
 							hasValue={ () => hasKeys( borderOverride ) }
@@ -276,42 +296,41 @@ const StyleSection = ( { status, styles = {}, inFlight, onChangeStyles } ) => {
 								__next40pxDefaultSize
 							/>
 						</ToolsPanelItem>
-					</StylePanel>
-					<StylePanel
-						label={ __( 'Border Radius', 'newspack-plugin' ) }
-						resetAll={ () => onChangeStyles( setPath( styles, [ 'border', 'radius' ], undefined ) ) }
-					>
 						<ToolsPanelItem
 							label={ __( 'Radius', 'newspack-plugin' ) }
 							hasValue={ () => undefined !== styles.border?.radius }
 							onDeselect={ () => setRadius() }
 							isShownByDefault
 						>
-							<HStack spacing={ 4 } className="newspack-prompt-style-radius">
-								<UnitControl
-									label={ __( 'Radius', 'newspack-plugin' ) }
-									hideLabelFromVision
-									value={ radiusValue }
-									onChange={ setRadius }
-									min={ 0 }
-									disabled={ inFlight }
-									__next40pxDefaultSize
-								/>
-								<RangeControl
-									label={ __( 'Border radius', 'newspack-plugin' ) }
-									hideLabelFromVision
-									value={ radiusQuantity }
-									onChange={ setRadiusQuantity }
-									min={ 0 }
-									max={ RADIUS_SLIDER_MAX }
-									step={ 'px' === ( radiusUnit || 'px' ) || '%' === radiusUnit ? 1 : 0.1 }
-									initialPosition={ 0 }
-									withInputField={ false }
-									disabled={ inFlight }
-									__nextHasNoMarginBottom
-									__next40pxDefaultSize
-								/>
-							</HStack>
+							<VStack spacing={ 2 }>
+								<BaseControl.VisualLabel>{ __( 'Radius', 'newspack-plugin' ) }</BaseControl.VisualLabel>
+								<HStack spacing={ 4 } className="newspack-prompt-style-radius">
+									<Icon className="newspack-prompt-style-radius__icon" icon={ cornerAll } size={ ICON_SIZE } />
+									<UnitControl
+										label={ __( 'Radius', 'newspack-plugin' ) }
+										hideLabelFromVision
+										value={ radiusValue }
+										onChange={ setRadius }
+										min={ 0 }
+										disabled={ inFlight }
+										__next40pxDefaultSize
+									/>
+									<RangeControl
+										label={ __( 'Border radius', 'newspack-plugin' ) }
+										hideLabelFromVision
+										value={ radiusQuantity }
+										onChange={ setRadiusQuantity }
+										min={ 0 }
+										max={ RADIUS_SLIDER_MAX }
+										step={ 'px' === ( radiusUnit || 'px' ) || '%' === radiusUnit ? 1 : 0.1 }
+										initialPosition={ 0 }
+										withInputField={ false }
+										disabled={ inFlight }
+										__nextHasNoMarginBottom
+										__next40pxDefaultSize
+									/>
+								</HStack>
+							</VStack>
 						</ToolsPanelItem>
 					</StylePanel>
 				</VStack>

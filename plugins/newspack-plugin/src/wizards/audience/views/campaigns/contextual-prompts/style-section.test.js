@@ -59,7 +59,12 @@ describe( 'StyleSection on a block theme', () => {
 	} );
 } );
 
-const CONTRAST_WARNING = 'This color combination may be hard for people to read.';
+// The editor's two contrast messages, verbatim: the suggestion follows the way the
+// pair already leans.
+const CONTRAST_WARNING_DARKER_BACKGROUND =
+	'This color combination may be hard for people to read. Try using a darker background color and/or a brighter text color.';
+const CONTRAST_WARNING_BRIGHTER_BACKGROUND =
+	'This color combination may be hard for people to read. Try using a brighter background color and/or a darker text color.';
 // A Notice announces itself into the a11y-speak region, which duplicates its text
 // in the document, so the queries below are scoped to the rendered notice.
 const NOTICE_CONTENT = '.components-notice__content';
@@ -95,10 +100,12 @@ describe( 'StyleSection on a classic theme', () => {
 		expect( screen.getByRole( 'button', { name: 'Text' } ) ).toBeInTheDocument();
 		expect( screen.getByRole( 'button', { name: 'Background' } ) ).toBeInTheDocument();
 
-		// Each group offers its resets from an options menu, not a Reset button.
-		[ 'Color', 'Typography', 'Padding', 'Border', 'Border Radius' ].forEach( label =>
+		// Each group offers its resets from an options menu, not a Reset button, and
+		// the radius belongs to the Border group rather than one of its own.
+		[ 'Color', 'Typography', 'Padding', 'Border' ].forEach( label =>
 			expect( screen.getByRole( 'button', { name: `${ label } options` } ) ).toBeInTheDocument()
 		);
+		expect( screen.queryByRole( 'button', { name: 'Border Radius options' } ) ).toBeNull();
 		expect( screen.queryByRole( 'button', { name: 'Reset' } ) ).toBeNull();
 	} );
 
@@ -180,13 +187,29 @@ describe( 'StyleSection on a classic theme', () => {
 			/>
 		);
 
-		// The radius is its own group, so resetting the border leaves it behind.
+		// The radius is its own item, so resetting the border leaves it behind.
 		openPanelMenu( 'Border' );
 		clickMenuItem( 'Reset Border' );
 		expect( onChangeStyles ).toHaveBeenCalledWith( { border: { radius: '4px' } } );
 	} );
 
-	it( 'keeps the border radius when the whole border group is reset', () => {
+	it( 'resets only the radius from the radius item', () => {
+		const onChangeStyles = jest.fn();
+		render(
+			<StyleSection
+				status={ CLASSIC_STATUS }
+				styles={ { border: { radius: '4px', width: '1px' } } }
+				inFlight={ false }
+				onChangeStyles={ onChangeStyles }
+			/>
+		);
+
+		openPanelMenu( 'Border' );
+		clickMenuItem( 'Reset Radius' );
+		expect( onChangeStyles ).toHaveBeenCalledWith( { border: { width: '1px' } } );
+	} );
+
+	it( 'clears the radius too when the whole border group is reset', () => {
 		const onChangeStyles = jest.fn();
 		render(
 			<StyleSection
@@ -199,23 +222,7 @@ describe( 'StyleSection on a classic theme', () => {
 
 		openPanelMenu( 'Border' );
 		clickMenuItem( 'Reset all' );
-		expect( onChangeStyles ).toHaveBeenCalledWith( { border: { radius: '4px' } } );
-	} );
-
-	it( 'resets only the radius from the Border Radius group', () => {
-		const onChangeStyles = jest.fn();
-		render(
-			<StyleSection
-				status={ CLASSIC_STATUS }
-				styles={ { border: { radius: '4px', width: '1px' } } }
-				inFlight={ false }
-				onChangeStyles={ onChangeStyles }
-			/>
-		);
-
-		openPanelMenu( 'Border Radius' );
-		clickMenuItem( 'Reset Radius' );
-		expect( onChangeStyles ).toHaveBeenCalledWith( { border: { width: '1px' } } );
+		expect( onChangeStyles ).toHaveBeenCalledWith( {} );
 	} );
 
 	it( 'disables the controls that take a disabled prop while a save is in flight', () => {
@@ -237,6 +244,9 @@ describe( 'StyleSection on a classic theme', () => {
 		expect( screen.getByLabelText( 'Radius' ) ).toHaveValue( 10 );
 		expect( screen.getByRole( 'slider', { name: 'Border radius' } ) ).toHaveValue( '10' );
 		expect( screen.queryByLabelText( 'Top left' ) ).toBeNull();
+
+		// The Border group's header no longer names the radius, so its row does.
+		expect( screen.getByText( 'Radius', { selector: '.components-base-control__label' } ) ).toBeInTheDocument();
 	} );
 
 	it( 'writes the border radius as a single string', () => {
@@ -274,7 +284,7 @@ describe( 'StyleSection on a classic theme', () => {
 		expect( onChangeStyles ).toHaveBeenCalledWith( { border: { radius: '12px' } } );
 	} );
 
-	it( 'warns on a low-contrast pair', () => {
+	it( 'warns on a low-contrast pair, suggesting a darker background under lighter text', () => {
 		render(
 			<StyleSection
 				status={ CLASSIC_STATUS }
@@ -283,14 +293,16 @@ describe( 'StyleSection on a classic theme', () => {
 				onChangeStyles={ () => {} }
 			/>
 		);
-		expect( screen.getByText( CONTRAST_WARNING, { selector: NOTICE_CONTENT } ) ).toBeInTheDocument();
+		// The background is the darker of the two, so the fix is to push it darker
+		// still and lift the text.
+		expect( screen.getByText( CONTRAST_WARNING_DARKER_BACKGROUND, { selector: NOTICE_CONTENT } ) ).toBeInTheDocument();
 	} );
 
 	it( 'warns using the default background when only text is set', () => {
 		render( <StyleSection status={ CLASSIC_STATUS } styles={ { color: { text: '#888888' } } } inFlight={ false } onChangeStyles={ () => {} } /> );
 		// Default background #f7f7f7 vs #888888 is below 4.5 too, so the warning
-		// must consider defaults: expect it present.
-		expect( screen.getByText( CONTRAST_WARNING, { selector: NOTICE_CONTENT } ) ).toBeInTheDocument();
+		// must consider defaults: expect it present, this time the other way around.
+		expect( screen.getByText( CONTRAST_WARNING_BRIGHTER_BACKGROUND, { selector: NOTICE_CONTENT } ) ).toBeInTheDocument();
 	} );
 
 	it( 'warns using the inherited text color when only the background is set', () => {
@@ -302,6 +314,6 @@ describe( 'StyleSection on a classic theme', () => {
 			style_defaults: { ...CLASSIC_STATUS.style_defaults, color: { background: '#f7f7f7', text: '#111111' } },
 		};
 		render( <StyleSection status={ status } styles={ { color: { background: '#7a5c3e' } } } inFlight={ false } onChangeStyles={ () => {} } /> );
-		expect( screen.getByText( CONTRAST_WARNING, { selector: NOTICE_CONTENT } ) ).toBeInTheDocument();
+		expect( screen.getByText( CONTRAST_WARNING_BRIGHTER_BACKGROUND, { selector: NOTICE_CONTENT } ) ).toBeInTheDocument();
 	} );
 } );
