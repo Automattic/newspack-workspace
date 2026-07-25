@@ -17,6 +17,22 @@
 	a:hover {
 		opacity: 0.8;
 	}
+
+	// Layout parity with `.cat-links a` — tag labels no longer carry the
+	// `cat-links` class (NPPM-3048), so the chip layout is declared here.
+	a,
+	.tag-label {
+		display: inline-block;
+		margin: 0 0.25rem 0.25rem 0;
+	}
+}
+
+.archive .tag-labels a,
+.blog .tag-labels a,
+.search .tag-labels a {
+	font-size: 0.65rem;
+	margin-bottom: 0;
+	padding: 0.25em 0.5em;
 }
 
 /* stylelint-disable selector-type-no-unknown  */
@@ -51,7 +67,8 @@ amp-script .tag-labels {
 
 	// Workaround margin/padding override for featured images.
 	.featured-image-behind {
-		.cat-links.tag-labels {
+		// Selector updated with the markup: labels no longer carry `cat-links` (NPPM-3048).
+		.tag-labels {
 			a,
 			a:hover {
 				padding: 0.3em 0.5em;

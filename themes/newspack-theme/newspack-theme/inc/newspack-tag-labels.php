@@ -54,8 +54,12 @@ if ( ! function_exists( 'newspack_display_tag_labels' ) ) :
 	 * @return null
 	 */
 	function newspack_display_tag_labels( $labels = null, $links = true ) {
-		if ( class_exists( '\Newspack\Tag_Labels' ) && method_exists( '\Newspack\Tag_Labels', 'display' ) ) {
-			\Newspack\Tag_Labels::display( $labels, $links, 'span' );
+		if ( class_exists( '\Newspack\Tag_Labels' ) && method_exists( '\Newspack\Tag_Labels', 'generate_html' ) ) {
+			// Render WITHOUT the `cat-links` wrapper class: per-category `.cat-links a`
+			// styling (a common per-section pattern on publisher sites) must never
+			// restyle tag labels (NPPM-3048). Layout parity lives in
+			// sass/plugins/newspack-tag-labels.scss.
+			echo wp_kses_post( \Newspack\Tag_Labels::generate_html( $labels, $links, array( 'tag-labels' ), array( 'tag-label', 'flag' ), 'span' ) . ' ' );
 		}
 
 		return null;
