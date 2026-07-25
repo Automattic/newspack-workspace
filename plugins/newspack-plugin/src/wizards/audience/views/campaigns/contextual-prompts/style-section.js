@@ -187,127 +187,129 @@ const StyleSection = ( { status, styles = {}, inFlight, onChangeStyles } ) => {
 	// `disabled` prop, so the whole stack goes inert while a save is in flight.
 	const classicControls = (
 		<Disabled isDisabled={ !! inFlight }>
-			<VStack spacing={ 6 }>
-				<StyleGroup
-					label={ __( 'Color', 'newspack-plugin' ) }
-					hasOverride={ hasKeys( styles.color ) }
-					onReset={ () => onChangeStyles( setPath( styles, [ 'color' ], undefined ) ) }
-					disabled={ inFlight }
-				>
-					<VStack spacing={ 0 } className="newspack-prompt-style-colors">
-						<ColorRow label={ __( 'Text', 'newspack-plugin' ) } colorValue={ text } disabled={ inFlight }>
-							<ColorPalette
-								aria-label={ __( 'Text', 'newspack-plugin' ) }
-								colors={ paletteColors }
-								value={ text ?? undefined }
-								onChange={ value => setColor( 'text', value ) }
-							/>
-						</ColorRow>
-						<ColorRow label={ __( 'Background', 'newspack-plugin' ) } colorValue={ background } disabled={ inFlight }>
-							<ColorPalette
-								aria-label={ __( 'Background', 'newspack-plugin' ) }
-								colors={ paletteColors }
-								value={ background ?? undefined }
-								onChange={ value => setColor( 'background', value ) }
-							/>
-						</ColorRow>
-					</VStack>
-					{ null !== ratio && ratio < MIN_CONTRAST_RATIO && (
-						<Notice status="warning" isDismissible={ false } style={ { margin: 0 } }>
-							{ __( 'This color combination may be hard for people to read.', 'newspack-plugin' ) }
-						</Notice>
-					) }
-				</StyleGroup>
-				<StyleGroup
-					label={ __( 'Typography', 'newspack-plugin' ) }
-					hasOverride={ hasKeys( styles.typography ) }
-					onReset={ () => onChangeStyles( setPath( styles, [ 'typography' ], undefined ) ) }
-					disabled={ inFlight }
-				>
-					<FontSizePicker
-						fontSizes={ fontSizes }
-						value={ effective( [ 'typography', 'fontSize' ] ) }
-						onChange={ setFontSize }
-						withReset={ false }
-						__next40pxDefaultSize
-					/>
-				</StyleGroup>
-				<StyleGroup
-					label={ __( 'Padding', 'newspack-plugin' ) }
-					hasOverride={ undefined !== styles.spacing?.padding }
-					onReset={ () => onChangeStyles( setPath( styles, [ 'spacing', 'padding' ], undefined ) ) }
-					disabled={ inFlight }
-				>
-					<BoxControl
-						label={ __( 'Padding', 'newspack-plugin' ) }
-						values={ effective( [ 'spacing', 'padding' ] ) }
-						onChange={ setPadding }
-						splitOnAxis={ false }
-						allowReset={ false }
-						__next40pxDefaultSize
-					/>
-				</StyleGroup>
-				<StyleGroup
-					label={ __( 'Border', 'newspack-plugin' ) }
-					hasOverride={ hasKeys( borderOverride ) }
-					onReset={ () =>
-						onChangeStyles(
-							setPath( styles, [ 'border' ], undefined !== styles.border?.radius ? { radius: styles.border.radius } : undefined )
-						)
-					}
-					disabled={ inFlight }
-				>
-					<BorderBoxControl
-						label={ __( 'Border', 'newspack-plugin' ) }
-						hideLabelFromVision
-						colors={ paletteColors }
-						value={ hasKeys( borderOverride ) ? borderOverride : withoutRadius( defaults.border ) }
-						onChange={ setBorder }
-						enableStyle
-						__next40pxDefaultSize
-					/>
-				</StyleGroup>
-				<StyleGroup
-					label={ __( 'Border Radius', 'newspack-plugin' ) }
-					hasOverride={ undefined !== styles.border?.radius }
-					onReset={ () => onChangeStyles( setPath( styles, [ 'border', 'radius' ], undefined ) ) }
-					disabled={ inFlight }
-				>
-					<HStack alignment="flex-end" justify="space-between" spacing={ 2 }>
-						{ radiusLinked ? (
-							<UnitControl
-								label={ __( 'Radius', 'newspack-plugin' ) }
-								value={ isSplitRadius ? '' : radius }
-								onChange={ setRadius }
-								min={ 0 }
-								disabled={ inFlight }
-								__next40pxDefaultSize
-							/>
-						) : (
-							<Grid columns={ 2 } gutter={ 8 } noMargin>
-								{ RADIUS_CORNERS.map( ( [ corner, cornerLabel ] ) => (
-									<UnitControl
-										key={ corner }
-										label={ cornerLabel }
-										value={ isSplitRadius ? radius[ corner ] : radius }
-										onChange={ value => setRadiusCorner( corner, value ) }
-										min={ 0 }
-										disabled={ inFlight }
-										__next40pxDefaultSize
-									/>
-								) ) }
-							</Grid>
+			<HStack alignment="top" justify="flex-end">
+				<VStack spacing={ 6 } className="newspack-prompt-style-controls">
+					<StyleGroup
+						label={ __( 'Color', 'newspack-plugin' ) }
+						hasOverride={ hasKeys( styles.color ) }
+						onReset={ () => onChangeStyles( setPath( styles, [ 'color' ], undefined ) ) }
+						disabled={ inFlight }
+					>
+						<VStack spacing={ 0 } className="newspack-prompt-style-colors">
+							<ColorRow label={ __( 'Text', 'newspack-plugin' ) } colorValue={ text } disabled={ inFlight }>
+								<ColorPalette
+									aria-label={ __( 'Text', 'newspack-plugin' ) }
+									colors={ paletteColors }
+									value={ text ?? undefined }
+									onChange={ value => setColor( 'text', value ) }
+								/>
+							</ColorRow>
+							<ColorRow label={ __( 'Background', 'newspack-plugin' ) } colorValue={ background } disabled={ inFlight }>
+								<ColorPalette
+									aria-label={ __( 'Background', 'newspack-plugin' ) }
+									colors={ paletteColors }
+									value={ background ?? undefined }
+									onChange={ value => setColor( 'background', value ) }
+								/>
+							</ColorRow>
+						</VStack>
+						{ null !== ratio && ratio < MIN_CONTRAST_RATIO && (
+							<Notice status="warning" isDismissible={ false } style={ { margin: 0 } }>
+								{ __( 'This color combination may be hard for people to read.', 'newspack-plugin' ) }
+							</Notice>
 						) }
-						<Button
-							icon={ radiusLinked ? link : linkOff }
-							label={ radiusLinked ? __( 'Unlink Corners', 'newspack-plugin' ) : __( 'Link Corners', 'newspack-plugin' ) }
-							onClick={ () => setRadiusLinked( ! radiusLinked ) }
-							disabled={ inFlight }
-							isSmall
+					</StyleGroup>
+					<StyleGroup
+						label={ __( 'Typography', 'newspack-plugin' ) }
+						hasOverride={ hasKeys( styles.typography ) }
+						onReset={ () => onChangeStyles( setPath( styles, [ 'typography' ], undefined ) ) }
+						disabled={ inFlight }
+					>
+						<FontSizePicker
+							fontSizes={ fontSizes }
+							value={ effective( [ 'typography', 'fontSize' ] ) }
+							onChange={ setFontSize }
+							withReset={ false }
+							__next40pxDefaultSize
 						/>
-					</HStack>
-				</StyleGroup>
-			</VStack>
+					</StyleGroup>
+					<StyleGroup
+						label={ __( 'Padding', 'newspack-plugin' ) }
+						hasOverride={ undefined !== styles.spacing?.padding }
+						onReset={ () => onChangeStyles( setPath( styles, [ 'spacing', 'padding' ], undefined ) ) }
+						disabled={ inFlight }
+					>
+						<BoxControl
+							label={ __( 'Padding', 'newspack-plugin' ) }
+							values={ effective( [ 'spacing', 'padding' ] ) }
+							onChange={ setPadding }
+							splitOnAxis={ false }
+							allowReset={ false }
+							__next40pxDefaultSize
+						/>
+					</StyleGroup>
+					<StyleGroup
+						label={ __( 'Border', 'newspack-plugin' ) }
+						hasOverride={ hasKeys( borderOverride ) }
+						onReset={ () =>
+							onChangeStyles(
+								setPath( styles, [ 'border' ], undefined !== styles.border?.radius ? { radius: styles.border.radius } : undefined )
+							)
+						}
+						disabled={ inFlight }
+					>
+						<BorderBoxControl
+							label={ __( 'Border', 'newspack-plugin' ) }
+							hideLabelFromVision
+							colors={ paletteColors }
+							value={ hasKeys( borderOverride ) ? borderOverride : withoutRadius( defaults.border ) }
+							onChange={ setBorder }
+							enableStyle
+							__next40pxDefaultSize
+						/>
+					</StyleGroup>
+					<StyleGroup
+						label={ __( 'Border Radius', 'newspack-plugin' ) }
+						hasOverride={ undefined !== styles.border?.radius }
+						onReset={ () => onChangeStyles( setPath( styles, [ 'border', 'radius' ], undefined ) ) }
+						disabled={ inFlight }
+					>
+						<HStack alignment="flex-end" justify="space-between" spacing={ 2 }>
+							{ radiusLinked ? (
+								<UnitControl
+									label={ __( 'Radius', 'newspack-plugin' ) }
+									value={ isSplitRadius ? '' : radius }
+									onChange={ setRadius }
+									min={ 0 }
+									disabled={ inFlight }
+									__next40pxDefaultSize
+								/>
+							) : (
+								<Grid columns={ 2 } gutter={ 8 } noMargin>
+									{ RADIUS_CORNERS.map( ( [ corner, cornerLabel ] ) => (
+										<UnitControl
+											key={ corner }
+											label={ cornerLabel }
+											value={ isSplitRadius ? radius[ corner ] : radius }
+											onChange={ value => setRadiusCorner( corner, value ) }
+											min={ 0 }
+											disabled={ inFlight }
+											__next40pxDefaultSize
+										/>
+									) ) }
+								</Grid>
+							) }
+							<Button
+								icon={ radiusLinked ? link : linkOff }
+								label={ radiusLinked ? __( 'Unlink Corners', 'newspack-plugin' ) : __( 'Link Corners', 'newspack-plugin' ) }
+								onClick={ () => setRadiusLinked( ! radiusLinked ) }
+								disabled={ inFlight }
+								isSmall
+							/>
+						</HStack>
+					</StyleGroup>
+				</VStack>
+			</HStack>
 		</Disabled>
 	);
 

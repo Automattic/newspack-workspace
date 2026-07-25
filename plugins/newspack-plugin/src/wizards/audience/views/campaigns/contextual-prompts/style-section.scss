@@ -6,6 +6,14 @@
  */
 
 @use "~@wordpress/base-styles/colors" as wp-colors;
+@use "~@wordpress/base-styles/variables" as wp-variables;
+
+// The controls column hugs the end of the section grid, capped at the editor
+// sidebar's content width: the 280px sidebar less its 16px gutters.
+.newspack-prompt-style-controls {
+	max-width: calc(#{wp-variables.$sidebar-width} - #{wp-variables.$grid-unit-20} * 2);
+	width: 100%;
+}
 
 .newspack-prompt-style-colors {
 	border: 1px solid wp-colors.$gray-300;
