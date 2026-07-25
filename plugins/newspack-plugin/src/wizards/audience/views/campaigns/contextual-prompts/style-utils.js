@@ -28,7 +28,9 @@ const luminance = channels => {
 };
 
 // WCAG relative luminance, which the contrast ratio rests on: null when the
-// value is not a color this module can read.
+// value is not a color this module can read. Exported for the tests alone, which
+// use it to pin where it diverges from the perceived brightness the suggestion
+// below follows.
 export const relativeLuminance = value => {
 	const channels = parseHex( value );
 	return channels ? luminance( channels ) : null;

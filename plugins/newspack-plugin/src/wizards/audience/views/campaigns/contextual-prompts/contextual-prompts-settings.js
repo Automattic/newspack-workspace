@@ -137,6 +137,10 @@ const ContextualPromptsSettings = ( { status, values, blockStyles, error, inFlig
 	const hasCtaToggle = ( fields || [] ).some( field => OVERRIDE_CTA_KEY === field.key );
 	const effectiveCta = hasCtaToggle ? values[ OVERRIDE_CTA_KEY ] || 'form' : 'button';
 	const overrideEnabled = !! values[ OVERRIDE_ENABLED_KEY ];
+	// The Style section needs the style payload newspack-popups only started
+	// sending alongside it. Against an older one its controls would render empty
+	// and every save would be silently dropped, so the section stays out.
+	const hasStylePayload = 'is_block_theme' in status;
 
 	// Fields are grouped by section server-side so the override controls can sit
 	// under their own heading rather than trailing the publisher profile.
@@ -229,8 +233,12 @@ const ContextualPromptsSettings = ( { status, values, blockStyles, error, inFlig
 				/>
 				<VStack spacing={ 6 }>{ renderFields( 'override' ) }</VStack>
 			</Grid>
-			<Divider alignment="full-width" variant="tertiary" />
-			<StyleSection status={ status } styles={ blockStyles } inFlight={ inFlight } onChangeStyles={ onChangeStyles } />
+			{ hasStylePayload && (
+				<>
+					<Divider alignment="full-width" variant="tertiary" />
+					<StyleSection status={ status } styles={ blockStyles } inFlight={ inFlight } onChangeStyles={ onChangeStyles } />
+				</>
+			) }
 		</WizardsTab>
 	);
 };

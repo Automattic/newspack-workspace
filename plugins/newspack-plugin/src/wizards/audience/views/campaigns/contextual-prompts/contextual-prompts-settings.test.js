@@ -32,6 +32,17 @@ const TOGGLE_FIELD = {
 const LABEL_FIELD = { ...FIELD_DEFAULTS, key: 'newspack_contextual_prompts_override_label', label: 'Override button label', type: 'text' };
 const URL_FIELD = { ...FIELD_DEFAULTS, key: 'newspack_contextual_prompts_override_url', label: 'Override button URL', type: 'text' };
 
+// The style keys the status payload carries; the Style section itself is covered
+// in style-section.test.js, so the block-theme shape (a handoff, no controls) is
+// enough to see the section render at all.
+const STYLE_PAYLOAD = {
+	is_block_theme: true,
+	style_defaults: {},
+	style_palette: [],
+	style_font_sizes: [],
+	site_editor_styles_url: 'https://example.test/wp-admin/site-editor.php?p=%2Fstyles',
+};
+
 const fieldsToValues = fields => ( fields || [] ).reduce( ( acc, field ) => ( { ...acc, [ field.key ]: field.value ?? '' } ), {} );
 
 // Enabled body needs live values so the field-gating interactions can be exercised.
@@ -93,6 +104,25 @@ describe( 'ContextualPromptsSettings enabled body', () => {
 	it( 'renders the two settings sections', () => {
 		render(
 			<ContextualPromptsSettings
+				status={ { enabled: true, can_manage: true, fields: [ ENABLE_FIELD ], ...STYLE_PAYLOAD } }
+				values={ fieldsToValues( [ ENABLE_FIELD ] ) }
+				error={ null }
+				inFlight={ false }
+				onSetValue={ () => {} }
+				onEnable={ () => Promise.resolve() }
+			/>
+		);
+
+		expect( screen.getByRole( 'heading', { name: 'Publisher Profile' } ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'heading', { name: 'Site-Wide Override' } ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'heading', { name: 'Style' } ) ).toBeInTheDocument();
+	} );
+
+	// An older newspack-popups answers the status endpoint without the style keys:
+	// the section's controls would render empty and its saves would be dropped.
+	it( 'leaves out the Style section when the payload carries no style keys', () => {
+		render(
+			<ContextualPromptsSettings
 				status={ { enabled: true, can_manage: true, fields: [ ENABLE_FIELD ] } }
 				values={ fieldsToValues( [ ENABLE_FIELD ] ) }
 				error={ null }
@@ -104,6 +134,7 @@ describe( 'ContextualPromptsSettings enabled body', () => {
 
 		expect( screen.getByRole( 'heading', { name: 'Publisher Profile' } ) ).toBeInTheDocument();
 		expect( screen.getByRole( 'heading', { name: 'Site-Wide Override' } ) ).toBeInTheDocument();
+		expect( screen.queryByRole( 'heading', { name: 'Style' } ) ).not.toBeInTheDocument();
 	} );
 
 	it( 'shows only the enable toggle while the override is off', () => {
