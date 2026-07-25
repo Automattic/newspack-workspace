@@ -7,7 +7,7 @@ import '../../shared/js/public-path';
 /**
  * WordPress dependencies.
  */
-import { createElement, render, useState } from '@wordpress/element';
+import { createElement, render, useEffect, useRef, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 
 /**
@@ -16,16 +16,55 @@ import { __ } from '@wordpress/i18n';
 import { Button } from '../../../packages/components/src';
 import './style.scss';
 
-const HandoffBanner = ( {
+const VISIBLE_CLASS = 'newspack-handoff-banner-visible';
+const HEIGHT_PROPERTY = '--newspack-handoff-banner-height';
+
+/**
+ * Stop advertising the banner height. Pages that reserve room for the banner
+ * fall back to a zero offset.
+ */
+const clearBannerHeight = () => {
+	document.documentElement.classList.remove( VISIBLE_CLASS );
+	document.documentElement.style.removeProperty( HEIGHT_PROPERTY );
+};
+
+export const HandoffBanner = ( {
 	bodyText = __( 'Return to Newspack after completing configuration', 'newspack-plugin' ),
 	primaryButtonText = __( 'Back to Newspack', 'newspack-plugin' ),
 	dismissButtonText = __( 'Dismiss', 'newspack-plugin' ),
 	primaryButtonURL = '/wp-admin/admin.php?page=newspack-dashboard',
 } ) => {
 	const [ visibility, setVisibility ] = useState( true );
+	const bannerRef = useRef( null );
+
+	// Full-screen editors lay themselves out against the viewport and ignore the
+	// banner's place in the document flow. Publish the measured height so their
+	// scoped CSS can reserve the space, and take it back when the banner goes.
+	useEffect( () => {
+		const banner = bannerRef.current;
+		if ( ! visibility || ! banner ) {
+			clearBannerHeight();
+			return;
+		}
+		const updateHeight = () => {
+			document.documentElement.classList.add( VISIBLE_CLASS );
+			document.documentElement.style.setProperty( HEIGHT_PROPERTY, `${ banner.offsetHeight }px` );
+		};
+		updateHeight();
+		if ( typeof window.ResizeObserver !== 'function' ) {
+			return clearBannerHeight;
+		}
+		const observer = new window.ResizeObserver( updateHeight );
+		observer.observe( banner );
+		return () => {
+			observer.disconnect();
+			clearBannerHeight();
+		};
+	}, [ visibility ] );
+
 	return (
 		visibility && (
-			<div className="newspack-handoff-banner">
+			<div className="newspack-handoff-banner" ref={ bannerRef }>
 				<div className="newspack-handoff-banner__text">{ bodyText }</div>
 				<div className="newspack-handoff-banner__buttons">
 					<Button variant="tertiary" isSmall onClick={ () => setVisibility( false ) }>
