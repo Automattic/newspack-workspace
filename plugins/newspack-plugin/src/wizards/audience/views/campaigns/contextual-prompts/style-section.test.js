@@ -284,6 +284,24 @@ describe( 'StyleSection on a classic theme', () => {
 		expect( onChangeStyles ).toHaveBeenCalledWith( { border: { radius: '12px' } } );
 	} );
 
+	it( 'writes a numeric font size preset as a px string', () => {
+		const onChangeStyles = jest.fn();
+		const status = {
+			...CLASSIC_STATUS,
+			// A theme.json may declare a preset size as a bare number, and the picker
+			// hands back the shape it was given.
+			style_font_sizes: [
+				{ name: 'Small', slug: 'small', size: 16 },
+				{ name: 'Normal', slug: 'normal', size: 20 },
+			],
+		};
+		render( <StyleSection status={ status } styles={ {} } inFlight={ false } onChangeStyles={ onChangeStyles } /> );
+
+		fireEvent.click( screen.getByRole( 'radio', { name: 'Normal' } ) );
+
+		expect( onChangeStyles ).toHaveBeenCalledWith( { typography: { fontSize: '20px' } } );
+	} );
+
 	it( 'warns on a low-contrast pair, suggesting a darker background under lighter text', () => {
 		render(
 			<StyleSection
@@ -303,6 +321,22 @@ describe( 'StyleSection on a classic theme', () => {
 		// Default background #f7f7f7 vs #888888 is below 4.5 too, so the warning
 		// must consider defaults: expect it present, this time the other way around.
 		expect( screen.getByText( CONTRAST_WARNING_BRIGHTER_BACKGROUND, { selector: NOTICE_CONTENT } ) ).toBeInTheDocument();
+	} );
+
+	it( 'picks the suggestion by perceived brightness, as the editor does', () => {
+		render(
+			<StyleSection
+				status={ CLASSIC_STATUS }
+				styles={ { color: { background: '#00ff00', text: '#cccccc' } } }
+				inFlight={ false }
+				onChangeStyles={ () => {} }
+			/>
+		);
+		// Green reads darker than light gray by core's perceived brightness (149.7 vs
+		// 204) while WCAG relative luminance calls it the lighter of the two (0.715 vs
+		// 0.604), so the two metrics point the suggestion opposite ways here. The
+		// editor's answer is the brightness one.
+		expect( screen.getByText( CONTRAST_WARNING_DARKER_BACKGROUND, { selector: NOTICE_CONTENT } ) ).toBeInTheDocument();
 	} );
 
 	it( 'warns using the inherited text color when only the background is set', () => {

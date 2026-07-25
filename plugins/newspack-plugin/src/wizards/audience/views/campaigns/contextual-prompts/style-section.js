@@ -39,7 +39,7 @@ import { Icon, cornerAll } from '@wordpress/icons';
  * Internal dependencies
  */
 import { Button, Grid, Handoff, SectionHeader } from '../../../../../../packages/components/src';
-import { contrastRatio, presetRefForColor, relativeLuminance, resolveColor } from './style-utils';
+import { contrastRatio, perceivedBrightness, presetRefForColor, resolveColor } from './style-utils';
 import './style-section.scss';
 
 const MIN_CONTRAST_RATIO = 4.5;
@@ -77,6 +77,11 @@ const setPath = ( source, path, value ) => {
 	return next;
 };
 
+// A theme can register its font size presets as plain numbers, and FontSizePicker
+// hands back whatever shape it was given. Stored styles are CSS strings, and the
+// REST layer keeps string leaves only, so a bare number would be dropped on save.
+const withPixelUnit = size => ( 'number' === typeof size ? `${ size }px` : size );
+
 // Border radius is its own group, so the border group reads and writes every
 // border key except the radius.
 const withoutRadius = border => {
@@ -91,8 +96,10 @@ const withoutRadius = border => {
 
 // The editor's contrast warning, verbatim: the suggestion pushes the pair the way
 // it already leans, so a dark background asks for a darker background still.
+// Which one leans dark is core's perceived-brightness question, not a WCAG
+// luminance one — the two disagree on saturated hues.
 const contrastMessage = ( background, text ) =>
-	relativeLuminance( background ) < relativeLuminance( text )
+	perceivedBrightness( background ) < perceivedBrightness( text )
 		? __(
 				'This color combination may be hard for people to read. Try using a darker background color and/or a brighter text color.',
 				'newspack-plugin'
@@ -141,7 +148,7 @@ const StyleSection = ( { status, styles = {}, inFlight, onChangeStyles } ) => {
 	// Global settings presets carry extra keys (fluid font sizes, gradients); the
 	// controls only take the shapes they document.
 	const paletteColors = palette.map( ( { name, slug, color } ) => ( { name, slug, color } ) );
-	const fontSizes = ( styleFontSizes || [] ).map( ( { name, slug, size } ) => ( { name, slug, size } ) );
+	const fontSizes = ( styleFontSizes || [] ).map( ( { name, slug, size } ) => ( { name, slug, size: withPixelUnit( size ) } ) );
 	const effective = path => getPath( styles, path ) ?? getPath( defaults, path );
 
 	const radius = effective( [ 'border', 'radius' ] );
@@ -157,7 +164,7 @@ const StyleSection = ( { status, styles = {}, inFlight, onChangeStyles } ) => {
 
 	const setColor = ( key, value ) => onChangeStyles( setPath( styles, [ 'color', key ], value ? presetRefForColor( value, palette ) : undefined ) );
 
-	const setFontSize = value => onChangeStyles( setPath( styles, [ 'typography', 'fontSize' ], value || undefined ) );
+	const setFontSize = value => onChangeStyles( setPath( styles, [ 'typography', 'fontSize' ], value ? withPixelUnit( value ) : undefined ) );
 
 	const setPadding = value => {
 		const sides = {};

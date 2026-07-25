@@ -1,7 +1,7 @@
 /**
  * Internal dependencies
  */
-import { contrastRatio, presetRefForColor, relativeLuminance, resolveColor } from './style-utils';
+import { contrastRatio, perceivedBrightness, presetRefForColor, relativeLuminance, resolveColor } from './style-utils';
 
 const PALETTE = [
 	{ name: 'Accent', slug: 'accent', color: '#178f15' },
@@ -28,11 +28,32 @@ describe( 'relativeLuminance', () => {
 		expect( relativeLuminance( '#000000' ) ).toBe( 0 );
 		expect( relativeLuminance( '#ffffff' ) ).toBeCloseTo( 1, 5 );
 	} );
-	it( 'orders a pair, which is what picks the contrast suggestion', () => {
-		expect( relativeLuminance( '#777777' ) ).toBeLessThan( relativeLuminance( '#888888' ) );
-	} );
 	it( 'returns null for unparseable input', () => {
 		expect( relativeLuminance( 'var:preset|color|accent' ) ).toBeNull();
+	} );
+} );
+
+describe( 'perceivedBrightness', () => {
+	it( 'runs from black to white on the 0-255 scale', () => {
+		expect( perceivedBrightness( '#000000' ) ).toBe( 0 );
+		expect( perceivedBrightness( '#ffffff' ) ).toBeCloseTo( 255, 5 );
+	} );
+	it( 'weights the channels as core does', () => {
+		// Pure green: 587 * 255 / 1000.
+		expect( perceivedBrightness( '#00ff00' ) ).toBeCloseTo( 149.685, 3 );
+	} );
+	it( 'orders a plain pair the same way relative luminance does', () => {
+		expect( perceivedBrightness( '#777777' ) ).toBeLessThan( perceivedBrightness( '#888888' ) );
+		expect( relativeLuminance( '#777777' ) ).toBeLessThan( relativeLuminance( '#888888' ) );
+	} );
+	it( 'disagrees with relative luminance on a saturated hue, which is why it picks the suggestion', () => {
+		// Green (149.7) reads darker than light gray (204) by brightness, while by
+		// WCAG luminance it is the lighter of the two (0.715 vs 0.604).
+		expect( perceivedBrightness( '#00ff00' ) ).toBeLessThan( perceivedBrightness( '#cccccc' ) );
+		expect( relativeLuminance( '#00ff00' ) ).toBeGreaterThan( relativeLuminance( '#cccccc' ) );
+	} );
+	it( 'returns null for unparseable input', () => {
+		expect( perceivedBrightness( 'var:preset|color|accent' ) ).toBeNull();
 	} );
 } );
 

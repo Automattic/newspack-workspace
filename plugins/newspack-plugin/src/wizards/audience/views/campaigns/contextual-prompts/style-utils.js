@@ -27,11 +27,23 @@ const luminance = channels => {
 	return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 };
 
-// WCAG relative luminance, for deciding which way a low-contrast pair should
-// move: null when the value is not a color this module can read.
+// WCAG relative luminance, which the contrast ratio rests on: null when the
+// value is not a color this module can read.
 export const relativeLuminance = value => {
 	const channels = parseHex( value );
 	return channels ? luminance( channels ) : null;
+};
+
+// Perceived brightness, the metric core's ContrastChecker orders a pair by when
+// it picks which way to move them. It disagrees with relative luminance on
+// saturated hues, so the editor's suggestion follows this one.
+export const perceivedBrightness = value => {
+	const channels = parseHex( value );
+	if ( ! channels ) {
+		return null;
+	}
+	const [ r, g, b ] = channels;
+	return ( 299 * r + 587 * g + 114 * b ) / 1000;
 };
 
 export const contrastRatio = ( a, b ) => {
