@@ -168,7 +168,7 @@ export const ContextualPromptEditor = ( { clientId } ) => {
 						) }
 					</p>
 					<GenerateButton busy={ generating } onClick={ regenerate }>
-						{ __( 'Regenerate suggestions', 'newspack-popups' ) }
+						{ __( 'Regenerate Suggestions', 'newspack-popups' ) }
 					</GenerateButton>
 					<CandidateList candidates={ candidates } onApply={ apply } />
 				</PanelBody>

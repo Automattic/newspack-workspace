@@ -16,9 +16,7 @@ import { useState } from '@wordpress/element';
 import { useSelect, useDispatch } from '@wordpress/data';
 import { PluginDocumentSettingPanel } from '@wordpress/edit-post';
 import {
-	Button,
 	Notice,
-	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
 
@@ -57,7 +55,7 @@ const ContextualPromptPanel = () => {
 		};
 	}, [] );
 
-	const { insertBlock, removeBlock, updateBlockAttributes, selectBlock } = useDispatch( 'core/block-editor' );
+	const { insertBlock, updateBlockAttributes, selectBlock } = useDispatch( 'core/block-editor' );
 
 	const [ candidates, setCandidates ] = useState( [] );
 	const [ generating, setGenerating ] = useState( false );
@@ -113,7 +111,7 @@ const ContextualPromptPanel = () => {
 	};
 
 	const generateLabel =
-		candidates.length || instance ? __( 'Regenerate suggestions', 'newspack-popups' ) : __( 'Generate suggestions', 'newspack-popups' );
+		candidates.length || instance ? __( 'Regenerate Suggestions', 'newspack-popups' ) : __( 'Generate Suggestions', 'newspack-popups' );
 
 	return (
 		<PluginDocumentSettingPanel name="newspack-contextual-prompt" title={ __( 'Contextual Prompt', 'newspack-popups' ) }>
@@ -124,33 +122,19 @@ const ContextualPromptPanel = () => {
 					</Notice>
 				) }
 
-				{ instance ? (
-					<>
-						<p style={ { margin: 0 } }>
-							{ sprintf(
+				<p style={ { margin: 0 } }>
+					{ instance
+						? sprintf(
 								/* translators: %1$s: the edited content's post type label, e.g. "post", "page". */
 								__( 'This %1$s has a Contextual Prompt. Edit its copy directly in the %1$s.', 'newspack-popups' ),
 								POST_TYPE_LABEL
-							) }
-						</p>
-						<HStack justify="flex-start" spacing={ 2 } wrap>
-							<Button variant="secondary" __next40pxDefaultSize onClick={ () => selectBlock( instance.clientId ) }>
-								{ __( 'Select prompt', 'newspack-popups' ) }
-							</Button>
-							<Button isDestructive variant="tertiary" __next40pxDefaultSize onClick={ () => removeBlock( instance.clientId ) }>
-								{ __( 'Remove', 'newspack-popups' ) }
-							</Button>
-						</HStack>
-					</>
-				) : (
-					<p style={ { margin: 0 } }>
-						{ sprintf(
-							/* translators: %s: the edited content's post type label, e.g. "post", "page". */
-							__( 'Generate a donation prompt specific to this %s.', 'newspack-popups' ),
-							POST_TYPE_LABEL
-						) }
-					</p>
-				) }
+						  )
+						: sprintf(
+								/* translators: %s: the edited content's post type label, e.g. "post", "page". */
+								__( 'Generate a donation prompt specific to this %s.', 'newspack-popups' ),
+								POST_TYPE_LABEL
+						  ) }
+				</p>
 
 				<GenerateButton busy={ generating } onClick={ generate }>
 					{ generateLabel }

@@ -18,13 +18,16 @@ import { Button } from '@wordpress/components';
 export const POST_TYPE_LABEL =
 	window.newspack_popups_blocks_data?.post_type_label || window.newspackPopupsContextualPrompt?.postTypeLabel || __( 'post', 'newspack-popups' );
 
+// Title Case variant for the framing headings.
+const POST_TYPE_HEADING = POST_TYPE_LABEL.charAt( 0 ).toUpperCase() + POST_TYPE_LABEL.slice( 1 );
+
 export const FRAMING_LABELS = {
-	/* translators: %s: the edited content's post type label, e.g. "post", "page". */
-	top: sprintf( __( 'Top of %s', 'newspack-popups' ), POST_TYPE_LABEL ),
-	/* translators: %s: the edited content's post type label, e.g. "post", "page". */
-	mid: sprintf( __( 'Mid-%s', 'newspack-popups' ), POST_TYPE_LABEL ),
-	/* translators: %s: the edited content's post type label, e.g. "post", "page". */
-	end: sprintf( __( 'End of %s', 'newspack-popups' ), POST_TYPE_LABEL ),
+	/* translators: %s: the edited content's post type label, e.g. "Post", "Page". */
+	top: sprintf( __( 'Top of %s', 'newspack-popups' ), POST_TYPE_HEADING ),
+	/* translators: %s: the edited content's post type label, e.g. "Post", "Page". */
+	mid: sprintf( __( 'Mid-%s', 'newspack-popups' ), POST_TYPE_HEADING ),
+	/* translators: %s: the edited content's post type label, e.g. "Post", "Page". */
+	end: sprintf( __( 'End of %s', 'newspack-popups' ), POST_TYPE_HEADING ),
 };
 
 /**
@@ -62,6 +65,9 @@ export const GenerateButton = ( { busy, onClick, children } ) => (
 export const CandidateList = ( { candidates, onApply } ) =>
 	candidates.map( ( candidate, index ) => (
 		<div key={ index } style={ { marginTop: '16px' } }>
+			{ index > 0 && (
+				<hr style={ { margin: '0 0 16px', border: 'none', borderTop: '1px solid var(--wpds-color-stroke-surface-neutral-weak, #f0f0f0)' } } />
+			) }
 			<strong>{ FRAMING_LABELS[ candidate.framing ] || candidate.framing }</strong>
 			<p style={ { margin: '4px 0 8px' } }>{ candidate.body }</p>
 			<Button variant="primary" size="small" onClick={ () => onApply( candidate ) }>
