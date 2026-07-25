@@ -200,40 +200,71 @@ final class Newspack_Popups_API {
 			'is_block_theme'         => wp_is_block_theme(),
 			'styles'                 => empty( $styles ) ? (object) [] : $styles,
 			'style_defaults'         => Newspack_Popups_Contextual_Prompt_Styles::get_defaults(),
-			'style_palette'          => self::flatten_global_settings_presets( wp_get_global_settings( [ 'color', 'palette' ] ) ),
+			'style_palette'          => self::merge_global_settings_presets( wp_get_global_settings( [ 'color', 'palette' ] ) ),
 			'style_font_sizes'       => self::normalize_preset_font_sizes( $font_sizes ),
 			'site_editor_styles_url' => admin_url( 'site-editor.php?p=%2Fstyles&section=' . rawurlencode( '/blocks/' . rawurlencode( Newspack_Popups_Contextual_Prompt_Block::BLOCK_NAME ) ) ),
 		];
 	}
 
 	/**
-	 * Global-settings presets come keyed by origin, each origin holding its own
-	 * list; the wizard wants one flat list. Merge the origins, custom beating theme
-	 * beating default on a shared slug: every origin gets a CSS custom property, so
-	 * a lower-precedence preset is still usable and dropping it would hide it from
-	 * the wizard for no reason. Anything not origin-keyed and not already a flat
-	 * list is not a preset list at all, and yields nothing.
+	 * The preset lists that hold something, highest precedence first. Global
+	 * settings key presets by origin (custom > theme > default), each origin holding
+	 * its own list; an already-flat list stands in as its own single origin. Neither
+	 * shape means it is not a preset list at all — a missing settings path hands back
+	 * the whole settings tree — so it offers nothing.
+	 *
+	 * @param mixed $presets Origin-keyed presets, or already-flat array.
+	 * @return array List of preset lists, empty when there is nothing to offer.
+	 */
+	private static function preset_origin_lists( $presets ) {
+		if ( ! is_array( $presets ) ) {
+			return [];
+		}
+		// Not origin-keyed: already a flat preset list.
+		if ( wp_is_numeric_array( $presets ) ) {
+			return empty( $presets ) ? [] : [ array_values( $presets ) ];
+		}
+		$lists = [];
+		foreach ( [ 'custom', 'theme', 'default' ] as $origin ) {
+			if ( ! empty( $presets[ $origin ] ) && is_array( $presets[ $origin ] ) ) {
+				$lists[] = array_values( $presets[ $origin ] );
+			}
+		}
+		return $lists;
+	}
+
+	/**
+	 * One flat preset list, taking the highest origin that holds anything. This is
+	 * how the editor resolves a preset list it offers as a single set — font sizes,
+	 * where `custom ?? theme ?? default` decides — so the wizard offers the same
+	 * sizes its picker does.
+	 *
+	 * Public so the flattening can be exercised directly in tests.
+	 *
+	 * @param mixed $presets Origin-keyed presets, or already-flat array.
+	 * @return array Flat preset list, empty when there is nothing to offer.
+	 */
+	public static function flatten_global_settings_presets( $presets ) {
+		$lists = self::preset_origin_lists( $presets );
+		return empty( $lists ) ? [] : $lists[0];
+	}
+
+	/**
+	 * One flat preset list holding every origin, custom beating theme beating
+	 * default on a shared slug. The editor's color panel shows each origin as its
+	 * own section rather than picking one, and every origin gets a CSS custom
+	 * property, so dropping the lower ones would hide usable colors.
 	 *
 	 * Public so the merge can be exercised directly in tests.
 	 *
 	 * @param mixed $presets Origin-keyed presets, or already-flat array.
 	 * @return array Flat preset list, empty when there is nothing to offer.
 	 */
-	public static function flatten_global_settings_presets( $presets ) {
-		if ( ! is_array( $presets ) ) {
-			return [];
-		}
-		// Not origin-keyed: already a flat preset list.
-		if ( wp_is_numeric_array( $presets ) ) {
-			return array_values( $presets );
-		}
+	public static function merge_global_settings_presets( $presets ) {
 		$flat  = [];
 		$slugs = [];
-		foreach ( [ 'custom', 'theme', 'default' ] as $origin ) {
-			if ( empty( $presets[ $origin ] ) || ! is_array( $presets[ $origin ] ) ) {
-				continue;
-			}
-			foreach ( $presets[ $origin ] as $preset ) {
+		foreach ( self::preset_origin_lists( $presets ) as $list ) {
+			foreach ( $list as $preset ) {
 				if ( ! is_array( $preset ) ) {
 					continue;
 				}

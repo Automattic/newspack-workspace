@@ -99,11 +99,11 @@ class ContextualPromptStylesApiTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Presets are merged across origins: a shared slug is taken from the highest
+	 * The palette is merged across origins: a shared slug is taken from the highest
 	 * origin defining it, and a slug only a lower origin defines still travels.
 	 */
-	public function test_presets_merge_across_origins() {
-		$merged = Newspack_Popups_API::flatten_global_settings_presets(
+	public function test_palette_presets_merge_across_origins() {
+		$merged = Newspack_Popups_API::merge_global_settings_presets(
 			[
 				'default' => [
 					[
@@ -142,35 +142,63 @@ class ContextualPromptStylesApiTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Font sizes are not merged: the editor's picker offers a single origin, the
+	 * highest one holding anything, so the wizard offers the same set.
+	 */
+	public function test_font_size_presets_take_the_highest_origin() {
+		$presets = [
+			'default' => [
+				[
+					'slug' => 'medium',
+					'size' => '20px',
+				],
+			],
+			'theme'   => [
+				[
+					'slug' => 'normal',
+					'size' => '20px',
+				],
+				[
+					'slug' => 'huge',
+					'size' => '44px',
+				],
+			],
+		];
+
+		$this->assertSame( $presets['theme'], Newspack_Popups_API::flatten_global_settings_presets( $presets ) );
+
+		// With that origin empty the next one down stands in.
+		$presets['theme'] = [];
+		$this->assertSame( $presets['default'], Newspack_Popups_API::flatten_global_settings_presets( $presets ) );
+	}
+
+	/**
 	 * Nothing to offer travels as an empty list, never as a list of junk. An
-	 * already-flat list passes through untouched.
+	 * already-flat list passes through untouched. Both shapes are read the same way
+	 * whether the presets are merged or taken from one origin.
 	 */
 	public function test_presets_edge_shapes() {
-		$this->assertSame(
-			[],
-			Newspack_Popups_API::flatten_global_settings_presets(
-				[
-					'default' => [],
-					'theme'   => [],
-					'custom'  => [],
-				]
-			)
-		);
+		$empty_origins = [
+			'default' => [],
+			'theme'   => [],
+			'custom'  => [],
+		];
 		// A missing settings path hands back the whole settings tree, which is not a
 		// preset list.
-		$this->assertSame(
-			[],
-			Newspack_Popups_API::flatten_global_settings_presets( [ 'typography' => [ 'fontSizes' => [] ] ] )
-		);
-		$this->assertSame( [], Newspack_Popups_API::flatten_global_settings_presets( 'not an array' ) );
-
-		$flat = [
+		$settings_tree = [ 'typography' => [ 'fontSizes' => [] ] ];
+		$flat          = [
 			[
 				'slug' => 'small',
 				'size' => '13px',
 			],
 		];
-		$this->assertSame( $flat, Newspack_Popups_API::flatten_global_settings_presets( $flat ) );
+
+		foreach ( [ 'flatten_global_settings_presets', 'merge_global_settings_presets' ] as $method ) {
+			$this->assertSame( [], Newspack_Popups_API::$method( $empty_origins ), $method );
+			$this->assertSame( [], Newspack_Popups_API::$method( $settings_tree ), $method );
+			$this->assertSame( [], Newspack_Popups_API::$method( 'not an array' ), $method );
+			$this->assertSame( $flat, Newspack_Popups_API::$method( $flat ), $method );
+		}
 	}
 
 	/**
