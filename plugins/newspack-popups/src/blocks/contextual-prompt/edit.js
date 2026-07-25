@@ -15,23 +15,16 @@
  * WordPress dependencies.
  */
 import { __, sprintf } from '@wordpress/i18n';
-import apiFetch from '@wordpress/api-fetch';
 import { useEffect, useRef, useState } from '@wordpress/element';
 import { useSelect, useDispatch } from '@wordpress/data';
 import { InspectorControls, useBlockProps, useInnerBlocksProps, store as blockEditorStore } from '@wordpress/block-editor';
 import { createBlock, createBlocksFromInnerBlocksTemplate } from '@wordpress/blocks';
-import { Button, PanelBody } from '@wordpress/components';
+import { PanelBody } from '@wordpress/components';
 
-const POST_TYPE_LABEL = window.newspack_popups_blocks_data?.post_type_label || __( 'post', 'newspack-popups' );
-
-const FRAMING_LABELS = {
-	/* translators: %s: the edited content's post type label, e.g. "post", "page". */
-	top: sprintf( __( 'Top of %s', 'newspack-popups' ), POST_TYPE_LABEL ),
-	/* translators: %s: the edited content's post type label, e.g. "post", "page". */
-	mid: sprintf( __( 'Mid-%s', 'newspack-popups' ), POST_TYPE_LABEL ),
-	/* translators: %s: the edited content's post type label, e.g. "post", "page". */
-	end: sprintf( __( 'End of %s', 'newspack-popups' ), POST_TYPE_LABEL ),
-};
+/**
+ * Internal dependencies.
+ */
+import { POST_TYPE_LABEL, FRAMING_LABELS, generateCandidates, GenerateButton, CandidateList } from './candidates';
 
 // The CTA follows the site's reader-revenue setup: the donate block when
 // Newspack donations are native, a plain button otherwise. The button defaults
@@ -127,13 +120,11 @@ export const ContextualPromptEditor = ( { clientId } ) => {
 	const fetchCandidates = async () => {
 		setGenerating( true );
 		try {
-			const response = await apiFetch( {
-				path: '/wp/v2/newspack-editorial-assistant/generate/donation',
-				method: 'POST',
-				data: { post_id: postId, content: wp.data.select( 'core/editor' ).getEditedPostContent(), framing },
+			return await generateCandidates( {
+				postId,
+				content: wp.data.select( 'core/editor' ).getEditedPostContent(),
+				framing,
 			} );
-			const payload = response && response.data ? response.data : response;
-			return payload?.candidates || [];
 		} finally {
 			setGenerating( false );
 		}
@@ -176,25 +167,10 @@ export const ContextualPromptEditor = ( { clientId } ) => {
 							FRAMING_LABELS[ framing ].toLowerCase()
 						) }
 					</p>
-					<Button
-						variant="secondary"
-						onClick={ regenerate }
-						disabled={ generating }
-						isBusy={ generating }
-						__next40pxDefaultSize
-						style={ { width: '100%', justifyContent: 'center' } }
-					>
-						{ generating ? __( 'Generating…', 'newspack-popups' ) : __( 'Regenerate suggestions', 'newspack-popups' ) }
-					</Button>
-					{ candidates.map( ( candidate, index ) => (
-						<div key={ index } style={ { marginTop: '16px' } }>
-							<strong>{ FRAMING_LABELS[ candidate.framing ] || candidate.framing }</strong>
-							<p style={ { margin: '4px 0 8px' } }>{ candidate.body }</p>
-							<Button variant="primary" size="small" onClick={ () => apply( candidate ) }>
-								{ __( 'Apply', 'newspack-popups' ) }
-							</Button>
-						</div>
-					) ) }
+					<GenerateButton busy={ generating } onClick={ regenerate }>
+						{ __( 'Regenerate suggestions', 'newspack-popups' ) }
+					</GenerateButton>
+					<CandidateList candidates={ candidates } onApply={ apply } />
 				</PanelBody>
 			</InspectorControls>
 			<div { ...innerBlocksProps } />

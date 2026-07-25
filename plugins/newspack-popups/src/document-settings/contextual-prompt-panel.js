@@ -4,7 +4,8 @@
  * The prompt is a block living in the post content, so the canvas is the source
  * of truth: copy is edited inline, position is the block's position, and the
  * design comes from block supports. The panel's only jobs are AI generation and
- * managing that one block.
+ * managing that one block. Generation and candidate presentation are shared
+ * with the block's Copy panel (see the block's candidates module).
  */
 
 /**
@@ -17,16 +18,15 @@ import { PluginDocumentSettingPanel } from '@wordpress/edit-post';
 import {
 	Button,
 	Notice,
-	Spinner,
 	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
-import apiFetch from '@wordpress/api-fetch';
 
 /**
  * Internal dependencies
  */
 import { createPromptBlock } from '../blocks/contextual-prompt/edit';
+import { POST_TYPE_LABEL, generateCandidates, GenerateButton, CandidateList } from '../blocks/contextual-prompt/candidates';
 
 const BLOCK_NAME = 'newspack-popups/contextual-prompt';
 
@@ -42,17 +42,6 @@ const findCopyBlock = blocks => {
 		}
 	}
 	return null;
-};
-
-const POST_TYPE_LABEL = window.newspackPopupsContextualPrompt?.postTypeLabel || __( 'post', 'newspack-popups' );
-
-const FRAMING_LABELS = {
-	/* translators: %s: the edited content's post type label, e.g. "post", "page". */
-	top: sprintf( __( 'Top of %s', 'newspack-popups' ), POST_TYPE_LABEL ),
-	/* translators: %s: the edited content's post type label, e.g. "post", "page". */
-	mid: sprintf( __( 'Mid-%s', 'newspack-popups' ), POST_TYPE_LABEL ),
-	/* translators: %s: the edited content's post type label, e.g. "post", "page". */
-	end: sprintf( __( 'End of %s', 'newspack-popups' ), POST_TYPE_LABEL ),
 };
 
 const ContextualPromptPanel = () => {
@@ -86,13 +75,7 @@ const ContextualPromptPanel = () => {
 		setGenerating( true );
 		setError( '' );
 		try {
-			const response = await apiFetch( {
-				path: '/wp/v2/newspack-editorial-assistant/generate/donation',
-				method: 'POST',
-				data: { post_id: postId, content },
-			} );
-			const payload = response && response.data ? response.data : response;
-			const list = ( payload && payload.candidates ) || [];
+			const list = await generateCandidates( { postId, content } );
 			setCandidates( list );
 			if ( ! list.length ) {
 				setError( __( 'No suggestions were returned. Try generating again.', 'newspack-popups' ) );
@@ -151,10 +134,10 @@ const ContextualPromptPanel = () => {
 							) }
 						</p>
 						<HStack justify="flex-start" spacing={ 2 } wrap>
-							<Button variant="secondary" onClick={ () => selectBlock( instance.clientId ) }>
+							<Button variant="secondary" __next40pxDefaultSize onClick={ () => selectBlock( instance.clientId ) }>
 								{ __( 'Select prompt', 'newspack-popups' ) }
 							</Button>
-							<Button isDestructive variant="tertiary" onClick={ () => removeBlock( instance.clientId ) }>
+							<Button isDestructive variant="tertiary" __next40pxDefaultSize onClick={ () => removeBlock( instance.clientId ) }>
 								{ __( 'Remove', 'newspack-popups' ) }
 							</Button>
 						</HStack>
@@ -169,23 +152,12 @@ const ContextualPromptPanel = () => {
 					</p>
 				) }
 
-				<Button variant="secondary" onClick={ generate } disabled={ generating }>
-					{ generating && <Spinner /> }
-					{ generating ? __( 'Generating…', 'newspack-popups' ) : generateLabel }
-				</Button>
-
-				{ candidates.map( ( candidate, index ) => (
-					<VStack key={ index } spacing={ 2 }>
-						<strong>{ FRAMING_LABELS[ candidate.framing ] || candidate.framing }</strong>
-						<p style={ { margin: 0 } }>{ candidate.body }</p>
-						<div>
-							<Button variant="secondary" onClick={ () => applyCandidate( candidate ) }>
-								{ __( 'Apply', 'newspack-popups' ) }
-							</Button>
-						</div>
-					</VStack>
-				) ) }
+				<GenerateButton busy={ generating } onClick={ generate }>
+					{ generateLabel }
+				</GenerateButton>
 			</VStack>
+
+			<CandidateList candidates={ candidates } onApply={ applyCandidate } />
 		</PluginDocumentSettingPanel>
 	);
 };
