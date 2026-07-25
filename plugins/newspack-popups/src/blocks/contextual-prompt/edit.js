@@ -15,23 +15,16 @@
  * WordPress dependencies.
  */
 import { __, sprintf } from '@wordpress/i18n';
-import apiFetch from '@wordpress/api-fetch';
 import { useEffect, useRef, useState } from '@wordpress/element';
 import { useSelect, useDispatch } from '@wordpress/data';
 import { InspectorControls, useBlockProps, useInnerBlocksProps, store as blockEditorStore } from '@wordpress/block-editor';
 import { createBlock, createBlocksFromInnerBlocksTemplate } from '@wordpress/blocks';
-import { Button, PanelBody } from '@wordpress/components';
+import { PanelBody } from '@wordpress/components';
 
-const POST_TYPE_LABEL = window.newspack_popups_blocks_data?.post_type_label || __( 'post', 'newspack-popups' );
-
-const FRAMING_LABELS = {
-	/* translators: %s: the edited content's post type label, e.g. "post", "page". */
-	top: sprintf( __( 'Top of %s', 'newspack-popups' ), POST_TYPE_LABEL ),
-	/* translators: %s: the edited content's post type label, e.g. "post", "page". */
-	mid: sprintf( __( 'Mid-%s', 'newspack-popups' ), POST_TYPE_LABEL ),
-	/* translators: %s: the edited content's post type label, e.g. "post", "page". */
-	end: sprintf( __( 'End of %s', 'newspack-popups' ), POST_TYPE_LABEL ),
-};
+/**
+ * Internal dependencies.
+ */
+import { POST_TYPE_LABEL, FRAMING_LABELS, framingForPosition, generateCandidates, GenerateButton, CandidateList } from './candidates';
 
 // The CTA follows the site's reader-revenue setup: the donate block when
 // Newspack donations are native, a plain button otherwise. The button defaults
@@ -72,23 +65,11 @@ export const ContextualPromptEditor = ( { clientId } ) => {
 			const blockEditor = select( blockEditorStore );
 			const copyId = blockEditor.getClientIdsOfDescendants( clientId ).find( id => 'core/paragraph' === blockEditor.getBlockName( id ) );
 			const content = copyId ? blockEditor.getBlockAttributes( copyId ).content : undefined;
-			// The framing follows the block's actual position in the story, with a
-			// small buffer: a prompt sitting two paragraphs in still reads as a
-			// top-of-story ask, and likewise near the end.
-			const FRAMING_BUFFER = 3;
-			const index = blockEditor.getBlockIndex( clientId );
-			const total = blockEditor.getBlockCount();
-			let position = 'mid';
-			if ( index < FRAMING_BUFFER ) {
-				position = 'top';
-			} else if ( index >= total - FRAMING_BUFFER ) {
-				position = 'end';
-			}
 			return {
 				postId: select( 'core/editor' ).getCurrentPostId(),
 				copyClientId: copyId,
 				copyIsEmpty: ! content || ! content.toString().trim(),
-				framing: position,
+				framing: framingForPosition( blockEditor.getBlockIndex( clientId ), blockEditor.getBlockCount() ),
 			};
 		},
 		[ clientId ]
@@ -124,16 +105,27 @@ export const ContextualPromptEditor = ( { clientId } ) => {
 	const [ candidates, setCandidates ] = useState( [] );
 	const autoRan = useRef( false );
 
+	// The block can be moved after a request is in flight; a request framed for
+	// the old position must not overwrite the current one's candidates.
+	const framingRef = useRef( framing );
+	useEffect( () => {
+		framingRef.current = framing;
+	} );
+
+	// Candidates are framed for a specific position, so a move to a different
+	// bucket invalidates any already listed.
+	useEffect( () => {
+		setCandidates( [] );
+	}, [ framing ] );
+
 	const fetchCandidates = async () => {
 		setGenerating( true );
 		try {
-			const response = await apiFetch( {
-				path: '/wp/v2/newspack-editorial-assistant/generate/donation',
-				method: 'POST',
-				data: { post_id: postId, content: wp.data.select( 'core/editor' ).getEditedPostContent(), framing },
+			return await generateCandidates( {
+				postId,
+				content: wp.data.select( 'core/editor' ).getEditedPostContent(),
+				framing,
 			} );
-			const payload = response && response.data ? response.data : response;
-			return payload?.candidates || [];
 		} finally {
 			setGenerating( false );
 		}
@@ -146,7 +138,17 @@ export const ContextualPromptEditor = ( { clientId } ) => {
 		setCandidates( [] );
 	};
 
-	const regenerate = () => fetchCandidates().then( setCandidates );
+	const regenerate = () => {
+		const requestedFraming = framing;
+		return fetchCandidates().then( list => {
+			// The block moved to a different framing bucket while the request was
+			// in flight — the response is for a stale position, so drop it.
+			if ( ( framingRef.current || undefined ) !== ( requestedFraming || undefined ) ) {
+				return;
+			}
+			setCandidates( list );
+		} );
+	};
 
 	// A fresh prompt generates its own copy — inserting the block should never
 	// leave the editor with an empty placeholder to fill by hand.
@@ -176,25 +178,10 @@ export const ContextualPromptEditor = ( { clientId } ) => {
 							FRAMING_LABELS[ framing ].toLowerCase()
 						) }
 					</p>
-					<Button
-						variant="secondary"
-						onClick={ regenerate }
-						disabled={ generating }
-						isBusy={ generating }
-						__next40pxDefaultSize
-						style={ { width: '100%', justifyContent: 'center' } }
-					>
-						{ generating ? __( 'Generating…', 'newspack-popups' ) : __( 'Regenerate suggestions', 'newspack-popups' ) }
-					</Button>
-					{ candidates.map( ( candidate, index ) => (
-						<div key={ index } style={ { marginTop: '16px' } }>
-							<strong>{ FRAMING_LABELS[ candidate.framing ] || candidate.framing }</strong>
-							<p style={ { margin: '4px 0 8px' } }>{ candidate.body }</p>
-							<Button variant="primary" size="small" onClick={ () => apply( candidate ) }>
-								{ __( 'Apply', 'newspack-popups' ) }
-							</Button>
-						</div>
-					) ) }
+					<GenerateButton busy={ generating } onClick={ regenerate }>
+						{ __( 'Regenerate Suggestions', 'newspack-popups' ) }
+					</GenerateButton>
+					<CandidateList candidates={ candidates } onApply={ apply } />
 				</PanelBody>
 			</InspectorControls>
 			<div { ...innerBlocksProps } />

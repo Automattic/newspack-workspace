@@ -4,29 +4,27 @@
  * The prompt is a block living in the post content, so the canvas is the source
  * of truth: copy is edited inline, position is the block's position, and the
  * design comes from block supports. The panel's only jobs are AI generation and
- * managing that one block.
+ * managing that one block. Generation and candidate presentation are shared
+ * with the block's Copy panel (see the block's candidates module).
  */
 
 /**
  * WordPress dependencies
  */
 import { __, sprintf } from '@wordpress/i18n';
-import { useState } from '@wordpress/element';
+import { useEffect, useRef, useState } from '@wordpress/element';
 import { useSelect, useDispatch } from '@wordpress/data';
 import { PluginDocumentSettingPanel } from '@wordpress/edit-post';
 import {
-	Button,
 	Notice,
-	Spinner,
-	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
-import apiFetch from '@wordpress/api-fetch';
 
 /**
  * Internal dependencies
  */
 import { createPromptBlock } from '../blocks/contextual-prompt/edit';
+import { POST_TYPE_LABEL, framingForPosition, generateCandidates, GenerateButton, CandidateList } from '../blocks/contextual-prompt/candidates';
 
 const BLOCK_NAME = 'newspack-popups/contextual-prompt';
 
@@ -44,35 +42,42 @@ const findCopyBlock = blocks => {
 	return null;
 };
 
-const POST_TYPE_LABEL = window.newspackPopupsContextualPrompt?.postTypeLabel || __( 'post', 'newspack-popups' );
-
-const FRAMING_LABELS = {
-	/* translators: %s: the edited content's post type label, e.g. "post", "page". */
-	top: sprintf( __( 'Top of %s', 'newspack-popups' ), POST_TYPE_LABEL ),
-	/* translators: %s: the edited content's post type label, e.g. "post", "page". */
-	mid: sprintf( __( 'Mid-%s', 'newspack-popups' ), POST_TYPE_LABEL ),
-	/* translators: %s: the edited content's post type label, e.g. "post", "page". */
-	end: sprintf( __( 'End of %s', 'newspack-popups' ), POST_TYPE_LABEL ),
-};
-
 const ContextualPromptPanel = () => {
-	const { postId, postType, content, blockCount, instance } = useSelect( select => {
+	const { postId, postType, content, blockCount, instance, instanceFraming } = useSelect( select => {
 		const editor = select( 'core/editor' );
 		const blocks = select( 'core/block-editor' ).getBlocks() || [];
+		const instanceIndex = blocks.findIndex( block => BLOCK_NAME === block.name );
 		return {
 			postId: editor.getCurrentPostId(),
 			postType: editor.getCurrentPostType(),
 			content: editor.getEditedPostContent(),
 			blockCount: blocks.length,
-			instance: blocks.find( block => BLOCK_NAME === block.name ) || null,
+			instance: -1 === instanceIndex ? null : blocks[ instanceIndex ],
+			// Once the prompt is placed, its position decides the framing — the
+			// top/mid/end choice is only on offer before the first insert.
+			instanceFraming: -1 === instanceIndex ? null : framingForPosition( instanceIndex, blocks.length ),
 		};
 	}, [] );
 
-	const { insertBlock, removeBlock, updateBlockAttributes, selectBlock } = useDispatch( 'core/block-editor' );
+	const { insertBlock, updateBlockAttributes, selectBlock } = useDispatch( 'core/block-editor' );
 
 	const [ candidates, setCandidates ] = useState( [] );
 	const [ generating, setGenerating ] = useState( false );
 	const [ error, setError ] = useState( '' );
+
+	// The block can be moved after a request is in flight; a request framed for
+	// the old position must not overwrite the current one's candidates.
+	const framingRef = useRef( instanceFraming );
+	useEffect( () => {
+		framingRef.current = instanceFraming;
+	} );
+
+	// Candidates are framed for a specific position, so a move to a different
+	// bucket invalidates any already listed.
+	useEffect( () => {
+		setCandidates( [] );
+		setError( '' );
+	}, [ instanceFraming ] );
 
 	const optedIn = window.newspackPopupsContextualPrompt?.enabled;
 	const isPrompt = 'newspack_popups_cpt' === postType;
@@ -85,14 +90,14 @@ const ContextualPromptPanel = () => {
 	const generate = async () => {
 		setGenerating( true );
 		setError( '' );
+		const requestedFraming = instanceFraming || undefined;
 		try {
-			const response = await apiFetch( {
-				path: '/wp/v2/newspack-editorial-assistant/generate/donation',
-				method: 'POST',
-				data: { post_id: postId, content },
-			} );
-			const payload = response && response.data ? response.data : response;
-			const list = ( payload && payload.candidates ) || [];
+			const list = await generateCandidates( { postId, content, framing: requestedFraming } );
+			// The block moved to a different framing bucket while the request was
+			// in flight — the response is for a stale position, so drop it.
+			if ( ( framingRef.current || undefined ) !== requestedFraming ) {
+				return;
+			}
 			setCandidates( list );
 			if ( ! list.length ) {
 				setError( __( 'No suggestions were returned. Try generating again.', 'newspack-popups' ) );
@@ -130,7 +135,7 @@ const ContextualPromptPanel = () => {
 	};
 
 	const generateLabel =
-		candidates.length || instance ? __( 'Regenerate suggestions', 'newspack-popups' ) : __( 'Generate suggestions', 'newspack-popups' );
+		candidates.length || instance ? __( 'Regenerate Suggestions', 'newspack-popups' ) : __( 'Generate Suggestions', 'newspack-popups' );
 
 	return (
 		<PluginDocumentSettingPanel name="newspack-contextual-prompt" title={ __( 'Contextual Prompt', 'newspack-popups' ) }>
@@ -141,51 +146,26 @@ const ContextualPromptPanel = () => {
 					</Notice>
 				) }
 
-				{ instance ? (
-					<>
-						<p style={ { margin: 0 } }>
-							{ sprintf(
+				<p style={ { margin: 0 } }>
+					{ instance
+						? sprintf(
 								/* translators: %1$s: the edited content's post type label, e.g. "post", "page". */
 								__( 'This %1$s has a Contextual Prompt. Edit its copy directly in the %1$s.', 'newspack-popups' ),
 								POST_TYPE_LABEL
-							) }
-						</p>
-						<HStack justify="flex-start" spacing={ 2 } wrap>
-							<Button variant="secondary" onClick={ () => selectBlock( instance.clientId ) }>
-								{ __( 'Select prompt', 'newspack-popups' ) }
-							</Button>
-							<Button isDestructive variant="tertiary" onClick={ () => removeBlock( instance.clientId ) }>
-								{ __( 'Remove', 'newspack-popups' ) }
-							</Button>
-						</HStack>
-					</>
-				) : (
-					<p style={ { margin: 0 } }>
-						{ sprintf(
-							/* translators: %s: the edited content's post type label, e.g. "post", "page". */
-							__( 'Generate a donation prompt specific to this %s.', 'newspack-popups' ),
-							POST_TYPE_LABEL
-						) }
-					</p>
-				) }
+						  )
+						: sprintf(
+								/* translators: %s: the edited content's post type label, e.g. "post", "page". */
+								__( 'Generate a donation prompt specific to this %s.', 'newspack-popups' ),
+								POST_TYPE_LABEL
+						  ) }
+				</p>
 
-				<Button variant="secondary" onClick={ generate } disabled={ generating }>
-					{ generating && <Spinner /> }
-					{ generating ? __( 'Generating…', 'newspack-popups' ) : generateLabel }
-				</Button>
-
-				{ candidates.map( ( candidate, index ) => (
-					<VStack key={ index } spacing={ 2 }>
-						<strong>{ FRAMING_LABELS[ candidate.framing ] || candidate.framing }</strong>
-						<p style={ { margin: 0 } }>{ candidate.body }</p>
-						<div>
-							<Button variant="secondary" onClick={ () => applyCandidate( candidate ) }>
-								{ __( 'Apply', 'newspack-popups' ) }
-							</Button>
-						</div>
-					</VStack>
-				) ) }
+				<GenerateButton busy={ generating } onClick={ generate }>
+					{ generateLabel }
+				</GenerateButton>
 			</VStack>
+
+			<CandidateList candidates={ candidates } onApply={ applyCandidate } />
 		</PluginDocumentSettingPanel>
 	);
 };
