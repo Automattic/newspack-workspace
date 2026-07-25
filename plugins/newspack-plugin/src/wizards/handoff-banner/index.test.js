@@ -6,7 +6,7 @@ import { render, fireEvent, screen } from '@testing-library/react';
 /**
  * Internal dependencies.
  */
-import { HandoffBanner } from './index';
+import { HandoffBanner, remeasureBannerOffset } from './index';
 
 const VISIBLE_CLASS = 'newspack-handoff-banner-visible';
 const HEIGHT_PROPERTY = '--newspack-handoff-banner-height';
@@ -123,6 +123,33 @@ describe( 'HandoffBanner', () => {
 		expect( document.documentElement.style.getPropertyValue( HEIGHT_PROPERTY ) ).toBe( '124px' );
 
 		window.ResizeObserver = originalResizeObserver;
+	} );
+
+	it( 're-measures when the banner is moved after mount, e.g. the WooCommerce header offset', () => {
+		restoreRect = mockRect( { top: 32, height: 56 } );
+
+		render( <HandoffBanner /> );
+		expect( document.documentElement.style.getPropertyValue( HEIGHT_PROPERTY ) ).toBe( '88px' );
+
+		// The bootstrap's WooCommerce offset can land up to five seconds after
+		// mount: the margin moves the banner without resizing it, so nothing but
+		// this call refreshes the published value.
+		restoreRect();
+		restoreRect = mockRect( { top: 92, height: 56 } );
+		remeasureBannerOffset();
+
+		expect( document.documentElement.style.getPropertyValue( HEIGHT_PROPERTY ) ).toBe( '148px' );
+	} );
+
+	it( 'ignores a re-measure once the banner is gone', () => {
+		restoreRect = mockRect( { top: 32, height: 56 } );
+
+		const { unmount } = render( <HandoffBanner /> );
+		unmount();
+		remeasureBannerOffset();
+
+		expect( document.documentElement.classList.contains( VISIBLE_CLASS ) ).toBe( false );
+		expect( document.documentElement.style.getPropertyValue( HEIGHT_PROPERTY ) ).toBe( '' );
 	} );
 
 	it( 'still publishes a value without ResizeObserver support', () => {

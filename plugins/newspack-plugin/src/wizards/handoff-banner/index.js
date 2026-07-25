@@ -28,6 +28,16 @@ const clearBannerOffset = () => {
 	document.documentElement.style.removeProperty( HEIGHT_PROPERTY );
 };
 
+// The mounted banner's measurement, held at module scope so code outside the
+// component can ask for a fresh reading. Null while no banner is mounted.
+let measureBannerOffset = null;
+
+/**
+ * Publish a fresh offset. Anything that moves the banner without resizing it —
+ * the ResizeObserver below never sees that — has to call this.
+ */
+export const remeasureBannerOffset = () => measureBannerOffset?.();
+
 export const HandoffBanner = ( {
 	bodyText = __( 'Return to Newspack after completing configuration', 'newspack-plugin' ),
 	primaryButtonText = __( 'Back to Newspack', 'newspack-plugin' ),
@@ -61,15 +71,20 @@ export const HandoffBanner = ( {
 				`${ Math.ceil( banner.getBoundingClientRect().bottom + window.scrollY ) }px`
 			);
 		};
+		measureBannerOffset = updateOffset;
 		updateOffset();
+		const cleanUp = () => {
+			measureBannerOffset = null;
+			clearBannerOffset();
+		};
 		if ( typeof window.ResizeObserver !== 'function' ) {
-			return clearBannerOffset;
+			return cleanUp;
 		}
 		const observer = new window.ResizeObserver( updateOffset );
 		observer.observe( banner );
 		return () => {
 			observer.disconnect();
-			clearBannerOffset();
+			cleanUp();
 		};
 	}, [ visibility ] );
 
@@ -107,6 +122,9 @@ if ( el ) {
 			const wooHeader = document.querySelector( '.woocommerce-layout__header' );
 			if ( wooHeader && wpbody.style.marginTop ) {
 				el.style.marginTop = wpbody.style.marginTop;
+				// The margin pushes the banner down without changing its size, so
+				// the published offset has to be taken again. A no-op before mount.
+				remeasureBannerOffset();
 				return true;
 			}
 			return false;
