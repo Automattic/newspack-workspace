@@ -32,11 +32,11 @@ const TOGGLE_FIELD = {
 const LABEL_FIELD = { ...FIELD_DEFAULTS, key: 'newspack_contextual_prompts_override_label', label: 'Override button label', type: 'text' };
 const URL_FIELD = { ...FIELD_DEFAULTS, key: 'newspack_contextual_prompts_override_url', label: 'Override button URL', type: 'text' };
 
-// The style keys the status payload carries; the Style section itself is covered
-// in style-section.test.js, so the block-theme shape (a handoff, no controls) is
-// enough to see the section render at all.
+// The style keys the status payload carries, on a classic theme; the Style
+// section itself is covered in style-section.test.js, so the heading is enough to
+// see the section render at all.
 const STYLE_PAYLOAD = {
-	is_block_theme: true,
+	is_block_theme: false,
 	style_defaults: {},
 	style_palette: [],
 	style_font_sizes: [],
@@ -101,7 +101,7 @@ describe( 'ContextualPromptsSettings empty state', () => {
 } );
 
 describe( 'ContextualPromptsSettings enabled body', () => {
-	it( 'renders the two settings sections', () => {
+	it( 'renders the two settings sections, plus Style on a classic theme', () => {
 		render(
 			<ContextualPromptsSettings
 				status={ { enabled: true, can_manage: true, fields: [ ENABLE_FIELD ], ...STYLE_PAYLOAD } }
@@ -116,6 +116,25 @@ describe( 'ContextualPromptsSettings enabled body', () => {
 		expect( screen.getByRole( 'heading', { name: 'Publisher Profile' } ) ).toBeInTheDocument();
 		expect( screen.getByRole( 'heading', { name: 'Site-Wide Override' } ) ).toBeInTheDocument();
 		expect( screen.getByRole( 'heading', { name: 'Style' } ) ).toBeInTheDocument();
+	} );
+
+	// A block theme's styles live in the Site Editor, which the wizard header hands
+	// off to, so the section has nothing left to render.
+	it( 'leaves out the Style section on a block theme', () => {
+		render(
+			<ContextualPromptsSettings
+				status={ { enabled: true, can_manage: true, fields: [ ENABLE_FIELD ], ...STYLE_PAYLOAD, is_block_theme: true } }
+				values={ fieldsToValues( [ ENABLE_FIELD ] ) }
+				error={ null }
+				inFlight={ false }
+				onSetValue={ () => {} }
+				onEnable={ () => Promise.resolve() }
+			/>
+		);
+
+		expect( screen.getByRole( 'heading', { name: 'Site-Wide Override' } ) ).toBeInTheDocument();
+		expect( screen.queryByRole( 'heading', { name: 'Style' } ) ).not.toBeInTheDocument();
+		expect( screen.queryByRole( 'button', { name: 'Background' } ) ).toBeNull();
 	} );
 
 	// An older newspack-popups answers the status endpoint without the style keys:

@@ -1,8 +1,10 @@
 /**
  * Contextual Prompts Style section.
  *
- * Block themes hand off to the Site Editor's Styles panel; classic themes get
- * controls that write site-wide defaults for the Contextual Prompt block.
+ * Controls that write site-wide defaults for the Contextual Prompt block on a
+ * classic theme. Block themes get no section: the wizard header hands off to the
+ * Site Editor's Styles panel instead, so the parent renders this for classic
+ * themes alone.
  */
 
 /**
@@ -51,7 +53,7 @@ import {
 /**
  * Internal dependencies
  */
-import { Button, Grid, Handoff, SectionHeader } from '../../../../../../packages/components/src';
+import { Button, Grid, SectionHeader } from '../../../../../../packages/components/src';
 import {
 	contrastRatio,
 	perceivedBrightness,
@@ -291,8 +293,6 @@ const PaddingControl = ( { steps, units, allowCustom, values, onChange, disabled
 
 const StyleSection = ( { status, styles = {}, inFlight, onChangeStyles } ) => {
 	const {
-		is_block_theme: isBlockTheme,
-		site_editor_styles_url: siteEditorStylesUrl,
 		style_defaults: styleDefaults,
 		style_palette: stylePalette,
 		style_font_sizes: styleFontSizes,
@@ -367,7 +367,7 @@ const StyleSection = ( { status, styles = {}, inFlight, onChangeStyles } ) => {
 
 	// ColorPalette, FontSizePicker, BoxControl and BorderBoxControl take no
 	// `disabled` prop, so the whole stack goes inert while a save is in flight.
-	const classicControls = (
+	const controls = (
 		<Disabled isDisabled={ !! inFlight }>
 			<HStack alignment="top" justify="flex-end">
 				<VStack spacing={ 0 } className="newspack-prompt-style-controls">
@@ -519,30 +519,13 @@ const StyleSection = ( { status, styles = {}, inFlight, onChangeStyles } ) => {
 			<SectionHeader
 				heading={ 2 }
 				title={ __( 'Style', 'newspack-plugin' ) }
-				description={
-					isBlockTheme
-						? __( "Contextual Prompt styles are managed in the Site Editor's Styles panel.", 'newspack-plugin' )
-						: __(
-								'Site-wide default styles for the Contextual Prompt block. Styles set on an individual block override these.',
-								'newspack-plugin'
-						  )
-				}
+				description={ __(
+					'Site-wide default styles for the Contextual Prompt block. Styles set on an individual block override these.',
+					'newspack-plugin'
+				) }
 				noMargin
 			/>
-			{ isBlockTheme ? (
-				<VStack spacing={ 6 } alignment="start">
-					<Handoff
-						url={ siteEditorStylesUrl }
-						bannerText={ __( 'Return to Contextual Prompts after editing the block styles', 'newspack-plugin' ) }
-						bannerButtonText={ __( 'Back to Contextual Prompts', 'newspack-plugin' ) }
-						size="compact"
-					>
-						{ __( 'Edit Styles', 'newspack-plugin' ) }
-					</Handoff>
-				</VStack>
-			) : (
-				classicControls
-			) }
+			{ controls }
 		</Grid>
 	);
 };

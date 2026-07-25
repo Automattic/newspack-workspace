@@ -1,68 +1,19 @@
 /**
- * Contextual Prompts Style section: on a block theme it only offers the handoff
- * to the Site Editor's Styles panel, with no site-wide style controls; on a
- * classic theme it renders the site-wide style control groups.
+ * Contextual Prompts Style section: the site-wide style control groups a classic
+ * theme gets. Block themes have no section — the wizard header hands off to the
+ * Site Editor instead, which index.test.js covers.
  */
 
 /**
  * External dependencies
  */
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
-
-/**
- * WordPress dependencies
- */
-import apiFetch from '@wordpress/api-fetch';
 
 /**
  * Internal dependencies
  */
 import StyleSection from './style-section';
-
-jest.mock( '@wordpress/api-fetch', () => jest.fn() );
-
-const HANDOFF_LINK = 'https://example.test/wp-admin/site-editor.php?handoff=1';
-const RETURN_URL = 'https://example.test/wp-admin/admin.php?page=newspack-audience';
-
-const BLOCK_THEME_STATUS = {
-	is_block_theme: true,
-	style_defaults: {},
-	style_palette: [],
-	style_font_sizes: [],
-	site_editor_styles_url: 'https://example.test/wp-admin/site-editor.php?p=%2Fstyles',
-};
-
-describe( 'StyleSection on a block theme', () => {
-	beforeEach( () => {
-		apiFetch.mockReset();
-		apiFetch.mockResolvedValue( { HandoffLink: HANDOFF_LINK } );
-		delete window.location;
-		window.location = { href: RETURN_URL };
-	} );
-
-	it( 'renders the handoff to the Styles panel and no controls', async () => {
-		render( <StyleSection status={ BLOCK_THEME_STATUS } styles={ {} } inFlight={ false } onChangeStyles={ () => {} } /> );
-
-		expect( screen.queryByText( 'Background' ) ).toBeNull();
-
-		fireEvent.click( screen.getByRole( 'button', { name: 'Edit Styles' } ) );
-
-		await waitFor( () => expect( window.location.href ).toBe( HANDOFF_LINK ) );
-		expect( apiFetch ).toHaveBeenCalledWith(
-			expect.objectContaining( {
-				path: '/newspack/v1/handoff',
-				method: 'POST',
-				data: expect.objectContaining( {
-					destinationUrl: BLOCK_THEME_STATUS.site_editor_styles_url,
-					// The banner the Site Editor shows carries the way back here.
-					bannerText: 'Return to Contextual Prompts after editing the block styles',
-					bannerButtonText: 'Back to Contextual Prompts',
-				} ),
-			} )
-		);
-	} );
-} );
 
 // The editor's two contrast messages, verbatim: the suggestion follows the way the
 // pair already leans.
@@ -112,10 +63,9 @@ const CLASSIC_STATUS = {
 };
 
 describe( 'StyleSection on a classic theme', () => {
-	it( 'renders control groups and no handoff button', () => {
+	it( 'renders the control groups', () => {
 		render( <StyleSection status={ CLASSIC_STATUS } styles={ {} } inFlight={ false } onChangeStyles={ () => {} } /> );
 
-		expect( screen.queryByRole( 'link', { name: 'Edit Styles' } ) ).toBeNull();
 		expect( screen.getByRole( 'button', { name: 'Text' } ) ).toBeInTheDocument();
 		expect( screen.getByRole( 'button', { name: 'Background' } ) ).toBeInTheDocument();
 

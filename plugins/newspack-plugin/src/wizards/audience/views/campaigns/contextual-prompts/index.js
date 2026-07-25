@@ -20,7 +20,7 @@ import { moreVertical } from '@wordpress/icons';
 /**
  * Internal dependencies
  */
-import { withWizardScreen, Button, Notice, Waiting, useUnsavedChangesDialog } from '../../../../../../packages/components/src';
+import { withWizardScreen, Button, Handoff, Notice, Waiting, useUnsavedChangesDialog } from '../../../../../../packages/components/src';
 import ContextualPromptsSettings from './contextual-prompts-settings';
 
 const STATUS_PATH = '/newspack-popups/v1/contextual-prompt/status';
@@ -176,6 +176,11 @@ const ContextualPrompts = props => {
 	const onDisable = () => requestConfirm( disable );
 	const onEnable = () => setEnabled( true ).then( () => setSnackbar( __( 'Contextual Prompts enabled.', 'newspack-plugin' ) ) );
 
+	// Block themes have no Style section: their block styles live in the Site
+	// Editor, so the header hands off to it. The style payload newspack-popups
+	// only started sending carries the theme flag, so an older one gets nothing.
+	const showStyleHandoff = status?.enabled && 'is_block_theme' in status && status.is_block_theme;
+
 	const headerActions = status?.enabled ? (
 		<>
 			<DropdownMenu
@@ -189,6 +194,15 @@ const ContextualPrompts = props => {
 					},
 				] }
 			/>
+			{ showStyleHandoff && (
+				<Handoff
+					url={ status.site_editor_styles_url }
+					bannerText={ __( 'Return to Contextual Prompts after editing the block styles', 'newspack-plugin' ) }
+					bannerButtonText={ __( 'Back to Contextual Prompts', 'newspack-plugin' ) }
+				>
+					{ __( 'Edit Styles', 'newspack-plugin' ) }
+				</Handoff>
+			) }
 			<Button variant="primary" onClick={ saveProfile } disabled={ inFlight || ! isDirty }>
 				{ __( 'Save', 'newspack-plugin' ) }
 			</Button>

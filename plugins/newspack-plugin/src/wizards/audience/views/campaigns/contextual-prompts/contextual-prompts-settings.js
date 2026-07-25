@@ -3,8 +3,9 @@
  *
  * Presentational: the parent tab owns the fetched status/values and the header
  * Save/Disable actions. When the feature is off this renders an empty state with
- * an admin opt-in (AI-use disclosure modal); when on, the publisher-profile,
- * site-wide override and style sections in the branch's grid/divider layout.
+ * an admin opt-in (AI-use disclosure modal); when on, the publisher-profile and
+ * site-wide override sections in the branch's grid/divider layout, plus the
+ * style section on a classic theme.
  */
 
 /**
@@ -139,7 +140,8 @@ const ContextualPromptsSettings = ( { status, values, blockStyles, error, inFlig
 	const overrideEnabled = !! values[ OVERRIDE_ENABLED_KEY ];
 	// The Style section needs the style payload newspack-popups only started
 	// sending alongside it. Against an older one its controls would render empty
-	// and every save would be silently dropped, so the section stays out.
+	// and every save would be silently dropped, so the section stays out. Block
+	// themes have no section at all: the header hands off to the Site Editor.
 	const hasStylePayload = 'is_block_theme' in status;
 
 	// Fields are grouped by section server-side so the override controls can sit
@@ -233,7 +235,7 @@ const ContextualPromptsSettings = ( { status, values, blockStyles, error, inFlig
 				/>
 				<VStack spacing={ 6 }>{ renderFields( 'override' ) }</VStack>
 			</Grid>
-			{ hasStylePayload && (
+			{ hasStylePayload && ! status.is_block_theme && (
 				<>
 					<Divider alignment="full-width" variant="tertiary" />
 					<StyleSection status={ status } styles={ blockStyles } inFlight={ inFlight } onChangeStyles={ onChangeStyles } />

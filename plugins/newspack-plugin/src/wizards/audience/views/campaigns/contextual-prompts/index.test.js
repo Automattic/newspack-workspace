@@ -1,6 +1,7 @@
 /**
  * Contextual Prompts tab: a failed initial status fetch surfaces an error with a
- * Retry that re-runs the fetch, and profile fields lock while a save is pending.
+ * Retry that re-runs the fetch, profile fields lock while a save is pending, and
+ * on a block theme the header hands off to the Site Editor's Styles panel.
  */
 
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
@@ -53,6 +54,10 @@ const styledStatus = () => ( {
 
 // With nothing stored, PHP hands back an empty JSON array rather than an object.
 const unstyledStatus = () => ( { ...styledStatus(), styles: [] } );
+
+// Block theme, so the styles live in the Site Editor: no Style section, and the
+// header carries the handoff to it instead.
+const blockThemeStatus = () => ( { ...styledStatus(), is_block_theme: true } );
 
 // Each style group resets from the options menu in its ToolsPanel header.
 const resetStyleItem = ( panel, item ) => {
@@ -184,5 +189,50 @@ describe( 'ContextualPrompts tab', () => {
 		const { data } = apiFetch.mock.calls[ 1 ][ 0 ];
 		expect( data.styles ).toEqual( { color: { background: '#123456' }, border: { radius: '4px' } } );
 		expect( data.fields ).toEqual( { [ PROFILE_FIELD.key ]: '' } );
+	} );
+
+	describe( 'on a block theme', () => {
+		const HANDOFF_LINK = 'https://example.test/wp-admin/site-editor.php?handoff=1';
+		const RETURN_URL = 'https://example.test/wp-admin/admin.php?page=newspack-audience';
+		let location;
+
+		// The handoff reads the current URL for its return banner and navigates by
+		// assigning to it, so a plain object stands in for the whole time.
+		beforeEach( () => {
+			location = window.location;
+			delete window.location;
+			window.location = { href: RETURN_URL };
+		} );
+
+		afterEach( () => {
+			window.location = location;
+		} );
+
+		it( 'hands off to the Styles panel from the header, with no Style section', async () => {
+			apiFetch.mockResolvedValueOnce( blockThemeStatus() );
+			apiFetch.mockResolvedValueOnce( { HandoffLink: HANDOFF_LINK } );
+			renderTab();
+
+			await waitFor( () => expect( screen.getByRole( 'button', { name: 'Edit Styles' } ) ).toBeInTheDocument() );
+			// The section is gone: the header action stands in for it.
+			expect( screen.queryByRole( 'heading', { name: 'Style' } ) ).toBeNull();
+			expect( screen.queryByRole( 'button', { name: 'Background' } ) ).toBeNull();
+
+			fireEvent.click( screen.getByRole( 'button', { name: 'Edit Styles' } ) );
+
+			await waitFor( () => expect( window.location.href ).toBe( HANDOFF_LINK ) );
+			expect( apiFetch ).toHaveBeenCalledWith(
+				expect.objectContaining( {
+					path: '/newspack/v1/handoff',
+					method: 'POST',
+					data: expect.objectContaining( {
+						destinationUrl: blockThemeStatus().site_editor_styles_url,
+						// The banner the Site Editor shows carries the way back here.
+						bannerText: 'Return to Contextual Prompts after editing the block styles',
+						bannerButtonText: 'Back to Contextual Prompts',
+					} ),
+				} )
+			);
+		} );
 	} );
 } );
