@@ -1387,44 +1387,80 @@ class Newspack_Blocks {
 	}
 
 	/**
-	 * Pick either white or black, whatever has sufficient contrast with the color being passed to it.
-	 * From Newspack Theme functions.
+	 * Pick either black or white text, whichever reads better on the given background.
 	 *
-	 * @param  string $hex Hexidecimal value of the color to adjust.
-	 * @return string Either black or white hexidecimal values.
+	 * Scores pure black and pure white as text against the background and returns
+	 * whichever produces the greater APCA lightness contrast (Lc); ties fall to
+	 * black. The constants are the SA98G set from apca-w3 0.1.9.
 	 *
-	 * @ref https://stackoverflow.com/questions/1331591/given-a-background-color-black-or-white-text
+	 * Keep in sync with getColorForContrast() in src/blocks/donate/utils.ts.
+	 *
+	 * @param string $hex Hexadecimal background color (#RGB or #RRGGBB, with or without #).
+	 * @return string Either 'black' or 'white' (literal CSS color keywords).
 	 */
 	public static function get_color_for_contrast( $hex ) {
-		// Hex RGB.
-		$r1 = hexdec( substr( $hex, 1, 2 ) );
-		$g1 = hexdec( substr( $hex, 3, 2 ) );
-		$b1 = hexdec( substr( $hex, 5, 2 ) );
-		// Black RGB.
-		$black_color    = '#000';
-		$r2_black_color = hexdec( substr( $black_color, 1, 2 ) );
-		$g2_black_color = hexdec( substr( $black_color, 3, 2 ) );
-		$b2_black_color = hexdec( substr( $black_color, 5, 2 ) );
-		// Calc contrast ratio.
-		$l1             = 0.2126 * pow( $r1 / 255, 2.2 ) +
-		0.7152 * pow( $g1 / 255, 2.2 ) +
-		0.0722 * pow( $b1 / 255, 2.2 );
-		$l2             = 0.2126 * pow( $r2_black_color / 255, 2.2 ) +
-		0.7152 * pow( $g2_black_color / 255, 2.2 ) +
-		0.0722 * pow( $b2_black_color / 255, 2.2 );
-		$contrast_ratio = 0;
-		if ( $l1 > $l2 ) {
-			$contrast_ratio = (int) ( ( $l1 + 0.05 ) / ( $l2 + 0.05 ) );
-		} else {
-			$contrast_ratio = (int) ( ( $l2 + 0.05 ) / ( $l1 + 0.05 ) );
+		$background_y = self::get_apca_luminance( $hex );
+		$black_lc     = self::get_apca_contrast( $background_y, self::get_apca_luminance( '#000000' ) );
+		$white_lc     = self::get_apca_contrast( $background_y, self::get_apca_luminance( '#ffffff' ) );
+
+		return abs( $white_lc ) > abs( $black_lc ) ? 'white' : 'black';
+	}
+
+	/**
+	 * Compute the soft-clamped APCA screen luminance (Y) of a hex color.
+	 *
+	 * Accepts #RGB and #RRGGBB, with or without the leading #. Unparseable input
+	 * is treated as white (luminance 1.0) so callers fall back to black text.
+	 *
+	 * @param string $hex Hexadecimal color.
+	 * @return float Soft-clamped luminance in the 0..1 range.
+	 */
+	private static function get_apca_luminance( $hex ) {
+		$hex = ltrim( (string) $hex, '#' );
+		if ( 3 === strlen( $hex ) ) {
+			$hex = $hex[0] . $hex[0] . $hex[1] . $hex[1] . $hex[2] . $hex[2];
 		}
-		if ( $contrast_ratio > 5 ) {
-			// If contrast is more than 5, return black color.
-			return 'black';
-		} else {
-			// if not, return white color.
-			return 'white';
+		if ( 6 !== strlen( $hex ) || ! ctype_xdigit( $hex ) ) {
+			return 1.0;
 		}
+
+		$r = hexdec( substr( $hex, 0, 2 ) ) / 255;
+		$g = hexdec( substr( $hex, 2, 2 ) ) / 255;
+		$b = hexdec( substr( $hex, 4, 2 ) ) / 255;
+
+		$y = 0.2126729 * pow( $r, 2.4 ) + 0.7151522 * pow( $g, 2.4 ) + 0.0721750 * pow( $b, 2.4 );
+
+		// APCA soft-clamp of near-black luminance.
+		if ( $y <= 0.022 ) {
+			$y += pow( 0.022 - $y, 1.414 );
+		}
+
+		return $y;
+	}
+
+	/**
+	 * Compute the APCA lightness contrast (Lc) of text on a background.
+	 *
+	 * Positive values are dark text on a lighter background; negative values are
+	 * light text on a darker background. Both luminances must already be
+	 * soft-clamped.
+	 *
+	 * @param float $background_y Soft-clamped background luminance.
+	 * @param float $text_y       Soft-clamped text luminance.
+	 * @return float The Lc value.
+	 */
+	private static function get_apca_contrast( $background_y, $text_y ) {
+		if ( abs( $background_y - $text_y ) < 0.0005 ) {
+			return 0.0;
+		}
+
+		if ( $background_y > $text_y ) {
+			$sapc = ( pow( $background_y, 0.56 ) - pow( $text_y, 0.57 ) ) * 1.14;
+			return $sapc < 0.1 ? 0.0 : ( $sapc - 0.027 ) * 100;
+		}
+
+		$sapc = ( pow( $background_y, 0.65 ) - pow( $text_y, 0.62 ) ) * 1.14;
+		return $sapc > -0.1 ? 0.0 : ( $sapc + 0.027 ) * 100;
 	}
 
 	/**
