@@ -53,7 +53,12 @@ describe( 'StyleSection on a block theme', () => {
 			expect.objectContaining( {
 				path: '/newspack/v1/handoff',
 				method: 'POST',
-				data: expect.objectContaining( { destinationUrl: BLOCK_THEME_STATUS.site_editor_styles_url } ),
+				data: expect.objectContaining( {
+					destinationUrl: BLOCK_THEME_STATUS.site_editor_styles_url,
+					// The banner the Site Editor shows carries the way back here.
+					bannerText: 'Return to Contextual Prompts after editing the block styles',
+					bannerButtonText: 'Back to Contextual Prompts',
+				} ),
 			} )
 		);
 	} );

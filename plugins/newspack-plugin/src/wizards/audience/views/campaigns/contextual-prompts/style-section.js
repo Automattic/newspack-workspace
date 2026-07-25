@@ -531,7 +531,12 @@ const StyleSection = ( { status, styles = {}, inFlight, onChangeStyles } ) => {
 			/>
 			{ isBlockTheme ? (
 				<VStack spacing={ 6 } alignment="start">
-					<Handoff url={ siteEditorStylesUrl } __next40pxDefaultSize>
+					<Handoff
+						url={ siteEditorStylesUrl }
+						bannerText={ __( 'Return to Contextual Prompts after editing the block styles', 'newspack-plugin' ) }
+						bannerButtonText={ __( 'Back to Contextual Prompts', 'newspack-plugin' ) }
+						size="compact"
+					>
 						{ __( 'Edit Styles', 'newspack-plugin' ) }
 					</Handoff>
 				</VStack>
