@@ -24,7 +24,8 @@ class ContextualPromptBlockTest extends WP_UnitTestCase {
 
 
 	/**
-	 * A single top-level contextual-prompt block, wrapped in filler paragraphs.
+	 * A single top-level contextual-prompt block carrying a plain-button CTA,
+	 * wrapped in filler paragraphs.
 	 *
 	 * @param int $before Filler paragraphs before the prompt.
 	 * @param int $after  Filler paragraphs after the prompt.
@@ -32,7 +33,8 @@ class ContextualPromptBlockTest extends WP_UnitTestCase {
 	 */
 	private function content_with_prompt( $before, $after ) {
 		$para   = "<!-- wp:paragraph -->\n<p>Body.</p>\n<!-- /wp:paragraph -->\n";
-		$prompt = "<!-- wp:newspack-popups/contextual-prompt -->\n<div class=\"wp-block-newspack-popups-contextual-prompt\"><!-- wp:paragraph -->\n<p>Ask.</p>\n<!-- /wp:paragraph --></div>\n<!-- /wp:newspack-popups/contextual-prompt -->\n";
+		$button = "<!-- wp:buttons -->\n<div class=\"wp-block-buttons\"><!-- wp:button {\"url\":\"https://example.com/donate/\"} -->\n<div class=\"wp-block-button\"><a class=\"wp-block-button__link wp-element-button\" href=\"https://example.com/donate/\">Donate</a></div>\n<!-- /wp:button --></div>\n<!-- /wp:buttons -->";
+		$prompt = "<!-- wp:newspack-popups/contextual-prompt -->\n<div class=\"wp-block-newspack-popups-contextual-prompt\"><!-- wp:paragraph -->\n<p>Ask.</p>\n<!-- /wp:paragraph -->" . $button . "</div>\n<!-- /wp:newspack-popups/contextual-prompt -->\n";
 		return str_repeat( $para, $before ) . $prompt . str_repeat( $para, $after );
 	}
 

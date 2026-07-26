@@ -256,6 +256,34 @@ class ContextualPromptOverrideTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The stamped CTA type follows what actually renders, not the configured
+	 * platform: a button override on a native-donations site reports 'button'.
+	 */
+	public function test_cta_attribute_follows_button_override() {
+		add_filter( 'newspack_contextual_prompts_use_donate_block', '__return_true' );
+		update_option( Newspack_Popups_Settings::OVERRIDE_ENABLED_OPTION, true );
+		update_option( Newspack_Popups_Settings::OVERRIDE_CTA_OPTION, 'button' );
+		update_option( 'newspack_contextual_prompts_override_body', 'Support our spring drive.' );
+		update_option( 'newspack_contextual_prompts_override_url', 'https://example.com/drive/' );
+
+		$html = do_blocks( self::DONATE_FORM_PROMPT );
+
+		$this->assertStringContainsString( 'data-newspack-cp-cta="button"', $html );
+	}
+
+	/**
+	 * Off-site with no destination drops the CTA entirely, and the stamped type
+	 * says so rather than claiming a button rendered.
+	 */
+	public function test_cta_attribute_reports_none_when_cta_dropped() {
+		add_filter( 'newspack_contextual_prompts_use_donate_block', '__return_false' );
+
+		$html = do_blocks( self::DONATE_FORM_PROMPT );
+
+		$this->assertStringContainsString( 'data-newspack-cp-cta="none"', $html );
+	}
+
+	/**
 	 * A literal $-sequence in override copy or label survives verbatim — never
 	 * expanded as a regex backreference.
 	 */

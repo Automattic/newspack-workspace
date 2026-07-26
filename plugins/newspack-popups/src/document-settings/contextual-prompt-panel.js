@@ -52,16 +52,20 @@ const findCopyBlock = blocks => {
 const ContextualPromptPanel = () => {
 	const { postId, postType, blockCount, instance, instanceFraming } = useSelect( select => {
 		const editor = select( 'core/editor' );
-		const blocks = select( 'core/block-editor' ).getBlocks() || [];
-		const instanceIndex = blocks.findIndex( block => BLOCK_NAME === block.name );
+		const blockEditor = select( 'core/block-editor' );
+		const blocks = blockEditor.getBlocks() || [];
+		// The prompt can sit anywhere, including nested inside a group or columns.
+		const promptClientId = blockEditor.getClientIdsWithDescendants().find( clientId => BLOCK_NAME === blockEditor.getBlockName( clientId ) );
+		const topLevelIndex = promptClientId ? blocks.findIndex( block => promptClientId === block.clientId ) : -1;
 		return {
 			postId: editor.getCurrentPostId(),
 			postType: editor.getCurrentPostType(),
 			blockCount: blocks.length,
-			instance: -1 === instanceIndex ? null : blocks[ instanceIndex ],
+			instance: promptClientId ? blockEditor.getBlock( promptClientId ) : null,
 			// Once the prompt is placed, its position decides the framing — the
-			// top/mid/end choice is only on offer before the first insert.
-			instanceFraming: -1 === instanceIndex ? null : framingForPosition( instanceIndex, blocks.length ),
+			// top/mid/end choice is only on offer before the first insert. A nested
+			// prompt can't be bucketed, matching get_placement()'s 'unknown'.
+			instanceFraming: -1 === topLevelIndex ? null : framingForPosition( topLevelIndex, blocks.length ),
 		};
 	}, [] );
 
@@ -78,16 +82,11 @@ const ContextualPromptPanel = () => {
 		framingRef.current = instanceFraming;
 	} );
 
-	// Asking again is a rejection of what came back, so a repeat request for the
-	// same framing must not be served the cached response.
-	const generatedRef = useRef( false );
-
 	// Candidates are framed for a specific position, so a move to a different
 	// bucket invalidates any already listed.
 	useEffect( () => {
 		setCandidates( [] );
 		setError( '' );
-		generatedRef.current = false;
 	}, [ instanceFraming ] );
 
 	const optedIn = window.newspackPopupsContextualPrompt?.enabled;
@@ -98,6 +97,11 @@ const ContextualPromptPanel = () => {
 		return null;
 	}
 
+	// Asking again is a rejection of what came back, so whenever the button reads
+	// "Regenerate" the request must bypass the cached response. Only the very
+	// first Generate in a fresh context is served from cache.
+	const isRegenerate = Boolean( candidates.length || instance );
+
 	const generate = async () => {
 		setGenerating( true );
 		setError( '' );
@@ -107,9 +111,8 @@ const ContextualPromptPanel = () => {
 				postId,
 				content: wp.data.select( 'core/editor' ).getEditedPostContent(),
 				framing: requestedFraming,
-				regenerate: generatedRef.current,
+				regenerate: isRegenerate,
 			} );
-			generatedRef.current = true;
 			// The block moved to a different framing bucket while the request was
 			// in flight — the response is for a stale position, so drop it.
 			if ( ( framingRef.current || undefined ) !== requestedFraming ) {
@@ -151,8 +154,7 @@ const ContextualPromptPanel = () => {
 		setCandidates( [] );
 	};
 
-	const generateLabel =
-		candidates.length || instance ? __( 'Regenerate Suggestions', 'newspack-popups' ) : __( 'Generate Suggestions', 'newspack-popups' );
+	const generateLabel = isRegenerate ? __( 'Regenerate Suggestions', 'newspack-popups' ) : __( 'Generate Suggestions', 'newspack-popups' );
 
 	return (
 		<PluginDocumentSettingPanel name="newspack-contextual-prompt" title={ __( 'Contextual Prompt', 'newspack-popups' ) }>

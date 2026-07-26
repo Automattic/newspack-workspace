@@ -45,7 +45,7 @@ final class Newspack_Popups_Contextual_Prompt_Block {
 		}
 
 		$post_id  = (int) get_the_ID();
-		$cta_type = self::use_donate_block() ? 'donate_block' : 'button';
+		$cta_type = self::get_cta_type( is_array( $block ) ? $block : [] );
 
 		// Add the data attributes to the opening tag of the wrapper only.
 		return preg_replace(
@@ -57,6 +57,23 @@ final class Newspack_Popups_Contextual_Prompt_Block {
 			$block_content,
 			1
 		);
+	}
+
+	/**
+	 * The CTA actually rendered, read from the parsed block after the render
+	 * pipeline's normalization and override have reshaped it: the configured
+	 * platform alone can disagree with the markup (a button override on a native
+	 * site, or an off-site setup with no destination, where the CTA is dropped).
+	 *
+	 * @param array $block The parsed block, post render_block_data filters.
+	 * @return string 'donate_block' | 'button' | 'none'.
+	 */
+	private static function get_cta_type( $block ) {
+		$cta = self::find_cta( $block );
+		if ( null === $cta ) {
+			return 'none';
+		}
+		return 'newspack-blocks/donate' === $cta['name'] ? 'donate_block' : 'button';
 	}
 
 	/**

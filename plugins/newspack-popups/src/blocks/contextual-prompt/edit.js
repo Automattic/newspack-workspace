@@ -112,7 +112,7 @@ export const ContextualPromptEditor = ( { clientId } ) => {
 	const [ generating, setGenerating ] = useState( false );
 	const [ candidates, setCandidates ] = useState( [] );
 	const [ error, setError ] = useState( '' );
-	const autoRan = useRef( false );
+	const autoAttempted = useRef( new Set() );
 
 	// The block can be moved after a request is in flight; a request framed for
 	// the old position must not overwrite the current one's candidates.
@@ -172,10 +172,12 @@ export const ContextualPromptEditor = ( { clientId } ) => {
 	};
 
 	// A fresh prompt generates its own copy — inserting the block should never
-	// leave the editor with an empty placeholder to fill by hand.
+	// leave the editor with an empty placeholder to fill by hand. Attempts are
+	// keyed by framing: a move while the request is in flight drops the stale
+	// response, and the effect then retries once for the new position.
 	useEffect( () => {
-		if ( copyClientId && copyIsEmpty && ! autoRan.current ) {
-			autoRan.current = true;
+		if ( copyClientId && copyIsEmpty && ! autoAttempted.current.has( framing ) ) {
+			autoAttempted.current.add( framing );
 			const requestedFraming = framing;
 			fetchCandidates()
 				.then( list => {
@@ -197,7 +199,7 @@ export const ContextualPromptEditor = ( { clientId } ) => {
 				} )
 				.catch( handleError );
 		}
-	}, [ copyClientId, copyIsEmpty ] );
+	}, [ copyClientId, copyIsEmpty, framing ] );
 
 	return (
 		<>

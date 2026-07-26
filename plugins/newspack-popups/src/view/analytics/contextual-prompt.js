@@ -89,12 +89,13 @@ const trackSeen = element => {
  */
 const trackClicked = element => {
 	element.addEventListener( 'click', event => {
-		// The CTA activation only: a link (plain-button mode) or a submit control
-		// (the donate block's submit). Deliberately NOT any button — the donate
-		// block's amount/frequency selectors are buttons too, and counting them
-		// would inflate clicks and skew comparison against the plain-button CTA.
-		const link = event.target.closest( 'a[href]' );
-		if ( ! link && ! event.target.closest( '[type="submit"]' ) ) {
+		// The CTA activation only: the CTA button's link (plain-button mode) or a
+		// submit control inside the donate block (native mode). Deliberately NOT
+		// any link or button — inline links in the copy are editorial, and the
+		// donate block's amount/frequency selectors are buttons too; counting
+		// either would inflate clicks and skew comparison between the two modes.
+		const link = event.target.closest( '.wp-block-buttons .wp-block-button__link[href]' );
+		if ( ! link && ! event.target.closest( '.wpbnbd [type="submit"]' ) ) {
 			return;
 		}
 		// button_text and link_url are meaningful only in plain-button mode (the
