@@ -24,7 +24,14 @@ import {
  * Internal dependencies
  */
 import { createPromptBlock } from '../blocks/contextual-prompt/edit';
-import { POST_TYPE_LABEL, framingForPosition, generateCandidates, GenerateButton, CandidateList } from '../blocks/contextual-prompt/candidates';
+import {
+	POST_TYPE_LABEL,
+	framingForPosition,
+	generateCandidates,
+	toRichTextContent,
+	GenerateButton,
+	CandidateList,
+} from '../blocks/contextual-prompt/candidates';
 
 const BLOCK_NAME = 'newspack-popups/contextual-prompt';
 
@@ -43,14 +50,13 @@ const findCopyBlock = blocks => {
 };
 
 const ContextualPromptPanel = () => {
-	const { postId, postType, content, blockCount, instance, instanceFraming } = useSelect( select => {
+	const { postId, postType, blockCount, instance, instanceFraming } = useSelect( select => {
 		const editor = select( 'core/editor' );
 		const blocks = select( 'core/block-editor' ).getBlocks() || [];
 		const instanceIndex = blocks.findIndex( block => BLOCK_NAME === block.name );
 		return {
 			postId: editor.getCurrentPostId(),
 			postType: editor.getCurrentPostType(),
-			content: editor.getEditedPostContent(),
 			blockCount: blocks.length,
 			instance: -1 === instanceIndex ? null : blocks[ instanceIndex ],
 			// Once the prompt is placed, its position decides the framing — the
@@ -72,11 +78,16 @@ const ContextualPromptPanel = () => {
 		framingRef.current = instanceFraming;
 	} );
 
+	// Asking again is a rejection of what came back, so a repeat request for the
+	// same framing must not be served the cached response.
+	const generatedRef = useRef( false );
+
 	// Candidates are framed for a specific position, so a move to a different
 	// bucket invalidates any already listed.
 	useEffect( () => {
 		setCandidates( [] );
 		setError( '' );
+		generatedRef.current = false;
 	}, [ instanceFraming ] );
 
 	const optedIn = window.newspackPopupsContextualPrompt?.enabled;
@@ -92,7 +103,13 @@ const ContextualPromptPanel = () => {
 		setError( '' );
 		const requestedFraming = instanceFraming || undefined;
 		try {
-			const list = await generateCandidates( { postId, content, framing: requestedFraming } );
+			const list = await generateCandidates( {
+				postId,
+				content: wp.data.select( 'core/editor' ).getEditedPostContent(),
+				framing: requestedFraming,
+				regenerate: generatedRef.current,
+			} );
+			generatedRef.current = true;
 			// The block moved to a different framing bucket while the request was
 			// in flight — the response is for a stale position, so drop it.
 			if ( ( framingRef.current || undefined ) !== requestedFraming ) {
@@ -125,7 +142,7 @@ const ContextualPromptPanel = () => {
 		if ( instance ) {
 			const copyBlock = findCopyBlock( instance.innerBlocks );
 			if ( copyBlock ) {
-				updateBlockAttributes( copyBlock.clientId, { content: candidate.body } );
+				updateBlockAttributes( copyBlock.clientId, { content: toRichTextContent( candidate.body ) } );
 			}
 			selectBlock( instance.clientId );
 		} else {

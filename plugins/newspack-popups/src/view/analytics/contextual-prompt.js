@@ -59,8 +59,14 @@ const trackSeen = element => {
 	const observer = new IntersectionObserver(
 		entries => {
 			entries.forEach( entry => {
-				if ( entry.isIntersecting ) {
+				// The observer's initial callback fires at whatever the current ratio
+				// is, threshold or not, so the ratio is checked rather than assumed.
+				if ( entry.isIntersecting && entry.intersectionRatio >= SEEN_THRESHOLD ) {
+					if ( timer ) {
+						return;
+					}
 					timer = setTimeout( () => {
+						timer = null;
 						sendEvent( payloadFor( element, 'seen' ), EVENT_NAME );
 						observer.disconnect();
 					}, SEEN_DURATION_MS );

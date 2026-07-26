@@ -19,12 +19,20 @@ import { useEffect, useRef, useState } from '@wordpress/element';
 import { useSelect, useDispatch } from '@wordpress/data';
 import { InspectorControls, useBlockProps, useInnerBlocksProps, store as blockEditorStore } from '@wordpress/block-editor';
 import { createBlock, createBlocksFromInnerBlocksTemplate } from '@wordpress/blocks';
-import { PanelBody } from '@wordpress/components';
+import { Notice, PanelBody } from '@wordpress/components';
 
 /**
  * Internal dependencies.
  */
-import { POST_TYPE_LABEL, FRAMING_LABELS, framingForPosition, generateCandidates, GenerateButton, CandidateList } from './candidates';
+import {
+	POST_TYPE_LABEL,
+	FRAMING_LABELS,
+	framingForPosition,
+	generateCandidates,
+	toRichTextContent,
+	GenerateButton,
+	CandidateList,
+} from './candidates';
 
 // The CTA follows the site's reader-revenue setup: the donate block when
 // Newspack donations are native, a plain button otherwise. The button defaults
@@ -49,7 +57,7 @@ export const getTemplate = () => [
 export const createPromptBlock = copy => {
 	const template = getTemplate();
 	// The copy paragraph is the first child.
-	template[ 0 ][ 1 ].content = copy;
+	template[ 0 ][ 1 ].content = toRichTextContent( copy );
 	return createBlock( 'newspack-popups/contextual-prompt', {}, createBlocksFromInnerBlocksTemplate( template ) );
 };
 
@@ -103,6 +111,7 @@ export const ContextualPromptEditor = ( { clientId } ) => {
 
 	const [ generating, setGenerating ] = useState( false );
 	const [ candidates, setCandidates ] = useState( [] );
+	const [ error, setError ] = useState( '' );
 	const autoRan = useRef( false );
 
 	// The block can be moved after a request is in flight; a request framed for
@@ -116,38 +125,50 @@ export const ContextualPromptEditor = ( { clientId } ) => {
 	// bucket invalidates any already listed.
 	useEffect( () => {
 		setCandidates( [] );
+		setError( '' );
 	}, [ framing ] );
 
-	const fetchCandidates = async () => {
+	const fetchCandidates = async options => {
 		setGenerating( true );
+		setError( '' );
 		try {
 			return await generateCandidates( {
 				postId,
 				content: wp.data.select( 'core/editor' ).getEditedPostContent(),
 				framing,
+				...options,
 			} );
 		} finally {
 			setGenerating( false );
 		}
 	};
 
+	const handleError = e => setError( e.message || __( 'Could not generate suggestions.', 'newspack-popups' ) );
+
 	const apply = candidate => {
 		if ( copyClientId ) {
-			updateBlockAttributes( copyClientId, { content: candidate.body } );
+			updateBlockAttributes( copyClientId, { content: toRichTextContent( candidate.body ) } );
 		}
 		setCandidates( [] );
 	};
 
+	// Asking again is a rejection of what came back, so it must not be served the
+	// cached response.
 	const regenerate = () => {
 		const requestedFraming = framing;
-		return fetchCandidates().then( list => {
-			// The block moved to a different framing bucket while the request was
-			// in flight — the response is for a stale position, so drop it.
-			if ( ( framingRef.current || undefined ) !== ( requestedFraming || undefined ) ) {
-				return;
-			}
-			setCandidates( list );
-		} );
+		return fetchCandidates( { regenerate: true } )
+			.then( list => {
+				// The block moved to a different framing bucket while the request was
+				// in flight — the response is for a stale position, so drop it.
+				if ( ( framingRef.current || undefined ) !== ( requestedFraming || undefined ) ) {
+					return;
+				}
+				setCandidates( list );
+				if ( ! list.length ) {
+					setError( __( 'No suggestions were returned. Try generating again.', 'newspack-popups' ) );
+				}
+			} )
+			.catch( handleError );
 	};
 
 	// A fresh prompt generates its own copy — inserting the block should never
@@ -155,11 +176,26 @@ export const ContextualPromptEditor = ( { clientId } ) => {
 	useEffect( () => {
 		if ( copyClientId && copyIsEmpty && ! autoRan.current ) {
 			autoRan.current = true;
-			fetchCandidates().then( list => {
-				if ( list[ 0 ] ) {
+			const requestedFraming = framing;
+			fetchCandidates()
+				.then( list => {
+					if ( ( framingRef.current || undefined ) !== ( requestedFraming || undefined ) ) {
+						return;
+					}
+					if ( ! list.length ) {
+						setError( __( 'No suggestions were returned. Try generating again.', 'newspack-popups' ) );
+						return;
+					}
+					// Copy typed while the request was in flight is the editor's, not
+					// ours to replace: offer the response as candidates instead.
+					const current = wp.data.select( 'core/block-editor' ).getBlockAttributes( copyClientId )?.content;
+					if ( current && current.toString().trim() ) {
+						setCandidates( list );
+						return;
+					}
 					apply( list[ 0 ] );
-				}
-			} );
+				} )
+				.catch( handleError );
 		}
 	}, [ copyClientId, copyIsEmpty ] );
 
@@ -167,6 +203,11 @@ export const ContextualPromptEditor = ( { clientId } ) => {
 		<>
 			<InspectorControls>
 				<PanelBody title={ __( 'Copy', 'newspack-popups' ) } initialOpen>
+					{ error && (
+						<Notice status="error" isDismissible={ false }>
+							{ error }
+						</Notice>
+					) }
 					<p style={ { marginTop: 0 } }>
 						{ sprintf(
 							/* translators: %1$s: the edited content's post type label. %2$s: the prompt's position. */

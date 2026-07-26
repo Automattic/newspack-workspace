@@ -55,6 +55,7 @@ class Newspack_Test_GA4_Custom_Dimensions extends WP_UnitTestCase {
 
 		delete_option( GA4_Custom_Dimensions::PROVISIONED_OPTION );
 		delete_option( self::SK_SETTINGS_OPTION );
+		delete_transient( GA4_Custom_Dimensions::SCHEMA_TRANSIENT );
 		wp_clear_scheduled_hook( GA4_Custom_Dimensions::PROVISION_ACTION );
 
 		// The OAuth proxy constants persist across tests; define them once. The
@@ -259,13 +260,28 @@ class Newspack_Test_GA4_Custom_Dimensions extends WP_UnitTestCase {
 			GA4_Custom_Dimensions::PROVISIONED_OPTION,
 			[
 				'property_id' => 'P1',
+				'schema'      => GA4_Custom_Dimensions::schema_fingerprint(),
 				'created'     => [],
 			]
 		);
 		GA4_Custom_Dimensions::on_sitekit_settings_updated( [ 'propertyID' => 'P0' ], [ 'propertyID' => 'P1' ] );
 		$this->assertFalse( wp_next_scheduled( GA4_Custom_Dimensions::PROVISION_ACTION ), 'An already-provisioned property is not rescheduled.' );
 
+		// A property provisioned against an older dimension list is rescheduled: GA4
+		// does not backfill a dimension created later.
+		update_option(
+			GA4_Custom_Dimensions::PROVISIONED_OPTION,
+			[
+				'property_id' => 'P1',
+				'schema'      => 'an-older-dimension-list',
+				'created'     => [],
+			]
+		);
+		GA4_Custom_Dimensions::on_sitekit_settings_updated( [ 'propertyID' => 'P0' ], [ 'propertyID' => 'P1' ] );
+		$this->assertNotFalse( wp_next_scheduled( GA4_Custom_Dimensions::PROVISION_ACTION ), 'A changed dimension list reschedules provisioning.' );
+
 		// A genuine property change schedules provisioning.
+		wp_clear_scheduled_hook( GA4_Custom_Dimensions::PROVISION_ACTION );
 		GA4_Custom_Dimensions::on_sitekit_settings_updated( [ 'propertyID' => 'P1' ], [ 'propertyID' => 'P2' ] );
 		$this->assertNotFalse( wp_next_scheduled( GA4_Custom_Dimensions::PROVISION_ACTION ), 'Changing the property schedules provisioning.' );
 
@@ -349,6 +365,7 @@ class Newspack_Test_GA4_Custom_Dimensions extends WP_UnitTestCase {
 		$summary = GA4_Custom_Dimensions::provision();
 		$this->assertIsArray( $summary );
 		$this->assertSame( 'newspack', $summary['auth_source'] );
+		$this->assertSame( GA4_Custom_Dimensions::schema_fingerprint(), $summary['schema'], 'The run records the dimension list it provisioned.' );
 		$this->assertSame( [], $summary['created'], 'Nothing is created when every dimension already exists.' );
 		$this->assertCount( count( GA4_Custom_Dimensions::get_dimensions() ), $summary['skipped_exists'] );
 		$this->assertSame( 0, $this->count_requests( 'properties/PROP-IDEM/customDimensions', 'POST' ), 'No create requests are made.' );

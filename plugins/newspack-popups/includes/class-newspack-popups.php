@@ -922,7 +922,7 @@ final class Newspack_Popups {
 			// It's not a popup CPT.
 
 			$supported_post_types = Newspack_Popups_Model::get_default_popup_post_types();
-			if ( self::is_contextual_prompts_enabled() && in_array( $screen->post_type, $supported_post_types, true ) ) {
+			if ( in_array( $screen->post_type, $supported_post_types, true ) ) {
 				// But it's a supported post type.
 				$document_settings_asset_path  = dirname( NEWSPACK_POPUPS_PLUGIN_FILE ) . '/dist/documentSettings.asset.php';
 				$document_settings_script_path = dirname( NEWSPACK_POPUPS_PLUGIN_FILE ) . '/dist/documentSettings.js';
@@ -938,14 +938,18 @@ final class Newspack_Popups {
 					$document_settings_asset['version'] ?? filemtime( $document_settings_script_path ),
 					true
 				);
-				\wp_localize_script(
-					'newspack-popups',
-					'newspackPopupsContextualPrompt',
-					[
-						'enabled'       => Newspack_Popups_Settings::is_ai_copy_assistant_enabled(),
-						'postTypeLabel' => self::get_current_post_type_label(),
-					]
-				);
+				// The script also carries the long-standing "Disable prompts" panel,
+				// so only the Contextual Prompt data is gated on the rollout flag.
+				if ( self::is_contextual_prompts_enabled() ) {
+					\wp_localize_script(
+						'newspack-popups',
+						'newspackPopupsContextualPrompt',
+						[
+							'enabled'       => Newspack_Popups_Settings::is_ai_copy_assistant_enabled(),
+							'postTypeLabel' => self::get_current_post_type_label(),
+						]
+					);
+				}
 			}
 
 			return;

@@ -12,6 +12,7 @@
 import { __, sprintf } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
 import { Button } from '@wordpress/components';
+import { escapeHTML } from '@wordpress/escape-html';
 
 // The block editor and the document-settings panel are separate entries with
 // separate localized objects; either may be the one present.
@@ -58,19 +59,30 @@ export const framingForPosition = ( index, total ) => {
 };
 
 /**
+ * Model output is stored in a RichText attribute, which serializes strings as
+ * raw HTML. The manager sanitizes server-side; encoding here too means nothing
+ * a model returns can reach the post as markup.
+ *
+ * @param {string} body The candidate copy.
+ * @return {string} The copy, encoded as plain text.
+ */
+export const toRichTextContent = body => escapeHTML( String( body ?? '' ) );
+
+/**
  * Request donation prompt candidates for a post.
  *
- * @param {Object} args           Request arguments.
- * @param {number} args.postId    The post being edited.
- * @param {string} args.content   The edited post content.
- * @param {string} [args.framing] Optional framing; when set, candidates are variants of it.
+ * @param {Object}  args              Request arguments.
+ * @param {number}  args.postId       The post being edited.
+ * @param {string}  args.content      The edited post content.
+ * @param {string}  [args.framing]    Optional framing; when set, candidates are variants of it.
+ * @param {boolean} [args.regenerate] Whether this is an explicit re-run, which bypasses the cached response.
  * @return {Promise<Array>} The candidate list (possibly empty).
  */
-export const generateCandidates = async ( { postId, content, framing } ) => {
+export const generateCandidates = async ( { postId, content, framing, regenerate } ) => {
 	const response = await apiFetch( {
 		path: '/wp/v2/newspack-editorial-assistant/generate/donation',
 		method: 'POST',
-		data: { post_id: postId, content, ...( framing ? { framing } : {} ) },
+		data: { post_id: postId, content, ...( framing ? { framing } : {} ), ...( regenerate ? { regenerate: true } : {} ) },
 	} );
 	const payload = response && response.data ? response.data : response;
 	return payload?.candidates || [];

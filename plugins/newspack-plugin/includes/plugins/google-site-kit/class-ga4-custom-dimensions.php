@@ -23,6 +23,7 @@ defined( 'ABSPATH' ) || exit;
 final class GA4_Custom_Dimensions {
 
 	const PROVISIONED_OPTION = 'newspack_ga4_dimensions_provisioned';
+	const SCHEMA_TRANSIENT   = 'newspack_ga4_dimensions_schema_check';
 	const LOGGER_HEADER      = 'NEWSPACK-GA4-DIMENSIONS';
 	const PROVISION_ACTION   = 'newspack_ga4_provision_dimensions';
 	const RECHECK_ACTION     = 'newspack_ga4_recheck_dimensions';
@@ -81,7 +82,8 @@ final class GA4_Custom_Dimensions {
 
 	/**
 	 * Schedule an immediate single-shot WP-Cron event to run provisioning in
-	 * the background. Skips if the property has already been provisioned.
+	 * the background. Skips if the property has already been provisioned with
+	 * the current dimension list.
 	 *
 	 * The event is keyed only on the action name, not the property. If the
 	 * connected property changes again before a pending event fires, no second
@@ -96,8 +98,9 @@ final class GA4_Custom_Dimensions {
 		$provisioned = get_option( self::PROVISIONED_OPTION, [] );
 		if (
 			is_array( $provisioned )
-			&& isset( $provisioned['property_id'] )
+			&& isset( $provisioned['property_id'], $provisioned['schema'] )
 			&& (string) $provisioned['property_id'] === $property_id
+			&& (string) $provisioned['schema'] === self::schema_fingerprint()
 		) {
 			return;
 		}
@@ -115,6 +118,10 @@ final class GA4_Custom_Dimensions {
 	 * self-heal without a manual CLI run. When everything is already in place it
 	 * is a no-op: one list call, zero writes.
 	 *
+	 * Also the entry point for a changed dimension list: GA4 collects a dimension
+	 * only from the moment it exists, so an addition is provisioned now rather
+	 * than at the next monthly recheck.
+	 *
 	 * Idempotent and safe to call repeatedly (e.g. on every admin page load).
 	 */
 	public static function maybe_schedule_recheck() {
@@ -122,11 +129,18 @@ final class GA4_Custom_Dimensions {
 			return;
 		}
 		$is_scheduled = as_has_scheduled_action( self::RECHECK_ACTION, [], self::RECHECK_GROUP );
-		if ( ! self::get_property_id() ) {
+		$property_id  = self::get_property_id();
+		if ( ! $property_id ) {
 			if ( $is_scheduled && function_exists( 'as_unschedule_all_actions' ) ) {
 				as_unschedule_all_actions( self::RECHECK_ACTION, [], self::RECHECK_GROUP );
 			}
 			return;
+		}
+		// Throttled so a site whose provisioning keeps failing doesn't queue a
+		// fresh attempt on every admin page load.
+		if ( ! get_transient( self::SCHEMA_TRANSIENT ) ) {
+			set_transient( self::SCHEMA_TRANSIENT, 1, DAY_IN_SECONDS );
+			self::schedule_provisioning( $property_id );
 		}
 		if ( $is_scheduled ) {
 			return;
@@ -178,6 +192,17 @@ final class GA4_Custom_Dimensions {
 			'categories'                  => 'Categories',
 			'author'                      => 'Author',
 		];
+	}
+
+	/**
+	 * Fingerprint of the dimension list currently in the code, stored with each
+	 * provisioning run so a later addition to the list can be told apart from a
+	 * property that is already fully provisioned.
+	 *
+	 * @return string
+	 */
+	public static function schema_fingerprint() {
+		return md5( (string) wp_json_encode( array_keys( self::get_dimensions() ) ) );
 	}
 
 	/**
@@ -432,6 +457,7 @@ final class GA4_Custom_Dimensions {
 
 		$summary = [
 			'property_id'    => $property_id,
+			'schema'         => self::schema_fingerprint(),
 			'auth_source'    => $used_source,
 			'timestamp'      => time(),
 			'created'        => $created,
