@@ -152,7 +152,17 @@
 	margin: 0;
 	max-height: none;
 	max-width: wp-vars.$sidebar-width;
+
+	// Core's frame carries a 350px floor, which would beat the cap above.
+	min-width: 0;
 	width: 100%;
+
+	// The wizard's modal styles blank every popover while a modal is open, to
+	// hide dropdowns left hanging behind one. The drawer's own popovers render
+	// into its slot inside this frame, so they are the one set meant to show.
+	.components-popover__content {
+		opacity: 1;
+	}
 
 	// Drop the modal's built-in content padding so the panels sit flush against
 	// the drawer's edges with only their own padding, and let the inner wrappers
