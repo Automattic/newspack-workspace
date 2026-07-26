@@ -134,7 +134,9 @@ const ContextualPromptPanel = () => {
 				setError( __( 'No suggestions were returned. Try generating again.', 'newspack-popups' ) );
 			}
 		} catch ( e ) {
-			if ( isCurrent() ) {
+			// Mirror the success-path guard: an error from a request framed for a
+			// previous position must not surface in the current framing context.
+			if ( isCurrent() && ( framingRef.current || undefined ) === requestedFraming ) {
 				setError( e.message || __( 'Could not generate suggestions.', 'newspack-popups' ) );
 			}
 		} finally {

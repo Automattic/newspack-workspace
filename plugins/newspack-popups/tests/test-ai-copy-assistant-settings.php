@@ -15,6 +15,18 @@
 class AiCopyAssistantSettingsTest extends WP_UnitTestCase {
 
 	/**
+	 * Native-CTA checks need the donate block registered — use_donate_block()
+	 * falls back to a button when it isn't. Newspack Blocks is not loaded in
+	 * this test env, so register a stub.
+	 */
+	public function set_up() {
+		parent::set_up();
+		if ( ! WP_Block_Type_Registry::get_instance()->is_registered( 'newspack-blocks/donate' ) ) {
+			register_block_type( 'newspack-blocks/donate' );
+		}
+	}
+
+	/**
 	 * Reset the opt-in, profile and override options between tests.
 	 */
 	public function tear_down() {
@@ -29,6 +41,9 @@ class AiCopyAssistantSettingsTest extends WP_UnitTestCase {
 		}
 		remove_filter( 'newspack_contextual_prompts_use_donate_block', '__return_true' );
 		remove_filter( 'newspack_contextual_prompts_use_donate_block', '__return_false' );
+		if ( WP_Block_Type_Registry::get_instance()->is_registered( 'newspack-blocks/donate' ) ) {
+			unregister_block_type( 'newspack-blocks/donate' );
+		}
 		parent::tear_down();
 	}
 

@@ -148,6 +148,7 @@ export const ContextualPromptEditor = ( { clientId } ) => {
 	const fetchCandidates = async options => {
 		const requestId = ++requestIdRef.current;
 		const isCurrent = () => requestId === requestIdRef.current;
+		const requestedFraming = framing;
 		setGenerating( true );
 		setError( '' );
 		try {
@@ -159,7 +160,9 @@ export const ContextualPromptEditor = ( { clientId } ) => {
 			} );
 			return { list, isCurrent };
 		} catch ( e ) {
-			if ( isCurrent() ) {
+			// Mirror the success-path guard: an error from a request framed for a
+			// previous position must not surface in the current framing context.
+			if ( isCurrent() && ( framingRef.current || undefined ) === ( requestedFraming || undefined ) ) {
 				handleError( e );
 			}
 			return { list: null, isCurrent };

@@ -5,8 +5,9 @@
  *
  * Both operate on parsed block data via prepare_block_data(). Structure
  * assertions call the filter directly; markup assertions render through
- * do_blocks() so the real pipeline runs. The donate block is not registered in
- * this test env, so native-CTA assertions are structural only.
+ * do_blocks() so the real pipeline runs. Newspack Blocks is not loaded in this
+ * test env, so set_up() registers a stub donate block type — use_donate_block()
+ * requires it — and native-CTA assertions are structural only.
  *
  * @package Newspack_Popups
  */
@@ -16,11 +17,15 @@
  */
 class ContextualPromptOverrideTest extends WP_UnitTestCase {
 	/**
-	 * Rendering requires the admin opt-in since the render-time strip keys on it.
+	 * Rendering requires the admin opt-in since the render-time strip keys on it,
+	 * and the native CTA requires the donate block to be registered.
 	 */
 	public function set_up() {
 		parent::set_up();
 		update_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION, true );
+		if ( ! WP_Block_Type_Registry::get_instance()->is_registered( 'newspack-blocks/donate' ) ) {
+			register_block_type( 'newspack-blocks/donate' );
+		}
 	}
 
 
@@ -68,6 +73,9 @@ class ContextualPromptOverrideTest extends WP_UnitTestCase {
 		delete_option( 'newspack_popups_donor_landing_page' );
 		remove_filter( 'newspack_contextual_prompts_use_donate_block', '__return_true' );
 		remove_filter( 'newspack_contextual_prompts_use_donate_block', '__return_false' );
+		if ( WP_Block_Type_Registry::get_instance()->is_registered( 'newspack-blocks/donate' ) ) {
+			unregister_block_type( 'newspack-blocks/donate' );
+		}
 		parent::tear_down();
 	}
 
@@ -117,6 +125,32 @@ class ContextualPromptOverrideTest extends WP_UnitTestCase {
 
 		$parsed = $this->parse_prompt( self::DONATE_FORM_PROMPT );
 		$this->assertSame( $parsed, Newspack_Popups_Contextual_Prompt_Block::prepare_block_data( $parsed ) );
+	}
+
+	/**
+	 * Native platform with the donate block registered: the donate child renders
+	 * and the stamped CTA type reports it.
+	 */
+	public function test_native_platform_with_block_registered_reports_donate_cta() {
+		add_filter( 'newspack_contextual_prompts_use_donate_block', '__return_true' );
+
+		$this->assertStringContainsString( 'data-newspack-cp-cta="donate_block"', do_blocks( self::DONATE_FORM_PROMPT ) );
+	}
+
+	/**
+	 * Native platform without the donate block registered (Newspack Blocks
+	 * inactive): an unregistered child has no render callback, so the pipeline
+	 * falls back to the plain-button CTA.
+	 */
+	public function test_native_platform_without_block_falls_back_to_button() {
+		add_filter( 'newspack_contextual_prompts_use_donate_block', '__return_true' );
+		unregister_block_type( 'newspack-blocks/donate' );
+		$permalink = $this->set_donor_landing_page();
+
+		$html = do_blocks( self::DONATE_FORM_PROMPT );
+
+		$this->assertStringContainsString( 'href="' . esc_url( $permalink ) . '"', $html );
+		$this->assertStringContainsString( 'data-newspack-cp-cta="button"', $html );
 	}
 
 	/**

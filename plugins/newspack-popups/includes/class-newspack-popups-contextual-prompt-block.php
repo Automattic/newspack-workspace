@@ -162,7 +162,9 @@ final class Newspack_Popups_Contextual_Prompt_Block {
 	 * Whether the CTA is the native Newspack donate block rather than a plain
 	 * button. Defaults to true when the publisher uses Newspack (WooCommerce)
 	 * donations — then reader conversions classify as donations in analytics /
-	 * Insights. Falls back to a plain button for off-site donation setups.
+	 * Insights. Falls back to a plain button for off-site donation setups, and
+	 * whenever the donate block itself isn't registered (Newspack Blocks
+	 * inactive) — an unregistered child would render nothing, losing the ask.
 	 *
 	 * @return bool
 	 */
@@ -174,7 +176,9 @@ final class Newspack_Popups_Contextual_Prompt_Block {
 		 *
 		 * @param bool $use_donate_block Whether to use the donate block.
 		 */
-		return (bool) apply_filters( 'newspack_contextual_prompts_use_donate_block', $default );
+		$use_donate_block = (bool) apply_filters( 'newspack_contextual_prompts_use_donate_block', $default );
+
+		return $use_donate_block && \WP_Block_Type_Registry::get_instance()->is_registered( 'newspack-blocks/donate' );
 	}
 
 	/**

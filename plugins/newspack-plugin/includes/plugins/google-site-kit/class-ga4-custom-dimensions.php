@@ -384,7 +384,8 @@ final class GA4_Custom_Dimensions {
 	 *
 	 * Idempotent: existing dimensions on the property are detected by
 	 * parameter name and skipped. Per-dimension create failures are logged
-	 * and recorded in the summary but do not abort the run.
+	 * and recorded in the summary without aborting the run – unless one proves
+	 * the rest would fail the same way (quota exhausted, auth denied).
 	 *
 	 * Cron and Action Scheduler run handlers synchronously inside a request
 	 * whose time limit is often 30–60s, while creating ~27 dimensions each
@@ -425,9 +426,10 @@ final class GA4_Custom_Dimensions {
 					}
 				}
 
-				$created        = [];
-				$skipped_exists = [];
-				$errors         = [];
+				$created             = [];
+				$skipped_exists      = [];
+				$errors              = [];
+				$has_transient_error = false;
 
 				foreach ( self::get_dimensions() as $parameter_name => $display_name ) {
 					if ( isset( $existing_params[ $parameter_name ] ) ) {
@@ -441,10 +443,17 @@ final class GA4_Custom_Dimensions {
 					} catch ( \Throwable $e ) {
 						$errors[ $parameter_name ] = $e->getMessage();
 						Logger::log( "Failed to create GA4 dimension '$parameter_name': " . $e->getMessage(), self::LOGGER_HEADER );
+						if ( ! self::is_permanent_create_error( $e ) ) {
+							$has_transient_error = true;
+						}
+						if ( self::is_fatal_create_error( $e ) ) {
+							Logger::log( 'Aborting remaining GA4 dimension creates: subsequent requests would fail the same way.', self::LOGGER_HEADER );
+							break;
+						}
 					}
 				}
 
-				return [ $created, $skipped_exists, $errors ];
+				return [ $created, $skipped_exists, $errors, $has_transient_error ];
 			}
 		);
 
@@ -453,13 +462,19 @@ final class GA4_Custom_Dimensions {
 			return $result;
 		}
 
-		list( $created, $skipped_exists, $errors ) = $result;
+		list( $created, $skipped_exists, $errors, $has_transient_error ) = $result;
+
+		if ( ! empty( $errors ) && ! $has_transient_error ) {
+			Logger::log( 'GA4 dimension create failures are permanent (auth/quota/validation); suspending daily retries until the monthly recheck.', self::LOGGER_HEADER );
+		}
 
 		$summary = [
 			'property_id'    => $property_id,
-			// Recorded only for an error-free run: a partial failure must not
-			// read as current, so the daily-throttled recheck retries it.
-			'schema'         => empty( $errors ) ? self::schema_fingerprint() : null,
+			// A transient failure (timeout, 429, 5xx) must not read as current,
+			// so the daily-throttled recheck retries it. Permanent failures
+			// (auth, quota, validation) record the fingerprint anyway – a daily
+			// retry can't fix them; the monthly recheck is the self-heal path.
+			'schema'         => $has_transient_error ? null : self::schema_fingerprint(),
 			'auth_source'    => $used_source,
 			'timestamp'      => time(),
 			'created'        => $created,
@@ -493,6 +508,60 @@ final class GA4_Custom_Dimensions {
 		);
 
 		return $summary;
+	}
+
+	/**
+	 * The HTTP status of a failed Admin API call, from the exception code
+	 * (set by both client types) or, when unset, the "(NNN)" in the message.
+	 * 0 when neither carries one – timeouts and transport errors.
+	 *
+	 * @param \Throwable $e The failure.
+	 * @return int
+	 */
+	private static function error_status_code( \Throwable $e ) {
+		$code = (int) $e->getCode();
+		if ( ! $code && preg_match( '/\((\d{3})\)/', $e->getMessage(), $matches ) ) {
+			$code = (int) $matches[1];
+		}
+		return $code;
+	}
+
+	/**
+	 * Whether a failed create names GA4 quota exhaustion (e.g. the event-scoped
+	 * dimension cap on the property).
+	 *
+	 * @param \Throwable $e The failure.
+	 * @return bool
+	 */
+	private static function is_quota_error( \Throwable $e ) {
+		return (bool) preg_match( '/quota|RESOURCE_EXHAUSTED/i', $e->getMessage() );
+	}
+
+	/**
+	 * Whether a failed create is permanent – auth (401/403), quota exhaustion
+	 * or a validation error – so a daily retry cannot fix it, as opposed to
+	 * transient (timeout, 408/429 rate limiting, 5xx), which is worth one.
+	 *
+	 * @param \Throwable $e The failure.
+	 * @return bool
+	 */
+	private static function is_permanent_create_error( \Throwable $e ) {
+		if ( self::is_quota_error( $e ) ) {
+			return true;
+		}
+		$code = self::error_status_code( $e );
+		return $code >= 400 && $code < 500 && ! in_array( $code, [ 408, 429 ], true );
+	}
+
+	/**
+	 * Whether a failed create proves the remaining creates would fail the same
+	 * way: quota exhausted on the property, or authorization denied/revoked.
+	 *
+	 * @param \Throwable $e The failure.
+	 * @return bool
+	 */
+	private static function is_fatal_create_error( \Throwable $e ) {
+		return self::is_quota_error( $e ) || in_array( self::error_status_code( $e ), [ 401, 403 ], true );
 	}
 }
 GA4_Custom_Dimensions::init();
