@@ -241,9 +241,6 @@
 .newspack-prompt-style-drawer__content {
 	flex: 1 1 auto;
 	overflow-y: auto;
-
-	// The last panel's controls otherwise end flush against the footer's border.
-	padding-bottom: wp-vars.$grid-unit-20;
 }
 
 // The notice sits between the scrolling content and the footer, so it keeps its
@@ -254,7 +251,12 @@
 }
 
 .newspack-prompt-style-drawer__footer {
-	border-top: wp-vars.$border-width solid wp-colors.$gray-300;
 	flex: 0 0 auto;
 	padding: wp-vars.$grid-unit-20;
+
+	// The two actions split the row evenly.
+	.components-button {
+		flex: 1;
+		justify-content: center;
+	}
 }

@@ -116,6 +116,19 @@ describe( 'ContextualPrompts tab', () => {
 		await waitFor( () => expect( screen.getByRole( 'textbox', { name: 'Publisher name' } ) ).toBeDisabled() );
 	} );
 
+	it( 'locks the Edit Styles action while a save is pending', async () => {
+		apiFetch.mockResolvedValueOnce( styledStatus() );
+		renderTab();
+
+		await waitFor( () => expect( screen.getByRole( 'textbox', { name: 'Publisher name' } ) ).toBeInTheDocument() );
+		fireEvent.change( screen.getByRole( 'textbox', { name: 'Publisher name' } ), { target: { value: 'Newsroom X' } } );
+
+		// The drawer must not open onto state a pending save is about to replace.
+		apiFetch.mockReturnValueOnce( new Promise( () => {} ) );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Save' } ) );
+		await waitFor( () => expect( screen.getByRole( 'button', { name: 'Edit Styles' } ) ).toBeDisabled() );
+	} );
+
 	it( 'confirms before Disable discards unsaved edits, and cancelling keeps state', async () => {
 		const nameField = {
 			key: 'newspack_contextual_prompts_publisher_name',
@@ -190,6 +203,29 @@ describe( 'ContextualPrompts tab', () => {
 
 		fireEvent.click( screen.getByRole( 'button', { name: 'Edit Styles' } ) );
 		expect( drawer().getByRole( 'button', { name: 'Save' } ) ).toBeDisabled();
+	} );
+
+	it( 'vetoes Escape while style edits are unsaved', async () => {
+		apiFetch.mockResolvedValueOnce( styledStatus() );
+		renderTab();
+		await openDrawer();
+
+		resetStyleItem( 'Border', 'Border' );
+
+		// The frame's own handler vetoes the close and defers to the confirm.
+		fireEvent.keyDown( drawerElement(), { key: 'Escape' } );
+		await screen.findByText( /unsaved changes that will be lost/i );
+		expect( drawerElement() ).not.toBeNull();
+	} );
+
+	it( 'closes on Escape without a prompt when styles are untouched', async () => {
+		apiFetch.mockResolvedValueOnce( styledStatus() );
+		renderTab();
+		await openDrawer();
+
+		fireEvent.keyDown( drawerElement(), { key: 'Escape' } );
+		await waitFor( () => expect( drawerElement() ).toBeNull() );
+		expect( screen.queryByText( /unsaved changes that will be lost/i ) ).toBeNull();
 	} );
 
 	it( 'omits styles from the save payload when they are untouched', async () => {

@@ -171,6 +171,7 @@ const ContextualPrompts = props => {
 	// block would catch and answer with a prompt of its own.
 	const discardStyles = () => {
 		setBlockStyles( savedStylesRef.current );
+		setError( null );
 		setEditingStyles( false );
 	};
 	const onStyleDrawerClose = () => {
@@ -193,6 +194,8 @@ const ContextualPrompts = props => {
 	// separate confirm dialog would fight this one's navigation block.
 	const disable = () => {
 		setDisabling( true );
+		// A drawer left open would come back with the feature on re-enable.
+		setEditingStyles( false );
 		return setEnabled( false )
 			.then( () => setSnackbar( __( 'Contextual Prompts disabled.', 'newspack-plugin' ) ) )
 			.catch( () => {} )
@@ -233,7 +236,16 @@ const ContextualPrompts = props => {
 				</Handoff>
 			) }
 			{ showStyleDrawer && (
-				<Button variant="secondary" onClick={ () => setEditingStyles( true ) }>
+				<Button
+					variant="secondary"
+					onClick={ () => {
+						// The page and the drawer share the error state, so a notice
+						// left over from the page must not follow the drawer in.
+						setError( null );
+						setEditingStyles( true );
+					} }
+					disabled={ inFlight }
+				>
 					{ __( 'Edit Styles', 'newspack-plugin' ) }
 				</Button>
 			) }
@@ -277,7 +289,7 @@ const ContextualPrompts = props => {
 		<ContextualPromptsScreen { ...props } headerActions={ headerActions }>
 			{ confirmDialog }
 			{ content }
-			{ editingStyles && status && (
+			{ editingStyles && showStyleDrawer && (
 				<StyleDrawer
 					status={ status }
 					styles={ blockStyles }
