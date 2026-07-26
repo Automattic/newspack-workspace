@@ -157,6 +157,28 @@ const ContextualPrompts = props => {
 		}
 		return request( PROFILE_PATH, data ).then( () => setSnackbar( __( 'Settings saved.', 'newspack-plugin' ) ) );
 	};
+	// The endpoint requires fields, so the drawer sends the saved snapshot: a
+	// no-op for the profile that leaves local field edits both unsaved and
+	// intact, since this path never refreshes values from the response.
+	const saveStyles = () => {
+		setInFlight( true );
+		setError( null );
+		return apiFetch( { path: PROFILE_PATH, method: 'POST', data: { fields: savedValuesRef.current, styles: blockStyles } } )
+			.then( next => {
+				statusRequestRef.current++;
+				setStatus( next );
+				const nextStyles = normalizeStyles( next.styles );
+				setBlockStyles( nextStyles );
+				savedStylesRef.current = nextStyles;
+				setSnackbar( __( 'Styles saved.', 'newspack-plugin' ) );
+				return next;
+			} )
+			.catch( err => {
+				setError( err );
+				throw err;
+			} )
+			.finally( () => setInFlight( false ) );
+	};
 	const onSave = () => saveProfile().catch( () => {} );
 	const setValue = ( key, value ) => setValues( previous => ( { ...previous, [ key ]: value } ) );
 
@@ -181,11 +203,12 @@ const ContextualPrompts = props => {
 		if ( stylesDirty ) {
 			requestConfirm( discardStyles );
 		} else {
+			setError( null );
 			setEditingStyles( false );
 		}
 	};
 	const onStyleDrawerSave = () =>
-		saveProfile()
+		saveStyles()
 			.then( () => setEditingStyles( false ) )
 			.catch( () => {} );
 

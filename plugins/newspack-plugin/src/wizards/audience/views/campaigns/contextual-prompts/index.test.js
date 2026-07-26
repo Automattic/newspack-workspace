@@ -283,6 +283,30 @@ describe( 'ContextualPrompts tab', () => {
 		await waitFor( () => expect( drawerElement() ).toBeNull() );
 	} );
 
+	it( 'leaves dirty profile fields unsaved and intact when the drawer saves', async () => {
+		apiFetch.mockResolvedValueOnce( styledStatus() );
+		renderTab();
+
+		await waitFor( () => expect( screen.getByRole( 'textbox', { name: 'Publisher name' } ) ).toBeInTheDocument() );
+		fireEvent.change( screen.getByRole( 'textbox', { name: 'Publisher name' } ), { target: { value: 'Newsroom X' } } );
+
+		await openDrawer();
+		resetStyleItem( 'Border', 'Border' );
+
+		apiFetch.mockResolvedValueOnce( styledStatus() );
+		fireEvent.click( drawer().getByRole( 'button', { name: 'Save' } ) );
+
+		// The drawer commits styles only: the fields it has to send are the saved
+		// snapshot, not the edits standing in the page behind it.
+		await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 2 ) );
+		const { data } = apiFetch.mock.calls[ 1 ][ 0 ];
+		expect( data.fields ).toEqual( { [ PROFILE_FIELD.key ]: '' } );
+
+		await waitFor( () => expect( drawerElement() ).toBeNull() );
+		expect( screen.getByRole( 'textbox', { name: 'Publisher name' } ) ).toHaveValue( 'Newsroom X' );
+		expect( screen.getByRole( 'button', { name: 'Save' } ) ).toBeEnabled();
+	} );
+
 	it( 'keeps the drawer open and shows the error when the drawer save fails', async () => {
 		apiFetch.mockResolvedValueOnce( styledStatus() );
 		renderTab();
