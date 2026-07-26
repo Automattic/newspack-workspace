@@ -429,7 +429,8 @@
 	&.has-text-align-center {
 		.cat-links,
 		.entry-meta,
-		.entry-sponsors {
+		.entry-sponsors,
+		.tag-labels {
 			justify-content: center;
 		}
 
@@ -444,7 +445,8 @@
 		.cat-links,
 		.entry-meta,
 		.entry-sponsors,
-		.sponsor-logos {
+		.sponsor-logos,
+		.tag-labels {
 			justify-content: flex-end;
 			text-align: right;
 		}
@@ -475,6 +477,26 @@
 			display: flex;
 			gap: 0.5em;
 		}
+
+		a {
+			text-decoration: none;
+
+			&:hover {
+				text-decoration: underline;
+			}
+		}
+	}
+
+	// Tag labels: layout parity with `.cat-links`. The wrapper no longer
+	// carries `cat-links` — per-section `.cat-links a` styling must never
+	// restyle labels (NPPM-3049) — so the layout it relied on is declared
+	// here. Colors are intentionally not declared: chips keep their own.
+	.tag-labels {
+		display: flex;
+		flex-wrap: wrap;
+		font-size: variables.$font__size-xxs;
+		font-weight: bold;
+		margin: 0 0 0.5em;
 
 		a {
 			text-decoration: none;
@@ -516,7 +538,8 @@
 			.cat-links,
 			.entry-meta,
 			.entry-sponsors,
-			.sponsor-logos {
+			.sponsor-logos,
+			.tag-labels {
 				justify-content: flex-start;
 			}
 		}
@@ -525,7 +548,8 @@
 			.cat-links,
 			.entry-meta,
 			.entry-sponsors,
-			.sponsor-logos {
+			.sponsor-logos,
+			.tag-labels {
 				justify-content: flex-end;
 			}
 		}
