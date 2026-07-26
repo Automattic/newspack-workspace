@@ -157,13 +157,13 @@ const ContextualPrompts = props => {
 		}
 		return request( PROFILE_PATH, data ).then( () => setSnackbar( __( 'Settings saved.', 'newspack-plugin' ) ) );
 	};
-	// The endpoint requires fields, so the drawer sends the saved snapshot: a
-	// no-op for the profile that leaves local field edits both unsaved and
-	// intact, since this path never refreshes values from the response.
+	// The endpoint requires fields but only writes the keys it is given, so the
+	// drawer sends an empty object: no profile write at all, and local field
+	// edits stay unsaved and intact, since this path never refreshes values.
 	const saveStyles = () => {
 		setInFlight( true );
 		setError( null );
-		return apiFetch( { path: PROFILE_PATH, method: 'POST', data: { fields: savedValuesRef.current, styles: blockStyles } } )
+		return apiFetch( { path: PROFILE_PATH, method: 'POST', data: { fields: {}, styles: blockStyles } } )
 			.then( next => {
 				statusRequestRef.current++;
 				setStatus( next );

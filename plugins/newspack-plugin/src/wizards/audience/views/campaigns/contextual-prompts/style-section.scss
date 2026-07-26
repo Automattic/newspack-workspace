@@ -231,6 +231,11 @@
 	padding: wp-vars.$grid-unit-15 wp-vars.$grid-unit-20;
 }
 
+.newspack-prompt-style-drawer__icon {
+	fill: currentcolor;
+	flex: none;
+}
+
 .newspack-prompt-style-drawer__title {
 	flex: 1;
 	font-size: inherit;

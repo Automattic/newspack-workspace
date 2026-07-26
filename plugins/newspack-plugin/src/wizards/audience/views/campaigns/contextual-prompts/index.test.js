@@ -279,7 +279,7 @@ describe( 'ContextualPrompts tab', () => {
 		await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 2 ) );
 		const { data } = apiFetch.mock.calls[ 1 ][ 0 ];
 		expect( data.styles ).toEqual( { color: { background: '#123456' }, border: { radius: '4px' } } );
-		expect( data.fields ).toEqual( { [ PROFILE_FIELD.key ]: '' } );
+		expect( data.fields ).toEqual( {} );
 		await waitFor( () => expect( drawerElement() ).toBeNull() );
 	} );
 
@@ -296,11 +296,11 @@ describe( 'ContextualPrompts tab', () => {
 		apiFetch.mockResolvedValueOnce( styledStatus() );
 		fireEvent.click( drawer().getByRole( 'button', { name: 'Save' } ) );
 
-		// The drawer commits styles only: the fields it has to send are the saved
-		// snapshot, not the edits standing in the page behind it.
+		// The drawer commits styles only: the required fields argument goes out
+		// empty, never carrying the edits standing in the page behind it.
 		await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 2 ) );
 		const { data } = apiFetch.mock.calls[ 1 ][ 0 ];
-		expect( data.fields ).toEqual( { [ PROFILE_FIELD.key ]: '' } );
+		expect( data.fields ).toEqual( {} );
 
 		await waitFor( () => expect( drawerElement() ).toBeNull() );
 		expect( screen.getByRole( 'textbox', { name: 'Publisher name' } ) ).toHaveValue( 'Newsroom X' );

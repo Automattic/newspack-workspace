@@ -12,7 +12,7 @@
  */
 import { __ } from '@wordpress/i18n';
 import { Modal, Notice, Popover, SlotFillProvider, __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
-import { close } from '@wordpress/icons';
+import { Icon, close, styles as stylesIcon } from '@wordpress/icons';
 
 /**
  * Internal dependencies
@@ -61,6 +61,7 @@ const StyleDrawer = ( { status, styles, error, inFlight, isDirty, onChangeStyles
 			     escape the content area's overflow. */ }
 			<SlotFillProvider>
 				<HStack className="newspack-prompt-style-drawer__header" spacing={ 2 } alignment="center">
+					<Icon className="newspack-prompt-style-drawer__icon" icon={ stylesIcon } size={ 24 } />
 					<h2 className="newspack-prompt-style-drawer__title">{ __( 'Edit Styles', 'newspack-plugin' ) }</h2>
 					<Button icon={ close } size="small" label={ __( 'Close', 'newspack-plugin' ) } onClick={ requestClose } disabled={ inFlight } />
 				</HStack>
