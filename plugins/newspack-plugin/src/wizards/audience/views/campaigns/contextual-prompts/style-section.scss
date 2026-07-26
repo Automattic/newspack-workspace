@@ -143,9 +143,12 @@
 // block that fixed-position popovers inside the drawer anchor to.
 .components-modal__frame.newspack-prompt-style-drawer {
 	animation: 0.2s ease-out newspack-prompt-style-drawer-slide-in;
-	border-left: wp-vars.$border-width solid wp-colors.$gray-300;
 	border-radius: 0;
-	box-shadow: none;
+
+	// The dividing line is a shadow rather than a border so it sits outside the
+	// box and the inside keeps the full 280px width. Also displaces core's
+	// default frame shadow.
+	box-shadow: -#{wp-vars.$border-width} 0 0 wp-colors.$gray-300;
 	display: flex;
 	flex-direction: column;
 	height: 100%;
