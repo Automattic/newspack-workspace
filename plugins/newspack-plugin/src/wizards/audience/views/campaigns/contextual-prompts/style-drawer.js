@@ -73,10 +73,10 @@ const StyleDrawer = ( { status, styles, error, inFlight, isDirty, onChangeStyles
 					</Notice>
 				) }
 				<HStack className="newspack-prompt-style-drawer__footer" spacing={ 2 } justify="flex-end">
-					<Button variant="tertiary" onClick={ requestClose } disabled={ inFlight } __next40pxDefaultSize>
+					<Button variant="secondary" onClick={ requestClose } disabled={ inFlight }>
 						{ __( 'Cancel', 'newspack-plugin' ) }
 					</Button>
-					<Button variant="primary" onClick={ onSave } disabled={ inFlight || ! isDirty } isBusy={ inFlight } __next40pxDefaultSize>
+					<Button variant="primary" onClick={ onSave } disabled={ inFlight || ! isDirty } isBusy={ inFlight }>
 						{ __( 'Save', 'newspack-plugin' ) }
 					</Button>
 				</HStack>
