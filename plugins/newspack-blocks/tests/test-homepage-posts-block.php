@@ -371,5 +371,9 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		ob_start();
 		Newspack_Blocks::display_tag_labels( [] );
 		self::assertSame( '', ob_get_clean(), 'Empty labels must render nothing, not an empty wrapper.' );
+
+		ob_start();
+		Newspack_Blocks::display_tag_labels( null );
+		self::assertSame( '', ob_get_clean(), 'Null labels (the documented default) must render nothing.' );
 	}
 }
