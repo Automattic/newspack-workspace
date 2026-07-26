@@ -138,22 +138,37 @@ export const ContextualPromptEditor = ( { clientId } ) => {
 		setError( '' );
 	}, [ framing ] );
 
+	// Requests can overlap (an auto attempt racing an explicit regenerate);
+	// only the most recently dispatched one may touch state — a stale
+	// settlement must neither apply its result nor re-enable the UI early.
+	const requestIdRef = useRef( 0 );
+
+	const handleError = e => setError( e.message || __( 'Could not generate suggestions.', 'newspack-popups' ) );
+
 	const fetchCandidates = async options => {
+		const requestId = ++requestIdRef.current;
+		const isCurrent = () => requestId === requestIdRef.current;
 		setGenerating( true );
 		setError( '' );
 		try {
-			return await generateCandidates( {
+			const list = await generateCandidates( {
 				postId,
 				content: wp.data.select( 'core/editor' )?.getEditedPostContent?.(),
 				framing,
 				...options,
 			} );
+			return { list, isCurrent };
+		} catch ( e ) {
+			if ( isCurrent() ) {
+				handleError( e );
+			}
+			return { list: null, isCurrent };
 		} finally {
-			setGenerating( false );
+			if ( isCurrent() ) {
+				setGenerating( false );
+			}
 		}
 	};
-
-	const handleError = e => setError( e.message || __( 'Could not generate suggestions.', 'newspack-popups' ) );
 
 	const apply = candidate => {
 		if ( copyClientId ) {
@@ -166,19 +181,18 @@ export const ContextualPromptEditor = ( { clientId } ) => {
 	// cached response.
 	const regenerate = () => {
 		const requestedFraming = framing;
-		return fetchCandidates( { regenerate: true } )
-			.then( list => {
-				// The block moved to a different framing bucket while the request was
-				// in flight — the response is for a stale position, so drop it.
-				if ( ( framingRef.current || undefined ) !== ( requestedFraming || undefined ) ) {
-					return;
-				}
-				setCandidates( list );
-				if ( ! list.length ) {
-					setError( __( 'No suggestions were returned. Try generating again.', 'newspack-popups' ) );
-				}
-			} )
-			.catch( handleError );
+		return fetchCandidates( { regenerate: true } ).then( ( { list, isCurrent } ) => {
+			// The request errored, was superseded by a newer one, or the block
+			// moved to a different framing bucket while it was in flight — the
+			// response is stale, so drop it.
+			if ( ! list || ! isCurrent() || ( framingRef.current || undefined ) !== ( requestedFraming || undefined ) ) {
+				return;
+			}
+			setCandidates( list );
+			if ( ! list.length ) {
+				setError( __( 'No suggestions were returned. Try generating again.', 'newspack-popups' ) );
+			}
+		} );
 	};
 
 	// A fresh prompt generates its own copy — inserting the block should never
@@ -189,25 +203,23 @@ export const ContextualPromptEditor = ( { clientId } ) => {
 		if ( canGenerate && copyClientId && copyIsEmpty && ! autoAttempted.current.has( framing ) ) {
 			autoAttempted.current.add( framing );
 			const requestedFraming = framing;
-			fetchCandidates()
-				.then( list => {
-					if ( ( framingRef.current || undefined ) !== ( requestedFraming || undefined ) ) {
-						return;
-					}
-					if ( ! list.length ) {
-						setError( __( 'No suggestions were returned. Try generating again.', 'newspack-popups' ) );
-						return;
-					}
-					// Copy typed while the request was in flight is the editor's, not
-					// ours to replace: offer the response as candidates instead.
-					const current = wp.data.select( 'core/block-editor' ).getBlockAttributes( copyClientId )?.content;
-					if ( current && current.toString().trim() ) {
-						setCandidates( list );
-						return;
-					}
-					apply( list[ 0 ] );
-				} )
-				.catch( handleError );
+			fetchCandidates().then( ( { list, isCurrent } ) => {
+				if ( ! list || ! isCurrent() || ( framingRef.current || undefined ) !== ( requestedFraming || undefined ) ) {
+					return;
+				}
+				if ( ! list.length ) {
+					setError( __( 'No suggestions were returned. Try generating again.', 'newspack-popups' ) );
+					return;
+				}
+				// Copy typed while the request was in flight is the editor's, not
+				// ours to replace: offer the response as candidates instead.
+				const current = wp.data.select( 'core/block-editor' ).getBlockAttributes( copyClientId )?.content;
+				if ( current && current.toString().trim() ) {
+					setCandidates( list );
+					return;
+				}
+				apply( list[ 0 ] );
+			} );
 		}
 	}, [ canGenerate, copyClientId, copyIsEmpty, framing ] );
 

@@ -20,7 +20,7 @@ export const POST_TYPE_LABEL =
 	window.newspack_popups_blocks_data?.post_type_label || window.newspackPopupsContextualPrompt?.postTypeLabel || __( 'post', 'newspack-popups' );
 
 // Title Case variant for the framing headings.
-const POST_TYPE_HEADING = POST_TYPE_LABEL.charAt( 0 ).toUpperCase() + POST_TYPE_LABEL.slice( 1 );
+const POST_TYPE_HEADING = POST_TYPE_LABEL.charAt( 0 ).toLocaleUpperCase() + POST_TYPE_LABEL.slice( 1 );
 
 export const FRAMING_LABELS = {
 	/* translators: %s: the edited content's post type label, e.g. "Post", "Page". */
@@ -76,7 +76,7 @@ export const toRichTextContent = body => escapeHTML( String( body ?? '' ) );
  * @param {string}  args.content      The edited post content.
  * @param {string}  [args.framing]    Optional framing; when set, candidates are variants of it.
  * @param {boolean} [args.regenerate] Whether this is an explicit re-run, which bypasses the cached response.
- * @return {Promise<Array>} The candidate list (possibly empty).
+ * @return {Promise<Array>} The candidate list (possibly empty). Rejects on a malformed response.
  */
 export const generateCandidates = async ( { postId, content, framing, regenerate } ) => {
 	const response = await apiFetch( {
@@ -85,7 +85,21 @@ export const generateCandidates = async ( { postId, content, framing, regenerate
 		data: { post_id: postId, content, ...( framing ? { framing } : {} ), ...( regenerate ? { regenerate: true } : {} ) },
 	} );
 	const payload = response && response.data ? response.data : response;
-	return payload?.candidates || [];
+	// A malformed or version-skewed response must land in the caller's error
+	// state, not crash the candidate list; entries the UI can't render are
+	// dropped rather than trusted.
+	if ( ! Array.isArray( payload?.candidates ) ) {
+		throw new Error( __( 'Could not generate suggestions.', 'newspack-popups' ) );
+	}
+	return payload.candidates.filter(
+		candidate =>
+			candidate &&
+			'object' === typeof candidate &&
+			! Array.isArray( candidate ) &&
+			'string' === typeof candidate.body &&
+			candidate.body.trim() &&
+			( undefined === candidate.framing || Boolean( FRAMING_LABELS[ candidate.framing ] ) )
+	);
 };
 
 export const GenerateButton = ( { busy, onClick, children } ) => (

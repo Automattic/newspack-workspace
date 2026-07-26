@@ -79,6 +79,10 @@ const ContextualPromptPanel = () => {
 	// whatever it returned — a cached empty response must not be replayed on retry.
 	const hasGenerated = useRef( false );
 
+	// Requests dispatched before the busy state re-renders can overlap; only
+	// the most recently dispatched one may touch state.
+	const requestIdRef = useRef( 0 );
+
 	// The block can be moved after a request is in flight; a request framed for
 	// the old position must not overwrite the current one's candidates.
 	const framingRef = useRef( instanceFraming );
@@ -108,6 +112,8 @@ const ContextualPromptPanel = () => {
 	const isRegenerate = Boolean( candidates.length || instance || hasGenerated.current );
 
 	const generate = async () => {
+		const requestId = ++requestIdRef.current;
+		const isCurrent = () => requestId === requestIdRef.current;
 		setGenerating( true );
 		setError( '' );
 		const requestedFraming = instanceFraming || undefined;
@@ -118,9 +124,9 @@ const ContextualPromptPanel = () => {
 				framing: requestedFraming,
 				regenerate: isRegenerate,
 			} );
-			// The block moved to a different framing bucket while the request was
-			// in flight — the response is for a stale position, so drop it.
-			if ( ( framingRef.current || undefined ) !== requestedFraming ) {
+			// The request was superseded, or the block moved to a different framing
+			// bucket while it was in flight — the response is stale, so drop it.
+			if ( ! isCurrent() || ( framingRef.current || undefined ) !== requestedFraming ) {
 				return;
 			}
 			setCandidates( list );
@@ -128,14 +134,18 @@ const ContextualPromptPanel = () => {
 				setError( __( 'No suggestions were returned. Try generating again.', 'newspack-popups' ) );
 			}
 		} catch ( e ) {
-			setError( e.message || __( 'Could not generate suggestions.', 'newspack-popups' ) );
-		} finally {
-			// A stale response belongs to a framing context this ref was already
-			// reset for; only a settled attempt for the current one counts.
-			if ( ( framingRef.current || undefined ) === requestedFraming ) {
-				hasGenerated.current = true;
+			if ( isCurrent() ) {
+				setError( e.message || __( 'Could not generate suggestions.', 'newspack-popups' ) );
 			}
-			setGenerating( false );
+		} finally {
+			if ( isCurrent() ) {
+				// A stale response belongs to a framing context this ref was already
+				// reset for; only a settled attempt for the current one counts.
+				if ( ( framingRef.current || undefined ) === requestedFraming ) {
+					hasGenerated.current = true;
+				}
+				setGenerating( false );
+			}
 		}
 	};
 

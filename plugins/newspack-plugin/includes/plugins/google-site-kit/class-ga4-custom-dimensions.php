@@ -457,7 +457,9 @@ final class GA4_Custom_Dimensions {
 
 		$summary = [
 			'property_id'    => $property_id,
-			'schema'         => self::schema_fingerprint(),
+			// Recorded only for an error-free run: a partial failure must not
+			// read as current, so the daily-throttled recheck retries it.
+			'schema'         => empty( $errors ) ? self::schema_fingerprint() : null,
 			'auth_source'    => $used_source,
 			'timestamp'      => time(),
 			'created'        => $created,

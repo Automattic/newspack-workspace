@@ -431,6 +431,54 @@ class Newspack_Test_GA4_Custom_Dimensions extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A run with create failures must not record the schema fingerprint, so the
+	 * daily-throttled recheck path reschedules provisioning instead of treating
+	 * the property as current.
+	 */
+	public function test_partial_failure_is_rescheduled_by_recheck() {
+		if ( ! function_exists( 'as_schedule_recurring_action' ) ) {
+			$this->markTestSkipped( 'ActionScheduler not available.' );
+		}
+
+		$this->connect_property( 'PROP-PARTIAL' );
+		$this->configure_newspack_oauth( true );
+		// Every create fails.
+		$this->mock_admin_api( 'PROP-PARTIAL', [], 403 );
+
+		$summary = GA4_Custom_Dimensions::provision();
+		$this->assertIsArray( $summary );
+		$this->assertNotEmpty( $summary['errors'], 'The run recorded create failures.' );
+		$this->assertNull( $summary['schema'], 'A partial run does not record the schema fingerprint.' );
+
+		GA4_Custom_Dimensions::maybe_schedule_recheck();
+		$this->assertNotFalse( wp_next_scheduled( GA4_Custom_Dimensions::PROVISION_ACTION ), 'A partial run is rescheduled by the recheck.' );
+	}
+
+	/**
+	 * A clean run records the schema fingerprint, so the recheck path does not
+	 * reschedule provisioning.
+	 */
+	public function test_clean_run_is_not_rescheduled_by_recheck() {
+		if ( ! function_exists( 'as_schedule_recurring_action' ) ) {
+			$this->markTestSkipped( 'ActionScheduler not available.' );
+		}
+
+		$this->connect_property( 'PROP-OK' );
+		$this->configure_newspack_oauth( true );
+		$this->mock_admin_api( 'PROP-OK', [] );
+
+		$summary = GA4_Custom_Dimensions::provision();
+		$this->assertIsArray( $summary );
+		$this->assertSame( [], $summary['errors'] );
+		$this->assertSame( GA4_Custom_Dimensions::schema_fingerprint(), $summary['schema'] );
+
+		wp_clear_scheduled_hook( GA4_Custom_Dimensions::PROVISION_ACTION );
+		delete_transient( GA4_Custom_Dimensions::SCHEMA_TRANSIENT );
+		GA4_Custom_Dimensions::maybe_schedule_recheck();
+		$this->assertFalse( wp_next_scheduled( GA4_Custom_Dimensions::PROVISION_ACTION ), 'A clean run is not rescheduled by the recheck.' );
+	}
+
+	/**
 	 * `Google_OAuth_GA4_Client::build()` returns null when Newspack OAuth is
 	 * not configured.
 	 */

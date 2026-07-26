@@ -158,7 +158,8 @@ final class Newspack_Popups {
 	public static function get_current_post_type_label() {
 		$post_type_object = get_post_type_object( (string) get_post_type() );
 		if ( $post_type_object && ! empty( $post_type_object->labels->singular_name ) ) {
-			return strtolower( $post_type_object->labels->singular_name );
+			$label = $post_type_object->labels->singular_name;
+			return function_exists( 'mb_strtolower' ) ? mb_strtolower( $label ) : strtolower( $label );
 		}
 		return __( 'post', 'newspack-popups' );
 	}
