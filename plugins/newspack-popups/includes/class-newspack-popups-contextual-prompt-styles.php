@@ -99,17 +99,45 @@ final class Newspack_Popups_Contextual_Prompt_Styles {
 	}
 
 	/**
-	 * Sanitize and persist style overrides. An empty result removes the option.
+	 * Sanitize style overrides, distinguishing an intentional reset from a
+	 * malformed payload: a non-empty payload that sanitizes to nothing must not
+	 * pass as a reset, or saving it would silently erase valid saved styles.
 	 *
 	 * @param array $styles Block-supports-shaped style object.
+	 * @return array|WP_Error Sanitized style object, or WP_Error when a non-empty
+	 *                        payload holds nothing valid.
+	 */
+	public static function validate( $styles ) {
+		$styles    = (array) $styles;
+		$sanitized = self::sanitize( $styles );
+		if ( empty( $sanitized ) && ! empty( $styles ) ) {
+			return new WP_Error(
+				'newspack_popups_invalid_styles',
+				esc_html__( 'The style overrides contain no valid styles.', 'newspack-popups' ),
+				[ 'status' => 400 ]
+			);
+		}
+		return $sanitized;
+	}
+
+	/**
+	 * Sanitize and persist style overrides. An explicitly empty payload removes
+	 * the option; a non-empty payload sanitizing to nothing is rejected.
+	 *
+	 * @param array $styles Block-supports-shaped style object.
+	 * @return true|WP_Error True on save, WP_Error for a malformed payload.
 	 */
 	public static function save_styles( $styles ) {
-		$sanitized = self::sanitize( (array) $styles );
+		$sanitized = self::validate( $styles );
+		if ( is_wp_error( $sanitized ) ) {
+			return $sanitized;
+		}
 		if ( empty( $sanitized ) ) {
 			delete_option( self::OPTION_NAME );
-			return;
+			return true;
 		}
 		update_option( self::OPTION_NAME, $sanitized );
+		return true;
 	}
 
 	/**

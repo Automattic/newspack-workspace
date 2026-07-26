@@ -535,6 +535,30 @@ class ContextualPromptStylesApiTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * An invalid styles branch fails the whole request before any option write:
+	 * no profile field is persisted and the saved styles stand.
+	 */
+	public function test_save_profile_with_invalid_styles_writes_nothing() {
+		Newspack_Popups_Contextual_Prompt_Styles::save_styles( [ 'color' => [ 'text' => '#fedcba' ] ] );
+
+		$request = new WP_REST_Request( 'POST', '/newspack-popups/v1/contextual-prompt/profile' );
+		$request->set_body_params(
+			[
+				'fields' => [ 'newspack_contextual_prompts_override_label' => 'Give now' ],
+				'styles' => [ 'evil' => [ 'x' => 'y' ] ],
+			]
+		);
+		$response = rest_do_request( $request );
+
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( '', get_option( 'newspack_contextual_prompts_override_label', '' ) );
+		$this->assertSame(
+			[ 'color' => [ 'text' => '#fedcba' ] ],
+			Newspack_Popups_Contextual_Prompt_Styles::get_styles()
+		);
+	}
+
+	/**
 	 * Omitting styles leaves the stored option untouched; an explicit empty
 	 * object clears it.
 	 */

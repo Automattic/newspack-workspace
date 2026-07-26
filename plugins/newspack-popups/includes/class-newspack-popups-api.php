@@ -459,9 +459,19 @@ final class Newspack_Popups_API {
 			return $enabled;
 		}
 
-		Newspack_Popups_Settings::save_ai_copy_assistant_fields( (array) $request['fields'] );
+		// Validate the whole payload before any option write: a part that fails
+		// must not leave earlier fields already persisted.
+		$styles = null;
 		if ( isset( $request['styles'] ) ) {
-			Newspack_Popups_Contextual_Prompt_Styles::save_styles( (array) $request['styles'] );
+			$styles = Newspack_Popups_Contextual_Prompt_Styles::validate( (array) $request['styles'] );
+			if ( is_wp_error( $styles ) ) {
+				return $styles;
+			}
+		}
+
+		Newspack_Popups_Settings::save_ai_copy_assistant_fields( (array) $request['fields'] );
+		if ( null !== $styles ) {
+			Newspack_Popups_Contextual_Prompt_Styles::save_styles( $styles );
 		}
 		return rest_ensure_response( self::contextual_prompt_status() );
 	}

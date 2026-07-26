@@ -257,8 +257,25 @@ class ContextualPromptStylesTest extends WP_UnitTestCase {
 		Newspack_Popups_Contextual_Prompt_Styles::save_styles( [ 'color' => [ 'background' => '#123456' ] ] );
 		$this->assertNotEmpty( get_option( Newspack_Popups_Contextual_Prompt_Styles::OPTION_NAME ) );
 
-		Newspack_Popups_Contextual_Prompt_Styles::save_styles( [] );
+		$this->assertTrue( Newspack_Popups_Contextual_Prompt_Styles::save_styles( [] ) );
 		$this->assertFalse( get_option( Newspack_Popups_Contextual_Prompt_Styles::OPTION_NAME ) );
+	}
+
+	/**
+	 * An explicitly empty payload is the only reset: a non-empty payload that
+	 * sanitizes to nothing is rejected and leaves the saved styles standing.
+	 */
+	public function test_save_rejects_a_payload_with_no_valid_styles() {
+		Newspack_Popups_Contextual_Prompt_Styles::save_styles( [ 'color' => [ 'background' => '#123456' ] ] );
+
+		$result = Newspack_Popups_Contextual_Prompt_Styles::save_styles( [ 'evil' => [ 'x' => 'y' ] ] );
+
+		$this->assertWPError( $result );
+		$this->assertSame( 400, $result->get_error_data()['status'] );
+		$this->assertSame(
+			[ 'color' => [ 'background' => '#123456' ] ],
+			Newspack_Popups_Contextual_Prompt_Styles::get_styles()
+		);
 	}
 
 	/**

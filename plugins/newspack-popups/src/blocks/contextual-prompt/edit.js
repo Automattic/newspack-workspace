@@ -74,14 +74,24 @@ export const ContextualPromptEditor = ( { clientId } ) => {
 			const copyId = blockEditor.getClientIdsOfDescendants( clientId ).find( id => 'core/paragraph' === blockEditor.getBlockName( id ) );
 			const content = copyId ? blockEditor.getBlockAttributes( copyId ).content : undefined;
 			return {
-				postId: select( 'core/editor' ).getCurrentPostId(),
+				// The core/editor store only exists in the post editor; elsewhere
+				// (widgets editor) there is no post to generate from.
+				postId: select( 'core/editor' )?.getCurrentPostId?.(),
 				copyClientId: copyId,
 				copyIsEmpty: ! content || ! content.toString().trim(),
-				framing: framingForPosition( blockEditor.getBlockIndex( clientId ), blockEditor.getBlockCount() ),
+				// Framing buckets the prompt's position among the top-level blocks; a
+				// nested prompt can't be bucketed, matching get_placement()'s 'unknown'.
+				framing:
+					blockEditor.getBlockHierarchyRootClientId( clientId ) === clientId
+						? framingForPosition( blockEditor.getBlockIndex( clientId ), blockEditor.getBlockCount() )
+						: null,
 			};
 		},
 		[ clientId ]
 	);
+	// Generation needs a real post: in the Site Editor getCurrentPostId() is a
+	// template id string, which the endpoint cannot use.
+	const canGenerate = Number.isInteger( postId );
 	const { updateBlockAttributes } = useDispatch( blockEditorStore );
 
 	// Both children stay selectable so publishers can tweak them per-story; the
@@ -134,7 +144,7 @@ export const ContextualPromptEditor = ( { clientId } ) => {
 		try {
 			return await generateCandidates( {
 				postId,
-				content: wp.data.select( 'core/editor' ).getEditedPostContent(),
+				content: wp.data.select( 'core/editor' )?.getEditedPostContent?.(),
 				framing,
 				...options,
 			} );
@@ -176,7 +186,7 @@ export const ContextualPromptEditor = ( { clientId } ) => {
 	// keyed by framing: a move while the request is in flight drops the stale
 	// response, and the effect then retries once for the new position.
 	useEffect( () => {
-		if ( copyClientId && copyIsEmpty && ! autoAttempted.current.has( framing ) ) {
+		if ( canGenerate && copyClientId && copyIsEmpty && ! autoAttempted.current.has( framing ) ) {
 			autoAttempted.current.add( framing );
 			const requestedFraming = framing;
 			fetchCandidates()
@@ -199,34 +209,45 @@ export const ContextualPromptEditor = ( { clientId } ) => {
 				} )
 				.catch( handleError );
 		}
-	}, [ copyClientId, copyIsEmpty, framing ] );
+	}, [ canGenerate, copyClientId, copyIsEmpty, framing ] );
 
 	return (
 		<>
-			<InspectorControls>
-				<PanelBody title={ __( 'Copy', 'newspack-popups' ) } initialOpen>
-					{ error && (
-						<Notice status="error" isDismissible={ false }>
-							{ error }
-						</Notice>
-					) }
-					<p style={ { marginTop: 0 } }>
-						{ sprintf(
-							/* translators: %1$s: the edited content's post type label. %2$s: the prompt's position. */
-							__(
-								'Copy is generated from this %1$s, framed for its position (%2$s). Review a suggestion and apply it to replace the current copy.',
-								'newspack-popups'
-							),
-							POST_TYPE_LABEL,
-							FRAMING_LABELS[ framing ].toLowerCase()
+			{ canGenerate && (
+				<InspectorControls>
+					<PanelBody title={ __( 'Copy', 'newspack-popups' ) } initialOpen>
+						{ error && (
+							<Notice status="error" isDismissible={ false }>
+								{ error }
+							</Notice>
 						) }
-					</p>
-					<GenerateButton busy={ generating } onClick={ regenerate }>
-						{ __( 'Regenerate Suggestions', 'newspack-popups' ) }
-					</GenerateButton>
-					<CandidateList candidates={ candidates } onApply={ apply } />
-				</PanelBody>
-			</InspectorControls>
+						<p style={ { marginTop: 0 } }>
+							{ framing
+								? sprintf(
+										/* translators: %1$s: the edited content's post type label. %2$s: the prompt's position. */
+										__(
+											'Copy is generated from this %1$s, framed for its position (%2$s). Review a suggestion and apply it to replace the current copy.',
+											'newspack-popups'
+										),
+										POST_TYPE_LABEL,
+										FRAMING_LABELS[ framing ].toLowerCase()
+								  )
+								: sprintf(
+										/* translators: %s: the edited content's post type label. */
+										__(
+											'Copy is generated from this %s. Review a suggestion and apply it to replace the current copy.',
+											'newspack-popups'
+										),
+										POST_TYPE_LABEL
+								  ) }
+						</p>
+						<GenerateButton busy={ generating } onClick={ regenerate }>
+							{ __( 'Regenerate Suggestions', 'newspack-popups' ) }
+						</GenerateButton>
+						<CandidateList candidates={ candidates } onApply={ apply } />
+					</PanelBody>
+				</InspectorControls>
+			) }
 			<div { ...innerBlocksProps } />
 		</>
 	);

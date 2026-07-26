@@ -75,6 +75,10 @@ const ContextualPromptPanel = () => {
 	const [ generating, setGenerating ] = useState( false );
 	const [ error, setError ] = useState( '' );
 
+	// Whether a generation attempt has completed in the current framing context,
+	// whatever it returned — a cached empty response must not be replayed on retry.
+	const hasGenerated = useRef( false );
+
 	// The block can be moved after a request is in flight; a request framed for
 	// the old position must not overwrite the current one's candidates.
 	const framingRef = useRef( instanceFraming );
@@ -87,6 +91,7 @@ const ContextualPromptPanel = () => {
 	useEffect( () => {
 		setCandidates( [] );
 		setError( '' );
+		hasGenerated.current = false;
 	}, [ instanceFraming ] );
 
 	const optedIn = window.newspackPopupsContextualPrompt?.enabled;
@@ -100,7 +105,7 @@ const ContextualPromptPanel = () => {
 	// Asking again is a rejection of what came back, so whenever the button reads
 	// "Regenerate" the request must bypass the cached response. Only the very
 	// first Generate in a fresh context is served from cache.
-	const isRegenerate = Boolean( candidates.length || instance );
+	const isRegenerate = Boolean( candidates.length || instance || hasGenerated.current );
 
 	const generate = async () => {
 		setGenerating( true );
@@ -125,6 +130,11 @@ const ContextualPromptPanel = () => {
 		} catch ( e ) {
 			setError( e.message || __( 'Could not generate suggestions.', 'newspack-popups' ) );
 		} finally {
+			// A stale response belongs to a framing context this ref was already
+			// reset for; only a settled attempt for the current one counts.
+			if ( ( framingRef.current || undefined ) === requestedFraming ) {
+				hasGenerated.current = true;
+			}
 			setGenerating( false );
 		}
 	};
