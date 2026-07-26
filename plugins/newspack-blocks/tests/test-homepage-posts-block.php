@@ -5,6 +5,8 @@
  * @package Newspack_Blocks
  */
 
+require_once __DIR__ . '/class-newspack-tag-labels-stub.php';
+
 /**
  * Homepage Posts Block test case.
  */
@@ -329,5 +331,45 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 
 		\Newspack\Tag_Labels::$stub_labels = null;
 		self::assertFalse( Newspack_Blocks_API::newspack_blocks_get_tag_labels( [ 'id' => $post_id ] ) );
+	}
+
+	/**
+	 * The block server render must not emit the `cat-links` class on tag
+	 * labels: per-section `.cat-links a` styling must never recolor them
+	 * (NPPM-3049, the block-side counterpart of the NPPM-3048 theme fix).
+	 */
+	public function test_display_tag_labels_renders_without_cat_links() {
+		if ( ! property_exists( '\Newspack\Tag_Labels', 'stub_labels' ) ) {
+			$this->markTestSkipped( 'Real \Newspack\Tag_Labels present; stub-based contract test skipped.' );
+		}
+
+		ob_start();
+		Newspack_Blocks::display_tag_labels(
+			[
+				[
+					'flag' => 'Opinion',
+					'link' => 'https://example.org/tag/opinion/',
+				],
+			]
+		);
+		$html = ob_get_clean();
+
+		self::assertStringContainsString( 'class="tag-labels"', $html, 'Wrapper carries exactly the tag-labels class.' );
+		self::assertStringContainsString( '<div', $html, 'Block render keeps its div wrapper.' );
+		self::assertStringNotContainsString( 'cat-links', $html, 'Wrapper must not carry cat-links (NPPM-3049).' );
+		self::assertStringContainsString( 'class="tag-label flag"', $html, 'Inner labels keep the tag-label flag classes.' );
+	}
+
+	/**
+	 * Empty labels produce no output (parity with Tag_Labels::display()).
+	 */
+	public function test_display_tag_labels_outputs_nothing_for_empty_labels() {
+		if ( ! property_exists( '\Newspack\Tag_Labels', 'stub_labels' ) ) {
+			$this->markTestSkipped( 'Real \Newspack\Tag_Labels present; stub-based contract test skipped.' );
+		}
+
+		ob_start();
+		Newspack_Blocks::display_tag_labels( [] );
+		self::assertSame( '', ob_get_clean(), 'Empty labels must render nothing, not an empty wrapper.' );
 	}
 }

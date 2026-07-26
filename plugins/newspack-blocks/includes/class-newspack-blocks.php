@@ -1121,8 +1121,16 @@ class Newspack_Blocks {
 	 * @return void
 	 */
 	public static function display_tag_labels( $labels = null, $links = true ) {
-		if ( class_exists( '\Newspack\Tag_Labels' ) && method_exists( '\Newspack\Tag_Labels', 'display' ) ) {
-			\Newspack\Tag_Labels::display( $labels, $links, 'div' );
+		if ( class_exists( '\Newspack\Tag_Labels' ) && method_exists( '\Newspack\Tag_Labels', 'generate_html' ) ) {
+			// Render WITHOUT the `cat-links` wrapper class: per-section
+			// `.cat-links a` styling (a common per-section pattern on
+			// publisher sites) must never restyle tag labels (NPPM-3049,
+			// mirroring the theme-side NPPM-3048 fix). Layout parity lives
+			// in src/blocks/homepage-articles/view.scss.
+			$labels_html = \Newspack\Tag_Labels::generate_html( $labels, $links, array( 'tag-labels' ), array( 'tag-label', 'flag' ), 'div' );
+			if ( '' !== $labels_html ) {
+				echo wp_kses_post( $labels_html . ' ' );
+			}
 		}
 	}
 
