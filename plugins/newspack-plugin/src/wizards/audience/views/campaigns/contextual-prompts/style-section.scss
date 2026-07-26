@@ -1,23 +1,18 @@
 /**
- * Contextual Prompts Style section.
+ * Contextual Prompts style controls and the Edit Styles drawer hosting them.
  *
- * The style groups are core ToolsPanels, stacked into one ringed list the way the
- * editor's inspector stacks them. Color rows mirror the editor's color panel: a
- * bordered group of flat, full-width toggles, each showing a round indicator and
- * the color's name.
+ * The style groups are core ToolsPanels, stacked the way the editor's inspector
+ * stacks them: each panel carries its own top separator. Color rows mirror the
+ * editor's color panel: a bordered group of flat, full-width toggles, each
+ * showing a round indicator and the color's name.
  */
 
 @use "~@wordpress/base-styles/colors" as wp-colors;
 @use "~@wordpress/base-styles/variables" as wp-vars;
 
-// The controls column hugs the end of the section grid at the editor sidebar's
-// width, so the panels inside give their controls the width they have there. The
-// ring closes the stack off: the panels only carry the separators between them.
+// The panels fill the drawer at the editor sidebar's width, so the controls
+// inside get the width they have there; the drawer owns the chrome around them.
 .newspack-prompt-style-controls {
-	border-radius: wp-vars.$radius-small;
-	box-shadow: 0 0 0 wp-vars.$border-width wp-colors.$gray-300;
-	max-width: wp-vars.$sidebar-width;
-	overflow: hidden;
 	width: 100%;
 
 	// The color rows butt up against each other into a single bordered list
@@ -130,4 +125,115 @@
 .newspack-prompt-style-colors__popover.components-dropdown__content .components-popover__content {
 	padding: 16px;
 	width: 260px;
+}
+
+// Edit Styles drawer: a right-edge slide-in panel built on @wordpress/components
+// Modal with custom overlay/frame classes so it anchors to the right instead of
+// rendering centered. No overlay shim: the page stays visible, and the frame's
+// left border stands in for the ring the controls used to carry.
+.newspack-prompt-style-drawer__overlay {
+	align-items: stretch;
+	background: none;
+	justify-content: flex-end;
+	padding: 0;
+}
+
+// The slide-in deliberately carries no fill: its end state is the frame's
+// natural position, and a persisting transform would become the containing
+// block that fixed-position popovers inside the drawer anchor to.
+.components-modal__frame.newspack-prompt-style-drawer {
+	animation: 0.2s ease-out newspack-prompt-style-drawer-slide-in;
+	border-left: wp-vars.$border-width solid wp-colors.$gray-300;
+	border-radius: 0;
+	box-shadow: none;
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	margin: 0;
+	max-height: none;
+	max-width: wp-vars.$sidebar-width;
+	width: 100%;
+
+	// Drop the modal's built-in content padding so the panels sit flush against
+	// the drawer's edges with only their own padding, and let the inner wrappers
+	// flex so the content area scrolls within the full height.
+	.components-modal__content {
+		display: flex;
+		flex-direction: column;
+		padding: 0;
+	}
+
+	.components-modal__children-container {
+		display: flex;
+		flex: 1 1 auto;
+		flex-direction: column;
+		min-height: 0;
+	}
+}
+
+@keyframes newspack-prompt-style-drawer-slide-in {
+	from {
+		transform: translateX( 100% );
+	}
+
+	to {
+		transform: translateX( 0 );
+	}
+}
+
+@keyframes newspack-prompt-style-drawer-slide-out {
+	from {
+		transform: translateX( 0 );
+	}
+
+	to {
+		transform: translateX( 100% );
+	}
+}
+
+// Mirror the slide-in with a slide-out on close. @wp/components' Modal adds
+// `is-animating-out` and keeps the panel mounted until an animationend fires
+// (which bubbles up from the frame), so animating the frame is enough. Suppress
+// the overlay's default disappear animation so the motion stays a slide, not a
+// fade. The compound selector outweighs the base frame rule in the cascade.
+.components-modal__screen-overlay.newspack-prompt-style-drawer__overlay.is-animating-out {
+	animation: none;
+}
+
+.components-modal__screen-overlay.newspack-prompt-style-drawer__overlay.is-animating-out .components-modal__frame {
+	animation: 0.2s ease-in forwards newspack-prompt-style-drawer-slide-out;
+}
+
+@media ( prefers-reduced-motion: reduce ) {
+	.newspack-prompt-style-drawer__overlay,
+	.components-modal__frame.newspack-prompt-style-drawer,
+	.components-modal__screen-overlay.newspack-prompt-style-drawer__overlay.is-animating-out .components-modal__frame {
+		animation: none;
+	}
+}
+
+.newspack-prompt-style-drawer__header {
+	flex: 0 0 auto;
+	padding: wp-vars.$grid-unit-15 wp-vars.$grid-unit-20;
+}
+
+.newspack-prompt-style-drawer__title {
+	flex: 1;
+	font-size: inherit;
+	font-weight: wp-vars.$font-weight-medium;
+	margin: 0;
+}
+
+.newspack-prompt-style-drawer__content {
+	flex: 1 1 auto;
+	overflow-y: auto;
+
+	// The last panel's controls otherwise end flush against the footer's border.
+	padding-bottom: wp-vars.$grid-unit-20;
+}
+
+.newspack-prompt-style-drawer__footer {
+	border-top: wp-vars.$border-width solid wp-colors.$gray-300;
+	flex: 0 0 auto;
+	padding: wp-vars.$grid-unit-20;
 }

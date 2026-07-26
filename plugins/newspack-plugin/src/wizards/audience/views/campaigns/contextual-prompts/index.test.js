@@ -1,10 +1,11 @@
 /**
  * Contextual Prompts tab: a failed initial status fetch surfaces an error with a
  * Retry that re-runs the fetch, profile fields lock while a save is pending, and
- * on a block theme the header hands off to the Site Editor's Styles panel.
+ * the header's Edit Styles action opens the drawer on a classic theme or hands
+ * off to the Site Editor's Styles panel on a block theme.
  */
 
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import '@testing-library/jest-dom';
 import apiFetch from '@wordpress/api-fetch';
@@ -39,7 +40,7 @@ const PROFILE_FIELD = {
 // the other in place, so the payload assertion also covers "send the full object".
 const SAVED_STYLES = { color: { background: '#123456' }, border: { radius: '4px', width: '1px' } };
 
-// Classic theme, so the Style section renders its controls rather than the handoff.
+// Classic theme, so the header's Edit Styles opens the drawer rather than the handoff.
 const styledStatus = () => ( {
 	enabled: true,
 	can_manage: true,
@@ -55,14 +56,24 @@ const styledStatus = () => ( {
 // With nothing stored, PHP hands back an empty JSON array rather than an object.
 const unstyledStatus = () => ( { ...styledStatus(), styles: [] } );
 
-// Block theme, so the styles live in the Site Editor: no Style section, and the
-// header carries the handoff to it instead.
+// Block theme, so the styles live in the Site Editor: no drawer, and the header
+// carries the handoff to it instead.
 const blockThemeStatus = () => ( { ...styledStatus(), is_block_theme: true } );
 
 // Each style group resets from the options menu in its ToolsPanel header.
 const resetStyleItem = ( panel, item ) => {
 	fireEvent.click( screen.getByRole( 'button', { name: `${ panel } options` } ) );
 	fireEvent.click( screen.getByRole( 'menuitem', { name: `Reset ${ item }` } ) );
+};
+
+// The drawer and the header both carry Save/Cancel-named buttons, so drawer
+// queries are scoped to its frame (a portal, hence the document lookup).
+const drawerElement = () => document.querySelector( '.newspack-prompt-style-drawer' );
+const drawer = () => within( drawerElement() );
+
+const openDrawer = async () => {
+	await waitFor( () => expect( screen.getByRole( 'button', { name: 'Edit Styles' } ) ).toBeInTheDocument() );
+	fireEvent.click( screen.getByRole( 'button', { name: 'Edit Styles' } ) );
 };
 
 describe( 'ContextualPrompts tab', () => {
@@ -130,12 +141,55 @@ describe( 'ContextualPrompts tab', () => {
 		expect( screen.getByRole( 'textbox', { name: 'Publisher name' } ) ).toHaveValue( 'Newsroom X' );
 	} );
 
-	it( 'renders the Style section when enabled', async () => {
+	it( 'opens the Edit Styles drawer from the header on a classic theme, with no in-page section', async () => {
 		apiFetch.mockResolvedValueOnce( styledStatus() );
 		renderTab();
 
-		await waitFor( () => expect( screen.getByRole( 'heading', { name: 'Style', level: 2 } ) ).toBeInTheDocument() );
-		expect( screen.getByText( 'Background' ) ).toBeInTheDocument();
+		await waitFor( () => expect( screen.getByRole( 'button', { name: 'Edit Styles' } ) ).toBeInTheDocument() );
+		// The tab body carries no style controls: the drawer owns them now.
+		expect( screen.queryByRole( 'heading', { name: 'Style' } ) ).toBeNull();
+		expect( screen.queryByRole( 'button', { name: 'Background' } ) ).toBeNull();
+
+		fireEvent.click( screen.getByRole( 'button', { name: 'Edit Styles' } ) );
+		expect( screen.getByRole( 'heading', { name: 'Edit Styles', level: 2 } ) ).toBeInTheDocument();
+		expect( drawer().getByRole( 'button', { name: 'Background' } ) ).toBeInTheDocument();
+	} );
+
+	it( 'closes the drawer without a prompt when the styles are untouched', async () => {
+		apiFetch.mockResolvedValueOnce( styledStatus() );
+		renderTab();
+		await openDrawer();
+
+		fireEvent.click( drawer().getByRole( 'button', { name: 'Cancel' } ) );
+		await waitFor( () => expect( drawerElement() ).toBeNull() );
+		expect( screen.queryByText( /unsaved changes that will be lost/i ) ).toBeNull();
+	} );
+
+	it( 'confirms before Cancel discards style edits, keeping the drawer when the prompt is cancelled', async () => {
+		apiFetch.mockResolvedValueOnce( styledStatus() );
+		renderTab();
+		await openDrawer();
+
+		resetStyleItem( 'Border', 'Border' );
+
+		// Cancelling with a style edit standing prompts instead of closing.
+		fireEvent.click( drawer().getByRole( 'button', { name: 'Cancel' } ) );
+		await screen.findByText( /unsaved changes that will be lost/i );
+
+		// Keeping the changes leaves the drawer open with the edit in place. The
+		// text query dodges the dialog's X button, which is also named Cancel.
+		fireEvent.click( within( document.querySelector( '.newspack-modal' ) ).getByText( 'Cancel' ) );
+		expect( drawerElement() ).not.toBeNull();
+
+		// Discarding closes the drawer, reverts the edit and saves nothing: the
+		// reopened drawer's Save has nothing to send.
+		await waitFor( () => fireEvent.click( drawer().getByRole( 'button', { name: 'Cancel' } ) ) );
+		fireEvent.click( await screen.findByRole( 'button', { name: 'Discard Changes' } ) );
+		await waitFor( () => expect( drawerElement() ).toBeNull() );
+		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
+
+		fireEvent.click( screen.getByRole( 'button', { name: 'Edit Styles' } ) );
+		expect( drawer().getByRole( 'button', { name: 'Save' } ) ).toBeDisabled();
 	} );
 
 	it( 'omits styles from the save payload when they are untouched', async () => {
@@ -158,37 +212,39 @@ describe( 'ContextualPrompts tab', () => {
 	it( 'goes clean again when a style edit is undone from an empty array payload', async () => {
 		apiFetch.mockResolvedValueOnce( unstyledStatus() );
 		renderTab();
+		await openDrawer();
 
-		await waitFor( () => expect( screen.getByRole( 'button', { name: 'Text' } ) ).toBeInTheDocument() );
-		expect( screen.getByRole( 'button', { name: 'Save' } ) ).toBeDisabled();
+		expect( drawer().getByRole( 'button', { name: 'Save' } ) ).toBeDisabled();
 
-		fireEvent.click( screen.getByRole( 'button', { name: 'Text' } ) );
+		fireEvent.click( drawer().getByRole( 'button', { name: 'Text' } ) );
 		fireEvent.click( screen.getByRole( 'option', { name: 'Accent' } ) );
-		expect( screen.getByRole( 'button', { name: 'Save' } ) ).toBeEnabled();
+		expect( drawer().getByRole( 'button', { name: 'Save' } ) ).toBeEnabled();
 
 		// Clicking the selected swatch clears it, leaving no overrides at all: the
 		// saved snapshot has to compare equal to that, empty array payload or not.
 		fireEvent.click( screen.getByRole( 'option', { name: 'Accent' } ) );
-		expect( screen.getByRole( 'button', { name: 'Save' } ) ).toBeDisabled();
+		expect( drawer().getByRole( 'button', { name: 'Save' } ) ).toBeDisabled();
 	} );
 
-	it( 'includes the whole style object in the save payload when a style is edited', async () => {
+	it( 'includes the whole style object in the drawer save payload and closes on success', async () => {
 		apiFetch.mockResolvedValueOnce( styledStatus() );
 		renderTab();
+		await openDrawer();
 
-		await waitFor( () => expect( screen.getByRole( 'heading', { name: 'Border', level: 3 } ) ).toBeInTheDocument() );
-		expect( screen.getByRole( 'button', { name: 'Save' } ) ).toBeDisabled();
+		expect( screen.getByRole( 'heading', { name: 'Border', level: 3 } ) ).toBeInTheDocument();
+		expect( drawer().getByRole( 'button', { name: 'Save' } ) ).toBeDisabled();
 
 		resetStyleItem( 'Border', 'Border' );
-		expect( screen.getByRole( 'button', { name: 'Save' } ) ).toBeEnabled();
+		expect( drawer().getByRole( 'button', { name: 'Save' } ) ).toBeEnabled();
 
 		apiFetch.mockResolvedValueOnce( styledStatus() );
-		fireEvent.click( screen.getByRole( 'button', { name: 'Save' } ) );
+		fireEvent.click( drawer().getByRole( 'button', { name: 'Save' } ) );
 
 		await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 2 ) );
 		const { data } = apiFetch.mock.calls[ 1 ][ 0 ];
 		expect( data.styles ).toEqual( { color: { background: '#123456' }, border: { radius: '4px' } } );
 		expect( data.fields ).toEqual( { [ PROFILE_FIELD.key ]: '' } );
+		await waitFor( () => expect( drawerElement() ).toBeNull() );
 	} );
 
 	describe( 'on a block theme', () => {

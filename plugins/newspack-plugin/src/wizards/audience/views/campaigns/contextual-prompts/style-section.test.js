@@ -1,7 +1,8 @@
 /**
- * Contextual Prompts Style section: the site-wide style control groups a classic
- * theme gets. Block themes have no section — the wizard header hands off to the
- * Site Editor instead, which index.test.js covers.
+ * Contextual Prompts style controls: the site-wide style control groups a
+ * classic theme gets, hosted in the Edit Styles drawer. Block themes have no
+ * controls — the wizard header hands off to the Site Editor instead. The drawer
+ * and handoff flows live in index.test.js.
  */
 
 /**

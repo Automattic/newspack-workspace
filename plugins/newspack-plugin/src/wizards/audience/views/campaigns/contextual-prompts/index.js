@@ -22,6 +22,7 @@ import { moreVertical } from '@wordpress/icons';
  */
 import { withWizardScreen, Button, Handoff, Notice, Waiting, useUnsavedChangesDialog } from '../../../../../../packages/components/src';
 import ContextualPromptsSettings from './contextual-prompts-settings';
+import StyleDrawer from './style-drawer';
 
 const STATUS_PATH = '/newspack-popups/v1/contextual-prompt/status';
 const ENABLE_PATH = '/newspack-popups/v1/contextual-prompt/enable';
@@ -55,6 +56,8 @@ const ContextualPrompts = props => {
 	const [ error, setError ] = useState( null );
 	const [ loaded, setLoaded ] = useState( false );
 	const [ disabling, setDisabling ] = useState( false );
+	// Whether the Edit Styles drawer is open (classic themes only).
+	const [ editingStyles, setEditingStyles ] = useState( false );
 	// The legacy campaigns wizard has no store snackbar outlet, so success feedback
 	// is a local Snackbar (as the advertising placements screen does).
 	const [ snackbar, setSnackbar ] = useState( null );
@@ -152,16 +155,38 @@ const ContextualPrompts = props => {
 		if ( stylesDirty ) {
 			data.styles = blockStyles;
 		}
-		return request( PROFILE_PATH, data )
-			.then( () => setSnackbar( __( 'Settings saved.', 'newspack-plugin' ) ) )
-			.catch( () => {} );
+		return request( PROFILE_PATH, data ).then( () => setSnackbar( __( 'Settings saved.', 'newspack-plugin' ) ) );
 	};
+	const onSave = () => saveProfile().catch( () => {} );
 	const setValue = ( key, value ) => setValues( previous => ( { ...previous, [ key ]: value } ) );
 
 	const isDirty = ! valuesEqual( values, savedValuesRef.current ) || stylesDirty;
 	// Guard stays active during an in-flight save: the edits are only safe once
 	// a successful response has refreshed the saved snapshot.
 	const { confirmDialog, requestConfirm } = useUnsavedChangesDialog( { when: isDirty } );
+
+	// Closing the drawer with style edits standing goes through the same dialog
+	// as Disable and navigation. A second dialog instance would fight this one:
+	// dismissing it replaces the history location, which the guard's own active
+	// block would catch and answer with a prompt of its own.
+	const discardStyles = () => {
+		setBlockStyles( savedStylesRef.current );
+		setEditingStyles( false );
+	};
+	const onStyleDrawerClose = () => {
+		if ( inFlight ) {
+			return;
+		}
+		if ( stylesDirty ) {
+			requestConfirm( discardStyles );
+		} else {
+			setEditingStyles( false );
+		}
+	};
+	const onStyleDrawerSave = () =>
+		saveProfile()
+			.then( () => setEditingStyles( false ) )
+			.catch( () => {} );
 
 	// Disabling refreshes state from the response, discarding local edits, so route
 	// it through the same unsaved-changes guard: it confirms only when dirty, and a
@@ -176,10 +201,14 @@ const ContextualPrompts = props => {
 	const onDisable = () => requestConfirm( disable );
 	const onEnable = () => setEnabled( true ).then( () => setSnackbar( __( 'Contextual Prompts enabled.', 'newspack-plugin' ) ) );
 
-	// Block themes have no Style section: their block styles live in the Site
-	// Editor, so the header hands off to it. The style payload newspack-popups
-	// only started sending carries the theme flag, so an older one gets nothing.
-	const showStyleHandoff = status?.enabled && 'is_block_theme' in status && status.is_block_theme;
+	// Styles are edited from the header on both theme kinds: a block theme hands
+	// off to the Site Editor, where its block styles live, and a classic theme
+	// opens the drawer hosting the wizard's own controls. The style payload
+	// newspack-popups only started sending carries the theme flag, so an older
+	// one gets neither button.
+	const hasStylePayload = status?.enabled && 'is_block_theme' in status;
+	const showStyleHandoff = hasStylePayload && status.is_block_theme;
+	const showStyleDrawer = hasStylePayload && ! status.is_block_theme;
 
 	const headerActions = status?.enabled ? (
 		<>
@@ -203,7 +232,12 @@ const ContextualPrompts = props => {
 					{ __( 'Edit Styles', 'newspack-plugin' ) }
 				</Handoff>
 			) }
-			<Button variant="primary" onClick={ saveProfile } disabled={ inFlight || ! isDirty }>
+			{ showStyleDrawer && (
+				<Button variant="secondary" onClick={ () => setEditingStyles( true ) }>
+					{ __( 'Edit Styles', 'newspack-plugin' ) }
+				</Button>
+			) }
+			<Button variant="primary" onClick={ onSave } disabled={ inFlight || ! isDirty }>
 				{ __( 'Save', 'newspack-plugin' ) }
 			</Button>
 		</>
@@ -222,11 +256,9 @@ const ContextualPrompts = props => {
 			<ContextualPromptsSettings
 				status={ status }
 				values={ values }
-				blockStyles={ blockStyles }
 				error={ error }
 				inFlight={ inFlight }
 				onSetValue={ setValue }
-				onChangeStyles={ setBlockStyles }
 				onEnable={ onEnable }
 			/>
 		);
@@ -245,6 +277,17 @@ const ContextualPrompts = props => {
 		<ContextualPromptsScreen { ...props } headerActions={ headerActions }>
 			{ confirmDialog }
 			{ content }
+			{ editingStyles && status && (
+				<StyleDrawer
+					status={ status }
+					styles={ blockStyles }
+					inFlight={ inFlight }
+					isDirty={ stylesDirty }
+					onChangeStyles={ setBlockStyles }
+					onRequestClose={ onStyleDrawerClose }
+					onSave={ onStyleDrawerSave }
+				/>
+			) }
 			{ snackbar &&
 				createPortal(
 					<div className="newspack-wizard__snackbar-list">

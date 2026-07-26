@@ -1,10 +1,9 @@
 /**
- * Contextual Prompts Style section.
+ * Contextual Prompts style controls.
  *
  * Controls that write site-wide defaults for the Contextual Prompt block on a
- * classic theme. Block themes get no section: the wizard header hands off to the
- * Site Editor's Styles panel instead, so the parent renders this for classic
- * themes alone.
+ * classic theme, hosted in the Edit Styles drawer. Block themes get no controls:
+ * the wizard header hands off to the Site Editor's Styles panel instead.
  */
 
 /**
@@ -53,7 +52,7 @@ import {
 /**
  * Internal dependencies
  */
-import { Button, Grid, SectionHeader } from '../../../../../../packages/components/src';
+import { Button } from '../../../../../../packages/components/src';
 import {
 	contrastRatio,
 	perceivedBrightness,
@@ -367,166 +366,149 @@ const StyleSection = ( { status, styles = {}, inFlight, onChangeStyles } ) => {
 
 	// ColorPalette, FontSizePicker, BoxControl and BorderBoxControl take no
 	// `disabled` prop, so the whole stack goes inert while a save is in flight.
-	const controls = (
-		<Disabled isDisabled={ !! inFlight }>
-			<HStack alignment="top" justify="flex-end">
-				<VStack spacing={ 0 } className="newspack-prompt-style-controls">
-					<StylePanel
-						label={ __( 'Color', 'newspack-plugin' ) }
-						className="newspack-prompt-style-panel--color"
-						resetAll={ () => onChangeStyles( setPath( styles, [ 'color' ], undefined ) ) }
-						__experimentalFirstVisibleItemClass="newspack-prompt-style-colors--first"
-						__experimentalLastVisibleItemClass="newspack-prompt-style-colors--last"
-					>
-						<ToolsPanelItem
-							className="newspack-prompt-style-colors"
-							label={ __( 'Text', 'newspack-plugin' ) }
-							hasValue={ () => undefined !== styles.color?.text }
-							onDeselect={ () => setColor( 'text' ) }
-							isShownByDefault
-						>
-							<ColorRow label={ __( 'Text', 'newspack-plugin' ) } colorValue={ text } disabled={ inFlight }>
-								<ColorPalette
-									aria-label={ __( 'Text', 'newspack-plugin' ) }
-									colors={ paletteColors }
-									value={ text ?? undefined }
-									onChange={ value => setColor( 'text', value ) }
-								/>
-							</ColorRow>
-						</ToolsPanelItem>
-						<ToolsPanelItem
-							className="newspack-prompt-style-colors"
-							label={ __( 'Background', 'newspack-plugin' ) }
-							hasValue={ () => undefined !== styles.color?.background }
-							onDeselect={ () => setColor( 'background' ) }
-							isShownByDefault
-						>
-							<ColorRow label={ __( 'Background', 'newspack-plugin' ) } colorValue={ background } disabled={ inFlight }>
-								<ColorPalette
-									aria-label={ __( 'Background', 'newspack-plugin' ) }
-									colors={ paletteColors }
-									value={ background ?? undefined }
-									onChange={ value => setColor( 'background', value ) }
-								/>
-							</ColorRow>
-						</ToolsPanelItem>
-						{ null !== ratio && ratio < MIN_CONTRAST_RATIO && (
-							<Notice status="warning" isDismissible={ false } className="newspack-prompt-style-notice">
-								{ contrastMessage( background, text ) }
-							</Notice>
-						) }
-					</StylePanel>
-					<StylePanel
-						label={ __( 'Typography', 'newspack-plugin' ) }
-						resetAll={ () => onChangeStyles( setPath( styles, [ 'typography' ], undefined ) ) }
-					>
-						<ToolsPanelItem
-							label={ __( 'Font Size', 'newspack-plugin' ) }
-							hasValue={ () => undefined !== styles.typography?.fontSize }
-							onDeselect={ () => setFontSize() }
-							isShownByDefault
-						>
-							<FontSizePicker
-								fontSizes={ fontSizes }
-								value={ effective( [ 'typography', 'fontSize' ] ) }
-								onChange={ setFontSize }
-								withReset={ false }
-								__next40pxDefaultSize
-							/>
-						</ToolsPanelItem>
-					</StylePanel>
-					<StylePanel label={ __( 'Padding', 'newspack-plugin' ) } resetAll={ clearPadding }>
-						<ToolsPanelItem
-							label={ __( 'Padding', 'newspack-plugin' ) }
-							hasValue={ () => undefined !== styles.spacing?.padding }
-							onDeselect={ clearPadding }
-							isShownByDefault
-						>
-							<PaddingControl
-								steps={ paddingSteps }
-								units={ paddingUnits }
-								allowCustom={ styleSpacingCustom }
-								values={ paddingValues }
-								onChange={ setPaddingSides }
-								disabled={ inFlight }
-							/>
-						</ToolsPanelItem>
-					</StylePanel>
-					<StylePanel
-						label={ __( 'Border', 'newspack-plugin' ) }
-						resetAll={ () => onChangeStyles( setPath( styles, [ 'border' ], undefined ) ) }
-					>
-						<ToolsPanelItem
-							label={ __( 'Border', 'newspack-plugin' ) }
-							hasValue={ () => hasKeys( borderOverride ) }
-							onDeselect={ clearBorder }
-							isShownByDefault
-						>
-							<BorderBoxControl
-								label={ __( 'Border', 'newspack-plugin' ) }
-								hideLabelFromVision
-								colors={ paletteColors }
-								value={ hasKeys( borderOverride ) ? borderOverride : withoutRadius( defaults.border ) }
-								onChange={ setBorder }
-								enableStyle
-								__next40pxDefaultSize
-							/>
-						</ToolsPanelItem>
-						<ToolsPanelItem
-							label={ __( 'Radius', 'newspack-plugin' ) }
-							hasValue={ () => undefined !== styles.border?.radius }
-							onDeselect={ () => setRadius() }
-							isShownByDefault
-						>
-							<VStack spacing={ 2 }>
-								<BaseControl.VisualLabel>{ __( 'Radius', 'newspack-plugin' ) }</BaseControl.VisualLabel>
-								<HStack spacing={ 4 } className="newspack-prompt-style-radius">
-									<Icon className="newspack-prompt-style-radius__icon" icon={ cornerAll } size={ ICON_SIZE } />
-									<UnitControl
-										label={ __( 'Radius', 'newspack-plugin' ) }
-										hideLabelFromVision
-										value={ radiusValue }
-										onChange={ setRadius }
-										min={ 0 }
-										disabled={ inFlight }
-										__next40pxDefaultSize
-									/>
-									<RangeControl
-										label={ __( 'Border radius', 'newspack-plugin' ) }
-										hideLabelFromVision
-										value={ radiusQuantity }
-										onChange={ setRadiusQuantity }
-										min={ 0 }
-										max={ RADIUS_SLIDER_MAX }
-										step={ 'px' === ( radiusUnit || 'px' ) || '%' === radiusUnit ? 1 : 0.1 }
-										initialPosition={ 0 }
-										withInputField={ false }
-										disabled={ inFlight }
-										__nextHasNoMarginBottom
-										__next40pxDefaultSize
-									/>
-								</HStack>
-							</VStack>
-						</ToolsPanelItem>
-					</StylePanel>
-				</VStack>
-			</HStack>
-		</Disabled>
-	);
-
 	return (
-		<Grid columns={ 2 } gutter={ 32 } noMargin>
-			<SectionHeader
-				heading={ 2 }
-				title={ __( 'Style', 'newspack-plugin' ) }
-				description={ __(
-					'Site-wide default styles for the Contextual Prompt block. Styles set on an individual block override these.',
-					'newspack-plugin'
-				) }
-				noMargin
-			/>
-			{ controls }
-		</Grid>
+		<Disabled isDisabled={ !! inFlight }>
+			<VStack spacing={ 0 } className="newspack-prompt-style-controls">
+				<StylePanel
+					label={ __( 'Color', 'newspack-plugin' ) }
+					className="newspack-prompt-style-panel--color"
+					resetAll={ () => onChangeStyles( setPath( styles, [ 'color' ], undefined ) ) }
+					__experimentalFirstVisibleItemClass="newspack-prompt-style-colors--first"
+					__experimentalLastVisibleItemClass="newspack-prompt-style-colors--last"
+				>
+					<ToolsPanelItem
+						className="newspack-prompt-style-colors"
+						label={ __( 'Text', 'newspack-plugin' ) }
+						hasValue={ () => undefined !== styles.color?.text }
+						onDeselect={ () => setColor( 'text' ) }
+						isShownByDefault
+					>
+						<ColorRow label={ __( 'Text', 'newspack-plugin' ) } colorValue={ text } disabled={ inFlight }>
+							<ColorPalette
+								aria-label={ __( 'Text', 'newspack-plugin' ) }
+								colors={ paletteColors }
+								value={ text ?? undefined }
+								onChange={ value => setColor( 'text', value ) }
+							/>
+						</ColorRow>
+					</ToolsPanelItem>
+					<ToolsPanelItem
+						className="newspack-prompt-style-colors"
+						label={ __( 'Background', 'newspack-plugin' ) }
+						hasValue={ () => undefined !== styles.color?.background }
+						onDeselect={ () => setColor( 'background' ) }
+						isShownByDefault
+					>
+						<ColorRow label={ __( 'Background', 'newspack-plugin' ) } colorValue={ background } disabled={ inFlight }>
+							<ColorPalette
+								aria-label={ __( 'Background', 'newspack-plugin' ) }
+								colors={ paletteColors }
+								value={ background ?? undefined }
+								onChange={ value => setColor( 'background', value ) }
+							/>
+						</ColorRow>
+					</ToolsPanelItem>
+					{ null !== ratio && ratio < MIN_CONTRAST_RATIO && (
+						<Notice status="warning" isDismissible={ false } className="newspack-prompt-style-notice">
+							{ contrastMessage( background, text ) }
+						</Notice>
+					) }
+				</StylePanel>
+				<StylePanel
+					label={ __( 'Typography', 'newspack-plugin' ) }
+					resetAll={ () => onChangeStyles( setPath( styles, [ 'typography' ], undefined ) ) }
+				>
+					<ToolsPanelItem
+						label={ __( 'Font Size', 'newspack-plugin' ) }
+						hasValue={ () => undefined !== styles.typography?.fontSize }
+						onDeselect={ () => setFontSize() }
+						isShownByDefault
+					>
+						<FontSizePicker
+							fontSizes={ fontSizes }
+							value={ effective( [ 'typography', 'fontSize' ] ) }
+							onChange={ setFontSize }
+							withReset={ false }
+							__next40pxDefaultSize
+						/>
+					</ToolsPanelItem>
+				</StylePanel>
+				<StylePanel label={ __( 'Padding', 'newspack-plugin' ) } resetAll={ clearPadding }>
+					<ToolsPanelItem
+						label={ __( 'Padding', 'newspack-plugin' ) }
+						hasValue={ () => undefined !== styles.spacing?.padding }
+						onDeselect={ clearPadding }
+						isShownByDefault
+					>
+						<PaddingControl
+							steps={ paddingSteps }
+							units={ paddingUnits }
+							allowCustom={ styleSpacingCustom }
+							values={ paddingValues }
+							onChange={ setPaddingSides }
+							disabled={ inFlight }
+						/>
+					</ToolsPanelItem>
+				</StylePanel>
+				<StylePanel
+					label={ __( 'Border', 'newspack-plugin' ) }
+					resetAll={ () => onChangeStyles( setPath( styles, [ 'border' ], undefined ) ) }
+				>
+					<ToolsPanelItem
+						label={ __( 'Border', 'newspack-plugin' ) }
+						hasValue={ () => hasKeys( borderOverride ) }
+						onDeselect={ clearBorder }
+						isShownByDefault
+					>
+						<BorderBoxControl
+							label={ __( 'Border', 'newspack-plugin' ) }
+							hideLabelFromVision
+							colors={ paletteColors }
+							value={ hasKeys( borderOverride ) ? borderOverride : withoutRadius( defaults.border ) }
+							onChange={ setBorder }
+							enableStyle
+							__next40pxDefaultSize
+						/>
+					</ToolsPanelItem>
+					<ToolsPanelItem
+						label={ __( 'Radius', 'newspack-plugin' ) }
+						hasValue={ () => undefined !== styles.border?.radius }
+						onDeselect={ () => setRadius() }
+						isShownByDefault
+					>
+						<VStack spacing={ 2 }>
+							<BaseControl.VisualLabel>{ __( 'Radius', 'newspack-plugin' ) }</BaseControl.VisualLabel>
+							<HStack spacing={ 4 } className="newspack-prompt-style-radius">
+								<Icon className="newspack-prompt-style-radius__icon" icon={ cornerAll } size={ ICON_SIZE } />
+								<UnitControl
+									label={ __( 'Radius', 'newspack-plugin' ) }
+									hideLabelFromVision
+									value={ radiusValue }
+									onChange={ setRadius }
+									min={ 0 }
+									disabled={ inFlight }
+									__next40pxDefaultSize
+								/>
+								<RangeControl
+									label={ __( 'Border radius', 'newspack-plugin' ) }
+									hideLabelFromVision
+									value={ radiusQuantity }
+									onChange={ setRadiusQuantity }
+									min={ 0 }
+									max={ RADIUS_SLIDER_MAX }
+									step={ 'px' === ( radiusUnit || 'px' ) || '%' === radiusUnit ? 1 : 0.1 }
+									initialPosition={ 0 }
+									withInputField={ false }
+									disabled={ inFlight }
+									__nextHasNoMarginBottom
+									__next40pxDefaultSize
+								/>
+							</HStack>
+						</VStack>
+					</ToolsPanelItem>
+				</StylePanel>
+			</VStack>
+		</Disabled>
 	);
 };
 

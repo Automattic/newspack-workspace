@@ -32,9 +32,9 @@ const TOGGLE_FIELD = {
 const LABEL_FIELD = { ...FIELD_DEFAULTS, key: 'newspack_contextual_prompts_override_label', label: 'Override button label', type: 'text' };
 const URL_FIELD = { ...FIELD_DEFAULTS, key: 'newspack_contextual_prompts_override_url', label: 'Override button URL', type: 'text' };
 
-// The style keys the status payload carries, on a classic theme; the Style
-// section itself is covered in style-section.test.js, so the heading is enough to
-// see the section render at all.
+// The style keys the status payload carries, on a classic theme; the settings
+// body must ignore them, since styles are edited from the wizard header (the
+// drawer or the Site Editor handoff, both owned by the parent tab).
 const STYLE_PAYLOAD = {
 	is_block_theme: false,
 	style_defaults: {},
@@ -101,7 +101,7 @@ describe( 'ContextualPromptsSettings empty state', () => {
 } );
 
 describe( 'ContextualPromptsSettings enabled body', () => {
-	it( 'renders the two settings sections, plus Style on a classic theme', () => {
+	it( 'renders the two settings sections and no Style section, style payload or not', () => {
 		render(
 			<ContextualPromptsSettings
 				status={ { enabled: true, can_manage: true, fields: [ ENABLE_FIELD ], ...STYLE_PAYLOAD } }
@@ -115,45 +115,8 @@ describe( 'ContextualPromptsSettings enabled body', () => {
 
 		expect( screen.getByRole( 'heading', { name: 'Publisher Profile' } ) ).toBeInTheDocument();
 		expect( screen.getByRole( 'heading', { name: 'Site-Wide Override' } ) ).toBeInTheDocument();
-		expect( screen.getByRole( 'heading', { name: 'Style' } ) ).toBeInTheDocument();
-	} );
-
-	// A block theme's styles live in the Site Editor, which the wizard header hands
-	// off to, so the section has nothing left to render.
-	it( 'leaves out the Style section on a block theme', () => {
-		render(
-			<ContextualPromptsSettings
-				status={ { enabled: true, can_manage: true, fields: [ ENABLE_FIELD ], ...STYLE_PAYLOAD, is_block_theme: true } }
-				values={ fieldsToValues( [ ENABLE_FIELD ] ) }
-				error={ null }
-				inFlight={ false }
-				onSetValue={ () => {} }
-				onEnable={ () => Promise.resolve() }
-			/>
-		);
-
-		expect( screen.getByRole( 'heading', { name: 'Site-Wide Override' } ) ).toBeInTheDocument();
 		expect( screen.queryByRole( 'heading', { name: 'Style' } ) ).not.toBeInTheDocument();
 		expect( screen.queryByRole( 'button', { name: 'Background' } ) ).toBeNull();
-	} );
-
-	// An older newspack-popups answers the status endpoint without the style keys:
-	// the section's controls would render empty and its saves would be dropped.
-	it( 'leaves out the Style section when the payload carries no style keys', () => {
-		render(
-			<ContextualPromptsSettings
-				status={ { enabled: true, can_manage: true, fields: [ ENABLE_FIELD ] } }
-				values={ fieldsToValues( [ ENABLE_FIELD ] ) }
-				error={ null }
-				inFlight={ false }
-				onSetValue={ () => {} }
-				onEnable={ () => Promise.resolve() }
-			/>
-		);
-
-		expect( screen.getByRole( 'heading', { name: 'Publisher Profile' } ) ).toBeInTheDocument();
-		expect( screen.getByRole( 'heading', { name: 'Site-Wide Override' } ) ).toBeInTheDocument();
-		expect( screen.queryByRole( 'heading', { name: 'Style' } ) ).not.toBeInTheDocument();
 	} );
 
 	it( 'shows only the enable toggle while the override is off', () => {
