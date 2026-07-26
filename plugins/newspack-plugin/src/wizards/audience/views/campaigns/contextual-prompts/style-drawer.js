@@ -11,7 +11,7 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { Modal, Popover, SlotFillProvider, __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { Modal, Notice, Popover, SlotFillProvider, __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 import { close } from '@wordpress/icons';
 
 /**
@@ -20,11 +20,16 @@ import { close } from '@wordpress/icons';
 import { Button } from '../../../../../../packages/components/src';
 import StyleSection from './style-section';
 
-const StyleDrawer = ( { status, styles, inFlight, isDirty, onChangeStyles, onRequestClose, onSave } ) => {
-	// Close through the Modal's own Escape handler so the slide-out (exit)
-	// animation runs; calling onRequestClose directly unmounts the panel with no
-	// animation, since the Modal only animates closes that it initiates.
+const StyleDrawer = ( { status, styles, error, inFlight, isDirty, onChangeStyles, onRequestClose, onSave } ) => {
+	// Veto first: a close the parent answers with a confirm must reach it without
+	// the exit animation replaying, so only closes that really unmount go through
+	// the Modal's own Escape handler, which is what animates them. The overlay
+	// click is the accepted exception: it animates before the confirm appears.
 	const requestClose = event => {
+		if ( isDirty || inFlight ) {
+			onRequestClose();
+			return;
+		}
 		const frame = event.currentTarget.closest( '.components-modal__frame' );
 		if ( frame ) {
 			frame.dispatchEvent( new window.KeyboardEvent( 'keydown', { key: 'Escape', bubbles: true } ) );
@@ -36,6 +41,15 @@ const StyleDrawer = ( { status, styles, inFlight, isDirty, onChangeStyles, onReq
 		<Modal
 			__experimentalHideHeader
 			onRequestClose={ onRequestClose }
+			// Escape on a dirty or in-flight drawer is vetoed here, before the
+			// Modal's own handler animates the close. Popovers inside the drawer
+			// preventDefault their own Escape, so those are left alone.
+			onKeyDown={ event => {
+				if ( 'Escape' === event.key && ! event.defaultPrevented && ( isDirty || inFlight ) ) {
+					event.preventDefault();
+					onRequestClose();
+				}
+			} }
 			className="newspack-prompt-style-drawer"
 			overlayClassName="newspack-prompt-style-drawer__overlay"
 			contentLabel={ __( 'Edit Styles', 'newspack-plugin' ) }
@@ -53,6 +67,11 @@ const StyleDrawer = ( { status, styles, inFlight, isDirty, onChangeStyles, onReq
 				<div className="newspack-prompt-style-drawer__content">
 					<StyleSection status={ status } styles={ styles } inFlight={ inFlight } onChangeStyles={ onChangeStyles } />
 				</div>
+				{ error && (
+					<Notice status="error" isDismissible={ false } className="newspack-prompt-style-drawer__notice">
+						{ error.message }
+					</Notice>
+				) }
 				<HStack className="newspack-prompt-style-drawer__footer" spacing={ 2 } justify="flex-end">
 					<Button variant="tertiary" onClick={ requestClose } disabled={ inFlight } __next40pxDefaultSize>
 						{ __( 'Cancel', 'newspack-plugin' ) }

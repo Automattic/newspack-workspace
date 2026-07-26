@@ -281,6 +281,7 @@ const ContextualPrompts = props => {
 				<StyleDrawer
 					status={ status }
 					styles={ blockStyles }
+					error={ error }
 					inFlight={ inFlight }
 					isDirty={ stylesDirty }
 					onChangeStyles={ setBlockStyles }

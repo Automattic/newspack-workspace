@@ -202,10 +202,14 @@
 }
 
 // Mirror the slide-in with a slide-out on close. @wp/components' Modal adds
-// `is-animating-out` and keeps the panel mounted until an animationend fires
-// (which bubbles up from the frame), so animating the frame is enough. Suppress
-// the overlay's default disappear animation so the motion stays a slide, not a
-// fade. The compound selector outweighs the base frame rule in the cascade.
+// `is-animating-out` and keeps the panel mounted while it plays, but it only
+// listens for an animationend from its own `components-modal__disappear-animation`;
+// under a custom animation name every close instead resolves on its fallback
+// timeout, the core frame animation duration times 1.2 (200ms * 1.2 = 240ms).
+// The slide-out must therefore stay at or below that 200ms frame duration, or
+// the unmount cuts it short. Suppress the overlay's default disappear animation
+// so the motion stays a slide, not a fade. The compound selector outweighs the
+// base frame rule in the cascade.
 .components-modal__screen-overlay.newspack-prompt-style-drawer__overlay.is-animating-out {
 	animation: none;
 }
@@ -240,6 +244,13 @@
 
 	// The last panel's controls otherwise end flush against the footer's border.
 	padding-bottom: wp-vars.$grid-unit-20;
+}
+
+// The notice sits between the scrolling content and the footer, so it keeps its
+// own height instead of being squashed by the column's flex distribution.
+.newspack-prompt-style-drawer__notice {
+	flex: 0 0 auto;
+	margin: 0;
 }
 
 .newspack-prompt-style-drawer__footer {

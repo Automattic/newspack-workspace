@@ -247,6 +247,24 @@ describe( 'ContextualPrompts tab', () => {
 		await waitFor( () => expect( drawerElement() ).toBeNull() );
 	} );
 
+	it( 'keeps the drawer open and shows the error when the drawer save fails', async () => {
+		apiFetch.mockResolvedValueOnce( styledStatus() );
+		renderTab();
+		await openDrawer();
+
+		resetStyleItem( 'Border', 'Border' );
+
+		apiFetch.mockRejectedValueOnce( new Error( 'Save failed.' ) );
+		fireEvent.click( drawer().getByRole( 'button', { name: 'Save' } ) );
+
+		// The edits are still there to retry, with the reason in reach of them.
+		await waitFor( () => {
+			expect( apiFetch ).toHaveBeenCalledTimes( 2 );
+			expect( drawerElement() ).not.toBeNull();
+			expect( drawer().getByText( 'Save failed.' ) ).toBeInTheDocument();
+		} );
+	} );
+
 	describe( 'on a block theme', () => {
 		const HANDOFF_LINK = 'https://example.test/wp-admin/site-editor.php?handoff=1';
 		const RETURN_URL = 'https://example.test/wp-admin/admin.php?page=newspack-audience';
