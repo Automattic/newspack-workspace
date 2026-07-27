@@ -61,6 +61,18 @@ class ContextualPromptOverrideTest extends WP_UnitTestCase {
 <!-- /wp:buttons --></div>
 <!-- /wp:newspack-popups/contextual-prompt -->';
 
+	const EMPTY_COPY_PROMPT = '<!-- wp:newspack-popups/contextual-prompt -->
+<div class="wp-block-newspack-popups-contextual-prompt"><!-- wp:paragraph -->
+<p>&nbsp;</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:buttons -->
+<div class="wp-block-buttons"><!-- wp:button {"url":"https://example.com/donate/"} -->
+<div class="wp-block-button"><a class="wp-block-button__link wp-element-button" href="https://example.com/donate/">Donate</a></div>
+<!-- /wp:button --></div>
+<!-- /wp:buttons --></div>
+<!-- /wp:newspack-popups/contextual-prompt -->';
+
 	/**
 	 * Reset override options, donor landing page and platform filters.
 	 */
@@ -332,6 +344,57 @@ class ContextualPromptOverrideTest extends WP_UnitTestCase {
 
 		$this->assertStringContainsString( 'Give $5 today — just ${1} a week.', $html );
 		$this->assertStringContainsString( '>Give $5</a>', $html );
+	}
+
+	/**
+	 * A prompt whose copy paragraph holds no visible text (generation failed,
+	 * post published anyway) renders nothing — not a CTA-only card.
+	 */
+	public function test_empty_copy_prompt_renders_nothing() {
+		add_filter( 'newspack_contextual_prompts_use_donate_block', '__return_false' );
+
+		$this->assertSame( '', trim( do_blocks( self::EMPTY_COPY_PROMPT ) ) );
+	}
+
+	/**
+	 * The empty-copy suppression also applies when the prompt is nested.
+	 */
+	public function test_empty_copy_prompt_nested_renders_nothing() {
+		add_filter( 'newspack_contextual_prompts_use_donate_block', '__return_false' );
+
+		$html = do_blocks( "<!-- wp:group -->\n<div class=\"wp-block-group\">" . self::EMPTY_COPY_PROMPT . "</div>\n<!-- /wp:group -->" );
+
+		$this->assertStringNotContainsString( 'contextual-prompt', $html );
+		$this->assertStringNotContainsString( 'wp-block-button', $html );
+	}
+
+	/**
+	 * An empty authored copy with an active site-wide override that supplies the
+	 * copy still renders — only a prompt that would display no copy is suppressed.
+	 */
+	public function test_empty_copy_prompt_with_override_copy_still_renders() {
+		add_filter( 'newspack_contextual_prompts_use_donate_block', '__return_false' );
+		update_option( Newspack_Popups_Settings::OVERRIDE_ENABLED_OPTION, true );
+		update_option( 'newspack_contextual_prompts_override_body', 'Support our spring drive.' );
+		update_option( 'newspack_contextual_prompts_override_label', 'Give now' );
+		update_option( 'newspack_contextual_prompts_override_url', 'https://example.com/drive/' );
+
+		$html = do_blocks( self::EMPTY_COPY_PROMPT );
+
+		$this->assertStringContainsString( 'Support our spring drive.', $html );
+		$this->assertStringContainsString( '>Give now</a>', $html );
+	}
+
+	/**
+	 * A prompt with authored copy renders as before.
+	 */
+	public function test_authored_copy_prompt_still_renders() {
+		add_filter( 'newspack_contextual_prompts_use_donate_block', '__return_false' );
+
+		$html = do_blocks( self::PLAIN_BUTTON_PROMPT );
+
+		$this->assertStringContainsString( 'Original story copy.', $html );
+		$this->assertStringContainsString( 'href="https://example.com/donate/"', $html );
 	}
 
 	/**

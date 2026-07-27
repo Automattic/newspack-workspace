@@ -825,9 +825,10 @@ final class Newspack_Popups {
 
 		// The blocks bundle also loads in the widgets editor, Site Editor and
 		// customizer, where the Contextual Prompt block cannot work: it needs the
-		// core/editor post context. Only post-editor screens carry a post type.
-		$screen         = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
-		$is_post_editor = $screen && ! empty( $screen->post_type );
+		// core/editor post context. Only post-editor screens carry a post type,
+		// and the generation API only accepts the popups-supported post types.
+		$screen                   = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
+		$is_supported_post_editor = $screen && ! empty( $screen->post_type ) && in_array( $screen->post_type, Newspack_Popups_Model::get_default_popup_post_types(), true );
 
 		$blocks_asset = require $blocks_asset_path;
 		\wp_enqueue_script(
@@ -847,10 +848,10 @@ final class Newspack_Popups {
 				'post_type'                  => self::NEWSPACK_POPUPS_CPT,
 				'is_prompt'                  => self::NEWSPACK_POPUPS_CPT == get_post_type(),
 				// Gates client-side registration of the Contextual Prompt block:
-				// requires a post-editor screen plus both the rollout flag and the
-				// admin opt-in, so the block cannot be inserted before the AI
-				// disclosure is accepted.
-				'contextual_prompts_enabled' => $is_post_editor && self::is_contextual_prompts_enabled() && Newspack_Popups_Settings::is_ai_copy_assistant_enabled(),
+				// requires a supported-post-type editor screen plus both the
+				// rollout flag and the admin opt-in, so the block cannot be
+				// inserted before the AI disclosure is accepted.
+				'contextual_prompts_enabled' => $is_supported_post_editor && self::is_contextual_prompts_enabled() && Newspack_Popups_Settings::is_ai_copy_assistant_enabled(),
 				// So the editor previews the Contextual Prompt CTA in the same
 				// accent the front end resolves at render.
 				'accent_color'               => Newspack_Popups_Contextual_Prompt_Block::get_accent_color(),

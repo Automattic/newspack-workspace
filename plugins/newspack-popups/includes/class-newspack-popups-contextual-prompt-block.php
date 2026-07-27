@@ -26,6 +26,7 @@ final class Newspack_Popups_Contextual_Prompt_Block {
 		add_action( 'init', [ __CLASS__, 'register_block' ] );
 		add_filter( 'wp_theme_json_data_default', [ __CLASS__, 'default_design' ] );
 		add_filter( 'render_block_data', [ __CLASS__, 'prepare_block_data' ] );
+		add_filter( 'render_block_' . self::BLOCK_NAME, [ __CLASS__, 'suppress_empty_prompt' ], 9, 2 );
 		add_filter( 'render_block_' . self::BLOCK_NAME, [ __CLASS__, 'add_analytics_attributes' ], 10, 2 );
 		add_filter( 'render_block_data', [ __CLASS__, 'inherit_accent_color' ], 10, 3 );
 	}
@@ -57,6 +58,40 @@ final class Newspack_Popups_Contextual_Prompt_Block {
 			$block_content,
 			1
 		);
+	}
+
+	/**
+	 * A prompt with no copy — generation failed and the post was published
+	 * anyway — renders nothing rather than a CTA-only card. Checked against the
+	 * final normalized block (post-override), like get_cta_type(): an empty
+	 * authored paragraph whose copy the active site-wide override supplies still
+	 * renders.
+	 *
+	 * @param string $block_content Rendered block markup.
+	 * @param array  $block         The parsed block, post render_block_data filters.
+	 * @return string
+	 */
+	public static function suppress_empty_prompt( $block_content, $block = [] ) {
+		return self::has_copy( is_array( $block ) ? $block : [] ) ? $block_content : '';
+	}
+
+	/**
+	 * Whether any copy paragraph carries visible text.
+	 *
+	 * @param array $parsed_block Parsed prompt block.
+	 * @return bool
+	 */
+	private static function has_copy( $parsed_block ) {
+		foreach ( $parsed_block['innerBlocks'] ?? [] as $child ) {
+			if ( 'core/paragraph' !== ( $child['blockName'] ?? '' ) ) {
+				continue;
+			}
+			$text = html_entity_decode( wp_strip_all_tags( (string) ( $child['innerHTML'] ?? '' ) ), ENT_QUOTES, 'UTF-8' );
+			if ( '' !== trim( str_replace( "\xC2\xA0", ' ', $text ) ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
