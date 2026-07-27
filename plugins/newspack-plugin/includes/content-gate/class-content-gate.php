@@ -620,7 +620,11 @@ class Content_Gate {
 	}
 
 	/**
-	 * Whether any gates of the given type has metering enabled.
+	 * Whether any gate of the given type meters, i.e. grants at least one free view.
+	 *
+	 * Read the gate settings through Metering rather than the gate array: metering lives
+	 * under the `registration`/`custom_access` sections on the gate CPT and in flat post
+	 * meta on the legacy memberships gate, and Metering is what resolves the two.
 	 *
 	 * @param string $post_type Post type.
 	 *
@@ -629,7 +633,7 @@ class Content_Gate {
 	public static function is_metering_enabled( $post_type = self::GATE_CPT ) {
 		$gates = self::get_gates( $post_type );
 		foreach ( $gates as $gate ) {
-			if ( isset( $gate['metering'] ) && ! empty( $gate['metering']['enabled'] ) ) {
+			if ( Metering::is_gate_metered( $gate['id'] ) ) {
 				return true;
 			}
 		}
@@ -1112,7 +1116,14 @@ class Content_Gate {
 		$pattern_slug = '';
 		if ( 'registration' === $gate_mode ) {
 			$pattern_slug = 'registration-wall';
-			if ( ! empty( $custom_access_settings['active'] ) ) {
+			// Upgrade to the metering layout only when the paid tier actually grants free
+			// views. A tier that is active but meters 0 views gates every reader on their
+			// first view, so its layout must not advertise "free articles" it never
+			// delivers (NPPD-2056).
+			$custom_access_meters = ! empty( $custom_access_settings['active'] )
+				&& ! empty( $custom_access_settings['metering']['enabled'] )
+				&& absint( $custom_access_settings['metering']['count'] ?? 0 ) > 0;
+			if ( $custom_access_meters ) {
 				$pattern_slug = 'pay-wall-one-tier-metering';
 			}
 		} elseif ( 'custom_access' === $gate_mode ) {
