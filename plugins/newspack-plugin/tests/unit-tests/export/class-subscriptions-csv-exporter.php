@@ -24,9 +24,8 @@ class Newspack_Test_Subscriptions_CSV_Exporter extends WP_UnitTestCase {
 	 */
 	public function set_up() {
 		parent::set_up();
-		global $subscriptions_database, $wcs_mock_subscriptions_for_product, $wcs_mock_subscription_search_results, $wcs_mock_hpos_enabled, $wcs_mock_orders_with_meta_query_args, $wcs_mock_orders_with_meta_query_result;
+		global $subscriptions_database, $wcs_mock_subscription_search_results, $wcs_mock_hpos_enabled, $wcs_mock_orders_with_meta_query_args, $wcs_mock_orders_with_meta_query_result;
 		$subscriptions_database                 = [];
-		$wcs_mock_subscriptions_for_product     = [];
 		$wcs_mock_subscription_search_results   = [];
 		$wcs_mock_hpos_enabled                  = false;
 		$wcs_mock_orders_with_meta_query_args   = null;
@@ -228,8 +227,14 @@ class Newspack_Test_Subscriptions_CSV_Exporter extends WP_UnitTestCase {
 	 * intersect; a disjoint intersection yields the [ 0 ] sentinel.
 	 */
 	public function test_build_query_args_product_and_customer_intersect() {
-		global $wcs_mock_subscriptions_for_product;
-		$wcs_mock_subscriptions_for_product = [ 5 => array_fill_keys( [ 1, 2, 3 ], 'sub' ) ];
+		foreach ( [ 1, 2, 3 ] as $subscription_id ) {
+			wcs_create_subscription(
+				[
+					'id'       => $subscription_id,
+					'products' => [ 5 ],
+				]
+			);
+		}
 		WCS_Customer_Store::$mock_user_subscription_ids = [ 7 => [ 2, 3, 4 ] ];
 
 		$args = Subscriptions_CSV_Exporter::build_query_args(

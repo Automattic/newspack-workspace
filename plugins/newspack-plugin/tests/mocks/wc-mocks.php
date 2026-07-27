@@ -948,6 +948,27 @@ function wcs_get_subscriptions( $args = [] ) {
 	}
 	return $matches;
 }
+function wcs_get_subscriptions_for_product( $product_ids, $fields = 'ids', $args = [] ) {
+	// Minimal mock mirroring the real return shape: subscriptions keyed by their
+	// ID (so array_keys() yields subscription IDs), matched via WC_Subscription's
+	// `products` array (has_product()). `subscription_status`/paging args are
+	// ignored — extend here if a test needs them.
+	global $subscriptions_database;
+	$product_ids   = array_map( 'absint', (array) $product_ids );
+	$subscriptions = [];
+	foreach ( $subscriptions_database as $id => $subscription ) {
+		if ( ! method_exists( $subscription, 'has_product' ) ) {
+			continue;
+		}
+		foreach ( $product_ids as $product_id ) {
+			if ( $subscription->has_product( $product_id ) ) {
+				$subscriptions[ $id ] = ( 'ids' !== $fields ) ? $subscription : $id;
+				break;
+			}
+		}
+	}
+	return $subscriptions;
+}
 function wcs_get_canonical_product_id( $item ) {
 	if ( is_object( $item ) && method_exists( $item, 'get_product_id' ) ) {
 		// Real WCS: the variation ID is the canonical ID when present.
@@ -1339,10 +1360,6 @@ function wcs_get_subscription_statuses() {
 function wcs_sanitize_subscription_status_key( $status_key ) {
 	$status_key = sanitize_key( $status_key );
 	return 'wc-' === substr( $status_key, 0, 3 ) ? $status_key : 'wc-' . $status_key;
-}
-function wcs_get_subscriptions_for_product( $product_id ) {
-	global $wcs_mock_subscriptions_for_product;
-	return $wcs_mock_subscriptions_for_product[ $product_id ] ?? [];
 }
 function wcs_subscription_search( $term ) {
 	global $wcs_mock_subscription_search_results;
