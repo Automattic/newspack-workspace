@@ -32,7 +32,7 @@ require plugin_dir_path( __FILE__ ) . 'includes/class-article-settings.php';
 require plugin_dir_path( __FILE__ ) . 'includes/class-widget.php';
 require plugin_dir_path( __FILE__ ) . 'includes/compatibility-co-authors-plus.php';
 require plugin_dir_path( __FILE__ ) . 'includes/class-republication-rewrite.php';
-require plugin_dir_path( __FILE__ ) . 'src/blocks/republish-button/class-republish-button-block.php';
+require plugin_dir_path( __FILE__ ) . 'includes/class-republish-button-block.php';
 require plugin_dir_path( __FILE__ ) . 'includes/class-republish-pattern.php';
 
 /**

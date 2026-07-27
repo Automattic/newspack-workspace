@@ -31,6 +31,7 @@ class On_Hold_Duration {
 		add_action( 'woocommerce_subscription_status_on-hold', [ __CLASS__, 'maybe_schedule_expiration' ], 10, 1 );
 		add_action( 'woocommerce_subscription_status_active', [ __CLASS__, 'maybe_unschedule_expiration' ], 10, 1 );
 		add_action( 'woocommerce_subscriptions_after_apply_retry_rule', [ __CLASS__, 'maybe_unschedule_expiration_on_retry' ], 10, 3 );
+		add_action( 'woocommerce_subscriptions_retry_status_updated', [ __CLASS__, 'maybe_reschedule_expiration_on_retry_end' ], 10, 2 );
 		add_action( 'woocommerce_subscription_payment_failed', [ __CLASS__, 'trash_subscription_on_failed_payment' ], 10, 2 );
 		add_action( self::AS_HOOK, [ __CLASS__, 'handle_scheduled_action' ] );
 	}
@@ -162,6 +163,32 @@ class On_Hold_Duration {
 	public static function maybe_unschedule_expiration_on_retry( $retry_rule, $last_order, $subscription ) {
 		if ( $subscription->get_date( 'payment_retry' ) > 0 ) {
 			self::maybe_unschedule_expiration( $subscription );
+		}
+	}
+
+	/**
+	 * Re-arm the on-hold expiration when a payment retry ends with no replacement.
+	 *
+	 * The main scheduler only fires on the transition into on-hold. When a retry is
+	 * cancelled (e.g. by the Stripe gateway on a Radar block) the sub is already
+	 * on-hold, so that hook never re-fires and the sub would otherwise never expire.
+	 *
+	 * @param \WCS_Retry $retry      The retry whose status changed.
+	 * @param string     $new_status The new retry status.
+	 */
+	public static function maybe_reschedule_expiration_on_retry_end( $retry, $new_status ) {
+		// Pending/processing retries still progress on their own.
+		if ( in_array( $new_status, [ 'pending', 'processing' ], true ) ) {
+			return;
+		}
+
+		foreach ( wcs_get_subscriptions_for_renewal_order( $retry->get_order_id() ) as $subscription ) {
+			// Stranded = on-hold with no retry queued. WCS clears payment_retry at priority 0
+			// on this hook (only for the last retry), so a still-pending newer retry keeps the
+			// date set and is skipped by this priority-10 callback.
+			if ( 'on-hold' === $subscription->get_status() && 0 === $subscription->get_date( 'payment_retry' ) ) {
+				self::maybe_schedule_expiration( $subscription );
+			}
 		}
 	}
 
