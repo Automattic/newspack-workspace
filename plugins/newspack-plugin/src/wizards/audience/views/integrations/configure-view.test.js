@@ -6,7 +6,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 /**
  * Internal dependencies
  */
-import { ConfigureView } from './configure-view';
+import { ConfigureView, operatorOptionsForField, reconcileOperators, toggleField } from './configure-view';
 import { useUnsavedChangesDialog } from '../../../../../packages/components/src';
 
 const mockSetHeaderData = jest.fn();
@@ -21,6 +21,11 @@ jest.mock( '@wordpress/components', () => ( {
 	ExternalLink: ( { children } ) => children,
 	TextareaControl: ( { label, value, onChange } ) => (
 		<textarea aria-label={ label } value={ value || '' } onChange={ e => onChange( e.target.value ) } />
+	),
+	// The inbound operator selector renders once a field is enabled; without a stub
+	// here any test that renders an enabled incoming field hits an undefined element.
+	SelectControl: ( { label, value, onChange } ) => (
+		<input aria-label={ label } value={ value || '' } onChange={ e => onChange( e.target.value ) } />
 	),
 } ) );
 jest.mock( '../../../../../packages/components/src', () => ( {
@@ -281,6 +286,29 @@ describe( 'ConfigureView save wiring', () => {
 		expect( useUnsavedChangesDialog ).toHaveBeenLastCalledWith( { when: false } );
 	} );
 
+	// Inbound fields store a { key => operator } map. Reference equality would read a
+	// net-zero edit (toggle a field on then off, or change an operator and change it
+	// back) as pending, keeping Save and the unsaved-changes guard armed.
+	const withInbound = value => ( {
+		esp: { ...INTEGRATION, settings: [ { key: 'incoming_metadata_fields', type: 'metadata', label: 'Inbound', value } ] },
+	} );
+
+	it( 'treats an equivalent inbound operator map as unchanged', () => {
+		renderConfigureView( {
+			integrations: withInbound( { AMOUNT: 'range' } ),
+			inFlightChanges: { esp: { incoming_metadata_fields: { AMOUNT: 'range' } } },
+		} );
+		expect( useUnsavedChangesDialog ).toHaveBeenLastCalledWith( { when: false } );
+	} );
+
+	it( 'still flags a genuinely changed inbound operator map as pending', () => {
+		renderConfigureView( {
+			integrations: withInbound( { AMOUNT: 'default' } ),
+			inFlightChanges: { esp: { incoming_metadata_fields: { AMOUNT: 'range' } } },
+		} );
+		expect( useUnsavedChangesDialog ).toHaveBeenLastCalledWith( { when: true } );
+	} );
+
 	// A boolean checkbox draft round-trips from WP options as the string '1', so
 	// the reconcile must coerce or the field would stay stuck dirty.
 	it( 'reconciles a boolean checkbox against a string-typed server value', () => {
@@ -349,5 +377,110 @@ describe( 'ConfigureView per-id remount', () => {
 		rerender( buildConfigureView( { integrations, integrationId: 'other' } ) );
 		expect( screen.getByLabelText( 'Other ID' ).value ).toBe( '' );
 		expect( useUnsavedChangesDialog ).toHaveBeenLastCalledWith( { when: false } );
+	} );
+} );
+
+describe( 'incoming-field operators', () => {
+	it( 'offers text/number for plain fields and single/multi for enumerated', () => {
+		expect( operatorOptionsForField( { has_options: false } ).map( o => o.value ) ).toEqual( [ 'default', 'range' ] );
+		expect( operatorOptionsForField( { has_options: true } ).map( o => o.value ) ).toEqual( [ 'default', 'list__in' ] );
+	} );
+
+	it( 'constrains operator options by value_type', () => {
+		expect( operatorOptionsForField( { value_type: 'number' } ).map( o => o.value ) ).toEqual( [ 'range' ] );
+		expect( operatorOptionsForField( { value_type: 'date' } ).map( o => o.value ) ).toEqual( [ 'default' ] );
+		expect( operatorOptionsForField( { value_type: 'datetime' } ).map( o => o.value ) ).toEqual( [ 'default' ] );
+		expect( operatorOptionsForField( { value_type: 'boolean' } ).map( o => o.value ) ).toEqual( [ 'default' ] );
+		expect( operatorOptionsForField( { value_type: 'multiselect' } ).map( o => o.value ) ).toEqual( [ 'list__in' ] );
+		expect( operatorOptionsForField( { value_type: 'select' } ).map( o => o.value ) ).toEqual( [ 'default', 'list__in' ] );
+		expect( operatorOptionsForField( { value_type: 'string', has_options: false } ).map( o => o.value ) ).toEqual( [ 'default', 'range' ] );
+		expect( operatorOptionsForField( { value_type: 'string', has_options: true } ).map( o => o.value ) ).toEqual( [ 'default', 'list__in' ] );
+	} );
+
+	it( 'toggles a field in/out of the operator map using the field default', () => {
+		const option = { value: 'AMOUNT', has_options: false, matching_function: 'default' };
+		expect( toggleField( {}, option, true ) ).toEqual( { AMOUNT: 'default' } );
+		expect( toggleField( { AMOUNT: 'range' }, option, false ) ).toEqual( {} );
+	} );
+
+	it( 'reconciles a stored operator that is invalid for the declared value_type', () => {
+		const options = [ { value: 'AMOUNT', value_type: 'number', matching_function: 'range', has_options: false } ];
+		expect( reconcileOperators( { AMOUNT: 'default' }, options ) ).toEqual( { AMOUNT: 'range' } );
+	} );
+
+	it( 'returns the same map when every stored operator is already valid', () => {
+		const options = [ { value: 'AMOUNT', value_type: 'number', has_options: false } ];
+		const map = { AMOUNT: 'range' };
+		// Identity is the signal the save path uses to skip an unnecessary write.
+		expect( reconcileOperators( map, options ) ).toBe( map );
+	} );
+
+	it( 'never enables a field that is absent from the map', () => {
+		const options = [ { value: 'AMOUNT', value_type: 'number', has_options: false } ];
+		expect( reconcileOperators( {}, options ) ).toEqual( {} );
+	} );
+
+	it( 'preserves sibling fields on toggle-off and propagates the field default operator', () => {
+		expect(
+			toggleField(
+				{
+					AMOUNT: 'range',
+					NAME: 'default',
+				},
+				{ value: 'AMOUNT', has_options: false, matching_function: 'range' },
+				false
+			)
+		).toEqual( { NAME: 'default' } );
+		expect( toggleField( {}, { value: 'FAVS', has_options: true, matching_function: 'list__in' }, true ) ).toEqual( { FAVS: 'list__in' } );
+	} );
+} );
+
+describe( 'incoming-field operator reconciliation on save', () => {
+	beforeEach( () => {
+		mockSetHeaderData.mockClear();
+		useUnsavedChangesDialog.mockClear();
+		useUnsavedChangesDialog.mockReturnValue( { confirmDialog: null, requestConfirm: jest.fn() } );
+	} );
+
+	const withInboundOptions = storedOperator => ( {
+		esp: {
+			...INTEGRATION,
+			settings: [
+				{ key: 'mailchimp_audience_id', type: 'text', label: 'Audience ID', value: '' },
+				{
+					key: 'incoming_metadata_fields',
+					type: 'metadata',
+					label: 'Inbound',
+					value: { AMOUNT: storedOperator },
+					options: [ { value: 'AMOUNT', label: 'Amount', value_type: 'number', matching_function: 'range', has_options: false } ],
+				},
+			],
+		},
+	} );
+
+	// The row displays the only valid option ('Number'), but a single-option select
+	// can never fire onChange to persist it. Folding the repair into a save the user
+	// already asked for keeps the stored operator in step with the label.
+	it( 'folds a reconciled operator map into the save payload', async () => {
+		const onSave = jest.fn( () => Promise.resolve() );
+		renderConfigureView( { integrations: withInboundOptions( 'default' ), onSave } );
+		fireEvent.change( screen.getByLabelText( 'Audience ID' ), { target: { value: 'abc123' } } );
+		await act( async () => {
+			getLatestSaveAction()();
+		} );
+		expect( onSave ).toHaveBeenCalledWith( 'esp', {
+			mailchimp_audience_id: 'abc123',
+			incoming_metadata_fields: { AMOUNT: 'range' },
+		} );
+	} );
+
+	it( 'leaves the payload alone when the stored operator is already valid', async () => {
+		const onSave = jest.fn( () => Promise.resolve() );
+		renderConfigureView( { integrations: withInboundOptions( 'range' ), onSave } );
+		fireEvent.change( screen.getByLabelText( 'Audience ID' ), { target: { value: 'abc123' } } );
+		await act( async () => {
+			getLatestSaveAction()();
+		} );
+		expect( onSave ).toHaveBeenCalledWith( 'esp', { mailchimp_audience_id: 'abc123' } );
 	} );
 } );

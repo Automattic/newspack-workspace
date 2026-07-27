@@ -2760,11 +2760,26 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 			}
 		}
 
+		// Derive value_type (and the numeric range default) from Mailchimp's
+		// merge-field type so the framework constrains the operator dropdown to the
+		// field shape — a date field can't be typed "Number", a numeric field gets
+		// range matching. Mirrors the ActiveCampaign mapper for cross-ESP consistency.
+		$value_type        = 'string';
+		$matching_function = 'default';
+		if ( in_array( $type, [ 'dropdown', 'radio' ], true ) ) {
+			$value_type = 'select';
+		} elseif ( in_array( $type, [ 'date', 'birthday' ], true ) ) {
+			$value_type = 'date';
+		} elseif ( 'number' === $type ) {
+			$value_type        = 'number';
+			$matching_function = 'range';
+		}
+
 		return [
 			'key'                 => $tag,
 			'name'                => ! empty( $field['name'] ) ? $field['name'] : $tag,
-			'value_type'          => 'string',
-			'matching_function'   => 'default',
+			'value_type'          => $value_type,
+			'matching_function'   => $matching_function,
 			'options'             => $options,
 			'description'         => isset( $field['help_text'] ) ? $field['help_text'] : '',
 			'is_access_rule'      => $is_promoted_by_default,
