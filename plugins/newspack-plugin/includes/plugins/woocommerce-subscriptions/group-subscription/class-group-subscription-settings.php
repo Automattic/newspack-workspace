@@ -856,7 +856,7 @@ class Group_Subscription_Settings {
 		$product_ids = \get_posts( // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.get_posts_get_posts
 			[
 				'post_type'      => [ 'product', 'product_variation' ],
-				'posts_per_page' => -1, // phpcs:ignore WordPress.WP.PostsPerPage.posts_per_page_posts_per_page
+				'posts_per_page' => -1, // phpcs:ignore WordPress.WP.PostsPerPage.posts_per_page_posts_per_page, WordPressVIPMinimum.Performance.NoPaging -- Group-subscription-enabled products only; small meta-filtered set.
 				'fields'         => 'ids',
 				'meta_key'       => $meta_key, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
 				'meta_value'     => 'yes', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value

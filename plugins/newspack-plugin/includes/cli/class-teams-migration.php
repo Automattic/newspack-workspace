@@ -17,6 +17,8 @@
  * @package Newspack
  */
 
+// phpcs:disable WordPressVIPMinimum.Performance.NoPaging -- Operator-run CLI command; unbounded by design.
+
 namespace Newspack\CLI;
 
 use Newspack\Group_Subscription;

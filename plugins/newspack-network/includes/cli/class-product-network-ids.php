@@ -857,7 +857,7 @@ class Product_Network_Ids {
 			[
 				'post_type'   => Memberships_Admin::MEMBERSHIP_PLANS_CPT,
 				'post_status' => 'any',
-				'numberposts' => -1,
+				'numberposts' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Operator-run CLI command; unbounded by design.
 				'fields'      => 'ids',
 			]
 		);
@@ -998,7 +998,7 @@ class Product_Network_Ids {
 			[
 				'post_type'   => 'product',
 				'post_status' => 'any',
-				'numberposts' => -1,
+				'numberposts' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Operator-run CLI command; unbounded by design.
 				'fields'      => 'ids',
 				'meta_query'  => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
 					[

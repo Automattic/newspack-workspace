@@ -578,7 +578,7 @@ class API {
 		$query_args = [
 			'story_budget_search' => true,
 			'fields'              => 'ids',
-			'posts_per_page'      => -1,
+			'posts_per_page'      => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Tax-scoped to active budgets; bounded editorial set.
 			's'                   => $request->get_param( 's' ) ?? '',
 		];
 
@@ -932,7 +932,7 @@ class API {
 		$query_args = [
 			'story_budget_search' => true,
 			'fields'              => 'ids',
-			'posts_per_page'      => -1,
+			'posts_per_page'      => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Tax-scoped to active budgets; bounded editorial set.
 			's'                   => $request->get_param( 's' ) ?? '',
 		];
 

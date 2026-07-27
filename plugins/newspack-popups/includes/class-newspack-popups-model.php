@@ -110,7 +110,7 @@ final class Newspack_Popups_Model {
 				[
 					'post_type'      => Newspack_Popups::NEWSPACK_POPUPS_CPT,
 					'post_status'    => 'publish',
-					'posts_per_page' => -1,
+					'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Prompt CPT; config-scale.
 				]
 			),
 			true

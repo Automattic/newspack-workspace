@@ -136,7 +136,7 @@ class Institution {
 			[
 				'post_type'      => self::POST_TYPE,
 				'post_status'    => 'publish',
-				'posts_per_page' => -1,
+				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Institution CPT; config-scale.
 				'orderby'        => 'title',
 				'order'          => 'ASC',
 			]
@@ -188,7 +188,7 @@ class Institution {
 			[
 				'post_type'      => self::POST_TYPE,
 				'post_status'    => 'publish',
-				'posts_per_page' => -1,
+				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Institution CPT; config-scale.
 			]
 		);
 		$institutions = [];
