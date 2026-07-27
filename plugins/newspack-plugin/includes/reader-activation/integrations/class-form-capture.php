@@ -4,7 +4,8 @@
  *
  * Captures email submissions from publisher-designated frontend forms (built
  * with any form tool) and registers them as readers via the frontend
- * registration endpoint. Inbound-only: it is not a sync destination.
+ * registration endpoint. Capture-only: neither a sync destination nor a
+ * pull source (see supports_push()/supports_pull()).
  *
  * Capture semantics publishers must understand before opting a form in:
  * - Capture fires on the browser's submit event (native validity checked)
@@ -94,9 +95,9 @@ class Form_Capture extends Integration {
 	}
 
 	/**
-	 * Whether contacts can be synced. Inbound-only integration: there are no
-	 * prerequisites to gate, so this never errors — the inbound-only intent is
-	 * expressed by the no-op push_contact_data(), not by failing this gate.
+	 * Whether contacts can be synced. There are no prerequisites to gate, so
+	 * this never errors — the capture-only intent is expressed by
+	 * supports_push()/supports_pull(), not by failing this gate.
 	 *
 	 * @param bool $return_errors Optional. Whether to return a WP_Error object. Default false.
 	 *
@@ -111,7 +112,9 @@ class Form_Capture extends Integration {
 	}
 
 	/**
-	 * Push contact data. Inbound-only integration: deliberate no-op.
+	 * Push contact data. Deliberate no-op, kept only because the base class
+	 * declares the method abstract; supports_push() declares the capability
+	 * off.
 	 *
 	 * @param array      $contact          The contact data to push.
 	 * @param string     $context          Optional. The context of the sync.
@@ -121,6 +124,32 @@ class Form_Capture extends Integration {
 	 */
 	public function push_contact_data( $contact, $context = '', $existing_contact = null ) {
 		return true;
+	}
+
+	/**
+	 * Whether this integration can push (outbound) contact data to an
+	 * external destination. Form capture has none — push_contact_data() is a
+	 * deliberate no-op — so declare no push capability: no outbound sync
+	 * settings, no push dispatch, and no bearing on "has one syncable
+	 * integration".
+	 *
+	 * @return bool True if the integration can push contact data.
+	 */
+	public function supports_push(): bool {
+		return false;
+	}
+
+	/**
+	 * Whether this integration can pull (inbound) contact data from an
+	 * external source. Capture registers readers from on-site form
+	 * submissions — there is no external source to pull from, and
+	 * pull_contact_data()/get_available_incoming_fields() are not
+	 * implemented.
+	 *
+	 * @return bool True if the integration can pull contact data.
+	 */
+	public function supports_pull(): bool {
+		return false;
 	}
 
 	/**

@@ -113,7 +113,7 @@ class Test_Form_Capture extends WP_UnitTestCase {
 
 	/**
 	 * Verify can_sync() honors the base contract: WP_Error when $return_errors
-	 * is true — has_one_syncable_integration() calls ->has_errors() on it unguarded.
+	 * is true — callers like health_check() invoke ->has_errors() on it unguarded.
 	 */
 	public function test_can_sync_honors_wp_error_contract() {
 		Integrations::enable( Form_Capture::ID );
@@ -122,12 +122,27 @@ class Test_Form_Capture extends WP_UnitTestCase {
 		$this->assertTrue( $integration->can_sync() );
 		$errors = $integration->can_sync( true );
 		$this->assertInstanceOf( \WP_Error::class, $errors );
-		$this->assertFalse( $errors->has_errors(), 'Inbound-only integration has no sync prerequisites to fail.' );
+		$this->assertFalse( $errors->has_errors(), 'Capture-only integration has no sync prerequisites to fail.' );
 
 		add_filter( 'newspack_reader_activation_is_syncing_allowed', '__return_true' );
-		$this->assertTrue( Contact_Sync::has_one_syncable_integration() );
+		// Exercised through the real predicate either way: a pre-capability
+		// framework counts the always-passing can_sync() (true); with
+		// per-direction capabilities a push-less integration never satisfies
+		// this push-path predicate (false).
+		$expected = ! method_exists( $integration, 'is_push_enabled' );
+		$this->assertSame( $expected, Contact_Sync::has_one_syncable_integration() );
 
 		Integrations::disable( Form_Capture::ID );
+	}
+
+	/**
+	 * The capability declarations are part of the sync framework contract:
+	 * capture-only means no push and no pull.
+	 */
+	public function test_declares_no_sync_capabilities() {
+		$integration = Integrations::get_integration( Form_Capture::ID );
+		$this->assertFalse( $integration->supports_push(), 'Capture-only integration must declare no push capability.' );
+		$this->assertFalse( $integration->supports_pull(), 'Capture-only integration must declare no pull capability.' );
 	}
 
 	/**
