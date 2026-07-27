@@ -29,7 +29,7 @@ class Subscriber_Eligibility {
 	 *
 	 * @var array<string, bool>
 	 */
-	private static $verdicts = [];
+	private static array $verdicts = [];
 
 	/**
 	 * Whether a user is an active subscriber of any of the given subscription products.
@@ -39,7 +39,7 @@ class Subscriber_Eligibility {
 	 *
 	 * @return bool
 	 */
-	public static function user_has( $user_id, $product_ids ) {
+	public static function user_has( $user_id, $product_ids ): bool {
 		$user_id     = (int) $user_id;
 		$product_ids = array_values( array_unique( array_filter( array_map( 'absint', (array) $product_ids ) ) ) );
 
@@ -61,7 +61,7 @@ class Subscriber_Eligibility {
 	 * Flush the per-request cache. For tests and for callers that change a
 	 * reader's subscriptions mid-request.
 	 */
-	public static function flush_cache() {
+	public static function flush_cache(): void {
 		self::$verdicts = [];
 	}
 }

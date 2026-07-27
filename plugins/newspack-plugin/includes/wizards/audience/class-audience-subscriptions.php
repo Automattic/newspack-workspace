@@ -33,6 +33,18 @@ class Audience_Subscriptions extends Wizard {
 	protected $parent_slug = 'newspack-audience';
 
 	/**
+	 * WooCommerce product types offered as "available to" suggestions.
+	 *
+	 * Only parent products are suggested, to keep the picker to the handful of
+	 * subscriptions a publisher thinks in terms of. A rule may still name an
+	 * individual variation — `WC_Subscription::has_product()` matches a line
+	 * item's variation ID as readily as its product ID — so a rule authored
+	 * against one (via REST, or by a migration) is honoured and still resolves
+	 * to its name when the editor loads it.
+	 */
+	const SUBSCRIPTION_PRODUCT_TYPES = [ 'subscription', 'variable-subscription' ];
+
+	/**
 	 * Registered tabs, keyed by slug. Each is [ 'slug', 'label', 'path' ].
 	 *
 	 * @var array<string, array>
@@ -49,8 +61,13 @@ class Audience_Subscriptions extends Wizard {
 		self::register_tab(
 			'configuration',
 			[
-				'label' => esc_html__( 'Configuration', 'newspack-plugin' ),
+				// Unescaped: the label is localized into a nested array, where
+				// wp_localize_script() doesn't decode entities, and React escapes
+				// it at render anyway. Escaping here would ship `&#8217;` to
+				// locales whose translation contains an apostrophe.
+				'label' => __( 'Configuration', 'newspack-plugin' ),
 				'path'  => '/configuration',
+				'order' => 10,
 			]
 		);
 	}
@@ -67,6 +84,7 @@ class Audience_Subscriptions extends Wizard {
 	 *
 	 *     @type string $label Tab label, translated.
 	 *     @type string $path  Route path, e.g. '/subscriber-only'. Defaults to "/{$slug}".
+	 *     @type int    $order Sort position, low to high. Defaults to 10.
 	 * }
 	 */
 	public static function register_tab( $slug, $args = [] ) {
@@ -78,16 +96,28 @@ class Audience_Subscriptions extends Wizard {
 			'slug'  => $slug,
 			'label' => $args['label'],
 			'path'  => $args['path'] ?? '/' . $slug,
+			'order' => isset( $args['order'] ) ? (int) $args['order'] : 10,
 		];
 	}
 
 	/**
-	 * Get the registered tabs.
+	 * Get the registered tabs, ordered.
 	 *
-	 * @return array[] The tabs, in registration order.
+	 * Sorted by the declared order rather than by registration, which depends on
+	 * which hook each feature happens to register from. The first tab is where
+	 * the wizard lands, so it can't be incidental.
+	 *
+	 * @return array[] The tabs.
 	 */
 	public static function get_tabs() {
-		return array_values( self::$tabs );
+		$tabs = array_values( self::$tabs );
+		usort(
+			$tabs,
+			function ( $a, $b ) {
+				return $a['order'] <=> $b['order'];
+			}
+		);
+		return $tabs;
 	}
 
 	/**
@@ -240,29 +270,22 @@ class Audience_Subscriptions extends Wizard {
 	 * @return \WP_REST_Response
 	 */
 	public function subscriptions_search( $request ) {
-		$posts = $this->search_products( $request, [ 'publish', 'private', 'draft' ] );
+		// Constrain the query to subscription types rather than filtering the page
+		// afterwards: post-filtering applies the type test after the LIMIT, so a
+		// store whose subscriptions sort late alphabetically returns an empty
+		// picker — and this is the one field a rule can't be authored without.
+		$posts = $this->search_products( $request, [ 'publish', 'private', 'draft' ], self::SUBSCRIPTION_PRODUCT_TYPES );
 
 		$data = [];
 		foreach ( $posts as $post ) {
 			$product = wc_get_product( $post->ID );
-			if ( ! $product instanceof \WC_Product || ! self::is_subscription_product( $product ) ) {
+			if ( ! $product instanceof \WC_Product ) {
 				continue;
 			}
 			$data[] = self::get_product_data( $product );
 		}
 
 		return rest_ensure_response( $data );
-	}
-
-	/**
-	 * Whether a product is a subscription product.
-	 *
-	 * @param \WC_Product $product The product.
-	 *
-	 * @return bool
-	 */
-	private static function is_subscription_product( $product ) {
-		return in_array( $product->get_type(), [ 'subscription', 'variable-subscription', 'subscription_variation' ], true );
 	}
 
 	/**
@@ -293,10 +316,11 @@ class Audience_Subscriptions extends Wizard {
 	 *
 	 * @param \WP_REST_Request $request       The request object.
 	 * @param string[]         $post_statuses Post statuses to search.
+	 * @param string[]         $product_types Restrict to these WooCommerce product types. Empty for any.
 	 *
 	 * @return \WP_Post[]
 	 */
-	private function search_products( $request, $post_statuses ) {
+	private function search_products( $request, $post_statuses, $product_types = [] ) {
 		if ( ! function_exists( 'wc_get_product' ) || ! post_type_exists( 'product' ) ) {
 			return [];
 		}
@@ -311,6 +335,25 @@ class Audience_Subscriptions extends Wizard {
 		];
 
 		$include = $request->get_param( 'include' );
+
+		// WooCommerce stores the product type as a `product_type` term, so the
+		// filter belongs in the query — applying it to the returned page instead
+		// would filter after the LIMIT and could empty the results entirely.
+		//
+		// Suggestions only. Hydrating saved IDs must resolve whatever the rule
+		// already names: WooCommerce clears `product_type` on variations, so a
+		// saved subscription variation would otherwise come back nameless and
+		// render as a bare number.
+		if ( ! empty( $product_types ) && empty( $include ) && taxonomy_exists( 'product_type' ) ) {
+			$args['tax_query'] = [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query
+				[
+					'taxonomy' => 'product_type',
+					'field'    => 'slug',
+					'terms'    => $product_types,
+				],
+			];
+		}
+
 		if ( ! empty( $include ) ) {
 			$ids = array_filter( array_map( 'absint', explode( ',', $include ) ) );
 			if ( empty( $ids ) ) {

@@ -43,7 +43,7 @@ class Product_Targeting {
 	 *
 	 * @var array<string, array>
 	 */
-	private static $matching_rules = [];
+	private static array $matching_rules = [];
 
 	/**
 	 * Category IDs expanded with their descendants, keyed by the hash of the
@@ -51,7 +51,7 @@ class Product_Targeting {
 	 *
 	 * @var array<string, int[]>
 	 */
-	private static $expanded_categories = [];
+	private static array $expanded_categories = [];
 
 	/**
 	 * Get the rules from a rule set that cover a product, memoized per request.
@@ -63,7 +63,7 @@ class Product_Targeting {
 	 *
 	 * @return array The matching rules, in the order given.
 	 */
-	public static function get_matching_rules( $rules, $product ) {
+	public static function get_matching_rules( array $rules, $product ): array {
 		$product = $product instanceof \WC_Product ? $product : ( function_exists( 'wc_get_product' ) ? wc_get_product( $product ) : null );
 		if ( ! $product instanceof \WC_Product || empty( $rules ) ) {
 			return [];
@@ -91,7 +91,7 @@ class Product_Targeting {
 	 *
 	 * @return bool
 	 */
-	public static function rule_covers_product( $rule, $product ) {
+	public static function rule_covers_product( array $rule, $product ): bool {
 		$product_id = (int) $product->get_id();
 		$parent_id  = (int) $product->get_parent_id();
 		$targeting  = $rule['targeting'] ?? self::TARGETING_PRODUCTS;
@@ -129,7 +129,7 @@ class Product_Targeting {
 	 *
 	 * @return bool
 	 */
-	private static function is_excluded( $rule, $product_id, $parent_id ) {
+	private static function is_excluded( array $rule, int $product_id, int $parent_id ): bool {
 		$excluded = array_map( 'intval', $rule['excluded_product_ids'] ?? [] );
 		return ! empty( array_intersect( array_filter( [ $product_id, $parent_id ] ), $excluded ) );
 	}
@@ -144,7 +144,7 @@ class Product_Targeting {
 	 *
 	 * @return int[] The category IDs including all descendants.
 	 */
-	public static function expand_category_ids( $category_ids ) {
+	public static function expand_category_ids( array $category_ids ): array {
 		if ( empty( $category_ids ) ) {
 			return [];
 		}
@@ -166,7 +166,7 @@ class Product_Targeting {
 	 * Flush the per-request caches. For tests and for callers that mutate rules
 	 * or the category tree mid-request.
 	 */
-	public static function flush_cache() {
+	public static function flush_cache(): void {
 		self::$matching_rules      = [];
 		self::$expanded_categories = [];
 	}

@@ -11,6 +11,7 @@ import { __ } from '@wordpress/i18n';
 import { FormTokenField } from '@wordpress/components';
 import apiFetch from '@wordpress/api-fetch';
 import { useCallback, useEffect, useMemo, useRef, useState } from '@wordpress/element';
+import { useInstanceId } from '@wordpress/compose';
 import { decodeEntities } from '@wordpress/html-entities';
 import { addQueryArgs } from '@wordpress/url';
 
@@ -28,8 +29,6 @@ interface SearchTokenFieldProps {
 	help?: string;
 	value: number[];
 	onChange: ( ids: number[] ) => void;
-	/** Restrict suggestions to these IDs. Used by the exclusion field. */
-	limitTo?: number[];
 	disabled?: boolean;
 }
 
@@ -41,7 +40,8 @@ const debounce = < T extends ( ...args: never[] ) => void >( func: T, wait: numb
 	};
 };
 
-export default function SearchTokenField( { endpoint, label, help, value, onChange, limitTo, disabled }: SearchTokenFieldProps ) {
+export default function SearchTokenField( { endpoint, label, help, value, onChange, disabled }: SearchTokenFieldProps ) {
+	const instanceId = useInstanceId( SearchTokenField );
 	const [ suggestions, setSuggestions ] = useState< Item[] >( [] );
 	// Names for the current value, so saved IDs render as tokens before (and
 	// regardless of) any search.
@@ -64,9 +64,12 @@ export default function SearchTokenField( { endpoint, label, help, value, onChan
 	const resolvedIds = useMemo( () => resolved.map( item => item.id ), [ resolved ] );
 	const unresolved = useMemo( () => value.filter( id => ! resolvedIds.includes( id ) ), [ value, resolvedIds ] );
 	// Read the latest resolved list without making the effect depend on it,
-	// which would re-run it on every resolution.
+	// which would re-run it on every resolution. Assigned in an effect rather
+	// than during render, which isn't safe under concurrent rendering.
 	const resolvedRef = useRef( resolved );
-	resolvedRef.current = resolved;
+	useEffect( () => {
+		resolvedRef.current = resolved;
+	}, [ resolved ] );
 
 	useEffect( () => {
 		if ( ! unresolved.length ) {
@@ -100,30 +103,63 @@ export default function SearchTokenField( { endpoint, label, help, value, onChan
 	// FormTokenField matches on the label string.
 	const toLabel = useCallback( ( item: Item ) => decodeEntities( `${ item.id }: ${ item.name || __( '(no name)', 'newspack-plugin' ) }` ), [] );
 
-	const suggestionLabels = useMemo( () => {
-		const allowed = limitTo ? new Set( limitTo ) : null;
-		return suggestions.filter( item => ! allowed || allowed.has( item.id ) ).map( toLabel );
-	}, [ suggestions, limitTo, toLabel ] );
+	const suggestionLabels = useMemo( () => suggestions.map( toLabel ), [ suggestions, toLabel ] );
 
 	const tokens = useMemo(
 		() => value.map( id => ( known.has( id ) ? toLabel( known.get( id ) as Item ) : `${ id }` ) ),
 		[ value, known, toLabel ]
 	);
 
+	// Labels resolve back to the item they came from. Free text is dropped rather
+	// than parsed: "2024 Calendar" would otherwise become product ID 2024 and
+	// silently point the rule at whatever that is.
+	//
+	// Keyed on the trimmed label because FormTokenField trims a token as it adds
+	// it — a product whose name ends in a space (or a pasted non-breaking one)
+	// would otherwise be unselectable, the click doing nothing at all.
+	const labelToId = useMemo( () => {
+		const byLabel = new Map< string, number >();
+		known.forEach( item => byLabel.set( toLabel( item ).trim(), item.id ) );
+		return byLabel;
+	}, [ known, toLabel ] );
+
 	const handleChange = ( nextTokens: ( string | { value: string } )[] ) => {
 		const ids = nextTokens
 			.map( token => {
 				const tokenLabel = typeof token === 'string' ? token : token.value;
-				// Labels are "{id}: {name}"; a token typed by hand may be a bare ID.
-				const id = parseInt( tokenLabel, 10 );
-				return Number.isNaN( id ) ? null : id;
+				if ( labelToId.has( tokenLabel ) ) {
+					return labelToId.get( tokenLabel ) as number;
+				}
+				// A value still resolving to a name renders as its bare ID, so keep
+				// those; anything else the reader typed is not a product.
+				const id = Number( tokenLabel );
+				return Number.isInteger( id ) && value.includes( id ) ? id : null;
 			} )
-			.filter( ( id ): id is number => id !== null );
+			.filter( ( id ): id is number => null !== id );
 		onChange( [ ...new Set( ids ) ] );
 	};
 
+	// The help text explains what the rule actually does, so it has to reach
+	// screen readers rather than only sighted users. FormTokenField doesn't
+	// forward arbitrary props to its input and sets its own `aria-describedby`
+	// for the "how to" hint, so the id is appended to that attribute directly
+	// rather than passed as a prop, which the component would silently drop.
+	const helpId = `newspack-subscriptions-token-help-${ instanceId }`;
+	const wrapperRef = useRef< HTMLDivElement >( null );
+
+	useEffect( () => {
+		const input = wrapperRef.current?.querySelector( 'input' );
+		if ( ! input || ! help ) {
+			return;
+		}
+		const describedBy = ( input.getAttribute( 'aria-describedby' ) || '' ).split( ' ' ).filter( Boolean );
+		if ( ! describedBy.includes( helpId ) ) {
+			input.setAttribute( 'aria-describedby', [ ...describedBy, helpId ].join( ' ' ) );
+		}
+	}, [ help, helpId ] );
+
 	return (
-		<div className="newspack-subscriptions-search-token-field">
+		<div className="newspack-subscriptions-search-token-field" ref={ wrapperRef }>
 			<FormTokenField
 				label={ label }
 				value={ tokens }
@@ -135,7 +171,11 @@ export default function SearchTokenField( { endpoint, label, help, value, onChan
 				__next40pxDefaultSize
 				__nextHasNoMarginBottom
 			/>
-			{ help && <p className="components-base-control__help">{ help }</p> }
+			{ help && (
+				<p className="components-base-control__help" id={ helpId }>
+					{ help }
+				</p>
+			) }
 		</div>
 	);
 }
