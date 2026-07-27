@@ -40,7 +40,7 @@ class Subscriber_Commerce {
 	 *
 	 * @return bool
 	 */
-	public static function is_admin_available() {
+	public static function is_admin_available(): bool {
 		return Content_Gate::is_newspack_feature_enabled() && function_exists( 'wc_get_product' );
 	}
 
@@ -53,7 +53,7 @@ class Subscriber_Commerce {
 	 *
 	 * @return bool
 	 */
-	public static function is_enforcement_active() {
+	public static function is_enforcement_active(): bool {
 		$active = self::is_admin_available() && ! Memberships::is_active();
 
 		/**
@@ -73,7 +73,7 @@ class Subscriber_Commerce {
 	 *
 	 * @return array The rule with the base fields sanitized and defaulted.
 	 */
-	public static function sanitize_base_rule( $rule ) {
+	public static function sanitize_base_rule( array $rule ): array {
 		$targeting = $rule['targeting'] ?? Product_Targeting::TARGETING_PRODUCTS;
 		if ( ! in_array( $targeting, [ Product_Targeting::TARGETING_PRODUCTS, Product_Targeting::TARGETING_CATEGORY, Product_Targeting::TARGETING_ALL ], true ) ) {
 			$targeting = Product_Targeting::TARGETING_PRODUCTS;
@@ -83,7 +83,14 @@ class Subscriber_Commerce {
 			return array_values( array_unique( array_filter( array_map( 'absint', (array) $ids ) ) ) );
 		};
 
-		$created_at = isset( $rule['created_at'] ) ? preg_replace( '/[^0-9\-]/', '', (string) $rule['created_at'] ) : '';
+		// A real date or today's — the value is displayed, so garbage like
+		// "2026-13-99" must not reach the list.
+		$created_at = '';
+		if ( isset( $rule['created_at'] ) && preg_match( '/^(\d{4})-(\d{2})-(\d{2})$/', (string) $rule['created_at'], $date_parts ) ) {
+			if ( wp_checkdate( (int) $date_parts[2], (int) $date_parts[3], (int) $date_parts[1], $rule['created_at'] ) ) {
+				$created_at = $rule['created_at'];
+			}
+		}
 
 		return [
 			'id'                       => sanitize_key( $rule['id'] ?? '' ),
@@ -102,7 +109,7 @@ class Subscriber_Commerce {
 	 *
 	 * @return string
 	 */
-	public static function generate_rule_id() {
+	public static function generate_rule_id(): string {
 		return wp_generate_uuid4();
 	}
 }
