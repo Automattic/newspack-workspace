@@ -47,7 +47,7 @@ class Subscriber_Discounts_Pricing {
 	 * Attach the WooCommerce price filters.
 	 */
 	public static function register_price_filters() {
-		if ( ! Subscriber_Commerce::is_enforcement_active() ) {
+		if ( ! Subscriber_Commerce::is_enforcement_active() || ! self::should_adjust_prices_in_context() ) {
 			return;
 		}
 
@@ -68,11 +68,46 @@ class Subscriber_Discounts_Pricing {
 		foreach ( [ 'woocommerce_product_get_sale_price', 'woocommerce_product_variation_get_sale_price' ] as $hook ) {
 			add_filter( $hook, [ __CLASS__, 'filter_sale_price' ], $priority, 2 );
 		}
-		foreach ( [ 'woocommerce_variation_prices_price', 'woocommerce_variation_prices_sale_price' ] as $hook ) {
-			add_filter( $hook, [ __CLASS__, 'filter_variation_prices' ], $priority, 3 );
-		}
+		add_filter( 'woocommerce_variation_prices_price', [ __CLASS__, 'filter_variation_prices' ], $priority, 3 );
+		add_filter( 'woocommerce_variation_prices_sale_price', [ __CLASS__, 'filter_variation_sale_prices' ], $priority, 3 );
 		add_filter( 'woocommerce_get_variation_prices_hash', [ __CLASS__, 'filter_variation_prices_hash' ], $priority, 2 );
 		add_filter( 'woocommerce_product_is_on_sale', [ __CLASS__, 'filter_is_on_sale' ], $priority, 2 );
+	}
+
+	/**
+	 * Whether prices should be adjusted in the current request context.
+	 *
+	 * A subscriber discount belongs to the storefront. In wp-admin the same
+	 * price reads are how a shop manager edits the catalogue, and an
+	 * administrator who also holds a subscription would otherwise see — and,
+	 * through Quick Edit or a manual order, save back — their own discounted
+	 * price as the product's price.
+	 *
+	 * @return bool
+	 */
+	public static function should_adjust_prices_in_context() {
+		if ( is_admin() && ! wp_doing_ajax() ) {
+			return false;
+		}
+		if ( wp_doing_ajax() ) {
+			// Admin-screen AJAX that reads a price in order to write it back, or
+			// to populate an admin picker. The storefront's own AJAX (add to
+			// cart, cart fragments) is not in this list and stays discounted.
+			$admin_ajax_actions = [
+				'woocommerce_quick_edit',
+				'woocommerce_add_order_item',
+				'woocommerce_save_order_items',
+				'woocommerce_calc_line_taxes',
+				'woocommerce_json_search_products',
+				'woocommerce_json_search_products_and_variations',
+			];
+			// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading the action only, to decide whether to price for the storefront.
+			$action = isset( $_REQUEST['action'] ) ? sanitize_key( wp_unslash( $_REQUEST['action'] ) ) : '';
+			if ( in_array( $action, $admin_ajax_actions, true ) ) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	/**
@@ -119,8 +154,27 @@ class Subscriber_Discounts_Pricing {
 	 * @return string|float
 	 */
 	public static function filter_sale_price( $sale_price, $product ) {
-		$subscriber_price = self::get_subscriber_price( $product->get_price(), $product );
+		// Read the price with adjustments stood down: `get_price()` is itself
+		// filtered here, so discounting what it returns would apply the rule a
+		// second time and report a sale price below the one being charged.
+		$subscriber_price = self::get_subscriber_price( self::undiscounted_price( $product ), $product );
 		return null === $subscriber_price ? $sale_price : $subscriber_price;
+	}
+
+	/**
+	 * A product's price with subscriber discounts stood down.
+	 *
+	 * @param \WC_Product $product Product being priced.
+	 * @return string|float
+	 */
+	public static function undiscounted_price( $product ) {
+		self::suspend();
+		try {
+			$price = $product->get_price();
+		} finally {
+			self::resume();
+		}
+		return $price;
 	}
 
 	/**
@@ -137,6 +191,24 @@ class Subscriber_Discounts_Pricing {
 	}
 
 	/**
+	 * Variation sale prices, which drive a variable product's on-sale range.
+	 *
+	 * Reported as the subscriber price rather than the variation's own stored
+	 * sale price, so the prices array stays internally consistent — a consumer
+	 * reading it directly (the Store API among them) sees the same discounted
+	 * figure the product is sold at.
+	 *
+	 * @param string|float $sale_price Sale price WooCommerce is reporting.
+	 * @param \WC_Product  $variation  Variation being priced.
+	 * @param \WC_Product  $product    Parent product.
+	 * @return string|float
+	 */
+	public static function filter_variation_sale_prices( $sale_price, $variation, $product ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed
+		$subscriber_price = self::get_subscriber_price( self::undiscounted_price( $variation ), $variation );
+		return null === $subscriber_price ? $sale_price : $subscriber_price;
+	}
+
+	/**
 	 * Whether the product should be presented as on sale.
 	 *
 	 * @param bool        $on_sale Whether WooCommerce considers it on sale.
@@ -147,7 +219,7 @@ class Subscriber_Discounts_Pricing {
 		if ( $on_sale ) {
 			return true;
 		}
-		return null !== self::get_subscriber_price( $product->get_price(), $product );
+		return null !== self::get_subscriber_price( self::undiscounted_price( $product ), $product );
 	}
 
 	/**
@@ -161,14 +233,22 @@ class Subscriber_Discounts_Pricing {
 	 * @param \WC_Product $product Product being priced.
 	 * @return array
 	 */
-	public static function filter_variation_prices_hash( $hash, $product ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed
+	public static function filter_variation_prices_hash( $hash, $product ) {
 		if ( self::is_suspended() ) {
 			return $hash;
 		}
-		$hash['newspack_subscriber_discounts'] = [
-			'user'  => get_current_user_id(),
-			'rules' => self::active_rules_signature(),
-		];
+		// Keyed on the rules this reader qualifies for — their full content, not
+		// just their ids, since editing a rule's amount changes the prices
+		// without changing which rules apply — plus the settings that decide how
+		// they combine. Keying on the reader instead would give every logged-in
+		// reader their own entry in a transient WooCommerce accumulates rather
+		// than evicts; keying on entitlement collapses all non-subscribers onto
+		// one entry.
+		$qualifying_rules = self::get_rules_for( $product, get_current_user_id() );
+
+		$hash['newspack_subscriber_discounts'] = md5(
+			(string) wp_json_encode( [ $qualifying_rules, Subscriber_Discounts::get_settings() ] )
+		);
 		return $hash;
 	}
 
@@ -183,6 +263,13 @@ class Subscriber_Discounts_Pricing {
 	 */
 	public static function get_subscriber_price( $base_price, $product, $user_id = null ) {
 		if ( self::is_suspended() || ! $product instanceof \WC_Product ) {
+			return null;
+		}
+		// Checked here as well as at registration so every surface agrees:
+		// the reader-facing messaging asks this question directly rather than
+		// through the price filters, and a context where prices are not adjusted
+		// must not still be told a discount applied.
+		if ( ! self::should_adjust_prices_in_context() ) {
 			return null;
 		}
 		if ( '' === $base_price || null === $base_price ) {
@@ -215,12 +302,17 @@ class Subscriber_Discounts_Pricing {
 	 * @return array[]
 	 */
 	private static function get_rules_for( $product, $user_id ) {
-		$cache_key = $user_id . ':' . $product->get_id();
+		$active_rules = Subscriber_Discounts::get_active_rules();
+
+		// The rule set is part of the key, so a rule edited mid-request (the
+		// admin saving one, say) cannot be served from a verdict computed
+		// against the previous version.
+		$cache_key = $user_id . ':' . $product->get_id() . ':' . md5( (string) wp_json_encode( $active_rules ) );
 		if ( isset( self::$rules_for_product[ $cache_key ] ) ) {
 			return self::$rules_for_product[ $cache_key ];
 		}
 
-		$covering_rules = Product_Targeting::get_matching_rules( Subscriber_Discounts::get_active_rules(), $product );
+		$covering_rules = Product_Targeting::get_matching_rules( $active_rules, $product );
 
 		$qualifying_rules = array_values(
 			array_filter(
@@ -262,16 +354,6 @@ class Subscriber_Discounts_Pricing {
 	 */
 	private static function is_suspended() {
 		return self::$suspend_depth > 0;
-	}
-
-	/**
-	 * A short signature of the active rules, for cache keys.
-	 *
-	 * @return string
-	 */
-	private static function active_rules_signature() {
-		$rules = Subscriber_Discounts::get_active_rules();
-		return md5( (string) wp_json_encode( wp_list_pluck( $rules, 'id' ) ) );
 	}
 }
 

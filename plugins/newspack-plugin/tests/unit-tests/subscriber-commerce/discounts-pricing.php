@@ -327,6 +327,74 @@ class Test_Subscriber_Discounts_Pricing extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Prices are not adjusted on admin screens.
+	 *
+	 * A subscriber discount belongs to the storefront. In wp-admin the same
+	 * price reads are how the catalogue is edited: an administrator who also
+	 * holds a subscription would see their own discounted price in the product
+	 * editor, and Quick Edit would save it back as the product's real price for
+	 * everyone.
+	 */
+	public function test_prices_are_not_adjusted_on_admin_screens() {
+		$this->add_book_discount();
+
+		set_current_screen( 'edit-product' );
+		$price_in_admin = Subscriber_Discounts_Pricing::get_subscriber_price( 100.0, $this->book, $this->subscriber_id );
+		set_current_screen( 'front' );
+		$price_on_storefront = Subscriber_Discounts_Pricing::get_subscriber_price( 100.0, $this->book, $this->subscriber_id );
+
+		$this->assertNull( $price_in_admin, 'An admin screen sees the product\'s real price, not a subscriber\'s.' );
+		$this->assertSame( 90.0, $price_on_storefront, 'The storefront still discounts for the same reader.' );
+	}
+
+	/**
+	 * Exercised through the real filter chain rather than by calling the
+	 * decision method directly.
+	 *
+	 * `get_price()` is itself filtered, so any callback that reads it while
+	 * computing a price sees an already-discounted number. Reporting the
+	 * subscriber price on the sale-price filter without standing the
+	 * adjustments down applies the rule twice, and the product then advertises
+	 * a sale price lower than it charges — invisible in `get_price_html()`,
+	 * which renders from `get_price()`, but exposed directly by the Store API.
+	 */
+	public function test_price_and_sale_price_agree_through_the_filter_chain() {
+		$this->add_book_discount();
+		wp_set_current_user( $this->subscriber_id );
+
+		// Enforcement is off in the test environment, so the filters are turned
+		// on deliberately for this one assertion and removed again afterwards.
+		add_filter( 'newspack_subscriber_commerce_enforcement_active', '__return_true' );
+		Subscriber_Discounts_Pricing::register_price_filters();
+
+		$price      = (float) $this->book->get_price();
+		$sale_price = (float) $this->book->get_sale_price();
+		$on_sale    = $this->book->is_on_sale();
+
+		remove_filter( 'newspack_subscriber_commerce_enforcement_active', '__return_true' );
+		self::remove_price_filters();
+
+		$this->assertSame( 90.0, $price, 'The reader is charged 10% off.' );
+		$this->assertSame( 90.0, $sale_price, 'The advertised sale price is the same figure, not the discount applied a second time.' );
+		$this->assertTrue( $on_sale, 'The product presents as on sale so the original renders struck through.' );
+	}
+
+	/**
+	 * Detach the price filters again so they cannot affect other assertions.
+	 */
+	private static function remove_price_filters() {
+		$priority = apply_filters( 'newspack_subscriber_discounts_price_filter_priority', 999 );
+		remove_filter( 'woocommerce_product_get_price', [ Subscriber_Discounts_Pricing::class, 'filter_price' ], $priority );
+		remove_filter( 'woocommerce_product_variation_get_price', [ Subscriber_Discounts_Pricing::class, 'filter_price' ], $priority );
+		remove_filter( 'woocommerce_product_get_sale_price', [ Subscriber_Discounts_Pricing::class, 'filter_sale_price' ], $priority );
+		remove_filter( 'woocommerce_product_variation_get_sale_price', [ Subscriber_Discounts_Pricing::class, 'filter_sale_price' ], $priority );
+		remove_filter( 'woocommerce_variation_prices_price', [ Subscriber_Discounts_Pricing::class, 'filter_variation_prices' ], $priority );
+		remove_filter( 'woocommerce_variation_prices_sale_price', [ Subscriber_Discounts_Pricing::class, 'filter_variation_sale_prices' ], $priority );
+		remove_filter( 'woocommerce_get_variation_prices_hash', [ Subscriber_Discounts_Pricing::class, 'filter_variation_prices_hash' ], $priority );
+		remove_filter( 'woocommerce_product_is_on_sale', [ Subscriber_Discounts_Pricing::class, 'filter_is_on_sale' ], $priority );
+	}
+
+	/**
 	 * An empty price (a product with no price set) is left alone rather than
 	 * being coerced to a discounted zero.
 	 */

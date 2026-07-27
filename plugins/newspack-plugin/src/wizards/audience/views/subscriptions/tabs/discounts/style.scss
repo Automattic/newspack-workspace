@@ -1,0 +1,51 @@
+/**
+ * Subscriber discounts tab.
+ */
+
+@use "~@wordpress/base-styles/colors" as wp-colors;
+
+.newspack-subscriber-discounts {
+	&__actions {
+		display: flex;
+		gap: 8px;
+		justify-content: flex-end;
+		margin-bottom: 16px;
+	}
+
+	// The editor's before/after price preview. Kept quiet: it sits under the
+	// amount field and is read while typing, so it should not compete with the
+	// form controls above it.
+	&__preview {
+		border-collapse: collapse;
+		width: 100%;
+
+		th,
+		td {
+			border-bottom: 1px solid wp-colors.$gray-200;
+			padding: 8px 0;
+			text-align: left;
+			vertical-align: top;
+		}
+
+		th {
+			color: wp-colors.$gray-700;
+			font-size: 12px;
+			font-weight: 500;
+			text-transform: uppercase;
+		}
+
+		td:last-child {
+			text-align: right;
+			white-space: nowrap;
+		}
+
+		del {
+			color: wp-colors.$gray-700;
+			margin-right: 4px;
+		}
+
+		tr:last-child td {
+			border-bottom: 0;
+		}
+	}
+}

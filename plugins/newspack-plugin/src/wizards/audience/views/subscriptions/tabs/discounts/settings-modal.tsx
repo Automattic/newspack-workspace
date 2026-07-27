@@ -22,7 +22,7 @@ import {
 /**
  * Internal dependencies.
  */
-import { Button } from '../../../../../../../packages/components/src';
+import { Button, Notice } from '../../../../../../../packages/components/src';
 import { DISCOUNT_SETTINGS_ENDPOINT } from './constants';
 import type { DiscountSettings, DiscountsPayload } from './types';
 
@@ -35,21 +35,27 @@ interface SettingsModalProps {
 export default function SettingsModal( { settings, onSaved, onClose }: SettingsModalProps ) {
 	const [ draft, setDraft ] = useState< DiscountSettings >( settings );
 	const [ inFlight, setInFlight ] = useState( false );
+	const [ error, setError ] = useState( '' );
 
 	const save = () => {
 		setInFlight( true );
+		setError( '' );
 		apiFetch< DiscountsPayload >( {
 			path: DISCOUNT_SETTINGS_ENDPOINT,
 			method: 'POST',
 			data: draft,
 		} )
 			.then( onSaved )
+			.catch( ( apiError: { message?: string } ) =>
+				setError( apiError?.message || __( 'These settings could not be saved.', 'newspack-plugin' ) )
+			)
 			.finally( () => setInFlight( false ) );
 	};
 
 	return (
 		<Modal title={ __( 'Discount settings', 'newspack-plugin' ) } onRequestClose={ onClose } className="newspack-subscriber-discounts__settings">
 			<VStack spacing={ 4 }>
+				{ error && <Notice isError noticeText={ error } /> }
 				<h3>{ __( 'Combining discounts', 'newspack-plugin' ) }</h3>
 				<RadioControl
 					label={ __( 'Overlapping discounts', 'newspack-plugin' ) }

@@ -33,6 +33,20 @@ class Discounts_Migration {
 	const EXCLUDE_DISCOUNTS_META_KEY = '_wc_memberships_exclude_discounts';
 
 	/**
+	 * Memberships' store-level setting for discounting on-sale products.
+	 *
+	 * Note the inverted sense: Memberships stores whether to *exclude* on-sale
+	 * products (default 'no', i.e. it discounts them), while a subscriber
+	 * discount stores whether to *apply* to them (default false).
+	 */
+	const EXCLUDE_ON_SALE_OPTION = 'wc_memberships_exclude_on_sale_products_from_member_discounts';
+
+	/**
+	 * The only product taxonomy a subscriber discount can target.
+	 */
+	const SUPPORTED_TAXONOMY = 'product_cat';
+
+	/**
 	 * Migrate WooCommerce Memberships purchasing discounts to Access Control
 	 * subscriber discounts.
 	 *
@@ -129,6 +143,59 @@ class Discounts_Migration {
 		if ( ! empty( $mapped['skipped'] ) ) {
 			WP_CLI::warning( 'Skipped rules need a decision before the site is flipped — see the table above.' );
 		}
+
+		self::report_settings_parity( $dry_run, count( $mapped['rules'] ) );
+	}
+
+	/**
+	 * Report where Memberships' store-level discount behaviour differs from the
+	 * subscriber-discount defaults, and carry across what can be carried.
+	 *
+	 * These two settings decide what the migrated rules actually do, and both
+	 * defaults are inverted relative to Memberships — so a site flipped without
+	 * looking at them would quietly charge subscribers more than it used to.
+	 *
+	 * @param bool $dry_run    Whether this is a dry run.
+	 * @param int  $rule_count How many rules were mapped.
+	 */
+	private static function report_settings_parity( $dry_run, $rule_count ) {
+		if ( ! $rule_count ) {
+			return;
+		}
+
+		WP_CLI::line( '' );
+		WP_CLI::line( '=== STORE-LEVEL SETTINGS ===' );
+
+		// Memberships stores whether to *exclude* on-sale products and defaults
+		// to 'no' — i.e. it discounts them. Subscriber discounts default to not
+		// discounting them, so this has to be carried across explicitly.
+		$memberships_excludes_on_sale = 'yes' === get_option( self::EXCLUDE_ON_SALE_OPTION, 'no' );
+		$apply_on_sale                = ! $memberships_excludes_on_sale;
+
+		WP_CLI::line(
+			sprintf(
+				'On-sale products: Memberships %s them. %s "Apply on top of sale prices" %s.',
+				$memberships_excludes_on_sale ? 'excludes' : 'discounts',
+				$dry_run ? 'Would set' : 'Set',
+				$apply_on_sale ? 'on' : 'off'
+			)
+		);
+		if ( ! $dry_run ) {
+			Subscriber_Discounts::save_settings( [ 'apply_on_sale' => $apply_on_sale ] );
+		}
+
+		// Cumulative stacking is filter-only in Memberships (default: on), so
+		// there is no stored value to read — a publisher's override is invisible
+		// from here and the call has to be made by a human.
+		$overlap = Subscriber_Discounts::get_settings()['overlap'];
+		WP_CLI::line( sprintf( 'Overlapping discounts: currently "%s".', $overlap ) );
+		if ( 'best' === $overlap ) {
+			WP_CLI::warning(
+				'Memberships combines overlapping discounts by default; this site is set to apply only the best one. ' .
+				'If any two migrated rules can cover the same product, subscribers will now save less than they did — ' .
+				'check the rules above and switch the setting to "Combine discounts" if so.'
+			);
+		}
 	}
 
 	/**
@@ -170,8 +237,24 @@ class Discounts_Migration {
 				continue;
 			}
 
-			$object_ids = array_values( array_filter( array_map( 'absint', (array) ( $memberships_rule['object_ids'] ?? [] ) ) ) );
+			$object_ids  = array_values( array_filter( array_map( 'absint', (array) ( $memberships_rule['object_ids'] ?? [] ) ) ) );
 			$is_taxonomy = 'taxonomy' === ( $memberships_rule['content_type'] ?? '' );
+
+			// Memberships lets a discount target any product taxonomy — tags and
+			// product attributes included — while a subscriber discount resolves
+			// categories only. Migrating a tag rule into `category_ids` would
+			// produce a rule that matches nothing and reports success.
+			if ( $is_taxonomy && ! empty( $object_ids ) && self::SUPPORTED_TAXONOMY !== ( $memberships_rule['content_type_name'] ?? '' ) ) {
+				$skipped[] = [
+					'source' => $source_id,
+					'plan'   => $plan_id,
+					'reason' => sprintf(
+						'Targets the "%s" taxonomy, which subscriber discounts cannot express — re-target it by product or category.',
+						(string) ( $memberships_rule['content_type_name'] ?? 'unknown' )
+					),
+				];
+				continue;
+			}
 
 			if ( empty( $object_ids ) ) {
 				$targeting = Product_Targeting::TARGETING_ALL;
@@ -179,6 +262,19 @@ class Discounts_Migration {
 				$targeting = Product_Targeting::TARGETING_CATEGORY;
 			} else {
 				$targeting = Product_Targeting::TARGETING_PRODUCTS;
+			}
+
+			// An unrecognized type would otherwise fall through to "fixed" and
+			// turn "10% off" into "$10 off" — a large mispricing reported as a
+			// clean migration.
+			$memberships_discount_type = $memberships_rule['discount_type'] ?? '';
+			if ( ! in_array( $memberships_discount_type, [ 'percentage', 'amount' ], true ) ) {
+				$skipped[] = [
+					'source' => $source_id,
+					'plan'   => $plan_id,
+					'reason' => sprintf( 'Unrecognized discount type "%s" — cannot tell a percentage from an amount.', (string) $memberships_discount_type ),
+				];
+				continue;
 			}
 
 			$amount = (float) ( $memberships_rule['discount_amount'] ?? 0 );
@@ -194,6 +290,11 @@ class Discounts_Migration {
 			$rules[] = [
 				'_source_rule_id'          => $source_id,
 				'_source_plan_id'          => $plan_id,
+				// Derived from the source rule so a re-run updates the same rule
+				// in place. Without it every run would mint a new id and
+				// duplicate the whole rule set — which under the "combine"
+				// overlap setting would compound the discount readers get.
+				'id'                       => self::migrated_rule_id( $source_id ),
 				'subscription_product_ids' => $subscription_product_ids,
 				'targeting'                => $targeting,
 				'product_ids'              => Product_Targeting::TARGETING_PRODUCTS === $targeting ? $object_ids : [],
@@ -217,6 +318,16 @@ class Discounts_Migration {
 	}
 
 	/**
+	 * A stable subscriber-discount id for a Memberships rule.
+	 *
+	 * @param string $source_rule_id The Memberships rule id.
+	 * @return string
+	 */
+	public static function migrated_rule_id( $source_rule_id ) {
+		return 'wcm-' . substr( md5( (string) $source_rule_id ), 0, 24 );
+	}
+
+	/**
 	 * The subscription products that grant a Memberships plan.
 	 *
 	 * @param int $plan_id Plan post id.
@@ -233,22 +344,21 @@ class Discounts_Migration {
 	 * @return int[]
 	 */
 	private static function get_globally_excluded_product_ids() {
-		$product_ids = get_posts(
-			[
-				'post_type'      => [ 'product', 'product_variation' ],
-				'post_status'    => 'any',
-				'posts_per_page' => -1,
-				'fields'         => 'ids',
-				'no_found_rows'  => true,
-				'meta_query'     => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
-					[
-						'key'   => self::EXCLUDE_DISCOUNTS_META_KEY,
-						'value' => 'yes',
-					],
-				],
-			]
+		global $wpdb;
+
+		// A direct id lookup on an exact meta key, rather than a `-1` WP_Query
+		// over the whole catalogue. Only parent products are collected:
+		// `Product_Targeting` already treats a variation as excluded when its
+		// parent is listed, so listing variations too would only pad the rules.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- One-off migration lookup; caching a value read once per run would be worse than the query.
+		$product_ids = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key = %s AND meta_value = 'yes'",
+				self::EXCLUDE_DISCOUNTS_META_KEY
+			)
 		);
-		return array_values( array_map( 'absint', $product_ids ) );
+
+		return array_values( array_unique( array_filter( array_map( 'absint', (array) $product_ids ) ) ) );
 	}
 
 	/**

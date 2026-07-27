@@ -61,6 +61,10 @@ export default function DiscountEditor( { rule, currency, onSaved, onClose }: Ed
 	const [ inFlight, setInFlight ] = useState( false );
 	const [ error, setError ] = useState( '' );
 	const [ previewProducts, setPreviewProducts ] = useState< ProductSearchItem[] >( [] );
+	// The amount is held as the raw input string: deriving it from the numeric
+	// value blanks the field the moment it is falsy, which makes any amount
+	// below 1 impossible to type ("0" clears, then "." is NaN and clears again).
+	const [ amountInput, setAmountInput ] = useState( rule?.amount ? String( rule.amount ) : '' );
 
 	const update = ( partial: Partial< DiscountRule > ) => setDraft( current => ( { ...current, ...partial } ) );
 
@@ -152,8 +156,11 @@ export default function DiscountEditor( { rule, currency, onSaved, onClose }: Ed
 							? __( 'The percentage subscribers save on each product.', 'newspack-plugin' )
 							: __( 'The amount subscribers save on each product.', 'newspack-plugin' )
 					}
-					value={ draft.amount ? String( draft.amount ) : '' }
-					onChange={ value => update( { amount: Number( value ) } ) }
+					value={ amountInput }
+					onChange={ value => {
+						setAmountInput( value );
+						update( { amount: Number( value ) || 0 } );
+					} }
 					disabled={ inFlight }
 					__nextHasNoMarginBottom
 				/>
@@ -162,7 +169,7 @@ export default function DiscountEditor( { rule, currency, onSaved, onClose }: Ed
 						<thead>
 							<tr>
 								<th>{ __( 'Product', 'newspack-plugin' ) }</th>
-								<th>{ __( 'Subscriber price', 'newspack-plugin' ) }</th>
+								<th>{ __( 'Subscriber price (this discount alone)', 'newspack-plugin' ) }</th>
 							</tr>
 						</thead>
 						<tbody>

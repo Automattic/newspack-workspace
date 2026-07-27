@@ -130,8 +130,20 @@ class Subscriber_Discounts {
 		}
 
 		update_option( self::OPTION_NAME, array_values( $stored_rules ) );
+		self::flush_dependent_caches();
 
 		return $sanitized_rule;
+	}
+
+	/**
+	 * Discard everything memoized from the rules or settings.
+	 *
+	 * Anything that priced a product earlier in this request did so against the
+	 * previous configuration.
+	 */
+	private static function flush_dependent_caches() {
+		Subscriber_Discounts_Pricing::flush_cache();
+		Product_Targeting::flush_cache();
 	}
 
 	/**
@@ -157,6 +169,7 @@ class Subscriber_Discounts {
 			return false;
 		}
 		update_option( self::OPTION_NAME, $remaining_rules );
+		self::flush_dependent_caches();
 		return true;
 	}
 
@@ -206,6 +219,7 @@ class Subscriber_Discounts {
 			$settings = [];
 		}
 		update_option( self::SETTINGS_OPTION_NAME, array_merge( self::get_settings(), $settings ) );
+		self::flush_dependent_caches();
 		return self::get_settings();
 	}
 

@@ -100,7 +100,7 @@ class Subscriber_Discounts_Admin {
 
 		register_rest_route(
 			NEWSPACK_API_NAMESPACE,
-			$route_base . '/(?P<id>[A-Za-z0-9\-]+)',
+			$route_base . '/(?P<id>[a-z0-9_\-]+)',
 			[
 				'methods'             => \WP_REST_Server::DELETABLE,
 				'callback'            => [ __CLASS__, 'api_delete_discount' ],
@@ -129,6 +129,7 @@ class Subscriber_Discounts_Admin {
 		];
 		return [
 			'id'                       => [ 'type' => 'string' ],
+			'created_at'               => [ 'type' => 'string' ],
 			'subscription_product_ids' => $id_list,
 			'targeting'                => [
 				'type' => 'string',
@@ -185,6 +186,10 @@ class Subscriber_Discounts_Admin {
 		$saved_rule = Subscriber_Discounts::save_rule(
 			[
 				'id'                       => $request->get_param( 'id' ),
+				// Carried through so editing a rule — or just pausing it, which
+				// posts the whole rule back — doesn't restamp its creation date
+				// and reshuffle the list's "newest first" order.
+				'created_at'               => $request->get_param( 'created_at' ),
 				'subscription_product_ids' => $request->get_param( 'subscription_product_ids' ),
 				'targeting'                => $request->get_param( 'targeting' ),
 				'product_ids'              => $request->get_param( 'product_ids' ),

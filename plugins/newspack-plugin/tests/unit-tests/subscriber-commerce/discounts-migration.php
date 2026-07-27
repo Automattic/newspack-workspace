@@ -176,9 +176,10 @@ class Test_Discounts_Migration extends \WP_UnitTestCase {
 			[
 				$this->memberships_rule(
 					[
-						'content_type' => 'taxonomy',
-						'object_ids'   => [ 77 ],
-					] 
+						'content_type'      => 'taxonomy',
+						'content_type_name' => 'product_cat',
+						'object_ids'        => [ 77 ],
+					]
 				),
 			],
 			$this->plan_granted_by_two_subscriptions(),
@@ -192,6 +193,67 @@ class Test_Discounts_Migration extends \WP_UnitTestCase {
 			$excluded_product_ids
 		)['rules'][0];
 		$this->assertSame( [], $product_rule['excluded_product_ids'], 'A hand-picked product list needs no exclusions.' );
+	}
+
+	/**
+	 * Memberships can target any product taxonomy; a subscriber discount
+	 * resolves categories only. A tag- or attribute-based rule migrated into
+	 * `category_ids` would match nothing while reporting success, so it is
+	 * reported for a human instead.
+	 */
+	public function test_non_category_taxonomy_rules_are_skipped() {
+		$mapped = Discounts_Migration::map_rules(
+			[
+				$this->memberships_rule(
+					[
+						'content_type'      => 'taxonomy',
+						'content_type_name' => 'product_tag',
+						'object_ids'        => [ 55 ],
+					]
+				),
+			],
+			$this->plan_granted_by_two_subscriptions()
+		);
+
+		$this->assertEmpty( $mapped['rules'], 'A tag-targeted discount is not migrated as a category rule.' );
+		$this->assertCount( 1, $mapped['skipped'], 'It is reported instead.' );
+		$this->assertStringContainsString( 'product_tag', $mapped['skipped'][0]['reason'], 'The report names the taxonomy that could not be expressed.' );
+	}
+
+	/**
+	 * An unrecognized discount type must not fall through to "fixed": that would
+	 * turn "10% off" into "$10 off" and report it as a clean migration.
+	 */
+	public function test_unknown_discount_types_are_skipped() {
+		$mapped = Discounts_Migration::map_rules(
+			[ $this->memberships_rule( [ 'discount_type' => '' ] ) ],
+			$this->plan_granted_by_two_subscriptions()
+		);
+
+		$this->assertEmpty( $mapped['rules'], 'A rule with no discount type is not migrated.' );
+		$this->assertCount( 1, $mapped['skipped'], 'It is reported instead.' );
+	}
+
+	/**
+	 * Migrations get re-run — a first pass, a fix, a second pass. Rules carry an
+	 * id derived from their source rule so a re-run updates them in place; minting
+	 * a fresh id each time would duplicate every rule, and under the "combine"
+	 * overlap setting that would compound what readers are discounted.
+	 */
+	public function test_rerunning_updates_rules_in_place() {
+		delete_option( Subscriber_Discounts::OPTION_NAME );
+
+		$store_mapped_rules = function () {
+			foreach ( Discounts_Migration::map_rules( [ $this->memberships_rule() ], $this->plan_granted_by_two_subscriptions() )['rules'] as $rule ) {
+				unset( $rule['_source_rule_id'], $rule['_source_plan_id'] );
+				Subscriber_Discounts::save_rule( $rule );
+			}
+		};
+
+		$store_mapped_rules();
+		$store_mapped_rules();
+
+		$this->assertCount( 1, Subscriber_Discounts::get_rules(), 'Running the migration twice leaves one rule, not two.' );
 	}
 
 	/**

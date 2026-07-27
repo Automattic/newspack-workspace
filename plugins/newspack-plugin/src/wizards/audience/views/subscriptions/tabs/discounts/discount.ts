@@ -5,7 +5,8 @@
  *
  * The arithmetic mirrors `Newspack\Subscriber_Discounts::discounted_price()`.
  * The preview is what a publisher tunes a fixed amount against, so the two must
- * agree.
+ * agree. They can differ by one minor unit at an exact half-cent boundary, where
+ * PHP's `round()` pre-rounds to 15 significant digits and this does not.
  */
 
 /**
@@ -38,7 +39,9 @@ export function formatCurrency( amount: number, currency: DiscountCurrency = DEF
 
 	const fixed = Math.abs( amount ).toFixed( decimals );
 	const [ whole, fraction ] = fixed.split( '.' );
-	const grouped = whole.replace( /\B(?=(\d{3})+(?!\d))/g, thousandSeparator );
+	// Replacement via a callback: a separator containing `$` would otherwise be
+	// interpreted as a capture-group reference.
+	const grouped = whole.replace( /\B(?=(\d{3})+(?!\d))/g, () => thousandSeparator );
 	const number = ( amount < 0 ? '-' : '' ) + grouped + ( fraction ? decimalSeparator + fraction : '' );
 
 	switch ( position ) {

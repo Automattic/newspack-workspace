@@ -50,7 +50,7 @@ class Subscriber_Discounts_Display {
 		add_action( 'woocommerce_single_product_summary', [ __CLASS__, 'render_product_summary_note' ], 11 );
 		add_filter( 'woocommerce_get_item_data', [ __CLASS__, 'filter_cart_item_data' ], 10, 2 );
 		add_action( 'woocommerce_checkout_create_order_line_item', [ __CLASS__, 'stamp_order_line_item' ], 10, 3 );
-		add_action( 'woocommerce_order_item_meta_end', [ __CLASS__, 'render_order_item_note' ], 10, 3 );
+		add_action( 'woocommerce_order_item_meta_end', [ __CLASS__, 'render_order_item_note' ], 10, 4 );
 	}
 
 	/**
@@ -127,11 +127,15 @@ class Subscriber_Discounts_Display {
 	public static function filter_cart_item_data( $item_data, $cart_item ) {
 		$product = $cart_item['data'] ?? null;
 		if ( self::product_is_discounted( $product ) ) {
+			// Both `key` and `name` are set: the classic cart labels the row from
+			// `key`, the Cart and Checkout blocks read `name`, and leaving either
+			// empty renders a bare colon with nothing before it. WooCommerce
+			// escapes both on output, so they are passed through unescaped here.
 			$item_data[] = [
-				'key'     => '',
-				'name'    => '',
-				'value'   => esc_html__( 'Subscriber discount applied', 'newspack-plugin' ),
-				'display' => esc_html__( 'Subscriber discount applied', 'newspack-plugin' ),
+				'key'     => __( 'Discount', 'newspack-plugin' ),
+				'name'    => __( 'Discount', 'newspack-plugin' ),
+				'value'   => __( 'Subscriber discount applied', 'newspack-plugin' ),
+				'display' => __( 'Subscriber discount applied', 'newspack-plugin' ),
 			];
 		}
 		return $item_data;
@@ -141,19 +145,24 @@ class Subscriber_Discounts_Display {
 	 * Repeat the explanation on the order confirmation and order emails, where
 	 * the reader no longer has the list price to compare against.
 	 *
-	 * @param int                    $item_id Order item ID.
-	 * @param \WC_Order_Item_Product $item    Order item.
-	 * @param \WC_Order              $order   Order.
+	 * @param int                    $item_id    Order item ID.
+	 * @param \WC_Order_Item_Product $item       Order item.
+	 * @param \WC_Order              $order      Order.
+	 * @param bool                   $plain_text Whether this is the plain-text email template.
 	 */
-	public static function render_order_item_note( $item_id, $item, $order ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed
+	public static function render_order_item_note( $item_id, $item, $order, $plain_text = false ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundBeforeLastUsed
 		if ( ! is_callable( [ $item, 'get_meta' ] ) || ! $item->get_meta( self::ORDER_ITEM_META_KEY ) ) {
 			return;
 		}
-		printf(
-			'<p class="%s">%s</p>',
-			esc_attr( self::CSS_CLASS_PREFIX . '-note' ),
-			esc_html__( 'Subscriber discount applied', 'newspack-plugin' )
-		);
+		$note = esc_html__( 'Subscriber discount applied', 'newspack-plugin' );
+
+		// The same hook renders the plain-text order emails, where markup would
+		// arrive as literal tags in the reader's inbox.
+		if ( $plain_text ) {
+			echo "\n" . esc_html( $note );
+			return;
+		}
+		printf( '<p class="%s">%s</p>', esc_attr( self::CSS_CLASS_PREFIX . '-note' ), esc_html( $note ) );
 	}
 
 	/**
@@ -201,13 +210,7 @@ class Subscriber_Discounts_Display {
 	 * @return float
 	 */
 	private static function undiscounted_price( $product ) {
-		Subscriber_Discounts_Pricing::suspend();
-		try {
-			$price = (float) $product->get_price();
-		} finally {
-			Subscriber_Discounts_Pricing::resume();
-		}
-		return $price;
+		return (float) Subscriber_Discounts_Pricing::undiscounted_price( $product );
 	}
 }
 

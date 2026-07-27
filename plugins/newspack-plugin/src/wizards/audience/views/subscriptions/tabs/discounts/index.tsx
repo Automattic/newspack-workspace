@@ -6,17 +6,19 @@
 /**
  * WordPress dependencies.
  */
-import { __ } from '@wordpress/i18n';
+import { __, _n, sprintf } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
 import { useCallback, useEffect, useMemo, useState } from '@wordpress/element';
 import { filterSortAndPaginate } from '@wordpress/dataviews';
 import type { Action, Field, View } from '@wordpress/dataviews';
 import { percent } from '@wordpress/icons';
+// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
+import { __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components';
 
 /**
  * Internal dependencies.
  */
-import { Badge, Button, DataViews, SectionHeader } from '../../../../../../../packages/components/src';
+import { Badge, Button, DataViews, Notice, SectionHeader } from '../../../../../../../packages/components/src';
 import WizardsTab from '../../../../../wizards-tab';
 import WizardSection from '../../../../../wizards-section';
 import { registerTab } from '../registry';
@@ -25,6 +27,8 @@ import { DEFAULT_CURRENCY, discountLabel, targetingLabel } from './discount';
 import DiscountEditor from './editor';
 import SettingsModal from './settings-modal';
 import type { DiscountRule, DiscountsPayload } from './types';
+
+import './style.scss';
 
 const DEFAULT_VIEW: View = {
 	type: 'table',
@@ -48,10 +52,15 @@ function SubscriberDiscounts() {
 	const [ view, setView ] = useState< View >( DEFAULT_VIEW );
 	const [ editing, setEditing ] = useState< DiscountRule | null | undefined >( undefined );
 	const [ showSettings, setShowSettings ] = useState( false );
+	const [ error, setError ] = useState( '' );
+
+	const reportFailure = ( apiError: { message?: string } ) =>
+		setError( apiError?.message || __( 'That change could not be saved.', 'newspack-plugin' ) );
 
 	useEffect( () => {
 		apiFetch< DiscountsPayload >( { path: DISCOUNTS_ENDPOINT } )
 			.then( setPayload )
+			.catch( reportFailure )
 			.finally( () => setIsLoading( false ) );
 	}, [] );
 
@@ -66,14 +75,18 @@ function SubscriberDiscounts() {
 			path: DISCOUNTS_ENDPOINT,
 			method: 'POST',
 			data: { ...rule, active },
-		} ).then( setPayload );
+		} )
+			.then( setPayload )
+			.catch( reportFailure );
 	}, [] );
 
 	const deleteRule = useCallback( ( rule: DiscountRule ) => {
 		apiFetch< DiscountsPayload >( {
 			path: `${ DISCOUNTS_ENDPOINT }/${ rule.id }`,
 			method: 'DELETE',
-		} ).then( setPayload );
+		} )
+			.then( setPayload )
+			.catch( reportFailure );
 	}, [] );
 
 	const { currency } = payload;
@@ -85,9 +98,11 @@ function SubscriberDiscounts() {
 				label: __( 'Subscription', 'newspack-plugin' ),
 				enableHiding: false,
 				getValue: ( { item } ) =>
-					item.subscription_product_ids.length === 1
-						? __( '1 subscription', 'newspack-plugin' )
-						: `${ item.subscription_product_ids.length } ${ __( 'subscriptions', 'newspack-plugin' ) }`,
+					sprintf(
+						/* translators: %d: number of subscriptions whose subscribers get the discount. */
+						_n( '%d subscription', '%d subscriptions', item.subscription_product_ids.length, 'newspack-plugin' ),
+						item.subscription_product_ids.length
+					),
 			},
 			{
 				id: 'status',
@@ -136,7 +151,28 @@ function SubscriberDiscounts() {
 				id: 'delete',
 				label: __( 'Delete', 'newspack-plugin' ),
 				isDestructive: true,
-				callback: ( [ item ]: DiscountRule[] ) => deleteRule( item ),
+				// Deleting a rule cannot be undone and immediately changes what
+				// readers are charged, so it is confirmed rather than one-click.
+				RenderModal: ( { items, closeModal }: { items: DiscountRule[]; closeModal?: () => void } ) => (
+					<VStack spacing={ 4 }>
+						<p>{ __( 'This discount will stop applying immediately. This cannot be undone.', 'newspack-plugin' ) }</p>
+						<HStack spacing={ 2 } justify="flex-end">
+							<Button variant="secondary" onClick={ closeModal }>
+								{ __( 'Cancel', 'newspack-plugin' ) }
+							</Button>
+							<Button
+								variant="primary"
+								isDestructive
+								onClick={ () => {
+									items.forEach( deleteRule );
+									closeModal?.();
+								} }
+							>
+								{ __( 'Delete', 'newspack-plugin' ) }
+							</Button>
+						</HStack>
+					</VStack>
+				),
 			},
 		],
 		[ setActive, deleteRule ]
@@ -152,6 +188,7 @@ function SubscriberDiscounts() {
 	return (
 		<WizardsTab title={ __( 'Subscriber discounts', 'newspack-plugin' ) }>
 			<WizardSection>
+				{ error && <Notice isError noticeText={ error } /> }
 				{ ! isLoading && ! hasRules ? (
 					<SectionHeader
 						centered
