@@ -194,9 +194,10 @@ class Group_Subscription_Settings {
 			return $column_content;
 		}
 		$settings = self::get_subscription_settings( $subscription );
-		// The owner counts as a member, so pair the owner-inclusive count with the
+		// The owner occupies a seat, so pair the owner-inclusive count with the
 		// owner-inclusive capacity (the limit) so this matches the member-facing card
-		// and Members tab.
+		// and Members tab. "Seats" rather than "members" because the owner fills one of
+		// them without being a member.
 		$member_count = Group_Subscription::get_member_count( $subscription );
 		$capacity     = Group_Subscription::get_member_capacity( $subscription );
 		$limit        = null !== $capacity
@@ -209,8 +210,8 @@ class Group_Subscription_Settings {
 			\esc_html( $settings['name'] ),
 			\esc_html(
 				sprintf(
-					/* translators: 1: member count, 2: member capacity or "unlimited" */
-					__( '%1$s of %2$s members', 'newspack-plugin' ),
+					/* translators: 1: number of seats taken, 2: total seats or "unlimited" */
+					__( '%1$s of %2$s seats', 'newspack-plugin' ),
 					$member_count,
 					$limit
 				)

@@ -7,6 +7,7 @@ import {
   randomEmailAddress,
   clickMyAccountMenuItem,
   goToMyAccount,
+  getSnackbar,
 } from "./utils";
 
 const emailAddress = randomEmailAddress();
@@ -71,7 +72,7 @@ test("Register on the site", {
   await page.getByPlaceholder("Your Last Name").click();
   await page.getByPlaceholder("Your Last Name").fill("Doe");
   await page.getByRole("button", { name: "Update profile" }).click();
-  await expect(page.getByText("Account details changed successfully.")).toBeVisible();
+  await expect(getSnackbar(page, "Account details changed successfully.")).toBeVisible();
   await expect(page.getByPlaceholder("Your First Name")).toHaveValue("John");
   await expect(page.getByPlaceholder("Your Last Name")).toHaveValue("Doe");
 
@@ -82,7 +83,8 @@ test("Register on the site", {
     .getByRole("link", { name: "Create a password" })
     .click();
   await expect(
-    page.getByText(
+    getSnackbar(
+      page,
       "Please check your email inbox for instructions on how to set a new password."
     )
   ).toBeVisible();
@@ -126,11 +128,11 @@ test("Register on the site", {
   await page.locator("#newspack_account_email").fill(newEmailAddress);
   await page.getByRole("button", { name: "Update profile" }).click();
   const expectedNotification = `A verification email has been sent to ${newEmailAddress}. Please verify to complete the change.`;
-  await expect(page.getByText(expectedNotification)).toBeVisible();
+  await expect(getSnackbar(page, expectedNotification)).toBeVisible();
   await openEmail(page, "Confirm email change", newEmailAddress);
   await clickLinkURL(page, "Confirm email change");
   await expect(
-    page.getByText("Your email address has been successfully updated.")
+    getSnackbar(page, "Your email address has been successfully updated.")
   ).toBeVisible();
   await expect(page.locator("#newspack_account_email")).toHaveValue(
     newEmailAddress
