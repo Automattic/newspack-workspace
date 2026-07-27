@@ -71,7 +71,10 @@ class Newspack_Image_Credits {
 
 		$credit_url = get_post_meta( $attachment_id, self::MEDIA_CREDIT_URL_META, true );
 		if ( $credit_url ) {
-			$output['credit_url'] = esc_attr( $credit_url );
+			// esc_url, not esc_attr: normalizes protocol-less URLs (e.g. "images.com")
+			// to absolute ones, matching parse_media_credit_attrs(). A raw value would
+			// render as a relative href. See NPPM-273.
+			$output['credit_url'] = esc_url( $credit_url );
 		}
 
 		$organization = get_post_meta( $attachment_id, self::MEDIA_CREDIT_ORG_META, true );
