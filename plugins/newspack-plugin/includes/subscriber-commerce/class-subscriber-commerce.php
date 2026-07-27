@@ -1,0 +1,108 @@
+<?php
+/**
+ * Newspack Subscriber Commerce - shared infrastructure.
+ *
+ * @package Newspack
+ */
+
+namespace Newspack;
+
+defined( 'ABSPATH' ) || exit;
+
+/**
+ * Shared infrastructure for subscriber-commerce features: rules that tie
+ * WooCommerce store products to subscriptions (subscriber-only products,
+ * subscriber discounts).
+ *
+ * Each feature stores its rules in its own option as an array of rule arrays.
+ * Every rule carries the base fields:
+ *
+ *   id                       Unique rule ID (string).
+ *   subscription_product_ids Subscription products whose subscribers the rule applies to.
+ *   targeting                'products' | 'category' | 'all' (see Product_Targeting).
+ *   product_ids              Targeted product IDs ('products' targeting).
+ *   category_ids             Targeted product category IDs ('category' targeting).
+ *   excluded_product_ids     Products excluded from 'category'/'all' targeting.
+ *   active                   Whether the rule is enforced (an inactive rule is kept but ignored).
+ *   created_at               Creation date, Y-m-d.
+ *
+ * Features extend this shape with their own fields.
+ */
+class Subscriber_Commerce {
+
+	/**
+	 * Whether subscriber-commerce rules can be configured.
+	 *
+	 * Independent of whether they are enforced yet: a site migrating off
+	 * WooCommerce Memberships sets its rules up first and deactivates
+	 * Memberships afterwards, so the admin has to be reachable while
+	 * Memberships still owns the front end.
+	 *
+	 * @return bool
+	 */
+	public static function is_admin_available() {
+		return Content_Gate::is_newspack_feature_enabled() && function_exists( 'wc_get_product' );
+	}
+
+	/**
+	 * Whether subscriber-commerce rules are enforced at all.
+	 *
+	 * While WooCommerce Memberships is active it owns purchase restriction and
+	 * member discounts, and enforcing ours on top would double-apply on a site
+	 * mid-migration — so every subscriber-commerce feature stands down.
+	 *
+	 * @return bool
+	 */
+	public static function is_enforcement_active() {
+		$active = self::is_admin_available() && ! Memberships::is_active();
+
+		/**
+		 * Filters whether subscriber-commerce rules (subscriber-only products,
+		 * subscriber discounts) are enforced.
+		 *
+		 * @param bool $active Whether enforcement is active.
+		 */
+		return apply_filters( 'newspack_subscriber_commerce_enforcement_active', $active );
+	}
+
+	/**
+	 * Sanitize a base rule. Feature callers sanitize their own extra fields and
+	 * merge them over the returned array.
+	 *
+	 * @param array $rule The raw rule.
+	 *
+	 * @return array The rule with the base fields sanitized and defaulted.
+	 */
+	public static function sanitize_base_rule( $rule ) {
+		$targeting = $rule['targeting'] ?? Product_Targeting::TARGETING_PRODUCTS;
+		if ( ! in_array( $targeting, [ Product_Targeting::TARGETING_PRODUCTS, Product_Targeting::TARGETING_CATEGORY, Product_Targeting::TARGETING_ALL ], true ) ) {
+			$targeting = Product_Targeting::TARGETING_PRODUCTS;
+		}
+
+		$sanitize_ids = function ( $ids ) {
+			return array_values( array_unique( array_filter( array_map( 'absint', (array) $ids ) ) ) );
+		};
+
+		$created_at = isset( $rule['created_at'] ) ? preg_replace( '/[^0-9\-]/', '', (string) $rule['created_at'] ) : '';
+
+		return [
+			'id'                       => sanitize_key( $rule['id'] ?? '' ),
+			'subscription_product_ids' => $sanitize_ids( $rule['subscription_product_ids'] ?? [] ),
+			'targeting'                => $targeting,
+			'product_ids'              => $sanitize_ids( $rule['product_ids'] ?? [] ),
+			'category_ids'             => $sanitize_ids( $rule['category_ids'] ?? [] ),
+			'excluded_product_ids'     => $sanitize_ids( $rule['excluded_product_ids'] ?? [] ),
+			'active'                   => ! empty( $rule['active'] ),
+			'created_at'               => $created_at ? $created_at : gmdate( 'Y-m-d' ),
+		];
+	}
+
+	/**
+	 * Generate an ID for a new rule.
+	 *
+	 * @return string
+	 */
+	public static function generate_rule_id() {
+		return wp_generate_uuid4();
+	}
+}
