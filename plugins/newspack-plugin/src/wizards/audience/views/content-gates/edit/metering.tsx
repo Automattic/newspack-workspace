@@ -38,7 +38,7 @@ export default function Metering( { description, metering, onChange }: MeteringP
 						<Notice
 							isWarning
 							noticeText={ __(
-								'Metering is enabled but the number of views is set to 0. Content will be gated for all readers.',
+								'Free views is set to 0, so no reader gets a free view and content is gated for everyone — the same behavior as turning Metering off. Set 1 or more free views to meter access.',
 								'newspack-plugin'
 							) }
 						/>

@@ -80,10 +80,10 @@ describe( 'Metering free views count', () => {
 		expect( freeViewsInput.value ).toBe( '2' );
 	} );
 
-	it( 'shows the gated-for-all warning when the count is 0', () => {
+	it( 'warns that a count of 0 is the same as turning metering off', () => {
 		render( <MeteringHarness initialMetering={ { enabled: true, count: 0, period: 'month' } } /> );
 
-		expect( screen.getByText( /Content will be gated for all readers/ ) ).toBeInTheDocument();
+		expect( screen.getByText( /the same behavior as turning Metering off/ ) ).toBeInTheDocument();
 	} );
 
 	it( 'treats a blanked field as 0', () => {
