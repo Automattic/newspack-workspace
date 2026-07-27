@@ -49,6 +49,16 @@ class Test_Image_Credits extends WP_UnitTestCase {
 		$attachment_id = $this->create_attachment_with_credit( 'javascript:alert(1)' );
 		$credit_string = Newspack_Image_Credits::get_media_credit_string( $attachment_id );
 		$this->assertStringNotContainsString( 'javascript:', $credit_string );
+		$this->assertStringNotContainsString( '<a ', $credit_string );
 		$this->assertStringContainsString( 'Test Photographer', $credit_string );
+	}
+
+	/**
+	 * A protocol-relative credit URL is preserved as-is.
+	 */
+	public function test_credit_url_protocol_relative_is_preserved() {
+		$attachment_id = $this->create_attachment_with_credit( '//images.com' );
+		$credit_string = Newspack_Image_Credits::get_media_credit_string( $attachment_id );
+		$this->assertStringContainsString( 'href="//images.com"', $credit_string );
 	}
 }
