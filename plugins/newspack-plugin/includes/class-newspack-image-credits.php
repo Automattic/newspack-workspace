@@ -207,7 +207,10 @@ class Newspack_Image_Credits {
 		$fields['media_credit_url'] = [
 			'label' => __( 'Credit URL', 'newspack-image-credits' ),
 			'input' => 'text',
-			'value' => $credit_info['credit_url'],
+			// The stored value, not the esc_url-normalized one from get_media_credit():
+			// the edit field must round-trip exactly what the editor saved, or re-saving
+			// an attachment would silently rewrite (or blank) an untouched Credit URL.
+			'value' => get_post_meta( $post->ID, self::MEDIA_CREDIT_URL_META, true ),
 		];
 
 		$fields['media_credit_org'] = [

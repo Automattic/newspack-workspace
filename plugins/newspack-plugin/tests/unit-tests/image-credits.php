@@ -61,4 +61,13 @@ class Test_Image_Credits extends WP_UnitTestCase {
 		$credit_string = Newspack_Image_Credits::get_media_credit_string( $attachment_id );
 		$this->assertStringContainsString( 'href="//images.com"', $credit_string );
 	}
+
+	/**
+	 * The media-modal edit field round-trips the stored value untouched.
+	 */
+	public function test_media_modal_field_preserves_stored_value() {
+		$attachment_id = $this->create_attachment_with_credit( 'images.com' );
+		$fields        = Newspack_Image_Credits::add_media_credit( [], get_post( $attachment_id ) );
+		$this->assertSame( 'images.com', $fields['media_credit_url']['value'] );
+	}
 }
