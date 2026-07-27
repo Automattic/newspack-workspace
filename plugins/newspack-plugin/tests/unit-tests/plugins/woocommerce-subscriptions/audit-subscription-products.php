@@ -597,12 +597,12 @@ class Newspack_Test_Audit_Subscription_Products extends WP_UnitTestCase {
 		$rows = WooCommerce_Subscriptions::build_audit_rows(
 			[ 75 => $GLOBALS['subscriptions_database'][75] ],
 			[],
-			[ $trashed_product_id => [ 42 ] ]
+			[ $trashed_product_id => [ 'gate #42' ] ]
 		);
 
 		$this->assertCount( 1, $rows );
-		$this->assertSame( 'gate_referenced', $rows[0]['status'], 'A gate-referenced product still grants access, so the row must not be counted as at risk.' );
-		$this->assertStringContainsString( '#42', $rows[0]['evidence'], 'The evidence should name the gate still holding the product ID.' );
+		$this->assertSame( 'access_referenced', $rows[0]['status'], 'A gate-referenced product still grants access, so the row must not be counted as at risk.' );
+		$this->assertStringContainsString( 'gate #42', $rows[0]['evidence'], 'The evidence should name the gate still holding the product ID.' );
 	}
 
 	/**
@@ -616,10 +616,10 @@ class Newspack_Test_Audit_Subscription_Products extends WP_UnitTestCase {
 		$rows = WooCommerce_Subscriptions::build_audit_rows(
 			[ 76 => $GLOBALS['subscriptions_database'][76] ],
 			[],
-			[ $deleted_product_id => [ 42 ] ]
+			[ $deleted_product_id => [ 'gate #42' ] ]
 		);
 
-		$this->assertSame( 'gate_referenced', $rows[0]['status'] );
+		$this->assertSame( 'access_referenced', $rows[0]['status'] );
 	}
 
 	/**
@@ -637,7 +637,7 @@ class Newspack_Test_Audit_Subscription_Products extends WP_UnitTestCase {
 			$subscription,
 			$replacement_product_id,
 			false,
-			[ $trashed_product_id => [ 42 ] ]
+			[ $trashed_product_id => [ 'gate #42' ] ]
 		);
 
 		$this->assertFalse( $result['ok'], 'A subscription a gate still matches must never be repaired.' );
@@ -847,5 +847,74 @@ class Newspack_Test_Audit_Subscription_Products extends WP_UnitTestCase {
 		$this->expectException( Exception::class );
 		$this->expectExceptionMessageMatches( '/stopped advancing/' );
 		$audit_active_subscriptions->invoke( null, [] );
+	}
+
+	/**
+	 * Gates are not the only place a product ID is persisted as a subscription access rule:
+	 * the group/row/stack blocks carry the same rule shape inline as the
+	 * `newspackAccessControlRules` attribute, and Block_Visibility evaluates it through the
+	 * identical `Access_Rules` engine — so a trashed product referenced only by a block still
+	 * grants access. The scan must find those IDs, keyed to the post that carries the block,
+	 * or the audit repeats the gate over-report on a second surface.
+	 */
+	public function test_block_referenced_product_is_collected_from_post_content() {
+		$product_id = 36426;
+		$content    = '<!-- wp:group {"newspackAccessControlMode":"custom","newspackAccessControlRules":{"custom_access":{"active":true,"access_rules":[[{"slug":"subscription","value":[' . $product_id . ']}]]}}} --><div class="wp-block-group"><!-- wp:paragraph --><p>Members only.</p><!-- /wp:paragraph --></div><!-- /wp:group -->';
+		$post_id    = self::factory()->post->create(
+			[
+				'post_status'  => 'publish',
+				'post_content' => $content,
+			]
+		);
+
+		$get_block_referenced_product_ids = new ReflectionMethod( WooCommerce_Subscriptions::class, 'get_block_referenced_product_ids' );
+		$get_block_referenced_product_ids->setAccessible( true );
+		$referenced = $get_block_referenced_product_ids->invoke( null );
+
+		$this->assertArrayHasKey( $product_id, $referenced, 'A product referenced only by a block-level access rule must be collected.' );
+		$this->assertSame( [ 'block on post #' . $post_id ], $referenced[ $product_id ], 'The reference must name the post that carries the block.' );
+	}
+
+	/**
+	 * A block-mode block references gate IDs, not products; those products are already found
+	 * by the gate scan, so the block scan must not double-collect them off the block. A
+	 * custom-mode block whose access section is inactive grants nobody access and is skipped
+	 * too — mirroring Block_Visibility's own activation check.
+	 */
+	public function test_block_scan_ignores_gate_mode_and_inactive_rules() {
+		$gate_mode  = '<!-- wp:group {"newspackAccessControlMode":"gate","newspackAccessControlGateIds":[42]} --><div class="wp-block-group"></div><!-- /wp:group -->';
+		$inactive   = '<!-- wp:group {"newspackAccessControlMode":"custom","newspackAccessControlRules":{"custom_access":{"active":false,"access_rules":[[{"slug":"subscription","value":[555]}]]}}} --><div class="wp-block-group"></div><!-- /wp:group -->';
+		self::factory()->post->create(
+			[
+				'post_status'  => 'publish',
+				'post_content' => $gate_mode . $inactive,
+			]
+		);
+
+		$get_block_referenced_product_ids = new ReflectionMethod( WooCommerce_Subscriptions::class, 'get_block_referenced_product_ids' );
+		$get_block_referenced_product_ids->setAccessible( true );
+
+		$this->assertSame( [], $get_block_referenced_product_ids->invoke( null ), 'Gate-mode and inactive custom-mode blocks reference no live subscription products.' );
+	}
+
+	/**
+	 * The block surface is folded into the same fragile bucket as gates: a subscription kept
+	 * matchable only by a block-level rule is reported (not at risk) and its evidence names
+	 * the block, exactly as the gate case names the gate.
+	 */
+	public function test_block_referenced_product_is_not_at_risk() {
+		$trashed_product_id = 36426;
+		$this->register_product( $trashed_product_id, 'VAN Membership', 'trash' );
+		$this->register_subscription( 78, [ $this->line_item( 'VAN Membership', $trashed_product_id ) ] );
+
+		$rows = WooCommerce_Subscriptions::build_audit_rows(
+			[ 78 => $GLOBALS['subscriptions_database'][78] ],
+			[],
+			[ $trashed_product_id => [ 'block on post #99' ] ]
+		);
+
+		$this->assertCount( 1, $rows );
+		$this->assertSame( 'access_referenced', $rows[0]['status'], 'A block-referenced product still grants access, so the row must not be counted as at risk.' );
+		$this->assertStringContainsString( 'block on post #99', $rows[0]['evidence'], 'The evidence should name the block still holding the product ID.' );
 	}
 }
