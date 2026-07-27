@@ -172,16 +172,30 @@ class Discounts_Migration {
 		$memberships_excludes_on_sale = 'yes' === get_option( self::EXCLUDE_ON_SALE_OPTION, 'no' );
 		$apply_on_sale                = ! $memberships_excludes_on_sale;
 
-		WP_CLI::line(
-			sprintf(
-				'On-sale products: Memberships %s them. %s "Apply on top of sale prices" %s.',
-				$memberships_excludes_on_sale ? 'excludes' : 'discounts',
-				$dry_run ? 'Would set' : 'Set',
-				$apply_on_sale ? 'on' : 'off'
-			)
-		);
-		if ( ! $dry_run ) {
-			Subscriber_Discounts::save_settings( [ 'apply_on_sale' => $apply_on_sale ] );
+		// Only carried on the first run: rules update in place on a re-run, so
+		// overwriting here would silently revert a setting a publisher changed
+		// after the migration.
+		$settings_already_stored = false !== get_option( Subscriber_Discounts::SETTINGS_OPTION_NAME, false );
+
+		if ( $settings_already_stored ) {
+			WP_CLI::line(
+				sprintf(
+					'On-sale products: Memberships %s them; this site already has its own setting, left as is.',
+					$memberships_excludes_on_sale ? 'excludes' : 'discounts'
+				)
+			);
+		} else {
+			WP_CLI::line(
+				sprintf(
+					'On-sale products: Memberships %s them. %s "Apply on top of sale prices" %s.',
+					$memberships_excludes_on_sale ? 'excludes' : 'discounts',
+					$dry_run ? 'Would set' : 'Set',
+					$apply_on_sale ? 'on' : 'off'
+				)
+			);
+			if ( ! $dry_run ) {
+				Subscriber_Discounts::save_settings( [ 'apply_on_sale' => $apply_on_sale ] );
+			}
 		}
 
 		// Cumulative stacking is filter-only in Memberships (default: on), so
@@ -244,7 +258,7 @@ class Discounts_Migration {
 			// product attributes included — while a subscriber discount resolves
 			// categories only. Migrating a tag rule into `category_ids` would
 			// produce a rule that matches nothing and reports success.
-			if ( $is_taxonomy && ! empty( $object_ids ) && self::SUPPORTED_TAXONOMY !== ( $memberships_rule['content_type_name'] ?? '' ) ) {
+			if ( $is_taxonomy && self::SUPPORTED_TAXONOMY !== ( $memberships_rule['content_type_name'] ?? '' ) ) {
 				$skipped[] = [
 					'source' => $source_id,
 					'plan'   => $plan_id,

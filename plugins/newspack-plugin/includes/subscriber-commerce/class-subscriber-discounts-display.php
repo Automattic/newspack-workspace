@@ -154,12 +154,12 @@ class Subscriber_Discounts_Display {
 		if ( ! is_callable( [ $item, 'get_meta' ] ) || ! $item->get_meta( self::ORDER_ITEM_META_KEY ) ) {
 			return;
 		}
-		$note = esc_html__( 'Subscriber discount applied', 'newspack-plugin' );
+		$note = __( 'Subscriber discount applied', 'newspack-plugin' );
 
-		// The same hook renders the plain-text order emails, where markup would
-		// arrive as literal tags in the reader's inbox.
+		// The same hook renders the plain-text order emails, where both markup
+		// and HTML entities arrive literally in the reader's inbox.
 		if ( $plain_text ) {
-			echo "\n" . esc_html( $note );
+			echo "\n" . $note; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Plain-text email body; escaping would render entities literally.
 			return;
 		}
 		printf( '<p class="%s">%s</p>', esc_attr( self::CSS_CLASS_PREFIX . '-note' ), esc_html( $note ) );

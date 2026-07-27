@@ -94,13 +94,18 @@ class Subscriber_Discounts_Pricing {
 			// to populate an admin picker. The storefront's own AJAX (add to
 			// cart, cart fragments) is not in this list and stays discounted.
 			$admin_ajax_actions = [
-				'woocommerce_quick_edit',
 				'woocommerce_add_order_item',
 				'woocommerce_save_order_items',
 				'woocommerce_calc_line_taxes',
 				'woocommerce_json_search_products',
 				'woocommerce_json_search_products_and_variations',
 			];
+			// Quick Edit posts `action=inline-save` and marks itself with a
+			// request field rather than an action, so it is detected separately.
+			// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading request markers only, to decide whether to price for the storefront.
+			if ( ! empty( $_REQUEST['woocommerce_quick_edit'] ) ) {
+				return false;
+			}
 			// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading the action only, to decide whether to price for the storefront.
 			$action = isset( $_REQUEST['action'] ) ? sanitize_key( wp_unslash( $_REQUEST['action'] ) ) : '';
 			if ( in_array( $action, $admin_ajax_actions, true ) ) {
@@ -204,7 +209,12 @@ class Subscriber_Discounts_Pricing {
 	 * @return string|float
 	 */
 	public static function filter_variation_sale_prices( $sale_price, $variation, $product ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed
-		$subscriber_price = self::get_subscriber_price( self::undiscounted_price( $variation ), $variation );
+		// The edit-context price is the same base WooCommerce hands
+		// `filter_variation_prices`. Reading the view-context price instead
+		// would diverge whenever another extension filters it, and WooCommerce
+		// discards a variation sale price that doesn't match the variation
+		// price exactly — silently dropping the strike-through.
+		$subscriber_price = self::get_subscriber_price( $variation->get_price( 'edit' ), $variation );
 		return null === $subscriber_price ? $sale_price : $subscriber_price;
 	}
 
@@ -237,17 +247,17 @@ class Subscriber_Discounts_Pricing {
 		if ( self::is_suspended() ) {
 			return $hash;
 		}
-		// Keyed on the rules this reader qualifies for — their full content, not
-		// just their ids, since editing a rule's amount changes the prices
-		// without changing which rules apply — plus the settings that decide how
-		// they combine. Keying on the reader instead would give every logged-in
-		// reader their own entry in a transient WooCommerce accumulates rather
-		// than evicts; keying on entitlement collapses all non-subscribers onto
-		// one entry.
-		$qualifying_rules = self::get_rules_for( $product, get_current_user_id() );
-
+		// Keyed on the reader's entitlement across the whole active rule set,
+		// not on the product: prices here are computed per variation, and a rule
+		// can cover a variation without covering its parent, so a parent-derived
+		// key could hand two readers with different entitlements the same cache
+		// entry. Keying on the reader id instead would be correct but would give
+		// every logged-in reader an entry in a transient WooCommerce accumulates
+		// rather than evicts; entitlement collapses all non-subscribers onto one.
+		// Full rule content, since editing an amount changes prices without
+		// changing which rules apply, plus the settings that combine them.
 		$hash['newspack_subscriber_discounts'] = md5(
-			(string) wp_json_encode( [ $qualifying_rules, Subscriber_Discounts::get_settings() ] )
+			(string) wp_json_encode( [ self::qualifying_rules_for_reader( get_current_user_id() ), Subscriber_Discounts::get_settings() ] )
 		);
 		return $hash;
 	}
@@ -295,6 +305,26 @@ class Subscriber_Discounts_Pricing {
 	}
 
 	/**
+	 * Every active rule this reader qualifies for, regardless of product.
+	 *
+	 * @param int $user_id Reader.
+	 * @return array[]
+	 */
+	private static function qualifying_rules_for_reader( $user_id ) {
+		if ( $user_id <= 0 ) {
+			return [];
+		}
+		return array_values(
+			array_filter(
+				Subscriber_Discounts::get_active_rules(),
+				function ( $rule ) use ( $user_id ) {
+					return Subscriber_Eligibility::user_has( $user_id, $rule['subscription_product_ids'] );
+				}
+			)
+		);
+	}
+
+	/**
 	 * The active rules covering a product that this reader qualifies for.
 	 *
 	 * @param \WC_Product $product Product being priced.
@@ -302,17 +332,16 @@ class Subscriber_Discounts_Pricing {
 	 * @return array[]
 	 */
 	private static function get_rules_for( $product, $user_id ) {
-		$active_rules = Subscriber_Discounts::get_active_rules();
-
-		// The rule set is part of the key, so a rule edited mid-request (the
-		// admin saving one, say) cannot be served from a verdict computed
-		// against the previous version.
-		$cache_key = $user_id . ':' . $product->get_id() . ':' . md5( (string) wp_json_encode( $active_rules ) );
+		// Rule and settings writes flush this memo, so the key does not need to
+		// carry the rule set — and must not, since hashing it on every call
+		// would do the work the memo exists to avoid, several times per product
+		// on a shop archive.
+		$cache_key = $user_id . ':' . $product->get_id();
 		if ( isset( self::$rules_for_product[ $cache_key ] ) ) {
 			return self::$rules_for_product[ $cache_key ];
 		}
 
-		$covering_rules = Product_Targeting::get_matching_rules( $active_rules, $product );
+		$covering_rules = Product_Targeting::get_matching_rules( Subscriber_Discounts::get_active_rules(), $product );
 
 		$qualifying_rules = array_values(
 			array_filter(

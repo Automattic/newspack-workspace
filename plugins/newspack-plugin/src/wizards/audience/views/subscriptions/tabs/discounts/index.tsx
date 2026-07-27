@@ -66,6 +66,7 @@ function SubscriberDiscounts() {
 
 	const applyPayload = useCallback( ( next: DiscountsPayload ) => {
 		setPayload( next );
+		setError( '' );
 		setEditing( undefined );
 		setShowSettings( false );
 	}, [] );
@@ -76,7 +77,10 @@ function SubscriberDiscounts() {
 			method: 'POST',
 			data: { ...rule, active },
 		} )
-			.then( setPayload )
+			.then( next => {
+				setPayload( next );
+				setError( '' );
+			} )
 			.catch( reportFailure );
 	}, [] );
 
@@ -85,7 +89,10 @@ function SubscriberDiscounts() {
 			path: `${ DISCOUNTS_ENDPOINT }/${ rule.id }`,
 			method: 'DELETE',
 		} )
-			.then( setPayload )
+			.then( next => {
+				setPayload( next );
+				setError( '' );
+			} )
 			.catch( reportFailure );
 	}, [] );
 
