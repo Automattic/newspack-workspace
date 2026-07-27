@@ -166,6 +166,7 @@ One repository, so a cross-plugin change is one branch and one PR. Before changi
 - **Squash merge** (`gh pr merge --squash`). The exception is branch promotions between `main`, `alpha` and `release`, which use merge commits to preserve history.
 - **Never push or merge unless asked.**
 - **One Copilot pass per PR**, requested when the PR opens. After addressing its feedback do not re-request it; the next review should be a human's.
+- **PR bodies follow [the repository template](.github/PULL_REQUEST_TEMPLATE.md).** `gh pr create --body`/`--body-file` bypasses GitHub's automatic template application, so compose the body into the template's sections yourself, and tick only the checklist items that are actually true.
 
 With the `newspack` plugin installed: `newspack:pr-create` → `newspack:pr-feedback` → `newspack:pr-ready` → `newspack:pr-merge`, plus `newspack:pr-test` to test a PR in an isolated env. Install it with `n setup-agents`, or:
 
