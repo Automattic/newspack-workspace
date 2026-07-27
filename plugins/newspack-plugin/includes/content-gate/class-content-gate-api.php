@@ -198,7 +198,9 @@ class Content_Gate_API {
 			$sanitized['enabled'] = boolval( $metering['enabled'] );
 		}
 		if ( isset( $metering['count'] ) ) {
-			$sanitized['count'] = intval( $metering['count'] );
+			// Floor at 0: signed intval() would persist a negative count, which Metering reads
+			// back through absint() as a positive free-view allowance.
+			$sanitized['count'] = max( 0, intval( $metering['count'] ) );
 		}
 		if ( isset( $metering['period'] ) ) {
 			$sanitized['period'] = sanitize_text_field( $metering['period'] );
