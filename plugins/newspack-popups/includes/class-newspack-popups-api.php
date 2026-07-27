@@ -219,8 +219,88 @@ final class Newspack_Popups_API {
 			'style_spacing_sizes'    => self::normalize_preset_sizes( $spacing_sizes ),
 			'style_spacing_custom'   => self::is_custom_spacing_size_allowed(),
 			'style_spacing_units'    => self::get_spacing_units(),
-			'site_editor_styles_url' => admin_url( 'site-editor.php?p=%2Fstyles&section=' . rawurlencode( '/blocks/' . rawurlencode( Newspack_Popups_Contextual_Prompt_Block::BLOCK_NAME ) ) ),
+			'site_editor_styles_url' => self::get_site_editor_styles_url(),
 		];
+	}
+
+	/**
+	 * Transient holding the styling preview post id, or 0 when the site has no
+	 * prompt to preview. Content-wide LIKE searches are not indexed, so the
+	 * answer is remembered rather than recomputed on every wizard load.
+	 */
+	const PREVIEW_POST_TRANSIENT = 'newspack_contextual_prompt_preview_post';
+
+	/**
+	 * The block-theme style handoff: the Site Editor, opened on the Contextual
+	 * Prompt block's own styles section.
+	 *
+	 * Where the site already has a prompt, the canvas is pointed at that story so
+	 * the publisher styles the block while looking at a real one. Otherwise the
+	 * canvas keeps its default, which is the homepage. Only block themes take the
+	 * handoff, so the lookup never runs on a classic theme.
+	 *
+	 * @return string
+	 */
+	private static function get_site_editor_styles_url() {
+		$url = 'site-editor.php?p=%2Fstyles&section=' . rawurlencode( '/blocks/' . rawurlencode( Newspack_Popups_Contextual_Prompt_Block::BLOCK_NAME ) );
+
+		if ( wp_is_block_theme() ) {
+			$preview_id = self::get_styling_preview_post_id();
+			if ( $preview_id ) {
+				$url .= '&postType=' . rawurlencode( (string) get_post_type( $preview_id ) ) . '&postId=' . $preview_id;
+			}
+		}
+
+		return admin_url( $url );
+	}
+
+	/**
+	 * The newest published story carrying a Contextual Prompt, for the Site
+	 * Editor canvas to render while its styles are edited.
+	 *
+	 * Limited to `post` and `page`: the Site Editor drives its canvas from the
+	 * built-in types alone, and silently falls back to the homepage for anything
+	 * else. A remembered id is re-checked before it is trusted, so a story that
+	 * has since been deleted or unpublished sends the lookup around again.
+	 *
+	 * @return int Post id, or 0 when the site has no prompt to preview.
+	 */
+	private static function get_styling_preview_post_id() {
+		$cached = get_transient( self::PREVIEW_POST_TRANSIENT );
+		if ( false !== $cached ) {
+			$cached = (int) $cached;
+			if ( ! $cached || 'publish' === get_post_status( $cached ) ) {
+				return $cached;
+			}
+		}
+
+		$post_types = array_values( array_intersect( Newspack_Popups_Model::get_default_popup_post_types(), [ 'post', 'page' ] ) );
+		$preview_id = 0;
+
+		if ( $post_types ) {
+			$query = new WP_Query(
+				[
+					'post_type'              => $post_types,
+					'post_status'            => 'publish',
+					// The block's own delimiter, so the match cannot be a mention
+					// of the block in prose.
+					's'                      => '<!-- wp:' . Newspack_Popups_Contextual_Prompt_Block::BLOCK_NAME,
+					'sentence'               => true,
+					'posts_per_page'         => 1,
+					'orderby'                => 'date',
+					'order'                  => 'DESC',
+					'fields'                 => 'ids',
+					'no_found_rows'          => true,
+					'ignore_sticky_posts'    => true,
+					'update_post_meta_cache' => false,
+					'update_post_term_cache' => false,
+				]
+			);
+			$preview_id = $query->posts ? (int) $query->posts[0] : 0;
+		}
+
+		set_transient( self::PREVIEW_POST_TRANSIENT, $preview_id, HOUR_IN_SECONDS );
+		return $preview_id;
 	}
 
 	/**

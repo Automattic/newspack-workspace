@@ -64,7 +64,58 @@ class ContextualPromptStylesApiTest extends WP_UnitTestCase {
 		foreach ( [ 'name', 'slug', 'size' ] as $key ) {
 			$this->assertArrayHasKey( $key, $data['style_spacing_sizes'][0] );
 		}
+		// The handoff lands on the block's own styles section.
 		$this->assertStringContainsString( 'site-editor.php', $data['site_editor_styles_url'] );
+		$this->assertStringContainsString( rawurlencode( '/blocks/' . rawurlencode( Newspack_Popups_Contextual_Prompt_Block::BLOCK_NAME ) ), $data['site_editor_styles_url'] );
+	}
+
+	/**
+	 * On a block theme the handoff points the Site Editor canvas at a story that
+	 * already carries a prompt, so the publisher styles the block while looking
+	 * at a real one.
+	 */
+	public function test_block_theme_handoff_previews_a_story_carrying_a_prompt() {
+		$stylesheet = $this->get_any_block_theme_stylesheet();
+		if ( ! $stylesheet ) {
+			$this->markTestSkipped( 'No block theme installed.' );
+		}
+		$original = get_stylesheet();
+		switch_theme( $stylesheet );
+		delete_transient( Newspack_Popups_API::PREVIEW_POST_TRANSIENT );
+
+		$post_id = self::factory()->post->create(
+			[
+				'post_status'  => 'publish',
+				'post_content' => '<!-- wp:' . Newspack_Popups_Contextual_Prompt_Block::BLOCK_NAME . ' --><div class="wp-block-newspack-popups-contextual-prompt"><!-- wp:paragraph --><p>Support us.</p><!-- /wp:paragraph --></div><!-- /wp:' . Newspack_Popups_Contextual_Prompt_Block::BLOCK_NAME . ' -->',
+			]
+		);
+
+		$data = rest_do_request( new WP_REST_Request( 'GET', '/newspack-popups/v1/contextual-prompt/status' ) )->get_data();
+		$this->assertStringContainsString( 'postId=' . $post_id, $data['site_editor_styles_url'] );
+		$this->assertStringContainsString( 'postType=post', $data['site_editor_styles_url'] );
+
+		// With nothing to preview the canvas keeps its default, the homepage.
+		wp_trash_post( $post_id );
+		delete_transient( Newspack_Popups_API::PREVIEW_POST_TRANSIENT );
+		$data = rest_do_request( new WP_REST_Request( 'GET', '/newspack-popups/v1/contextual-prompt/status' ) )->get_data();
+		$this->assertStringNotContainsString( 'postId=', $data['site_editor_styles_url'] );
+
+		delete_transient( Newspack_Popups_API::PREVIEW_POST_TRANSIENT );
+		switch_theme( $original );
+	}
+
+	/**
+	 * Find any installed block theme stylesheet slug.
+	 *
+	 * @return string|null Theme stylesheet, or null if unavailable.
+	 */
+	private function get_any_block_theme_stylesheet() {
+		foreach ( wp_get_themes() as $stylesheet => $theme ) {
+			if ( method_exists( $theme, 'is_block_theme' ) && $theme->is_block_theme() ) {
+				return $stylesheet;
+			}
+		}
+		return null;
 	}
 
 	/**
