@@ -182,11 +182,21 @@ final class Newspack_Popups_API {
 
 	/**
 	 * The Contextual Prompts status payload: opt-in state, whether the user can
-	 * manage it, the publisher-profile fields, and the block's style data.
+	 * manage it, the publisher-profile fields, and the block's style data. The
+	 * route is open to `edit_posts`, but the profile and style data is wizard
+	 * configuration only an administrator may see: anyone else gets the opt-in
+	 * state alone.
 	 *
 	 * @return array
 	 */
 	private static function contextual_prompt_status() {
+		$can_manage = current_user_can( 'manage_options' );
+		if ( ! $can_manage ) {
+			return [
+				'enabled'    => Newspack_Popups_Settings::is_ai_copy_assistant_enabled(),
+				'can_manage' => false,
+			];
+		}
 		// Styles are a keyed object to every client, so no overrides has to travel
 		// as `{}`: an empty PHP array would serialize as `[]` and a client
 		// comparing it against an object it built would never see them as equal.
@@ -198,7 +208,7 @@ final class Newspack_Popups_API {
 		$spacing_sizes = self::get_spacing_size_presets();
 		return [
 			'enabled'                => Newspack_Popups_Settings::is_ai_copy_assistant_enabled(),
-			'can_manage'             => current_user_can( 'manage_options' ),
+			'can_manage'             => $can_manage,
 			'fields'                 => Newspack_Popups_Settings::get_ai_copy_assistant_fields(),
 			'override_active'        => Newspack_Popups_Settings::is_override_active(),
 			'is_block_theme'         => wp_is_block_theme(),

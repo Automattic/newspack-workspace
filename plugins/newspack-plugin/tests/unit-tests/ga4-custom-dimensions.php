@@ -496,6 +496,30 @@ class Newspack_Test_GA4_Custom_Dimensions extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A 429 whose quota wording names a rate window is a transient burst, not
+	 * the dimension cap: the loop aborts (every remaining create sits inside
+	 * the same window) but the schema stays unrecorded, so the daily recheck
+	 * reschedules provisioning.
+	 */
+	public function test_rate_limited_run_is_rescheduled_by_recheck() {
+		if ( ! function_exists( 'as_schedule_recurring_action' ) ) {
+			$this->markTestSkipped( 'ActionScheduler not available.' );
+		}
+
+		$this->connect_property( 'PROP-RATE' );
+		$this->configure_newspack_oauth( true );
+		$this->mock_admin_api( 'PROP-RATE', [], 429, "Quota exceeded for quota metric 'Requests' and limit 'Requests per minute' of service 'analyticsadmin.googleapis.com'." );
+
+		$summary = GA4_Custom_Dimensions::provision();
+		$this->assertCount( 1, $summary['errors'], 'The loop stops at the first rate-limited create.' );
+		$this->assertSame( 1, $this->count_requests( 'properties/PROP-RATE/customDimensions', 'POST' ), 'No further creates are attempted inside the window.' );
+		$this->assertNull( $summary['schema'], 'A rate-limited run does not record the schema fingerprint.' );
+
+		GA4_Custom_Dimensions::maybe_schedule_recheck();
+		$this->assertNotFalse( wp_next_scheduled( GA4_Custom_Dimensions::PROVISION_ACTION ), 'A rate-limited run is rescheduled by the recheck.' );
+	}
+
+	/**
 	 * A clean run records the schema fingerprint, so the recheck path does not
 	 * reschedule provisioning.
 	 */

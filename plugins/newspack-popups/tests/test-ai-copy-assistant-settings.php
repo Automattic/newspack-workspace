@@ -186,9 +186,11 @@ class AiCopyAssistantSettingsTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The status endpoint reports opt-in state, management capability, and fields.
+	 * The status endpoint reports opt-in state, management capability, and — to
+	 * an administrator — fields.
 	 */
 	public function test_status_endpoint() {
+		wp_set_current_user( $this->factory->user->create( [ 'role' => 'administrator' ] ) );
 		$response = Newspack_Popups_Api::api_get_contextual_prompt_status();
 		$data     = $response->get_data();
 

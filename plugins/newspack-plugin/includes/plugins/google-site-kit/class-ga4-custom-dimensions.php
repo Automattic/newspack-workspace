@@ -465,15 +465,16 @@ final class GA4_Custom_Dimensions {
 		list( $created, $skipped_exists, $errors, $has_transient_error ) = $result;
 
 		if ( ! empty( $errors ) && ! $has_transient_error ) {
-			Logger::log( 'GA4 dimension create failures are permanent (auth/quota/validation); suspending daily retries until the monthly recheck.', self::LOGGER_HEADER );
+			Logger::log( 'GA4 dimension create failures are permanent (auth/dimension cap/validation); suspending daily retries until the monthly recheck.', self::LOGGER_HEADER );
 		}
 
 		$summary = [
 			'property_id'    => $property_id,
 			// A transient failure (timeout, 429, 5xx) must not read as current,
 			// so the daily-throttled recheck retries it. Permanent failures
-			// (auth, quota, validation) record the fingerprint anyway – a daily
-			// retry can't fix them; the monthly recheck is the self-heal path.
+			// (auth, the dimension cap, validation) record the fingerprint
+			// anyway – a daily retry can't fix them; the monthly recheck is the
+			// self-heal path.
 			'schema'         => $has_transient_error ? null : self::schema_fingerprint(),
 			'auth_source'    => $used_source,
 			'timestamp'      => time(),
@@ -527,26 +528,33 @@ final class GA4_Custom_Dimensions {
 	}
 
 	/**
-	 * Whether a failed create names GA4 quota exhaustion (e.g. the event-scoped
-	 * dimension cap on the property).
+	 * Whether a failed create names the property's custom-dimension capacity –
+	 * the one quota a retry cannot fix. Google phrases rate limiting as quota
+	 * too ("Quota exceeded ... per minute"), so rate-window wording never
+	 * matches: that burst clears on its own and is worth a retry.
 	 *
 	 * @param \Throwable $e The failure.
 	 * @return bool
 	 */
-	private static function is_quota_error( \Throwable $e ) {
-		return (bool) preg_match( '/quota|RESOURCE_EXHAUSTED/i', $e->getMessage() );
+	private static function is_dimension_cap_error( \Throwable $e ) {
+		$message = $e->getMessage();
+		if ( preg_match( '/per (minute|hour|day)|rate limit/i', $message ) ) {
+			return false;
+		}
+		return (bool) preg_match( '/maximum number|CustomDimensions/i', $message );
 	}
 
 	/**
-	 * Whether a failed create is permanent – auth (401/403), quota exhaustion
-	 * or a validation error – so a daily retry cannot fix it, as opposed to
-	 * transient (timeout, 408/429 rate limiting, 5xx), which is worth one.
+	 * Whether a failed create is permanent – auth (401/403), the property's
+	 * dimension cap or a validation error – so a daily retry cannot fix it, as
+	 * opposed to transient (timeout, 408/429 rate limiting, 5xx), which is
+	 * worth one.
 	 *
 	 * @param \Throwable $e The failure.
 	 * @return bool
 	 */
 	private static function is_permanent_create_error( \Throwable $e ) {
-		if ( self::is_quota_error( $e ) ) {
+		if ( self::is_dimension_cap_error( $e ) ) {
 			return true;
 		}
 		$code = self::error_status_code( $e );
@@ -555,13 +563,15 @@ final class GA4_Custom_Dimensions {
 
 	/**
 	 * Whether a failed create proves the remaining creates would fail the same
-	 * way: quota exhausted on the property, or authorization denied/revoked.
+	 * way: the property's dimension cap, authorization denied/revoked, or a
+	 * rate-limited burst (429) whose window every remaining create would still
+	 * be inside.
 	 *
 	 * @param \Throwable $e The failure.
 	 * @return bool
 	 */
 	private static function is_fatal_create_error( \Throwable $e ) {
-		return self::is_quota_error( $e ) || in_array( self::error_status_code( $e ), [ 401, 403 ], true );
+		return self::is_dimension_cap_error( $e ) || in_array( self::error_status_code( $e ), [ 401, 403, 429 ], true );
 	}
 }
 GA4_Custom_Dimensions::init();

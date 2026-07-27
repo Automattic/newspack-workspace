@@ -47,6 +47,8 @@ class ContextualPromptStylesApiTest extends WP_UnitTestCase {
 		$response = rest_do_request( new WP_REST_Request( 'GET', '/newspack-popups/v1/contextual-prompt/status' ) );
 		$data     = $response->get_data();
 
+		$this->assertTrue( $data['can_manage'] );
+		$this->assertArrayHasKey( 'fields', $data );
 		$this->assertArrayHasKey( 'is_block_theme', $data );
 		// No overrides travels as an empty object, never an empty array.
 		$this->assertEquals( (object) [], $data['styles'] );
@@ -63,6 +65,25 @@ class ContextualPromptStylesApiTest extends WP_UnitTestCase {
 			$this->assertArrayHasKey( $key, $data['style_spacing_sizes'][0] );
 		}
 		$this->assertStringContainsString( 'site-editor.php', $data['site_editor_styles_url'] );
+	}
+
+	/**
+	 * The profile and style data is administrator configuration: a user who can
+	 * edit posts but not manage options gets the opt-in state alone.
+	 */
+	public function test_status_is_trimmed_for_a_non_manager() {
+		wp_set_current_user( $this->factory->user->create( [ 'role' => 'contributor' ] ) );
+
+		$response = rest_do_request( new WP_REST_Request( 'GET', '/newspack-popups/v1/contextual-prompt/status' ) );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame(
+			[
+				'enabled'    => true,
+				'can_manage' => false,
+			],
+			$response->get_data()
+		);
 	}
 
 	/**
