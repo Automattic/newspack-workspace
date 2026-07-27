@@ -83,6 +83,14 @@ class ContextualPromptStylesApiTest extends WP_UnitTestCase {
 		switch_theme( $stylesheet );
 		delete_transient( Newspack_Popups_API::PREVIEW_POST_TRANSIENT );
 
+		// A site with no prompt yet: the canvas keeps its default, the homepage.
+		// This also caches the "nothing to preview" answer.
+		$data = rest_do_request( new WP_REST_Request( 'GET', '/newspack-popups/v1/contextual-prompt/status' ) )->get_data();
+		$this->assertStringNotContainsString( 'postId=', $data['site_editor_styles_url'] );
+
+		// Publishing the site's first prompt has to take effect at once, which is
+		// the cached answer above going stale in the direction re-validation
+		// cannot see.
 		$post_id = self::factory()->post->create(
 			[
 				'post_status'  => 'publish',
@@ -94,9 +102,9 @@ class ContextualPromptStylesApiTest extends WP_UnitTestCase {
 		$this->assertStringContainsString( 'postId=' . $post_id, $data['site_editor_styles_url'] );
 		$this->assertStringContainsString( 'postType=post', $data['site_editor_styles_url'] );
 
-		// With nothing to preview the canvas keeps its default, the homepage.
+		// A trashed story stops being previewed without any cache flush of its
+		// own: a remembered id is re-checked before it is trusted.
 		wp_trash_post( $post_id );
-		delete_transient( Newspack_Popups_API::PREVIEW_POST_TRANSIENT );
 		$data = rest_do_request( new WP_REST_Request( 'GET', '/newspack-popups/v1/contextual-prompt/status' ) )->get_data();
 		$this->assertStringNotContainsString( 'postId=', $data['site_editor_styles_url'] );
 

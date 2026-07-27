@@ -13,29 +13,6 @@
 			}
 		}
 	},
-	"example": {
-		"attributes": {},
-		"innerBlocks": [
-			{
-				"name": "core/paragraph",
-				"attributes": {
-					"content": "Reporting like this takes time and costs money. If you value it, consider supporting our newsroom."
-				}
-			},
-			{
-				"name": "core/buttons",
-				"innerBlocks": [
-					{
-						"name": "core/button",
-						"attributes": {
-							"text": "Donate"
-						}
-					}
-				]
-			}
-		],
-		"viewportWidth": 800
-	},
 	"supports": {
 		"align": [
 			"wide",

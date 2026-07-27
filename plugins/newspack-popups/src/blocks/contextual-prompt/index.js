@@ -39,6 +39,30 @@ export const registerContextualPromptBlock = () => {
 	registerBlockType( metadata.name, {
 		...metadata,
 		supports: { ...metadata.supports, inserter: isInsertable },
+		// Registered here rather than in block.json, whose i18n schema does not
+		// translate example content. Feeds the inserter preview and the one the
+		// Site Editor shows above Styles > Blocks. The template swaps this CTA for
+		// the donate block on a donations-native site, which previews the real
+		// thing; the copy is deliberately non-empty so no generation is attempted.
+		example: {
+			attributes: {},
+			innerBlocks: [
+				{
+					name: 'core/paragraph',
+					attributes: {
+						content: __(
+							'Reporting like this takes time and costs money. If you value it, consider supporting our newsroom.',
+							'newspack-popups'
+						),
+					},
+				},
+				{
+					name: 'core/buttons',
+					innerBlocks: [ { name: 'core/button', attributes: { text: __( 'Donate', 'newspack-popups' ) } } ],
+				},
+			],
+			viewportWidth: 800,
+		},
 		title: __( 'Campaigns: Contextual Prompt', 'newspack-popups' ),
 		description: sprintf(
 			/* translators: %1$s: the edited content's post type label, e.g. "post", "page". */

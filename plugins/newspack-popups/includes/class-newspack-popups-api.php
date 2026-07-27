@@ -17,6 +17,25 @@ final class Newspack_Popups_API {
 	 */
 	public function __construct() {
 		add_action( 'rest_api_init', [ $this, 'register_api_endpoints' ] );
+		// Whether the site has a prompt to preview changes when content does, and
+		// the answer is cached — including the "nothing yet" answer, which is what
+		// a site looks like right up until its first prompt is published.
+		add_action( 'save_post', [ __CLASS__, 'flush_styling_preview_cache' ], 10, 2 );
+		add_action( 'delete_post', [ __CLASS__, 'flush_styling_preview_cache' ], 10, 2 );
+	}
+
+	/**
+	 * Drop the remembered styling preview post when a story that could change the
+	 * answer is written or removed.
+	 *
+	 * @param int     $post_id The post id.
+	 * @param WP_Post $post    The post.
+	 */
+	public static function flush_styling_preview_cache( $post_id, $post = null ) {
+		$post_type = $post instanceof WP_Post ? $post->post_type : get_post_type( $post_id );
+		if ( in_array( $post_type, [ 'post', 'page' ], true ) ) {
+			delete_transient( self::PREVIEW_POST_TRANSIENT );
+		}
 	}
 
 	/**
@@ -282,10 +301,16 @@ final class Newspack_Popups_API {
 				[
 					'post_type'              => $post_types,
 					'post_status'            => 'publish',
-					// The block's own delimiter, so the match cannot be a mention
-					// of the block in prose.
-					's'                      => '<!-- wp:' . Newspack_Popups_Contextual_Prompt_Block::BLOCK_NAME,
+					// The block's own delimiter, trailing space included, so the
+					// match is the serialized block itself rather than a mention of
+					// it in prose or a longer block name sharing the prefix.
+					's'                      => '<!-- wp:' . Newspack_Popups_Contextual_Prompt_Block::BLOCK_NAME . ' ',
 					'sentence'               => true,
+					// Block delimiters are HTML comments: they live in post_content
+					// and are stripped from search indexes, so this has to be a
+					// plain content match in the database.
+					'search_columns'         => [ 'post_content' ],
+					'ep_integrate'           => false,
 					'posts_per_page'         => 1,
 					'orderby'                => 'date',
 					'order'                  => 'DESC',
