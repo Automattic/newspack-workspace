@@ -10,7 +10,10 @@ import CustomAccess from './custom-access';
 
 jest.mock( './metering', () => () => null );
 jest.mock( './access-rules', () => ( { onChange } ) => (
-	<button data-testid="set-rules" onClick={ () => onChange( [ { name: 'active_subscription' } ] ) } />
+	<>
+		<button data-testid="set-rules" onClick={ () => onChange( [ { name: 'active_subscription' } ] ) } />
+		<button data-testid="set-subscription-rule" onClick={ () => onChange( [ { slug: 'subscription', value: [ 50 ] } ] ) } />
+	</>
 ) );
 
 describe( 'CustomAccess gate settings', () => {
@@ -80,6 +83,63 @@ describe( 'CustomAccess gate settings', () => {
 			fireEvent.click( graceToggle );
 
 			expect( onChange ).toHaveBeenCalledWith( expect.objectContaining( { payment_recovery_grace: true } ) );
+		} );
+
+		it( 'renders for a subscription rule that is not first in its group', () => {
+			const customAccess = {
+				active: true,
+				metering: { enabled: false },
+				// A gate authored over the REST API can group several rules together;
+				// only the first of each group reaches the rules editor.
+				access_rules: [
+					[
+						{ slug: 'email_domain', value: 'example.com' },
+						{ slug: 'subscription', value: [ 50 ] },
+					],
+				],
+				gate_layout_id: 456,
+			};
+
+			render( <CustomAccess customAccess={ customAccess } onChange={ jest.fn() } isNewsletter /> );
+
+			expect( screen.getByLabelText( GRACE_TOGGLE_LABEL ) ).toBeChecked();
+		} );
+
+		it( 'resets a stored false when the last subscription rule is removed', () => {
+			const onChange = jest.fn();
+			const customAccess = {
+				active: true,
+				metering: { enabled: false },
+				access_rules: [ [ { slug: 'subscription', value: [ 50 ] } ] ],
+				gate_layout_id: 456,
+				payment_recovery_grace: false,
+			};
+
+			render( <CustomAccess customAccess={ customAccess } onChange={ onChange } isNewsletter /> );
+
+			// The replacement rules carry no subscription rule, so the toggle
+			// disappears — the stored false must not survive to take effect
+			// invisibly if a subscription rule is added back later.
+			fireEvent.click( screen.getByTestId( 'set-rules' ) );
+
+			expect( onChange ).toHaveBeenCalledWith( expect.objectContaining( { payment_recovery_grace: true } ) );
+		} );
+
+		it( 'keeps a stored false when the rules still include a subscription rule', () => {
+			const onChange = jest.fn();
+			const customAccess = {
+				active: true,
+				metering: { enabled: false },
+				access_rules: [ [ { slug: 'subscription', value: [ 50 ] } ] ],
+				gate_layout_id: 456,
+				payment_recovery_grace: false,
+			};
+
+			render( <CustomAccess customAccess={ customAccess } onChange={ onChange } isNewsletter /> );
+
+			fireEvent.click( screen.getByTestId( 'set-subscription-rule' ) );
+
+			expect( onChange ).toHaveBeenCalledWith( expect.objectContaining( { payment_recovery_grace: false } ) );
 		} );
 	} );
 } );

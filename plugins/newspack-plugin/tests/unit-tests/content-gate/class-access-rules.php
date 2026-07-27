@@ -6,10 +6,12 @@
  */
 
 use Newspack\Access_Rules;
+use Newspack\Block_Visibility;
 use Newspack\Content_Gate;
 use Newspack\Content_Restriction_Control;
 use Newspack\Group_Subscription;
 use Newspack\Reader_Activation;
+use Newspack\User_Gate_Access;
 use Newspack\WooCommerce_Connection;
 
 /**
@@ -384,8 +386,10 @@ class Newspack_Test_Access_Rules extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test that an on-hold subscription with no scheduled payment retry does
-	 * not grant access — the retry window has passed or never existed.
+	 * Test that an on-hold subscription with no payment retry date does not
+	 * grant access. Woo Subscriptions deletes the date once a retry resolves
+	 * without a successor, so its absence means retries are done (or the retry
+	 * system never engaged) and the recovery window is closed.
 	 */
 	public function test_owner_denied_when_on_hold_without_scheduled_retry() {
 		$this->create_subscription( [ 'status' => 'on-hold' ] );
@@ -396,10 +400,13 @@ class Newspack_Test_Access_Rules extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test that an on-hold subscription with a payment retry scheduled in the
-	 * past does not grant access.
+	 * Test that an overdue payment retry still grants access. Action Scheduler
+	 * can run minutes or hours behind on a busy site; the retry date outliving
+	 * its due time means the retry has not run yet, not that recovery ended —
+	 * and denying here would gate the reader at exactly the boundary this grace
+	 * exists to cover.
 	 */
-	public function test_owner_denied_when_retry_date_is_past() {
+	public function test_owner_keeps_access_when_retry_is_overdue() {
 		$this->create_subscription(
 			[
 				'status' => 'on-hold',
@@ -409,7 +416,7 @@ class Newspack_Test_Access_Rules extends WP_UnitTestCase {
 
 		$has_access = Access_Rules::has_active_subscription( self::$owner_user_id, [ self::$product_id ] );
 
-		$this->assertFalse( $has_access, 'Owner should not have access when the last scheduled payment retry is in the past.' );
+		$this->assertTrue( $has_access, 'Owner should keep access while an overdue payment retry is still pending.' );
 	}
 
 	/**
@@ -601,6 +608,124 @@ class Newspack_Test_Access_Rules extends WP_UnitTestCase {
 		$this->assertFalse(
 			$restricted_with_grace_on,
 			'Flipping the stored setting to grace-ON must let the same on-hold-in-retry reader through.'
+		);
+
+		wp_delete_post( $plumbing_gate_id, true );
+	}
+
+	/**
+	 * Create a published gate whose Paid access rules require the test product
+	 * and whose payment-recovery grace is stored as OFF.
+	 *
+	 * @param string $title Gate title.
+	 * @return int Gate ID.
+	 */
+	private function create_grace_off_gate( $title ) {
+		$gate_id = $this->factory->post->create(
+			[
+				'post_type'   => Content_Gate::GATE_CPT,
+				'post_status' => 'publish',
+				'post_title'  => $title,
+			]
+		);
+		update_post_meta(
+			$gate_id,
+			'custom_access',
+			[
+				'active'                 => true,
+				'access_rules'           => [
+					[
+						[
+							'slug'  => 'subscription',
+							'value' => [ self::$product_id ],
+						],
+					],
+				],
+				'payment_recovery_grace' => false,
+			]
+		);
+		return $gate_id;
+	}
+
+	/**
+	 * Call-site plumbing test, member-content block path: a block gated by a
+	 * gate with stored grace OFF must stay hidden from an on-hold-in-retry
+	 * reader, and appear once the stored setting is flipped ON.
+	 *
+	 * Same rationale as the front-end restriction plumbing test: every fallback
+	 * in the chain is grace-ON, so this call site dropping its context argument
+	 * would leave the engine tests green while the publisher's off-switch did
+	 * nothing here.
+	 */
+	public function test_stored_grace_off_hides_block_via_block_visibility() {
+		$this->create_subscription(
+			[
+				'status' => 'on-hold',
+				'times'  => [ 'payment_retry' => time() + HOUR_IN_SECONDS ],
+			]
+		);
+
+		$plumbing_gate_id = $this->create_grace_off_gate( 'Block Plumbing Gate' );
+		$block            = [
+			'blockName' => 'core/group',
+			'attrs'     => [
+				'newspackAccessControlMode'    => 'gate',
+				'newspackAccessControlGateIds' => [ $plumbing_gate_id ],
+			],
+			'innerHTML' => '<div>members only</div>',
+		];
+
+		wp_set_current_user( self::$owner_user_id );
+
+		Block_Visibility::reset_cache_for_tests();
+		$this->assertSame(
+			'',
+			Block_Visibility::filter_render_block( '<div>members only</div>', $block ),
+			'A gate with stored payment_recovery_grace=false must hide its gated block from an on-hold-in-retry reader.'
+		);
+
+		// Flip only the stored setting; the same reader must now see the block.
+		Content_Gate::update_custom_access_settings( $plumbing_gate_id, [ 'payment_recovery_grace' => true ] );
+		Block_Visibility::reset_cache_for_tests();
+		$this->assertSame(
+			'<div>members only</div>',
+			Block_Visibility::filter_render_block( '<div>members only</div>', $block ),
+			'Flipping the stored setting to grace-ON must reveal the block to the same reader.'
+		);
+
+		Block_Visibility::reset_cache_for_tests();
+		wp_set_current_user( 0 );
+		wp_delete_post( $plumbing_gate_id, true );
+	}
+
+	/**
+	 * Call-site plumbing test, user-profile panel path: the gate-bypass report
+	 * shown on a reader's wp-admin profile must reflect the gate's stored grace
+	 * setting rather than the grace-ON default, so it doesn't tell an admin the
+	 * reader can bypass a gate that in fact restricts them.
+	 */
+	public function test_stored_grace_off_denies_bypass_via_user_gate_access() {
+		$this->create_subscription(
+			[
+				'status' => 'on-hold',
+				'times'  => [ 'payment_retry' => time() + HOUR_IN_SECONDS ],
+			]
+		);
+
+		$plumbing_gate_id = $this->create_grace_off_gate( 'Profile Panel Plumbing Gate' );
+
+		$evaluation_with_grace_off = User_Gate_Access::evaluate_gate_for_user( Content_Gate::get_gate( $plumbing_gate_id ), self::$owner_user_id );
+		$this->assertFalse(
+			$evaluation_with_grace_off['can_bypass'],
+			'A gate with stored payment_recovery_grace=false must report no bypass for an on-hold-in-retry reader.'
+		);
+
+		// Flip only the stored setting; the same reader must now be reported as bypassing.
+		Content_Gate::update_custom_access_settings( $plumbing_gate_id, [ 'payment_recovery_grace' => true ] );
+		$evaluation_with_grace_on = User_Gate_Access::evaluate_gate_for_user( Content_Gate::get_gate( $plumbing_gate_id ), self::$owner_user_id );
+		$this->assertTrue(
+			$evaluation_with_grace_on['can_bypass'],
+			'Flipping the stored setting to grace-ON must report the same reader as bypassing the gate.'
 		);
 
 		wp_delete_post( $plumbing_gate_id, true );

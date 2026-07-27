@@ -95,10 +95,20 @@ class WooCommerce_Connection {
 
 	/**
 	 * Whether a subscription is in payment recovery: on-hold after a failed
-	 * renewal payment, with a future retry scheduled by the Woo Subscriptions
-	 * failed-payment retry system (the dunning window). Once retries are
-	 * exhausted the `payment_retry` date stops being renewed, so the recovery
-	 * window closes on its own.
+	 * renewal payment, with a retry still outstanding in the Woo Subscriptions
+	 * failed-payment retry system (the dunning window).
+	 *
+	 * The presence of a `payment_retry` date is the signal, not whether that
+	 * date is still in the future. Woo Subscriptions sets the date when it
+	 * applies a retry rule and deletes it as soon as the retry leaves
+	 * pending/processing without a successor being scheduled
+	 * (`WCS_Retry_Manager::maybe_delete_payment_retry_date()`), so the date
+	 * exists exactly while a retry is outstanding and the recovery window
+	 * closes on its own once retries are exhausted. Comparing against the
+	 * current time would instead deny access whenever the Action Scheduler
+	 * queue runs behind — an overdue retry is still a pending one. This matches
+	 * how the rest of the plugin reads the date (see `On_Hold_Duration` and the
+	 * subscription-cleanup CLI command).
 	 *
 	 * @param \WC_Subscription|false $subscription Subscription object.
 	 *
@@ -107,7 +117,7 @@ class WooCommerce_Connection {
 	public static function is_subscription_in_payment_recovery( $subscription ) {
 		$in_payment_recovery = $subscription
 			&& $subscription->has_status( 'on-hold' )
-			&& (int) $subscription->get_time( 'payment_retry' ) > time();
+			&& (int) $subscription->get_time( 'payment_retry' ) > 0;
 
 		/**
 		 * Filters whether a subscription counts as being in payment recovery.
@@ -118,6 +128,13 @@ class WooCommerce_Connection {
 		 * `force_allow_failed_payment_retry`). Sites relying on gateway-managed
 		 * retries instead (e.g. Stripe smart retries) get no recovery window from
 		 * the default logic and should hook this filter to define their own.
+		 *
+		 * Whatever signal a filter uses must be self-closing. Returning true for
+		 * any on-hold subscription — without checking that a retry is genuinely
+		 * outstanding — grants paid access indefinitely to every subscription
+		 * that is parked on-hold, including ones the retry system gave up on long
+		 * ago. Gate custom logic on a real pending-retry record (e.g. the
+		 * gateway's own dunning state), not on the status alone.
 		 *
 		 * @param bool                   $in_payment_recovery Whether the subscription is in payment recovery.
 		 * @param \WC_Subscription|false $subscription        Subscription object.
@@ -434,6 +451,11 @@ class WooCommerce_Connection {
 			array_keys( \wcs_get_users_subscriptions( $user_id ) ),
 			function( $acc, $subscription_id ) use ( $product_ids, $user_id, $include_payment_recovery ) {
 				$subscription = \wcs_get_subscription( $subscription_id );
+				// wcs_get_subscription() returns false when the subscription post is
+				// gone (deleted, or a stale ID left behind on the user).
+				if ( ! $subscription ) {
+					return $acc;
+				}
 				$has_required_products = false;
 				if (
 					$subscription->has_status( self::ACTIVE_SUBSCRIPTION_STATUSES )
