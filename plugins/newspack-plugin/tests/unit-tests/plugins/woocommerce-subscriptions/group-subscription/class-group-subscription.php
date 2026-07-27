@@ -362,6 +362,42 @@ class Test_Group_Subscription extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The limit is projected from the IDs that would genuinely become members, not from the raw
+	 * batch: an ID the add would skip anyway (an existing member, a non-reader) takes no seat, so
+	 * counting it would reject an add that in fact fits.
+	 */
+	public function test_update_members_ignores_non_addable_ids_when_projecting_the_limit() {
+		$owner_id         = $this->create_reader_user();
+		$existing_member  = $this->create_reader_user();
+		$new_member       = $this->create_reader_user();
+		// An editor is not a reader: reader status falls back to the reader roles (subscriber,
+		// customer) when the reader meta is absent, so a plain no-meta subscriber would still pass.
+		$non_reader       = wp_insert_user(
+			[
+				'user_login' => 'not-a-reader-' . wp_generate_password( 6, false ),
+				'user_pass'  => wp_generate_password(),
+				'user_email' => 'not-a-reader-' . wp_generate_password( 6, false ) . '@test.com',
+				'role'       => 'editor',
+			]
+		);
+		$this->user_ids[] = $non_reader;
+
+		$sub = $this->create_group_subscription( $owner_id, 3 ); // Owner + two member seats.
+		$this->add_member( $existing_member, $sub );
+
+		// Only $new_member takes a seat, so the batch fits the one remaining seat -- even though its
+		// three IDs would overshoot a limit projected from the unfiltered count.
+		$result = Group_Subscription::update_members( $sub, [ $existing_member, $non_reader, $new_member ] );
+		$this->assertNotWPError( $result, 'A batch whose only real addition fits the limit must not be rejected.' );
+		$this->assertSame(
+			[ $new_member ],
+			array_keys( $result['members_added'] ),
+			'Only the genuinely-addable reader should be reported as added.'
+		);
+		$this->assertContains( (int) $new_member, array_map( 'intval', Group_Subscription::get_members( $sub ) ), 'The new member should have been added.' );
+	}
+
+	/**
 	 * The limit check only bounds additions, so a removal-only call must succeed even on a group that
 	 * is already over its limit (e.g. after the limit was lowered) -- a removal can never push a group
 	 * further over capacity, and rejecting it would strand the already-persisted removal.

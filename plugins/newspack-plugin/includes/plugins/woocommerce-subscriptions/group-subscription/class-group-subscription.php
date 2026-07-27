@@ -601,6 +601,20 @@ class Group_Subscription {
 			}
 		}
 
+		// Narrow the additions to the IDs that would genuinely become members: non-readers and users
+		// who already hold this subscription's member meta are no-ops. Filtering them here rather
+		// than in the add loop below keeps the limit projection honest -- counting a no-op ID would
+		// overstate the post-add total and reject an add that in fact fits.
+		$members_to_add = array_values(
+			array_filter(
+				$members_to_add,
+				function ( $member_id ) use ( $subscription ) {
+					return Reader_Activation::is_user_reader( $member_id )
+						&& ! in_array( $subscription->get_id(), self::get_group_subscriptions_for_user( $member_id, true ), true );
+				}
+			)
+		);
+
 		// The limit only bounds additions, so skip the check on removal-only calls: a removal can
 		// never push a group over its limit, and running it there would spuriously 409 an admin
 		// removing a member from an already-over-capacity group (e.g. after lowering the limit).
@@ -650,19 +664,13 @@ class Group_Subscription {
 				$pending_invite_emails[] = strtolower( $invite['email'] );
 			}
 		}
+		// Keyed by member ID: cancel_invites() and the caller want the addresses, but the failure log
+		// below wants to name the affected members without carrying their addresses (see there).
 		$invites_to_cancel = [];
 
-		// Add new members.
+		// Add new members. $members_to_add holds only genuinely-addable readers at this point, so the
+		// reader and duplicate-meta guards live in the filter above rather than here.
 		foreach ( $members_to_add as $member_id ) {
-			if ( ! Reader_Activation::is_user_reader( $member_id ) ) {
-				continue;
-			}
-
-			// Avoid adding duplicate meta entries.
-			$existing_group_subscription_ids = self::get_group_subscriptions_for_user( $member_id, true );
-			if ( in_array( $subscription->get_id(), $existing_group_subscription_ids, true ) ) {
-				continue;
-			}
 			if ( \add_user_meta( $member_id, self::GROUP_SUBSCRIPTION_USER_META_KEY, $subscription->get_id() ) ) {
 				\update_user_meta( $member_id, self::get_member_joined_meta_key( $subscription->get_id() ), time() );
 				$member_email                = \get_userdata( $member_id )->user_email;
@@ -671,17 +679,21 @@ class Group_Subscription {
 					'url'   => \get_edit_user_link( $member_id ),
 				];
 				if ( in_array( strtolower( $member_email ), $pending_invite_emails, true ) ) {
-					$invites_to_cancel[] = $member_email;
+					$invites_to_cancel[ $member_id ] = $member_email;
 				}
 			}
 		}
 
 		if ( ! empty( $invites_to_cancel ) ) {
-			$cancelled = Group_Subscription_Invite::cancel_invites( $subscription, $invites_to_cancel );
+			$cancelled = Group_Subscription_Invite::cancel_invites( $subscription, array_values( $invites_to_cancel ) );
 			if ( is_wp_error( $cancelled ) ) {
 				// Not fatal -- the members were added -- but it leaves stale invites still consuming
 				// seats, so surface it rather than swallowing it. is_group_subscription() returns
 				// false in some My Account contexts, which is the likeliest cause.
+				// The affected people are named by user ID, not address: the newspack_log pipeline
+				// only singles out a top-level `user_email` key for its own handling, which a batch
+				// cannot use, so addresses in `data` would be plain payload. The IDs resolve to the
+				// same readers, and the stale invites themselves stay on the subscription.
 				\do_action(
 					'newspack_log',
 					'newspack_group_subscription_invite_cancel_failed',
@@ -690,7 +702,7 @@ class Group_Subscription {
 						'type' => 'error',
 						'data' => [
 							'subscription_id' => $subscription->get_id(),
-							'emails'          => $invites_to_cancel,
+							'member_ids'      => array_keys( $invites_to_cancel ),
 						],
 					]
 				);
@@ -703,7 +715,8 @@ class Group_Subscription {
 			'members_removed'   => $members_removed,
 			// The emails whose pending invites this add fulfilled and cancelled, so callers (the
 			// admin JS) can drop the now-stale invite rows instead of leaving them counting a seat.
-			'invites_cancelled' => $invites_to_cancel,
+			// array_values() drops the member-ID keys, so this serializes as a JSON array for the JS.
+			'invites_cancelled' => array_values( $invites_to_cancel ),
 		];
 	}
 
