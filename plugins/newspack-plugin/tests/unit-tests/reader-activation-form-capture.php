@@ -237,7 +237,14 @@ class Test_Form_Capture extends WP_UnitTestCase {
 	 * The capture script is enqueued only when the integration is enabled.
 	 */
 	public function test_capture_script_enqueued_only_when_enabled() {
-		$integration = Integrations::get_integration( Form_Capture::ID );
+		// Constructed locally: registry-held instances can predate this test's
+		// hook backup (suites that reset the Integrations registry re-create
+		// them mid-run, and tear_down's hook restoration strips their
+		// constructor-time add_action calls), so has_action() on the registry
+		// instance reads false in a full-suite run despite correct production
+		// wiring. A fresh instance registers its hooks inside this test's
+		// backup scope and pins the contract order-independently.
+		$integration = new Form_Capture();
 
 		$this->assertSame( 20, has_action( 'wp_enqueue_scripts', [ $integration, 'enqueue_scripts' ] ), 'Enqueue must be hooked at priority 20.' );
 
