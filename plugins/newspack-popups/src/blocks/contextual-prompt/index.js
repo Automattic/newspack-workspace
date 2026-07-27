@@ -32,8 +32,13 @@ export const registerContextualPromptBlock = () => {
 
 	const postTypeLabel = window.newspack_popups_blocks_data?.post_type_label || __( 'post', 'newspack-popups' );
 
+	// Registration is wider than insertion: the Site Editor registers the block
+	// so it appears under Styles > Blocks, but cannot author one.
+	const isInsertable = Boolean( window.newspack_popups_blocks_data?.contextual_prompts_insertable );
+
 	registerBlockType( metadata.name, {
 		...metadata,
+		supports: { ...metadata.supports, inserter: isInsertable },
 		title: __( 'Campaigns: Contextual Prompt', 'newspack-popups' ),
 		description: sprintf(
 			/* translators: %1$s: the edited content's post type label, e.g. "post", "page". */

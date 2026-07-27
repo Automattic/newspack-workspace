@@ -232,18 +232,19 @@ class EditorAssetsTest extends WP_UnitTestCase {
 
 		$blocks_data = $this->get_localized_data( 'newspack-popups-blocks', 'newspack_popups_blocks_data' );
 		self::assertNotEmpty( $blocks_data['contextual_prompts_enabled'] );
+		self::assertNotEmpty( $blocks_data['contextual_prompts_insertable'] );
 		self::assertTrue( wp_script_is( 'newspack-popups', 'enqueued' ) );
 		self::assertStringContainsString( 'documentSettings.js', wp_scripts()->registered['newspack-popups']->src );
 		self::assertNotNull( $this->get_localized_data( 'newspack-popups', 'newspackPopupsContextualPrompt' ) );
 	}
 
 	/**
-	 * Test the Contextual Prompt block and document panel are disabled on a
-	 * post type the generation API rejects: public without an archive. The
-	 * document settings script gates on the same supported list, so it does
-	 * not enqueue either.
+	 * Test the Contextual Prompt block cannot be authored on a post type the
+	 * generation API rejects: public without an archive. The document settings
+	 * script gates on the same supported list, so it does not enqueue either.
+	 * The block still registers, so the Site Editor can style it.
 	 */
-	public function test_contextual_prompt_is_disabled_on_unsupported_post_types() {
+	public function test_contextual_prompt_is_not_insertable_on_unsupported_post_types() {
 		register_post_type( 'archiveless_cpt', [ 'public' => true ] );
 		update_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION, true );
 		$this->set_editor_screen( 'archiveless_cpt' );
@@ -252,8 +253,27 @@ class EditorAssetsTest extends WP_UnitTestCase {
 		do_action( 'enqueue_block_editor_assets' );
 
 		$blocks_data = $this->get_localized_data( 'newspack-popups-blocks', 'newspack_popups_blocks_data' );
-		self::assertEmpty( $blocks_data['contextual_prompts_enabled'] );
+		self::assertNotEmpty( $blocks_data['contextual_prompts_enabled'] );
+		self::assertEmpty( $blocks_data['contextual_prompts_insertable'] );
 		self::assertFalse( wp_script_is( 'newspack-popups', 'enqueued' ) );
+	}
+
+	/**
+	 * Test the block registers off the post editor, so the Site Editor lists it
+	 * under Styles > Blocks — where the wizard's block-theme handoff sends
+	 * publishers — while offering no way to insert one there.
+	 */
+	public function test_contextual_prompt_registers_but_is_not_insertable_off_post_editors() {
+		update_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION, true );
+		$this->ensure_dist_asset_files();
+		set_current_screen( 'site-editor' );
+
+		do_action( 'enqueue_block_assets' );
+		do_action( 'enqueue_block_editor_assets' );
+
+		$blocks_data = $this->get_localized_data( 'newspack-popups-blocks', 'newspack_popups_blocks_data' );
+		self::assertNotEmpty( $blocks_data['contextual_prompts_enabled'] );
+		self::assertEmpty( $blocks_data['contextual_prompts_insertable'] );
 	}
 
 	/**

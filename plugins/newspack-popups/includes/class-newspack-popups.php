@@ -824,9 +824,12 @@ final class Newspack_Popups {
 		}
 
 		// The blocks bundle also loads in the widgets editor, Site Editor and
-		// customizer, where the Contextual Prompt block cannot work: it needs the
-		// core/editor post context. Only post-editor screens carry a post type,
-		// and the generation API only accepts the popups-supported post types.
+		// customizer, where the Contextual Prompt block cannot be authored: it
+		// needs the core/editor post context. Only post-editor screens carry a
+		// post type, and the generation API only accepts the popups-supported
+		// post types. The block still registers everywhere the feature is on, so
+		// the Site Editor lists it under Styles > Blocks — which is where the
+		// wizard's block-theme handoff sends publishers to style it.
 		$screen                   = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
 		$is_supported_post_editor = $screen && ! empty( $screen->post_type ) && in_array( $screen->post_type, Newspack_Popups_Model::get_default_popup_post_types(), true );
 
@@ -843,27 +846,30 @@ final class Newspack_Popups {
 			'newspack-popups-blocks',
 			'newspack_popups_blocks_data',
 			[
-				'custom_placements'          => Newspack_Popups_Custom_Placements::get_custom_placements(),
-				'endpoint'                   => '/newspack-popups/v1/prompts',
-				'post_type'                  => self::NEWSPACK_POPUPS_CPT,
-				'is_prompt'                  => self::NEWSPACK_POPUPS_CPT == get_post_type(),
+				'custom_placements'             => Newspack_Popups_Custom_Placements::get_custom_placements(),
+				'endpoint'                      => '/newspack-popups/v1/prompts',
+				'post_type'                     => self::NEWSPACK_POPUPS_CPT,
+				'is_prompt'                     => self::NEWSPACK_POPUPS_CPT == get_post_type(),
 				// Gates client-side registration of the Contextual Prompt block:
-				// requires a supported-post-type editor screen plus both the
-				// rollout flag and the admin opt-in, so the block cannot be
-				// inserted before the AI disclosure is accepted.
-				'contextual_prompts_enabled' => $is_supported_post_editor && self::is_contextual_prompts_enabled() && Newspack_Popups_Settings::is_ai_copy_assistant_enabled(),
+				// the rollout flag plus the admin opt-in, so nothing registers
+				// before the AI disclosure is accepted.
+				'contextual_prompts_enabled'    => self::is_contextual_prompts_enabled() && Newspack_Popups_Settings::is_ai_copy_assistant_enabled(),
+				// Whether this screen can author one. Registration is wider than
+				// insertion so the Site Editor can style the block, but only a
+				// supported post editor offers it in the inserter.
+				'contextual_prompts_insertable' => $is_supported_post_editor,
 				// So the editor previews the Contextual Prompt CTA in the same
 				// accent the front end resolves at render.
-				'accent_color'               => Newspack_Popups_Contextual_Prompt_Block::get_accent_color(),
+				'accent_color'                  => Newspack_Popups_Contextual_Prompt_Block::get_accent_color(),
 				// The edited content's own noun ("post", "page", "listing"…), so
 				// prompt UI strings speak the publisher's language.
-				'post_type_label'            => self::get_current_post_type_label(),
+				'post_type_label'               => self::get_current_post_type_label(),
 				// Whether the Contextual Prompt CTA is the native donate block
 				// or a plain button.
-				'donations_native'           => Newspack_Popups_Contextual_Prompt_Block::use_donate_block(),
+				'donations_native'              => Newspack_Popups_Contextual_Prompt_Block::use_donate_block(),
 				// Default target for the plain-button CTA: the donor landing
 				// page, when one is configured in Campaigns settings.
-				'donor_landing_url'          => self::get_donor_landing_url(),
+				'donor_landing_url'             => self::get_donor_landing_url(),
 			]
 		);
 
