@@ -238,10 +238,11 @@ class Access_Rules {
 	 *
 	 * Only rules that (a) declare `supports_anonymous` and (b) have a populated
 	 * `value` are considered. An unpopulated rule is treated as "not configured"
-	 * rather than "matches everyone" — Access_Rules's underlying evaluators
-	 * return true for empty values as the rule's own no-constraint semantics,
-	 * which is correct for the rule in isolation but must not silently bypass
-	 * registration here.
+	 * rather than "matches everyone". How an evaluator itself reads an empty
+	 * value varies by rule — `email_domain` returns true (no constraint), while
+	 * `one_time_purchase` denies (unconfigured rules must never grant) — so this
+	 * check deliberately does not delegate that decision to the evaluator, and a
+	 * rule opting into `supports_anonymous` must not assume either reading.
 	 *
 	 * Groups containing any non-eligible rule are dropped (the AND-within-group
 	 * semantics would force the group to fail for an anonymous visitor anyway,
@@ -565,8 +566,15 @@ class Access_Rules {
 						}
 					}
 				} elseif ( in_array( $value['duration_unit'], [ 'days', 'months' ], true ) && $value['duration_value'] > 0 ) {
-					// Note: month arithmetic follows strtotime()'s rollover semantics
-					// (e.g. "-1 month" from July 31 normalizes through June 31 to July 1).
+					// One cutoff shared by every order, rather than a per-order expiry
+					// of purchase + N. Month arithmetic follows strtotime()'s rollover
+					// semantics, and rolling backwards from now is the conservative
+					// direction: "-1 month" from Mar 1 lands on Feb 1, so a Jan 31
+					// purchase stops granting once the calendar month is up, whereas
+					// "+1 month" from Jan 31 rolls forward through Feb 31 to Mar 3 and
+					// would grant three extra days. The two readings agree except on
+					// month-end anchors, where this one is both deny-biased and closer
+					// to what "N months from purchase" means on a calendar.
 					$cutoff       = strtotime( sprintf( '-%d %s', $value['duration_value'], $value['duration_unit'] ) );
 					$has_purchase = self::customer_bought_product_after( $user_id, $email, $value['product_ids'], $cutoff );
 				}
@@ -603,10 +611,17 @@ class Access_Rules {
 	 * @return bool
 	 */
 	private static function customer_bought_product_after( $user_id, $email, $product_ids, $cutoff ) {
+		$customer = array_values( array_filter( [ $user_id, $email ] ) );
+		// Fail closed with no identity to match: both WooCommerce order stores drop
+		// an empty `customer` constraint, which would widen the query to every
+		// customer's paid orders in the window.
+		if ( empty( $customer ) ) {
+			return false;
+		}
 		$paid_statuses = function_exists( 'wc_get_is_paid_statuses' ) ? \wc_get_is_paid_statuses() : [ 'processing', 'completed' ];
 		$orders        = \wc_get_orders(
 			[
-				'customer'     => array_values( array_filter( [ $user_id, $email ] ) ),
+				'customer'     => $customer,
 				'status'       => $paid_statuses,
 				'date_created' => '>' . $cutoff,
 				'limit'        => -1,

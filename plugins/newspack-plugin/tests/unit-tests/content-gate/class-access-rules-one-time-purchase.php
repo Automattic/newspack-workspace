@@ -451,4 +451,164 @@ class Newspack_Test_Access_Rules_One_Time_Purchase extends WP_UnitTestCase {
 			'A guest order matching the reader billing email should grant lifetime access.'
 		);
 	}
+
+	/**
+	 * A guest order whose billing email differs only in case still grants access:
+	 * WooCommerce matches the email in SQL, under a case-insensitive collation.
+	 */
+	public function test_guest_order_matches_billing_email_case_insensitively() {
+		$purchaser_email = get_userdata( self::$purchaser_user_id )->user_email;
+		$this->create_one_time_order(
+			[
+				'customer_id'   => 0,
+				'billing_email' => strtoupper( $purchaser_email ),
+				'date_created'  => gmdate( 'Y-m-d H:i:s', strtotime( '-10 days' ) ),
+			]
+		);
+
+		$this->assertTrue(
+			Access_Rules::has_one_time_purchase( self::$purchaser_user_id, $this->get_rule_value() ),
+			'A differently-cased billing email should still match within a finite duration.'
+		);
+		$this->assertTrue(
+			Access_Rules::has_one_time_purchase( self::$purchaser_user_id, $this->get_rule_value( [ 'duration_unit' => 'forever' ] ) ),
+			'A differently-cased billing email should still match for lifetime access.'
+		);
+	}
+
+	/**
+	 * With no user ID and no resolvable email there is nothing to match a purchase
+	 * against, so the rule denies rather than querying every customer's orders.
+	 */
+	public function test_missing_identity_denies_access() {
+		$this->create_one_time_order( [ 'date_created' => gmdate( 'Y-m-d H:i:s', strtotime( '-10 days' ) ) ] );
+
+		$this->assertFalse(
+			Access_Rules::has_one_time_purchase( 0, $this->get_rule_value() ),
+			'An anonymous evaluation should never match another customer\'s order within a finite duration.'
+		);
+		$this->assertFalse(
+			Access_Rules::has_one_time_purchase( 0, $this->get_rule_value( [ 'duration_unit' => 'forever' ] ) ),
+			'An anonymous evaluation should never match another customer\'s order for lifetime access.'
+		);
+	}
+
+	/**
+	 * The finite window compares strictly against its cutoff: an order created
+	 * exactly at the cutoff is already outside it.
+	 */
+	public function test_cutoff_boundary_is_strict() {
+		global $orders_database;
+		$thirty_days_ago = strtotime( '-30 days' );
+
+		$this->create_one_time_order( [ 'date_created' => gmdate( 'Y-m-d H:i:s', $thirty_days_ago ) ] );
+		$this->assertFalse(
+			Access_Rules::has_one_time_purchase( self::$purchaser_user_id, $this->get_rule_value() ),
+			'An order created exactly at the 30-day cutoff should be outside the window.'
+		);
+
+		$orders_database = [];
+		Access_Rules::flush_one_time_purchase_memo();
+
+		$this->create_one_time_order( [ 'date_created' => gmdate( 'Y-m-d H:i:s', $thirty_days_ago + HOUR_IN_SECONDS ) ] );
+		$this->assertTrue(
+			Access_Rules::has_one_time_purchase( self::$purchaser_user_id, $this->get_rule_value() ),
+			'An order created an hour inside the cutoff should grant access.'
+		);
+	}
+
+	/**
+	 * The months window is anchored on `now - N months` — one cutoff shared by
+	 * every order — rather than a per-order `purchase + N months` expiry. The two
+	 * readings only diverge on month-end anchors (PHP rolls "+1 month" from
+	 * January 31 forward through February 31 to March 3, while "-1 month" from
+	 * March 1 lands on February 1), where this anchor is the deny-biased one.
+	 */
+	public function test_months_window_is_anchored_on_now_minus_duration() {
+		global $orders_database;
+		$twelve_months_ago = strtotime( '-12 months' );
+		$twelve_month_rule = $this->get_rule_value(
+			[
+				'duration_value' => 12,
+				'duration_unit'  => 'months',
+			]
+		);
+
+		$this->create_one_time_order( [ 'date_created' => gmdate( 'Y-m-d H:i:s', $twelve_months_ago ) ] );
+		$this->assertFalse(
+			Access_Rules::has_one_time_purchase( self::$purchaser_user_id, $twelve_month_rule ),
+			'An order created exactly 12 months ago should be outside the 12-month window.'
+		);
+
+		$orders_database = [];
+		Access_Rules::flush_one_time_purchase_memo();
+
+		$this->create_one_time_order( [ 'date_created' => gmdate( 'Y-m-d H:i:s', $twelve_months_ago + DAY_IN_SECONDS ) ] );
+		$this->assertTrue(
+			Access_Rules::has_one_time_purchase( self::$purchaser_user_id, $twelve_month_rule ),
+			'An order created a day inside the 12-month cutoff should grant access.'
+		);
+	}
+
+	/**
+	 * The site timezone doesn't shift the window: the cutoff and the order date
+	 * are both absolute Unix timestamps, never locally formatted dates.
+	 */
+	public function test_window_is_independent_of_site_timezone() {
+		global $orders_database;
+		// UTC+14 — a timezone-sensitive comparison would shift the window by
+		// more than half a day, which the one-day durations below would expose.
+		update_option( 'timezone_string', 'Pacific/Kiritimati' );
+		$one_day_rule = $this->get_rule_value( [ 'duration_value' => 1 ] );
+
+		$this->create_one_time_order( [ 'date_created' => gmdate( 'Y-m-d H:i:s', strtotime( '-25 hours' ) ) ] );
+		$this->assertFalse(
+			Access_Rules::has_one_time_purchase( self::$purchaser_user_id, $one_day_rule ),
+			'A purchase 25 hours ago should be outside a one-day window whatever the site timezone.'
+		);
+
+		$orders_database = [];
+		Access_Rules::flush_one_time_purchase_memo();
+
+		$this->create_one_time_order( [ 'date_created' => gmdate( 'Y-m-d H:i:s', strtotime( '-23 hours' ) ) ] );
+		$this->assertTrue(
+			Access_Rules::has_one_time_purchase( self::$purchaser_user_id, $one_day_rule ),
+			'A purchase 23 hours ago should be inside a one-day window whatever the site timezone.'
+		);
+
+		update_option( 'timezone_string', '' );
+	}
+
+	/**
+	 * A variation ID stored directly in the rule value grants access on both
+	 * duration paths. Variations aren't offered as product options (the rule
+	 * lists simple and variable products), and the sanitizer doesn't whitelist
+	 * IDs against them, so a value pointing at a variation is honored as written.
+	 */
+	public function test_variation_id_stored_in_rule_value_grants_access() {
+		$variation_id = 999;
+		$this->create_one_time_order(
+			[
+				'date_created' => gmdate( 'Y-m-d H:i:s', strtotime( '-10 days' ) ),
+				'items'        => [
+					new WC_Order_Item_Product(
+						[
+							'product_id'   => self::$prepaid_product_id,
+							'variation_id' => $variation_id,
+						]
+					),
+				],
+			]
+		);
+		$variation_rule = $this->get_rule_value( [ 'product_ids' => [ $variation_id ] ] );
+
+		$this->assertTrue(
+			Access_Rules::has_one_time_purchase( self::$purchaser_user_id, $variation_rule ),
+			'A stored variation ID should grant access within a finite duration.'
+		);
+		$this->assertTrue(
+			Access_Rules::has_one_time_purchase( self::$purchaser_user_id, array_merge( $variation_rule, [ 'duration_unit' => 'forever' ] ) ),
+			'A stored variation ID should grant lifetime access.'
+		);
+	}
 }

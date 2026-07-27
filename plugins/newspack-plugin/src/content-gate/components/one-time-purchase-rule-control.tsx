@@ -11,7 +11,7 @@
 /**
  * WordPress dependencies.
  */
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 import { Flex, FlexBlock, FormTokenField as CoreFormTokenField, SelectControl, TextControl } from '@wordpress/components';
 
 const DURATION_UNITS = [ 'days', 'months', 'forever' ] as const;
@@ -47,6 +47,48 @@ export function normalizeOneTimePurchaseValue( value: unknown ): OneTimePurchase
 	};
 }
 
+/**
+ * FormTokenField identifies a token by its display string, so two products
+ * sharing a name would be indistinguishable — selecting one token would select
+ * every ID carrying that name. Build a bijection between product IDs and token
+ * strings instead, appending the ID to any name that isn't unique. A stored ID
+ * absent from the options list (a variation, or a deleted product) keeps a
+ * `#<id>` token so editing the field doesn't silently drop it.
+ */
+function getProductTokens( options: RuleOption[], productIds: Array< string | number > ) {
+	const nameCounts = new Map< string, number >();
+	options.forEach( option => nameCounts.set( option.label, ( nameCounts.get( option.label ) ?? 0 ) + 1 ) );
+
+	const tokenByValue = new Map< string, string >();
+	const valueByToken = new Map< string, string | number >();
+	const addToken = ( value: string | number, token: string ) => {
+		tokenByValue.set( String( value ), token );
+		valueByToken.set( token, value );
+	};
+
+	options.forEach( option => {
+		const isAmbiguous = 1 < ( nameCounts.get( option.label ) ?? 0 );
+		addToken(
+			option.value,
+			isAmbiguous
+				? sprintf(
+						// translators: 1: product name, 2: product ID.
+						__( '%1$s (#%2$s)', 'newspack-plugin' ),
+						option.label,
+						String( option.value )
+				  )
+				: option.label
+		);
+	} );
+	productIds.forEach( productId => {
+		if ( ! tokenByValue.has( String( productId ) ) ) {
+			addToken( productId, `#${ productId }` );
+		}
+	} );
+
+	return { tokenByValue, valueByToken };
+}
+
 export default function OneTimePurchaseRuleControl( {
 	value,
 	onChange,
@@ -63,11 +105,10 @@ export default function OneTimePurchaseRuleControl( {
 } ) {
 	const currentValue = normalizeOneTimePurchaseValue( value );
 	const isFiniteDuration = 'days' === currentValue.duration_unit || 'months' === currentValue.duration_unit;
-	const selectedLabels = options
-		.filter( option => currentValue.product_ids.some( id => String( id ) === String( option.value ) ) )
-		.map( option => option.label );
+	const { tokenByValue, valueByToken } = getProductTokens( options, currentValue.product_ids );
+	const selectedTokens = currentValue.product_ids.map( productId => tokenByValue.get( String( productId ) ) as string );
 
-	let durationHelp = __( 'How long a purchase grants access, counted from the order date.', 'newspack-plugin' );
+	let durationHelp: string = __( 'How long a purchase grants access, counted from the order date.', 'newspack-plugin' );
 	if ( 'forever' === currentValue.duration_unit ) {
 		durationHelp = __( 'Purchasers keep access forever.', 'newspack-plugin' );
 	} else if ( '' === currentValue.duration_unit ) {
@@ -78,13 +119,14 @@ export default function OneTimePurchaseRuleControl( {
 		<>
 			<TokenField
 				label={ productsLabel }
-				value={ selectedLabels }
-				suggestions={ options.map( option => option.label ) }
+				value={ selectedTokens }
+				suggestions={ options.map( option => tokenByValue.get( String( option.value ) ) as string ) }
 				onChange={ ( tokens: ( string | { value: string } )[] ) => {
-					const labels = tokens.map( token => ( typeof token === 'string' ? token : token.value ) );
 					onChange( {
 						...currentValue,
-						product_ids: options.filter( option => labels.includes( option.label ) ).map( option => option.value ),
+						product_ids: tokens
+							.map( token => valueByToken.get( typeof token === 'string' ? token : token.value ) )
+							.filter( ( productId ): productId is string | number => undefined !== productId ),
 					} );
 				} }
 				__experimentalExpandOnFocus

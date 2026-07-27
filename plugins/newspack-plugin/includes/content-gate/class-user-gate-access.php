@@ -115,15 +115,10 @@ class User_Gate_Access {
 	 * @return string Formatted value.
 	 */
 	private static function format_rule_value( $slug, $value ) {
-		if ( empty( $value ) ) {
-			return __( '(any)', 'newspack-plugin' );
-		}
-
-		if ( 'subscription' === $slug && is_array( $value ) ) {
-			return self::format_product_names( $value );
-		}
-
-		if ( 'one_time_purchase' === $slug && is_array( $value ) ) {
+		// Ahead of the generic empty-value branch below: an unconfigured
+		// one_time_purchase rule denies access, so reporting it as "(any)" would
+		// tell the reader the opposite of how the rule just evaluated.
+		if ( 'one_time_purchase' === $slug ) {
 			$sanitized_value = Access_Rules::sanitize_one_time_purchase_value( $value );
 			$products_label  = empty( $sanitized_value['product_ids'] )
 				? __( '(no products selected)', 'newspack-plugin' )
@@ -143,6 +138,14 @@ class User_Gate_Access {
 			}
 			/* translators: %s: list of product names. Shown when the stored duration is unrecognized; the rule then never grants access. */
 			return sprintf( __( '%s (invalid duration, grants no access)', 'newspack-plugin' ), $products_label );
+		}
+
+		if ( empty( $value ) ) {
+			return __( '(any)', 'newspack-plugin' );
+		}
+
+		if ( 'subscription' === $slug && is_array( $value ) ) {
+			return self::format_product_names( $value );
 		}
 
 		if ( is_array( $value ) ) {

@@ -1054,7 +1054,9 @@ function wc_get_orders( $args ) {
 	if ( isset( $args['customer'] ) ) {
 		// Real WC: 'customer' accepts a user ID or billing email (or an array of
 		// either) and matches orders belonging to ANY of the values — guest
-		// orders (customer_id 0) match via their billing email.
+		// orders (customer_id 0) match via their billing email. Email matching
+		// happens in SQL under a case-insensitive collation, so compare with
+		// strcasecmp() rather than a strict string comparison.
 		$customer_values = (array) $args['customer'];
 		$orders          = array_filter(
 			$orders,
@@ -1063,7 +1065,7 @@ function wc_get_orders( $args ) {
 					if ( is_numeric( $customer_value ) && $order->get_customer_id() === (int) $customer_value ) {
 						return true;
 					}
-					if ( is_string( $customer_value ) && ! is_numeric( $customer_value ) && $order->get_billing_email() === $customer_value ) {
+					if ( is_string( $customer_value ) && ! is_numeric( $customer_value ) && 0 === strcasecmp( (string) $order->get_billing_email(), $customer_value ) ) {
 						return true;
 					}
 				}
@@ -1114,9 +1116,10 @@ function wc_customer_bought_product( $customer_email, $user_id, $product_id ) {
 	global $orders_database;
 	foreach ( $orders_database as $order ) {
 		// Real WC matches the customer user ID OR the billing email, so guest
-		// orders count toward the buyer's history.
+		// orders count toward the buyer's history. The email comparison runs in
+		// SQL under a case-insensitive collation.
 		$matches_user  = $user_id && $order->get_customer_id() === $user_id;
-		$matches_email = $customer_email && $order->get_billing_email() === $customer_email;
+		$matches_email = $customer_email && 0 === strcasecmp( (string) $order->get_billing_email(), (string) $customer_email );
 		if ( ! $matches_user && ! $matches_email ) {
 			continue;
 		}
