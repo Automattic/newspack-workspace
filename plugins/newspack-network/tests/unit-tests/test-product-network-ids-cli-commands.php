@@ -321,17 +321,12 @@ class TestProductNetworkIdsCLICommands extends WP_UnitTestCase {
 
 		Product_Network_Ids::verify( [], [ 'format' => 'json' ] );
 
-		$json_lines = array_values(
-			array_filter(
-				WP_CLI::$output,
-				function ( $line ) {
-					return str_starts_with( $line, '{' );
-				}
-			)
-		);
-		$this->assertCount( 1, $json_lines, 'Only the report itself should be printed in JSON mode.' );
+		// Everything printed, not just the lines that look like JSON: an aggregator runs json_decode over
+		// the whole of stdout, so a trailing "Success:" line on the green path would break it on exactly
+		// the sites that are healthy.
+		$this->assertCount( 1, WP_CLI::$output, 'Only the report itself should be printed in JSON mode.' );
 
-		$report = json_decode( $json_lines[0], true );
+		$report = json_decode( WP_CLI::$output[0], true );
 		$this->assertTrue( $report['ready_to_flip'] );
 		$this->assertSame( [ 'https://node-one.test', 'https://node-two.test' ], $report['known_sites'] );
 		$this->assertSame(
@@ -346,6 +341,38 @@ class TestProductNetworkIdsCLICommands extends WP_UnitTestCase {
 			],
 			$report['products']
 		);
+	}
+
+	/**
+	 * A bare --expect-sites ( no =value ) is refused. WP-CLI passes it as boolean true, which stringifies
+	 * to '1' and would otherwise resolve to the 1-site floor -- greening a flip for an operator who meant
+	 * --expect-sites=all and fumbled the syntax, on the very check meant to catch that gap.
+	 */
+	public function test_verify_errors_on_a_valueless_expect_sites_flag() {
+		$product_id = $this->create_product( 'gold' );
+		$this->create_plan( 'gold', [ $product_id ] );
+		$this->create_node( 'https://node-one.test' );
+		update_option(
+			Product_Updated::OPTION_NAME,
+			[
+				'https://node-one.test' => [
+					9001 => [
+						'id'         => 9001,
+						'network_id' => 'gold',
+					],
+				],
+			]
+		);
+
+		// Linked on one other site, so the 1-site floor this would silently fall back to passes.
+		$this->expectException( WP_CLI_Halt::class );
+		try {
+			Product_Network_Ids::verify( [], [ 'expect-sites' => true ] );
+		} finally {
+			$output = WP_CLI::get_output();
+			$this->assertStringContainsString( '--expect-sites needs a value', $output );
+			$this->assertStringNotContainsString( 'Success:', $output );
+		}
 	}
 
 	/**

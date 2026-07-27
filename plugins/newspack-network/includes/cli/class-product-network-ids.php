@@ -719,8 +719,15 @@ class Product_Network_Ids {
 			WP_CLI::error( 'Verification found issues ( see above ). Not ready to flip.' );
 		}
 
+		if ( $is_json ) {
+			// JSON mode prints exactly one line, the report above, on both the passing and the failing
+			// path ( WP_CLI::error writes to stderr ), so an aggregator can json_decode stdout as-is.
+			// The verdict is carried by the exit code and by the report's own 'ready_to_flip'.
+			return;
+		}
+
 		WP_CLI::success( sprintf( 'All checked products carry a Network ID and are linked on %s.', $expectation['label'] ) );
-		if ( ! $is_json && ! $expectation['require_all'] && 1 === $expectation['minimum'] ) {
+		if ( ! $expectation['require_all'] && 1 === $expectation['minimum'] ) {
 			// Being linked *somewhere* is not the guarantee operators read into a green run: access is only
 			// granted from the site a reader's own subscription lives on.
 			WP_CLI::line( 'Note: this only proves each product is linked somewhere, not that every site a reader may subscribe on carries the ID. Re-run with --expect-sites=all ( on the Hub ) or --expect-sites=<count> to gate on real coverage.' );
@@ -745,6 +752,13 @@ class Product_Network_Ids {
 				'minimum'     => 1,
 				'label'       => 'at least 1 other site',
 			];
+		}
+
+		// A bare --expect-sites ( or --no-expect-sites ) arrives from WP-CLI as a boolean. (string) true
+		// is '1', which would pass the integer guard below and silently resolve to the 1-site floor: a
+		// green run for an operator who meant --expect-sites=all and fumbled the syntax.
+		if ( is_bool( $raw ) ) {
+			WP_CLI::error( '--expect-sites needs a value: pass "all" or a positive integer ( e.g. --expect-sites=all or --expect-sites=3 ). Omit the flag entirely for the default of 1 other site.' );
 		}
 
 		if ( 'all' === $raw ) {
@@ -966,9 +980,16 @@ class Product_Network_Ids {
 	 */
 	private static function get_products_to_check( $product_ids = null ) {
 		if ( null !== $product_ids ) {
+			$product_ids = array_map( 'intval', $product_ids );
+
+			// Prime up front, as on the default set below: get_network_id() reads the post and its meta,
+			// which would otherwise be a DB round trip per product on exactly the input a scripted flip
+			// gate passes.
+			self::prime_post_caches( $product_ids );
+
 			$products = [];
 			foreach ( $product_ids as $product_id ) {
-				$products[ (int) $product_id ] = Product_Admin::get_network_id( $product_id );
+				$products[ $product_id ] = Product_Admin::get_network_id( $product_id );
 			}
 			return $products;
 		}
