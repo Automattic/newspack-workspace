@@ -280,12 +280,12 @@ class Newspack_Test_Subscriber_Discounts_Storage extends WP_UnitTestCase {
 	 */
 	public function discount_math_provider() {
 		return [
-			'percentage off'                  => [ 520.0, 'percent', 15.0, 442.0, '15% off 520 is 442 — the design\'s worked example.' ],
-			'fixed amount off'                => [ 1450.0, 'fixed', 151.0, 1299.0, 'Fixed amounts are how the migrating sites hand-tune to a clean member price.' ],
-			'rounds to two decimals'          => [ 9.99, 'percent', 10.0, 8.99, 'Prices are rounded to currency precision, half down, as WooCommerce does.' ],
-			'fixed larger than price floors'  => [ 5.0, 'fixed', 20.0, 0.0, 'A discount bigger than the price floors at zero rather than going negative.' ],
-			'hundred percent is free'         => [ 40.0, 'percent', 100.0, 0.0, '100% off is free, not negative.' ],
-			'zero-priced product unchanged'   => [ 0.0, 'fixed', 5.0, null, 'A free product has nothing to discount, so no fake sale price is produced.' ],
+			'percentage off'                 => [ 520.0, 'percent', 15.0, 442.0, '15% off 520 is 442 — the design\'s worked example.' ],
+			'fixed amount off'               => [ 1450.0, 'fixed', 151.0, 1299.0, 'Fixed amounts are how the migrating sites hand-tune to a clean member price.' ],
+			'rounds to two decimals'         => [ 9.99, 'percent', 10.0, 8.99, 'Prices are rounded to currency precision, half down, as WooCommerce does.' ],
+			'fixed larger than price floors' => [ 5.0, 'fixed', 20.0, 0.0, 'A discount bigger than the price floors at zero rather than going negative.' ],
+			'hundred percent is free'        => [ 40.0, 'percent', 100.0, 0.0, '100% off is free, not negative.' ],
+			'zero-priced product unchanged'  => [ 0.0, 'fixed', 5.0, null, 'A free product has nothing to discount, so no fake sale price is produced.' ],
 		];
 	}
 

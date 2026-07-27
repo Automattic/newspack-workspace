@@ -32,6 +32,7 @@ class Initializer {
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-ga4-dimensions.php';
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-teams-for-memberships-diagnostics.php';
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-teams-migration.php';
+		include_once NEWSPACK_ABSPATH . 'includes/cli/class-discounts-migration.php';
 	}
 
 	/**
@@ -100,6 +101,7 @@ class Initializer {
 			WP_CLI::add_command( 'newspack migrate-teams', [ 'Newspack\CLI\Teams_Migration', 'migrate_teams' ] );
 			WP_CLI::add_command( 'newspack migrate-team-products', [ 'Newspack\CLI\Teams_Migration', 'migrate_team_products' ] );
 			WP_CLI::add_command( 'newspack migrate-manual-members', [ 'Newspack\CLI\Teams_Migration', 'migrate_manual_members' ] );
+			WP_CLI::add_command( 'newspack migrate-discounts', [ 'Newspack\CLI\Discounts_Migration', 'migrate_discounts' ] );
 			WP_CLI::add_command( 'newspack backfill-team-managers', [ 'Newspack\CLI\Teams_Migration', 'backfill_team_managers' ] );
 		}
 
