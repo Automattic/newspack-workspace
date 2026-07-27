@@ -7,5 +7,6 @@
 
 // Feature tab registrations.
 import './configuration';
+import './discounts';
 
 export { getTab, registerTab } from './registry';

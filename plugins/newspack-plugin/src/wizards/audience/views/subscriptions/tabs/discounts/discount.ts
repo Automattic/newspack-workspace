@@ -1,0 +1,157 @@
+/**
+ * Pure helpers behind the Subscriber discounts tab: currency formatting, the
+ * discount arithmetic the price preview shows, and the summary labels the list
+ * renders.
+ *
+ * The arithmetic mirrors `Newspack\Subscriber_Discounts::discounted_price()`.
+ * The preview is what a publisher tunes a fixed amount against, so the two must
+ * agree.
+ */
+
+/**
+ * WordPress dependencies.
+ */
+import { __, _n, sprintf } from '@wordpress/i18n';
+
+/**
+ * Internal dependencies.
+ */
+import type { DiscountCurrency, DiscountRule } from './types';
+
+export const DEFAULT_CURRENCY: DiscountCurrency = {
+	code: 'USD',
+	symbol: '$',
+	decimals: 2,
+	decimal_separator: '.',
+	thousand_separator: ',',
+	position: 'left',
+};
+
+/**
+ * Format an amount the way the storefront renders prices.
+ *
+ * @param amount   Amount to format.
+ * @param currency Store currency.
+ */
+export function formatCurrency( amount: number, currency: DiscountCurrency = DEFAULT_CURRENCY ): string {
+	const { decimals, decimal_separator: decimalSeparator, thousand_separator: thousandSeparator, symbol, position } = currency;
+
+	const fixed = Math.abs( amount ).toFixed( decimals );
+	const [ whole, fraction ] = fixed.split( '.' );
+	const grouped = whole.replace( /\B(?=(\d{3})+(?!\d))/g, thousandSeparator );
+	const number = ( amount < 0 ? '-' : '' ) + grouped + ( fraction ? decimalSeparator + fraction : '' );
+
+	switch ( position ) {
+		case 'right':
+			return `${ number }${ symbol }`;
+		case 'left_space':
+			return `${ symbol } ${ number }`;
+		case 'right_space':
+			return `${ number } ${ symbol }`;
+		default:
+			return `${ symbol }${ number }`;
+	}
+}
+
+/**
+ * The price a subscriber pays under a single rule, or null when the rule cannot
+ * lower it.
+ *
+ * @param basePrice Price before the discount.
+ * @param rule      Rule providing the type and amount.
+ * @param decimals  Currency decimals.
+ */
+export function subscriberPrice(
+	basePrice: number,
+	rule: Pick< DiscountRule, 'discount_type' | 'amount' >,
+	decimals = DEFAULT_CURRENCY.decimals
+): number | null {
+	if ( ! ( basePrice > 0 ) || ! ( rule.amount > 0 ) ) {
+		return null;
+	}
+	const raw = 'percent' === rule.discount_type ? basePrice * ( 1 - Math.min( rule.amount, 100 ) / 100 ) : basePrice - rule.amount;
+	const factor = Math.pow( 10, decimals );
+	// Round half down, matching how the server rounds a subscriber price.
+	const rounded = Math.max( 0, -Math.round( -raw * factor ) / factor );
+	return rounded < basePrice ? rounded : null;
+}
+
+/**
+ * The discount as shown in the list's Discount column.
+ *
+ * @param rule     Rule.
+ * @param currency Store currency.
+ */
+export function discountLabel( rule: Pick< DiscountRule, 'discount_type' | 'amount' >, currency: DiscountCurrency = DEFAULT_CURRENCY ): string {
+	return 'percent' === rule.discount_type
+		? sprintf(
+				/* translators: %s: a percentage, e.g. "15". */
+				__( '%s%%', 'newspack-plugin' ),
+				String( rule.amount )
+		  )
+		: formatCurrency( rule.amount, currency );
+}
+
+/**
+ * What a rule covers, as shown in the list's "Applies to" column.
+ *
+ * @param rule Rule.
+ */
+export function targetingLabel( rule: Pick< DiscountRule, 'targeting' | 'product_ids' | 'category_ids' | 'excluded_product_ids' > ): string {
+	let base;
+	if ( 'all' === rule.targeting ) {
+		base = __( 'All products', 'newspack-plugin' );
+	} else if ( 'category' === rule.targeting ) {
+		const count = rule.category_ids.length;
+		base = sprintf(
+			/* translators: %d: number of product categories. */
+			_n( '%d category', '%d categories', count, 'newspack-plugin' ),
+			count
+		);
+	} else {
+		const count = rule.product_ids.length;
+		base = sprintf(
+			/* translators: %d: number of products. */
+			_n( '%d product', '%d products', count, 'newspack-plugin' ),
+			count
+		);
+	}
+
+	// Exclusions only ever apply to category and all-products rules; a
+	// hand-picked list is its own exclusion.
+	const excluded = 'products' === rule.targeting ? 0 : rule.excluded_product_ids.length;
+	if ( ! excluded ) {
+		return base;
+	}
+	return sprintf(
+		/* translators: %1$s: what the rule covers, %2$d: number of excluded products. */
+		__( '%1$s · %2$d excluded', 'newspack-plugin' ),
+		base,
+		excluded
+	);
+}
+
+/**
+ * Whether a rule can be saved.
+ *
+ * Mirrors the server's validation so the editor can disable Save rather than
+ * round-trip to a 400.
+ *
+ * @param rule Draft rule.
+ */
+export function isValidRule( rule: Partial< DiscountRule > ): boolean {
+	if ( ! rule.subscription_product_ids?.length ) {
+		return false;
+	}
+	const amount = Number( rule.amount );
+	if ( ! ( amount > 0 ) || ( 'percent' === rule.discount_type && amount > 100 ) ) {
+		return false;
+	}
+	if ( 'products' === rule.targeting && ! rule.product_ids?.length ) {
+		return false;
+	}
+	if ( 'category' === rule.targeting && ! rule.category_ids?.length ) {
+		return false;
+	}
+	return true;
+}

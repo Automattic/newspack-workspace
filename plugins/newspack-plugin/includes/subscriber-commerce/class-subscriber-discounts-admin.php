@@ -24,7 +24,9 @@ class Subscriber_Discounts_Admin {
 	 * Hook up the tab and the endpoints.
 	 */
 	public static function init() {
-		add_action( 'init', [ __CLASS__, 'register_tab' ] );
+		// After the wizard itself has registered, so this tab follows the
+		// wizard's own Configuration tab rather than preceding it.
+		add_action( 'init', [ __CLASS__, 'register_tab' ], 11 );
 		add_action( 'rest_api_init', [ __CLASS__, 'register_api_endpoints' ] );
 	}
 
@@ -244,6 +246,34 @@ class Subscriber_Discounts_Admin {
 		return [
 			'rules'    => Subscriber_Discounts::get_rules(),
 			'settings' => Subscriber_Discounts::get_settings(),
+			'currency' => self::get_currency(),
+		];
+	}
+
+	/**
+	 * The store's currency format, so the editor can preview a subscriber price
+	 * the way the storefront will render it.
+	 *
+	 * @return array
+	 */
+	private static function get_currency() {
+		if ( ! function_exists( 'get_woocommerce_currency' ) ) {
+			return [
+				'code'               => 'USD',
+				'symbol'             => '$',
+				'decimals'           => 2,
+				'decimal_separator'  => '.',
+				'thousand_separator' => ',',
+				'position'           => 'left',
+			];
+		}
+		return [
+			'code'               => get_woocommerce_currency(),
+			'symbol'             => html_entity_decode( get_woocommerce_currency_symbol() ),
+			'decimals'           => wc_get_price_decimals(),
+			'decimal_separator'  => wc_get_price_decimal_separator(),
+			'thousand_separator' => wc_get_price_thousand_separator(),
+			'position'           => get_option( 'woocommerce_currency_pos', 'left' ),
 		];
 	}
 }
