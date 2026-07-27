@@ -19,7 +19,7 @@ import { useEffect, useRef, useState } from '@wordpress/element';
 import { useSelect, useDispatch } from '@wordpress/data';
 import { InspectorControls, useBlockProps, useInnerBlocksProps, store as blockEditorStore } from '@wordpress/block-editor';
 import { createBlock, createBlocksFromInnerBlocksTemplate } from '@wordpress/blocks';
-import { Disabled, Notice, PanelBody } from '@wordpress/components';
+import { Notice, PanelBody } from '@wordpress/components';
 
 /**
  * Internal dependencies.
@@ -269,16 +269,16 @@ export const ContextualPromptEditor = ( { clientId } ) => {
 					</PanelBody>
 				</InspectorControls>
 			) }
-			<div { ...wrapperProps } className={ isAutoGenerating ? `${ wrapperProps.className } is-generating-copy` : wrapperProps.className }>
-				{ isAutoGenerating ? (
-					<>
-						<Disabled>{ innerContent }</Disabled>
-						<span className="newspack-popups__contextual-prompt-generating" aria-hidden={ false }>
-							{ __( 'Generating copy…', 'newspack-popups' ) }
-						</span>
-					</>
-				) : (
-					innerContent
+			<div
+				{ ...wrapperProps }
+				className={ isAutoGenerating ? `${ wrapperProps.className } is-generating-copy` : wrapperProps.className }
+				aria-busy={ isAutoGenerating || undefined }
+			>
+				{ innerContent }
+				{ isAutoGenerating && (
+					<span className="newspack-popups__contextual-prompt-generating" role="status">
+						{ __( 'Generating copy…', 'newspack-popups' ) }
+					</span>
 				) }
 			</div>
 		</>

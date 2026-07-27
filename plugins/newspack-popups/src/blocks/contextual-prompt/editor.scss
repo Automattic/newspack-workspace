@@ -2,6 +2,7 @@
 	&__contextual-prompt-generating {
 		align-items: center;
 		display: flex;
+		font-size: 14px;
 		inset: 0;
 		justify-content: center;
 		position: absolute;
@@ -11,7 +12,13 @@
 .wp-block-newspack-popups-contextual-prompt.is-generating-copy {
 	position: relative;
 
-	> .components-disabled {
+	// Dim and mute the block's own children while copy generates; the status
+	// label stays fully opaque and interactive layers above them. Typing is
+	// still possible via an existing caret — the editor-side guards keep any
+	// typed copy over the generated candidate.
+	> :not(.newspack-popups__contextual-prompt-generating) {
 		opacity: 0.5;
+		pointer-events: none;
+		user-select: none;
 	}
 }
