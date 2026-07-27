@@ -74,12 +74,12 @@ class Subscriber_Only_Products_API {
 			$base,
 			[
 				[
-					'methods'             => 'GET',
+					'methods'             => \WP_REST_Server::READABLE,
 					'callback'            => [ __CLASS__, 'api_get_rules' ],
 					'permission_callback' => [ __CLASS__, 'permissions_check' ],
 				],
 				[
-					'methods'             => 'POST',
+					'methods'             => \WP_REST_Server::EDITABLE,
 					'callback'            => [ __CLASS__, 'api_save_rule' ],
 					'permission_callback' => [ __CLASS__, 'permissions_check' ],
 					'args'                => self::get_rule_args(),
@@ -92,13 +92,13 @@ class Subscriber_Only_Products_API {
 			$base . '/(?P<id>[a-zA-Z0-9\-]+)',
 			[
 				[
-					'methods'             => 'POST',
+					'methods'             => \WP_REST_Server::EDITABLE,
 					'callback'            => [ __CLASS__, 'api_save_rule' ],
 					'permission_callback' => [ __CLASS__, 'permissions_check' ],
 					'args'                => self::get_rule_args(),
 				],
 				[
-					'methods'             => 'DELETE',
+					'methods'             => \WP_REST_Server::DELETABLE,
 					'callback'            => [ __CLASS__, 'api_delete_rule' ],
 					'permission_callback' => [ __CLASS__, 'permissions_check' ],
 				],
@@ -109,7 +109,7 @@ class Subscriber_Only_Products_API {
 			$namespace,
 			'/wizard/newspack-audience-subscriptions/restriction-settings',
 			[
-				'methods'             => 'POST',
+				'methods'             => \WP_REST_Server::EDITABLE,
 				'callback'            => [ __CLASS__, 'api_update_settings' ],
 				'permission_callback' => [ __CLASS__, 'permissions_check' ],
 				'args'                => [

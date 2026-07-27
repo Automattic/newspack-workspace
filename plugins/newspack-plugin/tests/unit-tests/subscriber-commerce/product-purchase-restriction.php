@@ -425,6 +425,40 @@ class Test_Product_Purchase_Restriction extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Working out what to hide has to enumerate the covered products, and that
+	 * query fires `pre_get_posts` again — straight back into this filter. Run a
+	 * category rule through the real hook (not the callback directly, which
+	 * can't reproduce it) to prove the re-entry terminates.
+	 */
+	public function test_hiding_a_category_does_not_recurse_through_pre_get_posts() {
+		$category_id = $this->factory->term->create( [ 'taxonomy' => 'product_cat' ] );
+		wp_set_object_terms( $this->restricted_product->get_id(), [ $category_id ], 'product_cat' );
+		$this->set_rules(
+			[
+				[
+					'id'                       => 'rule',
+					'subscription_product_ids' => [ $this->subscription->get_id() ],
+					'targeting'                => 'category',
+					'category_ids'             => [ $category_id ],
+					'active'                   => true,
+				],
+			]
+		);
+		update_option( Subscriber_Only_Products::SETTINGS_OPTION_NAME, [ 'hide_from_product_lists' => true ] );
+		Product_Purchase_Restriction::flush_cache();
+
+		add_action( 'pre_get_posts', [ 'Newspack\Product_Purchase_Restriction', 'filter_product_query' ] );
+		try {
+			$query = new \WP_Query( [ 'post_type' => 'product' ] );
+		} finally {
+			remove_action( 'pre_get_posts', [ 'Newspack\Product_Purchase_Restriction', 'filter_product_query' ] );
+		}
+
+		$this->assertContains( $this->restricted_product->get_id(), (array) $query->get( 'post__not_in' ) );
+		$this->assertNotContains( $this->open_product->get_id(), (array) $query->get( 'post__not_in' ) );
+	}
+
+	/**
 	 * Run a product listing query through the hiding filter.
 	 *
 	 * @return \WP_Query

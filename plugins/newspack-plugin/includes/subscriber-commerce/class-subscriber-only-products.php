@@ -37,12 +37,21 @@ class Subscriber_Only_Products {
 	 *
 	 * @return array[] The restrictions.
 	 */
-	public static function get_rules() {
+	public static function get_rules(): array {
 		$rules = get_option( self::OPTION_NAME, [] );
 		if ( ! is_array( $rules ) ) {
 			return [];
 		}
-		return array_values( array_filter( $rules, 'is_array' ) );
+		// Rows without an ID can't be matched, updated or deleted, so they're
+		// dropped at the boundary rather than warning on every front-end request.
+		return array_values(
+			array_filter(
+				$rules,
+				function ( $rule ) {
+					return is_array( $rule ) && ! empty( $rule['id'] );
+				}
+			)
+		);
 	}
 
 	/**
@@ -55,7 +64,7 @@ class Subscriber_Only_Products {
 	 *
 	 * @return array[] The active, enforceable restrictions.
 	 */
-	public static function get_active_rules() {
+	public static function get_active_rules(): array {
 		return array_values(
 			array_filter(
 				self::get_rules(),
@@ -89,7 +98,7 @@ class Subscriber_Only_Products {
 	 *
 	 * @return array The saved rule.
 	 */
-	public static function save_rule( $rule ) {
+	public static function save_rule( array $rule ): array {
 		$sanitized = Subscriber_Commerce::sanitize_base_rule( $rule );
 		if ( empty( $sanitized['id'] ) ) {
 			$sanitized['id'] = Subscriber_Commerce::generate_rule_id();
@@ -121,7 +130,7 @@ class Subscriber_Only_Products {
 	 *
 	 * @return bool Whether a rule was deleted.
 	 */
-	public static function delete_rule( $id ) {
+	public static function delete_rule( $id ): bool {
 		$rules     = self::get_rules();
 		$remaining = array_values(
 			array_filter(
@@ -143,7 +152,7 @@ class Subscriber_Only_Products {
 	 *
 	 * @param array[] $rules The rules.
 	 */
-	private static function update_rules( $rules ) {
+	private static function update_rules( array $rules ): void {
 		update_option( self::OPTION_NAME, $rules );
 		Product_Targeting::flush_cache();
 		Product_Purchase_Restriction::flush_cache();
@@ -154,7 +163,7 @@ class Subscriber_Only_Products {
 	 *
 	 * @return array The settings.
 	 */
-	public static function get_settings() {
+	public static function get_settings(): array {
 		$settings = get_option( self::SETTINGS_OPTION_NAME, [] );
 		return [
 			// Off by default: the parity feature blocks purchasing, and hiding a
@@ -170,9 +179,12 @@ class Subscriber_Only_Products {
 	 *
 	 * @return array The saved settings.
 	 */
-	public static function update_settings( $settings ) {
+	public static function update_settings( array $settings ): array {
 		$sanitized = [ 'hide_from_product_lists' => ! empty( $settings['hide_from_product_lists'] ) ];
 		update_option( self::SETTINGS_OPTION_NAME, $sanitized );
+		// The hiding pass is memoized per request, so a settings change has to drop
+		// it for the same reason a rule change does.
+		Product_Purchase_Restriction::flush_cache();
 		return $sanitized;
 	}
 }

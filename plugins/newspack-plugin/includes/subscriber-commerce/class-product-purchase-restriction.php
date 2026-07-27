@@ -82,7 +82,7 @@ class Product_Purchase_Restriction {
 		// Priority 31: right after the add-to-cart form (30), where Memberships puts its own notice.
 		add_action( 'woocommerce_single_product_summary', [ __CLASS__, 'render_restricted_message' ], 31 );
 		// Block themes never fire the action above; the notice rides the add-to-cart block instead.
-		add_filter( 'render_block', [ __CLASS__, 'filter_add_to_cart_block' ], 10, 2 );
+		add_filter( 'render_block', [ __CLASS__, 'filter_add_to_cart_block' ], 10, 3 );
 		// Optional, off by default: keep restricted products out of product lists.
 		add_action( 'pre_get_posts', [ __CLASS__, 'filter_product_query' ] );
 	}
@@ -204,15 +204,17 @@ class Product_Purchase_Restriction {
 		if ( is_admin() || ! $query instanceof \WP_Query ) {
 			return;
 		}
+		// Cheapest test first: this fires on every front-end query, and the vast
+		// majority aren't about products at all. Only product listings qualify —
+		// a single product's own query must still find it.
+		if ( $query->is_singular() || ! self::is_product_query( $query ) ) {
+			return;
+		}
 		if ( ! Subscriber_Commerce::is_enforcement_active() ) {
 			return;
 		}
 		$settings = Subscriber_Only_Products::get_settings();
 		if ( empty( $settings['hide_from_product_lists'] ) ) {
-			return;
-		}
-		// Only product listings: a single product's own query must still find it.
-		if ( $query->is_singular() || ! self::is_product_query( $query ) ) {
 			return;
 		}
 
@@ -255,6 +257,12 @@ class Product_Purchase_Restriction {
 		if ( null !== self::$hidden_product_ids ) {
 			return self::$hidden_product_ids;
 		}
+		// Enumerating the covered products runs a product query, which fires
+		// `pre_get_posts` — straight back into the filter that called us. Publish
+		// the empty result first so that re-entry hides nothing and returns,
+		// instead of recursing until PHP dies.
+		self::$hidden_product_ids = [];
+
 		$hidden = [];
 		foreach ( self::covered_product_ids() as $product_id ) {
 			$product = wc_get_product( $product_id );
@@ -332,12 +340,13 @@ class Product_Purchase_Restriction {
 	 * so without this the purchase is blocked with no explanation — the reader
 	 * just finds the button missing.
 	 *
-	 * @param string $block_content The block's rendered content.
-	 * @param array  $block         The parsed block.
+	 * @param string    $block_content The block's rendered content.
+	 * @param array     $block         The parsed block.
+	 * @param \WP_Block $instance      The block instance, which carries the block context.
 	 *
 	 * @return string The block content, with the notice appended when the reader can't purchase.
 	 */
-	public static function filter_add_to_cart_block( $block_content, $block ) {
+	public static function filter_add_to_cart_block( $block_content, $block, $instance = null ) {
 		// Only the single-product add-to-cart blocks. The product list's button is
 		// left alone: lists stay as WooCommerce renders them, exactly as for a
 		// product that's out of stock.
@@ -346,7 +355,7 @@ class Product_Purchase_Restriction {
 			return $block_content;
 		}
 
-		$product = self::get_block_product( $block );
+		$product = self::get_block_product( $block, $instance );
 		if ( ! $product ) {
 			return $block_content;
 		}
@@ -357,12 +366,18 @@ class Product_Purchase_Restriction {
 	/**
 	 * Resolve the product a block is rendering for.
 	 *
-	 * @param array $block The parsed block.
+	 * Block context lives on the block instance, not on the parsed block array,
+	 * so a block rendering for a product other than the one in the loop is
+	 * resolved from its own context rather than from ambient loop state.
+	 *
+	 * @param array     $block    The parsed block.
+	 * @param \WP_Block $instance The block instance, if the filter supplied one.
 	 *
 	 * @return \WC_Product|null The product, or null if it can't be resolved.
 	 */
-	private static function get_block_product( $block ) {
-		$product_id = (int) ( $block['attrs']['productId'] ?? $block['context']['postId'] ?? get_the_ID() );
+	private static function get_block_product( $block, $instance = null ) {
+		$context_id = $instance instanceof \WP_Block ? ( $instance->context['postId'] ?? null ) : null;
+		$product_id = (int) ( $block['attrs']['productId'] ?? $context_id ?? get_the_ID() );
 		if ( ! $product_id || ! function_exists( 'wc_get_product' ) ) {
 			return null;
 		}
