@@ -583,6 +583,16 @@ abstract class Integration {
 	];
 
 	/**
+	 * Allowed matching functions (operators) for an incoming field's segment
+	 * criterion. Enforced on every write path — REST sanitize and the storage
+	 * setter — and re-applied on read; the single source of truth so those
+	 * paths can't drift.
+	 *
+	 * @var string[]
+	 */
+	private const ALLOWED_INCOMING_MATCHING_FUNCTIONS = [ 'default', 'range', 'list__in', 'list__not_in' ];
+
+	/**
 	 * Get the enabled incoming fields for this integration.
 	 *
 	 * Reads stored field data (key => raw_data map saved by
@@ -642,6 +652,16 @@ abstract class Integration {
 			$field = new Integrations\Incoming_Field( $key, $raw_data );
 			$field = $this->configure_incoming_field( $field );
 			if ( $field instanceof Integrations\Incoming_Field ) {
+				// The publisher's stored operator choice is authoritative. Re-apply it after
+				// configure_incoming_field(), which may (re)derive matching_function from the
+				// provider schema and clobber the choice for non-ESP integrations.
+				if (
+					isset( $raw_data['matching_function'] )
+					&& is_string( $raw_data['matching_function'] )
+					&& in_array( $raw_data['matching_function'], self::ALLOWED_INCOMING_MATCHING_FUNCTIONS, true )
+				) {
+					$field->set_matching_function( $raw_data['matching_function'] );
+				}
 				$fields[] = $field;
 			}
 		}
@@ -698,11 +718,15 @@ abstract class Integration {
 	 * Accepts an array of field keys (as sent by the UI), fetches the full
 	 * field data from the integration, and stores the matching raw field arrays.
 	 *
-	 * @param string[] $keys Array of field keys to enable.
+	 * @param array $fields Array of field keys, or a map of key => matching_function.
 	 *
 	 * @return bool True if updated, false otherwise.
 	 */
-	public function update_enabled_incoming_fields( $keys ) {
+	public function update_enabled_incoming_fields( $fields ) {
+		if ( ! is_array( $fields ) ) {
+			$fields = [];
+		}
+
 		$available = $this->get_available_incoming_fields();
 		if ( is_wp_error( $available ) ) {
 			$available = [];
@@ -716,12 +740,37 @@ abstract class Integration {
 			}
 		}
 
-		// Store as key => raw_data map.
+		// Normalize input to a map of key => chosen matching function. Accept both a
+		// sequential list of keys (legacy callers) and an associative map (typed UI).
+		$key_operator_map = [];
+		// PHP 8.0-safe array_is_list(): the array is a list iff re-indexing is a no-op.
+		if ( $fields === array_values( $fields ) ) {
+			foreach ( $fields as $key ) {
+				$key = (string) $key;
+				if ( '' === $key ) {
+					continue;
+				}
+				$key_operator_map[ $key ] = null;
+			}
+		} else {
+			foreach ( $fields as $key => $matching_function ) {
+				$key = (string) $key;
+				if ( '' === $key ) {
+					continue;
+				}
+				$key_operator_map[ $key ] = is_string( $matching_function ) ? $matching_function : null;
+			}
+		}
+
+		// Store as key => raw_data map, overriding matching_function when chosen.
 		$fields_to_store = [];
-		foreach ( $keys as $key ) {
+		foreach ( $key_operator_map as $key => $matching_function ) {
 			$raw_data = [];
 			if ( isset( $available_by_key[ $key ] ) ) {
 				$raw_data = $available_by_key[ $key ]->get_raw_data();
+			}
+			if ( null !== $matching_function && in_array( $matching_function, self::ALLOWED_INCOMING_MATCHING_FUNCTIONS, true ) ) {
+				$raw_data['matching_function'] = $matching_function;
 			}
 			$fields_to_store[ $key ] = $raw_data;
 		}
@@ -992,12 +1041,15 @@ abstract class Integration {
 			return $this->get_enabled_outgoing_fields();
 		}
 		if ( 'incoming_metadata_fields' === $key ) {
-			return array_map(
-				function( $field ) {
-					return $field->get_key();
-				},
-				$this->get_enabled_incoming_fields()
-			);
+			$map = [];
+			// Read the operator from stored raw_data: the Incoming_Field constructor does not
+			// apply it to the typed property, and some integrations' configure_incoming_field()
+			// is a no-op, so get_matching_function() alone would return the default.
+			foreach ( $this->get_enabled_incoming_fields() as $field ) {
+				$raw                      = $field->get_raw_data();
+				$map[ $field->get_key() ] = $raw['matching_function'] ?? $field->get_matching_function();
+			}
+			return $map;
 		}
 
 		$field = $this->get_settings_field_by_key( $key );
@@ -1125,11 +1177,15 @@ abstract class Integration {
 				$incoming_fields  = $this->get_filtered_incoming_fields();
 				$field['options'] = array_map(
 					function ( $incoming_field ) {
-						$key  = $incoming_field->get_key();
-						$name = $incoming_field->get_name();
+						$key     = $incoming_field->get_key();
+						$name    = $incoming_field->get_name();
+						$options = $incoming_field->get_options();
 						return [
-							'value' => $key,
-							'label' => '' !== $name ? $name : $key,
+							'value'             => $key,
+							'label'             => '' !== $name ? $name : $key,
+							'value_type'        => $incoming_field->get_value_type(),
+							'matching_function' => $incoming_field->get_matching_function(),
+							'has_options'       => ! empty( $options ),
 						];
 					},
 					is_wp_error( $incoming_fields ) ? [] : $incoming_fields
@@ -1196,6 +1252,36 @@ abstract class Integration {
 			case 'metadata':
 				if ( ! is_array( $value ) ) {
 					return $field['default'] ?? [];
+				}
+				// Incoming metadata fields carry a per-field operator: key => matching_function.
+				if ( 'incoming_metadata_fields' === ( $field['key'] ?? '' ) ) {
+					$sanitized = [];
+					// PHP 8.0-safe array_is_list(): the array is a list iff re-indexing is a no-op.
+					if ( $value === array_values( $value ) ) {
+						// Legacy plain list of enabled keys: keep it a list so
+						// update_enabled_incoming_fields() preserves each field's provider-default
+						// matching_function (no forced 'default' override).
+						foreach ( $value as $key ) {
+							$key = \sanitize_text_field( (string) $key );
+							if ( '' === $key ) {
+								continue;
+							}
+							$sanitized[] = $key;
+						}
+					} else {
+						foreach ( $value as $key => $operator ) {
+							$key = \sanitize_text_field( (string) $key );
+							if ( '' === $key ) {
+								continue;
+							}
+							// An operator outside the allowlist maps to null (no override) rather than
+							// 'default', which is itself a valid operator: coercing would silently
+							// downgrade a typed field's provider default (e.g. list__in for a
+							// multiselect) to exact match, which never matches such a field.
+							$sanitized[ $key ] = ( is_string( $operator ) && in_array( $operator, self::ALLOWED_INCOMING_MATCHING_FUNCTIONS, true ) ) ? $operator : null;
+						}
+					}
+					return $sanitized;
 				}
 				return array_values( array_map( 'sanitize_text_field', $value ) );
 			case 'textarea':

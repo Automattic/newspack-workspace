@@ -2769,6 +2769,38 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Gate priority orders overlapping gates, so two gates must never be created with the same
+	 * one — the tie would leave an arbitrary gate deciding what a reader sees. Deriving the
+	 * priority from the gate count collides as soon as a gate has been deleted from the middle
+	 * of the list, since priorities are positions, not a counter.
+	 */
+	public function test_create_gate_priority_survives_a_mid_list_delete() {
+		// The fixture leaves gates at priorities 0..3. Delete one from the middle.
+		wp_delete_post( $this->gate_ids[1], true );
+
+		$gate_id          = Content_Gate::create_gate( [ 'title' => 'Gate After Delete' ] );
+		$this->gate_ids[] = $gate_id;
+
+		$priorities = wp_list_pluck( Content_Gate::get_gates(), 'priority' );
+		$this->assertSame( array_unique( $priorities ), $priorities, 'No two gates share a priority' );
+		$this->assertSame( 4, Content_Gate::get_gate( $gate_id )['priority'], 'The new gate goes after the last gate, not at the deleted gate’s position' );
+	}
+
+	/**
+	 * Premium newsletter gates are prioritized in their own bucket, so a new one must be
+	 * numbered against the other newsletter gates — not against however many content gates the
+	 * site happens to have.
+	 */
+	public function test_create_newsletter_gate_priority_uses_the_newsletter_bucket() {
+		// The fixture already created four content gates, whose count must not leak in here.
+		$first_id  = Content_Gate::create_gate( [ 'title' => 'Newsletter Gate 1' ], Content_Gate::GATE_CPT, true );
+		$second_id = Content_Gate::create_gate( [ 'title' => 'Newsletter Gate 2' ], Content_Gate::GATE_CPT, true );
+
+		$this->assertSame( 0, Content_Gate::get_gate( $first_id )['priority'], 'The first newsletter gate starts the bucket at 0' );
+		$this->assertSame( 1, Content_Gate::get_gate( $second_id )['priority'], 'The second newsletter gate follows it, rather than tying with it' );
+	}
+
+	/**
 	 * A duplicate carries over every setting of its source, but is always created
 	 * inactive and last in the list — a copy of a live gate silently going live
 	 * would change site-wide access behavior.

@@ -204,6 +204,76 @@ class Metering {
 	}
 
 	/**
+	 * Whether the registration wall is the rule that gates the current reader.
+	 *
+	 * Follows the same registration-vs-`custom_access` split as the gate-layout
+	 * selection in `Content_Restriction_Control::is_post_restricted()`, which restricts
+	 * with the registration layout - and skips the `custom_access` rules entirely - for
+	 * both anonymous visitors and signed-in readers who have not verified their email on
+	 * a wall that requires verification.
+	 *
+	 * This assumes the reader is already known to be restricted; it is a settings
+	 * selector, not a restriction check. In particular it does not re-check the
+	 * anonymous `supports_anonymous` bypass (e.g. institutional access) that
+	 * `is_post_restricted()` applies before ever restricting an anonymous visitor - a
+	 * bypassed reader is not restricted, so no metering surface consults this for them.
+	 *
+	 * @param int  $gate_id      Gate ID.
+	 * @param bool $is_logged_in Whether to evaluate for a logged-in reader.
+	 *
+	 * @return bool Whether the registration wall governs the reader.
+	 */
+	private static function is_gated_by_registration( $gate_id, $is_logged_in ) {
+		$registration = Content_Gate::get_registration_settings( $gate_id );
+		if ( ! $registration['active'] ) {
+			return false;
+		}
+		if ( ! $is_logged_in ) {
+			return true;
+		}
+		if ( ! $registration['require_verification'] ) {
+			return false;
+		}
+		// Exempt non-reader users (admins, editors). This reuses the reader/verified
+		// checks from `is_logged_in_metering_allowed()`'s verification bail; note that
+		// bail keys off `Content_Gate::requires_account_verification()`, which reads
+		// `require_verification` without the `active` guard applied above, so the two
+		// only fully agree while the wall is active.
+		$user = \wp_get_current_user();
+		return Reader_Activation::is_user_reader( $user ) && ! Reader_Activation::is_reader_verified( $user );
+	}
+
+	/**
+	 * Get the metering settings that govern the current reader.
+	 *
+	 * Beware the two senses of "registered" in this class: `get_anonymous_settings()`
+	 * reads the `registration` meta (the registration wall), while
+	 * `get_registered_settings()` reads the `custom_access` meta (the paywall).
+	 *
+	 * A reader gated by the registration wall is metered by the wall's own settings -
+	 * including when its metering is deliberately turned off, which means no metered
+	 * views at all. Only readers who are past (or not subject to) the wall fall through
+	 * to the paywall, and with it the `custom_access` metering settings.
+	 *
+	 * Legacy Woo Memberships gates are exempt: they have no `registration` meta at all
+	 * and read both meters from the shared `metering` meta, so they keep the plain
+	 * anonymous/registered split.
+	 *
+	 * @param int  $gate_id      Gate ID.
+	 * @param bool $is_logged_in Whether to evaluate for a logged-in reader.
+	 *
+	 * @return array{enabled: bool, count: int, period: string} Metering settings.
+	 */
+	private static function get_effective_settings( $gate_id, $is_logged_in ) {
+		if ( Memberships::is_active() ) {
+			return $is_logged_in ? self::get_registered_settings( $gate_id ) : self::get_anonymous_settings( $gate_id );
+		}
+		return self::is_gated_by_registration( $gate_id, $is_logged_in )
+			? self::get_anonymous_settings( $gate_id )
+			: self::get_registered_settings( $gate_id );
+	}
+
+	/**
 	 * Update metering settings for a gate.
 	 *
 	 * @param int   $gate_id  Gate ID.
@@ -230,7 +300,7 @@ class Metering {
 		}
 		$gate_layout_id = Content_Gate::get_gate_layout_id();
 		$gate_post_id   = Content_Gate::get_gate_post_id();
-		$handle       = 'newspack-content-gate-metering';
+		$handle         = 'newspack-content-gate-metering';
 		\wp_enqueue_script(
 			$handle,
 			Newspack::plugin_url() . '/dist/content-gate-metering.js',
@@ -239,9 +309,7 @@ class Metering {
 			true
 		);
 
-		$anonymous_settings   = self::get_anonymous_settings( $gate_post_id );
-		$registered_settings  = self::get_registered_settings( $gate_post_id );
-		$settings = $anonymous_settings['enabled'] ? $anonymous_settings : $registered_settings;
+		$settings = self::get_effective_settings( $gate_post_id, false );
 		\wp_localize_script(
 			$handle,
 			'newspack_metering_settings',
@@ -329,9 +397,7 @@ class Metering {
 		}
 
 		$gate_post_id         = Content_Gate::get_gate_post_id();
-		$anonymous_settings   = self::get_anonymous_settings( $gate_post_id );
-		$registered_settings  = self::get_registered_settings( $gate_post_id );
-		$settings             = Memberships::is_active() || $anonymous_settings['enabled'] ? $anonymous_settings : $registered_settings;
+		$settings             = self::get_effective_settings( $gate_post_id, false );
 		$is_frontend_metering = $settings['enabled'] && $settings['count'] > 0;
 
 		/**
@@ -380,7 +446,13 @@ class Metering {
 		}
 
 		$gate_post_id = Content_Gate::get_gate_post_id();
-		$settings     = self::get_registered_settings( $gate_post_id );
+		// Read through the same helper as every reporting surface, so the enablement
+		// check here can never advertise a different allowance than they display. For
+		// every state that reaches this line the reader is either verified, a
+		// non-reader, or on a gate without a verification requirement - the verification
+		// bail above has already returned for the one state where the registration wall
+		// would govern - so this is behavior-identical to a direct paid-settings read.
+		$settings = self::get_effective_settings( $gate_post_id, true );
 
 		// Bail if metering is not enabled.
 		if ( ! $settings['enabled'] || $settings['count'] <= 0 ) {
@@ -480,7 +552,12 @@ class Metering {
 	}
 
 	/**
-	 * Get the metering period for a post.
+	 * Get the metering period for the current reader on a post.
+	 *
+	 * Resolves against the settings that govern the current reader, so the result is
+	 * auth-state dependent (via `is_user_logged_in()`, and verification state for
+	 * logged-in readers) - not a pure per-post value. Callers caching or comparing
+	 * periods across readers should key on the reader as well as the post.
 	 *
 	 * @param int|null $post_id Post ID. Default is current post.
 	 *
@@ -490,10 +567,8 @@ class Metering {
 		if ( ! $post_id ) {
 			$post_id = get_the_ID();
 		}
-		$gate_post_id         = Content_Gate::get_gate_post_id( $post_id );
-		$anonymous_settings   = self::get_anonymous_settings( $gate_post_id );
-		$registered_settings  = self::get_registered_settings( $gate_post_id );
-		$settings = $anonymous_settings['enabled'] ? $anonymous_settings : $registered_settings;
+		$gate_post_id = Content_Gate::get_gate_post_id( $post_id );
+		$settings     = self::get_effective_settings( $gate_post_id, \is_user_logged_in() );
 		return $settings['period'];
 	}
 
@@ -528,12 +603,11 @@ class Metering {
 		if ( ! $gate_post_id ) {
 			return false;
 		}
-		$anonymous_settings   = self::get_anonymous_settings( $gate_post_id );
-		$registered_settings  = self::get_registered_settings( $gate_post_id );
-		if ( ! $is_logged_in && $anonymous_settings['enabled'] ) {
-			return $anonymous_settings['count'];
+		$settings = self::get_effective_settings( $gate_post_id, $is_logged_in );
+		if ( ! $settings['enabled'] ) {
+			return false;
 		}
-		return $registered_settings['count'];
+		return $settings['count'];
 	}
 }
 Metering::init();
