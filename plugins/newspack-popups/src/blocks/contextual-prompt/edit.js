@@ -19,7 +19,7 @@ import { useEffect, useRef, useState } from '@wordpress/element';
 import { useSelect, useDispatch } from '@wordpress/data';
 import { InspectorControls, useBlockProps, useInnerBlocksProps, store as blockEditorStore } from '@wordpress/block-editor';
 import { createBlock, createBlocksFromInnerBlocksTemplate } from '@wordpress/blocks';
-import { Notice, PanelBody } from '@wordpress/components';
+import { Disabled, Notice, PanelBody } from '@wordpress/components';
 
 /**
  * Internal dependencies.
@@ -226,6 +226,12 @@ export const ContextualPromptEditor = ( { clientId } ) => {
 		}
 	}, [ canGenerate, copyClientId, copyIsEmpty, framing ] );
 
+	// While the auto request fills the empty copy, the block reads as busy:
+	// content disabled behind a "Generating copy…" label. An explicit
+	// regenerate over existing copy leaves the block editable.
+	const isAutoGenerating = generating && copyIsEmpty;
+	const { children: innerContent, ...wrapperProps } = innerBlocksProps;
+
 	return (
 		<>
 			{ canGenerate && (
@@ -263,7 +269,18 @@ export const ContextualPromptEditor = ( { clientId } ) => {
 					</PanelBody>
 				</InspectorControls>
 			) }
-			<div { ...innerBlocksProps } />
+			<div { ...wrapperProps } className={ isAutoGenerating ? `${ wrapperProps.className } is-generating-copy` : wrapperProps.className }>
+				{ isAutoGenerating ? (
+					<>
+						<Disabled>{ innerContent }</Disabled>
+						<span className="newspack-popups__contextual-prompt-generating" aria-hidden={ false }>
+							{ __( 'Generating copy…', 'newspack-popups' ) }
+						</span>
+					</>
+				) : (
+					innerContent
+				) }
+			</div>
 		</>
 	);
 };

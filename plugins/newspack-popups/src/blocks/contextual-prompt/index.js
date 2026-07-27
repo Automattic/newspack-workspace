@@ -14,6 +14,7 @@ import { Icon, megaphone } from '@wordpress/icons';
 /**
  * Internal dependencies.
  */
+import './editor.scss';
 import metadata from './block.json';
 import { ContextualPromptEditor } from './edit';
 

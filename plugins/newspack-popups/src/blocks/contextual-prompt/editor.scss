@@ -1,0 +1,17 @@
+.newspack-popups {
+	&__contextual-prompt-generating {
+		align-items: center;
+		display: flex;
+		inset: 0;
+		justify-content: center;
+		position: absolute;
+	}
+}
+
+.wp-block-newspack-popups-contextual-prompt.is-generating-copy {
+	position: relative;
+
+	> .components-disabled {
+		opacity: 0.5;
+	}
+}
