@@ -28,6 +28,8 @@ jobs:
       js-matrix: ${{ steps.detect.outputs.js-matrix }}
       php-matrix: ${{ steps.detect.outputs.php-matrix }}
       any: ${{ steps.detect.outputs.any }}
+      nw-paths: ${{ steps.detect.outputs.nw-paths }}
+      nw-changed: ${{ steps.detect.outputs.nw-changed }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -65,11 +67,41 @@ jobs:
           # main unchecked. Force install to run when these files change.
           # No `2>/dev/null` here: surface the diagnostic if BASE_REF can't be
           # resolved so the failure is loud rather than a silent fail-open.
+          # Materialised once and reused below. Every consumer greps this string
+          # rather than piping `git diff` directly: `git diff … | grep -q` loses
+          # its exit status to SIGPIPE once the diff outgrows the pipe buffer
+          # (grep exits on first match, git dies writing to a closed pipe,
+          # pipefail propagates 141), so the `if` reads false and the check is
+          # silently skipped — precisely on the largest diffs. Same reason the
+          # greps below omit `-q`: they must consume all of their input.
+          CHANGED_FILES=$(git diff --name-only "$BASE_REF...HEAD")
+
           ROOT_DEPS_CHANGED=false
-          if git diff --name-only "$BASE_REF...HEAD" \
-            | grep -qxE 'pnpm-lock\.yaml|package\.json|pnpm-workspace\.yaml'; then
+          if printf '%s\n' "$CHANGED_FILES" \
+            | grep -xE 'pnpm-lock\.yaml|package\.json|pnpm-workspace\.yaml' >/dev/null; then
             ROOT_DEPS_CHANGED=true
           fi
+
+          # PHP that phpcs.xml declares in scope but that lives outside the pnpm
+          # workspace, so the package matrix below can never reach it. Derived
+          # from the <file> elements rather than hardcoded: a hardcoded copy
+          # would let a newly-added <file> be linted by the pre-commit hook and
+          # by nothing here, which is the exact gap this job closes.
+          # `|| true` because grep exits 1 when the subtraction is empty.
+          NW_PATHS=$(sed -n 's|.*<file>\([^<]*\)</file>.*|\1|p' phpcs.xml \
+            | grep -vxE 'plugins|themes|packages' | tr '\n' ' ' | sed 's/ *$//' || true)
+          NW_CHANGED=false
+          if [ -n "$NW_PATHS" ]; then
+            NW_REGEX="^($(printf '%s' "$NW_PATHS" | tr ' ' '|'))/.*\.php$|^phpcs\.xml$"
+            if printf '%s\n' "$CHANGED_FILES" | grep -E "$NW_REGEX" >/dev/null; then
+              NW_CHANGED=true
+            fi
+          fi
+          # Emitted before the early exit below: a PR touching only e2e/ or
+          # config/ changes no workspace package, and that is exactly the case
+          # this job exists to catch.
+          echo "nw-paths=$NW_PATHS" >> "$GITHUB_OUTPUT"
+          echo "nw-changed=$NW_CHANGED" >> "$GITHUB_OUTPUT"
 
           if [ -z "$CHANGED" ]; then
             echo "js-matrix={\"include\":[]}" >> "$GITHUB_OUTPUT"
@@ -178,6 +210,30 @@ jobs:
         run: |
           dir=$(pnpm --silent --filter "${{ matrix.package }}" exec pwd)
           composer phpcs -- "$dir"
+
+  # ----------------------------------------------------------------------------
+  # PHPCS for in-scope PHP that lives outside the pnpm workspace. The matrix
+  # above is built from workspace packages, so it can never reach these — they
+  # would otherwise be linted by the pre-commit hook but by nothing in CI. Both
+  # the trigger and the path list come from phpcs.xml's <file> elements via
+  # changed-packages, so there is no second copy of the scope to keep in sync.
+  # ----------------------------------------------------------------------------
+  php-lint-non-workspace:
+    name: PHPCS / non-workspace
+    needs: changed-packages
+    if: needs.changed-packages.outputs.nw-changed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@7c071dfe9dc99bdf297fa79cb49ea005b9fcadbc # 2.37.1
+        with:
+          php-version: '8.3'
+          tools: composer, cs2pr
+          coverage: none
+      - name: composer install (root)
+        run: composer install --no-interaction --no-progress --prefer-dist
+      - name: phpcs
+        run: composer phpcs -- ${{ needs.changed-packages.outputs.nw-paths }}
 
   php-test:
     name: PHPUnit / ${{ matrix.package }}
@@ -387,7 +443,7 @@ jobs:
     # `install` is in the needs list so a `--frozen-lockfile` failure on a
     # root-deps-only PR (empty js/php matrices) is treated as a CI failure
     # rather than masked by the skipped matrix jobs.
-    needs: [install, js, php-lint, php-test, build-zips, bundle-zips]
+    needs: [install, js, php-lint, php-lint-non-workspace, php-test, build-zips, bundle-zips]
     if: always()
     runs-on: ubuntu-latest
     steps:

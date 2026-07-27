@@ -8,6 +8,23 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
  */
 import { EnableModal, getMissingRequiredFields } from './enable-modal';
 
+// EnableModal + SettingsField read six components from the components
+// barrel, but the barrel's index evaluates all ~50 components (Wizard,
+// PluginInstaller, integration icons, …) — seconds of module execution
+// per suite that made these tests fragile under CPU load. Re-export just
+// the submodules this render tree uses, as their REAL implementations,
+// so modal semantics, label association and disabled state stay fully
+// exercised. If the components under test start using another barrel
+// export, add it here (the failure is a loud "X is not a component").
+jest.mock( '../../../../../packages/components/src', () => ( {
+	Button: jest.requireActual( '../../../../../packages/components/src/button' ).default,
+	Modal: jest.requireActual( '../../../../../packages/components/src/modal' ).default,
+	Notice: jest.requireActual( '../../../../../packages/components/src/notice' ).default,
+	Grid: jest.requireActual( '../../../../../packages/components/src/grid' ).default,
+	SelectControl: jest.requireActual( '../../../../../packages/components/src/select-control' ).default,
+	TextControl: jest.requireActual( '../../../../../packages/components/src/text-control' ).default,
+} ) );
+
 const audienceField = {
 	key: 'mailchimp_audience_id',
 	type: 'select',
