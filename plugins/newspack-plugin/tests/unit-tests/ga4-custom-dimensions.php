@@ -456,11 +456,12 @@ class Newspack_Test_GA4_Custom_Dimensions extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A run whose create failures are permanent (403 auth) records the schema
-	 * fingerprint anyway, so the daily recheck stops retrying – the monthly
-	 * recheck remains the self-heal path.
+	 * A 403 auth failure aborts the create loop after one POST (a broken
+	 * connection costs one API call per attempt) but leaves the schema
+	 * unrecorded, so the daily recheck keeps probing and a repaired Google
+	 * connection self-heals within a day.
 	 */
-	public function test_permanent_failure_is_not_rescheduled_by_recheck() {
+	public function test_auth_failure_aborts_and_is_rescheduled_by_recheck() {
 		if ( ! function_exists( 'as_schedule_recurring_action' ) ) {
 			$this->markTestSkipped( 'ActionScheduler not available.' );
 		}
@@ -471,18 +472,21 @@ class Newspack_Test_GA4_Custom_Dimensions extends WP_UnitTestCase {
 
 		$summary = GA4_Custom_Dimensions::provision();
 		$this->assertIsArray( $summary );
-		$this->assertNotEmpty( $summary['errors'], 'The run recorded create failures.' );
-		$this->assertSame( GA4_Custom_Dimensions::schema_fingerprint(), $summary['schema'], 'A permanently failed run still records the fingerprint.' );
+		$this->assertCount( 1, $summary['errors'], 'The loop stops at the first auth failure.' );
+		$this->assertSame( 1, $this->count_requests( 'properties/PROP-PERM/customDimensions', 'POST' ), 'No further creates are attempted.' );
+		$this->assertNull( $summary['schema'], 'An auth-failed run does not record the schema fingerprint.' );
 
 		wp_clear_scheduled_hook( GA4_Custom_Dimensions::PROVISION_ACTION );
 		delete_transient( GA4_Custom_Dimensions::SCHEMA_TRANSIENT );
 		GA4_Custom_Dimensions::maybe_schedule_recheck();
-		$this->assertFalse( wp_next_scheduled( GA4_Custom_Dimensions::PROVISION_ACTION ), 'A permanent failure is not retried daily.' );
+		$this->assertNotFalse( wp_next_scheduled( GA4_Custom_Dimensions::PROVISION_ACTION ), 'An auth-failed run is rescheduled by the recheck.' );
 	}
 
 	/**
 	 * A quota-exhausted create proves the remaining creates would fail the same
-	 * way, so the loop aborts after the first failed POST.
+	 * way, so the loop aborts after the first failed POST. The dimension cap is
+	 * permanent: the fingerprint is recorded and the daily recheck stops
+	 * retrying – the monthly recheck remains the self-heal path.
 	 */
 	public function test_quota_error_aborts_the_create_loop() {
 		$this->connect_property( 'PROP-QUOTA' );
@@ -493,6 +497,11 @@ class Newspack_Test_GA4_Custom_Dimensions extends WP_UnitTestCase {
 		$this->assertCount( 1, $summary['errors'], 'The loop stops at the first quota failure.' );
 		$this->assertSame( 1, $this->count_requests( 'properties/PROP-QUOTA/customDimensions', 'POST' ), 'No further creates are attempted.' );
 		$this->assertSame( GA4_Custom_Dimensions::schema_fingerprint(), $summary['schema'], 'Quota exhaustion is permanent; daily retries stop.' );
+
+		wp_clear_scheduled_hook( GA4_Custom_Dimensions::PROVISION_ACTION );
+		delete_transient( GA4_Custom_Dimensions::SCHEMA_TRANSIENT );
+		GA4_Custom_Dimensions::maybe_schedule_recheck();
+		$this->assertFalse( wp_next_scheduled( GA4_Custom_Dimensions::PROVISION_ACTION ), 'A capped property is not retried daily.' );
 	}
 
 	/**

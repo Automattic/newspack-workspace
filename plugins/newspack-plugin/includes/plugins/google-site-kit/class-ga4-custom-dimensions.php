@@ -465,16 +465,18 @@ final class GA4_Custom_Dimensions {
 		list( $created, $skipped_exists, $errors, $has_transient_error ) = $result;
 
 		if ( ! empty( $errors ) && ! $has_transient_error ) {
-			Logger::log( 'GA4 dimension create failures are permanent (auth/dimension cap/validation); suspending daily retries until the monthly recheck.', self::LOGGER_HEADER );
+			Logger::log( 'GA4 dimension create failures are permanent (dimension cap/validation); suspending daily retries until the monthly recheck.', self::LOGGER_HEADER );
 		}
 
 		$summary = [
 			'property_id'    => $property_id,
-			// A transient failure (timeout, 429, 5xx) must not read as current,
-			// so the daily-throttled recheck retries it. Permanent failures
-			// (auth, the dimension cap, validation) record the fingerprint
-			// anyway – a daily retry can't fix them; the monthly recheck is the
-			// self-heal path.
+			// A transient failure (timeout, 401/403 auth, 429, 5xx) must not
+			// read as current, so the daily-throttled recheck retries it. For
+			// auth that costs one probe a day (the create loop aborts on the
+			// first 401/403) and self-heals within a day once the publisher
+			// repairs the Google connection. Permanent failures (the dimension
+			// cap, validation) record the fingerprint anyway – no retry can fix
+			// them; the monthly recheck is the self-heal path.
 			'schema'         => $has_transient_error ? null : self::schema_fingerprint(),
 			'auth_source'    => $used_source,
 			'timestamp'      => time(),
@@ -545,10 +547,12 @@ final class GA4_Custom_Dimensions {
 	}
 
 	/**
-	 * Whether a failed create is permanent – auth (401/403), the property's
-	 * dimension cap or a validation error – so a daily retry cannot fix it, as
-	 * opposed to transient (timeout, 408/429 rate limiting, 5xx), which is
-	 * worth one.
+	 * Whether a failed create is permanent – the property's dimension cap or a
+	 * validation error – so no retry can fix it, as opposed to transient
+	 * (timeout, 401/403 auth, 408/429 rate limiting, 5xx), which is worth one.
+	 * Auth stays transient because the publisher can repair the Google
+	 * connection at any time; the daily recheck then self-heals within a day
+	 * instead of waiting for the monthly recheck.
 	 *
 	 * @param \Throwable $e The failure.
 	 * @return bool
@@ -558,14 +562,16 @@ final class GA4_Custom_Dimensions {
 			return true;
 		}
 		$code = self::error_status_code( $e );
-		return $code >= 400 && $code < 500 && ! in_array( $code, [ 408, 429 ], true );
+		return $code >= 400 && $code < 500 && ! in_array( $code, [ 401, 403, 408, 429 ], true );
 	}
 
 	/**
 	 * Whether a failed create proves the remaining creates would fail the same
 	 * way: the property's dimension cap, authorization denied/revoked, or a
 	 * rate-limited burst (429) whose window every remaining create would still
-	 * be inside.
+	 * be inside. Fatal is broader than permanent: a 401/403 aborts the loop so
+	 * a broken connection costs one API call per daily attempt, yet stays
+	 * transient so the daily recheck keeps probing.
 	 *
 	 * @param \Throwable $e The failure.
 	 * @return bool
