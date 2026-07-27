@@ -515,6 +515,9 @@ class WC_Subscription {
 	public function get_date_created() {
 		return new WC_DateTime( $this->data['date_created'] ?? 'now' );
 	}
+	public function get_edit_order_url() {
+		return admin_url( 'post.php?post=' . $this->get_id() . '&action=edit' );
+	}
 	public function get_date_paid() {
 		return new WC_DateTime( $this->data['date_paid'] );
 	}
@@ -651,6 +654,9 @@ class WC_Subscription {
 	}
 	public function needs_payment() {
 		return ! empty( $this->data['needs_payment'] );
+	}
+	public function is_manual() {
+		return ! empty( $this->data['is_manual'] );
 	}
 	public function get_view_order_url() {
 		return $this->data['view_order_url'] ?? 'https://example.test/my-account/view-order/' . $this->get_id();
