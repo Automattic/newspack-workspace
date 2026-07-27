@@ -4,11 +4,12 @@
 	&__contextual-prompt-generating {
 		align-items: center;
 		display: flex;
-		font-family: wp-vars.$default-font;
-		font-size: wp-vars.$default-font-size;
-		font-weight: 600;
+		font-family: wp-vars.$font-family-body;
+		font-size: wp-vars.$font-size-medium;
+		font-weight: wp-vars.$font-weight-medium;
 		inset: 0;
 		justify-content: center;
+		line-height: wp-vars.$font-line-height-small;
 		position: absolute;
 
 		// Follow the prompt's own text color so the spinner reads on any
