@@ -30,11 +30,6 @@ class Subscriber_Discounts {
 	const SETTINGS_OPTION_NAME = 'newspack_subscriber_discounts_settings';
 
 	/**
-	 * Targeting modes a rule may use.
-	 */
-	const TARGETING_MODES = [ 'products', 'category', 'all' ];
-
-	/**
 	 * Discount types a rule may use.
 	 */
 	const DISCOUNT_TYPES = [ 'fixed', 'percent' ];
@@ -334,8 +329,13 @@ class Subscriber_Discounts {
 			);
 		}
 
-		$targeting = $rule['targeting'] ?? '';
-		if ( ! in_array( $targeting, self::TARGETING_MODES, true ) ) {
+		$targeting            = $rule['targeting'] ?? '';
+		$valid_targeting_modes = [
+			Product_Targeting::TARGETING_PRODUCTS,
+			Product_Targeting::TARGETING_CATEGORY,
+			Product_Targeting::TARGETING_ALL,
+		];
+		if ( ! in_array( $targeting, $valid_targeting_modes, true ) ) {
 			return new \WP_Error(
 				'newspack_subscriber_discount_invalid_targeting',
 				__( 'Choose whether this discount applies to specific products, a category, or all products.', 'newspack-plugin' )
@@ -360,40 +360,48 @@ class Subscriber_Discounts {
 			);
 		}
 
+		$base_rule = Subscriber_Commerce::sanitize_base_rule(
+			array_merge(
+				$rule,
+				[
+					// A newly created discount is live immediately; the shared
+					// sanitizer reads a missing flag as paused, so state it.
+					'active' => isset( $rule['active'] ) ? (bool) $rule['active'] : true,
+				]
+			)
+		);
+
 		// Only the fields belonging to the selected targeting mode are kept, so a
 		// rule the publisher re-pointed in the editor cannot keep matching through
 		// selections they can no longer see.
-		$product_ids          = 'products' === $targeting ? self::sanitize_ids( $rule['product_ids'] ?? [] ) : [];
-		$category_ids         = 'category' === $targeting ? self::sanitize_ids( $rule['category_ids'] ?? [] ) : [];
-		$excluded_product_ids = 'products' === $targeting ? [] : self::sanitize_ids( $rule['excluded_product_ids'] ?? [] );
+		$base_rule['product_ids']          = Product_Targeting::TARGETING_PRODUCTS === $targeting ? $base_rule['product_ids'] : [];
+		$base_rule['category_ids']         = Product_Targeting::TARGETING_CATEGORY === $targeting ? $base_rule['category_ids'] : [];
+		$base_rule['excluded_product_ids'] = Product_Targeting::TARGETING_PRODUCTS === $targeting ? [] : $base_rule['excluded_product_ids'];
 
-		if ( 'products' === $targeting && empty( $product_ids ) ) {
+		if ( Product_Targeting::TARGETING_PRODUCTS === $targeting && empty( $base_rule['product_ids'] ) ) {
 			return new \WP_Error(
 				'newspack_subscriber_discount_no_products',
 				__( 'Select at least one product for this discount.', 'newspack-plugin' )
 			);
 		}
-		if ( 'category' === $targeting && empty( $category_ids ) ) {
+		if ( Product_Targeting::TARGETING_CATEGORY === $targeting && empty( $base_rule['category_ids'] ) ) {
 			return new \WP_Error(
 				'newspack_subscriber_discount_no_categories',
 				__( 'Select at least one category for this discount.', 'newspack-plugin' )
 			);
 		}
 
-		return [
-			'id'                       => ! empty( $rule['id'] ) ? sanitize_key( $rule['id'] ) : self::generate_id(),
-			'subscription_product_ids' => $subscription_product_ids,
-			'targeting'                => $targeting,
-			'product_ids'              => $product_ids,
-			'category_ids'             => $category_ids,
-			'excluded_product_ids'     => $excluded_product_ids,
-			'discount_type'            => $discount_type,
-			'amount'                   => $amount,
-			'active'                   => isset( $rule['active'] ) ? (bool) $rule['active'] : true,
-			'created_at'               => ! empty( $rule['created_at'] )
-				? sanitize_text_field( $rule['created_at'] )
-				: gmdate( 'Y-m-d' ),
-		];
+		if ( empty( $base_rule['id'] ) ) {
+			$base_rule['id'] = Subscriber_Commerce::generate_rule_id();
+		}
+
+		return array_merge(
+			$base_rule,
+			[
+				'discount_type' => $discount_type,
+				'amount'        => $amount,
+			]
+		);
 	}
 
 	/**
@@ -440,14 +448,5 @@ class Subscriber_Discounts {
 				)
 			)
 		);
-	}
-
-	/**
-	 * A unique rule id.
-	 *
-	 * @return string
-	 */
-	private static function generate_id() {
-		return uniqid( 'discount_' );
 	}
 }

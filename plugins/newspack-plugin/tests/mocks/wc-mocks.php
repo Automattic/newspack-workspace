@@ -309,6 +309,17 @@ class WC_Product {
 	public function set_price( $price ) {
 		$this->data['price'] = $price;
 	}
+	public function get_sale_price() {
+		return $this->data['sale_price'] ?? ( $this->meta['_sale_price'] ?? '' );
+	}
+	/**
+	 * Mirrors WC_Product::is_on_sale() — a sale price is set and undercuts the
+	 * regular price.
+	 */
+	public function is_on_sale() {
+		$sale_price = $this->get_sale_price();
+		return '' !== (string) $sale_price && (float) $this->get_regular_price() > (float) $sale_price;
+	}
 	public function get_meta( $key, $single = true ) {
 		return $this->meta[ $key ] ?? '';
 	}
