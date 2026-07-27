@@ -1,0 +1,450 @@
+<?php
+/**
+ * Tests subscriber-only product purchase restriction.
+ *
+ * @package Newspack\Tests\Subscriber_Commerce
+ */
+
+namespace Newspack\Tests\Subscriber_Commerce;
+
+use Newspack\Product_Purchase_Restriction;
+use Newspack\Product_Targeting;
+use Newspack\Subscriber_Eligibility;
+use Newspack\Subscriber_Only_Products;
+
+/**
+ * Tests the WooCommerce Memberships purchase-restriction parity: a reader who
+ * doesn't subscribe can still *see* a restricted product, but cannot *buy* it.
+ *
+ * Enforcement rides `woocommerce_is_purchasable`, so these exercise the filter
+ * callback the same way WooCommerce does.
+ *
+ * The two process-wide guards in `is_enforcement_active()` — the
+ * NEWSPACK_CONTENT_GATES flag and Memberships being inactive — are verified at
+ * runtime rather than here: both are a `define()` or a `class_exists()`, so
+ * faking either would leak into every test that runs afterwards in the process.
+ *
+ * @group subscriber-commerce
+ * @group Product_Purchase_Restriction
+ */
+class Test_Product_Purchase_Restriction extends \WP_UnitTestCase {
+
+	/**
+	 * The restricted product.
+	 *
+	 * @var \WC_Product
+	 */
+	private $restricted_product;
+
+	/**
+	 * A product no restriction covers.
+	 *
+	 * @var \WC_Product
+	 */
+	private $open_product;
+
+	/**
+	 * The subscription that unlocks the restricted product.
+	 *
+	 * @var \WC_Product
+	 */
+	private $subscription;
+
+	/**
+	 * A reader who subscribes.
+	 *
+	 * @var int
+	 */
+	private $subscriber_id;
+
+	/**
+	 * A reader who doesn't.
+	 *
+	 * @var int
+	 */
+	private $non_subscriber_id;
+
+	/**
+	 * Enable the content gates flag and load the WooCommerce mocks.
+	 */
+	public static function setUpBeforeClass(): void {
+		parent::setUpBeforeClass();
+		if ( ! defined( 'NEWSPACK_CONTENT_GATES' ) ) {
+			define( 'NEWSPACK_CONTENT_GATES', true );
+		}
+		require_once dirname( __DIR__, 2 ) . '/mocks/wc-mocks.php';
+	}
+
+	/**
+	 * Register the product post type, build the products, and seed a
+	 * restriction covering one of them.
+	 */
+	public function set_up() {
+		parent::set_up();
+
+		register_post_type( 'product', [ 'public' => true ] );
+		register_post_type( 'product_variation', [ 'public' => false ] );
+		register_taxonomy( 'product_cat', 'product', [ 'hierarchical' => true ] );
+
+		$this->restricted_product = $this->create_product();
+		$this->open_product       = $this->create_product();
+		$this->subscription       = $this->create_product();
+
+		$this->subscriber_id     = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$this->non_subscriber_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+
+		add_filter( 'newspack_access_rules_has_active_subscription', [ $this, 'mock_oracle' ], 10, 2 );
+
+		$this->set_rules(
+			[
+				[
+					'id'                       => 'rule',
+					'subscription_product_ids' => [ $this->subscription->get_id() ],
+					'targeting'                => 'products',
+					'product_ids'              => [ $this->restricted_product->get_id() ],
+					'active'                   => true,
+				],
+			]
+		);
+	}
+
+	/**
+	 * Reset everything the restriction memoizes.
+	 */
+	public function tear_down() {
+		remove_filter( 'newspack_access_rules_has_active_subscription', [ $this, 'mock_oracle' ], 10 );
+		delete_option( Subscriber_Only_Products::OPTION_NAME );
+		delete_option( Subscriber_Only_Products::SETTINGS_OPTION_NAME );
+		$this->flush_caches();
+		wp_set_current_user( 0 );
+		global $products_database;
+		$products_database = []; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		parent::tear_down();
+	}
+
+	/**
+	 * Stand in for the subscription oracle: only the subscriber subscribes.
+	 *
+	 * @param bool $has_subscription Whether the user has an active subscription.
+	 * @param int  $user_id          User ID.
+	 *
+	 * @return bool
+	 */
+	public function mock_oracle( $has_subscription, $user_id ) {
+		return $user_id === $this->subscriber_id;
+	}
+
+	/**
+	 * Drop every per-request cache the restriction relies on.
+	 */
+	private function flush_caches() {
+		Product_Purchase_Restriction::flush_cache();
+		Product_Targeting::flush_cache();
+		Subscriber_Eligibility::flush_cache();
+	}
+
+	/**
+	 * Store the restrictions and drop the caches keyed on them.
+	 *
+	 * @param array[] $rules The rules.
+	 */
+	private function set_rules( $rules ) {
+		$sanitized = array_map( [ 'Newspack\Subscriber_Commerce', 'sanitize_base_rule' ], $rules );
+		update_option( Subscriber_Only_Products::OPTION_NAME, $sanitized );
+		$this->flush_caches();
+	}
+
+	/**
+	 * Create a product post plus its mock, registered so wc_get_product() finds it.
+	 *
+	 * @param int $parent_id Parent product ID, for a variation.
+	 *
+	 * @return \WC_Product
+	 */
+	private function create_product( $parent_id = 0 ) {
+		$post_id = $this->factory->post->create(
+			[
+				'post_type'   => $parent_id ? 'product_variation' : 'product',
+				'post_parent' => $parent_id,
+				'post_title'  => 'Product ' . wp_rand(),
+			]
+		);
+		$product = new \WC_Product(
+			[
+				'id'        => $post_id,
+				'parent_id' => $parent_id,
+			]
+		);
+
+		global $products_database;
+		$products_database[ $post_id ] = $product; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+
+		return $product;
+	}
+
+	/**
+	 * A reader who doesn't subscribe cannot buy a restricted product.
+	 */
+	public function test_non_subscriber_cannot_purchase() {
+		wp_set_current_user( $this->non_subscriber_id );
+
+		$this->assertFalse( Product_Purchase_Restriction::filter_is_purchasable( true, $this->restricted_product ) );
+	}
+
+	/**
+	 * A subscriber can.
+	 */
+	public function test_subscriber_can_purchase() {
+		wp_set_current_user( $this->subscriber_id );
+
+		$this->assertTrue( Product_Purchase_Restriction::filter_is_purchasable( true, $this->restricted_product ) );
+	}
+
+	/**
+	 * An anonymous reader cannot.
+	 */
+	public function test_anonymous_reader_cannot_purchase() {
+		$this->assertFalse( Product_Purchase_Restriction::filter_is_purchasable( true, $this->restricted_product ) );
+	}
+
+	/**
+	 * A product no restriction covers is untouched.
+	 */
+	public function test_unrestricted_product_is_left_alone() {
+		$this->assertTrue( Product_Purchase_Restriction::filter_is_purchasable( true, $this->open_product ) );
+	}
+
+	/**
+	 * A product WooCommerce already ruled unpurchasable stays that way: the
+	 * filter may only take purchasability away, never grant it.
+	 */
+	public function test_never_grants_purchasability_woocommerce_denied() {
+		wp_set_current_user( $this->subscriber_id );
+
+		$this->assertFalse( Product_Purchase_Restriction::filter_is_purchasable( false, $this->restricted_product ) );
+	}
+
+	/**
+	 * Shop managers keep purchasing rights, so a restriction can't lock a
+	 * publisher out of their own products.
+	 */
+	public function test_shop_manager_can_always_purchase() {
+		$manager_id = $this->factory->user->create( [ 'role' => 'administrator' ] );
+		// WooCommerce registers manage_woocommerce; it isn't loaded here, so the
+		// capability the check actually reads has to be granted explicitly.
+		get_user_by( 'id', $manager_id )->add_cap( 'manage_woocommerce' );
+		wp_set_current_user( $manager_id );
+
+		$this->assertTrue( Product_Purchase_Restriction::filter_is_purchasable( true, $this->restricted_product ) );
+	}
+
+	/**
+	 * Pausing a restriction hands its products back.
+	 */
+	public function test_inactive_restriction_does_not_block() {
+		$this->set_rules(
+			[
+				[
+					'id'                       => 'rule',
+					'subscription_product_ids' => [ $this->subscription->get_id() ],
+					'targeting'                => 'products',
+					'product_ids'              => [ $this->restricted_product->get_id() ],
+					'active'                   => false,
+				],
+			]
+		);
+
+		$this->assertTrue( Product_Purchase_Restriction::filter_is_purchasable( true, $this->restricted_product ) );
+	}
+
+	/**
+	 * A restriction naming no subscription names no way in. Blocking everyone
+	 * is far more likely to be a half-finished rule than an intent to withdraw
+	 * the product from sale, so it fails open.
+	 */
+	public function test_restriction_without_subscriptions_fails_open() {
+		$this->set_rules(
+			[
+				[
+					'id'                       => 'rule',
+					'subscription_product_ids' => [],
+					'targeting'                => 'products',
+					'product_ids'              => [ $this->restricted_product->get_id() ],
+					'active'                   => true,
+				],
+			]
+		);
+
+		$this->assertTrue( Product_Purchase_Restriction::filter_is_purchasable( true, $this->restricted_product ) );
+	}
+
+	/**
+	 * Two restrictions covering one product are alternatives, not hurdles:
+	 * satisfying either one unlocks the purchase. Each rule is an offer, so
+	 * adding one can only widen access.
+	 */
+	public function test_overlapping_restrictions_are_ored() {
+		$other_subscription = $this->create_product();
+		$this->set_rules(
+			[
+				[
+					'id'                       => 'unsatisfied',
+					// A subscription nobody in this test holds.
+					'subscription_product_ids' => [ $other_subscription->get_id() ],
+					'targeting'                => 'products',
+					'product_ids'              => [ $this->restricted_product->get_id() ],
+					'active'                   => true,
+				],
+				[
+					'id'                       => 'satisfied',
+					'subscription_product_ids' => [ $this->subscription->get_id() ],
+					'targeting'                => 'products',
+					'product_ids'              => [ $this->restricted_product->get_id() ],
+					'active'                   => true,
+				],
+			]
+		);
+		wp_set_current_user( $this->subscriber_id );
+
+		$this->assertTrue( Product_Purchase_Restriction::filter_is_purchasable( true, $this->restricted_product ) );
+	}
+
+	/**
+	 * A variation is restricted through its parent, which is what the publisher
+	 * picked.
+	 */
+	public function test_variation_is_restricted_through_its_parent() {
+		$variation = $this->create_product( $this->restricted_product->get_id() );
+
+		$this->assertFalse( Product_Purchase_Restriction::filter_is_purchasable( true, $variation ) );
+	}
+
+	/**
+	 * The notice names the subscription that unlocks the product, so the reader
+	 * knows what to buy.
+	 */
+	public function test_notice_links_the_unlocking_subscription() {
+		$message = Product_Purchase_Restriction::get_restricted_message( $this->restricted_product );
+
+		$this->assertStringContainsString( 'available to subscribers', $message );
+		$this->assertStringContainsString( get_permalink( $this->subscription->get_id() ), $message );
+	}
+
+	/**
+	 * Reader-facing copy says "subscribers", never Memberships' "members".
+	 */
+	public function test_notice_uses_subscriber_vocabulary() {
+		$message = Product_Purchase_Restriction::get_restricted_message( $this->restricted_product );
+
+		$this->assertStringNotContainsStringIgnoringCase( 'member', $message );
+	}
+
+	/**
+	 * A subscription the reader can't buy either is left out of the notice,
+	 * rather than pointing them at a product they've just been barred from.
+	 */
+	public function test_notice_omits_subscriptions_the_reader_cannot_buy() {
+		$this->set_rules(
+			[
+				[
+					'id'                       => 'rule',
+					'subscription_product_ids' => [ $this->subscription->get_id() ],
+					'targeting'                => 'products',
+					'product_ids'              => [ $this->restricted_product->get_id() ],
+					'active'                   => true,
+				],
+				[
+					'id'                       => 'locks-the-subscription',
+					'subscription_product_ids' => [ $this->open_product->get_id() ],
+					'targeting'                => 'products',
+					'product_ids'              => [ $this->subscription->get_id() ],
+					'active'                   => true,
+				],
+			]
+		);
+
+		$message = Product_Purchase_Restriction::get_restricted_message( $this->restricted_product );
+
+		$this->assertStringNotContainsString( get_permalink( $this->subscription->get_id() ), $message );
+	}
+
+	/**
+	 * Hiding is off by default: the parity feature blocks purchasing and leaves
+	 * the product listed.
+	 */
+	public function test_products_stay_listed_by_default() {
+		$query = $this->run_product_query();
+
+		$this->assertEmpty( $query->get( 'post__not_in' ) );
+	}
+
+	/**
+	 * With hiding on, a reader who can't buy the product doesn't see it listed.
+	 */
+	public function test_hiding_removes_unpurchasable_products_from_lists() {
+		update_option( Subscriber_Only_Products::SETTINGS_OPTION_NAME, [ 'hide_from_product_lists' => true ] );
+		$this->flush_caches();
+
+		$query = $this->run_product_query();
+
+		$this->assertContains( $this->restricted_product->get_id(), (array) $query->get( 'post__not_in' ) );
+		$this->assertNotContains( $this->open_product->get_id(), (array) $query->get( 'post__not_in' ) );
+	}
+
+	/**
+	 * A subscriber sees everything: hiding follows purchasability, so it must
+	 * not hide a product from the very readers it is sold to.
+	 */
+	public function test_hiding_leaves_subscribers_lists_intact() {
+		update_option( Subscriber_Only_Products::SETTINGS_OPTION_NAME, [ 'hide_from_product_lists' => true ] );
+		$this->flush_caches();
+		wp_set_current_user( $this->subscriber_id );
+
+		$query = $this->run_product_query();
+
+		$this->assertNotContains( $this->restricted_product->get_id(), (array) $query->get( 'post__not_in' ) );
+	}
+
+	/**
+	 * A direct link still resolves: hiding covers listings only, so a reader
+	 * holding the URL isn't left wondering where the product went.
+	 */
+	public function test_hiding_leaves_the_product_page_reachable() {
+		update_option( Subscriber_Only_Products::SETTINGS_OPTION_NAME, [ 'hide_from_product_lists' => true ] );
+		$this->flush_caches();
+
+		$query = new \WP_Query();
+		$query->query_vars = [
+			'post_type' => 'product',
+			'p'         => $this->restricted_product->get_id(),
+		];
+		$query->is_singular = true;
+		Product_Purchase_Restriction::filter_product_query( $query );
+
+		$this->assertEmpty( $query->get( 'post__not_in' ) );
+	}
+
+	/**
+	 * Run a product listing query through the hiding filter.
+	 *
+	 * @return \WP_Query
+	 */
+	private function run_product_query() {
+		$query             = new \WP_Query();
+		$query->query_vars = [ 'post_type' => 'product' ];
+		Product_Purchase_Restriction::filter_product_query( $query );
+		return $query;
+	}
+
+	/**
+	 * Saving a restriction takes effect immediately: the memoized verdicts must
+	 * not outlive the rules they were computed from.
+	 */
+	public function test_saving_a_restriction_invalidates_the_cache() {
+		$this->assertFalse( Product_Purchase_Restriction::filter_is_purchasable( true, $this->restricted_product ) );
+
+		Subscriber_Only_Products::delete_rule( 'rule' );
+
+		$this->assertTrue( Product_Purchase_Restriction::filter_is_purchasable( true, $this->restricted_product ) );
+	}
+}

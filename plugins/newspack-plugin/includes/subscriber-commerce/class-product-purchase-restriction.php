@@ -1,0 +1,486 @@
+<?php
+/**
+ * Newspack Subscriber Commerce - product purchase restriction.
+ *
+ * @package Newspack
+ */
+
+namespace Newspack;
+
+defined( 'ABSPATH' ) || exit;
+
+/**
+ * Enforces subscriber-only product restrictions.
+ *
+ * Only the purchase is blocked: the product page, its price and the product
+ * lists stay visible, and a notice on the product page tells the reader which
+ * subscriptions unlock it. This mirrors WooCommerce Memberships' product
+ * purchase restriction, which Access Control replaces.
+ *
+ * A reader may buy a restricted product if they subscribe to any subscription
+ * named by any restriction covering it — each restriction is an offer, not an
+ * additional hurdle. Publishers can also hide restricted products from product
+ * lists entirely, which goes beyond purchase restriction and is off by default.
+ */
+class Product_Purchase_Restriction {
+
+	/**
+	 * Whether the reader may purchase a product, keyed by "{product_id}_{user_id}".
+	 * WooCommerce asks several times per product per request (list loop, single
+	 * product template, cart validation), so the decision is memoized.
+	 *
+	 * @var array<string, bool>
+	 */
+	private static $purchase_verdicts = [];
+
+	/**
+	 * The active restrictions. Null until first read.
+	 *
+	 * @var array[]|null
+	 */
+	private static $rules = null;
+
+	/**
+	 * Products the notice has already been rendered for this request, so the
+	 * classic and block templates can't both emit it.
+	 *
+	 * @var array<int, bool>
+	 */
+	private static $rendered_notices = [];
+
+	/**
+	 * Products hidden from the current reader's product lists, or null before
+	 * they have been worked out. A page can run many product queries; the set
+	 * depends only on the rules and the reader, so it is computed once.
+	 *
+	 * @var int[]|null
+	 */
+	private static $hidden_product_ids = null;
+
+	/**
+	 * How many covered products the hiding pass will consider.
+	 *
+	 * Hiding has to name the products to exclude, so it enumerates what the
+	 * restrictions cover. That is bounded by what a publisher restricted rather
+	 * than by the catalog, and these are newsroom stores — books, tickets,
+	 * merchandise — so the ceiling is far above any real configuration. Past it
+	 * the excess stays listed (but still unpurchasable): over-listing is the
+	 * safe failure for an opt-in convenience, where a slow query is not.
+	 */
+	const MAX_HIDDEN_PRODUCTS = 500;
+
+	/**
+	 * Initialize hooks.
+	 */
+	public static function init() {
+		// Priority 999, as WooCommerce Memberships does: the restriction must have
+		// the final say, or a later callback (e.g. WooCommerce Subscriptions'
+		// renewal-cart limiter, which runs at 12 and returns true) hands the
+		// purchase back.
+		add_filter( 'woocommerce_is_purchasable', [ __CLASS__, 'filter_is_purchasable' ], 999, 2 );
+		add_filter( 'woocommerce_variation_is_purchasable', [ __CLASS__, 'filter_is_purchasable' ], 999, 2 );
+		// Priority 31: right after the add-to-cart form (30), where Memberships puts its own notice.
+		add_action( 'woocommerce_single_product_summary', [ __CLASS__, 'render_restricted_message' ], 31 );
+		// Block themes never fire the action above; the notice rides the add-to-cart block instead.
+		add_filter( 'render_block', [ __CLASS__, 'filter_add_to_cart_block' ], 10, 2 );
+		// Optional, off by default: keep restricted products out of product lists.
+		add_action( 'pre_get_posts', [ __CLASS__, 'filter_product_query' ] );
+	}
+
+	/**
+	 * Block purchasing of a restricted product for readers who don't subscribe.
+	 *
+	 * @param bool        $purchasable Whether the product is purchasable.
+	 * @param \WC_Product $product     The product (or variation).
+	 *
+	 * @return bool Whether the product is purchasable.
+	 */
+	public static function filter_is_purchasable( $purchasable, $product ) {
+		// Never make purchasable a product WooCommerce already ruled out.
+		if ( ! $purchasable ) {
+			return $purchasable;
+		}
+		return self::can_purchase( $product );
+	}
+
+	/**
+	 * Whether the reader may purchase a product.
+	 *
+	 * @param \WC_Product $product The product (or variation).
+	 * @param int|null    $user_id Optional user ID. Defaults to the current user.
+	 *
+	 * @return bool
+	 */
+	public static function can_purchase( $product, $user_id = null ) {
+		if ( ! Subscriber_Commerce::is_enforcement_active() || ! $product instanceof \WC_Product ) {
+			return true;
+		}
+		$product_id = (int) $product->get_id();
+		if ( ! $product_id ) {
+			return true;
+		}
+
+		$user_id   = null === $user_id ? get_current_user_id() : (int) $user_id;
+		$cache_key = $product_id . '_' . $user_id;
+		if ( ! isset( self::$purchase_verdicts[ $cache_key ] ) ) {
+			self::$purchase_verdicts[ $cache_key ] = self::evaluate_purchase( $product, $user_id );
+		}
+		return self::$purchase_verdicts[ $cache_key ];
+	}
+
+	/**
+	 * Work out whether a reader may purchase a product.
+	 *
+	 * @param \WC_Product $product The product (or variation).
+	 * @param int         $user_id The user ID (0 for anonymous readers).
+	 *
+	 * @return bool
+	 */
+	private static function evaluate_purchase( $product, $user_id ) {
+		$can_purchase = true;
+		$rules        = self::get_restricting_rules( $product );
+
+		if ( ! empty( $rules ) ) {
+			// Shop managers always keep purchasing rights, so a restriction can't
+			// lock a publisher out of their own products (Memberships parity).
+			if ( user_can( $user_id, 'manage_woocommerce' ) ) {
+				$can_purchase = true;
+			} else {
+				// Any restriction the reader satisfies unlocks the product: each
+				// rule names a way in, so more rules can only widen access.
+				$can_purchase = false;
+				foreach ( $rules as $rule ) {
+					if ( Subscriber_Eligibility::user_has( $user_id, $rule['subscription_product_ids'] ) ) {
+						$can_purchase = true;
+						break;
+					}
+				}
+			}
+		}
+
+		/**
+		 * Filters whether a reader may purchase a subscriber-only product.
+		 *
+		 * @param bool        $can_purchase Whether the reader may purchase it.
+		 * @param \WC_Product $product      The product (or variation).
+		 * @param int         $user_id      The user ID (0 for anonymous readers).
+		 * @param array[]     $rules        The restrictions covering the product.
+		 */
+		return (bool) apply_filters( 'newspack_subscriber_only_product_can_purchase', $can_purchase, $product, $user_id, $rules );
+	}
+
+	/**
+	 * Get the active restrictions covering a product.
+	 *
+	 * @param \WC_Product $product The product (or variation).
+	 *
+	 * @return array[] The restrictions.
+	 */
+	public static function get_restricting_rules( $product ) {
+		if ( null === self::$rules ) {
+			self::$rules = Subscriber_Only_Products::get_active_rules();
+		}
+		return Product_Targeting::get_matching_rules( self::$rules, $product );
+	}
+
+	/**
+	 * Keep restricted products out of product lists, when the publisher asked
+	 * for it.
+	 *
+	 * Goes beyond purchase restriction, so it is opt-in. Direct links still
+	 * work and show the product page with its notice — this only affects
+	 * listings, so a reader who has the URL is never left wondering where the
+	 * product went.
+	 *
+	 * Applies to every front-end product listing, not only the main query: a
+	 * "product list" here means any of them — the shop, a category archive, a
+	 * products block in a post — and hiding a product from one but not the next
+	 * would be incoherent. Singular queries are left alone so a direct link
+	 * still resolves.
+	 *
+	 * @param \WP_Query $query The query.
+	 */
+	public static function filter_product_query( $query ) {
+		if ( is_admin() || ! $query instanceof \WP_Query ) {
+			return;
+		}
+		if ( ! Subscriber_Commerce::is_enforcement_active() ) {
+			return;
+		}
+		$settings = Subscriber_Only_Products::get_settings();
+		if ( empty( $settings['hide_from_product_lists'] ) ) {
+			return;
+		}
+		// Only product listings: a single product's own query must still find it.
+		if ( $query->is_singular() || ! self::is_product_query( $query ) ) {
+			return;
+		}
+
+		$hidden = self::get_hidden_product_ids();
+		if ( empty( $hidden ) ) {
+			return;
+		}
+
+		$excluded = array_map( 'absint', (array) $query->get( 'post__not_in' ) );
+		// phpcs:ignore WordPressVIPMinimum.Hooks.PreGetPosts.PreGetPosts -- Deliberately covers secondary product listings too; see the doc block.
+		$query->set( 'post__not_in', array_values( array_unique( array_merge( $excluded, $hidden ) ) ) );
+	}
+
+	/**
+	 * Whether a query lists products.
+	 *
+	 * @param \WP_Query $query The query.
+	 *
+	 * @return bool
+	 */
+	private static function is_product_query( $query ) {
+		$post_types = (array) $query->get( 'post_type' );
+		if ( in_array( 'product', $post_types, true ) ) {
+			return true;
+		}
+		// The shop and product taxonomy archives don't set post_type explicitly.
+		return function_exists( 'is_shop' ) && ( $query->is_post_type_archive( 'product' ) || $query->is_tax( get_object_taxonomies( 'product' ) ) );
+	}
+
+	/**
+	 * Get the products the current reader may not purchase, for hiding.
+	 *
+	 * Only products covered by a restriction are considered, so the cost is
+	 * bounded by what the publisher actually restricted rather than by the
+	 * catalog size.
+	 *
+	 * @return int[] The product IDs to hide.
+	 */
+	private static function get_hidden_product_ids() {
+		if ( null !== self::$hidden_product_ids ) {
+			return self::$hidden_product_ids;
+		}
+		$hidden = [];
+		foreach ( self::covered_product_ids() as $product_id ) {
+			$product = wc_get_product( $product_id );
+			if ( $product instanceof \WC_Product && ! self::can_purchase( $product ) ) {
+				$hidden[] = (int) $product_id;
+			}
+		}
+		self::$hidden_product_ids = $hidden;
+		return self::$hidden_product_ids;
+	}
+
+	/**
+	 * Get the IDs of every product covered by an active restriction.
+	 *
+	 * @return int[] The product IDs.
+	 */
+	private static function covered_product_ids() {
+		$rules = Subscriber_Only_Products::get_active_rules();
+		if ( empty( $rules ) ) {
+			return [];
+		}
+
+		$named       = [];
+		$category_ids = [];
+		$covers_all  = false;
+		foreach ( $rules as $rule ) {
+			if ( Product_Targeting::TARGETING_ALL === $rule['targeting'] ) {
+				$covers_all = true;
+			} elseif ( Product_Targeting::TARGETING_CATEGORY === $rule['targeting'] ) {
+				$category_ids = array_merge( $category_ids, Product_Targeting::expand_category_ids( $rule['category_ids'] ) );
+			} else {
+				$named = array_merge( $named, $rule['product_ids'] );
+			}
+		}
+
+		$args = [
+			'post_type'      => 'product',
+			'post_status'    => 'publish',
+			// phpcs:ignore WordPress.WP.PostsPerPage.posts_per_page_posts_per_page -- Bounded by what the publisher restricted, not by the catalog; see MAX_HIDDEN_PRODUCTS.
+			'posts_per_page' => self::MAX_HIDDEN_PRODUCTS,
+			'fields'         => 'ids',
+			'no_found_rows'  => true,
+		];
+		if ( ! $covers_all ) {
+			if ( empty( $category_ids ) ) {
+				return array_values( array_unique( array_map( 'absint', $named ) ) );
+			}
+			$args['tax_query'] = [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query
+				[
+					'taxonomy'         => Product_Targeting::PRODUCT_CATEGORY_TAXONOMY,
+					'terms'            => array_unique( $category_ids ),
+					'include_children' => false, // Already expanded.
+				],
+			];
+		}
+
+		$ids = get_posts( $args );
+		return array_values( array_unique( array_merge( array_map( 'absint', $named ), array_map( 'absint', $ids ) ) ) );
+	}
+
+	/**
+	 * Render the notice on a classic product template.
+	 */
+	public static function render_restricted_message() {
+		global $product;
+
+		echo wp_kses_post( self::get_restricted_message_html( $product ) );
+	}
+
+	/**
+	 * Render the notice on a block-theme product template, where
+	 * `woocommerce_single_product_summary` never fires.
+	 *
+	 * The add-to-cart block renders nothing for a product the reader can't buy,
+	 * so without this the purchase is blocked with no explanation — the reader
+	 * just finds the button missing.
+	 *
+	 * @param string $block_content The block's rendered content.
+	 * @param array  $block         The parsed block.
+	 *
+	 * @return string The block content, with the notice appended when the reader can't purchase.
+	 */
+	public static function filter_add_to_cart_block( $block_content, $block ) {
+		// Only the single-product add-to-cart blocks. The product list's button is
+		// left alone: lists stay as WooCommerce renders them, exactly as for a
+		// product that's out of stock.
+		$add_to_cart_blocks = [ 'woocommerce/add-to-cart-form', 'woocommerce/add-to-cart-with-options' ];
+		if ( ! in_array( $block['blockName'] ?? '', $add_to_cart_blocks, true ) ) {
+			return $block_content;
+		}
+
+		$product = self::get_block_product( $block );
+		if ( ! $product ) {
+			return $block_content;
+		}
+
+		return $block_content . self::get_restricted_message_html( $product );
+	}
+
+	/**
+	 * Resolve the product a block is rendering for.
+	 *
+	 * @param array $block The parsed block.
+	 *
+	 * @return \WC_Product|null The product, or null if it can't be resolved.
+	 */
+	private static function get_block_product( $block ) {
+		$product_id = (int) ( $block['attrs']['productId'] ?? $block['context']['postId'] ?? get_the_ID() );
+		if ( ! $product_id || ! function_exists( 'wc_get_product' ) ) {
+			return null;
+		}
+		$product = wc_get_product( $product_id );
+		return $product instanceof \WC_Product ? $product : null;
+	}
+
+	/**
+	 * Build the notice markup for a product the reader can't purchase.
+	 *
+	 * Returns an empty string when the product is purchasable, so both the
+	 * classic and block templates can call it unconditionally. The notice is
+	 * emitted once per product per request, so a template running both paths
+	 * can't double it up.
+	 *
+	 * @param \WC_Product|null $product The product.
+	 *
+	 * @return string The notice HTML, escaped, or an empty string.
+	 */
+	private static function get_restricted_message_html( $product ): string {
+		if ( ! $product instanceof \WC_Product || self::can_purchase( $product ) ) {
+			return '';
+		}
+
+		$product_id = (int) $product->get_id();
+		if ( isset( self::$rendered_notices[ $product_id ] ) ) {
+			return '';
+		}
+		self::$rendered_notices[ $product_id ] = true;
+
+		$message = self::get_restricted_message( $product );
+		if ( ! $message ) {
+			return '';
+		}
+
+		return sprintf(
+			'<div class="woocommerce-info newspack-subscriber-only-notice">%s</div>',
+			wp_kses_post( $message )
+		);
+	}
+
+	/**
+	 * Build the message shown to a reader who can't purchase a product.
+	 *
+	 * @param \WC_Product $product The product.
+	 *
+	 * @return string The message. May contain links, so it is escaped with wp_kses_post() on output.
+	 */
+	public static function get_restricted_message( $product ) {
+		$links = self::get_subscription_links( $product );
+
+		if ( empty( $links ) ) {
+			$message = __( 'This product is available to subscribers.', 'newspack-plugin' );
+		} else {
+			$message = sprintf(
+				/* translators: %s: list of linked subscription names. */
+				__( 'This product is available to subscribers. To purchase it, subscribe to %s.', 'newspack-plugin' ),
+				// wp_sprintf( '%l' ) builds the list with the locale's separators ("A, B and C").
+				wp_sprintf( '%l', $links )
+			);
+		}
+
+		/**
+		 * Filters the notice shown to a reader who can't purchase a subscriber-only product.
+		 *
+		 * @param string      $message The message. Rendered through wp_kses_post().
+		 * @param \WC_Product $product The product.
+		 */
+		return apply_filters( 'newspack_subscriber_only_product_message', $message, $product );
+	}
+
+	/**
+	 * Get links to the subscriptions that unlock a product, so the reader knows
+	 * what to buy.
+	 *
+	 * A subscription the reader can't buy either — because a restriction covers
+	 * it too — is left out rather than pointed at, so the notice never sends
+	 * someone to a product they've just been barred from purchasing.
+	 *
+	 * @param \WC_Product $product The product.
+	 *
+	 * @return string[] The links, keyed by subscription product ID.
+	 */
+	private static function get_subscription_links( $product ) {
+		if ( ! function_exists( 'wc_get_product' ) ) {
+			return [];
+		}
+
+		$links = [];
+		foreach ( self::get_restricting_rules( $product ) as $rule ) {
+			foreach ( $rule['subscription_product_ids'] as $subscription_id ) {
+				$subscription_id = (int) $subscription_id;
+				if ( isset( $links[ $subscription_id ] ) ) {
+					continue;
+				}
+				$subscription = wc_get_product( $subscription_id );
+				if ( ! $subscription || ! self::can_purchase( $subscription ) ) {
+					continue;
+				}
+				$links[ $subscription_id ] = sprintf(
+					'<a href="%s">%s</a>',
+					esc_url( (string) get_permalink( $subscription_id ) ),
+					esc_html( $subscription->get_name() )
+				);
+			}
+		}
+		return $links;
+	}
+
+	/**
+	 * Flush the per-request caches. For tests and for callers that change the
+	 * rules mid-request.
+	 */
+	public static function flush_cache() {
+		self::$purchase_verdicts  = [];
+		self::$rules              = null;
+		self::$rendered_notices   = [];
+		self::$hidden_product_ids = null;
+	}
+}
+Product_Purchase_Restriction::init();
