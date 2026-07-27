@@ -55,4 +55,108 @@
 		color: wp-colors.$gray-700;
 		font-weight: 500;
 	}
+
+	// --- Applied rules + effective price ---
+
+	&__policy-chips {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 4px;
+	}
+
+	// Each chip links to the rule's edit view — the Badge stays the visual; the
+	// only link affordance is an underline on the label on hover/focus.
+	&__policy-chip {
+		text-decoration: none;
+
+		&:hover .newspack-badge,
+		&:focus-visible .newspack-badge {
+			text-decoration: underline;
+		}
+	}
+
+	// Per-plan label in the edit form's read-only policy list (variable subscriptions).
+	&__policy-plan-label {
+		flex: 0 0 auto;
+		min-width: 96px;
+		color: wp-colors.$gray-700;
+		font-weight: 500;
+	}
+
+	// base -> effective price display.
+	&__effective-price {
+		display: inline-flex;
+		align-items: baseline;
+		gap: 4px;
+		white-space: nowrap;
+	}
+
+	&__base-price {
+		color: wp-colors.$gray-700;
+	}
+
+	// With a multi-cycle schedule the whole cell is the popover's hover/click target —
+	// reset the button chrome so it reads as the price, with a dotted underline as the
+	// only "expandable" affordance.
+	&__effective-price-trigger {
+		appearance: none;
+		background: none;
+		border: none;
+		margin: 0;
+		padding: 0;
+		font: inherit;
+		color: inherit;
+		text-align: left;
+		cursor: pointer;
+
+		.newspack-subscription-products__effective-price-value {
+			border-bottom: 1px dotted wp-colors.$gray-400;
+		}
+
+		&:hover .newspack-subscription-products__effective-price-value,
+		&:focus-visible .newspack-subscription-products__effective-price-value {
+			border-bottom-color: currentcolor;
+		}
+	}
+
+	// Per-cycle schedule popover contents.
+	&__schedule {
+		padding: 4px;
+		min-width: 208px;
+	}
+
+	&__schedule-title {
+		padding: 4px 8px 8px;
+		font-size: 11px;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.02em;
+		color: wp-colors.$gray-700;
+	}
+
+	&__schedule-list {
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+
+	&__schedule-row {
+		display: flex;
+		justify-content: space-between;
+		align-items: baseline;
+		gap: 32px;
+		padding: 6px 8px;
+
+		& + & {
+			border-top: 1px solid wp-colors.$gray-100;
+		}
+	}
+
+	&__schedule-when {
+		color: wp-colors.$gray-700;
+	}
+
+	&__schedule-price {
+		white-space: nowrap;
+	}
 }

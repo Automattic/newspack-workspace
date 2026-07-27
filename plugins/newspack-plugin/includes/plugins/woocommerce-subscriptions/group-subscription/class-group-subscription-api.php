@@ -86,6 +86,27 @@ class Group_Subscription_API {
 		);
 		\register_rest_route(
 			self::NAMESPACE,
+			'/name',
+			[
+				'methods'             => \WP_REST_Server::EDITABLE,
+				'callback'            => [ __CLASS__, 'api_update_name' ],
+				'permission_callback' => [ __CLASS__, 'permission_callback' ],
+				'args'                => [
+					'subscription_id' => [
+						'type'              => 'integer',
+						'required'          => true,
+						'sanitize_callback' => 'absint',
+					],
+					'name'            => [
+						'type'              => 'string',
+						'required'          => true,
+						'sanitize_callback' => 'sanitize_text_field',
+					],
+				],
+			]
+		);
+		\register_rest_route(
+			self::NAMESPACE,
 			'/invite',
 			[
 				'methods'             => \WP_REST_Server::EDITABLE,
@@ -312,6 +333,41 @@ class Group_Subscription_API {
 		}
 		$results = Group_Subscription::update_members( $subscription_id, $members_to_add ?? [], $members_to_remove ?? [] );
 		return \rest_ensure_response( $results );
+	}
+
+	/**
+	 * Rename a group subscription.
+	 *
+	 * Renaming is metadata-only, so unlike member/invite changes it is NOT gated on the
+	 * subscription's state: an owner can still rename a cancelled or expired group to tell
+	 * their groups apart in the picker. An empty name clears the override, so the group
+	 * name falls back to the product name and then the default group label.
+	 *
+	 * @param \WP_REST_Request $request The request object.
+	 *
+	 * @return \WP_REST_Response The response object, carrying the resolved group name.
+	 */
+	public static function api_update_name( $request ) {
+		$subscription_id = $request->get_param( 'subscription_id' );
+		$subscription    = WooCommerce_Subscriptions::sanitize_subscription( $subscription_id );
+		if ( ! $subscription ) {
+			return \rest_ensure_response(
+				new \WP_Error(
+					'newspack_group_subscription_not_found',
+					__( 'Subscription not found.', 'newspack-plugin' ),
+					[ 'status' => 404 ]
+				)
+			);
+		}
+		// Cap the length to match the input's maxlength, so a client bypassing the field can't
+		// store an oversized name that breaks the header/picker layout. mb_substr() needs no
+		// mbstring guard: WP core polyfills it in wp-includes/compat.php. Unlike mb_strtolower(),
+		// which core does not polyfill, hence the guard in Group_Subscription::get_label_lower().
+		$name = mb_substr( trim( (string) $request->get_param( 'name' ) ), 0, Group_Subscription_Settings::GROUP_NAME_MAX_LENGTH );
+		Group_Subscription_Settings::update_subscription_name( $subscription, $name );
+		// Return the resolved name so the client can reflect the fallback when the name was cleared.
+		$settings = Group_Subscription_Settings::get_subscription_settings( $subscription );
+		return \rest_ensure_response( [ 'name' => $settings['name'] ] );
 	}
 
 	/**

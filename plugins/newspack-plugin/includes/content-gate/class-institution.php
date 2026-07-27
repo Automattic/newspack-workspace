@@ -165,6 +165,20 @@ class Institution {
 	}
 
 	/**
+	 * Whether any institution is configured.
+	 *
+	 * Callers that only need existence should use this rather than counting
+	 * get_cached_institutions(): the cache is returned verbatim from a
+	 * transient, whose value passes through the pre_transient/transient filters
+	 * and so is not guaranteed to be an array a caller can count().
+	 *
+	 * @return bool
+	 */
+	public static function has_institutions() {
+		return ! empty( self::get_cached_institutions() );
+	}
+
+	/**
 	 * Rebuild the institutions transient cache.
 	 *
 	 * @return array The rebuilt cache.

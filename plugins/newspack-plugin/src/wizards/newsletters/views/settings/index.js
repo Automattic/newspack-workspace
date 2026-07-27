@@ -18,6 +18,7 @@ import { sprintf, __ } from '@wordpress/i18n';
 import {
 	ExternalLink,
 	Notice as WpNotice,
+	TextareaControl,
 	ToggleControl,
 	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
@@ -232,6 +233,22 @@ export const Settings = ( {
 			return null;
 		}
 		switch ( setting.type ) {
+			case 'textarea': {
+				const props = getSettingProps( setting.key );
+				return (
+					<TextareaControl
+						key={ setting.key }
+						label={ props.label }
+						value={ props.value }
+						placeholder={ props.placeholder }
+						help={ config.settings[ setting.key ]?.help }
+						onChange={ props.onChange }
+						disabled={ props.disabled }
+						rows={ 3 }
+						__nextHasNoMarginBottom
+					/>
+				);
+			}
 			case 'select':
 				return <SelectControl key={ setting.key } { ...getSettingProps( setting.key ) } />;
 			case 'checkbox': {
@@ -354,9 +371,9 @@ export const Settings = ( {
 
 	if ( ! error && isEmpty( config ) ) {
 		return (
-			<div className="flex justify-around mt4">
+			<HStack justify="center" className="newspack-newsletters-settings__loading">
 				<Waiting />
-			</div>
+			</HStack>
 		);
 	}
 
@@ -669,9 +686,9 @@ export const SubscriptionLists = ( { lockedLists, onUpdate, provider, labels = {
 						</WpNotice>
 					) }
 					{ inFlight && ! lists?.length && ! error && (
-						<div className="flex justify-around mt4">
+						<HStack justify="center" className="newspack-newsletters-settings__loading">
 							<Waiting />
-						</div>
+						</HStack>
 					) }
 					{ ! lockedLists &&
 						! error &&

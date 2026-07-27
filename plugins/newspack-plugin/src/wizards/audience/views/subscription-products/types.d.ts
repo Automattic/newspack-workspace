@@ -6,6 +6,43 @@
  */
 
 /**
+ * A single pricing rule applied to a product.
+ */
+interface SubscriptionPolicy {
+	id: string;
+	slug: string;
+	label: string;
+	// The rule's strategy id (e.g. 'simple_price', 'stepped_by_cycle').
+	type: string;
+	adjustment_label: string;
+}
+
+/**
+ * One segment of a product's per-cycle price trajectory. Cycle 1 is
+ * the purchase; each segment runs from `from_cycle` until the next one takes over.
+ */
+interface SubscriptionPolicySegment {
+	from_cycle: number;
+	amount: number;
+}
+
+/**
+ * Resolved applied-rule stack + effective price for a product.
+ *
+ * Returned by the PHP integration seam ({@see Subscription_Policy_Resolver}).
+ */
+interface SubscriptionPolicyResolution {
+	is_mock: boolean;
+	// Null when the product is unpriced (nothing can price it) — rendered as an em dash.
+	base_price: number | null;
+	effective_price: number | null;
+	currency: string;
+	cycle: string;
+	policies: SubscriptionPolicy[];
+	schedule: SubscriptionPolicySegment[];
+}
+
+/**
  * One price variation of a variable subscription.
  */
 interface SubscriptionProductVariation {
@@ -15,6 +52,8 @@ interface SubscriptionProductVariation {
 	period: string;
 	interval: number;
 	price_label: string;
+	// Each variation resolves its own applied-rule stack + effective price.
+	policy: SubscriptionPolicyResolution;
 	// Active subscribers on this plan; a plan with subscribers can't be removed.
 	active_subscriptions: number;
 	// Group-subscription (multi-seat) settings for this plan.
@@ -77,6 +116,7 @@ interface SubscriptionProduct {
 	category_label: string;
 	active_subscriptions: number | null;
 	edit_url: string;
+	policy: SubscriptionPolicyResolution;
 }
 
 /**
@@ -86,6 +126,8 @@ interface SubscriptionProductsCurrency {
 	code: string;
 	symbol: string;
 	decimals: number;
+	decimal_separator: string;
+	thousand_separator: string;
 }
 
 /**
@@ -94,6 +136,7 @@ interface SubscriptionProductsCurrency {
 interface SubscriptionProductsResponse {
 	products: SubscriptionProduct[];
 	currency: SubscriptionProductsCurrency;
+	policy_source_is_mock: boolean;
 	available_categories: { id: number; name: string }[];
 	// Whether the group-subscription (multi-seat) content-gate feature is enabled.
 	group_subscriptions_enabled: boolean;
@@ -103,6 +146,7 @@ interface Window {
 	newspackAudienceSubscriptionProducts?: {
 		new_product_url: string;
 		manage_products_url: string;
+		policy_source_is_mock: boolean;
 		woocommerce_subscriptions_active: boolean;
 	};
 }

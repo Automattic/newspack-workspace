@@ -12,7 +12,8 @@
 		"readme": "grunt readme",
 		"semantic-release": "newspack-scripts release --files=republication-tracker-tool.php",
 		"release:archive": "npm run build && rm -rf release && mkdir -p release && rsync -r . ./release/republication-tracker-tool --exclude-from='./.distignore' && cd release && zip -r republication-tracker-tool.zip republication-tracker-tool",
-		"release": "npm run semantic-release"
+		"release": "npm run semantic-release",
+		"typescript:check": "newspack-scripts typescript-check"
 	},
 	"repository": {
 		"type": "git",

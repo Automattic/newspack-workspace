@@ -226,7 +226,7 @@ Blocks in `src/blocks/` with `block.json` metadata. Central registration in `src
 - Design tokens in `packages/colors/colors.module.scss` (primary, secondary, tertiary, quaternary, neutral + semantic colors, each with 000-1000 scale).
 - See `packages/colors/DEVELOPMENT.md` for the color usage decision tree: backend admin uses WordPress colors (with `primary-600` accent override), block icons must use `primary-400`, frontend Newspack UI uses `newspack-colors`, theme elements use the theme palette.
 - BEM-ish naming with `newspack-` prefix (e.g., `.newspack-wizard__header`, `.newspack-card`).
-- Tachyons CSS utility library available for utility classes.
+- No utility-class library. For layout, use `__experimentalHStack`/`__experimentalVStack` from `@wordpress/components`; spacing via the `spacing` prop (4px units).
 - Shared mixins in `src/shared/scss/_mixins.scss`.
 
 ### JS Testing

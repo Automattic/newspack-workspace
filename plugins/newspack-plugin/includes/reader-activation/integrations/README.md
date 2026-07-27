@@ -243,6 +243,15 @@ When a contact needs to be synced, the framework calls `push_contact_data()` on 
 
 `prepare_contact()` is a no-op when the site is still on the legacy metadata schema (where the metadata classes pre-filter), which keeps newly-built integrations compatible with un-migrated sites.
 
+### Optional `$options` parameter
+
+`Contact_Sync` may pass a fourth `$options` array to `push_contact_data()` carrying operator-driven sync scoping (currently used by the `wp newspack esp sync` CLI):
+
+- `skip_lists` (bool) — upsert the contact without adding it to any list, so an unsubscribed contact isn't resubscribed.
+- `fields` (string[]|null) — the canonical field labels the sync is scoped to (already applied to the metadata before your method is called).
+
+The abstract signature intentionally stays three-parameter (`push_contact_data( $contact, $context, $existing_contact )`). `Contact_Sync::push_to_integrations()` calls every integration with the fourth `$options` argument; PHP discards surplus positional arguments to a method that declares fewer parameters (they remain available via `func_get_args()`) — there is no warning or error, so a three-parameter implementation keeps working unchanged. Adding the fourth parameter to the *abstract* instead would be a fatal "declaration must be compatible" error for every existing three-parameter override, which is why the parameter lives only on the concrete overrides that use it. Add `$options = []` to your override only if the integration needs to react to these flags (the built-in `esp` integration reads `skip_lists`). Integrations that ignore `$options` behave exactly as before.
+
 ### When pushes are triggered
 
 - Data event handlers registered via `register_handler()` (see below).
