@@ -81,6 +81,10 @@ declare global {
 			// wp_localize_script() stringifies booleans ('1'/''); the wizard writes real booleans back.
 			presave_checks_enabled: boolean | string;
 			default_gate_status: GateStatus;
+			// NPPD-1846: Audience Management prerequisite. Stringified by
+			// wp_localize_script(), so '' means off.
+			audience_management_enabled: boolean | string;
+			audience_management_url: string;
 		};
 	}
 }

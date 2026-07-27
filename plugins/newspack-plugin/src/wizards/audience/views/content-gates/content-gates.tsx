@@ -17,6 +17,7 @@ import { Divider, Grid } from '../../../../../packages/components/src';
 import { useWizardData } from '../../../../../packages/components/src/wizard/store/utils';
 import { useWizardApiFetch } from '../../../hooks/use-wizard-api-fetch';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
+import AudienceManagementRequired from './audience-management-required';
 import ContentGatesOnboarding from './content-gates-onboarding';
 import ContentGatesPriority from './content-gates-priority';
 import ContentGateSettings from './content-gate-settings';
@@ -36,12 +37,16 @@ const ContentGates = ( { updateGatesData }: { updateGatesData: ( gates: Gate[] )
 	const config = ( wizardData?.config || {} ) as GateSettings;
 	const hasMetering = gates.some( gate => gate.registration?.metering?.enabled || gate.custom_access?.metering?.enabled );
 	const hasInstitutions = !! config.has_institutions;
+	// Audience Management is a hard prerequisite: without it there is no reader
+	// registration, login, account email or account page for a gate to hand off
+	// to. wp_localize_script() stringifies booleans, so '' means off.
+	const hasAudienceManagement = Boolean( window.newspackAudienceContentGates?.audience_management_enabled );
 
 	useEffect( () => {
 		if ( isFetching ) {
 			return;
 		}
-		if ( ! gates?.length ) {
+		if ( ! hasAudienceManagement || ! gates?.length ) {
 			resetHeaderData();
 			return;
 		}
@@ -82,7 +87,7 @@ const ContentGates = ( { updateGatesData }: { updateGatesData: ( gates: Gate[] )
 			sectionMenu,
 			sectionSecondaryAction: hasInstitutions ? institutionsLink : undefined,
 		} );
-	}, [ isFetching, gates, hasInstitutions ] );
+	}, [ isFetching, gates, hasInstitutions, hasAudienceManagement ] );
 
 	const toggleCountdownBanner = useRef< () => void >();
 	const handleToggleCountdownBanner = () => {
@@ -160,6 +165,10 @@ const ContentGates = ( { updateGatesData }: { updateGatesData: ( gates: Gate[] )
 			} );
 		}
 	}, [ errorMessage ] );
+
+	if ( ! hasAudienceManagement ) {
+		return <AudienceManagementRequired />;
+	}
 
 	if ( ! gates?.length ) {
 		return <ContentGatesOnboarding />;
