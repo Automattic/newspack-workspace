@@ -274,3 +274,5 @@ class Subscriber_Discounts_Pricing {
 		return md5( (string) wp_json_encode( wp_list_pluck( $rules, 'id' ) ) );
 	}
 }
+
+Subscriber_Discounts_Pricing::init();
