@@ -12,6 +12,11 @@ type HeaderAction = {
 	separator?: boolean;
 };
 
+// An entry in a section's kebab menu, or the header's secondary action. A
+// HeaderAction without the store-assigned `type`: either an `action` callback
+// or an `href` carries the behaviour.
+type SectionMenuItem = Omit< HeaderAction, 'type' >;
+
 // Single source of truth for the composite value shape lives with the control.
 type OneTimePurchaseRuleValue = import( '../../../../../content-gate/components/one-time-purchase-rule-control' ).OneTimePurchaseValue;
 type GateAccessRuleValue = string | string[] | boolean | OneTimePurchaseRuleValue;
@@ -156,6 +161,7 @@ type GateSettings = {
 	content_gifting?: ContentGiftingConfig;
 	countdown_banner?: MeteringCountdownConfig;
 	advanced_settings?: AdvancedSettingsConfig;
+	has_institutions?: boolean;
 };
 
 type GateConfig = {

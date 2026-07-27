@@ -2,7 +2,7 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { CheckboxControl } from '@wordpress/components';
+import { CheckboxControl, SelectControl } from '@wordpress/components';
 import { useDispatch } from '@wordpress/data';
 import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
 
@@ -16,22 +16,149 @@ import { SettingsField } from './settings-field';
 
 import './configure-view.scss';
 
+/**
+ * Build the operator dropdown options for an incoming metadata field.
+ *
+ * Options are primarily driven by the field's `value_type`, which the
+ * integration declares (e.g. a date field shouldn't offer the "Number"
+ * range operator, and a single-select field shouldn't offer it either).
+ * The built-in ESP integration maps its provider field types onto these
+ * value_types (number/date/datetime/select/multiselect), so those fields
+ * hit the typed cases above. A field left as a plain `string` (or an
+ * unrecognized value_type) falls back to the has-options heuristic:
+ * enumerated fields (those the ESP returns with a fixed option set) can be
+ * matched against a single value or any of several; free-form fields are
+ * matched as text or as a numeric range.
+ *
+ * @param {Object}  field              The incoming field option object.
+ * @param {string}  [field.value_type] The field's declared value type.
+ * @param {boolean} field.has_options  Whether the field is enumerated.
+ * @return {{label: string, value: string}[]} Operator options for a SelectControl.
+ */
+export const operatorOptionsForField = field => {
+	switch ( field?.value_type ) {
+		case 'number':
+			return [ { label: __( 'Number', 'newspack-plugin' ), value: 'range' } ];
+		case 'date':
+		case 'datetime':
+			return [ { label: __( 'Text', 'newspack-plugin' ), value: 'default' } ];
+		case 'multiselect':
+			return [ { label: __( 'Multiple values', 'newspack-plugin' ), value: 'list__in' } ];
+		case 'select':
+			return [
+				{ label: __( 'Single value', 'newspack-plugin' ), value: 'default' },
+				{ label: __( 'Multiple values', 'newspack-plugin' ), value: 'list__in' },
+			];
+		case 'boolean':
+			// A boolean can't be range- or list-matched; only exact (text) match applies.
+			return [ { label: __( 'Text', 'newspack-plugin' ), value: 'default' } ];
+		default:
+			// 'string' / unknown: fall back to the options-presence heuristic.
+			return field?.has_options
+				? [
+						{ label: __( 'Single value', 'newspack-plugin' ), value: 'default' },
+						{ label: __( 'Multiple values', 'newspack-plugin' ), value: 'list__in' },
+				  ]
+				: [
+						{ label: __( 'Text', 'newspack-plugin' ), value: 'default' },
+						{ label: __( 'Number', 'newspack-plugin' ), value: 'range' },
+				  ];
+	}
+};
+
+/**
+ * Toggle an incoming field in or out of the enabled operator map.
+ *
+ * Enabling a field seeds it with the field's own default matching function
+ * (falling back to `default`); disabling removes the key entirely.
+ *
+ * @param {Object}  currentMap                 The current { key => operator } map.
+ * @param {Object}  option                     The field option object.
+ * @param {string}  option.value               The field key.
+ * @param {string}  [option.matching_function] The field's default operator.
+ * @param {boolean} checked                    Whether the field is now enabled.
+ * @return {Object} The next { key => operator } map.
+ */
+export const toggleField = ( currentMap, option, checked ) => {
+	const next = { ...( currentMap || {} ) };
+	if ( checked ) {
+		next[ option.value ] = option.matching_function || 'default';
+	} else {
+		delete next[ option.value ];
+	}
+	return next;
+};
+
+/**
+ * Reconcile stored operators against each field's declared `value_type`.
+ *
+ * A field enabled before its integration declared a `value_type` keeps whatever
+ * operator was stored then (typically `default`), which may no longer be offered
+ * for that type. The row already *displays* the first valid option, but when
+ * that's the only option the SelectControl can never fire `onChange` to persist
+ * it — leaving the label ('Number') disagreeing with the effective operator
+ * ('default'/exact match). Folding the repair into the next save keeps the two
+ * in step without arming the unsaved-changes guard on mere page load.
+ *
+ * Only enabled fields (keys present in the map) are touched.
+ *
+ * @param {Object}   currentMap The stored { key => operator } map.
+ * @param {Object[]} options    The inbound field's option objects.
+ * @return {Object} The reconciled map, or `currentMap` itself when nothing changed.
+ */
+export const reconcileOperators = ( currentMap, options ) => {
+	const map = currentMap || {};
+	const next = { ...map };
+	let changed = false;
+	( options || [] ).forEach( option => {
+		const key = option?.value;
+		if ( ! key || ! Object.prototype.hasOwnProperty.call( map, key ) ) {
+			return;
+		}
+		const valid = operatorOptionsForField( option );
+		if ( valid.some( o => o.value === map[ key ] ) ) {
+			return;
+		}
+		const fallback = valid[ 0 ]?.value;
+		if ( undefined !== fallback && fallback !== map[ key ] ) {
+			next[ key ] = fallback;
+			changed = true;
+		}
+	} );
+	return changed ? next : map;
+};
+
 // Coerce a value to boolean. Values can arrive from WP options as scalar
 // strings (`'1'`/`'0'`/`'true'`/`'false'`/`''`); note `Boolean( '0' )` is `true`
 // in JS, so the falsy string forms are matched explicitly.
 const toBool = value => ( typeof value === 'string' ? ! [ '', '0', 'false' ].includes( value.toLowerCase() ) : Boolean( value ) );
 
+// True for a plain `{ key => value }` map (the shape `incoming_metadata_fields`
+// uses), excluding arrays and null so those keep their own comparison branches.
+const isMap = value => null !== value && 'object' === typeof value && ! Array.isArray( value );
+
 // Compare two field values for equivalence. Field values are scalars
-// (string/boolean) or arrays of strings (metadata/checkbox lists). The backend
-// can round-trip these unfaithfully — metadata arrays come back in canonical
-// order (`array_intersect`), and booleans as `'1'`/`''` — so arrays are compared
-// as sets and booleans are coerced, else a saved field would stay stuck "dirty".
+// (string/boolean), arrays of strings (metadata/checkbox lists), or a
+// `{ key => operator }` map (incoming metadata fields). The backend can
+// round-trip these unfaithfully — metadata arrays come back in canonical order
+// (`array_intersect`), and booleans as `'1'`/`''` — so arrays are compared as
+// sets, booleans are coerced, and maps are compared key-by-key, else a saved
+// field would stay stuck "dirty". Maps need their own branch because reference
+// equality would report a net-zero edit (toggle a field on then off, or change
+// an operator and change it back) as pending, keeping the Save action and the
+// unsaved-changes guard armed for semantically-unchanged settings.
 const valuesMatch = ( a, b ) => {
 	if ( Array.isArray( a ) && Array.isArray( b ) ) {
 		return a.length === b.length && a.every( value => b.includes( value ) );
 	}
 	if ( typeof a === 'boolean' || typeof b === 'boolean' ) {
 		return toBool( a ) === toBool( b );
+	}
+	if ( isMap( a ) && isMap( b ) ) {
+		const keys = Object.keys( a );
+		return (
+			keys.length === Object.keys( b ).length && keys.every( key => Object.prototype.hasOwnProperty.call( b, key ) && a[ key ] === b[ key ] )
+		);
 	}
 	return a === b;
 };
@@ -101,6 +228,28 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 		return { settingsFields: settings, inboundField: inbound, outboundField: outbound };
 	}, [ integration?.settings ] );
 
+	// Save submits the draft plus, when it needs repair, a reconciled inbound
+	// operator map (see reconcileOperators). Read through a ref for the same reason
+	// the draft is: the Save action closure is only re-registered on a
+	// hasPending/saving transition. Piggybacking on a save the user already asked
+	// for avoids both a write-on-load and a guard armed by settings nobody touched.
+	const buildSavePayloadRef = useRef( null );
+	buildSavePayloadRef.current = () => {
+		const payload = { ...draftRef.current };
+		if ( ! inboundField ) {
+			return payload;
+		}
+		const currentMap = ( inboundField.key in payload ? payload[ inboundField.key ] : inboundField.value ) || {};
+		if ( ! isMap( currentMap ) ) {
+			return payload;
+		}
+		const reconciled = reconcileOperators( currentMap, inboundField.options );
+		if ( reconciled !== currentMap ) {
+			payload[ inboundField.key ] = reconciled;
+		}
+		return payload;
+	};
+
 	// The parent clears the retry buffer on save success; drop submitted keys not
 	// re-edited since. Matching the submitted value (not the server's) survives
 	// backend normalization (`'' → 'NP_'`, `'5' → 5`) that equality would misread.
@@ -163,7 +312,7 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 					action: () => {
 						// The draft clears via the reconcile effect once the parent
 						// reflects the saved values; on failure the draft is retained.
-						onSave( integrationId, draftRef.current ).catch( () => {} );
+						onSave( integrationId, buildSavePayloadRef.current() ).catch( () => {} );
 					},
 					disabled: ! hasPending || integrationSaving,
 				},
@@ -259,21 +408,47 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 							<SectionHeader heading={ 2 } title={ __( 'Inbound', 'newspack-plugin' ) } noMargin />
 							<Grid columns={ 1 } rowGap={ 8 } noMargin>
 								{ ( inboundField.options || [] ).map( option => {
-									// Framework injects options as { value, label } objects
-									// (see class-integration.php:get_settings_config()), but accepts bare strings
-									// for backward compatibility.
-									const optionValue = typeof option === 'string' ? option : option.value;
-									const optionLabel = typeof option === 'string' ? option : option.label || option.value;
-									const currentValue = getFieldValue( inboundField );
-									const selected = Array.isArray( currentValue ) ? currentValue : [];
+									// Options are always { value, label, matching_function, has_options } objects
+									// for this field (see class-integration.php:get_settings_config()).
+									const optionValue = option.value;
+									const optionLabel = option.label || option.value;
+									// The stored value for this field is a { key => operator } map, not an array:
+									// a key present means enabled, and its value is the chosen matching operator.
+									const currentMap = getFieldValue( inboundField ) || {};
+									const checked = Object.prototype.hasOwnProperty.call( currentMap, optionValue );
+									const operatorOptions = operatorOptionsForField( option );
+									// If the stored operator isn't among the options offered for this field's
+									// current value_type (e.g. a field enabled before it declared a type), fall
+									// back to the first option so the control never shows a value with no option.
+									const selectedOperator = operatorOptions.some( o => o.value === currentMap[ optionValue ] )
+										? currentMap[ optionValue ]
+										: operatorOptions[ 0 ]?.value;
 									return (
-										<CheckboxControl
-											className="newspack-checkbox-control"
-											key={ optionValue }
-											label={ optionLabel }
-											checked={ selected.includes( optionValue ) }
-											onChange={ checked => handleCheckboxListChange( inboundField.key, currentValue, optionValue, checked ) }
-										/>
+										<div className="newspack-configure-view__inbound-field" key={ optionValue }>
+											<CheckboxControl
+												className="newspack-checkbox-control"
+												label={ optionLabel }
+												checked={ checked }
+												onChange={ isChecked =>
+													handleFieldChange( inboundField.key, toggleField( currentMap, option, isChecked ) )
+												}
+											/>
+											{ checked && (
+												<SelectControl
+													className="newspack-configure-view__inbound-operator"
+													label={ __( 'Segment as', 'newspack-plugin' ) }
+													hideLabelFromVision
+													value={ selectedOperator }
+													options={ operatorOptions }
+													onChange={ operator =>
+														handleFieldChange( inboundField.key, {
+															...currentMap,
+															[ optionValue ]: operator,
+														} )
+													}
+												/>
+											) }
+										</div>
 									);
 								} ) }
 							</Grid>

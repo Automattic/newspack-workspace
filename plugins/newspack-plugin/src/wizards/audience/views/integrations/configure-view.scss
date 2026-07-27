@@ -4,4 +4,26 @@
 		margin-top: 0;
 		margin-bottom: 0;
 	}
+
+	// Inbound field row: checkbox + label on the left, operator select on the
+	// right (same row) instead of a full-width select stacked underneath.
+	&__inbound-field {
+		align-items: center;
+		display: flex;
+		gap: 16px;
+		justify-content: space-between;
+
+		.newspack-checkbox-control {
+			flex: 1;
+			margin: 0;
+		}
+	}
+
+	// Operator select sits at a consistent width on the right rather than
+	// stretching full-width.
+	&__inbound-operator {
+		flex: 0 0 auto;
+		margin: 0;
+		width: 200px;
+	}
 }
