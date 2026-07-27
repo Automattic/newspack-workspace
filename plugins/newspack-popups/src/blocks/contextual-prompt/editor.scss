@@ -1,23 +1,33 @@
+@use "~@wordpress/base-styles/variables" as wp-vars;
+
 .newspack-popups {
 	&__contextual-prompt-generating {
 		align-items: center;
 		display: flex;
-		font-size: 14px;
+		font-family: wp-vars.$default-font;
+		font-size: wp-vars.$default-font-size;
+		font-weight: 600;
 		inset: 0;
 		justify-content: center;
 		position: absolute;
+
+		// Follow the prompt's own text color so the spinner reads on any
+		// background the style settings produce.
+		.components-spinner {
+			color: currentcolor;
+		}
 	}
 }
 
 .wp-block-newspack-popups-contextual-prompt.is-generating-copy {
 	position: relative;
 
-	// Dim and mute the block's own children while copy generates; the status
-	// label stays fully opaque and interactive layers above them. Typing is
-	// still possible via an existing caret — the editor-side guards keep any
-	// typed copy over the generated candidate.
+	// Hide the block's own children while copy generates; the centered
+	// spinner + label layers above them. Typing is still possible via an
+	// existing caret — the editor-side guards keep any typed copy over the
+	// generated candidate.
 	> :not(.newspack-popups__contextual-prompt-generating) {
-		opacity: 0.5;
+		opacity: 0;
 		pointer-events: none;
 		user-select: none;
 	}

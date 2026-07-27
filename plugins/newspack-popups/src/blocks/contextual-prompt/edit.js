@@ -19,7 +19,12 @@ import { useEffect, useRef, useState } from '@wordpress/element';
 import { useSelect, useDispatch } from '@wordpress/data';
 import { InspectorControls, useBlockProps, useInnerBlocksProps, store as blockEditorStore } from '@wordpress/block-editor';
 import { createBlock, createBlocksFromInnerBlocksTemplate } from '@wordpress/blocks';
-import { Notice, PanelBody } from '@wordpress/components';
+import {
+	Notice,
+	PanelBody,
+	Spinner,
+	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
+} from '@wordpress/components';
 
 /**
  * Internal dependencies.
@@ -276,9 +281,12 @@ export const ContextualPromptEditor = ( { clientId } ) => {
 			>
 				{ innerContent }
 				{ isAutoGenerating && (
-					<span className="newspack-popups__contextual-prompt-generating" role="status">
-						{ __( 'Generating copy…', 'newspack-popups' ) }
-					</span>
+					<div className="newspack-popups__contextual-prompt-generating" role="status">
+						<VStack alignment="center" spacing={ 2 }>
+							<Spinner />
+							<span>{ __( 'Generating copy…', 'newspack-popups' ) }</span>
+						</VStack>
+					</div>
 				) }
 			</div>
 		</>
