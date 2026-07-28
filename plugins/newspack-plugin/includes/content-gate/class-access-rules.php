@@ -470,6 +470,12 @@ class Access_Rules {
 		// Request-scoped memo: the full-catalog query would otherwise run once per
 		// rule sanitized on a gate save (Content_Gate_API resolves all rule options
 		// for each rule in the payload).
+		//
+		// TODO (NPPD-2132): unlike the subscription and institution options (also
+		// full dumps, but inherently small), a shop's simple/variable catalog can be
+		// large, and this list is serialized into every block-editor payload. Move to
+		// a bounded/REST-searchable product picker; the memo only helps within a
+		// single request.
 		static $options = null;
 		if ( null !== $options ) {
 			return $options;
