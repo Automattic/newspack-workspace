@@ -545,7 +545,7 @@ final class GA4_Custom_Dimensions {
 		if ( preg_match( '/per (minute|hour|day)|rate limit/i', $message ) ) {
 			return false;
 		}
-		return preg_match( '/maximum|exceed/i', $message ) && preg_match( '/custom ?dimensions/i', $message );
+		return preg_match( '/maximum|exceed|exhaust/i', $message ) && preg_match( '/custom ?dimensions/i', $message );
 	}
 
 	/**
