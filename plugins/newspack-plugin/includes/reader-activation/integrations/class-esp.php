@@ -581,6 +581,9 @@ class ESP extends Integration {
 		if ( isset( $raw['matching_function'] ) && is_scalar( $raw['matching_function'] ) && '' !== (string) $raw['matching_function'] ) {
 			$field->set_matching_function( (string) $raw['matching_function'] );
 		}
+		if ( isset( $raw['date_format'] ) && is_scalar( $raw['date_format'] ) && '' !== (string) $raw['date_format'] ) {
+			$field->set_date_format( (string) $raw['date_format'] );
+		}
 		if ( isset( $raw['options'] ) && is_array( $raw['options'] ) ) {
 			$field->set_options( $raw['options'] );
 		}

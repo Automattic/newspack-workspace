@@ -260,6 +260,34 @@ class Test_ESP extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A provider that declares its own date format has it applied to the field, so
+	 * the pull can normalize the value without guessing between MM/DD and DD/MM.
+	 */
+	public function test_configure_incoming_field_applies_date_format() {
+		$field = new Incoming_Field(
+			'LAST_GIFT',
+			[
+				'key'         => 'LAST_GIFT',
+				'value_type'  => 'date',
+				'date_format' => 'm/d/Y',
+			]
+		);
+
+		$configured = $this->invoke_configure( new ESP(), $field );
+
+		$this->assertSame( 'm/d/Y', $configured->get_date_format() );
+	}
+
+	/**
+	 * An unset date format means the provider already sends ISO / Y-m-d, which is
+	 * what ActiveCampaign does — so it must not be clobbered into something else.
+	 */
+	public function test_incoming_field_date_format_defaults_to_empty() {
+		$field = new Incoming_Field( 'LAST_GIFT', [ 'key' => 'LAST_GIFT' ] );
+		$this->assertSame( '', $field->get_date_format() );
+	}
+
+	/**
 	 * Each available incoming field is piped through configure_incoming_field().
 	 */
 	public function test_get_available_incoming_fields_applies_configuration() {

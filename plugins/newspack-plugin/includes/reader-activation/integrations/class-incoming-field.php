@@ -47,6 +47,16 @@ class Incoming_Field {
 	protected $matching_function = 'default';
 
 	/**
+	 * Source date format for `date` / `datetime` fields, as a PHP date format
+	 * string (e.g. `m/d/Y`). Empty means the provider already sends ISO 8601 /
+	 * `Y-m-d`, which is what ActiveCampaign does; Mailchimp renders each merge
+	 * field per its own `date_format` option and must declare it.
+	 *
+	 * @var string
+	 */
+	protected $date_format = '';
+
+	/**
 	 * Options for selection UI.
 	 *
 	 * @var array
@@ -169,6 +179,26 @@ class Incoming_Field {
 	 */
 	public function set_matching_function( $matching_function ) {
 		$this->matching_function = $matching_function;
+		return $this;
+	}
+
+	/**
+	 * Get the source date format.
+	 *
+	 * @return string
+	 */
+	public function get_date_format() {
+		return $this->date_format;
+	}
+
+	/**
+	 * Set the source date format.
+	 *
+	 * @param string $date_format A PHP date format string, or '' for ISO 8601 / Y-m-d.
+	 * @return self
+	 */
+	public function set_date_format( $date_format ) {
+		$this->date_format = $date_format;
 		return $this;
 	}
 
