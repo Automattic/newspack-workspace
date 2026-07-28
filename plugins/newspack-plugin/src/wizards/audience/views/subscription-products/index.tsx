@@ -45,7 +45,11 @@ const AudienceSubscriptionProducts = ( props: object, ref: React.Ref< HTMLDivEle
 					// from every scope tab, so editing a donation or a bundle
 					// highlights this one too — consistent with their shared
 					// `backNav: '#/'`. These entries also win the first-match
-					// lookup in `activeBreadcrumbs`, shadowing the hidden sections.
+					// lookup in `activeBreadcrumbs`, shadowing the hidden
+					// sections — dormant while no section here declares
+					// `breadcrumbs` (every trail falls back to `headerText`),
+					// but the add/edit screens would inherit this tab's trail
+					// the moment one does.
 					activeTabPaths: [ '/new', '/edit/*' ],
 					fullWidth: true,
 				},
