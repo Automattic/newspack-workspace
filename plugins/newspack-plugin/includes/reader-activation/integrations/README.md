@@ -119,6 +119,8 @@ class My_Integration extends Integration {
 
 | Method | Purpose |
 | --- | --- |
+| `supports_push()` | Whether the integration can send contact data outbound. Defaults to `true`. Return `false` for an inbound-only integration — see [Direction capabilities and toggles](#direction-capabilities-and-toggles). |
+| `supports_pull()` | Whether the integration can fetch contact data inbound. Defaults to `true`. Return `false` if `pull_contact_data()`/`get_available_incoming_fields()` are not implemented. |
 | `is_set_up()` | Whether the integration is fully configured (external prerequisites **and** the integration's own settings). Defaults to `true`. Used by the Integrations UI to mark cards as ready. |
 | `is_connected()` | Whether the external service prerequisite alone (provider chosen, key entered) is configured at its source. Defaults to `true`. The Integrations UI routes the card's primary action on this: not connected → `get_setup_url()`, connected but not set up → the integration's own settings view ("Finish setup"). |
 | `get_unsupported_reason()` | Non-null string marks the integration as unsupported with the site's current configuration (e.g. the ESP integration while the newsletters provider is "manual"). The Integrations UI shows the string verbatim as the card's error badge and routes the primary action to `get_setup_url()`; the REST layer refuses to enable. Defaults to `null`. |
@@ -196,17 +198,19 @@ $this->update_settings_field_value( 'api_key', $new_value );
 
 ### Built-in metadata fields
 
-Every integration automatically gets three additional fields appended to its settings:
+Each integration automatically gets the fields for the directions it declares (see [Direction capabilities and toggles](#direction-capabilities-and-toggles) — a push-less integration gets none of the outbound rows, a pull-less one none of the inbound rows):
 
-| Field key | Type | Purpose |
-| --- | --- | --- |
-| `metadata_prefix` | `text` | String prepended to every outgoing metadata field name (default `NP_`). Stored at `newspack_integration_metadata_prefix_{id}`. Required so outgoing field names are unique on the external system. |
-| `outgoing_metadata_fields` | `metadata` | Subset of Newspack metadata fields to push. Stored at `newspack_integration_outgoing_fields_{id}`. |
-| `incoming_metadata_fields` | `metadata` | Subset of external fields to pull and store on the Newspack user. Stored at `newspack_integration_incoming_fields_{id}` as a `key => raw_data` map. |
+| Field key | Direction | Type | Purpose |
+| --- | --- | --- | --- |
+| `metadata_prefix` | outbound | `text` | String prepended to every outgoing metadata field name (default `NP_`). Stored at `newspack_integration_metadata_prefix_{id}`. Required so outgoing field names are unique on the external system. |
+| `outgoing_sync_enabled` | outbound | `checkbox` | Whether outbound sync currently runs. Default `true`. Pausing it stops pushes (including account-deletion propagation) while preserving the outgoing field selection. Stored at `newspack_integration_settings_{id}_outgoing_sync_enabled`. |
+| `outgoing_metadata_fields` | outbound | `metadata` | Subset of Newspack metadata fields to push. Stored at `newspack_integration_outgoing_fields_{id}`. |
+| `incoming_sync_enabled` | inbound | `checkbox` | Whether inbound sync currently runs. Default `true`. Pausing it stops pulls while preserving the incoming field selection. Stored at `newspack_integration_settings_{id}_incoming_sync_enabled`. |
+| `incoming_metadata_fields` | inbound | `metadata` | Subset of external fields to pull and store on the Newspack user. Stored at `newspack_integration_incoming_fields_{id}` as a `key => raw_data` map. |
 
 ### Built-in account-deletion fields
 
-In addition to the metadata fields, every integration automatically gets two account-deletion settings:
+Deletion propagates through the push pipeline, so push-capable integrations also get two account-deletion settings (a push-less integration gets neither):
 
 | Field key | Type | Purpose |
 | --- | --- | --- |
@@ -233,6 +237,25 @@ The configure-view in `src/wizards/audience/views/integrations/` honors this pre
 
 ---
 
+## Direction capabilities and toggles
+
+Each direction is gated twice: by a **capability** the integration declares in code, and by a **toggle** the publisher controls in the wizard.
+
+| Method | Answers |
+| --- | --- |
+| `supports_push()` / `supports_pull()` | *Can* this integration ever sync in that direction? Override to `false` for a direction you don't implement. |
+| `is_push_enabled()` / `is_pull_enabled()` | *Should* it sync right now? `final` — capability AND toggle. Every dispatch site calls these. |
+
+Declaring `supports_push() === false` removes the entire Outbound settings group (metadata prefix, outbound toggle, outgoing fields, both account-deletion fields), keeps the integration out of `Sync::has_one_syncable_integration()`, and skips the push path — so an inbound-only integration renders no dead outbound controls. `supports_pull() === false` does the same for the Inbound group and `Contact_Pull`.
+
+The toggles pause a direction without discarding configuration: the stored field selections survive, so re-enabling restores them. Pausing is not retroactive — changes and deletions that occur while a direction is paused are not replayed on re-enable.
+
+An **undeclared** toggle field reads as enabled. An integration that overrides `get_settings_fields()` without the base metadata group has no toggle to store, so the direction can only ever be paused explicitly — pre-toggle third-party integrations keep syncing. This matches the configure-view, which treats a missing toggle field as enabled.
+
+**Scope caveat.** These toggles govern *this framework's* dispatch only. Newsletter-signup contact upserts reach the ESP through the Newspack Newsletters plugin's own channel and are unaffected by `outgoing_sync_enabled` — pausing outbound sync stops reader-data syncing, not newsletter subscriptions.
+
+---
+
 ## Push (Outgoing Sync)
 
 When a contact needs to be synced, the framework calls `push_contact_data()` on every active integration. The contact array is the Newspack canonical form (email, name, metadata, etc.). Implementations should call `$this->prepare_contact( $contact )` first, which:
@@ -242,6 +265,15 @@ When a contact needs to be synced, the framework calls `push_contact_data()` on 
 3. Preserves keys already in prefixed form if the underlying field is enabled.
 
 `prepare_contact()` is a no-op when the site is still on the legacy metadata schema (where the metadata classes pre-filter), which keeps newly-built integrations compatible with un-migrated sites.
+
+### Optional `$options` parameter
+
+`Contact_Sync` may pass a fourth `$options` array to `push_contact_data()` carrying operator-driven sync scoping (currently used by the `wp newspack esp sync` CLI):
+
+- `skip_lists` (bool) — upsert the contact without adding it to any list, so an unsubscribed contact isn't resubscribed.
+- `fields` (string[]|null) — the canonical field labels the sync is scoped to (already applied to the metadata before your method is called).
+
+The abstract signature intentionally stays three-parameter (`push_contact_data( $contact, $context, $existing_contact )`). `Contact_Sync::push_to_integrations()` calls every integration with the fourth `$options` argument; PHP discards surplus positional arguments to a method that declares fewer parameters (they remain available via `func_get_args()`) — there is no warning or error, so a three-parameter implementation keeps working unchanged. Adding the fourth parameter to the *abstract* instead would be a fatal "declaration must be compatible" error for every existing three-parameter override, which is why the parameter lives only on the concrete overrides that use it. Add `$options = []` to your override only if the integration needs to react to these flags (the built-in `esp` integration reads `skip_lists`). Integrations that ignore `$options` behave exactly as before.
 
 ### When pushes are triggered
 

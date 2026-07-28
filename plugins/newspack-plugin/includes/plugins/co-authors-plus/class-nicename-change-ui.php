@@ -83,6 +83,18 @@ class Nicename_Change_UI {
 
 		check_ajax_referer( 'newspack_change_nicename_nonce', 'nonce' );
 
+		// The response enumerates existing users and guest authors, so it is gated on the
+		// same capability that gates the UI this endpoint serves (the user-edit screen).
+		if ( ! current_user_can( 'edit_users' ) ) {
+			wp_send_json(
+				[
+					'success' => false,
+					'message' => esc_html__( 'You are not allowed to do that.', 'newspack-plugin' ),
+				],
+				403
+			);
+		}
+
 		$new_nicename = isset( $_POST['new_nicename'] ) ? sanitize_title( wp_unslash( $_POST['new_nicename'] ) ) : '';
 
 		$existing = Nicename_Change::get_existing_nicenames( $new_nicename );
@@ -113,14 +125,6 @@ class Nicename_Change_UI {
 
 		check_ajax_referer( 'newspack_change_nicename_nonce', 'nonce' );
 
-		$new_nicename = isset( $_POST['new_nicename'] ) ? sanitize_title( wp_unslash( $_POST['new_nicename'] ) ) : '';
-
-		$existing = Nicename_Change::get_existing_nicenames( $new_nicename );
-
-		if ( ! empty( $existing ) ) {
-			return self::change_nicename_check_ajax();
-		}
-
 		$user_id = isset( $_POST['user_id'] ) ? (int) $_POST['user_id'] : 0;
 
 		if ( ! $user_id ) {
@@ -130,6 +134,30 @@ class Nicename_Change_UI {
 					'message' => esc_html__( 'User not found.', 'newspack-plugin' ),
 				]
 			);
+		}
+
+		// The nonce only proves the request came from the user-edit screen. Require the same
+		// primitive that gates the availability check this handler may delegate to on a slug
+		// collision (so an authorized caller never gets 403'd mid-flow), and object-level
+		// authorization for the target so it can't be used to edit an arbitrary user. The
+		// primitive check also closes the self-edit gap where map_meta_cap grants
+		// `edit_user` on one's own ID to any logged-in user.
+		if ( ! current_user_can( 'edit_users' ) || ! current_user_can( 'edit_user', $user_id ) ) {
+			wp_send_json(
+				[
+					'success' => false,
+					'message' => esc_html__( 'You are not allowed to edit this user.', 'newspack-plugin' ),
+				],
+				403
+			);
+		}
+
+		$new_nicename = isset( $_POST['new_nicename'] ) ? sanitize_title( wp_unslash( $_POST['new_nicename'] ) ) : '';
+
+		$existing = Nicename_Change::get_existing_nicenames( $new_nicename );
+
+		if ( ! empty( $existing ) ) {
+			return self::change_nicename_check_ajax();
 		}
 
 		// Update the nicename.

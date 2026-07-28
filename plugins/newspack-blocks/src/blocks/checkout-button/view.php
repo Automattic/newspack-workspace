@@ -62,6 +62,7 @@ function render_callback( $attributes ) {
 	$after_success_behavior     = $attributes['afterSuccessBehavior'] ?? '';
 	$after_success_button_label = $attributes['afterSuccessButtonLabel'] ?? '';
 	$after_success_url          = $attributes['afterSuccessURL'] ?? '';
+	$coupon                     = $attributes['coupon'] ?? '';
 	$is_variable                = $attributes['is_variable'];
 
 	if ( $is_variable && $variation_id ) {
@@ -114,6 +115,12 @@ function render_callback( $attributes ) {
 		$hidden_fields .= $after_success_button_label ? '<input type="hidden" name="after_success_button_label" value="' . esc_attr( $after_success_button_label ) . '" />' : '';
 		$hidden_fields .= $after_success_url ? '<input type="hidden" name="after_success_url" value="' . esc_attr( $after_success_url ) . '" />' : '';
 	}
+	// Always emit the coupon field (not gated on the gateway check): it is
+	// applied server-side for both the modal and the redirect checkout flows.
+	// Strict check so a coupon code of "0" is still emitted.
+	if ( '' !== $coupon ) {
+		$hidden_fields .= '<input type="hidden" name="coupon" value="' . esc_attr( $coupon ) . '" />';
+	}
 
 	ob_start();
 	/**
@@ -153,8 +160,8 @@ function render_callback( $attributes ) {
 		$checkout_data = Checkout_Data::get_checkout_data( $product );
 
 		$form = sprintf(
-			'<form data-checkout="%1$s">%2$s %3$s</form>',
-			esc_attr( wp_json_encode( $checkout_data ) ),
+			'<form %1$s>%2$s %3$s</form>',
+			Checkout_Data::data_checkout_attr( $checkout_data ),
 			$button,
 			$hidden_fields
 		);

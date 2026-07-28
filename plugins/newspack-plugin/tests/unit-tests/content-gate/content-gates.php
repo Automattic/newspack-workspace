@@ -2743,6 +2743,29 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A negative metering count must be floored at 0 (NPPD-2056). Signed intval()
+	 * would persist -1, which Metering::get_registered_settings() reads back through
+	 * absint() as 1 free view - silently granting a view to a publisher who asked for
+	 * none. The admin UI clamps too; this closes the direct REST-caller path.
+	 */
+	public function test_sanitize_metering_floors_negative_count() {
+		$negative_count = Content_Gate_API::sanitize_metering(
+			[
+				'enabled' => true,
+				'count'   => -1,
+				'period'  => 'month',
+			]
+		);
+		$this->assertSame( 0, $negative_count['count'], 'A negative metering count must be floored at 0 rather than persisted as a negative' );
+
+		$explicit_zero = Content_Gate_API::sanitize_metering( [ 'count' => 0 ] );
+		$this->assertSame( 0, $explicit_zero['count'], 'An explicitly entered 0 must survive sanitization' );
+
+		$positive_count = Content_Gate_API::sanitize_metering( [ 'count' => 3 ] );
+		$this->assertSame( 3, $positive_count['count'], 'A positive metering count must pass through unchanged' );
+	}
+
+	/**
 	 * Creating a gate must fall back to a default title when the payload
 	 * omits one, since sanitize_gate() no longer guarantees a title.
 	 */
@@ -3007,7 +3030,7 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 				[
 					'post_type'      => Content_Gate::GATE_LAYOUT_CPT,
 					'post_status'    => 'any',
-					'posts_per_page' => -1,
+					'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Unbounded queries are acceptable in tests.
 					'fields'         => 'ids',
 				]
 			);

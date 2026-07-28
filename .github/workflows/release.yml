@@ -20,6 +20,16 @@ permissions:
 
 env:
   PNPM_VERSION: 10.33.0
+  # Every commit this workflow makes is automation-generated: the
+  # @semantic-release/git prepare commit, the package.json version sync, and
+  # the post-release branch-sync work (merge commits + the "restore
+  # workspace:*" commit in post-release.sh). Skip the husky pre-commit lint
+  # for all of them: the PHPCS wrapper hard-fails here (no root composer
+  # install provisions vendor/bin/phpcs), and a lint gate on generated
+  # release commits could block an already-published release anyway. Every PR
+  # is fully linted by CI before merge, so nothing is lost. HUSKY=0 is the
+  # documented bypass (see AGENTS.md).
+  HUSKY: '0'
 
 jobs:
   release:
@@ -94,6 +104,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          # The dry-run runs semantic-release's verifyConditions, which calls
+          # npm whoami. setup-node's registry-url wrote an .npmrc keyed on
+          # ${NODE_AUTH_TOKEN}; without it npm auth 401s and the gate fails even
+          # though the token is valid. Mirror the Release step below.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NODE_OPTIONS: --max-old-space-size=12288
       - name: Build shared packages
         if: steps.plan.outputs.release_needed == 'true'
