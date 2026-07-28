@@ -19,6 +19,56 @@ const parseReaderListValue = value => {
 	return value;
 };
 
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Reduces a stored date value to a calendar date, or null when it isn't one.
+ *
+ * Takes the date part as written — `2026-01-15T23:30:00-06:00` is Jan 15 for every
+ * reader regardless of their timezone, which is what the publisher sees in the ESP.
+ * The ISO check is load-bearing, not defensive: a legacy un-normalized value like
+ * `03/04/2026` slices to a perfectly comparable string that sorts below every ISO
+ * date, so skipping validation produces confident wrong matches rather than none.
+ *
+ * @param {*} value The stored reader value.
+ * @return {?string} A `YYYY-MM-DD` string, or null.
+ */
+const toCalendarDate = value => {
+	if ( typeof value !== 'string' ) {
+		return null;
+	}
+	const candidate = value.slice( 0, 10 );
+	return ISO_DATE.test( candidate ) ? candidate : null;
+};
+
+/**
+ * Resolves one end of a date range to a calendar date.
+ *
+ * Relative bounds resolve against the browser's today, which is what makes a
+ * rolling window ("last 30 days") stay current without the segment being edited.
+ *
+ * @param {*} bound `{ type: 'absolute', date }` or `{ type: 'relative', days }`.
+ * @return {?string} A `YYYY-MM-DD` string, or null when the bound is unusable.
+ */
+const resolveDateBound = bound => {
+	if ( ! bound || typeof bound !== 'object' ) {
+		return null;
+	}
+	if ( 'absolute' === bound.type ) {
+		return toCalendarDate( bound.date );
+	}
+	if ( 'relative' === bound.type && Number.isInteger( bound.days ) ) {
+		const date = new Date();
+		date.setDate( date.getDate() + bound.days );
+		// Built from local components on purpose: toISOString() converts to UTC and
+		// would land on the wrong day for anyone west of Greenwich.
+		const month = String( date.getMonth() + 1 ).padStart( 2, '0' );
+		const day = String( date.getDate() ).padStart( 2, '0' );
+		return `${ date.getFullYear() }-${ month }-${ day }`;
+	}
+	return null;
+};
+
 /**
  * Common matching functions that can be used by criteria.
  */
@@ -95,6 +145,39 @@ export default {
 		const hasBound = value => undefined !== value && null !== value && '' !== value;
 		if ( ( hasBound( min ) && criteria.value < min ) || ( hasBound( max ) && criteria.value > max ) ) {
 			return false;
+		}
+		return true;
+	},
+	/**
+	 * Matches an ESP date value against a { start, end } window where each bound is
+	 * either an absolute calendar date or an offset in days from today. An absent
+	 * bound is unbounded; both bounds are inclusive.
+	 *
+	 * Comparison is lexicographic on validated `YYYY-MM-DD` strings, which sort
+	 * chronologically, so no date arithmetic is involved in the compare itself.
+	 */
+	date_range: ( criteria, config ) => {
+		const value = toCalendarDate( criteria.value );
+		if ( ! value ) {
+			return false;
+		}
+		const bounds = config.value;
+		if ( ! bounds || typeof bounds !== 'object' || Array.isArray( bounds ) ) {
+			return false;
+		}
+		// A bound that is present but unusable fails closed. Silently dropping it
+		// would widen the segment to readers the publisher never asked for.
+		if ( bounds.start ) {
+			const start = resolveDateBound( bounds.start );
+			if ( ! start || value < start ) {
+				return false;
+			}
+		}
+		if ( bounds.end ) {
+			const end = resolveDateBound( bounds.end );
+			if ( ! end || value > end ) {
+				return false;
+			}
 		}
 		return true;
 	},
