@@ -13,7 +13,7 @@
  */
 import { __, sprintf } from '@wordpress/i18n';
 import { useEffect, useRef, useState } from '@wordpress/element';
-import { useSelect, useDispatch } from '@wordpress/data';
+import { useSelect, useDispatch, select as coreSelect } from '@wordpress/data';
 import { PluginDocumentSettingPanel } from '@wordpress/edit-post';
 import {
 	Notice,
@@ -120,7 +120,7 @@ const ContextualPromptPanel = () => {
 		try {
 			const list = await generateCandidates( {
 				postId,
-				content: wp.data.select( 'core/editor' ).getEditedPostContent(),
+				content: coreSelect( 'core/editor' ).getEditedPostContent(),
 				framing: requestedFraming,
 				regenerate: isRegenerate,
 			} );

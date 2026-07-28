@@ -16,7 +16,7 @@
  */
 import { __, sprintf } from '@wordpress/i18n';
 import { useEffect, useRef, useState } from '@wordpress/element';
-import { useSelect, useDispatch } from '@wordpress/data';
+import { useSelect, useDispatch, select as coreSelect, dispatch as coreDispatch } from '@wordpress/data';
 import { InspectorControls, useBlockProps, useInnerBlocksProps, store as blockEditorStore } from '@wordpress/block-editor';
 import { createBlock, createBlocksFromInnerBlocksTemplate } from '@wordpress/blocks';
 import {
@@ -119,7 +119,7 @@ export const ContextualPromptEditor = ( { clientId } ) => {
 	);
 	useEffect( () => {
 		if ( ctaClientId && accentColor && ctaButtonColor !== accentColor ) {
-			wp.data.dispatch( 'core/block-editor' ).__unstableMarkNextChangeAsNotPersistent();
+			coreDispatch( blockEditorStore ).__unstableMarkNextChangeAsNotPersistent();
 			updateBlockAttributes( ctaClientId, { buttonColor: accentColor } );
 		}
 	}, [ ctaClientId, accentColor, ctaButtonColor ] );
@@ -159,7 +159,7 @@ export const ContextualPromptEditor = ( { clientId } ) => {
 		try {
 			const list = await generateCandidates( {
 				postId,
-				content: wp.data.select( 'core/editor' )?.getEditedPostContent?.(),
+				content: coreSelect( 'core/editor' )?.getEditedPostContent?.(),
 				framing,
 				...options,
 			} );
@@ -221,7 +221,7 @@ export const ContextualPromptEditor = ( { clientId } ) => {
 				}
 				// Copy typed while the request was in flight is the editor's, not
 				// ours to replace: offer the response as candidates instead.
-				const current = wp.data.select( 'core/block-editor' ).getBlockAttributes( copyClientId )?.content;
+				const current = coreSelect( blockEditorStore ).getBlockAttributes( copyClientId )?.content;
 				if ( current && current.toString().trim() ) {
 					setCandidates( list );
 					return;
