@@ -1,12 +1,26 @@
 import { buildQueryParams, toQueryString } from './build-query';
+import { PER_PAGE_ALL } from '../../utils/per-page';
 
 describe( 'ads buildQueryParams', () => {
-	it( 'sets page and per_page from the view, defaulting to 1 and 25', () => {
-		expect( buildQueryParams( {} ) ).toMatchObject( { page: 1, per_page: 25 } );
+	it( 'sets page and per_page from the view, defaulting to 1 and 20', () => {
+		expect( buildQueryParams( {} ) ).toMatchObject( { page: 1, per_page: 20 } );
 		expect( buildQueryParams( { page: 2, perPage: 50 } ) ).toMatchObject( {
 			page: 2,
 			per_page: 50,
 		} );
+	} );
+
+	it( 'maps the All sentinel to max-size chunks starting at page 1', () => {
+		expect( buildQueryParams( { perPage: PER_PAGE_ALL, page: 4 } ) ).toMatchObject( { page: 1, per_page: 100 } );
+	} );
+
+	it( 'restricts fields so content/excerpt are never rendered server-side', () => {
+		const { _fields } = buildQueryParams( {} );
+		expect( _fields ).not.toContain( 'content' );
+		expect( _fields ).not.toContain( 'excerpt' );
+		expect( _fields.split( ',' ) ).toEqual( expect.arrayContaining( [ 'id', 'meta', 'newspack_newsletters_ad_status' ] ) );
+		// Without `_links`, `_embed` expands nothing and the terms columns go blank.
+		expect( _fields.split( ',' ) ).toContain( '_links' );
 	} );
 
 	it( 'requests context=edit so meta and private fields are returned', () => {
