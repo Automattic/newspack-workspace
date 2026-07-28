@@ -54,35 +54,46 @@ export function normalizeOneTimePurchaseValue( value: unknown ): OneTimePurchase
  * strings instead, appending the ID to any name that isn't unique. A stored ID
  * absent from the options list (a variation, or a deleted product) keeps a
  * `#<id>` token so editing the field doesn't silently drop it.
+ *
+ * Uniqueness is enforced against every token handed out, not just against names
+ * that repeat: a product named `Annual Pass (#60)` or `#123` would otherwise
+ * collide with a token generated for another product and steal its ID.
  */
-function getProductTokens( options: RuleOption[], productIds: Array< string | number > ) {
+export function getProductTokens( options: RuleOption[], productIds: Array< string | number > ) {
 	const nameCounts = new Map< string, number >();
 	options.forEach( option => nameCounts.set( option.label, ( nameCounts.get( option.label ) ?? 0 ) + 1 ) );
 
 	const tokenByValue = new Map< string, string >();
 	const valueByToken = new Map< string, string | number >();
-	const addToken = ( value: string | number, token: string ) => {
+	/**
+	 * Claim the first free token for a product: its preferred string, then the
+	 * ID-disambiguated one, then that plus a counter for the pathological case
+	 * where a product is literally named like a token we already handed out.
+	 */
+	const addToken = ( value: string | number, preferred: string, disambiguated: string ) => {
+		let token = preferred;
+		let attempt = 1;
+		while ( valueByToken.has( token ) ) {
+			token = 1 === attempt ? disambiguated : `${ disambiguated } (${ attempt })`;
+			attempt++;
+		}
 		tokenByValue.set( String( value ), token );
 		valueByToken.set( token, value );
 	};
 
 	options.forEach( option => {
-		const isAmbiguous = 1 < ( nameCounts.get( option.label ) ?? 0 );
-		addToken(
-			option.value,
-			isAmbiguous
-				? sprintf(
-						// translators: 1: product name, 2: product ID.
-						__( '%1$s (#%2$s)', 'newspack-plugin' ),
-						option.label,
-						String( option.value )
-				  )
-				: option.label
+		const disambiguated = sprintf(
+			// translators: 1: product name, 2: product ID.
+			__( '%1$s (#%2$s)', 'newspack-plugin' ),
+			option.label,
+			String( option.value )
 		);
+		const isAmbiguous = 1 < ( nameCounts.get( option.label ) ?? 0 );
+		addToken( option.value, isAmbiguous ? disambiguated : option.label, disambiguated );
 	} );
 	productIds.forEach( productId => {
 		if ( ! tokenByValue.has( String( productId ) ) ) {
-			addToken( productId, `#${ productId }` );
+			addToken( productId, `#${ productId }`, `#${ productId }` );
 		}
 	} );
 
@@ -129,6 +140,10 @@ export default function OneTimePurchaseRuleControl( {
 							.filter( ( productId ): productId is string | number => undefined !== productId ),
 					} );
 				} }
+				// FormTokenField accepts free-typed tokens by default, and one that
+				// isn't a known product would map to nothing and silently vanish on
+				// the next render. Reject it at entry instead.
+				__experimentalValidateInput={ ( token: string ) => valueByToken.has( token ) }
 				__experimentalExpandOnFocus
 				__next40pxDefaultSize
 				__nextHasNoMarginBottom

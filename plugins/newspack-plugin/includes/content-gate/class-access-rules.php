@@ -552,9 +552,16 @@ class Access_Rules {
 			if ( isset( self::$one_time_purchase_memo[ $memo_key ] ) ) {
 				$has_purchase = self::$one_time_purchase_memo[ $memo_key ];
 			} else {
-				$user  = \get_userdata( $user_id );
-				$email = $user ? $user->user_email : '';
-				if ( 'forever' === $value['duration_unit'] ) {
+				$user     = \get_userdata( $user_id );
+				$email    = $user ? $user->user_email : '';
+				$customer = array_values( array_filter( [ $user_id, $email ] ) );
+				if ( empty( $customer ) ) {
+					// Fail closed with no identity to match a purchase against, on both
+					// paths: an empty customer constraint is dropped by both WooCommerce
+					// order stores, which would widen the lookup to every customer's
+					// paid orders.
+					$has_purchase = false;
+				} elseif ( 'forever' === $value['duration_unit'] ) {
 					// Lifetime access: any paid order ever. wc_customer_bought_product()
 					// is exhaustive across the customer's order history (matching both
 					// user ID and billing email, so guest orders count), runs SQL-side,
@@ -576,7 +583,7 @@ class Access_Rules {
 					// month-end anchors, where this one is both deny-biased and closer
 					// to what "N months from purchase" means on a calendar.
 					$cutoff       = strtotime( sprintf( '-%d %s', $value['duration_value'], $value['duration_unit'] ) );
-					$has_purchase = self::customer_bought_product_after( $user_id, $email, $value['product_ids'], $cutoff );
+					$has_purchase = self::customer_bought_product_after( $customer, $value['product_ids'], $cutoff );
 				}
 				// Any other duration configuration (missing/unrecognized unit, zero
 				// finite duration) is misconfigured and fails closed.
@@ -603,21 +610,16 @@ class Access_Rules {
 	 * `customer` parameter matches the user ID or the billing email, so guest
 	 * orders count — mirroring wc_customer_bought_product() on the lifetime path.
 	 *
-	 * @param int    $user_id     User ID.
-	 * @param string $email       User email, to match guest orders.
-	 * @param int[]  $product_ids Product IDs to look for.
-	 * @param int    $cutoff      Unix timestamp orders must be created after.
+	 * @param array $customer    Non-empty list of user IDs and/or billing emails to
+	 *                           match. Callers must reject an empty list: both
+	 *                           WooCommerce order stores drop an empty `customer`
+	 *                           constraint and return every customer's orders.
+	 * @param int[] $product_ids Product IDs to look for.
+	 * @param int   $cutoff      Unix timestamp orders must be created after.
 	 *
 	 * @return bool
 	 */
-	private static function customer_bought_product_after( $user_id, $email, $product_ids, $cutoff ) {
-		$customer = array_values( array_filter( [ $user_id, $email ] ) );
-		// Fail closed with no identity to match: both WooCommerce order stores drop
-		// an empty `customer` constraint, which would widen the query to every
-		// customer's paid orders in the window.
-		if ( empty( $customer ) ) {
-			return false;
-		}
+	private static function customer_bought_product_after( $customer, $product_ids, $cutoff ) {
 		$paid_statuses = function_exists( 'wc_get_is_paid_statuses' ) ? \wc_get_is_paid_statuses() : [ 'processing', 'completed' ];
 		$orders        = \wc_get_orders(
 			[

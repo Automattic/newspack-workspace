@@ -1051,12 +1051,17 @@ function wc_get_orders( $args ) {
 			}
 		);
 	}
-	if ( isset( $args['customer'] ) ) {
+	if ( ! empty( $args['customer'] ) ) {
 		// Real WC: 'customer' accepts a user ID or billing email (or an array of
 		// either) and matches orders belonging to ANY of the values — guest
 		// orders (customer_id 0) match via their billing email. Email matching
 		// happens in SQL under a case-insensitive collation, so compare with
 		// strcasecmp() rather than a strict string comparison.
+		//
+		// The `! empty()` gate is deliberate: both order stores test the query var
+		// with `! empty()` too, so an empty value drops the constraint entirely and
+		// matches EVERY customer's orders. Guarding with isset() here would invert
+		// that and make callers passing an empty customer look safe.
 		$customer_values = (array) $args['customer'];
 		$orders          = array_filter(
 			$orders,
