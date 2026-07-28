@@ -19,8 +19,12 @@ import { escapeHTML } from '@wordpress/escape-html';
 export const POST_TYPE_LABEL =
 	window.newspack_popups_blocks_data?.post_type_label || window.newspackPopupsContextualPrompt?.postTypeLabel || __( 'post', 'newspack-popups' );
 
-// Title Case variant for the framing headings.
-const POST_TYPE_HEADING = POST_TYPE_LABEL.charAt( 0 ).toLocaleUpperCase() + POST_TYPE_LABEL.slice( 1 );
+// The post type's singular label as it declares it, for the framing headings.
+// Recasing the lowercased sentence label here would mis-case some locales.
+const POST_TYPE_HEADING =
+	window.newspack_popups_blocks_data?.post_type_heading ||
+	window.newspackPopupsContextualPrompt?.postTypeHeading ||
+	__( 'Post', 'newspack-popups' );
 
 export const FRAMING_LABELS = {
 	/* translators: %s: the edited content's post type label, e.g. "Post", "Page". */
@@ -109,22 +113,36 @@ export const GenerateButton = ( { busy, onClick, children } ) => (
 		disabled={ busy }
 		isBusy={ busy }
 		__next40pxDefaultSize
-		style={ { width: '100%', justifyContent: 'center' } }
+		className="newspack-popups__contextual-prompt-generate"
 	>
 		{ busy ? __( 'Generating…', 'newspack-popups' ) : children }
 	</Button>
 );
 
 export const CandidateList = ( { candidates, onApply } ) =>
-	candidates.map( ( candidate, index ) => (
-		<div key={ index } style={ { marginTop: '16px' } }>
-			{ index > 0 && (
-				<hr style={ { margin: '0 0 16px', border: 'none', borderTop: '1px solid var(--wpds-color-stroke-surface-neutral-weak, #f0f0f0)' } } />
-			) }
-			<strong>{ FRAMING_LABELS[ candidate.framing ] || candidate.framing }</strong>
-			<p style={ { margin: '4px 0 8px' } }>{ candidate.body }</p>
-			<Button variant="primary" size="small" onClick={ () => onApply( candidate ) }>
-				{ __( 'Apply', 'newspack-popups' ) }
-			</Button>
-		</div>
-	) );
+	candidates.map( ( candidate, index ) => {
+		const framingLabel = FRAMING_LABELS[ candidate.framing ] || candidate.framing;
+		return (
+			<div key={ index } className="newspack-popups__contextual-prompt-candidate">
+				{ index > 0 && <hr className="newspack-popups__contextual-prompt-candidate-divider" /> }
+				<strong>{ framingLabel }</strong>
+				<p className="newspack-popups__contextual-prompt-candidate-body">{ candidate.body }</p>
+				<Button
+					variant="primary"
+					size="small"
+					onClick={ () => onApply( candidate ) }
+					aria-label={
+						framingLabel
+							? sprintf(
+									/* translators: %s: the suggestion's framing label, e.g. "Top of Post". */
+									__( 'Apply suggestion: %s', 'newspack-popups' ),
+									framingLabel
+							  )
+							: undefined
+					}
+				>
+					{ __( 'Apply', 'newspack-popups' ) }
+				</Button>
+			</div>
+		);
+	} );
