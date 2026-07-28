@@ -16,7 +16,7 @@ import { Button, CategoryAutocomplete, Router, SelectControl, Settings, TextCont
 import ListsControl from '../../../components/lists-control';
 
 const { useHistory } = Router;
-const { SettingsCard, SettingsSection, MinMaxSetting } = Settings;
+const { SettingsCard, SettingsSection, MinMaxSetting, DateRangeSetting } = Settings;
 
 /**
  * Whether a criterion should render as a multi-select checkbox group: ESP
@@ -135,6 +135,17 @@ const SingleSegment = ( { segmentId, setSegments, wizardApiFetch } ) => {
 						max={ value?.max }
 						onChangeMin={ min => update( { min } ) }
 						onChangeMax={ max => update( { max } ) }
+					/>
+				);
+			}
+			if ( 'date_range' === criteria.matching_function ) {
+				return (
+					<DateRangeSetting
+						data-testid={ `newspack-criteria-${ criteria.id }` }
+						start={ value?.start }
+						end={ value?.end }
+						onChangeStart={ start => update( { start } ) }
+						onChangeEnd={ end => update( { end } ) }
 					/>
 				);
 			}

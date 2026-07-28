@@ -38,7 +38,8 @@
 			}
 			&__content {
 				> div,
-				.newspack-settings__min-max {
+				.newspack-settings__min-max,
+				.newspack-settings__date-range-bound {
 					margin: 0;
 					display: flex;
 					align-items: center;
@@ -49,7 +50,8 @@
 					}
 				}
 				.newspack-autocomplete-tokenfield,
-				.newspack-settings__min-max {
+				.newspack-settings__min-max,
+				.newspack-settings__date-range-bound {
 					width: 100%;
 				}
 				.newspack-autocomplete-tokenfield {
@@ -87,6 +89,21 @@
 			}
 
 			+ .newspack-settings__min-max {
+				margin-top: 16px !important;
+			}
+		}
+		.newspack-settings__date-range-bound {
+			gap: 8px;
+
+			.newspack-select-control {
+				flex: 0 0 auto;
+			}
+
+			.newspack-text-control {
+				flex: 1 1 auto;
+			}
+
+			+ .newspack-settings__date-range-bound {
 				margin-top: 16px !important;
 			}
 		}

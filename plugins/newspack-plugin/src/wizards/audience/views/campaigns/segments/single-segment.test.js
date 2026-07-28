@@ -37,6 +37,13 @@ const criteria = [
 		placeholder: 'google.com, facebook.com',
 		matching_attribute: 'referrer',
 	},
+	{
+		id: 'LAST_GIFT_DATE',
+		category: 'integrations',
+		matching_function: 'date_range',
+		name: 'ActiveCampaign: Last Gift Date',
+		matching_attribute: 'LAST_GIFT_DATE',
+	},
 ];
 
 const SEGMENTS = [
@@ -140,5 +147,51 @@ describe( 'segment criteria input selection', () => {
 		expect( isMultiSelectCriteria( { matching_function: 'list__not_in', options: [ {} ] } ) ).toBe( true );
 		expect( isMultiSelectCriteria( { matching_function: 'default', options: [ {} ] } ) ).toBe( false );
 		expect( isMultiSelectCriteria( { matching_function: 'list__in', options: [] } ) ).toBe( false );
+	} );
+} );
+
+describe( 'Date range criteria input', () => {
+	const mockProps = {
+		segmentId: 'new',
+		setSegments: jest.fn(),
+		wizardApiFetch: () => Promise.resolve( [] ),
+	};
+
+	beforeEach( () => {
+		window.newspackAudienceCampaigns = { criteria };
+		render(
+			<MemoryRouter>
+				<SingleSegment { ...mockProps } />
+			</MemoryRouter>
+		);
+	} );
+
+	it( 'renders a bound selector for each end of the range', () => {
+		expect( screen.getByLabelText( 'From' ) ).toBeInTheDocument();
+		expect( screen.getByLabelText( 'To' ) ).toBeInTheDocument();
+	} );
+
+	it( 'shows no value input until a bound type is chosen', () => {
+		expect( screen.queryByTestId( 'date-range-start-value' ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'seeds a value when a bound type is chosen, so no half-filled bound exists', () => {
+		fireEvent.change( screen.getByLabelText( 'From' ), { target: { value: 'past' } } );
+		const input = screen.getByTestId( 'date-range-start-value' );
+		expect( input ).toHaveValue( 0 );
+	} );
+
+	it( 'stores a relative bound as signed days', () => {
+		fireEvent.change( screen.getByLabelText( 'From' ), { target: { value: 'past' } } );
+		fireEvent.change( screen.getByTestId( 'date-range-start-value' ), { target: { value: '30' } } );
+		// Re-read: a past bound of 30 days renders back as "Days ago" with 30.
+		expect( screen.getByLabelText( 'From' ) ).toHaveValue( 'past' );
+		expect( screen.getByTestId( 'date-range-start-value' ) ).toHaveValue( 30 );
+	} );
+
+	it( 'clears a bound back to Any', () => {
+		fireEvent.change( screen.getByLabelText( 'From' ), { target: { value: 'past' } } );
+		fireEvent.change( screen.getByLabelText( 'From' ), { target: { value: '' } } );
+		expect( screen.queryByTestId( 'date-range-start-value' ) ).not.toBeInTheDocument();
 	} );
 } );
