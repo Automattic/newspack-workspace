@@ -98,19 +98,39 @@ describe( 'scheduleRow', () => {
 	} );
 
 	// The endpoint derives endDate in the SITE's timezone, so "today" must be read
-	// on that same basis. Pinned with a site 10 hours behind UTC and an instant
-	// that has already rolled over in UTC but not on the site: the plan ends
-	// *today* for the publisher, so it reads "Ends", whatever zone the admin's
-	// browser is in.
-	it( "decides Ends/Ended on the site's calendar day, not the viewer's", () => {
+	// on that same basis, whatever zone the admin's browser is in. Both directions
+	// are pinned, on instants where the site's calendar day and UTC's disagree: a
+	// site behind UTC (UTC has rolled over, the site has not) and one ahead of it
+	// (the site has rolled over, UTC has not). The pair is what makes the test
+	// bite — a regression to UTC or browser-local "today" flips the label in one
+	// direction or the other, so neither can pass both.
+	describe( "deciding Ends/Ended on the site's calendar day", () => {
 		const settings = getSettings();
-		setSettings( { ...settings, timezone: { offset: -10, string: 'Pacific/Honolulu', abbr: 'HST' } } );
-		jest.useFakeTimers().setSystemTime( new Date( '2026-01-02T05:00:00Z' ) ); // 2026-01-01 19:00 in Honolulu.
 
-		expect( scheduleRow( { nextBillingDate: null, endDate: '2026-01-01' } ).label ).toBe( 'Ends' );
-		expect( scheduleRow( { nextBillingDate: null, endDate: '2025-12-31' } ).label ).toBe( 'Ended' );
+		// Restored here rather than after the assertions, so that a failing expect
+		// cannot leak the fixture timezone or the fake clock into the rest of the
+		// suite — which runs whole, and would then fail somewhere unrelated.
+		afterEach( () => {
+			jest.useRealTimers();
+			setSettings( settings );
+		} );
 
-		jest.useRealTimers();
-		setSettings( settings );
+		it( 'reads a site behind UTC, where the site day has not yet rolled over', () => {
+			setSettings( { ...settings, timezone: { offset: -10, string: 'Pacific/Honolulu', abbr: 'HST' } } );
+			jest.useFakeTimers().setSystemTime( new Date( '2026-01-02T05:00:00Z' ) ); // 2026-01-01 19:00 in Honolulu.
+
+			// The plan ends *today* for the publisher, so it still reads "Ends".
+			expect( scheduleRow( { nextBillingDate: null, endDate: '2026-01-01' } ).label ).toBe( 'Ends' );
+			expect( scheduleRow( { nextBillingDate: null, endDate: '2025-12-31' } ).label ).toBe( 'Ended' );
+		} );
+
+		it( 'reads a site ahead of UTC, where the site day has already rolled over', () => {
+			setSettings( { ...settings, timezone: { offset: 14, string: 'Pacific/Kiritimati', abbr: '+14' } } );
+			jest.useFakeTimers().setSystemTime( new Date( '2026-01-01T12:00:00Z' ) ); // 2026-01-02 02:00 in Kiritimati.
+
+			expect( scheduleRow( { nextBillingDate: null, endDate: '2026-01-02' } ).label ).toBe( 'Ends' );
+			// Yesterday on the site, even though it is still today in UTC.
+			expect( scheduleRow( { nextBillingDate: null, endDate: '2026-01-01' } ).label ).toBe( 'Ended' );
+		} );
 	} );
 } );
