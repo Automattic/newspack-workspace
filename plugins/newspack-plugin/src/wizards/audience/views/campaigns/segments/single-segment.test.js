@@ -194,4 +194,24 @@ describe( 'Date range criteria input', () => {
 		fireEvent.change( screen.getByLabelText( 'From' ), { target: { value: '' } } );
 		expect( screen.queryByTestId( 'date-range-start-value' ) ).not.toBeInTheDocument();
 	} );
+
+	it( 'keeps the selector on "Days from now" after choosing it', () => {
+		fireEvent.change( screen.getByLabelText( 'From' ), { target: { value: 'future' } } );
+		// A zero-magnitude relative bound is ambiguous; the selector must not snap back to "Days ago".
+		expect( screen.getByLabelText( 'From' ) ).toHaveValue( 'future' );
+	} );
+
+	it( 'stores a positive offset when a magnitude is typed under "Days from now"', () => {
+		fireEvent.change( screen.getByLabelText( 'From' ), { target: { value: 'future' } } );
+		fireEvent.change( screen.getByTestId( 'date-range-start-value' ), { target: { value: '7' } } );
+		// A negated offset would re-derive as "Days ago" once the magnitude is non-zero.
+		expect( screen.getByLabelText( 'From' ) ).toHaveValue( 'future' );
+		expect( screen.getByTestId( 'date-range-start-value' ) ).toHaveValue( 7 );
+	} );
+
+	it( 'switches from "Days from now" back to "Days ago" and stays there', () => {
+		fireEvent.change( screen.getByLabelText( 'From' ), { target: { value: 'future' } } );
+		fireEvent.change( screen.getByLabelText( 'From' ), { target: { value: 'past' } } );
+		expect( screen.getByLabelText( 'From' ) ).toHaveValue( 'past' );
+	} );
 } );

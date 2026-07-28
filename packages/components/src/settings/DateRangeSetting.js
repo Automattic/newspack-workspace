@@ -1,6 +1,7 @@
 /**
  * WordPress dependencies.
  */
+import { useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 
 /**
@@ -56,14 +57,25 @@ const makeBound = ( type, rawValue ) => {
 };
 
 const DateRangeBound = ( { label, testId, bound, onChange } ) => {
-	const type = boundTypeOf( bound );
+	// The bound type is normally derived from the stored value, but a zero-magnitude
+	// relative bound (`days: 0`) is the same day whether the publisher chose "ago" or
+	// "from now" — the sign can't tell them apart. Direction is a UI concern in that
+	// case, so it's held in state and only consulted while the bound stays ambiguous;
+	// once a magnitude is entered, the stored value is unambiguous again and wins.
+	const [ chosenType, setChosenType ] = useState( () => boundTypeOf( bound ) );
+	const derivedType = boundTypeOf( bound );
+	const isAmbiguous = 'relative' === bound?.type && 0 === bound.days;
+	const type = isAmbiguous ? chosenType : derivedType;
 	return (
 		<div className="newspack-settings__date-range-bound">
 			<SelectControl
 				label={ label }
 				value={ type }
 				options={ BOUND_TYPES }
-				onChange={ nextType => onChange( nextType ? makeBound( nextType, '' ) : undefined ) }
+				onChange={ nextType => {
+					setChosenType( nextType );
+					onChange( nextType ? makeBound( nextType, '' ) : undefined );
+				} }
 			/>
 			{ '' !== type && (
 				<TextControl
