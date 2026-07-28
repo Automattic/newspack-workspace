@@ -4,8 +4,10 @@
  * Newspack Access Control group subscriptions, plus a backfill for group managers.
  *
  * Ported from the standalone `migrate-memberships` drop-in so the tooling ships
- * with the plugin (CLI classes load only under WP_CLI, so there is no web-request
- * cost) and writes through the real Group_Subscription data layer.
+ * with the plugin and writes through the real Group_Subscription data layer. Note
+ * that CLI\Initializer::init() includes this file on every request; only the
+ * WP_CLI::add_command() registration is gated behind WP_CLI, so nothing here should
+ * assume a CLI-only execution context.
  *
  * Member and manager writes go through update_members()/add_manager(), which fire
  * only the group cache-reset hook — no data events, ESP sync, or emails. WooCommerce

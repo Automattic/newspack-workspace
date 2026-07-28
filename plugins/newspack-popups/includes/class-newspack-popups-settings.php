@@ -246,7 +246,10 @@ class Newspack_Popups_Settings {
 				'post_type'      => 'page',
 				'post_status'    => 'publish',
 				'post_parent'    => 0,
-				'posts_per_page' => 1000, // phpcs:ignore WordPress.WP.PostsPerPage.posts_per_page_posts_per_page -- Deliberate cap to keep the query bounded on sites with very many top-level pages.
+				// This list doubles as the save allow-list in update_setting(), so a cap would make
+				// pages outside the window silently unsaveable. Left unbounded until the setting
+				// moves to an autocomplete field and stops enumerating pages.
+				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- See above; bounding this changes behavior, not just cost.
 			]
 		);
 		// Remove the query filter so we don't unintentionally affect other queries.
