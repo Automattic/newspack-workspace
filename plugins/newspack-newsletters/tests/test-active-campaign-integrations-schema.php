@@ -82,6 +82,23 @@ class ActiveCampaignIntegrationsSchemaTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A date field is useless under exact-match text, so enabling one should seed
+	 * the date range operator — the same way a Mailchimp number seeds range.
+	 */
+	public function test_date_types_default_to_date_range_operator() {
+		foreach ( [ 'date', 'datetime' ] as $type ) {
+			$mapped = $this->map_field(
+				[
+					'perstag' => 'LAST_GIFT',
+					'title'   => 'Last Gift',
+					'type'    => $type,
+				]
+			);
+			$this->assertSame( 'date_range', $mapped['matching_function'], "$type matching_function" );
+		}
+	}
+
+	/**
 	 * Value-type mapping is derived from AC's field type so the framework constrains
 	 * the segment operator per field shape. Mirrors newspack-manager's ActiveCampaign
 	 * integration so the same field types identically across both AC integrations.
