@@ -274,15 +274,44 @@ final class Newspack_Popups_API {
 	}
 
 	/**
-	 * The newest published story carrying a Contextual Prompt, for the Site
-	 * Editor canvas to render while its styles are edited.
+	 * How many prompt-bearing stories to examine before giving up and previewing
+	 * the homepage. A publisher whose whole recent run of prompts is restyled is
+	 * previewing an unrepresentative card either way, so the search is bounded
+	 * rather than walking the archive.
+	 */
+	const PREVIEW_CANDIDATE_LIMIT = 20;
+
+	/**
+	 * Block attributes that set, at instance level, a property the block's global
+	 * styles also set. Any of them means the instance wins over Styles > Blocks,
+	 * so the canvas would not move when those controls do.
+	 */
+	const PREVIEW_STYLING_ATTRIBUTES = [
+		'style',
+		'className',
+		'backgroundColor',
+		'textColor',
+		'gradient',
+		'fontSize',
+		'fontFamily',
+		'borderColor',
+	];
+
+	/**
+	 * The newest published story carrying an unstyled Contextual Prompt, for the
+	 * Site Editor canvas to render while the block's styles are edited.
+	 *
+	 * Unstyled matters: a per-instance override beats the block's global styles,
+	 * so previewing a restyled prompt would leave the Styles > Blocks controls
+	 * looking broken, moving nothing on screen. Rather than the newest prompt,
+	 * this is the newest prompt that will actually answer those controls.
 	 *
 	 * Limited to `post` and `page`: the Site Editor drives its canvas from the
 	 * built-in types alone, and silently falls back to the homepage for anything
 	 * else. A remembered id is re-checked before it is trusted, so a story that
 	 * has since been deleted or unpublished sends the lookup around again.
 	 *
-	 * @return int Post id, or 0 when the site has no prompt to preview.
+	 * @return int Post id, or 0 when the site has no prompt worth previewing.
 	 */
 	private static function get_styling_preview_post_id() {
 		$cached = get_transient( self::PREVIEW_POST_TRANSIENT );
@@ -311,7 +340,7 @@ final class Newspack_Popups_API {
 					// plain content match in the database.
 					'search_columns'         => [ 'post_content' ],
 					'ep_integrate'           => false,
-					'posts_per_page'         => 1,
+					'posts_per_page'         => self::PREVIEW_CANDIDATE_LIMIT,
 					'orderby'                => 'date',
 					'order'                  => 'DESC',
 					'fields'                 => 'ids',
@@ -321,11 +350,90 @@ final class Newspack_Popups_API {
 					'update_post_term_cache' => false,
 				]
 			);
-			$preview_id = $query->posts ? (int) $query->posts[0] : 0;
+
+			foreach ( $query->posts as $candidate_id ) {
+				$candidate = get_post( $candidate_id );
+				if ( $candidate && self::has_unstyled_prompt( $candidate->post_content ) ) {
+					$preview_id = (int) $candidate_id;
+					break;
+				}
+			}
 		}
 
 		set_transient( self::PREVIEW_POST_TRANSIENT, $preview_id, HOUR_IN_SECONDS );
 		return $preview_id;
+	}
+
+	/**
+	 * Whether a story's prompt still answers the block's global styles.
+	 *
+	 * The copy paragraph counts as well as the card: typography and text colour
+	 * reach the copy by inheritance, so a paragraph carrying its own would hide
+	 * a global change just as the card's own background would. The CTA child is
+	 * deliberately not examined, since a donate block always carries its
+	 * configuration and judging that as styling would reject every prompt.
+	 *
+	 * @param string $content The story's content.
+	 * @return bool
+	 */
+	private static function has_unstyled_prompt( $content ) {
+		return self::find_unstyled_prompt( parse_blocks( $content ) );
+	}
+
+	/**
+	 * Walk a block tree for an unstyled prompt. Recursive because a prompt sitting
+	 * inside a group or columns still renders, and still answers global styles.
+	 *
+	 * @param array $blocks Parsed blocks.
+	 * @return bool
+	 */
+	private static function find_unstyled_prompt( $blocks ) {
+		foreach ( $blocks as $block ) {
+			if ( Newspack_Popups_Contextual_Prompt_Block::BLOCK_NAME === ( $block['blockName'] ?? '' ) ) {
+				if ( self::is_prompt_unstyled( $block ) ) {
+					return true;
+				}
+				continue;
+			}
+			if ( ! empty( $block['innerBlocks'] ) && self::find_unstyled_prompt( $block['innerBlocks'] ) ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Whether a prompt and its copy are both free of instance-level styling.
+	 *
+	 * @param array $prompt A parsed prompt block.
+	 * @return bool
+	 */
+	private static function is_prompt_unstyled( $prompt ) {
+		if ( self::is_styled( $prompt ) ) {
+			return false;
+		}
+		foreach ( $prompt['innerBlocks'] ?? [] as $child ) {
+			if ( 'core/paragraph' === ( $child['blockName'] ?? '' ) && self::is_styled( $child ) ) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * Whether a parsed block carries any instance-level styling.
+	 *
+	 * @param array $block A parsed block.
+	 * @return bool
+	 */
+	private static function is_styled( $block ) {
+		foreach ( self::PREVIEW_STYLING_ATTRIBUTES as $attribute ) {
+			if ( ! empty( $block['attrs'][ $attribute ] ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**

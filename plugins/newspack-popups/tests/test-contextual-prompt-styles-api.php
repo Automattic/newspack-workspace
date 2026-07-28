@@ -113,6 +113,127 @@ class ContextualPromptStylesApiTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Serialize a prompt carrying the given attributes and copy.
+	 *
+	 * @param string $prompt_attrs    JSON attributes for the prompt, or ''.
+	 * @param string $paragraph_attrs JSON attributes for the copy paragraph, or ''.
+	 * @return string
+	 */
+	private function prompt_content( $prompt_attrs = '', $paragraph_attrs = '' ) {
+		$name = Newspack_Popups_Contextual_Prompt_Block::BLOCK_NAME;
+		return '<!-- wp:' . $name . ( $prompt_attrs ? ' ' . $prompt_attrs : '' ) . ' -->'
+			. '<div class="wp-block-newspack-popups-contextual-prompt">'
+			. '<!-- wp:paragraph' . ( $paragraph_attrs ? ' ' . $paragraph_attrs : '' ) . ' --><p>Support us.</p><!-- /wp:paragraph -->'
+			. '</div>'
+			. '<!-- /wp:' . $name . ' -->';
+	}
+
+	/**
+	 * The style handoff previews a prompt that still answers the block's global
+	 * styles. A restyled prompt overrides them, so pointing the canvas at one
+	 * would leave the Styles > Blocks controls moving nothing on screen.
+	 */
+	public function test_block_theme_handoff_skips_a_restyled_prompt() {
+		$stylesheet = $this->get_any_block_theme_stylesheet();
+		if ( ! $stylesheet ) {
+			$this->markTestSkipped( 'No block theme installed.' );
+		}
+		$original = get_stylesheet();
+		switch_theme( $stylesheet );
+
+		$plain = self::factory()->post->create(
+			[
+				'post_status'  => 'publish',
+				'post_content' => $this->prompt_content(),
+			]
+		);
+
+		// Newer, so it would win on date alone, but its card is restyled.
+		self::factory()->post->create(
+			[
+				'post_status'  => 'publish',
+				'post_date'    => gmdate( 'Y-m-d H:i:s', time() + 60 ),
+				'post_content' => $this->prompt_content( '{"backgroundColor":"base","textColor":"contrast"}' ),
+			]
+		);
+
+		// Newer still, and its card is plain, but its copy carries typography that
+		// would swallow a global change the same way.
+		self::factory()->post->create(
+			[
+				'post_status'  => 'publish',
+				'post_date'    => gmdate( 'Y-m-d H:i:s', time() + 120 ),
+				'post_content' => $this->prompt_content( '', '{"fontSize":"large"}' ),
+			]
+		);
+
+		delete_transient( Newspack_Popups_API::PREVIEW_POST_TRANSIENT );
+		$data = rest_do_request( new WP_REST_Request( 'GET', '/newspack-popups/v1/contextual-prompt/status' ) )->get_data();
+
+		$this->assertStringContainsString( 'postId=' . $plain, $data['site_editor_styles_url'] );
+
+		delete_transient( Newspack_Popups_API::PREVIEW_POST_TRANSIENT );
+		switch_theme( $original );
+	}
+
+	/**
+	 * With every prompt on the site restyled there is nothing worth previewing,
+	 * so the canvas keeps its default rather than showing a card that ignores the
+	 * controls beside it.
+	 */
+	public function test_block_theme_handoff_falls_back_when_every_prompt_is_restyled() {
+		$stylesheet = $this->get_any_block_theme_stylesheet();
+		if ( ! $stylesheet ) {
+			$this->markTestSkipped( 'No block theme installed.' );
+		}
+		$original = get_stylesheet();
+		switch_theme( $stylesheet );
+
+		self::factory()->post->create(
+			[
+				'post_status'  => 'publish',
+				'post_content' => $this->prompt_content( '{"style":{"spacing":{"padding":{"top":"3rem"}}}}' ),
+			]
+		);
+
+		delete_transient( Newspack_Popups_API::PREVIEW_POST_TRANSIENT );
+		$data = rest_do_request( new WP_REST_Request( 'GET', '/newspack-popups/v1/contextual-prompt/status' ) )->get_data();
+
+		$this->assertStringNotContainsString( 'postId=', $data['site_editor_styles_url'] );
+
+		delete_transient( Newspack_Popups_API::PREVIEW_POST_TRANSIENT );
+		switch_theme( $original );
+	}
+
+	/**
+	 * A prompt nested in a group still renders and still answers global styles,
+	 * so it is a valid thing to preview.
+	 */
+	public function test_block_theme_handoff_finds_a_nested_prompt() {
+		$stylesheet = $this->get_any_block_theme_stylesheet();
+		if ( ! $stylesheet ) {
+			$this->markTestSkipped( 'No block theme installed.' );
+		}
+		$original = get_stylesheet();
+		switch_theme( $stylesheet );
+
+		$nested = self::factory()->post->create(
+			[
+				'post_status'  => 'publish',
+				'post_content' => '<!-- wp:group --><div class="wp-block-group">' . $this->prompt_content() . '</div><!-- /wp:group -->',
+			]
+		);
+
+		delete_transient( Newspack_Popups_API::PREVIEW_POST_TRANSIENT );
+		$data = rest_do_request( new WP_REST_Request( 'GET', '/newspack-popups/v1/contextual-prompt/status' ) )->get_data();
+
+		$this->assertStringContainsString( 'postId=' . $nested, $data['site_editor_styles_url'] );
+
+		delete_transient( Newspack_Popups_API::PREVIEW_POST_TRANSIENT );
+		switch_theme( $original );
+	}
+
+	/**
 	 * Find any installed block theme stylesheet slug.
 	 *
 	 * @return string|null Theme stylesheet, or null if unavailable.
