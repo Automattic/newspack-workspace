@@ -15,6 +15,7 @@ import {
 	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 	__experimentalToggleGroupControlOption as ToggleGroupControlOption,
 } from '@wordpress/components';
+import type { TokenItem } from '@wordpress/components/build-types/form-token-field/types.d.ts';
 import { useState, useEffect } from '@wordpress/element';
 import apiFetch from '@wordpress/api-fetch';
 import { __, sprintf } from '@wordpress/i18n';
@@ -23,6 +24,13 @@ import { __, sprintf } from '@wordpress/i18n';
  * Internal dependencies
  */
 import './block-visibility.scss';
+import {
+	formatAccessRuleOptionLabel,
+	getAccessRuleOptionTokens,
+	getMissingOptionLabel,
+	isAccessRuleOptionInput,
+	resolveAccessRuleOptionTokens,
+} from '../access-rule-options';
 
 /**
  * Target block types that receive access control attributes.
@@ -119,18 +127,20 @@ const VisibilityControl = ( {
  * A reader needs to satisfy any one of the selected gates' rules to match.
  */
 const GateControls = ( { gateIds, onChange }: { gateIds: number[]; onChange: ( ids: number[] ) => void } ) => {
-	const selectedLabels = availableGates.filter( g => gateIds.includes( g.id ) ).map( g => g.title );
+	// Gate titles are no more unique than product names, so tokens carry the gate ID for
+	// the same reason the access-rule pickers do.
+	const gateOptions = availableGates.map( g => ( { value: g.id, label: g.title } ) );
 
 	return (
 		<PanelRow>
 			<FormTokenField
 				label={ __( 'Gates', 'newspack-plugin' ) }
-				value={ selectedLabels }
-				suggestions={ availableGates.map( g => g.title ) }
-				onChange={ ( tokens: ( string | { value: string } )[] ) => {
-					const labels = tokens.map( t => ( typeof t === 'string' ? t : t.value ) );
-					onChange( availableGates.filter( g => labels.includes( g.title ) ).map( g => g.id ) );
-				} }
+				value={ getAccessRuleOptionTokens( gateOptions, gateIds, getMissingOptionLabel( 'gate' ) ) }
+				suggestions={ gateOptions.map( formatAccessRuleOptionLabel ) }
+				onChange={ ( tokens: ( string | TokenItem )[] ) =>
+					onChange( resolveAccessRuleOptionTokens( tokens, gateOptions, gateIds ).map( Number ) )
+				}
+				__experimentalValidateInput={ ( input: string ) => isAccessRuleOptionInput( input, gateOptions ) }
 				__experimentalExpandOnFocus
 				__next40pxDefaultSize
 				__nextHasNoMarginBottom
@@ -187,19 +197,13 @@ const AccessRuleValueControl = ( {
 	}, [ slug ] ); // eslint-disable-line react-hooks/exhaustive-deps
 
 	if ( options.length > 0 ) {
-		// Map stored IDs to labels for display; silently drop IDs with no matching option.
-		const valueArr = Array.isArray( value ) ? value : [];
-		const selectedLabels = options.filter( o => valueArr.some( v => String( v ) === String( o.value ) ) ).map( o => o.label );
-
 		return (
 			<FormTokenField
 				label={ config.name }
-				value={ selectedLabels }
-				suggestions={ options.map( o => o.label ) }
-				onChange={ ( tokens: ( string | { value: string } )[] ) => {
-					const labels = tokens.map( t => ( typeof t === 'string' ? t : t.value ) );
-					onChange( options.filter( o => labels.includes( o.label ) ).map( o => o.value ) );
-				} }
+				value={ getAccessRuleOptionTokens( options, value, getMissingOptionLabel( slug ) ) }
+				suggestions={ options.map( formatAccessRuleOptionLabel ) }
+				onChange={ ( tokens: ( string | TokenItem )[] ) => onChange( resolveAccessRuleOptionTokens( tokens, options, value ) ) }
+				__experimentalValidateInput={ ( input: string ) => isAccessRuleOptionInput( input, options ) }
 				__experimentalExpandOnFocus
 				__next40pxDefaultSize
 				__nextHasNoMarginBottom

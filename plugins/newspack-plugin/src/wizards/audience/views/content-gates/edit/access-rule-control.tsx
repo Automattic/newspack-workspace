@@ -6,14 +6,21 @@ import { useEffect, useState } from '@wordpress/element';
 import { useDispatch } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
 import { TextControl } from '@wordpress/components';
+import type { TokenItem } from '@wordpress/components/build-types/form-token-field/types.d.ts';
 
 /**
  * Internal dependencies
  */
 import { FormTokenField } from '../../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
-
-type RuleOption = { value: string | number; label: string };
+import {
+	formatAccessRuleOptionLabel,
+	getAccessRuleOptionTokens,
+	getMissingOptionLabel,
+	isAccessRuleOptionInput,
+	resolveAccessRuleOptionTokens,
+	type AccessRuleOption as RuleOption,
+} from '../../../../../content-gate/access-rule-options';
 
 interface DynamicRuleConfig< T > {
 	path: string;
@@ -81,12 +88,13 @@ export default function AccessRuleControl( { slug, value, onChange }: GateRuleCo
 	if ( options && options.length > 0 ) {
 		return (
 			<FormTokenField
-				label={ '' }
-				value={ options
-					.filter( o => ( value as Array< string | number > ).some( v => String( v ) === String( o.value ) ) )
-					.map( o => o.label ) }
-				onChange={ ( items: string[] ) => onChange( options?.filter( o => items.includes( o.label ) ).map( o => o.value ) ?? [] ) }
-				suggestions={ options.map( o => o.label ) }
+				hideLabelFromVision
+				label={ rule.name }
+				description={ __( 'Search by name or ID.', 'newspack-plugin' ) }
+				value={ getAccessRuleOptionTokens( options, value, getMissingOptionLabel( slug ) ) }
+				onChange={ ( tokens: ( string | TokenItem )[] ) => onChange( resolveAccessRuleOptionTokens( tokens, options, value ) ) }
+				suggestions={ options.map( formatAccessRuleOptionLabel ) }
+				__experimentalValidateInput={ ( input: string ) => isAccessRuleOptionInput( input, options ) }
 				__experimentalExpandOnFocus
 				__next40pxDefaultSize
 			/>

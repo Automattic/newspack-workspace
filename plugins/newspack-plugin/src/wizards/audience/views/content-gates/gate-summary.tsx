@@ -12,6 +12,12 @@ import { __, sprintf } from '@wordpress/i18n';
  * Internal dependencies.
  */
 import ContentRuleControl from './edit/content-rule-control';
+import {
+	findAccessRuleOption,
+	formatAccessRuleOptionLabel,
+	formatMissingAccessRuleOptionLabel,
+	getMissingOptionLabel,
+} from '../../../../content-gate/access-rule-options';
 
 const availableAccessRules = window.newspackAudienceContentGates.available_access_rules || {};
 
@@ -96,10 +102,12 @@ export const getGateSummarySections = ( gate: Gate, isNewsletter = false ): Gate
 									<strong>{ availableAccessRules[ rule.slug ].name }:</strong>{ ' ' }
 									{ Array.isArray( rule.value ) && availableAccessRules[ rule.slug ]?.options
 										? rule.value
-												.map(
-													value =>
-														availableAccessRules[ rule.slug ].options?.find( option => option.value === value )?.label
-												)
+												.map( value => {
+													const option = findAccessRuleOption( availableAccessRules[ rule.slug ].options ?? [], value );
+													return option
+														? formatAccessRuleOptionLabel( option )
+														: formatMissingAccessRuleOptionLabel( value, getMissingOptionLabel( rule.slug ) );
+												} )
 												.join( ', ' )
 										: rule.value }
 								</p>
