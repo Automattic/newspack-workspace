@@ -326,6 +326,7 @@ class Contact_Pull {
 			Logger::log( 'Pulled data from ' . $integration->get_id() . ': ' . wp_json_encode( $data ) );
 
 			$write_errors = [];
+			$pending_keys = [];
 			foreach ( $data as $key => $value ) {
 				$encoded = wp_json_encode( $value );
 
@@ -333,16 +334,17 @@ class Contact_Pull {
 					// Both of update_item()'s rejection causes are deterministic, so
 					// the preview can report them without persisting — an operator
 					// green-lighting a run deserves to see writes that are guaranteed
-					// to fail. The key cap is evaluated against the reader's stored
-					// keys, so within one reader a preview can undercount which
-					// individual fields hit the cap; the reader-level error tally
-					// (any failed field marks the reader) is still accurate.
-					$would_store = \Newspack\Reader_Data::validate_item( $user_id, $key, $encoded );
+					// to fail. Keys accepted earlier in this loop are threaded through
+					// as pending: nothing is written, so without them a batch of new
+					// keys that collectively crosses the cap would preview clean and
+					// then fail for real.
+					$would_store = \Newspack\Reader_Data::validate_item( $user_id, $key, $encoded, $pending_keys );
 					if ( is_wp_error( $would_store ) ) {
 						Logger::log( sprintf( '[dry-run] Would FAIL storing reader data "%s" for user %d: %s', $key, $user_id, $would_store->get_error_message() ), self::LOGGER_HEADER );
 						$write_errors[] = sprintf( '"%s": %s', $key, $would_store->get_error_message() );
 						continue;
 					}
+					$pending_keys[] = $key;
 					Logger::log( sprintf( '[dry-run] Would store reader data "%s" for user %d.', $key, $user_id ), self::LOGGER_HEADER );
 					continue;
 				}

@@ -282,24 +282,31 @@ final class Reader_Data {
 	}
 
 	/**
-	 * Whether a reader data item would be accepted by update_item().
-	 *
-	 * Both rejection causes are deterministic and depend only on the value and
-	 * the reader's current key count, so callers that preview writes — the
-	 * integrations backfill dry-run — can report them without persisting.
+	 * Read the reader's registered data keys.
 	 *
 	 * @param string $user_id User ID.
-	 * @param string $key     Key.
-	 * @param mixed  $value   Value.
+	 *
+	 * @return string[] The reader's data keys.
+	 */
+	private static function get_item_keys( $user_id ) {
+		$user_keys = \get_user_meta( $user_id, 'newspack_reader_data_keys', true );
+		return $user_keys ? $user_keys : [];
+	}
+
+	/**
+	 * Validate an already-prepared value against the per-reader key cap.
+	 *
+	 * Split from validate_item() so update_item() can reuse the value it
+	 * prepared and the keys it read, instead of doing both twice.
+	 *
+	 * @param string   $user_id   User ID.
+	 * @param string   $key       Key.
+	 * @param string   $value     Prepared (stringified, sanitized) value.
+	 * @param string[] $user_keys The reader's current data keys.
 	 *
 	 * @return true|WP_Error True if the write would be accepted, error object otherwise.
 	 */
-	public static function validate_item( $user_id, $key, $value ) {
-		$value = self::prepare_item_value( $value );
-		if ( \is_wp_error( $value ) ) {
-			return $value;
-		}
-
+	private static function validate_prepared_item( $user_id, $key, $value, $user_keys ) {
 		// Only an empty string is invalid. A falsy-but-meaningful scalar must
 		// still store: a numeric zero JSON-encodes to the string "0", which PHP
 		// treats as falsy, so a loose `! $value` check would reject legitimate
@@ -308,11 +315,6 @@ final class Reader_Data {
 		// re-enqueued indefinitely — so the value could never be stored.
 		if ( '' === $value ) {
 			return new \WP_Error( 'invalid_value', __( 'Invalid value.', 'newspack' ), [ 'status' => 400 ] );
-		}
-
-		$user_keys = \get_user_meta( $user_id, 'newspack_reader_data_keys', true );
-		if ( ! $user_keys ) {
-			$user_keys = [];
 		}
 
 		/**
@@ -324,11 +326,49 @@ final class Reader_Data {
 		 * @param string $value     Value.
 		 */
 		$max_items = apply_filters( 'newspack_reader_data_max_items', self::MAX_ITEMS, $user_id, $key, $value );
-		if ( count( $user_keys ) >= $max_items ) {
+
+		// The cap bounds how many keys a reader accumulates, so only a NEW key
+		// can breach it — refreshing an already-stored item doesn't grow the
+		// list. Enforcing it unconditionally would strand an at-cap reader:
+		// their stored fields could never be updated again, and since a rejected
+		// write is permanent-class on the pull path, every re-pull would fail
+		// with no operator remedy short of deleting reader data.
+		if ( ! in_array( $key, $user_keys, true ) && count( $user_keys ) >= $max_items ) {
 			return new \WP_Error( 'too_many_items', __( 'Too many items.', 'newspack' ), [ 'status' => 400 ] );
 		}
 
 		return true;
+	}
+
+	/**
+	 * Whether a reader data item would be accepted by update_item().
+	 *
+	 * Both rejection causes are deterministic and depend only on the value and
+	 * the reader's key list, so callers that preview writes — the integrations
+	 * backfill dry-run — can report them without persisting.
+	 *
+	 * @param string   $user_id      User ID.
+	 * @param string   $key          Key.
+	 * @param mixed    $value        Value.
+	 * @param string[] $pending_keys Optional. Keys an in-progress preview has already
+	 *                               accepted but not persisted, so a batch of new keys
+	 *                               is validated against the count it would really
+	 *                               reach. Default empty.
+	 *
+	 * @return true|WP_Error True if the write would be accepted, error object otherwise.
+	 */
+	public static function validate_item( $user_id, $key, $value, $pending_keys = [] ) {
+		$value = self::prepare_item_value( $value );
+		if ( \is_wp_error( $value ) ) {
+			return $value;
+		}
+
+		$user_keys = self::get_item_keys( $user_id );
+		if ( ! empty( $pending_keys ) ) {
+			$user_keys = array_values( array_unique( array_merge( $user_keys, $pending_keys ) ) );
+		}
+
+		return self::validate_prepared_item( $user_id, $key, $value, $user_keys );
 	}
 
 	/**
@@ -341,15 +381,16 @@ final class Reader_Data {
 	 * @return true|WP_Error True on success, error object on failure.
 	 */
 	public static function update_item( $user_id, $key, $value ) {
-		$is_valid = self::validate_item( $user_id, $key, $value );
-		if ( \is_wp_error( $is_valid ) ) {
-			return $is_valid;
+		$value = self::prepare_item_value( $value );
+		if ( \is_wp_error( $value ) ) {
+			return $value;
 		}
 
-		$value     = self::prepare_item_value( $value );
-		$user_keys = \get_user_meta( $user_id, 'newspack_reader_data_keys', true );
-		if ( ! $user_keys ) {
-			$user_keys = [];
+		$user_keys = self::get_item_keys( $user_id );
+
+		$is_valid = self::validate_prepared_item( $user_id, $key, $value, $user_keys );
+		if ( \is_wp_error( $is_valid ) ) {
+			return $is_valid;
 		}
 
 		if ( ! in_array( $key, $user_keys, true ) ) {

@@ -103,6 +103,37 @@ class Test_Contact_Pull_Dry_Run extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A preview persists nothing, so keys it has already accepted must be
+	 * threaded forward: otherwise a pull adding several new keys that
+	 * collectively cross the cap previews clean and then fails for real
+	 * (NPPD-2076 review).
+	 */
+	public function test_dry_run_accounts_for_keys_it_would_add_earlier_in_the_batch() {
+		update_option(
+			'newspack_integration_incoming_fields_pull_mock',
+			[
+				'field_a' => [ 'name' => 'Field A' ],
+				'field_b' => [ 'name' => 'Field B' ],
+			]
+		);
+		Failing_Sample_Integration::$pull_data = [
+			'field_a' => 'gold',
+			'field_b' => 'silver',
+		];
+		// Leave exactly one free slot, so only the first of the two new keys fits.
+		for ( $i = 0; $i < Reader_Data::MAX_ITEMS - 1; $i++ ) {
+			Reader_Data::update_item( $this->user_id, "filler_{$i}", '"x"' );
+		}
+
+		$result = Contact_Pull::pull_single_integration( $this->user_id, $this->integration, true );
+
+		$this->assertInstanceOf( \WP_Error::class, $result, 'The second key would breach the cap.' );
+		$this->assertSame( 'reader_data_write_failed', $result->get_error_code() );
+		$this->assertStringContainsString( 'Too many items', $result->get_error_message() );
+		$this->assertStringContainsString( '1 of 2', $result->get_error_message(), 'Exactly one of the two writes fails.' );
+	}
+
+	/**
 	 * A numeric zero must survive the round trip. Its JSON encoding is the
 	 * string "0", which PHP treats as falsy — a rejection here would fail the
 	 * pull permanently and re-enqueue the reader forever (NPPD-2076 review).
