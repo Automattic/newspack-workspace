@@ -256,7 +256,8 @@ class Content_Gate extends Contact_Metadata {
 	 * subscriptions with an active status. A group subscription in the payment-retry
 	 * window therefore grants access without contributing a group name, so `$context`
 	 * has nothing to switch on here — it is accepted to keep the resolver signature
-	 * uniform.
+	 * uniform. Aligning the group name with the grace toggle means threading context
+	 * through that shared, cross-feature helper (also used by GA4); tracked in NPPD-2133.
 	 *
 	 * @param string $slug    Rule slug.
 	 * @param mixed  $value   Rule value.
