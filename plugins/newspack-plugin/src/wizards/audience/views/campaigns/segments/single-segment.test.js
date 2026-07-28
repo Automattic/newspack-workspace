@@ -215,3 +215,39 @@ describe( 'Date range criteria input', () => {
 		expect( screen.getByLabelText( 'From' ) ).toHaveValue( 'past' );
 	} );
 } );
+
+describe( 'Date range criteria input for an existing segment with an ambiguous bound', () => {
+	// The stored bound is ambiguous (days: 0) and only arrives after the async
+	// fetch resolves, which is exactly the scenario the regression hit: the
+	// control first mounts with no bound at all, then re-renders once the real,
+	// ambiguous bound loads.
+	const existingSegment = {
+		...SEGMENTS[ 0 ],
+		criteria: [
+			{
+				criteria_id: 'LAST_GIFT_DATE',
+				value: { start: { type: 'relative', days: 0 } },
+			},
+		],
+	};
+
+	const mockProps = {
+		segmentId: existingSegment.id,
+		setSegments: jest.fn(),
+		wizardApiFetch: () => Promise.resolve( [ existingSegment ] ),
+	};
+
+	beforeEach( () => {
+		window.newspackAudienceCampaigns = { criteria };
+		render(
+			<MemoryRouter>
+				<SingleSegment { ...mockProps } />
+			</MemoryRouter>
+		);
+	} );
+
+	it( 'renders the derived direction and value once the stored bound loads, instead of Any', async () => {
+		await waitFor( () => expect( screen.getByLabelText( 'From' ) ).toHaveValue( 'past' ) );
+		expect( screen.getByTestId( 'date-range-start-value' ) ).toHaveValue( 0 );
+	} );
+} );
