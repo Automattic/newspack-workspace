@@ -22,6 +22,17 @@ updates:
       interval: "weekly"
     labels:
       - "dependencies"
+    ignore:
+      # VIPCS 3.1.0 makes `posts_per_page => -1` a hard error, which the
+      # monorepo does not yet satisfy, so the root constraint stays on 3.0.x
+      # until that audit lands (NPPM-3055). The pin alone is not enough:
+      # Dependabot also opens "permit the latest version" PRs that rewrite the
+      # constraint itself, and one of those reverted this pin and turned every
+      # PHP-linted PR red. Drop this entry as part of the audit.
+      - dependency-name: "automattic/vipwpcs"
+        update-types:
+          - "version-update:semver-minor"
+          - "version-update:semver-major"
 
   # GitHub Actions.
   - package-ecosystem: "github-actions"
