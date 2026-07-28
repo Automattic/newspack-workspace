@@ -126,6 +126,11 @@ final class Newspack_Popups {
 		include_once __DIR__ . '/class-newspack-popups-inserter.php';
 		include_once __DIR__ . '/class-newspack-popups-api.php';
 		include_once __DIR__ . '/class-newspack-popups-settings.php';
+		if ( self::is_contextual_prompts_enabled() ) {
+			// Registered outside the admin-only Settings init: an opt-in flipped
+			// over WP-CLI has to leave the same record as one flipped in the wizard.
+			Newspack_Popups_Settings::register_opt_in_audit();
+		}
 		include_once __DIR__ . '/class-newspack-popups-segmentation.php';
 		include_once __DIR__ . '/class-newspack-popups-custom-placements.php';
 		include_once __DIR__ . '/class-newspack-popups-view-as.php';

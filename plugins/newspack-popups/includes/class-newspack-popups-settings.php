@@ -51,6 +51,68 @@ class Newspack_Popups_Settings {
 	}
 
 	/**
+	 * Record who accepted AI use on this site, and when.
+	 *
+	 * The opt-in is what starts drafts travelling to an external model service,
+	 * and some newsrooms are contractually barred from AI use, so the acceptance
+	 * needs a forensic record rather than a bare option write. Hooked on the
+	 * option itself so a flip made outside the wizard, over WP-CLI or by another
+	 * plugin, is recorded the same way.
+	 */
+	public static function register_opt_in_audit() {
+		add_action( 'add_option_' . self::AI_COPY_ASSISTANT_ENABLED_OPTION, [ __CLASS__, 'log_opt_in_added' ], 10, 2 );
+		add_action( 'update_option_' . self::AI_COPY_ASSISTANT_ENABLED_OPTION, [ __CLASS__, 'log_opt_in_updated' ], 10, 2 );
+	}
+
+	/**
+	 * First write of the opt-in option.
+	 *
+	 * @param string $option Option name.
+	 * @param mixed  $value  The stored value.
+	 */
+	public static function log_opt_in_added( $option, $value ) {
+		self::log_opt_in_state( $value );
+	}
+
+	/**
+	 * A changed opt-in. `update_option()` returns before this fires when the
+	 * value is unchanged, so every call here is a real state change.
+	 *
+	 * @param mixed $old_value The previous value.
+	 * @param mixed $value     The new value.
+	 */
+	public static function log_opt_in_updated( $old_value, $value ) {
+		self::log_opt_in_state( $value );
+	}
+
+	/**
+	 * Write the audit record.
+	 *
+	 * @param mixed $value The new opt-in value.
+	 */
+	private static function log_opt_in_state( $value ) {
+		$enabled = (bool) $value;
+		$user    = wp_get_current_user();
+
+		Newspack_Popups_Logger::audit_log(
+			'newspack_contextual_prompts',
+			$enabled
+				? 'Contextual Prompts: AI use was accepted for this site.'
+				: 'Contextual Prompts: AI use was withdrawn for this site.',
+			[
+				'file'       => 'newspack_contextual_prompts',
+				'enabled'    => $enabled,
+				// Recorded explicitly so the entry answers "who, and when" on its
+				// own, without depending on when a consumer received it.
+				'timestamp'  => gmdate( 'c' ),
+				'user_id'    => $user ? (int) $user->ID : 0,
+				'user_login' => $user ? (string) $user->user_login : '',
+			],
+			'info'
+		);
+	}
+
+	/**
 	 * Whether the site-wide override is active: enabled AND carrying copy.
 	 * An enabled override with no copy would blank every prompt, so it is
 	 * treated as inactive.
