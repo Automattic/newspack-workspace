@@ -49,7 +49,10 @@ jest.mock( '../../../../../packages/components/src', () => ( {
 	Accordion: ( { children } ) => children,
 	AccordionPanel: ( { children } ) => children,
 	Button: ( { children } ) => children,
-	Divider: () => null,
+	// Section dividers pass alignment="full-width"; the divider under a section
+	// toggle does not, so the stub tags them apart for the tests that assert on
+	// whether a toggle divider has anything to divide.
+	Divider: ( { alignment } ) => <hr data-testid={ 'full-width' === alignment ? 'section-divider' : 'toggle-divider' } />,
 	Grid: ( { children } ) => children,
 	SectionHeader: () => null,
 	SelectControl: ( { label, value, onChange } ) => (
@@ -676,5 +679,43 @@ describe( 'ConfigureView per-direction sections', () => {
 			getLatestSaveAction()();
 		} );
 		expect( onSave ).toHaveBeenCalledWith( 'esp', { outgoing_sync_enabled: false } );
+	} );
+
+	// The divider under a section toggle only separates it from the content
+	// below, so a direction with nothing to show must not render one.
+	it( 'renders a toggle divider per enabled section, and none once both are paused', () => {
+		renderConfigureView( { integrations: bidirectionalIntegration() } );
+		expect( screen.queryAllByTestId( 'toggle-divider' ) ).toHaveLength( 2 );
+
+		fireEvent.click( screen.getByLabelText( 'Enable outbound sync' ) );
+		fireEvent.click( screen.getByLabelText( 'Enable inbound sync' ) );
+		expect( screen.queryAllByTestId( 'toggle-divider' ) ).toHaveLength( 0 );
+	} );
+
+	// An enabled Outbound section that declares a settings field but has no
+	// picker, and hides that field behind an unsatisfied condition, still
+	// renders the section — with nothing under the toggle to divide.
+	it( 'renders no outbound toggle divider when every outbound settings field is hidden', () => {
+		renderConfigureView( {
+			integrations: {
+				esp: {
+					...INTEGRATION,
+					settings: [
+						{ key: 'mailchimp_audience_id', type: 'text', label: 'Audience ID', value: '' },
+						{ key: 'outgoing_sync_enabled', type: 'checkbox', label: 'Enable outbound sync', value: true },
+						{
+							key: 'account_deletion_handling',
+							type: 'text',
+							label: 'How to sync deletion',
+							value: 'flag',
+							condition: { field: 'mailchimp_audience_id', equals: 'never-matches' },
+						},
+					],
+				},
+			},
+		} );
+		expect( screen.getByLabelText( 'Enable outbound sync' ).checked ).toBe( true );
+		expect( screen.queryByLabelText( 'How to sync deletion' ) ).toBeNull();
+		expect( screen.queryAllByTestId( 'toggle-divider' ) ).toHaveLength( 0 );
 	} );
 } );

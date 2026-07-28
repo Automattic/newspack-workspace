@@ -423,6 +423,7 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 	const outboundEnabled = ! outboundToggleField || toBool( getFieldValue( outboundToggleField ) );
 
 	const visibleSettingsFields = settingsFields.filter( fieldIsVisible );
+	const visibleOutboundSettingsFields = outboundSettingsFields.filter( fieldIsVisible );
 
 	// The divider separates the toggle from the section content below it, so it
 	// only renders when there is content to divide: the caller passes false for a
@@ -532,18 +533,19 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 						<Grid columns={ 2 } gutter={ 32 } noMargin>
 							<SectionHeader heading={ 2 } title={ __( 'Outbound', 'newspack-plugin' ) } noMargin />
 							<Grid columns={ 1 } rowGap={ 16 } noMargin>
-								{ renderSectionToggle( outboundToggleField, outboundEnabled ) }
+								{ renderSectionToggle(
+									outboundToggleField,
+									outboundEnabled && ( visibleOutboundSettingsFields.length > 0 || !! outboundField )
+								) }
 								{ outboundEnabled &&
-									outboundSettingsFields
-										.filter( fieldIsVisible )
-										.map( field => (
-											<SettingsField
-												key={ field.key }
-												field={ field }
-												value={ getFieldValue( field ) }
-												onChange={ val => handleFieldChange( field.key, val ) }
-											/>
-										) ) }
+									visibleOutboundSettingsFields.map( field => (
+										<SettingsField
+											key={ field.key }
+											field={ field }
+											value={ getFieldValue( field ) }
+											onChange={ val => handleFieldChange( field.key, val ) }
+										/>
+									) ) }
 								{ outboundEnabled && outboundField && (
 									<Accordion hideSingleTitle>
 										{ ( outboundField.grouped_options || [] ).map( ( group, index ) => {
