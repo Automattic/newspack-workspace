@@ -51,16 +51,23 @@ class User_Gate_Access {
 	 *     @type array $groups     Array of group results, each containing:
 	 *         @type bool  $passes Whether the group passes (AND logic).
 	 *         @type array $rules  Array of rule results with slug, name, value, and passes.
+	 *     @type array $context    The evaluation context the rules were evaluated under.
+	 *                             Returned so callers that re-run a rule callback to
+	 *                             explain *why* it passed (e.g. the contact-metadata
+	 *                             sync's source labels) can evaluate under the same
+	 *                             gate settings rather than the callbacks' defaults.
 	 * }
 	 */
 	public static function evaluate_gate_for_user( $gate, $user_id ) {
 		$access_rules = Access_Rules::normalize_rules( $gate['custom_access']['access_rules'] ?? [] );
+		$context      = [ 'payment_recovery_grace' => $gate['custom_access']['payment_recovery_grace'] ?? true ];
 
 		// Empty rules means the gate does not restrict — matches Content_Restriction_Control behavior.
 		if ( empty( $access_rules ) ) {
 			return [
 				'can_bypass' => true,
 				'groups'     => [],
+				'context'    => $context,
 			];
 		}
 
@@ -76,12 +83,7 @@ class User_Gate_Access {
 					continue;
 				}
 				$rule_config = Access_Rules::get_rule( $rule['slug'] );
-				$passes      = Access_Rules::evaluate_rule(
-					$rule['slug'],
-					$rule['value'] ?? null,
-					$user_id,
-					[ 'payment_recovery_grace' => $gate['custom_access']['payment_recovery_grace'] ?? true ]
-				);
+				$passes      = Access_Rules::evaluate_rule( $rule['slug'], $rule['value'] ?? null, $user_id, $context );
 
 				if ( ! $passes ) {
 					$group_passes = false;
@@ -108,6 +110,7 @@ class User_Gate_Access {
 		return [
 			'can_bypass' => $can_bypass,
 			'groups'     => $groups,
+			'context'    => $context,
 		];
 	}
 

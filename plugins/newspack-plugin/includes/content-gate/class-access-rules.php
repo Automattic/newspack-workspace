@@ -205,18 +205,40 @@ class Access_Rules {
 			return call_user_func( $rule['callback'], $user_id, $args );
 		}
 
+		return self::with_evaluation_context(
+			$context,
+			function () use ( $rule, $user_id, $args ) {
+				return call_user_func( $rule['callback'], $user_id, $args );
+			}
+		);
+	}
+
+	/**
+	 * Run a callback with the given evaluation context in place, restoring the
+	 * previous context afterwards.
+	 *
+	 * Use this to give rule callbacks a gate's settings when invoking them
+	 * outside `evaluate_rule()` / `evaluate_rules()` — e.g. calling
+	 * `has_active_subscription()` directly to attribute *why* a rule passed.
+	 * Without it those calls silently fall back to the rule callbacks' own
+	 * defaults instead of honoring the gate.
+	 *
+	 * @param array    $context  Evaluation context, as read by get_evaluation_context().
+	 * @param callable $callback Callback to run.
+	 *
+	 * @return mixed The callback's return value.
+	 */
+	public static function with_evaluation_context( $context, $callback ) {
 		$previous_context         = self::$evaluation_context;
 		self::$evaluation_context = $context;
 		try {
 			// Rule callbacks are third-party-registerable; restoring in a finally
 			// block guarantees a throwing callback can't leak this context into
 			// later evaluations in the same request.
-			$passes = call_user_func( $rule['callback'], $user_id, $args );
+			return $callback();
 		} finally {
 			self::$evaluation_context = $previous_context;
 		}
-
-		return $passes;
 	}
 
 	/**
@@ -309,25 +331,20 @@ class Access_Rules {
 		// Normalize legacy flat rules structure to grouped format.
 		$access_rules = self::normalize_rules( $access_rules );
 
-		$previous_context         = self::$evaluation_context;
-		self::$evaluation_context = $context;
-		try {
-			// Evaluate each group with OR logic - if any group passes, grant access.
-			// Rule callbacks are third-party-registerable; restoring in a finally
-			// block guarantees a throwing callback can't leak this context into
-			// later evaluations in the same request.
-			$granted = false;
-			foreach ( $access_rules as $group ) {
-				if ( self::evaluate_rules_group( $group, $user_id ) ) {
-					$granted = true;
-					break;
+		return self::with_evaluation_context(
+			$context,
+			function () use ( $access_rules, $user_id ) {
+				// Evaluate each group with OR logic - if any group passes, grant access.
+				foreach ( $access_rules as $group ) {
+					if ( self::evaluate_rules_group( $group, $user_id ) ) {
+						return true;
+					}
 				}
-			}
-		} finally {
-			self::$evaluation_context = $previous_context;
-		}
 
-		return $granted;
+				// No group passed - restrict access.
+				return false;
+			}
+		);
 	}
 
 	/**

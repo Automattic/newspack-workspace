@@ -110,6 +110,17 @@ class WooCommerce_Connection {
 	 * how the rest of the plugin reads the date (see `On_Hold_Duration` and the
 	 * subscription-cleanup CLI command).
 	 *
+	 * One residual case does not self-close: if the scheduled retry action fails
+	 * permanently at the Action Scheduler level, Woo Subscriptions only logs it
+	 * (`WCS_Failed_Scheduled_Action_Manager`) — the retry record stays `pending`,
+	 * so the date is never deleted and recovery persists for as long as the
+	 * subscription stays on-hold. Reading the retry store's status instead would
+	 * not help: the record it would read is the one left pending. Any touch of the
+	 * subscription's status clears the date (`WCS_Retry_Manager::maybe_cancel_retry()`),
+	 * so this only bites a subscription nothing ever touches again. Closing it
+	 * properly needs a bound the retry system does not provide — e.g. capping the
+	 * grace at the configured on-hold duration.
+	 *
 	 * @param \WC_Subscription|false $subscription Subscription object.
 	 *
 	 * @return bool
