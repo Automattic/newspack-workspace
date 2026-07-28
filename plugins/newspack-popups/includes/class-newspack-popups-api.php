@@ -19,9 +19,12 @@ final class Newspack_Popups_API {
 		add_action( 'rest_api_init', [ $this, 'register_api_endpoints' ] );
 		// Whether the site has a prompt to preview changes when content does, and
 		// the answer is cached — including the "nothing yet" answer, which is what
-		// a site looks like right up until its first prompt is published.
-		add_action( 'save_post', [ __CLASS__, 'flush_styling_preview_cache' ], 10, 2 );
-		add_action( 'delete_post', [ __CLASS__, 'flush_styling_preview_cache' ], 10, 2 );
+		// a site looks like right up until its first prompt is published. With the
+		// feature off the transient can never exist, so nothing hooks.
+		if ( Newspack_Popups::is_contextual_prompts_enabled() ) {
+			add_action( 'save_post', [ __CLASS__, 'flush_styling_preview_cache' ], 10, 2 );
+			add_action( 'delete_post', [ __CLASS__, 'flush_styling_preview_cache' ], 10, 2 );
+		}
 	}
 
 	/**
