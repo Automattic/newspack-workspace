@@ -479,6 +479,12 @@ class Newspack_Test_Access_Rules_One_Time_Purchase extends WP_UnitTestCase {
 	/**
 	 * With no user ID and no resolvable email there is nothing to match a purchase
 	 * against, so the rule denies rather than querying every customer's orders.
+	 *
+	 * The finite assertion is the one that pins the guard: without it the
+	 * unconstrained order query would match another customer's order. The forever
+	 * assertion documents parity rather than arming anything — with no identity,
+	 * wc_customer_bought_product() fails closed itself, in the mock as in real
+	 * WooCommerce.
 	 */
 	public function test_missing_identity_denies_access() {
 		$this->create_one_time_order( [ 'date_created' => gmdate( 'Y-m-d H:i:s', strtotime( '-10 days' ) ) ] );
