@@ -280,6 +280,13 @@ class Admin_Bar {
 	 * @return string
 	 */
 	private static function get_modal_markup( array $sites ) {
+		// Newspack UI's own layout primitive, so the spacing comes from the design
+		// system rather than from this plugin.
+		$row_stack   = 'newspack-ui__stack newspack-ui__stack--horizontal newspack-ui__stack--align-center newspack-ui__stack--gap-1';
+		$list_stack  = 'newspack-ui__stack newspack-ui__stack--vertical newspack-ui__stack--gap-1';
+		$panel_stack = 'newspack-ui__stack newspack-ui__stack--vertical newspack-ui__stack--gap-5';
+		$button_stack = 'newspack-ui__stack newspack-ui__stack--vertical newspack-ui__stack--gap-2';
+
 		$rows = '';
 		foreach ( $sites as $index => $site ) {
 			$id = 'newspack-network-distribute-site-' . (int) $index;
@@ -299,20 +306,22 @@ class Admin_Bar {
 			}
 
 			$rows .= sprintf(
-				'<label class="newspack-network-distribute-site" for="%1$s"><input type="checkbox" id="%1$s" value="%2$s"%3$s><span class="newspack-network-distribute-site-name">%4$s</span>%5$s</label>',
+				'<label class="newspack-network-distribute-site %6$s" for="%1$s"><input type="checkbox" id="%1$s" value="%2$s"%3$s><span class="newspack-network-distribute-site-name">%4$s</span>%5$s</label>',
 				esc_attr( $id ),
 				esc_attr( $site['url'] ),
 				$state,
 				esc_html( $site['name'] ),
-				$note
+				$note,
+				esc_attr( $row_stack )
 			);
 		}
 
 		$select_all = '';
 		if ( count( $sites ) > 1 ) {
 			$select_all = sprintf(
-				'<label class="newspack-network-distribute-all"><input type="checkbox" class="newspack-network-distribute-all-toggle">%s</label>',
-				esc_html__( 'Select all', 'newspack-network' )
+				'<label class="newspack-network-distribute-all %2$s"><input type="checkbox" class="newspack-network-distribute-all-toggle">%1$s</label>',
+				esc_html__( 'Select all', 'newspack-network' ),
+				esc_attr( $row_stack )
 			);
 		}
 
@@ -321,15 +330,18 @@ class Admin_Bar {
 
 		// Distribution is additive and cannot be undone from here, so the selection is
 		// confirmed before it is sent. The message is written by the JS, which knows
-		// the count; the panel is inert without it.
+		// the count; the panel is inert without it. Wide primary over wide ghost,
+		// as on the reader-activation screens.
 		$confirm = sprintf(
-			'<div class="newspack-network-distribute-confirm" hidden><p class="newspack-network-distribute-confirm-message" tabindex="-1"></p><div class="newspack-network-distribute-confirm-actions"><button type="button" class="newspack-ui__button newspack-ui__button--secondary newspack-network-distribute-back">%1$s</button><button type="button" class="newspack-ui__button newspack-ui__button--primary newspack-network-distribute-confirm-submit"><span>%2$s</span></button></div></div>',
+			'<div class="newspack-network-distribute-confirm %3$s" hidden><p class="newspack-network-distribute-confirm-message" tabindex="-1"></p><div class="%4$s"><button type="button" class="newspack-ui__button newspack-ui__button--primary newspack-ui__button--wide newspack-network-distribute-confirm-submit"><span>%1$s</span></button><button type="button" class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--wide newspack-network-distribute-back">%2$s</button></div></div>',
+			esc_html__( 'Distribute', 'newspack-network' ),
 			esc_html__( 'Back', 'newspack-network' ),
-			esc_html__( 'Distribute', 'newspack-network' )
+			esc_attr( $panel_stack ),
+			esc_attr( $button_stack )
 		);
 
 		return sprintf(
-			'<div class="newspack-ui"><div id="newspack-network-distribute-modal" class="newspack-ui__modal-container" data-state="closed"><div class="newspack-ui__modal-container__overlay"></div><div class="newspack-ui__modal newspack-ui__modal--small" role="dialog" aria-modal="true" aria-labelledby="newspack-network-distribute-modal-title"><header class="newspack-ui__modal__header"><h2 id="newspack-network-distribute-modal-title" class="newspack-ui__font--l">%1$s</h2><button type="button" class="newspack-ui__button newspack-ui__button--icon newspack-ui__button--ghost newspack-ui__modal__close"><span class="screen-reader-text">%2$s</span>%3$s</button></header><section class="newspack-ui__modal__content"><fieldset class="newspack-network-distribute-form"><legend class="screen-reader-text">%4$s</legend>%5$s%6$s<button type="button" class="newspack-ui__button newspack-ui__button--primary newspack-network-distribute-submit" disabled><span>%7$s</span></button></fieldset>%8$s</section></div></div></div>',
+			'<div class="newspack-ui"><div id="newspack-network-distribute-modal" class="newspack-ui__modal-container" data-state="closed"><div class="newspack-ui__modal-container__overlay"></div><div class="newspack-ui__modal newspack-ui__modal--small" role="dialog" aria-modal="true" aria-labelledby="newspack-network-distribute-modal-title"><header class="newspack-ui__modal__header"><h2 id="newspack-network-distribute-modal-title" class="newspack-ui__font--l">%1$s</h2><button type="button" class="newspack-ui__button newspack-ui__button--icon newspack-ui__button--ghost newspack-ui__modal__close"><span class="screen-reader-text">%2$s</span>%3$s</button></header><section class="newspack-ui__modal__content"><fieldset class="newspack-network-distribute-form %8$s"><legend class="screen-reader-text">%4$s</legend><div class="%9$s">%5$s%6$s</div><button type="button" class="newspack-ui__button newspack-ui__button--primary newspack-ui__button--wide newspack-network-distribute-submit" disabled>%7$s</button></fieldset>%10$s</section></div></div></div>',
 			esc_html__( 'Distribute to network sites', 'newspack-network' ),
 			esc_html__( 'Close', 'newspack-network' ),
 			$close_icon,
@@ -337,6 +349,8 @@ class Admin_Bar {
 			$select_all,
 			$rows,
 			esc_html__( 'Distribute', 'newspack-network' ),
+			esc_attr( $panel_stack ),
+			esc_attr( $list_stack ),
 			$confirm
 		);
 	}

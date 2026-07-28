@@ -91,8 +91,6 @@ const init = () => {
 	const confirmMessage = modal.querySelector( '.newspack-network-distribute-confirm-message' );
 	const confirmSubmit = modal.querySelector( '.newspack-network-distribute-confirm-submit' );
 	const backButton = modal.querySelector( '.newspack-network-distribute-back' );
-	const submitLabel = submit.querySelector( 'span' );
-	const baseLabel = submitLabel ? submitLabel.textContent : '';
 	const siteBoxes = () => Array.from( fieldset.querySelectorAll( '.newspack-network-distribute-site input[type="checkbox"]' ) );
 	const selectable = () => siteBoxes().filter( box => ! box.disabled );
 	const selected = () => selectable().filter( box => box.checked );
@@ -107,10 +105,6 @@ const init = () => {
 	const refresh = () => {
 		const selectableBoxes = selectable();
 		const count = selected().length;
-		if ( submitLabel ) {
-			/* translators: %s is the number of network sites selected. */
-			submitLabel.textContent = 0 === count ? baseLabel : sprintf( __( 'Distribute (%s)', 'newspack-network' ), count );
-		}
 		submit.disabled = 0 === count;
 		if ( selectAll ) {
 			selectAll.disabled = 0 === selectableBoxes.length;

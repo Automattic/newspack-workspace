@@ -329,8 +329,7 @@ class TestAdminBar extends \WP_UnitTestCase {
 	 * The wp_footer modal is a Newspack UI small modal (wrapped in .newspack-ui
 	 * so its buttons/checkboxes are styled): a select-all, one checkbox per site
 	 * carrying its URL, already-distributed sites checked and disabled, and a
-	 * primary Distribute button (label in a span for the loading state) that
-	 * starts disabled.
+	 * wide primary Distribute button that starts disabled.
 	 */
 	public function test_render_modal_renders_checkbox_list() {
 		$outgoing = new Outgoing_Post( $this->post );
@@ -345,7 +344,7 @@ class TestAdminBar extends \WP_UnitTestCase {
 		$this->assertStringContainsString( 'newspack-network-distribute-all-toggle', $html );
 
 		$this->assertMatchesRegularExpression(
-			'/<button type="button" class="newspack-ui__button newspack-ui__button--primary newspack-network-distribute-submit"[^>]*disabled><span>/',
+			'/<button type="button" class="[^"]*newspack-ui__button--primary newspack-ui__button--wide newspack-network-distribute-submit" disabled>Distribute<\/button>/',
 			$html
 		);
 
@@ -367,12 +366,34 @@ class TestAdminBar extends \WP_UnitTestCase {
 		Admin_Bar::render_modal();
 		$html = ob_get_clean();
 
-		$this->assertStringContainsString( '<div class="newspack-network-distribute-confirm" hidden>', $html );
-		$this->assertStringContainsString( 'newspack-network-distribute-back', $html );
-		$this->assertStringContainsString( 'newspack-network-distribute-confirm-submit', $html );
+		$this->assertMatchesRegularExpression( '/<div class="newspack-network-distribute-confirm [^"]*newspack-ui__stack[^"]*" hidden>/', $html );
 
 		// Written by the JS, which knows the count; empty server-side.
 		$this->assertStringContainsString( '<p class="newspack-network-distribute-confirm-message" tabindex="-1"></p>', $html );
+
+		// Wide primary over wide ghost, as on the reader-activation screens.
+		$this->assertMatchesRegularExpression(
+			'/newspack-ui__button--primary newspack-ui__button--wide newspack-network-distribute-confirm-submit".*newspack-ui__button--ghost newspack-ui__button--wide newspack-network-distribute-back"/',
+			$html
+		);
+	}
+
+	/**
+	 * Spacing comes from Newspack UI's stack element rather than from this
+	 * plugin's stylesheet, so the modal tracks the design system.
+	 */
+	public function test_render_modal_lays_out_with_newspack_ui_stacks() {
+		ob_start();
+		Admin_Bar::render_modal();
+		$html = ob_get_clean();
+
+		// Site rows and the button below them.
+		$this->assertStringContainsString( 'newspack-ui__stack newspack-ui__stack--vertical newspack-ui__stack--gap-1', $html );
+		$this->assertStringContainsString( 'newspack-ui__stack newspack-ui__stack--vertical newspack-ui__stack--gap-5', $html );
+		// The two confirmation buttons.
+		$this->assertStringContainsString( 'newspack-ui__stack newspack-ui__stack--vertical newspack-ui__stack--gap-2', $html );
+		// A checkbox and its site name.
+		$this->assertStringContainsString( 'newspack-ui__stack newspack-ui__stack--horizontal newspack-ui__stack--align-center newspack-ui__stack--gap-1', $html );
 	}
 
 	/**
