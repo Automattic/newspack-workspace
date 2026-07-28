@@ -59,7 +59,10 @@ final class Republication_Tracker_Tool_Republish_Button_Block {
 			return;
 		}
 
-		$block_dir = REPUBLICATION_TRACKER_TOOL_PATH . 'src/blocks/republish-button';
+		// block.json is copied into the build directory by the build step; src/
+		// is stripped from the distributed plugin, so registration must read the
+		// shipped copy under dist/.
+		$block_dir = REPUBLICATION_TRACKER_TOOL_PATH . 'dist/blocks/republish-button';
 		$args      = [
 			'render_callback' => [ __CLASS__, 'render_block' ],
 		];

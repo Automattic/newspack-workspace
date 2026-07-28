@@ -74,6 +74,7 @@ class Wizards {
 			'audience-content-gates'  => new Audience_Content_Gates(),
 			'audience-donations'      => new Audience_Donations(),
 			'audience-integrations'   => new Audience_Integrations(),
+			'newspack-subscribers'    => new Subscribers_Wizard(),
 			'listings'                => new Listings_Wizard(),
 			'network'                 => new Network_Wizard(),
 			'newsletters'             => new Newsletters_Wizard(),
