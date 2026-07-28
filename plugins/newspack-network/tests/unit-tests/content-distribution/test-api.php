@@ -187,6 +187,21 @@ class TestApi extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * The handler refuses a missing post on its own rather than leaning on the
+	 * permission callback having returned do_not_allow first.
+	 */
+	public function test_distribute_returns_404_for_a_missing_post() {
+		$request = $this->make_request( PHP_INT_MAX );
+		$request->set_param( 'urls', [ $this->network[0]['url'] ] );
+		$request->set_param( 'status_on_publish', 'draft' );
+
+		$result = API::distribute( $request );
+
+		$this->assertWPError( $result );
+		$this->assertSame( 404, $result->get_error_data()['status'] );
+	}
+
+	/**
 	 * A failed dispatch must be surfaced as an error, not a 200 response.
 	 */
 	public function test_distribute_returns_error_when_dispatch_fails() {

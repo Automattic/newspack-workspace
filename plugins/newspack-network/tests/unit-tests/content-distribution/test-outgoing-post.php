@@ -143,6 +143,69 @@ class TestOutgoingPost extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A post whose stored distribution meta was written before URLs were
+	 * normalised, seeded directly so the shape is the legacy one on disk.
+	 *
+	 * @param string[] $urls The raw stored URLs.
+	 *
+	 * @return Outgoing_Post
+	 */
+	private function post_with_legacy_distribution( $urls ) {
+		$post = $this->factory->post->create_and_get(
+			[
+				'post_type'   => 'post',
+				'post_author' => $this->some_editor->ID,
+			]
+		);
+		update_post_meta( $post->ID, Outgoing_Post::DISTRIBUTED_POST_META, $urls );
+		return new Outgoing_Post( $post );
+	}
+
+	/**
+	 * Distributing to a new site must not be blocked by a slashed URL already in
+	 * the config.
+	 *
+	 * Rewriting the stored entries to their canonical form reads as a removal to
+	 * Content_Distribution::maybe_short_circuit_distributed_meta(), which vetoes
+	 * the write, so the post could never be distributed again.
+	 */
+	public function test_set_distribution_with_legacy_slashed_meta() {
+		$outgoing_post = $this->post_with_legacy_distribution( [ $this->network[0]['url'] . '/' ] );
+
+		$result = $outgoing_post->set_distribution( [ $this->network[1]['url'] ] );
+
+		$this->assertFalse( is_wp_error( $result ) );
+		$this->assertContains( $this->network[1]['url'], $outgoing_post->get_distribution() );
+	}
+
+	/**
+	 * The same, for the shape where both slash variants of one site are stored.
+	 */
+	public function test_set_distribution_with_both_slash_variants_stored() {
+		$outgoing_post = $this->post_with_legacy_distribution(
+			[ $this->network[0]['url'] . '/', $this->network[0]['url'] ]
+		);
+
+		$result = $outgoing_post->set_distribution( [ $this->network[1]['url'] ] );
+
+		$this->assertFalse( is_wp_error( $result ) );
+		$this->assertContains( $this->network[1]['url'], $outgoing_post->get_distribution() );
+	}
+
+	/**
+	 * A site already in the config under a slashed URL is not recorded a second
+	 * time when it is distributed to again.
+	 */
+	public function test_set_distribution_does_not_duplicate_a_slashed_site() {
+		$outgoing_post = $this->post_with_legacy_distribution( [ $this->network[0]['url'] . '/' ] );
+
+		$result = $outgoing_post->set_distribution( [ $this->network[0]['url'] ] );
+
+		$this->assertFalse( is_wp_error( $result ) );
+		$this->assertCount( 1, $outgoing_post->get_distribution() );
+	}
+
+	/**
 	 * Test remove distribution.
 	 */
 	public function test_remove_distribution() {
@@ -150,6 +213,19 @@ class TestOutgoingPost extends \WP_UnitTestCase {
 		$result = $this->outgoing_post->remove_distribution( $this->network[1]['url'] );
 		$this->assertFalse( is_wp_error( $result ) );
 		$this->assertFalse( in_array( $this->network[1]['url'], $this->outgoing_post->get_distribution(), true ) );
+	}
+
+	/**
+	 * A site stored under a slashed URL is removable by its canonical URL, which
+	 * is the form incoming post-deleted events carry.
+	 */
+	public function test_remove_distribution_matches_a_slashed_url() {
+		$outgoing_post = $this->post_with_legacy_distribution( [ $this->network[0]['url'] . '/' ] );
+
+		$result = $outgoing_post->remove_distribution( $this->network[0]['url'] );
+
+		$this->assertFalse( is_wp_error( $result ) );
+		$this->assertEmpty( $outgoing_post->get_distribution() );
 	}
 
 	/**

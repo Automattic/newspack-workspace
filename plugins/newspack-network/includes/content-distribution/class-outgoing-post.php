@@ -164,15 +164,28 @@ class Outgoing_Post {
 			$distribution = [];
 		}
 
-		// If there are urls not already in the config, add them. Note that we don't support
-		// removing urls from the config. Both sides are normalised to the network's
-		// canonical form first, or array_unique() would keep slash variants of one site.
-		$existing     = $distribution;
-		$distribution = array_values( array_unique( array_map( 'untrailingslashit', array_merge( $distribution, $site_urls ) ) ) );
+		// If there are urls not already in the config, add them. Note that we don't
+		// support removing urls from the config. Entries already stored are left
+		// byte-for-byte as they are: rewriting them to the network's canonical form
+		// reads as a removal to Content_Distribution::maybe_short_circuit_distributed_meta(),
+		// which vetoes the write, so a post holding a slashed url from before this
+		// normalisation could never be distributed again. Only the comparison is
+		// normalised, so slash variants of one site can't produce a second entry.
+		$existing   = array_values( $distribution );
+		$normalized = array_map( 'untrailingslashit', $existing );
+
+		$distribution = $existing;
+		foreach ( $site_urls as $site_url ) {
+			$site_url = untrailingslashit( $site_url );
+			if ( ! in_array( $site_url, $normalized, true ) ) {
+				$distribution[] = $site_url;
+				$normalized[]   = $site_url;
+			}
+		}
 
 		// update_post_meta() returns false both on failure and when the value is
 		// unchanged. Distributing to sites already in the config is a valid no-op.
-		$unchanged = array_values( $existing ) === array_values( $distribution );
+		$unchanged = $existing === $distribution;
 
 		$updated = update_post_meta( $this->post->ID, self::DISTRIBUTED_POST_META, $distribution );
 
@@ -196,15 +209,28 @@ class Outgoing_Post {
 			$distribution = [];
 		}
 
-		$index = array_search( $site_url, $distribution, true );
+		// Match on the canonical form, so a site is removable by the url an incoming
+		// event carries whichever slash variant happens to be stored.
+		$index    = false;
+		$site_url = untrailingslashit( $site_url );
+		foreach ( $distribution as $key => $url ) {
+			if ( untrailingslashit( $url ) === $site_url ) {
+				$index = $key;
+				break;
+			}
+		}
+
 		if ( false === $index ) {
 			return new WP_Error( 'site_not_found', __( 'Site URL not found in post distribution.', 'newspack-network' ) );
 		}
 
+		// The short circuit validation diffs against the raw stored value, so the
+		// removal intent has to carry that rather than the canonical form.
+		$removing = $distribution[ $index ];
 		unset( $distribution[ $index ] );
 
 		// Add a meta to allow bypassing the short circuit validation.
-		update_post_meta( $this->post->ID, 'newspack_network_remove_distribution', $site_url );
+		update_post_meta( $this->post->ID, 'newspack_network_remove_distribution', $removing );
 
 		$updated = update_post_meta( $this->post->ID, self::DISTRIBUTED_POST_META, array_values( $distribution ) );
 

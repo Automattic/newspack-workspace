@@ -82,23 +82,32 @@ const init = () => {
 		return;
 	}
 
-	const dialog = modal.querySelector( '.newspack-ui__modal' );
-	const overlay = modal.querySelector( '.newspack-ui__modal-container__overlay' );
 	const fieldset = modal.querySelector( '.newspack-network-distribute-form' );
-	const selectAll = modal.querySelector( '.newspack-network-distribute-all-toggle' );
 	const submit = modal.querySelector( '.newspack-network-distribute-submit' );
 	const confirmPanel = modal.querySelector( '.newspack-network-distribute-confirm' );
 	const confirmMessage = modal.querySelector( '.newspack-network-distribute-confirm-message' );
 	const confirmSubmit = modal.querySelector( '.newspack-network-distribute-confirm-submit' );
 	const backButton = modal.querySelector( '.newspack-network-distribute-back' );
+
+	// These are dereferenced directly below. They come from one template, so a
+	// missing one means the markup isn't ours to drive.
+	if ( ! fieldset || ! submit || ! confirmPanel || ! confirmMessage || ! confirmSubmit || ! backButton ) {
+		return;
+	}
+
+	// Genuinely optional, so these stay null-checked at their use sites.
+	const dialog = modal.querySelector( '.newspack-ui__modal' );
+	const overlay = modal.querySelector( '.newspack-ui__modal-container__overlay' );
+	const selectAll = modal.querySelector( '.newspack-network-distribute-all-toggle' );
+
 	const siteBoxes = () => Array.from( fieldset.querySelectorAll( '.newspack-network-distribute-site input[type="checkbox"]' ) );
 	const selectable = () => siteBoxes().filter( box => ! box.disabled );
 	const selected = () => selectable().filter( box => box.checked );
 
 	let returnFocus = null;
 
-	// A disabled <fieldset> disables its descendants without giving them a
-	// disabled attribute, so :disabled is the only reliable test.
+	// Only what can take focus right now: the panel that isn't showing has a null
+	// offsetParent, and disabled controls are out of the tab ring.
 	const focusableItems = () =>
 		Array.from( modal.querySelectorAll( FOCUSABLE ) ).filter( el => ! el.matches( ':disabled' ) && null !== el.offsetParent );
 
@@ -124,7 +133,7 @@ const init = () => {
 		/* translators: %s is the number of network sites selected. */
 		const question = _n( 'Distribute this post to %s network site?', 'Distribute this post to %s network sites?', count, 'newspack-network' );
 
-		confirmMessage.textContent = [ sprintf( question, count ), __( "This can't be undone from here.", 'newspack-network' ) ].join( ' ' );
+		confirmMessage.textContent = [ sprintf( question, count ), __( 'This can’t be undone from here.', 'newspack-network' ) ].join( ' ' );
 		fieldset.hidden = true;
 		confirmPanel.hidden = false;
 		// Focused rather than the first button, so the question is announced before
@@ -295,8 +304,12 @@ const init = () => {
 						  sprintf( __( 'Could not distribute: %s', 'newspack-network' ), error.message );
 				notify( message, 'error' );
 				// Back to the list with the selection intact, so a retry is one click.
-				showSelection();
-				submit.focus();
+				// Not if the modal was closed while the request was in flight: closeModal
+				// has already reset it, and focus belongs to whatever it returned to.
+				if ( 'open' === modal.getAttribute( 'data-state' ) ) {
+					showSelection();
+					submit.focus();
+				}
 			} )
 			.finally( () => {
 				clearTimeout( deadline );
