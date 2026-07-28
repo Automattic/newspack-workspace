@@ -200,10 +200,13 @@ class ContextualPromptStylesTest extends WP_UnitTestCase {
 	public function test_sanitize_rejects_function_shaped_values() {
 		$sanitized = Newspack_Popups_Contextual_Prompt_Styles::sanitize(
 			[
-				'color' => [
+				'color'      => [
 					'background' => 'url(javascript:alert(1))',
 					'text'       => ' EXPRESSION(alert(1))',
 				],
+				// Nested inside another set of parentheses, so the shape is not
+				// at the start of the value.
+				'typography' => [ 'fontSize' => '(url(javascript:alert(1)))' ],
 			]
 		);
 
