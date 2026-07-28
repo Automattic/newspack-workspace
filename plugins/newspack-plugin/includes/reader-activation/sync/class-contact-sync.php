@@ -1178,6 +1178,20 @@ class Contact_Sync extends Sync {
 		$contact    = \apply_filters( 'newspack_esp_sync_contact', $contact, $context );
 		$skip_lists = ! empty( $options['skip_lists'] );
 		foreach ( Integrations::get_active_configured_integrations() as $integration_id => $integration ) {
+			// The real push path skips integrations without an (enabled) push, so
+			// report the skip rather than a payload the run would never send —
+			// a preview that disagrees with the run defeats the point of --dry-run.
+			if ( ! $integration->is_push_enabled() ) {
+				static::log(
+					sprintf(
+						'[dry-run] SKIPPED integration "%s": %s.',
+						$integration_id,
+						$integration->supports_push() ? 'outbound sync is paused' : 'integration does not support outbound sync'
+					)
+				);
+				continue;
+			}
+
 			$prepared = self::prepare_contact_for_integration( $integration, $contact, $options );
 			$metadata = $prepared['metadata'] ?? [];
 			static::log(
