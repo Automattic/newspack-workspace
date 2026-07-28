@@ -49,6 +49,15 @@ class Newspack_Popups_Settings {
 	const OVERRIDE_CTA_OPTION = 'newspack_contextual_prompts_override_cta';
 
 	/**
+	 * The opt-in state a pending deletion is about to remove. Core fires
+	 * `delete_option` while the row is still readable, which is the only point
+	 * the deletion path can learn what it is withdrawing.
+	 *
+	 * @var bool
+	 */
+	private static $opt_in_before_delete = false;
+
+	/**
 	 * Whether the AI Copy Assistant has been opted into on this site.
 	 *
 	 * @return bool
@@ -70,7 +79,19 @@ class Newspack_Popups_Settings {
 	public static function register_opt_in_audit() {
 		add_action( 'add_option_' . self::AI_COPY_ASSISTANT_ENABLED_OPTION, [ __CLASS__, 'log_opt_in_added' ], 10, 2 );
 		add_action( 'update_option_' . self::AI_COPY_ASSISTANT_ENABLED_OPTION, [ __CLASS__, 'log_opt_in_updated' ], 10, 2 );
+		add_action( 'delete_option', [ __CLASS__, 'capture_opt_in_before_delete' ] );
 		add_action( 'delete_option_' . self::AI_COPY_ASSISTANT_ENABLED_OPTION, [ __CLASS__, 'log_opt_in_deleted' ] );
+	}
+
+	/**
+	 * Remember the opt-in state ahead of its deletion.
+	 *
+	 * @param string $option Option name.
+	 */
+	public static function capture_opt_in_before_delete( $option ) {
+		if ( self::AI_COPY_ASSISTANT_ENABLED_OPTION === $option ) {
+			self::$opt_in_before_delete = self::is_ai_copy_assistant_enabled();
+		}
 	}
 
 	/**
@@ -98,8 +119,15 @@ class Newspack_Popups_Settings {
 	 * A deleted opt-in. `wp option delete` is a live path, and the site is not
 	 * opted in once the option is gone, so deletion closes the window exactly as
 	 * setting it false does. Core fires this only after the row is really gone.
+	 *
+	 * Deletion has no equivalent of `update_option()`'s no-op suppression, so
+	 * removing an option already storing false is not a withdrawal and must not
+	 * displace the record of the change that actually closed the window.
 	 */
 	public static function log_opt_in_deleted() {
+		if ( ! self::$opt_in_before_delete ) {
+			return;
+		}
 		self::log_opt_in_state( false );
 	}
 

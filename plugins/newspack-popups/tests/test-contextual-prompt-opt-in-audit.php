@@ -154,6 +154,23 @@ class ContextualPromptOptInAuditTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Neither is deleting an option already storing false: the site was already
+	 * un-opted-in, so a second withdrawal record would be noise, and it would
+	 * displace the record of the change that actually closed the window.
+	 */
+	public function test_deleting_an_already_false_option_records_nothing() {
+		update_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION, true );
+		update_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION, false );
+		$withdrawal                = get_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_AUDIT_OPTION );
+		\Newspack\Logger::$entries = [];
+
+		delete_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION );
+
+		$this->assertCount( 0, $this->entries() );
+		$this->assertSame( $withdrawal, get_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_AUDIT_OPTION ), 'The real withdrawal keeps its place in the record.' );
+	}
+
+	/**
 	 * A save that changes nothing is not a state change, so it leaves no record.
 	 * Otherwise the trail would fill with noise and bury the real acceptances.
 	 */
