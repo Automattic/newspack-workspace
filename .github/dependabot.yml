@@ -22,6 +22,13 @@ updates:
       interval: "weekly"
     labels:
       - "dependencies"
+    ignore:
+      # The root composer.json pins vipwpcs to ~3.0.1 on purpose: 3.1.0 widened
+      # WordPressVIPMinimum.Performance.NoPaging to flag posts_per_page and
+      # numberposts set to -1, which is 66 errors across six plugins and reddens
+      # CI for every PR. Dependabot raised the constraint anyway (#744), undoing
+      # the pin from #740. Lift this ignore once NPPM-3055 lands the audit.
+      - dependency-name: "automattic/vipwpcs"
 
   # GitHub Actions.
   - package-ecosystem: "github-actions"
