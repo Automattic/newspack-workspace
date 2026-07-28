@@ -193,6 +193,24 @@ class ContextualPromptStylesTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Function-shaped values are rejected even though every character they use
+	 * is individually allowlisted: `url()` and `expression()` could smuggle a
+	 * scheme into the declaration.
+	 */
+	public function test_sanitize_rejects_function_shaped_values() {
+		$sanitized = Newspack_Popups_Contextual_Prompt_Styles::sanitize(
+			[
+				'color' => [
+					'background' => 'url(javascript:alert(1))',
+					'text'       => ' EXPRESSION(alert(1))',
+				],
+			]
+		);
+
+		$this->assertSame( [], $sanitized );
+	}
+
+	/**
 	 * CSS output: style engine declarations inside the zero-plus-root wrapper,
 	 * preset refs converted to CSS custom property lookups.
 	 */

@@ -23,9 +23,10 @@ final class Newspack_Popups_Contextual_Prompt_Styles {
 	/**
 	 * Leaf values: CSS-safe fragments only. Permits hex/named colors, units,
 	 * var:preset|…|… refs and var() lookups; rejects anything that could close
-	 * a declaration or rule.
+	 * a declaration or rule, and function shapes (`url(…)`, `expression(…)`)
+	 * that could smuggle a scheme.
 	 */
-	const VALUE_PATTERN = '/^[a-zA-Z0-9 #%().,\/|:_-]+\z/';
+	const VALUE_PATTERN = '/^(?!\s*(?i:url|expression)\s*\()[a-zA-Z0-9 #%().,\/|:_-]+\z/';
 
 	/**
 	 * Object-schema nodes that also accept a string leaf, as dot paths into the
