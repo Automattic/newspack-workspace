@@ -538,6 +538,28 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Backfill reports a team whose marked group has group subscriptions disabled as
+	 * unresolved rather than promoting managers into it — group manager meta on a group
+	 * the publisher switched off would be inert. The reason names the group, since
+	 * "nothing found" would be false twice over: a group was found, and it is active.
+	 */
+	public function test_backfill_does_not_resolve_a_disabled_marked_group() {
+		$owner          = $this->create_reader();
+		$manager_member = $this->create_reader();
+		$team_id        = $this->create_team( $owner, [ $manager_member ], null );
+		$disabled       = $this->create_migrated_group_subscription( $owner, $team_id );
+		Teams_Migration::add_group_member( $disabled, $manager_member );
+		$this->set_team_role( $manager_member, $team_id, 'manager' );
+		$this->disable_group_subscriptions_on( $disabled );
+
+		$result = Teams_Migration::backfill_team_managers_for_team( $team_id, true );
+
+		$this->assertFalse( $result['resolved'], 'A group with group subscriptions disabled must not be resolved for a manager backfill.' );
+		$this->assertNotContains( $manager_member, array_map( 'intval', Group_Subscription::get_managers( $disabled ) ), 'No manager should be promoted into the disabled group.' );
+		$this->assertStringContainsString( (string) $disabled->get_id(), $result['reason'], 'The reason must name the disabled group so the operator knows what to re-enable.' );
+	}
+
+	/**
 	 * Create an active group subscription owned by $owner_id and marked as migrated
 	 * from $team_id, mirroring what migrate-teams stamps for a team.
 	 *
@@ -548,6 +570,19 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 	private function create_migrated_group_subscription( int $owner_id, int $team_id ) {
 		$subscription = $this->create_group_subscription( $owner_id );
 		$subscription->update_meta_data( Teams_Migration::MIGRATED_TEAM_ID_META_KEY, $team_id );
+		$subscription->save();
+		return $subscription;
+	}
+
+	/**
+	 * Turn group subscriptions off on a subscription, as a publisher would from its
+	 * settings — the subscription's own meta overrides the product-level setting.
+	 *
+	 * @param WC_Subscription $subscription The subscription.
+	 * @return WC_Subscription The same subscription, for chaining.
+	 */
+	private function disable_group_subscriptions_on( $subscription ) {
+		$subscription->update_meta_data( Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'enabled', 'no' );
 		$subscription->save();
 		return $subscription;
 	}
@@ -619,6 +654,96 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 		$this->assertSame( $expired->get_id(), $reuse['subscription']->get_id(), 'An expired group marked for this team should still be reused.' );
 		$this->assertTrue( $reuse['reused_without_access'], 'Reusing a group whose status withholds access must be flagged so the caller warns.' );
 		$this->assertFalse( $reuse['used_owner_fallback'], 'A marker match is not an owner fallback.' );
+	}
+
+	/**
+	 * A publisher who turns group subscriptions off on the group this team was migrated
+	 * to is making a deliberate choice, and the marker still says the group belongs to
+	 * this team. Neither reusing it (migrate-teams would re-enable the flag) nor ignoring
+	 * it (a re-run would create a second group stamped with the same team ID) is right, so
+	 * the resolver reports it instead and the caller refuses the team.
+	 */
+	public function test_disabled_marked_group_is_reported_rather_than_reused_or_duplicated() {
+		$owner    = $this->create_reader();
+		$team_id  = $this->create_team( $owner, [] );
+		$disabled = $this->disable_group_subscriptions_on( $this->create_migrated_group_subscription( $owner, $team_id ) );
+
+		$reuse = Teams_Migration::find_reusable_group_subscription( $team_id, $owner );
+
+		$this->assertNull( $reuse['subscription'], 'A group with group subscriptions disabled must not be offered for reuse — migrate-teams would re-enable the flag.' );
+		$this->assertSame( [ $disabled->get_id() ], $reuse['disabled_marked_group_ids'], "The disabled group's ID must be reported so the caller can name it and refuse the team." );
+	}
+
+	/**
+	 * Every disabled group of the team's is reported at once, so an operator recovering a
+	 * team that has more than one is not sent back for a run per group.
+	 */
+	public function test_all_disabled_marked_groups_are_reported_together() {
+		$owner        = $this->create_reader();
+		$team_id      = $this->create_team( $owner, [] );
+		$first        = $this->disable_group_subscriptions_on( $this->create_migrated_group_subscription( $owner, $team_id ) );
+		$second       = $this->disable_group_subscriptions_on( $this->create_migrated_group_subscription( $owner, $team_id ) );
+
+		$reuse = Teams_Migration::find_reusable_group_subscription( $team_id, $owner );
+
+		$this->assertNull( $reuse['subscription'], 'Neither disabled group may be offered for reuse.' );
+		$this->assertSame( [ $first->get_id(), $second->get_id() ], $reuse['disabled_marked_group_ids'], 'Both disabled groups of this team must be reported in one pass.' );
+	}
+
+	/**
+	 * The disabled marked group outranks the unmarked owner fallback: this team's own
+	 * group exists, so adopting a different group of the owner's would merge the team's
+	 * members into a group that is not theirs on the strength of a flag the publisher set.
+	 */
+	public function test_disabled_marked_group_outranks_the_unmarked_owner_fallback() {
+		$owner    = $this->create_reader();
+		$team_id  = $this->create_team( $owner, [] );
+		$disabled = $this->disable_group_subscriptions_on( $this->create_migrated_group_subscription( $owner, $team_id ) );
+		$unmarked = $this->create_group_subscription( $owner );
+
+		$reuse = Teams_Migration::find_reusable_group_subscription( $team_id, $owner );
+
+		$this->assertNull( $reuse['subscription'], 'The unmarked group ' . $unmarked->get_id() . ' must not be adopted while this team has a group of its own.' );
+		$this->assertFalse( $reuse['used_owner_fallback'], 'Reporting a disabled marked group is not an owner fallback.' );
+		$this->assertSame( [ $disabled->get_id() ], $reuse['disabled_marked_group_ids'], 'The disabled marked group must be reported in preference to the fallback.' );
+	}
+
+	/**
+	 * A usable group of the team's own outranks a disabled one, whatever the iteration
+	 * order: refusing a team whose group is sitting there to be updated would block a
+	 * migration that has somewhere valid to go. The disabled group is created first so it
+	 * is iterated first, which is the case that would break if the resolver returned on
+	 * the first disabled group it saw instead of holding it and scanning on.
+	 */
+	public function test_usable_marked_group_wins_over_a_disabled_marked_group() {
+		$owner   = $this->create_reader();
+		$team_id = $this->create_team( $owner, [] );
+		$this->disable_group_subscriptions_on( $this->create_migrated_group_subscription( $owner, $team_id ) );
+		$active = $this->create_migrated_group_subscription( $owner, $team_id );
+
+		$reuse = Teams_Migration::find_reusable_group_subscription( $team_id, $owner );
+
+		$this->assertSame( $active->get_id(), $reuse['subscription']->get_id(), "The team's active group must be reused even though a disabled one is iterated first." );
+		$this->assertSame( [], $reuse['disabled_marked_group_ids'], 'A team with a resolvable group must not report a refusal.' );
+	}
+
+	/**
+	 * Same precedence one rung down: an expired group of the team's is still reusable, so
+	 * it wins over a disabled one rather than the team being refused.
+	 */
+	public function test_expired_marked_group_wins_over_a_disabled_marked_group() {
+		$owner   = $this->create_reader();
+		$team_id = $this->create_team( $owner, [] );
+		$this->disable_group_subscriptions_on( $this->create_migrated_group_subscription( $owner, $team_id ) );
+		$expired = $this->create_migrated_group_subscription( $owner, $team_id );
+		$expired->set_status( 'expired' );
+		$expired->save();
+
+		$reuse = Teams_Migration::find_reusable_group_subscription( $team_id, $owner );
+
+		$this->assertSame( $expired->get_id(), $reuse['subscription']->get_id(), "The team's expired group is still reusable and must win over a disabled one." );
+		$this->assertTrue( $reuse['reused_without_access'], 'Reusing the expired group must still be flagged as access-less.' );
+		$this->assertSame( [], $reuse['disabled_marked_group_ids'], 'A team with a resolvable group must not report a refusal.' );
 	}
 
 	/**

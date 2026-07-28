@@ -49,6 +49,20 @@ class Teams_Migration {
 	const MIGRATED_TEAM_ID_META_KEY = '_newspack_migrated_team_id';
 
 	/**
+	 * The "nothing to reuse" group-subscription resolution, and so the shape every
+	 * resolution returns: a match fills in only the fields that apply to it. See
+	 * find_reusable_group_subscription() for what each field means.
+	 *
+	 * @var array
+	 */
+	private const NO_REUSE = [
+		'subscription'              => null,
+		'used_owner_fallback'       => false,
+		'reused_without_access'     => false,
+		'disabled_marked_group_ids' => [],
+	];
+
+	/**
 	 * Migrate all active team memberships to Newspack group subscriptions.
 	 *
 	 * For teams already linked to an active subscription: enables the group
@@ -237,6 +251,21 @@ class Teams_Migration {
 			if ( ! $subscription ) {
 				$reuse        = self::find_reusable_group_subscription( $team_id, $owner_id );
 				$reusable_sub = $reuse['subscription'];
+				// This team's own group exists but the publisher has turned group
+				// subscriptions off on it. Migrating would re-enable a flag they set
+				// deliberately, and carrying on without it would create a second group
+				// stamped with this team's ID — so leave the team alone and let the operator
+				// decide, keeping the one-group-per-team invariant intact either way.
+				if ( $reuse['disabled_marked_group_ids'] ) {
+					$disabled_list = implode( ', ', $reuse['disabled_marked_group_ids'] );
+					$errors[]      = sprintf( 'group subscription(s) %s migrated from this team have group subscriptions disabled — re-enable one or clear its %s meta, then re-run', $disabled_list, self::MIGRATED_TEAM_ID_META_KEY );
+					$summary[]     = self::summary_row( $team_id, 'ERROR', 0, 0, $seat_count, false, $errors );
+					WP_CLI::warning( sprintf( 'Team %d ("%s"): group subscription(s) %s migrated from this team have group subscriptions disabled — skipping so the migration does not re-enable them or create a duplicate. Re-enable one, or clear the %s meta to let a fresh group be created, then re-run.', $team_id, $team->post_title, $disabled_list, self::MIGRATED_TEAM_ID_META_KEY ) );
+					// This path has just loaded every subscription of the owner's, which is what
+					// the per-team cache clear exists to bound.
+					\WP_CLI\Utils\wp_clear_object_cache();
+					continue;
+				}
 				if ( $reusable_sub ) {
 					$subscription = $reusable_sub;
 					if ( $reuse['used_owner_fallback'] ) {
@@ -946,7 +975,7 @@ class Teams_Migration {
 				$unresolved[] = [
 					'team_id' => $team_id,
 					'owner'   => $owner ? $owner->user_email : "user:{$result['owner_id']}",
-					'reason'  => 'No active group subscription found (linked or owner-owned).',
+					'reason'  => $result['reason'],
 				];
 				continue;
 			}
@@ -1014,6 +1043,7 @@ class Teams_Migration {
 	 *     @type int[]      $promoted        User IDs promoted (or that would be).
 	 *     @type int[]      $already         User IDs already managing.
 	 *     @type int[]      $not_member      Manager-role user IDs that are not group members.
+	 *     @type string     $reason          Why nothing resolved, for the operator; empty when `resolved` is true.
 	 * }
 	 */
 	public static function backfill_team_managers_for_team( $team_id, $live ) {
@@ -1021,8 +1051,15 @@ class Teams_Migration {
 		$team     = \get_post( $team_id );
 		$owner_id = $team ? (int) $team->post_author : 0;
 
-		$subscription = self::resolve_backfill_subscription( $team_id, $owner_id );
+		$reuse        = self::resolve_backfill_reuse( $team_id, $owner_id );
+		$subscription = $reuse['subscription'];
 		if ( ! $subscription ) {
+			// A group of this team's that the publisher disabled is the actionable fact
+			// here: the generic "nothing found" reads as false twice over, since a group
+			// was found and it is active.
+			$reason = $reuse['disabled_marked_group_ids']
+				? sprintf( 'Group subscription(s) %s migrated from this team have group subscriptions disabled — re-enable one, then re-run.', implode( ', ', $reuse['disabled_marked_group_ids'] ) )
+				: 'No active group subscription found (linked or owner-owned).';
 			return [
 				'resolved'        => false,
 				'owner_id'        => $owner_id,
@@ -1031,6 +1068,7 @@ class Teams_Migration {
 				'promoted'        => [],
 				'already'         => [],
 				'not_member'      => [],
+				'reason'          => $reason,
 			];
 		}
 
@@ -1042,11 +1080,12 @@ class Teams_Migration {
 			)
 		);
 
-		$result             = self::promote_managers_from_team_roles( $subscription, $team_id, $member_ids, ! $live );
-		$result['resolved'] = true;
-		$result['owner_id'] = $owner_id;
+		$result                    = self::promote_managers_from_team_roles( $subscription, $team_id, $member_ids, ! $live );
+		$result['resolved']        = true;
+		$result['owner_id']        = $owner_id;
 		$result['subscription_id'] = $subscription->get_id();
-		$result['found']    = count( $result['promoted'] ) + count( $result['already'] ) + count( $result['not_member'] );
+		$result['found']           = count( $result['promoted'] ) + count( $result['already'] ) + count( $result['not_member'] );
+		$result['reason']          = '';
 		return $result;
 	}
 
@@ -1182,20 +1221,25 @@ class Teams_Migration {
 	 * marked group that is no longer active, which would otherwise report as unresolved),
 	 * else an unmarked group subscription owned by the team owner. Never creates one.
 	 *
+	 * A marked group the publisher has disabled group subscriptions on resolves as
+	 * unresolved — group manager meta on it would be inert — and is reported through
+	 * `disabled_marked_group_ids` so the caller can name it instead of telling the operator
+	 * nothing was found (see find_reusable_group_subscription()).
+	 *
 	 * @param int $team_id  The team post ID.
 	 * @param int $owner_id The team owner user ID.
 	 *
-	 * @return \WC_Subscription|null
+	 * @return array The find_reusable_group_subscription() shape.
 	 */
-	private static function resolve_backfill_subscription( $team_id, $owner_id ) {
+	private static function resolve_backfill_reuse( $team_id, $owner_id ) {
 		$raw_sub_id = (int) \get_post_meta( $team_id, '_subscription_id', true );
 		if ( $raw_sub_id ) {
 			$subscription = \wcs_get_subscription( $raw_sub_id );
 			if ( $subscription && 'active' === $subscription->get_status() && Group_Subscription::is_group_subscription( $subscription ) ) {
-				return $subscription;
+				return array_merge( self::NO_REUSE, [ 'subscription' => $subscription ] );
 			}
 		}
-		return self::find_reusable_group_subscription( $team_id, $owner_id )['subscription'];
+		return self::find_reusable_group_subscription( $team_id, $owner_id );
 	}
 
 	/**
@@ -1220,6 +1264,17 @@ class Teams_Migration {
 	 * an earlier migrator run (or a publisher) explicitly enabled carries the meta on
 	 * the subscription itself.
 	 *
+	 * A marked group the publisher has since turned group subscriptions off on is neither
+	 * reused nor ignored: when the team has no usable group left, those groups are reported
+	 * via `disabled_marked_group_ids` and the caller refuses the team. Reusing one would
+	 * re-enable a flag the publisher deliberately set (migrate-teams stamps
+	 * `_newspack_group_subscription_enabled` unconditionally), while ignoring it would create
+	 * a second group stamped with the same team ID — so the call belongs to the operator,
+	 * who either re-enables the group or clears its marker. A team that also has a usable
+	 * marked group (the split state an earlier duplicating run could leave behind) is
+	 * migrated into that one and reports nothing, since refusing a team whose group is
+	 * there to be updated would block a migration that has somewhere valid to go.
+	 *
 	 * Both lookups run over a single pass of the owner's subscriptions. Discovery is
 	 * scoped to the team's current owner (migrated groups are owned by their team owner),
 	 * which assumes the owner has not changed since the team was migrated; if it has, the
@@ -1236,44 +1291,51 @@ class Teams_Migration {
 	 * @param int $owner_id The team owner user ID.
 	 *
 	 * @return array {
-	 *     @type \WC_Subscription|null $subscription          The subscription to reuse, or null.
-	 *     @type bool                  $used_owner_fallback   Whether the unmarked owner fallback matched.
-	 *     @type bool                  $reused_without_access Whether the marker match holds a status that grants members no access.
+	 *     @type \WC_Subscription|null $subscription              The subscription to reuse, or null.
+	 *     @type bool                  $used_owner_fallback       Whether the unmarked owner fallback matched.
+	 *     @type bool                  $reused_without_access     Whether the marker match holds a status that grants members no access.
+	 *     @type int[]                 $disabled_marked_group_ids IDs of this team's marked groups that have group subscriptions disabled, populated only when no usable group resolved — the caller refuses the team. Empty otherwise, including when a usable group resolved alongside a disabled one.
 	 * }
 	 */
 	public static function find_reusable_group_subscription( $team_id, $owner_id ) {
-		$none     = [
-			'subscription'          => null,
-			'used_owner_fallback'   => false,
-			'reused_without_access' => false,
-		];
 		$team_id  = absint( $team_id );
 		$owner_id = absint( $owner_id );
 		if ( ! $team_id || ! $owner_id || ! function_exists( 'wcs_get_users_subscriptions' ) ) {
-			return $none;
+			return self::NO_REUSE;
 		}
 
 		$non_active_marked_sub = null;
+		$disabled_marked_ids   = [];
 		$unmarked_group_sub    = null;
 		foreach ( \wcs_get_users_subscriptions( $owner_id ) as $subscription ) {
 			// wcs_get_users_subscriptions is filtered to include member-only groups; require ownership.
 			if ( (int) $subscription->get_user_id() !== $owner_id ) {
 				continue;
 			}
-			if ( ! Group_Subscription::is_group_subscription( $subscription ) ) {
+			// The marker is read before the group-enabled gate: a group this team was
+			// migrated to still belongs to the team once the publisher disables group
+			// subscriptions on it, and the caller has to hear about it rather than pass
+			// over it and duplicate the team's group.
+			$marked_team_id = (int) $subscription->get_meta( self::MIGRATED_TEAM_ID_META_KEY );
+			$is_group_sub   = Group_Subscription::is_group_subscription( $subscription );
+			if ( ! $is_group_sub && $marked_team_id !== $team_id ) {
 				continue;
 			}
-			$marked_team_id = (int) $subscription->get_meta( self::MIGRATED_TEAM_ID_META_KEY );
 			// A group already migrated from this team wins outright — reuse keys on the
 			// source team, so a sibling team of the same owner never merges into it, and
 			// an unmarked group appearing earlier in the iteration never pre-empts it.
 			if ( $marked_team_id === $team_id ) {
+				if ( ! $is_group_sub ) {
+					// Collect them all, but keep scanning: a team that also has a group of
+					// its own with groups still enabled (the state an earlier duplicating
+					// run could leave behind) is migrated into that one instead of refused,
+					// and naming every disabled group at once saves the operator a run per
+					// group when there is more than one.
+					$disabled_marked_ids[] = $subscription->get_id();
+					continue;
+				}
 				if ( 'active' === $subscription->get_status() ) {
-					return [
-						'subscription'          => $subscription,
-						'used_owner_fallback'   => false,
-						'reused_without_access' => false,
-					];
+					return array_merge( self::NO_REUSE, [ 'subscription' => $subscription ] );
 				}
 				// Hold on to it in case the team has no active marked group at all, but
 				// keep scanning — an active one, if it exists, is the better match.
@@ -1288,27 +1350,38 @@ class Teams_Migration {
 		}
 
 		if ( $non_active_marked_sub ) {
-			return [
-				'subscription'          => $non_active_marked_sub,
-				'used_owner_fallback'   => false,
-				// Only flag statuses that actually withhold access. `pending-cancel` is not
-				// `active`, but group membership reads through ACTIVE_SUBSCRIPTION_STATUSES,
-				// so its members do have access until the period ends — warning about it
-				// would push an operator to reactivate a subscription a reader deliberately
-				// cancelled.
-				'reused_without_access' => ! $non_active_marked_sub->has_status( WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES ),
-			];
+			return array_merge(
+				self::NO_REUSE,
+				[
+					'subscription'          => $non_active_marked_sub,
+					// Only flag statuses that actually withhold access. `pending-cancel` is
+					// not `active`, but group membership reads through
+					// ACTIVE_SUBSCRIPTION_STATUSES, so its members do have access until the
+					// period ends — warning about it would push an operator to reactivate a
+					// subscription a reader deliberately cancelled.
+					'reused_without_access' => ! $non_active_marked_sub->has_status( WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES ),
+				]
+			);
+		}
+
+		// Reported ahead of the owner fallback: while this team has a group of its own,
+		// adopting a different group of the owner's would merge the team's members into a
+		// group that is not theirs on the strength of a flag the publisher set.
+		if ( $disabled_marked_ids ) {
+			return array_merge( self::NO_REUSE, [ 'disabled_marked_group_ids' => $disabled_marked_ids ] );
 		}
 
 		if ( $unmarked_group_sub ) {
-			return [
-				'subscription'          => $unmarked_group_sub,
-				'used_owner_fallback'   => true,
-				'reused_without_access' => false,
-			];
+			return array_merge(
+				self::NO_REUSE,
+				[
+					'subscription'        => $unmarked_group_sub,
+					'used_owner_fallback' => true,
+				]
+			);
 		}
 
-		return $none;
+		return self::NO_REUSE;
 	}
 
 	/**
