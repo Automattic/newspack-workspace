@@ -1131,6 +1131,22 @@ function wc_get_products( $args = [] ) {
 	return $matches;
 }
 /**
+ * Minimal stand-in for WooCommerce's admin field renderer. Only enough markup to let a metabox
+ * callback render end to end; assertions belong on the surrounding markup, not on this field.
+ *
+ * @param array $field The field definition.
+ */
+function woocommerce_wp_text_input( $field ) {
+	printf(
+		'<p class="form-field %1$s"><label for="%2$s">%3$s</label><input type="text" id="%2$s" name="%4$s" value="%5$s" /></p>',
+		esc_attr( $field['wrapper_class'] ?? '' ),
+		esc_attr( $field['id'] ?? '' ),
+		esc_html( $field['label'] ?? '' ),
+		esc_attr( $field['name'] ?? ( $field['id'] ?? '' ) ),
+		esc_attr( $field['value'] ?? '' )
+	);
+}
+/**
  * Recording mock: notices land on the $wc_mock_notices global so tests can
  * assert the reader-facing half of code paths gated on
  * function_exists( 'wc_add_notice' ).
