@@ -45,14 +45,18 @@ class Membership_Gates_Migration {
 	 * Dry-run by default; pass --live to write.
 	 *
 	 * On --live each written gate is re-read and checked against the conditions the
-	 * frontend evaluator applies, and any gate that would not restrict is reported as
-	 * a WARN row rather than counted as a plain success. Migrated gates stay dormant
-	 * until WooCommerce Memberships is deactivated, so without this an unenforceable
-	 * gate would look migrated for as long as it takes someone to notice at cutover.
+	 * frontend evaluator applies, and any gate that would not restrict — or would
+	 * restrict less than the plan it came from, e.g. a paid plan that migrated to a
+	 * gate any registered reader passes — is reported as a WARN row rather than
+	 * counted as a plain success. Migrated gates stay dormant until WooCommerce
+	 * Memberships is deactivated, so without this an unenforceable gate would look
+	 * migrated for as long as it takes someone to notice at cutover.
 	 *
 	 * Re-running is NOT edit-preserving: an existing gate matched by title has its
 	 * content rules and layout content overwritten with freshly extracted markup, so
-	 * any customization made in the admin after a previous run is lost.
+	 * any customization made in the admin after a previous run is lost. A layout is
+	 * left alone when nothing could be extracted for it, so an empty extraction never
+	 * blanks a working layout.
 	 *
 	 * ## OPTIONS
 	 *
@@ -253,9 +257,9 @@ class Membership_Gates_Migration {
 			// weeks.
 			$verification_issues = [];
 			if ( ! $dry_run && empty( $layout_errors ) && $gate_id ) {
-				$verification_issues = self::verify_migrated_gate( $gate_id );
+				$verification_issues = self::verify_migrated_gate( $gate_id, $has_purchase );
 				foreach ( $verification_issues as $issue ) {
-					WP_CLI::warning( sprintf( '"%s" (gate %d) will not restrict: %s', $gate_title, $gate_id, $issue ) );
+					WP_CLI::warning( sprintf( '"%s" (gate %d) will not restrict as intended: %s', $gate_title, $gate_id, $issue ) );
 				}
 			}
 
@@ -323,7 +327,7 @@ class Membership_Gates_Migration {
 		if ( $unenforceable ) {
 			WP_CLI::warning(
 				sprintf(
-					'%d of those gate(s) will not restrict anything as written (see the WARN rows above). Fix them before deactivating WooCommerce Memberships.',
+					'%d of those gate(s) will not restrict as intended (see the WARN rows above). Fix them before deactivating WooCommerce Memberships.',
 					$unenforceable
 				)
 			);
@@ -333,15 +337,17 @@ class Membership_Gates_Migration {
 	/**
 	 * Re-read a freshly written gate and report why it would fail to restrict.
 	 *
-	 * Mirrors the conditions Content_Restriction_Control::get_post_gates() applies
-	 * when deciding whether a gate applies to a post, so a gate that passes here is
-	 * one the evaluator can actually act on.
+	 * Mirrors the conditions Content_Restriction_Control::get_post_gates() and
+	 * is_post_restricted() apply when deciding whether a gate applies to a post and
+	 * whether a given reader is stopped by it, so a gate that passes here is one the
+	 * evaluator can actually act on — for the readers the source plan restricted.
 	 *
-	 * @param int $gate_id The content gate post ID.
+	 * @param int  $gate_id      The content gate post ID.
+	 * @param bool $has_purchase Whether any plan behind this gate requires a purchase.
 	 *
 	 * @return string[] Human-readable problems; empty when the gate is enforceable.
 	 */
-	private static function verify_migrated_gate( int $gate_id ): array {
+	private static function verify_migrated_gate( int $gate_id, bool $has_purchase = false ): array {
 		$issues = [];
 
 		if ( 'publish' !== \get_post_status( $gate_id ) ) {
@@ -371,6 +377,17 @@ class Membership_Gates_Migration {
 				'none of its content rules resolve to a post type or taxonomy the evaluator can match (%s)',
 				implode( ', ', $unresolvable )
 			);
+		} elseif ( ! empty( $unresolvable ) ) {
+			// A partially dead rule set is a partial leak, not a clean gate: the rules
+			// combine with 'any', so the content selected by the unresolvable rules is
+			// left ungated while the rest is covered. A plan restricting all posts plus a
+			// category is exactly this shape, and it is a common way plans are configured.
+			$issues[] = sprintf(
+				'%d of its %d content rules do not resolve to a post type or taxonomy the evaluator can match (%s), so the content they select stays ungated',
+				count( $unresolvable ),
+				count( $content_rules ),
+				implode( ', ', $unresolvable )
+			);
 		}
 
 		// A gate with neither mode active is skipped outright; an active mode with no
@@ -384,8 +401,36 @@ class Membership_Gates_Migration {
 			'registration' => $registration,
 			'paid access'  => $custom_access,
 		] as $label => $settings ) {
-			if ( ! empty( $settings['active'] ) && empty( $settings['gate_layout_id'] ) ) {
+			if ( empty( $settings['active'] ) ) {
+				continue;
+			}
+			if ( empty( $settings['gate_layout_id'] ) ) {
 				$issues[] = sprintf( 'the %s mode is active with no layout', $label );
+				continue;
+			}
+			// The evaluator only checks that the layout ID is truthy, so a missing or
+			// blank layout post still counts as "restricted" — the reader gets a
+			// truncated article with nothing underneath it: no form, no upsell, no
+			// explanation of why the article stops.
+			$layout_post = \get_post( $settings['gate_layout_id'] );
+			if ( ! $layout_post ) {
+				$issues[] = sprintf( 'the %s mode points at layout post %d, which no longer exists', $label, $settings['gate_layout_id'] );
+			} elseif ( '' === trim( $layout_post->post_content ) ) {
+				$issues[] = sprintf( 'the %s mode points at an empty layout (post %d), so the reader would see a blank gate', $label, $settings['gate_layout_id'] );
+			}
+		}
+
+		// A plan that required a purchase must migrate to a gate that gates on the
+		// purchase. Registration mode alone stops nobody who has an account —
+		// is_post_restricted() only re-checks a logged-in reader when
+		// require_verification is set, which this migration never writes — so a paid
+		// plan whose paid access mode is missing or unconstrained turns into content
+		// any reader can unlock by registering a free account.
+		if ( $has_purchase ) {
+			if ( empty( $custom_access['active'] ) ) {
+				$issues[] = 'it migrates a plan that requires a purchase, but its paid access mode is not active — any registered reader would get in';
+			} elseif ( empty( $custom_access['access_rules'] ) ) {
+				$issues[] = 'its paid access mode is active but has no access rules, so it asks for no purchase — any registered reader would get in';
 			}
 		}
 
@@ -498,6 +543,11 @@ class Membership_Gates_Migration {
 	 * Create or update a gate layout post and point the gate's registration or
 	 * custom_access settings at it.
 	 *
+	 * An empty $content never overwrites an existing layout: nothing was extracted to
+	 * migrate, and blanking the layout the gate already points at (for a new gate, the
+	 * default seeded by Content_Gate::create_gate()) would leave readers a truncated
+	 * article with an empty gate under it.
+	 *
 	 * @param int        $gate_id     The content gate post ID.
 	 * @param string     $gate_title  The gate title (used to name new layout posts).
 	 * @param string     $mode        Either 'registration' or 'custom_access'.
@@ -519,54 +569,65 @@ class Membership_Gates_Migration {
 			$label     = 'Registration Layout';
 		}
 
-		// Gate content authored by an admin with unfiltered_html can legitimately
-		// contain iframes/embeds/Custom HTML. A WP-CLI run has no user, so kses would
-		// strip those on re-save and the migrated layout would not match its source.
-		$kses_was_active = \has_filter( 'content_save_pre', 'wp_filter_post_kses' );
-		if ( $kses_was_active ) {
-			\kses_remove_filters();
-		}
-
-		if ( $layout_id ) {
-			// The overwrite is unconditional even when $content is '' — mirroring the
-			// drop-in. Content_Gate::create_gate() seeds a default block-pattern layout,
-			// which this replaces with the migrated markup; an empty $content (no
-			// np_memberships_gate found for the group, or a nested/reusable wrapper) thus
-			// blanks that default. Preserving those defaults on empty content is the
-			// empty-layout fix tracked in NPPD-2058; kept faithful here.
-			$updated = \wp_update_post(
-				[
-					'ID'           => $layout_id,
-					'post_content' => $content,
-				],
-				true // Return WP_Error on failure.
+		if ( $layout_id && '' === $content ) {
+			// Content_Gate::create_gate() seeds both layout posts with a default block
+			// pattern, so this update path is the normal one, not the exception — writing
+			// empty content here would blank a working layout and leave the reader a
+			// truncated article with nothing underneath it. create_gate_layout()
+			// substitutes the default for empty content; keep the two paths in agreement
+			// by leaving whatever the layout already holds in place.
+			WP_CLI::warning(
+				sprintf(
+					'No %s content could be extracted for "%s" — keeping the existing layout (post %d) rather than blanking it. Review it before cutover.',
+					strtolower( $label ),
+					$gate_title,
+					$layout_id
+				)
 			);
-			if ( \is_wp_error( $updated ) || ! $updated ) {
-				// A stale gate_layout_id pointing at a deleted post makes this a no-op.
-				WP_CLI::warning(
-					sprintf(
-						'Could not update %s (post %d) for "%s": %s',
-						strtolower( $label ),
-						$layout_id,
-						$gate_title,
-						\is_wp_error( $updated ) ? $updated->get_error_message() : 'the layout post no longer exists'
-					)
-				);
-				$layout_id = 0;
-			}
 		} else {
-			$layout_id = \Newspack\Content_Gate::create_gate_layout(
-				sprintf( '%s — %s', $gate_title, $label ),
-				$content
-			);
-			if ( \is_wp_error( $layout_id ) ) {
-				WP_CLI::warning( sprintf( 'Could not create %s for "%s": %s', strtolower( $label ), $gate_title, $layout_id->get_error_message() ) );
-				$layout_id = 0;
+			// Gate content authored by an admin with unfiltered_html can legitimately
+			// contain iframes/embeds/Custom HTML. A WP-CLI run has no user, so kses would
+			// strip those on re-save and the migrated layout would not match its source.
+			$kses_was_active = \has_filter( 'content_save_pre', 'wp_filter_post_kses' );
+			if ( $kses_was_active ) {
+				\kses_remove_filters();
 			}
-		}
 
-		if ( $kses_was_active ) {
-			\kses_init_filters();
+			if ( $layout_id ) {
+				$updated = \wp_update_post(
+					[
+						'ID'           => $layout_id,
+						'post_content' => $content,
+					],
+					true // Return WP_Error on failure.
+				);
+				if ( \is_wp_error( $updated ) || ! $updated ) {
+					// A stale gate_layout_id pointing at a deleted post makes this a no-op.
+					WP_CLI::warning(
+						sprintf(
+							'Could not update %s (post %d) for "%s": %s',
+							strtolower( $label ),
+							$layout_id,
+							$gate_title,
+							\is_wp_error( $updated ) ? $updated->get_error_message() : 'the layout post no longer exists'
+						)
+					);
+					$layout_id = 0;
+				}
+			} else {
+				$layout_id = \Newspack\Content_Gate::create_gate_layout(
+					sprintf( '%s — %s', $gate_title, $label ),
+					$content
+				);
+				if ( \is_wp_error( $layout_id ) ) {
+					WP_CLI::warning( sprintf( 'Could not create %s for "%s": %s', strtolower( $label ), $gate_title, $layout_id->get_error_message() ) );
+					$layout_id = 0;
+				}
+			}
+
+			if ( $kses_was_active ) {
+				\kses_init_filters();
+			}
 		}
 
 		// Without a layout post the mode must stay as it is: Content_Restriction_Control

@@ -64,21 +64,6 @@ class Content_Restriction_Control {
 	}
 
 	/**
-	 * Discard the request-scoped caches.
-	 *
-	 * The caches are keyed by post ID and assume the gate configuration does not
-	 * change for the lifetime of the request. Callers that write gates and then
-	 * evaluate them in the same process — or that reuse post IDs, as the test
-	 * suite does when it rolls back each case — must discard them first.
-	 */
-	public static function flush_request_cache() {
-		self::$post_gate_id_map        = [];
-		self::$post_gate_layout_id_map = [];
-		self::$post_gates_map          = [];
-		self::$term_descendants_map    = [];
-	}
-
-	/**
 	 * Get the post types that can be restricted.
 	 */
 	public static function get_available_post_types() {

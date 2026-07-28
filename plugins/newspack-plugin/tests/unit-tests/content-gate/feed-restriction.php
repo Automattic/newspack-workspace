@@ -9,7 +9,6 @@ namespace Newspack\Tests\Content_Gate;
 
 use Newspack\Content_Gate;
 use Newspack\Content_Gate_Advanced_Settings;
-use Newspack\Content_Restriction_Control;
 
 /**
  * Tests that the "Restrict content in feeds" advanced setting keeps gated
@@ -19,6 +18,8 @@ use Newspack\Content_Restriction_Control;
  * @group content-gate
  */
 class Test_Feed_Restriction extends \WP_UnitTestCase {
+
+	use \Newspack\Tests\Content_Gate\Traits\Trait_Restriction_Cache_Test;
 
 	/**
 	 * Gated post content: five distinct paragraphs so we can assert which
@@ -114,17 +115,6 @@ class Test_Feed_Restriction extends \WP_UnitTestCase {
 		wp_set_current_user( 0 );
 
 		parent::tear_down();
-	}
-
-	/**
-	 * Reset the per-request restriction caches between assertions.
-	 */
-	private function reset_restriction_cache() {
-		foreach ( [ 'post_gate_id_map', 'post_gate_layout_id_map', 'post_gates_map', 'term_descendants_map' ] as $cache_property ) {
-			$cache_property_reflection = new \ReflectionProperty( Content_Restriction_Control::class, $cache_property );
-			$cache_property_reflection->setAccessible( true );
-			$cache_property_reflection->setValue( null, [] );
-		}
 	}
 
 	/**

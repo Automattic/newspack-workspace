@@ -343,6 +343,153 @@ HTML;
 	}
 
 	/**
+	 * A gate whose rules are only partly resolvable under-gates rather than failing
+	 * outright: the rules combine with 'any', so the content behind the dead slugs is
+	 * left readable while the rest is gated. That partial leak is reported too — a
+	 * plan restricting all posts plus a category (a common WCM configuration) maps to
+	 * exactly this shape, and reporting it clean would hide the NPPD-2063 blast radius
+	 * until cutover.
+	 */
+	public function test_verify_migrated_gate_flags_content_rules_only_some_of_which_resolve() {
+		$gate_id = $this->create_enforceable_gate(
+			[
+				[
+					'slug'  => 'post',
+					'value' => [ '1' ],
+				],
+				[
+					'slug'  => 'category',
+					'value' => [ '2' ],
+				],
+			]
+		);
+
+		$issues = $this->invoke_private_static( 'verify_migrated_gate', [ $gate_id ] );
+
+		$this->assertCount( 1, $issues );
+		$this->assertStringContainsString( '1 of its 2 content rules do not resolve', $issues[0] );
+		$this->assertStringContainsString( 'post', $issues[0], 'The dead slug is named so the operator knows what is left ungated.' );
+	}
+
+	/**
+	 * A gate migrated from a plan that required a purchase, but whose paid access mode
+	 * was never activated, lets any registered reader through: registration mode alone
+	 * stops nobody with an account, since the migration never writes
+	 * require_verification. That is a worse outcome than an inert gate — the content
+	 * silently loses its paywall at cutover — so it must not pass verification.
+	 */
+	public function test_verify_migrated_gate_flags_a_purchase_gate_with_no_paid_access_mode() {
+		$gate_id = $this->create_enforceable_gate(
+			[
+				[
+					'slug'  => 'post_types',
+					'value' => [ 'post' ],
+				],
+			]
+		);
+
+		$issues = $this->invoke_private_static( 'verify_migrated_gate', [ $gate_id, true ] );
+
+		$this->assertCount( 1, $issues );
+		$this->assertStringContainsString( 'its paid access mode is not active', $issues[0] );
+		$this->assertSame(
+			[],
+			$this->invoke_private_static( 'verify_migrated_gate', [ $gate_id, false ] ),
+			'The same gate is fine for a signup-only plan — only the purchase requirement makes it a leak.'
+		);
+	}
+
+	/**
+	 * An active paid access mode with no access rules asks for no purchase:
+	 * is_post_restricted() skips an empty rule set, so a registered reader passes.
+	 * Reachable when every one of a plan's products is a variation (dropped as gates
+	 * reference parent products only) or when the plan has no products at all.
+	 */
+	public function test_verify_migrated_gate_flags_a_purchase_gate_whose_paid_access_has_no_rules() {
+		$gate_id = $this->create_enforceable_gate(
+			[
+				[
+					'slug'  => 'post_types',
+					'value' => [ 'post' ],
+				],
+			]
+		);
+		\Newspack\Content_Gate::update_custom_access_settings(
+			$gate_id,
+			[
+				'active'         => true,
+				'gate_layout_id' => \Newspack\Content_Gate::create_gate_layout( 'Paid access fixture layout', '' ),
+				'access_rules'   => [],
+			]
+		);
+
+		$issues = $this->invoke_private_static( 'verify_migrated_gate', [ $gate_id, true ] );
+
+		$this->assertCount( 1, $issues );
+		$this->assertStringContainsString( 'no access rules', $issues[0] );
+	}
+
+	/**
+	 * The paid path migrated fully — an active paid access mode constrained by the
+	 * plan's products — so nothing is reported.
+	 */
+	public function test_verify_migrated_gate_passes_a_purchase_gate_with_product_access_rules() {
+		$gate_id = $this->create_enforceable_gate(
+			[
+				[
+					'slug'  => 'post_types',
+					'value' => [ 'post' ],
+				],
+			]
+		);
+		\Newspack\Content_Gate::update_custom_access_settings(
+			$gate_id,
+			[
+				'active'         => true,
+				'gate_layout_id' => \Newspack\Content_Gate::create_gate_layout( 'Paid access fixture layout', '' ),
+				'access_rules'   => [
+					[
+						[
+							'slug'  => 'subscription',
+							'value' => [ 123 ],
+						],
+					],
+				],
+			]
+		);
+
+		$this->assertSame( [], $this->invoke_private_static( 'verify_migrated_gate', [ $gate_id, true ] ) );
+	}
+
+	/**
+	 * The evaluator only checks that a mode's layout ID is truthy, so a blank layout
+	 * post counts as "gated" and the reader gets a truncated article with nothing
+	 * under it — no form, no upsell, no explanation.
+	 */
+	public function test_verify_migrated_gate_flags_an_active_mode_with_an_empty_layout() {
+		$gate_id = $this->create_enforceable_gate(
+			[
+				[
+					'slug'  => 'post_types',
+					'value' => [ 'post' ],
+				],
+			]
+		);
+		$layout_id = \Newspack\Content_Gate::get_registration_settings( $gate_id )['gate_layout_id'];
+		wp_update_post(
+			[
+				'ID'           => $layout_id,
+				'post_content' => '',
+			]
+		);
+
+		$issues = $this->invoke_private_static( 'verify_migrated_gate', [ $gate_id ] );
+
+		$this->assertCount( 1, $issues );
+		$this->assertStringContainsString( 'points at an empty layout', $issues[0] );
+	}
+
+	/**
 	 * A gate written with rule slugs the evaluator handles by name, an active mode and
 	 * a layout post passes verification with no issues.
 	 */
