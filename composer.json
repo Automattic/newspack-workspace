@@ -7,7 +7,7 @@
 		"php": ">=8.0"
 	},
 	"require-dev": {
-		"automattic/vipwpcs": "^3.0",
+		"automattic/vipwpcs": "~3.1.0",
 		"wp-coding-standards/wpcs": "^3.0",
 		"phpcompatibility/phpcompatibility-wp": "^2.1",
 		"dealerdirect/phpcodesniffer-composer-installer": "^1.0",
