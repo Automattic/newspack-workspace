@@ -1,45 +1,59 @@
 /**
  * Front-end admin bar distribution (Newspack UI modal).
  */
+
+/**
+ * WordPress dependencies.
+ */
+import { __, _n, sprintf } from '@wordpress/i18n';
+
+/**
+ * Internal dependencies.
+ */
 import './style.scss';
 
 const config = window.newspack_network_admin_bar || {};
 
 /**
- * Replace %s and %1$s-style placeholders in a translatable string.
+ * The success message for the configured distribution status, in the locale's
+ * own plural form for the given count.
  *
- * @param {string}    string Translatable string with %s or %n$s placeholders.
- * @param {...string} values Replacement values, in order.
- * @return {string} The formatted string.
+ * @param {number} count The number of network sites distributed to.
+ * @return {string} The message.
  */
-const formatString = ( string, ...values ) => {
-	let i = 0;
-	return string.replace( /%(\d+\$)?s/g, ( match, position ) => ( position ? values[ parseInt( position, 10 ) - 1 ] : values[ i++ ] ) );
+const getDistributedMessage = count => {
+	let template;
+
+	switch ( config.defaultStatus ) {
+		case 'draft':
+			/* translators: %s is the number of network sites distributed to. */
+			template = _n( 'Distributed to %s network site as a draft.', 'Distributed to %s network sites as drafts.', count, 'newspack-network' );
+			break;
+		case 'pending':
+			/* translators: %s is the number of network sites distributed to. */
+			template = _n(
+				'Distributed to %s network site as pending review.',
+				'Distributed to %s network sites as pending review.',
+				count,
+				'newspack-network'
+			);
+			break;
+		case 'publish':
+			/* translators: %s is the number of network sites distributed to. */
+			template = _n(
+				'Distributed to %s network site and published.',
+				'Distributed to %s network sites and published.',
+				count,
+				'newspack-network'
+			);
+			break;
+		default:
+			/* translators: %s is the number of network sites distributed to. */
+			template = _n( 'Distributed to %s network site.', 'Distributed to %s network sites.', count, 'newspack-network' );
+	}
+
+	return sprintf( template, count );
 };
-
-const STATUS_MESSAGE_KEYS = {
-	draft: 'distributedAsDraft',
-	pending: 'distributedAsPending',
-	publish: 'distributedAsPublish',
-};
-
-/**
- * Pick the singular or plural form. @wordpress/i18n is not on the front end,
- * so this is a two-form approximation.
- *
- * @param {{singular: string, plural: string}} forms Singular/plural templates.
- * @param {number}                             count The count deciding the form.
- * @return {string} The chosen template.
- */
-const pluralize = ( forms, count ) => ( count === 1 ? forms.singular : forms.plural );
-
-/**
- * The "distributed" templates for the configured status, falling back to the
- * generic message when the status is missing or unrecognised.
- *
- * @return {{singular: string, plural: string}} Singular/plural templates.
- */
-const getDistributedForms = () => config.i18n[ STATUS_MESSAGE_KEYS[ config.defaultStatus ] ] || config.i18n.distributed;
 
 const REQUEST_TIMEOUT = 30000;
 
@@ -73,6 +87,10 @@ const init = () => {
 	const fieldset = modal.querySelector( '.newspack-network-distribute-form' );
 	const selectAll = modal.querySelector( '.newspack-network-distribute-all-toggle' );
 	const submit = modal.querySelector( '.newspack-network-distribute-submit' );
+	const confirmPanel = modal.querySelector( '.newspack-network-distribute-confirm' );
+	const confirmMessage = modal.querySelector( '.newspack-network-distribute-confirm-message' );
+	const confirmSubmit = modal.querySelector( '.newspack-network-distribute-confirm-submit' );
+	const backButton = modal.querySelector( '.newspack-network-distribute-back' );
 	const submitLabel = submit.querySelector( 'span' );
 	const baseLabel = submitLabel ? submitLabel.textContent : '';
 	const siteBoxes = () => Array.from( fieldset.querySelectorAll( '.newspack-network-distribute-site input[type="checkbox"]' ) );
@@ -90,7 +108,8 @@ const init = () => {
 		const selectableBoxes = selectable();
 		const count = selected().length;
 		if ( submitLabel ) {
-			submitLabel.textContent = 0 === count ? baseLabel : formatString( config.i18n.submitCount, count );
+			/* translators: %s is the number of network sites selected. */
+			submitLabel.textContent = 0 === count ? baseLabel : sprintf( __( 'Distribute (%s)', 'newspack-network' ), count );
 		}
 		submit.disabled = 0 === count;
 		if ( selectAll ) {
@@ -98,6 +117,25 @@ const init = () => {
 			selectAll.checked = selectableBoxes.length > 0 && count === selectableBoxes.length;
 			selectAll.indeterminate = count > 0 && count < selectableBoxes.length;
 		}
+	};
+
+	// Distribution cannot be undone from here, and select-all makes fanning a post
+	// out to the whole network one click, so the selection is confirmed first.
+	const showSelection = () => {
+		confirmPanel.hidden = true;
+		fieldset.hidden = false;
+	};
+
+	const showConfirm = count => {
+		/* translators: %s is the number of network sites selected. */
+		const question = _n( 'Distribute this post to %s network site?', 'Distribute this post to %s network sites?', count, 'newspack-network' );
+
+		confirmMessage.textContent = [ sprintf( question, count ), __( "This can't be undone from here.", 'newspack-network' ) ].join( ' ' );
+		fieldset.hidden = true;
+		confirmPanel.hidden = false;
+		// Focused rather than the first button, so the question is announced before
+		// the action that answers it. tabindex="-1" keeps it out of the tab ring.
+		confirmMessage.focus();
 	};
 
 	const close = () => {
@@ -152,6 +190,7 @@ const init = () => {
 		selectable().forEach( box => {
 			box.checked = false;
 		} );
+		showSelection();
 		refresh();
 		if ( returnFocus && typeof returnFocus.focus === 'function' ) {
 			returnFocus.focus();
@@ -188,21 +227,32 @@ const init = () => {
 	} );
 
 	submit.addEventListener( 'click', () => {
+		const count = selected().length;
+		if ( count ) {
+			showConfirm( count );
+		}
+	} );
+
+	backButton.addEventListener( 'click', () => {
+		showSelection();
+		submit.focus();
+	} );
+
+	confirmSubmit.addEventListener( 'click', () => {
 		const boxes = selected();
 		if ( ! boxes.length ) {
 			return;
 		}
 		const urls = boxes.map( box => box.value );
 
-		submit.disabled = true;
-		submit.classList.add( 'newspack-ui__button--loading' );
-		// Disabling the fieldset disables every control inside it (busy state).
-		fieldset.disabled = true;
+		confirmSubmit.disabled = true;
+		backButton.disabled = true;
+		confirmSubmit.classList.add( 'newspack-ui__button--loading' );
 		if ( dialog ) {
 			dialog.setAttribute( 'aria-busy', 'true' );
 		}
-		// Disabling the focused submit button blurs it, which would drop focus to
-		// <body> and let Tab escape the modal for the length of the request.
+		// Disabling the focused button blurs it, which would drop focus to <body>
+		// and let Tab escape the modal for the length of the request.
 		const stillFocusable = focusableItems();
 		if ( stillFocusable.length ) {
 			stillFocusable[ 0 ].focus();
@@ -225,7 +275,7 @@ const init = () => {
 				response
 					.json()
 					.catch( () => {
-						throw new Error( config.i18n.invalidResponse );
+						throw new Error( __( 'The site did not return a valid response.', 'newspack-network' ) );
 					} )
 					.then( body => {
 						if ( ! response.ok ) {
@@ -240,17 +290,25 @@ const init = () => {
 					box.checked = true;
 					box.disabled = true;
 				} );
-				notify( formatString( pluralize( getDistributedForms(), boxes.length ), boxes.length ), 'success' );
+				notify( getDistributedMessage( boxes.length ), 'success' );
 				close();
 			} )
 			.catch( error => {
-				const message = 'AbortError' === error.name ? config.i18n.timeout : formatString( config.i18n.error, error.message );
+				const message =
+					'AbortError' === error.name
+						? __( 'The request timed out. Please try again.', 'newspack-network' )
+						: /* translators: %s is the error message. */
+						  sprintf( __( 'Could not distribute: %s', 'newspack-network' ), error.message );
 				notify( message, 'error' );
+				// Back to the list with the selection intact, so a retry is one click.
+				showSelection();
+				submit.focus();
 			} )
 			.finally( () => {
 				clearTimeout( deadline );
-				submit.classList.remove( 'newspack-ui__button--loading' );
-				fieldset.disabled = false;
+				confirmSubmit.classList.remove( 'newspack-ui__button--loading' );
+				confirmSubmit.disabled = false;
+				backButton.disabled = false;
 				if ( dialog ) {
 					dialog.removeAttribute( 'aria-busy' );
 				}

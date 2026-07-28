@@ -110,6 +110,39 @@ class TestOutgoingPost extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * The other half of that distinction: a write that genuinely fails on a
+	 * changed value must still report 'update_failed'.
+	 */
+	public function test_set_distribution_reports_a_genuine_write_failure() {
+		$fail = function () {
+			return false;
+		};
+		add_filter( 'update_post_metadata', $fail, 10, 0 );
+
+		// A site not already in the config, so the write is a genuine change.
+		$result = $this->outgoing_post->set_distribution( [ $this->network[1]['url'] ] );
+
+		remove_filter( 'update_post_metadata', $fail, 10 );
+
+		$this->assertWPError( $result );
+		$this->assertSame( 'update_failed', $result->get_error_code() );
+	}
+
+	/**
+	 * Slash variants of one site collapse to a single canonical entry, so the
+	 * same site cannot be recorded twice.
+	 */
+	public function test_set_distribution_normalizes_trailing_slashes() {
+		$this->outgoing_post->set_distribution( [ $this->network[1]['url'] . '/' ] );
+		$this->outgoing_post->set_distribution( [ $this->network[1]['url'] ] );
+
+		$this->assertSame(
+			[ $this->network[0]['url'], $this->network[1]['url'] ],
+			$this->outgoing_post->get_distribution()
+		);
+	}
+
+	/**
 	 * Test remove distribution.
 	 */
 	public function test_remove_distribution() {

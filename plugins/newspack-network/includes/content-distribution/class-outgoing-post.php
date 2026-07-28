@@ -145,7 +145,7 @@ class Outgoing_Post {
 	/**
 	 * Set the distribution configuration for a given post.
 	 *
-	 * @param int[] $site_urls Array of site URLs to distribute the post to.
+	 * @param string[] $site_urls Array of site URLs to distribute the post to.
 	 *
 	 * @return array|WP_Error Config array on success, WP_Error on failure.
 	 */
@@ -165,9 +165,10 @@ class Outgoing_Post {
 		}
 
 		// If there are urls not already in the config, add them. Note that we don't support
-		// removing urls from the config.
+		// removing urls from the config. Both sides are normalised to the network's
+		// canonical form first, or array_unique() would keep slash variants of one site.
 		$existing     = $distribution;
-		$distribution = array_unique( array_merge( $distribution, $site_urls ) );
+		$distribution = array_values( array_unique( array_map( 'untrailingslashit', array_merge( $distribution, $site_urls ) ) ) );
 
 		// update_post_meta() returns false both on failure and when the value is
 		// unchanged. Distributing to sites already in the config is a valid no-op.

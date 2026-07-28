@@ -61,3 +61,34 @@
 		margin-top: 4px;
 	}
 }
+
+// The panels set their own display, which would otherwise win over [hidden].
+.newspack-network-distribute-form[hidden],
+.newspack-network-distribute-confirm[hidden] {
+	display: none;
+}
+
+.newspack-network-distribute-confirm {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+
+	.newspack-network-distribute-confirm-message {
+		margin: 0;
+
+		// Focused programmatically so the question is announced; it is not in the
+		// tab ring, so the ring would be misleading here.
+		&:focus {
+			outline: none;
+		}
+	}
+
+	.newspack-network-distribute-confirm-actions {
+		display: flex;
+		gap: 8px;
+
+		> .newspack-ui__button {
+			flex: 1;
+		}
+	}
+}

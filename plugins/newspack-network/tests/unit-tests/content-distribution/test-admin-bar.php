@@ -51,6 +51,8 @@ class TestAdminBar extends \WP_UnitTestCase {
 	public function set_up() {
 		parent::set_up();
 
+		Admin_Bar::flush_cache();
+
 		update_option( Site_Role::OPTION_NAME, Site_Role::NODE_ROLE );
 		update_option( 'newspack_node_hub_url', 'https://hub.test' );
 		update_option( Hub_Node::HUB_NODES_SYNCED_OPTION, $this->network );
@@ -68,6 +70,7 @@ class TestAdminBar extends \WP_UnitTestCase {
 	 * Tear down.
 	 */
 	public function tear_down() {
+		Admin_Bar::flush_cache();
 		delete_option( Site_Role::OPTION_NAME );
 		delete_option( 'newspack_node_hub_url' );
 		delete_option( Hub_Node::HUB_NODES_SYNCED_OPTION );
@@ -249,6 +252,22 @@ class TestAdminBar extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * The site list is answered once per request and reused, so the capability
+	 * chain, the meta read and the network lookup do not run per hook.
+	 */
+	public function test_get_sites_is_memoized_until_flushed() {
+		$this->assertCount( 3, Admin_Bar::get_sites( $this->post ) );
+
+		update_option( Hub_Node::HUB_NODES_SYNCED_OPTION, [] );
+
+		$this->assertCount( 3, Admin_Bar::get_sites( $this->post ), 'The memo should survive a mid-request change.' );
+
+		Admin_Bar::flush_cache();
+
+		$this->assertCount( 1, Admin_Bar::get_sites( $this->post ) );
+	}
+
+	/**
 	 * A post the menu should not render for yields no sites.
 	 */
 	public function test_get_sites_is_empty_when_not_rendering() {
@@ -338,6 +357,50 @@ class TestAdminBar extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Distribution is additive and cannot be undone from the front end, and
+	 * select-all makes fanning a post out to the whole network one click, so the
+	 * markup carries a confirmation step. It starts hidden; the JS reveals it
+	 * with the count once a selection is submitted.
+	 */
+	public function test_render_modal_renders_hidden_confirmation_step() {
+		ob_start();
+		Admin_Bar::render_modal();
+		$html = ob_get_clean();
+
+		$this->assertStringContainsString( '<div class="newspack-network-distribute-confirm" hidden>', $html );
+		$this->assertStringContainsString( 'newspack-network-distribute-back', $html );
+		$this->assertStringContainsString( 'newspack-network-distribute-confirm-submit', $html );
+
+		// Written by the JS, which knows the count; empty server-side.
+		$this->assertStringContainsString( '<p class="newspack-network-distribute-confirm-message" tabindex="-1"></p>', $html );
+	}
+
+	/**
+	 * A locked row says why it is locked. Assistive tech otherwise reports only
+	 * that the checkbox is disabled, with no hint that distribution is additive.
+	 */
+	public function test_render_modal_describes_already_distributed_rows() {
+		$outgoing = new Outgoing_Post( $this->post );
+		$outgoing->set_distribution( [ $this->network[0]['url'] ] );
+
+		ob_start();
+		Admin_Bar::render_modal();
+		$html = ob_get_clean();
+
+		$this->assertMatchesRegularExpression(
+			'/<input type="checkbox" id="(newspack-network-distribute-site-\d+)"[^>]*checked disabled aria-describedby="\1-note">/',
+			$html
+		);
+		$this->assertMatchesRegularExpression(
+			'/<span id="newspack-network-distribute-site-\d+-note" class="screen-reader-text">Already distributed<\/span>/',
+			$html
+		);
+
+		// Selectable rows carry no description, so nothing dangles.
+		$this->assertSame( 1, substr_count( $html, 'screen-reader-text">Already distributed' ) );
+	}
+
+	/**
 	 * The select-all toggle is omitted when there is only one target site.
 	 */
 	public function test_render_modal_omits_select_all_for_single_site() {
@@ -410,77 +473,54 @@ class TestAdminBar extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * The enqueued script is localized with the ARIA-live announcement strings.
+	 * The behaviour script hard-depends on the newspack-ui *script* handle, and
+	 * WordPress drops a script whose dependency is unregistered. Gating on the
+	 * style handle alone would leave a Distribute button that opens nothing.
 	 */
-	public function test_enqueue_scripts_localizes_i18n_strings() {
-		// Cleared so this reads only this call's payload; see get_localized_data().
-		wp_scripts()->add_data( 'newspack-network-admin-bar', 'data', '' );
+	public function test_trigger_and_modal_guarded_without_newspack_ui_script() {
+		require_once ABSPATH . WPINC . '/class-wp-admin-bar.php';
+		wp_deregister_script( 'newspack-ui' );
 
-		Admin_Bar::enqueue_scripts();
+		$bar = new WP_Admin_Bar();
+		Admin_Bar::admin_bar_menu( $bar );
+		$this->assertNull( $bar->get_node( 'newspack-network-distribute' ) );
 
-		$data = wp_scripts()->get_data( 'newspack-network-admin-bar', 'data' );
-
-		$this->assertIsString( $data );
-		$this->assertStringContainsString( '"i18n":{', $data );
-		$this->assertStringContainsString( 'Distribute (%s)', $data );
-		$this->assertStringContainsString( 'Distributed to %s network sites.', $data );
-		$this->assertStringContainsString( 'Could not distribute: %s', $data );
-		$this->assertStringContainsString( 'The request timed out. Please try again.', $data );
+		ob_start();
+		Admin_Bar::render_modal();
+		$this->assertSame( '', ob_get_clean() );
 	}
 
 	/**
-	 * The localized payload carries a distinct, fully translatable sentence
-	 * for each distribution status, so the front end can announce which
-	 * status the post landed as on the receiving site without interpolating
-	 * a status word into a single template.
+	 * The user-facing strings live in the bundle and are translated by the
+	 * wp-i18n runtime, so the locale's own plural rules apply rather than a
+	 * two-form approximation. The localized payload carries request config only.
 	 */
-	public function test_enqueue_scripts_localizes_status_specific_distributed_strings() {
-		// Cleared so this reads only this call's payload; see get_localized_data().
+	public function test_enqueue_scripts_localizes_request_config_only() {
+		// Cleared so this reads only this call's payload; see decode_localized_payload().
 		wp_scripts()->add_data( 'newspack-network-admin-bar', 'data', '' );
 
 		Admin_Bar::enqueue_scripts();
 
-		$data = wp_scripts()->get_data( 'newspack-network-admin-bar', 'data' );
+		$payload = $this->decode_localized_payload( wp_scripts()->get_data( 'newspack-network-admin-bar', 'data' ) );
 
-		$this->assertIsString( $data );
-		$this->assertStringContainsString( 'Distributed to %s network sites as drafts.', $data );
-		$this->assertStringContainsString( 'Distributed to %s network sites as pending review.', $data );
-		$this->assertStringContainsString( 'Distributed to %s network sites and published.', $data );
+		$this->assertSame( [ 'restUrl', 'nonce', 'defaultStatus' ], array_keys( $payload ) );
+		$this->assertStringContainsString( 'content-distribution/distribute/' . $this->post->ID, $payload['restUrl'] );
+		$this->assertNotEmpty( $payload['nonce'] );
 	}
 
 	/**
-	 * The plural-aware i18n keys are `{ singular, plural }` objects, not flat
-	 * strings: the front end's pluralize() picks a form from the pair at
-	 * runtime. A regression that flattens one of these keys back into a
-	 * single string would still contain the plural wording checked above,
-	 * so this decodes the payload and asserts the object shape and the
-	 * singular strings directly.
+	 * The bundle imports @wordpress/i18n, which webpack externalises to
+	 * wp.i18n. Unlike the block editor, the front end does not load it for us,
+	 * so the handle has to be declared or the script is silently dropped.
 	 */
-	public function test_enqueue_scripts_localizes_plural_object_shape() {
-		// Cleared so this reads only this call's payload; see get_localized_data().
-		wp_scripts()->add_data( 'newspack-network-admin-bar', 'data', '' );
-
+	public function test_enqueue_scripts_depends_on_wp_i18n_and_sets_translations() {
 		Admin_Bar::enqueue_scripts();
 
-		$data = wp_scripts()->get_data( 'newspack-network-admin-bar', 'data' );
-		$i18n = $this->decode_localized_i18n( $data );
-
-		foreach ( [ 'distributed', 'distributedAsDraft', 'distributedAsPending', 'distributedAsPublish' ] as $key ) {
-			$this->assertIsArray( $i18n[ $key ], "i18n.$key should be a { singular, plural } object." );
-			$this->assertSame( [ 'singular', 'plural' ], array_keys( $i18n[ $key ] ), "i18n.$key should only carry singular/plural keys." );
-			$this->assertNotEmpty( $i18n[ $key ]['singular'] );
-			$this->assertNotEmpty( $i18n[ $key ]['plural'] );
-		}
-
-		$this->assertIsString( $i18n['submitCount'] );
-		$this->assertSame( 'Distribute (%s)', $i18n['submitCount'] );
-		$this->assertSame( 'Distributed to %s network site.', $i18n['distributed']['singular'] );
-		$this->assertSame( 'Distributed to %s network site as a draft.', $i18n['distributedAsDraft']['singular'] );
-		$this->assertSame( 'Distributed to %s network site as pending review.', $i18n['distributedAsPending']['singular'] );
-		$this->assertSame( 'Distributed to %s network site and published.', $i18n['distributedAsPublish']['singular'] );
-
-		$this->assertIsString( $i18n['timeout'] );
-		$this->assertSame( 'The request timed out. Please try again.', $i18n['timeout'] );
+		$script = wp_scripts()->query( 'newspack-network-admin-bar' );
+		$this->assertNotFalse( $script );
+		$this->assertContains( 'wp-i18n', $script->deps );
+		$this->assertSame( 'newspack-network', $script->textdomain );
+		$this->assertStringEndsWith( '/languages', $script->translations_path );
 	}
 
 	/**
@@ -509,7 +549,7 @@ class TestAdminBar extends \WP_UnitTestCase {
 	public function test_enqueue_scripts_localizes_configured_default_status() {
 		update_option( Admin::DEFAULT_DISTRIBUTION_STATUS_OPTION_NAME, 'publish' );
 
-		// Cleared so this reads only this call's payload; see get_localized_data().
+		// Cleared so this reads only this call's payload; see decode_localized_payload().
 		wp_scripts()->add_data( 'newspack-network-admin-bar', 'data', '' );
 
 		Admin_Bar::enqueue_scripts();
@@ -528,7 +568,7 @@ class TestAdminBar extends \WP_UnitTestCase {
 	public function test_enqueue_scripts_localizes_default_status_fallback() {
 		delete_option( Admin::DEFAULT_DISTRIBUTION_STATUS_OPTION_NAME );
 
-		// Cleared so this reads only this call's payload; see get_localized_data().
+		// Cleared so this reads only this call's payload; see decode_localized_payload().
 		wp_scripts()->add_data( 'newspack-network-admin-bar', 'data', '' );
 
 		Admin_Bar::enqueue_scripts();
@@ -569,7 +609,7 @@ class TestAdminBar extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Decode the 'i18n' branch of the admin-bar script's localized payload.
+	 * Decode the admin-bar script's localized payload.
 	 *
 	 * WP_Scripts::localize() prepends any earlier call's block ahead of a
 	 * new one instead of replacing it, so this decodes the LAST
@@ -578,9 +618,11 @@ class TestAdminBar extends \WP_UnitTestCase {
 	 *
 	 * @param string $data The raw string from wp_scripts()->get_data( $handle, 'data' ).
 	 *
-	 * @return array The decoded 'i18n' branch of the payload.
+	 * @return array The decoded payload.
 	 */
-	private function decode_localized_i18n( $data ) {
+	private function decode_localized_payload( $data ) {
+		$this->assertIsString( $data );
+
 		$marker = 'var newspack_network_admin_bar = ';
 		$pos    = strrpos( $data, $marker );
 		$this->assertNotFalse( $pos, 'Localized script marker not found in the "data" extra.' );
@@ -590,8 +632,7 @@ class TestAdminBar extends \WP_UnitTestCase {
 		$payload = json_decode( $json, true );
 
 		$this->assertIsArray( $payload, 'Localized payload did not decode to an array.' );
-		$this->assertArrayHasKey( 'i18n', $payload );
 
-		return $payload['i18n'];
+		return $payload;
 	}
 }

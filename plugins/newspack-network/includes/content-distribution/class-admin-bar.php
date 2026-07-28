@@ -19,6 +19,29 @@ use WP_Post;
 class Admin_Bar {
 
 	/**
+	 * Memoized get_sites() results, keyed by post ID.
+	 *
+	 * Three hooks ask the same question about the same post on every front-end
+	 * view, and answering it costs a capability chain, a post-meta read and a
+	 * network-sites lookup. Nothing that feeds it changes within a request.
+	 *
+	 * @var array<int, array>
+	 */
+	private static $sites_cache = [];
+
+	/**
+	 * Discard the memoized site lists.
+	 *
+	 * For tests and long-running processes, where the state behind the memo can
+	 * change within one PHP process.
+	 *
+	 * @return void
+	 */
+	public static function flush_cache() {
+		self::$sites_cache = [];
+	}
+
+	/**
 	 * Whether the distribute menu should render for a given post.
 	 *
 	 * Does not check query context (is_singular()); callers on the front end must verify that themselves.
@@ -86,11 +109,32 @@ class Admin_Bar {
 	/**
 	 * The network sites the given post can be distributed to.
 	 *
+	 * Empty whenever the menu should not render, so callers can gate on this
+	 * alone rather than re-running should_render() themselves.
+	 *
 	 * @param WP_Post|int $post The post object or ID.
 	 *
 	 * @return array List of [ 'name', 'url', 'distributed' ] arrays.
 	 */
 	public static function get_sites( $post ) {
+		$post_id = $post instanceof WP_Post ? $post->ID : (int) $post;
+		if ( isset( self::$sites_cache[ $post_id ] ) ) {
+			return self::$sites_cache[ $post_id ];
+		}
+
+		self::$sites_cache[ $post_id ] = self::build_sites( $post );
+
+		return self::$sites_cache[ $post_id ];
+	}
+
+	/**
+	 * Build the site list for the given post, without the memo.
+	 *
+	 * @param WP_Post|int $post The post object or ID.
+	 *
+	 * @return array List of [ 'name', 'url', 'distributed' ] arrays.
+	 */
+	private static function build_sites( $post ) {
 		if ( ! self::should_render( $post ) ) {
 			return [];
 		}
@@ -128,8 +172,10 @@ class Admin_Bar {
 	 */
 	public static function init() {
 		add_action( 'admin_bar_menu', [ __CLASS__, 'admin_bar_menu' ], 100 );
-		add_action( 'wp_enqueue_scripts', [ __CLASS__, 'enqueue_scripts' ] );
-		add_action( 'wp_footer', [ __CLASS__, 'render_modal' ] );
+		// After priority 10, where core's wp_common_block_scripts_and_styles() fires
+		// 'enqueue_block_assets' and newspack-plugin registers the 'newspack-ui' handles.
+		add_action( 'wp_enqueue_scripts', [ __CLASS__, 'enqueue_scripts' ], 11 );
+		add_action( 'wp_footer', [ __CLASS__, 'render_modal' ], 10 );
 	}
 
 	/**
@@ -137,11 +183,14 @@ class Admin_Bar {
 	 *
 	 * The modal, its snackbar, and its styling come from newspack-plugin's
 	 * 'newspack-ui' handle; without it the feature has nothing to render into.
+	 * Both handles are checked: WordPress silently drops a script whose
+	 * dependency is unregistered, which would leave a Distribute button that
+	 * opens nothing and logs no error.
 	 *
 	 * @return bool
 	 */
 	private static function newspack_ui_available() {
-		return wp_style_is( 'newspack-ui', 'registered' );
+		return wp_style_is( 'newspack-ui', 'registered' ) && wp_script_is( 'newspack-ui', 'registered' );
 	}
 
 	/**
@@ -188,7 +237,6 @@ class Admin_Bar {
 				// A real link so it is natively clickable and keyboard-activatable;
 				// the JS preventDefault()s the '#' and opens the modal.
 				'href'  => '#',
-				'meta'  => [ 'menu_title' => __( 'Distribute', 'newspack-network' ) ],
 			]
 		);
 	}
@@ -207,7 +255,7 @@ class Admin_Bar {
 		}
 
 		$post = self::get_queried_post();
-		if ( ! $post || ! self::should_render( $post ) || ! self::newspack_ui_available() ) {
+		if ( ! $post || ! self::newspack_ui_available() ) {
 			return;
 		}
 
@@ -234,14 +282,29 @@ class Admin_Bar {
 	private static function get_modal_markup( array $sites ) {
 		$rows = '';
 		foreach ( $sites as $index => $site ) {
-			$id    = 'newspack-network-distribute-site-' . (int) $index;
-			$state = $site['distributed'] ? ' checked disabled' : '';
+			$id = 'newspack-network-distribute-site-' . (int) $index;
+
+			// Distribution is additive, so an already-distributed site is checked and
+			// locked. The reason is spelled out for assistive tech, which otherwise
+			// reports only that the checkbox is disabled.
+			$state = '';
+			$note  = '';
+			if ( $site['distributed'] ) {
+				$state = sprintf( ' checked disabled aria-describedby="%s"', esc_attr( $id . '-note' ) );
+				$note  = sprintf(
+					'<span id="%1$s" class="screen-reader-text">%2$s</span>',
+					esc_attr( $id . '-note' ),
+					esc_html__( 'Already distributed', 'newspack-network' )
+				);
+			}
+
 			$rows .= sprintf(
-				'<label class="newspack-network-distribute-site" for="%1$s"><input type="checkbox" id="%1$s" value="%2$s"%3$s><span class="newspack-network-distribute-site-name">%4$s</span></label>',
+				'<label class="newspack-network-distribute-site" for="%1$s"><input type="checkbox" id="%1$s" value="%2$s"%3$s><span class="newspack-network-distribute-site-name">%4$s</span>%5$s</label>',
 				esc_attr( $id ),
 				esc_attr( $site['url'] ),
 				$state,
-				esc_html( $site['name'] )
+				esc_html( $site['name'] ),
+				$note
 			);
 		}
 
@@ -256,15 +319,25 @@ class Admin_Bar {
 		// Inlined so no cross-plugin Newspack_UI_Icons call is needed; a hardcoded, safe literal.
 		$close_icon = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false" class="newspack-ui__svg-icon--close"><path d="m13.06 12 6.47-6.47-1.06-1.06L12 10.94 5.53 4.47 4.47 5.53 10.94 12l-6.47 6.47 1.06 1.06L12 13.06l6.47 6.47 1.06-1.06L13.06 12Z" /></svg>';
 
+		// Distribution is additive and cannot be undone from here, so the selection is
+		// confirmed before it is sent. The message is written by the JS, which knows
+		// the count; the panel is inert without it.
+		$confirm = sprintf(
+			'<div class="newspack-network-distribute-confirm" hidden><p class="newspack-network-distribute-confirm-message" tabindex="-1"></p><div class="newspack-network-distribute-confirm-actions"><button type="button" class="newspack-ui__button newspack-ui__button--secondary newspack-network-distribute-back">%1$s</button><button type="button" class="newspack-ui__button newspack-ui__button--primary newspack-network-distribute-confirm-submit"><span>%2$s</span></button></div></div>',
+			esc_html__( 'Back', 'newspack-network' ),
+			esc_html__( 'Distribute', 'newspack-network' )
+		);
+
 		return sprintf(
-			'<div class="newspack-ui"><div id="newspack-network-distribute-modal" class="newspack-ui__modal-container" data-state="closed"><div class="newspack-ui__modal-container__overlay"></div><div class="newspack-ui__modal newspack-ui__modal--small" role="dialog" aria-modal="true" aria-labelledby="newspack-network-distribute-modal-title"><header class="newspack-ui__modal__header"><h2 id="newspack-network-distribute-modal-title" class="newspack-ui__font--l">%1$s</h2><button class="newspack-ui__button newspack-ui__button--icon newspack-ui__button--ghost newspack-ui__modal__close"><span class="screen-reader-text">%2$s</span>%3$s</button></header><section class="newspack-ui__modal__content"><fieldset class="newspack-network-distribute-form"><legend class="screen-reader-text">%4$s</legend>%5$s%6$s<button type="button" class="newspack-ui__button newspack-ui__button--primary newspack-network-distribute-submit" disabled><span>%7$s</span></button></fieldset></section></div></div></div>',
+			'<div class="newspack-ui"><div id="newspack-network-distribute-modal" class="newspack-ui__modal-container" data-state="closed"><div class="newspack-ui__modal-container__overlay"></div><div class="newspack-ui__modal newspack-ui__modal--small" role="dialog" aria-modal="true" aria-labelledby="newspack-network-distribute-modal-title"><header class="newspack-ui__modal__header"><h2 id="newspack-network-distribute-modal-title" class="newspack-ui__font--l">%1$s</h2><button type="button" class="newspack-ui__button newspack-ui__button--icon newspack-ui__button--ghost newspack-ui__modal__close"><span class="screen-reader-text">%2$s</span>%3$s</button></header><section class="newspack-ui__modal__content"><fieldset class="newspack-network-distribute-form"><legend class="screen-reader-text">%4$s</legend>%5$s%6$s<button type="button" class="newspack-ui__button newspack-ui__button--primary newspack-network-distribute-submit" disabled><span>%7$s</span></button></fieldset>%8$s</section></div></div></div>',
 			esc_html__( 'Distribute to network sites', 'newspack-network' ),
 			esc_html__( 'Close', 'newspack-network' ),
 			$close_icon,
 			esc_html__( 'Distribute to', 'newspack-network' ),
 			$select_all,
 			$rows,
-			esc_html__( 'Distribute', 'newspack-network' )
+			esc_html__( 'Distribute', 'newspack-network' ),
+			$confirm
 		);
 	}
 
@@ -294,17 +367,22 @@ class Admin_Bar {
 		}
 
 		$post = self::get_queried_post();
-		if ( ! $post || ! self::should_render( $post ) || ! self::newspack_ui_available() ) {
+		if ( ! $post || ! self::newspack_ui_available() ) {
+			return;
+		}
+
+		if ( empty( self::get_sites( $post ) ) ) {
 			return;
 		}
 
 		wp_enqueue_script(
 			'newspack-network-admin-bar',
 			plugins_url( '../../dist/admin-bar.js', __FILE__ ),
-			[ 'newspack-ui' ],
+			[ 'newspack-ui', 'wp-i18n' ],
 			self::asset_version( 'dist/admin-bar.js' ),
 			true
 		);
+		wp_set_script_translations( 'newspack-network-admin-bar', 'newspack-network', NEWSPACK_NETWORK_PLUGIN_DIR . 'languages' );
 		wp_register_style(
 			'newspack-network-admin-bar',
 			plugins_url( '../../dist/admin-bar.css', __FILE__ ),
@@ -314,6 +392,8 @@ class Admin_Bar {
 		wp_style_add_data( 'newspack-network-admin-bar', 'rtl', 'replace' );
 		wp_enqueue_style( 'newspack-network-admin-bar' );
 
+		// The bundle owns its own strings, via @wordpress/i18n and the 'wp-i18n'
+		// dependency above, so plural forms follow the locale's own rules.
 		wp_localize_script(
 			'newspack-network-admin-bar',
 			'newspack_network_admin_bar',
@@ -321,38 +401,6 @@ class Admin_Bar {
 				'restUrl'       => rest_url( 'newspack-network/v1/content-distribution/distribute/' . $post->ID ),
 				'nonce'         => wp_create_nonce( 'wp_rest' ),
 				'defaultStatus' => Admin::get_default_distribution_status(),
-				'i18n'          => [
-					/* translators: %s is the number of network sites selected. */
-					'submitCount'          => __( 'Distribute (%s)', 'newspack-network' ),
-					'distributed'          => [
-						/* translators: %s is the number of network sites distributed to. */
-						'singular' => __( 'Distributed to %s network site.', 'newspack-network' ),
-						/* translators: %s is the number of network sites distributed to. */
-						'plural'   => __( 'Distributed to %s network sites.', 'newspack-network' ),
-					],
-					'distributedAsDraft'   => [
-						/* translators: %s is the number of network sites distributed to. */
-						'singular' => __( 'Distributed to %s network site as a draft.', 'newspack-network' ),
-						/* translators: %s is the number of network sites distributed to. */
-						'plural'   => __( 'Distributed to %s network sites as drafts.', 'newspack-network' ),
-					],
-					'distributedAsPending' => [
-						/* translators: %s is the number of network sites distributed to. */
-						'singular' => __( 'Distributed to %s network site as pending review.', 'newspack-network' ),
-						/* translators: %s is the number of network sites distributed to. */
-						'plural'   => __( 'Distributed to %s network sites as pending review.', 'newspack-network' ),
-					],
-					'distributedAsPublish' => [
-						/* translators: %s is the number of network sites distributed to. */
-						'singular' => __( 'Distributed to %s network site and published.', 'newspack-network' ),
-						/* translators: %s is the number of network sites distributed to. */
-						'plural'   => __( 'Distributed to %s network sites and published.', 'newspack-network' ),
-					],
-					/* translators: %s is the error message. */
-					'error'                => __( 'Could not distribute: %s', 'newspack-network' ),
-					'invalidResponse'      => __( 'The site did not return a valid response.', 'newspack-network' ),
-					'timeout'              => __( 'The request timed out. Please try again.', 'newspack-network' ),
-				],
 			]
 		);
 	}
