@@ -259,6 +259,23 @@ class Test_Sync_Capabilities extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A stored `'false'` string pauses the direction. The checkbox sanitizer
+	 * can't produce that value, but a hand-set option or an external writer can,
+	 * and it diverges in the worst direction: the wizard's toBool() reads
+	 * `'false'` as off, so a truthy cast here would render the direction paused
+	 * while dispatch kept pushing.
+	 */
+	public function test_falsy_string_toggle_values_pause_directions() {
+		$integration = new \Sample_Integration( 'cap-string-false', 'Cap String False' );
+
+		update_option( $this->settings_option_name( 'cap-string-false', 'outgoing_sync_enabled' ), 'false' );
+		update_option( $this->settings_option_name( 'cap-string-false', 'incoming_sync_enabled' ), 'false' );
+
+		$this->assertFalse( $integration->is_push_enabled(), "Stored 'false' must pause outbound sync." );
+		$this->assertFalse( $integration->is_pull_enabled(), "Stored 'false' must pause inbound sync." );
+	}
+
+	/**
 	 * Pausing a direction preserves the stored field selections, so re-enabling
 	 * does not lose the publisher's configuration.
 	 */
@@ -343,6 +360,71 @@ class Test_Sync_Capabilities extends \WP_UnitTestCase {
 		$result = Sync::has_one_syncable_integration( true );
 		$this->assertWPError( $result );
 		$this->assertFalse( $result->has_errors(), 'Success must not carry reasons collected from skipped integrations.' );
+	}
+
+	/**
+	 * Build an integration whose can_sync() ignores $return_errors and returns a
+	 * bare bool — the documented `bool|\WP_Error` signature invites it, so the
+	 * availability check must survive a third-party integration that does.
+	 *
+	 * @param string $id    Integration ID.
+	 * @param string $name  Integration name.
+	 * @param bool   $value Bool can_sync() should return.
+	 * @return \Sample_Integration
+	 */
+	private function create_bool_can_sync_integration( $id, $name, $value ) {
+		$integration = new class( $id, $name ) extends \Sample_Integration {
+			/**
+			 * Bare bool returned by can_sync() regardless of $return_errors.
+			 *
+			 * @var bool
+			 */
+			public $bool_can_sync = true;
+
+			/**
+			 * Ignore $return_errors and return a bare bool.
+			 *
+			 * @param bool $return_errors Whether to return a WP_Error object.
+			 * @return bool
+			 */
+			public function can_sync( $return_errors = false ) {
+				return $this->bool_can_sync;
+			}
+		};
+		$integration->bool_can_sync = $value;
+		return $integration;
+	}
+
+	/**
+	 * A bool-returning can_sync() must not fatal the availability check on
+	 * WP_Error::has_errors(); a `true` normalizes to "can sync".
+	 */
+	public function test_has_one_syncable_integration_tolerates_true_bool_can_sync() {
+		$integration = $this->create_bool_can_sync_integration( 'cap-bool-true', 'Cap Bool True', true );
+		Integrations::register( $integration );
+		update_option( Integrations::OPTION_NAME, [ 'cap-bool-true' ] );
+
+		$this->assertTrue( Sync::has_one_syncable_integration(), 'A bool-returning can_sync() must not fatal.' );
+
+		$result = Sync::has_one_syncable_integration( true );
+		$this->assertWPError( $result );
+		$this->assertFalse( $result->has_errors(), 'A bool true normalizes to a no-error verdict.' );
+	}
+
+	/**
+	 * A bool `false` from a contract-violating can_sync() normalizes to a
+	 * reason rather than a silent success.
+	 */
+	public function test_has_one_syncable_integration_tolerates_false_bool_can_sync() {
+		$integration = $this->create_bool_can_sync_integration( 'cap-bool-false', 'Cap Bool False', false );
+		Integrations::register( $integration );
+		update_option( Integrations::OPTION_NAME, [ 'cap-bool-false' ] );
+
+		$this->assertFalse( Sync::has_one_syncable_integration() );
+
+		$result = Sync::has_one_syncable_integration( true );
+		$this->assertWPError( $result );
+		$this->assertContains( 'integration_cannot_sync', $result->get_error_codes() );
 	}
 
 	/**

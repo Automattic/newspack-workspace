@@ -96,6 +96,21 @@ abstract class Integration {
 	protected $settings_fields = [];
 
 	/**
+	 * Memoized return value of get_settings_fields().
+	 *
+	 * The declarations are stable for the life of the instance — the subclass
+	 * half is already frozen in $settings_fields, and the base-class groups are
+	 * built from per-instance capability flags — but rebuilding them costs a
+	 * __() call per label and description. The direction toggles resolve through
+	 * this array on every is_push_enabled()/is_pull_enabled() call, which run
+	 * once per contact in sync loops, so the array is built once and reused.
+	 * Reset by init(), the only place $settings_fields can change.
+	 *
+	 * @var array|null
+	 */
+	private $settings_fields_cache = null;
+
+	/**
 	 * Constructor.
 	 *
 	 * @param string $id          The unique identifier for this integration.
@@ -295,7 +310,8 @@ abstract class Integration {
 	 * Currently only initializes settings fields, but can be extended by child classes for additional setup.
 	 */
 	public function init() {
-		$this->settings_fields = $this->register_settings_fields();
+		$this->settings_fields       = $this->register_settings_fields();
+		$this->settings_fields_cache = null;
 	}
 
 	/**
@@ -365,6 +381,13 @@ abstract class Integration {
 	 * declared field never resolves to null — get_settings_field_value() falls
 	 * back to the field default.
 	 *
+	 * The stored value is coerced with wp_validate_boolean() rather than a cast
+	 * so this agrees with the wizard's toBool(): both read the strings `'false'`
+	 * and `'0'` as off. The sanctioned write path can't produce `'false'` (the
+	 * checkbox sanitizes to a real bool), but a hand-set option or external
+	 * writer otherwise diverges in the worst direction — UI paused, dispatch
+	 * still pushing.
+	 *
 	 * @return bool True if pushes should run.
 	 */
 	final public function is_push_enabled(): bool {
@@ -372,7 +395,7 @@ abstract class Integration {
 			return false;
 		}
 		$enabled = $this->get_settings_field_value( 'outgoing_sync_enabled' );
-		return null === $enabled || (bool) $enabled;
+		return null === $enabled || \wp_validate_boolean( $enabled );
 	}
 
 	/**
@@ -384,7 +407,8 @@ abstract class Integration {
 	 *
 	 * As with is_push_enabled(), an undeclared toggle field reads as null and
 	 * counts as enabled — only an explicit stored value can pause the
-	 * direction.
+	 * direction — and the stored value is coerced with wp_validate_boolean() so
+	 * PHP and the wizard agree on the falsy string forms.
 	 *
 	 * @return bool True if pulls should run.
 	 */
@@ -393,7 +417,7 @@ abstract class Integration {
 			return false;
 		}
 		$enabled = $this->get_settings_field_value( 'incoming_sync_enabled' );
-		return null === $enabled || (bool) $enabled;
+		return null === $enabled || \wp_validate_boolean( $enabled );
 	}
 
 	/**
@@ -1104,14 +1128,20 @@ abstract class Integration {
 	 * reads as null/falsy, which the deletion dispatcher treats as disabled).
 	 * The metadata groups are capability-gated in get_metadata_fields().
 	 *
+	 * Memoized per instance — see $settings_fields_cache for why.
+	 *
 	 * @return array Array of settings field declarations.
 	 */
 	public function get_settings_fields() {
+		if ( null !== $this->settings_fields_cache ) {
+			return $this->settings_fields_cache;
+		}
 		$fields = $this->settings_fields;
 		if ( $this->supports_push() ) {
 			$fields = array_merge( $fields, $this->get_account_deletion_fields() );
 		}
-		return array_merge( $fields, $this->get_metadata_fields() );
+		$this->settings_fields_cache = array_merge( $fields, $this->get_metadata_fields() );
+		return $this->settings_fields_cache;
 	}
 
 	/**
