@@ -288,6 +288,17 @@ class Contact_Pull {
 				return $data;
 			}
 
+			// A provider that returns a non-array payload cannot be filtered or
+			// stored. Reject it explicitly instead of letting array_intersect_key()
+			// raise a TypeError that the catch below would misclassify as a
+			// transient exception and retry five times.
+			if ( ! is_array( $data ) ) {
+				return new \WP_Error(
+					'invalid_pull_payload',
+					sprintf( 'Integration "%s" returned a %s instead of an array of contact data.', $integration->get_id(), gettype( $data ) )
+				);
+			}
+
 			$selected_keys = array_flip(
 				array_map(
 					function( $field ) {
@@ -301,11 +312,27 @@ class Contact_Pull {
 
 			$write_errors = [];
 			foreach ( $data as $key => $value ) {
+				$encoded = wp_json_encode( $value );
+
 				if ( $dry_run ) {
+					// Both of update_item()'s rejection causes are deterministic, so
+					// the preview can report them without persisting — an operator
+					// green-lighting a run deserves to see writes that are guaranteed
+					// to fail. The key cap is evaluated against the reader's stored
+					// keys, so within one reader a preview can undercount which
+					// individual fields hit the cap; the reader-level error tally
+					// (any failed field marks the reader) is still accurate.
+					$would_store = \Newspack\Reader_Data::validate_item( $user_id, $key, $encoded );
+					if ( is_wp_error( $would_store ) ) {
+						Logger::log( sprintf( '[dry-run] Would FAIL storing reader data "%s" for user %d: %s', $key, $user_id, $would_store->get_error_message() ), self::LOGGER_HEADER );
+						$write_errors[] = sprintf( '"%s": %s', $key, $would_store->get_error_message() );
+						continue;
+					}
 					Logger::log( sprintf( '[dry-run] Would store reader data "%s" for user %d.', $key, $user_id ), self::LOGGER_HEADER );
 					continue;
 				}
-				$stored = \Newspack\Reader_Data::update_item( $user_id, $key, wp_json_encode( $value ) );
+
+				$stored = \Newspack\Reader_Data::update_item( $user_id, $key, $encoded );
 				if ( is_wp_error( $stored ) ) {
 					Logger::log( sprintf( 'Failed storing reader data "%s" for user %d: %s', $key, $user_id, $stored->get_error_message() ), self::LOGGER_HEADER );
 					$write_errors[] = sprintf( '"%s": %s', $key, $stored->get_error_message() );
@@ -377,19 +404,34 @@ class Contact_Pull {
 	}
 
 	/**
-	 * Whether a pull failure is permanent — retrying cannot succeed.
+	 * Pull error codes that no retry can resolve.
 	 *
-	 * Reader_Data::update_item() rejections are validation-level and
-	 * deterministic (`invalid_value` for values whose sanitized JSON encoding
-	 * is falsy, `too_many_items` at the per-reader key cap), so a retry would
-	 * re-fetch from the provider only to fail the exact same write again.
+	 * `reader_data_write_failed` — Reader_Data::update_item() rejections are
+	 * validation-level and deterministic (`invalid_value` for an empty
+	 * sanitized value, `too_many_items` at the per-reader key cap), so a retry
+	 * would re-fetch from the provider only to fail the exact same write again.
+	 * `no_selected_incoming_fields` — a configuration state, not a failure the
+	 * provider can recover from. `invalid_pull_payload` — the integration's own
+	 * return type is wrong, which no amount of waiting fixes.
+	 *
 	 * Fetch-side errors (network, provider 5xx/429) stay retryable.
+	 *
+	 * @var string[]
+	 */
+	const PERMANENT_PULL_ERRORS = [
+		'reader_data_write_failed',
+		'no_selected_incoming_fields',
+		'invalid_pull_payload',
+	];
+
+	/**
+	 * Whether a pull failure is permanent — retrying cannot succeed.
 	 *
 	 * @param \WP_Error|mixed $error The pull result.
 	 * @return bool True when the error can never be resolved by retrying.
 	 */
 	private static function is_permanent_pull_error( $error ) {
-		return $error instanceof \WP_Error && 'reader_data_write_failed' === $error->get_error_code();
+		return $error instanceof \WP_Error && in_array( $error->get_error_code(), self::PERMANENT_PULL_ERRORS, true );
 	}
 
 	/**
@@ -496,9 +538,20 @@ class Contact_Pull {
 			return;
 		}
 
+		// Fields disabled mid-chain is a configuration change, not a failure:
+		// end the chain quietly like the is_set_up() guard above, rather than
+		// letting the pull return no_selected_incoming_fields and fail the
+		// ActionScheduler action. Resolved once here and threaded in, since
+		// resolution may hit the provider's API on legacy-shaped settings.
+		$selected_fields = $integration->get_enabled_incoming_fields();
+		if ( empty( $selected_fields ) ) {
+			Logger::log( sprintf( 'Integration "%s" has no enabled incoming fields on pull retry %d; aborting retry chain.', $integration_id, $retry_count ), self::LOGGER_HEADER );
+			return;
+		}
+
 		Logger::log( sprintf( 'Executing pull retry %d/%d for integration "%s" of user %d.', $retry_count, self::MAX_RETRIES, $integration_id, $user_id ), self::LOGGER_HEADER );
 
-		$result = self::pull_single_integration( $user_id, $integration );
+		$result = self::pull_single_integration( $user_id, $integration, false, $selected_fields );
 		if ( is_wp_error( $result ) ) {
 			$error_message = sprintf(
 				'Pull retry %d/%d failed for integration "%s" of user %d: %s',

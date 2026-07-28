@@ -47,9 +47,10 @@ class Failing_Sample_Integration extends Integration {
 	public static $push_ids = [];
 
 	/**
-	 * Data returned by pull_contact_data.
+	 * Data returned by pull_contact_data. Usually an array; tests covering
+	 * malformed provider payloads set a non-array value.
 	 *
-	 * @var array
+	 * @var mixed
 	 */
 	public static $pull_data = [];
 
@@ -75,6 +76,13 @@ class Failing_Sample_Integration extends Integration {
 	 * @var bool
 	 */
 	public static $is_set_up_value = true;
+
+	/**
+	 * Reason can_sync() should fail with. Null means the integration is syncable.
+	 *
+	 * @var string|null
+	 */
+	public static $cannot_sync_reason = null;
 
 	/**
 	 * Register settings fields (test implementation).
@@ -141,6 +149,9 @@ class Failing_Sample_Integration extends Integration {
 	 * @return bool|WP_Error
 	 */
 	public function can_sync( $return_errors = false ) {
+		if ( null !== self::$cannot_sync_reason ) {
+			return $return_errors ? new \WP_Error( 'mock_cannot_sync', self::$cannot_sync_reason ) : false;
+		}
 		return $return_errors ? new \WP_Error() : true;
 	}
 
@@ -166,5 +177,6 @@ class Failing_Sample_Integration extends Integration {
 		self::$pull_should_fail              = false;
 		self::$enabled_incoming_fields_calls = 0;
 		self::$is_set_up_value               = true;
+		self::$cannot_sync_reason            = null;
 	}
 }

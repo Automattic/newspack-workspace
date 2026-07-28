@@ -61,15 +61,13 @@ class Test_Contact_Pull_Retries extends WP_UnitTestCase {
 		$result = Contact_Pull::pull_all( $this->user_id );
 
 		$this->assertInstanceOf( \WP_Error::class, $result, 'The failure still surfaces to the caller.' );
-		if ( function_exists( 'as_get_scheduled_actions' ) ) {
-			$pending = as_get_scheduled_actions(
-				[
-					'hook'   => Contact_Pull::RETRY_HOOK,
-					'status' => \ActionScheduler_Store::STATUS_PENDING,
-				]
-			);
-			$this->assertCount( 0, $pending, 'A permanent write failure must not schedule retries.' );
-		}
+		$pending = as_get_scheduled_actions(
+			[
+				'hook'   => Contact_Pull::RETRY_HOOK,
+				'status' => \ActionScheduler_Store::STATUS_PENDING,
+			]
+		);
+		$this->assertCount( 0, $pending, 'A permanent write failure must not schedule retries.' );
 	}
 
 	/**
@@ -107,5 +105,26 @@ class Test_Contact_Pull_Retries extends WP_UnitTestCase {
 		);
 
 		$this->assertSame( 1, Failing_Sample_Integration::$pull_count, 'The retry attempted the pull without throwing.' );
+	}
+
+	/**
+	 * Incoming fields disabled mid-chain is a configuration change, not a
+	 * failure: end the chain quietly like the is_set_up() guard rather than
+	 * burning retries — or failing the action — on a deterministic outcome
+	 * (NPPD-2076 review).
+	 */
+	public function test_retry_execution_aborts_quietly_when_incoming_fields_are_disabled() {
+		delete_option( 'newspack_integration_incoming_fields_retry_mock' );
+
+		Contact_Pull::execute_integration_retry(
+			[
+				'integration_id' => 'retry_mock',
+				'user_id'        => $this->user_id,
+				'retry_count'    => 1,
+			]
+		);
+
+		$this->assertSame( 0, Failing_Sample_Integration::$pull_count, 'No provider fetch for a chain with nothing to pull.' );
+		$this->assertContains( 'no_selected_incoming_fields', Contact_Pull::PERMANENT_PULL_ERRORS, 'And pull_all() must not schedule retries for it either.' );
 	}
 }

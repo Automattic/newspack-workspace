@@ -82,4 +82,63 @@ class Test_Contact_Pull_Dry_Run extends WP_UnitTestCase {
 		$this->assertSame( 'reader_data_write_failed', $result->get_error_code() );
 		$this->assertSame( 1, Failing_Sample_Integration::$pull_count, 'The fetch still happened.' );
 	}
+
+	/**
+	 * The dry-run preview must report writes that are guaranteed to fail —
+	 * otherwise an operator green-lights a run whose systematic failures the
+	 * preview could not show (NPPD-2076 review).
+	 */
+	public function test_dry_run_reports_writes_that_would_fail() {
+		// Fill the reader to the data-key cap so the pull's write would be rejected.
+		for ( $i = 0; $i < Reader_Data::MAX_ITEMS; $i++ ) {
+			Reader_Data::update_item( $this->user_id, "filler_{$i}", '"x"' );
+		}
+
+		$result = Contact_Pull::pull_single_integration( $this->user_id, $this->integration, true );
+
+		$this->assertInstanceOf( \WP_Error::class, $result, 'The preview must surface a guaranteed write failure.' );
+		$this->assertSame( 'reader_data_write_failed', $result->get_error_code() );
+		$this->assertStringContainsString( 'Too many items', $result->get_error_message() );
+		$this->assertFalse( Reader_Data::get_data( $this->user_id, 'field_a' ), 'The preview still persists nothing.' );
+	}
+
+	/**
+	 * A numeric zero must survive the round trip. Its JSON encoding is the
+	 * string "0", which PHP treats as falsy — a rejection here would fail the
+	 * pull permanently and re-enqueue the reader forever (NPPD-2076 review).
+	 */
+	public function test_zero_valued_incoming_field_is_stored() {
+		Failing_Sample_Integration::$pull_data = [ 'field_a' => 0 ];
+
+		$result = Contact_Pull::pull_single_integration( $this->user_id, $this->integration );
+
+		$this->assertTrue( $result, 'A zero-valued incoming field is a successful pull.' );
+		$this->assertSame( '0', Reader_Data::get_data( $this->user_id, 'field_a' ) );
+	}
+
+	/**
+	 * And its dry-run preview agrees — no phantom error.
+	 */
+	public function test_dry_run_does_not_flag_a_zero_valued_field() {
+		Failing_Sample_Integration::$pull_data = [ 'field_a' => 0 ];
+
+		$result = Contact_Pull::pull_single_integration( $this->user_id, $this->integration, true );
+
+		$this->assertTrue( $result, 'A storable zero must not preview as a failure.' );
+	}
+
+	/**
+	 * A provider returning a non-array payload is rejected explicitly rather
+	 * than tripping a TypeError that the catch block would misclassify as a
+	 * transient exception worth five retries (NPPD-2076 review).
+	 */
+	public function test_non_array_payload_is_a_permanent_error() {
+		Failing_Sample_Integration::$pull_data = 'not-an-array';
+
+		$result = Contact_Pull::pull_single_integration( $this->user_id, $this->integration );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'invalid_pull_payload', $result->get_error_code() );
+		$this->assertContains( 'invalid_pull_payload', Contact_Pull::PERMANENT_PULL_ERRORS );
+	}
 }
