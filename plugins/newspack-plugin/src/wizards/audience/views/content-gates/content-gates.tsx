@@ -23,6 +23,7 @@ import ContentGateSettings from './content-gate-settings';
 import AdvancedSettings from './advanced-settings';
 import SettingsCard from './settings-card';
 import { AUDIENCE_CONTENT_GATES_WIZARD_SLUG } from './consts';
+import { isGateMetered } from './utils';
 import './style.scss';
 
 const ContentGates = ( { updateGatesData }: { updateGatesData: ( gates: Gate[] ) => void } ) => {
@@ -34,7 +35,7 @@ const ContentGates = ( { updateGatesData }: { updateGatesData: ( gates: Gate[] )
 	const ref = useRef( null );
 	const gates = ( wizardData?.gates || [] ) as Gate[];
 	const config = ( wizardData?.config || {} ) as GateSettings;
-	const hasMetering = gates.some( gate => gate.registration?.metering?.enabled || gate.custom_access?.metering?.enabled );
+	const hasMetering = gates.some( isGateMetered );
 	const hasInstitutions = !! config.has_institutions;
 
 	useEffect( () => {
