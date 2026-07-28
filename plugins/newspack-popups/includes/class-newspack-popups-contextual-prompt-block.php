@@ -45,19 +45,22 @@ final class Newspack_Popups_Contextual_Prompt_Block {
 			return $block_content;
 		}
 
-		$post_id  = (int) get_the_ID();
-		$cta_type = self::get_cta_type( is_array( $block ) ? $block : [] );
+		// Parsed rather than pattern-matched, so a leading comment or text node
+		// can't push the attributes off the wrapper. Stops at the first opening
+		// tag, leaving every tag inside the wrapper alone.
+		$processor = new WP_HTML_Tag_Processor( $block_content );
+		if ( ! $processor->next_tag() ) {
+			return $block_content;
+		}
 
-		// Add the data attributes to the opening tag of the wrapper only.
-		return preg_replace(
-			'/^(\s*<[a-z0-9]+)\b/i',
-			'$1'
-				. ' data-newspack-cp-post-id="' . esc_attr( (string) $post_id ) . '"'
-				. ' data-newspack-cp-cta="' . esc_attr( $cta_type ) . '"'
-				. ' data-newspack-cp-placement="' . esc_attr( self::get_placement( $post_id ) ) . '"',
-			$block_content,
-			1
-		);
+		$post_id = (int) get_the_ID();
+
+		// set_attribute() escapes the value, so these are passed unescaped.
+		$processor->set_attribute( 'data-newspack-cp-post-id', (string) $post_id );
+		$processor->set_attribute( 'data-newspack-cp-cta', self::get_cta_type( is_array( $block ) ? $block : [] ) );
+		$processor->set_attribute( 'data-newspack-cp-placement', self::get_placement( $post_id ) );
+
+		return $processor->get_updated_html();
 	}
 
 	/**
@@ -119,15 +122,36 @@ final class Newspack_Popups_Contextual_Prompt_Block {
 	 * not the framing the editor first chose, since the block can be moved after
 	 * insertion. This is the "which placement converts best" grant metric.
 	 *
+	 * Memoized for the request: add_analytics_attributes() calls this on every
+	 * render and each miss reparses the whole post. Only a resolved post is
+	 * memoized, so an id that resolves later in the request is never pinned to
+	 * the 'unknown' its earlier lookup produced.
+	 *
 	 * @param int $post_id The article.
 	 * @return string 'top' | 'mid' | 'end' | 'unknown'.
 	 */
 	public static function get_placement( $post_id ) {
+		static $memo = [];
+
 		$post = $post_id ? get_post( $post_id ) : null;
 		if ( ! $post ) {
 			return 'unknown';
 		}
 
+		if ( ! isset( $memo[ $post->ID ] ) ) {
+			$memo[ $post->ID ] = self::bucket_placement( $post );
+		}
+
+		return $memo[ $post->ID ];
+	}
+
+	/**
+	 * Bucket a post's prompt position among its top-level blocks.
+	 *
+	 * @param WP_Post $post The article.
+	 * @return string 'top' | 'mid' | 'end' | 'unknown'.
+	 */
+	private static function bucket_placement( $post ) {
 		$blocks = array_values(
 			array_filter(
 				parse_blocks( $post->post_content ),
