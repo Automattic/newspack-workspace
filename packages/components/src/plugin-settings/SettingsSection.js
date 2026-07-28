@@ -110,7 +110,7 @@ const SettingsSection = props => {
 							setSaveDisabled( true );
 						} }
 					>
-						{ __( 'Save Settings', 'newspack' ) }
+						{ __( 'Save Settings', 'newspack-plugin' ) }
 					</Button>
 				)
 			}
