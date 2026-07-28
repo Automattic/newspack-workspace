@@ -41,7 +41,7 @@ const JEST_CONFIG = {
 	},
 	modulePaths: [ path.resolve( modules.rootDirectory, 'node_modules' ), path.resolve( __dirname, '../node_modules' ) ],
 	testEnvironment: 'jsdom',
-	collectCoverageFrom: [ '**/*.{js,jsx}', '!**/node_modules/**', '!**/dist/**', '!**/vendor/**' ],
+	collectCoverageFrom: [ '**/*.{js,jsx,ts,tsx}', '!**/*.d.ts', '!**/node_modules/**', '!**/dist/**', '!**/vendor/**' ],
 };
 
 args.push( '--config', JSON.stringify( JEST_CONFIG ) );
