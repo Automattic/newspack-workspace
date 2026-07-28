@@ -153,6 +153,15 @@ class Newspack_Popups_Settings {
 				return new WP_Error( 'newspack_popups_invalid_setting_update', sprintf( __( 'Invalid setting value for "%s".', 'newspack-popups' ), $config['description'] ) );
 			}
 		}
+		// Page settings validate the submitted ID directly, so any published page qualifies
+		// without the setting having to enumerate every page it would accept.
+		if ( isset( $config['control'] ) && 'page' === $config['control'] ) {
+			$value = empty( $value ) ? '' : (string) absint( $value );
+			if ( ! empty( $value ) && ! self::is_valid_page_id( $value ) ) {
+				// translators: %s is the description of the option.
+				return new WP_Error( 'newspack_popups_invalid_setting_update', sprintf( __( 'Invalid setting value for "%s".', 'newspack-popups' ), $config['description'] ) );
+			}
+		}
 		$updated = update_option( $config['key'], self::sanitize_setting_option( $config['type'], $value ) );
 		return $updated;
 	}
@@ -178,6 +187,34 @@ class Newspack_Popups_Settings {
 			default:
 				return '';
 		}
+	}
+
+	/**
+	 * Whether the given ID belongs to a published page.
+	 *
+	 * @param mixed $page_id The page ID to validate.
+	 *
+	 * @return boolean
+	 */
+	private static function is_valid_page_id( $page_id ) {
+		$page = get_post( absint( $page_id ) );
+		return $page instanceof WP_Post && 'page' === $page->post_type && 'publish' === $page->post_status;
+	}
+
+	/**
+	 * The saved donor landing page, shaped for the settings UI's autocomplete field.
+	 *
+	 * @return array|null Array with `label` and `value` keys, or null if unset or no longer valid.
+	 */
+	private static function get_donor_landing_page_selection() {
+		$page_id = self::donor_landing_page();
+		if ( empty( $page_id ) || ! self::is_valid_page_id( $page_id ) ) {
+			return null;
+		}
+		return [
+			'label' => get_the_title( absint( $page_id ) ),
+			'value' => absint( $page_id ),
+		];
 	}
 
 	/**
@@ -232,35 +269,6 @@ class Newspack_Popups_Settings {
 	 * @return array Array of settings objects.
 	 */
 	public static function get_settings( $assoc = false, $get_segments = false ) {
-		$donor_landing_options = [
-			[
-				'label' => __( '-- None --', 'newspack-popups' ),
-				'value' => '',
-			],
-		];
-
-		// Before executing the query, make sure we can filter it to remove any CPTs that might be added by other plugins.
-		add_action( 'pre_get_posts', [ __CLASS__, 'prevent_other_post_types_in_page_query' ], PHP_INT_MAX );
-		$donor_landing_options_query = new \WP_Query(
-			[
-				'post_type'      => 'page',
-				'post_status'    => 'publish',
-				'post_parent'    => 0,
-				'posts_per_page' => -1,
-			]
-		);
-		// Remove the query filter so we don't unintentionally affect other queries.
-		remove_action( 'pre_get_posts', [ __CLASS__, 'prevent_other_post_types_in_page_query' ], PHP_INT_MAX );
-
-		if ( $donor_landing_options_query->have_posts() ) {
-			foreach ( $donor_landing_options_query->posts as $page ) {
-				$donor_landing_options[] = [
-					'label' => $page->post_title,
-					'value' => (string) $page->ID,
-				];
-			}
-		}
-
 		$settings_list = [
 			[
 				'description' => __( 'Donor Settings', 'newspack-popups' ),
@@ -275,6 +283,7 @@ class Newspack_Popups_Settings {
 				'section'     => 'donor_settings',
 				'key'         => 'newspack_popups_donor_landing_page',
 				'type'        => 'string',
+				'control'     => 'page',
 				'value'       => self::donor_landing_page(),
 				'default'     => '',
 				'description' => __( 'Donor landing page', 'newspack-popups' ),
@@ -282,7 +291,7 @@ class Newspack_Popups_Settings {
 					"Set a page on your site as a donation landing page. Once a reader views this page, they will be considered a donor. This is helpful if you're using an off-site donation platform but still want to target donors as an audience segment.",
 					'newspack-popups'
 				),
-				'options'     => $donor_landing_options,
+				'selected'    => self::get_donor_landing_page_selection(),
 			],
 			[
 				'section'     => 'donor_settings',
@@ -502,16 +511,6 @@ class Newspack_Popups_Settings {
 		}
 
 		return true;
-	}
-
-	/**
-	 * Prevents other plugins from adding additional post types to the page query.
-	 * Note: No query checking needed because this callback is only added for the one query we need to filter.
-	 *
-	 * @param WP_Query $query The WP query object.
-	 */
-	public static function prevent_other_post_types_in_page_query( $query ) {
-		$query->set( 'post_type', 'page' ); // phpcs:ignore WordPressVIPMinimum.Hooks.PreGetPosts.PreGetPosts
 	}
 }
 
