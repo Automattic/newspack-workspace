@@ -200,6 +200,7 @@ final class Newspack {
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/audience/class-audience-subscription-products.php';
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/audience/class-audience-pricing-rules.php';
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/audience/class-audience-integrations.php';
+		include_once NEWSPACK_ABSPATH . 'includes/wizards/class-subscribers-wizard.php';
 
 		// Network Wizard.
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/class-network-wizard.php';

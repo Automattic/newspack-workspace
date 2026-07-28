@@ -941,17 +941,38 @@ function wcs_get_users_subscriptions( $user_id ) {
 	return apply_filters( 'wcs_get_users_subscriptions', $user_subscriptions, $user_id );
 }
 function wcs_get_subscriptions( $args = [] ) {
-	// Minimal mock: implements only the `customer_id` filter, the sole arg the code
-	// under test passes. If a future test needs status/paging args
-	// (subscription_status, subscriptions_per_page, paged, offset), extend the filter
-	// here rather than relying on this returning the full set.
+	// Minimal mock: implements the `customer_id` and `subscription_status` filters
+	// plus `subscriptions_per_page`/`offset` paging — the args the code under test
+	// passes. `subscription_status` accepts a single status or an array; 'any' (or
+	// unset) means no status filter. `meta_query` and `orderby` are still ignored —
+	// extend here rather than relying on this returning the full set if a test
+	// needs them.
+	//
+	// `paged` is deliberately NOT implemented: the real wcs_get_subscriptions()
+	// declares it among its own defaults and strips it before building the query,
+	// so a mock that honored it would make a broken caller look correct.
 	global $subscriptions_database;
 	$customer_id = $args['customer_id'] ?? null;
-	$matches     = [];
+	$statuses    = $args['subscription_status'] ?? 'any';
+	$per_page    = isset( $args['subscriptions_per_page'] ) ? (int) $args['subscriptions_per_page'] : 0;
+	$offset      = isset( $args['offset'] ) ? max( 0, (int) $args['offset'] ) : 0;
+	if ( 'any' === $statuses ) {
+		$statuses = null;
+	} elseif ( null !== $statuses ) {
+		$statuses = (array) $statuses;
+	}
+	$matches = [];
 	foreach ( $subscriptions_database as $id => $subscription ) {
-		if ( null === $customer_id || $subscription->get_customer_id() === $customer_id ) {
-			$matches[ $id ] = $subscription;
+		if ( null !== $customer_id && $subscription->get_customer_id() !== $customer_id ) {
+			continue;
 		}
+		if ( null !== $statuses && ! in_array( $subscription->get_status(), $statuses, true ) ) {
+			continue;
+		}
+		$matches[ $id ] = $subscription;
+	}
+	if ( $per_page > 0 || $offset > 0 ) {
+		$matches = array_slice( $matches, $offset, $per_page > 0 ? $per_page : null, true );
 	}
 	return $matches;
 }
@@ -1091,6 +1112,22 @@ function wc_get_order( $order_id ) {
 function wc_get_product( $product_id ) {
 	global $products_database;
 	return $products_database[ $product_id ] ?? false;
+}
+/**
+ * Minimal stand-in for WooCommerce's admin field renderer. Only enough markup to let a metabox
+ * callback render end to end; assertions belong on the surrounding markup, not on this field.
+ *
+ * @param array $field The field definition.
+ */
+function woocommerce_wp_text_input( $field ) {
+	printf(
+		'<p class="form-field %1$s"><label for="%2$s">%3$s</label><input type="text" id="%2$s" name="%4$s" value="%5$s" /></p>',
+		esc_attr( $field['wrapper_class'] ?? '' ),
+		esc_attr( $field['id'] ?? '' ),
+		esc_html( $field['label'] ?? '' ),
+		esc_attr( $field['name'] ?? ( $field['id'] ?? '' ) ),
+		esc_attr( $field['value'] ?? '' )
+	);
 }
 /**
  * Recording mock: notices land on the $wc_mock_notices global so tests can
