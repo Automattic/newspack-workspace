@@ -104,9 +104,10 @@ class RAS_Contact_Sync {
 	 *   @type int         $config['batch_size'] Number of contacts to sync per batch.
 	 *   @type int         $config['offset'] Number of contacts to skip.
 	 *   @type int         $config['max_batches'] Maximum number of batches to process.
-	 *   @type bool        $config['is_dry_run'] True if a dry run.
 	 *   @type string      $config['context'] Context of the sync.
-	 *   @type array       $config['options'] Sync options ( `skip_lists` bool, `fields` string[]|null ).
+	 *   @type array       $config['options'] Sync options ( `skip_lists` bool, `fields`
+	 *                     string[]|null, `integration_id` string|null to scope the push
+	 *                     fan-out to a single integration ).
 	 * }
 	 *
 	 * @return array|\WP_Error Results tally ( `processed`, `errors`, `skipped` ) or WP_Error.
@@ -514,14 +515,15 @@ class RAS_Contact_Sync {
 	 * errors the operator must re-run. Free the cache at every batch boundary
 	 * (cheap, and what keeps memory flat), but pace the external request
 	 * stream on the work actually done rather than on the batch count: sleep
-	 * one second only once PAUSE_EVERY_CONTACTS contacts have hit an external
-	 * provider since the last pause.
+	 * one second for every PAUSE_EVERY_CONTACTS contacts that have hit an
+	 * external provider since the last pause, carrying any remainder forward.
 	 *
-	 * Tying the pause to contacts rather than batches keeps its cost
-	 * proportional and independent of --batch-size. At the historical default
-	 * of 10 that is one second per 100 contacts instead of one per 10 — on a
-	 * 100k-reader site, ~17 minutes of added wall time rather than ~2.8 hours
-	 * — so the legacy `esp sync` alias stays usable at its frozen defaults.
+	 * Tying the pause to contacts rather than batches keeps its cost strictly
+	 * proportional to provider traffic and independent of --batch-size: one
+	 * second per 100 contacts whether the operator runs batches of 10 or 500.
+	 * On a 100k-reader site that is ~17 minutes of added wall time rather than
+	 * the ~2.8 hours a per-batch pause would cost at the historical default of
+	 * 10 — so the legacy `esp sync` alias stays usable at its frozen defaults.
 	 * Batches that only skipped contacts (e.g. --active-subs-only filtering
 	 * everyone out) did no external work and never sleep.
 	 *
@@ -535,11 +537,27 @@ class RAS_Contact_Sync {
 		if ( function_exists( '\WP_CLI\Utils\wp_clear_object_cache' ) ) {
 			\WP_CLI\Utils\wp_clear_object_cache();
 		}
-		if ( static::$unpaused_contacts < self::PAUSE_EVERY_CONTACTS ) {
-			return;
+		$seconds = self::consume_pause_seconds();
+		if ( $seconds > 0 ) {
+			sleep( $seconds );
 		}
-		static::$unpaused_contacts = 0;
-		sleep( 1 );
+	}
+
+	/**
+	 * Seconds this batch boundary owes, deducting them from the paced counter.
+	 *
+	 * Consumes the counter in whole increments rather than zeroing it: a
+	 * boundary carrying 500 accrued contacts owes five seconds, not one.
+	 * Discarding the overflow would degrade pacing to one second per
+	 * --batch-size contacts, under-throttling exactly the large-batch runs that
+	 * generate requests fastest. The remainder carries into the next boundary.
+	 *
+	 * @return int Whole seconds to sleep.
+	 */
+	private static function consume_pause_seconds(): int {
+		$seconds                    = intdiv( static::$unpaused_contacts, self::PAUSE_EVERY_CONTACTS );
+		static::$unpaused_contacts -= $seconds * self::PAUSE_EVERY_CONTACTS;
+		return $seconds;
 	}
 
 	/**
@@ -847,8 +865,9 @@ class RAS_Contact_Sync {
 	 *
 	 * A run that tallies any error exits with status 1 and prints the summary as
 	 * a warning, so an unattended runbook can detect partial failure without
-	 * parsing output. A clean run exits 0. (The legacy `esp sync` alias always
-	 * exits 0, as it always has.)
+	 * parsing output. A clean run exits 0. (The legacy `esp sync` alias still
+	 * exits 0 even when errors are tallied, as it always has; a pre-flight
+	 * failure exits 1 on both commands via `WP_CLI::error()`.)
 	 *
 	 * A `--dry-run` pull evaluates the deterministic reader-data write
 	 * rejections without persisting, so its error tally previews what a real

@@ -347,14 +347,19 @@ wp newspack integrations backfill --direction=both --integration=esp --batch-siz
 - `--direction=push|pull|both` (default `push`). Push-only flags
   (`--subscription-ids`, `--order-ids`, `--migrated-subscriptions`,
   `--skip-lists`, `--fields`) hard-error when the direction includes pull.
+- Both legs honor the per-direction toggles: the push leg skips integrations
+  where `is_push_enabled()` is false, and the pull leg skips those where
+  `is_pull_enabled()` is false, matching every other sync dispatch site.
 - A direction that includes `pull` requires at least one in-scope integration
-  with enabled incoming fields — validated in the pre-flight, so a
-  `--direction=both` run fails fast instead of completing the push leg first.
+  with inbound sync enabled *and* incoming fields selected — validated in the
+  pre-flight, so a `--direction=both` run fails fast instead of completing the
+  push leg first.
 - `--integration=<id>` restricts the run to one active, configured integration.
   On the push side this also scopes the `--fields` pre-flight validation, checks
-  that integration's own `can_sync()` (rather than only the global "at least one
-  syncable integration" gate), and skips ESP-specific guards such as the
-  Mailchimp `--skip-lists` rejection when the target is not the ESP.
+  that integration's own `can_sync()` and `is_push_enabled()` (rather than only
+  the global "at least one syncable integration" gate), and skips ESP-specific
+  guards such as the Mailchimp `--skip-lists` rejection when the target is not
+  the ESP.
 - A pull `--dry-run` still performs the external API reads — it only skips
   writing reader data. It does evaluate the deterministic reader-data write
   rejections, so its error tally previews what a real run would report.
@@ -364,11 +369,13 @@ wp newspack integrations backfill --direction=both --integration=esp --batch-siz
 - A run that tallies any error prints its summary as a warning and **exits 1**,
   so unattended runbooks can detect partial failure from the exit status. A
   clean run exits 0.
-- Batch boundaries free the object cache and pause one second per 100 contacts
-  that reached an integration, spacing the external request stream without
-  making the pause cost scale with `--batch-size`.
+- Batch boundaries free the object cache and pause one second for every 100
+  contacts that reached an integration, carrying the remainder forward. Pacing
+  is therefore proportional to provider traffic and independent of
+  `--batch-size`.
 - `wp newspack esp sync` remains as a backward-compatible alias frozen to the
-  push direction, its historical flag surface, and its unconditional exit 0.
+  push direction and its historical flag surface. It still exits 0 even when
+  errors are tallied; a pre-flight failure exits 1 on both commands.
 
 See `wp help newspack integrations backfill` for the full option reference.
 

@@ -179,6 +179,24 @@ class Test_RAS_Integrations_Backfill_Pull extends WP_UnitTestCase {
 		$this->assertSame( 'newspack_backfill_no_pull_targets', $result->get_error_code() );
 	}
 
+	/**
+	 * Pausing the inbound toggle stops the backfill's pull leg too. Every other
+	 * pull dispatch site (pull_sync, pull_all, the retry chain) honors
+	 * is_pull_enabled(); a bulk driver that ignored it would call providers the
+	 * publisher has explicitly paused (#700).
+	 */
+	public function test_pull_skips_integrations_with_inbound_sync_paused() {
+		$integration = Integrations::get_integration( 'pull_cli_mock' );
+		$integration->update_settings_field_value( 'incoming_sync_enabled', false );
+		$user_a = $this->create_reader();
+
+		$result = $this->run_pull( [ 'user_ids' => [ $user_a ] ] );
+
+		$this->assertInstanceOf( \WP_Error::class, $result, 'The only in-scope integration is paused, so there is nothing to pull.' );
+		$this->assertSame( 'newspack_backfill_no_pull_targets', $result->get_error_code() );
+		$this->assertSame( 0, Failing_Sample_Integration::$pull_count, 'A paused integration must not be called.' );
+	}
+
 	public function test_active_only_skips_readers_without_active_subscription() {
 		$active_user   = $this->create_reader();
 		$inactive_user = $this->create_reader();

@@ -318,4 +318,67 @@ class Test_RAS_Integrations_Backfill_Options extends WP_UnitTestCase {
 		$this->assertNull( WP_CLI::$halt_code, 'A clean run must not halt with an error code.' );
 		$this->assertSame( [ 'Pulled 1 contacts (0 errors, 0 skipped).' ], WP_CLI::$successes );
 	}
+
+	/**
+	 * Set the paced-contacts counter and consume a boundary's worth of pause.
+	 *
+	 * @param int $accrued Contacts accrued since the last pause.
+	 * @return array{seconds: int, remainder: int}
+	 */
+	private function consume_pause( int $accrued ): array {
+		$counter = new \ReflectionProperty( RAS_Contact_Sync::class, 'unpaused_contacts' );
+		$counter->setAccessible( true );
+		$counter->setValue( null, $accrued );
+
+		$method = new \ReflectionMethod( RAS_Contact_Sync::class, 'consume_pause_seconds' );
+		$method->setAccessible( true );
+		$seconds = $method->invoke( null );
+
+		return [
+			'seconds'   => $seconds,
+			'remainder' => $counter->getValue(),
+		];
+	}
+
+	/**
+	 * The pause is owed per PAUSE_EVERY_CONTACTS contacts, not per boundary:
+	 * zeroing the counter would discard the overflow and degrade pacing to 1s
+	 * per --batch-size contacts, under-throttling large-batch runs exactly when
+	 * they generate requests fastest (NPPD-2076 review).
+	 */
+	public function test_pause_consumes_counter_in_increments() {
+		$per = RAS_Contact_Sync::PAUSE_EVERY_CONTACTS;
+
+		$this->assertSame(
+			[
+				'seconds'   => 0,
+				'remainder' => $per - 1,
+			],
+			$this->consume_pause( $per - 1 ),
+			'Below the threshold nothing is owed and nothing is lost.'
+		);
+		$this->assertSame(
+			[
+				'seconds'   => 1,
+				'remainder' => 0,
+			],
+			$this->consume_pause( $per )
+		);
+		$this->assertSame(
+			[
+				'seconds'   => 5,
+				'remainder' => 0,
+			],
+			$this->consume_pause( $per * 5 ),
+			'A batch of 5x the threshold owes five seconds, not one.'
+		);
+		$this->assertSame(
+			[
+				'seconds'   => 2,
+				'remainder' => 7,
+			],
+			$this->consume_pause( ( $per * 2 ) + 7 ),
+			'The remainder carries into the next boundary.'
+		);
+	}
 }
