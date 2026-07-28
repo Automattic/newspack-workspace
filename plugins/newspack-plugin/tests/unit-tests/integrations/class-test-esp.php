@@ -526,6 +526,55 @@ class Test_ESP extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * The incoming-fields options in settings config carry matching_function + has_options,
+	 * so the admin UI can build the per-field operator selector and default it.
+	 *
+	 * @group integrations
+	 */
+	public function test_settings_config_incoming_options_include_operator() {
+		\Newspack_Newsletters_Contacts::$fields_fixture = [
+			[
+				'key'                 => 'FAVS',
+				'name'                => 'Favorites',
+				'value_type'          => 'string',
+				'matching_function'   => 'list__in',
+				'options'             => [
+					[
+						'value' => 'a',
+						'label' => 'A',
+					],
+				],
+				'is_segment_criteria' => true,
+			],
+			[
+				'key'                 => 'AMOUNT',
+				'name'                => 'Amount',
+				'value_type'          => 'string',
+				'matching_function'   => 'default',
+				'options'             => [],
+				'is_segment_criteria' => true,
+			],
+		];
+
+		$esp    = $this->make_esp_with_master_list();
+		$config = $esp->get_settings_config();
+
+		$incoming = null;
+		foreach ( $config as $field ) {
+			if ( 'incoming_metadata_fields' === $field['key'] ) {
+				$incoming = $field;
+			}
+		}
+		$this->assertNotNull( $incoming );
+		$by_value = array_column( $incoming['options'], null, 'value' );
+		$this->assertSame( 'list__in', $by_value['FAVS']['matching_function'] );
+		$this->assertTrue( $by_value['FAVS']['has_options'] );
+		$this->assertFalse( $by_value['AMOUNT']['has_options'] );
+		$this->assertSame( 'string', $by_value['FAVS']['value_type'] );
+		$this->assertSame( 'string', $by_value['AMOUNT']['value_type'] );
+	}
+
+	/**
 	 * Active newspack-newsletters maps to is_active=true, is_installed=true so the
 	 * integrations UI shows the normal Enable/Connect action, not the requirements badge.
 	 */

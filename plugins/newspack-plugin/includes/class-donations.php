@@ -326,7 +326,7 @@ class Donations {
 			[
 				'post_type'      => 'product',
 				'post_status'    => 'any',
-				'posts_per_page' => -1,
+				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Donation-flagged products only; small meta-filtered set.
 				'fields'         => 'ids',
 				'meta_query'     => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
 					[
