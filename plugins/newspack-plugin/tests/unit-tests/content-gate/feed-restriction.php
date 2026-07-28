@@ -10,6 +10,8 @@ namespace Newspack\Tests\Content_Gate;
 use Newspack\Content_Gate;
 use Newspack\Content_Gate_Advanced_Settings;
 use Newspack\Content_Restriction_Control;
+use Newspack\Content_Gate\IP_Access_Rule;
+use Newspack\Newsletters_Access;
 
 /**
  * Tests that the "Restrict content in feeds" advanced setting keeps gated
@@ -345,7 +347,8 @@ class Test_Feed_Restriction extends \WP_UnitTestCase {
 		};
 		add_filter( 'newspack_is_post_restricted', $grant_access, 99, 2 );
 
-		$feed_ids = $this->feed_post_ids();
+		$feed_ids   = $this->feed_post_ids();
+		$feed_query = $GLOBALS['wp_query'];
 
 		remove_filter( 'newspack_is_post_restricted', $grant_access, 99 );
 		foreach ( array_merge( $free_ids, $restricted_ids ) as $id ) {
@@ -353,6 +356,8 @@ class Test_Feed_Restriction extends \WP_UnitTestCase {
 		}
 
 		$this->assertCount( 3, $feed_ids, 'Feed should be back-filled and trimmed to posts_per_rss.' );
+		$this->assertSame( 3, (int) $feed_query->get( 'posts_per_rss' ), 'The trimmed page must leave posts_per_rss describing the feed actually served.' );
+		$this->assertSame( 3, (int) $feed_query->get( 'posts_per_page' ), 'Core copies posts_per_rss into posts_per_page for feeds, so both must be restored.' );
 		// The three newest free posts (days 5, 4, 3) fill it; the two oldest do not.
 		$this->assertEqualsCanonicalizing(
 			array_slice( array_reverse( $free_ids ), 0, 3 ),
@@ -579,6 +584,10 @@ class Test_Feed_Restriction extends \WP_UnitTestCase {
 	 * verify_feed_overfetch_limit() drops the trim target when the final LIMIT is
 	 * no longer the inflated one, so that plugin's 6-item feed is served whole
 	 * instead of being trimmed back to posts_per_rss (3).
+	 *
+	 * Dropping the trim leaves the page alone but must not leave the query object
+	 * inflated: the length vars are restored either way, so anything reading them
+	 * later (pagination links, SEO plugins) sees the pre-over-fetch state.
 	 */
 	public function test_trim_is_dropped_when_a_post_limits_writer_sets_the_length() {
 		update_option( 'posts_per_rss', 3 );
@@ -604,7 +613,8 @@ class Test_Feed_Restriction extends \WP_UnitTestCase {
 			);
 		}
 
-		$feed_ids = $this->feed_post_ids();
+		$feed_ids   = $this->feed_post_ids();
+		$feed_query = $GLOBALS['wp_query'];
 
 		remove_filter( 'post_limits', $set_feed_limit, 10 );
 		remove_filter( 'newspack_is_post_restricted', $grant_all, 99 );
@@ -613,6 +623,8 @@ class Test_Feed_Restriction extends \WP_UnitTestCase {
 		}
 
 		$this->assertCount( 6, $feed_ids, "A post_limits writer's feed length must survive: no trim back to posts_per_rss (3)." );
+		$this->assertSame( 3, (int) $feed_query->get( 'posts_per_rss' ), 'Abandoning the trim must still restore posts_per_rss, not leave it at the over-fetch (15).' );
+		$this->assertSame( 3, (int) $feed_query->get( 'posts_per_page' ), 'posts_per_page — what third-party pagination code reads — must be restored too.' );
 	}
 
 	/**
@@ -798,6 +810,73 @@ class Test_Feed_Restriction extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * The has_restriction_source guard is escapable. It hard-codes the two
+	 * first-party answerers of the public `newspack_is_post_restricted` filter, so
+	 * a publisher plugin that answers that filter on its own — restricting posts
+	 * with no published gate and no Memberships — would have its articles gated on
+	 * the site but shipped full-text in the feed. The
+	 * `newspack_content_gate_has_restriction_source` filter opts such a site back
+	 * in without patching the plugin.
+	 */
+	public function test_restriction_source_filter_opts_a_gateless_site_back_in() {
+		foreach ( Content_Gate::get_gates() as $gate ) {
+			wp_delete_post( $gate['id'], true );
+		}
+		$this->reset_restriction_cache();
+		Content_Gate_Advanced_Settings::reset_cache();
+
+		// Stands in for publisher custom code answering the public contract.
+		$restrict_everything = function () {
+			return true;
+		};
+		add_filter( 'newspack_is_post_restricted', $restrict_everything, 99 );
+
+		$unguarded_feed_ids = $this->feed_post_ids();
+
+		add_filter( 'newspack_content_gate_has_restriction_source', '__return_true' );
+		$opted_in_feed_ids = $this->feed_post_ids();
+		remove_filter( 'newspack_content_gate_has_restriction_source', '__return_true' );
+
+		remove_filter( 'newspack_is_post_restricted', $restrict_everything, 99 );
+
+		$this->assertContains( $this->post_id, $unguarded_feed_ids, 'Sanity: with no first-party restriction source the feed hooks stand down.' );
+		$this->assertNotContains( $this->post_id, $opted_in_feed_ids, 'The filter must restore feed restriction for a site that restricts without a gate.' );
+	}
+
+	/**
+	 * Cache-defeat covers every reader-varying access grant in this subsystem, not
+	 * just the newsletter bypass: in exclude mode an institutional (IP) grant
+	 * changes which items are in the feed at all, so a cached copy of one reader's
+	 * feed would hand the premium headline set to everyone.
+	 *
+	 * Asserted on the decision rather than on the emitted headers: nocache_headers()
+	 * bails on headers_sent(), which is always true under the CLI SAPI.
+	 */
+	public function test_every_bypass_grant_makes_the_feed_uncacheable() {
+		$this->go_to( get_feed_link( 'rss2' ) );
+
+		$this->assertFalse(
+			Content_Gate_Advanced_Settings::feed_response_varies_by_reader(),
+			'Sanity: an anonymous feed request carries no grant and stays cacheable.'
+		);
+
+		$grant_cookies = [
+			'newsletter bypass'  => Newsletters_Access::COOKIE_NAME,
+			'single-post bypass' => Newsletters_Access::SINGLE_POST_COOKIE_NAME,
+			'IP/institution'     => IP_Access_Rule::COOKIE_NAME,
+		];
+		foreach ( $grant_cookies as $grant => $cookie_name ) {
+			$_COOKIE[ $cookie_name ] = '1'; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+			$varies_by_reader        = Content_Gate_Advanced_Settings::feed_response_varies_by_reader();
+			unset( $_COOKIE[ $cookie_name ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+
+			$this->assertTrue( $varies_by_reader, "A feed request carrying the $grant grant must not be cached." );
+		}
+
+		wp_reset_postdata();
+	}
+
+	/**
 	 * The trim back to the requested length does not depend on the mode
 	 * resolving the same way twice: if a filter flips the mode between
 	 * `pre_get_posts` and `the_posts`, the already over-fetched page is still
@@ -852,10 +931,15 @@ class Test_Feed_Restriction extends \WP_UnitTestCase {
 			);
 		}
 
+		// go_to() runs WP::main(), which queries the posts and then calls
+		// handle_404() — no need to invoke it again.
 		$this->go_to( add_query_arg( 'paged', 2, get_feed_link( 'rss2' ) ) );
-		$GLOBALS['wp']->handle_404();
 		$is_404 = is_404();
 		wp_reset_postdata();
+
+		$emptied_paged_feed = new \ReflectionProperty( Content_Gate_Advanced_Settings::class, 'emptied_paged_feed' );
+		$emptied_paged_feed->setAccessible( true );
+		$flag_after_request = $emptied_paged_feed->getValue();
 
 		foreach ( $restricted_ids as $id ) {
 			wp_delete_post( $id, true );
@@ -863,6 +947,7 @@ class Test_Feed_Restriction extends \WP_UnitTestCase {
 
 		$this->assertEmpty( $GLOBALS['wp_query']->posts, 'Sanity: the page should have been emptied by exclusion.' );
 		$this->assertFalse( $is_404, 'A feed page emptied by exclusion must stay a valid, empty feed page.' );
+		$this->assertFalse( $flag_after_request, 'The flag must be one-shot, or every later empty feed query in the process inherits this page\'s 404 suppression.' );
 	}
 
 	/**

@@ -63,6 +63,17 @@ class Content_Gate_Advanced_Settings {
 	const FEED_OVERFETCH_QUERY_VAR = 'newspack_feed_restriction_overfetch';
 
 	/**
+	 * Query var stashing the feed length the query asked for before the
+	 * over-fetch inflated it.
+	 *
+	 * Distinct from FEED_TARGET_QUERY_VAR, which verify_feed_overfetch_limit()
+	 * clears to abandon the trim: this one is never cleared, so the inflated
+	 * length can always be restored on the query object (see
+	 * restore_feed_query_length) even when the page itself is left alone.
+	 */
+	const FEED_REQUESTED_LENGTH_QUERY_VAR = 'newspack_feed_restriction_requested_length';
+
+	/**
 	 * Cached settings.
 	 *
 	 * @var array|null
@@ -70,15 +81,12 @@ class Content_Gate_Advanced_Settings {
 	private static $settings = null;
 
 	/**
-	 * Memoized result of has_restriction_source().
-	 *
-	 * @var bool|null
-	 */
-	private static $has_restriction_source = null;
-
-	/**
 	 * Whether a paginated feed page was emptied by exclude-mode filtering, so
 	 * the 404 core would otherwise issue for it can be suppressed.
+	 *
+	 * Cleared as soon as prevent_excluded_feed_404() has read it: a request only
+	 * runs `handle_404()` once, and leaving the flag raised would let one emptied
+	 * feed page preempt the 404 for every later empty query in the same process.
 	 *
 	 * @var bool
 	 */
@@ -97,8 +105,8 @@ class Content_Gate_Advanced_Settings {
 		// item count; capturing the trim target before them would trim partner
 		// feeds back to the stale default length even when nothing was restricted.
 		add_action( 'pre_get_posts', [ __CLASS__, 'overfetch_restricted_feed' ], PHP_INT_MAX );
-		// Also at PHP_INT_MAX, so it sees the final LIMIT after every other
-		// post_limits writer (see verify_feed_overfetch_limit).
+		// Also at PHP_INT_MAX, so it sees the LIMIT after every other post_limits
+		// writer (see verify_feed_overfetch_limit).
 		add_filter( 'post_limits', [ __CLASS__, 'verify_feed_overfetch_limit' ], PHP_INT_MAX, 2 );
 		add_filter( 'the_posts', [ __CLASS__, 'exclude_restricted_posts_from_feed' ], 10, 2 );
 		add_filter( 'pre_handle_404', [ __CLASS__, 'prevent_excluded_feed_404' ], 10, 2 );
@@ -117,19 +125,29 @@ class Content_Gate_Advanced_Settings {
 	 * sites that have never opened Access Control and have no UI to turn it off
 	 * (the wizard only registers behind the NEWSPACK_CONTENT_GATES constant).
 	 *
-	 * Memoized per request: the gate lookup itself is cached by
-	 * Content_Gate::get_gates(), and this is consulted on every feed hook.
+	 * Not memoized: the gate lookup itself is cached by Content_Gate::get_gates(),
+	 * so a second memo here would only add a value that can go stale against the
+	 * cache it was derived from.
 	 *
 	 * @return bool
 	 */
 	private static function has_restriction_source(): bool {
-		if ( null === self::$has_restriction_source ) {
-			// Same arguments as Content_Restriction_Control::get_post_gates(), so
-			// the two share one cached query.
-			self::$has_restriction_source = Memberships::is_active()
-				|| ! empty( Content_Gate::get_gates( Content_Gate::GATE_CPT, 'publish', false ) );
-		}
-		return self::$has_restriction_source;
+		// Same arguments as Content_Restriction_Control::get_post_gates(), so
+		// the two share one cached query.
+		$has_restriction_source = Memberships::is_active()
+			|| ! empty( Content_Gate::get_gates( Content_Gate::GATE_CPT, 'publish', false ) );
+
+		/**
+		 * Filters whether anything on this site can restrict a post.
+		 *
+		 * The feed hooks short-circuit entirely when this is false, so code that
+		 * answers `newspack_is_post_restricted` on its own — a publisher plugin
+		 * restricting posts without publishing a gate or activating Memberships —
+		 * must return true here, or its restricted posts ship in full in the feed.
+		 *
+		 * @param bool $has_restriction_source Whether a first-party restriction source was detected.
+		 */
+		return (bool) apply_filters( 'newspack_content_gate_has_restriction_source', $has_restriction_source );
 	}
 
 	/**
@@ -156,26 +174,44 @@ class Content_Gate_Advanced_Settings {
 	}
 
 	/**
+	 * Whether this feed response varies by reader, i.e. carries a gate bypass
+	 * grant that changes which items are in it.
+	 *
+	 * Covers every reader-varying access grant in this subsystem: both newsletter
+	 * bypass cookies and the IP/institution grant. Cookie *presence* is enough —
+	 * an invalid cookie is not a leak, but it costs nothing to treat it as one,
+	 * and verifying would cost an HMAC.
+	 *
+	 * @return bool
+	 */
+	public static function feed_response_varies_by_reader(): bool {
+		if ( ! is_feed() || ! self::has_restriction_source() ) {
+			return false;
+		}
+		if ( self::FEED_MODE_OFF === self::get_feed_restriction_mode( self::get_feed_filter_context() ) ) {
+			return false;
+		}
+		$bypass_cookies = [
+			Newsletters_Access::COOKIE_NAME,
+			Newsletters_Access::SINGLE_POST_COOKIE_NAME,
+			Content_Gate\IP_Access_Rule::COOKIE_NAME,
+		];
+		// phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		return ! empty( array_intersect( $bypass_cookies, array_keys( $_COOKIE ) ) );
+	}
+
+	/**
 	 * Defeat page caching on feed requests carrying a gate bypass cookie.
 	 *
 	 * In exclude mode the *membership* of the feed varies per reader — a reader
-	 * holding a newsletter bypass cookie sees premium items an anonymous reader
-	 * does not — so a cached copy of that response would leak the whole premium
-	 * headline set, not just one teaser. Caches are expected to skip requests
-	 * carrying `wp_`-prefixed cookies anyway; this makes the guarantee
-	 * independent of that naming convention.
+	 * holding a bypass cookie sees premium items an anonymous reader does not —
+	 * so a cached copy of that response would leak the whole premium headline
+	 * set, not just one teaser. Caches are expected to skip requests carrying
+	 * `wp_`-prefixed cookies anyway; this makes the guarantee independent of that
+	 * naming convention.
 	 */
 	public static function maybe_defeat_feed_cache() {
-		if ( ! is_feed() || ! self::has_restriction_source() ) {
-			return;
-		}
-		if ( self::FEED_MODE_OFF === self::get_feed_restriction_mode( self::get_feed_filter_context() ) ) {
-			return;
-		}
-		// Presence is enough: an invalid cookie is not a leak, but it costs
-		// nothing to skip the cache for it, and verifying would cost an HMAC.
-		// phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
-		if ( ! isset( $_COOKIE[ Newsletters_Access::COOKIE_NAME ] ) && ! isset( $_COOKIE[ Newsletters_Access::SINGLE_POST_COOKIE_NAME ] ) ) {
+		if ( ! self::feed_response_varies_by_reader() ) {
 			return;
 		}
 		if ( function_exists( 'batcache_cancel' ) ) {
@@ -284,8 +320,7 @@ class Content_Gate_Advanced_Settings {
 	 * Reset the settings cache.
 	 */
 	public static function reset_cache() {
-		self::$settings               = null;
-		self::$has_restriction_source = null;
+		self::$settings = null;
 	}
 
 	/**
@@ -394,27 +429,36 @@ class Content_Gate_Advanced_Settings {
 		}
 		if ( $target > 0 ) {
 			$visible = array_slice( $visible, 0, $target );
-			self::restore_feed_query_length( $wp_query, $target );
+		}
+		// Independent of the trim: the over-fetch inflated the query object even
+		// on the branch where verify_feed_overfetch_limit() abandoned the trim, so
+		// the length has to be restored either way.
+		$requested = (int) $wp_query->get( self::FEED_REQUESTED_LENGTH_QUERY_VAR );
+		if ( $requested > 0 ) {
+			self::restore_feed_query_length( $wp_query, $requested );
 		}
 		return $visible;
 	}
 
 	/**
-	 * Undo the over-fetch on the query object once the page has been trimmed.
+	 * Undo the over-fetch on the query object once its page has come back.
 	 *
 	 * `set_found_posts()` computed `max_num_pages` from the inflated page size
-	 * before `the_posts` ran, and `posts_per_rss` still holds the inflated value —
-	 * both are readable for the rest of the request (custom feed templates, SEO
-	 * plugins emitting `<atom:link rel="next">`). Restoring them keeps the query
-	 * object describing the feed that is actually being served.
+	 * before `the_posts` ran, and both `posts_per_rss` and the `posts_per_page`
+	 * core copies it into for feed queries still hold the inflated value — all
+	 * readable for the rest of the request (custom feed templates, SEO plugins
+	 * emitting `<atom:link rel="next">`, third-party pagination code, which reads
+	 * `posts_per_page`). Restoring the length the query asked for leaves the query
+	 * object exactly as it would have been had this class never over-fetched.
 	 *
-	 * @param \WP_Query $wp_query The feed query.
-	 * @param int       $target   The originally requested feed length.
+	 * @param \WP_Query $wp_query  The feed query.
+	 * @param int       $requested The feed length before the over-fetch.
 	 */
-	private static function restore_feed_query_length( \WP_Query $wp_query, int $target ) {
-		$wp_query->set( 'posts_per_rss', $target );
+	private static function restore_feed_query_length( \WP_Query $wp_query, int $requested ) {
+		$wp_query->set( 'posts_per_rss', $requested );
+		$wp_query->set( 'posts_per_page', $requested );
 		if ( $wp_query->found_posts ) {
-			$wp_query->max_num_pages = (int) ceil( $wp_query->found_posts / $target );
+			$wp_query->max_num_pages = (int) ceil( $wp_query->found_posts / $requested );
 		}
 	}
 
@@ -425,7 +469,13 @@ class Content_Gate_Advanced_Settings {
 	 * ran on `pre_get_posts`, so a plugin that sets feed length there (an older
 	 * but real idiom) has the last word on the page size. Trimming that page back
 	 * to `posts_per_rss` would silently shorten their feed, so the trim only
-	 * survives while the final LIMIT is still the inflated one.
+	 * survives while the final LIMIT is still the inflated one. Abandoning the
+	 * trim leaves the page alone but not the query object: the length is still
+	 * restored from FEED_REQUESTED_LENGTH_QUERY_VAR, which this never clears.
+	 *
+	 * Core applies one more filter after this one, `post_limits_request`, so a
+	 * rewrite there is not covered. It is documented as being for caching plugins
+	 * and is not the idiom feed-length plugins use.
 	 *
 	 * @param string         $limits   The LIMIT clause.
 	 * @param \WP_Query|null $wp_query The query being built.
@@ -461,6 +511,8 @@ class Content_Gate_Advanced_Settings {
 		if ( $preempt || ! self::$emptied_paged_feed ) {
 			return $preempt;
 		}
+		// One-shot: the flag answers for the page that raised it and nothing else.
+		self::$emptied_paged_feed = false;
 		if ( ! $wp_query instanceof \WP_Query || ! $wp_query->is_feed() || ! empty( $wp_query->posts ) ) {
 			return $preempt;
 		}
@@ -496,9 +548,6 @@ class Content_Gate_Advanced_Settings {
 		if ( ! $wp_query instanceof \WP_Query || ! $wp_query->is_feed() || ! $wp_query->is_main_query() ) {
 			return;
 		}
-		if ( ! self::has_restriction_source() ) {
-			return;
-		}
 		// Comment feeds derive their LIMIT from the posts_per_rss option directly,
 		// so inflating the query var would not affect them — skip the wasted work.
 		if ( $wp_query->is_comment_feed() ) {
@@ -508,6 +557,10 @@ class Content_Gate_Advanced_Settings {
 		// would make paginated feeds skip unrestricted posts. Back-fill only the
 		// first page; later pages fall back to plain drop-without-back-fill.
 		if ( (int) $wp_query->get( 'paged' ) > 1 ) {
+			return;
+		}
+		// Last of the guards: the only one that can cost a query.
+		if ( ! self::has_restriction_source() ) {
 			return;
 		}
 		if ( self::FEED_MODE_EXCLUDE !== self::get_feed_restriction_mode( self::get_feed_filter_context( $wp_query ) ) ) {
@@ -539,6 +592,7 @@ class Content_Gate_Advanced_Settings {
 
 		$wp_query->set( 'posts_per_rss', $overfetch );
 		$wp_query->set( self::FEED_TARGET_QUERY_VAR, $requested );
+		$wp_query->set( self::FEED_REQUESTED_LENGTH_QUERY_VAR, $requested );
 		$wp_query->set( self::FEED_OVERFETCH_QUERY_VAR, $overfetch );
 	}
 

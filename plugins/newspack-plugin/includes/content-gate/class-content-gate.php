@@ -66,6 +66,16 @@ class Content_Gate {
 	private static $gates_cache = [];
 
 	/**
+	 * Whether $gates_cache may be read from and written to.
+	 *
+	 * Null means "not resolved yet"; see is_gates_cache_enabled() for the default
+	 * and set_gates_cache_enabled() for why it is overridable.
+	 *
+	 * @var bool|null
+	 */
+	private static $gates_cache_enabled = null;
+
+	/**
 	 * Valid gate post statuses.
 	 *
 	 * @var array
@@ -1454,12 +1464,11 @@ class Content_Gate {
 	 * @return array Array of content gates.
 	 */
 	public static function get_gates( $post_type = self::GATE_CPT, $post_status = null, $is_newsletter = false ) {
-		// PHPUnit rolls each test back at the database level, which fires none of
-		// the write hooks the cache is invalidated by, so a gate created in one
-		// test would still be "visible" in the next. Skip the cache there, as
-		// is_newspack_feature_enabled() does for the same class of reason.
-		$is_cacheable = ! defined( 'IS_TEST_ENV' ) || ! IS_TEST_ENV;
-		$cache_key    = wp_json_encode( [ $post_type, $post_status, $is_newsletter ] );
+		$is_cacheable = self::is_gates_cache_enabled();
+		// Keyed by blog as well as by arguments: the cache is a plain static, so it
+		// would otherwise outlive a switch_to_blog() and hand one site another
+		// site's gates.
+		$cache_key = wp_json_encode( [ get_current_blog_id(), $post_type, $post_status, $is_newsletter ] );
 		if ( $is_cacheable && isset( self::$gates_cache[ $cache_key ] ) ) {
 			return self::$gates_cache[ $cache_key ];
 		}
@@ -1489,6 +1498,38 @@ class Content_Gate {
 			self::$gates_cache[ $cache_key ] = $gates;
 		}
 		return $gates;
+	}
+
+	/**
+	 * Whether get_gates() may serve from (and populate) its cache.
+	 *
+	 * Off by default under PHPUnit: tests are rolled back at the database level,
+	 * which fires none of the write hooks the cache is invalidated by, so a gate
+	 * created in one test would still be "visible" in the next.
+	 *
+	 * @return bool
+	 */
+	private static function is_gates_cache_enabled(): bool {
+		if ( null === self::$gates_cache_enabled ) {
+			self::$gates_cache_enabled = ! defined( 'IS_TEST_ENV' ) || ! IS_TEST_ENV;
+		}
+		return self::$gates_cache_enabled;
+	}
+
+	/**
+	 * Turn the get_gates() cache on or off for the rest of the request.
+	 *
+	 * Exists so the cache is not merely untested under PHPUnit but untestable:
+	 * with the test-env default (off) hard-coded into get_gates(), neither the
+	 * cache read, the cache write nor any of the five invalidation hooks could be
+	 * exercised at all. A test that covers them turns the cache on for its own
+	 * duration and calls this with no argument to restore the default.
+	 *
+	 * @param bool|null $enabled True/false to force, null to restore the default.
+	 */
+	public static function set_gates_cache_enabled( ?bool $enabled = null ) {
+		self::$gates_cache_enabled = $enabled;
+		self::flush_gates_cache();
 	}
 
 	/**
