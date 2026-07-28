@@ -372,7 +372,7 @@ class Emails {
 		$templates = get_posts(
 			[
 				'post_type'      => self::POST_TYPE,
-				'posts_per_page' => -1,
+				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- One-time migration over a handful of email templates.
 				'post_status'    => 'publish',
 			]
 		);
@@ -1320,7 +1320,7 @@ class Emails {
 			$templates = get_posts(
 				[
 					'post_type'      => self::POST_TYPE,
-					'posts_per_page' => -1,
+					'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Email-template CPT; config-scale.
 					'post_status'    => 'publish',
 				]
 			);
