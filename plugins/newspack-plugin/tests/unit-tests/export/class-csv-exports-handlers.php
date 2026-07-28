@@ -34,27 +34,30 @@ class Newspack_Test_CSV_Export_Handlers extends WP_UnitTestCase {
 	private $die_status = 0;
 
 	/**
-	 * Intercept wp_die() so the handlers' bail-out paths are assertable.
+	 * Reset the WCS mock fixtures the exporter pages over, and intercept
+	 * wp_die() so the handlers' bail-out paths are assertable.
 	 */
 	public function set_up() {
 		parent::set_up();
-		if ( ! defined( 'WC_ABSPATH' ) ) {
-			// CSV_Exports::load_exporter_dependencies() only reads this to
-			// locate WooCommerce's batch-exporter abstract, which wc-mocks.php
-			// has already defined — so the path itself is never used.
-			define( 'WC_ABSPATH', '/woocommerce/' );
-		}
+		// Other suites populate these globals and don't clear them, so the
+		// result set an export sees here would otherwise depend on file order.
+		global $subscriptions_database, $wcs_mock_hpos_enabled;
+		$subscriptions_database = [];
+		$wcs_mock_hpos_enabled  = false;
+		unset( $GLOBALS['wcs_mock_orders_with_meta_query_result'] );
 		add_filter( 'wp_die_handler', [ $this, 'get_die_handler' ] );
 		add_filter( 'wp_die_ajax_handler', [ $this, 'get_die_handler' ] );
 	}
 
 	/**
-	 * Clean up the request superglobals and filters.
+	 * Clean up the request superglobals, filters and staged export files.
 	 */
 	public function tear_down() {
 		remove_filter( 'wp_die_handler', [ $this, 'get_die_handler' ] );
 		remove_filter( 'wp_die_ajax_handler', [ $this, 'get_die_handler' ] );
 		remove_filter( 'wp_doing_ajax', '__return_true' );
+		remove_all_filters( 'woocommerce_newspack_subscriptions_export_batch_limit' );
+		newspack_test_remove_export_files();
 		$_GET     = [];
 		$_POST    = [];
 		$_REQUEST = [];
@@ -136,6 +139,24 @@ class Newspack_Test_CSV_Export_Handlers extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Seed an AJAX export step request.
+	 *
+	 * @param int    $step     Step number.
+	 * @param string $filename Filename to echo back, if any.
+	 */
+	private function seed_ajax_request( $step, $filename = '' ) {
+		$_POST = [
+			'export'   => 'subscriptions',
+			'security' => wp_create_nonce( CSV_Exports::AJAX_NONCE_ACTION ),
+			'step'     => $step,
+		];
+		if ( '' !== $filename ) {
+			$_POST['filename'] = $filename;
+		}
+		$_REQUEST = $_POST; // phpcs:ignore WordPress.Security.NonceVerification.Missing
+	}
+
+	/**
 	 * Seed a download request.
 	 *
 	 * @param string $type     Export type.
@@ -214,8 +235,13 @@ class Newspack_Test_CSV_Export_Handlers extends WP_UnitTestCase {
 	 * while WooCommerce is absent.
 	 */
 	public function test_download_users_export_requires_woocommerce() {
+		if ( class_exists( 'WooCommerce' ) ) {
+			// Another suite (tests/unit-tests/my-account.php) eval()s a
+			// WooCommerce shim, which can't be undone for the rest of the
+			// process. Skip rather than depend on file ordering.
+			$this->markTestSkipped( 'A WooCommerce class shim is already defined in this process.' );
+		}
 		$this->login_as_export_capable_admin();
-		$this->assertFalse( class_exists( 'WooCommerce' ), 'This test asserts the WooCommerce-inactive behavior.' );
 		$this->seed_download_request(
 			'users',
 			CSV_Exports::generate_export_filename( 'users' ),
@@ -265,13 +291,7 @@ class Newspack_Test_CSV_Export_Handlers extends WP_UnitTestCase {
 	 */
 	public function test_ajax_export_does_not_adopt_a_cross_type_filename() {
 		$this->login_as_export_capable_admin();
-		$_POST    = [
-			'export'   => 'subscriptions',
-			'security' => wp_create_nonce( CSV_Exports::AJAX_NONCE_ACTION ),
-			'step'     => 2,
-			'filename' => CSV_Exports::generate_export_filename( 'users' ),
-		];
-		$_REQUEST = $_POST; // phpcs:ignore WordPress.Security.NonceVerification.Missing
+		$this->seed_ajax_request( 2, CSV_Exports::generate_export_filename( 'users' ) );
 
 		$response = $this->run_ajax_export();
 
@@ -282,5 +302,62 @@ class Newspack_Test_CSV_Export_Handlers extends WP_UnitTestCase {
 		wp_parse_str( (string) wp_parse_url( $response['data']['url'], PHP_URL_QUERY ), $query );
 		$download_filename = $query['filename'] ?? '';
 		$this->assertStringStartsWith( 'newspack-subscriptions-export-', $download_filename );
+	}
+
+	/**
+	 * A single already-exported row leaving the set mid-run is the likeliest
+	 * shrinkage and the one the percentage hides: the WC counter assumes every
+	 * prior page was full, so the terminal empty page puts it back at exactly
+	 * 100 over a file that is a row short. The publisher must still be told the
+	 * snapshot may be incomplete, and the run's pinned total must not outlive
+	 * the run.
+	 */
+	public function test_ajax_export_flags_a_run_that_ended_short() {
+		global $subscriptions_database;
+		$this->login_as_export_capable_admin();
+		// Only the fields the mock has no default for: this test is about
+		// paging, not row contents (the exporter suite covers those).
+		for ( $i = 1; $i <= 4; $i++ ) {
+			wcs_create_subscription(
+				[
+					'id'               => $i,
+					'status'           => 'active',
+					'total'            => '25.00',
+					'billing_period'   => 'month',
+					'billing_interval' => 1,
+					'customer_id'      => 0,
+				]
+			);
+		}
+		// Two rows per step, so the run spans several AJAX steps (the handler
+		// never calls set_limit(); WC's batch-limit filter is the seam).
+		add_filter( 'woocommerce_newspack_subscriptions_export_batch_limit', fn() => 2 );
+
+		$this->seed_ajax_request( 1 );
+		$step_one = $this->run_ajax_export();
+		$this->assertSame( 2, $step_one['data']['step'] );
+		$this->assertSame( 50, $step_one['data']['percentage'] );
+		$filename = $step_one['data']['filename'];
+
+		// One of the two exported rows leaves the filtered set, so the last two
+		// rows now sit at offsets the run has already walked past.
+		unset( $subscriptions_database[1] );
+
+		$this->seed_ajax_request( 2, $filename );
+		$step_two = $this->run_ajax_export();
+		$this->assertSame( 3, $step_two['data']['step'], 'The pinned total must keep the run paging.' );
+
+		$this->seed_ajax_request( 3, $filename );
+		$step_three = $this->run_ajax_export();
+
+		$this->assertSame( 'done', $step_three['data']['step'] );
+		$this->assertNotEmpty(
+			$step_three['data']['notice'],
+			'A run ending on an empty page wrote fewer rows than it counted, whatever the percentage says.'
+		);
+		$this->assertFalse(
+			get_transient( 'newspack_export_total_' . md5( $filename ) ),
+			'The finished run must not leave its pinned total behind.'
+		);
 	}
 }

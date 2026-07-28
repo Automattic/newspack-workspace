@@ -1,5 +1,12 @@
 <?php // phpcs:disable WordPress.Files.FileName.InvalidClassFileName, Squiz.Commenting.FunctionComment.Missing, Squiz.Commenting.ClassComment.Missing, Squiz.Commenting.VariableComment.Missing, Squiz.Commenting.FileComment.Missing, Generic.Files.OneObjectStructurePerFile.MultipleFound, Universal.Files.SeparateFunctionsFromOO.Mixed
 
+// WooCommerce's plugin path constant. Code under test uses it both to locate
+// WC files and as an "is WooCommerce loaded" proxy; the mocks below stand in
+// for the files themselves, so nothing ever reads the path.
+if ( ! defined( 'WC_ABSPATH' ) ) {
+	define( 'WC_ABSPATH', '/woocommerce/' );
+}
+
 /**
  * Minimal mock for WC_Payment_Token, used when WooCommerce is not loaded in the test environment.
  */
@@ -1270,7 +1277,11 @@ if ( ! class_exists( 'WC_CSV_Exporter' ) ) {
 if ( ! class_exists( 'WC_CSV_Batch_Exporter' ) ) {
 	/**
 	 * Mock of WC_CSV_Batch_Exporter (includes/export/abstract-wc-csv-batch-exporter.php).
-	 * Paging/percent semantics match the real class; file operations are omitted.
+	 * Paging/percent semantics match the real class, and generate_file() appends
+	 * each page to the data file as the real class does — the export file is the
+	 * only evidence the AJAX handler has that a page was written, so a mock that
+	 * skipped it could not exercise that path. Use
+	 * newspack_test_remove_export_files() to clear the staged files.
 	 */
 	abstract class WC_CSV_Batch_Exporter extends WC_CSV_Exporter {
 		protected $page = 1;
@@ -1290,8 +1301,18 @@ if ( ! class_exists( 'WC_CSV_Batch_Exporter' ) ) {
 			return $this->total_rows ? (int) floor( ( $this->get_total_exported() / $this->total_rows ) * 100 ) : 100;
 		}
 		public function generate_file() {
+			// phpcs:disable WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents, WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_file_put_contents, WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_unlink
+			if ( 1 === $this->get_page() ) {
+				// A run starts from a clean file, as in the real class.
+				foreach ( [ $this->get_file_path(), $this->get_headers_row_file_path() ] as $temp_file ) {
+					if ( file_exists( $temp_file ) ) {
+						unlink( $temp_file );
+					}
+				}
+			}
 			$this->prepare_data_to_export();
-			$this->export_rows();
+			file_put_contents( $this->get_file_path(), $this->export_rows(), FILE_APPEND );
+			// phpcs:enable WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents, WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_file_put_contents, WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_unlink
 		}
 		public function get_headers_row_file() {
 			$file = chr( 239 ) . chr( 187 ) . chr( 191 ) . $this->export_column_headers();
@@ -1390,6 +1411,23 @@ function wcs_get_orders_with_meta_query( $args ) {
 		];
 	}
 	return $ids;
+}
+
+/**
+ * Delete the CSV export temp files staged by the batch-exporter mock, so a
+ * test class that drives generate_file() leaves the uploads dir as it found
+ * it. No-op unless the exporter base class is loaded.
+ */
+function newspack_test_remove_export_files() {
+	if ( ! class_exists( '\Newspack\CSV_Batch_Exporter' ) ) {
+		return;
+	}
+	$files = glob( trailingslashit( \Newspack\CSV_Batch_Exporter::get_exports_dir() ) . '*.csv*' );
+	// phpcs:disable WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_unlink
+	foreach ( (array) $files as $file ) {
+		unlink( $file );
+	}
+	// phpcs:enable WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_unlink
 }
 
 function wc_get_template( $template_name, $args = [] ) {

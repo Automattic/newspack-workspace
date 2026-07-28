@@ -35,6 +35,14 @@ class Newspack_Test_Subscriptions_CSV_Exporter extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Remove the export files the paging tests stage under uploads.
+	 */
+	public function tear_down() {
+		newspack_test_remove_export_files();
+		parent::tear_down();
+	}
+
+	/**
 	 * Build a fully-populated mock subscription.
 	 *
 	 * @param array $overrides Data overrides.
@@ -547,5 +555,99 @@ class Newspack_Test_Subscriptions_CSV_Exporter extends WP_UnitTestCase {
 		$this->assertSame( 4, $page_two->get_mock_total_rows() );
 		$this->assertSame( 50, $page_two->get_percent_complete() );
 		$this->assertTrue( $page_two->page_was_empty(), 'The offset walked past the shrunken set, so the run must end on an empty page.' );
+		$this->assertTrue( $page_two->ended_short() );
+	}
+
+	/**
+	 * The shrink above is exactly one page wide, which the percentage alone
+	 * would also have caught. A *sub-page* shrink is the likelier case and the
+	 * one it hides: the WC counter assumes every prior page was full, so on the
+	 * terminal empty page it catches back up to the pinned total and reports
+	 * exactly 100% over a file that is a row short. ended_short() is what both
+	 * surfaces gate their incomplete-snapshot warning on for that reason.
+	 */
+	public function test_a_sub_page_shrink_still_ends_short() {
+		global $subscriptions_database;
+		for ( $i = 1; $i <= 4; $i++ ) {
+			$this->create_full_subscription(
+				[
+					'id'          => $i,
+					'customer_id' => 0,
+				]
+			);
+		}
+		$filename = 'newspack-subscriptions-export-partial.csv';
+
+		$page_one = new Subscriptions_CSV_Exporter();
+		$page_one->set_filename( $filename );
+		$page_one->set_limit( 2 );
+		$page_one->set_page( 1 );
+		$page_one->generate_file();
+		$this->assertSame( 50, $page_one->get_percent_complete() );
+
+		// A single already-exported row leaves the set, sliding the last two
+		// rows back into offsets the run has already walked past.
+		unset( $subscriptions_database[1] );
+
+		// Page 2 (offset 2 over 3 remaining rows) writes one row instead of two.
+		$page_two = new Subscriptions_CSV_Exporter();
+		$page_two->set_filename( $filename );
+		$page_two->set_limit( 2 );
+		$page_two->set_page( 2 );
+		$page_two->generate_file();
+		$this->assertSame( 3, $page_two->get_total_exported() );
+		$this->assertSame( 75, $page_two->get_percent_complete() );
+		$this->assertFalse( $page_two->ended_short(), 'A short page still made progress; only an empty one ends the run.' );
+
+		// Page 3 walks past the end. Three rows are in the file, one row that
+		// still exists was never exported — and the percentage says 100.
+		$page_three = new Subscriptions_CSV_Exporter();
+		$page_three->set_filename( $filename );
+		$page_three->set_limit( 2 );
+		$page_three->set_page( 3 );
+		$page_three->generate_file();
+		$this->assertSame( 100, $page_three->get_percent_complete(), 'The counter assumes full pages, so it catches back up to the pinned total.' );
+		$this->assertTrue( $page_three->ended_short(), 'Gating on the percentage here would report a short file as complete.' );
+	}
+
+	/**
+	 * The pinned total survives a run longer than a single transient lifetime:
+	 * every page slides the expiry forward, so a large export doesn't silently
+	 * revert to the live recount the pin exists to prevent.
+	 */
+	public function test_pinned_total_expiry_slides_with_each_page() {
+		if ( wp_using_ext_object_cache() ) {
+			$this->markTestSkipped( 'Transient expiry is not readable from the options table under a persistent object cache.' );
+		}
+		for ( $i = 1; $i <= 4; $i++ ) {
+			$this->create_full_subscription(
+				[
+					'id'          => $i,
+					'customer_id' => 0,
+				]
+			);
+		}
+		$filename  = 'newspack-subscriptions-export-sliding.csv';
+		$transient = '_transient_timeout_newspack_export_total_' . md5( $filename );
+
+		$page_one = new Subscriptions_CSV_Exporter();
+		$page_one->set_filename( $filename );
+		$page_one->set_limit( 2 );
+		$page_one->set_page( 1 );
+		$page_one->generate_file();
+
+		// Wind the expiry back to a minute from now, as a long run would.
+		update_option( $transient, time() + MINUTE_IN_SECONDS );
+
+		$page_two = new Subscriptions_CSV_Exporter();
+		$page_two->set_filename( $filename );
+		$page_two->set_limit( 2 );
+		$page_two->set_page( 2 );
+		$page_two->generate_file();
+
+		$this->assertGreaterThan( time() + HOUR_IN_SECONDS, (int) get_option( $transient ), 'Reading the pin must push its expiry back out.' );
+
+		$page_two->clear_pinned_total();
+		$this->assertFalse( get_transient( 'newspack_export_total_' . md5( $filename ) ) );
 	}
 }

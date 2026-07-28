@@ -153,9 +153,9 @@ final class CSV_Exports {
 	 * Get an exporter instance for a type.
 	 *
 	 * @param string $type Export type: 'subscriptions' or 'users'.
-	 * @return \WC_CSV_Batch_Exporter|null
+	 * @return CSV_Batch_Exporter|null
 	 */
-	public static function get_exporter( string $type ): ?\WC_CSV_Batch_Exporter {
+	public static function get_exporter( string $type ): ?CSV_Batch_Exporter {
 		if ( ! self::load_exporter_dependencies() ) {
 			return null;
 		}
@@ -333,11 +333,13 @@ final class CSV_Exports {
 
 		$percent = $exporter->get_percent_complete();
 		// The run's total is pinned to page 1 (see CSV_Batch_Exporter::
-		// pin_total_rows()), so a result set that shrinks mid-run ends with an
+		// pin_total_rows()), so a result set that shrinks mid-run ends on an
 		// empty page rather than a percentage that quietly overshoots 100.
-		// Finish on either, and say so when the run stopped short.
-		$page_was_empty = $exporter->page_was_empty();
-		if ( $percent >= 100 || $page_was_empty ) {
+		// Finish on either, and say so when the run stopped short — which is
+		// ended_short(), not a percentage below 100: the percentage is back at
+		// exactly 100 whenever the shrinkage was smaller than a page.
+		$ended_short = $exporter->ended_short();
+		if ( $percent >= 100 || $ended_short ) {
 			// An unwritable uploads dir fails silently in the WC exporter;
 			// surface it instead of serving an empty CSV.
 			$file_path = $exporter->get_export_file_path();
@@ -346,11 +348,14 @@ final class CSV_Exports {
 					[ 'message' => __( 'The export file could not be written. Please check uploads directory permissions.', 'newspack-plugin' ) ]
 				);
 			}
+			// The run is over: drop its pinned total rather than leaving the
+			// transient to expire on its own.
+			$exporter->clear_pinned_total();
 			\wp_send_json_success(
 				[
 					'step'       => 'done',
 					'percentage' => 100,
-					'notice'     => $percent < 100
+					'notice'     => $ended_short
 						? __( 'Rows were removed or changed while the export was running, so this file may be incomplete. Run the export again for a fresh snapshot.', 'newspack-plugin' )
 						: '',
 					'url'        => \add_query_arg(

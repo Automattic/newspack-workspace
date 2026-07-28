@@ -149,20 +149,29 @@ class Export {
 			return $exporter;
 		};
 
-		$page = 1;
+		$page        = 1;
+		$exported    = 0;
+		$ended_short = false;
 		do {
 			$exporter = $make_exporter( $page );
 			$exporter->generate_file();
-			$percent  = $exporter->get_percent_complete();
-			$exported = $exporter->get_total_exported();
-			WP_CLI::log( sprintf( '%d rows (%d%%)', $exported, min( 100, $percent ) ) );
+			$percent = $exporter->get_percent_complete();
 			// Guard against a stall if the underlying data changes mid-export:
-			// the run's total is pinned to page 1, so a shrinking set ends with
-			// an empty page rather than a shrinking total.
-			if ( $percent < 100 && $exporter->page_was_empty() ) {
+			// the run's total is pinned to page 1, so a shrinking set ends on
+			// an empty page rather than a shrinking total. Gating on
+			// ended_short() rather than the percentage catches the sub-page
+			// case too, where the percentage is back at exactly 100 (see
+			// CSV_Batch_Exporter::ended_short()).
+			if ( $exporter->ended_short() ) {
+				$ended_short = true;
 				WP_CLI::warning( 'No progress in the last batch; finishing early. The data may have changed during the export.' );
 				break;
 			}
+			// Read off the last page that actually wrote rows: on the terminal
+			// empty page the parent's counter reports the pinned total, not
+			// what the file holds.
+			$exported = $exporter->get_total_exported();
+			WP_CLI::log( sprintf( '%d rows (%d%%)', $exported, min( 100, $percent ) ) );
 			$page++;
 			// The object cache accumulates every loaded subscription/user in a
 			// long-running CLI process; without this, large exports exhaust
@@ -172,12 +181,16 @@ class Export {
 			}
 		} while ( $percent < 100 );
 
-		if ( ! $exporter->save_to( $output ) ) {
+		$saved = $exporter->save_to( $output );
+		// The run is over either way: drop its pinned total rather than
+		// leaving the transient to expire on its own.
+		$exporter->clear_pinned_total();
+		if ( ! $saved ) {
 			WP_CLI::error( sprintf( 'Could not write to %s.', $output ) );
 		}
 		// The no-progress guard can break the loop before completion, shipping
 		// a partial CSV; say so rather than reporting an unqualified success.
-		if ( $percent >= 100 ) {
+		if ( ! $ended_short ) {
 			WP_CLI::success( sprintf( 'Exported %d rows to %s.', $exported, $output ) );
 		} else {
 			WP_CLI::warning( sprintf( 'Export incomplete: wrote %d rows to %s before stopping early.', $exported, $output ) );

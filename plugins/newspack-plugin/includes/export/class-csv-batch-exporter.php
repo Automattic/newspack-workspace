@@ -35,6 +35,16 @@ abstract class CSV_Batch_Exporter extends \WC_CSV_Batch_Exporter {
 	}
 
 	/**
+	 * Transient key holding this run's pinned total row count. The export
+	 * filename is unique per run, so a later run always recounts.
+	 *
+	 * @return string
+	 */
+	private function get_pinned_total_transient(): string {
+		return 'newspack_export_total_' . md5( $this->get_filename() );
+	}
+
+	/**
 	 * Set the run's total row count, pinned to what the first page counted.
 	 *
 	 * Paging is by offset over a live query, so the total is recounted on
@@ -47,27 +57,45 @@ abstract class CSV_Batch_Exporter extends \WC_CSV_Batch_Exporter {
 	 * CSV presented as complete.
 	 *
 	 * Pinning the total to page 1 keeps the run paging until a page comes back
-	 * empty (see CSV_Exports::ajax_export() and the CLI's no-progress guard),
-	 * which is where both surfaces flag the result as a possibly-incomplete
-	 * snapshot. Rows that slid back into an already-consumed offset are still
-	 * missed — closing that would mean snapshotting the entire ID set and
-	 * replaying it as post__in on every page, which does not scale on the
-	 * large sites where the race is likeliest.
+	 * empty, which is what both surfaces flag as a possibly-incomplete
+	 * snapshot (see ended_short()). Rows that slid back into an already-
+	 * consumed offset are still missed — closing that would mean snapshotting
+	 * the entire ID set and replaying it as post__in on every page, which does
+	 * not scale on the large sites where the race is likeliest.
 	 *
-	 * The pin is a single int in a transient keyed by the export filename,
-	 * which is unique per run, so a later run always recounts.
+	 * The pin lives for a day — the same window the export files themselves
+	 * get from CSV_Exports::cleanup_stale_files() — and every page slides that
+	 * window forward, so a run measured in hours (a six-figure export is
+	 * thousands of AJAX steps at 50 rows each, and a CLI run is no faster)
+	 * keeps its pin instead of quietly reverting to the live recount the pin
+	 * exists to avoid. Both surfaces delete it once the run is over.
 	 *
 	 * @param int $live_total Total rows the current page's query reported.
 	 */
 	protected function pin_total_rows( int $live_total ): void {
-		$transient = 'newspack_export_total_' . md5( $this->get_filename() );
+		$transient = $this->get_pinned_total_transient();
 		if ( 1 === $this->get_page() ) {
-			\set_transient( $transient, $live_total, HOUR_IN_SECONDS );
+			\set_transient( $transient, $live_total, DAY_IN_SECONDS );
 			$this->total_rows = $live_total;
 			return;
 		}
-		$pinned           = \get_transient( $transient );
-		$this->total_rows = false === $pinned ? $live_total : (int) $pinned;
+		$pinned = \get_transient( $transient );
+		if ( false === $pinned ) {
+			// Expired, or evicted by a persistent object cache: the run has
+			// lost its pin and falls back to the live count for what remains.
+			$this->total_rows = $live_total;
+			return;
+		}
+		\set_transient( $transient, (int) $pinned, DAY_IN_SECONDS );
+		$this->total_rows = (int) $pinned;
+	}
+
+	/**
+	 * Drop this run's pinned total. Called by both surfaces once the run is
+	 * over, so a finished export doesn't leave a transient sitting for a day.
+	 */
+	public function clear_pinned_total(): void {
+		\delete_transient( $this->get_pinned_total_transient() );
 	}
 
 	/**
@@ -82,6 +110,30 @@ abstract class CSV_Batch_Exporter extends \WC_CSV_Batch_Exporter {
 	 */
 	public function page_was_empty(): bool {
 		return $this->get_total_exported() <= ( $this->get_page() - 1 ) * $this->get_limit();
+	}
+
+	/**
+	 * Whether the run ended short of the rows it set out to export, and so
+	 * produced a CSV that may be missing rows that still exist.
+	 *
+	 * Reaching an empty page past the first one always means that: a complete
+	 * run ends on a *non-empty* page, with the exported count meeting the
+	 * pinned total (a short final page included). The page guard keeps a
+	 * legitimately empty result set — where page 1 is empty and
+	 * get_percent_complete() reports 100 against a zero total — from being
+	 * flagged.
+	 *
+	 * This, rather than a percentage below 100, is what both surfaces gate
+	 * their incomplete-export warnings on. The parent's get_total_exported()
+	 * assumes every prior page was full, so after a partial page the count
+	 * catches back up on the terminal empty page and the percentage reads
+	 * exactly 100 over a short file — silence on precisely the sub-page
+	 * shrinkage that is the likelier case.
+	 *
+	 * @return bool
+	 */
+	public function ended_short(): bool {
+		return $this->get_page() > 1 && $this->page_was_empty();
 	}
 
 	/**
