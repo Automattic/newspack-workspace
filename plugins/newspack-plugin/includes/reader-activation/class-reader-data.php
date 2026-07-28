@@ -262,27 +262,57 @@ final class Reader_Data {
 	}
 
 	/**
-	 * Update reader data item.
+	 * Stringify and sanitize a value for storage.
 	 *
-	 * @param string $user_id User ID.
-	 * @param string $key     Key.
-	 * @param string $value   Value.
+	 * @param mixed $value Value.
 	 *
-	 * @return true|WP_Error True on success, error object on failure.
+	 * @return string|WP_Error The storable string, or error object if unencodable.
 	 */
-	public static function update_item( $user_id, $key, $value ) {
-		$user_keys = \get_user_meta( $user_id, 'newspack_reader_data_keys', true );
-		if ( ! $user_keys ) {
-			$user_keys = [];
-		}
-
+	private static function prepare_item_value( $value ) {
 		if ( ! is_string( $value ) ) {
 			$value = wp_json_encode( $value );
 		}
 
-		$value = sanitize_text_field( $value );
-		if ( ! $value ) {
+		// A value that could not be JSON-encoded (e.g. NAN, a resource) is unusable.
+		if ( false === $value ) {
 			return new \WP_Error( 'invalid_value', __( 'Invalid value.', 'newspack' ), [ 'status' => 400 ] );
+		}
+
+		return sanitize_text_field( $value );
+	}
+
+	/**
+	 * Whether a reader data item would be accepted by update_item().
+	 *
+	 * Both rejection causes are deterministic and depend only on the value and
+	 * the reader's current key count, so callers that preview writes — the
+	 * integrations backfill dry-run — can report them without persisting.
+	 *
+	 * @param string $user_id User ID.
+	 * @param string $key     Key.
+	 * @param mixed  $value   Value.
+	 *
+	 * @return true|WP_Error True if the write would be accepted, error object otherwise.
+	 */
+	public static function validate_item( $user_id, $key, $value ) {
+		$value = self::prepare_item_value( $value );
+		if ( \is_wp_error( $value ) ) {
+			return $value;
+		}
+
+		// Only an empty string is invalid. A falsy-but-meaningful scalar must
+		// still store: a numeric zero JSON-encodes to the string "0", which PHP
+		// treats as falsy, so a loose `! $value` check would reject legitimate
+		// zero values (a donation count, a score). On the integrations pull path
+		// that rejection is permanent — the reader fails every pull and is
+		// re-enqueued indefinitely — so the value could never be stored.
+		if ( '' === $value ) {
+			return new \WP_Error( 'invalid_value', __( 'Invalid value.', 'newspack' ), [ 'status' => 400 ] );
+		}
+
+		$user_keys = \get_user_meta( $user_id, 'newspack_reader_data_keys', true );
+		if ( ! $user_keys ) {
+			$user_keys = [];
 		}
 
 		/**
@@ -296,6 +326,30 @@ final class Reader_Data {
 		$max_items = apply_filters( 'newspack_reader_data_max_items', self::MAX_ITEMS, $user_id, $key, $value );
 		if ( count( $user_keys ) >= $max_items ) {
 			return new \WP_Error( 'too_many_items', __( 'Too many items.', 'newspack' ), [ 'status' => 400 ] );
+		}
+
+		return true;
+	}
+
+	/**
+	 * Update reader data item.
+	 *
+	 * @param string $user_id User ID.
+	 * @param string $key     Key.
+	 * @param string $value   Value.
+	 *
+	 * @return true|WP_Error True on success, error object on failure.
+	 */
+	public static function update_item( $user_id, $key, $value ) {
+		$is_valid = self::validate_item( $user_id, $key, $value );
+		if ( \is_wp_error( $is_valid ) ) {
+			return $is_valid;
+		}
+
+		$value     = self::prepare_item_value( $value );
+		$user_keys = \get_user_meta( $user_id, 'newspack_reader_data_keys', true );
+		if ( ! $user_keys ) {
+			$user_keys = [];
 		}
 
 		if ( ! in_array( $key, $user_keys, true ) ) {
