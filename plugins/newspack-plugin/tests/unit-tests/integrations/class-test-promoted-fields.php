@@ -415,4 +415,27 @@ class Test_Promoted_Fields extends \WP_UnitTestCase {
 		$this->assertTrue( $method->invoke( null, $field, $user_id, [ 'Politics' ] ) );
 		$this->assertFalse( $method->invoke( null, $field, $user_id, [ 'Sports' ] ) );
 	}
+
+	/**
+	 * Access rules pass a scalar argument and have no date-range UI. A field typed
+	 * as date_range for segmentation must therefore keep exact-matching through the
+	 * access-rule path, or flipping the operator would silently break a live gate.
+	 */
+	public function test_date_range_field_still_exact_matches_as_access_rule() {
+		$user_id = $this->factory->user->create();
+		if ( ! class_exists( '\Newspack\Reader_Data' ) ) {
+			$this->markTestSkipped( 'Reader_Data not available.' );
+		}
+		\Newspack\Reader_Data::update_item( $user_id, 'LAST_GIFT_DATE', wp_json_encode( '2026-01-15' ) );
+
+		$method = new \ReflectionMethod( Promoted_Fields::class, 'evaluate_field' );
+		$method->setAccessible( true );
+
+		$field = ( new Incoming_Field( 'LAST_GIFT_DATE' ) )
+			->set_value_type( 'date' )
+			->set_matching_function( 'date_range' );
+
+		$this->assertTrue( $method->invoke( null, $field, $user_id, '2026-01-15' ) );
+		$this->assertFalse( $method->invoke( null, $field, $user_id, '2026-01-16' ) );
+	}
 }
