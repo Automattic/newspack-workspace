@@ -22,6 +22,13 @@ updates:
       interval: "weekly"
     labels:
       - "dependencies"
+    ignore:
+      # vipwpcs 3.1.0 enables NoPaging, which errors on every existing
+      # `posts_per_page => -1` in the monorepo. composer.json pins it to ~3.0.1
+      # until NPPM-3055 audits those call sites; without this entry the weekly
+      # "permit the latest version" PR raises the constraint again and
+      # auto-merge.yml lands it, which is how the first pin was lost.
+      - dependency-name: "automattic/vipwpcs"
 
   # GitHub Actions.
   - package-ecosystem: "github-actions"
