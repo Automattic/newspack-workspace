@@ -29,6 +29,13 @@ class Newspack_Popups_Settings {
 	const AI_COPY_ASSISTANT_ENABLED_OPTION = 'newspack_contextual_prompts_enabled';
 
 	/**
+	 * Non-autoloaded option holding the most recent opt-in state change, so
+	 * "who accepted, and when" is answerable on the site itself even when the
+	 * logger pipeline's consumer is unavailable.
+	 */
+	const AI_COPY_ASSISTANT_AUDIT_OPTION = 'newspack_contextual_prompts_last_change';
+
+	/**
 	 * Option enabling the site-wide Contextual Prompts override ("fund-drive
 	 * mode"): while on, a single override CTA temporarily replaces the copy of
 	 * every Contextual Prompt on the site.
@@ -104,23 +111,47 @@ class Newspack_Popups_Settings {
 	private static function log_opt_in_state( $value ) {
 		$enabled = (bool) $value;
 		$user    = wp_get_current_user();
+		$record  = [
+			'file'       => 'newspack_contextual_prompts',
+			'enabled'    => $enabled,
+			// Recorded explicitly so the entry answers "who, and when" on its
+			// own, without depending on when a consumer received it.
+			'timestamp'  => gmdate( 'c' ),
+			'user_id'    => $user ? (int) $user->ID : 0,
+			'user_login' => $user ? (string) $user->user_login : '',
+			// An unattended flip (WP-CLI without --user records user 0 and an
+			// empty login) stays explainable through where it ran.
+			'context'    => self::execution_context(),
+		];
+
+		update_option( self::AI_COPY_ASSISTANT_AUDIT_OPTION, $record, false );
 
 		Newspack_Popups_Logger::audit_log(
 			'newspack_contextual_prompts',
 			$enabled
 				? 'Contextual Prompts: AI use was accepted for this site.'
 				: 'Contextual Prompts: AI use was withdrawn for this site.',
-			[
-				'file'       => 'newspack_contextual_prompts',
-				'enabled'    => $enabled,
-				// Recorded explicitly so the entry answers "who, and when" on its
-				// own, without depending on when a consumer received it.
-				'timestamp'  => gmdate( 'c' ),
-				'user_id'    => $user ? (int) $user->ID : 0,
-				'user_login' => $user ? (string) $user->user_login : '',
-			],
+			$record,
 			'info'
 		);
+	}
+
+	/**
+	 * Where the opt-in flip ran.
+	 *
+	 * @return string One of 'cli', 'cron', 'rest' or 'web'.
+	 */
+	private static function execution_context() {
+		if ( defined( 'WP_CLI' ) && WP_CLI ) {
+			return 'cli';
+		}
+		if ( wp_doing_cron() ) {
+			return 'cron';
+		}
+		if ( defined( 'REST_REQUEST' ) && REST_REQUEST ) {
+			return 'rest';
+		}
+		return 'web';
 	}
 
 	/**

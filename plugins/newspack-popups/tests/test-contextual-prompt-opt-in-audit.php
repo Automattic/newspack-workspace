@@ -21,6 +21,7 @@ class ContextualPromptOptInAuditTest extends WP_UnitTestCase {
 	public function set_up() {
 		parent::set_up();
 		delete_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION );
+		delete_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_AUDIT_OPTION );
 		\Newspack\Logger::$entries = [];
 	}
 
@@ -29,6 +30,7 @@ class ContextualPromptOptInAuditTest extends WP_UnitTestCase {
 	 */
 	public function tear_down() {
 		delete_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION );
+		delete_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_AUDIT_OPTION );
 		\Newspack\Logger::$entries = [];
 		parent::tear_down();
 	}
@@ -81,6 +83,32 @@ class ContextualPromptOptInAuditTest extends WP_UnitTestCase {
 		// A parseable absolute time, so the record stands on its own rather than
 		// depending on when a consumer received it.
 		$this->assertNotFalse( strtotime( $entry['data']['timestamp'] ) );
+		// Where the flip ran, so an unattended change (user 0) is explainable.
+		$this->assertSame( 'web', $entry['data']['context'] );
+	}
+
+	/**
+	 * The last state change also lands in a non-autoloaded option, so "who
+	 * accepted, and when" is answerable on the site itself even when the logger
+	 * pipeline's consumer is unavailable.
+	 */
+	public function test_the_last_state_change_is_queryable_on_the_site() {
+		$user_id = self::factory()->user->create( [ 'role' => 'administrator' ] );
+		wp_set_current_user( $user_id );
+
+		update_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION, true );
+
+		$record = get_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_AUDIT_OPTION );
+		$this->assertTrue( $record['enabled'] );
+		$this->assertSame( $user_id, $record['user_id'] );
+		$this->assertNotFalse( strtotime( $record['timestamp'] ) );
+		// A forensic record must not ride into every request's alloptions.
+		$this->assertArrayNotHasKey( Newspack_Popups_Settings::AI_COPY_ASSISTANT_AUDIT_OPTION, wp_load_alloptions( true ) );
+
+		delete_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION );
+
+		$record = get_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_AUDIT_OPTION );
+		$this->assertFalse( $record['enabled'] );
 	}
 
 	/**

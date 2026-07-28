@@ -12,42 +12,44 @@
 
 namespace Newspack;
 
-/**
- * Capturing Logger stand-in.
- */
-class Logger {
+if ( ! class_exists( Logger::class ) ) {
 	/**
-	 * Captured newspack_log() calls.
-	 *
-	 * @var array
+	 * Capturing Logger stand-in.
 	 */
-	public static $entries = [];
+	class Logger {
+		/**
+		 * Captured newspack_log() calls.
+		 *
+		 * @var array
+		 */
+		public static $entries = [];
 
-	/**
-	 * Capture an always-on log entry.
-	 *
-	 * @param string $code    The log code.
-	 * @param string $message The message.
-	 * @param array  $data    Additional data.
-	 * @param string $type    The log type.
-	 */
-	public static function newspack_log( $code, $message, $data = [], $type = 'error' ) {
-		self::$entries[] = compact( 'code', 'message', 'data', 'type' );
+		/**
+		 * Capture an always-on log entry.
+		 *
+		 * @param string $code    The log code.
+		 * @param string $message The message.
+		 * @param array  $data    Additional data.
+		 * @param string $type    The log type.
+		 */
+		public static function newspack_log( $code, $message, $data = [], $type = 'error' ) {
+			self::$entries[] = compact( 'code', 'message', 'data', 'type' );
+		}
+
+		/**
+		 * No-op.
+		 *
+		 * @param string $payload The payload.
+		 * @param string $header  The header.
+		 */
+		public static function log( $payload, $header = 'NEWSPACK' ) {} // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed
+
+		/**
+		 * No-op.
+		 *
+		 * @param string $payload The payload.
+		 * @param string $header  The header.
+		 */
+		public static function error( $payload, $header = 'NEWSPACK' ) {} // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed
 	}
-
-	/**
-	 * No-op.
-	 *
-	 * @param string $payload The payload.
-	 * @param string $header  The header.
-	 */
-	public static function log( $payload, $header = 'NEWSPACK' ) {} // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed
-
-	/**
-	 * No-op.
-	 *
-	 * @param string $payload The payload.
-	 * @param string $header  The header.
-	 */
-	public static function error( $payload, $header = 'NEWSPACK' ) {} // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed
 }
