@@ -248,6 +248,55 @@ class Contact_Pull {
 	}
 
 	/**
+	 * Normalize an ESP date value to ISO so the criteria matcher sees one format.
+	 *
+	 * Resolved here, at write time, because this is the only place the provider's
+	 * own format metadata is still in hand — `03/04/2026` is genuinely ambiguous
+	 * between Mailchimp's two `date_format` settings once it reaches storage.
+	 *
+	 * A value that cannot be parsed is returned untouched: never destroy publisher
+	 * data to satisfy a format. The matcher fails closed on non-ISO values, and the
+	 * reader's next pull repairs the entry.
+	 *
+	 * @param mixed  $value      Raw value from the integration.
+	 * @param string $format     Source format as a PHP date format string. Empty means
+	 *                           the provider already sends ISO 8601 / Y-m-d.
+	 * @param string $value_type Either 'date' or 'datetime'.
+	 * @return mixed ISO string, or the value unchanged.
+	 */
+	public static function normalize_date_value( $value, $format = '', $value_type = 'date' ) {
+		if ( ! is_string( $value ) || '' === trim( $value ) ) {
+			return $value;
+		}
+
+		$trimmed = trim( $value );
+		$date    = false;
+
+		if ( '' !== $format ) {
+			$date = \DateTimeImmutable::createFromFormat( $format, $trimmed );
+			// createFromFormat is permissive: it happily parses '2026-13-45' against
+			// 'Y-m-d' and rolls the overflow into the next year. Warnings are how it
+			// reports that, so treat any as a parse failure. As of PHP 8.2
+			// getLastErrors() returns false rather than an array when clean.
+			$errors = \DateTimeImmutable::getLastErrors();
+			if ( is_array( $errors ) && ( ! empty( $errors['warning_count'] ) || ! empty( $errors['error_count'] ) ) ) {
+				$date = false;
+			}
+		}
+
+		if ( false === $date ) {
+			// No declared format, or the declared one didn't fit. ISO parses here.
+			try {
+				$date = new \DateTimeImmutable( $trimmed );
+			} catch ( \Exception $e ) {
+				return $value;
+			}
+		}
+
+		return $date->format( 'datetime' === $value_type ? \DateTimeInterface::ATOM : 'Y-m-d' );
+	}
+
+	/**
 	 * Pull data from a single integration and store selected fields.
 	 *
 	 * @param int                                     $user_id     WordPress user ID.
@@ -268,18 +317,18 @@ class Contact_Pull {
 				return $data;
 			}
 
-			$selected_keys = array_flip(
-				array_map(
-					function( $field ) {
-						return $field->get_key();
-					},
-					$selected_fields
-				)
-			);
-			$data          = array_intersect_key( $data, $selected_keys );
+			$fields_by_key = [];
+			foreach ( $selected_fields as $field ) {
+				$fields_by_key[ $field->get_key() ] = $field;
+			}
+			$data = array_intersect_key( $data, $fields_by_key );
 			Logger::log( 'Pulled data from ' . $integration->get_id() . ': ' . wp_json_encode( $data ) );
 
 			foreach ( $data as $key => $value ) {
+				$value_type = $fields_by_key[ $key ]->get_value_type();
+				if ( 'date' === $value_type || 'datetime' === $value_type ) {
+					$value = self::normalize_date_value( $value, $fields_by_key[ $key ]->get_date_format(), $value_type );
+				}
 				\Newspack\Reader_Data::update_item( $user_id, $key, wp_json_encode( $value ) );
 			}
 

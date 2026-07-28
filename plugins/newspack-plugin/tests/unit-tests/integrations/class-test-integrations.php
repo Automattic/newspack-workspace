@@ -2097,4 +2097,36 @@ class Test_Integrations extends \WP_UnitTestCase {
 
 		$this->assertSame( 'Change provider', $esp->get_unsupported_action_label() );
 	}
+
+	/**
+	 * The normalizer is what lets the client matcher assume one date format. A
+	 * value it can't parse is stored untouched rather than dropped — the matcher
+	 * fails closed on it, and the next successful pull repairs it.
+	 */
+	public function test_normalize_date_value() {
+		// Already ISO, no declared format.
+		$this->assertSame( '2026-01-15', Contact_Pull::normalize_date_value( '2026-01-15' ) );
+
+		// Mailchimp's two date_format settings disambiguate the same input.
+		$this->assertSame( '2026-03-04', Contact_Pull::normalize_date_value( '03/04/2026', 'm/d/Y' ) );
+		$this->assertSame( '2026-04-03', Contact_Pull::normalize_date_value( '03/04/2026', 'd/m/Y' ) );
+
+		// A datetime keeps its instant, offset included — no timezone shifting.
+		$this->assertSame(
+			'2026-01-15T23:30:00-06:00',
+			Contact_Pull::normalize_date_value( '2026-01-15T23:30:00-06:00', '', 'datetime' )
+		);
+
+		// Unparsable input survives verbatim.
+		$this->assertSame( 'not a date', Contact_Pull::normalize_date_value( 'not a date', 'm/d/Y' ) );
+		$this->assertSame( '', Contact_Pull::normalize_date_value( '' ) );
+
+		// A value that doesn't match its declared format must not be silently
+		// reinterpreted by PHP's permissive parser.
+		$this->assertSame( '2026-13-45', Contact_Pull::normalize_date_value( '2026-13-45', 'Y-m-d' ) );
+
+		// Non-strings pass through.
+		$this->assertSame( 42, Contact_Pull::normalize_date_value( 42 ) );
+		$this->assertNull( Contact_Pull::normalize_date_value( null ) );
+	}
 }
