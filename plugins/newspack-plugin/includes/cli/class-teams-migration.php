@@ -21,6 +21,7 @@ namespace Newspack\CLI;
 
 use Newspack\Group_Subscription;
 use Newspack\Reader_Activation;
+use Newspack\WooCommerce_Connection;
 use WP_CLI;
 
 defined( 'ABSPATH' ) || exit;
@@ -251,11 +252,15 @@ class Teams_Migration {
 							$linked_note = sprintf( ' It is currently linked to team %d ("%s") — check this is not a cross-team merge before running --live.', $linked_team_id, $linked_team ? $linked_team->post_title : '?' );
 						}
 						WP_CLI::warning( sprintf( 'Team %d ("%s"): no group subscription marked for this team; adopting unmarked group subscription %d owned by owner %d and marking it for this team.%s', $team_id, $team->post_title, $reusable_sub->get_id(), $owner_id, $linked_note ) );
-					} elseif ( $reuse['reused_inactive'] ) {
-						// Reusing the team's own group even though it is no longer active
-						// keeps one group per team; creating a second one would split the
-						// team's members across two groups. It is not reactivated here.
-						WP_CLI::warning( sprintf( 'Team %d: reusing group subscription %d migrated from this team, but its status is "%s" — members added below get no access until it is active again.', $team_id, $reusable_sub->get_id(), $reusable_sub->get_status() ) );
+					} elseif ( $reuse['reused_without_access'] ) {
+						// Reusing the team's own group even though its status grants no
+						// access keeps one group per team; creating a second one would split
+						// the team's members across two groups. It is not reactivated here.
+						// Recorded as an issue rather than only warned about, so the team
+						// does not read as a clean success in the end-of-run summary — this
+						// is the one outcome where the members are written into a group that
+						// grants nobody access.
+						$errors[] = sprintf( 'reused group subscription %d migrated from this team, but its status is "%s" — the members added to it have no access until it is active again', $reusable_sub->get_id(), $reusable_sub->get_status() );
 					} else {
 						WP_CLI::line( sprintf( 'Team %d: found existing group subscription %d migrated from this team — re-updating.', $team_id, $reusable_sub->get_id() ) );
 					}
@@ -1201,10 +1206,10 @@ class Teams_Migration {
 	 * MIGRATED_TEAM_ID_META_KEY), so reuse keys on the team and a multi-team owner keeps
 	 * one group subscription per team. A marker match wins whatever its status: a team
 	 * whose group has since expired or been put on hold must reuse that group rather
-	 * than get a second, duplicate one on the next run (the caller is told via
-	 * `reused_inactive` so it can warn). Falls back to an active group subscription
-	 * owned by the team owner that carries no marker, and flags that fallback so the
-	 * caller can warn.
+	 * than get a second, duplicate one on the next run (when the reused group's status
+	 * withholds access the caller is told via `reused_without_access` so it can warn).
+	 * Falls back to an active group subscription owned by the team owner that carries no
+	 * marker, and flags that fallback so the caller can warn.
 	 *
 	 * The fallback additionally requires the subscription's *own*
 	 * `_newspack_group_subscription_enabled` meta, not just
@@ -1231,16 +1236,16 @@ class Teams_Migration {
 	 * @param int $owner_id The team owner user ID.
 	 *
 	 * @return array {
-	 *     @type \WC_Subscription|null $subscription        The subscription to reuse, or null.
-	 *     @type bool                  $used_owner_fallback Whether the unmarked owner fallback matched.
-	 *     @type bool                  $reused_inactive     Whether the marker match is not active.
+	 *     @type \WC_Subscription|null $subscription          The subscription to reuse, or null.
+	 *     @type bool                  $used_owner_fallback   Whether the unmarked owner fallback matched.
+	 *     @type bool                  $reused_without_access Whether the marker match holds a status that grants members no access.
 	 * }
 	 */
 	public static function find_reusable_group_subscription( $team_id, $owner_id ) {
 		$none     = [
-			'subscription'        => null,
-			'used_owner_fallback' => false,
-			'reused_inactive'     => false,
+			'subscription'          => null,
+			'used_owner_fallback'   => false,
+			'reused_without_access' => false,
 		];
 		$team_id  = absint( $team_id );
 		$owner_id = absint( $owner_id );
@@ -1248,8 +1253,8 @@ class Teams_Migration {
 			return $none;
 		}
 
-		$inactive_marked_sub = null;
-		$unmarked_group_sub  = null;
+		$non_active_marked_sub = null;
+		$unmarked_group_sub    = null;
 		foreach ( \wcs_get_users_subscriptions( $owner_id ) as $subscription ) {
 			// wcs_get_users_subscriptions is filtered to include member-only groups; require ownership.
 			if ( (int) $subscription->get_user_id() !== $owner_id ) {
@@ -1265,14 +1270,14 @@ class Teams_Migration {
 			if ( $marked_team_id === $team_id ) {
 				if ( 'active' === $subscription->get_status() ) {
 					return [
-						'subscription'        => $subscription,
-						'used_owner_fallback' => false,
-						'reused_inactive'     => false,
+						'subscription'          => $subscription,
+						'used_owner_fallback'   => false,
+						'reused_without_access' => false,
 					];
 				}
 				// Hold on to it in case the team has no active marked group at all, but
 				// keep scanning — an active one, if it exists, is the better match.
-				$inactive_marked_sub = $inactive_marked_sub ?? $subscription;
+				$non_active_marked_sub = $non_active_marked_sub ?? $subscription;
 				continue;
 			}
 			// Remember the first unmarked group as the owner fallback. A group already
@@ -1282,19 +1287,24 @@ class Teams_Migration {
 			}
 		}
 
-		if ( $inactive_marked_sub ) {
+		if ( $non_active_marked_sub ) {
 			return [
-				'subscription'        => $inactive_marked_sub,
-				'used_owner_fallback' => false,
-				'reused_inactive'     => true,
+				'subscription'          => $non_active_marked_sub,
+				'used_owner_fallback'   => false,
+				// Only flag statuses that actually withhold access. `pending-cancel` is not
+				// `active`, but group membership reads through ACTIVE_SUBSCRIPTION_STATUSES,
+				// so its members do have access until the period ends — warning about it
+				// would push an operator to reactivate a subscription a reader deliberately
+				// cancelled.
+				'reused_without_access' => ! $non_active_marked_sub->has_status( WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES ),
 			];
 		}
 
 		if ( $unmarked_group_sub ) {
 			return [
-				'subscription'        => $unmarked_group_sub,
-				'used_owner_fallback' => true,
-				'reused_inactive'     => false,
+				'subscription'          => $unmarked_group_sub,
+				'used_owner_fallback'   => true,
+				'reused_without_access' => false,
 			];
 		}
 

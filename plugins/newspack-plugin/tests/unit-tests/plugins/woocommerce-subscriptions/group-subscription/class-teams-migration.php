@@ -617,8 +617,28 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 		$reuse = Teams_Migration::find_reusable_group_subscription( $team_id, $owner );
 
 		$this->assertSame( $expired->get_id(), $reuse['subscription']->get_id(), 'An expired group marked for this team should still be reused.' );
-		$this->assertTrue( $reuse['reused_inactive'], 'Reusing a non-active group must be flagged so the caller warns.' );
+		$this->assertTrue( $reuse['reused_without_access'], 'Reusing a group whose status withholds access must be flagged so the caller warns.' );
 		$this->assertFalse( $reuse['used_owner_fallback'], 'A marker match is not an owner fallback.' );
+	}
+
+	/**
+	 * `pending-cancel` is not `active`, but group membership reads through
+	 * WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES, so its members still have
+	 * access until the paid-up period ends. Reusing such a group must therefore not be
+	 * reported as access-less — the warning would push an operator to reactivate a
+	 * subscription the reader deliberately cancelled.
+	 */
+	public function test_pending_cancel_marked_group_is_not_reported_as_access_less() {
+		$owner   = $this->create_reader();
+		$team_id = $this->create_team( $owner, [] );
+		$pending_cancel = $this->create_migrated_group_subscription( $owner, $team_id );
+		$pending_cancel->set_status( 'pending-cancel' );
+		$pending_cancel->save();
+
+		$reuse = Teams_Migration::find_reusable_group_subscription( $team_id, $owner );
+
+		$this->assertSame( $pending_cancel->get_id(), $reuse['subscription']->get_id(), 'A pending-cancel group marked for this team should still be reused.' );
+		$this->assertFalse( $reuse['reused_without_access'], 'pending-cancel still grants group access, so it must not be flagged as access-less.' );
 	}
 
 	/**
