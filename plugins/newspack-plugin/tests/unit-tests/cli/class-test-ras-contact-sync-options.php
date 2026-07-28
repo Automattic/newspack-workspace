@@ -88,6 +88,42 @@ class Test_RAS_Contact_Sync_Options extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The Mailchimp guard concerns the ESP integration only. Once --integration
+	 * scopes the run to a non-ESP integration, the site's ESP takes no part in
+	 * it and must not block the run (NPPD-2076 review).
+	 */
+	public function test_skip_lists_guard_skipped_when_scoped_to_non_esp_integration() {
+		Integrations::register( new Failing_Sample_Integration( 'skip_lists_mock', 'Skip Lists Mock' ) );
+		Integrations::enable( 'skip_lists_mock' );
+		update_option( 'newspack_newsletters_service_provider', 'mailchimp' );
+
+		$scoped   = $this->parse( [ 'skip-lists' => true ], 'skip_lists_mock' );
+		$unscoped = $this->parse( [ 'skip-lists' => true ] );
+
+		delete_option( 'newspack_newsletters_service_provider' );
+		Integrations::disable( 'skip_lists_mock' );
+
+		$this->assertIsArray( $scoped, 'A run scoped away from the ESP is unaffected by the ESP guard.' );
+		$this->assertTrue( $scoped['skip_lists'] );
+		$this->assertInstanceOf( \WP_Error::class, $unscoped, 'An unscoped run still includes the ESP, so the guard applies.' );
+		$this->assertSame( 'newspack_esp_sync_skip_lists_mailchimp', $unscoped->get_error_code() );
+	}
+
+	/**
+	 * Scoping explicitly TO the ESP keeps the guard.
+	 */
+	public function test_skip_lists_guard_applies_when_scoped_to_the_esp() {
+		update_option( 'newspack_newsletters_service_provider', 'mailchimp' );
+
+		$result = $this->parse( [ 'skip-lists' => true ], 'esp' );
+
+		delete_option( 'newspack_newsletters_service_provider' );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'newspack_esp_sync_skip_lists_mailchimp', $result->get_error_code() );
+	}
+
+	/**
 	 * Regression: the parser must thread the RESOLVED labels into
 	 * `$options['fields']`. A prior version resolved and validated the tokens but
 	 * left `fields` null, so no compute/push scoping actually happened.

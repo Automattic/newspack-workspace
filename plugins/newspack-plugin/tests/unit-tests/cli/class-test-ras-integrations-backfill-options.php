@@ -231,4 +231,91 @@ class Test_RAS_Integrations_Backfill_Options extends WP_UnitTestCase {
 		$this->assertSame( 'newspack_backfill_no_pull_targets', $scoped_to_other->get_error_code() );
 		$this->assertIsArray( $scoped_to_mock, 'backfill_mock has an enabled incoming field.' );
 	}
+
+	/**
+	 * A scoped push pre-flights the TARGET integration's own can_sync(). The
+	 * push leg's runtime gate is the global has_one_syncable_integration(),
+	 * which a syncable sibling satisfies — so without this check a run scoped
+	 * to a non-syncable integration proceeds and reports "Synced 0 contacts"
+	 * instead of naming the reason (NPPD-2076 review).
+	 */
+	public function test_scoped_push_fails_preflight_when_target_cannot_sync() {
+		Failing_Sample_Integration::$cannot_sync_reason = 'Missing API key.';
+
+		$result = $this->parse( [ 'integration' => 'backfill_mock' ] );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'newspack_backfill_integration_cannot_sync', $result->get_error_code() );
+		$this->assertStringContainsString( 'Missing API key.', $result->get_error_message() );
+	}
+
+	/**
+	 * The scoped syncability check is push-specific: a pull-only run reads from
+	 * the provider and never pushes, so an unsyncable target is irrelevant.
+	 */
+	public function test_scoped_pull_ignores_push_syncability() {
+		Failing_Sample_Integration::$cannot_sync_reason = 'Missing API key.';
+
+		$parsed = $this->parse(
+			[
+				'direction'   => 'pull',
+				'integration' => 'backfill_mock',
+			]
+		);
+
+		$this->assertIsArray( $parsed, 'A pull-only run does not need push syncability.' );
+		$this->assertSame( 'backfill_mock', $parsed['integration_id'] );
+	}
+
+	/**
+	 * An unscoped run keeps the global gate: the per-integration check only
+	 * applies when --integration names a target.
+	 */
+	public function test_unscoped_run_skips_the_per_integration_sync_check() {
+		Failing_Sample_Integration::$cannot_sync_reason = 'Missing API key.';
+
+		$this->assertIsArray( $this->parse( [] ), 'Unscoped runs are gated globally, not per integration.' );
+	}
+
+	/**
+	 * A run that tallies errors must exit non-zero so an unattended runbook can
+	 * detect partial failure without parsing the summary (NPPD-2076 review).
+	 */
+	public function test_backfill_exits_non_zero_when_the_tally_has_errors() {
+		WP_CLI::reset();
+		Failing_Sample_Integration::$pull_should_fail = true;
+		$user_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+
+		RAS_Contact_Sync::cli_backfill(
+			[],
+			[
+				'direction' => 'pull',
+				'user-ids'  => (string) $user_id,
+			]
+		);
+
+		$this->assertSame( 1, WP_CLI::$halt_code, 'A tallied error must set a non-zero exit code.' );
+		$this->assertSame( [], WP_CLI::$successes, 'A partial failure is not a success.' );
+		$this->assertContains( 'Pulled 0 contacts (1 errors, 0 skipped).', WP_CLI::$warnings );
+	}
+
+	/**
+	 * Contrast: a clean run still exits 0 with the usual success line.
+	 */
+	public function test_backfill_exits_zero_on_a_clean_run() {
+		WP_CLI::reset();
+		Failing_Sample_Integration::$pull_data = [ 'field_a' => 'gold' ];
+		$user_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+
+		RAS_Contact_Sync::cli_backfill(
+			[],
+			[
+				'direction' => 'pull',
+				'user-ids'  => (string) $user_id,
+			]
+		);
+
+		$this->assertNull( WP_CLI::$halt_code, 'A clean run must not halt with an error code.' );
+		$this->assertSame( [ 'Pulled 1 contacts (0 errors, 0 skipped).' ], WP_CLI::$successes );
+	}
 }

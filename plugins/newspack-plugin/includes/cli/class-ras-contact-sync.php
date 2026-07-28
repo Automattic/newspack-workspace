@@ -12,6 +12,7 @@ use Newspack\Reader_Activation;
 use Newspack\Reader_Activation\Contact_Sync;
 use Newspack\Reader_Activation\Integrations;
 use Newspack\Reader_Activation\Integrations\Contact_Pull;
+use Newspack\Reader_Activation\Integrations\ESP;
 use Newspack\Reader_Activation\Sync\Metadata;
 use Newspack_Subscription_Migrations\CSV_Importers\CSV_Importer;
 use Newspack_Subscription_Migrations\Stripe_Sync;
@@ -31,6 +32,14 @@ class RAS_Contact_Sync {
 	protected static $context = 'Contact sync manually triggered via CLI';
 
 	/**
+	 * Number of contacts that must hit an external provider before the next
+	 * inter-batch pause. See batch_boundary_pause().
+	 *
+	 * @var int
+	 */
+	const PAUSE_EVERY_CONTACTS = 100;
+
+	/**
 	 * The final results object.
 	 *
 	 * @var array
@@ -42,11 +51,22 @@ class RAS_Contact_Sync {
 	];
 
 	/**
+	 * Contacts that performed external work since the last inter-batch pause.
+	 *
+	 * @var int
+	 */
+	protected static $unpaused_contacts = 0;
+
+	/**
 	 * Record the outcome of a single sync_contact() call in the results tally.
+	 *
+	 * A recorded contact reached the integrations, so it counts toward the
+	 * inter-batch pacing regardless of whether the push succeeded.
 	 *
 	 * @param true|\WP_Error $result The value returned by Contact_Sync::sync_contact().
 	 */
 	protected static function record_result( $result ) {
+		static::$unpaused_contacts++;
 		if ( \is_wp_error( $result ) ) {
 			static::$results['errors']++;
 		} else {
@@ -115,6 +135,7 @@ class RAS_Contact_Sync {
 			'errors'    => 0,
 			'skipped'   => 0,
 		];
+		static::$unpaused_contacts = 0;
 
 		static::$context = $config['context'];
 
@@ -175,6 +196,7 @@ class RAS_Contact_Sync {
 						break;
 					}
 
+					self::batch_boundary_pause();
 					$next_batch_offset = $config['offset'] + ( $batches * $config['batch_size'] );
 					$config['subscription_ids'] = self::get_migrated_subscriptions( $config['migrated_only'], $config['batch_size'], $next_batch_offset, $config['active_only'] );
 				}
@@ -313,7 +335,7 @@ class RAS_Contact_Sync {
 	 *
 	 * @return array|\WP_Error Results tally ( `processed`, `errors`, `skipped` ) or WP_Error.
 	 */
-	private static function pull_contacts( $config ) {
+	private static function pull_contacts( $config ): array|\WP_Error {
 		$default_config = [
 			'active_only'    => false,
 			'user_ids'       => false,
@@ -366,11 +388,18 @@ class RAS_Contact_Sync {
 			'errors'    => 0,
 			'skipped'   => 0,
 		];
+		static::$unpaused_contacts = 0;
 
 		if ( ! empty( $config['user_ids'] ) ) {
 			static::log( __( 'Pulling by user ID...', 'newspack-plugin' ) );
-			foreach ( $config['user_ids'] as $user_id ) {
-				self::pull_contact( (int) $user_id, $pull_targets, $config, $tally );
+			// Chunked like the all-readers loop so a very large --user-ids list gets
+			// the same cache flush and provider pacing rather than hydrating every
+			// user object into a cache that is never freed.
+			foreach ( array_chunk( $config['user_ids'], max( 1, (int) $config['batch_size'] ) ) as $chunk ) {
+				foreach ( $chunk as $user_id ) {
+					self::pull_contact( (int) $user_id, $pull_targets, $config, $tally );
+				}
+				self::batch_boundary_pause();
 			}
 			return $tally;
 		}
@@ -413,7 +442,7 @@ class RAS_Contact_Sync {
 	 * @param array $config       Batch configuration (active_only, is_dry_run).
 	 * @param array $tally        Results tally, passed by reference.
 	 */
-	private static function pull_contact( $user_id, $pull_targets, $config, &$tally ) {
+	private static function pull_contact( $user_id, $pull_targets, $config, &$tally ): void {
 		if ( ! \get_userdata( $user_id ) ) {
 			static::log(
 				sprintf(
@@ -430,6 +459,10 @@ class RAS_Contact_Sync {
 			$tally['skipped']++;
 			return;
 		}
+
+		// The reader is about to hit every target integration's provider, so it
+		// counts toward the inter-batch pacing.
+		static::$unpaused_contacts++;
 
 		$errors = 0;
 		foreach ( $pull_targets as $id => $target ) {
@@ -456,25 +489,40 @@ class RAS_Contact_Sync {
 	}
 
 	/**
-	 * Inter-batch hygiene for the bulk reader loops (push and pull).
+	 * Inter-batch hygiene for the bulk contact loops (push and pull).
 	 *
 	 * A long CLI run accumulates every get_userdata() result in the runtime
 	 * object cache and fires an unspaced external request stream (one per
-	 * reader per integration) — and since pull errors are deliberately not
+	 * contact per integration) — and since pull errors are deliberately not
 	 * retried, tripping a provider rate limit turns straight into tallied
-	 * errors the operator must re-run. Free the cache and pause for a second
-	 * at each batch boundary. The pause costs one second per batch, so large
-	 * runs should raise --batch-size to keep the total negligible. No-op
-	 * outside a real WP-CLI runtime (the WP_CLI constant is not defined under
-	 * PHPUnit), so tests are unaffected.
+	 * errors the operator must re-run. Free the cache at every batch boundary
+	 * (cheap, and what keeps memory flat), but pace the external request
+	 * stream on the work actually done rather than on the batch count: sleep
+	 * one second only once PAUSE_EVERY_CONTACTS contacts have hit an external
+	 * provider since the last pause.
+	 *
+	 * Tying the pause to contacts rather than batches keeps its cost
+	 * proportional and independent of --batch-size. At the historical default
+	 * of 10 that is one second per 100 contacts instead of one per 10 — on a
+	 * 100k-reader site, ~17 minutes of added wall time rather than ~2.8 hours
+	 * — so the legacy `esp sync` alias stays usable at its frozen defaults.
+	 * Batches that only skipped contacts (e.g. --active-subs-only filtering
+	 * everyone out) did no external work and never sleep.
+	 *
+	 * No-op outside a real WP-CLI runtime (the WP_CLI constant is not defined
+	 * under PHPUnit), so tests are unaffected.
 	 */
-	private static function batch_boundary_pause() {
+	private static function batch_boundary_pause(): void {
 		if ( ! defined( 'WP_CLI' ) || ! WP_CLI ) {
 			return;
 		}
 		if ( function_exists( '\WP_CLI\Utils\wp_clear_object_cache' ) ) {
 			\WP_CLI\Utils\wp_clear_object_cache();
 		}
+		if ( static::$unpaused_contacts < self::PAUSE_EVERY_CONTACTS ) {
+			return;
+		}
+		static::$unpaused_contacts = 0;
 		sleep( 1 );
 	}
 
@@ -563,12 +611,15 @@ class RAS_Contact_Sync {
 		$roles = Reader_Activation::get_reader_roles();
 		$query = new \WP_User_Query(
 			[
-				'fields'   => 'ID',
-				'number'   => $batch_size,
-				'offset'   => $offset,
-				'order'    => 'DESC',
-				'orderby'  => 'registered',
-				'role__in' => $roles,
+				'fields'      => 'ID',
+				'number'      => $batch_size,
+				'offset'      => $offset,
+				'order'       => 'DESC',
+				'orderby'     => 'registered',
+				'role__in'    => $roles,
+				// The loops page until a batch comes back empty and never read the
+				// total, so skip the extra SQL_CALC_FOUND_ROWS COUNT(*) per batch.
+				'count_total' => false,
 			]
 		);
 		$results = $query->get_results();
@@ -583,7 +634,7 @@ class RAS_Contact_Sync {
 	 * @param array $assoc_args Associative CLI args.
 	 * @return array Batch config for sync_contacts() (sync `options` not included).
 	 */
-	private static function build_sync_config( $assoc_args ) {
+	private static function build_sync_config( $assoc_args ): array {
 		return [
 			'is_dry_run'       => ! empty( $assoc_args['dry-run'] ),
 			// `active-subs-only` is the flag on `integrations backfill`; `active-only`
@@ -613,7 +664,7 @@ class RAS_Contact_Sync {
 	 * @param string $direction  Either 'push' or 'pull'.
 	 * @return string
 	 */
-	private static function format_summary( $tally, $is_dry_run, $direction ) {
+	private static function format_summary( $tally, $is_dry_run, $direction ): string {
 		if ( 'pull' === $direction ) {
 			if ( $is_dry_run ) {
 				// Translators: 1: processed count, 2: error count, 3: skipped count.
@@ -664,7 +715,7 @@ class RAS_Contact_Sync {
 	 * : Comma-delimited list of order IDs. If passed, will only process subscriptions associated with those specific orders.
 	 *
 	 * [--batch-size=<number>]
-	 * : Number of subscriptions to query/process at once. Defaults to 10. Each batch boundary pauses for one second, so raise this on large runs (e.g. 500) to keep the added wall time negligible.
+	 * : Number of subscriptions to query/process at once. Defaults to 10. Batch boundaries free the object cache, and pause for one second per 100 contacts that reached an integration, to space out the external request stream.
 	 *
 	 * [--max-batches=<number>]
 	 * : Maximum number of batches to process.
@@ -747,7 +798,7 @@ class RAS_Contact_Sync {
 	 * : (push only) Only process subscriptions migrated via the Newspack Subscription Migrations plugin. That plugin must be active.
 	 *
 	 * [--batch-size=<number>]
-	 * : Number of contacts to query/process at once. Defaults to 10. Each batch boundary pauses for one second, so raise this on large runs (e.g. 500) to keep the added wall time negligible.
+	 * : Number of contacts to query/process at once. Defaults to 10. Batch boundaries free the object cache, and pause for one second per 100 contacts that reached an integration, to space out the external request stream.
 	 *
 	 * [--max-batches=<number>]
 	 * : Maximum number of batches to process.
@@ -778,10 +829,19 @@ class RAS_Contact_Sync {
 	 * instead. Push retry behavior is unchanged from `wp newspack esp sync`,
 	 * including the no-retry rule for `--skip-lists`/`--fields` runs.
 	 *
+	 * A run that tallies any error exits with status 1 and prints the summary as
+	 * a warning, so an unattended runbook can detect partial failure without
+	 * parsing output. A clean run exits 0. (The legacy `esp sync` alias always
+	 * exits 0, as it always has.)
+	 *
+	 * A `--dry-run` pull evaluates the deterministic reader-data write
+	 * rejections without persisting, so its error tally previews what a real
+	 * run would report.
+	 *
 	 * @param array $args Positional args.
 	 * @param array $assoc_args Associative args.
 	 */
-	public static function cli_backfill( $args, $assoc_args ) {
+	public static function cli_backfill( $args, $assoc_args ): void {
 		$backfill = self::parse_backfill_options( $assoc_args );
 		if ( \is_wp_error( $backfill ) ) {
 			WP_CLI::error( $backfill->get_error_message() );
@@ -791,6 +851,7 @@ class RAS_Contact_Sync {
 		$integration_id = $backfill['integration_id'];
 		$config         = self::build_sync_config( $assoc_args );
 		$summaries      = [];
+		$total_errors   = 0;
 
 		if ( in_array( $direction, [ 'push', 'both' ], true ) ) {
 			$options = self::parse_sync_options( $assoc_args, $integration_id );
@@ -808,7 +869,8 @@ class RAS_Contact_Sync {
 				WP_CLI::error( $push_results->get_error_message() );
 				return;
 			}
-			$summaries[] = self::format_summary( $push_results, $config['is_dry_run'], 'push' );
+			$summaries[]   = self::format_summary( $push_results, $config['is_dry_run'], 'push' );
+			$total_errors += $push_results['errors'];
 		}
 
 		if ( in_array( $direction, [ 'pull', 'both' ], true ) ) {
@@ -828,11 +890,26 @@ class RAS_Contact_Sync {
 				WP_CLI::error( $pull_results->get_error_message() );
 				return;
 			}
-			$summaries[] = self::format_summary( $pull_results, $config['is_dry_run'], 'pull' );
+			$summaries[]   = self::format_summary( $pull_results, $config['is_dry_run'], 'pull' );
+			$total_errors += $pull_results['errors'];
 		}
 
 		WP_CLI::line( "\n" );
-		WP_CLI::success( implode( ' ', $summaries ) );
+		$summary = implode( ' ', $summaries );
+
+		// Partial failure must be detectable from the exit status. An unattended
+		// runbook cannot parse the summary string, so an unconditional success
+		// would hide systematic failures and the documented recovery — re-run the
+		// affected --offset window — would never trigger. This command is new and
+		// carries no compatibility constraint; the frozen `esp sync` alias keeps
+		// its unconditional success.
+		if ( $total_errors > 0 ) {
+			WP_CLI::warning( $summary );
+			WP_CLI::halt( 1 );
+			return;
+		}
+
+		WP_CLI::success( $summary );
 	}
 
 	/**
@@ -862,8 +939,17 @@ class RAS_Contact_Sync {
 		// --skip-lists backfill on Mailchimp would push metadata for no one (every
 		// contact tallied as an error). Fail the pre-flight with an actionable message
 		// rather than letting the whole run fail contact-by-contact.
+		//
+		// The guard only concerns the ESP integration, so a run scoped to some
+		// other integration via --integration is unaffected by the site's ESP
+		// and must not be blocked by it. Skip the guard only when the target is
+		// positively known not to be the ESP; an unresolvable id keeps the
+		// guard (parse_backfill_options() rejects those before they get here).
+		$scoped_integration = empty( $integration_id ) ? null : Integrations::get_integration( $integration_id );
+		$esp_takes_part     = empty( $integration_id ) || ! $scoped_integration || $scoped_integration instanceof ESP;
 		if (
 			$options['skip_lists'] &&
+			$esp_takes_part &&
 			class_exists( 'Newspack_Newsletters' ) &&
 			'mailchimp' === \Newspack_Newsletters::service_provider()
 		) {
@@ -969,6 +1055,26 @@ class RAS_Contact_Sync {
 						$available ? $available : __( '(none)', 'newspack-plugin' )
 					)
 				);
+			}
+
+			// A scoped push must check the *target* integration's syncability. The
+			// push leg's gate is the global has_one_syncable_integration(), which a
+			// syncable sibling satisfies — so a run scoped to a non-syncable
+			// integration would otherwise proceed and either tally an error per
+			// contact or report "Synced 0 contacts" instead of naming the reason.
+			if ( 'pull' !== $direction ) {
+				$can_sync = $active[ $integration_id ]->can_sync( true );
+				if ( \is_wp_error( $can_sync ) && $can_sync->has_errors() ) {
+					return new \WP_Error(
+						'newspack_backfill_integration_cannot_sync',
+						sprintf(
+							// Translators: 1: the integration id passed to --integration, 2: the reason it cannot sync.
+							__( 'Integration "%1$s" cannot sync: %2$s', 'newspack-plugin' ),
+							$integration_id,
+							$can_sync->get_error_message()
+						)
+					);
+				}
 			}
 		}
 

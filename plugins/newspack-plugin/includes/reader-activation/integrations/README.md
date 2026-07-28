@@ -327,15 +327,25 @@ wp newspack integrations backfill --direction=both --integration=esp --batch-siz
 - A direction that includes `pull` requires at least one in-scope integration
   with enabled incoming fields — validated in the pre-flight, so a
   `--direction=both` run fails fast instead of completing the push leg first.
-- `--integration=<id>` restricts the run to one active, configured integration;
-  on the push side this also scopes the `--fields` pre-flight validation.
+- `--integration=<id>` restricts the run to one active, configured integration.
+  On the push side this also scopes the `--fields` pre-flight validation, checks
+  that integration's own `can_sync()` (rather than only the global "at least one
+  syncable integration" gate), and skips ESP-specific guards such as the
+  Mailchimp `--skip-lists` rejection when the target is not the ESP.
 - A pull `--dry-run` still performs the external API reads — it only skips
-  writing reader data.
+  writing reader data. It does evaluate the deterministic reader-data write
+  rejections, so its error tally previews what a real run would report.
 - Pull failures are **not** retried via ActionScheduler (a bulk run against a
   flaky API would flood the queue): errors are tallied and logged, and the
   affected `--offset` window can be re-run. Push retry semantics are unchanged.
+- A run that tallies any error prints its summary as a warning and **exits 1**,
+  so unattended runbooks can detect partial failure from the exit status. A
+  clean run exits 0.
+- Batch boundaries free the object cache and pause one second per 100 contacts
+  that reached an integration, spacing the external request stream without
+  making the pause cost scale with `--batch-size`.
 - `wp newspack esp sync` remains as a backward-compatible alias frozen to the
-  push direction and its historical flag surface.
+  push direction, its historical flag surface, and its unconditional exit 0.
 
 See `wp help newspack integrations backfill` for the full option reference.
 

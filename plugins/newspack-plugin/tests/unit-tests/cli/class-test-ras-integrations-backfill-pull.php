@@ -119,15 +119,13 @@ class Test_RAS_Integrations_Backfill_Pull extends WP_UnitTestCase {
 
 		$this->assertSame( 1, $tally['errors'] );
 		$this->assertSame( 0, $tally['processed'] );
-		if ( function_exists( 'as_get_scheduled_actions' ) ) {
-			$pending = as_get_scheduled_actions(
-				[
-					'hook'   => Contact_Pull::RETRY_HOOK,
-					'status' => \ActionScheduler_Store::STATUS_PENDING,
-				]
-			);
-			$this->assertCount( 0, $pending, 'CLI bulk pulls must not schedule AS retries.' );
-		}
+		$pending = as_get_scheduled_actions(
+			[
+				'hook'   => Contact_Pull::RETRY_HOOK,
+				'status' => \ActionScheduler_Store::STATUS_PENDING,
+			]
+		);
+		$this->assertCount( 0, $pending, 'CLI bulk pulls must not schedule AS retries.' );
 	}
 
 	public function test_integration_scoping_limits_pull_targets() {
