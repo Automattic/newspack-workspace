@@ -5,7 +5,7 @@
 /**
  * WordPress dependencies.
  */
-import { gmdateI18n, getSettings, humanTimeDiff } from '@wordpress/date';
+import { dateI18n, gmdateI18n, getSettings, humanTimeDiff } from '@wordpress/date';
 import { __, _n, sprintf } from '@wordpress/i18n';
 
 // "2 days ago" — defers to core's localized relative-time formatting (the same
@@ -156,17 +156,13 @@ export const scheduleRow = ( { nextBillingDate, endDate } = {} ) => {
 		return { label: __( 'Next billing', 'newspack-plugin' ), value: fmtDate( nextBillingDate ) };
 	}
 	if ( endDate ) {
-		// Compared as bare YYYY-MM-DD strings, which sort chronologically; today
-		// is the site's civil date (the same basis fmtDate presents), so the label
-		// flips on the calendar day the plan ends.
-		const today = fmtRawDate( new Date() );
+		// Compared as bare YYYY-MM-DD strings, which sort chronologically. "Today"
+		// is the site's civil date, not the viewer's browser day: the endpoint
+		// derives endDate in the site timezone (wp_date), so an admin working from
+		// another zone would otherwise see the label flip a day early or late.
+		const today = dateI18n( 'Y-m-d' );
 		const label = endDate >= today ? __( 'Ends', 'newspack-plugin' ) : __( 'Ended', 'newspack-plugin' );
 		return { label, value: fmtDate( endDate ) };
 	}
 	return { label: __( 'Next billing', 'newspack-plugin' ), value: '—' };
 };
-
-// Today's civil date as YYYY-MM-DD, for chronological comparison against the
-// endpoint's bare dates.
-const fmtRawDate = date =>
-	`${ date.getFullYear() }-${ String( date.getMonth() + 1 ).padStart( 2, '0' ) }-${ String( date.getDate() ).padStart( 2, '0' ) }`;

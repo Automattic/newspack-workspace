@@ -384,7 +384,7 @@ class Subscribers_Wizard extends Wizard {
 		$owner_id   = (int) $subscription->get_user_id();
 		$owner      = $owner_id ? get_userdata( $owner_id ) : false;
 		$created    = $subscription->get_date_created();
-		$created_at = $created ? gmdate( 'Y-m-d', $created->getTimestamp() ) : null;
+		$created_at = $this->local_date( $created ? $created->getTimestamp() : null );
 
 		return [
 			'id'          => (int) $subscription->get_id(),
@@ -589,9 +589,10 @@ class Subscribers_Wizard extends Wizard {
 		$subscriptions       = $this->get_individual_subscriptions( $user_id, $owned_subscriptions, $detailed );
 		$groups              = $this->get_group_memberships( $user_id, $detailed );
 
-		// user_registered can be a zero date ('0000-00-00 …'), which is truthy but
+		// user_registered is stored in GMT, so anchor the parse to UTC before it is
+		// localized. It can also be a zero date ('0000-00-00 …'), which is truthy but
 		// unparseable; guard on the parsed timestamp so it degrades to null, not 1970.
-		$registered = $user->user_registered ? strtotime( $user->user_registered ) : false;
+		$registered = $user->user_registered ? strtotime( $user->user_registered . ' UTC' ) : false;
 
 		return [
 			'id'            => $user_id,
@@ -602,7 +603,7 @@ class Subscribers_Wizard extends Wizard {
 			// profile keeps this as a header action rather than stranding the admin.
 			'editUrl'       => get_edit_user_link( $user_id ),
 			'status'        => $this->reduced_status( $subscriptions, $groups ),
-			'memberSince'   => $registered ? gmdate( 'Y-m-d', $registered ) : null,
+			'memberSince'   => $this->local_date( $registered ),
 			'lastPayment'   => $this->last_payment_date( $user_id ),
 			// Wired to reader activity in a later slice; the column is hidden by default.
 			'lastSeen'      => null,
@@ -690,15 +691,32 @@ class Subscribers_Wizard extends Wizard {
 	}
 
 	/**
+	 * The calendar day an instant falls on in the publisher's timezone, as a bare
+	 * 'Y-m-d' string.
+	 *
+	 * EVERY date this wizard emits goes through here, so one profile cannot mix
+	 * bases: a UTC-formatted "First subscribed" sitting directly above a localized
+	 * "Last payment" can read a day apart for the same instant on a negative-offset
+	 * site, and the publisher cross-checks these numbers against WooCommerce's own
+	 * admin screens, which localize. wp_date() formats a Unix timestamp in the site
+	 * timezone; callers are responsible for handing over a UTC-anchored timestamp.
+	 *
+	 * @param int|false|null $timestamp A Unix timestamp, or a falsy value when the date is unset.
+	 *
+	 * @return string|null 'YYYY-MM-DD', or null when there is no timestamp.
+	 */
+	private function local_date( $timestamp ) {
+		return $timestamp ? wp_date( 'Y-m-d', (int) $timestamp ) : null;
+	}
+
+	/**
 	 * One of a subscription's dates as a bare 'Y-m-d' string in the site's
 	 * timezone, or null when unset.
 	 *
 	 * WC_Subscription::get_date() hands back a GMT 'Y-m-d H:i:s' string, or the
 	 * integer 0 when the date is not set. The wizard shows calendar days, so the
 	 * GMT instant is converted to the publisher's timezone before the time is
-	 * dropped — otherwise a date near midnight renders a day off from WooCommerce's
-	 * own admin screens (which localize), exactly the numbers a publisher
-	 * cross-checks. wp_date() formats a Unix timestamp in the site timezone.
+	 * dropped — see local_date().
 	 *
 	 * @param \WC_Subscription $subscription The subscription.
 	 * @param string           $date_type    A WCS date type, e.g. 'next_payment'.
@@ -712,8 +730,7 @@ class Subscribers_Wizard extends Wizard {
 		}
 		// get_date() returns GMT; anchor the parse to UTC so a server default
 		// timezone can't shift the instant before it is localized.
-		$timestamp = strtotime( (string) $date . ' UTC' );
-		return $timestamp ? wp_date( 'Y-m-d', $timestamp ) : null;
+		return $this->local_date( strtotime( (string) $date . ' UTC' ) );
 	}
 
 	/**
@@ -815,7 +832,7 @@ class Subscribers_Wizard extends Wizard {
 					'role'     => $role,
 					// Null for a member who predates the joined-at meta, rather than a
 					// misleading Unix epoch.
-					'joinedAt' => $joined_at ? wp_date( 'Y-m-d', $joined_at ) : null,
+					'joinedAt' => $this->local_date( $joined_at ),
 				]
 			);
 		}
@@ -945,7 +962,7 @@ class Subscribers_Wizard extends Wizard {
 			return null;
 		}
 		$paid = $orders[0]->get_date_paid();
-		return $paid ? gmdate( 'Y-m-d', $paid->getTimestamp() ) : null;
+		return $this->local_date( $paid ? $paid->getTimestamp() : null );
 	}
 
 	/**

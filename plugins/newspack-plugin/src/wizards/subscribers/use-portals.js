@@ -30,11 +30,16 @@ export function useWizardNode( selector, modifierClass, enabled = true ) {
 			return undefined;
 		}
 		let observer;
+		// The node belongs to the wizard, not to the screen that borrowed it, so
+		// the modifier has to come back off when the screen unmounts — otherwise a
+		// list navigated back to keeps a class describing a portal that is gone.
+		let tagged;
 		const attach = () => {
 			const found = document.querySelector( selector );
 			if ( found ) {
 				if ( modifierClass ) {
 					found.classList.add( modifierClass );
+					tagged = found;
 				}
 				setNode( found );
 			}
@@ -48,7 +53,10 @@ export function useWizardNode( selector, modifierClass, enabled = true ) {
 			} );
 			observer.observe( document.body, { childList: true, subtree: true } );
 		}
-		return () => observer?.disconnect();
+		return () => {
+			observer?.disconnect();
+			tagged?.classList.remove( modifierClass );
+		};
 	}, [ selector, modifierClass, enabled ] );
 	return node;
 }

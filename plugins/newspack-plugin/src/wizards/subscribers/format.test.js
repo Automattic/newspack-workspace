@@ -8,6 +8,11 @@
  */
 
 /**
+ * WordPress dependencies
+ */
+import { getSettings, setSettings } from '@wordpress/date';
+
+/**
  * Internal dependencies
  */
 import { fmtCurrency, billingText, orDash, scheduleRow } from './format';
@@ -90,5 +95,22 @@ describe( 'scheduleRow', () => {
 		const row = scheduleRow( { status: 'active', nextBillingDate: null, endDate: null } );
 		expect( row.label ).toBe( 'Next billing' );
 		expect( row.value ).toBe( '—' );
+	} );
+
+	// The endpoint derives endDate in the SITE's timezone, so "today" must be read
+	// on that same basis. Pinned with a site 10 hours behind UTC and an instant
+	// that has already rolled over in UTC but not on the site: the plan ends
+	// *today* for the publisher, so it reads "Ends", whatever zone the admin's
+	// browser is in.
+	it( "decides Ends/Ended on the site's calendar day, not the viewer's", () => {
+		const settings = getSettings();
+		setSettings( { ...settings, timezone: { offset: -10, string: 'Pacific/Honolulu', abbr: 'HST' } } );
+		jest.useFakeTimers().setSystemTime( new Date( '2026-01-02T05:00:00Z' ) ); // 2026-01-01 19:00 in Honolulu.
+
+		expect( scheduleRow( { nextBillingDate: null, endDate: '2026-01-01' } ).label ).toBe( 'Ends' );
+		expect( scheduleRow( { nextBillingDate: null, endDate: '2025-12-31' } ).label ).toBe( 'Ended' );
+
+		jest.useRealTimers();
+		setSettings( settings );
 	} );
 } );
