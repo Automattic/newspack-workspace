@@ -26,6 +26,19 @@
 		<exclude name="Generic.CodeAnalysis.UnusedFunctionParameter.Found"/>
 	</rule>
 
+	<!-- VIPCS 3.1.0 extended NoPaging to flag `posts_per_page`/`numberposts`
+	     set to `-1`, which the previous `> 100` check let through. That is a
+	     fair rule, but it lands on ~66 pre-existing call sites across four
+	     plugins — WP-CLI migrations and backfillers, test fixtures, and
+	     runtime queries over small internal post types. Each needs its own
+	     judgement about batching or a justified suppression, so adopting it
+	     is its own piece of work rather than a drive-by. The `nopaging` group
+	     stays enabled; only the two new error codes are deferred. -->
+	<rule ref="WordPressVIPMinimum.Performance.NoPaging">
+		<exclude name="WordPressVIPMinimum.Performance.NoPaging.posts_per_page_posts_per_page"/>
+		<exclude name="WordPressVIPMinimum.Performance.NoPaging.posts_per_page_numberposts"/>
+	</rule>
+
 	<!-- Custom capabilities defined by Newspack plugins (newspack-plugin,
 	     newspack-multibranded-site). Listed at root so WP.Capabilities does
 	     not flag legitimate cap names. -->
