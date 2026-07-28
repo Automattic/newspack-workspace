@@ -198,4 +198,181 @@ class Test_Group_Subscription_API extends WP_UnitTestCase {
 
 		$this->assertNotWPError( $result, 'A pending-cancel subscription should still pass the active gate.' );
 	}
+
+	/**
+	 * Build a /name request carrying a subscription_id and a name (NPPD-1813).
+	 *
+	 * @param int    $subscription_id Subscription ID.
+	 * @param string $name            Group name to set.
+	 * @return WP_REST_Request
+	 */
+	private function rename_request_for( int $subscription_id, string $name ): WP_REST_Request {
+		$request = new WP_REST_Request( 'POST', '/newspack-group-subscription/v1/name' );
+		$request->set_param( 'subscription_id', $subscription_id );
+		$request->set_param( 'name', $name );
+		return $request;
+	}
+
+	/**
+	 * Renaming persists a custom group name, and the response echoes the resolved name.
+	 */
+	public function test_update_name_persists_custom_name() {
+		$subscription = $this->create_group_subscription( 'active' );
+		$request      = $this->rename_request_for( $subscription->get_id(), 'Marketing Team' );
+
+		$result = Group_Subscription_API::api_update_name( $request );
+
+		$this->assertNotWPError( $result, 'Renaming an active group should succeed.' );
+		$this->assertSame( 'Marketing Team', $result->get_data()['name'], 'The response should echo the saved name.' );
+		$this->assertSame(
+			'Marketing Team',
+			Group_Subscription_Settings::get_subscription_settings( $subscription )['name'],
+			'The custom name should be persisted to the subscription settings.'
+		);
+	}
+
+	/**
+	 * Surrounding whitespace is trimmed before the name is stored.
+	 */
+	public function test_update_name_trims_whitespace() {
+		$subscription = $this->create_group_subscription( 'active' );
+		$request      = $this->rename_request_for( $subscription->get_id(), '  Spaced Team  ' );
+
+		$result = Group_Subscription_API::api_update_name( $request );
+
+		$this->assertSame( 'Spaced Team', $result->get_data()['name'], 'Leading/trailing whitespace should be trimmed from the saved name.' );
+	}
+
+	/**
+	 * Clearing the name drops the override. With no product on the test subscription, the
+	 * resolved name falls through the product-name step to the default singular group label
+	 * (in production a real subscription has a product, so it would land on the product name first).
+	 */
+	public function test_update_name_empty_resets_to_label_when_no_product() {
+		$subscription = $this->create_group_subscription( 'active' );
+		// Give it a custom name first, then clear it.
+		Group_Subscription_API::api_update_name( $this->rename_request_for( $subscription->get_id(), 'Temporary Name' ) );
+
+		$result = Group_Subscription_API::api_update_name( $this->rename_request_for( $subscription->get_id(), '   ' ) );
+
+		$this->assertSame(
+			\Newspack\Group_Subscription::get_label( 'singular' ),
+			$result->get_data()['name'],
+			'Clearing the name with no product should fall back to the default singular group label.'
+		);
+	}
+
+	/**
+	 * Renaming to a name that happens to equal the currently-inherited name must still pin
+	 * the override, so a later change to the inherited source can't silently rename the
+	 * reader's group underneath them (NPPD-1813).
+	 *
+	 * Reproduced here via the label fallback (the test subscriptions carry no product); in
+	 * production the same drift happens via the product-name step of the fallback chain.
+	 */
+	public function test_update_name_pins_override_matching_the_inherited_name() {
+		$subscription   = $this->create_group_subscription( 'active' );
+		$inherited_name = \Newspack\Group_Subscription::get_label( 'singular' );
+
+		// The reader types the name they currently see, which equals the inherited fallback.
+		Group_Subscription_API::api_update_name( $this->rename_request_for( $subscription->get_id(), $inherited_name ) );
+
+		// The publisher then renames the underlying source the fallback resolves to.
+		update_option( 'newspack_group_subscription_label_singular', 'Team' );
+
+		$this->assertSame(
+			$inherited_name,
+			Group_Subscription_Settings::get_subscription_settings( $subscription )['name'],
+			'A name the reader explicitly saved must stay pinned when the inherited source changes.'
+		);
+	}
+
+	/**
+	 * An over-long name is capped to GROUP_NAME_MAX_LENGTH so it can't break the header/picker layout.
+	 */
+	public function test_update_name_caps_length() {
+		$subscription = $this->create_group_subscription( 'active' );
+		$request      = $this->rename_request_for( $subscription->get_id(), str_repeat( 'a', Group_Subscription_Settings::GROUP_NAME_MAX_LENGTH + 50 ) );
+
+		$result = Group_Subscription_API::api_update_name( $request );
+
+		$this->assertSame(
+			Group_Subscription_Settings::GROUP_NAME_MAX_LENGTH,
+			mb_strlen( $result->get_data()['name'] ),
+			'The saved name should be capped to GROUP_NAME_MAX_LENGTH.'
+		);
+	}
+
+	/**
+	 * Renaming is metadata-only and is NOT state-gated: it stays allowed on a
+	 * cancelled subscription so an owner can still tell their groups apart in the picker.
+	 */
+	public function test_update_name_allowed_on_cancelled_subscription() {
+		$subscription = $this->create_group_subscription( 'cancelled' );
+		$request      = $this->rename_request_for( $subscription->get_id(), 'Archived Team' );
+
+		$result = Group_Subscription_API::api_update_name( $request );
+
+		$this->assertNotWPError( $result, 'Renaming should be allowed regardless of subscription status.' );
+		$this->assertSame( 'Archived Team', $result->get_data()['name'], 'The name should persist even on a cancelled subscription.' );
+	}
+
+	/**
+	 * A missing/invalid subscription returns a 404 WP_Error, the contract the JS relies on.
+	 */
+	public function test_update_name_returns_404_for_invalid_subscription() {
+		$result = Group_Subscription_API::api_update_name( $this->rename_request_for( 999999, 'Nobody\'s Group' ) );
+
+		$this->assertWPError( $result, 'An unresolvable subscription should yield a WP_Error.' );
+		$this->assertSame( 404, $result->get_error_data()['status'], 'The error should carry HTTP 404.' );
+	}
+
+	/**
+	 * Dispatch through the registered route as a fresh REST server, exercising the
+	 * permission_callback and arg sanitization the direct-call tests bypass.
+	 *
+	 * @param int    $subscription_id Subscription ID.
+	 * @param string $name            Group name to set.
+	 * @return WP_REST_Response
+	 */
+	private function dispatch_rename( int $subscription_id, string $name ): WP_REST_Response {
+		global $wp_rest_server;
+		$wp_rest_server = new WP_REST_Server();
+		do_action( 'rest_api_init' );
+		$request = new WP_REST_Request( 'POST', '/newspack-group-subscription/v1/name' );
+		$request->set_param( 'subscription_id', $subscription_id );
+		$request->set_param( 'name', $name );
+		return $wp_rest_server->dispatch( $request );
+	}
+
+	/**
+	 * The /name route's permission_callback rejects a reader who isn't the group's manager.
+	 */
+	public function test_rest_route_denies_non_manager() {
+		$subscription = $this->create_group_subscription( 'active' );
+		$non_manager  = self::factory()->user->create( [ 'role' => 'subscriber' ] );
+		wp_set_current_user( $non_manager );
+
+		$response = $this->dispatch_rename( $subscription->get_id(), 'Hijacked' );
+
+		$this->assertSame( 403, $response->get_status(), 'A non-manager reader must not be able to rename the group.' );
+		$this->assertSame(
+			'',
+			$subscription->get_meta( Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'name', true ),
+			'A rejected request must not change the stored name.'
+		);
+	}
+
+	/**
+	 * The route's sanitize_callback (sanitize_text_field) strips markup before the name is stored.
+	 */
+	public function test_rest_route_strips_markup_from_name() {
+		$subscription = $this->create_group_subscription( 'active' );
+		wp_set_current_user( $this->owner_id );
+
+		$response = $this->dispatch_rename( $subscription->get_id(), '<b>Marketing Team</b>' );
+
+		$this->assertSame( 200, $response->get_status(), 'The group manager should be allowed to rename.' );
+		$this->assertSame( 'Marketing Team', $response->get_data()['name'], 'Markup should be stripped from the saved name.' );
+	}
 }

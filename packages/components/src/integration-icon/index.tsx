@@ -15,7 +15,8 @@ import './style.scss';
  * and a background rule in this component's stylesheet.
  */
 const IntegrationIcon = ( { provider, className }: { provider: string; className?: string } ) => {
-	const node = Object.prototype.hasOwnProperty.call( espProviderIcons, provider ) ? espProviderIcons[ provider ] : null;
+	const icons: Record< string, React.ReactNode > = espProviderIcons;
+	const node = Object.prototype.hasOwnProperty.call( espProviderIcons, provider ) ? icons[ provider ] : null;
 	if ( ! node ) {
 		return null;
 	}

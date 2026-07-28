@@ -12,6 +12,46 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Newspack_Newsletters_Renderer {
 	/**
+	 * Font-size preset scale (slug => CSS px). Single source of truth for the newsletter
+	 * font-size presets, shared with the WC email renderer (Theme_Json_Builder references
+	 * this constant) so both engines resolve a preset to the same pixel value.
+	 *
+	 * @var array<string,string>
+	 */
+	const FONT_SIZES = [
+		'xx-small'     => '8px',
+		'x-small'      => '10px',
+		'small'        => '12px',
+		'normal'       => '16px',
+		'medium'       => '16px',
+		'large'        => '24px',
+		'huge'         => '36px',
+		'x-large'      => '36px',
+		'xx-large'     => '40px',
+		'xxx-large'    => '48px',
+		'xxxx-large'   => '56px',
+		'xxxxx-large'  => '64px',
+		'xxxxxx-large' => '72px',
+	];
+
+	/**
+	 * Spacing preset scale (slug => CSS px). Single source of truth for the newsletter
+	 * spacing presets, shared with the WC email renderer (Theme_Json_Builder references
+	 * this constant) so both engines resolve `var:preset|spacing|*` to the same value.
+	 *
+	 * @var array<string,string>
+	 */
+	const SPACING_SIZES = [
+		'20' => '8px',
+		'30' => '16px',
+		'40' => '24px',
+		'50' => '32px',
+		'60' => '32px',
+		'70' => '48px',
+		'80' => '64px',
+	];
+
+	/**
 	 * The color palette to be used.
 	 *
 	 * @var Object
@@ -159,22 +199,7 @@ final class Newspack_Newsletters_Renderer {
 			return $block_attrs['customFontSize'] . 'px';
 		}
 		if ( isset( $block_attrs['fontSize'] ) ) {
-			$sizes = array(
-				'xx-small'     => '8px',
-				'x-small'      => '10px',
-				'small'        => '12px',
-				'normal'       => '16px',
-				'medium'       => '16px',
-				'large'        => '24px',
-				'huge'         => '36px',
-				'x-large'      => '36px',
-				'xx-large'     => '40px',
-				'xxx-large'    => '48px',
-				'xxxx-large'   => '56px',
-				'xxxxx-large'  => '64px',
-				'xxxxxx-large' => '72px',
-			);
-			return $sizes[ $block_attrs['fontSize'] ] ?? null;
+			return self::FONT_SIZES[ $block_attrs['fontSize'] ] ?? null;
 		}
 		return null;
 	}
@@ -341,20 +366,11 @@ final class Newspack_Newsletters_Renderer {
 	 * @return string Spacing value.
 	 */
 	private static function get_spacing_value( $value ) {
-		$presets = [
-			'20' => '8px',
-			'30' => '16px',
-			'40' => '24px',
-			'50' => '32px',
-			'60' => '32px',
-			'70' => '48px',
-			'80' => '64px',
-		];
 		if ( 0 === strpos( $value, 'var' ) ) {
 			$preset_key = explode( '|', $value );
 			$preset     = end( $preset_key );
-			if ( isset( $presets[ $preset ] ) ) {
-				return $presets[ $preset ];
+			if ( isset( self::SPACING_SIZES[ $preset ] ) ) {
+				return self::SPACING_SIZES[ $preset ];
 			}
 			return $preset . 'px';
 		}
