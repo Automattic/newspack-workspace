@@ -20,8 +20,8 @@ import './configure-view.scss';
  * Build the operator dropdown options for an incoming metadata field.
  *
  * Options are primarily driven by the field's `value_type`, which the
- * integration declares (e.g. a date field shouldn't offer the "Number"
- * range operator, and a single-select field shouldn't offer it either).
+ * integration declares (e.g. a date field offers a date range and exact
+ * text, but not the "Number" range operator).
  * The built-in ESP integration maps its provider field types onto these
  * value_types (number/date/datetime/select/multiselect), so those fields
  * hit the typed cases above. A field left as a plain `string` (or an
@@ -41,7 +41,10 @@ export const operatorOptionsForField = field => {
 			return [ { label: __( 'Number', 'newspack-plugin' ), value: 'range' } ];
 		case 'date':
 		case 'datetime':
-			return [ { label: __( 'Text', 'newspack-plugin' ), value: 'default' } ];
+			return [
+				{ label: __( 'Date range', 'newspack-plugin' ), value: 'date_range' },
+				{ label: __( 'Text', 'newspack-plugin' ), value: 'default' },
+			];
 		case 'multiselect':
 			return [ { label: __( 'Multiple values', 'newspack-plugin' ), value: 'list__in' } ];
 		case 'select':

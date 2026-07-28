@@ -415,6 +415,17 @@ class Test_Integrations extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * The operator whitelist is enforced on every write path, so a date field's
+	 * operator is unstorable until date_range is on it.
+	 */
+	public function test_update_enabled_incoming_fields_persists_date_range_operator() {
+		$integration = new Sample_Integration( 'test-id', 'Test Integration' );
+		$integration->update_enabled_incoming_fields( [ 'last_gift_date' => 'date_range' ] );
+		$stored = \get_option( 'newspack_integration_incoming_fields_test-id' );
+		$this->assertSame( 'date_range', $stored['last_gift_date']['matching_function'] );
+	}
+
+	/**
 	 * A stored per-field operator survives an integration whose
 	 * configure_incoming_field() doesn't set matching_function (the non-ESP case),
 	 * so the registered segment criterion gets the publisher's chosen operator.

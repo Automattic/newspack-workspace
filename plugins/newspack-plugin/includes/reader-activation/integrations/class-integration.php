@@ -590,7 +590,7 @@ abstract class Integration {
 	 *
 	 * @var string[]
 	 */
-	private const ALLOWED_INCOMING_MATCHING_FUNCTIONS = [ 'default', 'range', 'list__in', 'list__not_in' ];
+	private const ALLOWED_INCOMING_MATCHING_FUNCTIONS = [ 'default', 'range', 'list__in', 'list__not_in', 'date_range' ];
 
 	/**
 	 * Get the enabled incoming fields for this integration.
