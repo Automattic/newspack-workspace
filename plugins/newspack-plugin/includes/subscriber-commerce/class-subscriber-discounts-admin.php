@@ -21,12 +21,15 @@ class Subscriber_Discounts_Admin {
 	const TAB_SLUG = 'discounts';
 
 	/**
+	 * Where this tab sits among the wizard's tabs.
+	 */
+	const TAB_ORDER = 20;
+
+	/**
 	 * Hook up the tab and the endpoints.
 	 */
 	public static function init() {
-		// After the wizard itself has registered, so this tab follows the
-		// wizard's own Configuration tab rather than preceding it.
-		add_action( 'init', [ __CLASS__, 'register_tab' ], 11 );
+		add_action( 'init', [ __CLASS__, 'register_tab' ] );
 		add_action( 'rest_api_init', [ __CLASS__, 'register_api_endpoints' ] );
 	}
 
@@ -45,8 +48,12 @@ class Subscriber_Discounts_Admin {
 		Audience_Subscriptions::register_tab(
 			self::TAB_SLUG,
 			[
-				'label' => esc_html__( 'Subscriber discounts', 'newspack-plugin' ),
+				// Not escaped: the label is localized into a nested array, where
+				// wp_localize_script() leaves entities encoded, so an escaped
+				// label would reach any apostrophe-bearing locale as `&#8217;`.
+				'label' => __( 'Subscriber discounts', 'newspack-plugin' ),
 				'path'  => '/discounts',
+				'order' => self::TAB_ORDER,
 			]
 		);
 	}
@@ -86,12 +93,15 @@ class Subscriber_Discounts_Admin {
 				'callback'            => [ __CLASS__, 'api_save_settings' ],
 				'permission_callback' => [ __CLASS__, 'api_permissions_check' ],
 				'args'                => [
-					'overlap'       => [
+					'overlap'           => [
 						'type'              => 'string',
 						'enum'              => [ 'best', 'combine' ],
 						'sanitize_callback' => 'sanitize_key',
 					],
-					'apply_on_sale' => [
+					'apply_on_sale'     => [
+						'type' => 'boolean',
+					],
+					'apply_at_checkout' => [
 						'type' => 'boolean',
 					],
 				],
@@ -232,7 +242,7 @@ class Subscriber_Discounts_Admin {
 	 */
 	public static function api_save_settings( $request ) {
 		$settings = [];
-		foreach ( [ 'overlap', 'apply_on_sale' ] as $setting ) {
+		foreach ( [ 'overlap', 'apply_on_sale', 'apply_at_checkout' ] as $setting ) {
 			if ( null !== $request->get_param( $setting ) ) {
 				$settings[ $setting ] = $request->get_param( $setting );
 			}

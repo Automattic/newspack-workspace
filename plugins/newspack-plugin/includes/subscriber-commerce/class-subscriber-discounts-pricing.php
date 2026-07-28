@@ -287,7 +287,7 @@ class Subscriber_Discounts_Pricing {
 		}
 
 		$user_id = null === $user_id ? get_current_user_id() : (int) $user_id;
-		if ( $user_id <= 0 ) {
+		if ( $user_id <= 0 && empty( Subscriber_Discounts::get_settings()['apply_at_checkout'] ) ) {
 			return null;
 		}
 
@@ -305,20 +305,103 @@ class Subscriber_Discounts_Pricing {
 	}
 
 	/**
+	 * Whether a reader gets a rule's discount.
+	 *
+	 * Normally that means holding one of the subscriptions the rule names. With
+	 * "apply at checkout" on, having one in the cart is enough — so a reader
+	 * buying a subscription and a discounted product together sees the
+	 * subscriber price before they have finished checking out. The subscription
+	 * itself is never discounted by its own rule: the reader is not a subscriber
+	 * of it yet, and discounting the thing that grants the discount is a loop.
+	 *
+	 * @param int         $user_id Reader.
+	 * @param array       $rule    Rule being considered.
+	 * @param \WC_Product $product Product being priced.
+	 * @return bool
+	 */
+	private static function reader_qualifies( $user_id, $rule, $product ) {
+		if ( Subscriber_Eligibility::user_has( $user_id, $rule['subscription_product_ids'] ) ) {
+			return true;
+		}
+		if ( empty( Subscriber_Discounts::get_settings()['apply_at_checkout'] ) ) {
+			return false;
+		}
+		if ( self::product_is_one_of( $product, $rule['subscription_product_ids'] ) ) {
+			return false;
+		}
+		return self::cart_contains_any( $rule['subscription_product_ids'] );
+	}
+
+	/**
+	 * Whether a product (or its parent) is one of the given products.
+	 *
+	 * @param \WC_Product $product     Product being priced.
+	 * @param int[]       $product_ids Products to match against.
+	 * @return bool
+	 */
+	private static function product_is_one_of( $product, $product_ids ) {
+		$product_ids = array_map( 'absint', (array) $product_ids );
+		return in_array( (int) $product->get_id(), $product_ids, true )
+			|| ( $product->get_parent_id() && in_array( (int) $product->get_parent_id(), $product_ids, true ) );
+	}
+
+	/**
+	 * Whether the cart holds any of the given products.
+	 *
+	 * @param int[] $product_ids Products to look for.
+	 * @return bool
+	 */
+	private static function cart_contains_any( $product_ids ) {
+		$product_ids = array_map( 'absint', (array) $product_ids );
+		return (bool) array_intersect( $product_ids, self::get_cart_product_ids() );
+	}
+
+	/**
+	 * Every product currently in the cart, variations included.
+	 *
+	 * @return int[]
+	 */
+	private static function get_cart_product_ids() {
+		$cart_product_ids = [];
+		if ( function_exists( 'WC' ) && WC()->cart ) {
+			foreach ( WC()->cart->get_cart() as $cart_item ) {
+				$cart_product_ids[] = absint( $cart_item['product_id'] ?? 0 );
+				$cart_product_ids[] = absint( $cart_item['variation_id'] ?? 0 );
+			}
+		}
+
+		/**
+		 * Filters the products considered to be in the reader's cart when
+		 * deciding whether a subscription there already grants its discount.
+		 *
+		 * @param int[] $cart_product_ids Product and variation IDs in the cart.
+		 */
+		$cart_product_ids = (array) apply_filters( 'newspack_subscriber_discounts_cart_product_ids', $cart_product_ids );
+
+		return array_values( array_filter( array_map( 'absint', $cart_product_ids ) ) );
+	}
+
+	/**
 	 * Every active rule this reader qualifies for, regardless of product.
 	 *
 	 * @param int $user_id Reader.
 	 * @return array[]
 	 */
 	private static function qualifying_rules_for_reader( $user_id ) {
-		if ( $user_id <= 0 ) {
+		$apply_at_checkout = ! empty( Subscriber_Discounts::get_settings()['apply_at_checkout'] );
+		if ( $user_id <= 0 && ! $apply_at_checkout ) {
 			return [];
 		}
 		return array_values(
 			array_filter(
 				Subscriber_Discounts::get_active_rules(),
-				function ( $rule ) use ( $user_id ) {
-					return Subscriber_Eligibility::user_has( $user_id, $rule['subscription_product_ids'] );
+				function ( $rule ) use ( $user_id, $apply_at_checkout ) {
+					if ( Subscriber_Eligibility::user_has( $user_id, $rule['subscription_product_ids'] ) ) {
+						return true;
+					}
+					// Cart contents are part of the entitlement once they can
+					// grant it, so the variation-price cache key varies with them.
+					return $apply_at_checkout && self::cart_contains_any( $rule['subscription_product_ids'] );
 				}
 			)
 		);
@@ -346,8 +429,8 @@ class Subscriber_Discounts_Pricing {
 		$qualifying_rules = array_values(
 			array_filter(
 				$covering_rules,
-				function ( $rule ) use ( $user_id ) {
-					return Subscriber_Eligibility::user_has( $user_id, $rule['subscription_product_ids'] );
+				function ( $rule ) use ( $user_id, $product ) {
+					return self::reader_qualifies( $user_id, $rule, $product );
 				}
 			)
 		);

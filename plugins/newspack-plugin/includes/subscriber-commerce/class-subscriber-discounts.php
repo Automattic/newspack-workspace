@@ -45,8 +45,12 @@ class Subscriber_Discounts {
 	 * @var array
 	 */
 	const DEFAULT_SETTINGS = [
-		'overlap'       => 'best',
-		'apply_on_sale' => false,
+		'overlap'           => 'best',
+		'apply_on_sale'     => false,
+		// Whether a subscription sitting in the cart already counts, so a reader
+		// buying a subscription and a discounted product together sees the
+		// subscriber price before they have checked out.
+		'apply_at_checkout' => false,
 	];
 
 	/**
@@ -202,8 +206,9 @@ class Subscriber_Discounts {
 		$settings = array_merge( self::DEFAULT_SETTINGS, $stored_settings );
 
 		return [
-			'overlap'       => in_array( $settings['overlap'], [ 'best', 'combine' ], true ) ? $settings['overlap'] : 'best',
-			'apply_on_sale' => (bool) $settings['apply_on_sale'],
+			'overlap'           => in_array( $settings['overlap'], [ 'best', 'combine' ], true ) ? $settings['overlap'] : 'best',
+			'apply_on_sale'     => (bool) $settings['apply_on_sale'],
+			'apply_at_checkout' => (bool) $settings['apply_at_checkout'],
 		];
 	}
 

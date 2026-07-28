@@ -74,6 +74,17 @@ export default function SettingsModal( { settings, onSaved, onClose }: SettingsM
 					onChange={ value => setDraft( { ...draft, apply_on_sale: value } ) }
 					__nextHasNoMarginBottom
 				/>
+				<h3>{ __( 'Timing', 'newspack-plugin' ) }</h3>
+				<ToggleControl
+					label={ __( 'Apply discounts at checkout', 'newspack-plugin' ) }
+					help={ __(
+						'Give readers their subscriber prices as soon as a subscription is in their cart, before they have completed the purchase.',
+						'newspack-plugin'
+					) }
+					checked={ draft.apply_at_checkout }
+					onChange={ value => setDraft( { ...draft, apply_at_checkout: value } ) }
+					__nextHasNoMarginBottom
+				/>
 				<HStack spacing={ 2 } justify="flex-end">
 					<Button variant="secondary" disabled={ inFlight } onClick={ onClose }>
 						{ __( 'Cancel', 'newspack-plugin' ) }

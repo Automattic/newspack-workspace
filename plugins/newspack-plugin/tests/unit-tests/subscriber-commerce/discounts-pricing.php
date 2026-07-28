@@ -77,6 +77,7 @@ class Test_Subscriber_Discounts_Pricing extends \WP_UnitTestCase {
 		$this->non_subscriber_id = $this->factory->user->create();
 
 		$this->book = $this->create_product( 100.0 );
+		$this->set_cart_contents( [] );
 
 		add_filter( 'newspack_access_rules_has_active_subscription', [ $this, 'grant_subscription_to_subscriber' ], 10, 3 );
 
@@ -87,6 +88,7 @@ class Test_Subscriber_Discounts_Pricing extends \WP_UnitTestCase {
 	 * Detach the simulated subscription and clear memoized state.
 	 */
 	public function tear_down() {
+		$this->set_cart_contents( [] );
 		remove_filter( 'newspack_access_rules_has_active_subscription', [ $this, 'grant_subscription_to_subscriber' ], 10 );
 		$this->flush_caches();
 		global $products_database;
@@ -107,6 +109,23 @@ class Test_Subscriber_Discounts_Pricing extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Put products in the reader's cart, through the seam the pricing layer
+	 * reads the cart from.
+	 *
+	 * @param int[] $product_ids Products in the cart.
+	 */
+	private function set_cart_contents( $product_ids ) {
+		remove_all_filters( 'newspack_subscriber_discounts_cart_product_ids' );
+		add_filter(
+			'newspack_subscriber_discounts_cart_product_ids',
+			function () use ( $product_ids ) {
+				return $product_ids;
+			}
+		);
+		$this->flush_caches();
+	}
+
+	/**
 	 * Reset every memoized layer between assertions.
 	 */
 	private function flush_caches() {
@@ -118,12 +137,13 @@ class Test_Subscriber_Discounts_Pricing extends \WP_UnitTestCase {
 	/**
 	 * Create a product post plus its mock, registered so wc_get_product() finds it.
 	 *
-	 * @param float $price     Product price.
+	 * @param float $price      Product price.
 	 * @param float $sale_price Sale price, when the product is on sale.
+	 * @param int   $product_id Explicit post ID, when the test needs a known one.
 	 * @return \WC_Product
 	 */
-	private function create_product( $price, $sale_price = null ) {
-		$post_id = $this->factory->post->create( [ 'post_type' => 'product' ] );
+	private function create_product( $price, $sale_price = null, $product_id = 0 ) {
+		$post_id = $product_id ? $product_id : $this->factory->post->create( [ 'post_type' => 'product' ] );
 		$data    = [
 			'id'            => $post_id,
 			'price'         => $price,
@@ -323,6 +343,69 @@ class Test_Subscriber_Discounts_Pricing extends \WP_UnitTestCase {
 		$this->assertFalse(
 			Subscriber_Discounts_Pricing::filter_is_on_sale( false, $this->book ),
 			'It does not report as on sale for a reader who gets no discount.'
+		);
+	}
+
+	/**
+	 * With "apply discounts at checkout" on, a subscription sitting in the cart
+	 * is enough — a reader buying a subscription and a discounted product in the
+	 * same order sees the subscriber price before they have checked out.
+	 */
+	public function test_a_subscription_in_the_cart_can_grant_the_discount() {
+		$this->add_book_discount();
+
+		$non_subscriber_with_subscription_in_cart = $this->non_subscriber_id;
+		$this->set_cart_contents( [ self::GRANTING_SUBSCRIPTION_ID ] );
+
+		$this->assertNull(
+			Subscriber_Discounts_Pricing::get_subscriber_price( 100.0, $this->book, $non_subscriber_with_subscription_in_cart ),
+			'Off by default: what is in the cart does not yet make anyone a subscriber.'
+		);
+
+		Subscriber_Discounts::save_settings( [ 'apply_at_checkout' => true ] );
+		$this->flush_caches();
+
+		$this->assertSame(
+			90.0,
+			Subscriber_Discounts_Pricing::get_subscriber_price( 100.0, $this->book, $non_subscriber_with_subscription_in_cart ),
+			'With the setting on, the subscription in the cart grants the discount.'
+		);
+
+		$this->set_cart_contents( [] );
+
+		$this->assertNull(
+			Subscriber_Discounts_Pricing::get_subscriber_price( 100.0, $this->book, $non_subscriber_with_subscription_in_cart ),
+			'An empty cart grants nothing.'
+		);
+	}
+
+	/**
+	 * The subscription that grants a discount is never discounted by its own
+	 * rule: the reader is not a subscriber of it yet, and discounting the thing
+	 * that grants the discount is circular.
+	 */
+	public function test_the_granting_subscription_is_not_discounted_by_its_own_rule() {
+		Subscriber_Discounts::save_rule(
+			[
+				'subscription_product_ids' => [ self::GRANTING_SUBSCRIPTION_ID ],
+				'targeting'                => 'all',
+				'discount_type'            => 'percent',
+				'amount'                   => 10,
+			]
+		);
+		Subscriber_Discounts::save_settings( [ 'apply_at_checkout' => true ] );
+
+		$granting_subscription = $this->create_product( 120.0, null, self::GRANTING_SUBSCRIPTION_ID );
+		$this->set_cart_contents( [ self::GRANTING_SUBSCRIPTION_ID ] );
+
+		$this->assertNull(
+			Subscriber_Discounts_Pricing::get_subscriber_price( 120.0, $granting_subscription, $this->non_subscriber_id ),
+			'The subscription in the cart is not discounted by the rule it grants.'
+		);
+		$this->assertSame(
+			90.0,
+			Subscriber_Discounts_Pricing::get_subscriber_price( 100.0, $this->book, $this->non_subscriber_id ),
+			'Everything else the rule covers still is.'
 		);
 	}
 
