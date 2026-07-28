@@ -95,17 +95,13 @@ class Newspack_Popups_Settings {
 			);
 		}
 
-		$option_type  = 'select' === $setting['type'] ? 'string' : $setting['type'];
-		$option_value = self::sanitize_setting_option( $option_type, $options['option_value'] );
-
-		if ( update_option( $option_name, $option_value ) ) {
-			return true;
-		} else {
-			return new \WP_Error(
-				'newspack_popups_settings_error',
-				esc_html__( 'Error updating the settings.', 'newspack-popups' )
-			);
+		// Route through update_setting() so both screens share one validation path.
+		$updated = self::update_setting( $setting['section'], $option_name, $options['option_value'] );
+		if ( is_wp_error( $updated ) ) {
+			return $updated;
 		}
+
+		return true;
 	}
 
 	/**
@@ -156,10 +152,17 @@ class Newspack_Popups_Settings {
 		// Page settings validate the submitted ID directly, so any published page qualifies
 		// without the setting having to enumerate every page it would accept.
 		if ( isset( $config['control'] ) && 'page' === $config['control'] ) {
-			$value = empty( $value ) ? '' : (string) absint( $value );
-			if ( ! empty( $value ) && ! self::is_valid_page_id( $value ) ) {
-				// translators: %s is the description of the option.
-				return new WP_Error( 'newspack_popups_invalid_setting_update', sprintf( __( 'Invalid setting value for "%s".', 'newspack-popups' ), $config['description'] ) );
+			// An empty value clears the setting; anything else must be a published page ID.
+			// Reject rather than coerce, so a malformed payload can't save a different page.
+			if ( empty( $value ) ) {
+				$value = '';
+			} else {
+				$page_id = is_numeric( $value ) ? absint( $value ) : 0;
+				if ( ! $page_id || (string) $page_id !== (string) $value || ! self::is_valid_page_id( $page_id ) ) {
+					// translators: %s is the description of the option.
+					return new WP_Error( 'newspack_popups_invalid_setting_update', sprintf( __( 'Invalid setting value for "%s".', 'newspack-popups' ), $config['description'] ) );
+				}
+				$value = (string) $page_id;
 			}
 		}
 		$updated = update_option( $config['key'], self::sanitize_setting_option( $config['type'], $value ) );
@@ -269,6 +272,11 @@ class Newspack_Popups_Settings {
 	 * @return array Array of settings objects.
 	 */
 	public static function get_settings( $assoc = false, $get_segments = false ) {
+		// A saved page that has since been unpublished or deleted reports as unset, so the
+		// reported value and the picker's selection agree and re-saving the section doesn't
+		// fail validation on a field that looks empty.
+		$donor_landing_page = self::get_donor_landing_page_selection();
+
 		$settings_list = [
 			[
 				'description' => __( 'Donor Settings', 'newspack-popups' ),
@@ -284,14 +292,14 @@ class Newspack_Popups_Settings {
 				'key'         => 'newspack_popups_donor_landing_page',
 				'type'        => 'string',
 				'control'     => 'page',
-				'value'       => self::donor_landing_page(),
+				'value'       => $donor_landing_page ? (string) $donor_landing_page['value'] : '',
 				'default'     => '',
 				'description' => __( 'Donor landing page', 'newspack-popups' ),
 				'help'        => __(
 					"Set a page on your site as a donation landing page. Once a reader views this page, they will be considered a donor. This is helpful if you're using an off-site donation platform but still want to target donors as an audience segment.",
 					'newspack-popups'
 				),
-				'selected'    => self::get_donor_landing_page_selection(),
+				'selected'    => $donor_landing_page,
 			],
 			[
 				'section'     => 'donor_settings',

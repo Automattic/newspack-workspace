@@ -12,41 +12,12 @@ import { Button, Card, CardBody, CheckboxControl, Notice, SelectControl, SlotFil
 /**
  * Newspack dependencies.
  */
-import { AutocompleteWithSuggestions, Page } from 'newspack-components';
+import { PageControl, Page } from 'newspack-components';
 
 /**
  * Internal dependencies
  */
 import './style.scss';
-
-/**
- * A single-page selector backed by an autocomplete search over all pages.
- *
- * Tracks the selected page locally so the field can show its title, while the value
- * handed back to the settings payload is just the page ID.
- *
- * @param {Object}   props          Component props.
- * @param {Object}   props.setting  The setting configuration.
- * @param {Function} props.onChange Called with the selected page ID, or '' when cleared.
- */
-const PageSetting = ( { setting, onChange } ) => {
-	const [ selected, setSelected ] = useState( setting.selected || null );
-	return (
-		<AutocompleteWithSuggestions
-			label={ setting.description }
-			help={ setting.help }
-			postTypes={ [ { slug: 'page', label: __( 'Page', 'newspack-popups' ) } ] }
-			postTypeLabel={ __( 'page', 'newspack-popups' ) }
-			postTypeLabelPlural={ __( 'pages', 'newspack-popups' ) }
-			selectedItems={ selected ? [ selected ] : [] }
-			onChange={ items => {
-				const item = items && items.length ? items[ items.length - 1 ] : null;
-				setSelected( item );
-				onChange( item ? String( item.value ) : '' );
-			} }
-		/>
-	);
-};
 
 const App = () => {
 	const [ inFlight, setInFlight ] = useState( false );
@@ -89,7 +60,16 @@ const App = () => {
 			};
 			// A `control` overrides the default control for the setting's data type.
 			if ( 'page' === setting.control ) {
-				return <PageSetting key={ setting.key } setting={ setting } onChange={ handleSettingChange( setting.key ) } />;
+				return (
+					<PageControl
+						key={ setting.key }
+						label={ setting.description }
+						help={ setting.help }
+						disabled={ inFlight }
+						selected={ setting.selected || null }
+						onChange={ handleSettingChange( setting.key ) }
+					/>
+				);
 			}
 			switch ( setting.type ) {
 				case 'string':

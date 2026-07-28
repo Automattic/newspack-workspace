@@ -5,7 +5,7 @@
 /**
  * WordPress dependencies
  */
-import { Fragment, useEffect, useState } from '@wordpress/element';
+import { Fragment, useState } from '@wordpress/element';
 import { applyFilters } from '@wordpress/hooks';
 import { __ } from '@wordpress/i18n';
 import { CheckboxControl } from '@wordpress/components';
@@ -13,42 +13,8 @@ import { CheckboxControl } from '@wordpress/components';
 /**
  * Internal dependencies
  */
-import { ActionCard, AutocompleteWithSuggestions, Button, Grid, Notice, SelectControl, TextControl } from '../';
+import { ActionCard, Button, Grid, Notice, PageControl, SelectControl, TextControl } from '../';
 import './style.scss';
-
-/**
- * A single-page selector backed by an autocomplete search, for settings that point at a
- * page without enumerating every page the site has.
- *
- * @param {Object}   props          Component props.
- * @param {string}   props.label    Field label.
- * @param {string}   props.help     Help text.
- * @param {Object}   props.selected The saved page as `{ label, value }`, if any.
- * @param {Function} props.onChange Called with the selected page ID, or '' when cleared.
- */
-const PageControl = ( { label, help, selected, onChange } ) => {
-	const [ selectedItem, setSelectedItem ] = useState( selected || null );
-	// Settings are fetched after this control first renders, so adopt the saved page
-	// whenever it arrives or changes rather than only on mount.
-	useEffect( () => {
-		setSelectedItem( selected || null );
-	}, [ selected?.value ] );
-	return (
-		<AutocompleteWithSuggestions
-			label={ label }
-			help={ help }
-			postTypes={ [ { slug: 'page', label: __( 'Page', 'newspack' ) } ] }
-			postTypeLabel={ __( 'page', 'newspack' ) }
-			postTypeLabelPlural={ __( 'pages', 'newspack' ) }
-			selectedItems={ selectedItem ? [ selectedItem ] : [] }
-			onChange={ items => {
-				const item = items && items.length ? items[ items.length - 1 ] : null;
-				setSelectedItem( item );
-				onChange( item ? String( item.value ) : '' );
-			} }
-		/>
-	);
-};
 
 const isSelectControl = setting => {
 	return Array.isArray( setting.options ) && setting.options.length;
@@ -104,7 +70,8 @@ const SettingsSection = props => {
 				label: option.name || option.label,
 			} ) ) || null,
 		value: setting.value,
-		selected: setting.selected || null,
+		// Only page controls consume `selected`; keep it off every other control's props.
+		selected: 'page' === setting.control ? setting.selected || null : null,
 		multiple: isSelectControl( setting ) && setting.multiple ? true : null,
 		checked: setting.type === 'boolean' ? !! setting.value : null,
 		onChange: value => {
