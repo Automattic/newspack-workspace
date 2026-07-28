@@ -313,7 +313,7 @@ class Corrections {
 	public static function get_corrections( $post_id ) {
 		$corrections = get_posts( // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.get_posts_get_posts
 			[
-				'posts_per_page' => -1,
+				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging.posts_per_page_posts_per_page
 				'post_type'      => self::POST_TYPE,
 				'post_status'    => 'any',
 				'meta_key'       => self::CORRECTION_POST_ID_META, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key

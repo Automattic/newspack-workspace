@@ -1280,7 +1280,7 @@ final class Newspack_Popups {
 				'fields'           => 'ids',
 				'post_status'      => 'any',
 				'post_type'        => self::NEWSPACK_POPUPS_CPT,
-				'posts_per_page'   => -1,
+				'posts_per_page'   => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging.posts_per_page_posts_per_page
 			]
 		);
 

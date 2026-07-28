@@ -79,7 +79,7 @@ final class Ads_Placements {
 		$placement_ads = get_posts(
 			[
 				'post_type'      => Ads::CPT,
-				'posts_per_page' => -1,
+				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging.posts_per_page_posts_per_page
 				'tax_query'      => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query
 					[
 						'taxonomy' => self::TAXONOMY,

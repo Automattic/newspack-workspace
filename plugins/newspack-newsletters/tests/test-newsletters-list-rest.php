@@ -48,7 +48,7 @@ class Newsletters_List_REST_Test extends WP_UnitTestCase {
 				[
 					'post_type'      => Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT,
 					'fields'         => 'ids',
-					'posts_per_page' => -1,
+					'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging.posts_per_page_posts_per_page
 					'orderby'        => 'ID',
 					'order'          => 'ASC',
 				],
@@ -841,7 +841,7 @@ class Newsletters_List_REST_Test extends WP_UnitTestCase {
 				[
 					'post_type'      => Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT,
 					'fields'         => 'ids',
-					'posts_per_page' => -1,
+					'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging.posts_per_page_posts_per_page
 					'orderby'        => 'ID',
 					'order'          => 'ASC',
 				]
@@ -894,7 +894,7 @@ class Newsletters_List_REST_Test extends WP_UnitTestCase {
 				[
 					'post_type'      => Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT,
 					'fields'         => 'ids',
-					'posts_per_page' => -1,
+					'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging.posts_per_page_posts_per_page
 					'orderby'        => 'ID',
 					'order'          => 'ASC',
 				]
@@ -948,7 +948,7 @@ class Newsletters_List_REST_Test extends WP_UnitTestCase {
 				[
 					'post_type'      => Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT,
 					'fields'         => 'ids',
-					'posts_per_page' => -1,
+					'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging.posts_per_page_posts_per_page
 					'orderby'        => 'ID',
 					'order'          => 'ASC',
 				]
@@ -1079,7 +1079,7 @@ class Newsletters_List_REST_Test extends WP_UnitTestCase {
 					'post_type'      => Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT,
 					'post_status'    => 'publish',
 					'fields'         => 'ids',
-					'posts_per_page' => -1,
+					'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging.posts_per_page_posts_per_page
 				]
 			)
 		);

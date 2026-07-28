@@ -69,7 +69,7 @@ class Nodes {
 		$nodes  = get_posts(
 			[
 				'post_type'      => self::POST_TYPE_SLUG,
-				'posts_per_page' => -1,
+				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging.posts_per_page_posts_per_page
 				'fields'         => 'ids',
 			]
 		);

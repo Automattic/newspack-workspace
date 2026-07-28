@@ -547,7 +547,7 @@ class Ads_List_REST_Test extends WP_UnitTestCase {
 				[
 					'post_type'      => Ads::CPT,
 					'fields'         => 'ids',
-					'posts_per_page' => -1,
+					'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging.posts_per_page_posts_per_page
 				]
 			)
 		);
@@ -594,7 +594,7 @@ class Ads_List_REST_Test extends WP_UnitTestCase {
 				[
 					'post_type'      => Ads::CPT,
 					'fields'         => 'ids',
-					'posts_per_page' => -1,
+					'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging.posts_per_page_posts_per_page
 				]
 			)
 		);
@@ -657,7 +657,7 @@ class Ads_List_REST_Test extends WP_UnitTestCase {
 				[
 					'post_type'      => Ads::CPT,
 					'fields'         => 'ids',
-					'posts_per_page' => -1,
+					'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging.posts_per_page_posts_per_page
 				]
 			)
 		);
@@ -708,7 +708,7 @@ class Ads_List_REST_Test extends WP_UnitTestCase {
 				[
 					'post_type'      => Ads::CPT,
 					'fields'         => 'ids',
-					'posts_per_page' => -1,
+					'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging.posts_per_page_posts_per_page
 				]
 			)
 		);
@@ -754,7 +754,7 @@ class Ads_List_REST_Test extends WP_UnitTestCase {
 				[
 					'post_type'      => Ads::CPT,
 					'fields'         => 'ids',
-					'posts_per_page' => -1,
+					'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging.posts_per_page_posts_per_page
 				]
 			)
 		);
@@ -801,7 +801,7 @@ class Ads_List_REST_Test extends WP_UnitTestCase {
 				[
 					'post_type'      => Ads::CPT,
 					'fields'         => 'ids',
-					'posts_per_page' => -1,
+					'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging.posts_per_page_posts_per_page
 				]
 			)
 		);
@@ -818,7 +818,7 @@ class Ads_List_REST_Test extends WP_UnitTestCase {
 				[
 					'post_type'      => Ads::CPT,
 					'fields'         => 'ids',
-					'posts_per_page' => -1,
+					'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging.posts_per_page_posts_per_page
 				]
 			)
 		);
@@ -834,7 +834,7 @@ class Ads_List_REST_Test extends WP_UnitTestCase {
 				[
 					'post_type'      => Ads::CPT,
 					'fields'         => 'ids',
-					'posts_per_page' => -1,
+					'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging.posts_per_page_posts_per_page
 				]
 			)
 		);
@@ -1013,7 +1013,7 @@ class Ads_List_REST_Test extends WP_UnitTestCase {
 					'post_type'      => Ads::CPT,
 					'post_status'    => 'publish',
 					'fields'         => 'ids',
-					'posts_per_page' => -1,
+					'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging.posts_per_page_posts_per_page
 				]
 			)
 		);
@@ -1056,7 +1056,7 @@ class Ads_List_REST_Test extends WP_UnitTestCase {
 					'post_type'      => Ads::CPT,
 					'post_status'    => 'publish',
 					'fields'         => 'ids',
-					'posts_per_page' => -1,
+					'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging.posts_per_page_posts_per_page
 				]
 			)
 		);
@@ -1108,7 +1108,7 @@ class Ads_List_REST_Test extends WP_UnitTestCase {
 						'post_type'      => Ads::CPT,
 						'post_status'    => 'publish',
 						'fields'         => 'ids',
-						'posts_per_page' => -1,
+						'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging.posts_per_page_posts_per_page
 					]
 				)
 			);
@@ -1155,7 +1155,7 @@ class Ads_List_REST_Test extends WP_UnitTestCase {
 				[
 					'post_type'      => Ads::CPT,
 					'fields'         => 'ids',
-					'posts_per_page' => -1,
+					'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging.posts_per_page_posts_per_page
 					'orderby'        => 'ID',
 					'order'          => 'ASC',
 				]
@@ -1251,7 +1251,7 @@ class Ads_List_REST_Test extends WP_UnitTestCase {
 				[
 					'post_type'      => Ads::CPT,
 					'fields'         => 'ids',
-					'posts_per_page' => -1,
+					'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging.posts_per_page_posts_per_page
 				]
 			)
 		);
@@ -1266,7 +1266,7 @@ class Ads_List_REST_Test extends WP_UnitTestCase {
 				[
 					'post_type'      => Ads::CPT,
 					'fields'         => 'ids',
-					'posts_per_page' => -1,
+					'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging.posts_per_page_posts_per_page
 				]
 			)
 		);
@@ -1318,7 +1318,7 @@ class Ads_List_REST_Test extends WP_UnitTestCase {
 				[
 					'post_type'      => Ads::CPT,
 					'fields'         => 'ids',
-					'posts_per_page' => -1,
+					'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging.posts_per_page_posts_per_page
 				]
 			)
 		);
@@ -1333,7 +1333,7 @@ class Ads_List_REST_Test extends WP_UnitTestCase {
 				[
 					'post_type'      => Ads::CPT,
 					'fields'         => 'ids',
-					'posts_per_page' => -1,
+					'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging.posts_per_page_posts_per_page
 				]
 			)
 		);

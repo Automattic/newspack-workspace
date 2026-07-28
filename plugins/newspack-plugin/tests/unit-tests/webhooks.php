@@ -45,7 +45,7 @@ class Newspack_Test_Webhooks extends WP_UnitTestCase {
 			[
 				'post_type'      => Data_Events\Webhooks::REQUEST_POST_TYPE,
 				'post_status'    => 'any',
-				'posts_per_page' => -1,
+				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging.posts_per_page_posts_per_page
 			]
 		);
 		foreach ( $requests as $request ) {
@@ -341,7 +341,7 @@ class Newspack_Test_Webhooks extends WP_UnitTestCase {
 			[
 				'post_type'      => Data_Events\Webhooks::REQUEST_POST_TYPE,
 				'post_status'    => 'any',
-				'posts_per_page' => -1,
+				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging.posts_per_page_posts_per_page
 				'fields'         => 'ids',
 			]
 		);
@@ -378,7 +378,7 @@ class Newspack_Test_Webhooks extends WP_UnitTestCase {
 			[
 				'post_type'      => Data_Events\Webhooks::REQUEST_POST_TYPE,
 				'post_status'    => 'any',
-				'posts_per_page' => -1,
+				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging.posts_per_page_posts_per_page
 				'fields'         => 'ids',
 			]
 		);

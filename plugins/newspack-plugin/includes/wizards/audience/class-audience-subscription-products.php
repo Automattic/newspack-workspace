@@ -1591,7 +1591,7 @@ class Audience_Subscription_Products extends Wizard {
 			[
 				'post_type'      => Content_Gate::get_gate_post_types(),
 				'post_status'    => 'publish',
-				'posts_per_page' => -1,
+				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging.posts_per_page_posts_per_page
 			]
 		);
 

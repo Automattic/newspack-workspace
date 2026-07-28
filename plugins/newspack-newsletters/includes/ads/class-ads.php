@@ -592,7 +592,7 @@ final class Ads {
 		$all_ads = get_posts(
 			[
 				'post_type'      => self::CPT,
-				'posts_per_page' => -1,
+				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging.posts_per_page_posts_per_page
 			]
 		);
 		$ads     = [];

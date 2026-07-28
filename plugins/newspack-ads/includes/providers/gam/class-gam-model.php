@@ -418,7 +418,7 @@ final class GAM_Model {
 		$query           = new \WP_Query(
 			[
 				'post_type'      => self::$custom_post_type,
-				'posts_per_page' => -1,
+				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging.posts_per_page_posts_per_page
 				'post_status'    => [ 'publish' ],
 			]
 		);

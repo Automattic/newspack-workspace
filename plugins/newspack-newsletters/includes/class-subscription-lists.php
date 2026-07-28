@@ -405,7 +405,7 @@ class Subscription_Lists {
 		$posts   = get_posts(
 			[
 				'post_type'      => self::CPT,
-				'posts_per_page' => -1,
+				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging.posts_per_page_posts_per_page
 				'post_status'    => 'any',
 			]
 		);

@@ -1705,7 +1705,7 @@ class Content_Gate {
 			[
 				'post_type'      => $post_type,
 				'post_status'    => $post_status ? $post_status : self::get_post_statuses(),
-				'posts_per_page' => -1,
+				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging.posts_per_page_posts_per_page
 				'meta_query'     => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
 					[
 						'key'     => 'is_newsletter',

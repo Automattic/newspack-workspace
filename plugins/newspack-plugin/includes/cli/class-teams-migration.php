@@ -132,7 +132,7 @@ class Teams_Migration {
 			[
 				'post_type'      => 'wc_memberships_team',
 				'post_status'    => 'publish',
-				'posts_per_page' => -1,
+				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging.posts_per_page_posts_per_page
 				'fields'         => 'ids',
 				'orderby'        => 'ID',
 				'order'          => 'ASC',
@@ -454,7 +454,7 @@ class Teams_Migration {
 			[
 				'post_type'      => 'product',
 				'post_status'    => 'publish',
-				'posts_per_page' => -1,
+				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging.posts_per_page_posts_per_page
 				'fields'         => 'ids',
 				'orderby'        => 'ID',
 				'order'          => 'ASC',
@@ -677,7 +677,7 @@ class Teams_Migration {
 					'post_type'      => 'wc_user_membership',
 					'post_status'    => 'wcm-active',
 					'post_parent'    => $plan_id,
-					'posts_per_page' => -1,
+					'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging.posts_per_page_posts_per_page
 					'fields'         => 'ids',
 					'no_found_rows'  => true,
 				]
@@ -883,7 +883,7 @@ class Teams_Migration {
 			[
 				'post_type'      => 'wc_memberships_team',
 				'post_status'    => 'publish',
-				'posts_per_page' => -1,
+				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging.posts_per_page_posts_per_page
 				'fields'         => 'ids',
 				'orderby'        => 'ID',
 				'order'          => 'ASC',
@@ -1429,7 +1429,7 @@ class Teams_Migration {
 			[
 				'post_type'      => 'wc_membership_plan',
 				'post_status'    => 'publish',
-				'posts_per_page' => -1,
+				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging.posts_per_page_posts_per_page
 				'fields'         => 'ids',
 				'no_found_rows'  => true,
 				'orderby'        => 'ID',
