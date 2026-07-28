@@ -347,6 +347,60 @@ class ContextualPromptOverrideTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Script markup in the override copy or label is rendered as text, never as
+	 * an element. The override is admin supplied and lands on every story, so a
+	 * dropped esc_html() here is stored XSS on the whole site.
+	 */
+	public function test_override_script_payload_is_escaped() {
+		add_filter( 'newspack_contextual_prompts_use_donate_block', '__return_false' );
+		update_option( Newspack_Popups_Settings::OVERRIDE_ENABLED_OPTION, true );
+		update_option( 'newspack_contextual_prompts_override_body', '<script>alert("xss")</script>' );
+		update_option( 'newspack_contextual_prompts_override_label', '<script>alert("label")</script>' );
+		update_option( 'newspack_contextual_prompts_override_url', 'https://example.com/drive/' );
+
+		$html = do_blocks( self::PLAIN_BUTTON_PROMPT );
+
+		$this->assertStringContainsString( '&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;', $html, 'The copy payload is entity-encoded.' );
+		$this->assertStringContainsString( '&lt;script&gt;alert(&quot;label&quot;)&lt;/script&gt;', $html, 'The label payload is entity-encoded.' );
+		$this->assertDoesNotMatchRegularExpression( '#<\s*script#i', $html, 'No live script element reaches the reader.' );
+	}
+
+	/**
+	 * An event-handler payload in the override copy comes out as text: no tag in
+	 * the rendered prompt carries an on* attribute.
+	 */
+	public function test_override_event_handler_payload_is_escaped() {
+		add_filter( 'newspack_contextual_prompts_use_donate_block', '__return_false' );
+		update_option( Newspack_Popups_Settings::OVERRIDE_ENABLED_OPTION, true );
+		update_option( 'newspack_contextual_prompts_override_body', 'Support us <img src=x onerror="alert(1)">' );
+		update_option( 'newspack_contextual_prompts_override_label', 'Give now' );
+		update_option( 'newspack_contextual_prompts_override_url', 'https://example.com/drive/' );
+
+		$html = do_blocks( self::PLAIN_BUTTON_PROMPT );
+
+		$this->assertStringContainsString( 'Support us &lt;img src=x onerror=&quot;alert(1)&quot;&gt;', $html, 'The payload is entity-encoded.' );
+		$this->assertDoesNotMatchRegularExpression( '#<[a-z][^>]*\son[a-z]+\s*=#i', $html, 'No rendered tag carries an event handler attribute.' );
+	}
+
+	/**
+	 * A javascript: destination in the override URL is dropped rather than
+	 * rendered as a live link.
+	 */
+	public function test_override_javascript_url_is_dropped() {
+		add_filter( 'newspack_contextual_prompts_use_donate_block', '__return_false' );
+		update_option( Newspack_Popups_Settings::OVERRIDE_ENABLED_OPTION, true );
+		update_option( 'newspack_contextual_prompts_override_body', 'Support our spring drive.' );
+		update_option( 'newspack_contextual_prompts_override_label', 'Give now' );
+		update_option( 'newspack_contextual_prompts_override_url', 'javascript:alert(1)' );
+
+		$html = do_blocks( self::PLAIN_BUTTON_PROMPT );
+
+		$this->assertStringContainsString( '>Give now</a>', $html, 'The button still renders.' );
+		$this->assertStringContainsString( 'href=""', $html, 'esc_url() emptied the destination.' );
+		$this->assertDoesNotMatchRegularExpression( '#javascript\s*:#i', $html, 'No live javascript: URL reaches the reader.' );
+	}
+
+	/**
 	 * A prompt whose copy paragraph holds no visible text (generation failed,
 	 * post published anyway) renders nothing — not a CTA-only card.
 	 */

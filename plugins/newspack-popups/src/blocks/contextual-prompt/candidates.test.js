@@ -1,6 +1,6 @@
 import apiFetch from '@wordpress/api-fetch';
 
-import { framingForPosition, generateCandidates } from './candidates';
+import { framingForPosition, generateCandidates, toRichTextContent } from './candidates';
 
 jest.mock( '@wordpress/api-fetch' );
 
@@ -66,5 +66,20 @@ describe( 'generateCandidates', () => {
 			],
 		} );
 		await expect( generateCandidates( args ) ).resolves.toEqual( [ { body: 'kept', framing: 'mid' }, { body: 'kept too' } ] );
+	} );
+} );
+
+describe( 'toRichTextContent', () => {
+	// A RichText attribute serializes strings as raw HTML, so the tag-opening
+	// character is what makes model output dangerous: with it encoded, nothing
+	// the model returns can reach the post as markup.
+	it.each( [
+		[ 'a script element', '<script>alert("xss")</script>', '&lt;script>alert("xss")&lt;/script>' ],
+		[ 'an event handler', '<img src=x onerror="alert(1)">', '&lt;img src=x onerror="alert(1)">' ],
+		[ 'a javascript: link', '<a href="javascript:alert(1)">Donate</a>', '&lt;a href="javascript:alert(1)">Donate&lt;/a>' ],
+	] )( 'encodes %s', ( label, body, expected ) => {
+		const content = toRichTextContent( body );
+		expect( content ).toEqual( expected );
+		expect( content ).not.toMatch( /</ );
 	} );
 } );
