@@ -191,4 +191,54 @@ class Test_RAS_Contact_Sync_Options extends WP_UnitTestCase {
 		$this->assertIsArray( $scoped, 'Scoped to scoped_ok: pre-flight passes.' );
 		$this->assertSame( [ 'Content Access' ], $scoped['fields'] );
 	}
+
+	/**
+	 * The same missing-field setup must NOT fail the pre-flight when the
+	 * integration's outbound sync is paused: the run skips push-disabled
+	 * integrations entirely, so their field selection can't be a reason to block
+	 * a backfill of the others.
+	 */
+	public function test_field_not_enabled_on_push_disabled_integration_is_ignored() {
+		Failing_Sample_Integration::reset();
+		$integration = new Failing_Sample_Integration( 'preflight_paused', 'Preflight Paused' );
+		Integrations::register( $integration );
+		Integrations::enable( 'preflight_paused' );
+		$integration->update_enabled_outgoing_fields( [ 'Account' ] );
+		$integration->update_settings_field_value( 'outgoing_sync_enabled', false );
+
+		$options = $this->parse( [ 'fields' => 'Content Access' ] );
+
+		Integrations::disable( 'preflight_paused' );
+
+		$this->assertIsArray( $options, 'A paused integration must not block the pre-flight.' );
+		$this->assertSame( [ 'Content Access' ], $options['fields'] );
+	}
+
+	/**
+	 * Same for an integration that declares no push capability at all — it never
+	 * receives contact data, so it has no say in the backfill's field pre-flight.
+	 */
+	public function test_field_not_enabled_on_push_incapable_integration_is_ignored() {
+		Failing_Sample_Integration::reset();
+		$integration = new class( 'preflight_incapable', 'Preflight Incapable' ) extends Failing_Sample_Integration {
+			/**
+			 * Declare no push capability.
+			 *
+			 * @return bool
+			 */
+			public function supports_push(): bool {
+				return false;
+			}
+		};
+		Integrations::register( $integration );
+		Integrations::enable( 'preflight_incapable' );
+		$integration->update_enabled_outgoing_fields( [ 'Account' ] );
+
+		$options = $this->parse( [ 'fields' => 'Content Access' ] );
+
+		Integrations::disable( 'preflight_incapable' );
+
+		$this->assertIsArray( $options, 'A push-incapable integration must not block the pre-flight.' );
+		$this->assertSame( [ 'Content Access' ], $options['fields'] );
+	}
 }

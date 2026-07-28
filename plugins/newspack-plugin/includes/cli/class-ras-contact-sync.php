@@ -352,13 +352,29 @@ class RAS_Contact_Sync {
 			$integrations = array_intersect_key( $integrations, [ $config['integration_id'] => true ] );
 		}
 
-		// Only integrations with enabled incoming fields can be pulled (matches
-		// Contact_Pull::pull_all() semantics); the rest are skipped with a notice.
-		// The fields are resolved once per integration here and threaded into
-		// every pull: resolution may hit the provider's API on legacy-shaped
-		// settings, so re-resolving per reader would multiply external requests.
+		// Only integrations with an enabled pull and enabled incoming fields can be
+		// pulled (matches Contact_Pull::pull_all() semantics); the rest are skipped
+		// with a notice. The fields are resolved once per integration here and
+		// threaded into every pull: resolution may hit the provider's API on
+		// legacy-shaped settings, so re-resolving per reader would multiply
+		// external requests.
 		$pull_targets = [];
 		foreach ( $integrations as $id => $integration ) {
+			// Checked before resolving fields, which may itself call the provider.
+			if ( ! $integration->is_pull_enabled() ) {
+				static::log(
+					sprintf(
+						// Translators: 1: integration id, 2: the reason it is skipped.
+						__( 'Skipping integration "%1$s": %2$s.', 'newspack-plugin' ),
+						$id,
+						$integration->supports_pull()
+							? __( 'inbound sync is paused', 'newspack-plugin' )
+							: __( 'integration does not support inbound sync', 'newspack-plugin' )
+					)
+				);
+				continue;
+			}
+
 			$fields = $integration->get_enabled_incoming_fields();
 			if ( empty( $fields ) ) {
 				static::log(
@@ -379,7 +395,7 @@ class RAS_Contact_Sync {
 		if ( empty( $pull_targets ) ) {
 			return new \WP_Error(
 				'newspack_backfill_no_pull_targets',
-				__( 'No active integrations with enabled incoming fields to pull from.', 'newspack-plugin' )
+				__( 'No active integrations with inbound sync enabled and incoming fields selected to pull from.', 'newspack-plugin' )
 			);
 		}
 
@@ -980,7 +996,13 @@ class RAS_Contact_Sync {
 		if ( ! empty( $integration_id ) ) {
 			$integrations = array_intersect_key( $integrations, [ $integration_id => true ] );
 		}
+		// Loop variable stays `$id`: `$integration_id` is the run's scope parameter.
 		foreach ( $integrations as $id => $integration ) {
+			// The sync run itself skips integrations without an (enabled) push, so
+			// their field selection must not block the backfill of the others.
+			if ( ! $integration->is_push_enabled() ) {
+				continue;
+			}
 			$enabled = $integration->get_enabled_outgoing_fields();
 			$missing = array_values( array_diff( $labels, $enabled ) );
 			if ( ! empty( $missing ) ) {
@@ -1063,7 +1085,26 @@ class RAS_Contact_Sync {
 			// integration would otherwise proceed and either tally an error per
 			// contact or report "Synced 0 contacts" instead of naming the reason.
 			if ( 'pull' !== $direction ) {
-				$can_sync = $active[ $integration_id ]->can_sync( true );
+				$target = $active[ $integration_id ];
+
+				// Same failure mode via the per-direction toggle: push_to_integrations()
+				// skips push-disabled integrations, so a scoped run against one would
+				// push to nobody and still report success.
+				if ( ! $target->is_push_enabled() ) {
+					return new \WP_Error(
+						'newspack_backfill_integration_cannot_sync',
+						sprintf(
+							// Translators: 1: the integration id passed to --integration, 2: the reason it cannot push.
+							__( 'Integration "%1$s" cannot be pushed to: %2$s.', 'newspack-plugin' ),
+							$integration_id,
+							$target->supports_push()
+								? __( 'outbound sync is paused', 'newspack-plugin' )
+								: __( 'integration does not support outbound sync', 'newspack-plugin' )
+						)
+					);
+				}
+
+				$can_sync = $target->can_sync( true );
 				if ( \is_wp_error( $can_sync ) && $can_sync->has_errors() ) {
 					return new \WP_Error(
 						'newspack_backfill_integration_cannot_sync',
@@ -1105,7 +1146,9 @@ class RAS_Contact_Sync {
 			}
 			$has_pull_target = false;
 			foreach ( $pull_scope as $integration ) {
-				if ( ! empty( $integration->get_enabled_incoming_fields() ) ) {
+				// Mirrors pull_contacts()'s target selection, so the pre-flight and
+				// the run agree on what counts as a viable target.
+				if ( $integration->is_pull_enabled() && ! empty( $integration->get_enabled_incoming_fields() ) ) {
 					$has_pull_target = true;
 					break;
 				}
@@ -1113,7 +1156,7 @@ class RAS_Contact_Sync {
 			if ( ! $has_pull_target ) {
 				return new \WP_Error(
 					'newspack_backfill_no_pull_targets',
-					__( 'No active integrations with enabled incoming fields to pull from.', 'newspack-plugin' )
+					__( 'No active integrations with inbound sync enabled and incoming fields selected to pull from.', 'newspack-plugin' )
 				);
 			}
 		}
