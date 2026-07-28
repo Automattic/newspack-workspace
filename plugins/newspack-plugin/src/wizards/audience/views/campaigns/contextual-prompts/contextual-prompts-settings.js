@@ -59,16 +59,11 @@ const ContextualPromptsSettings = ( { status, values, error, inFlight, onSetValu
 		</Notice>
 	);
 
-	// Empty state: the feature is off. Admins can opt in via the disclosure modal.
+	// Empty state: the feature is off. Admins can opt in via the disclosure
+	// modal. WizardsTab carries the wizard's content sizing.
 	if ( ! enabled ) {
 		return (
-			<div
-				style={ {
-					margin: '0 auto',
-					maxWidth: 'calc(var(--newspack-wizard-section-space) * 2 + var(--newspack-wizard-section-width))',
-					padding: '0 var(--newspack-wizard-section-space) 0',
-				} }
-			>
+			<WizardsTab>
 				<Grid columns={ 4 } noMargin>
 					<VStack start={ 2 } end={ 4 } spacing={ 8 }>
 						{ errorNotice }
@@ -129,7 +124,7 @@ const ContextualPromptsSettings = ( { status, values, error, inFlight, onSetValu
 						</HStack>
 					</Modal>
 				) }
-			</div>
+			</WizardsTab>
 		);
 	}
 

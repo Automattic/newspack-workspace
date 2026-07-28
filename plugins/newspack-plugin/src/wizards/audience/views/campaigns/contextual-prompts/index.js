@@ -13,6 +13,7 @@ import {
 	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 	__experimentalVStack as VStack,
 	DropdownMenu,
+	Notice,
 	Snackbar,
 } from '@wordpress/components';
 import { moreVertical } from '@wordpress/icons';
@@ -20,9 +21,10 @@ import { moreVertical } from '@wordpress/icons';
 /**
  * Internal dependencies
  */
-import { withWizardScreen, Button, Handoff, Notice, Waiting, useUnsavedChangesDialog } from '../../../../../../packages/components/src';
+import { withWizardScreen, Button, Handoff, Waiting, useUnsavedChangesDialog } from '../../../../../../packages/components/src';
 import ContextualPromptsSettings from './contextual-prompts-settings';
 import StyleDrawer from './style-drawer';
+import './style.scss';
 
 const STATUS_PATH = '/newspack-popups/v1/contextual-prompt/status';
 const ENABLE_PATH = '/newspack-popups/v1/contextual-prompt/enable';
@@ -281,9 +283,9 @@ const ContextualPrompts = props => {
 	let content = <Waiting />;
 	if ( disabling ) {
 		content = (
-			<VStack alignment="center" spacing={ 4 } style={ { padding: '64px 0' } }>
+			<VStack alignment="center" spacing={ 4 } className="newspack-contextual-prompts__disabling">
 				<Waiting />
-				<p style={ { margin: 0, fontWeight: 600 } }>{ __( 'Disabling Contextual Prompts…', 'newspack-plugin' ) }</p>
+				<p>{ __( 'Disabling Contextual Prompts…', 'newspack-plugin' ) }</p>
 			</VStack>
 		);
 	} else if ( status ) {
@@ -300,7 +302,9 @@ const ContextualPrompts = props => {
 	} else if ( loaded ) {
 		content = (
 			<>
-				<Notice isError noticeText={ error?.message || __( 'Could not load Contextual Prompts.', 'newspack-plugin' ) } />
+				<Notice status="error" isDismissible={ false }>
+					{ error?.message || __( 'Could not load Contextual Prompts.', 'newspack-plugin' ) }
+				</Notice>
 				<Button variant="primary" onClick={ loadStatus }>
 					{ __( 'Retry', 'newspack-plugin' ) }
 				</Button>
