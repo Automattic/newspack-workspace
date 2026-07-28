@@ -310,6 +310,33 @@ final class Newspack_Popups_Contextual_Prompt_Block {
 	}
 
 	/**
+	 * The card's default colors.
+	 *
+	 * A block theme's style variations re-point the palette, so a literal value
+	 * survives a switch that the page around it does not: the shipped Nocturne
+	 * variation puts `contrast` at white, which the card's copy inherits, and a
+	 * fixed light background would leave white text on a near-white card. Naming
+	 * the slugs instead makes the card follow whichever variation is active, and
+	 * pinning the text color keeps it tied to the background rather than the
+	 * canvas.
+	 *
+	 * Classic themes have no variations, so the designed value stands and the
+	 * copy keeps inheriting the theme's body color, which the Customizer owns.
+	 *
+	 * @return array Color node for theme.json.
+	 */
+	private static function default_colors() {
+		if ( ! wp_is_block_theme() ) {
+			return [ 'background' => '#f7f7f7' ];
+		}
+
+		return [
+			'background' => 'var:preset|color|base-2',
+			'text'       => 'var:preset|color|contrast',
+		];
+	}
+
+	/**
 	 * The default design, as theme.json data. Sits in the default layer so a
 	 * theme or the publisher (Styles → Blocks → Campaigns: Contextual Prompt)
 	 * overrides it, and applies to every instance retroactively.
@@ -325,7 +352,7 @@ final class Newspack_Popups_Contextual_Prompt_Block {
 					'blocks' => [
 						self::BLOCK_NAME => [
 							'border'     => [ 'radius' => '10px' ],
-							'color'      => [ 'background' => '#f7f7f7' ],
+							'color'      => self::default_colors(),
 							// Body copy size. Block themes define `medium` themselves;
 							// classic themes resolve it from core's default set, which
 							// stays available even where the theme's own sizes replace
