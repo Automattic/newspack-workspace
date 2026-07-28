@@ -56,12 +56,14 @@ class Newspack_Popups_Settings {
 	 * The opt-in is what starts drafts travelling to an external model service,
 	 * and some newsrooms are contractually barred from AI use, so the acceptance
 	 * needs a forensic record rather than a bare option write. Hooked on the
-	 * option itself so a flip made outside the wizard, over WP-CLI or by another
-	 * plugin, is recorded the same way.
+	 * option itself, on all three of write, change and deletion, so a flip made
+	 * outside the wizard, over WP-CLI or by another plugin, is recorded the same
+	 * way.
 	 */
 	public static function register_opt_in_audit() {
 		add_action( 'add_option_' . self::AI_COPY_ASSISTANT_ENABLED_OPTION, [ __CLASS__, 'log_opt_in_added' ], 10, 2 );
 		add_action( 'update_option_' . self::AI_COPY_ASSISTANT_ENABLED_OPTION, [ __CLASS__, 'log_opt_in_updated' ], 10, 2 );
+		add_action( 'delete_option_' . self::AI_COPY_ASSISTANT_ENABLED_OPTION, [ __CLASS__, 'log_opt_in_deleted' ] );
 	}
 
 	/**
@@ -83,6 +85,15 @@ class Newspack_Popups_Settings {
 	 */
 	public static function log_opt_in_updated( $old_value, $value ) {
 		self::log_opt_in_state( $value );
+	}
+
+	/**
+	 * A deleted opt-in. `wp option delete` is a live path, and the site is not
+	 * opted in once the option is gone, so deletion closes the window exactly as
+	 * setting it false does. Core fires this only after the row is really gone.
+	 */
+	public static function log_opt_in_deleted() {
+		self::log_opt_in_state( false );
 	}
 
 	/**

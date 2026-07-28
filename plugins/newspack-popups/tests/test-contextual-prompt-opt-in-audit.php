@@ -100,6 +100,32 @@ class ContextualPromptOptInAuditTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Deleting the option leaves the site un-opted-in just as surely as setting
+	 * it false, and `wp option delete` is a live path, so it has to be recorded.
+	 */
+	public function test_deleting_the_option_records_a_withdrawal() {
+		update_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION, true );
+		\Newspack\Logger::$entries = [];
+
+		delete_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION );
+
+		$entries = $this->entries();
+		$this->assertCount( 1, $entries );
+		$this->assertStringContainsString( 'withdrawn', $entries[0]['message'] );
+		$this->assertFalse( $entries[0]['data']['enabled'] );
+	}
+
+	/**
+	 * Deleting an option that was never written is not a withdrawal, and core
+	 * does not fire the hook for it, so nothing is recorded.
+	 */
+	public function test_deleting_an_absent_option_records_nothing() {
+		delete_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION );
+
+		$this->assertCount( 0, $this->entries() );
+	}
+
+	/**
 	 * A save that changes nothing is not a state change, so it leaves no record.
 	 * Otherwise the trail would fill with noise and bury the real acceptances.
 	 */
