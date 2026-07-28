@@ -533,7 +533,9 @@ final class GA4_Custom_Dimensions {
 	 * Whether a failed create names the property's custom-dimension capacity –
 	 * the one quota a retry cannot fix. Google phrases rate limiting as quota
 	 * too ("Quota exceeded ... per minute"), so rate-window wording never
-	 * matches: that burst clears on its own and is worth a retry.
+	 * matches: that burst clears on its own and is worth a retry. The cap
+	 * requires both the quota wording and the resource name, so a validation
+	 * error that merely echoes the resource path stays retryable.
 	 *
 	 * @param \Throwable $e The failure.
 	 * @return bool
@@ -543,7 +545,7 @@ final class GA4_Custom_Dimensions {
 		if ( preg_match( '/per (minute|hour|day)|rate limit/i', $message ) ) {
 			return false;
 		}
-		return (bool) preg_match( '/maximum number|CustomDimensions/i', $message );
+		return preg_match( '/maximum|exceed/i', $message ) && preg_match( '/custom ?dimensions/i', $message );
 	}
 
 	/**
