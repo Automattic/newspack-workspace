@@ -40,7 +40,10 @@ class WC_Memberships_User_Membership {
 class WC_Memberships_Membership_Plan {
 	private $id;
 	private $name;
-	private $rules;
+	// Default to an empty array so get_content_restriction_rules() always returns
+	// an array (matching the real WC_Memberships_Membership_Plan), even before
+	// set_content_restriction_rules() is called.
+	private $rules = [];
 
 	public function __construct( $id ) {
 		$this->id   = $id;

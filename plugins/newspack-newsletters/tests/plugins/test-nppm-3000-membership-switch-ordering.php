@@ -209,7 +209,7 @@ class NPPM_3000_Membership_Switch_Ordering_Test extends WP_UnitTestCase {
 		);
 
 		// 2) REMOVE: monthly membership transitions to an inactive status.
-		set_post_status_raw( $this->monthly_membership_id, 'wcm-cancelled' );
+		$this->set_post_status_raw( $this->monthly_membership_id, 'wcm-cancelled' );
 		Woocommerce_Memberships::handle_membership_status_change(
 			new WC_Memberships_User_Membership( $this->monthly_membership_id ),
 			'active',
@@ -237,13 +237,16 @@ class NPPM_3000_Membership_Switch_Ordering_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Control test for the reporter's hypothesis: performing the REMOVE before the
-	 * ADD preserves the shared list even on unpatched code. Confirms the causal
-	 * mechanism is the ordering (not something else).
+	 * Control test: performing the REMOVE before the ADD also yields the correct
+	 * end state (shared + annual retained, monthly dropped). This is NOT expected
+	 * to fail pre-fix — with the still-active annual membership re-granting the
+	 * shared list, remove-before-add was already correct — so it is a companion
+	 * that documents the ordering is not the failure path, not a second regression
+	 * guard (test_shared_list_survives_membership_switch is the guard).
 	 */
 	public function test_reorder_remove_before_add_preserves_shared_list() {
 		// 1) REMOVE first: monthly membership transitions to inactive.
-		set_post_status_raw( $this->monthly_membership_id, 'wcm-cancelled' );
+		$this->set_post_status_raw( $this->monthly_membership_id, 'wcm-cancelled' );
 		Woocommerce_Memberships::handle_membership_status_change(
 			new WC_Memberships_User_Membership( $this->monthly_membership_id ),
 			'active',
@@ -286,7 +289,7 @@ class NPPM_3000_Membership_Switch_Ordering_Test extends WP_UnitTestCase {
 		$this->assertNotContains( $this->public_id( $this->list_monthly ), $before, 'Precondition: reader opted out of the monthly list.' );
 
 		// 1) PAUSE the monthly membership ( active -> paused ): triggers removal.
-		set_post_status_raw( $this->monthly_membership_id, 'wcm-paused' );
+		$this->set_post_status_raw( $this->monthly_membership_id, 'wcm-paused' );
 		Woocommerce_Memberships::handle_membership_status_change(
 			new WC_Memberships_User_Membership( $this->monthly_membership_id ),
 			'active',
@@ -294,7 +297,7 @@ class NPPM_3000_Membership_Switch_Ordering_Test extends WP_UnitTestCase {
 		);
 
 		// 2) REACTIVATE it ( paused -> active ): set previous_status, then re-add.
-		set_post_status_raw( $this->monthly_membership_id, 'wcm-active' );
+		$this->set_post_status_raw( $this->monthly_membership_id, 'wcm-active' );
 		Woocommerce_Memberships::handle_membership_status_change(
 			new WC_Memberships_User_Membership( $this->monthly_membership_id ),
 			'paused',
@@ -341,14 +344,17 @@ class NPPM_3000_Membership_Switch_Ordering_Test extends WP_UnitTestCase {
 		}
 		return null;
 	}
-}
 
-/**
- * Helper to flip a post_status without triggering WP transition hooks that the
- * mock environment doesn't fully support.
- */
-function set_post_status_raw( $post_id, $status ) {
-	global $wpdb;
-	$wpdb->update( $wpdb->posts, [ 'post_status' => $status ], [ 'ID' => $post_id ] );
-	clean_post_cache( $post_id );
+	/**
+	 * Flip a post_status directly, without triggering the WP transition hooks the
+	 * mock environment doesn't fully support.
+	 *
+	 * @param int    $post_id The post ID.
+	 * @param string $status  The new post_status.
+	 */
+	private function set_post_status_raw( $post_id, $status ) {
+		global $wpdb;
+		$wpdb->update( $wpdb->posts, [ 'post_status' => $status ], [ 'ID' => $post_id ] );
+		clean_post_cache( $post_id );
+	}
 }

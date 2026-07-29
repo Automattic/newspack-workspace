@@ -290,6 +290,9 @@ class Woocommerce_Memberships {
 		}
 		$lists = [];
 		foreach ( $active_memberships as $membership ) {
+			if ( ! $membership instanceof \WC_Memberships_User_Membership ) {
+				continue;
+			}
 			if ( (int) $membership->get_id() === (int) $exclude_membership_id ) {
 				continue;
 			}
