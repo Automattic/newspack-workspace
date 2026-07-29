@@ -76,8 +76,8 @@ class Newspack_Test_Access_Rules extends WP_UnitTestCase {
 		$subscriptions_database = [];
 
 		// Create test users.
-		self::$owner_user_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
-		self::$member_user_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		self::$owner_user_id      = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		self::$member_user_id     = $this->factory->user->create( [ 'role' => 'subscriber' ] );
 		self::$non_member_user_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
 
 		// Mark users as readers.

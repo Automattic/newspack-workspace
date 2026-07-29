@@ -178,7 +178,7 @@ class Newspack_Test_Content_Gate_Metadata extends WP_UnitTestCase {
 	 * @return int Institution post ID.
 	 */
 	private function create_institution( $title, $rules ) {
-		$id = Institution::create( $title, '', $rules );
+		$id                      = Institution::create( $title, '', $rules );
 		$this->institution_ids[] = $id;
 		Institution::invalidate_cache();
 		return $id;
@@ -961,7 +961,7 @@ class Newspack_Test_Content_Gate_Metadata extends WP_UnitTestCase {
 	 * gate grants access either way and only the attribution can differ.
 	 */
 	public function test_source_labels_respect_gate_payment_recovery_grace() {
-		$active_product_id    = $this->create_mock_product( 610, 'Active Plan' );
+		$active_product_id      = $this->create_mock_product( 610, 'Active Plan' );
 		$in_recovery_product_id = $this->create_mock_product( 611, 'In Recovery Plan' );
 
 		$this->create_subscription( self::$user_id, [ $active_product_id ] );
