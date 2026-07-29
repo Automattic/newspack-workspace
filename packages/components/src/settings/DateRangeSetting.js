@@ -1,7 +1,7 @@
 /**
  * WordPress dependencies.
  */
-import { useState } from '@wordpress/element';
+import { useEffect, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 
 /**
@@ -59,17 +59,25 @@ const makeBound = ( type, rawValue ) => {
 const DateRangeBound = ( { label, testId, bound, onChange } ) => {
 	// The bound type is normally derived from the stored value, but a zero-magnitude
 	// relative bound (`days: 0`) is the same day whether the publisher chose "ago" or
-	// "from now" — the sign can't tell them apart. `chosenType` records an explicit
-	// choice the publisher made in this control, as opposed to one merely derived
-	// from the stored value, and starts out `null` — no choice made yet — since the
-	// bound this control receives can arrive asynchronously (e.g. an existing segment
-	// fetched after first mount) and a value from a later render is not a choice.
-	// It's consulted only while the bound stays ambiguous and only once it holds a
-	// real choice; once a magnitude is entered, the stored value is unambiguous again
-	// and wins.
+	// "from now" — the sign can't tell them apart. `chosenType` records the direction
+	// to fall back on while the bound stays ambiguous, and starts out `null` — no
+	// direction known yet — since the bound this control receives can arrive
+	// asynchronously (e.g. an existing segment fetched after first mount).
 	const [ chosenType, setChosenType ] = useState( null );
 	const derivedType = boundTypeOf( bound );
 	const isAmbiguous = 'relative' === bound?.type && 0 === bound.days;
+
+	// Keep chosenType in step with any unambiguous bound — freshly chosen by the
+	// publisher in this control, or loaded from storage — so the direction survives
+	// if the value is later cleared down to an ambiguous zero. A bound of '' (no
+	// bound at all, e.g. before an async load resolves) doesn't establish a
+	// direction; only a real, unambiguous one does.
+	useEffect( () => {
+		if ( '' !== derivedType && ! isAmbiguous ) {
+			setChosenType( derivedType );
+		}
+	}, [ derivedType, isAmbiguous ] );
+
 	const type = isAmbiguous && null !== chosenType ? chosenType : derivedType;
 	return (
 		<div className="newspack-settings__date-range-bound">

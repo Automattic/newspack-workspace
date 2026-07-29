@@ -216,6 +216,62 @@ describe( 'Date range criteria input', () => {
 	} );
 } );
 
+describe( 'Date range criteria input for an existing segment with a loaded "Days from now" end bound', () => {
+	// Regression coverage for editing (not just loading) a bound that arrived from
+	// storage: backspacing the value to empty makes the bound ambiguous (days: 0),
+	// and chosenType must already hold the loaded direction so the selector doesn't
+	// flip to the opposite direction.
+	const existingSegment = {
+		...SEGMENTS[ 0 ],
+		criteria: [
+			{
+				criteria_id: 'LAST_GIFT_DATE',
+				value: { end: { type: 'relative', days: 7 } },
+			},
+		],
+	};
+
+	const wizardApiFetch = jest.fn( ( { method } = {} ) => Promise.resolve( 'POST' === method ? existingSegment : [ existingSegment ] ) );
+
+	const mockProps = {
+		segmentId: existingSegment.id,
+		setSegments: jest.fn(),
+		wizardApiFetch,
+	};
+
+	beforeEach( () => {
+		window.newspackAudienceCampaigns = { criteria };
+		wizardApiFetch.mockClear();
+		render(
+			<MemoryRouter>
+				<SingleSegment { ...mockProps } />
+			</MemoryRouter>
+		);
+	} );
+
+	it( 'keeps "Days from now" once the loaded value is cleared, and stores a positive offset when retyped', async () => {
+		await waitFor( () => expect( screen.getByLabelText( 'To' ) ).toHaveValue( 'future' ) );
+
+		fireEvent.change( screen.getByTestId( 'date-range-end-value' ), { target: { value: '' } } );
+		// The regression: without the fix this selector flips to "Days ago".
+		expect( screen.getByLabelText( 'To' ) ).toHaveValue( 'future' );
+
+		fireEvent.change( screen.getByTestId( 'date-range-end-value' ), { target: { value: '14' } } );
+		expect( screen.getByLabelText( 'To' ) ).toHaveValue( 'future' );
+
+		fireEvent.click( screen.getByText( 'Save' ) );
+
+		expect( wizardApiFetch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				method: 'POST',
+				data: expect.objectContaining( {
+					criteria: [ { criteria_id: 'LAST_GIFT_DATE', value: { end: { type: 'relative', days: 14 } } } ],
+				} ),
+			} )
+		);
+	} );
+} );
+
 describe( 'Date range criteria input for an existing segment with an ambiguous bound', () => {
 	// The stored bound is ambiguous (days: 0) and only arrives after the async
 	// fetch resolves, which is exactly the scenario the regression hit: the
