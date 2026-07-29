@@ -21,9 +21,26 @@ const parseReaderListValue = value => {
 
 // Month and day ranges are bounded (01-12, 01-31) so a digit-shaped but impossible
 // date like '2026-13-45' is rejected rather than sorting above every real date.
-// Not calendar-aware (e.g. Feb 30 still passes) — that's the PHP side's job; this
-// regex only needs to keep an out-of-range value from silently widening a window.
+// Shape only — isCalendarDate() below rejects a day that doesn't exist in its month.
 const ISO_DATE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
+
+/**
+ * Whether a shape-valid `YYYY-MM-DD` names a day that actually exists.
+ *
+ * The bounded regex still admits `2026-02-30`, which sorts perfectly well between
+ * real dates — so as a stored value it would match a window it isn't in, and as a
+ * saved bound it would silently shift one edge of that window. Applied to both
+ * sides, since a criterion value can be saved through paths that don't validate
+ * against the segment schema.
+ *
+ * @param {string} candidate A `YYYY-MM-DD` string that already passed ISO_DATE.
+ * @return {boolean} Whether the date exists.
+ */
+const isCalendarDate = candidate => {
+	const [ year, month, day ] = candidate.split( '-' ).map( Number );
+	const date = new Date( year, month - 1, day );
+	return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day;
+};
 
 /**
  * Reduces a stored date value to a calendar date, or null when it isn't one.
@@ -42,7 +59,7 @@ const toCalendarDate = value => {
 		return null;
 	}
 	const candidate = value.slice( 0, 10 );
-	return ISO_DATE.test( candidate ) ? candidate : null;
+	return ISO_DATE.test( candidate ) && isCalendarDate( candidate ) ? candidate : null;
 };
 
 /**
@@ -64,6 +81,13 @@ const resolveDateBound = bound => {
 	if ( 'relative' === bound.type && Number.isInteger( bound.days ) ) {
 		const date = new Date();
 		date.setDate( date.getDate() + bound.days );
+		// An offset past the Date range yields an Invalid Date, whose components
+		// format to the truthy string 'NaN-NaN-NaN'. As an end bound that compares
+		// as satisfied, widening the window to everyone — the opposite of the
+		// fail-closed contract below. Return null so the caller rejects it.
+		if ( Number.isNaN( date.getTime() ) ) {
+			return null;
+		}
 		// Built from local components on purpose: toISOString() converts to UTC and
 		// would land on the wrong day for anyone west of Greenwich.
 		const month = String( date.getMonth() + 1 ).padStart( 2, '0' );
