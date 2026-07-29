@@ -404,9 +404,9 @@ describe( 'applyPickerPricing', () => {
 				applies: true,
 				regular_html: '$10.00 / month',
 				first_html: '$8.00',
-				recurring_html: 'then $10.00 / month',
+				recurring_html: ', then $10.00 / month',
 			},
-			75: { applies: true, regular_html: '$100.00 / year', first_html: '$80.00', recurring_html: 'then $100.00 / year' },
+			75: { applies: true, regular_html: '$100.00 / year', first_html: '$80.00', recurring_html: ', then $100.00 / year' },
 		},
 		...overrides,
 	} );
@@ -416,8 +416,8 @@ describe( 'applyPickerPricing', () => {
 
 		applyPickerPricing( form, pricing() );
 
-		expect( priceText( form, '74' ) ).toBe( '$10.00 / month $8.00then $10.00 / month' );
-		expect( priceText( form, '75' ) ).toBe( '$100.00 / year $80.00then $100.00 / year' );
+		expect( priceText( form, '74' ) ).toBe( '$10.00 / month $8.00, then $10.00 / month' );
+		expect( priceText( form, '75' ) ).toBe( '$100.00 / year $80.00, then $100.00 / year' );
 	} );
 
 	it( 'omits the qualifier when the discount recurs', () => {
@@ -459,10 +459,10 @@ describe( 'applyPickerPricing', () => {
 		applyPickerPricing( form, {
 			applies: true,
 			recurs: false,
-			variations: { 74: { applies: true, regular_html: '$10.00 / month', first_html: '$9.00', recurring_html: 'then $10.00 / month' } },
+			variations: { 74: { applies: true, regular_html: '$10.00 / month', first_html: '$9.00', recurring_html: ', then $10.00 / month' } },
 		} );
 
-		expect( priceText( form, '74' ) ).toBe( '$10.00 / month $9.00then $10.00 / month' );
+		expect( priceText( form, '74' ) ).toBe( '$10.00 / month $9.00, then $10.00 / month' );
 		// Variation 75 was discounted by the first call and must be back to normal.
 		expect( priceText( form, '75' ) ).toBe( '$100.00 / year' );
 	} );
@@ -483,12 +483,12 @@ describe( 'applyPickerPricing', () => {
 			recurs: false,
 			variations: {
 				74: { applies: false, regular_html: '$10.00 / month', first_html: '', recurring_html: '' },
-				75: { applies: true, regular_html: '$100.00 / year', first_html: '$80.00', recurring_html: 'then $100.00 / year' },
+				75: { applies: true, regular_html: '$100.00 / year', first_html: '$80.00', recurring_html: ', then $100.00 / year' },
 			},
 		} );
 
 		expect( priceText( form, '74' ) ).toBe( '$10.00 / month' );
-		expect( priceText( form, '75' ) ).toBe( '$100.00 / year $80.00then $100.00 / year' );
+		expect( priceText( form, '75' ) ).toBe( '$100.00 / year $80.00, then $100.00 / year' );
 	} );
 
 	it( 'does not throw on a failed fetch, a null form, or an unknown variation', () => {
