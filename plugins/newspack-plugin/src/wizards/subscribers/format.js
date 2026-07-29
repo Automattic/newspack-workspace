@@ -10,6 +10,13 @@ import { __, _n, sprintf } from '@wordpress/i18n';
 
 // "2 days ago" — defers to core's localized relative-time formatting (the same
 // helper wp-admin uses) rather than a bespoke ladder.
+//
+// The bare date needs no anchoring, unlike in fmtDate below: humanTimeDiff reads
+// it as midnight in the *site's* timezone and measures from now, so it already
+// speaks the same calendar the absolute date beside it prints. Anchoring it at
+// UTC to match fmtDate's mechanism would break that agreement rather than
+// complete it — on a site ahead of UTC, a date on the site's current day is still
+// in the future in UTC, and a join date would read "in 12 hours".
 export const fmtRelative = date => ( date ? humanTimeDiff( date ) : '' );
 
 // Calendar-date presentation, using the publisher's WordPress date format. The
