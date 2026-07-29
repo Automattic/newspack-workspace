@@ -9,6 +9,8 @@ import {
 	resolveCheckoutButtonForm,
 	copyContextFields,
 	applyContextFields,
+	applyPickerPricing,
+	clearPickerPricing,
 	PICKER_CONTEXT_FIELDS,
 } from './checkout-button-trigger';
 
@@ -368,6 +370,139 @@ describe( 'applyContextFields', () => {
 		const form = picker();
 		expect( () => applyContextFields( null, { coupon: 'X' } ) ).not.toThrow();
 		expect( () => applyContextFields( form, null ) ).not.toThrow();
+	} );
+} );
+
+describe( 'applyPickerPricing', () => {
+	// Mirrors Subscriptions_Tiers::render_product_card(): the price shares
+	// newspack-ui__helper-text with the description, so only the extra class
+	// distinguishes it.
+	const pickerWithCards = () =>
+		render(
+			`<form id="picker">
+				<label>
+					<input type="radio" name="product_id" value="74">
+					<span class="newspack-ui__helper-text">A description</span>
+					<span class="newspack-ui__helper-text newspack__subscription-tiers__price">$10.00 / month</span>
+				</label>
+				<label>
+					<input type="radio" name="product_id" value="75">
+					<span class="newspack-ui__helper-text newspack__subscription-tiers__price">$100.00 / year</span>
+				</label>
+			</form>`
+		).querySelector( '#picker' );
+
+	const priceText = ( form, id ) =>
+		form.querySelector( `input[value="${ id }"]` ).closest( 'label' ).querySelector( '.newspack__subscription-tiers__price' ).textContent;
+
+	const pricing = ( overrides = {} ) => ( {
+		coupon: 'SAVE20',
+		applies: true,
+		recurs: false,
+		variations: {
+			74: {
+				applies: true,
+				regular_html: '$10.00 / month',
+				first_html: '$8.00',
+				recurring_html: 'then $10.00 / month',
+			},
+			75: { applies: true, regular_html: '$100.00 / year', first_html: '$80.00', recurring_html: 'then $100.00 / year' },
+		},
+		...overrides,
+	} );
+
+	it( 'shows the discounted first payment and the recurring qualifier', () => {
+		const form = pickerWithCards();
+
+		applyPickerPricing( form, pricing() );
+
+		expect( priceText( form, '74' ) ).toBe( '$10.00 / month $8.00then $10.00 / month' );
+		expect( priceText( form, '75' ) ).toBe( '$100.00 / year $80.00then $100.00 / year' );
+	} );
+
+	it( 'omits the qualifier when the discount recurs', () => {
+		const form = pickerWithCards();
+
+		applyPickerPricing( form, {
+			applies: true,
+			recurs: true,
+			variations: { 74: { applies: true, regular_html: '$10.00 / month', first_html: '$8.00 / month', recurring_html: '' } },
+		} );
+
+		expect( priceText( form, '74' ) ).toBe( '$10.00 / month $8.00 / month' );
+	} );
+
+	it( 'leaves the description alone', () => {
+		const form = pickerWithCards();
+
+		applyPickerPricing( form, pricing() );
+
+		expect( form.querySelector( 'label .newspack-ui__helper-text' ).textContent ).toBe( 'A description' );
+	} );
+
+	// The picker is shared and never re-rendered, so a coupon-less open has to undo
+	// the previous button's discount.
+	it( 'restores the original prices when the next open has no discount', () => {
+		const form = pickerWithCards();
+
+		applyPickerPricing( form, pricing() );
+		clearPickerPricing( form );
+
+		expect( priceText( form, '74' ) ).toBe( '$10.00 / month' );
+		expect( priceText( form, '75' ) ).toBe( '$100.00 / year' );
+	} );
+
+	it( 'replaces a previous open’s discount rather than stacking on it', () => {
+		const form = pickerWithCards();
+
+		applyPickerPricing( form, pricing() );
+		applyPickerPricing( form, {
+			applies: true,
+			recurs: false,
+			variations: { 74: { applies: true, regular_html: '$10.00 / month', first_html: '$9.00', recurring_html: 'then $10.00 / month' } },
+		} );
+
+		expect( priceText( form, '74' ) ).toBe( '$10.00 / month $9.00then $10.00 / month' );
+		// Variation 75 was discounted by the first call and must be back to normal.
+		expect( priceText( form, '75' ) ).toBe( '$100.00 / year' );
+	} );
+
+	it( 'leaves prices untouched when the coupon does not apply', () => {
+		const form = pickerWithCards();
+
+		applyPickerPricing( form, pricing( { applies: false } ) );
+
+		expect( priceText( form, '74' ) ).toBe( '$10.00 / month' );
+	} );
+
+	it( 'skips a variation the coupon is not valid for', () => {
+		const form = pickerWithCards();
+
+		applyPickerPricing( form, {
+			applies: true,
+			recurs: false,
+			variations: {
+				74: { applies: false, regular_html: '$10.00 / month', first_html: '', recurring_html: '' },
+				75: { applies: true, regular_html: '$100.00 / year', first_html: '$80.00', recurring_html: 'then $100.00 / year' },
+			},
+		} );
+
+		expect( priceText( form, '74' ) ).toBe( '$10.00 / month' );
+		expect( priceText( form, '75' ) ).toBe( '$100.00 / year $80.00then $100.00 / year' );
+	} );
+
+	it( 'does not throw on a failed fetch, a null form, or an unknown variation', () => {
+		const form = pickerWithCards();
+		expect( () => applyPickerPricing( form, null ) ).not.toThrow();
+		expect( () => applyPickerPricing( null, pricing() ) ).not.toThrow();
+		expect( () => clearPickerPricing( null ) ).not.toThrow();
+		expect( () =>
+			applyPickerPricing( form, {
+				applies: true,
+				variations: { 999: { applies: true, regular_html: '$1', first_html: '$0.50', recurring_html: '' } },
+			} )
+		).not.toThrow();
+		expect( priceText( form, '74' ) ).toBe( '$10.00 / month' );
 	} );
 } );
 

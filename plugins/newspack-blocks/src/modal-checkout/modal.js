@@ -24,7 +24,7 @@ import {
 	getCheckoutData,
 	getFormattedAmount,
 } from './utils';
-import { resolveCheckoutButtonForm, readCheckoutData, applyContextFields } from './checkout-button-trigger';
+import { resolveCheckoutButtonForm, readCheckoutData, applyContextFields, applyPickerPricing, clearPickerPricing } from './checkout-button-trigger';
 import { applyCtaAttribution } from '../shared/js/cta-attribution';
 
 const CLASS_PREFIX = newspackBlocksModal.newspack_class_prefix;
@@ -253,6 +253,30 @@ domReady( () => {
 	};
 
 	/**
+	 * Fetch how an attached coupon affects a product's variation prices.
+	 *
+	 * Resolves to null on any failure — a picker that can't show the discount is
+	 * still a working picker, so this must never reject or block opening the modal.
+	 *
+	 * @param {string} productId The parent product ID.
+	 * @param {string} coupon    The attached coupon code.
+	 *
+	 * @return {Promise<Object|null>} The pricing payload, or null.
+	 */
+	const fetchCouponPricing = ( productId, coupon ) => {
+		const endpoint = newspackBlocksModal.coupon_pricing_url;
+		if ( ! endpoint || ! productId || ! coupon ) {
+			return Promise.resolve( null );
+		}
+		const url = new URL( endpoint );
+		url.searchParams.set( 'product_id', productId );
+		url.searchParams.set( 'coupon', coupon );
+		return fetch( url.toString() )
+			.then( res => ( res.ok ? res.json() : null ) )
+			.catch( () => null );
+	};
+
+	/**
 	 * Empty cart via ajax.
 	 */
 	const emptyCart = async () => {
@@ -367,6 +391,16 @@ domReady( () => {
 					// shared by every button for this product and is never reset, so
 					// this overwrites the previous open's context rather than adding to it.
 					applyContextFields( singleVariationForm, checkoutData );
+
+					// Reflect the attached coupon in the prices on offer. Cleared
+					// synchronously so a coupon-less open never shows the previous
+					// button's discount while the request is in flight.
+					clearPickerPricing( singleVariationForm );
+					if ( checkoutData.coupon ) {
+						fetchCouponPricing( checkoutData.product_id, checkoutData.coupon ).then( pricing =>
+							applyPickerPricing( singleVariationForm, pricing )
+						);
+					}
 
 					// Append the product data hidden inputs.
 					const data = readCheckoutData( singleVariationForm );
