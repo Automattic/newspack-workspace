@@ -243,6 +243,15 @@ class Woocommerce_Memberships {
 		// (e.g. monthly and annual premium newsletters that share a "member" list),
 		// deactivating the old plan must not strip a list the new, still-active plan
 		// also grants — otherwise the shared list is lost. See NPPM-3000.
+		//
+		// This makes the switch order-independent when the new plan is already active
+		// at the moment the old one deactivates (so it appears in the active-
+		// memberships scan below) — the order seen in the reported production flow.
+		// If a flow instead deactivates the old plan BEFORE the new one becomes
+		// active, the shared list is removed here and re-added when the new plan
+		// activates via add_user_to_lists(); that re-add covers plan-tied lists but
+		// not lists gated behind the post-checkout signup modal, so a shared list
+		// that is also a signup-modal list could still be dropped in that ordering.
 		$lists_still_granted = self::get_lists_granted_by_other_active_memberships( $user->ID, $user_membership->get_id() );
 		if ( ! empty( $lists_still_granted ) ) {
 			$lists_to_remove = array_values( array_diff( $lists_to_remove, $lists_still_granted ) );
