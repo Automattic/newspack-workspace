@@ -3013,7 +3013,7 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 				[
 					'post_type'      => Content_Gate::GATE_LAYOUT_CPT,
 					'post_status'    => 'any',
-					'posts_per_page' => -1,
+					'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Unbounded queries are acceptable in tests.
 					'fields'         => 'ids',
 				]
 			);

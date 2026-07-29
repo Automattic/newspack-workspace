@@ -110,7 +110,7 @@ final class Newspack_Popups_Model {
 				[
 					'post_type'      => Newspack_Popups::NEWSPACK_POPUPS_CPT,
 					'post_status'    => 'publish',
-					'posts_per_page' => -1,
+					'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Prompt CPT; accepted cost. Unlike retrieve_popups() above this is frontend-reachable, so a cap would change which prompts render and is left to a follow-up.
 				]
 			),
 			true
