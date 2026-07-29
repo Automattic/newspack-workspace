@@ -7,7 +7,7 @@
 		"php": ">=8.0"
 	},
 	"require-dev": {
-		"automattic/vipwpcs": "3.0.*",
+		"automattic/vipwpcs": "~3.1.0",
 		"wp-coding-standards/wpcs": "^3.0",
 		"phpcompatibility/phpcompatibility-wp": "^2.1",
 		"dealerdirect/phpcodesniffer-composer-installer": "^1.0",
@@ -28,10 +28,5 @@
 			"dealerdirect/phpcodesniffer-composer-installer": true
 		},
 		"sort-packages": true
-	},
-	"extra": {
-		"pinned-dependencies": {
-			"automattic/vipwpcs": "Held at 3.0.* because there is no committed lockfile: CI resolves this constraint fresh on every run, so a new minor lands in every open PR at once. 3.1.0 broadens NoPaging (posts_per_page/numberposts set to -1), FetchingRemoteData and AlwaysReturnInFilter, which flags pre-existing call sites in nearly every plugin. Adopting it means triaging those findings, so it belongs in its own PR rather than arriving unannounced."
-		}
 	}
 }
