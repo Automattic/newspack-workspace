@@ -8,6 +8,7 @@
 import { __ } from '@wordpress/i18n';
 import { SelectControl, ToggleControl, __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 import { useDispatch } from '@wordpress/data';
+import { decodeEntities } from '@wordpress/html-entities';
 import { useEffect, useRef, useState } from '@wordpress/element';
 
 /**
@@ -28,7 +29,7 @@ const AdvancedSettings = ( { closeModal, showModal }: { closeModal: () => void; 
 	const initialConfig = {
 		...( wizardData?.config?.advanced_settings || {} ),
 	};
-	const { wizardApiFetch, isFetching, resetError, setError } = useWizardApiFetch( AUDIENCE_CONTENT_GATES_WIZARD_SLUG );
+	const { wizardApiFetch, isFetching, resetError } = useWizardApiFetch( AUDIENCE_CONTENT_GATES_WIZARD_SLUG );
 	const { addNotice, resetNotices, updateWizardSettings } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const [ config, setConfig ] = useState< AdvancedSettingsConfig >( initialConfig );
 
@@ -74,7 +75,11 @@ const AdvancedSettings = ( { closeModal, showModal }: { closeModal: () => void; 
 					} );
 				},
 				onError: ( fetchError: WpFetchError ) => {
-					setError( fetchError );
+					addNotice( {
+						message: decodeEntities( fetchError.message ),
+						type: 'error',
+						id: 'content-gates-advanced-settings-error',
+					} );
 				},
 				onFinally: () => {
 					closeModal();
@@ -86,7 +91,7 @@ const AdvancedSettings = ( { closeModal, showModal }: { closeModal: () => void; 
 	updateConfig.current = handleUpdateConfig;
 	return (
 		showModal && (
-			<Modal onClose={ closeModal } size="medium" title={ __( 'Advanced settings', 'newspack-plugin' ) } onRequestClose={ closeModal }>
+			<Modal onClose={ closeModal } size="medium" title={ __( 'Advanced Settings', 'newspack-plugin' ) } onRequestClose={ closeModal }>
 				<VStack>
 					<ToggleControl
 						label={ __( 'Restrict content in feeds', 'newspack-plugin' ) }

@@ -432,7 +432,7 @@ class Test_Feed_Restriction extends \WP_UnitTestCase {
 			[
 				'post_type'      => 'post',
 				'post_status'    => 'publish',
-				'posts_per_page' => -1,
+				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Test fixture; the case seeds a handful of posts.
 			]
 		);
 		$ids = wp_list_pluck( $query->posts, 'ID' );

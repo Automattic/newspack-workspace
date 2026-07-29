@@ -8,7 +8,7 @@
  * License: GPL2
  * Text Domain:     newspack-newsletters
  * Domain Path:     /languages
- * Version:         3.35.2
+ * Version:         3.37.1
  *
  * @package         Newspack_Newsletters
  */
@@ -34,9 +34,32 @@ if ( ! defined( 'NEWSPACK_NEWSLETTERS_PLUGIN_FILE' ) ) {
 if ( ! defined( 'NEWSPACK_NEWSLETTERS_LETTERHEAD_ENDPOINT' ) ) {
 	define( 'NEWSPACK_NEWSLETTERS_LETTERHEAD_ENDPOINT', 'https://api.tryletterhead.com' );
 }
+// Load the Composer autoloader. Prefer the jetpack-autoloader package loader
+// (which negotiates shared package versions across plugins); fall back to the
+// plain Composer autoloader if it is unavailable.
+if ( file_exists( NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/vendor/autoload_packages.php' ) ) {
+	require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/vendor/autoload_packages.php';
+} elseif ( file_exists( NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/vendor/autoload.php' ) ) {
+	require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/vendor/autoload.php';
+} else {
+	add_action(
+		'admin_notices',
+		function () {
+			echo '<div class="notice notice-error"><p>';
+			echo esc_html__( 'Newspack Newsletters is missing its Composer dependencies. Please run "composer install" in the plugin directory.', 'newspack-newsletters' );
+			echo '</p></div>';
+		}
+	);
+	return;
+}
 // Include main plugin resources.
-require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/vendor/autoload.php';
 require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/class-newspack-newsletters-logger.php';
+require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/email-renderers/class-feature-flag.php';
+require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/email-renderers/class-fonts.php';
+require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/email-renderers/class-email-defaults.php';
+require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/email-renderers/class-full-bleed-sections.php';
+require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/email-renderers/class-renderer-controller.php';
+require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/email-renderers/class-editor-bootstrap.php';
 require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/service-providers/interface-newspack-newsletters-esp-service.php';
 require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/service-providers/interface-newspack-newsletters-wp-hookable.php';
 require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/service-providers/class-newspack-newsletters-service-provider.php';
@@ -69,8 +92,10 @@ require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/class-newspack-newsle
 require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/class-newspack-newsletters-quick-edit.php';
 require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/class-newspack-newsletters-embed.php';
 require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/class-newspack-newsletters-subscription-attempts.php';
+require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/email-renderers/class-theme-json-builder.php';
 require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/ads/class-ads.php';
 require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/tracking/class-utils.php';
+require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/tracking/class-ad-stats.php';
 require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/tracking/class-pixel.php';
 require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/tracking/class-click.php';
 require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/tracking/class-admin.php';
@@ -90,12 +115,31 @@ require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/admin/class-newslette
 require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/admin/class-ads-list-rest.php';
 require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/admin/class-advertisers-list-rest.php';
 require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/admin/class-settings-rest.php';
+require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/admin/class-admin-shell-preferences.php';
 require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/admin/class-asset-loader.php';
 require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/admin/class-admin-shell-menu.php';
 require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/admin/class-admin-shell-legacy-redirect.php';
 require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/admin/class-admin-shell-assets.php';
 require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/admin/class-admin-shell.php';
 require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/class-wizard-bridge.php';
+
+// Boot the WooCommerce Email Editor package. Must run before the `init` hook
+// so the editor's own `init` callbacks (CPT, templates) are registered in time.
+//
+// Deliberately NOT behind Feature_Flag: the trade is one boot path for both flag
+// states instead of a conditional boot. The editor takeover — asset enqueuing,
+// theme.json overrides, the block allow-list and the `use_woo_renderer` editor flag
+// — is gated on Feature_Flag::is_enabled() in Newspack_Newsletters_Editor, so on a
+// flag-off site the WC canvas never engages and the boot is behaviorally inert (not
+// a no-op: it also registers a global `block_type_metadata_settings` filter that adds
+// `supports.email` + `render_email_callback` to core block settings site-wide, but
+// both are additive and unused until the renderer runs).
+//
+// Note the boot is what opts the newsletters CPT into the package (via the
+// `woocommerce_email_editor_post_types` filter added in Editor_Bootstrap::init()),
+// which is the only reason the init:11 CPT re-assertion exists — gating the boot
+// would remove the opt-in and the re-assertion together, not orphan one of them.
+\Newspack\Newsletters\Email_Renderers\Editor_Bootstrap::init();
 
 // This MUST be initialized after Newspack_Newsletter class.
 \Newspack\Newsletters\Subscription_Lists::init();
@@ -106,3 +150,4 @@ require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/class-wizard-bridge.p
 \Newspack\Newsletters\Admin\Ads_List_REST::init();
 \Newspack\Newsletters\Admin\Advertisers_List_REST::init();
 \Newspack\Newsletters\Admin\Settings_REST::init();
+\Newspack\Newsletters\Admin\Admin_Shell_Preferences::init();

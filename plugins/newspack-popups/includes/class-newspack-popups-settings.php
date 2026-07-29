@@ -22,6 +22,17 @@ class Newspack_Popups_Settings {
 	const DEFAULT_DONOR_MERGE_FIELD = 'DONAT';
 
 	/**
+	 * The settings page hook suffix returned by add_submenu_page().
+	 *
+	 * Used to scope asset enqueuing to this screen. The screen base can't be
+	 * relied on because the parent CPT is registered with `show_in_menu` false,
+	 * which orphans the submenu and yields an `admin_page_*` base.
+	 *
+	 * @var string
+	 */
+	public static $page_hook = '';
+
+	/**
 	 * Set up hooks.
 	 */
 	public static function init() {
@@ -33,7 +44,7 @@ class Newspack_Popups_Settings {
 	 * Add settings page.
 	 */
 	public static function add_plugin_page() {
-		add_submenu_page(
+		self::$page_hook = add_submenu_page(
 			'edit.php?post_type=' . Newspack_Popups::NEWSPACK_POPUPS_CPT,
 			__( 'Campaigns Settings', 'newspack-popups' ),
 			__( 'Settings', 'newspack-popups' ),
@@ -235,7 +246,10 @@ class Newspack_Popups_Settings {
 				'post_type'      => 'page',
 				'post_status'    => 'publish',
 				'post_parent'    => 0,
-				'posts_per_page' => -1,
+				// This list doubles as the save allow-list in update_setting(), so a cap would make
+				// pages outside the window silently unsaveable. Left unbounded until the setting
+				// moves to an autocomplete field and stops enumerating pages.
+				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- See above; bounding this changes behavior, not just cost.
 			]
 		);
 		// Remove the query filter so we don't unintentionally affect other queries.
@@ -391,11 +405,11 @@ class Newspack_Popups_Settings {
 
 	/**
 	 * Load up common JS/CSS for settings.
+	 *
+	 * @param string $hook_suffix Current admin page hook suffix.
 	 */
-	public static function admin_enqueue_scripts() {
-		$screen = get_current_screen();
-
-		if ( Newspack_Popups::NEWSPACK_POPUPS_CPT . '_page_' . self::NEWSPACK_POPUPS_SETTINGS_PAGE !== $screen->base ) {
+	public static function admin_enqueue_scripts( $hook_suffix ) {
+		if ( $hook_suffix !== self::$page_hook ) {
 			return;
 		}
 
