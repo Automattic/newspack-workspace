@@ -325,9 +325,15 @@ class Contact_Pull {
 			Logger::log( 'Pulled data from ' . $integration->get_id() . ': ' . wp_json_encode( $data ) );
 
 			foreach ( $data as $key => $value ) {
-				$value_type = $fields_by_key[ $key ]->get_value_type();
-				if ( 'date' === $value_type || 'datetime' === $value_type ) {
-					$value = self::normalize_date_value( $value, $fields_by_key[ $key ]->get_date_format(), $value_type );
+				$field      = $fields_by_key[ $key ];
+				$value_type = $field->get_value_type();
+				// Only rewrite the stored value when the publisher has chosen Date range
+				// matching for this field. A date-typed field left on another operator
+				// (e.g. Text) keeps its raw provider value, so any existing content-gate
+				// rule or segment matching the literal string keeps working unless the
+				// publisher deliberately switches the operator.
+				if ( ( 'date' === $value_type || 'datetime' === $value_type ) && 'date_range' === $field->get_matching_function() ) {
+					$value = self::normalize_date_value( $value, $field->get_date_format(), $value_type );
 				}
 				\Newspack\Reader_Data::update_item( $user_id, $key, wp_json_encode( $value ) );
 			}

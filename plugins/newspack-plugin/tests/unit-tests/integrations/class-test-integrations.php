@@ -12,6 +12,7 @@ use Newspack\Reader_Activation\Integration;
 use Newspack\Reader_Activation\Integrations;
 use Newspack\Reader_Activation\Integrations\Contact_Cron;
 use Newspack\Reader_Activation\Integrations\Contact_Pull;
+use Newspack\Reader_Activation\Integrations\Incoming_Field;
 use Sample_Integration;
 
 /**
@@ -2107,6 +2108,67 @@ class Test_Integrations extends \WP_UnitTestCase {
 		$esp = new \Newspack\Reader_Activation\Integrations\ESP();
 
 		$this->assertSame( 'Change provider', $esp->get_unsupported_action_label() );
+	}
+
+	/**
+	 * Contact_Pull::pull_single_integration() only rewrites a date-typed field's
+	 * value when the publisher has chosen Date range matching for it. A field left
+	 * on another operator (e.g. Text) must keep its raw provider value, so an
+	 * existing content-gate rule or Text segment matching the literal old string
+	 * keeps working until the publisher deliberately switches the operator.
+	 */
+	public function test_pull_normalizes_only_fields_with_date_range_matching_function() {
+		$user_id = $this->factory()->user->create();
+
+		$integration = new class( 'date-norm-test', 'Date Norm Test' ) extends Sample_Integration {
+			/**
+			 * Pull contact data returning the same raw value for both fields.
+			 *
+			 * @param int $user_id WordPress user ID.
+			 * @return array
+			 */
+			public function pull_contact_data( $user_id ) {
+				return [
+					'text_date'       => '03/04/2026',
+					'date_range_date' => '03/04/2026',
+				];
+			}
+
+			/**
+			 * Return two date-typed fields that differ only by matching_function.
+			 *
+			 * @return Incoming_Field[]
+			 */
+			public function get_enabled_incoming_fields() {
+				return [
+					( new Incoming_Field( 'text_date' ) )
+						->set_value_type( 'date' )
+						->set_matching_function( 'default' )
+						->set_date_format( 'm/d/Y' ),
+					( new Incoming_Field( 'date_range_date' ) )
+						->set_value_type( 'date' )
+						->set_matching_function( 'date_range' )
+						->set_date_format( 'm/d/Y' ),
+				];
+			}
+		};
+
+		$result = Contact_Pull::pull_single_integration( $user_id, $integration );
+		$this->assertTrue( $result );
+
+		// Text-operator field: raw value untouched. wp_unslash mirrors what
+		// update_metadata() does to the meta value before storing it — the raw
+		// value's forward slashes make this the first test in the file to need it.
+		$this->assertSame(
+			wp_unslash( wp_json_encode( '03/04/2026' ) ),
+			get_user_meta( $user_id, 'newspack_reader_data_item_text_date', true )
+		);
+
+		// date_range-operator field: normalized to ISO.
+		$this->assertSame(
+			wp_json_encode( '2026-03-04' ),
+			get_user_meta( $user_id, 'newspack_reader_data_item_date_range_date', true )
+		);
 	}
 
 	/**
