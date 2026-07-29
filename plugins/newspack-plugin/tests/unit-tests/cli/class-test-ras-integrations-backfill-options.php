@@ -6,6 +6,7 @@
  */
 
 use Newspack\CLI\RAS_Contact_Sync;
+use Newspack\Reader_Activation\Integration;
 use Newspack\Reader_Activation\Integrations;
 
 require_once dirname( __DIR__, 3 ) . '/includes/cli/class-ras-contact-sync.php';
@@ -31,11 +32,29 @@ class Test_RAS_Integrations_Backfill_Options extends WP_UnitTestCase {
 	}
 
 	public function tear_down() {
-		delete_option( 'newspack_integration_incoming_fields_backfill_mock' );
+		foreach ( [ 'backfill_mock', 'backfill_other' ] as $integration_id ) {
+			self::delete_integration_options( $integration_id );
+		}
 		Integrations::disable( 'backfill_mock' );
 		Integrations::enable( 'esp' );
 		Failing_Sample_Integration::reset();
 		parent::tear_down();
+	}
+
+	/**
+	 * Remove every per-integration option these tests write.
+	 *
+	 * Symmetric with what the tests set: the incoming-fields selection and the
+	 * per-direction toggles a paused-integration test flips. WP_UnitTestCase's
+	 * transaction rolls these back either way, so this is about the cleanup
+	 * being honest about what the class touches rather than about leakage.
+	 *
+	 * @param string $integration_id The integration id.
+	 */
+	private static function delete_integration_options( $integration_id ) {
+		delete_option( 'newspack_integration_incoming_fields_' . $integration_id );
+		delete_option( Integration::SETTINGS_OPTION_PREFIX . $integration_id . '_incoming_sync_enabled' );
+		delete_option( Integration::SETTINGS_OPTION_PREFIX . $integration_id . '_outgoing_sync_enabled' );
 	}
 
 	/**

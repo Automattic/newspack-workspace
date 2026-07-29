@@ -7,6 +7,7 @@
 
 use Newspack\CLI\RAS_Contact_Sync;
 use Newspack\Reader_Activation;
+use Newspack\Reader_Activation\Integration;
 use Newspack\Reader_Activation\Integrations;
 use Newspack\Reader_Activation\Integrations\Contact_Pull;
 use Newspack\Reader_Data;
@@ -42,11 +43,29 @@ class Test_RAS_Integrations_Backfill_Pull extends WP_UnitTestCase {
 	public function tear_down() {
 		global $subscriptions_database;
 		$subscriptions_database = [];
-		delete_option( 'newspack_integration_incoming_fields_pull_cli_mock' );
+		foreach ( [ 'pull_cli_mock', 'pull_cli_other' ] as $integration_id ) {
+			self::delete_integration_options( $integration_id );
+		}
 		Integrations::disable( 'pull_cli_mock' );
 		Integrations::enable( 'esp' );
 		Failing_Sample_Integration::reset();
 		parent::tear_down();
+	}
+
+	/**
+	 * Remove every per-integration option these tests write.
+	 *
+	 * Symmetric with what the tests set: the incoming-fields selection and the
+	 * per-direction toggles a paused-integration test flips. WP_UnitTestCase's
+	 * transaction rolls these back either way, so this is about the cleanup
+	 * being honest about what the class touches rather than about leakage.
+	 *
+	 * @param string $integration_id The integration id.
+	 */
+	private static function delete_integration_options( $integration_id ) {
+		delete_option( 'newspack_integration_incoming_fields_' . $integration_id );
+		delete_option( Integration::SETTINGS_OPTION_PREFIX . $integration_id . '_incoming_sync_enabled' );
+		delete_option( Integration::SETTINGS_OPTION_PREFIX . $integration_id . '_outgoing_sync_enabled' );
 	}
 
 	/**
