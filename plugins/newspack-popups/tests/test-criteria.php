@@ -125,4 +125,38 @@ class CriteriaTest extends WP_UnitTestCase {
 			$criteria_config['test_criteria_config']['optionParams']
 		);
 	}
+
+	/**
+	 * The supported list is what a registering plugin probes before emitting a
+	 * matching function, so it has to stay in step with the keys exported by
+	 * src/criteria/matching-functions.js — a name advertised here but missing there
+	 * is exactly the unresolvable-function crash the probe exists to avoid.
+	 */
+	public function test_supports_matching_function() {
+		foreach ( [ 'default', 'range', 'list__in', 'list__not_in', 'date_range' ] as $matching_function ) {
+			$this->assertTrue(
+				Newspack_Popups_Criteria::supports_matching_function( $matching_function ),
+				$matching_function
+			);
+		}
+
+		$this->assertFalse( Newspack_Popups_Criteria::supports_matching_function( 'does_not_exist' ) );
+		$this->assertFalse( Newspack_Popups_Criteria::supports_matching_function( '' ) );
+	}
+
+	/**
+	 * Every advertised matching function must exist in the JS module, so the two
+	 * lists can't drift as operators are added.
+	 */
+	public function test_supported_matching_functions_exist_in_js_module() {
+		$source = file_get_contents( __DIR__ . '/../src/criteria/matching-functions.js' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+
+		foreach ( Newspack_Popups_Criteria::SUPPORTED_MATCHING_FUNCTIONS as $matching_function ) {
+			$this->assertMatchesRegularExpression(
+				'/^\t' . preg_quote( $matching_function, '/' ) . ':\s/m',
+				$source,
+				"$matching_function is advertised as supported but not exported by matching-functions.js"
+			);
+		}
+	}
 }

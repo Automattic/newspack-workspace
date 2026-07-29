@@ -417,9 +417,11 @@ class Test_Promoted_Fields extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Access rules pass a scalar argument and have no date-range UI. A field typed
-	 * as date_range for segmentation must therefore keep exact-matching through the
-	 * access-rule path, or flipping the operator would silently break a live gate.
+	 * Access rules pass a scalar argument and have no date-range UI, so a field
+	 * typed as date_range still matches one date exactly. It compares calendar
+	 * dates rather than raw strings: choosing the operator makes the pull rewrite
+	 * stored values to ISO, and a rule written in the provider's own format would
+	 * otherwise silently stop matching a live gate.
 	 */
 	public function test_date_range_field_still_exact_matches_as_access_rule() {
 		$user_id = $this->factory->user->create();
@@ -437,5 +439,37 @@ class Test_Promoted_Fields extends \WP_UnitTestCase {
 
 		$this->assertTrue( $method->invoke( null, $field, $user_id, '2026-01-15' ) );
 		$this->assertFalse( $method->invoke( null, $field, $user_id, '2026-01-16' ) );
+
+		// A rule the publisher wrote in the provider's format keeps matching the
+		// value the pull rewrote to ISO.
+		$mailchimp_field = ( new Incoming_Field( 'LAST_GIFT_DATE' ) )
+			->set_value_type( 'date' )
+			->set_matching_function( 'date_range' )
+			->set_date_format( 'm/d/Y' );
+		$this->assertTrue( $method->invoke( null, $mailchimp_field, $user_id, '01/15/2026' ) );
+		$this->assertFalse( $method->invoke( null, $mailchimp_field, $user_id, '01/16/2026' ) );
+
+		// A datetime value is compared on its date part, as written — the ATOM form
+		// the pull stores can never be typed into a gate rule by hand.
+		\Newspack\Reader_Data::update_item( $user_id, 'LAST_GIFT_DATE', wp_json_encode( '2026-01-15T23:30:00-06:00' ) );
+		$datetime_field = ( new Incoming_Field( 'LAST_GIFT_DATE' ) )
+			->set_value_type( 'datetime' )
+			->set_matching_function( 'date_range' );
+		$this->assertTrue( $method->invoke( null, $datetime_field, $user_id, '2026-01-15' ) );
+		$this->assertFalse( $method->invoke( null, $datetime_field, $user_id, '2026-01-16' ) );
+
+		// A reader with no value never matches, even against an unusable rule.
+		\Newspack\Reader_Data::update_item( $user_id, 'LAST_GIFT_DATE', wp_json_encode( '' ) );
+		$this->assertFalse( $method->invoke( null, $field, $user_id, '' ) );
+		$this->assertFalse( $method->invoke( null, $field, $user_id, 'not a date' ) );
+
+		// A day that doesn't exist in its month is what the normalizer stores
+		// untouched precisely because it isn't a date; it must not become one here.
+		\Newspack\Reader_Data::update_item( $user_id, 'LAST_GIFT_DATE', wp_json_encode( '2026-02-30' ) );
+		$this->assertFalse( $method->invoke( null, $field, $user_id, '2026-02-30' ) );
+
+		// A leap day is a real date and still matches.
+		\Newspack\Reader_Data::update_item( $user_id, 'LAST_GIFT_DATE', wp_json_encode( '2024-02-29' ) );
+		$this->assertTrue( $method->invoke( null, $field, $user_id, '2024-02-29' ) );
 	}
 }

@@ -10,6 +10,7 @@ namespace Newspack\Reader_Activation;
 use Newspack\Access_Rules;
 use Newspack\Reader_Data;
 use Newspack\Reader_Activation\Integration;
+use Newspack\Reader_Activation\Integrations\Contact_Pull;
 use Newspack\Reader_Activation\Integrations\Incoming_Field;
 
 defined( 'ABSPATH' ) || exit;
@@ -25,6 +26,16 @@ class Promoted_Fields {
 	 * @var array|null
 	 */
 	private static $promoted_fields = null;
+
+	/**
+	 * Matching functions that predate the newspack-popups capability probe. Any
+	 * newspack-popups build old enough to lack `supports_matching_function()`
+	 * still resolves every one of these, so they never need gating — only
+	 * operators introduced alongside or after the probe do.
+	 *
+	 * @var string[]
+	 */
+	private const BASELINE_MATCHING_FUNCTIONS = [ 'default', 'range', 'list__in', 'list__not_in' ];
 
 	/**
 	 * Initialize hooks.
@@ -183,13 +194,39 @@ class Promoted_Fields {
 				[
 					'name'               => self::get_display_name( $field, $integration ),
 					'category'           => 'integrations',
-					'matching_function'  => $field->get_matching_function(),
+					'matching_function'  => self::supported_matching_function( $field->get_matching_function() ),
 					'matching_attribute' => $field->get_key(),
 					'options'            => $options,
 					'description'        => $field->get_description(),
 				]
 			);
 		}
+	}
+
+	/**
+	 * Resolve a matching function the installed newspack-popups can actually run.
+	 *
+	 * Newer operators ship here before newspack-popups is updated to match, and an
+	 * old build leaves an unresolvable name as a raw string and then calls it —
+	 * a TypeError that escapes segment matching and takes prompt display down
+	 * sitewide, not just for that segment. Newer builds fail closed on their own,
+	 * but that guard is exactly what a stale build lacks, so ask first and fall
+	 * back to exact matching (a criterion that matches too narrowly, rather than
+	 * one that breaks the page).
+	 *
+	 * @param string $matching_function The field's matching function.
+	 * @return string A matching function the installed newspack-popups supports.
+	 */
+	private static function supported_matching_function( $matching_function ) {
+		if ( in_array( $matching_function, self::BASELINE_MATCHING_FUNCTIONS, true ) ) {
+			return $matching_function;
+		}
+		// An older newspack-popups has no such method. Its absence means "cannot
+		// confirm support", which for anything past the baseline means don't emit it.
+		if ( ! method_exists( '\Newspack_Popups_Criteria', 'supports_matching_function' ) ) {
+			return 'default';
+		}
+		return \Newspack_Popups_Criteria::supports_matching_function( $matching_function ) ? $matching_function : 'default';
 	}
 
 	/**
@@ -242,9 +279,46 @@ class Promoted_Fields {
 			case 'list__not_in':
 				$user_values = self::parse_list_value( $value );
 				return empty( array_intersect( (array) $args, $user_values ) );
+			case 'date_range':
+				// Access rules have no range UI — a rule still holds one typed value and
+				// still matches it exactly. But selecting this operator makes the pull
+				// rewrite stored values to ISO, so a rule the publisher wrote in the
+				// provider's own format ('03/04/2026') would silently stop matching a
+				// stored '2026-03-04'. Put both sides through the same normalizer and
+				// compare calendar dates, so the rule keeps meaning what it meant.
+				$stored_date = self::to_calendar_date( $value );
+				$rule_date   = self::to_calendar_date(
+					Contact_Pull::normalize_date_value( $args, $field->get_date_format(), $field->get_value_type() )
+				);
+				return null !== $stored_date && $stored_date === $rule_date;
 			default:
 				return $value === $args;
 		}
+	}
+
+	/**
+	 * Reduce a date value to its calendar date, or null when it isn't one.
+	 *
+	 * Mirrors the client matcher's `toCalendarDate()` (newspack-popups
+	 * `src/criteria/matching-functions.js`) so both consumers of a `date_range`
+	 * field agree on what counts as a date, and on reading the date part as
+	 * written rather than shifting it into a timezone.
+	 *
+	 * @param mixed $value Candidate value.
+	 * @return string|null A `YYYY-MM-DD` string, or null.
+	 */
+	private static function to_calendar_date( $value ) {
+		if ( ! is_string( $value ) ) {
+			return null;
+		}
+		$candidate = substr( trim( $value ), 0, 10 );
+		if ( 1 !== preg_match( '/^(\d{4})-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/', $candidate, $matches ) ) {
+			return null;
+		}
+		// The bounded pattern still admits a day that doesn't exist in its month
+		// (`2026-02-30`), which the normalizer stores untouched precisely because it
+		// isn't a date. It must not become one here either.
+		return checkdate( (int) $matches[2], (int) $matches[3], (int) $matches[1] ) ? $candidate : null;
 	}
 
 	/**
