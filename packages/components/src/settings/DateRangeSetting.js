@@ -48,9 +48,14 @@ const boundValueOf = bound => {
 	return 'absolute' === bound.type ? bound.date || '' : String( Math.abs( bound.days || 0 ) );
 };
 
-const makeBound = ( type, rawValue ) => {
+// `seed` is set only when the publisher picks a bound type, so a newly chosen
+// bound starts on a usable value instead of being half-filled. It must stay off
+// for edits to the value itself: a date input reports '' both when cleared and
+// transiently while its value is being retyped, and substituting today() there
+// would silently move a saved window out from under the publisher.
+const makeBound = ( type, rawValue, seed = false ) => {
 	if ( 'absolute' === type ) {
-		return { type: 'absolute', date: rawValue || today() };
+		return { type: 'absolute', date: rawValue || ( seed ? today() : '' ) };
 	}
 	const days = Math.abs( parseInt( rawValue, 10 ) || 0 );
 	return { type: 'relative', days: 'future' === type ? days : -days };
@@ -87,13 +92,18 @@ const DateRangeBound = ( { label, testId, bound, onChange } ) => {
 				options={ BOUND_TYPES }
 				onChange={ nextType => {
 					setChosenType( nextType );
-					onChange( nextType ? makeBound( nextType, '' ) : undefined );
+					onChange( nextType ? makeBound( nextType, '', true ) : undefined );
 				} }
 			/>
 			{ '' !== type && (
 				<TextControl
 					data-testid={ testId }
+					// The visible label sits on the sibling select, so without one here
+					// the input has no accessible name at all.
+					label={ 'absolute' === type ? __( 'Date', 'newspack-plugin' ) : __( 'Days', 'newspack-plugin' ) }
+					hideLabelFromVision
 					type={ 'absolute' === type ? 'date' : 'number' }
+					min={ 'absolute' === type ? undefined : 0 }
 					value={ boundValueOf( bound ) }
 					onChange={ nextValue => onChange( makeBound( type, nextValue ) ) }
 				/>

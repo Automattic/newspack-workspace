@@ -214,6 +214,31 @@ describe( 'Date range criteria input', () => {
 		fireEvent.change( screen.getByLabelText( 'From' ), { target: { value: 'past' } } );
 		expect( screen.getByLabelText( 'From' ) ).toHaveValue( 'past' );
 	} );
+
+	it( 'seeds today when "Date" is chosen, so no half-filled bound exists', () => {
+		fireEvent.change( screen.getByLabelText( 'From' ), { target: { value: 'absolute' } } );
+		expect( screen.getByTestId( 'date-range-start-value' ) ).not.toHaveValue( '' );
+	} );
+
+	it( 'leaves a cleared date empty instead of re-seeding today', () => {
+		fireEvent.change( screen.getByLabelText( 'From' ), { target: { value: 'absolute' } } );
+		const input = screen.getByTestId( 'date-range-start-value' );
+		fireEvent.change( input, { target: { value: '2020-01-01' } } );
+		expect( input ).toHaveValue( '2020-01-01' );
+		// A date input reports '' both when cleared and transiently while it is being
+		// retyped. Substituting today() there would silently move a saved window.
+		fireEvent.change( input, { target: { value: '' } } );
+		expect( screen.getByTestId( 'date-range-start-value' ) ).toHaveValue( '' );
+	} );
+
+	it( 'gives the value input an accessible name of its own', () => {
+		// The only visible text sits on the sibling select, so without a label here a
+		// screen reader announces an unnamed date field or spin button.
+		fireEvent.change( screen.getByLabelText( 'From' ), { target: { value: 'past' } } );
+		expect( screen.getByLabelText( 'Days' ) ).toBeInTheDocument();
+		fireEvent.change( screen.getByLabelText( 'From' ), { target: { value: 'absolute' } } );
+		expect( screen.getByLabelText( 'Date' ) ).toBeInTheDocument();
+	} );
 } );
 
 describe( 'Date range criteria input for an existing segment with a loaded "Days from now" end bound', () => {
