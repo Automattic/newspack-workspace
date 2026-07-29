@@ -30,6 +30,14 @@ class Subscription_Lists {
 	const CPT = 'newspack_nl_list';
 
 	/**
+	 * Per-request memo of every Subscription List. Reset by flush_cache() whenever
+	 * a list is created, updated, or deleted.
+	 *
+	 * @var Subscription_List[]|null
+	 */
+	private static $all_lists = null;
+
+	/**
 	 * Initialize this class and register hooks
 	 *
 	 * @return void
@@ -40,6 +48,10 @@ class Subscription_Lists {
 
 		add_filter( 'wp_editor_settings', [ __CLASS__, 'filter_editor_settings' ], 10, 2 );
 		add_action( 'save_post', [ __CLASS__, 'save_post' ] );
+		// Bust the per-request list memo when a list changes so a create, update,
+		// or delete within the same request is reflected on re-read.
+		add_action( 'save_post_' . self::CPT, [ __CLASS__, 'flush_cache' ] );
+		add_action( 'before_delete_post', [ __CLASS__, 'maybe_flush_cache_on_delete' ], 10, 2 );
 		add_action( 'admin_enqueue_scripts', [ __CLASS__, 'admin_enqueue_scripts' ] );
 
 		add_action( 'edit_form_before_permalink', [ __CLASS__, 'edit_form_before_permalink' ] );
@@ -402,6 +414,12 @@ class Subscription_Lists {
 	 * @return Subscription_List[]
 	 */
 	public static function get_all() {
+		// Skip the memo under PHPUnit: tests roll back the database between cases
+		// but static memos persist, which would leak one test's lists into the next.
+		$use_cache = ! ( defined( 'IS_TEST_ENV' ) && IS_TEST_ENV );
+		if ( $use_cache && null !== self::$all_lists ) {
+			return self::$all_lists;
+		}
 		$posts   = get_posts(
 			[
 				'post_type'      => self::CPT,
@@ -413,7 +431,37 @@ class Subscription_Lists {
 		foreach ( $posts as $post ) {
 			$objects[] = new Subscription_List( $post );
 		}
+		if ( $use_cache ) {
+			self::$all_lists = $objects;
+		}
 		return $objects;
+	}
+
+	/**
+	 * Clear the per-request list memo. Also resets the newsletters-subscription
+	 * lists-config memo so a list change is reflected in both places on re-read.
+	 *
+	 * @return void
+	 */
+	public static function flush_cache() {
+		self::$all_lists = null;
+		if ( class_exists( 'Newspack_Newsletters_Subscription' ) ) {
+			\Newspack_Newsletters_Subscription::reset_lists_config_cache();
+		}
+	}
+
+	/**
+	 * Flush the list caches when a Subscription List is deleted.
+	 *
+	 * @param int          $post_id Post ID being deleted.
+	 * @param WP_Post|null $post    Post object being deleted, when provided.
+	 * @return void
+	 */
+	public static function maybe_flush_cache_on_delete( $post_id, $post = null ) {
+		$post_type = $post instanceof \WP_Post ? $post->post_type : get_post_type( $post_id );
+		if ( self::CPT === $post_type ) {
+			self::flush_cache();
+		}
 	}
 
 	/**

@@ -24,6 +24,38 @@ class Subscription_Lists_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A list added or changed within a request must invalidate the memoized
+	 * lists config, so a subsequent read reflects it.
+	 */
+	public function test_flush_cache_invalidates_lists_config() {
+		Newspack_Newsletters::set_service_provider( 'mailchimp' );
+		Newspack_Newsletters_Subscription::reset_lists_config_cache();
+		$before = count( Newspack_Newsletters_Subscription::get_lists_config() );
+
+		// Create and configure a new active Mailchimp list. The meta write does
+		// not fire the CPT save hook, so flush the way the update flow would.
+		$new_id = self::create_post( 'flush' );
+		update_post_meta(
+			$new_id,
+			Subscription_List::META_KEY,
+			[
+				'mailchimp' => [
+					'list'     => 'mc_list',
+					'tag_id'   => 99,
+					'tag_name' => 'Flush Tag',
+				],
+			]
+		);
+		Subscription_Lists::flush_cache();
+
+		$after = count( Newspack_Newsletters_Subscription::get_lists_config() );
+		$this->assertSame( $before + 1, $after, 'New active list should appear once the config cache is flushed.' );
+
+		wp_delete_post( $new_id, true );
+		Subscription_Lists::flush_cache();
+	}
+
+	/**
 	 * Test get_configured_for_provider
 	 */
 	public function test_get_configured_for_provider() {

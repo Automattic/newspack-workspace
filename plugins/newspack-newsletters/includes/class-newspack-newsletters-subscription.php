@@ -572,7 +572,7 @@ class Newspack_Newsletters_Subscription {
 	 * @return array[]|WP_Error Associative array with list configuration keyed by list ID or error.
 	 */
 	public static function get_lists_config() {
-		if ( self::$lists_config ) {
+		if ( null !== self::$lists_config ) {
 			return self::$lists_config;
 		}
 		$provider = Newspack_Newsletters::get_service_provider();
@@ -592,6 +592,16 @@ class Newspack_Newsletters_Subscription {
 
 		self::$lists_config = $active_lists;
 		return self::$lists_config;
+	}
+
+	/**
+	 * Reset the memoized lists config so the next get_lists_config() call rebuilds
+	 * it. Called when a subscription list changes within the same request.
+	 *
+	 * @return void
+	 */
+	public static function reset_lists_config_cache() {
+		self::$lists_config = null;
 	}
 
 	/**
