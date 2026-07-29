@@ -1,20 +1,43 @@
 import { buildQueryParams, toQueryString } from './build-query';
+import { PER_PAGE_ALL } from '../../utils/per-page';
 
 describe( 'buildQueryParams', () => {
-	it( 'sets page and per_page from the view, defaulting to 1 and 25', () => {
-		expect( buildQueryParams( {} ) ).toMatchObject( { page: 1, per_page: 25 } );
+	it( 'sets page and per_page from the view, defaulting to 1 and 20', () => {
+		expect( buildQueryParams( {} ) ).toMatchObject( { page: 1, per_page: 20 } );
 		expect( buildQueryParams( { page: 3, perPage: 50 } ) ).toMatchObject( {
 			page: 3,
 			per_page: 50,
 		} );
 	} );
 
+	it( 'maps the All sentinel to max-size chunks starting at page 1', () => {
+		expect( buildQueryParams( { perPage: PER_PAGE_ALL, page: 7 } ) ).toMatchObject( { page: 1, per_page: 100 } );
+	} );
+
+	it( 'restricts fields so content/excerpt are never rendered server-side', () => {
+		const { _fields } = buildQueryParams( {} );
+		expect( _fields.split( ',' ) ).toEqual(
+			expect.arrayContaining( [ 'id', 'status', 'title', 'date', 'link', 'meta', 'newspack_newsletters_status' ] )
+		);
+		expect( _fields ).not.toContain( 'content' );
+		expect( _fields ).not.toContain( 'excerpt' );
+		// Without `_links`, `_embed` expands nothing and the author/terms columns go blank.
+		expect( _fields.split( ',' ) ).toContain( '_links' );
+		expect( _fields.split( ',' ) ).toEqual( expect.arrayContaining( [ 'categories', 'tags' ] ) );
+	} );
+
 	it( 'requests context=edit so meta and private fields are returned', () => {
 		expect( buildQueryParams( {} ).context ).toBe( 'edit' );
 	} );
 
-	it( 'includes author and wp:term embeds for the columns that need them', () => {
+	it( 'includes author and wp:term embeds when field visibility is unknown', () => {
 		expect( buildQueryParams( {} )._embed ).toBe( 'author,wp:term' );
+	} );
+
+	it( 'drops the expensive wp:term embed when the Categories/Tags columns are hidden', () => {
+		expect( buildQueryParams( { fields: [ 'status', 'date', 'author' ] } )._embed ).toBe( 'author' );
+		expect( buildQueryParams( { fields: [ 'status', 'categories' ] } )._embed ).toBe( 'author,wp:term' );
+		expect( buildQueryParams( { fields: [ 'tags' ] } )._embed ).toBe( 'author,wp:term' );
 	} );
 
 	it( 'defaults status to all common writable statuses (no trash) when no filter is set', () => {

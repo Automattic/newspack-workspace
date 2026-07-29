@@ -95,55 +95,11 @@
 			}
 
 			.order-review-wrapper {
-				// Collapse and expand Transaction Details.
-				// stylelint-disable-next-line selector-id-pattern
-				#order_review_heading {
-					border-radius: 0;
-					min-height: 0;
-					padding: 0;
-
-					&:hover {
-						background: transparent;
-						color: var(--newspack-ui-color-neutral-60);
-					}
-
-					&:focus-visible {
-						outline: 0;
-						text-decoration: underline;
-					}
-
-					svg {
-						margin: 0 -8px;
-						transition: rotate 125ms ease-in-out;
-					}
-				}
+				margin-bottom: var(--newspack-ui-spacer-5, 24px);
 
 				// stylelint-disable-next-line selector-id-pattern
 				#order_review {
 					margin: 0;
-				}
-
-				.transaction-details-content {
-					display: grid;
-					grid-template-rows: 0fr;
-					margin-bottom: var(--newspack-ui-spacer-2, 12px);
-					transition: grid-template-rows 250ms ease-in-out;
-				}
-
-				.transaction-details-content-inner {
-					overflow: hidden;
-				}
-			}
-
-			&.transaction-details-expanded {
-				// stylelint-disable-next-line selector-id-pattern
-				#order_review_heading svg {
-					rotate: 180deg;
-				}
-
-				.transaction-details-content {
-					grid-template-rows: 1fr;
-					margin-bottom: var(--newspack-ui-spacer-5, 24px);
 				}
 			}
 		}
@@ -407,14 +363,6 @@
 	.modal_checkout_coupon {
 		&.modal-processing {
 			opacity: 0.5;
-		}
-	}
-
-	// Checkout form heading.
-	.woocommerce .order-details-summary {
-		// Top margin not needed in newspack ui modal.
-		h2 {
-			margin-top: 0;
 		}
 	}
 

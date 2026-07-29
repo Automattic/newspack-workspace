@@ -232,6 +232,29 @@ final class Checkout_Data {
 	}
 
 	/**
+	 * Build a `data-checkout` HTML attribute for a checkout-data payload.
+	 *
+	 * Centralizes wp_json_encode + esc_attr so the encoding and escaping live in a
+	 * single place and can't be omitted by callers. Mirrors the JS getCheckoutData()
+	 * reader in src/modal-checkout/utils.js.
+	 *
+	 * @param array $data Checkout-data payload (e.g. from get_checkout_data()).
+	 * @return string Escaped attribute, e.g. data-checkout='{...}'.
+	 */
+	public static function data_checkout_attr( array $data ) {
+		return sprintf( "data-checkout='%s'", esc_attr( wp_json_encode( $data ) ) );
+	}
+
+	/**
+	 * Echo a `data-checkout` HTML attribute for a checkout-data payload.
+	 *
+	 * @param array $data Checkout-data payload.
+	 */
+	public static function print_data_checkout_attr( array $data ) {
+		echo self::data_checkout_attr( $data ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- data_checkout_attr() escapes via esc_attr().
+	}
+
+	/**
 	 * Returns checkout data given a product, product variation, cart or order object.
 	 *
 	 * @param \WC_Product|\WC_Product_Variation|\WC_Cart|\WC_Order $source Product, product variation, cart or order object.

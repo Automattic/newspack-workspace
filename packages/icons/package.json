@@ -33,12 +33,14 @@
 		"react": "^16.8.0 || ^17.0.0 || ^18.0.0"
 	},
 	"devDependencies": {
-		"@types/react": "^18.0.0"
+		"@types/react": "^18.0.0",
+		"newspack-scripts": "workspace:*"
 	},
 	"scripts": {
 		"build-types": "node build-types.js",
 		"prepublishOnly": "npm run build-types",
-		"clean": "rm -rf build-types"
+		"clean": "rm -rf build-types",
+		"typescript:check": "newspack-scripts typescript-check"
 	},
 	"files": [
 		"build-types/",

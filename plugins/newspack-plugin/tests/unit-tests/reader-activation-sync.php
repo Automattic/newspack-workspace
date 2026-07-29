@@ -24,7 +24,7 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 	 */
 	public function get_sample_contact() {
 		$contact = [
-			'email'    => 'test@email.com',
+			'email'    => 'test@example.com',
 			'name'     => 'Test Contact',
 			'metadata' => [],
 		];
@@ -147,7 +147,7 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 		// Set connected ESP to ActiveCampaign.
 		\update_option( 'newspack_newsletters_service_provider', 'active_campaign' );
 		$contact_data_with_raw_keys      = [
-			'email'    => 'test@email.com',
+			'email'    => 'test@example.com',
 			'name'     => 'Test Contact',
 			'metadata' => [
 				'account'           => 123,
@@ -156,7 +156,7 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 			],
 		];
 		$contact_data_with_prefixed_keys = [
-			'email'    => 'test@email.com',
+			'email'    => 'test@example.com',
 			'name'     => 'Test Contact',
 			'metadata' => [
 				'NP_Account'           => 123,
@@ -165,7 +165,7 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 			],
 		];
 		$contact_data_with_custom_prefix = [
-			'email'    => 'test@email.com',
+			'email'    => 'test@example.com',
 			'name'     => 'Test Contact',
 			'metadata' => [
 				'CU_Account'           => 123,
@@ -349,7 +349,7 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 		// Clear any pending retries.
 		as_unschedule_all_actions( Contact_Sync::RETRY_HOOK );
 
-		$user_id = $this->factory()->user->create( [ 'user_email' => 'retry@test.com' ] );
+		$user_id = $this->factory()->user->create( [ 'user_email' => 'retry@example.com' ] );
 
 		Contact_Sync::execute_integration_retry(
 			[
@@ -392,7 +392,7 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 		// Clear any pending retries.
 		as_unschedule_all_actions( Contact_Sync::RETRY_HOOK );
 
-		$user_id = $this->factory()->user->create( [ 'user_email' => 'success@test.com' ] );
+		$user_id = $this->factory()->user->create( [ 'user_email' => 'success@example.com' ] );
 
 		Contact_Sync::execute_integration_retry(
 			[
@@ -431,7 +431,7 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 		// Clear any pending retries.
 		as_unschedule_all_actions( Contact_Sync::RETRY_HOOK );
 
-		$user_id = $this->factory()->user->create( [ 'user_email' => 'max@test.com' ] );
+		$user_id = $this->factory()->user->create( [ 'user_email' => 'max@example.com' ] );
 
 		// Simulate a retry at the max count — should NOT schedule another and should throw.
 		$threw = false;
@@ -475,7 +475,7 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 
 		as_unschedule_all_actions( Contact_Sync::RETRY_HOOK );
 
-		$user_id = $this->factory()->user->create( [ 'user_email' => 'log@test.com' ] );
+		$user_id = $this->factory()->user->create( [ 'user_email' => 'log@example.com' ] );
 
 		// Schedule a dummy AS action to simulate the currently-executing action.
 		$dummy_action_id = as_schedule_single_action( time() + 3600, 'newspack_dummy_log_action' );
@@ -530,7 +530,7 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 
 		as_unschedule_all_actions( Contact_Sync::RETRY_HOOK );
 
-		$user_id = $this->factory()->user->create( [ 'user_email' => 'deadletter@test.com' ] );
+		$user_id = $this->factory()->user->create( [ 'user_email' => 'deadletter@example.com' ] );
 
 		// Schedule a dummy AS action to simulate the currently-executing action.
 		$dummy_action_id = as_schedule_single_action( time() + 3600, 'newspack_dummy_sync_action' );
@@ -595,7 +595,7 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 
 		as_unschedule_all_actions( Contact_Sync::RETRY_HOOK );
 
-		$user_id = $this->factory()->user->create( [ 'user_email' => 'exhaustion@test.com' ] );
+		$user_id = $this->factory()->user->create( [ 'user_email' => 'exhaustion@example.com' ] );
 
 		// Execute at max retry count — triggers exhaustion and throws.
 		try {
@@ -616,6 +616,177 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 		$this->assertEquals( $user_id, $hook_data['user_id'] );
 		$this->assertEquals( Contact_Sync::MAX_RETRIES, $hook_data['retry_count'] );
 		$this->assertArrayHasKey( 'reason', $hook_data );
+	}
+
+	/**
+	 * Test that classify_error sorts ESP error messages into the right class.
+	 */
+	public function test_classify_error_signatures() {
+		$reflection = new \ReflectionMethod( Contact_Sync::class, 'classify_error' );
+		$reflection->setAccessible( true );
+
+		$cases = [
+			'neil@example.com was permanently deleted and cannot be re-imported.' => 'permanent_contact',
+			'asdf@example.com looks fake or invalid, please enter a real email address.' => 'permanent_contact',
+			'Please enter a number Your merge fields were invalid.' => 'permanent_contact',
+			'Please provide a valid email address.' => 'permanent_contact',
+			'Contact Email Address is not valid.'   => 'permanent_contact',
+			'API Access has been disabled for this account.' => 'permanent_config',
+			'Payment Required'                      => 'permanent_config',
+			'cindy@example.com is already a list member. Use PUT to insert or update.' => 'benign',
+			'Member Exists'                         => 'benign',
+			'garcia@example.com has signed up to a lot of lists very recently' => 'transient',
+			'Some unknown transient network error'  => 'transient',
+		];
+
+		foreach ( $cases as $message => $expected ) {
+			$this->assertEquals(
+				$expected,
+				$reflection->invoke( null, new \WP_Error( 'esp_error', $message ) ),
+				sprintf( 'Message "%s" should classify as %s.', $message, $expected )
+			);
+		}
+	}
+
+	/**
+	 * Test that classify_error matches signatures in any message of an
+	 * aggregate WP_Error, not just the first — the ESP layer prepends
+	 * invalid-list and exception messages ahead of the provider's own error.
+	 */
+	public function test_classify_error_reads_all_messages() {
+		$reflection = new \ReflectionMethod( Contact_Sync::class, 'classify_error' );
+		$reflection->setAccessible( true );
+
+		$error = new \WP_Error( 'newspack_newsletters_invalid_list', 'Invalid list: xyz123' );
+		$error->add( 'esp_error', 'API Access has been disabled for this account.' );
+
+		$this->assertEquals(
+			'permanent_config',
+			$reflection->invoke( null, $error ),
+			'A signature in a later message of an aggregate WP_Error should still classify.'
+		);
+	}
+
+	/**
+	 * Test that the deletion direction uses its own signature map: "member
+	 * exists" phrases must retry (the ESP contact still exists without the
+	 * deletion flags) and "was permanently deleted" is the benign end-state.
+	 */
+	public function test_classify_error_deletion_direction() {
+		$reflection = new \ReflectionMethod( Contact_Sync::class, 'classify_error' );
+		$reflection->setAccessible( true );
+
+		$cases = [
+			'Member Exists' => 'transient',
+			'cindy@example.com is already a list member. Use PUT to insert or update.' => 'transient',
+			'neil@example.com was permanently deleted and cannot be re-imported.' => 'benign',
+			'asdf@example.com looks fake or invalid, please enter a real email address.' => 'permanent_contact',
+			'API Access has been disabled for this account.' => 'permanent_config',
+		];
+
+		foreach ( $cases as $message => $expected ) {
+			$this->assertEquals(
+				$expected,
+				$reflection->invoke( null, new \WP_Error( 'esp_error', $message ), 'deletion' ),
+				sprintf( 'Deletion-direction message "%s" should classify as %s.', $message, $expected )
+			);
+		}
+	}
+
+	/**
+	 * Test that a permanent contact-data error skips the retry without firing
+	 * the permanent-failure hook (only config failures are surfaced).
+	 */
+	public function test_permanent_contact_error_skips_retry_without_alert() {
+		if ( ! function_exists( 'as_schedule_single_action' ) ) {
+			$this->markTestSkipped( 'ActionScheduler not available.' );
+		}
+
+		$fired = false;
+		add_action(
+			'newspack_sync_permanent_failure',
+			function () use ( &$fired ) {
+				$fired = true;
+			}
+		);
+
+		Failing_Sample_Integration::reset();
+		Failing_Sample_Integration::$should_fail  = true;
+		Failing_Sample_Integration::$fail_message = 'saraeschwartz@example.com looks fake or invalid, please enter a real email address.';
+		$this->register_failing_integration( 'permanent_mock' );
+
+		as_unschedule_all_actions( Contact_Sync::RETRY_HOOK );
+
+		$user_id = $this->factory()->user->create( [ 'user_email' => 'perm@example.com' ] );
+
+		Contact_Sync::execute_integration_retry(
+			[
+				'integration_id' => 'permanent_mock',
+				'user_id'        => $user_id,
+				'context'        => 'Test',
+				'retry_count'    => 1,
+			]
+		);
+
+		$pending = as_get_scheduled_actions(
+			[
+				'hook'   => Contact_Sync::RETRY_HOOK,
+				'group'  => Integrations::get_action_group( 'permanent_mock' ),
+				'status' => \ActionScheduler_Store::STATUS_PENDING,
+			],
+			'ARRAY_A'
+		);
+
+		$this->assertEmpty( $pending, 'No retry should be scheduled for a permanent error.' );
+		$this->assertFalse( $fired, 'Permanent contact-data failures should not fire newspack_sync_permanent_failure.' );
+	}
+
+	/**
+	 * Test that a benign error (contact already synced) skips the retry without
+	 * firing the permanent-failure hook.
+	 */
+	public function test_benign_error_skips_retry_without_alert() {
+		if ( ! function_exists( 'as_schedule_single_action' ) ) {
+			$this->markTestSkipped( 'ActionScheduler not available.' );
+		}
+
+		$fired = false;
+		add_action(
+			'newspack_sync_permanent_failure',
+			function () use ( &$fired ) {
+				$fired = true;
+			}
+		);
+
+		Failing_Sample_Integration::reset();
+		Failing_Sample_Integration::$should_fail  = true;
+		Failing_Sample_Integration::$fail_message = 'cindy@example.com is already a list member. Use PUT to insert or update.';
+		$this->register_failing_integration( 'benign_mock' );
+
+		as_unschedule_all_actions( Contact_Sync::RETRY_HOOK );
+
+		$user_id = $this->factory()->user->create( [ 'user_email' => 'benign@example.com' ] );
+
+		Contact_Sync::execute_integration_retry(
+			[
+				'integration_id' => 'benign_mock',
+				'user_id'        => $user_id,
+				'context'        => 'Test',
+				'retry_count'    => 1,
+			]
+		);
+
+		$pending = as_get_scheduled_actions(
+			[
+				'hook'   => Contact_Sync::RETRY_HOOK,
+				'group'  => Integrations::get_action_group( 'benign_mock' ),
+				'status' => \ActionScheduler_Store::STATUS_PENDING,
+			],
+			'ARRAY_A'
+		);
+
+		$this->assertEmpty( $pending, 'No retry should be scheduled for a benign result.' );
+		$this->assertFalse( $fired, 'Benign results should not fire newspack_sync_permanent_failure.' );
 	}
 
 	/**
@@ -643,7 +814,7 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 
 		as_unschedule_all_actions( Contact_Sync::RETRY_HOOK );
 
-		$user_id = $this->factory()->user->create( [ 'user_email' => 'retry-abort@test.com' ] );
+		$user_id = $this->factory()->user->create( [ 'user_email' => 'retry-abort@example.com' ] );
 
 		Contact_Sync::execute_integration_retry(
 			[
@@ -703,5 +874,269 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 			'ARRAY_A'
 		);
 		$this->assertEmpty( $pending, 'No retry should be scheduled for invalid data.' );
+	}
+
+	/**
+	 * Test that a permanent deletion error skips the retry and fires the hook.
+	 */
+	public function test_permanent_deletion_error_skips_retry() {
+		if ( ! function_exists( 'as_schedule_single_action' ) ) {
+			$this->markTestSkipped( 'ActionScheduler not available.' );
+		}
+
+		$fired = false;
+		$data  = null;
+		add_action(
+			'newspack_sync_permanent_failure',
+			function ( $d ) use ( &$fired, &$data ) {
+				$fired = true;
+				$data  = $d;
+			}
+		);
+
+		as_unschedule_all_actions( Contact_Sync::RETRY_DELETION_HOOK );
+
+		$reflection = new \ReflectionMethod( Contact_Sync::class, 'schedule_deletion_retry' );
+		$reflection->setAccessible( true );
+		$reflection->invoke(
+			null,
+			'esp',           // integration_id.
+			'delete',        // mode.
+			'gone@example.com', // email.
+			[],              // contact.
+			'Test',          // context.
+			0,               // retry_count.
+			new \WP_Error( 'esp_error', 'API Access has been disabled for this account.' )
+		);
+
+		$pending = as_get_scheduled_actions(
+			[
+				'hook'   => Contact_Sync::RETRY_DELETION_HOOK,
+				'status' => \ActionScheduler_Store::STATUS_PENDING,
+			],
+			'ARRAY_A'
+		);
+
+		$this->assertEmpty( $pending, 'No deletion retry should be scheduled for a permanent error.' );
+		$this->assertTrue( $fired, 'newspack_sync_permanent_failure should fire.' );
+		$this->assertEquals( 'delete', $data['mode'] );
+		$this->assertEquals( 'gone@example.com', $data['email'] );
+		$this->assertEquals( 'esp', $data['integration_id'] );
+		$this->assertEquals( 'Test', $data['context'] );
+		$this->assertEquals( 'API Access has been disabled for this account.', $data['reason'] );
+		$this->assertEquals( 'permanent_config', $data['error_class'] );
+	}
+
+	/**
+	 * Test that a permanent config error fires the permanent-failure hook even
+	 * when the sync has no resolvable WP user (guest checkouts, users deleted
+	 * mid-flight) — classification runs before the user-existence bail.
+	 */
+	public function test_permanent_config_alert_fires_without_user() {
+		if ( ! function_exists( 'as_schedule_single_action' ) ) {
+			$this->markTestSkipped( 'ActionScheduler not available.' );
+		}
+
+		$fired = false;
+		$data  = null;
+		add_action(
+			'newspack_sync_permanent_failure',
+			function ( $d ) use ( &$fired, &$data ) {
+				$fired = true;
+				$data  = $d;
+			}
+		);
+
+		as_unschedule_all_actions( Contact_Sync::RETRY_HOOK );
+
+		$reflection = new \ReflectionMethod( Contact_Sync::class, 'schedule_integration_retry' );
+		$reflection->setAccessible( true );
+		$reflection->invoke(
+			null,
+			'esp',  // integration_id.
+			0,      // user_id — no resolvable WP user.
+			'Test', // context.
+			0,      // retry_count.
+			new \WP_Error( 'esp_error', 'API Access has been disabled for this account.' )
+		);
+
+		$pending = as_get_scheduled_actions(
+			[
+				'hook'   => Contact_Sync::RETRY_HOOK,
+				'status' => \ActionScheduler_Store::STATUS_PENDING,
+			],
+			'ARRAY_A'
+		);
+
+		$this->assertEmpty( $pending, 'No retry should be scheduled for a permanent error.' );
+		$this->assertTrue( $fired, 'newspack_sync_permanent_failure should fire even without a WP user.' );
+		$this->assertSame( '', $data['email'], 'Email should be empty when no WP user was resolved.' );
+		$this->assertEquals( 'permanent_config', $data['error_class'] );
+	}
+
+	/**
+	 * Test that a benign result on the final retry does not mark the AS action
+	 * as failed — the chain is deliberately ended for an effectively-synced
+	 * outcome, so the executor must not throw.
+	 */
+	public function test_benign_error_at_max_retries_does_not_throw() {
+		if ( ! function_exists( 'as_schedule_single_action' ) ) {
+			$this->markTestSkipped( 'ActionScheduler not available.' );
+		}
+
+		Failing_Sample_Integration::reset();
+		Failing_Sample_Integration::$should_fail  = true;
+		Failing_Sample_Integration::$fail_message = 'Member Exists';
+		$this->register_failing_integration( 'benign_final_mock' );
+
+		as_unschedule_all_actions( Contact_Sync::RETRY_HOOK );
+
+		$user_id = $this->factory()->user->create( [ 'user_email' => 'benign-final@example.com' ] );
+
+		// Would throw before the benign-aware guard; an exception here fails the test.
+		Contact_Sync::execute_integration_retry(
+			[
+				'integration_id' => 'benign_final_mock',
+				'user_id'        => $user_id,
+				'context'        => 'Test',
+				'retry_count'    => Contact_Sync::MAX_RETRIES,
+			]
+		);
+
+		$pending = as_get_scheduled_actions(
+			[
+				'hook'   => Contact_Sync::RETRY_HOOK,
+				'group'  => Integrations::get_action_group( 'benign_final_mock' ),
+				'status' => \ActionScheduler_Store::STATUS_PENDING,
+			],
+			'ARRAY_A'
+		);
+		$this->assertEmpty( $pending, 'No retry should be scheduled for a benign result.' );
+	}
+
+	/**
+	 * Test that "member exists" responses on the deletion path are retried:
+	 * they mean the ESP contact still exists WITHOUT the deletion flags, so
+	 * skipping the retry would permanently drop the deletion signal.
+	 */
+	public function test_deletion_member_exists_is_retried() {
+		if ( ! function_exists( 'as_schedule_single_action' ) ) {
+			$this->markTestSkipped( 'ActionScheduler not available.' );
+		}
+
+		as_unschedule_all_actions( Contact_Sync::RETRY_DELETION_HOOK );
+
+		$reflection = new \ReflectionMethod( Contact_Sync::class, 'schedule_deletion_retry' );
+		$reflection->setAccessible( true );
+		$reflection->invoke(
+			null,
+			'esp',                              // integration_id.
+			'flag',                             // mode.
+			'gone@example.com',                 // email.
+			[ 'email' => 'gone@example.com' ],  // contact.
+			'Test',                             // context.
+			0,                                  // retry_count.
+			new \WP_Error( 'esp_error', 'Member Exists' )
+		);
+
+		$pending = as_get_scheduled_actions(
+			[
+				'hook'   => Contact_Sync::RETRY_DELETION_HOOK,
+				'status' => \ActionScheduler_Store::STATUS_PENDING,
+			],
+			'ARRAY_A'
+		);
+		$this->assertCount( 1, $pending, '"Member Exists" on a deletion push must schedule a retry.' );
+	}
+
+	/**
+	 * Test that "was permanently deleted" on the deletion path is the benign
+	 * end-state: the contact is already gone, so no retry and no alert.
+	 */
+	public function test_deletion_already_deleted_is_benign() {
+		if ( ! function_exists( 'as_schedule_single_action' ) ) {
+			$this->markTestSkipped( 'ActionScheduler not available.' );
+		}
+
+		$fired = false;
+		add_action(
+			'newspack_sync_permanent_failure',
+			function () use ( &$fired ) {
+				$fired = true;
+			}
+		);
+
+		as_unschedule_all_actions( Contact_Sync::RETRY_DELETION_HOOK );
+
+		$reflection = new \ReflectionMethod( Contact_Sync::class, 'schedule_deletion_retry' );
+		$reflection->setAccessible( true );
+		$reflection->invoke(
+			null,
+			'esp',              // integration_id.
+			'delete',           // mode.
+			'gone@example.com', // email.
+			[],                 // contact.
+			'Test',             // context.
+			0,                  // retry_count.
+			new \WP_Error( 'esp_error', 'neil@example.com was permanently deleted and cannot be re-imported.' )
+		);
+
+		$pending = as_get_scheduled_actions(
+			[
+				'hook'   => Contact_Sync::RETRY_DELETION_HOOK,
+				'status' => \ActionScheduler_Store::STATUS_PENDING,
+			],
+			'ARRAY_A'
+		);
+		$this->assertEmpty( $pending, 'No retry should be scheduled when the contact is already gone.' );
+		$this->assertFalse( $fired, 'An already-deleted contact is the deletion end-state, not a failure.' );
+	}
+
+	/**
+	 * Test that a permanent contact-data error on the deletion path fires the
+	 * permanent-failure hook — a skipped deletion retry has no natural
+	 * re-trigger, so the dropped deletion signal must stay observable.
+	 */
+	public function test_deletion_permanent_contact_error_fires_hook() {
+		if ( ! function_exists( 'as_schedule_single_action' ) ) {
+			$this->markTestSkipped( 'ActionScheduler not available.' );
+		}
+
+		$fired = false;
+		$data  = null;
+		add_action(
+			'newspack_sync_permanent_failure',
+			function ( $d ) use ( &$fired, &$data ) {
+				$fired = true;
+				$data  = $d;
+			}
+		);
+
+		as_unschedule_all_actions( Contact_Sync::RETRY_DELETION_HOOK );
+
+		$reflection = new \ReflectionMethod( Contact_Sync::class, 'schedule_deletion_retry' );
+		$reflection->setAccessible( true );
+		$reflection->invoke(
+			null,
+			'esp',                              // integration_id.
+			'flag',                             // mode.
+			'gone@example.com',                 // email.
+			[ 'email' => 'gone@example.com' ],  // contact.
+			'Test',                             // context.
+			0,                                  // retry_count.
+			new \WP_Error( 'esp_error', 'asdf@example.com looks fake or invalid, please enter a real email address.' )
+		);
+
+		$pending = as_get_scheduled_actions(
+			[
+				'hook'   => Contact_Sync::RETRY_DELETION_HOOK,
+				'status' => \ActionScheduler_Store::STATUS_PENDING,
+			],
+			'ARRAY_A'
+		);
+		$this->assertEmpty( $pending, 'No retry should be scheduled for a permanent contact-data error.' );
+		$this->assertTrue( $fired, 'Deletion-path permanent contact-data errors must fire the hook.' );
+		$this->assertEquals( 'permanent_contact', $data['error_class'] );
+		$this->assertEquals( 'flag', $data['mode'] );
 	}
 }

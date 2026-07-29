@@ -1036,13 +1036,13 @@
 				":focus": {
 					"color": {
 						"background": "var( --wp--preset--color--accent )",
-						"text": "var( --wp--preset--color--base )"
+						"text": "var( --wp--preset--color--accent-contrast, var( --wp--preset--color--base ) )"
 					}
 				},
 				":hover": {
 					"color": {
 						"background": "color-mix( in srgb, var( --wp--preset--color--accent ) 80%, black )",
-						"text": "var( --wp--preset--color--base )"
+						"text": "var( --wp--preset--color--accent-contrast-hover, var( --wp--preset--color--accent-contrast, var( --wp--preset--color--base ) ) )"
 					}
 				},
 				"border": {
@@ -1050,7 +1050,7 @@
 				},
 				"color": {
 					"background": "var( --wp--preset--color--accent )",
-					"text": "var( --wp--preset--color--base )"
+					"text": "var( --wp--preset--color--accent-contrast, var( --wp--preset--color--base ) )"
 				},
 				"spacing": {
 					"padding": {
