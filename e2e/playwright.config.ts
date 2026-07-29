@@ -54,6 +54,25 @@ const launchOptions: LaunchOptions = process.env.CI
 // against a single site, which is what a local `USE_SETUP` run wants.
 const phase = (process.env.E2E_PHASE ?? "all").toLowerCase();
 const viewport = (process.env.E2E_VIEWPORT ?? "both").toLowerCase();
+
+// Fail loud on a mistyped axis rather than silently running the wrong slice: an
+// unknown phase would otherwise yield an empty project list (a cryptic "no
+// tests" abort) and an unknown viewport would quietly run both.
+const validPhases = ["all", "both", "vanilla", "woo", "ac"];
+const validViewports = ["both", "desktop", "mobile"];
+if (!validPhases.includes(phase)) {
+  throw new Error(
+    `Invalid E2E_PHASE "${phase}"; expected one of ${validPhases.join(", ")}.`
+  );
+}
+if (!validViewports.includes(viewport)) {
+  throw new Error(
+    `Invalid E2E_VIEWPORT "${viewport}"; expected one of ${validViewports.join(
+      ", "
+    )}.`
+  );
+}
+
 const runAll = phase === "all" || phase === "both";
 const runVanilla = runAll || phase === "vanilla";
 const runWoo = runAll || phase === "woo";

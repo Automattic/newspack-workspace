@@ -53,7 +53,7 @@ test(
 
     /**
      * Gate the lists behind a whitelisted email domain -- a paid access rule
-     * that needs no WooCommerce products, so it works in the vanilla phase.
+     * that needs no WooCommerce products, keeping this spec's setup light.
      */
     await page.getByRole("checkbox", { name: "Paid access" }).check();
     await page
