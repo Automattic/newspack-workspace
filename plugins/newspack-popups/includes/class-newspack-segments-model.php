@@ -295,9 +295,12 @@ final class Newspack_Segments_Model {
 							'type' => 'string',
 							'enum' => [ 'absolute' ],
 						],
+						// Month and day are bounded, not just digit-shaped, so this matches
+						// the client matcher's ISO_DATE exactly. A criterion the matcher
+						// would reject (`2026-13-45`) can't be saved in the first place.
 						'date' => [
 							'type'    => 'string',
-							'pattern' => '^\d{4}-\d\d-\d\d$',
+							'pattern' => '^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$',
 						],
 					],
 				],

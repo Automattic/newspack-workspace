@@ -408,6 +408,50 @@ class SchemasTest extends WP_UnitTestCase {
 				],
 				false,
 			],
+			'date range impossible'  => [
+				[
+					'name'          => 'Test Segment',
+					'id'            => 1001,
+					'priority'      => 10,
+					'criteria'      => [
+						[
+							'criteria_id' => 'LAST_GIFT_DATE',
+							'value'       => [
+								'start' => [
+									'type' => 'absolute',
+									'date' => '2026-13-45',
+								],
+							],
+						],
+					],
+					'configuration' => [
+						'max_posts' => 1,
+					],
+				],
+				false,
+			],
+			'date range last day'    => [
+				[
+					'name'          => 'Test Segment',
+					'id'            => 1001,
+					'priority'      => 10,
+					'criteria'      => [
+						[
+							'criteria_id' => 'LAST_GIFT_DATE',
+							'value'       => [
+								'start' => [
+									'type' => 'absolute',
+									'date' => '2026-12-31',
+								],
+							],
+						],
+					],
+					'configuration' => [
+						'max_posts' => 1,
+					],
+				],
+				true,
+			],
 			'date range mixed bound' => [
 				[
 					'name'          => 'Test Segment',
