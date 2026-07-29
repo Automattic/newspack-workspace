@@ -124,6 +124,8 @@ type CustomAccess = {
 	metering: Metering;
 	gate_layout_id: number;
 	access_rules: GateAccessRuleGroup[];
+	// Optional: gates saved before the setting existed lack the key; reads treat absence as ON.
+	payment_recovery_grace?: boolean;
 };
 
 type ContentGiftingConfig = {
