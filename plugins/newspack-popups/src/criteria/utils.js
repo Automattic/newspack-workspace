@@ -49,9 +49,17 @@ export function registerCriteria( id, config = {} ) {
 			criteria.matchingFunction = matchingFunctions[ criteria.matchingFunction ].bind( null, criteria );
 		}
 
-		// Bail if unable to configure matching function.
+		// Bail if unable to configure matching function. Fall back to a function that
+		// never matches, rather than leaving the raw unresolved string in place — a
+		// caller further down unconditionally invokes criteria.matchingFunction(), and
+		// this is reachable in production whenever one plugin registers a matching
+		// function name that the currently-installed version of the other doesn't
+		// recognize yet (e.g. newspack-plugin ships `date_range` before newspack-popups
+		// is updated to match). Leaving the string in place would throw a TypeError
+		// that escapes segment matching and aborts prompt display sitewide.
 		if ( typeof criteria.matchingFunction !== 'function' ) {
 			console.warn( `Unable to configure matching function for criteria ${ criteria.id }.` ); // eslint-disable-line no-console
+			criteria.matchingFunction = () => false;
 			return;
 		}
 
