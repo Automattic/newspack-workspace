@@ -31,7 +31,7 @@ class Renewal {
 		add_action( 'init', [ __CLASS__, 'add_renewal_endpoint' ] );
 		if ( ! is_admin() ) {
 			add_filter( 'woocommerce_get_query_vars', [ __CLASS__, 'add_renewal_query_var' ] );
-			add_filter( 'pre_get_posts', [ __CLASS__, 'maybe_redirect_renewal_endpoint' ] );
+			add_action( 'pre_get_posts', [ __CLASS__, 'maybe_redirect_renewal_endpoint' ] );
 		}
 	}
 

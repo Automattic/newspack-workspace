@@ -230,7 +230,7 @@ class Distributor_Migrator {
 		return get_posts(
 			[
 				'post_type'      => 'dt_subscription',
-				'posts_per_page' => -1,
+				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- One-time migration over the Distributor subscription CPT.
 				'fields'         => 'ids',
 			]
 		);

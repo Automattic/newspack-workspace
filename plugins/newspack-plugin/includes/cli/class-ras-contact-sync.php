@@ -527,6 +527,11 @@ class RAS_Contact_Sync {
 		// than a hard error the operator can resolve by enabling the field.
 		$integrations = Integrations::get_active_configured_integrations();
 		foreach ( $integrations as $integration_id => $integration ) {
+			// The sync run itself skips integrations without an (enabled) push, so
+			// their field selection must not block the backfill of the others.
+			if ( ! $integration->is_push_enabled() ) {
+				continue;
+			}
 			$enabled = $integration->get_enabled_outgoing_fields();
 			$missing = array_values( array_diff( $labels, $enabled ) );
 			if ( ! empty( $missing ) ) {
