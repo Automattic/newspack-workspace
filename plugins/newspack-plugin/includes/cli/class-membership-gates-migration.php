@@ -679,7 +679,7 @@ class Membership_Gates_Migration {
 		$args = [
 			'post_type'      => 'wc_membership_plan',
 			'post_status'    => 'publish',
-			'posts_per_page' => -1,
+			'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Operator-run CLI command; unbounded by design.
 			'fields'         => 'ids',
 			'no_found_rows'  => true,
 			'orderby'        => 'ID',
