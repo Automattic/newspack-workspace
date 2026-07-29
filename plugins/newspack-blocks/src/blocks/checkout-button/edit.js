@@ -139,6 +139,10 @@ function ProductControl( props ) {
 			fetchSaved();
 		} else {
 			setSelected( false );
+			// Clear the parent's copy too, otherwise product-derived state (e.g.
+			// whether this is a donation) keeps describing the product that was
+			// just removed.
+			props.onProduct( {} );
 		}
 	}, [ props.value ] );
 	function onChange( tokens ) {
@@ -344,24 +348,36 @@ function CheckoutButtonEdit( props ) {
 							</>
 						) }
 					</ProductControl>
-					{ newspack_blocks_data?.coupons_enabled &&
-						( isDonation ? (
-							// Newspack disables coupons for donation carts, so a coupon set
-							// here would be dropped without telling anyone. Warn instead of
-							// clearing the stored code: the publisher may be mid-way through
-							// swapping the product back.
-							<Notice status={ coupon ? 'warning' : 'info' } isDismissible={ false }>
-								{ coupon
-									? sprintf(
-											// translators: %s: the coupon code stored on the block.
-											__( 'Coupon "%s" will not be applied. Coupons are never applied to donations.', 'newspack-blocks' ),
-											coupon
-									  )
-									: __( 'Coupons are not available for donation products.', 'newspack-blocks' ) }
-							</Notice>
-						) : (
+					{ newspack_blocks_data?.coupons_enabled && (
+						<>
+							{ /*
+							 * Newspack drops coupons from donation carts, so a coupon set here
+							 * is unlikely to reach the order. Warn rather than assert: the
+							 * check behind it does not engage on every checkout path. The
+							 * control stays rendered alongside the notice — the block emits
+							 * the stored code regardless of donation status, so hiding the
+							 * control would only remove the publisher's way to clear it.
+							 */ }
+							{ isDonation && (
+								<Notice status={ coupon ? 'warning' : 'info' } isDismissible={ false }>
+									{ coupon
+										? sprintf(
+												// translators: %s: the coupon code stored on the block.
+												__(
+													'Coupon "%s" is unlikely to be applied: donation carts normally discard coupons.',
+													'newspack-blocks'
+												),
+												coupon
+										  )
+										: __(
+												'Donation carts normally discard coupons, so a coupon set here is unlikely to apply.',
+												'newspack-blocks'
+										  ) }
+								</Notice>
+							) }
 							<CouponControl value={ coupon } onChange={ value => setAttributes( { coupon: value } ) } />
-						) ) }
+						</>
+					) }
 					<WidthControl selectedWidth={ width } setAttributes={ setAttributes } />
 				</PanelBody>
 				<PanelBody title={ __( 'After purchase', 'newspack-blocks' ) }>
