@@ -315,12 +315,7 @@ final class Coupon_Pricing {
 			 */
 			'first_html'     => $recurs ? self::price_string( $child, $discounted ) : wc_price( $discounted ),
 			'recurring_html' => $recurs ? '' : sprintf(
-				/*
-				 * translators: %s: the undiscounted recurring price, e.g. "$10.00 / month".
-				 * The leading comma separates this from the discounted first payment it
-				 * follows, reading as "$8.00, then $10.00 / month" — keep or replace it
-				 * with whatever punctuation the locale expects.
-				 */
+				// translators: %s: the undiscounted recurring price, e.g. "$10.00 / month". The leading comma separates it from the discounted first payment it follows, reading as "$8.00, then $10.00 / month" — replace it with whatever punctuation the locale expects.
 				__( ', then %s', 'newspack-blocks' ),
 				$regular
 			),
