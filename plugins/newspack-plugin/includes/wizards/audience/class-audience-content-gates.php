@@ -15,6 +15,7 @@ defined( 'ABSPATH' ) || exit;
 class Audience_Content_Gates extends Wizard {
 
 	use Wizards\Traits\Content_Gate_Preferences;
+	use Wizards\Traits\Audience_Management_Dependency;
 
 	/**
 	 * Admin page slug.
@@ -94,14 +95,17 @@ class Audience_Content_Gates extends Wizard {
 		\wp_localize_script(
 			'newspack-wizards',
 			'newspackAudienceContentGates',
-			[
-				'api'                     => '/' . NEWSPACK_API_NAMESPACE . '/wizard/' . $this->slug,
-				'available_access_rules'  => Access_Rules::get_access_rules(),
-				'available_content_rules' => Content_Rules::get_content_rules(),
-				'edit_gate_layout_url'    => Content_Gate::get_edit_gate_layout_url(),
-				'presave_checks_enabled'  => Content_Gate::get_presave_checks_enabled(),
-				'default_gate_status'     => Content_Gate::get_default_new_gate_status(),
-			]
+			array_merge(
+				[
+					'api'                     => '/' . NEWSPACK_API_NAMESPACE . '/wizard/' . $this->slug,
+					'available_access_rules'  => Access_Rules::get_access_rules(),
+					'available_content_rules' => Content_Rules::get_content_rules(),
+					'edit_gate_layout_url'    => Content_Gate::get_edit_gate_layout_url(),
+					'presave_checks_enabled'  => Content_Gate::get_presave_checks_enabled(),
+					'default_gate_status'     => Content_Gate::get_default_new_gate_status(),
+				],
+				$this->get_audience_management_script_data()
+			)
 		);
 
 		\wp_localize_script(
@@ -276,7 +280,7 @@ class Audience_Content_Gates extends Wizard {
 						'properties'        => Content_Gate_API::$gate_properties,
 					],
 				],
-				'permission_callback' => [ $this, 'api_permissions_check' ],
+				'permission_callback' => [ $this, 'api_permissions_check_audience_management' ],
 			]
 		);
 
@@ -341,7 +345,7 @@ class Audience_Content_Gates extends Wizard {
 			[
 				'methods'             => 'POST',
 				'callback'            => [ $this, 'api_duplicate_gate' ],
-				'permission_callback' => [ $this, 'api_permissions_check' ],
+				'permission_callback' => [ $this, 'api_permissions_check_audience_management' ],
 				'args'                => [
 					'id' => [
 						'type'              => 'integer',

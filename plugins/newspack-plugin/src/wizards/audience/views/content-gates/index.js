@@ -16,6 +16,7 @@ import { forwardRef } from '@wordpress/element';
  */
 import { Wizard, withWizard } from '../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
+import { requireAudienceManagement } from './audience-management-required';
 import ContentGates from './content-gates';
 import Edit from './edit';
 import CountdownBanner from './edit/countdown-banner';
@@ -48,19 +49,19 @@ const AudienceContentGates = ( props, ref ) => {
 			sections={ [
 				{
 					path: '/content-gates',
-					render: ContentGates,
+					render: requireAudienceManagement( ContentGates ),
 					breadcrumbs: ACCESS_CONTROL,
 				},
 				{
 					path: '/edit/:id/:type?',
-					render: Edit,
+					render: requireAudienceManagement( Edit ),
 					isHidden: true,
 					exact: true,
 					breadcrumbs: ACCESS_CONTROL,
 				},
 				{
 					path: '/settings/countdown-banner',
-					render: CountdownBanner,
+					render: requireAudienceManagement( CountdownBanner ),
 					isHidden: true,
 					exact: true,
 					backNav: '#/content-gates',
@@ -73,7 +74,7 @@ const AudienceContentGates = ( props, ref ) => {
 				},
 				{
 					path: '/settings/content-gifting',
-					render: ContentGifting,
+					render: requireAudienceManagement( ContentGifting ),
 					isHidden: true,
 					exact: true,
 					backNav: '#/content-gates',
@@ -86,7 +87,7 @@ const AudienceContentGates = ( props, ref ) => {
 				},
 				{
 					path: '/institutions',
-					render: Institutions,
+					render: requireAudienceManagement( Institutions ),
 					exact: true,
 					isHidden: true,
 					backNav: '#/content-gates',
@@ -96,7 +97,7 @@ const AudienceContentGates = ( props, ref ) => {
 				},
 				{
 					path: '/institutions/new',
-					render: InstitutionEdit,
+					render: requireAudienceManagement( InstitutionEdit ),
 					isHidden: true,
 					exact: true,
 					backNav: '#/institutions',
@@ -105,7 +106,7 @@ const AudienceContentGates = ( props, ref ) => {
 				},
 				{
 					path: '/institutions/:id',
-					render: InstitutionEdit,
+					render: requireAudienceManagement( InstitutionEdit ),
 					isHidden: true,
 					exact: true,
 					backNav: '#/institutions',

@@ -81,6 +81,12 @@ declare global {
 			// wp_localize_script() stringifies booleans ('1'/''); the wizard writes real booleans back.
 			presave_checks_enabled: boolean | string;
 			default_gate_status: GateStatus;
+			// Audience Management is a prerequisite for content gates. Only ever the
+			// string wp_localize_script() produced ('1' on, '' off) - nothing writes a
+			// real boolean back, so typing it wider would invite a `=== true` that can
+			// never hold. Read it via hasAudienceManagement() in content-gates/utils.
+			audience_management_enabled: string;
+			audience_management_url: string;
 		};
 	}
 }

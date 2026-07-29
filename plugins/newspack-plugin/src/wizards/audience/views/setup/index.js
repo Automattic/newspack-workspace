@@ -40,6 +40,7 @@ function AudienceWizard( { pluginRequirements, wizardApiFetch }, ref ) {
 	const [ requiredPlugins, setRequiredPlugins ] = useState( {} );
 	const [ configLoaded, setConfigLoaded ] = useState( false );
 	const [ verificationRequiredByGates, setVerificationRequiredByGates ] = useState( [] );
+	const [ disablingBlockedByGates, setDisablingBlockedByGates ] = useState( false );
 
 	const fetchConfig = () => {
 		setError( false );
@@ -47,14 +48,24 @@ function AudienceWizard( { pluginRequirements, wizardApiFetch }, ref ) {
 		return wizardApiFetch( {
 			path: '/newspack/v1/wizard/newspack-audience/audience-management',
 		} )
-			.then( ( { config: fetchedConfig, prerequisites_status, required_plugins, can_esp_sync, verification_required_by_gates } ) => {
-				setPrerequisites( prerequisites_status );
-				setRequiredPlugins( required_plugins || {} );
-				setConfig( fetchedConfig );
-				setEspSyncErrors( can_esp_sync.errors );
-				setVerificationRequiredByGates( verification_required_by_gates || [] );
-				setConfigLoaded( true );
-			} )
+			.then(
+				( {
+					config: fetchedConfig,
+					prerequisites_status,
+					required_plugins,
+					can_esp_sync,
+					verification_required_by_gates,
+					disabling_blocked_by_gates,
+				} ) => {
+					setPrerequisites( prerequisites_status );
+					setRequiredPlugins( required_plugins || {} );
+					setConfig( fetchedConfig );
+					setEspSyncErrors( can_esp_sync.errors );
+					setVerificationRequiredByGates( verification_required_by_gates || [] );
+					setDisablingBlockedByGates( Boolean( disabling_blocked_by_gates ) );
+					setConfigLoaded( true );
+				}
+			)
 			.catch( setError )
 			.finally( () => setInFlight( false ) );
 	};
@@ -207,6 +218,7 @@ function AudienceWizard( { pluginRequirements, wizardApiFetch }, ref ) {
 									breadcrumbItems={ ROOT }
 									platformSelected={ platformSelected }
 									showEnableToggle={ platformSelected }
+									disablingBlockedByGates={ disablingBlockedByGates }
 									onComplete={ () => {
 										setShowChooser( false );
 										fetchConfig();

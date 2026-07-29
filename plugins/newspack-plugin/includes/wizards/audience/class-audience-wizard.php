@@ -546,6 +546,10 @@ class Audience_Wizard extends Wizard {
 				'memberships'                    => self::get_memberships_settings(),
 				'can_esp_sync'                   => Reader_Activation\Contact_Sync::has_one_syncable_integration( true ),
 				'verification_required_by_gates' => self::get_verification_required_gates_with_edit_urls(),
+				// Audience Management cannot be switched off while gates exist (NPPD-1846).
+				// Surfaced so the toggle can say so up front instead of letting the publisher
+				// confirm a destructive dialog and then hit a REST refusal.
+				'disabling_blocked_by_gates'     => Content_Gate::has_any_gates(),
 			]
 		);
 	}
@@ -590,6 +594,22 @@ class Audience_Wizard extends Wizard {
 	 */
 	public function api_update_reader_activation_settings( $request ) {
 		$args = $request->get_params();
+
+		// Audience Management is a hard prerequisite for content gating (NPPD-1846).
+		// Gates carry no Reader Activation dependency of their own, so switching it off
+		// here would leave every existing gate restricting content while readers lose
+		// the registration, sign-in and account surfaces they need to satisfy it — and
+		// the gate screens, which replace themselves with the prerequisite state, could
+		// no longer be used to lift those restrictions. Refusing the transition keeps
+		// "Audience Management off" and "no gates exist" the same state.
+		if ( isset( $args['enabled'] ) && ! $args['enabled'] && Content_Gate::has_any_gates() ) {
+			return new \WP_Error(
+				'newspack_audience_management_required_by_gates',
+				__( 'Audience Management cannot be disabled while content gates exist. Delete your gates under Audience → Access Control first.', 'newspack-plugin' ),
+				[ 'status' => 409 ]
+			);
+		}
+
 		foreach ( $args as $key => $value ) {
 			Reader_Activation::update_setting( $key, $value );
 		}

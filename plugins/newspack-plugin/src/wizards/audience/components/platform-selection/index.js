@@ -41,7 +41,17 @@ export const OPTIONS = [
 	},
 ];
 
-const PlatformSelection = ( { onComplete, onCancel, config, saveConfig, inFlight, showEnableToggle, platform, platformSelected } ) => {
+const PlatformSelection = ( {
+	onComplete,
+	onCancel,
+	config,
+	saveConfig,
+	inFlight,
+	showEnableToggle,
+	platform,
+	platformSelected,
+	disablingBlockedByGates = false,
+} ) => {
 	const { saveWizardSettings } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const [ installing, setInstalling ] = useState( null );
 	const [ installFailed, setInstallFailed ] = useState( false );
@@ -133,7 +143,18 @@ const PlatformSelection = ( { onComplete, onCancel, config, saveConfig, inFlight
 							isMedium
 							title={ __( 'Audience Management', 'newspack-plugin' ) }
 							description={
-								config?.enabled
+								/*
+								 * Content gating depends on Audience Management, so while any gate
+								 * exists the toggle explains why it is locked rather than letting the
+								 * publisher confirm a destructive dialog and then hit a REST refusal.
+								 */
+								// eslint-disable-next-line no-nested-ternary
+								disablingBlockedByGates && config?.enabled
+									? __(
+											'Audience Management is enabled. It cannot be disabled while content gates exist, because readers would be unable to register or sign in to reach gated content. Delete your gates under Audience → Access Control first.',
+											'newspack-plugin'
+									  )
+									: config?.enabled
 									? __( 'Audience Management is enabled.', 'newspack-plugin' )
 									: __( 'Audience Management is disabled.', 'newspack-plugin' )
 							}
@@ -146,7 +167,7 @@ const PlatformSelection = ( { onComplete, onCancel, config, saveConfig, inFlight
 									requestDisable( () => saveConfig( { enabled: false } ) );
 								}
 							} }
-							disabled={ inFlight }
+							disabled={ inFlight || ( disablingBlockedByGates && Boolean( config?.enabled ) ) }
 						/>
 					) }
 					{ OPTIONS.map( option => {

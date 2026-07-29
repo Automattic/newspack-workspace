@@ -1848,6 +1848,43 @@ class Content_Gate {
 	}
 
 	/**
+	 * Whether the site has any content gate at all, of either kind and in any status.
+	 *
+	 * Audience Management is a hard prerequisite for gating (NPPD-1846), which makes
+	 * this the condition for refusing to switch Audience Management off: while a gate
+	 * exists, disabling it would leave that gate restricting content with readers
+	 * unable to register or sign in to satisfy it.
+	 *
+	 * Deliberately counts drafts and premium newsletter gates too, so that
+	 * "Audience Management off" always implies "no gates exist". The gate screens
+	 * rely on that invariant when they replace themselves with the prerequisite
+	 * state: it is what guarantees the replacement cannot strand a gate that nobody
+	 * can then reach to unpublish.
+	 *
+	 * @return bool
+	 */
+	public static function has_any_gates() {
+		// get_post_statuses() includes 'trash' because the gate screens still need to
+		// resolve trashed gates. A trashed gate restricts nothing and the publisher has
+		// already deleted it, so counting it here would hold the Audience Management
+		// toggle hostage to a gate that no longer applies.
+		$statuses = array_diff( self::get_post_statuses(), [ 'trash' ] );
+		if ( empty( $statuses ) ) {
+			return false;
+		}
+		$gates = get_posts(
+			[
+				'post_type'      => self::GATE_CPT,
+				'post_status'    => $statuses,
+				'posts_per_page' => 1,
+				'fields'         => 'ids',
+				'no_found_rows'  => true,
+			]
+		);
+		return ! empty( $gates );
+	}
+
+	/**
 	 * Get all gates.
 	 *
 	 * @param string          $post_type Post type.

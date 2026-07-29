@@ -19,6 +19,9 @@ import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/w
 import { PREMIUM_NEWSLETTERS_WIZARD_SLUG, BASE_HEADER_TEXT } from './consts';
 import PremiumNewslettersList from './premium-newsletters-list';
 import Edit from '../../../audience/views/content-gates/edit';
+import { requireAudienceManagement } from '../../../audience/views/content-gates/audience-management-required';
+
+const REQUIRES_AUDIENCE_MANAGEMENT = { isNewsletter: true };
 
 const ROOT = [ { label: __( 'Newsletters', 'newspack-plugin' ) } ];
 const PREMIUM_BREADCRUMBS = [ ...ROOT, { label: __( 'Premium', 'newspack-plugin' ) } ];
@@ -43,12 +46,12 @@ const PremiumNewsletters = ( props, ref ) => {
 			sections={ [
 				{
 					path: '/content-gates',
-					render: PremiumNewslettersList,
+					render: requireAudienceManagement( PremiumNewslettersList, REQUIRES_AUDIENCE_MANAGEMENT ),
 					breadcrumbs: PREMIUM_BREADCRUMBS,
 				},
 				{
 					path: '/edit/:id/:type?',
-					render: Edit,
+					render: requireAudienceManagement( Edit, REQUIRES_AUDIENCE_MANAGEMENT ),
 					isHidden: true,
 					exact: true,
 					breadcrumbs: PREMIUM_BREADCRUMBS,
