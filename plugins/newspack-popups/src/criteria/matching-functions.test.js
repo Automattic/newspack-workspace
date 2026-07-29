@@ -67,6 +67,15 @@ describe( 'date_range matching function', () => {
 		expect( dateRange( { value: '03/04/2026' }, config ) ).toBe( false );
 	} );
 
+	it( 'rejects a digit-shaped but impossible calendar date', () => {
+		// '2026-13-45' has the right digit shape but no such month or day. The PHP
+		// side stores exactly this kind of value verbatim on a parse failure,
+		// expecting the matcher to reject it — an unvalidated compare would instead
+		// sort it above every December date, matching this no-upper-bound window.
+		const config = { value: { start: absolute( '2026-01-01' ) } };
+		expect( dateRange( { value: '2026-13-45' }, config ) ).toBe( false );
+	} );
+
 	it( 'never matches an empty or non-string reader value', () => {
 		const config = { value: { start: absolute( '2026-01-01' ) } };
 		expect( dateRange( { value: '' }, config ) ).toBe( false );

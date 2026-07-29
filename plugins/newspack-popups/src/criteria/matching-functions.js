@@ -19,7 +19,11 @@ const parseReaderListValue = value => {
 	return value;
 };
 
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+// Month and day ranges are bounded (01-12, 01-31) so a digit-shaped but impossible
+// date like '2026-13-45' is rejected rather than sorting above every real date.
+// Not calendar-aware (e.g. Feb 30 still passes) — that's the PHP side's job; this
+// regex only needs to keep an out-of-range value from silently widening a window.
+const ISO_DATE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 
 /**
  * Reduces a stored date value to a calendar date, or null when it isn't one.
