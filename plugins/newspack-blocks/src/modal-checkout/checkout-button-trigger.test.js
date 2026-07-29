@@ -2,7 +2,14 @@
  * Tests for the checkout-button URL trigger resolution helpers.
  */
 
-import { readCheckoutData, findCheckoutButtonForm, selectPickerForm, resolveCheckoutButtonForm, copyContextFields } from './checkout-button-trigger';
+import {
+	readCheckoutData,
+	findCheckoutButtonForm,
+	selectPickerForm,
+	resolveCheckoutButtonForm,
+	copyContextFields,
+	PICKER_CONTEXT_FIELDS,
+} from './checkout-button-trigger';
 
 const VARIATION_MODAL_CLASS_PREFIX = 'newspack-blocks__modal-variation';
 const IFRAME_NAME = 'newspack_modal_checkout_iframe';
@@ -262,5 +269,33 @@ describe( 'copyContextFields', () => {
 		const target = root.querySelector( '#dst' );
 		expect( () => copyContextFields( null, target ) ).not.toThrow();
 		expect( () => copyContextFields( target, null ) ).not.toThrow();
+	} );
+
+	// The picker form replaces the button's own form, so a coupon attached to the
+	// Checkout Button block is only auto-applied if it is carried across.
+	it( 'copies the auto-applied coupon to the picker form', () => {
+		const root = render( '<form id="src"><input type="hidden" name="coupon" value="MEMBER10"></form><form id="dst"></form>' );
+
+		copyContextFields( root.querySelector( '#src' ), root.querySelector( '#dst' ) );
+
+		expect( root.querySelector( '#dst input[name="coupon"]' ).value ).toBe( 'MEMBER10' );
+	} );
+} );
+
+describe( 'PICKER_CONTEXT_FIELDS', () => {
+	// modal.js reads this same list for the click path, so a field missing here is
+	// dropped by both the URL trigger and the variation picker.
+	it( 'carries the coupon alongside the after-success and attribution context', () => {
+		expect( PICKER_CONTEXT_FIELDS ).toEqual(
+			expect.arrayContaining( [
+				'after_success_behavior',
+				'after_success_url',
+				'after_success_button_label',
+				'gate_post_id',
+				'newspack_popup_id',
+				'prompt_title',
+				'coupon',
+			] )
+		);
 	} );
 } );

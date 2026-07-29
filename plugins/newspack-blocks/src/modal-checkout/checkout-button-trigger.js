@@ -98,6 +98,12 @@ export function selectPickerForm( root, productId, variationId, options = {} ) {
 /**
  * Hidden fields copied from a source checkout button to a picker submission.
  *
+ * The picker form is rendered once per variable product in the footer and is
+ * submitted instead of the button's own form, so anything the block attached to
+ * that button — after-success behavior, attribution, the auto-applied coupon —
+ * is lost unless it is listed here. Shared with modal.js so the click path and
+ * the URL-trigger path carry the same context.
+ *
  * @type {string[]}
  */
 export const PICKER_CONTEXT_FIELDS = [
@@ -107,6 +113,7 @@ export const PICKER_CONTEXT_FIELDS = [
 	'gate_post_id',
 	'newspack_popup_id',
 	'prompt_title',
+	'coupon',
 ];
 
 /**
