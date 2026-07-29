@@ -214,6 +214,30 @@ class Woocommerce_Memberships {
 			}
 		}
 
+		/**
+		 * Snapshot which of this plan's lists the reader is currently subscribed to,
+		 * BEFORE narrowing the removal set below. This snapshot is stored as the
+		 * membership's deactivation history and is what a later reactivation uses to
+		 * resubscribe the reader to exactly the lists they were in.
+		 *
+		 * It must be computed from the full plan list, not the post-exclusion removal
+		 * set: if a shared list is excluded from removal (below) and it was the only
+		 * one of this plan's lists the reader was subscribed to, computing this after
+		 * the exclusion would store an empty history — and add_user_to_lists() treats
+		 * an empty history as "no restriction" and re-adds every plan list on
+		 * reactivation, resubscribing the reader to lists they had opted out of.
+		 *
+		 * Also, during a subscription renewal, a membership can be momentarily marked
+		 * as paused, causing the user to be removed from the lists, in which case we
+		 * want to resubscribe them only to the lists they were in. See NPPM-3000.
+		 */
+		$current_user_lists = \Newspack_Newsletters_Subscription::get_contact_lists( $user_email );
+		$existing_lists     = [];
+
+		if ( is_array( $current_user_lists ) ) {
+			$existing_lists = array_values( array_intersect( $current_user_lists, $lists_to_remove ) );
+		}
+
 		// Don't remove lists the reader still has access to via another active
 		// membership. When switching between plans that share a Subscription List
 		// (e.g. monthly and annual premium newsletters that share a "member" list),
@@ -227,21 +251,6 @@ class Woocommerce_Memberships {
 		// Bail if there are no lists we need to remove.
 		if ( empty( $lists_to_remove ) ) {
 			return;
-		}
-
-		/**
-		 * Check if the user is already in one of the lists. If they are, store it.
-		 *
-		 * If they are granted this membership again, we can resubscribe them only to the lists they were in.
-		 *
-		 * Also, during a subscription renewal, a membership can be momentarily marked as paused, causing the user to be removed from the lists
-		 * in which case we want to resubscribe them to the lists they were in.
-		 */
-		$current_user_lists = \Newspack_Newsletters_Subscription::get_contact_lists( $user_email );
-		$existing_lists     = [];
-
-		if ( is_array( $current_user_lists ) ) {
-			$existing_lists = array_values( array_intersect( $current_user_lists, $lists_to_remove ) );
 		}
 
 		self::update_user_lists_on_deactivation( $user->ID, $user_membership->get_id(), $existing_lists );

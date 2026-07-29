@@ -266,6 +266,72 @@ class NPPM_3000_Membership_Switch_Ordering_Test extends WP_UnitTestCase {
 		$this->assertNotContains( $this->public_id( $this->list_monthly ), $after, 'Monthly list removed.' );
 	}
 
+	/**
+	 * A list the reader opted OUT of must not be silently re-added when the
+	 * membership that grants it is paused and then reactivated (e.g. a
+	 * subscription renewal), while another active membership keeps a shared list.
+	 *
+	 * Regression guard for the deactivation-history interaction: if the shared
+	 * list is excluded from removal, the saved history must still record the
+	 * reader's real subscriptions so reactivation restores only those -- not the
+	 * whole plan. See NPPM-3000.
+	 */
+	public function test_optout_list_survives_membership_pause_reactivate() {
+		// Reader has opted out of the monthly-only list while keeping the shared list.
+		// The annual membership still grants the shared list.
+		self::$mc_interests['grp_monthly'] = false;
+
+		$before = \Newspack_Newsletters_Subscription::get_contact_lists( self::$email );
+		$this->assertContains( $this->public_id( $this->list_shared ), $before, 'Precondition: reader is in the shared list.' );
+		$this->assertNotContains( $this->public_id( $this->list_monthly ), $before, 'Precondition: reader opted out of the monthly list.' );
+
+		// 1) PAUSE the monthly membership ( active -> paused ): triggers removal.
+		set_post_status_raw( $this->monthly_membership_id, 'wcm-paused' );
+		Woocommerce_Memberships::handle_membership_status_change(
+			new WC_Memberships_User_Membership( $this->monthly_membership_id ),
+			'active',
+			'paused'
+		);
+
+		// 2) REACTIVATE it ( paused -> active ): set previous_status, then re-add.
+		set_post_status_raw( $this->monthly_membership_id, 'wcm-active' );
+		Woocommerce_Memberships::handle_membership_status_change(
+			new WC_Memberships_User_Membership( $this->monthly_membership_id ),
+			'paused',
+			'active'
+		);
+		Woocommerce_Memberships::add_user_to_lists(
+			$this->monthly_membership_plan(),
+			[
+				'user_id'            => $this->user_id,
+				'user_membership_id' => $this->monthly_membership_id,
+				'is_update'          => true,
+			]
+		);
+
+		$after = \Newspack_Newsletters_Subscription::get_contact_lists( self::$email );
+		$this->assertContains(
+			$this->public_id( $this->list_shared ),
+			$after,
+			'Shared list is retained across the pause/reactivate.'
+		);
+		$this->assertNotContains(
+			$this->public_id( $this->list_monthly ),
+			$after,
+			'Opted-out list must NOT be re-added on reactivation (NPPM-3000).'
+		);
+	}
+
+	private function monthly_membership_plan() {
+		global $test_wc_memberships;
+		foreach ( $test_wc_memberships as $plan ) {
+			if ( 100 === (int) $plan->get_id() ) {
+				return $plan;
+			}
+		}
+		return null;
+	}
+
 	private function annual_membership_plan() {
 		global $test_wc_memberships;
 		foreach ( $test_wc_memberships as $plan ) {
