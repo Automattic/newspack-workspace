@@ -562,12 +562,15 @@ class Access_Rules {
 				$email    = $user ? $user->user_email : '';
 				$customer = array_values( array_filter( [ $user_id, $email ] ) );
 				if ( empty( $customer ) ) {
-					// Fail closed with no identity to match a purchase against. The
-					// finite path depends on this guard: an empty customer constraint is
-					// dropped by both WooCommerce order stores, which would widen the
-					// lookup to every customer's paid orders. The forever path is
-					// defensive symmetry — wc_customer_bought_product() already returns
-					// false when it has neither a user ID nor an email to match on.
+					// Fail closed with no identity to match a purchase against. Both
+					// paths need this guard, for different reasons. The finite path:
+					// an empty customer constraint is dropped by both WooCommerce
+					// order stores, which would widen the lookup to every customer's
+					// paid orders. The forever path: wc_customer_bought_product()
+					// returns the value of the `woocommerce_pre_customer_bought_product`
+					// filter verbatim whenever it is non-null, ahead of its own
+					// identity check, so a third-party filter can answer truthy for
+					// nobody in particular. Neither branch is redundant.
 					$has_purchase = false;
 				} elseif ( 'forever' === $value['duration_unit'] ) {
 					// Lifetime access: any paid order ever. wc_customer_bought_product()

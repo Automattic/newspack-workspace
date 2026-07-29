@@ -480,11 +480,13 @@ class Newspack_Test_Access_Rules_One_Time_Purchase extends WP_UnitTestCase {
 	 * With no user ID and no resolvable email there is nothing to match a purchase
 	 * against, so the rule denies rather than querying every customer's orders.
 	 *
-	 * The finite assertion is the one that pins the guard: without it the
-	 * unconstrained order query would match another customer's order. The forever
-	 * assertion documents parity rather than arming anything — with no identity,
-	 * wc_customer_bought_product() fails closed itself, in the mock as in real
-	 * WooCommerce.
+	 * Each assertion pins the guard on its own path. Finite: without the guard the
+	 * unconstrained order query would match another customer's order. Forever:
+	 * wc_customer_bought_product() returns the value of the
+	 * `woocommerce_pre_customer_bought_product` filter verbatim whenever it is
+	 * non-null, ahead of its own identity check, so a third-party plugin hooking
+	 * that filter can answer truthy for nobody in particular — see
+	 * test_missing_identity_denies_access_against_pre_bought_filter().
 	 */
 	public function test_missing_identity_denies_access() {
 		$this->create_one_time_order( [ 'date_created' => gmdate( 'Y-m-d H:i:s', strtotime( '-10 days' ) ) ] );
@@ -496,6 +498,32 @@ class Newspack_Test_Access_Rules_One_Time_Purchase extends WP_UnitTestCase {
 		$this->assertFalse(
 			Access_Rules::has_one_time_purchase( 0, $this->get_rule_value( [ 'duration_unit' => 'forever' ] ) ),
 			'An anonymous evaluation should never match another customer\'s order for lifetime access.'
+		);
+	}
+
+	/**
+	 * A plugin hooking `woocommerce_pre_customer_bought_product` short-circuits
+	 * wc_customer_bought_product() before it ever looks at the customer identity,
+	 * so on the lifetime path only our own guard stands between an anonymous
+	 * evaluation and a truthy answer. Drop the guard and this test fails.
+	 */
+	public function test_missing_identity_denies_access_against_pre_bought_filter() {
+		$this->create_one_time_order( [ 'date_created' => gmdate( 'Y-m-d H:i:s', strtotime( '-10 days' ) ) ] );
+
+		$grant_to_anyone = '__return_true';
+		add_filter( 'woocommerce_pre_customer_bought_product', $grant_to_anyone );
+
+		$anonymous_has_lifetime_access = Access_Rules::has_one_time_purchase( 0, $this->get_rule_value( [ 'duration_unit' => 'forever' ] ) );
+
+		remove_filter( 'woocommerce_pre_customer_bought_product', $grant_to_anyone );
+
+		$this->assertFalse(
+			$anonymous_has_lifetime_access,
+			'A filter answering truthy should not grant lifetime access to an evaluation with no identity.'
+		);
+		$this->assertTrue(
+			Access_Rules::has_one_time_purchase( self::$purchaser_user_id, $this->get_rule_value( [ 'duration_unit' => 'forever' ] ) ),
+			'The identified purchaser is still evaluated through wc_customer_bought_product(), filter or not.'
 		);
 	}
 

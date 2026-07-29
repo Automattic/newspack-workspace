@@ -1119,6 +1119,12 @@ function wc_get_orders( $args ) {
 
 function wc_customer_bought_product( $customer_email, $user_id, $product_id ) {
 	global $orders_database;
+	// Real WC hands the question to third parties first and returns whatever they
+	// answer verbatim, ahead of its own identity check.
+	$filtered = apply_filters( 'woocommerce_pre_customer_bought_product', null, $customer_email, $user_id, $product_id );
+	if ( null !== $filtered ) {
+		return $filtered;
+	}
 	foreach ( $orders_database as $order ) {
 		// Real WC matches the customer user ID OR the billing email, so guest
 		// orders count toward the buyer's history. The email comparison runs in
