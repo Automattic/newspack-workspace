@@ -52,6 +52,30 @@ class Content_Gate {
 	private static bool $is_content_locked = false;
 
 	/**
+	 * Request-scoped cache of get_gates() results, keyed by its arguments.
+	 *
+	 * Each miss costs a get_posts() with a meta_query plus a get_gate() per gate,
+	 * and callers hit it once per evaluated post (e.g. every item of an RSS feed),
+	 * so the uncached cost scales with the number of posts on the page. Flushed
+	 * whenever a post or post meta is written (see flush_gates_cache), which
+	 * covers both wp_update_post and the bare update_post_meta() calls that gate
+	 * settings are stored with.
+	 *
+	 * @var array<string,array>
+	 */
+	private static $gates_cache = [];
+
+	/**
+	 * Whether $gates_cache may be read from and written to.
+	 *
+	 * Null means "not resolved yet"; see is_gates_cache_enabled() for the default
+	 * and set_gates_cache_enabled() for why it is overridable.
+	 *
+	 * @var bool|null
+	 */
+	private static $gates_cache_enabled = null;
+
+	/**
 	 * Valid gate post statuses.
 	 *
 	 * @var array
@@ -136,6 +160,13 @@ class Content_Gate {
 		add_action( 'enqueue_block_editor_assets', [ __CLASS__, 'enqueue_block_editor_assets' ] );
 		add_action( 'after_setup_theme', [ __CLASS__, 'register_overlay_gate_hooks' ] );
 		add_action( 'before_delete_post', [ __CLASS__, 'delete_gate_layouts' ], 10, 2 );
+
+		// Keep the get_gates() cache honest across writes (see $gates_cache).
+		add_action( 'save_post', [ __CLASS__, 'flush_gates_cache' ] );
+		add_action( 'deleted_post', [ __CLASS__, 'flush_gates_cache' ] );
+		add_action( 'added_post_meta', [ __CLASS__, 'flush_gates_cache' ] );
+		add_action( 'updated_post_meta', [ __CLASS__, 'flush_gates_cache' ] );
+		add_action( 'deleted_post_meta', [ __CLASS__, 'flush_gates_cache' ] );
 		add_filter( 'newspack_popups_assess_has_disabled_popups', [ __CLASS__, 'disable_popups' ] );
 		add_filter( 'newspack_reader_activity_article_view', [ __CLASS__, 'suppress_article_view_activity' ], 100 );
 
@@ -1894,6 +1925,14 @@ class Content_Gate {
 	 * @return array Array of content gates.
 	 */
 	public static function get_gates( $post_type = self::GATE_CPT, $post_status = null, $is_newsletter = false ) {
+		$is_cacheable = self::is_gates_cache_enabled();
+		// Keyed by blog as well as by arguments: the cache is a plain static, so it
+		// would otherwise outlive a switch_to_blog() and hand one site another
+		// site's gates.
+		$cache_key = wp_json_encode( [ get_current_blog_id(), $post_type, $post_status, $is_newsletter ] );
+		if ( $is_cacheable && isset( self::$gates_cache[ $cache_key ] ) ) {
+			return self::$gates_cache[ $cache_key ];
+		}
 		$posts = get_posts(
 			[
 				'post_type'      => $post_type,
@@ -1916,7 +1955,55 @@ class Content_Gate {
 				}
 			);
 		}
+		if ( $is_cacheable ) {
+			self::$gates_cache[ $cache_key ] = $gates;
+		}
 		return $gates;
+	}
+
+	/**
+	 * Whether get_gates() may serve from (and populate) its cache.
+	 *
+	 * Off by default under PHPUnit: tests are rolled back at the database level,
+	 * which fires none of the write hooks the cache is invalidated by, so a gate
+	 * created in one test would still be "visible" in the next.
+	 *
+	 * @return bool
+	 */
+	private static function is_gates_cache_enabled(): bool {
+		if ( null === self::$gates_cache_enabled ) {
+			self::$gates_cache_enabled = ! defined( 'IS_TEST_ENV' ) || ! IS_TEST_ENV;
+		}
+		return self::$gates_cache_enabled;
+	}
+
+	/**
+	 * Turn the get_gates() cache on or off for the rest of the request.
+	 *
+	 * Exists so the cache is not merely untested under PHPUnit but untestable:
+	 * with the test-env default (off) hard-coded into get_gates(), neither the
+	 * cache read, the cache write nor any of the five invalidation hooks could be
+	 * exercised at all. A test that covers them turns the cache on for its own
+	 * duration and calls this with no argument to restore the default.
+	 *
+	 * @param bool|null $enabled True/false to force, null to restore the default.
+	 */
+	public static function set_gates_cache_enabled( ?bool $enabled = null ) {
+		self::$gates_cache_enabled = $enabled;
+		self::flush_gates_cache();
+	}
+
+	/**
+	 * Flush the get_gates() cache.
+	 *
+	 * Hooked to every post and post-meta write rather than only to gate-CPT
+	 * writes: gate settings are persisted with bare update_post_meta() calls, and
+	 * the hooks that carry a post ID would each need a get_post_type() lookup to
+	 * tell a gate write from any other. Flushing unconditionally is cheaper than
+	 * that check and can only cost a re-query on requests that write posts.
+	 */
+	public static function flush_gates_cache() {
+		self::$gates_cache = [];
 	}
 
 	/**
