@@ -18,6 +18,10 @@ import apiFetch from '@wordpress/api-fetch';
 
 const PATH = '/newspack/v1/wizard/newspack-subscribers/subscribers';
 
+// A request that can never succeed on retry: the user is gone, or the id is not
+// a number the `(?P<id>\d+)` route will ever match.
+const NOT_FOUND_CODES = [ 'newspack_subscriber_not_found', 'rest_no_route' ];
+
 /**
  * Fetch one subscriber's full profile.
  *
@@ -32,10 +36,6 @@ const PATH = '/newspack/v1/wizard/newspack-subscribers/subscribers';
  * @param {number|string} id The subscriber (user) ID.
  * @return {{ subscriber: ?Object, loading: boolean, error: string, notFound: boolean, reload: Function }} The profile.
  */
-// A request that can never succeed on retry: the user is gone, or the id is not
-// a number the `(?P<id>\d+)` route will ever match.
-const NOT_FOUND_CODES = [ 'newspack_subscriber_not_found', 'rest_no_route' ];
-
 export function useSubscriber( id ) {
 	const [ subscriber, setSubscriber ] = useState( null );
 	const [ loading, setLoading ] = useState( true );

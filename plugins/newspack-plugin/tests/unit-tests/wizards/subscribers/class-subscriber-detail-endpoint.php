@@ -10,8 +10,6 @@
  * the client would have to resolve.
  *
  * @package Newspack\Tests
- * @group WooCommerce_Subscriptions_Integration
- * @group subscribers-wizard
  */
 
 use Newspack\Group_Subscription;
@@ -19,6 +17,9 @@ use Newspack\Group_Subscription_Settings;
 
 /**
  * GET /wizard/newspack-subscribers/subscribers/<id>.
+ *
+ * @group WooCommerce_Subscriptions_Integration
+ * @group subscribers-wizard
  */
 class Test_Subscribers_Wizard_Subscriber_Detail_Endpoint extends WP_UnitTestCase {
 
@@ -30,6 +31,14 @@ class Test_Subscribers_Wizard_Subscriber_Detail_Endpoint extends WP_UnitTestCase
 	 * @var int[]
 	 */
 	private $user_ids = [];
+
+	/**
+	 * The site timezone options as they stood before a test changed them, or null
+	 * when untouched. See set_site_timezone().
+	 *
+	 * @var array|null
+	 */
+	private $original_timezone = null;
 
 	/**
 	 * Include the WC mocks before the class boots.
@@ -52,7 +61,8 @@ class Test_Subscribers_Wizard_Subscriber_Detail_Endpoint extends WP_UnitTestCase
 		$subscriptions_database = [];
 		$products_database      = [];
 		$orders_database        = [];
-		$this->user_ids         = [];
+		$this->user_ids          = [];
+		$this->original_timezone = null;
 		Group_Subscription::reset_cache();
 		Group_Subscription_Settings::clear_group_subscription_ids_cache();
 		do_action( 'rest_api_init' );
@@ -70,8 +80,43 @@ class Test_Subscribers_Wizard_Subscriber_Detail_Endpoint extends WP_UnitTestCase
 			wp_delete_user( $user_id );
 		}
 		$this->user_ids = [];
+		$this->restore_site_timezone();
 		Group_Subscription_Settings::clear_group_subscription_ids_cache();
 		parent::tear_down();
+	}
+
+	/**
+	 * Point the site at a timezone for one test.
+	 *
+	 * The previous values are remembered so tear_down() puts them back even when
+	 * the test fails part-way. WP_UnitTestCase's per-test DB rollback would cover
+	 * this in practice, but a test that quietly depends on the harness undoing its
+	 * own global state stops being correct the moment it moves.
+	 *
+	 * @param string    $timezone_string A PHP timezone identifier, or '' to fall back to the offset.
+	 * @param int|float $gmt_offset      The UTC offset, in hours.
+	 */
+	private function set_site_timezone( string $timezone_string, $gmt_offset ) {
+		if ( null === $this->original_timezone ) {
+			$this->original_timezone = [
+				'timezone_string' => get_option( 'timezone_string' ),
+				'gmt_offset'      => get_option( 'gmt_offset' ),
+			];
+		}
+		update_option( 'timezone_string', $timezone_string );
+		update_option( 'gmt_offset', $gmt_offset );
+	}
+
+	/**
+	 * Put back whatever set_site_timezone() replaced, if anything.
+	 */
+	private function restore_site_timezone() {
+		if ( null === $this->original_timezone ) {
+			return;
+		}
+		update_option( 'timezone_string', $this->original_timezone['timezone_string'] );
+		update_option( 'gmt_offset', $this->original_timezone['gmt_offset'] );
+		$this->original_timezone = null;
 	}
 
 	/**
@@ -152,15 +197,16 @@ class Test_Subscribers_Wizard_Subscriber_Detail_Endpoint extends WP_UnitTestCase
 	 * @param int    $limit    Seat limit (0 = unlimited).
 	 * @param string $status   Subscription status.
 	 * @param string $name     Group name.
+	 * @param string $created  GMT creation datetime.
 	 *
 	 * @return WC_Subscription
 	 */
-	private function create_group_subscription( int $owner_id, int $limit = 5, string $status = 'active', string $name = 'Acme Newsroom' ): WC_Subscription {
+	private function create_group_subscription( int $owner_id, int $limit = 5, string $status = 'active', string $name = 'Acme Newsroom', string $created = '2024-02-01 09:00:00' ): WC_Subscription {
 		$subscription = wcs_create_subscription(
 			array_merge(
 				[
 					'customer_id'  => $owner_id,
-					'date_created' => '2024-02-01 09:00:00',
+					'date_created' => $created,
 				],
 				$this->billing_fixture( $status )
 			)
@@ -533,8 +579,7 @@ class Test_Subscribers_Wizard_Subscriber_Detail_Endpoint extends WP_UnitTestCase
 	 * other Woo screen the publisher cross-checks.
 	 */
 	public function test_dates_render_in_the_site_timezone() {
-		update_option( 'timezone_string', '' );
-		update_option( 'gmt_offset', -5 );
+		$this->set_site_timezone( '', -5 );
 
 		$this->login_admin();
 		$reader_id = $this->create_reader( 'NY reader' );
@@ -552,6 +597,42 @@ class Test_Subscribers_Wizard_Subscriber_Detail_Endpoint extends WP_UnitTestCase
 
 		$entry = $this->dispatch( $reader_id )->get_data()['subscriptions'][0];
 		$this->assertSame( '2026-07-31', $entry['nextBillingDate'], 'The date is the site-local calendar day, not the GMT one.' );
+	}
+
+	/**
+	 * EVERY date on the profile shares that one basis. A group-owner card renders
+	 * "First subscribed" (the group's createdAt) directly above "Last payment", and
+	 * the header renders "Subscriber since" (memberSince) — so a field still
+	 * formatted in GMT would read a calendar day apart from the localized field
+	 * next to it for the same instant, on the same screen. All three instants here
+	 * are just after midnight UTC, which is the previous day for this UTC-5 site.
+	 */
+	public function test_every_profile_date_shares_the_site_timezone_basis() {
+		$this->set_site_timezone( '', -5 );
+
+		$this->login_admin();
+		$owner_id = $this->create_reader( 'Owner' );
+		wp_update_user(
+			[
+				'ID'              => $owner_id,
+				'user_registered' => '2024-02-01 02:00:00',
+			]
+		);
+		$this->create_group_subscription( $owner_id, 5, 'active', 'Acme Newsroom', '2025-05-06 02:00:00' );
+		wc_create_order(
+			[
+				'customer_id' => $owner_id,
+				'status'      => 'completed',
+				'total'       => 12.5,
+				'date_paid'   => '2026-07-01 02:00:00',
+			]
+		);
+
+		$subscriber = $this->dispatch( $owner_id )->get_data();
+
+		$this->assertSame( '2024-01-31', $subscriber['memberSince'], 'memberSince is the site-local day.' );
+		$this->assertSame( '2026-06-30', $subscriber['lastPayment'], 'lastPayment is the site-local day.' );
+		$this->assertSame( '2025-05-05', $subscriber['groups'][0]['createdAt'], "The group's createdAt is the site-local day." );
 	}
 
 	/**

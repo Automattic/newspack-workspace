@@ -512,6 +512,9 @@ class WC_Subscription {
 	public function get_date_created() {
 		return new WC_DateTime( $this->data['date_created'] ?? 'now' );
 	}
+	public function get_edit_order_url() {
+		return admin_url( 'post.php?post=' . $this->get_id() . '&action=edit' );
+	}
 	public function get_date_paid() {
 		return new WC_DateTime( $this->data['date_paid'] );
 	}
@@ -648,6 +651,9 @@ class WC_Subscription {
 	}
 	public function needs_payment() {
 		return ! empty( $this->data['needs_payment'] );
+	}
+	public function is_manual() {
+		return ! empty( $this->data['is_manual'] );
 	}
 	public function get_view_order_url() {
 		return $this->data['view_order_url'] ?? 'https://example.test/my-account/view-order/' . $this->get_id();
@@ -1079,6 +1085,22 @@ function wc_get_order( $order_id ) {
 function wc_get_product( $product_id ) {
 	global $products_database;
 	return $products_database[ $product_id ] ?? false;
+}
+/**
+ * Minimal stand-in for WooCommerce's admin field renderer. Only enough markup to let a metabox
+ * callback render end to end; assertions belong on the surrounding markup, not on this field.
+ *
+ * @param array $field The field definition.
+ */
+function woocommerce_wp_text_input( $field ) {
+	printf(
+		'<p class="form-field %1$s"><label for="%2$s">%3$s</label><input type="text" id="%2$s" name="%4$s" value="%5$s" /></p>',
+		esc_attr( $field['wrapper_class'] ?? '' ),
+		esc_attr( $field['id'] ?? '' ),
+		esc_html( $field['label'] ?? '' ),
+		esc_attr( $field['name'] ?? ( $field['id'] ?? '' ) ),
+		esc_attr( $field['value'] ?? '' )
+	);
 }
 /**
  * Recording mock: notices land on the $wc_mock_notices global so tests can

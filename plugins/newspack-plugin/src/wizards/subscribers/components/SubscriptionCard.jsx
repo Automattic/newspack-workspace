@@ -58,6 +58,12 @@ import '../screens/style.scss';
 /**
  * A labeled label/value row on a card, matching the quick-edit drawer style.
  *
+ * Each row is its own one-pair description list, so a screen reader announces
+ * the value *as* the value of its label rather than as two adjacent unrelated
+ * strings. A single `dl` around all the rows would be the other option, but the
+ * rows are laid out by a Grid whose own wrapper element would then sit between
+ * the `dl` and its `dt`/`dd` — invalid, and no better read aloud.
+ *
  * Exported because the "View subscription" drawer lays the same label/value
  * pairs out vertically rather than in the card's two-column grid.
  *
@@ -66,10 +72,10 @@ import '../screens/style.scss';
  * @param {*}      props.children The row value.
  */
 export const CardRow = ( { label, children } ) => (
-	<div className="newspack-subscribers__card-row">
-		<span className="newspack-subscribers__card-label">{ label }</span>
-		<span className="newspack-subscribers__card-value">{ children }</span>
-	</div>
+	<dl className="newspack-subscribers__card-row">
+		<dt className="newspack-subscribers__card-label">{ label }</dt>
+		<dd className="newspack-subscribers__card-value">{ children }</dd>
+	</dl>
 );
 
 /**
