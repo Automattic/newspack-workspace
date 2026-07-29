@@ -295,6 +295,20 @@ class TestOutgoingPost extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A slashed URL kept raw in the meta is dispatched in its canonical form, so
+	 * the recipient's strict match against its own url succeeds rather than
+	 * rejecting the event as not_distributed_to_site.
+	 */
+	public function test_get_payload_normalizes_slashed_sites() {
+		$outgoing_post = $this->post_with_legacy_distribution( [ $this->network[0]['url'] . '/' ] );
+
+		$payload = $outgoing_post->get_payload();
+
+		$this->assertSame( [ $this->network[0]['url'] . '/' ], $outgoing_post->get_distribution() );
+		$this->assertSame( [ $this->network[0]['url'] ], $payload['sites'] );
+	}
+
+	/**
 	 * Test that the author(s) are included in the payload.
 	 */
 	public function test_authors_data(): void {

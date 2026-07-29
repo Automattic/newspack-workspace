@@ -312,7 +312,11 @@ class Outgoing_Post {
 			'post_id'           => $this->post->ID,
 			'post_url'          => get_permalink( $this->post->ID ),
 			'network_post_id'   => $this->get_network_post_id(),
-			'sites'             => $this->get_distribution(),
+			// Stored entries are left raw so the removal guard sees them unchanged,
+			// but the wire format is canonical: Incoming_Post matches this list
+			// against its own url strictly, so a slashed entry would otherwise be
+			// rejected as not_distributed_to_site while the sender reported success.
+			'sites'             => array_map( 'untrailingslashit', $this->get_distribution() ),
 			'status_on_publish' => $status_on_publish,
 			'post_data'         => [
 				'title'          => html_entity_decode( get_the_title( $this->post->ID ), ENT_QUOTES, get_bloginfo( 'charset' ) ),
