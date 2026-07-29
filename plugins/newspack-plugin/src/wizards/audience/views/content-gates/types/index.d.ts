@@ -152,8 +152,11 @@ type MeteringCountdownConfig = {
 	cta_product_id: number;
 };
 
+type FeedRestrictionMode = 'truncate' | 'exclude';
+
 type AdvancedSettingsConfig = {
 	restrict_feeds: boolean;
+	feed_restriction_mode: FeedRestrictionMode;
 	newsletter_link_bypass_enabled: boolean;
 };
 
