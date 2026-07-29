@@ -11,6 +11,8 @@
     "test:vanilla:mobile": "E2E_PHASE=vanilla E2E_VIEWPORT=mobile USE_SETUP=true npm run test",
     "test:woo:desktop": "E2E_PHASE=woo E2E_VIEWPORT=desktop USE_SETUP=true npm run test",
     "test:woo:mobile": "E2E_PHASE=woo E2E_VIEWPORT=mobile USE_SETUP=true npm run test",
+    "test:ac:desktop": "E2E_PHASE=ac E2E_VIEWPORT=desktop USE_SETUP=true npm run test",
+    "test:ac:mobile": "E2E_PHASE=ac E2E_VIEWPORT=mobile USE_SETUP=true npm run test",
     "codegen": "playwright codegen",
     "codegen:mobile": "playwright codegen --viewport-size=375,667"
   },

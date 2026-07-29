@@ -16,7 +16,7 @@ import {
 test(
   "Create and delete a premium newsletter gate",
   {
-    tag: "@vanilla",
+    tag: "@access-control",
   },
   async ({ page }) => {
     const newsletterGateName = `E2E Premium NL ${randomString(4)}`;

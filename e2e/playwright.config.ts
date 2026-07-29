@@ -38,20 +38,26 @@ const launchOptions: LaunchOptions = process.env.CI
     }
   : {};
 
-// The suite provisions the target site from scratch and runs in two phases -- a
-// vanilla site, then the same site re-provisioned with WooCommerce -- across two
-// viewports (desktop + mobile). End to end that is well over TeamCity's 20-minute
-// per-build execution cap, so CI slices it: E2E_PHASE (vanilla | woo) and
-// E2E_VIEWPORT (desktop | mobile) each pick one axis, and every slice provisions
-// and runs on its own, so the four combinations can run as separate parallel
-// builds -- each against its own site, since each provisioning does a destructive
-// from-scratch reset that would clobber a site another slice is using. Leaving
-// both unset runs the whole thing against a single site, which is what a local
-// `USE_SETUP` run wants.
-const phase = (process.env.E2E_PHASE ?? "both").toLowerCase();
+// The suite provisions the target site from scratch and runs in three phases -- a
+// vanilla site, the same site re-provisioned with WooCommerce, and an
+// Access-Control phase (content gating / paywalls / premium newsletters, which
+// needs the WooCommerce provisioning) -- across two viewports (desktop + mobile).
+// End to end that is well over TeamCity's 20-minute per-build execution cap, so CI
+// slices it: E2E_PHASE (vanilla | woo | ac) and E2E_VIEWPORT (desktop | mobile)
+// each pick one axis, and every slice provisions and runs on its own, so the
+// combinations can run as separate parallel builds -- each against its own site,
+// since each provisioning does a destructive from-scratch reset that would clobber
+// a site another slice is using. The Access-Control specs are tagged
+// @access-control (not @vanilla/@with-woo), so the vanilla/woo slices no longer run
+// them -- a flaky AC spec can't fail a base or woo build. Leaving E2E_PHASE unset
+// (equivalently "all"; "both" is kept as a back-compat alias) runs every phase
+// against a single site, which is what a local `USE_SETUP` run wants.
+const phase = (process.env.E2E_PHASE ?? "all").toLowerCase();
 const viewport = (process.env.E2E_VIEWPORT ?? "both").toLowerCase();
-const runVanilla = phase !== "woo";
-const runWoo = phase !== "vanilla";
+const runAll = phase === "all" || phase === "both";
+const runVanilla = runAll || phase === "vanilla";
+const runWoo = runAll || phase === "woo";
+const runAc = runAll || phase === "ac";
 const runDesktop = viewport !== "mobile";
 const runMobile = viewport !== "desktop";
 const useSetup = !!process.env.USE_SETUP;
@@ -74,6 +80,9 @@ const buildProjects = () => {
   const lastVanilla = runMobile
     ? "Vanilla in Mobile Chrome"
     : "Vanilla in Desktop Chrome";
+  const lastWoo = runMobile
+    ? "With Woo in Mobile Chrome"
+    : "With Woo in Desktop Chrome";
 
   if (useSetup && runVanilla) {
     projects.push({
@@ -102,7 +111,10 @@ const buildProjects = () => {
     });
   }
 
-  if (useSetup && runWoo) {
+  // The woo provisioning also underpins the Access-Control phase (its paywall /
+  // premium-newsletter gates need WooCommerce), so setup-with-woo runs whenever
+  // either phase is selected.
+  if (useSetup && (runWoo || runAc)) {
     projects.push({
       name: "setup-with-woo",
       testMatch: "with-woo.ts",
@@ -126,6 +138,34 @@ const buildProjects = () => {
       grep: /@with-woo/,
       dependencies: useSetup
         ? [runDesktop ? "With Woo in Desktop Chrome" : "setup-with-woo"]
+        : [],
+    });
+  }
+
+  // Access-Control specs run on the woo-provisioned site. When the woo phase also
+  // runs (a shared-site "all" run) they follow the last woo project; when the AC
+  // phase is sliced onto its own site they depend on setup-with-woo directly.
+  if (runAc && runDesktop) {
+    projects.push({
+      name: "Access Control in Desktop Chrome",
+      use: desktop,
+      grep: /@access-control/,
+      dependencies: useSetup ? [runWoo ? lastWoo : "setup-with-woo"] : [],
+    });
+  }
+  if (runAc && runMobile) {
+    projects.push({
+      name: "Access Control in Mobile Chrome",
+      use: mobile,
+      grep: /@access-control/,
+      dependencies: useSetup
+        ? [
+            runDesktop
+              ? "Access Control in Desktop Chrome"
+              : runWoo
+              ? lastWoo
+              : "setup-with-woo",
+          ]
         : [],
     });
   }

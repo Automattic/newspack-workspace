@@ -24,7 +24,7 @@ import {
 test(
   "Regwall lifecycle: metered registered access from creation to deletion",
   {
-    tag: "@vanilla",
+    tag: "@access-control",
   },
   async ({ page }) => {
     // Admin configuration, client-side metering, an in-gate registration
@@ -138,7 +138,7 @@ test(
 test(
   "Paywall lifecycle: paid access unlocked by a subscription purchase",
   {
-    tag: "@with-woo",
+    tag: "@access-control",
   },
   async ({ page }) => {
     // Gate creation plus a full Stripe checkout round-trip.

@@ -25,12 +25,15 @@ against Atomic staging sites. The build definitions live in TeamCity settings, n
 in this repo; each config's steps are: install dependencies, write a `.env`, then
 run its slice script (the setup projects provision the site over SSH).
 
-The full suite (both phases, both viewports) runs well over TeamCity's 20-minute
-per-build execution timeout, so it is split into four parallel build configs, one
-per phase/viewport slice (`npm run test:vanilla:desktop` / `:vanilla:mobile` /
-`:woo:desktop` / `:woo:mobile`). Each provisions its own site from scratch, so the
-four must each target a **different** site (a shared site's reset would clobber a
-parallel slice). See `AGENTS.md` → "Sliced into four parallel build configs".
+The full suite (every phase, both viewports) runs well over TeamCity's 20-minute
+per-build execution timeout, so it is split into parallel build configs, one per
+phase/viewport slice (`npm run test:vanilla:desktop` / `:vanilla:mobile` /
+`:woo:desktop` / `:woo:mobile` / `:ac:desktop` / `:ac:mobile`). Each provisions its
+own site from scratch, so they must each target a **different** site (a shared
+site's reset would clobber a parallel slice). The Access-Control specs run in their
+own `ac` phase (tagged `@access-control`, not `@vanilla`/`@with-woo`), so an AC
+regression can't fail a base or woo build. See `AGENTS.md` → "Sliced into parallel
+build configs".
 
 That staging site is pinned to the **stable release** channel, and provisioning
 rebuilds against the plugin version installed there – not the version the specs
@@ -115,9 +118,19 @@ USE_SETUP is TRUE (with workers: 1):
           ▼
 ┌─────────────────┐
 │ With Woo Mobile │  (@with-woo tests)
-│     Chrome      │
+│     Chrome      │  ← LAST @with-woo test
+└─────────┬───────┘
+          │
+🔒 ACCESS-CONTROL TESTS PHASE
+          ▼           (reuses the woo-provisioned site; gates need WooCommerce)
+┌─────────────────┐
+│  Access Control │  (@access-control tests: content gates, paywalls,
+│  Desktop → Mob. │   premium newsletters)
 └─────────────────┘
 ```
+
+A sliced `ac` build instead provisions its own site with `setup-with-woo` first,
+then runs the `@access-control` specs against it.
 
 ## Writing tests
 
