@@ -1020,9 +1020,12 @@ Error message(s) received:
 	 *       field to offer publishers a { start, end } window operator. The consumer also recognizes
 	 *       'list__not_in', though no current provider emits it.
 	 *   - date_format (string): PHP date format string describing how the provider renders a
-	 *       'date'/'datetime' field's value (e.g. 'm/d/Y'). Empty or omitted means the provider
-	 *       already sends ISO 8601 / 'Y-m-d', which is what ActiveCampaign does; a provider whose
-	 *       dates are not already ISO must declare this or incoming values may be misparsed.
+	 *       'date'/'datetime' field's value (e.g. 'm/d/Y'). Empty means the provider already
+	 *       sends ISO 8601 / 'Y-m-d', which is what ActiveCampaign does; a provider whose dates
+	 *       are not already ISO must declare this or incoming values cannot be parsed. Always
+	 *       emit the key for a date-typed field, including as '': the consumer distinguishes a
+	 *       declared-ISO field from one snapshotted before source formats existed (and so needing
+	 *       a refresh from the live schema) by whether the key is present at all.
 	 *   - options (array): List of [ 'value' => ..., 'label' => ... ] pairs for enumerated fields.
 	 *   - description (string): Optional help text surfaced in the admin UI.
 	 *   - is_access_rule (bool): Whether the field is eligible as a content-gate access rule by default.

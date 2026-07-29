@@ -2535,6 +2535,11 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 			'name'                => ! empty( $field['title'] ) ? $field['title'] : $perstag,
 			'value_type'          => $value_type,
 			'matching_function'   => $matching_function,
+			// Declared explicitly, even though it is always empty: ActiveCampaign sends
+			// ISO 8601. The consumer distinguishes "declared as ISO" from "never stored,
+			// so the format is unknown" by the key's presence, and refreshes the latter
+			// from the live schema.
+			'date_format'         => '',
 			'options'             => $options,
 			'description'         => ! empty( $field['descript'] ) ? $field['descript'] : '',
 			'is_access_rule'      => $is_promoted_by_default,

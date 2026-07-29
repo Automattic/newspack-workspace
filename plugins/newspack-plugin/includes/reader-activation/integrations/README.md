@@ -297,6 +297,10 @@ $field
     ->set_access_rule_callback( function ( $user_id, $args ) { /* ... */ } );
 ```
 
+**Declare `date_format` on every `date` / `datetime` field, even when it is empty.** The raw schema array is snapshotted when a publisher enables a field, and the key's presence is how the framework tells "the provider says its dates are ISO 8601" from "this entry predates source formats, so the format is unknown". An entry set to `date_range` with the key *absent* is refreshed from the live schema on read; one that declares `''` is taken at its word and never refetched.
+
+A date value the framework cannot confidently parse is stored **untouched** rather than guessed at — the matcher then rejects it, so the criterion matches nobody rather than matching wrongly. When that happens the pull writes a line to the Newspack log naming the field and the source format it used, which is the only signal that a declared format is missing or wrong.
+
 Use `configure_incoming_field()` to enrich a field after construction — it's called on every field returned by `get_available_incoming_fields()` and again whenever stored fields are re-hydrated. This is where you set `is_access_rule`, `is_segment_criteria`, and any custom callback.
 
 The base class also offers `get_filtered_incoming_fields()`, which hides fields whose name matches one of the integration's own outgoing prefixed keys, so publishers don't re-select fields they're already pushing.

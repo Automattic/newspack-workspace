@@ -593,6 +593,27 @@ abstract class Integration {
 	private const ALLOWED_INCOMING_MATCHING_FUNCTIONS = [ 'default', 'range', 'list__in', 'list__not_in', 'date_range' ];
 
 	/**
+	 * Whether a stored entry is set to date range matching but carries no source
+	 * date format, and so needs one overlaid from the live provider schema.
+	 *
+	 * `date_format` is not in SCHEMA_KEYS, so an entry saved between the schema
+	 * expansion and the arrival of source formats looks current and is never
+	 * refreshed — yet the pull needs the format to normalize the value. Without it
+	 * a non-ISO value is stored raw, the matcher rejects it, and the criterion
+	 * silently matches nobody. Absent means "never stored"; a provider that sends
+	 * ISO stores `''` explicitly.
+	 *
+	 * @param array $raw_data Stored raw field data.
+	 * @return bool
+	 */
+	private static function needs_source_date_format( $raw_data ) {
+		return is_array( $raw_data )
+			&& isset( $raw_data['matching_function'] )
+			&& 'date_range' === $raw_data['matching_function']
+			&& ! array_key_exists( 'date_format', $raw_data );
+	}
+
+	/**
 	 * Get the enabled incoming fields for this integration.
 	 *
 	 * Reads stored field data (key => raw_data map saved by
@@ -613,13 +634,13 @@ abstract class Integration {
 			return [];
 		}
 
-		$has_legacy_entries = false;
+		$needs_live_schema = false;
 		foreach ( $stored as $key => $raw_data ) {
 			if ( ! is_string( $key ) || '' === $key ) {
 				continue;
 			}
-			if ( ! is_array( $raw_data ) || empty( array_intersect( self::SCHEMA_KEYS, array_keys( $raw_data ) ) ) ) {
-				$has_legacy_entries = true;
+			if ( ! is_array( $raw_data ) || empty( array_intersect( self::SCHEMA_KEYS, array_keys( $raw_data ) ) ) || self::needs_source_date_format( $raw_data ) ) {
+				$needs_live_schema = true;
 				break;
 			}
 		}
@@ -627,7 +648,7 @@ abstract class Integration {
 		// Resolve the live provider list once, only when at least one entry needs it.
 		// On API failure, fall back to the stored raw_data unchanged.
 		$live_by_key = [];
-		if ( $has_legacy_entries ) {
+		if ( $needs_live_schema ) {
 			$available = $this->get_available_incoming_fields();
 			if ( ! is_wp_error( $available ) && is_array( $available ) ) {
 				foreach ( $available as $available_field ) {
@@ -644,10 +665,16 @@ abstract class Integration {
 				continue;
 			}
 			$raw_data = is_array( $raw_data ) ? $raw_data : [];
-			if ( empty( array_intersect( self::SCHEMA_KEYS, array_keys( $raw_data ) ) ) && isset( $live_by_key[ $key ] ) ) {
-				// Stored entry is in the legacy shape — overlay the live schema while
-				// preserving any non-schema keys the publisher may have stored.
-				$raw_data = array_merge( $raw_data, $live_by_key[ $key ] );
+			if ( isset( $live_by_key[ $key ] ) ) {
+				if ( empty( array_intersect( self::SCHEMA_KEYS, array_keys( $raw_data ) ) ) ) {
+					// Stored entry is in the legacy shape — overlay the live schema while
+					// preserving any non-schema keys the publisher may have stored.
+					$raw_data = array_merge( $raw_data, $live_by_key[ $key ] );
+				} elseif ( self::needs_source_date_format( $raw_data ) ) {
+					// Fill in just the source format — the publisher's stored operator and
+					// the rest of the snapshot stay authoritative.
+					$raw_data['date_format'] = isset( $live_by_key[ $key ]['date_format'] ) ? $live_by_key[ $key ]['date_format'] : '';
+				}
 			}
 			$field = new Integrations\Incoming_Field( $key, $raw_data );
 			$field = $this->configure_incoming_field( $field );

@@ -95,6 +95,11 @@ class ActiveCampaignIntegrationsSchemaTest extends WP_UnitTestCase {
 				]
 			);
 			$this->assertSame( 'date_range', $mapped['matching_function'], "$type matching_function" );
+			// Declared explicitly even though ActiveCampaign always sends ISO: the
+			// consumer tells "declared as ISO" from "never stored, format unknown" by
+			// the key's presence, and refreshes the latter from the live schema.
+			$this->assertArrayHasKey( 'date_format', $mapped, "$type date_format" );
+			$this->assertSame( '', $mapped['date_format'], "$type date_format" );
 		}
 	}
 
@@ -172,7 +177,7 @@ class ActiveCampaignIntegrationsSchemaTest extends WP_UnitTestCase {
 				'descript' => 'Picked at signup',
 			]
 		);
-		foreach ( [ 'key', 'name', 'value_type', 'matching_function', 'options', 'description', 'is_access_rule', 'is_segment_criteria' ] as $key ) {
+		foreach ( [ 'key', 'name', 'value_type', 'matching_function', 'date_format', 'options', 'description', 'is_access_rule', 'is_segment_criteria' ] as $key ) {
 			$this->assertArrayHasKey( $key, $mapped );
 		}
 		$this->assertSame( 'FAVCOLOR', $mapped['key'] );

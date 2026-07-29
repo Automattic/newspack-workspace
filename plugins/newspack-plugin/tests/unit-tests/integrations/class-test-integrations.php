@@ -2222,4 +2222,145 @@ class Test_Integrations extends \WP_UnitTestCase {
 		// Not ISO-shaped: returned verbatim rather than misread American-first.
 		$this->assertSame( '03/04/2026', Contact_Pull::normalize_date_value( '03/04/2026' ) );
 	}
+
+	/**
+	 * PHP's general parser rolls an impossible calendar date over into a valid one
+	 * rather than failing — `2026-02-30` becomes `2026-03-02`. A rolled-over value
+	 * is well-formed ISO, so nothing downstream can tell it from a real date and no
+	 * later pull repairs it; it has to stay untouched so the matcher fails closed.
+	 */
+	public function test_normalize_date_value_rejects_impossible_calendar_dates() {
+		$this->assertSame( '2026-02-30', Contact_Pull::normalize_date_value( '2026-02-30' ) );
+		$this->assertSame( '2026-04-31', Contact_Pull::normalize_date_value( '2026-04-31' ) );
+		$this->assertSame( '2026-00-10', Contact_Pull::normalize_date_value( '2026-00-10' ) );
+
+		// Real dates at the edges still normalize, including a leap day.
+		$this->assertSame( '2024-02-29', Contact_Pull::normalize_date_value( '2024-02-29' ) );
+		$this->assertSame( '2026-12-31', Contact_Pull::normalize_date_value( '2026-12-31' ) );
+		$this->assertSame( '2026-01-01', Contact_Pull::normalize_date_value( '2026-01-01' ) );
+	}
+
+	/**
+	 * When a declared format doesn't fit, the value must not fall through to PHP's
+	 * general parser — that is the American-first misread the declared format
+	 * exists to prevent. Only an already ISO-shaped value is allowed through, which
+	 * keeps the legitimate rescue (an ISO value arriving under a slash format).
+	 */
+	public function test_normalize_date_value_declared_format_miss_does_not_fall_through() {
+		// Trailing time under a slash format: 'd/m/Y' means 3 April, and the general
+		// parser would read it as March 4.
+		$this->assertSame( '03/04/2026 00:00:00', Contact_Pull::normalize_date_value( '03/04/2026 00:00:00', 'd/m/Y' ) );
+
+		// Month 30 under 'd/m/Y' is not a date in any reading.
+		$this->assertSame( '02/30/2026', Contact_Pull::normalize_date_value( '02/30/2026', 'd/m/Y' ) );
+
+		// Relative expressions are not dates the provider sent.
+		$this->assertSame( 'tomorrow', Contact_Pull::normalize_date_value( 'tomorrow', 'm/d/Y' ) );
+		$this->assertSame( 'friday', Contact_Pull::normalize_date_value( 'friday', 'm/d/Y' ) );
+
+		// The rescue still works: an ISO value under a declared slash format.
+		$this->assertSame( '2026-01-15', Contact_Pull::normalize_date_value( '2026-01-15', 'd/m/Y' ) );
+	}
+
+	/**
+	 * `date_format` is not a schema key, so an entry saved between the schema
+	 * expansion and the arrival of source formats looks current and is never
+	 * refreshed — leaving the pull unable to normalize and the criterion matching
+	 * nobody. An entry set to date range with no stored format gets one overlaid
+	 * from the live provider schema.
+	 */
+	public function test_get_enabled_incoming_fields_overlays_missing_source_date_format() {
+		$integration = new class( 'date-format-overlay', 'Date Format Overlay' ) extends Sample_Integration {
+			/**
+			 * Live provider schema, which now declares a source format.
+			 *
+			 * @return Incoming_Field[]
+			 */
+			public function get_available_incoming_fields() {
+				return [
+					( new Incoming_Field(
+						'last_gift',
+						[
+							'key'               => 'last_gift',
+							'name'              => 'Last Gift',
+							'value_type'        => 'date',
+							'matching_function' => 'date_range',
+							'date_format'       => 'd/m/Y',
+						]
+					) ),
+				];
+			}
+		};
+
+		// Stored as it would have been before source formats existed: current schema
+		// keys present, so not "legacy", but no date_format.
+		\update_option(
+			'newspack_integration_incoming_fields_date-format-overlay',
+			[
+				'last_gift' => [
+					'key'               => 'last_gift',
+					'name'              => 'Last Gift',
+					'value_type'        => 'date',
+					'matching_function' => 'date_range',
+				],
+			]
+		);
+
+		$fields = $integration->get_enabled_incoming_fields();
+
+		$this->assertCount( 1, $fields );
+		// Asserted on raw data because that is what the overlay writes and what
+		// ESP::configure_incoming_field() reads to call set_date_format(); the base
+		// Incoming_Field constructor does not hydrate typed properties from it.
+		$raw = $fields[0]->get_raw_data();
+		$this->assertSame( 'd/m/Y', $raw['date_format'] );
+		// The publisher's stored operator is untouched by the overlay.
+		$this->assertSame( 'date_range', $fields[0]->get_matching_function() );
+	}
+
+	/**
+	 * The overlay is keyed on the format being absent, not empty. A provider that
+	 * sends ISO stores `''` explicitly, and that entry is already complete — it
+	 * must not trigger a live provider fetch on every read.
+	 */
+	public function test_get_enabled_incoming_fields_keeps_declared_empty_date_format() {
+		$integration = new class( 'date-format-declared', 'Date Format Declared' ) extends Sample_Integration {
+			/**
+			 * How many times the live provider list was fetched.
+			 *
+			 * @var int
+			 */
+			public $fetch_count = 0;
+
+			/**
+			 * Count fetches so the test can assert the gating actually skipped one.
+			 *
+			 * @return Incoming_Field[]
+			 */
+			public function get_available_incoming_fields() {
+				$this->fetch_count++;
+				return [];
+			}
+		};
+
+		\update_option(
+			'newspack_integration_incoming_fields_date-format-declared',
+			[
+				'last_gift' => [
+					'key'               => 'last_gift',
+					'name'              => 'Last Gift',
+					'value_type'        => 'date',
+					'matching_function' => 'date_range',
+					'date_format'       => '',
+				],
+			]
+		);
+
+		$fields = $integration->get_enabled_incoming_fields();
+
+		$this->assertCount( 1, $fields );
+		$raw = $fields[0]->get_raw_data();
+		$this->assertSame( '', $raw['date_format'] );
+		$this->assertSame( 0, $integration->fetch_count, 'A complete entry must not trigger a live provider fetch.' );
+	}
 }
