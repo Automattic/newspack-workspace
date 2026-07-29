@@ -17,9 +17,6 @@
 	},
 	"license": "GPL-2.0-or-later",
 	"scripts": {
-		"post-update-cmd": [
-			"vendor/bin/cghooks update"
-		],
 		"test-with-coverage": [
 			"XDEBUG_MODE=coverage vendor/bin/phpunit --coverage-html codecov"
 		]

@@ -15,9 +15,6 @@
 	"license": "GPL-2.0-or-later",
 	"scripts": {
 		"pre-push": "./.hooks/pre-push",
-		"post-update-cmd": [
-			"vendor/bin/cghooks update"
-		],
 		"lint": "phpcs ./"
 	},
 	"extra": {},

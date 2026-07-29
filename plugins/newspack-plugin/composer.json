@@ -27,11 +27,6 @@
 			"includes"
 		]
 	},
-	"scripts": {
-		"post-update-cmd": [
-			"vendor/bin/cghooks update"
-		]
-	},
 	"extra": {
 		"installer-paths": {
 			"vendor/{$vendor}/{$name}": [

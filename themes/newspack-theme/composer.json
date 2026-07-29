@@ -20,7 +20,6 @@
 		"lint": "@php ./vendor/squizlabs/php_codesniffer/bin/phpcs",
 		"format": "@php ./vendor/squizlabs/php_codesniffer/bin/phpcbf",
 		"post-update-cmd": [
-			"vendor/bin/cghooks update",
 			"PHPStan\\WordPress\\Composer\\FixWpStubs::php73Polyfill"
 		]
 	},
