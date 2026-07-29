@@ -8,6 +8,7 @@ import {
 	selectPickerForm,
 	resolveCheckoutButtonForm,
 	copyContextFields,
+	applyContextFields,
 	PICKER_CONTEXT_FIELDS,
 } from './checkout-button-trigger';
 
@@ -227,6 +228,28 @@ describe( 'resolveCheckoutButtonForm', () => {
 		expect( pickerForm.querySelector( 'input[name="after_success_button_label"]' ).value ).toBe( 'Thanks!' );
 		expect( pickerForm.querySelector( 'input[name="after_success_url"]' ).value ).toBe( '/welcome/' );
 	} );
+
+	// A button locked to one variation was configured for that variation, so its
+	// coupon should not follow the reader to a different one when an unlocked
+	// button for the same product is available to supply the context instead.
+	it( 'prefers an unlocked button over a variation-locked one for the picker context', () => {
+		const locked = `<div class="wp-block-newspack-blocks-checkout-button"><form data-checkout='${ JSON.stringify( {
+			product_id: '1406',
+			variation_id: '1408',
+			is_variable: true,
+		} ) }'><input type="hidden" name="coupon" value="LOCKED20"><button type="submit">Annual</button></form></div>`;
+		const unlocked = `<div class="wp-block-newspack-blocks-checkout-button"><form data-checkout='${ JSON.stringify( {
+			product_id: '1406',
+			is_variable: true,
+		} ) }'><input type="hidden" name="coupon" value="ANYTIER5"><button type="submit">Subscribe</button></form></div>`;
+		const root = render( locked + unlocked + variationPicker( '1406', [ '1407', '1408', '1409' ] ) );
+		const pickerForm = root.querySelector( `.${ VARIATION_MODAL_CLASS_PREFIX } form` );
+
+		const result = resolveCheckoutButtonForm( root, '1406', '1407', PICKER_OPTIONS );
+
+		expect( result ).toBe( pickerForm );
+		expect( pickerForm.querySelector( 'input[name="coupon"]' ).value ).toBe( 'ANYTIER5' );
+	} );
 } );
 
 describe( 'copyContextFields', () => {
@@ -279,6 +302,72 @@ describe( 'copyContextFields', () => {
 		copyContextFields( root.querySelector( '#src' ), root.querySelector( '#dst' ) );
 
 		expect( root.querySelector( '#dst input[name="coupon"]' ).value ).toBe( 'MEMBER10' );
+	} );
+} );
+
+describe( 'applyContextFields', () => {
+	// The picker is rendered once per parent product and shared by every button
+	// targeting it, and nothing clears it when the modal closes. These two cases
+	// are what the click path gets wrong if the stamp is not authoritative.
+	const picker = () => render( '<form id="picker"></form>' ).querySelector( '#picker' );
+	const couponValue = form => {
+		const input = form.querySelector( 'input[name="coupon"]' );
+		return input ? input.value : null;
+	};
+
+	it( 'replaces a coupon left behind by a previously clicked button', () => {
+		const form = picker();
+
+		applyContextFields( form, { coupon: 'SAVE20' } );
+		applyContextFields( form, { coupon: 'MEMBER10' } );
+
+		expect( couponValue( form ) ).toBe( 'MEMBER10' );
+		expect( form.querySelectorAll( 'input[name="coupon"]' ) ).toHaveLength( 1 );
+	} );
+
+	it( 'clears the coupon when the clicked button has none', () => {
+		const form = picker();
+
+		applyContextFields( form, { coupon: 'SAVE20' } );
+		applyContextFields( form, {} );
+
+		expect( couponValue( form ) ).toBeNull();
+	} );
+
+	it( 'does not leave an empty coupon input that would block a later button', () => {
+		const form = picker();
+
+		applyContextFields( form, {} );
+		applyContextFields( form, { coupon: 'SAVE20' } );
+
+		expect( couponValue( form ) ).toBe( 'SAVE20' );
+	} );
+
+	it( 'stamps the after-success and attribution context', () => {
+		const form = picker();
+
+		applyContextFields( form, { after_success_behavior: 'custom', gate_post_id: 12, prompt_title: '' } );
+
+		expect( form.querySelector( 'input[name="after_success_behavior"]' ).value ).toBe( 'custom' );
+		expect( form.querySelector( 'input[name="gate_post_id"]' ).value ).toBe( '12' );
+		expect( form.querySelector( 'input[name="prompt_title"]' ) ).toBeNull();
+	} );
+
+	it( 'leaves the picker’s own fields alone', () => {
+		const form = render(
+			'<form id="picker"><input type="hidden" name="newspack_checkout" value="1"><input type="radio" name="product_id" value="9"></form>'
+		).querySelector( '#picker' );
+
+		applyContextFields( form, { coupon: 'SAVE20' } );
+
+		expect( form.querySelector( 'input[name="newspack_checkout"]' ).value ).toBe( '1' );
+		expect( form.querySelector( 'input[name="product_id"]' ).value ).toBe( '9' );
+	} );
+
+	it( 'does not throw on a null form or missing data', () => {
+		const form = picker();
+		expect( () => applyContextFields( null, { coupon: 'X' } ) ).not.toThrow();
+		expect( () => applyContextFields( form, null ) ).not.toThrow();
 	} );
 } );
 
