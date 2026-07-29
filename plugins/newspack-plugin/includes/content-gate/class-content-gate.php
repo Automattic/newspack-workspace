@@ -86,6 +86,19 @@ class Content_Gate {
 	 * {@see self::replace_restricted_content()} claims the slot on the way in, so a
 	 * leftover is overwritten rather than mistaken for the pass now running.
 	 *
+	 * What depth cannot establish on its own is that the pass holding the entry is
+	 * the one that substituted, so {@see self::handle_restricted_content()} pairs it
+	 * with the substitution filter still being registered. That stands in for the
+	 * substitution having run in every ordinary execution, since priorities run
+	 * ascending and core does not revisit one it has passed. Defeating it takes four
+	 * coincident manipulations of this class's own filters: the substitution filter
+	 * removed before self::RESTRICTION_PRIORITY, then re-added by a callback above
+	 * it, over a leftover entry at this same depth, on a restricted post. Short of
+	 * all four the mismatch falls through to the stored teaser and gate, so the
+	 * failure mode this guards against — publishing a restricted body — needs a
+	 * plugin manipulating these filters deliberately rather than an integration
+	 * merely filtering content.
+	 *
 	 * @var array<int, int>
 	 */
 	private static array $pending_gates = [];
@@ -362,8 +375,9 @@ class Content_Gate {
 		// The post is taken from the entry rather than from get_the_ID(), which a
 		// callback may have moved off the post whose teaser is in hand; and the
 		// entry is trusted only while the substitution is still registered, since
-		// without it no pass can have substituted and the body in hand is the
-		// unrestricted post.
+		// short of that filter being removed and re-added mid-chain no pass can
+		// have substituted, and the body in hand is the unrestricted post. See
+		// self::$pending_gates for what that proxy does and does not establish.
 		if (
 			null !== $substituted_id
 			&& isset( self::$restricted_content[ $substituted_id ] )
