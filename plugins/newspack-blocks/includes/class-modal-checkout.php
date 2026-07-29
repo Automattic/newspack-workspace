@@ -1131,9 +1131,6 @@ final class Modal_Checkout {
 			'newspackBlocksModal',
 			[
 				'ajax_url'                        => admin_url( 'admin-ajax.php' ),
-				// Resolved server-side so the frontend never assembles a REST path,
-				// which also keeps it correct without pretty permalinks.
-				'coupon_pricing_url'              => rest_url( 'newspack-blocks/v1/checkout-button/coupon-pricing' ),
 				'checkout_registration_flag'      => self::CHECKOUT_REGISTRATION_FLAG,
 				'newspack_class_prefix'           => self::get_class_prefix(),
 				'is_registration_required'        => self::is_registration_required(),

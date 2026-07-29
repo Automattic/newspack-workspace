@@ -520,8 +520,7 @@ class Subscriptions_Tiers {
 				<span class="newspack-ui__helper-text"><?php echo $description; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></span>
 			<?php endif; ?>
 			<?php if ( $price ) : ?>
-				<?php // Distinct class so consumers can find the price: the description above uses newspack-ui__helper-text too. ?>
-				<span class="newspack-ui__helper-text newspack__subscription-tiers__price"><?php echo $price; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></span>
+				<span class="newspack-ui__helper-text"><?php echo $price; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></span>
 			<?php endif; ?>
 		</label>
 		<?php
