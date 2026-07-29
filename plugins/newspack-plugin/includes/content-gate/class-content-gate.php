@@ -27,14 +27,14 @@ class Content_Gate {
 	 *
 	 * @var boolean
 	 */
-	private static $gate_rendered = false;
+	private static bool $gate_rendered = false;
 
 	/**
 	 * Whether the gate is being rendered.
 	 *
 	 * @var boolean
 	 */
-	private static $is_gated = false;
+	private static bool $is_gated = false;
 
 	/**
 	 * Whether the queried post's content is locked for the current reader, i.e.
@@ -49,28 +49,80 @@ class Content_Gate {
 	 *
 	 * @var boolean
 	 */
-	private static $is_content_locked = false;
+	private static bool $is_content_locked = false;
 
 	/**
 	 * Valid gate post statuses.
 	 *
 	 * @var array
 	 */
-	public static $valid_gate_post_statuses = [ 'publish', 'draft', 'pending', 'future', 'private', 'trash' ];
+	public static array $valid_gate_post_statuses = [ 'publish', 'draft', 'pending', 'future', 'private', 'trash' ];
 
 	/**
-	 * Restricted content per post ID.
+	 * Rendered pieces of each restricted post, keyed by post ID: the teaser and the
+	 * gate HTML. Held separately so the teaser can be handed to the remaining
+	 * 'the_content' filters without exposing the gate HTML to them.
 	 *
-	 * @var string[]
+	 * @var array<int, array{teaser: string, gate: string}>
 	 */
-	private static $restricted_content = [];
+	private static array $restricted_content = [];
+
+	/**
+	 * Post ID whose teaser has been substituted into an in-flight 'the_content'
+	 * pass and whose gate is still to be appended, keyed by that pass's nesting
+	 * depth.
+	 *
+	 * Keyed per pass rather than held as a single flag because 'the_content' nests:
+	 * a callback registered after self::RESTRICTION_PRIORITY may run
+	 * apply_filters( 'the_content', … ) itself, and core runs the whole callback
+	 * list again for that inner pass. Sharing one slot, the inner pass would consume
+	 * the outer pass's state, and the outer pass would then fall back to unfiltered
+	 * markup, silently discarding the third-party filtering this substitution exists
+	 * to preserve.
+	 *
+	 * Depth is also what keeps the bookkeeping self-cleaning. Neither filter is
+	 * exception-safe — a callback throwing in between leaves the entry behind — but
+	 * an entry can only ever be read by another pass at that exact depth, and
+	 * {@see self::replace_restricted_content()} claims the slot on the way in, so a
+	 * leftover is overwritten rather than mistaken for the pass now running.
+	 *
+	 * What depth cannot establish on its own is that the pass holding the entry is
+	 * the one that substituted, so {@see self::handle_restricted_content()} pairs it
+	 * with the substitution filter still being registered. That stands in for the
+	 * substitution having run in every ordinary execution, since priorities run
+	 * ascending and core does not revisit one it has passed. Defeating it takes four
+	 * coincident manipulations of this class's own filters: the substitution filter
+	 * removed before self::RESTRICTION_PRIORITY, then re-added by a callback above
+	 * it, over a leftover entry at this same depth, on a restricted post. Short of
+	 * all four the mismatch falls through to the stored teaser and gate, so the
+	 * failure mode this guards against — publishing a restricted body — needs a
+	 * plugin manipulating these filters deliberately rather than an integration
+	 * merely filtering content.
+	 *
+	 * @var array<int, int>
+	 */
+	private static array $pending_gates = [];
+
+	/**
+	 * Priority at which a restricted post's content is swapped for its teaser.
+	 *
+	 * Woo Memberships restricted content at 999. Matching it keeps integrations
+	 * built against Memberships working once a site moves to Access Control, which
+	 * is the reason for substituting here rather than at the end of the chain.
+	 *
+	 * Note the boundary this draws: callbacks at or below this priority still
+	 * receive the full restricted post and their output is still replaced. That is
+	 * the behavior Memberships had, but it means an integration gating its own
+	 * embeds at the default priority of 10 is not covered by this.
+	 */
+	const RESTRICTION_PRIORITY = 999;
 
 	/**
 	 * Whether the overlay gate markup has been output in this execution.
 	 *
 	 * @var boolean
 	 */
-	private static $overlay_gate_output = false;
+	private static bool $overlay_gate_output = false;
 
 	/**
 	 * Initialize hooks and filters.
@@ -88,6 +140,7 @@ class Content_Gate {
 		add_filter( 'newspack_reader_activity_article_view', [ __CLASS__, 'suppress_article_view_activity' ], 100 );
 
 		add_action( 'the_post', [ __CLASS__, 'restrict_post' ], 10, 2 );
+		add_filter( 'the_content', [ __CLASS__, 'replace_restricted_content' ], self::RESTRICTION_PRIORITY );
 		add_filter( 'the_content', [ __CLASS__, 'handle_restricted_content' ], PHP_INT_MAX );
 		add_filter( 'comments_open', [ __CLASS__, 'filter_comments_open' ], 10, 2 );
 		add_filter( 'comments_array', [ __CLASS__, 'filter_comments_array' ], 10, 2 );
@@ -236,30 +289,130 @@ class Content_Gate {
 		self::$is_gated          = true;
 		self::$is_content_locked = true;
 
-		$content = self::get_restricted_post_excerpt( $post );
+		$content   = self::get_restricted_post_excerpt( $post );
+		$gate_html = self::get_inline_gate_html();
 
-		$post->post_content   = $content . self::get_inline_gate_html();
+		// Note that this does not feed the 'the_content' chain: core generates the
+		// post's page data before firing 'the_post', so the chain is handed the
+		// original body regardless. The assignment is for the other readers of the
+		// global post object, and is why the filters below have to substitute the
+		// teaser themselves.
+		$post->post_content   = $content . $gate_html;
 		$post->post_excerpt   = $content;
 		$post->comment_status = 'closed';
 		$post->comment_count  = 0;
 
-		self::$restricted_content[ $post->ID ] = $post->post_content;
+		self::$restricted_content[ $post->ID ] = [
+			'teaser' => $content,
+			'gate'   => $gate_html,
+		];
 
 		self::mark_gate_as_rendered();
 	}
 
 	/**
-	 * Handle restricted post content filtering.
+	 * Substitute a restricted post's content for its teaser, early enough that the
+	 * remaining 'the_content' filters still run over it.
+	 *
+	 * Third-party integrations gate their own embeds on 'the_content' – the Everlit
+	 * audio player, which registers at priority 999999, is the known case. Handing
+	 * them the teaser lets their gating compose with the paywall the way it did
+	 * under Woo Memberships, whose restriction filter ran at 999. Returning the
+	 * full post here and discarding the filtered result instead would leave those
+	 * embeds ungated on restricted posts.
+	 *
+	 * The gate HTML is deliberately excluded; {@see self::handle_restricted_content()}
+	 * appends it once every other filter has run, so neither a callback at a lower
+	 * priority nor one registered at PHP_INT_MAX before this class hooks in can
+	 * rewrite the gate markup itself. A PHP_INT_MAX callback registered afterwards
+	 * does run last within that priority and does see the gate; nothing but
+	 * registration order separates the two, so this is a boundary against ordinary
+	 * integrations rather than against a plugin that means to reach the markup.
 	 *
 	 * @param string $content Content.
 	 *
 	 * @return string
 	 */
-	public static function handle_restricted_content( $content ) {
-		if ( ! isset( self::$restricted_content[ get_the_ID() ] ) ) {
+	public static function replace_restricted_content( $content ) {
+		$post_id = get_the_ID();
+		$depth   = self::get_content_filter_depth();
+
+		// Claim this pass's slot before anything else, so an entry a previous pass
+		// at this depth left behind – a callback between the two filters throwing,
+		// with the exception caught upstream – cannot be read as if it belonged to
+		// this pass.
+		unset( self::$pending_gates[ $depth ] );
+
+		if ( ! isset( self::$restricted_content[ $post_id ] ) ) {
 			return $content;
 		}
-		return self::$restricted_content[ get_the_ID() ];
+
+		self::$pending_gates[ $depth ] = $post_id;
+		return self::$restricted_content[ $post_id ]['teaser'];
+	}
+
+	/**
+	 * Append the gate to a restricted post after all other content filters have run.
+	 *
+	 * @param string $content Content, expected to be the teaser as returned by
+	 *                        {@see self::replace_restricted_content()} and processed
+	 *                        by any later 'the_content' filters.
+	 *
+	 * @return string
+	 */
+	public static function handle_restricted_content( $content ) {
+		$post_id = get_the_ID();
+		$depth   = self::get_content_filter_depth();
+
+		$substituted_id = self::$pending_gates[ $depth ] ?? null;
+		unset( self::$pending_gates[ $depth ] );
+
+		// Close only a substitution this same pass opened, which the nesting depth
+		// is what establishes. A later filter may run 'the_content' again – related
+		// posts, summaries – and that inner pass gets a depth of its own, so it can
+		// neither consume this pass's pending gate nor be handed it.
+		//
+		// The post is taken from the entry rather than from get_the_ID(), which a
+		// callback may have moved off the post whose teaser is in hand; and the
+		// entry is trusted only while the substitution is still registered, since
+		// short of that filter being removed and re-added mid-chain no pass can
+		// have substituted, and the body in hand is the unrestricted post. See
+		// self::$pending_gates for what that proxy does and does not establish.
+		if (
+			null !== $substituted_id
+			&& isset( self::$restricted_content[ $substituted_id ] )
+			&& has_filter( 'the_content', [ __CLASS__, 'replace_restricted_content' ] )
+		) {
+			return $content . self::$restricted_content[ $substituted_id ]['gate'];
+		}
+
+		if ( ! isset( self::$restricted_content[ $post_id ] ) ) {
+			return $content;
+		}
+
+		// The teaser substitution did not run for this pass, most likely because
+		// another plugin removed or short-circuited the filter. Core hands this
+		// chain the unrestricted post body, so return the stored gated markup
+		// rather than appending the gate to what is in hand, which would publish
+		// the restricted post.
+		return self::$restricted_content[ $post_id ]['teaser'] . self::$restricted_content[ $post_id ]['gate'];
+	}
+
+	/**
+	 * Nesting depth of the 'the_content' pass currently running: 1 for an ordinary
+	 * render, deeper when a callback runs the filter again from inside it.
+	 *
+	 * Core pushes the hook name onto $wp_current_filter for the duration of each
+	 * pass, so counting the entries is the one reading of the depth that cannot
+	 * disagree with the chain actually being run.
+	 *
+	 * @return int
+	 */
+	private static function get_content_filter_depth() {
+		if ( empty( $GLOBALS['wp_current_filter'] ) || ! is_array( $GLOBALS['wp_current_filter'] ) ) {
+			return 0;
+		}
+		return count( array_keys( $GLOBALS['wp_current_filter'], 'the_content', true ) );
 	}
 
 	/**
