@@ -258,14 +258,14 @@ class Contact_Pull {
 	 * data to satisfy a format. The matcher fails closed on non-ISO values, and the
 	 * reader's next pull repairs the entry.
 	 *
-	 * A genuinely empty format additionally requires the value to already be
-	 * ISO-shaped before it's handed to the general parser. Empty means either
-	 * "ActiveCampaign, which sends ISO 8601" or "a field enabled before source
-	 * formats existed and never refreshed with the provider's schema" — those are
-	 * indistinguishable here, and PHP's general parser reads an ambiguous
-	 * slash-separated date American-first, so trusting it on the latter risks a
-	 * confident wrong answer (Mailchimp DD/MM/YYYY landing months off) rather than
-	 * the untouched value the matcher fails closed on.
+	 * PHP's general parser is only ever handed an already ISO-shaped value, whether
+	 * or not a format was declared. It reads an ambiguous slash-separated date
+	 * American-first, so a Mailchimp DD/MM/YYYY value reaching it would land months
+	 * off; and it silently rolls an impossible calendar date over (`2026-02-30`
+	 * becomes `2026-03-02`) instead of failing. Both produce a confident wrong
+	 * answer, which is strictly worse than the untouched value the matcher fails
+	 * closed on. The ISO gate plus the round-trip check below keep every such case
+	 * on the "return it unchanged" path.
 	 *
 	 * @param mixed  $value      Raw value from the integration.
 	 * @param string $format     Source format as a PHP date format string. Empty means
@@ -291,15 +291,23 @@ class Contact_Pull {
 			if ( is_array( $errors ) && ( ! empty( $errors['warning_count'] ) || ! empty( $errors['error_count'] ) ) ) {
 				$date = false;
 			}
-		} elseif ( ! self::is_iso_shaped_date( $trimmed ) ) {
-			return $value;
 		}
 
 		if ( false === $date ) {
-			// Declared format didn't fit, or there was none and the value is ISO-shaped.
+			// Reached when no format was declared, or when a declared one didn't fit.
+			// An ISO value arriving under a declared slash format is the legitimate
+			// rescue here; anything else is ambiguous and must not be guessed at.
+			if ( ! self::is_iso_shaped_date( $trimmed ) ) {
+				return $value;
+			}
 			try {
 				$date = new \DateTimeImmutable( $trimmed );
 			} catch ( \Exception $e ) {
+				return $value;
+			}
+			// The parser rolls an out-of-calendar day over rather than throwing, so
+			// the date part has to survive the round trip to be trusted.
+			if ( $date->format( 'Y-m-d' ) !== substr( $trimmed, 0, 10 ) ) {
 				return $value;
 			}
 		}
@@ -309,15 +317,18 @@ class Contact_Pull {
 
 	/**
 	 * Whether a string is already ISO-shaped: a `YYYY-MM-DD` date, optionally
-	 * followed by a time component. Gates the empty-format fallback parse in
+	 * followed by a time component. Gates the fallback parse in
 	 * normalize_date_value() so an ambiguous non-ISO value isn't handed to PHP's
 	 * general parser, which reads slash-separated dates American-first.
+	 *
+	 * Month and day are bounded rather than merely digit-shaped, matching the
+	 * client matcher's ISO_DATE and the segment criteria schema pattern.
 	 *
 	 * @param string $value Trimmed candidate value.
 	 * @return bool
 	 */
 	private static function is_iso_shaped_date( $value ) {
-		return 1 === preg_match( '/^\d{4}-\d{2}-\d{2}([T\s].*)?$/', $value );
+		return 1 === preg_match( '/^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])([T\s].*)?$/', $value );
 	}
 
 	/**
@@ -357,7 +368,24 @@ class Contact_Pull {
 				// rule or segment matching the literal string keeps working unless the
 				// publisher deliberately switches the operator.
 				if ( ( 'date' === $value_type || 'datetime' === $value_type ) && 'date_range' === $field->get_matching_function() ) {
-					$value = self::normalize_date_value( $value, $field->get_date_format(), $value_type );
+					$normalized = self::normalize_date_value( $value, $field->get_date_format(), $value_type );
+					// A non-empty value that comes back still not ISO-shaped is the
+					// fail-closed path: the matcher rejects it, so the segment silently
+					// matches nobody. That is indistinguishable from "no reader qualifies"
+					// out in the admin, so say so here — it is the only signal that the
+					// provider's declared source format is missing or wrong.
+					if ( is_string( $normalized ) && '' !== trim( $normalized ) && ! self::is_iso_shaped_date( trim( $normalized ) ) ) {
+						Logger::log(
+							sprintf(
+								'Date field "%s" from %s could not be normalized (source format: %s); it will not match any date range.',
+								$key,
+								$integration->get_id(),
+								'' === $field->get_date_format() ? 'none declared' : $field->get_date_format()
+							),
+							self::LOGGER_HEADER
+						);
+					}
+					$value = $normalized;
 				}
 				\Newspack\Reader_Data::update_item( $user_id, $key, wp_json_encode( $value ) );
 			}
