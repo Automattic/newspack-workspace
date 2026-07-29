@@ -288,7 +288,7 @@ $field = new Incoming_Field( 'membership_level', $raw );
 $field
     ->set_name( __( 'Membership Level', 'my-plugin' ) )
     ->set_value_type( 'string' )                    // 'string' or 'boolean'.
-    ->set_matching_function( 'list__in' )           // 'default', 'list__in', 'list__not_in', 'range'.
+    ->set_matching_function( 'list__in' )           // 'default', 'list__in', 'list__not_in', 'range', 'date_range'.
     ->set_options( [ [ 'value' => 'gold', 'label' => 'Gold' ], ... ] )
     ->set_description( __( 'Member tier from the CRM.', 'my-plugin' ) )
     ->set_is_access_rule( true )                    // Register as a content gate access rule.

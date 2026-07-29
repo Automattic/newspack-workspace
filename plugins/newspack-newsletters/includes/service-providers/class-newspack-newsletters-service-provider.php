@@ -1012,10 +1012,16 @@ Error message(s) received:
 	 *   - key (string, required): Machine key for the field. Used as the Incoming_Field key.
 	 *   - name (string): Human-readable label. Defaults to the key.
 	 *   - value_type (string): Defaults to 'string'. The Incoming_Field setter accepts other values
-	 *       (e.g. 'boolean'); current providers only emit 'string'.
+	 *       (e.g. 'boolean', 'number', 'select', 'multiselect'); Mailchimp and ActiveCampaign also
+	 *       emit 'date' and 'datetime' for date-typed merge/custom fields.
 	 *   - matching_function (string): Defaults to 'default' (strict equality). Use 'list__in' for
-	 *       multi-select fields whose stored value is a delimited list. The consumer also
-	 *       recognizes 'list__not_in' and 'range', though no current provider emits them.
+	 *       multi-select fields whose stored value is a delimited list, or 'date_range' for a
+	 *       'date'/'datetime' field to offer publishers a { start, end } window operator. The
+	 *       consumer also recognizes 'list__not_in' and 'range', though no current provider emits them.
+	 *   - date_format (string): PHP date format string describing how the provider renders a
+	 *       'date'/'datetime' field's value (e.g. 'm/d/Y'). Empty or omitted means the provider
+	 *       already sends ISO 8601 / 'Y-m-d', which is what ActiveCampaign does; a provider whose
+	 *       dates are not already ISO must declare this or incoming values may be misparsed.
 	 *   - options (array): List of [ 'value' => ..., 'label' => ... ] pairs for enumerated fields.
 	 *   - description (string): Optional help text surfaced in the admin UI.
 	 *   - is_access_rule (bool): Whether the field is eligible as a content-gate access rule by default.
