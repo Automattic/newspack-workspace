@@ -258,6 +258,15 @@ class Contact_Pull {
 	 * data to satisfy a format. The matcher fails closed on non-ISO values, and the
 	 * reader's next pull repairs the entry.
 	 *
+	 * A genuinely empty format additionally requires the value to already be
+	 * ISO-shaped before it's handed to the general parser. Empty means either
+	 * "ActiveCampaign, which sends ISO 8601" or "a field enabled before source
+	 * formats existed and never refreshed with the provider's schema" — those are
+	 * indistinguishable here, and PHP's general parser reads an ambiguous
+	 * slash-separated date American-first, so trusting it on the latter risks a
+	 * confident wrong answer (Mailchimp DD/MM/YYYY landing months off) rather than
+	 * the untouched value the matcher fails closed on.
+	 *
 	 * @param mixed  $value      Raw value from the integration.
 	 * @param string $format     Source format as a PHP date format string. Empty means
 	 *                           the provider already sends ISO 8601 / Y-m-d.
@@ -282,10 +291,12 @@ class Contact_Pull {
 			if ( is_array( $errors ) && ( ! empty( $errors['warning_count'] ) || ! empty( $errors['error_count'] ) ) ) {
 				$date = false;
 			}
+		} elseif ( ! self::is_iso_shaped_date( $trimmed ) ) {
+			return $value;
 		}
 
 		if ( false === $date ) {
-			// No declared format, or the declared one didn't fit. ISO parses here.
+			// Declared format didn't fit, or there was none and the value is ISO-shaped.
 			try {
 				$date = new \DateTimeImmutable( $trimmed );
 			} catch ( \Exception $e ) {
@@ -294,6 +305,19 @@ class Contact_Pull {
 		}
 
 		return $date->format( 'datetime' === $value_type ? \DateTimeInterface::ATOM : 'Y-m-d' );
+	}
+
+	/**
+	 * Whether a string is already ISO-shaped: a `YYYY-MM-DD` date, optionally
+	 * followed by a time component. Gates the empty-format fallback parse in
+	 * normalize_date_value() so an ambiguous non-ISO value isn't handed to PHP's
+	 * general parser, which reads slash-separated dates American-first.
+	 *
+	 * @param string $value Trimmed candidate value.
+	 * @return bool
+	 */
+	private static function is_iso_shaped_date( $value ) {
+		return 1 === preg_match( '/^\d{4}-\d{2}-\d{2}([T\s].*)?$/', $value );
 	}
 
 	/**

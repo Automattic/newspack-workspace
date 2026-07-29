@@ -2202,4 +2202,24 @@ class Test_Integrations extends \WP_UnitTestCase {
 		$this->assertSame( 42, Contact_Pull::normalize_date_value( 42 ) );
 		$this->assertNull( Contact_Pull::normalize_date_value( null ) );
 	}
+
+	/**
+	 * A field enabled before this branch shipped has no stored date_format at all
+	 * (not even ActiveCampaign's implicit ''), because stored field data is only
+	 * refreshed from the provider when it has zero schema keys. With no format to
+	 * trust, only an already ISO-shaped value may fall through to PHP's general
+	 * parser — anything else risks the American-first slash-date misread (a
+	 * Mailchimp DD/MM/YYYY value silently landing eleven months wrong).
+	 */
+	public function test_normalize_date_value_without_format_requires_iso_shape() {
+		// ISO-shaped: normalizes via the general parser as before.
+		$this->assertSame( '2026-01-15', Contact_Pull::normalize_date_value( '2026-01-15' ) );
+		$this->assertSame(
+			'2026-01-15T23:30:00-06:00',
+			Contact_Pull::normalize_date_value( '2026-01-15T23:30:00-06:00', '', 'datetime' )
+		);
+
+		// Not ISO-shaped: returned verbatim rather than misread American-first.
+		$this->assertSame( '03/04/2026', Contact_Pull::normalize_date_value( '03/04/2026' ) );
+	}
 }
