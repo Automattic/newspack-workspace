@@ -220,6 +220,43 @@ final class Coupon_Pricing {
 	}
 
 	/**
+	 * The discount a coupon takes off a single item priced at $price.
+	 *
+	 * WC_Coupon::get_discount_amount() cannot be used here: it only resolves
+	 * `percent` without cart context. Its `fixed_cart` branch is gated on a cart
+	 * item plus WC()->cart->subtotal_ex_tax, and the types WooCommerce
+	 * Subscriptions adds are resolved by a filter that needs the cart too — so
+	 * both quietly return 0, reporting a real discount as no discount.
+	 *
+	 * Computing it per type is exact here because the modal checkout cart holds
+	 * exactly one line at quantity 1, which is what makes a cart-level discount
+	 * unambiguous: all of it lands on this item.
+	 *
+	 * @param \WC_Coupon $coupon Coupon.
+	 * @param float      $price  The item's price.
+	 *
+	 * @return float The discount, never more than the price.
+	 */
+	private static function calculate_discount( $coupon, $price ) {
+		$amount = (float) $coupon->get_amount();
+		if ( 0 >= $amount || 0 >= $price ) {
+			return 0.0;
+		}
+		switch ( $coupon->get_discount_type() ) {
+			case 'percent':
+			case 'recurring_percent':
+				return min( $price, $price * $amount / 100 );
+			case 'fixed_product':
+			case 'recurring_fee':
+			case 'fixed_cart':
+				return min( $price, $amount );
+			default:
+				// Sign-up-fee and renewal-only types leave the price on offer alone.
+				return 0.0;
+		}
+	}
+
+	/**
 	 * Price a single variation against the coupon.
 	 *
 	 * @param \WC_Product $child  Variation, or a childless product.
@@ -260,7 +297,7 @@ final class Coupon_Pricing {
 			return $declined;
 		}
 
-		$discount = (float) $coupon->get_discount_amount( $price );
+		$discount = self::calculate_discount( $coupon, $price );
 		if ( 0 >= $discount ) {
 			return $declined;
 		}
