@@ -351,31 +351,23 @@ function CheckoutButtonEdit( props ) {
 					{ newspack_blocks_data?.coupons_enabled && (
 						<>
 							{ /*
-							 * Newspack drops coupons from donation carts, so a coupon set here
-							 * is unlikely to reach the order. Warn rather than assert: the
-							 * check behind it does not engage on every checkout path. The
-							 * control stays rendered alongside the notice — the block emits
-							 * the stored code regardless of donation status, so hiding the
-							 * control would only remove the publisher's way to clear it.
+							 * Coupons are not supported on donation products. The control is
+							 * disabled rather than hidden so a code stored before the product
+							 * was swapped stays visible — and removable, since the block emits
+							 * it regardless of donation status.
 							 */ }
 							{ isDonation && (
 								<Notice status={ coupon ? 'warning' : 'info' } isDismissible={ false }>
 									{ coupon
 										? sprintf(
 												// translators: %s: the coupon code stored on the block.
-												__(
-													'Coupon "%s" is unlikely to be applied: donation carts normally discard coupons.',
-													'newspack-blocks'
-												),
+												__( 'Donation products do not support coupons. "%s" will not be applied.', 'newspack-blocks' ),
 												coupon
 										  )
-										: __(
-												'Donation carts normally discard coupons, so a coupon set here is unlikely to apply.',
-												'newspack-blocks'
-										  ) }
+										: __( 'Donation products do not support coupons.', 'newspack-blocks' ) }
 								</Notice>
 							) }
-							<CouponControl value={ coupon } onChange={ value => setAttributes( { coupon: value } ) } />
+							<CouponControl value={ coupon } onChange={ value => setAttributes( { coupon: value } ) } disabled={ isDonation } />
 						</>
 					) }
 					<WidthControl selectedWidth={ width } setAttributes={ setAttributes } />
