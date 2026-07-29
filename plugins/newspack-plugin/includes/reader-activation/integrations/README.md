@@ -287,8 +287,9 @@ The pull pipeline (`Contact_Pull` + `Contact_Cron`) runs on every logged-in page
 $field = new Incoming_Field( 'membership_level', $raw );
 $field
     ->set_name( __( 'Membership Level', 'my-plugin' ) )
-    ->set_value_type( 'string' )                    // 'string' or 'boolean'.
+    ->set_value_type( 'string' )                    // 'string', 'boolean', 'number', 'date', 'datetime', 'select', or 'multiselect'.
     ->set_matching_function( 'list__in' )           // 'default', 'list__in', 'list__not_in', 'range', 'date_range'.
+    ->set_date_format( '' )                         // PHP date format (e.g. 'm/d/Y'); empty if provider sends ISO 8601 / Y-m-d.
     ->set_options( [ [ 'value' => 'gold', 'label' => 'Gold' ], ... ] )
     ->set_description( __( 'Member tier from the CRM.', 'my-plugin' ) )
     ->set_is_access_rule( true )                    // Register as a content gate access rule.
