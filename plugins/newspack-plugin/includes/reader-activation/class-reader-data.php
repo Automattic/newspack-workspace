@@ -353,7 +353,13 @@ final class Reader_Data {
 	 * @param string[] $pending_keys Optional. Keys an in-progress preview has already
 	 *                               accepted but not persisted, so a batch of new keys
 	 *                               is validated against the count it would really
-	 *                               reach. Default empty.
+	 *                               reach. These join the reader's stored keys for both
+	 *                               the cap count and the membership test, so a caller
+	 *                               must only pass keys this method already accepted —
+	 *                               passing a key that would not fit reports a write
+	 *                               that would really be rejected. Nothing is persisted
+	 *                               here, so a bad value misreports rather than
+	 *                               corrupts. Default empty.
 	 *
 	 * @return true|WP_Error True if the write would be accepted, error object otherwise.
 	 */

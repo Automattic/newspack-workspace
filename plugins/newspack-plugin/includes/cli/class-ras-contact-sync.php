@@ -412,11 +412,18 @@ class RAS_Contact_Sync {
 			// Chunked like the all-readers loop so a very large --user-ids list gets
 			// the same cache flush and provider pacing rather than hydrating every
 			// user object into a cache that is never freed.
-			foreach ( array_chunk( $config['user_ids'], max( 1, (int) $config['batch_size'] ) ) as $chunk ) {
+			$chunks     = array_chunk( $config['user_ids'], max( 1, (int) $config['batch_size'] ) );
+			$last_chunk = count( $chunks ) - 1;
+			foreach ( $chunks as $index => $chunk ) {
 				foreach ( $chunk as $user_id ) {
 					self::pull_contact( (int) $user_id, $pull_targets, $config, $tally );
 				}
-				self::batch_boundary_pause();
+				// The pause spaces out requests still to come, so there is nothing to
+				// space after the final chunk — sleeping there is pure wall-clock
+				// waste on work already finished.
+				if ( $index < $last_chunk ) {
+					self::batch_boundary_pause();
+				}
 			}
 			return $tally;
 		}
@@ -482,8 +489,15 @@ class RAS_Contact_Sync {
 		static::$unpaused_contacts++;
 
 		$errors = 0;
+		// Shared across this reader's integrations so a dry run accounts for the
+		// keys earlier targets would have written. A wet run gets that for free —
+		// the writes are real — so without this the preview would under-report a
+		// reader that only crosses the key cap once every integration's fields
+		// are counted together.
+		$pending_keys = [];
+
 		foreach ( $pull_targets as $id => $target ) {
-			$result = Contact_Pull::pull_single_integration( $user_id, $target['integration'], $config['is_dry_run'], $target['fields'] );
+			$result = Contact_Pull::pull_single_integration( $user_id, $target['integration'], $config['is_dry_run'], $target['fields'], $pending_keys );
 			if ( \is_wp_error( $result ) ) {
 				static::log(
 					sprintf(
@@ -855,8 +869,14 @@ class RAS_Contact_Sync {
 	 * separate `--direction=push` command for them.
 	 *
 	 * A direction that includes `pull` also requires at least one in-scope
-	 * integration with enabled incoming fields; this is validated in the
-	 * pre-flight, before any push work runs.
+	 * integration with inbound sync enabled and incoming fields selected; this
+	 * is validated in the pre-flight, before any push work runs.
+	 *
+	 * Both legs honor the per-direction toggles: the push leg skips
+	 * integrations whose outbound sync is paused (or unsupported), and the pull
+	 * leg skips those whose inbound sync is. A run scoped with `--integration`
+	 * to such an integration fails the pre-flight rather than reporting a
+	 * successful run that touched nobody.
 	 *
 	 * Pull failures are NOT auto-retried via ActionScheduler (a bulk run against
 	 * a flaky API would flood the queue). Re-run the affected `--offset` window
@@ -1049,9 +1069,11 @@ class RAS_Contact_Sync {
 	 * run a separate `--direction=push` command instead.
 	 *
 	 * When the direction includes pull, also requires at least one in-scope
-	 * integration with enabled incoming fields: surfacing that here keeps a
-	 * `--direction=both` run from completing a full push before discovering
-	 * the pull leg has nothing to do.
+	 * integration with inbound sync enabled and incoming fields selected —
+	 * the same predicate pull_contacts() uses to build its targets, so the
+	 * pre-flight and the run agree. Surfacing it here keeps a `--direction=both`
+	 * run from completing a full push before discovering the pull leg has
+	 * nothing to do.
 	 *
 	 * @param array $assoc_args Associative CLI args.
 	 *

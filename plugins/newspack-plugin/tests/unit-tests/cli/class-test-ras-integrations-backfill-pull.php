@@ -197,6 +197,72 @@ class Test_RAS_Integrations_Backfill_Pull extends WP_UnitTestCase {
 		$this->assertSame( 0, Failing_Sample_Integration::$pull_count, 'A paused integration must not be called.' );
 	}
 
+	/**
+	 * The mixed case: a paused integration is skipped while an enabled sibling
+	 * still pulls. More likely to regress silently than the all-paused case,
+	 * since the run still succeeds either way — only the call count betrays it
+	 * (NPPD-2076 review).
+	 */
+	public function test_paused_integration_is_skipped_while_enabled_sibling_pulls() {
+		Integrations::register( new Failing_Sample_Integration( 'pull_cli_other', 'Pull CLI Other' ) );
+		Integrations::enable( 'pull_cli_other' );
+		update_option( 'newspack_integration_incoming_fields_pull_cli_other', [ 'field_a' => [ 'name' => 'Field A' ] ] );
+		Integrations::get_integration( 'pull_cli_other' )->update_settings_field_value( 'incoming_sync_enabled', false );
+		$user_a = $this->create_reader();
+
+		$tally = $this->run_pull( [ 'user_ids' => [ $user_a ] ] );
+
+		delete_option( 'newspack_integration_incoming_fields_pull_cli_other' );
+		Integrations::disable( 'pull_cli_other' );
+
+		$this->assertSame( 1, $tally['processed'], 'The enabled sibling still pulls the reader.' );
+		$this->assertSame( 0, $tally['errors'] );
+		$this->assertSame( 1, Failing_Sample_Integration::$pull_count, 'Exactly one of the two integrations was called.' );
+		$this->assertSame( '"gold"', Reader_Data::get_data( $user_a, 'field_a' ) );
+	}
+
+	/**
+	 * A dry run must tally what a wet run would, including across integrations:
+	 * a wet run's earlier writes grow the reader's key list before the next
+	 * integration is pulled, so the preview has to carry that pending state or
+	 * it under-reports a reader who only crosses the cap once every
+	 * integration's fields are counted together (NPPD-2076 review).
+	 */
+	public function test_dry_run_tally_matches_wet_run_across_integrations() {
+		Integrations::register( new Failing_Sample_Integration( 'pull_cli_other', 'Pull CLI Other' ) );
+		Integrations::enable( 'pull_cli_other' );
+		// Distinct incoming fields, so the two integrations write different keys.
+		update_option( 'newspack_integration_incoming_fields_pull_cli_other', [ 'field_b' => [ 'name' => 'Field B' ] ] );
+		Failing_Sample_Integration::$pull_data = [
+			'field_a' => 'gold',
+			'field_b' => 'silver',
+		];
+
+		$dry_user = $this->create_reader();
+		$wet_user = $this->create_reader();
+		// One free slot each: the first integration's key fits, the second's does not.
+		foreach ( [ $dry_user, $wet_user ] as $user_id ) {
+			for ( $i = 0; $i < Reader_Data::MAX_ITEMS - 1; $i++ ) {
+				Reader_Data::update_item( $user_id, "filler_{$i}", '"x"' );
+			}
+		}
+
+		$dry_tally = $this->run_pull(
+			[
+				'user_ids'   => [ $dry_user ],
+				'is_dry_run' => true,
+			]
+		);
+		$wet_tally = $this->run_pull( [ 'user_ids' => [ $wet_user ] ] );
+
+		delete_option( 'newspack_integration_incoming_fields_pull_cli_other' );
+		Integrations::disable( 'pull_cli_other' );
+
+		$this->assertSame( 1, $wet_tally['errors'], 'The second integration really does breach the cap.' );
+		$this->assertSame( $wet_tally, $dry_tally, 'The preview must report the same tally as the real run.' );
+		$this->assertFalse( Reader_Data::get_data( $dry_user, 'field_a' ), 'The preview still persists nothing.' );
+	}
+
 	public function test_active_only_skips_readers_without_active_subscription() {
 		$active_user   = $this->create_reader();
 		$inactive_user = $this->create_reader();

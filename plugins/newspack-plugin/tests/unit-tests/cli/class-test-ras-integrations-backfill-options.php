@@ -268,6 +268,55 @@ class Test_RAS_Integrations_Backfill_Options extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Same failure mode via the per-direction toggle: push_to_integrations()
+	 * skips push-disabled integrations, so a scoped run against one would push
+	 * to nobody and still report success (#700 / NPPD-2076 review).
+	 */
+	public function test_scoped_push_fails_preflight_when_outbound_sync_is_paused() {
+		Integrations::get_integration( 'backfill_mock' )->update_settings_field_value( 'outgoing_sync_enabled', false );
+
+		$result = $this->parse( [ 'integration' => 'backfill_mock' ] );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'newspack_backfill_integration_cannot_sync', $result->get_error_code() );
+		$this->assertStringContainsString( 'outbound sync is paused', $result->get_error_message() );
+	}
+
+	/**
+	 * A paused outbound toggle is push-specific: the same integration is still
+	 * a valid pull target.
+	 */
+	public function test_paused_outbound_sync_does_not_block_a_pull_direction() {
+		Integrations::get_integration( 'backfill_mock' )->update_settings_field_value( 'outgoing_sync_enabled', false );
+
+		$parsed = $this->parse(
+			[
+				'direction'   => 'pull',
+				'integration' => 'backfill_mock',
+			]
+		);
+
+		$this->assertIsArray( $parsed, 'Outbound state is irrelevant to a pull-only run.' );
+	}
+
+	/**
+	 * The pull pre-flight uses the same predicate as pull_contacts(), so a
+	 * paused inbound toggle fails fast rather than letting a --direction=both
+	 * run complete its push leg first (#700 / NPPD-2076 review).
+	 */
+	public function test_pull_preflight_fails_when_inbound_sync_is_paused() {
+		Integrations::get_integration( 'backfill_mock' )->update_settings_field_value( 'incoming_sync_enabled', false );
+
+		foreach ( [ 'pull', 'both' ] as $direction ) {
+			$result = $this->parse( [ 'direction' => $direction ] );
+			$this->assertInstanceOf( \WP_Error::class, $result, "Direction '$direction' must fail when the only target is paused." );
+			$this->assertSame( 'newspack_backfill_no_pull_targets', $result->get_error_code() );
+		}
+
+		$this->assertIsArray( $this->parse( [ 'direction' => 'push' ] ), 'A paused inbound toggle does not affect a push run.' );
+	}
+
+	/**
 	 * An unscoped run keeps the global gate: the per-integration check only
 	 * applies when --integration names a target.
 	 */

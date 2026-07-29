@@ -285,9 +285,17 @@ class Contact_Pull {
 	 *                                                                 API on legacy-shaped settings, so re-resolving
 	 *                                                                 per reader multiplies external requests. Default
 	 *                                                                 null (resolve here).
+	 * @param string[]                                $pending_keys    Optional. Dry-run only, by reference. Keys a
+	 *                                                                 preview has already accepted for this reader but
+	 *                                                                 not persisted; appended to as more are accepted.
+	 *                                                                 A caller pulling the same reader from several
+	 *                                                                 integrations passes one array through all of
+	 *                                                                 them, so the preview sees the key list a wet run
+	 *                                                                 would have grown. Ignored outside a dry run,
+	 *                                                                 where real writes make it observable anyway.
 	 * @return true|\WP_Error True on success, WP_Error on failure.
 	 */
-	public static function pull_single_integration( $user_id, $integration, $dry_run = false, $selected_fields = null ) {
+	public static function pull_single_integration( $user_id, $integration, $dry_run = false, $selected_fields = null, &$pending_keys = [] ) {
 		if ( null === $selected_fields ) {
 			$selected_fields = $integration->get_enabled_incoming_fields();
 		}
@@ -326,7 +334,6 @@ class Contact_Pull {
 			Logger::log( 'Pulled data from ' . $integration->get_id() . ': ' . wp_json_encode( $data ) );
 
 			$write_errors = [];
-			$pending_keys = [];
 			foreach ( $data as $key => $value ) {
 				$encoded = wp_json_encode( $value );
 
@@ -334,10 +341,12 @@ class Contact_Pull {
 					// Both of update_item()'s rejection causes are deterministic, so
 					// the preview can report them without persisting — an operator
 					// green-lighting a run deserves to see writes that are guaranteed
-					// to fail. Keys accepted earlier in this loop are threaded through
-					// as pending: nothing is written, so without them a batch of new
-					// keys that collectively crosses the cap would preview clean and
-					// then fail for real.
+					// to fail. Keys already accepted are threaded through as pending:
+					// nothing is written, so without them a set of new keys that
+					// collectively crosses the cap would preview clean and then fail
+					// for real. $pending_keys spans the caller's whole pull of this
+					// reader, so keys accepted by an earlier integration count too —
+					// in a wet run those writes would have landed before this one.
 					$would_store = \Newspack\Reader_Data::validate_item( $user_id, $key, $encoded, $pending_keys );
 					if ( is_wp_error( $would_store ) ) {
 						Logger::log( sprintf( '[dry-run] Would FAIL storing reader data "%s" for user %d: %s', $key, $user_id, $would_store->get_error_message() ), self::LOGGER_HEADER );
