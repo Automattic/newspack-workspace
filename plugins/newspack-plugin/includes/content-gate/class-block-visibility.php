@@ -363,7 +363,13 @@ class Block_Visibility {
 
 		$access_passes = true;
 		if ( ! empty( $custom_access['active'] ) && ! empty( $custom_access['access_rules'] ) ) {
-			$access_passes = Access_Rules::evaluate_rules( $custom_access['access_rules'], $user_id );
+			// Gate-derived rules carry the gate's stored setting; rules parsed from
+			// block attributes never contain the key, so block-attribute visibility
+			// is deliberately always grace-ON — the block editor exposes no
+			// payment-recovery toggle, and a reader in the retry window should see
+			// member-only blocks just as they can pass the gate itself.
+			$rule_context  = [ 'payment_recovery_grace' => $custom_access['payment_recovery_grace'] ?? true ];
+			$access_passes = Access_Rules::evaluate_rules( $custom_access['access_rules'], $user_id, $rule_context );
 		}
 
 		// AND logic: both must pass when both are configured.
