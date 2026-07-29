@@ -16,6 +16,7 @@
  */
 
 use Newspack\CLI\Teams_Migration;
+use Newspack\Content_Gate;
 use Newspack\Group_Subscription;
 use Newspack\Group_Subscription_Settings;
 
@@ -40,6 +41,13 @@ class Test_Teams_Migration_Manual_Members extends WP_UnitTestCase {
 	 * @var int[]
 	 */
 	private $user_ids = [];
+
+	/**
+	 * Gate IDs to clean up.
+	 *
+	 * @var int[]
+	 */
+	private $gate_ids = [];
 
 	/**
 	 * Include the WC and WP-CLI mocks.
@@ -85,6 +93,10 @@ class Test_Teams_Migration_Manual_Members extends WP_UnitTestCase {
 			wp_delete_user( $user_id );
 		}
 		$this->user_ids = [];
+		foreach ( $this->gate_ids as $gate_id ) {
+			wp_delete_post( $gate_id, true );
+		}
+		$this->gate_ids = [];
 		parent::tear_down();
 	}
 
@@ -172,6 +184,41 @@ class Test_Teams_Migration_Manual_Members extends WP_UnitTestCase {
 		$this->user_ids[] = $user_id;
 		update_user_meta( $user_id, '_newspack_reader', true );
 		return $user_id;
+	}
+
+	/**
+	 * Publish a content gate whose access rule requires an active subscription to
+	 * the given products — the configuration the covered-products list is derived
+	 * from when --access-product-ids is omitted.
+	 *
+	 * @param int[] $product_ids Products the gate accepts.
+	 * @return int Gate post ID.
+	 */
+	private function create_gate_requiring_subscription_to( array $product_ids ): int {
+		$gate_id = Content_Gate::create_gate( [ 'title' => 'Paywall' ] );
+		$this->assertNotWPError( $gate_id, 'Fixture gate creation should succeed.' );
+		$this->gate_ids[] = $gate_id;
+		wp_update_post(
+			[
+				'ID'          => $gate_id,
+				'post_status' => 'publish',
+			]
+		);
+		Content_Gate::update_custom_access_settings(
+			$gate_id,
+			[
+				'active'       => true,
+				'access_rules' => [
+					[
+						[
+							'slug'  => 'subscription',
+							'value' => $product_ids,
+						],
+					],
+				],
+			]
+		);
+		return $gate_id;
 	}
 
 	/**
@@ -655,6 +702,198 @@ class Test_Teams_Migration_Manual_Members extends WP_UnitTestCase {
 		$group_subscription->set_status( 'cancelled' );
 		Group_Subscription::reset_cache();
 		$this->assertFalse( Teams_Migration::member_has_live_subscription( $group_member ), 'A member of only a cancelled group subscription is not live.' );
+	}
+
+	/**
+	 * Liveness is scoped to the products the gates actually accept. Access
+	 * Control's `subscription` rule grants only for a subscription to one of the
+	 * gate's configured products, so a member whose only live subscription is to
+	 * some other product (a recurring donation is the common case) loses access
+	 * at the flip and belongs in the sweep — even though they "hold a live
+	 * subscription" in the product-agnostic sense.
+	 */
+	public function test_liveness_is_scoped_to_the_given_access_products() {
+		$purchase_plan_id    = $this->create_plan( 'purchase' );
+		$gate_product_id     = 909002;
+		$donation_product_id = 909003;
+		wc_create_mock_product(
+			[
+				'id'   => $gate_product_id,
+				'name' => 'Digital subscription',
+			]
+		);
+		wc_create_mock_product(
+			[
+				'id'   => $donation_product_id,
+				'name' => 'Monthly donation',
+			]
+		);
+		$member_on_gate_product  = $this->create_member( $purchase_plan_id );
+		$member_on_donation_only = $this->create_member( $purchase_plan_id );
+
+		wcs_create_subscription(
+			[
+				'customer_id' => $member_on_gate_product,
+				'status'      => 'active',
+				'products'    => [ $gate_product_id ],
+			]
+		);
+		wcs_create_subscription(
+			[
+				'customer_id' => $member_on_donation_only,
+				'status'      => 'active',
+				'products'    => [ $donation_product_id ],
+			]
+		);
+
+		$output = $this->run_migrate_manual_members(
+			[
+				'plan-ids'                       => (string) $purchase_plan_id,
+				'only-without-live-subscription' => true,
+				// The comp product the sweep grants is accepted too, as it must be for
+				// the granted subscriptions to restore access.
+				'access-product-ids'             => $gate_product_id . ',' . self::MIGRATION_PRODUCT_ID,
+				'live'                           => true,
+			]
+		);
+
+		$this->assertEmpty( $this->get_migration_subscription_ids_for_user( $member_on_gate_product ), 'A member subscribed to a gate product keeps access and must be skipped.' );
+		$this->assertCount( 1, $this->get_migration_subscription_ids_for_user( $member_on_donation_only ), 'A member whose only live subscription is to a product no gate accepts loses access at the flip and must get a $0 subscription.' );
+		$this->assertStringContainsString( 'Skipped 1 member(s) holding a live', $output, 'Only the gate-product subscriber counts as covered.' );
+	}
+
+	/**
+	 * With no --access-product-ids, the covered-products list is derived from the
+	 * `subscription` access rules of the published content gates, so the default
+	 * run matches what the gates will actually honour.
+	 */
+	public function test_access_products_are_derived_from_published_gates() {
+		$purchase_plan_id    = $this->create_plan( 'purchase' );
+		$gate_product_id     = 909004;
+		$donation_product_id = 909005;
+		wc_create_mock_product(
+			[
+				'id'   => $gate_product_id,
+				'name' => 'Digital subscription',
+			]
+		);
+		wc_create_mock_product(
+			[
+				'id'   => $donation_product_id,
+				'name' => 'Monthly donation',
+			]
+		);
+		$this->create_gate_requiring_subscription_to( [ $gate_product_id, self::MIGRATION_PRODUCT_ID ] );
+
+		$member_on_gate_product  = $this->create_member( $purchase_plan_id );
+		$member_on_donation_only = $this->create_member( $purchase_plan_id );
+		wcs_create_subscription(
+			[
+				'customer_id' => $member_on_gate_product,
+				'status'      => 'active',
+				'products'    => [ $gate_product_id ],
+			]
+		);
+		wcs_create_subscription(
+			[
+				'customer_id' => $member_on_donation_only,
+				'status'      => 'active',
+				'products'    => [ $donation_product_id ],
+			]
+		);
+
+		$output = $this->run_migrate_manual_members(
+			[
+				'plan-ids'                       => (string) $purchase_plan_id,
+				'only-without-live-subscription' => true,
+				'live'                           => true,
+			]
+		);
+
+		$this->assertStringContainsString( sprintf( 'Access products: %d', $gate_product_id ), $output, 'The effective product list must be reported so the run reconciles against the audit.' );
+		$this->assertStringContainsString( 'derived from published gates', $output, 'The run must say where the product list came from.' );
+		$this->assertEmpty( $this->get_migration_subscription_ids_for_user( $member_on_gate_product ), 'A member subscribed to the derived gate product must be skipped.' );
+		$this->assertCount( 1, $this->get_migration_subscription_ids_for_user( $member_on_donation_only ), 'The donation-only member must be included without passing the flag.' );
+	}
+
+	/**
+	 * With no gates configured yet and no explicit flag there is nothing to scope
+	 * by, so any live subscription counts (matching a gate with no product filter)
+	 * — but the run says so, because that is the reading under which a member with
+	 * an unrelated subscription is wrongly treated as covered.
+	 */
+	public function test_unscoped_run_warns_that_liveness_is_product_agnostic() {
+		$purchase_plan_id   = $this->create_plan( 'purchase' );
+		$member_with_active = $this->create_member( $purchase_plan_id );
+		$this->create_subscription_with_status( $member_with_active, 'active' );
+
+		$output = $this->run_migrate_manual_members(
+			[
+				'plan-ids'                       => (string) $purchase_plan_id,
+				'only-without-live-subscription' => true,
+				'live'                           => true,
+			]
+		);
+
+		$this->assertStringContainsString( 'no access products could be determined', $output, 'An unscoped run must warn rather than silently treat any subscription as covering access.' );
+		$this->assertEmpty( $this->get_migration_subscription_ids_for_user( $member_with_active ), 'Unscoped, any live subscription still counts as covered.' );
+	}
+
+	/**
+	 * Granting a $0 subscription for a product the gates do not accept restores
+	 * no access at all — the run would report "created" while the reader stays
+	 * locked out. Refused while the accepted products are known.
+	 */
+	public function test_migration_product_outside_the_access_products_is_refused() {
+		$purchase_plan_id = $this->create_plan( 'purchase' );
+		$gate_product_id  = 909008;
+		wc_create_mock_product(
+			[
+				'id'   => $gate_product_id,
+				'name' => 'Digital subscription',
+			]
+		);
+		$this->create_gate_requiring_subscription_to( [ $gate_product_id ] );
+		$this->create_member( $purchase_plan_id );
+
+		$this->expectException( WP_CLI_Mock_Exception::class );
+		$this->expectExceptionMessage( 'grants no access' );
+		$this->run_migrate_manual_members(
+			[
+				'plan-ids'                       => (string) $purchase_plan_id,
+				'only-without-live-subscription' => true,
+				'live'                           => true,
+			]
+		);
+	}
+
+	/**
+	 * Group-subscription liveness is product-scoped too: riding a group
+	 * subscription only substitutes for a personal $0 subscription when that
+	 * group subscription is for a product the gates accept.
+	 */
+	public function test_group_subscription_liveness_is_scoped_to_access_products() {
+		$purchase_plan_id    = $this->create_plan( 'purchase' );
+		$gate_product_id     = 909006;
+		$donation_product_id = 909007;
+		$group_member        = $this->create_member( $purchase_plan_id );
+		$group_owner_id      = $this->create_reader_user();
+
+		$group_subscription = wcs_create_subscription(
+			[
+				'customer_id'    => $group_owner_id,
+				'status'         => 'active',
+				'billing_period' => 'month',
+				'products'       => [ $donation_product_id ],
+			]
+		);
+		$group_subscription->update_meta_data( Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'enabled', 'yes' );
+		add_user_meta( $group_member, Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY, $group_subscription->get_id() );
+		Group_Subscription::reset_cache();
+
+		$this->assertFalse( Teams_Migration::member_has_live_subscription( $group_member, [ $gate_product_id ] ), 'A group subscription for a product no gate accepts does not keep the member covered.' );
+		$this->assertTrue( Teams_Migration::member_has_live_subscription( $group_member, [ $donation_product_id ] ), 'A group subscription for an accepted product does keep the member covered.' );
+		$this->assertTrue( Teams_Migration::member_has_live_subscription( $group_member ), 'With no product scope, any live group subscription counts.' );
 	}
 
 	/**

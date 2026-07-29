@@ -19,6 +19,7 @@
 
 namespace Newspack\CLI;
 
+use Newspack\Content_Gate;
 use Newspack\Group_Subscription;
 use Newspack\Reader_Activation;
 use WP_CLI;
@@ -611,7 +612,10 @@ class Teams_Migration {
 	 * : Comma-delimited list of membership plan IDs to process. If omitted, all published plans with _access_method = manual-only are used — or ALL published plans when --only-without-live-subscription or --user-ids/--user-ids-file is passed.
 	 *
 	 * [--only-without-live-subscription]
-	 * : Only process members who do NOT own (or belong to a group on) a subscription in a live status (active, on-hold, pending-cancel). Members whose subscriptions are all in dead states (cancelled, expired, pending, ...) are included, same as members with no subscription at all. Skipped members are counted per user so the output reconciles against a parity diff.
+	 * : Only process members who do NOT own (or belong to a group on) a subscription in a live status (active, on-hold, pending-cancel) FOR A PRODUCT THE GATES ACCEPT. Members whose subscriptions are all in dead states (cancelled, expired, pending, ...), or are only for products no gate accepts, are included, same as members with no subscription at all. Skipped members are counted per user so the output reconciles against a parity diff.
+	 *
+	 * [--access-product-ids=<ids>]
+	 * : Comma-delimited product IDs that grant access under the new gates — the audit's ACCESS_PRODUCT_IDS. Scopes which subscriptions count as covering a member. Defaults to the products named by the `subscription` access rules of the published content gates; pass this when the gates are not configured yet, or to pin the list the parity diff was computed with.
 	 *
 	 * [--user-ids=<ids>]
 	 * : Comma-delimited list of user IDs to process (explicit input mode). Only active members of the processed plans whose user ID is on this list are handled; list entries never matched are reported at the end. Combines with --user-ids-file.
@@ -655,6 +659,7 @@ class Teams_Migration {
 		$only_without_live_subscription = (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'only-without-live-subscription', false );
 		$user_ids_csv                   = \WP_CLI\Utils\get_flag_value( $assoc_args, 'user-ids', '' );
 		$user_ids_file                  = \WP_CLI\Utils\get_flag_value( $assoc_args, 'user-ids-file', '' );
+		$access_product_ids_csv         = \WP_CLI\Utils\get_flag_value( $assoc_args, 'access-product-ids', '' );
 		$skip_domains                   = \WP_CLI\Utils\get_flag_value( $assoc_args, 'skip-domains', '' );
 		$skip_domains                   = ! empty( $skip_domains )
 			? array_filter( array_map( 'trim', explode( ',', strtolower( $skip_domains ) ) ) )
@@ -682,6 +687,37 @@ class Teams_Migration {
 		$explicit_users_mode = ! empty( $target_user_ids );
 		if ( ! $explicit_users_mode && ( ( is_string( $user_ids_csv ) && '' !== trim( $user_ids_csv ) ) || ( is_string( $user_ids_file ) && '' !== trim( $user_ids_file ) ) ) ) {
 			WP_CLI::error( 'The --user-ids/--user-ids-file input resolved to no user IDs.' );
+		}
+
+		// Which subscriptions count as covering a member's access after the flip.
+		// An explicit list wins so a run can be pinned to the products the parity
+		// diff was computed with; otherwise read it off the gates themselves.
+		if ( ! is_string( $access_product_ids_csv ) ) {
+			WP_CLI::error( 'The --access-product-ids flag requires a value (e.g. --access-product-ids=519858).' );
+		}
+		$access_product_ids = self::parse_id_tokens( $access_product_ids_csv, 'product ID', '--access-product-ids' );
+		if ( \is_wp_error( $access_product_ids ) ) {
+			WP_CLI::error( $access_product_ids->get_error_message() );
+		}
+		$access_products_source = 'given';
+		if ( empty( $access_product_ids ) ) {
+			$access_product_ids     = self::get_gate_access_product_ids();
+			$access_products_source = 'derived from published gates';
+		}
+
+		// A $0 subscription for a product no gate accepts restores no access: the
+		// run would report "created" while the reader stays locked out. Only
+		// checkable when the accepted products are known — with none configured
+		// yet, the gates are presumably still to be built around this product.
+		if ( ! empty( $access_product_ids ) && ! in_array( $product_id, $access_product_ids, true ) ) {
+			WP_CLI::error(
+				sprintf(
+					'Product %d is not among the products that grant access (%s), so a subscription to it grants no access. Pass --product-id for a product the gates accept, or add %d to a gate\'s "Active subscription" rule first.',
+					$product_id,
+					implode( ', ', $access_product_ids ),
+					$product_id
+				)
+			);
 		}
 
 		$product = \wc_get_product( $product_id );
@@ -748,6 +784,17 @@ class Teams_Migration {
 			if ( ! empty( $non_manual_plan_ids ) ) {
 				WP_CLI::error( sprintf( 'Plan(s) %s are not manual-only. Pass --only-without-live-subscription and/or --user-ids/--user-ids-file to target them without granting $0 subscriptions to paying members.', implode( ', ', $non_manual_plan_ids ) ) );
 			}
+		}
+
+		// The product scope only changes which members the live-subscription filter
+		// treats as covered, so report it exactly where it applies.
+		if ( $only_without_live_subscription ) {
+			if ( empty( $access_product_ids ) ) {
+				WP_CLI::warning( 'Access products: none — no access products could be determined, so ANY live subscription counts as covering a member. That matches a gate whose subscription rule lists no products; if the gates do list products, pass --access-product-ids or this run will skip members whose only subscription is to a product the gates do not accept (a recurring donation, say) and they will lose access at the flip.' );
+			} else {
+				WP_CLI::line( sprintf( 'Access products: %s (%s).', implode( ', ', $access_product_ids ), $access_products_source ) );
+			}
+			WP_CLI::line( '' );
 		}
 
 		WP_CLI::line( sprintf( 'Processing %d plan(s): %s', count( $plan_ids ), implode( ', ', $plan_ids ) ) );
@@ -857,7 +904,7 @@ class Teams_Migration {
 				// over a lapsed subscription is exactly the residual this flag targets.
 				// Tracked per user, not per membership, so the reported count reconciles
 				// against a per-reader parity diff.
-				if ( $only_without_live_subscription && self::member_has_live_subscription( $user_id ) ) {
+				if ( $only_without_live_subscription && self::member_has_live_subscription( $user_id, $access_product_ids ) ) {
 					WP_CLI::line( sprintf( '  Membership %d (user %d, %s): skipped — holds a live subscription.', $membership_id, $user_id, $user->user_email ) );
 					$skipped_live_subscription_user_ids[ $user_id ] = true;
 					continue;
@@ -1623,33 +1670,110 @@ class Teams_Migration {
 	 * personal $0 subscription). Subscriptions existing only in dead states
 	 * (cancelled, expired, ...) return false.
 	 *
-	 * @param int $user_id The member user ID.
+	 * Liveness is scoped to $product_ids because that is what grants access after
+	 * the flip: Access_Rules::has_active_subscription() only accepts a
+	 * subscription to one of the gate's configured products. A member whose only
+	 * live subscription is to some other product — a recurring donation is the
+	 * common case, and a gift recipient can hold one — would lose access, so they
+	 * are a residual, not a covered member. An empty $product_ids means no product
+	 * constraint, matching a gate whose subscription rule lists no products.
+	 *
+	 * @param int   $user_id     The member user ID.
+	 * @param int[] $product_ids Products that grant access under the gates. Empty
+	 *                           means any product counts.
 	 *
 	 * @return bool
 	 */
-	public static function member_has_live_subscription( $user_id ) {
+	public static function member_has_live_subscription( $user_id, $product_ids = [] ) {
 		$user_id = absint( $user_id );
 		if ( ! $user_id || ! function_exists( 'wcs_get_users_subscriptions' ) ) {
 			return false;
 		}
+		$product_ids = array_values( array_filter( array_map( 'absint', (array) $product_ids ) ) );
 		foreach ( \wcs_get_users_subscriptions( $user_id ) as $subscription ) {
 			// wcs_get_users_subscriptions can be filtered to include member-only groups; require ownership
 			// here — group memberships are evaluated explicitly below, in every context.
 			if ( (int) $subscription->get_user_id() !== $user_id ) {
 				continue;
 			}
-			if ( in_array( $subscription->get_status(), self::LIVE_SUBSCRIPTION_STATUSES, true ) ) {
+			if ( ! in_array( $subscription->get_status(), self::LIVE_SUBSCRIPTION_STATUSES, true ) ) {
+				continue;
+			}
+			if ( self::subscription_covers_access_products( $subscription, $product_ids ) ) {
 				return true;
 			}
 		}
 		// Group memberships: the My Account injection filter doesn't run on CLI, so
 		// ask the group data layer directly.
 		foreach ( Group_Subscription::get_group_subscriptions_for_user( $user_id ) as $group_subscription ) {
-			if ( in_array( $group_subscription->get_status(), self::LIVE_SUBSCRIPTION_STATUSES, true ) ) {
+			if ( ! in_array( $group_subscription->get_status(), self::LIVE_SUBSCRIPTION_STATUSES, true ) ) {
+				continue;
+			}
+			if ( self::subscription_covers_access_products( $group_subscription, $product_ids ) ) {
 				return true;
 			}
 		}
 		return false;
+	}
+
+	/**
+	 * Whether a subscription is for one of the products that grant access.
+	 *
+	 * A subscription that can't be asked (no has_product()) counts as NOT
+	 * covering: that errs towards granting the member a $0 subscription, which
+	 * costs the publisher a redundant record, where the opposite error costs a
+	 * reader their access silently.
+	 *
+	 * @param object $subscription Subscription object.
+	 * @param int[]  $product_ids  Products that grant access. Empty means any.
+	 *
+	 * @return bool
+	 */
+	private static function subscription_covers_access_products( $subscription, $product_ids ) {
+		if ( empty( $product_ids ) ) {
+			return true;
+		}
+		if ( ! method_exists( $subscription, 'has_product' ) ) {
+			return false;
+		}
+		foreach ( $product_ids as $product_id ) {
+			if ( $subscription->has_product( $product_id ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Products that grant access under the site's published content gates: the
+	 * `value` of every `subscription` access rule across them.
+	 *
+	 * This is the same set the pre-migration parity audit calls ACCESS_PRODUCT_IDS
+	 * when it computes who loses access at the flip, so deriving it here keeps the
+	 * command's member selection and that diff on one definition of "covered".
+	 * Premium newsletter gates are excluded — they gate newsletters, not content.
+	 *
+	 * @return int[]
+	 */
+	private static function get_gate_access_product_ids() {
+		if ( ! class_exists( 'Newspack\Content_Gate' ) ) {
+			return [];
+		}
+		$product_ids = [];
+		foreach ( Content_Gate::get_gates( Content_Gate::GATE_CPT, 'publish' ) as $gate ) {
+			if ( empty( $gate['custom_access']['access_rules'] ) ) {
+				continue;
+			}
+			foreach ( $gate['custom_access']['access_rules'] as $group ) {
+				foreach ( (array) $group as $rule ) {
+					if ( ! isset( $rule['slug'] ) || 'subscription' !== $rule['slug'] ) {
+						continue;
+					}
+					$product_ids = array_merge( $product_ids, array_map( 'absint', (array) ( $rule['value'] ?? [] ) ) );
+				}
+			}
+		}
+		return array_values( array_unique( array_filter( $product_ids ) ) );
 	}
 
 	/**
@@ -1679,21 +1803,38 @@ class Teams_Migration {
 			}
 			$raw_input .= ' ' . file_get_contents( $user_ids_file ); // phpcs:ignore WordPressVIPMinimum.Performance.FetchingRemoteData.FileGetContentsUnknown
 		}
+		return self::parse_id_tokens( $raw_input, 'user ID', '--user-ids/--user-ids-file' );
+	}
+
+	/**
+	 * Parse a comma- and/or whitespace-delimited list of positive integer IDs.
+	 *
+	 * Strict by design: a non-numeric token fails the whole input rather than
+	 * being dropped, since a malformed reviewed list should halt the run, not
+	 * silently shrink it.
+	 *
+	 * @param string $raw_input  The raw list.
+	 * @param string $id_label   What the IDs are, for the error message ('user ID').
+	 * @param string $flag_label The flag(s) the input came from, for the error message.
+	 *
+	 * @return int[]|\WP_Error Unique IDs in input order, or an error.
+	 */
+	private static function parse_id_tokens( $raw_input, $id_label, $flag_label ) {
 		$raw_input = trim( $raw_input );
 		if ( '' === $raw_input ) {
 			return [];
 		}
-		$user_ids = [];
+		$ids = [];
 		foreach ( preg_split( '/[\s,]+/', $raw_input ) as $token ) {
 			if ( '' === $token ) {
 				continue;
 			}
 			if ( ! ctype_digit( $token ) || 0 === (int) $token ) {
-				return new \WP_Error( 'newspack_migration_user_ids_token', sprintf( '"%s" is not a valid user ID — fix the --user-ids/--user-ids-file input.', $token ) );
+				return new \WP_Error( 'newspack_migration_id_token', sprintf( '"%s" is not a valid %s — fix the %s input.', $token, $id_label, $flag_label ) );
 			}
-			$user_ids[] = (int) $token;
+			$ids[] = (int) $token;
 		}
-		return array_values( array_unique( $user_ids ) );
+		return array_values( array_unique( $ids ) );
 	}
 
 	/**
