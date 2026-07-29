@@ -130,6 +130,8 @@ type CustomAccess = {
 	// (see edit/custom-access.tsx), and the server falls back to the gate ID.
 	gate_layout_id?: number;
 	access_rules: GateAccessRuleGroup[];
+	// Optional: gates saved before the setting existed lack the key; reads treat absence as ON.
+	payment_recovery_grace?: boolean;
 };
 
 // All fields are optional: the settings screens build these objects
@@ -159,8 +161,11 @@ type MeteringCountdownConfig = {
 	cta_product_id?: number;
 };
 
+type FeedRestrictionMode = 'truncate' | 'exclude';
+
 type AdvancedSettingsConfig = {
 	restrict_feeds: boolean;
+	feed_restriction_mode: FeedRestrictionMode;
 	newsletter_link_bypass_enabled: boolean;
 };
 

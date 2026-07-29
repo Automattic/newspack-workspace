@@ -25,6 +25,7 @@ class Newspack_Blocks {
 	 */
 	public static function init() {
 		add_action( 'after_setup_theme', [ __CLASS__, 'add_image_sizes' ] );
+		add_filter( 'intermediate_image_sizes_advanced', [ __CLASS__, 'maybe_skip_article_block_image_subsizes' ] );
 		add_post_type_support( 'post', 'newspack_blocks' );
 		add_post_type_support( 'page', 'newspack_blocks' );
 		add_action( 'jetpack_register_gutenberg_extensions', [ __CLASS__, 'disable_jetpack_donate' ], 99 );
@@ -541,6 +542,70 @@ class Newspack_Blocks {
 		add_image_size( 'newspack-article-block-square-tiny', 200, 200, true );
 
 		add_image_size( 'newspack-article-block-uncropped', 1200, 9999, false );
+	}
+
+	/**
+	 * Skip generating the physical `newspack-article-block-*` sub-size files on upload.
+	 *
+	 * The sizes stay registered, so blocks still resolve correctly-cropped URLs;
+	 * we only skip writing the files where an on-the-fly image CDN can reproduce them
+	 * from the registered sizes. The prefix match removes every `newspack-article-block-*`
+	 * sub-size, including `newspack-article-block-uncropped` (registered with
+	 * `crop => false` — a plain downscale, not a crop); the CDN resizes as well as
+	 * crops, so none of them need a physical file. This also makes the Image block
+	 * (REST) and Media Library upload paths behave the same on wpcom, where they
+	 * otherwise differ.
+	 *
+	 * @param array $sizes Image sub-sizes to generate, keyed by size name.
+	 * @return array Filtered sizes.
+	 */
+	public static function maybe_skip_article_block_image_subsizes( array $sizes ): array {
+		/**
+		 * Filters whether to skip physical `newspack-article-block-*` sub-size generation.
+		 * Defaults to true where an on-the-fly image CDN reproduces the sizes: WordPress.com
+		 * Simple (always) and Atomic (only when the Jetpack Image CDN is active). Self-hosted
+		 * sites can opt in, e.g. when fronting uploads with the Jetpack Image CDN.
+		 *
+		 * @param bool $skip Whether to skip physical sub-size generation.
+		 */
+		$skip = apply_filters( 'newspack_blocks_skip_article_image_subsizes', self::is_wpcom_image_cdn_active() );
+		if ( ! $skip ) {
+			return $sizes;
+		}
+
+		foreach ( array_keys( $sizes ) as $size_name ) {
+			if ( is_string( $size_name ) && str_starts_with( $size_name, 'newspack-article-block-' ) ) {
+				unset( $sizes[ $size_name ] );
+			}
+		}
+		return $sizes;
+	}
+
+	/**
+	 * Whether this site serves images through an on-the-fly image CDN that crops and
+	 * resizes from the registered sizes, making the physical `newspack-article-block-*`
+	 * files redundant.
+	 *
+	 * WordPress.com Simple always serves images through the platform image CDN. On
+	 * Atomic the Jetpack Image CDN (Photon) can be toggled off, so it counts only when
+	 * the module is active — otherwise the crops must still be generated. Self-hosted
+	 * sites are not auto-detected here; they opt in via the filter above.
+	 *
+	 * @return bool
+	 */
+	private static function is_wpcom_image_cdn_active(): bool {
+		if ( ! class_exists( '\Automattic\Jetpack\Status\Host' ) ) {
+			return false;
+		}
+		$host = new \Automattic\Jetpack\Status\Host();
+		if ( $host->is_wpcom_simple() ) {
+			return true;
+		}
+		if ( $host->is_wpcom_platform() ) {
+			// Atomic: only skip when the Image CDN (Photon) is actually active to crop on the fly.
+			return class_exists( 'Jetpack' ) && \Jetpack::is_module_active( 'photon' );
+		}
+		return false;
 	}
 
 	/**
