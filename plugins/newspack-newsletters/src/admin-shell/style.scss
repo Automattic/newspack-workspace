@@ -187,6 +187,59 @@ body.newspack-newsletters-admin-screen--bundled {
 	}
 }
 
+// Centered over the admin content while an "All" fetch walks the
+// collection (portalled to body — inside the DataViews tree every
+// ancestor stack is a positioning context, which would pin it to the
+// actions row). `left` is set inline from #wpbody's box. The delayed
+// fade keeps fast walks from flashing the overlay in and out.
+.newspack-newsletters-fetch-all-progress {
+	animation: newspack-newsletters-fetch-all-progress-in 150ms ease-in-out 300ms both;
+	left: 50%;
+	pointer-events: none;
+	position: fixed;
+	top: 50%;
+	transform: translate(-50%, -50%);
+	z-index: 10;
+
+	.components-spinner {
+		margin: 0;
+	}
+}
+
+@keyframes newspack-newsletters-fetch-all-progress-in {
+	from {
+		opacity: 0;
+	}
+
+	to {
+		opacity: 1;
+	}
+}
+
+
+body.newspack-newsletters-admin-screen .dataviews-view-table a:not(.newspack-newsletters-list__title) {
+	color: var(--wp-admin-theme-color);
+
+	&:focus,
+	&:hover {
+		color: var(--wp-admin-theme-color-darker-20);
+	}
+}
+
+// The funnel toggle is permanently disabled once a primary filter pins
+// the filter row open (core can't hide the row anymore) — drop it.
+body.newspack-newsletters-admin-screen .dataviews-filters__visibility-toggle:disabled,
+body.newspack-newsletters-admin-screen .dataviews-filters__visibility-toggle[aria-disabled="true"] {
+	display: none;
+}
+
+// Muted item count portalled next to the breadcrumbs page title.
+.newspack-newsletters-header-count {
+	color: wp-colors.$gray-700;
+	font-weight: wp-vars.$font-weight-regular;
+	white-space: pre;
+}
+
 .newspack-newsletters-list {
 	&__author,
 	&__status,

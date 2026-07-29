@@ -104,6 +104,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          # The dry-run runs semantic-release's verifyConditions, which calls
+          # npm whoami. setup-node's registry-url wrote an .npmrc keyed on
+          # ${NODE_AUTH_TOKEN}; without it npm auth 401s and the gate fails even
+          # though the token is valid. Mirror the Release step below.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NODE_OPTIONS: --max-old-space-size=12288
       - name: Build shared packages
         if: steps.plan.outputs.release_needed == 'true'
