@@ -24,10 +24,12 @@ class Subscription_Lists_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A list added or changed within a request must invalidate the memoized
-	 * lists config, so a subsequent read reflects it.
+	 * A newly created active list for the current provider appears in the lists
+	 * config on the next read; the update flow flushes the per-request caches. The
+	 * config memo is disabled under PHPUnit, so this asserts the outcome rather than
+	 * exercising the cache-hit path.
 	 */
-	public function test_flush_cache_invalidates_lists_config() {
+	public function test_new_active_list_appears_in_lists_config() {
 		Newspack_Newsletters::set_service_provider( 'mailchimp' );
 		Newspack_Newsletters_Subscription::reset_lists_config_cache();
 		$before = count( Newspack_Newsletters_Subscription::get_lists_config() );

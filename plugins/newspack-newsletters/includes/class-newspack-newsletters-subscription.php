@@ -569,10 +569,19 @@ class Newspack_Newsletters_Subscription {
 	/**
 	 * Get the lists configuration for the active provider.
 	 *
+	 * Note: on sites with premium newsletter gates, the result is filtered per the
+	 * current user (via the newspack_newsletters_subscription_lists filter →
+	 * Premium_Newsletters::filter_subscription_lists()). The per-request memo
+	 * therefore bakes in the current user's view; a caller that changes the current
+	 * user mid-request must call reset_lists_config_cache() before re-reading.
+	 *
 	 * @return array[]|WP_Error Associative array with list configuration keyed by list ID or error.
 	 */
 	public static function get_lists_config() {
-		if ( null !== self::$lists_config ) {
+		// Skip the memo under PHPUnit, mirroring Subscription_Lists::get_all():
+		// static memos persist across the DB rollback between tests.
+		$use_cache = ! ( defined( 'IS_TEST_ENV' ) && IS_TEST_ENV );
+		if ( $use_cache && null !== self::$lists_config ) {
 			return self::$lists_config;
 		}
 		$provider = Newspack_Newsletters::get_service_provider();
@@ -590,8 +599,10 @@ class Newspack_Newsletters_Subscription {
 			$active_lists[ $list->get_public_id() ] = $list->to_array();
 		}
 
-		self::$lists_config = $active_lists;
-		return self::$lists_config;
+		if ( $use_cache ) {
+			self::$lists_config = $active_lists;
+		}
+		return $active_lists;
 	}
 
 	/**

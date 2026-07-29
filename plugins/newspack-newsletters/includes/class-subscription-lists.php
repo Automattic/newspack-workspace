@@ -30,8 +30,9 @@ class Subscription_Lists {
 	const CPT = 'newspack_nl_list';
 
 	/**
-	 * Per-request memo of every Subscription List. Reset by flush_cache() whenever
-	 * a list is created, updated, or deleted.
+	 * Per-request memo of every Subscription List. Reset by flush_cache() whenever a
+	 * list is created, updated, trashed, untrashed, deleted, or its provider
+	 * settings (post meta) change. Disabled under PHPUnit — see get_all().
 	 *
 	 * @var Subscription_List[]|null
 	 */
@@ -48,10 +49,21 @@ class Subscription_Lists {
 
 		add_filter( 'wp_editor_settings', [ __CLASS__, 'filter_editor_settings' ], 10, 2 );
 		add_action( 'save_post', [ __CLASS__, 'save_post' ] );
-		// Bust the per-request list memo when a list changes so a create, update,
-		// or delete within the same request is reflected on re-read.
+		// Bust the per-request list memo whenever a list changes, so the next read
+		// in the same request is never stale. save_post covers insert/update;
+		// status transitions (trash/untrash) and permanent deletes fire their own
+		// hooks; and the provider settings that drive get_lists_config() live in
+		// post meta, written without a save_post fire, so the meta hooks are needed
+		// too. deleted_post (not before_delete_post) matches the sibling
+		// Newspack_Newsletters_Subscription delete cache and avoids a repopulation
+		// window.
 		add_action( 'save_post_' . self::CPT, [ __CLASS__, 'flush_cache' ] );
-		add_action( 'before_delete_post', [ __CLASS__, 'maybe_flush_cache_on_delete' ], 10, 2 );
+		add_action( 'deleted_post', [ __CLASS__, 'maybe_flush_cache_for_post' ], 10, 2 );
+		add_action( 'trashed_post', [ __CLASS__, 'maybe_flush_cache_for_post' ] );
+		add_action( 'untrashed_post', [ __CLASS__, 'maybe_flush_cache_for_post' ] );
+		add_action( 'added_post_meta', [ __CLASS__, 'maybe_flush_cache_for_meta' ], 10, 3 );
+		add_action( 'updated_post_meta', [ __CLASS__, 'maybe_flush_cache_for_meta' ], 10, 3 );
+		add_action( 'deleted_post_meta', [ __CLASS__, 'maybe_flush_cache_for_meta' ], 10, 3 );
 		add_action( 'admin_enqueue_scripts', [ __CLASS__, 'admin_enqueue_scripts' ] );
 
 		add_action( 'edit_form_before_permalink', [ __CLASS__, 'edit_form_before_permalink' ] );
@@ -451,15 +463,43 @@ class Subscription_Lists {
 	}
 
 	/**
-	 * Flush the list caches when a Subscription List is deleted.
+	 * Flush the list caches when a Subscription List post is deleted, trashed, or
+	 * untrashed. On deleted_post the row is already gone, so the passed $post is the
+	 * authoritative source for the type check.
 	 *
-	 * @param int          $post_id Post ID being deleted.
-	 * @param WP_Post|null $post    Post object being deleted, when provided.
+	 * @param int          $post_id Post ID.
+	 * @param WP_Post|null $post    Post object, when the hook provides it.
 	 * @return void
 	 */
-	public static function maybe_flush_cache_on_delete( $post_id, $post = null ) {
+	public static function maybe_flush_cache_for_post( $post_id, $post = null ) {
 		$post_type = $post instanceof \WP_Post ? $post->post_type : get_post_type( $post_id );
 		if ( self::CPT === $post_type ) {
+			self::flush_cache();
+		}
+	}
+
+	/**
+	 * Flush the list caches when a Subscription List's provider settings change.
+	 * Those settings drive is_active()/is_configured_for_current_provider()/
+	 * to_array() and are stored in post meta, written without a save_post fire. The
+	 * meta-key check short-circuits before the post-type lookup for the many
+	 * unrelated meta writes elsewhere on the site.
+	 *
+	 * @param int    $meta_id  Meta ID (unused).
+	 * @param int    $post_id  Post the meta belongs to.
+	 * @param string $meta_key Meta key written.
+	 * @return void
+	 */
+	public static function maybe_flush_cache_for_meta( $meta_id, $post_id, $meta_key ) {
+		$list_meta_keys = [
+			Subscription_List::META_KEY,
+			Subscription_List::TYPE_META,
+			Subscription_List::PROVIDER_META,
+			Subscription_List::REMOTE_ID_META,
+			Subscription_List::REMOTE_NAME_META,
+			Subscription_List::SUBSCRIBER_COUNT_META,
+		];
+		if ( in_array( $meta_key, $list_meta_keys, true ) && self::CPT === get_post_type( $post_id ) ) {
 			self::flush_cache();
 		}
 	}
