@@ -571,6 +571,167 @@ HTML;
 		}
 	}
 
+	// -------------------------------------------------------------------------
+	// compute_pre_write_issues() — dry-run predictive verification
+	// -------------------------------------------------------------------------
+
+	/**
+	 * A plan with all-unresolvable content-rule slugs is flagged in dry-run, mirroring
+	 * the "none of its content rules resolve" check in verify_migrated_gate().
+	 */
+	public function test_compute_pre_write_issues_flags_all_unresolvable_slugs() {
+		$ac_rules = [
+			[
+				'slug'  => 'post',
+				'value' => [ '1' ],
+			],
+		];
+		$layouts  = [
+			'registration'  => '',
+			'custom_access' => null,
+		];
+
+		$issues = $this->invoke_private_static(
+			'compute_pre_write_issues',
+			[ $ac_rules, false, $layouts, [] ]
+		);
+
+		$this->assertCount( 1, $issues );
+		$this->assertStringContainsString( 'none of its content rules resolve', $issues[0] );
+		$this->assertStringContainsString( 'post', $issues[0] );
+	}
+
+	/**
+	 * When only some slugs are unresolvable, the partial-leak variant of the message
+	 * is produced — the content behind the dead rules stays ungated while the rest is
+	 * covered.
+	 */
+	public function test_compute_pre_write_issues_flags_partially_unresolvable_slugs() {
+		$ac_rules = [
+			[
+				'slug'  => 'post',
+				'value' => [ '1' ],
+			],
+			[
+				'slug'  => 'category',
+				'value' => [ '2' ],
+			],
+		];
+		$layouts = [
+			'registration'  => '',
+			'custom_access' => null,
+		];
+
+		$issues = $this->invoke_private_static(
+			'compute_pre_write_issues',
+			[ $ac_rules, false, $layouts, [] ]
+		);
+
+		$this->assertCount( 1, $issues );
+		$this->assertStringContainsString( '1 of its 2 content rules do not resolve', $issues[0] );
+	}
+
+	/**
+	 * A purchase plan with no custom_access layout extracted is flagged — apply_layout()
+	 * will be skipped for the paid access mode, so any registered reader gets through.
+	 * Mirrors verify_migrated_gate()'s "paid access mode is not active" check.
+	 */
+	public function test_compute_pre_write_issues_flags_purchase_plan_with_no_custom_access_layout() {
+		$ac_rules = [
+			[
+				'slug'  => 'post_types',
+				'value' => [ 'post' ],
+			],
+		];
+		$layouts  = [
+			'registration'  => '<p>Upsell.</p>',
+			'custom_access' => null,
+		];
+
+		$issues = $this->invoke_private_static(
+			'compute_pre_write_issues',
+			[ $ac_rules, true, $layouts, [ 123 ] ]
+		);
+
+		$this->assertCount( 1, $issues );
+		$this->assertStringContainsString( 'paid access mode will not be activated', $issues[0] );
+	}
+
+	/**
+	 * A purchase plan whose merged product IDs are all empty is flagged — access_rules
+	 * will be an empty array, so the paid access mode asks for no purchase and any
+	 * registered reader passes. Mirrors verify_migrated_gate()'s "active but has no
+	 * access rules" check.
+	 */
+	public function test_compute_pre_write_issues_flags_purchase_plan_with_empty_product_ids() {
+		$ac_rules = [
+			[
+				'slug'  => 'post_types',
+				'value' => [ 'post' ],
+			],
+		];
+		$layouts  = [
+			'registration'  => '<p>Upsell.</p>',
+			'custom_access' => '<p>Member content.</p>',
+		];
+
+		$issues = $this->invoke_private_static(
+			'compute_pre_write_issues',
+			[ $ac_rules, true, $layouts, [] ]
+		);
+
+		$this->assertCount( 1, $issues );
+		$this->assertStringContainsString( 'no access rules', $issues[0] );
+	}
+
+	/**
+	 * A signup-only plan with resolvable slugs produces no pre-write issues.
+	 */
+	public function test_compute_pre_write_issues_returns_empty_for_a_clean_signup_plan() {
+		$ac_rules = [
+			[
+				'slug'  => 'post_types',
+				'value' => [ 'post' ],
+			],
+		];
+		$layouts  = [
+			'registration'  => '<p>Register.</p>',
+			'custom_access' => null,
+		];
+
+		$this->assertSame(
+			[],
+			$this->invoke_private_static(
+				'compute_pre_write_issues',
+				[ $ac_rules, false, $layouts, [] ]
+			)
+		);
+	}
+
+	/**
+	 * A purchase plan with a custom_access layout and at least one product ID is clean.
+	 */
+	public function test_compute_pre_write_issues_returns_empty_for_a_clean_purchase_plan() {
+		$ac_rules = [
+			[
+				'slug'  => 'post_types',
+				'value' => [ 'post' ],
+			],
+		];
+		$layouts  = [
+			'registration'  => '<p>Upsell.</p>',
+			'custom_access' => '<p>Welcome.</p>',
+		];
+
+		$this->assertSame(
+			[],
+			$this->invoke_private_static(
+				'compute_pre_write_issues',
+				[ $ac_rules, true, $layouts, [ 99 ] ]
+			)
+		);
+	}
+
 	/**
 	 * Create a published gate with an active registration mode pointing at a real
 	 * layout post — i.e. enforceable except for the content rules under test.

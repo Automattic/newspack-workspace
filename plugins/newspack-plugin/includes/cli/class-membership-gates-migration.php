@@ -44,13 +44,18 @@ class Membership_Gates_Migration {
 	 *
 	 * Dry-run by default; pass --live to write.
 	 *
-	 * On --live each written gate is re-read and checked against the conditions the
-	 * frontend evaluator applies, and any gate that would not restrict — or would
-	 * restrict less than the plan it came from, e.g. a paid plan that migrated to a
-	 * gate any registered reader passes — is reported as a WARN row rather than
-	 * counted as a plain success. Migrated gates stay dormant until WooCommerce
-	 * Memberships is deactivated, so without this an unenforceable gate would look
-	 * migrated for as long as it takes someone to notice at cutover.
+	 * Both modes surface predictable migration issues as WARN rows. Purchase-mode
+	 * gaps (no custom_access layout found, no product IDs after stripping variations)
+	 * and content-rule slugs the evaluator cannot resolve are computable from the
+	 * group data before any write, so they appear in dry-run and make the planning
+	 * pass predictive rather than optimistic. On --live each written gate is
+	 * additionally re-read and checked against the full set of conditions the frontend
+	 * evaluator applies; any gate that would not restrict — or would restrict less
+	 * than the plan it came from, e.g. a paid plan that migrated to a gate any
+	 * registered reader passes — is reported as a WARN row rather than counted as a
+	 * plain success. Migrated gates stay dormant until WooCommerce Memberships is
+	 * deactivated, so without this an unenforceable gate would look migrated for as
+	 * long as it takes someone to notice at cutover.
 	 *
 	 * Re-running is NOT edit-preserving: an existing gate matched by title has its
 	 * content rules and layout content overwritten with freshly extracted markup, so
@@ -249,17 +254,23 @@ class Membership_Gates_Migration {
 				}
 			}
 
-			// Post-write verification. The writes above only report that nothing
-			// errored; they say nothing about whether the resulting gate will
-			// actually restrict once WooCommerce Memberships is deactivated. Because
-			// migrated gates lie dormant until that cutover, an unenforceable gate
-			// would otherwise be reported as a success today and go unnoticed for
-			// weeks.
+			// Verification. In live mode, the written gate is re-read against the full
+			// set of conditions the frontend evaluator applies — an unenforceable gate
+			// that looks migrated could otherwise go unnoticed until cutover. In
+			// dry-run mode, a computable pre-write subset of the same checks runs off
+			// the group data so the planning pass is predictive rather than optimistic:
+			// purchase-mode gaps and unresolvable content-rule slugs surface before
+			// anything is written.
 			$verification_issues = [];
 			if ( ! $dry_run && empty( $layout_errors ) && $gate_id ) {
 				$verification_issues = self::verify_migrated_gate( $gate_id, $has_purchase );
 				foreach ( $verification_issues as $issue ) {
 					WP_CLI::warning( sprintf( '"%s" (gate %d) will not restrict as intended: %s', $gate_title, $gate_id, $issue ) );
+				}
+			} elseif ( $dry_run ) {
+				$verification_issues = self::compute_pre_write_issues( $ac_rules, $has_purchase, $layouts, $merged_product_ids );
+				foreach ( $verification_issues as $issue ) {
+					WP_CLI::warning( sprintf( '"%s" will not migrate correctly: %s', $gate_title, $issue ) );
 				}
 			}
 
@@ -431,6 +442,67 @@ class Membership_Gates_Migration {
 				$issues[] = 'it migrates a plan that requires a purchase, but its paid access mode is not active — any registered reader would get in';
 			} elseif ( empty( $custom_access['access_rules'] ) ) {
 				$issues[] = 'its paid access mode is active but has no access rules, so it asks for no purchase — any registered reader would get in';
+			}
+		}
+
+		return $issues;
+	}
+
+	/**
+	 * Predict migration issues from group data alone, without writing anything.
+	 *
+	 * A computable subset of verify_migrated_gate() that needs no written gate: slugs
+	 * that the evaluator cannot resolve, and purchase-mode gaps (no custom_access
+	 * layout extracted, or no product IDs after stripping variations). Called in
+	 * dry-run mode so the planning pass surfaces the same warnings --live would.
+	 *
+	 * @param array[] $ac_rules           AC-format content rules: [ [ 'slug' => string, 'value' => string[] ], ... ].
+	 * @param bool    $has_purchase       Whether any plan in the group requires a purchase.
+	 * @param array   $layouts            Extracted layout markup keyed by 'registration' and 'custom_access'.
+	 * @param int[]   $merged_product_ids Merged parent product IDs for the custom_access mode.
+	 *
+	 * @return string[] Human-readable problems; empty when no issues are predicted.
+	 */
+	private static function compute_pre_write_issues( array $ac_rules, bool $has_purchase, array $layouts, array $merged_product_ids ): array {
+		$issues = [];
+
+		// Mirror the unresolvable-slug check from verify_migrated_gate(): slugs the
+		// evaluator cannot resolve map to no content, so those rules leave their
+		// content ungated after cutover.
+		$unresolvable = array_values(
+			array_filter(
+				array_column( $ac_rules, 'slug' ),
+				fn( $slug ) => ! self::is_content_rule_slug_resolvable( $slug )
+			)
+		);
+		if ( ! empty( $unresolvable ) ) {
+			if ( count( $unresolvable ) === count( $ac_rules ) ) {
+				$issues[] = sprintf(
+					'none of its content rules resolve to a post type or taxonomy the evaluator can match (%s)',
+					implode( ', ', $unresolvable )
+				);
+			} else {
+				$issues[] = sprintf(
+					'%d of its %d content rules do not resolve to a post type or taxonomy the evaluator can match (%s), so the content they select stays ungated',
+					count( $unresolvable ),
+					count( $ac_rules ),
+					implode( ', ', $unresolvable )
+				);
+			}
+		}
+
+		if ( $has_purchase ) {
+			if ( null === $layouts['custom_access'] ) {
+				// No custom_access layout found → apply_layout() is never called for
+				// the custom_access mode → paid access mode stays inactive → any
+				// registered reader passes. Mirrors verify_migrated_gate()'s "paid
+				// access mode is not active" check.
+				$issues[] = 'it migrates a plan that requires a purchase, but no paid access layout was found — the paid access mode will not be activated, so any registered reader would get in';
+			} elseif ( empty( $merged_product_ids ) ) {
+				// apply_layout() is called but with an empty $product_ids → access_rules
+				// will be an empty array → mode is active with no purchase constraint.
+				// Mirrors verify_migrated_gate()'s "active but has no access rules" check.
+				$issues[] = 'its paid access mode will have no access rules (no product IDs remain after stripping product variations), so it will ask for no purchase — any registered reader would get in';
 			}
 		}
 
