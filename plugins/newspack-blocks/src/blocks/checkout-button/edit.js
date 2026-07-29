@@ -27,6 +27,7 @@ import {
 	SelectControl,
 	FormTokenField,
 	Button,
+	Notice,
 	Spinner,
 	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 	__experimentalToggleGroupControl as ToggleGroupControl,
@@ -208,6 +209,11 @@ function CheckoutButtonEdit( props ) {
 	const [ variations, setVariations ] = useState( [] );
 	const [ nyp, setNYP ] = useState( false );
 
+	// Resolved server-side, since a donation is not always identifiable from the
+	// product meta. Variations inherit it from their parent, which is the product
+	// fetched here, so the selected variation needs no separate check.
+	const isDonation = !! productData?.newspack_is_donation;
+
 	function handleProduct( data ) {
 		setProductData( data );
 		// Handle product variation data.
@@ -338,9 +344,24 @@ function CheckoutButtonEdit( props ) {
 							</>
 						) }
 					</ProductControl>
-					{ newspack_blocks_data?.coupons_enabled && (
-						<CouponControl value={ coupon } onChange={ value => setAttributes( { coupon: value } ) } />
-					) }
+					{ newspack_blocks_data?.coupons_enabled &&
+						( isDonation ? (
+							// Newspack disables coupons for donation carts, so a coupon set
+							// here would be dropped without telling anyone. Warn instead of
+							// clearing the stored code: the publisher may be mid-way through
+							// swapping the product back.
+							<Notice status={ coupon ? 'warning' : 'info' } isDismissible={ false }>
+								{ coupon
+									? sprintf(
+											// translators: %s: the coupon code stored on the block.
+											__( 'Coupon "%s" will not be applied. Coupons are never applied to donations.', 'newspack-blocks' ),
+											coupon
+									  )
+									: __( 'Coupons are not available for donation products.', 'newspack-blocks' ) }
+							</Notice>
+						) : (
+							<CouponControl value={ coupon } onChange={ value => setAttributes( { coupon: value } ) } />
+						) ) }
 					<WidthControl selectedWidth={ width } setAttributes={ setAttributes } />
 				</PanelBody>
 				<PanelBody title={ __( 'After purchase', 'newspack-blocks' ) }>
