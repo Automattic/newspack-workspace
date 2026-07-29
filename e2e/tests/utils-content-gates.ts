@@ -93,11 +93,16 @@ const clickHeaderSave = async (page: Page) => {
   }
 };
 
-// Save the gate being edited and return to the gate list. New gates default to
-// Active, so Save persists immediately and the wizard routes back to the list --
-// there is no status to choose.
+// Save the gate being edited and leave it live (Active), then return to the gate
+// list. Saving opens the Access Control wizard's pre-save panel ("Are you ready
+// to save?"), where new gates default to Inactive, so Active is picked
+// explicitly before confirming.
 export const saveGateAsActive = async (page: Page) => {
   await clickHeaderSave(page);
+  const saveDialog = page.getByRole("dialog");
+  await expect(saveDialog.getByText("Are you ready to save?")).toBeVisible();
+  await saveDialog.getByRole("radio", { name: "Active", exact: true }).check();
+  await saveDialog.getByRole("button", { name: "Save", exact: true }).click();
   await page.waitForURL(/#\/content-gates/);
 };
 
