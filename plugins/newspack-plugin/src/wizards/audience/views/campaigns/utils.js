@@ -3,7 +3,7 @@
  * WordPress dependencies.
  */
 import apiFetch from '@wordpress/api-fetch';
-import { __, sprintf } from '@wordpress/i18n';
+import { __, _n, sprintf } from '@wordpress/i18n';
 import { addQueryArgs } from '@wordpress/url';
 import { applyFilters, addFilter } from '@wordpress/hooks';
 import { useEffect, useState, Fragment } from '@wordpress/element';
@@ -141,6 +141,64 @@ export const promptDescription = prompt => {
 	return descriptionMessages.length ? descriptionMessages.join( ' | ' ) : null;
 };
 
+/**
+ * Render one end of a date-range criterion for the segment summary.
+ *
+ * @param {*} bound `{ type: 'absolute', date }` or `{ type: 'relative', days }`.
+ * @return {?string} A human-readable bound, or null when it isn't one.
+ */
+const dateBoundLabel = bound => {
+	if ( ! bound || 'object' !== typeof bound ) {
+		return null;
+	}
+	if ( 'absolute' === bound.type ) {
+		return bound.date || null;
+	}
+	if ( 'relative' === bound.type && Number.isInteger( bound.days ) ) {
+		if ( 0 === bound.days ) {
+			return __( 'today', 'newspack-plugin' );
+		}
+		const magnitude = Math.abs( bound.days );
+		return bound.days < 0
+			? /* translators: %d: number of days before today. */
+			  sprintf( _n( '%d day ago', '%d days ago', magnitude, 'newspack-plugin' ), magnitude )
+			: /* translators: %d: number of days after today. */
+			  sprintf( _n( '%d day from now', '%d days from now', magnitude, 'newspack-plugin' ), magnitude );
+	}
+	return null;
+};
+
+/**
+ * Render a date-range criterion value.
+ *
+ * Each bound is itself an object, so the generic `key: value` pass in
+ * segmentDescription() would stringify it as "[object Object]".
+ *
+ * @param {*} value The criterion value.
+ * @return {?string} A human-readable range, or null when the value isn't one.
+ */
+const dateRangeLabel = value => {
+	const isBound = bound => bound && 'object' === typeof bound && ( 'absolute' === bound.type || 'relative' === bound.type );
+	if ( ! isBound( value.start ) && ! isBound( value.end ) ) {
+		return null;
+	}
+	const from = dateBoundLabel( value.start );
+	const to = dateBoundLabel( value.end );
+	if ( from && to ) {
+		/* translators: 1: start of a date range, 2: end of a date range. */
+		return sprintf( __( '%1$s to %2$s', 'newspack-plugin' ), from, to );
+	}
+	if ( from ) {
+		/* translators: %s: start of an open-ended date range. */
+		return sprintf( __( 'from %s', 'newspack-plugin' ), from );
+	}
+	if ( to ) {
+		/* translators: %s: end of an open-ended date range. */
+		return sprintf( __( 'until %s', 'newspack-plugin' ), to );
+	}
+	return null;
+};
+
 export const segmentDescription = segment => {
 	const descriptionMessages = [];
 
@@ -163,13 +221,18 @@ export const segmentDescription = segment => {
 				if ( Array.isArray( value ) ) {
 					value = value.join( ', ' );
 				} else if ( typeof value === 'object' ) {
-					const values = [];
-					for ( const key in value ) {
-						if ( value[ key ] ) {
-							values.push( `${ key }: ${ value[ key ] }` );
+					const dateRange = dateRangeLabel( value );
+					if ( null !== dateRange ) {
+						value = dateRange;
+					} else {
+						const values = [];
+						for ( const key in value ) {
+							if ( value[ key ] ) {
+								values.push( `${ key }: ${ value[ key ] }` );
+							}
 						}
+						value = values.join( ', ' );
 					}
-					value = values.join( ', ' );
 				}
 				const message = applyFilters(
 					'newspack.wizards.campaigns.segmentDescription.criteriaMessage',
