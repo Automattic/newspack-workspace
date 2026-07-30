@@ -2,7 +2,7 @@
  * Tests for the donate URL trigger resolution helpers.
  */
 
-import { resolveDonationTrigger, validateDonationTriggerParams } from './donate-trigger';
+import { resolveDonationTrigger, validateDonationTriggerParams, TIERS_BASED_READY_EVENT } from './donate-trigger';
 
 /**
  * Build a tiers-based Donate block markup string, mirroring
@@ -139,6 +139,17 @@ describe( 'resolveDonationTrigger — tiered layout', () => {
 		const resolution = resolveDonationTrigger( root, { layout: 'tiered', frequency: 'year', amount: '180' } );
 		expect( resolution.status ).toBe( 'not-ready' );
 		expect( resolution.form ).toBe( root.querySelector( 'form' ) );
+	} );
+
+	it( 'resolves after the tiers view marks the block ready, matching the ready-event contract', () => {
+		const root = render( tieredBlock( { ready: false } ) );
+		expect( resolveDonationTrigger( root, { layout: 'tiered', frequency: 'year', amount: '180' } ).status ).toBe( 'not-ready' );
+		// What the tiers-based view does when it initializes (see view.ts):
+		// stamp the container, then announce readiness so waiting triggers retry.
+		expect( TIERS_BASED_READY_EVENT ).toBe( 'newspack-tiers-based-ready' );
+		root.querySelector( '.wpbnbd--tiers-based' ).setAttribute( 'data-tiers-based-ready', '' );
+		const retried = resolveDonationTrigger( root, { layout: 'tiered', frequency: 'year', amount: '180' } );
+		expect( retried.status ).toBe( 'tiered' );
 	} );
 
 	it( 'returns no-match for an amount no tier offers, without mutating the form', () => {

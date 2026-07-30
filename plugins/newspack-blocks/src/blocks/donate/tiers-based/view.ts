@@ -1,5 +1,6 @@
 import { setupSlider } from './slider';
 import { parseTiersBasedConfig } from './utils';
+import { TIERS_BASED_READY_EVENT } from '../../../modal-checkout/donate-trigger';
 
 const BUTTON_ACTIVE_CLASSNAME = 'wpbnbd__button--active';
 
@@ -132,6 +133,8 @@ export default ( parentEl: HTMLElement ) => {
 
 	// Mark the block as ready for programmatic triggering (see
 	// src/modal-checkout/donate-trigger.js): the listeners above are attached,
-	// so a tab click now synchronously updates the tier submit buttons.
+	// so a tab click now synchronously updates the tier submit buttons. The
+	// event lets a URL trigger that ran before this init retry immediately.
 	parentEl.setAttribute( 'data-tiers-based-ready', '' );
+	parentEl.dispatchEvent( new CustomEvent( TIERS_BASED_READY_EVENT, { bubbles: true } ) );
 };

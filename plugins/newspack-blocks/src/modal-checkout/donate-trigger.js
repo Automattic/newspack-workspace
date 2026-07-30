@@ -20,6 +20,17 @@ export const VALID_LAYOUTS = [ 'tiered', 'frequency', 'untiered' ];
 export const VALID_FREQUENCIES = [ 'once', 'month', 'year' ];
 
 /**
+ * Bubbling event the tiers-based view script dispatches on its container once
+ * its listeners are attached (right after it sets `data-tiers-based-ready`).
+ * A trigger that resolved a block as `not-ready` listens for this to retry —
+ * the tiersBased and modal bundles load async in either order, so the trigger
+ * can run first.
+ *
+ * @type {string}
+ */
+export const TIERS_BASED_READY_EVENT = 'newspack-tiers-based-ready';
+
+/**
  * Validate donate URL trigger parameters.
  *
  * The values are interpolated into attribute selectors, so anything outside

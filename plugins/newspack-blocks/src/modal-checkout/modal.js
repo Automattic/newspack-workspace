@@ -25,7 +25,7 @@ import {
 	getFormattedAmount,
 } from './utils';
 import { resolveCheckoutButtonForm, readCheckoutData } from './checkout-button-trigger';
-import { resolveDonationTrigger } from './donate-trigger';
+import { resolveDonationTrigger, TIERS_BASED_READY_EVENT } from './donate-trigger';
 import { applyCtaAttribution } from '../shared/js/cta-attribution';
 
 const CLASS_PREFIX = newspackBlocksModal.newspack_class_prefix;
@@ -790,12 +790,29 @@ domReady( () => {
 			return false;
 		}
 		if ( resolution.status === 'not-ready' ) {
-			// The tiersBased view script has not initialized this block yet
-			// (modal.js and tiersBased.js load async in either order), so tab and
-			// tier clicks would do nothing. Failing keeps the URL params in place
-			// (see handleModalCheckoutUrlParams), so a reload retries the trigger.
+			// The tiersBased view script has not initialized this block yet —
+			// modal.js and tiersBased.js load async in either order, and when
+			// modal.js is first (typical on fast/cached loads, where execution
+			// follows document order and modal.js is printed first) tab and tier
+			// clicks would do nothing. Retry when the block announces readiness;
+			// the listener re-arms if the matching block still isn't the one that
+			// became ready. Returning false keeps the URL params (see
+			// handleModalCheckoutUrlParams), so the retry — or a reload, if
+			// readiness never comes — still has them; a successful retry strips
+			// them here since the caller's pass is already over.
+			document.addEventListener(
+				TIERS_BASED_READY_EVENT,
+				() => {
+					if ( triggerDonationForm( layout, frequency, amount, other ) ) {
+						window.history.replaceState( null, null, window.location.pathname );
+					}
+				},
+				{ once: true }
+			);
 			// eslint-disable-next-line no-console
-			console.warn( `Newspack modal checkout: the donate form matching ${ described } is still initializing. The checkout was not triggered.` );
+			console.warn(
+				`Newspack modal checkout: the donate form matching ${ described } is still initializing — the trigger will retry when it is ready.`
+			);
 			return false;
 		}
 		const { form } = resolution;
