@@ -312,6 +312,12 @@ ${worktree_volumes}      - ./envs/${env_name}/html:/var/www/html
       - APACHE_RUN_USER=\${USE_CUSTOM_APACHE_USER:-www-data}
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/127.0.0.1/11211"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     networks:
       default: {}
       newspack_envs:

@@ -147,6 +147,9 @@ class WP_Object_Cache {
 
 	var $connection_errors = array();
 
+	// Servers already reported via error_log this request, keyed by "host:port".
+	var $logged_connection_errors = array();
+
 	var $time_start = 0;
 	var $time_total = 0;
 	var $size_total = 0;
@@ -277,9 +280,11 @@ class WP_Object_Cache {
 
 		$this->group_ops_stats( 'delete', $key, $group, null, $elapsed );
 
-		if ( false !== $result ) {
-			unset( $this->cache[ $key ] );
-		}
+		// Always drop the runtime entry, even when the backend delete fails (server
+		// unreachable, or key absent). Leaving it in place keeps a stale value
+		// readable for the rest of the request, which silently breaks the
+		// read-after-write that update_metadata() and clean_post_cache() rely on.
+		unset( $this->cache[ $key ] );
 
 		return $result;
 	}
@@ -810,6 +815,17 @@ class WP_Object_Cache {
 	}
 
 	function failure_callback( $host, $port ) {
+		$server = $host . ':' . $port;
+
+		// Report each unreachable server once per request. Without this the cache
+		// degrades to a request-scoped array with no outward signal at all, which
+		// is indistinguishable from a healthy cache until results go stale.
+		if ( ! isset( $this->logged_connection_errors[ $server ] ) ) {
+			$this->logged_connection_errors[ $server ] = true;
+
+			error_log( sprintf( 'Memcached object cache: cannot reach %s. Falling back to a request-scoped cache; run `/etc/init.d/memcached start` in the container.', $server ) );
+		}
+
 		$this->connection_errors[] = array(
 			'host' => $host,
 			'port' => $port,

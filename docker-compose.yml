@@ -61,6 +61,16 @@ services:
       - APACHE_RUN_USER=${USE_CUSTOM_APACHE_USER:-www-data}
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    ## Apache runs in the foreground, so it takes the container down with it when
+    ## it dies. memcached does not: it can exit and leave a container that looks
+    ## healthy while the object cache quietly stops invalidating. Probe it so the
+    ## failure is visible in `docker ps`.
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/127.0.0.1/11211"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
   mailhog:
     image: arjenz/mailhog:latest
     restart: always

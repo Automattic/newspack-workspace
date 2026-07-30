@@ -57,8 +57,31 @@ echo "Newspack Manager site is available at https://manager.com${WP_HOST_PORT}/"
 echo "Open http://localhost:8025 to see Mailhog inbox."
 echo
 
-# Start memcached
+# Start memcached.
+#
+# memcached.conf points -P at /var/run/memcached/, a directory that lives on
+# tmpfs and so is absent on every container start. init.d tracks the daemon by a
+# separate pid file that its wrapper writes, so this one is redundant -- but
+# without the directory memcached logs a pid file error on each start, which
+# reads as a startup failure when triaging. Create it to keep the log honest.
+mkdir -p /var/run/memcached
+chown memcache:memcache /var/run/memcached
+
 /etc/init.d/memcached start
+
+# Keep memcached alive. Nothing supervises it, and a dead memcached is invisible
+# from the outside: the object cache drop-in keeps serving a request-scoped
+# array, so the site looks fine while cache invalidation silently stops working.
+(
+	while true; do
+		sleep 30
+
+		if ! (echo > /dev/tcp/127.0.0.1/11211) 2>/dev/null; then
+			echo "[run.sh] memcached is not answering on 11211; restarting it."
+			/etc/init.d/memcached restart || /etc/init.d/memcached start
+		fi
+	done
+) &
 
 # Run apache in the foreground so the container keeps running
 echo "Running Apache in the foreground"
