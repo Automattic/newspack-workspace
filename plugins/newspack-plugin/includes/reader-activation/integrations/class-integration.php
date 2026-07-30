@@ -630,7 +630,10 @@ abstract class Integration {
 	 *
 	 * Lazily migrates stored display names (pre-coexistence format) to
 	 * version-qualified field ids, resolving names against the site's
-	 * schema origin, and writes the option back in the new format.
+	 * schema origin, and writes the option back in the new format. The
+	 * write-back is conditional: it is skipped whenever any stored name
+	 * fails to resolve, so migration can retry (and succeed) on a later
+	 * read instead of permanently losing that entry from the option.
 	 *
 	 * @return string[] List of enabled field ids.
 	 */
@@ -651,8 +654,9 @@ abstract class Integration {
 			return array_values( $stored );
 		}
 
-		$origin = Sync\Field_Registry::get_schema_origin();
-		$ids    = [];
+		$origin         = Sync\Field_Registry::get_schema_origin();
+		$ids            = [];
+		$has_unresolved = false;
 		foreach ( $stored as $entry ) {
 			if ( preg_match( '/^(v1|v2|neutral):/', (string) $entry ) ) {
 				$ids[] = $entry;
@@ -667,13 +671,25 @@ abstract class Integration {
 			}
 			if ( empty( $definitions ) ) {
 				Logger::log( sprintf( 'Outgoing fields migration: no definition found for "%s".', $entry ) );
+				$has_unresolved = true;
 			}
 			foreach ( $definitions as $definition ) {
 				$ids[] = $definition['id'];
 			}
 		}
 		$ids = array_values( array_unique( $ids ) );
-		\update_option( self::OUTGOING_FIELDS_OPTION_PREFIX . $this->id, $ids, false );
+
+		// Only write the migrated ids back when every stored entry resolved.
+		// A name can fail to resolve when the plugin that declares its field
+		// is inactive (e.g. newspack-network deactivated, or a WooCommerce
+		// Teams field gated off); persisting the reduced list now would drop
+		// that name from the option permanently, so reactivating the
+		// provider could never restore the reader's prior selection. Leaving
+		// the option untouched lets migration retry - and succeed - on a
+		// later read once the field becomes resolvable again.
+		if ( ! $has_unresolved ) {
+			\update_option( self::OUTGOING_FIELDS_OPTION_PREFIX . $this->id, $ids, false );
+		}
 		return $ids;
 	}
 

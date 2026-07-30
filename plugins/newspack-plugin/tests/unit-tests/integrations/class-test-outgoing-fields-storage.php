@@ -87,6 +87,42 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * When a stored display name fails to resolve — e.g. the plugin that
+	 * declares its field is inactive — the write-back is skipped so the
+	 * unresolved name survives in the option for a later retry. Once every
+	 * stored entry resolves, the write-back proceeds as normal.
+	 */
+	public function test_migration_skips_write_back_when_name_unresolvable() {
+		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
+		\update_option(
+			Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test',
+			[ 'Account', 'Field That Does Not Exist' ]
+		);
+
+		$ids = $this->integration->get_enabled_outgoing_field_ids();
+
+		$this->assertEqualsCanonicalizing( [ 'v1:account' ], $ids );
+		// Not written back: the option must still hold the original names so
+		// migration can retry once the missing field becomes resolvable.
+		$this->assertEqualsCanonicalizing(
+			[ 'Account', 'Field That Does Not Exist' ],
+			\get_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test' )
+		);
+
+		// Once every stored entry resolves, the write-back proceeds normally.
+		\update_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test', [ 'Account' ] );
+
+		$this->assertEqualsCanonicalizing(
+			[ 'v1:account' ],
+			$this->integration->get_enabled_outgoing_field_ids()
+		);
+		$this->assertEqualsCanonicalizing(
+			[ 'v1:account' ],
+			\get_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test' )
+		);
+	}
+
+	/**
 	 * Legacy maps two raw keys (registration_page, current_page_url) to this
 	 * one name; migration must resolve the stored name to both ids, since
 	 * dropping either would lose payload fields.
