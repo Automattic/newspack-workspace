@@ -282,7 +282,10 @@ class Contact_Pull {
 		$date    = false;
 
 		if ( '' !== $format ) {
-			$date = \DateTimeImmutable::createFromFormat( $format, $trimmed );
+			// The `!` resets fields the format doesn't specify to zero instead of
+			// "now", so a datetime under a date-only source format stores the same
+			// value on every pull rather than embedding the pull moment.
+			$date = \DateTimeImmutable::createFromFormat( '!' . $format, $trimmed );
 			// createFromFormat is permissive: it happily parses '2026-13-45' against
 			// 'Y-m-d' and rolls the overflow into the next year. Warnings are how it
 			// reports that, so treat any as a parse failure. As of PHP 8.2
