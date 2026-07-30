@@ -250,6 +250,24 @@ describe( 'resolveCheckoutButtonForm', () => {
 		expect( result ).toBe( pickerForm );
 		expect( pickerForm.querySelector( 'input[name="coupon"]' ).value ).toBe( 'ANYTIER5' );
 	} );
+
+	// With nothing but locked buttons there is no correct donor, so the first in
+	// DOM order supplies the context — the other half of findContextDonorForm.
+	it( 'falls back to the first locked button when no unlocked one exists', () => {
+		const locked = ( variationId, coupon ) =>
+			`<div class="wp-block-newspack-blocks-checkout-button"><form data-checkout='${ JSON.stringify( {
+				product_id: '1406',
+				variation_id: variationId,
+				is_variable: true,
+			} ) }'><input type="hidden" name="coupon" value="${ coupon }"><button type="submit">Buy</button></form></div>`;
+		const root = render( locked( '1408', 'FIRST20' ) + locked( '1409', 'SECOND10' ) + variationPicker( '1406', [ '1407', '1408', '1409' ] ) );
+		const pickerForm = root.querySelector( `.${ VARIATION_MODAL_CLASS_PREFIX } form` );
+
+		const result = resolveCheckoutButtonForm( root, '1406', '1407', PICKER_OPTIONS );
+
+		expect( result ).toBe( pickerForm );
+		expect( pickerForm.querySelector( 'input[name="coupon"]' ).value ).toBe( 'FIRST20' );
+	} );
 } );
 
 describe( 'copyContextFields', () => {
