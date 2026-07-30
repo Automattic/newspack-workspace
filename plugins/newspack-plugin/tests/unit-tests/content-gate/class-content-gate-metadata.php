@@ -882,19 +882,60 @@ class Newspack_Test_Content_Gate_Metadata extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test that a malformed institution rule value (non-array) does not fatal
-	 * and contributes no group label.
+	 * Test that an empty institution rule value imposes no constraint and
+	 * contributes no group label.
 	 *
-	 * Institution::evaluate() treats a non-array $value as "matches everyone,"
-	 * so the rule passes — but there's no specific institution to attribute, so
+	 * Institution::evaluate() treats an empty $value as "no constraint," so the
+	 * rule passes — but there's no specific institution to attribute, so
 	 * Content_Access_Group must come back empty (and crucially: no TypeError on
 	 * a `foreach` over a non-iterable).
 	 *
+	 * @dataProvider empty_institution_value_provider
+	 *
+	 * @param mixed $value Empty rule value.
+	 */
+	public function test_group_label_empty_for_empty_institution_rule( $value ) {
+		// An institution must exist so the rule evaluation has something to consider.
+		$this->create_institution( 'Test University', [ 'email_domain' => 'example.com' ] );
+
+		$rules = [
+			[
+				[
+					'slug'  => 'institution',
+					'value' => $value,
+				],
+			],
+		];
+		$this->create_gate_with_rules( 'Empty Institution Gate', $rules );
+
+		$result = $this->get_metadata_for_user( self::$user_id );
+
+		$this->assertEquals( 'Yes', $result['Content_Access'], 'Empty institution rule imposes no constraint per Institution::evaluate().' );
+		$this->assertEmpty( $result['Content_Access_Group'], 'Empty institution rule should yield no group label.' );
+	}
+
+	/**
+	 * Data provider for empty institution rule values.
+	 */
+	public function empty_institution_value_provider() {
+		return [
+			'empty string' => [ '' ],
+			'empty array'  => [ [] ],
+			'null'         => [ null ],
+		];
+	}
+
+	/**
+	 * Test that a populated non-array institution rule value fails closed:
+	 * Institution::evaluate() returns false for a malformed shape, so the rule —
+	 * and with it the single-rule group — denies access, and no group label is
+	 * attributed.
+	 *
 	 * @dataProvider malformed_institution_value_provider
 	 *
-	 * @param mixed $value Malformed rule value.
+	 * @param mixed $value Malformed (populated non-array) rule value.
 	 */
-	public function test_group_label_empty_for_malformed_institution_rule( $value ) {
+	public function test_access_denied_for_malformed_institution_rule( $value ) {
 		// An institution must exist so the rule evaluation has something to consider.
 		$this->create_institution( 'Test University', [ 'email_domain' => 'example.com' ] );
 
@@ -910,20 +951,17 @@ class Newspack_Test_Content_Gate_Metadata extends WP_UnitTestCase {
 
 		$result = $this->get_metadata_for_user( self::$user_id );
 
-		$this->assertEquals( 'Yes', $result['Content_Access'], 'Malformed institution rule matches everyone per Institution::evaluate().' );
+		$this->assertEquals( 'No', $result['Content_Access'], 'Malformed institution rule fails closed per Institution::evaluate().' );
 		$this->assertEmpty( $result['Content_Access_Group'], 'Malformed institution rule should yield no group label.' );
 	}
 
 	/**
-	 * Data provider for malformed institution rule values.
+	 * Data provider for malformed (populated non-array) institution rule values.
 	 */
 	public function malformed_institution_value_provider() {
 		return [
-			'empty string' => [ '' ],
-			'empty array'  => [ [] ],
-			'null'         => [ null ],
-			'scalar int'   => [ 5 ],
-			'scalar str'   => [ '5' ],
+			'scalar int' => [ 5 ],
+			'scalar str' => [ '5' ],
 		];
 	}
 

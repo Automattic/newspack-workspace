@@ -186,7 +186,10 @@ const AccessRuleValueControl = ( {
 		};
 	}, [ slug ] ); // eslint-disable-line react-hooks/exhaustive-deps
 
-	if ( options.length > 0 ) {
+	// Options-backed rules always get the token field — with an empty option list
+	// it renders an empty picker. Degrading to the free-text control would let a
+	// string be saved where an array of option values belongs.
+	if ( config.has_options ) {
 		// Map stored IDs to labels for display; silently drop IDs with no matching option.
 		const valueArr = Array.isArray( value ) ? value : [];
 		const selectedLabels = options.filter( o => valueArr.some( v => String( v ) === String( o.value ) ) ).map( o => o.label );

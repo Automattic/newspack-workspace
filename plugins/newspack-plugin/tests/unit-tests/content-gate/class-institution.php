@@ -457,6 +457,21 @@ class Newspack_Test_Institution extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test that an empty value keeps its no-constraint semantics while a populated
+	 * value of the wrong shape (e.g. a free-text string saved by a picker that
+	 * degraded to a text box) fails closed instead of granting access to everyone.
+	 */
+	public function test_evaluate_fails_closed_for_populated_non_array_value() {
+		$reader_id = $this->create_reader( 'reader@fail-closed.edu' );
+
+		$this->assertTrue( Institution::evaluate( $reader_id, [] ), 'An empty array means no constraint.' );
+		$this->assertTrue( Institution::evaluate( $reader_id, null ), 'Null means no constraint.' );
+		$this->assertTrue( Institution::evaluate( $reader_id, '' ), 'An empty string means no constraint.' );
+
+		$this->assertFalse( Institution::evaluate( $reader_id, 'Springfield University' ), 'A populated non-array value must not grant access.' );
+	}
+
+	/**
 	 * Test check_ip filter handler.
 	 */
 	public function test_check_ip_filter() {

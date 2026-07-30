@@ -268,14 +268,17 @@ class Content_Gate extends Contact_Metadata {
 	private static function get_group_labels( $slug, $value, $user_id, $context = [] ) {
 		switch ( $slug ) {
 			case 'subscription':
-				// An empty/non-array $value mirrors Access_Rules::has_active_subscription's
+				// An empty $value mirrors Access_Rules::has_active_subscription's
 				// "any active subscription" semantics — every active group sub matches.
+				// A populated non-array value fails the rule outright, so this
+				// resolver is never reached for one.
 				$product_filter = is_array( $value ) && ! empty( $value ) ? $value : null;
 				return Group_Subscription::get_group_names_for_user( $user_id, $product_filter );
 
 			case 'institution':
-				// A malformed institution rule (missing/empty/scalar value) matches everyone
-				// per Institution::evaluate(), but there's no specific institution to attribute.
+				// An empty institution rule imposes no constraint per Institution::evaluate(),
+				// but there's no specific institution to attribute. A populated non-array
+				// value fails the rule outright, so this resolver is never reached for one.
 				if ( ! is_array( $value ) || empty( $value ) ) {
 					return [];
 				}

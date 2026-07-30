@@ -83,6 +83,15 @@ class Access_Rules {
 				'description' => '',
 				'default'     => ! empty( $config['options'] ) ? [] : '',
 				'options'     => [],
+				// Whether the registration declared an options source (a callable, or a
+				// populated list). This is the discriminator between an options-backed
+				// rule (value: array of option values) and a free-text rule (value:
+				// string) — the *resolved* options list can't serve that purpose, since
+				// a callable source legitimately resolves to an empty list while no
+				// matching entities (institutions, subscription products) exist yet.
+				// An explicitly empty `options` array (e.g. a promoted ESP field with
+				// no options) still registers as free-text, matching `default` below.
+				'has_options' => ! empty( $config['options'] ),
 				'is_boolean'  => false,
 			]
 		);
@@ -435,9 +444,12 @@ class Access_Rules {
 	 * Also checks if the user is a member of a group subscription with the required products.
 	 *
 	 * Note: `$strict` only constrains the built-in ownership / group-membership checks.
-	 * The `newspack_access_rules_has_active_subscription` filter is always applied and
-	 * its return value is the final result, so a third-party filter callback can grant
-	 * access even when `$strict` is true. Filter authors should opt in to the 4th `$strict`
+	 * The `newspack_access_rules_has_active_subscription` filter is applied to every
+	 * well-formed evaluation and its return value is the final result, so a third-party
+	 * filter callback can grant access even when `$strict` is true. The one exception
+	 * is a populated non-array `$product_ids`: malformed configuration fails closed
+	 * before the filter runs, so a filter cannot grant access based on a value nobody
+	 * can interpret. Filter authors should opt in to the 4th `$strict`
 	 * arg (`accepted_args` >= 4) and respect it — e.g., short-circuit and return
 	 * `$has_subscription` unchanged when `$strict` is true and the access claim isn't
 	 * strictly an owned subscription. Otherwise callers using `$strict` to distinguish
@@ -445,11 +457,20 @@ class Access_Rules {
 	 * filter-granted access as local ownership.
 	 *
 	 * @param int   $user_id     User ID.
-	 * @param array $product_ids Required product IDs.
+	 * @param mixed $product_ids Required product IDs — an array when well-formed
+	 *                           (empty means any subscription qualifies); any other
+	 *                           populated shape is treated as malformed and fails closed.
 	 * @param bool  $strict      If true, only consider active subscriptions owned by $user_id (ignore group subscription memberships).
 	 * @return bool
 	 */
 	public static function has_active_subscription( $user_id, $product_ids, $strict = false ) {
+		// A populated value of the wrong shape (e.g. a free-text string saved
+		// before values were validated) is malformed configuration, not the
+		// absence of a constraint — fail closed, mirroring Institution::evaluate().
+		if ( ! empty( $product_ids ) && ! is_array( $product_ids ) ) {
+			return false;
+		}
+
 		$has_subscription = false;
 
 		// Whether on-hold subscriptions in payment recovery (failed-payment retry

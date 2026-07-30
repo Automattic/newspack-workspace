@@ -106,11 +106,13 @@ class Content_Gate_API {
 	/**
 	 * Sanitize the gate.
 	 *
-	 * TODO: Handle errors from each sanitization method.
+	 * TODO: Handle errors from the remaining sanitization methods (content rules,
+	 * registration, metering) the way custom access errors already propagate.
 	 *
 	 * @param array $gate The gate.
 	 *
-	 * @return array The sanitized gate.
+	 * @return array|\WP_Error The sanitized gate, or an error when an access rule
+	 *                         holds an invalid value.
 	 */
 	public static function sanitize_gate( $gate ) {
 		$sanitized = [];
@@ -133,7 +135,13 @@ class Content_Gate_API {
 			$sanitized['registration'] = self::sanitize_registration( $gate['registration'] );
 		}
 		if ( isset( $gate['custom_access'] ) ) {
-			$sanitized['custom_access'] = self::sanitize_custom_access( $gate['custom_access'] );
+			$sanitized_custom_access = self::sanitize_custom_access( $gate['custom_access'] );
+			if ( is_wp_error( $sanitized_custom_access ) ) {
+				// As a REST `sanitize_callback` return value, the error fails the
+				// request with a 400 rather than silently saving a loosened rule set.
+				return $sanitized_custom_access;
+			}
+			$sanitized['custom_access'] = $sanitized_custom_access;
 		}
 		if ( isset( $gate['content_rules_match'] ) ) {
 			$sanitized['content_rules_match'] = in_array( $gate['content_rules_match'], [ 'all', 'any' ], true ) ? $gate['content_rules_match'] : 'all';
@@ -170,7 +178,8 @@ class Content_Gate_API {
 	 *
 	 * @param array $custom_access The custom access settings.
 	 *
-	 * @return array The sanitized custom access.
+	 * @return array|\WP_Error The sanitized custom access, or an error when an
+	 *                         access rule holds an invalid value.
 	 */
 	public static function sanitize_custom_access( $custom_access ) {
 		$sanitized = [];
@@ -181,7 +190,11 @@ class Content_Gate_API {
 			$sanitized['metering'] = self::sanitize_metering( $custom_access['metering'] );
 		}
 		if ( isset( $custom_access['access_rules'] ) ) {
-			$sanitized['access_rules'] = self::sanitize_rules( $custom_access['access_rules'], 'access' );
+			$sanitized_rules = self::sanitize_rules( $custom_access['access_rules'], 'access' );
+			if ( is_wp_error( $sanitized_rules ) ) {
+				return $sanitized_rules;
+			}
+			$sanitized['access_rules'] = $sanitized_rules;
 		}
 		if ( isset( $custom_access['gate_layout_id'] ) ) {
 			$sanitized['gate_layout_id'] = absint( $custom_access['gate_layout_id'] );
@@ -221,7 +234,8 @@ class Content_Gate_API {
 	 * @param array  $rules The rules.
 	 * @param string $type The type of rules to sanitize.
 	 *
-	 * @return array The sanitized rules.
+	 * @return array|\WP_Error The sanitized rules, or an error when an access rule
+	 *                         holds an invalid value.
 	 */
 	public static function sanitize_rules( $rules, $type = 'access' ) {
 		if ( ! is_array( $rules ) ) {
@@ -252,7 +266,8 @@ class Content_Gate_API {
 	 *
 	 * @param array $rules The access rules.
 	 *
-	 * @return array The sanitized access rules in grouped format.
+	 * @return array|\WP_Error The sanitized access rules in grouped format, or an
+	 *                         error when a rule holds an invalid value.
 	 */
 	public static function sanitize_access_rules_grouped( $rules ) {
 		if ( empty( $rules ) ) {
@@ -266,6 +281,9 @@ class Content_Gate_API {
 		$sanitized_groups = [];
 		foreach ( $rules as $group ) {
 			$sanitized_group = self::sanitize_access_rules_group( $group );
+			if ( is_wp_error( $sanitized_group ) ) {
+				return $sanitized_group;
+			}
 			if ( ! empty( $sanitized_group ) ) {
 				$sanitized_groups[] = $sanitized_group;
 			}
@@ -277,9 +295,19 @@ class Content_Gate_API {
 	/**
 	 * Sanitize a single group of access rules.
 	 *
+	 * A rule with an unknown slug is dropped — a gate may hold rules from a since-
+	 * deactivated integration, and those must not brick the save. Dropping it doesn't
+	 * change effective behavior, because `Access_Rules::evaluate_rule()` already
+	 * returns true for an unregistered slug. An *invalid value* on a known rule fails
+	 * the whole save instead: silently dropping that rule would flip its group from
+	 * failing closed at evaluate time to granting access (or empty the rule set,
+	 * which grants access outright), so the error must reach the caller for the
+	 * operator to fix the value.
+	 *
 	 * @param array $group The group of access rules.
 	 *
-	 * @return array The sanitized group.
+	 * @return array|\WP_Error The sanitized group, or an error when a rule holds an
+	 *                         invalid value.
 	 */
 	public static function sanitize_access_rules_group( $group ) {
 		if ( ! is_array( $group ) ) {
@@ -289,9 +317,13 @@ class Content_Gate_API {
 		$sanitized_group = [];
 		foreach ( $group as $rule ) {
 			$sanitized = self::sanitize_access_rule( $rule );
-			if ( ! is_wp_error( $sanitized ) ) {
-				$sanitized_group[] = $sanitized;
+			if ( is_wp_error( $sanitized ) ) {
+				if ( 'invalid_access_rule_value' === $sanitized->get_error_code() ) {
+					return $sanitized;
+				}
+				continue;
 			}
+			$sanitized_group[] = $sanitized;
 		}
 		return $sanitized_group;
 	}
@@ -304,8 +336,11 @@ class Content_Gate_API {
 	 * @return mixed|\WP_Error The sanitized access rule or error if invalid.
 	 */
 	public static function sanitize_access_rule( $access_rule ) {
-		$rules = Access_Rules::get_access_rules();
-		$slug  = sanitize_text_field( $access_rule['slug'] );
+		// Registered (unresolved) rules carry everything this method reads —
+		// `is_boolean`, `has_options` — so the option lists (institution query,
+		// product query) are not resolved here.
+		$rules = Access_Rules::get_registered_rules();
+		$slug  = sanitize_text_field( $access_rule['slug'] ?? '' );
 
 		if ( empty( $slug ) || ! isset( $rules[ $slug ] ) ) {
 			return new \WP_Error( 'invalid_access_rule_slug', __( 'Invalid access rule slug.', 'newspack-plugin' ), [ 'status' => 400 ] );
@@ -315,9 +350,21 @@ class Content_Gate_API {
 		$rule  = $rules[ $slug ];
 		if ( $rule['is_boolean'] ) {
 			$value = true; // Boolean rules are always true.
-		} elseif ( ! empty( $rule['options'] ) ) {
-			if ( ! is_array( $access_rule['value'] ) ) {
-				return new \WP_Error( 'invalid_access_rule_value', __( 'Invalid access rule value.', 'newspack-plugin' ), [ 'status' => 400 ] );
+		} elseif ( ! empty( $rule['has_options'] ) ) {
+			// Branch on whether the rule declares an options source, not on the
+			// resolved list: an options-backed rule whose list is currently empty
+			// (no institutions yet, no subscription products) still takes array
+			// values only. Free text saved here would evaluate as malformed.
+			if ( ! is_array( $access_rule['value'] ?? null ) ) {
+				return new \WP_Error(
+					'invalid_access_rule_value',
+					sprintf(
+						// translators: %s is the access rule name.
+						__( 'Invalid value for the "%s" access rule.', 'newspack-plugin' ),
+						$rule['name']
+					),
+					[ 'status' => 400 ]
+				);
 			}
 			$value = array_values(
 				array_filter(
@@ -330,7 +377,21 @@ class Content_Gate_API {
 				)
 			);
 		} else {
-			$value = sanitize_text_field( $access_rule['value'] );
+			// The mirror shape check: `sanitize_text_field()` silently collapses an
+			// array to '', and free-text rules read '' as "no constraint" — so a
+			// populated non-scalar value would grant access to everyone.
+			if ( ! is_scalar( $access_rule['value'] ?? '' ) ) {
+				return new \WP_Error(
+					'invalid_access_rule_value',
+					sprintf(
+						// translators: %s is the access rule name.
+						__( 'Invalid value for the "%s" access rule.', 'newspack-plugin' ),
+						$rule['name']
+					),
+					[ 'status' => 400 ]
+				);
+			}
+			$value = sanitize_text_field( $access_rule['value'] ?? '' );
 		}
 
 		return [

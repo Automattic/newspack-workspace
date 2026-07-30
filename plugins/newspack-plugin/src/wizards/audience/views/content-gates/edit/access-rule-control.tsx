@@ -78,14 +78,16 @@ export default function AccessRuleControl( { slug, value, onChange }: GateRuleCo
 	if ( ! rule || rule.is_boolean ) {
 		return null;
 	}
-	if ( options && options.length > 0 ) {
+	// Options-backed rules always get the token field — with an empty option list
+	// it renders an empty picker. Degrading to the free-text control would let a
+	// string be saved where an array of option values belongs.
+	if ( rule.has_options ) {
+		const valueArr = Array.isArray( value ) ? value : [];
 		return (
 			<FormTokenField
 				label={ '' }
-				value={ options
-					.filter( o => ( value as Array< string | number > ).some( v => String( v ) === String( o.value ) ) )
-					.map( o => o.label ) }
-				onChange={ ( items: string[] ) => onChange( options?.filter( o => items.includes( o.label ) ).map( o => o.value ) ?? [] ) }
+				value={ options.filter( o => valueArr.some( v => String( v ) === String( o.value ) ) ).map( o => o.label ) }
+				onChange={ ( items: string[] ) => onChange( options.filter( o => items.includes( o.label ) ).map( o => o.value ) ) }
 				suggestions={ options.map( o => o.label ) }
 				__experimentalExpandOnFocus
 				__next40pxDefaultSize
