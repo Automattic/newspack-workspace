@@ -266,6 +266,53 @@ class Subscribers_Wizard extends Wizard {
 				],
 			]
 		);
+
+		// The wizard's first person-profile write endpoints: on-hold recovery
+		// (NPPD-1753). Both act on one individual subscription; group money
+		// actions deliberately live with the group surface instead.
+		register_rest_route(
+			NEWSPACK_API_NAMESPACE,
+			'/wizard/' . $this->slug . '/subscriptions/(?P<id>\d+)/reactivate',
+			[
+				'methods'             => \WP_REST_Server::EDITABLE,
+				'callback'            => [ $this, 'api_reactivate_subscription' ],
+				'permission_callback' => [ $this, 'api_permissions_check' ],
+				'args'                => [
+					'id'   => [
+						'type'              => 'integer',
+						'required'          => true,
+						'minimum'           => 1,
+						'sanitize_callback' => 'absint',
+						'validate_callback' => 'rest_validate_request_arg',
+					],
+					'mode' => [
+						'type'              => 'string',
+						'required'          => true,
+						'enum'              => [ 'free', 'charge' ],
+						'validate_callback' => 'rest_validate_request_arg',
+					],
+				],
+			]
+		);
+
+		register_rest_route(
+			NEWSPACK_API_NAMESPACE,
+			'/wizard/' . $this->slug . '/subscriptions/(?P<id>\d+)/payment-link',
+			[
+				'methods'             => \WP_REST_Server::EDITABLE,
+				'callback'            => [ $this, 'api_send_payment_link' ],
+				'permission_callback' => [ $this, 'api_permissions_check' ],
+				'args'                => [
+					'id' => [
+						'type'              => 'integer',
+						'required'          => true,
+						'minimum'           => 1,
+						'sanitize_callback' => 'absint',
+						'validate_callback' => 'rest_validate_request_arg',
+					],
+				],
+			]
+		);
 	}
 
 	/**
@@ -546,6 +593,370 @@ class Subscribers_Wizard extends Wizard {
 	}
 
 	/**
+	 * POST one on-hold subscription back to active (NPPD-1753 on-hold recovery).
+	 *
+	 * Two modes, chosen by the admin in the reactivate flow:
+	 *
+	 * - `free`: no payment. WCS's own on-hold → active transition recalculates
+	 *   the next payment date when the stored one is in the past, so billing
+	 *   resumes on the regular schedule without charging anything now.
+	 * - `charge`: process a renewal against the saved payment method — see
+	 *   process_renewal_charge() for how the charge is dispatched and how its
+	 *   outcome is decided.
+	 *
+	 * @param \WP_REST_Request $request The request.
+	 *
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public function api_reactivate_subscription( $request ) {
+		$this->reset_request_caches();
+
+		$subscription = $this->resolve_on_hold_subscription( (int) $request->get_param( 'id' ) );
+		if ( \is_wp_error( $subscription ) ) {
+			return $subscription;
+		}
+
+		$admin_login = wp_get_current_user()->user_login;
+
+		if ( 'charge' === $request->get_param( 'mode' ) ) {
+			return $this->process_renewal_charge( $subscription, $admin_login );
+		}
+
+		// Real WCS throws when the transition is not allowed — e.g. the
+		// subscription's product no longer exists. That is a business-rule
+		// refusal, not a server fault: surface it as a conflict, with the
+		// likely causes named, since WCS's own message names none. One known
+		// divergence: WCS lets an admin override the unavailable-product
+		// refusal only inside wp-admin (`is_admin()`), which a REST request is
+		// not — so the native subscription screen may still allow what this
+		// endpoint refuses; the message points there.
+		try {
+			$subscription->update_status( 'active' );
+		} catch ( \Exception $e ) {
+			return new \WP_Error(
+				'newspack_subscribers_reactivate_failed',
+				sprintf(
+					/* translators: %s: the refusal reported by WooCommerce. */
+					__( '%s The subscription\'s product may no longer be purchasable, or its term may have ended. Reactivating from the WooCommerce subscription screen may still be possible.', 'newspack-plugin' ),
+					$e->getMessage()
+				),
+				[ 'status' => 409 ]
+			);
+		}
+
+		// After the transition, so a refused reactivation never leaves a note
+		// claiming one happened — the note is the audit trail.
+		/* translators: %s: the acting admin's login. */
+		$subscription->add_order_note( sprintf( __( 'Reactivated without payment by %s from the Subscribers admin.', 'newspack-plugin' ), $admin_login ) );
+
+		return rest_ensure_response( $this->reactivation_payload( $subscription ) );
+	}
+
+	/**
+	 * Charge a renewal for an on-hold subscription against its saved payment
+	 * method, and decide the outcome honestly.
+	 *
+	 * Dispatch: the gateway leg of WCS's renewal chain
+	 * (WC_Subscriptions_Payment_Gateways::gateway_scheduled_subscription_payment),
+	 * called directly rather than via the `woocommerce_scheduled_subscription_payment`
+	 * action. The umbrella action is how WCS's retry system recognises a
+	 * *scheduled* attempt (WCS_Retry_Manager checks `doing_action()` on it), so
+	 * firing it here would enroll every admin click in the automatic retry
+	 * ladder — whose final rule on Newspack sites expires the subscription. The
+	 * direct call charges the same order through the same gateway hook without
+	 * impersonating the billing schedule.
+	 *
+	 * Outcome: a gateway charge is not always synchronous — Stripe can leave the
+	 * money in flight (a charge awaiting asynchronous capture or manual review,
+	 * an SCA charge awaiting the customer's authentication, a mandated debit
+	 * scheduled for later). So the outcome is read from state, three ways:
+	 * the subscription reactivated (success); the renewal order no longer needs
+	 * payment but the subscription is not active yet (payment in flight —
+	 * reported as pending, NOT as a failure, so nobody retries a live charge);
+	 * otherwise a failure that names both possible causes.
+	 *
+	 * Concurrency: a short-lived per-subscription transient lock guards the
+	 * dispatch. It is best-effort — the check-then-set is not atomic and the
+	 * TTL bounds a stuck request rather than the charge — but it closes the
+	 * re-click and two-admins window from a full gateway round-trip to
+	 * milliseconds, and neither WCS nor the gateways deduplicate renewal
+	 * attempts on their own.
+	 *
+	 * @param \WC_Subscription $subscription The on-hold subscription.
+	 * @param string           $admin_login  The acting admin's login, for the audit note.
+	 *
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	private function process_renewal_charge( $subscription, $admin_login ) {
+		if ( ! $this->can_charge( $subscription ) ) {
+			return new \WP_Error(
+				'newspack_subscribers_cannot_charge',
+				__( 'This subscription has no payment method on file that can be charged. Send a payment link instead.', 'newspack-plugin' ),
+				[ 'status' => 409 ]
+			);
+		}
+
+		$lock_key = 'newspack_subscribers_charge_' . $subscription->get_id();
+		if ( false !== get_transient( $lock_key ) ) {
+			return new \WP_Error(
+				'newspack_subscribers_charge_in_progress',
+				__( 'A charge for this subscription is already being processed. Refresh the profile to see the outcome.', 'newspack-plugin' ),
+				[ 'status' => 409 ]
+			);
+		}
+		set_transient( $lock_key, 1, MINUTE_IN_SECONDS );
+
+		try {
+			$renewal_order = $this->latest_or_new_renewal_order( $subscription );
+			if ( \is_wp_error( $renewal_order ) ) {
+				return $renewal_order;
+			}
+
+			/* translators: %s: the acting admin's login. */
+			$subscription->add_order_note( sprintf( __( 'Renewal payment initiated by %s from the Subscribers admin.', 'newspack-plugin' ), $admin_login ) );
+
+			// The gateway leg of the renewal chain (see the method docblock for
+			// why it is called directly). The action fallback is the unit-test
+			// seam: the mocks don't ship the WCS gateway dispatcher.
+			if ( class_exists( 'WC_Subscriptions_Payment_Gateways' ) ) {
+				\WC_Subscriptions_Payment_Gateways::gateway_scheduled_subscription_payment( $subscription->get_id() );
+			} else {
+				do_action( 'woocommerce_scheduled_subscription_payment', $subscription->get_id() );
+			}
+
+			$subscription  = function_exists( 'wcs_get_subscription' ) ? \wcs_get_subscription( $subscription->get_id() ) : $subscription;
+			$renewal_order = function_exists( 'wc_get_order' ) ? \wc_get_order( $renewal_order->get_id() ) : $renewal_order;
+
+			if ( $subscription && 'active' === $subscription->get_status() ) {
+				return rest_ensure_response( $this->reactivation_payload( $subscription ) );
+			}
+
+			// The order stopped needing payment but the subscription did not
+			// reactivate: the money is in flight (asynchronous capture, manual
+			// review, a webhook-confirmed gateway). Not a failure — saying
+			// "declined" here is what gets a live charge retried.
+			if ( $subscription && $renewal_order && ! $renewal_order->needs_payment() ) {
+				return rest_ensure_response(
+					array_merge(
+						$this->reactivation_payload( $subscription ),
+						[ 'pendingConfirmation' => true ]
+					)
+				);
+			}
+
+			return new \WP_Error(
+				'newspack_subscribers_charge_failed',
+				__( 'The payment did not complete. The card may have been declined, or the charge may be waiting for the subscriber to authenticate it — check the renewal order\'s notes before retrying or sending a payment link.', 'newspack-plugin' ),
+				[ 'status' => 402 ]
+			);
+		} finally {
+			delete_transient( $lock_key );
+		}
+	}
+
+	/**
+	 * POST a payment link to the subscription's customer.
+	 *
+	 * The link is the unpaid renewal order's checkout payment URL — the same
+	 * order the failed renewal left behind, so paying it resumes the existing
+	 * billing history rather than starting a parallel one. The customer gets it
+	 * by email (WooCommerce's customer invoice email, which carries the pay
+	 * link), and the URL is returned so the admin can hand it over directly.
+	 *
+	 * @param \WP_REST_Request $request The request.
+	 *
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public function api_send_payment_link( $request ) {
+		$this->reset_request_caches();
+
+		$subscription = $this->resolve_on_hold_subscription( (int) $request->get_param( 'id' ) );
+		if ( \is_wp_error( $subscription ) ) {
+			return $subscription;
+		}
+
+		// While a charge is mid-flight the renewal order still needs payment,
+		// so without this check the customer would be emailed a pay link for
+		// the very order the gateway is charging — and paying it is a second
+		// real payment. Same lock the charge path holds.
+		if ( false !== get_transient( 'newspack_subscribers_charge_' . $subscription->get_id() ) ) {
+			return new \WP_Error(
+				'newspack_subscribers_charge_in_progress',
+				__( 'A charge for this subscription is being processed. Wait for it to finish before sending a payment link.', 'newspack-plugin' ),
+				[ 'status' => 409 ]
+			);
+		}
+
+		$renewal_order = $this->latest_or_new_renewal_order( $subscription );
+		if ( \is_wp_error( $renewal_order ) ) {
+			return $renewal_order;
+		}
+
+		// `emailSent` is honest to what can be known here: the invoice email
+		// no-ops without a recipient, so an order with no billing email means no
+		// email went out — and the client falls back to showing the URL itself.
+		$email_sent = false;
+		if ( function_exists( 'WC' ) && \WC()->mailer() && '' !== (string) $renewal_order->get_billing_email() ) {
+			// The same envelope WC core's own "Email invoice" order action uses,
+			// so email-logging integrations see this send too.
+			do_action( 'woocommerce_before_resend_order_emails', $renewal_order, 'customer_invoice' );
+			\WC()->mailer()->customer_invoice( $renewal_order );
+			do_action( 'woocommerce_after_resend_order_emails', $renewal_order, 'customer_invoice' );
+			$email_sent = true;
+			/* translators: %s: the acting admin's login. */
+			$subscription->add_order_note( sprintf( __( 'Payment link emailed to the customer by %s from the Subscribers admin.', 'newspack-plugin' ), wp_get_current_user()->user_login ) );
+		}
+
+		return rest_ensure_response(
+			[
+				'paymentUrl' => $renewal_order->get_checkout_payment_url(),
+				'emailSent'  => $email_sent,
+			]
+		);
+	}
+
+	/**
+	 * Resolve an id to an individual on-hold subscription, or the error that
+	 * explains why the write cannot proceed.
+	 *
+	 * A group-enabled subscription reports not-found: its money actions belong
+	 * to the group surface, and this route not acknowledging it keeps the two
+	 * surfaces from drifting into two ways of charging the same group.
+	 *
+	 * @param int $subscription_id The subscription ID.
+	 *
+	 * @return \WC_Subscription|\WP_Error
+	 */
+	private function resolve_on_hold_subscription( $subscription_id ) {
+		$subscription = function_exists( 'wcs_get_subscription' ) ? \wcs_get_subscription( $subscription_id ) : false;
+		$settings     = $subscription && class_exists( '\Newspack\Group_Subscription_Settings' )
+			? Group_Subscription_Settings::get_subscription_settings( $subscription )
+			: [];
+		if ( ! $subscription || ! empty( $settings['enabled'] ) ) {
+			return new \WP_Error(
+				'newspack_subscribers_subscription_not_found',
+				__( 'That subscription could not be found.', 'newspack-plugin' ),
+				[ 'status' => 404 ]
+			);
+		}
+		// On-hold only, and raw status rather than the mapped vocabulary: the
+		// mapped "on-hold" bucket also absorbs unknown WCS statuses, which are
+		// exactly the ones a recovery write should not touch blind.
+		if ( 'on-hold' !== $subscription->get_status() ) {
+			return new \WP_Error(
+				'newspack_subscribers_not_on_hold',
+				__( 'This subscription is not on hold, so it cannot be reactivated.', 'newspack-plugin' ),
+				[ 'status' => 409 ]
+			);
+		}
+		return $subscription;
+	}
+
+	/**
+	 * Whether a renewal charge could even be attempted: an automatic payment
+	 * method is on file, its gateway is actually registered (a stored gateway id
+	 * whose plugin was deactivated would fire a charge into a void), there is an
+	 * amount to charge, and the gateway lets WCS trigger the charge (rather than
+	 * scheduling payments itself, in which case an admin-triggered charge would
+	 * double-bill).
+	 *
+	 * @param \WC_Subscription $subscription The subscription.
+	 *
+	 * @return bool
+	 */
+	private function can_charge( $subscription ) {
+		return ! $subscription->is_manual()
+			&& '' !== (string) $subscription->get_payment_method()
+			&& (float) $subscription->get_total() > 0
+			&& ! $subscription->payment_method_supports( 'gateway_scheduled_payments' )
+			&& function_exists( 'wc_get_payment_gateway_by_order' )
+			&& (bool) \wc_get_payment_gateway_by_order( $subscription );
+	}
+
+	/**
+	 * The renewal order recovery acts on, creating one when the latest is settled.
+	 *
+	 * Selection matches the code that will actually charge:
+	 * WC_Subscriptions_Payment_Gateways::gateway_scheduled_subscription_payment()
+	 * acts on `get_last_order( 'all', 'renewal' )` — the newest renewal order,
+	 * paid or not — and skips it when it no longer needs payment. Selecting any
+	 * *other* order here (say, an older unpaid one behind a newer settled one)
+	 * would name and email one order while the gateway charges, or skips,
+	 * another. So: reuse the latest renewal order when it still needs payment —
+	 * the common failed-renewal case — otherwise create a fresh one, which then
+	 * IS the latest, keeping the named order and the charged order the same
+	 * object.
+	 *
+	 * @param \WC_Subscription $subscription The subscription.
+	 *
+	 * @return \WC_Order|\WP_Error
+	 */
+	private function latest_or_new_renewal_order( $subscription ) {
+		$latest_renewal = $subscription->get_last_order( 'all', [ 'renewal' ] );
+		if ( is_object( $latest_renewal ) && $latest_renewal->needs_payment() ) {
+			return $latest_renewal;
+		}
+
+		// A latest renewal order held on-hold WITH a transaction recorded means
+		// a gateway payment is in flight — a charge awaiting asynchronous
+		// capture or manual review parks the order there, with the money
+		// possibly already moved. Creating (and charging or invoicing) a
+		// second order underneath it is how a subscriber gets billed twice.
+		// The transaction id is the discriminator: offline gateways (BACS,
+		// cheque) also park orders on-hold but record no transaction, and for
+		// those the payment link IS the remedy, so they must not dead-end
+		// here. Settled orders — completed or processing (an admin-suspended
+		// subscription after a successful renewal), cancelled, refunded —
+		// don't block a fresh attempt either.
+		if ( is_object( $latest_renewal ) && $latest_renewal->has_status( [ 'on-hold' ] ) && '' !== (string) $latest_renewal->get_transaction_id() ) {
+			return new \WP_Error(
+				'newspack_subscribers_payment_unresolved',
+				__( 'A payment for this subscription is still awaiting confirmation. Wait for it to resolve before charging again or sending a payment link.', 'newspack-plugin' ),
+				[ 'status' => 409 ]
+			);
+		}
+
+		$renewal_order = function_exists( 'wcs_create_renewal_order' ) ? \wcs_create_renewal_order( $subscription ) : false;
+		if ( ! $renewal_order || \is_wp_error( $renewal_order ) ) {
+			return new \WP_Error(
+				'newspack_subscribers_renewal_order_failed',
+				__( 'A renewal order could not be created for this subscription.', 'newspack-plugin' ),
+				[ 'status' => 500 ]
+			);
+		}
+		if ( $subscription->is_manual() ) {
+			// Parity with WCS's process_renewal() for manual subscriptions, so
+			// integrations listening for manual renewal orders see this one too.
+			do_action( 'woocommerce_generated_manual_renewal_order', $renewal_order->get_id(), $subscription );
+			$renewal_order->add_order_note( __( 'Manual renewal order awaiting customer payment.', 'newspack-plugin' ) );
+		} elseif ( function_exists( 'wc_get_payment_gateway_by_order' ) ) {
+			// Carry the subscription's gateway onto the fresh order so the charge
+			// path knows what to trigger — same as WCS's process_renewal().
+			$gateway = \wc_get_payment_gateway_by_order( $subscription );
+			if ( $gateway ) {
+				$renewal_order->set_payment_method( $gateway );
+				$renewal_order->save();
+			}
+		}
+		return $renewal_order;
+	}
+
+	/**
+	 * What the reactivate flow needs to confirm the outcome: the mapped status
+	 * plus the next billing date WCS recalculated.
+	 *
+	 * @param \WC_Subscription $subscription The subscription.
+	 *
+	 * @return array
+	 */
+	private function reactivation_payload( $subscription ) {
+		return [
+			'status'          => self::map_subscription_status( $subscription->get_status() ),
+			'nextBillingDate' => $this->subscription_date( $subscription, 'next_payment' ),
+		];
+	}
+
+	/**
 	 * Clear the per-request memoized caches at the start of each endpoint.
 	 *
 	 * Every callback resolves group data fresh; the memos exist only to avoid
@@ -645,7 +1056,24 @@ class Subscribers_Wizard extends Wizard {
 				'status'  => self::map_subscription_status( $subscription->get_status() ),
 				'editUrl' => $this->subscription_edit_url( $subscription ),
 			];
-			$out[] = $detailed ? array_merge( $entry, $this->subscription_billing( $subscription ) ) : $entry;
+			$out[] = $detailed
+				? array_merge(
+					$entry,
+					$this->subscription_billing( $subscription ),
+					[
+						// Whether a renewal charge could even be attempted, so
+						// the reactivate flow can hide "Charge now" when there
+						// is nothing on file to charge.
+						'canCharge'     => $this->can_charge( $subscription ),
+						// Whether the reactivate action applies at all. Gated on
+						// the RAW status, matching the write endpoint's rule: the
+						// mapped "on-hold" bucket also absorbs unknown WCS
+						// statuses, and offering an action the server will refuse
+						// with a 409 is worse than not offering it.
+						'canReactivate' => 'on-hold' === $subscription->get_status(),
+					]
+				)
+				: $entry;
 		}
 		return $out;
 	}

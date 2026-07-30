@@ -15,11 +15,12 @@
  * content right), and every card is the shared SubscriptionCard so this screen
  * and the group detail cannot drift apart.
  *
- * Per-subscription actions (change plan, change payment method, refund/cancel,
- * reactivate) are separate workstreams and are deliberately absent from the
- * menus here rather than present-but-inert: a menu item that does nothing is
- * worse than one that is not there yet. Each card's menu carries only what works
- * today — opening the subscription itself.
+ * Per-subscription actions appear in a card's menu only once they work — a
+ * menu item that does nothing is worse than one that is not there yet. What
+ * works today: reactivating an on-hold individual subscription (charge now,
+ * send a payment link, or reactivate for free — the on-hold recovery flow).
+ * Change plan, change payment method and refund/cancel are separate
+ * workstreams and stay deliberately absent.
  */
 
 /**
@@ -29,6 +30,7 @@ import { createPortal, useEffect, useMemo, useState } from '@wordpress/element';
 import { __, _n, sprintf } from '@wordpress/i18n';
 import { useDispatch } from '@wordpress/data';
 import {
+	Snackbar,
 	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
@@ -40,7 +42,9 @@ import { Button, Card, Divider, Grid, Notice, Router, SectionHeader, Waiting } f
 import './style.scss';
 import { WIZARD_STORE_NAMESPACE } from '../../../../packages/components/src/wizard/store';
 import SubscriptionCard from '../components/SubscriptionCard';
+import ReactivateFlow from '../flows/ReactivateFlow';
 import { useSubscriber } from '../data/use-subscriber';
+import { useSubscriptionActions } from '../data/use-subscription-actions';
 import { SHOW_AVATARS, useAvatars } from '../data/use-avatars';
 import { useWizardNode } from '../use-portals';
 import { billingText, fmtDate, orDash, scheduleRow } from '../format';
@@ -111,6 +115,9 @@ export default function PersonProfile() {
 	const location = useLocation();
 	const { setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const [ showCancelled, setShowCancelled ] = useState( false );
+	const [ modal, setModal ] = useState( null );
+	const [ snackbar, setSnackbar ] = useState( null );
+	const subscriptionActions = useSubscriptionActions();
 
 	// Return to wherever the profile was opened from. HashRouter drops
 	// location.state across a reload, so the origin travels as a `from` query
@@ -123,6 +130,18 @@ export default function PersonProfile() {
 	const backNav = isInternalHashPath( rawFrom ) ? rawFrom : '#/';
 
 	const { subscriber, loading, error, notFound, reload } = useSubscriber( id );
+
+	// Every flow reports back through here. Mutations are awaited rather than
+	// rendered optimistically (see data/use-subscription-actions.js), so
+	// completing one refetches the subscriber and the cards re-render from what
+	// the server actually stored — status, recalculated next billing date.
+	const onFlowDone = message => {
+		if ( message ) {
+			setSnackbar( { message } );
+		}
+		reload();
+		setModal( null );
+	};
 
 	// A 128px source feeds the 64px header avatar (2x for high-DPR displays),
 	// resolved through the same endpoint the lists use.
@@ -235,6 +254,23 @@ export default function PersonProfile() {
 
 		const individualCards = ( subscriber.subscriptions || [] ).map( subscription => {
 			const name = subscription.plan || __( '(Subscription)', 'newspack-plugin' );
+			// The menu carries only what works: reactivate, when the server says
+			// so. `canReactivate` reflects the write endpoint's own raw-status
+			// rule — the mapped status can't be trusted here, because unknown WCS
+			// statuses map into the "on-hold" bucket the endpoint would refuse.
+			// The remaining money actions (change plan / payment / refund) are
+			// separate workstreams — see the header note.
+			const actions = subscription.canReactivate
+				? [
+						{
+							key: 'reactivate',
+							label: __( 'Reactivate', 'newspack-plugin' ),
+							// translators: %s is a subscription/plan name.
+							ariaLabel: sprintf( __( 'Reactivate: %s', 'newspack-plugin' ), name ),
+							onClick: () => setModal( { kind: 'reactivate', subscription } ),
+						},
+				  ]
+				: [];
 			return {
 				key: `subscription-${ subscription.id }`,
 				status: subscription.status,
@@ -253,9 +289,7 @@ export default function PersonProfile() {
 							{ label: __( 'Last payment', 'newspack-plugin' ), value: orDash( fmtDate( subscription.lastPayment ) ) },
 							scheduleRow( subscription ),
 						] }
-						// No per-status "more" menu yet: the card title already links to
-						// the subscription's edit screen, and change-plan / payment /
-						// refund / reactivate are Workstreams D and E.
+						actions={ actions }
 					/>
 				),
 			};
@@ -356,6 +390,22 @@ export default function PersonProfile() {
 					) }
 				</VStack>
 			</Row>
+
+			{ 'reactivate' === modal?.kind && (
+				<ReactivateFlow
+					subscription={ modal.subscription }
+					email={ subscriber.email }
+					actions={ subscriptionActions }
+					onClose={ () => setModal( null ) }
+					onDone={ onFlowDone }
+				/>
+			) }
+
+			{ snackbar && (
+				<div className="newspack-subscribers__snackbar">
+					<Snackbar onRemove={ () => setSnackbar( null ) }>{ snackbar.message }</Snackbar>
+				</div>
+			) }
 		</div>
 	);
 }

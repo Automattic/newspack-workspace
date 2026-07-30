@@ -438,6 +438,36 @@ class WC_Order {
 	public function get_currency() {
 		return $this->data['currency'] ?? '';
 	}
+	/**
+	 * Faithful to WC_Order::needs_payment(): an order awaits payment while it is
+	 * pending or failed and there is an amount to pay.
+	 */
+	public function needs_payment() {
+		return in_array( $this->data['status'], [ 'pending', 'failed' ], true ) && (float) $this->get_total() > 0;
+	}
+	public function get_checkout_payment_url() {
+		return 'https://example.test/checkout/order-pay/' . $this->get_id() . '/?pay_for_order=true&key=wc_order_' . $this->get_id();
+	}
+	public function add_order_note( $note ) {
+		$this->data['order_notes'][] = $note;
+	}
+	/**
+	 * Accepts a gateway object or id string, like the real setter.
+	 *
+	 * @param object|string $payment_method Gateway instance (with an `id`) or gateway id.
+	 */
+	public function set_payment_method( $payment_method ) {
+		$this->data['payment_method'] = is_object( $payment_method ) ? $payment_method->id : (string) $payment_method;
+	}
+	public function get_payment_method() {
+		return $this->data['payment_method'] ?? '';
+	}
+	public function get_transaction_id() {
+		return $this->data['transaction_id'] ?? '';
+	}
+	public function set_transaction_id( $transaction_id ) {
+		$this->data['transaction_id'] = (string) $transaction_id;
+	}
 }
 
 class WC_Subscription {
@@ -543,11 +573,18 @@ class WC_Subscription {
 	/**
 	 * Recording stand-in for WC_Subscription::update_status(): applies the
 	 * status and records the transition with its note on `status_updates`.
+	 * Faithful to the real method's refusal: when `can_update_to` is staged and
+	 * disallows the target, it throws instead of applying.
 	 *
 	 * @param string $status New status.
 	 * @param string $note   Optional transition note.
+	 *
+	 * @throws Exception When the staged `can_update_to` forbids the transition.
 	 */
 	public function update_status( $status, $note = '' ) {
+		if ( ! $this->can_be_updated_to( $status ) ) {
+			throw new Exception( sprintf( 'Unable to change subscription status to "%s".', esc_html( $status ) ) );
+		}
 		$this->data['status']           = $status;
 		$this->data['status_updates'][] = [
 			'status' => $status,
@@ -570,6 +607,20 @@ class WC_Subscription {
 		return $this->data['currency'] ?? '';
 	}
 	public function get_last_order( $output = 'all', $types = [], $exclude_statuses = [] ) {
+		// Faithful to the real method when asked for renewal orders ONLY: the
+		// newest related renewal order, paid or not, staged via
+		// `related_orders`. Mixed-type calls (e.g. parent + renewal) keep the
+		// legacy `orders`-array behavior below.
+		if ( [ 'renewal' ] === (array) $types ) {
+			$renewals = $this->data['related_orders']['renewal'] ?? [];
+			$newest   = false;
+			foreach ( $renewals as $order ) {
+				if ( is_object( $order ) && ( ! $newest || $order->get_id() > $newest->get_id() ) ) {
+					$newest = $order;
+				}
+			}
+			return $newest;
+		}
 		if ( empty( $this->orders ) ) {
 			return false;
 		}
@@ -889,6 +940,50 @@ function wcs_get_subscriptions_for_order( $order, $args = [] ) {
 		return [];
 	}
 	return [ $subscriptions_database[ $subscription_id ] ];
+}
+
+/**
+ * Faithful to wc_get_payment_gateway_by_order() in shape: a gateway object for
+ * an order/subscription whose payment method id is set, false otherwise. The
+ * object carries only `id`, which is all callers here read.
+ *
+ * @param WC_Order|WC_Subscription $order The order or subscription.
+ *
+ * @return object|false
+ */
+function wc_get_payment_gateway_by_order( $order ) {
+	$method = method_exists( $order, 'get_payment_method' ) ? (string) $order->get_payment_method() : '';
+	if ( '' === $method ) {
+		return false;
+	}
+	$gateway     = new stdClass();
+	$gateway->id = $method;
+	return $gateway;
+}
+
+/**
+ * Faithful in shape to wcs_create_renewal_order(): a pending order for the
+ * subscription's recurring total, linked back via `_subscription_renewal` meta
+ * and registered on the subscription's renewal related-orders.
+ *
+ * @param WC_Subscription $subscription The subscription to renew.
+ *
+ * @return WC_Order The pending renewal order.
+ */
+function wcs_create_renewal_order( $subscription ) {
+	$order = new WC_Order(
+		[
+			'status'        => 'pending',
+			'customer_id'   => $subscription->get_customer_id(),
+			'total'         => $subscription->get_total(),
+			'currency'      => $subscription->get_currency(),
+			'billing_email' => $subscription->get_billing_email(),
+		]
+	);
+	$order->update_meta_data( '_subscription_renewal', $subscription->get_id() );
+
+	$subscription->data['related_orders']['renewal'][ $order->get_id() ] = $order;
+	return $order;
 }
 
 function wcs_order_contains_renewal( $order ) {
