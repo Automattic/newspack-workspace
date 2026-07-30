@@ -33,6 +33,17 @@ class Memberships_Audit {
 	const ACTIVE_MEMBERSHIP_STATUSES = [ 'wcm-active', 'wcm-complimentary', 'wcm-free_trial', 'wcm-pending' ];
 
 	/**
+	 * Posts fetched per query when walking memberships or plans.
+	 *
+	 * The command runs against production sites whose paid base can reach tens
+	 * of thousands of memberships, so the walk is paged rather than fetched in
+	 * one unbounded query.
+	 *
+	 * @var int
+	 */
+	const QUERY_BATCH_SIZE = 500;
+
+	/**
 	 * Subscription statuses that grant content access under Access Control.
 	 *
 	 * Mirrors `WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES`, which is
@@ -275,57 +286,55 @@ class Memberships_Audit {
 			}
 			++$audited_plans;
 
-			$memberships = \get_posts(
-				[
-					'post_type'      => 'wc_user_membership',
-					'post_status'    => $membership_statuses,
-					'post_parent'    => $plan_id,
-					'posts_per_page' => -1,
-					'fields'         => 'ids',
-					'no_found_rows'  => true,
-					'orderby'        => 'ID',
-					'order'          => 'ASC',
-				]
-			);
-
 			$plan_counts = array_fill_keys( self::ALL_CLASSES, 0 );
+			$progress    = null;
 
-			// Long runs over SSH look like a hang without this. It writes to STDOUT,
-			// so it must not run for the machine-readable formats.
-			$progress = $quiet
-				? null
-				: \WP_CLI\Utils\make_progress_bar( sprintf( 'Plan %d: %d membership(s)', $plan_id, count( $memberships ) ), count( $memberships ) );
+			$membership_count = self::each_post_id_batch(
+				[
+					'post_type'   => 'wc_user_membership',
+					'post_status' => $membership_statuses,
+					'post_parent' => $plan_id,
+				],
+				function ( $membership_ids, $total ) use ( &$plan_counts, &$total_counts, &$rows, &$progress, $plan, $plan_id, $only_classes, $format, $quiet ) {
+					// Long runs over SSH look like a hang without this. It writes to
+					// STDOUT, so it must not run for the machine-readable formats, and
+					// it needs the total, so it is built on the first batch.
+					if ( ! $quiet && ! $progress ) {
+						$progress = \WP_CLI\Utils\make_progress_bar( sprintf( 'Plan %d: %d membership(s)', $plan_id, $total ), $total );
+					}
 
-			foreach ( $memberships as $membership_id ) {
-				// Keep memory bounded across an unbounded membership list; the rows
-				// collected below are plain arrays and survive the flush.
-				\WP_CLI\Utils\wp_clear_object_cache();
+					foreach ( $membership_ids as $membership_id ) {
+						// Keep memory bounded across a long membership list; the rows
+						// collected below are plain arrays and survive the flush.
+						\WP_CLI\Utils\wp_clear_object_cache();
 
-				$facts = self::read_membership_facts( $membership_id );
-				$class = self::classify( $facts );
+						$facts = self::read_membership_facts( $membership_id );
+						$class = self::classify( $facts );
 
-				++$plan_counts[ $class ];
-				++$total_counts[ $class ];
+						++$plan_counts[ $class ];
+						++$total_counts[ $class ];
 
-				if ( in_array( $class, $only_classes, true ) ) {
-					// The ids format keeps only the member, so skip the evidence
-					// lookups (user lookups + the member's own subscriptions) entirely.
-					$rows[] = 'ids' === $format
-						? [ 'member_id' => (int) $facts['holder_id'] ]
-						: self::build_row( $plan, $membership_id, $facts, $class, $format );
+						if ( in_array( $class, $only_classes, true ) ) {
+							// The ids format keeps only the member, so skip the evidence
+							// lookups (user lookups + the member's own subscriptions) entirely.
+							$rows[] = 'ids' === $format
+								? [ 'member_id' => (int) $facts['holder_id'] ]
+								: self::build_row( $plan, $membership_id, $facts, $class, $format );
+						}
+
+						if ( $progress ) {
+							$progress->tick();
+						}
+					}
 				}
-
-				if ( $progress ) {
-					$progress->tick();
-				}
-			}
+			);
 
 			if ( $progress ) {
 				$progress->finish();
 			}
 
 			if ( ! $quiet ) {
-				WP_CLI::line( sprintf( '── Plan %d: "%s" — %d membership(s) with access ──', $plan_id, $plan->post_title, count( $memberships ) ) );
+				WP_CLI::line( sprintf( '── Plan %d: "%s" — %d membership(s) with access ──', $plan_id, $plan->post_title, $membership_count ) );
 				foreach ( self::ALL_CLASSES as $class ) {
 					if ( 0 === $plan_counts[ $class ] ) {
 						continue;
@@ -390,6 +399,57 @@ class Memberships_Audit {
 		);
 		WP_CLI::line( 'These readers lose access at the flip. `member_own_access_subscriptions` is evidence, not a verdict: a subscription there only preserves access if the gates accept its product.' );
 		WP_CLI::line( 'Next: confirm buyer-vs-recipient intent with the publisher, then re-run with --format=ids for the signed-off list. Granting those readers $0 subscriptions needs a migrate-manual-members that can select members by user ID (--user-ids/--user-ids-file); run `wp help newspack migrate-manual-members` to check this build, and fall back to operator scripting against the list where it cannot.' );
+	}
+
+	/**
+	 * Walk a post query in batches, handing each batch of IDs to $callback.
+	 *
+	 * Fetching every row in one query is what the audit must not do: a paid
+	 * site's membership list runs to tens of thousands, and this command reads
+	 * it on the live site. Paging keeps each query bounded however large the
+	 * plan is. The walk is read-only and ordered by ID, so offset paging is
+	 * stable — nothing shifts underneath it mid-run.
+	 *
+	 * @param array    $args     WP_Query args. Paging, ordering and `fields` are set here.
+	 * @param callable $callback Receives ( int[] $post_ids, int $total ) per batch.
+	 *
+	 * @return int Total matching posts.
+	 */
+	private static function each_post_id_batch( array $args, callable $callback ) {
+		$args = array_merge(
+			$args,
+			[
+				'fields'         => 'ids',
+				'posts_per_page' => self::QUERY_BATCH_SIZE,
+				'orderby'        => 'ID',
+				'order'          => 'ASC',
+			]
+		);
+
+		$page  = 1;
+		$total = 0;
+
+		while ( true ) {
+			$query = new \WP_Query( array_merge( $args, [ 'paged' => $page ] ) );
+
+			if ( 1 === $page ) {
+				$total = (int) $query->found_posts;
+			}
+			if ( empty( $query->posts ) ) {
+				break;
+			}
+
+			$callback( $query->posts, $total );
+
+			// A short batch is the last one; asking for the next page would be a
+			// wasted query on every run whose count divides evenly.
+			if ( count( $query->posts ) < self::QUERY_BATCH_SIZE ) {
+				break;
+			}
+			++$page;
+		}
+
+		return $total;
 	}
 
 	/**
@@ -836,17 +896,17 @@ class Memberships_Audit {
 	public static function resolve_plan_ids( $plan_ids_csv ) {
 		$plan_ids_csv = trim( (string) $plan_ids_csv );
 		if ( '' === $plan_ids_csv ) {
-			return \get_posts(
+			$all_plan_ids = [];
+			self::each_post_id_batch(
 				[
-					'post_type'      => 'wc_membership_plan',
-					'post_status'    => 'publish',
-					'posts_per_page' => -1,
-					'fields'         => 'ids',
-					'no_found_rows'  => true,
-					'orderby'        => 'ID',
-					'order'          => 'ASC',
-				]
+					'post_type'   => 'wc_membership_plan',
+					'post_status' => 'publish',
+				],
+				function ( $plan_ids ) use ( &$all_plan_ids ) {
+					$all_plan_ids = array_merge( $all_plan_ids, $plan_ids );
+				}
 			);
+			return $all_plan_ids;
 		}
 
 		$plan_ids = [];
