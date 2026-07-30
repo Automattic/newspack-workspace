@@ -312,6 +312,9 @@ class WC_Product {
 	public function get_meta( $key, $single = true ) {
 		return $this->meta[ $key ] ?? '';
 	}
+	public function get_status() {
+		return $this->data['status'] ?? 'publish';
+	}
 }
 
 class WC_Cart {
@@ -438,6 +441,17 @@ class WC_Order {
 	public function get_currency() {
 		return $this->data['currency'] ?? '';
 	}
+	public function get_total_refunded() {
+		return (float) ( $this->data['total_refunded'] ?? 0 );
+	}
+	public function is_paid() {
+		// Real wc_order_is_paid_statuses(): processing and completed.
+		return $this->has_status( [ 'processing', 'completed' ] );
+	}
+	public function add_order_note( $note ) {
+		$this->data['order_notes'][] = $note;
+		return count( $this->data['order_notes'] );
+	}
 }
 
 class WC_Subscription {
@@ -474,6 +488,9 @@ class WC_Subscription {
 	}
 	public function get_payment_method() {
 		return $this->data['payment_method'] ?? '';
+	}
+	public function get_payment_method_title() {
+		return $this->data['payment_method_title'] ?? '';
 	}
 	/**
 	 * Stageable stand-in for WC_Subscription::payment_method_supports(): pass a
@@ -584,7 +601,22 @@ class WC_Subscription {
 		return reset( $this->orders );
 	}
 	public function get_related_orders( $output = 'all', $type = '' ) {
-		return $this->data['related_orders'][ $type ] ?? [];
+		// Real WCS expands 'any' to parent/renewal/resubscribe/switch; mirror it
+		// so staging per-type fixtures still reaches production code asking 'any'.
+		if ( 'any' === $type ) {
+			$orders = array_merge( ...array_values( array_map( 'array_values', $this->data['related_orders'] ?? [ [] ] ) ) );
+		} else {
+			$orders = $this->data['related_orders'][ $type ] ?? [];
+		}
+		if ( 'ids' === $output ) {
+			return array_map(
+				function ( $order ) {
+					return $order->get_id();
+				},
+				$orders
+			);
+		}
+		return $orders;
 	}
 	public function get_coupon_codes() {
 		return $this->data['coupon_codes'] ?? [];
@@ -619,8 +651,20 @@ class WC_Subscription {
 		$last  = $this->data['billing_last_name'] ?? '';
 		return trim( "$first $last" );
 	}
-	public function get_items() {
-		return $this->data['items'] ?? [];
+	/**
+	 * Faithful to WC_Abstract_Order::get_items(): defaults to line items only;
+	 * other types (coupon/fee/shipping) come from `<type>_items` data keys.
+	 *
+	 * @param string|array $types Item type(s) to return.
+	 */
+	public function get_items( $types = 'line_item' ) {
+		$types = (array) $types;
+		$out   = [];
+		foreach ( $types as $type ) {
+			$typed = 'line_item' === $type ? ( $this->data['items'] ?? [] ) : ( $this->data[ $type . '_items' ] ?? [] );
+			$out   = array_replace( $out, $typed );
+		}
+		return $out;
 	}
 	public function get_item( $item_id, $load_from_db = true ) {
 		// Faithful to WC_Abstract_Order::get_item(): the default delegates to
@@ -657,6 +701,62 @@ class WC_Subscription {
 	}
 	public function get_view_order_url() {
 		return $this->data['view_order_url'] ?? 'https://example.test/my-account/view-order/' . $this->get_id();
+	}
+	/**
+	 * Remove a line item by its item ID (get_items() keys by item ID, matching
+	 * real WC_Abstract_Order).
+	 *
+	 * @param int $item_id The order item ID.
+	 */
+	public function remove_item( $item_id ) {
+		unset( $this->data['items'][ $item_id ] );
+	}
+	/**
+	 * Append a product line item, recording the call like real add_product().
+	 *
+	 * @param WC_Product $product  The product.
+	 * @param int        $quantity Quantity.
+	 */
+	public function add_product( $product, $quantity = 1 ) {
+		$item_id = 9000 + count( $this->data['added_products'] ?? [] );
+		$this->data['added_products'][] = [
+			'product_id' => $product->get_id(),
+			'quantity'   => $quantity,
+		];
+		$this->data['items'][ $item_id ] = new WC_Order_Item_Product(
+			[
+				'id'         => $item_id,
+				'product_id' => $product->get_id(),
+				'name'       => $product->get_name(),
+				'quantity'   => $quantity,
+			]
+		);
+		return $item_id;
+	}
+	public function set_billing_period( $period ) {
+		$this->data['billing_period'] = $period;
+	}
+	public function set_billing_interval( $interval ) {
+		$this->data['billing_interval'] = (int) $interval;
+	}
+	/**
+	 * Recompute the total from added products' subscription price, recording
+	 * that the recalculation ran.
+	 */
+	public function calculate_totals() {
+		$this->data['calculated_totals'] = true;
+		$total                           = 0;
+		foreach ( $this->data['added_products'] ?? [] as $added ) {
+			$product = wc_get_product( $added['product_id'] );
+			if ( $product ) {
+				$price  = (float) $product->get_price();
+				$price  = $price ? $price : (float) $product->get_meta( '_subscription_price' );
+				$total += $price * $added['quantity'];
+			}
+		}
+		if ( ! empty( $this->data['added_products'] ) ) {
+			$this->data['total'] = $total;
+		}
 	}
 	public function save() {
 		return true;
@@ -735,6 +835,22 @@ if ( ! class_exists( 'WC_Subscriptions_Product' ) ) {
 		public static function get_interval( $product ) {
 			$interval = is_object( $product ) && method_exists( $product, 'get_meta' ) ? (int) $product->get_meta( '_subscription_period_interval' ) : 0;
 			return $interval > 0 ? $interval : 1;
+		}
+		/**
+		 * Mirror of WCS's expiration-date resolver: `_subscription_length`
+		 * periods from the given start, or 0 for a never-expiring product.
+		 *
+		 * @param int|WC_Product $product_id The product (ID).
+		 * @param string         $from_date  GMT datetime to count from.
+		 */
+		public static function get_expiration_date( $product_id, $from_date = '' ) {
+			$product = is_object( $product_id ) ? $product_id : wc_get_product( $product_id );
+			$length  = $product ? (int) $product->get_meta( '_subscription_length' ) : 0;
+			if ( $length <= 0 ) {
+				return 0;
+			}
+			$base = $from_date ? strtotime( $from_date ) : time();
+			return gmdate( 'Y-m-d H:i:s', strtotime( sprintf( '+%d %s', $length, self::get_period( $product ) ), $base ) );
 		}
 		/**
 		 * Minimal mirror of WCS's price-string builder — enough to derive a
@@ -1085,6 +1201,30 @@ function wc_get_order( $order_id ) {
 function wc_get_product( $product_id ) {
 	global $products_database;
 	return $products_database[ $product_id ] ?? false;
+}
+/**
+ * Minimal wc_get_products(): filters the mock store by `type` (array or string)
+ * and `status`. Products carry status in their data bag, defaulting to publish.
+ *
+ * @param array $args Query args.
+ * @return WC_Product[]
+ */
+function wc_get_products( $args = [] ) {
+	global $products_database;
+	$types  = isset( $args['type'] ) ? (array) $args['type'] : [];
+	$status = $args['status'] ?? '';
+	$out    = [];
+	foreach ( $products_database as $product ) {
+		if ( $types && ! $product->is_type( $types ) ) {
+			continue;
+		}
+		$product_status = method_exists( $product, 'get_status' ) ? $product->get_status() : 'publish';
+		if ( $status && $product_status !== $status ) {
+			continue;
+		}
+		$out[] = $product;
+	}
+	return $out;
 }
 /**
  * Minimal stand-in for WooCommerce's admin field renderer. Only enough markup to let a metabox

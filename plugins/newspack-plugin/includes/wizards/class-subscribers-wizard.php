@@ -266,6 +266,11 @@ class Subscribers_Wizard extends Wizard {
 				],
 			]
 		);
+
+		// The payment-action routes (change payment method, refund/cancel, plan
+		// change, default card) live in their own class; they share this wizard's
+		// permission check so the whole surface has one capability gate.
+		Subscribers_Payments::register_routes( [ $this, 'api_permissions_check' ] );
 	}
 
 	/**
@@ -595,23 +600,26 @@ class Subscribers_Wizard extends Wizard {
 		$registered = $user->user_registered ? strtotime( $user->user_registered . ' UTC' ) : false;
 
 		return [
-			'id'            => $user_id,
-			'name'          => $user->display_name,
-			'email'         => $user->user_email,
+			'id'             => $user_id,
+			'name'           => $user->display_name,
+			'email'          => $user->user_email,
 			// The native user-edit screen (self edits resolve to profile.php). The
 			// in-wizard profile does not yet cover editing the WordPress user, so the
 			// profile keeps this as a header action rather than stranding the admin.
-			'editUrl'       => get_edit_user_link( $user_id ),
-			'status'        => $this->reduced_status( $subscriptions, $groups ),
-			'memberSince'   => $this->local_date( $registered ),
-			'lastPayment'   => $this->last_payment_date( $user_id ),
+			'editUrl'        => get_edit_user_link( $user_id ),
+			'status'         => $this->reduced_status( $subscriptions, $groups ),
+			'memberSince'    => $this->local_date( $registered ),
+			'lastPayment'    => $this->last_payment_date( $user_id ),
 			// Wired to reader activity in a later slice; the column is hidden by default.
-			'lastSeen'      => null,
-			'subscriptions' => $subscriptions,
-			'groups'        => $groups,
+			'lastSeen'       => null,
+			'subscriptions'  => $subscriptions,
+			'groups'         => $groups,
 			// Tags and newsletters are populated in a later slice (NPPD-1753 PR 7).
-			'tags'          => [],
-			'newsletters'   => [],
+			'tags'           => [],
+			'newsletters'    => [],
+			// The saved-card list is profile-only: a list row never renders it, and
+			// resolving tokens per row would cost a query on every row of every page.
+			'paymentMethods' => $detailed ? Subscribers_Payments::payment_methods_for_user( $user_id ) : [],
 		];
 	}
 
@@ -645,7 +653,9 @@ class Subscribers_Wizard extends Wizard {
 				'status'  => self::map_subscription_status( $subscription->get_status() ),
 				'editUrl' => $this->subscription_edit_url( $subscription ),
 			];
-			$out[] = $detailed ? array_merge( $entry, $this->subscription_billing( $subscription ) ) : $entry;
+			$out[] = $detailed
+				? array_merge( $entry, $this->subscription_billing( $subscription ), Subscribers_Payments::subscription_payment_fields( $subscription ) )
+				: $entry;
 		}
 		return $out;
 	}

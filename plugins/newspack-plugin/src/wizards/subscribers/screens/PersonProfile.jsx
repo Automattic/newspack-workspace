@@ -15,11 +15,15 @@
  * content right), and every card is the shared SubscriptionCard so this screen
  * and the group detail cannot drift apart.
  *
- * Per-subscription actions (change plan, change payment method, refund/cancel,
- * reactivate) are separate workstreams and are deliberately absent from the
- * menus here rather than present-but-inert: a menu item that does nothing is
- * worse than one that is not there yet. Each card's menu carries only what works
- * today — opening the subscription itself.
+ * Each individual subscription card carries its per-status money actions in
+ * the "more" menu — change plan and change payment method for a live plan,
+ * refund/cancel where there is a payment to give back — and the saved cards
+ * are listed below the subscriptions with their Default/Expired state. Every
+ * mutation is awaited and followed by a profile refetch (the wizard's write
+ * convention, see data/use-group.js on the group-detail slice): the server
+ * recalculates totals and can refuse, so the response is the truth. On-hold
+ * recovery (reactivate) and resubscribe are separate workstreams and stay
+ * absent rather than present-but-inert.
  */
 
 /**
@@ -29,6 +33,7 @@ import { createPortal, useEffect, useMemo, useState } from '@wordpress/element';
 import { __, _n, sprintf } from '@wordpress/i18n';
 import { useDispatch } from '@wordpress/data';
 import {
+	Snackbar,
 	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
@@ -40,7 +45,12 @@ import { Button, Card, Divider, Grid, Notice, Router, SectionHeader, Waiting } f
 import './style.scss';
 import { WIZARD_STORE_NAMESPACE } from '../../../../packages/components/src/wizard/store';
 import SubscriptionCard from '../components/SubscriptionCard';
+import PaymentMethodsList, { cardLabel } from '../components/PaymentMethodsList';
+import ChangePaymentMethodFlow from '../flows/ChangePaymentMethodFlow';
+import PlanChangeFlow from '../flows/PlanChangeFlow';
+import RefundFlow from '../flows/RefundFlow';
 import { useSubscriber } from '../data/use-subscriber';
+import { usePaymentActions, canChangePaymentMethod } from '../data/use-payments';
 import { SHOW_AVATARS, useAvatars } from '../data/use-avatars';
 import { useWizardNode } from '../use-portals';
 import { billingText, fmtDate, orDash, scheduleRow } from '../format';
@@ -123,6 +133,49 @@ export default function PersonProfile() {
 	const backNav = isInternalHashPath( rawFrom ) ? rawFrom : '#/';
 
 	const { subscriber, loading, error, notFound, reload } = useSubscriber( id );
+
+	// The money flows: which modal is open (null for none), the snackbar shown
+	// after one completes, and the write calls the modals run. The snackbar's
+	// `id` makes a repeated identical message a new render (so it re-announces
+	// and its timer restarts), and `isError` styles a refusal apart from a
+	// confirmation.
+	const [ modal, setModal ] = useState( null );
+	const [ snackbar, setSnackbar ] = useState( null );
+	const paymentActions = usePaymentActions( id );
+
+	const showSnackbar = ( message, isError = false ) => setSnackbar( { message, isError, id: Date.now() } );
+
+	// A lone Snackbar (outside a SnackbarList) never dismisses itself, so a
+	// success toast would sit there until clicked.
+	useEffect( () => {
+		if ( ! snackbar ) {
+			return;
+		}
+		const timer = setTimeout( () => setSnackbar( null ), 10000 );
+		return () => clearTimeout( timer );
+	}, [ snackbar ] );
+
+	// Every flow ends the same way: close the modal, tell the admin what
+	// happened, and refetch the profile so the screen renders the server's
+	// truth rather than the request's intent.
+	const completeFlow = message => {
+		setModal( null );
+		showSnackbar( message );
+		reload();
+	};
+
+	// Make-default is a single non-destructive click, so it runs without a
+	// confirmation modal; a refusal (e.g. the server refusing an expired card)
+	// surfaces in the snackbar with the server's own message.
+	const makeDefault = async pm => {
+		try {
+			await paymentActions.setDefaultPaymentMethod( pm.id );
+			// translators: %s is a card label (e.g. "Visa ending in 4242").
+			completeFlow( sprintf( __( '%s is now the default payment method.', 'newspack-plugin' ), cardLabel( pm ) ) );
+		} catch ( e ) {
+			showSnackbar( e?.message || __( 'Something went wrong.', 'newspack-plugin' ), true );
+		}
+	};
 
 	// A 128px source feeds the 64px header avatar (2x for high-DPR displays),
 	// resolved through the same endpoint the lists use.
@@ -235,6 +288,50 @@ export default function PersonProfile() {
 
 		const individualCards = ( subscriber.subscriptions || [] ).map( subscription => {
 			const name = subscription.plan || __( '(Subscription)', 'newspack-plugin' );
+			const isActive = 'active' === subscription.status;
+			const isLive = isActive || 'on-hold' === subscription.status;
+			const menuActions = [];
+			// canChangePlan is resolved server-side with the same rule the endpoint
+			// enforces (strictly active — the wizard's "Active" badge also covers
+			// WCS pending-cancel — and no coupon/fee/shipping items), so the menu
+			// never offers a plan change the server would refuse.
+			if ( subscription.canChangePlan ) {
+				menuActions.push( {
+					key: 'plan',
+					label: __( 'Change subscription', 'newspack-plugin' ),
+					// translators: %s is a subscription/plan name.
+					ariaLabel: sprintf( __( 'Change subscription: %s', 'newspack-plugin' ), name ),
+					onClick: () => setModal( { kind: 'plan', subscription } ),
+				} );
+			}
+			// Offered only when the subscription charges a resolvable saved card
+			// and there is another usable card to switch to.
+			if ( isLive && canChangePaymentMethod( subscription, subscriber.paymentMethods ) ) {
+				menuActions.push( {
+					key: 'payment',
+					label: __( 'Change payment method', 'newspack-plugin' ),
+					// translators: %s is a subscription/plan name.
+					ariaLabel: sprintf( __( 'Change payment method: %s', 'newspack-plugin' ), name ),
+					onClick: () => setModal( { kind: 'payment', subscription } ),
+				} );
+			}
+			// The refund choice is offered only when there is actually money to give
+			// back (the server's refundableAmount); on hold, free, or fully
+			// refunded, the action is a plain cancel — same rule RefundFlow applies.
+			if ( isLive ) {
+				const refundable = isActive && !! subscription.refundableAmount;
+				menuActions.push( {
+					key: 'refund',
+					label: refundable ? __( 'Refund or cancel', 'newspack-plugin' ) : __( 'Cancel', 'newspack-plugin' ),
+					ariaLabel: refundable
+						? // translators: %s is a subscription/plan name.
+						  sprintf( __( 'Refund or cancel: %s', 'newspack-plugin' ), name )
+						: // translators: %s is a subscription/plan name.
+						  sprintf( __( 'Cancel: %s', 'newspack-plugin' ), name ),
+					isDestructive: true,
+					onClick: () => setModal( { kind: 'refund', subscription } ),
+				} );
+			}
 			return {
 				key: `subscription-${ subscription.id }`,
 				status: subscription.status,
@@ -253,9 +350,9 @@ export default function PersonProfile() {
 							{ label: __( 'Last payment', 'newspack-plugin' ), value: orDash( fmtDate( subscription.lastPayment ) ) },
 							scheduleRow( subscription ),
 						] }
-						// No per-status "more" menu yet: the card title already links to
-						// the subscription's edit screen, and change-plan / payment /
-						// refund / reactivate are Workstreams D and E.
+						actions={ menuActions }
+						// translators: %s is a subscription/plan name.
+						actionsLabel={ sprintf( __( 'Subscription actions: %s', 'newspack-plugin' ), name ) }
 					/>
 				),
 			};
@@ -313,7 +410,7 @@ export default function PersonProfile() {
 					headerNode
 				) }
 
-			<Row title={ __( 'Subscriptions', 'newspack-plugin' ) } showDivider={ false }>
+			<Row title={ __( 'Subscriptions', 'newspack-plugin' ) }>
 				<VStack spacing={ 4 }>
 					{ 0 === cards.length && (
 						<Card __experimentalCoreCard className="newspack-subscribers__card">
@@ -356,6 +453,49 @@ export default function PersonProfile() {
 					) }
 				</VStack>
 			</Row>
+
+			<Row
+				title={ __( 'Payment methods', 'newspack-plugin' ) }
+				description={ __( 'The cards on file for this subscriber. Renewals fall back to the default.', 'newspack-plugin' ) }
+				showDivider={ false }
+			>
+				<PaymentMethodsList paymentMethods={ subscriber.paymentMethods || [] } onMakeDefault={ makeDefault } />
+			</Row>
+
+			{ 'payment' === modal?.kind && (
+				<ChangePaymentMethodFlow
+					subscription={ modal.subscription }
+					paymentMethods={ subscriber.paymentMethods || [] }
+					actions={ paymentActions }
+					onClose={ () => setModal( null ) }
+					onDone={ completeFlow }
+				/>
+			) }
+			{ 'plan' === modal?.kind && (
+				<PlanChangeFlow
+					subscription={ modal.subscription }
+					actions={ paymentActions }
+					onClose={ () => setModal( null ) }
+					onDone={ completeFlow }
+				/>
+			) }
+			{ 'refund' === modal?.kind && (
+				<RefundFlow
+					subscription={ modal.subscription }
+					subscriberName={ subscriber.name }
+					actions={ paymentActions }
+					onClose={ () => setModal( null ) }
+					onDone={ completeFlow }
+				/>
+			) }
+
+			{ snackbar && (
+				<div className={ `newspack-subscribers__snackbar${ snackbar.isError ? ' newspack-subscribers__snackbar--error' : '' }` }>
+					<Snackbar key={ snackbar.id } onRemove={ () => setSnackbar( null ) }>
+						{ snackbar.message }
+					</Snackbar>
+				</div>
+			) }
 		</div>
 	);
 }

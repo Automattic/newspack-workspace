@@ -17,6 +17,12 @@
 	position: fixed;
 	transform: translateX( -50% );
 	z-index: 100000;
+
+	// A refusal must not look like a confirmation: error toasts get the alert
+	// red the components' error notices use.
+	&--error .components-snackbar {
+		background-color: wp-colors.$alert-red;
+	}
 }
 
 .newspack-subscribers__card-icon {
