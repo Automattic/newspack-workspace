@@ -312,12 +312,14 @@ ${worktree_volumes}      - ./envs/${env_name}/html:/var/www/html
       - APACHE_RUN_USER=\${USE_CUSTOM_APACHE_USER:-www-data}
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    ## Probes memcached -- see docker-compose.yml for the rationale. Kept in step
+    ## with the healthcheck migration in env_up().
     healthcheck:
       test: ["CMD", "bash", "-c", "echo > /dev/tcp/127.0.0.1/11211"]
-      interval: 60s
+      interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 30s
+      start_period: 180s
     networks:
       default: {}
       newspack_envs:
@@ -442,6 +444,26 @@ networks:
     external: true
 MIGRATE
             echo "Migrated $env_name: added shared network (domain: $domain)"
+        fi
+        # --- Migration: add the memcached healthcheck if missing ---
+        # Compose files are generated once at create time, so envs predating the
+        # healthcheck would never get it. Keep this block in step with the
+        # healthcheck in the generated YAML above.
+        if ! grep -q 'healthcheck:' "$compose_file"; then
+            awk '
+                { print }
+                /^      - "host\.docker\.internal:host-gateway"$/ && !inserted {
+                    print "    ## Probes memcached -- see docker-compose.yml for the rationale."
+                    print "    healthcheck:"
+                    print "      test: [\"CMD\", \"bash\", \"-c\", \"echo > /dev/tcp/127.0.0.1/11211\"]"
+                    print "      interval: 30s"
+                    print "      timeout: 5s"
+                    print "      retries: 3"
+                    print "      start_period: 180s"
+                    inserted = 1
+                }
+            ' "$compose_file" > "${compose_file}.tmp" && mv "${compose_file}.tmp" "$compose_file"
+            echo "Migrated $env_name: added memcached healthcheck"
         fi
         # Re-read domain after potential migration.
         domain=$(domain_for_env "$compose_file")

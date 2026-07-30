@@ -8,6 +8,15 @@ Plugin URI: https://wordpress.org/plugins/memcached/
 Author: Ryan Boren, Denis de Bernardy, Matt Martz, Andy Skelton
 
 Install this file to wp-content/object-cache.php
+
+LOCALLY PATCHED — this is not a pristine copy of upstream 4.0.0. Re-vendoring the
+upstream release will silently revert these; re-apply them:
+  - delete()           always drops the runtime entry, even when the backend delete fails.
+  - replace()          same, so a failed replace cannot leave a stale value readable.
+  - failure_callback() logs an unreachable server once per request.
+Without the first two, an unreachable memcached turns this drop-in into a cache that
+can never be invalidated: set() populates the runtime array unconditionally and get()
+serves from it, so read-after-write within one request returns the stale value.
 */
 
 // Users with setups where multiple installs share a common wp-config.php or $table_prefix
@@ -147,8 +156,11 @@ class WP_Object_Cache {
 
 	var $connection_errors = array();
 
-	// Servers already reported via error_log this request, keyed by "host:port".
-	var $logged_connection_errors = array();
+	// Servers already reported this request, keyed by "host:port". Static because
+	// advanced-cache.php instantiates this class and wp-settings.php then replaces
+	// that instance, so a per-instance map would report the same server once per
+	// instantiation rather than once per request.
+	static $logged_connection_errors = array();
 
 	var $time_start = 0;
 	var $time_total = 0;
@@ -591,6 +603,11 @@ class WP_Object_Cache {
 				'value' => $data,
 				'found' => true,
 			];
+		} else {
+			// Drop the runtime entry rather than leaving the superseded value
+			// readable, for the same reason delete() does: a failed backend write
+			// must not make this request observe stale data.
+			unset( $this->cache[ $key ] );
 		}
 
 		return $result;
@@ -817,14 +834,19 @@ class WP_Object_Cache {
 	function failure_callback( $host, $port ) {
 		$server = $host . ':' . $port;
 
-		// Report each unreachable server once per request. Without this the cache
+		// Record each unreachable server once per request. Without this the cache
 		// degrades to a request-scoped array with no outward signal at all, which
-		// is indistinguishable from a healthy cache until results go stale.
-		if ( ! isset( $this->logged_connection_errors[ $server ] ) ) {
-			$this->logged_connection_errors[ $server ] = true;
-
-			error_log( sprintf( 'Memcached object cache: cannot reach %s. Falling back to a request-scoped cache; run `/etc/init.d/memcached start` in the container.', $server ) );
+		// is indistinguishable from a healthy cache until results go stale. The
+		// guard also bounds $connection_errors, which nothing reads back and which
+		// would otherwise grow one entry per failed operation for the life of a
+		// long-running process.
+		if ( isset( self::$logged_connection_errors[ $server ] ) ) {
+			return;
 		}
+
+		self::$logged_connection_errors[ $server ] = true;
+
+		error_log( sprintf( 'Memcached object cache: cannot reach %s. Falling back to a request-scoped cache. The container watchdog restarts memcached within 30s; if this repeats, check /var/log/memcached.log.', $server ) );
 
 		$this->connection_errors[] = array(
 			'host' => $host,

@@ -59,29 +59,21 @@ echo
 
 # Start memcached.
 #
-# memcached.conf points -P at /var/run/memcached/, a directory that lives on
-# tmpfs and so is absent on every container start. init.d tracks the daemon by a
-# separate pid file that its wrapper writes, so this one is redundant -- but
-# without the directory memcached logs a pid file error on each start, which
-# reads as a startup failure when triaging. Create it to keep the log honest.
-mkdir -p /var/run/memcached
-chown memcache:memcache /var/run/memcached
+# memcached.conf points -P at /var/run/memcached/, a directory Debian's package
+# creates through systemd-tmpfiles -- which never runs in a container, so it is
+# absent here. init.d tracks the daemon by a separate pid file that its wrapper
+# writes, so this one is redundant; but without the directory memcached logs a
+# pid file error on every start, which reads as a startup failure when triaging.
+# Create it to keep the log honest. Neither step is worth failing the container
+# for, hence the guards.
+mkdir -p /var/run/memcached || true
+chown memcache:memcache /var/run/memcached || true
 
 /etc/init.d/memcached start
 
-# Keep memcached alive. Nothing supervises it, and a dead memcached is invisible
-# from the outside: the object cache drop-in keeps serving a request-scoped
-# array, so the site looks fine while cache invalidation silently stops working.
-(
-	while true; do
-		sleep 30
-
-		if ! (echo > /dev/tcp/127.0.0.1/11211) 2>/dev/null; then
-			echo "[run.sh] memcached is not answering on 11211; restarting it."
-			/etc/init.d/memcached restart || /etc/init.d/memcached start
-		fi
-	done
-) &
+# Supervise it -- see the script for why nothing else does.
+chmod +x /var/scripts/watchdog-memcached.sh || true
+/var/scripts/watchdog-memcached.sh &
 
 # Run apache in the foreground so the container keeps running
 echo "Running Apache in the foreground"
