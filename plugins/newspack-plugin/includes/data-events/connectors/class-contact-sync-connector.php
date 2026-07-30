@@ -13,7 +13,6 @@ use Newspack\Reader_Activation\Contact_Sync;
 use Newspack_Newsletters_Contacts;
 use Newspack\WooCommerce_Connection;
 use Newspack\Reader_Activation\Sync\WooCommerce as Sync_WooCommerce;
-use Newspack\Reader_Activation\Sync\Metadata as Sync_Metadata;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -38,11 +37,12 @@ class Contact_Sync_Connector {
 			return;
 		}
 		Data_Events::register_handler( [ __CLASS__, 'reader_registered' ], 'reader_registered' );
-		if ( 'legacy' === Sync_Metadata::get_version() ) {
-			Data_Events::register_handler( [ __CLASS__, 'reader_deleted' ], 'reader_deleted' );
-		} else {
-			Data_Events::register_handler( [ __CLASS__, 'reader_delete_sync' ], 'reader_delete_sync' );
-		}
+		// Deletion always routes through the unified, per-integration
+		// Contact_Sync::handle_account_deletion() path (see reader_delete_sync()
+		// below). The legacy reader_deleted() handler predates per-integration
+		// account-deletion settings and is no longer wired up automatically; it
+		// is retained only for its own direct unit-test coverage.
+		Data_Events::register_handler( [ __CLASS__, 'reader_delete_sync' ], 'reader_delete_sync' );
 		Data_Events::register_handler( [ __CLASS__, 'reader_logged_in' ], 'reader_logged_in' );
 		Data_Events::register_handler( [ __CLASS__, 'order_completed' ], 'order_completed' );
 		Data_Events::register_handler( [ __CLASS__, 'subscription_updated' ], 'donation_subscription_changed' );

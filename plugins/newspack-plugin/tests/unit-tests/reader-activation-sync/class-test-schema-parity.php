@@ -57,7 +57,6 @@ class Test_Schema_Parity extends \WP_UnitTestCase {
 		Field_Registry::reset();
 		$this->reset_integrations();
 		Integrations::register_integrations();
-		$this->set_metadata_version( 'legacy' );
 		parent::tear_down();
 	}
 
@@ -69,18 +68,6 @@ class Test_Schema_Parity extends \WP_UnitTestCase {
 		$property   = $reflection->getProperty( 'integrations' );
 		$property->setAccessible( true );
 		$property->setValue( null, [] );
-	}
-
-	/**
-	 * Set the metadata version via reflection.
-	 *
-	 * @param string $version The version to set.
-	 */
-	private function set_metadata_version( $version ) {
-		$reflection = new \ReflectionClass( Metadata::class );
-		$property   = $reflection->getProperty( 'version' );
-		$property->setAccessible( true );
-		$property->setValue( null, $version );
 	}
 
 	/**

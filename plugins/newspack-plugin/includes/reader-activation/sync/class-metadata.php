@@ -24,13 +24,6 @@ class Metadata {
 	const PREFIX_OPTION = '_newspack_metadata_prefix';
 
 	/**
-	 * The schema version for the metadata. Legacy is the default and fallsback to how things were before Newspack Integrations.
-	 *
-	 * @var string
-	 */
-	public static $version = 'legacy';
-
-	/**
 	 * The option name for choosing which metadata fields to sync.
 	 *
 	 * @var string
@@ -80,24 +73,6 @@ class Metadata {
 		$v1     = [ Contact_Metadata\Legacy_Basic::class, Contact_Metadata\Legacy_Payment::class, Contact_Metadata\Content_Gate::class ];
 		$v2     = [ Contact_Metadata\Identity::class, Contact_Metadata\Registration::class, Contact_Metadata\Engagement::class, Contact_Metadata\Subscription::class, Contact_Metadata\Donation::class, Contact_Metadata\Content_Gate::class ];
 		return array_values( array_filter( Field_Registry::VERSION_V1 === $origin ? $v1 : $v2, 'class_exists' ) );
-	}
-
-	/**
-	 * Get the current metadata schema version.
-	 *
-	 * @return string
-	 */
-	public static function get_version() {
-		if ( defined( 'NEWSPACK_SYNC_METADATA_VERSION' ) ) {
-			return NEWSPACK_SYNC_METADATA_VERSION;
-		}
-
-		// boolean version of the feature flag.
-		if ( defined( 'NEWSPACK_SYNC_METADATA_VERSION_1' ) && NEWSPACK_SYNC_METADATA_VERSION_1 ) {
-			return '1.0';
-		}
-
-		return self::$version;
 	}
 
 	/**
@@ -168,14 +143,44 @@ class Metadata {
 	}
 
 	/**
-	 * Get payment-related metadata fields.
+	 * Get payment-related metadata fields (v1 map).
+	 *
+	 * Used by the WooCommerce sync class when clearing payment fields.
 	 *
 	 * @return array List of fields.
 	 */
 	public static function get_payment_fields() {
-		// Not sure yet if this method will be useful in the new schema, so keeping it here for now.
-		// It's used in the Woocommerce class when we want to clear payment fields, so we might still need to have a list of "Woocommerce related fields".
-		return Legacy_Metadata::get_payment_fields();
+		return Contact_Metadata\Legacy_Payment::get_fields();
+	}
+
+	/**
+	 * Get the UTM key from a raw or prefixed key.
+	 *
+	 * Port of the legacy helper: validates the UTM family against the
+	 * fields enabled for the ESP integration and returns the prefixed,
+	 * suffixed ESP name (e.g. "NP_Signup UTM: source"), or false.
+	 *
+	 * @param string $key Key to check.
+	 *
+	 * @return string|false
+	 */
+	public static function get_utm_key( $key ) {
+		$utm_keys = [ 'signup_page_utm', 'payment_page_utm' ];
+		$raw_keys = self::get_raw_keys();
+		foreach ( $utm_keys as $utm_key ) {
+			if ( ! in_array( $utm_key, $raw_keys, true ) ) {
+				continue;
+			}
+			$prefixed_key = self::get_key( $utm_key );
+			if ( 0 === strpos( $key, $utm_key ) ) {
+				$suffix = str_replace( $utm_key . '_', '', $key );
+				return ! empty( trim( $suffix ) ) && $suffix !== $key ? $prefixed_key . $suffix : false;
+			}
+			if ( 0 === strpos( $key, $prefixed_key ) && $key !== $prefixed_key ) {
+				return $key;
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -548,7 +553,11 @@ class Metadata {
 		Logger::log( 'Normalizing contact data for reader ESP sync:' );
 		Logger::log( $contact );
 
-		/** This filter is documented in includes/reader-activation/sync/class-legacy-metadata.php */
+		/**
+		 * Filters the normalized contact data before syncing to the ESP.
+		 *
+		 * @param array $contact Contact data.
+		 */
 		return apply_filters( 'newspack_esp_sync_normalize_contact', $contact );
 	}
 }

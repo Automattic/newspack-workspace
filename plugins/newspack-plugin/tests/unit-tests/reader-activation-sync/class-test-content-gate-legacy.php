@@ -21,13 +21,6 @@ use Newspack\Reader_Activation\Sync\Contact_Metadata\Content_Gate as Content_Gat
 class Test_Content_Gate_Legacy extends WP_UnitTestCase {
 
 	/**
-	 * Schema version restored in tear_down().
-	 *
-	 * @var string
-	 */
-	private static $original_version;
-
-	/**
 	 * Enabled outgoing fields restored in tear_down().
 	 *
 	 * @var array|null
@@ -56,13 +49,11 @@ class Test_Content_Gate_Legacy extends WP_UnitTestCase {
 		if ( ! defined( 'NEWSPACK_CONTENT_GATES' ) ) {
 			define( 'NEWSPACK_CONTENT_GATES', true );
 		}
-		self::$original_version = Metadata::$version;
 	}
 
 	public function set_up() {
 		parent::set_up();
 		Content_Gate_Metadata::reset_cache();
-		Metadata::$version = 'legacy';
 		// Pin the schema origin so the origin-scoped field surfaces describe a
 		// v1 (legacy) site regardless of what the detection heuristic infers
 		// from this test environment.
@@ -82,7 +73,6 @@ class Test_Content_Gate_Legacy extends WP_UnitTestCase {
 
 	public function tear_down() {
 		Metadata::update_fields( ! empty( $this->original_enabled_fields ) ? $this->original_enabled_fields : [] );
-		Metadata::$version = self::$original_version;
 		delete_option( Field_Registry::SCHEMA_ORIGIN_OPTION );
 		Field_Registry::reset();
 		Content_Gate_Metadata::reset_cache();

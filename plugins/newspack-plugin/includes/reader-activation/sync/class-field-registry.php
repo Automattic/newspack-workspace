@@ -218,8 +218,10 @@ class Field_Registry {
 
 	/**
 	 * Get the site's schema origin: the schema version it was on before
-	 * per-field coexistence. Presentation and migration defaults only —
-	 * sync behavior must never read this.
+	 * per-field coexistence. Decides presentation defaults, migration
+	 * name-resolution and the origin-scoped compatibility maps (e.g.
+	 * Metadata::get_keys()); it does not decide what actually syncs — that
+	 * is decided per-integration by each integration's enabled field ids.
 	 *
 	 * @return string 'v1' or 'v2'.
 	 */
@@ -229,6 +231,18 @@ class Field_Registry {
 			return $origin;
 		}
 		$origin = self::detect_schema_origin();
+
+		// detect_schema_origin()'s final fallback needs a registered 'esp'
+		// integration to tell a genuinely fresh site from a legacy site whose
+		// ESP integration simply hasn't registered yet (e.g. this is called
+		// before init priority 5). Without that signal the computed value is
+		// only a guess, and persisting a wrong 'v2' guess would freeze it
+		// forever. Skip the persist in that case; a later, correctly-timed
+		// call will persist the real answer once the registry is populated.
+		if ( null === \Newspack\Reader_Activation\Integrations::get_integration( 'esp' ) ) {
+			return $origin;
+		}
+
 		\add_option( self::SCHEMA_ORIGIN_OPTION, $origin, '', false );
 		return $origin;
 	}
@@ -247,7 +261,13 @@ class Field_Registry {
 	 * @return string 'v1' or 'v2'.
 	 */
 	private static function detect_schema_origin() {
-		if ( 'legacy' !== Metadata::get_version() ) {
+		$flag_version = null;
+		if ( defined( 'NEWSPACK_SYNC_METADATA_VERSION' ) ) {
+			$flag_version = NEWSPACK_SYNC_METADATA_VERSION;
+		} elseif ( defined( 'NEWSPACK_SYNC_METADATA_VERSION_1' ) && NEWSPACK_SYNC_METADATA_VERSION_1 ) {
+			$flag_version = '1.0';
+		}
+		if ( null !== $flag_version && 'legacy' !== $flag_version ) {
 			return self::VERSION_V2;
 		}
 

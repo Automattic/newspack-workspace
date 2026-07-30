@@ -5,6 +5,7 @@
  * @package Newspack\Tests
  */
 
+use Newspack\Reader_Activation\Sync\Field_Registry;
 use Newspack\Reader_Activation\Sync\Metadata;
 
 /**
@@ -14,28 +15,17 @@ use Newspack\Reader_Activation\Sync\Metadata;
  */
 class Test_Grouped_Metadata extends WP_UnitTestCase {
 
-	/**
-	 * Schema version restored in tear_down().
-	 *
-	 * @var string
-	 */
-	private static $original_version;
-
-	public static function set_up_before_class() {
-		parent::set_up_before_class();
-		self::$original_version = Metadata::$version;
-	}
-
 	public function set_up() {
 		parent::set_up();
-		// Force the v1.0 schema so Identity / Registration / Engagement etc.
-		// participate in get_metadata_classes() (legacy classes return empty
-		// section names and would all fall into the "Additional" bucket).
-		Metadata::$version = '1.0';
+		// Pin the schema origin to v2 so Identity / Registration / Engagement
+		// etc. participate in get_origin_metadata_classes() (the v1 legacy
+		// classes return empty section names and would all fall into the
+		// "Additional" bucket).
+		update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v2' );
 	}
 
 	public function tear_down() {
-		Metadata::$version = self::$original_version;
+		delete_option( Field_Registry::SCHEMA_ORIGIN_OPTION );
 		remove_all_filters( 'newspack_ras_metadata_keys' );
 		remove_all_filters( 'newspack_ras_grouped_metadata_fields' );
 		parent::tear_down();

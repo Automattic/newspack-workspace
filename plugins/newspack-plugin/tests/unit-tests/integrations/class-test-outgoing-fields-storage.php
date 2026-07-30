@@ -225,6 +225,26 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Origin detection's final fallback (see detect_schema_origin()) needs a
+	 * registered 'esp' integration to tell a genuinely fresh site from a
+	 * legacy site whose ESP integration simply hasn't registered yet (e.g.
+	 * get_schema_origin() is called before init priority 5). Without that
+	 * signal, get_schema_origin() must not persist its guess — persisting a
+	 * wrong 'v2' would freeze it forever. Once the registry is populated, a
+	 * later call detects and persists the real answer.
+	 */
+	public function test_origin_skips_persist_when_esp_not_yet_registered() {
+		$this->assertSame( 'v2', Field_Registry::get_schema_origin() );
+		$this->assertFalse( \get_option( Field_Registry::SCHEMA_ORIGIN_OPTION ) );
+
+		Sample_Integration::$is_set_up_value = true;
+		Integrations::register( new Sample_Integration( 'esp', 'ESP' ) );
+
+		$this->assertSame( 'v1', Field_Registry::get_schema_origin() );
+		$this->assertSame( 'v1', \get_option( Field_Registry::SCHEMA_ORIGIN_OPTION ) );
+	}
+
+	/**
 	 * The concrete ESP integration overrides get_enabled_outgoing_fields()
 	 * directly (rather than inheriting the base Integration behavior), so it
 	 * needs its own coverage: stored ids resolve back to display names.

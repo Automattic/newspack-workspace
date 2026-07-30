@@ -892,59 +892,50 @@ class Test_Account_Deletion extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * In v1 metadata mode, Integration::prepare_contact() strips metadata keys that
-	 * are not registered in Sync\Metadata::get_keys() and enabled_outgoing_fields.
-	 * The dispatcher must re-inject account_deleted (with the integration's prefix)
-	 * AFTER prepare_contact() so the deletion signal still reaches the ESP.
+	 * Account_deleted is a synthetic, system-level signal: it is not declared
+	 * as a field by any metadata class, so Integration::prepare_contact()
+	 * always strips it regardless of the integration's enabled outgoing
+	 * fields. The dispatcher must re-inject it (with the integration's
+	 * prefix) AFTER prepare_contact() so the deletion signal still reaches
+	 * the ESP.
 	 */
-	public function test_handle_account_deletion_flag_preserves_account_deleted_in_v1_mode() {
-		// Set metadata version to non-legacy via reflection.
-		$reflection = new \ReflectionClass( \Newspack\Reader_Activation\Sync\Metadata::class );
-		$property   = $reflection->getProperty( 'version' );
-		$property->setAccessible( true );
-		$original_version = $property->getValue();
-		$property->setValue( null, '2' );
+	public function test_handle_account_deletion_flag_preserves_account_deleted() {
+		$this->reset_integrations();
+		$spy = new \Deletion_Spy_Integration( 'spy-v1-flag', 'Spy V1 Flag' );
+		Integrations::register( $spy );
+		$spy->update_settings_field_value( 'sync_account_deletion', true );
+		$spy->update_settings_field_value( 'account_deletion_handling', 'flag' );
+		Integrations::enable( 'spy-v1-flag' );
 
-		try {
-			$this->reset_integrations();
-			$spy = new \Deletion_Spy_Integration( 'spy-v1-flag', 'Spy V1 Flag' );
-			Integrations::register( $spy );
-			$spy->update_settings_field_value( 'sync_account_deletion', true );
-			$spy->update_settings_field_value( 'account_deletion_handling', 'flag' );
-			Integrations::enable( 'spy-v1-flag' );
+		\Newspack\Reader_Activation\Contact_Sync::handle_account_deletion(
+			'reader@example.com',
+			[
+				'email'    => 'reader@example.com',
+				'metadata' => [],
+			],
+			'TestContext'
+		);
 
-			\Newspack\Reader_Activation\Contact_Sync::handle_account_deletion(
-				'reader@example.com',
-				[
-					'email'    => 'reader@example.com',
-					'metadata' => [],
-				],
-				'TestContext'
-			);
+		$this->assertCount( 1, $spy->push_calls );
+		$pushed = $spy->push_calls[0]['contact'];
 
-			$this->assertCount( 1, $spy->push_calls );
-			$pushed = $spy->push_calls[0]['contact'];
-
-			// Account_Deleted must survive prepare_contact in v1 mode, prefixed by the integration.
-			// Title_Case_With_Underscores matches peer prefixed metadata (e.g. NP_Registration_Date).
-			$prefix       = $spy->get_metadata_prefix();
-			$prefixed_key = $prefix . 'Account_Deleted';
-			$this->assertArrayHasKey(
-				$prefixed_key,
-				$pushed['metadata'],
-				'Prefixed Account_Deleted must be present in the v1-mode flag-push payload.'
-			);
-			$this->assertNotFalse(
-				strtotime( $pushed['metadata'][ $prefixed_key ] ),
-				'Account_Deleted must be a strtotime-parseable timestamp in v1 mode.'
-			);
-			$this->assertMatchesRegularExpression(
-				'/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/',
-				$pushed['metadata'][ $prefixed_key ],
-				'Account_Deleted must use the Y-m-d H:i:s format that peer datetime metadata uses.'
-			);
-		} finally {
-			$property->setValue( null, $original_version );
-		}
+		// Account_Deleted must survive prepare_contact, prefixed by the integration.
+		// Title_Case_With_Underscores matches peer prefixed metadata (e.g. NP_Registration_Date).
+		$prefix       = $spy->get_metadata_prefix();
+		$prefixed_key = $prefix . 'Account_Deleted';
+		$this->assertArrayHasKey(
+			$prefixed_key,
+			$pushed['metadata'],
+			'Prefixed Account_Deleted must be present in the flag-push payload.'
+		);
+		$this->assertNotFalse(
+			strtotime( $pushed['metadata'][ $prefixed_key ] ),
+			'Account_Deleted must be a strtotime-parseable timestamp.'
+		);
+		$this->assertMatchesRegularExpression(
+			'/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/',
+			$pushed['metadata'][ $prefixed_key ],
+			'Account_Deleted must use the Y-m-d H:i:s format that peer datetime metadata uses.'
+		);
 	}
 }

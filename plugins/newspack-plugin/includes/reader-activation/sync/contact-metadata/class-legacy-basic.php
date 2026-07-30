@@ -8,7 +8,6 @@
 namespace Newspack\Reader_Activation\Sync\Contact_Metadata;
 
 use Newspack\Reader_Activation\Sync\Contact_Metadata;
-use Newspack\Reader_Activation\Sync\Legacy_Metadata;
 use Newspack\Reader_Activation\Sync\WooCommerce;
 
 defined( 'ABSPATH' ) || exit;
@@ -42,7 +41,17 @@ class Legacy_Basic extends Contact_Metadata {
 	 * @return array
 	 */
 	public static function get_fields() {
-		return Legacy_Metadata::get_basic_fields();
+		return [
+			'account'              => 'Account',
+			'registration_date'    => 'Registration Date',
+			'connected_account'    => 'Connected Account',
+			'signup_page_utm'      => 'Signup UTM: ',
+			'newsletter_selection' => 'Newsletter Selection',
+			'referer'              => 'Referrer Path',
+			'registration_page'    => 'Registration Page',
+			'current_page_url'     => 'Registration Page',
+			'registration_method'  => 'Registration Method',
+		];
 	}
 
 	/**
@@ -82,9 +91,8 @@ class Legacy_Basic extends Contact_Metadata {
 
 		// Enrichment (add_registration_data_raw/add_utm_data_raw) is applied
 		// centrally in Metadata::get_contact_with_metadata() via
-		// normalize_contact_data(), which sees the full merged metadata
-		// (e.g. Legacy_Payment's payment_page) instead of just this class's
-		// slice. Not reapplied here to avoid redundant work.
+		// normalize_contact_data(), so applying it per-class here would be
+		// redundant.
 		return $contact['metadata'] ?? [];
 	}
 }

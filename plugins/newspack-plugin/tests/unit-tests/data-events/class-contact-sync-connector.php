@@ -10,16 +10,16 @@ namespace Newspack\Tests\Data_Events;
 use Newspack\Data_Events;
 use Newspack\Data_Events\Connectors\Contact_Sync_Connector;
 use Newspack\Reader_Activation\Integrations;
-use Newspack\Reader_Activation\Sync\Metadata;
 use Sample_Integration;
 
 /**
  * Tests for Contact_Sync_Connector::register_handlers().
  *
- * Verifies that the deletion handlers are gated by metadata schema version:
- * legacy-mode sites register only the legacy `reader_deleted` handler, while
- * v1+ sites register only the `reader_delete_sync` handler. Today both run on
- * every site, causing double-processing during user deletion.
+ * Verifies that register_handlers() always registers the unified
+ * `reader_delete_sync` handler (which routes through
+ * Contact_Sync::handle_account_deletion()) and never the legacy
+ * `reader_deleted` handler, which predates per-integration account-deletion
+ * settings and is no longer wired up automatically.
  */
 class Newspack_Test_Contact_Sync_Connector extends \WP_UnitTestCase {
 
@@ -58,7 +58,6 @@ class Newspack_Test_Contact_Sync_Connector extends \WP_UnitTestCase {
 		delete_option( Integrations::OPTION_NAME );
 		$this->reset_integrations();
 		Integrations::register_integrations();
-		$this->set_metadata_version( 'legacy' );
 		if ( null !== $this->actions_snapshot ) {
 			$this->restore_data_events_actions( $this->actions_snapshot );
 			$this->actions_snapshot = null;
@@ -88,18 +87,6 @@ class Newspack_Test_Contact_Sync_Connector extends \WP_UnitTestCase {
 		$property   = $reflection->getProperty( 'actions' );
 		$property->setAccessible( true );
 		$property->setValue( null, $snapshot );
-	}
-
-	/**
-	 * Set the metadata schema version via reflection.
-	 *
-	 * @param string $version The version to set.
-	 */
-	private function set_metadata_version( $version ) {
-		$reflection = new \ReflectionClass( Metadata::class );
-		$property   = $reflection->getProperty( 'version' );
-		$property->setAccessible( true );
-		$property->setValue( null, $version );
 	}
 
 	/**
@@ -148,33 +135,30 @@ class Newspack_Test_Contact_Sync_Connector extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * In legacy metadata mode, register_handlers() should register the
-	 * `reader_deleted` handler and skip `reader_delete_sync`.
+	 * Register_handlers() should always register the unified
+	 * `reader_delete_sync` handler, regardless of the (now-retired) metadata
+	 * schema version.
 	 */
-	public function test_legacy_mode_registers_reader_deleted_only() {
-		$this->set_metadata_version( 'legacy' );
+	public function test_register_handlers_registers_reader_delete_sync() {
 		$this->reset_data_events_handlers();
 
 		Contact_Sync_Connector::register_handlers();
 
-		$actions = $this->get_registered_handler_action_names();
-		$this->assertContains( 'reader_deleted', $actions );
-		$this->assertNotContains( 'reader_delete_sync', $actions );
+		$this->assertContains( 'reader_delete_sync', $this->get_registered_handler_action_names() );
 	}
 
 	/**
-	 * In v1 (non-legacy) metadata mode, register_handlers() should register the
-	 * `reader_delete_sync` handler and skip `reader_deleted`.
+	 * Register_handlers() should never register the legacy `reader_deleted`
+	 * handler: it predates per-integration account-deletion settings and is
+	 * no longer wired up automatically (see reader_deleted()'s own direct
+	 * tests below for its still-valid, standalone behavior).
 	 */
-	public function test_v1_mode_registers_reader_delete_sync_only() {
-		$this->set_metadata_version( '2' );
+	public function test_register_handlers_never_registers_reader_deleted() {
 		$this->reset_data_events_handlers();
 
 		Contact_Sync_Connector::register_handlers();
 
-		$actions = $this->get_registered_handler_action_names();
-		$this->assertContains( 'reader_delete_sync', $actions );
-		$this->assertNotContains( 'reader_deleted', $actions );
+		$this->assertNotContains( 'reader_deleted', $this->get_registered_handler_action_names() );
 	}
 
 	/**
@@ -239,13 +223,12 @@ class Newspack_Test_Contact_Sync_Connector extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * End-to-end: in v1 mode, reader_delete_sync should route through the
-	 * Contact_Sync dispatcher and call delete_contact() on a registered
-	 * integration configured to handle deletion via the 'delete' mode.
+	 * End-to-end: reader_delete_sync should route through the Contact_Sync
+	 * dispatcher and call delete_contact() on a registered integration
+	 * configured to handle deletion via the 'delete' mode.
 	 */
 	public function test_reader_delete_sync_routes_to_handle_account_deletion() {
-		// Pre-conditions: v1 mode, one spy integration in 'delete' mode.
-		$this->set_metadata_version( '2' );
+		// Pre-condition: one spy integration in 'delete' mode.
 		$reflection = new \ReflectionClass( \Newspack\Reader_Activation\Integrations::class );
 		$property   = $reflection->getProperty( 'integrations' );
 		$property->setAccessible( true );
