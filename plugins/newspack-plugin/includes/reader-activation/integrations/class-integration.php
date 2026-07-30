@@ -929,44 +929,84 @@ abstract class Integration {
 	}
 
 	/**
-	 * Prepare contact data for this integration by filtering to enabled
-	 * outgoing fields and adding the metadata prefix.
+	 * Prepare contact data for this integration by resolving enabled field
+	 * ids to prefixed ESP field names.
 	 *
-	 * In legacy mode, metadata classes already return filtered and prefixed
-	 * data, so the contact is returned unchanged.
+	 * Incoming metadata may mix raw keys from any schema version. Only
+	 * fields enabled for this integration survive; enabled dynamic-suffix
+	 * fields (UTM) match by raw-key prefix and never by their bare key, which
+	 * carries no suffix and is therefore not a syncable field. Save-time
+	 * validation guarantees at most one enabled version per ESP name, so no
+	 * two inputs can write the same output key.
 	 *
 	 * @param array $contact Contact data with raw metadata keys.
 	 * @return array Contact data with filtered, prefixed metadata.
 	 */
 	public function prepare_contact( $contact ) {
-		if ( 'legacy' === Sync\Metadata::get_version() ) {
-			return $contact;
-		}
-
 		if ( empty( $contact['metadata'] ) ) {
 			return $contact;
 		}
 
-		$enabled_fields = $this->get_enabled_outgoing_fields();
-		$prefix         = $this->get_metadata_prefix();
-		$keys_map       = Sync\Metadata::get_keys();
-		$prepared       = [];
+		$prefix      = $this->get_metadata_prefix();
+		$passthrough = [ 'status', 'status_if_new' ];
+		$by_raw      = [];
+		$by_name     = [];
+		$dynamic     = [];
 
+		foreach ( $this->get_enabled_outgoing_field_ids() as $id ) {
+			$definition = Sync\Field_Registry::get_definition( $id );
+			if ( ! $definition ) {
+				continue;
+			}
+			// Dynamic-suffix fields are only ever matched with a suffix, so they
+			// are deliberately kept out of the exact-match lookups.
+			if ( $definition['dynamic_suffix'] ) {
+				$dynamic[] = $definition;
+				continue;
+			}
+			$by_raw[ $definition['raw_key'] ] = $definition;
+			$by_name[ $definition['name'] ]   = $definition;
+		}
+
+		$prepared = [];
 		foreach ( $contact['metadata'] as $key => $value ) {
-			// If the key is already prefixed, keep it only when its field is both
-			// enabled and currently available — guarding against stale enabled-field
-			// names left over from a prior feature-flag-on period.
+			if ( in_array( $key, $passthrough, true ) ) {
+				$prepared[ $key ] = $value;
+				continue;
+			}
+
+			// Already-prefixed input (e.g. added by third-party filters).
 			if ( 0 === strpos( $key, $prefix ) ) {
-				$field_name = substr( $key, strlen( $prefix ) );
-				if ( in_array( $field_name, $enabled_fields, true ) && in_array( $field_name, $keys_map, true ) ) {
+				$name = substr( $key, strlen( $prefix ) );
+				if ( isset( $by_name[ $name ] ) ) {
 					$prepared[ $key ] = $value;
+					continue;
+				}
+				foreach ( $dynamic as $definition ) {
+					if ( 0 === strpos( $name, $definition['name'] ) && $name !== $definition['name'] ) {
+						$prepared[ $key ] = $value;
+						break;
+					}
 				}
 				continue;
 			}
 
-			// Otherwise, prefix raw keys that are in the keys map and enabled.
-			if ( isset( $keys_map[ $key ] ) && in_array( $keys_map[ $key ], $enabled_fields, true ) ) {
-				$prepared[ $prefix . $keys_map[ $key ] ] = $value;
+			// Raw key, exact match.
+			if ( isset( $by_raw[ $key ] ) ) {
+				$prepared[ $prefix . $by_raw[ $key ]['name'] ] = $value;
+				continue;
+			}
+
+			// Raw key, dynamic suffix (e.g. signup_page_utm_source).
+			foreach ( $dynamic as $definition ) {
+				$raw_prefix = $definition['raw_key'] . '_';
+				if ( 0 === strpos( $key, $raw_prefix ) ) {
+					$suffix = substr( $key, strlen( $raw_prefix ) );
+					if ( '' !== trim( $suffix ) ) {
+						$prepared[ $prefix . $definition['name'] . $suffix ] = $value;
+					}
+					break;
+				}
 			}
 		}
 

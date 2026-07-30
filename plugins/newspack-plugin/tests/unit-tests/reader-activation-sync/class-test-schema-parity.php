@@ -14,6 +14,7 @@ namespace Newspack\Tests\Unit\Reader_Activation_Sync;
 
 use Newspack\Reader_Activation;
 use Newspack\Reader_Activation\Integrations;
+use Newspack\Reader_Activation\Sync\Field_Registry;
 use Newspack\Reader_Activation\Sync\Metadata;
 use Sample_Integration;
 
@@ -37,17 +38,20 @@ class Test_Schema_Parity extends \WP_UnitTestCase {
 	public function set_up() {
 		parent::set_up();
 		$this->reset_integrations();
-		// Register under the 'esp' id: legacy normalize resolves enabled
-		// fields through the ESP integration fallback.
+		// Register under the 'esp' id: the deprecated Metadata field helpers
+		// resolve through the ESP integration fallback.
 		$this->esp = new Sample_Integration( 'esp', 'ESP' );
 		Integrations::register( $this->esp );
 		$this->esp->update_metadata_prefix( 'NP_' );
+		Field_Registry::reset();
 	}
 
 	/**
 	 * Tear down test environment.
 	 */
 	public function tear_down() {
+		\delete_option( Field_Registry::SCHEMA_ORIGIN_OPTION );
+		Field_Registry::reset();
 		$this->reset_integrations();
 		Integrations::register_integrations();
 		$this->set_metadata_version( 'legacy' );
@@ -78,11 +82,11 @@ class Test_Schema_Parity extends \WP_UnitTestCase {
 
 	/**
 	 * Legacy site, hand-built partial payload (the live registration-event
-	 * flow): normalize must enrich, expand UTMs, filter to enabled fields
+	 * flow): the pipeline must enrich, expand UTMs, filter to enabled fields
 	 * and prefix.
 	 */
 	public function test_legacy_normalize_golden() {
-		$this->set_metadata_version( 'legacy' );
+		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
 		$this->esp->update_enabled_outgoing_fields(
 			[ 'Account', 'Registration Date', 'Registration Method', 'Registration Page', 'Signup UTM: ' ]
 		);
@@ -101,8 +105,9 @@ class Test_Schema_Parity extends \WP_UnitTestCase {
 		];
 
 		$normalized = Metadata::normalize_contact_data( $contact );
+		$prepared   = $this->esp->prepare_contact( $normalized );
 
-		$this->assertSame( 'reader@example.com', $normalized['email'] );
+		$this->assertSame( 'reader@example.com', $prepared['email'] );
 		$this->assertEquals(
 			[
 				'NP_Account'             => $user_id,
@@ -112,17 +117,17 @@ class Test_Schema_Parity extends \WP_UnitTestCase {
 				'NP_Signup UTM: source'  => 'facebook',
 				'NP_Signup UTM: medium'  => 'social',
 			],
-			$normalized['metadata']
+			$prepared['metadata']
 		);
 	}
 
 	/**
-	 * Legacy site: prepare_contact is a passthrough today. After Task 5 this
-	 * test's SETUP changes (prepare becomes the filtering point) but the
-	 * final payload below stays identical.
+	 * Legacy site, end to end: raw-key normalization followed by the
+	 * integration's id-resolving prepare_contact() yields the same payload the
+	 * pre-refactor pipeline produced.
 	 */
-	public function test_legacy_prepare_contact_passthrough() {
-		$this->set_metadata_version( 'legacy' );
+	public function test_legacy_end_to_end_payload() {
+		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
 		$this->esp->update_enabled_outgoing_fields( [ 'Account', 'Registration Date' ] );
 
 		$normalized = Metadata::normalize_contact_data(
@@ -149,7 +154,7 @@ class Test_Schema_Parity extends \WP_UnitTestCase {
 	 * V2-flag site: raw keys are filtered and prefixed per integration.
 	 */
 	public function test_v2_prepare_contact_golden() {
-		$this->set_metadata_version( '1.0' );
+		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v2' );
 		$this->esp->update_enabled_outgoing_fields(
 			[ 'Registration Date', 'Registration UTM Source' ]
 		);

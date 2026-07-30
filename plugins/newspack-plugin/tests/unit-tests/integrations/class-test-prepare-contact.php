@@ -8,6 +8,7 @@
 namespace Newspack\Tests\Unit\Integrations;
 
 use Newspack\Reader_Activation\Integrations;
+use Newspack\Reader_Activation\Sync\Field_Registry;
 use Newspack\Reader_Activation\Sync\Metadata;
 use Sample_Integration;
 
@@ -35,12 +36,15 @@ class Test_Prepare_Contact extends \WP_UnitTestCase {
 		$this->integration = new Sample_Integration( 'prepare-test', 'Prepare Test' );
 		Integrations::register( $this->integration );
 		$this->integration->update_metadata_prefix( 'NP_' );
+		Field_Registry::reset();
 	}
 
 	/**
 	 * Tear down test environment.
 	 */
 	public function tear_down() {
+		\delete_option( Field_Registry::SCHEMA_ORIGIN_OPTION );
+		Field_Registry::reset();
 		$this->reset_integrations();
 		Integrations::register_integrations();
 		$this->set_metadata_version( 'legacy' );
@@ -70,29 +74,111 @@ class Test_Prepare_Contact extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Test that prepare_contact returns contact unchanged in legacy mode.
+	 * A v1-origin site resolves the enabled legacy field id and prefixes its
+	 * raw key; everything else is dropped.
 	 */
-	public function test_legacy_mode_returns_unchanged() {
-		$this->set_metadata_version( 'legacy' );
+	public function test_v1_ids_resolve_raw_keys() {
+		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
+		$this->integration->update_enabled_outgoing_fields( [ 'v1:account' ] );
 
 		$contact = [
 			'email'    => 'test@example.com',
 			'metadata' => [
-				'NP_Account'           => '123',
-				'NP_Registration Date' => '2024-01-01',
+				'account'   => 5,
+				'unrelated' => 'x',
 			],
 		];
 
 		$result = $this->integration->prepare_contact( $contact );
 
-		$this->assertSame( $contact, $result );
+		$this->assertSame( [ 'NP_Account' => 5 ], $result['metadata'] );
+	}
+
+	/**
+	 * A raw key and the prefixed form of the same field resolve to one output
+	 * key; the later input wins, matching the pre-refactor normalization.
+	 */
+	public function test_raw_and_prefixed_forms_of_same_field_collapse() {
+		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
+		$this->integration->update_enabled_outgoing_fields( [ 'v1:account' ] );
+
+		$result = $this->integration->prepare_contact(
+			[
+				'email'    => 'test@example.com',
+				'metadata' => [
+					'account'    => 'raw',
+					'NP_Account' => 'prefixed',
+				],
+			]
+		);
+
+		$this->assertSame( [ 'NP_Account' => 'prefixed' ], $result['metadata'] );
+	}
+
+	/**
+	 * Dynamic-suffix fields (legacy UTM) only match keys that actually carry a
+	 * suffix, in both the raw and already-prefixed forms. The bare key is not a
+	 * syncable field and must be dropped, as it was before the refactor.
+	 */
+	public function test_dynamic_suffix_fields_require_a_suffix() {
+		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
+		$this->integration->update_enabled_outgoing_fields( [ 'v1:signup_page_utm' ] );
+
+		$result = $this->integration->prepare_contact(
+			[
+				'email'    => 'test@example.com',
+				'metadata' => [
+					'signup_page_utm_source' => 'facebook',
+					'NP_Signup UTM: medium'  => 'social',
+					'signup_page_utm'        => 'no-suffix',
+					'signup_page_utm_'       => 'empty-suffix',
+					'NP_Signup UTM: '        => 'prefixed-no-suffix',
+				],
+			]
+		);
+
+		$this->assertSame(
+			[
+				'NP_Signup UTM: source' => 'facebook',
+				'NP_Signup UTM: medium' => 'social',
+			],
+			$result['metadata']
+		);
+	}
+
+	/**
+	 * The ESP list-status keys are transport-level directives, not metadata
+	 * fields, so they pass through even with no enabled outgoing fields.
+	 */
+	public function test_status_keys_pass_through_unfiltered() {
+		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
+		$this->integration->update_enabled_outgoing_fields( [] );
+
+		$result = $this->integration->prepare_contact(
+			[
+				'email'    => 'test@example.com',
+				'metadata' => [
+					'status'        => 'subscribed',
+					'status_if_new' => 'pending',
+					'account'       => 1,
+				],
+			]
+		);
+
+		$this->assertSame(
+			[
+				'status'        => 'subscribed',
+				'status_if_new' => 'pending',
+			],
+			$result['metadata']
+		);
 	}
 
 	/**
 	 * Test that prepare_contact returns contact unchanged when metadata is empty.
 	 */
 	public function test_empty_metadata_returns_unchanged() {
-		$this->set_metadata_version( '1.0' );
+		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v2' );
 
 		$contact = [
 			'email'    => 'test@example.com',
@@ -108,7 +194,7 @@ class Test_Prepare_Contact extends \WP_UnitTestCase {
 	 * Test that prepare_contact returns contact unchanged when metadata key is missing.
 	 */
 	public function test_missing_metadata_key_returns_unchanged() {
-		$this->set_metadata_version( '1.0' );
+		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v2' );
 
 		$contact = [
 			'email' => 'test@example.com',
@@ -123,7 +209,7 @@ class Test_Prepare_Contact extends \WP_UnitTestCase {
 	 * Test that prepare_contact filters to enabled fields and adds prefix.
 	 */
 	public function test_filters_and_prefixes_raw_keys() {
-		$this->set_metadata_version( '1.0' );
+		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v2' );
 
 		// Get the actual keys map to find valid raw keys.
 		$keys_map      = Metadata::get_keys();
@@ -168,7 +254,7 @@ class Test_Prepare_Contact extends \WP_UnitTestCase {
 	 * Test that prepare_contact uses integration-specific prefix.
 	 */
 	public function test_uses_integration_prefix() {
-		$this->set_metadata_version( '1.0' );
+		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v2' );
 		$this->integration->update_metadata_prefix( 'CUSTOM_' );
 
 		$keys_map      = Metadata::get_keys();
@@ -192,7 +278,7 @@ class Test_Prepare_Contact extends \WP_UnitTestCase {
 	 * Test that already-prefixed keys are kept as-is and not double-prefixed.
 	 */
 	public function test_already_prefixed_keys_not_double_prefixed() {
-		$this->set_metadata_version( '1.0' );
+		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v2' );
 
 		$keys_map      = Metadata::get_keys();
 		$enabled_field = reset( $keys_map );
@@ -220,7 +306,7 @@ class Test_Prepare_Contact extends \WP_UnitTestCase {
 	 * Test that already-prefixed keys for disabled fields are filtered out.
 	 */
 	public function test_already_prefixed_disabled_fields_filtered() {
-		$this->set_metadata_version( '1.0' );
+		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v2' );
 
 		$keys_map = Metadata::get_keys();
 		$fields   = array_values( $keys_map );
@@ -246,7 +332,7 @@ class Test_Prepare_Contact extends \WP_UnitTestCase {
 	 * Test that unknown raw keys not in the keys map are excluded.
 	 */
 	public function test_unknown_keys_excluded() {
-		$this->set_metadata_version( '1.0' );
+		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v2' );
 
 		$keys_map = Metadata::get_keys();
 		$this->integration->update_enabled_outgoing_fields( array_values( $keys_map ) );
@@ -268,7 +354,7 @@ class Test_Prepare_Contact extends \WP_UnitTestCase {
 	 * Test that email and name are preserved through prepare_contact.
 	 */
 	public function test_preserves_email_and_name() {
-		$this->set_metadata_version( '1.0' );
+		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v2' );
 
 		$contact = [
 			'email'    => 'test@example.com',
@@ -288,7 +374,7 @@ class Test_Prepare_Contact extends \WP_UnitTestCase {
 	 * corresponding metadata class after the field was saved) is filtered out.
 	 */
 	public function test_already_prefixed_stale_enabled_field_filtered() {
-		$this->set_metadata_version( '1.0' );
+		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v2' );
 
 		// Write the enabled-fields option directly, bypassing the
 		// update_enabled_outgoing_fields() intersect filter, to simulate a stale
@@ -316,7 +402,7 @@ class Test_Prepare_Contact extends \WP_UnitTestCase {
 	 * Test mixed raw and already-prefixed keys in the same contact.
 	 */
 	public function test_mixed_raw_and_prefixed_keys() {
-		$this->set_metadata_version( '1.0' );
+		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v2' );
 
 		$keys_map = Metadata::get_keys();
 		$fields   = array_values( $keys_map );

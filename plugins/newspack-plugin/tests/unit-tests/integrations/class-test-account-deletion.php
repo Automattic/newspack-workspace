@@ -305,7 +305,11 @@ class Test_Account_Deletion extends \WP_UnitTestCase {
 
 	/**
 	 * When handling='flag', the dispatcher must push the contact with an
-	 * `account_deleted` datetime in metadata and not call delete_contact.
+	 * `Account_Deleted` datetime in metadata and not call delete_contact.
+	 *
+	 * Because prepare_contact() drops the raw `account_deleted` key (it is not
+	 * a registered outgoing field), the dispatcher re-injects the signal under
+	 * the integration's prefix afterwards.
 	 */
 	public function test_handle_account_deletion_calls_push_with_timestamp_when_handling_flag() {
 		$this->reset_integrations();
@@ -329,20 +333,21 @@ class Test_Account_Deletion extends \WP_UnitTestCase {
 
 		$pushed = $spy->push_calls[0]['contact'];
 		$this->assertSame( 'reader@example.com', $pushed['email'] );
-		$this->assertArrayHasKey( 'account_deleted', $pushed['metadata'] );
+		$prefix       = $spy->get_metadata_prefix();
+		$deleted_key  = $prefix . 'Account_Deleted';
+		$this->assertArrayHasKey( $deleted_key, $pushed['metadata'] );
 		$this->assertNotFalse(
-			strtotime( $pushed['metadata']['account_deleted'] ),
-			'account_deleted must be a strtotime-parseable timestamp.'
+			strtotime( $pushed['metadata'][ $deleted_key ] ),
+			'Account_Deleted must be a strtotime-parseable timestamp.'
 		);
 		$this->assertMatchesRegularExpression(
 			'/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/',
-			$pushed['metadata']['account_deleted'],
-			'account_deleted must use the Y-m-d H:i:s format that peer datetime metadata uses.'
+			$pushed['metadata'][ $deleted_key ],
+			'Account_Deleted must use the Y-m-d H:i:s format that peer datetime metadata uses.'
 		);
 		// Flag mode must also re-inject the historical membership_status=user-deleted
 		// signal under the prefixed key, for backward compatibility with publisher
 		// automations that keyed on it before the per-integration deletion settings.
-		$prefix = $spy->get_metadata_prefix();
 		$this->assertSame(
 			'user-deleted',
 			$pushed['metadata'][ $prefix . 'Membership_Status' ],

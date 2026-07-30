@@ -18,6 +18,37 @@ require_once __DIR__ . '/integrations/class-failing-sample-integration.php';
  */
 class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 	/**
+	 * Pin the schema origin: these tests describe the legacy (v1) field set.
+	 */
+	public function set_up() {
+		parent::set_up();
+		update_option( Sync\Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
+		Sync\Field_Registry::reset();
+	}
+
+	/**
+	 * Restore the schema-origin state.
+	 */
+	public function tear_down() {
+		delete_option( Sync\Field_Registry::SCHEMA_ORIGIN_OPTION );
+		Sync\Field_Registry::reset();
+		parent::tear_down();
+	}
+
+	/**
+	 * Run the full outgoing pipeline: raw-key normalization followed by the
+	 * ESP integration's id-resolving prepare_contact(), which is where
+	 * outgoing-field filtering and prefixing now happen.
+	 *
+	 * @param array $contact Contact data.
+	 * @return array Prepared contact data.
+	 */
+	public function normalize_and_prepare( $contact ) {
+		$esp = Integrations::get_integration( 'esp' );
+		return $esp->prepare_contact( Sync\Metadata::normalize_contact_data( $contact ) );
+	}
+
+	/**
 	 * Gets a sample contact for the tests
 	 *
 	 * @return array
@@ -176,7 +207,7 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 
 		$this->assertEquals(
 			$contact_data_with_prefixed_keys,
-			Sync\Metadata::normalize_contact_data( $contact_data_with_raw_keys ),
+			$this->normalize_and_prepare( $contact_data_with_raw_keys ),
 			'Raw metadata keys should be converted to prefixed keys.'
 		);
 
@@ -184,7 +215,7 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 
 		$this->assertEquals(
 			$contact_data_with_custom_prefix,
-			Sync\Metadata::normalize_contact_data( $contact_data_with_raw_keys ),
+			$this->normalize_and_prepare( $contact_data_with_raw_keys ),
 			'Metadata keys should be prefixed with the custom prefix, if set.'
 		);
 
@@ -193,7 +224,7 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 
 		$contact_data_with_prefixed_keys['metadata']['NP_Invalid_Key'] = 'Invalid data';
 		$this->assertEquals(
-			array_diff( $contact_data_with_prefixed_keys['metadata'], Sync\Metadata::normalize_contact_data( $contact_data_with_prefixed_keys )['metadata'] ),
+			array_diff( $contact_data_with_prefixed_keys['metadata'], $this->normalize_and_prepare( $contact_data_with_prefixed_keys )['metadata'] ),
 			[ 'NP_Invalid_Key' => 'Invalid data' ],
 			'Most keys should be exact.'
 		);
@@ -202,7 +233,7 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 		$contact_data_with_prefixed_keys['metadata']['NP_Signup UTM: foo'] = 'bar';
 		$this->assertArrayHasKey(
 			'NP_Signup UTM: foo',
-			Sync\Metadata::normalize_contact_data( $contact_data_with_prefixed_keys )['metadata'],
+			$this->normalize_and_prepare( $contact_data_with_prefixed_keys )['metadata'],
 			'But UTM keys can have arbitrary suffixes.'
 		);
 
@@ -212,17 +243,17 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 		$contact_data_with_prefixed_keys['metadata']['signup_page_utm_'] = 'baz';
 		$this->assertArrayNotHasKey(
 			'NP_Signup UTM: ',
-			Sync\Metadata::normalize_contact_data( $contact_data_with_prefixed_keys )['metadata'],
+			$this->normalize_and_prepare( $contact_data_with_prefixed_keys )['metadata'],
 			'Prefixed UTM keys must have a suffix.'
 		);
 		$this->assertArrayNotHasKey(
 			'signup_page_utm',
-			Sync\Metadata::normalize_contact_data( $contact_data_with_prefixed_keys )['metadata'],
+			$this->normalize_and_prepare( $contact_data_with_prefixed_keys )['metadata'],
 			'Raw UTM keys must have a suffix.'
 		);
 		$this->assertArrayNotHasKey(
 			'NP_Signup UTM: ',
-			Sync\Metadata::normalize_contact_data( $contact_data_with_prefixed_keys )['metadata'],
+			$this->normalize_and_prepare( $contact_data_with_prefixed_keys )['metadata'],
 			'Raw UTM keys must have a suffix.'
 		);
 	}
@@ -232,7 +263,7 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 	 */
 	public function test_with_default_option() {
 		$contact = $this->get_sample_contact();
-		$normalized = Sync\Metadata::normalize_contact_data( $contact );
+		$normalized = $this->normalize_and_prepare( $contact );
 
 		// Strip unsuffixed UTM keys.
 		unset( $contact['metadata'][ Sync\Metadata::get_key( 'signup_page_utm' ) ] );
@@ -247,7 +278,7 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 	public function test_with_empty_selected() {
 		$contact = $this->get_sample_contact();
 		$this->set_option( [] );
-		$normalized = Sync\Metadata::normalize_contact_data( $contact );
+		$normalized = $this->normalize_and_prepare( $contact );
 		$this->assertEmpty( $normalized['metadata'] );
 	}
 
@@ -257,7 +288,7 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 	public function test_with_all_invalid_selected() {
 		$contact = $this->get_sample_contact();
 		$this->set_option( [ 'invalid_1', 'invalid_2' ] );
-		$normalized = Sync\Metadata::normalize_contact_data( $contact );
+		$normalized = $this->normalize_and_prepare( $contact );
 		$this->assertEmpty( $normalized['metadata'] );
 	}
 
@@ -268,7 +299,7 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 		$contact = $this->get_sample_contact();
 		$defaults = array_keys( Sync\Metadata::get_keys() );
 		$this->set_option( [ Sync\Metadata::get_keys()[ $defaults[0] ], Sync\Metadata::get_keys()[ $defaults[1] ] ] );
-		$normalized = Sync\Metadata::normalize_contact_data( $contact );
+		$normalized = $this->normalize_and_prepare( $contact );
 		$this->assertArrayHasKey( Sync\Metadata::get_key( $defaults[0] ), $normalized['metadata'] );
 		$this->assertArrayHasKey( Sync\Metadata::get_key( $defaults[1] ), $normalized['metadata'] );
 		$this->assertArrayNotHasKey( Sync\Metadata::get_key( $defaults[2] ), $normalized['metadata'] );
@@ -282,7 +313,7 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 		$contact  = $this->get_sample_contact();
 		$defaults = array_keys( Sync\Metadata::get_keys() );
 		$this->set_option( [ Sync\Metadata::get_keys()[ $defaults[0] ], Sync\Metadata::get_keys()[ $defaults[1] ], 'invalid' ] );
-		$normalized = Sync\Metadata::normalize_contact_data( $contact );
+		$normalized = $this->normalize_and_prepare( $contact );
 		$this->assertArrayHasKey( Sync\Metadata::get_key( $defaults[0] ), $normalized['metadata'] );
 		$this->assertArrayHasKey( Sync\Metadata::get_key( $defaults[1] ), $normalized['metadata'] );
 		$this->assertArrayNotHasKey( Sync\Metadata::get_key( $defaults[2] ), $normalized['metadata'] );
@@ -300,7 +331,7 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 		$this->set_option( [ Sync\Metadata::get_keys()['signup_page_utm'], Sync\Metadata::get_keys()['payment_page_utm'] ] );
 		$contact['metadata'][ Sync\Metadata::get_key( 'signup_page_utm' ) . 'foo' ] = 'bar';
 		$contact['metadata'][ Sync\Metadata::get_key( 'payment_page_utm' ) . 'yyy' ] = 'zzz';
-		$normalized = Sync\Metadata::normalize_contact_data( $contact );
+		$normalized = $this->normalize_and_prepare( $contact );
 		$this->assertArrayHasKey( Sync\Metadata::get_key( 'signup_page_utm' ) . 'foo', $normalized['metadata'] );
 		$this->assertArrayHasKey( Sync\Metadata::get_key( 'payment_page_utm' ) . 'yyy', $normalized['metadata'] );
 		$this->assertArrayNotHasKey( Sync\Metadata::get_key( $defaults[0] ), $normalized['metadata'] );
@@ -316,7 +347,7 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 		$this->set_option( [ Sync\Metadata::get_keys()['signup_page_utm'], Sync\Metadata::get_keys()['payment_page_utm'] ] );
 		$contact['metadata']['signup_page_utm_foo'] = 'bar';
 		$contact['metadata']['payment_page_utm_yyy'] = 'zzz';
-		$normalized = Sync\Metadata::normalize_contact_data( $contact );
+		$normalized = $this->normalize_and_prepare( $contact );
 		$this->assertArrayHasKey( Sync\Metadata::get_key( 'signup_page_utm' ) . 'foo', $normalized['metadata'] );
 		$this->assertArrayHasKey( Sync\Metadata::get_key( 'payment_page_utm' ) . 'yyy', $normalized['metadata'] );
 	}

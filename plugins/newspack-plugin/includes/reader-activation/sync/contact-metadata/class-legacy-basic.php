@@ -9,6 +9,7 @@ namespace Newspack\Reader_Activation\Sync\Contact_Metadata;
 
 use Newspack\Reader_Activation\Sync\Contact_Metadata;
 use Newspack\Reader_Activation\Sync\Legacy_Metadata;
+use Newspack\Reader_Activation\Sync\Metadata;
 use Newspack\Reader_Activation\Sync\WooCommerce;
 
 defined( 'ABSPATH' ) || exit;
@@ -62,10 +63,11 @@ class Legacy_Basic extends Contact_Metadata {
 	}
 
 	/**
-	 * Get the metadata for the given user, customer or order.
+	 * Get the metadata for the given user, customer or order, as raw keys.
 	 *
-	 * Delegates to the legacy WooCommerce and normalization logic to build
-	 * the full set of legacy metadata fields.
+	 * Builds the raw legacy contact from the WooCommerce helper and applies
+	 * raw-key enrichment. Filtering and prefixing are the integration's
+	 * responsibility (prepare_contact).
 	 *
 	 * @return array
 	 */
@@ -79,8 +81,10 @@ class Legacy_Basic extends Contact_Metadata {
 			return [];
 		}
 
-		$contact = Legacy_Metadata::normalize_contact_data( $contact );
+		$metadata = $contact['metadata'] ?? [];
+		$metadata = Metadata::add_registration_data_raw( $metadata );
+		$metadata = Metadata::add_utm_data_raw( $metadata );
 
-		return $contact['metadata'] ?? [];
+		return $metadata;
 	}
 }

@@ -8,6 +8,7 @@
 namespace Newspack\Reader_Activation\Sync;
 
 use Newspack\Donations;
+use Newspack\Logger;
 use Newspack\Reader_Activation;
 use Newspack\Reader_Activation\Integrations;
 
@@ -39,30 +40,24 @@ class Metadata {
 	/**
 	 * Get the metadata classes to be used for syncing contact metadata to the ESP.
 	 *
-	 * These are the metadata classes that will be used to build the full set of contact metadata fields.
+	 * All schema versions' classes are always registered; per-integration
+	 * enabled field ids decide what actually syncs.
 	 *
 	 * @return array List of metadata classes.
 	 */
 	protected static function get_metadata_classes() {
-		if ( 'legacy' === self::get_version() ) {
-			$classes = [
-				'Legacy_Basic',
-				'Legacy_Payment',
-				'Content_Gate',
-			];
-		} else {
-			$classes = [
-				'Identity',
-				'Registration',
-				'Engagement',
-				'Subscription',
-				'Donation',
-				'Content_Gate',
-			];
-		}
+		$classes = [
+			'Legacy_Basic',
+			'Legacy_Payment',
+			'Identity',
+			'Registration',
+			'Engagement',
+			'Subscription',
+			'Donation',
+			'Content_Gate',
+		];
 
 		$classnames = [];
-
 		foreach ( $classes as $class ) {
 			$classname = __NAMESPACE__ . '\\Contact_Metadata\\' . $class;
 			if ( class_exists( $classname ) ) {
@@ -70,6 +65,21 @@ class Metadata {
 			}
 		}
 		return $classnames;
+	}
+
+	/**
+	 * Get the metadata classes scoped to the site's schema origin.
+	 *
+	 * Phase-1 UI freeze: the existing field-selection UI keeps rendering
+	 * the origin version's list until the per-field UI ships.
+	 *
+	 * @return array List of metadata classes.
+	 */
+	protected static function get_origin_metadata_classes() {
+		$origin = Field_Registry::get_schema_origin();
+		$v1     = [ Contact_Metadata\Legacy_Basic::class, Contact_Metadata\Legacy_Payment::class, Contact_Metadata\Content_Gate::class ];
+		$v2     = [ Contact_Metadata\Identity::class, Contact_Metadata\Registration::class, Contact_Metadata\Engagement::class, Contact_Metadata\Subscription::class, Contact_Metadata\Donation::class, Contact_Metadata\Content_Gate::class ];
+		return array_values( array_filter( Field_Registry::VERSION_V1 === $origin ? $v1 : $v2, 'class_exists' ) );
 	}
 
 	/**
@@ -296,7 +306,7 @@ class Metadata {
 	 *   names. May be filtered by `newspack_ras_grouped_metadata_fields`.
 	 */
 	public static function get_grouped_default_fields(): array {
-		$classes          = self::get_metadata_classes();
+		$classes          = self::get_origin_metadata_classes();
 		$available_fields = array_values( array_unique( array_values( self::get_all_fields( true ) ) ) );
 		$groups           = [];
 		$grouped_fields   = [];
@@ -341,13 +351,17 @@ class Metadata {
 	}
 
 	/**
-	 * Get all metadata fields
+	 * Get all metadata fields.
+	 *
+	 * Scoped to the site's schema origin: this feeds the field-selection UI,
+	 * get_key() and the partial-payload builders, which stay on the origin
+	 * version's list until the per-field UI ships.
 	 *
 	 * @param boolean $only_available Whether to return only available fields or all fields.
 	 * @return array List of fields.
 	 */
 	public static function get_all_fields( $only_available = false ) {
-		$classes = self::get_metadata_classes();
+		$classes = self::get_origin_metadata_classes();
 		$keys    = [];
 		foreach ( $classes as $class ) {
 			if ( ! $only_available || $class::is_available() ) {
@@ -375,6 +389,8 @@ class Metadata {
 	 */
 	public static function get_contact_with_metadata( $user_customer_or_order ) {
 		$core_contact = new Contact_Metadata\Core_Contact( $user_customer_or_order );
+		// Deliberately the merged list: the contact carries raw keys from every
+		// schema version, and each integration filters them in prepare_contact().
 		$classes      = self::get_metadata_classes();
 		$metadata     = [];
 
@@ -512,21 +528,25 @@ class Metadata {
 	}
 
 	/**
-	 * Normalizes contact metadata keys before syncing to ESP.
+	 * Normalizes contact metadata before syncing: raw-key enrichment only.
+	 *
+	 * Filtering and prefixing happen per integration in
+	 * Integration::prepare_contact().
 	 *
 	 * @param array $contact Contact data.
 	 * @return array Normalized contact data.
 	 */
 	public static function normalize_contact_data( $contact ) {
-		if ( 'legacy' === self::get_version() ) {
-			return Legacy_Metadata::normalize_contact_data( $contact );
-		}
-
 		if ( ! isset( $contact['metadata'] ) ) {
 			$contact['metadata'] = [];
 		}
+		$contact['metadata'] = self::add_registration_data_raw( $contact['metadata'] );
+		$contact['metadata'] = self::add_utm_data_raw( $contact['metadata'] );
 
-		// TODO: Do something new.
-		return $contact;
+		Logger::log( 'Normalizing contact data for reader ESP sync:' );
+		Logger::log( $contact );
+
+		/** This filter is documented in includes/reader-activation/sync/class-legacy-metadata.php */
+		return apply_filters( 'newspack_esp_sync_normalize_contact', $contact );
 	}
 }

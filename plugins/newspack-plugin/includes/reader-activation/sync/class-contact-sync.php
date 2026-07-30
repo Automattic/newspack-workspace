@@ -163,10 +163,8 @@ class Contact_Sync extends Sync {
 		}
 
 		// Added logging here to more easily monitor integration sync data. Can be removed once integrations are released.
-		if ( 'legacy' !== Metadata::get_version() ) {
-			Logger::log( sprintf( 'Syncing contact %s for context "%s".', $contact['email'] ?? 'unknown', $context ) );
-			Logger::log( $contact );
-		}
+		Logger::log( sprintf( 'Syncing contact %s for context "%s".', $contact['email'] ?? 'unknown', $context ) );
+		Logger::log( $contact );
 
 		return self::push_to_integrations( $contact, $context, $existing_contact );
 	}
@@ -209,10 +207,8 @@ class Contact_Sync extends Sync {
 			$integration_contact = $integration->prepare_contact( $contact );
 
 			// Added logging here to more easily monitor integration sync data. Can be removed once integrations are released.
-			if ( 'legacy' !== Metadata::get_version() ) {
-				Logger::log( sprintf( 'Syncing contact %s for integration %s with context "%s".', $integration_contact['email'] ?? 'unknown', $integration_id, $context ) );
-				Logger::log( $integration_contact );
-			}
+			Logger::log( sprintf( 'Syncing contact %s for integration %s with context "%s".', $integration_contact['email'] ?? 'unknown', $integration_id, $context ) );
+			Logger::log( $integration_contact );
 
 			$result = $integration->push_contact_data( $integration_contact, $context, $existing_contact );
 			if ( \is_wp_error( $result ) ) {
