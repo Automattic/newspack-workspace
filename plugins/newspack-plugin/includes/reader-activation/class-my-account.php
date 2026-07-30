@@ -176,7 +176,6 @@ class My_Account {
 			NEWSPACK_PLUGIN_VERSION,
 			true
 		);
-		\wp_script_add_data( 'newspack-ui', 'strategy', 'defer' );
 		\wp_add_inline_script(
 			'newspack-ui',
 			"( function() {
