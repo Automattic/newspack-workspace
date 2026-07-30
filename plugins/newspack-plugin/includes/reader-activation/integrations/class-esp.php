@@ -284,27 +284,74 @@ class ESP extends Integration {
 	}
 
 	/**
-	 * Get the enabled outgoing metadata fields for the ESP integration.
+	 * Ensure the per-integration outgoing fields option is seeded from the
+	 * legacy global option when possible.
 	 *
-	 * Overrides the parent to provide lazy migration from the legacy global
-	 * option (Metadata::FIELDS_OPTION) to the per-integration option.
-	 *
-	 * @return string[] List of enabled field names.
+	 * @return bool True if a stored per-integration option exists (parent
+	 *              accessors can be used), false if the ESP should fall back
+	 *              to dynamic defaults.
 	 */
-	public function get_enabled_outgoing_fields() {
-		$fields = \get_option( self::OUTGOING_FIELDS_OPTION_PREFIX . $this->id, null );
-		if ( null !== $fields && is_array( $fields ) ) {
-			return $fields;
+	private function ensure_outgoing_fields_seeded() {
+		$stored = \get_option( self::OUTGOING_FIELDS_OPTION_PREFIX . $this->id, null );
+		if ( null !== $stored && is_array( $stored ) ) {
+			return true;
 		}
 
 		// Migrate from legacy global option.
 		$legacy = \get_option( Sync\Metadata::FIELDS_OPTION, null );
 		if ( null !== $legacy && is_array( $legacy ) ) {
 			$this->update_enabled_outgoing_fields( $legacy );
-			return $legacy;
+			return true;
 		}
 
+		return false;
+	}
+
+	/**
+	 * Get the enabled outgoing metadata fields for the ESP integration.
+	 *
+	 * Overrides the parent to provide lazy migration from the legacy global
+	 * option (Metadata::FIELDS_OPTION) to the per-integration option, and a
+	 * dynamic all-defaults fallback when nothing was ever stored.
+	 *
+	 * @return string[] List of enabled field names.
+	 */
+	public function get_enabled_outgoing_fields() {
+		if ( $this->ensure_outgoing_fields_seeded() ) {
+			return parent::get_enabled_outgoing_fields();
+		}
 		return Sync\Metadata::get_default_fields();
+	}
+
+	/**
+	 * Get the enabled outgoing metadata field ids for the ESP integration.
+	 *
+	 * Mirrors get_enabled_outgoing_fields(): when nothing was ever stored,
+	 * the ESP defaults to all available fields — resolved to ids against the
+	 * site's schema origin (falling back to any version, which covers
+	 * version-neutral fields) without persisting, so defaults keep tracking
+	 * availability changes.
+	 *
+	 * @return string[] List of enabled field ids.
+	 */
+	public function get_enabled_outgoing_field_ids() {
+		if ( $this->ensure_outgoing_fields_seeded() ) {
+			return parent::get_enabled_outgoing_field_ids();
+		}
+
+		$origin = Sync\Field_Registry::get_schema_origin();
+		$ids    = [];
+		foreach ( Sync\Metadata::get_default_fields() as $name ) {
+			$definitions = Sync\Field_Registry::get_all_by_name( $name, $origin );
+			if ( empty( $definitions ) ) {
+				$definition  = Sync\Field_Registry::get_by_name( $name );
+				$definitions = $definition ? [ $definition ] : [];
+			}
+			foreach ( $definitions as $definition ) {
+				$ids[] = $definition['id'];
+			}
+		}
+		return array_values( array_unique( $ids ) );
 	}
 
 	/**

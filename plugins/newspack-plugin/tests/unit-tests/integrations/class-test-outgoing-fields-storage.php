@@ -9,7 +9,9 @@ namespace Newspack\Tests\Unit\Integrations;
 
 use Newspack\Reader_Activation\Integration;
 use Newspack\Reader_Activation\Integrations;
+use Newspack\Reader_Activation\Integrations\ESP;
 use Newspack\Reader_Activation\Sync\Field_Registry;
+use Newspack\Reader_Activation\Sync\Metadata;
 use Sample_Integration;
 
 /**
@@ -43,6 +45,8 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 	 */
 	public function tear_down() {
 		\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test' );
+		\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'esp' );
+		\delete_option( Metadata::FIELDS_OPTION );
 		\delete_option( Field_Registry::SCHEMA_ORIGIN_OPTION );
 		Field_Registry::reset();
 		$this->reset_integrations();
@@ -194,5 +198,65 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 		\update_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'esp', [ 'Account' ] );
 		$this->assertSame( 'v1', Field_Registry::get_schema_origin() );
 		\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'esp' );
+	}
+
+	/**
+	 * The concrete ESP integration overrides get_enabled_outgoing_fields()
+	 * directly (rather than inheriting the base Integration behavior), so it
+	 * needs its own coverage: stored ids resolve back to display names.
+	 */
+	public function test_esp_stored_ids_return_names() {
+		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
+		\update_option(
+			Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'esp',
+			[ 'v1:account', 'v1:registration_date' ]
+		);
+
+		$esp = new ESP();
+
+		$this->assertEqualsCanonicalizing(
+			[ 'Account', 'Registration Date' ],
+			$esp->get_enabled_outgoing_fields()
+		);
+	}
+
+	/**
+	 * ESP's override provides lazy migration from the legacy GLOBAL fields
+	 * option (Metadata::FIELDS_OPTION) — a behavior the base Integration
+	 * class does not have — seeding the per-integration option on first read.
+	 */
+	public function test_esp_global_option_migrates_to_ids() {
+		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
+		\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'esp' );
+		\update_option( Metadata::FIELDS_OPTION, [ 'Account' ] );
+
+		$esp = new ESP();
+
+		$this->assertEqualsCanonicalizing( [ 'Account' ], $esp->get_enabled_outgoing_fields() );
+		$this->assertEqualsCanonicalizing(
+			[ 'v1:account' ],
+			\get_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'esp' )
+		);
+	}
+
+	/**
+	 * With neither the per-integration option nor the legacy global option
+	 * ever stored, the ESP falls back to all available fields resolved to
+	 * ids against the schema origin, without persisting the fallback.
+	 */
+	public function test_esp_defaults_resolve_to_ids_without_persisting() {
+		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
+		\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'esp' );
+		\delete_option( Metadata::FIELDS_OPTION );
+
+		$esp = new ESP();
+		$ids = $esp->get_enabled_outgoing_field_ids();
+
+		$this->assertNotEmpty( $ids );
+		foreach ( $ids as $id ) {
+			$this->assertMatchesRegularExpression( '/^(v1|v2|neutral):/', $id );
+		}
+		$this->assertContains( 'v1:account', $ids );
+		$this->assertNull( \get_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'esp', null ) );
 	}
 }
