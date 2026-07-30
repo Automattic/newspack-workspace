@@ -94,6 +94,11 @@
 		}
 		.newspack-settings__date-range-bound {
 			gap: 8px;
+			// The select carries the visible From/To label and the value input's is
+			// hidden, so the two controls have different overall heights. Centering
+			// would float the input up against the label; aligning to the bottom
+			// lines the two boxes up with each other.
+			align-items: flex-end;
 
 			.newspack-select-control {
 				flex: 0 0 auto;

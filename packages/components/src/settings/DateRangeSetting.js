@@ -88,6 +88,9 @@ const DateRangeBound = ( { label, testId, bound, onChange } ) => {
 		<div className="newspack-settings__date-range-bound">
 			<SelectControl
 				label={ label }
+				// Without this the select renders at 32px while the sibling input is
+				// 40px, so the two boxes in a row don't match.
+				__next40pxDefaultSize
 				value={ type }
 				options={ BOUND_TYPES }
 				onChange={ nextType => {
