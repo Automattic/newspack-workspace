@@ -25,6 +25,7 @@ import {
 	getFormattedAmount,
 } from './utils';
 import { resolveCheckoutButtonForm, readCheckoutData } from './checkout-button-trigger';
+import { resolveDonationTrigger } from './donate-trigger';
 
 const CLASS_PREFIX = newspackBlocksModal.newspack_class_prefix;
 const IFRAME_NAME = 'newspack_modal_checkout_iframe';
@@ -748,62 +749,72 @@ domReady( () => {
 	/**
 	 * Handle donation form triggers.
 	 *
+	 * Resolution (which form, which tier) is delegated to resolveDonationTrigger,
+	 * which validates the URL params and never mutates the DOM, so a trigger that
+	 * can't complete leaves the page untouched. Only the first form in DOM order
+	 * that fully satisfies the trigger is acted on.
+	 *
 	 * @param {string}      layout    The donation layout.
 	 * @param {string}      frequency The donation frequency.
 	 * @param {string}      amount    The donation amount.
 	 * @param {string|null} other     Optional. The custom amount when other is selected.
+	 *
+	 * @return {boolean} Whether a donation form was triggered.
 	 */
 	const triggerDonationForm = ( layout, frequency, amount, other = null ) => {
-		// Iterate with `for...of` so we can `return` after the first successful trigger.
-		// Without this, multiple matching forms on the same page (e.g. two tiered Donate
-		// blocks) would each get submitted in succession.
-		for ( const donationForm of document.querySelectorAll( '.wpbnbd.wpbnbd--platform-wc form' ) ) {
-			if ( layout === 'tiered' ) {
-				// Tiered forms render a single hidden `donation_frequency` input whose value
-				// is locked to the block's default frequency, so we can't gate on that input
-				// matching the URL `frequency`. Instead, look for the tiered frequency tab,
-				// which is unique to the tiered layout (frequency-based uses `data-tab-id`).
-				const frequencyButton = donationForm.querySelector( `button[data-frequency-slug="${ frequency }"]` );
-				if ( ! frequencyButton ) {
-					continue;
-				}
-				// Clicking the tab synchronously updates each tier submit button's `name`
-				// and `value` attributes (see src/blocks/donate/tiers-based/view.ts), so we
-				// can query for the matching submit button immediately afterwards.
-				frequencyButton.click();
-				const submitButton = donationForm.querySelector( `button[type="submit"][name="donation_value_${ frequency }"][value="${ amount }"]` );
-				if ( ! submitButton ) {
-					continue;
-				}
-				submitButton.click();
-				return;
-			}
-			const frequencyInput = donationForm.querySelector( `input[name="donation_frequency"][value="${ frequency }"]` );
-			if ( ! frequencyInput ) {
-				continue;
-			}
-			const amountInput =
-				layout === 'untiered'
-					? donationForm.querySelector( `input[name="donation_value_${ frequency }_untiered"]` )
-					: donationForm.querySelector( `input[name="donation_value_${ frequency }"][value="${ amount }"]` );
-			if ( ! amountInput ) {
-				continue;
-			}
-			frequencyInput.checked = true;
-			if ( layout === 'untiered' ) {
-				amountInput.value = amount;
-			} else if ( amount === 'other' ) {
-				amountInput.click();
-				const otherInput = donationForm.querySelector( `input[name="donation_value_${ frequency }_other"]` );
-				if ( otherInput && other ) {
-					otherInput.value = other;
-				}
-			} else {
-				amountInput.checked = true;
-			}
-			triggerFormSubmit( donationForm );
-			return;
+		const resolution = resolveDonationTrigger( document, { layout, frequency, amount } );
+		const described = `layout "${ layout }", frequency "${ frequency }" and amount "${ amount }"`;
+		if ( resolution.status === 'invalid-params' ) {
+			// eslint-disable-next-line no-console
+			console.warn( `Newspack modal checkout: invalid donate trigger parameters (${ described }). The checkout was not triggered.` );
+			return false;
 		}
+		if ( resolution.status === 'no-match' ) {
+			// eslint-disable-next-line no-console
+			console.warn( `Newspack modal checkout: no donate form matches ${ described }. The checkout was not triggered.` );
+			return false;
+		}
+		if ( resolution.status === 'not-ready' ) {
+			// The tiersBased view script has not initialized this block yet
+			// (modal.js and tiersBased.js load async in either order), so tab and
+			// tier clicks would do nothing. Failing keeps the URL params in place
+			// (see handleModalCheckoutUrlParams), so a reload retries the trigger.
+			// eslint-disable-next-line no-console
+			console.warn( `Newspack modal checkout: the donate form matching ${ described } is still initializing. The checkout was not triggered.` );
+			return false;
+		}
+		const { form } = resolution;
+		if ( resolution.status === 'tiered' ) {
+			// Clicking the tab synchronously updates each tier submit button's
+			// `name` and `value` attributes (see src/blocks/donate/tiers-based/view.ts);
+			// resolution already verified the view script is initialized. Blocks
+			// with a single enabled frequency render no tabs and need no click.
+			if ( resolution.frequencyButton ) {
+				resolution.frequencyButton.click();
+			}
+			const submitButton = form.querySelector( `button[type="submit"][data-tier-index="${ resolution.tierIndex }"]` );
+			if ( ! submitButton ) {
+				// eslint-disable-next-line no-console
+				console.warn( `Newspack modal checkout: no tier submit button matches ${ described }. The checkout was not triggered.` );
+				return false;
+			}
+			submitButton.click();
+			return true;
+		}
+		resolution.frequencyInput.checked = true;
+		if ( resolution.status === 'untiered' ) {
+			resolution.amountInput.value = amount;
+		} else if ( amount === 'other' ) {
+			resolution.amountInput.click();
+			const otherInput = form.querySelector( `input[name="donation_value_${ frequency }_other"]` );
+			if ( otherInput && other ) {
+				otherInput.value = other;
+			}
+		} else {
+			resolution.amountInput.checked = true;
+		}
+		triggerFormSubmit( form );
+		return true;
 	};
 
 	/**
@@ -840,9 +851,10 @@ domReady( () => {
 		if ( ! urlParams.has( 'checkout' ) ) {
 			return;
 		}
-		// Default to stripping the params after handling. The checkout button
-		// trigger overrides this so a link that matches no form stays visible
-		// and diagnosable rather than being silently dropped.
+		// Default to stripping the params after handling. The donate and
+		// checkout button triggers override this so a link that fails to
+		// trigger stays visible and diagnosable rather than being silently
+		// dropped, and a reload can retry a transient failure.
 		let shouldStripParams = true;
 		const type = urlParams.get( 'type' );
 		if ( type === 'donate' ) {
@@ -851,7 +863,11 @@ domReady( () => {
 			const amount = urlParams.get( 'amount' );
 			const other = urlParams.get( 'other' );
 			if ( layout && frequency && amount ) {
-				triggerDonationForm( layout, frequency, amount, other );
+				shouldStripParams = triggerDonationForm( layout, frequency, amount, other );
+			} else {
+				shouldStripParams = false;
+				// eslint-disable-next-line no-console
+				console.warn( 'Newspack modal checkout: donate trigger is missing layout, frequency or amount. The checkout was not triggered.' );
 			}
 		} else if ( type === 'checkout_button' ) {
 			const productId = urlParams.get( 'product_id' );

@@ -129,4 +129,9 @@ export default ( parentEl: HTMLElement ) => {
 			backButton.style.display = 'none';
 		}
 	} );
+
+	// Mark the block as ready for programmatic triggering (see
+	// src/modal-checkout/donate-trigger.js): the listeners above are attached,
+	// so a tab click now synchronously updates the tier submit buttons.
+	parentEl.setAttribute( 'data-tiers-based-ready', '' );
 };
