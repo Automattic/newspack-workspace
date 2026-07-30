@@ -342,7 +342,9 @@ class Newspack_Blocks {
 	 *
 	 * @param string      $type     The block's type.
 	 * @param string|null $strategy Optional. Script loading strategy to apply to the
-	 *                              view script ('defer' or 'async'). Default null (no strategy).
+	 *                              view script ('defer' or 'async'). First write wins:
+	 *                              ignored if a strategy is already set on the handle.
+	 *                              Default null (no strategy).
 	 */
 	public static function enqueue_view_assets( $type, $strategy = null ) {
 		$style_path = apply_filters(
@@ -372,7 +374,7 @@ class Newspack_Blocks {
 				$script_data['version'],
 				true
 			);
-			if ( $strategy ) {
+			if ( $strategy && ! wp_scripts()->get_data( $handle, 'strategy' ) ) {
 				wp_script_add_data( $handle, 'strategy', $strategy );
 			}
 		}
