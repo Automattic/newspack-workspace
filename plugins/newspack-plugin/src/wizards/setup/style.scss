@@ -11,10 +11,15 @@
 
 .newspack-wizard__welcome,
 .newspack-wizard__completed {
-	.newspack-wizard__header,
 	.newspack-tabbed-navigation {
 		display: none;
 	}
+}
+
+.newspack-setup-completed__card {
+	display: flex;
+	flex-direction: column;
+	justify-content: space-between;
 }
 
 // Welcome Screen
@@ -67,18 +72,6 @@
 
 	@media screen and ( min-width: 744px ) {
 		grid-template-columns: 102px auto calc(( 100% - 64px ) / 3);
-	}
-}
-
-.newspack-wizard {
-	&__title {
-		a {
-			pointer-events: none;
-		}
-
-		svg:not(.newspack-icon) {
-			display: none;
-		}
 	}
 }
 

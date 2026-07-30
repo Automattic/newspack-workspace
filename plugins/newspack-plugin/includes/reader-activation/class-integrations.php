@@ -479,14 +479,18 @@ class Integrations {
 				continue;
 			}
 			$result[ $id ] = [
-				'id'               => $id,
-				'name'             => $integration->get_name(),
-				'description'      => $integration->get_description(),
-				'enabled'          => self::is_enabled( $id ),
-				'is_set_up'        => $integration->is_set_up(),
-				'setup_url'        => $integration->get_setup_url(),
-				'settings'         => $integration->get_settings_config(),
-				'required_plugins' => $integration->get_required_plugins(),
+				'id'                       => $id,
+				'name'                     => $integration->get_name(),
+				'description'              => $integration->get_description(),
+				'enabled'                  => self::is_enabled( $id ),
+				'is_set_up'                => (bool) $integration->is_set_up(),
+				'is_connected'             => (bool) $integration->is_connected(),
+				'unsupported_reason'       => $integration->get_unsupported_reason(),
+				'unsupported_action_label' => $integration->get_unsupported_action_label(),
+				'provider'                 => $integration->get_provider_slug(),
+				'setup_url'                => $integration->get_setup_url(),
+				'settings'                 => $integration->get_settings_config(),
+				'required_plugins'         => $integration->get_required_plugins(),
 			];
 		}
 

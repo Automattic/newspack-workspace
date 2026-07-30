@@ -155,7 +155,11 @@ final class Reader_Activation {
 	 */
 	public static function enqueue_scripts() {
 		$authenticated_email = \is_user_logged_in() && self::is_user_reader( \wp_get_current_user() ) ? \wp_get_current_user()->user_email : '';
-		$script_dependencies = [];
+		// `newspack_commons` holds the shared (code-split) modules these scripts
+		// depend on at runtime, so it must load first. Declaring it as a dependency
+		// (combined with `defer` instead of `async` below) guarantees the load order
+		// even when an optimization plugin (e.g. Perfmatters) delays the scripts. See NPPM-2951.
+		$script_dependencies = [ 'newspack_commons' ];
 		$script_data         = [
 			'auth_intention_cookie'      => self::AUTH_INTENTION_COOKIE,
 			'cid_cookie'                 => NEWSPACK_CLIENT_ID_COOKIE_NAME,
@@ -191,7 +195,7 @@ final class Reader_Activation {
 			$script_dependencies,
 			Newspack::asset_version( 'reader-activation' ),
 			[
-				'strategy'  => 'async',
+				'strategy'  => 'defer',
 				'in_footer' => true,
 			]
 		);
@@ -200,7 +204,7 @@ final class Reader_Activation {
 			'newspack_ras_config',
 			$script_data
 		);
-		\wp_script_add_data( self::SCRIPT_HANDLE, 'async', true );
+		\wp_script_add_data( self::SCRIPT_HANDLE, 'defer', true );
 		\wp_script_add_data( self::SCRIPT_HANDLE, 'amp-plus', true );
 
 		/**
@@ -218,12 +222,12 @@ final class Reader_Activation {
 				[ self::SCRIPT_HANDLE ],
 				Newspack::asset_version( 'reader-auth' ),
 				[
-					'strategy'  => 'async',
+					'strategy'  => 'defer',
 					'in_footer' => true,
 				]
 			);
 			\wp_localize_script( self::AUTH_SCRIPT_HANDLE, 'newspack_reader_activation_labels', self::get_reader_activation_labels() );
-			\wp_script_add_data( self::AUTH_SCRIPT_HANDLE, 'async', true );
+			\wp_script_add_data( self::AUTH_SCRIPT_HANDLE, 'defer', true );
 			\wp_script_add_data( self::AUTH_SCRIPT_HANDLE, 'amp-plus', true );
 			\wp_enqueue_style(
 				self::AUTH_SCRIPT_HANDLE,
@@ -243,7 +247,7 @@ final class Reader_Activation {
 				[ self::SCRIPT_HANDLE ],
 				Newspack::asset_version( 'newsletters-signup' ),
 				[
-					'strategy'  => 'async',
+					'strategy'  => 'defer',
 					'in_footer' => true,
 				]
 			);
@@ -257,7 +261,7 @@ final class Reader_Activation {
 				]
 			);
 
-			\wp_script_add_data( self::NEWSLETTERS_SCRIPT_HANDLE, 'async', true );
+			\wp_script_add_data( self::NEWSLETTERS_SCRIPT_HANDLE, 'defer', true );
 			\wp_enqueue_style(
 				self::NEWSLETTERS_SCRIPT_HANDLE,
 				Newspack::plugin_url() . '/dist/newsletters-signup.css',
@@ -2533,7 +2537,13 @@ final class Reader_Activation {
 			return new \WP_Error( 'newspack_register_reader_disabled', __( 'Registration is disabled.', 'newspack-plugin' ) );
 		}
 
-		if ( \is_user_logged_in() ) {
+		// Registration is only blocked while logged in when it would also authenticate:
+		// a session can't be re-authenticated as a second identity. A non-authenticating
+		// registration is allowed so that a logged-in browser (e.g. a returning reader, or
+		// a shared device still carrying a prior reader's cookie) can still create an account
+		// for a different email — e.g. a Newsletter Subscription block signup — without
+		// hijacking the current session.
+		if ( \is_user_logged_in() && $authenticate ) {
 			return new \WP_Error( 'newspack_register_reader_logged_in', __( 'Cannot register while logged in.', 'newspack-plugin' ) );
 		}
 
@@ -2543,7 +2553,12 @@ final class Reader_Activation {
 			return new \WP_Error( 'newspack_register_reader_empty_email', __( 'Please enter a valid email address.', 'newspack-plugin' ) );
 		}
 
-		self::set_auth_intention_cookie( $email );
+		// Only record an auth intention for a logged-out visitor. While logged in (a
+		// non-authenticating registration for a different email) the browser has no pending
+		// authentication, so the intention cookie must not be overwritten with the other email.
+		if ( ! \is_user_logged_in() ) {
+			self::set_auth_intention_cookie( $email );
+		}
 
 		$existing_user = \get_user_by( 'email', $email );
 		if ( \is_wp_error( $existing_user ) ) {
@@ -2555,7 +2570,13 @@ final class Reader_Activation {
 		if ( $existing_user ) {
 			// If the user is not a reader, send a non-reader login reminder. We don't want to expose on the front-end that the email address belongs to a non-reader account.
 			if ( ! self::is_user_reader( $existing_user ) ) {
-				self::send_non_reader_login_reminder( $existing_user );
+				// The "you already have an account, log in" reminder only makes sense for a
+				// logged-out registration attempt. While logged in (a non-authenticating
+				// registration for someone else's existing non-reader account) suppress it: the
+				// email's owner did not initiate this, and may even be the current user.
+				if ( ! \is_user_logged_in() ) {
+					self::send_non_reader_login_reminder( $existing_user );
+				}
 				return false;
 			}
 

@@ -6,7 +6,7 @@ declare global {
 				href: string;
 				forceSelected: boolean;
 			}>;
-			title: string;
+			breadcrumbs: Array<{ label: string; url?: string }>;
 		};
 		newspackAudience: {
 			has_reader_activation: boolean;
@@ -78,6 +78,10 @@ declare global {
 			available_access_rules: AccessRules;
 			available_content_rules: ContentRules;
 			edit_gate_layout_url: string;
+			// wp_localize_script() stringifies booleans ('1'/''); the wizard writes real booleans back.
+			presave_checks_enabled: boolean | string;
+			default_gate_status: GateStatus;
+			feed_restriction_modes?: { value: FeedRestrictionMode; label: string }[];
 		};
 	}
 }

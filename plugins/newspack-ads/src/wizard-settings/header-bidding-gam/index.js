@@ -9,11 +9,12 @@ import { addFilter } from '@wordpress/hooks';
 import { sprintf, __, _n } from '@wordpress/i18n';
 import { Fragment, useState, useEffect } from '@wordpress/element';
 import apiFetch from '@wordpress/api-fetch';
+import { __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 
 /**
  * Newspack dependencies.
  */
-import { ActionCard, Card, Modal, Notice, Button } from 'newspack-components';
+import { ActionCard, Modal, Notice, Button } from 'newspack-components';
 
 /**
  * Internal dependencies.
@@ -146,7 +147,7 @@ const HeaderBiddingGAM = () => {
 				<Modal title={ __( 'Manage Orders', 'newspack-ads' ) } onRequestClose={ () => ! inFlight && setIsManaging( false ) }>
 					{ activeOrders.length && (
 						<>
-							<Card noBorder>
+							<VStack spacing={ 0 } className="newspack-header-bidding-gam__orders">
 								{ activeOrders.map( order => (
 									<ActionCard
 										key={ order.id }
@@ -188,11 +189,10 @@ const HeaderBiddingGAM = () => {
 												gamLink={ getOrderUrl( order.id ) }
 											/>
 										}
-										className="mv0"
 										isSmall
 									/>
 								) ) }
-							</Card>
+							</VStack>
 							{
 								// Display warning if a bidder is being targeted by more than one order.
 								Object.keys( bidders ).map( bidderKey => {
@@ -215,14 +215,14 @@ const HeaderBiddingGAM = () => {
 									);
 								} )
 							}
-							<Card buttonsCard noBorder className="justify-end">
+							<HStack justify="flex-end" spacing={ 4 } wrap className="newspack-modal__footer">
 								<Button isSecondary disabled={ inFlight } onClick={ () => setIsManaging( false ) }>
 									{ __( 'Cancel', 'newspack-ads' ) }
 								</Button>
 								<Button isPrimary disabled={ inFlight } onClick={ () => setEditingOrder( 0 ) }>
 									Create new order
 								</Button>
-							</Card>
+							</HStack>
 						</>
 					) }
 				</Modal>

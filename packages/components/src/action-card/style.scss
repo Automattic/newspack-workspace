@@ -77,28 +77,6 @@
 			padding: 0 4px;
 		}
 
-		&.mv0 {
-			border-left-color: wp-colors.$gray-300;
-			border-radius: 0;
-			border-right-color: wp-colors.$gray-300;
-
-			&:first-of-type {
-				border-top-color: wp-colors.$gray-300;
-				border-top-left-radius: 3px;
-				border-top-right-radius: 3px;
-			}
-
-			&:last-of-type {
-				border-bottom-color: wp-colors.$gray-300;
-				border-bottom-left-radius: 3px;
-				border-bottom-right-radius: 3px;
-			}
-
-			& + & {
-				margin-top: -1px;
-			}
-		}
-
 		&.newspack-card__is-disabled,
 		&.newspack-card__is-primary,
 		&.newspack-card__is-secondary,

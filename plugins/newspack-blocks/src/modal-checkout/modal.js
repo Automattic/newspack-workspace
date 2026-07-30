@@ -26,6 +26,7 @@ import {
 } from './utils';
 import { resolveCheckoutButtonForm, readCheckoutData } from './checkout-button-trigger';
 import { resolveDonationTrigger } from './donate-trigger';
+import { applyCtaAttribution } from '../shared/js/cta-attribution';
 
 const CLASS_PREFIX = newspackBlocksModal.newspack_class_prefix;
 const IFRAME_NAME = 'newspack_modal_checkout_iframe';
@@ -165,12 +166,6 @@ domReady( () => {
 		onCheckoutPlaceOrderError( container, hideProcessingPaymentScreen );
 
 		onCheckoutReady( container, () => {
-			// Make sure the order summary renders the correct text.
-			const summaryTextNode = productDetails?.querySelector( 'strong' );
-			if ( summaryTextNode ) {
-				summaryTextNode.textContent = checkoutData.price_summary;
-			}
-
 			// Display initial errors if any.
 			if ( modalCheckout.initialErrors ) {
 				const errorContainer = document.createElement( 'div' );
@@ -301,6 +296,13 @@ domReady( () => {
 		}
 		const form = ev.target;
 		form.classList.add( 'modal-processing' );
+
+		// NPPD-1887: if the reader arrived here by clicking a paid-intent CTA in a gate
+		// or prompt, replay that surface's id as a hidden field so the order carries
+		// `_gate_post_id` / `_newspack_popup_id`. No-ops when the form already has one
+		// (a form rendered inside the surface itself always wins) or when the form is
+		// inside a gate. Must run BEFORE getCheckoutData(), which snapshots the form.
+		applyCtaAttribution( form );
 
 		const checkoutData = getCheckoutData( form );
 
@@ -437,11 +439,6 @@ domReady( () => {
 		if ( shouldPromptRegistration() ) {
 			ev.preventDefault();
 
-			const priceSummary = checkoutData.price_summary;
-			const content = priceSummary
-				? `<div class="order-details-summary ${ CLASS_PREFIX }__box ${ CLASS_PREFIX }__box--text-center"><p><strong>${ priceSummary }</strong></p></div>`
-				: '';
-
 			// Generate cart asynchroneously.
 			const cartReq = generateCart( checkoutData );
 
@@ -492,7 +489,6 @@ domReady( () => {
 						title: newspackBlocksModal.labels.register_modal_title,
 					},
 				},
-				content,
 				trigger: ev.submitter,
 				closeOnSuccess: isModalCheckout,
 			} );
@@ -602,7 +598,26 @@ domReady( () => {
 					if ( 'custom' === afterSuccessBehavior ) {
 						window.location.href = afterSuccessUrl;
 					} else if ( 'referrer' === afterSuccessBehavior ) {
-						window.history.back();
+						// window.history.back() is a no-op when there's no in-session
+						// history entry (reader landed directly, opened in a new tab, or
+						// the previous entry is cross-origin), stranding the reader with no
+						// feedback. Prefer the same-origin document.referrer when we have
+						// one, and fall back to history.back() otherwise.
+						const referrer = document.referrer;
+						let navigated = false;
+						if ( referrer ) {
+							try {
+								if ( new URL( referrer ).origin === window.location.origin ) {
+									window.location.href = referrer;
+									navigated = true;
+								}
+							} catch ( e ) {
+								// Malformed referrer — fall through to history.back().
+							}
+						}
+						if ( ! navigated ) {
+							window.history.back();
+						}
 					}
 				}
 				window?.newspackReaderActivation?.setPendingCheckout?.();

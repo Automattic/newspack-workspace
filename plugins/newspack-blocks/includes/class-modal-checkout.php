@@ -30,6 +30,25 @@ final class Modal_Checkout {
 	const CHECKOUT_REGISTRATION_ORDER_META_KEY = '_newspack_checkout_registration_meta';
 
 	/**
+	 * Session key tracking a coupon auto-applied from a Checkout Button block,
+	 * used to hide the in-modal coupon form for that coupon.
+	 *
+	 * @var string
+	 */
+	const AUTO_APPLIED_COUPON_SESSION_KEY = 'newspack_blocks_auto_applied_coupon';
+
+	/**
+	 * Billing fields with server-side format validation in the Store API,
+	 * mapped from their classic checkout keys to Store API address keys.
+	 *
+	 * @var string[]
+	 */
+	const STORE_API_VALIDATED_ADDRESS_FIELDS = [
+		'billing_state'    => 'state',
+		'billing_postcode' => 'postcode',
+	];
+
+	/**
 	 * Whether the modal checkout has been enqueued.
 	 *
 	 * @var boolean
@@ -157,6 +176,8 @@ final class Modal_Checkout {
 		add_filter( 'woocommerce_get_checkout_order_received_url', [ __CLASS__, 'woocommerce_get_return_url' ], 10, 2 );
 		add_filter( 'wc_get_template', [ __CLASS__, 'wc_get_template' ], 10, 2 );
 		add_filter( 'woocommerce_checkout_fields', [ __CLASS__, 'woocommerce_checkout_fields' ] );
+		add_filter( 'rest_pre_dispatch', [ __CLASS__, 'scrub_store_api_checkout_address' ], 10, 3 );
+		add_filter( 'woocommerce_get_country_locale', [ __CLASS__, 'relax_configured_off_locale_fields' ] );
 		add_filter( 'woocommerce_update_order_review_fragments', [ __CLASS__, 'order_review_fragments' ] );
 		add_filter( 'woocommerce_cart_needs_payment', [ __CLASS__, 'cart_needs_payment' ] );
 		add_filter( 'newspack_recaptcha_verify_captcha', [ __CLASS__, 'recaptcha_verify_captcha' ], 10, 3 );
@@ -434,7 +455,14 @@ final class Modal_Checkout {
 		$cart_item_data = apply_filters( 'newspack_blocks_modal_checkout_cart_item_data', $cart_item_data );
 
 		\WC()->cart->empty_cart();
-		\WC()->cart->add_to_cart( $product_id, 1, 0, [], $cart_item_data );
+		$cart_item_key = \WC()->cart->add_to_cart( $product_id, 1, 0, [], $cart_item_data );
+
+		// Auto-apply a coupon attached to the Checkout Button block, if present and
+		// valid. Read with a sanitizing filter (satisfies input-sanitization
+		// checks); the validate-and-apply gate lives in maybe_auto_apply_coupon()
+		// so it can be unit-tested in isolation.
+		$coupon_code = (string) filter_input( INPUT_GET, 'coupon', FILTER_SANITIZE_FULL_SPECIAL_CHARS );
+		self::maybe_auto_apply_coupon( $coupon_code );
 
 		// Set checkout registration flag if user is logged not logged in.
 		if ( ! is_user_logged_in() ) {
@@ -476,12 +504,30 @@ final class Modal_Checkout {
 			'referrer'   => $referer,
 		];
 
-		/**
-		 * Action to fire for checkout button block modal.
-		 */
-		\do_action( 'newspack_blocks_checkout_button_modal', $checkout_button_metadata );
+		if ( $cart_item_key ) {
+			/**
+			 * Action to fire for checkout button block modal.
+			 *
+			 * Fires only when the product actually entered the cart, so consumers
+			 * recording checkout-initiated events stay in step with adds rejected
+			 * by an add-to-cart guard.
+			 */
+			\do_action( 'newspack_blocks_checkout_button_modal', $checkout_button_metadata );
+		}
 
 		$checkout_url = apply_filters( 'newspack_blocks_checkout_url', $checkout_url );
+
+		// If the product could not be added (e.g. rejected by an add-to-cart guard),
+		// the cart is empty and the checkout would render blank: point the modal at
+		// its error screen, which prints the queued error notice and a back button.
+		// Like the success path above, an unsupported payment gateway means a
+		// full-page rather than iframed checkout, so modal_checkout is omitted.
+		if ( ! $cart_item_key ) {
+			$checkout_url = \wc_get_cart_url();
+			if ( ! self::has_unsupported_payment_gateway() ) {
+				$checkout_url = add_query_arg( 'modal_checkout', 1, $checkout_url );
+			}
+		}
 
 		if ( defined( 'DOING_AJAX' ) ) {
 			echo wp_json_encode( [ 'url' => $checkout_url ] );
@@ -670,7 +716,26 @@ final class Modal_Checkout {
 		$coupons = \WC()->cart->get_applied_coupons();
 
 		\WC()->cart->empty_cart();
-		\WC()->cart->add_to_cart( $product_id, 1, 0, [], $cart_item_data );
+		$cart_item_key = \WC()->cart->add_to_cart( $product_id, 1, 0, [], $cart_item_data );
+
+		// A rejected add (e.g. an add-to-cart guard) must not report success: surface
+		// the error notice the cart queued for it instead of a thank-you message.
+		// The consumer appends this message as an HTML string, and unlike template-
+		// rendered notices it never passes through kses on output — so filter any
+		// third-party notice content here.
+		if ( ! $cart_item_key ) {
+			$error_notices = \wc_get_notices( 'error' );
+			\wc_clear_notices();
+			wp_send_json_error(
+				[
+					'message' => ! empty( $error_notices[0]['notice'] )
+						? wp_kses_post( $error_notices[0]['notice'] )
+						: __( 'This product could not be added to the cart.', 'newspack-blocks' ),
+				]
+			);
+
+			wp_die();
+		}
 
 		if ( ! empty( $coupons ) ) {
 			foreach ( $coupons as $coupon ) {
@@ -1330,7 +1395,13 @@ final class Modal_Checkout {
 	}
 
 	/**
-	 * Modify fields for modal checkout.
+	 * Remove the configured-off billing fields from modal checkout requests.
+	 *
+	 * Deliberately scoped to modal checkout: some publishers rely on standard
+	 * Woo checkout flows that predate Audience Management, so those keep the
+	 * stock field set. The express checkout gap this leaves (wallets submitting
+	 * values for fields the buyer cannot see) is handled for modal-originated
+	 * requests by scrub_store_api_checkout_address() below.
 	 *
 	 * @param array $fields Checkout fields.
 	 *
@@ -1341,8 +1412,8 @@ final class Modal_Checkout {
 			return $fields;
 		}
 		$cart = \WC()->cart;
-		// Don't modify fields if shipping is required.
-		if ( $cart->needs_shipping_address() ) {
+		// Don't modify fields if there is no cart or shipping is required.
+		if ( ! $cart || $cart->needs_shipping_address() ) {
 			return $fields;
 		}
 		/**
@@ -1371,6 +1442,199 @@ final class Modal_Checkout {
 		}
 
 		return $fields;
+	}
+
+	/**
+	 * Scrub invalid address values from Store API checkout requests when the
+	 * corresponding billing fields are configured off.
+	 *
+	 * Express checkout wallets submit to wc/store/v1/checkout and can supply
+	 * values the buyer never sees or corrects (e.g. Apple Pay sending a suburb
+	 * as the state), which hard-fails Store API address validation. Values the
+	 * validation would accept are left untouched, and only the billing address
+	 * is scrubbed. Runs on rest_pre_dispatch because the validation happens
+	 * during dispatch.
+	 *
+	 * The shipping address is intentionally out of scope. Carts that need a
+	 * shipping address bail below, and wallets return only billing contact when
+	 * shipping is not requested, so a virtual-cart request carries no shipping
+	 * address to scrub.
+	 *
+	 * Scoped to requests originating from the modal checkout, so any Store API
+	 * checkout outside the modal (e.g. the blocks checkout page or express
+	 * buttons on product pages) keeps stock behavior.
+	 *
+	 * @param mixed            $result  Response to replace the requested version with.
+	 * @param \WP_REST_Server  $server  Server instance.
+	 * @param \WP_REST_Request $request Request used to generate the response.
+	 *
+	 * @return mixed
+	 */
+	public static function scrub_store_api_checkout_address( $result, $server, $request ) {
+		if ( null !== $result ) {
+			return $result;
+		}
+
+		if (
+			! $request instanceof \WP_REST_Request ||
+			'POST' !== $request->get_method() ||
+			0 !== strpos( $request->get_route(), '/wc/store/v1/checkout' )
+		) {
+			return $result;
+		}
+
+		if ( ! self::is_modal_checkout_referer() ) {
+			return $result;
+		}
+
+		if ( ! function_exists( 'WC' ) || ! class_exists( 'WC_Validation' ) ) {
+			return $result;
+		}
+
+		$billing_fields = apply_filters( 'newspack_blocks_donate_billing_fields_keys', [] );
+
+		if ( empty( $billing_fields ) ) {
+			return $result;
+		}
+
+		// Physical-goods flows are never modified. The cart is not always
+		// initialized this early in Store API requests; when it is, bail for
+		// carts that need a shipping address. Only the billing address is
+		// scrubbed, so shipping data is never touched either way.
+		if ( \WC()->cart && \WC()->cart->needs_shipping_address() ) {
+			return $result;
+		}
+
+		$address = $request->get_param( 'billing_address' );
+
+		if ( is_array( $address ) ) {
+			$scrubbed = self::scrub_invalid_address_values( $address, $billing_fields );
+
+			if ( $scrubbed !== $address ) {
+				$request->set_param( 'billing_address', $scrubbed );
+			}
+		}
+
+		return $result;
+	}
+
+	/**
+	 * Whether the current request originates from the modal checkout, based on
+	 * the referer.
+	 *
+	 * Express checkout submissions go to the Store API as JSON, so the usual
+	 * modal_checkout request params are absent. The requests are made from the
+	 * modal checkout iframe, whose URL carries modal_checkout=1, so it shows up
+	 * as the (same-origin) referer.
+	 *
+	 * @return bool
+	 */
+	private static function is_modal_checkout_referer() {
+		$referer = isset( $_SERVER['HTTP_REFERER'] ) ? esc_url_raw( wp_unslash( $_SERVER['HTTP_REFERER'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
+		if ( ! $referer ) {
+			return false;
+		}
+
+		$query_string = \wp_parse_url( $referer, PHP_URL_QUERY );
+		\wp_parse_str( (string) $query_string, $query_params );
+
+		return ! empty( $query_params['modal_checkout'] );
+	}
+
+	/**
+	 * Drop configured-off address values that would fail Store API validation.
+	 *
+	 * @param array    $address        Store API address (billing or shipping).
+	 * @param string[] $billing_fields Configured billing field keys.
+	 *
+	 * @return array Scrubbed address.
+	 */
+	private static function scrub_invalid_address_values( $address, $billing_fields ) {
+		$country = isset( $address['country'] ) ? $address['country'] : '';
+
+		if (
+			! in_array( 'billing_state', $billing_fields, true ) &&
+			! empty( $address['state'] ) &&
+			is_string( $address['state'] ) &&
+			$country
+		) {
+			$states = \WC()->countries->get_states( $country );
+
+			if ( is_array( $states ) && ! empty( $states ) ) {
+				$code_match = array_key_exists( strtoupper( $address['state'] ), array_change_key_case( $states, CASE_UPPER ) );
+				$name_match = in_array( strtolower( $address['state'] ), array_map( 'strtolower', $states ), true );
+
+				if ( ! $code_match && ! $name_match ) {
+					$address['state'] = '';
+				}
+			}
+		}
+
+		if (
+			! in_array( 'billing_postcode', $billing_fields, true ) &&
+			! empty( $address['postcode'] ) &&
+			is_string( $address['postcode'] ) &&
+			! \WC_Validation::is_postcode( $address['postcode'], $country )
+		) {
+			$address['postcode'] = '';
+		}
+
+		return $address;
+	}
+
+	/**
+	 * Relax locale-required flags for configured-off billing fields.
+	 *
+	 * After an invalid wallet value is scrubbed (see
+	 * scrub_store_api_checkout_address), the Store API order validation would
+	 * still reject the checkout when the country locale marks the field as
+	 * required. A field the site is configured not to collect cannot be
+	 * required.
+	 *
+	 * Scoped to modal-originated requests so standard Woo flows keep the stock
+	 * locale rules.
+	 *
+	 * @param array $locale Country locale field settings.
+	 *
+	 * @return array
+	 */
+	public static function relax_configured_off_locale_fields( $locale ) {
+		if ( ! self::is_modal_checkout_referer() && ! self::is_modal_checkout() ) {
+			return $locale;
+		}
+
+		$billing_fields = apply_filters( 'newspack_blocks_donate_billing_fields_keys', [] );
+
+		if ( empty( $billing_fields ) ) {
+			return $locale;
+		}
+
+		// Never relax requirements when the cart needs a shipping address:
+		// physical-goods flows keep the full locale rules.
+		if ( function_exists( 'WC' ) && \WC()->cart && \WC()->cart->needs_shipping_address() ) {
+			return $locale;
+		}
+
+		$off = [];
+
+		foreach ( self::STORE_API_VALIDATED_ADDRESS_FIELDS as $config_key => $address_key ) {
+			if ( ! in_array( $config_key, $billing_fields, true ) ) {
+				$off[] = $address_key;
+			}
+		}
+
+		if ( empty( $off ) ) {
+			return $locale;
+		}
+
+		foreach ( array_keys( $locale ) as $country ) {
+			foreach ( $off as $address_key ) {
+				$locale[ $country ][ $address_key ]['required'] = false;
+			}
+		}
+
+		return $locale;
 	}
 
 	/**
@@ -1452,61 +1716,79 @@ final class Modal_Checkout {
 	}
 
 	/**
+	 * Auto-apply a coupon attached to a Checkout Button block to the current
+	 * cart, gated on validation.
+	 *
+	 * The reader never typed the code, so anything that would surface it is kept
+	 * silent: an invalid, expired, restricted or usage-capped coupon is skipped
+	 * with no error notice (validation runs before apply), and the "applied
+	 * successfully" success notice that WC_Cart::apply_coupon() queues is
+	 * cleared. A successful application is tracked in the session so the modal
+	 * can hide its coupon form for that coupon (see should_hide_coupon_form());
+	 * any prior marker is reset first.
+	 *
+	 * @param string $coupon_code Raw coupon code from the request (already
+	 *                            sanitized by the caller, e.g. via filter_input()).
+	 *
+	 * @return void
+	 */
+	public static function maybe_auto_apply_coupon( $coupon_code ) {
+		if ( ! function_exists( 'WC' ) || ! \WC()->cart ) {
+			return;
+		}
+		if ( \WC()->session ) {
+			\WC()->session->set( self::AUTO_APPLIED_COUPON_SESSION_KEY, null );
+		}
+		// Decode entities so a literal code (e.g. one containing "&") still
+		// matches. The strict empty-string check keeps a coupon code of "0" valid.
+		$coupon_code = html_entity_decode( (string) $coupon_code, ENT_QUOTES );
+		if ( '' === $coupon_code || ! function_exists( 'wc_coupons_enabled' ) || ! \wc_coupons_enabled() ) {
+			return;
+		}
+		$coupon    = new \WC_Coupon( $coupon_code );
+		$discounts = new \WC_Discounts( \WC()->cart );
+		if ( true === $discounts->is_coupon_valid( $coupon ) && \WC()->cart->apply_coupon( $coupon_code ) ) {
+			// apply_coupon() queues a "Coupon code applied successfully." success
+			// notice; clear it so the auto-apply stays silent for the reader.
+			if ( function_exists( 'wc_clear_notices' ) ) {
+				\wc_clear_notices();
+			}
+			if ( \WC()->session ) {
+				\WC()->session->set( self::AUTO_APPLIED_COUPON_SESSION_KEY, \wc_format_coupon_code( $coupon_code ) );
+			}
+		}
+	}
+
+	/**
+	 * Whether the in-modal coupon form should be hidden.
+	 *
+	 * True when a coupon was auto-applied from a Checkout Button block (tracked
+	 * in the session) and is still applied to the cart. The reader never entered
+	 * the code, so they should not be prompted to add or stack coupons. If they
+	 * remove the auto-applied coupon, the form is shown again.
+	 *
+	 * @return bool
+	 */
+	public static function should_hide_coupon_form() {
+		if ( ! function_exists( 'WC' ) || ! \WC()->session || ! \WC()->cart ) {
+			return false;
+		}
+		$auto_applied = \WC()->session->get( self::AUTO_APPLIED_COUPON_SESSION_KEY );
+		return ! empty( $auto_applied ) && in_array( $auto_applied, \WC()->cart->get_applied_coupons(), true );
+	}
+
+	/**
 	 * Whether to show order details table.
 	 *
 	 * @return bool
 	 */
 	public static function should_show_order_details() {
+		// The transaction details table is always shown for any non-empty cart. Simple
+		// single-item carts previously hid it and relied on the static price-summary card
+		// above the form; that card was removed, so the real, deal-accurate order details
+		// must always be visible. Guard against a missing cart (early hooks / edge AJAX).
 		$cart = \WC()->cart;
-		if ( $cart->is_empty() ) {
-			return false;
-		}
-		if ( ! empty( $cart->get_applied_coupons() ) ) {
-			return true;
-		}
-		if ( \wc_tax_enabled() && ! $cart->display_prices_including_tax() ) {
-			return true;
-		}
-		if ( 1 < $cart->get_cart_contents_count() ) {
-			return true;
-		}
-		if ( ! empty( $cart->get_fees() ) ) {
-			return true;
-		}
-		if ( method_exists( 'WC_Subscriptions_Switcher', 'cart_contains_switches' ) && \WC_Subscriptions_Switcher::cart_contains_switches( 'any' ) ) {
-			return true;
-		}
-		if ( $cart->needs_shipping_address() ) {
-			$shipping       = \WC()->shipping;
-			$packages       = $shipping->get_packages();
-			$totals         = $cart->get_totals();
-			$shipping_rates = [];
-
-			// Find all the shipping rates that apply to the current transaction.
-			foreach ( $packages as $package ) {
-				if ( ! empty( $package['rates'] ) ) {
-					foreach ( $package['rates'] as $rate_key => $rate ) {
-						$shipping_rates[ $rate_key ] = $rate;
-					}
-				}
-			}
-
-			// Show details if shipping requires a fee or if there are multiple shipping rates to choose from.
-			if ( (float) $totals['total'] !== (float) $totals['subtotal'] || 1 < count( array_values( $shipping_rates ) ) ) {
-				return true;
-			}
-		}
-
-		if ( class_exists( 'WC_Subscriptions_Cart' ) && \WC_Subscriptions_Cart::cart_contains_subscription() ) {
-			return true;
-		}
-
-		// Show details if the cart contains a subscription renewal.
-		if ( function_exists( 'wcs_cart_contains_renewal' ) && \wcs_cart_contains_renewal() ) {
-			return true;
-		}
-
-		return false;
+		return $cart && ! $cart->is_empty();
 	}
 
 	/**
@@ -1794,29 +2076,21 @@ final class Modal_Checkout {
 		}
 		$cart_item_key = array_key_first( $cart->get_cart() );
 		$cart_item = $cart->get_cart_item( $cart_item_key );
-		$product_id = $cart_item['variation_id'] ? $cart_item['variation_id'] : $cart_item['product_id'];
-		$class_prefix = self::get_class_prefix();
 		?>
-			<div class="<?php echo esc_attr( "order-details-summary {$class_prefix}__box {$class_prefix}__box--text-center" ); ?>">
 			<?php
 			// phpcs:disable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce hooks.
 			$_product = apply_filters( 'woocommerce_cart_item_product', $cart_item['data'], $cart_item, $cart_item_key );
-			if ( $_product && $_product->exists() && $cart_item['quantity'] > 0 && apply_filters( 'woocommerce_checkout_cart_item_visible', true, $cart_item, $cart_item_key ) ) :
+			// Hidden data carrier only — the visible price-summary card was removed. The modal
+			// dialog (modal.js) still reads this element's data-checkout for the RAS
+			// checkout_completed event and post-auth checkout routing. It is intentionally not
+			// gated on woocommerce_checkout_cart_item_visible (it carries data, not a visible
+			// row), so the JS anchor and analytics survive a plugin hiding the cart item.
+			if ( $_product && $_product->exists() && $cart_item['quantity'] > 0 ) :
 				?>
-				<p id="modal-checkout-product-details" data-checkout='<?php echo wp_json_encode( Checkout_Data::get_checkout_data( $cart ) ); ?>'>
-					<strong>
-						<?php
-						echo apply_filters( 'woocommerce_cart_item_name', $_product->get_name(), $cart_item, $cart_item_key ) . ': '; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
-						echo wc_get_formatted_cart_item_data( $cart_item ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
-						?>
-						<?php echo apply_filters( 'woocommerce_cart_item_subtotal', $cart->get_product_subtotal( $_product, $cart_item['quantity'] ), $cart_item, $cart_item_key ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
-					</strong>
-				</p>
+				<p id="modal-checkout-product-details" <?php Checkout_Data::print_data_checkout_attr( Checkout_Data::get_checkout_data( $cart ) ); ?> hidden></p>
 				<?php
 			endif;
-			// phpcs:enable
 			?>
-			</div>
 		<?php
 	}
 
@@ -1965,7 +2239,25 @@ final class Modal_Checkout {
 	 * @return false|int User ID if found by email address, false otherwise.
 	 */
 	public static function get_user_id_from_email() {
-		$billing_email = filter_input( INPUT_POST, 'billing_email', FILTER_SANITIZE_EMAIL );
+		$billing_email = '';
+		if ( isset( $_POST['billing_email'] ) && is_string( $_POST['billing_email'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+			$billing_email = sanitize_email( wp_unslash( $_POST['billing_email'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
+		}
+
+		if ( ! $billing_email ) {
+			$post_data = '';
+			if ( isset( $_POST['post_data'] ) && is_string( $_POST['post_data'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+				$post_data = wp_unslash( $_POST['post_data'] ); // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Parsed and sanitized below.
+			}
+
+			// WooCommerce order-review requests send checkout fields serialized in post_data.
+			if ( $post_data ) {
+				wp_parse_str( $post_data, $parsed_post_data );
+				if ( isset( $parsed_post_data['billing_email'] ) && is_string( $parsed_post_data['billing_email'] ) ) {
+					$billing_email = sanitize_email( $parsed_post_data['billing_email'] );
+				}
+			}
+		}
 		if ( $billing_email ) {
 			$customer = \get_user_by( 'email', $billing_email );
 			if ( $customer ) {
@@ -2251,6 +2543,7 @@ final class Modal_Checkout {
 		if ( $user_id !== 0 ) {
 			return $is_limited_for_user;
 		}
+		// Standard and modal checkout refreshes can both carry guest emails in serialized post_data.
 		$id_from_email = self::get_user_id_from_email();
 		if ( $id_from_email ) {
 			$is_limited_for_user = wcs_is_product_limited_for_user( $product, $id_from_email );

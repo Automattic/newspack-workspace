@@ -42,7 +42,7 @@ All icons in this package are designed on a **24×24 grid/viewbox**. This ensure
 
 ## Available Icons
 
-This package includes 48 custom icons:
+This package includes 49 custom icons:
 
 - `accessibility` - Accessibility icon
 - `activity` - Activity icon
@@ -57,6 +57,7 @@ This package includes 48 custom icons:
 - `ballotBox` - Ballot box icon
 - `broadcast` - Broadcast icon
 - `browser` - Browser icon
+- `chartReport` - Chart report icon
 - `collections` - Collections icon
 - `contentCarousel` - Content carousel icon
 - `contentLocked` - Content locked icon

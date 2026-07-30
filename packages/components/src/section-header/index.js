@@ -85,19 +85,31 @@ const SectionHeader = ( {
 		pageHeader && 'newspack-section-header--page-header'
 	);
 
-	const HeadingTag = pageHeader ? 'h1' : `h${ heading }`;
+	// The breadcrumb `Page` owns the single page `<h1>`, so a `pageHeader` section
+	// is a secondary heading: its level follows `heading` (default 2). `pageHeader`
+	// controls only the enlarged, centered styling — not the tag. Pass `heading={ 1 }`
+	// on a headerless screen that needs the section header to be the page's h1.
+	const HeadingTag = `h${ heading }`;
 
 	let titleContent = null;
 
 	if ( typeof title === 'string' ) {
 		titleContent = (
 			<div className="newspack-section-header__title-container">
-				<HeadingTag>
+				<HeadingTag className="newspack-section-header__title">
 					{ title }
 					{ badges?.length
 						? badges.map( ( badge, i ) => <Badge key={ i } text={ badge.label } level={ badge.level || 'default' } /> )
 						: null }
 				</HeadingTag>
+				{ /* Secondary action before the overflow menu, so a promoted link reads as an action rather than sitting to the right of the kebab. */ }
+				{ secondaryAction && (
+					<div className="newspack-section-header__secondary-action">
+						<Button variant="link" href={ secondaryAction.href } onClick={ secondaryAction.action }>
+							{ secondaryAction.label }
+						</Button>
+					</div>
+				) }
 				{ menu?.length > 0 && (
 					<DropdownMenu className="newspack-section-header__menu" icon={ moreVertical } label={ __( 'More options', 'newspack-plugin' ) }>
 						{ () =>
@@ -116,17 +128,10 @@ const SectionHeader = ( {
 						}
 					</DropdownMenu>
 				) }
-				{ secondaryAction && (
-					<div className="newspack-section-header__secondary-action">
-						<Button variant="link" href={ secondaryAction.href } onClick={ secondaryAction.action }>
-							{ secondaryAction.label }
-						</Button>
-					</div>
-				) }
 			</div>
 		);
 	} else if ( typeof title === 'function' ) {
-		titleContent = <HeadingTag>{ title() }</HeadingTag>;
+		titleContent = <HeadingTag className="newspack-section-header__title">{ title() }</HeadingTag>;
 	}
 
 	return (

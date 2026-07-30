@@ -93,8 +93,14 @@ final class Newspack_Popups {
 		add_action( 'add_meta_boxes_' . self::NEWSPACK_POPUPS_CPT, [ __CLASS__, 'remove_custom_fields_meta_box' ], 99 );
 		add_filter( 'display_post_states', [ __CLASS__, 'display_post_states' ], 10, 2 );
 		add_action( 'save_post_' . self::NEWSPACK_POPUPS_CPT, [ __CLASS__, 'popup_default_fields' ], 10, 3 );
+		add_action( 'save_post_' . self::NEWSPACK_POPUPS_CPT, [ 'Newspack_Popups_Model', 'flush_above_header_cache' ] );
 		add_action( 'transition_post_status', [ __CLASS__, 'prevent_default_category_on_publish' ], 10, 3 );
 		add_action( 'transition_post_status', [ __CLASS__, 'store_activation_dates' ], 10, 3 );
+		add_action( 'transition_post_status', [ __CLASS__, 'flush_above_header_cache_on_transition' ], 10, 3 );
+		add_action( 'before_delete_post', [ __CLASS__, 'flush_above_header_cache_on_delete' ], 10, 2 );
+		add_action( 'added_post_meta', [ __CLASS__, 'flush_above_header_cache_on_meta' ], 10, 3 );
+		add_action( 'updated_post_meta', [ __CLASS__, 'flush_above_header_cache_on_meta' ], 10, 3 );
+		add_action( 'deleted_post_meta', [ __CLASS__, 'flush_above_header_cache_on_meta' ], 10, 3 );
 		add_action( 'pre_delete_term', [ __CLASS__, 'prevent_default_category_on_term_delete' ], 10, 2 );
 		add_filter( 'show_admin_bar', [ __CLASS__, 'show_admin_bar' ], 10, 2 ); // phpcs:ignore WordPressVIPMinimum.UserExperience.AdminBarRemoval.RemovalDetected
 		add_filter( 'newspack_blocks_should_deduplicate', [ __CLASS__, 'newspack_blocks_should_deduplicate' ], 10, 2 );
@@ -1201,6 +1207,51 @@ final class Newspack_Popups {
 	}
 
 	/**
+	 * Flush the above-header prompt detection cache when a prompt's status changes.
+	 *
+	 * @param string  $new_status New status.
+	 * @param string  $old_status Old status.
+	 * @param WP_Post $post       Post.
+	 */
+	public static function flush_above_header_cache_on_transition( $new_status, $old_status, $post ) {
+		if ( self::NEWSPACK_POPUPS_CPT === $post->post_type ) {
+			Newspack_Popups_Model::flush_above_header_cache();
+		}
+	}
+
+	/**
+	 * Flush the above-header prompt detection cache when a prompt is permanently deleted.
+	 *
+	 * @param int          $post_id Post ID.
+	 * @param WP_Post|null $post    Post object.
+	 */
+	public static function flush_above_header_cache_on_delete( $post_id, $post = null ) {
+		$post_type = $post instanceof WP_Post ? $post->post_type : get_post_type( $post_id );
+		if ( self::NEWSPACK_POPUPS_CPT === $post_type ) {
+			Newspack_Popups_Model::flush_above_header_cache();
+		}
+	}
+
+	/**
+	 * Flush the above-header prompt detection cache when a prompt's placement meta
+	 * changes outside of a post save (e.g. a CLI/importer/programmatic meta update).
+	 *
+	 * Shared handler for added_post_meta / updated_post_meta / deleted_post_meta, whose
+	 * second and third arguments are the object ID and meta key in every case. WordPress
+	 * offers no post-type-scoped variant of these hooks, so the post type is checked here;
+	 * the meta key is compared first to keep that check off the path of unrelated writes.
+	 *
+	 * @param int|int[] $meta_id   Meta ID (or IDs, for deleted_post_meta). Unused.
+	 * @param int       $object_id Post ID the meta belongs to.
+	 * @param string    $meta_key  Meta key being changed.
+	 */
+	public static function flush_above_header_cache_on_meta( $meta_id, $object_id, $meta_key ) {
+		if ( 'placement' === $meta_key && self::NEWSPACK_POPUPS_CPT === get_post_type( $object_id ) ) {
+			Newspack_Popups_Model::flush_above_header_cache();
+		}
+	}
+
+	/**
 	 * When a category is deleted, any posts that have only that category assigned
 	 * are automatically assigned the site's default category (usually "Uncategorized").
 	 * We want to prevent this behavior for prompts, as prompts with the default
@@ -1229,7 +1280,7 @@ final class Newspack_Popups {
 				'fields'           => 'ids',
 				'post_status'      => 'any',
 				'post_type'        => self::NEWSPACK_POPUPS_CPT,
-				'posts_per_page'   => -1,
+				'posts_per_page'   => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Prompt CPT; config-scale.
 			]
 		);
 
