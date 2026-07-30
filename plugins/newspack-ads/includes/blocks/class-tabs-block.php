@@ -77,7 +77,7 @@ final class Tabs_Block {
 			return $block_content;
 		}
 
-		// Enqueue the frontend script whenever a tabs block actually renders —
+		// Enqueue the frontend assets whenever a tabs block actually renders —
 		// including inside synced patterns, which content sniffing cannot detect.
 		// The script prints in the footer, so enqueueing at render time is safe.
 		\wp_enqueue_script(
@@ -90,6 +90,7 @@ final class Tabs_Block {
 				'strategy'  => 'defer',
 			]
 		);
+		Media_Kit::enqueue_frontend_style();
 
 		if ( $block['innerBlocks'] ) {
 

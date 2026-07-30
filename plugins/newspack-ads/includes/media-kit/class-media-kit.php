@@ -207,15 +207,26 @@ final class Media_Kit {
 		$has_pattern = false !== strpos( $page_content, 'media-kit-page__wrapper' );
 		$has_block = false !== strpos( $page_content, '<!-- wp:newspack/tabs' );
 		if ( $has_pattern || $has_block ) {
-			\wp_register_style(
-				'newspack-ads-media-kit-frontend',
-				Core::plugin_url( 'dist/media-kit-frontend.css' ),
-				null,
-				filemtime( dirname( NEWSPACK_ADS_PLUGIN_FILE ) . '/dist/media-kit-frontend.css' )
-			);
-			\wp_style_add_data( 'newspack-ads-media-kit-frontend', 'rtl', 'replace' );
-			\wp_enqueue_style( 'newspack-ads-media-kit-frontend' );
+			self::enqueue_frontend_style();
 		}
+	}
+
+	/**
+	 * Enqueue the media kit frontend stylesheet.
+	 *
+	 * Called both from the content sniffing above (the page wrapper carries styles of
+	 * its own) and from the tabs block render path, which is the only way to catch a
+	 * block nested in a synced pattern.
+	 */
+	public static function enqueue_frontend_style() {
+		\wp_register_style(
+			'newspack-ads-media-kit-frontend',
+			Core::plugin_url( 'dist/media-kit-frontend.css' ),
+			null,
+			filemtime( dirname( NEWSPACK_ADS_PLUGIN_FILE ) . '/dist/media-kit-frontend.css' )
+		);
+		\wp_style_add_data( 'newspack-ads-media-kit-frontend', 'rtl', 'replace' );
+		\wp_enqueue_style( 'newspack-ads-media-kit-frontend' );
 	}
 
 	/**
