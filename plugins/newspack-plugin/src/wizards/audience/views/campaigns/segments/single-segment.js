@@ -144,8 +144,7 @@ const SingleSegment = ( { segmentId, setSegments, wizardApiFetch } ) => {
 						data-testid={ `newspack-criteria-${ criteria.id }` }
 						start={ value?.start }
 						end={ value?.end }
-						onChangeStart={ start => update( { start } ) }
-						onChangeEnd={ end => update( { end } ) }
+						onChange={ update }
 					/>
 				);
 			}

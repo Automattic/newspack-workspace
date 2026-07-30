@@ -62,6 +62,9 @@
 					// while bottom-aligning lines the two boxes up with each other.
 					align-items: flex-end;
 				}
+				.newspack-settings__date-range-preset {
+					width: 100%;
+				}
 				.newspack-autocomplete-tokenfield {
 					display: block;
 					margin: 0;
@@ -99,6 +102,9 @@
 			+ .newspack-settings__min-max {
 				margin-top: 16px !important;
 			}
+		}
+		.newspack-settings__date-range-preset + .newspack-settings__date-range-bound {
+			margin-top: 16px !important;
 		}
 		.newspack-settings__date-range-bound {
 			gap: 8px;

@@ -1,8 +1,8 @@
 /**
  * WordPress dependencies.
  */
-import { useEffect, useState } from '@wordpress/element';
-import { __ } from '@wordpress/i18n';
+import { Fragment, useEffect, useState } from '@wordpress/element';
+import { __, sprintf } from '@wordpress/i18n';
 
 /**
  * Internal dependencies.
@@ -115,11 +115,115 @@ const DateRangeBound = ( { label, testId, bound, onChange } ) => {
 	);
 };
 
-const DateRangeSetting = ( { start, end, onChangeStart, onChangeEnd, ...props } ) => (
-	<div { ...props }>
-		<DateRangeBound label={ __( 'From', 'newspack-plugin' ) } testId="date-range-start-value" bound={ start } onChange={ onChangeStart } />
-		<DateRangeBound label={ __( 'To', 'newspack-plugin' ) } testId="date-range-end-value" bound={ end } onChange={ onChangeEnd } />
-	</div>
-);
+/**
+ * Rolling windows offered as one-click presets. Each is the trailing window
+ * ending today, i.e. `start: -N days`, `end: today` — the same shape the custom
+ * rows produce, so a preset is a shortcut rather than a separate stored format.
+ */
+const PRESET_DAYS = [ 7, 30, 365 ];
+
+const PRESETS = [
+	{ label: __( 'Any', 'newspack-plugin' ), value: '' },
+	/* translators: %d: number of days in a trailing date window. */
+	...PRESET_DAYS.map( days => ( { label: sprintf( __( 'Last %d days', 'newspack-plugin' ), days ), value: String( days ) } ) ),
+	{ label: __( 'Custom', 'newspack-plugin' ), value: 'custom' },
+];
+
+/**
+ * Which preset a stored range corresponds to.
+ *
+ * @param {*} start The start bound.
+ * @param {*} end   The end bound.
+ * @return {string} A PRESETS value: '' when unbounded, the day count when the
+ *                  range is exactly one of the presets, otherwise 'custom'.
+ */
+const presetOf = ( start, end ) => {
+	if ( ! start && ! end ) {
+		return '';
+	}
+	if (
+		start &&
+		end &&
+		'relative' === start.type &&
+		'relative' === end.type &&
+		0 === end.days &&
+		start.days < 0 &&
+		PRESET_DAYS.includes( Math.abs( start.days ) )
+	) {
+		return String( Math.abs( start.days ) );
+	}
+	return 'custom';
+};
+
+const DateRangeSetting = ( { start, end, onChange, ...props } ) => {
+	const derivedPreset = presetOf( start, end );
+	// A range that matches a preset is indistinguishable from the same range built
+	// by hand, and an empty one is indistinguishable from "Custom, nothing filled
+	// in yet" — so a deliberate Custom choice has to be remembered rather than
+	// re-derived. Starts null: nothing chosen yet, so the stored value decides.
+	const [ chosenPreset, setChosenPreset ] = useState( null );
+
+	// Custom explains any range, so it is never overridden by what the value looks
+	// like. Every other selection stays in step with a range that arrived from
+	// storage or changed elsewhere.
+	useEffect( () => {
+		setChosenPreset( chosen => ( 'custom' === chosen ? chosen : derivedPreset ) );
+	}, [ derivedPreset ] );
+
+	const preset = null === chosenPreset ? derivedPreset : chosenPreset;
+
+	// Both keys are always emitted: the consumer merges the value into the stored
+	// criterion, so omitting one would leave a stale bound behind. An empty range
+	// emits nothing at all, which drops the criterion — an empty `{}` would reach
+	// the matcher as "no bounds to check" and match every reader with a date.
+	const changeRange = ( nextStart, nextEnd ) => onChange( nextStart || nextEnd ? { start: nextStart, end: nextEnd } : undefined );
+
+	const changePreset = next => {
+		setChosenPreset( next );
+		if ( 'custom' === next ) {
+			// Keep the current range so the rows open on what the preset meant.
+			return;
+		}
+		if ( '' === next ) {
+			onChange( undefined );
+			return;
+		}
+		changeRange( { type: 'relative', days: -Number( next ) }, { type: 'relative', days: 0 } );
+	};
+
+	return (
+		<div { ...props }>
+			<div className="newspack-settings__date-range-preset">
+				<SelectControl
+					// The criterion's own name is the visible heading of the section
+					// this renders into, so a visible label here would just repeat it.
+					label={ __( 'Date range', 'newspack-plugin' ) }
+					hideLabelFromVision
+					__next40pxDefaultSize
+					data-testid="date-range-preset"
+					value={ preset }
+					options={ PRESETS }
+					onChange={ changePreset }
+				/>
+			</div>
+			{ 'custom' === preset && (
+				<Fragment>
+					<DateRangeBound
+						label={ __( 'From', 'newspack-plugin' ) }
+						testId="date-range-start-value"
+						bound={ start }
+						onChange={ nextStart => changeRange( nextStart, end ) }
+					/>
+					<DateRangeBound
+						label={ __( 'To', 'newspack-plugin' ) }
+						testId="date-range-end-value"
+						bound={ end }
+						onChange={ nextEnd => changeRange( start, nextEnd ) }
+					/>
+				</Fragment>
+			) }
+		</div>
+	);
+};
 
 export default DateRangeSetting;
