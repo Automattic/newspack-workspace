@@ -7,6 +7,9 @@
 
 namespace Newspack\Reader_Activation;
 
+use Newspack\Logger;
+use Newspack\Reader_Activation\Sync;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -623,12 +626,74 @@ abstract class Integration {
 	}
 
 	/**
+	 * Get the enabled outgoing metadata field ids for this integration.
+	 *
+	 * Lazily migrates stored display names (pre-coexistence format) to
+	 * version-qualified field ids, resolving names against the site's
+	 * schema origin, and writes the option back in the new format.
+	 *
+	 * @return string[] List of enabled field ids.
+	 */
+	public function get_enabled_outgoing_field_ids() {
+		$stored = \get_option( self::OUTGOING_FIELDS_OPTION_PREFIX . $this->id, [] );
+		if ( empty( $stored ) || ! is_array( $stored ) ) {
+			return [];
+		}
+
+		$needs_migration = false;
+		foreach ( $stored as $entry ) {
+			if ( ! preg_match( '/^(v1|v2|neutral):/', (string) $entry ) ) {
+				$needs_migration = true;
+				break;
+			}
+		}
+		if ( ! $needs_migration ) {
+			return array_values( $stored );
+		}
+
+		$origin = Sync\Field_Registry::get_schema_origin();
+		$ids    = [];
+		foreach ( $stored as $entry ) {
+			if ( preg_match( '/^(v1|v2|neutral):/', (string) $entry ) ) {
+				$ids[] = $entry;
+				continue;
+			}
+			// A display name may be shared by several same-version raw keys
+			// (legacy "Registration Page"); resolve to all of them.
+			$definitions = Sync\Field_Registry::get_all_by_name( (string) $entry, $origin );
+			if ( empty( $definitions ) ) {
+				$definition  = Sync\Field_Registry::get_by_name( (string) $entry );
+				$definitions = $definition ? [ $definition ] : [];
+			}
+			if ( empty( $definitions ) ) {
+				Logger::log( sprintf( 'Outgoing fields migration: no definition found for "%s".', $entry ) );
+			}
+			foreach ( $definitions as $definition ) {
+				$ids[] = $definition['id'];
+			}
+		}
+		$ids = array_values( array_unique( $ids ) );
+		\update_option( self::OUTGOING_FIELDS_OPTION_PREFIX . $this->id, $ids, false );
+		return $ids;
+	}
+
+	/**
 	 * Get the enabled outgoing metadata fields for this integration.
+	 *
+	 * Back-compat surface: returns display names derived from the stored
+	 * field ids. The old settings UI consumes and posts these names.
 	 *
 	 * @return string[] List of enabled field names.
 	 */
 	public function get_enabled_outgoing_fields() {
-		return array_values( \get_option( self::OUTGOING_FIELDS_OPTION_PREFIX . $this->id, [] ) );
+		$names = [];
+		foreach ( $this->get_enabled_outgoing_field_ids() as $id ) {
+			$definition = Sync\Field_Registry::get_definition( $id );
+			if ( $definition ) {
+				$names[] = $definition['name'];
+			}
+		}
+		return array_values( array_unique( $names ) );
 	}
 
 	/**
@@ -671,13 +736,55 @@ abstract class Integration {
 	/**
 	 * Update the enabled outgoing metadata fields for this integration.
 	 *
-	 * @param array $fields List of field names to enable.
+	 * Accepts field ids and/or display names (the old UI posts names;
+	 * names resolve against the site's schema origin). Stores ids and
+	 * enforces one enabled version per name-conflict group
+	 * (keep-first-version: same-version siblings sharing a name are fine,
+	 * a second version's ids for a claimed name are dropped and logged).
+	 *
+	 * @param array $fields List of field ids and/or names to enable.
 	 * @return bool True if updated, false otherwise.
 	 */
 	public function update_enabled_outgoing_fields( $fields ) {
-		// Only allow fields that are in the metadata keys map.
-		$fields = array_intersect( Sync\Metadata::get_default_fields(), $fields );
-		return \update_option( self::OUTGOING_FIELDS_OPTION_PREFIX . $this->id, array_values( $fields ), false );
+		$origin = Sync\Field_Registry::get_schema_origin();
+		$ids    = [];
+		foreach ( (array) $fields as $entry ) {
+			$entry = (string) $entry;
+			if ( preg_match( '/^(v1|v2|neutral):/', $entry ) ) {
+				$definitions = array_filter( [ Sync\Field_Registry::get_definition( $entry ) ] );
+			} else {
+				$definitions = Sync\Field_Registry::get_all_by_name( $entry, $origin );
+				if ( empty( $definitions ) ) {
+					$definition  = Sync\Field_Registry::get_by_name( $entry );
+					$definitions = $definition ? [ $definition ] : [];
+				}
+			}
+			foreach ( $definitions as $definition ) {
+				if ( $definition['available'] ) {
+					$ids[] = $definition['id'];
+				}
+			}
+		}
+		$ids = array_values( array_unique( $ids ) );
+
+		// Enforce one enabled version per conflict group (keep-first-version).
+		$conflict_groups  = Sync\Field_Registry::get_conflict_groups();
+		$claimed_versions = [];
+		$validated        = [];
+		foreach ( $ids as $id ) {
+			$definition = Sync\Field_Registry::get_definition( $id );
+			$name       = $definition['name'];
+			if ( isset( $conflict_groups[ $name ] ) ) {
+				if ( isset( $claimed_versions[ $name ] ) && $claimed_versions[ $name ] !== $definition['version'] ) {
+					Logger::log( sprintf( 'Dropping "%s": conflict group "%s" is already enabled as %s.', $id, $name, $claimed_versions[ $name ] ) );
+					continue;
+				}
+				$claimed_versions[ $name ] = $definition['version'];
+			}
+			$validated[] = $id;
+		}
+
+		return \update_option( self::OUTGOING_FIELDS_OPTION_PREFIX . $this->id, $validated, false );
 	}
 
 	/**

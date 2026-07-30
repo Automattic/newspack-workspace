@@ -213,4 +213,51 @@ class Field_Registry {
 		}
 		return $groups;
 	}
+
+	const SCHEMA_ORIGIN_OPTION = 'newspack_sync_schema_origin';
+
+	/**
+	 * Get the site's schema origin: the schema version it was on before
+	 * per-field coexistence. Presentation and migration defaults only —
+	 * sync behavior must never read this.
+	 *
+	 * @return string 'v1' or 'v2'.
+	 */
+	public static function get_schema_origin() {
+		$origin = \get_option( self::SCHEMA_ORIGIN_OPTION );
+		if ( in_array( $origin, [ self::VERSION_V1, self::VERSION_V2 ], true ) ) {
+			return $origin;
+		}
+		$origin = self::detect_schema_origin();
+		\add_option( self::SCHEMA_ORIGIN_OPTION, $origin, '', false );
+		return $origin;
+	}
+
+	/**
+	 * Detect the schema origin for a site that has not recorded one yet.
+	 *
+	 * This is the single remaining consumer of the old global version
+	 * switch: v2-flag (BlueLena) sites map to v2; sites with existing
+	 * outgoing-field selections or the pre-integrations global fields
+	 * option are v1; everything else is a fresh install and starts on v2.
+	 *
+	 * @return string 'v1' or 'v2'.
+	 */
+	private static function detect_schema_origin() {
+		if ( 'legacy' !== Metadata::get_version() ) {
+			return self::VERSION_V2;
+		}
+
+		global $wpdb;
+		$has_selections = $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$wpdb->prepare(
+				"SELECT option_id FROM {$wpdb->options} WHERE option_name LIKE %s LIMIT 1",
+				$wpdb->esc_like( \Newspack\Reader_Activation\Integration::OUTGOING_FIELDS_OPTION_PREFIX ) . '%'
+			)
+		);
+		if ( $has_selections || false !== \get_option( Metadata::FIELDS_OPTION, false ) ) {
+			return self::VERSION_V1;
+		}
+		return self::VERSION_V2;
+	}
 }
