@@ -55,7 +55,12 @@ const boundValueOf = bound => {
 // would silently move a saved window out from under the publisher.
 const makeBound = ( type, rawValue, seed = false ) => {
 	if ( 'absolute' === type ) {
-		return { type: 'absolute', date: rawValue || ( seed ? today() : '' ) };
+		const date = rawValue || ( seed ? today() : '' );
+		// An absolute bound with no date is not a bound: emitted and saved, it
+		// would reach the matcher as a bound it can only reject, silently
+		// shrinking the segment to nobody. The row itself stays open — the
+		// control falls back to the chosen bound type while the bound is absent.
+		return date ? { type: 'absolute', date } : undefined;
 	}
 	const days = Math.abs( parseInt( rawValue, 10 ) || 0 );
 	return { type: 'relative', days: 'future' === type ? days : -days };
@@ -83,7 +88,10 @@ const DateRangeBound = ( { label, testId, bound, onChange } ) => {
 		}
 	}, [ derivedType, isAmbiguous ] );
 
-	const type = isAmbiguous && null !== chosenType ? chosenType : derivedType;
+	// Also fall back while there is no bound at all: a cleared date emits no
+	// bound (see makeBound), and deriving from the absent value would collapse
+	// the row to "Any" mid-edit instead of leaving the empty input for retyping.
+	const type = null !== chosenType && ( isAmbiguous || ! bound ) ? chosenType : derivedType;
 	return (
 		<div className="newspack-settings__date-range-bound">
 			<SelectControl
@@ -102,8 +110,16 @@ const DateRangeBound = ( { label, testId, bound, onChange } ) => {
 				<TextControl
 					data-testid={ testId }
 					// The visible label sits on the sibling select, so without one here
-					// the input has no accessible name at all.
-					label={ 'absolute' === type ? __( 'Date', 'newspack-plugin' ) : __( 'Days', 'newspack-plugin' ) }
+					// the input has no accessible name at all. Composed with the row
+					// label so the two bound rows' inputs stay distinguishable — two
+					// bare "Days" spin buttons announce identically.
+					label={
+						'absolute' === type
+							? // translators: %s: the bound row label (From/To).
+							  sprintf( __( '%s date', 'newspack-plugin' ), label )
+							: // translators: %s: the bound row label (From/To).
+							  sprintf( __( '%s days', 'newspack-plugin' ), label )
+					}
 					hideLabelFromVision
 					type={ 'absolute' === type ? 'date' : 'number' }
 					min={ 'absolute' === type ? undefined : 0 }
@@ -155,7 +171,7 @@ const presetOf = ( start, end ) => {
 	return 'custom';
 };
 
-const DateRangeSetting = ( { start, end, onChange, ...props } ) => {
+const DateRangeSetting = ( { start, end, onChange, label, ...props } ) => {
 	const derivedPreset = presetOf( start, end );
 	// A range that matches a preset is indistinguishable from the same range built
 	// by hand, and an empty one is indistinguishable from "Custom, nothing filled
@@ -196,8 +212,11 @@ const DateRangeSetting = ( { start, end, onChange, ...props } ) => {
 			<div className="newspack-settings__date-range-preset">
 				<SelectControl
 					// The criterion's own name is the visible heading of the section
-					// this renders into, so a visible label here would just repeat it.
-					label={ __( 'Date range', 'newspack-plugin' ) }
+					// this renders into, so a visible label here would just repeat it —
+					// but the heading is a bare span with no label association, so the
+					// consumer-passed name is what keeps several date criteria's preset
+					// selectors distinguishable to a screen reader.
+					label={ label || __( 'Date range', 'newspack-plugin' ) }
 					hideLabelFromVision
 					__next40pxDefaultSize
 					data-testid="date-range-preset"
