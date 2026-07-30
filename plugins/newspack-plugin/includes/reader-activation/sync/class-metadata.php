@@ -8,6 +8,7 @@
 namespace Newspack\Reader_Activation\Sync;
 
 use Newspack\Donations;
+use Newspack\Reader_Activation;
 use Newspack\Reader_Activation\Integrations;
 
 defined( 'ABSPATH' ) || exit;
@@ -423,6 +424,91 @@ class Metadata {
 			return $metadata[ self::get_key( $key ) ];
 		}
 		return null;
+	}
+
+	/**
+	 * Add user's registration-related data to the given metadata, as raw keys.
+	 *
+	 * Raw-key port of the legacy enrichment: values are looked up from user
+	 * meta when absent, never overwritten, and no prefixing or filtering is
+	 * performed here.
+	 *
+	 * @param array $metadata Metadata to add to.
+	 *
+	 * @return array Metadata with registration data added.
+	 */
+	public static function add_registration_data_raw( $metadata ) {
+		$user = self::has_key( 'account', $metadata ) ? \get_user_by( 'id', self::get_key_value( 'account', $metadata ) ) : false;
+		if ( ! $user ) {
+			return $metadata;
+		}
+
+		$registration_method = self::has_key( 'registration_method', $metadata ) ? self::get_key_value( 'registration_method', $metadata ) : \get_user_meta( $user->ID, Reader_Activation::REGISTRATION_METHOD, true );
+		if ( ! empty( $registration_method ) ) {
+			$metadata['registration_method'] = $registration_method;
+		}
+
+		$registration_page = self::has_key( 'registration_page', $metadata ) ? self::get_key_value( 'registration_page', $metadata ) : \get_user_meta( $user->ID, Reader_Activation::REGISTRATION_PAGE, true );
+		if ( ! empty( $registration_page ) ) {
+			$metadata['registration_page'] = $registration_page;
+		}
+
+		$connected_account = self::has_key( 'connected_account', $metadata ) ? self::get_key_value( 'connected_account', $metadata ) : \get_user_meta( $user->ID, Reader_Activation::CONNECTED_ACCOUNT, true );
+		if ( ! empty( $connected_account ) && in_array( $connected_account, Reader_Activation::SSO_REGISTRATION_METHODS, true ) ) {
+			$metadata['connected_account'] = $connected_account;
+		} elseif ( ! empty( $registration_method ) && in_array( $registration_method, Reader_Activation::SSO_REGISTRATION_METHODS, true ) ) {
+			$metadata['connected_account'] = $registration_method;
+		}
+
+		return $metadata;
+	}
+
+	/**
+	 * Expand UTM parameters from page URLs into raw suffixed keys.
+	 *
+	 * Raw-key port of the legacy UTM expansion: emits keys like
+	 * `signup_page_utm_source` / `payment_page_utm_campaign` instead of
+	 * prefixed ESP names. Existing values are never overwritten.
+	 *
+	 * @param array $metadata Metadata to add to.
+	 *
+	 * @return array Metadata with UTM fields added.
+	 */
+	public static function add_utm_data_raw( $metadata ) {
+		$has_page = self::has_key( 'current_page_url', $metadata ) || self::has_key( 'registration_page', $metadata ) || self::has_key( 'payment_page', $metadata );
+		if ( ! $has_page ) {
+			return $metadata;
+		}
+
+		$payment_page = self::has_key( 'payment_page', $metadata ) ? self::get_key_value( 'payment_page', $metadata ) : false;
+		if ( ! empty( $payment_page ) ) {
+			$raw_url = $payment_page;
+		} elseif ( self::has_key( 'current_page_url', $metadata ) ) {
+			$raw_url = self::get_key_value( 'current_page_url', $metadata );
+		} else {
+			$raw_url = self::get_key_value( 'registration_page', $metadata );
+		}
+
+		$parsed_url = \wp_parse_url( $raw_url );
+		if ( empty( $parsed_url['query'] ) ) {
+			return $metadata;
+		}
+
+		$utm_key_prefix = ! empty( $payment_page ) ? 'payment_page_utm' : 'signup_page_utm';
+		$params         = [];
+		\wp_parse_str( $parsed_url['query'], $params );
+		foreach ( $params as $param => $value ) {
+			$param = \sanitize_text_field( $param );
+			if ( 'utm' !== substr( $param, 0, 3 ) ) {
+				continue;
+			}
+			$key = $utm_key_prefix . '_' . str_replace( 'utm_', '', $param );
+			if ( empty( $metadata[ $key ] ) ) {
+				$metadata[ $key ] = $value;
+			}
+		}
+
+		return $metadata;
 	}
 
 	/**
