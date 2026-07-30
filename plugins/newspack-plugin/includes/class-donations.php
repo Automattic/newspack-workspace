@@ -300,11 +300,26 @@ class Donations {
 
 	/**
 	 * Request-level cache of the legacy donation product IDs, keyed by the
-	 * parent-product option so saving donation settings mid-request invalidates it.
+	 * parent-product option.
+	 *
+	 * The key only covers the parent: children can be regenerated under a stable
+	 * option (see update_donation_product()), which the key cannot detect. Call
+	 * reset_legacy_donation_product_ids_cache() after any write that may have
+	 * changed them.
 	 *
 	 * @var array|null
 	 */
 	private static $legacy_donation_product_ids = null;
+
+	/**
+	 * Reset the cached legacy donation product IDs.
+	 *
+	 * Call this after regenerating the donation products in the same request or
+	 * other long-lived process so subsequent lookups reload the current set.
+	 */
+	public static function reset_legacy_donation_product_ids_cache() {
+		self::$legacy_donation_product_ids = null;
+	}
 
 	/**
 	 * Get the legacy donation product IDs: the grouped parent and its children.
@@ -698,6 +713,11 @@ class Donations {
 		$parent_product->set_status( 'publish' );
 		$parent_product->save();
 		update_option( self::DONATION_PRODUCT_ID_OPTION, $parent_product->get_id() );
+
+		// Children may have been regenerated under an unchanged parent option, so
+		// neither cache can detect the change on its own. Drop both.
+		self::reset_legacy_donation_product_ids_cache();
+		self::reset_flagged_donation_product_ids_cache();
 	}
 
 	/**
