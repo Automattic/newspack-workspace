@@ -113,7 +113,12 @@ const SingleSegment = ( { segmentId, setSegments, wizardApiFetch } ) => {
 			if ( ! value || ( Array.isArray( value ) && 0 === value.length ) ) {
 				config.splice( config.indexOf( item ), 1 );
 			} else if ( ! Array.isArray( value ) && typeof value === 'object' ) {
-				item.value = { ...item.value, ...value };
+				// A criterion that changed operators may still hold a scalar value
+				// (e.g. a date field switched from Text to Date range). Spreading a
+				// string would scatter it into character-indexed keys, so only merge
+				// onto a previous value that is itself a plain object.
+				const previous = item.value && typeof item.value === 'object' && ! Array.isArray( item.value ) ? item.value : {};
+				item.value = { ...previous, ...value };
 			} else {
 				item.value = value;
 			}
@@ -142,6 +147,7 @@ const SingleSegment = ( { segmentId, setSegments, wizardApiFetch } ) => {
 				return (
 					<DateRangeSetting
 						data-testid={ `newspack-criteria-${ criteria.id }` }
+						label={ criteria.name }
 						start={ value?.start }
 						end={ value?.end }
 						onChange={ update }
