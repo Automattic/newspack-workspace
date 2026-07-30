@@ -239,7 +239,10 @@ class Field_Registry {
 	 * This is the single remaining consumer of the old global version
 	 * switch: v2-flag (BlueLena) sites map to v2; sites with existing
 	 * outgoing-field selections or the pre-integrations global fields
-	 * option are v1; everything else is a fresh install and starts on v2.
+	 * option are v1; a site with a configured ESP but neither of those
+	 * (never opened the metadata-fields settings) is still an existing
+	 * legacy site syncing dynamic defaults, not a fresh install, so it
+	 * is also v1; everything else is a fresh install and starts on v2.
 	 *
 	 * @return string 'v1' or 'v2'.
 	 */
@@ -258,6 +261,14 @@ class Field_Registry {
 		if ( $has_selections || false !== \get_option( Metadata::FIELDS_OPTION, false ) ) {
 			return self::VERSION_V1;
 		}
+
+		// A configured ESP with no stored selections is an existing legacy
+		// site syncing dynamic defaults — not a fresh install.
+		$esp_integration = \Newspack\Reader_Activation\Integrations::get_integration( 'esp' );
+		if ( $esp_integration && $esp_integration->is_set_up() ) {
+			return self::VERSION_V1;
+		}
+
 		return self::VERSION_V2;
 	}
 }

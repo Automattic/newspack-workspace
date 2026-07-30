@@ -201,6 +201,30 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A site with the pre-integrations global fields option set (and no
+	 * per-integration outgoing-fields options, and no ESP registered) is
+	 * detected as a v1-origin site. This exercises the global-option branch,
+	 * which runs before the ESP-configured check, on its own.
+	 */
+	public function test_legacy_global_fields_option_origin_is_v1() {
+		\update_option( Metadata::FIELDS_OPTION, [ 'Account' ] );
+		$this->assertSame( 'v1', Field_Registry::get_schema_origin() );
+	}
+
+	/**
+	 * A site with a configured ESP integration but no stored outgoing-field
+	 * selections and no legacy global fields option is an existing legacy
+	 * site that has been syncing dynamic defaults all along — not a fresh
+	 * install — so it is detected as v1.
+	 */
+	public function test_configured_esp_with_no_selections_origin_is_v1() {
+		Sample_Integration::$is_set_up_value = true;
+		Integrations::register( new Sample_Integration( 'esp', 'ESP' ) );
+
+		$this->assertSame( 'v1', Field_Registry::get_schema_origin() );
+	}
+
+	/**
 	 * The concrete ESP integration overrides get_enabled_outgoing_fields()
 	 * directly (rather than inheriting the base Integration behavior), so it
 	 * needs its own coverage: stored ids resolve back to display names.
