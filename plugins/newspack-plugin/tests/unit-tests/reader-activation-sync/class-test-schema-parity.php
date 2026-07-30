@@ -50,6 +50,9 @@ class Test_Schema_Parity extends \WP_UnitTestCase {
 	 * Tear down test environment.
 	 */
 	public function tear_down() {
+		// Defensive cleanup: guarantees no test-registered callback survives
+		// even if a test fails before reaching its own remove_filter() call.
+		\remove_all_filters( 'newspack_esp_sync_normalize_contact' );
 		\delete_option( Field_Registry::SCHEMA_ORIGIN_OPTION );
 		Field_Registry::reset();
 		$this->reset_integrations();
@@ -178,5 +181,44 @@ class Test_Schema_Parity extends \WP_UnitTestCase {
 			],
 			$prepared['metadata']
 		);
+	}
+
+	/**
+	 * Class-built contacts (Metadata::get_contact_with_metadata(), the main
+	 * outgoing-sync path) must run through the same
+	 * `newspack_esp_sync_normalize_contact` filter that hand-built contacts
+	 * get via Metadata::normalize_contact_data(), so publisher code hooking
+	 * the filter to mutate outgoing contacts keeps firing on the main path.
+	 */
+	public function test_normalize_filter_fires_on_class_built_contacts() {
+		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
+		$this->esp->update_enabled_outgoing_fields( [ 'Newsletter Selection', 'Account' ] );
+
+		$call_count = 0;
+		// 'newsletter_selection' is a raw key Legacy_Basic declares as a
+		// field, but its value is not populated by the normal metadata
+		// build — injecting it here is proof the value came from the
+		// filter, not from any other code path.
+		$callback = function ( $contact ) use ( &$call_count ) {
+			++$call_count;
+			$contact['metadata']['newsletter_selection'] = 'Weekly';
+			return $contact;
+		};
+		\add_filter( 'newspack_esp_sync_normalize_contact', $callback );
+
+		$user_id = self::factory()->user->create( [ 'user_email' => 'class-built@example.com' ] );
+		$contact = Metadata::get_contact_with_metadata( $user_id );
+
+		\remove_filter( 'newspack_esp_sync_normalize_contact', $callback );
+
+		$this->assertGreaterThanOrEqual(
+			1,
+			$call_count,
+			'The normalize filter must fire while building a class-based contact.'
+		);
+
+		$prepared = $this->esp->prepare_contact( $contact );
+
+		$this->assertSame( 'Weekly', $prepared['metadata']['NP_Newsletter Selection'] );
 	}
 }

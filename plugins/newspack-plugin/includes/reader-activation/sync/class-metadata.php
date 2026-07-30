@@ -401,11 +401,13 @@ class Metadata {
 			}
 		}
 
-		return [
-			'email'    => $core_contact->get_email(),
-			'name'     => $core_contact->get_full_name(),
-			'metadata' => $metadata,
-		];
+		return self::normalize_contact_data(
+			[
+				'email'    => $core_contact->get_email(),
+				'name'     => $core_contact->get_full_name(),
+				'metadata' => $metadata,
+			]
+		);
 	}
 
 	/**
