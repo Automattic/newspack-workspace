@@ -46,6 +46,22 @@ class Legacy_Basic extends Contact_Metadata {
 	}
 
 	/**
+	 * Rich per-field configuration.
+	 *
+	 * @return array
+	 */
+	public static function get_fields_config() {
+		$config = parent::get_fields_config();
+		if ( isset( $config['signup_page_utm'] ) ) {
+			$config['signup_page_utm']['dynamic_suffix'] = true;
+		}
+		if ( isset( $config['payment_page_utm'] ) ) {
+			$config['payment_page_utm']['dynamic_suffix'] = true;
+		}
+		return $config;
+	}
+
+	/**
 	 * Get the metadata for the given user, customer or order.
 	 *
 	 * Delegates to the legacy WooCommerce and normalization logic to build

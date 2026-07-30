@@ -94,6 +94,23 @@ abstract class Contact_Metadata {
 	abstract public static function get_fields();
 
 	/**
+	 * Rich per-field configuration for the fields handled by this class.
+	 *
+	 * Defaults to deriving minimal config from get_fields(). Subclasses
+	 * override to add description, example, sync_type, status,
+	 * superseded_by and dynamic_suffix.
+	 *
+	 * @return array Map of raw key => config array with at least a 'name'.
+	 */
+	public static function get_fields_config() {
+		$config = [];
+		foreach ( static::get_fields() as $raw_key => $name ) {
+			$config[ $raw_key ] = [ 'name' => $name ];
+		}
+		return $config;
+	}
+
+	/**
 	 * Get the metadata for the given user, customer or order, returned as an array of key/value pairs where the key is the key of the field that will be prefixed and synced, and the value is the value of the field for that user, customer or order.
 	 *
 	 * @return array
