@@ -2263,6 +2263,19 @@ class Test_Integrations extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Fields the declared format doesn't specify must not be filled from "now":
+	 * a datetime field under a date-only source format would otherwise store a
+	 * different ATOM string on every pull — churning Reader_Data writes and
+	 * defeating change detection — even though day-granular matching still works.
+	 */
+	public function test_normalize_date_value_datetime_with_date_only_format_is_deterministic() {
+		$this->assertSame(
+			'2026-03-04T00:00:00+00:00',
+			Contact_Pull::normalize_date_value( '03/04/2026', 'm/d/Y', 'datetime' )
+		);
+	}
+
+	/**
 	 * `date_format` is not a schema key, so an entry saved between the schema
 	 * expansion and the arrival of source formats looks current and is never
 	 * refreshed — leaving the pull unable to normalize and the criterion matching
@@ -2362,5 +2375,227 @@ class Test_Integrations extends \WP_UnitTestCase {
 		$raw = $fields[0]->get_raw_data();
 		$this->assertSame( '', $raw['date_format'] );
 		$this->assertSame( 0, $integration->fetch_count, 'A complete entry must not trigger a live provider fetch.' );
+	}
+
+	/**
+	 * The overlay must persist the resolved format back to the stored option:
+	 * get_enabled_incoming_fields() runs on every request (Promoted_Fields
+	 * registers on init, front end included), so an in-memory-only repair means
+	 * a live provider-schema resolution per request until the publisher happens
+	 * to re-save the Integrations screen.
+	 */
+	public function test_get_enabled_incoming_fields_persists_overlaid_date_format() {
+		$integration = new class( 'date-format-persist', 'Date Format Persist' ) extends Sample_Integration {
+			/**
+			 * How many times the live provider list was fetched.
+			 *
+			 * @var int
+			 */
+			public $fetch_count = 0;
+
+			/**
+			 * Live provider schema declaring a source format.
+			 *
+			 * @return Incoming_Field[]
+			 */
+			public function get_available_incoming_fields() {
+				$this->fetch_count++;
+				return [
+					( new Incoming_Field(
+						'last_gift',
+						[
+							'key'               => 'last_gift',
+							'name'              => 'Last Gift',
+							'value_type'        => 'date',
+							'matching_function' => 'date_range',
+							'date_format'       => 'd/m/Y',
+						]
+					) ),
+				];
+			}
+		};
+
+		\update_option(
+			'newspack_integration_incoming_fields_date-format-persist',
+			[
+				'last_gift' => [
+					'key'               => 'last_gift',
+					'name'              => 'Last Gift',
+					'value_type'        => 'date',
+					'matching_function' => 'date_range',
+				],
+			]
+		);
+
+		$fields = $integration->get_enabled_incoming_fields();
+		$this->assertSame( 'd/m/Y', $fields[0]->get_raw_data()['date_format'] );
+
+		$stored = \get_option( 'newspack_integration_incoming_fields_date-format-persist' );
+		$this->assertSame( 'd/m/Y', $stored['last_gift']['date_format'], 'The resolved format must be persisted back to the option.' );
+
+		$integration->get_enabled_incoming_fields();
+		$this->assertSame( 1, $integration->fetch_count, 'A persisted format must not trigger another live provider fetch.' );
+	}
+
+	/**
+	 * An integration can declare a date value_type without ever declaring a
+	 * date_format (newspack-manager's ActiveCampaign integration does). The live
+	 * schema then can never supply the key, so without persisting the resolved
+	 * '' the entry re-triggers the live resolution on every read, permanently.
+	 */
+	public function test_get_enabled_incoming_fields_persists_empty_date_format_when_live_schema_lacks_it() {
+		$integration = new class( 'date-format-formatless', 'Date Format Formatless' ) extends Sample_Integration {
+			/**
+			 * How many times the live provider list was fetched.
+			 *
+			 * @var int
+			 */
+			public $fetch_count = 0;
+
+			/**
+			 * Live provider schema that declares a date type but no source format.
+			 *
+			 * @return Incoming_Field[]
+			 */
+			public function get_available_incoming_fields() {
+				$this->fetch_count++;
+				return [
+					( new Incoming_Field(
+						'last_gift',
+						[
+							'key'               => 'last_gift',
+							'name'              => 'Last Gift',
+							'value_type'        => 'date',
+							'matching_function' => 'date_range',
+						]
+					) ),
+				];
+			}
+		};
+
+		\update_option(
+			'newspack_integration_incoming_fields_date-format-formatless',
+			[
+				'last_gift' => [
+					'key'               => 'last_gift',
+					'name'              => 'Last Gift',
+					'value_type'        => 'date',
+					'matching_function' => 'date_range',
+				],
+			]
+		);
+
+		$fields = $integration->get_enabled_incoming_fields();
+		$this->assertSame( '', $fields[0]->get_raw_data()['date_format'] );
+
+		$stored = \get_option( 'newspack_integration_incoming_fields_date-format-formatless' );
+		$this->assertSame( '', $stored['last_gift']['date_format'], 'ISO must be persisted when the live schema has no format to give.' );
+
+		$integration->get_enabled_incoming_fields();
+		$this->assertSame( 1, $integration->fetch_count, 'A persisted format must not trigger another live provider fetch.' );
+	}
+
+	/**
+	 * A field that has left the provider can never be found in the live schema.
+	 * As long as the resolution itself succeeded, ISO is persisted so the entry
+	 * stops re-resolving — an API error, by contrast, must not persist anything,
+	 * so the next read can retry.
+	 */
+	public function test_get_enabled_incoming_fields_persists_empty_date_format_when_field_left_the_provider() {
+		$integration = new class( 'date-format-departed', 'Date Format Departed' ) extends Sample_Integration {
+			/**
+			 * How many times the live provider list was fetched.
+			 *
+			 * @var int
+			 */
+			public $fetch_count = 0;
+
+			/**
+			 * Whether the live resolution errors instead of succeeding.
+			 *
+			 * @var bool
+			 */
+			public $errors = false;
+
+			/**
+			 * A live provider schema that no longer contains the field.
+			 *
+			 * @return Incoming_Field[]|\WP_Error
+			 */
+			public function get_available_incoming_fields() {
+				$this->fetch_count++;
+				return $this->errors ? new \WP_Error( 'api_down' ) : [];
+			}
+		};
+
+		$stored_entry = [
+			'last_gift' => [
+				'key'               => 'last_gift',
+				'name'              => 'Last Gift',
+				'value_type'        => 'date',
+				'matching_function' => 'date_range',
+			],
+		];
+		\update_option( 'newspack_integration_incoming_fields_date-format-departed', $stored_entry );
+
+		// While the API errors, nothing is persisted and the next read retries.
+		$integration->errors = true;
+		$integration->get_enabled_incoming_fields();
+		$this->assertSame( $stored_entry, \get_option( 'newspack_integration_incoming_fields_date-format-departed' ) );
+		$integration->get_enabled_incoming_fields();
+		$this->assertSame( 2, $integration->fetch_count, 'A failed resolution must be retried on the next read.' );
+
+		// Once the resolution succeeds without the field, ISO is persisted.
+		$integration->errors = false;
+		$integration->get_enabled_incoming_fields();
+		$stored = \get_option( 'newspack_integration_incoming_fields_date-format-departed' );
+		$this->assertSame( '', $stored['last_gift']['date_format'] );
+		$integration->get_enabled_incoming_fields();
+		$this->assertSame( 3, $integration->fetch_count, 'A persisted format must not trigger another live provider fetch.' );
+	}
+
+	/**
+	 * A legacy-shaped entry predates per-field operators, so its effective
+	 * operator has always been exact matching. The live overlay must not hand it
+	 * a newer default (date_range): that would silently rewrite pulled values to
+	 * ISO and stop existing text-valued segment criteria matching, with no
+	 * publisher action. The rest of the live schema still overlays.
+	 */
+	public function test_get_enabled_incoming_fields_keeps_legacy_entries_on_exact_matching() {
+		$integration = new class( 'legacy-date-entry', 'Legacy Date Entry' ) extends Sample_Integration {
+			/**
+			 * Live provider schema whose date fields now default to date_range.
+			 *
+			 * @return Incoming_Field[]
+			 */
+			public function get_available_incoming_fields() {
+				return [
+					( new Incoming_Field(
+						'last_gift',
+						[
+							'key'               => 'last_gift',
+							'name'              => 'Last Gift',
+							'value_type'        => 'date',
+							'matching_function' => 'date_range',
+							'date_format'       => 'd/m/Y',
+						]
+					) ),
+				];
+			}
+		};
+
+		// A legacy entry carries none of the schema keys.
+		\update_option(
+			'newspack_integration_incoming_fields_legacy-date-entry',
+			[ 'last_gift' => [ 'enabled' => true ] ]
+		);
+
+		$fields = $integration->get_enabled_incoming_fields();
+
+		$this->assertCount( 1, $fields );
+		$this->assertSame( 'default', $fields[0]->get_matching_function(), 'A legacy entry must keep exact matching until the publisher opts in.' );
+		$raw = $fields[0]->get_raw_data();
+		$this->assertSame( 'date', $raw['value_type'] );
+		$this->assertSame( 'd/m/Y', $raw['date_format'], 'The rest of the live schema still overlays.' );
 	}
 }

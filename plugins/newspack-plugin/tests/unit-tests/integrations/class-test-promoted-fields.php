@@ -472,4 +472,51 @@ class Test_Promoted_Fields extends \WP_UnitTestCase {
 		\Newspack\Reader_Data::update_item( $user_id, 'LAST_GIFT_DATE', wp_json_encode( '2024-02-29' ) );
 		$this->assertTrue( $method->invoke( null, $field, $user_id, '2024-02-29' ) );
 	}
+
+	/**
+	 * The version-skew guard is what stops an old newspack-popups from being
+	 * handed a matching function it can't resolve — a TypeError that escapes
+	 * segment matching and takes prompt display down sitewide. newspack-popups
+	 * is not loaded in this suite, which is exactly the probe-less environment
+	 * an old build presents (the probe method can't exist), so this pins the
+	 * degradation path; the probe-present path is covered from the popups side
+	 * by its own CriteriaTest, since CI runs each plugin's suite in isolation.
+	 */
+	public function test_supported_matching_function_degrades_without_the_popups_probe() {
+		if ( class_exists( '\Newspack_Popups_Criteria' ) ) {
+			$this->markTestSkipped( 'newspack-popups is loaded; this test covers the probe-less environment.' );
+		}
+
+		$method = new \ReflectionMethod( Promoted_Fields::class, 'supported_matching_function' );
+		$method->setAccessible( true );
+
+		// Baseline operators predate the capability probe: every newspack-popups
+		// build old enough to lack the probe still resolves all of them, so they
+		// must pass through untouched — degrading them would silently change
+		// matching semantics on sites that are not skewed at all.
+		foreach ( [ 'default', 'range', 'list__in', 'list__not_in' ] as $matching_function ) {
+			$this->assertSame( $matching_function, $method->invoke( null, $matching_function ), $matching_function );
+		}
+
+		// Anything past the baseline cannot be confirmed without the probe, so it
+		// degrades to exact matching — a criterion that matches too narrowly,
+		// rather than one that breaks the page.
+		$this->assertSame( 'default', $method->invoke( null, 'date_range' ) );
+		$this->assertSame( 'default', $method->invoke( null, 'a_future_operator' ) );
+	}
+
+	/**
+	 * The baseline list is a hand-maintained copy of the operator set that
+	 * predates the popups capability probe. It must never grow: an operator
+	 * added to it skips the probe entirely and would be emitted to builds that
+	 * cannot resolve it — the exact crash the probe exists to prevent.
+	 */
+	public function test_baseline_matching_functions_is_frozen() {
+		$constant = new \ReflectionClassConstant( Promoted_Fields::class, 'BASELINE_MATCHING_FUNCTIONS' );
+		$this->assertSame(
+			[ 'default', 'range', 'list__in', 'list__not_in' ],
+			$constant->getValue(),
+			'BASELINE_MATCHING_FUNCTIONS is the pre-probe operator set; new operators must rely on the probe, not the baseline.'
+		);
+	}
 }
