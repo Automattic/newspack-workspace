@@ -297,7 +297,7 @@ $field
     ->set_access_rule_callback( function ( $user_id, $args ) { /* ... */ } );
 ```
 
-**Declare `date_format` on every `date` / `datetime` field, even when it is empty.** The raw schema array is snapshotted when a publisher enables a field, and the key's presence is how the framework tells "the provider says its dates are ISO 8601" from "this entry predates source formats, so the format is unknown". An entry set to `date_range` with the key *absent* is refreshed from the live schema on read; one that declares `''` is taken at its word and never refetched.
+**Declare `date_format` on every `date` / `datetime` field, even when it is empty.** The raw schema array is snapshotted when a publisher enables a field, and the key's presence is how the framework tells "the provider says its dates are ISO 8601" from "this entry predates source formats, so the format is unknown". An entry set to `date_range` with the key *absent* is refreshed from the live schema on the next read and the resolved format is persisted back — a one-time repair, falling back to ISO when the live schema has no format to give; one that declares `''` is taken at its word and never refetched.
 
 A date value the framework cannot confidently parse is stored **untouched** rather than guessed at — the matcher then rejects it, so the criterion matches nobody rather than matching wrongly. When that happens the pull writes a line to the Newspack log naming the field and the source format it used, which is the only signal that a declared format is missing or wrong.
 

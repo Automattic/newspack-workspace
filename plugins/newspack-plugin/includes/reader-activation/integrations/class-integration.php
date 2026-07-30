@@ -593,6 +593,19 @@ abstract class Integration {
 	private const ALLOWED_INCOMING_MATCHING_FUNCTIONS = [ 'default', 'range', 'list__in', 'list__not_in', 'date_range' ];
 
 	/**
+	 * Matching functions a legacy-shaped entry may adopt from the live schema
+	 * overlay. A legacy entry predates stored snapshots, so its effective
+	 * operator has always been whatever the provider mapper emitted at read
+	 * time — but only for these long-standing defaults. A default introduced
+	 * later (date_range) changes matching semantics and makes the pull rewrite
+	 * stored reader values, so a legacy entry must keep exact matching until the
+	 * publisher deliberately opts in on the Integrations screen.
+	 *
+	 * @var string[]
+	 */
+	private const LEGACY_OVERLAY_MATCHING_FUNCTIONS = [ 'default', 'range', 'list__in', 'list__not_in' ];
+
+	/**
 	 * Whether a stored entry is set to date range matching but carries no source
 	 * date format, and so needs one overlaid from the live provider schema.
 	 *
@@ -601,7 +614,9 @@ abstract class Integration {
 	 * refreshed — yet the pull needs the format to normalize the value. Without it
 	 * a non-ISO value is stored raw, the matcher rejects it, and the criterion
 	 * silently matches nobody. Absent means "never stored"; a provider that sends
-	 * ISO stores `''` explicitly.
+	 * ISO stores `''` explicitly. The read path resolves the format once and
+	 * persists it back, so this is a one-time repair per entry rather than a live
+	 * resolution on every read.
 	 *
 	 * @param array $raw_data Stored raw field data.
 	 * @return bool
@@ -647,10 +662,12 @@ abstract class Integration {
 
 		// Resolve the live provider list once, only when at least one entry needs it.
 		// On API failure, fall back to the stored raw_data unchanged.
-		$live_by_key = [];
+		$live_by_key          = [];
+		$live_schema_resolved = false;
 		if ( $needs_live_schema ) {
 			$available = $this->get_available_incoming_fields();
 			if ( ! is_wp_error( $available ) && is_array( $available ) ) {
+				$live_schema_resolved = true;
 				foreach ( $available as $available_field ) {
 					if ( $available_field instanceof Integrations\Incoming_Field ) {
 						$live_by_key[ $available_field->get_key() ] = $available_field->get_raw_data();
@@ -659,22 +676,39 @@ abstract class Integration {
 			}
 		}
 
-		$fields = [];
+		$fields       = [];
+		$stored_dirty = false;
 		foreach ( $stored as $key => $raw_data ) {
 			if ( ! is_string( $key ) || '' === $key ) {
 				continue;
 			}
 			$raw_data = is_array( $raw_data ) ? $raw_data : [];
-			if ( isset( $live_by_key[ $key ] ) ) {
-				if ( empty( array_intersect( self::SCHEMA_KEYS, array_keys( $raw_data ) ) ) ) {
+			if ( empty( array_intersect( self::SCHEMA_KEYS, array_keys( $raw_data ) ) ) ) {
+				if ( isset( $live_by_key[ $key ] ) ) {
 					// Stored entry is in the legacy shape — overlay the live schema while
-					// preserving any non-schema keys the publisher may have stored.
-					$raw_data = array_merge( $raw_data, $live_by_key[ $key ] );
-				} elseif ( self::needs_source_date_format( $raw_data ) ) {
-					// Fill in just the source format — the publisher's stored operator and
-					// the rest of the snapshot stay authoritative.
-					$raw_data['date_format'] = isset( $live_by_key[ $key ]['date_format'] ) ? $live_by_key[ $key ]['date_format'] : '';
+					// preserving any non-schema keys the publisher may have stored. A
+					// newer live default (date_range) is pinned back to exact matching:
+					// it would silently change how the entry matches and how the pull
+					// stores the value, for a field enabled long before it existed.
+					$live_data = $live_by_key[ $key ];
+					if (
+						isset( $live_data['matching_function'] )
+						&& ! in_array( $live_data['matching_function'], self::LEGACY_OVERLAY_MATCHING_FUNCTIONS, true )
+					) {
+						$live_data['matching_function'] = 'default';
+					}
+					$raw_data = array_merge( $raw_data, $live_data );
 				}
+			} elseif ( self::needs_source_date_format( $raw_data ) && $live_schema_resolved ) {
+				// Fill in just the source format — the publisher's stored operator and
+				// the rest of the snapshot stay authoritative. Absent from the live
+				// schema (an integration that never declares formats, or a field that
+				// left the provider) means ISO. Persisted below so this is a one-time
+				// repair, not a live resolution on every read; an API failure persists
+				// nothing, so the next read retries.
+				$raw_data['date_format']       = isset( $live_by_key[ $key ]['date_format'] ) ? $live_by_key[ $key ]['date_format'] : '';
+				$stored[ $key ]['date_format'] = $raw_data['date_format'];
+				$stored_dirty                  = true;
 			}
 			$field = new Integrations\Incoming_Field( $key, $raw_data );
 			$field = $this->configure_incoming_field( $field );
@@ -692,6 +726,14 @@ abstract class Integration {
 				$fields[] = $field;
 			}
 		}
+
+		if ( $stored_dirty ) {
+			// Self-heal: persist the resolved source formats so the live resolution
+			// doesn't repeat on every read. update_option() no-ops on an unchanged
+			// value, so concurrent requests racing here are harmless.
+			\update_option( self::INCOMING_FIELDS_OPTION_PREFIX . $this->id, $stored, false );
+		}
+
 		return $fields;
 	}
 
