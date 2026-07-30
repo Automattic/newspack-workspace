@@ -77,6 +77,20 @@ final class Tabs_Block {
 			return $block_content;
 		}
 
+		// Enqueue the frontend script whenever a tabs block actually renders —
+		// including inside synced patterns, which content sniffing cannot detect.
+		// The script prints in the footer, so enqueueing at render time is safe.
+		\wp_enqueue_script(
+			'newspack-ads-media-kit-frontend',
+			Core::plugin_url( 'dist/media-kit-frontend.js' ),
+			[],
+			NEWSPACK_ADS_VERSION,
+			[
+				'in_footer' => true,
+				'strategy'  => 'defer',
+			]
+		);
+
 		if ( $block['innerBlocks'] ) {
 
 			// Add tab navigation controls.

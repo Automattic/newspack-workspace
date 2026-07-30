@@ -195,6 +195,13 @@ final class Media_Kit {
 	 * Equeue frontend scripts.
 	 */
 	public static function enqueue_scripts() {
+		// The media kit page (and any page using its patterns) is always a
+		// singular view, so skip the content sniffing everywhere else. The
+		// frontend JS is enqueued from the tabs block render path instead
+		// (see Tabs_Block::render_tab_navigation()).
+		if ( ! is_singular() ) {
+			return;
+		}
 		// Get current page content and check for the special class used in the patterns, or block usage.
 		$page_content = get_the_content();
 		$has_pattern = false !== strpos( $page_content, 'media-kit-page__wrapper' );
@@ -208,18 +215,6 @@ final class Media_Kit {
 			);
 			\wp_style_add_data( 'newspack-ads-media-kit-frontend', 'rtl', 'replace' );
 			\wp_enqueue_style( 'newspack-ads-media-kit-frontend' );
-		}
-		if ( $has_block ) {
-			\wp_enqueue_script(
-				'newspack-ads-media-kit-frontend',
-				Core::plugin_url( 'dist/media-kit-frontend.js' ),
-				[],
-				NEWSPACK_ADS_VERSION,
-				[
-					'in_footer' => true,
-					'strategy'  => 'defer',
-				]
-			);
 		}
 	}
 
