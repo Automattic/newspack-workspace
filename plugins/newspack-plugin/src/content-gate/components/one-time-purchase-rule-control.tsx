@@ -148,7 +148,7 @@ export default function OneTimePurchaseRuleControl( {
 				__next40pxDefaultSize
 				__nextHasNoMarginBottom
 			/>
-			<Flex align="flex-end" gap={ 2 } style={ { marginTop: '8px' } }>
+			<Flex align="flex-start" gap={ 2 } style={ { marginTop: '8px' } }>
 				<FlexBlock>
 					<SelectControl
 						label={ __( 'Access duration', 'newspack-plugin' ) }
