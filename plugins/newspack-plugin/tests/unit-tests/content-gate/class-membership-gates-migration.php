@@ -110,6 +110,50 @@ class Test_Membership_Gates_Migration extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Build a plan-group descriptor as group_plans_by_fingerprint() would, carrying
+	 * just the access method group_requires_purchase() inspects.
+	 *
+	 * @param string $access_method The WCM plan access method ('purchase' or 'signup').
+	 *
+	 * @return array
+	 */
+	private function make_group_plan( string $access_method ): array {
+		return [
+			'pid'           => 0,
+			'name'          => 'Plan',
+			'access_method' => $access_method,
+			'ac_rules'      => [],
+			'product_ids'   => [],
+		];
+	}
+
+	/**
+	 * A group is purchase-gated only when EVERY plan requires a purchase — the two
+	 * gate modes AND for a logged-in reader, so a mixed group would demand the
+	 * subscription from members the signup plan granted for free. A group holding one
+	 * signup plan and one purchase plan is therefore registration-gated, not
+	 * purchase-gated.
+	 */
+	public function test_group_requires_purchase_only_when_every_plan_is_purchase() {
+		$all_purchase = [ $this->make_group_plan( 'purchase' ), $this->make_group_plan( 'purchase' ) ];
+		$mixed        = [ $this->make_group_plan( 'signup' ), $this->make_group_plan( 'purchase' ) ];
+		$all_signup   = [ $this->make_group_plan( 'signup' ) ];
+
+		$this->assertTrue(
+			$this->invoke_private_static( 'group_requires_purchase', [ $all_purchase ] ),
+			'A group where every plan requires a purchase is purchase-gated.'
+		);
+		$this->assertFalse(
+			$this->invoke_private_static( 'group_requires_purchase', [ $mixed ] ),
+			'A mixed signup+purchase group is registration-gated — the signup plan grants the more permissive access.'
+		);
+		$this->assertFalse(
+			$this->invoke_private_static( 'group_requires_purchase', [ $all_signup ] ),
+			'A signup-only group is registration-gated.'
+		);
+	}
+
+	/**
 	 * NPPD-2063: the AC rule slug is the raw WooCommerce content-type name, not the
 	 * AC content-rules key ('post_types' for post types, 'specific_posts' for
 	 * individual posts). Object IDs are stringified. The stacked NPPD-2063 fix will

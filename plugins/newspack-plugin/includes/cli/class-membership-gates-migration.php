@@ -37,8 +37,9 @@ class Membership_Gates_Migration {
 	 * For each gate (group of plans):
 	 * - Creates a new content gate (or updates an existing one matched by title).
 	 * - Sets content rules from the shared restriction rules.
-	 * - Enables registration settings (always) and custom_access settings (if any
-	 *   plan in the group requires a purchase).
+	 * - Enables registration settings (always) and custom_access settings (only
+	 *   when every plan in the group requires a purchase — a group that also holds a
+	 *   signup plan is registration-gated, since either plan grants access in WCM).
 	 * - Copies block content from the first plan's np_memberships_gate post (falling
 	 *   back to the Primary gate) into the gate's registration / paid-access layouts.
 	 *
@@ -155,10 +156,8 @@ class Membership_Gates_Migration {
 			$ac_rules      = $group[0]['ac_rules'];
 			$gate_title    = implode( ' | ', array_column( $group, 'name' ) );
 			$gate_key      = trim( strtolower( $gate_title ) );
-			$has_purchase  = ! empty(
-				array_filter( $group, fn( $g ) => 'purchase' === $g['access_method'] )
-			);
-			$access_type = $has_purchase ? 'purchase' : 'signup';
+			$has_purchase = self::group_requires_purchase( $group );
+			$access_type  = $has_purchase ? 'purchase' : 'signup';
 
 			// Cast to int for parity with the REST write path, which stores subscription
 			// access-rule values as ints; raw `_product_ids` meta can hold strings.
@@ -246,7 +245,8 @@ class Membership_Gates_Migration {
 					$layout_errors[] = 'registration layout';
 				}
 
-				// Custom access layout (purchase plans only).
+				// Custom access layout — only when every plan in the group requires a
+				// purchase (see $has_purchase). A mixed group is left registration-gated.
 				if ( $has_purchase && null !== $layouts['custom_access'] ) {
 					if ( ! self::apply_layout( $gate_id, $gate_title, 'custom_access', $layouts['custom_access'], $merged_product_ids ) ) {
 						$layout_errors[] = 'paid access layout';
@@ -354,7 +354,7 @@ class Membership_Gates_Migration {
 	 * evaluator can actually act on — for the readers the source plan restricted.
 	 *
 	 * @param int  $gate_id      The content gate post ID.
-	 * @param bool $has_purchase Whether any plan behind this gate requires a purchase.
+	 * @param bool $has_purchase Whether every plan behind this gate requires a purchase.
 	 *
 	 * @return string[] Human-readable problems; empty when the gate is enforceable.
 	 */
@@ -457,7 +457,7 @@ class Membership_Gates_Migration {
 	 * dry-run mode so the planning pass surfaces the same warnings --live would.
 	 *
 	 * @param array[] $ac_rules           AC-format content rules: [ [ 'slug' => string, 'value' => string[] ], ... ].
-	 * @param bool    $has_purchase       Whether any plan in the group requires a purchase.
+	 * @param bool    $has_purchase       Whether every plan in the group requires a purchase.
 	 * @param array   $layouts            Extracted layout markup keyed by 'registration' and 'custom_access'.
 	 * @param int[]   $merged_product_ids Merged parent product IDs for the custom_access mode.
 	 *
@@ -609,6 +609,26 @@ class Membership_Gates_Migration {
 		}
 
 		return $plan_groups;
+	}
+
+	/**
+	 * Whether a plan group should migrate to a purchase-gated gate.
+	 *
+	 * True only when every plan in the group requires a purchase. The two gate modes
+	 * compose with AND for a logged-in reader — registration mode passes them, then
+	 * custom_access restricts them unless they hold a subscription — so activating
+	 * paid access on a group that also holds a signup plan would demand the
+	 * subscription from everyone. WooCommerce Memberships grants access to a holder of
+	 * *either* plan (OR semantics), so the signup plan's free-registration members
+	 * would silently lose access at cutover. Keeping the most-permissive plan's
+	 * requirement (registration-gate a mixed group) is the faithful migration.
+	 *
+	 * @param array[] $group Plan descriptors, each carrying an 'access_method' key.
+	 *
+	 * @return bool
+	 */
+	private static function group_requires_purchase( array $group ): bool {
+		return ! array_filter( $group, fn( $g ) => 'purchase' !== $g['access_method'] );
 	}
 
 	/**
