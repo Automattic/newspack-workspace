@@ -60,14 +60,72 @@ class Legacy_Basic extends Contact_Metadata {
 	 * @return array
 	 */
 	public static function get_fields_config() {
-		$config = parent::get_fields_config();
-		if ( isset( $config['signup_page_utm'] ) ) {
-			$config['signup_page_utm']['dynamic_suffix'] = true;
-		}
-		if ( isset( $config['payment_page_utm'] ) ) {
-			$config['payment_page_utm']['dynamic_suffix'] = true;
-		}
-		return $config;
+		return [
+			'account'              => [
+				'name'        => 'Account',
+				'description' => __( 'WordPress user account ID of the reader.', 'newspack-plugin' ),
+				'example'     => '323',
+				'sync_type'   => 'field',
+				'status'      => 'legacy',
+			],
+			'registration_date'    => [
+				'name'        => 'Registration Date',
+				'description' => __( 'Date the reader created their account.', 'newspack-plugin' ),
+				'example'     => '2022-09-19 10:00:00',
+				'sync_type'   => 'field',
+				'status'      => 'legacy',
+			],
+			'connected_account'    => [
+				'name'        => 'Connected Account',
+				'description' => __( 'SSO service used to register, if applicable (e.g. google, apple).', 'newspack-plugin' ),
+				'example'     => 'google',
+				'sync_type'   => 'field',
+				'status'      => 'legacy',
+			],
+			'signup_page_utm'      => [
+				'name'           => 'Signup UTM: ',
+				'description'    => __( 'UTM parameters present on the signup page, synced as one field per parameter.', 'newspack-plugin' ),
+				'example'        => 'facebook',
+				'sync_type'      => 'field',
+				'status'         => 'legacy',
+				'dynamic_suffix' => true,
+			],
+			'newsletter_selection' => [
+				'name'        => 'Newsletter Selection',
+				'description' => __( 'Comma-separated list of the newsletter lists the reader is subscribed to.', 'newspack-plugin' ),
+				'example'     => 'News Update, Weather Alerts',
+				'sync_type'   => 'field',
+				'status'      => 'legacy',
+			],
+			'referer'              => [
+				'name'        => 'Referrer Path',
+				'description' => __( 'Referring page URL captured when the reader submitted a signup or donation form.', 'newspack-plugin' ),
+				'example'     => 'https://example.com/newsletter-signup',
+				'sync_type'   => 'field',
+				'status'      => 'legacy',
+			],
+			'registration_page'    => [
+				'name'        => 'Registration Page',
+				'description' => __( 'URL of the page where the reader registered.', 'newspack-plugin' ),
+				'example'     => 'https://example.com/newsletter',
+				'sync_type'   => 'field',
+				'status'      => 'legacy',
+			],
+			'current_page_url'     => [
+				'name'        => 'Registration Page',
+				'description' => __( 'URL of the page the reader was on when they registered; an alternate source for the same value as Registration Page.', 'newspack-plugin' ),
+				'example'     => 'https://example.com/newsletter',
+				'sync_type'   => 'field',
+				'status'      => 'legacy',
+			],
+			'registration_method'  => [
+				'name'        => 'Registration Method',
+				'description' => __( 'How the reader registered (e.g. registration wall, newsletter, checkout, popup, manual, or an SSO provider).', 'newspack-plugin' ),
+				'example'     => 'newsletter',
+				'sync_type'   => 'field',
+				'status'      => 'legacy',
+			],
+		];
 	}
 
 	/**

@@ -52,6 +52,62 @@ class Registration extends Contact_Metadata {
 	}
 
 	/**
+	 * Rich per-field configuration.
+	 *
+	 * @return array
+	 */
+	public static function get_fields_config() {
+		return [
+			'Registration_Date'         => [
+				'name'        => 'Registration Date',
+				'description' => __( 'Date reader created their account (MM/DD/YYYY)', 'newspack-plugin' ),
+				'example'     => '09/19/2022',
+				'sync_type'   => 'field',
+				'status'      => 'existing',
+			],
+			'Registration_Page'         => [
+				'name'        => 'Registration Page',
+				'description' => __( 'URL of the page where reader registered', 'newspack-plugin' ),
+				'example'     => 'https://example.com/newsletter',
+				'sync_type'   => 'field',
+				'status'      => 'updated',
+			],
+			'Registration_Strategy'     => [
+				'name'        => 'Registration Strategy',
+				'description' => __( 'How the reader registered. One of: registration-wall, newsletter, checkout, popup, manual', 'newspack-plugin' ),
+				'example'     => 'registration-wall',
+				'sync_type'   => 'tag',
+				'status'      => 'new',
+				'supersedes'  => 'v1:registration_method',
+			],
+			'Registration_UTM_Source'   => [
+				'name'        => 'Registration UTM Source',
+				'description' => __( 'UTM source present at time of registration', 'newspack-plugin' ),
+				'example'     => 'facebook',
+				'sync_type'   => 'field',
+				'status'      => 'updated',
+				'supersedes'  => 'v1:signup_page_utm',
+			],
+			'Registration_UTM_Medium'   => [
+				'name'        => 'Registration UTM Medium',
+				'description' => __( 'UTM medium present at time of registration', 'newspack-plugin' ),
+				'example'     => 'social',
+				'sync_type'   => 'field',
+				'status'      => 'updated',
+				'supersedes'  => 'v1:signup_page_utm',
+			],
+			'Registration_UTM_Campaign' => [
+				'name'        => 'Registration UTM Campaign',
+				'description' => __( 'UTM campaign present at time of registration', 'newspack-plugin' ),
+				'example'     => 'spring2024',
+				'sync_type'   => 'field',
+				'status'      => 'updated',
+				'supersedes'  => 'v1:signup_page_utm',
+			],
+		];
+	}
+
+	/**
 	 * Get the metadata for the given user, customer or order.
 	 *
 	 * @return array

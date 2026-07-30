@@ -82,6 +82,111 @@ class Subscription extends Contact_Metadata {
 	}
 
 	/**
+	 * Rich per-field configuration.
+	 *
+	 * @return array
+	 */
+	public static function get_fields_config() {
+		return [
+			'Subscriber_Status'                      => [
+				'name'        => 'Subscriber Status',
+				'description' => __( 'Status of the reader\'s most recent non-donation subscription. Valid values: active, on-hold, pending, cancelled, expired, pending-cancel', 'newspack-plugin' ),
+				'example'     => 'active',
+				'sync_type'   => 'tag',
+				'status'      => 'existing',
+			],
+			'Active_Subscription_Count'              => [
+				'name'        => 'Active Subscription Count',
+				'description' => __( 'Number of currently active non-donation subscriptions the reader holds', 'newspack-plugin' ),
+				'example'     => '2',
+				'sync_type'   => 'field',
+				'status'      => 'new',
+			],
+			'Current_Subscription_Start_Date'        => [
+				'name'        => 'Current Subscription Start Date',
+				'description' => __( 'Start date of the most recent active non-donation subscription (MM/DD/YYYY)', 'newspack-plugin' ),
+				'example'     => '09/19/2022',
+				'sync_type'   => 'field',
+				'status'      => 'existing',
+			],
+			'Current_Subscription_End_Date'          => [
+				'name'        => 'Current Subscription End Date',
+				'description' => __( 'End/renewal date of the most recent non-donation subscription (MM/DD/YYYY)', 'newspack-plugin' ),
+				'example'     => '09/19/2023',
+				'sync_type'   => 'field',
+				'status'      => 'existing',
+			],
+			'Subscription_Cancellation_Reason'       => [
+				'name'        => 'Subscription Cancellation Reason',
+				'description' => __( 'Reason for a cancelled subscription. One of: user-canceled, manually-canceled, expired', 'newspack-plugin' ),
+				'example'     => 'user-canceled',
+				'sync_type'   => 'tag',
+				'status'      => 'existing',
+			],
+			'Current_Subscription_Billing_Cycle'     => [
+				'name'        => 'Current Subscription Billing Cycle',
+				'description' => __( 'Billing frequency. One of: month, year', 'newspack-plugin' ),
+				'example'     => 'month',
+				'sync_type'   => 'tag',
+				'status'      => 'existing',
+				'supersedes'  => 'v1:billing_cycle',
+			],
+			'Current_Subscription_Recurring_Payment' => [
+				'name'        => 'Current Subscription Recurring Payment',
+				'description' => __( 'Amount of the recurring subscription payment (non-donation products)', 'newspack-plugin' ),
+				'example'     => '15',
+				'sync_type'   => 'field',
+				'status'      => 'existing',
+				'supersedes'  => 'v1:recurring_payment',
+			],
+			'Current_Subscription_Next_Payment_Date' => [
+				'name'        => 'Current Subscription Next Payment Date',
+				'description' => __( 'Date of next scheduled subscription payment (MM/DD/YYYY)', 'newspack-plugin' ),
+				'example'     => '10/19/2022',
+				'sync_type'   => 'field',
+				'status'      => 'existing',
+				'supersedes'  => 'v1:next_payment_date',
+			],
+			'Current_Subscription_Product_Name'      => [
+				'name'        => 'Current Subscription Product Name',
+				'description' => __( 'Name of the non-donation subscription product the reader purchased', 'newspack-plugin' ),
+				'example'     => 'Digital Supporter',
+				'sync_type'   => 'tag',
+				'status'      => 'existing',
+				'supersedes'  => 'v1:product_name',
+			],
+			'Previous_Subscription_Product'          => [
+				'name'        => 'Previous Subscription Product',
+				'description' => __( 'Name of the subscription product before the reader switched plans', 'newspack-plugin' ),
+				'example'     => 'Basic Access',
+				'sync_type'   => 'tag',
+				'status'      => 'existing',
+			],
+			'Current_Subscription_Coupon_Code'       => [
+				'name'        => 'Current Subscription Coupon Code',
+				'description' => __( 'Coupon code applied at checkout for a non-donation subscription', 'newspack-plugin' ),
+				'example'     => 'freemonth',
+				'sync_type'   => 'field',
+				'status'      => 'existing',
+			],
+			'Last_Payment_Amount'                    => [
+				'name'        => 'Last Payment Amount',
+				'description' => __( 'Amount of the most recent subscription payment (non-donation products)', 'newspack-plugin' ),
+				'example'     => '15',
+				'sync_type'   => 'field',
+				'status'      => 'existing',
+			],
+			'Last_Payment_Date'                      => [
+				'name'        => 'Last Payment Date',
+				'description' => __( 'Date of most recent subscription payment (MM/DD/YYYY)', 'newspack-plugin' ),
+				'example'     => '09/19/2022',
+				'sync_type'   => 'field',
+				'status'      => 'existing',
+			],
+		];
+	}
+
+	/**
 	 * Get the metadata for the given user, customer or order.
 	 *
 	 * @return array

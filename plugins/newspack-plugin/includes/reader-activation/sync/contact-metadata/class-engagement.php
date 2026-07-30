@@ -62,6 +62,82 @@ class Engagement extends Contact_Metadata {
 	}
 
 	/**
+	 * Rich per-field configuration.
+	 *
+	 * @return array
+	 */
+	public static function get_fields_config() {
+		return [
+			'First_Visit_Date'     => [
+				'name'        => 'First Visit Date',
+				'description' => __( 'Date of the reader\'s very first visit to the site, regardless of whether or when they registered (MM/DD/YYY).', 'newspack-plugin' ),
+				'example'     => '01/05/2025',
+				'sync_type'   => 'field',
+				'status'      => 'new',
+			],
+			'Last_Active'          => [
+				'name'        => 'Last Active',
+				'description' => __( 'Date reader was last seen on site', 'newspack-plugin' ),
+				'example'     => '03/05/2026',
+				'sync_type'   => 'field',
+				'status'      => 'new',
+			],
+			'Paywall_Hits'         => [
+				'name'        => 'Paywall Hits',
+				'description' => __( 'Number of times reader has reached a metered paywall', 'newspack-plugin' ),
+				'example'     => '3',
+				'sync_type'   => 'field',
+				'status'      => 'new',
+			],
+			'Favorite_Categories'  => [
+				'name'        => 'Favorite Categories',
+				'description' => __( 'Comma-separated list of the reader\'s most-engaged content categories, ordered by frequency', 'newspack-plugin' ),
+				'example'     => 'politics,climate,local',
+				'sync_type'   => 'field',
+				'status'      => 'new',
+			],
+			'Payment_Page'         => [
+				'name'        => 'Payment Page',
+				'description' => __( 'URL of the page the reader most recently checked out on', 'newspack-plugin' ),
+				'example'     => 'https://example.com/support-us',
+				'sync_type'   => 'field',
+				'status'      => 'existing',
+			],
+			'Payment_UTM_Source'   => [
+				'name'        => 'Payment UTM Source',
+				'description' => __( 'UTM source on payment page if present', 'newspack-plugin' ),
+				'example'     => 'email',
+				'sync_type'   => 'field',
+				'status'      => 'existing',
+				'supersedes'  => 'v1:payment_page_utm',
+			],
+			'Payment_UTM_Medium'   => [
+				'name'        => 'Payment UTM Medium',
+				'description' => __( 'UTM medium on payment page if present', 'newspack-plugin' ),
+				'example'     => 'newsletter',
+				'sync_type'   => 'field',
+				'status'      => 'existing',
+				'supersedes'  => 'v1:payment_page_utm',
+			],
+			'Payment_UTM_Campaign' => [
+				'name'        => 'Payment UTM Campaign',
+				'description' => __( 'UTM campaign on payment page if present', 'newspack-plugin' ),
+				'example'     => 'year-end-2024',
+				'sync_type'   => 'field',
+				'status'      => 'existing',
+				'supersedes'  => 'v1:payment_page_utm',
+			],
+			'Total_Paid'           => [
+				'name'        => 'Total Paid',
+				'description' => __( 'Lifetime total amount the reader has paid through Newspack\'s WooCommerce system', 'newspack-plugin' ),
+				'example'     => '120',
+				'sync_type'   => 'field',
+				'status'      => 'existing',
+			],
+		];
+	}
+
+	/**
 	 * Get the metadata for the given user, customer or order.
 	 *
 	 * @return array

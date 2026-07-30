@@ -129,6 +129,17 @@ class Field_Registry {
 			];
 		}
 
+		// Derive reverse supersedes links.
+		foreach ( $definitions as $id => $definition ) {
+			if ( empty( $definition['supersedes'] ) ) {
+				continue;
+			}
+			$target = $definition['supersedes'];
+			if ( isset( $definitions[ $target ] ) ) {
+				$definitions[ $target ]['superseded_by'][] = $id;
+			}
+		}
+
 		self::$definitions = $definitions;
 		return self::$definitions;
 	}

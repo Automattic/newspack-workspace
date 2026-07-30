@@ -7,6 +7,7 @@
 
 namespace Newspack\Tests\Unit\Reader_Activation_Sync;
 
+use Newspack\Reader_Activation\Sync\Contact_Metadata;
 use Newspack\Reader_Activation\Sync\Field_Registry;
 
 /**
@@ -122,5 +123,63 @@ class Test_Field_Registry extends \WP_UnitTestCase {
 		$this->assertSame( 'v2:Last_Payment_Amount', $v2['id'] );
 		// Unqualified lookup returns some definition for the name.
 		$this->assertNotNull( Field_Registry::get_by_name( 'Newsletter Selection' ) );
+	}
+
+	/**
+	 * Every class-owned definition (i.e. not a filter-added extra) must
+	 * carry a description and a valid sync_type, since these back the
+	 * Phase-2 field-picker UI.
+	 */
+	public function test_all_class_owned_definitions_have_descriptions() {
+		foreach ( Field_Registry::get_definitions() as $id => $definition ) {
+			if ( null === $definition['class'] ) {
+				continue; // Filter extras carry no authored metadata.
+			}
+			$this->assertNotEmpty( $definition['description'] ?? '', "Missing description for {$id}" );
+			$this->assertContains( $definition['sync_type'] ?? '', [ 'field', 'tag' ], "Missing sync_type for {$id}" );
+		}
+	}
+
+	/**
+	 * A v2 field that renames/replaces a v1 field declares `supersedes`
+	 * with the v1 id; the registry derives the reverse `superseded_by`
+	 * link onto the v1 definition.
+	 *
+	 * The Content Gate "Content Access" field is registered as
+	 * version-neutral (see Field_Registry::get_class_map()), so its id is
+	 * `neutral:Content_Access`, not `v2:Content_Access`.
+	 */
+	public function test_supersedes_links_are_bidirectional() {
+		$defs = Field_Registry::get_definitions();
+		$this->assertSame( 'v1:signup_page_utm', $defs['v2:Registration_UTM_Source']['supersedes'] );
+		$this->assertContains( 'v2:Registration_UTM_Source', $defs['v1:signup_page_utm']['superseded_by'] );
+		$this->assertSame( 'v1:membership_status', $defs['neutral:Content_Access']['supersedes'] ?? null );
+		$this->assertContains( 'neutral:Content_Access', $defs['v1:membership_status']['superseded_by'] );
+	}
+
+	/**
+	 * Each metadata class's get_fields_config() must annotate exactly the
+	 * keys its get_fields() declares -- no more, no less -- so the rich
+	 * config can never silently drift from the field list the class
+	 * actually exposes.
+	 */
+	public function test_fields_config_key_sets_match_get_fields() {
+		$classes = [
+			Contact_Metadata\Legacy_Basic::class,
+			Contact_Metadata\Legacy_Payment::class,
+			Contact_Metadata\Identity::class,
+			Contact_Metadata\Registration::class,
+			Contact_Metadata\Engagement::class,
+			Contact_Metadata\Subscription::class,
+			Contact_Metadata\Donation::class,
+			Contact_Metadata\Content_Gate::class,
+		];
+		foreach ( $classes as $class ) {
+			$this->assertSame(
+				array_keys( $class::get_fields() ),
+				array_keys( $class::get_fields_config() ),
+				"get_fields()/get_fields_config() key-set drift in {$class}"
+			);
+		}
 	}
 }
