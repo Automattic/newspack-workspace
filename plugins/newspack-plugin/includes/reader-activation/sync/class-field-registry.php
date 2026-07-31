@@ -351,6 +351,45 @@ class Field_Registry {
 		return $groups;
 	}
 
+	/**
+	 * Serialize every definition for the integrations settings payload.
+	 *
+	 * Flat list, all schema versions — the per-field UI derives rows,
+	 * visibility (non-origin fields show only while enabled) and the
+	 * version-picker cards client-side, so it needs both sides of every
+	 * conflict and rename regardless of the site's origin.
+	 *
+	 * @return array[] List of definition arrays (see the settings REST contract).
+	 */
+	public static function get_definitions_for_settings() {
+		$conflict_ids = [];
+		foreach ( self::get_conflict_groups() as $ids ) {
+			$conflict_ids = array_merge( $conflict_ids, $ids );
+		}
+		$conflict_ids = array_flip( $conflict_ids );
+
+		$rows = [];
+		foreach ( self::get_definitions() as $id => $definition ) {
+			$rows[] = [
+				'id'                => $id,
+				'version'           => $definition['version'],
+				'raw_key'           => $definition['raw_key'],
+				'name'              => $definition['name'],
+				'section'           => (string) ( $definition['section'] ?? '' ),
+				'available'         => (bool) $definition['available'],
+				'dynamic_suffix'    => (bool) $definition['dynamic_suffix'],
+				'description'       => (string) ( $definition['description'] ?? '' ),
+				'example'           => (string) ( $definition['example'] ?? '' ),
+				'sync_type'         => (string) ( $definition['sync_type'] ?? '' ),
+				'status'            => in_array( $definition['status'] ?? '', [ 'new', 'updated' ], true ) ? $definition['status'] : 'existing',
+				'supersedes'        => $definition['supersedes'] ?? null,
+				'superseded_by'     => array_values( $definition['superseded_by'] ?? [] ),
+				'in_conflict_group' => isset( $conflict_ids[ $id ] ),
+			];
+		}
+		return $rows;
+	}
+
 	const SCHEMA_ORIGIN_OPTION = 'newspack_sync_schema_origin';
 
 	/**

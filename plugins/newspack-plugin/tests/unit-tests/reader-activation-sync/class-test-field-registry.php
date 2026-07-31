@@ -238,4 +238,45 @@ class Test_Field_Registry extends \WP_UnitTestCase {
 		$this->assertTrue( Field_Registry::name_is_registered( 'Signup UTM: source' ) );
 		$this->assertFalse( Field_Registry::name_is_registered( 'Totally Custom Field' ) );
 	}
+
+	/**
+	 * The settings serialization carries everything the per-field UI renders,
+	 * for every version, and nothing internal (no class references).
+	 */
+	public function test_definitions_for_settings_shape() {
+		$rows  = Field_Registry::get_definitions_for_settings();
+		$by_id = array_column( $rows, null, 'id' );
+
+		$this->assertArrayHasKey( 'v1:account', $by_id );
+		$this->assertArrayHasKey( 'v2:Registration_Strategy', $by_id );
+
+		$row = $by_id['v2:Registration_Strategy'];
+		$this->assertSame( 'Registration Strategy', $row['name'] );
+		$this->assertSame( 'v2', $row['version'] );
+		$this->assertSame( 'Registration_Strategy', $row['raw_key'] );
+		$this->assertSame( 'tag', $row['sync_type'] );
+		$this->assertSame( 'new', $row['status'] );
+		$this->assertSame( 'v1:registration_method', $row['supersedes'] );
+		$this->assertNotEmpty( $row['description'] );
+		$this->assertNotEmpty( $row['example'] );
+		$this->assertFalse( $row['in_conflict_group'] );
+		$this->assertIsBool( $row['available'] );
+		$this->assertIsBool( $row['dynamic_suffix'] );
+		$this->assertIsArray( $row['superseded_by'] );
+		$this->assertArrayNotHasKey( 'class', $row );
+
+		// Conflict membership: Last Payment Amount exists in both schemas.
+		$this->assertTrue( $by_id['v1:last_payment_amount']['in_conflict_group'] );
+		$this->assertTrue( $by_id['v2:Last_Payment_Amount']['in_conflict_group'] );
+
+		// Superseded side of a rename carries the reverse link.
+		$this->assertContains( 'v2:Registration_Strategy', $by_id['v1:registration_method']['superseded_by'] );
+
+		// Fields with no declared status/sync_type serialize with safe defaults.
+		foreach ( $rows as $r ) {
+			$this->assertContains( $r['status'], [ 'new', 'updated', 'existing' ] );
+			$this->assertIsString( $r['sync_type'] );
+			$this->assertIsString( $r['section'] );
+		}
+	}
 }
