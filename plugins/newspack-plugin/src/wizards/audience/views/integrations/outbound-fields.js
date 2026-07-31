@@ -2,6 +2,14 @@
  * WordPress dependencies
  */
 import { __, sprintf } from '@wordpress/i18n';
+import { Button, CheckboxControl } from '@wordpress/components';
+import { useMemo, useState } from '@wordpress/element';
+
+/**
+ * Internal dependencies
+ */
+import { Accordion, AccordionPanel, Badge, Grid } from '../../../../../packages/components/src';
+import FieldDetailsModal from './field-details-modal';
 
 const VERSIONS = [ 'v1', 'v2', 'neutral' ];
 
@@ -141,18 +149,6 @@ export const badgesForRow = ( row, origin ) => {
 	}
 	return badges;
 };
-
-/**
- * WordPress dependencies
- */
-import { Button, CheckboxControl } from '@wordpress/components';
-import { useMemo, useState } from '@wordpress/element';
-
-/**
- * Internal dependencies
- */
-import { Accordion, AccordionPanel, Badge, Grid } from '../../../../../packages/components/src';
-import FieldDetailsModal from './field-details-modal';
 
 /**
  * The per-field Outbound selection list: merged v1/v2 rows with inline
