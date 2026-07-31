@@ -17,17 +17,19 @@ type AccessRuleOption = {
 	value: string | number;
 	label: string;
 };
+// Single source of truth for the composite value shape lives with the control.
+type EditorOneTimePurchaseRuleValue = import( '../components/one-time-purchase-rule-control' ).OneTimePurchaseValue;
 type AccessRuleConfig = {
 	name: string;
 	description: string;
-	default: string | Array< string | number >;
+	default: string | Array< string | number > | EditorOneTimePurchaseRuleValue;
 	is_boolean?: boolean;
 	placeholder?: string;
 	options?: AccessRuleOption[];
 };
 type ActiveRule = {
 	slug: string;
-	value: string | Array< string | number > | null;
+	value: string | Array< string | number > | EditorOneTimePurchaseRuleValue | null;
 };
 type RegistrationRule = {
 	active: boolean;
