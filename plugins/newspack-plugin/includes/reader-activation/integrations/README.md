@@ -292,6 +292,10 @@ Failed pushes are scheduled for retry by the upstream `Contact_Sync` class with 
 
 Integrations that override `pull_contact_data( $user_id )` can fetch external state back into Newspack. The returned associative array is intersected with the enabled incoming fields and persisted via `Reader_Data::update_item()` for each key.
 
+When the provider has no contact for the reader at all, return a `WP_Error` with the code `Integration::CONTACT_NOT_FOUND_ERROR_CODE` (`ras_contact_not_found`) — it lets batch drivers count the reader as skipped rather than failed, since no re-run can make an absent contact appear. The built-in ESP integration normalizes its providers' not-found errors onto this code.
+
+**Pulled values are additive.** A pull writes the enabled incoming fields present in the payload and never deletes reader data: a field cleared (or emptied) at the provider is simply absent from the next payload, so the previously stored value remains — including for access rules and segmentation criteria built on promoted fields. Revoking something by clearing a provider field therefore has no local effect; remove the reader's stored item instead, or gate on a field whose value changes rather than disappears.
+
 ### When pulls are triggered
 
 The pull pipeline (`Contact_Pull` + `Contact_Cron`) runs on every logged-in pageview, throttled per user:
@@ -366,6 +370,10 @@ wp newspack integrations backfill --direction=both --integration=esp --batch-siz
 - Pull failures are **not** retried via ActionScheduler (a bulk run against a
   flaky API would flood the queue): errors are tallied and logged, and the
   affected `--offset` window can be re-run. Push retry semantics are unchanged.
+- Readers the provider has no contact for (`ras_contact_not_found`) are tallied
+  as skipped, not as errors: a pull cannot create the missing contact, so
+  re-running could never clear them and a partially-synced site would never
+  exit 0.
 - A run that tallies any error prints its summary as a warning and **exits 1**,
   so unattended runbooks can detect partial failure from the exit status. A
   clean run exits 0.

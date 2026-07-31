@@ -204,6 +204,15 @@ if ( ! class_exists( 'Newspack_Newsletters_Service_Provider' ) ) {
 	class Newspack_Newsletters_Service_Provider {
 		public $service = 'mailchimp';
 
+		/**
+		 * Emails passed to clear_contact_data(), in call order. Static because
+		 * Newspack_Newsletters::get_service_provider() returns a fresh instance
+		 * per call; reset directly in tests that assert on it.
+		 *
+		 * @var string[]
+		 */
+		public static $cleared_emails = [];
+
 		public static function get_lists() {
 			return [
 				[
@@ -212,6 +221,10 @@ if ( ! class_exists( 'Newspack_Newsletters_Service_Provider' ) ) {
 					'id'     => '123',
 				],
 			];
+		}
+
+		public function clear_contact_data( $email ) {
+			self::$cleared_emails[] = $email;
 		}
 	}
 }

@@ -353,6 +353,11 @@ class Contact_Pull {
 				);
 			}
 
+			// Additive by design: only keys present in the payload are written, and
+			// nothing deletes a stored key the provider stopped reporting — a field
+			// cleared upstream (or filtered out as empty) leaves the previously
+			// stored value in place, and consumers reading stored values (access
+			// rules, segmentation) keep matching it. See the README's Pull section.
 			$write_errors = [];
 			foreach ( $data as $key => $value ) {
 				$encoded = wp_json_encode( $value );

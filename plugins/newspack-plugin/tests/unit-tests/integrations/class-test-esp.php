@@ -7,6 +7,7 @@
 
 namespace Newspack\Tests\Unit\Integrations;
 
+use Newspack\Reader_Activation\Integration;
 use Newspack\Reader_Activation\Integrations\ESP;
 use Newspack\Reader_Activation\Integrations\Incoming_Field;
 
@@ -718,5 +719,37 @@ class Test_ESP extends \WP_UnitTestCase {
 	 */
 	public function test_pull_returns_empty_array_without_any_metadata() {
 		$this->assertSame( [], $this->pull_with_contact_data( [ 'lists' => [] ] ) );
+	}
+
+	/**
+	 * Providers name "no such contact" differently (Mailchimp has a dedicated
+	 * error code, ActiveCampaign a generic one). Callers get one canonical code
+	 * so batch drivers can tell "the provider does not know this reader" from a
+	 * failure without provider knowledge.
+	 */
+	public function test_pull_normalizes_provider_not_found_to_the_canonical_code() {
+		\Newspack_Newsletters::$is_service_provider_configured = true;
+		$user_id = self::factory()->user->create( [ 'user_email' => 'ghost@example.com' ] );
+		// No staged contact data: the subscription mock reports the contact as not found.
+
+		$result = $this->make_esp_with_master_list( 'list-123' )->pull_contact_data( $user_id );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( Integration::CONTACT_NOT_FOUND_ERROR_CODE, $result->get_error_code() );
+	}
+
+	/**
+	 * Bulk pulls read each contact once. A provider that memoizes contact
+	 * payloads per email must have the entry released after the read, or a
+	 * full-site pull grows by one payload per reader for the life of the
+	 * process — the batch loops' object-cache flush cannot free it.
+	 */
+	public function test_pull_releases_the_provider_contact_cache_entry() {
+		\Newspack_Newsletters_Service_Provider::$cleared_emails = [];
+
+		$result = $this->pull_with_contact_data( [ 'metadata' => [ 'CRM_SCORE' => '11' ] ] );
+
+		$this->assertSame( [ 'CRM_SCORE' => '11' ], $result, 'Sanity: the pull read the staged payload.' );
+		$this->assertSame( [ 'reader@example.com' ], \Newspack_Newsletters_Service_Provider::$cleared_emails, 'The provider cache entry for the pulled contact was released.' );
 	}
 }

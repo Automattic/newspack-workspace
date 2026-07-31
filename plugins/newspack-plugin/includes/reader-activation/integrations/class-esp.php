@@ -490,7 +490,27 @@ class ESP extends Integration {
 
 		$contact_data = Newspack_Newsletters_Subscription::get_contact_data( $user->user_email, true );
 
+		// The provider may memoize each contact's raw API payload for the life of
+		// the request (ActiveCampaign does); a bulk pull reads each contact once,
+		// so release the entry as soon as it is consumed — the batch loops'
+		// object-cache flush cannot reach provider-internal caches.
+		$provider = \Newspack_Newsletters::get_service_provider();
+		if ( $provider && method_exists( $provider, 'clear_contact_data' ) ) {
+			$provider->clear_contact_data( $user->user_email );
+		}
+
 		if ( is_wp_error( $contact_data ) ) {
+			// Providers name "no such contact" differently (Mailchimp has a
+			// dedicated code, ActiveCampaign a generic one); normalize to the
+			// framework's canonical code so batch drivers can classify the
+			// reader as skipped without provider knowledge.
+			$not_found_codes = [
+				'newspack_newsletters_mailchimp_contact_not_found',
+				'newspack_newsletters_contact_not_found',
+			];
+			if ( in_array( $contact_data->get_error_code(), $not_found_codes, true ) ) {
+				return new \WP_Error( self::CONTACT_NOT_FOUND_ERROR_CODE, $contact_data->get_error_message() );
+			}
 			return $contact_data;
 		}
 
