@@ -96,11 +96,12 @@ class Audience_Content_Gates extends Wizard {
 			'newspackAudienceContentGates',
 			[
 				'api'                     => '/' . NEWSPACK_API_NAMESPACE . '/wizard/' . $this->slug,
-				'available_access_rules'  => Access_Rules::get_access_rules(),
+				'available_access_rules'  => Access_Rules::get_access_rules_for_client(),
 				'available_content_rules' => Content_Rules::get_content_rules(),
 				'edit_gate_layout_url'    => Content_Gate::get_edit_gate_layout_url(),
 				'presave_checks_enabled'  => Content_Gate::get_presave_checks_enabled(),
 				'default_gate_status'     => Content_Gate::get_default_new_gate_status(),
+				'feed_restriction_modes'  => Content_Gate_Advanced_Settings::get_feed_restriction_mode_options(),
 			]
 		);
 
@@ -175,11 +176,24 @@ class Audience_Content_Gates extends Wizard {
 				'permission_callback' => [ $this, 'api_permissions_check' ],
 				'args'                => [
 					'advanced_settings' => [
-						'type'       => 'object',
-						'properties' => [
-							'restrict_feeds' => [ 'type' => 'boolean' ],
+						'type'                 => 'object',
+						'required'             => true,
+						// Unknown keys are ignored by the update handler anyway;
+						// rejecting them makes that contract explicit.
+						'additionalProperties' => false,
+						'properties'           => [
+							'restrict_feeds'        => [ 'type' => 'boolean' ],
+							'feed_restriction_mode' => [
+								'type' => 'string',
+								'enum' => Content_Gate_Advanced_Settings::get_feed_restriction_modes(),
+							],
 							'newsletter_link_bypass_enabled' => [ 'type' => 'boolean' ],
 						],
+						// Validate the whole object against the schema so the nested
+						// feed_restriction_mode enum is actually enforced (a bad value
+						// returns a 400 instead of being silently coerced to exclude).
+						'validate_callback'    => 'rest_validate_request_arg',
+						'sanitize_callback'    => 'rest_sanitize_request_arg',
 					],
 				],
 			]
@@ -388,13 +402,7 @@ class Audience_Content_Gates extends Wizard {
 	 * @return \WP_REST_Response
 	 */
 	public function get_config() {
-		$advanced = Content_Gate_Advanced_Settings::get_settings();
-		// Cast to bool at the REST boundary so the TS type (boolean) is satisfied.
-		// Internal storage remains as 0/1 integers — only the REST response payload is cast.
-		$advanced_settings_response = [
-			'restrict_feeds'                 => (bool) ( $advanced['restrict_feeds'] ?? false ),
-			'newsletter_link_bypass_enabled' => (bool) ( $advanced['newsletter_link_bypass_enabled'] ?? false ),
-		];
+		$advanced_settings_response = $this->prepare_advanced_settings_response( Content_Gate_Advanced_Settings::get_settings() );
 		$config = [
 			'gates'  => Content_Gate::get_gates(),
 			'config' => [
@@ -418,7 +426,30 @@ class Audience_Content_Gates extends Wizard {
 	public function update_settings( $request ) {
 		$settings = $request->get_param( 'advanced_settings' );
 		$updated = Content_Gate_Advanced_Settings::update_settings( $settings );
-		return rest_ensure_response( $updated );
+		// Shaped exactly like the GET response: the wizard writes this payload
+		// into the same store slot it read the config from and compares the two
+		// with JSON.stringify, so an int here where the GET returned a bool would
+		// leave the Save button enabled after a successful save.
+		return rest_ensure_response( $this->prepare_advanced_settings_response( $updated ) );
+	}
+
+	/**
+	 * Shape the advanced settings for a REST response.
+	 *
+	 * The boolean flags are stored as 0/1 integers; the TS types (and the
+	 * wizard's dirty-state comparison) expect booleans. feed_restriction_mode is
+	 * stored and returned as a string.
+	 *
+	 * @param array $advanced Stored advanced settings.
+	 *
+	 * @return array
+	 */
+	private function prepare_advanced_settings_response( $advanced ) {
+		return [
+			'restrict_feeds'                 => (bool) ( $advanced['restrict_feeds'] ?? false ),
+			'feed_restriction_mode'          => (string) ( $advanced['feed_restriction_mode'] ?? Content_Gate_Advanced_Settings::FEED_MODE_EXCLUDE ),
+			'newsletter_link_bypass_enabled' => (bool) ( $advanced['newsletter_link_bypass_enabled'] ?? false ),
+		];
 	}
 
 	/**

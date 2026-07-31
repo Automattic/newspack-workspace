@@ -178,7 +178,7 @@ class Newspack_Test_Content_Gate_Metadata extends WP_UnitTestCase {
 	 * @return int Institution post ID.
 	 */
 	private function create_institution( $title, $rules ) {
-		$id = Institution::create( $title, '', $rules );
+		$id                      = Institution::create( $title, '', $rules );
 		$this->institution_ids[] = $id;
 		Institution::invalidate_cache();
 		return $id;
@@ -189,10 +189,11 @@ class Newspack_Test_Content_Gate_Metadata extends WP_UnitTestCase {
 	 *
 	 * @param string $title        Gate title.
 	 * @param array  $access_rules Access rules array.
+	 * @param array  $extra        Additional custom_access settings (e.g. payment_recovery_grace).
 	 *
 	 * @return int Gate post ID.
 	 */
-	private function create_gate_with_rules( $title, $access_rules ) {
+	private function create_gate_with_rules( $title, $access_rules, $extra = [] ) {
 		$gate_id = $this->factory->post->create(
 			[
 				'post_type'   => Content_Gate::GATE_CPT,
@@ -203,10 +204,13 @@ class Newspack_Test_Content_Gate_Metadata extends WP_UnitTestCase {
 		update_post_meta(
 			$gate_id,
 			'custom_access',
-			[
-				'active'       => true,
-				'access_rules' => $access_rules,
-			]
+			array_merge(
+				[
+					'active'       => true,
+					'access_rules' => $access_rules,
+				],
+				$extra
+			)
 		);
 		return $gate_id;
 	}
@@ -943,5 +947,69 @@ class Newspack_Test_Content_Gate_Metadata extends WP_UnitTestCase {
 
 		$this->assertEquals( 'No', $result['Content_Access'] );
 		$this->assertEmpty( $result['Content_Access_Group'], 'Denied access should yield an empty group label.' );
+	}
+
+	/**
+	 * The source labels are produced by re-running the subscription rule callback
+	 * to work out *which* product granted access. That re-run has to happen under
+	 * the gate's own evaluation context: called bare it falls back to the
+	 * callback's grace-ON default, and a gate with payment-recovery grace turned
+	 * off would still report an in-recovery subscription as a source — sending
+	 * publishers a paid-segment label their gate deliberately denies.
+	 *
+	 * The reader here holds one active and one in-recovery subscription, so the
+	 * gate grants access either way and only the attribution can differ.
+	 */
+	public function test_source_labels_respect_gate_payment_recovery_grace() {
+		$active_product_id      = $this->create_mock_product( 610, 'Active Plan' );
+		$in_recovery_product_id = $this->create_mock_product( 611, 'In Recovery Plan' );
+
+		$this->create_subscription( self::$user_id, [ $active_product_id ] );
+		$this->create_subscription(
+			self::$user_id,
+			[ $in_recovery_product_id ],
+			[
+				'status' => 'on-hold',
+				'times'  => [ 'payment_retry' => time() + HOUR_IN_SECONDS ],
+			]
+		);
+
+		$rules = [
+			[
+				[
+					'slug'  => 'subscription',
+					'value' => [ $active_product_id, $in_recovery_product_id ],
+				],
+			],
+		];
+
+		$grace_off_gate_id = $this->create_gate_with_rules( 'Grace Off Gate', $rules, [ 'payment_recovery_grace' => false ] );
+
+		$grace_off_result = $this->get_metadata_for_user( self::$user_id );
+		$this->assertEquals( 'Yes', $grace_off_result['Content_Access'], 'The active subscription grants access regardless of the grace setting.' );
+		$this->assertEquals(
+			'Active Plan',
+			$grace_off_result['Content_Access_Source'],
+			'Grace off: the in-recovery subscription must not be reported as a source.'
+		);
+
+		// Flip only the stored setting; the same reader must now be attributed to both.
+		update_post_meta(
+			$grace_off_gate_id,
+			'custom_access',
+			[
+				'active'                 => true,
+				'access_rules'           => $rules,
+				'payment_recovery_grace' => true,
+			]
+		);
+		Content_Gate_Metadata::reset_cache();
+
+		$grace_on_result = $this->get_metadata_for_user( self::$user_id );
+		$this->assertEquals(
+			'Active Plan, In Recovery Plan',
+			$grace_on_result['Content_Access_Source'],
+			'Grace on: both the active and the in-recovery subscription are sources.'
+		);
 	}
 }

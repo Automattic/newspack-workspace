@@ -2,9 +2,11 @@
  * Tests for the Subscribers wizard formatting helpers.
  *
  * These pin the non-obvious formatting decisions: that a billing rate collapses
- * cleanly when data is missing, and — most importantly — that the schedule row
- * is driven by the dates, not the status, so a subscription WooCommerce is
- * winding down still tells the admin when it ends.
+ * cleanly when data is missing, that every date the wizard shows — absolute and
+ * relative alike — is read on the site's calendar rather than the viewer's, and
+ * — most importantly — that the schedule row is driven by the dates, not the
+ * status, so a subscription WooCommerce is winding down still tells the admin
+ * when it ends.
  */
 
 /**
@@ -15,7 +17,32 @@ import { getSettings, setSettings } from '@wordpress/date';
 /**
  * Internal dependencies
  */
-import { fmtCurrency, billingText, orDash, scheduleRow } from './format';
+import { fmtCurrency, fmtRelative, billingText, orDash, scheduleRow } from './format';
+
+// Two sites whose calendar day disagrees with UTC's, in opposite directions: one
+// where UTC has rolled into the next day and the site has not, and one where the
+// site has rolled over and UTC has not. Asserting on both is what makes a
+// timezone test bite — a regression to UTC or to browser-local "today" moves the
+// answer in one direction or the other, so neither can pass both.
+const SITE_BEHIND_UTC = { offset: -10, string: 'Pacific/Honolulu', abbr: 'HST' };
+const SITE_AHEAD_OF_UTC = { offset: 14, string: 'Pacific/Kiritimati', abbr: '+14' };
+
+// Captured before any test mutates it, so restoring is restoring, not re-reading
+// a fixture.
+const REAL_DATE_SETTINGS = getSettings();
+
+const pinSite = ( timezone, nowUtc ) => {
+	setSettings( { ...REAL_DATE_SETTINGS, timezone } );
+	jest.useFakeTimers().setSystemTime( new Date( nowUtc ) );
+};
+
+// Used from afterEach rather than at the end of each test, so that a failing
+// expect cannot leak the fixture timezone or the fake clock into the rest of the
+// suite — which runs whole, and would then fail somewhere unrelated.
+const unpinSite = () => {
+	jest.useRealTimers();
+	setSettings( REAL_DATE_SETTINGS );
+};
 
 describe( 'fmtCurrency', () => {
 	it( 'formats an amount with its currency', () => {
@@ -65,6 +92,39 @@ describe( 'orDash', () => {
 	} );
 } );
 
+// The relative line sits directly under the absolute date in the "Member since"
+// and "Last seen" cells, so it has to describe the same civil day that line
+// shows. It gets there differently from fmtDate — humanTimeDiff reads a bare date
+// as midnight in the SITE's zone and measures from now, where fmtDate anchors at
+// UTC in order to print the stored day verbatim — but both land on the site's
+// calendar, which is the property worth pinning.
+describe( 'fmtRelative', () => {
+	afterEach( unpinSite );
+
+	it( 'reads a site ahead of UTC, where the site day has already rolled over', () => {
+		pinSite( SITE_AHEAD_OF_UTC, '2026-01-01T12:00:00Z' ); // 2026-01-02 02:00 in Kiritimati.
+
+		// Two hours into the site's today. Anchoring the bare date at UTC midnight
+		// instead would put it twelve hours in the *future* and render the member's
+		// join date as "in 12 hours".
+		expect( fmtRelative( '2026-01-02' ) ).toBe( '2 hours ago' );
+	} );
+
+	it( 'reads a site behind UTC, where the site day has not yet rolled over', () => {
+		pinSite( SITE_BEHIND_UTC, '2026-01-02T05:00:00Z' ); // 2026-01-01 19:00 in Honolulu.
+
+		// Still the site's today; a UTC anchor would put it 29 hours back and age it
+		// to "a day ago".
+		expect( fmtRelative( '2026-01-01' ) ).toBe( '19 hours ago' );
+	} );
+
+	it( 'renders nothing for a missing date', () => {
+		expect( fmtRelative( '' ) ).toBe( '' );
+		expect( fmtRelative( null ) ).toBe( '' );
+		expect( fmtRelative( undefined ) ).toBe( '' );
+	} );
+} );
+
 describe( 'scheduleRow', () => {
 	it( 'shows next billing when there is a next-billing date', () => {
 		const row = scheduleRow( { status: 'active', nextBillingDate: '2099-08-01', endDate: null } );
@@ -98,26 +158,12 @@ describe( 'scheduleRow', () => {
 	} );
 
 	// The endpoint derives endDate in the SITE's timezone, so "today" must be read
-	// on that same basis, whatever zone the admin's browser is in. Both directions
-	// are pinned, on instants where the site's calendar day and UTC's disagree: a
-	// site behind UTC (UTC has rolled over, the site has not) and one ahead of it
-	// (the site has rolled over, UTC has not). The pair is what makes the test
-	// bite — a regression to UTC or browser-local "today" flips the label in one
-	// direction or the other, so neither can pass both.
+	// on that same basis, whatever zone the admin's browser is in.
 	describe( "deciding Ends/Ended on the site's calendar day", () => {
-		const settings = getSettings();
-
-		// Restored here rather than after the assertions, so that a failing expect
-		// cannot leak the fixture timezone or the fake clock into the rest of the
-		// suite — which runs whole, and would then fail somewhere unrelated.
-		afterEach( () => {
-			jest.useRealTimers();
-			setSettings( settings );
-		} );
+		afterEach( unpinSite );
 
 		it( 'reads a site behind UTC, where the site day has not yet rolled over', () => {
-			setSettings( { ...settings, timezone: { offset: -10, string: 'Pacific/Honolulu', abbr: 'HST' } } );
-			jest.useFakeTimers().setSystemTime( new Date( '2026-01-02T05:00:00Z' ) ); // 2026-01-01 19:00 in Honolulu.
+			pinSite( SITE_BEHIND_UTC, '2026-01-02T05:00:00Z' ); // 2026-01-01 19:00 in Honolulu.
 
 			// The plan ends *today* for the publisher, so it still reads "Ends".
 			expect( scheduleRow( { nextBillingDate: null, endDate: '2026-01-01' } ).label ).toBe( 'Ends' );
@@ -125,8 +171,7 @@ describe( 'scheduleRow', () => {
 		} );
 
 		it( 'reads a site ahead of UTC, where the site day has already rolled over', () => {
-			setSettings( { ...settings, timezone: { offset: 14, string: 'Pacific/Kiritimati', abbr: '+14' } } );
-			jest.useFakeTimers().setSystemTime( new Date( '2026-01-01T12:00:00Z' ) ); // 2026-01-02 02:00 in Kiritimati.
+			pinSite( SITE_AHEAD_OF_UTC, '2026-01-01T12:00:00Z' ); // 2026-01-02 02:00 in Kiritimati.
 
 			expect( scheduleRow( { nextBillingDate: null, endDate: '2026-01-02' } ).label ).toBe( 'Ends' );
 			// Yesterday on the site, even though it is still today in UTC.
