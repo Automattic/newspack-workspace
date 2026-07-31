@@ -27,3 +27,43 @@
 		width: 200px;
 	}
 }
+
+.newspack-outbound-field-row {
+	align-items: flex-start;
+	display: flex;
+	gap: 8px;
+
+	.newspack-checkbox-control {
+		flex: 1;
+	}
+
+	&__badges {
+		display: inline-flex;
+		gap: 4px;
+		padding-top: 2px;
+	}
+
+	&__details {
+		opacity: 0;
+		transition: opacity 0.15s ease-in-out;
+	}
+
+	&:hover &__details,
+	&:focus-within &__details {
+		opacity: 1;
+	}
+}
+
+.newspack-field-version-card {
+	border: 1px solid var( --wp-admin-border-color, #ddd );
+	border-radius: 4px;
+	padding: 12px;
+
+	&.is-active {
+		border-color: var( --wp-admin-theme-color, #36f );
+	}
+
+	&__example {
+		font-family: monospace;
+	}
+}

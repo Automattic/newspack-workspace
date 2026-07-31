@@ -1,4 +1,5 @@
-import { buildFieldRows, toggleRow, pickRowVersion, badgesForRow, visibleSections } from './outbound-fields';
+import { render, fireEvent, screen } from '@testing-library/react';
+import OutboundFields, { buildFieldRows, toggleRow, pickRowVersion, badgesForRow, visibleSections } from './outbound-fields';
 
 const def = ( id, name, extra = {} ) => {
 	const [ version, raw_key ] = id.split( ':' );
@@ -118,5 +119,22 @@ describe( 'visibleSections', () => {
 		const sections = visibleSections( buildFieldRows( [ ...DEFS, def( 'v1:extra', 'Extra', { section: '' } ) ], [], 'v1' ) );
 		expect( sections.map( s => s.section ) ).toContain( 'Additional' );
 		expect( sections.find( s => s.section === 'Test' ).rows.length ).toBeGreaterThan( 0 );
+	} );
+} );
+
+describe( 'OutboundFields', () => {
+	const field = { key: 'outgoing_metadata_fields', definitions: DEFS, value_ids: [], schema_origin: 'v1' };
+
+	it( 'renders sections with checkboxes and posts ids on toggle', () => {
+		const onChange = jest.fn();
+		render( <OutboundFields field={ field } value={ [] } onChange={ onChange } /> );
+		fireEvent.click( screen.getByRole( 'checkbox', { name: /^Account/ } ) );
+		expect( onChange ).toHaveBeenCalledWith( [ 'v1:account' ] );
+	} );
+
+	it( 'opens the details modal from the row cog', () => {
+		render( <OutboundFields field={ field } value={ [ 'v1:account' ] } onChange={ () => {} } /> );
+		fireEvent.click( screen.getAllByRole( 'button', { name: /field details/i } )[ 0 ] );
+		expect( screen.getByRole( 'dialog' ) ).toBeInTheDocument();
 	} );
 } );

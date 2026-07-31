@@ -1,7 +1,7 @@
 /**
  * WordPress dependencies
  */
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 
 const VERSIONS = [ 'v1', 'v2', 'neutral' ];
 
@@ -141,3 +141,93 @@ export const badgesForRow = ( row, origin ) => {
 	}
 	return badges;
 };
+
+/**
+ * WordPress dependencies
+ */
+import { Button, CheckboxControl } from '@wordpress/components';
+import { useMemo, useState } from '@wordpress/element';
+
+/**
+ * Internal dependencies
+ */
+import { Accordion, AccordionPanel, Badge, Grid } from '../../../../../packages/components/src';
+import FieldDetailsModal from './field-details-modal';
+
+/**
+ * The per-field Outbound selection list: merged v1/v2 rows with inline
+ * description, badges and a details cog; posts ids via onChange.
+ *
+ * @param {Object}   props          Component props.
+ * @param {Object}   props.field    The outgoing_metadata_fields settings payload entry.
+ * @param {string[]} props.value    Current enabled ids (draft or saved).
+ * @param {Function} props.onChange Receives the next ids array.
+ */
+const OutboundFields = ( { field, value, onChange } ) => {
+	const [ detailsRowKey, setDetailsRowKey ] = useState( null );
+	const enabledIds = Array.isArray( value ) ? value : field.value_ids || [];
+	const rows = useMemo(
+		() => buildFieldRows( field.definitions, enabledIds, field.schema_origin ),
+		[ field.definitions, enabledIds, field.schema_origin ]
+	);
+	const sections = useMemo( () => visibleSections( rows ), [ rows ] );
+	const detailsRow = rows.find( r => r.key === detailsRowKey );
+	return (
+		<>
+			<Accordion hideSingleTitle>
+				{ sections.map( ( { section, rows: sectionRows }, index ) => (
+					<AccordionPanel key={ section } title={ section } defaultOpen={ index === 0 }>
+						<Grid columns={ 1 } rowGap={ 8 } noMargin>
+							{ sectionRows.map( row => (
+								<div className="newspack-outbound-field-row" key={ row.key }>
+									<CheckboxControl
+										className="newspack-checkbox-control"
+										label={ row.name }
+										help={
+											[
+												row.activeDefinition.description,
+												row.supersededHint &&
+													sprintf(
+														/* translators: %s: name of the replacing field. */
+														__( 'Superseded by %s.', 'newspack-plugin' ),
+														row.supersededHint
+													),
+											]
+												.filter( Boolean )
+												.join( ' — ' ) || undefined
+										}
+										checked={ row.checked }
+										onChange={ checked => onChange( toggleRow( enabledIds, row, checked ) ) }
+									/>
+									<span className="newspack-outbound-field-row__badges">
+										{ badgesForRow( row, field.schema_origin ).map( badge => (
+											<Badge key={ badge.text } text={ badge.text } level={ badge.level } />
+										) ) }
+									</span>
+									<Button
+										className="newspack-outbound-field-row__details"
+										icon="admin-generic"
+										label={ __( 'Field details', 'newspack-plugin' ) }
+										onClick={ () => setDetailsRowKey( row.key ) }
+									/>
+								</div>
+							) ) }
+						</Grid>
+					</AccordionPanel>
+				) ) }
+			</Accordion>
+			{ detailsRow && (
+				<FieldDetailsModal
+					row={ detailsRow }
+					onPickVersion={ version => {
+						onChange( pickRowVersion( enabledIds, detailsRow, version ) );
+						setDetailsRowKey( null );
+					} }
+					onClose={ () => setDetailsRowKey( null ) }
+				/>
+			) }
+		</>
+	);
+};
+
+export default OutboundFields;
