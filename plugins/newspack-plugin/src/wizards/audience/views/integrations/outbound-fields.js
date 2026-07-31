@@ -1,7 +1,7 @@
 /**
  * WordPress dependencies
  */
-import { __, sprintf } from '@wordpress/i18n';
+import { __ } from '@wordpress/i18n';
 
 const VERSIONS = [ 'v1', 'v2', 'neutral' ];
 
@@ -34,7 +34,14 @@ export const buildFieldRows = ( definitions, enabledIds, origin ) => {
 		const present = VERSIONS.filter( v => candidates[ v ].length );
 		const conflict = candidates.v1.length > 0 && candidates.v2.length > 0;
 		const enabledVersion = VERSIONS.find( v => candidates[ v ].some( d => enabled.has( d.id ) ) );
-		const activeVersion = enabledVersion || ( conflict ? origin : present[ 0 ] );
+		const hasAvailable = v => candidates[ v ].some( d => d.available );
+		let activeVersion = enabledVersion || ( conflict ? origin : present[ 0 ] );
+		if ( ! enabledVersion && conflict && ! hasAvailable( activeVersion ) ) {
+			const alternate = 'v1' === activeVersion ? 'v2' : 'v1';
+			if ( hasAvailable( alternate ) ) {
+				activeVersion = alternate;
+			}
+		}
 		const active = candidates[ activeVersion ];
 		if ( ! active.length || active.every( d => ! d.available ) ) {
 			return;

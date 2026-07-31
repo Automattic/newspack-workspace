@@ -59,6 +59,24 @@ describe( 'buildFieldRows', () => {
 		const rows = buildFieldRows( DEFS, [], 'v1' );
 		expect( rows.find( r => r.name === 'Registration Method' ).supersededHint ).toBe( 'Registration Strategy' );
 	} );
+
+	it( 'falls back to the other version when the origin side of a conflict is unavailable', () => {
+		const defs = [
+			def( 'v1:last_payment', 'Last Payment', { in_conflict_group: true, available: false } ),
+			def( 'v2:Last_Payment', 'Last Payment', { in_conflict_group: true } ),
+		];
+		const row = buildFieldRows( defs, [], 'v1' ).find( r => r.name === 'Last Payment' );
+		expect( row ).toBeDefined();
+		expect( row.activeVersion ).toBe( 'v2' );
+	} );
+
+	it( 'hides a conflict row only when both versions are unavailable', () => {
+		const defs = [
+			def( 'v1:last_payment', 'Last Payment', { in_conflict_group: true, available: false } ),
+			def( 'v2:Last_Payment', 'Last Payment', { in_conflict_group: true, available: false } ),
+		];
+		expect( buildFieldRows( defs, [], 'v1' ).find( r => r.name === 'Last Payment' ) ).toBeUndefined();
+	} );
 } );
 
 describe( 'toggleRow / pickRowVersion', () => {
