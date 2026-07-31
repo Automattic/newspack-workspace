@@ -69,9 +69,11 @@ class Test_Bootstrap_Flag_Gate extends WP_UnitTestCase {
 				'post_status' => 'publish',
 			]
 		);
-		// remove_visibility_hidden_block() reads the CPT from the global post.
+		// remove_visibility_hidden_block() reads the CPT from the global post. Save
+		// and restore it so the override doesn't leak into later tests.
 		global $post;
-		$post = get_post( $post_id );
+		$previous_post = $post;
+		$post          = get_post( $post_id ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
 
 		$email_block = [ 'attrs' => [ 'newsletterVisibility' => 'email' ] ];
 		$web_block   = [ 'attrs' => [ 'newsletterVisibility' => 'web' ] ];
@@ -93,7 +95,7 @@ class Test_Bootstrap_Flag_Gate extends WP_UnitTestCase {
 			'Unmarked blocks must render on the web front end.'
 		);
 
-		$post = null;
+		$post = $previous_post; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
 	}
 
 	/**
