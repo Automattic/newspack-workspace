@@ -1333,6 +1333,19 @@ class Contact_Sync extends Sync {
 	}
 
 	/**
+	 * Whether WooCommerce customer data is available for building contact data.
+	 *
+	 * Wraps the class_exists() check so tests can simulate a site without
+	 * WooCommerce — the suite's WC mocks are loaded process-wide, which makes
+	 * the WooCommerce-less path below unreachable through class_exists() alone.
+	 *
+	 * @return bool
+	 */
+	protected static function is_woocommerce_available() {
+		return class_exists( '\WC_Customer' );
+	}
+
+	/**
 	 * Get contact data for syncing.
 	 *
 	 * @param int           $user_id The user ID.
@@ -1349,11 +1362,18 @@ class Contact_Sync extends Sync {
 
 		$contact = [
 			'email'    => $user->user_email,
-			'name'     => $user->display_name,
 			'metadata' => [],
 		];
 
-		if ( ! class_exists( '\WC_Customer' ) ) {
+		// A display name auto-generated from the email address (e.g. "jdoe" for
+		// jdoe@example.com) is not a real name — omit it so it can't reach the
+		// ESP as the contact name. Omitted rather than '': some ESP providers
+		// write empty first/last name fields whenever the name key is present.
+		if ( ! Reader_Activation::reader_has_generic_display_name( $user_id ) ) {
+			$contact['name'] = $user->display_name;
+		}
+
+		if ( ! static::is_woocommerce_available() ) {
 			return $contact;
 		}
 		$customer = new \WC_Customer( $user_id );
