@@ -13,6 +13,14 @@ class WP_REST_Newspack_Authors_Controller extends WP_REST_Controller {
 // phpcs:enable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedClassFound
 
 	/**
+	 * Fields carrying contact details that WordPress reserves for people who manage users.
+	 *
+	 * These endpoints are open to anyone who can edit posts, which is a much wider audience
+	 * than core allows to read an address.
+	 */
+	const USER_MANAGEMENT_FIELDS = [ 'email' ];
+
+	/**
 	 * Constructs the controller.
 	 *
 	 * @access public
@@ -20,6 +28,36 @@ class WP_REST_Newspack_Authors_Controller extends WP_REST_Controller {
 	public function __construct() {
 		$this->namespace = 'newspack-blocks/v1';
 		$this->rest_base = 'authors';
+	}
+
+	/**
+	 * Whether the current user may read author contact details.
+	 *
+	 * Matches the capabilities core requires before exposing a user's address.
+	 *
+	 * @return boolean
+	 */
+	public static function can_read_user_management_fields() {
+		return current_user_can( 'list_users' ) || current_user_can( 'edit_users' );
+	}
+
+	/**
+	 * Drop any requested fields the current user is not allowed to read.
+	 *
+	 * Applied per request rather than inside the formatting helpers, which also render the
+	 * front-end author blocks for visitors and must keep returning whatever a publisher has
+	 * chosen to publish there.
+	 *
+	 * @param array $fields Requested fields.
+	 *
+	 * @return array Fields the current user may receive.
+	 */
+	public static function restrict_fields( $fields ) {
+		if ( ! is_array( $fields ) || self::can_read_user_management_fields() ) {
+			return $fields;
+		}
+
+		return array_values( array_diff( $fields, self::USER_MANAGEMENT_FIELDS ) );
 	}
 
 	/**
@@ -84,6 +122,7 @@ class WP_REST_Newspack_Authors_Controller extends WP_REST_Controller {
 		$per_page            = ! empty( $request->get_param( 'perPage' ) ) ? $request->get_param( 'perPage' ) : 10; // Number of results to return per page. This is applied to each query, so the actual number of results returned may be up to 2x this number.
 		$avatar_hide_default = ! empty( $request->get_param( 'avatar_hide_default' ) ) ? true : false; // Hide the default avatar if the user has no custom avatar.
 		$fields              = ! empty( $request->get_param( 'fields' ) ) ? explode( ',', $request->get_param( 'fields' ) ) : [ 'id' ]; // Fields to get. Will return at least id.
+		$fields              = self::restrict_fields( $fields );
 		$include             = ! empty( $request->get_param( 'include' ) ) ? explode( ',', $request->get_param( 'include' ) ) : null; // Fetch authors by multiple IDs.
 		$post_id             = ! empty( $request->get_param( 'post_id' ) ) ? $request->get_param( 'post_id' ) : 0; // Fetch authors for a specific post (contextual mode).
 

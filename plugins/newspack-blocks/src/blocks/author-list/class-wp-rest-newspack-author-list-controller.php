@@ -161,7 +161,7 @@ class WP_REST_Newspack_Author_List_Controller extends WP_REST_Newspack_Authors_C
 			'per_page'            => 10,
 		];
 		$options         = wp_parse_args( $options, $default_options );
-		$fields          = $options['fields'];
+		$fields          = self::restrict_fields( $options['fields'] );
 		$current_page    = 1;
 
 		// Array to store all authors.
