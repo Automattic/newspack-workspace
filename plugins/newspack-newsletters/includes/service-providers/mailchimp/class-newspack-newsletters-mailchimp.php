@@ -2277,35 +2277,6 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 	}
 
 	/**
-	 * Drop merge fields the contact has no value for.
-	 *
-	 * Mailchimp returns every merge field defined on the audience, using an
-	 * empty string for ones the contact hasn't filled in. ActiveCampaign only
-	 * reports fields that carry a value, so filtering here keeps `metadata`
-	 * meaning the same thing on both providers — a caller storing it doesn't
-	 * end up persisting empty entries for one ESP and not the other.
-	 *
-	 * Only unset values are dropped. A falsy-but-real value — `0` from a number
-	 * field, `'0'` from a text field — is a value the contact has, and callers
-	 * such as reader data store it as one.
-	 *
-	 * @param array $merge_fields Raw merge fields keyed by merge tag.
-	 *
-	 * @return array Merge fields the contact has a value for.
-	 */
-	private static function filter_set_merge_fields( $merge_fields ) {
-		if ( ! is_array( $merge_fields ) ) {
-			return [];
-		}
-		return array_filter(
-			$merge_fields,
-			function ( $value ) {
-				return null !== $value && '' !== $value && [] !== $value;
-			}
-		);
-	}
-
-	/**
 	 * Get contact data by email.
 	 *
 	 * @param string $email          Email address.
@@ -2366,7 +2337,11 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 					// the per-audience map below exists.
 					$data['merge_fields'] = $contact['merge_fields'];
 
-					$merge_fields_by_list[ $contact['list_id'] ] = self::filter_set_merge_fields( $contact['merge_fields'] );
+					// Mailchimp reports every merge field defined on the audience, using
+					// an empty string for ones the contact hasn't filled in — filter
+					// those out so `metadata` keeps the shared meaning of "fields the
+					// contact has a value for".
+					$merge_fields_by_list[ $contact['list_id'] ] = self::filter_set_field_values( $contact['merge_fields'] );
 				}
 			}
 
@@ -2385,7 +2360,7 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 			// `merge_fields`, can only report one audience for a multi-audience
 			// contact.
 			if ( $return_details ) {
-				$data['metadata']         = self::filter_set_merge_fields( $data['merge_fields'] );
+				$data['metadata']         = self::filter_set_field_values( $data['merge_fields'] );
 				$data['metadata_by_list'] = $merge_fields_by_list;
 			}
 
