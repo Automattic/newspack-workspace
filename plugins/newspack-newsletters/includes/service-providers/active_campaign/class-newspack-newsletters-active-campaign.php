@@ -2303,7 +2303,10 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 			return $result;
 		}
 		if ( ! isset( $result['contacts'], $result['contacts'][0] ) ) {
-			return new WP_Error( 'newspack_newsletters', __( 'No contact data found.' ) );
+			// A dedicated code (rather than the generic `newspack_newsletters`) so
+			// callers can tell "no such contact" from an actual failure, matching
+			// Mailchimp's dedicated not-found code.
+			return new WP_Error( 'newspack_newsletters_contact_not_found', __( 'No contact data found.' ) );
 		}
 		$contact_data = $result['contacts'][0];
 		if ( $return_details ) {
