@@ -330,8 +330,28 @@ class Contact_Pull {
 					$selected_fields
 				)
 			);
+			$fetched_keys  = array_keys( $data );
 			$data          = array_intersect_key( $data, $selected_keys );
 			Logger::log( 'Pulled data from ' . $integration->get_id() . ': ' . wp_json_encode( $data ) );
+
+			// A pull that stores nothing is a legitimate outcome — the contact may
+			// simply have no values — but it is indistinguishable from a broken read
+			// path, which is how an ESP pull returning the wrong payload key went
+			// unnoticed. Name the reason so an operator can tell "this reader has no
+			// data" from "this integration handed us keys we don't recognise".
+			if ( empty( $data ) ) {
+				Logger::log(
+					sprintf(
+						'Nothing to store for user %d from %s: the provider returned %s, none matching the %d enabled incoming field(s) (%s).',
+						$user_id,
+						$integration->get_id(),
+						empty( $fetched_keys ) ? 'no fields' : sprintf( '%d field(s) (%s)', count( $fetched_keys ), implode( ', ', $fetched_keys ) ),
+						count( $selected_keys ),
+						implode( ', ', array_keys( $selected_keys ) )
+					),
+					self::LOGGER_HEADER
+				);
+			}
 
 			$write_errors = [];
 			foreach ( $data as $key => $value ) {

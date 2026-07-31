@@ -159,6 +159,24 @@ class Test_Contact_Pull_Dry_Run extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A payload whose keys don't match any enabled incoming field stores
+	 * nothing and still succeeds — the reader may legitimately have no values,
+	 * so it isn't an error. This is the shape the ESP pull had when it read a
+	 * key the provider never returned: "pulled, 0 errors" with no delivery.
+	 * Pinned so the outcome stays deliberate, with the log naming the reason.
+	 */
+	public function test_payload_with_no_matching_keys_succeeds_without_storing() {
+		Failing_Sample_Integration::$pull_data = [ 'unknown_key' => 'value' ];
+
+		$result = Contact_Pull::pull_single_integration( $this->user_id, $this->integration );
+
+		$this->assertTrue( $result, 'No matching keys is not a failure.' );
+		$this->assertSame( 1, Failing_Sample_Integration::$pull_count, 'The fetch still happened.' );
+		$this->assertFalse( Reader_Data::get_data( $this->user_id, 'unknown_key' ), 'Unenabled keys are never stored.' );
+		$this->assertFalse( Reader_Data::get_data( $this->user_id, 'field_a' ), 'And nothing else was invented.' );
+	}
+
+	/**
 	 * A provider returning a non-array payload is rejected explicitly rather
 	 * than tripping a TypeError that the catch block would misclassify as a
 	 * transient exception worth five retries (NPPD-2076 review).
