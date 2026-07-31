@@ -787,6 +787,54 @@ class Test_Account_Deletion extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A successful flag-mode retry must re-run flag_deletion_cleanup(), not
+	 * just the metadata push: if the original push failed, flag_deletion_cleanup()
+	 * may have already cleared the reader's ESP list membership independently
+	 * (see handle_account_deletion()). Without re-running cleanup here, this
+	 * retry's successful upsert would silently re-add the reader to ESP lists,
+	 * reversing a completed list-removal.
+	 */
+	public function test_execute_deletion_retry_flag_mode_reruns_cleanup_on_success() {
+		if ( ! function_exists( 'as_schedule_single_action' ) ) {
+			$this->markTestSkipped( 'ActionScheduler not available.' );
+		}
+		\as_unschedule_all_actions( \Newspack\Reader_Activation\Contact_Sync::RETRY_DELETION_HOOK );
+
+		$this->reset_integrations();
+		$spy = new \Deletion_Spy_Integration( 'spy-retry-exec-flag-cleanup', 'Spy Retry Exec Flag Cleanup' );
+		Integrations::register( $spy );
+		Integrations::enable( 'spy-retry-exec-flag-cleanup' );
+
+		\Newspack\Reader_Activation\Contact_Sync::execute_deletion_retry(
+			[
+				'integration_id' => 'spy-retry-exec-flag-cleanup',
+				'mode'           => 'flag',
+				'email'          => 'reader@example.com',
+				'contact'        => [
+					'email'    => 'reader@example.com',
+					'metadata' => [],
+				],
+				'context'        => 'TestContext',
+				'retry_count'    => 1,
+			]
+		);
+
+		$this->assertCount( 1, $spy->push_calls, 'Retry must re-push the flag-mode contact.' );
+		$this->assertCount( 1, $spy->cleanup_calls, 'A successful flag retry must re-run flag_deletion_cleanup().' );
+		$this->assertSame( 'reader@example.com', $spy->cleanup_calls[0]['email'] );
+
+		$pending = \as_get_scheduled_actions(
+			[
+				'hook'   => \Newspack\Reader_Activation\Contact_Sync::RETRY_DELETION_HOOK,
+				'group'  => Integrations::get_action_group( 'spy-retry-exec-flag-cleanup' ),
+				'status' => \ActionScheduler_Store::STATUS_PENDING,
+			],
+			'ARRAY_A'
+		);
+		$this->assertEmpty( $pending, 'No retry should be scheduled on success.' );
+	}
+
+	/**
 	 * On the final retry, execute_deletion_retry() throws so ActionScheduler
 	 * marks the action as failed.
 	 */
@@ -1033,6 +1081,36 @@ class Test_Account_Deletion extends \WP_UnitTestCase {
 		\delete_option( Integrations::OPTION_NAME );
 		\delete_option( 'newspack_integration_settings_esp_mailchimp_audience_id' );
 		\Newspack_Newsletters_Contacts::reset_calls();
+	}
+
+	/**
+	 * The flag_deletion_cleanup() hook must still run even when the flag push
+	 * itself fails: "keep the record, stop the emails" is independent of
+	 * whether the Account_Deleted/Membership_Status metadata landed. Without
+	 * this, a publisher relying on cleanup to stop outreach would keep
+	 * emailing a deleted reader for as long as the metadata push keeps failing.
+	 */
+	public function test_handle_account_deletion_flag_push_failure_still_runs_cleanup() {
+		$this->reset_integrations();
+		$spy              = new \Deletion_Spy_Integration( 'spy-cleanup-despite-push-fail', 'Spy Cleanup Despite Push Fail' );
+		$spy->push_result = new \WP_Error( 'boom', 'ESP rejected push' );
+		Integrations::register( $spy );
+		$spy->update_settings_field_value( 'sync_account_deletion', true );
+		$spy->update_settings_field_value( 'account_deletion_handling', 'flag' );
+		Integrations::enable( 'spy-cleanup-despite-push-fail' );
+
+		\Newspack\Reader_Activation\Contact_Sync::handle_account_deletion(
+			'reader@example.com',
+			[
+				'email'    => 'reader@example.com',
+				'metadata' => [],
+			],
+			'TestContext'
+		);
+
+		$this->assertCount( 1, $spy->push_calls, 'Flag push must still be attempted even though it will fail.' );
+		$this->assertCount( 1, $spy->cleanup_calls, 'Cleanup must still run even though the flag push failed.' );
+		$this->assertSame( 'reader@example.com', $spy->cleanup_calls[0]['email'] );
 	}
 
 	/**

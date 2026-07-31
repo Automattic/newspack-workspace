@@ -274,9 +274,13 @@ class Contact_Sync extends Sync {
 	 *
 	 * The WP user no longer exists by the time this runs, so the standard
 	 * push_to_integrations() retry path (which keys retries on user_id) is
-	 * not used. Transient ESP errors are retried via RETRY_DELETION_HOOK with
-	 * a payload keyed on email + mode so a 5xx/429 doesn't strand the contact
-	 * in undeleted state (a GDPR exposure for "right to be forgotten" flows).
+	 * not used. Transient errors from delete_contact() or the flag-mode push
+	 * are retried via RETRY_DELETION_HOOK with a payload keyed on email + mode
+	 * so a 5xx/429 doesn't strand the contact in undeleted state (a GDPR
+	 * exposure for "right to be forgotten" flows). flag_deletion_cleanup()
+	 * failures are log/alert-only and do not feed that retry loop; a
+	 * successful flag-mode retry re-runs cleanup so a completed list-removal
+	 * can't be silently reversed by the delayed upsert.
 	 *
 	 * @param string $email   Email of the deleted reader.
 	 * @param array  $contact Contact data to push in flag mode (email + metadata).
@@ -903,6 +907,44 @@ class Contact_Sync extends Sync {
 			static::log( $success_message );
 			if ( self::$current_as_action_id ) {
 				\ActionScheduler_Logger::instance()->log( self::$current_as_action_id, $success_message );
+			}
+
+			// The original flag push already ran flag_deletion_cleanup() once (see
+			// handle_account_deletion()), independent of whether that push succeeded.
+			// If the initial push failed and landed here as a retry, cleanup may have
+			// already cleared the reader from ESP lists; this retry's successful
+			// upsert would otherwise silently re-add them, reversing that completed
+			// list-removal. Re-run cleanup so the retry can't undo it. It's
+			// idempotent (clearing lists twice is harmless). Mirrors
+			// handle_account_deletion(): cleanup failures here are log-only and must
+			// not fail this retry or feed schedule_deletion_retry(), which stays
+			// scoped to the flag push.
+			if ( 'flag' === $mode ) {
+				$cleanup_result = $integration->flag_deletion_cleanup( $email );
+				if ( \is_wp_error( $cleanup_result ) ) {
+					$cleanup_error_message = sprintf(
+						'Flag-deletion cleanup failed for integration "%s" of %s on retry %d: %s',
+						$integration_id,
+						$email,
+						$retry_count,
+						$cleanup_result->get_error_message()
+					);
+					static::log( $cleanup_error_message );
+					if ( self::$current_as_action_id ) {
+						\ActionScheduler_Logger::instance()->log( self::$current_as_action_id, $cleanup_error_message );
+					}
+				} else {
+					$cleanup_success_message = sprintf(
+						'Flag-deletion cleanup succeeded for integration "%s" of %s on retry %d.',
+						$integration_id,
+						$email,
+						$retry_count
+					);
+					static::log( $cleanup_success_message );
+					if ( self::$current_as_action_id ) {
+						\ActionScheduler_Logger::instance()->log( self::$current_as_action_id, $cleanup_success_message );
+					}
+				}
 			}
 		}
 	}
