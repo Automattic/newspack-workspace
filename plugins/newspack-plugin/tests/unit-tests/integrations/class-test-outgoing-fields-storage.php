@@ -562,4 +562,23 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 		\remove_filter( 'newspack_ras_metadata_keys', $callback );
 		Field_Registry::reset();
 	}
+
+	/**
+	 * The get_enabled_outgoing_fields_keys() method must cover enabled non-origin ids,
+	 * raw and prefixed.
+	 */
+	public function test_enabled_outgoing_fields_keys_cover_non_origin_ids() {
+		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
+		\update_option(
+			Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test',
+			[ 'v1:account', 'v2:Registration_Strategy' ]
+		);
+
+		$raw = $this->integration->get_enabled_outgoing_fields_keys();
+		$this->assertContains( 'account', $raw );
+		$this->assertContains( 'Registration_Strategy', $raw );
+
+		$prefixed = $this->integration->get_enabled_outgoing_fields_keys( true );
+		$this->assertContains( $this->integration->get_metadata_prefix() . 'Registration Strategy', $prefixed );
+	}
 }

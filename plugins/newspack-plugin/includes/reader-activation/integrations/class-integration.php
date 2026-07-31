@@ -1118,21 +1118,23 @@ abstract class Integration {
 	/**
 	 * Get the metadata keys enabled for outgoing sync.
 	 *
+	 * Operates in id-space: enabled ids of any version convert to their raw keys and
+	 * prefixed names regardless of schema origin.
+	 *
 	 * @param bool $prefixed Optional. Whether to return prefixed keys instead of raw keys. Default false.
 	 *
 	 * @return string[] List of raw metadata keys.
 	 */
 	public function get_enabled_outgoing_fields_keys( $prefixed = false ) {
-		$enabled_fields = $this->get_enabled_outgoing_fields();
-		$keys           = [];
-
-		foreach ( Sync\Metadata::get_keys() as $raw_key => $field_name ) {
-			if ( in_array( $field_name, $enabled_fields, true ) ) {
-				$keys[] = $prefixed ? $this->get_metadata_prefix() . $field_name : $raw_key;
+		$keys = [];
+		foreach ( $this->get_enabled_outgoing_field_ids() as $id ) {
+			$definition = Sync\Field_Registry::get_definition( $id );
+			if ( ! $definition ) {
+				continue;
 			}
+			$keys[] = $prefixed ? $this->get_metadata_prefix() . $definition['name'] : $definition['raw_key'];
 		}
-
-		return array_unique( $keys );
+		return array_values( array_unique( $keys ) );
 	}
 
 	/**
