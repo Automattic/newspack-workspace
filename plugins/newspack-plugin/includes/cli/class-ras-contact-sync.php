@@ -528,6 +528,10 @@ class RAS_Contact_Sync {
 					$names[] = $prefix . $definition['name'] . ( $definition['dynamic_suffix'] ? '*' : '' );
 				}
 			}
+			// Several raw keys can map to one ESP name (legacy "Registration
+			// Page"), and the question this answers is which field names the
+			// provider would receive — so list each name once.
+			$names = array_values( array_unique( $names ) );
 			WP_CLI::log( '' );
 			WP_CLI::log(
 				sprintf(
