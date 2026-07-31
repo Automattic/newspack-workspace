@@ -21,6 +21,7 @@ import {
 	resolveAccessRuleOptionTokens,
 	type AccessRuleOption as RuleOption,
 } from '../../../../../content-gate/access-rule-options';
+import OneTimePurchaseRuleControl from '../../../../../content-gate/components/one-time-purchase-rule-control';
 
 interface DynamicRuleConfig< T > {
 	path: string;
@@ -84,6 +85,9 @@ export default function AccessRuleControl( { slug, value, onChange }: GateRuleCo
 
 	if ( ! rule || rule.is_boolean ) {
 		return null;
+	}
+	if ( 'one_time_purchase' === slug ) {
+		return <OneTimePurchaseRuleControl value={ value } onChange={ onChange } options={ options } TokenField={ FormTokenField } />;
 	}
 	if ( options && options.length > 0 ) {
 		return (

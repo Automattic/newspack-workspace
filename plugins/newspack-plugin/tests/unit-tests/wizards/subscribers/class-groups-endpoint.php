@@ -3,8 +3,6 @@
  * Tests for the Subscribers wizard groups read endpoint.
  *
  * @package Newspack\Tests
- * @group WooCommerce_Subscriptions_Integration
- * @group subscribers-wizard
  */
 
 use Newspack\Group_Subscription;
@@ -12,6 +10,9 @@ use Newspack\Group_Subscription_Settings;
 
 /**
  * GET /wizard/newspack-subscribers/groups.
+ *
+ * @group WooCommerce_Subscriptions_Integration
+ * @group subscribers-wizard
  */
 class Test_Subscribers_Wizard_Groups_Endpoint extends WP_UnitTestCase {
 

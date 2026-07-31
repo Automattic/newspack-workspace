@@ -81,7 +81,13 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 		content_rules: isNewsletter ? [ { slug: 'newsletters', value: [] } ] : [ { slug: 'post_types', value: [ 'post' ] } ],
 		content_rules_match: 'all',
 		registration: { active: false, metering: { enabled: false, count: 1, period: 'month' }, require_verification: false, gate_layout_id: 0 },
-		custom_access: { active: false, metering: { enabled: false, count: 1, period: 'month' }, gate_layout_id: 0, access_rules: [] },
+		custom_access: {
+			active: false,
+			metering: { enabled: false, count: 1, period: 'month' },
+			gate_layout_id: 0,
+			access_rules: [],
+			payment_recovery_grace: true,
+		},
 	};
 
 	const history = useHistory();
