@@ -281,6 +281,33 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * When detection runs without persisting (no ESP registered yet), the
+	 * result is cached for the rest of the request so repeated calls don't
+	 * re-run detection — including its options-table LIKE query. Changing a
+	 * detection input mid-request is therefore not observed until
+	 * Field_Registry::reset() drops the cache.
+	 */
+	public function test_origin_detection_is_cached_per_request_and_cleared_by_reset() {
+		$this->assertSame( 'v2', Field_Registry::get_schema_origin() );
+
+		// A v1 signal appears after the first detection. Without an ESP
+		// registered there is no re-detect trigger, so the cached value stands.
+		\update_option( Metadata::FIELDS_OPTION, [ 'Account' ] );
+		$this->assertSame(
+			'v2',
+			Field_Registry::get_schema_origin(),
+			'A second call must be served from the per-request cache, not re-detected.'
+		);
+
+		Field_Registry::reset();
+		$this->assertSame(
+			'v1',
+			Field_Registry::get_schema_origin(),
+			'reset() must clear the detection cache so the next call re-detects.'
+		);
+	}
+
+	/**
 	 * The concrete ESP integration overrides get_enabled_outgoing_fields()
 	 * directly (rather than inheriting the base Integration behavior), so it
 	 * needs its own coverage: stored ids resolve back to display names.

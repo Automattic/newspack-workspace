@@ -230,7 +230,7 @@ class Contact_Sync extends Sync {
 
 		// Added logging here to more easily monitor integration sync data. Can be removed once integrations are released.
 		Logger::log( sprintf( 'Syncing contact %s for context "%s".', $contact['email'] ?? 'unknown', $context ) );
-		Logger::log( $contact );
+		Logger::log_payload( $contact );
 
 		return self::push_to_integrations( $contact, $context, $existing_contact, $options );
 	}
@@ -357,7 +357,7 @@ class Contact_Sync extends Sync {
 
 			// Added logging here to more easily monitor integration sync data. Can be removed once integrations are released.
 			Logger::log( sprintf( 'Syncing contact %s for integration %s with context "%s".', $integration_contact['email'] ?? 'unknown', $integration_id, $context ) );
-			Logger::log( $integration_contact );
+			Logger::log_payload( $integration_contact );
 
 			$result = $integration->push_contact_data( $integration_contact, $context, $existing_contact, $options );
 			if ( \is_wp_error( $result ) ) {

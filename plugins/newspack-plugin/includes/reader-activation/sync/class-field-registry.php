@@ -29,6 +29,18 @@ class Field_Registry {
 	private static $definitions = null;
 
 	/**
+	 * Per-request cache of a detected-but-not-persisted schema origin.
+	 *
+	 * Keyed nowhere — there is at most one origin per request. Records
+	 * whether the 'esp' integration was registered when the value was
+	 * detected, because that is the one input that can change the answer
+	 * within a request (see get_schema_origin()).
+	 *
+	 * @var array|null { origin: string, esp_registered: bool }
+	 */
+	private static $detected_origin = null;
+
+	/**
 	 * Map of schema version to the metadata classes that own its fields.
 	 *
 	 * @return array
@@ -58,7 +70,8 @@ class Field_Registry {
 	 * @return void
 	 */
 	public static function reset() {
-		self::$definitions = null;
+		self::$definitions     = null;
+		self::$detected_origin = null;
 	}
 
 	/**
@@ -241,7 +254,22 @@ class Field_Registry {
 		if ( in_array( $origin, [ self::VERSION_V1, self::VERSION_V2 ], true ) ) {
 			return $origin;
 		}
-		$origin = self::detect_schema_origin();
+		$esp_integration = \Newspack\Reader_Activation\Integrations::get_integration( 'esp' );
+
+		// Reuse the per-request detection rather than re-running it (and its
+		// $wpdb LIKE query) on every call. The only input that can change the
+		// answer mid-request is the 'esp' integration registering, so a value
+		// detected before that happened is re-detected once an integration is
+		// present; anything else is served from the cache.
+		if ( null !== self::$detected_origin && ( self::$detected_origin['esp_registered'] || null === $esp_integration ) ) {
+			return self::$detected_origin['origin'];
+		}
+
+		$origin                = self::detect_schema_origin();
+		self::$detected_origin = [
+			'origin'         => $origin,
+			'esp_registered' => null !== $esp_integration,
+		];
 
 		// detect_schema_origin()'s final fallback needs a registered 'esp'
 		// integration to tell a genuinely fresh site from a legacy site whose
@@ -250,7 +278,7 @@ class Field_Registry {
 		// only a guess, and persisting a wrong 'v2' guess would freeze it
 		// forever. Skip the persist in that case; a later, correctly-timed
 		// call will persist the real answer once the registry is populated.
-		if ( null === \Newspack\Reader_Activation\Integrations::get_integration( 'esp' ) ) {
+		if ( null === $esp_integration ) {
 			return $origin;
 		}
 

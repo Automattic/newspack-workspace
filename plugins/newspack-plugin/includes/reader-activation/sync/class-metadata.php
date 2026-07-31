@@ -680,7 +680,7 @@ class Metadata {
 		$contact['metadata'] = self::add_utm_data_raw( $contact['metadata'] );
 
 		Logger::log( 'Normalizing contact data for reader ESP sync:' );
-		Logger::log( $contact );
+		Logger::log_payload( $contact );
 
 		/**
 		 * Filters the normalized contact data before syncing to the ESP.
