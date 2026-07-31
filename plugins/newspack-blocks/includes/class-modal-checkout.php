@@ -1222,7 +1222,7 @@ final class Modal_Checkout {
 				\wp_parse_str( $referrer_query, $request_params );
 			}
 		}
-		return array_filter(
+		$params = array_filter(
 			[
 				'after_success_behavior'     => isset( $request_params['after_success_behavior'] ) ? sanitize_text_field( wp_unslash( $request_params['after_success_behavior'] ) ) : '', // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 				'after_success_url'          => isset( $request_params['after_success_url'] ) ? self::sanitize_after_success_url( sanitize_url( wp_unslash( $request_params['after_success_url'] ) ) ) : '', // phpcs:ignore WordPress.Security.NonceVerification.Recommended
@@ -1230,6 +1230,14 @@ final class Modal_Checkout {
 				'action_type'                => isset( $request_params['action_type'] ) ? sanitize_text_field( wp_unslash( $request_params['action_type'] ) ) : '', // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			]
 		);
+
+		// A custom destination this site won't redirect to falls back to closing the modal, so
+		// the reader gets a finished checkout rather than an empty destination.
+		if ( 'custom' === ( $params['after_success_behavior'] ?? '' ) && empty( $params['after_success_url'] ) ) {
+			unset( $params['after_success_behavior'] );
+		}
+
+		return $params;
 	}
 
 	/**

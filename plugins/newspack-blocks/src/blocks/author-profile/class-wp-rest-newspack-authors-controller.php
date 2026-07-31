@@ -48,9 +48,12 @@ class WP_REST_Newspack_Authors_Controller extends WP_REST_Controller {
 	 * front-end author blocks for visitors and must keep returning whatever a publisher has
 	 * chosen to publish there.
 	 *
-	 * @param array $fields Requested fields.
+	 * `false` is the helpers' "every field" convention, used by the front-end blocks; it is
+	 * passed through untouched so those renders are unaffected.
 	 *
-	 * @return array Fields the current user may receive.
+	 * @param array|false $fields Requested fields, or false for every field.
+	 *
+	 * @return array|false Fields the current user may receive.
 	 */
 	public static function restrict_fields( $fields ) {
 		if ( ! is_array( $fields ) || self::can_read_user_management_fields() ) {

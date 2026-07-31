@@ -132,6 +132,26 @@ class AuthorsControllerTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
+	 * The author list block renders for visitors through the controller's own getter rather
+	 * than through the REST route, so the request-level restriction must not reach it.
+	 */
+	public function test_front_end_author_list_still_includes_email() {
+		wp_set_current_user( 0 );
+
+		$authors = ( new WP_REST_Newspack_Author_List_Controller() )->get_all_authors(
+			[
+				'fields'   => [ 'id', 'name', 'email' ],
+				'per_page' => 100,
+			]
+		);
+
+		$record = $this->find_subject( $authors );
+
+		$this->assertNotNull( $record, 'The author under test was missing from the front-end render.' );
+		$this->assertArrayHasKey( 'email', $record, 'The author list block lost its contact link for visitors.' );
+	}
+
+	/**
 	 * The front-end author blocks render for visitors and must keep showing the contact link
 	 * a publisher has chosen to publish. The request-level restriction must not reach here.
 	 */

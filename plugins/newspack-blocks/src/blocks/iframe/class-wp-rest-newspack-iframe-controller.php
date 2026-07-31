@@ -566,12 +566,12 @@ class WP_REST_Newspack_Iframe_Controller extends WP_REST_Controller {
 			$stat = $zip->statIndex( $file_index );
 			if ( $stat && isset( $stat['name'] ) ) {
 				// An entry names its own destination, so it decides where the write lands.
-				$entry_path = $this->sanitize_relative_path( $stat['name'] );
-				if ( ! $entry_path ) {
+				$entry_relative_path = $this->sanitize_relative_path( $stat['name'] );
+				if ( ! $entry_relative_path ) {
 					return $invalid_file_error;
 				}
 
-				$destination = $iframe_path . $entry_path;
+				$destination = $iframe_path . $entry_relative_path;
 				if ( ! file_exists( dirname( $destination ) ) ) {
 					wp_mkdir_p( dirname( $destination ) );
 				}

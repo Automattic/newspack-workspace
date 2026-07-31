@@ -38,10 +38,10 @@ class AfterSuccessUrlTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
-	 * A relative destination is kept, and resolved against this site.
+	 * A destination given as a path on this site is kept as-is.
 	 */
 	public function test_keeps_a_relative_destination() {
-		$this->assertStringContainsString(
+		$this->assertSame(
 			'/thank-you/',
 			\Newspack_Blocks\Modal_Checkout::sanitize_after_success_url( '/thank-you/' )
 		);
@@ -106,5 +106,54 @@ class AfterSuccessUrlTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	 */
 	public function test_keeps_an_empty_destination_empty() {
 		$this->assertSame( '', \Newspack_Blocks\Modal_Checkout::sanitize_after_success_url( '' ) );
+	}
+
+	/**
+	 * Read the after-success params the checkout passes to the page.
+	 *
+	 * @return array
+	 */
+	private function get_after_success_params() {
+		$method = new ReflectionMethod( '\Newspack_Blocks\Modal_Checkout', 'get_after_success_params' );
+		$method->setAccessible( true );
+
+		return $method->invoke( null );
+	}
+
+	/**
+	 * The checkout applies the rule, not just the helper.
+	 *
+	 * Without this the suite would stay green if the call were dropped from the one place
+	 * that decides what the page receives.
+	 */
+	public function test_checkout_drops_an_off_site_destination() {
+		$_REQUEST['after_success_behavior'] = 'custom';
+		$_REQUEST['after_success_url']      = 'https://elsewhere.example.test/collect';
+
+		$params = $this->get_after_success_params();
+
+		unset( $_REQUEST['after_success_behavior'], $_REQUEST['after_success_url'] );
+
+		$this->assertArrayNotHasKey( 'after_success_url', $params, 'An off-site destination reached the page.' );
+		$this->assertArrayNotHasKey(
+			'after_success_behavior',
+			$params,
+			'A dropped destination left the reader with a custom behavior and nowhere to go.'
+		);
+	}
+
+	/**
+	 * A destination on this site still reaches the page.
+	 */
+	public function test_checkout_keeps_a_destination_on_this_site() {
+		$_REQUEST['after_success_behavior'] = 'custom';
+		$_REQUEST['after_success_url']      = home_url( '/thank-you/' );
+
+		$params = $this->get_after_success_params();
+
+		unset( $_REQUEST['after_success_behavior'], $_REQUEST['after_success_url'] );
+
+		$this->assertSame( home_url( '/thank-you/' ), $params['after_success_url'] ?? '' );
+		$this->assertSame( 'custom', $params['after_success_behavior'] ?? '' );
 	}
 }
