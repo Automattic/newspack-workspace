@@ -511,4 +511,23 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 		$this->assertArrayHasKey( 'options', $outgoing );
 		$this->assertArrayHasKey( 'grouped_options', $outgoing );
 	}
+
+	/**
+	 * The filter_enabled_outgoing_fields() method must operate in id-space: a non-origin
+	 * enabled id matches its raw key even though the origin-scoped keys map
+	 * does not contain it.
+	 */
+	public function test_filter_enabled_outgoing_fields_covers_non_origin_ids() {
+		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
+		\update_option(
+			Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test',
+			[ 'v1:account', 'v2:Registration_Strategy' ]
+		);
+
+		$filtered = $this->integration->filter_enabled_outgoing_fields( [ 'account', 'Registration_Strategy', 'registration_date' ] );
+
+		$this->assertSame( 'Account', $filtered['account'] );
+		$this->assertSame( 'Registration Strategy', $filtered['Registration_Strategy'], 'Enabled non-origin ids must match their raw keys.' );
+		$this->assertArrayNotHasKey( 'registration_date', $filtered, 'Non-enabled keys must not match.' );
+	}
 }

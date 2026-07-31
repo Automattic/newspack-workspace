@@ -1097,20 +1097,22 @@ abstract class Integration {
 	}
 
 	/**
-	 * Filter metadata keys to only those whose field name is enabled for outgoing sync.
+	 * Filter raw metadata keys to those enabled for outgoing sync, in id-space: any enabled id's raw key matches regardless of schema version.
+	 *
+	 * Returns raw_key => ESP name pairs.
 	 *
 	 * @param string[] $keys Array of raw metadata keys to filter.
-	 * @return array Filtered key-value pairs from Metadata::get_keys().
+	 * @return array Filtered key-value pairs of raw_key => name.
 	 */
 	public function filter_enabled_outgoing_fields( $keys ) {
-		$enabled_fields = $this->get_enabled_outgoing_fields();
-		return array_filter(
-			Sync\Metadata::get_keys(),
-			function ( $val, $key ) use ( $keys, $enabled_fields ) {
-				return in_array( $key, $keys, true ) && in_array( $val, $enabled_fields, true );
-			},
-			ARRAY_FILTER_USE_BOTH
-		);
+		$filtered = [];
+		foreach ( $this->get_enabled_outgoing_field_ids() as $id ) {
+			$definition = Sync\Field_Registry::get_definition( $id );
+			if ( $definition && in_array( $definition['raw_key'], $keys, true ) ) {
+				$filtered[ $definition['raw_key'] ] = $definition['name'];
+			}
+		}
+		return $filtered;
 	}
 
 	/**
