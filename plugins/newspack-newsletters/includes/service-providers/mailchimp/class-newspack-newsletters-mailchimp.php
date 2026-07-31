@@ -2277,6 +2277,35 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 	}
 
 	/**
+	 * Drop merge fields the contact has no value for.
+	 *
+	 * Mailchimp returns every merge field defined on the audience, using an
+	 * empty string for ones the contact hasn't filled in. ActiveCampaign only
+	 * reports fields that carry a value, so filtering here keeps `metadata`
+	 * meaning the same thing on both providers — a caller storing it doesn't
+	 * end up persisting empty entries for one ESP and not the other.
+	 *
+	 * Only unset values are dropped. A falsy-but-real value — `0` from a number
+	 * field, `'0'` from a text field — is a value the contact has, and callers
+	 * such as reader data store it as one.
+	 *
+	 * @param array $merge_fields Raw merge fields keyed by merge tag.
+	 *
+	 * @return array Merge fields the contact has a value for.
+	 */
+	private static function filter_set_merge_fields( $merge_fields ) {
+		if ( ! is_array( $merge_fields ) ) {
+			return [];
+		}
+		return array_filter(
+			$merge_fields,
+			function ( $value ) {
+				return null !== $value && '' !== $value && [] !== $value;
+			}
+		);
+	}
+
+	/**
 	 * Get contact data by email.
 	 *
 	 * @param string $email          Email address.
@@ -2310,6 +2339,9 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 				'interests'    => [],
 				'merge_fields' => [],
 			];
+			// Collected alongside the loop but only exposed under $return_details,
+			// so a plain lookup keeps its historical keys.
+			$merge_fields_by_list = [];
 			foreach ( $found as $contact ) {
 				foreach ( $keys as $key ) {
 					if ( ! isset( $data[ $key ] ) || empty( $data[ $key ] ) ) {
@@ -2328,7 +2360,13 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 					'status'     => $contact['status'],
 				];
 				if ( isset( $contact['merge_fields'] ) ) {
+					// Flat and last-wins, preserved as-is: existing callers read this
+					// shape. Merge fields are defined per audience, so for a contact in
+					// several audiences it holds whichever came back last — which is why
+					// the per-audience map below exists.
 					$data['merge_fields'] = $contact['merge_fields'];
+
+					$merge_fields_by_list[ $contact['list_id'] ] = self::filter_set_merge_fields( $contact['merge_fields'] );
 				}
 			}
 
@@ -2338,8 +2376,17 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 			// get_contact_fields_for_integrations() reports as a field's `key`, so
 			// the two line up without remapping. Without this an ESP contact pull
 			// finds no `metadata` and stores nothing while reporting success.
+			//
+			// `metadata_by_list` carries the same values keyed by audience. Merge
+			// fields are per-audience in Mailchimp, and a caller's field schema comes
+			// from one specific audience (get_contact_fields_for_integrations() takes
+			// a list ID), so a caller that knows which audience it configured should
+			// read its entry rather than the flat `metadata` — which, like
+			// `merge_fields`, can only report one audience for a multi-audience
+			// contact.
 			if ( $return_details ) {
-				$data['metadata'] = $data['merge_fields'];
+				$data['metadata']         = self::filter_set_merge_fields( $data['merge_fields'] );
+				$data['metadata_by_list'] = $merge_fields_by_list;
 			}
 
 			return $data;
