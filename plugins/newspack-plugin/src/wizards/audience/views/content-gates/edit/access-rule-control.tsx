@@ -12,6 +12,7 @@ import { TextControl } from '@wordpress/components';
  */
 import { FormTokenField } from '../../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
+import OneTimePurchaseRuleControl from '../../../../../content-gate/components/one-time-purchase-rule-control';
 
 type RuleOption = { value: string | number; label: string };
 
@@ -77,6 +78,9 @@ export default function AccessRuleControl( { slug, value, onChange }: GateRuleCo
 
 	if ( ! rule || rule.is_boolean ) {
 		return null;
+	}
+	if ( 'one_time_purchase' === slug ) {
+		return <OneTimePurchaseRuleControl value={ value } onChange={ onChange } options={ options } TokenField={ FormTokenField } />;
 	}
 	// Options-backed rules always get the token field — with an empty option list
 	// it renders an empty picker. Degrading to the free-text control would let a

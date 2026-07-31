@@ -17,12 +17,13 @@ import {
 } from '@wordpress/components';
 import { useState, useEffect } from '@wordpress/element';
 import apiFetch from '@wordpress/api-fetch';
-import { __, sprintf } from '@wordpress/i18n';
+import { __ } from '@wordpress/i18n';
 
 /**
  * Internal dependencies
  */
 import './block-visibility.scss';
+import OneTimePurchaseRuleControl from '../components/one-time-purchase-rule-control';
 
 /**
  * Target block types that receive access control attributes.
@@ -185,6 +186,10 @@ const AccessRuleValueControl = ( {
 			cancelled = true;
 		};
 	}, [ slug ] ); // eslint-disable-line react-hooks/exhaustive-deps
+
+	if ( 'one_time_purchase' === slug ) {
+		return <OneTimePurchaseRuleControl value={ value } onChange={ onChange } options={ options } productsLabel={ config.name } />;
+	}
 
 	// Options-backed rules always get the token field — with an empty option list
 	// it renders an empty picker. Degrading to the free-text control would let a
@@ -392,11 +397,11 @@ const BlockVisibilityPanel = ( { attributes, setAttributes }: BlockEditProps ) =
 
 				<VisibilityControl
 					label={ __( 'Visibility', 'newspack-plugin' ) }
-					help={ sprintf(
-						// translators: %s is either 'gates' or 'rules'.
-						__( 'Content visibility for readers who match any of the selected %s.', 'newspack-plugin' ),
-						mode === 'gate' ? __( 'gates', 'newspack-plugin' ) : __( 'rules', 'newspack-plugin' )
-					) }
+					help={
+						'gate' === mode
+							? __( 'Content visibility for readers who match any of the selected gates.', 'newspack-plugin' )
+							: __( 'Content visibility for readers who match any of the selected rules.', 'newspack-plugin' )
+					}
 					value={ visibility }
 					onChange={ ( v: string ) => setAttributes( { newspackAccessControlVisibility: v } ) }
 					disabled={ ! rulesActive }
