@@ -729,12 +729,15 @@ class RAS_Contact_Sync {
 			// loops — which run until a batch comes back empty — would never
 			// terminate. A negative offset builds an invalid LIMIT clause instead:
 			// the query returns nothing and the run reads as a clean success over
-			// a window that was never covered. (`! empty()` runs on the raw string,
-			// so a literal `0` keeps the default but a non-numeric value reaches
-			// intval().) Matches the --user-ids chunk clamp in pull_contacts().
+			// a window that was never covered. A negative max-batches is truthy
+			// against the batch counter, so it would silently stop the run after
+			// the first batch; flooring it to 0 keeps it meaning "no cap".
+			// (`! empty()` runs on the raw string, so a literal `0` keeps the
+			// default but a non-numeric value reaches intval().) Matches the
+			// --user-ids chunk clamp in pull_contacts().
 			'batch_size'       => ! empty( $assoc_args['batch-size'] ) ? max( 1, intval( $assoc_args['batch-size'] ) ) : 10,
 			'offset'           => ! empty( $assoc_args['offset'] ) ? max( 0, intval( $assoc_args['offset'] ) ) : 0,
-			'max_batches'      => ! empty( $assoc_args['max-batches'] ) ? intval( $assoc_args['max-batches'] ) : 0,
+			'max_batches'      => ! empty( $assoc_args['max-batches'] ) ? max( 0, intval( $assoc_args['max-batches'] ) ) : 0,
 			'context'          => ! empty( $assoc_args['sync-context'] ) ? $assoc_args['sync-context'] : static::$context,
 		];
 	}

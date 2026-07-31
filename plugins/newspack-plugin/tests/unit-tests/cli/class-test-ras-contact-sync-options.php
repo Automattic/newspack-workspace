@@ -280,4 +280,15 @@ class Test_RAS_Contact_Sync_Options extends WP_UnitTestCase {
 		$this->assertSame( 0, $this->build_config( [ 'offset' => '-3' ] )['offset'], 'A negative offset is floored to 0.' );
 		$this->assertSame( 7, $this->build_config( [ 'offset' => '7' ] )['offset'] );
 	}
+
+	/**
+	 * A negative max-batches is truthy against the batch counter, so it would
+	 * silently stop the run after the first batch — flooring it to 0 keeps it
+	 * meaning "no cap" (NPPD-2076 review).
+	 */
+	public function test_max_batches_floors_negative_input_to_zero() {
+		$this->assertSame( 0, $this->build_config( [ 'max-batches' => '-2' ] )['max_batches'], 'A negative max-batches is floored to 0 (no cap).' );
+		$this->assertSame( 0, $this->build_config( [] )['max_batches'], 'Absent flag keeps the no-cap default.' );
+		$this->assertSame( 3, $this->build_config( [ 'max-batches' => '3' ] )['max_batches'] );
+	}
 }
