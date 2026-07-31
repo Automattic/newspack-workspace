@@ -2331,6 +2331,17 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 					$data['merge_fields'] = $contact['merge_fields'];
 				}
 			}
+
+			// Expose the merge fields under the provider-neutral `metadata` key that
+			// callers requesting full details read, as ActiveCampaign already does.
+			// Merge fields are keyed by merge tag, which is the same identifier
+			// get_contact_fields_for_integrations() reports as a field's `key`, so
+			// the two line up without remapping. Without this an ESP contact pull
+			// finds no `metadata` and stores nothing while reporting success.
+			if ( $return_details ) {
+				$data['metadata'] = $data['merge_fields'];
+			}
+
 			return $data;
 		} catch ( \Exception $e ) {
 			return new WP_Error(

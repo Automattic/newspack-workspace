@@ -440,6 +440,15 @@ class MailchimpContactMethodsTest extends WP_UnitTestCase {
 				// some noise to make sure it doesn't change anything.
 				$response['exact_matches']['members'][0]['noise'] = 'noise';
 
+			} elseif ( 'with-merge-fields@example.com' === $args['query'] ) {
+				// Simulates a contact carrying merge-field values.
+				$response = $base_success_response;
+				$response['exact_matches']['members'][] = $base_member_response;
+				$response['exact_matches']['members'][0]['merge_fields'] = [
+					'FNAME'     => 'Sample',
+					'CRM_SCORE' => '42',
+				];
+
 			} elseif ( 'found-empty@example.com' === $args['query'] ) {
 				// Simulates a response of a contact with zero lists.
 				$response = $base_success_response;
@@ -570,6 +579,68 @@ class MailchimpContactMethodsTest extends WP_UnitTestCase {
 		}
 
 		remove_filter( 'mailchimp_mock_get', [ __CLASS__, 'get_contact_mock_response' ] );
+	}
+
+	/**
+	 * Callers requesting full details read field values from `metadata` — the
+	 * provider-neutral key ActiveCampaign already sets. Without it a Newspack
+	 * ESP contact pull finds nothing to store and reports success anyway.
+	 *
+	 * Merge fields are keyed by merge tag, which is the same identifier
+	 * get_contact_fields_for_integrations() reports as a field's `key`, so the
+	 * two line up without remapping.
+	 *
+	 * @return void
+	 */
+	public function test_get_contact_data_exposes_merge_fields_as_metadata() {
+		$provider = Newspack_Newsletters::get_service_provider();
+		add_filter( 'mailchimp_mock_get', [ __CLASS__, 'get_contact_mock_response' ], 10, 3 );
+
+		$contact_data = $provider->get_contact_data( 'with-merge-fields@example.com', true );
+
+		remove_filter( 'mailchimp_mock_get', [ __CLASS__, 'get_contact_mock_response' ] );
+
+		$expected = [
+			'FNAME'     => 'Sample',
+			'CRM_SCORE' => '42',
+		];
+		$this->assertSame( $expected, $contact_data['merge_fields'] );
+		$this->assertSame( $expected, $contact_data['metadata'], 'metadata mirrors the merge fields keyed by merge tag.' );
+	}
+
+	/**
+	 * A contact with no merge fields still gets the key, so callers can read it
+	 * unconditionally rather than testing for presence.
+	 *
+	 * @return void
+	 */
+	public function test_get_contact_data_sets_empty_metadata_without_merge_fields() {
+		$provider = Newspack_Newsletters::get_service_provider();
+		add_filter( 'mailchimp_mock_get', [ __CLASS__, 'get_contact_mock_response' ], 10, 3 );
+
+		$contact_data = $provider->get_contact_data( 'one-audience-tag-and-group@example.com', true );
+
+		remove_filter( 'mailchimp_mock_get', [ __CLASS__, 'get_contact_mock_response' ] );
+
+		$this->assertSame( [], $contact_data['metadata'] );
+	}
+
+	/**
+	 * The key is gated on the details flag, mirroring ActiveCampaign — a plain
+	 * lookup keeps its historical shape.
+	 *
+	 * @return void
+	 */
+	public function test_get_contact_data_omits_metadata_without_details() {
+		$provider = Newspack_Newsletters::get_service_provider();
+		add_filter( 'mailchimp_mock_get', [ __CLASS__, 'get_contact_mock_response' ], 10, 3 );
+
+		$contact_data = $provider->get_contact_data( 'with-merge-fields@example.com' );
+
+		remove_filter( 'mailchimp_mock_get', [ __CLASS__, 'get_contact_mock_response' ] );
+
+		$this->assertArrayNotHasKey( 'metadata', $contact_data );
+		$this->assertArrayHasKey( 'merge_fields', $contact_data );
 	}
 
 	/**
