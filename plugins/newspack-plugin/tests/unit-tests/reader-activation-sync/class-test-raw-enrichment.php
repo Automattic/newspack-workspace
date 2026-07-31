@@ -8,6 +8,8 @@
 namespace Newspack\Tests\Unit\Reader_Activation_Sync;
 
 use Newspack\Reader_Activation;
+use Newspack\Reader_Activation\Integration;
+use Newspack\Reader_Activation\Sync\Field_Registry;
 use Newspack\Reader_Activation\Sync\Metadata;
 
 /**
@@ -83,5 +85,26 @@ class Test_Raw_Enrichment extends \WP_UnitTestCase {
 		);
 
 		$this->assertSame( 'original', $metadata['signup_page_utm_source'] );
+	}
+
+	/**
+	 * Guards get_utm_key() against a get_raw_keys() match that is not backed
+	 * by an origin-scoped prefixed key. get_raw_keys() is id-space (any
+	 * schema version an integration has enabled), while get_key() stays
+	 * scoped to the site's schema origin and returns false when the raw key
+	 * belongs to a non-origin version. On PHP 8, strpos( $key, false )
+	 * coerces the needle to '' and matches at position 0, so without an
+	 * explicit guard every key looked like a match once get_key() missed.
+	 */
+	public function test_get_utm_key_rejects_a_non_origin_raw_key_match() {
+		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v2' );
+		\update_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'esp', [ 'v1:signup_page_utm' ] );
+		Field_Registry::reset();
+
+		$this->assertFalse( Metadata::get_utm_key( 'Some_Random_Key' ) );
+
+		\delete_option( Field_Registry::SCHEMA_ORIGIN_OPTION );
+		\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'esp' );
+		Field_Registry::reset();
 	}
 }

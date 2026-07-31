@@ -217,6 +217,9 @@ class Metadata {
 				continue;
 			}
 			$prefixed_key = self::get_key( $utm_key );
+			if ( false === $prefixed_key ) {
+				continue;
+			}
 			if ( 0 === strpos( $key, $utm_key ) ) {
 				$suffix = str_replace( $utm_key . '_', '', $key );
 				return ! empty( trim( $suffix ) ) && $suffix !== $key ? $prefixed_key . $suffix : false;
