@@ -86,6 +86,18 @@ describe( 'buildFieldRows', () => {
 		];
 		expect( buildFieldRows( defs, [], 'v1' ).find( r => r.name === 'Last Payment' ) ).toBeUndefined();
 	} );
+
+	it( 'keeps a conflict row visible when its enabled version becomes unavailable', () => {
+		const defs = [
+			def( 'v1:last_payment', 'Last Payment', { in_conflict_group: true } ),
+			def( 'v2:Last_Payment', 'Last Payment', { in_conflict_group: true, available: false } ),
+		];
+		const row = buildFieldRows( defs, [ 'v2:Last_Payment' ], 'v1' ).find( r => r.name === 'Last Payment' );
+		expect( row ).toBeDefined();
+		expect( row.activeVersion ).toBe( 'v2' );
+		expect( row.checked ).toBe( true );
+		expect( row.availableVersions ).toEqual( { v1: true, v2: false } );
+	} );
 } );
 
 describe( 'toggleRow / pickRowVersion', () => {
@@ -175,5 +187,27 @@ describe( 'OutboundFields', () => {
 		render( <OutboundFields field={ field } value={ [ 'v1:account' ] } onChange={ () => {} } /> );
 		fireEvent.click( screen.getAllByRole( 'button', { name: /field details/i } )[ 0 ] );
 		expect( screen.getByRole( 'dialog' ) ).toBeInTheDocument();
+	} );
+
+	// Regression guard for the whole pick-a-version path: the "Account" row is a
+	// conflict row (both versions available), so its cog opens the picker modal;
+	// picking v2 there must reach onChange with pickRowVersion's result.
+	it( 'picks a version from the details modal and posts its ids', () => {
+		const onChange = jest.fn();
+		render( <OutboundFields field={ field } value={ [] } onChange={ onChange } /> );
+		fireEvent.click( screen.getAllByRole( 'button', { name: /field details/i } )[ 0 ] );
+		fireEvent.click( screen.getByRole( 'button', { name: /use v2/i } ) );
+		expect( onChange ).toHaveBeenCalledWith( [ 'v2:Account' ] );
+	} );
+
+	it( 'disables the modal picker for a version with no available candidates', () => {
+		const unavailableV2 = DEFS.map( d => ( 'v2:Account' === d.id ? { ...d, available: false } : d ) );
+		const onChange = jest.fn();
+		render( <OutboundFields field={ { ...field, definitions: unavailableV2 } } value={ [] } onChange={ onChange } /> );
+		fireEvent.click( screen.getAllByRole( 'button', { name: /field details/i } )[ 0 ] );
+		const useV2Button = screen.getByRole( 'button', { name: /use v2/i } );
+		expect( useV2Button ).toBeDisabled();
+		fireEvent.click( useV2Button );
+		expect( onChange ).not.toHaveBeenCalled();
 	} );
 } );

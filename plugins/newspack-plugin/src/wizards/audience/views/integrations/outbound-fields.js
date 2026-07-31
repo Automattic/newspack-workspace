@@ -51,7 +51,8 @@ export const buildFieldRows = ( definitions, enabledIds, origin ) => {
 			}
 		}
 		const active = candidates[ activeVersion ];
-		if ( ! active.length || active.every( d => ! d.available ) ) {
+		const anyAvailable = conflict ? [ 'v1', 'v2' ].some( v => candidates[ v ].some( d => d.available ) ) : active.some( d => d.available );
+		if ( ! active.length || ! anyAvailable ) {
 			return;
 		}
 		const checked = Boolean( enabledVersion );
@@ -71,6 +72,7 @@ export const buildFieldRows = ( definitions, enabledIds, origin ) => {
 			ids: active.map( d => d.id ),
 			allIds: VERSIONS.flatMap( v => candidates[ v ].map( d => d.id ) ),
 			checked,
+			availableVersions: { v1: candidates.v1.some( d => d.available ), v2: candidates.v2.some( d => d.available ) },
 			supersededHint: supersededByDef ? supersededByDef.name : null,
 			originOrder: activeVersion === origin || 'neutral' === activeVersion ? 0 : 1,
 		} );

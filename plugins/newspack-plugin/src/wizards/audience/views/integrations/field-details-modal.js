@@ -14,10 +14,10 @@ const SYNC_TYPE_LABELS = {
 	tag: __( 'Synced as a tag', 'newspack-plugin' ),
 };
 
-const VersionCard = ( { definition, isActive, isPicker, onPick } ) => (
+const VersionCard = ( { definition, isActive, isPicker, isPickable, onPick } ) => (
 	<div className={ `newspack-field-version-card${ isActive ? ' is-active' : '' }` }>
 		<div className="newspack-field-version-card__header">
-			<Badge text={ definition.version } level={ isActive ? 'info' : 'default' } />
+			{ isPicker && <Badge text={ definition.version } level={ isActive ? 'info' : 'default' } /> }
 			{ 'new' === definition.status && <Badge text={ __( 'New', 'newspack-plugin' ) } level="success" /> }
 		</div>
 		{ definition.description && <p>{ definition.description }</p> }
@@ -32,13 +32,20 @@ const VersionCard = ( { definition, isActive, isPicker, onPick } ) => (
 		) }
 		{ SYNC_TYPE_LABELS[ definition.sync_type ] && <p>{ SYNC_TYPE_LABELS[ definition.sync_type ] }</p> }
 		{ isPicker && (
-			<Button variant={ isActive ? 'secondary' : 'primary' } disabled={ isActive } onClick={ onPick }>
-				{ sprintf(
-					/* translators: %s: schema version (v1 or v2). */
-					__( 'Use %s', 'newspack-plugin' ),
-					definition.version
+			<>
+				<Button variant={ isActive ? 'secondary' : 'primary' } disabled={ isActive || ! isPickable } onClick={ onPick }>
+					{ sprintf(
+						/* translators: %s: schema version (v1 or v2). */
+						__( 'Use %s', 'newspack-plugin' ),
+						definition.version
+					) }
+				</Button>
+				{ ! isPickable && (
+					<p className="newspack-field-version-card__unavailable">
+						{ __( "Not available with the site's current configuration.", 'newspack-plugin' ) }
+					</p>
 				) }
-			</Button>
+			</>
 		) }
 	</div>
 );
@@ -46,10 +53,6 @@ const VersionCard = ( { definition, isActive, isPicker, onPick } ) => (
 /**
  * Per-field details: full description, example value and sync behavior; on
  * conflict rows the v1/v2 cards double as the version picker.
- *
- * Callers also pass an `origin` prop, accepted for interface consistency
- * with sibling row helpers; it isn't read here because buildFieldRows
- * already bakes the site's schema origin into row.activeVersion/conflict.
  *
  * @param {Object}   props               Component props.
  * @param {Object}   props.row           Row from buildFieldRows.
@@ -60,7 +63,7 @@ const FieldDetailsModal = ( { row, onPickVersion, onClose } ) => {
 	const versions = [ 'v1', 'v2' ].filter( v => row.candidates[ v ]?.length );
 	const cards = row.conflict ? versions.map( v => row.candidates[ v ][ 0 ] ) : [ row.activeDefinition ];
 	return (
-		<Modal title={ row.name } onRequestClose={ onClose } size="medium">
+		<Modal title={ row.name } onRequestClose={ onClose } size={ row.conflict ? 'large' : 'medium' }>
 			{ row.conflict && (
 				<Notice status="warning" isDismissible={ false }>
 					{ __(
@@ -69,13 +72,14 @@ const FieldDetailsModal = ( { row, onPickVersion, onClose } ) => {
 					) }
 				</Notice>
 			) }
-			<Grid columns={ cards.length } gutter={ 16 }>
+			<Grid columns={ cards.length } gutter={ 16 } noMargin>
 				{ cards.map( definition => (
 					<VersionCard
 						key={ definition.id }
 						definition={ definition }
 						isActive={ definition.version === row.activeVersion && row.checked }
 						isPicker={ row.conflict }
+						isPickable={ row.availableVersions?.[ definition.version ] !== false }
 						onPick={ () => onPickVersion( definition.version ) }
 					/>
 				) ) }

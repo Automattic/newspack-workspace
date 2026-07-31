@@ -41,7 +41,7 @@ describe( 'FieldDetailsModal', () => {
 	it( 'renders comparison cards for a conflict row and picks a version', () => {
 		const row = buildFieldRows( DEFS, [ 'v1:last_payment_amount' ], 'v1' )[ 0 ];
 		const onPickVersion = jest.fn();
-		render( <FieldDetailsModal row={ row } origin="v1" onPickVersion={ onPickVersion } onClose={ () => {} } /> );
+		render( <FieldDetailsModal row={ row } onPickVersion={ onPickVersion } onClose={ () => {} } /> );
 		expect( screen.getByText( 'Amount of the most recent payment, net of refunds' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Gross amount of the most recent order' ) ).toBeInTheDocument();
 		// `Notice` calls `@wordpress/a11y`'s `speak()` on mount, which echoes its
@@ -55,7 +55,7 @@ describe( 'FieldDetailsModal', () => {
 	it( 'renders a single card without a picker for non-conflict rows', () => {
 		const single = [ { ...DEFS[ 0 ], in_conflict_group: false, id: 'v1:total_paid', name: 'Total Paid', raw_key: 'total_paid' } ];
 		const row = buildFieldRows( single, [], 'v1' )[ 0 ];
-		render( <FieldDetailsModal row={ row } origin="v1" onPickVersion={ () => {} } onClose={ () => {} } /> );
+		render( <FieldDetailsModal row={ row } onPickVersion={ () => {} } onClose={ () => {} } /> );
 		expect( screen.queryByRole( 'button', { name: /use v/i } ) ).not.toBeInTheDocument();
 	} );
 } );
