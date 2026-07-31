@@ -47,7 +47,7 @@ if ( ! $is_valid ) {
 
 $is_success             = ! $order->has_status( 'failed' );
 $after_success_behavior = isset( $_GET['after_success_behavior'] ) ? \sanitize_text_field( \wp_unslash( $_GET['after_success_behavior'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-$after_success_url      = isset( $_GET['after_success_url'] ) ? esc_url( \sanitize_url( \wp_unslash( $_GET['after_success_url'] ) ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+$after_success_url      = isset( $_GET['after_success_url'] ) ? esc_url( \Newspack_Blocks\Modal_Checkout::sanitize_after_success_url( \sanitize_url( \wp_unslash( $_GET['after_success_url'] ) ) ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 $after_success_label    = isset( $_GET['after_success_button_label'] ) ? \sanitize_text_field( \wp_unslash( $_GET['after_success_button_label'] ) ) : \Newspack_Blocks\Modal_Checkout::get_modal_checkout_labels( 'after_success' ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 $checkout_data          = Checkout_Data::get_checkout_data( $order );
 ?>

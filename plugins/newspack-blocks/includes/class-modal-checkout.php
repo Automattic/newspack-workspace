@@ -1189,6 +1189,27 @@ final class Modal_Checkout {
 	}
 
 	/**
+	 * Reduce a post-checkout destination to one this site is willing to send readers to.
+	 *
+	 * The destination reaches the thank-you page through the request, whether it came from
+	 * the block's own settings or from the link the reader followed, and by that point the
+	 * two are indistinguishable. Core's redirect validation decides: this site's host is
+	 * always allowed, and a publisher who wants to send readers somewhere else adds that
+	 * host through the standard `allowed_redirect_hosts` filter.
+	 *
+	 * @param string $url The requested destination.
+	 *
+	 * @return string The destination, or an empty string if it is not allowed.
+	 */
+	public static function sanitize_after_success_url( $url ) {
+		if ( empty( $url ) ) {
+			return '';
+		}
+
+		return (string) wp_validate_redirect( $url, '' );
+	}
+
+	/**
 	 * Get after success button params.
 	 */
 	private static function get_after_success_params() {
@@ -1204,7 +1225,7 @@ final class Modal_Checkout {
 		return array_filter(
 			[
 				'after_success_behavior'     => isset( $request_params['after_success_behavior'] ) ? sanitize_text_field( wp_unslash( $request_params['after_success_behavior'] ) ) : '', // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-				'after_success_url'          => isset( $request_params['after_success_url'] ) ? sanitize_url( wp_unslash( $request_params['after_success_url'] ) ) : '', // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+				'after_success_url'          => isset( $request_params['after_success_url'] ) ? self::sanitize_after_success_url( sanitize_url( wp_unslash( $request_params['after_success_url'] ) ) ) : '', // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 				'after_success_button_label' => isset( $request_params['after_success_button_label'] ) ? sanitize_text_field( wp_unslash( $request_params['after_success_button_label'] ) ) : '', // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 				'action_type'                => isset( $request_params['action_type'] ) ? sanitize_text_field( wp_unslash( $request_params['action_type'] ) ) : '', // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			]
