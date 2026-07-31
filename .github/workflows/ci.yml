@@ -438,12 +438,33 @@ jobs:
           retention-days: 14
 
   # ----------------------------------------------------------------------------
+  shell-tests:
+    name: Shell specs
+    # Not gated on changed-packages: these cover bin/ and `n`, which belong to no
+    # package, so a tooling-only PR would otherwise run nothing at all.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: bin/tests
+        run: |
+          shopt -s nullglob
+          specs=(bin/tests/*.sh)
+          if [ ${#specs[@]} -eq 0 ]; then
+            echo "No shell specs found in bin/tests/."
+            exit 1
+          fi
+          for spec in "${specs[@]}"; do
+            echo "--- $spec"
+            bash "$spec"
+          done
+
+  # ----------------------------------------------------------------------------
   ci-ok:
     name: CI OK
     # `install` is in the needs list so a `--frozen-lockfile` failure on a
     # root-deps-only PR (empty js/php matrices) is treated as a CI failure
     # rather than masked by the skipped matrix jobs.
-    needs: [install, js, php-lint, php-lint-non-workspace, php-test, build-zips, bundle-zips]
+    needs: [install, js, php-lint, php-lint-non-workspace, php-test, build-zips, bundle-zips, shell-tests]
     if: always()
     runs-on: ubuntu-latest
     steps:
