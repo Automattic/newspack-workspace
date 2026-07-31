@@ -132,8 +132,12 @@ require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/class-wizard-bridge.p
 // `single_template` takeover (load_email_preview_template) keys off, so gating it
 // keeps a flag-off site's *public* newsletters rendering in the theme's standard
 // single template (legacy/MJML behavior) rather than the package's email-preview
-// template. The boot still registers only additive, unused-until-render machinery
-// (e.g. the `block_type_metadata_settings` filter) when the flag is off.
+// template. With the flag off the boot still registers site-wide machinery, but it is
+// either additive or post-type-gated: a `sent` post status, the email-editor preview
+// REST routes, an `email-contents` block-pattern category, a `post_types` field on the
+// wp_template REST response, and a `safe_style_css` KSES allow-list widening (`display`
+// + `mso-*`). None of it engages the front-end template path — that is what the opt-in
+// gate closes. Full rationale in includes/email-renderers/README.md.
 \Newspack\Newsletters\Email_Renderers\Editor_Bootstrap::init();
 
 // This MUST be initialized after Newspack_Newsletter class.

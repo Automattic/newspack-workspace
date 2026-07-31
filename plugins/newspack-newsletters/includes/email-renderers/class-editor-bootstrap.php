@@ -66,8 +66,13 @@ class Editor_Bootstrap {
 
 		// The package re-registers opted-in post types on init:10, overwriting the
 		// canonical CPT args with email defaults. Re-assert at priority 11 to keep
-		// Newspack's registration authoritative.
-		add_action( 'init', [ \Newspack_Newsletters::class, 'register_cpt' ], 11 );
+		// Newspack's registration authoritative — but only when the flag is on, since
+		// that is the only time the package opts the CPT in (see add_post_type) and so
+		// the only time there is anything to counter. With the flag off the package
+		// registers nothing at init:10, and re-registering here would be pure duplicate
+		// work every request (and would silently undo a remove_post_type_support() made
+		// between init:10 and init:11).
+		add_action( 'init', [ __CLASS__, 'reassert_cpt_when_enabled' ], 11 );
 
 		// Inject per-newsletter theme colors at render time. See merge_theme_json().
 		add_filter( 'woocommerce_email_editor_theme_json', [ __CLASS__, 'merge_theme_json' ] );
@@ -78,6 +83,23 @@ class Editor_Bootstrap {
 
 		// Inject Newspack fallback defaults at the theme.json default origin.
 		Email_Defaults::init();
+	}
+
+	/**
+	 * Re-assert Newspack's canonical CPT registration after the package's init:10
+	 * pass — only when the WC renderer is on.
+	 *
+	 * The package overwrites the CPT args with email defaults only for opted-in post
+	 * types (see add_post_type), so with the flag off there is nothing to counter and
+	 * this is skipped, avoiding a redundant re-registration on every request. Reads the
+	 * flag lazily at init:11, matching add_post_type's read at init:10.
+	 *
+	 * @return void
+	 */
+	public static function reassert_cpt_when_enabled() {
+		if ( Feature_Flag::is_enabled() ) {
+			\Newspack_Newsletters::register_cpt();
+		}
 	}
 
 	/**
@@ -123,22 +145,19 @@ class Editor_Bootstrap {
 	/**
 	 * Opt the newsletters CPT into the email editor — only when the WC renderer is on.
 	 *
-	 * The opt-in is what the package keys its front-end takeover off: with the CPT in
-	 * this list the package's `single_template` filter (Email_Editor::load_email_preview_template)
-	 * serves a *public* newsletter (one set for both email and web) through the package's
-	 * email-preview template — full email HTML, email-only blocks shown, no theme wrapper —
-	 * instead of the theme's standard single template. Gating the opt-in on the flag keeps a
-	 * flag-off site on the legacy (MJML) behavior, where public newsletters render normally in
-	 * the theme and `Newspack_Newsletters::remove_visibility_hidden_block()` hides email-only
-	 * blocks. The editor takeover in Newspack_Newsletters_Editor is separately flag-gated; this
-	 * closes the front-end path it never covered.
+	 * The package keys its front-end `single_template` takeover
+	 * (Email_Editor::load_email_preview_template) off this opt-in list, so gating it keeps a
+	 * flag-off site's public newsletters in the theme's standard single template (legacy MJML
+	 * behavior) instead of the package's bare email-preview template. See the README
+	 * (`Editor_Bootstrap`) for the full rationale, including what the flag-on path still leaves
+	 * open (tracked in NPPD-2150).
 	 *
-	 * The flag is read here (lazily, when the filter fires on `init`) rather than at boot so
-	 * every flag source is honored — option, constant, and the `newspack_newsletters_use_woo_renderer`
-	 * filter — regardless of when it is registered.
+	 * The flag is read lazily here, so the option and constant (always set in time) and any
+	 * `newspack_newsletters_use_woo_renderer` filter registered before `init:10` are honored —
+	 * a filter added later half-engages, since register_email_post_types() reads this list once
+	 * at init:10.
 	 *
-	 * The package expects `name` + `args` entries; empty args is fine. The package
-	 * re-registers opted-in CPTs (see init() for the priority-11 re-assertion).
+	 * The package expects `name` + `args` entries; empty args is fine.
 	 *
 	 * @param array $post_types List of email editor post types.
 	 * @return array Modified list.

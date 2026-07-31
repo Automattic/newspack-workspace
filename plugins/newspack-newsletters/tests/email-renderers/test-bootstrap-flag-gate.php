@@ -15,11 +15,10 @@ use Newspack\Newsletters\Email_Renderers\Editor_Bootstrap;
  * Regression (#564): the package boots unconditionally, and its opt-in used to be
  * unconditional too. Once the CPT is opted in, the package's `single_template`
  * filter (Email_Editor::load_email_preview_template) takes over the front end of a
- * *public* newsletter (one set for both email and web) — serving the package's
- * email-preview template (full email HTML, email-only blocks shown, no theme
- * wrapper) instead of the theme's standard single template. Gating the opt-in on
- * `Feature_Flag::is_enabled()` (in Editor_Bootstrap::add_post_type) closes that
- * front-end path when the flag is off.
+ * *public* newsletter (one set for both email and web) — serving the package's bare
+ * email-preview template (no theme header, footer or sidebar) instead of the theme's
+ * standard single template. Gating the opt-in on `Feature_Flag::is_enabled()` (in
+ * Editor_Bootstrap::add_post_type) closes that front-end path when the flag is off.
  */
 class Test_Bootstrap_Flag_Gate extends WP_UnitTestCase {
 
@@ -57,10 +56,59 @@ class Test_Bootstrap_Flag_Gate extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The package's front-end `single_template` takeover engages only when the flag is
+	 * on. This asserts the exact thing the regression broke — the template resolved for a
+	 * public newsletter — which the CPT-opt-in and block-visibility tests do not: a future
+	 * package version that keyed its takeover off something other than
+	 * `woocommerce_email_editor_post_types` would slip past them.
+	 *
+	 * `load_email_preview_template()` only registers a nested closure and returns a path
+	 * (render_html() is not called at filter time), so the flag-on branch stays cheap.
+	 */
+	public function test_single_template_taken_over_only_when_flag_on() {
+		$post_id = self::factory()->post->create(
+			[
+				'post_type'   => \Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT,
+				'post_status' => 'publish',
+				'meta_input'  => [ 'is_public' => 1 ],
+			]
+		);
+		// The package resolves the current post from the global; save/restore it.
+		global $post;
+		$previous_post = $post;
+		$post          = get_post( $post_id ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+
+		$theme_template = '/theme/single.php';
+
+		// Flag off (default): the theme's single template is returned unchanged.
+		$this->assertSame(
+			$theme_template,
+			apply_filters( 'single_template', $theme_template ),
+			'Flag off: a public newsletter must keep the theme single template.'
+		);
+
+		// Flag on: the package's email-preview template takes over.
+		add_filter( 'newspack_newsletters_use_woo_renderer', '__return_true' );
+		$resolved = apply_filters( 'single_template', $theme_template );
+		remove_filter( 'newspack_newsletters_use_woo_renderer', '__return_true' );
+		$this->assertStringContainsString(
+			'single-email-post-template.php',
+			$resolved,
+			'Flag on: the package email-preview template must take over the front end.'
+		);
+
+		$post = $previous_post; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+	}
+
+	/**
 	 * On the web front end (no active email render), `remove_visibility_hidden_block()`
-	 * hides `email`-only blocks and keeps `web`-only and unmarked blocks. This is the
-	 * behavior a flag-off public newsletter must keep — when the opt-in leaked, the
-	 * package's email template bypassed this path and showed email-only blocks.
+	 * hides `email`-only blocks and keeps `web`-only and unmarked blocks.
+	 *
+	 * This is a characterization test of `remove_visibility_hidden_block()`, which the
+	 * gate does not touch (the filter ran under the package template too, so email-only
+	 * blocks were never the regression) — but it had no coverage anywhere before this PR,
+	 * so it is worth pinning. The gate's actual behavior is asserted in
+	 * test_single_template_taken_over_only_when_flag_on().
 	 */
 	public function test_email_only_blocks_hidden_on_web_front_end() {
 		$post_id = self::factory()->post->create(
