@@ -39,7 +39,7 @@ if ( ! class_exists( 'Newspack\Newsletters\Subscription_Lists' ) ) {
 			$posts = get_posts(
 				[
 					'post_type'      => self::CPT,
-					'posts_per_page' => -1,
+					'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Mirrors the real Subscription_Lists query; the test seeds a handful of lists.
 					'post_status'    => 'any',
 				]
 			);
