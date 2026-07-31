@@ -494,6 +494,20 @@ class ESP extends Integration {
 			return $contact_data;
 		}
 
+		// The enabled incoming fields are defined from one specific list — see
+		// get_available_incoming_fields(), which resolves the field schema from
+		// get_master_list_id(). Providers whose fields are per-list (Mailchimp
+		// merge fields belong to an audience) report them keyed by list, so read
+		// the configured list's entry: a reader belonging to several lists would
+		// otherwise get whichever list the provider happened to report last,
+		// storing another list's values or none at all.
+		$master_list_id = $this->get_master_list_id();
+		if ( $master_list_id && isset( $contact_data['metadata_by_list'] ) && is_array( $contact_data['metadata_by_list'] ) ) {
+			return $contact_data['metadata_by_list'][ $master_list_id ] ?? [];
+		}
+
+		// Providers with account-wide fields (ActiveCampaign) report a single flat
+		// map, with no per-list ambiguity to resolve.
 		if ( ! empty( $contact_data['metadata'] ) ) {
 			return $contact_data['metadata'];
 		}
