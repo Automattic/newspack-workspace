@@ -28,6 +28,11 @@ class Group_Subscription_Settings {
 	const GROUP_SUBSCRIPTION_META_PREFIX = '_newspack_group_subscription_';
 
 	/**
+	 * Maximum length for a custom group name. Mirrored by the rename input's maxlength.
+	 */
+	const GROUP_NAME_MAX_LENGTH = 100;
+
+	/**
 	 * Initialize hooks and filters.
 	 */
 	public static function init() {
@@ -116,7 +121,28 @@ class Group_Subscription_Settings {
 				'invalid_email_message' => __( 'Please enter a valid email address.', 'newspack-plugin' ),
 				'success_message'       => __( 'Invitation sent successfully.', 'newspack-plugin' ),
 				'pending_label'         => __( '(pending)', 'newspack-plugin' ),
+				'remove_label'          => __( 'Remove', 'newspack-plugin' ),
+				'cancel_label'          => __( 'Cancel', 'newspack-plugin' ),
+				'cancel_error_message'  => __( 'Failed to cancel invitation.', 'newspack-plugin' ),
+				'limit_notice'          => self::get_limit_notice_text(),
 			]
+		);
+	}
+
+	/**
+	 * Get the "member limit reached" sentence shown in the admin metabox.
+	 *
+	 * Shared by the server-side render and the JS that rewrites the notice on live
+	 * add/remove/invite/cancel, so both always say the same thing — including the
+	 * publisher-configurable container label.
+	 *
+	 * @return string The translated notice text.
+	 */
+	public static function get_limit_notice_text() {
+		return sprintf(
+			/* translators: %s: lowercase singular group label (e.g. "group", "team"). */
+			__( 'This %s has reached its member limit. Remove a member, or raise the member limit above and save, to add more.', 'newspack-plugin' ),
+			Group_Subscription::get_label_lower( 'singular' )
 		);
 	}
 
@@ -157,9 +183,9 @@ class Group_Subscription_Settings {
 		$custom_product_pricing_options['newspack_group_subscription_limit'] = [
 			'id'                => self::GROUP_SUBSCRIPTION_META_PREFIX . 'limit',
 			'wrapper_class'     => 'show_if_newspack_group_subscription_enabled',
-			'label'             => __( 'Group subscription member limit (in addition to owner)', 'newspack-plugin' ),
+			'label'             => __( 'Group subscription member limit (including owner)', 'newspack-plugin' ),
 			'desc_tip'          => true,
-			'description'       => __( 'Set the maximum number of members allowed in addition to the owner. Set to 0 to allow an unlimited number of group members.', 'newspack-plugin' ),
+			'description'       => __( 'Set the maximum number of members, including the owner. The minimum is 2, so there is always room for one member besides the owner. Set to 0 to allow an unlimited number of group members.', 'newspack-plugin' ),
 			'default'           => self::DEFAULT_SETTINGS['limit'],
 			'product_types'     => [ 'subscription', 'subscription_variation' ],
 			'type'              => 'number',
@@ -189,8 +215,10 @@ class Group_Subscription_Settings {
 			return $column_content;
 		}
 		$settings = self::get_subscription_settings( $subscription );
-		// The owner counts as a member, so use the owner-inclusive count and a capacity
-		// (limit + owner) so this matches the member-facing card and Members tab.
+		// The owner occupies a seat, so pair the owner-inclusive count with the
+		// owner-inclusive capacity (the limit) so this matches the member-facing card
+		// and Members tab. "Seats" rather than "members" because the owner fills one of
+		// them without being a member.
 		$member_count = Group_Subscription::get_member_count( $subscription );
 		$capacity     = Group_Subscription::get_member_capacity( $subscription );
 		$limit        = null !== $capacity
@@ -203,8 +231,8 @@ class Group_Subscription_Settings {
 			\esc_html( $settings['name'] ),
 			\esc_html(
 				sprintf(
-					/* translators: 1: member count, 2: member capacity or "unlimited" */
-					__( '%1$s of %2$s members', 'newspack-plugin' ),
+					/* translators: 1: number of seats taken, 2: total seats or "unlimited" */
+					__( '%1$s of %2$s seats', 'newspack-plugin' ),
 					$member_count,
 					$limit
 				)
@@ -214,6 +242,25 @@ class Group_Subscription_Settings {
 		// Prepend the group info before the standard WCS column markup so any
 		// status pills, preview affordances, or future additions from WCS are preserved.
 		return $group_markup . $column_content;
+	}
+
+	/**
+	 * Normalize a member limit to the owner-inclusive contract.
+	 *
+	 * The limit counts the owner, so a group must be allowed at least 2 seats to have
+	 * room for one member besides them. A positive limit is floored to that minimum;
+	 * unlimited (0) is left untouched. Applied on every read as well as on write, so
+	 * limits stored under the earlier "members in addition to the owner" meaning — a
+	 * stored 1 would otherwise leave zero usable member seats — stay workable without
+	 * a re-save. See Group_Subscription::get_member_seat_limit().
+	 *
+	 * @param mixed $limit The raw limit value.
+	 *
+	 * @return int The normalized limit: 0 (unlimited) or 2 and up.
+	 */
+	public static function normalize_limit( $limit ) {
+		$limit = absint( $limit );
+		return $limit > 0 ? max( 2, $limit ) : 0;
 	}
 
 	/**
@@ -245,7 +292,10 @@ class Group_Subscription_Settings {
 		 * @param array $settings The group subscription settings.
 		 * @param WC_Product $product The product object.
 		 */
-		return apply_filters( 'newspack_group_subscription_product_settings', $settings, $product );
+		$settings = apply_filters( 'newspack_group_subscription_product_settings', $settings, $product );
+
+		$settings['limit'] = self::normalize_limit( $settings['limit'] ?? 0 );
+		return $settings;
 	}
 
 	/**
@@ -281,7 +331,10 @@ class Group_Subscription_Settings {
 		 * @param array $settings The group subscription settings.
 		 * @param WC_Subscription $subscription The subscription object.
 		 */
-		return apply_filters( 'newspack_group_subscription_settings', $settings, $subscription );
+		$settings = apply_filters( 'newspack_group_subscription_settings', $settings, $subscription );
+
+		$settings['limit'] = self::normalize_limit( $settings['limit'] ?? 0 );
+		return $settings;
 	}
 
 	/**
@@ -311,6 +364,9 @@ class Group_Subscription_Settings {
 			} elseif ( is_int( self::DEFAULT_SETTINGS[ $key ] ) ) {
 				$value = absint( $value );
 			}
+			if ( 'limit' === $key ) {
+				$value = self::normalize_limit( $value );
+			}
 			if ( $value !== $previous_value ) {
 				$subscription->update_meta_data( self::GROUP_SUBSCRIPTION_META_PREFIX . $key, $value );
 				$should_save    = true;
@@ -325,6 +381,35 @@ class Group_Subscription_Settings {
 				self::clear_group_subscription_ids_cache();
 			}
 		}
+	}
+
+	/**
+	 * Set the group name override on a subscription.
+	 *
+	 * Deliberately does NOT go through update_subscription_settings(), which dedupes against
+	 * the *resolved* name (custom → product name → label). That dedupe is right for the admin
+	 * meta box, whose field is pre-filled with the resolved name: a no-op save there must not
+	 * silently sever product inheritance. It is wrong for an explicit rename, whose field is
+	 * pre-filled with the raw override and shows the fallback only as a placeholder — so a
+	 * non-empty submit means "pin this name", even when it happens to equal what the group
+	 * currently inherits. Without pinning, a later product/label rename would silently rename
+	 * the reader's group underneath them.
+	 *
+	 * @param WC_Subscription|int $subscription The subscription object or ID.
+	 * @param string              $name         The custom name. An empty string clears the override.
+	 */
+	public static function update_subscription_name( $subscription, $name ) {
+		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $subscription );
+		if ( ! $subscription ) {
+			return;
+		}
+		$meta_key = self::GROUP_SUBSCRIPTION_META_PREFIX . 'name';
+		// Compare against the raw override, not the resolved name, so only a genuine no-op skips the write.
+		if ( (string) $subscription->get_meta( $meta_key, true ) === $name ) {
+			return;
+		}
+		$subscription->update_meta_data( $meta_key, $name );
+		$subscription->save();
 	}
 
 	/**
@@ -397,30 +482,48 @@ class Group_Subscription_Settings {
 		}
 		$settings = self::get_subscription_settings( $subscription );
 		$product  = \wc_get_product( WooCommerce_Subscriptions::get_subscription_product_id( $subscription ) );
-		$members  = Group_Subscription::get_members( $subscription );
-		$managers = Group_Subscription::get_managers( $subscription );
-		$invites  = Group_Subscription_Invite::get_invites( $subscription );
+		$members   = array_map( 'intval', Group_Subscription::get_members( $subscription ) );
+		$managers  = array_map( 'intval', Group_Subscription::get_managers( $subscription ) );
+		$invites   = Group_Subscription_Invite::get_invites( $subscription );
+		$owner_id  = (int) $subscription->get_user_id();
 		// Resolve the rows once, applying the same guards used when rendering below, so the
 		// header count always matches the rendered list (and the admin JS, which re-tallies the
-		// list items on add/remove/invite). The owner/manager(s) render as non-removable rows;
-		// members exclude any manager that also carries member meta (avoiding a duplicate row)
-		// and must be readers.
-		$manager_users = [];
-		foreach ( array_map( 'intval', $managers ) as $manager_id ) {
-			$manager_user = get_user_by( 'id', $manager_id );
-			if ( $manager_user ) {
-				$manager_users[] = $manager_user;
+		// list items on add/remove/invite). The owner is the only non-removable row. Promoted
+		// managers keep their member meta, so they render as removable member rows below, flagged
+		// so the row can show a "(manager)" label instead of being mislabelled as the owner.
+		$owner_user = $owner_id ? get_user_by( 'id', $owner_id ) : null;
+		$member_rows = [];
+		foreach ( $members as $member_id ) {
+			if ( $member_id === $owner_id ) {
+				continue;
 			}
-		}
-		$member_users = [];
-		foreach ( array_diff( array_map( 'intval', $members ), array_map( 'intval', $managers ) ) as $member_id ) {
 			$member_user = get_user_by( 'id', $member_id );
 			if ( $member_user && Reader_Activation::is_user_reader( $member_user ) ) {
-				$member_users[] = $member_user;
+				$member_rows[] = [
+					'user'       => $member_user,
+					'is_manager' => in_array( $member_id, $managers, true ),
+				];
 			}
 		}
+		// A spot is consumed by each group member and each pending (non-expired) invite. The
+		// threshold is the member-seat limit, not the owner-inclusive configured limit: $members
+		// comes from get_members(), which returns member-meta holders and so excludes the owner,
+		// and get_member_seat_limit() reserves the seat of every manager who holds no member meta
+		// (in practice the owner). That is the exact expression the server enforces in
+		// Group_Subscription::update_members() and Group_Subscription_Invite::generate_invite(),
+		// and the one the reader-facing My Account view computes
+		// (my-account/templates/v1/group-subscription-members.php), so the admin is never shown an
+		// add form the server would then reject with a 409. A null seat limit means unlimited. The
+		// admin JS re-evaluates on add/remove/invite/cancel to keep the form and notice in sync.
+		$seat_limit      = Group_Subscription::get_member_seat_limit( $subscription );
+		$pending_invites = Group_Subscription_Invite::get_invites( $subscription, false );
+		$is_at_limit     = null !== $seat_limit && ( count( $members ) + count( $pending_invites ) ) >= $seat_limit;
+		// Members in the raw set but not rendered as spot-marked rows (a manager who also carries
+		// member meta, or a non-reader member) still consume a spot; the JS adds this offset to
+		// its rendered-row tally so its live count matches this server-side one.
+		$spots_offset = count( $members ) - count( $member_rows );
 		?>
-		<div class="newspack-group-subscription__container" data-subscription-id="<?php echo \esc_attr( $subscription->get_id() ); ?>">
+		<div class="newspack-group-subscription__container<?php echo $is_at_limit ? ' is-at-limit' : ''; ?>" data-subscription-id="<?php echo \esc_attr( $subscription->get_id() ); ?>" data-member-limit="<?php echo \esc_attr( null === $seat_limit ? '' : (string) $seat_limit ); ?>" data-spots-offset="<?php echo \esc_attr( (string) $spots_offset ); ?>">
 			<input type="hidden" name="<?php echo \esc_attr( self::GROUP_SUBSCRIPTION_META_PREFIX . 'enabled_baseline' ); ?>" value="<?php echo \esc_attr( \wc_bool_to_string( $settings['enabled'] ) ); ?>" />
 			<input type="hidden" name="<?php echo \esc_attr( self::GROUP_SUBSCRIPTION_META_PREFIX . 'limit_baseline' ); ?>" value="<?php echo \esc_attr( (int) $settings['limit'] ); ?>" />
 			<input type="hidden" name="<?php echo \esc_attr( self::GROUP_SUBSCRIPTION_META_PREFIX . 'name_baseline' ); ?>" value="<?php echo \esc_attr( $settings['name'] ); ?>" />
@@ -485,29 +588,35 @@ class Group_Subscription_Settings {
 						sprintf(
 							// translators: %d: The number of group members.
 							__( 'Group members (<span class="newspack-group-subscription__members-count">%d</span>)', 'newspack-plugin' ),
-							// Count exactly the rows rendered below (owner(s) + reader-members + invites)
+							// Count exactly the rows rendered below (owner + reader-members + invites)
 							// so the header never drifts from the list.
-							count( $manager_users ) + count( $member_users ) + count( $invites )
+							( $owner_user ? 1 : 0 ) + count( $member_rows ) + count( $invites )
 						)
 					);
 					?>
 				</h3>
 				<ul class="newspack-group-subscription__members-list">
 					<?php
-					// The owner counts as a member of the group, so render the manager(s) first
-					// as non-removable rows. The JS keeps the count in sync by tallying list items.
-					foreach ( $manager_users as $manager_user ) :
+					// The owner counts as a member of the group and is rendered first as a
+					// non-removable row. The JS keeps the count in sync by tallying list items.
+					if ( $owner_user ) :
 						?>
 						<li>
-							<a class="newspack-group-subscription__member-user-link" href="<?php echo \esc_url( \get_edit_user_link( $manager_user->ID ) ); ?>"><?php echo \esc_html( $manager_user->user_email ); ?></a>
+							<a class="newspack-group-subscription__member-user-link" href="<?php echo \esc_url( \get_edit_user_link( $owner_user->ID ) ); ?>"><?php echo \esc_html( $owner_user->user_email ); ?></a>
 							<span class="newspack-group-subscription__member-role"><?php \esc_html_e( '(owner)', 'newspack-plugin' ); ?></span>
 						</li>
 						<?php
-					endforeach;
-					foreach ( $member_users as $user ) :
+					endif;
+					// Members and promoted managers are removable rows; a manager row carries a
+					// "(manager)" label so it isn't confused with a plain member or the owner.
+					foreach ( $member_rows as $member_row ) :
+						$user = $member_row['user'];
 						?>
-						<li>
+						<li data-consumes-spot="1">
 							<a class="newspack-group-subscription__member-user-link" href="<?php echo \esc_url( \get_edit_user_link( $user->ID ) ); ?>"><?php echo \esc_html( $user->user_email ); ?></a>
+							<?php if ( $member_row['is_manager'] ) : ?>
+								<span class="newspack-group-subscription__member-role"><?php \esc_html_e( '(manager)', 'newspack-plugin' ); ?></span>
+							<?php endif; ?>
 							<a title="<?php \esc_attr_e( 'Remove', 'newspack-plugin' ); ?>" href="#" class="newspack-group-subscription__remove-member" data-user-id="<?php echo \esc_attr( $user->ID ); ?>">
 								&#215;
 								<span class="screen-reader-text"><?php \esc_html_e( 'Remove', 'newspack-plugin' ); ?></span>
@@ -518,7 +627,7 @@ class Group_Subscription_Settings {
 					foreach ( array_values( $invites ) as $invite ) :
 						$is_expired = Group_Subscription_Invite::is_invite_expired( $invite );
 						?>
-						<li data-email="<?php echo \esc_attr( $invite['email'] ); ?>">
+						<li data-email="<?php echo \esc_attr( $invite['email'] ); ?>"<?php echo $is_expired ? '' : ' data-consumes-spot="1"'; ?>>
 							<span class="newspack-group-subscription__pending-invite"><?php echo \esc_html( $invite['email'] ); ?></span> <span class="newspack-group-subscription__pending-invite-label"><?php echo \esc_html( $is_expired ? __( '(expired)', 'newspack-plugin' ) : __( '(pending)', 'newspack-plugin' ) ); ?></span>
 							<a title="<?php \esc_attr_e( 'Cancel', 'newspack-plugin' ); ?>" href="#" class="newspack-group-subscription__cancel-invite">
 								&#215;
@@ -530,11 +639,27 @@ class Group_Subscription_Settings {
 					?>
 				</ul>
 			</div>
-			<div class="newspack-group-subscription__add-member show_if_newspack_group_subscription_enabled form-row">
+			<?php
+			// The live region is always present and never display:none — an element hidden that way
+			// is out of the accessibility tree, so it would not announce when the JS reveals it.
+			// The notice itself is added and removed inside it (server-side here, by the admin JS on
+			// live transitions), which is the content change screen readers actually announce.
+			?>
+			<div class="newspack-group-subscription__limit-notice show_if_newspack_group_subscription_enabled" role="status">
+				<?php if ( $is_at_limit ) : ?>
+					<div class="notice notice-warning inline"><p><?php echo \esc_html( self::get_limit_notice_text() ); ?></p></div>
+				<?php endif; ?>
+			</div>
+			<?php
+			// The add-member form is hidden with the `hidden` attribute rather than by a stylesheet
+			// rule, so the initial state is right even if the CSS fails to load; the JS toggles the
+			// same attribute on add/remove/invite/cancel. update_members() remains the authority.
+			?>
+			<div class="newspack-group-subscription__add-member show_if_newspack_group_subscription_enabled form-row"<?php echo $is_at_limit ? ' hidden' : ''; ?>>
 				<h3><?php \esc_html_e( 'Add new group members', 'newspack-plugin' ); ?></h3>
 				<select id="_newspack_group_subscription_member_ids" name="_newspack_group_subscription_member_ids[]">
 					<option value="">
-						<?php echo \esc_html( 'Select a reader...' ); ?>
+						<?php \esc_html_e( 'Select a reader...', 'newspack-plugin' ); ?>
 					</option>
 				</select>
 				<div class="newspack-group-subscription__invite-member">
@@ -785,7 +910,7 @@ class Group_Subscription_Settings {
 		$product_ids = \get_posts( // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.get_posts_get_posts
 			[
 				'post_type'      => [ 'product', 'product_variation' ],
-				'posts_per_page' => -1, // phpcs:ignore WordPress.WP.PostsPerPage.posts_per_page_posts_per_page
+				'posts_per_page' => -1, // phpcs:ignore WordPress.WP.PostsPerPage.posts_per_page_posts_per_page, WordPressVIPMinimum.Performance.NoPaging -- Group-subscription-enabled products only; small meta-filtered set.
 				'fields'         => 'ids',
 				'meta_key'       => $meta_key, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
 				'meta_value'     => 'yes', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value

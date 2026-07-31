@@ -18,6 +18,8 @@ use Newspack\Institution;
 
 /**
  * Tests for the Content Gates class.
+ *
+ * @group content-gate
  */
 class Test_Content_Gates extends \WP_UnitTestCase {
 
@@ -178,7 +180,10 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 	 * Teardown after tests.
 	 */
 	public function tear_down() {
-		foreach ( Content_Gate::get_gates() as $gate ) {
+		// Both buckets: get_gates() defaults to content gates only, so premium newsletter gates
+		// would otherwise survive into later tests and skew title/priority derivation there.
+		$gates = array_merge( Content_Gate::get_gates(), Content_Gate::get_gates( Content_Gate::GATE_CPT, null, true ) );
+		foreach ( $gates as $gate ) {
 			wp_delete_post( $gate['id'], true );
 		}
 		foreach ( $this->post_ids as $post_id ) {
@@ -1034,6 +1039,19 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Helper to read a private static property on Content_Gate via reflection.
+	 *
+	 * @param string $property Property name.
+	 *
+	 * @return mixed
+	 */
+	private function get_content_gate_property( $property ) {
+		$reflection = new \ReflectionProperty( Content_Gate::class, $property );
+		$reflection->setAccessible( true );
+		return $reflection->getValue();
+	}
+
+	/**
 	 * Reset the static per-post restriction cache on Content_Restriction_Control.
 	 * This cache is populated by is_post_restricted() and must be cleared between
 	 * tests to prevent cross-test contamination.
@@ -1055,6 +1073,8 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 		$this->set_content_gate_property( 'gate_rendered', false );
 		$this->set_content_gate_property( 'is_gated', false );
 		$this->set_content_gate_property( 'is_content_locked', false );
+		$this->set_content_gate_property( 'restricted_content', [] );
+		$this->set_content_gate_property( 'pending_gates', [] );
 	}
 
 	/**
@@ -2723,6 +2743,29 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A negative metering count must be floored at 0 (NPPD-2056). Signed intval()
+	 * would persist -1, which Metering::get_registered_settings() reads back through
+	 * absint() as 1 free view - silently granting a view to a publisher who asked for
+	 * none. The admin UI clamps too; this closes the direct REST-caller path.
+	 */
+	public function test_sanitize_metering_floors_negative_count() {
+		$negative_count = Content_Gate_API::sanitize_metering(
+			[
+				'enabled' => true,
+				'count'   => -1,
+				'period'  => 'month',
+			]
+		);
+		$this->assertSame( 0, $negative_count['count'], 'A negative metering count must be floored at 0 rather than persisted as a negative' );
+
+		$explicit_zero = Content_Gate_API::sanitize_metering( [ 'count' => 0 ] );
+		$this->assertSame( 0, $explicit_zero['count'], 'An explicitly entered 0 must survive sanitization' );
+
+		$positive_count = Content_Gate_API::sanitize_metering( [ 'count' => 3 ] );
+		$this->assertSame( 3, $positive_count['count'], 'A positive metering count must pass through unchanged' );
+	}
+
+	/**
 	 * Creating a gate must fall back to a default title when the payload
 	 * omits one, since sanitize_gate() no longer guarantees a title.
 	 */
@@ -2763,5 +2806,722 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 		$this->assertSame( 'publish', get_post_status( $gate_id_2 ), 'Memberships-style callers must not be affected by a draft default' );
 
 		delete_option( Content_Gate::DEFAULT_STATUS_OPTION );
+	}
+
+	/**
+	 * Gate priority orders overlapping gates, so two gates must never be created with the same
+	 * one — the tie would leave an arbitrary gate deciding what a reader sees. Deriving the
+	 * priority from the gate count collides as soon as a gate has been deleted from the middle
+	 * of the list, since priorities are positions, not a counter.
+	 */
+	public function test_create_gate_priority_survives_a_mid_list_delete() {
+		// The fixture leaves gates at priorities 0..3. Delete one from the middle.
+		wp_delete_post( $this->gate_ids[1], true );
+
+		$gate_id          = Content_Gate::create_gate( [ 'title' => 'Gate After Delete' ] );
+		$this->gate_ids[] = $gate_id;
+
+		$priorities = wp_list_pluck( Content_Gate::get_gates(), 'priority' );
+		$this->assertSame( array_unique( $priorities ), $priorities, 'No two gates share a priority' );
+		$this->assertSame( 4, Content_Gate::get_gate( $gate_id )['priority'], 'The new gate goes after the last gate, not at the deleted gate’s position' );
+	}
+
+	/**
+	 * Premium newsletter gates are prioritized in their own bucket, so a new one must be
+	 * numbered against the other newsletter gates — not against however many content gates the
+	 * site happens to have.
+	 */
+	public function test_create_newsletter_gate_priority_uses_the_newsletter_bucket() {
+		// The fixture already created four content gates, whose count must not leak in here.
+		$first_id  = Content_Gate::create_gate( [ 'title' => 'Newsletter Gate 1' ], Content_Gate::GATE_CPT, true );
+		$second_id = Content_Gate::create_gate( [ 'title' => 'Newsletter Gate 2' ], Content_Gate::GATE_CPT, true );
+
+		$this->assertSame( 0, Content_Gate::get_gate( $first_id )['priority'], 'The first newsletter gate starts the bucket at 0' );
+		$this->assertSame( 1, Content_Gate::get_gate( $second_id )['priority'], 'The second newsletter gate follows it, rather than tying with it' );
+	}
+
+	/**
+	 * A duplicate carries over every setting of its source, but is always created
+	 * inactive and last in the list — a copy of a live gate silently going live
+	 * would change site-wide access behavior.
+	 */
+	public function test_duplicate_gate_copies_settings() {
+		$source_id = $this->gate_ids[2]; // 'Published Gate'.
+		Content_Gate::update_gate_settings(
+			$source_id,
+			[
+				'content_rules_match' => 'all',
+				'custom_access'       => [
+					'active'       => true,
+					'metering'     => [
+						'enabled' => true,
+						'count'   => 5,
+						'period'  => 'week',
+					],
+					'access_rules' => [
+						[
+							[
+								'slug'  => 'subscriptions',
+								'value' => [ 123 ],
+							],
+						],
+					],
+				],
+			]
+		);
+		$source = Content_Gate::get_gate( $source_id );
+
+		$copy_id = Content_Gate::duplicate_gate( $source_id );
+		$this->assertNotWPError( $copy_id, 'Duplicating a valid gate succeeds' );
+		$copy = Content_Gate::get_gate( $copy_id );
+
+		$this->assertSame( 'Published Gate copy', $copy['title'] );
+		$this->assertSame( 'draft', $copy['status'], 'A copy is always inactive, even when the source is published' );
+		$this->assertSame( $source['content_rules'], $copy['content_rules'] );
+		$this->assertSame( $source['content_rules_match'], $copy['content_rules_match'] );
+
+		// Layout IDs are deep-copied (asserted in test_duplicate_gate_deep_copies_layouts), so compare everything else.
+		unset( $source['registration']['gate_layout_id'], $copy['registration']['gate_layout_id'] );
+		unset( $source['custom_access']['gate_layout_id'], $copy['custom_access']['gate_layout_id'] );
+		$this->assertSame( $source['registration'], $copy['registration'] );
+		$this->assertSame( $source['custom_access'], $copy['custom_access'] );
+
+		// get_gates() returns content gates ordered by priority, so the copy coming last means
+		// it was appended rather than sorted in among the existing gates.
+		$content_gates = Content_Gate::get_gates();
+		$this->assertSame( $copy_id, end( $content_gates )['id'], 'The copy is appended to the end of the gate list' );
+		$this->assertGreaterThan( $source['priority'], $copy['priority'], 'The copy sorts after its source' );
+	}
+
+	/**
+	 * A layout's presentation settings live as meta on the layout post, and they gate how
+	 * much of the restricted article a reader can see. Dropping them on the copy would not
+	 * just look wrong: an overlay layout revealing no paragraphs would come back as an
+	 * inline one revealing the article's first two.
+	 */
+	public function test_duplicate_gate_copies_layout_settings() {
+		$source_id     = $this->gate_ids[2];
+		$source        = Content_Gate::get_gate( $source_id );
+		$source_layout_id = $source['registration']['gate_layout_id'];
+
+		$layout_settings = [
+			'style'              => 'overlay',
+			'visible_paragraphs' => 0,
+			'overlay_position'   => 'bottom',
+			'overlay_size'       => 'large',
+			'inline_fade'        => false,
+			'use_more_tag'       => false,
+		];
+		foreach ( $layout_settings as $key => $value ) {
+			update_post_meta( $source_layout_id, $key, $value );
+		}
+
+		$copy_id   = Content_Gate::duplicate_gate( $source_id );
+		$copy      = Content_Gate::get_gate( $copy_id );
+		$copy_layout_id = $copy['registration']['gate_layout_id'];
+
+		foreach ( $layout_settings as $key => $value ) {
+			$this->assertEquals(
+				get_post_meta( $source_layout_id, $key, true ),
+				get_post_meta( $copy_layout_id, $key, true ),
+				sprintf( 'Layout setting "%s" must carry over to the copy', $key )
+			);
+		}
+	}
+
+	/**
+	 * Protected (`_`-prefixed) meta must not carry over to the copy. Keys like `_edit_lock`
+	 * are WordPress bookkeeping bound to the source post; copying them would misattribute
+	 * that state to the copy. Both copy loops (gate meta and layout meta) skip these keys,
+	 * and this pins that so a future refactor can't quietly start copying them through.
+	 */
+	public function test_duplicate_gate_skips_protected_meta() {
+		$source_id        = $this->gate_ids[2];
+		$source           = Content_Gate::get_gate( $source_id );
+		$source_layout_id = $source['registration']['gate_layout_id'];
+
+		add_post_meta( $source_id, '_private', 'gate-secret' );
+		add_post_meta( $source_layout_id, '_private', 'layout-secret' );
+
+		$copy_id = Content_Gate::duplicate_gate( $source_id );
+		$this->assertNotWPError( $copy_id );
+		$copy = Content_Gate::get_gate( $copy_id );
+
+		$this->assertSame( '', get_post_meta( $copy_id, '_private', true ), 'Protected meta on the gate is not copied' );
+		$this->assertSame( '', get_post_meta( $copy['registration']['gate_layout_id'], '_private', true ), 'Protected meta on the layout is not copied' );
+	}
+
+	/**
+	 * Layouts must be deep-copied. Sharing layout posts between two gates would let
+	 * delete_gate_layouts() destroy the surviving gate's reader-facing content.
+	 */
+	public function test_duplicate_gate_deep_copies_layouts() {
+		$source_id = $this->gate_ids[2];
+		$source    = Content_Gate::get_gate( $source_id );
+
+		// Customize the source layouts — the publisher's edits are the main thing worth duplicating.
+		wp_update_post(
+			[
+				'ID'           => $source['registration']['gate_layout_id'],
+				'post_content' => '<!-- wp:paragraph --><p>Custom registration layout</p><!-- /wp:paragraph -->',
+			]
+		);
+		wp_update_post(
+			[
+				'ID'           => $source['custom_access']['gate_layout_id'],
+				'post_content' => '<!-- wp:paragraph --><p>Custom paid access layout</p><!-- /wp:paragraph -->',
+			]
+		);
+
+		$copy_id = Content_Gate::duplicate_gate( $source_id );
+		$copy    = Content_Gate::get_gate( $copy_id );
+
+		$copy_registration_layout_id  = $copy['registration']['gate_layout_id'];
+		$copy_custom_access_layout_id = $copy['custom_access']['gate_layout_id'];
+
+		$this->assertNotEmpty( $copy_registration_layout_id, 'The copy has its own registration layout' );
+		$this->assertNotEmpty( $copy_custom_access_layout_id, 'The copy has its own paid access layout' );
+		$this->assertNotEquals( $source['registration']['gate_layout_id'], $copy_registration_layout_id, 'Layout posts are not shared between gates' );
+		$this->assertNotEquals( $source['custom_access']['gate_layout_id'], $copy_custom_access_layout_id, 'Layout posts are not shared between gates' );
+
+		$this->assertStringContainsString( 'Custom registration layout', get_post( $copy_registration_layout_id )->post_content, 'The customized layout content is carried over' );
+		$this->assertStringContainsString( 'Custom paid access layout', get_post( $copy_custom_access_layout_id )->post_content, 'The customized layout content is carried over' );
+
+		// Permanently deleting the source must not take the copy's layouts with it.
+		wp_delete_post( $source_id, true );
+
+		$this->assertNotNull( get_post( $copy_registration_layout_id ), "The copy's registration layout survives deletion of the source gate" );
+		$this->assertNotNull( get_post( $copy_custom_access_layout_id ), "The copy's paid access layout survives deletion of the source gate" );
+	}
+
+	/**
+	 * A layout a publisher deliberately emptied must stay empty on the copy — not fall back to
+	 * the default "only available to members" content, which the source doesn't show.
+	 */
+	public function test_duplicate_gate_preserves_empty_layout_content() {
+		$source_id        = $this->gate_ids[2];
+		$source           = Content_Gate::get_gate( $source_id );
+		$source_layout_id = $source['registration']['gate_layout_id'];
+
+		wp_update_post(
+			[
+				'ID'           => $source_layout_id,
+				'post_content' => '',
+			]
+		);
+
+		$copy_id = Content_Gate::duplicate_gate( $source_id );
+		$copy    = Content_Gate::get_gate( $copy_id );
+
+		$this->assertSame( '', get_post( $copy['registration']['gate_layout_id'] )->post_content, 'An intentionally blank layout stays blank on the copy' );
+	}
+
+	/**
+	 * If a layout can't be created, the half-built copy must not be left behind pointing at
+	 * the source's layouts: deleting that copy would then permanently delete the layouts the
+	 * source gate is still serving to readers.
+	 */
+	public function test_duplicate_gate_cleans_up_when_layout_creation_fails() {
+		$source_id = $this->gate_ids[2];
+		$source    = Content_Gate::get_gate( $source_id );
+
+		$get_layout_ids = function () {
+			return get_posts(
+				[
+					'post_type'      => Content_Gate::GATE_LAYOUT_CPT,
+					'post_status'    => 'any',
+					'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Unbounded queries are acceptable in tests.
+					'fields'         => 'ids',
+				]
+			);
+		};
+		$layout_ids_before = $get_layout_ids();
+
+		// Fail the *second* layout insert only. That's the branch worth protecting: the copy
+		// already owns a registration layout, so the cleanup has a layout of its own to reap.
+		$layout_inserts             = 0;
+		$fail_second_layout_creation = function ( $maybe_empty, $postarr ) use ( &$layout_inserts ) {
+			if ( Content_Gate::GATE_LAYOUT_CPT !== $postarr['post_type'] ) {
+				return $maybe_empty;
+			}
+			++$layout_inserts;
+			return $layout_inserts > 1;
+		};
+		add_filter( 'wp_insert_post_empty_content', $fail_second_layout_creation, 10, 2 );
+		$result = Content_Gate::duplicate_gate( $source_id );
+		remove_filter( 'wp_insert_post_empty_content', $fail_second_layout_creation, 10 );
+
+		$this->assertWPError( $result, 'Duplication fails when a layout cannot be created' );
+		$this->assertSame( 2, $layout_inserts, 'The first layout was created before the second one failed' );
+
+		$gate_titles = wp_list_pluck( Content_Gate::get_gates(), 'title' );
+		$this->assertNotContains( 'Published Gate copy', $gate_titles, 'The half-built copy is cleaned up rather than left in the list' );
+
+		// The copy's own layout goes with it — no orphaned layout posts left behind.
+		$this->assertEqualsCanonicalizing( $layout_ids_before, $get_layout_ids(), 'No layout posts are added or removed by a failed duplication' );
+
+		// The whole point: the source gate is untouched and still owns its layouts.
+		$this->assertNotNull( get_post( $source['registration']['gate_layout_id'] ), "The source's registration layout is untouched" );
+		$this->assertNotNull( get_post( $source['custom_access']['gate_layout_id'] ), "The source's paid access layout is untouched" );
+	}
+
+	/**
+	 * Repeated duplication produces unique, numbered titles.
+	 */
+	public function test_duplicate_gate_title_uniqueness() {
+		$source_id = $this->gate_ids[2];
+
+		$first_copy_id = Content_Gate::duplicate_gate( $source_id );
+		$this->assertSame( 'Published Gate copy', get_post( $first_copy_id )->post_title );
+
+		$second_copy_id = Content_Gate::duplicate_gate( $source_id );
+		$this->assertSame( 'Published Gate copy 2', get_post( $second_copy_id )->post_title );
+
+		// Duplicating a copy reads as a copy of that copy.
+		$copy_of_copy_id = Content_Gate::duplicate_gate( $first_copy_id );
+		$this->assertSame( 'Published Gate copy copy', get_post( $copy_of_copy_id )->post_title );
+	}
+
+	/**
+	 * A gate whose layout post is gone (stale ID) still duplicates, getting a fresh
+	 * layout with default content — mirroring create_gate()'s self-healing.
+	 */
+	public function test_duplicate_gate_missing_layout_falls_back() {
+		$source_id = $this->gate_ids[2];
+		$source    = Content_Gate::get_gate( $source_id );
+
+		wp_delete_post( $source['registration']['gate_layout_id'], true );
+
+		$copy_id = Content_Gate::duplicate_gate( $source_id );
+		$this->assertNotWPError( $copy_id, 'A stale layout ID does not break duplication' );
+
+		$copy = Content_Gate::get_gate( $copy_id );
+		$this->assertNotEmpty( $copy['registration']['gate_layout_id'], 'A fresh registration layout is created' );
+
+		$layout = get_post( $copy['registration']['gate_layout_id'] );
+		$this->assertNotNull( $layout );
+		$this->assertNotEmpty( $layout->post_content, 'The fresh layout gets default content' );
+	}
+
+	/**
+	 * A premium newsletter gate duplicates into the newsletter bucket: it keeps the
+	 * is_newsletter flag and stays out of the content gates list.
+	 */
+	public function test_duplicate_newsletter_gate() {
+		$newsletter_gate_id = Content_Gate::create_gate( [ 'title' => 'Premium Newsletter Gate' ], Content_Gate::GATE_CPT, true );
+
+		$copy_id = Content_Gate::duplicate_gate( $newsletter_gate_id );
+		$this->assertNotWPError( $copy_id );
+
+		$this->assertSame( 'Premium Newsletter Gate copy', get_post( $copy_id )->post_title );
+		$this->assertNotEmpty( get_post_meta( $copy_id, 'is_newsletter', true ), 'The copy stays a newsletter gate' );
+
+		$newsletter_gate_ids = wp_list_pluck( Content_Gate::get_gates( Content_Gate::GATE_CPT, null, true ), 'id' );
+		$this->assertContains( $copy_id, $newsletter_gate_ids, 'The copy is listed with the premium newsletter gates' );
+
+		$content_gate_ids = wp_list_pluck( Content_Gate::get_gates(), 'id' );
+		$this->assertNotContains( $copy_id, $content_gate_ids, 'The copy is not listed with the content gates' );
+
+		// get_gates() returns the bucket ordered by priority, so the copy being last means it
+		// was appended within the newsletter bucket rather than sorted in among the others.
+		$this->assertSame( $copy_id, end( $newsletter_gate_ids ), 'The copy is appended to the end of the newsletter bucket' );
+		$this->assertGreaterThan(
+			Content_Gate::get_gate( $newsletter_gate_id )['priority'],
+			Content_Gate::get_gate( $copy_id )['priority'],
+			'The copy sorts after its source'
+		);
+	}
+
+	/**
+	 * A non-gate post ID cannot be duplicated.
+	 */
+	public function test_duplicate_gate_rejects_non_gate() {
+		$this->assertWPError( Content_Gate::duplicate_gate( $this->post_ids[0] ), 'A regular post is not a gate' );
+		$this->assertWPError( Content_Gate::duplicate_gate( 999999 ), 'A non-existent post is not a gate' );
+	}
+
+	/**
+	 * The access control wizard's duplicate route returns the full gate shape the
+	 * frontend consumes.
+	 */
+	public function test_duplicate_gate_endpoint() {
+		wp_set_current_user( $this->factory->user->create( [ 'role' => 'administrator' ] ) );
+
+		$request  = new \WP_REST_Request( 'POST', '/' . NEWSPACK_API_NAMESPACE . '/wizard/newspack-audience-access-control/' . $this->gate_ids[2] . '/duplicate' );
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+
+		$data = $response->get_data();
+		$this->assertSame( 'Published Gate copy', $data['title'] );
+		$this->assertSame( 'draft', $data['status'] );
+		$this->assertArrayHasKey( 'registration', $data );
+		$this->assertArrayHasKey( 'custom_access', $data );
+		$this->assertArrayHasKey( 'content_rules', $data );
+		$this->assertNotEquals( $this->gate_ids[2], $data['id'] );
+	}
+
+	/**
+	 * Each wizard only duplicates gates from its own bucket: a copy made from the
+	 * wrong wizard would be invisible in the list it was created from.
+	 */
+	public function test_duplicate_gate_endpoint_rejects_cross_wizard_gates() {
+		wp_set_current_user( $this->factory->user->create( [ 'role' => 'administrator' ] ) );
+
+		$newsletter_gate_id = Content_Gate::create_gate( [ 'title' => 'Premium Newsletter Gate' ], Content_Gate::GATE_CPT, true );
+
+		$request  = new \WP_REST_Request( 'POST', '/' . NEWSPACK_API_NAMESPACE . '/wizard/newspack-audience-access-control/' . $newsletter_gate_id . '/duplicate' );
+		$response = rest_get_server()->dispatch( $request );
+		$this->assertSame( 400, $response->get_status(), 'The access control wizard rejects newsletter gates' );
+
+		// The Premium Newsletters wizard bails out of registering its routes when the
+		// Newsletters plugin is absent (as it is in this suite), so exercise its
+		// callback directly.
+		$premium_newsletters_wizard = \Newspack\Wizards::get_wizard( 'premium-newsletters' );
+
+		$content_gate_request = new \WP_REST_Request( 'POST', '/' . NEWSPACK_API_NAMESPACE . '/wizard/newspack-premium-newsletters/' . $this->gate_ids[2] . '/duplicate' );
+		$content_gate_request->set_param( 'id', $this->gate_ids[2] );
+		$rejection = $premium_newsletters_wizard->api_duplicate_gate( $content_gate_request );
+		$this->assertWPError( $rejection, 'The premium newsletters wizard rejects content gates' );
+		$this->assertSame( 400, $rejection->get_error_data()['status'] );
+
+		$newsletter_request = new \WP_REST_Request( 'POST', '/' . NEWSPACK_API_NAMESPACE . '/wizard/newspack-premium-newsletters/' . $newsletter_gate_id . '/duplicate' );
+		$newsletter_request->set_param( 'id', $newsletter_gate_id );
+		$success = $premium_newsletters_wizard->api_duplicate_gate( $newsletter_request );
+		$this->assertNotWPError( $success );
+		$this->assertSame( 'Premium Newsletter Gate copy', $success->get_data()['title'] );
+	}
+
+	/**
+	 * Drive a restricted render of $post_id and return the rendered content.
+	 *
+	 * Mirrors a front-end request: the gate populates its per-post state on
+	 * 'the_post', then the theme runs the post through 'the_content'.
+	 *
+	 * @param int $post_id Post ID.
+	 *
+	 * @return string
+	 */
+	private function render_restricted_post( $post_id ) {
+		$this->reset_restriction_cache();
+		$this->reset_gate_render_state();
+		$this->go_to( get_permalink( $post_id ) );
+
+		global $wp_query;
+		Content_Gate::restrict_post( get_post( $post_id ), $wp_query );
+
+		return apply_filters( 'the_content', get_post( $post_id )->post_content );
+	}
+
+	/**
+	 * Set up a published gate restricting all posts to registered readers, with an
+	 * inline layout, and return a logged-out reader on a post with three paragraphs.
+	 *
+	 * @return int Post ID.
+	 */
+	private function set_up_restricted_post_for_content_filters() {
+		$gate = Content_Gate::get_gate( $this->gate_ids[2] );
+		update_post_meta( $gate['registration']['gate_layout_id'], 'style', 'inline' );
+		update_post_meta( $gate['registration']['gate_layout_id'], 'visible_paragraphs', 2 );
+		update_post_meta( $gate['registration']['gate_layout_id'], 'use_more_tag', false );
+
+		Content_Rules::update_gate_content_rules(
+			$this->gate_ids[2],
+			[
+				[
+					'slug'  => 'post_types',
+					'value' => [ 'post' ],
+				],
+			]
+		);
+
+		wp_set_current_user( 0 );
+
+		$post_id = $this->factory->post->create(
+			[
+				'post_content' => '<p>Visible paragraph.</p><p>PARTNER_EMBED</p><p>Hidden paragraph.</p>',
+			]
+		);
+		$this->post_ids[] = $post_id;
+
+		return $post_id;
+	}
+
+	/**
+	 * A third-party integration filtering 'the_content' must see the teaser, and its
+	 * changes must survive into the rendered page.
+	 *
+	 * Partner plugins gate their own embeds this way — the Everlit audio player is
+	 * the known case, restricting its iframe at priority 999999 after asking us
+	 * whether the post is restricted. Woo Memberships substituted restricted content
+	 * at priority 999, so those callbacks ran last and their output was rendered.
+	 * Returning the full post to them and then discarding the filtered result would
+	 * leave the partner's embed ungated on exactly the posts that are paywalled.
+	 */
+	public function test_third_party_content_filters_apply_to_restricted_teaser() {
+		$post_id = $this->set_up_restricted_post_for_content_filters();
+
+		// The literal priority the Everlit integration registers at, so that raising
+		// RESTRICTION_PRIORITY past it fails this test instead of silently
+		// reintroducing the bug.
+		$partner_priority = 999999;
+		$partner_filter   = function ( $content ) {
+			return str_replace( 'PARTNER_EMBED', 'PARTNER_EMBED_GATED', $content );
+		};
+		add_filter( 'the_content', $partner_filter, $partner_priority );
+		$rendered = $this->render_restricted_post( $post_id );
+		remove_filter( 'the_content', $partner_filter, $partner_priority );
+
+		$this->assertLessThan( $partner_priority, Content_Gate::RESTRICTION_PRIORITY, 'The teaser must be substituted before partner gating filters run' );
+		$this->assertStringContainsString( 'PARTNER_EMBED_GATED', $rendered, "A later 'the_content' filter should see the teaser and its output should be rendered" );
+		$this->assertStringNotContainsString( '<p>PARTNER_EMBED</p>', $rendered, 'The unfiltered embed should not survive into the page' );
+		$this->assertStringContainsString( 'newspack-content-gate__inline-gate', $rendered, 'The gate should still be appended' );
+		$this->assertStringNotContainsString( 'Hidden paragraph', $rendered, 'Content past the teaser should stay restricted' );
+	}
+
+	/**
+	 * A later filter that runs 'the_content' itself must not consume the outer
+	 * pass's state and leave the outer pass discarding everything downstream of it.
+	 */
+	public function test_nested_content_filtering_still_renders_partner_output() {
+		$post_id = $this->set_up_restricted_post_for_content_filters();
+
+		$nested         = false;
+		$nested_output  = '';
+		$nesting_filter = function ( $content ) use ( &$nested, &$nested_output ) {
+			// A filter that renders some other content through the same chain, as
+			// related-post and summary integrations do. Guarded so it nests once,
+			// the way such a filter guards against re-entering itself.
+			if ( ! $nested ) {
+				$nested        = true;
+				$nested_output = apply_filters( 'the_content', 'UNRELATED' );
+			}
+			return $content;
+		};
+		$partner_filter = function ( $content ) {
+			return str_replace( 'PARTNER_EMBED', 'PARTNER_EMBED_GATED', $content );
+		};
+		add_filter( 'the_content', $nesting_filter, Content_Gate::RESTRICTION_PRIORITY + 1 );
+		add_filter( 'the_content', $partner_filter, 999999 );
+		$rendered = $this->render_restricted_post( $post_id );
+		remove_filter( 'the_content', $nesting_filter, Content_Gate::RESTRICTION_PRIORITY + 1 );
+		remove_filter( 'the_content', $partner_filter, 999999 );
+
+		// Both callbacks key off the post being rendered, not the string in hand, so
+		// a bare string run through 'the_content' while the global post is still the
+		// restricted one comes back as that post's teaser and gate. Swallowing it is
+		// the long-standing behavior, and the point of the assertions below is that
+		// the inner pass resolves on its own terms rather than by borrowing — or
+		// stranding — the outer one's.
+		$this->assertStringNotContainsString( 'UNRELATED', $nested_output, "A nested pass on the restricted post's own render is answered with the teaser" );
+		$this->assertSame( 1, substr_count( $nested_output, 'newspack-content-gate__inline-gate' ), 'The nested pass should close with its own gate' );
+
+		$this->assertStringContainsString( 'PARTNER_EMBED_GATED', $rendered, 'Partner filtering should survive a nested content pass' );
+		$this->assertSame( 1, substr_count( $rendered, 'newspack-content-gate__inline-gate' ), 'The gate should be appended exactly once' );
+		$this->assertStringNotContainsString( 'Hidden paragraph', $rendered, 'Content past the teaser should stay restricted' );
+	}
+
+	/**
+	 * A later filter that renders a *different*, unrestricted post through
+	 * 'the_content' must not consume the restricted post's pending substitution.
+	 *
+	 * That inner pass never substitutes anything, so if it closed the outer one it
+	 * would both stamp this post's gate onto unrelated content and leave the outer
+	 * pass discarding the partner filtering.
+	 */
+	public function test_nested_render_of_another_post_does_not_consume_the_substitution() {
+		$post_id = $this->set_up_restricted_post_for_content_filters();
+
+		$other_id = $this->factory->post->create(
+			[
+				'post_content'  => '<p>Unrelated post body.</p>',
+				'post_category' => [],
+			]
+		);
+		$this->post_ids[] = $other_id;
+
+		$nested_output  = '';
+		$nested         = false;
+		$nesting_filter = function ( $content ) use ( &$nested, &$nested_output, $other_id ) {
+			if ( ! $nested ) {
+				$nested = true;
+				global $post;
+				$outer = $post;
+				$post  = get_post( $other_id ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+				setup_postdata( $post );
+				$nested_output = apply_filters( 'the_content', get_post( $other_id )->post_content );
+				wp_reset_postdata();
+				$post = $outer; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+			}
+			return $content;
+		};
+		$partner_filter = function ( $content ) {
+			return str_replace( 'PARTNER_EMBED', 'PARTNER_EMBED_GATED', $content );
+		};
+		add_filter( 'the_content', $nesting_filter, Content_Gate::RESTRICTION_PRIORITY + 1 );
+		add_filter( 'the_content', $partner_filter, 999999 );
+		$rendered = $this->render_restricted_post( $post_id );
+		remove_filter( 'the_content', $nesting_filter, Content_Gate::RESTRICTION_PRIORITY + 1 );
+		remove_filter( 'the_content', $partner_filter, 999999 );
+
+		$this->assertStringNotContainsString( 'newspack-content-gate__inline-gate', $nested_output, "The unrestricted post's render should not receive the restricted post's gate" );
+		$this->assertStringContainsString( 'PARTNER_EMBED_GATED', $rendered, 'Partner filtering should survive a nested render of another post' );
+		$this->assertSame( 1, substr_count( $rendered, 'newspack-content-gate__inline-gate' ), 'The gate should be appended exactly once' );
+	}
+
+	/**
+	 * Rendering the same restricted post twice in one request must not accumulate
+	 * gates or leave state behind that changes the second result.
+	 */
+	public function test_repeated_content_filtering_appends_gate_once_each_pass() {
+		$post_id = $this->set_up_restricted_post_for_content_filters();
+
+		$first  = $this->render_restricted_post( $post_id );
+		$second = apply_filters( 'the_content', get_post( $post_id )->post_content );
+
+		$this->assertSame( 1, substr_count( $first, 'newspack-content-gate__inline-gate' ), 'The first pass should append exactly one gate' );
+		$this->assertSame( 1, substr_count( $second, 'newspack-content-gate__inline-gate' ), 'The second pass should append exactly one gate' );
+		$this->assertStringNotContainsString( 'Hidden paragraph', $second, 'Content past the teaser should stay restricted on repeat passes' );
+	}
+
+	/**
+	 * The gate HTML is appended after every other content filter has run, so a
+	 * third-party callback cannot rewrite the gate markup itself.
+	 */
+	public function test_gate_html_is_not_exposed_to_third_party_content_filters() {
+		$post_id = $this->set_up_restricted_post_for_content_filters();
+
+		$seen = '';
+		$spy  = function ( $content ) use ( &$seen ) {
+			$seen = $content;
+			return $content;
+		};
+		add_filter( 'the_content', $spy, Content_Gate::RESTRICTION_PRIORITY + 1 );
+		$rendered = $this->render_restricted_post( $post_id );
+		remove_filter( 'the_content', $spy, Content_Gate::RESTRICTION_PRIORITY + 1 );
+
+		$this->assertStringContainsString( 'Visible paragraph', $seen, 'The teaser should be handed to later content filters' );
+		$this->assertStringNotContainsString( 'newspack-content-gate__inline-gate', $seen, 'The gate markup should not be handed to later content filters' );
+		$this->assertStringContainsString( 'newspack-content-gate__inline-gate', $rendered, 'The gate should still be present in the rendered output' );
+	}
+
+	/**
+	 * If the teaser substitution does not run — another plugin removing the filter
+	 * is the realistic case — the restricted post must not be published anyway.
+	 */
+	public function test_restricted_content_falls_back_when_teaser_substitution_is_removed() {
+		$post_id = $this->set_up_restricted_post_for_content_filters();
+
+		// Stand in for a filter that hands back content of its own once the
+		// substitution is gone. It must not reach the page with a gate stuck on it.
+		$leak_filter = function () {
+			return '<p>MUST_NOT_LEAK Hidden paragraph.</p>';
+		};
+		remove_filter( 'the_content', [ Content_Gate::class, 'replace_restricted_content' ], Content_Gate::RESTRICTION_PRIORITY );
+		add_filter( 'the_content', $leak_filter, Content_Gate::RESTRICTION_PRIORITY + 1 );
+		$rendered = $this->render_restricted_post( $post_id );
+		remove_filter( 'the_content', $leak_filter, Content_Gate::RESTRICTION_PRIORITY + 1 );
+		add_filter( 'the_content', [ Content_Gate::class, 'replace_restricted_content' ], Content_Gate::RESTRICTION_PRIORITY );
+
+		$this->assertStringNotContainsString( 'MUST_NOT_LEAK', $rendered, 'Content in hand must not be published when the substitution did not run' );
+		$this->assertStringNotContainsString( 'Hidden paragraph', $rendered, 'The restricted content must not be rendered' );
+		$this->assertStringContainsString( 'Visible paragraph', $rendered, 'The teaser should still be rendered' );
+		$this->assertSame( 1, substr_count( $rendered, 'newspack-content-gate__inline-gate' ), 'The gate should be rendered exactly once' );
+	}
+
+	/**
+	 * Drive a restricted render that a 'the_content' callback aborts by throwing,
+	 * leaving the substitution's bookkeeping open the way a partner filter blowing
+	 * up mid-pass, with the exception caught upstream, would.
+	 *
+	 * @param int $post_id Post ID.
+	 */
+	private function abort_restricted_render( $post_id ) {
+		// DomainException rather than a RuntimeException: PHPUnit's own failure
+		// exceptions extend RuntimeException, and catching those here would swallow
+		// a failing assertion.
+		$throwing_filter = function () {
+			throw new \DomainException( 'A partner filter blew up mid-render.' );
+		};
+
+		// Core pops the hook off $wp_current_filter only on the way out, so the
+		// exception leaves the stack a level deep. Restore it, both to keep the
+		// dirty stack out of what follows and because the harder case is the one
+		// where later passes run at the same nesting depth the aborted pass did,
+		// and so can actually reach what it left behind.
+		$filter_stack = $GLOBALS['wp_current_filter'];
+		$caught       = null;
+		add_filter( 'the_content', $throwing_filter, Content_Gate::RESTRICTION_PRIORITY + 1 );
+		try {
+			$this->render_restricted_post( $post_id );
+		} catch ( \DomainException $e ) {
+			$caught = $e;
+		}
+		remove_filter( 'the_content', $throwing_filter, Content_Gate::RESTRICTION_PRIORITY + 1 );
+		$GLOBALS['wp_current_filter'] = $filter_stack; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+
+		$this->assertNotNull( $caught, 'The throwing filter should have aborted the pass' );
+	}
+
+	/**
+	 * A 'the_content' callback that throws between the teaser substitution and the
+	 * gate append leaves the substitution's bookkeeping open — core unwinds the
+	 * filter without running the rest of the chain. Nothing left behind may reach a
+	 * later pass, since an entry read by a pass that did not substitute would put
+	 * the gate on the unrestricted body in hand.
+	 */
+	public function test_content_filter_exception_leaves_nothing_that_corrupts_later_renders() {
+		$post_id = $this->set_up_restricted_post_for_content_filters();
+		$this->abort_restricted_render( $post_id );
+
+		// A pass where the substitution did not run holds a body of someone else's
+		// making. Taking the aborted pass's entry for its own would stamp the gate
+		// onto that body and publish it.
+		$leak_filter = function () {
+			return '<p>MUST_NOT_LEAK Hidden paragraph.</p>';
+		};
+		remove_filter( 'the_content', [ Content_Gate::class, 'replace_restricted_content' ], Content_Gate::RESTRICTION_PRIORITY );
+		add_filter( 'the_content', $leak_filter, Content_Gate::RESTRICTION_PRIORITY + 1 );
+		$without_substitution = apply_filters( 'the_content', get_post( $post_id )->post_content );
+		remove_filter( 'the_content', $leak_filter, Content_Gate::RESTRICTION_PRIORITY + 1 );
+		add_filter( 'the_content', [ Content_Gate::class, 'replace_restricted_content' ], Content_Gate::RESTRICTION_PRIORITY );
+
+		$this->assertStringNotContainsString( 'MUST_NOT_LEAK', $without_substitution, 'A pass that did not substitute must not be gated as if it had' );
+		$this->assertStringNotContainsString( 'Hidden paragraph', $without_substitution, 'The restricted content must not be published after an aborted pass' );
+		$this->assertSame( 1, substr_count( $without_substitution, 'newspack-content-gate__inline-gate' ), 'The gate should be rendered exactly once' );
+
+		$rendered = apply_filters( 'the_content', get_post( $post_id )->post_content );
+
+		$this->assertStringContainsString( 'Visible paragraph', $rendered, 'A later render should still produce the teaser' );
+		$this->assertStringNotContainsString( 'Hidden paragraph', $rendered, 'A later render should still restrict the content' );
+		$this->assertSame( 1, substr_count( $rendered, 'newspack-content-gate__inline-gate' ), 'A later render should append exactly one gate' );
+		$this->assertSame( [], $this->get_content_gate_property( 'pending_gates' ), 'A completed pass should leave no substitution open' );
+	}
+
+	/**
+	 * What an aborted pass leaves behind must not reach a post that is not
+	 * restricted at all: the next pass at that nesting depth claims the bookkeeping
+	 * on its way in, before anything can be read as its own.
+	 */
+	public function test_aborted_pass_does_not_gate_a_later_unrestricted_render() {
+		$post_id = $this->set_up_restricted_post_for_content_filters();
+		$this->abort_restricted_render( $post_id );
+
+		$unrestricted_id  = $this->factory->post->create(
+			[
+				'post_content'  => '<p>Unrelated post body.</p>',
+				'post_category' => [],
+			]
+		);
+		$this->post_ids[] = $unrestricted_id;
+
+		global $post;
+		$post = get_post( $unrestricted_id ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		setup_postdata( $post );
+		$rendered = apply_filters( 'the_content', get_post( $unrestricted_id )->post_content );
+		wp_reset_postdata();
+
+		$this->assertStringContainsString( 'Unrelated post body', $rendered, 'An unrestricted post should render its own content' );
+		$this->assertStringNotContainsString( 'newspack-content-gate__inline-gate', $rendered, 'An unrestricted post must not be gated by what an aborted pass left behind' );
 	}
 }

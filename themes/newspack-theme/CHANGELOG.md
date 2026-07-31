@@ -1,3 +1,11 @@
+# newspack-theme [2.24.0](https://github.com/Automattic/newspack-workspace/compare/newspack-theme@2.23.7...newspack-theme@2.24.0) (2026-07-20)
+
+
+### Features
+
+* add support for tag labels ([#2613](https://github.com/Automattic/newspack-workspace/issues/2613)) ([c1b42c3](https://github.com/Automattic/newspack-workspace/commit/c1b42c3de09244aeeef4c8eb24a8167e5306c6d4))
+* **newspack-ui:** standardize snackbars + accessible notices ([#445](https://github.com/Automattic/newspack-workspace/issues/445)) ([0b8f39b](https://github.com/Automattic/newspack-workspace/commit/0b8f39beb69b52b944dc8ba889a1e4e90597f604))
+
 ## newspack-theme [2.23.7](https://github.com/Automattic/newspack-workspace/compare/newspack-theme@2.23.6...newspack-theme@2.23.7) (2026-07-09)
 
 

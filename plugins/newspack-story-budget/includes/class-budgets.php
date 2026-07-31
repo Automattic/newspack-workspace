@@ -171,7 +171,7 @@ class Budgets {
 			[
 				'post_type'      => self::get_post_types(),
 				'post_status'    => [ 'publish', 'pending', 'draft', 'future', 'private' ],
-				'posts_per_page' => -1,
+				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Tax-scoped to active budgets; bounded editorial set.
 			]
 		);
 

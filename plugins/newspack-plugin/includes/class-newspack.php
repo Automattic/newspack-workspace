@@ -197,7 +197,9 @@ final class Newspack {
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/audience/class-audience-donations.php';
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/audience/class-audience-subscriptions.php';
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/audience/class-audience-subscription-products.php';
+		include_once NEWSPACK_ABSPATH . 'includes/wizards/audience/class-audience-pricing-rules.php';
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/audience/class-audience-integrations.php';
+		include_once NEWSPACK_ABSPATH . 'includes/wizards/class-subscribers-wizard.php';
 
 		// Network Wizard.
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/class-network-wizard.php';
@@ -243,6 +245,9 @@ final class Newspack {
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/wc-memberships/class-memberships.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/class-woocommerce.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/woocommerce-subscriptions/class-woocommerce-subscriptions.php';
+		include_once NEWSPACK_ABSPATH . 'includes/plugins/woocommerce-subscriptions/class-subscription-policy-resolver.php';
+		include_once NEWSPACK_ABSPATH . 'includes/plugins/woocommerce/class-dynamic-pricing-bridges.php';
+		include_once NEWSPACK_ABSPATH . 'includes/plugins/woocommerce/class-available-deals-bridge.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/woocommerce-subscriptions/class-woocommerce-subscriptions-gifting.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-api.php';
