@@ -38,6 +38,8 @@ class WP_REST_Newspack_Authors_Controller extends WP_REST_Controller {
 	 * @return boolean
 	 */
 	public static function can_read_user_management_fields() {
+		// Keep `list_users` first: on multisite, core maps `edit_users` through
+		// `manage_network_users`, so a site administrator passes only on `list_users`.
 		return current_user_can( 'list_users' ) || current_user_can( 'edit_users' );
 	}
 

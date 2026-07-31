@@ -1189,24 +1189,77 @@ final class Modal_Checkout {
 	}
 
 	/**
+	 * Behaviors that have somewhere to go once checkout finishes.
+	 *
+	 * Anything else leaves the reader in a modal that won't move and won't close, so it is
+	 * treated as "close the modal" instead.
+	 *
+	 * @var string[]
+	 */
+	const AFTER_SUCCESS_BEHAVIORS = [ 'custom', 'referrer' ];
+
+	/**
 	 * Reduce a post-checkout destination to one this site is willing to send readers to.
 	 *
 	 * The destination reaches the thank-you page through the request, whether it came from
 	 * the block's own settings or from the link the reader followed, and by that point the
-	 * two are indistinguishable. Core's redirect validation decides: this site's host is
-	 * always allowed, and a publisher who wants to send readers somewhere else adds that
-	 * host through the standard `allowed_redirect_hosts` filter.
+	 * two are indistinguishable. Core's redirect validation decides, so the destinations
+	 * this site accepts are the ones `allowed_redirect_hosts` reports. That's this site's
+	 * own host, plus whatever a publisher adds through that filter, plus anything another
+	 * plugin has added (`Newspack\NRH` registers one).
 	 *
 	 * @param string $url The requested destination.
 	 *
 	 * @return string The destination, or an empty string if it is not allowed.
 	 */
 	public static function sanitize_after_success_url( $url ) {
+		$url = sanitize_url( (string) $url );
+
 		if ( empty( $url ) ) {
 			return '';
 		}
 
+		// Core compares hosts case-sensitively; host names aren't. Normalise first so this
+		// site's own host typed in capitals isn't read as somewhere else.
+		$host = wp_parse_url( $url, PHP_URL_HOST );
+		if ( $host && strtolower( $host ) !== $host ) {
+			$url = str_replace( '://' . $host, '://' . strtolower( $host ), $url );
+		}
+
 		return (string) wp_validate_redirect( $url, '' );
+	}
+
+	/**
+	 * Drop an after-success behavior the reader can't act on.
+	 *
+	 * A behavior with nowhere to go renders a modal that neither navigates nor closes, so
+	 * the destination, the behavior and its button label all fall away together and the
+	 * reader gets the ordinary "close" button instead of one labelled for a page they
+	 * won't be taken to.
+	 *
+	 * @param array $params After-success params.
+	 *
+	 * @return array The params, less any the reader can't act on.
+	 */
+	public static function filter_after_success_params( $params ) {
+		$behavior = $params['after_success_behavior'] ?? '';
+
+		if ( '' === $behavior ) {
+			return $params;
+		}
+
+		$is_unknown  = ! in_array( $behavior, self::AFTER_SUCCESS_BEHAVIORS, true );
+		$has_nowhere = 'custom' === $behavior && empty( $params['after_success_url'] );
+
+		if ( $is_unknown || $has_nowhere ) {
+			unset(
+				$params['after_success_behavior'],
+				$params['after_success_url'],
+				$params['after_success_button_label']
+			);
+		}
+
+		return $params;
 	}
 
 	/**
@@ -1225,19 +1278,13 @@ final class Modal_Checkout {
 		$params = array_filter(
 			[
 				'after_success_behavior'     => isset( $request_params['after_success_behavior'] ) ? sanitize_text_field( wp_unslash( $request_params['after_success_behavior'] ) ) : '', // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-				'after_success_url'          => isset( $request_params['after_success_url'] ) ? self::sanitize_after_success_url( sanitize_url( wp_unslash( $request_params['after_success_url'] ) ) ) : '', // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+				'after_success_url'          => isset( $request_params['after_success_url'] ) ? self::sanitize_after_success_url( wp_unslash( $request_params['after_success_url'] ) ) : '', // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 				'after_success_button_label' => isset( $request_params['after_success_button_label'] ) ? sanitize_text_field( wp_unslash( $request_params['after_success_button_label'] ) ) : '', // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 				'action_type'                => isset( $request_params['action_type'] ) ? sanitize_text_field( wp_unslash( $request_params['action_type'] ) ) : '', // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			]
 		);
 
-		// A custom destination this site won't redirect to falls back to closing the modal, so
-		// the reader gets a finished checkout rather than an empty destination.
-		if ( 'custom' === ( $params['after_success_behavior'] ?? '' ) && empty( $params['after_success_url'] ) ) {
-			unset( $params['after_success_behavior'] );
-		}
-
-		return $params;
+		return self::filter_after_success_params( $params );
 	}
 
 	/**

@@ -238,6 +238,61 @@ class IframeControllerTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
+	 * An ordinary document import still lands where the response says it does.
+	 *
+	 * The containment assertions above are satisfied just as well by an endpoint that
+	 * refuses everything, so this pins that the usual case still works.
+	 */
+	public function test_document_import_still_succeeds() {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'author' ] ) );
+
+		$media_id = $this->create_attachment( 'Quarterly report (final)', 'application/pdf', '%PDF-1.4 fixture', 'pdf' );
+		$response = $this->import_from_media( $media_id );
+
+		$this->assertNotWPError( $response, 'An ordinary document import was refused.' );
+
+		$data = $response instanceof WP_REST_Response ? $response->get_data() : $response;
+
+		$this->assertSame( 'document', $data['mode'] ?? '' );
+		$this->assertStringContainsString( WP_REST_Newspack_Iframe_Controller::IFRAME_UPLOAD_DIR, $data['src'] ?? '' );
+
+		$upload_dir = wp_upload_dir();
+		$this->assertFileExists(
+			str_replace( $upload_dir['url'], $upload_dir['path'], $data['src'] ),
+			'The response pointed at a file that was never written.'
+		);
+	}
+
+	/**
+	 * An ordinary archive import still extracts and reports its entrypoint.
+	 */
+	public function test_archive_import_still_succeeds() {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+
+		$archive_path = $this->create_archive( [ 'index.html' => '<html><body>entrypoint</body></html>' ] );
+		$media_id     = $this->create_attachment(
+			'Election results',
+			'application/zip',
+			(string) file_get_contents( $archive_path ), // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+			'zip'
+		);
+
+		$response = $this->import_from_media( $media_id );
+
+		$this->assertNotWPError( $response, 'An ordinary archive import was refused.' );
+
+		$data = $response instanceof WP_REST_Response ? $response->get_data() : $response;
+
+		$this->assertSame( 'iframe', $data['mode'] ?? '' );
+
+		$upload_dir = wp_upload_dir();
+		$this->assertFileExists(
+			str_replace( $upload_dir['url'], $upload_dir['path'], $data['src'] ) . WP_REST_Newspack_Iframe_Controller::IFRAME_ENTRY_FILE,
+			'The extracted archive has no entrypoint where the response says it is.'
+		);
+	}
+
+	/**
 	 * Archive handling stays behind the archive-upload capability check.
 	 *
 	 * Archives may carry unfiltered HTML/CSS/JS, so they are gated more tightly than single

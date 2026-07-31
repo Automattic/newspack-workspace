@@ -143,6 +143,75 @@ class AfterSuccessUrlTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
+	 * The site's own host typed in capitals is still the site's own host.
+	 */
+	public function test_keeps_a_destination_whose_host_is_capitalised() {
+		$host = wp_parse_url( home_url(), PHP_URL_HOST );
+		$url  = 'https://' . strtoupper( $host ) . '/thank-you/';
+
+		$this->assertNotSame(
+			'',
+			\Newspack_Blocks\Modal_Checkout::sanitize_after_success_url( $url ),
+			'The site\'s own host was treated as somewhere else because of its case.'
+		);
+	}
+
+	/**
+	 * A behavior the reader can't act on is dropped along with its label.
+	 *
+	 * Leaving the behavior in place renders a modal that neither navigates nor closes;
+	 * leaving the label in place labels the close button for a page nobody visits.
+	 *
+	 * @dataProvider unusable_behaviors
+	 *
+	 * @param string $behavior The requested behavior.
+	 * @param string $url      The requested destination.
+	 */
+	public function test_checkout_drops_a_behavior_the_reader_cannot_act_on( $behavior, $url ) {
+		$_REQUEST['after_success_behavior']     = $behavior;
+		$_REQUEST['after_success_url']          = $url;
+		$_REQUEST['after_success_button_label'] = 'Read the member guide';
+
+		$params = $this->get_after_success_params();
+
+		unset( $_REQUEST['after_success_behavior'], $_REQUEST['after_success_url'], $_REQUEST['after_success_button_label'] );
+
+		$this->assertArrayNotHasKey( 'after_success_behavior', $params );
+		$this->assertArrayNotHasKey( 'after_success_url', $params );
+		$this->assertArrayNotHasKey(
+			'after_success_button_label',
+			$params,
+			'The close button kept a label naming a destination the reader never reaches.'
+		);
+	}
+
+	/**
+	 * Behaviors that leave the reader with nowhere to go.
+	 *
+	 * @return array[]
+	 */
+	public function unusable_behaviors() {
+		return [
+			'a destination this site refuses' => [ 'custom', 'https://elsewhere.example.test/collect' ],
+			'a custom behavior with no url'   => [ 'custom', '' ],
+			'an unknown behavior'             => [ 'somewhere', '/thank-you/' ],
+		];
+	}
+
+	/**
+	 * The referrer behavior has somewhere to go without a destination of its own.
+	 */
+	public function test_checkout_keeps_the_referrer_behavior() {
+		$_REQUEST['after_success_behavior'] = 'referrer';
+
+		$params = $this->get_after_success_params();
+
+		unset( $_REQUEST['after_success_behavior'] );
+
+		$this->assertSame( 'referrer', $params['after_success_behavior'] ?? '' );
+	}
+
+	/**
 	 * A destination on this site still reaches the page.
 	 */
 	public function test_checkout_keeps_a_destination_on_this_site() {

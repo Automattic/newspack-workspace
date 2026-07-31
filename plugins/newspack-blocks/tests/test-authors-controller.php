@@ -57,7 +57,7 @@ class AuthorsControllerTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		$request->set_query_params(
 			[
 				'fields'   => 'email,name',
-				'per_page' => 100,
+				'perPage'  => 100,
 			]
 		);
 

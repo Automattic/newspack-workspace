@@ -309,8 +309,10 @@ class WP_REST_Newspack_Iframe_Controller extends WP_REST_Controller {
 	/**
 	 * Confirm that a destination resolves inside a directory.
 	 *
-	 * A last check on the resolved paths, after the destination's parent exists, so that a
-	 * symlink or a gap in the checks above still cannot place a file outside the directory.
+	 * A last check on the resolved paths, so that a symlink or a gap in the checks above
+	 * still cannot place a file outside the directory. The destination itself need not
+	 * exist yet: the deepest part of it that does exist is what gets resolved, which is
+	 * what lets this run before anything is created.
 	 *
 	 * @param string $directory   Absolute path to the directory the write must stay inside.
 	 * @param string $destination Absolute path to the intended destination.
@@ -318,14 +320,24 @@ class WP_REST_Newspack_Iframe_Controller extends WP_REST_Controller {
 	 * @return boolean
 	 */
 	private function is_inside_directory( $directory, $destination ) {
-		$directory   = realpath( $directory );
-		$destination = realpath( dirname( $destination ) );
+		$directory = realpath( $directory );
 
-		if ( ! $directory || ! $destination ) {
+		if ( ! $directory ) {
 			return false;
 		}
 
-		return 0 === strpos( trailingslashit( $destination ), trailingslashit( $directory ) );
+		$existing = dirname( $destination );
+		while ( ! file_exists( $existing ) && dirname( $existing ) !== $existing ) {
+			$existing = dirname( $existing );
+		}
+
+		$resolved = realpath( $existing );
+
+		if ( ! $resolved ) {
+			return false;
+		}
+
+		return 0 === strpos( trailingslashit( $resolved ), trailingslashit( $directory ) );
 	}
 
 	/**
@@ -540,9 +552,13 @@ class WP_REST_Newspack_Iframe_Controller extends WP_REST_Controller {
 		$iframe_path       = trailingslashit( $iframe_upload_dir . $iframe_folder );
 		$data              = $request->get_body_params();
 
-		// create iframe directory if not existing.
-		if ( ! file_exists( $iframe_upload_dir ) ) {
-			wp_mkdir_p( $iframe_upload_dir );
+		// Create this archive's own directory up front, so each entry's destination can be
+		// resolved against it before anything is written.
+		if ( ! file_exists( $iframe_path ) ) {
+			wp_mkdir_p( $iframe_path );
+		}
+		if ( ! $this->is_inside_directory( $iframe_upload_dir, $iframe_path ) ) {
+			return $invalid_file_error;
 		}
 
 		// Extract files from archive.
@@ -572,11 +588,14 @@ class WP_REST_Newspack_Iframe_Controller extends WP_REST_Controller {
 				}
 
 				$destination = $iframe_path . $entry_relative_path;
+
+				// Checked before anything is created, so a destination outside this archive's
+				// own folder never gets a directory made for it.
+				if ( ! $this->is_inside_directory( $iframe_path, $destination ) ) {
+					return $invalid_file_error;
+				}
 				if ( ! file_exists( dirname( $destination ) ) ) {
 					wp_mkdir_p( dirname( $destination ) );
-				}
-				if ( ! $this->is_inside_directory( $iframe_upload_dir, $destination ) ) {
-					return $invalid_file_error;
 				}
 
 				$put = $wp_filesystem->put_contents( $destination, $contents );
