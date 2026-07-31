@@ -10,6 +10,7 @@ namespace Newspack\CLI;
 use WP_CLI;
 use Newspack\Reader_Activation;
 use Newspack\Reader_Activation\Contact_Sync;
+use Newspack\Reader_Activation\Integration;
 use Newspack\Reader_Activation\Integrations;
 use Newspack\Reader_Activation\Integrations\Contact_Pull;
 use Newspack\Reader_Activation\Integrations\ESP;
@@ -60,13 +61,18 @@ class RAS_Contact_Sync {
 	/**
 	 * Record the outcome of a single sync_contact() call in the results tally.
 	 *
-	 * A recorded contact reached the integrations, so it counts toward the
-	 * inter-batch pacing regardless of whether the push succeeded.
+	 * A wet-run contact reached the integrations, so it counts toward the
+	 * inter-batch pacing regardless of whether the push succeeded. A dry-run
+	 * push short-circuits before any integration is called, so pacing it would
+	 * only slow the preview without spacing any external request.
 	 *
-	 * @param true|\WP_Error $result The value returned by Contact_Sync::sync_contact().
+	 * @param true|\WP_Error $result     The value returned by Contact_Sync::sync_contact().
+	 * @param bool           $is_dry_run Whether the run is a dry run (no provider traffic on push).
 	 */
-	protected static function record_result( $result ) {
-		static::$unpaused_contacts++;
+	protected static function record_result( $result, $is_dry_run = false ) {
+		if ( ! $is_dry_run ) {
+			static::$unpaused_contacts++;
+		}
 		if ( \is_wp_error( $result ) ) {
 			static::$results['errors']++;
 		} else {
@@ -187,7 +193,7 @@ class RAS_Contact_Sync {
 						)
 					);
 				}
-				static::record_result( $result );
+				static::record_result( $result, $config['is_dry_run'] );
 
 				// Get the next batch.
 				if ( $config['migrated_only'] && empty( $config['subscription_ids'] ) ) {
@@ -234,7 +240,7 @@ class RAS_Contact_Sync {
 						)
 					);
 				}
-				static::record_result( $result );
+				static::record_result( $result, $config['is_dry_run'] );
 			}
 		}
 
@@ -254,7 +260,7 @@ class RAS_Contact_Sync {
 							)
 						);
 					}
-					static::record_result( $result );
+					static::record_result( $result, $config['is_dry_run'] );
 				} else {
 					static::$results['skipped']++;
 				}
@@ -290,7 +296,7 @@ class RAS_Contact_Sync {
 							)
 						);
 					}
-					static::record_result( $result );
+					static::record_result( $result, $config['is_dry_run'] );
 				} else {
 					static::$results['skipped']++;
 				}
@@ -338,13 +344,14 @@ class RAS_Contact_Sync {
 	 */
 	private static function pull_contacts( $config ): array|\WP_Error {
 		$default_config = [
-			'active_only'    => false,
-			'user_ids'       => false,
-			'batch_size'     => 10,
-			'offset'         => 0,
-			'max_batches'    => 0,
-			'is_dry_run'     => false,
-			'integration_id' => null,
+			'active_only'              => false,
+			'user_ids'                 => false,
+			'batch_size'               => 10,
+			'offset'                   => 0,
+			'max_batches'              => 0,
+			'is_dry_run'               => false,
+			'integration_id'           => null,
+			'resolved_incoming_fields' => [],
 		];
 		$config = \wp_parse_args( $config, $default_config );
 
@@ -376,7 +383,12 @@ class RAS_Contact_Sync {
 				continue;
 			}
 
-			$fields = $integration->get_enabled_incoming_fields();
+			// Reuse the pre-flight's resolution when the run came through
+			// cli_backfill(): the pre-flight already paid this integration's
+			// possible provider round-trip, so the run must not ask twice.
+			$fields = array_key_exists( $id, $config['resolved_incoming_fields'] )
+				? $config['resolved_incoming_fields'][ $id ]
+				: $integration->get_enabled_incoming_fields();
 			if ( empty( $fields ) ) {
 				static::log(
 					sprintf(
@@ -488,7 +500,8 @@ class RAS_Contact_Sync {
 		// counts toward the inter-batch pacing.
 		static::$unpaused_contacts++;
 
-		$errors = 0;
+		$errors    = 0;
+		$not_found = 0;
 		// Shared across this reader's integrations so a dry run accounts for the
 		// keys earlier targets would have written. A wet run gets that for free —
 		// the writes are real — so without this the preview would under-report a
@@ -499,6 +512,22 @@ class RAS_Contact_Sync {
 		foreach ( $pull_targets as $id => $target ) {
 			$result = Contact_Pull::pull_single_integration( $user_id, $target['integration'], $config['is_dry_run'], $target['fields'], $pending_keys );
 			if ( \is_wp_error( $result ) ) {
+				// The provider not knowing this reader is not a failure: no re-run
+				// can make an absent contact appear, so tallying it as an error
+				// would flip the exit status on exactly the partially-synced sites
+				// a backfill exists for. Mirror the push leg's missing-entity skips.
+				if ( Integration::CONTACT_NOT_FOUND_ERROR_CODE === $result->get_error_code() ) {
+					$not_found++;
+					static::log(
+						sprintf(
+							// Translators: 1: user ID, 2: integration id.
+							__( 'No contact for user ID %1$d at "%2$s". Skipping.', 'newspack-plugin' ),
+							$user_id,
+							$id
+						)
+					);
+					continue;
+				}
 				static::log(
 					sprintf(
 						// Translators: 1: integration id, 2: user ID, 3: error message.
@@ -514,6 +543,9 @@ class RAS_Contact_Sync {
 
 		if ( $errors ) {
 			$tally['errors']++;
+		} elseif ( $not_found && count( $pull_targets ) === $not_found ) {
+			// Every target came up empty-handed: no integration knows this reader.
+			$tally['skipped']++;
 		} else {
 			$tally['processed']++;
 		}
@@ -692,8 +724,16 @@ class RAS_Contact_Sync {
 			'subscription_ids' => ! empty( $assoc_args['subscription-ids'] ) ? explode( ',', $assoc_args['subscription-ids'] ) : false,
 			'user_ids'         => ! empty( $assoc_args['user-ids'] ) ? explode( ',', $assoc_args['user-ids'] ) : false,
 			'order_ids'        => ! empty( $assoc_args['order-ids'] ) ? explode( ',', $assoc_args['order-ids'] ) : false,
-			'batch_size'       => ! empty( $assoc_args['batch-size'] ) ? intval( $assoc_args['batch-size'] ) : 10,
-			'offset'           => ! empty( $assoc_args['offset'] ) ? intval( $assoc_args['offset'] ) : 0,
+			// Floored: WP_User_Query applies no LIMIT when `number` is non-positive,
+			// so every batch would return the entire reader set and the paging
+			// loops — which run until a batch comes back empty — would never
+			// terminate. A negative offset builds an invalid LIMIT clause instead:
+			// the query returns nothing and the run reads as a clean success over
+			// a window that was never covered. (`! empty()` runs on the raw string,
+			// so a literal `0` keeps the default but a non-numeric value reaches
+			// intval().) Matches the --user-ids chunk clamp in pull_contacts().
+			'batch_size'       => ! empty( $assoc_args['batch-size'] ) ? max( 1, intval( $assoc_args['batch-size'] ) ) : 10,
+			'offset'           => ! empty( $assoc_args['offset'] ) ? max( 0, intval( $assoc_args['offset'] ) ) : 0,
 			'max_batches'      => ! empty( $assoc_args['max-batches'] ) ? intval( $assoc_args['max-batches'] ) : 0,
 			'context'          => ! empty( $assoc_args['sync-context'] ) ? $assoc_args['sync-context'] : static::$context,
 		];
@@ -883,6 +923,11 @@ class RAS_Contact_Sync {
 	 * instead. Push retry behavior is unchanged from `wp newspack esp sync`,
 	 * including the no-retry rule for `--skip-lists`/`--fields` runs.
 	 *
+	 * Readers the provider has no contact for are tallied as skipped, not as
+	 * errors: a pull cannot create the missing contact, so re-running the
+	 * window could never clear them — and a partially-synced site (the usual
+	 * backfill candidate) would otherwise never exit 0.
+	 *
 	 * A run that tallies any error exits with status 1 and prints the summary as
 	 * a warning, so an unattended runbook can detect partial failure without
 	 * parsing output. A clean run exits 0. (The legacy `esp sync` alias still
@@ -892,6 +937,17 @@ class RAS_Contact_Sync {
 	 * A `--dry-run` pull evaluates the deterministic reader-data write
 	 * rejections without persisting, so its error tally previews what a real
 	 * run would report.
+	 *
+	 * ## EXAMPLES
+	 *
+	 *     # Re-push all readers to every active integration (same as the legacy `esp sync`).
+	 *     wp newspack integrations backfill
+	 *
+	 *     # Pull enabled incoming fields for all readers from one integration.
+	 *     wp newspack integrations backfill --direction=pull --integration=esp
+	 *
+	 *     # Fully catch up one integration, 500 readers per batch.
+	 *     wp newspack integrations backfill --direction=both --integration=esp --batch-size=500
 	 *
 	 * @param array $args Positional args.
 	 * @param array $assoc_args Associative args.
@@ -932,13 +988,14 @@ class RAS_Contact_Sync {
 			static::log( __( 'Running integrations contact pull...', 'newspack-plugin' ) );
 			$pull_results = self::pull_contacts(
 				[
-					'active_only'    => $config['active_only'],
-					'user_ids'       => $config['user_ids'],
-					'batch_size'     => $config['batch_size'],
-					'offset'         => $config['offset'],
-					'max_batches'    => $config['max_batches'],
-					'is_dry_run'     => $config['is_dry_run'],
-					'integration_id' => $integration_id,
+					'active_only'              => $config['active_only'],
+					'user_ids'                 => $config['user_ids'],
+					'batch_size'               => $config['batch_size'],
+					'offset'                   => $config['offset'],
+					'max_batches'              => $config['max_batches'],
+					'is_dry_run'               => $config['is_dry_run'],
+					'integration_id'           => $integration_id,
+					'resolved_incoming_fields' => $backfill['resolved_incoming_fields'],
 				]
 			);
 			if ( \is_wp_error( $pull_results ) ) {
@@ -1080,7 +1137,8 @@ class RAS_Contact_Sync {
 	 * @return array|\WP_Error `[ 'direction' => 'push'|'pull'|'both', 'integration_id' => string|null ]` or WP_Error.
 	 */
 	private static function parse_backfill_options( $assoc_args ): array|\WP_Error {
-		$direction = isset( $assoc_args['direction'] ) ? (string) $assoc_args['direction'] : 'push';
+		$direction                = isset( $assoc_args['direction'] ) ? (string) $assoc_args['direction'] : 'push';
+		$resolved_incoming_fields = [];
 		if ( ! in_array( $direction, [ 'push', 'pull', 'both' ], true ) ) {
 			return new \WP_Error(
 				'newspack_backfill_invalid_direction',
@@ -1186,10 +1244,17 @@ class RAS_Contact_Sync {
 				$pull_scope = array_intersect_key( $pull_scope, [ $integration_id => true ] );
 			}
 			$has_pull_target = false;
-			foreach ( $pull_scope as $integration ) {
+			foreach ( $pull_scope as $id => $integration ) {
 				// Mirrors pull_contacts()'s target selection, so the pre-flight and
-				// the run agree on what counts as a viable target.
-				if ( $integration->is_pull_enabled() && ! empty( $integration->get_enabled_incoming_fields() ) ) {
+				// the run agree on what counts as a viable target. Each resolution
+				// is kept and threaded into the run: resolving may hit the
+				// provider's API, so the run must not ask the same integration a
+				// second time.
+				if ( ! $integration->is_pull_enabled() ) {
+					continue;
+				}
+				$resolved_incoming_fields[ $id ] = $integration->get_enabled_incoming_fields();
+				if ( ! empty( $resolved_incoming_fields[ $id ] ) ) {
 					$has_pull_target = true;
 					break;
 				}
@@ -1203,8 +1268,9 @@ class RAS_Contact_Sync {
 		}
 
 		return [
-			'direction'      => $direction,
-			'integration_id' => '' !== $integration_id ? $integration_id : null,
+			'direction'                => $direction,
+			'integration_id'           => '' !== $integration_id ? $integration_id : null,
+			'resolved_incoming_fields' => $resolved_incoming_fields,
 		];
 	}
 }

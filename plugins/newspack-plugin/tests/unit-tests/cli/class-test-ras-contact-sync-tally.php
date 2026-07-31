@@ -213,4 +213,37 @@ class Test_RAS_Contact_Sync_Tally extends WP_UnitTestCase {
 			'The alias summary keeps the exact historical `esp sync` wording.'
 		);
 	}
+
+	/**
+	 * Read the protected static inter-batch pacing counter.
+	 *
+	 * @return int
+	 */
+	private function get_unpaused_contacts() {
+		$prop = new \ReflectionProperty( RAS_Contact_Sync::class, 'unpaused_contacts' );
+		$prop->setAccessible( true );
+		return $prop->getValue();
+	}
+
+	/**
+	 * A dry-run push never reaches a provider, so it must not accrue the
+	 * pacing that exists to space out real external requests — previewing
+	 * 100k readers should not cost ~17 minutes of sleep (NPPD-2076 review).
+	 */
+	public function test_dry_run_push_does_not_accrue_pacing() {
+		$this->run_sync(
+			[
+				'user_ids'   => [ $this->active_user_id, $this->inactive_user_id ],
+				'is_dry_run' => true,
+			]
+		);
+
+		$this->assertSame( 0, $this->get_unpaused_contacts(), 'Dry-run push contacts generate no provider traffic to pace.' );
+	}
+
+	public function test_wet_push_accrues_pacing_per_contact() {
+		$this->run_sync( [ 'user_ids' => [ $this->active_user_id, $this->inactive_user_id ] ] );
+
+		$this->assertSame( 2, $this->get_unpaused_contacts(), 'Each wet-pushed contact reached the integrations and counts toward pacing.' );
+	}
 }

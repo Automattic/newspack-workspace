@@ -72,8 +72,11 @@ class Test_RAS_Integrations_Backfill_Options extends WP_UnitTestCase {
 	public function test_defaults_to_push_and_all_integrations() {
 		$this->assertSame(
 			[
-				'direction'      => 'push',
-				'integration_id' => null,
+				'direction'                => 'push',
+				'integration_id'           => null,
+				// Empty on a push-only parse: only a pull direction's pre-flight
+				// resolves incoming fields to thread into the run.
+				'resolved_incoming_fields' => [],
 			],
 			$this->parse( [] )
 		);

@@ -62,6 +62,14 @@ class Failing_Sample_Integration extends Integration {
 	public static $pull_should_fail = false;
 
 	/**
+	 * WP_Error code returned when $pull_should_fail is true. Tests covering the
+	 * provider-missing-contact classification set the canonical not-found code.
+	 *
+	 * @var string
+	 */
+	public static $pull_error_code = 'mock_pull_error';
+
+	/**
 	 * Count of get_enabled_incoming_fields() calls, so tests can pin that
 	 * batch drivers resolve fields once per integration, not once per reader.
 	 *
@@ -118,7 +126,7 @@ class Failing_Sample_Integration extends Integration {
 	public function pull_contact_data( $user_id ) {
 		self::$pull_count++;
 		if ( self::$pull_should_fail ) {
-			return new \WP_Error( 'mock_pull_error', 'Mock pull failed' );
+			return new \WP_Error( self::$pull_error_code, 'Mock pull failed' );
 		}
 		return self::$pull_data;
 	}
@@ -175,6 +183,7 @@ class Failing_Sample_Integration extends Integration {
 		self::$push_ids                      = [];
 		self::$pull_data                     = [];
 		self::$pull_should_fail              = false;
+		self::$pull_error_code               = 'mock_pull_error';
 		self::$enabled_incoming_fields_calls = 0;
 		self::$is_set_up_value               = true;
 		self::$cannot_sync_reason            = null;

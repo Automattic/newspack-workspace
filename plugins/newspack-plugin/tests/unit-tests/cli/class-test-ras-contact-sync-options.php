@@ -241,4 +241,43 @@ class Test_RAS_Contact_Sync_Options extends WP_UnitTestCase {
 		$this->assertIsArray( $options, 'A push-incapable integration must not block the pre-flight.' );
 		$this->assertSame( [ 'Content Access' ], $options['fields'] );
 	}
+
+	/**
+	 * Invoke the private static build_sync_config() via reflection.
+	 *
+	 * @param array $assoc_args Associative CLI args.
+	 * @return array
+	 */
+	private function build_config( array $assoc_args ) {
+		$method = new \ReflectionMethod( RAS_Contact_Sync::class, 'build_sync_config' );
+		$method->setAccessible( true );
+		return $method->invoke( null, $assoc_args );
+	}
+
+	/**
+	 * WP_User_Query treats a non-positive `number` as "no LIMIT", which would
+	 * turn every batch into the entire reader set and make the paging loops
+	 * non-terminating — so invalid input is floored, never passed through
+	 * (NPPD-2076 review).
+	 */
+	public function test_batch_size_floors_non_positive_input_to_one() {
+		$this->assertSame( 1, $this->build_config( [ 'batch-size' => '-5' ] )['batch_size'], 'A negative batch size is floored to 1.' );
+		$this->assertSame( 1, $this->build_config( [ 'batch-size' => 'abc' ] )['batch_size'], 'A non-numeric batch size (intval → 0) is floored to 1.' );
+	}
+
+	public function test_batch_size_default_and_valid_values_are_unchanged() {
+		$this->assertSame( 10, $this->build_config( [] )['batch_size'], 'Absent flag keeps the default.' );
+		$this->assertSame( 10, $this->build_config( [ 'batch-size' => '0' ] )['batch_size'], 'A literal 0 is empty-string-falsy and keeps the default.' );
+		$this->assertSame( 250, $this->build_config( [ 'batch-size' => '250' ] )['batch_size'] );
+	}
+
+	/**
+	 * A negative offset builds an invalid LIMIT clause: the query returns
+	 * nothing and the run reads as a clean "Synced 0 contacts" success over a
+	 * window that was never covered (NPPD-2076 review).
+	 */
+	public function test_offset_floors_negative_input_to_zero() {
+		$this->assertSame( 0, $this->build_config( [ 'offset' => '-3' ] )['offset'], 'A negative offset is floored to 0.' );
+		$this->assertSame( 7, $this->build_config( [ 'offset' => '7' ] )['offset'] );
+	}
 }

@@ -367,4 +367,90 @@ class Test_RAS_Integrations_Backfill_Pull extends WP_UnitTestCase {
 			'Push and pull summaries are joined into one success line, push first.'
 		);
 	}
+
+	/**
+	 * A reader the provider has never heard of is not a failure: no re-run can
+	 * make an absent contact appear, so tallying them as errors would exit 1 on
+	 * exactly the sites a backfill exists for — mirror the push leg's
+	 * missing-entity skips instead (NPPD-2076 review).
+	 */
+	public function test_provider_missing_contacts_tally_as_skipped() {
+		Failing_Sample_Integration::$pull_should_fail = true;
+		Failing_Sample_Integration::$pull_error_code  = Integration::CONTACT_NOT_FOUND_ERROR_CODE;
+		$user_a = $this->create_reader();
+
+		$tally = $this->run_pull( [ 'user_ids' => [ $user_a ] ] );
+
+		$this->assertSame(
+			[
+				'processed' => 0,
+				'errors'    => 0,
+				'skipped'   => 1,
+			],
+			$tally,
+			'A provider-missing contact is skipped, not an error.'
+		);
+	}
+
+	/**
+	 * Not-found only means "skip" when every target came up empty: a reader one
+	 * integration knows and another does not was still pulled.
+	 */
+	public function test_reader_found_by_one_integration_is_processed_despite_not_found_elsewhere() {
+		// Fresh id: the integrations registry is process-static and keeps the
+		// first instance registered under an id, so reusing `pull_cli_other`
+		// here would silently run a sibling test's plain mock instead.
+		$not_found = new class( 'pull_cli_ghost', 'Pull CLI Ghost' ) extends Failing_Sample_Integration {
+			/**
+			 * Always report the contact as missing at the provider.
+			 *
+			 * @param int $user_id WordPress user ID.
+			 * @return \WP_Error
+			 */
+			public function pull_contact_data( $user_id ) {
+				return new \WP_Error( Integration::CONTACT_NOT_FOUND_ERROR_CODE, 'Contact not found' );
+			}
+		};
+		Integrations::register( $not_found );
+		Integrations::enable( 'pull_cli_ghost' );
+		update_option( 'newspack_integration_incoming_fields_pull_cli_ghost', [ 'field_a' => [ 'name' => 'Field A' ] ] );
+		$user_a = $this->create_reader();
+
+		$tally = $this->run_pull( [ 'user_ids' => [ $user_a ] ] );
+
+		Integrations::disable( 'pull_cli_ghost' );
+		delete_option( 'newspack_integration_incoming_fields_pull_cli_ghost' );
+
+		$this->assertSame(
+			[
+				'processed' => 1,
+				'errors'    => 0,
+				'skipped'   => 0,
+			],
+			$tally,
+			'The reader was pulled from the integration that knows them.'
+		);
+	}
+
+	/**
+	 * The whole backfill run — pre-flight included — resolves each
+	 * integration's incoming fields once: resolution may hit the provider's
+	 * API on legacy-shaped settings (NPPD-2076 review).
+	 */
+	public function test_backfill_run_resolves_incoming_fields_once_including_preflight() {
+		$user_a = $this->create_reader();
+		WP_CLI::reset();
+		Failing_Sample_Integration::$enabled_incoming_fields_calls = 0;
+
+		RAS_Contact_Sync::cli_backfill(
+			[],
+			[
+				'direction' => 'pull',
+				'user-ids'  => (string) $user_a,
+			]
+		);
+
+		$this->assertSame( 1, Failing_Sample_Integration::$enabled_incoming_fields_calls, 'One resolution for the entire run, pre-flight included.' );
+		$this->assertSame( 1, Failing_Sample_Integration::$pull_count, 'The reader was still pulled.' );
+	}
 }
