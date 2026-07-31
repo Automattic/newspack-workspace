@@ -1607,9 +1607,13 @@ abstract class Integration {
 				);
 			}
 			if ( 'outgoing_metadata_fields' === $field['key'] ) {
-				// TODO: Drop $field['options'] for outgoing_metadata_fields once consumers have migrated to grouped_options.
+				// TODO: Drop options/grouped_options once external consumers
+				// (manager-admin) migrate to definitions/value_ids.
 				$field['options']         = Sync\Metadata::get_default_fields();
 				$field['grouped_options'] = Sync\Metadata::get_grouped_default_fields();
+				$field['definitions']     = Sync\Field_Registry::get_definitions_for_settings();
+				$field['value_ids']       = $this->get_enabled_outgoing_field_ids();
+				$field['schema_origin']   = Sync\Field_Registry::get_schema_origin();
 			}
 			$config[] = $field;
 		}

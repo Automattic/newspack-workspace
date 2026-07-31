@@ -485,4 +485,30 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 
 		$this->assertSame( 'v2', Field_Registry::get_schema_origin() );
 	}
+
+	/**
+	 * The outgoing-fields settings entry carries the id-space payload the
+	 * per-field UI consumes, alongside the legacy name-space keys external
+	 * consumers still read.
+	 */
+	public function test_settings_config_carries_definitions_and_value_ids() {
+		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
+		\update_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test', [ 'v1:account' ] );
+
+		$outgoing = null;
+		foreach ( $this->integration->get_settings_config() as $field ) {
+			if ( 'outgoing_metadata_fields' === $field['key'] ) {
+				$outgoing = $field;
+			}
+		}
+
+		$this->assertNotNull( $outgoing );
+		$this->assertSame( [ 'v1:account' ], $outgoing['value_ids'] );
+		$this->assertSame( 'v1', $outgoing['schema_origin'] );
+		$this->assertNotEmpty( $outgoing['definitions'] );
+		$this->assertContains( 'v2:Registration_Strategy', array_column( $outgoing['definitions'], 'id' ), 'Definitions must include non-origin versions.' );
+		// Legacy keys stay for external consumers.
+		$this->assertArrayHasKey( 'options', $outgoing );
+		$this->assertArrayHasKey( 'grouped_options', $outgoing );
+	}
 }
