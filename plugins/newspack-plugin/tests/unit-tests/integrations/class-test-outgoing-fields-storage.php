@@ -530,4 +530,36 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 		$this->assertSame( 'Registration Strategy', $filtered['Registration_Strategy'], 'Enabled non-origin ids must match their raw keys.' );
 		$this->assertArrayNotHasKey( 'registration_date', $filtered, 'Non-enabled keys must not match.' );
 	}
+
+	/**
+	 * The filter_enabled_outgoing_fields() method must cover neutral ids (filter-added fields)
+	 * end to end: resolving neutral ids to their raw keys and names regardless of schema origin.
+	 */
+	public function test_filter_enabled_outgoing_fields_covers_neutral_ids() {
+		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
+
+		// Register a custom filter-added field as neutral.
+		$callback = function ( $keys ) {
+			$keys['custom_extra'] = 'Custom Extra';
+			return $keys;
+		};
+		\add_filter( 'newspack_ras_metadata_keys', $callback );
+		Field_Registry::reset();
+
+		// Store v1 and neutral ids in the integration's option.
+		\update_option(
+			Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test',
+			[ 'v1:account', 'neutral:custom_extra' ]
+		);
+
+		$filtered = $this->integration->filter_enabled_outgoing_fields( [ 'account', 'custom_extra', 'registration_date' ] );
+
+		$this->assertSame( 'Account', $filtered['account'] );
+		$this->assertSame( 'Custom Extra', $filtered['custom_extra'], 'Enabled neutral ids must match their raw keys.' );
+		$this->assertArrayNotHasKey( 'registration_date', $filtered, 'Non-enabled keys must not match.' );
+
+		// Clean up: remove filter and reset registry.
+		\remove_filter( 'newspack_ras_metadata_keys', $callback );
+		Field_Registry::reset();
+	}
 }
