@@ -49,7 +49,7 @@ function render_callback( $attributes ) {
 		? $attributes['product']
 		: $product_id;
 	\Newspack_Blocks\Modal_Checkout::enqueue_modal( $modal_product_id );
-	\Newspack_Blocks::enqueue_view_assets( 'checkout-button' );
+	\Newspack_Blocks::enqueue_view_assets( 'checkout-button', 'defer' );
 
 	$background_color           = $attributes['backgroundColor'] ?? '';
 	$text_color                 = $attributes['textColor'] ?? '';

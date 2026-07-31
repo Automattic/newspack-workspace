@@ -18,6 +18,8 @@ use Newspack\Institution;
 
 /**
  * Tests for the Content Gates class.
+ *
+ * @group content-gate
  */
 class Test_Content_Gates extends \WP_UnitTestCase {
 
@@ -1037,6 +1039,19 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Helper to read a private static property on Content_Gate via reflection.
+	 *
+	 * @param string $property Property name.
+	 *
+	 * @return mixed
+	 */
+	private function get_content_gate_property( $property ) {
+		$reflection = new \ReflectionProperty( Content_Gate::class, $property );
+		$reflection->setAccessible( true );
+		return $reflection->getValue();
+	}
+
+	/**
 	 * Reset the static per-post restriction cache on Content_Restriction_Control.
 	 * This cache is populated by is_post_restricted() and must be cleared between
 	 * tests to prevent cross-test contamination.
@@ -1058,6 +1073,8 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 		$this->set_content_gate_property( 'gate_rendered', false );
 		$this->set_content_gate_property( 'is_gated', false );
 		$this->set_content_gate_property( 'is_content_locked', false );
+		$this->set_content_gate_property( 'restricted_content', [] );
+		$this->set_content_gate_property( 'pending_gates', [] );
 	}
 
 	/**
@@ -2726,6 +2743,29 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A negative metering count must be floored at 0 (NPPD-2056). Signed intval()
+	 * would persist -1, which Metering::get_registered_settings() reads back through
+	 * absint() as 1 free view - silently granting a view to a publisher who asked for
+	 * none. The admin UI clamps too; this closes the direct REST-caller path.
+	 */
+	public function test_sanitize_metering_floors_negative_count() {
+		$negative_count = Content_Gate_API::sanitize_metering(
+			[
+				'enabled' => true,
+				'count'   => -1,
+				'period'  => 'month',
+			]
+		);
+		$this->assertSame( 0, $negative_count['count'], 'A negative metering count must be floored at 0 rather than persisted as a negative' );
+
+		$explicit_zero = Content_Gate_API::sanitize_metering( [ 'count' => 0 ] );
+		$this->assertSame( 0, $explicit_zero['count'], 'An explicitly entered 0 must survive sanitization' );
+
+		$positive_count = Content_Gate_API::sanitize_metering( [ 'count' => 3 ] );
+		$this->assertSame( 3, $positive_count['count'], 'A positive metering count must pass through unchanged' );
+	}
+
+	/**
 	 * Creating a gate must fall back to a default title when the payload
 	 * omits one, since sanitize_gate() no longer guarantees a title.
 	 */
@@ -2990,7 +3030,7 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 				[
 					'post_type'      => Content_Gate::GATE_LAYOUT_CPT,
 					'post_status'    => 'any',
-					'posts_per_page' => -1,
+					'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Unbounded queries are acceptable in tests.
 					'fields'         => 'ids',
 				]
 			);
@@ -3150,5 +3190,338 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 		$success = $premium_newsletters_wizard->api_duplicate_gate( $newsletter_request );
 		$this->assertNotWPError( $success );
 		$this->assertSame( 'Premium Newsletter Gate copy', $success->get_data()['title'] );
+	}
+
+	/**
+	 * Drive a restricted render of $post_id and return the rendered content.
+	 *
+	 * Mirrors a front-end request: the gate populates its per-post state on
+	 * 'the_post', then the theme runs the post through 'the_content'.
+	 *
+	 * @param int $post_id Post ID.
+	 *
+	 * @return string
+	 */
+	private function render_restricted_post( $post_id ) {
+		$this->reset_restriction_cache();
+		$this->reset_gate_render_state();
+		$this->go_to( get_permalink( $post_id ) );
+
+		global $wp_query;
+		Content_Gate::restrict_post( get_post( $post_id ), $wp_query );
+
+		return apply_filters( 'the_content', get_post( $post_id )->post_content );
+	}
+
+	/**
+	 * Set up a published gate restricting all posts to registered readers, with an
+	 * inline layout, and return a logged-out reader on a post with three paragraphs.
+	 *
+	 * @return int Post ID.
+	 */
+	private function set_up_restricted_post_for_content_filters() {
+		$gate = Content_Gate::get_gate( $this->gate_ids[2] );
+		update_post_meta( $gate['registration']['gate_layout_id'], 'style', 'inline' );
+		update_post_meta( $gate['registration']['gate_layout_id'], 'visible_paragraphs', 2 );
+		update_post_meta( $gate['registration']['gate_layout_id'], 'use_more_tag', false );
+
+		Content_Rules::update_gate_content_rules(
+			$this->gate_ids[2],
+			[
+				[
+					'slug'  => 'post_types',
+					'value' => [ 'post' ],
+				],
+			]
+		);
+
+		wp_set_current_user( 0 );
+
+		$post_id = $this->factory->post->create(
+			[
+				'post_content' => '<p>Visible paragraph.</p><p>PARTNER_EMBED</p><p>Hidden paragraph.</p>',
+			]
+		);
+		$this->post_ids[] = $post_id;
+
+		return $post_id;
+	}
+
+	/**
+	 * A third-party integration filtering 'the_content' must see the teaser, and its
+	 * changes must survive into the rendered page.
+	 *
+	 * Partner plugins gate their own embeds this way — the Everlit audio player is
+	 * the known case, restricting its iframe at priority 999999 after asking us
+	 * whether the post is restricted. Woo Memberships substituted restricted content
+	 * at priority 999, so those callbacks ran last and their output was rendered.
+	 * Returning the full post to them and then discarding the filtered result would
+	 * leave the partner's embed ungated on exactly the posts that are paywalled.
+	 */
+	public function test_third_party_content_filters_apply_to_restricted_teaser() {
+		$post_id = $this->set_up_restricted_post_for_content_filters();
+
+		// The literal priority the Everlit integration registers at, so that raising
+		// RESTRICTION_PRIORITY past it fails this test instead of silently
+		// reintroducing the bug.
+		$partner_priority = 999999;
+		$partner_filter   = function ( $content ) {
+			return str_replace( 'PARTNER_EMBED', 'PARTNER_EMBED_GATED', $content );
+		};
+		add_filter( 'the_content', $partner_filter, $partner_priority );
+		$rendered = $this->render_restricted_post( $post_id );
+		remove_filter( 'the_content', $partner_filter, $partner_priority );
+
+		$this->assertLessThan( $partner_priority, Content_Gate::RESTRICTION_PRIORITY, 'The teaser must be substituted before partner gating filters run' );
+		$this->assertStringContainsString( 'PARTNER_EMBED_GATED', $rendered, "A later 'the_content' filter should see the teaser and its output should be rendered" );
+		$this->assertStringNotContainsString( '<p>PARTNER_EMBED</p>', $rendered, 'The unfiltered embed should not survive into the page' );
+		$this->assertStringContainsString( 'newspack-content-gate__inline-gate', $rendered, 'The gate should still be appended' );
+		$this->assertStringNotContainsString( 'Hidden paragraph', $rendered, 'Content past the teaser should stay restricted' );
+	}
+
+	/**
+	 * A later filter that runs 'the_content' itself must not consume the outer
+	 * pass's state and leave the outer pass discarding everything downstream of it.
+	 */
+	public function test_nested_content_filtering_still_renders_partner_output() {
+		$post_id = $this->set_up_restricted_post_for_content_filters();
+
+		$nested         = false;
+		$nested_output  = '';
+		$nesting_filter = function ( $content ) use ( &$nested, &$nested_output ) {
+			// A filter that renders some other content through the same chain, as
+			// related-post and summary integrations do. Guarded so it nests once,
+			// the way such a filter guards against re-entering itself.
+			if ( ! $nested ) {
+				$nested        = true;
+				$nested_output = apply_filters( 'the_content', 'UNRELATED' );
+			}
+			return $content;
+		};
+		$partner_filter = function ( $content ) {
+			return str_replace( 'PARTNER_EMBED', 'PARTNER_EMBED_GATED', $content );
+		};
+		add_filter( 'the_content', $nesting_filter, Content_Gate::RESTRICTION_PRIORITY + 1 );
+		add_filter( 'the_content', $partner_filter, 999999 );
+		$rendered = $this->render_restricted_post( $post_id );
+		remove_filter( 'the_content', $nesting_filter, Content_Gate::RESTRICTION_PRIORITY + 1 );
+		remove_filter( 'the_content', $partner_filter, 999999 );
+
+		// Both callbacks key off the post being rendered, not the string in hand, so
+		// a bare string run through 'the_content' while the global post is still the
+		// restricted one comes back as that post's teaser and gate. Swallowing it is
+		// the long-standing behavior, and the point of the assertions below is that
+		// the inner pass resolves on its own terms rather than by borrowing — or
+		// stranding — the outer one's.
+		$this->assertStringNotContainsString( 'UNRELATED', $nested_output, "A nested pass on the restricted post's own render is answered with the teaser" );
+		$this->assertSame( 1, substr_count( $nested_output, 'newspack-content-gate__inline-gate' ), 'The nested pass should close with its own gate' );
+
+		$this->assertStringContainsString( 'PARTNER_EMBED_GATED', $rendered, 'Partner filtering should survive a nested content pass' );
+		$this->assertSame( 1, substr_count( $rendered, 'newspack-content-gate__inline-gate' ), 'The gate should be appended exactly once' );
+		$this->assertStringNotContainsString( 'Hidden paragraph', $rendered, 'Content past the teaser should stay restricted' );
+	}
+
+	/**
+	 * A later filter that renders a *different*, unrestricted post through
+	 * 'the_content' must not consume the restricted post's pending substitution.
+	 *
+	 * That inner pass never substitutes anything, so if it closed the outer one it
+	 * would both stamp this post's gate onto unrelated content and leave the outer
+	 * pass discarding the partner filtering.
+	 */
+	public function test_nested_render_of_another_post_does_not_consume_the_substitution() {
+		$post_id = $this->set_up_restricted_post_for_content_filters();
+
+		$other_id = $this->factory->post->create(
+			[
+				'post_content'  => '<p>Unrelated post body.</p>',
+				'post_category' => [],
+			]
+		);
+		$this->post_ids[] = $other_id;
+
+		$nested_output  = '';
+		$nested         = false;
+		$nesting_filter = function ( $content ) use ( &$nested, &$nested_output, $other_id ) {
+			if ( ! $nested ) {
+				$nested = true;
+				global $post;
+				$outer = $post;
+				$post  = get_post( $other_id ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+				setup_postdata( $post );
+				$nested_output = apply_filters( 'the_content', get_post( $other_id )->post_content );
+				wp_reset_postdata();
+				$post = $outer; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+			}
+			return $content;
+		};
+		$partner_filter = function ( $content ) {
+			return str_replace( 'PARTNER_EMBED', 'PARTNER_EMBED_GATED', $content );
+		};
+		add_filter( 'the_content', $nesting_filter, Content_Gate::RESTRICTION_PRIORITY + 1 );
+		add_filter( 'the_content', $partner_filter, 999999 );
+		$rendered = $this->render_restricted_post( $post_id );
+		remove_filter( 'the_content', $nesting_filter, Content_Gate::RESTRICTION_PRIORITY + 1 );
+		remove_filter( 'the_content', $partner_filter, 999999 );
+
+		$this->assertStringNotContainsString( 'newspack-content-gate__inline-gate', $nested_output, "The unrestricted post's render should not receive the restricted post's gate" );
+		$this->assertStringContainsString( 'PARTNER_EMBED_GATED', $rendered, 'Partner filtering should survive a nested render of another post' );
+		$this->assertSame( 1, substr_count( $rendered, 'newspack-content-gate__inline-gate' ), 'The gate should be appended exactly once' );
+	}
+
+	/**
+	 * Rendering the same restricted post twice in one request must not accumulate
+	 * gates or leave state behind that changes the second result.
+	 */
+	public function test_repeated_content_filtering_appends_gate_once_each_pass() {
+		$post_id = $this->set_up_restricted_post_for_content_filters();
+
+		$first  = $this->render_restricted_post( $post_id );
+		$second = apply_filters( 'the_content', get_post( $post_id )->post_content );
+
+		$this->assertSame( 1, substr_count( $first, 'newspack-content-gate__inline-gate' ), 'The first pass should append exactly one gate' );
+		$this->assertSame( 1, substr_count( $second, 'newspack-content-gate__inline-gate' ), 'The second pass should append exactly one gate' );
+		$this->assertStringNotContainsString( 'Hidden paragraph', $second, 'Content past the teaser should stay restricted on repeat passes' );
+	}
+
+	/**
+	 * The gate HTML is appended after every other content filter has run, so a
+	 * third-party callback cannot rewrite the gate markup itself.
+	 */
+	public function test_gate_html_is_not_exposed_to_third_party_content_filters() {
+		$post_id = $this->set_up_restricted_post_for_content_filters();
+
+		$seen = '';
+		$spy  = function ( $content ) use ( &$seen ) {
+			$seen = $content;
+			return $content;
+		};
+		add_filter( 'the_content', $spy, Content_Gate::RESTRICTION_PRIORITY + 1 );
+		$rendered = $this->render_restricted_post( $post_id );
+		remove_filter( 'the_content', $spy, Content_Gate::RESTRICTION_PRIORITY + 1 );
+
+		$this->assertStringContainsString( 'Visible paragraph', $seen, 'The teaser should be handed to later content filters' );
+		$this->assertStringNotContainsString( 'newspack-content-gate__inline-gate', $seen, 'The gate markup should not be handed to later content filters' );
+		$this->assertStringContainsString( 'newspack-content-gate__inline-gate', $rendered, 'The gate should still be present in the rendered output' );
+	}
+
+	/**
+	 * If the teaser substitution does not run — another plugin removing the filter
+	 * is the realistic case — the restricted post must not be published anyway.
+	 */
+	public function test_restricted_content_falls_back_when_teaser_substitution_is_removed() {
+		$post_id = $this->set_up_restricted_post_for_content_filters();
+
+		// Stand in for a filter that hands back content of its own once the
+		// substitution is gone. It must not reach the page with a gate stuck on it.
+		$leak_filter = function () {
+			return '<p>MUST_NOT_LEAK Hidden paragraph.</p>';
+		};
+		remove_filter( 'the_content', [ Content_Gate::class, 'replace_restricted_content' ], Content_Gate::RESTRICTION_PRIORITY );
+		add_filter( 'the_content', $leak_filter, Content_Gate::RESTRICTION_PRIORITY + 1 );
+		$rendered = $this->render_restricted_post( $post_id );
+		remove_filter( 'the_content', $leak_filter, Content_Gate::RESTRICTION_PRIORITY + 1 );
+		add_filter( 'the_content', [ Content_Gate::class, 'replace_restricted_content' ], Content_Gate::RESTRICTION_PRIORITY );
+
+		$this->assertStringNotContainsString( 'MUST_NOT_LEAK', $rendered, 'Content in hand must not be published when the substitution did not run' );
+		$this->assertStringNotContainsString( 'Hidden paragraph', $rendered, 'The restricted content must not be rendered' );
+		$this->assertStringContainsString( 'Visible paragraph', $rendered, 'The teaser should still be rendered' );
+		$this->assertSame( 1, substr_count( $rendered, 'newspack-content-gate__inline-gate' ), 'The gate should be rendered exactly once' );
+	}
+
+	/**
+	 * Drive a restricted render that a 'the_content' callback aborts by throwing,
+	 * leaving the substitution's bookkeeping open the way a partner filter blowing
+	 * up mid-pass, with the exception caught upstream, would.
+	 *
+	 * @param int $post_id Post ID.
+	 */
+	private function abort_restricted_render( $post_id ) {
+		// DomainException rather than a RuntimeException: PHPUnit's own failure
+		// exceptions extend RuntimeException, and catching those here would swallow
+		// a failing assertion.
+		$throwing_filter = function () {
+			throw new \DomainException( 'A partner filter blew up mid-render.' );
+		};
+
+		// Core pops the hook off $wp_current_filter only on the way out, so the
+		// exception leaves the stack a level deep. Restore it, both to keep the
+		// dirty stack out of what follows and because the harder case is the one
+		// where later passes run at the same nesting depth the aborted pass did,
+		// and so can actually reach what it left behind.
+		$filter_stack = $GLOBALS['wp_current_filter'];
+		$caught       = null;
+		add_filter( 'the_content', $throwing_filter, Content_Gate::RESTRICTION_PRIORITY + 1 );
+		try {
+			$this->render_restricted_post( $post_id );
+		} catch ( \DomainException $e ) {
+			$caught = $e;
+		}
+		remove_filter( 'the_content', $throwing_filter, Content_Gate::RESTRICTION_PRIORITY + 1 );
+		$GLOBALS['wp_current_filter'] = $filter_stack; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+
+		$this->assertNotNull( $caught, 'The throwing filter should have aborted the pass' );
+	}
+
+	/**
+	 * A 'the_content' callback that throws between the teaser substitution and the
+	 * gate append leaves the substitution's bookkeeping open — core unwinds the
+	 * filter without running the rest of the chain. Nothing left behind may reach a
+	 * later pass, since an entry read by a pass that did not substitute would put
+	 * the gate on the unrestricted body in hand.
+	 */
+	public function test_content_filter_exception_leaves_nothing_that_corrupts_later_renders() {
+		$post_id = $this->set_up_restricted_post_for_content_filters();
+		$this->abort_restricted_render( $post_id );
+
+		// A pass where the substitution did not run holds a body of someone else's
+		// making. Taking the aborted pass's entry for its own would stamp the gate
+		// onto that body and publish it.
+		$leak_filter = function () {
+			return '<p>MUST_NOT_LEAK Hidden paragraph.</p>';
+		};
+		remove_filter( 'the_content', [ Content_Gate::class, 'replace_restricted_content' ], Content_Gate::RESTRICTION_PRIORITY );
+		add_filter( 'the_content', $leak_filter, Content_Gate::RESTRICTION_PRIORITY + 1 );
+		$without_substitution = apply_filters( 'the_content', get_post( $post_id )->post_content );
+		remove_filter( 'the_content', $leak_filter, Content_Gate::RESTRICTION_PRIORITY + 1 );
+		add_filter( 'the_content', [ Content_Gate::class, 'replace_restricted_content' ], Content_Gate::RESTRICTION_PRIORITY );
+
+		$this->assertStringNotContainsString( 'MUST_NOT_LEAK', $without_substitution, 'A pass that did not substitute must not be gated as if it had' );
+		$this->assertStringNotContainsString( 'Hidden paragraph', $without_substitution, 'The restricted content must not be published after an aborted pass' );
+		$this->assertSame( 1, substr_count( $without_substitution, 'newspack-content-gate__inline-gate' ), 'The gate should be rendered exactly once' );
+
+		$rendered = apply_filters( 'the_content', get_post( $post_id )->post_content );
+
+		$this->assertStringContainsString( 'Visible paragraph', $rendered, 'A later render should still produce the teaser' );
+		$this->assertStringNotContainsString( 'Hidden paragraph', $rendered, 'A later render should still restrict the content' );
+		$this->assertSame( 1, substr_count( $rendered, 'newspack-content-gate__inline-gate' ), 'A later render should append exactly one gate' );
+		$this->assertSame( [], $this->get_content_gate_property( 'pending_gates' ), 'A completed pass should leave no substitution open' );
+	}
+
+	/**
+	 * What an aborted pass leaves behind must not reach a post that is not
+	 * restricted at all: the next pass at that nesting depth claims the bookkeeping
+	 * on its way in, before anything can be read as its own.
+	 */
+	public function test_aborted_pass_does_not_gate_a_later_unrestricted_render() {
+		$post_id = $this->set_up_restricted_post_for_content_filters();
+		$this->abort_restricted_render( $post_id );
+
+		$unrestricted_id  = $this->factory->post->create(
+			[
+				'post_content'  => '<p>Unrelated post body.</p>',
+				'post_category' => [],
+			]
+		);
+		$this->post_ids[] = $unrestricted_id;
+
+		global $post;
+		$post = get_post( $unrestricted_id ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		setup_postdata( $post );
+		$rendered = apply_filters( 'the_content', get_post( $unrestricted_id )->post_content );
+		wp_reset_postdata();
+
+		$this->assertStringContainsString( 'Unrelated post body', $rendered, 'An unrestricted post should render its own content' );
+		$this->assertStringNotContainsString( 'newspack-content-gate__inline-gate', $rendered, 'An unrestricted post must not be gated by what an aborted pass left behind' );
 	}
 }
