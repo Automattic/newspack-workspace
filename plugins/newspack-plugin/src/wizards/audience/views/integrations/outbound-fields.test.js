@@ -4,10 +4,20 @@ import OutboundFields, { buildFieldRows, toggleRow, pickRowVersion, badgesForRow
 const def = ( id, name, extra = {} ) => {
 	const [ version, raw_key ] = id.split( ':' );
 	return {
-		id, version, raw_key, name,
-		section: 'Test', available: true, dynamic_suffix: false,
-		description: '', example: '', sync_type: 'field', status: 'existing',
-		supersedes: null, superseded_by: [], in_conflict_group: false,
+		id,
+		version,
+		raw_key,
+		name,
+		section: 'Test',
+		available: true,
+		dynamic_suffix: false,
+		description: '',
+		example: '',
+		sync_type: 'field',
+		status: 'existing',
+		supersedes: null,
+		superseded_by: [],
+		in_conflict_group: false,
 		...extra,
 	};
 };
@@ -45,9 +55,7 @@ describe( 'buildFieldRows', () => {
 
 	it( 'hides non-origin single-version fields unless enabled', () => {
 		expect( buildFieldRows( DEFS, [], 'v1' ).find( r => r.name === 'Registration Strategy' ) ).toBeUndefined();
-		expect(
-			buildFieldRows( DEFS, [ 'v2:Registration_Strategy' ], 'v1' ).find( r => r.name === 'Registration Strategy' )?.checked
-		).toBe( true );
+		expect( buildFieldRows( DEFS, [ 'v2:Registration_Strategy' ], 'v1' ).find( r => r.name === 'Registration Strategy' )?.checked ).toBe( true );
 	} );
 
 	it( 'shows neutral fields on every origin and hides unavailable ones', () => {
@@ -87,7 +95,13 @@ describe( 'toggleRow / pickRowVersion', () => {
 		const on = toggleRow( [], account, true );
 		expect( on ).toEqual( [ 'v1:account' ] );
 		const rows2 = buildFieldRows( DEFS, [ 'v2:Account' ], 'v1' );
-		expect( toggleRow( [ 'v2:Account' ], rows2.find( r => r.name === 'Account' ), false ) ).toEqual( [] );
+		expect(
+			toggleRow(
+				[ 'v2:Account' ],
+				rows2.find( r => r.name === 'Account' ),
+				false
+			)
+		).toEqual( [] );
 	} );
 
 	it( 'picking a version swaps and enables', () => {
@@ -95,22 +109,47 @@ describe( 'toggleRow / pickRowVersion', () => {
 		const account = rows.find( r => r.name === 'Account' );
 		expect( pickRowVersion( [ 'v1:account' ], account, 'v2' ) ).toEqual( [ 'v2:Account' ] );
 		const rowsOff = buildFieldRows( DEFS, [], 'v1' );
-		expect( pickRowVersion( [], rowsOff.find( r => r.name === 'Account' ), 'v2' ) ).toEqual( [ 'v2:Account' ] );
+		expect(
+			pickRowVersion(
+				[],
+				rowsOff.find( r => r.name === 'Account' ),
+				'v2'
+			)
+		).toEqual( [ 'v2:Account' ] );
 	} );
 
 	it( 'toggle preserves unrelated ids', () => {
 		const rows = buildFieldRows( DEFS, [ 'neutral:woo_team' ], 'v1' );
 		const page = rows.find( r => r.name === 'Registration Page' );
-		expect( toggleRow( [ 'neutral:woo_team' ], page, true ).sort() ).toEqual( [ 'neutral:woo_team', 'v1:current_page_url', 'v1:registration_page' ] );
+		expect( toggleRow( [ 'neutral:woo_team' ], page, true ).sort() ).toEqual( [
+			'neutral:woo_team',
+			'v1:current_page_url',
+			'v1:registration_page',
+		] );
 	} );
 } );
 
 describe( 'badgesForRow', () => {
 	it( 'labels new, legacy and conflict-version rows', () => {
 		const v1Rows = buildFieldRows( DEFS, [ 'v2:Registration_Strategy' ], 'v1' );
-		expect( badgesForRow( v1Rows.find( r => r.name === 'Registration Strategy' ), 'v1' ).map( b => b.text ) ).toContain( 'New' );
-		expect( badgesForRow( v1Rows.find( r => r.name === 'Registration Method' ), 'v1' ).map( b => b.text ) ).toContain( 'Legacy' );
-		expect( badgesForRow( v1Rows.find( r => r.name === 'Account' ), 'v1' ).map( b => b.text ) ).toContain( 'v1' );
+		expect(
+			badgesForRow(
+				v1Rows.find( r => r.name === 'Registration Strategy' ),
+				'v1'
+			).map( b => b.text )
+		).toContain( 'New' );
+		expect(
+			badgesForRow(
+				v1Rows.find( r => r.name === 'Registration Method' ),
+				'v1'
+			).map( b => b.text )
+		).toContain( 'Legacy' );
+		expect(
+			badgesForRow(
+				v1Rows.find( r => r.name === 'Account' ),
+				'v1'
+			).map( b => b.text )
+		).toContain( 'v1' );
 	} );
 } );
 

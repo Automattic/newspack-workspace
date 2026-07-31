@@ -59,9 +59,7 @@ export const buildFieldRows = ( definitions, enabledIds, origin ) => {
 			return; // Sunset rule: non-origin fields list only while enabled.
 		}
 		const activeDefinition = active[ 0 ];
-		const supersededByDef = ( activeDefinition.superseded_by || [] )
-			.map( id => ( definitions || [] ).find( d => d.id === id ) )
-			.find( Boolean );
+		const supersededByDef = ( activeDefinition.superseded_by || [] ).map( id => ( definitions || [] ).find( d => d.id === id ) ).find( Boolean );
 		rows.push( {
 			key: conflict ? `name:${ name }` : activeDefinition.id,
 			name,
