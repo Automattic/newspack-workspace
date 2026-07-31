@@ -68,6 +68,16 @@ abstract class Integration {
 	const METADATA_PREFIX_OPTION_PREFIX = 'newspack_integration_metadata_prefix_';
 
 	/**
+	 * WP_Error code pull_contact_data() should return when the provider has no
+	 * contact for the reader. Not a failure: no re-run can make an absent
+	 * contact appear, so batch drivers count these readers as skipped rather
+	 * than errored.
+	 *
+	 * @var string
+	 */
+	const CONTACT_NOT_FOUND_ERROR_CODE = 'ras_contact_not_found';
+
+	/**
 	 * The unique identifier for this integration.
 	 *
 	 * @var string
@@ -94,6 +104,21 @@ abstract class Integration {
 	 * @var array
 	 */
 	protected $settings_fields = [];
+
+	/**
+	 * Memoized return value of get_settings_fields().
+	 *
+	 * The declarations are stable for the life of the instance — the subclass
+	 * half is already frozen in $settings_fields, and the base-class groups are
+	 * built from per-instance capability flags — but rebuilding them costs a
+	 * __() call per label and description. The direction toggles resolve through
+	 * this array on every is_push_enabled()/is_pull_enabled() call, which run
+	 * once per contact in sync loops, so the array is built once and reused.
+	 * Reset by init(), the only place $settings_fields can change.
+	 *
+	 * @var array|null
+	 */
+	private $settings_fields_cache = null;
 
 	/**
 	 * Constructor.
@@ -295,7 +320,8 @@ abstract class Integration {
 	 * Currently only initializes settings fields, but can be extended by child classes for additional setup.
 	 */
 	public function init() {
-		$this->settings_fields = $this->register_settings_fields();
+		$this->settings_fields       = $this->register_settings_fields();
+		$this->settings_fields_cache = null;
 	}
 
 	/**
@@ -317,6 +343,92 @@ abstract class Integration {
 	 * @return bool|\WP_Error True if contacts can be synced, false otherwise. WP_Error if return_errors is true.
 	 */
 	abstract public function can_sync( $return_errors = false );
+
+	/**
+	 * Whether this integration can push (outbound) contact data to its external
+	 * destination.
+	 *
+	 * Push-capable integrations get the Outbound settings section, the
+	 * account-deletion sync fields and the metadata field prefix, and count
+	 * toward Sync::has_one_syncable_integration(). Inbound-only integrations
+	 * (those whose push_contact_data() is a deliberate no-op) should override
+	 * this to return false so the settings UI shows no dead outbound controls
+	 * and the sync framework skips the push path entirely.
+	 *
+	 * @return bool True if the integration can push contact data.
+	 */
+	public function supports_push(): bool {
+		return true;
+	}
+
+	/**
+	 * Whether this integration can pull (inbound) contact data from its
+	 * external source.
+	 *
+	 * Pull-capable integrations get the Inbound settings section and are
+	 * included in the Contact_Pull dispatch. Integrations that don't implement
+	 * pull_contact_data()/get_available_incoming_fields() should override this
+	 * to return false.
+	 *
+	 * @return bool True if the integration can pull contact data.
+	 */
+	public function supports_pull(): bool {
+		return true;
+	}
+
+	/**
+	 * Whether outbound (push) sync should currently run for this integration.
+	 *
+	 * Combines the push capability with the `outgoing_sync_enabled` toggle,
+	 * which pauses the direction while preserving the configured outgoing
+	 * field selection. Every push dispatch site must consult this — including
+	 * account-deletion propagation, which travels the push pipeline.
+	 *
+	 * An undeclared toggle field (e.g. a subclass overriding
+	 * get_settings_fields() without the base metadata group) reads as null and
+	 * counts as enabled: the toggle can only ever pause sync explicitly,
+	 * mirroring the frontend's missing-toggle-means-enabled rendering. A
+	 * declared field never resolves to null — get_settings_field_value() falls
+	 * back to the field default.
+	 *
+	 * The stored value is coerced with wp_validate_boolean() rather than a cast
+	 * so this agrees with the wizard's toBool(): both read the strings `'false'`
+	 * and `'0'` as off. The sanctioned write path can't produce `'false'` (the
+	 * checkbox sanitizes to a real bool), but a hand-set option or external
+	 * writer otherwise diverges in the worst direction — UI paused, dispatch
+	 * still pushing.
+	 *
+	 * @return bool True if pushes should run.
+	 */
+	final public function is_push_enabled(): bool {
+		if ( ! $this->supports_push() ) {
+			return false;
+		}
+		$enabled = $this->get_settings_field_value( 'outgoing_sync_enabled' );
+		return null === $enabled || \wp_validate_boolean( $enabled );
+	}
+
+	/**
+	 * Whether inbound (pull) sync should currently run for this integration.
+	 *
+	 * Combines the pull capability with the `incoming_sync_enabled` toggle,
+	 * which pauses the direction while preserving the configured incoming
+	 * field selection. Every pull dispatch site must consult this.
+	 *
+	 * As with is_push_enabled(), an undeclared toggle field reads as null and
+	 * counts as enabled — only an explicit stored value can pause the
+	 * direction — and the stored value is coerced with wp_validate_boolean() so
+	 * PHP and the wizard agree on the falsy string forms.
+	 *
+	 * @return bool True if pulls should run.
+	 */
+	final public function is_pull_enabled(): bool {
+		if ( ! $this->supports_pull() ) {
+			return false;
+		}
+		$enabled = $this->get_settings_field_value( 'incoming_sync_enabled' );
+		return null === $enabled || \wp_validate_boolean( $enabled );
+	}
 
 	/**
 	 * Push contact data to the integration destination.
@@ -866,9 +978,11 @@ abstract class Integration {
 	/**
 	 * Get the account-deletion fields declared by this integration.
 	 *
-	 * Auto-appended to every integration's settings. The first field is a top-level
-	 * toggle; the second field is gated by the first via the `condition` predicate
-	 * honored by the frontend renderer.
+	 * Auto-appended to push-capable integrations' settings (see
+	 * get_settings_fields()): deletion propagates through the push pipeline, so
+	 * for a push-less integration these would be dead controls. The first field
+	 * is a top-level toggle; the second field is gated by the first via the
+	 * `condition` predicate honored by the frontend renderer.
 	 *
 	 * @return array Array of settings field declarations.
 	 */
@@ -921,30 +1035,55 @@ abstract class Integration {
 	/**
 	 * Get the metadata fields declared by this integration.
 	 *
+	 * Capability-aware: the outbound group (metadata prefix, outbound sync
+	 * toggle, outgoing fields) is declared only for push-capable integrations —
+	 * the prefix is only ever read on push paths (prepare_contact()) — and the
+	 * inbound group (inbound sync toggle, incoming fields) only for
+	 * pull-capable ones, so an integration lacking a direction gets no dead
+	 * controls for it.
+	 *
 	 * @return array Array of settings field declarations.
 	 */
 	public function get_metadata_fields() {
-		return [
-			[
+		$fields = [];
+		if ( $this->supports_push() ) {
+			$fields[] = [
 				'key'         => 'metadata_prefix',
 				'type'        => 'text',
 				'label'       => __( 'Metadata field prefix', 'newspack-plugin' ),
 				'description' => __( 'A string to prefix metadata fields synced to the integration. Required to ensure that metadata field names are unique. Default: NP_', 'newspack-plugin' ),
 				'default'     => 'NP_',
-			],
-			[
+			];
+			$fields[] = [
+				'key'         => 'outgoing_sync_enabled',
+				'type'        => 'checkbox',
+				'label'       => __( 'Enable outbound sync', 'newspack-plugin' ),
+				'description' => __( 'Sync reader data to this integration. Disabling pauses outbound sync, including account-deletion sync, and preserves the outgoing field selection. Changes and deletions that occur while paused are not sent retroactively on re-enable.', 'newspack-plugin' ),
+				'default'     => true,
+			];
+			$fields[] = [
 				'key'     => 'outgoing_metadata_fields',
 				'type'    => 'metadata',
 				'label'   => __( 'Outgoing metadata fields', 'newspack-plugin' ),
 				'default' => [],
-			],
-			[
+			];
+		}
+		if ( $this->supports_pull() ) {
+			$fields[] = [
+				'key'         => 'incoming_sync_enabled',
+				'type'        => 'checkbox',
+				'label'       => __( 'Enable inbound sync', 'newspack-plugin' ),
+				'description' => __( 'Pull contact data from this integration. Disabling pauses inbound sync and preserves the incoming field selection.', 'newspack-plugin' ),
+				'default'     => true,
+			];
+			$fields[] = [
 				'key'     => 'incoming_metadata_fields',
 				'type'    => 'metadata',
 				'label'   => __( 'Incoming metadata fields', 'newspack-plugin' ),
 				'default' => [],
-			],
-		];
+			];
+		}
+		return $fields;
 	}
 
 	/**
@@ -1089,14 +1228,26 @@ abstract class Integration {
 	/**
 	 * Get the settings fields declared by this integration.
 	 *
+	 * The account-deletion group follows the push capability: deletion sync
+	 * routes through push_contact_data()/delete_contact(), so a push-less
+	 * integration gets neither field (and its `sync_account_deletion` value
+	 * reads as null/falsy, which the deletion dispatcher treats as disabled).
+	 * The metadata groups are capability-gated in get_metadata_fields().
+	 *
+	 * Memoized per instance — see $settings_fields_cache for why.
+	 *
 	 * @return array Array of settings field declarations.
 	 */
 	public function get_settings_fields() {
-		return array_merge(
-			$this->settings_fields,
-			$this->get_account_deletion_fields(),
-			$this->get_metadata_fields()
-		);
+		if ( null !== $this->settings_fields_cache ) {
+			return $this->settings_fields_cache;
+		}
+		$fields = $this->settings_fields;
+		if ( $this->supports_push() ) {
+			$fields = array_merge( $fields, $this->get_account_deletion_fields() );
+		}
+		$this->settings_fields_cache = array_merge( $fields, $this->get_metadata_fields() );
+		return $this->settings_fields_cache;
 	}
 
 	/**
