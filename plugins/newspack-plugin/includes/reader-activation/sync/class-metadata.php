@@ -76,6 +76,51 @@ class Metadata {
 	}
 
 	/**
+	 * Get the metadata classes whose schema versions are actually in play
+	 * for outgoing sync.
+	 *
+	 * The registry keeps every version's definitions, but computing metadata
+	 * for a version no integration has enabled would run its WooCommerce
+	 * subscription/order queries on every sync only for
+	 * Integration::prepare_contact() to discard the result. Scope the
+	 * compute to the union of versions enabled across push-capable
+	 * integrations, falling back to the origin version's classes when no
+	 * integration has a stored selection. Version-neutral classes
+	 * (Content Gate) are always included, in the same position they hold in
+	 * the full merged list so key-collision precedence is unchanged.
+	 *
+	 * @return array List of metadata classes.
+	 */
+	protected static function get_sync_metadata_classes() {
+		$versions = [];
+		foreach ( Integrations::get_available_integrations() as $integration ) {
+			if ( ! $integration->supports_push() ) {
+				continue;
+			}
+			foreach ( $integration->get_enabled_outgoing_field_ids() as $id ) {
+				$version = (string) strstr( (string) $id, ':', true );
+				if ( '' !== $version && Field_Registry::VERSION_NEUTRAL !== $version ) {
+					$versions[ $version ] = true;
+				}
+			}
+		}
+
+		if ( empty( $versions ) ) {
+			return self::get_origin_metadata_classes();
+		}
+
+		$classes = [];
+		if ( isset( $versions[ Field_Registry::VERSION_V1 ] ) ) {
+			$classes = array_merge( $classes, [ Contact_Metadata\Legacy_Basic::class, Contact_Metadata\Legacy_Payment::class ] );
+		}
+		if ( isset( $versions[ Field_Registry::VERSION_V2 ] ) ) {
+			$classes = array_merge( $classes, [ Contact_Metadata\Identity::class, Contact_Metadata\Registration::class, Contact_Metadata\Engagement::class, Contact_Metadata\Subscription::class, Contact_Metadata\Donation::class ] );
+		}
+		$classes[] = Contact_Metadata\Content_Gate::class;
+		return array_values( array_filter( $classes, 'class_exists' ) );
+	}
+
+	/**
 	 * Get the metadata keys map for Reader Activation.
 	 *
 	 * @return array List of fields.
@@ -377,6 +422,14 @@ class Metadata {
 		/**
 		 * Filters the list of key/value pairs for metadata fields to be synced to the connected ESP.
 		 *
+		 * Applied twice per request against two different map shapes: here,
+		 * on the origin-scoped raw_key => label map, and in
+		 * Field_Registry::get_definitions(), on the merged all-versions map
+		 * (with $only_available hardcoded to false). Add/remove/rename
+		 * callbacks behave identically on both; a callback that replaces the
+		 * map wholesale also constrains the registry, and one that inspects
+		 * the incoming map sees different contents per call site.
+		 *
 		 * @param array $keys The list of key/value pairs for metadata fields to be synced to the connected ESP.
 		 * @param boolean $only_available Whether the list of fields is filtered to only available fields or not.
 		 */
@@ -482,9 +535,11 @@ class Metadata {
 	 */
 	public static function get_contact_with_metadata( $user_customer_or_order, $fields = null ) {
 		$core_contact = new Contact_Metadata\Core_Contact( $user_customer_or_order );
-		// Deliberately the merged list: the contact carries raw keys from every
-		// schema version, and each integration filters them in prepare_contact().
-		$classes      = self::get_metadata_classes();
+		// The contact carries raw keys from every schema version in play, and
+		// each integration filters them in prepare_contact(); versions no
+		// integration has enabled are skipped so their (WooCommerce-heavy)
+		// metadata isn't computed just to be discarded.
+		$classes      = self::get_sync_metadata_classes();
 		$metadata     = [];
 
 		foreach ( $classes as $class ) {
@@ -684,6 +739,14 @@ class Metadata {
 
 		/**
 		 * Filters the normalized contact data before syncing to the ESP.
+		 *
+		 * The metadata carries raw keys at this point (e.g. `account`,
+		 * `signup_page_utm_source`) — prefixing happens later, per
+		 * integration, in Integration::prepare_contact(). Raw keys added
+		 * here sync only when registered (via `newspack_ras_metadata_keys`)
+		 * and enabled for the integration; already-prefixed keys pass
+		 * through preparation untouched unless they belong to a registered
+		 * field the integration has disabled.
 		 *
 		 * @param array $contact Contact data.
 		 */

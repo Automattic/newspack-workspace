@@ -694,6 +694,109 @@ class Test_Account_Deletion extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A cleanup (list-removal) failure must be as durable as a push failure:
+	 * without a retry, a transient provider error leaves the deleted reader
+	 * subscribed to every list indefinitely. The failure notification must
+	 * also carry an error classification, or the alert recorder files a
+	 * permanent condition as transient.
+	 */
+	public function test_handle_account_deletion_schedules_retry_on_cleanup_failure() {
+		if ( ! function_exists( 'as_schedule_single_action' ) ) {
+			$this->markTestSkipped( 'ActionScheduler not available.' );
+		}
+		\as_unschedule_all_actions( \Newspack\Reader_Activation\Contact_Sync::RETRY_DELETION_HOOK );
+
+		$this->reset_integrations();
+		$spy                 = new \Deletion_Spy_Integration( 'spy-cleanup-retry', 'Spy Cleanup Retry' );
+		$spy->cleanup_result = new \WP_Error( 'transient', 'ESP 429' );
+		Integrations::register( $spy );
+		$spy->update_settings_field_value( 'sync_account_deletion', true );
+		$spy->update_settings_field_value( 'account_deletion_handling', 'flag' );
+		Integrations::enable( 'spy-cleanup-retry' );
+
+		$failures = [];
+		$capture  = function ( $payload ) use ( &$failures ) {
+			$failures[] = $payload;
+		};
+		\add_action( 'newspack_sync_contact_failed', $capture );
+
+		\Newspack\Reader_Activation\Contact_Sync::handle_account_deletion(
+			'reader@example.com',
+			[
+				'email'    => 'reader@example.com',
+				'metadata' => [],
+			],
+			'TestContext'
+		);
+
+		\remove_action( 'newspack_sync_contact_failed', $capture );
+
+		$pending = \as_get_scheduled_actions(
+			[
+				'hook'   => \Newspack\Reader_Activation\Contact_Sync::RETRY_DELETION_HOOK,
+				'group'  => Integrations::get_action_group( 'spy-cleanup-retry' ),
+				'status' => \ActionScheduler_Store::STATUS_PENDING,
+			],
+			'ARRAY_A'
+		);
+		$this->assertNotEmpty( $pending, 'A retry must be scheduled on cleanup failure.' );
+
+		$action_id = array_key_first( $pending );
+		$args      = \ActionScheduler::store()->fetch_action( $action_id )->get_args();
+		$this->assertSame( 'flag', $args[0]['mode'] );
+		$this->assertSame( 'reader@example.com', $args[0]['email'] );
+
+		$this->assertCount( 1, $failures );
+		$this->assertSame( 'cleanup', $failures[0]['stage'] ?? null, 'Cleanup failures must be distinguishable from push failures.' );
+		$this->assertArrayHasKey( 'error_class', $failures[0], 'Cleanup failures must carry an error classification.' );
+		$this->assertSame( 'transient', $failures[0]['error_class'] );
+
+		\as_unschedule_all_actions( \Newspack\Reader_Activation\Contact_Sync::RETRY_DELETION_HOOK );
+	}
+
+	/**
+	 * When the flag push itself failed, that failure already scheduled the
+	 * retry (whose success re-runs cleanup) — the cleanup failure must not
+	 * schedule a second, competing retry chain.
+	 */
+	public function test_cleanup_failure_after_push_failure_schedules_single_retry() {
+		if ( ! function_exists( 'as_schedule_single_action' ) ) {
+			$this->markTestSkipped( 'ActionScheduler not available.' );
+		}
+		\as_unschedule_all_actions( \Newspack\Reader_Activation\Contact_Sync::RETRY_DELETION_HOOK );
+
+		$this->reset_integrations();
+		$spy                 = new \Deletion_Spy_Integration( 'spy-both-fail', 'Spy Both Fail' );
+		$spy->push_result    = new \WP_Error( 'transient', 'ESP 503' );
+		$spy->cleanup_result = new \WP_Error( 'transient', 'ESP 429' );
+		Integrations::register( $spy );
+		$spy->update_settings_field_value( 'sync_account_deletion', true );
+		$spy->update_settings_field_value( 'account_deletion_handling', 'flag' );
+		Integrations::enable( 'spy-both-fail' );
+
+		\Newspack\Reader_Activation\Contact_Sync::handle_account_deletion(
+			'reader@example.com',
+			[
+				'email'    => 'reader@example.com',
+				'metadata' => [],
+			],
+			'TestContext'
+		);
+
+		$pending = \as_get_scheduled_actions(
+			[
+				'hook'   => \Newspack\Reader_Activation\Contact_Sync::RETRY_DELETION_HOOK,
+				'group'  => Integrations::get_action_group( 'spy-both-fail' ),
+				'status' => \ActionScheduler_Store::STATUS_PENDING,
+			],
+			'ARRAY_A'
+		);
+		$this->assertCount( 1, $pending, 'Push and cleanup failures must share one retry chain.' );
+
+		\as_unschedule_all_actions( \Newspack\Reader_Activation\Contact_Sync::RETRY_DELETION_HOOK );
+	}
+
+	/**
 	 * A transient ESP failure in flag mode must schedule a retry, and the retry
 	 * payload must carry the already-prepared contact so we don't try to rebuild
 	 * it from a user that no longer exists.

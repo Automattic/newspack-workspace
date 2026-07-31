@@ -10,7 +10,9 @@ namespace Newspack\CLI;
 use WP_CLI;
 use Newspack\Reader_Activation;
 use Newspack\Reader_Activation\Contact_Sync;
+use Newspack\Reader_Activation\Integration;
 use Newspack\Reader_Activation\Integrations;
+use Newspack\Reader_Activation\Sync\Field_Registry;
 use Newspack\Reader_Activation\Sync\Metadata;
 use Newspack_Subscription_Migrations\CSV_Importers\CSV_Importer;
 use Newspack_Subscription_Migrations\Stripe_Sync;
@@ -471,6 +473,74 @@ class RAS_Contact_Sync {
 				$results['skipped']
 			)
 		);
+	}
+
+	/**
+	 * Inspect or repair the site's ESP metadata schema origin.
+	 *
+	 * Shows the recorded `newspack_sync_schema_origin` marker (or the
+	 * unpersisted per-request detection when none is recorded) and, per
+	 * push-capable integration, the prefixed field names its enabled
+	 * selection would actually sync — so a wrong origin or an emptied field
+	 * list is visible without database access.
+	 *
+	 * ## OPTIONS
+	 *
+	 * [--set=<version>]
+	 * : Record the schema origin explicitly. Accepts 'v1' or 'v2'. Use to repair a misdetected marker.
+	 *
+	 * ## EXAMPLES
+	 *
+	 *     wp newspack esp schema-origin
+	 *     wp newspack esp schema-origin --set=v1
+	 *
+	 * @param array $args       Positional args.
+	 * @param array $assoc_args Associative args.
+	 */
+	public static function cli_schema_origin( $args, $assoc_args ) {
+		$set = $assoc_args['set'] ?? null;
+		if ( null !== $set ) {
+			if ( ! in_array( $set, [ Field_Registry::VERSION_V1, Field_Registry::VERSION_V2 ], true ) ) {
+				WP_CLI::error( 'Invalid --set value. Accepts: v1, v2.' );
+			}
+			\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, $set, false );
+			Field_Registry::reset();
+			WP_CLI::success( sprintf( 'Schema origin recorded as "%s".', $set ) );
+		}
+
+		$stored    = \get_option( Field_Registry::SCHEMA_ORIGIN_OPTION );
+		$is_stored = in_array( $stored, [ Field_Registry::VERSION_V1, Field_Registry::VERSION_V2 ], true );
+		WP_CLI::log( sprintf( 'Recorded schema origin: %s', $is_stored ? $stored : 'not recorded' ) );
+		if ( ! $is_stored ) {
+			WP_CLI::log( sprintf( 'Detected origin (unpersisted, this request): %s', Field_Registry::get_schema_origin() ) );
+		}
+
+		foreach ( Integrations::get_available_integrations() as $id => $integration ) {
+			if ( ! $integration->supports_push() ) {
+				continue;
+			}
+			$has_stored_selection = false !== \get_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . $id, false );
+			$prefix               = $integration->get_metadata_prefix();
+			$names                = [];
+			foreach ( $integration->get_enabled_outgoing_field_ids() as $field_id ) {
+				$definition = Field_Registry::get_definition( $field_id );
+				if ( $definition ) {
+					$names[] = $prefix . $definition['name'] . ( $definition['dynamic_suffix'] ? '*' : '' );
+				}
+			}
+			WP_CLI::log( '' );
+			WP_CLI::log(
+				sprintf(
+					'Integration "%s" would sync %d field(s)%s:',
+					$id,
+					count( $names ),
+					$has_stored_selection ? '' : ' (no stored selection — dynamic defaults)'
+				)
+			);
+			foreach ( $names as $name ) {
+				WP_CLI::log( '  - ' . $name );
+			}
+		}
 	}
 
 	/**

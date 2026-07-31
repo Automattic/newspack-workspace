@@ -151,6 +151,7 @@ class Contact_Sync extends Sync {
 	public static function init_hooks() {
 		add_action( 'newspack_scheduled_esp_sync', [ __CLASS__, 'scheduled_sync' ], 10, 2 );
 		add_action( 'shutdown', [ __CLASS__, 'run_queued_syncs' ] );
+		add_action( 'newspack_activation', [ Sync\Field_Registry::class, 'seed_fresh_install_origin' ] );
 		add_action( self::RETRY_HOOK, [ __CLASS__, 'execute_integration_retry' ] );
 		add_action( self::RETRY_DELETION_HOOK, [ __CLASS__, 'execute_deletion_retry' ] );
 		add_action( 'action_scheduler_begin_execute', [ __CLASS__, 'set_current_as_action_id' ] );
@@ -600,6 +601,7 @@ class Contact_Sync extends Sync {
 							'context'        => $context,
 							'reason'         => $result->get_error_message(),
 							'mode'           => 'flag',
+							'stage'          => 'push',
 							'error_class'    => $error_class,
 						]
 					);
@@ -624,12 +626,19 @@ class Contact_Sync extends Sync {
 				// independent of whether the Account_Deleted/Membership_Status metadata
 				// landed. This restores the pre-refactor behavior of legacy sites with
 				// sync_esp_delete=false, whose handler removed the contact from every
-				// ESP list on deletion. Cleanup failures are log+alert only — they do
-				// not feed schedule_deletion_retry(), which stays scoped to the flag push.
+				// ESP list on deletion. A cleanup failure must be as durable as a push
+				// failure — a transient provider error here would otherwise leave the
+				// deleted reader subscribed to every list with no retry — so when the
+				// flag push succeeded (a failed push already scheduled a retry whose
+				// success re-runs cleanup), schedule the same flag retry: the re-push
+				// is an idempotent upsert and a successful retry re-runs cleanup.
 				$cleanup_result = $integration->flag_deletion_cleanup( $email );
 				if ( \is_wp_error( $cleanup_result ) ) {
 					$errors[] = sprintf( '[%s] %s', $integration_id, $cleanup_result->get_error_message() );
 					static::log( sprintf( 'Flag-deletion cleanup failed for integration "%s" of %s: %s', $integration_id, $email, $cleanup_result->get_error_message() ) );
+					$cleanup_error_class = \is_wp_error( $result )
+						? self::classify_error( $cleanup_result, 'deletion' )
+						: self::schedule_deletion_retry( $integration_id, 'flag', $email, $integration_contact, $context, 0, $cleanup_result );
 					/** This action is documented above in the 'delete' branch of this method. */
 					do_action(
 						'newspack_sync_contact_failed',
@@ -639,6 +648,8 @@ class Contact_Sync extends Sync {
 							'context'        => $context,
 							'reason'         => $cleanup_result->get_error_message(),
 							'mode'           => 'flag',
+							'stage'          => 'cleanup',
+							'error_class'    => $cleanup_error_class,
 						]
 					);
 					if ( self::$current_as_action_id ) {
@@ -934,9 +945,13 @@ class Contact_Sync extends Sync {
 
 		static::log( sprintf( 'Executing retry %d/%d for integration "%s" sync of user %d (%s).', $retry_count, self::MAX_RETRIES, $integration_id, $user_id, $contact['email'] ?? 'unknown' ) );
 
+		// The contact from get_contact_data() is already normalized (and the
+		// primary sync path applies no further normalization after this
+		// filter) — normalizing again here would fire
+		// `newspack_esp_sync_normalize_contact` a second time per retry,
+		// double-applying any non-idempotent publisher callback.
 		/** This filter is documented in includes/reader-activation/sync/class-contact-sync.php */
 		$contact = \apply_filters( 'newspack_esp_sync_contact', $contact, $context );
-		$contact = Sync\Metadata::normalize_contact_data( $contact );
 
 		// Reconstruct existing_contact for email-change retries so integrations
 		// can upsert against the previous email address.
@@ -1293,9 +1308,10 @@ class Contact_Sync extends Sync {
 			// upsert would otherwise silently re-add them, reversing that completed
 			// list-removal. Re-run cleanup so the retry can't undo it. It's
 			// idempotent (clearing lists twice is harmless). Mirrors
-			// handle_account_deletion(): cleanup failures here are log-only and must
-			// not fail this retry or feed schedule_deletion_retry(), which stays
-			// scoped to the flag push.
+			// handle_account_deletion(): a cleanup failure must not fail this retry
+			// (the push landed), but it schedules the next flag retry — bounded by
+			// the shared retry count — so a still-subscribed deleted reader keeps a
+			// path to list removal.
 			if ( 'flag' === $mode ) {
 				$cleanup_result = $integration->flag_deletion_cleanup( $email );
 				if ( \is_wp_error( $cleanup_result ) ) {
@@ -1310,6 +1326,7 @@ class Contact_Sync extends Sync {
 					if ( self::$current_as_action_id ) {
 						\ActionScheduler_Logger::instance()->log( self::$current_as_action_id, $cleanup_error_message );
 					}
+					self::schedule_deletion_retry( $integration_id, 'flag', $email, $contact, $context, $retry_count, $cleanup_result );
 				} else {
 					$cleanup_success_message = sprintf(
 						'Flag-deletion cleanup succeeded for integration "%s" of %s on retry %d.',

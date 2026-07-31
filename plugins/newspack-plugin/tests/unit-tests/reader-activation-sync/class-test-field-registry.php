@@ -182,4 +182,60 @@ class Test_Field_Registry extends \WP_UnitTestCase {
 			);
 		}
 	}
+
+	/**
+	 * A `newspack_ras_metadata_keys` callback that renames an existing field
+	 * must rename its registry definition too. Otherwise name-based
+	 * resolution (defaults, migration, settings saves) looks up the filtered
+	 * label, finds no definition, and the field silently drops out of
+	 * outgoing sync.
+	 */
+	public function test_filter_rename_is_adopted_by_definitions() {
+		$rename = function ( $keys ) {
+			$keys['account'] = 'Renamed Account';
+			return $keys;
+		};
+		\add_filter( 'newspack_ras_metadata_keys', $rename );
+		Field_Registry::reset();
+
+		$definition = Field_Registry::get_by_name( 'Renamed Account' );
+
+		\remove_filter( 'newspack_ras_metadata_keys', $rename );
+		Field_Registry::reset();
+
+		$this->assertNotNull( $definition, 'A renamed field must resolve under its filtered label.' );
+		$this->assertSame( 'v1:account', $definition['id'] );
+	}
+
+	/**
+	 * Name resolution encodes the shared invariant: every same-version
+	 * definition sharing the name, falling back to a single any-version
+	 * match (which is what covers version-neutral fields).
+	 */
+	public function test_resolve_name_prefers_version_then_falls_back() {
+		// "Registration Page" is declared by two v1 raw keys.
+		$v1 = Field_Registry::resolve_name( 'Registration Page', 'v1' );
+		$this->assertGreaterThan( 1, count( $v1 ) );
+		foreach ( $v1 as $definition ) {
+			$this->assertSame( 'v1', $definition['version'] );
+		}
+
+		// A v2-only name resolves through the any-version fallback.
+		$fallback = Field_Registry::resolve_name( 'User Role', 'v1' );
+		$this->assertCount( 1, $fallback );
+		$this->assertSame( 'v2', $fallback[0]['version'] );
+
+		$this->assertSame( [], Field_Registry::resolve_name( 'No Such Field', 'v1' ) );
+	}
+
+	/**
+	 * Registration lookup tells an unknown (explicitly-injected) prefixed
+	 * field from a registered one, including dynamic-suffix matches — the
+	 * distinction prepare_contact() uses to decide pass-through vs drop.
+	 */
+	public function test_name_is_registered_covers_dynamic_suffixes() {
+		$this->assertTrue( Field_Registry::name_is_registered( 'Account' ) );
+		$this->assertTrue( Field_Registry::name_is_registered( 'Signup UTM: source' ) );
+		$this->assertFalse( Field_Registry::name_is_registered( 'Totally Custom Field' ) );
+	}
 }

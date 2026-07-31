@@ -338,6 +338,51 @@ class Test_Prepare_Contact extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * An explicitly-supplied prefixed value must survive raw enrichment that
+	 * resolves to the same output key. The URL-derived UTM expansion adds a
+	 * raw key alongside the supplied prefixed one; without precedence, the
+	 * raw key would overwrite the caller's value.
+	 */
+	public function test_supplied_prefixed_value_wins_over_raw_expansion() {
+		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
+		$this->integration->update_enabled_outgoing_fields( [ 'v1:signup_page_utm' ] );
+
+		$contact = [
+			'email'    => 'test@example.com',
+			'metadata' => [
+				'NP_Signup UTM: source'  => 'supplied',
+				'signup_page_utm_source' => 'derived',
+			],
+		];
+
+		$result = $this->integration->prepare_contact( $contact );
+
+		$this->assertSame( 'supplied', $result['metadata']['NP_Signup UTM: source'] );
+	}
+
+	/**
+	 * The same precedence applies to a non-dynamic field: an explicitly
+	 * supplied prefixed value is not overwritten by a raw key resolving to
+	 * the same ESP name.
+	 */
+	public function test_supplied_prefixed_value_wins_over_raw_key() {
+		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
+		$this->integration->update_enabled_outgoing_fields( [ 'v1:account' ] );
+
+		$contact = [
+			'email'    => 'test@example.com',
+			'metadata' => [
+				'NP_Account' => 'supplied',
+				'account'    => 'raw',
+			],
+		];
+
+		$result = $this->integration->prepare_contact( $contact );
+
+		$this->assertSame( 'supplied', $result['metadata']['NP_Account'] );
+	}
+
+	/**
 	 * Test that email and name are preserved through prepare_contact.
 	 */
 	public function test_preserves_email_and_name() {
@@ -356,32 +401,55 @@ class Test_Prepare_Contact extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Test that an already-prefixed key whose field is enabled but no longer
-	 * present in the live keys map (e.g. because a feature flag turned off the
-	 * corresponding metadata class after the field was saved) is filtered out.
+	 * Test the prefixed-input contract: a prefixed key unknown to the
+	 * registry passes through (it is indistinguishable from an
+	 * explicitly-injected custom field, which must keep reaching the
+	 * provider), while a prefixed key naming a registered field the
+	 * integration has not enabled is dropped, respecting the
+	 * per-integration selection.
 	 */
-	public function test_already_prefixed_stale_enabled_field_filtered() {
+	public function test_already_prefixed_keys_follow_registry_contract() {
 		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v2' );
 
 		// Write the enabled-fields option directly, bypassing the
 		// update_enabled_outgoing_fields() intersect filter, to simulate a stale
-		// saved field name that is no longer in the live keys map.
+		// saved field name that is no longer in the live keys map — the
+		// integration ends up with zero enabled ids.
 		\update_option( 'newspack_integration_outgoing_fields_prepare-test', [ 'Stale Field' ] );
 
 		$keys_map = Metadata::get_keys();
 		$this->assertNotContains( 'Stale Field', $keys_map, 'Sanity: stale field must not be in the live keys map.' );
 
+		// Pick a registered, non-dynamic v2 definition — not enabled here,
+		// since the stored selection resolves to nothing.
+		$registered_name = null;
+		foreach ( Field_Registry::get_definitions() as $definition ) {
+			if ( 'v2' === $definition['version'] && empty( $definition['dynamic_suffix'] ) ) {
+				$registered_name = $definition['name'];
+				break;
+			}
+		}
+		$this->assertNotNull( $registered_name, 'Sanity: a v2 definition exists.' );
+
 		$contact = [
 			'email'    => 'test@example.com',
-			'metadata' => [ 'NP_Stale Field' => 'leftover_value' ],
+			'metadata' => [
+				'NP_Stale Field'         => 'leftover_value',
+				'NP_' . $registered_name => 'disabled_value',
+			],
 		];
 
 		$result = $this->integration->prepare_contact( $contact );
 
+		$this->assertSame(
+			'leftover_value',
+			$result['metadata']['NP_Stale Field'] ?? null,
+			'A prefixed key unknown to the registry passes through.'
+		);
 		$this->assertArrayNotHasKey(
-			'NP_Stale Field',
+			'NP_' . $registered_name,
 			$result['metadata'],
-			'Stale prefixed key must be dropped when its field is no longer available.'
+			'A prefixed key naming a registered-but-disabled field is dropped.'
 		);
 	}
 

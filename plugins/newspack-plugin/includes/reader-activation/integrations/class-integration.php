@@ -837,7 +837,15 @@ abstract class Integration {
 	 * @return string[] List of enabled field ids.
 	 */
 	public function get_enabled_outgoing_field_ids() {
-		$stored = \get_option( self::OUTGOING_FIELDS_OPTION_PREFIX . $this->id, [] );
+		$stored = \get_option( self::OUTGOING_FIELDS_OPTION_PREFIX . $this->id, false );
+		if ( false === $stored ) {
+			// Never configured: match the pre-coexistence behavior, where an
+			// integration without a stored selection received the full
+			// prefixed payload from the legacy passthrough — default to every
+			// available field. A stored empty selection (the admin deselected
+			// everything) still means none.
+			return $this->get_default_outgoing_field_ids();
+		}
 		if ( empty( $stored ) || ! is_array( $stored ) ) {
 			return [];
 		}
@@ -863,13 +871,21 @@ abstract class Integration {
 			}
 			// A display name may be shared by several same-version raw keys
 			// (legacy "Registration Page"); resolve to all of them.
-			$definitions = Sync\Field_Registry::get_all_by_name( (string) $entry, $origin );
+			$definitions = Sync\Field_Registry::resolve_name( (string) $entry, $origin );
 			if ( empty( $definitions ) ) {
-				$definition  = Sync\Field_Registry::get_by_name( (string) $entry );
-				$definitions = $definition ? [ $definition ] : [];
-			}
-			if ( empty( $definitions ) ) {
-				Logger::log( sprintf( 'Outgoing fields migration: no definition found for "%s".', $entry ) );
+				// Route through newspack_log so the repeating, never-resolving
+				// migration is operator-visible (Newspack Manager consumes the
+				// newspack_log action) — Logger::log() is a no-op at the
+				// default production log level.
+				Logger::newspack_log(
+					'outgoing_fields_migration_unresolved',
+					sprintf( 'Outgoing fields migration: no definition found for "%s" in integration "%s".', $entry, $this->id ),
+					[
+						'integration_id' => $this->id,
+						'entry'          => (string) $entry,
+					],
+					'warning'
+				);
 				$has_unresolved = true;
 			}
 			foreach ( $definitions as $definition ) {
@@ -893,10 +909,48 @@ abstract class Integration {
 	}
 
 	/**
+	 * Get the default outgoing metadata field ids for this integration:
+	 * every available field, resolved to ids against the site's schema
+	 * origin (falling back to any version, which covers version-neutral
+	 * fields) without persisting, so defaults keep tracking availability
+	 * changes.
+	 *
+	 * Memoized per (registry generation, origin, names): prepare_contact()
+	 * calls this once per contact per integration, and a CLI backfill must
+	 * not rebuild the name resolution for every row. The key derives from
+	 * the resolution inputs, so registry resets and availability changes
+	 * invalidate it naturally.
+	 *
+	 * @return string[] List of field ids.
+	 */
+	protected function get_default_outgoing_field_ids() {
+		static $cache = [];
+		$origin = Sync\Field_Registry::get_schema_origin();
+		$names  = Sync\Metadata::get_default_fields();
+		$key    = Sync\Field_Registry::get_generation() . '|' . $origin . '|' . md5( (string) \wp_json_encode( $names ) );
+		if ( isset( $cache[ $key ] ) ) {
+			return $cache[ $key ];
+		}
+		$ids = [];
+		foreach ( $names as $name ) {
+			foreach ( Sync\Field_Registry::resolve_name( $name, $origin ) as $definition ) {
+				$ids[] = $definition['id'];
+			}
+		}
+		$cache[ $key ] = array_values( array_unique( $ids ) );
+		return $cache[ $key ];
+	}
+
+	/**
 	 * Get the enabled outgoing metadata fields for this integration.
 	 *
 	 * Back-compat surface: returns display names derived from the stored
-	 * field ids. The old settings UI consumes and posts these names.
+	 * field ids. The old settings UI consumes and posts these names. Note
+	 * the round-trip is lossy across schema versions: ids collapse to bare
+	 * names here, and update_enabled_outgoing_fields() re-resolves bare
+	 * names against the site's origin — so a non-origin selection saved
+	 * through this surface would be rewritten to the origin's ids. The
+	 * per-field UI (Phase 2) must post ids, not names.
 	 *
 	 * @return string[] List of enabled field names.
 	 */
@@ -981,8 +1035,10 @@ abstract class Integration {
 	 * Update the enabled outgoing metadata fields for this integration.
 	 *
 	 * Accepts field ids and/or display names (the old UI posts names;
-	 * names resolve against the site's schema origin). Stores ids and
-	 * enforces one enabled version per name-conflict group
+	 * names resolve against the site's schema origin, so a non-origin id
+	 * that was collapsed to a bare name by get_enabled_outgoing_fields()
+	 * round-trips to the origin's ids — the Phase-2 UI must post ids).
+	 * Stores ids and enforces one enabled version per name-conflict group
 	 * (keep-first-version: same-version siblings sharing a name are fine,
 	 * a second version's ids for a claimed name are dropped and logged).
 	 *
@@ -997,11 +1053,7 @@ abstract class Integration {
 			if ( preg_match( '/^(v1|v2|neutral):/', $entry ) ) {
 				$definitions = array_filter( [ Sync\Field_Registry::get_definition( $entry ) ] );
 			} else {
-				$definitions = Sync\Field_Registry::get_all_by_name( $entry, $origin );
-				if ( empty( $definitions ) ) {
-					$definition  = Sync\Field_Registry::get_by_name( $entry );
-					$definitions = $definition ? [ $definition ] : [];
-				}
+				$definitions = Sync\Field_Registry::resolve_name( $entry, $origin );
 			}
 			foreach ( $definitions as $definition ) {
 				if ( $definition['available'] ) {
@@ -1020,7 +1072,20 @@ abstract class Integration {
 			$name       = $definition['name'];
 			if ( isset( $conflict_groups[ $name ] ) ) {
 				if ( isset( $claimed_versions[ $name ] ) && $claimed_versions[ $name ] !== $definition['version'] ) {
-					Logger::log( sprintf( 'Dropping "%s": conflict group "%s" is already enabled as %s.', $id, $name, $claimed_versions[ $name ] ) );
+					// Route through newspack_log so a save that silently stores
+					// less than was submitted stays operator-visible — the
+					// settings endpoint reports success either way, and
+					// Logger::log() is a no-op at the default production level.
+					Logger::newspack_log(
+						'outgoing_fields_conflict_drop',
+						sprintf( 'Dropping "%s": conflict group "%s" is already enabled as %s.', $id, $name, $claimed_versions[ $name ] ),
+						[
+							'integration_id' => $this->id,
+							'dropped_id'     => $id,
+							'kept_version'   => $claimed_versions[ $name ],
+						],
+						'warning'
+					);
 					continue;
 				}
 				$claimed_versions[ $name ] = $definition['version'];
@@ -1203,12 +1268,23 @@ abstract class Integration {
 	 * Prepare contact data for this integration by resolving enabled field
 	 * ids to prefixed ESP field names.
 	 *
-	 * Incoming metadata may mix raw keys from any schema version. Only
-	 * fields enabled for this integration survive; enabled dynamic-suffix
+	 * Incoming metadata may mix raw keys from any schema version. Raw keys
+	 * survive only when enabled for this integration; enabled dynamic-suffix
 	 * fields (UTM) match by raw-key prefix and never by their bare key, which
 	 * carries no suffix and is therefore not a syncable field. Save-time
 	 * validation guarantees at most one enabled version per ESP name, so no
-	 * two inputs can write the same output key.
+	 * two raw inputs can write the same output key.
+	 *
+	 * Already-prefixed inputs are explicit injections (callers, the
+	 * normalize filter): they pass through when they match an enabled field
+	 * OR when the registry doesn't know their name at all — a custom field a
+	 * site snippet adds the documented way must keep reaching the provider,
+	 * as it did when the legacy pipeline forwarded filter output verbatim.
+	 * Only prefixed keys naming a registered-but-disabled field are dropped,
+	 * respecting the per-integration selection. An explicitly-supplied
+	 * prefixed value also wins over a raw key resolving to the same output
+	 * name (the raw UTM expansion must not overwrite a supplied
+	 * `NP_Signup UTM: source`).
 	 *
 	 * @param array $contact Contact data with raw metadata keys.
 	 * @return array Contact data with filtered, prefixed metadata.
@@ -1240,6 +1316,7 @@ abstract class Integration {
 		}
 
 		$prepared = [];
+		$explicit = [];
 		foreach ( $contact['metadata'] as $key => $value ) {
 			if ( in_array( $key, $passthrough, true ) ) {
 				$prepared[ $key ] = $value;
@@ -1248,23 +1325,38 @@ abstract class Integration {
 
 			// Already-prefixed input (e.g. added by third-party filters).
 			if ( 0 === strpos( $key, $prefix ) ) {
-				$name = substr( $key, strlen( $prefix ) );
-				if ( isset( $by_name[ $name ] ) ) {
-					$prepared[ $key ] = $value;
-					continue;
-				}
-				foreach ( $dynamic as $definition ) {
-					if ( 0 === strpos( $name, $definition['name'] ) && $name !== $definition['name'] ) {
-						$prepared[ $key ] = $value;
-						break;
+				$name    = substr( $key, strlen( $prefix ) );
+				$matched = isset( $by_name[ $name ] );
+				if ( ! $matched ) {
+					foreach ( $dynamic as $definition ) {
+						if ( 0 === strpos( $name, $definition['name'] ) && $name !== $definition['name'] ) {
+							$matched = true;
+							break;
+						}
 					}
+				}
+				// Unknown to the registry entirely: an explicitly-injected
+				// custom field — pass through. Registered but not enabled
+				// here: drop, respecting the per-integration selection.
+				if ( ! $matched && ! Sync\Field_Registry::name_is_registered( $name ) ) {
+					$matched = true;
+				}
+				if ( $matched ) {
+					$prepared[ $key ] = $value;
+					$explicit[ $key ] = true;
 				}
 				continue;
 			}
 
-			// Raw key, exact match.
+			// Raw key, exact match. Raw-vs-raw keeps last-write-wins (legacy
+			// parity for same-name siblings like registration_page /
+			// current_page_url); only explicitly-supplied prefixed values are
+			// protected from being overwritten.
 			if ( isset( $by_raw[ $key ] ) ) {
-				$prepared[ $prefix . $by_raw[ $key ]['name'] ] = $value;
+				$out = $prefix . $by_raw[ $key ]['name'];
+				if ( ! isset( $explicit[ $out ] ) ) {
+					$prepared[ $out ] = $value;
+				}
 				continue;
 			}
 
@@ -1274,7 +1366,10 @@ abstract class Integration {
 				if ( 0 === strpos( $key, $raw_prefix ) ) {
 					$suffix = substr( $key, strlen( $raw_prefix ) );
 					if ( '' !== trim( $suffix ) ) {
-						$prepared[ $prefix . $definition['name'] . $suffix ] = $value;
+						$out = $prefix . $definition['name'] . $suffix;
+						if ( ! isset( $explicit[ $out ] ) ) {
+							$prepared[ $out ] = $value;
+						}
 					}
 					break;
 				}

@@ -366,4 +366,123 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 		$this->assertContains( 'v1:account', $ids );
 		$this->assertNull( \get_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'esp', null ) );
 	}
+
+	/**
+	 * A push integration whose outgoing-fields option was never stored keeps
+	 * the pre-coexistence behavior: the full default field set, not an empty
+	 * payload. Before this, only the ESP had a defaults fallback, so a
+	 * third-party push integration on a legacy site silently synced no
+	 * metadata at all.
+	 */
+	public function test_never_configured_integration_defaults_to_all_fields() {
+		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
+		\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test' );
+
+		$ids = $this->integration->get_enabled_outgoing_field_ids();
+
+		$this->assertNotEmpty( $ids, 'A never-configured integration must default to the full field set.' );
+		$this->assertContains( 'v1:account', $ids );
+		$this->assertNull(
+			\get_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test', null ),
+			'The defaults fallback must not persist, so it keeps tracking availability changes.'
+		);
+	}
+
+	/**
+	 * A stored empty selection is a deliberate "sync nothing" choice and must
+	 * NOT be treated as never-configured.
+	 */
+	public function test_stored_empty_selection_means_no_fields() {
+		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
+		\update_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test', [] );
+
+		$this->assertSame( [], $this->integration->get_enabled_outgoing_field_ids() );
+	}
+
+	/**
+	 * Seeding from the legacy global option must not drop selections whose
+	 * definitions are currently unavailable (e.g. payment fields while
+	 * WooCommerce is inactive). The seeded option shadows the legacy option
+	 * permanently, so a resolve-and-filter seed — which drops unavailable
+	 * definitions — would lose those selections for good.
+	 */
+	public function test_esp_seeding_preserves_unavailable_field_selections() {
+		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
+		\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'esp' );
+		// 'Last Payment Amount' is declared by Legacy_Payment, which reports
+		// available === false without WooCommerce in the test environment.
+		\update_option( Metadata::FIELDS_OPTION, [ 'Account', 'Last Payment Amount' ] );
+
+		$esp = new ESP();
+
+		$this->assertContains(
+			'Last Payment Amount',
+			$esp->get_enabled_outgoing_fields(),
+			'A currently-unavailable selection must survive seeding.'
+		);
+		$this->assertContains(
+			'v1:last_payment_amount',
+			\get_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'esp' ),
+			'The seeded selection resolves to its id and stays stored.'
+		);
+	}
+
+	/**
+	 * The fresh-install fallback is a guess — its discriminator (a set-up ESP)
+	 * is transiently false whenever Newspack Newsletters is deactivated — so
+	 * it must never be persisted. A legacy site touched during that window
+	 * would otherwise be branded v2 forever and start writing v2 field names
+	 * to the publisher's ESP.
+	 */
+	public function test_unconfident_fresh_install_guess_is_not_persisted() {
+		Sample_Integration::$is_set_up_value = false;
+		Integrations::register( new Sample_Integration( 'esp', 'ESP' ) );
+
+		$this->assertSame( 'v2', Field_Registry::get_schema_origin() );
+		$this->assertFalse(
+			\get_option( Field_Registry::SCHEMA_ORIGIN_OPTION ),
+			'An unconfigured ESP makes the v2 answer a guess; it must stay unpersisted.'
+		);
+
+		// Once the ESP reports itself set up, the answer is evidence — and it
+		// resolves to v1, the value the guess would have frozen incorrectly.
+		Sample_Integration::$is_set_up_value = true;
+		Field_Registry::reset();
+
+		$this->assertSame( 'v1', Field_Registry::get_schema_origin() );
+		$this->assertSame( 'v1', \get_option( Field_Registry::SCHEMA_ORIGIN_OPTION ) );
+	}
+
+	/**
+	 * A genuinely fresh install records v2 at activation, when "no prior
+	 * usage" is unambiguous — lazy detection can't distinguish it later.
+	 */
+	public function test_activation_seeds_fresh_install_origin() {
+		Field_Registry::seed_fresh_install_origin();
+
+		$this->assertSame( 'v2', \get_option( Field_Registry::SCHEMA_ORIGIN_OPTION ) );
+	}
+
+	/**
+	 * Activation seeding must leave a site with prior usage alone — its
+	 * origin is evidence-based and belongs to lazy detection.
+	 */
+	public function test_activation_seeding_skips_site_with_prior_usage() {
+		\update_option( Metadata::FIELDS_OPTION, [ 'Account' ] );
+
+		Field_Registry::seed_fresh_install_origin();
+
+		$this->assertFalse( \get_option( Field_Registry::SCHEMA_ORIGIN_OPTION ) );
+	}
+
+	/**
+	 * Detection reads the version out of stored selections rather than
+	 * treating the mere existence of the option as "legacy": a site that
+	 * saved v2 ids before its origin settled is a v2 site.
+	 */
+	public function test_stored_v2_ids_detect_v2_origin() {
+		\update_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test', [ 'v2:Registration_Date' ] );
+
+		$this->assertSame( 'v2', Field_Registry::get_schema_origin() );
+	}
 }

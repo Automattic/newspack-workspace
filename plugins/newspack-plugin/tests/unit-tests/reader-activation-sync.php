@@ -224,9 +224,9 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 
 		$contact_data_with_prefixed_keys['metadata']['NP_Invalid_Key'] = 'Invalid data';
 		$this->assertEquals(
-			array_diff( $contact_data_with_prefixed_keys['metadata'], $this->normalize_and_prepare( $contact_data_with_prefixed_keys )['metadata'] ),
-			[ 'NP_Invalid_Key' => 'Invalid data' ],
-			'Most keys should be exact.'
+			$contact_data_with_prefixed_keys['metadata'],
+			$this->normalize_and_prepare( $contact_data_with_prefixed_keys )['metadata'],
+			'Prefixed keys unknown to the registry pass through: explicitly-injected custom fields keep reaching the provider.'
 		);
 
 		unset( $contact_data_with_prefixed_keys['metadata']['NP_Invalid_Key'] );
