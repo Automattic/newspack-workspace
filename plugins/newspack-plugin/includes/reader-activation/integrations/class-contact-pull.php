@@ -332,7 +332,9 @@ class Contact_Pull {
 			);
 			$fetched_keys  = array_keys( $data );
 			$data          = array_intersect_key( $data, $selected_keys );
-			Logger::log( 'Pulled data from ' . $integration->get_id() . ': ' . wp_json_encode( $data ) );
+			// Keys only: the values are reader data, and a full backfill runs this
+			// line once per reader across the whole base.
+			Logger::log( 'Pulled data from ' . $integration->get_id() . ': ' . wp_json_encode( array_keys( $data ) ) );
 
 			// A pull that stores nothing is a legitimate outcome — the contact may
 			// simply have no values — but it is indistinguishable from a broken read
