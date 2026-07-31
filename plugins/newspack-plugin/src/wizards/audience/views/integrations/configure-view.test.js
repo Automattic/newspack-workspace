@@ -551,6 +551,7 @@ describe( 'ConfigureView per-direction sections', () => {
 					label: 'Outgoing metadata fields',
 					definitions: [ outboundDef( 'v1:full_name', 'Full Name' ), outboundDef( 'v1:signup_date', 'Signup Date' ) ],
 					value_ids: [ 'v1:full_name' ],
+					value: [ 'Full Name' ],
 					schema_origin: 'v1',
 				},
 				{ key: 'incoming_sync_enabled', type: 'checkbox', label: 'Enable inbound sync', value: true },
