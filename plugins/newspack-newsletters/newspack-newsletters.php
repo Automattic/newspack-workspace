@@ -126,19 +126,14 @@ require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/class-wizard-bridge.p
 // Boot the WooCommerce Email Editor package. Must run before the `init` hook
 // so the editor's own `init` callbacks (CPT, templates) are registered in time.
 //
-// Deliberately NOT behind Feature_Flag: the trade is one boot path for both flag
-// states instead of a conditional boot. The editor takeover — asset enqueuing,
-// theme.json overrides, the block allow-list and the `use_woo_renderer` editor flag
-// — is gated on Feature_Flag::is_enabled() in Newspack_Newsletters_Editor, so on a
-// flag-off site the WC canvas never engages and the boot is behaviorally inert (not
-// a no-op: it also registers a global `block_type_metadata_settings` filter that adds
-// `supports.email` + `render_email_callback` to core block settings site-wide, but
-// both are additive and unused until the renderer runs).
-//
-// Note the boot is what opts the newsletters CPT into the package (via the
-// `woocommerce_email_editor_post_types` filter added in Editor_Bootstrap::init()),
-// which is the only reason the init:11 CPT re-assertion exists — gating the boot
-// would remove the opt-in and the re-assertion together, not orphan one of them.
+// The boot itself is unconditional (one boot path for both flag states), but the
+// newsletters CPT is opted into the package only when the renderer flag is on — see
+// Editor_Bootstrap::add_post_type(). That opt-in is what the package's front-end
+// `single_template` takeover (load_email_preview_template) keys off, so gating it
+// keeps a flag-off site's *public* newsletters rendering in the theme's standard
+// single template (legacy/MJML behavior) rather than the package's email-preview
+// template. The boot still registers only additive, unused-until-render machinery
+// (e.g. the `block_type_metadata_settings` filter) when the flag is off.
 \Newspack\Newsletters\Email_Renderers\Editor_Bootstrap::init();
 
 // This MUST be initialized after Newspack_Newsletter class.

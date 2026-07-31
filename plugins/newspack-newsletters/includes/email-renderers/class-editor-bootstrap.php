@@ -121,7 +121,21 @@ class Editor_Bootstrap {
 	}
 
 	/**
-	 * Opt the newsletters CPT into the email editor.
+	 * Opt the newsletters CPT into the email editor — only when the WC renderer is on.
+	 *
+	 * The opt-in is what the package keys its front-end takeover off: with the CPT in
+	 * this list the package's `single_template` filter (Email_Editor::load_email_preview_template)
+	 * serves a *public* newsletter (one set for both email and web) through the package's
+	 * email-preview template — full email HTML, email-only blocks shown, no theme wrapper —
+	 * instead of the theme's standard single template. Gating the opt-in on the flag keeps a
+	 * flag-off site on the legacy (MJML) behavior, where public newsletters render normally in
+	 * the theme and `Newspack_Newsletters::remove_visibility_hidden_block()` hides email-only
+	 * blocks. The editor takeover in Newspack_Newsletters_Editor is separately flag-gated; this
+	 * closes the front-end path it never covered.
+	 *
+	 * The flag is read here (lazily, when the filter fires on `init`) rather than at boot so
+	 * every flag source is honored — option, constant, and the `newspack_newsletters_use_woo_renderer`
+	 * filter — regardless of when it is registered.
 	 *
 	 * The package expects `name` + `args` entries; empty args is fine. The package
 	 * re-registers opted-in CPTs (see init() for the priority-11 re-assertion).
@@ -130,6 +144,9 @@ class Editor_Bootstrap {
 	 * @return array Modified list.
 	 */
 	public static function add_post_type( $post_types ) {
+		if ( ! Feature_Flag::is_enabled() ) {
+			return $post_types;
+		}
 		$post_types[] = [
 			'name' => \Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT,
 			'args' => [],
