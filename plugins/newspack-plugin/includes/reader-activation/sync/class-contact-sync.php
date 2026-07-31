@@ -267,7 +267,10 @@ class Contact_Sync extends Sync {
 	 * - sync_account_deletion=false → skip this integration entirely.
 	 * - sync_account_deletion=true + handling='delete' → call $integration->delete_contact($email).
 	 * - sync_account_deletion=true + handling='flag' → push the contact with the
-	 *   `account_deleted` metadata field set to an ISO8601 timestamp.
+	 *   `account_deleted` metadata field set to an ISO8601 timestamp, then call
+	 *   $integration->flag_deletion_cleanup($email) so the integration can stop
+	 *   further outreach (e.g. the ESP removes the contact from all lists) while
+	 *   keeping the flagged record.
 	 *
 	 * The WP user no longer exists by the time this runs, so the standard
 	 * push_to_integrations() retry path (which keys retries on user_id) is
@@ -440,6 +443,44 @@ class Contact_Sync extends Sync {
 						\ActionScheduler_Logger::instance()->log(
 							self::$current_as_action_id,
 							sprintf( 'Flag-push succeeded for integration "%s" of %s.', $integration_id, $email )
+						);
+					}
+				}
+
+				// Run the integration's list/audience cleanup regardless of whether the
+				// metadata push above succeeded: "keep the record, stop the emails" is
+				// independent of whether the Account_Deleted/Membership_Status metadata
+				// landed. This restores the pre-refactor behavior of legacy sites with
+				// sync_esp_delete=false, whose handler removed the contact from every
+				// ESP list on deletion. Cleanup failures are log+alert only — they do
+				// not feed schedule_deletion_retry(), which stays scoped to the flag push.
+				$cleanup_result = $integration->flag_deletion_cleanup( $email );
+				if ( \is_wp_error( $cleanup_result ) ) {
+					$errors[] = sprintf( '[%s] %s', $integration_id, $cleanup_result->get_error_message() );
+					static::log( sprintf( 'Flag-deletion cleanup failed for integration "%s" of %s: %s', $integration_id, $email, $cleanup_result->get_error_message() ) );
+					/** This action is documented above in the 'delete' branch of this method. */
+					do_action(
+						'newspack_sync_contact_failed',
+						[
+							'integration_id' => $integration_id,
+							'contact'        => $flag_contact,
+							'context'        => $context,
+							'reason'         => $cleanup_result->get_error_message(),
+							'mode'           => 'flag',
+						]
+					);
+					if ( self::$current_as_action_id ) {
+						\ActionScheduler_Logger::instance()->log(
+							self::$current_as_action_id,
+							sprintf( 'Flag-deletion cleanup failed for integration "%s" of %s: %s', $integration_id, $email, $cleanup_result->get_error_message() )
+						);
+					}
+				} else {
+					static::log( sprintf( 'Flag-deletion cleanup succeeded for integration "%s" of %s.', $integration_id, $email ) );
+					if ( self::$current_as_action_id ) {
+						\ActionScheduler_Logger::instance()->log(
+							self::$current_as_action_id,
+							sprintf( 'Flag-deletion cleanup succeeded for integration "%s" of %s.', $integration_id, $email )
 						);
 					}
 				}

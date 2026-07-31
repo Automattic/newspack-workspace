@@ -454,6 +454,31 @@ class ESP extends Integration {
 	}
 
 	/**
+	 * Remove the deleted reader from every ESP list when flagged instead of
+	 * hard-deleted.
+	 *
+	 * Restores the pre-refactor behavior of legacy sites with
+	 * `sync_esp_delete=false`, whose old handler called
+	 * `Newspack_Newsletters_Contacts::update_lists( $email, [], ... )` directly:
+	 * keep the contact record (carrying the Account_Deleted / Membership_Status
+	 * flags written by the flag-mode metadata push) but stop further outreach
+	 * by clearing all list membership.
+	 *
+	 * @param string $email Email address of the deleted reader.
+	 *
+	 * @return true|\WP_Error True on success, WP_Error on failure.
+	 */
+	public function flag_deletion_cleanup( $email ) {
+		if ( ! class_exists( 'Newspack_Newsletters_Contacts' ) ) {
+			return new \WP_Error(
+				'newspack_newsletters_contacts_not_found',
+				__( 'Newspack Newsletters is not available.', 'newspack-plugin' )
+			);
+		}
+		return \Newspack_Newsletters_Contacts::update_lists( $email, [], 'Reader account deleted' );
+	}
+
+	/**
 	 * Pull contact data from the ESP for a given user.
 	 *
 	 * @param int $user_id WordPress user ID.

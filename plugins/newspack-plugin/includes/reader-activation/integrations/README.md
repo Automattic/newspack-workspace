@@ -210,7 +210,7 @@ In addition to the metadata fields, every integration automatically gets two acc
 
 **Legacy migration.** Both fields derive from the single legacy `sync_esp_delete` boolean, which was effectively three-way in behavior: `true` hard-deleted the contact, while `false` kept the contact but removed it from every list (still a deletion signal). Because *both* states propagated a deletion, a migrated site always keeps `sync_account_deletion = true`; the legacy boolean only picks the handling mode — `true → delete`, `false → flag`. Mapping legacy `false` to `flag` (rather than disabling sync) preserves the old "don't hard-delete, but still signal the deletion" posture. Sites that never set the legacy option fall through to the field defaults. See `Integration::migrate_account_deletion_setting()`.
 
-The dispatcher lives at `Contact_Sync::handle_account_deletion()` and is called from the `reader_delete_sync` data event handler. All sites — legacy and coexistence — route through this single handler, which honors each integration's `account_deletion_handling` setting.
+The dispatcher lives at `Contact_Sync::handle_account_deletion()` and is called from the `reader_delete_sync` data event handler. All sites — legacy and coexistence — route through this single handler, which honors each integration's `account_deletion_handling` setting. In `flag` mode, the dispatcher also calls the integration's `flag_deletion_cleanup( $email )` hook after the metadata push — for the built-in ESP integration, this removes the reader from every ESP list, keeping the flagged contact record but stopping further outreach.
 
 ### Conditional fields
 

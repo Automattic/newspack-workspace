@@ -305,6 +305,22 @@ abstract class Integration {
 	}
 
 	/**
+	 * Perform integration-specific cleanup when a deleted reader is flagged
+	 * (account_deletion_handling = 'flag') instead of hard-deleted.
+	 *
+	 * Default is a no-op. Integrations that maintain list/audience
+	 * subscriptions should override to stop outreach to the deleted reader
+	 * while keeping the flagged contact record.
+	 *
+	 * @param string $email Email address of the deleted reader.
+	 *
+	 * @return true|\WP_Error True on success (or nothing to do), WP_Error on failure.
+	 */
+	public function flag_deletion_cleanup( $email ) {
+		return true;
+	}
+
+	/**
 	 * Handle a logged-in user attempting to register again via the frontend registration flow.
 	 *
 	 * Integrations can override this method to update user data or perform other actions when an existing user attempts to register again via the frontend registration flow. For example, an integration might want to link the existing user account to the integration, record a new donation for a returning donor, or log this event for analytics purposes.
