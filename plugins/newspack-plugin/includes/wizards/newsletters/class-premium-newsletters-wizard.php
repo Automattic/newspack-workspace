@@ -225,7 +225,7 @@ class Premium_Newsletters_Wizard extends Wizard {
 			array_merge(
 				[
 					'api'                     => '/' . NEWSPACK_API_NAMESPACE . '/wizard/' . $this->slug,
-					'available_access_rules'  => Access_Rules::get_access_rules(),
+					'available_access_rules'  => Access_Rules::get_access_rules_for_client(),
 					'available_content_rules' => Content_Rules::get_premium_newsletter_rules(),
 					'presave_checks_enabled'  => Content_Gate::get_presave_checks_enabled(),
 					'default_gate_status'     => Content_Gate::get_default_new_gate_status(),

@@ -98,7 +98,7 @@ class Audience_Content_Gates extends Wizard {
 			array_merge(
 				[
 					'api'                     => '/' . NEWSPACK_API_NAMESPACE . '/wizard/' . $this->slug,
-					'available_access_rules'  => Access_Rules::get_access_rules(),
+					'available_access_rules'  => Access_Rules::get_access_rules_for_client(),
 					'available_content_rules' => Content_Rules::get_content_rules(),
 					'edit_gate_layout_url'    => Content_Gate::get_edit_gate_layout_url(),
 					'presave_checks_enabled'  => Content_Gate::get_presave_checks_enabled(),
