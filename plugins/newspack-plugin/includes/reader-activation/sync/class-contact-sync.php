@@ -290,7 +290,8 @@ class Contact_Sync extends Sync {
 				}
 				// UTM-style labels end in ": " and match any suffixed key (e.g. "Signup UTM: source").
 				// This trailing-": " shape is the contract defined by the UTM labels in
-				// Legacy_Metadata::get_basic_fields() ("Signup UTM: ", "Payment UTM: ").
+				// Legacy_Basic::get_fields() ("Signup UTM: ") and
+				// Legacy_Payment::get_fields() ("Payment UTM: ").
 				if ( ': ' === substr( $label, -2 ) && 0 === strpos( $remainder, $label ) ) {
 					$filtered[ $key ] = $value;
 					break;

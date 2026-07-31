@@ -523,7 +523,7 @@ class Metadata {
 	 */
 	private static function class_handles_any_field( $class, array $fields ): bool {
 		if ( Contact_Metadata\Legacy_Basic::class === $class ) {
-			$class_raw_keys = array_keys( Legacy_Metadata::get_all_fields() );
+			$class_raw_keys = array_keys( array_merge( Contact_Metadata\Legacy_Basic::get_fields(), Contact_Metadata\Legacy_Payment::get_fields() ) );
 		} else {
 			$class_raw_keys = array_keys( $class::get_fields() );
 		}

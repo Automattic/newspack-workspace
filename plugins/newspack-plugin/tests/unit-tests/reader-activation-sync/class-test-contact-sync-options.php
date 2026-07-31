@@ -13,8 +13,8 @@ use Newspack\Content_Gate;
 use Newspack\Reader_Activation;
 use Newspack\Reader_Activation\Contact_Sync;
 use Newspack\Reader_Activation\Integrations;
+use Newspack\Reader_Activation\Sync\Field_Registry;
 use Newspack\Reader_Activation\Sync\Metadata;
-use Newspack\Reader_Activation\Sync\Legacy_Metadata;
 use Newspack\Reader_Activation\Sync\Contact_Metadata\Content_Gate as Content_Gate_Metadata;
 
 require_once __DIR__ . '/../../mocks/newsletters-mocks.php';
@@ -26,13 +26,6 @@ require_once __DIR__ . '/../integrations/class-failing-sample-integration.php';
  * @group Contact_Sync_Options
  */
 class Test_Contact_Sync_Options extends WP_UnitTestCase {
-
-	/**
-	 * Schema version restored in tear_down().
-	 *
-	 * @var string
-	 */
-	private static $original_version;
 
 	/**
 	 * Verified reader user ID.
@@ -62,14 +55,16 @@ class Test_Contact_Sync_Options extends WP_UnitTestCase {
 		if ( ! defined( 'NEWSPACK_FORCE_ALLOW_ESP_SYNC' ) ) {
 			define( 'NEWSPACK_FORCE_ALLOW_ESP_SYNC', true );
 		}
-		self::$original_version = Metadata::$version;
 	}
 
 	public function set_up() {
 		parent::set_up();
 		Content_Gate_Metadata::reset_cache();
 		Newspack_Newsletters_Contacts::reset_calls();
-		Metadata::$version = 'legacy';
+		// Pin the site to the legacy (v1) schema origin: these tests assert the
+		// legacy field set and its labels.
+		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
+		Field_Registry::reset();
 
 		$this->user_id = $this->factory->user->create(
 			[
@@ -85,7 +80,8 @@ class Test_Contact_Sync_Options extends WP_UnitTestCase {
 	}
 
 	public function tear_down() {
-		Metadata::$version = self::$original_version;
+		\delete_option( Field_Registry::SCHEMA_ORIGIN_OPTION );
+		Field_Registry::reset();
 		Content_Gate_Metadata::reset_cache();
 		Failing_Sample_Integration::reset();
 		if ( function_exists( 'as_unschedule_all_actions' ) ) {
@@ -206,9 +202,10 @@ class Test_Contact_Sync_Options extends WP_UnitTestCase {
 
 		$contact = Metadata::get_contact_with_metadata( $this->user_id, $this->content_access_labels );
 
-		$this->assertArrayHasKey( 'NP_Content Access', $contact['metadata'] );
+		// Computation always yields raw keys; prefixing is prepare_contact()'s job.
+		$this->assertArrayHasKey( 'Content_Access', $contact['metadata'] );
 		$this->assertArrayNotHasKey(
-			'NP_Account',
+			'account',
 			$contact['metadata'],
 			'Legacy_Basic must be skipped when only Content Access fields are requested.'
 		);
@@ -222,26 +219,33 @@ class Test_Contact_Sync_Options extends WP_UnitTestCase {
 		$contact = Metadata::get_contact_with_metadata( $this->user_id, [ 'Total Paid' ] );
 
 		$this->assertArrayHasKey(
-			'NP_Account',
+			'account',
 			$contact['metadata'],
 			'Requesting a payment field must still run Legacy_Basic (which computes all legacy fields).'
 		);
 		$this->assertArrayNotHasKey(
-			'NP_Content Access',
+			'Content_Access',
 			$contact['metadata'],
 			'Content_Gate must be skipped when only a payment field is requested.'
 		);
 	}
 
-	public function test_compute_v1_returns_raw_content_access_keys_only() {
-		Metadata::$version = '1.0';
+	/**
+	 * Field scoping is origin-aware: on a v2-origin site the requested labels
+	 * resolve against the v2 field set, so the v2 classes that own them run and
+	 * every other class is skipped.
+	 */
+	public function test_compute_v2_origin_returns_requested_content_access_fields_only() {
+		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v2' );
+		Field_Registry::reset();
 		Content_Gate_Metadata::reset_cache();
 		$this->create_custom_access_gate( $this->passing_email_domain_rules() );
 
 		$contact = Metadata::get_contact_with_metadata( $this->user_id, $this->content_access_labels );
 
-		$this->assertArrayHasKey( 'Content_Access', $contact['metadata'], 'v1 mode returns raw (unprefixed) keys.' );
-		$this->assertArrayNotHasKey( 'Registration_Date', $contact['metadata'], 'Non-requested classes must be skipped in v1 mode.' );
+		$this->assertArrayHasKey( 'Content_Access', $contact['metadata'], 'Computation returns raw (unprefixed) keys.' );
+		$this->assertArrayNotHasKey( 'Registration_Date', $contact['metadata'], 'Non-requested v2 classes must be skipped.' );
+		$this->assertArrayNotHasKey( 'account', $contact['metadata'], 'Legacy classes must be skipped on a v2-origin site.' );
 	}
 
 	public function test_prepare_contact_for_integration_keeps_only_requested_fields() {
