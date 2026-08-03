@@ -1,3 +1,18 @@
+# newspack-popups [3.16.0](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.15.1...newspack-popups@3.16.0) (2026-08-03)
+
+
+### Features
+
+* **audience:** per-field operators for incoming ESP field criteria ([#628](https://github.com/Automattic/newspack-workspace/issues/628)) ([f4449a8](https://github.com/Automattic/newspack-workspace/commit/f4449a806b9794e03bcf3aa2e3f87f42beb67904))
+* **audience:** pricing rules wizard + reader-segment foundation ([#465](https://github.com/Automattic/newspack-workspace/issues/465)) ([496f0e0](https://github.com/Automattic/newspack-workspace/commit/496f0e0047dc30211a530a64395daa1d6e8c6d9e))
+* explicit breadcrumb API for Newspack admin headers ([#472](https://github.com/Automattic/newspack-workspace/issues/472)) ([7c43233](https://github.com/Automattic/newspack-workspace/commit/7c4323301f5323822937e93274c4fda4279a787f))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.6.0
+* **newspack-scripts:** upgraded to 5.10.0
+
 ## newspack-popups [3.15.1](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.15.0...newspack-popups@3.15.1) (2026-07-22)
 
 

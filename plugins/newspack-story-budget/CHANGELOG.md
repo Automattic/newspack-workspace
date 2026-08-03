@@ -1,3 +1,16 @@
+# newspack-story-budget [1.2.0](https://github.com/Automattic/newspack-workspace/compare/newspack-story-budget@1.1.0...newspack-story-budget@1.2.0) (2026-08-03)
+
+
+### Features
+
+* explicit breadcrumb API for Newspack admin headers ([#472](https://github.com/Automattic/newspack-workspace/issues/472)) ([7c43233](https://github.com/Automattic/newspack-workspace/commit/7c4323301f5323822937e93274c4fda4279a787f))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.6.0
+* **newspack-scripts:** upgraded to 5.10.0
+
 # newspack-story-budget [1.1.0](https://github.com/Automattic/newspack-workspace/compare/newspack-story-budget@1.0.2...newspack-story-budget@1.1.0) (2026-07-20)
 
 
