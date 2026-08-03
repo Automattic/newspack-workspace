@@ -68,6 +68,16 @@ abstract class Integration {
 	const METADATA_PREFIX_OPTION_PREFIX = 'newspack_integration_metadata_prefix_';
 
 	/**
+	 * WP_Error code pull_contact_data() should return when the provider has no
+	 * contact for the reader. Not a failure: no re-run can make an absent
+	 * contact appear, so batch drivers count these readers as skipped rather
+	 * than errored.
+	 *
+	 * @var string
+	 */
+	const CONTACT_NOT_FOUND_ERROR_CODE = 'ras_contact_not_found';
+
+	/**
 	 * The unique identifier for this integration.
 	 *
 	 * @var string
