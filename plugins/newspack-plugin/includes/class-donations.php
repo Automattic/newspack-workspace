@@ -888,10 +888,13 @@ class Donations {
 		}
 
 		// Pass through UTM params so they can be forwarded to the WooCommerce checkout flow.
+		// Values are encoded here because add_query_arg() does not encode them:
+		// an ampersand or space in a campaign name would otherwise split into a
+		// stray param or be dropped by the redirect sanitizer.
 		foreach ( $params as $param => $value ) {
 			if ( 'utm' === substr( $param, 0, 3 ) ) {
 				$param                = sanitize_text_field( $param );
-				$query_args[ $param ] = sanitize_text_field( $value );
+				$query_args[ $param ] = rawurlencode( sanitize_text_field( $value ) );
 			}
 		}
 
