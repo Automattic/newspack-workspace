@@ -186,4 +186,123 @@ class Promo_Url_Targets_Test extends WP_UnitTestCase {
 		$this->assertNotEmpty( $attrs );
 		$this->assertSame( '11', $attrs[0]['product'] );
 	}
+
+	/**
+	 * Helper to build a test product family.
+	 */
+	private function family() {
+		return [
+			'parent'     => 100,
+			'variations' => [ 101, 102 ],
+			'members'    => [],
+		];
+	}
+
+	/**
+	 * Test deriving config for a parent product button with variation picker.
+	 */
+	public function test_derive_parent_button_with_picker() {
+		$config = Promo_Url_Targets::derive_checkout_button_config(
+			[
+				'product'     => '100',
+				'is_variable' => true,
+			],
+			$this->family()
+		);
+		$this->assertSame( 100, $config['product_id'] );
+		$this->assertNull( $config['variation_id'] );
+		$this->assertTrue( $config['has_variation_picker'] );
+	}
+
+	/**
+	 * Test deriving config for a variation-locked button.
+	 */
+	public function test_derive_variation_locked_button() {
+		$config = Promo_Url_Targets::derive_checkout_button_config(
+			[
+				'product'     => '100',
+				'variation'   => '102',
+				'is_variable' => true,
+			],
+			$this->family()
+		);
+		$this->assertSame( 100, $config['product_id'] );
+		$this->assertSame( 102, $config['variation_id'] );
+		$this->assertFalse( $config['has_variation_picker'] );
+	}
+
+	/**
+	 * Test deriving config for a button pointing directly at a variation.
+	 */
+	public function test_derive_button_pointing_directly_at_variation() {
+		$config = Promo_Url_Targets::derive_checkout_button_config( [ 'product' => '101' ], $this->family() );
+		$this->assertSame( 100, $config['product_id'] );
+		$this->assertSame( 101, $config['variation_id'] );
+	}
+
+	/**
+	 * Test deriving config for a grouped product member button.
+	 */
+	public function test_derive_grouped_member_button_uses_member_id() {
+		$family = [
+			'parent'     => 200,
+			'variations' => [],
+			'members'    => [ 201, 202 ],
+		];
+		$config = Promo_Url_Targets::derive_checkout_button_config( [ 'product' => '201' ], $family );
+		$this->assertSame( 201, $config['product_id'] );
+		$this->assertNull( $config['variation_id'] );
+		$this->assertFalse( $config['has_variation_picker'] );
+	}
+
+	/**
+	 * Test deriving config for a grouped parent button with picker.
+	 */
+	public function test_derive_grouped_parent_button_has_picker() {
+		$family = [
+			'parent'     => 200,
+			'variations' => [],
+			'members'    => [ 201, 202 ],
+		];
+		$config = Promo_Url_Targets::derive_checkout_button_config( [ 'product' => '200' ], $family );
+		$this->assertSame( 200, $config['product_id'] );
+		$this->assertTrue( $config['has_variation_picker'] );
+	}
+
+	/**
+	 * Test that derive_checkout_button_config returns null for unrelated products.
+	 */
+	public function test_derive_returns_null_for_unrelated_product() {
+		$this->assertNull( Promo_Url_Targets::derive_checkout_button_config( [ 'product' => '999' ], $this->family() ) );
+		$this->assertNull( Promo_Url_Targets::derive_checkout_button_config( [], $this->family() ) );
+	}
+
+	/**
+	 * Test that derive_checkout_button_config carries coupon and after_success.
+	 */
+	public function test_derive_carries_coupon_and_after_success() {
+		$config = Promo_Url_Targets::derive_checkout_button_config(
+			[
+				'product'                 => '100',
+				'coupon'                  => 'SPRING20',
+				'afterSuccessBehavior'    => 'custom',
+				'afterSuccessURL'         => 'https://example.com/thanks',
+				'afterSuccessButtonLabel' => 'Continue',
+			],
+			$this->family()
+		);
+		$this->assertSame( 'SPRING20', $config['coupon'] );
+		$this->assertSame( 'custom', $config['after_success']['behavior'] );
+		$this->assertSame( 'https://example.com/thanks', $config['after_success']['url'] );
+		// Default button label alone must not fabricate an after_success config.
+		$plain = Promo_Url_Targets::derive_checkout_button_config(
+			[
+				'product'                 => '100',
+				'afterSuccessButtonLabel' => 'Continue',
+			],
+			$this->family()
+		);
+		$this->assertNull( $plain['after_success'] );
+		$this->assertNull( $plain['coupon'] );
+	}
 }

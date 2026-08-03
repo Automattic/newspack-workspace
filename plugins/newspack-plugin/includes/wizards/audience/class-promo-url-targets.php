@@ -141,4 +141,87 @@ final class Promo_Url_Targets {
 		$walker( parse_blocks( $content ) );
 		return $found;
 	}
+
+	/**
+	 * Build the product "family" a plan row spans: the row product itself plus
+	 * its variation children (variable) or bundled members (grouped).
+	 *
+	 * @param int $product_id Plan row product ID.
+	 * @return array{parent:int,variations:int[],members:int[]}
+	 */
+	public static function get_product_family( $product_id ) {
+		$family = [
+			'parent'     => (int) $product_id,
+			'variations' => [],
+			'members'    => [],
+		];
+		if ( ! function_exists( 'wc_get_product' ) ) {
+			return $family;
+		}
+		$product = wc_get_product( $product_id );
+		if ( ! $product ) {
+			return $family;
+		}
+		$children = array_map( 'intval', $product->get_children() );
+		if ( $product->is_type( 'grouped' ) ) {
+			$family['members'] = $children;
+		} else {
+			$family['variations'] = $children;
+		}
+		return $family;
+	}
+
+	/**
+	 * Derive the effective config of a Checkout Button block relative to a plan
+	 * family. Returns the ids the block's data-checkout JSON will emit at render
+	 * time — the JS URL trigger matches against those, not the raw attributes
+	 * (variable-locked buttons collapse product onto the variation in view.php).
+	 *
+	 * @param array $attrs  Block attributes from parse_blocks().
+	 * @param array $family See get_product_family().
+	 * @return array|null Effective config, or null when the block doesn't match.
+	 */
+	public static function derive_checkout_button_config( $attrs, $family ) {
+		$block_product   = isset( $attrs['product'] ) ? (int) $attrs['product'] : 0;
+		$block_variation = isset( $attrs['variation'] ) ? (int) $attrs['variation'] : 0;
+		if ( ! $block_product ) {
+			return null;
+		}
+		$parent     = (int) $family['parent'];
+		$variations = array_map( 'intval', $family['variations'] );
+		$members    = array_map( 'intval', $family['members'] );
+
+		$config = null;
+		if ( $block_product === $parent ) {
+			$locked = in_array( $block_variation, array_merge( $variations, $members ), true ) ? $block_variation : 0;
+			$config = [
+				'product_id'           => $parent,
+				'variation_id'         => $locked ? $locked : null,
+				'has_variation_picker' => ! $locked && ( ! empty( $attrs['is_variable'] ) || ! empty( $members ) ),
+			];
+		} elseif ( in_array( $block_product, $variations, true ) ) {
+			$config = [
+				'product_id'           => $parent,
+				'variation_id'         => $block_product,
+				'has_variation_picker' => false,
+			];
+		} elseif ( in_array( $block_product, $members, true ) ) {
+			$config = [
+				'product_id'           => $block_product,
+				'variation_id'         => null,
+				'has_variation_picker' => false,
+			];
+		}
+		if ( ! $config ) {
+			return null;
+		}
+		$behavior                = isset( $attrs['afterSuccessBehavior'] ) ? (string) $attrs['afterSuccessBehavior'] : '';
+		$config['coupon']        = isset( $attrs['coupon'] ) && '' !== (string) $attrs['coupon'] ? (string) $attrs['coupon'] : null;
+		$config['after_success'] = '' !== $behavior ? [
+			'behavior'     => $behavior,
+			'url'          => isset( $attrs['afterSuccessURL'] ) ? (string) $attrs['afterSuccessURL'] : '',
+			'button_label' => isset( $attrs['afterSuccessButtonLabel'] ) ? (string) $attrs['afterSuccessButtonLabel'] : '',
+		] : null;
+		return $config;
+	}
 }
