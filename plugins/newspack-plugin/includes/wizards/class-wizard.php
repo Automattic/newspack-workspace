@@ -174,6 +174,10 @@ abstract class Wizard {
 			],
 			'homepage'       => get_edit_post_link( get_option( 'page_on_front', false ) ),
 			'site'           => get_site_url(),
+			// Reader-facing base: on a subdirectory install this differs from
+			// `site` (the WordPress address), so links meant for readers — a
+			// promotional URL pasted into a newsletter — must use this one.
+			'home'           => home_url( '/' ),
 			'support'        => esc_url( 'https://help.newspack.com/' ),
 			'support_email'  => $support_email,
 		];

@@ -36,7 +36,14 @@ import {
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import { buildPromoUrl } from './promo-url';
 import type { DonateFrequencySlug, PromoUrlSelections } from './promo-url';
-import { getAmountChoices, getDefaultFrequency, getFrequencyChoices, getVariationChoices, resolvePageProductParams } from './promo-url-options';
+import {
+	getAmountChoices,
+	getDefaultFrequency,
+	getFrequencyChoices,
+	getValidationError,
+	getVariationChoices,
+	resolvePageProductParams,
+} from './promo-url-options';
 import type { PromoCouponResponse, PromoTarget, PromoTargetBlockConfig, PromoTargetDonateConfig, PromoTargetsResponse } from './promo-url-options';
 
 const API_BASE = '/newspack/v1/wizard/newspack-audience-subscription-products';
@@ -46,7 +53,9 @@ type CouponStatus = { state: 'idle' | 'checking' | 'valid' | 'invalid'; reason?:
 export default function PromoUrlModal( { item, closeModal }: { item: SubscriptionProduct; closeModal?: () => void } ) {
 	const { addNotice } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const kind = item.is_donation ? 'donation' : 'product';
-	const siteUrl = window.newspack_urls?.site || window.location.origin;
+	// Readers open these links, so build them on the home address: on a
+	// subdirectory install the WordPress address carries a path they shouldn't see.
+	const siteUrl = window.newspack_urls?.home || window.newspack_urls?.site || window.location.origin;
 
 	const [ isLoading, setIsLoading ] = useState( true );
 	const [ fetchError, setFetchError ] = useState( false );
@@ -96,7 +105,10 @@ export default function PromoUrlModal( { item, closeModal }: { item: Subscriptio
 		return response?.donation_config || null;
 	}, [ kind, destination, selectedTarget, response ] );
 
-	const variationChoices = useMemo( () => ( kind === 'product' ? getVariationChoices( item, targetBlocks ) : [] ), [ kind, item, targetBlocks ] );
+	const variationChoices = useMemo(
+		() => ( kind === 'product' ? getVariationChoices( item, targetBlocks, response?.eligible_children ) : [] ),
+		[ kind, item, targetBlocks, response ]
+	);
 	const frequencyChoices = useMemo( () => getFrequencyChoices( donateConfig ), [ donateConfig ] );
 	const amountChoices = useMemo( () => getAmountChoices( donateConfig, frequency ), [ donateConfig, frequency ] );
 	const isNypEligible = Boolean( response?.nyp?.[ variationId === '' ? item.id : variationId ] );
@@ -198,81 +210,79 @@ export default function PromoUrlModal( { item, closeModal }: { item: Subscriptio
 		utmCampaign,
 	};
 
-	const validationError: string | null = useMemo( () => {
-		if ( destination === 'page' && ! selectedTarget ) {
-			return __( 'Choose a target page.', 'newspack-plugin' );
-		}
-		if ( kind === 'product' && requiresChild && variationId === '' ) {
-			return __( 'Choose which plan option the link should check out.', 'newspack-plugin' );
-		}
-		if ( kind === 'donation' ) {
-			if ( ! donateConfig ) {
-				return __( 'Donations are not configured for WooCommerce on this site.', 'newspack-plugin' );
-			}
-			if ( effectiveAmount === undefined ) {
-				return __( 'Enter a valid amount.', 'newspack-plugin' );
-			}
-			const numeric = effectiveAmount === 'other' ? parseFloat( customAmount ) : effectiveAmount;
-			if ( numeric < donateConfig.minimum ) {
-				return sprintf(
-					/* translators: %s: minimum donation amount. */
-					__( 'The amount must be at least %s.', 'newspack-plugin' ),
-					donateConfig.minimum
-				);
-			}
-		}
-		if (
-			kind === 'donation' &&
-			destination === 'page' &&
-			typeof effectiveAmount === 'number' &&
-			donateConfig &&
-			donateConfig.layout_param !== 'untiered' &&
-			! amountChoices.presets.includes( effectiveAmount )
-		) {
-			return __( 'Choose one of the amounts available on the target page.', 'newspack-plugin' );
-		}
-		if ( isCouponActive && couponStatus.state === 'invalid' ) {
-			return couponStatus.reason || __( 'The coupon code is not valid.', 'newspack-plugin' );
-		}
-		if ( afterSuccess === 'custom' && destination === 'direct' && ! afterSuccessUrl ) {
-			return __( 'Enter the URL readers should continue to.', 'newspack-plugin' );
-		}
-		return null;
-	}, [
-		destination,
-		selectedTarget,
-		kind,
-		requiresChild,
-		variationId,
-		donateConfig,
-		amountChoices.presets,
-		effectiveAmount,
-		customAmount,
-		isCouponActive,
-		couponStatus,
-		afterSuccess,
-		afterSuccessUrl,
-	] );
+	const validationError: string | null = useMemo(
+		() =>
+			getValidationError( {
+				kind,
+				destination,
+				hasTarget: Boolean( selectedTarget ),
+				requiresChild,
+				variationId,
+				donateConfig,
+				effectiveAmount,
+				customAmount,
+				presets: amountChoices.presets,
+				isCouponActive,
+				couponState: couponStatus.state,
+				couponReason: couponStatus.reason,
+				afterSuccess,
+				afterSuccessUrl,
+			} ),
+		[
+			kind,
+			destination,
+			selectedTarget,
+			requiresChild,
+			variationId,
+			donateConfig,
+			effectiveAmount,
+			customAmount,
+			amountChoices.presets,
+			isCouponActive,
+			couponStatus,
+			afterSuccess,
+			afterSuccessUrl,
+		]
+	);
 
 	const url = validationError ? '' : buildPromoUrl( { kind, siteUrl, selections } );
 
-	const copyUrl = () => {
-		navigator.clipboard.writeText( url ).then(
-			() => {
-				addNotice( {
-					message: __( 'Promotional link copied to clipboard.', 'newspack-plugin' ),
-					type: 'success',
-					id: 'promo-url-copied',
-				} );
-				closeModal?.();
-			},
-			() =>
-				addNotice( {
-					message: __( 'Failed to copy the link. Please copy it manually.', 'newspack-plugin' ),
-					type: 'error',
-					id: 'promo-url-copy-error',
-				} )
-		);
+	const copyUrl = async () => {
+		let copied = false;
+		try {
+			// `navigator.clipboard` is undefined outside a secure context — a
+			// plain-HTTP admin — where this throws synchronously.
+			await navigator.clipboard.writeText( url );
+			copied = true;
+		} catch ( e ) {
+			try {
+				const textarea = document.createElement( 'textarea' );
+				textarea.value = url;
+				textarea.setAttribute( 'readonly', '' );
+				textarea.style.position = 'fixed';
+				textarea.style.opacity = '0';
+				document.body.appendChild( textarea );
+				textarea.select();
+				copied = document.execCommand( 'copy' );
+				document.body.removeChild( textarea );
+			} catch ( fallbackError ) {
+				copied = false;
+			}
+		}
+		if ( copied ) {
+			addNotice( {
+				message: __( 'Promotional link copied to clipboard.', 'newspack-plugin' ),
+				type: 'success',
+				id: 'promo-url-copied',
+			} );
+			closeModal?.();
+			return;
+		}
+		addNotice( {
+			message: __( 'Failed to copy the link. Please copy it manually.', 'newspack-plugin' ),
+			type: 'error',
+			id: 'promo-url-copy-error',
+		} );
 	};
 
 	if ( isLoading ) {
@@ -340,7 +350,10 @@ export default function PromoUrlModal( { item, closeModal }: { item: Subscriptio
 				<Notice status="info" isDismissible={ false }>
 					{ sprintf(
 						/* translators: %s: block name. */
-						__( 'No published page contains a compatible %s block. Add one to a page to enable this option.', 'newspack-plugin' ),
+						__(
+							'No published page or post contains a compatible %s block. Add one to a page to enable this option. Only pages and posts are searched.',
+							'newspack-plugin'
+						),
 						blockLabel
 					) }
 				</Notice>
@@ -390,6 +403,14 @@ export default function PromoUrlModal( { item, closeModal }: { item: Subscriptio
 							...amountChoices.presets.map( preset => ( { label: String( preset ), value: String( preset ) } ) ),
 							...( amountChoices.supportsCustom ? [ { label: __( 'Custom…', 'newspack-plugin' ), value: 'custom' } ] : [] ),
 						] }
+						help={
+							destination === 'direct' && ! amountChoices.supportsCustom
+								? __(
+										'Name Your Price is not active, so checkout charges the amount saved in Donations settings. A link cannot pre-fill a different one.',
+										'newspack-plugin'
+								  )
+								: undefined
+						}
 						onChange={ value => setAmount( value === 'custom' ? 'custom' : parseFloat( value ) ) }
 					/>
 					{ amount === 'custom' && (

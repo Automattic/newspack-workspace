@@ -94,6 +94,8 @@ declare global {
 		};
 		newspack_urls: {
 			site: string;
+			// Reader-facing base; differs from `site` on a subdirectory install.
+			home?: string;
 		};
 	}
 }
