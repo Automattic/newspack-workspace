@@ -61,6 +61,18 @@ class ContextualPromptOverrideTest extends WP_UnitTestCase {
 <!-- /wp:buttons --></div>
 <!-- /wp:newspack-popups/contextual-prompt -->';
 
+	const PLAIN_BUTTON_PROMPT_WITH_LAYOUT = '<!-- wp:newspack-popups/contextual-prompt {"layout":{"type":"flex","orientation":"horizontal"}} -->
+<div class="wp-block-newspack-popups-contextual-prompt"><!-- wp:paragraph -->
+<p>Original story copy.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:buttons -->
+<div class="wp-block-buttons"><!-- wp:button {"url":"https://example.com/donate/"} -->
+<div class="wp-block-button"><a class="wp-block-button__link wp-element-button" href="https://example.com/donate/">Donate</a></div>
+<!-- /wp:button --></div>
+<!-- /wp:buttons --></div>
+<!-- /wp:newspack-popups/contextual-prompt -->';
+
 	const EMPTY_COPY_PROMPT = '<!-- wp:newspack-popups/contextual-prompt -->
 <div class="wp-block-newspack-popups-contextual-prompt"><!-- wp:paragraph -->
 <p>&nbsp;</p>
@@ -73,8 +85,19 @@ class ContextualPromptOverrideTest extends WP_UnitTestCase {
 <!-- /wp:buttons --></div>
 <!-- /wp:newspack-popups/contextual-prompt -->';
 
+	const DONATE_FORM_PROMPT_WITH_LAYOUT = '<!-- wp:newspack-popups/contextual-prompt {"layout":{"type":"flex","orientation":"horizontal"}} -->
+<div class="wp-block-newspack-popups-contextual-prompt"><!-- wp:paragraph -->
+<p>Original story copy.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:newspack-blocks/donate {"className":"is-style-modern"} /--></div>
+<!-- /wp:newspack-popups/contextual-prompt -->';
+
 	/**
-	 * Reset override options, donor landing page and platform filters.
+	 * Reset override options, donor landing page and platform filters, and put
+	 * the block registration back. WP_UnitTestCase rolls back $wp_filter but not
+	 * WP_Block_Type_Registry, so a test that fails mid-body would otherwise leave
+	 * the block registered with native layout supports for the rest of the run.
 	 */
 	public function tear_down() {
 		delete_option( Newspack_Popups_Settings::OVERRIDE_ENABLED_OPTION );
@@ -83,11 +106,17 @@ class ContextualPromptOverrideTest extends WP_UnitTestCase {
 		delete_option( 'newspack_contextual_prompts_override_label' );
 		delete_option( 'newspack_contextual_prompts_override_url' );
 		delete_option( 'newspack_popups_donor_landing_page' );
+		delete_option( 'newspack_contextual_prompts_button_text' );
+		delete_option( 'newspack_contextual_prompts_button_url' );
 		remove_filter( 'newspack_contextual_prompts_use_donate_block', '__return_true' );
 		remove_filter( 'newspack_contextual_prompts_use_donate_block', '__return_false' );
 		if ( WP_Block_Type_Registry::get_instance()->is_registered( 'newspack-blocks/donate' ) ) {
 			unregister_block_type( 'newspack-blocks/donate' );
 		}
+		if ( WP_Block_Type_Registry::get_instance()->is_registered( Newspack_Popups_Contextual_Prompt_Block::BLOCK_NAME ) ) {
+			unregister_block_type( Newspack_Popups_Contextual_Prompt_Block::BLOCK_NAME );
+		}
+		Newspack_Popups_Contextual_Prompt_Block::register_block();
 		parent::tear_down();
 	}
 
@@ -127,6 +156,39 @@ class ContextualPromptOverrideTest extends WP_UnitTestCase {
 
 		$this->assertSame( 'newspack-blocks/donate', $result['innerBlocks'][1]['blockName'] );
 		$this->assertSame( 'is-style-modern', $result['innerBlocks'][1]['attrs']['className'] );
+	}
+
+	/**
+	 * Native platform: a button-era layout attribute is dropped when the CTA is
+	 * rebuilt into the donate form.
+	 */
+	public function test_native_platform_swap_clears_stale_layout_attribute() {
+		$name = Newspack_Popups_Contextual_Prompt_Block::BLOCK_NAME;
+		add_filter( 'newspack_contextual_prompts_use_donate_block', '__return_true' );
+		unregister_block_type( $name );
+		Newspack_Popups_Contextual_Prompt_Block::register_block();
+
+		$html = do_blocks( self::PLAIN_BUTTON_PROMPT_WITH_LAYOUT );
+
+		$this->assertStringNotContainsString( 'flex-direction', $html, 'The stale horizontal orientation no longer applies to the form.' );
+		$this->assertStringContainsString( 'is-layout-flow', $html, 'The registered flow default governs instead.' );
+	}
+
+	/**
+	 * Native platform: the layout attribute is cleared even when the stored CTA is
+	 * already the donate form, which template sync can leave behind.
+	 */
+	public function test_native_platform_donate_cta_clears_stale_layout_attribute() {
+		$name = Newspack_Popups_Contextual_Prompt_Block::BLOCK_NAME;
+		add_filter( 'newspack_contextual_prompts_use_donate_block', '__return_true' );
+		unregister_block_type( $name );
+		Newspack_Popups_Contextual_Prompt_Block::register_block();
+
+		$html = do_blocks( self::DONATE_FORM_PROMPT_WITH_LAYOUT );
+
+		$this->assertStringNotContainsString( 'flex-direction', $html, 'The stale horizontal orientation no longer applies to the form.' );
+		$this->assertStringNotContainsString( 'is-horizontal', $html, 'The stale horizontal orientation class is gone.' );
+		$this->assertStringContainsString( 'is-layout-flow', $html, 'The registered flow default governs instead.' );
 	}
 
 	/**
@@ -228,6 +290,71 @@ class ContextualPromptOverrideTest extends WP_UnitTestCase {
 
 		$this->assertCount( 1, $result['innerBlocks'], 'Only the copy paragraph remains.' );
 		$this->assertStringNotContainsString( 'wp-block-button', do_blocks( self::URLLESS_BUTTON_PROMPT ) );
+	}
+
+	/**
+	 * Off-site platform: a rebuilt CTA carries the site-wide button label and
+	 * destination.
+	 */
+	public function test_normalize_builds_button_from_the_globals() {
+		add_filter( 'newspack_contextual_prompts_use_donate_block', '__return_false' );
+		$permalink = $this->set_donor_landing_page();
+		update_option( 'newspack_contextual_prompts_button_text', 'Support us' );
+		update_option( 'newspack_contextual_prompts_button_url', 'https://example.com/give/' );
+
+		$result = Newspack_Popups_Contextual_Prompt_Block::prepare_block_data( $this->parse_prompt( self::DONATE_FORM_PROMPT ) );
+		$button = $result['innerBlocks'][1]['innerBlocks'][0];
+
+		$this->assertSame( 'https://example.com/give/', $button['attrs']['url'] );
+		$this->assertStringContainsString( 'href="https://example.com/give/"', $button['innerHTML'] );
+		$this->assertStringContainsString( '>Support us</a>', $button['innerHTML'] );
+		$this->assertStringNotContainsString( esc_url( $permalink ), $button['innerHTML'], 'The global URL wins over the donor landing page.' );
+	}
+
+	/**
+	 * Empty globals inherit: "Donate" and the donor landing page.
+	 */
+	public function test_empty_globals_inherit_donate_and_the_landing_page() {
+		add_filter( 'newspack_contextual_prompts_use_donate_block', '__return_false' );
+		$permalink = $this->set_donor_landing_page();
+
+		$this->assertSame( 'Donate', Newspack_Popups_Contextual_Prompt_Block::get_button_text() );
+		$this->assertSame( $permalink, Newspack_Popups_Contextual_Prompt_Block::get_button_url() );
+
+		$result = Newspack_Popups_Contextual_Prompt_Block::prepare_block_data( $this->parse_prompt( self::DONATE_FORM_PROMPT ) );
+		$button = $result['innerBlocks'][1]['innerBlocks'][0];
+
+		$this->assertStringContainsString( 'href="' . esc_url( $permalink ) . '"', $button['innerHTML'] );
+		$this->assertStringContainsString( '>Donate</a>', $button['innerHTML'] );
+	}
+
+	/**
+	 * The globals seed prompts inserted afterwards; a stored prompt keeps its own
+	 * label and destination.
+	 */
+	public function test_globals_do_not_rewrite_stored_prompts() {
+		add_filter( 'newspack_contextual_prompts_use_donate_block', '__return_false' );
+		update_option( 'newspack_contextual_prompts_button_text', 'Support us' );
+		update_option( 'newspack_contextual_prompts_button_url', 'https://example.com/give/' );
+
+		$html = do_blocks( self::PLAIN_BUTTON_PROMPT );
+
+		$this->assertStringContainsString( 'href="https://example.com/donate/"', $html );
+		$this->assertStringContainsString( '>Donate</a>', $html );
+		$this->assertStringNotContainsString( 'https://example.com/give/', $html );
+	}
+
+	/**
+	 * With no landing page and no global URL the CTA is dropped, not rendered as a
+	 * dead button carrying the global label.
+	 */
+	public function test_global_label_alone_does_not_resurrect_a_dead_cta() {
+		add_filter( 'newspack_contextual_prompts_use_donate_block', '__return_false' );
+		update_option( 'newspack_contextual_prompts_button_text', 'Support us' );
+
+		$result = Newspack_Popups_Contextual_Prompt_Block::prepare_block_data( $this->parse_prompt( self::DONATE_FORM_PROMPT ) );
+
+		$this->assertCount( 1, $result['innerBlocks'], 'Only the copy paragraph remains.' );
 	}
 
 	/**

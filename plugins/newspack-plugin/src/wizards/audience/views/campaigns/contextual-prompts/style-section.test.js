@@ -40,6 +40,7 @@ const paddingRow = index => within( document.querySelectorAll( '.newspack-prompt
 
 const CLASSIC_STATUS = {
 	is_block_theme: false,
+	can_edit_css: true,
 	style_defaults: {
 		color: { background: '#f7f7f7' },
 		border: { radius: '10px' },
@@ -72,7 +73,7 @@ describe( 'StyleSection on a classic theme', () => {
 
 		// Each group offers its resets from an options menu, not a Reset button, and
 		// the radius belongs to the Border group rather than one of its own.
-		[ 'Color', 'Typography', 'Padding', 'Border' ].forEach( label =>
+		[ 'Color', 'Typography', 'Padding', 'Border', 'Additional CSS' ].forEach( label =>
 			expect( screen.getByRole( 'button', { name: `${ label } options` } ) ).toBeInTheDocument()
 		);
 		expect( screen.queryByRole( 'button', { name: 'Border Radius options' } ) ).toBeNull();
@@ -499,5 +500,99 @@ describe( 'StyleSection on a classic theme', () => {
 		};
 		render( <StyleSection status={ status } styles={ { color: { background: '#7a5c3e' } } } inFlight={ false } onChangeStyles={ () => {} } /> );
 		expect( screen.getByText( CONTRAST_WARNING_BRIGHTER_BACKGROUND, { selector: NOTICE_CONTENT } ) ).toBeInTheDocument();
+	} );
+
+	it( 'shows the stored custom CSS and reports every edit', () => {
+		const onChangeCustomCss = jest.fn();
+		render(
+			<StyleSection
+				status={ CLASSIC_STATUS }
+				styles={ {} }
+				customCss="color: red;"
+				inFlight={ false }
+				onChangeStyles={ () => {} }
+				onChangeCustomCss={ onChangeCustomCss }
+			/>
+		);
+
+		const field = screen.getByLabelText( 'Additional CSS' );
+		expect( field ).toHaveValue( 'color: red;' );
+
+		fireEvent.change( field, { target: { value: '& a { color: blue; }' } } );
+
+		expect( onChangeCustomCss ).toHaveBeenCalledWith( '& a { color: blue; }' );
+	} );
+
+	it( 'clears the custom CSS from the panel menu', () => {
+		const onChangeCustomCss = jest.fn();
+		render(
+			<StyleSection
+				status={ CLASSIC_STATUS }
+				styles={ {} }
+				customCss="color: red;"
+				inFlight={ false }
+				onChangeStyles={ () => {} }
+				onChangeCustomCss={ onChangeCustomCss }
+			/>
+		);
+
+		openPanelMenu( 'Additional CSS' );
+		clickMenuItem( 'Reset Additional CSS' );
+
+		expect( onChangeCustomCss ).toHaveBeenCalledWith( '' );
+	} );
+
+	it( 'shows stored custom CSS read-only once the capability is revoked, rather than hiding it', () => {
+		render(
+			<StyleSection
+				status={ { ...CLASSIC_STATUS, can_edit_css: false } }
+				styles={ {} }
+				customCss="color: red;"
+				inFlight={ false }
+				onChangeStyles={ () => {} }
+				onChangeCustomCss={ () => {} }
+			/>
+		);
+
+		const field = screen.getByLabelText( 'Additional CSS' );
+		expect( field ).toHaveValue( 'color: red;' );
+		// Read-only, not disabled, so the value stays selectable and focusable.
+		expect( field ).toHaveAttribute( 'readonly' );
+		expect( field ).not.toBeDisabled();
+		expect( screen.getByText( /Additional CSS can no longer be edited on this site/ ) ).toBeInTheDocument();
+		// No options menu, so no reset is offered that the capability would refuse.
+		expect( screen.queryByRole( 'button', { name: 'Additional CSS options' } ) ).toBeNull();
+	} );
+
+	it( 'omits the Additional CSS panel when nothing is stored and the capability is gone', () => {
+		render(
+			<StyleSection
+				status={ { ...CLASSIC_STATUS, can_edit_css: false } }
+				styles={ {} }
+				customCss=""
+				inFlight={ false }
+				onChangeStyles={ () => {} }
+				onChangeCustomCss={ () => {} }
+			/>
+		);
+
+		expect( screen.queryByLabelText( 'Additional CSS' ) ).toBeNull();
+		expect( screen.queryByRole( 'button', { name: 'Additional CSS options' } ) ).toBeNull();
+		expect( screen.getByRole( 'button', { name: 'Border options' } ) ).toBeInTheDocument();
+	} );
+
+	it( 'disables the custom CSS field while a save is in flight', () => {
+		render(
+			<StyleSection
+				status={ CLASSIC_STATUS }
+				styles={ {} }
+				customCss="color: red;"
+				inFlight={ true }
+				onChangeStyles={ () => {} }
+				onChangeCustomCss={ () => {} }
+			/>
+		);
+
+		expect( screen.getByLabelText( 'Additional CSS' ) ).toBeDisabled();
 	} );
 } );

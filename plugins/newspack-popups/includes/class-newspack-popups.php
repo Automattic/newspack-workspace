@@ -865,33 +865,34 @@ final class Newspack_Popups {
 			'newspack-popups-blocks',
 			'newspack_popups_blocks_data',
 			[
-				'custom_placements'             => Newspack_Popups_Custom_Placements::get_custom_placements(),
-				'endpoint'                      => '/newspack-popups/v1/prompts',
-				'post_type'                     => self::NEWSPACK_POPUPS_CPT,
-				'is_prompt'                     => self::NEWSPACK_POPUPS_CPT == get_post_type(),
+				'custom_placements'              => Newspack_Popups_Custom_Placements::get_custom_placements(),
+				'endpoint'                       => '/newspack-popups/v1/prompts',
+				'post_type'                      => self::NEWSPACK_POPUPS_CPT,
+				'is_prompt'                      => self::NEWSPACK_POPUPS_CPT == get_post_type(),
 				// Gates client-side registration of the Contextual Prompt block:
 				// the rollout flag plus the admin opt-in, so nothing registers
 				// before the AI disclosure is accepted.
-				'contextual_prompts_enabled'    => self::is_contextual_prompts_enabled() && Newspack_Popups_Settings::is_ai_copy_assistant_enabled(),
+				'contextual_prompts_enabled'     => self::is_contextual_prompts_enabled() && Newspack_Popups_Settings::is_ai_copy_assistant_enabled(),
 				// Whether this screen can author one. Registration is wider than
 				// insertion so the Site Editor can style the block, but only a
 				// supported post editor offers it in the inserter.
-				'contextual_prompts_insertable' => $is_supported_post_editor,
+				'contextual_prompts_insertable'  => $is_supported_post_editor,
 				// So the editor previews the Contextual Prompt CTA in the same
 				// accent the front end resolves at render.
-				'accent_color'                  => Newspack_Popups_Contextual_Prompt_Block::get_accent_color(),
+				'accent_color'                   => Newspack_Popups_Contextual_Prompt_Block::get_accent_color(),
 				// The edited content's own noun ("post", "page", "listing"…), so
 				// prompt UI strings speak the publisher's language.
-				'post_type_label'               => self::get_current_post_type_label(),
+				'post_type_label'                => self::get_current_post_type_label(),
 				// The label as the post type declares it, for headings; recasing
 				// the lowercased noun client-side would mis-case some locales.
-				'post_type_heading'             => self::get_current_post_type_heading(),
+				'post_type_heading'              => self::get_current_post_type_heading(),
 				// Whether the Contextual Prompt CTA is the native donate block
 				// or a plain button.
-				'donations_native'              => Newspack_Popups_Contextual_Prompt_Block::use_donate_block(),
-				// Default target for the plain-button CTA: the donor landing
-				// page, when one is configured in Campaigns settings.
-				'donor_landing_url'             => self::get_donor_landing_url(),
+				'donations_native'               => Newspack_Popups_Contextual_Prompt_Block::use_donate_block(),
+				// What the plain-button CTA an insert starts from carries, already
+				// resolved to its fallbacks.
+				'contextual_prompts_button_text' => Newspack_Popups_Contextual_Prompt_Block::get_button_text(),
+				'contextual_prompts_button_url'  => Newspack_Popups_Contextual_Prompt_Block::get_button_url(),
 			]
 		);
 

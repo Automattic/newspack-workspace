@@ -3,7 +3,8 @@
  * Class Contextual Prompt Styles API Test
  *
  * The wizard's Style section rides the existing status/profile endpoints:
- * status carries the style payload, profile save carries optional overrides.
+ * status carries the style payload, profile save carries optional overrides and,
+ * behind `edit_css`, the block's custom CSS.
  *
  * @package Newspack_Popups
  */
@@ -19,6 +20,7 @@ class ContextualPromptStylesApiTest extends WP_UnitTestCase {
 		parent::set_up();
 		update_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION, true );
 		delete_option( Newspack_Popups_Contextual_Prompt_Styles::OPTION_NAME );
+		delete_option( Newspack_Popups_Contextual_Prompt_Styles::CUSTOM_CSS_OPTION_NAME );
 		wp_set_current_user( $this->factory->user->create( [ 'role' => 'administrator' ] ) );
 		global $wp_rest_server;
 		$wp_rest_server = new WP_REST_Server(); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
@@ -30,6 +32,7 @@ class ContextualPromptStylesApiTest extends WP_UnitTestCase {
 	 * in the theme_json cache group too — so drop all of it.
 	 */
 	public function tear_down() {
+		remove_filter( 'map_meta_cap', [ __CLASS__, 'deny_edit_css' ] );
 		remove_filter( 'wp_theme_json_data_theme', [ __CLASS__, 'add_numeric_font_size_preset' ] );
 		remove_filter( 'wp_theme_json_data_theme', [ __CLASS__, 'disable_default_palette' ] );
 		remove_filter( 'wp_theme_json_data_theme', [ __CLASS__, 'disable_default_spacing_sizes' ] );
@@ -780,5 +783,115 @@ class ContextualPromptStylesApiTest extends WP_UnitTestCase {
 		);
 		rest_do_request( $request );
 		$this->assertSame( [], Newspack_Popups_Contextual_Prompt_Styles::get_styles() );
+	}
+
+	/**
+	 * Status carries the stored custom CSS and whether this user may write it.
+	 */
+	public function test_status_carries_the_custom_css_and_its_capability() {
+		Newspack_Popups_Contextual_Prompt_Styles::save_custom_css( 'color: red;' );
+
+		$data = rest_do_request( new WP_REST_Request( 'GET', '/newspack-popups/v1/contextual-prompt/status' ) )->get_data();
+
+		$this->assertTrue( $data['can_edit_css'] );
+		$this->assertSame( 'color: red;', $data['custom_css'] );
+
+		add_filter( 'map_meta_cap', [ __CLASS__, 'deny_edit_css' ], 10, 2 );
+		$data = rest_do_request( new WP_REST_Request( 'GET', '/newspack-popups/v1/contextual-prompt/status' ) )->get_data();
+
+		$this->assertFalse( $data['can_edit_css'] );
+	}
+
+	/**
+	 * Profile save with custom CSS persists it, unfiltered, and echoes it back.
+	 */
+	public function test_save_profile_with_custom_css() {
+		$request = new WP_REST_Request( 'POST', '/newspack-popups/v1/contextual-prompt/profile' );
+		$request->set_body_params(
+			[
+				'fields'     => [],
+				'custom_css' => '& a { color: red; }',
+			]
+		);
+		$data = rest_do_request( $request )->get_data();
+
+		$this->assertSame( '& a { color: red; }', $data['custom_css'] );
+		$this->assertSame( '& a { color: red; }', Newspack_Popups_Contextual_Prompt_Styles::get_custom_css() );
+	}
+
+	/**
+	 * Custom CSS is not sanitized, so `edit_css` is the control: a payload
+	 * carrying it from a user without the capability fails the whole request.
+	 */
+	public function test_save_profile_rejects_custom_css_without_the_capability() {
+		add_filter( 'map_meta_cap', [ __CLASS__, 'deny_edit_css' ], 10, 2 );
+
+		$request = new WP_REST_Request( 'POST', '/newspack-popups/v1/contextual-prompt/profile' );
+		$request->set_body_params(
+			[
+				'fields'     => [ 'newspack_contextual_prompts_override_label' => 'Give now' ],
+				'custom_css' => 'color: red;',
+			]
+		);
+		$response = rest_do_request( $request );
+
+		$this->assertSame( 403, $response->get_status() );
+		$this->assertSame( '', Newspack_Popups_Contextual_Prompt_Styles::get_custom_css() );
+		$this->assertSame( '', get_option( 'newspack_contextual_prompts_override_label', '' ) );
+	}
+
+	/**
+	 * CSS that could close the STYLE element early fails the request before any
+	 * option write.
+	 */
+	public function test_save_profile_rejects_invalid_custom_css() {
+		Newspack_Popups_Contextual_Prompt_Styles::save_custom_css( 'color: red;' );
+
+		$request = new WP_REST_Request( 'POST', '/newspack-popups/v1/contextual-prompt/profile' );
+		$request->set_body_params(
+			[
+				'fields'     => [ 'newspack_contextual_prompts_override_label' => 'Give now' ],
+				'custom_css' => 'color: red; </style>',
+			]
+		);
+		$response = rest_do_request( $request );
+
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'color: red;', Newspack_Popups_Contextual_Prompt_Styles::get_custom_css() );
+		$this->assertSame( '', get_option( 'newspack_contextual_prompts_override_label', '' ) );
+	}
+
+	/**
+	 * Omitting the key leaves the stored CSS untouched; an explicit empty string
+	 * clears it.
+	 */
+	public function test_save_profile_custom_css_semantics() {
+		Newspack_Popups_Contextual_Prompt_Styles::save_custom_css( 'color: red;' );
+
+		$request = new WP_REST_Request( 'POST', '/newspack-popups/v1/contextual-prompt/profile' );
+		$request->set_body_params( [ 'fields' => [] ] );
+		rest_do_request( $request );
+		$this->assertSame( 'color: red;', Newspack_Popups_Contextual_Prompt_Styles::get_custom_css() );
+
+		$request = new WP_REST_Request( 'POST', '/newspack-popups/v1/contextual-prompt/profile' );
+		$request->set_body_params(
+			[
+				'fields'     => [],
+				'custom_css' => '',
+			]
+		);
+		rest_do_request( $request );
+		$this->assertSame( '', Newspack_Popups_Contextual_Prompt_Styles::get_custom_css() );
+	}
+
+	/**
+	 * Withhold `edit_css` from a user who otherwise manages options.
+	 *
+	 * @param string[] $caps Primitive capabilities required of the user.
+	 * @param string   $cap  Capability being checked.
+	 * @return string[]
+	 */
+	public static function deny_edit_css( $caps, $cap ) {
+		return 'edit_css' === $cap ? [ 'do_not_allow' ] : $caps;
 	}
 }

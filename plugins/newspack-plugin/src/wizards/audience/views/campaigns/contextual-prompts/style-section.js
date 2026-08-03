@@ -25,6 +25,7 @@ import {
 	FontSizePicker,
 	Notice,
 	RangeControl,
+	TextareaControl,
 	__experimentalBorderBoxControl as BorderBoxControl, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalParseQuantityAndUnitFromRawValue as parseQuantityAndUnitFromRawValue, // eslint-disable-line @wordpress/no-unsafe-wp-apis
@@ -75,6 +76,8 @@ const RADIUS_SLIDER_MAX = 100;
 // The units a custom padding value may be given in while the site declares none,
 // which is the fallback core's own spacing controls carry for the same setting.
 const DEFAULT_SPACING_UNITS = [ 'px', 'em', 'rem', 'vh', 'vw', '%' ];
+
+const noop = () => {};
 
 const getPath = ( source, path ) => path.reduce( ( node, key ) => node?.[ key ], source );
 
@@ -290,8 +293,9 @@ const PaddingControl = ( { steps, units, allowCustom, values, onChange, disabled
 	);
 };
 
-const StyleSection = ( { status, styles = {}, inFlight, onChangeStyles } ) => {
+const StyleSection = ( { status, styles = {}, customCss = '', inFlight, onChangeStyles, onChangeCustomCss } ) => {
 	const {
+		can_edit_css: canEditCss,
 		style_defaults: styleDefaults,
 		style_palette: stylePalette,
 		style_font_sizes: styleFontSizes,
@@ -363,6 +367,10 @@ const StyleSection = ( { status, styles = {}, inFlight, onChangeStyles } ) => {
 	// The slider only moves the number, so it writes back with the unit already in
 	// play, as core's BorderControl does for the border width.
 	const setRadiusQuantity = value => setRadius( undefined === value ? undefined : `${ value }${ radiusUnit || 'px' }` );
+
+	// A site can lose `edit_css` after custom CSS was written, and the stored CSS
+	// keeps rendering, so it stays visible read-only rather than disappearing.
+	const showCustomCss = canEditCss || '' !== customCss;
 
 	// ColorPalette, FontSizePicker, BoxControl and BorderBoxControl take no
 	// `disabled` prop, so the whole stack goes inert while a save is in flight.
@@ -507,6 +515,52 @@ const StyleSection = ( { status, styles = {}, inFlight, onChangeStyles } ) => {
 						</VStack>
 					</ToolsPanelItem>
 				</StylePanel>
+				{ showCustomCss &&
+					( canEditCss ? (
+						<StylePanel label={ __( 'Additional CSS', 'newspack-plugin' ) } resetAll={ () => onChangeCustomCss( '' ) }>
+							<ToolsPanelItem
+								label={ __( 'Additional CSS', 'newspack-plugin' ) }
+								hasValue={ () => '' !== customCss }
+								onDeselect={ () => onChangeCustomCss( '' ) }
+								isShownByDefault
+							>
+								<TextareaControl
+									label={ __( 'Additional CSS', 'newspack-plugin' ) }
+									hideLabelFromVision
+									className="newspack-prompt-style-custom-css"
+									value={ customCss }
+									onChange={ onChangeCustomCss }
+									rows={ 8 }
+									help={ __(
+										'These styles apply to the prompt. Declarations need no selector, and in a nested rule & refers to the prompt.',
+										'newspack-plugin'
+									) }
+									disabled={ inFlight }
+									__nextHasNoMarginBottom
+								/>
+							</ToolsPanelItem>
+						</StylePanel>
+					) : (
+						// Registering no panel item leaves the header without its options
+						// menu, so nothing offers a reset the capability no longer allows.
+						<StylePanel label={ __( 'Additional CSS', 'newspack-plugin' ) }>
+							<TextareaControl
+								label={ __( 'Additional CSS', 'newspack-plugin' ) }
+								hideLabelFromVision
+								className="newspack-prompt-style-custom-css"
+								value={ customCss }
+								onChange={ noop }
+								rows={ 8 }
+								help={ __(
+									'Additional CSS can no longer be edited on this site. These styles keep applying and are shown read-only.',
+									'newspack-plugin'
+								) }
+								disabled={ inFlight }
+								readOnly
+								__nextHasNoMarginBottom
+							/>
+						</StylePanel>
+					) ) }
 			</VStack>
 		</Disabled>
 	);

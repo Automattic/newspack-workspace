@@ -20,7 +20,7 @@ import { Icon, close, styles as stylesIcon } from '@wordpress/icons';
 import { Button } from '../../../../../../packages/components/src';
 import StyleSection from './style-section';
 
-const StyleDrawer = ( { status, styles, error, inFlight, isDirty, onChangeStyles, onRequestClose, onSave } ) => {
+const StyleDrawer = ( { status, styles, customCss, error, inFlight, isDirty, onChangeStyles, onChangeCustomCss, onRequestClose, onSave } ) => {
 	// Veto first: a close the parent answers with a confirm must reach it without
 	// the exit animation replaying, so only closes that really unmount go through
 	// the Modal's own Escape handler, which is what animates them. The overlay
@@ -66,7 +66,14 @@ const StyleDrawer = ( { status, styles, error, inFlight, isDirty, onChangeStyles
 					<Button icon={ close } size="small" label={ __( 'Close', 'newspack-plugin' ) } onClick={ requestClose } disabled={ inFlight } />
 				</HStack>
 				<div className="newspack-prompt-style-drawer__content">
-					<StyleSection status={ status } styles={ styles } inFlight={ inFlight } onChangeStyles={ onChangeStyles } />
+					<StyleSection
+						status={ status }
+						styles={ styles }
+						customCss={ customCss }
+						inFlight={ inFlight }
+						onChangeStyles={ onChangeStyles }
+						onChangeCustomCss={ onChangeCustomCss }
+					/>
 				</div>
 				{ error && (
 					<Notice status="error" isDismissible={ false } className="newspack-prompt-style-drawer__notice">

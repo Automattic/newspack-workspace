@@ -178,13 +178,19 @@ final class Newspack_Popups_API {
 					'callback'            => [ __CLASS__, 'api_save_contextual_prompt_profile' ],
 					'permission_callback' => [ $this, 'permission_callback' ],
 					'args'                => [
-						'fields' => [
+						'fields'     => [
 							'required' => true,
 							'type'     => 'object',
 						],
-						'styles' => [
+						'styles'     => [
 							'required' => false,
 							'type'     => 'object',
+						],
+						// Deliberately unsanitized: custom CSS is validated, not
+						// filtered, and the `edit_css` capability is the control.
+						'custom_css' => [
+							'required' => false,
+							'type'     => 'string',
 						],
 					],
 				]
@@ -204,10 +210,10 @@ final class Newspack_Popups_API {
 
 	/**
 	 * The Contextual Prompts status payload: opt-in state, whether the user can
-	 * manage it, the publisher-profile fields, and the block's style data. The
-	 * route is open to `edit_posts`, but the profile and style data is wizard
-	 * configuration only an administrator may see: anyone else gets the opt-in
-	 * state alone.
+	 * manage it, the publisher-profile fields, and the block's style data, custom
+	 * CSS and the capability to edit it included. The route is open to
+	 * `edit_posts`, but the profile and style data is wizard configuration only an
+	 * administrator may see: anyone else gets the opt-in state alone.
 	 *
 	 * @return array
 	 */
@@ -231,10 +237,12 @@ final class Newspack_Popups_API {
 		return [
 			'enabled'                => Newspack_Popups_Settings::is_ai_copy_assistant_enabled(),
 			'can_manage'             => $can_manage,
+			'can_edit_css'           => Newspack_Popups_Contextual_Prompt_Styles::can_edit_css(),
 			'fields'                 => Newspack_Popups_Settings::get_ai_copy_assistant_fields(),
 			'override_active'        => Newspack_Popups_Settings::is_override_active(),
 			'is_block_theme'         => wp_is_block_theme(),
 			'styles'                 => empty( $styles ) ? (object) [] : $styles,
+			'custom_css'             => Newspack_Popups_Contextual_Prompt_Styles::get_custom_css(),
 			'style_defaults'         => Newspack_Popups_Contextual_Prompt_Styles::get_defaults(),
 			'style_palette'          => self::get_palette_presets(),
 			'style_font_sizes'       => self::normalize_preset_sizes( $font_sizes ),
@@ -694,10 +702,30 @@ final class Newspack_Popups_API {
 				return $styles;
 			}
 		}
+		$custom_css = null;
+		if ( isset( $request['custom_css'] ) ) {
+			// Rejected rather than dropped, so a save that cannot take effect does
+			// not report success.
+			if ( ! Newspack_Popups_Contextual_Prompt_Styles::can_edit_css() ) {
+				return new \WP_Error(
+					'newspack_contextual_prompts_cannot_edit_css',
+					__( 'You are not allowed to edit custom CSS.', 'newspack-popups' ),
+					[ 'status' => rest_authorization_required_code() ]
+				);
+			}
+			$custom_css = (string) $request['custom_css'];
+			$valid_css  = Newspack_Popups_Contextual_Prompt_Styles::validate_custom_css( $custom_css );
+			if ( is_wp_error( $valid_css ) ) {
+				return $valid_css;
+			}
+		}
 
 		Newspack_Popups_Settings::save_ai_copy_assistant_fields( (array) $request['fields'] );
 		if ( null !== $styles ) {
 			Newspack_Popups_Contextual_Prompt_Styles::save_styles( $styles );
+		}
+		if ( null !== $custom_css ) {
+			Newspack_Popups_Contextual_Prompt_Styles::save_custom_css( $custom_css );
 		}
 		return rest_ensure_response( self::contextual_prompt_status() );
 	}

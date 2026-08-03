@@ -118,6 +118,16 @@
 			flex: 1 1 60%;
 		}
 	}
+
+	// Read-only, the field is a direct child of the panel grid rather than a panel
+	// item, so it spans the columns the item would have spanned for it.
+	.newspack-prompt-style-custom-css {
+		grid-column: 1 / -1;
+
+		textarea {
+			font-family: wp-vars.$font-family-mono;
+		}
+	}
 }
 
 // Popover content is `width: min-content`, which would collapse the palette to

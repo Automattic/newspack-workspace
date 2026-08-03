@@ -54,6 +54,7 @@ const ContextualPrompts = props => {
 	const [ status, setStatus ] = useState( null );
 	const [ values, setValues ] = useState( {} );
 	const [ blockStyles, setBlockStyles ] = useState( {} );
+	const [ customCss, setCustomCss ] = useState( '' );
 	const [ inFlight, setInFlight ] = useState( false );
 	const [ error, setError ] = useState( null );
 	const [ loaded, setLoaded ] = useState( false );
@@ -67,9 +68,21 @@ const ContextualPrompts = props => {
 	const savedValuesRef = useRef( {} );
 	// Same, for the block style overrides: the save only sends them when they differ.
 	const savedStylesRef = useRef( {} );
+	// Same again, for the custom CSS, which is its own option.
+	const savedCustomCssRef = useRef( '' );
 	// Monotonic id so a slow status response can't clobber state written by a
 	// newer request or mutation.
 	const statusRequestRef = useRef( 0 );
+
+	// Re-seed the drawer's state and the snapshots its dirty check measures against.
+	const applyStyleState = next => {
+		const nextStyles = normalizeStyles( next.styles );
+		setBlockStyles( nextStyles );
+		savedStylesRef.current = nextStyles;
+		const nextCustomCss = next.custom_css || '';
+		setCustomCss( nextCustomCss );
+		savedCustomCssRef.current = nextCustomCss;
+	};
 
 	const loadStatus = () => {
 		setError( null );
@@ -84,9 +97,7 @@ const ContextualPrompts = props => {
 				const nextValues = fieldsToValues( next.fields );
 				setValues( nextValues );
 				savedValuesRef.current = nextValues;
-				const nextStyles = normalizeStyles( next.styles );
-				setBlockStyles( nextStyles );
-				savedStylesRef.current = nextStyles;
+				applyStyleState( next );
 			} )
 			.catch( err => {
 				if ( requestId === statusRequestRef.current ) {
@@ -112,9 +123,7 @@ const ContextualPrompts = props => {
 				const nextValues = fieldsToValues( next.fields );
 				setValues( nextValues );
 				savedValuesRef.current = nextValues;
-				const nextStyles = normalizeStyles( next.styles );
-				setBlockStyles( nextStyles );
-				savedStylesRef.current = nextStyles;
+				applyStyleState( next );
 				return next;
 			} )
 			.catch( err => {
@@ -138,9 +147,7 @@ const ContextualPrompts = props => {
 				const nextValues = fieldsToValues( next.fields );
 				setValues( nextValues );
 				savedValuesRef.current = nextValues;
-				const nextStyles = normalizeStyles( next.styles );
-				setBlockStyles( nextStyles );
-				savedStylesRef.current = nextStyles;
+				applyStyleState( next );
 				return next;
 			} )
 			.catch( err => {
@@ -150,12 +157,18 @@ const ContextualPrompts = props => {
 			.finally( () => setInFlight( false ) );
 	};
 	// The endpoint replaces the whole styles option when the key is present and
-	// leaves it alone when it is absent, so only an actual edit sends it.
+	// leaves it alone when it is absent, so only an actual edit sends it. The
+	// custom CSS is its own option, on the same terms.
 	const stylesDirty = ! isEqual( blockStyles, savedStylesRef.current );
+	const customCssDirty = customCss !== savedCustomCssRef.current;
+	const styleDrawerDirty = stylesDirty || customCssDirty;
 	const saveProfile = () => {
 		const data = { fields: values };
 		if ( stylesDirty ) {
 			data.styles = blockStyles;
+		}
+		if ( customCssDirty ) {
+			data.custom_css = customCss;
 		}
 		return request( PROFILE_PATH, data ).then( () => setSnackbar( __( 'Settings saved.', 'newspack-plugin' ) ) );
 	};
@@ -165,13 +178,21 @@ const ContextualPrompts = props => {
 	const saveStyles = () => {
 		setInFlight( true );
 		setError( null );
-		return apiFetch( { path: PROFILE_PATH, method: 'POST', data: { fields: {}, styles: blockStyles } } )
+		const data = { fields: {} };
+		// Each key travels only when it was edited: an unedited styles snapshot
+		// would clobber a newer save, and an unedited custom_css would fail
+		// outright for a user without `edit_css`.
+		if ( stylesDirty ) {
+			data.styles = blockStyles;
+		}
+		if ( customCssDirty ) {
+			data.custom_css = customCss;
+		}
+		return apiFetch( { path: PROFILE_PATH, method: 'POST', data } )
 			.then( next => {
 				statusRequestRef.current++;
 				setStatus( next );
-				const nextStyles = normalizeStyles( next.styles );
-				setBlockStyles( nextStyles );
-				savedStylesRef.current = nextStyles;
+				applyStyleState( next );
 				setSnackbar( __( 'Styles saved.', 'newspack-plugin' ) );
 				return next;
 			} )
@@ -184,7 +205,7 @@ const ContextualPrompts = props => {
 	const onSave = () => saveProfile().catch( () => {} );
 	const setValue = ( key, value ) => setValues( previous => ( { ...previous, [ key ]: value } ) );
 
-	const isDirty = ! valuesEqual( values, savedValuesRef.current ) || stylesDirty;
+	const isDirty = ! valuesEqual( values, savedValuesRef.current ) || styleDrawerDirty;
 	// Guard stays active during an in-flight save: the edits are only safe once
 	// a successful response has refreshed the saved snapshot.
 	const { confirmDialog, requestConfirm } = useUnsavedChangesDialog( { when: isDirty } );
@@ -195,6 +216,7 @@ const ContextualPrompts = props => {
 	// block would catch and answer with a prompt of its own.
 	const discardStyles = () => {
 		setBlockStyles( savedStylesRef.current );
+		setCustomCss( savedCustomCssRef.current );
 		setError( null );
 		setEditingStyles( false );
 	};
@@ -202,7 +224,7 @@ const ContextualPrompts = props => {
 		if ( inFlight ) {
 			return;
 		}
-		if ( stylesDirty ) {
+		if ( styleDrawerDirty ) {
 			requestConfirm( discardStyles );
 		} else {
 			setError( null );
@@ -320,10 +342,12 @@ const ContextualPrompts = props => {
 				<StyleDrawer
 					status={ status }
 					styles={ blockStyles }
+					customCss={ customCss }
 					error={ error }
 					inFlight={ inFlight }
-					isDirty={ stylesDirty }
+					isDirty={ styleDrawerDirty }
 					onChangeStyles={ setBlockStyles }
+					onChangeCustomCss={ setCustomCss }
 					onRequestClose={ onStyleDrawerClose }
 					onSave={ onStyleDrawerSave }
 				/>

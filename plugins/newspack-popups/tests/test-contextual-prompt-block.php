@@ -22,6 +22,25 @@ class ContextualPromptBlockTest extends WP_UnitTestCase {
 		update_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION, true );
 	}
 
+	/**
+	 * Put the block registration back. WP_UnitTestCase rolls back $wp_filter but
+	 * not WP_Block_Type_Registry, so a test that fails mid-body would otherwise
+	 * leave the block registered with native layout supports for the rest of the
+	 * run.
+	 */
+	public function tear_down() {
+		remove_filter( 'newspack_contextual_prompts_use_donate_block', '__return_true' );
+		remove_filter( 'newspack_contextual_prompts_use_donate_block', '__return_false' );
+		if ( WP_Block_Type_Registry::get_instance()->is_registered( 'newspack-blocks/donate' ) ) {
+			unregister_block_type( 'newspack-blocks/donate' );
+		}
+		if ( WP_Block_Type_Registry::get_instance()->is_registered( Newspack_Popups_Contextual_Prompt_Block::BLOCK_NAME ) ) {
+			unregister_block_type( Newspack_Popups_Contextual_Prompt_Block::BLOCK_NAME );
+		}
+		Newspack_Popups_Contextual_Prompt_Block::register_block();
+		parent::tear_down();
+	}
+
 
 	/**
 	 * A single top-level contextual-prompt block carrying a plain-button CTA,
@@ -192,6 +211,53 @@ class ContextualPromptBlockTest extends WP_UnitTestCase {
 			Newspack_Popups::maybe_strip_contextual_prompt_block( '<p>Unrelated.</p>', [ 'blockName' => 'core/paragraph' ] ),
 			'Other blocks always pass through.'
 		);
+	}
+
+	/**
+	 * The registered layout supports follow the CTA the site renders, and must
+	 * match what index.js registers on the client.
+	 */
+	public function test_registered_layout_supports_follow_the_cta() {
+		$name          = Newspack_Popups_Contextual_Prompt_Block::BLOCK_NAME;
+		$register_with = function ( $callback ) use ( $name ) {
+			add_filter( 'newspack_contextual_prompts_use_donate_block', $callback );
+			unregister_block_type( $name );
+			Newspack_Popups_Contextual_Prompt_Block::register_block();
+			remove_filter( 'newspack_contextual_prompts_use_donate_block', $callback );
+			return WP_Block_Type_Registry::get_instance()->get_registered( $name )->supports['layout'];
+		};
+
+		$button = $register_with( '__return_false' );
+		$this->assertSame(
+			[
+				'type'           => 'flex',
+				'orientation'    => 'vertical',
+				'justifyContent' => 'stretch',
+			],
+			$button['default']
+		);
+		$this->assertTrue( $button['allowOrientation'] );
+		$this->assertTrue( $button['allowJustification'] );
+
+		// use_donate_block() also requires the donate block itself, which this
+		// test env does not load.
+		register_block_type( 'newspack-blocks/donate' );
+		$form = $register_with( '__return_true' );
+		unregister_block_type( 'newspack-blocks/donate' );
+
+		$this->assertSame( [ 'type' => 'default' ], $form['default'] );
+		$this->assertFalse( $form['allowOrientation'] );
+		$this->assertFalse( $form['allowJustification'] );
+		$this->assertFalse( $form['allowEditing'] );
+	}
+
+	/**
+	 * The layout attribute carries no default, so an untouched prompt follows
+	 * whichever layout the supports declare.
+	 */
+	public function test_layout_attribute_has_no_default() {
+		$attributes = WP_Block_Type_Registry::get_instance()->get_registered( Newspack_Popups_Contextual_Prompt_Block::BLOCK_NAME )->attributes;
+		$this->assertArrayNotHasKey( 'default', $attributes['layout'] );
 	}
 
 	/**

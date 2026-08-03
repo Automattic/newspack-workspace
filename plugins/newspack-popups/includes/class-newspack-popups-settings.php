@@ -258,6 +258,20 @@ class Newspack_Popups_Settings {
 				'help'  => __( 'Optional house do/don\'ts appended to the AI guidance. Never overrides the non-advocacy guardrail.', 'newspack-popups' ),
 				'type'  => 'textarea',
 			],
+			// Filtered out below on a native site, which renders the donate form
+			// rather than a button.
+			[
+				'key'   => 'newspack_contextual_prompts_button_text',
+				'label' => __( 'Donation button label', 'newspack-popups' ),
+				'help'  => __( 'The label on a newly inserted prompt\'s donation button, and on any prompt with no destination of its own. Defaults to "Donate" when empty. Editable per story.', 'newspack-popups' ),
+				'type'  => 'text',
+			],
+			[
+				'key'   => 'newspack_contextual_prompts_button_url',
+				'label' => __( 'Donation button URL', 'newspack-popups' ),
+				'help'  => __( 'Where a newly inserted prompt\'s donation button links, and any prompt with no destination of its own. Defaults to your donor landing page when empty. Editable per story.', 'newspack-popups' ),
+				'type'  => 'text',
+			],
 			// Site-wide override ("fund-drive mode"): while enabled, this single
 			// CTA temporarily replaces the copy of every Contextual Prompt.
 			[
@@ -308,17 +322,19 @@ class Newspack_Popups_Settings {
 		];
 
 		// The form/button choice only exists where a native donate form exists;
-		// off-site sites are always button mode.
-		if ( ! Newspack_Popups_Contextual_Prompt_Block::use_donate_block() ) {
-			$fields = array_values(
-				array_filter(
-					$fields,
-					function ( $field ) {
-						return self::OVERRIDE_CTA_OPTION !== $field['key'];
-					}
-				)
-			);
-		}
+		// off-site sites are always button mode. The button label and URL are the
+		// mirror image, shaping a CTA a native site never renders.
+		$excluded = Newspack_Popups_Contextual_Prompt_Block::use_donate_block()
+			? [ 'newspack_contextual_prompts_button_text', 'newspack_contextual_prompts_button_url' ]
+			: [ self::OVERRIDE_CTA_OPTION ];
+		$fields   = array_values(
+			array_filter(
+				$fields,
+				function ( $field ) use ( $excluded ) {
+					return ! in_array( $field['key'], $excluded, true );
+				}
+			)
+		);
 
 		foreach ( $fields as &$field ) {
 			$field['section'] = $field['section'] ?? 'profile';
@@ -355,7 +371,7 @@ class Newspack_Popups_Settings {
 			if ( ! is_scalar( $value ) ) {
 				continue;
 			}
-			if ( 'newspack_contextual_prompts_override_url' === $key ) {
+			if ( in_array( $key, [ 'newspack_contextual_prompts_override_url', 'newspack_contextual_prompts_button_url' ], true ) ) {
 				$sanitized = esc_url_raw( (string) $value );
 			} elseif ( self::OVERRIDE_CTA_OPTION === $key ) {
 				// Whitelist: anything but 'button' collapses to the default 'form'.

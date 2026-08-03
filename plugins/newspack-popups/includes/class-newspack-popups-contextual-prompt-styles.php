@@ -7,7 +7,8 @@
  * directly). Stored as a block-supports-shaped object, rendered to CSS by the
  * style engine, and delivered at :root :where() specificity AFTER the block's
  * theme.json default design so it overrides the default while any per-block
- * style still wins.
+ * style still wins. Publisher-written custom CSS rides along in an option of its
+ * own, scoped to the block by core's custom-css processing.
  *
  * @package Newspack
  */
@@ -19,6 +20,18 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Newspack_Popups_Contextual_Prompt_Styles {
 	const OPTION_NAME = 'newspack_popups_contextual_prompt_styles';
+
+	/**
+	 * Free-form CSS has its own option: it cannot travel through the style
+	 * engine's block-supports shape, and mixing the two would weaken a
+	 * deliberately strict allowlist.
+	 */
+	const CUSTOM_CSS_OPTION_NAME = 'newspack_popups_contextual_prompt_custom_css';
+
+	/**
+	 * The block class both the style engine output and the custom CSS are scoped to.
+	 */
+	const SELECTOR = '.wp-block-newspack-popups-contextual-prompt';
 
 	/**
 	 * Leaf values: CSS-safe fragments only. Permits hex/named colors, units,
@@ -228,20 +241,233 @@ final class Newspack_Popups_Contextual_Prompt_Styles {
 	}
 
 	/**
-	 * The overrides as a single CSS rule, or an empty string.
+	 * Whether the current user may write custom CSS. `edit_css` is core's own gate
+	 * for the same feature, mapped alongside `unfiltered_html`.
+	 *
+	 * @return bool
+	 */
+	public static function can_edit_css() {
+		return current_user_can( 'edit_css' );
+	}
+
+	/**
+	 * The saved custom CSS.
+	 *
+	 * @return string
+	 */
+	public static function get_custom_css() {
+		$css = get_option( self::CUSTOM_CSS_OPTION_NAME, '' );
+		return is_string( $css ) ? $css : '';
+	}
+
+	/**
+	 * Validate custom CSS: it must not close the STYLE element it renders in, and
+	 * its braces, comments and strings must all balance. An unclosed one would
+	 * break every style appended to the shared global-styles handle after it.
+	 *
+	 * @param string $css CSS to validate.
+	 * @return true|WP_Error True when the CSS is safe to store, WP_Error otherwise.
+	 */
+	public static function validate_custom_css( $css ) {
+		$length = strlen( $css );
+		for (
+			$at = strcspn( $css, '<' );
+			$at < $length;
+			$at += strcspn( $css, '<', ++$at )
+		) {
+			$remaining_strlen = $length - $at;
+			// Styles are concatenated, so a trailing prefix of a closing tag is
+			// rejected too: the next one could complete it.
+			$possible_style_close_tag = 0 === substr_compare( $css, '</style', $at, min( 7, $remaining_strlen ), true );
+			if ( ! $possible_style_close_tag ) {
+				continue;
+			}
+			if ( 8 > $remaining_strlen ) {
+				return new WP_Error(
+					'newspack_popups_invalid_custom_css',
+					sprintf(
+						/* translators: %s: the end of the submitted CSS. */
+						__( 'The CSS must not end in "%s".', 'newspack-popups' ),
+						substr( $css, $at )
+					),
+					[ 'status' => 400 ]
+				);
+			}
+			if ( 1 === strspn( $css, " \t\f\r\n/>", $at + 7, 1 ) ) {
+				return new WP_Error(
+					'newspack_popups_invalid_custom_css',
+					sprintf(
+						/* translators: %s: the offending part of the submitted CSS. */
+						__( 'The CSS must not contain "%s".', 'newspack-popups' ),
+						substr( $css, $at, 8 )
+					),
+					[ 'status' => 400 ]
+				);
+			}
+		}
+
+		return self::scan_css_structure( $css );
+	}
+
+	/**
+	 * Scan the CSS once, left to right, balancing braces, parentheses, comments
+	 * and quoted strings together. Strings and comments are tracked so their
+	 * contents do not count as structure: `content: "{"` leaves the brace count
+	 * alone. A bare newline (or carriage return or form feed) inside a string ends
+	 * it in the browser, so it fails here as an unterminated string.
+	 *
+	 * Known limitation: there is no url() state, so `/*` inside an unquoted
+	 * `url()` reads as a comment opener and is rejected. Quoting the URL avoids it.
+	 *
+	 * @param string $css CSS to scan.
+	 * @return true|WP_Error True when comments, strings, braces and parentheses
+	 *                       all close, WP_Error otherwise.
+	 */
+	private static function scan_css_structure( $css ) {
+		$length      = strlen( $css );
+		$depth       = 0;
+		$paren_depth = 0;
+		$quote       = '';
+		$in_comment  = false;
+
+		for ( $at = 0; $at < $length; $at++ ) {
+			$char = $css[ $at ];
+
+			if ( $in_comment ) {
+				if ( '*' === $char && $at + 1 < $length && '/' === $css[ $at + 1 ] ) {
+					$in_comment = false;
+					++$at;
+				}
+				continue;
+			}
+
+			if ( '' !== $quote ) {
+				if ( '\\' === $char ) {
+					// A CRLF line continuation is one escaped unit, so both its bytes
+					// are consumed here rather than the LF reading as a bare newline.
+					if ( $at + 2 < $length && "\r" === $css[ $at + 1 ] && "\n" === $css[ $at + 2 ] ) {
+						$at += 2;
+					} else {
+						++$at;
+					}
+				} elseif ( $quote === $char ) {
+					$quote = '';
+				} elseif ( "\n" === $char || "\r" === $char || "\f" === $char ) {
+					return self::unterminated_string_error();
+				}
+				continue;
+			}
+
+			if ( '/' === $char && $at + 1 < $length && '*' === $css[ $at + 1 ] ) {
+				$in_comment = true;
+				++$at;
+				continue;
+			}
+
+			if ( '"' === $char || "'" === $char ) {
+				$quote = $char;
+				continue;
+			}
+
+			if ( '{' === $char ) {
+				++$depth;
+			} elseif ( '}' === $char ) {
+				--$depth;
+				if ( 0 > $depth ) {
+					return new WP_Error(
+						'newspack_popups_invalid_custom_css',
+						__( 'The CSS contains an unbalanced brace.', 'newspack-popups' ),
+						[ 'status' => 400 ]
+					);
+				}
+			} elseif ( '(' === $char ) {
+				++$paren_depth;
+			} elseif ( ')' === $char && 0 < $paren_depth ) {
+				// Clamped at zero so a stray closer cannot cancel out a later unclosed
+				// opener and hide it from the check below.
+				--$paren_depth;
+			}
+		}
+
+		if ( $in_comment ) {
+			return new WP_Error(
+				'newspack_popups_invalid_custom_css',
+				__( 'The CSS contains an unclosed comment.', 'newspack-popups' ),
+				[ 'status' => 400 ]
+			);
+		}
+		if ( '' !== $quote ) {
+			return self::unterminated_string_error();
+		}
+		if ( 0 !== $depth ) {
+			return new WP_Error(
+				'newspack_popups_invalid_custom_css',
+				__( 'The CSS contains an unbalanced brace.', 'newspack-popups' ),
+				[ 'status' => 400 ]
+			);
+		}
+		if ( 0 !== $paren_depth ) {
+			return new WP_Error(
+				'newspack_popups_invalid_custom_css',
+				__( 'The CSS contains an unbalanced parenthesis.', 'newspack-popups' ),
+				[ 'status' => 400 ]
+			);
+		}
+
+		return true;
+	}
+
+	/**
+	 * The "unterminated string" error.
+	 *
+	 * @return WP_Error
+	 */
+	private static function unterminated_string_error() {
+		return new WP_Error(
+			'newspack_popups_invalid_custom_css',
+			__( 'The CSS contains an unterminated string.', 'newspack-popups' ),
+			[ 'status' => 400 ]
+		);
+	}
+
+	/**
+	 * Validate and persist custom CSS. An empty value removes the option.
+	 *
+	 * @param string $css Additional CSS.
+	 * @return true|WP_Error True on save, WP_Error for CSS that fails validation.
+	 */
+	public static function save_custom_css( $css ) {
+		$css   = is_string( $css ) ? $css : '';
+		$valid = self::validate_custom_css( $css );
+		if ( is_wp_error( $valid ) ) {
+			return $valid;
+		}
+		if ( '' === trim( $css ) ) {
+			delete_option( self::CUSTOM_CSS_OPTION_NAME );
+			return true;
+		}
+		update_option( self::CUSTOM_CSS_OPTION_NAME, $css );
+		return true;
+	}
+
+	/**
+	 * The overrides as a single CSS rule followed by the scoped custom CSS, or an
+	 * empty string.
 	 *
 	 * @return string
 	 */
 	public static function get_css() {
+		$css    = '';
 		$styles = self::get_styles();
-		if ( empty( $styles ) ) {
-			return '';
+		if ( ! empty( $styles ) ) {
+			$result = wp_style_engine_get_styles(
+				$styles,
+				[ 'selector' => ':root :where(' . self::SELECTOR . ')' ]
+			);
+			$css    = isset( $result['css'] ) ? $result['css'] : '';
 		}
-		$result = wp_style_engine_get_styles(
-			$styles,
-			[ 'selector' => ':root :where(.wp-block-newspack-popups-contextual-prompt)' ]
-		);
-		return isset( $result['css'] ) ? $result['css'] : '';
+		// Wraps bare declarations in :root :where( selector ) and substitutes `&`.
+		return $css . WP_Theme_JSON::process_blocks_custom_css( self::get_custom_css(), self::SELECTOR );
 	}
 
 	/**

@@ -44,9 +44,11 @@ const SAVED_STYLES = { color: { background: '#123456' }, border: { radius: '4px'
 const styledStatus = () => ( {
 	enabled: true,
 	can_manage: true,
+	can_edit_css: true,
 	fields: [ PROFILE_FIELD ],
 	is_block_theme: false,
 	styles: SAVED_STYLES,
+	custom_css: '',
 	style_defaults: { color: { background: '#f7f7f7' }, border: { radius: '10px' } },
 	style_palette: [ { name: 'Accent', slug: 'accent', color: '#178f15' } ],
 	style_font_sizes: [ { name: 'Small', slug: 'small', size: '14px' } ],
@@ -280,7 +282,46 @@ describe( 'ContextualPrompts tab', () => {
 		const { data } = apiFetch.mock.calls[ 1 ][ 0 ];
 		expect( data.styles ).toEqual( { color: { background: '#123456' }, border: { radius: '4px' } } );
 		expect( data.fields ).toEqual( {} );
+		// The endpoint rejects the key outright from a user who cannot write it.
+		expect( data ).not.toHaveProperty( 'custom_css' );
 		await waitFor( () => expect( drawerElement() ).toBeNull() );
+	} );
+
+	it( 'enables the drawer save on a custom CSS edit and sends it', async () => {
+		apiFetch.mockResolvedValueOnce( styledStatus() );
+		renderTab();
+		await openDrawer();
+
+		expect( drawer().getByRole( 'button', { name: 'Save' } ) ).toBeDisabled();
+
+		fireEvent.change( drawer().getByLabelText( 'Additional CSS' ), { target: { value: 'color: red;' } } );
+		expect( drawer().getByRole( 'button', { name: 'Save' } ) ).toBeEnabled();
+
+		apiFetch.mockResolvedValueOnce( { ...styledStatus(), custom_css: 'color: red;' } );
+		fireEvent.click( drawer().getByRole( 'button', { name: 'Save' } ) );
+
+		await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 2 ) );
+		const { data } = apiFetch.mock.calls[ 1 ][ 0 ];
+		expect( data.custom_css ).toBe( 'color: red;' );
+		// Sending the loaded snapshot back would clobber a styles save made elsewhere.
+		expect( data ).not.toHaveProperty( 'styles' );
+		await waitFor( () => expect( drawerElement() ).toBeNull() );
+	} );
+
+	it( 'confirms before Cancel discards a custom CSS edit', async () => {
+		apiFetch.mockResolvedValueOnce( styledStatus() );
+		renderTab();
+		await openDrawer();
+
+		fireEvent.change( drawer().getByLabelText( 'Additional CSS' ), { target: { value: 'color: red;' } } );
+
+		fireEvent.click( drawer().getByRole( 'button', { name: 'Cancel' } ) );
+		fireEvent.click( await screen.findByRole( 'button', { name: 'Discard Changes' } ) );
+		await waitFor( () => expect( drawerElement() ).toBeNull() );
+
+		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Edit Styles' } ) );
+		expect( drawer().getByLabelText( 'Additional CSS' ) ).toHaveValue( '' );
 	} );
 
 	it( 'leaves dirty profile fields unsaved and intact when the drawer saves', async () => {

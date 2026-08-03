@@ -3,9 +3,8 @@
  *
  * The block is the styled container: design (background, text color, padding,
  * border, gap) comes from its own supports, with site-wide defaults supplied
- * as theme.json data. Its two children are fixed — the copy paragraph (text
- * editable) and the CTA, which is disabled outright: it renders from site
- * settings and is not editable per-story.
+ * as theme.json data. Its two children are fixed and edited content-only: their
+ * text and settings stay editable per story, nothing else.
  *
  * Inserting the block generates its copy automatically; the block toolbar and
  * sidebar offer regeneration with per-candidate Apply.
@@ -16,7 +15,7 @@
  */
 import { __, sprintf } from '@wordpress/i18n';
 import { useEffect, useRef, useState } from '@wordpress/element';
-import { useSelect, useDispatch, select as coreSelect, dispatch as coreDispatch } from '@wordpress/data';
+import { useSelect, useDispatch, select as coreSelect } from '@wordpress/data';
 import { InspectorControls, useBlockProps, useInnerBlocksProps, store as blockEditorStore } from '@wordpress/block-editor';
 import { createBlock, createBlocksFromInnerBlocksTemplate } from '@wordpress/blocks';
 import {
@@ -40,17 +39,18 @@ import {
 } from './candidates';
 
 // The CTA follows the site's reader-revenue setup: the donate block when
-// Newspack donations are native, a plain button otherwise. The button defaults
-// to the donor landing page configured in Campaigns settings, so conversions
-// through it count the reader as a donor; publishers can retarget it per-story.
-const DONATIONS_NATIVE = window.newspack_popups_blocks_data?.donations_native ?? true;
-const DONOR_LANDING_URL = window.newspack_popups_blocks_data?.donor_landing_url || undefined;
+// Newspack donations are native, a plain button otherwise. The button's label
+// and destination are resolved server-side from Campaigns settings; publishers
+// can retarget it per-story.
+export const DONATIONS_NATIVE = window.newspack_popups_blocks_data?.donations_native ?? true;
+const BUTTON_TEXT = window.newspack_popups_blocks_data?.contextual_prompts_button_text || __( 'Donate', 'newspack-popups' );
+const BUTTON_URL = window.newspack_popups_blocks_data?.contextual_prompts_button_url || undefined;
 
 export const getTemplate = () => [
 	[ 'core/paragraph', {} ],
 	DONATIONS_NATIVE
 		? [ 'newspack-blocks/donate', { className: 'is-style-modern' } ]
-		: [ 'core/buttons', {}, [ [ 'core/button', { text: __( 'Donate', 'newspack-popups' ), url: DONOR_LANDING_URL } ] ] ],
+		: [ 'core/buttons', {}, [ [ 'core/button', { text: BUTTON_TEXT, url: BUTTON_URL } ] ] ],
 ];
 
 /**
@@ -66,7 +66,7 @@ export const createPromptBlock = copy => {
 	return createBlock( 'newspack-popups/contextual-prompt', {}, createBlocksFromInnerBlocksTemplate( template ) );
 };
 
-export const ContextualPromptEditor = ( { clientId } ) => {
+export const ContextualPromptEditor = ( { clientId, attributes } ) => {
 	const blockProps = useBlockProps();
 	const innerBlocksProps = useInnerBlocksProps( blockProps, {
 		template: getTemplate(),
@@ -97,10 +97,33 @@ export const ContextualPromptEditor = ( { clientId } ) => {
 	// Generation needs a real post: in the Site Editor getCurrentPostId() is a
 	// template id string, which the endpoint cannot use.
 	const canGenerate = Number.isInteger( postId );
-	const { updateBlockAttributes } = useDispatch( blockEditorStore );
+	const {
+		updateBlockAttributes,
+		setBlockEditingMode,
+		unsetBlockEditingMode,
+		__unstableMarkNextChangeAsNotPersistent: markNextChangeAsNotPersistent,
+	} = useDispatch( blockEditorStore );
 
-	// Both children stay selectable so publishers can tweak them per-story; the
-	// template lock prevents moving or removing them.
+	// The template lock alone is defeatable: core offers every locked block an
+	// Unlock button whose `lock` attribute overrides the template. Content-only
+	// editing mode withholds it. Set per block rather than through
+	// `templateLock: 'contentOnly'`, which would swap this block's inspector for
+	// a pattern-style content list. Non-persistent because editing mode is UI
+	// state, and persisting it would dirty a freshly opened post.
+	const descendantClientIds = useSelect( select => select( blockEditorStore ).getClientIdsOfDescendants( clientId ).join( ',' ), [ clientId ] );
+	useEffect( () => {
+		const ids = descendantClientIds ? descendantClientIds.split( ',' ) : [];
+		ids.forEach( id => {
+			markNextChangeAsNotPersistent();
+			setBlockEditingMode( id, 'contentOnly' );
+		} );
+		return () =>
+			ids.forEach( id => {
+				markNextChangeAsNotPersistent();
+				unsetBlockEditingMode( id );
+			} );
+	}, [ descendantClientIds ] );
+
 	const ctaClientId = useSelect(
 		select => {
 			const blockEditor = select( blockEditorStore );
@@ -119,10 +142,19 @@ export const ContextualPromptEditor = ( { clientId } ) => {
 	);
 	useEffect( () => {
 		if ( ctaClientId && accentColor && ctaButtonColor !== accentColor ) {
-			coreDispatch( blockEditorStore ).__unstableMarkNextChangeAsNotPersistent();
+			markNextChangeAsNotPersistent();
 			updateBlockAttributes( ctaClientId, { buttonColor: accentColor } );
 		}
 	}, [ ctaClientId, accentColor, ctaButtonColor ] );
+
+	// Mirrors normalize_cta()'s render-time repair, so the canvas does not preview
+	// a layout the front end drops. Non-persistent, so opening a post stays clean.
+	useEffect( () => {
+		if ( DONATIONS_NATIVE && attributes.layout !== undefined ) {
+			markNextChangeAsNotPersistent();
+			updateBlockAttributes( clientId, { layout: undefined } );
+		}
+	}, [ clientId, attributes.layout ] );
 
 	const [ generating, setGenerating ] = useState( false );
 	const [ candidates, setCandidates ] = useState( [] );

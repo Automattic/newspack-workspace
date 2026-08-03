@@ -7,10 +7,7 @@
 	"description": "A story-specific donation ask. Copy is generated from the story and editable; the call to action follows your donation settings.",
 	"attributes": {
 		"layout": {
-			"type": "object",
-			"default": {
-				"type": "default"
-			}
+			"type": "object"
 		}
 	},
 	"supports": {
@@ -21,13 +18,6 @@
 		"html": false,
 		"multiple": false,
 		"reusable": false,
-		"layout": {
-			"default": {
-				"type": "default"
-			},
-			"allowJustification": false,
-			"allowSwitching": false
-		},
 		"color": {
 			"background": true,
 			"text": true

@@ -6,6 +6,8 @@
  * allowlist sanitization, style-engine CSS output, and the editor delivery
  * path. The CSS must sit at :root :where() specificity so the block's
  * theme.json default design loses by order and per-block styles still win.
+ * Publisher-written custom CSS rides along in its own option, validated and
+ * scoped to the block.
  *
  * @package Newspack_Popups
  */
@@ -28,6 +30,7 @@ class ContextualPromptStylesTest extends WP_UnitTestCase {
 		parent::set_up();
 		update_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION, true );
 		delete_option( Newspack_Popups_Contextual_Prompt_Styles::OPTION_NAME );
+		delete_option( Newspack_Popups_Contextual_Prompt_Styles::CUSTOM_CSS_OPTION_NAME );
 	}
 
 	/**
@@ -406,5 +409,332 @@ class ContextualPromptStylesTest extends WP_UnitTestCase {
 
 		$this->assertSame( '#f7f7f7', $defaults['color']['background'] );
 		$this->assertArrayNotHasKey( 'text', $defaults['color'] );
+	}
+
+	/**
+	 * Custom CSS renders inside a STYLE element, so it must not close it, nor end
+	 * in a prefix of a closing tag the next stylesheet could complete.
+	 */
+	public function test_validate_custom_css_rejects_a_premature_style_close() {
+		$rejected = [
+			'p { color: red; } </style>',
+			'p { color: red; } </STYLE >',
+			'p { color: red; } </style/',
+			'p { color: red; } </style',
+			'p { color: red; } </sty',
+			'p { color: red; } <',
+		];
+
+		foreach ( $rejected as $css ) {
+			$result = Newspack_Popups_Contextual_Prompt_Styles::validate_custom_css( $css );
+
+			$this->assertWPError( $result, $css );
+			$this->assertSame( 400, $result->get_error_data()['status'] );
+		}
+	}
+
+	/**
+	 * An unclosed comment would comment out every style appended to the shared
+	 * global-styles handle after it.
+	 */
+	public function test_validate_custom_css_rejects_an_unclosed_comment() {
+		$rejected = [
+			"p { color: red; }\n/* unclosed comment",
+			'/* unclosed',
+		];
+
+		foreach ( $rejected as $css ) {
+			$result = Newspack_Popups_Contextual_Prompt_Styles::validate_custom_css( $css );
+
+			$this->assertWPError( $result, $css );
+			$this->assertSame( 400, $result->get_error_data()['status'] );
+		}
+	}
+
+	/**
+	 * An unbalanced opening brace, for the same reason.
+	 */
+	public function test_validate_custom_css_rejects_an_unbalanced_opening_brace() {
+		$result = Newspack_Popups_Contextual_Prompt_Styles::validate_custom_css( 'p { color: red;' );
+
+		$this->assertWPError( $result );
+		$this->assertSame( 400, $result->get_error_data()['status'] );
+	}
+
+	/**
+	 * An unbalanced closing brace, for the same reason.
+	 */
+	public function test_validate_custom_css_rejects_an_unbalanced_closing_brace() {
+		$rejected = [
+			'p { color: red; } }',
+			'p { } }',
+		];
+
+		foreach ( $rejected as $css ) {
+			$result = Newspack_Popups_Contextual_Prompt_Styles::validate_custom_css( $css );
+
+			$this->assertWPError( $result, $css );
+			$this->assertSame( 400, $result->get_error_data()['status'] );
+		}
+	}
+
+	/**
+	 * An unclosed parenthesis, for the same reason: an unterminated function
+	 * consumes input until its closer, so it swallows whatever follows.
+	 */
+	public function test_validate_custom_css_rejects_an_unbalanced_opening_parenthesis() {
+		$rejected = [
+			'& { background: url( }',
+			'& { color: rgb(0,0,0 }',
+		];
+
+		foreach ( $rejected as $css ) {
+			$result = Newspack_Popups_Contextual_Prompt_Styles::validate_custom_css( $css );
+
+			$this->assertWPError( $result, $css );
+			$this->assertSame( 400, $result->get_error_data()['status'] );
+		}
+	}
+
+	/**
+	 * Balanced parentheses pass, and a stray closer is harmless in CSS so it
+	 * passes too. Parentheses inside strings and comments are text, not structure.
+	 */
+	public function test_validate_custom_css_accepts_balanced_and_stray_parentheses() {
+		$accepted = [
+			"& { background: url( 'a.png' ); width: calc( 100% - 10px ); }",
+			'& { width: calc( 100% ) ); }',
+			'& { content: "("; }',
+			'& { /* ( */ color: red; }',
+		];
+
+		foreach ( $accepted as $css ) {
+			$this->assertTrue( Newspack_Popups_Contextual_Prompt_Styles::validate_custom_css( $css ), $css );
+		}
+	}
+
+	/**
+	 * Everything else passes.
+	 */
+	public function test_validate_custom_css_accepts_ordinary_css() {
+		$accepted = [
+			'',
+			'color: red;',
+			'& a { text-decoration: underline; }',
+			'p { /* a complete comment */ color: red; }',
+			'p::after { content: "</styles"; }',
+		];
+
+		foreach ( $accepted as $css ) {
+			$this->assertTrue( Newspack_Popups_Contextual_Prompt_Styles::validate_custom_css( $css ), $css );
+		}
+	}
+
+	/**
+	 * A comment opener immediately followed by a slash opens a comment that never
+	 * closes.
+	 */
+	public function test_validate_custom_css_rejects_a_comment_that_never_closes() {
+		$result = Newspack_Popups_Contextual_Prompt_Styles::validate_custom_css( '/*/' );
+
+		$this->assertWPError( $result );
+		$this->assertSame( 400, $result->get_error_data()['status'] );
+	}
+
+	/**
+	 * An unterminated quoted string, for the same reason.
+	 */
+	public function test_validate_custom_css_rejects_an_unterminated_string() {
+		$result = Newspack_Popups_Contextual_Prompt_Styles::validate_custom_css( '& { content: "unterminated' );
+
+		$this->assertWPError( $result );
+		$this->assertSame( 400, $result->get_error_data()['status'] );
+	}
+
+	/**
+	 * A brace, comment marker or escaped quote inside a quoted string is text,
+	 * not structure.
+	 */
+	public function test_validate_custom_css_accepts_structural_characters_inside_strings() {
+		$accepted = [
+			'&::before { content: "{"; }',
+			'&::after { content: "}"; }',
+			'&::before { content: "/*"; }',
+			'&::before { content: "*/"; }',
+			'& { background: url("data:image/svg+xml;utf8,<svg><text>{</text></svg>"); }',
+			'p { content: "a\\"b"; }',
+			"p { content: 'a\\'b'; }",
+		];
+
+		foreach ( $accepted as $css ) {
+			$this->assertTrue( Newspack_Popups_Contextual_Prompt_Styles::validate_custom_css( $css ), $css );
+		}
+	}
+
+	/**
+	 * A bare newline ends a string in the browser, so a comment opened after it
+	 * is real and the CSS must be rejected. All three line endings count.
+	 */
+	public function test_validate_custom_css_rejects_a_string_broken_by_a_bare_newline() {
+		$rejected = [
+			".a { content: \"x\n/*\n\" }",
+			".a { content: \"x\r\n/*\r\n\" }",
+			".a { content: \"x\f/*\f\" }",
+		];
+
+		foreach ( $rejected as $css ) {
+			$result = Newspack_Popups_Contextual_Prompt_Styles::validate_custom_css( $css );
+
+			$this->assertWPError( $result, $css );
+			$this->assertSame( 400, $result->get_error_data()['status'] );
+		}
+	}
+
+	/**
+	 * A backslash line continuation keeps the string open across the line break,
+	 * so only a bare newline fails. Both line-ending forms must keep passing.
+	 */
+	public function test_validate_custom_css_accepts_a_backslash_line_continuation_in_a_string() {
+		$accepted = [
+			"p { content: \"a\\\nb\"; }",
+			"p { content: \"a\\\r\nb\"; }",
+		];
+
+		foreach ( $accepted as $css ) {
+			$this->assertTrue( Newspack_Popups_Contextual_Prompt_Styles::validate_custom_css( $css ), $css );
+		}
+	}
+
+	/**
+	 * Saving rejects the same CSS the validator does, leaving the stored value
+	 * standing.
+	 */
+	public function test_save_custom_css_rejects_invalid_css() {
+		Newspack_Popups_Contextual_Prompt_Styles::save_custom_css( 'color: red;' );
+
+		$result = Newspack_Popups_Contextual_Prompt_Styles::save_custom_css( 'color: red; </style>' );
+
+		$this->assertWPError( $result );
+		$this->assertSame( 'color: red;', Newspack_Popups_Contextual_Prompt_Styles::get_custom_css() );
+	}
+
+	/**
+	 * Saving rejects structurally invalid CSS the same way, leaving the stored
+	 * value standing.
+	 */
+	public function test_save_custom_css_rejects_structurally_invalid_css() {
+		Newspack_Popups_Contextual_Prompt_Styles::save_custom_css( 'color: red;' );
+
+		$result = Newspack_Popups_Contextual_Prompt_Styles::save_custom_css( 'p { color: red;' );
+
+		$this->assertWPError( $result );
+		$this->assertSame( 'color: red;', Newspack_Popups_Contextual_Prompt_Styles::get_custom_css() );
+	}
+
+	/**
+	 * An empty value removes the option entirely.
+	 */
+	public function test_save_empty_custom_css_deletes_option() {
+		Newspack_Popups_Contextual_Prompt_Styles::save_custom_css( 'color: red;' );
+		$this->assertNotEmpty( get_option( Newspack_Popups_Contextual_Prompt_Styles::CUSTOM_CSS_OPTION_NAME ) );
+
+		$this->assertTrue( Newspack_Popups_Contextual_Prompt_Styles::save_custom_css( '' ) );
+		$this->assertFalse( get_option( Newspack_Popups_Contextual_Prompt_Styles::CUSTOM_CSS_OPTION_NAME ) );
+		$this->assertSame( '', Newspack_Popups_Contextual_Prompt_Styles::get_custom_css() );
+	}
+
+	/**
+	 * Bare declarations are wrapped in the block's :root :where() band, and `&`
+	 * stands for the block in a nested rule.
+	 */
+	public function test_custom_css_is_scoped_to_the_block() {
+		Newspack_Popups_Contextual_Prompt_Styles::save_custom_css( "color: red;\n& a { text-decoration: underline; }" );
+
+		$css = Newspack_Popups_Contextual_Prompt_Styles::get_css();
+
+		$this->assertStringContainsString( ':root :where(.wp-block-newspack-popups-contextual-prompt){color: red;}', $css );
+		$this->assertStringContainsString( ':root :where(.wp-block-newspack-popups-contextual-prompt a){text-decoration: underline;}', $css );
+	}
+
+	/**
+	 * The custom CSS follows the style-engine output, so at the equal specificity
+	 * the two share, the publisher's own rule wins.
+	 */
+	public function test_custom_css_follows_the_style_engine_output() {
+		Newspack_Popups_Contextual_Prompt_Styles::save_styles( [ 'color' => [ 'background' => '#123456' ] ] );
+		Newspack_Popups_Contextual_Prompt_Styles::save_custom_css( 'background-color: #abcdef;' );
+
+		$css = Newspack_Popups_Contextual_Prompt_Styles::get_css();
+
+		$this->assertLessThan( strpos( $css, '#abcdef' ), strpos( $css, '#123456' ) );
+	}
+
+	/**
+	 * Custom CSS with no style overrides beside it still reaches both delivery
+	 * paths.
+	 */
+	public function test_custom_css_ships_without_any_style_overrides() {
+		Newspack_Popups_Contextual_Prompt_Styles::save_custom_css( 'color: red;' );
+		$this->assertSame( [], Newspack_Popups_Contextual_Prompt_Styles::get_styles() );
+
+		$css = Newspack_Popups_Contextual_Prompt_Styles::get_css();
+		$this->assertStringContainsString( 'color: red;', $css );
+
+		$settings = Newspack_Popups_Contextual_Prompt_Styles::filter_block_editor_settings( [ 'styles' => [] ] );
+		$this->assertCount( 1, $settings['styles'] );
+		$this->assertSame( $css, $settings['styles'][0]['css'] );
+	}
+
+	/**
+	 * Custom CSS inherits init()'s opt-in gate.
+	 */
+	public function test_custom_css_is_not_delivered_before_the_opt_in() {
+		if ( wp_is_block_theme() ) {
+			$this->markTestSkipped( 'Block themes keep the class inert regardless of the opt-in.' );
+		}
+		Newspack_Popups_Contextual_Prompt_Styles::save_custom_css( 'color: red;' );
+		$callback = [ 'Newspack_Popups_Contextual_Prompt_Styles', 'enqueue_front_end_styles' ];
+		remove_action( 'wp_footer', $callback, 1 );
+
+		delete_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION );
+		Newspack_Popups_Contextual_Prompt_Styles::init();
+
+		$this->assertFalse( has_action( 'wp_footer', $callback ) );
+	}
+
+	/**
+	 * And its block-theme gate, where the Site Editor's own Additional CSS owns
+	 * the block.
+	 */
+	public function test_custom_css_is_not_delivered_on_a_block_theme() {
+		$stylesheet = $this->get_any_block_theme_stylesheet();
+		if ( ! $stylesheet ) {
+			$this->markTestSkipped( 'No block theme installed.' );
+		}
+		Newspack_Popups_Contextual_Prompt_Styles::save_custom_css( 'color: red;' );
+		$callback = [ 'Newspack_Popups_Contextual_Prompt_Styles', 'enqueue_front_end_styles' ];
+		remove_action( 'wp_footer', $callback, 1 );
+
+		$original = get_stylesheet();
+		switch_theme( $stylesheet );
+		Newspack_Popups_Contextual_Prompt_Styles::init();
+		$hooked = has_action( 'wp_footer', $callback );
+		switch_theme( $original );
+
+		$this->assertFalse( $hooked );
+	}
+
+	/**
+	 * Find any installed block theme stylesheet slug.
+	 *
+	 * @return string|null Theme stylesheet, or null if unavailable.
+	 */
+	private function get_any_block_theme_stylesheet() {
+		foreach ( wp_get_themes() as $stylesheet => $theme ) {
+			if ( method_exists( $theme, 'is_block_theme' ) && $theme->is_block_theme() ) {
+				return $stylesheet;
+			}
+		}
+		return null;
 	}
 }

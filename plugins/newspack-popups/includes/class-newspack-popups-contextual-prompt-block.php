@@ -23,7 +23,9 @@ final class Newspack_Popups_Contextual_Prompt_Block {
 	 * Register hooks.
 	 */
 	public static function init() {
-		add_action( 'init', [ __CLASS__, 'register_block' ] );
+		// Priority 20: the supports depend on whether newspack-blocks/donate is
+		// registered, which happens on default-priority init.
+		add_action( 'init', [ __CLASS__, 'register_block' ], 20 );
 		add_filter( 'wp_theme_json_data_default', [ __CLASS__, 'default_design' ] );
 		add_filter( 'render_block_data', [ __CLASS__, 'prepare_block_data' ] );
 		add_filter( 'render_block_' . self::BLOCK_NAME, [ __CLASS__, 'suppress_empty_prompt' ], 9, 2 );
@@ -241,6 +243,66 @@ final class Newspack_Popups_Contextual_Prompt_Block {
 	}
 
 	/**
+	 * The block's layout supports: a flex column for a plain-button CTA, so core
+	 * offers its own orientation toggle, flow layout for the full-width donate
+	 * form. Must stay identical to LAYOUT_SUPPORT in
+	 * src/blocks/contextual-prompt/index.js, which client registration applies.
+	 *
+	 * @return array
+	 */
+	private static function layout_support() {
+		if ( self::use_donate_block() ) {
+			return [
+				'default'            => [ 'type' => 'default' ],
+				'allowSwitching'     => false,
+				'allowJustification' => false,
+				'allowOrientation'   => false,
+				// Without this core still renders an empty "Layout" section.
+				'allowEditing'       => false,
+			];
+		}
+
+		return [
+			// justifyContent: stretch, since core's flex layout zeroes child
+			// margins and the copy and button would otherwise shrink-wrap.
+			'default'                => [
+				'type'           => 'flex',
+				'orientation'    => 'vertical',
+				'justifyContent' => 'stretch',
+			],
+			'allowSwitching'         => false,
+			// Paired with orientation: the toggle rewrites the whole layout
+			// attribute, remapping stretch to flex-start, and only a justification
+			// control can put it back.
+			'allowJustification'     => true,
+			'allowOrientation'       => true,
+			'allowVerticalAlignment' => true,
+		];
+	}
+
+	/**
+	 * The label on a plain-button CTA: the site-wide setting, or "Donate" when
+	 * the publisher has left it empty.
+	 *
+	 * @return string
+	 */
+	public static function get_button_text() {
+		$text = trim( (string) get_option( 'newspack_contextual_prompts_button_text', '' ) );
+		return '' !== $text ? $text : __( 'Donate', 'newspack-popups' );
+	}
+
+	/**
+	 * Where a plain-button CTA points: the site-wide setting, or the donor
+	 * landing page configured in Campaigns settings when it is empty.
+	 *
+	 * @return string
+	 */
+	public static function get_button_url() {
+		$url = trim( (string) get_option( 'newspack_contextual_prompts_button_url', '' ) );
+		return '' !== $url ? $url : Newspack_Popups::get_donor_landing_url();
+	}
+
+	/**
 	 * Make the donate CTA inside a Contextual Prompt use the theme's accent
 	 * color instead of the donate block's default. Always resolved at render so
 	 * it tracks theme changes — any stored buttonColor (stamped by the editor
@@ -282,10 +344,7 @@ final class Newspack_Popups_Contextual_Prompt_Block {
 				'description' => __( 'A story-specific donation ask. Copy is generated from the story and editable; the call to action follows your donation settings.', 'newspack-popups' ),
 				'category'    => 'newspack',
 				'attributes'  => [
-					'layout' => [
-						'type'    => 'object',
-						'default' => [ 'type' => 'default' ],
-					],
+					'layout' => [ 'type' => 'object' ],
 				],
 				'supports'    => [
 					'align'                => [ 'wide', 'full' ],
@@ -293,11 +352,7 @@ final class Newspack_Popups_Contextual_Prompt_Block {
 					'lock'                 => false,
 					'multiple'             => false,
 					'reusable'             => false,
-					'layout'               => [
-						'default'            => [ 'type' => 'default' ],
-						'allowJustification' => false,
-						'allowSwitching'     => false,
-					],
+					'layout'               => self::layout_support(),
 					'shadow'               => true,
 					'color'                => [
 						'background' => true,
@@ -443,8 +498,9 @@ final class Newspack_Popups_Contextual_Prompt_Block {
 	 * A block's CTA type is fixed when it is inserted, so after a change of
 	 * donation platform the stored CTA can disagree with the site. Normalize at
 	 * render: the native platform renders the donate form, off-site renders a
-	 * button to the donor landing page — or copy only when none is configured.
-	 * Matching CTAs pass through untouched, preserving per-story customization.
+	 * button carrying the site-wide label and destination, or copy only when no
+	 * destination is configured anywhere. Matching CTAs pass through untouched,
+	 * preserving per-story customization.
 	 *
 	 * @param array $parsed_block Parsed prompt block.
 	 * @return array
@@ -459,6 +515,9 @@ final class Newspack_Popups_Contextual_Prompt_Block {
 			if ( 'core/buttons' === $cta['name'] ) {
 				$parsed_block['innerBlocks'][ $cta['index'] ] = self::build_donate_child();
 			}
+			// A button-era layout attribute has nothing to apply to the full-width
+			// form, and template sync can swap the CTA child while leaving it behind.
+			unset( $parsed_block['attrs']['layout'] );
 			return $parsed_block;
 		}
 
@@ -469,13 +528,13 @@ final class Newspack_Popups_Contextual_Prompt_Block {
 			|| ! self::buttons_have_destination( $parsed_block['innerBlocks'][ $cta['index'] ] );
 
 		if ( $needs_destination ) {
-			$url = Newspack_Popups::get_donor_landing_url();
+			$url = self::get_button_url();
 			if ( '' === $url ) {
 				// No destination to point a button at: render the copy alone
 				// rather than a dead button or a form on a disabled platform.
 				return self::remove_child( $parsed_block, $cta['index'] );
 			}
-			$parsed_block['innerBlocks'][ $cta['index'] ] = self::build_buttons_child( $url, __( 'Donate', 'newspack-popups' ) );
+			$parsed_block['innerBlocks'][ $cta['index'] ] = self::build_buttons_child( $url, self::get_button_text() );
 		}
 
 		return $parsed_block;

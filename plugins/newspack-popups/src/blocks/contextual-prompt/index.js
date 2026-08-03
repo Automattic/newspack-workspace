@@ -16,7 +16,33 @@ import { Icon, megaphone } from '@wordpress/icons';
  */
 import './editor.scss';
 import metadata from './block.json';
-import { ContextualPromptEditor } from './edit';
+import { ContextualPromptEditor, DONATIONS_NATIVE } from './edit';
+
+// A flex column for a plain-button CTA, so core offers its own orientation
+// toggle, flow layout for the full-width donate form. Must stay identical to
+// layout_support() in class-newspack-popups-contextual-prompt-block.php;
+// block.json carries no layout supports, since both of these override it.
+const LAYOUT_SUPPORT = DONATIONS_NATIVE
+	? {
+			default: { type: 'default' },
+			allowSwitching: false,
+			allowJustification: false,
+			allowOrientation: false,
+			// Without this core still renders an empty "Layout" section.
+			allowEditing: false,
+	  }
+	: {
+			// justifyContent: stretch, since core's flex layout zeroes child margins
+			// and the copy and button would otherwise shrink-wrap.
+			default: { type: 'flex', orientation: 'vertical', justifyContent: 'stretch' },
+			allowSwitching: false,
+			// Paired with orientation: the toggle rewrites the whole layout
+			// attribute, remapping stretch to flex-start, and only a justification
+			// control can put it back.
+			allowJustification: true,
+			allowOrientation: true,
+			allowVerticalAlignment: true,
+	  };
 
 const Save = () => {
 	const blockProps = useBlockProps.save();
@@ -38,7 +64,7 @@ export const registerContextualPromptBlock = () => {
 
 	registerBlockType( metadata.name, {
 		...metadata,
-		supports: { ...metadata.supports, inserter: isInsertable },
+		supports: { ...metadata.supports, inserter: isInsertable, layout: LAYOUT_SUPPORT },
 		// Registered here rather than in block.json, whose i18n schema does not
 		// translate example content. Feeds the inserter preview and the one the
 		// Site Editor shows above Styles > Blocks. The template swaps this CTA for

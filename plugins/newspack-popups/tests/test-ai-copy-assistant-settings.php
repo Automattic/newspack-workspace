@@ -36,6 +36,10 @@ class AiCopyAssistantSettingsTest extends WP_UnitTestCase {
 		delete_option( 'newspack_contextual_prompts_override_body' );
 		delete_option( 'newspack_contextual_prompts_override_label' );
 		delete_option( 'newspack_contextual_prompts_override_url' );
+		// The field list is gated, so a native site would not report these keys
+		// to the loop below.
+		delete_option( 'newspack_contextual_prompts_button_text' );
+		delete_option( 'newspack_contextual_prompts_button_url' );
 		foreach ( wp_list_pluck( Newspack_Popups_Settings::get_ai_copy_assistant_fields(), 'key' ) as $key ) {
 			delete_option( $key );
 		}
@@ -105,6 +109,54 @@ class AiCopyAssistantSettingsTest extends WP_UnitTestCase {
 		$this->assertNotContains( Newspack_Popups_Settings::OVERRIDE_CTA_OPTION, $button_keys );
 		$this->assertContains( 'newspack_contextual_prompts_override_label', $button_keys );
 		$this->assertContains( 'newspack_contextual_prompts_override_url', $button_keys );
+	}
+
+	/**
+	 * The button label and URL exist only where the CTA is a plain button.
+	 */
+	public function test_button_fields_only_on_non_native_sites() {
+		add_filter( 'newspack_contextual_prompts_use_donate_block', '__return_false' );
+		$button_keys = wp_list_pluck( Newspack_Popups_Settings::get_ai_copy_assistant_fields(), 'key' );
+		$this->assertContains( 'newspack_contextual_prompts_button_text', $button_keys );
+		$this->assertContains( 'newspack_contextual_prompts_button_url', $button_keys );
+		remove_filter( 'newspack_contextual_prompts_use_donate_block', '__return_false' );
+
+		add_filter( 'newspack_contextual_prompts_use_donate_block', '__return_true' );
+		$native_keys = wp_list_pluck( Newspack_Popups_Settings::get_ai_copy_assistant_fields(), 'key' );
+		$this->assertNotContains( 'newspack_contextual_prompts_button_text', $native_keys );
+		$this->assertNotContains( 'newspack_contextual_prompts_button_url', $native_keys );
+
+		// Saving follows the same list, so a native site writes neither.
+		Newspack_Popups_Settings::save_ai_copy_assistant_fields(
+			[
+				'newspack_contextual_prompts_button_text' => 'Support us',
+				'newspack_contextual_prompts_button_url'  => 'https://example.com/give/',
+			]
+		);
+		$this->assertSame( '', get_option( 'newspack_contextual_prompts_button_text', '' ) );
+		$this->assertSame( '', get_option( 'newspack_contextual_prompts_button_url', '' ) );
+	}
+
+	/**
+	 * The button URL is esc_url_raw'd like the override URL; the label takes the
+	 * default text sanitisation.
+	 */
+	public function test_button_fields_are_sanitized() {
+		add_filter( 'newspack_contextual_prompts_use_donate_block', '__return_false' );
+
+		Newspack_Popups_Settings::save_ai_copy_assistant_fields(
+			[
+				'newspack_contextual_prompts_button_text' => '<script>alert(1)</script>Support us',
+				'newspack_contextual_prompts_button_url'  => 'javascript:alert(1)',
+			]
+		);
+		$this->assertSame( 'Support us', get_option( 'newspack_contextual_prompts_button_text' ) );
+		$this->assertSame( '', get_option( 'newspack_contextual_prompts_button_url' ), 'A javascript: destination is dropped.' );
+
+		Newspack_Popups_Settings::save_ai_copy_assistant_fields(
+			[ 'newspack_contextual_prompts_button_url' => 'https://example.com/give/' ]
+		);
+		$this->assertSame( 'https://example.com/give/', get_option( 'newspack_contextual_prompts_button_url' ) );
 	}
 
 	/**
