@@ -1,3 +1,23 @@
+# newspack-components [4.6.0](https://github.com/Automattic/newspack-workspace/compare/newspack-components@4.5.0...newspack-components@4.6.0) (2026-08-03)
+
+
+### Bug Fixes
+
+* **audience:** unblock the ESP connect flow in Integrations ([#258](https://github.com/Automattic/newspack-workspace/issues/258)) ([93f3a67](https://github.com/Automattic/newspack-workspace/commit/93f3a67a825b95e0e0f43ac09dad536ee5ccf6f2))
+* **components:** balance section-header description text-wrap ([#624](https://github.com/Automattic/newspack-workspace/issues/624)) ([e6b7076](https://github.com/Automattic/newspack-workspace/commit/e6b70764f63ad98c781ae648728e92819308ace5))
+* **components:** render routed content when no tab owns the route ([#672](https://github.com/Automattic/newspack-workspace/issues/672)) ([ff2ba8d](https://github.com/Automattic/newspack-workspace/commit/ff2ba8d3182e6be0e8e1ebdb7a7af666786ba93e))
+
+
+### Features
+
+* explicit breadcrumb API for Newspack admin headers ([#472](https://github.com/Automattic/newspack-workspace/issues/472)) ([7c43233](https://github.com/Automattic/newspack-workspace/commit/7c4323301f5323822937e93274c4fda4279a787f))
+
+
+### Dependencies
+
+* **newspack-icons:** upgraded to 1.1.0
+* **newspack-scripts:** upgraded to 5.10.0
+
 # newspack-components [4.6.0-alpha.1](https://github.com/Automattic/newspack-workspace/compare/newspack-components@4.5.0...newspack-components@4.6.0-alpha.1) (2026-07-23)
 
 

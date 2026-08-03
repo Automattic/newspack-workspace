@@ -1,6 +1,6 @@
 {
 	"name": "newspack-components",
-	"version": "4.6.0-alpha.1",
+	"version": "4.6.0",
 	"description": "Newspack design system components",
 	"author": "Automattic",
 	"license": "GPL-2.0-or-later",
@@ -30,7 +30,7 @@
 		"classnames": "^2.3.1",
 		"lodash": "^4.17.21",
 		"moment-range": "^3.1.1",
-		"newspack-icons": "workspace:*",
+		"newspack-icons": "1.1.0",
 		"qs": "^6.15.2",
 		"react-router-dom": "^5.3.4",
 		"@babel/runtime": "^7.29.7",
@@ -58,7 +58,7 @@
 		"@babel/preset-env": "^7.29.7",
 		"@babel/preset-react": "^7.29.7",
 		"@babel/preset-typescript": "^7.29.7",
-		"newspack-scripts": "workspace:*",
+		"newspack-scripts": "5.10.0",
 		"recursive-copy": "^2.0.0"
 	},
 	"babel": {
