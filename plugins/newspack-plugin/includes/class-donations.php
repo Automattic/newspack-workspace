@@ -808,6 +808,8 @@ class Donations {
 			wp_parse_str( $parsed_url['query'], $params );
 		}
 
+		$params = self::merge_request_utm_params( $params );
+
 		if ( function_exists( 'wpcom_vip_url_to_postid' ) ) {
 			$referer_post_id = wpcom_vip_url_to_postid( $referer );
 		} else {
@@ -909,6 +911,27 @@ class Donations {
 			\wp_safe_redirect( $checkout_url );
 			exit;
 		}
+	}
+
+	/**
+	 * Merge utm_* parameters from the current request into a params array.
+	 *
+	 * The passthrough loop in process_donation_request() historically only saw
+	 * params parsed from the referer URL, so utm params on a direct (cold)
+	 * donation URL — which has no referer — were dropped. Request params win
+	 * over referer params.
+	 *
+	 * @param array $params Params parsed from the referer query string.
+	 * @return array Params with the request's utm_* params merged in.
+	 */
+	public static function merge_request_utm_params( $params ) {
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		foreach ( wp_unslash( $_GET ) as $key => $value ) {
+			if ( 'utm' === substr( $key, 0, 3 ) && is_string( $value ) && '' !== $value ) {
+				$params[ sanitize_text_field( $key ) ] = sanitize_text_field( $value );
+			}
+		}
+		return $params;
 	}
 
 	/**
