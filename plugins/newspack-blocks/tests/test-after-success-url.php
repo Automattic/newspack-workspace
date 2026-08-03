@@ -109,6 +109,30 @@ class AfterSuccessUrlTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
+	 * A refused destination is announced, so the silent case can be watched for.
+	 */
+	public function test_announces_a_refused_destination() {
+		$seen = [];
+		add_action(
+			'newspack_blocks_after_success_url_rejected',
+			function ( $url ) use ( &$seen ) {
+				$seen[] = $url;
+			}
+		);
+
+		\Newspack_Blocks\Modal_Checkout::sanitize_after_success_url( 'https://elsewhere.example.test/collect' );
+		\Newspack_Blocks\Modal_Checkout::sanitize_after_success_url( home_url( '/thanks/' ) );
+
+		remove_all_actions( 'newspack_blocks_after_success_url_rejected' );
+
+		$this->assertSame(
+			[ 'https://elsewhere.example.test/collect' ],
+			$seen,
+			'The refused destination was not announced, or an accepted one was.'
+		);
+	}
+
+	/**
 	 * Read the after-success params the checkout passes to the page.
 	 *
 	 * @return array

@@ -1226,7 +1226,22 @@ final class Modal_Checkout {
 			$url = str_replace( '://' . $host, '://' . strtolower( $host ), $url );
 		}
 
-		return (string) wp_validate_redirect( $url, '' );
+		$validated = (string) wp_validate_redirect( $url, '' );
+
+		if ( '' === $validated ) {
+			/**
+			 * Fires when a post-checkout destination is refused.
+			 *
+			 * The reader is sent nowhere and the modal simply closes, which looks the same
+			 * as a publisher not configuring a destination at all. This is the hook to
+			 * watch if you need to tell those two apart.
+			 *
+			 * @param string $url The refused destination.
+			 */
+			do_action( 'newspack_blocks_after_success_url_rejected', $url );
+		}
+
+		return $validated;
 	}
 
 	/**

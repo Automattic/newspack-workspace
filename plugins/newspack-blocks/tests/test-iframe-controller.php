@@ -64,7 +64,6 @@ class IframeControllerTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	private function find_escapes( $marker ) {
 		$upload_dir  = wp_upload_dir();
 		$content_dir = dirname( $upload_dir['basedir'] );
-		$iframe_root = $upload_dir['path'] . WP_REST_Newspack_Iframe_Controller::IFRAME_UPLOAD_DIR;
 
 		if ( ! is_dir( $content_dir ) ) {
 			return [];
@@ -76,7 +75,10 @@ class IframeControllerTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 			RecursiveIteratorIterator::CHILD_FIRST
 		);
 		foreach ( $iterator as $path => $unused ) { // phpcs:ignore VariableAnalysis.CodeAnalysis.VariableAnalysis.UnusedVariable
-			if ( false !== strpos( $path, $marker ) && 0 !== strpos( $path, $iframe_root ) ) {
+			// Any iframe directory counts as inside, not just the current month's: uploads are
+			// filed by month, so a run that crosses a month boundary would otherwise read last
+			// month's perfectly contained files as escapes.
+			if ( false !== strpos( $path, $marker ) && false === strpos( $path, WP_REST_Newspack_Iframe_Controller::IFRAME_UPLOAD_DIR ) ) {
 				$found[] = $path;
 			}
 		}
