@@ -483,6 +483,29 @@ class Promo_Url_Targets_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test that build_direct_donation_config returns null when every frequency
+	 * ends up unusable (all donation products missing), so the UI reports
+	 * donations as not configured instead of emitting a dead URL.
+	 */
+	public function test_build_direct_donation_config_null_when_no_frequency_usable() {
+		$settings    = $this->donate_configuration(
+			[
+				'disabledFrequencies' => [
+					'once'  => false,
+					'month' => false,
+					'year'  => false,
+				],
+			]
+		);
+		$product_ids = [
+			'once'  => 0,
+			'month' => 0,
+			'year'  => 0,
+		];
+		$this->assertNull( Promo_Url_Targets::build_direct_donation_config( $settings, $product_ids, true ) );
+	}
+
+	/**
 	 * Test that get_targets scans and returns matching pages with derived
 	 * block configs, and reports truncation.
 	 */

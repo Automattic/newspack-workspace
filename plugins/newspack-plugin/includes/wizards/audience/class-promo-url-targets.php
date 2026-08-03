@@ -85,12 +85,16 @@ final class Promo_Url_Targets {
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 			$referencing = $wpdb->get_col(
 				$wpdb->prepare(
-					"SELECT ID FROM {$wpdb->posts} WHERE post_status = 'publish' AND post_type IN ('page','post') AND ( post_content LIKE %s OR post_content LIKE %s ) LIMIT %d",
+					"SELECT ID FROM {$wpdb->posts} WHERE post_status = 'publish' AND post_type IN ('page','post') AND ( post_content LIKE %s OR post_content LIKE %s ) ORDER BY post_modified DESC LIMIT %d",
 					$ref_like_comma,
 					$ref_like_brace,
 					$limit
 				)
 			);
+			// A full page here means more referencing pages may exist unseen.
+			if ( count( $referencing ) >= $limit ) {
+				$truncated = true;
+			}
 			$ids = array_merge( $ids, $referencing );
 		}
 		$ids = array_values( array_unique( array_map( 'intval', $ids ) ) );
@@ -327,7 +331,9 @@ final class Promo_Url_Targets {
 	 * @param array $settings    Donations::get_donation_settings() output.
 	 * @param array $product_ids Frequency slug => donation product ID (0/empty when missing).
 	 * @param bool  $can_use_nyp Whether Name-Your-Price is available.
-	 * @return array Promo donate config.
+	 * @return array|null Promo donate config, or null when no frequency is usable
+	 *                    (the UI then reports donations as not configured instead
+	 *                    of emitting a URL the donation handler would ignore).
 	 */
 	public static function build_direct_donation_config( $settings, $product_ids, $can_use_nyp ) {
 		$enabled_map = [];
@@ -350,6 +356,16 @@ final class Promo_Url_Targets {
 				$config['frequencies'][ $slug ]['enabled'] = false;
 			}
 		}
+		$has_enabled = false;
+		foreach ( $config['frequencies'] as $frequency_config ) {
+			if ( ! empty( $frequency_config['enabled'] ) ) {
+				$has_enabled = true;
+				break;
+			}
+		}
+		if ( ! $has_enabled ) {
+			return null;
+		}
 		return $config;
 	}
 
@@ -359,7 +375,8 @@ final class Promo_Url_Targets {
 	 * supports a custom amount; a frequency is only usable when its donation
 	 * product exists.
 	 *
-	 * @return array|null Promo donate config, or null when donations aren't WC-based.
+	 * @return array|null Promo donate config, or null when donations aren't
+	 *                    WC-based or no frequency has a donation product.
 	 */
 	public static function get_direct_donation_config() {
 		if ( ! Donations::is_platform_wc() ) {
