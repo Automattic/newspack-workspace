@@ -1,5 +1,12 @@
-import { getVariationChoices, getFrequencyChoices, getAmountChoices, getDefaultFrequency, resolvePageProductParams } from './promo-url-options';
-import type { PromoTargetBlockConfig, PromoTargetDonateConfig } from './promo-url-options';
+import {
+	getVariationChoices,
+	getFrequencyChoices,
+	getAmountChoices,
+	getDefaultFrequency,
+	getValidationError,
+	resolvePageProductParams,
+} from './promo-url-options';
+import type { PromoTargetBlockConfig, PromoTargetDonateConfig, PromoValidationInput } from './promo-url-options';
 
 const variableItem = {
 	id: 100,
@@ -7,6 +14,15 @@ const variableItem = {
 	variations: [
 		{ id: 101, name: 'Monthly', plan_label: 'Monthly' },
 		{ id: 102, name: 'Yearly', plan_label: 'Yearly' },
+	],
+} as unknown as SubscriptionProduct;
+
+const groupedItem = {
+	id: 200,
+	type: 'grouped',
+	bundled_products: [
+		{ id: 201, name: 'Digital', price_label: '$10' },
+		{ id: 202, name: 'Tote bag', price_label: '$25' },
 	],
 } as unknown as SubscriptionProduct;
 
@@ -114,5 +130,116 @@ describe( 'resolvePageProductParams', () => {
 			productId: 100,
 			variationId: null,
 		} );
+	} );
+} );
+
+describe( 'getVariationChoices with server-side eligible children', () => {
+	const pickerBlock: PromoTargetBlockConfig[] = [
+		{ product_id: 200, variation_id: null, has_variation_picker: true, coupon: null, after_success: null },
+	];
+
+	it( 'omits grouped children the target page picker cannot serve', () => {
+		// 202 is bundled but not subscription-typed, so the tiers form renders
+		// no radio for it — offering it would emit a link that matches nothing.
+		const choices = getVariationChoices( groupedItem, pickerBlock, [ 201 ] );
+		expect( choices.map( c => c.value ) ).toEqual( [ '', 201 ] );
+	} );
+
+	it( 'falls back to every child when the server sends no eligible list', () => {
+		const choices = getVariationChoices( groupedItem, pickerBlock );
+		expect( choices.map( c => c.value ) ).toEqual( [ '', 201, 202 ] );
+	} );
+
+	it( 'leaves the direct path unconstrained', () => {
+		expect( getVariationChoices( groupedItem, null, [ 201 ] ).map( c => c.value ) ).toEqual( [ 201, 202 ] );
+	} );
+} );
+
+describe( 'getValidationError', () => {
+	const productBase: PromoValidationInput = {
+		kind: 'product',
+		destination: 'direct',
+		hasTarget: false,
+		requiresChild: false,
+		variationId: 101,
+		donateConfig: null,
+		effectiveAmount: undefined,
+		customAmount: '',
+		presets: [],
+		isCouponActive: false,
+		couponState: 'idle',
+		afterSuccess: '',
+		afterSuccessUrl: '',
+	};
+	const donationBase: PromoValidationInput = {
+		...productBase,
+		kind: 'donation',
+		donateConfig,
+		effectiveAmount: 15,
+		presets: [ 7, 15, 30 ],
+	};
+
+	it( 'allows a complete product selection', () => {
+		expect( getValidationError( productBase ) ).toBeNull();
+	} );
+
+	it( 'requires a target page on the page path', () => {
+		expect( getValidationError( { ...productBase, destination: 'page' } ) ).toBe( 'Choose a target page.' );
+	} );
+
+	it( 'requires a specific plan option when the page cannot let the reader choose', () => {
+		expect( getValidationError( { ...productBase, requiresChild: true, variationId: '' } ) ).toBe(
+			'Choose which plan option the link should check out.'
+		);
+	} );
+
+	it( 'reports donations that are not configured', () => {
+		expect( getValidationError( { ...donationBase, donateConfig: null } ) ).toBe( 'Donations are not configured for WooCommerce on this site.' );
+	} );
+
+	it( 'rejects an unparseable or absent amount', () => {
+		expect( getValidationError( { ...donationBase, effectiveAmount: undefined } ) ).toBe( 'Enter a valid amount.' );
+	} );
+
+	it( 'enforces the minimum donation, including for a custom amount', () => {
+		expect( getValidationError( { ...donationBase, effectiveAmount: 2 } ) ).toBe( 'The amount must be at least 5.' );
+		expect( getValidationError( { ...donationBase, effectiveAmount: 'other', customAmount: '1' } ) ).toBe( 'The amount must be at least 5.' );
+	} );
+
+	it( 'requires a page amount the target block actually renders', () => {
+		expect( getValidationError( { ...donationBase, destination: 'page', hasTarget: true, effectiveAmount: 22 } ) ).toBe(
+			'Choose one of the amounts available on the target page.'
+		);
+		expect( getValidationError( { ...donationBase, destination: 'page', hasTarget: true, effectiveAmount: 15 } ) ).toBeNull();
+	} );
+
+	it( 'accepts any amount on an untiered target block', () => {
+		expect(
+			getValidationError( {
+				...donationBase,
+				destination: 'page',
+				hasTarget: true,
+				effectiveAmount: 22,
+				donateConfig: { ...donateConfig, layout_param: 'untiered' },
+			} )
+		).toBeNull();
+	} );
+
+	it( 'surfaces the coupon reason while the coupon field is in play', () => {
+		expect(
+			getValidationError( {
+				...productBase,
+				isCouponActive: true,
+				couponState: 'invalid',
+				couponReason: 'This coupon does not apply to this plan.',
+			} )
+		).toBe( 'This coupon does not apply to this plan.' );
+		// The same coupon state is ignored where the field does not apply.
+		expect( getValidationError( { ...productBase, couponState: 'invalid' } ) ).toBeNull();
+	} );
+
+	it( 'requires a destination URL for a custom after-checkout behavior', () => {
+		expect( getValidationError( { ...productBase, afterSuccess: 'custom' } ) ).toBe( 'Enter the URL readers should continue to.' );
+		expect( getValidationError( { ...productBase, afterSuccess: 'custom', afterSuccessUrl: 'https://x.test' } ) ).toBeNull();
 	} );
 } );

@@ -776,4 +776,280 @@ class Promo_Url_Targets_Test extends WP_UnitTestCase {
 		);
 		$this->assertTrue( $result['valid'] );
 	}
+
+	/**
+	 * Test that a coupon excluding a category the promoted plan is in is
+	 * invalid — the mirror of the allowed-categories check.
+	 */
+	public function test_evaluate_coupon_excluded_category_intersecting_family_is_invalid() {
+		$result = Promo_Url_Targets::evaluate_coupon(
+			$this->coupon_data( [ 'excluded_category_ids' => [ 6, 7 ] ] ),
+			[
+				'family_ids'          => [ 100 ],
+				'family_category_ids' => [ 6 ],
+			]
+		);
+		$this->assertFalse( $result['valid'] );
+		$this->assertNotEmpty( $result['reason'] );
+	}
+
+	/**
+	 * Test that an excluded category the plan is not in leaves the coupon valid.
+	 */
+	public function test_evaluate_coupon_excluded_category_not_intersecting_is_valid() {
+		$result = Promo_Url_Targets::evaluate_coupon(
+			$this->coupon_data( [ 'excluded_category_ids' => [ 9 ] ] ),
+			[
+				'family_ids'          => [ 100 ],
+				'family_category_ids' => [ 6 ],
+			]
+		);
+		$this->assertTrue( $result['valid'] );
+	}
+
+	/**
+	 * Test that without Name Your Price the direct donation config offers only
+	 * the donation product's stored price and no custom amount: the handler
+	 * ignores the URL's amount in that configuration, so anything else would be
+	 * a price the checkout will not charge. The stored price comes from
+	 * amounts[<frequency>][ tiered ? 1 : 3 ], mirroring update_donation_product().
+	 */
+	public function test_build_direct_donation_config_without_nyp_offers_only_stored_price() {
+		$settings = $this->donate_configuration(
+			[
+				'tiered'              => false,
+				'disabledFrequencies' => [
+					'once'  => false,
+					'month' => false,
+					'year'  => false,
+				],
+			]
+		);
+		$product_ids = [
+			'once'  => 10,
+			'month' => 11,
+			'year'  => 12,
+		];
+
+		$config = Promo_Url_Targets::build_direct_donation_config( $settings, $product_ids, false );
+		foreach ( [ 'once', 'month', 'year' ] as $slug ) {
+			$this->assertFalse( $config['frequencies'][ $slug ]['supports_custom'], $slug );
+		}
+		// Untiered settings: stored price is the suggested amount (index 3).
+		$this->assertSame( [ 15.0 ], $config['frequencies']['month']['amounts'] );
+		$this->assertSame( [ 180.0 ], $config['frequencies']['year']['amounts'] );
+
+		// Tiered settings: stored price is the middle tier (index 1).
+		$tiered_config = Promo_Url_Targets::build_direct_donation_config(
+			$this->donate_configuration(
+				[
+					'tiered'              => true,
+					'disabledFrequencies' => [
+						'once'  => false,
+						'month' => false,
+						'year'  => false,
+					],
+				]
+			),
+			$product_ids,
+			false
+		);
+		$this->assertSame( [ 15.0 ], $tiered_config['frequencies']['month']['amounts'] );
+		$this->assertSame( [ 180.0 ], $tiered_config['frequencies']['year']['amounts'] );
+		$this->assertFalse( $tiered_config['frequencies']['month']['supports_custom'] );
+	}
+
+	/**
+	 * Test that with Name Your Price every frequency still takes a custom amount.
+	 */
+	public function test_build_direct_donation_config_with_nyp_supports_custom() {
+		$config = Promo_Url_Targets::build_direct_donation_config(
+			$this->donate_configuration(
+				[
+					'disabledFrequencies' => [
+						'once'  => false,
+						'month' => false,
+						'year'  => false,
+					],
+				]
+			),
+			[
+				'once'  => 10,
+				'month' => 11,
+				'year'  => 12,
+			],
+			true
+		);
+		foreach ( [ 'once', 'month', 'year' ] as $slug ) {
+			$this->assertTrue( $config['frequencies'][ $slug ]['supports_custom'], $slug );
+		}
+	}
+
+	/**
+	 * Test that a grouped plan whose children the tiers picker cannot serve
+	 * reports no picker, so the UI never offers a "reader chooses" option that
+	 * would resolve to no radio at runtime.
+	 */
+	public function test_derive_grouped_parent_without_picker_members_has_no_picker() {
+		$family = [
+			'parent'         => 200,
+			'variations'     => [],
+			'members'        => [ 201, 202 ],
+			'picker_members' => [],
+		];
+		$config = Promo_Url_Targets::derive_checkout_button_config( [ 'product' => '200' ], $family );
+		$this->assertSame( 200, $config['product_id'] );
+		$this->assertFalse( $config['has_variation_picker'] );
+
+		$family['picker_members'] = [ 201 ];
+		$with_picker              = Promo_Url_Targets::derive_checkout_button_config( [ 'product' => '200' ], $family );
+		$this->assertTrue( $with_picker['has_variation_picker'] );
+	}
+
+	/**
+	 * Test that eligible children span variations for a variable plan and only
+	 * picker-servable members for a grouped one.
+	 */
+	public function test_get_eligible_children() {
+		$this->assertSame(
+			[ 101, 102 ],
+			Promo_Url_Targets::get_eligible_children(
+				[
+					'parent'         => 100,
+					'variations'     => [ 101, 102 ],
+					'members'        => [],
+					'picker_members' => [],
+				]
+			)
+		);
+		$this->assertSame(
+			[ 201 ],
+			Promo_Url_Targets::get_eligible_children(
+				[
+					'parent'         => 200,
+					'variations'     => [],
+					'members'        => [ 201, 202 ],
+					'picker_members' => [ 201 ],
+				]
+			)
+		);
+	}
+
+	/**
+	 * Test that the content scan is cached per block type, so every plan row
+	 * reuses it instead of repeating the LIKE queries. Asserted by removing the
+	 * matching page behind save_post's back: a fresh scan would miss it.
+	 */
+	public function test_scanned_blocks_are_cached_per_block_type() {
+		global $wpdb;
+		delete_option( Promo_Url_Targets::CACHE_VERSION_OPTION );
+		$page_id = self::factory()->post->create(
+			[
+				'post_type'    => 'page',
+				'post_status'  => 'publish',
+				'post_content' => '<!-- wp:newspack-blocks/checkout-button {"product":"401"} /-->',
+			]
+		);
+		$first = Promo_Url_Targets::get_scanned_blocks( self::BUTTON );
+		$this->assertCount( 1, $first['posts'] );
+		$this->assertSame( '401', $first['posts'][0]['attrs'][0]['product'] );
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->delete( $wpdb->posts, [ 'ID' => $page_id ] );
+		clean_post_cache( $page_id );
+		$this->assertCount( 1, Promo_Url_Targets::get_scanned_blocks( self::BUTTON )['posts'] );
+	}
+
+	/**
+	 * Test that hitting the synced-pattern cap signals truncation, even when the
+	 * resulting page set stays well under SCAN_LIMIT — there may be further
+	 * patterns, and pages referencing them, that were never looked at.
+	 */
+	public function test_truncated_flag_when_pattern_scan_limit_reached() {
+		delete_option( Promo_Url_Targets::CACHE_VERSION_OPTION );
+		for ( $i = 0; $i < Promo_Url_Targets::PATTERN_SCAN_LIMIT; $i++ ) {
+			self::factory()->post->create(
+				[
+					'post_type'    => 'wp_block',
+					'post_status'  => 'publish',
+					'post_content' => '<!-- wp:newspack-blocks/checkout-button {"product":"1"} /-->',
+				]
+			);
+		}
+		list( $ids, $truncated ) = Promo_Url_Targets::find_candidate_post_ids( self::BUTTON );
+		$this->assertTrue( $truncated );
+		$this->assertLessThanOrEqual( Promo_Url_Targets::SCAN_LIMIT, count( $ids ) );
+	}
+
+	/**
+	 * Test that a pattern referenced by more pages than the scan can return also
+	 * signals truncation.
+	 */
+	public function test_truncated_flag_when_pattern_referencing_pages_exceed_limit() {
+		delete_option( Promo_Url_Targets::CACHE_VERSION_OPTION );
+		$pattern_id = self::factory()->post->create(
+			[
+				'post_type'    => 'wp_block',
+				'post_status'  => 'publish',
+				'post_content' => '<!-- wp:newspack-blocks/checkout-button {"product":"1"} /-->',
+			]
+		);
+		for ( $i = 0; $i < Promo_Url_Targets::SCAN_LIMIT + 1; $i++ ) {
+			self::factory()->post->create(
+				[
+					'post_type'    => 'page',
+					'post_status'  => 'publish',
+					'post_content' => '<!-- wp:block {"ref":' . $pattern_id . '} /-->',
+				]
+			);
+		}
+		list( $ids, $truncated ) = Promo_Url_Targets::find_candidate_post_ids( self::BUTTON );
+		$this->assertTrue( $truncated );
+		$this->assertCount( Promo_Url_Targets::SCAN_LIMIT, $ids );
+	}
+
+	/**
+	 * Test that candidates come back newest-modified first, which is what the
+	 * UI's "only the most recently updated pages were checked" warning promises.
+	 */
+	public function test_find_candidate_post_ids_orders_by_post_modified_desc() {
+		global $wpdb;
+		delete_option( Promo_Url_Targets::CACHE_VERSION_OPTION );
+		$content = '<!-- wp:newspack-blocks/checkout-button {"product":"1"} /-->';
+		$older   = self::factory()->post->create(
+			[
+				'post_type'    => 'page',
+				'post_status'  => 'publish',
+				'post_content' => $content,
+			]
+		);
+		$newer   = self::factory()->post->create(
+			[
+				'post_type'    => 'page',
+				'post_status'  => 'publish',
+				'post_content' => $content,
+			]
+		);
+		// Set post_modified explicitly: wp_insert_post derives it from the
+		// insert time, so two posts created in the same second would tie.
+		$modified_dates = [
+			$older => '2020-01-01 00:00:00',
+			$newer => '2030-01-01 00:00:00',
+		];
+		foreach ( $modified_dates as $id => $modified ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$wpdb->update(
+				$wpdb->posts,
+				[
+					'post_modified'     => $modified,
+					'post_modified_gmt' => $modified,
+				],
+				[ 'ID' => $id ]
+			);
+			clean_post_cache( $id );
+		}
+		list( $ids, $truncated ) = Promo_Url_Targets::find_candidate_post_ids( self::BUTTON );
+		$this->assertFalse( $truncated );
+		$this->assertSame( [ $newer, $older ], array_slice( $ids, 0, 2 ) );
+	}
 }
