@@ -1,3 +1,31 @@
+# newspack-newsletters [3.38.0](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.37.1...newspack-newsletters@3.38.0) (2026-08-03)
+
+
+### Bug Fixes
+
+* Contributor/Author newsletter + content-gate permission errors (NPPM-2982) ([#579](https://github.com/Automattic/newspack-workspace/issues/579)) ([35c7476](https://github.com/Automattic/newspack-workspace/commit/35c747695189b5f85c2f5573926de9a61d33790a))
+* **newsletters:** activate ads in one step from status toggle ([#479](https://github.com/Automattic/newspack-workspace/issues/479)) ([e0eb747](https://github.com/Automattic/newspack-workspace/commit/e0eb7479f882544541439b783e293ba09c27104c))
+* **newsletters:** address publisher feedback on the newsletters list ([#677](https://github.com/Automattic/newspack-workspace/issues/677)) ([6fec734](https://github.com/Automattic/newspack-workspace/commit/6fec7341dcd0b5e4c1dc88521dc76f24f0690e38))
+* **newsletters:** guard fix_public_status exit for non-page requests ([#701](https://github.com/Automattic/newspack-workspace/issues/701)) ([4751b5d](https://github.com/Automattic/newspack-workspace/commit/4751b5dddfb9052e233a47d9c3eecba7c3cb84f6))
+* **newsletters:** keep flag-off public newsletters on the theme template ([#777](https://github.com/Automattic/newspack-workspace/issues/777)) ([63564dd](https://github.com/Automattic/newspack-workspace/commit/63564dd216253c83c2ea09c22a0d53bfbf3bb005))
+* **newsletters:** map AC listbox fields as multi-value ([#696](https://github.com/Automattic/newspack-workspace/issues/696)) ([eec1896](https://github.com/Automattic/newspack-workspace/commit/eec1896c1f64efab847cec4a4dc2849012168429))
+
+
+### Features
+
+* **audience:** per-field operators for incoming ESP field criteria ([#628](https://github.com/Automattic/newspack-workspace/issues/628)) ([f4449a8](https://github.com/Automattic/newspack-workspace/commit/f4449a806b9794e03bcf3aa2e3f87f42beb67904))
+* explicit breadcrumb API for Newspack admin headers ([#472](https://github.com/Automattic/newspack-workspace/issues/472)) ([7c43233](https://github.com/Automattic/newspack-workspace/commit/7c4323301f5323822937e93274c4fda4279a787f))
+* **newsletters:** block-based WooCommerce email rendering engine (behind flag) ([#564](https://github.com/Automattic/newspack-workspace/issues/564)) ([f782159](https://github.com/Automattic/newspack-workspace/commit/f782159887d28d0ee547f1120a5afd6b9032b0ef))
+* **newsletters:** custom Mailchimp resubscribe error message ([#590](https://github.com/Automattic/newspack-workspace/issues/590)) ([765b716](https://github.com/Automattic/newspack-workspace/commit/765b7160ab8f7f2b0a39677dcc94b0f21f5adfd9))
+* **newsletters:** Use publish terminology for manual provider ([#378](https://github.com/Automattic/newspack-workspace/issues/378)) ([a081073](https://github.com/Automattic/newspack-workspace/commit/a081073beb24afe4e490491d2e9288e6758eb866))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.6.0
+* **newspack-icons:** upgraded to 1.1.0
+* **newspack-scripts:** upgraded to 5.10.0
+
 ## newspack-newsletters [3.37.1](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.37.0...newspack-newsletters@3.37.1) (2026-07-21)
 
 

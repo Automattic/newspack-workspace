@@ -1,3 +1,10 @@
+## newspack-network [2.21.2](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.21.1...newspack-network@2.21.2) (2026-08-03)
+
+
+### Dependencies
+
+* **newspack-scripts:** upgraded to 5.10.0
+
 ## newspack-network [2.21.1](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.21.0...newspack-network@2.21.1) (2026-07-23)
 
 
