@@ -28,7 +28,7 @@ final class Promo_Url_Targets {
 	 */
 	public static function init() {
 		if ( ! has_action( 'save_post', [ __CLASS__, 'bump_cache_version' ] ) ) {
-			add_action( 'save_post', [ __CLASS__, 'bump_cache_version' ] );
+			add_action( 'save_post', [ __CLASS__, 'bump_cache_version' ], 10, 1 );
 		}
 	}
 
@@ -36,18 +36,32 @@ final class Promo_Url_Targets {
 	 * Invalidate cached scans when content that can carry the blocks changes.
 	 * Note: save_post also fires on trash, which is desirable here.
 	 *
+	 * Only the content scan is cached (see get_scanned_blocks()), so this covers
+	 * everything the cache depends on: donation settings and product families
+	 * are resolved per request.
+	 *
 	 * @param int $post_id Saved post ID.
 	 */
 	public static function bump_cache_version( $post_id ) {
 		if ( ! in_array( get_post_type( $post_id ), [ 'page', 'post', 'wp_block' ], true ) ) {
 			return;
 		}
-		update_option( self::CACHE_VERSION_OPTION, (string) time(), false );
+		// microtime() rather than time(): two saves in the same second would
+		// otherwise write an identical value, which update_option() skips,
+		// leaving a pre-save scan cached for the rest of its TTL.
+		update_option( self::CACHE_VERSION_OPTION, (string) microtime( true ), false );
 	}
 
 	/**
 	 * Find published pages/posts whose content contains the given block —
 	 * directly, or via a published synced pattern (wp_block ref).
+	 *
+	 * Two deliberate limits: only `page` and `post` are searched (a block in a
+	 * custom post type or an FSE template is not discovered, which the UI's
+	 * empty state says out loud), and pattern refs are followed one level — a
+	 * page referencing a pattern that only nests the block inside *another*
+	 * pattern is not found here, even though extract_blocks() would resolve
+	 * that chain for a page already discovered.
 	 *
 	 * @param string $block_name Block name, e.g. `newspack-blocks/checkout-button`.
 	 * @return array [ int[] $ids, bool $truncated ]
@@ -150,14 +164,18 @@ final class Promo_Url_Targets {
 	 * Build the product "family" a plan row spans: the row product itself plus
 	 * its variation children (variable) or bundled members (grouped).
 	 *
+	 * `picker_members` is the subset a grouped plan's runtime picker can actually
+	 * serve — see get_picker_members().
+	 *
 	 * @param int $product_id Plan row product ID.
-	 * @return array{parent:int,variations:int[],members:int[]}
+	 * @return array{parent:int,variations:int[],members:int[],picker_members:int[]}
 	 */
 	public static function get_product_family( $product_id ) {
 		$family = [
-			'parent'     => (int) $product_id,
-			'variations' => [],
-			'members'    => [],
+			'parent'         => (int) $product_id,
+			'variations'     => [],
+			'members'        => [],
+			'picker_members' => [],
 		];
 		if ( ! function_exists( 'wc_get_product' ) ) {
 			return $family;
@@ -168,11 +186,66 @@ final class Promo_Url_Targets {
 		}
 		$children = array_map( 'intval', $product->get_children() );
 		if ( $product->is_type( 'grouped' ) ) {
-			$family['members'] = $children;
+			$family['members']        = $children;
+			$family['picker_members'] = self::get_picker_members( $children );
 		} else {
 			$family['variations'] = $children;
 		}
 		return $family;
+	}
+
+	/**
+	 * Reduce a grouped product's children to the ids its picker will render.
+	 *
+	 * A Checkout Button pointing at a grouped parent renders the tiers picker
+	 * (Subscriptions_Tiers::render_form()), and that form's
+	 * get_tiers_by_frequency() keeps only subscription-typed, non-private
+	 * children, expanding a variable subscription into its variations. Offering
+	 * any other child would emit a URL whose radio never renders — the JS
+	 * trigger then finds no form and only logs a console warning.
+	 *
+	 * @param int[] $child_ids Grouped product child IDs.
+	 * @return int[] Ids the picker will render.
+	 */
+	public static function get_picker_members( $child_ids ) {
+		$members = [];
+		if ( ! function_exists( 'wc_get_product' ) ) {
+			return $members;
+		}
+		foreach ( $child_ids as $child_id ) {
+			$child = wc_get_product( $child_id );
+			if ( ! $child || ! in_array( $child->get_type(), [ 'subscription', 'variable-subscription' ], true ) ) {
+				continue;
+			}
+			if ( 'private' === $child->get_status() ) {
+				continue;
+			}
+			if ( $child->is_type( 'variable-subscription' ) ) {
+				foreach ( $child->get_available_variations() as $variation ) {
+					if ( ! empty( $variation['variation_id'] ) ) {
+						$members[] = (int) $variation['variation_id'];
+					}
+				}
+				continue;
+			}
+			$members[] = (int) $child_id;
+		}
+		return array_values( array_unique( $members ) );
+	}
+
+	/**
+	 * Child ids a promo URL may name for a plan: variations for a variable
+	 * plan, picker-servable members for a grouped one. The generator UI uses
+	 * this to constrain the "reader chooses" option to children the target
+	 * page's picker will actually offer.
+	 *
+	 * @param array $family See get_product_family().
+	 * @return int[] Eligible child IDs.
+	 */
+	public static function get_eligible_children( $family ) {
+		$variations = isset( $family['variations'] ) ? array_map( 'intval', $family['variations'] ) : [];
+		$members    = isset( $family['picker_members'] ) ? array_map( 'intval', $family['picker_members'] ) : [];
+		return array_values( array_unique( array_merge( $variations, $members ) ) );
 	}
 
 	/**
@@ -194,6 +267,9 @@ final class Promo_Url_Targets {
 		$parent     = (int) $family['parent'];
 		$variations = array_map( 'intval', $family['variations'] );
 		$members    = array_map( 'intval', $family['members'] );
+		// Only picker-servable members signal a picker: a grouped plan whose
+		// children the tiers form skips renders no radios at all.
+		$picker_members = isset( $family['picker_members'] ) ? array_map( 'intval', $family['picker_members'] ) : $members;
 
 		$config = null;
 		if ( $block_product === $parent ) {
@@ -201,7 +277,7 @@ final class Promo_Url_Targets {
 			$config = [
 				'product_id'           => $parent,
 				'variation_id'         => $locked ? $locked : null,
-				'has_variation_picker' => ! $locked && ( ! empty( $attrs['is_variable'] ) || ! empty( $members ) ),
+				'has_variation_picker' => ! $locked && ( ! empty( $attrs['is_variable'] ) || ! empty( $picker_members ) ),
 			];
 		} elseif ( in_array( $block_product, $variations, true ) ) {
 			$config = [
@@ -328,6 +404,10 @@ final class Promo_Url_Targets {
 	 * get_direct_donation_config() so the inversion/override logic is
 	 * unit-testable without WooCommerce loaded.
 	 *
+	 * With Name Your Price active every frequency takes an arbitrary amount;
+	 * without it the handler ignores the URL's amount, so only the donation
+	 * product's stored price is offered (see the inline note below).
+	 *
 	 * @param array $settings    Donations::get_donation_settings() output.
 	 * @param array $product_ids Frequency slug => donation product ID (0/empty when missing).
 	 * @param bool  $can_use_nyp Whether Name-Your-Price is available.
@@ -350,8 +430,26 @@ final class Promo_Url_Targets {
 			]
 		);
 		$config = self::map_donate_configuration( $configuration, $can_use_nyp );
+		// Without Name Your Price the donation handler drops the URL's amount —
+		// process_donation_request() passes a null `nyp` cart datum — and the
+		// reader pays the donation child product's stored price, which
+		// update_donation_product() takes from amounts[<frequency>][ tiered ? 1 : 3 ].
+		// That single value is then the only amount a direct link can promise.
+		$stored_price_index = ! empty( $settings['tiered'] ) ? 1 : 3;
 		foreach ( array_keys( $config['frequencies'] ) as $slug ) {
-			$config['frequencies'][ $slug ]['supports_custom'] = true;
+			if ( $can_use_nyp ) {
+				// Direct URLs standardize any amount through the `nyp` cart datum.
+				$config['frequencies'][ $slug ]['supports_custom'] = true;
+			} else {
+				$amounts      = isset( $settings['amounts'][ $slug ] ) ? array_map( 'floatval', (array) $settings['amounts'][ $slug ] ) : [];
+				$stored_price = isset( $amounts[ $stored_price_index ] ) ? $amounts[ $stored_price_index ] : null;
+
+				$config['frequencies'][ $slug ]['supports_custom'] = false;
+				$config['frequencies'][ $slug ]['amounts']         = null === $stored_price ? [] : [ $stored_price ];
+				if ( null === $stored_price ) {
+					$config['frequencies'][ $slug ]['enabled'] = false;
+				}
+			}
 			if ( empty( $product_ids[ $slug ] ) ) {
 				$config['frequencies'][ $slug ]['enabled'] = false;
 			}
@@ -371,9 +469,8 @@ final class Promo_Url_Targets {
 
 	/**
 	 * Promo config for the direct (PHP-side) donation path, from site settings.
-	 * Direct URLs accept any value (NYP-standardized), so every frequency
-	 * supports a custom amount; a frequency is only usable when its donation
-	 * product exists.
+	 * A frequency is only usable when its donation product exists, and a custom
+	 * amount only when Name Your Price can carry it to the cart.
 	 *
 	 * @return array|null Promo donate config, or null when donations aren't
 	 *                    WC-based or no frequency has a donation product.
@@ -386,40 +483,76 @@ final class Promo_Url_Targets {
 		if ( is_wp_error( $settings ) ) {
 			return null;
 		}
-		$can_use_nyp = class_exists( '\Newspack_Blocks' ) ? \Newspack_Blocks::can_use_name_your_price() : false;
-		return self::build_direct_donation_config( $settings, Donations::get_donation_product_child_products_ids(), $can_use_nyp );
+		return self::build_direct_donation_config( $settings, Donations::get_donation_product_child_products_ids(), Donations::can_use_name_your_price() );
 	}
 
 	/**
-	 * Scan for pages/posts containing blocks compatible with the given promo
-	 * type (and product family, for checkout buttons). Cached per type+product
-	 * until content changes (see bump_cache_version) or CACHE_TTL elapses.
+	 * Scan content once per block type: every page/post carrying the block,
+	 * with that block's raw attributes.
+	 *
+	 * This is the expensive half (unindexed LIKE queries over post_content plus
+	 * a parse_blocks() pass per match) and it depends only on the block name, so
+	 * it is cached per block name and shared across plan rows instead of being
+	 * repeated for each one. Deriving a config from these attributes is cheap
+	 * and stays out of the cache, so a change to donation settings or to a
+	 * product's variations is reflected on the next request rather than
+	 * outliving it by up to CACHE_TTL.
+	 *
+	 * @param string $block_name Block name to scan for.
+	 * @return array{posts:array,truncated:bool}
+	 */
+	public static function get_scanned_blocks( $block_name ) {
+		$version   = (string) get_option( self::CACHE_VERSION_OPTION, '0' );
+		$cache_key = 'newspack_promo_blocks_' . md5( $block_name . '|' . $version );
+		$cached    = get_transient( $cache_key );
+		if ( is_array( $cached ) ) {
+			return $cached;
+		}
+		list( $candidate_ids, $truncated ) = self::find_candidate_post_ids( $block_name );
+		$posts = [];
+		foreach ( $candidate_ids as $candidate_id ) {
+			$post = get_post( $candidate_id );
+			if ( ! $post ) {
+				continue;
+			}
+			$attrs = self::extract_blocks( $post->post_content, $block_name );
+			if ( empty( $attrs ) ) {
+				continue;
+			}
+			$posts[] = [
+				'id'    => $post->ID,
+				'title' => get_the_title( $post ),
+				'url'   => get_permalink( $post ),
+				'attrs' => $attrs,
+			];
+		}
+		$result = [
+			'posts'     => $posts,
+			'truncated' => $truncated,
+		];
+		set_transient( $cache_key, $result, self::CACHE_TTL );
+		return $result;
+	}
+
+	/**
+	 * Pages/posts carrying blocks compatible with the given promo type (and
+	 * product family, for checkout buttons), derived from the cached scan.
 	 *
 	 * @param string $type       'checkout_button' or 'donate'.
 	 * @param int    $product_id Plan row product ID (checkout_button only).
 	 * @return array{targets:array,truncated:bool}
 	 */
 	public static function get_targets( $type, $product_id = 0 ) {
-		$version   = (string) get_option( self::CACHE_VERSION_OPTION, '0' );
-		$cache_key = 'newspack_promo_targets_' . md5( $type . '|' . $product_id . '|' . $version );
-		$cached    = get_transient( $cache_key );
-		if ( is_array( $cached ) ) {
-			return $cached;
-		}
 		$block_name = 'checkout_button' === $type ? 'newspack-blocks/checkout-button' : 'newspack-blocks/donate';
 		$family     = 'checkout_button' === $type ? self::get_product_family( $product_id ) : null;
-		list( $candidate_ids, $truncated ) = self::find_candidate_post_ids( $block_name );
-		$result = [
+		$scanned    = self::get_scanned_blocks( $block_name );
+		$result     = [
 			'targets'   => [],
-			'truncated' => $truncated,
+			'truncated' => $scanned['truncated'],
 		];
-		foreach ( $candidate_ids as $candidate_id ) {
-			$post = get_post( $candidate_id );
-			if ( ! $post ) {
-				continue;
-			}
+		foreach ( $scanned['posts'] as $scanned_post ) {
 			$configs = [];
-			foreach ( self::extract_blocks( $post->post_content, $block_name ) as $attrs ) {
+			foreach ( $scanned_post['attrs'] as $attrs ) {
 				$config = 'checkout_button' === $type
 					? self::derive_checkout_button_config( $attrs, $family )
 					: self::get_donate_target_config( $attrs );
@@ -429,14 +562,13 @@ final class Promo_Url_Targets {
 			}
 			if ( ! empty( $configs ) ) {
 				$result['targets'][] = [
-					'id'     => $post->ID,
-					'title'  => get_the_title( $post ),
-					'url'    => get_permalink( $post ),
+					'id'     => $scanned_post['id'],
+					'title'  => $scanned_post['title'],
+					'url'    => $scanned_post['url'],
 					'blocks' => $configs,
 				];
 			}
 		}
-		set_transient( $cache_key, $result, self::CACHE_TTL );
 		return $result;
 	}
 
@@ -475,6 +607,7 @@ final class Promo_Url_Targets {
 	 *     @type int[]      $product_ids      Allowed product IDs ([] = no restriction).
 	 *     @type int[]      $excluded_ids     Excluded product IDs.
 	 *     @type int[]      $category_ids     Allowed product category IDs ([] = no restriction).
+	 *     @type int[]      $excluded_category_ids Excluded product category IDs.
 	 *     @type float      $minimum_amount   Minimum spend (0 = none).
 	 * }
 	 * @param array $product_context {
@@ -520,6 +653,13 @@ final class Promo_Url_Targets {
 				return [
 					'valid'  => false,
 					'reason' => __( 'This coupon is limited to product categories this plan is not in.', 'newspack-plugin' ),
+				];
+			}
+			$excluded_cats = isset( $coupon_data['excluded_category_ids'] ) ? array_map( 'intval', $coupon_data['excluded_category_ids'] ) : [];
+			if ( ! empty( $excluded_cats ) && ! empty( array_intersect( $excluded_cats, $family_cats ) ) ) {
+				return [
+					'valid'  => false,
+					'reason' => __( 'This coupon excludes a product category this plan is in.', 'newspack-plugin' ),
 				];
 			}
 			$minimum = isset( $coupon_data['minimum_amount'] ) ? (float) $coupon_data['minimum_amount'] : 0.0;

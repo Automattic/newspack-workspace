@@ -287,7 +287,9 @@ class Audience_Subscription_Products extends Wizard {
 		if ( 'donate' === $type ) {
 			$response['donation_config'] = Promo_Url_Targets::get_direct_donation_config();
 		} else {
-			$response['nyp'] = Promo_Url_Targets::get_nyp_map( Promo_Url_Targets::get_product_family( $product_id ) );
+			$family                        = Promo_Url_Targets::get_product_family( $product_id );
+			$response['nyp']               = Promo_Url_Targets::get_nyp_map( $family );
+			$response['eligible_children'] = Promo_Url_Targets::get_eligible_children( $family );
 		}
 		return rest_ensure_response( $response );
 	}
@@ -338,12 +340,13 @@ class Audience_Subscription_Products extends Wizard {
 		$expires        = $coupon->get_date_expires();
 		$usage_limit    = (int) $coupon->get_usage_limit();
 		$coupon_data    = [
-			'expired'        => $expires && $expires->getTimestamp() < time(),
-			'usage_exceeded' => $usage_limit > 0 && (int) $coupon->get_usage_count() >= $usage_limit,
-			'product_ids'    => $coupon->get_product_ids(),
-			'excluded_ids'   => $coupon->get_excluded_product_ids(),
-			'category_ids'   => $coupon->get_product_categories(),
-			'minimum_amount' => (float) $coupon->get_minimum_amount(),
+			'expired'               => $expires && $expires->getTimestamp() < time(),
+			'usage_exceeded'        => $usage_limit > 0 && (int) $coupon->get_usage_count() >= $usage_limit,
+			'product_ids'           => $coupon->get_product_ids(),
+			'excluded_ids'          => $coupon->get_excluded_product_ids(),
+			'category_ids'          => $coupon->get_product_categories(),
+			'excluded_category_ids' => $coupon->get_excluded_product_categories(),
+			'minimum_amount'        => (float) $coupon->get_minimum_amount(),
 		];
 		$product_context = [];
 		$product_id      = absint( $request->get_param( 'product_id' ) );
