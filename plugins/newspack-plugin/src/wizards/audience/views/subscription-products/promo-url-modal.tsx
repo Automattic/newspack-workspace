@@ -99,16 +99,21 @@ export default function PromoUrlModal( { item, closeModal }: { item: Subscriptio
 	const variationChoices = useMemo( () => ( kind === 'product' ? getVariationChoices( item, targetBlocks ) : [] ), [ kind, item, targetBlocks ] );
 	const frequencyChoices = useMemo( () => getFrequencyChoices( donateConfig ), [ donateConfig ] );
 	const amountChoices = useMemo( () => getAmountChoices( donateConfig, frequency ), [ donateConfig, frequency ] );
+	const isNypEligible = Boolean( response?.nyp?.[ variationId === '' ? item.id : variationId ] );
 
 	// Reset dependent selections when the context they came from changes.
 	useEffect( () => {
 		setVariationId( '' );
+		setPrice( '' );
 	}, [ destination, pageId ] );
+	useEffect( () => {
+		setPrice( '' );
+	}, [ variationId ] );
 	useEffect( () => {
 		if ( donateConfig ) {
 			setFrequency( getDefaultFrequency( item, donateConfig ) );
 		}
-	}, [ donateConfig, item ] );
+	}, [ donateConfig, item.period ] );
 	useEffect( () => {
 		setAmount( amountChoices.presets.length ? amountChoices.presets[ 0 ] : 'custom' );
 		setCustomAmount( amountChoices.suggested ? String( amountChoices.suggested ) : '' );
@@ -129,7 +134,7 @@ export default function PromoUrlModal( { item, closeModal }: { item: Subscriptio
 				.catch( () => setCouponStatus( { state: 'invalid', reason: __( 'Could not validate the coupon.', 'newspack-plugin' ) } ) );
 		}, 500 );
 		return () => clearTimeout( timeout );
-	}, [ coupon ] );
+	}, [ coupon, item.id ] );
 
 	// A specific child is required on the direct path always, and on the page
 	// path unless a picker block provides the "reader chooses" option.
@@ -166,7 +171,10 @@ export default function PromoUrlModal( { item, closeModal }: { item: Subscriptio
 		otherAmount: effectiveAmount === 'other' ? parseFloat( customAmount ) : undefined,
 		layoutParam: donateConfig?.layout_param,
 		coupon: isCouponActive ? coupon || undefined : undefined,
-		price: kind === 'product' && destination === 'direct' && price ? parseFloat( price ) : undefined,
+		price:
+			kind === 'product' && destination === 'direct' && isNypEligible && price && ! isNaN( parseFloat( price ) )
+				? parseFloat( price )
+				: undefined,
 		afterSuccessBehavior: destination === 'direct' ? afterSuccess : '',
 		afterSuccessUrl,
 		afterSuccessButtonLabel: afterSuccessLabel,
@@ -387,7 +395,7 @@ export default function PromoUrlModal( { item, closeModal }: { item: Subscriptio
 							{ __( 'After checkout, readers follow the behavior configured on the block on this page.', 'newspack-plugin' ) }
 						</Notice>
 					) }
-					{ kind === 'product' && destination === 'direct' && Boolean( response?.nyp?.[ variationId === '' ? item.id : variationId ] ) && (
+					{ kind === 'product' && destination === 'direct' && isNypEligible && (
 						<TextControl
 							label={ __( 'Suggested price', 'newspack-plugin' ) }
 							type="number"
@@ -437,7 +445,7 @@ export default function PromoUrlModal( { item, closeModal }: { item: Subscriptio
 				</Notice>
 			) : (
 				<BaseControl id="newspack-promo-url-preview" label={ __( 'Promotional link', 'newspack-plugin' ) }>
-					<TextareaControl value={ url } readOnly rows={ 3 } onChange={ () => {} } />
+					<TextareaControl id="newspack-promo-url-preview" value={ url } readOnly rows={ 3 } onChange={ () => {} } />
 				</BaseControl>
 			) }
 			<HStack justify="flex-end">
