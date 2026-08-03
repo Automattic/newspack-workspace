@@ -19,6 +19,13 @@ class Failing_Sample_Integration extends Integration {
 	public static $should_fail = false;
 
 	/**
+	 * Error message returned when $should_fail is true.
+	 *
+	 * @var string
+	 */
+	public static $fail_message = 'Mock push failed';
+
+	/**
 	 * Count of push_contact_data calls.
 	 *
 	 * @var int
@@ -59,7 +66,7 @@ class Failing_Sample_Integration extends Integration {
 	public function push_contact_data( $contact, $context = '', $existing_contact = null ) {
 		self::$push_count++;
 		if ( self::$should_fail ) {
-			return new \WP_Error( 'mock_error', 'Mock push failed' );
+			return new \WP_Error( 'mock_error', self::$fail_message );
 		}
 		return true;
 	}
@@ -111,5 +118,6 @@ class Failing_Sample_Integration extends Integration {
 		self::$push_count      = 0;
 		self::$pull_count      = 0;
 		self::$is_set_up_value = true;
+		self::$fail_message    = 'Mock push failed';
 	}
 }

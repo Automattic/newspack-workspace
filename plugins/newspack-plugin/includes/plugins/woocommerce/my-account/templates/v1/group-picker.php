@@ -44,8 +44,8 @@ usort(
 		<?php foreach ( $managed as $subscription ) : ?>
 			<?php
 			$settings = Group_Subscription_Settings::get_subscription_settings( $subscription );
-			// The owner counts as a member, so use the owner-inclusive count and a
-			// capacity (limit + owner) so the card matches the group's Members tab.
+			// The owner counts as a member, so pair the owner-inclusive count with the
+			// owner-inclusive capacity (the limit) so the card matches the group's Members tab.
 			$member_count        = Group_Subscription::get_member_count( $subscription );
 			$capacity            = Group_Subscription::get_member_capacity( $subscription );
 			$count_label         = $capacity

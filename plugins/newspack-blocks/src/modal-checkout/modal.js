@@ -24,7 +24,7 @@ import {
 	getCheckoutData,
 	getFormattedAmount,
 } from './utils';
-import { resolveCheckoutButtonForm, readCheckoutData } from './checkout-button-trigger';
+import { resolveCheckoutButtonForm, readCheckoutData, applyContextFields } from './checkout-button-trigger';
 import { applyCtaAttribution } from '../shared/js/cta-attribution';
 
 const CLASS_PREFIX = newspackBlocksModal.newspack_class_prefix;
@@ -165,12 +165,6 @@ domReady( () => {
 		onCheckoutPlaceOrderError( container, hideProcessingPaymentScreen );
 
 		onCheckoutReady( container, () => {
-			// Make sure the order summary renders the correct text.
-			const summaryTextNode = productDetails?.querySelector( 'strong' );
-			if ( summaryTextNode ) {
-				summaryTextNode.textContent = checkoutData.price_summary;
-			}
-
 			// Display initial errors if any.
 			if ( modalCheckout.initialErrors ) {
 				const errorContainer = document.createElement( 'div' );
@@ -369,20 +363,10 @@ domReady( () => {
 			const variationModal = [ ...variationModals ].find( modal => modal.dataset.productId === checkoutData.product_id );
 			if ( variationModal ) {
 				variationModal.querySelectorAll( `form[target="${ IFRAME_NAME }"]` ).forEach( singleVariationForm => {
-					// Fill in the hidden params in the variation modal.
-					[
-						'after_success_behavior',
-						'after_success_url',
-						'after_success_button_label',
-						'gate_post_id',
-						'newspack_popup_id',
-						'prompt_title',
-					].forEach( hiddenParam => {
-						const existingInputs = singleVariationForm.querySelectorAll( 'input[name="' + hiddenParam + '"]' );
-						if ( 0 === existingInputs.length ) {
-							singleVariationForm.prepend( createHiddenInput( hiddenParam, checkoutData[ hiddenParam ] ) );
-						}
-					} );
+					// Fill in the hidden params in the variation modal. The picker is
+					// shared by every button for this product and is never reset, so
+					// this overwrites the previous open's context rather than adding to it.
+					applyContextFields( singleVariationForm, checkoutData );
 
 					// Append the product data hidden inputs.
 					const data = readCheckoutData( singleVariationForm );
@@ -444,11 +428,6 @@ domReady( () => {
 		if ( shouldPromptRegistration() ) {
 			ev.preventDefault();
 
-			const priceSummary = checkoutData.price_summary;
-			const content = priceSummary
-				? `<div class="order-details-summary ${ CLASS_PREFIX }__box ${ CLASS_PREFIX }__box--text-center"><p><strong>${ priceSummary }</strong></p></div>`
-				: '';
-
 			// Generate cart asynchroneously.
 			const cartReq = generateCart( checkoutData );
 
@@ -499,7 +478,6 @@ domReady( () => {
 						title: newspackBlocksModal.labels.register_modal_title,
 					},
 				},
-				content,
 				trigger: ev.submitter,
 				closeOnSuccess: isModalCheckout,
 			} );
