@@ -224,4 +224,126 @@ final class Promo_Url_Targets {
 		] : null;
 		return $config;
 	}
+
+	/**
+	 * Map a resolved Donate renderer configuration to the promo-URL contract.
+	 *
+	 * Encodes the layout-param semantics of triggerDonationForm() in
+	 * newspack-blocks (modal.js): `tiered` targets the tiers-based block,
+	 * `untiered` the NYP input, and any other value the frequency-based tier
+	 * radios. Getting this wrong is a silent failure (NPPM-2815), so it lives
+	 * here — server-side, tested — and nowhere else.
+	 *
+	 * @param array $configuration Output of Newspack_Blocks_Donate_Renderer_Base::get_configuration().
+	 * @param bool  $can_use_nyp   Whether Name-Your-Price is available.
+	 * @return array Promo donate config (layout_param, frequencies, default_frequency, minimum).
+	 */
+	public static function map_donate_configuration( $configuration, $can_use_nyp ) {
+		$is_tiers_based = ! empty( $configuration['is_tier_based_layout'] );
+		$tiered         = ! empty( $configuration['tiered'] );
+		if ( $is_tiers_based ) {
+			$layout_param = 'tiered';
+		} elseif ( $tiered ) {
+			$layout_param = 'frequency';
+		} else {
+			$layout_param = $can_use_nyp ? 'untiered' : 'frequency';
+		}
+		$frequencies = [];
+		foreach ( [ 'once', 'month', 'year' ] as $slug ) {
+			$amounts   = isset( $configuration['amounts'][ $slug ] ) ? array_map( 'floatval', (array) $configuration['amounts'][ $slug ] ) : [];
+			$suggested = isset( $amounts[3] ) ? $amounts[3] : null;
+			if ( 'untiered' === $layout_param ) {
+				$preset_amounts  = [];
+				$supports_custom = true;
+			} elseif ( 'tiered' === $layout_param ) {
+				$preset_amounts  = array_slice( $amounts, 0, 3 );
+				$supports_custom = false;
+			} elseif ( $tiered ) {
+				$preset_amounts  = array_slice( $amounts, 0, 3 );
+				$supports_custom = $can_use_nyp;
+			} else {
+				$preset_amounts  = null === $suggested ? [] : [ $suggested ];
+				$supports_custom = false;
+			}
+			$frequencies[ $slug ] = [
+				'enabled'         => isset( $configuration['frequencies'][ $slug ] ),
+				'amounts'         => $preset_amounts,
+				'supports_custom' => $supports_custom,
+				'suggested'       => $suggested,
+			];
+		}
+		return [
+			'layout_param'      => $layout_param,
+			'frequencies'       => $frequencies,
+			'default_frequency' => isset( $configuration['defaultFrequency'] ) ? (string) $configuration['defaultFrequency'] : 'month',
+			'minimum'           => isset( $configuration['minimumDonation'] ) ? (float) $configuration['minimumDonation'] : 5.0,
+		];
+	}
+
+	/**
+	 * Derive the promo config for one Donate block instance found in content.
+	 *
+	 * @param array $attrs Block attributes from parse_blocks().
+	 * @return array|null Promo donate config, or null when newspack-blocks is
+	 *                    unavailable or the block can't take modal-checkout URLs.
+	 */
+	public static function get_donate_target_config( $attrs ) {
+		if ( ! class_exists( '\Newspack_Blocks_Donate_Renderer_Base' ) || ! class_exists( '\Newspack_Blocks' ) ) {
+			return null;
+		}
+		// parse_blocks() yields only explicitly-set attributes; fill schema defaults.
+		$block_type = \WP_Block_Type_Registry::get_instance()->get_registered( 'newspack-blocks/donate' );
+		if ( $block_type ) {
+			$attrs = $block_type->prepare_attributes_for_render( $attrs );
+		}
+		if ( isset( $attrs['useModalCheckout'] ) && ! $attrs['useModalCheckout'] ) {
+			return null;
+		}
+		$configuration = \Newspack_Blocks_Donate_Renderer_Base::get_configuration( $attrs );
+		if ( is_wp_error( $configuration ) || 'wc' !== ( $configuration['platform'] ?? '' ) ) {
+			return null;
+		}
+		return self::map_donate_configuration( $configuration, \Newspack_Blocks::can_use_name_your_price() );
+	}
+
+	/**
+	 * Promo config for the direct (PHP-side) donation path, from site settings.
+	 * Direct URLs accept any value (NYP-standardized), so every frequency
+	 * supports a custom amount; a frequency is only usable when its donation
+	 * product exists.
+	 *
+	 * @return array|null Promo donate config, or null when donations aren't WC-based.
+	 */
+	public static function get_direct_donation_config() {
+		if ( ! Donations::is_platform_wc() ) {
+			return null;
+		}
+		$settings = Donations::get_donation_settings();
+		if ( is_wp_error( $settings ) ) {
+			return null;
+		}
+		$enabled_map = [];
+		foreach ( [ 'once', 'month', 'year' ] as $slug ) {
+			if ( empty( $settings['disabledFrequencies'][ $slug ] ) ) {
+				$enabled_map[ $slug ] = $slug;
+			}
+		}
+		$configuration = array_merge(
+			$settings,
+			[
+				'frequencies'          => $enabled_map,
+				'is_tier_based_layout' => false,
+			]
+		);
+		$can_use_nyp = class_exists( '\Newspack_Blocks' ) ? \Newspack_Blocks::can_use_name_your_price() : false;
+		$config      = self::map_donate_configuration( $configuration, $can_use_nyp );
+		$product_ids = Donations::get_donation_product_child_products_ids();
+		foreach ( array_keys( $config['frequencies'] ) as $slug ) {
+			$config['frequencies'][ $slug ]['supports_custom'] = true;
+			if ( empty( $product_ids[ $slug ] ) ) {
+				$config['frequencies'][ $slug ]['enabled'] = false;
+			}
+		}
+		return $config;
+	}
 }

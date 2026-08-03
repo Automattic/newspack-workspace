@@ -305,4 +305,96 @@ class Promo_Url_Targets_Test extends WP_UnitTestCase {
 		$this->assertNull( $plain['after_success'] );
 		$this->assertNull( $plain['coupon'] );
 	}
+
+	/**
+	 * Helper to build a test donate configuration.
+	 *
+	 * @param array $overrides Optional overrides to apply.
+	 * @return array Donate configuration.
+	 */
+	private function donate_configuration( $overrides = [] ) {
+		return array_merge(
+			[
+				'is_tier_based_layout' => false,
+				'tiered'               => true,
+				'frequencies'          => [
+					'month' => 'Monthly',
+					'year'  => 'Annually',
+				],
+				'amounts'              => [
+					'once'  => [ 9, 20, 90, 20 ],
+					'month' => [ 7, 15, 30, 15 ],
+					'year'  => [ 84, 180, 360, 180 ],
+				],
+				'defaultFrequency'     => 'month',
+				'minimumDonation'      => 5,
+			],
+			$overrides
+		);
+	}
+
+	/**
+	 * Test mapping tiers-based layout.
+	 */
+	public function test_map_tiers_based_layout() {
+		$config = Promo_Url_Targets::map_donate_configuration(
+			$this->donate_configuration( [ 'is_tier_based_layout' => true ] ),
+			true
+		);
+		$this->assertSame( 'tiered', $config['layout_param'] );
+		$this->assertTrue( $config['frequencies']['month']['enabled'] );
+		$this->assertFalse( $config['frequencies']['once']['enabled'] );
+		$this->assertSame( [ 7.0, 15.0, 30.0 ], $config['frequencies']['month']['amounts'] );
+		$this->assertFalse( $config['frequencies']['month']['supports_custom'] );
+	}
+
+	/**
+	 * Test mapping frequency-based tiered layout.
+	 */
+	public function test_map_frequency_based_tiered_layout() {
+		$config = Promo_Url_Targets::map_donate_configuration( $this->donate_configuration(), true );
+		$this->assertSame( 'frequency', $config['layout_param'] );
+		$this->assertTrue( $config['frequencies']['month']['supports_custom'] );
+		$config_no_nyp = Promo_Url_Targets::map_donate_configuration( $this->donate_configuration(), false );
+		$this->assertFalse( $config_no_nyp['frequencies']['month']['supports_custom'] );
+	}
+
+	/**
+	 * Test mapping untiered layout with and without NYP.
+	 */
+	public function test_map_untiered_layout_with_and_without_nyp() {
+		$config = Promo_Url_Targets::map_donate_configuration(
+			$this->donate_configuration( [ 'tiered' => false ] ),
+			true
+		);
+		$this->assertSame( 'untiered', $config['layout_param'] );
+		$this->assertTrue( $config['frequencies']['month']['supports_custom'] );
+		$this->assertSame( 15.0, $config['frequencies']['month']['suggested'] );
+
+		$config_no_nyp = Promo_Url_Targets::map_donate_configuration(
+			$this->donate_configuration( [ 'tiered' => false ] ),
+			false
+		);
+		$this->assertSame( 'frequency', $config_no_nyp['layout_param'] );
+		$this->assertSame( [ 15.0 ], $config_no_nyp['frequencies']['month']['amounts'] );
+		$this->assertFalse( $config_no_nyp['frequencies']['month']['supports_custom'] );
+	}
+
+	/**
+	 * Test that default frequency and minimum are carried through.
+	 */
+	public function test_map_carries_default_frequency_and_minimum() {
+		$config = Promo_Url_Targets::map_donate_configuration( $this->donate_configuration(), true );
+		$this->assertSame( 'month', $config['default_frequency'] );
+		$this->assertSame( 5.0, $config['minimum'] );
+	}
+
+	/**
+	 * Test that get_donate_target_config returns null when newspack-blocks is not loaded.
+	 */
+	public function test_get_donate_target_config_without_newspack_blocks_returns_null() {
+		// newspack-blocks is not loaded in this test suite, so the guarded seam
+		// must bail out cleanly rather than fataling.
+		$this->assertNull( Promo_Url_Targets::get_donate_target_config( [ 'useModalCheckout' => true ] ) );
+	}
 }
