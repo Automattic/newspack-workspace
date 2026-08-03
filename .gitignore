@@ -44,3 +44,11 @@ packages/*/package-lock.json
 # Per-checkout personal hooks run by .husky/pre-commit (see AGENTS.md).
 # `*.local*` also covers editor backups like pre-commit.local~ / .local.bak.
 .husky/*.local*
+# Security scan artifacts: findings, patches, and reports from AI security
+# scanners. This repo is public, so these must never be committed. Being
+# untracked is not protection — a single `git add -A` publishes them.
+# Deliberately matched by name rather than by a broad wildcard, for the same
+# reason `/data` above is anchored: an over-wide pattern silently swallows
+# source directories. Add new scanners here by name as they appear.
+CLAUDE-SECURITY-*
+.codex-security/
