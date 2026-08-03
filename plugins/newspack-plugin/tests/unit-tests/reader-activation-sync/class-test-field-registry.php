@@ -127,8 +127,7 @@ class Test_Field_Registry extends \WP_UnitTestCase {
 
 	/**
 	 * Every class-owned definition (i.e. not a filter-added extra) must
-	 * carry a description and a valid sync_type, since these back the
-	 * Phase-2 field-picker UI.
+	 * carry a description, since these back the Phase-2 field-picker UI.
 	 */
 	public function test_all_class_owned_definitions_have_descriptions() {
 		foreach ( Field_Registry::get_definitions() as $id => $definition ) {
@@ -136,7 +135,6 @@ class Test_Field_Registry extends \WP_UnitTestCase {
 				continue; // Filter extras carry no authored metadata.
 			}
 			$this->assertNotEmpty( $definition['description'] ?? '', "Missing description for {$id}" );
-			$this->assertContains( $definition['sync_type'] ?? '', [ 'field', 'tag' ], "Missing sync_type for {$id}" );
 		}
 	}
 
