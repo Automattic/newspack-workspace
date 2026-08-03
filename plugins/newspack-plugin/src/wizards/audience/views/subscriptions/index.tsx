@@ -43,7 +43,6 @@ function AudienceSubscriptions( props: Record< string, any >, ref: React.Forward
 				{
 					label: __( 'Configuration', 'newspack-plugin' ),
 					path: '/configuration',
-					breadcrumbs: [ { label: __( 'Audience Management', 'newspack-plugin' ) }, { label: __( 'Subscriptions', 'newspack-plugin' ) } ],
 					render: () => (
 						<WizardsTab title={ __( 'Configuration', 'newspack-plugin' ) }>
 							<WizardSection>

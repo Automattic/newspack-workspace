@@ -7,7 +7,6 @@ import classnames from 'classnames';
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { isValidElement } from '@wordpress/element';
 import { DropdownMenu, __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 import { moreVertical } from '@wordpress/icons';
 
@@ -39,14 +38,14 @@ type CardFeatureIcon = {
 type MoreControl = {
 	title: string;
 	onClick: () => void;
-	icon?: JSX.Element;
+	icon?: React.ReactNode;
 };
 
 type CardFeatureProps = {
 	title: string;
 	description?: string;
-	/** Icon shown beside the title: a descriptor (coloured badge) or a ready element rendered as-is. */
-	icon?: CardFeatureIcon | React.ReactElement;
+	/** Icon displayed on the right-hand side of the title and description. */
+	icon?: CardFeatureIcon;
 	/** Whether the feature is currently enabled. */
 	enabled?: boolean;
 	/**
@@ -58,22 +57,18 @@ type CardFeatureProps = {
 	requirements?: string;
 	/**
 	 * When `requirements` is set, keep the primary button clickable so the
-	 * user can remediate the unmet requirement from this card, and keep the
-	 * "More" dropdown available — the feature is degraded but still operable
-	 * (e.g. can be disabled), unlike a hard-locked requirement.
+	 * user can remediate the unmet requirement from this card.
 	 */
 	requirementsActionable?: boolean;
 	/** Primary button label when not enabled. Default: "Enable". */
 	enableLabel?: string;
-	/** Show the primary button as busy (spinner) and disabled while an action is in flight. */
-	busy?: boolean;
 	/** Primary button label when enabled. Default: "Configure". */
 	configureLabel?: string;
 	/** Called when the primary button is clicked and the feature is not enabled. */
 	onEnable?: () => void;
 	/** Called when the primary button is clicked and the feature is enabled. */
 	onConfigure?: () => void;
-	/** Controls rendered inside the "More" dropdown, shown when enabled — including the unmet-requirements state when `requirementsActionable`. */
+	/** Controls rendered inside the "More" dropdown, shown only when enabled. */
 	moreControls?: MoreControl[];
 	/** Badge text shown when enabled. Default: "Enabled". */
 	badgeText?: string;
@@ -97,7 +92,6 @@ const CardFeature = ( {
 	requirements,
 	requirementsActionable = false,
 	enableLabel,
-	busy = false,
 	configureLabel,
 	onEnable,
 	onConfigure,
@@ -120,7 +114,6 @@ const CardFeature = ( {
 
 	const isConfigureState = enabled && ! requirements;
 	const buttonLabel = isConfigureState ? configureLabel ?? __( 'Configure', 'newspack-plugin' ) : enableLabel ?? __( 'Enable', 'newspack-plugin' );
-	const showMoreControls = enabled && !! moreControls?.length && ( ! requirements || requirementsActionable );
 
 	const handleButtonClick = () => {
 		if ( isConfigureState ) {
@@ -130,30 +123,12 @@ const CardFeature = ( {
 		}
 	};
 
-	const iconDescriptor = icon && ! isValidElement( icon ) ? ( icon as CardFeatureIcon ) : null;
-	const iconClasses = iconDescriptor
+	const iconClasses = icon
 		? classnames( 'newspack-card-feature__icon', {
-				'newspack-card-feature__icon--radius-small': !! iconDescriptor.backgroundColor && iconDescriptor.radius !== 'full',
-				'newspack-card-feature__icon--radius-full': iconDescriptor.radius === 'full',
+				'newspack-card-feature__icon--radius-small': !! icon.backgroundColor && icon.radius !== 'full',
+				'newspack-card-feature__icon--radius-full': icon.radius === 'full',
 		  } )
 		: undefined;
-
-	let renderedIcon = null;
-	if ( isValidElement( icon ) ) {
-		renderedIcon = icon;
-	} else if ( iconDescriptor ) {
-		renderedIcon = (
-			<div
-				className={ iconClasses }
-				style={ {
-					backgroundColor: iconDescriptor.backgroundColor,
-					color: iconDescriptor.fill,
-				} }
-			>
-				{ iconDescriptor.node }
-			</div>
-		);
-	}
 
 	return (
 		<Card
@@ -168,20 +143,29 @@ const CardFeature = ( {
 								<h2 className="newspack-card-feature__title">{ title }</h2>
 								{ description && <p className="newspack-card-feature__description">{ description }</p> }
 							</div>
-							{ renderedIcon }
+							{ icon && (
+								<div
+									className={ iconClasses }
+									style={ {
+										backgroundColor: icon.backgroundColor,
+										color: icon.fill,
+									} }
+								>
+									{ icon.node }
+								</div>
+							) }
 						</HStack>
 						<HStack alignment="edge">
 							<HStack expanded={ false } spacing="8px">
 								<Button
 									variant={ isConfigureState ? 'tertiary' : 'secondary' }
-									disabled={ ( isMuted && ! requirementsActionable ) || busy }
-									isBusy={ busy }
+									disabled={ isMuted && ! requirementsActionable }
 									onClick={ handleButtonClick }
 									size="compact"
 								>
 									{ buttonLabel }
 								</Button>
-								{ showMoreControls && (
+								{ isConfigureState && !! moreControls?.length && (
 									<DropdownMenu
 										icon={ moreVertical }
 										label={ __( 'More', 'newspack-plugin' ) }

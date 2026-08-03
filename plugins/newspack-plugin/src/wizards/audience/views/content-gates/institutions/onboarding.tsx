@@ -37,7 +37,7 @@ const InstitutionsOnboarding = () => {
 					/>
 					<HStack alignment="center">
 						<Button variant="primary" href="#/institutions/new">
-							{ __( 'Add Institution', 'newspack-plugin' ) }
+							{ __( 'Add new institution', 'newspack-plugin' ) }
 						</Button>
 					</HStack>
 				</VStack>

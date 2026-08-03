@@ -58,7 +58,6 @@ function ConfirmDialog(
 		onCancel = noOp,
 		when = false,
 		isOpen = false,
-		children,
 		...otherProps
 	}: ConfirmDialogProps,
 	ref: React.Ref< HTMLDivElement >
@@ -66,9 +65,6 @@ function ConfirmDialog(
 	const [ showDialog, setShowDialog ] = useState( isOpen );
 	const history = useHistory();
 	const pendingNavigation = useRef< ( () => void ) | null >( null );
-	// While true, the blocker lets navigation through — used so the confirmed
-	// ("Discard changes") navigation isn't caught by the still-active blocker.
-	const bypassBlock = useRef( false );
 
 	const handleOnConfirm = useCallback( () => {
 		setShowDialog( false );
@@ -80,16 +76,8 @@ function ConfirmDialog(
 	const handleOnCancel = useCallback( () => {
 		setShowDialog( false );
 		pendingNavigation.current = null;
-		// A POP may have moved the URL to the target before it was blocked; put
-		// it back so the address bar matches the page the user chose to stay on.
-		bypassBlock.current = true;
-		try {
-			history.replace( history.location );
-		} finally {
-			bypassBlock.current = false;
-		}
 		onCancel();
-	}, [ onCancel, history ] );
+	}, [ onCancel, pendingNavigation ] );
 
 	// Block navigation when there are unsaved changes.
 	useEffect( () => {
@@ -97,25 +85,12 @@ function ConfirmDialog(
 			return;
 		}
 		const unblock = history.block( ( location: string, action: string ) => {
-			// Let our own confirmed navigation through instead of re-blocking it.
-			if ( bypassBlock.current ) {
-				return undefined;
-			}
 			pendingNavigation.current = () => {
-				bypassBlock.current = true;
-				try {
-					// A browser/anchor POP (e.g. a breadcrumb or back link) moves the URL
-					// to the target before navigation is blocked, and v5 leaves the hash
-					// there, so pushing the target would be a no-op. Re-sync to the
-					// still-current location first so the real navigation actually fires.
-					history.replace( history.location );
-					if ( action === 'REPLACE' ) {
-						history.replace( location );
-					} else {
-						history.push( location );
-					}
-				} finally {
-					bypassBlock.current = false;
+				unblock();
+				if ( action === 'REPLACE' ) {
+					history.replace( location );
+				} else {
+					history.push( location );
 				}
 			};
 			setShowDialog( true );
@@ -151,9 +126,7 @@ function ConfirmDialog(
 			onConfirm={ handleOnConfirm }
 			onCancel={ handleOnCancel }
 			__experimentalHideHeader={ false }
-		>
-			{ children }
-		</BaseComponent>
+		/>
 	);
 }
 export default forwardRef( ConfirmDialog );

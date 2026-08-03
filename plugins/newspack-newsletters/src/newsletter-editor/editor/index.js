@@ -21,7 +21,6 @@ import withApiHandler from '../../components/with-api-handler';
 import SendButton from '../../components/send-button';
 import './style.scss';
 import { validateNewsletter } from '../utils';
-import { CAMPAIGN_SENT_NOTICE_ID } from '../../utils/consts';
 
 const Editor = compose( [
 	withApiHandler(),
@@ -114,10 +113,9 @@ const Editor = compose( [
 			// Lock autosaving after a newsletter is sent.
 			lockPostAutosaving();
 
-			// Show an editor notice if the newsletter has been sent. The separating space lives here
-			// rather than in `successNote` so the translatable string carries no flanking whitespace.
-			createNotice( 'success', `${ successNote } ${ dateTime }`, {
-				id: CAMPAIGN_SENT_NOTICE_ID,
+			// Show an editor notice if the newsletter has been sent.
+			createNotice( 'success', successNote + dateTime, {
+				id: 'newspack-newsletters-campaign-sent-notice',
 				isDismissible: false,
 			} );
 

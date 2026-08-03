@@ -8,10 +8,6 @@ export function notifySuccess( message, options = {} ) {
 	dispatch( noticesStore ).createSuccessNotice( message, { ...options, type: 'snackbar' } );
 }
 
-export function notifyInfo( message, options = {} ) {
-	dispatch( noticesStore ).createInfoNotice( message, { ...options, type: 'snackbar' } );
-}
-
 export function notifyError( message, options = {} ) {
 	dispatch( noticesStore ).createErrorNotice( message, { ...options, type: 'snackbar' } );
 }

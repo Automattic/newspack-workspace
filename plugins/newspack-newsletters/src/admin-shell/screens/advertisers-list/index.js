@@ -14,10 +14,7 @@ import { __ } from '@wordpress/i18n';
 import { store } from '@wordpress/icons';
 
 import EmptyState from '../../components/empty-state';
-import HeaderCount from '../../components/header-count';
-import ItemsPerPage from '../../components/items-per-page';
 import { useHeaderActions } from '../../header-actions-context';
-import usePersistedView from '../../hooks/use-persisted-view';
 import AdvertiserModal from './modal';
 import useAdvertisersData from './use-advertisers-data';
 import useAllAdvertisers from './use-all-advertisers';
@@ -28,7 +25,7 @@ import { getActions } from './actions';
 const DEFAULT_VIEW = {
 	type: 'table',
 	page: 1,
-	perPage: 20,
+	perPage: 25,
 	sort: { field: 'name', direction: 'asc' },
 	search: '',
 	filters: [],
@@ -39,12 +36,8 @@ const DEFAULT_VIEW = {
 
 const DEFAULT_LAYOUTS = { table: {} };
 
-// Suppress the built-in ViewConfig per-page control — the custom
-// `ItemsPerPage` renders in its place inside the View options popover.
-const DATAVIEWS_CONFIG = { perPageSizes: [] };
-
 export default function AdvertisersListScreen() {
-	const [ view, setView ] = usePersistedView( 'advertisers-list', DEFAULT_VIEW );
+	const [ view, setView ] = useState( DEFAULT_VIEW );
 	const [ modalState, setModalState ] = useState( null ); // null | { mode: 'add' | 'edit', advertiser?: Object }
 	// Single mutation trigger shared by every write path (Modal save,
 	// per-row Delete, bulk Delete). Bumping it refetches both the
@@ -54,7 +47,7 @@ export default function AdvertisersListScreen() {
 	// created one appears immediately on the next modal open.
 	const [ mutationKey, setMutationKey ] = useState( 0 );
 
-	const { data, paginationInfo, isLoading, hasResolved, hasLoadedOnce, progress } = useAdvertisersData( view, mutationKey );
+	const { data, paginationInfo, isLoading, hasResolved, hasLoadedOnce } = useAdvertisersData( view, mutationKey );
 	const allAdvertisers = useAllAdvertisers( mutationKey );
 
 	// `setModalState` (a `useState` setter) is itself stable, but wrapping
@@ -81,7 +74,7 @@ export default function AdvertisersListScreen() {
 					: [
 							{
 								type: 'primary',
-								label: __( 'Add Advertiser', 'newspack-newsletters' ),
+								label: __( 'Add new advertiser', 'newspack-newsletters' ),
 								onClick: openAdd,
 							},
 					  ],
@@ -99,7 +92,6 @@ export default function AdvertisersListScreen() {
 
 	return (
 		<>
-			<HeaderCount count={ paginationInfo.totalItems } />
 			{ isStrictEmpty ? (
 				<EmptyState
 					icon={ store }
@@ -108,7 +100,7 @@ export default function AdvertisersListScreen() {
 						'Group ads by the advertiser they belong to so you can track and report on each one separately.',
 						'newspack-newsletters'
 					) }
-					ctaTitle={ __( 'Add Advertiser', 'newspack-newsletters' ) }
+					ctaTitle={ __( 'Add new advertiser', 'newspack-newsletters' ) }
 					ctaOnClick={ openAdd }
 				/>
 			) : (
@@ -124,14 +116,6 @@ export default function AdvertisersListScreen() {
 					isLoading={ isLoading }
 					getItemId={ item => String( item.id ) }
 					search
-					config={ DATAVIEWS_CONFIG }
-					header={
-						<ItemsPerPage
-							value={ view.perPage }
-							progress={ progress }
-							onChange={ perPage => setView( current => ( { ...current, perPage, page: 1 } ) ) }
-						/>
-					}
 				/>
 			) }
 

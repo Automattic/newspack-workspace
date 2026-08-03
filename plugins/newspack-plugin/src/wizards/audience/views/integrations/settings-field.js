@@ -99,21 +99,11 @@ export const SettingsField = ( { field, value, onChange } ) => {
 						value: opt.value,
 					} ) ) }
 					onChange={ onChange }
-					__next40pxDefaultSize
-					__nextHasNoMarginBottom
 				/>
 			);
 		case 'textarea':
 			return (
-				<TextareaControl
-					key={ key }
-					label={ label }
-					help={ help }
-					value={ value || '' }
-					placeholder={ placeholder }
-					onChange={ onChange }
-					__nextHasNoMarginBottom
-				/>
+				<TextareaControl key={ key } label={ label } help={ help } value={ value || '' } placeholder={ placeholder } onChange={ onChange } />
 			);
 		case 'number':
 			return (
@@ -125,8 +115,6 @@ export const SettingsField = ( { field, value, onChange } ) => {
 					placeholder={ placeholder }
 					onChange={ onChange }
 					type="number"
-					__next40pxDefaultSize
-					__nextHasNoMarginBottom
 				/>
 			);
 		case 'password':
@@ -139,23 +127,10 @@ export const SettingsField = ( { field, value, onChange } ) => {
 					placeholder={ placeholder }
 					onChange={ onChange }
 					type="password"
-					__next40pxDefaultSize
-					__nextHasNoMarginBottom
 				/>
 			);
 		case 'text':
 		default:
-			return (
-				<TextControl
-					key={ key }
-					label={ label }
-					help={ help }
-					value={ value || '' }
-					placeholder={ placeholder }
-					onChange={ onChange }
-					__next40pxDefaultSize
-					__nextHasNoMarginBottom
-				/>
-			);
+			return <TextControl key={ key } label={ label } help={ help } value={ value || '' } placeholder={ placeholder } onChange={ onChange } />;
 	}
 };

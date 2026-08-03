@@ -23,7 +23,7 @@ import Publicize from './publicize';
 function Social() {
 	return (
 		<div className="newspack-wizard__sections">
-			<h2 className="newspack-wizard__heading">{ __( 'Social', 'newspack-plugin' ) }</h2>
+			<h1>{ __( 'Social', 'newspack-plugin' ) }</h1>
 
 			<Section>
 				<Publicize />

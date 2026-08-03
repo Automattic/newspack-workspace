@@ -82,15 +82,12 @@ class Advertisers_List_Page extends Hidden_React_List_Page {
 	}
 
 	/**
-	 * Explicit admin-header breadcrumb trail.
+	 * Canonical Advertisers tab URL — wizard header's strict URL
+	 * equality check would otherwise miss our `&page=…` subpage.
 	 *
-	 * @return array<array{label: string}>
+	 * @return string
 	 */
-	public function get_wizard_breadcrumbs(): ?array {
-		return [
-			[ 'label' => __( 'Newsletters', 'newspack-newsletters' ) ],
-			[ 'label' => __( 'Advertising', 'newspack-newsletters' ) ],
-			[ 'label' => __( 'Advertisers', 'newspack-newsletters' ) ],
-		];
+	public function get_wizard_tab_url(): ?string {
+		return admin_url( 'edit-tags.php?taxonomy=' . Ads::ADVERTISER_TAX . '&post_type=' . Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT );
 	}
 }

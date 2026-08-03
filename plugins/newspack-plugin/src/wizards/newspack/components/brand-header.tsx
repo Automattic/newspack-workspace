@@ -12,7 +12,7 @@ const BrandHeader = () => {
 	return (
 		<header className="newspack-dashboard__brand-header" style={ { backgroundColor: settings.headerBgColor } }>
 			<BoxContrast className="brand-header__inner" hexColor={ settings.headerBgColor }>
-				<p className="newspack-dashboard__brand-header__title">{ settings.siteName }</p>
+				<h1>{ settings.siteName }</h1>
 			</BoxContrast>
 		</header>
 	);

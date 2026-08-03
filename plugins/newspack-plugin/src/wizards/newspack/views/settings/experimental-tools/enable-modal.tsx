@@ -6,12 +6,12 @@
  * WordPress dependencies
  */
 import { __, sprintf } from '@wordpress/i18n';
-import { Notice, __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { Notice } from '@wordpress/components';
 
 /**
  * Internal dependencies
  */
-import { Button, Modal } from '../../../../../../packages/components/src';
+import { Card, Button, Modal } from '../../../../../../packages/components/src';
 import type { Tool } from './types';
 
 export default function EnableModal( {
@@ -41,14 +41,14 @@ export default function EnableModal( {
 					{ tool.location_hint }
 				</Notice>
 			) }
-			<HStack justify="flex-end" spacing={ 4 } wrap className="newspack-modal__footer">
+			<Card buttonsCard noBorder className="justify-end">
 				<Button variant="secondary" onClick={ onClose } disabled={ disabled }>
 					{ __( 'Cancel', 'newspack-plugin' ) }
 				</Button>
 				<Button variant="primary" onClick={ onConfirm } disabled={ disabled }>
 					{ __( 'Enable', 'newspack-plugin' ) }
 				</Button>
-			</HStack>
+			</Card>
 		</Modal>
 	);
 }

@@ -3,12 +3,11 @@
  */
 import { __ } from '@wordpress/i18n';
 import { useSelect } from '@wordpress/data';
-import { __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 
 /**
  * Internal dependencies.
  */
-import { Button, Modal, Notice } from '../..';
+import { Button, Card, Modal, Notice } from '../..';
 import { WIZARD_STORE_NAMESPACE } from '../store';
 
 const parseError = ( { data, message, code } ) => {
@@ -37,11 +36,11 @@ const WizardError = () => {
 			<Modal title={ __( 'Unrecoverable error' ) } onRequestClose={ fallbackURL ? () => ( window.location = fallbackURL ) : undefined }>
 				<Notice noticeText={ message } isError rawHTML />
 				{ fallbackURL && (
-					<HStack justify="flex-end" spacing={ 4 } wrap className="newspack-modal__footer">
+					<Card buttonsCard noBorder className="justify-end">
 						<Button isPrimary href={ fallbackURL }>
 							{ __( 'Return to Dashboard', 'newspack-plugin' ) }
 						</Button>
-					</HStack>
+					</Card>
 				) }
 			</Modal>
 		);

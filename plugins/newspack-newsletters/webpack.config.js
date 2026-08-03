@@ -8,7 +8,6 @@
  * External dependencies
  */
 const getBaseWebpackConfig = require( 'newspack-scripts/config/getWebpackConfig' );
-const { resolveSourceFile } = require( 'newspack-scripts/config/resolveSource' );
 const path = require( 'path' );
 const webpack = require( 'webpack' );
 
@@ -26,10 +25,9 @@ const entry = {
 	branding: path.join( __dirname, 'src', 'branding' ),
 	quickEdit: path.join( __dirname, 'src', 'quick-edit' ),
 	editorBlocks: path.join( __dirname, 'src', 'editor', 'blocks' ),
-	legacyBlockStyles: path.join( __dirname, 'src', 'editor', 'legacy-block-styles' ),
 	newsletterEditor: path.join( __dirname, 'src', 'newsletter-editor' ),
 	blocks: path.join( __dirname, 'src', 'blocks' ),
-	subscribeBlock: resolveSourceFile( path.join( __dirname, 'src', 'blocks', 'subscribe', 'view' ) ),
+	subscribeBlock: path.join( __dirname, 'src', 'blocks', 'subscribe', 'view.js' ),
 	subscriptions: path.join( __dirname, 'src', 'subscriptions' ),
 };
 

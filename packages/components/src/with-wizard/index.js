@@ -4,12 +4,12 @@
 import { Component, createRef, Fragment } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
-import { __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { category } from '@wordpress/icons';
 
 /**
  * Internal dependencies.
  */
-import { Button, Modal, Notice, Page, PluginInstaller } from '../';
+import { Button, Card, Modal, NewspackIcon, Notice, PluginInstaller } from '../';
 import Router from '../proxied-imports/router';
 import Footer from '../footer';
 import './style.scss';
@@ -99,11 +99,11 @@ export default function withWizard( WrappedComponent, requiredPlugins ) {
 			return (
 				<Modal title={ __( 'Unrecoverable error' ) } onRequestClose={ () => ( window.location = fallbackURL ) }>
 					<Notice noticeText={ message } isError rawHTML />
-					<HStack justify="flex-end" spacing={ 4 } wrap className="newspack-modal__footer">
+					<Card buttonsCard noBorder className="justify-end">
 						<Button isPrimary href={ fallbackURL }>
 							{ __( 'Return to Dashboard', 'newspack-plugin' ) }
 						</Button>
-					</HStack>
+					</Card>
 				</Modal>
 			);
 		};
@@ -203,20 +203,41 @@ export default function withWizard( WrappedComponent, requiredPlugins ) {
 			if ( complete ) {
 				return <Redirect from="/plugin-requirements" to="/" />;
 			}
-			const headerText = requiredPlugins.length > 1 ? __( 'Required plugins', 'newspack-plugin' ) : __( 'Required plugin', 'newspack-plugin' );
-			const content = (
-				<div className="newspack-wizard newspack-wizard__content">
-					<PluginInstaller plugins={ requiredPlugins } onStatus={ status => this.pluginInstallationStatus( status ) } />
-				</div>
-			);
 			return (
 				<Route
 					path="/"
-					render={ () =>
-						// While `complete` is still null the requirements are being
-						// determined; render content without a header (matches prior behavior).
-						complete === null ? content : <Page breadcrumbItems={ [ { label: headerText } ] }>{ content }</Page>
-					}
+					render={ () => (
+						<Fragment>
+							{ complete !== null && (
+								<div className="newspack-wizard__header">
+									<div className="newspack-wizard__header__inner">
+										<div className="newspack-wizard__title">
+											<Button
+												isLink
+												href={ newspack_urls.dashboard }
+												label={ __( 'Return to Dashboard', 'newspack-plugin' ) }
+												showTooltip={ true }
+												icon={ category }
+												iconSize={ 36 }
+											>
+												<NewspackIcon size={ 36 } />
+											</Button>
+											<div>
+												<h2>
+													{ requiredPlugins.length > 1
+														? __( 'Required plugins', 'newspack-plugin' )
+														: __( 'Required plugin', 'newspack-plugin' ) }
+												</h2>
+											</div>
+										</div>
+									</div>
+								</div>
+							) }
+							<div className="newspack-wizard newspack-wizard__content">
+								<PluginInstaller plugins={ requiredPlugins } onStatus={ status => this.pluginInstallationStatus( status ) } />
+							</div>
+						</Fragment>
+					) }
 				/>
 			);
 		};
@@ -235,7 +256,7 @@ export default function withWizard( WrappedComponent, requiredPlugins ) {
 		confirmAction = options => {
 			const modalOptions = {
 				title: null,
-				message: __( 'Are you sure?', 'newspack-plugin' ),
+				message: __( 'Are you sure?', 'newpack-plugin' ),
 				confirmText: __( 'OK', 'newspack-plugin' ),
 				cancelText: __( 'Cancel', 'newspack-plugin' ),
 				callback: null,
@@ -260,7 +281,7 @@ export default function withWizard( WrappedComponent, requiredPlugins ) {
 				callback && (
 					<Modal size="small" hideTitle={ ! title } title={ title } onRequestClose={ () => this.setState( { confirmation: null } ) }>
 						<p>{ message }</p>
-						<HStack justify="flex-end" spacing={ 4 } wrap className="newspack-modal__footer">
+						<Card buttonsCard noBorder className="justify-end">
 							<Button variant="secondary" onClick={ () => this.setState( { confirmation: null } ) }>
 								{ cancelText }
 							</Button>
@@ -273,7 +294,7 @@ export default function withWizard( WrappedComponent, requiredPlugins ) {
 							>
 								{ confirmText }
 							</Button>
-						</HStack>
+						</Card>
 					</Modal>
 				)
 			);

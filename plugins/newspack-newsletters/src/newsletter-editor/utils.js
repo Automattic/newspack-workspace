@@ -11,7 +11,6 @@ import { __ } from '@wordpress/i18n';
  */
 import { getServiceProvider } from '../service-providers';
 import { LAYOUT_CPT_SLUG } from '../utils/consts';
-import { isManualProvider } from '../utils/service-provider';
 
 /**
  * Is the current editor session editing a layout post?
@@ -35,6 +34,16 @@ export const isSupportedESP = () => {
 };
 
 /**
+ * Is the current ESP "manual"?
+ *
+ * @return {boolean} True if the ESP is supported and connected.
+ */
+export const isManualESP = () => {
+	const { name: serviceProviderName } = getServiceProvider();
+	return 'manual' === serviceProviderName;
+};
+
+/**
  * Validation utility.
  *
  * @param {Object} meta              Post meta.
@@ -44,7 +53,8 @@ export const isSupportedESP = () => {
  * @return {string[]} Array of validation messages. If empty, newsletter is valid.
  */
 export const validateNewsletter = ( meta = {} ) => {
-	if ( isManualProvider() ) {
+	const { name: serviceProviderName } = getServiceProvider();
+	if ( 'manual' === serviceProviderName ) {
 		return [];
 	}
 	const { senderEmail, senderName, send_list_id: listId } = meta;

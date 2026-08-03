@@ -4,7 +4,6 @@
 import { __ } from '@wordpress/i18n';
 import { Fragment, useState, useEffect } from '@wordpress/element';
 import apiFetch from '@wordpress/api-fetch';
-import { __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 
 /**
  * Newspack dependencies.
@@ -284,7 +283,7 @@ const Order = ( { orderId = null, defaultName = '', onPending = () => {}, onErro
 					<ProgressBar completed={ step } total={ totalSteps } label={ stepName } />
 				</Fragment>
 			) : null }
-			<HStack justify="flex-end" spacing={ 4 } wrap className="newspack-modal__footer">
+			<Card buttonsCard noBorder className="justify-end">
 				{ typeof onCancel === 'function' && (
 					<Button
 						isSecondary
@@ -310,7 +309,7 @@ const Order = ( { orderId = null, defaultName = '', onPending = () => {}, onErro
 				>
 					{ hasIssues() ? __( 'Fix issues', 'newspack-ads' ) : buttonText() }
 				</Button>
-			</HStack>
+			</Card>
 		</Card>
 	);
 };

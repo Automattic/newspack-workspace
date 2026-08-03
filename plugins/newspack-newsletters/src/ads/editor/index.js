@@ -28,12 +28,11 @@ apiFetch.use( ( options, next ) => {
 } );
 
 function AdEdit() {
-	const { status, isSaving, price, startDate, expiryDate, insertionStrategy, positionInContent, positionBlockCount } = useSelect( select => {
-		const { getEditedPostAttribute, isSavingPost } = select( 'core/editor' );
+	const { status, price, startDate, expiryDate, insertionStrategy, positionInContent, positionBlockCount } = useSelect( select => {
+		const { getEditedPostAttribute } = select( 'core/editor' );
 		const meta = getEditedPostAttribute( 'meta' );
 		return {
 			status: getEditedPostAttribute( 'status' ),
-			isSaving: isSavingPost(),
 			price: meta.price,
 			// Normalize to Y-m-d on read so all client-side date comparisons are
 			// plain string compares regardless of any legacy ISO-datetime value.
@@ -59,7 +58,7 @@ function AdEdit() {
 	const [ isSavingPlacement, setIsSavingPlacement ] = useState( false );
 	const [ isManagingPlacements, setIsManagingPlacements ] = useState( false );
 
-	const { editPost, savePost } = useDispatch( 'core/editor' );
+	const { editPost } = useDispatch( 'core/editor' );
 	const { saveEntityRecord } = useDispatch( 'core' );
 	const { removeEditorPanel } = useDispatch( editPostStore );
 	const messages = [];
@@ -118,19 +117,9 @@ function AdEdit() {
 	// to Inactive, and only write `publish`/`draft` back on an actual change.
 	const statusControl = [ 'publish', 'future' ].includes( status ) ? 'active' : 'inactive';
 
-	// Toggle acts as an on/off switch: apply and persist the new status in one
-	// step. Saving directly avoids sending the publisher through the native
-	// Publish button, whose pre-publish panel exposes WP's "Visibility /
-	// Publish" vocabulary that this control is meant to hide.
-	const setStatus = value => {
-		editPost( { status: value === 'active' ? 'publish' : 'draft' } );
-		savePost();
-	};
-
 	return (
 		<Fragment>
 			<PluginDocumentSettingPanel name="newsletters-ads-settings-panel" title={ __( 'Ad settings', 'newspack-newsletters' ) }>
-				{ noticeProps ? <Notice isDismissible={ false } { ...noticeProps } /> : null }
 				<RadioControl
 					label={ __( 'Status', 'newspack-newsletters' ) }
 					selected={ statusControl }
@@ -138,8 +127,7 @@ function AdEdit() {
 						{ label: __( 'Active', 'newspack-newsletters' ), value: 'active' },
 						{ label: __( 'Inactive', 'newspack-newsletters' ), value: 'inactive' },
 					] }
-					onChange={ setStatus }
-					disabled={ isSaving }
+					onChange={ value => editPost( { status: value === 'active' ? 'publish' : 'draft' } ) }
 					help={ __(
 						'Active ads run according to their start and expiration dates. Inactive ads are never shown.',
 						'newspack-newsletters'

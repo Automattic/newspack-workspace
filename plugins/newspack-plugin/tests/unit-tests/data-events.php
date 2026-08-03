@@ -404,13 +404,12 @@ class Newspack_Test_Data_Events extends WP_UnitTestCase {
 		$action_name = 'test_nonce_action';
 		Data_Events::register_action( $action_name );
 
-		// Hook into the dispatched action to capture the request body. The nonce is sent
-		// in the body rather than the query string, which the access log would record.
-		$captured_body = [];
+		// Hook into the dispatched action to capture the URL.
+		$captured_url = '';
 		add_filter(
 			'pre_http_request',
-			function( $preempt, $args, $url ) use ( &$captured_body ) {
-				$captured_body = $args['body'];
+			function( $preempt, $args, $url ) use ( &$captured_url ) {
+				$captured_url = $url;
 				return true; // Short-circuit the request.
 			},
 			10,
@@ -421,9 +420,9 @@ class Newspack_Test_Data_Events extends WP_UnitTestCase {
 		Data_Events::dispatch( $action_name, [ 'test' => 'data' ] );
 		Data_Events::execute_queued_dispatches();
 
-		// Verify the body carries our custom nonce.
+		// Verify the URL contains our custom nonce.
 		$nonce = Data_Events::get_nonce();
-		$this->assertSame( $nonce, $captured_body['nonce'] );
+		$this->assertStringContainsString( 'nonce=' . $nonce, $captured_url );
 	}
 
 	/**
@@ -511,12 +510,12 @@ class Newspack_Test_Data_Events extends WP_UnitTestCase {
 		update_option( Data_Events::NONCE_EXPIRATION_OPTION, time() - 1 );
 		$new_nonce = Data_Events::get_nonce();
 
-		// Hook into the dispatched action to capture the request body.
-		$captured_body = [];
+		// Hook into the dispatched action to capture the URL.
+		$captured_url = '';
 		add_filter(
 			'pre_http_request',
-			function( $preempt, $args, $url ) use ( &$captured_body ) {
-				$captured_body = $args['body'];
+			function( $preempt, $args, $url ) use ( &$captured_url ) {
+				$captured_url = $url;
 				return true; // Short-circuit the request.
 			},
 			10,
@@ -527,8 +526,8 @@ class Newspack_Test_Data_Events extends WP_UnitTestCase {
 		Data_Events::dispatch( $action_name, [ 'test' => 'data' ] );
 		Data_Events::execute_queued_dispatches();
 
-		// Verify the body carries the new nonce.
-		$this->assertSame( $new_nonce, $captured_body['nonce'] );
+		// Verify the URL contains the new nonce.
+		$this->assertStringContainsString( 'nonce=' . $new_nonce, $captured_url );
 
 		// Manually verify a request with the old nonce would be accepted.
 		$_REQUEST['nonce'] = $initial_nonce;

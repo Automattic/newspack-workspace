@@ -128,13 +128,6 @@ class Contact_Pull {
 		$errors = [];
 
 		foreach ( $integrations as $id => $integration ) {
-			// Skip integrations without an (enabled) pull: pausing the inbound
-			// toggle stops pulls while the stored incoming-field selection waits
-			// for re-enable, and pull-less integrations have nothing to pull from.
-			if ( ! $integration->is_pull_enabled() ) {
-				continue;
-			}
-
 			$selected_fields = $integration->get_enabled_incoming_fields();
 			if ( empty( $selected_fields ) ) {
 				continue;
@@ -169,9 +162,6 @@ class Contact_Pull {
 		$errors              = [];
 
 		foreach ( $active_integrations as $integration ) {
-			if ( ! $integration->is_pull_enabled() ) {
-				continue;
-			}
 			$selected_fields = $integration->get_enabled_incoming_fields();
 			if ( empty( $selected_fields ) ) {
 				continue;
@@ -240,11 +230,6 @@ class Contact_Pull {
 		// integration. Skip silently with success — "not set up" is a no-op,
 		// not an error worth surfacing to the loopback caller.
 		if ( ! $integration->is_set_up() ) {
-			wp_send_json_success();
-		}
-
-		// Same defense-in-depth for a paused or pull-less integration.
-		if ( ! $integration->is_pull_enabled() ) {
 			wp_send_json_success();
 		}
 
@@ -443,11 +428,6 @@ class Contact_Pull {
 
 		if ( ! $integration->is_set_up() ) {
 			Logger::log( sprintf( 'Integration "%s" no longer set up on pull retry %d; aborting retry chain.', $integration_id, $retry_count ), self::LOGGER_HEADER );
-			return;
-		}
-
-		if ( ! $integration->is_pull_enabled() ) {
-			Logger::log( sprintf( 'Inbound sync disabled for integration "%s" on pull retry %d; aborting retry chain.', $integration_id, $retry_count ), self::LOGGER_HEADER );
 			return;
 		}
 

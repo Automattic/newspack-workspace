@@ -65,6 +65,7 @@ class Card extends Component {
 		const classes = classNames(
 			'newspack-card',
 			className,
+			buttonsCard && 'newspack-card__buttons-card',
 			headerActions && 'newspack-card__header-actions',
 			isMedium && 'newspack-card__is-medium',
 			isNarrow && 'newspack-card__is-narrow',

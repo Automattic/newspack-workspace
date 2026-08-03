@@ -29,8 +29,6 @@ import Emails from './emails';
 
 const { HashRouter, Redirect, Route, Switch } = Router;
 
-const ROOT = [ { label: __( 'Audience Management', 'newspack-plugin' ) } ];
-
 function AudienceWizard( { pluginRequirements, wizardApiFetch }, ref ) {
 	const [ inFlight, setInFlight ] = useState( false );
 	const [ config, setConfig ] = useState( {} );
@@ -122,31 +120,26 @@ function AudienceWizard( { pluginRequirements, wizardApiFetch }, ref ) {
 				{
 					label: config.enabled ? __( 'Configuration', 'newspack-plugin' ) : __( 'Setup', 'newspack-plugin' ),
 					path: '/',
-					breadcrumbs: [ ...ROOT, { label: config.enabled ? __( 'Configuration', 'newspack-plugin' ) : __( 'Setup', 'newspack-plugin' ) } ],
 				},
 				config.enabled &&
 					newspackAudience.has_memberships && {
 						label: __( 'Content Gating', 'newspack-plugin' ),
 						path: '/content-gating',
-						breadcrumbs: [ ...ROOT, { label: __( 'Content Gating', 'newspack-plugin' ) } ],
 					},
 				[ 'wc', 'nrh' ].includes( platform ) && {
 					label: __( 'Checkout & Payment', 'newspack-plugin' ),
 					path: '/payment',
-					breadcrumbs: [ ...ROOT, { label: __( 'Checkout & Payment', 'newspack-plugin' ) } ],
 				},
 				// NPPD-1538: Emails screen under Audience > Configuration.
 				showEmails && {
 					label: __( 'Emails', 'newspack-plugin' ),
 					path: '/emails',
-					breadcrumbs: [ ...ROOT, { label: __( 'Emails', 'newspack-plugin' ) } ],
 				},
 				// "Advanced settings" hosts the Group labels override, which only makes
 				// sense when the Newspack Content Gate / Group subscriptions feature is on.
 				newspackAudience.is_newspack_feature_enabled && {
-					label: __( 'Advanced Settings', 'newspack-plugin' ),
+					label: __( 'Advanced settings', 'newspack-plugin' ),
 					path: '/groups',
-					breadcrumbs: [ ...ROOT, { label: __( 'Advanced Settings', 'newspack-plugin' ) } ],
 				},
 		  ];
 	tabs = tabs.filter( tab => tab );
@@ -204,7 +197,6 @@ function AudienceWizard( { pluginRequirements, wizardApiFetch }, ref ) {
 								<PlatformSelection
 									{ ...props }
 									tabbedNavigation={ null }
-									breadcrumbItems={ ROOT }
 									platformSelected={ platformSelected }
 									showEnableToggle={ platformSelected }
 									onComplete={ () => {
@@ -234,18 +226,8 @@ function AudienceWizard( { pluginRequirements, wizardApiFetch }, ref ) {
 							)
 						}
 					/>
-					<Route
-						path="/campaign"
-						render={ () =>
-							configLoaded && ! config.enabled ? <Redirect to="/" /> : <Campaign { ...props } breadcrumbItems={ ROOT } />
-						}
-					/>
-					<Route
-						path="/complete"
-						render={ () =>
-							configLoaded && ! config.enabled ? <Redirect to="/" /> : <Complete { ...props } breadcrumbItems={ ROOT } />
-						}
-					/>
+					<Route path="/campaign" render={ () => ( configLoaded && ! config.enabled ? <Redirect to="/" /> : <Campaign { ...props } /> ) } />
+					<Route path="/complete" render={ () => ( configLoaded && ! config.enabled ? <Redirect to="/" /> : <Complete { ...props } /> ) } />
 					<Redirect to="/" />
 				</Switch>
 			</HashRouter>

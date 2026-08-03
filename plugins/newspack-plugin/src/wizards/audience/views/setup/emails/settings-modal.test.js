@@ -140,12 +140,7 @@ jest.mock( '../../../../../../packages/components/src', () => {
 	const React = require( 'react' );
 	return {
 		Badge: ( { text } ) => <span>{ text }</span>,
-		DataViews: ( { data, header } ) => (
-			<div data-testid="dataviews">
-				{ header }
-				{ data.length }
-			</div>
-		),
+		DataViews: ( { data } ) => <div data-testid="dataviews">{ data.length }</div>,
 		Notice: ( { noticeText } ) => <div data-testid="notice">{ noticeText }</div>,
 		// Discard `loading` and `variant` rather than spreading them to
 		// the DOM button — React warns on unrecognized non-boolean
@@ -266,7 +261,7 @@ describe( 'SettingsModal', () => {
 		};
 	} );
 
-	it( 'opens the modal when the Settings button in the DataViews toolbar is clicked', async () => {
+	it( 'opens the modal when the Settings button on the chip bar is clicked', async () => {
 		setUpFetchMock();
 		const Emails = require( './emails' ).default;
 		render( <Emails /> );
@@ -274,7 +269,7 @@ describe( 'SettingsModal', () => {
 		// Modal not yet rendered.
 		expect( screen.queryByRole( 'dialog', { name: 'Settings' } ) ).not.toBeInTheDocument();
 
-		// Click the Settings button in the DataViews toolbar.
+		// Click the Settings button on the chip bar.
 		fireEvent.click( screen.getByRole( 'button', { name: 'Settings' } ) );
 
 		await waitFor( () => {

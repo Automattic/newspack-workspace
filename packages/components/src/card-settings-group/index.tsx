@@ -19,7 +19,6 @@ const CardSettingsGroup = ( {
 	className,
 	disabled = false,
 	icon = null,
-	iconElement = null,
 	headerAction,
 	title = '',
 	description = '',
@@ -32,8 +31,6 @@ const CardSettingsGroup = ( {
 	className?: string;
 	disabled?: boolean;
 	icon?: React.ReactNode;
-	/** A ready-rendered icon element (e.g. `<IntegrationIcon>`) shown as-is, without the default icon badge. */
-	iconElement?: React.ReactNode;
 	title: string;
 	headerAction?: {
 		label: string;
@@ -68,7 +65,6 @@ const CardSettingsGroup = ( {
 				onToggle: onEnable,
 				disabled,
 				icon,
-				iconElement,
 				iconBackgroundColor: true,
 				isActive,
 				title,

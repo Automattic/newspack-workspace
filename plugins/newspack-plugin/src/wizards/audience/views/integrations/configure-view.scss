@@ -1,3 +1,5 @@
+@use "~@wordpress/base-styles/colors" as wp-colors;
+
 .newspack-configure-view {
 	// Align section headers to the top of the grid row.
 	.newspack-grid .newspack-section-header {
@@ -5,25 +7,17 @@
 		margin-bottom: 0;
 	}
 
-	// Inbound field row: checkbox + label on the left, operator select on the
-	// right (same row) instead of a full-width select stacked underneath.
-	&__inbound-field {
-		align-items: center;
-		display: flex;
-		gap: 16px;
-		justify-content: space-between;
+	// Accordion overrides: top/bottom borders only, no box border.
+	.newspack-accordion {
+		border: none;
+		border-top: 1px solid wp-colors.$gray-300;
 
-		.newspack-checkbox-control {
-			flex: 1;
-			margin: 0;
+		&:first-child {
+			border-top: none;
 		}
-	}
 
-	// Operator select sits at a consistent width on the right rather than
-	// stretching full-width.
-	&__inbound-operator {
-		flex: 0 0 auto;
-		margin: 0;
-		width: 200px;
+		&:last-child {
+			border-bottom: none;
+		}
 	}
 }

@@ -4,7 +4,7 @@
 import { render, fireEvent, waitFor, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
-import SingleSegment, { isMultiSelectCriteria } from './single-segment';
+import SingleSegment from './single-segment';
 
 // Sample criteria for input testing.
 const criteria = [
@@ -131,14 +131,5 @@ describe( 'A new segment creation', () => {
 				],
 			},
 		] );
-	} );
-} );
-
-describe( 'segment criteria input selection', () => {
-	it( 'treats list matching functions with options as multi-select', () => {
-		expect( isMultiSelectCriteria( { matching_function: 'list__in', options: [ {} ] } ) ).toBe( true );
-		expect( isMultiSelectCriteria( { matching_function: 'list__not_in', options: [ {} ] } ) ).toBe( true );
-		expect( isMultiSelectCriteria( { matching_function: 'default', options: [ {} ] } ) ).toBe( false );
-		expect( isMultiSelectCriteria( { matching_function: 'list__in', options: [] } ) ).toBe( false );
 	} );
 } );

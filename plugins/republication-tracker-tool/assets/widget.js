@@ -96,14 +96,6 @@ function show_modal( $modal, $close ) {
 
 	initTabSwitching();
 
-	// Bind copy button via data attribute (replaces inline onclick).
-	var $copyBtn = $modal.find( '[data-copy-active]' );
-	$copyBtn.off( 'click.republish' ).on( 'click.republish', function() {
-		if ( window.ClipboardUtils ) {
-			ClipboardUtils.copyFromElement( getActiveTextarea(), this );
-		}
-	} );
-
 	trapFocus( $modal );
 	$close.focus();
 }

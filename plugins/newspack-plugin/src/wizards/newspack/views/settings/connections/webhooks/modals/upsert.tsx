@@ -7,14 +7,14 @@
  */
 import { __ } from '@wordpress/i18n';
 import { useState, useEffect, useRef, Fragment } from '@wordpress/element';
-import { CheckboxControl as WpCheckboxControl, TextControl, __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { CheckboxControl as WpCheckboxControl, TextControl } from '@wordpress/components';
 
 /**
  * Internal dependencies
  */
 import { ENDPOINTS_CACHE_KEY } from '../constants';
 import { WizardApiError } from '../../../../../../errors';
-import { Button, Notice, Modal, Grid, Divider } from '../../../../../../../../packages/components/src';
+import { Card, Button, Notice, Modal, Grid, Divider } from '../../../../../../../../packages/components/src';
 import { validateEndpoint, validateUrl } from '../utils';
 
 /**
@@ -110,7 +110,6 @@ const Upsert = ( {
 		<Fragment>
 			<Modal
 				ref={ modalRef }
-				size="full"
 				title={ __( 'Webhook Endpoint', 'newspack-plugin' ) }
 				onRequestClose={ () => {
 					setAction( null, endpoint.id );
@@ -122,7 +121,7 @@ const Upsert = ( {
 					<Notice isError noticeText={ __( 'Request Error: ', 'newspack-plugin' ) + editing.disabled_error } />
 				) }
 				{ testResponse.success && <Notice isSuccess noticeText={ `${ testResponse.message }: ${ testResponse.code }` } /> }
-				<Grid columns={ 1 } gutter={ 16 } noMargin>
+				<Grid columns={ 1 } gutter={ 16 } className="mt0">
 					<TextControl
 						label={ __( 'URL', 'newspack-plugin' ) }
 						help={ __(
@@ -144,7 +143,7 @@ const Upsert = ( {
 						onChange={ ( value: string ) => setEditing( { ...editing, bearer_token: value } ) }
 						disabled={ inFlight }
 					/>
-					<HStack justify="flex-end" spacing={ 4 } wrap>
+					<Card buttonsCard noBorder className="justify-end">
 						<Button
 							variant="secondary"
 							disabled={ inFlight || ! editing.url }
@@ -152,7 +151,7 @@ const Upsert = ( {
 						>
 							{ __( 'Send a test request', 'newspack-plugin' ) }
 						</Button>
-					</HStack>
+					</Card>
 				</Grid>
 				<Divider alignment="full-width" variant="tertiary" />
 				<TextControl
@@ -191,7 +190,7 @@ const Upsert = ( {
 							</Grid>
 						</Fragment>
 					) }
-					<HStack justify="flex-end" spacing={ 4 } wrap className="newspack-modal__footer">
+					<Card buttonsCard noBorder className="justify-end">
 						<Button
 							isPrimary
 							onClick={ () => {
@@ -203,7 +202,7 @@ const Upsert = ( {
 						>
 							{ __( 'Save', 'newspack-plugin' ) }
 						</Button>
-					</HStack>
+					</Card>
 				</Grid>
 			</Modal>
 		</Fragment>

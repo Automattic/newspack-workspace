@@ -1,8 +1,0 @@
-{
-	"extends": "newspack-scripts/config/tsconfig.json",
-	"include": [
-		"src",
-		"includes/blocks",
-		"node_modules/newspack-scripts/types"
-	]
-}

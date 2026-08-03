@@ -40,11 +40,9 @@
 		"lint:scss:staged": "newspack-scripts wp-scripts lint-style --customSyntax postcss-scss",
 		"format:scss": "newspack-scripts wp-scripts lint-style '**/src/**/*.scss' --customSyntax postcss-scss --fix",
 		"release:archive": "rm -rf release && mkdir -p release && rsync -r . ./release/newspack-block-theme --exclude-from='./.distignore' && cd release && zip -r newspack-block-theme.zip newspack-block-theme",
-		"release": "npm run build && npm run semantic-release",
-		"typescript:check": "newspack-scripts typescript-check"
+		"release": "npm run build && npm run semantic-release"
 	},
 	"devDependencies": {
-		"@rushstack/eslint-patch": "^1.16.1",
 		"newspack-components": "workspace:*",
 		"newspack-scripts": "workspace:*"
 	}

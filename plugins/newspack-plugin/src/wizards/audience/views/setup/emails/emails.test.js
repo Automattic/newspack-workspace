@@ -5,17 +5,6 @@
  */
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 
-/**
- * Internal dependencies
- */
-// Import the component (and the mocked barrel's utils) at module scope, not
-// via require() inside tests: module evaluation then happens during suite
-// setup, which jest does not time, instead of inside the first test's 5s
-// timeout. The jest.mock calls below are hoisted above these imports, so the
-// component still resolves every mocked dependency.
-import Emails from './emails';
-import { utils } from '../../../../../../packages/components/src';
-
 jest.mock( './emails.scss', () => ( {} ) );
 
 // Use mock-prefixed names so Jest's hoisted jest.mock can close over them.
@@ -23,42 +12,18 @@ const mockWizardApiFetch = jest.fn();
 const mockResetError = jest.fn();
 let mockErrorMessage = null;
 
-// The hook returns one stable object so every render sees the same function
-// identities. A fresh object per call is the classic effect-churn landmine:
-// emails.tsx only consumes these from a mount-only effect today, but if a
-// future effect lists `wizardApiFetch` in its deps, per-render identities
-// would re-run it on every render. `errorMessage` is a getter so per-test
-// mutations of mockErrorMessage stay visible through the stable object.
-const mockUseWizardApiFetchReturn = {
-	wizardApiFetch: ( ...args ) => mockWizardApiFetch( ...args ),
-	isFetching: false,
-	get errorMessage() {
-		return mockErrorMessage;
-	},
-	resetError: ( ...args ) => mockResetError( ...args ),
-};
-
 jest.mock( '../../../../hooks/use-wizard-api-fetch', () => ( {
-	useWizardApiFetch: () => mockUseWizardApiFetchReturn,
+	useWizardApiFetch: () => ( {
+		wizardApiFetch: ( ...args ) => mockWizardApiFetch( ...args ),
+		isFetching: false,
+		errorMessage: mockErrorMessage,
+		resetError: ( ...args ) => mockResetError( ...args ),
+	} ),
 } ) );
 
 jest.mock( '@wordpress/icons', () => ( {
 	Icon: ( { icon } ) => <span data-testid="icon">{ icon }</span>,
 	envelope: 'envelope',
-} ) );
-
-// Stub @wordpress/components — emails.tsx imports only Button and the
-// experimental HStack from it. Evaluating the real package costs seconds of
-// module execution per suite; because this suite used to require() the
-// component inside each test, that cost landed inside the first test's 5s
-// jest timeout and failed nondeterministically under CPU load. Both call
-// sites pass explicit aria-*/role props, so faithful DOM passthroughs keep
-// every assertion meaningful (same approach as settings-modal.test.js).
-jest.mock( '@wordpress/components', () => ( {
-	// eslint-disable-next-line @typescript-eslint/no-unused-vars
-	Button: ( { children, variant, size, isPressed, isBusy, ...rest } ) => <button { ...rest }>{ children }</button>,
-	// eslint-disable-next-line @typescript-eslint/no-unused-vars
-	__experimentalHStack: ( { children, spacing, justify, alignment, ...rest } ) => <div { ...rest }>{ children }</div>,
 } ) );
 
 jest.mock( '@wordpress/dataviews', () => ( {
@@ -86,26 +51,23 @@ jest.mock( '../../../../../../packages/components/src', () => {
 	}
 	return {
 		Badge: ( { text } ) => <span>{ text }</span>,
-		DataViews: ( { data, fields, actions, view, onChangeView, header } ) => {
+		DataViews: ( { data, fields, actions, view, onChangeView } ) => {
 			mockCapturedActions = actions || [];
 			mockCapturedView = view;
 			mockCapturedOnChangeView = onChangeView;
 			mockCapturedData = data;
 			return (
-				<>
-					{ header }
-					<table data-testid="dataviews">
-						<tbody>
-							{ data.map( ( item, i ) => (
-								<tr key={ i }>
-									{ fields.map( field => (
-										<td key={ field.id }>{ renderField( field, item ) }</td>
-									) ) }
-								</tr>
-							) ) }
-						</tbody>
-					</table>
-				</>
+				<table data-testid="dataviews">
+					<tbody>
+						{ data.map( ( item, i ) => (
+							<tr key={ i }>
+								{ fields.map( field => (
+									<td key={ field.id }>{ renderField( field, item ) }</td>
+								) ) }
+							</tr>
+						) ) }
+					</tbody>
+				</table>
 			);
 		},
 		Card: ( { children } ) => <div data-testid="card">{ children }</div>,
@@ -282,6 +244,7 @@ describe( 'Emails', () => {
 	} );
 
 	it( 'renders reader-revenue emails by default', async () => {
+		const Emails = require( './emails' ).default;
 		render( <Emails /> );
 
 		// Default chip is reader-revenue — these rows are visible.
@@ -299,6 +262,7 @@ describe( 'Emails', () => {
 	} );
 
 	it( 'renders Recipient column with Reader/Admin labels', async () => {
+		const Emails = require( './emails' ).default;
 		render( <Emails /> );
 
 		await waitFor( () => {
@@ -311,6 +275,7 @@ describe( 'Emails', () => {
 	} );
 
 	it( 'renders status as Enabled / Disabled', async () => {
+		const Emails = require( './emails' ).default;
 		render( <Emails /> );
 
 		await waitFor( () => {
@@ -322,6 +287,7 @@ describe( 'Emails', () => {
 	} );
 
 	it( 'deactivate action calls wizardApiFetch with draft status', async () => {
+		const Emails = require( './emails' ).default;
 		render( <Emails /> );
 
 		await waitFor( () => {
@@ -329,10 +295,7 @@ describe( 'Emails', () => {
 		} );
 
 		const deactivate = mockCapturedActions.find( a => a.id === 'deactivate' );
-		// act() because the callback optimistically sets state before fetching.
-		act( () => {
-			deactivate.callback( [ mockEmails[ 0 ] ] );
-		} );
+		deactivate.callback( [ mockEmails[ 0 ] ] );
 
 		// updateStatus applies the new status optimistically in local
 		// state before the fetch fires, then passes `onError` only —
@@ -356,6 +319,7 @@ describe( 'Emails', () => {
 	it( 'displays error notice when hook reports an error', async () => {
 		mockErrorMessage = 'Something went wrong';
 
+		const Emails = require( './emails' ).default;
 		render( <Emails /> );
 
 		await waitFor( () => {
@@ -365,6 +329,7 @@ describe( 'Emails', () => {
 	} );
 
 	it( 'activate action calls wizardApiFetch with publish status', async () => {
+		const Emails = require( './emails' ).default;
 		render( <Emails /> );
 
 		await waitFor( () => {
@@ -376,10 +341,7 @@ describe( 'Emails', () => {
 		// actually eligible for activate (category !== 'reader-activation').
 		// Verifies the callback wiring on an item that would pass `isEligible`.
 		expect( activate.isEligible( mockEmails[ 4 ] ) ).toBe( true );
-		// act() because the callback optimistically sets state before fetching.
-		act( () => {
-			activate.callback( [ mockEmails[ 4 ] ] );
-		} );
+		activate.callback( [ mockEmails[ 4 ] ] );
 
 		// updateStatus applies the new status optimistically — onError
 		// is the only callback (rollback on failure). See the matching
@@ -399,6 +361,7 @@ describe( 'Emails', () => {
 	} );
 
 	it( 'deactivate/activate are not eligible for reader-activation emails', async () => {
+		const Emails = require( './emails' ).default;
 		render( <Emails /> );
 
 		await waitFor( () => {
@@ -417,6 +380,8 @@ describe( 'Emails', () => {
 	} );
 
 	it( 'reset action calls wizardApiFetch with DELETE after confirmation', async () => {
+		const { utils } = require( '../../../../../../packages/components/src' );
+		const Emails = require( './emails' ).default;
 		render( <Emails /> );
 
 		await waitFor( () => {
@@ -424,10 +389,7 @@ describe( 'Emails', () => {
 		} );
 
 		const reset = mockCapturedActions.find( a => a.id === 'reset' );
-		// act() because the DELETE's onSuccess refetch resolves into state.
-		act( () => {
-			reset.callback( [ mockEmails[ 0 ] ] );
-		} );
+		reset.callback( [ mockEmails[ 0 ] ] );
 
 		expect( utils.confirmAction ).toHaveBeenCalled();
 
@@ -443,6 +405,7 @@ describe( 'Emails', () => {
 	} );
 
 	it( 'reset is eligible for newspack-source rows', async () => {
+		const Emails = require( './emails' ).default;
 		render( <Emails /> );
 
 		await waitFor( () => {
@@ -463,6 +426,7 @@ describe( 'Emails', () => {
 	// Slice 2a — WC surfacing tests below.
 
 	it( 'reset is NOT eligible for a woocommerce-source row', async () => {
+		const Emails = require( './emails' ).default;
 		render( <Emails /> );
 
 		await waitFor( () => {
@@ -477,6 +441,7 @@ describe( 'Emails', () => {
 	} );
 
 	it( 'deactivate routes string post_id to toggleWcEmail', async () => {
+		const Emails = require( './emails' ).default;
 		render( <Emails /> );
 
 		await waitFor( () => {
@@ -486,10 +451,7 @@ describe( 'Emails', () => {
 		const deactivate = mockCapturedActions.find( a => a.id === 'deactivate' );
 		// WC row is publish + category !== reader-activation → eligible.
 		expect( deactivate.isEligible( mockEmails[ 5 ] ) ).toBe( true );
-		// act() because the callback optimistically sets state before fetching.
-		act( () => {
-			deactivate.callback( [ mockEmails[ 5 ] ] );
-		} );
+		deactivate.callback( [ mockEmails[ 5 ] ] );
 
 		// Type-based routing: string post_id 'wc:new_order' goes to the
 		// toggle endpoint, not to wp/v2 post status update.
@@ -513,6 +475,7 @@ describe( 'Emails', () => {
 	} );
 
 	it( 'activate routes string post_id to toggleWcEmail', async () => {
+		const Emails = require( './emails' ).default;
 		render( <Emails /> );
 
 		await waitFor( () => {
@@ -522,10 +485,7 @@ describe( 'Emails', () => {
 		const activate = mockCapturedActions.find( a => a.id === 'activate' );
 		// WC draft row → eligible for activate.
 		expect( activate.isEligible( mockEmails[ 6 ] ) ).toBe( true );
-		// act() because the callback optimistically sets state before fetching.
-		act( () => {
-			activate.callback( [ mockEmails[ 6 ] ] );
-		} );
+		activate.callback( [ mockEmails[ 6 ] ] );
 
 		expect( mockWizardApiFetch ).toHaveBeenCalledWith(
 			expect.objectContaining( {
@@ -540,6 +500,7 @@ describe( 'Emails', () => {
 	} );
 
 	it( 'toggleWcEmail onSuccess replaces local state with the authoritative server response', async () => {
+		const Emails = require( './emails' ).default;
 		render( <Emails /> );
 
 		await waitFor( () => {
@@ -573,6 +534,7 @@ describe( 'Emails', () => {
 	} );
 
 	it( 'toggleWcEmail onError rolls back the optimistic status change', async () => {
+		const Emails = require( './emails' ).default;
 		render( <Emails /> );
 
 		await waitFor( () => {
@@ -606,6 +568,7 @@ describe( 'Emails', () => {
 	} );
 
 	it( 'chip filter shows only rows matching activeChip', async () => {
+		const Emails = require( './emails' ).default;
 		render( <Emails /> );
 
 		// Default chip = reader-revenue. Auth-account rows are filtered out.
@@ -632,6 +595,7 @@ describe( 'Emails', () => {
 	} );
 
 	it( 'chip switch resets search and page', async () => {
+		const Emails = require( './emails' ).default;
 		render( <Emails /> );
 
 		await waitFor( () => {
@@ -662,6 +626,7 @@ describe( 'Emails', () => {
 	} );
 
 	it( 'search bypasses chip filter — operates across all chips', async () => {
+		const Emails = require( './emails' ).default;
 		render( <Emails /> );
 
 		await waitFor( () => {
@@ -691,6 +656,7 @@ describe( 'Emails', () => {
 	} );
 
 	it( 'chip bar shows both chips unpressed during active search', async () => {
+		const Emails = require( './emails' ).default;
 		render( <Emails /> );
 
 		await waitFor( () => {
@@ -723,6 +689,7 @@ describe( 'Emails', () => {
 	} );
 
 	it( 'clearing search restores active chip pressed state', async () => {
+		const Emails = require( './emails' ).default;
 		render( <Emails /> );
 
 		await waitFor( () => {
@@ -762,6 +729,7 @@ describe( 'Emails', () => {
 	// `wc:{id}` string for classic-template emails.
 
 	it( 'preview field renders an anchor with aria-label for each row', async () => {
+		const Emails = require( './emails' ).default;
 		render( <Emails /> );
 
 		await waitFor( () => {
@@ -778,6 +746,7 @@ describe( 'Emails', () => {
 	} );
 
 	it( 'preview field passes the right id to EmailPreview for each render path', async () => {
+		const Emails = require( './emails' ).default;
 		render( <Emails /> );
 
 		await waitFor( () => {
@@ -806,6 +775,7 @@ describe( 'Emails', () => {
 	} );
 
 	it( 'renders the Emails heading as visually hidden (screen-reader only)', async () => {
+		const Emails = require( './emails' ).default;
 		render( <Emails /> );
 
 		await waitFor( () => {
@@ -814,8 +784,7 @@ describe( 'Emails', () => {
 
 		// The tab surface renders no visible title; the section heading is
 		// present for assistive tech but visually hidden via screen-reader-text.
-		// It's an h2 — the single h1 now comes from the wizard's Page breadcrumb.
-		const heading = screen.getByRole( 'heading', { level: 2, name: 'Emails' } );
+		const heading = screen.getByRole( 'heading', { level: 1, name: 'Emails' } );
 		expect( heading ).toHaveClass( 'screen-reader-text' );
 	} );
 
@@ -825,6 +794,7 @@ describe( 'Emails', () => {
 		// than showing a lone, always-pressed (non-functional) chip. Settings
 		// stays available; the list renders unfiltered.
 		window.newspackAudience.emails.isNewspackPlatform = false;
+		const Emails = require( './emails' ).default;
 		render( <Emails /> );
 
 		await waitFor( () => {

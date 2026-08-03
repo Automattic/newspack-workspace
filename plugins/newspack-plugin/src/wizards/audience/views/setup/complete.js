@@ -5,7 +5,7 @@
  */
 import { __ } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
-import { ExternalLink, __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { ExternalLink } from '@wordpress/components';
 import { useEffect, useRef, useState } from '@wordpress/element';
 
 /**
@@ -121,17 +121,17 @@ export default withWizardScreen( ( { fetchConfig } ) => {
 						<h2>{ __( "You're all set to publish the Audience Management campaign!", 'newspack-plugin' ) }</h2>
 						<p>{ __( 'This is what will happen next:', 'newspack-plugin' ) }</p>
 
-						<Card noBorder>
+						<Card noBorder className="justify-center">
 							<StepsList stepsListItems={ listItems } narrowList />
 						</Card>
 
 						{ error && <Notice noticeText={ error?.message || __( 'Something went wrong.', 'newspack-plugin' ) } isError /> }
 
-						<HStack justify="center" spacing={ 4 } wrap>
+						<Card buttonsCard noBorder className="justify-center">
 							<Button isPrimary onClick={ () => activate() }>
 								{ __( 'Publish campaign', 'newspack-plugin' ) }
 							</Button>
-						</HStack>
+						</Card>
 					</Card>
 				) }
 				<div className="newspack-buttons-card">

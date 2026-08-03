@@ -96,21 +96,6 @@ abstract class Integration {
 	protected $settings_fields = [];
 
 	/**
-	 * Memoized return value of get_settings_fields().
-	 *
-	 * The declarations are stable for the life of the instance — the subclass
-	 * half is already frozen in $settings_fields, and the base-class groups are
-	 * built from per-instance capability flags — but rebuilding them costs a
-	 * __() call per label and description. The direction toggles resolve through
-	 * this array on every is_push_enabled()/is_pull_enabled() call, which run
-	 * once per contact in sync loops, so the array is built once and reused.
-	 * Reset by init(), the only place $settings_fields can change.
-	 *
-	 * @var array|null
-	 */
-	private $settings_fields_cache = null;
-
-	/**
 	 * Constructor.
 	 *
 	 * @param string $id          The unique identifier for this integration.
@@ -166,54 +151,6 @@ abstract class Integration {
 	}
 
 	/**
-	 * Whether the external service this integration depends on is connected.
-	 *
-	 * Distinct from is_set_up(): "connected" covers only the third-party
-	 * prerequisite configured at its source (provider chosen, API key
-	 * entered), while is_set_up() additionally requires the integration's
-	 * own settings to be complete. The Integrations UI routes the card's
-	 * primary action on this: not connected sends the user to get_setup_url(),
-	 * connected-but-not-set-up sends them to the integration's settings view.
-	 * Like is_set_up(), this is a stored-state check by contract — no live
-	 * API calls. Returns true by default.
-	 *
-	 * @return bool True if connected, false otherwise.
-	 */
-	public function is_connected() {
-		return true;
-	}
-
-	/**
-	 * Why this integration cannot operate with the site's current configuration.
-	 *
-	 * A non-null string marks the integration as unsupported: the Integrations
-	 * UI shows the string verbatim as the card's error badge and routes the
-	 * primary action to get_setup_url(), and the REST layer refuses to enable
-	 * the integration. Distinct from is_connected(): connected-but-unsupported
-	 * means the external prerequisite exists but is incompatible with this
-	 * integration (e.g. the newsletters provider is "manual", which has no API
-	 * to sync contacts against). Returns null by default.
-	 *
-	 * @return string|null Reason the integration is unsupported, or null.
-	 */
-	public function get_unsupported_reason() {
-		return null;
-	}
-
-	/**
-	 * The primary action label to offer when get_unsupported_reason() returns a reason.
-	 *
-	 * Child classes that report an unsupported reason should override this to name
-	 * the remedy, so the integrations UI does not have to carry per-integration copy.
-	 * Only read when get_unsupported_reason() is non-null.
-	 *
-	 * @return string The action label.
-	 */
-	public function get_unsupported_action_label() {
-		return __( 'Open settings', 'newspack-plugin' );
-	}
-
-	/**
 	 * Get the URL where the user can set up this integration.
 	 *
 	 * Child classes should override this to return the admin page where
@@ -223,19 +160,6 @@ abstract class Integration {
 	 */
 	public function get_setup_url() {
 		return '';
-	}
-
-	/**
-	 * Get the slug identifying which brand icon the integration card should show.
-	 *
-	 * Child classes override this to name the connected vendor (e.g. the active
-	 * ESP provider). The integrations UI maps the slug to a brand mark; a null
-	 * return keeps the integration's generic icon.
-	 *
-	 * @return string|null The icon slug, or null for the generic icon.
-	 */
-	public function get_provider_slug() {
-		return null;
 	}
 
 	/**
@@ -310,8 +234,7 @@ abstract class Integration {
 	 * Currently only initializes settings fields, but can be extended by child classes for additional setup.
 	 */
 	public function init() {
-		$this->settings_fields       = $this->register_settings_fields();
-		$this->settings_fields_cache = null;
+		$this->settings_fields = $this->register_settings_fields();
 	}
 
 	/**
@@ -333,92 +256,6 @@ abstract class Integration {
 	 * @return bool|\WP_Error True if contacts can be synced, false otherwise. WP_Error if return_errors is true.
 	 */
 	abstract public function can_sync( $return_errors = false );
-
-	/**
-	 * Whether this integration can push (outbound) contact data to its external
-	 * destination.
-	 *
-	 * Push-capable integrations get the Outbound settings section, the
-	 * account-deletion sync fields and the metadata field prefix, and count
-	 * toward Sync::has_one_syncable_integration(). Inbound-only integrations
-	 * (those whose push_contact_data() is a deliberate no-op) should override
-	 * this to return false so the settings UI shows no dead outbound controls
-	 * and the sync framework skips the push path entirely.
-	 *
-	 * @return bool True if the integration can push contact data.
-	 */
-	public function supports_push(): bool {
-		return true;
-	}
-
-	/**
-	 * Whether this integration can pull (inbound) contact data from its
-	 * external source.
-	 *
-	 * Pull-capable integrations get the Inbound settings section and are
-	 * included in the Contact_Pull dispatch. Integrations that don't implement
-	 * pull_contact_data()/get_available_incoming_fields() should override this
-	 * to return false.
-	 *
-	 * @return bool True if the integration can pull contact data.
-	 */
-	public function supports_pull(): bool {
-		return true;
-	}
-
-	/**
-	 * Whether outbound (push) sync should currently run for this integration.
-	 *
-	 * Combines the push capability with the `outgoing_sync_enabled` toggle,
-	 * which pauses the direction while preserving the configured outgoing
-	 * field selection. Every push dispatch site must consult this — including
-	 * account-deletion propagation, which travels the push pipeline.
-	 *
-	 * An undeclared toggle field (e.g. a subclass overriding
-	 * get_settings_fields() without the base metadata group) reads as null and
-	 * counts as enabled: the toggle can only ever pause sync explicitly,
-	 * mirroring the frontend's missing-toggle-means-enabled rendering. A
-	 * declared field never resolves to null — get_settings_field_value() falls
-	 * back to the field default.
-	 *
-	 * The stored value is coerced with wp_validate_boolean() rather than a cast
-	 * so this agrees with the wizard's toBool(): both read the strings `'false'`
-	 * and `'0'` as off. The sanctioned write path can't produce `'false'` (the
-	 * checkbox sanitizes to a real bool), but a hand-set option or external
-	 * writer otherwise diverges in the worst direction — UI paused, dispatch
-	 * still pushing.
-	 *
-	 * @return bool True if pushes should run.
-	 */
-	final public function is_push_enabled(): bool {
-		if ( ! $this->supports_push() ) {
-			return false;
-		}
-		$enabled = $this->get_settings_field_value( 'outgoing_sync_enabled' );
-		return null === $enabled || \wp_validate_boolean( $enabled );
-	}
-
-	/**
-	 * Whether inbound (pull) sync should currently run for this integration.
-	 *
-	 * Combines the pull capability with the `incoming_sync_enabled` toggle,
-	 * which pauses the direction while preserving the configured incoming
-	 * field selection. Every pull dispatch site must consult this.
-	 *
-	 * As with is_push_enabled(), an undeclared toggle field reads as null and
-	 * counts as enabled — only an explicit stored value can pause the
-	 * direction — and the stored value is coerced with wp_validate_boolean() so
-	 * PHP and the wizard agree on the falsy string forms.
-	 *
-	 * @return bool True if pulls should run.
-	 */
-	final public function is_pull_enabled(): bool {
-		if ( ! $this->supports_pull() ) {
-			return false;
-		}
-		$enabled = $this->get_settings_field_value( 'incoming_sync_enabled' );
-		return null === $enabled || \wp_validate_boolean( $enabled );
-	}
 
 	/**
 	 * Push contact data to the integration destination.
@@ -685,16 +522,6 @@ abstract class Integration {
 	];
 
 	/**
-	 * Allowed matching functions (operators) for an incoming field's segment
-	 * criterion. Enforced on every write path — REST sanitize and the storage
-	 * setter — and re-applied on read; the single source of truth so those
-	 * paths can't drift.
-	 *
-	 * @var string[]
-	 */
-	private const ALLOWED_INCOMING_MATCHING_FUNCTIONS = [ 'default', 'range', 'list__in', 'list__not_in' ];
-
-	/**
 	 * Get the enabled incoming fields for this integration.
 	 *
 	 * Reads stored field data (key => raw_data map saved by
@@ -754,16 +581,6 @@ abstract class Integration {
 			$field = new Integrations\Incoming_Field( $key, $raw_data );
 			$field = $this->configure_incoming_field( $field );
 			if ( $field instanceof Integrations\Incoming_Field ) {
-				// The publisher's stored operator choice is authoritative. Re-apply it after
-				// configure_incoming_field(), which may (re)derive matching_function from the
-				// provider schema and clobber the choice for non-ESP integrations.
-				if (
-					isset( $raw_data['matching_function'] )
-					&& is_string( $raw_data['matching_function'] )
-					&& in_array( $raw_data['matching_function'], self::ALLOWED_INCOMING_MATCHING_FUNCTIONS, true )
-				) {
-					$field->set_matching_function( $raw_data['matching_function'] );
-				}
 				$fields[] = $field;
 			}
 		}
@@ -820,15 +637,11 @@ abstract class Integration {
 	 * Accepts an array of field keys (as sent by the UI), fetches the full
 	 * field data from the integration, and stores the matching raw field arrays.
 	 *
-	 * @param array $fields Array of field keys, or a map of key => matching_function.
+	 * @param string[] $keys Array of field keys to enable.
 	 *
 	 * @return bool True if updated, false otherwise.
 	 */
-	public function update_enabled_incoming_fields( $fields ) {
-		if ( ! is_array( $fields ) ) {
-			$fields = [];
-		}
-
+	public function update_enabled_incoming_fields( $keys ) {
 		$available = $this->get_available_incoming_fields();
 		if ( is_wp_error( $available ) ) {
 			$available = [];
@@ -842,37 +655,12 @@ abstract class Integration {
 			}
 		}
 
-		// Normalize input to a map of key => chosen matching function. Accept both a
-		// sequential list of keys (legacy callers) and an associative map (typed UI).
-		$key_operator_map = [];
-		// PHP 8.0-safe array_is_list(): the array is a list iff re-indexing is a no-op.
-		if ( $fields === array_values( $fields ) ) {
-			foreach ( $fields as $key ) {
-				$key = (string) $key;
-				if ( '' === $key ) {
-					continue;
-				}
-				$key_operator_map[ $key ] = null;
-			}
-		} else {
-			foreach ( $fields as $key => $matching_function ) {
-				$key = (string) $key;
-				if ( '' === $key ) {
-					continue;
-				}
-				$key_operator_map[ $key ] = is_string( $matching_function ) ? $matching_function : null;
-			}
-		}
-
-		// Store as key => raw_data map, overriding matching_function when chosen.
+		// Store as key => raw_data map.
 		$fields_to_store = [];
-		foreach ( $key_operator_map as $key => $matching_function ) {
+		foreach ( $keys as $key ) {
 			$raw_data = [];
 			if ( isset( $available_by_key[ $key ] ) ) {
 				$raw_data = $available_by_key[ $key ]->get_raw_data();
-			}
-			if ( null !== $matching_function && in_array( $matching_function, self::ALLOWED_INCOMING_MATCHING_FUNCTIONS, true ) ) {
-				$raw_data['matching_function'] = $matching_function;
 			}
 			$fields_to_store[ $key ] = $raw_data;
 		}
@@ -932,11 +720,9 @@ abstract class Integration {
 	/**
 	 * Get the account-deletion fields declared by this integration.
 	 *
-	 * Auto-appended to push-capable integrations' settings (see
-	 * get_settings_fields()): deletion propagates through the push pipeline, so
-	 * for a push-less integration these would be dead controls. The first field
-	 * is a top-level toggle; the second field is gated by the first via the
-	 * `condition` predicate honored by the frontend renderer.
+	 * Auto-appended to every integration's settings. The first field is a top-level
+	 * toggle; the second field is gated by the first via the `condition` predicate
+	 * honored by the frontend renderer.
 	 *
 	 * @return array Array of settings field declarations.
 	 */
@@ -989,55 +775,30 @@ abstract class Integration {
 	/**
 	 * Get the metadata fields declared by this integration.
 	 *
-	 * Capability-aware: the outbound group (metadata prefix, outbound sync
-	 * toggle, outgoing fields) is declared only for push-capable integrations —
-	 * the prefix is only ever read on push paths (prepare_contact()) — and the
-	 * inbound group (inbound sync toggle, incoming fields) only for
-	 * pull-capable ones, so an integration lacking a direction gets no dead
-	 * controls for it.
-	 *
 	 * @return array Array of settings field declarations.
 	 */
 	public function get_metadata_fields() {
-		$fields = [];
-		if ( $this->supports_push() ) {
-			$fields[] = [
+		return [
+			[
 				'key'         => 'metadata_prefix',
 				'type'        => 'text',
 				'label'       => __( 'Metadata field prefix', 'newspack-plugin' ),
 				'description' => __( 'A string to prefix metadata fields synced to the integration. Required to ensure that metadata field names are unique. Default: NP_', 'newspack-plugin' ),
 				'default'     => 'NP_',
-			];
-			$fields[] = [
-				'key'         => 'outgoing_sync_enabled',
-				'type'        => 'checkbox',
-				'label'       => __( 'Enable outbound sync', 'newspack-plugin' ),
-				'description' => __( 'Sync reader data to this integration. Disabling pauses outbound sync, including account-deletion sync, and preserves the outgoing field selection. Changes and deletions that occur while paused are not sent retroactively on re-enable.', 'newspack-plugin' ),
-				'default'     => true,
-			];
-			$fields[] = [
+			],
+			[
 				'key'     => 'outgoing_metadata_fields',
 				'type'    => 'metadata',
 				'label'   => __( 'Outgoing metadata fields', 'newspack-plugin' ),
 				'default' => [],
-			];
-		}
-		if ( $this->supports_pull() ) {
-			$fields[] = [
-				'key'         => 'incoming_sync_enabled',
-				'type'        => 'checkbox',
-				'label'       => __( 'Enable inbound sync', 'newspack-plugin' ),
-				'description' => __( 'Pull contact data from this integration. Disabling pauses inbound sync and preserves the incoming field selection.', 'newspack-plugin' ),
-				'default'     => true,
-			];
-			$fields[] = [
+			],
+			[
 				'key'     => 'incoming_metadata_fields',
 				'type'    => 'metadata',
 				'label'   => __( 'Incoming metadata fields', 'newspack-plugin' ),
 				'default' => [],
-			];
-		}
-		return $fields;
+			],
+		];
 	}
 
 	/**
@@ -1122,26 +883,14 @@ abstract class Integration {
 	/**
 	 * Get the settings fields declared by this integration.
 	 *
-	 * The account-deletion group follows the push capability: deletion sync
-	 * routes through push_contact_data()/delete_contact(), so a push-less
-	 * integration gets neither field (and its `sync_account_deletion` value
-	 * reads as null/falsy, which the deletion dispatcher treats as disabled).
-	 * The metadata groups are capability-gated in get_metadata_fields().
-	 *
-	 * Memoized per instance — see $settings_fields_cache for why.
-	 *
 	 * @return array Array of settings field declarations.
 	 */
 	public function get_settings_fields() {
-		if ( null !== $this->settings_fields_cache ) {
-			return $this->settings_fields_cache;
-		}
-		$fields = $this->settings_fields;
-		if ( $this->supports_push() ) {
-			$fields = array_merge( $fields, $this->get_account_deletion_fields() );
-		}
-		$this->settings_fields_cache = array_merge( $fields, $this->get_metadata_fields() );
-		return $this->settings_fields_cache;
+		return array_merge(
+			$this->settings_fields,
+			$this->get_account_deletion_fields(),
+			$this->get_metadata_fields()
+		);
 	}
 
 	/**
@@ -1182,15 +931,12 @@ abstract class Integration {
 			return $this->get_enabled_outgoing_fields();
 		}
 		if ( 'incoming_metadata_fields' === $key ) {
-			$map = [];
-			// Read the operator from stored raw_data: the Incoming_Field constructor does not
-			// apply it to the typed property, and some integrations' configure_incoming_field()
-			// is a no-op, so get_matching_function() alone would return the default.
-			foreach ( $this->get_enabled_incoming_fields() as $field ) {
-				$raw                      = $field->get_raw_data();
-				$map[ $field->get_key() ] = $raw['matching_function'] ?? $field->get_matching_function();
-			}
-			return $map;
+			return array_map(
+				function( $field ) {
+					return $field->get_key();
+				},
+				$this->get_enabled_incoming_fields()
+			);
 		}
 
 		$field = $this->get_settings_field_by_key( $key );
@@ -1318,15 +1064,11 @@ abstract class Integration {
 				$incoming_fields  = $this->get_filtered_incoming_fields();
 				$field['options'] = array_map(
 					function ( $incoming_field ) {
-						$key     = $incoming_field->get_key();
-						$name    = $incoming_field->get_name();
-						$options = $incoming_field->get_options();
+						$key  = $incoming_field->get_key();
+						$name = $incoming_field->get_name();
 						return [
-							'value'             => $key,
-							'label'             => '' !== $name ? $name : $key,
-							'value_type'        => $incoming_field->get_value_type(),
-							'matching_function' => $incoming_field->get_matching_function(),
-							'has_options'       => ! empty( $options ),
+							'value' => $key,
+							'label' => '' !== $name ? $name : $key,
 						];
 					},
 					is_wp_error( $incoming_fields ) ? [] : $incoming_fields
@@ -1393,36 +1135,6 @@ abstract class Integration {
 			case 'metadata':
 				if ( ! is_array( $value ) ) {
 					return $field['default'] ?? [];
-				}
-				// Incoming metadata fields carry a per-field operator: key => matching_function.
-				if ( 'incoming_metadata_fields' === ( $field['key'] ?? '' ) ) {
-					$sanitized = [];
-					// PHP 8.0-safe array_is_list(): the array is a list iff re-indexing is a no-op.
-					if ( $value === array_values( $value ) ) {
-						// Legacy plain list of enabled keys: keep it a list so
-						// update_enabled_incoming_fields() preserves each field's provider-default
-						// matching_function (no forced 'default' override).
-						foreach ( $value as $key ) {
-							$key = \sanitize_text_field( (string) $key );
-							if ( '' === $key ) {
-								continue;
-							}
-							$sanitized[] = $key;
-						}
-					} else {
-						foreach ( $value as $key => $operator ) {
-							$key = \sanitize_text_field( (string) $key );
-							if ( '' === $key ) {
-								continue;
-							}
-							// An operator outside the allowlist maps to null (no override) rather than
-							// 'default', which is itself a valid operator: coercing would silently
-							// downgrade a typed field's provider default (e.g. list__in for a
-							// multiselect) to exact match, which never matches such a field.
-							$sanitized[ $key ] = ( is_string( $operator ) && in_array( $operator, self::ALLOWED_INCOMING_MATCHING_FUNCTIONS, true ) ) ? $operator : null;
-						}
-					}
-					return $sanitized;
 				}
 				return array_values( array_map( 'sanitize_text_field', $value ) );
 			case 'textarea':

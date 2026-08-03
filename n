@@ -152,17 +152,7 @@ start() {
         if [ "$1" == "8.2" ]; then
             file="docker-compose-82.yml"
         fi
-        compose_files=(-f "$file")
-        # Honor a developer-local docker-compose.override.yml for the main dev
-        # stack. Passing an explicit -f disables Compose's automatic override
-        # loading, so re-add the file here when it exists (a no-op otherwise,
-        # which preserves the default stack). Isolated env containers
-        # deliberately skip this file -- they layer their own
-        # docker-compose.env-*.yml overrides instead.
-        if [[ -f docker-compose.override.yml ]]; then
-            compose_files+=(-f docker-compose.override.yml)
-        fi
-        docker compose "${compose_files[@]}" up -d
+        docker compose -f $file up -d
 
     # Create shared network for inter-container communication.
     # Env containers join this network with their domain as an alias,

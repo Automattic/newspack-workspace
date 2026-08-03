@@ -8,21 +8,14 @@ import { createHigherOrderComponent } from '@wordpress/compose';
 import { useState } from '@wordpress/element';
 
 import { SHARE_BLOCK_NOTICE_ID } from '../../editor/blocks/share/consts';
-import { CAMPAIGN_SENT_NOTICE_ID } from '../../utils/consts';
-import { isManualProvider } from '../../utils/service-provider';
 
-// The manual provider doesn't send through an ESP, so the post-publish notice uses publish wording.
-// Read lazily (like the other provider checks in this PR) so the wording resolves from the global at
-// use time rather than being frozen at module load, independent of script-enqueue ordering.
-const getSuccessNote = () => ( isManualProvider() ? __( 'Published on', 'newspack-newsletters' ) : __( 'Campaign sent on', 'newspack-newsletters' ) );
+const successNote = __( 'Campaign sent on', 'newspack-newsletters' );
 const shouldRemoveNotice = notice => {
 	return (
 		notice.id !== SHARE_BLOCK_NOTICE_ID &&
 		notice.id !== 'newspack-newsletters-email-content-too-large' &&
-		// Keep the post-publish notice by its stable id, so this doesn't depend on its wording.
-		notice.id !== CAMPAIGN_SENT_NOTICE_ID &&
 		'error' !== notice.status &&
-		( 'success' !== notice.status || -1 === notice.content.indexOf( getSuccessNote() ) )
+		( 'success' !== notice.status || -1 === notice.content.indexOf( successNote ) )
 	);
 };
 
@@ -72,7 +65,7 @@ export default () =>
 					errors={ errors }
 					setInFlightForAsync={ setInFlightForAsync }
 					inFlight={ inFlight }
-					successNote={ getSuccessNote() }
+					successNote={ successNote }
 				/>
 			);
 		},

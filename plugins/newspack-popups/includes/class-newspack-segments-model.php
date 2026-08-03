@@ -136,12 +136,12 @@ final class Newspack_Segments_Model {
 									'properties'           => [
 										'min' => [
 											'name'     => 'min',
-											'type'     => 'number',
+											'type'     => 'integer',
 											'required' => false,
 										],
 										'max' => [
 											'name'     => 'max',
-											'type'     => 'number',
+											'type'     => 'integer',
 											'required' => false,
 										],
 									],

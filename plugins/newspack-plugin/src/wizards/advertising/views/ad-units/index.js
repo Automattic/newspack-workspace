@@ -7,7 +7,8 @@
  */
 import { useEffect, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
-import { ExternalLink, __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { ExternalLink } from '@wordpress/components';
+import { arrowLeft } from '@wordpress/icons';
 
 /**
  * Internal dependencies
@@ -15,6 +16,8 @@ import { ExternalLink, __experimentalHStack as HStack } from '@wordpress/compone
 import { ActionCard, Button, Card, Notice, SelectControl, TextControl, withWizardScreen } from '../../../../../packages/components/src';
 import ServiceAccountConnection from './service-account-connection';
 import OptionsPopover from './options-popover';
+
+const CREATE_AD_ID_PARAM = 'create';
 
 /**
  * Advertising management screen.
@@ -98,6 +101,12 @@ const AdUnits = ( { adUnits, parentAdUnits, onDelete, wizardApiFetch, updateWith
 
 	return (
 		<>
+			<Card noBorder>
+				<Button isLink href="#/" icon={ arrowLeft }>
+					{ __( 'Back', 'newspack-plugin' ) }
+				</Button>
+			</Card>
+
 			{ ! isLegacy && networkCode && (
 				<>
 					<SelectControl
@@ -123,11 +132,11 @@ const AdUnits = ( { adUnits, parentAdUnits, onDelete, wizardApiFetch, updateWith
 						/>
 					) }
 					<Card headerActions noBorder className="mt16">
-						<HStack justify="flex-end">
+						<div className="flex justify-end w-100">
 							<Button variant="primary" onClick={ updateGAMConfiguration }>
 								{ __( 'Save', 'newspack-plugin' ) }
 							</Button>
-						</HStack>
+						</div>
 					</Card>
 					<hr />
 				</>
@@ -169,17 +178,19 @@ const AdUnits = ( { adUnits, parentAdUnits, onDelete, wizardApiFetch, updateWith
 			{ isLegacy && serviceData.enabled && (
 				<>
 					<Notice noticeText={ __( 'Currently operating in legacy mode.', 'newspack-plugin' ) } isWarning />
-					<HStack alignment="bottom" justify="flex-start" spacing={ 4 }>
+					<div className="flex items-end">
 						<TextControl
 							label={ __( 'Network Code', 'newspack-plugin' ) }
 							value={ networkCode }
 							onChange={ setNetworkCode }
 							withMargin={ false }
 						/>
-						<Button onClick={ updateLegacyNetworkCode } isPrimary>
-							{ __( 'Save', 'newspack-plugin' ) }
-						</Button>
-					</HStack>
+						<span className="pl3">
+							<Button onClick={ updateLegacyNetworkCode } isPrimary>
+								{ __( 'Save', 'newspack-plugin' ) }
+							</Button>
+						</span>
+					</div>
 				</>
 			) }
 			<p>
@@ -190,6 +201,13 @@ const AdUnits = ( { adUnits, parentAdUnits, onDelete, wizardApiFetch, updateWith
 					'newspack-plugin'
 				) }
 			</p>
+			<Card headerActions noBorder>
+				<div className="flex justify-end w-100">
+					<Button variant="primary" href={ `#/google_ad_manager/${ CREATE_AD_ID_PARAM }` }>
+						{ __( 'Add New Ad Unit', 'newspack-plugin' ) }
+					</Button>
+				</div>
+			</Card>
 			<Card noBorder>
 				{ Object.values( adUnits )
 					.filter( adUnit => adUnit.id !== 0 )

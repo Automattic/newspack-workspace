@@ -1,9 +1,13 @@
 /**
+ * External dependencies
+ */
+import classnames from 'classnames';
+
+/**
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
 import { useEffect } from '@wordpress/element';
-import { __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 
 /**
  * Internal dependencies
@@ -13,8 +17,12 @@ import { withWizardScreen, ActionCard, Button, Card, Grid, SectionHeader } from 
 const Completed = () => {
 	useEffect( () => {
 		document.body.classList.add( 'newspack-wizard__completed' );
+		document.querySelector( '.newspack-wizard__header' ).remove();
 		return () => document.body.classList.remove( 'newspack-wizard__completed' );
 	}, [] );
+
+	const cardClasses = classnames( 'flex', 'flex-column', 'justify-between' );
+	const buttonClasses = classnames( 'flex', 'flex-row-reverse' );
 
 	return (
 		<>
@@ -33,49 +41,49 @@ const Completed = () => {
 					<ActionCard
 						title={ __( 'Configure Newspack', 'newspack' ) }
 						description={ __( 'Go in-depth with our various options to set up Newspack to meet your needs.', 'newspack' ) }
-						className="newspack-setup-completed__card"
+						className={ cardClasses }
 					>
-						<HStack justify="flex-end">
+						<div className={ buttonClasses }>
 							<Button variant="primary" href={ newspack_urls.dashboard }>
 								{ __( 'Go to the Dashboard', 'newspack' ) }
 							</Button>
-						</HStack>
+						</div>
 					</ActionCard>
 
 					<ActionCard
 						title={ __( 'Explore our documentation', 'newspack' ) }
 						description={ __( 'Read about the different tools, plugins, and themes that make up Newspack.', 'newspack' ) }
-						className="newspack-setup-completed__card"
+						className={ cardClasses }
 					>
-						<HStack justify="flex-end">
+						<div className={ buttonClasses }>
 							<Button variant="primary" href={ newspack_urls.support }>
 								{ __( 'Read Documentation', 'newspack' ) }
 							</Button>
-						</HStack>
+						</div>
 					</ActionCard>
 
 					<ActionCard
 						title={ __( 'Update your homepage', 'newspack' ) }
 						description={ __( 'We’ve created the basics, now it’s time to update the content.', 'newspack' ) }
-						className="newspack-setup-completed__card"
+						className={ cardClasses }
 					>
-						<HStack justify="flex-end">
+						<div className={ buttonClasses }>
 							<Button variant="primary" href={ newspack_urls.homepage }>
 								{ __( 'Edit Homepage', 'newspack' ) }
 							</Button>
-						</HStack>
+						</div>
 					</ActionCard>
 
 					<ActionCard
 						title={ __( 'View your site', 'newspack' ) }
 						description={ __( 'Preview what you’ve created so far. It looks great!', 'newspack' ) }
-						className="newspack-setup-completed__card"
+						className={ cardClasses }
 					>
-						<HStack justify="flex-end">
+						<div className={ buttonClasses }>
 							<Button variant="primary" href={ newspack_urls.site }>
 								{ __( 'Visit Site', 'newspack' ) }
 							</Button>
-						</HStack>
+						</div>
 					</ActionCard>
 				</Grid>
 			</Card>
@@ -83,4 +91,4 @@ const Completed = () => {
 	);
 };
 
-export default withWizardScreen( Completed, { hidePrimaryButton: true, hideHeader: true } );
+export default withWizardScreen( Completed, { hidePrimaryButton: true } );

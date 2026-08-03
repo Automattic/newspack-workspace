@@ -98,11 +98,11 @@ const SegmentGroup = props => {
 							{ 'unassigned' !== campaignId && (
 								<Fragment>
 									<Button isSmall variant="secondary" onClick={ () => setModalVisible( ! modalVisible ) }>
-										{ __( 'Add Prompt', 'newspack-plugin' ) }
+										{ __( 'Add New Prompt', 'newspack-plugin' ) }
 									</Button>
 									{ modalVisible && (
 										<Modal
-											title={ __( 'Add Prompt', 'newspack-plugin' ) }
+											title={ __( 'Add New Prompt', 'newspack-plugin' ) }
 											onRequestClose={ () => setModalVisible( false ) }
 											shouldCloseOnEsc={ false }
 											shouldCloseOnClickOutside={ false }

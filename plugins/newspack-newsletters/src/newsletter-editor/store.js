@@ -17,8 +17,7 @@ import { addQueryArgs } from '@wordpress/url';
 /**
  * Internal dependencies
  */
-import { isSupportedESP } from './utils';
-import { isManualProvider } from '../utils/service-provider';
+import { isManualESP, isSupportedESP } from './utils';
 import { getServiceProvider } from '../service-providers';
 
 /**
@@ -169,7 +168,7 @@ export const updateNewsletterDataError = error => dispatch( STORE_NAMESPACE ).se
 
 // Dispatcher to fetch newsletter data from the server.
 export const fetchNewsletterData = async postId => {
-	if ( ! isSupportedESP() || isManualProvider() ) {
+	if ( ! isSupportedESP() || isManualESP() ) {
 		return;
 	}
 
@@ -207,7 +206,7 @@ export const fetchNewsletterData = async postId => {
 
 // Dispatcher to fetch any errors from the most recent sync attempt.
 export const fetchSyncErrors = async postId => {
-	if ( ! isSupportedESP() || isManualProvider() ) {
+	if ( ! isSupportedESP() || isManualESP() ) {
 		return;
 	}
 
@@ -233,7 +232,7 @@ export const fetchSyncErrors = async postId => {
 
 // Dispatcher to fetch send lists and sublists from the connected ESP and update the newsletterData in store.
 export const fetchSendLists = debounce( async ( opts, replace = false ) => {
-	if ( ! isSupportedESP() || isManualProvider() ) {
+	if ( ! isSupportedESP() || isManualESP() ) {
 		return [];
 	}
 

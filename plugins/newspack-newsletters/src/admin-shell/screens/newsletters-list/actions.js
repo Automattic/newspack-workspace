@@ -184,6 +184,7 @@ export function getActions( { refresh, openQuickEdit } ) {
 	const trashAction = {
 		id: 'trash',
 		label: __( 'Trash', 'newspack-newsletters' ),
+		isPrimary: true,
 		icon: trash,
 		modalHeader: __( 'Move to trash', 'newspack-newsletters' ),
 		isDestructive: true,

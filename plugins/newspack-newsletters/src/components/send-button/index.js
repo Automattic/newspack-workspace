@@ -1,9 +1,7 @@
-/* global newspack_email_editor_data */
-
 /**
  * WordPress dependencies
  */
-import { withDispatch, withSelect, useSelect, useDispatch } from '@wordpress/data';
+import { withDispatch, withSelect, useSelect } from '@wordpress/data';
 import { compose } from '@wordpress/compose';
 import { Button, Modal, Spinner } from '@wordpress/components';
 import { Fragment, useEffect, useState } from '@wordpress/element';
@@ -20,53 +18,32 @@ import { get } from 'lodash';
  * Internal dependencies
  */
 import { getServiceProvider } from '../../service-providers';
-import { isManualProvider } from '../../utils/service-provider';
 import { validateNewsletter } from '../../newsletter-editor/utils';
 import { useNewsletterData } from '../../newsletter-editor/store';
 import { refreshEmailHtml } from '../../editor/mjml';
 import './style.scss';
 
 function PreviewHTML() {
-	const { isSaving, isAutosaving, isDirty, postId, postContent, postTitle } = useSelect( select => {
-		const { getCurrentPostId, getEditedPostAttribute, getEditedPostContent, isAutosavingPost, isEditedPostDirty, isSavingPost } =
+	const { isSaving, isAutosaving, postId, postContent, postTitle } = useSelect( select => {
+		const { getCurrentPostId, getCurrentPostType, getEditedPostAttribute, getEditedPostContent, isAutosavingPost, isSavingPost } =
 			select( 'core/editor' );
 		return {
 			isSaving: isSavingPost(),
 			isAutosaving: isAutosavingPost(),
-			isDirty: isEditedPostDirty(),
 			postContent: getEditedPostContent(),
 			postId: getCurrentPostId(),
 			postTitle: getEditedPostAttribute( 'title' ),
+			postType: getCurrentPostType(),
 		};
 	} );
-	const { savePost } = useDispatch( 'core/editor' );
-	const { createNotice } = useDispatch( 'core/notices' );
 	const [ previewHtml, setPreviewHtml ] = useState( '' );
 	const showSpinner = ( isSaving && ! isAutosaving ) || ! previewHtml;
 
 	useEffect( () => {
 		if ( ! previewHtml ) {
-			// Mount-once: the modal remounts on each open, so capturing isDirty/savePost
-			// at mount is intentional — do not add them to deps (would cause double-fetches).
-			( async () => {
-				try {
-					if ( newspack_email_editor_data?.use_woo_renderer && isDirty ) {
-						await savePost();
-					}
-					const res = await refreshEmailHtml( postId, postTitle, postContent );
-					if ( res?.html ) {
-						setPreviewHtml( res.html );
-					} else {
-						createNotice( 'error', res?.error?.message || __( 'Failed to load email preview.', 'newspack-newsletters' ) );
-						// Resolve the spinner with non-empty fallback markup.
-						setPreviewHtml( `<p>${ __( 'Could not load preview.', 'newspack-newsletters' ) }</p>` );
-					}
-				} catch ( error ) {
-					createNotice( 'error', error?.message || __( 'Failed to load email preview.', 'newspack-newsletters' ) );
-					// Resolve the spinner with non-empty fallback markup.
-					setPreviewHtml( `<p>${ __( 'Could not load preview.', 'newspack-newsletters' ) }</p>` );
-				}
-			} )();
+			refreshEmailHtml( postId, postTitle, postContent ).then( ( { html } ) => {
+				setPreviewHtml( html );
+			} );
 		}
 	}, [] );
 
@@ -195,11 +172,7 @@ export default compose( [
 
 	const newsletterValidationErrors = validateNewsletter( meta );
 
-	const { renderPreSendInfo, renderPostUpdateInfo } = getServiceProvider();
-
-	// The manual provider doesn't send through an ESP – the publisher copies the rendered HTML and sends it
-	// themselves. So the editor keeps WordPress' native publish/published terminology instead of send/sent.
-	const isManual = isManualProvider();
+	const { name: serviceProviderName, renderPreSendInfo, renderPostUpdateInfo } = getServiceProvider();
 
 	const isButtonEnabled =
 		( isPublishable || isEditedPostBeingScheduled ) &&
@@ -207,29 +180,25 @@ export default compose( [
 		! isPublished &&
 		! isSaving &&
 		'future' !== status &&
-		( newsletterData.campaign || isManual ) &&
+		( newsletterData.campaign || 'manual' === serviceProviderName ) &&
 		0 === newsletterValidationErrors.length;
 	let label;
 	if ( isPublished ) {
 		if ( isSaving ) {
-			label = isManual ? __( 'Publishing…', 'newspack-newsletters' ) : __( 'Sending…', 'newspack-newsletters' );
-		} else if ( isManual ) {
-			label = __( 'Published', 'newspack-newsletters' );
+			label = __( 'Sending', 'newspack-newsletters' );
 		} else {
 			label = is_public ? __( 'Sent and Published', 'newspack-newsletters' ) : __( 'Sent', 'newspack-newsletters' );
 		}
 	} else if ( 'future' === status ) {
 		if ( postDate && new Date( postDate ) < new Date() ) {
 			// Scheduled, but in the past ¯\_(ツ)_/¯.
-			label = isManual ? __( 'Publish', 'newspack-newsletters' ) : __( 'Send', 'newspack-newsletters' );
+			label = __( 'Send', 'newspack-newsletters' );
 		} else {
 			// Scheduled to be sent.
 			label = __( 'Scheduled', 'newspack-newsletters' );
 		}
 	} else if ( isEditedPostBeingScheduled ) {
-		label = isManual ? __( 'Schedule', 'newspack-newsletters' ) : __( 'Schedule sending', 'newspack-newsletters' );
-	} else if ( isManual ) {
-		label = __( 'Publish', 'newspack-newsletters' );
+		label = __( 'Schedule sending', 'newspack-newsletters' );
 	} else {
 		label = is_public ? __( 'Send and Publish', 'newspack-newsletters' ) : __( 'Send', 'newspack-newsletters' );
 	}
@@ -237,7 +206,7 @@ export default compose( [
 	let updateLabel;
 	if ( isSaving ) {
 		updateLabel = __( 'Updating…', 'newspack-newsletters' );
-	} else if ( isManual ) {
+	} else if ( 'manual' === serviceProviderName ) {
 		updateLabel = __( 'Update and copy HTML', 'newspack-newsletters' );
 	} else {
 		updateLabel = __( 'Update', 'newspack-newsletters' );
@@ -256,8 +225,12 @@ export default compose( [
 
 	const [ testEmail, setTestEmail ] = useState( window?.newspack_newsletters_data?.user_test_emails?.join( ',' ) || '' );
 
-	// `label` already carries the manual provider's "Publish" wording, so it works as the modal submit label too.
-	const modalSubmitLabel = label;
+	let modalSubmitLabel;
+	if ( 'manual' === serviceProviderName ) {
+		modalSubmitLabel = is_public ? __( 'Mark as sent and publish', 'newspack-newsletters' ) : __( 'Mark as sent', 'newspack-newsletters' );
+	} else {
+		modalSubmitLabel = label;
+	}
 
 	const triggerCampaignSend = async () => {
 		editPost( { status: publishStatus } );
@@ -321,7 +294,7 @@ export default compose( [
 							<div className="newspack-newsletters__modal__content">
 								<DisableAutoAds saveOnToggle />
 								<hr />
-								{ ! isManual && (
+								{ 'manual' !== serviceProviderName && (
 									<Testing testEmail={ testEmail } onChangeEmail={ setTestEmail } disabled={ isSaving } inlineNotifications />
 								) }
 								<hr />
@@ -335,17 +308,8 @@ export default compose( [
 	}
 
 	const handleModalOpen = async () => {
-		// Under the Woo renderer the endpoint renders saved content, so save first
-		// to avoid rendering stale content. When the flag is off, preserve the
-		// original order (refresh first, then save) byte-for-byte.
-		let res;
-		if ( newspack_email_editor_data?.use_woo_renderer ) {
-			await savePost();
-			res = await refreshEmailHtml( postId, postTitle, postContent );
-		} else {
-			res = await refreshEmailHtml( postId, postTitle, postContent );
-			await savePost();
-		}
+		const res = await refreshEmailHtml( postId, postTitle, postContent );
+		await savePost();
 		if ( res.result === 'success' && saveDidSucceed ) {
 			setModalVisible( true );
 		} else {
@@ -373,9 +337,7 @@ export default compose( [
 			{ modalVisible && (
 				<Modal
 					className="newspack-newsletters__modal"
-					title={
-						isManual ? __( 'Publish your newsletter?', 'newspack-newsletters' ) : __( 'Send your newsletter?', 'newspack-newsletters' )
-					}
+					title={ __( 'Send your newsletter?', 'newspack-newsletters' ) }
 					onRequestClose={ () => setModalVisible( false ) }
 					shouldCloseOnClickOutside={ false }
 					isFullScreen
@@ -387,7 +349,7 @@ export default compose( [
 						<div className="newspack-newsletters__modal__content">
 							<DisableAutoAds saveOnToggle />
 							<hr />
-							{ ! isManual && (
+							{ 'manual' !== serviceProviderName && (
 								<Testing testEmail={ testEmail } onChangeEmail={ setTestEmail } disabled={ isSaving } inlineNotifications />
 							) }
 							<div className="newspack-newsletters__modal__spacer" />

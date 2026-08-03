@@ -34,7 +34,6 @@ const CoreCard = ( {
 	footerStyle,
 	disabled,
 	icon,
-	iconElement,
 	iconBackgroundColor,
 	isActive,
 	isDraggable,
@@ -61,7 +60,7 @@ const CoreCard = ( {
 		isDraggable && 'newspack-card--core__is-draggable',
 		isNarrow && 'newspack-card--core__is-narrow',
 		isSmall && 'newspack-card--core__is-small',
-		( icon || iconElement ) && 'newspack-card--core__has-icon',
+		icon && 'newspack-card--core__has-icon',
 		iconBackgroundColor && 'newspack-card--core__has-icon-background-color',
 		isActive && 'newspack-card--core__is-active',
 		disabled && 'newspack-card--core__is-disabled',
@@ -88,7 +87,7 @@ const CoreCard = ( {
 	const headerIsButton = !! onHeaderClick && ! hasInteractiveHeaderChildren;
 	return (
 		<CardWrapper as={ as } className={ classes } { ...otherProps }>
-			{ ( header || icon || iconElement ) && (
+			{ ( header || icon ) && (
 				<CardHeader
 					as={ headerIsButton ? 'button' : undefined }
 					className={ classNames(
@@ -126,14 +125,10 @@ const CoreCard = ( {
 							</div>
 						</div>
 					) }
-					{ iconElement ? (
-						<div className="newspack-card--core__icon-slot">{ iconElement }</div>
-					) : (
-						icon && (
-							<div className="newspack-card--core__icon">
-								<Icon icon={ icon } height={ isSmall ? 24 : 48 } width={ isSmall ? 24 : 48 } />
-							</div>
-						)
+					{ icon && (
+						<div className="newspack-card--core__icon">
+							<Icon icon={ icon } height={ isSmall ? 24 : 48 } width={ isSmall ? 24 : 48 } />
+						</div>
 					) }
 					{ actions?.length > 0 && actionType === 'toggle' && (
 						<ToggleControl
