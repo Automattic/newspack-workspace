@@ -266,6 +266,11 @@ class Test_Field_Registry extends \WP_UnitTestCase {
 		$this->assertTrue( $by_id['v1:last_payment_amount']['in_conflict_group'] );
 		$this->assertTrue( $by_id['v2:Last_Payment_Amount']['in_conflict_group'] );
 
+		// Equivalence is serialized for the UI's row collapse.
+		$this->assertTrue( $by_id['v2:Account']['equivalent'] );
+		$this->assertFalse( $by_id['v2:Last_Payment_Amount']['equivalent'] );
+		$this->assertFalse( $by_id['v1:account']['equivalent'] );
+
 		// Superseded side of a rename carries the reverse link.
 		$this->assertContains( 'v2:Registration_Strategy', $by_id['v1:registration_method']['superseded_by'] );
 

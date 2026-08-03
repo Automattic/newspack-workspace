@@ -40,10 +40,19 @@ export const buildFieldRows = ( definitions, enabledIds, origin ) => {
 	const rows = [];
 	byName.forEach( ( candidates, name ) => {
 		const present = VERSIONS.filter( v => candidates[ v ].length );
-		const conflict = candidates.v1.length > 0 && candidates.v2.length > 0;
+		const bothVersions = candidates.v1.length > 0 && candidates.v2.length > 0;
+		// A name in both versions whose every v2 member declares value
+		// equivalence is one field, not a conflict: the save path upgrades
+		// stored v1 ids to the v2 twin, so the row renders the surviving v2
+		// identity with no version picker.
+		const equivalentGroup = bothVersions && candidates.v2.every( d => d.equivalent );
+		const conflict = bothVersions && ! equivalentGroup;
 		const enabledVersion = VERSIONS.find( v => candidates[ v ].some( d => enabled.has( d.id ) ) );
 		const hasAvailable = v => candidates[ v ].some( d => d.available );
 		let activeVersion = enabledVersion || ( conflict ? origin : present[ 0 ] );
+		if ( equivalentGroup ) {
+			activeVersion = hasAvailable( 'v2' ) || ! hasAvailable( 'v1' ) ? 'v2' : 'v1';
+		}
 		if ( ! enabledVersion && conflict && ! hasAvailable( activeVersion ) ) {
 			const alternate = 'v1' === activeVersion ? 'v2' : 'v1';
 			if ( hasAvailable( alternate ) ) {
@@ -56,7 +65,7 @@ export const buildFieldRows = ( definitions, enabledIds, origin ) => {
 			return;
 		}
 		const checked = Boolean( enabledVersion );
-		if ( ! conflict && ! checked && 'neutral' !== activeVersion && activeVersion !== origin ) {
+		if ( ! conflict && ! equivalentGroup && ! checked && 'neutral' !== activeVersion && activeVersion !== origin ) {
 			return; // Sunset rule: non-origin fields list only while enabled.
 		}
 		const activeDefinition = active[ 0 ];
@@ -177,7 +186,6 @@ const OutboundFields = ( { field, value, onChange } ) => {
 							{ sectionRows.map( row => (
 								<div className="newspack-outbound-field-row" key={ row.key }>
 									<CheckboxControl
-										className="newspack-checkbox-control"
 										label={ row.name }
 										help={
 											[

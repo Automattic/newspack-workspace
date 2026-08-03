@@ -18,6 +18,7 @@ const def = ( id, name, extra = {} ) => {
 		supersedes: null,
 		superseded_by: [],
 		in_conflict_group: false,
+		equivalent: false,
 		...extra,
 	};
 };
@@ -85,6 +86,31 @@ describe( 'buildFieldRows', () => {
 			def( 'v2:Last_Payment', 'Last Payment', { in_conflict_group: true, available: false } ),
 		];
 		expect( buildFieldRows( defs, [], 'v1' ).find( r => r.name === 'Last Payment' ) ).toBeUndefined();
+	} );
+
+	it( 'collapses value-equivalent pairs into one v2 row with no picker', () => {
+		const defs = [
+			def( 'v1:account', 'Account', { in_conflict_group: true } ),
+			def( 'v2:Account', 'Account', { in_conflict_group: true, equivalent: true } ),
+		];
+		const account = buildFieldRows( defs, [], 'v1' ).find( r => r.name === 'Account' );
+		expect( account ).toBeDefined();
+		expect( account.conflict ).toBe( false );
+		expect( account.activeVersion ).toBe( 'v2' );
+		expect( account.checked ).toBe( false );
+		expect( badgesForRow( account, 'v1' ) ).toEqual( [] );
+		expect( toggleRow( [], account, true ) ).toEqual( [ 'v2:Account' ] );
+	} );
+
+	it( 'renders a stale v1-enabled equivalent row checked under its v2 identity', () => {
+		const defs = [
+			def( 'v1:account', 'Account', { in_conflict_group: true } ),
+			def( 'v2:Account', 'Account', { in_conflict_group: true, equivalent: true } ),
+		];
+		const row = buildFieldRows( defs, [ 'v1:account' ], 'v1' ).find( r => r.name === 'Account' );
+		expect( row.checked ).toBe( true );
+		expect( row.activeVersion ).toBe( 'v2' );
+		expect( toggleRow( [ 'v1:account' ], row, false ) ).toEqual( [] );
 	} );
 
 	it( 'keeps a conflict row visible when its enabled version becomes unavailable', () => {

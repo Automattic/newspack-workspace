@@ -394,6 +394,7 @@ class Field_Registry {
 				'supersedes'        => $definition['supersedes'] ?? null,
 				'superseded_by'     => array_values( $definition['superseded_by'] ?? [] ),
 				'in_conflict_group' => isset( $conflict_ids[ $id ] ),
+				'equivalent'        => ! empty( $definition['equivalent'] ),
 			];
 		}
 		return $rows;
