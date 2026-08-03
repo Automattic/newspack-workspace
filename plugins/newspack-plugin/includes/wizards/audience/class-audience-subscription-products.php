@@ -171,9 +171,12 @@ class Audience_Subscription_Products extends Wizard {
 				'callback'            => [ $this, 'api_validate_promo_coupon' ],
 				'permission_callback' => [ $this, 'api_permissions_check' ],
 				'args'                => [
-					'code' => [
+					'code'       => [
 						'required'          => true,
 						'sanitize_callback' => 'sanitize_text_field',
+					],
+					'product_id' => [
+						'sanitize_callback' => 'absint',
 					],
 				],
 			]
@@ -290,9 +293,13 @@ class Audience_Subscription_Products extends Wizard {
 	}
 
 	/**
-	 * GET coupon validity for the promo URL generator. Mirrors the semantics of
-	 * Modal_Checkout::maybe_auto_apply_coupon() so the UI verdict matches what
-	 * the checkout will actually do.
+	 * GET coupon validity for the promo URL generator against the promoted plan.
+	 *
+	 * Mirrors the context-free subset of checkout coupon validation (expiry,
+	 * usage limit) plus explicit product-restriction/minimum-spend checks
+	 * against the promoted plan — a bare WC_Discounts with no cart would
+	 * falsely reject coupons restricted to the promoted product, the primary
+	 * promotional-coupon shape. See {@see Promo_Url_Targets::evaluate_coupon()}.
 	 *
 	 * @param \WP_REST_Request $request The request.
 	 * @return \WP_REST_Response
@@ -324,17 +331,29 @@ class Audience_Subscription_Products extends Wizard {
 				]
 			);
 		}
-		$discounts = new \WC_Discounts();
-		$valid     = $discounts->is_coupon_valid( $coupon );
-		if ( true === $valid ) {
-			return rest_ensure_response( [ 'valid' => true ] );
+		$expires        = $coupon->get_date_expires();
+		$usage_limit    = (int) $coupon->get_usage_limit();
+		$coupon_data    = [
+			'expired'        => $expires && $expires->getTimestamp() < time(),
+			'usage_exceeded' => $usage_limit > 0 && (int) $coupon->get_usage_count() >= $usage_limit,
+			'product_ids'    => $coupon->get_product_ids(),
+			'excluded_ids'   => $coupon->get_excluded_product_ids(),
+			'category_ids'   => $coupon->get_product_categories(),
+			'minimum_amount' => (float) $coupon->get_minimum_amount(),
+		];
+		$product_context = [];
+		$product_id      = absint( $request->get_param( 'product_id' ) );
+		if ( $product_id && function_exists( 'wc_get_product' ) ) {
+			$family           = Promo_Url_Targets::get_product_family( $product_id );
+			$family_ids       = array_merge( [ $family['parent'] ], $family['variations'], $family['members'] );
+			$product          = wc_get_product( $product_id );
+			$product_context  = [
+				'family_ids'          => $family_ids,
+				'family_category_ids' => $product ? $product->get_category_ids() : [],
+				'reference_price'     => $product && '' !== $product->get_price() ? (float) $product->get_price() : null,
+			];
 		}
-		return rest_ensure_response(
-			[
-				'valid'  => false,
-				'reason' => is_wp_error( $valid ) ? $valid->get_error_message() : esc_html__( 'Coupon is not currently valid.', 'newspack-plugin' ),
-			]
-		);
+		return rest_ensure_response( Promo_Url_Targets::evaluate_coupon( $coupon_data, $product_context ) );
 	}
 
 	/**

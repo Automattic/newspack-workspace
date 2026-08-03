@@ -440,4 +440,80 @@ final class Promo_Url_Targets {
 		}
 		return $map;
 	}
+
+	/**
+	 * Decide whether a coupon is usable for a promoted product, from plain
+	 * extracted values. Pure so it is unit-testable without WooCommerce; the
+	 * REST callback extracts these values from WC_Coupon and delegates.
+	 *
+	 * Mirrors the context-free subset of WC_Discounts::is_coupon_valid() plus
+	 * manual product/amount checks — a bare WC_Discounts with no cart rejects
+	 * product-restricted and minimum-amount coupons outright, which are the
+	 * primary promotional-coupon shapes.
+	 *
+	 * @param array $coupon_data {
+	 *     Extracted coupon state.
+	 *     @type bool       $expired          Past its end date.
+	 *     @type bool       $usage_exceeded   Usage limit reached.
+	 *     @type int[]      $product_ids      Allowed product IDs ([] = no restriction).
+	 *     @type int[]      $excluded_ids     Excluded product IDs.
+	 *     @type int[]      $category_ids     Allowed product category IDs ([] = no restriction).
+	 *     @type float      $minimum_amount   Minimum spend (0 = none).
+	 * }
+	 * @param array $product_context {
+	 *     Promoted-product context; empty array skips product-dependent checks.
+	 *     @type int[]      $family_ids       Product + variations/members IDs.
+	 *     @type int[]      $family_category_ids Category term IDs of the product.
+	 *     @type float|null $reference_price  Price used against minimum_amount.
+	 * }
+	 * @return array { valid: bool, reason?: string }
+	 */
+	public static function evaluate_coupon( $coupon_data, $product_context = [] ) {
+		if ( ! empty( $coupon_data['expired'] ) ) {
+			return [
+				'valid'  => false,
+				'reason' => __( 'This coupon has expired.', 'newspack-plugin' ),
+			];
+		}
+		if ( ! empty( $coupon_data['usage_exceeded'] ) ) {
+			return [
+				'valid'  => false,
+				'reason' => __( 'This coupon has reached its usage limit.', 'newspack-plugin' ),
+			];
+		}
+		$family_ids = isset( $product_context['family_ids'] ) ? array_map( 'intval', $product_context['family_ids'] ) : [];
+		if ( ! empty( $family_ids ) ) {
+			$allowed = isset( $coupon_data['product_ids'] ) ? array_map( 'intval', $coupon_data['product_ids'] ) : [];
+			if ( ! empty( $allowed ) && empty( array_intersect( $allowed, $family_ids ) ) ) {
+				return [
+					'valid'  => false,
+					'reason' => __( 'This coupon does not apply to this plan.', 'newspack-plugin' ),
+				];
+			}
+			$excluded = isset( $coupon_data['excluded_ids'] ) ? array_map( 'intval', $coupon_data['excluded_ids'] ) : [];
+			if ( ! empty( $excluded ) && empty( array_diff( $family_ids, $excluded ) ) ) {
+				return [
+					'valid'  => false,
+					'reason' => __( 'This coupon excludes this plan.', 'newspack-plugin' ),
+				];
+			}
+			$allowed_cats = isset( $coupon_data['category_ids'] ) ? array_map( 'intval', $coupon_data['category_ids'] ) : [];
+			$family_cats  = isset( $product_context['family_category_ids'] ) ? array_map( 'intval', $product_context['family_category_ids'] ) : [];
+			if ( ! empty( $allowed_cats ) && empty( array_intersect( $allowed_cats, $family_cats ) ) ) {
+				return [
+					'valid'  => false,
+					'reason' => __( 'This coupon is limited to product categories this plan is not in.', 'newspack-plugin' ),
+				];
+			}
+			$minimum = isset( $coupon_data['minimum_amount'] ) ? (float) $coupon_data['minimum_amount'] : 0.0;
+			$price   = isset( $product_context['reference_price'] ) ? $product_context['reference_price'] : null;
+			if ( $minimum > 0 && null !== $price && (float) $price < $minimum ) {
+				return [
+					'valid'  => false,
+					'reason' => __( 'The plan price is below this coupon’s minimum spend.', 'newspack-plugin' ),
+				];
+			}
+		}
+		return [ 'valid' => true ];
+	}
 }
