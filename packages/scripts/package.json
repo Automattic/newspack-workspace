@@ -1,6 +1,6 @@
 {
 	"name": "newspack-scripts",
-	"version": "5.10.0-alpha.1",
+	"version": "5.10.0",
 	"description": "",
 	"bin": {
 		"newspack-scripts": "./bin/newspack-scripts.js"
