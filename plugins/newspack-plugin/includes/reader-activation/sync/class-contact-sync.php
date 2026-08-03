@@ -195,7 +195,9 @@ class Contact_Sync extends Sync {
 	 * @param array  $options          Optional. Sync options threaded to the integration push:
 	 *                                 `skip_lists` (bool) and `fields` (string[]|null). These apply
 	 *                                 only to the direct push path below — not the queued Data Events
-	 *                                 branch, which never runs under WP-CLI.
+	 *                                 branch, which never runs under WP-CLI. `integration_id`
+	 *                                 (string|null) restricts the push fan-out to a single active
+	 *                                 integration.
 	 *
 	 * @return true|\WP_Error True if succeeded or WP_Error.
 	 */
@@ -321,6 +323,8 @@ class Contact_Sync extends Sync {
 	 *                                 full contact and would push it with the master list,
 	 *                                 undoing the list-less/field-scoped intent. Operators
 	 *                                 re-run the affected `--offset` window instead.
+	 *                                 `integration_id` (string|null) restricts the fan-out to
+	 *                                 that integration; retries for it are scheduled normally.
 	 *
 	 * @return true|\WP_Error True if all succeeded, or WP_Error with combined messages.
 	 */
@@ -333,7 +337,10 @@ class Contact_Sync extends Sync {
 		 */
 		$contact = \apply_filters( 'newspack_esp_sync_contact', $contact, $context );
 		$integrations = Integrations::get_active_configured_integrations();
-		$errors       = [];
+		if ( ! empty( $options['integration_id'] ) ) {
+			$integrations = array_intersect_key( $integrations, [ $options['integration_id'] => true ] );
+		}
+		$errors = [];
 
 		// Resolve user ID for retry scheduling.
 		$user    = ! empty( $contact['email'] ) ? \get_user_by( 'email', $contact['email'] ) : false;
@@ -347,6 +354,13 @@ class Contact_Sync extends Sync {
 		}
 
 		foreach ( $integrations as $integration_id => $integration ) {
+			// Skip integrations without an (enabled) push: pausing the outbound
+			// toggle stops pushes while the stored outgoing-field selection waits
+			// for re-enable, and push-less integrations have nothing to push to.
+			if ( ! $integration->is_push_enabled() ) {
+				continue;
+			}
+
 			$integration_contact = self::prepare_contact_for_integration( $integration, $contact, $options );
 
 			// Added logging here to more easily monitor integration sync data. Can be removed once integrations are released.
@@ -491,6 +505,12 @@ class Contact_Sync extends Sync {
 		$flag_contact = \apply_filters( 'newspack_esp_sync_contact', $flag_contact, $context );
 
 		foreach ( $integrations as $integration_id => $integration ) {
+			// Deletion propagates through the push pipeline (delete_contact() /
+			// flag-mode push_contact_data()), so it follows the push capability
+			// and the outbound toggle like any other outbound sync.
+			if ( ! $integration->is_push_enabled() ) {
+				continue;
+			}
 			if ( ! $integration->get_settings_field_value( 'sync_account_deletion' ) ) {
 				continue;
 			}
@@ -872,6 +892,11 @@ class Contact_Sync extends Sync {
 			return;
 		}
 
+		if ( ! $integration->is_push_enabled() ) {
+			static::log( sprintf( 'Outbound sync disabled for integration "%s" on retry %d; aborting retry chain.', $integration_id, $retry_count ) );
+			return;
+		}
+
 		static::log( sprintf( 'Executing retry %d/%d for integration "%s" sync of user %d (%s).', $retry_count, self::MAX_RETRIES, $integration_id, $user_id, $contact['email'] ?? 'unknown' ) );
 
 		/** This filter is documented in includes/reader-activation/sync/class-contact-sync.php */
@@ -1163,6 +1188,11 @@ class Contact_Sync extends Sync {
 			return;
 		}
 
+		if ( ! $integration->is_push_enabled() ) {
+			static::log( sprintf( 'Outbound sync disabled for integration "%s" on deletion retry %d; aborting retry chain.', $integration_id, $retry_count ) );
+			return;
+		}
+
 		static::log( sprintf( 'Executing retry %d/%d for deletion (%s) sync of %s in integration "%s".', $retry_count, self::MAX_RETRIES, $mode, $email, $integration_id ) );
 
 		if ( 'delete' === $mode ) {
@@ -1367,6 +1397,8 @@ class Contact_Sync extends Sync {
 	 *                                        `fields` (string[]|null, canonical labels). `fields`
 	 *                                        restricts both what metadata is computed and what is
 	 *                                        pushed; `skip_lists` upserts without a master list.
+	 *                                        `integration_id` (string|null) restricts the push
+	 *                                        fan-out to a single active integration.
 	 *
 	 * @return true|\WP_Error True if the contact was synced successfully, WP_Error otherwise.
 	 */
@@ -1423,8 +1455,27 @@ class Contact_Sync extends Sync {
 		// publisher filter contributes.
 		/** This filter is documented in includes/reader-activation/sync/class-contact-sync.php. */
 		$contact    = \apply_filters( 'newspack_esp_sync_contact', $contact, $context );
-		$skip_lists = ! empty( $options['skip_lists'] );
-		foreach ( Integrations::get_active_configured_integrations() as $integration_id => $integration ) {
+		$skip_lists   = ! empty( $options['skip_lists'] );
+		$integrations = Integrations::get_active_configured_integrations();
+		if ( ! empty( $options['integration_id'] ) ) {
+			$integrations = array_intersect_key( $integrations, [ $options['integration_id'] => true ] );
+		}
+		foreach ( $integrations as $integration_id => $integration ) {
+			// The real push path skips integrations without an (enabled) push, so
+			// report the skip rather than a payload the run would never send —
+			// a preview that disagrees with the run defeats the point of --dry-run.
+			if ( ! $integration->is_push_enabled() ) {
+				static::log(
+					sprintf(
+						'[dry-run] SKIPPED integration "%s": %s.',
+						$integration_id,
+						$integration->supports_push() ? 'outbound sync is paused' : 'integration does not support outbound sync'
+					)
+				);
+				continue;
+			}
+
+
 			$prepared = self::prepare_contact_for_integration( $integration, $contact, $options );
 			$metadata = $prepared['metadata'] ?? [];
 			static::log(

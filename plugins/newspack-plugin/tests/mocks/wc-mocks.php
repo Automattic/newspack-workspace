@@ -408,6 +408,14 @@ class WC_Order {
 		}
 		return new WC_DateTime( $this->data['date_paid'] );
 	}
+	public function get_date_created() {
+		// Fall back to date_paid like fixtures that predate the date_created key.
+		$date_created = $this->data['date_created'] ?? $this->data['date_paid'];
+		if ( empty( $date_created ) ) {
+			return null;
+		}
+		return new WC_DateTime( $date_created );
+	}
 	public function get_date_completed() {
 		return new WC_DateTime( $this->data['date_completed'] );
 	}
@@ -1021,6 +1029,12 @@ function wc_prices_include_tax() {
 	global $wcs_mock_prices_include_tax;
 	return ! empty( $wcs_mock_prices_include_tax );
 }
+/**
+ * Real WC: order statuses considered "paid" (payment received).
+ */
+function wc_get_is_paid_statuses() {
+	return [ 'processing', 'completed' ];
+}
 function wc_get_orders( $args ) {
 	global $orders_database;
 	// For simplicity, this mock will only return a single page of results.
@@ -1031,18 +1045,63 @@ function wc_get_orders( $args ) {
 	if ( isset( $args['customer_id'] ) ) {
 		// Filter by customer.
 		$orders = array_filter(
-			$orders_database,
+			$orders,
 			function( $order ) use ( $args ) {
 				return $order->get_customer_id() === $args['customer_id'];
 			}
 		);
 	}
+	if ( ! empty( $args['customer'] ) ) {
+		// Real WC: 'customer' accepts a user ID or billing email (or an array of
+		// either) and matches orders belonging to ANY of the values — guest
+		// orders (customer_id 0) match via their billing email. Email matching
+		// happens in SQL under a case-insensitive collation, so compare with
+		// strcasecmp() rather than a strict string comparison.
+		//
+		// The `! empty()` gate is deliberate: both order stores test the query var
+		// with `! empty()` too, so an empty value drops the constraint entirely and
+		// matches EVERY customer's orders. Guarding with isset() here would invert
+		// that and make callers passing an empty customer look safe.
+		$customer_values = (array) $args['customer'];
+		$orders          = array_filter(
+			$orders,
+			function( $order ) use ( $customer_values ) {
+				foreach ( $customer_values as $customer_value ) {
+					if ( is_numeric( $customer_value ) && $order->get_customer_id() === (int) $customer_value ) {
+						return true;
+					}
+					if ( is_string( $customer_value ) && ! is_numeric( $customer_value ) && 0 === strcasecmp( (string) $order->get_billing_email(), $customer_value ) ) {
+						return true;
+					}
+				}
+				return false;
+			}
+		);
+	}
 	if ( isset( $args['status'] ) ) {
-		// Filter by status.
+		// Filter by status. Real wc_get_orders accepts statuses with or without
+		// the 'wc-' prefix; normalize both sides so either form matches.
+		$statuses = array_map(
+			function( $status ) {
+				return preg_replace( '/^wc-/', '', $status );
+			},
+			(array) $args['status']
+		);
+		$orders   = array_filter(
+			$orders,
+			function( $order ) use ( $statuses ) {
+				return in_array( $order->get_status(), $statuses, true );
+			}
+		);
+	}
+	if ( isset( $args['date_created'] ) && is_string( $args['date_created'] ) && str_starts_with( $args['date_created'], '>' ) ) {
+		// Support the '>{timestamp}' comparison form used by date-bounded queries.
+		$cutoff = (int) substr( $args['date_created'], 1 );
 		$orders = array_filter(
-			$orders_database,
-			function( $order ) use ( $args ) {
-				return 'wc-' . $order->get_status() === $args['status'][0];
+			$orders,
+			function( $order ) use ( $cutoff ) {
+				$date_created = $order->get_date_created();
+				return $date_created && $date_created->getTimestamp() > $cutoff;
 			}
 		);
 	}
@@ -1052,17 +1111,36 @@ function wc_get_orders( $args ) {
 			return $b->get_date_paid()->getTimestamp() <=> $a->get_date_paid()->getTimestamp();
 		}
 	);
+	if ( isset( $args['limit'] ) && (int) $args['limit'] > 0 ) {
+		$orders = array_slice( $orders, 0, (int) $args['limit'] );
+	}
 	return $orders;
 }
 
 function wc_customer_bought_product( $customer_email, $user_id, $product_id ) {
 	global $orders_database;
+	// Real WC hands the question to third parties first and returns whatever they
+	// answer verbatim, ahead of its own identity check.
+	$filtered = apply_filters( 'woocommerce_pre_customer_bought_product', null, $customer_email, $user_id, $product_id );
+	if ( null !== $filtered ) {
+		return $filtered;
+	}
 	foreach ( $orders_database as $order ) {
-		if ( $order->get_customer_id() !== $user_id ) {
+		// Real WC matches the customer user ID OR the billing email, so guest
+		// orders count toward the buyer's history. The email comparison runs in
+		// SQL under a case-insensitive collation.
+		$matches_user  = $user_id && $order->get_customer_id() === $user_id;
+		$matches_email = $customer_email && 0 === strcasecmp( (string) $order->get_billing_email(), (string) $customer_email );
+		if ( ! $matches_user && ! $matches_email ) {
+			continue;
+		}
+		// Real WC only counts orders in paid statuses (processing/completed).
+		if ( ! $order->has_status( wc_get_is_paid_statuses() ) ) {
 			continue;
 		}
 		foreach ( $order->get_items() as $item ) {
-			if ( $item->get_product_id() === $product_id ) {
+			// Real WC matches both _product_id and _variation_id order item meta.
+			if ( $item->get_product_id() === $product_id || ( $item->get_variation_id() && $item->get_variation_id() === $product_id ) ) {
 				return true;
 			}
 		}
@@ -1085,6 +1163,22 @@ function wc_get_order( $order_id ) {
 function wc_get_product( $product_id ) {
 	global $products_database;
 	return $products_database[ $product_id ] ?? false;
+}
+/**
+ * Minimal stand-in for WooCommerce's admin field renderer. Only enough markup to let a metabox
+ * callback render end to end; assertions belong on the surrounding markup, not on this field.
+ *
+ * @param array $field The field definition.
+ */
+function woocommerce_wp_text_input( $field ) {
+	printf(
+		'<p class="form-field %1$s"><label for="%2$s">%3$s</label><input type="text" id="%2$s" name="%4$s" value="%5$s" /></p>',
+		esc_attr( $field['wrapper_class'] ?? '' ),
+		esc_attr( $field['id'] ?? '' ),
+		esc_html( $field['label'] ?? '' ),
+		esc_attr( $field['name'] ?? ( $field['id'] ?? '' ) ),
+		esc_attr( $field['value'] ?? '' )
+	);
 }
 /**
  * Recording mock: notices land on the $wc_mock_notices global so tests can

@@ -324,7 +324,10 @@ class WooCommerce_My_Account {
 				\Newspack\Newspack::plugin_url() . '/dist/my-account.js',
 				[],
 				\Newspack\Newspack::asset_version( 'my-account' ),
-				true
+				[
+					'in_footer' => true,
+					'strategy'  => 'defer',
+				]
 			);
 			\wp_localize_script(
 				'newspack-my-account',

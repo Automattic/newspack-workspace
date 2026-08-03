@@ -587,6 +587,11 @@ final class Newspack {
 		);
 		wp_enqueue_script( 'newspack_commons' );
 
+		// Defer on the front end only; admin and block editor requests (is_admin()) are left untouched.
+		if ( ! is_admin() ) {
+			wp_script_add_data( 'newspack_commons', 'strategy', 'defer' );
+		}
+
 		wp_register_style(
 			'newspack-commons',
 			self::plugin_url() . '/dist/commons.css',
