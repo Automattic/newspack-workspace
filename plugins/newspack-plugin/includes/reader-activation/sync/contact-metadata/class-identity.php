@@ -82,6 +82,8 @@ class Identity extends Contact_Metadata {
 				'description' => __( 'WordPress user account ID of the reader', 'newspack-plugin' ),
 				'example'     => '323',
 				'status'      => 'existing',
+				'supersedes'  => 'v1:account',
+				'equivalent'  => true,
 			],
 			'User_Role'         => [
 				'name'        => 'User Role',
@@ -100,6 +102,8 @@ class Identity extends Contact_Metadata {
 				'description' => __( 'SSO service used to register, if applicable (e.g. google, apple)', 'newspack-plugin' ),
 				'example'     => 'google',
 				'status'      => 'existing',
+				'supersedes'  => 'v1:connected_account',
+				'equivalent'  => true,
 			],
 		];
 	}

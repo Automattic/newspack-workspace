@@ -894,6 +894,11 @@ abstract class Integration {
 		}
 		$ids = array_values( array_unique( $ids ) );
 
+		// Migration is a write path too: upgrade value-equivalent v1 ids to
+		// their v2 twins (see update_enabled_outgoing_fields()) so the
+		// written-back option is already on the surviving id shape.
+		$ids = Sync\Field_Registry::upgrade_equivalent_ids( $ids );
+
 		// Only write the migrated ids back when every stored entry resolved.
 		// A name can fail to resolve when the plugin that declares its field
 		// is inactive (e.g. newspack-network deactivated, or a WooCommerce
@@ -1062,6 +1067,11 @@ abstract class Integration {
 			}
 		}
 		$ids = array_values( array_unique( $ids ) );
+
+		// Value-equivalent conflict pairs store the v2 id: their v2 pipeline
+		// produces the identical value for the same ESP name, so upgrading at
+		// save time retires legacy ids with no observable payload change.
+		$ids = Sync\Field_Registry::upgrade_equivalent_ids( $ids );
 
 		// Enforce one enabled version per conflict group (keep-first-version).
 		$conflict_groups  = Sync\Field_Registry::get_conflict_groups();
@@ -1317,6 +1327,15 @@ abstract class Integration {
 			}
 			$by_raw[ $definition['raw_key'] ] = $definition;
 			$by_name[ $definition['name'] ]   = $definition;
+			// An equivalent-group id accepts its v1 counterparts' raw keys as
+			// input aliases: callers still hand-build contacts with legacy raw
+			// keys (the deletion connector passes `account`), and the values
+			// are identical by declaration — only the key spelling differs.
+			foreach ( Sync\Field_Registry::get_equivalent_input_raw_keys( $id ) as $alias_raw_key ) {
+				if ( ! isset( $by_raw[ $alias_raw_key ] ) ) {
+					$by_raw[ $alias_raw_key ] = $definition;
+				}
+			}
 		}
 
 		$prepared = [];

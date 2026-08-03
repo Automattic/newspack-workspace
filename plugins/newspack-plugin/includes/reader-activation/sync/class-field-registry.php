@@ -59,6 +59,15 @@ class Field_Registry {
 	private static $generation = 0;
 
 	/**
+	 * Lazily-built map of v1 definition id => v2 definition ids, for the
+	 * conflict groups whose every v2 member declares itself value-equivalent
+	 * to its v1 counterpart. Backs the storage-time id upgrade.
+	 *
+	 * @var array|null
+	 */
+	private static $equivalent_upgrades = null;
+
+	/**
 	 * Map of schema version to the metadata classes that own its fields.
 	 *
 	 * @return array
@@ -88,9 +97,10 @@ class Field_Registry {
 	 * @return void
 	 */
 	public static function reset() {
-		self::$definitions     = null;
-		self::$detected_origin = null;
-		self::$name_index      = null;
+		self::$definitions         = null;
+		self::$detected_origin     = null;
+		self::$name_index          = null;
+		self::$equivalent_upgrades = null;
 		self::$generation++;
 	}
 
@@ -387,6 +397,103 @@ class Field_Registry {
 			];
 		}
 		return $rows;
+	}
+
+	/**
+	 * Build the equivalent-upgrade map: v1 id => v2 ids, restricted to
+	 * conflict groups whose every v2 member declares `equivalent`.
+	 *
+	 * Equivalence is an authored claim on the v2 config — "the v2 pipeline
+	 * produces the identical value for the same ESP name" — audited against
+	 * the field-inventory sheet, never inferred from matching copy.
+	 *
+	 * @return array Map of v1 definition id => list of v2 definition ids.
+	 */
+	private static function get_equivalent_upgrades() {
+		if ( null !== self::$equivalent_upgrades ) {
+			return self::$equivalent_upgrades;
+		}
+		$definitions = self::get_definitions();
+		$map         = [];
+		foreach ( self::get_conflict_groups() as $ids ) {
+			$v1_ids         = [];
+			$v2_ids         = [];
+			$all_equivalent = true;
+			foreach ( $ids as $id ) {
+				if ( self::VERSION_V1 === $definitions[ $id ]['version'] ) {
+					$v1_ids[] = $id;
+					continue;
+				}
+				$v2_ids[] = $id;
+				if ( empty( $definitions[ $id ]['equivalent'] ) ) {
+					$all_equivalent = false;
+				}
+			}
+			if ( ! $all_equivalent || empty( $v2_ids ) || empty( $v1_ids ) ) {
+				continue;
+			}
+			foreach ( $v1_ids as $v1_id ) {
+				$map[ $v1_id ] = $v2_ids;
+			}
+		}
+		self::$equivalent_upgrades = $map;
+		return self::$equivalent_upgrades;
+	}
+
+	/**
+	 * Upgrade v1 ids of value-equivalent conflict pairs to their v2 twins.
+	 *
+	 * The storage-time sunset lever: because an equivalent pair produces a
+	 * byte-identical ESP payload on either version, rewriting the stored id
+	 * is unobservable at the provider and retires legacy ids for free. This
+	 * is only safe where the registry attests equivalence — divergent pairs
+	 * (different values or formats on the same ESP name) are never touched;
+	 * their migration stays an explicit publisher decision in the UI.
+	 *
+	 * @param string[] $ids Field ids.
+	 *
+	 * @return string[] Ids with equivalent v1 members upgraded, de-duplicated.
+	 */
+	public static function upgrade_equivalent_ids( $ids ) {
+		$upgrades = self::get_equivalent_upgrades();
+		$upgraded = [];
+		foreach ( (array) $ids as $id ) {
+			if ( isset( $upgrades[ $id ] ) ) {
+				foreach ( $upgrades[ $id ] as $v2_id ) {
+					$upgraded[] = $v2_id;
+				}
+				continue;
+			}
+			$upgraded[] = $id;
+		}
+		return array_values( array_unique( $upgraded ) );
+	}
+
+	/**
+	 * Raw keys an equivalent-group v2 id accepts as input aliases.
+	 *
+	 * Callers still hand-build contacts with legacy raw keys (the deletion
+	 * connector passes `account`, for one), so an enabled v2 id from an
+	 * equivalent pair must match its v1 counterparts' raw keys in
+	 * Integration::prepare_contact() — the values are identical by
+	 * declaration, only the internal key spelling differs.
+	 *
+	 * @param string $id Field id.
+	 *
+	 * @return string[] v1 raw keys aliased to this id (empty for non-equivalent ids).
+	 */
+	public static function get_equivalent_input_raw_keys( $id ) {
+		$definitions = self::get_definitions();
+		if ( empty( $definitions[ $id ]['equivalent'] ) ) {
+			return [];
+		}
+		$aliases = [];
+		foreach ( self::get_equivalent_upgrades() as $v1_id => $v2_ids ) {
+			if ( in_array( $id, $v2_ids, true ) && isset( $definitions[ $v1_id ]['raw_key'] ) ) {
+				$aliases[] = $definitions[ $v1_id ]['raw_key'];
+			}
+		}
+		return array_values( array_unique( $aliases ) );
 	}
 
 	const SCHEMA_ORIGIN_OPTION = 'newspack_sync_schema_origin';

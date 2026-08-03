@@ -488,4 +488,24 @@ class Test_Prepare_Contact extends \WP_UnitTestCase {
 		$this->assertArrayHasKey( 'NP_' . $fields[1], $result['metadata'] );
 		$this->assertSame( 'prefixed_value', $result['metadata'][ 'NP_' . $fields[1] ] );
 	}
+	/**
+	 * An equivalent-group v2 id accepts the legacy raw key as input: callers
+	 * still hand-build contacts with v1 raw keys (the deletion connector
+	 * passes `account`), and the pair's values are identical by declaration.
+	 */
+	public function test_equivalent_id_accepts_legacy_raw_key_input() {
+		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
+		$this->integration->update_enabled_outgoing_fields( [ 'v1:account' ] );
+		// Stored as the v2 twin by the equivalence upgrade.
+		$this->assertSame( [ 'v2:Account' ], $this->integration->get_enabled_outgoing_field_ids() );
+
+		$contact = [
+			'email'    => 'test@example.com',
+			'metadata' => [ 'account' => 42 ],
+		];
+
+		$result = $this->integration->prepare_contact( $contact );
+
+		$this->assertSame( 42, $result['metadata']['NP_Account'] ?? null, 'Legacy raw key must map through the equivalent v2 id.' );
+	}
 }
