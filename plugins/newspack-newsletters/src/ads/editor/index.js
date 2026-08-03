@@ -27,6 +27,15 @@ apiFetch.use( ( options, next ) => {
 	return next( options );
 } );
 
+// `DatePicker` works out whether a string already carries a UTC offset with
+// `/Z|[+-]\d{2}(:?\d{2})?$/`, and that also matches the `-DD` day component of
+// a bare `Y-m-d`. A date handed over as `2026-08-05` is therefore read as UTC
+// midnight rather than site-local midnight, which renders as the previous day
+// on any site whose UTC offset is negative. Give the picker the timezone-less
+// datetime it documents (`TIMEZONELESS_FORMAT`) so there is nothing in the
+// string to mistake for an offset.
+const toPickerDate = value => ( value ? `${ value }T00:00:00` : value );
+
 function AdEdit() {
 	const { status, isSaving, price, startDate, expiryDate, insertionStrategy, positionInContent, positionBlockCount } = useSelect( select => {
 		const { getEditedPostAttribute, isSavingPost } = select( 'core/editor' );
@@ -308,7 +317,7 @@ function AdEdit() {
 				/>
 				{ startDate ? (
 					<DatePicker
-						currentDate={ startDate }
+						currentDate={ toPickerDate( startDate ) }
 						onChange={ next => editPost( { meta: { start_date: format( 'Y-m-d', next ) } } ) }
 						isInvalidDate={ date => ! isInTheFuture( date ) }
 					/>
@@ -331,7 +340,7 @@ function AdEdit() {
 				/>
 				{ expiryDate ? (
 					<DatePicker
-						currentDate={ expiryDate }
+						currentDate={ toPickerDate( expiryDate ) }
 						onChange={ next => editPost( { meta: { expiry_date: format( 'Y-m-d', next ) } } ) }
 						isInvalidDate={ date => {
 							return startDate ? format( 'Y-m-d', date ) < startDate : ! isInTheFuture( date );
