@@ -186,6 +186,7 @@ const OutboundFields = ( { field, value, onChange } ) => {
 							{ sectionRows.map( row => (
 								<div className="newspack-outbound-field-row" key={ row.key }>
 									<CheckboxControl
+										className="newspack-outbound-field-row__checkbox"
 										label={ row.name }
 										help={
 											[
