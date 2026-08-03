@@ -102,4 +102,88 @@ class Promo_Url_Targets_Test extends WP_UnitTestCase {
 		Promo_Url_Targets::bump_cache_version( $page );
 		$this->assertNotFalse( get_option( Promo_Url_Targets::CACHE_VERSION_OPTION ) );
 	}
+
+	/**
+	 * Test that ref matching is anchored to the exact pattern id, not merely
+	 * a numeric prefix of it (e.g. pattern id 5 must not match a page that
+	 * references pattern id 52).
+	 */
+	public function test_ref_matching_is_anchored_to_exact_pattern_id() {
+		$pattern_id = self::factory()->post->create(
+			[
+				'post_type'    => 'wp_block',
+				'post_status'  => 'publish',
+				'post_content' => '<!-- wp:newspack-blocks/checkout-button {"product":"11"} /-->',
+			]
+		);
+		$decoy_id   = self::factory()->post->create(
+			[
+				'post_type'    => 'page',
+				'post_status'  => 'publish',
+				'post_content' => '<!-- wp:block {"ref":' . $pattern_id . '2} /-->',
+			]
+		);
+		$ref_id     = self::factory()->post->create(
+			[
+				'post_type'    => 'page',
+				'post_status'  => 'publish',
+				'post_content' => '<!-- wp:block {"ref":' . $pattern_id . '} /-->',
+			]
+		);
+		list( $ids, $truncated ) = Promo_Url_Targets::find_candidate_post_ids( self::BUTTON );
+		$this->assertNotContains( $decoy_id, $ids );
+		$this->assertContains( $ref_id, $ids );
+		$this->assertFalse( $truncated );
+	}
+
+	/**
+	 * Test that the returned candidate ids are capped at SCAN_LIMIT and the
+	 * truncated flag is set when there are more matches than that.
+	 */
+	public function test_truncated_flag_when_scan_limit_exceeded() {
+		for ( $i = 0; $i < Promo_Url_Targets::SCAN_LIMIT + 1; $i++ ) {
+			self::factory()->post->create(
+				[
+					'post_type'    => 'post',
+					'post_status'  => 'publish',
+					'post_content' => '<!-- wp:newspack-blocks/checkout-button {"product":"1"} /-->',
+				]
+			);
+		}
+		list( $ids, $truncated ) = Promo_Url_Targets::find_candidate_post_ids( self::BUTTON );
+		$this->assertCount( Promo_Url_Targets::SCAN_LIMIT, $ids );
+		$this->assertTrue( $truncated );
+	}
+
+	/**
+	 * Test that a circular chain of synced-pattern refs terminates via the
+	 * depth cap instead of recursing indefinitely.
+	 */
+	public function test_extract_blocks_survives_circular_pattern_refs() {
+		$post_a = self::factory()->post->create(
+			[
+				'post_type'    => 'wp_block',
+				'post_status'  => 'publish',
+				'post_content' => '<!-- wp:newspack-blocks/checkout-button {"product":"11"} /-->',
+			]
+		);
+		$post_b = self::factory()->post->create(
+			[
+				'post_type'    => 'wp_block',
+				'post_status'  => 'publish',
+				'post_content' => '<!-- wp:block {"ref":' . $post_a . '} /-->',
+			]
+		);
+		// Close the cycle now that both posts exist.
+		wp_update_post(
+			[
+				'ID'           => $post_a,
+				'post_content' => '<!-- wp:newspack-blocks/checkout-button {"product":"11"} /--><!-- wp:block {"ref":' . $post_b . '} /-->',
+			]
+		);
+		$attrs = Promo_Url_Targets::extract_blocks( '<!-- wp:block {"ref":' . $post_a . '} /-->', self::BUTTON );
+		$this->assertIsArray( $attrs );
+		$this->assertNotEmpty( $attrs );
+		$this->assertSame( '11', $attrs[0]['product'] );
+	}
 }

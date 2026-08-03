@@ -20,6 +20,7 @@ final class Promo_Url_Targets {
 	const CACHE_TTL            = 15 * MINUTE_IN_SECONDS;
 	const CACHE_VERSION_OPTION = 'newspack_promo_targets_cache_version';
 	const SCAN_LIMIT           = 100;
+	const PATTERN_SCAN_LIMIT   = 20;
 	const MAX_BLOCK_DEPTH      = 3;
 
 	/**
@@ -63,28 +64,47 @@ final class Promo_Url_Targets {
 				$limit
 			)
 		);
-		// Synced patterns containing the block, then pages referencing them.
+		// Synced patterns containing the block, newest-modified first and
+		// capped; if the cap is hit there may be more patterns (and more
+		// referencing pages) we never see, so that must be signaled too.
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$pattern_ids = $wpdb->get_col(
 			$wpdb->prepare(
-				"SELECT ID FROM {$wpdb->posts} WHERE post_status = 'publish' AND post_type = 'wp_block' AND post_content LIKE %s LIMIT 20",
-				$like
+				"SELECT ID FROM {$wpdb->posts} WHERE post_status = 'publish' AND post_type = 'wp_block' AND post_content LIKE %s ORDER BY post_modified DESC LIMIT %d",
+				$like,
+				self::PATTERN_SCAN_LIMIT
 			)
 		);
+		$truncated = count( $pattern_ids ) === self::PATTERN_SCAN_LIMIT;
 		foreach ( $pattern_ids as $pattern_id ) {
-			$ref_like = '%' . $wpdb->esc_like( '"ref":' . (int) $pattern_id ) . '%';
+			// Anchor the ref match to the full id: block serialization is
+			// `{"ref":123}` or `{"ref":123,...}`, so an unanchored match on
+			// `"ref":5` would also false-positive on `"ref":52`.
+			$ref_like_comma = '%' . $wpdb->esc_like( '"ref":' . (int) $pattern_id . ',' ) . '%';
+			$ref_like_brace = '%' . $wpdb->esc_like( '"ref":' . (int) $pattern_id . '}' ) . '%';
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 			$referencing = $wpdb->get_col(
 				$wpdb->prepare(
-					"SELECT ID FROM {$wpdb->posts} WHERE post_status = 'publish' AND post_type IN ('page','post') AND post_content LIKE %s LIMIT %d",
-					$ref_like,
+					"SELECT ID FROM {$wpdb->posts} WHERE post_status = 'publish' AND post_type IN ('page','post') AND ( post_content LIKE %s OR post_content LIKE %s ) LIMIT %d",
+					$ref_like_comma,
+					$ref_like_brace,
 					$limit
 				)
 			);
 			$ids = array_merge( $ids, $referencing );
 		}
-		$ids       = array_values( array_unique( array_map( 'intval', $ids ) ) );
-		$truncated = count( $ids ) > self::SCAN_LIMIT;
+		$ids = array_values( array_unique( array_map( 'intval', $ids ) ) );
+
+		// Direct-content and ref-based ids are each newest-first within their
+		// own query, but the merged union isn't; re-sort it in one query.
+		if ( count( $ids ) > 1 ) {
+			$placeholders = implode( ',', array_fill( 0, count( $ids ), '%d' ) );
+			$sql          = "SELECT ID FROM {$wpdb->posts} WHERE ID IN ({$placeholders}) ORDER BY post_modified DESC";
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared
+			$ids = array_map( 'intval', $wpdb->get_col( $wpdb->prepare( $sql, $ids ) ) );
+		}
+
+		$truncated = $truncated || count( $ids ) > self::SCAN_LIMIT;
 		return [ array_slice( $ids, 0, self::SCAN_LIMIT ), $truncated ];
 	}
 
