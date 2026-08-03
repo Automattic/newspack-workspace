@@ -13,7 +13,7 @@ const def = ( id, name, extra = {} ) => {
 		dynamic_suffix: false,
 		description: '',
 		example: '',
-		sync_type: 'field',
+
 		status: 'existing',
 		supersedes: null,
 		superseded_by: [],

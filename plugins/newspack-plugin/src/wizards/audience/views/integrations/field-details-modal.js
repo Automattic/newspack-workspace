@@ -9,11 +9,6 @@ import { Button, Notice } from '@wordpress/components';
  */
 import { Badge, Grid, Modal } from '../../../../../packages/components/src';
 
-const SYNC_TYPE_LABELS = {
-	field: __( 'Synced as a contact field', 'newspack-plugin' ),
-	tag: __( 'Synced as a tag', 'newspack-plugin' ),
-};
-
 const VersionCard = ( { definition, isActive, isPicker, isPickable, onPick } ) => (
 	<div className={ `newspack-field-version-card${ isActive ? ' is-active' : '' }` }>
 		<div className="newspack-field-version-card__header">
@@ -30,7 +25,6 @@ const VersionCard = ( { definition, isActive, isPicker, isPickable, onPick } ) =
 				) }
 			</p>
 		) }
-		{ SYNC_TYPE_LABELS[ definition.sync_type ] && <p>{ SYNC_TYPE_LABELS[ definition.sync_type ] }</p> }
 		{ isPicker && (
 			<>
 				<Button variant={ isActive ? 'secondary' : 'primary' } disabled={ isActive || ! isPickable } onClick={ onPick }>

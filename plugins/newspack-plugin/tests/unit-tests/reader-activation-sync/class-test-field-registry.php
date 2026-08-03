@@ -252,7 +252,6 @@ class Test_Field_Registry extends \WP_UnitTestCase {
 		$this->assertSame( 'Registration Strategy', $row['name'] );
 		$this->assertSame( 'v2', $row['version'] );
 		$this->assertSame( 'Registration_Strategy', $row['raw_key'] );
-		$this->assertSame( 'tag', $row['sync_type'] );
 		$this->assertSame( 'new', $row['status'] );
 		$this->assertSame( 'v1:registration_method', $row['supersedes'] );
 		$this->assertNotEmpty( $row['description'] );
@@ -270,10 +269,9 @@ class Test_Field_Registry extends \WP_UnitTestCase {
 		// Superseded side of a rename carries the reverse link.
 		$this->assertContains( 'v2:Registration_Strategy', $by_id['v1:registration_method']['superseded_by'] );
 
-		// Fields with no declared status/sync_type serialize with safe defaults.
+		// Fields with no declared status serialize with safe defaults.
 		foreach ( $rows as $r ) {
 			$this->assertContains( $r['status'], [ 'new', 'updated', 'existing' ] );
-			$this->assertIsString( $r['sync_type'] );
 			$this->assertIsString( $r['section'] );
 		}
 	}

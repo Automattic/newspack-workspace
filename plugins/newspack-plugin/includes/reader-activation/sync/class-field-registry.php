@@ -380,7 +380,6 @@ class Field_Registry {
 				'dynamic_suffix'    => (bool) $definition['dynamic_suffix'],
 				'description'       => (string) ( $definition['description'] ?? '' ),
 				'example'           => (string) ( $definition['example'] ?? '' ),
-				'sync_type'         => (string) ( $definition['sync_type'] ?? '' ),
 				'status'            => in_array( $definition['status'] ?? '', [ 'new', 'updated' ], true ) ? $definition['status'] : 'existing',
 				'supersedes'        => $definition['supersedes'] ?? null,
 				'superseded_by'     => array_values( $definition['superseded_by'] ?? [] ),

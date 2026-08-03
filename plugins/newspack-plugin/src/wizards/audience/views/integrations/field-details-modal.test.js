@@ -13,7 +13,7 @@ const DEFS = [
 		dynamic_suffix: false,
 		description: 'Amount of the most recent payment, net of refunds',
 		example: '20',
-		sync_type: 'field',
+
 		status: 'existing',
 		supersedes: null,
 		superseded_by: [],
@@ -29,7 +29,7 @@ const DEFS = [
 		dynamic_suffix: false,
 		description: 'Gross amount of the most recent order',
 		example: '20.00',
-		sync_type: 'field',
+
 		status: 'updated',
 		supersedes: null,
 		superseded_by: [],
