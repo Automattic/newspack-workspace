@@ -370,6 +370,7 @@ class Promo_Url_Targets_Test extends WP_UnitTestCase {
 		$this->assertSame( 'untiered', $config['layout_param'] );
 		$this->assertTrue( $config['frequencies']['month']['supports_custom'] );
 		$this->assertSame( 15.0, $config['frequencies']['month']['suggested'] );
+		$this->assertSame( [], $config['frequencies']['month']['amounts'] );
 
 		$config_no_nyp = Promo_Url_Targets::map_donate_configuration(
 			$this->donate_configuration( [ 'tiered' => false ] ),
@@ -396,5 +397,88 @@ class Promo_Url_Targets_Test extends WP_UnitTestCase {
 		// newspack-blocks is not loaded in this test suite, so the guarded seam
 		// must bail out cleanly rather than fataling.
 		$this->assertNull( Promo_Url_Targets::get_donate_target_config( [ 'useModalCheckout' => true ] ) );
+	}
+
+	/**
+	 * Test that get_donate_target_config rejects an explicit modal-checkout
+	 * opt-out before the newspack-blocks class guards, since an explicit
+	 * false never needs schema defaults to be resolved.
+	 */
+	public function test_get_donate_target_config_rejects_explicit_modal_optout() {
+		$this->assertNull( Promo_Url_Targets::get_donate_target_config( [ 'useModalCheckout' => false ] ) );
+	}
+
+	/**
+	 * Test that evaluate_donate_configuration gates on WP_Error and on a
+	 * non-WooCommerce platform before mapping, and maps through otherwise.
+	 */
+	public function test_evaluate_donate_configuration_gates() {
+		$this->assertNull( Promo_Url_Targets::evaluate_donate_configuration( new WP_Error( 'error', 'Error' ), true ) );
+		$this->assertNull(
+			Promo_Url_Targets::evaluate_donate_configuration(
+				$this->donate_configuration( [ 'platform' => 'stripe' ] ),
+				true
+			)
+		);
+		$config = Promo_Url_Targets::evaluate_donate_configuration(
+			$this->donate_configuration( [ 'platform' => 'wc' ] ),
+			true
+		);
+		$this->assertArrayHasKey( 'layout_param', $config );
+	}
+
+	/**
+	 * Test that build_direct_donation_config inverts disabledFrequencies into
+	 * enabled flags and forces supports_custom on every frequency, since
+	 * direct-path URLs accept any NYP-standardized amount.
+	 */
+	public function test_build_direct_donation_config_inverts_disabled_and_forces_custom() {
+		$settings    = $this->donate_configuration(
+			[
+				'disabledFrequencies' => [
+					'once'  => true,
+					'month' => false,
+					'year'  => false,
+				],
+				'minimumDonation'     => 5,
+			]
+		);
+		$product_ids = [
+			'once'  => 0,
+			'month' => 11,
+			'year'  => 12,
+		];
+		$config = Promo_Url_Targets::build_direct_donation_config( $settings, $product_ids, true );
+		$this->assertFalse( $config['frequencies']['once']['enabled'] );
+		$this->assertTrue( $config['frequencies']['month']['enabled'] );
+		foreach ( [ 'once', 'month', 'year' ] as $slug ) {
+			$this->assertTrue( $config['frequencies'][ $slug ]['supports_custom'] );
+		}
+		$this->assertSame( 5.0, $config['minimum'] );
+	}
+
+	/**
+	 * Test that build_direct_donation_config disables a frequency whose
+	 * donation product is missing, even when the frequency itself is enabled
+	 * in settings.
+	 */
+	public function test_build_direct_donation_config_disables_missing_products() {
+		$settings    = $this->donate_configuration(
+			[
+				'disabledFrequencies' => [
+					'once'  => true,
+					'month' => false,
+					'year'  => false,
+				],
+			]
+		);
+		$product_ids = [
+			'once'  => 0,
+			'month' => 11,
+			'year'  => 0,
+		];
+		$config = Promo_Url_Targets::build_direct_donation_config( $settings, $product_ids, true );
+		$this->assertFalse( $config['frequencies']['year']['enabled'] );
+		$this->assertTrue( $config['frequencies']['month']['enabled'] );
 	}
 }

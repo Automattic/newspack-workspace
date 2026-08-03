@@ -281,6 +281,22 @@ final class Promo_Url_Targets {
 	}
 
 	/**
+	 * Gate + map a resolved Donate configuration. Split from
+	 * get_donate_target_config() so the rejection logic is unit-testable
+	 * without newspack-blocks loaded.
+	 *
+	 * @param array|\WP_Error $configuration Renderer configuration or error.
+	 * @param bool            $can_use_nyp   Whether Name-Your-Price is available.
+	 * @return array|null Promo donate config, or null when unusable.
+	 */
+	public static function evaluate_donate_configuration( $configuration, $can_use_nyp ) {
+		if ( is_wp_error( $configuration ) || ! is_array( $configuration ) || 'wc' !== ( $configuration['platform'] ?? '' ) ) {
+			return null;
+		}
+		return self::map_donate_configuration( $configuration, $can_use_nyp );
+	}
+
+	/**
 	 * Derive the promo config for one Donate block instance found in content.
 	 *
 	 * @param array $attrs Block attributes from parse_blocks().
@@ -288,6 +304,9 @@ final class Promo_Url_Targets {
 	 *                    unavailable or the block can't take modal-checkout URLs.
 	 */
 	public static function get_donate_target_config( $attrs ) {
+		if ( isset( $attrs['useModalCheckout'] ) && ! $attrs['useModalCheckout'] ) {
+			return null;
+		}
 		if ( ! class_exists( '\Newspack_Blocks_Donate_Renderer_Base' ) || ! class_exists( '\Newspack_Blocks' ) ) {
 			return null;
 		}
@@ -296,14 +315,42 @@ final class Promo_Url_Targets {
 		if ( $block_type ) {
 			$attrs = $block_type->prepare_attributes_for_render( $attrs );
 		}
-		if ( isset( $attrs['useModalCheckout'] ) && ! $attrs['useModalCheckout'] ) {
-			return null;
-		}
 		$configuration = \Newspack_Blocks_Donate_Renderer_Base::get_configuration( $attrs );
-		if ( is_wp_error( $configuration ) || 'wc' !== ( $configuration['platform'] ?? '' ) ) {
-			return null;
+		return self::evaluate_donate_configuration( $configuration, \Newspack_Blocks::can_use_name_your_price() );
+	}
+
+	/**
+	 * Build the direct-path donation config from raw settings. Split from
+	 * get_direct_donation_config() so the inversion/override logic is
+	 * unit-testable without WooCommerce loaded.
+	 *
+	 * @param array $settings    Donations::get_donation_settings() output.
+	 * @param array $product_ids Frequency slug => donation product ID (0/empty when missing).
+	 * @param bool  $can_use_nyp Whether Name-Your-Price is available.
+	 * @return array Promo donate config.
+	 */
+	public static function build_direct_donation_config( $settings, $product_ids, $can_use_nyp ) {
+		$enabled_map = [];
+		foreach ( [ 'once', 'month', 'year' ] as $slug ) {
+			if ( empty( $settings['disabledFrequencies'][ $slug ] ) ) {
+				$enabled_map[ $slug ] = $slug;
+			}
 		}
-		return self::map_donate_configuration( $configuration, \Newspack_Blocks::can_use_name_your_price() );
+		$configuration = array_merge(
+			$settings,
+			[
+				'frequencies'          => $enabled_map,
+				'is_tier_based_layout' => false,
+			]
+		);
+		$config = self::map_donate_configuration( $configuration, $can_use_nyp );
+		foreach ( array_keys( $config['frequencies'] ) as $slug ) {
+			$config['frequencies'][ $slug ]['supports_custom'] = true;
+			if ( empty( $product_ids[ $slug ] ) ) {
+				$config['frequencies'][ $slug ]['enabled'] = false;
+			}
+		}
+		return $config;
 	}
 
 	/**
@@ -322,28 +369,7 @@ final class Promo_Url_Targets {
 		if ( is_wp_error( $settings ) ) {
 			return null;
 		}
-		$enabled_map = [];
-		foreach ( [ 'once', 'month', 'year' ] as $slug ) {
-			if ( empty( $settings['disabledFrequencies'][ $slug ] ) ) {
-				$enabled_map[ $slug ] = $slug;
-			}
-		}
-		$configuration = array_merge(
-			$settings,
-			[
-				'frequencies'          => $enabled_map,
-				'is_tier_based_layout' => false,
-			]
-		);
 		$can_use_nyp = class_exists( '\Newspack_Blocks' ) ? \Newspack_Blocks::can_use_name_your_price() : false;
-		$config      = self::map_donate_configuration( $configuration, $can_use_nyp );
-		$product_ids = Donations::get_donation_product_child_products_ids();
-		foreach ( array_keys( $config['frequencies'] ) as $slug ) {
-			$config['frequencies'][ $slug ]['supports_custom'] = true;
-			if ( empty( $product_ids[ $slug ] ) ) {
-				$config['frequencies'][ $slug ]['enabled'] = false;
-			}
-		}
-		return $config;
+		return self::build_direct_donation_config( $settings, Donations::get_donation_product_child_products_ids(), $can_use_nyp );
 	}
 }
