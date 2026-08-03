@@ -1,0 +1,114 @@
+name: Retarget stacked PRs
+
+# When a PR merges, any open PR that targets its head branch (a stacked /
+# daisychained PR) is repointed at the merged PR's base, and that base is then
+# merged into the child branch so the child's diff stops showing the parent's
+# already-squashed changes.
+#
+# This deliberately takes over from GitHub's own deletion-time retargeting,
+# which is bundled with a race that can close the child PR outright: on branch
+# deletion, a legacy close-dependents job and the 2020 retargeting job both
+# fire, and a child can be retargeted AND closed in the same second (see #626,
+# closed collaterally by the merge of #608 despite a successful retarget and a
+# live 16-file diff). With this workflow doing the retargeting at merge time
+# and prune-merged-branches only deleting branches nothing targets, GitHub's
+# racy path never runs. That also makes this workflow load-bearing: if it is
+# disabled, stacked PRs strand on their merged base branch silently instead of
+# GitHub catching them. Refs:
+# https://github.blog/changelog/2020-05-19-pull-request-retargeting/
+# https://github.com/orgs/community/discussions/176698
+#
+# Merge-the-base-in rather than rebase, on purpose: it advances the merge-base
+# (de-polluting the PR diff) with no force-push, so review comment anchors and
+# commit SHAs survive, conflicts are resolved once rather than per commit, and
+# the squash-merge strategy keeps the merge commit out of main's history
+# anyway. The merge is best-effort – on conflict the child keeps its retarget
+# and gets a comment asking for a manual merge.
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+# Serialize runs: near-simultaneous parent merges get queued, not raced.
+concurrency:
+  group: retarget-stacked-prs
+  cancel-in-progress: false
+
+jobs:
+  retarget:
+    name: Retarget PRs stacked on the merged branch
+    if: github.event.pull_request.merged == true && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      REPO: ${{ github.repository }}
+      PARENT_NUMBER: ${{ github.event.pull_request.number }}
+      PARENT_HEAD: ${{ github.event.pull_request.head.ref }}
+      PARENT_BASE: ${{ github.event.pull_request.base.ref }}
+    steps:
+      - name: Find stacked PRs
+        id: children
+        run: |
+          count=$(gh pr list --repo "$REPO" --base "$PARENT_HEAD" --state open --json number --jq length)
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+          echo "$count open PR(s) are based on $PARENT_HEAD."
+
+      # GH_TOKEN is a PAT, not GITHUB_TOKEN, on purpose: a merge commit pushed
+      # with GITHUB_TOKEN would not trigger ci.yml, leaving the child PR's
+      # checks pending forever on its new head.
+      - name: Checkout
+        if: steps.children.outputs.count != '0'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GH_TOKEN }}
+
+      - name: Retarget and integrate
+        if: steps.children.outputs.count != '0'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Ref names cannot contain ":", so it is a safe field separator.
+          children=$(gh pr list --repo "$REPO" --base "$PARENT_HEAD" --state open --json number,headRefName,isCrossRepository --jq '.[] | "\(.number):\(.isCrossRepository):\(.headRefName)"')
+
+          while IFS=: read -r number cross branch; do
+            [ -z "$number" ] && continue
+            echo "Retargeting #$number ($branch) from $PARENT_HEAD to $PARENT_BASE."
+            if ! gh api -X PATCH "repos/$REPO/pulls/$number" -f base="$PARENT_BASE" > /dev/null; then
+              echo "::warning::Could not retarget #$number – skipping it."
+              continue
+            fi
+
+            # A fork-headed child can be retargeted but not pushed to – its
+            # branch lives in the fork, not here. Leave the merge to the author.
+            if [ "$cross" = "true" ]; then
+              gh pr comment "$number" --repo "$REPO" --body "Base branch \`$PARENT_HEAD\` was merged into \`$PARENT_BASE\` (#$PARENT_NUMBER), so this PR was retargeted to \`$PARENT_BASE\`. The branch lives in a fork, so the automatic merge of \`$PARENT_BASE\` was skipped – please merge \`$PARENT_BASE\` into \`$branch\` yourself. Until then the diff will include changes already merged via #$PARENT_NUMBER."
+              continue
+            fi
+
+            # The branch can vanish or move between listing and fetch; a failed
+            # fetch must not kill the loop for the remaining children.
+            if ! git fetch origin "$branch" "$PARENT_BASE"; then
+              gh pr comment "$number" --repo "$REPO" --body "Base branch \`$PARENT_HEAD\` was merged into \`$PARENT_BASE\` (#$PARENT_NUMBER), so this PR was retargeted to \`$PARENT_BASE\`. The automatic merge of \`$PARENT_BASE\` into \`$branch\` was skipped (the branch could not be fetched) – please merge \`$PARENT_BASE\` in manually."
+              echo "::warning::Could not fetch $branch – automatic merge skipped for #$number."
+              continue
+            fi
+            git checkout -B "$branch" "origin/$branch"
+            if git merge --no-edit "origin/$PARENT_BASE"; then
+              if git push origin "$branch"; then
+                gh pr comment "$number" --repo "$REPO" --body "Base branch \`$PARENT_HEAD\` was merged into \`$PARENT_BASE\` (#$PARENT_NUMBER), so this PR was retargeted to \`$PARENT_BASE\`, and \`$PARENT_BASE\` was merged into \`$branch\` so the diff only shows this PR's own changes. No history was rewritten – a plain \`git pull\` brings your local branch up to date."
+              else
+                gh pr comment "$number" --repo "$REPO" --body "Base branch \`$PARENT_HEAD\` was merged into \`$PARENT_BASE\` (#$PARENT_NUMBER), so this PR was retargeted to \`$PARENT_BASE\`. The automatic merge of \`$PARENT_BASE\` into \`$branch\` could not be pushed (the branch moved in the meantime) – please merge \`$PARENT_BASE\` in manually."
+                echo "::warning::Push to $branch rejected – the branch moved during the run."
+              fi
+            else
+              git merge --abort
+              gh pr comment "$number" --repo "$REPO" --body "Base branch \`$PARENT_HEAD\` was merged into \`$PARENT_BASE\` (#$PARENT_NUMBER), so this PR was retargeted to \`$PARENT_BASE\`. Merging \`$PARENT_BASE\` into \`$branch\` hit conflicts, so it was left untouched – please merge \`$PARENT_BASE\` in (or rebase) manually. Until then the diff will include changes already merged via #$PARENT_NUMBER."
+              echo "::warning::Merge of $PARENT_BASE into $branch conflicted – left for the author."
+            fi
+          done <<< "$children"

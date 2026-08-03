@@ -10,7 +10,10 @@ import { emailAd } from 'newspack-icons';
 
 import { getAdminUrl } from '../../admin-globals';
 import EmptyState from '../../components/empty-state';
+import HeaderCount from '../../components/header-count';
+import ItemsPerPage from '../../components/items-per-page';
 import { useHeaderActions } from '../../header-actions-context';
+import usePersistedView from '../../hooks/use-persisted-view';
 import { fetchAllTerms } from '../../utils/terms';
 import useAdsData from './use-ads-data';
 import { getFields } from './fields';
@@ -21,7 +24,7 @@ import AdsQuickEditPanel from './quick-edit-panel';
 const DEFAULT_VIEW = {
 	type: 'table',
 	page: 1,
-	perPage: 25,
+	perPage: 20,
 	sort: { field: 'date', direction: 'desc' },
 	search: '',
 	filters: [],
@@ -31,6 +34,10 @@ const DEFAULT_VIEW = {
 };
 
 const DEFAULT_LAYOUTS = { table: {} };
+
+// Suppress the built-in ViewConfig per-page control — the custom
+// `ItemsPerPage` renders in its place inside the View options popover.
+const DATAVIEWS_CONFIG = { perPageSizes: [] };
 
 const ADS_CPT = 'newspack_nl_ads_cpt';
 
@@ -62,9 +69,9 @@ function useFilterTerms() {
 }
 
 export default function AdsListScreen() {
-	const [ view, setView ] = useState( DEFAULT_VIEW );
+	const [ view, setView ] = usePersistedView( 'ads-list', DEFAULT_VIEW );
 	const [ quickEditItem, setQuickEditItem ] = useState( null );
-	const { data, paginationInfo, isLoading, hasResolved, hasLoadedOnce, trashCount, refresh } = useAdsData( view );
+	const { data, paginationInfo, isLoading, hasResolved, hasLoadedOnce, trashCount, progress, refresh } = useAdsData( view );
 	const filterTerms = useFilterTerms();
 
 	const addNewHref = `${ getAdminUrl() }post-new.php?post_type=${ ADS_CPT }`;
@@ -88,7 +95,7 @@ export default function AdsListScreen() {
 					: [
 							{
 								type: 'primary',
-								label: __( 'Add new newsletter ad', 'newspack-newsletters' ),
+								label: __( 'Add Newsletter Ad', 'newspack-newsletters' ),
 								href: addNewHref,
 							},
 					  ],
@@ -113,7 +120,7 @@ export default function AdsListScreen() {
 					'Monetise newsletters with sponsored or house ads. Schedule by date, target by placement or category.',
 					'newspack-newsletters'
 				) }
-				ctaTitle={ __( 'Add new newsletter ad', 'newspack-newsletters' ) }
+				ctaTitle={ __( 'Add Newsletter Ad', 'newspack-newsletters' ) }
 				ctaHref={ addNewHref }
 			/>
 		);
@@ -121,6 +128,7 @@ export default function AdsListScreen() {
 
 	return (
 		<>
+			<HeaderCount count={ paginationInfo.totalItems } />
 			<DataViews
 				className="newspack-newsletters-list newspack-newsletters-ads-list"
 				data={ data }
@@ -133,6 +141,14 @@ export default function AdsListScreen() {
 				isLoading={ isLoading }
 				getItemId={ item => String( item.id ) }
 				search
+				config={ DATAVIEWS_CONFIG }
+				header={
+					<ItemsPerPage
+						value={ view.perPage }
+						progress={ progress }
+						onChange={ perPage => setView( current => ( { ...current, perPage, page: 1 } ) ) }
+					/>
+				}
 			/>
 			{ quickEditItem && (
 				<AdsQuickEditPanel

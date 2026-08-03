@@ -233,6 +233,64 @@ class Test_Promoted_Fields extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Range matching casts both the stored value and the min/max bounds to float, so a
+	 * decimal amount (e.g. a Mailchimp `number` merge field) matches correctly. Absent
+	 * bounds default to 0..PHP_INT_MAX and a non-numeric value coerces to 0.0, so a
+	 * blank-bounds range rule grants access broadly — pinned here so that fail-open
+	 * default stays intentional.
+	 */
+	public function test_evaluate_range_matching() {
+		$user_id = $this->factory->user->create();
+		if ( ! class_exists( '\Newspack\Reader_Data' ) ) {
+			$this->markTestSkipped( 'Reader_Data not available.' );
+		}
+		\Newspack\Reader_Data::update_item( $user_id, 'amount', wp_json_encode( 49.99 ) );
+
+		$method = new \ReflectionMethod( Promoted_Fields::class, 'evaluate_field' );
+		$method->setAccessible( true );
+
+		$field = ( new Incoming_Field( 'amount' ) )
+			->set_value_type( 'number' )
+			->set_matching_function( 'range' );
+
+		// Decimal value within decimal bounds, and boundary-inclusive.
+		$this->assertTrue(
+			$method->invoke(
+				null,
+				$field,
+				$user_id,
+				[
+					'min' => 10.5,
+					'max' => 99.99,
+				]
+			)
+		);
+		$this->assertTrue(
+			$method->invoke(
+				null,
+				$field,
+				$user_id,
+				[
+					'min' => 49.99,
+					'max' => 49.99,
+				]
+			)
+		);
+		// Outside the bounds on each side.
+		$this->assertFalse( $method->invoke( null, $field, $user_id, [ 'min' => 50 ] ) );
+		$this->assertFalse( $method->invoke( null, $field, $user_id, [ 'max' => 10 ] ) );
+
+		// Absent bounds default to 0..PHP_INT_MAX: any non-negative amount matches.
+		$this->assertTrue( $method->invoke( null, $field, $user_id, [] ) );
+
+		// A non-numeric stored value coerces to 0.0: blank bounds still match (fail-open),
+		// but a positive min excludes the coerced-to-zero value.
+		\Newspack\Reader_Data::update_item( $user_id, 'amount', wp_json_encode( 'not-a-number' ) );
+		$this->assertTrue( $method->invoke( null, $field, $user_id, [] ) );
+		$this->assertFalse( $method->invoke( null, $field, $user_id, [ 'min' => 1 ] ) );
+	}
+
+	/**
 	 * Test list__in matching with a plain scalar string (non-JSON).
 	 */
 	public function test_evaluate_list_in_plain_string() {
