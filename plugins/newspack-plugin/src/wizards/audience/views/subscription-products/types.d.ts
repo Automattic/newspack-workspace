@@ -52,6 +52,7 @@ interface SubscriptionProductVariation {
 	period: string;
 	interval: number;
 	price_label: string;
+	plan_label?: string;
 	// Each variation resolves its own applied-rule stack + effective price.
 	policy: SubscriptionPolicyResolution;
 	// Active subscribers on this plan; a plan with subscribers can't be removed.
@@ -148,5 +149,6 @@ interface Window {
 		manage_products_url: string;
 		policy_source_is_mock: boolean;
 		woocommerce_subscriptions_active: boolean;
+		newspack_blocks_active?: boolean;
 	};
 }
