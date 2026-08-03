@@ -97,8 +97,8 @@ abstract class Contact_Metadata {
 	 * Rich per-field configuration for the fields handled by this class.
 	 *
 	 * Defaults to deriving minimal config from get_fields(). Subclasses
-	 * override to add description, example, sync_type, status,
-	 * superseded_by and dynamic_suffix.
+	 * override to add description, example, status, superseded_by and
+	 * dynamic_suffix.
 	 *
 	 * @return array Map of raw key => config array with at least a 'name'.
 	 */
