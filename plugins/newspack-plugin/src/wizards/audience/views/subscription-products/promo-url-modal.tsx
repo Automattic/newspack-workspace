@@ -100,6 +100,7 @@ export default function PromoUrlModal( { item, closeModal }: { item: Subscriptio
 	const frequencyChoices = useMemo( () => getFrequencyChoices( donateConfig ), [ donateConfig ] );
 	const amountChoices = useMemo( () => getAmountChoices( donateConfig, frequency ), [ donateConfig, frequency ] );
 	const isNypEligible = Boolean( response?.nyp?.[ variationId === '' ? item.id : variationId ] );
+	const couponProductId = variationId === '' ? item.id : variationId;
 
 	// Reset dependent selections when the context they came from changes.
 	useEffect( () => {
@@ -117,7 +118,7 @@ export default function PromoUrlModal( { item, closeModal }: { item: Subscriptio
 	useEffect( () => {
 		setAmount( amountChoices.presets.length ? amountChoices.presets[ 0 ] : 'custom' );
 		setCustomAmount( amountChoices.suggested ? String( amountChoices.suggested ) : '' );
-	}, [ frequency, amountChoices.presets.length, amountChoices.suggested ] );
+	}, [ frequency, donateConfig ] );
 
 	// Debounced coupon validation (direct product path only).
 	useEffect( () => {
@@ -126,15 +127,29 @@ export default function PromoUrlModal( { item, closeModal }: { item: Subscriptio
 			return;
 		}
 		setCouponStatus( { state: 'checking' } );
+		let ignore = false;
 		const timeout = setTimeout( () => {
 			apiFetch< PromoCouponResponse >( {
-				path: addQueryArgs( `${ API_BASE }/promo-coupon`, { code: coupon, product_id: item.id } ),
+				path: addQueryArgs( `${ API_BASE }/promo-coupon`, { code: coupon, product_id: couponProductId } ),
 			} )
-				.then( result => setCouponStatus( result.valid ? { state: 'valid' } : { state: 'invalid', reason: result.reason } ) )
-				.catch( () => setCouponStatus( { state: 'invalid', reason: __( 'Could not validate the coupon.', 'newspack-plugin' ) } ) );
+				.then( result => {
+					if ( ignore ) {
+						return;
+					}
+					setCouponStatus( result.valid ? { state: 'valid' } : { state: 'invalid', reason: result.reason } );
+				} )
+				.catch( () => {
+					if ( ignore ) {
+						return;
+					}
+					setCouponStatus( { state: 'invalid', reason: __( 'Could not validate the coupon.', 'newspack-plugin' ) } );
+				} );
 		}, 500 );
-		return () => clearTimeout( timeout );
-	}, [ coupon, item.id ] );
+		return () => {
+			clearTimeout( timeout );
+			ignore = true;
+		};
+	}, [ coupon, couponProductId ] );
 
 	// A specific child is required on the direct path always, and on the page
 	// path unless a picker block provides the "reader chooses" option.
@@ -206,6 +221,16 @@ export default function PromoUrlModal( { item, closeModal }: { item: Subscriptio
 				);
 			}
 		}
+		if (
+			kind === 'donation' &&
+			destination === 'page' &&
+			typeof effectiveAmount === 'number' &&
+			donateConfig &&
+			donateConfig.layout_param !== 'untiered' &&
+			! amountChoices.presets.includes( effectiveAmount )
+		) {
+			return __( 'Choose one of the amounts available on the target page.', 'newspack-plugin' );
+		}
 		if ( isCouponActive && couponStatus.state === 'invalid' ) {
 			return couponStatus.reason || __( 'The coupon code is not valid.', 'newspack-plugin' );
 		}
@@ -220,6 +245,7 @@ export default function PromoUrlModal( { item, closeModal }: { item: Subscriptio
 		requiresChild,
 		variationId,
 		donateConfig,
+		amountChoices.presets,
 		effectiveAmount,
 		customAmount,
 		isCouponActive,

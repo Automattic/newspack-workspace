@@ -299,7 +299,11 @@ class Audience_Subscription_Products extends Wizard {
 	 * usage limit) plus explicit product-restriction/minimum-spend checks
 	 * against the promoted plan — a bare WC_Discounts with no cart would
 	 * falsely reject coupons restricted to the promoted product, the primary
-	 * promotional-coupon shape. See {@see Promo_Url_Targets::evaluate_coupon()}.
+	 * promotional-coupon shape. When the promoted product is a child (a
+	 * variation or grouped member), its family is expanded to include the
+	 * parent and the parent's whole family, so a coupon restricted to the
+	 * parent — or to a category, which lives on the parent for variations —
+	 * still validates. See {@see Promo_Url_Targets::evaluate_coupon()}.
 	 *
 	 * @param \WP_REST_Request $request The request.
 	 * @return \WP_REST_Response
@@ -344,12 +348,19 @@ class Audience_Subscription_Products extends Wizard {
 		$product_context = [];
 		$product_id      = absint( $request->get_param( 'product_id' ) );
 		if ( $product_id && function_exists( 'wc_get_product' ) ) {
-			$family           = Promo_Url_Targets::get_product_family( $product_id );
-			$family_ids       = array_merge( [ $family['parent'] ], $family['variations'], $family['members'] );
-			$product          = wc_get_product( $product_id );
-			$product_context  = [
-				'family_ids'          => $family_ids,
-				'family_category_ids' => $product ? $product->get_category_ids() : [],
+			$product    = wc_get_product( $product_id );
+			$family     = Promo_Url_Targets::get_product_family( $product_id );
+			$family_ids = array_merge( [ $family['parent'] ], $family['variations'], $family['members'] );
+			$parent_id  = $product ? (int) $product->get_parent_id() : 0;
+			if ( $parent_id ) {
+				$parent_family = Promo_Url_Targets::get_product_family( $parent_id );
+				$family_ids    = array_merge( $family_ids, [ $parent_family['parent'] ], $parent_family['variations'], $parent_family['members'] );
+			}
+			$parent_product  = $parent_id && $product ? wc_get_product( $parent_id ) : null;
+			$category_source = $parent_product ? $parent_product : $product;
+			$product_context = [
+				'family_ids'          => array_values( array_unique( array_map( 'intval', $family_ids ) ) ),
+				'family_category_ids' => $category_source ? $category_source->get_category_ids() : [],
 				'reference_price'     => $product && '' !== $product->get_price() ? (float) $product->get_price() : null,
 			];
 		}

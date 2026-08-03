@@ -2,7 +2,7 @@
 /**
  * Tests request-utm merging for direct checkout URLs.
  *
- * @package WordPress
+ * @package Newspack_Blocks
  */
 
 use Newspack_Blocks\Modal_Checkout;
