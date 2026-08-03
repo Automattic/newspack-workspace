@@ -83,6 +83,7 @@ class Audience_Subscription_Products extends Wizard {
 	 */
 	public function __construct() {
 		parent::__construct();
+		Promo_Url_Targets::init();
 		add_action( 'rest_api_init', [ $this, 'register_api_endpoints' ] );
 
 		// Guard against orphaning live subscriptions: block trashing/deleting a subscription
@@ -138,6 +139,41 @@ class Audience_Subscription_Products extends Wizard {
 				'args'                => [
 					'id' => [
 						'sanitize_callback' => 'absint',
+					],
+				],
+			]
+		);
+		register_rest_route(
+			NEWSPACK_API_NAMESPACE,
+			'/wizard/' . $this->slug . '/promo-targets',
+			[
+				'methods'             => \WP_REST_Server::READABLE,
+				'callback'            => [ $this, 'api_get_promo_targets' ],
+				'permission_callback' => [ $this, 'api_permissions_check' ],
+				'args'                => [
+					'type'       => [
+						'required'          => true,
+						'validate_callback' => function ( $value ) {
+							return in_array( $value, [ 'checkout_button', 'donate' ], true );
+						},
+					],
+					'product_id' => [
+						'sanitize_callback' => 'absint',
+					],
+				],
+			]
+		);
+		register_rest_route(
+			NEWSPACK_API_NAMESPACE,
+			'/wizard/' . $this->slug . '/promo-coupon',
+			[
+				'methods'             => \WP_REST_Server::READABLE,
+				'callback'            => [ $this, 'api_validate_promo_coupon' ],
+				'permission_callback' => [ $this, 'api_permissions_check' ],
+				'args'                => [
+					'code' => [
+						'required'          => true,
+						'sanitize_callback' => 'sanitize_text_field',
 					],
 				],
 			]
@@ -226,6 +262,79 @@ class Audience_Subscription_Products extends Wizard {
 
 		$response['products'] = array_map( [ $this, 'prepare_product' ], array_values( $products ) );
 		return rest_ensure_response( $response );
+	}
+
+	/**
+	 * GET pages containing blocks compatible with a promo URL for a plan.
+	 *
+	 * @param \WP_REST_Request $request The request.
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public function api_get_promo_targets( $request ) {
+		$type       = $request->get_param( 'type' );
+		$product_id = absint( $request->get_param( 'product_id' ) );
+		if ( 'checkout_button' === $type && ! $product_id ) {
+			return new \WP_Error(
+				'newspack_promo_targets_missing_product',
+				esc_html__( 'product_id is required for checkout button targets.', 'newspack-plugin' ),
+				[ 'status' => 400 ]
+			);
+		}
+		$response = Promo_Url_Targets::get_targets( $type, $product_id );
+		if ( 'donate' === $type ) {
+			$response['donation_config'] = Promo_Url_Targets::get_direct_donation_config();
+		} else {
+			$response['nyp'] = Promo_Url_Targets::get_nyp_map( Promo_Url_Targets::get_product_family( $product_id ) );
+		}
+		return rest_ensure_response( $response );
+	}
+
+	/**
+	 * GET coupon validity for the promo URL generator. Mirrors the semantics of
+	 * Modal_Checkout::maybe_auto_apply_coupon() so the UI verdict matches what
+	 * the checkout will actually do.
+	 *
+	 * @param \WP_REST_Request $request The request.
+	 * @return \WP_REST_Response
+	 */
+	public function api_validate_promo_coupon( $request ) {
+		$code = $request->get_param( 'code' );
+		if ( ! function_exists( 'wc_coupons_enabled' ) || ! class_exists( '\WC_Coupon' ) || ! class_exists( '\WC_Discounts' ) ) {
+			return rest_ensure_response(
+				[
+					'valid'  => false,
+					'reason' => esc_html__( 'WooCommerce coupons are unavailable.', 'newspack-plugin' ),
+				]
+			);
+		}
+		if ( ! \wc_coupons_enabled() ) {
+			return rest_ensure_response(
+				[
+					'valid'  => false,
+					'reason' => esc_html__( 'Coupons are disabled in WooCommerce settings.', 'newspack-plugin' ),
+				]
+			);
+		}
+		$coupon = new \WC_Coupon( $code );
+		if ( ! $coupon->get_id() ) {
+			return rest_ensure_response(
+				[
+					'valid'  => false,
+					'reason' => esc_html__( 'Coupon not found.', 'newspack-plugin' ),
+				]
+			);
+		}
+		$discounts = new \WC_Discounts();
+		$valid     = $discounts->is_coupon_valid( $coupon );
+		if ( true === $valid ) {
+			return rest_ensure_response( [ 'valid' => true ] );
+		}
+		return rest_ensure_response(
+			[
+				'valid'  => false,
+				'reason' => is_wp_error( $valid ) ? $valid->get_error_message() : esc_html__( 'Coupon is not currently valid.', 'newspack-plugin' ),
+			]
+		);
 	}
 
 	/**
@@ -1818,6 +1927,7 @@ class Audience_Subscription_Products extends Wizard {
 				'manage_products_url'              => admin_url( 'edit.php?post_type=product' ),
 				'policy_source_is_mock'            => Subscription_Policy_Resolver::IS_MOCK,
 				'woocommerce_subscriptions_active' => function_exists( 'wcs_get_subscriptions' ),
+				'newspack_blocks_active'           => class_exists( 'Newspack_Blocks' ),
 			]
 		);
 	}

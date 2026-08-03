@@ -372,4 +372,72 @@ final class Promo_Url_Targets {
 		$can_use_nyp = class_exists( '\Newspack_Blocks' ) ? \Newspack_Blocks::can_use_name_your_price() : false;
 		return self::build_direct_donation_config( $settings, Donations::get_donation_product_child_products_ids(), $can_use_nyp );
 	}
+
+	/**
+	 * Scan for pages/posts containing blocks compatible with the given promo
+	 * type (and product family, for checkout buttons). Cached per type+product
+	 * until content changes (see bump_cache_version) or CACHE_TTL elapses.
+	 *
+	 * @param string $type       'checkout_button' or 'donate'.
+	 * @param int    $product_id Plan row product ID (checkout_button only).
+	 * @return array{targets:array,truncated:bool}
+	 */
+	public static function get_targets( $type, $product_id = 0 ) {
+		$version   = (string) get_option( self::CACHE_VERSION_OPTION, '0' );
+		$cache_key = 'newspack_promo_targets_' . md5( $type . '|' . $product_id . '|' . $version );
+		$cached    = get_transient( $cache_key );
+		if ( is_array( $cached ) ) {
+			return $cached;
+		}
+		$block_name = 'checkout_button' === $type ? 'newspack-blocks/checkout-button' : 'newspack-blocks/donate';
+		$family     = 'checkout_button' === $type ? self::get_product_family( $product_id ) : null;
+		list( $candidate_ids, $truncated ) = self::find_candidate_post_ids( $block_name );
+		$result = [
+			'targets'   => [],
+			'truncated' => $truncated,
+		];
+		foreach ( $candidate_ids as $candidate_id ) {
+			$post = get_post( $candidate_id );
+			if ( ! $post ) {
+				continue;
+			}
+			$configs = [];
+			foreach ( self::extract_blocks( $post->post_content, $block_name ) as $attrs ) {
+				$config = 'checkout_button' === $type
+					? self::derive_checkout_button_config( $attrs, $family )
+					: self::get_donate_target_config( $attrs );
+				if ( $config ) {
+					$configs[] = $config;
+				}
+			}
+			if ( ! empty( $configs ) ) {
+				$result['targets'][] = [
+					'id'     => $post->ID,
+					'title'  => get_the_title( $post ),
+					'url'    => get_permalink( $post ),
+					'blocks' => $configs,
+				];
+			}
+		}
+		set_transient( $cache_key, $result, self::CACHE_TTL );
+		return $result;
+	}
+
+	/**
+	 * Name-Your-Price availability per family member, for the direct-path
+	 * custom price field.
+	 *
+	 * @param array $family See get_product_family().
+	 * @return array<int,bool> Empty when the NYP plugin is unavailable.
+	 */
+	public static function get_nyp_map( $family ) {
+		$map = [];
+		if ( ! class_exists( '\WC_Name_Your_Price_Helpers' ) ) {
+			return $map;
+		}
+		foreach ( array_merge( [ $family['parent'] ], $family['variations'], $family['members'] ) as $id ) {
+			$map[ $id ] = (bool) \WC_Name_Your_Price_Helpers::is_nyp( $id );
+		}
+		return $map;
+	}
 }

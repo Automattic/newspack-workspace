@@ -481,4 +481,110 @@ class Promo_Url_Targets_Test extends WP_UnitTestCase {
 		$this->assertFalse( $config['frequencies']['year']['enabled'] );
 		$this->assertTrue( $config['frequencies']['month']['enabled'] );
 	}
+
+	/**
+	 * Test that get_targets scans and returns matching pages with derived
+	 * block configs, and reports truncation.
+	 */
+	public function test_get_targets_returns_matching_pages_with_configs() {
+		delete_option( Promo_Url_Targets::CACHE_VERSION_OPTION );
+		$page_id = self::factory()->post->create(
+			[
+				'post_type'    => 'page',
+				'post_status'  => 'publish',
+				'post_title'   => 'Support us',
+				'post_content' => '<!-- wp:newspack-blocks/checkout-button {"product":"300"} /-->',
+			]
+		);
+		self::factory()->post->create(
+			[
+				'post_type'    => 'page',
+				'post_status'  => 'publish',
+				'post_content' => '<!-- wp:newspack-blocks/checkout-button {"product":"999"} /-->',
+			]
+		);
+		$result = Promo_Url_Targets::get_targets( 'checkout_button', 300 );
+		$this->assertCount( 1, $result['targets'] );
+		$this->assertSame( $page_id, $result['targets'][0]['id'] );
+		$this->assertSame( 'Support us', $result['targets'][0]['title'] );
+		$this->assertSame( 300, $result['targets'][0]['blocks'][0]['product_id'] );
+		$this->assertFalse( $result['truncated'] );
+	}
+
+	/**
+	 * Test that get_targets caches its result until the cache version bumps.
+	 */
+	public function test_get_targets_is_cached_until_version_bump() {
+		delete_option( Promo_Url_Targets::CACHE_VERSION_OPTION );
+		$result_before = Promo_Url_Targets::get_targets( 'checkout_button', 301 );
+		$this->assertCount( 0, $result_before['targets'] );
+		$page_id = self::factory()->post->create(
+			[
+				'post_type'    => 'page',
+				'post_status'  => 'publish',
+				'post_content' => '<!-- wp:newspack-blocks/checkout-button {"product":"301"} /-->',
+			]
+		);
+		// Same version: cached empty result.
+		$this->assertCount( 0, Promo_Url_Targets::get_targets( 'checkout_button', 301 )['targets'] );
+		Promo_Url_Targets::bump_cache_version( $page_id );
+		$this->assertCount( 1, Promo_Url_Targets::get_targets( 'checkout_button', 301 )['targets'] );
+	}
+
+	/**
+	 * Test the promo-targets REST endpoint's permission check and type
+	 * validation, and that a successful donate request carries donation_config.
+	 *
+	 * The wizard's own endpoint registration is also hooked explicitly before
+	 * dispatch, so this doesn't depend on how/when the constructor's hook
+	 * fires relative to `do_action( 'rest_api_init' )`.
+	 */
+	public function test_promo_targets_endpoint_permissions_and_validation() {
+		$wizard = new Newspack\Audience_Subscription_Products();
+		add_action( 'rest_api_init', [ $wizard, 'register_api_endpoints' ] );
+		do_action( 'rest_api_init' );
+		$route = '/newspack/v1/wizard/newspack-audience-subscription-products/promo-targets';
+
+		wp_set_current_user( 0 );
+		$request = new WP_REST_Request( 'GET', $route );
+		$request->set_param( 'type', 'donate' );
+		$response = rest_get_server()->dispatch( $request );
+		$this->assertSame( 403, $response->get_status() );
+
+		$admin = self::factory()->user->create( [ 'role' => 'administrator' ] );
+		get_user_by( 'id', $admin )->add_cap( 'manage_woocommerce' );
+		wp_set_current_user( $admin );
+
+		$request = new WP_REST_Request( 'GET', $route );
+		$request->set_param( 'type', 'checkout_button' );
+		$response = rest_get_server()->dispatch( $request );
+		$this->assertSame( 400, $response->get_status() );
+
+		$request = new WP_REST_Request( 'GET', $route );
+		$request->set_param( 'type', 'donate' );
+		$response = rest_get_server()->dispatch( $request );
+		$this->assertSame( 200, $response->get_status() );
+		$data = $response->get_data();
+		$this->assertArrayHasKey( 'targets', $data );
+		$this->assertArrayHasKey( 'donation_config', $data );
+	}
+
+	/**
+	 * Test the promo-coupon REST endpoint degrades cleanly when WooCommerce
+	 * coupons are unavailable (WooCommerce isn't loaded in this suite).
+	 */
+	public function test_promo_coupon_endpoint_reports_wc_unavailable() {
+		$wizard = new Newspack\Audience_Subscription_Products();
+		add_action( 'rest_api_init', [ $wizard, 'register_api_endpoints' ] );
+		do_action( 'rest_api_init' );
+		$admin = self::factory()->user->create( [ 'role' => 'administrator' ] );
+		get_user_by( 'id', $admin )->add_cap( 'manage_woocommerce' );
+		wp_set_current_user( $admin );
+		$request = new WP_REST_Request( 'GET', '/newspack/v1/wizard/newspack-audience-subscription-products/promo-coupon' );
+		$request->set_param( 'code', 'SPRING20' );
+		$response = rest_get_server()->dispatch( $request );
+		$this->assertSame( 200, $response->get_status() );
+		// WooCommerce isn't loaded in this suite; the endpoint must degrade cleanly.
+		$this->assertFalse( $response->get_data()['valid'] );
+	}
 }
