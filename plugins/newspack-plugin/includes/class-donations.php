@@ -878,7 +878,10 @@ class Donations {
 		if ( $is_modal_checkout ) {
 			$query_args['modal_checkout'] = 1;
 		}
-		foreach ( [ 'after_success_behavior', 'after_success_button_label', 'after_success_url' ] as $attribute_name ) {
+		// `after_success_signature` travels with the destination it signs: drop it here and a
+		// publisher-configured destination arrives unsigned and gets refused as if a link had
+		// supplied it.
+		foreach ( [ 'after_success_behavior', 'after_success_button_label', 'after_success_url', 'after_success_signature' ] as $attribute_name ) {
 			$value = filter_input( INPUT_GET, $attribute_name, FILTER_SANITIZE_FULL_SPECIAL_CHARS );
 			if ( ! empty( $value ) ) {
 				$query_args[ $attribute_name ] = $value;

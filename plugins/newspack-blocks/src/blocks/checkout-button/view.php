@@ -113,6 +113,9 @@ function render_callback( $attributes ) {
 		$hidden_fields .= $after_success_behavior ? '<input type="hidden" name="after_success_behavior" value="' . esc_attr( $after_success_behavior ) . '" />' : '';
 		$hidden_fields .= $after_success_button_label ? '<input type="hidden" name="after_success_button_label" value="' . esc_attr( $after_success_button_label ) . '" />' : '';
 		$hidden_fields .= $after_success_url ? '<input type="hidden" name="after_success_url" value="' . esc_attr( $after_success_url ) . '" />' : '';
+		// Signed here because this is the last point the destination is known to come from the
+		// block's own settings rather than from the request.
+		$hidden_fields .= $after_success_url ? '<input type="hidden" name="after_success_signature" value="' . esc_attr( Modal_Checkout::get_after_success_url_signature( $after_success_url ) ) . '" />' : '';
 	}
 
 	ob_start();

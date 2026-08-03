@@ -133,6 +133,127 @@ class AfterSuccessUrlTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
+	 * A destination this site signed is honoured wherever it points.
+	 *
+	 * This is what lets a publisher send readers to a host they own without anyone adding
+	 * that host to this site's allowlist in code.
+	 */
+	public function test_keeps_a_signed_destination_off_site() {
+		$url       = 'https://elsewhere.example.test/thanks';
+		$signature = \Newspack_Blocks\Modal_Checkout::get_after_success_url_signature( $url );
+
+		$this->assertSame(
+			$url,
+			\Newspack_Blocks\Modal_Checkout::sanitize_after_success_url( $url, $signature ),
+			'A destination this site signed was refused.'
+		);
+	}
+
+	/**
+	 * The same destination without the signature is still refused.
+	 *
+	 * A link can carry the destination; it can't carry the signature.
+	 */
+	public function test_drops_the_same_destination_unsigned() {
+		$url = 'https://elsewhere.example.test/thanks';
+
+		$this->assertSame( '', \Newspack_Blocks\Modal_Checkout::sanitize_after_success_url( $url ) );
+		$this->assertSame( '', \Newspack_Blocks\Modal_Checkout::sanitize_after_success_url( $url, 'not-a-signature' ) );
+	}
+
+	/**
+	 * A signature belongs to the destination it was made for.
+	 */
+	public function test_does_not_let_a_signature_transfer_to_another_destination() {
+		$signature = \Newspack_Blocks\Modal_Checkout::get_after_success_url_signature( 'https://elsewhere.example.test/thanks' );
+
+		$this->assertSame(
+			'',
+			\Newspack_Blocks\Modal_Checkout::sanitize_after_success_url( 'https://attacker.example.test/collect', $signature ),
+			'A signature made for one destination was accepted for another.'
+		);
+	}
+
+	/**
+	 * Signing survives the sanitising the value passes through in transit.
+	 *
+	 * The signature covers an exact string, and the destination is sanitised between the
+	 * block that emits it and the page that checks it. If the two sides ever normalise
+	 * differently, a publisher's own destination starts failing closed.
+	 *
+	 * @dataProvider awkward_destinations
+	 *
+	 * @param string $url A destination that sanitising might alter.
+	 */
+	public function test_signing_survives_sanitising( $url ) {
+		$signature = \Newspack_Blocks\Modal_Checkout::get_after_success_url_signature( $url );
+
+		// What the page receives has been through sanitising on the way.
+		$in_transit = sanitize_url( $url );
+
+		$this->assertNotSame(
+			'',
+			\Newspack_Blocks\Modal_Checkout::sanitize_after_success_url( $in_transit, $signature ),
+			'A signed destination stopped verifying after sanitising.'
+		);
+	}
+
+	/**
+	 * Destinations whose exact string sanitising may not leave alone.
+	 *
+	 * @return array[]
+	 */
+	public function awkward_destinations() {
+		return [
+			'a query string'      => [ 'https://elsewhere.example.test/thanks?utm_campaign=spring&utm_source=email' ],
+			'a fragment'          => [ 'https://elsewhere.example.test/thanks#supporters' ],
+			'an encoded space'    => [ 'https://elsewhere.example.test/thank%20you/' ],
+			'a capitalised host'  => [ 'https://ELSEWHERE.example.test/thanks' ],
+			'a port'              => [ 'https://elsewhere.example.test:8443/thanks' ],
+			'a trailing slash'    => [ 'https://elsewhere.example.test/thanks/' ],
+		];
+	}
+
+	/**
+	 * A signed destination is not announced as refused.
+	 */
+	public function test_does_not_announce_a_signed_destination() {
+		$seen = [];
+		add_action(
+			'newspack_blocks_after_success_url_rejected',
+			function ( $url ) use ( &$seen ) {
+				$seen[] = $url;
+			}
+		);
+
+		$url = 'https://elsewhere.example.test/thanks';
+		\Newspack_Blocks\Modal_Checkout::sanitize_after_success_url( $url, \Newspack_Blocks\Modal_Checkout::get_after_success_url_signature( $url ) );
+
+		remove_all_actions( 'newspack_blocks_after_success_url_rejected' );
+
+		$this->assertSame( [], $seen, 'A destination this site signed was reported as refused.' );
+	}
+
+	/**
+	 * The checkout carries the signature through with the destination it signs.
+	 */
+	public function test_checkout_carries_a_signed_destination() {
+		$url = 'https://elsewhere.example.test/thanks';
+
+		$_REQUEST['after_success_behavior']  = 'custom';
+		$_REQUEST['after_success_url']       = $url;
+		$_REQUEST['after_success_signature'] = \Newspack_Blocks\Modal_Checkout::get_after_success_url_signature( $url );
+
+		$params = $this->get_after_success_params();
+
+		unset( $_REQUEST['after_success_behavior'], $_REQUEST['after_success_url'], $_REQUEST['after_success_signature'] );
+
+		$this->assertSame( $url, $params['after_success_url'] ?? '', 'A signed destination did not reach the page.' );
+		$this->assertSame( 'custom', $params['after_success_behavior'] ?? '' );
+		$this->assertNotEmpty( $params['after_success_signature'] ?? '', 'The signature was not carried onward with the destination.' );
+	}
+
+	/**
 	 * Read the after-success params the checkout passes to the page.
 	 *
 	 * @return array

@@ -212,6 +212,15 @@ abstract class Newspack_Blocks_Donate_Renderer_Base {
 					<input type='hidden' name='<?php echo esc_attr( $param_name ); ?>' value='<?php echo esc_attr( $value ); ?>' />
 				<?php
 			}
+
+			// Signed here because this is the last point the destination is known to come from
+			// the block's own settings rather than from the request.
+			$after_success_url = isset( $attributes['afterSuccessURL'] ) ? $attributes['afterSuccessURL'] : '';
+			if ( $after_success_url ) {
+				?>
+					<input type='hidden' name='after_success_signature' value='<?php echo esc_attr( \Newspack_Blocks\Modal_Checkout::get_after_success_url_signature( $after_success_url ) ); ?>' />
+				<?php
+			}
 		}
 		return ob_get_clean();
 	}

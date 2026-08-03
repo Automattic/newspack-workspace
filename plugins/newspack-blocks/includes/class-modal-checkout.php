@@ -377,6 +377,7 @@ final class Modal_Checkout {
 		$after_success_behavior     = filter_input( INPUT_GET, 'after_success_behavior', FILTER_SANITIZE_SPECIAL_CHARS );
 		$after_success_url          = filter_input( INPUT_GET, 'after_success_url', FILTER_SANITIZE_URL );
 		$after_success_button_label = filter_input( INPUT_GET, 'after_success_button_label', FILTER_SANITIZE_SPECIAL_CHARS );
+		$after_success_signature    = filter_input( INPUT_GET, 'after_success_signature', FILTER_SANITIZE_SPECIAL_CHARS );
 
 		if ( $variation_id ) {
 			$product_id = $variation_id;
@@ -395,7 +396,7 @@ final class Modal_Checkout {
 			wp_parse_str( $parsed_url['query'], $params );
 		}
 
-		$params = array_merge( $params, compact( 'after_success_behavior', 'after_success_url', 'after_success_button_label' ) );
+		$params = array_merge( $params, compact( 'after_success_behavior', 'after_success_url', 'after_success_button_label', 'after_success_signature' ) );
 
 		if ( function_exists( 'wpcom_vip_url_to_postid' ) ) {
 			$referer_post_id = wpcom_vip_url_to_postid( $referer );
@@ -1199,31 +1200,99 @@ final class Modal_Checkout {
 	const AFTER_SUCCESS_BEHAVIORS = [ 'custom', 'referrer' ];
 
 	/**
-	 * Reduce a post-checkout destination to one this site is willing to send readers to.
+	 * Reduce a post-checkout destination to a single comparable form.
 	 *
-	 * The destination reaches the thank-you page through the request, whether it came from
-	 * the block's own settings or from the link the reader followed, and by that point the
-	 * two are indistinguishable. Core's redirect validation decides, so the destinations
-	 * this site accepts are the ones `allowed_redirect_hosts` reports. That's this site's
-	 * own host, plus whatever a publisher adds through that filter, plus anything another
-	 * plugin has added (`Newspack\NRH` registers one).
+	 * Signing and verifying have to agree on the exact string, and the value passes through
+	 * sanitising on its way between them, so both sides normalise here rather than each
+	 * doing their own.
 	 *
 	 * @param string $url The requested destination.
 	 *
-	 * @return string The destination, or an empty string if it is not allowed.
+	 * @return string The normalised destination, or an empty string.
 	 */
-	public static function sanitize_after_success_url( $url ) {
+	public static function normalize_after_success_url( $url ) {
 		$url = sanitize_url( (string) $url );
 
 		if ( empty( $url ) ) {
 			return '';
 		}
 
-		// Core compares hosts case-sensitively; host names aren't. Normalise first so this
-		// site's own host typed in capitals isn't read as somewhere else.
+		// Core compares hosts case-sensitively; host names aren't. Normalise so this site's
+		// own host typed in capitals isn't read as somewhere else.
 		$host = wp_parse_url( $url, PHP_URL_HOST );
 		if ( $host && strtolower( $host ) !== $host ) {
 			$url = str_replace( '://' . $host, '://' . strtolower( $host ), $url );
+		}
+
+		return $url;
+	}
+
+	/**
+	 * Sign a post-checkout destination a block has been configured with.
+	 *
+	 * Minted where the block renders, which is the last point this site knows the value came
+	 * from its own content rather than from the request. `wp_hash()` rather than a nonce:
+	 * the signature has to survive page caching and a reader who signs in partway through
+	 * checkout, and a nonce is bound to a user and a time window.
+	 *
+	 * @param string $url The destination to sign.
+	 *
+	 * @return string The signature, or an empty string if there is nothing to sign.
+	 */
+	public static function get_after_success_url_signature( $url ) {
+		$url = self::normalize_after_success_url( $url );
+
+		return $url ? wp_hash( $url ) : '';
+	}
+
+	/**
+	 * Whether a destination carries this site's signature.
+	 *
+	 * @param string $url       The requested destination.
+	 * @param string $signature The signature offered with it.
+	 *
+	 * @return boolean
+	 */
+	public static function is_after_success_url_signed( $url, $signature ) {
+		$signature = (string) $signature;
+		$expected  = self::get_after_success_url_signature( $url );
+
+		if ( '' === $signature || '' === $expected ) {
+			return false;
+		}
+
+		return hash_equals( $expected, $signature );
+	}
+
+	/**
+	 * Reduce a post-checkout destination to one this site is willing to send readers to.
+	 *
+	 * The destination reaches the thank-you page through the request, whether it came from
+	 * the block's own settings or from the link the reader followed, and by that point the
+	 * two look alike. A signature tells them apart: one is minted when a block renders a
+	 * destination a publisher configured, so a destination carrying a valid one is this
+	 * site's own and is honoured wherever it points.
+	 *
+	 * Everything else falls to core's redirect validation, which accepts what
+	 * `allowed_redirect_hosts` reports — this site's own host, plus whatever a publisher
+	 * adds through that filter, plus anything another plugin has added (`Newspack\NRH`
+	 * registers one). A destination arriving in a link with no signature has to clear that
+	 * bar, which is what keeps a crafted link from choosing where a reader lands.
+	 *
+	 * @param string $url       The requested destination.
+	 * @param string $signature Signature offered with the destination, if any.
+	 *
+	 * @return string The destination, or an empty string if it is not allowed.
+	 */
+	public static function sanitize_after_success_url( $url, $signature = '' ) {
+		$url = self::normalize_after_success_url( $url );
+
+		if ( empty( $url ) ) {
+			return '';
+		}
+
+		if ( self::is_after_success_url_signed( $url, $signature ) ) {
+			return $url;
 		}
 
 		$validated = (string) wp_validate_redirect( $url, '' );
@@ -1270,7 +1339,8 @@ final class Modal_Checkout {
 			unset(
 				$params['after_success_behavior'],
 				$params['after_success_url'],
-				$params['after_success_button_label']
+				$params['after_success_button_label'],
+				$params['after_success_signature']
 			);
 		}
 
@@ -1290,11 +1360,14 @@ final class Modal_Checkout {
 				\wp_parse_str( $referrer_query, $request_params );
 			}
 		}
+		$signature = isset( $request_params['after_success_signature'] ) ? sanitize_text_field( wp_unslash( $request_params['after_success_signature'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
 		$params = array_filter(
 			[
 				'after_success_behavior'     => isset( $request_params['after_success_behavior'] ) ? sanitize_text_field( wp_unslash( $request_params['after_success_behavior'] ) ) : '', // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-				'after_success_url'          => isset( $request_params['after_success_url'] ) ? self::sanitize_after_success_url( wp_unslash( $request_params['after_success_url'] ) ) : '', // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+				'after_success_url'          => isset( $request_params['after_success_url'] ) ? self::sanitize_after_success_url( wp_unslash( $request_params['after_success_url'] ), $signature ) : '', // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 				'after_success_button_label' => isset( $request_params['after_success_button_label'] ) ? sanitize_text_field( wp_unslash( $request_params['after_success_button_label'] ) ) : '', // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+				'after_success_signature'    => $signature,
 				'action_type'                => isset( $request_params['action_type'] ) ? sanitize_text_field( wp_unslash( $request_params['action_type'] ) ) : '', // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			]
 		);
