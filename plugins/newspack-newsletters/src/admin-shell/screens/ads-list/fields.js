@@ -8,7 +8,7 @@
 import { Icon } from '@wordpress/components';
 import { __, sprintf } from '@wordpress/i18n';
 import { drafts, notAllowed, published, scheduled, trash } from '@wordpress/icons';
-import { dateI18n, getSettings as getDateSettings } from '@wordpress/date';
+import { gmdateI18n } from '@wordpress/date';
 
 import { getAdminUrl } from '../../admin-globals';
 import { formatPostDate } from '../../utils/format-date';
@@ -23,24 +23,37 @@ const STATUS_KIND_ICONS = {
 	trash,
 };
 
+// Ad windows are whole calendar days: the meta is `Y-m-d`, and `is_ad_active()`
+// compares it as a string against the newsletter's own date. Nothing about
+// these values carries a time or a timezone, so they're formatted in UTC with
+// a date-only pattern. Two things that looks like over-caution but isn't:
+// converting into the site timezone shifts the day (that is the whole family of
+// bugs this file sits next to), and the site's `date_format` may legitimately
+// include a time, which would then render as a clock reading with no meaning —
+// a noon anchor showing up as "8:00 am" on an EDT site, say.
+const adDateFormat = () => __( 'F j, Y', 'newspack-newsletters' );
+
+const adDateHint = () =>
+	__(
+		'Ad scheduling uses whole days in the site timezone, matched against the newsletter’s own date. Both the start and expiration days are included.',
+		'newspack-newsletters'
+	);
+
 const formatTimestampAsDate = timestamp => {
 	if ( ! timestamp ) {
 		return '';
 	}
-	const settings = getDateSettings();
-	const format = settings.formats?.date || 'M j, Y';
-	return dateI18n( format, timestamp * 1000 );
+	// `starts_at`/`expires_at` are anchored at noon UTC by the REST layer.
+	return gmdateI18n( adDateFormat(), timestamp * 1000 );
 };
 
 const formatDate = value => {
 	if ( ! value ) {
 		return '';
 	}
-	const settings = getDateSettings();
-	const format = settings.formats?.date || 'M j, Y';
-	// Tolerate ISO datetime meta; noon UTC keeps the parsed day timezone-safe.
+	// Tolerate a legacy ISO datetime meta value by keeping only the date.
 	const ymd = String( value ).slice( 0, 10 );
-	return dateI18n( format, `${ ymd }T12:00:00Z` );
+	return gmdateI18n( adDateFormat(), `${ ymd }T00:00:00Z` );
 };
 
 const editUrl = item => `${ getAdminUrl() }post.php?post=${ item.id }&action=edit`;
@@ -98,8 +111,16 @@ const renderTerms =
 			.join( ', ' );
 	};
 
-const renderStartDate = ( { item } ) => formatDate( item?.meta?.start_date );
-const renderExpiryDate = ( { item } ) => formatDate( item?.meta?.expiry_date );
+const renderAdDate = value => {
+	const formatted = formatDate( value );
+	if ( ! formatted ) {
+		return '';
+	}
+	return <span title={ adDateHint() }>{ formatted }</span>;
+};
+
+const renderStartDate = ( { item } ) => renderAdDate( item?.meta?.start_date );
+const renderExpiryDate = ( { item } ) => renderAdDate( item?.meta?.expiry_date );
 
 const renderImpressions = ( { item } ) => String( item?.meta?.tracking_impressions ?? 0 );
 const renderClicks = ( { item } ) => String( item?.meta?.tracking_clicks ?? 0 );
