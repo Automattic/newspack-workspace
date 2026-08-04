@@ -258,13 +258,19 @@ An **undeclared** toggle field reads as enabled. An integration that overrides `
 
 ## Push (Outgoing Sync)
 
-When a contact needs to be synced, the framework calls `push_contact_data()` on every active integration. The contact array is the Newspack canonical form (email, name, metadata, etc.). Implementations should call `$this->prepare_contact( $contact )` first, which:
+When a contact needs to be synced, the framework calls `push_contact_data()` on every active integration. The contact array is the Newspack canonical form (email, name, metadata, etc.). Implementations should call `$this->prepare_contact( $contact )` first, which, on the v1 metadata schema:
 
 1. Filters `$contact['metadata']` to the keys enabled on this integration.
 2. Renames keys using the integration's metadata prefix.
 3. Preserves keys already in prefixed form if the underlying field is enabled.
 
-`prepare_contact()` is a no-op when the site is still on the legacy metadata schema (where the metadata classes pre-filter), which keeps newly-built integrations compatible with un-migrated sites.
+On the legacy metadata schema (sites without `NEWSPACK_SYNC_METADATA_VERSION`), the metadata classes pre-filter and prefix the data by the **ESP integration's** field selection before it reaches `prepare_contact()`. The `esp` integration takes it unchanged; every other integration still narrows the set to its own enabled Outbound fields.
+
+Matching runs on whole keys, built with the legacy pipeline's prefix (`Metadata::get_prefix()` — the prefix the data actually carries, which may differ from the integration's own). Each enabled label contributes both the key `Metadata::get_key()` produces, so keys reshaped by the `newspack_ras_metadata_key` filter still match, and the plain `prefix . label` shape. Only the raw keys in `Legacy_Metadata::UTM_RAW_KEYS` match by prefix — an enabled `Signup UTM: ` carries `Signup UTM: source` and its siblings. A label registered through `newspack_ras_metadata_keys` that happens to end in `': '` is matched exactly, so it can never carry a *different* field past the selection. Unprefixed sync-control keys (`Legacy_Metadata::SYNC_CONTROL_KEYS`: `status`, `status_if_new`) always pass through; any other unprefixed key is dropped.
+
+An integration that has **never saved** an Outbound selection inherits the ESP integration's effective selection, so un-migrated sites keep their pre-existing payloads; an explicitly saved selection always wins, and saving with nothing checked genuinely means "push no metadata fields". Override `get_inherited_legacy_outgoing_fields()` to inherit a different set, or return `[]` from it to opt out of inheritance entirely. Two legacy-mode caveats: the upstream pre-filter runs first, so an explicit selection can only narrow the ESP's set; and once a selection is saved, inheritance only returns if the integration's `newspack_integration_outgoing_fields_*` option is deleted (NPPD-2107).
+
+**Default posture.** Inheritance preserves behavior rather than tightening it. On a site where nobody ever saved an ESP selection, `Esp::get_enabled_outgoing_fields()` falls through to `Metadata::get_default_fields()` — every available field, including Membership Status, Total Paid and Recurring Payment — and a newly connected integration inherits exactly that. Per-integration selection is what closes that exposure, and it takes an explicit save to do so.
 
 ### Optional `$options` parameter
 
