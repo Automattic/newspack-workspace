@@ -13,6 +13,8 @@ class PresetsTest extends WP_UnitTestCase {
 	 * Delete prompts, segments, and user inputs from prior tests.
 	 */
 	public function set_up() {
+		parent::set_up();
+
 		// Remove any popups (from previous tests).
 		foreach ( Newspack_Popups_Model::retrieve_popups() as $popup ) {
 			\wp_delete_post( $popup['id'] );
@@ -20,11 +22,6 @@ class PresetsTest extends WP_UnitTestCase {
 
 		\delete_option( Newspack_Popups_Presets::NEWSPACK_POPUPS_RAS_PROMPTS_OPTION );
 		Newspack_Segments_Model::delete_all_segments();
-
-		// Preset previews read request state and the current user, so start each
-		// test from a known one.
-		unset( $_GET['values'], $_GET['preset'] );
-		\wp_set_current_user( 0 );
 	}
 
 	/**
