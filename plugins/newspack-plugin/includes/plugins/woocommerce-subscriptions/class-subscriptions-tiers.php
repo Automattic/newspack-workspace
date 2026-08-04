@@ -253,6 +253,62 @@ class Subscriptions_Tiers {
 	}
 
 	/**
+	 * Whether a product carries WooCommerce Subscriptions "subscription plans".
+	 *
+	 * Subscriptions 9.0 folded All Products for Subscriptions into core, so a
+	 * recurring product no longer has to use the dedicated `subscription` /
+	 * `variable-subscription` product types: an ordinary `simple` or `variable`
+	 * product with subscription schemes attached is now the way the product
+	 * editor creates one. Mirrors the detection Subscriptions itself uses in
+	 * `WCSG_Product::product_has_subscription_plans()`, including the opt-out
+	 * meta, so we stay in step with what Subscriptions treats as recurring.
+	 *
+	 * @param \WC_Product $product Product object.
+	 *
+	 * @return bool Whether the product has subscription plans.
+	 */
+	public static function has_subscription_plans( $product ) {
+		if ( ! class_exists( 'WCS_ATT_Product_Schemes' ) || ! method_exists( 'WCS_ATT_Product_Schemes', 'has_subscription_schemes' ) ) {
+			return false;
+		}
+		if ( 'yes' === $product->get_meta( '_wcsatt_disabled' ) ) {
+			return false;
+		}
+		return (bool) \WCS_ATT_Product_Schemes::has_subscription_schemes( $product );
+	}
+
+	/**
+	 * Whether a product is a subscription, under either product model.
+	 *
+	 * @param \WC_Product $product Product object.
+	 *
+	 * @return bool Whether the product is a subscription.
+	 */
+	public static function is_subscription_product( $product ) {
+		if ( in_array( $product->get_type(), [ 'subscription', 'variable-subscription' ], true ) ) {
+			return true;
+		}
+		return self::has_subscription_plans( $product );
+	}
+
+	/**
+	 * Whether a product is a variable subscription, under either product model.
+	 *
+	 * Determines whether tiers come from the product's variations rather than
+	 * from the product itself.
+	 *
+	 * @param \WC_Product $product Product object.
+	 *
+	 * @return bool Whether the product is a variable subscription.
+	 */
+	public static function is_variable_subscription_product( $product ) {
+		if ( $product->is_type( 'variable-subscription' ) ) {
+			return true;
+		}
+		return $product->is_type( 'variable' ) && self::has_subscription_plans( $product );
+	}
+
+	/**
 	 * Get the frequency of a product.
 	 *
 	 * @param \WC_Product $product Product object.
@@ -299,7 +355,7 @@ class Subscriptions_Tiers {
 		} elseif ( $product->is_type( 'grouped' ) ) {
 			$products = $product->get_children();
 			$sort_by_price = $sort_by_price ?? false;
-		} elseif ( $product->is_type( 'variable' ) || $product->is_type( 'variable-subscription' ) || $product->is_type( 'subscription' ) ) {
+		} elseif ( $product->is_type( 'variable' ) || self::is_subscription_product( $product ) ) {
 			$products = [ $product ];
 			$sort_by_price = $sort_by_price ?? true;
 		}
@@ -315,7 +371,7 @@ class Subscriptions_Tiers {
 				$product = wc_get_product( $product );
 			}
 
-			if ( ! in_array( $product->get_type(), [ 'subscription', 'variable-subscription' ], true ) ) {
+			if ( ! self::is_subscription_product( $product ) ) {
 				continue;
 			}
 
@@ -324,7 +380,7 @@ class Subscriptions_Tiers {
 			}
 
 			// Extract the variations if it's a variable subscription product.
-			if ( $product->is_type( 'variable-subscription' ) ) {
+			if ( self::is_variable_subscription_product( $product ) ) {
 				$variations = $product->get_available_variations();
 				foreach ( $variations as $variation ) {
 					$selected_products[] = new \WC_Product_Variation( $variation['variation_id'] );

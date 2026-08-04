@@ -1600,3 +1600,17 @@ class WC_Webhook {
 function wc_get_webhook( $id ) {
 	return isset( WC_Webhook::$registry[ (int) $id ] ) ? WC_Webhook::$registry[ (int) $id ] : null;
 }
+
+if ( ! class_exists( 'WCS_ATT_Product_Schemes' ) ) {
+	/**
+	 * Stub of the All Products for Subscriptions scheme reader that WooCommerce
+	 * Subscriptions 9.0+ ships in core. Tests opt products in by ID via
+	 * self::$products_with_schemes.
+	 */
+	class WCS_ATT_Product_Schemes {
+		public static $products_with_schemes = [];
+		public static function has_subscription_schemes( $product ) {
+			return in_array( $product->get_id(), self::$products_with_schemes, true );
+		}
+	}
+}
