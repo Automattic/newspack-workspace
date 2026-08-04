@@ -657,15 +657,12 @@ final class Modal_Checkout {
 	 * and specific products are `product` alone. A variation lock on a
 	 * non-variable product has no serving form, so it is rejected.
 	 *
-	 * A `coupon` and after-success settings become the block's own attributes, so
-	 * they ride to the checkout as the form's hidden fields exactly as
-	 * block-configured ones do — the coupon is validated and applied against the
-	 * real cart, and the thank-you screen reads the after-success fields.
+	 * A coupon and after-success settings become block attributes, so they ride to
+	 * the checkout as hidden fields exactly as block-configured ones do.
 	 *
-	 * Only `custom` after-success is accepted. The block's other behavior,
-	 * `referrer`, returns the reader to where they came from, which a
-	 * promotional link cannot rely on: a reader arriving from an email or a QR
-	 * code has no same-origin referrer and no history entry to go back to.
+	 * Only `custom` after-success is accepted: the block's other behavior,
+	 * `referrer`, returns the reader where they came from, which a link from an
+	 * email or a QR code has no referrer or history entry to satisfy.
 	 *
 	 * @param string $product_type  Product type slug from WC_Product::get_type().
 	 * @param int    $product_id    Requested product ID.
@@ -700,14 +697,10 @@ final class Modal_Checkout {
 		if ( '' !== $coupon ) {
 			$attrs['coupon'] = $coupon;
 		}
-		// A destination is required: 'custom' with nowhere to go leaves the
-		// reader on a continue button that does nothing.
-		//
-		// No signature is passed, so only an allowed host gets through. This
-		// path cannot sign: the URL arrives in the request, and signing
-		// untrusted input would authorize exactly what the signature exists to
-		// refuse. An off-site destination therefore has to come from a block,
-		// where an editor authored it.
+		// A destination is required, or the continue button goes nowhere. No
+		// signature is passed: this path cannot sign, since the URL arrives in the
+		// request and signing untrusted input would authorize what the signature
+		// exists to refuse. Off-site destinations must come from a block.
 		$after_success_url = isset( $after_success['url'] ) ? self::sanitize_after_success_url( $after_success['url'] ) : '';
 		if ( isset( $after_success['behavior'] ) && 'custom' === $after_success['behavior'] && '' !== $after_success_url ) {
 			$attrs['afterSuccessBehavior'] = 'custom';
@@ -726,21 +719,15 @@ final class Modal_Checkout {
 	const AFTER_SUCCESS_SIGNATURE_ARG = 'after_success_sig';
 
 	/**
-	 * Sign an after-checkout destination, marking it as one the site itself
-	 * stored rather than one supplied by whoever opened the link.
+	 * Sign an after-checkout destination, marking it as one the site stored
+	 * rather than one supplied by whoever opened the link.
 	 *
-	 * A block's destination is authored in the editor and lives in post content,
-	 * so it is trusted and may point anywhere — a partner site, an external
-	 * welcome page. The same value arriving in a query string is not trusted,
-	 * and honouring it unchecked is an open redirect fired the instant a payment
-	 * completes, on the publisher's own domain. Both reach the thank-you screen
-	 * as identical params, so provenance has to travel with the value: the block
-	 * renderers sign what they emit, and only a valid signature buys an off-site
-	 * destination.
-	 *
-	 * The signature is an integrity check, not a secret — it may appear in a
-	 * public URL. Replaying one only ever reaches the destination the publisher
-	 * already configured.
+	 * A block's destination is editor-authored, so it may point anywhere; the
+	 * same value in a query string is untrusted, and honoring it unchecked is an
+	 * open redirect fired the instant a payment completes. Both reach the
+	 * thank-you screen as identical params, so provenance travels with the value.
+	 * The signature is an integrity check, not a secret: replaying one only
+	 * reaches the destination the publisher already configured.
 	 *
 	 * @param string $url Destination to sign.
 	 * @return string Signature, or '' for an empty URL.
@@ -766,12 +753,9 @@ final class Modal_Checkout {
 	}
 
 	/**
-	 * Validate an after-checkout destination.
-	 *
-	 * A destination on a host the site allows (its own, plus anything added via
-	 * the `allowed_redirect_hosts` filter) needs nothing further. Anywhere else
-	 * requires the signature a block renderer produced — see
-	 * sign_after_success_url() for why provenance is what matters here.
+	 * Validate an after-checkout destination. An allowed host (the site's own,
+	 * plus anything added via `allowed_redirect_hosts`) needs nothing further;
+	 * anywhere else requires a block renderer's signature.
 	 *
 	 * @param string $url       Requested destination.
 	 * @param string $signature Signature accompanying the request, if any.
@@ -1519,10 +1503,9 @@ final class Modal_Checkout {
 		return array_filter(
 			[
 				'after_success_behavior'          => isset( $request_params['after_success_behavior'] ) ? sanitize_text_field( wp_unslash( $request_params['after_success_behavior'] ) ) : '', // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-				// Validated here as well as at the thank-you screen, so a
-				// destination the site never authorized does not travel in the
-				// URLs this builds. array_filter() then drops the empty value and
-				// the modal falls back to closing rather than redirecting.
+				// Validated here too, so an unauthorized destination never travels
+				// in the URLs this builds; array_filter() drops the empty value and
+				// the modal falls back to closing.
 				'after_success_url'               => isset( $request_params['after_success_url'] ) ? self::sanitize_after_success_url( wp_unslash( $request_params['after_success_url'] ), isset( $request_params[ self::AFTER_SUCCESS_SIGNATURE_ARG ] ) ? wp_unslash( $request_params[ self::AFTER_SUCCESS_SIGNATURE_ARG ] ) : '' ) : '', // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 				// Carried onward so the thank-you screen can validate too.
 				self::AFTER_SUCCESS_SIGNATURE_ARG => isset( $request_params[ self::AFTER_SUCCESS_SIGNATURE_ARG ] ) ? sanitize_text_field( wp_unslash( $request_params[ self::AFTER_SUCCESS_SIGNATURE_ARG ] ) ) : '', // phpcs:ignore WordPress.Security.NonceVerification.Recommended

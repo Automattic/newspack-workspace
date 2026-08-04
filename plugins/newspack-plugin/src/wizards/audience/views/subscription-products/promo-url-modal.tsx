@@ -329,7 +329,10 @@ export default function PromoUrlModal( { item, closeModal }: { item: Subscriptio
 		<VStack spacing={ 4 }>
 			<ComboboxControl
 				label={ __( 'Target page', 'newspack-plugin' ) }
-				help={ __( 'The checkout opens over this page, keeping it in view. Any page works; search to pick a different one.', 'newspack-plugin' ) }
+				help={ __(
+					'The checkout opens over this page, keeping it in view. Any page works; search to pick a different one.',
+					'newspack-plugin'
+				) }
 				value={ pageValue }
 				options={ pageChoices.map( ( { value, label } ) => ( { value, label } ) ) }
 				onChange={ value => setPageValue( value ) }

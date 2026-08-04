@@ -43,10 +43,9 @@ const FREQUENCY_LABELS: Record< DonateFrequencySlug, string > = {
 };
 
 /**
- * Child-product choices for a plan row. The "reader chooses" option opens the
- * plan's picker over the page, so it is offered whenever that picker can render
- * at least one option: always for a variable plan, and for a grouped plan only
- * when the tiers form serves a child (`eligibleChildren`, from the server).
+ * Child-product choices for a plan row. "Reader chooses" opens the plan's picker,
+ * so it is offered only when that picker renders at least one option: always for
+ * a variable plan, and for a grouped plan only when the tiers form serves a child.
  */
 export function getPlanChoices( item: SubscriptionProduct, eligibleChildren: number[] ): { value: number | ''; label: string }[] {
 	const children =
@@ -68,10 +67,9 @@ export function getPlanChoices( item: SubscriptionProduct, eligibleChildren: num
 
 /**
  * Resolve the product_id/variation_id a URL must carry for the chosen child.
- * The reader-chooses option names the parent (the picker opens over the page);
- * a grouped member is a plain product (the trigger rejects
- * product_id === variation_id — NPPM-2872 residual quirk); a variation rides
- * on its parent.
+ * Reader-chooses names the parent, a grouped member is a plain product (the
+ * trigger rejects product_id === variation_id — NPPM-2872), a variation rides on
+ * its parent.
  */
 export function resolveProductParams( item: SubscriptionProduct, chosenChild: number | '' ): { productId: number; variationId: number | null } {
 	if ( chosenChild === '' ) {
@@ -120,13 +118,10 @@ export function getDefaultFrequency( item: SubscriptionProduct, config: PromoTar
 }
 
 /**
- * Whether an after-checkout destination is on this site.
- *
- * The destination is assigned to `window.location.href` once the reader closes
- * the modal, so the server refuses an off-site one to avoid an open redirect
- * right after a payment (Modal_Checkout::sanitize_after_success_url()). The
- * generator checks it too, so the publisher is told rather than handed a link
- * whose destination is silently dropped.
+ * Whether an after-checkout destination is on this site. The server refuses an
+ * off-site one from a URL (Modal_Checkout::sanitize_after_success_url()); the
+ * generator checks too, so the publisher is told rather than handed a link whose
+ * destination is silently dropped.
  */
 export function isSameSiteUrl( url: string, siteOrigin: string ): boolean {
 	if ( ! url ) {
@@ -160,10 +155,9 @@ export type PromoValidationInput = {
 };
 
 /**
- * The gate that decides whether a promotional URL may be emitted at all: the
- * modal shows the returned message and withholds the link. Kept pure so each
- * refusal is directly testable — a gap here is what lets a silently-failing
- * link reach a publisher. Returns null when the selections are valid.
+ * The gate deciding whether a URL may be emitted: the modal shows the returned
+ * message and withholds the link. Pure so each refusal is testable. Returns null
+ * when the selections are valid.
  */
 export function getValidationError( input: PromoValidationInput ): string | null {
 	const { kind, donateConfig, effectiveAmount, customAmount } = input;
