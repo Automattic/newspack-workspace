@@ -150,7 +150,7 @@ function newspack_blocks_get_author_or_guest_author( $author_id, $avatar_size = 
 		}
 
 		$author = ( new CoAuthors_Guest_Authors() )->get_guest_author_by( 'id', $author_id );
-		$avatar = function_exists( 'coauthors_get_avatar' ) ? coauthors_get_avatar( $author, $avatar_size ) : false;
+		$avatar = function_exists( 'coauthors_get_avatar' ) ? coauthors_get_avatar( $author, $avatar_size, $hide_default ? 'blank' : '' ) : false;
 
 		// Format CAP guest author object to return to the render function.
 		if ( $author && isset( $author->ID ) ) {
@@ -161,7 +161,7 @@ function newspack_blocks_get_author_or_guest_author( $author_id, $avatar_size = 
 				$author
 			);
 
-			if ( $avatar && ( false === strpos( $avatar, 'avatar-default' ) || ! $hide_default ) ) {
+			if ( \Newspack_Blocks\is_avatar_displayable( $avatar, $hide_default ) ) {
 				$author['avatar'] = $avatar;
 			}
 		}
@@ -176,8 +176,8 @@ function newspack_blocks_get_author_or_guest_author( $author_id, $avatar_size = 
 			$wp_user
 		);
 
-		$avatar = get_avatar( $author_id, $avatar_size );
-		if ( $avatar && ( false === strpos( $avatar, 'avatar-default' ) || ! $hide_default ) ) {
+		$avatar = get_avatar( $author_id, $avatar_size, $hide_default ? 'blank' : '' );
+		if ( \Newspack_Blocks\is_avatar_displayable( $avatar, $hide_default ) ) {
 			$author['avatar'] = $avatar;
 		}
 	}

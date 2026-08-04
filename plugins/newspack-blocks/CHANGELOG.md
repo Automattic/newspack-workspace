@@ -1,3 +1,10 @@
+## @automattic/newspack-blocks [4.29.1](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.29.0...newspack-blocks@4.29.1) (2026-08-04)
+
+
+### Bug Fixes
+
+* **author-profile:** hide default avatars when the toggle is on ([#570](https://github.com/Automattic/newspack-workspace/issues/570)) ([4aba9cd](https://github.com/Automattic/newspack-workspace/commit/4aba9cd016d8b5645358640dd27f9ff9070239b1))
+
 # @automattic/newspack-blocks [4.29.0](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.28.0...newspack-blocks@4.29.0) (2026-08-03)
 
 
