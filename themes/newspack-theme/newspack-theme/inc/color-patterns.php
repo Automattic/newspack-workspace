@@ -215,6 +215,8 @@ function newspack_custom_colors_css() {
 		// render as a colored gap. Kept as a standalone rule: in browsers
 		// without :has() support an unknown selector invalidates the entire
 		// rule, which must not take the selectors above down with it.
+		// The same filled-zone test is duplicated in newspack-ads
+		// (src/frontend/style.scss) — keep the two selectors in sync (NPPM-2975).
 		$theme_css .= '
 			broadstreet-zone-container:has(broadstreet-zone div *, a, iframe, img, video) {
 				background-color: ' . esc_attr( $ads_color_hex ) . ';
