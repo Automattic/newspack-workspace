@@ -99,7 +99,8 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 	}
 
 	/**
-	 * Normalize the prompt card's CTA, for blocks coming from the pattern only.
+	 * Normalize the prompt card's CTA and apply the site-wide override, for blocks
+	 * coming from the pattern only.
 	 *
 	 * @param array $parsed_block The block being rendered.
 	 * @return array
@@ -113,7 +114,13 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 			return $parsed_block;
 		}
 
-		return self::normalize_cta( $parsed_block );
+		$parsed_block = self::normalize_cta( $parsed_block );
+
+		if ( class_exists( 'Newspack_Popups_Settings' ) && Newspack_Popups_Settings::is_override_active() ) {
+			$parsed_block = self::apply_override( $parsed_block );
+		}
+
+		return $parsed_block;
 	}
 
 	/**
@@ -157,6 +164,99 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 		}
 
 		return $parsed_block;
+	}
+
+	/**
+	 * Site-wide override ("fund-drive mode"): swap the copy of every prompt, and
+	 * in button mode replace the CTA with the override button. Stored content is
+	 * untouched — turning the override off restores each story's own prompt.
+	 *
+	 * @param array $parsed_block Parsed prompt card, already normalized.
+	 * @return array
+	 */
+	public static function apply_override( $parsed_block ) {
+		$body = trim( (string) get_option( 'newspack_contextual_prompts_override_body', '' ) );
+		if ( '' !== $body ) {
+			$copy_index = self::find_copy( $parsed_block );
+			if ( null !== $copy_index ) {
+				// An instance's own copy is a pattern override, resolved after this
+				// filter: left bound, it would be written back over the site-wide copy.
+				unset( $parsed_block['innerBlocks'][ $copy_index ]['attrs']['metadata']['bindings'] );
+			}
+			$parsed_block = self::replace_copy( $parsed_block, $body );
+		}
+
+		if ( 'button' === Newspack_Popups_Settings::get_override_cta() ) {
+			$label = trim( (string) get_option( 'newspack_contextual_prompts_override_label', '' ) );
+			$child = Newspack_Popups_Contextual_Prompt_Pattern::build_buttons_child(
+				(string) get_option( 'newspack_contextual_prompts_override_url', '' ),
+				'' !== $label ? $label : null
+			);
+
+			$cta = self::find_cta( $parsed_block );
+			if ( null !== $cta ) {
+				$parsed_block['innerBlocks'][ $cta['index'] ] = $child;
+			} else {
+				$parsed_block = self::append_child( $parsed_block, $child );
+			}
+		}
+
+		return $parsed_block;
+	}
+
+	/**
+	 * Replace the text of the copy paragraph.
+	 *
+	 * Uses preg_replace_callback, not preg_replace, so a literal $1 / ${1} / \1
+	 * in the override copy — "Give $5 today" — is never expanded as a
+	 * backreference.
+	 *
+	 * @param array  $parsed_block Parsed prompt card.
+	 * @param string $body         Replacement copy, unescaped.
+	 * @return array
+	 */
+	private static function replace_copy( $parsed_block, $body ) {
+		$index = self::find_copy( $parsed_block );
+		if ( null === $index ) {
+			return $parsed_block;
+		}
+
+		$child = $parsed_block['innerBlocks'][ $index ];
+		$swap  = function ( $html ) use ( $body ) {
+			return preg_replace_callback(
+				'#(<p\b[^>]*>).*?(</p>)#s',
+				function ( $matches ) use ( $body ) {
+					return $matches[1] . esc_html( $body ) . $matches[2];
+				},
+				(string) $html,
+				1
+			);
+		};
+
+		$child['innerHTML'] = $swap( $child['innerHTML'] );
+		foreach ( $child['innerContent'] as $chunk_index => $chunk ) {
+			if ( is_string( $chunk ) && '' !== trim( $chunk ) ) {
+				$child['innerContent'][ $chunk_index ] = $swap( $chunk );
+			}
+		}
+		$parsed_block['innerBlocks'][ $index ] = $child;
+
+		return $parsed_block;
+	}
+
+	/**
+	 * Locate the copy child: the first paragraph.
+	 *
+	 * @param array $parsed_block Parsed prompt card.
+	 * @return int|null Child index, or null.
+	 */
+	private static function find_copy( $parsed_block ) {
+		foreach ( $parsed_block['innerBlocks'] ?? [] as $index => $child ) {
+			if ( 'core/paragraph' === ( $child['blockName'] ?? '' ) ) {
+				return $index;
+			}
+		}
+		return null;
 	}
 
 	/**

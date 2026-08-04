@@ -27,6 +27,12 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 	const CUSTOM_URL = 'https://example.com/custom/';
 
 	/**
+	 * The copy an instance carries as its own pattern override, so "the site-wide
+	 * override won" is provable rather than merely "the override rendered".
+	 */
+	const PER_POST_COPY = 'Per-post copy';
+
+	/**
 	 * Register the stub donate block and clear the per-request render state the
 	 * previous test left behind.
 	 */
@@ -52,6 +58,11 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 		delete_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_PATTERN_ID );
 		delete_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_STAMPED_ACCENT );
 		delete_option( 'newspack_popups_donor_landing_page' );
+		delete_option( Newspack_Popups_Settings::OVERRIDE_ENABLED_OPTION );
+		delete_option( Newspack_Popups_Settings::OVERRIDE_CTA_OPTION );
+		delete_option( 'newspack_contextual_prompts_override_body' );
+		delete_option( 'newspack_contextual_prompts_override_label' );
+		delete_option( 'newspack_contextual_prompts_override_url' );
 		if ( WP_Block_Type_Registry::get_instance()->is_registered( 'newspack-blocks/donate' ) ) {
 			unregister_block_type( 'newspack-blocks/donate' );
 		}
@@ -75,11 +86,32 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 	/**
 	 * Render an instance of the pattern, the way a post referencing it does.
 	 *
+	 * @param string|null $copy The instance's own pattern override copy, or null
+	 *                          for an instance carrying none.
 	 * @return string Rendered markup.
 	 */
-	private function render_instance() {
-		$ref = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
-		return do_blocks( '<!-- wp:block {"ref":' . $ref . '} /-->' );
+	private function render_instance( $copy = null ) {
+		$attrs = [ 'ref' => Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id() ];
+		if ( null !== $copy ) {
+			$attrs['content'] = [ Newspack_Popups_Contextual_Prompt_Pattern::BOUND_NAME => [ 'content' => $copy ] ];
+		}
+		return do_blocks( '<!-- wp:block ' . wp_json_encode( $attrs ) . ' /-->' );
+	}
+
+	/**
+	 * Turn the site-wide override on.
+	 *
+	 * @param string $body  Override copy.
+	 * @param string $cta   'form' or 'button'.
+	 * @param string $label Button label.
+	 * @param string $url   Button destination.
+	 */
+	private function set_override( $body, $cta = 'button', $label = 'Give now', $url = 'https://example.com/drive/' ) {
+		update_option( Newspack_Popups_Settings::OVERRIDE_ENABLED_OPTION, true );
+		update_option( Newspack_Popups_Settings::OVERRIDE_CTA_OPTION, $cta );
+		update_option( 'newspack_contextual_prompts_override_body', $body );
+		update_option( 'newspack_contextual_prompts_override_label', $label );
+		update_option( 'newspack_contextual_prompts_override_url', $url );
 	}
 
 	/**
@@ -406,5 +438,124 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 		$this->assertStringContainsString( 'href="' . esc_url( $permalink ) . '"', $html );
 		$this->assertStringNotContainsString( self::DONATE_STUB_CLASS, $html );
 		$this->assertSame( $detached, get_post( $ref )->post_content, 'The pattern post is untouched.' );
+	}
+
+	/**
+	 * The site-wide override replaces the copy of every instance — the story's own
+	 * pattern override included, which the binding would otherwise re-apply over
+	 * it. Form mode leaves the CTA alone.
+	 */
+	public function test_override_replaces_per_post_copy() {
+		$this->set_platform( true );
+		$this->set_override( 'Support our spring drive.', 'form' );
+
+		$html = $this->render_instance( self::PER_POST_COPY );
+
+		$this->assertStringContainsString( 'Support our spring drive.', $html );
+		$this->assertStringNotContainsString( self::PER_POST_COPY, $html, 'The story copy does not come back at bind time.' );
+		$this->assertStringContainsString( self::DONATE_STUB_CLASS, $html, 'Form mode keeps the donate form.' );
+	}
+
+	/**
+	 * Button mode on a native site: the override button replaces the donate form.
+	 */
+	public function test_override_button_mode_replaces_the_form() {
+		$this->set_platform( true );
+		$this->set_override( 'Support our spring drive.' );
+
+		$html = $this->render_instance( self::PER_POST_COPY );
+
+		$this->assertStringContainsString( 'Support our spring drive.', $html );
+		$this->assertStringContainsString( 'href="https://example.com/drive/"', $html );
+		$this->assertStringContainsString( '>Give now</a>', $html );
+		$this->assertStringNotContainsString( self::DONATE_STUB_CLASS, $html );
+	}
+
+	/**
+	 * Off site with no donor landing page, so normalization drops the CTA: the
+	 * override appends its own, and fund-drive mode still has a working ask.
+	 */
+	public function test_override_button_mode_appends_cta_when_missing() {
+		$this->set_platform( false );
+		$this->set_override( 'Support our spring drive.' );
+
+		$html = $this->render_instance( self::PER_POST_COPY );
+
+		$this->assertStringContainsString( 'Support our spring drive.', $html );
+		$this->assertStringContainsString( 'href="https://example.com/drive/"', $html );
+		$this->assertStringContainsString( '>Give now</a>', $html );
+	}
+
+	/**
+	 * Script markup in the override copy or label is rendered as text, never as an
+	 * element. The override is admin supplied and lands on every story, so a
+	 * dropped esc_html() here is stored XSS on the whole site.
+	 */
+	public function test_override_script_payload_is_escaped() {
+		$this->set_platform( false );
+		$this->set_override( '<script>alert("xss")</script>', 'button', '<script>alert("label")</script>' );
+
+		$html = $this->render_instance( self::PER_POST_COPY );
+
+		$this->assertStringContainsString( '&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;', $html, 'The copy payload is entity-encoded.' );
+		$this->assertStringContainsString( '&lt;script&gt;alert(&quot;label&quot;)&lt;/script&gt;', $html, 'The label payload is entity-encoded.' );
+		$this->assertDoesNotMatchRegularExpression( '#<\s*script#i', $html, 'No live script element reaches the reader.' );
+	}
+
+	/**
+	 * An event-handler payload in the override copy comes out as text: no tag in
+	 * the rendered prompt carries an on* attribute.
+	 */
+	public function test_override_event_handler_payload_is_escaped() {
+		$this->set_platform( false );
+		$this->set_override( 'Support us <img src=x onerror="alert(1)">' );
+
+		$html = $this->render_instance( self::PER_POST_COPY );
+
+		$this->assertStringContainsString( 'Support us &lt;img src=x onerror=&quot;alert(1)&quot;&gt;', $html, 'The payload is entity-encoded.' );
+		$this->assertDoesNotMatchRegularExpression( '#<[a-z][^>]*\son[a-z]+\s*=#i', $html, 'No rendered tag carries an event handler attribute.' );
+	}
+
+	/**
+	 * A javascript: destination in the override URL is dropped rather than
+	 * rendered as a live link.
+	 */
+	public function test_override_javascript_url_is_dropped() {
+		$this->set_platform( false );
+		$this->set_override( 'Support our spring drive.', 'button', 'Give now', 'javascript:alert(1)' );
+
+		$html = $this->render_instance( self::PER_POST_COPY );
+
+		$this->assertStringContainsString( '>Give now</a>', $html, 'The button still renders.' );
+		$this->assertStringContainsString( 'href=""', $html, 'esc_url() emptied the destination.' );
+		$this->assertDoesNotMatchRegularExpression( '#javascript\s*:#i', $html, 'No live javascript: URL reaches the reader.' );
+	}
+
+	/**
+	 * A literal $-sequence in override copy or label survives verbatim — never
+	 * expanded as a regex backreference.
+	 */
+	public function test_dollar_sequences_are_not_expanded() {
+		$this->set_platform( false );
+		$this->set_override( 'Give $5 today — just ${1} a week.', 'button', 'Give $5' );
+
+		$html = $this->render_instance( self::PER_POST_COPY );
+
+		$this->assertStringContainsString( 'Give $5 today — just ${1} a week.', $html );
+		$this->assertStringContainsString( '>Give $5</a>', $html );
+	}
+
+	/**
+	 * An inactive override — enabled with no copy — leaves the instance alone, so
+	 * the story's own copy renders.
+	 */
+	public function test_inactive_override_is_a_noop() {
+		$this->set_platform( false );
+		$this->set_donor_landing_page();
+		update_option( Newspack_Popups_Settings::OVERRIDE_ENABLED_OPTION, true );
+
+		$html = $this->render_instance( self::PER_POST_COPY );
+
+		$this->assertStringContainsString( self::PER_POST_COPY, $html );
 	}
 }
