@@ -243,7 +243,19 @@ export default function PromoUrlModal( { item, closeModal }: { item: Subscriptio
 				afterSuccess: kind === 'product' ? afterSuccess : '',
 				afterSuccessUrl,
 			} ),
-		[ kind, pageUrl, requiresChild, variationId, donateConfig, effectiveAmount, customAmount, amountChoices.presets, couponStatus, afterSuccess, afterSuccessUrl ]
+		[
+			kind,
+			pageUrl,
+			requiresChild,
+			variationId,
+			donateConfig,
+			effectiveAmount,
+			customAmount,
+			amountChoices.presets,
+			couponStatus,
+			afterSuccess,
+			afterSuccessUrl,
+		]
 	);
 
 	const url = validationError ? '' : buildPromoUrl( { kind, selections } );

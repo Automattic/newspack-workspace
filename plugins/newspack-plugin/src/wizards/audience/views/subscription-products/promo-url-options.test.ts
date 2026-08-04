@@ -166,9 +166,7 @@ describe( 'getValidationError', () => {
 	} );
 
 	it( 'requires a destination for a custom after-checkout behavior', () => {
-		expect( getValidationError( { ...productBase, afterSuccess: 'custom' } ) ).toBe(
-			'Enter the URL readers should continue to after checkout.'
-		);
+		expect( getValidationError( { ...productBase, afterSuccess: 'custom' } ) ).toBe( 'Enter the URL readers should continue to after checkout.' );
 		expect( getValidationError( { ...productBase, afterSuccess: 'custom', afterSuccessUrl: 'https://x.test' } ) ).toBeNull();
 		expect( getValidationError( { ...productBase, afterSuccess: '' } ) ).toBeNull();
 	} );
