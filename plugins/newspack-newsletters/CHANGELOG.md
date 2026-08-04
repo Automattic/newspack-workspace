@@ -1,3 +1,10 @@
+## newspack-newsletters [3.38.1](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.38.0...newspack-newsletters@3.38.1) (2026-08-04)
+
+
+### Bug Fixes
+
+* **newsletters:** keep shared list on membership switch (NPPM-3000) ([#615](https://github.com/Automattic/newspack-workspace/issues/615)) ([72b411e](https://github.com/Automattic/newspack-workspace/commit/72b411e3020f421c47e8be33e5af0a8799095377))
+
 # newspack-newsletters [3.38.0](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.37.1...newspack-newsletters@3.38.0) (2026-08-03)
 
 
