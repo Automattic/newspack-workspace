@@ -1,3 +1,23 @@
+# newspack-multibranded-site [2.4.0](https://github.com/Automattic/newspack-workspace/compare/newspack-multibranded-site@2.3.1...newspack-multibranded-site@2.4.0) (2026-08-03)
+
+
+### Features
+
+* explicit breadcrumb API for Newspack admin headers ([#472](https://github.com/Automattic/newspack-workspace/issues/472)) ([7c43233](https://github.com/Automattic/newspack-workspace/commit/7c4323301f5323822937e93274c4fda4279a787f))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.6.0
+* **newspack-scripts:** upgraded to 5.10.0
+
+## newspack-multibranded-site [2.3.1](https://github.com/Automattic/newspack-workspace/compare/newspack-multibranded-site@2.3.0...newspack-multibranded-site@2.3.1) (2026-07-20)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.5.0
+
 # newspack-multibranded-site [2.3.0](https://github.com/Automattic/newspack-workspace/compare/newspack-multibranded-site@2.2.0...newspack-multibranded-site@2.3.0) (2026-06-29)
 
 

@@ -1632,6 +1632,20 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 	}
 
 	/**
+	 * The fallback message shown to readers whose Mailchimp contact is in a
+	 * compliance state, used when no custom message has been configured.
+	 *
+	 * Shared with the settings list, which uses it as the field placeholder so the
+	 * wizard previews the real fallback copy. A method rather than a class constant
+	 * because gettext extraction requires a string literal inside __().
+	 *
+	 * @return string The default resubscribe error message.
+	 */
+	public static function get_default_resubscribe_message() {
+		return __( "We'll need to subscribe this email address manually. Please contact our support team.", 'newspack-newsletters' );
+	}
+
+	/**
 	 * Filters the error message shown to readers when an error occurs.
 	 *
 	 * @param string $reader_error The default error message.
@@ -1643,7 +1657,13 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 	public function reader_error_message( $reader_error, $params, $raw_error ) {
 		// Handle special case where a user is in compliance state.
 		if ( is_wp_error( $raw_error ) && false !== strpos( $raw_error->get_error_message(), 'Member In Compliance State' ) ) {
-			$reader_error = __( "We'll need to subscribe this email address manually. Please contact our support team.", 'newspack-newsletters' );
+			// Mailchimp forbids resubscribing such contacts via its API, so the reader must be
+			// pointed elsewhere — publishers can customize the message (HTML links allowed).
+			$custom_message = trim( (string) get_option( 'newspack_newsletters_mailchimp_resubscribe_message', '' ) );
+			if ( ! empty( $custom_message ) ) {
+				return $custom_message;
+			}
+			$reader_error = self::get_default_resubscribe_message();
 		}
 		return $reader_error;
 	}
@@ -2740,11 +2760,26 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 			}
 		}
 
+		// Derive value_type (and the numeric range default) from Mailchimp's
+		// merge-field type so the framework constrains the operator dropdown to the
+		// field shape — a date field can't be typed "Number", a numeric field gets
+		// range matching. Mirrors the ActiveCampaign mapper for cross-ESP consistency.
+		$value_type        = 'string';
+		$matching_function = 'default';
+		if ( in_array( $type, [ 'dropdown', 'radio' ], true ) ) {
+			$value_type = 'select';
+		} elseif ( in_array( $type, [ 'date', 'birthday' ], true ) ) {
+			$value_type = 'date';
+		} elseif ( 'number' === $type ) {
+			$value_type        = 'number';
+			$matching_function = 'range';
+		}
+
 		return [
 			'key'                 => $tag,
 			'name'                => ! empty( $field['name'] ) ? $field['name'] : $tag,
-			'value_type'          => 'string',
-			'matching_function'   => 'default',
+			'value_type'          => $value_type,
+			'matching_function'   => $matching_function,
 			'options'             => $options,
 			'description'         => isset( $field['help_text'] ) ? $field['help_text'] : '',
 			'is_access_rule'      => $is_promoted_by_default,

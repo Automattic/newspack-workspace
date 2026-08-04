@@ -94,7 +94,7 @@ final class Newspack_Newsletters {
 		add_action( 'admin_enqueue_scripts', [ __CLASS__, 'branding_scripts' ] );
 		add_filter( 'newspack_theme_featured_image_post_types', [ __CLASS__, 'support_featured_image_options' ] );
 		add_filter( 'gform_force_hooks_js_output', [ __CLASS__, 'suppress_gravityforms_js_on_newsletters' ] );
-		add_filter( 'render_block', [ __CLASS__, 'remove_email_only_block' ], 10, 2 );
+		add_filter( 'render_block', [ __CLASS__, 'remove_visibility_hidden_block' ], 10, 2 );
 		add_action( 'pre_get_posts', [ __CLASS__, 'display_newsletters_in_archives' ] );
 		add_action( 'the_post', [ __CLASS__, 'fix_public_status' ] );
 	}
@@ -639,7 +639,7 @@ final class Newspack_Newsletters {
 			'menu_name'                => _x( 'Newsletters', 'admin menu', 'newspack-newsletters' ),
 			'name_admin_bar'           => _x( 'Newsletter', 'add new on admin bar', 'newspack-newsletters' ),
 			'add_new'                  => _x( 'Add New', 'newsletter', 'newspack-newsletters' ),
-			'add_new_item'             => __( 'Add New Newsletter', 'newspack-newsletters' ),
+			'add_new_item'             => __( 'Add Newsletter', 'newspack-newsletters' ),
 			'new_item'                 => __( 'New Newsletter', 'newspack-newsletters' ),
 			'edit_item'                => __( 'Edit Newsletter', 'newspack-newsletters' ),
 			'view_item'                => __( 'View Newsletter', 'newspack-newsletters' ),
@@ -732,6 +732,18 @@ final class Newspack_Newsletters {
 				'render_callback' => [ __CLASS__, 'render_share_block' ],
 			]
 		);
+		// Register the ad block so the WC email renderer can locate its
+		// render_email_callback. Block_Renderer_Registry sets that callback via
+		// the `block_type_metadata_settings` filter (priority 11), which fires
+		// here during register_block_type_from_metadata() — after the registry's
+		// init() has already hooked it at plugin-load time (before `init`). Guard
+		// against a context that re-runs registration (multibranded/network) so we
+		// don't trip a `_doing_it_wrong` notice for a double registration.
+		if ( ! \WP_Block_Type_Registry::get_instance()->is_registered( 'newspack-newsletters/ad' ) ) {
+			register_block_type_from_metadata(
+				__DIR__ . '/../src/editor/blocks/ad/block.json'
+			);
+		}
 	}
 
 	/**
@@ -889,7 +901,7 @@ final class Newspack_Newsletters {
 			[
 				'methods'             => \WP_REST_Server::READABLE,
 				'callback'            => [ __CLASS__, 'api_get_layouts' ],
-				'permission_callback' => [ __CLASS__, 'api_authoring_permissions_check' ],
+				'permission_callback' => [ __CLASS__, 'api_edit_posts_permissions_check' ],
 				'args'                => [
 					'defaults_only' => [
 						'type'        => 'boolean',
@@ -928,7 +940,7 @@ final class Newspack_Newsletters {
 			[
 				'methods'             => \WP_REST_Server::EDITABLE,
 				'callback'            => [ __CLASS__, 'api_set_color_palette' ],
-				'permission_callback' => [ __CLASS__, 'api_authoring_permissions_check' ],
+				'permission_callback' => [ __CLASS__, 'api_edit_posts_permissions_check' ],
 			]
 		);
 
@@ -938,7 +950,7 @@ final class Newspack_Newsletters {
 			[
 				'methods'             => \WP_REST_Server::EDITABLE,
 				'callback'            => [ __CLASS__, 'api_get_mjml' ],
-				'permission_callback' => [ __CLASS__, 'api_authoring_permissions_check' ],
+				'permission_callback' => [ __CLASS__, 'api_edit_post_permissions_check' ],
 				'args'                => [
 					'post_id' => [
 						'required'          => true,
@@ -946,6 +958,22 @@ final class Newspack_Newsletters {
 					],
 					'content' => [
 						'required' => true,
+					],
+				],
+			]
+		);
+		\register_rest_route(
+			self::API_NAMESPACE,
+			'post-html',
+			[
+				'methods'             => \WP_REST_Server::READABLE,
+				'callback'            => [ __CLASS__, 'api_get_post_html' ],
+				'permission_callback' => [ __CLASS__, 'api_authoring_permissions_check' ],
+				'args'                => [
+					'post_id' => [
+						'required'          => true,
+						'type'              => 'integer',
+						'sanitize_callback' => 'absint',
 					],
 				],
 			]
@@ -962,9 +990,27 @@ final class Newspack_Newsletters {
 	 * @param WP_REST_Request $request API request object.
 	 */
 	public static function api_set_color_palette( $request ) {
-		self::update_color_palette( json_decode( $request->get_body(), true ) );
-
-		return \rest_ensure_response( [] );
+		/*
+		 * The newsletter editor auto-POSTs the palette on every editor load, including for
+		 * Contributors/Authors who can now reach the editor (via post-mjml) but must not
+		 * change this site-wide option. We deliberately return success WITHOUT writing for
+		 * those roles instead of a 403 — otherwise the editor surfaces a "You cannot use
+		 * this resource." notice on every load. So for unauthorized roles the response
+		 * reports success while the option write is a no-op. The write capability is
+		 * filterable via `newspack_newsletters_color_palette_capability`.
+		 */
+		$capability = apply_filters( 'newspack_newsletters_color_palette_capability', 'edit_others_posts' );
+		$did_write  = false;
+		if ( current_user_can( $capability ) ) {
+			// update_option() returns false when the value is unchanged as well as on
+			// failure, so `updated` reports "the stored palette changed", not "no error".
+			$did_write = self::update_color_palette( json_decode( $request->get_body(), true ) );
+		} else {
+			Newspack_Newsletters_Logger::log( 'Color palette write skipped: current user lacks the "' . $capability . '" capability.' );
+		}
+		// The route's contract is always 200; the body distinguishes a real write from a
+		// permission-skipped no-op so a client or maintainer can tell them apart.
+		return \rest_ensure_response( [ 'updated' => (bool) $did_write ] );
 	}
 
 	/**
@@ -981,6 +1027,41 @@ final class Newspack_Newsletters {
 		}
 		$post->post_content = $request['content'];
 		return \rest_ensure_response( Newspack_Newsletters_Renderer::render_post_to_mjml( $post ) );
+	}
+
+	/**
+	 * Render a newsletter to final email HTML via the WC engine.
+	 *
+	 * Produces email-safe HTML through the block-based WC email-editor engine for
+	 * the editor preview. This is a read-only endpoint: it renders the
+	 * newsletter's saved content and, unlike api_get_mjml(), does not accept a
+	 * live `content` override, because the WC engine re-fetches the post from the
+	 * database by ID at render time (see Post_Content::render_stateless in the
+	 * email-editor package), so an in-memory override would be ignored.
+	 *
+	 * @param WP_REST_Request $request API request object.
+	 * @return WP_REST_Response|WP_Error Response carrying the rendered HTML; a 404
+	 *                                   error when the post is not a newsletter, or
+	 *                                   a 500 error when rendering fails.
+	 */
+	public static function api_get_post_html( $request ) {
+		$post = get_post( $request['post_id'] );
+		if ( ! $post instanceof \WP_Post || ! self::validate_newsletter_id( $post->ID ) ) {
+			return new \WP_Error(
+				'newspack_newsletters_no_post',
+				__( 'Newsletter not found.', 'newspack-newsletters' ),
+				[ 'status' => 404 ]
+			);
+		}
+		$html = \Newspack\Newsletters\Email_Renderers\Renderer_Controller::render_wc( $post );
+		if ( '' === $html ) {
+			return new \WP_Error(
+				'newspack_newsletters_render_failed',
+				__( 'Failed to render the newsletter.', 'newspack-newsletters' ),
+				[ 'status' => 500 ]
+			);
+		}
+		return \rest_ensure_response( [ 'html' => $html ] );
 	}
 
 	/**
@@ -1009,7 +1090,23 @@ final class Newspack_Newsletters {
 				)
 			);
 		}
-		return \rest_ensure_response( Newspack_Newsletters_Layouts::get_layouts() );
+		$layouts = Newspack_Newsletters_Layouts::get_layouts();
+
+		/*
+		 * The layouts list is readable at `edit_posts` so Contributors/Authors can pick a
+		 * layout, but each saved layout's `campaign_defaults` carries send/audience config
+		 * (senderEmail, send_list_id, send_sublist_id) that the editor copies into the draft.
+		 * Withhold it from roles below `edit_others_posts` so the send/audience surface stays
+		 * editor-only — the picker still applies content, colors and fonts without it.
+		 */
+		if ( ! current_user_can( 'edit_others_posts' ) ) {
+			foreach ( $layouts as $layout ) {
+				if ( isset( $layout->meta ) && is_array( $layout->meta ) ) {
+					unset( $layout->meta['campaign_defaults'] );
+				}
+			}
+		}
+		return \rest_ensure_response( $layouts );
 	}
 
 	/**
@@ -1150,6 +1247,54 @@ final class Newspack_Newsletters {
 			);
 		}
 		return true;
+	}
+
+	/**
+	 * Permission check for post-scoped authoring routes (e.g. `post-mjml`):
+	 * the current user must be able to edit the specific post the request
+	 * targets. Scoped on `post_id` only — never a generic `id`, which on
+	 * other routes refers to a different CPT (e.g. a layout).
+	 *
+	 * @param WP_REST_Request $request API request object.
+	 * @return bool|WP_Error
+	 */
+	public static function api_edit_post_permissions_check( $request ) {
+		$post_id = (int) $request->get_param( 'post_id' );
+		if ( $post_id && current_user_can( 'edit_post', $post_id ) ) {
+			return true;
+		}
+		return new \WP_Error(
+			'newspack_rest_forbidden',
+			esc_html__( 'You cannot use this resource.', 'newspack-newsletters' ),
+			[
+				'status' => 403,
+			]
+		);
+	}
+
+	/**
+	 * Permission check for non-post authoring reads needed to load the
+	 * editor (e.g. the `layouts` list of saved templates). Any user who can
+	 * author posts may use them. These surface editor-support content; the
+	 * one field that carries send/audience configuration (`campaign_defaults`)
+	 * is stripped from the layouts payload for roles below `edit_others_posts`
+	 * in api_get_layouts(), so this relaxed check does not broaden that surface.
+	 *
+	 * @param WP_REST_Request $request API request object.
+	 * @return bool|WP_Error
+	 */
+	public static function api_edit_posts_permissions_check( $request ) {
+		unset( $request );
+		if ( current_user_can( 'edit_posts' ) ) {
+			return true;
+		}
+		return new \WP_Error(
+			'newspack_rest_forbidden',
+			esc_html__( 'You cannot use this resource.', 'newspack-newsletters' ),
+			[
+				'status' => 403,
+			]
+		);
 	}
 
 	/**
@@ -1383,22 +1528,26 @@ final class Newspack_Newsletters {
 	}
 
 	/**
-	 * Do not display blocks that are configured to be email-only.
+	 * Hide blocks whose `newsletterVisibility` doesn't match the current render.
+	 *
+	 * On the web front-end, `email`-only blocks are hidden. During an email render
+	 * (`render_wc`, detected via the rendering-post accessor) it's the opposite:
+	 * `web`-only blocks are hidden and `email`-only blocks are kept. Without the
+	 * email branch, `render_wc` followed the web path and wrongly dropped email-only
+	 * blocks — e.g. the prebuilt layouts' "Support our newsroom" section.
 	 *
 	 * @param string $block_content The block content about to be appended.
 	 * @param array  $block         The full block, including name and attributes.
-	 *
-	 * @return string Transformed block content to be apppended.
+	 * @return string The block content, or '' when the block is hidden in this context.
 	 */
-	public static function remove_email_only_block( $block_content, $block ) {
-		if (
-			self::NEWSPACK_NEWSLETTERS_CPT === get_post_type() &&
-			isset( $block['attrs']['newsletterVisibility'] ) &&
-			'email' === $block['attrs']['newsletterVisibility']
-		) {
-			return '';
+	public static function remove_visibility_hidden_block( $block_content, $block ) {
+		if ( self::NEWSPACK_NEWSLETTERS_CPT !== get_post_type() || empty( $block['attrs']['newsletterVisibility'] ) ) {
+			return $block_content;
 		}
-		return $block_content;
+		$is_email_render   = class_exists( '\Newspack\Newsletters\Email_Renderers\Renderer_Controller' )
+			&& \Newspack\Newsletters\Email_Renderers\Renderer_Controller::get_rendering_post() instanceof \WP_Post;
+		$hidden_visibility = $is_email_render ? 'web' : 'email';
+		return $hidden_visibility === $block['attrs']['newsletterVisibility'] ? '' : $block_content;
 	}
 
 	/**
@@ -1513,6 +1662,14 @@ final class Newspack_Newsletters {
 		}
 		$is_public = (bool) get_post_meta( $post->ID, 'is_public', true );
 		if ( 'publish' === $post->post_status && ! $is_public ) {
+			// Correcting to `private` does NOT trigger an ESP send. A
+			// publish -> private transition stays within the controlled
+			// statuses (`['publish', 'private']`), so neither `pre_post_update()`
+			// (which sends when a newsletter moves out of / into that set) nor
+			// `transition_post_status()` (which sends only when `$old_status` is
+			// `'future'`) fires. This matters because, with the `exit` below now
+			// scoped to page views, a single request can correct many rows
+			// instead of stopping at the first — many corrections, still no sends.
 			wp_update_post(
 				[
 					'ID'          => $post->ID,
@@ -1521,12 +1678,66 @@ final class Newspack_Newsletters {
 				false,
 				false
 			);
-			// Force a page refresh on the front-end.
-			if ( ! is_admin() ) {
+			// Force a page refresh, but only on a genuine front-end page view.
+			// During REST, AJAX, cron or WP-CLI the `exit` would truncate the
+			// current request (e.g. a REST collection would return a partial,
+			// short-circuited response), so restrict it to real page loads.
+			if ( self::is_front_end_page_request() ) {
 				header( 'Refresh:0' );
 				exit;
 			}
 		}
+	}
+
+	/**
+	 * Whether the current request is a genuine front-end page view, as opposed
+	 * to an admin screen, REST/AJAX/XML-RPC request, cron run, WP-CLI
+	 * invocation, or feed render.
+	 *
+	 * Used to decide whether it is safe to `exit` the request: on a page view a
+	 * redirect is the intended behavior, but on any programmatic request or
+	 * streamed response an `exit` would truncate the output mid-flight.
+	 *
+	 * @return bool True on a front-end page request, false otherwise.
+	 */
+	private static function is_front_end_page_request() {
+		if ( is_admin() ) {
+			return false;
+		}
+		if ( defined( 'REST_REQUEST' ) && REST_REQUEST ) {
+			return false;
+		}
+		if ( wp_doing_ajax() ) {
+			return false;
+		}
+		if ( wp_doing_cron() ) {
+			return false;
+		}
+		if ( defined( 'WP_CLI' ) && WP_CLI ) {
+			return false;
+		}
+		if ( defined( 'XMLRPC_REQUEST' ) && XMLRPC_REQUEST ) {
+			return false;
+		}
+		// A feed is a front-end request but not a page view; an `exit` here
+		// would truncate the feed's XML mid-document. Newsletters can appear in
+		// feeds via `display_newsletters_in_archives()`. Behaviour change worth
+		// naming: a feed containing a just-corrected newsletter now serves that
+		// item once in the current response (a reader hitting the feed at that
+		// moment sees it) rather than emitting invalid XML, and it drops out of
+		// subsequent requests once healed — one slightly-stale item beats broken
+		// XML.
+		//
+		// This check MUST stay after the REST/AJAX/cron/CLI/XML-RPC returns
+		// above — the ordering is load-bearing, not stylistic. `is_feed()` is a
+		// main-query conditional; called with `$wp_query` unset (e.g. mid-REST)
+		// it triggers `_doing_it_wrong()` and returns false, which would let the
+		// `exit` through in exactly the contexts this guard protects. Do not
+		// reorder these into alphabetical / "cheapest check first" order.
+		if ( is_feed() ) {
+			return false;
+		}
+		return true;
 	}
 
 	/**

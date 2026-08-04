@@ -53,6 +53,9 @@
 		},
 		"width": {
 			"type": "number"
+		},
+		"coupon": {
+			"type": "string"
 		}
 	},
 	"supports": {

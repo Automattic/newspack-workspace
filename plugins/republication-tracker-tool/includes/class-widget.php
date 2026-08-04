@@ -14,13 +14,6 @@
 class Republication_Tracker_Tool_Widget extends WP_Widget {
 
 	/**
-	 * Whether the widget has been instantiated.
-	 *
-	 * @var bool
-	 */
-	public $has_instance = false;
-
-	/**
 	 * Sets up the widgets name etc.
 	 */
 	public function __construct() {
@@ -108,25 +101,27 @@ class Republication_Tracker_Tool_Widget extends WP_Widget {
 
 		echo wp_kses_post( $args['after_widget'] );
 
-		// if has_instance is false, we can continue with displaying the modal.
-		if ( isset( $this->has_instance ) && false === $this->has_instance ) {
+		// If the modal has not been rendered yet, include it.
+		if ( ! Republication_Tracker_Tool::$modal_rendered ) {
 
-			// update has_instance so the next time the widget is created on the same page, it does not create a second modal.
-			$this->has_instance = true;
+			// Mark the modal as rendered.
+			Republication_Tracker_Tool::$modal_rendered = true;
 
 			// define our path to grab file content from.
 			$modal_content_path = plugin_dir_path( __FILE__ ) . 'shareable-content.php';
 
+			$is_amp = self::is_amp();
+
 			if ( $is_amp ) {
 				?>
 					<amp-lightbox id="republication-tracker-tool-modal" layout="nodisplay" role="dialog" aria-modal="true" aria-labelledby="republish-modal-label">
-						<?php echo esc_html( include_once $modal_content_path ); ?>
+						<?php include $modal_content_path; ?>
 					</amp-lightbox>
 				<?php
 			} else {
 				?>
 					<div id="republication-tracker-tool-modal" style="display:none;" data-postid="<?php echo esc_attr( $post->ID ); ?>" data-pluginsdir="<?php echo esc_attr( plugins_url() ); ?>" role="dialog" aria-modal="true" aria-labelledby="republish-modal-label">
-						<?php echo esc_html( include_once $modal_content_path ); ?>
+						<?php include $modal_content_path; ?>
 					</div>
 				<?php
 			}

@@ -3,6 +3,7 @@
  */
 import { __, sprintf } from '@wordpress/i18n';
 import { useDispatch } from '@wordpress/data';
+import { useEffect } from '@wordpress/element';
 import { ToggleControl, ExternalLink } from '@wordpress/components';
 
 /**
@@ -245,13 +246,19 @@ export const DonationAmounts = () => {
 
 const Donation = () => {
 	const wizardData = useWizardData( AUDIENCE_DONATIONS_WIZARD_SLUG ) as AudienceDonationsWizardData;
-	const { saveWizardSettings } = useDispatch( WIZARD_STORE_NAMESPACE );
+	const { saveWizardSettings, setHeaderData, resetHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const onSaveDonationSettings = () =>
 		saveWizardSettings( {
 			slug: AUDIENCE_DONATIONS_WIZARD_SLUG,
 			payloadPath: [ 'donation_data' ],
 			auxData: { saveDonationProduct: true },
 		} );
+
+	useEffect( () => {
+		setHeaderData( { actions: [ { type: 'primary', label: __( 'Save', 'newspack-plugin' ), action: onSaveDonationSettings } ] } );
+		return () => resetHeaderData();
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [] );
 
 	// Check for product validation errors.
 	const validationResults = Object.values( wizardData.product_validation || {} );
@@ -321,11 +328,6 @@ const Donation = () => {
 				</>
 			) }
 			<DonationAmounts />
-			<div className="newspack-buttons-card">
-				<Button variant="primary" onClick={ onSaveDonationSettings }>
-					{ __( 'Save Settings', 'newspack-plugin' ) }
-				</Button>
-			</div>
 		</WizardsTab>
 	);
 };
