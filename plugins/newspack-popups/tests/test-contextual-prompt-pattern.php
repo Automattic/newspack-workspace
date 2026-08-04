@@ -38,7 +38,7 @@ class ContextualPromptPatternTest extends WP_UnitTestCase {
 	 * block type.
 	 */
 	public function tear_down() {
-		delete_transient( Newspack_Popups_Contextual_Prompt_Pattern::SEEDING_LOCK );
+		delete_option( Newspack_Popups_Contextual_Prompt_Pattern::SEEDING_LOCK_OPTION );
 		delete_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_PATTERN_ID );
 		delete_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_STAMPED_ACCENT );
 		delete_option( 'newspack_popups_donor_landing_page' );
@@ -325,6 +325,55 @@ class ContextualPromptPatternTest extends WP_UnitTestCase {
 
 		$single = rest_do_request( new WP_REST_Request( 'GET', '/wp/v2/blocks/' . $pattern_id ) );
 		$this->assertSame( $pattern_id, $single->get_data()['id'], 'The pattern still resolves by id.' );
+	}
+
+	/**
+	 * Protection is not the feature's to switch off: with the flag rolled back the
+	 * pattern would be deletable, and deleting it orphans every instance a
+	 * re-enabled site still carries. So the gated init registers none of it, and
+	 * the entry point Newspack_Popups::init() always calls registers all of it.
+	 */
+	public function test_protection_registers_outside_the_feature_gate() {
+		$class = 'Newspack_Popups_Contextual_Prompt_Pattern';
+		remove_all_filters( 'map_meta_cap' );
+		remove_all_filters( 'block_editor_settings_all' );
+		remove_all_filters( 'rest_wp_block_query' );
+
+		Newspack_Popups_Contextual_Prompt_Pattern::init();
+
+		$this->assertFalse( has_filter( 'map_meta_cap', [ $class, 'protect_pattern' ] ), 'The gated init registers no protection.' );
+		$this->assertFalse( has_filter( 'block_editor_settings_all', [ $class, 'lock_pattern_editor' ] ) );
+		$this->assertFalse( has_filter( 'rest_wp_block_query', [ $class, 'hide_pattern_from_collections' ] ) );
+
+		Newspack_Popups_Contextual_Prompt_Pattern::init_protection();
+
+		$this->assertNotFalse( has_filter( 'map_meta_cap', [ $class, 'protect_pattern' ] ) );
+		$this->assertNotFalse( has_filter( 'block_editor_settings_all', [ $class, 'lock_pattern_editor' ] ) );
+		$this->assertNotFalse( has_filter( 'rest_wp_block_query', [ $class, 'hide_pattern_from_collections' ] ) );
+	}
+
+	/**
+	 * Which is only safe because every protection callback reads the record raw
+	 * and no-ops without one: a site that never seeded a pattern carries the hooks
+	 * and notices nothing.
+	 */
+	public function test_protection_leaves_a_site_with_no_pattern_alone() {
+		delete_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_PATTERN_ID );
+		$post = self::factory()->post->create( [ 'post_type' => 'wp_block' ] );
+
+		$this->assertSame(
+			[ 'delete_posts' ],
+			Newspack_Popups_Contextual_Prompt_Pattern::protect_pattern( [ 'delete_posts' ], 'delete_post', 0, [ $post ] )
+		);
+		$this->assertArrayNotHasKey(
+			'post__not_in',
+			Newspack_Popups_Contextual_Prompt_Pattern::hide_pattern_from_collections( [ 'post_type' => 'wp_block' ] ),
+			'Nothing is excluded from a collection.'
+		);
+		$this->assertArrayNotHasKey(
+			'canLockBlocks',
+			Newspack_Popups_Contextual_Prompt_Pattern::lock_pattern_editor( [], new WP_Block_Editor_Context( [ 'post' => get_post( $post ) ] ) )
+		);
 	}
 
 	/**

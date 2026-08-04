@@ -67,7 +67,7 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 	 */
 	public function tear_down() {
 		wp_set_current_user( 0 );
-		delete_transient( Newspack_Popups_Contextual_Prompt_Pattern::SEEDING_LOCK );
+		delete_option( Newspack_Popups_Contextual_Prompt_Pattern::SEEDING_LOCK_OPTION );
 		delete_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION );
 		delete_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_PATTERN_ID );
 		delete_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_STAMPED_ACCENT );
@@ -447,6 +447,26 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The record describes the stored pattern's donate child, so a write that did
+	 * not land must not move it: a record disagreeing with the stored child reads
+	 * as a publisher color and freezes the restamp for good.
+	 */
+	public function test_a_failed_write_leaves_the_accent_record_alone() {
+		$this->set_platform( true );
+		$this->set_accent_color( '#003da5' );
+		$ref    = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
+		$stored = get_post( $ref )->post_content;
+
+		$this->set_accent_color( '#ff0000' );
+		add_filter( 'wp_insert_post_empty_content', '__return_true' );
+		Newspack_Popups_Contextual_Prompt_Pattern::repair();
+		remove_filter( 'wp_insert_post_empty_content', '__return_true' );
+
+		$this->assertSame( $stored, get_post( $ref )->post_content, 'The write was refused.' );
+		$this->assertSame( '#003da5', get_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_STAMPED_ACCENT ), 'So the record still describes what is stored.' );
+	}
+
+	/**
 	 * With no recorded stamp — a site seeded off site, or before the record
 	 * existed — there is nothing to tell a seeded color from a chosen one, so the
 	 * restamp stays out of it.
@@ -687,11 +707,12 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The seed holds a lock while inserting, so a second call arriving while the
-	 * first is still writing gets nothing rather than a second pattern.
+	 * The seed claims a lock before inserting, so a call arriving while another
+	 * request is still writing gets nothing rather than a second pattern —
+	 * instances made against the loser's pattern would never be managed again.
 	 */
-	public function test_a_held_seed_lock_does_not_insert_a_second_pattern() {
-		set_transient( Newspack_Popups_Contextual_Prompt_Pattern::SEEDING_LOCK, 1, 30 );
+	public function test_a_held_seed_claim_does_not_insert_a_second_pattern() {
+		add_option( Newspack_Popups_Contextual_Prompt_Pattern::SEEDING_LOCK_OPTION, time(), '', false );
 
 		$this->assertSame( 0, Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id() );
 		$this->assertEmpty(
@@ -706,16 +727,63 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The lock expires on its own, so a request that died mid-seed leaves seeding
-	 * blocked for seconds rather than for good.
+	 * A caller that cannot claim answers with whatever is recorded: the winner may
+	 * already have recorded its pattern, and nothing else is this caller's to say.
 	 */
-	public function test_an_expired_seed_lock_seeds_anyway() {
-		set_transient( Newspack_Popups_Contextual_Prompt_Pattern::SEEDING_LOCK, 1, -1 );
+	public function test_a_held_seed_claim_answers_with_the_record() {
+		update_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_PATTERN_ID, 4242 );
+		add_option( Newspack_Popups_Contextual_Prompt_Pattern::SEEDING_LOCK_OPTION, time(), '', false );
+
+		$this->assertSame( 4242, Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id() );
+	}
+
+	/**
+	 * A claim left behind by a request that died mid-seed is stale after its TTL,
+	 * so seeding is blocked for seconds rather than for good.
+	 */
+	public function test_a_stale_seed_claim_is_reclaimed() {
+		add_option( Newspack_Popups_Contextual_Prompt_Pattern::SEEDING_LOCK_OPTION, time() - 120, '', false );
 
 		$id = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
 
 		$this->assertGreaterThan( 0, $id );
 		$this->assertSame( 'wp_block', get_post_type( $id ) );
+		$this->assertFalse( get_option( Newspack_Popups_Contextual_Prompt_Pattern::SEEDING_LOCK_OPTION ), 'The claim is released.' );
+	}
+
+	/**
+	 * Two first loads can still overlap around the insert itself. A seeder that
+	 * finds a pattern recorded while it was writing drops its own and adopts the
+	 * recorded one: the record is what every instance is made against, so keeping
+	 * both would leave a pattern nothing manages.
+	 */
+	public function test_a_seed_that_loses_the_race_adopts_the_recorded_pattern() {
+		$rival  = self::factory()->post->create(
+			[
+				'post_type'   => 'wp_block',
+				'post_status' => 'publish',
+			]
+		);
+		$orphan = 0;
+		add_action(
+			'wp_insert_post',
+			function ( $post_id, $post ) use ( $rival, &$orphan ) {
+				if ( 'wp_block' === $post->post_type && (int) $post_id !== $rival ) {
+					$orphan = (int) $post_id;
+					update_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_PATTERN_ID, $rival );
+				}
+			},
+			10,
+			2
+		);
+
+		$id = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
+
+		$this->assertSame( $rival, $id );
+		$this->assertGreaterThan( 0, $orphan );
+		$this->assertNull( get_post( $orphan ), 'The pattern nothing recorded is dropped.' );
+		$this->assertSame( $rival, (int) get_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_PATTERN_ID ) );
+		$this->assertFalse( get_option( Newspack_Popups_Contextual_Prompt_Pattern::SEEDING_LOCK_OPTION ), 'The claim is released.' );
 	}
 
 	/**
@@ -793,6 +861,35 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 			'The binding is left alone.'
 		);
 		$this->assertStringContainsString( self::PER_POST_COPY, $this->render_instance(), 'Overrides written under the seeded name still resolve.' );
+	}
+
+	/**
+	 * Overrides enabled on another child would share the copy paragraph's one key,
+	 * so the binding is dropped rather than renamed — and the copy paragraph, the
+	 * pattern's only bound field, is left as it is.
+	 */
+	public function test_an_override_bound_to_another_child_is_stripped() {
+		$this->set_platform( false );
+		$this->set_donor_landing_page();
+		$ref = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
+
+		$blocks = parse_blocks( get_post( $ref )->post_content );
+		$blocks[0]['innerBlocks'][1]['innerBlocks'][0]['attrs']['metadata'] = [
+			'name'     => 'Donate button',
+			'bindings' => [ '__default' => [ 'source' => 'core/pattern-overrides' ] ],
+		];
+		Newspack_Popups_Contextual_Prompt_Pattern::save_pattern_content( $ref, serialize_blocks( $blocks ) );
+
+		Newspack_Popups_Contextual_Prompt_Pattern::repair();
+
+		$group = $this->stored_group();
+		$this->assertArrayNotHasKey( 'metadata', $group['innerBlocks'][1]['innerBlocks'][0]['attrs'], 'The stray binding and the name that keyed it are gone.' );
+		$this->assertSame( Newspack_Popups_Contextual_Prompt_Pattern::BOUND_NAME, $group['innerBlocks'][0]['attrs']['metadata']['name'], 'The copy paragraph keeps its name.' );
+		$this->assertSame(
+			[ '__default' => [ 'source' => 'core/pattern-overrides' ] ],
+			$group['innerBlocks'][0]['attrs']['metadata']['bindings'],
+			'And its binding.'
+		);
 	}
 
 	/**

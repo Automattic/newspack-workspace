@@ -20,7 +20,7 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 	const OPTION_STAMPED_ACCENT = 'newspack_contextual_prompts_stamped_accent';
 	const MARKER_CLASS          = 'newspack-contextual-prompt';
 	const BOUND_NAME            = 'Prompt copy';
-	const SEEDING_LOCK          = 'newspack_contextual_prompts_seeding';
+	const SEEDING_LOCK_OPTION   = 'newspack_contextual_prompts_seeding';
 	const SEEDING_LOCK_TTL      = 30;
 
 	/**
@@ -39,12 +39,22 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 	];
 
 	/**
-	 * Register hooks.
+	 * Register the hooks that keep the pattern out of reach. Registered whether
+	 * or not the feature is on: rolling it back must not expose the pattern to
+	 * deletion, since deleting it would empty every instance a re-enabled site
+	 * still carries. Each callback reads the record raw and no-ops without one,
+	 * so a site that never seeded a pattern is unaffected.
 	 */
-	public static function init() {
+	public static function init_protection() {
 		add_filter( 'map_meta_cap', [ __CLASS__, 'protect_pattern' ], 10, 4 );
 		add_filter( 'block_editor_settings_all', [ __CLASS__, 'lock_pattern_editor' ], 10, 2 );
 		add_filter( 'rest_wp_block_query', [ __CLASS__, 'hide_pattern_from_collections' ] );
+	}
+
+	/**
+	 * Register hooks.
+	 */
+	public static function init() {
 		// \Newspack\Donations may not be loaded when hooks register, so the option
 		// name it owns is spelled out rather than read off the class. Configuring
 		// the platform for the first time adds the option rather than updating
@@ -134,33 +144,81 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 			return $id;
 		}
 
-		// Hold a short lock while inserting, so two concurrent first calls can't
-		// both seed a pattern. It expires on its own: a request that dies mid-seed
-		// must not leave seeding claimed for good.
-		if ( get_transient( self::SEEDING_LOCK ) ) {
-			return 0;
+		// Hold a lock while inserting, so two concurrent first calls can't both seed
+		// a pattern. A caller that loses the claim yields rather than seeding a
+		// second one: instances made against it would never be managed again.
+		if ( ! self::claim_seeding_lock() ) {
+			return (int) get_option( self::OPTION_PATTERN_ID, 0 );
 		}
-		set_transient( self::SEEDING_LOCK, 1, self::SEEDING_LOCK_TTL );
 
-		$new_id = wp_insert_post(
-			wp_slash(
-				[
-					'post_type'    => 'wp_block',
-					'post_status'  => 'publish',
-					'post_title'   => __( 'Contextual Prompt', 'newspack-popups' ),
-					'post_content' => self::build_pattern_content(),
-				]
-			)
-		);
-		if ( is_wp_error( $new_id ) || ! $new_id ) {
-			delete_transient( self::SEEDING_LOCK );
-			return 0;
+		try {
+			$new_id = wp_insert_post(
+				wp_slash(
+					[
+						'post_type'    => 'wp_block',
+						'post_status'  => 'publish',
+						'post_title'   => __( 'Contextual Prompt', 'newspack-popups' ),
+						'post_content' => self::build_pattern_content(),
+					]
+				)
+			);
+			if ( is_wp_error( $new_id ) || ! $new_id ) {
+				return 0;
+			}
+
+			return self::finish_seed( (int) $new_id );
+		} finally {
+			delete_option( self::SEEDING_LOCK_OPTION );
+		}
+	}
+
+	/**
+	 * Claim the right to seed. add_option() is the atomic INSERT: a check
+	 * followed by a write would let two concurrent first loads both pass. The
+	 * claim is timestamped rather than expiring on its own, so a request that
+	 * died mid-seed blocks seeding for seconds rather than for good.
+	 *
+	 * @return bool Whether this caller may seed.
+	 */
+	private static function claim_seeding_lock() {
+		if ( add_option( self::SEEDING_LOCK_OPTION, time(), '', false ) ) {
+			return true;
+		}
+
+		$claimed = (int) get_option( self::SEEDING_LOCK_OPTION, 0 );
+		if ( $claimed && time() - $claimed < self::SEEDING_LOCK_TTL ) {
+			return false;
+		}
+
+		delete_option( self::SEEDING_LOCK_OPTION );
+
+		return (bool) add_option( self::SEEDING_LOCK_OPTION, time(), '', false );
+	}
+
+	/**
+	 * Record the pattern just inserted, unless another request recorded a live one
+	 * while it was being written. The record is what every instance is made
+	 * against, so a losing seeder adopts that pattern and drops its own: keeping
+	 * it would leave a pattern nothing manages, and instances nothing can repair.
+	 * A record pointing at nothing is the stale one this call is replacing.
+	 *
+	 * The delete guard denies the recorded id only, so the orphan is deletable —
+	 * and wp_delete_post() checks no capability in any case.
+	 *
+	 * @param int $new_id The inserted pattern post ID.
+	 *
+	 * @return int The pattern ID to use.
+	 */
+	private static function finish_seed( $new_id ) {
+		$recorded = (int) get_option( self::OPTION_PATTERN_ID, 0 );
+		if ( $recorded && $recorded !== $new_id && 'wp_block' === get_post_type( $recorded ) ) {
+			wp_delete_post( $new_id, true );
+			return $recorded;
 		}
 
 		update_option( self::OPTION_PATTERN_ID, $new_id );
-		delete_transient( self::SEEDING_LOCK );
 
-		return (int) $new_id;
+		return $new_id;
 	}
 
 	/**
@@ -191,9 +249,11 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 	 *
 	 * @param int    $pattern_id Pattern post ID.
 	 * @param string $content    Serialized block markup.
+	 *
+	 * @return bool Whether the write landed.
 	 */
 	public static function save_pattern_content( $pattern_id, $content ) {
-		self::update_pattern_post(
+		return self::update_pattern_post(
 			[
 				'ID'           => $pattern_id,
 				'post_content' => $content,
@@ -208,6 +268,9 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 	 * content and repair would then stabilize on the mangled copy.
 	 *
 	 * @param array $postarr Post data, unslashed.
+	 *
+	 * @return bool Whether the write landed. Callers record state describing the
+	 *              stored pattern, which a failed write leaves untouched.
 	 */
 	private static function update_pattern_post( $postarr ) {
 		// Restored rather than re-initialized unconditionally: a context that never
@@ -218,12 +281,14 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 		}
 
 		try {
-			wp_update_post( wp_slash( $postarr ) );
+			$result = wp_update_post( wp_slash( $postarr ) );
 		} finally {
 			if ( $filtered ) {
 				kses_init_filters();
 			}
 		}
+
+		return ! is_wp_error( $result ) && (bool) $result;
 	}
 
 	/**
@@ -299,24 +364,26 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 			return;
 		}
 
-		self::save_pattern_content( $pattern_id, $content );
-
 		// The record describes the stored pattern's donate child, so it is only
 		// truthful once that pattern has actually been written.
-		if ( null !== $stamp ) {
+		if ( self::save_pattern_content( $pattern_id, $content ) && null !== $stamp ) {
 			self::record_stamp( $stamp );
 		}
 	}
 
 	/**
-	 * Restore the bound paragraph's name. It is the key every instance's copy is
-	 * stored under, not a label: renaming it in the pattern editor would orphan
-	 * the copy of every prompt already written, so the seeded name is pinned back.
+	 * Hold the pattern to exactly one bound field: the copy paragraph. Its name is
+	 * the key every instance's copy is stored under, not a label — renaming it in
+	 * the pattern editor would orphan the copy of every prompt already written, so
+	 * the seeded name is pinned back. Overrides enabled on any other child would
+	 * share that one key, so their bindings are dropped.
 	 *
 	 * @param array $blocks Parsed blocks, mutated in place.
-	 * @return bool Whether a name was restored.
+	 * @return bool Whether anything changed.
 	 */
 	private static function repin_bound_name( &$blocks ) {
+		$changed = false;
+
 		foreach ( $blocks as $index => $block ) {
 			$bound = false;
 			foreach ( $block['attrs']['metadata']['bindings'] ?? [] as $binding ) {
@@ -326,17 +393,47 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 				}
 			}
 
-			if ( $bound && self::BOUND_NAME !== ( $block['attrs']['metadata']['name'] ?? '' ) ) {
-				$blocks[ $index ]['attrs']['metadata']['name'] = self::BOUND_NAME;
-				return true;
+			if ( $bound && 'core/paragraph' === ( $block['blockName'] ?? '' ) ) {
+				if ( self::BOUND_NAME !== ( $block['attrs']['metadata']['name'] ?? '' ) ) {
+					$blocks[ $index ]['attrs']['metadata']['name'] = self::BOUND_NAME;
+					$changed = true;
+				}
+			} elseif ( $bound ) {
+				self::strip_overrides_binding( $blocks[ $index ] );
+				$changed = true;
 			}
 
 			if ( ! empty( $block['innerBlocks'] ) && self::repin_bound_name( $blocks[ $index ]['innerBlocks'] ) ) {
-				return true;
+				$changed = true;
 			}
 		}
 
-		return false;
+		return $changed;
+	}
+
+	/**
+	 * Drop a block's pattern-overrides binding, and the name that keyed it once
+	 * nothing else binds by it. Bindings from other sources are the publisher's.
+	 *
+	 * @param array $block Parsed block, mutated in place.
+	 */
+	private static function strip_overrides_binding( &$block ) {
+		$bindings = $block['attrs']['metadata']['bindings'];
+		foreach ( $bindings as $key => $binding ) {
+			if ( 'core/pattern-overrides' === ( $binding['source'] ?? '' ) ) {
+				unset( $bindings[ $key ] );
+			}
+		}
+
+		if ( ! empty( $bindings ) ) {
+			$block['attrs']['metadata']['bindings'] = $bindings;
+			return;
+		}
+
+		unset( $block['attrs']['metadata']['bindings'], $block['attrs']['metadata']['name'] );
+		if ( empty( $block['attrs']['metadata'] ) ) {
+			unset( $block['attrs']['metadata'] );
+		}
 	}
 
 	/**

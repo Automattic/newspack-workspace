@@ -41,12 +41,16 @@ const CHILD_LOCK = { move: true, remove: true };
  * the store into another pass.
  *
  * @param {Object[]} blocks Block tree.
- * @return {{remove: string[], stripGroupLock: string[], pinTemplateLock: string[], lockChildren: string[]}} The corrections.
+ * @return {{remove: string[], unlockRemovals: string[], stripGroupLock: string[], pinTemplateLock: string[], lockChildren: string[]}} The corrections.
  */
 export const planPromptCorrections = blocks => {
 	const cards = findPromptCards( blocks );
+	const surplus = cards.slice( 1 );
 	const plan = {
-		remove: cards.slice( 1 ).map( card => card.clientId ),
+		remove: surplus.map( card => card.clientId ),
+		// A card pasted out of the pattern editor carries the pattern's own lock,
+		// which the store honours: removal would silently do nothing.
+		unlockRemovals: surplus.filter( card => card.attributes?.lock?.remove ).map( card => card.clientId ),
 		stripGroupLock: [],
 		pinTemplateLock: [],
 		lockChildren: [],
@@ -141,7 +145,11 @@ export const registerContextualPromptCardGuard = () => {
 			return;
 		}
 
-		const { updateBlockAttributes, removeBlocks } = dispatch( blockEditorStore );
+		const {
+			updateBlockAttributes,
+			removeBlocks,
+			__unstableMarkNextChangeAsNotPersistent: markNextChangeAsNotPersistent,
+		} = dispatch( blockEditorStore );
 
 		const reconcile = createPromptCardHold( {
 			getBlocks: () => select( blockEditorStore ).getBlocks(),
@@ -153,24 +161,44 @@ export const registerContextualPromptCardGuard = () => {
 					} ),
 					patternId: PATTERN_ID,
 				} ),
+			// Nothing the guard does is the publisher's edit: marking each dispatch
+			// not-persistent keeps it out of the undo stack and off a freshly opened
+			// post's dirty flag, so undoing a paste pops the paste itself.
 			apply: plan => {
 				if ( plan.stripGroupLock.length ) {
+					markNextChangeAsNotPersistent();
 					updateBlockAttributes( plan.stripGroupLock, { lock: undefined } );
 				}
 				if ( plan.pinTemplateLock.length ) {
+					markNextChangeAsNotPersistent();
 					updateBlockAttributes( plan.pinTemplateLock, { templateLock: 'insert' } );
 				}
 				if ( plan.lockChildren.length ) {
+					markNextChangeAsNotPersistent();
 					updateBlockAttributes( plan.lockChildren, { lock: { ...CHILD_LOCK } } );
 				}
 				if ( plan.remove.length ) {
+					if ( plan.unlockRemovals.length ) {
+						markNextChangeAsNotPersistent();
+						updateBlockAttributes( plan.unlockRemovals, { lock: undefined } );
+					}
 					// selectPrevious would move the caret off whatever the publisher was
 					// doing when the copy landed.
+					markNextChangeAsNotPersistent();
 					removeBlocks( plan.remove, false );
-					dispatch( 'core/notices' ).createNotice( 'info', __( 'Only one Contextual Prompt can be added per post.', 'newspack-popups' ), {
-						type: 'snackbar',
-						id: NOTICE_ID,
-					} );
+					// The store can still refuse — a locked ancestor, a template — and a
+					// notice about a card the post visibly still carries would be a lie.
+					const removed = plan.remove.some( clientId => ! select( blockEditorStore ).getBlock( clientId ) );
+					if ( removed ) {
+						dispatch( 'core/notices' ).createNotice(
+							'info',
+							__( 'Only one Contextual Prompt can be added per post.', 'newspack-popups' ),
+							{
+								type: 'snackbar',
+								id: NOTICE_ID,
+							}
+						);
+					}
 				}
 			},
 		} );

@@ -81,7 +81,8 @@ export const isPromptCard = ( name, attributes ) => isPromptInstance( name, attr
  *
  * A card is never descended into: an instance carries the pattern's own
  * marker-classed Group as an inner block, which is the same card, not a second
- * one.
+ * one. Neither is any other synced pattern: its content is not this post's, and
+ * a prompt is never nested inside one.
  *
  * @param {Object[]} blocks Block tree.
  * @return {Object[]} The prompt cards.
@@ -92,6 +93,9 @@ export const findPromptCards = blocks => {
 		for ( const block of list || [] ) {
 			if ( isPromptCard( block?.name, block?.attributes ) ) {
 				found.push( block );
+				continue;
+			}
+			if ( 'core/block' === block?.name ) {
 				continue;
 			}
 			walk( block?.innerBlocks );

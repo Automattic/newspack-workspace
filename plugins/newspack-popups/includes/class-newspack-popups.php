@@ -111,6 +111,10 @@ final class Newspack_Popups {
 		include_once __DIR__ . '/class-newspack-segments-model.php';
 		include_once __DIR__ . '/class-newspack-popups-presets.php';
 		include_once __DIR__ . '/class-newspack-popups-contextual-prompt-pattern.php';
+		// Registered whether or not the feature is on: rolling the flag back must
+		// not leave the pattern deletable, since deleting it and re-enabling would
+		// orphan every instance a site already published.
+		Newspack_Popups_Contextual_Prompt_Pattern::init_protection();
 		if ( self::is_contextual_prompts_enabled() ) {
 			Newspack_Popups_Contextual_Prompt_Pattern::init();
 		}

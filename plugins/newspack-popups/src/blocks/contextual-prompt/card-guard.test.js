@@ -23,7 +23,13 @@ afterEach( () => {
 
 const CHILD_LOCK = { move: true, remove: true };
 
-const instance = ( clientId, innerBlocks = [] ) => ( { clientId, name: 'core/block', attributes: { ref: PATTERN_ID }, innerBlocks } );
+const instance = ( clientId, innerBlocks = [], attributes = {} ) => ( {
+	clientId,
+	name: 'core/block',
+	attributes: { ref: PATTERN_ID, ...attributes },
+	innerBlocks,
+} );
+const foreignPattern = ( clientId, innerBlocks = [] ) => ( { clientId, name: 'core/block', attributes: { ref: PATTERN_ID + 1 }, innerBlocks } );
 const detached = ( clientId, innerBlocks = [], attributes = {} ) => ( {
 	clientId,
 	name: 'core/group',
@@ -58,6 +64,35 @@ describe( 'planPromptCorrections: surplus cards', () => {
 		const { planPromptCorrections } = loadGuard();
 		expect( planPromptCorrections( [ instance( 'card', [ settled( 'pattern-content' ) ] ) ] ).remove ).toEqual( [] );
 	} );
+
+	// Another synced pattern's content is not the post's to correct, and a
+	// marker-classed Group inside one is that pattern's business.
+	it( 'never descends into a foreign synced pattern', () => {
+		const { planPromptCorrections } = loadGuard();
+		const blocks = [ instance( 'card' ), foreignPattern( 'other', [ settled( 'lookalike' ) ] ) ];
+
+		expect( planPromptCorrections( blocks ).remove ).toEqual( [] );
+	} );
+
+	// A card copied out of the pattern editor carries the pattern's own lock, and
+	// the store honours it: removal would silently do nothing.
+	it.each( [
+		[ 'a locked detached copy', [ instance( 'first' ), detached( 'second', [ paragraph( 'copy' ) ], { lock: CHILD_LOCK } ) ] ],
+		[ 'a locked instance', [ instance( 'first' ), instance( 'second', [], { lock: CHILD_LOCK } ) ] ],
+	] )( 'unlocks %s before removing it', ( label, blocks ) => {
+		const { planPromptCorrections } = loadGuard();
+		const plan = planPromptCorrections( blocks );
+
+		expect( plan.remove ).toEqual( [ 'second' ] );
+		expect( plan.unlockRemovals ).toEqual( [ 'second' ] );
+	} );
+
+	it( 'unlocks nothing a removal does not need', () => {
+		const { planPromptCorrections } = loadGuard();
+		const blocks = [ instance( 'first' ), settled( 'second' ), instance( 'third', [], { lock: { move: true, remove: false } } ) ];
+
+		expect( planPromptCorrections( blocks ).unlockRemovals ).toEqual( [] );
+	} );
 } );
 
 describe( 'planPromptCorrections: detached card locks', () => {
@@ -66,6 +101,7 @@ describe( 'planPromptCorrections: detached card locks', () => {
 
 		expect( planPromptCorrections( [ settled( 'card' ) ] ) ).toEqual( {
 			remove: [],
+			unlockRemovals: [],
 			stripGroupLock: [],
 			pinTemplateLock: [],
 			lockChildren: [],
@@ -126,7 +162,13 @@ describe( 'planPromptCorrections: detached card locks', () => {
 		const { planPromptCorrections } = loadGuard();
 		const card = instance( 'card', [ detached( 'pattern-content', [ paragraph( 'copy', {} ) ], { lock: CHILD_LOCK } ) ] );
 
-		expect( planPromptCorrections( [ card ] ) ).toEqual( { remove: [], stripGroupLock: [], pinTemplateLock: [], lockChildren: [] } );
+		expect( planPromptCorrections( [ card ] ) ).toEqual( {
+			remove: [],
+			unlockRemovals: [],
+			stripGroupLock: [],
+			pinTemplateLock: [],
+			lockChildren: [],
+		} );
 	} );
 
 	// The surplus is on its way out; correcting it would write attributes onto
