@@ -1,7 +1,8 @@
 <?php
 /**
- * Promotional URL targets: scan content for modal-checkout-compatible blocks
- * and derive the effective config a promotional URL must match (NPPD-1707).
+ * Promotional URL targets: the server-side knowledge the promo link generator
+ * needs so it only emits URLs that actually trigger the modal checkout
+ * (NPPD-1707).
  *
  * @package Newspack
  */
@@ -11,9 +12,12 @@ namespace Newspack;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Finds pages/posts containing Checkout Button or Donate blocks compatible
- * with a given plan, and derives per-block effective config so the generator
- * UI can only emit URLs that will actually trigger the modal checkout.
+ * Server-side knowledge for the promo link generator: pages carrying Donate
+ * blocks (donation links must target one, with the effective per-block config),
+ * and the product-family/picker facts that decide which plan children a
+ * product link may name. Product links themselves work on any URL —
+ * newspack-blocks renders the checkout button for the requested product when
+ * the trigger params are present.
  */
 final class Promo_Url_Targets {
 
@@ -249,63 +253,6 @@ final class Promo_Url_Targets {
 	}
 
 	/**
-	 * Derive the effective config of a Checkout Button block relative to a plan
-	 * family. Returns the ids the block's data-checkout JSON will emit at render
-	 * time — the JS URL trigger matches against those, not the raw attributes
-	 * (variable-locked buttons collapse product onto the variation in view.php).
-	 *
-	 * @param array $attrs  Block attributes from parse_blocks().
-	 * @param array $family See get_product_family().
-	 * @return array|null Effective config, or null when the block doesn't match.
-	 */
-	public static function derive_checkout_button_config( $attrs, $family ) {
-		$block_product   = isset( $attrs['product'] ) ? (int) $attrs['product'] : 0;
-		$block_variation = isset( $attrs['variation'] ) ? (int) $attrs['variation'] : 0;
-		if ( ! $block_product ) {
-			return null;
-		}
-		$parent     = (int) $family['parent'];
-		$variations = array_map( 'intval', $family['variations'] );
-		$members    = array_map( 'intval', $family['members'] );
-		// Only picker-servable members signal a picker: a grouped plan whose
-		// children the tiers form skips renders no radios at all.
-		$picker_members = isset( $family['picker_members'] ) ? array_map( 'intval', $family['picker_members'] ) : $members;
-
-		$config = null;
-		if ( $block_product === $parent ) {
-			$locked = in_array( $block_variation, array_merge( $variations, $members ), true ) ? $block_variation : 0;
-			$config = [
-				'product_id'           => $parent,
-				'variation_id'         => $locked ? $locked : null,
-				'has_variation_picker' => ! $locked && ( ! empty( $attrs['is_variable'] ) || ! empty( $picker_members ) ),
-			];
-		} elseif ( in_array( $block_product, $variations, true ) ) {
-			$config = [
-				'product_id'           => $parent,
-				'variation_id'         => $block_product,
-				'has_variation_picker' => false,
-			];
-		} elseif ( in_array( $block_product, $members, true ) ) {
-			$config = [
-				'product_id'           => $block_product,
-				'variation_id'         => null,
-				'has_variation_picker' => false,
-			];
-		}
-		if ( ! $config ) {
-			return null;
-		}
-		$behavior                = isset( $attrs['afterSuccessBehavior'] ) ? (string) $attrs['afterSuccessBehavior'] : '';
-		$config['coupon']        = isset( $attrs['coupon'] ) && '' !== (string) $attrs['coupon'] ? (string) $attrs['coupon'] : null;
-		$config['after_success'] = '' !== $behavior ? [
-			'behavior'     => $behavior,
-			'url'          => isset( $attrs['afterSuccessURL'] ) ? (string) $attrs['afterSuccessURL'] : '',
-			'button_label' => isset( $attrs['afterSuccessButtonLabel'] ) ? (string) $attrs['afterSuccessButtonLabel'] : '',
-		] : null;
-		return $config;
-	}
-
-	/**
 	 * Map a resolved Donate renderer configuration to the promo-URL contract.
 	 *
 	 * Encodes the layout-param semantics of triggerDonationForm() in
@@ -448,27 +395,28 @@ final class Promo_Url_Targets {
 	}
 
 	/**
-	 * Pages/posts carrying blocks compatible with the given promo type (and
-	 * product family, for checkout buttons), derived from the cached scan.
+	 * Pages/posts carrying Donate blocks that can take a promotional link,
+	 * derived from the cached scan.
 	 *
-	 * @param string $type       'checkout_button' or 'donate'.
-	 * @param int    $product_id Plan row product ID (checkout_button only).
+	 * Donation links still need a page with a Donate block: the link's
+	 * frequency/amount/layout params only mean something against that block's
+	 * rendered configuration. Product links have no such dependency —
+	 * newspack-blocks serves their trigger on any URL by rendering the
+	 * checkout button for the requested product (see
+	 * Modal_Checkout::maybe_setup_url_triggered_button()).
+	 *
 	 * @return array{targets:array,truncated:bool}
 	 */
-	public static function get_targets( $type, $product_id = 0 ) {
-		$block_name = 'checkout_button' === $type ? 'newspack-blocks/checkout-button' : 'newspack-blocks/donate';
-		$family     = 'checkout_button' === $type ? self::get_product_family( $product_id ) : null;
-		$scanned    = self::get_scanned_blocks( $block_name );
-		$result     = [
+	public static function get_donate_targets() {
+		$scanned = self::get_scanned_blocks( 'newspack-blocks/donate' );
+		$result  = [
 			'targets'   => [],
 			'truncated' => $scanned['truncated'],
 		];
 		foreach ( $scanned['posts'] as $scanned_post ) {
 			$configs = [];
 			foreach ( $scanned_post['attrs'] as $attrs ) {
-				$config = 'checkout_button' === $type
-					? self::derive_checkout_button_config( $attrs, $family )
-					: self::get_donate_target_config( $attrs );
+				$config = self::get_donate_target_config( $attrs );
 				if ( $config ) {
 					$configs[] = $config;
 				}

@@ -8,14 +8,6 @@ import { __, sprintf } from '@wordpress/i18n';
  */
 import type { DonateFrequencySlug, PromoKind } from './promo-url';
 
-export type PromoTargetBlockConfig = {
-	product_id: number;
-	variation_id: number | null;
-	has_variation_picker: boolean;
-	coupon: string | null;
-	after_success: { behavior: string; url: string; button_label: string } | null;
-};
-
 export type DonateFrequencyConfig = {
 	enabled: boolean;
 	amounts: number[];
@@ -30,20 +22,29 @@ export type PromoTargetDonateConfig = {
 	minimum: number;
 };
 
-export type PromoTarget = {
+export type PromoDonateTarget = {
 	id: number;
 	title: string;
 	url: string;
-	blocks: PromoTargetBlockConfig[] | PromoTargetDonateConfig[];
+	blocks: PromoTargetDonateConfig[];
 };
 
-export type PromoTargetsResponse = {
-	targets: PromoTarget[];
+// Donation links must target a page carrying a Donate block.
+export type DonateTargetsResponse = {
+	targets: PromoDonateTarget[];
 	truncated: boolean;
-	// Children a target page's picker can actually serve — for a grouped plan
-	// this excludes children the tiers form skips (non-subscription, private).
-	eligible_children?: number[];
 };
+
+// Product links work over any URL; the server supplies the homepage default
+// and which plan children a link may name.
+export type ProductPromoContext = {
+	homepage: { id: number; title: string; url: string };
+	// Children a picker can actually serve — for a grouped plan this excludes
+	// children the tiers form skips (non-subscription, private).
+	eligible_children: number[];
+};
+
+export type PromoPageChoice = { value: string; label: string; url: string };
 
 const FREQUENCY_LABELS: Record< DonateFrequencySlug, string > = {
 	once: __( 'One-time', 'newspack-plugin' ),
@@ -52,23 +53,12 @@ const FREQUENCY_LABELS: Record< DonateFrequencySlug, string > = {
 };
 
 /**
- * Child-product choices for a plan row, constrained to what the chosen page's
- * blocks accept. Returns nothing until a page is chosen, since the blocks on
- * that page decide which children a link can name. The "reader chooses" option
- * appears only when a block renders a picker.
- *
- * `eligibleChildren` (from the server) narrows the picker's options to children
- * its form will actually render: a grouped plan can bundle children the tiers
- * form skips, and offering one of those would emit a URL matching no radio.
+ * Child-product choices for a plan row. The "reader chooses" option opens the
+ * plan's picker over the page, so it is offered whenever that picker can render
+ * at least one option: always for a variable plan, and for a grouped plan only
+ * when the tiers form serves a child (`eligibleChildren`, from the server).
  */
-export function getVariationChoices(
-	item: SubscriptionProduct,
-	targetBlocks: PromoTargetBlockConfig[] | null,
-	eligibleChildren?: number[]
-): { value: number | ''; label: string }[] {
-	if ( ! targetBlocks ) {
-		return [];
-	}
+export function getPlanChoices( item: SubscriptionProduct, eligibleChildren: number[] ): { value: number | ''; label: string }[] {
 	const children =
 		item.type === 'grouped'
 			? ( item.bundled_products || [] ).map( product => ( {
@@ -82,22 +72,25 @@ export function getVariationChoices(
 	if ( ! children.length ) {
 		return [];
 	}
-	const pickerServable = eligibleChildren?.length ? children.filter( child => eligibleChildren.includes( child.value as number ) ) : children;
-	const allowed = new Set< number >();
-	let allowChooser = false;
-	for ( const block of targetBlocks ) {
-		if ( block.variation_id ) {
-			allowed.add( block.variation_id );
-		} else if ( block.has_variation_picker ) {
-			allowChooser = true;
-			pickerServable.forEach( child => allowed.add( child.value as number ) );
-		} else if ( block.product_id !== item.id ) {
-			// A button pointing directly at a grouped member.
-			allowed.add( block.product_id );
-		}
+	const allowChooser = item.type === 'grouped' ? eligibleChildren.length > 0 : true;
+	return allowChooser ? [ { value: '' as const, label: __( 'Let the reader choose', 'newspack-plugin' ) }, ...children ] : children;
+}
+
+/**
+ * Resolve the product_id/variation_id a URL must carry for the chosen child.
+ * The reader-chooses option names the parent (the picker opens over the page);
+ * a grouped member is a plain product (the trigger rejects
+ * product_id === variation_id — NPPM-2872 residual quirk); a variation rides
+ * on its parent.
+ */
+export function resolveProductParams( item: SubscriptionProduct, chosenChild: number | '' ): { productId: number; variationId: number | null } {
+	if ( chosenChild === '' ) {
+		return { productId: item.id, variationId: null };
 	}
-	const filtered = children.filter( child => allowed.has( child.value as number ) );
-	return allowChooser ? [ { value: '' as const, label: __( 'Let the reader choose', 'newspack-plugin' ) }, ...filtered ] : filtered;
+	if ( item.type === 'grouped' ) {
+		return { productId: chosenChild, variationId: null };
+	}
+	return { productId: item.id, variationId: chosenChild };
 }
 
 export function getFrequencyChoices( config: PromoTargetDonateConfig | null ): { value: DonateFrequencySlug; label: string }[] {
@@ -181,34 +174,4 @@ export function getValidationError( input: PromoValidationInput ): string | null
 		}
 	}
 	return null;
-}
-
-/**
- * Resolve the product_id/variation_id a page URL must carry so the block on the
- * page can actually serve the chosen child. A member-only button emits a plain
- * product URL — the JS trigger rejects product_id === variation_id (NPPM-2872
- * residual quirk), so that combination must never be produced.
- */
-export function resolvePageProductParams(
-	blocks: PromoTargetBlockConfig[],
-	itemId: number,
-	chosenChild: number | ''
-): { productId: number; variationId: number | null } {
-	if ( chosenChild === '' ) {
-		const parentBlock = blocks.find( block => block.has_variation_picker );
-		return { productId: parentBlock ? parentBlock.product_id : itemId, variationId: null };
-	}
-	const locked = blocks.find( block => block.variation_id === chosenChild );
-	if ( locked ) {
-		return { productId: locked.product_id, variationId: chosenChild };
-	}
-	const member = blocks.find( block => block.variation_id === null && ! block.has_variation_picker && block.product_id === chosenChild );
-	if ( member ) {
-		return { productId: chosenChild, variationId: null };
-	}
-	const picker = blocks.find( block => block.has_variation_picker );
-	if ( picker ) {
-		return { productId: picker.product_id, variationId: chosenChild };
-	}
-	return { productId: itemId, variationId: chosenChild };
 }

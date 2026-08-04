@@ -250,7 +250,13 @@ class Audience_Subscription_Products extends Wizard {
 	}
 
 	/**
-	 * GET pages containing blocks compatible with a promo URL for a plan.
+	 * GET promo-link context for a plan.
+	 *
+	 * Donation links need a page carrying a Donate block, so the donate type
+	 * returns the scanned targets. Product links work over any URL (the
+	 * checkout button is rendered on demand by newspack-blocks), so the
+	 * checkout_button type returns the homepage default plus which plan
+	 * children a link may name.
 	 *
 	 * @param \WP_REST_Request $request The request.
 	 * @return \WP_REST_Response|\WP_Error
@@ -258,18 +264,27 @@ class Audience_Subscription_Products extends Wizard {
 	public function api_get_promo_targets( $request ) {
 		$type       = $request->get_param( 'type' );
 		$product_id = absint( $request->get_param( 'product_id' ) );
-		if ( 'checkout_button' === $type && ! $product_id ) {
+		if ( 'donate' === $type ) {
+			return rest_ensure_response( Promo_Url_Targets::get_donate_targets() );
+		}
+		if ( ! $product_id ) {
 			return new \WP_Error(
 				'newspack_promo_targets_missing_product',
 				esc_html__( 'product_id is required for checkout button targets.', 'newspack-plugin' ),
 				[ 'status' => 400 ]
 			);
 		}
-		$response = Promo_Url_Targets::get_targets( $type, $product_id );
-		if ( 'checkout_button' === $type ) {
-			$response['eligible_children'] = Promo_Url_Targets::get_eligible_children( Promo_Url_Targets::get_product_family( $product_id ) );
-		}
-		return rest_ensure_response( $response );
+		$front_page_id = (int) get_option( 'page_on_front' );
+		return rest_ensure_response(
+			[
+				'homepage'          => [
+					'id'    => $front_page_id,
+					'title' => $front_page_id ? get_the_title( $front_page_id ) : __( 'Homepage', 'newspack-plugin' ),
+					'url'   => home_url( '/' ),
+				],
+				'eligible_children' => Promo_Url_Targets::get_eligible_children( Promo_Url_Targets::get_product_family( $product_id ) ),
+			]
+		);
 	}
 
 	/**

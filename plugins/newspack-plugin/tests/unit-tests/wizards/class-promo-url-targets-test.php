@@ -188,125 +188,6 @@ class Promo_Url_Targets_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Helper to build a test product family.
-	 */
-	private function family() {
-		return [
-			'parent'     => 100,
-			'variations' => [ 101, 102 ],
-			'members'    => [],
-		];
-	}
-
-	/**
-	 * Test deriving config for a parent product button with variation picker.
-	 */
-	public function test_derive_parent_button_with_picker() {
-		$config = Promo_Url_Targets::derive_checkout_button_config(
-			[
-				'product'     => '100',
-				'is_variable' => true,
-			],
-			$this->family()
-		);
-		$this->assertSame( 100, $config['product_id'] );
-		$this->assertNull( $config['variation_id'] );
-		$this->assertTrue( $config['has_variation_picker'] );
-	}
-
-	/**
-	 * Test deriving config for a variation-locked button.
-	 */
-	public function test_derive_variation_locked_button() {
-		$config = Promo_Url_Targets::derive_checkout_button_config(
-			[
-				'product'     => '100',
-				'variation'   => '102',
-				'is_variable' => true,
-			],
-			$this->family()
-		);
-		$this->assertSame( 100, $config['product_id'] );
-		$this->assertSame( 102, $config['variation_id'] );
-		$this->assertFalse( $config['has_variation_picker'] );
-	}
-
-	/**
-	 * Test deriving config for a button pointing directly at a variation.
-	 */
-	public function test_derive_button_pointing_directly_at_variation() {
-		$config = Promo_Url_Targets::derive_checkout_button_config( [ 'product' => '101' ], $this->family() );
-		$this->assertSame( 100, $config['product_id'] );
-		$this->assertSame( 101, $config['variation_id'] );
-	}
-
-	/**
-	 * Test deriving config for a grouped product member button.
-	 */
-	public function test_derive_grouped_member_button_uses_member_id() {
-		$family = [
-			'parent'     => 200,
-			'variations' => [],
-			'members'    => [ 201, 202 ],
-		];
-		$config = Promo_Url_Targets::derive_checkout_button_config( [ 'product' => '201' ], $family );
-		$this->assertSame( 201, $config['product_id'] );
-		$this->assertNull( $config['variation_id'] );
-		$this->assertFalse( $config['has_variation_picker'] );
-	}
-
-	/**
-	 * Test deriving config for a grouped parent button with picker.
-	 */
-	public function test_derive_grouped_parent_button_has_picker() {
-		$family = [
-			'parent'     => 200,
-			'variations' => [],
-			'members'    => [ 201, 202 ],
-		];
-		$config = Promo_Url_Targets::derive_checkout_button_config( [ 'product' => '200' ], $family );
-		$this->assertSame( 200, $config['product_id'] );
-		$this->assertTrue( $config['has_variation_picker'] );
-	}
-
-	/**
-	 * Test that derive_checkout_button_config returns null for unrelated products.
-	 */
-	public function test_derive_returns_null_for_unrelated_product() {
-		$this->assertNull( Promo_Url_Targets::derive_checkout_button_config( [ 'product' => '999' ], $this->family() ) );
-		$this->assertNull( Promo_Url_Targets::derive_checkout_button_config( [], $this->family() ) );
-	}
-
-	/**
-	 * Test that derive_checkout_button_config carries coupon and after_success.
-	 */
-	public function test_derive_carries_coupon_and_after_success() {
-		$config = Promo_Url_Targets::derive_checkout_button_config(
-			[
-				'product'                 => '100',
-				'coupon'                  => 'SPRING20',
-				'afterSuccessBehavior'    => 'custom',
-				'afterSuccessURL'         => 'https://example.com/thanks',
-				'afterSuccessButtonLabel' => 'Continue',
-			],
-			$this->family()
-		);
-		$this->assertSame( 'SPRING20', $config['coupon'] );
-		$this->assertSame( 'custom', $config['after_success']['behavior'] );
-		$this->assertSame( 'https://example.com/thanks', $config['after_success']['url'] );
-		// Default button label alone must not fabricate an after_success config.
-		$plain = Promo_Url_Targets::derive_checkout_button_config(
-			[
-				'product'                 => '100',
-				'afterSuccessButtonLabel' => 'Continue',
-			],
-			$this->family()
-		);
-		$this->assertNull( $plain['after_success'] );
-		$this->assertNull( $plain['coupon'] );
-	}
-
-	/**
 	 * Helper to build a test donate configuration.
 	 *
 	 * @param array $overrides Optional overrides to apply.
@@ -428,52 +309,23 @@ class Promo_Url_Targets_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test that get_targets scans and returns matching pages with derived
-	 * block configs, and reports truncation.
+	 * Test that get_donate_targets keeps its response shape when the
+	 * newspack-blocks plugin isn't available to derive block configs from
+	 * (it isn't, in this suite): pages carrying the block yield no usable
+	 * config, so no target is offered rather than a broken one.
 	 */
-	public function test_get_targets_returns_matching_pages_with_configs() {
+	public function test_get_donate_targets_shape_without_newspack_blocks() {
 		delete_option( Promo_Url_Targets::CACHE_VERSION_OPTION );
-		$page_id = self::factory()->post->create(
-			[
-				'post_type'    => 'page',
-				'post_status'  => 'publish',
-				'post_title'   => 'Support us',
-				'post_content' => '<!-- wp:newspack-blocks/checkout-button {"product":"300"} /-->',
-			]
-		);
 		self::factory()->post->create(
 			[
 				'post_type'    => 'page',
 				'post_status'  => 'publish',
-				'post_content' => '<!-- wp:newspack-blocks/checkout-button {"product":"999"} /-->',
+				'post_content' => '<!-- wp:newspack-blocks/donate /-->',
 			]
 		);
-		$result = Promo_Url_Targets::get_targets( 'checkout_button', 300 );
-		$this->assertCount( 1, $result['targets'] );
-		$this->assertSame( $page_id, $result['targets'][0]['id'] );
-		$this->assertSame( 'Support us', $result['targets'][0]['title'] );
-		$this->assertSame( 300, $result['targets'][0]['blocks'][0]['product_id'] );
+		$result = Promo_Url_Targets::get_donate_targets();
+		$this->assertSame( [], $result['targets'] );
 		$this->assertFalse( $result['truncated'] );
-	}
-
-	/**
-	 * Test that get_targets caches its result until the cache version bumps.
-	 */
-	public function test_get_targets_is_cached_until_version_bump() {
-		delete_option( Promo_Url_Targets::CACHE_VERSION_OPTION );
-		$result_before = Promo_Url_Targets::get_targets( 'checkout_button', 301 );
-		$this->assertCount( 0, $result_before['targets'] );
-		$page_id = self::factory()->post->create(
-			[
-				'post_type'    => 'page',
-				'post_status'  => 'publish',
-				'post_content' => '<!-- wp:newspack-blocks/checkout-button {"product":"301"} /-->',
-			]
-		);
-		// Same version: cached empty result.
-		$this->assertCount( 0, Promo_Url_Targets::get_targets( 'checkout_button', 301 )['targets'] );
-		Promo_Url_Targets::bump_cache_version( $page_id );
-		$this->assertCount( 1, Promo_Url_Targets::get_targets( 'checkout_button', 301 )['targets'] );
 	}
 
 	/**
@@ -521,30 +373,12 @@ class Promo_Url_Targets_Test extends WP_UnitTestCase {
 		$response = rest_get_server()->dispatch( $request );
 		$this->assertSame( 200, $response->get_status() );
 		$data = $response->get_data();
-		$this->assertArrayHasKey( 'targets', $data );
-		$this->assertArrayHasKey( 'truncated', $data );
+		// Product links work over any page, so there are no scanned targets —
+		// just the homepage default and the plan-children context.
+		$this->assertArrayNotHasKey( 'targets', $data );
+		$this->assertArrayHasKey( 'homepage', $data );
+		$this->assertNotEmpty( $data['homepage']['url'] );
 		$this->assertArrayHasKey( 'eligible_children', $data );
-	}
-
-	/**
-	 * Test that a grouped plan whose children the tiers picker cannot serve
-	 * reports no picker, so the UI never offers a "reader chooses" option that
-	 * would resolve to no radio at runtime.
-	 */
-	public function test_derive_grouped_parent_without_picker_members_has_no_picker() {
-		$family = [
-			'parent'         => 200,
-			'variations'     => [],
-			'members'        => [ 201, 202 ],
-			'picker_members' => [],
-		];
-		$config = Promo_Url_Targets::derive_checkout_button_config( [ 'product' => '200' ], $family );
-		$this->assertSame( 200, $config['product_id'] );
-		$this->assertFalse( $config['has_variation_picker'] );
-
-		$family['picker_members'] = [ 201 ];
-		$with_picker              = Promo_Url_Targets::derive_checkout_button_config( [ 'product' => '200' ], $family );
-		$this->assertTrue( $with_picker['has_variation_picker'] );
 	}
 
 	/**

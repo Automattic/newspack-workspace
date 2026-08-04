@@ -1,12 +1,5 @@
-import {
-	getVariationChoices,
-	getFrequencyChoices,
-	getAmountChoices,
-	getDefaultFrequency,
-	getValidationError,
-	resolvePageProductParams,
-} from './promo-url-options';
-import type { PromoTargetBlockConfig, PromoTargetDonateConfig, PromoValidationInput } from './promo-url-options';
+import { getPlanChoices, getFrequencyChoices, getAmountChoices, getDefaultFrequency, getValidationError, resolveProductParams } from './promo-url-options';
+import type { PromoTargetDonateConfig, PromoValidationInput } from './promo-url-options';
 
 const variableItem = {
 	id: 100,
@@ -26,6 +19,8 @@ const groupedItem = {
 	],
 } as unknown as SubscriptionProduct;
 
+const simpleItem = { id: 300, type: 'subscription' } as unknown as SubscriptionProduct;
+
 const donateConfig: PromoTargetDonateConfig = {
 	layout_param: 'frequency',
 	frequencies: {
@@ -37,42 +32,40 @@ const donateConfig: PromoTargetDonateConfig = {
 	minimum: 5,
 };
 
-describe( 'getVariationChoices', () => {
-	it( 'offers nothing until a target page is chosen', () => {
-		// The blocks on the chosen page decide which children a link can name.
-		expect( getVariationChoices( variableItem, null ) ).toEqual( [] );
+describe( 'getPlanChoices', () => {
+	it( 'offers every variation plus the reader-chooses option', () => {
+		// The variable picker renders over any page, so the reader can always
+		// be left to choose.
+		expect( getPlanChoices( variableItem, [ 101, 102 ] ).map( c => c.value ) ).toEqual( [ '', 101, 102 ] );
 	} );
 
-	it( 'constrains to the target blocks and offers chooser only with a picker', () => {
-		const locked: PromoTargetBlockConfig[] = [
-			{ product_id: 100, variation_id: 102, has_variation_picker: false, coupon: null, after_success: null },
-		];
-		expect( getVariationChoices( variableItem, locked ).map( c => c.value ) ).toEqual( [ 102 ] );
+	it( 'offers nothing for a plan with no children', () => {
+		expect( getPlanChoices( simpleItem, [] ) ).toEqual( [] );
+	} );
 
-		const picker: PromoTargetBlockConfig[] = [
-			{ product_id: 100, variation_id: null, has_variation_picker: true, coupon: null, after_success: null },
-		];
-		const choices = getVariationChoices( variableItem, picker );
-		expect( choices[ 0 ].value ).toBe( '' );
-		expect( choices.map( c => c.value ) ).toContain( 101 );
+	it( 'offers grouped members, with reader-chooses only when the picker serves one', () => {
+		expect( getPlanChoices( groupedItem, [ 201 ] ).map( c => c.value ) ).toEqual( [ '', 201, 202 ] );
+		// No child is servable by the tiers form, so "let the reader choose"
+		// would open a picker with no options.
+		expect( getPlanChoices( groupedItem, [] ).map( c => c.value ) ).toEqual( [ 201, 202 ] );
+	} );
+
+	it( 'labels grouped members with their price', () => {
+		expect( getPlanChoices( groupedItem, [ 201 ] )[ 1 ].label ).toBe( 'Digital ($10)' );
 	} );
 } );
 
-describe( 'getVariationChoices with server-side eligible children', () => {
-	const pickerBlock: PromoTargetBlockConfig[] = [
-		{ product_id: 200, variation_id: null, has_variation_picker: true, coupon: null, after_success: null },
-	];
-
-	it( 'omits grouped children the target page picker cannot serve', () => {
-		// 202 is bundled but not subscription-typed, so the tiers form renders
-		// no radio for it — offering it would emit a link that matches nothing.
-		const choices = getVariationChoices( groupedItem, pickerBlock, [ 201 ] );
-		expect( choices.map( c => c.value ) ).toEqual( [ '', 201 ] );
+describe( 'resolveProductParams', () => {
+	it( 'names the parent for the reader-chooses option', () => {
+		expect( resolveProductParams( variableItem, '' ) ).toEqual( { productId: 100, variationId: null } );
 	} );
 
-	it( 'falls back to every child when the server sends no eligible list', () => {
-		const choices = getVariationChoices( groupedItem, pickerBlock );
-		expect( choices.map( c => c.value ) ).toEqual( [ '', 201, 202 ] );
+	it( 'rides a variation on its parent', () => {
+		expect( resolveProductParams( variableItem, 102 ) ).toEqual( { productId: 100, variationId: 102 } );
+	} );
+
+	it( 'emits a plain product URL for a grouped member (never product_id === variation_id)', () => {
+		expect( resolveProductParams( groupedItem, 201 ) ).toEqual( { productId: 201, variationId: null } );
 	} );
 } );
 
@@ -96,58 +89,6 @@ describe( 'frequency and amount choices', () => {
 		const onceRow = { period: '' } as unknown as SubscriptionProduct;
 		// `once` is disabled in config, so fall back to default_frequency.
 		expect( getDefaultFrequency( onceRow, donateConfig ) ).toBe( 'month' );
-	} );
-} );
-
-describe( 'resolvePageProductParams', () => {
-	const lockedBlock: PromoTargetBlockConfig = {
-		product_id: 100,
-		variation_id: 102,
-		has_variation_picker: false,
-		coupon: null,
-		after_success: null,
-	};
-	const pickerBlock: PromoTargetBlockConfig = {
-		product_id: 100,
-		variation_id: null,
-		has_variation_picker: true,
-		coupon: null,
-		after_success: null,
-	};
-	const memberBlock: PromoTargetBlockConfig = {
-		product_id: 201,
-		variation_id: null,
-		has_variation_picker: false,
-		coupon: null,
-		after_success: null,
-	};
-
-	it( 'prefers a block locked to the chosen child', () => {
-		expect( resolvePageProductParams( [ pickerBlock, lockedBlock ], 100, 102 ) ).toEqual( {
-			productId: 100,
-			variationId: 102,
-		} );
-	} );
-
-	it( 'emits a plain product URL for a member-only button (never product_id === variation_id)', () => {
-		expect( resolvePageProductParams( [ memberBlock ], 200, 201 ) ).toEqual( {
-			productId: 201,
-			variationId: null,
-		} );
-	} );
-
-	it( 'routes any child through a picker block', () => {
-		expect( resolvePageProductParams( [ pickerBlock ], 100, 101 ) ).toEqual( {
-			productId: 100,
-			variationId: 101,
-		} );
-	} );
-
-	it( 'uses the picker parent for the reader-chooses option', () => {
-		expect( resolvePageProductParams( [ pickerBlock ], 100, '' ) ).toEqual( {
-			productId: 100,
-			variationId: null,
-		} );
 	} );
 } );
 
@@ -178,7 +119,7 @@ describe( 'getValidationError', () => {
 		expect( getValidationError( { ...productBase, hasTarget: false } ) ).toBe( 'Choose a target page.' );
 	} );
 
-	it( 'requires a specific plan option when the page cannot let the reader choose', () => {
+	it( 'requires a specific plan option when the picker cannot let the reader choose', () => {
 		expect( getValidationError( { ...productBase, requiresChild: true, variationId: '' } ) ).toBe(
 			'Choose which plan option the link should check out.'
 		);
