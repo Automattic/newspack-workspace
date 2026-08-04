@@ -21,36 +21,4 @@
 		justify-content: center;
 		width: 100%;
 	}
-
-	&__contextual-prompt-generating {
-		align-items: center;
-		display: flex;
-		font-family: wp-vars.$font-family-body;
-		font-size: wp-vars.$font-size-medium;
-		font-weight: wp-vars.$font-weight-medium;
-		inset: 0;
-		justify-content: center;
-		line-height: wp-vars.$font-line-height-small;
-		position: absolute;
-
-		// Follow the prompt's own text color so the spinner reads on any
-		// background the style settings produce.
-		.components-spinner {
-			color: currentcolor;
-		}
-	}
-}
-
-.wp-block-newspack-popups-contextual-prompt.is-generating-copy {
-	position: relative;
-
-	// Hide the block's own children while copy generates; the centered
-	// spinner + label layers above them. Typing is still possible via an
-	// existing caret — the editor-side guards keep any typed copy over the
-	// generated candidate.
-	> :not(.newspack-popups__contextual-prompt-generating) {
-		opacity: 0;
-		pointer-events: none;
-		user-select: none;
-	}
 }

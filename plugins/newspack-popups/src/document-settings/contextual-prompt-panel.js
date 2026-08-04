@@ -1,11 +1,12 @@
 /**
  * Contextual Prompt editor panel.
  *
- * The prompt is a block living in the post content, so the canvas is the source
- * of truth: copy is edited inline, position is the block's position, and the
- * design comes from block supports. The panel's only jobs are AI generation and
- * managing that one block. Generation and candidate presentation are shared
- * with the block's Copy panel (see the block's candidates module).
+ * The prompt is an instance of the site's synced pattern, living in the post
+ * content: copy is edited inline as a pattern override, position is the
+ * instance's position, and the design comes from the pattern. The panel's only
+ * jobs are AI generation and managing that one instance. Generation and
+ * candidate presentation are shared with the instance inspector (see the
+ * candidates module).
  */
 
 /**
@@ -14,6 +15,7 @@
 import { __, sprintf } from '@wordpress/i18n';
 import { useEffect, useRef, useState } from '@wordpress/element';
 import { useSelect, useDispatch, select as coreSelect } from '@wordpress/data';
+import { createBlock } from '@wordpress/blocks';
 import { PluginDocumentSettingPanel } from '@wordpress/edit-post';
 import {
 	Notice,
@@ -23,39 +25,20 @@ import {
 /**
  * Internal dependencies
  */
-import { createPromptBlock } from '../blocks/contextual-prompt/edit';
-import {
-	POST_TYPE_LABEL,
-	framingForPosition,
-	generateCandidates,
-	toRichTextContent,
-	GenerateButton,
-	CandidateList,
-} from '../blocks/contextual-prompt/candidates';
+import { buildOverrideAttrs, getBoundName, isPromptInstance } from '../blocks/contextual-prompt/instance';
+import { POST_TYPE_LABEL, framingForPosition, generateCandidates, GenerateButton, CandidateList } from '../blocks/contextual-prompt/candidates';
 
-const BLOCK_NAME = 'newspack-popups/contextual-prompt';
-
-// The copy paragraph, wherever it sits in the prompt's structure.
-const findCopyBlock = blocks => {
-	for ( const block of blocks ) {
-		if ( 'core/paragraph' === block.name ) {
-			return block;
-		}
-		const found = findCopyBlock( block.innerBlocks || [] );
-		if ( found ) {
-			return found;
-		}
-	}
-	return null;
-};
+const PATTERN_ID = Number( window.newspackPopupsContextualPrompt?.patternId || 0 );
 
 const ContextualPromptPanel = () => {
-	const { postId, postType, blockCount, instance, instanceFraming } = useSelect( select => {
+	const { postId, postType, blockCount, instance, instanceFraming, patternContent } = useSelect( select => {
 		const editor = select( 'core/editor' );
 		const blockEditor = select( 'core/block-editor' );
 		const blocks = blockEditor.getBlocks() || [];
 		// The prompt can sit anywhere, including nested inside a group or columns.
-		const promptClientId = blockEditor.getClientIdsWithDescendants().find( clientId => BLOCK_NAME === blockEditor.getBlockName( clientId ) );
+		const promptClientId = blockEditor
+			.getClientIdsWithDescendants()
+			.find( clientId => isPromptInstance( blockEditor.getBlockName( clientId ), blockEditor.getBlockAttributes( clientId ) ) );
 		const topLevelIndex = promptClientId ? blocks.findIndex( block => promptClientId === block.clientId ) : -1;
 		return {
 			postId: editor.getCurrentPostId(),
@@ -66,6 +49,8 @@ const ContextualPromptPanel = () => {
 			// top/mid/end choice is only on offer before the first insert. A nested
 			// prompt can't be bucketed, matching get_placement()'s 'unknown'.
 			instanceFraming: -1 === topLevelIndex ? null : framingForPosition( topLevelIndex, blocks.length ),
+			// Copy is stored under the key the pattern names.
+			patternContent: PATTERN_ID ? select( 'core' ).getEntityRecord( 'postType', 'wp_block', PATTERN_ID )?.content?.raw ?? '' : '',
 		};
 	}, [] );
 
@@ -101,8 +86,9 @@ const ContextualPromptPanel = () => {
 	const optedIn = window.newspackPopupsContextualPrompt?.enabled;
 	const isPrompt = 'newspack_popups_cpt' === postType;
 
-	// Hidden until an administrator opts the site into AI use; never on a prompt.
-	if ( ! optedIn || isPrompt ) {
+	// Hidden until an administrator opts the site into AI use; never on a prompt,
+	// and never without the pattern every instance references.
+	if ( ! optedIn || isPrompt || ! PATTERN_ID ) {
 		return null;
 	}
 
@@ -164,14 +150,12 @@ const ContextualPromptPanel = () => {
 	};
 
 	const applyCandidate = candidate => {
+		const overrideAttrs = buildOverrideAttrs( getBoundName( patternContent ), candidate.body );
 		if ( instance ) {
-			const copyBlock = findCopyBlock( instance.innerBlocks );
-			if ( copyBlock ) {
-				updateBlockAttributes( copyBlock.clientId, { content: toRichTextContent( candidate.body ) } );
-			}
+			updateBlockAttributes( instance.clientId, overrideAttrs );
 			selectBlock( instance.clientId );
 		} else {
-			insertBlock( createPromptBlock( candidate.body ), positionForFraming( candidate.framing ) );
+			insertBlock( createBlock( 'core/block', { ref: PATTERN_ID, ...overrideAttrs } ), positionForFraming( candidate.framing ) );
 		}
 		setCandidates( [] );
 	};

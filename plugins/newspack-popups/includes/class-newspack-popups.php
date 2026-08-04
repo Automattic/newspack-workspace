@@ -805,15 +805,9 @@ final class Newspack_Popups {
 			return;
 		}
 
-		// The blocks bundle also loads in the widgets editor, Site Editor and
-		// customizer, where the Contextual Prompt block cannot be authored: it
-		// needs the core/editor post context. Only post-editor screens carry a
-		// post type, and the generation API only accepts the popups-supported
-		// post types. The block still registers everywhere the feature is on, so
-		// the Site Editor lists it under Styles > Blocks — which is where the
-		// wizard's block-theme handoff sends publishers to style it.
-		$screen                   = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
-		$is_supported_post_editor = $screen && ! empty( $screen->post_type ) && in_array( $screen->post_type, Newspack_Popups_Model::get_default_popup_post_types(), true );
+		// The rollout flag plus the admin opt-in: nothing Contextual Prompts is
+		// exposed, and no pattern is seeded, before the AI disclosure is accepted.
+		$contextual_prompts_enabled = self::is_contextual_prompts_enabled() && Newspack_Popups_Settings::is_ai_copy_assistant_enabled();
 
 		$blocks_asset = require $blocks_asset_path;
 		\wp_enqueue_script(
@@ -832,29 +826,17 @@ final class Newspack_Popups {
 				'endpoint'                      => '/newspack-popups/v1/prompts',
 				'post_type'                     => self::NEWSPACK_POPUPS_CPT,
 				'is_prompt'                     => self::NEWSPACK_POPUPS_CPT == get_post_type(),
-				// Gates client-side registration of the Contextual Prompt block:
-				// the rollout flag plus the admin opt-in, so nothing registers
-				// before the AI disclosure is accepted.
-				'contextual_prompts_enabled'    => self::is_contextual_prompts_enabled() && Newspack_Popups_Settings::is_ai_copy_assistant_enabled(),
-				// Whether this screen can author one. Registration is wider than
-				// insertion so the Site Editor can style the block, but only a
-				// supported post editor offers it in the inserter.
-				'contextual_prompts_insertable' => $is_supported_post_editor,
-				// So the editor previews the Contextual Prompt CTA in the same
-				// accent the front end resolves at render.
-				'accent_color'                  => Newspack_Popups_Contextual_Prompt_Pattern::get_accent_color(),
+				// Gates the Contextual Prompt inspector on the client.
+				'contextual_prompts_enabled'    => $contextual_prompts_enabled,
+				// The pattern every Contextual Prompt instance references, which is
+				// how the editor recognizes one.
+				'contextual_prompts_pattern_id' => $contextual_prompts_enabled ? Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id() : 0,
 				// The edited content's own noun ("post", "page", "listing"…), so
 				// prompt UI strings speak the publisher's language.
 				'post_type_label'               => self::get_current_post_type_label(),
 				// The label as the post type declares it, for headings; recasing
 				// the lowercased noun client-side would mis-case some locales.
 				'post_type_heading'             => self::get_current_post_type_heading(),
-				// Whether the Contextual Prompt CTA is the native donate block
-				// or a plain button.
-				'donations_native'              => Newspack_Popups_Contextual_Prompt_Pattern::use_donate_block(),
-				// Default target for the plain-button CTA: the donor landing
-				// page, when one is configured in Campaigns settings.
-				'donor_landing_url'             => self::get_donor_landing_url(),
 			]
 		);
 
@@ -941,11 +923,16 @@ final class Newspack_Popups {
 				// The script also carries the long-standing "Disable prompts" panel,
 				// so only the Contextual Prompt data is gated on the rollout flag.
 				if ( self::is_contextual_prompts_enabled() ) {
+					$opted_in = Newspack_Popups_Settings::is_ai_copy_assistant_enabled();
 					\wp_localize_script(
 						'newspack-popups',
 						'newspackPopupsContextualPrompt',
 						[
-							'enabled'         => Newspack_Popups_Settings::is_ai_copy_assistant_enabled(),
+							'enabled'         => $opted_in,
+							// The pattern instances the panel inserts and updates.
+							// Reading the id seeds it, so it is only asked for once
+							// the site has opted in.
+							'patternId'       => $opted_in ? Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id() : 0,
 							'postTypeLabel'   => self::get_current_post_type_label(),
 							'postTypeHeading' => self::get_current_post_type_heading(),
 						]
