@@ -297,7 +297,7 @@ final class Newspack_Popups_Presets {
 		$field_name = $field['name'];
 
 		// An override comes from the request; saved and default values do not.
-		if ( ! empty( $value ) ) {
+		if ( null !== $value ) {
 			if ( 'string' === $field['type'] && ! is_scalar( $value ) ) {
 				// `?values[body][]=x` would otherwise reach trim() below as an array.
 				$value = null;
@@ -306,7 +306,8 @@ final class Newspack_Popups_Presets {
 			}
 		}
 
-		if ( ! $value ) {
+		// Not `! $value`: "0" is a value an editor can legitimately preview.
+		if ( null === $value || '' === $value || [] === $value ) {
 			$value = isset( $field['value'] ) ? $field['value'] : $field['default'];
 		}
 

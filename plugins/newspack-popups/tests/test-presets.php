@@ -302,6 +302,18 @@ class PresetsTest extends WP_UnitTestCase {
 			Newspack_Popups_Presets::process_user_inputs( '<p>{{body}}</p>', $field ),
 			'Without an override, the default value is used unchanged.'
 		);
+
+		$this->assertSame(
+			'<p>0</p>',
+			Newspack_Popups_Presets::process_user_inputs( '<p>{{body}}</p>', $field, '0' ),
+			'An override of "0" is a value, not an absent one.'
+		);
+
+		$this->assertSame(
+			'<p>Default body</p>',
+			Newspack_Popups_Presets::process_user_inputs( '<p>{{body}}</p>', $field, '' ),
+			'An empty override falls back to the default.'
+		);
 	}
 
 	/**
