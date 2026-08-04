@@ -1,9 +1,4 @@
 /**
- * External dependencies
- */
-import isEqual from 'lodash/isEqual';
-
-/**
  * WordPress dependencies
  */
 import apiFetch from '@wordpress/api-fetch';
@@ -21,9 +16,8 @@ import { moreVertical } from '@wordpress/icons';
 /**
  * Internal dependencies
  */
-import { withWizardScreen, Button, Handoff, Waiting, useUnsavedChangesDialog } from '../../../../../../packages/components/src';
+import { withWizardScreen, Button, Waiting, useUnsavedChangesDialog } from '../../../../../../packages/components/src';
 import ContextualPromptsSettings from './contextual-prompts-settings';
-import StyleDrawer from './style-drawer';
 import './style.scss';
 
 const STATUS_PATH = '/newspack-popups/v1/contextual-prompt/status';
@@ -34,11 +28,6 @@ const PROFILE_PATH = '/newspack-popups/v1/contextual-prompt/profile';
 const MIN_TOGGLE_MS = 2000;
 
 const fieldsToValues = fields => ( fields || [] ).reduce( ( acc, field ) => ( { ...acc, [ field.key ]: field.value ?? '' } ), {} );
-
-// No overrides can arrive as an empty JSON array, and the controls only ever
-// produce plain objects: an array snapshot would never compare equal to one, so
-// edits that net back to nothing would stay dirty forever.
-const normalizeStyles = styles => ( styles && ! Array.isArray( styles ) ? styles : {} );
 
 // Values are scalars, so key/value equality is a full compare.
 const valuesEqual = ( a, b ) => {
@@ -53,20 +42,15 @@ const ContextualPromptsScreen = withWizardScreen( ( { children } ) => <>{ childr
 const ContextualPrompts = props => {
 	const [ status, setStatus ] = useState( null );
 	const [ values, setValues ] = useState( {} );
-	const [ blockStyles, setBlockStyles ] = useState( {} );
 	const [ inFlight, setInFlight ] = useState( false );
 	const [ error, setError ] = useState( null );
 	const [ loaded, setLoaded ] = useState( false );
 	const [ disabling, setDisabling ] = useState( false );
-	// Whether the Edit Styles drawer is open (classic themes only).
-	const [ editingStyles, setEditingStyles ] = useState( false );
 	// The legacy campaigns wizard has no store snackbar outlet, so success feedback
 	// is a local Snackbar (as the advertising placements screen does).
 	const [ snackbar, setSnackbar ] = useState( null );
 	// Values as of the last successful status fetch / profile save, to detect dirt.
 	const savedValuesRef = useRef( {} );
-	// Same, for the block style overrides: the save only sends them when they differ.
-	const savedStylesRef = useRef( {} );
 	// Monotonic id so a slow status response can't clobber state written by a
 	// newer request or mutation.
 	const statusRequestRef = useRef( 0 );
@@ -84,9 +68,6 @@ const ContextualPrompts = props => {
 				const nextValues = fieldsToValues( next.fields );
 				setValues( nextValues );
 				savedValuesRef.current = nextValues;
-				const nextStyles = normalizeStyles( next.styles );
-				setBlockStyles( nextStyles );
-				savedStylesRef.current = nextStyles;
 			} )
 			.catch( err => {
 				if ( requestId === statusRequestRef.current ) {
@@ -112,9 +93,6 @@ const ContextualPrompts = props => {
 				const nextValues = fieldsToValues( next.fields );
 				setValues( nextValues );
 				savedValuesRef.current = nextValues;
-				const nextStyles = normalizeStyles( next.styles );
-				setBlockStyles( nextStyles );
-				savedStylesRef.current = nextStyles;
 				return next;
 			} )
 			.catch( err => {
@@ -138,9 +116,6 @@ const ContextualPrompts = props => {
 				const nextValues = fieldsToValues( next.fields );
 				setValues( nextValues );
 				savedValuesRef.current = nextValues;
-				const nextStyles = normalizeStyles( next.styles );
-				setBlockStyles( nextStyles );
-				savedStylesRef.current = nextStyles;
 				return next;
 			} )
 			.catch( err => {
@@ -149,78 +124,20 @@ const ContextualPrompts = props => {
 			} )
 			.finally( () => setInFlight( false ) );
 	};
-	// The endpoint replaces the whole styles option when the key is present and
-	// leaves it alone when it is absent, so only an actual edit sends it.
-	const stylesDirty = ! isEqual( blockStyles, savedStylesRef.current );
-	const saveProfile = () => {
-		const data = { fields: values };
-		if ( stylesDirty ) {
-			data.styles = blockStyles;
-		}
-		return request( PROFILE_PATH, data ).then( () => setSnackbar( __( 'Settings saved.', 'newspack-plugin' ) ) );
-	};
-	// The endpoint requires fields but only writes the keys it is given, so the
-	// drawer sends an empty object: no profile write at all, and local field
-	// edits stay unsaved and intact, since this path never refreshes values.
-	const saveStyles = () => {
-		setInFlight( true );
-		setError( null );
-		return apiFetch( { path: PROFILE_PATH, method: 'POST', data: { fields: {}, styles: blockStyles } } )
-			.then( next => {
-				statusRequestRef.current++;
-				setStatus( next );
-				const nextStyles = normalizeStyles( next.styles );
-				setBlockStyles( nextStyles );
-				savedStylesRef.current = nextStyles;
-				setSnackbar( __( 'Styles saved.', 'newspack-plugin' ) );
-				return next;
-			} )
-			.catch( err => {
-				setError( err );
-				throw err;
-			} )
-			.finally( () => setInFlight( false ) );
-	};
+	const saveProfile = () => request( PROFILE_PATH, { fields: values } ).then( () => setSnackbar( __( 'Settings saved.', 'newspack-plugin' ) ) );
 	const onSave = () => saveProfile().catch( () => {} );
 	const setValue = ( key, value ) => setValues( previous => ( { ...previous, [ key ]: value } ) );
 
-	const isDirty = ! valuesEqual( values, savedValuesRef.current ) || stylesDirty;
+	const isDirty = ! valuesEqual( values, savedValuesRef.current );
 	// Guard stays active during an in-flight save: the edits are only safe once
 	// a successful response has refreshed the saved snapshot.
 	const { confirmDialog, requestConfirm } = useUnsavedChangesDialog( { when: isDirty } );
-
-	// Closing the drawer with style edits standing goes through the same dialog
-	// as Disable and navigation. A second dialog instance would fight this one:
-	// dismissing it replaces the history location, which the guard's own active
-	// block would catch and answer with a prompt of its own.
-	const discardStyles = () => {
-		setBlockStyles( savedStylesRef.current );
-		setError( null );
-		setEditingStyles( false );
-	};
-	const onStyleDrawerClose = () => {
-		if ( inFlight ) {
-			return;
-		}
-		if ( stylesDirty ) {
-			requestConfirm( discardStyles );
-		} else {
-			setError( null );
-			setEditingStyles( false );
-		}
-	};
-	const onStyleDrawerSave = () =>
-		saveStyles()
-			.then( () => setEditingStyles( false ) )
-			.catch( () => {} );
 
 	// Disabling refreshes state from the response, discarding local edits, so route
 	// it through the same unsaved-changes guard: it confirms only when dirty, and a
 	// separate confirm dialog would fight this one's navigation block.
 	const disable = () => {
 		setDisabling( true );
-		// A drawer left open would come back with the feature on re-enable.
-		setEditingStyles( false );
 		return setEnabled( false )
 			.then( () => setSnackbar( __( 'Contextual Prompts disabled.', 'newspack-plugin' ) ) )
 			.catch( () => {} )
@@ -228,15 +145,6 @@ const ContextualPrompts = props => {
 	};
 	const onDisable = () => requestConfirm( disable );
 	const onEnable = () => setEnabled( true ).then( () => setSnackbar( __( 'Contextual Prompts enabled.', 'newspack-plugin' ) ) );
-
-	// Styles are edited from the header on both theme kinds: a block theme hands
-	// off to the Site Editor, where its block styles live, and a classic theme
-	// opens the drawer hosting the wizard's own controls. The style payload
-	// newspack-popups only started sending carries the theme flag, so an older
-	// one gets neither button.
-	const hasStylePayload = status?.enabled && 'is_block_theme' in status;
-	const showStyleHandoff = hasStylePayload && status.is_block_theme;
-	const showStyleDrawer = hasStylePayload && ! status.is_block_theme;
 
 	const headerActions = status?.enabled ? (
 		<>
@@ -251,27 +159,9 @@ const ContextualPrompts = props => {
 					},
 				] }
 			/>
-			{ showStyleHandoff && (
-				<Handoff
-					url={ status.site_editor_styles_url }
-					bannerText={ __( 'Return to Contextual Prompts after editing the block styles', 'newspack-plugin' ) }
-					bannerButtonText={ __( 'Back to Contextual Prompts', 'newspack-plugin' ) }
-				>
-					{ __( 'Edit Styles', 'newspack-plugin' ) }
-				</Handoff>
-			) }
-			{ showStyleDrawer && (
-				<Button
-					variant="secondary"
-					onClick={ () => {
-						// The page and the drawer share the error state, so a notice
-						// left over from the page must not follow the drawer in.
-						setError( null );
-						setEditingStyles( true );
-					} }
-					disabled={ inFlight }
-				>
-					{ __( 'Edit Styles', 'newspack-plugin' ) }
+			{ status.pattern_edit_url && (
+				<Button variant="secondary" href={ status.pattern_edit_url }>
+					{ __( 'Edit design', 'newspack-plugin' ) }
 				</Button>
 			) }
 			<Button variant="primary" onClick={ onSave } disabled={ inFlight || ! isDirty }>
@@ -316,18 +206,6 @@ const ContextualPrompts = props => {
 		<ContextualPromptsScreen { ...props } headerActions={ headerActions }>
 			{ confirmDialog }
 			{ content }
-			{ editingStyles && showStyleDrawer && (
-				<StyleDrawer
-					status={ status }
-					styles={ blockStyles }
-					error={ error }
-					inFlight={ inFlight }
-					isDirty={ stylesDirty }
-					onChangeStyles={ setBlockStyles }
-					onRequestClose={ onStyleDrawerClose }
-					onSave={ onStyleDrawerSave }
-				/>
-			) }
 			{ snackbar &&
 				createPortal(
 					<div className="newspack-wizard__snackbar-list">

@@ -32,15 +32,11 @@ const TOGGLE_FIELD = {
 const LABEL_FIELD = { ...FIELD_DEFAULTS, key: 'newspack_contextual_prompts_override_label', label: 'Override button label', type: 'text' };
 const URL_FIELD = { ...FIELD_DEFAULTS, key: 'newspack_contextual_prompts_override_url', label: 'Override button URL', type: 'text' };
 
-// The style keys the status payload carries, on a classic theme; the settings
-// body must ignore them, since styles are edited from the wizard header (the
-// drawer or the Site Editor handoff, both owned by the parent tab).
-const STYLE_PAYLOAD = {
-	is_block_theme: false,
-	style_defaults: {},
-	style_palette: [],
-	style_font_sizes: [],
-	site_editor_styles_url: 'https://example.test/wp-admin/site-editor.php?p=%2Fstyles',
+// The pattern keys the status payload carries; the settings body must ignore
+// them, since the design is edited in the pattern from the wizard header.
+const PATTERN_PAYLOAD = {
+	pattern_id: 42,
+	pattern_edit_url: 'https://example.test/wp-admin/site-editor.php?postId=42&postType=wp_block&canvas=edit',
 };
 
 const fieldsToValues = fields => ( fields || [] ).reduce( ( acc, field ) => ( { ...acc, [ field.key ]: field.value ?? '' } ), {} );
@@ -101,10 +97,10 @@ describe( 'ContextualPromptsSettings empty state', () => {
 } );
 
 describe( 'ContextualPromptsSettings enabled body', () => {
-	it( 'renders the two settings sections and no Style section, style payload or not', () => {
+	it( 'renders the two settings sections and no design controls, pattern payload or not', () => {
 		render(
 			<ContextualPromptsSettings
-				status={ { enabled: true, can_manage: true, fields: [ ENABLE_FIELD ], ...STYLE_PAYLOAD } }
+				status={ { enabled: true, can_manage: true, fields: [ ENABLE_FIELD ], ...PATTERN_PAYLOAD } }
 				values={ fieldsToValues( [ ENABLE_FIELD ] ) }
 				error={ null }
 				inFlight={ false }
@@ -115,8 +111,7 @@ describe( 'ContextualPromptsSettings enabled body', () => {
 
 		expect( screen.getByRole( 'heading', { name: 'Publisher Profile' } ) ).toBeInTheDocument();
 		expect( screen.getByRole( 'heading', { name: 'Site-Wide Override' } ) ).toBeInTheDocument();
-		expect( screen.queryByRole( 'heading', { name: 'Style' } ) ).not.toBeInTheDocument();
-		expect( screen.queryByRole( 'button', { name: 'Background' } ) ).toBeNull();
+		expect( screen.queryByRole( 'link', { name: 'Edit design' } ) ).not.toBeInTheDocument();
 	} );
 
 	it( 'shows only the enable toggle while the override is off', () => {
