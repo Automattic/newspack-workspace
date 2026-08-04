@@ -1,7 +1,7 @@
 /**
- * GA4 analytics for the Contextual Prompt block.
+ * GA4 analytics for the Contextual Prompt card.
  *
- * The block is body content, not a Campaigns prompt, so it can't ride the
+ * The card is body content, not a Campaigns prompt, so it can't ride the
  * prompt-keyed `np_prompt_interaction` event (there is no newspack_popup_id).
  * It emits its own `np_contextual_prompt_interaction` event instead, keyed by
  * the article post id, reusing the shared gtag wrapper.
@@ -49,7 +49,7 @@ const payloadFor = ( element, action, extra = {} ) => ( {
 /**
  * Fire `seen` once per prompt, when it has been sufficiently visible.
  *
- * @param {Element} element The prompt block wrapper.
+ * @param {Element} element The prompt card wrapper.
  */
 const trackSeen = element => {
 	if ( 'undefined' === typeof IntersectionObserver ) {
@@ -85,7 +85,7 @@ const trackSeen = element => {
  * Fire `clicked` when the reader activates the CTA — a link (plain-button mode)
  * or the donate block's submit button (native mode).
  *
- * @param {Element} element The prompt block wrapper.
+ * @param {Element} element The prompt card wrapper.
  */
 const trackClicked = element => {
 	element.addEventListener( 'click', event => {
@@ -107,7 +107,7 @@ const trackClicked = element => {
 };
 
 /**
- * Wire up seen/clicked tracking for every Contextual Prompt block on the page.
+ * Wire up seen/clicked tracking for every Contextual Prompt card on the page.
  */
 export const handleContextualPromptAnalytics = () => {
 	document.querySelectorAll( SELECTOR ).forEach( element => {

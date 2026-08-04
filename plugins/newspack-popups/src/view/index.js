@@ -24,8 +24,8 @@ domReady( () => {
 		handleAnalytics( prompts );
 	}
 
-	// The Contextual Prompt block is body content, not a prompt, so its tracking
-	// is independent of the prompt-disabled flag — it runs whenever the block is
+	// The Contextual Prompt card is body content, not a prompt, so its tracking
+	// is independent of the prompt-disabled flag — it runs whenever the card is
 	// on the page.
 	handleContextualPromptAnalytics();
 } );
