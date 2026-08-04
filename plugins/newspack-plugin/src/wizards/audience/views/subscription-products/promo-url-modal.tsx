@@ -16,7 +16,7 @@
 /**
  * WordPress dependencies
  */
-import { __, sprintf } from '@wordpress/i18n';
+import { __ } from '@wordpress/i18n';
 import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
 import { useDispatch } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
@@ -41,7 +41,14 @@ import {
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import { buildPromoUrl } from './promo-url';
 import type { DonateFrequencySlug, PromoUrlSelections } from './promo-url';
-import { getAmountChoices, getDefaultFrequency, getFrequencyChoices, getPlanChoices, getValidationError, resolveProductParams } from './promo-url-options';
+import {
+	getAmountChoices,
+	getDefaultFrequency,
+	getFrequencyChoices,
+	getPlanChoices,
+	getValidationError,
+	resolveProductParams,
+} from './promo-url-options';
 import type { DonateTargetsResponse, ProductPromoContext, PromoPageChoice, PromoTargetDonateConfig } from './promo-url-options';
 
 const API_BASE = '/newspack/v1/wizard/newspack-audience-subscription-products';

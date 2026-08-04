@@ -1,4 +1,11 @@
-import { getPlanChoices, getFrequencyChoices, getAmountChoices, getDefaultFrequency, getValidationError, resolveProductParams } from './promo-url-options';
+import {
+	getPlanChoices,
+	getFrequencyChoices,
+	getAmountChoices,
+	getDefaultFrequency,
+	getValidationError,
+	resolveProductParams,
+} from './promo-url-options';
 import type { PromoTargetDonateConfig, PromoValidationInput } from './promo-url-options';
 
 const variableItem = {
