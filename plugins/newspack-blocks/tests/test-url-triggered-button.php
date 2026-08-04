@@ -146,6 +146,59 @@ class Newspack_Blocks_Test_Url_Triggered_Button extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test that an off-site destination is refused. The thank-you screen assigns
+	 * it to window.location.href once the reader closes the modal, so accepting
+	 * an arbitrary host would be an open redirect fired right after a payment.
+	 */
+	public function test_after_success_url_must_be_on_this_site() {
+		$off_site = Modal_Checkout::build_url_triggered_button_attrs(
+			'subscription',
+			11,
+			0,
+			'',
+			[
+				'behavior' => 'custom',
+				'url'      => 'https://evil.example/phish',
+			]
+		);
+		$this->assertArrayNotHasKey( 'afterSuccessBehavior', $off_site );
+		$this->assertArrayNotHasKey( 'afterSuccessURL', $off_site );
+
+		$on_site = Modal_Checkout::build_url_triggered_button_attrs(
+			'subscription',
+			11,
+			0,
+			'',
+			[
+				'behavior' => 'custom',
+				'url'      => home_url( '/welcome' ),
+			]
+		);
+		$this->assertSame( 'custom', $on_site['afterSuccessBehavior'] );
+		$this->assertSame( home_url( '/welcome' ), $on_site['afterSuccessURL'] );
+	}
+
+	/**
+	 * Test the destination allowlist directly, including the near-miss host that
+	 * a naive prefix check would wave through.
+	 */
+	public function test_sanitize_after_success_url() {
+		$this->assertSame( home_url( '/welcome' ), Modal_Checkout::sanitize_after_success_url( home_url( '/welcome' ) ) );
+		$this->assertSame( '', Modal_Checkout::sanitize_after_success_url( 'https://evil.example/phish' ) );
+		$this->assertSame( '', Modal_Checkout::sanitize_after_success_url( 'https://' . wp_parse_url( home_url(), PHP_URL_HOST ) . '.evil.example/x' ) );
+		$this->assertSame( '', Modal_Checkout::sanitize_after_success_url( '' ) );
+
+		// Sites that genuinely need an off-site destination opt in the host.
+		$allow = function ( $hosts ) {
+			$hosts[] = 'partner.example';
+			return $hosts;
+		};
+		add_filter( 'allowed_redirect_hosts', $allow );
+		$this->assertSame( 'https://partner.example/welcome', Modal_Checkout::sanitize_after_success_url( 'https://partner.example/welcome' ) );
+		remove_filter( 'allowed_redirect_hosts', $allow );
+	}
+
+	/**
 	 * Test that `referrer` is not accepted: a reader arriving from an email or a
 	 * QR code has no same-origin referrer and no history entry to return to.
 	 */

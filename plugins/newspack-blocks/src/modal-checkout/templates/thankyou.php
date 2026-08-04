@@ -47,8 +47,17 @@ if ( ! $is_valid ) {
 
 $is_success             = ! $order->has_status( 'failed' );
 $after_success_behavior = isset( $_GET['after_success_behavior'] ) ? \sanitize_text_field( \wp_unslash( $_GET['after_success_behavior'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-$after_success_url      = isset( $_GET['after_success_url'] ) ? esc_url( \sanitize_url( \wp_unslash( $_GET['after_success_url'] ) ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-$after_success_label    = isset( $_GET['after_success_button_label'] ) ? \sanitize_text_field( \wp_unslash( $_GET['after_success_button_label'] ) ) : \Newspack_Blocks\Modal_Checkout::get_modal_checkout_labels( 'after_success' ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+// The modal assigns window.location.href to this once the reader closes the
+// modal, and anyone can put a URL in the query string, so it is restricted to
+// a host the site allows. See Modal_Checkout::sanitize_after_success_url().
+// phpcs:ignore WordPress.Security.NonceVerification.Recommended, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- sanitize_after_success_url() sanitizes and allowlists the host.
+$after_success_url = isset( $_GET['after_success_url'] ) ? \Newspack_Blocks\Modal_Checkout::sanitize_after_success_url( \wp_unslash( $_GET['after_success_url'] ) ) : '';
+// Without a destination the redirect cannot happen; fall back to simply
+// closing the modal rather than leaving a dead continue button.
+if ( 'custom' === $after_success_behavior && '' === $after_success_url ) {
+	$after_success_behavior = '';
+}
+$after_success_label = isset( $_GET['after_success_button_label'] ) ? \sanitize_text_field( \wp_unslash( $_GET['after_success_button_label'] ) ) : \Newspack_Blocks\Modal_Checkout::get_modal_checkout_labels( 'after_success' ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 $checkout_data          = Checkout_Data::get_checkout_data( $order );
 ?>
 <div class="woocommerce-order">

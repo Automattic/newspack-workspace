@@ -687,8 +687,9 @@ final class Modal_Checkout {
 			$attrs['coupon'] = $coupon;
 		}
 		// A destination is required: 'custom' with nowhere to go leaves the
-		// reader on a continue button that does nothing.
-		$after_success_url = isset( $after_success['url'] ) ? esc_url_raw( $after_success['url'] ) : '';
+		// reader on a continue button that does nothing. Off-site destinations
+		// are refused — see sanitize_after_success_url().
+		$after_success_url = isset( $after_success['url'] ) ? self::sanitize_after_success_url( $after_success['url'] ) : '';
 		if ( isset( $after_success['behavior'] ) && 'custom' === $after_success['behavior'] && '' !== $after_success_url ) {
 			$attrs['afterSuccessBehavior'] = 'custom';
 			$attrs['afterSuccessURL']      = $after_success_url;
@@ -697,6 +698,29 @@ final class Modal_Checkout {
 			}
 		}
 		return $attrs;
+	}
+
+	/**
+	 * Restrict an after-checkout destination to a host the site allows.
+	 *
+	 * The destination travels in the query string all the way to the thank-you
+	 * screen, where the modal reads it and assigns `window.location.href` once
+	 * the reader closes the modal. Anyone can put a URL there, so an unchecked
+	 * value is an open redirect fired the instant a payment completes — on the
+	 * publisher's own domain, which is exactly when a reader would trust a
+	 * "confirm your details" page. wp_validate_redirect() applies the same
+	 * allowlist wp_safe_redirect() uses (the site's host, plus anything added
+	 * via the `allowed_redirect_hosts` filter).
+	 *
+	 * @param string $url Requested destination.
+	 * @return string The destination, or '' when it is not allowed.
+	 */
+	public static function sanitize_after_success_url( $url ) {
+		$url = esc_url_raw( (string) $url );
+		if ( '' === $url ) {
+			return '';
+		}
+		return wp_validate_redirect( $url, '' );
 	}
 
 	/**
@@ -1426,7 +1450,11 @@ final class Modal_Checkout {
 		return array_filter(
 			[
 				'after_success_behavior'     => isset( $request_params['after_success_behavior'] ) ? sanitize_text_field( wp_unslash( $request_params['after_success_behavior'] ) ) : '', // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-				'after_success_url'          => isset( $request_params['after_success_url'] ) ? sanitize_url( wp_unslash( $request_params['after_success_url'] ) ) : '', // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+				// Restricted to an allowed host here as well as at the thank-you
+				// screen, so an off-site destination never travels in the URLs
+				// this builds. array_filter() then drops the empty value, and the
+				// modal falls back to closing rather than redirecting.
+				'after_success_url'          => isset( $request_params['after_success_url'] ) ? self::sanitize_after_success_url( wp_unslash( $request_params['after_success_url'] ) ) : '', // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 				'after_success_button_label' => isset( $request_params['after_success_button_label'] ) ? sanitize_text_field( wp_unslash( $request_params['after_success_button_label'] ) ) : '', // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 				'action_type'                => isset( $request_params['action_type'] ) ? sanitize_text_field( wp_unslash( $request_params['action_type'] ) ) : '', // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			]
