@@ -258,6 +258,41 @@ class PresetsTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * `lists` is the one array-typed override, and it is substituted as JSON, so it
+	 * has to stay a list rather than becoming an object.
+	 */
+	public function test_preset_list_override_stays_a_json_array() {
+		try {
+			$this->login_as_prompt_manager();
+			$_GET['preset'] = 'ras_newsletter_overlay';
+			$_GET['values'] = [ 'lists' => [ '1', '2' ] ];
+
+			$preset = Newspack_Popups_Presets::retrieve_preset_popup( 'ras_newsletter_overlay' );
+			$this->assertIsArray( $preset );
+			$this->assertStringContainsString(
+				'"lists": ["1","2"]',
+				$preset['content'],
+				'An array override is encoded as a JSON array, not an object.'
+			);
+			$subscribe = null;
+			foreach ( \parse_blocks( $preset['content'] ) as $block ) {
+				if ( 'newspack-newsletters/subscribe' === $block['blockName'] ) {
+					$subscribe = $block;
+					break;
+				}
+			}
+			$this->assertNotNull( $subscribe, 'The subscribe block is present.' );
+			$this->assertSame(
+				[ '1', '2' ],
+				$subscribe['attrs']['lists'] ?? null,
+				'The block parses with lists as a PHP list.'
+			);
+		} finally {
+			unset( $_GET['values'], $_GET['preset'] );
+		}
+	}
+
+	/**
 	 * "0" is falsy in PHP but a legitimate thing for an editor to preview, so it has
 	 * to survive the whole path, not just the substitution.
 	 */
