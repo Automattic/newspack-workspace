@@ -129,51 +129,77 @@ final class Reader_Registration {
 	/**
 	 * Whether a user meta key is reserved and therefore not caller-writable.
 	 *
-	 * Covers Newspack reader state and reader data, the identity key Jetpack reads,
-	 * and WordPress account state. Other code trusts these values, so registration
-	 * metadata must not set them. Add to the list when adding a key that gates
-	 * anything.
+	 * Covers Newspack reader state and reader data, the identifiers other systems
+	 * resolve records against, and WordPress account state. Other code trusts these
+	 * values, so registration metadata must not set them. Add to the list when adding
+	 * a key that gates anything.
 	 *
-	 * @param string $meta_key Meta key to check.
+	 * Normalizes the key itself, so it is safe to call with a raw request key.
+	 *
+	 * @param int|string $meta_key Meta key to check. Numeric array keys arrive as int.
 	 * @return bool True if the key is reserved.
 	 */
 	public static function is_reserved_meta_key( $meta_key ): bool {
-		global $wpdb;
-
-		$key = strtolower( trim( (string) $meta_key ) );
+		$key = \sanitize_key( \wp_unslash( (string) $meta_key ) );
 		if ( '' === $key ) {
 			return true;
 		}
 
 		$reserved_prefixes = [ 'np_', '_np_', 'newspack_', '_newspack_' ];
 		foreach ( $reserved_prefixes as $prefix ) {
-			if ( 0 === strpos( $key, $prefix ) ) {
+			if ( str_starts_with( $key, $prefix ) ) {
 				return true;
 			}
 		}
 
 		$reserved_keys = [
-			'wpcom_user_id', // Jetpack resolves subscriptions against this ID, not the local user ID.
+			// Other systems' identifiers, read via get_user_option(), which falls back
+			// to the unprefixed key. WooPayments needs all three.
+			'wpcom_user_id',
+			'_stripe_customer_id',
+			'_wcpay_customer_id',
+			'_wcpay_customer_id_live',
+			'_wcpay_customer_id_test',
+
 			'session_tokens',
 			'_application_passwords',
-			'wp_capabilities',
-			'wp_user_level',
-			'wp_user-settings',
-			'wp_user-settings-time',
 			'default_password_nag',
 		];
+
+		/**
+		 * Filters additional user meta keys that registration metadata may not write.
+		 *
+		 * Additive only: the keys above are always reserved and cannot be removed.
+		 *
+		 * @param string[] $keys Additional reserved meta keys.
+		 */
+		$reserved_keys = array_merge( $reserved_keys, (array) \apply_filters( 'newspack_reserved_registration_meta_keys', [] ) );
+
 		if ( in_array( $key, $reserved_keys, true ) ) {
 			return true;
 		}
 
-		// Table-prefixed, with a per-blog segment on multisite (wp_2_capabilities).
-		// Match the site's prefix and the default, so this holds on any configuration.
+		return self::is_prefixed_account_key( $key );
+	}
+
+	/**
+	 * Whether a key is one of the table-prefixed WordPress account keys.
+	 *
+	 * Prefixed, with a per-blog segment on multisite (wp_2_capabilities). Matches the
+	 * site's prefix and the default, so this holds on any configuration.
+	 *
+	 * @param string $key Sanitized meta key.
+	 * @return bool True if the key is a prefixed account key.
+	 */
+	private static function is_prefixed_account_key( string $key ): bool {
+		global $wpdb;
+
 		$prefixes = [ 'wp_' ];
 		if ( isset( $wpdb->base_prefix ) ) {
-			$prefixes[] = strtolower( $wpdb->base_prefix );
+			$prefixes[] = \sanitize_key( $wpdb->base_prefix );
 		}
 		foreach ( array_unique( $prefixes ) as $prefix ) {
-			if ( preg_match( '/^' . preg_quote( $prefix, '/' ) . '(\d+_)?(capabilities|user_level)$/', $key ) ) {
+			if ( preg_match( '/^' . preg_quote( $prefix, '/' ) . '(\d+_)?(capabilities|user_level|user-settings|user-settings-time)$/', $key ) ) {
 				return true;
 			}
 		}
@@ -545,10 +571,17 @@ final class Reader_Registration {
 			'email'   => $email,
 		];
 
-		// So an integration author can tell a saved key from a discarded one.
-		if ( ! empty( $skipped_keys ) ) {
-			$response_data['skipped_metadata_keys'] = $skipped_keys;
-		}
+		// Always present, so callers need no isset() guard. Prefixed account keys are
+		// logged but not echoed: only the matching one comes back, which would
+		// disclose the table prefix.
+		$response_data['skipped_metadata_keys'] = array_values(
+			array_filter(
+				$skipped_keys,
+				function ( $key ) {
+					return ! self::is_prefixed_account_key( \sanitize_key( \wp_unslash( (string) $key ) ) );
+				}
+			)
+		);
 
 		// Surface verification state so integration callers (via window.newspackReaderActivation.register())
 		// can opt into the post-registration verification modal when their UX warrants it. Callers that

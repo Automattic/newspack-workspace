@@ -912,6 +912,10 @@ class Newspack_Test_Frontend_Registration_Endpoint extends WP_UnitTestCase {
 					'_newspack_group_subscription'       => 'injected-subscription',
 					$caps_key                            => 'administrator',
 					'wpcom_user_id'                      => '12345',
+					'_stripe_customer_id'                => 'cus_attacker',
+					'_wcpay_customer_id'                 => 'cus_attacker',
+					'_wcpay_customer_id_live'            => 'cus_attacker',
+					'_wcpay_customer_id_test'            => 'cus_attacker',
 					'session_tokens'                     => 'injected-session',
 					'_application_passwords'             => 'injected-password',
 					'partner_member_id'                  => 'abc-123',
@@ -937,11 +941,19 @@ class Newspack_Test_Frontend_Registration_Endpoint extends WP_UnitTestCase {
 			get_user_meta( $user->ID, '_newspack_group_subscription', true ),
 			'Request metadata must not be able to write underscore-prefixed Newspack keys.'
 		);
-		$this->assertSame(
-			'',
-			get_user_meta( $user->ID, 'wpcom_user_id', true ),
-			'Request metadata must not be able to claim another WordPress.com identity, which Jetpack resolves paid subscriptions against.'
-		);
+		// Identifiers other systems resolve their own records against. get_user_option()
+		// falls back to the unprefixed key, so an unprefixed write is what gets read.
+		foreach ( [ 'wpcom_user_id', '_stripe_customer_id', '_wcpay_customer_id', '_wcpay_customer_id_live', '_wcpay_customer_id_test' ] as $identity_key ) {
+			$this->assertSame(
+				'',
+				get_user_meta( $user->ID, $identity_key, true ),
+				sprintf( 'Request metadata must not be able to claim another account via "%s".', $identity_key )
+			);
+			$this->assertFalse(
+				get_user_option( $identity_key, $user->ID ),
+				sprintf( 'get_user_option() must not resolve a caller-supplied "%s".', $identity_key )
+			);
+		}
 
 		// Registration authenticates the new reader, so these two may legitimately hold
 		// a real value. What must never happen is a caller-supplied scalar landing in
@@ -963,7 +975,7 @@ class Newspack_Test_Frontend_Registration_Endpoint extends WP_UnitTestCase {
 			'Request metadata must not be able to overwrite the capabilities meta.'
 		);
 		$this->assertArrayNotHasKey( 'administrator', $caps );
-		$this->assertFalse( user_can( $user->ID, 'manage_options' ) );
+		$this->assertNotEmpty( $caps, 'The account keeps the role register_reader() gave it.' );
 
 		// The drop is reported back, so an integration author can tell "saved" from
 		// "silently discarded".
@@ -971,6 +983,14 @@ class Newspack_Test_Frontend_Registration_Endpoint extends WP_UnitTestCase {
 		$this->assertArrayHasKey( 'skipped_metadata_keys', $data );
 		$this->assertContains( 'np_reader_email_verified', $data['skipped_metadata_keys'] );
 		$this->assertNotContains( 'partner_member_id', $data['skipped_metadata_keys'] );
+
+		// The prefixed account keys are blocked but not echoed. Echoing only the one
+		// matching this install would tell an unauthenticated caller the table prefix.
+		$this->assertNotContains(
+			$caps_key,
+			$data['skipped_metadata_keys'],
+			'The response must not disclose which table prefix matched.'
+		);
 
 		// Keys outside the reserved set still write: the metadata contract that
 		// integrations rely on is unchanged.
@@ -1003,13 +1023,20 @@ class Newspack_Test_Frontend_Registration_Endpoint extends WP_UnitTestCase {
 			$wpdb->base_prefix . '3_capabilities',
 			$wpdb->base_prefix . 'user_level',
 			'wpcom_user_id',
+			'_stripe_customer_id',
+			'_wcpay_customer_id',
+			'_wcpay_customer_id_live',
+			'_wcpay_customer_id_test',
 			'session_tokens',
 			'_application_passwords',
 			'wp_user-settings',
 			'wp_user-settings-time',
+			$wpdb->base_prefix . 'user-settings',
+			$wpdb->base_prefix . 'user-settings-time',
 			'default_password_nag',
 			'NP_Reader_Email_Verified',
 			'  np_reader  ',
+			'np\\_reader',
 			'',
 		];
 		foreach ( $reserved as $key ) {
