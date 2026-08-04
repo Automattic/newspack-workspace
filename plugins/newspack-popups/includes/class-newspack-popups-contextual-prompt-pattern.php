@@ -74,7 +74,8 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 	 * @param string[] $caps    Primitive capabilities required of the user.
 	 * @param string   $cap     Capability being checked.
 	 * @param int      $user_id User ID.
-	 * @param array    $args    Context, with the object ID at index 0.
+	 * @param array    $args    Context, with the object ID — or the post itself —
+	 *                          at index 0.
 	 *
 	 * @return string[]
 	 */
@@ -83,8 +84,11 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 			return $caps;
 		}
 
+		// map_meta_cap passes on whatever the caller gave current_user_can(), which
+		// for a post capability may be the post object.
+		$object_id  = (int) ( $args[0] instanceof WP_Post ? $args[0]->ID : $args[0] );
 		$pattern_id = (int) get_option( self::OPTION_PATTERN_ID, 0 );
-		if ( ! $pattern_id || (int) $args[0] !== $pattern_id ) {
+		if ( ! $pattern_id || $object_id !== $pattern_id ) {
 			return $caps;
 		}
 
@@ -193,19 +197,21 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 		$locale   = get_locale();
 		$switched = $locale !== determine_locale() && switch_to_locale( $locale );
 
-		$new_id = wp_insert_post(
-			wp_slash(
-				[
-					'post_type'    => 'wp_block',
-					'post_status'  => 'publish',
-					'post_title'   => __( 'Contextual Prompt', 'newspack-popups' ),
-					'post_content' => self::build_pattern_content(),
-				]
-			)
-		);
-
-		if ( $switched ) {
-			restore_previous_locale();
+		try {
+			$new_id = wp_insert_post(
+				wp_slash(
+					[
+						'post_type'    => 'wp_block',
+						'post_status'  => 'publish',
+						'post_title'   => __( 'Contextual Prompt', 'newspack-popups' ),
+						'post_content' => self::build_pattern_content(),
+					]
+				)
+			);
+		} finally {
+			if ( $switched ) {
+				restore_previous_locale();
+			}
 		}
 
 		return is_wp_error( $new_id ) ? 0 : (int) $new_id;

@@ -297,6 +297,46 @@ class ContextualPromptPatternTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Undone when the insert throws, too: a request left in the site locale would
+	 * run every later string — and the taxonomy registration a locale change
+	 * re-runs — under a language it is not in.
+	 */
+	public function test_a_throwing_insert_still_restores_the_locale() {
+		$restored = 0;
+		add_filter(
+			'determine_locale',
+			function () {
+				return 'fr_FR';
+			}
+		);
+		add_action(
+			'restore_previous_locale',
+			function () use ( &$restored ) {
+				++$restored;
+			}
+		);
+		add_action(
+			'save_post',
+			function () {
+				throw new RuntimeException( 'The insert failed.' );
+			}
+		);
+
+		$thrown = false;
+		try {
+			Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
+		} catch ( RuntimeException $e ) {
+			$thrown = true;
+		}
+
+		// As above: the locale change dropped the prompt CPT's taxonomies.
+		Newspack_Popups::register_cpt();
+
+		$this->assertTrue( $thrown, 'The insert threw.' );
+		$this->assertSame( 1, $restored, 'And the request got its own locale back.' );
+	}
+
+	/**
 	 * A deleted pattern post is re-seeded rather than leaving instances pointing
 	 * at a hole.
 	 */
@@ -347,6 +387,8 @@ class ContextualPromptPatternTest extends WP_UnitTestCase {
 		$id = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
 
 		$this->assertFalse( current_user_can( 'delete_post', $id ) );
+		// Core passes the post itself as often as its id.
+		$this->assertFalse( current_user_can( 'delete_post', get_post( $id ) ) );
 
 		$other = self::factory()->post->create( [ 'post_type' => 'wp_block' ] );
 		$this->assertTrue( current_user_can( 'delete_post', $other ), 'Other synced patterns stay deletable.' );
@@ -364,6 +406,7 @@ class ContextualPromptPatternTest extends WP_UnitTestCase {
 
 		wp_set_current_user( self::factory()->user->create( [ 'role' => 'editor' ] ) );
 		$this->assertFalse( current_user_can( 'edit_post', $id ) );
+		$this->assertFalse( current_user_can( 'edit_post', get_post( $id ) ) );
 		$this->assertTrue( current_user_can( 'edit_post', $other ), 'Other synced patterns stay editable.' );
 
 		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );

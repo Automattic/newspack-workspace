@@ -131,7 +131,7 @@ const ContextualPrompts = props => {
 	const isDirty = ! valuesEqual( values, savedValuesRef.current );
 	// Guard stays active during an in-flight save: the edits are only safe once
 	// a successful response has refreshed the saved snapshot.
-	const { confirmDialog, requestConfirm } = useUnsavedChangesDialog( { when: isDirty } );
+	const { confirmDialog, requestConfirm, allowNextUnload } = useUnsavedChangesDialog( { when: isDirty } );
 
 	// Disabling refreshes state from the response, discarding local edits, so route
 	// it through the same unsaved-changes guard: it confirms only when dirty, and a
@@ -163,6 +163,9 @@ const ContextualPrompts = props => {
 				bannerButtonText,
 			},
 		} ).then( response => {
+			// The edits are still pending, so the guard is still armed: stand it
+			// down for this navigation, which the discard dialog already approved.
+			allowNextUnload();
 			window.location.href = response.HandoffLink;
 		} );
 

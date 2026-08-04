@@ -37,6 +37,14 @@ const PROFILE_FIELD = {
 
 const PATTERN_EDIT_URL = 'https://example.test/wp-admin/site-editor.php?postId=42&postType=wp_block&canvas=edit';
 
+// A cancelable beforeunload: prevented means the browser would draw its native
+// "Leave site?" prompt.
+const fireBeforeUnload = () => {
+	const event = new Event( 'beforeunload', { cancelable: true } );
+	window.dispatchEvent( event );
+	return event;
+};
+
 const patternStatus = () => ( {
 	enabled: true,
 	can_manage: true,
@@ -151,11 +159,16 @@ describe( 'ContextualPrompts tab', () => {
 		fireEvent.click( screen.getByRole( 'button', { name: 'Edit design' } ) );
 		expect( screen.getByText( /unsaved changes that will be lost/i ) ).toBeInTheDocument();
 		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
+		// A refresh with edits pending still prompts.
+		expect( fireBeforeUnload().defaultPrevented ).toBe( true );
 
 		apiFetch.mockResolvedValueOnce( { HandoffLink: HANDOFF_LINK } );
 		fireEvent.click( screen.getByText( 'Discard Changes' ) );
 
 		await waitFor( () => expect( window.location.href ).toBe( HANDOFF_LINK ) );
+		// But the handoff's own navigation, already approved in the dialog, does
+		// not draw a second native prompt on top of it.
+		expect( fireBeforeUnload().defaultPrevented ).toBe( false );
 		expect( apiFetch ).toHaveBeenCalledWith(
 			expect.objectContaining( {
 				path: '/newspack/v1/handoff',
