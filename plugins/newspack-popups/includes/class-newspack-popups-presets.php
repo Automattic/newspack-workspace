@@ -222,7 +222,9 @@ final class Newspack_Popups_Presets {
 
 				// Populate placeholder content with saved inputs or default values.
 				foreach ( $prompt['user_input_fields'] as $field ) {
-					$override = ! empty( $override_values[ $field['name'] ] ) ? $override_values[ $field['name'] ] : null;
+					// Not `! empty()`: "0" is a value, and process_user_inputs() decides
+					// for itself what counts as absent.
+					$override = $override_values[ $field['name'] ] ?? null;
 					if ( 'array' === $field['type'] || 'string' === $field['type'] ) {
 						$prompt['content'] = self::process_user_inputs( $prompt['content'], $field, $override );
 					}

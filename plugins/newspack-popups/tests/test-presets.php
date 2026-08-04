@@ -258,6 +258,28 @@ class PresetsTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * "0" is falsy in PHP but a legitimate thing for an editor to preview, so it has
+	 * to survive the whole path, not just the substitution.
+	 */
+	public function test_preset_override_of_zero_reaches_the_preview() {
+		try {
+			$this->login_as_prompt_manager();
+			$_GET['preset'] = 'ras_newsletter_overlay';
+			$_GET['values'] = [ 'heading' => '0' ];
+
+			$preset = Newspack_Popups_Presets::retrieve_preset_popup( 'ras_newsletter_overlay' );
+			$this->assertIsArray( $preset );
+			$this->assertStringContainsString(
+				'<h2>0</h2>',
+				$preset['content'],
+				'An override of "0" reaches the preview instead of falling back to the default.'
+			);
+		} finally {
+			unset( $_GET['values'], $_GET['preset'] );
+		}
+	}
+
+	/**
 	 * Override values are request-scoped preview input. They must not reach
 	 * get_ras_presets() on the paths that persist prompts.
 	 */
