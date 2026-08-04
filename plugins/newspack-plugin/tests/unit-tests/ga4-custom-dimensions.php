@@ -242,11 +242,16 @@ class Newspack_Test_GA4_Custom_Dimensions extends WP_UnitTestCase {
 	/**
 	 * The matched-segment dimension must be provisioned, so segment reach is
 	 * reportable in GA4 without a publisher hand-creating the dimension.
+	 *
+	 * The parameter holds a single segment ID per event, not a list: a list
+	 * would need a regex filter per segment to keep one ID from matching inside
+	 * another, and its distinct values would be segment combinations, which
+	 * pass GA4's high-cardinality threshold and collapse into `(other)`.
 	 */
-	public function test_provisions_matched_segments_dimension() {
+	public function test_provisions_matched_segment_dimension() {
 		$dimensions = GA4_Custom_Dimensions::get_dimensions();
-		$this->assertArrayHasKey( 'segments', $dimensions, 'The matched-segment dimension must be provisioned.' );
-		$this->assertSame( 'Matched Segments', $dimensions['segments'] );
+		$this->assertArrayHasKey( 'segment_id', $dimensions, 'The matched-segment dimension must be provisioned.' );
+		$this->assertSame( 'Matched Segment', $dimensions['segment_id'] );
 	}
 
 	/**

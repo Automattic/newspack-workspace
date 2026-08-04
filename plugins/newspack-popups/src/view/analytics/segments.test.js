@@ -1,4 +1,4 @@
-import { reportMatchedSegments, joinWithinLimit, EVENT_NAME, SESSION_KEY } from './segments';
+import { reportMatchedSegments, EVENT_NAME, SESSION_KEY, EMPTY_VALUE } from './segments';
 import { getMatchingSegmentIds, sendEvent } from '../utils';
 
 jest.mock( '../utils', () => ( {
@@ -20,32 +20,61 @@ describe( 'reportMatchedSegments', () => {
 		jest.restoreAllMocks();
 	} );
 
-	it( 'reports the matched set on the first evaluation of a session', () => {
+	it( 'reports one event per matched segment', () => {
 		getMatchingSegmentIds.mockReturnValue( [ '12', '45' ] );
 		reportMatchedSegments();
-		expect( sendEvent ).toHaveBeenCalledWith( { segments: '12,45' }, EVENT_NAME );
+		expect( sendEvent ).toHaveBeenCalledTimes( 2 );
+		expect( sendEvent ).toHaveBeenCalledWith( { segment_id: '12' }, EVENT_NAME );
+		expect( sendEvent ).toHaveBeenCalledWith( { segment_id: '45' }, EVENT_NAME );
 	} );
 
-	it( 'stays silent when the matched set has not changed', () => {
+	it( 'stays silent when the same segments match again', () => {
 		getMatchingSegmentIds.mockReturnValue( [ '12', '45' ] );
 		reportMatchedSegments();
 		reportMatchedSegments();
-		expect( sendEvent ).toHaveBeenCalledTimes( 1 );
+		expect( sendEvent ).toHaveBeenCalledTimes( 2 );
 	} );
 
-	it( 'reports again when the matched set changes mid-session', () => {
+	it( 'reports only the segment newly matched mid-session', () => {
 		getMatchingSegmentIds.mockReturnValue( [ '12' ] );
 		reportMatchedSegments();
 		getMatchingSegmentIds.mockReturnValue( [ '12', '45' ] );
 		reportMatchedSegments();
 		expect( sendEvent ).toHaveBeenCalledTimes( 2 );
-		expect( sendEvent ).toHaveBeenLastCalledWith( { segments: '12,45' }, EVENT_NAME );
+		expect( sendEvent ).toHaveBeenLastCalledWith( { segment_id: '45' }, EVENT_NAME );
+	} );
+
+	it( 'does not report a segment again after it stops and resumes matching', () => {
+		getMatchingSegmentIds.mockReturnValue( [ '12' ] );
+		reportMatchedSegments();
+		getMatchingSegmentIds.mockReturnValue( [] );
+		reportMatchedSegments();
+		getMatchingSegmentIds.mockReturnValue( [ '12' ] );
+		reportMatchedSegments();
+		const reportedIds = sendEvent.mock.calls.map( call => call[ 0 ].segment_id );
+		expect( reportedIds ).toEqual( [ '12', EMPTY_VALUE ] );
 	} );
 
 	it( 'reports an empty match explicitly so "matches nothing" is measurable', () => {
 		getMatchingSegmentIds.mockReturnValue( [] );
 		reportMatchedSegments();
-		expect( sendEvent ).toHaveBeenCalledWith( { segments: 'none' }, EVENT_NAME );
+		expect( sendEvent ).toHaveBeenCalledWith( { segment_id: EMPTY_VALUE }, EVENT_NAME );
+	} );
+
+	it( 'reports the empty match only once per session', () => {
+		getMatchingSegmentIds.mockReturnValue( [] );
+		reportMatchedSegments();
+		reportMatchedSegments();
+		expect( sendEvent ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it( 'reports a segment matched after an earlier empty match', () => {
+		getMatchingSegmentIds.mockReturnValue( [] );
+		reportMatchedSegments();
+		getMatchingSegmentIds.mockReturnValue( [ '12' ] );
+		reportMatchedSegments();
+		const reportedIds = sendEvent.mock.calls.map( call => call[ 0 ].segment_id );
+		expect( reportedIds ).toEqual( [ EMPTY_VALUE, '12' ] );
 	} );
 
 	it( 'does nothing, and remembers nothing, when gtag is unavailable', () => {
@@ -74,21 +103,5 @@ describe( 'reportMatchedSegments', () => {
 		reportMatchedSegments();
 		reportMatchedSegments();
 		expect( sendEvent ).toHaveBeenCalledTimes( 2 );
-	} );
-} );
-
-describe( 'joinWithinLimit', () => {
-	it( 'joins IDs with commas', () => {
-		expect( joinWithinLimit( [ '12', '45' ] ) ).toBe( '12,45' );
-	} );
-
-	it( 'drops whole IDs rather than letting GA4 cut mid-number', () => {
-		// 25 four-digit IDs joined would be 124 characters, over GA4's 100-char cap.
-		const ids = Array.from( { length: 25 }, ( _, index ) => String( 1000 + index ) );
-		const value = joinWithinLimit( ids );
-		const kept = value.split( ',' );
-		expect( value.length ).toBeLessThanOrEqual( 100 );
-		expect( kept ).toEqual( ids.slice( 0, kept.length ) );
-		expect( ids ).toContain( kept[ kept.length - 1 ] );
 	} );
 } );

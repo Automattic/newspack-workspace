@@ -168,7 +168,7 @@ final class GA4_Custom_Dimensions {
 			'lists'                       => 'Newsletter Lists',
 			'categories'                  => 'Categories',
 			'author'                      => 'Author',
-			'segments'                    => 'Matched Segments',
+			'segment_id'                  => 'Matched Segment',
 		];
 	}
 

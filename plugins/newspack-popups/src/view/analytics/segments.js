@@ -1,7 +1,7 @@
 /* global gtag */
 
 /**
- * Report the reader's matched segment set to GA4.
+ * Report the reader's matched segments to GA4, one event per segment.
  *
  * Runs on every pageview where segmentation is active — including gated
  * articles and posts with prompts disabled, neither of which reaches the
@@ -9,79 +9,59 @@
  * gated pageviews understate exactly the audience a publisher is trying to
  * size.
  *
- * Scoped to the browsing session rather than the pageview. A session's first
- * evaluation reports; identical sets stay silent; a changed set reports again,
- * which catches the reader who crosses a pageview threshold mid-session. User
- * counts in GA4 dedupe regardless of firing frequency, so this costs nothing
- * for reach while keeping the added event volume off publishers' BigQuery
- * export quota.
+ * One event per segment rather than one event listing them all, so reach is a
+ * plain GA4 report: dimension `segment_id`, metric Total users, every segment
+ * ranked. A combined list would need a regex filter per segment to avoid one
+ * ID matching inside another (12 inside 120), and its distinct values would be
+ * segment *combinations* — which passes GA4's 500-value high-cardinality
+ * threshold on a site with many segments and starts collapsing rows into
+ * `(other)`, silently under-counting.
+ *
+ * Each segment reports once per browsing session, the first time the reader
+ * matches it. A segment that starts matching mid-session reports then; one that
+ * stops matching is not reported again, since reach means the reader matched it
+ * at some point during the session.
  */
 
 import { getMatchingSegmentIds, sendEvent } from '../utils';
 
-export const EVENT_NAME = 'np_segments_matched';
+export const EVENT_NAME = 'np_segment_matched';
 export const SESSION_KEY = 'newspack-popups-reported-segments';
 export const EMPTY_VALUE = 'none';
 
-// GA4 silently truncates event parameter values at 100 characters.
-const MAX_PARAM_LENGTH = 100;
-
 /**
- * Join segment IDs into a comma-separated list that fits GA4's parameter
- * length cap.
+ * Read the segment IDs already reported in this session.
  *
- * Drops whole IDs from the end rather than letting GA4 cut the value
- * arbitrarily: a value truncated mid-number leaves a fragment that reads as a
- * different, real segment, turning a rare overflow into silently wrong data.
- *
- * @param {string[]} ids Sorted segment IDs.
- *
- * @return {string} Comma-separated IDs, at most MAX_PARAM_LENGTH characters.
- */
-export const joinWithinLimit = ids => {
-	let value = '';
-	for ( const id of ids ) {
-		const next = value ? `${ value },${ id }` : `${ id }`;
-		if ( next.length > MAX_PARAM_LENGTH ) {
-			break;
-		}
-		value = next;
-	}
-	return value;
-};
-
-/**
- * Read the set reported earlier in this session.
- *
- * @return {string|null} The last reported value, or null if none or unreadable.
+ * @return {string[]} Reported IDs, empty if none or unreadable.
  */
 const readReported = () => {
 	try {
-		return window.sessionStorage.getItem( SESSION_KEY );
+		const stored = window.sessionStorage.getItem( SESSION_KEY );
+		return stored ? stored.split( ',' ) : [];
 	} catch ( e ) {
 		// sessionStorage unavailable (e.g. private mode). Treating this as
 		// "nothing reported yet" degrades the reader to per-pageview dispatch,
 		// which costs volume but loses no data.
-		return null;
+		return [];
 	}
 };
 
 /**
- * Remember the set just reported, so the rest of the session stays quiet.
+ * Remember the segment IDs reported so far, so the rest of the session stays
+ * quiet about them.
  *
- * @param {string} value The value that was reported.
+ * @param {string[]} ids Every ID reported in this session.
  */
-const writeReported = value => {
+const writeReported = ids => {
 	try {
-		window.sessionStorage.setItem( SESSION_KEY, value );
+		window.sessionStorage.setItem( SESSION_KEY, ids.join( ',' ) );
 	} catch ( e ) {
 		// See readReported: a write failure only costs the volume saving.
 	}
 };
 
 /**
- * Evaluate the reader's segments and report them to GA4 if the set is new to
- * this session.
+ * Evaluate the reader's segments and report any that are new to this session.
  *
  * Takes no arguments: it is pushed onto `window.newspackRAS`, which calls it
  * with the Reader Activation library, but it needs only that RAS is ready —
@@ -95,10 +75,14 @@ export const reportMatchedSegments = () => {
 		return;
 	}
 	const ids = getMatchingSegmentIds( segments );
-	const value = ids.length ? joinWithinLimit( ids ) : EMPTY_VALUE;
-	if ( value === readReported() ) {
+	// The empty match is tracked as a pseudo-ID, so "matched nothing" is
+	// measurable and follows the same once-per-session rule as a real segment.
+	const matched = ids.length ? ids : [ EMPTY_VALUE ];
+	const reported = readReported();
+	const fresh = matched.filter( id => ! reported.includes( id ) );
+	if ( ! fresh.length ) {
 		return;
 	}
-	writeReported( value );
-	sendEvent( { segments: value }, EVENT_NAME );
+	fresh.forEach( id => sendEvent( { segment_id: id }, EVENT_NAME ) );
+	writeReported( reported.concat( fresh ) );
 };
