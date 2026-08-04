@@ -89,19 +89,19 @@ class Ads_List_Page_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The wizard-tab override returns the ads CPT URL — the canonical
-	 * "Ads" tab href in `Newsletters_Wizard::get_tabs()`. Without this,
-	 * the wizard header's strict URL equality check fails for our
-	 * hidden React subpage (live URL has an extra `&page=…` query)
-	 * and the tab renders without `.selected`. The default base
-	 * implementation returns `null`; the override here is what makes
-	 * `Admin_Shell_Assets::patch_wizard_header_active_tab` flip the tab.
+	 * The page declares its explicit three-level admin-header breadcrumb
+	 * trail (Newsletters / Advertising / Ads), supplied to the newspack-plugin
+	 * wizard header via the `newspack_wizards_admin_header_breadcrumbs` filter.
 	 */
-	public function test_wizard_tab_url_targets_ads_cpt() {
+	public function test_wizard_breadcrumbs_are_three_level_ads_trail() {
 		$page = new Ads_List_Page();
 		$this->assertSame(
-			admin_url( 'edit.php?post_type=' . Ads::CPT ),
-			$page->get_wizard_tab_url()
+			[
+				[ 'label' => 'Newsletters' ],
+				[ 'label' => 'Advertising' ],
+				[ 'label' => 'Ads' ],
+			],
+			$page->get_wizard_breadcrumbs()
 		);
 	}
 }

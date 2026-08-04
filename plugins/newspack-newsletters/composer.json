@@ -3,7 +3,9 @@
 	"description": "Newsletter authoring plugin.",
 	"type": "wordpress-plugin",
 	"require": {
-		"campaignmonitor/createsend-php": "^7.0"
+		"campaignmonitor/createsend-php": "^7.0",
+		"automattic/jetpack-autoloader": "^5.0",
+		"woocommerce/email-editor": "2.14.0"
 	},
 	"require-dev": {
 		"automattic/vipwpcs": "^3.0",
@@ -22,13 +24,16 @@
 			"XDEBUG_MODE=coverage vendor/bin/phpunit --coverage-html codecov"
 		]
 	},
-	"extra": {},
+	"extra": {
+		"autoloader-suffix": "Newspack_Newsletters"
+	},
 	"config": {
 		"platform": {
 			"php": "8.3"
 		},
 		"allow-plugins": {
-			"dealerdirect/phpcodesniffer-composer-installer": true
+			"dealerdirect/phpcodesniffer-composer-installer": true,
+			"automattic/jetpack-autoloader": true
 		}
 	},
 	"autoload": {

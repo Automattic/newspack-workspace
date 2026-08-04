@@ -145,7 +145,21 @@ trait Content_Gate_Layout {
 		}
 		$asset = require dirname( NEWSPACK_PLUGIN_FILE ) . '/dist/content-gate-editor.asset.php';
 		wp_enqueue_script( 'newspack-content-gate', Newspack::plugin_url() . '/dist/content-gate-editor.js', $asset['dependencies'], $asset['version'], true );
-		wp_localize_script( 'newspack-content-gate', 'newspack_content_gate', [ 'has_campaigns' => class_exists( 'Newspack_Popups' ) ] );
+		wp_localize_script(
+			'newspack-content-gate',
+			'newspack_content_gate',
+			[
+				'has_campaigns' => class_exists( 'Newspack_Popups' ),
+				// Preview is only offered for Access Control gate layouts while Access
+				// Control owns the front-end (parity: no Woo Memberships bypass). The
+				// Memberships gate layout CPT and WCM-active sites get no preview data.
+				'preview'       => (
+					Content_Gate::GATE_LAYOUT_CPT === $post_type
+					&& Content_Gate::is_newspack_feature_enabled()
+					&& ! Memberships::is_active()
+				) ? Content_Gate\Gate_Preview::get_editor_preview_data() : null,
+			]
+		);
 		wp_enqueue_style( 'newspack-content-gate', Newspack::plugin_url() . '/dist/content-gate-editor.css', [], $asset['version'] );
 	}
 
@@ -203,7 +217,15 @@ trait Content_Gate_Layout {
 		// Build gate content.
 		$gate_content = '<div style=\'content:"";clear:both;display:table;\'></div>';
 		if ( $gate_layout_post ) {
-			$gate_content        .= \get_the_content( null, false, $gate_layout_post );
+			/**
+			 * Filters the raw layout content before it is wrapped and run through
+			 * the gate content pipeline. Lets the gate preview substitute autosaved
+			 * content for the previewed layout.
+			 *
+			 * @param string $content        The layout post content.
+			 * @param int    $gate_layout_id The gate layout ID.
+			 */
+			$gate_content        .= \apply_filters( 'newspack_gate_layout_content', \get_the_content( null, false, $gate_layout_post ), $gate_layout_id );
 			$visible_paragraphs   = self::get_visible_paragraphs( $gate_layout_id );
 			$inline_fade          = \get_post_meta( $gate_layout_id, 'inline_fade', true );
 		} else {
@@ -288,12 +310,31 @@ trait Content_Gate_Layout {
 	}
 
 	/**
+	 * Stamp `data-newspack-cta` on paid-intent button anchors in rendered gate HTML.
+	 *
+	 * NPPD-1887. Applied at the two gate-HTML producers rather than as a filter on
+	 * `newspack_gate_content`, because that filter ALSO runs over the restricted
+	 * article excerpt (see get_visible_content() above and Metering::…). Stamping
+	 * there would let a reader clicking a button in the article body attribute a
+	 * later subscription to the gate. Gate content only.
+	 *
+	 * @param string $html Rendered gate HTML.
+	 * @return string
+	 */
+	private static function annotate_gate_ctas( $html ) {
+		if ( ! class_exists( '\Newspack\CTA_Intent_Classifier' ) ) {
+			return $html;
+		}
+		return \Newspack\CTA_Intent_Classifier::annotate_button_anchors( $html );
+	}
+
+	/**
 	 * Get the inline gate HTML for rendering.
 	 *
 	 * @return string
 	 */
 	public static function get_inline_gate_html() {
-		return apply_filters( 'newspack_gate_content', self::get_inline_gate_content() );
+		return self::annotate_gate_ctas( apply_filters( 'newspack_gate_content', self::get_inline_gate_content() ) );
 	}
 
 	/**
@@ -304,11 +345,14 @@ trait Content_Gate_Layout {
 	public static function render_overlay_gate_html( $gate_post_id ) {
 		$position = \get_post_meta( $gate_post_id, 'overlay_position', true );
 		$size     = \get_post_meta( $gate_post_id, 'overlay_size', true );
+		// $gate_post_id is the layout ID here despite the name; the preview seam keys off it.
+		/** This filter is documented in includes/content-gate/trait-content-gate-layout.php */
+		$content = self::annotate_gate_ctas( \apply_filters( 'newspack_gate_content', \apply_filters( 'newspack_gate_layout_content', \get_the_content( null, null, $gate_post_id ), $gate_post_id ) ) );
 		?>
 		<div class="newspack-content-gate__gate newspack-content-gate__overlay-gate" style="display:none;" data-position="<?php echo \esc_attr( $position ); ?>" data-size="<?php echo \esc_attr( $size ); ?>">
 			<div class="newspack-content-gate__overlay-gate__container">
 				<div class="newspack-content-gate__overlay-gate__content">
-					<?php echo \apply_filters( 'newspack_gate_content', \get_the_content( null, null, $gate_post_id ) );  // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+					<?php echo $content; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 				</div>
 			</div>
 		</div>

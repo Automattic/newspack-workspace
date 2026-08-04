@@ -267,7 +267,7 @@ final class Ads {
 			'menu_name'                => _x( 'Newsletter Ads', 'admin menu', 'newspack-newsletters' ),
 			'name_admin_bar'           => _x( 'Newsletter Ad', 'add new on admin bar', 'newspack-newsletters' ),
 			'add_new'                  => _x( 'Add New', 'popup', 'newspack-newsletters' ),
-			'add_new_item'             => __( 'Add New Newsletter Ad', 'newspack-newsletters' ),
+			'add_new_item'             => __( 'Add Newsletter Ad', 'newspack-newsletters' ),
 			'new_item'                 => __( 'New Newsletter Ad', 'newspack-newsletters' ),
 			'edit_item'                => __( 'Edit Newsletter Ad', 'newspack-newsletters' ),
 			'view_item'                => __( 'View Newsletter Ad', 'newspack-newsletters' ),
@@ -899,6 +899,24 @@ final class Ads {
 	 */
 	public static function is_ad_inserted( $newsletter_id, $ad_id ) {
 		return ! empty( self::$inserted_ads[ $newsletter_id ] ) && in_array( $ad_id, self::$inserted_ads[ $newsletter_id ], true );
+	}
+
+	/**
+	 * Reset the in-memory inserted-ads tracking.
+	 *
+	 * `mark_ad_inserted()`/`is_ad_inserted()` use a process-global static that is
+	 * otherwise never cleared within a request, so a second render of the same
+	 * newsletter in one request would see every ad already inserted and drop it.
+	 * Callers starting a fresh render should reset first.
+	 *
+	 * @param int|null $newsletter_id Newsletter to reset, or null to reset all.
+	 */
+	public static function reset_inserted_ads( $newsletter_id = null ) {
+		if ( null === $newsletter_id ) {
+			self::$inserted_ads = [];
+			return;
+		}
+		unset( self::$inserted_ads[ $newsletter_id ] );
 	}
 
 	/**

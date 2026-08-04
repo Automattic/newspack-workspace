@@ -45,6 +45,14 @@ ins {
 	text-decoration: none;
 }
 
+// Gutenberg's inline text-color format wraps text in mark.has-inline-color.
+// That mark is a color carrier, not a highlight, so it must not inherit the
+// highlight background above. Explicitly-set inline background colors still
+// win over this rule.
+mark.has-inline-color {
+	background-color: transparent;
+}
+
 big {
 	font-size: 125%;
 }

@@ -11,6 +11,20 @@ if ( ! class_exists( 'Newspack_Newsletters_Contacts' ) ) {
 		public static $add_and_remove_lists_calls = [];
 
 		/**
+		 * Calls to delete(). Each entry: [ 'email', 'context' ].
+		 *
+		 * @var array[]
+		 */
+		public static $delete_calls = [];
+
+		/**
+		 * Calls to upsert(). Each entry: [ 'contact', 'master_list_id', 'context', 'existing_contact' ].
+		 *
+		 * @var array[]
+		 */
+		public static $upsert_calls = [];
+
+		/**
 		 * Fixture returned by get_fields(). Set in tests that exercise code paths
 		 * calling Newspack_Newsletters_Contacts::get_fields(). An array returns as-is;
 		 * a WP_Error is returned to simulate provider failure.
@@ -37,6 +51,8 @@ if ( ! class_exists( 'Newspack_Newsletters_Contacts' ) ) {
 
 		public static function reset_calls() {
 			self::$add_and_remove_lists_calls = [];
+			self::$delete_calls               = [];
+			self::$upsert_calls               = [];
 			self::$fields_fixture             = [];
 			self::$next_return                = null;
 			self::$next_throw                 = null;
@@ -55,6 +71,45 @@ if ( ! class_exists( 'Newspack_Newsletters_Contacts' ) ) {
 				throw $exception;
 			}
 			return null === self::$next_return ? true : self::$next_return;
+		}
+
+		public static function delete( $email, $context = '' ) {
+			self::$delete_calls[] = [
+				'email'   => $email,
+				'context' => $context,
+			];
+			if ( null !== self::$next_throw ) {
+				$exception        = self::$next_throw;
+				self::$next_throw = null;
+				throw $exception;
+			}
+			return null === self::$next_return ? true : self::$next_return;
+		}
+
+		public static function upsert( $contact, $master_list_id, $context = '', $existing_contact = null ) {
+			self::$upsert_calls[] = [
+				'contact'          => $contact,
+				'master_list_id'   => $master_list_id,
+				'context'          => $context,
+				'existing_contact' => $existing_contact,
+			];
+			if ( null !== self::$next_throw ) {
+				$exception        = self::$next_throw;
+				self::$next_throw = null;
+				throw $exception;
+			}
+			return null === self::$next_return ? true : self::$next_return;
+		}
+
+		public static function update_lists( $email, $lists, $context = '' ) {
+			self::$add_and_remove_lists_calls[] = [
+				'email'           => $email,
+				'lists_to_add'    => [],
+				'lists_to_remove' => [],
+				'lists'           => $lists,
+				'context'         => $context,
+			];
+			return true;
 		}
 
 		public static function get_fields( $list_id = null ) {

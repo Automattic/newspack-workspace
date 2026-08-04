@@ -1,3 +1,30 @@
+## newspack-block-theme [1.30.1](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.30.0...newspack-block-theme@1.30.1) (2026-08-03)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.6.0
+* **newspack-scripts:** upgraded to 5.10.0
+
+# newspack-block-theme [1.30.0](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.29.1...newspack-block-theme@1.30.0) (2026-07-20)
+
+
+### Features
+
+* **block-theme:** add ad slots and spacing control (NPPD-1558, [#300](https://github.com/Automattic/newspack-workspace/issues/300)) ([7823f2f](https://github.com/Automattic/newspack-workspace/commit/7823f2fefd7cc1eaf854b08d8b4422289fa75f62))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.5.0
+
+## newspack-block-theme [1.29.1](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.29.0...newspack-block-theme@1.29.1) (2026-07-09)
+
+
+### Bug Fixes
+
+* **themes:** remove unintended highlight behind colored text ([#574](https://github.com/Automattic/newspack-workspace/issues/574)) ([d94254c](https://github.com/Automattic/newspack-workspace/commit/d94254c6427f689d70c140b710a017a102c07a8f))
+
 # newspack-block-theme [1.29.0](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.28.6...newspack-block-theme@1.29.0) (2026-06-29)
 
 

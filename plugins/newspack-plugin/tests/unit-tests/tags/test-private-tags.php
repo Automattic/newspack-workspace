@@ -45,10 +45,66 @@ class Test_Private_Tags extends WP_UnitTestCase {
 	// -----------------------------------------------------------------
 
 	/**
-	 * Is enabled returns true when constant defined.
+	 * Is enabled defaults to true (feature on by default, no constant needed).
 	 */
-	public function test_is_enabled_returns_true_when_constant_defined() {
+	public function test_is_enabled_defaults_to_true() {
 		$this->assertTrue( Private_Tags::is_enabled() );
+	}
+
+	/**
+	 * The newspack_private_tags_enabled filter can disable the feature.
+	 *
+	 * The NEWSPACK_PRIVATE_TAGS_DISABLED constant is the other opt-out path; because a
+	 * constant cannot be undefined mid-process, its precedence over the filter is
+	 * exercised separately in test_disable_constant_takes_precedence_over_filter().
+	 */
+	public function test_is_enabled_can_be_disabled_via_filter() {
+		// No explicit remove_filter — WP_UnitTestCase::tear_down() restores $wp_filter
+		// after every test, so the filter cannot leak even if the assertion fails.
+		add_filter( 'newspack_private_tags_enabled', '__return_false' );
+		$this->assertFalse( Private_Tags::is_enabled() );
+	}
+
+	/**
+	 * The NEWSPACK_PRIVATE_TAGS_DISABLED constant takes final precedence: a filter
+	 * returning true cannot re-enable the feature once the constant disables it.
+	 *
+	 * Runs in a separate process because a constant cannot be undefined mid-process —
+	 * defining it inline would leak into (and neutralize) every later test in the run.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_disable_constant_takes_precedence_over_filter() {
+		define( 'NEWSPACK_PRIVATE_TAGS_DISABLED', true );
+		add_filter( 'newspack_private_tags_enabled', '__return_true' );
+		$this->assertFalse( Private_Tags::is_enabled() );
+	}
+
+	/**
+	 * Disabling the feature stops init() from registering hooks.
+	 *
+	 * Guards the opt-out wiring: a disable filter (or the constant) must prevent
+	 * init() from registering the behavior hooks, not merely flip is_enabled().
+	 * init() runs on after_setup_theme, so a plugin/theme filter is in place first.
+	 */
+	public function test_init_registers_no_hooks_when_disabled() {
+		// Reset to un-initialized and drop the representative hook setUp registered,
+		// so we can observe whether a fresh init() re-adds it.
+		$ref  = new ReflectionClass( Private_Tags::class );
+		$prop = $ref->getProperty( 'initiated' );
+		$prop->setAccessible( true );
+		$prop->setValue( null, false );
+		remove_filter( 'newspack_reader_activity_article_view', [ Private_Tags::class, 'filter_reader_activity' ] );
+
+		add_filter( 'newspack_private_tags_enabled', '__return_false' );
+		Private_Tags::init();
+		remove_filter( 'newspack_private_tags_enabled', '__return_false' );
+
+		$this->assertFalse(
+			has_filter( 'newspack_reader_activity_article_view', [ Private_Tags::class, 'filter_reader_activity' ] ),
+			'init() must not register behavior hooks when the feature is disabled.'
+		);
 	}
 
 	// -----------------------------------------------------------------
@@ -89,7 +145,7 @@ class Test_Private_Tags extends WP_UnitTestCase {
 	 */
 	public function test_default_settings_has_expected_keys() {
 		$settings = Private_Tags::get_settings();
-		foreach ( [ 'all', 'archives', 'feeds', 'feed_terms', 'tag_links', 'tag_clouds', 'css_classes', 'gam_targeting', 'yoast_metadata', 'yoast_sitemap' ] as $key ) {
+		foreach ( [ 'all', 'archives', 'feeds', 'feed_terms', 'tag_links', 'tag_clouds', 'css_classes', 'gam_targeting', 'yoast_metadata', 'yoast_sitemap', 'reader_data' ] as $key ) {
 			$this->assertArrayHasKey( $key, $settings, "Default settings missing key: {$key}" );
 			$this->assertTrue( $settings[ $key ], "Default for {$key} should be true" );
 		}
