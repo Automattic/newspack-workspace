@@ -465,10 +465,18 @@ function process_form() {
 		return;
 	}
 
-	// Honeypot trap.
-	if ( ! empty( $_REQUEST['email'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		return send_form_response( [ 'email' => \sanitize_email( $_REQUEST['email'] ) ] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+	// Honeypot trap. A browser that autofills the form puts the reader's own address
+	// in both the decoy and the real field, so a decoy matching `npe` is autofill
+	// rather than a bot — treating it as a bot reports a subscription that never
+	// happened. Kept in step with Newspack's `Reader_Activation::is_honeypot_tripped()`;
+	// implemented locally so this doesn't depend on a newspack-plugin version.
+	// phpcs:disable WordPress.Security.NonceVerification.Recommended
+	$honeypot_trap = isset( $_REQUEST['email'] ) ? strtolower( trim( \sanitize_email( $_REQUEST['email'] ) ) ) : '';
+	$real_email    = isset( $_REQUEST['npe'] ) ? strtolower( trim( \sanitize_email( $_REQUEST['npe'] ) ) ) : '';
+	if ( ! empty( $honeypot_trap ) && ( '' === $real_email || $honeypot_trap !== $real_email ) ) {
+		return send_form_response( [ 'email' => \sanitize_email( $_REQUEST['email'] ) ] );
 	}
+	// phpcs:enable WordPress.Security.NonceVerification.Recommended
 
 	// reCAPTCHA test.
 	$current_page_url = \wp_parse_url( \wp_get_raw_referer() );
