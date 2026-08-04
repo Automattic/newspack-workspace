@@ -15,9 +15,24 @@ use Newspack\Newspack_UI_Icons;
 defined( 'ABSPATH' ) || exit;
 
 \do_action( 'newspack_woocommerce_before_subscription_header', $subscription, $actions );
-$members              = Group_Subscription::get_members( $subscription );
-$managers_and_members = array_merge( Group_Subscription::get_managers( $subscription ), $members );
-$member_limit         = Group_Subscription_Settings::get_subscription_settings( $subscription )['limit'];
+// get_managers() returns ints while get_members() returns string IDs; normalize so the
+// strict in_array() and integer-keyed lookup below don't depend on PHP's key coercion.
+$members              = array_map( 'intval', Group_Subscription::get_members( $subscription ) );
+$managers             = array_map( 'intval', Group_Subscription::get_managers( $subscription ) );
+// array_unique() guards against a user appearing in both lists (e.g. the owner also carrying
+// member meta), which would otherwise render two rows for the same person.
+$managers_and_members = array_values( array_unique( array_merge( $managers, $members ) ) );
+// Batch-load every row's user once, instead of one get_user_by() per row. The non-empty
+// guard matters: get_users() with an empty 'include' would return every site user.
+$members_by_id = [];
+if ( ! empty( $managers_and_members ) ) {
+	foreach ( get_users( [ 'include' => $managers_and_members ] ) as $member_user ) {
+		$members_by_id[ $member_user->ID ] = $member_user;
+	}
+}
+// The seat limit, not the owner-inclusive configured limit: $members excludes the owner,
+// so this is the threshold the server actually gates additions and invites on.
+$member_limit         = Group_Subscription::get_member_seat_limit( $subscription );
 $all_invites          = Group_Subscription_Invite::get_invites( $subscription );
 $pending_invites      = Group_Subscription_Invite::get_invites( $subscription, false );
 $current_user_id      = get_current_user_id();
@@ -25,13 +40,15 @@ $invite_link          = Group_Subscription_Invite::get_link_invite( $subscriptio
 $invite_link_url      = $invite_link ? Group_Subscription_Invite::get_link_invite_url( $subscription->get_id(), $current_user_id, $invite_link['key'] ) : '';
 $is_at_limit         = $member_limit > 0 && ( count( $members ) + count( $pending_invites ) ) >= $member_limit;
 $is_manageable       = Group_Subscription_MyAccount::is_subscription_manageable( $subscription );
+// Role changes (and touching peer managers) are the owner's call; a manager only manages plain members.
+$viewer_is_owner     = $current_user_id === (int) $subscription->get_user_id();
 $is_active           = Group_Subscription_MyAccount::is_subscription_active( $subscription );
 $active_tab          = ( isset( $_GET['activeTab'] ) && 'invites' === sanitize_key( wp_unslash( $_GET['activeTab'] ) ) ) ? 'invites' : 'members'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 $group_label_lower   = Group_Subscription::get_label_lower( 'singular' );
 $is_completely_empty = empty( $members ) && empty( $all_invites );
 ?>
 <?php if ( ! $is_manageable ) : ?>
-	<div class="newspack-ui__notice newspack-ui__notice--info newspack-my-account__group_subscription__inactive-notice">
+	<div class="newspack-ui__notice newspack-ui__notice--info newspack-my-account__group_subscription__inactive-notice" role="status">
 		<p class="newspack-ui__spacing-top--0 newspack-ui__spacing-bottom--0">
 			<?php
 			echo esc_html(
@@ -124,12 +141,17 @@ $is_completely_empty = empty( $members ) && empty( $all_invites );
 		<tbody>
 		<?php
 		foreach ( $managers_and_members as $user_id ) :
-			$user = get_user_by( 'id', $user_id );
+			$user = $members_by_id[ $user_id ] ?? null;
 			if ( ! $user ) {
 				continue;
 			}
-			$is_manager  = Group_Subscription::user_is_manager( $user_id, $subscription );
-			$is_owner    = $user_id === $subscription->get_user_id();
+			// Check membership against the hoisted manager list (which depends only on the
+			// subscription) instead of calling user_is_manager() per row, which would re-resolve
+			// the managers and group settings every iteration. Apply the same
+			// newspack_group_subscription_user_is_manager filter user_is_manager() applies, so the
+			// extension point is preserved.
+			$is_manager  = (bool) apply_filters( 'newspack_group_subscription_user_is_manager', in_array( $user_id, $managers, true ), $user_id, $subscription );
+			$is_owner    = $user_id === (int) $subscription->get_user_id();
 			$member_role = $is_manager ? __( 'Manager', 'newspack-plugin' ) : __( 'Member', 'newspack-plugin' );
 			if ( $is_owner ) {
 				$member_role = __( 'Owner', 'newspack-plugin' );
@@ -138,14 +160,20 @@ $is_completely_empty = empty( $members ) && empty( $all_invites );
 			<tr>
 				<td data-title="<?php esc_attr_e( 'Name', 'newspack-plugin' ); ?>">
 					<strong><?php echo esc_html( newspack_get_user_display_label( $user ) ); ?></strong>
-					<?php if ( $is_owner ) : ?>
+					<?php if ( $user_id === $current_user_id ) : ?>
 						<?php esc_html_e( ' (you)', 'newspack-plugin' ); ?>
 					<?php endif; ?>
 				</td>
 				<td data-title="<?php esc_attr_e( 'Email', 'newspack-plugin' ); ?>"><a href="mailto:<?php echo esc_attr( sanitize_email( $user->user_email ) ); ?>"><?php echo esc_html( sanitize_email( $user->user_email ) ); ?></a></td>
 				<td data-title="<?php esc_attr_e( 'Role', 'newspack-plugin' ); ?>"><?php echo esc_html( $member_role ); ?></td>
-				<td class="newspack-my-account__group_subscription__members--actions order-actions <?php echo esc_attr( $is_manager ? 'newspack-my-account__group_subscription__members--actions--manager' : '' ); ?>">
-					<?php if ( ! $is_manager && $is_manageable ) : ?>
+				<td class="newspack-my-account__group_subscription__members--actions order-actions">
+					<?php
+					// The owner's row has no actions. A manager row is only actionable by
+					// the owner (peer managers are off limits); a manager viewing manages
+					// plain members only.
+					$show_row_actions = ! $is_owner && $is_manageable && ( $viewer_is_owner || ! $is_manager );
+					?>
+					<?php if ( $show_row_actions ) : ?>
 					<div class="newspack-ui__dropdown">
 						<button class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--small newspack-ui__dropdown__toggle newspack-ui__button--icon">
 							<?php Newspack_UI_Icons::print_svg( 'more' ); ?>
@@ -153,6 +181,20 @@ $is_completely_empty = empty( $members ) && empty( $all_invites );
 						</button>
 							<div class="newspack-ui__dropdown__content">
 								<ul>
+									<?php if ( $viewer_is_owner ) : ?>
+									<li>
+										<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+											<input type="hidden" name="action" value="newspack_group_subscription_set_manager_role">
+											<input type="hidden" name="subscription_id" value="<?php echo esc_attr( $subscription->get_id() ); ?>">
+											<input type="hidden" name="member_id" value="<?php echo esc_attr( $user->ID ); ?>">
+											<input type="hidden" name="role" value="<?php echo esc_attr( $is_manager ? 'member' : 'manager' ); ?>">
+											<?php wp_nonce_field( Group_Subscription_MyAccount::SET_MANAGER_ROLE_NONCE_ACTION ); ?>
+											<button type="submit" class="newspack-ui__button newspack-ui__button--ghost">
+												<?php echo esc_html( $is_manager ? __( 'Remove manager', 'newspack-plugin' ) : __( 'Make manager', 'newspack-plugin' ) ); ?>
+											</button>
+										</form>
+									</li>
+									<?php endif; ?>
 									<li>
 										<button
 											type="button"

@@ -100,7 +100,7 @@ When building a screen, use the **spacing scale** (8px unit: 16, 24, 32, 48, 64)
 - **`Notice`** – Use for outcome feedback (success/error/warning) or short contextual messages. Vertical margin is 32px so notices don’t collide with cards; keep one primary message per area when possible.
 - **`Waiting`** – Loading state indicator.
 - **`ProgressBar`** – Progress indicator.
-- **`Accordion`** – Collapsible content sections.
+- **`Accordion`** / **`AccordionPanel`** – Container for one or more collapsible panels.
 - **`StepsList`** / **`StepsListItem`** – Step-by-step list components.
 - **`StyleCard`** – Style preview card.
 

@@ -10,7 +10,10 @@ import { envelope } from '@wordpress/icons';
 
 import { getAdminUrl, getCptSlug } from '../../admin-globals';
 import EmptyState from '../../components/empty-state';
+import HeaderCount from '../../components/header-count';
+import ItemsPerPage from '../../components/items-per-page';
 import { useHeaderActions } from '../../header-actions-context';
+import usePersistedView from '../../hooks/use-persisted-view';
 import useNewslettersData from './use-newsletters-data';
 import useFilterElements from './use-filter-elements';
 import { getFields } from './fields';
@@ -22,7 +25,7 @@ import NewslettersQuickEditPanel from './quick-edit-panel';
 const DEFAULT_VIEW = {
 	type: 'table',
 	page: 1,
-	perPage: 25,
+	perPage: 20,
 	sort: { field: 'date', direction: 'desc' },
 	search: '',
 	filters: [],
@@ -33,10 +36,14 @@ const DEFAULT_VIEW = {
 
 const DEFAULT_LAYOUTS = { table: {} };
 
+// Suppress the built-in ViewConfig per-page control — the custom
+// `ItemsPerPage` renders in its place inside the View options popover.
+const DATAVIEWS_CONFIG = { perPageSizes: [] };
+
 export default function NewslettersListScreen() {
-	const [ view, setView ] = useState( DEFAULT_VIEW );
+	const [ view, setView ] = usePersistedView( 'newsletters-list', DEFAULT_VIEW );
 	const [ quickEditItem, setQuickEditItem ] = useState( null );
-	const { data, paginationInfo, isLoading, hasResolved, hasLoadedOnce, trashCount, refresh } = useNewslettersData( view );
+	const { data, paginationInfo, isLoading, hasResolved, hasLoadedOnce, trashCount, progress, refresh } = useNewslettersData( view );
 	const filterElements = useFilterElements();
 
 	const addNewHref = `${ getAdminUrl() }post-new.php?post_type=${ getCptSlug() }`;
@@ -60,7 +67,7 @@ export default function NewslettersListScreen() {
 					: [
 							{
 								type: 'primary',
-								label: __( 'Add new newsletter', 'newspack-newsletters' ),
+								label: __( 'Add Newsletter', 'newspack-newsletters' ),
 								href: addNewHref,
 							},
 					  ],
@@ -82,7 +89,7 @@ export default function NewslettersListScreen() {
 				icon={ envelope }
 				title={ __( 'Get started with newsletters', 'newspack-newsletters' ) }
 				description={ __( 'Compose, schedule, and send newsletters to your subscribers via your connected ESP.', 'newspack-newsletters' ) }
-				ctaTitle={ __( 'Add new newsletter', 'newspack-newsletters' ) }
+				ctaTitle={ __( 'Add Newsletter', 'newspack-newsletters' ) }
 				ctaHref={ addNewHref }
 			/>
 		);
@@ -90,6 +97,7 @@ export default function NewslettersListScreen() {
 
 	return (
 		<>
+			<HeaderCount count={ paginationInfo.totalItems } />
 			<DataViews
 				className="newspack-newsletters-list"
 				data={ data }
@@ -102,6 +110,14 @@ export default function NewslettersListScreen() {
 				isLoading={ isLoading }
 				getItemId={ item => String( item.id ) }
 				search
+				config={ DATAVIEWS_CONFIG }
+				header={
+					<ItemsPerPage
+						value={ view.perPage }
+						progress={ progress }
+						onChange={ perPage => setView( current => ( { ...current, perPage, page: 1 } ) ) }
+					/>
+				}
 			/>
 			{ quickEditItem && (
 				<NewslettersQuickEditPanel

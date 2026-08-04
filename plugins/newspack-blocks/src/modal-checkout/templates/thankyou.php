@@ -60,7 +60,7 @@ $checkout_data          = Checkout_Data::get_checkout_data( $order );
 				<path d="M16.7 7.1l-6.3 8.5-3.3-2.5-.9 1.2 4.5 3.4L17.9 8z"></path>
 			</svg>
 		</span>
-		<p id="modal-checkout-product-details" data-checkout='<?php echo wp_json_encode( $checkout_data ); ?>'>
+		<p id="modal-checkout-product-details" <?php Checkout_Data::print_data_checkout_attr( $checkout_data ); ?>>
 			<strong>
 				<?php
 					echo esc_html( Modal_Checkout::get_post_checkout_success_text() );

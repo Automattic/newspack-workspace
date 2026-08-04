@@ -102,7 +102,7 @@ final class Newspack_Newsletters_Editor {
 	 */
 	public static function is_editing_email( $post_id = null ) {
 		$post_id = empty( $post_id ) ? get_the_ID() : $post_id;
-		return in_array( get_post_type( $post_id ), self::get_email_editor_cpts() );
+		return in_array( get_post_type( $post_id ), self::get_email_editor_cpts(), true );
 	}
 
 	/**
@@ -119,7 +119,7 @@ final class Newspack_Newsletters_Editor {
 		global $pagenow;
 		$email_editor_cpts = self::get_email_editor_cpts();
 		$is_editing_email  = 'post.php' === $pagenow && isset( $_GET['post'] ) && self::is_editing_email( absint( $_GET['post'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		$is_creating_email = 'post-new.php' === $pagenow && isset( $_GET['post_type'] ) && in_array( $_GET['post_type'], $email_editor_cpts ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$is_creating_email = 'post-new.php' === $pagenow && isset( $_GET['post_type'] ) && is_string( $_GET['post_type'] ) && in_array( sanitize_key( wp_unslash( $_GET['post_type'] ) ), $email_editor_cpts, true ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		return $is_editing_email || $is_creating_email;
 	}
 
@@ -219,6 +219,17 @@ final class Newspack_Newsletters_Editor {
 			return;
 		}
 
+		// Theme-native editor: under the WC renderer, keep the theme's editor styles
+		// ONLY for block themes — they express block appearance via theme.json, which
+		// the WC email render also consumes, so the canvas and the email match (1:1).
+		// Classic themes style blocks via editor CSS the email render can't reproduce,
+		// so they keep stripping and fall back to theme.json + Newspack defaults (which
+		// both the canvas and the email use), preserving 1:1. The legacy MJML editor
+		// (flag off) always strips.
+		if ( \Newspack\Newsletters\Email_Renderers\Feature_Flag::is_enabled() && wp_is_block_theme() ) {
+			return;
+		}
+
 		$allowed_actions = [
 			__CLASS__ . '::enqueue_block_assets',
 			'newspack_enqueue_scripts',
@@ -288,6 +299,13 @@ final class Newspack_Newsletters_Editor {
 		if ( ! self::is_email_editor_request() ) {
 			return;
 		}
+		// Theme-native editor: under the WC renderer, let theme.json drive block
+		// appearance (font sizes, spacing, layout, button) so the canvas matches
+		// the standard post editor. The legacy MJML editor keeps the email-safe
+		// overrides below.
+		if ( \Newspack\Newsletters\Email_Renderers\Feature_Flag::is_enabled() ) {
+			return;
+		}
 		add_theme_support(
 			'editor-font-sizes',
 			[
@@ -328,6 +346,14 @@ final class Newspack_Newsletters_Editor {
 	 */
 	public static function override_theme_json_for_email_editor( $theme_json ) {
 		if ( ! self::is_email_editor_request() ) {
+			return $theme_json;
+		}
+
+		// Theme-native editor: under the WC renderer, let theme.json drive block
+		// appearance (font sizes, spacing, layout, button) so the canvas matches
+		// the standard post editor. The legacy MJML editor keeps the email-safe
+		// overrides below.
+		if ( \Newspack\Newsletters\Email_Renderers\Feature_Flag::is_enabled() ) {
 			return $theme_json;
 		}
 
@@ -409,9 +435,10 @@ final class Newspack_Newsletters_Editor {
 			],
 		];
 
-		// Only override button element styles for block themes — classic themes
-		// use their own neutral defaults and don't need the opinionated blue.
 		if ( wp_is_block_theme() ) {
+			// Legacy (flag off): only override button element styles for block
+			// themes — classic themes use their own neutral defaults and don't need
+			// the opinionated blue.
 			$primary_color = '#36f';
 			if ( method_exists( '\Newspack\Lite_Site', 'get_primary_color' ) ) {
 				$primary_color = Newspack\Lite_Site::get_primary_color();
@@ -501,6 +528,34 @@ final class Newspack_Newsletters_Editor {
 			'remote-data-blocks/foundation-movie',
 			'remote-data-blocks/foundation-movies',
 		);
+
+		// Blocks the WC email-editor engine can render but the legacy MJML
+		// renderer cannot. Only offer them when the WC engine is active, so a
+		// site still on MJML can't insert a block that renders empty at send.
+		if ( \Newspack\Newsletters\Email_Renderers\Feature_Flag::is_enabled() ) {
+			$allowed_block_types = array_merge(
+				$allowed_block_types,
+				array(
+					'core/table',
+					'core/gallery',
+					'core/media-text',
+					'core/cover',
+				)
+			);
+
+			/**
+			 * Whether to allow the experimental audio/video blocks. They have no
+			 * inline playback in email — the WC engine renders them as static
+			 * fallbacks (audio: a "Listen" link; video: a play-poster link), so
+			 * they ship off by default and can be opted into via this filter.
+			 *
+			 * @param bool $enabled Whether experimental blocks are allowed.
+			 */
+			if ( apply_filters( 'newspack_newsletters_wc_experimental_blocks', false ) ) {
+				$allowed_block_types[] = 'core/audio';
+				$allowed_block_types[] = 'core/video';
+			}
+		}
 		/**
 		 * Filters the allowed block types for the Newsletter CPT.
 		 *
@@ -542,6 +597,7 @@ final class Newspack_Newsletters_Editor {
 			],
 			'supported_social_icon_services' => Newspack_Newsletters_Renderer::get_supported_social_icons_services(),
 			'supported_esps'                 => Newspack_Newsletters::get_supported_providers(),
+			'use_woo_renderer'               => \Newspack\Newsletters\Email_Renderers\Feature_Flag::is_enabled(),
 			'merge_tags'                     => $provider
 				? $provider::get_merge_tags()
 				: Newspack_Newsletters_Service_Provider::get_merge_tags(),
@@ -571,6 +627,24 @@ final class Newspack_Newsletters_Editor {
 
 			wp_add_inline_style( 'newspack-newsletters', self::get_color_palette_css( '.editor-styles-wrapper' ) );
 
+			// Legacy MJML-era block-appearance styles (separator/button/social/
+			// quote/list). Skip them when the WC email renderer is active so the
+			// editor canvas reflects the WC (vanilla WP) output; MJML sites still
+			// load them, unchanged. Defaults to loading if the flag class is
+			// somehow unavailable, preserving pre-WC behavior.
+			$wc_renderer_active = class_exists( \Newspack\Newsletters\Email_Renderers\Feature_Flag::class )
+				&& \Newspack\Newsletters\Email_Renderers\Feature_Flag::is_enabled();
+			if ( ! $wc_renderer_active ) {
+				wp_register_style(
+					'newspack-newsletters-legacy-block-styles',
+					plugins_url( '../dist/legacyBlockStyles.css', __FILE__ ),
+					[ 'newspack-newsletters' ],
+					filemtime( NEWSPACK_NEWSLETTERS_PLUGIN_FILE . 'dist/legacyBlockStyles.css' )
+				);
+				wp_style_add_data( 'newspack-newsletters-legacy-block-styles', 'rtl', 'replace' );
+				wp_enqueue_style( 'newspack-newsletters-legacy-block-styles' );
+			}
+
 			$editor_asset = include NEWSPACK_NEWSLETTERS_PLUGIN_FILE . 'dist/editor.asset.php';
 			\wp_enqueue_script(
 				'newspack-newsletters-editor',
@@ -595,6 +669,7 @@ final class Newspack_Newsletters_Editor {
 		}
 
 		if ( self::is_editing_newsletter() || self::is_editing_layout() ) {
+			$provider = Newspack_Newsletters::get_service_provider();
 			wp_localize_script(
 				'newspack-newsletters-editor',
 				'newspack_newsletters_data',

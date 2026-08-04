@@ -1,3 +1,5 @@
+import { FETCH_ALL_CHUNK_SIZE, isFetchAllPerPage } from './per-page';
+
 function asArray( value ) {
 	if ( Array.isArray( value ) ) {
 		return value;
@@ -15,7 +17,7 @@ function asArray( value ) {
  * @param {Object}                                    options                      Screen-specific bindings.
  * @param {Object}                                    [options.fieldToQueryParam]  Map of non-status filter fields → REST query params.
  * @param {Object}                                    [options.sortFieldToOrderby] Map of view.sort.field → REST `orderby`. When omitted, sort is pass-through.
- * @param {number}                                    [options.defaultPerPage]     Default `per_page` when `view.perPage` is missing. Defaults to 25.
+ * @param {number}                                    [options.defaultPerPage]     Default `per_page` when `view.perPage` is missing. Defaults to 20.
  * @param {string}                                    [options.defaultStatuses]    Comma-joined statuses to use when no status filter is active.
  * @param {string}                                    [options.statusFilterParam]  REST param to receive status-filter values. When omitted, `status` is used.
  * @param {string}                                    [options.defaultStatusParam] REST param to receive `defaultStatuses`. Defaults to `'status'`.
@@ -28,7 +30,7 @@ export function buildQueryParams( view = {}, options = {} ) {
 	const {
 		fieldToQueryParam = {},
 		sortFieldToOrderby = null,
-		defaultPerPage = 25,
+		defaultPerPage = 20,
 		defaultStatuses = null,
 		statusFilterParam = null,
 		defaultStatusParam = 'status',
@@ -37,13 +39,19 @@ export function buildQueryParams( view = {}, options = {} ) {
 		arrayParams = [],
 	} = options;
 
+	// "All" walks the collection in max-size chunks starting at page 1;
+	// `use-collection-data` follows `X-WP-TotalPages` for the rest.
+	const fetchAll = isFetchAllPerPage( view.perPage );
+
 	const params = {
-		per_page: view.perPage || defaultPerPage,
+		per_page: fetchAll ? FETCH_ALL_CHUNK_SIZE : view.perPage || defaultPerPage,
 		context: 'edit',
 		...extraParams,
 	};
 
-	if ( supportsOffset && typeof view.offset === 'number' ) {
+	if ( fetchAll ) {
+		params.page = 1;
+	} else if ( supportsOffset && typeof view.offset === 'number' ) {
 		params.offset = view.offset;
 	} else {
 		params.page = view.page || 1;
