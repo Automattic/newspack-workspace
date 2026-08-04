@@ -95,24 +95,24 @@ jobs:
           # would let a newly-added <file> be linted by the pre-commit hook and
           # by nothing here, which is the exact gap this job closes.
           # `|| true` because grep exits 1 when the subtraction is empty.
-          NW_PATHS=$(sed -n 's|.*<file>\([^<]*\)</file>.*|\1|p' phpcs.xml \
-            | grep -vxE 'plugins|themes|packages' | tr '\n' ' ' | sed 's/ *$//' || true)
+          NW_LINES=$(sed -n 's|.*<file>\([^<]*\)</file>.*|\1|p' phpcs.xml \
+            | grep -vxE 'plugins|themes|packages' || true)
           # phpcs.xml comes from the PR, and these paths are word-split into a shell
           # command in the php-lint-non-workspace job, so keep them to plain relative
-          # paths. Fail loudly: a rejected path would otherwise go unlinted behind a
-          # green check. `set -f` because the unquoted expansion that does the word
-          # splitting would otherwise glob first, so a `<file>*</file>` would expand to
-          # real filenames and sail through the check it is meant to fail. The match
-          # rejects, in order: a `..` component, so a path cannot walk outside the
-          # checkout; any character outside the allowed set; and a leading character
-          # that would make the path arrive as an option flag (`-i`), which phpcs
-          # accepts and then lints nothing.
-          set -f
-          if [ -n "$NW_PATHS" ] && printf '%s\n' $NW_PATHS | grep -E '\.\.|[^A-Za-z0-9._/-]|^[^A-Za-z0-9._]' >/dev/null; then
-            echo "Rejected phpcs.xml <file> path(s): $NW_PATHS"
+          # paths. Validated one <file> value per line, before joining: a value
+          # containing a space would otherwise split into two words that each pass and
+          # neither of which is the declared path. Fail loudly, since a rejected path
+          # would go unlinted behind a green check. The match rejects, in order: a `..`
+          # component, so a path cannot walk outside the checkout; any character
+          # outside the allowed set, which includes whitespace and the glob characters;
+          # and a leading character that would make the path arrive as an option flag
+          # (`-i`), which phpcs accepts and then lints nothing.
+          if [ -n "$NW_LINES" ] && printf '%s\n' "$NW_LINES" | grep -E '\.\.|[^A-Za-z0-9._/-]|^[^A-Za-z0-9._]' >/dev/null; then
+            echo "Rejected phpcs.xml <file> path(s):"
+            printf '%s\n' "$NW_LINES"
             exit 1
           fi
-          set +f
+          NW_PATHS=$(printf '%s\n' "$NW_LINES" | tr '\n' ' ' | sed 's/ *$//')
 
           NW_CHANGED=false
           if [ -n "$NW_PATHS" ]; then
