@@ -163,6 +163,24 @@ class Audience_Subscription_Products extends Wizard {
 				],
 			]
 		);
+		register_rest_route(
+			NEWSPACK_API_NAMESPACE,
+			'/wizard/' . $this->slug . '/promo-coupon',
+			[
+				'methods'             => \WP_REST_Server::READABLE,
+				'callback'            => [ $this, 'api_validate_promo_coupon' ],
+				'permission_callback' => [ $this, 'api_permissions_check' ],
+				'args'                => [
+					'code'       => [
+						'required'          => true,
+						'sanitize_callback' => 'sanitize_text_field',
+					],
+					'product_id' => [
+						'sanitize_callback' => 'absint',
+					],
+				],
+			]
+		);
 	}
 
 	/**
@@ -285,6 +303,82 @@ class Audience_Subscription_Products extends Wizard {
 				'eligible_children' => Promo_Url_Targets::get_eligible_children( Promo_Url_Targets::get_product_family( $product_id ) ),
 			]
 		);
+	}
+
+	/**
+	 * GET coupon validity for the promo URL generator against the promoted plan.
+	 *
+	 * Mirrors the context-free subset of checkout coupon validation (expiry,
+	 * usage limit) plus explicit product-restriction/minimum-spend checks
+	 * against the promoted plan — a bare WC_Discounts with no cart would
+	 * falsely reject coupons restricted to the promoted product, the primary
+	 * promotional-coupon shape. When the promoted product is a child (a
+	 * variation or grouped member), its family is expanded to include the
+	 * parent and the parent's whole family, so a coupon restricted to the
+	 * parent — or to a category, which lives on the parent for variations —
+	 * still validates. See {@see Promo_Url_Targets::evaluate_coupon()}.
+	 *
+	 * @param \WP_REST_Request $request The request.
+	 * @return \WP_REST_Response
+	 */
+	public function api_validate_promo_coupon( $request ) {
+		$code = $request->get_param( 'code' );
+		if ( ! function_exists( 'wc_coupons_enabled' ) || ! class_exists( '\WC_Coupon' ) || ! class_exists( '\WC_Discounts' ) ) {
+			return rest_ensure_response(
+				[
+					'valid'  => false,
+					'reason' => esc_html__( 'WooCommerce coupons are unavailable.', 'newspack-plugin' ),
+				]
+			);
+		}
+		if ( ! \wc_coupons_enabled() ) {
+			return rest_ensure_response(
+				[
+					'valid'  => false,
+					'reason' => esc_html__( 'Coupons are disabled in WooCommerce settings.', 'newspack-plugin' ),
+				]
+			);
+		}
+		$coupon = new \WC_Coupon( $code );
+		if ( ! $coupon->get_id() ) {
+			return rest_ensure_response(
+				[
+					'valid'  => false,
+					'reason' => esc_html__( 'Coupon not found.', 'newspack-plugin' ),
+				]
+			);
+		}
+		$expires        = $coupon->get_date_expires();
+		$usage_limit    = (int) $coupon->get_usage_limit();
+		$coupon_data    = [
+			'expired'               => $expires && $expires->getTimestamp() < time(),
+			'usage_exceeded'        => $usage_limit > 0 && (int) $coupon->get_usage_count() >= $usage_limit,
+			'product_ids'           => $coupon->get_product_ids(),
+			'excluded_ids'          => $coupon->get_excluded_product_ids(),
+			'category_ids'          => $coupon->get_product_categories(),
+			'excluded_category_ids' => $coupon->get_excluded_product_categories(),
+			'minimum_amount'        => (float) $coupon->get_minimum_amount(),
+		];
+		$product_context = [];
+		$product_id      = absint( $request->get_param( 'product_id' ) );
+		if ( $product_id && function_exists( 'wc_get_product' ) ) {
+			$product    = wc_get_product( $product_id );
+			$family     = Promo_Url_Targets::get_product_family( $product_id );
+			$family_ids = array_merge( [ $family['parent'] ], $family['variations'], $family['members'] );
+			$parent_id  = $product ? (int) $product->get_parent_id() : 0;
+			if ( $parent_id ) {
+				$parent_family = Promo_Url_Targets::get_product_family( $parent_id );
+				$family_ids    = array_merge( $family_ids, [ $parent_family['parent'] ], $parent_family['variations'], $parent_family['members'] );
+			}
+			$parent_product  = $parent_id && $product ? wc_get_product( $parent_id ) : null;
+			$category_source = $parent_product ? $parent_product : $product;
+			$product_context = [
+				'family_ids'          => array_values( array_unique( array_map( 'intval', $family_ids ) ) ),
+				'family_category_ids' => $category_source ? $category_source->get_category_ids() : [],
+				'reference_price'     => $product && '' !== $product->get_price() ? (float) $product->get_price() : null,
+			];
+		}
+		return rest_ensure_response( Promo_Url_Targets::evaluate_coupon( $coupon_data, $product_context ) );
 	}
 
 	/**

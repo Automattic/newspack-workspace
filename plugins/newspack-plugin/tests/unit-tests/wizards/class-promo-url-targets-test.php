@@ -527,4 +527,175 @@ class Promo_Url_Targets_Test extends WP_UnitTestCase {
 		$this->assertFalse( $truncated );
 		$this->assertSame( [ $newer, $older ], array_slice( $ids, 0, 2 ) );
 	}
+
+	/**
+	 * Helper to build a clean (unrestricted, non-expired, non-exceeded)
+	 * coupon_data array for evaluate_coupon() tests.
+	 *
+	 * @param array $overrides Optional overrides to apply.
+	 * @return array Coupon data.
+	 */
+	private function coupon_data( $overrides = [] ) {
+		return array_merge(
+			[
+				'expired'        => false,
+				'usage_exceeded' => false,
+				'product_ids'    => [],
+				'excluded_ids'   => [],
+				'category_ids'   => [],
+				'minimum_amount' => 0.0,
+			],
+			$overrides
+		);
+	}
+
+	/**
+	 * Test that an expired coupon is invalid regardless of product context.
+	 */
+	public function test_evaluate_coupon_expired_is_invalid() {
+		$result = Promo_Url_Targets::evaluate_coupon( $this->coupon_data( [ 'expired' => true ] ) );
+		$this->assertFalse( $result['valid'] );
+		$this->assertNotEmpty( $result['reason'] );
+	}
+
+	/**
+	 * Test that a coupon past its usage limit is invalid.
+	 */
+	public function test_evaluate_coupon_usage_exceeded_is_invalid() {
+		$result = Promo_Url_Targets::evaluate_coupon( $this->coupon_data( [ 'usage_exceeded' => true ] ) );
+		$this->assertFalse( $result['valid'] );
+		$this->assertNotEmpty( $result['reason'] );
+	}
+
+	/**
+	 * Test that a coupon restricted to product IDs intersecting the promoted
+	 * plan's family is valid.
+	 */
+	public function test_evaluate_coupon_allowed_product_ids_intersecting_family_is_valid() {
+		$result = Promo_Url_Targets::evaluate_coupon(
+			$this->coupon_data( [ 'product_ids' => [ 100, 200 ] ] ),
+			[ 'family_ids' => [ 200, 201 ] ]
+		);
+		$this->assertTrue( $result['valid'] );
+	}
+
+	/**
+	 * Test that a coupon restricted to product IDs that don't intersect the
+	 * promoted plan's family is invalid, with a reason.
+	 */
+	public function test_evaluate_coupon_allowed_product_ids_not_intersecting_family_is_invalid() {
+		$result = Promo_Url_Targets::evaluate_coupon(
+			$this->coupon_data( [ 'product_ids' => [ 100, 200 ] ] ),
+			[ 'family_ids' => [ 300 ] ]
+		);
+		$this->assertFalse( $result['valid'] );
+		$this->assertNotEmpty( $result['reason'] );
+	}
+
+	/**
+	 * Test that a coupon excluding every member of the promoted plan's family
+	 * is invalid.
+	 */
+	public function test_evaluate_coupon_excluded_ids_covering_whole_family_is_invalid() {
+		$result = Promo_Url_Targets::evaluate_coupon(
+			$this->coupon_data( [ 'excluded_ids' => [ 100, 101 ] ] ),
+			[ 'family_ids' => [ 100, 101 ] ]
+		);
+		$this->assertFalse( $result['valid'] );
+		$this->assertNotEmpty( $result['reason'] );
+	}
+
+	/**
+	 * Test that a coupon restricted to product categories the promoted plan
+	 * isn't in is invalid.
+	 */
+	public function test_evaluate_coupon_category_restriction_not_intersecting_is_invalid() {
+		$result = Promo_Url_Targets::evaluate_coupon(
+			$this->coupon_data( [ 'category_ids' => [ 5 ] ] ),
+			[
+				'family_ids'          => [ 100 ],
+				'family_category_ids' => [ 6 ],
+			]
+		);
+		$this->assertFalse( $result['valid'] );
+		$this->assertNotEmpty( $result['reason'] );
+	}
+
+	/**
+	 * Test that a minimum-amount coupon is invalid when the promoted plan's
+	 * reference price is below the minimum.
+	 */
+	public function test_evaluate_coupon_minimum_amount_above_reference_price_is_invalid() {
+		$result = Promo_Url_Targets::evaluate_coupon(
+			$this->coupon_data( [ 'minimum_amount' => 50.0 ] ),
+			[
+				'family_ids'      => [ 100 ],
+				'reference_price' => 10.0,
+			]
+		);
+		$this->assertFalse( $result['valid'] );
+		$this->assertNotEmpty( $result['reason'] );
+	}
+
+	/**
+	 * Test that the minimum-amount check is skipped (coupon stays valid) when
+	 * no reference price could be resolved for the promoted plan.
+	 */
+	public function test_evaluate_coupon_minimum_amount_skipped_when_reference_price_null() {
+		$result = Promo_Url_Targets::evaluate_coupon(
+			$this->coupon_data( [ 'minimum_amount' => 50.0 ] ),
+			[
+				'family_ids'      => [ 100 ],
+				'reference_price' => null,
+			]
+		);
+		$this->assertTrue( $result['valid'] );
+	}
+
+	/**
+	 * Test that a clean coupon is valid when no product context is given at
+	 * all — product-dependent checks (even restrictive ones) are skipped
+	 * entirely rather than evaluated against an empty family.
+	 */
+	public function test_evaluate_coupon_empty_product_context_is_valid() {
+		$result = Promo_Url_Targets::evaluate_coupon(
+			$this->coupon_data(
+				[
+					'product_ids'    => [ 999 ],
+					'minimum_amount' => 1000.0,
+				]
+			)
+		);
+		$this->assertTrue( $result['valid'] );
+	}
+
+	/**
+	 * Test that a coupon excluding a category the promoted plan is in is
+	 * invalid — the mirror of the allowed-categories check.
+	 */
+	public function test_evaluate_coupon_excluded_category_intersecting_family_is_invalid() {
+		$result = Promo_Url_Targets::evaluate_coupon(
+			$this->coupon_data( [ 'excluded_category_ids' => [ 6, 7 ] ] ),
+			[
+				'family_ids'          => [ 100 ],
+				'family_category_ids' => [ 6 ],
+			]
+		);
+		$this->assertFalse( $result['valid'] );
+		$this->assertNotEmpty( $result['reason'] );
+	}
+
+	/**
+	 * Test that an excluded category the plan is not in leaves the coupon valid.
+	 */
+	public function test_evaluate_coupon_excluded_category_not_intersecting_is_valid() {
+		$result = Promo_Url_Targets::evaluate_coupon(
+			$this->coupon_data( [ 'excluded_category_ids' => [ 9 ] ] ),
+			[
+				'family_ids'          => [ 100 ],
+				'family_category_ids' => [ 6 ],
+			]
+		);
+		$this->assertTrue( $result['valid'] );
+	}
 }

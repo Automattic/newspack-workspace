@@ -49,10 +49,18 @@ import {
 	getValidationError,
 	resolveProductParams,
 } from './promo-url-options';
-import type { DonateTargetsResponse, ProductPromoContext, PromoPageChoice, PromoTargetDonateConfig } from './promo-url-options';
+import type {
+	DonateTargetsResponse,
+	ProductPromoContext,
+	PromoCouponResponse,
+	PromoPageChoice,
+	PromoTargetDonateConfig,
+} from './promo-url-options';
 
 const API_BASE = '/newspack/v1/wizard/newspack-audience-subscription-products';
 const HOMEPAGE_VALUE = 'home';
+
+type CouponStatus = { state: 'idle' | 'checking' | 'valid' | 'invalid'; reason?: string };
 
 export default function PromoUrlModal( { item, closeModal }: { item: SubscriptionProduct; closeModal?: () => void } ) {
 	const { addNotice } = useDispatch( WIZARD_STORE_NAMESPACE );
@@ -74,6 +82,8 @@ export default function PromoUrlModal( { item, closeModal }: { item: Subscriptio
 	const [ frequency, setFrequency ] = useState< DonateFrequencySlug >( 'month' );
 	const [ amount, setAmount ] = useState< number | 'custom' | '' >( '' );
 	const [ customAmount, setCustomAmount ] = useState( '' );
+	const [ coupon, setCoupon ] = useState( '' );
+	const [ couponStatus, setCouponStatus ] = useState< CouponStatus >( { state: 'idle' } );
 	const [ utmSource, setUtmSource ] = useState( '' );
 	const [ utmMedium, setUtmMedium ] = useState( '' );
 	const [ utmCampaign, setUtmCampaign ] = useState( '' );
@@ -152,6 +162,35 @@ export default function PromoUrlModal( { item, closeModal }: { item: Subscriptio
 		setCustomAmount( amountChoices.suggested ? String( amountChoices.suggested ) : '' );
 	}, [ frequency, donateConfig ] );
 
+	const couponProductId = variationId === '' ? item.id : variationId;
+	useEffect( () => {
+		if ( ! coupon ) {
+			setCouponStatus( { state: 'idle' } );
+			return;
+		}
+		setCouponStatus( { state: 'checking' } );
+		let ignore = false;
+		const timeout = setTimeout( () => {
+			apiFetch< PromoCouponResponse >( {
+				path: addQueryArgs( `${ API_BASE }/promo-coupon`, { code: coupon, product_id: couponProductId } ),
+			} )
+				.then( result => {
+					if ( ! ignore ) {
+						setCouponStatus( result.valid ? { state: 'valid' } : { state: 'invalid', reason: result.reason } );
+					}
+				} )
+				.catch( () => {
+					if ( ! ignore ) {
+						setCouponStatus( { state: 'invalid', reason: __( 'Could not validate the coupon.', 'newspack-plugin' ) } );
+					}
+				} );
+		}, 500 );
+		return () => {
+			clearTimeout( timeout );
+			ignore = true;
+		};
+	}, [ coupon, couponProductId ] );
+
 	// A specific child is required unless the plan's picker provides the
 	// "reader chooses" option.
 	const requiresChild = planChoices.length > 0 && ! planChoices.some( choice => choice.value === '' );
@@ -182,6 +221,7 @@ export default function PromoUrlModal( { item, closeModal }: { item: Subscriptio
 		amount: effectiveAmount,
 		otherAmount: effectiveAmount === 'other' ? parseFloat( customAmount ) : undefined,
 		layoutParam: donateConfig?.layout_param,
+		coupon: kind === 'product' ? coupon || undefined : undefined,
 		utmSource,
 		utmMedium,
 		utmCampaign,
@@ -198,8 +238,10 @@ export default function PromoUrlModal( { item, closeModal }: { item: Subscriptio
 				effectiveAmount,
 				customAmount,
 				presets: amountChoices.presets,
+				couponState: kind === 'product' ? couponStatus.state : undefined,
+				couponReason: couponStatus.reason,
 			} ),
-		[ kind, pageUrl, requiresChild, variationId, donateConfig, effectiveAmount, customAmount, amountChoices.presets ]
+		[ kind, pageUrl, requiresChild, variationId, donateConfig, effectiveAmount, customAmount, amountChoices.presets, couponStatus ]
 	);
 
 	const url = validationError ? '' : buildPromoUrl( { kind, selections } );
@@ -255,6 +297,21 @@ export default function PromoUrlModal( { item, closeModal }: { item: Subscriptio
 				{ __( 'Could not load link options. Please close and try again.', 'newspack-plugin' ) }
 			</Notice>
 		);
+	}
+
+	let couponHelp: string | undefined;
+	switch ( couponStatus.state ) {
+		case 'checking':
+			couponHelp = __( 'Checking…', 'newspack-plugin' );
+			break;
+		case 'valid':
+			couponHelp = __( 'Coupon is valid and will be applied automatically at checkout.', 'newspack-plugin' );
+			break;
+		case 'invalid':
+			couponHelp = couponStatus.reason;
+			break;
+		default:
+			couponHelp = __( 'Optional. Applied automatically at checkout.', 'newspack-plugin' );
 	}
 
 	if ( kind === 'donation' && ! donateResponse?.targets.length ) {
@@ -349,6 +406,14 @@ export default function PromoUrlModal( { item, closeModal }: { item: Subscriptio
 						/>
 					) }
 				</HStack>
+			) }
+			{ kind === 'product' && (
+				<TextControl
+					label={ __( 'Coupon code', 'newspack-plugin' ) }
+					value={ coupon }
+					onChange={ setCoupon }
+					help={ couponHelp }
+				/>
 			) }
 			<PanelBody title={ __( 'Campaign tracking', 'newspack-plugin' ) } initialOpen={ false }>
 				<HStack alignment="top">

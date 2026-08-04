@@ -46,6 +46,8 @@ export type ProductPromoContext = {
 
 export type PromoPageChoice = { value: string; label: string; url: string };
 
+export type PromoCouponResponse = { valid: boolean; reason?: string };
+
 const FREQUENCY_LABELS: Record< DonateFrequencySlug, string > = {
 	once: __( 'One-time', 'newspack-plugin' ),
 	month: __( 'Monthly', 'newspack-plugin' ),
@@ -138,6 +140,8 @@ export type PromoValidationInput = {
 	effectiveAmount: number | 'other' | undefined;
 	customAmount: string;
 	presets: number[];
+	couponState?: 'idle' | 'checking' | 'valid' | 'invalid';
+	couponReason?: string;
 };
 
 /**
@@ -172,6 +176,9 @@ export function getValidationError( input: PromoValidationInput ): string | null
 		if ( typeof effectiveAmount === 'number' && donateConfig.layout_param !== 'untiered' && ! input.presets.includes( effectiveAmount ) ) {
 			return __( 'Choose one of the amounts available on the target page.', 'newspack-plugin' );
 		}
+	}
+	if ( 'invalid' === input.couponState ) {
+		return input.couponReason || __( 'The coupon code is not valid.', 'newspack-plugin' );
 	}
 	return null;
 }

@@ -152,6 +152,19 @@ describe( 'getValidationError', () => {
 		expect( getValidationError( { ...donationBase, effectiveAmount: 15 } ) ).toBeNull();
 	} );
 
+	it( 'surfaces the coupon pre-check reason', () => {
+		expect( getValidationError( { ...productBase, couponState: 'invalid', couponReason: 'This coupon has expired.' } ) ).toBe(
+			'This coupon has expired.'
+		);
+		expect( getValidationError( { ...productBase, couponState: 'invalid' } ) ).toBe( 'The coupon code is not valid.' );
+	} );
+
+	it( 'does not block on a coupon still being checked or already valid', () => {
+		expect( getValidationError( { ...productBase, couponState: 'checking' } ) ).toBeNull();
+		expect( getValidationError( { ...productBase, couponState: 'valid' } ) ).toBeNull();
+		expect( getValidationError( { ...productBase, couponState: 'idle' } ) ).toBeNull();
+	} );
+
 	it( 'accepts any amount on an untiered target block', () => {
 		expect(
 			getValidationError( {

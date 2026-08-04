@@ -36,9 +36,36 @@ describe( 'buildPromoUrl', () => {
 			} )
 		);
 		expect( url.searchParams.has( 'variation_id' ) ).toBe( false );
+		expect( url.searchParams.has( 'coupon' ) ).toBe( false );
 		expect( url.searchParams.has( 'utm_source' ) ).toBe( false );
 		expect( url.searchParams.has( 'utm_medium' ) ).toBe( false );
 		expect( url.searchParams.has( 'utm_campaign' ) ).toBe( false );
+	} );
+
+	it( 'carries a coupon on a product link', () => {
+		const url = new URL(
+			buildPromoUrl( {
+				kind: 'product',
+				selections: { pageUrl: PAGE, productId: 100, coupon: 'SPRING 20' },
+			} )
+		);
+		expect( url.searchParams.get( 'coupon' ) ).toBe( 'SPRING 20' );
+	} );
+
+	it( 'never puts a coupon on a donation link', () => {
+		const url = new URL(
+			buildPromoUrl( {
+				kind: 'donation',
+				selections: {
+					pageUrl: 'https://example.test/donate/',
+					layoutParam: 'frequency',
+					frequency: 'month',
+					amount: 15,
+					coupon: 'SPRING20',
+				},
+			} )
+		);
+		expect( url.searchParams.has( 'coupon' ) ).toBe( false );
 	} );
 
 	it( 'preserves an existing query string on the page permalink', () => {

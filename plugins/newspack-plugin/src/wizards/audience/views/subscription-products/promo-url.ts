@@ -17,6 +17,7 @@ export type PromoUrlSelections = {
 	amount?: number | 'other';
 	otherAmount?: number;
 	layoutParam?: 'tiered' | 'untiered' | 'frequency';
+	coupon?: string;
 	utmSource?: string;
 	utmMedium?: string;
 	utmCampaign?: string;
@@ -42,6 +43,8 @@ export function buildPromoUrl( input: PromoUrlInput ): string {
 		url.searchParams.set( 'type', 'checkout_button' );
 		setIf( url, 'product_id', s.productId );
 		setIf( url, 'variation_id', s.variationId );
+		// Applied to the cart at checkout, and carried through the plan picker.
+		setIf( url, 'coupon', s.coupon );
 	} else {
 		url.searchParams.set( 'type', 'donate' );
 		setIf( url, 'layout', s.layoutParam );
