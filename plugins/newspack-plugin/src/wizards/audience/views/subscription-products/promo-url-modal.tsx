@@ -288,7 +288,12 @@ export default function PromoUrlModal( { item, closeModal }: { item: Subscriptio
 						onChange={ value => setAmount( value === 'custom' ? 'custom' : parseFloat( value ) ) }
 					/>
 					{ amount === 'custom' && (
-						<TextControl label={ __( 'Custom amount', 'newspack-plugin' ) } type="number" value={ customAmount } onChange={ setCustomAmount } />
+						<TextControl
+							label={ __( 'Custom amount', 'newspack-plugin' ) }
+							type="number"
+							value={ customAmount }
+							onChange={ setCustomAmount }
+						/>
 					) }
 				</HStack>
 			) }

@@ -185,7 +185,9 @@ describe( 'getValidationError', () => {
 	} );
 
 	it( 'reports a Donate block that cannot take a link', () => {
-		expect( getValidationError( { ...donationBase, donateConfig: null } ) ).toBe( 'The Donate block on this page cannot take a promotional link.' );
+		expect( getValidationError( { ...donationBase, donateConfig: null } ) ).toBe(
+			'The Donate block on this page cannot take a promotional link.'
+		);
 	} );
 
 	it( 'rejects an unparseable or absent amount', () => {
@@ -198,9 +200,7 @@ describe( 'getValidationError', () => {
 	} );
 
 	it( 'requires an amount the target block actually renders', () => {
-		expect( getValidationError( { ...donationBase, effectiveAmount: 22 } ) ).toBe(
-			'Choose one of the amounts available on the target page.'
-		);
+		expect( getValidationError( { ...donationBase, effectiveAmount: 22 } ) ).toBe( 'Choose one of the amounts available on the target page.' );
 		expect( getValidationError( { ...donationBase, effectiveAmount: 15 } ) ).toBeNull();
 	} );
 
