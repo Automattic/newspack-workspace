@@ -14,6 +14,12 @@ describe( 'reportMatchedSegments', () => {
 		window.newspack_popups_view = { segments: { 12: {}, 45: {} } };
 	} );
 
+	afterEach( () => {
+		// Restore any Storage.prototype spies even when a test fails partway
+		// through, so one failure here cannot cascade into unrelated tests.
+		jest.restoreAllMocks();
+	} );
+
 	it( 'reports the matched set on the first evaluation of a session', () => {
 		getMatchingSegmentIds.mockReturnValue( [ '12', '45' ] );
 		reportMatchedSegments();
@@ -58,18 +64,16 @@ describe( 'reportMatchedSegments', () => {
 	} );
 
 	it( 'dispatches every time when sessionStorage is unavailable', () => {
-		const getSpy = jest.spyOn( Storage.prototype, 'getItem' ).mockImplementation( () => {
+		jest.spyOn( Storage.prototype, 'getItem' ).mockImplementation( () => {
 			throw new Error( 'denied' );
 		} );
-		const setSpy = jest.spyOn( Storage.prototype, 'setItem' ).mockImplementation( () => {
+		jest.spyOn( Storage.prototype, 'setItem' ).mockImplementation( () => {
 			throw new Error( 'denied' );
 		} );
 		getMatchingSegmentIds.mockReturnValue( [ '12' ] );
 		reportMatchedSegments();
 		reportMatchedSegments();
 		expect( sendEvent ).toHaveBeenCalledTimes( 2 );
-		getSpy.mockRestore();
-		setSpy.mockRestore();
 	} );
 } );
 
