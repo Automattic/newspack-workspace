@@ -78,6 +78,9 @@ export default function PromoUrlModal( { item, closeModal }: { item: Subscriptio
 	const [ customAmount, setCustomAmount ] = useState( '' );
 	const [ coupon, setCoupon ] = useState( '' );
 	const [ couponStatus, setCouponStatus ] = useState< CouponStatus >( { state: 'idle' } );
+	const [ afterSuccess, setAfterSuccess ] = useState< '' | 'custom' >( '' );
+	const [ afterSuccessUrl, setAfterSuccessUrl ] = useState( '' );
+	const [ afterSuccessLabel, setAfterSuccessLabel ] = useState( '' );
 	const [ utmSource, setUtmSource ] = useState( '' );
 	const [ utmMedium, setUtmMedium ] = useState( '' );
 	const [ utmCampaign, setUtmCampaign ] = useState( '' );
@@ -216,6 +219,9 @@ export default function PromoUrlModal( { item, closeModal }: { item: Subscriptio
 		otherAmount: effectiveAmount === 'other' ? parseFloat( customAmount ) : undefined,
 		layoutParam: donateConfig?.layout_param,
 		coupon: kind === 'product' ? coupon || undefined : undefined,
+		afterSuccessBehavior: kind === 'product' ? afterSuccess : '',
+		afterSuccessUrl,
+		afterSuccessButtonLabel: afterSuccessLabel || undefined,
 		utmSource,
 		utmMedium,
 		utmCampaign,
@@ -234,8 +240,10 @@ export default function PromoUrlModal( { item, closeModal }: { item: Subscriptio
 				presets: amountChoices.presets,
 				couponState: kind === 'product' ? couponStatus.state : undefined,
 				couponReason: couponStatus.reason,
+				afterSuccess: kind === 'product' ? afterSuccess : '',
+				afterSuccessUrl,
 			} ),
-		[ kind, pageUrl, requiresChild, variationId, donateConfig, effectiveAmount, customAmount, amountChoices.presets, couponStatus ]
+		[ kind, pageUrl, requiresChild, variationId, donateConfig, effectiveAmount, customAmount, amountChoices.presets, couponStatus, afterSuccess, afterSuccessUrl ]
 	);
 
 	const url = validationError ? '' : buildPromoUrl( { kind, selections } );
@@ -403,6 +411,35 @@ export default function PromoUrlModal( { item, closeModal }: { item: Subscriptio
 			) }
 			{ kind === 'product' && (
 				<TextControl label={ __( 'Coupon code', 'newspack-plugin' ) } value={ coupon } onChange={ setCoupon } help={ couponHelp } />
+			) }
+			{ kind === 'product' && (
+				<>
+					<SelectControl
+						label={ __( 'After checkout', 'newspack-plugin' ) }
+						value={ afterSuccess }
+						options={ [
+							{ label: __( 'Show the thank-you screen', 'newspack-plugin' ), value: '' },
+							{ label: __( 'Continue to a custom URL', 'newspack-plugin' ), value: 'custom' },
+						] }
+						onChange={ value => setAfterSuccess( value as '' | 'custom' ) }
+					/>
+					{ afterSuccess === 'custom' && (
+						<>
+							<TextControl
+								label={ __( 'Custom URL', 'newspack-plugin' ) }
+								value={ afterSuccessUrl }
+								onChange={ setAfterSuccessUrl }
+								placeholder="https://example.com"
+							/>
+							<TextControl
+								label={ __( 'Button label', 'newspack-plugin' ) }
+								value={ afterSuccessLabel }
+								onChange={ setAfterSuccessLabel }
+								help={ __( 'Optional. Defaults to the site\u2019s continue label.', 'newspack-plugin' ) }
+							/>
+						</>
+					) }
+				</>
 			) }
 			<PanelBody title={ __( 'Campaign tracking', 'newspack-plugin' ) } initialOpen={ false }>
 				<HStack alignment="top">

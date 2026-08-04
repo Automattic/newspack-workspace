@@ -52,6 +52,35 @@ describe( 'buildPromoUrl', () => {
 		expect( url.searchParams.get( 'coupon' ) ).toBe( 'SPRING 20' );
 	} );
 
+	it( 'carries a custom after-checkout destination', () => {
+		const url = new URL(
+			buildPromoUrl( {
+				kind: 'product',
+				selections: {
+					pageUrl: PAGE,
+					productId: 100,
+					afterSuccessBehavior: 'custom',
+					afterSuccessUrl: 'https://example.test/welcome',
+					afterSuccessButtonLabel: 'Get started',
+				},
+			} )
+		);
+		expect( url.searchParams.get( 'after_success_behavior' ) ).toBe( 'custom' );
+		expect( url.searchParams.get( 'after_success_url' ) ).toBe( 'https://example.test/welcome' );
+		expect( url.searchParams.get( 'after_success_button_label' ) ).toBe( 'Get started' );
+	} );
+
+	it( 'omits after-checkout params when the thank-you screen is kept', () => {
+		const url = new URL(
+			buildPromoUrl( {
+				kind: 'product',
+				selections: { pageUrl: PAGE, productId: 100, afterSuccessBehavior: '', afterSuccessUrl: 'https://example.test/welcome' },
+			} )
+		);
+		expect( url.searchParams.has( 'after_success_behavior' ) ).toBe( false );
+		expect( url.searchParams.has( 'after_success_url' ) ).toBe( false );
+	} );
+
 	it( 'never puts a coupon on a donation link', () => {
 		const url = new URL(
 			buildPromoUrl( {

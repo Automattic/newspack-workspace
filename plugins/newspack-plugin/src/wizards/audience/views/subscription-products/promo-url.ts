@@ -18,6 +18,9 @@ export type PromoUrlSelections = {
 	otherAmount?: number;
 	layoutParam?: 'tiered' | 'untiered' | 'frequency';
 	coupon?: string;
+	afterSuccessBehavior?: '' | 'custom';
+	afterSuccessUrl?: string;
+	afterSuccessButtonLabel?: string;
 	utmSource?: string;
 	utmMedium?: string;
 	utmCampaign?: string;
@@ -45,6 +48,12 @@ export function buildPromoUrl( input: PromoUrlInput ): string {
 		setIf( url, 'variation_id', s.variationId );
 		// Applied to the cart at checkout, and carried through the plan picker.
 		setIf( url, 'coupon', s.coupon );
+		// Read by the thank-you screen to send the reader onward.
+		if ( s.afterSuccessBehavior === 'custom' ) {
+			url.searchParams.set( 'after_success_behavior', 'custom' );
+			setIf( url, 'after_success_url', s.afterSuccessUrl );
+			setIf( url, 'after_success_button_label', s.afterSuccessButtonLabel );
+		}
 	} else {
 		url.searchParams.set( 'type', 'donate' );
 		setIf( url, 'layout', s.layoutParam );

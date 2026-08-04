@@ -142,6 +142,8 @@ export type PromoValidationInput = {
 	presets: number[];
 	couponState?: 'idle' | 'checking' | 'valid' | 'invalid';
 	couponReason?: string;
+	afterSuccess?: '' | 'custom';
+	afterSuccessUrl?: string;
 };
 
 /**
@@ -179,6 +181,9 @@ export function getValidationError( input: PromoValidationInput ): string | null
 	}
 	if ( 'invalid' === input.couponState ) {
 		return input.couponReason || __( 'The coupon code is not valid.', 'newspack-plugin' );
+	}
+	if ( 'custom' === input.afterSuccess && ! input.afterSuccessUrl ) {
+		return __( 'Enter the URL readers should continue to after checkout.', 'newspack-plugin' );
 	}
 	return null;
 }
