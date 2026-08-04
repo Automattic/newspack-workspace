@@ -20,6 +20,288 @@ class PresetsTest extends WP_UnitTestCase {
 
 		\delete_option( Newspack_Popups_Presets::NEWSPACK_POPUPS_RAS_PROMPTS_OPTION );
 		Newspack_Segments_Model::delete_all_segments();
+
+		// Preset previews read request state and the current user, so start each
+		// test from a known one.
+		unset( $_GET['values'], $_GET['preset'] );
+		\wp_set_current_user( 0 );
+	}
+
+	/**
+	 * Set the current user to one holding the prompt-management capability.
+	 *
+	 * Deliberately an editor, not an administrator: the gate is `edit_others_pages`
+	 * via a filterable capability, and an administrator would satisfy any capability
+	 * this were later tightened to, hiding the regression from this suite.
+	 */
+	private function login_as_prompt_manager() {
+		\wp_set_current_user( self::factory()->user->create( [ 'role' => 'editor' ] ) );
+	}
+
+	/**
+	 * Render a preset the way generate_popup() does, and return the output.
+	 *
+	 * @param array $preset Preset popup object.
+	 * @return string Rendered markup.
+	 */
+	private function render_preset( $preset ) {
+		$body = '';
+		foreach ( \parse_blocks( $preset['content'] ) as $block ) {
+			$body .= \render_block( $block );
+		}
+		return \do_shortcode( $body );
+	}
+
+	/**
+	 * Preset previews render request-supplied input, so they are limited to users
+	 * who can manage prompts, the same way single-prompt previews are.
+	 */
+	public function test_preset_popup_requires_prompt_management_capability() {
+		$this->assertNull(
+			Newspack_Popups_Presets::retrieve_preset_popup( 'ras_registration_overlay' ),
+			'A visitor must not be able to render a preset preview.'
+		);
+
+		\wp_set_current_user( self::factory()->user->create( [ 'role' => 'subscriber' ] ) );
+		$this->assertNull(
+			Newspack_Popups_Presets::retrieve_preset_popup( 'ras_registration_overlay' ),
+			'A subscriber must not be able to render a preset preview.'
+		);
+
+		$this->login_as_prompt_manager();
+		$preset = Newspack_Popups_Presets::retrieve_preset_popup( 'ras_registration_overlay' );
+		$this->assertIsArray( $preset, 'A user who can manage prompts can still render a preset preview.' );
+		$this->assertArrayHasKey( 'content', $preset );
+	}
+
+	/**
+	 * A visitor appending ?preset= must not put the request into preview mode, which
+	 * would suppress every prompt on the page and swap the reader data store.
+	 */
+	public function test_preset_param_is_inert_for_visitors() {
+		$_GET['preset'] = 'ras_registration_overlay';
+		try {
+			\wp_set_current_user( 0 );
+			$this->assertNull( Newspack_Popups::preset_popup_id(), 'A visitor gets no preset slug.' );
+			$this->assertFalse( Newspack_Popups::is_preview_request(), 'A visitor does not enter preview mode.' );
+			$this->assertSame(
+				[],
+				Newspack_Popups_Inserter::popups_for_post(),
+				'A visitor gets an empty popup list, not [ null ].'
+			);
+
+			$this->login_as_prompt_manager();
+			$this->assertSame( 'ras_registration_overlay', Newspack_Popups::preset_popup_id() );
+			$this->assertTrue( Newspack_Popups::is_preview_request() );
+		} finally {
+			unset( $_GET['preset'] );
+		}
+	}
+
+	/**
+	 * Preview override values are spliced into content that is later rendered
+	 * through do_shortcode(), so they must not be able to introduce a shortcode.
+	 */
+	public function test_preset_override_values_cannot_inject_shortcodes() {
+		$ran = false;
+		\add_shortcode(
+			'newspack_test_injection',
+			function () use ( &$ran ) {
+				$ran = true;
+				return 'INJECTED';
+			}
+		);
+
+		try {
+			$this->login_as_prompt_manager();
+			// This preset puts both placeholders inside core blocks, so the override
+			// value ends up in rendered body text — the same place generate_popup()
+			// runs do_shortcode() over.
+			$_GET['preset'] = 'ras_newsletter_overlay';
+			$_GET['values'] = [
+				'body'    => '[newspack_test_injection]',
+				'heading' => 'Safe heading',
+			];
+
+			$preset = Newspack_Popups_Presets::retrieve_preset_popup( 'ras_newsletter_overlay' );
+			$this->assertIsArray( $preset );
+			$rendered = $this->render_preset( $preset );
+
+			$this->assertFalse( $ran, 'An injected shortcode must not execute from a preview override value.' );
+			$this->assertStringNotContainsString( 'INJECTED', $rendered, 'Injected shortcode output must not reach the page.' );
+			$this->assertStringNotContainsString(
+				'[newspack_test_injection]',
+				$preset['content'],
+				'Shortcode delimiters must not survive into preset content.'
+			);
+			$this->assertStringContainsString(
+				'Safe heading',
+				$preset['content'],
+				'Ordinary override values still populate the preview.'
+			);
+		} finally {
+			\remove_shortcode( 'newspack_test_injection' );
+			unset( $_GET['values'], $_GET['preset'] );
+		}
+	}
+
+	/**
+	 * Most placeholders are substituted inside a block delimiter's JSON attribute
+	 * object, which parse_blocks() runs through json_decode(). A JSON escape
+	 * sequence must not be able to reconstitute a bracket after it was stripped.
+	 */
+	public function test_preset_override_values_cannot_inject_shortcodes_via_json_escape() {
+		$ran = false;
+		\add_shortcode(
+			'newspack_test_injection',
+			function () use ( &$ran ) {
+				$ran = true;
+				return 'INJECTED';
+			}
+		);
+
+		try {
+			$this->login_as_prompt_manager();
+			$_GET['preset'] = 'ras_registration_overlay';
+			// A backslash-u escape for each bracket. Built with chr( 92 ) so the
+			// backslash is unambiguous in source: json_decode() inside parse_blocks()
+			// would turn these back into real brackets after the strip has run.
+			$escaped_open  = chr( 92 ) . 'u005B';
+			$escaped_close = chr( 92 ) . 'u005D';
+			// wp_slash() because WordPress slashes superglobals in wp_magic_quotes(),
+			// and get_override_values() unslashes. Assigning the raw string here would
+			// have the unslash eat the backslash and the test would prove nothing.
+			$_GET['values'] = \wp_slash(
+				[
+					'body' => $escaped_open . 'newspack_test_injection' . $escaped_close,
+				]
+			);
+
+			$preset = Newspack_Popups_Presets::retrieve_preset_popup( 'ras_registration_overlay' );
+			$this->assertIsArray( $preset );
+
+			$blocks = \parse_blocks( $preset['content'] );
+			$this->assertNotEmpty( $blocks );
+			$description = $blocks[0]['attrs']['description'] ?? '';
+			$this->assertStringNotContainsString(
+				'[newspack_test_injection]',
+				$description,
+				'A JSON escape sequence must not reconstitute shortcode delimiters after parsing.'
+			);
+
+			$rendered = $this->render_preset( $preset );
+			$this->assertFalse( $ran, 'An injected shortcode must not execute via a JSON escape sequence.' );
+			$this->assertStringNotContainsString( 'INJECTED', $rendered );
+		} finally {
+			\remove_shortcode( 'newspack_test_injection' );
+			unset( $_GET['values'], $_GET['preset'] );
+		}
+	}
+
+	/**
+	 * A quote in ordinary editorial copy must not break the block it is substituted
+	 * into, and must not let a value inject sibling block attributes.
+	 */
+	public function test_preset_override_values_cannot_break_out_of_block_attributes() {
+		try {
+			$this->login_as_prompt_manager();
+			$_GET['preset'] = 'ras_registration_overlay';
+			$_GET['values'] = [
+				'heading'      => 'Say "hi" to us',
+				'button_label' => 'Sign up","className":"INJECTED-CLASS',
+			];
+
+			$preset = Newspack_Popups_Presets::retrieve_preset_popup( 'ras_registration_overlay' );
+			$this->assertIsArray( $preset );
+
+			$blocks = \parse_blocks( $preset['content'] );
+			$this->assertNotEmpty( $blocks );
+			$attrs = $blocks[0]['attrs'];
+
+			$this->assertIsArray(
+				$attrs,
+				'A quote in ordinary copy must not make the block attributes unparseable.'
+			);
+			$this->assertArrayNotHasKey(
+				'className',
+				$attrs,
+				'An override value must not be able to add block attributes.'
+			);
+			$this->assertStringNotContainsString( 'INJECTED-CLASS', $this->render_preset( $preset ) );
+		} finally {
+			unset( $_GET['values'], $_GET['preset'] );
+		}
+	}
+
+	/**
+	 * The featured image override never passes through process_user_inputs(), so it
+	 * is guarded on its own. It reaches the popup object under `options`, not at the
+	 * top level.
+	 */
+	public function test_preset_featured_image_override_is_sanitized() {
+		try {
+			$this->login_as_prompt_manager();
+			$_GET['preset'] = 'ras_registration_overlay';
+			$_GET['values'] = [ 'featured_image_id' => '12[newspack_test_injection]' ];
+
+			$preset = Newspack_Popups_Presets::retrieve_preset_popup( 'ras_registration_overlay' );
+			$this->assertIsArray( $preset );
+			$this->assertArrayHasKey( 'featured_image_id', $preset['options'] );
+			$this->assertSame(
+				12,
+				$preset['options']['featured_image_id'],
+				'The featured image override reaches the popup as an integer.'
+			);
+		} finally {
+			unset( $_GET['values'], $_GET['preset'] );
+		}
+	}
+
+	/**
+	 * Override values are request-scoped preview input. They must not reach
+	 * get_ras_presets() on the paths that persist prompts.
+	 */
+	public function test_override_values_are_ignored_without_a_preset_request() {
+		try {
+			$this->login_as_prompt_manager();
+			$_GET['values'] = [ 'heading' => 'Override heading' ];
+
+			$presets = Newspack_Popups_Presets::get_ras_presets();
+			$this->assertIsArray( $presets );
+			foreach ( $presets['prompts'] as $prompt ) {
+				$this->assertStringNotContainsString(
+					'Override heading',
+					$prompt['content'],
+					'Request values must not be applied outside a preset preview.'
+				);
+			}
+		} finally {
+			unset( $_GET['values'] );
+		}
+	}
+
+	/**
+	 * The override value is encoded at the substitution point too, so any caller
+	 * passing one gets the same treatment.
+	 */
+	public function test_process_user_inputs_encodes_delimiters_in_override() {
+		$field = [
+			'name'    => 'body',
+			'type'    => 'string',
+			'default' => 'Default body',
+		];
+
+		$this->assertSame(
+			'<p>&#91;evil attr="x"&#93;</p>',
+			Newspack_Popups_Presets::process_user_inputs( '<p>{{body}}</p>', $field, '[evil attr="x"]' ),
+			'Square brackets are encoded in an override value, not removed.'
+		);
+
+		$this->assertSame(
+			'<p>Default body</p>',
+			Newspack_Popups_Presets::process_user_inputs( '<p>{{body}}</p>', $field ),
+			'Without an override, the default value is used unchanged.'
+		);
 	}
 
 	/**

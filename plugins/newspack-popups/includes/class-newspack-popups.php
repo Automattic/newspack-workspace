@@ -938,6 +938,11 @@ final class Newspack_Popups {
 	 * @return string|null Popup slug, if found in the URL
 	 */
 	public static function preset_popup_id() {
+		// Ignored for everyone else: preview mode suppresses prompts and swaps the
+		// reader data store.
+		if ( ! self::is_user_admin() ) {
+			return null;
+		}
 		// Not using filter_input since it's not playing well with phpunit.
 		if ( isset( $_GET[ self::NEWSPACK_POPUP_PRESET_QUERY_PARAM ] ) && $_GET[ self::NEWSPACK_POPUP_PRESET_QUERY_PARAM ] ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
 			return sanitize_text_field( $_GET[ self::NEWSPACK_POPUP_PRESET_QUERY_PARAM ] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended

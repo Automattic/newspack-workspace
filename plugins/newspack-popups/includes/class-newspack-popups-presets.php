@@ -22,6 +22,11 @@ final class Newspack_Popups_Presets {
 	 * @return object|null Popup object, or null if no preset is found for the given slug.
 	 */
 	public static function retrieve_preset_popup( $slug ) {
+		// Renders request input, so restrict it like retrieve_preview_popup() does.
+		if ( ! Newspack_Popups::is_user_admin() ) {
+			return null;
+		}
+
 		$presets = self::get_ras_presets();
 
 		if ( \is_wp_error( $presets ) || ! $presets || ! isset( $presets['prompts'] ) ) {
@@ -98,6 +103,74 @@ final class Newspack_Popups_Presets {
 	}
 
 	/**
+	 * Read preset preview override values from the request.
+	 *
+	 * Values arrive as `?values[field_name]=…`; `lists` arrives as an array.
+	 *
+	 * @return array Sanitized override values, keyed by field name.
+	 */
+	private static function get_override_values() {
+		// get_ras_presets() also backs the two functions that write real prompt posts.
+		if ( ! Newspack_Popups::preset_popup_id() ) {
+			return [];
+		}
+
+		// filter_input reads the original request, not $_GET, so it is null under PHPUnit.
+		if ( ! isset( $_GET['values'] ) || ! is_array( $_GET['values'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			return [];
+		}
+
+		return self::sanitize_override_values( \wp_unslash( $_GET['values'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+	}
+
+	/**
+	 * Sanitize preset preview override values.
+	 *
+	 * @param mixed $values Raw values from the request.
+	 * @return array Sanitized values.
+	 */
+	private static function sanitize_override_values( $values ) {
+		if ( ! is_array( $values ) ) {
+			return [];
+		}
+
+		$sanitized = [];
+		foreach ( $values as $key => $value ) {
+			$key = \sanitize_text_field( $key );
+			if ( is_array( $value ) ) {
+				$sanitized[ $key ] = self::sanitize_override_values( $value );
+				continue;
+			}
+			if ( ! is_scalar( $value ) ) {
+				continue;
+			}
+			// Not sanitize_text_field(): an unencoded `"` closes the JSON string these sit in.
+			$sanitized[ $key ] = self::encode_shortcode_delimiters( filter_var( (string) $value, FILTER_SANITIZE_FULL_SPECIAL_CHARS ) );
+		}
+
+		return $sanitized;
+	}
+
+	/**
+	 * Encode the characters that could introduce a shortcode into preset markup.
+	 *
+	 * Backslashes too: `parse_blocks()` JSON-decodes these values, which would turn an
+	 * escape sequence back into a bracket.
+	 *
+	 * @param mixed $value Value to encode.
+	 * @return mixed Value with delimiters encoded.
+	 */
+	private static function encode_shortcode_delimiters( $value ) {
+		if ( is_array( $value ) ) {
+			return array_map( [ __CLASS__, 'encode_shortcode_delimiters' ], $value );
+		}
+		if ( ! is_string( $value ) ) {
+			return $value;
+		}
+		return str_replace( [ '[', ']', '\\' ], [ '&#91;', '&#93;', '&#92;' ], $value );
+	}
+
+	/**
 	 * Retrieve default prompts + segments.
 	 *
 	 * @return array|WP_Error Array of prompt and segment default configs.
@@ -123,7 +196,7 @@ final class Newspack_Popups_Presets {
 		}
 
 		// Get override values if previewing a preset.
-		$override_values = filter_input( INPUT_GET, 'values', FILTER_SANITIZE_FULL_SPECIAL_CHARS, FILTER_REQUIRE_ARRAY );
+		$override_values = self::get_override_values();
 
 		// Populate prompt configs with saved inputs.
 		$data['prompts'] = array_map(
@@ -155,7 +228,8 @@ final class Newspack_Popups_Presets {
 					}
 					if ( 'int' === $field['type'] && 'featured_image_id' === $field['name'] ) {
 						if ( ! empty( $override_values['featured_image_id'] ) ) {
-							$prompt['featured_image_id'] = $override_values['featured_image_id'];
+							// An int field, and the only override that skips process_user_inputs().
+							$prompt['featured_image_id'] = absint( $override_values['featured_image_id'] );
 						} elseif ( isset( $field['value'] ) ) {
 							$prompt['featured_image_id'] = $field['value'];
 						}
@@ -221,6 +295,16 @@ final class Newspack_Popups_Presets {
 		}
 
 		$field_name = $field['name'];
+
+		// An override comes from the request; saved and default values do not.
+		if ( ! empty( $value ) ) {
+			if ( 'string' === $field['type'] && ! is_scalar( $value ) ) {
+				// `?values[body][]=x` would otherwise reach trim() below as an array.
+				$value = null;
+			} else {
+				$value = self::encode_shortcode_delimiters( $value );
+			}
+		}
 
 		if ( ! $value ) {
 			$value = isset( $field['value'] ) ? $field['value'] : $field['default'];
