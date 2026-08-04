@@ -1,7 +1,8 @@
 <?php // phpcs:ignore WordPress.Files.FileName.InvalidClassFileName
 /**
  * Test the Contextual Prompt synced pattern: seeding, the locked and bound
- * structure it seeds with, and the slash-safe write helper.
+ * structure it seeds with, the slash-safe write helper, and the protection that
+ * keeps the pattern out of reach of deletion and unlocking.
  *
  * Newspack Blocks is not loaded in this test env, so set_up() registers a stub
  * donate block type — use_donate_block() requires it — and native-CTA
@@ -216,5 +217,41 @@ class ContextualPromptPatternTest extends WP_UnitTestCase {
 			parse_blocks( $content )[0]['innerBlocks'][0]['attrs']['placeholder'],
 			'The attribute escapes survived the write.'
 		);
+	}
+
+	/**
+	 * Deleting the pattern would break every instance referencing it, so the
+	 * capability is denied outright — to administrators too. Other synced
+	 * patterns keep theirs.
+	 */
+	public function test_the_pattern_cannot_be_deleted_by_anyone() {
+		$admin = self::factory()->user->create( [ 'role' => 'administrator' ] );
+		wp_set_current_user( $admin );
+		$id = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
+
+		$this->assertFalse( current_user_can( 'delete_post', $id ) );
+
+		$other = self::factory()->post->create( [ 'post_type' => 'wp_block' ] );
+		$this->assertTrue( current_user_can( 'delete_post', $other ), 'Other synced patterns stay deletable.' );
+	}
+
+	/**
+	 * The pattern's own locks are what keep instances uniform, so the editor that
+	 * opens it offers no way to lift them. Other posts keep block locking.
+	 */
+	public function test_the_pattern_editor_hides_block_locking() {
+		// get_block_editor_settings() collects the iframed editor assets, which
+		// needs the enqueue globals a real request would already have.
+		wp_styles();
+		wp_scripts();
+
+		$id       = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
+		$context  = new WP_Block_Editor_Context( [ 'post' => get_post( $id ) ] );
+		$settings = get_block_editor_settings( [], $context );
+
+		$this->assertFalse( $settings['canLockBlocks'] );
+
+		$other_context = new WP_Block_Editor_Context( [ 'post' => get_post( self::factory()->post->create() ) ] );
+		$this->assertNotFalse( get_block_editor_settings( [], $other_context )['canLockBlocks'] ?? true, 'Other posts keep block locking.' );
 	}
 }

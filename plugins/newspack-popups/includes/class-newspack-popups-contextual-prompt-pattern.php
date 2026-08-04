@@ -40,6 +40,45 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 	 * Register hooks.
 	 */
 	public static function init() {
+		add_filter( 'map_meta_cap', [ __CLASS__, 'protect_pattern' ], 10, 4 );
+		add_filter( 'block_editor_settings_all', [ __CLASS__, 'lock_pattern_editor' ], 10, 2 );
+	}
+
+	/**
+	 * Deny deleting the pattern: every instance references it, so losing it would
+	 * empty them all. The raw option is what the guard compares against — a
+	 * capability check must never seed.
+	 *
+	 * @param string[] $caps    Primitive capabilities required of the user.
+	 * @param string   $cap     Capability being checked.
+	 * @param int      $user_id User ID.
+	 * @param array    $args    Context, with the object ID at index 0.
+	 *
+	 * @return string[]
+	 */
+	public static function protect_pattern( $caps, $cap, $user_id, $args ) {
+		if ( 'delete_post' === $cap && ! empty( $args[0] ) && (int) $args[0] === (int) get_option( self::OPTION_PATTERN_ID, 0 ) ) {
+			return [ 'do_not_allow' ];
+		}
+
+		return $caps;
+	}
+
+	/**
+	 * Hide block locking in the editor that opens the pattern: its locks are what
+	 * keep instances uniform, so they are not the publisher's to lift.
+	 *
+	 * @param array                   $settings Block editor settings.
+	 * @param WP_Block_Editor_Context $context  Editor context.
+	 *
+	 * @return array
+	 */
+	public static function lock_pattern_editor( $settings, $context ) {
+		if ( ! empty( $context->post ) && (int) $context->post->ID === (int) get_option( self::OPTION_PATTERN_ID, 0 ) ) {
+			$settings['canLockBlocks'] = false;
+		}
+
+		return $settings;
 	}
 
 	/**
