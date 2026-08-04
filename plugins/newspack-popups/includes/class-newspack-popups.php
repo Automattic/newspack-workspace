@@ -118,10 +118,6 @@ final class Newspack_Popups {
 		if ( self::is_contextual_prompts_enabled() ) {
 			Newspack_Popups_Contextual_Prompt_Render::init();
 		}
-		include_once __DIR__ . '/class-newspack-popups-contextual-prompt-styles.php';
-		if ( self::is_contextual_prompts_enabled() ) {
-			Newspack_Popups_Contextual_Prompt_Styles::init();
-		}
 		// Registered whether or not the feature is on, so turning it off hides the
 		// prompts a site already publishes.
 		add_filter( 'render_block_core/block', [ 'Newspack_Popups_Contextual_Prompt_Render', 'maybe_strip_instance' ], 8, 2 );

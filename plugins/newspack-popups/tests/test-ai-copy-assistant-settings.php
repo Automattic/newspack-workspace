@@ -33,6 +33,8 @@ class AiCopyAssistantSettingsTest extends WP_UnitTestCase {
 		delete_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION );
 		delete_option( Newspack_Popups_Settings::OVERRIDE_ENABLED_OPTION );
 		delete_option( Newspack_Popups_Settings::OVERRIDE_CTA_OPTION );
+		delete_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_PATTERN_ID );
+		delete_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_STAMPED_ACCENT );
 		delete_option( 'newspack_contextual_prompts_override_body' );
 		delete_option( 'newspack_contextual_prompts_override_label' );
 		delete_option( 'newspack_contextual_prompts_override_url' );
@@ -209,6 +211,96 @@ class AiCopyAssistantSettingsTest extends WP_UnitTestCase {
 		$this->assertContains( 'newspack_contextual_prompts_additional_guidance', $by_section['profile'] );
 		$this->assertContains( Newspack_Popups_Settings::OVERRIDE_ENABLED_OPTION, $by_section['override'] );
 		$this->assertContains( 'newspack_contextual_prompts_override_body', $by_section['override'] );
+	}
+
+	/**
+	 * The pattern is the design surface, so status hands an administrator the
+	 * pattern and its editor link, seeding the pattern on demand.
+	 */
+	public function test_status_carries_the_pattern_edit_link() {
+		wp_set_current_user( $this->factory->user->create( [ 'role' => 'administrator' ] ) );
+		update_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION, true );
+
+		$data       = Newspack_Popups_Api::api_get_contextual_prompt_status()->get_data();
+		$pattern_id = (int) get_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_PATTERN_ID, 0 );
+
+		$this->assertNotSame( 0, $pattern_id, 'Reading the status seeds the pattern.' );
+		$this->assertSame( $pattern_id, $data['pattern_id'] );
+		$this->assertNotSame( '', $data['pattern_edit_url'] );
+		$this->assertSame( get_edit_post_link( $pattern_id, 'raw' ), $data['pattern_edit_url'] );
+		$this->assertStringContainsString( (string) $pattern_id, $data['pattern_edit_url'] );
+	}
+
+	/**
+	 * Nothing is written before opt-in — a site contractually barred from AI use
+	 * must not find a prompt pattern in its patterns list.
+	 */
+	public function test_status_seeds_no_pattern_before_opt_in() {
+		wp_set_current_user( $this->factory->user->create( [ 'role' => 'administrator' ] ) );
+
+		$data = Newspack_Popups_Api::api_get_contextual_prompt_status()->get_data();
+
+		$this->assertSame( 0, $data['pattern_id'] );
+		$this->assertSame( '', $data['pattern_edit_url'] );
+		$this->assertFalse( get_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_PATTERN_ID ) );
+	}
+
+	/**
+	 * The publisher-set styles the wizard used to edit are gone: the pattern
+	 * editor is the design surface, so no style data travels with the status.
+	 */
+	public function test_status_carries_no_style_payload() {
+		wp_set_current_user( $this->factory->user->create( [ 'role' => 'administrator' ] ) );
+		update_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION, true );
+
+		$data = Newspack_Popups_Api::api_get_contextual_prompt_status()->get_data();
+
+		$this->assertSame(
+			[ 'enabled', 'can_manage', 'fields', 'override_active', 'pattern_id', 'pattern_edit_url' ],
+			array_keys( $data )
+		);
+	}
+
+	/**
+	 * Anyone below an administrator gets the opt-in state alone: the profile and
+	 * the pattern are wizard configuration.
+	 */
+	public function test_status_for_a_non_manager_carries_the_opt_in_state_alone() {
+		wp_set_current_user( $this->factory->user->create( [ 'role' => 'author' ] ) );
+		update_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION, true );
+
+		$data = Newspack_Popups_Api::api_get_contextual_prompt_status()->get_data();
+
+		$this->assertSame( [ 'enabled', 'can_manage' ], array_keys( $data ) );
+		$this->assertTrue( $data['enabled'] );
+		$this->assertFalse( $data['can_manage'] );
+	}
+
+	/**
+	 * A stray styles member from an older client is ignored: the endpoint no
+	 * longer takes one, and nothing about it is stored or reported back.
+	 */
+	public function test_profile_save_ignores_a_styles_member() {
+		wp_set_current_user( $this->factory->user->create( [ 'role' => 'administrator' ] ) );
+		update_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION, true );
+		global $wp_rest_server;
+		$wp_rest_server = new WP_REST_Server(); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		do_action( 'rest_api_init' );
+
+		$request = new WP_REST_Request( 'POST', '/newspack-popups/v1/contextual-prompt/profile' );
+		$request->set_body_params(
+			[
+				'fields' => [ 'newspack_contextual_prompts_coverage_area' => 'Riverside County' ],
+				'styles' => [ 'color' => [ 'background' => '#123456' ] ],
+			]
+		);
+		$response = rest_do_request( $request );
+		$data     = $response->get_data();
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'Riverside County', get_option( 'newspack_contextual_prompts_coverage_area' ) );
+		$this->assertArrayNotHasKey( 'styles', $data );
+		$this->assertFalse( get_option( 'newspack_popups_contextual_prompt_styles' ) );
 	}
 
 	/**

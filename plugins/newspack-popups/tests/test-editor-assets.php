@@ -242,7 +242,6 @@ class EditorAssetsTest extends WP_UnitTestCase {
 	 * Test the Contextual Prompt block cannot be authored on a post type the
 	 * generation API rejects: public without an archive. The document settings
 	 * script gates on the same supported list, so it does not enqueue either.
-	 * The block still registers, so the Site Editor can style it.
 	 */
 	public function test_contextual_prompt_is_not_insertable_on_unsupported_post_types() {
 		register_post_type( 'archiveless_cpt', [ 'public' => true ] );
@@ -259,9 +258,8 @@ class EditorAssetsTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test the block registers off the post editor, so the Site Editor lists it
-	 * under Styles > Blocks — where the wizard's block-theme handoff sends
-	 * publishers — while offering no way to insert one there.
+	 * Test the feature reports itself off the post editor while offering no way
+	 * to insert a prompt there.
 	 */
 	public function test_contextual_prompt_registers_but_is_not_insertable_off_post_editors() {
 		update_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION, true );
