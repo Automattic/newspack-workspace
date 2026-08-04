@@ -334,6 +334,21 @@ class Content_Restriction_Control {
 			return $is_post_restricted;
 		}
 
+		// Audience Management is a hard prerequisite for Access Control (NPPD-1846).
+		// A gate hands the reader off to registration, sign-in and account surfaces that
+		// only exist while Audience Management is on, so enforcing one without it locks
+		// readers out with no way in. Gates stay configured and go inert instead, which
+		// is what lets Audience Management be switched off without stranding a live
+		// restriction nobody can reach the screens to lift.
+		//
+		// Passes the incoming value through rather than returning false: this decides
+		// only whether *our* gates restrict, and other callbacks on
+		// `newspack_is_post_restricted` (Woo Memberships, newsletter access) own their
+		// own restrictions and are unaffected by Audience Management.
+		if ( ! Reader_Activation::is_enabled() ) {
+			return $is_post_restricted;
+		}
+
 		// Return early if this post is exempt from access control restrictions.
 		if ( $post_id && get_post_meta( $post_id, self::IS_EXEMPT_META_KEY, true ) ) {
 			return false;

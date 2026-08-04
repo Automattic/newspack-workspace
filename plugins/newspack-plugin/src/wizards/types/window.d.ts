@@ -86,8 +86,12 @@ declare global {
 			// string wp_localize_script() produced ('1' on, '' off) - nothing writes a
 			// real boolean back, so typing it wider would invite a `=== true` that can
 			// never hold. Read it via hasAudienceManagement() in content-gates/utils.
-			audience_management_enabled: string;
-			audience_management_url: string;
+			//
+			// Optional because both keys are absent on a page whose localized config
+			// predates this feature, which the readers already handle: hasAudienceManagement()
+			// fails closed through `?.`, and the prerequisite screen falls back to ''.
+			audience_management_enabled?: string;
+			audience_management_url?: string;
 		};
 	}
 }
