@@ -39,7 +39,7 @@ export const FRAMING_LABELS = {
  * The framing implied by a block's position among the article's top-level
  * blocks, as a coarse ratio-based bucket: top / mid / end.
  *
- * Mirrors get_placement() in class-newspack-popups-contextual-prompt-block.php,
+ * Mirrors get_placement() in class-newspack-popups-contextual-prompt-render.php,
  * which computes the server-side analytics placement. Keep the two in sync: if
  * they diverge, the generated copy is framed for a different position than the
  * one analytics reports.

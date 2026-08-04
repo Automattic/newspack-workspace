@@ -110,10 +110,6 @@ final class Newspack_Popups {
 		include_once __DIR__ . '/class-newspack-segments-migration.php';
 		include_once __DIR__ . '/class-newspack-segments-model.php';
 		include_once __DIR__ . '/class-newspack-popups-presets.php';
-		include_once __DIR__ . '/class-newspack-popups-contextual-prompt-block.php';
-		if ( self::is_contextual_prompts_enabled() ) {
-			Newspack_Popups_Contextual_Prompt_Block::init();
-		}
 		include_once __DIR__ . '/class-newspack-popups-contextual-prompt-pattern.php';
 		if ( self::is_contextual_prompts_enabled() ) {
 			Newspack_Popups_Contextual_Prompt_Pattern::init();
@@ -126,11 +122,9 @@ final class Newspack_Popups {
 		if ( self::is_contextual_prompts_enabled() ) {
 			Newspack_Popups_Contextual_Prompt_Styles::init();
 		}
-		// Feature off — rollout flag absent OR admin opt-in withdrawn: strip any
-		// stored Contextual Prompt markup so it never reaches the front end as an
-		// orphaned call to action (or keeps a stale site-wide override alive).
-		// The opt-in is an option, so it is checked at render time.
-		add_filter( 'render_block', [ __CLASS__, 'maybe_strip_contextual_prompt_block' ], 10, 2 );
+		// Registered whether or not the feature is on, so turning it off hides the
+		// prompts a site already publishes.
+		add_filter( 'render_block_core/block', [ 'Newspack_Popups_Contextual_Prompt_Render', 'maybe_strip_instance' ], 8, 2 );
 		include_once __DIR__ . '/class-newspack-popups-inserter.php';
 		include_once __DIR__ . '/class-newspack-popups-api.php';
 		include_once __DIR__ . '/class-newspack-popups-settings.php';
@@ -800,41 +794,6 @@ final class Newspack_Popups {
 	}
 
 	/**
-	 * Strip Contextual Prompt blocks from rendered output when the feature is
-	 * not fully on: the rollout flag must be defined AND the admin opt-in active.
-	 * Checked at render time because the opt-in is an option an admin can flip
-	 * without a reload; without this, disabling the feature would leave stored
-	 * prompts (and a live site-wide override) rendering with no UI to stop them.
-	 *
-	 * @param string $block_content The block's rendered HTML.
-	 * @param array  $block         The parsed block.
-	 * @return string
-	 */
-	public static function maybe_strip_contextual_prompt_block( $block_content, $block ) {
-		if ( self::is_contextual_prompts_enabled() && Newspack_Popups_Settings::is_ai_copy_assistant_enabled() ) {
-			return $block_content;
-		}
-		return self::strip_contextual_prompt_block( $block_content, $block );
-	}
-
-	/**
-	 * Strip Contextual Prompt blocks from rendered output.
-	 *
-	 * A pure function: returns '' for a Contextual Prompt block, the content
-	 * unchanged for any other block — so it is testable without toggling the flag.
-	 *
-	 * @param string $block_content The block's rendered HTML.
-	 * @param array  $block         The parsed block.
-	 * @return string
-	 */
-	public static function strip_contextual_prompt_block( $block_content, $block ) {
-		if ( isset( $block['blockName'] ) && Newspack_Popups_Contextual_Prompt_Block::BLOCK_NAME === $block['blockName'] ) {
-			return '';
-		}
-		return $block_content;
-	}
-
-	/**
 	 * Load block assets in the editor.
 	 */
 	public static function enqueue_block_assets() {
@@ -887,7 +846,7 @@ final class Newspack_Popups {
 				'contextual_prompts_insertable' => $is_supported_post_editor,
 				// So the editor previews the Contextual Prompt CTA in the same
 				// accent the front end resolves at render.
-				'accent_color'                  => Newspack_Popups_Contextual_Prompt_Block::get_accent_color(),
+				'accent_color'                  => Newspack_Popups_Contextual_Prompt_Pattern::get_accent_color(),
 				// The edited content's own noun ("post", "page", "listing"…), so
 				// prompt UI strings speak the publisher's language.
 				'post_type_label'               => self::get_current_post_type_label(),
@@ -896,7 +855,7 @@ final class Newspack_Popups {
 				'post_type_heading'             => self::get_current_post_type_heading(),
 				// Whether the Contextual Prompt CTA is the native donate block
 				// or a plain button.
-				'donations_native'              => Newspack_Popups_Contextual_Prompt_Block::use_donate_block(),
+				'donations_native'              => Newspack_Popups_Contextual_Prompt_Pattern::use_donate_block(),
 				// Default target for the plain-button CTA: the donor landing
 				// page, when one is configured in Campaigns settings.
 				'donor_landing_url'             => self::get_donor_landing_url(),

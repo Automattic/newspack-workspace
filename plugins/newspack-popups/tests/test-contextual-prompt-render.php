@@ -39,6 +39,8 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 	public function set_up() {
 		parent::set_up();
 		$this->reset_request_state();
+		// Instances are stripped without the admin opt-in.
+		update_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION, true );
 		if ( ! WP_Block_Type_Registry::get_instance()->is_registered( 'newspack-blocks/donate' ) ) {
 			register_block_type(
 				'newspack-blocks/donate',
@@ -55,6 +57,7 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 	 * Reset the pattern record, the donor landing page and the stub block type.
 	 */
 	public function tear_down() {
+		delete_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION );
 		delete_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_PATTERN_ID );
 		delete_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_STAMPED_ACCENT );
 		delete_option( 'newspack_popups_donor_landing_page' );
@@ -85,12 +88,14 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 
 	/**
 	 * Render an instance of the pattern, the way a post referencing it does.
+	 * Copy by default: the pattern's own paragraph is seeded empty, so an instance
+	 * carrying no override renders nothing at all.
 	 *
 	 * @param string|null $copy The instance's own pattern override copy, or null
 	 *                          for an instance carrying none.
 	 * @return string Rendered markup.
 	 */
-	private function render_instance( $copy = null ) {
+	private function render_instance( $copy = self::PER_POST_COPY ) {
 		$attrs = [ 'ref' => Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id() ];
 		if ( null !== $copy ) {
 			$attrs['content'] = [ Newspack_Popups_Contextual_Prompt_Pattern::BOUND_NAME => [ 'content' => $copy ] ];
@@ -245,6 +250,38 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 		$group = $this->stored_group();
 		$this->assertCount( 1, $group['innerBlocks'], 'Only the copy paragraph remains.' );
 		$this->assertSame( 1, count( array_filter( $group['innerContent'], 'is_null' ) ), 'One placeholder per remaining child.' );
+	}
+
+	/**
+	 * A pattern seeded before any donor landing page existed carries a button with
+	 * no destination. Once one is configured the button is repointed at it, in the
+	 * render and in the stored pattern, rather than left a dead ask.
+	 */
+	public function test_offsite_urlless_button_is_repointed_to_a_new_landing_page() {
+		$this->set_platform( false );
+		$ref = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
+		$this->assertStringNotContainsString( 'href=', get_post( $ref )->post_content, 'The seeded button really has no destination.' );
+
+		$permalink = $this->set_donor_landing_page();
+
+		$html = $this->render_instance();
+
+		$this->assertStringContainsString( 'href="' . esc_url( $permalink ) . '"', $html );
+		$this->assertStringContainsString( 'href="' . esc_url( $permalink ) . '"', get_post( $ref )->post_content );
+	}
+
+	/**
+	 * Off site with no destination anywhere: the seeded button is dropped — copy
+	 * alone, never a dead Donate button.
+	 */
+	public function test_offsite_urlless_button_without_a_landing_page_is_dropped() {
+		$this->set_platform( false );
+		Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
+
+		$html = $this->render_instance();
+
+		$this->assertStringContainsString( self::PER_POST_COPY, $html );
+		$this->assertStringNotContainsString( 'wp-block-button', $html );
 	}
 
 	/**

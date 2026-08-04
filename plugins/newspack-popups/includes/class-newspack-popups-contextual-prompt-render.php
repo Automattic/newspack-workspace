@@ -2,11 +2,14 @@
 /**
  * Contextual Prompt render pipeline.
  *
- * Shapes every Contextual Prompt as it renders: the pattern's stored CTA is
- * fixed when it is written, so a change of donation platform can leave it
- * disagreeing with the site. Reconciling happens twice — once against the
- * stored pattern (repair, so the editor sees the truth too) and again in memory
- * for whatever the pattern's own markup happens to be at render.
+ * Shapes every Contextual Prompt as it renders and owns what leaves it: the
+ * analytics hooks the view script reads, the empty-copy suppression, and the
+ * strip that hides instances while the feature is off.
+ *
+ * The pattern's stored CTA is fixed when it is written, so a change of donation
+ * platform can leave it disagreeing with the site. Reconciling happens twice —
+ * once against the stored pattern (repair, so the editor sees the truth too) and
+ * again in memory for whatever the pattern's own markup happens to be at render.
  *
  * Normalization is scoped to blocks arriving from the pattern: a Group a
  * publisher detached and pasted into a post is theirs, not ours.
@@ -40,6 +43,8 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 	public static function init() {
 		add_filter( 'render_block_data', [ __CLASS__, 'open_instance_window' ], 10, 1 );
 		add_filter( 'render_block_data', [ __CLASS__, 'normalize_group' ], 10, 1 );
+		add_filter( 'render_block_core/block', [ __CLASS__, 'suppress_empty_instance' ], 9, 2 );
+		add_filter( 'render_block_core/group', [ __CLASS__, 'add_analytics_attributes' ], 10, 2 );
 		add_filter( 'render_block_core/block', [ __CLASS__, 'close_instance_window' ], 999, 2 );
 	}
 
@@ -50,6 +55,19 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 	 */
 	public static function is_in_instance() {
 		return self::$in_instance;
+	}
+
+	/**
+	 * Whether a parsed block references the pattern. The record is read raw: a
+	 * render must never seed, and an unseeded site must not match a ref of 0.
+	 *
+	 * @param array $block Parsed block.
+	 * @return bool
+	 */
+	private static function is_instance( $block ) {
+		$ref = (int) ( $block['attrs']['ref'] ?? 0 );
+
+		return (bool) $ref && $ref === (int) get_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_PATTERN_ID, 0 );
 	}
 
 	/**
@@ -65,12 +83,7 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 	 * @return array
 	 */
 	public static function open_instance_window( $parsed_block ) {
-		if ( 'core/block' !== ( $parsed_block['blockName'] ?? '' ) ) {
-			return $parsed_block;
-		}
-
-		$ref = (int) ( $parsed_block['attrs']['ref'] ?? 0 );
-		if ( ! $ref || $ref !== (int) get_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_PATTERN_ID, 0 ) ) {
+		if ( 'core/block' !== ( $parsed_block['blockName'] ?? '' ) || ! self::is_instance( $parsed_block ) ) {
 			return $parsed_block;
 		}
 
@@ -96,6 +109,216 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 		self::$in_instance = false;
 
 		return $block_content;
+	}
+
+	/**
+	 * Hide every instance while the feature is not fully on: the rollout flag must
+	 * be defined AND the admin opt-in active. Registered unconditionally and
+	 * checked at render, because the opt-in is an option an admin can withdraw
+	 * without a reload — without this, disabling the feature would leave prompts
+	 * (and a live site-wide override) rendering with no UI to stop them.
+	 *
+	 * A detached card is the publisher's own content, so only instances are hidden.
+	 *
+	 * @param string $block_content Rendered block markup.
+	 * @param array  $block         The parsed block.
+	 * @return string
+	 */
+	public static function maybe_strip_instance( $block_content, $block = [] ) {
+		if ( ! self::is_instance( is_array( $block ) ? $block : [] ) ) {
+			return $block_content;
+		}
+
+		if ( Newspack_Popups::is_contextual_prompts_enabled() && Newspack_Popups_Settings::is_ai_copy_assistant_enabled() ) {
+			return $block_content;
+		}
+
+		return '';
+	}
+
+	/**
+	 * An instance displaying no copy — generation failed and the post was
+	 * published anyway — renders nothing rather than a CTA-only card. Read off the
+	 * rendered markup, so the copy an instance override or the site-wide override
+	 * supplies counts as copy.
+	 *
+	 * @param string $block_content Rendered block markup.
+	 * @param array  $block         The parsed block.
+	 * @return string
+	 */
+	public static function suppress_empty_instance( $block_content, $block = [] ) {
+		if ( ! self::is_instance( is_array( $block ) ? $block : [] ) ) {
+			return $block_content;
+		}
+
+		return self::has_copy( $block_content ) ? $block_content : '';
+	}
+
+	/**
+	 * Whether the card's copy paragraph — the first one it renders — carries
+	 * visible text. A paragraph holding only a non-breaking space is what the
+	 * editor leaves behind when copy is deleted, and reads as empty.
+	 *
+	 * @param string $block_content Rendered block markup.
+	 * @return bool
+	 */
+	private static function has_copy( $block_content ) {
+		if ( ! preg_match( '#<p\b[^>]*>(.*?)</p>#s', (string) $block_content, $matches ) ) {
+			return false;
+		}
+
+		$text = html_entity_decode( wp_strip_all_tags( $matches[1] ), ENT_QUOTES, 'UTF-8' );
+
+		return '' !== trim( str_replace( "\xC2\xA0", ' ', $text ) );
+	}
+
+	/**
+	 * Stamp analytics hooks on the rendered card so the view script can report
+	 * seen/clicked events. Done at render (not in saved content) so the values stay
+	 * live and no markup carries stale ids.
+	 *
+	 * @param string $block_content Rendered block markup.
+	 * @param array  $block         The parsed block.
+	 * @return string
+	 */
+	public static function add_analytics_attributes( $block_content, $block = [] ) {
+		// This filter runs for every Group on the page, so the marker is looked for
+		// in the string before anything is parsed.
+		if ( false === strpos( (string) $block_content, Newspack_Popups_Contextual_Prompt_Pattern::MARKER_CLASS ) ) {
+			return $block_content;
+		}
+
+		// Parsed rather than pattern-matched, so a leading comment or text node
+		// can't push the attributes off the card. The card is the first tag: a Group
+		// that merely contains one carries the marker in its content, and stamping
+		// it too would report the same prompt twice.
+		$processor = new WP_HTML_Tag_Processor( $block_content );
+		if ( ! $processor->next_tag() || ! $processor->has_class( Newspack_Popups_Contextual_Prompt_Pattern::MARKER_CLASS ) ) {
+			return $block_content;
+		}
+
+		$post_id = (int) get_the_ID();
+
+		// set_attribute() escapes the value, so these are passed unescaped.
+		$processor->set_attribute( 'data-newspack-cp-post-id', (string) $post_id );
+		$processor->set_attribute( 'data-newspack-cp-cta', self::get_cta_type_from_html( $block_content ) );
+		$processor->set_attribute( 'data-newspack-cp-placement', self::get_placement( $post_id ) );
+
+		return $processor->get_updated_html();
+	}
+
+	/**
+	 * The CTA actually rendered, read off the markup: the configured platform
+	 * alone can disagree with it (a button override on a native site, or an
+	 * off-site setup with no destination, where the CTA is dropped).
+	 *
+	 * @param string $html Rendered card markup.
+	 * @return string 'donate_block' | 'button' | 'none'.
+	 */
+	public static function get_cta_type_from_html( $html ) {
+		if ( false !== strpos( (string) $html, 'wpbnbd' ) ) {
+			return 'donate_block';
+		}
+		if ( false !== strpos( (string) $html, 'wp-block-button__link' ) ) {
+			return 'button';
+		}
+
+		return 'none';
+	}
+
+	/**
+	 * Where the prompt sits in the story, as a coarse bucket: top / mid / end.
+	 *
+	 * A prompt is body content, so placement is its position among the article's
+	 * top-level blocks — measured, not the framing the editor first chose, since
+	 * it can be moved after insertion. This is the "which placement converts best"
+	 * grant metric.
+	 *
+	 * Memoized for the request: add_analytics_attributes() calls this on every
+	 * render and each miss reparses the whole post. Only a resolved post is
+	 * memoized, so an id that resolves later in the request is never pinned to the
+	 * 'unknown' its earlier lookup produced.
+	 *
+	 * @param int $post_id The article.
+	 * @return string 'top' | 'mid' | 'end' | 'unknown'.
+	 */
+	public static function get_placement( $post_id ) {
+		static $memo = [];
+
+		$post = $post_id ? get_post( $post_id ) : null;
+		if ( ! $post ) {
+			return 'unknown';
+		}
+
+		if ( ! isset( $memo[ $post->ID ] ) ) {
+			$memo[ $post->ID ] = self::bucket_placement( $post );
+		}
+
+		return $memo[ $post->ID ];
+	}
+
+	/**
+	 * Bucket a post's prompt position among its top-level blocks.
+	 *
+	 * @param WP_Post $post The article.
+	 * @return string 'top' | 'mid' | 'end' | 'unknown'.
+	 */
+	private static function bucket_placement( $post ) {
+		$blocks = array_values(
+			array_filter(
+				parse_blocks( $post->post_content ),
+				function ( $block ) {
+					return ! empty( $block['blockName'] );
+				}
+			)
+		);
+		$total = count( $blocks );
+		if ( $total < 1 ) {
+			return 'unknown';
+		}
+
+		$index = null;
+		foreach ( $blocks as $i => $block ) {
+			if ( self::is_prompt_card( $block ) ) {
+				$index = $i;
+				break;
+			}
+		}
+		if ( null === $index ) {
+			// Nested inside a group/columns — position can't be bucketed cleanly.
+			return 'unknown';
+		}
+
+		if ( 1 === $total ) {
+			return 'top';
+		}
+
+		$ratio = $index / ( $total - 1 );
+		if ( $ratio <= 1 / 3 ) {
+			return 'top';
+		}
+		if ( $ratio >= 2 / 3 ) {
+			return 'end';
+		}
+		return 'mid';
+	}
+
+	/**
+	 * Whether a parsed block is a prompt card: an instance of the pattern, or the
+	 * marker Group a publisher detached from it.
+	 *
+	 * @param array $block Parsed block.
+	 * @return bool
+	 */
+	private static function is_prompt_card( $block ) {
+		$name = $block['blockName'] ?? '';
+
+		if ( 'core/block' === $name ) {
+			return self::is_instance( $block );
+		}
+
+		return 'core/group' === $name
+			&& false !== strpos( (string) ( $block['attrs']['className'] ?? '' ), Newspack_Popups_Contextual_Prompt_Pattern::MARKER_CLASS );
 	}
 
 	/**

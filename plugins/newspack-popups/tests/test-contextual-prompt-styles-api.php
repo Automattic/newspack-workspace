@@ -66,7 +66,7 @@ class ContextualPromptStylesApiTest extends WP_UnitTestCase {
 		}
 		// The handoff lands on the block's own styles section.
 		$this->assertStringContainsString( 'site-editor.php', $data['site_editor_styles_url'] );
-		$this->assertStringContainsString( rawurlencode( '/blocks/' . rawurlencode( Newspack_Popups_Contextual_Prompt_Block::BLOCK_NAME ) ), $data['site_editor_styles_url'] );
+		$this->assertStringContainsString( rawurlencode( '/blocks/' . rawurlencode( Newspack_Popups_Contextual_Prompt_Styles::BLOCK_NAME ) ), $data['site_editor_styles_url'] );
 	}
 
 	/**
@@ -94,7 +94,7 @@ class ContextualPromptStylesApiTest extends WP_UnitTestCase {
 		$post_id = self::factory()->post->create(
 			[
 				'post_status'  => 'publish',
-				'post_content' => '<!-- wp:' . Newspack_Popups_Contextual_Prompt_Block::BLOCK_NAME . ' --><div class="wp-block-newspack-popups-contextual-prompt"><!-- wp:paragraph --><p>Support us.</p><!-- /wp:paragraph --></div><!-- /wp:' . Newspack_Popups_Contextual_Prompt_Block::BLOCK_NAME . ' -->',
+				'post_content' => '<!-- wp:' . Newspack_Popups_Contextual_Prompt_Styles::BLOCK_NAME . ' --><div class="wp-block-newspack-popups-contextual-prompt"><!-- wp:paragraph --><p>Support us.</p><!-- /wp:paragraph --></div><!-- /wp:' . Newspack_Popups_Contextual_Prompt_Styles::BLOCK_NAME . ' -->',
 			]
 		);
 
@@ -120,7 +120,7 @@ class ContextualPromptStylesApiTest extends WP_UnitTestCase {
 	 * @return string
 	 */
 	private function prompt_content( $prompt_attrs = '', $paragraph_attrs = '' ) {
-		$name = Newspack_Popups_Contextual_Prompt_Block::BLOCK_NAME;
+		$name = Newspack_Popups_Contextual_Prompt_Styles::BLOCK_NAME;
 		return '<!-- wp:' . $name . ( $prompt_attrs ? ' ' . $prompt_attrs : '' ) . ' -->'
 			. '<div class="wp-block-newspack-popups-contextual-prompt">'
 			. '<!-- wp:paragraph' . ( $paragraph_attrs ? ' ' . $paragraph_attrs : '' ) . ' --><p>Support us.</p><!-- /wp:paragraph -->'
@@ -323,7 +323,7 @@ class ContextualPromptStylesApiTest extends WP_UnitTestCase {
 		wp_clean_theme_json_cache();
 
 		// The premise: the two scopes disagree, and the block scope really is there.
-		$block_context = [ 'block_name' => Newspack_Popups_Contextual_Prompt_Block::BLOCK_NAME ];
+		$block_context = [ 'block_name' => Newspack_Popups_Contextual_Prompt_Styles::BLOCK_NAME ];
 		$this->assertTrue( wp_get_global_settings( [ 'spacing', 'customSpacingSize' ] ) );
 		$this->assertFalse( wp_get_global_settings( [ 'spacing', 'customSpacingSize' ], $block_context ) );
 
@@ -350,7 +350,7 @@ class ContextualPromptStylesApiTest extends WP_UnitTestCase {
 						'units'             => [ 'px', 'em' ],
 					],
 					'blocks'  => [
-						Newspack_Popups_Contextual_Prompt_Block::BLOCK_NAME => [
+						Newspack_Popups_Contextual_Prompt_Styles::BLOCK_NAME => [
 							'spacing' => [
 								'customSpacingSize' => false,
 								'units'             => [ 'rem' ],
@@ -398,7 +398,7 @@ class ContextualPromptStylesApiTest extends WP_UnitTestCase {
 						],
 					],
 					'blocks' => [
-						Newspack_Popups_Contextual_Prompt_Block::BLOCK_NAME => [
+						Newspack_Popups_Contextual_Prompt_Styles::BLOCK_NAME => [
 							'color' => [
 								'palette' => [
 									[

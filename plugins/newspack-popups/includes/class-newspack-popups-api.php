@@ -264,7 +264,7 @@ final class Newspack_Popups_API {
 	 * @return string
 	 */
 	private static function get_site_editor_styles_url() {
-		$url = 'site-editor.php?p=%2Fstyles&section=' . rawurlencode( '/blocks/' . rawurlencode( Newspack_Popups_Contextual_Prompt_Block::BLOCK_NAME ) );
+		$url = 'site-editor.php?p=%2Fstyles&section=' . rawurlencode( '/blocks/' . rawurlencode( Newspack_Popups_Contextual_Prompt_Styles::BLOCK_NAME ) );
 
 		if ( wp_is_block_theme() ) {
 			$preview_id = self::get_styling_preview_post_id();
@@ -336,7 +336,7 @@ final class Newspack_Popups_API {
 					// The block's own delimiter, trailing space included, so the
 					// match is the serialized block itself rather than a mention of
 					// it in prose or a longer block name sharing the prefix.
-					's'                      => '<!-- wp:' . Newspack_Popups_Contextual_Prompt_Block::BLOCK_NAME . ' ',
+					's'                      => '<!-- wp:' . Newspack_Popups_Contextual_Prompt_Styles::BLOCK_NAME . ' ',
 					'sentence'               => true,
 					// Block delimiters are HTML comments: they live in post_content
 					// and are stripped from search indexes, so this has to be a
@@ -392,7 +392,7 @@ final class Newspack_Popups_API {
 	 */
 	private static function find_unstyled_prompt( $blocks ) {
 		foreach ( $blocks as $block ) {
-			if ( Newspack_Popups_Contextual_Prompt_Block::BLOCK_NAME === ( $block['blockName'] ?? '' ) ) {
+			if ( Newspack_Popups_Contextual_Prompt_Styles::BLOCK_NAME === ( $block['blockName'] ?? '' ) ) {
 				if ( self::is_prompt_unstyled( $block ) ) {
 					return true;
 				}
@@ -452,7 +452,7 @@ final class Newspack_Popups_API {
 	 * @return mixed The setting, or whatever the global lookup hands back.
 	 */
 	private static function get_style_setting( $path ) {
-		$block_path  = array_merge( [ 'blocks', Newspack_Popups_Contextual_Prompt_Block::BLOCK_NAME ], $path );
+		$block_path  = array_merge( [ 'blocks', Newspack_Popups_Contextual_Prompt_Styles::BLOCK_NAME ], $path );
 		$block_value = self::settings_path_value( wp_get_global_settings(), $block_path );
 		// A block setting of `false` is a setting, as the editor treats it: only an
 		// unset one falls back to the global scope.

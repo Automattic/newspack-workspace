@@ -336,7 +336,7 @@ class ContextualPromptStylesTest extends WP_UnitTestCase {
 	 */
 	public function test_get_defaults_fills_in_the_inherited_text_color() {
 		$block_node = wp_get_global_styles(
-			[ 'blocks', Newspack_Popups_Contextual_Prompt_Block::BLOCK_NAME ],
+			[ 'blocks', Newspack_Popups_Contextual_Prompt_Styles::BLOCK_NAME ],
 			[ 'transforms' => [ 'resolve-variables' ] ]
 		);
 		$this->assertArrayNotHasKey( 'text', $block_node['color'] );
@@ -406,5 +406,55 @@ class ContextualPromptStylesTest extends WP_UnitTestCase {
 
 		$this->assertSame( '#f7f7f7', $defaults['color']['background'] );
 		$this->assertArrayNotHasKey( 'text', $defaults['color'] );
+	}
+
+	/**
+	 * The color node the default design emits for the active theme.
+	 *
+	 * @return array
+	 */
+	private function default_color_node() {
+		$filtered = Newspack_Popups_Contextual_Prompt_Styles::default_design(
+			new WP_Theme_JSON_Data( [ 'version' => 3 ], 'default' )
+		);
+		return $filtered->get_data()['styles']['blocks'][ Newspack_Popups_Contextual_Prompt_Styles::BLOCK_NAME ]['color'];
+	}
+
+	/**
+	 * A block theme's style variations re-point the palette, so a literal
+	 * background would survive a switch the page around it does not: the shipped
+	 * Nocturne variation puts `contrast` at white, which the copy inherits.
+	 * Naming slugs makes the card follow the active variation, and the pinned
+	 * text color keeps the copy tied to the card rather than the canvas.
+	 */
+	public function test_block_theme_default_colors_name_palette_slugs() {
+		$original = get_stylesheet();
+		switch_theme( 'twentytwentyfive' );
+
+		if ( ! wp_is_block_theme() ) {
+			switch_theme( $original );
+			$this->markTestSkipped( 'No block theme available in the test install.' );
+		}
+
+		$color = $this->default_color_node();
+		switch_theme( $original );
+
+		// Compiled to custom properties, which is what proves the references
+		// resolve as presets rather than travelling through as literal strings.
+		$this->assertSame( 'var(--wp--preset--color--base-2)', $color['background'] );
+		$this->assertSame( 'var(--wp--preset--color--contrast)', $color['text'] );
+	}
+
+	/**
+	 * Classic themes have no variations, so the designed value stands and the
+	 * copy keeps inheriting the theme's body color, which the Customizer owns.
+	 */
+	public function test_classic_theme_default_colors_keep_the_designed_value() {
+		$this->assertFalse( wp_is_block_theme(), 'The suite is expected to run on a classic theme.' );
+
+		$color = $this->default_color_node();
+
+		$this->assertSame( '#f7f7f7', $color['background'] );
+		$this->assertArrayNotHasKey( 'text', $color );
 	}
 }

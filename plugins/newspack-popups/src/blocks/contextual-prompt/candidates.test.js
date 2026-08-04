@@ -6,7 +6,7 @@ jest.mock( '@wordpress/api-fetch' );
 
 describe( 'framingForPosition', () => {
 	// Boundary cases mirroring get_placement() in
-	// class-newspack-popups-contextual-prompt-block.php: the two must agree.
+	// class-newspack-popups-contextual-prompt-render.php: the two must agree.
 	it.each( [
 		[ 0, 1, 'top' ],
 		[ 0, 4, 'top' ],
