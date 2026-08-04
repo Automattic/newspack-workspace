@@ -6,7 +6,7 @@ import { __, sprintf } from '@wordpress/i18n';
 /**
  * Internal dependencies
  */
-import type { DonateFrequencySlug, PromoDestination, PromoKind } from './promo-url';
+import type { DonateFrequencySlug, PromoKind } from './promo-url';
 
 export type PromoTargetBlockConfig = {
 	product_id: number;
@@ -40,14 +40,10 @@ export type PromoTarget = {
 export type PromoTargetsResponse = {
 	targets: PromoTarget[];
 	truncated: boolean;
-	donation_config?: PromoTargetDonateConfig | null;
-	nyp?: Record< number, boolean >;
 	// Children a target page's picker can actually serve — for a grouped plan
 	// this excludes children the tiers form skips (non-subscription, private).
 	eligible_children?: number[];
 };
-
-export type PromoCouponResponse = { valid: boolean; reason?: string };
 
 const FREQUENCY_LABELS: Record< DonateFrequencySlug, string > = {
 	once: __( 'One-time', 'newspack-plugin' ),
@@ -56,10 +52,10 @@ const FREQUENCY_LABELS: Record< DonateFrequencySlug, string > = {
 };
 
 /**
- * Child-product choices for a plan row. On the direct path (null targetBlocks)
- * a specific child is required — parents cannot be added to the cart. On the
- * page path, choices are constrained to what the target page's blocks accept;
- * the "reader chooses" option appears only when a block renders a picker.
+ * Child-product choices for a plan row, constrained to what the chosen page's
+ * blocks accept. Returns nothing until a page is chosen, since the blocks on
+ * that page decide which children a link can name. The "reader chooses" option
+ * appears only when a block renders a picker.
  *
  * `eligibleChildren` (from the server) narrows the picker's options to children
  * its form will actually render: a grouped plan can bundle children the tiers
@@ -70,6 +66,9 @@ export function getVariationChoices(
 	targetBlocks: PromoTargetBlockConfig[] | null,
 	eligibleChildren?: number[]
 ): { value: number | ''; label: string }[] {
+	if ( ! targetBlocks ) {
+		return [];
+	}
 	const children =
 		item.type === 'grouped'
 			? ( item.bundled_products || [] ).map( product => ( {
@@ -82,9 +81,6 @@ export function getVariationChoices(
 			  } ) );
 	if ( ! children.length ) {
 		return [];
-	}
-	if ( ! targetBlocks ) {
-		return children;
 	}
 	const pickerServable = eligibleChildren?.length ? children.filter( child => eligibleChildren.includes( child.value as number ) ) : children;
 	const allowed = new Set< number >();
@@ -142,7 +138,6 @@ export function getDefaultFrequency( item: SubscriptionProduct, config: PromoTar
 
 export type PromoValidationInput = {
 	kind: PromoKind;
-	destination: PromoDestination;
 	hasTarget: boolean;
 	requiresChild: boolean;
 	variationId: number | '';
@@ -150,11 +145,6 @@ export type PromoValidationInput = {
 	effectiveAmount: number | 'other' | undefined;
 	customAmount: string;
 	presets: number[];
-	isCouponActive: boolean;
-	couponState: 'idle' | 'checking' | 'valid' | 'invalid';
-	couponReason?: string;
-	afterSuccess: '' | 'custom';
-	afterSuccessUrl: string;
 };
 
 /**
@@ -164,8 +154,8 @@ export type PromoValidationInput = {
  * link reach a publisher. Returns null when the selections are valid.
  */
 export function getValidationError( input: PromoValidationInput ): string | null {
-	const { kind, destination, donateConfig, effectiveAmount, customAmount } = input;
-	if ( destination === 'page' && ! input.hasTarget ) {
+	const { kind, donateConfig, effectiveAmount, customAmount } = input;
+	if ( ! input.hasTarget ) {
 		return __( 'Choose a target page.', 'newspack-plugin' );
 	}
 	if ( kind === 'product' && input.requiresChild && input.variationId === '' ) {
@@ -173,7 +163,7 @@ export function getValidationError( input: PromoValidationInput ): string | null
 	}
 	if ( kind === 'donation' ) {
 		if ( ! donateConfig ) {
-			return __( 'Donations are not configured for WooCommerce on this site.', 'newspack-plugin' );
+			return __( 'The Donate block on this page cannot take a promotional link.', 'newspack-plugin' );
 		}
 		if ( effectiveAmount === undefined ) {
 			return __( 'Enter a valid amount.', 'newspack-plugin' );
@@ -186,29 +176,18 @@ export function getValidationError( input: PromoValidationInput ): string | null
 				donateConfig.minimum
 			);
 		}
-		if (
-			destination === 'page' &&
-			typeof effectiveAmount === 'number' &&
-			donateConfig.layout_param !== 'untiered' &&
-			! input.presets.includes( effectiveAmount )
-		) {
+		if ( typeof effectiveAmount === 'number' && donateConfig.layout_param !== 'untiered' && ! input.presets.includes( effectiveAmount ) ) {
 			return __( 'Choose one of the amounts available on the target page.', 'newspack-plugin' );
 		}
-	}
-	if ( input.isCouponActive && input.couponState === 'invalid' ) {
-		return input.couponReason || __( 'The coupon code is not valid.', 'newspack-plugin' );
-	}
-	if ( input.afterSuccess === 'custom' && destination === 'direct' && ! input.afterSuccessUrl ) {
-		return __( 'Enter the URL readers should continue to.', 'newspack-plugin' );
 	}
 	return null;
 }
 
 /**
- * Resolve the product_id/variation_id a page-path URL must carry so the block
- * on the page can actually serve the chosen child. A member-only button emits
- * a plain product URL — the JS trigger rejects product_id === variation_id
- * (NPPM-2872 residual quirk), so that combination must never be produced.
+ * Resolve the product_id/variation_id a page URL must carry so the block on the
+ * page can actually serve the chosen child. A member-only button emits a plain
+ * product URL — the JS trigger rejects product_id === variation_id (NPPM-2872
+ * residual quirk), so that combination must never be produced.
  */
 export function resolvePageProductParams(
 	blocks: PromoTargetBlockConfig[],
