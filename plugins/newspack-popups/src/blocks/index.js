@@ -4,6 +4,7 @@
 import { registerCustomPlacementBlock } from './custom-placement';
 import { registerSinglePromptBlock } from './single-prompt';
 import { registerContextualPromptInstance } from './contextual-prompt/instance';
+import { registerContextualPromptSiteEditorLocks } from './contextual-prompt/site-editor-locks';
 import './contextual-prompt/editor.scss';
 import './prompt-editor-canvas.scss';
 
@@ -14,4 +15,5 @@ registerSinglePromptBlock();
 // (wp_localize_script stringifies the boolean to '1'/'').
 if ( Boolean( window.newspack_popups_blocks_data?.contextual_prompts_enabled ) ) {
 	registerContextualPromptInstance();
+	registerContextualPromptSiteEditorLocks();
 }

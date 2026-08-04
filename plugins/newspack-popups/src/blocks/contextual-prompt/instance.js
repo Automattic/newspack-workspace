@@ -40,7 +40,7 @@ const BOUND_NAME = 'Prompt copy';
 // The block editor and the document-settings panel are separate entries with
 // separate localized objects; either may be the one present. Both stringify the
 // id, so it is compared as a number.
-const PATTERN_ID = Number(
+export const PATTERN_ID = Number(
 	window.newspack_popups_blocks_data?.contextual_prompts_pattern_id || window.newspackPopupsContextualPrompt?.patternId || 0
 );
 
@@ -277,7 +277,10 @@ const PromptInstanceInspector = ( { clientId, attributes } ) => {
 	}
 
 	return (
-		<InspectorControls>
+		// A selected pattern instance is a section block, and the inspector mounts
+		// only the content and list slot groups for one — a default-group fill
+		// would never render.
+		<InspectorControls group="content">
 			<PanelBody title={ __( 'Copy', 'newspack-popups' ) } initialOpen>
 				{ error && (
 					<Notice status="error" isDismissible={ false }>
