@@ -87,6 +87,29 @@ describe( 'planPromptCorrections: surplus cards', () => {
 		expect( plan.unlockRemovals ).toEqual( [ 'second' ] );
 	} );
 
+	// A copy pasted above the prompt the post already carries is still the copy:
+	// removing by document order would delete the card the publisher wrote.
+	it.each( [
+		[ 'above', [ instance( 'new' ), instance( 'old' ) ] ],
+		[ 'below', [ instance( 'old' ), instance( 'new' ) ] ],
+	] )( 'removes a newcomer that lands %s the card the post already carried', ( label, blocks ) => {
+		const { planPromptCorrections } = loadGuard();
+		const plan = planPromptCorrections( blocks, [ 'old' ] );
+
+		expect( plan.remove ).toEqual( [ 'new' ] );
+		expect( plan.keep ).toEqual( [ 'old' ] );
+	} );
+
+	// A post saved before this guard existed, or reopened with fresh client ids:
+	// nothing is known, so document order is all there is to go on.
+	it( 'keeps the first of cards it has never seen', () => {
+		const { planPromptCorrections } = loadGuard();
+		const plan = planPromptCorrections( [ instance( 'first' ), instance( 'second' ) ], [ 'gone' ] );
+
+		expect( plan.remove ).toEqual( [ 'second' ] );
+		expect( plan.keep ).toEqual( [ 'first' ] );
+	} );
+
 	it( 'unlocks nothing a removal does not need', () => {
 		const { planPromptCorrections } = loadGuard();
 		const blocks = [ instance( 'first' ), settled( 'second' ), instance( 'third', [], { lock: { move: true, remove: false } } ) ];
@@ -100,6 +123,7 @@ describe( 'planPromptCorrections: detached card locks', () => {
 		const { planPromptCorrections } = loadGuard();
 
 		expect( planPromptCorrections( [ settled( 'card' ) ] ) ).toEqual( {
+			keep: [ 'card' ],
 			remove: [],
 			unlockRemovals: [],
 			stripGroupLock: [],
@@ -163,6 +187,7 @@ describe( 'planPromptCorrections: detached card locks', () => {
 		const card = instance( 'card', [ detached( 'pattern-content', [ paragraph( 'copy', {} ) ], { lock: CHILD_LOCK } ) ] );
 
 		expect( planPromptCorrections( [ card ] ) ).toEqual( {
+			keep: [ 'card' ],
 			remove: [],
 			unlockRemovals: [],
 			stripGroupLock: [],
@@ -332,5 +357,39 @@ describe( 'createPromptCardHold', () => {
 		reconcile();
 
 		expect( apply ).toHaveBeenCalledWith( expect.objectContaining( { remove: [ 'second' ] } ) );
+	} );
+
+	// The publisher's own prompt may be detached and hand-tailored, and pasting
+	// above it makes the copy first in document order.
+	it.each( [
+		[ 'above', [ instance( 'new' ), settled( 'old' ) ] ],
+		[ 'below', [ settled( 'old' ), instance( 'new' ) ] ],
+	] )( 'removes the copy pasted %s the prompt the post already carried', ( label, pasted ) => {
+		const { reconcile, apply } = setUp( [ [ settled( 'old' ) ], pasted ] );
+
+		reconcile();
+		reconcile();
+
+		expect( apply ).toHaveBeenCalledWith( expect.objectContaining( { remove: [ 'new' ] } ) );
+	} );
+
+	// Saved before this guard existed: neither card is the one it kept last pass.
+	it( 'keeps the first when the post opens carrying two', () => {
+		const { reconcile, apply } = setUp( [ [ instance( 'first' ), instance( 'second' ) ] ] );
+
+		reconcile();
+
+		expect( apply ).toHaveBeenCalledWith( expect.objectContaining( { remove: [ 'second' ] } ) );
+	} );
+
+	// Client ids do not survive a reload, so a tree in which none of them is known
+	// is a fresh open rather than a paste.
+	it( 'falls back to document order when no id is known any more', () => {
+		const { reconcile, apply } = setUp( [ [ instance( 'old' ) ], [ instance( 'a' ), instance( 'b' ) ] ] );
+
+		reconcile();
+		reconcile();
+
+		expect( apply ).toHaveBeenCalledWith( expect.objectContaining( { remove: [ 'b' ] } ) );
 	} );
 } );

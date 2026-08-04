@@ -4,8 +4,8 @@
  *
  * Owns the `wp_block` post every Contextual Prompt instance references: seeding
  * it on demand with a locked Group holding the bound copy paragraph and the CTA
- * for the site's donation platform, and the one slash-safe write helper every
- * later change to its markup goes through.
+ * for the site's donation platform, and the one compare-and-swap write helper
+ * every later change to its markup goes through.
  *
  * @package Newspack
  */
@@ -65,7 +65,10 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 
 	/**
 	 * Deny deleting the pattern: every instance references it, so losing it would
-	 * empty them all. The raw option is what the guard compares against — a
+	 * empty them all. And deny editing it to anyone but an administrator: it is
+	 * the design every prompt on the site renders, not a post an author owns —
+	 * core reads the same capability to hide "Edit original" and to refuse the
+	 * editor route. The raw option is what the guard compares against — a
 	 * capability check must never seed.
 	 *
 	 * @param string[] $caps    Primitive capabilities required of the user.
@@ -76,7 +79,16 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 	 * @return string[]
 	 */
 	public static function protect_pattern( $caps, $cap, $user_id, $args ) {
-		if ( 'delete_post' === $cap && ! empty( $args[0] ) && (int) $args[0] === (int) get_option( self::OPTION_PATTERN_ID, 0 ) ) {
+		if ( ! in_array( $cap, [ 'delete_post', 'edit_post' ], true ) || empty( $args[0] ) ) {
+			return $caps;
+		}
+
+		$pattern_id = (int) get_option( self::OPTION_PATTERN_ID, 0 );
+		if ( ! $pattern_id || (int) $args[0] !== $pattern_id ) {
+			return $caps;
+		}
+
+		if ( 'delete_post' === $cap || ! user_can( $user_id, 'manage_options' ) ) {
 			return [ 'do_not_allow' ];
 		}
 
@@ -150,31 +162,53 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 		// answers with the winner's pattern only once that pattern exists — a
 		// record still pointing at nothing is no answer, and a caller handed one
 		// would address instances at a hole.
-		if ( ! self::claim_seeding_lock() ) {
+		$claim = self::claim_seeding_lock();
+		if ( ! $claim ) {
 			$recorded = (int) get_option( self::OPTION_PATTERN_ID, 0 );
 
 			return $recorded && 'wp_block' === get_post_type( $recorded ) ? $recorded : 0;
 		}
 
 		try {
-			$new_id = wp_insert_post(
-				wp_slash(
-					[
-						'post_type'    => 'wp_block',
-						'post_status'  => 'publish',
-						'post_title'   => __( 'Contextual Prompt', 'newspack-popups' ),
-						'post_content' => self::build_pattern_content(),
-					]
-				)
-			);
-			if ( is_wp_error( $new_id ) || ! $new_id ) {
+			$new_id = self::insert_pattern();
+			if ( ! $new_id ) {
 				return 0;
 			}
 
-			return self::finish_seed( (int) $new_id );
+			return self::finish_seed( $new_id );
 		} finally {
-			delete_option( self::SEEDING_LOCK_OPTION );
+			self::release_seeding_lock( $claim );
 		}
+	}
+
+	/**
+	 * Insert the pattern post, under the site's own locale. Seeding runs from the
+	 * admin or the REST API, where the language in effect is the seeding
+	 * administrator's — while the title and copy this stores are the site's, read
+	 * by every reader and every later publisher.
+	 *
+	 * @return int The inserted post ID, or 0 when the insert failed.
+	 */
+	private static function insert_pattern() {
+		$locale   = get_locale();
+		$switched = $locale !== determine_locale() && switch_to_locale( $locale );
+
+		$new_id = wp_insert_post(
+			wp_slash(
+				[
+					'post_type'    => 'wp_block',
+					'post_status'  => 'publish',
+					'post_title'   => __( 'Contextual Prompt', 'newspack-popups' ),
+					'post_content' => self::build_pattern_content(),
+				]
+			)
+		);
+
+		if ( $switched ) {
+			restore_previous_locale();
+		}
+
+		return is_wp_error( $new_id ) ? 0 : (int) $new_id;
 	}
 
 	/**
@@ -189,39 +223,63 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 	 * The held value is read from the table rather than through get_option(),
 	 * whose cache the raw INSERT above does not refresh.
 	 *
-	 * @return bool Whether this caller may seed.
+	 * @return string|null The claim held, which releasing it is conditional on,
+	 *                     or null when this caller may not seed.
 	 */
 	private static function claim_seeding_lock() {
 		global $wpdb;
 
+		$claim   = (string) time();
 		$claimed = $wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Options API cannot express an atomic claim.
 			$wpdb->prepare(
 				"INSERT IGNORE INTO {$wpdb->options} ( option_name, option_value, autoload ) VALUES ( %s, %s, 'off' )",
 				self::SEEDING_LOCK_OPTION,
-				(string) time()
+				$claim
 			)
 		);
 		if ( $claimed ) {
-			return true;
+			return $claim;
 		}
 
 		$held = $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- The claim above is not in the options cache.
 			$wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", self::SEEDING_LOCK_OPTION )
 		);
 		if ( null === $held || time() - (int) $held < self::SEEDING_LOCK_TTL ) {
-			return false;
+			return null;
 		}
 
 		$reclaimed = $wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Options API cannot express an atomic claim.
 			$wpdb->prepare(
 				"UPDATE {$wpdb->options} SET option_value = %s WHERE option_name = %s AND option_value = %s",
-				(string) time(),
+				$claim,
 				self::SEEDING_LOCK_OPTION,
 				$held
 			)
 		);
 
-		return 1 === (int) $reclaimed;
+		return 1 === (int) $reclaimed ? $claim : null;
+	}
+
+	/**
+	 * Release the claim, and only the claim: a request whose own claim went stale
+	 * and was reclaimed while it worked would otherwise delete the lock its
+	 * successor is holding, and hand a third request the right to seed a second
+	 * pattern.
+	 *
+	 * @param string $claim The value this request claimed with.
+	 */
+	private static function release_seeding_lock( $claim ) {
+		global $wpdb;
+
+		$wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Options API cannot express a conditional delete.
+			$wpdb->prepare(
+				"DELETE FROM {$wpdb->options} WHERE option_name = %s AND option_value = %s",
+				self::SEEDING_LOCK_OPTION,
+				$claim
+			)
+		);
+
+		wp_cache_delete( self::SEEDING_LOCK_OPTION, 'options' );
 	}
 
 	/**
@@ -272,29 +330,54 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 	}
 
 	/**
-	 * Write markup to the pattern post. Every write goes through here: unslashing
-	 * strips the escapes serialize_blocks() emits, so the content has to be
-	 * slashed on the way in.
+	 * Write markup to the pattern post, swapping it in only while the row still
+	 * carries the revision the content was derived from. The compare and the swap
+	 * are the one statement: a check followed by a write leaves a window in which
+	 * a save from the pattern editor lands and is then overwritten with content
+	 * read from before it. A write naming no revision swaps on whatever is stored
+	 * now, which is the same statement against a revision read a moment earlier.
+	 *
+	 * The row is written directly, so the values go in unslashed: slashing is
+	 * wp_update_post()'s unslash to undo, and the escapes serialize_blocks()
+	 * emits would survive it into the stored markup.
 	 *
 	 * @param int         $pattern_id Pattern post ID.
 	 * @param string      $content    Serialized block markup.
 	 * @param string|null $read_at    The post_modified_gmt the content was read
-	 *                                at, to write only while the stored pattern
-	 *                                is still the one it was derived from.
+	 *                                at, or null to read the current one.
 	 *
 	 * @return bool Whether the write landed.
 	 */
 	public static function save_pattern_content( $pattern_id, $content, $read_at = null ) {
-		if ( null !== $read_at && $read_at !== self::read_modified_gmt( $pattern_id ) ) {
+		global $wpdb;
+
+		$pattern_id = (int) $pattern_id;
+		$read_at    = null === $read_at ? self::read_modified_gmt( $pattern_id ) : $read_at;
+		if ( null === $read_at ) {
 			return false;
 		}
 
-		return self::update_pattern_post(
+		$written = $wpdb->update( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- The Posts API cannot express a conditional write.
+			$wpdb->posts,
 			[
-				'ID'           => $pattern_id,
-				'post_content' => $content,
+				'post_content'      => $content,
+				'post_modified'     => current_time( 'mysql' ),
+				'post_modified_gmt' => current_time( 'mysql', true ),
+			],
+			[
+				'ID'                => $pattern_id,
+				'post_modified_gmt' => $read_at,
 			]
 		);
+
+		// No row matched: the pattern moved on under this write.
+		if ( ! $written ) {
+			return false;
+		}
+
+		clean_post_cache( $pattern_id );
+
+		return true;
 	}
 
 	/**
@@ -315,15 +398,16 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 	}
 
 	/**
-	 * Update the pattern post with KSES suspended. The markup is programmatic,
-	 * parsed from what is already stored, and a write can land in a context with
-	 * no unfiltered_html — where filtering would mangle the publisher's own
-	 * content and repair would then stabilize on the mangled copy.
+	 * Update the pattern post's own fields — its status — with KSES suspended.
+	 * wp_update_post() carries the stored markup through the write, and a status
+	 * change can land in a context with no unfiltered_html, where filtering would
+	 * mangle the publisher's own content and repair would then stabilize on the
+	 * mangled copy. Markup is not written here: save_pattern_content() swaps the
+	 * row itself, which no filter sees.
 	 *
 	 * @param array $postarr Post data, unslashed.
 	 *
-	 * @return bool Whether the write landed. Callers record state describing the
-	 *              stored pattern, which a failed write leaves untouched.
+	 * @return bool Whether the write landed.
 	 */
 	private static function update_pattern_post( $postarr ) {
 		// Restored rather than re-initialized unconditionally: a context that never

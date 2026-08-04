@@ -4,8 +4,8 @@
  * Two things the pattern cannot enforce on its own:
  *
  * - One prompt per story. The pattern is kept out of the inserter, but Duplicate
- *   and paste still put a second card in the post, so everything after the first
- *   is removed as it lands.
+ *   and paste still put a second card in the post, so the newcomer is removed as
+ *   it lands — whichever position it lands in.
  * - A card detached from the pattern keeps the pattern's structure. Detaching
  *   copies the card's markup into the post, locks and all: the group's own lock
  *   is stripped so the publisher can move and delete their prompt, while its
@@ -33,20 +33,34 @@ const NOTICE_ID = 'newspack-contextual-prompt-single';
 // Mirrors BLOCK_LOCK in class-newspack-popups-contextual-prompt-pattern.php.
 const CHILD_LOCK = { move: true, remove: true };
 
+// The plan's correction lists, as opposed to the cards it hands the next pass.
+const CORRECTIONS = [ 'remove', 'unlockRemovals', 'stripGroupLock', 'pinTemplateLock', 'lockChildren' ];
+
 /**
  * What has to change for the post to carry one prompt in the pattern's shape.
  *
- * Every list is empty when nothing is wrong, which is the common case — a pass
- * that finds nothing must dispatch nothing, or the attribute writes would tick
- * the store into another pass.
+ * Every correction list is empty when nothing is wrong, which is the common case
+ * — a pass that finds nothing must dispatch nothing, or the attribute writes
+ * would tick the store into another pass.
+ *
+ * The card the post keeps is the one the previous pass already saw: a copy
+ * pasted above the publisher's own prompt is still the copy, and removing by
+ * document order would delete the card they wrote. Only a pass with nothing
+ * known — the post opened carrying two, saved before this guard existed, or
+ * reopened with fresh client ids — falls back to document order.
  *
  * @param {Object[]} blocks Block tree.
- * @return {{remove: string[], unlockRemovals: string[], stripGroupLock: string[], pinTemplateLock: string[], lockChildren: string[]}} The corrections.
+ * @param {string[]} known  Client ids of the cards the previous pass kept.
+ * @return {{keep: string[], remove: string[], unlockRemovals: string[], stripGroupLock: string[], pinTemplateLock: string[], lockChildren: string[]}} The corrections, and the cards to know next pass.
  */
-export const planPromptCorrections = blocks => {
+export const planPromptCorrections = ( blocks, known = [] ) => {
 	const cards = findPromptCards( blocks );
-	const surplus = cards.slice( 1 );
+	const knownIds = new Set( known );
+	const survivors = cards.filter( card => knownIds.has( card.clientId ) );
+	const kept = survivors.length ? survivors : cards.slice( 0, 1 );
+	const surplus = cards.filter( card => ! kept.includes( card ) );
 	const plan = {
+		keep: kept.map( card => card.clientId ),
 		remove: surplus.map( card => card.clientId ),
 		// A card pasted out of the pattern editor carries the pattern's own lock,
 		// which the store honours: removal would silently do nothing.
@@ -58,7 +72,7 @@ export const planPromptCorrections = blocks => {
 
 	// Only the card the post keeps: the rest are on their way out, and an
 	// instance carries its structure in the pattern rather than the post.
-	const [ card ] = cards;
+	const [ card ] = kept;
 	if ( ! card || ! isDetachedPromptCard( card.name, card.attributes ) ) {
 		return plan;
 	}
@@ -149,6 +163,9 @@ export const createPromptCorrectionApplier =
  * latch: they re-enter this reconciler synchronously, and a second pass would
  * read the tree it is halfway through changing.
  *
+ * The cards each pass keeps are carried to the next, which is what tells the
+ * post's own prompt from one that just landed.
+ *
  * @param {Object}   args           Store access.
  * @param {Function} args.getBlocks Reads the block tree.
  * @param {Function} args.isPattern Whether the pattern itself is what is open.
@@ -158,6 +175,7 @@ export const createPromptCorrectionApplier =
 export const createPromptCardHold = ( { getBlocks, isPattern, apply } ) => {
 	let lastBlocks;
 	let applying = false;
+	let known = [];
 
 	return () => {
 		if ( applying ) {
@@ -176,8 +194,9 @@ export const createPromptCardHold = ( { getBlocks, isPattern, apply } ) => {
 			return;
 		}
 
-		const plan = planPromptCorrections( blocks );
-		if ( ! Object.values( plan ).some( list => list.length ) ) {
+		const plan = planPromptCorrections( blocks, known );
+		known = plan.keep;
+		if ( ! CORRECTIONS.some( key => plan[ key ].length ) ) {
 			return;
 		}
 

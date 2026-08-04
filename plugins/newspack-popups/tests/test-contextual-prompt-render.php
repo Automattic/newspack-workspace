@@ -393,21 +393,21 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 	 * Repair rewrites the pattern only when it has something to change.
 	 */
 	public function test_repair_is_a_noop_when_nothing_changed() {
+		global $wpdb;
 		$this->set_platform( true );
 		$ref    = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
 		$before = get_post( $ref );
 
+		// The write is a statement of its own, so the queries are what counts it.
 		$writes = 0;
 		add_filter(
-			'wp_insert_post_data',
-			function ( $data, $postarr ) use ( &$writes, $ref ) {
-				if ( (int) ( $postarr['ID'] ?? 0 ) === $ref ) {
+			'query',
+			function ( $query ) use ( &$writes, $wpdb ) {
+				if ( 0 === stripos( $query, 'UPDATE' ) && false !== strpos( $query, $wpdb->posts ) ) {
 					++$writes;
 				}
-				return $data;
-			},
-			10,
-			2
+				return $query;
+			}
 		);
 
 		$this->render_instance();
@@ -465,16 +465,45 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 	public function test_a_failed_write_leaves_the_accent_record_alone() {
 		$this->set_platform( true );
 		$this->set_accent_color( '#003da5' );
-		$ref    = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
-		$stored = get_post( $ref )->post_content;
+		$ref = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
 
 		$this->set_accent_color( '#ff0000' );
-		add_filter( 'wp_insert_post_empty_content', '__return_true' );
+		$saved = $this->save_between_read_and_write( $ref );
 		Newspack_Popups_Contextual_Prompt_Pattern::repair();
-		remove_filter( 'wp_insert_post_empty_content', '__return_true' );
 
-		$this->assertSame( $stored, get_post( $ref )->post_content, 'The write was refused.' );
+		$this->assertSame( $saved, get_post( $ref )->post_content, 'The write was refused.' );
 		$this->assertSame( '#003da5', get_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_STAMPED_ACCENT ), 'So the record still describes what is stored.' );
+	}
+
+	/**
+	 * Simulate a save landing between repair's read of the pattern and its write:
+	 * the row is written and its revision moved on while repair reads the stamp
+	 * record, which it does after reading the pattern and before writing it.
+	 *
+	 * @param int $ref Pattern post ID.
+	 *
+	 * @return string The content the concurrent save stored.
+	 */
+	private function save_between_read_and_write( $ref ) {
+		global $wpdb;
+		$saved = "<!-- wp:paragraph -->\n<p>Saved from the editor.</p>\n<!-- /wp:paragraph -->";
+		$bump  = function ( $value ) use ( $ref, $saved, $wpdb ) {
+			$wpdb->update( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+				$wpdb->posts,
+				[
+					'post_content'      => $saved,
+					'post_modified_gmt' => gmdate( 'Y-m-d H:i:s', time() + 60 ),
+				],
+				[ 'ID' => $ref ]
+			);
+			clean_post_cache( $ref );
+			return $value;
+		};
+		$option = Newspack_Popups_Contextual_Prompt_Pattern::OPTION_STAMPED_ACCENT;
+		add_filter( 'option_' . $option, $bump );
+		add_filter( 'default_option_' . $option, $bump );
+
+		return $saved;
 	}
 
 	/**
@@ -810,6 +839,43 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A claim that went stale while its holder worked is another request's to take,
+	 * and the holder must not then release it: the successor would be left seeding
+	 * without a lock, and a third request could seed a second pattern alongside it.
+	 * So the release is conditional on the value this request claimed with.
+	 */
+	public function test_an_expired_claim_does_not_release_its_successor() {
+		global $wpdb;
+		$successor = 'claimed-by-the-next-request';
+		add_action(
+			'wp_insert_post',
+			function ( $post_id, $post ) use ( $wpdb, $successor ) {
+				if ( 'wp_block' !== $post->post_type ) {
+					return;
+				}
+				$wpdb->update( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+					$wpdb->options,
+					[ 'option_value' => $successor ],
+					[ 'option_name' => Newspack_Popups_Contextual_Prompt_Pattern::SEEDING_LOCK_OPTION ]
+				);
+			},
+			10,
+			2
+		);
+
+		$id = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
+
+		$this->assertGreaterThan( 0, $id );
+		$held = $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$wpdb->prepare(
+				"SELECT option_value FROM {$wpdb->options} WHERE option_name = %s",
+				Newspack_Popups_Contextual_Prompt_Pattern::SEEDING_LOCK_OPTION
+			)
+		);
+		$this->assertSame( $successor, $held, 'The claim its successor holds is left standing.' );
+	}
+
+	/**
 	 * The lock does not stand in the way of re-seeding: a record left pointing at
 	 * a pattern the publisher deleted anyway is replaced.
 	 */
@@ -980,42 +1046,25 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 	 * the pattern and before writing it.
 	 */
 	public function test_repair_refuses_to_overwrite_a_concurrent_save() {
-		global $wpdb;
 		$this->set_platform( false );
 		$this->set_donor_landing_page();
 		$ref = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
 		// A platform change repair would otherwise write.
 		$this->set_platform( true );
 
-		$saved = "<!-- wp:paragraph -->\n<p>Saved from the editor.</p>\n<!-- /wp:paragraph -->";
-		$bump  = function ( $value ) use ( $ref, $saved, $wpdb ) {
-			$wpdb->update( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-				$wpdb->posts,
-				[
-					'post_content'      => $saved,
-					'post_modified_gmt' => gmdate( 'Y-m-d H:i:s', time() + 60 ),
-				],
-				[ 'ID' => $ref ]
-			);
-			clean_post_cache( $ref );
-			return $value;
-		};
-		$option = Newspack_Popups_Contextual_Prompt_Pattern::OPTION_STAMPED_ACCENT;
-		add_filter( 'option_' . $option, $bump );
-		add_filter( 'default_option_' . $option, $bump );
-
+		$saved = $this->save_between_read_and_write( $ref );
 		Newspack_Popups_Contextual_Prompt_Pattern::repair();
 
-		remove_filter( 'option_' . $option, $bump );
-		remove_filter( 'default_option_' . $option, $bump );
 		$this->assertSame( $saved, get_post( $ref )->post_content, 'The publisher\'s save stands.' );
 	}
 
 	/**
-	 * The guard itself: content read at one revision is never written over a
-	 * later one, and a write that names no revision is unconditional.
+	 * The guard itself: the compare and the swap are one statement, so content
+	 * read at one revision is swapped in only while the row still carries that
+	 * revision — a check followed by a write leaves a window a save can land in.
+	 * A write naming no revision swaps on whatever is stored now.
 	 */
-	public function test_the_freshness_guard_refuses_a_stale_write() {
+	public function test_the_write_swaps_only_on_the_revision_it_read() {
 		global $wpdb;
 		$ref  = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
 		$read = get_post( $ref )->post_modified_gmt;
@@ -1032,6 +1081,47 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 
 		$this->assertTrue( Newspack_Popups_Contextual_Prompt_Pattern::save_pattern_content( $ref, 'fresh' ) );
 		$this->assertSame( 'fresh', get_post( $ref )->post_content );
+	}
+
+	/**
+	 * What lands moves the revision on and refreshes the cache: the row is written
+	 * behind the Posts API, so a stale cached post would leave the rest of the
+	 * request — and the next freshness check — reading content nothing stores.
+	 */
+	public function test_a_landed_write_is_what_every_later_read_sees() {
+		global $wpdb;
+		$ref  = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
+		$past = gmdate( 'Y-m-d H:i:s', time() - HOUR_IN_SECONDS );
+		$wpdb->update( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$wpdb->posts,
+			[ 'post_modified_gmt' => $past ],
+			[ 'ID' => $ref ]
+		);
+		clean_post_cache( $ref );
+		// Warm the cache with the copy the write replaces.
+		$this->assertSame( $past, get_post( $ref )->post_modified_gmt );
+
+		$this->assertTrue( Newspack_Popups_Contextual_Prompt_Pattern::save_pattern_content( $ref, 'fresh' ) );
+
+		$after = get_post( $ref );
+		$this->assertSame( 'fresh', $after->post_content, 'The cached post is the written one.' );
+		$this->assertNotSame( $past, $after->post_modified_gmt, 'And the revision moved on.' );
+		$this->assertSame( $after->post_modified_gmt, $this->stored_modified_gmt( $ref ), 'In the row as much as in the cache.' );
+	}
+
+	/**
+	 * The pattern's revision as the table has it.
+	 *
+	 * @param int $ref Pattern post ID.
+	 *
+	 * @return string Post modified time in GMT.
+	 */
+	private function stored_modified_gmt( $ref ) {
+		global $wpdb;
+
+		return (string) $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$wpdb->prepare( "SELECT post_modified_gmt FROM {$wpdb->posts} WHERE ID = %d", $ref )
+		);
 	}
 
 	/**

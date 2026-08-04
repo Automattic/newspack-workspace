@@ -97,7 +97,8 @@ describe( 'ContextualPrompts tab', () => {
 	} );
 
 	// A plain link would strand the publisher in the editor: the handoff is what
-	// puts a way back to the wizard on the destination screen.
+	// puts a way back to the wizard on the destination screen. With nothing
+	// pending it leaves straight away.
 	it( 'hands off to the pattern editor from the header, with no in-page design controls', async () => {
 		const HANDOFF_LINK = 'https://example.test/wp-admin/site-editor.php?handoff=1';
 		const location = window.location;
@@ -123,6 +124,44 @@ describe( 'ContextualPrompts tab', () => {
 				data: expect.objectContaining( {
 					destinationUrl: PATTERN_EDIT_URL,
 					// The pattern opens in the block editor, where the banner is a notice.
+					showOnBlockEditor: true,
+					bannerText: 'Return to Contextual Prompts after editing the design',
+					bannerButtonText: 'Back to Contextual Prompts',
+				} ),
+			} )
+		);
+
+		window.location = location;
+	} );
+
+	// The handoff POSTs and navigates itself, so there is no link for the
+	// unsaved-changes guard to intercept: the discard dialog is asked for here.
+	it( 'confirms before Edit design leaves with unsaved edits, and discarding hands off', async () => {
+		const HANDOFF_LINK = 'https://example.test/wp-admin/site-editor.php?handoff=1';
+		const location = window.location;
+		delete window.location;
+		window.location = { href: 'https://example.test/wp-admin/admin.php?page=newspack-audience' };
+
+		apiFetch.mockResolvedValueOnce( patternStatus() );
+		renderTab();
+
+		await waitFor( () => expect( screen.getByRole( 'textbox', { name: 'Publisher name' } ) ).toBeInTheDocument() );
+		fireEvent.change( screen.getByRole( 'textbox', { name: 'Publisher name' } ), { target: { value: 'Newsroom X' } } );
+
+		fireEvent.click( screen.getByRole( 'button', { name: 'Edit design' } ) );
+		expect( screen.getByText( /unsaved changes that will be lost/i ) ).toBeInTheDocument();
+		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
+
+		apiFetch.mockResolvedValueOnce( { HandoffLink: HANDOFF_LINK } );
+		fireEvent.click( screen.getByText( 'Discard Changes' ) );
+
+		await waitFor( () => expect( window.location.href ).toBe( HANDOFF_LINK ) );
+		expect( apiFetch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				path: '/newspack/v1/handoff',
+				method: 'POST',
+				data: expect.objectContaining( {
+					destinationUrl: PATTERN_EDIT_URL,
 					showOnBlockEditor: true,
 					bannerText: 'Return to Contextual Prompts after editing the design',
 					bannerButtonText: 'Back to Contextual Prompts',

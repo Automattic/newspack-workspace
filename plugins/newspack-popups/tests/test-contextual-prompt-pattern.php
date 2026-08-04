@@ -256,6 +256,47 @@ class ContextualPromptPatternTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Seeding runs from the admin or the REST API, under the seeding
+	 * administrator's own profile language — while the title and copy it stores
+	 * are the site's, read by every reader. So the build and the insert run under
+	 * the site locale, and the switch is undone whatever happens.
+	 */
+	public function test_seeding_runs_under_the_site_locale() {
+		$switched = [];
+		$restored = 0;
+		// The language a request runs in, which in the admin is the user's own.
+		add_filter(
+			'determine_locale',
+			function () {
+				return 'fr_FR';
+			}
+		);
+		add_action(
+			'switch_locale',
+			function ( $locale ) use ( &$switched ) {
+				$switched[] = $locale;
+			}
+		);
+		add_action(
+			'restore_previous_locale',
+			function () use ( &$restored ) {
+				++$restored;
+			}
+		);
+
+		$id = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
+
+		// Core re-runs create_initial_taxonomies() on every locale change, dropping
+		// the prompt CPT's category and tag attachment for the rest of the process
+		// — the end of the request in production, the rest of this run here.
+		Newspack_Popups::register_cpt();
+
+		$this->assertGreaterThan( 0, $id );
+		$this->assertSame( [ get_locale() ], $switched, 'The seed ran under the site locale.' );
+		$this->assertSame( 1, $restored, 'And handed the request back its own.' );
+	}
+
+	/**
 	 * A deleted pattern post is re-seeded rather than leaving instances pointing
 	 * at a hole.
 	 */
@@ -270,10 +311,11 @@ class ContextualPromptPatternTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Block markup survives a write: the escapes serialize_blocks() emits are
-	 * what unslashing strips, so the write helper has to slash first.
+	 * Block markup survives a write unchanged: the row is written directly, so
+	 * the escapes serialize_blocks() emits go in as they are — there is no
+	 * unslashing to survive, and slashing them would store the backslashes.
 	 */
-	public function test_pattern_content_round_trips_markup_through_wp_slash() {
+	public function test_pattern_content_round_trips_block_markup() {
 		$id     = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
 		$blocks = parse_blocks( get_post( $id )->post_content );
 
@@ -308,6 +350,24 @@ class ContextualPromptPatternTest extends WP_UnitTestCase {
 
 		$other = self::factory()->post->create( [ 'post_type' => 'wp_block' ] );
 		$this->assertTrue( current_user_can( 'delete_post', $other ), 'Other synced patterns stay deletable.' );
+	}
+
+	/**
+	 * The pattern is the design every prompt on the site renders, so editing it is
+	 * an administrator's call: core reads the same capability to hide "Edit
+	 * original" from an instance and to refuse the editor route outright. Other
+	 * synced patterns stay editable by whoever could edit them before.
+	 */
+	public function test_only_administrators_may_edit_the_pattern() {
+		$id    = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
+		$other = self::factory()->post->create( [ 'post_type' => 'wp_block' ] );
+
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'editor' ] ) );
+		$this->assertFalse( current_user_can( 'edit_post', $id ) );
+		$this->assertTrue( current_user_can( 'edit_post', $other ), 'Other synced patterns stay editable.' );
+
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+		$this->assertTrue( current_user_can( 'edit_post', $id ) );
 	}
 
 	/**

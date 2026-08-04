@@ -146,6 +146,26 @@ const ContextualPrompts = props => {
 	const onDisable = () => requestConfirm( disable );
 	const onEnable = () => setEnabled( true ).then( () => setSnackbar( __( 'Contextual Prompts enabled.', 'newspack-plugin' ) ) );
 
+	const bannerText = __( 'Return to Contextual Prompts after editing the design', 'newspack-plugin' );
+	const bannerButtonText = __( 'Back to Contextual Prompts', 'newspack-plugin' );
+	// What Handoff does on click: register the return banner, then leave for the
+	// editor. Repeated here because the dirty branch has to run it after the
+	// discard dialog, and Handoff owns its own onClick.
+	const goToPattern = () =>
+		apiFetch( {
+			path: '/newspack/v1/handoff',
+			method: 'POST',
+			data: {
+				destinationUrl: status.pattern_edit_url,
+				handoffReturnUrl: window.location.href,
+				showOnBlockEditor: true,
+				bannerText,
+				bannerButtonText,
+			},
+		} ).then( response => {
+			window.location.href = response.HandoffLink;
+		} );
+
 	const headerActions = status?.enabled ? (
 		<>
 			<DropdownMenu
@@ -160,18 +180,25 @@ const ContextualPrompts = props => {
 				] }
 			/>
 			{ /* A handoff rather than a link: the pattern opens in the block editor,
-			     which has no way back to the wizard without the return banner. */ }
-			{ status.pattern_edit_url && (
-				<Handoff
-					variant="secondary"
-					url={ status.pattern_edit_url }
-					showOnBlockEditor
-					bannerText={ __( 'Return to Contextual Prompts after editing the design', 'newspack-plugin' ) }
-					bannerButtonText={ __( 'Back to Contextual Prompts', 'newspack-plugin' ) }
-				>
-					{ __( 'Edit design', 'newspack-plugin' ) }
-				</Handoff>
-			) }
+			     which has no way back to the wizard without the return banner. It
+			     leaves the wizard without a navigation the unsaved-changes guard can
+			     intercept, so with edits pending the confirmation is asked here. */ }
+			{ status.pattern_edit_url &&
+				( isDirty ? (
+					<Button variant="secondary" onClick={ () => requestConfirm( goToPattern ) }>
+						{ __( 'Edit design', 'newspack-plugin' ) }
+					</Button>
+				) : (
+					<Handoff
+						variant="secondary"
+						url={ status.pattern_edit_url }
+						showOnBlockEditor
+						bannerText={ bannerText }
+						bannerButtonText={ bannerButtonText }
+					>
+						{ __( 'Edit design', 'newspack-plugin' ) }
+					</Handoff>
+				) ) }
 			<Button variant="primary" onClick={ onSave } disabled={ inFlight || ! isDirty }>
 				{ __( 'Save', 'newspack-plugin' ) }
 			</Button>
