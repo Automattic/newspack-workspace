@@ -888,4 +888,151 @@ class Newspack_Test_Frontend_Registration_Endpoint extends WP_UnitTestCase {
 		delete_transient( 'newspack_check_email_ip_' . md5( '127.0.0.1' ) );
 		wp_cache_delete( 'newspack_check_email_ip_' . md5( '127.0.0.1' ), 'newspack_rate_limit' );
 	}
+
+	/**
+	 * Metadata sent to the endpoint must not be able to set state the site trusts.
+	 * The endpoint is unauthenticated, so reader state (email verification), reader
+	 * data (which content gates read) and WordPress account state are all off limits.
+	 */
+	public function test_register_metadata_cannot_write_reserved_keys() {
+		global $wpdb;
+
+		$response = $this->do_register_request(
+			[
+				'npe'             => self::$reader_email,
+				'integration_id'  => self::$integration_id,
+				'integration_key' => self::generate_key( self::$integration_id ),
+				'metadata'        => [
+					'np_reader_email_verified'           => '1',
+					'_np_reader_email_verified'          => '1',
+					'newspack_reader_data_item_is_donor' => 'injected-reader-data',
+					'newspack_reader_data_keys'          => 'injected-key-list',
+					'_newspack_group_subscription'       => 'injected-subscription',
+					'wp_capabilities'                    => 'administrator',
+					$wpdb->base_prefix . 'capabilities'  => 'administrator',
+					'wpcom_user_id'                      => '12345',
+					'session_tokens'                     => 'injected-session',
+					'_application_passwords'             => 'injected-password',
+					'partner_member_id'                  => 'abc-123',
+				],
+			]
+		);
+
+		$this->assertEquals( 201, $response->get_status() );
+		$user = get_user_by( 'email', self::$reader_email );
+		$this->assertInstanceOf( 'WP_User', $user );
+
+		$this->assertFalse(
+			Reader_Activation::is_reader_verified( $user ),
+			'Request metadata must not be able to mark the reader email-verified.'
+		);
+		$this->assertSame(
+			'',
+			get_user_meta( $user->ID, 'newspack_reader_data_item_is_donor', true ),
+			'Request metadata must not be able to write reader data that access rules read.'
+		);
+		$this->assertSame(
+			'',
+			get_user_meta( $user->ID, '_newspack_group_subscription', true ),
+			'Request metadata must not be able to write underscore-prefixed Newspack keys.'
+		);
+		$this->assertSame(
+			'',
+			get_user_meta( $user->ID, 'wpcom_user_id', true ),
+			'Request metadata must not be able to claim another WordPress.com identity, which Jetpack resolves paid subscriptions against.'
+		);
+
+		// Registration authenticates the new reader, so these two may legitimately hold
+		// a real value. What must never happen is a caller-supplied scalar landing in
+		// them, which is what their consumers would choke on.
+		foreach ( [ 'newspack_reader_data_keys', 'session_tokens', '_application_passwords' ] as $array_key ) {
+			$stored = get_user_meta( $user->ID, $array_key, true );
+			$this->assertTrue(
+				'' === $stored || is_array( $stored ),
+				sprintf( 'Request metadata must not be able to write a scalar into "%s".', $array_key )
+			);
+		}
+
+		// The harm at the capabilities key is not escalation — sanitize_text_field()
+		// makes the value a scalar, which core ignores — it is that writing a scalar
+		// replaces the role array, stripping the account of every role.
+		$caps = get_user_meta( $user->ID, $wpdb->get_blog_prefix() . 'capabilities', true );
+		$this->assertIsArray(
+			$caps,
+			'Request metadata must not be able to overwrite the capabilities meta.'
+		);
+		$this->assertArrayNotHasKey( 'administrator', $caps );
+		$this->assertFalse( user_can( $user->ID, 'manage_options' ) );
+
+		// The drop is reported back, so an integration author can tell "saved" from
+		// "silently discarded".
+		$data = $response->get_data();
+		$this->assertArrayHasKey( 'skipped_metadata_keys', $data );
+		$this->assertContains( 'np_reader_email_verified', $data['skipped_metadata_keys'] );
+		$this->assertNotContains( 'partner_member_id', $data['skipped_metadata_keys'] );
+
+		// Keys outside the reserved set still write: the metadata contract that
+		// integrations rely on is unchanged.
+		$this->assertSame(
+			'abc-123',
+			get_user_meta( $user->ID, 'partner_member_id', true ),
+			'Non-reserved metadata keys must still be saved.'
+		);
+	}
+
+	/**
+	 * Reserved-key classification, including the case and whitespace variants a
+	 * caller could use to try to slip past the guard.
+	 */
+	public function test_is_reserved_meta_key() {
+		global $wpdb;
+
+		$reserved = [
+			'np_reader',
+			'np_reader_email_verified',
+			'_np_reader',
+			'newspack_reader_data_keys',
+			'newspack_reader_data_item_is_donor',
+			'_newspack_anything',
+			'wp_capabilities',
+			'wp_user_level',
+			'wp_2_capabilities',
+			'wp_2_user_level',
+			$wpdb->base_prefix . 'capabilities',
+			$wpdb->base_prefix . '3_capabilities',
+			$wpdb->base_prefix . 'user_level',
+			'wpcom_user_id',
+			'session_tokens',
+			'_application_passwords',
+			'wp_user-settings',
+			'wp_user-settings-time',
+			'default_password_nag',
+			'NP_Reader_Email_Verified',
+			'  np_reader  ',
+			'',
+		];
+		foreach ( $reserved as $key ) {
+			$this->assertTrue(
+				Reader_Registration::is_reserved_meta_key( $key ),
+				sprintf( 'Key "%s" must be treated as reserved.', $key )
+			);
+		}
+
+		$allowed = [
+			'partner_member_id',
+			'billing_city',
+			'nps_score',
+			'newspaper_subscriber_id',
+			'crm_contact_id',
+			'capabilities',
+			'user_level',
+			'reader_source',
+		];
+		foreach ( $allowed as $key ) {
+			$this->assertFalse(
+				Reader_Registration::is_reserved_meta_key( $key ),
+				sprintf( 'Key "%s" must remain writable.', $key )
+			);
+		}
+	}
 }

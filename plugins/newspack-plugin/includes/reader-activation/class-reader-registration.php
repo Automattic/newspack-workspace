@@ -106,7 +106,8 @@ final class Reader_Registration {
 	/**
 	 * Sanitize the metadata parameter.
 	 *
-	 * Ensures all keys and values are sanitized strings.
+	 * Ensures all keys and values are sanitized strings. If this ever accepts
+	 * arrays, revisit {@see is_reserved_meta_key()}.
 	 *
 	 * @param array $metadata Raw metadata from the request.
 	 * @return array Sanitized metadata.
@@ -123,6 +124,61 @@ final class Reader_Registration {
 			}
 		}
 		return $sanitized;
+	}
+
+	/**
+	 * Whether a user meta key is reserved and therefore not caller-writable.
+	 *
+	 * Covers Newspack reader state and reader data, the identity key Jetpack reads,
+	 * and WordPress account state. Other code trusts these values, so registration
+	 * metadata must not set them. Add to the list when adding a key that gates
+	 * anything.
+	 *
+	 * @param string $meta_key Meta key to check.
+	 * @return bool True if the key is reserved.
+	 */
+	public static function is_reserved_meta_key( $meta_key ): bool {
+		global $wpdb;
+
+		$key = strtolower( trim( (string) $meta_key ) );
+		if ( '' === $key ) {
+			return true;
+		}
+
+		$reserved_prefixes = [ 'np_', '_np_', 'newspack_', '_newspack_' ];
+		foreach ( $reserved_prefixes as $prefix ) {
+			if ( 0 === strpos( $key, $prefix ) ) {
+				return true;
+			}
+		}
+
+		$reserved_keys = [
+			'wpcom_user_id', // Jetpack resolves subscriptions against this ID, not the local user ID.
+			'session_tokens',
+			'_application_passwords',
+			'wp_capabilities',
+			'wp_user_level',
+			'wp_user-settings',
+			'wp_user-settings-time',
+			'default_password_nag',
+		];
+		if ( in_array( $key, $reserved_keys, true ) ) {
+			return true;
+		}
+
+		// Table-prefixed, with a per-blog segment on multisite (wp_2_capabilities).
+		// Match the site's prefix and the default, so this holds on any configuration.
+		$prefixes = [ 'wp_' ];
+		if ( isset( $wpdb->base_prefix ) ) {
+			$prefixes[] = strtolower( $wpdb->base_prefix );
+		}
+		foreach ( array_unique( $prefixes ) as $prefix ) {
+			if ( preg_match( '/^' . preg_quote( $prefix, '/' ) . '(\d+_)?(capabilities|user_level)$/', $key ) ) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/**
@@ -455,12 +511,32 @@ final class Reader_Registration {
 			);
 		}
 
-		// Save arbitrary user metadata.
+		// Save arbitrary user metadata, skipping keys other code trusts.
 		$user_metadata = $request->get_param( 'metadata' );
+		$skipped_keys  = [];
 		if ( ! empty( $user_metadata ) ) {
 			foreach ( $user_metadata as $meta_key => $meta_value ) {
+				if ( self::is_reserved_meta_key( $meta_key ) ) {
+					$skipped_keys[] = $meta_key;
+					continue;
+				}
 				\update_user_meta( $result, $meta_key, $meta_value );
 			}
+		}
+
+		if ( ! empty( $skipped_keys ) ) {
+			// Once per request, not per key: the caller controls how many it sends.
+			// newspack_log() fires regardless of NEWSPACK_LOG_LEVEL.
+			Logger::newspack_log(
+				'newspack_frontend_registration_reserved_metadata',
+				'Frontend registration skipped reserved metadata keys.',
+				[
+					'integration_id' => $integration_id,
+					'count'          => count( $skipped_keys ),
+					'keys'           => array_slice( $skipped_keys, 0, 20 ),
+				],
+				'warning'
+			);
 		}
 
 		$response_data = [
@@ -468,6 +544,11 @@ final class Reader_Registration {
 			'status'  => 'created',
 			'email'   => $email,
 		];
+
+		// So an integration author can tell a saved key from a discarded one.
+		if ( ! empty( $skipped_keys ) ) {
+			$response_data['skipped_metadata_keys'] = $skipped_keys;
+		}
 
 		// Surface verification state so integration callers (via window.newspackReaderActivation.register())
 		// can opt into the post-registration verification modal when their UX warrants it. Callers that
