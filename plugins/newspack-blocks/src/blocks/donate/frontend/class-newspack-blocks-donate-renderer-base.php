@@ -212,6 +212,9 @@ abstract class Newspack_Blocks_Donate_Renderer_Base {
 					<input type='hidden' name='<?php echo esc_attr( $param_name ); ?>' value='<?php echo esc_attr( $value ); ?>' />
 				<?php
 			}
+			// The signature marks this destination as one the site stored, so an
+			// off-site one is honored while an arbitrary one from a URL is not.
+			echo \Newspack_Blocks\Modal_Checkout::after_success_signature_input( isset( $attributes['afterSuccessURL'] ) ? $attributes['afterSuccessURL'] : '' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in the helper.
 		}
 		return ob_get_clean();
 	}

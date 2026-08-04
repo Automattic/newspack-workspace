@@ -48,10 +48,12 @@ if ( ! $is_valid ) {
 $is_success             = ! $order->has_status( 'failed' );
 $after_success_behavior = isset( $_GET['after_success_behavior'] ) ? \sanitize_text_field( \wp_unslash( $_GET['after_success_behavior'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 // The modal assigns window.location.href to this once the reader closes the
-// modal, and anyone can put a URL in the query string, so it is restricted to
-// a host the site allows. See Modal_Checkout::sanitize_after_success_url().
-// phpcs:ignore WordPress.Security.NonceVerification.Recommended, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- sanitize_after_success_url() sanitizes and allowlists the host.
-$after_success_url = isset( $_GET['after_success_url'] ) ? \Newspack_Blocks\Modal_Checkout::sanitize_after_success_url( \wp_unslash( $_GET['after_success_url'] ) ) : '';
+// modal, and anyone can put a URL in the query string. An off-site destination
+// is therefore honored only with the signature a block renderer produced.
+// See Modal_Checkout::sanitize_after_success_url().
+$after_success_signature = isset( $_GET[ \Newspack_Blocks\Modal_Checkout::AFTER_SUCCESS_SIGNATURE_ARG ] ) ? \sanitize_text_field( \wp_unslash( $_GET[ \Newspack_Blocks\Modal_Checkout::AFTER_SUCCESS_SIGNATURE_ARG ] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+// phpcs:ignore WordPress.Security.NonceVerification.Recommended, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- sanitize_after_success_url() sanitizes and validates.
+$after_success_url = isset( $_GET['after_success_url'] ) ? \Newspack_Blocks\Modal_Checkout::sanitize_after_success_url( \wp_unslash( $_GET['after_success_url'] ), $after_success_signature ) : '';
 // Without a destination the redirect cannot happen; fall back to simply
 // closing the modal rather than leaving a dead continue button.
 if ( 'custom' === $after_success_behavior && '' === $after_success_url ) {
