@@ -131,6 +131,13 @@ class PresetsTest extends WP_UnitTestCase {
 				$preset['content'],
 				'Shortcode delimiters must not survive into preset content.'
 			);
+			// Asserted decoded, not as the entity: the reader still sees their brackets,
+			// and a later change that double-encoded them would fail here.
+			$this->assertStringContainsString(
+				'[newspack_test_injection]',
+				html_entity_decode( $rendered ),
+				'The editor sees the brackets as literal text.'
+			);
 			$this->assertStringContainsString(
 				'Safe heading',
 				$preset['content'],
@@ -248,6 +255,83 @@ class PresetsTest extends WP_UnitTestCase {
 				12,
 				$preset['options']['featured_image_id'],
 				'The featured image override reaches the popup as an integer.'
+			);
+		} finally {
+			unset( $_GET['values'], $_GET['preset'] );
+		}
+	}
+
+	/**
+	 * Array keys land in the same block-delimiter JSON as the values. A key carrying
+	 * a bracket puts a live delimiter next to an attacker-chosen tag name, with the
+	 * closing one supplied by the JSON array itself.
+	 */
+	public function test_preset_override_array_keys_cannot_inject_shortcodes() {
+		$ran = false;
+		\add_shortcode(
+			'newspack_test_injection',
+			function () use ( &$ran ) {
+				$ran = true;
+				return 'INJECTED';
+			}
+		);
+
+		try {
+			$this->login_as_prompt_manager();
+			// Parsed the way PHP parses the query string, which permits `[` inside a key.
+			\parse_str(
+				'preset=ras_newsletter_inline&values[body]={{lists}}&values[lists][[newspack_test_injection%3D1][]=x',
+				$parsed
+			);
+			$this->assertArrayHasKey(
+				'[newspack_test_injection=1',
+				$parsed['values']['lists'],
+				'The payload parses into an array key, as PHP permits.'
+			);
+
+			$_GET['preset'] = $parsed['preset'];
+			$_GET['values'] = \wp_slash( $parsed['values'] );
+
+			$preset = Newspack_Popups_Presets::retrieve_preset_popup( 'ras_newsletter_inline' );
+			$this->assertIsArray( $preset );
+
+			// Positive control: the payload did reach the content, encoded. Without it
+			// the assertions below would also pass if the override never arrived.
+			$this->assertStringContainsString(
+				'&#91;newspack_test_injection=1',
+				$preset['content'],
+				'The key reached the content with its bracket encoded.'
+			);
+
+			$rendered = $this->render_preset( $preset );
+			$this->assertFalse( $ran, 'A bracket in an array key must not execute a shortcode.' );
+			$this->assertStringNotContainsString( 'INJECTED', $rendered );
+		} finally {
+			\remove_shortcode( 'newspack_test_injection' );
+			unset( $_GET['values'], $_GET['preset'] );
+		}
+	}
+
+	/**
+	 * A scalar sent to the array-typed field would be JSON-encoded as a string, and
+	 * the subscribe block's render then calls array_intersect() on it.
+	 */
+	public function test_preset_scalar_override_for_a_list_field_falls_back() {
+		try {
+			$this->login_as_prompt_manager();
+			$_GET['preset'] = 'ras_newsletter_inline';
+			$_GET['values'] = [ 'lists' => 'x' ];
+
+			$preset = Newspack_Popups_Presets::retrieve_preset_popup( 'ras_newsletter_inline' );
+			$this->assertIsArray( $preset );
+			$this->assertStringNotContainsString(
+				'"lists": "x"',
+				$preset['content'],
+				'A scalar must not reach the list field.'
+			);
+			$this->assertNotEmpty(
+				$this->render_preset( $preset ),
+				'The preview still renders rather than throwing on the scalar.'
 			);
 		} finally {
 			unset( $_GET['values'], $_GET['preset'] );

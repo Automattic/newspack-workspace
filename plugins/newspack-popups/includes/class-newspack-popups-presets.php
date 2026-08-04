@@ -115,7 +115,8 @@ final class Newspack_Popups_Presets {
 			return [];
 		}
 
-		// filter_input reads the original request, not $_GET, so it is null under PHPUnit.
+		// filter_input reads the SAPI's original request, so it bypasses wp_magic_quotes()
+		// and anything that modified $_GET, and is null under WP-CLI and PHPUnit.
 		if ( ! isset( $_GET['values'] ) || ! is_array( $_GET['values'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			return [];
 		}
@@ -136,7 +137,8 @@ final class Newspack_Popups_Presets {
 
 		$sanitized = [];
 		foreach ( $values as $key => $value ) {
-			$key = \sanitize_text_field( $key );
+			// Keys are emitted into the same block-delimiter JSON as the values.
+			$key = self::encode_shortcode_delimiters( \sanitize_text_field( $key ) );
 			if ( is_array( $value ) ) {
 				$sanitized[ $key ] = self::sanitize_override_values( $value );
 				continue;
@@ -162,7 +164,12 @@ final class Newspack_Popups_Presets {
 	 */
 	private static function encode_shortcode_delimiters( $value ) {
 		if ( is_array( $value ) ) {
-			return array_map( [ __CLASS__, 'encode_shortcode_delimiters' ], $value );
+			// Keys as well as values: both are emitted into the same JSON.
+			$encoded = [];
+			foreach ( $value as $key => $item ) {
+				$encoded[ self::encode_shortcode_delimiters( $key ) ] = self::encode_shortcode_delimiters( $item );
+			}
+			return $encoded;
 		}
 		if ( ! is_string( $value ) ) {
 			return $value;
@@ -303,6 +310,9 @@ final class Newspack_Popups_Presets {
 			if ( 'string' === $field['type'] && ! is_scalar( $value ) ) {
 				// `?values[body][]=x` would otherwise reach trim() below as an array.
 				$value = null;
+			} elseif ( 'array' === $field['type'] && ! is_array( $value ) ) {
+				// And the mirror: a scalar would be JSON-encoded where a list is expected.
+				$value = null;
 			} else {
 				$value = self::encode_shortcode_delimiters( $value );
 			}
@@ -317,7 +327,9 @@ final class Newspack_Popups_Presets {
 		if ( 'string' === $field['type'] && isset( $field['max_length'] ) ) {
 			$value = substr( trim( $value ), 0, $field['max_length'] );
 		}
-		// If an array, stringify with field name.
+		// If an array, stringify with field name. Overrides hold only strings and
+		// arrays, so the brackets wp_json_encode() emits here are always followed by a
+		// quote or another bracket, never by a tag name do_shortcode() would match.
 		if ( 'array' === $field['type'] ) {
 			$value = '"' . $field_name . '": ' . \wp_json_encode( $value );
 		}

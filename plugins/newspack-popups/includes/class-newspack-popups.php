@@ -1050,11 +1050,17 @@ final class Newspack_Popups {
 	 * Is the user an admin or editor user?
 	 * If so, prompts will be shown to these users while logged in, but analytics
 	 * will not be fired for them.
+	 *
+	 * This also gates the prompt and preset preview paths, which render
+	 * request-supplied content, so widening it widens who can reach those.
 	 */
 	public static function is_user_admin() {
 		/**
 		 * Filter to allow other plugins to decide which capability should be checked
 		 * to determine whether a user's activity should be tracked via Google Analytics.
+		 *
+		 * Also gates the prompt and preset previews, so widening this widens who can
+		 * render request-supplied content through them.
 		 *
 		 * @param string $capability Capability to check. Default: edit_others_pages.
 		 * @return string Filtered capability string.
