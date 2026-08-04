@@ -49,13 +49,7 @@ import {
 	getValidationError,
 	resolveProductParams,
 } from './promo-url-options';
-import type {
-	DonateTargetsResponse,
-	ProductPromoContext,
-	PromoCouponResponse,
-	PromoPageChoice,
-	PromoTargetDonateConfig,
-} from './promo-url-options';
+import type { DonateTargetsResponse, ProductPromoContext, PromoCouponResponse, PromoPageChoice, PromoTargetDonateConfig } from './promo-url-options';
 
 const API_BASE = '/newspack/v1/wizard/newspack-audience-subscription-products';
 const HOMEPAGE_VALUE = 'home';
@@ -408,12 +402,7 @@ export default function PromoUrlModal( { item, closeModal }: { item: Subscriptio
 				</HStack>
 			) }
 			{ kind === 'product' && (
-				<TextControl
-					label={ __( 'Coupon code', 'newspack-plugin' ) }
-					value={ coupon }
-					onChange={ setCoupon }
-					help={ couponHelp }
-				/>
+				<TextControl label={ __( 'Coupon code', 'newspack-plugin' ) } value={ coupon } onChange={ setCoupon } help={ couponHelp } />
 			) }
 			<PanelBody title={ __( 'Campaign tracking', 'newspack-plugin' ) } initialOpen={ false }>
 				<HStack alignment="top">
