@@ -1,3 +1,10 @@
+## newspack [6.47.1](https://github.com/Automattic/newspack-workspace/compare/newspack@6.47.0...newspack@6.47.1) (2026-08-04)
+
+
+### Bug Fixes
+
+* **reader-activation:** reserve internal user meta keys on registration ([#793](https://github.com/Automattic/newspack-workspace/issues/793)) ([dfe7eda](https://github.com/Automattic/newspack-workspace/commit/dfe7eda9e236bf92723756a2b5467ebd117888ac))
+
 # newspack [6.47.0](https://github.com/Automattic/newspack-workspace/compare/newspack@6.46.1...newspack@6.47.0) (2026-08-03)
 
 
