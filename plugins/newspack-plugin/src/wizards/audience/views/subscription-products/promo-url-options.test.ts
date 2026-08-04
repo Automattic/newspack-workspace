@@ -176,9 +176,7 @@ describe( 'getValidationError', () => {
 		// The destination is assigned to window.location.href after a payment, so
 		// an off-site one would be an open redirect the server refuses anyway.
 		const base = { ...productBase, afterSuccess: 'custom' as const, siteOrigin: 'https://site.test/' };
-		expect( getValidationError( { ...base, afterSuccessUrl: 'https://evil.example/phish' } ) ).toBe(
-			'The continue URL must be on this site.'
-		);
+		expect( getValidationError( { ...base, afterSuccessUrl: 'https://evil.example/phish' } ) ).toBe( 'The continue URL must be on this site.' );
 		expect( getValidationError( { ...base, afterSuccessUrl: 'https://site.test/welcome' } ) ).toBeNull();
 		expect( getValidationError( { ...base, afterSuccessUrl: '/welcome' } ) ).toBeNull();
 	} );
