@@ -1,13 +1,14 @@
 /**
- * Contextual Prompt pattern locks, in the Site Editor.
+ * Contextual Prompt pattern locks, in every editor that opens the pattern.
  *
- * The server hides block locking for the editor that opens the pattern, but the
- * Site Editor route (`site-editor.php?p=/wp_block/<id>`) reaches the same post
- * through an editor context that carries no post, so the filter cannot see what
- * is being edited and the locks become liftable — and savable. Holding the
- * setting client-side covers that route, and hands it back on the way out: the
- * Site Editor is a single page, so the next pattern the session opens must not
- * inherit our lockdown.
+ * The server hides block locking for the editor that loads the pattern as its
+ * post, but two routes reach the same post through settings that filter never
+ * sees: the Site Editor (`site-editor.php?p=/wp_block/<id>`), whose editor
+ * context carries no post, and the post editor's pattern focus mode, whose
+ * settings were bootstrapped for the post the session started on. Both leave the
+ * locks liftable — and savable. Holding the setting client-side covers them, and
+ * hands it back on the way out: leaving focus mode, or moving on to another
+ * pattern, must not inherit our lockdown.
  */
 
 /**
@@ -35,9 +36,31 @@ export const isEditingPattern = ( { postType, postId, patternId } ) =>
 	Boolean( patternId ) && 'wp_block' === postType && Number( postId ) === Number( patternId );
 
 /**
+ * What the editor is currently editing, whichever editor it is.
+ *
+ * The Site Editor knows its own route; the post editor knows only the post it
+ * bootstrapped with, which pattern focus mode swaps for the pattern itself. Both
+ * halves come from one store, so a type resolved from one editor can never be
+ * paired with an id from the other.
+ *
+ * @param {Object} args              Store access.
+ * @param {Object} [args.siteEditor] The `core/edit-site` store, when present.
+ * @param {Object} [args.editor]     The `core/editor` store, when present.
+ * @return {{postType: string|undefined, postId: string|number|undefined}} The edited entity.
+ */
+export const resolveEditedEntity = ( { siteEditor, editor } ) => {
+	const siteEditorPostType = siteEditor?.getEditedPostType?.();
+	if ( siteEditorPostType ) {
+		return { postType: siteEditorPostType, postId: siteEditor.getEditedPostId?.() };
+	}
+
+	return { postType: editor?.getCurrentPostType?.(), postId: editor?.getCurrentPostId?.() };
+};
+
+/**
  * A reconciler holding `canLockBlocks` off while the pattern is open.
  *
- * The Site Editor re-pushes its own settings as it navigates, so the setting is
+ * Editors re-push their own settings as they navigate, so the setting is
  * re-asserted on every change rather than only on arrival. What it was on
  * arrival is what it is restored to on leaving.
  *
@@ -70,24 +93,23 @@ export const createLockHold = ( { isEditingPattern: editingPattern, getCanLockBl
 	};
 };
 
-export const registerContextualPromptSiteEditorLocks = () => {
+export const registerContextualPromptEditorLocks = () => {
 	if ( ! PATTERN_ID ) {
 		return;
 	}
 
 	domReady( () => {
-		// Outside the Site Editor the server filter already covers the route.
-		const siteEditor = select( 'core/edit-site' );
-		if ( ! siteEditor ) {
+		if ( ! select( blockEditorStore ) ) {
 			return;
 		}
 
-		const editor = () => select( 'core/editor' );
 		const reconcile = createLockHold( {
 			isEditingPattern: () =>
 				isEditingPattern( {
-					postType: siteEditor.getEditedPostType?.() ?? editor()?.getCurrentPostType?.(),
-					postId: siteEditor.getEditedPostId?.() ?? editor()?.getCurrentPostId?.(),
+					...resolveEditedEntity( {
+						siteEditor: select( 'core/edit-site' ),
+						editor: select( 'core/editor' ),
+					} ),
 					patternId: PATTERN_ID,
 				} ),
 			getCanLockBlocks: () => select( blockEditorStore ).getSettings().canLockBlocks,

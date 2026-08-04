@@ -274,7 +274,9 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 	 * @return array Parsed core/group block.
 	 */
 	private static function build_group() {
-		$wrapper = '<div class="wp-block-group ' . self::MARKER_CLASS . ' has-background has-medium-font-size" style="border-radius:10px;background-color:#f7f7f7;padding-top:var(--wp--preset--spacing--50);padding-right:var(--wp--preset--spacing--50);padding-bottom:var(--wp--preset--spacing--50);padding-left:var(--wp--preset--spacing--50)">';
+		$text_color = self::get_text_color_slug();
+		$classes    = 'wp-block-group ' . self::MARKER_CLASS . ' has-text-color has-' . $text_color . '-color has-background has-medium-font-size';
+		$wrapper    = '<div class="' . $classes . '" style="border-radius:10px;background-color:#f7f7f7;padding-top:var(--wp--preset--spacing--50);padding-right:var(--wp--preset--spacing--50);padding-bottom:var(--wp--preset--spacing--50);padding-left:var(--wp--preset--spacing--50)">';
 
 		return [
 			'blockName'    => 'core/group',
@@ -283,6 +285,7 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 				'className'    => self::MARKER_CLASS,
 				'templateLock' => 'insert',
 				'lock'         => self::BLOCK_LOCK,
+				'textColor'    => $text_color,
 				'style'        => [
 					'color'   => [ 'background' => '#f7f7f7' ],
 					'border'  => [ 'radius' => '10px' ],
@@ -308,7 +311,9 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 	/**
 	 * The copy paragraph, bound to pattern overrides so each instance carries its
 	 * own story-specific copy. Seeded empty: an instance nobody has written copy
-	 * for renders nothing rather than placeholder text.
+	 * for renders nothing rather than placeholder text. The placeholder is editor
+	 * chrome — core never renders it — so it says what the empty block is for
+	 * without putting words in front of readers.
 	 *
 	 * @return array Parsed core/paragraph block.
 	 */
@@ -316,11 +321,12 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 		return [
 			'blockName'    => 'core/paragraph',
 			'attrs'        => [
-				'metadata' => [
+				'metadata'    => [
 					'name'     => self::BOUND_NAME,
 					'bindings' => [ '__default' => [ 'source' => 'core/pattern-overrides' ] ],
 				],
-				'lock'     => self::BLOCK_LOCK,
+				'lock'        => self::BLOCK_LOCK,
+				'placeholder' => __( 'Copy is generated for each story.', 'newspack-popups' ),
 			],
 			'innerBlocks'  => [],
 			'innerHTML'    => "\n<p></p>\n",
@@ -456,6 +462,17 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 		 * @param bool $use_donate_block Whether to use the donate block.
 		 */
 		return (bool) apply_filters( 'newspack_contextual_prompts_use_donate_block', $default );
+	}
+
+	/**
+	 * The palette slug the card's text is seeded with. The two theme families name
+	 * their body-text color differently, and a slug the active palette does not
+	 * declare would leave the editor showing a color it cannot resolve.
+	 *
+	 * @return string Palette color slug.
+	 */
+	public static function get_text_color_slug() {
+		return wp_is_block_theme() ? 'contrast' : 'dark-gray';
 	}
 
 	/**

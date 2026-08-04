@@ -5,7 +5,7 @@
  */
 jest.mock( '@wordpress/block-editor', () => ( {} ) );
 
-const { isEditingPattern, createLockHold } = require( './site-editor-locks' );
+const { isEditingPattern, resolveEditedEntity, createLockHold } = require( './editor-locks' );
 
 describe( 'isEditingPattern', () => {
 	// getEditedPostId() returns the id as a string; the localized pattern id is a
@@ -29,6 +29,56 @@ describe( 'isEditingPattern', () => {
 	] )( 'never matches when the pattern id is %s', ( label, patternId ) => {
 		expect( isEditingPattern( { postType: 'wp_block', postId: 0, patternId } ) ).toBe( false );
 		expect( isEditingPattern( { postType: 'wp_block', postId: undefined, patternId } ) ).toBe( false );
+	} );
+} );
+
+describe( 'resolveEditedEntity', () => {
+	const siteEditorOn = ( postType, postId ) => ( {
+		getEditedPostType: () => postType,
+		getEditedPostId: () => postId,
+	} );
+	const editorOn = ( postType, postId ) => ( {
+		getCurrentPostType: () => postType,
+		getCurrentPostId: () => postId,
+	} );
+
+	it( 'reads the Site Editor route when there is one', () => {
+		expect( resolveEditedEntity( { siteEditor: siteEditorOn( 'wp_block', '232' ), editor: editorOn( 'page', 12 ) } ) ).toEqual( {
+			postType: 'wp_block',
+			postId: '232',
+		} );
+	} );
+
+	// Pattern focus mode swaps the post editor's own entity for the pattern.
+	it( 'reads the post editor when the Site Editor is not loaded', () => {
+		expect( resolveEditedEntity( { siteEditor: undefined, editor: editorOn( 'wp_block', 232 ) } ) ).toEqual( {
+			postType: 'wp_block',
+			postId: 232,
+		} );
+	} );
+
+	it( 'reads the post the post editor started on', () => {
+		expect( resolveEditedEntity( { siteEditor: undefined, editor: editorOn( 'post', 29 ) } ) ).toEqual( {
+			postType: 'post',
+			postId: 29,
+		} );
+	} );
+
+	// A Site Editor store that answers neither selector must not contribute half
+	// an answer for the post editor's id to pair with.
+	it.each( [
+		[ 'answers with nothing', {} ],
+		[ 'has dropped the selectors', { getEditedPostType: undefined } ],
+		[ 'is not loaded', undefined ],
+	] )( 'falls through whole when the Site Editor %s', ( label, siteEditor ) => {
+		expect( resolveEditedEntity( { siteEditor, editor: editorOn( 'post', 29 ) } ) ).toEqual( {
+			postType: 'post',
+			postId: 29,
+		} );
+	} );
+
+	it( 'resolves to nothing when no editor answers', () => {
+		expect( resolveEditedEntity( {} ) ).toEqual( { postType: undefined, postId: undefined } );
 	} );
 } );
 

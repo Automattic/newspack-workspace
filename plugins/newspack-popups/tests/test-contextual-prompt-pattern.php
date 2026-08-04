@@ -16,27 +16,57 @@
  */
 class ContextualPromptPatternTest extends WP_UnitTestCase {
 	/**
+	 * The theme the test env started on.
+	 *
+	 * @var string
+	 */
+	private $original_stylesheet;
+
+	/**
 	 * The native CTA requires the donate block to be registered.
 	 */
 	public function set_up() {
 		parent::set_up();
+		$this->original_stylesheet = get_stylesheet();
 		if ( ! WP_Block_Type_Registry::get_instance()->is_registered( 'newspack-blocks/donate' ) ) {
 			register_block_type( 'newspack-blocks/donate' );
 		}
 	}
 
 	/**
-	 * Reset the pattern record, the donor landing page and the stub block type.
+	 * Reset the pattern record, the donor landing page, the theme and the stub
+	 * block type.
 	 */
 	public function tear_down() {
 		delete_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_PATTERN_ID );
 		delete_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_STAMPED_ACCENT );
 		delete_option( 'newspack_popups_donor_landing_page' );
+		if ( get_stylesheet() !== $this->original_stylesheet ) {
+			switch_theme( $this->original_stylesheet );
+		}
 		if ( WP_Block_Type_Registry::get_instance()->is_registered( 'newspack-blocks/donate' ) ) {
 			unregister_block_type( 'newspack-blocks/donate' );
 		}
 		parent::tear_down();
 		wp_clean_theme_json_cache();
+	}
+
+	/**
+	 * Switch to any installed theme of the requested family, skipping the test
+	 * when the env has none — the seeded palette slug is what differs between them.
+	 *
+	 * @param bool $block_theme Whether to switch to a block theme.
+	 */
+	private function switch_to_theme_family( $block_theme ) {
+		foreach ( wp_get_themes() as $stylesheet => $theme ) {
+			if ( method_exists( $theme, 'is_block_theme' ) && $block_theme === $theme->is_block_theme() ) {
+				switch_theme( $stylesheet );
+				wp_clean_theme_json_cache();
+				return;
+			}
+		}
+
+		$this->markTestSkipped( $block_theme ? 'No block theme is available in this test environment.' : 'No classic theme is available in this test environment.' );
 	}
 
 	/**
@@ -139,11 +169,46 @@ class ContextualPromptPatternTest extends WP_UnitTestCase {
 	/**
 	 * The seeded copy is empty: an uninitialized instance displays nothing rather
 	 * than placeholder copy, which is what the empty-prompt suppression keys on.
+	 * The placeholder is an attribute, which core shows in the editor only.
 	 */
-	public function test_seeded_copy_is_empty() {
+	public function test_seeded_copy_is_empty_behind_an_editor_placeholder() {
 		add_filter( 'newspack_contextual_prompts_use_donate_block', '__return_true' );
 
-		$this->assertSame( '<p></p>', trim( $this->seeded_group()['innerBlocks'][0]['innerHTML'] ) );
+		$para = $this->seeded_group()['innerBlocks'][0];
+
+		$this->assertSame( '<p></p>', trim( $para['innerHTML'] ) );
+		$this->assertSame( 'Copy is generated for each story.', $para['attrs']['placeholder'] );
+	}
+
+	/**
+	 * The card seeds explicit typography and text color, and the wrapper carries
+	 * exactly the classes core serializes for them: a class set the editor would
+	 * regenerate differently is a block validation error the moment it opens.
+	 */
+	public function test_classic_theme_seeds_dark_gray_text_at_medium_size() {
+		$this->switch_to_theme_family( false );
+
+		$group = $this->seeded_group();
+
+		$this->assertSame( 'dark-gray', $group['attrs']['textColor'] );
+		$this->assertSame( 'medium', $group['attrs']['fontSize'] );
+		$this->assertStringContainsString( 'has-text-color has-dark-gray-color', $group['innerHTML'] );
+		$this->assertStringContainsString( 'has-medium-font-size', $group['innerHTML'] );
+	}
+
+	/**
+	 * Block themes name their body-text color differently, so the seed follows the
+	 * palette rather than the slug the classic theme happens to declare.
+	 */
+	public function test_block_theme_seeds_contrast_text_at_medium_size() {
+		$this->switch_to_theme_family( true );
+
+		$group = $this->seeded_group();
+
+		$this->assertSame( 'contrast', $group['attrs']['textColor'] );
+		$this->assertSame( 'medium', $group['attrs']['fontSize'] );
+		$this->assertStringContainsString( 'has-text-color has-contrast-color', $group['innerHTML'] );
+		$this->assertStringContainsString( 'has-medium-font-size', $group['innerHTML'] );
 	}
 
 	/**
