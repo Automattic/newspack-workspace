@@ -131,6 +131,30 @@ export function getDefaultFrequency( item: SubscriptionProduct, config: PromoTar
 	return getFrequencyChoices( config )[ 0 ]?.value || 'month';
 }
 
+/**
+ * Whether an after-checkout destination is on this site.
+ *
+ * The destination is assigned to `window.location.href` once the reader closes
+ * the modal, so the server refuses an off-site one to avoid an open redirect
+ * right after a payment (Modal_Checkout::sanitize_after_success_url()). The
+ * generator checks it too, so the publisher is told rather than handed a link
+ * whose destination is silently dropped.
+ */
+export function isSameSiteUrl( url: string, siteOrigin: string ): boolean {
+	if ( ! url ) {
+		return false;
+	}
+	// A root-relative path stays on the site by construction.
+	if ( url.startsWith( '/' ) && ! url.startsWith( '//' ) ) {
+		return true;
+	}
+	try {
+		return new URL( url, siteOrigin ).origin === new URL( siteOrigin ).origin;
+	} catch ( e ) {
+		return false;
+	}
+}
+
 export type PromoValidationInput = {
 	kind: PromoKind;
 	hasTarget: boolean;
@@ -144,6 +168,7 @@ export type PromoValidationInput = {
 	couponReason?: string;
 	afterSuccess?: '' | 'custom';
 	afterSuccessUrl?: string;
+	siteOrigin?: string;
 };
 
 /**
@@ -182,8 +207,13 @@ export function getValidationError( input: PromoValidationInput ): string | null
 	if ( 'invalid' === input.couponState ) {
 		return input.couponReason || __( 'The coupon code is not valid.', 'newspack-plugin' );
 	}
-	if ( 'custom' === input.afterSuccess && ! input.afterSuccessUrl ) {
-		return __( 'Enter the URL readers should continue to after checkout.', 'newspack-plugin' );
+	if ( 'custom' === input.afterSuccess ) {
+		if ( ! input.afterSuccessUrl ) {
+			return __( 'Enter the URL readers should continue to after checkout.', 'newspack-plugin' );
+		}
+		if ( input.siteOrigin && ! isSameSiteUrl( input.afterSuccessUrl, input.siteOrigin ) ) {
+			return __( 'The continue URL must be on this site.', 'newspack-plugin' );
+		}
 	}
 	return null;
 }

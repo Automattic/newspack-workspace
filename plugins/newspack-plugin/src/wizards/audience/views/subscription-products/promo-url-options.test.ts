@@ -1,5 +1,6 @@
 import {
 	getPlanChoices,
+	isSameSiteUrl,
 	getFrequencyChoices,
 	getAmountChoices,
 	getDefaultFrequency,
@@ -171,6 +172,17 @@ describe( 'getValidationError', () => {
 		expect( getValidationError( { ...productBase, afterSuccess: '' } ) ).toBeNull();
 	} );
 
+	it( 'refuses an off-site continue URL', () => {
+		// The destination is assigned to window.location.href after a payment, so
+		// an off-site one would be an open redirect the server refuses anyway.
+		const base = { ...productBase, afterSuccess: 'custom' as const, siteOrigin: 'https://site.test/' };
+		expect( getValidationError( { ...base, afterSuccessUrl: 'https://evil.example/phish' } ) ).toBe(
+			'The continue URL must be on this site.'
+		);
+		expect( getValidationError( { ...base, afterSuccessUrl: 'https://site.test/welcome' } ) ).toBeNull();
+		expect( getValidationError( { ...base, afterSuccessUrl: '/welcome' } ) ).toBeNull();
+	} );
+
 	it( 'accepts any amount on an untiered target block', () => {
 		expect(
 			getValidationError( {
@@ -179,5 +191,26 @@ describe( 'getValidationError', () => {
 				donateConfig: { ...donateConfig, layout_param: 'untiered' },
 			} )
 		).toBeNull();
+	} );
+} );
+
+describe( 'isSameSiteUrl', () => {
+	const SITE = 'https://site.test/';
+
+	it( 'accepts absolute URLs on the site and root-relative paths', () => {
+		expect( isSameSiteUrl( 'https://site.test/welcome', SITE ) ).toBe( true );
+		expect( isSameSiteUrl( '/welcome', SITE ) ).toBe( true );
+	} );
+
+	it( 'rejects other hosts, protocol-relative URLs, and junk', () => {
+		expect( isSameSiteUrl( 'https://evil.example/phish', SITE ) ).toBe( false );
+		// Protocol-relative borrows the current scheme and lands off-site.
+		expect( isSameSiteUrl( '//evil.example/phish', SITE ) ).toBe( false );
+		expect( isSameSiteUrl( 'javascript:alert(1)', SITE ) ).toBe( false ); // eslint-disable-line no-script-url
+		expect( isSameSiteUrl( '', SITE ) ).toBe( false );
+	} );
+
+	it( 'rejects a host that merely starts with the site host', () => {
+		expect( isSameSiteUrl( 'https://site.test.evil.example/x', SITE ) ).toBe( false );
 	} );
 } );

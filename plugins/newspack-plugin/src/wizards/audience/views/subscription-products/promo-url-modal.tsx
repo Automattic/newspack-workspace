@@ -242,6 +242,7 @@ export default function PromoUrlModal( { item, closeModal }: { item: Subscriptio
 				couponReason: couponStatus.reason,
 				afterSuccess: kind === 'product' ? afterSuccess : '',
 				afterSuccessUrl,
+				siteOrigin: productContext?.homepage.url,
 			} ),
 		[
 			kind,
@@ -441,7 +442,8 @@ export default function PromoUrlModal( { item, closeModal }: { item: Subscriptio
 								label={ __( 'Custom URL', 'newspack-plugin' ) }
 								value={ afterSuccessUrl }
 								onChange={ setAfterSuccessUrl }
-								placeholder="https://example.com"
+								placeholder={ productContext?.homepage.url || 'https://example.com' }
+								help={ __( 'Must be a page on this site.', 'newspack-plugin' ) }
 							/>
 							<TextControl
 								label={ __( 'Button label', 'newspack-plugin' ) }
