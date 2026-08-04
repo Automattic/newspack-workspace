@@ -614,7 +614,17 @@ final class Modal_Checkout {
 			}
 		}
 		$coupon = (string) filter_input( INPUT_GET, 'coupon', FILTER_SANITIZE_FULL_SPECIAL_CHARS );
-		$attrs  = self::build_url_triggered_button_attrs( $product->get_type(), $product_id, $variation_id, $coupon );
+		$attrs  = self::build_url_triggered_button_attrs(
+			$product->get_type(),
+			$product_id,
+			$variation_id,
+			$coupon,
+			[
+				'behavior'     => (string) filter_input( INPUT_GET, 'after_success_behavior', FILTER_SANITIZE_SPECIAL_CHARS ),
+				'url'          => (string) filter_input( INPUT_GET, 'after_success_url', FILTER_SANITIZE_URL ),
+				'button_label' => (string) filter_input( INPUT_GET, 'after_success_button_label', FILTER_SANITIZE_SPECIAL_CHARS ),
+			]
+		);
 		if ( empty( $attrs ) ) {
 			return;
 		}
@@ -633,18 +643,30 @@ final class Modal_Checkout {
 	 * and specific products are `product` alone. A variation lock on a
 	 * non-variable product has no serving form, so it is rejected.
 	 *
-	 * A `coupon` becomes the block's own coupon attribute, so it rides to the
-	 * checkout as the form's hidden `coupon` field exactly as a block-configured
-	 * one does — process_checkout_request() then validates and applies it
-	 * against the real cart.
+	 * A `coupon` and after-success settings become the block's own attributes, so
+	 * they ride to the checkout as the form's hidden fields exactly as
+	 * block-configured ones do — the coupon is validated and applied against the
+	 * real cart, and the thank-you screen reads the after-success fields.
 	 *
-	 * @param string $product_type Product type slug from WC_Product::get_type().
-	 * @param int    $product_id   Requested product ID.
-	 * @param int    $variation_id Requested variation ID (0 for none).
-	 * @param string $coupon       Requested coupon code ('' for none).
+	 * Only `custom` after-success is accepted. The block's other behavior,
+	 * `referrer`, returns the reader to where they came from, which a
+	 * promotional link cannot rely on: a reader arriving from an email or a QR
+	 * code has no same-origin referrer and no history entry to go back to.
+	 *
+	 * @param string $product_type  Product type slug from WC_Product::get_type().
+	 * @param int    $product_id    Requested product ID.
+	 * @param int    $variation_id  Requested variation ID (0 for none).
+	 * @param string $coupon        Requested coupon code ('' for none).
+	 * @param array  $after_success {
+	 *     Optional. Requested after-checkout behavior.
+	 *     @type string $behavior     'custom' to send the reader onward; anything
+	 *                                else leaves the thank-you screen alone.
+	 *     @type string $url          Destination for the 'custom' behavior.
+	 *     @type string $button_label Label for the continue button.
+	 * }
 	 * @return array Block attributes, or [] when the combination can't be served.
 	 */
-	public static function build_url_triggered_button_attrs( $product_type, $product_id, $variation_id = 0, $coupon = '' ) {
+	public static function build_url_triggered_button_attrs( $product_type, $product_id, $variation_id = 0, $coupon = '', $after_success = [] ) {
 		$is_variable = in_array( $product_type, [ 'variable', 'variable-subscription' ], true );
 		if ( $variation_id && ! $is_variable ) {
 			return [];
@@ -663,6 +685,16 @@ final class Modal_Checkout {
 		// Strict check so a coupon code of "0" still rides along.
 		if ( '' !== $coupon ) {
 			$attrs['coupon'] = $coupon;
+		}
+		// A destination is required: 'custom' with nowhere to go leaves the
+		// reader on a continue button that does nothing.
+		$after_success_url = isset( $after_success['url'] ) ? esc_url_raw( $after_success['url'] ) : '';
+		if ( isset( $after_success['behavior'] ) && 'custom' === $after_success['behavior'] && '' !== $after_success_url ) {
+			$attrs['afterSuccessBehavior'] = 'custom';
+			$attrs['afterSuccessURL']      = $after_success_url;
+			if ( ! empty( $after_success['button_label'] ) ) {
+				$attrs['afterSuccessButtonLabel'] = $after_success['button_label'];
+			}
 		}
 		return $attrs;
 	}

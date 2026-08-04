@@ -103,6 +103,80 @@ class Newspack_Blocks_Test_Url_Triggered_Button extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test that the picker-opening path shares that same field list rather than
+	 * keeping its own copy — a second list is how a field gets added for one
+	 * path and silently dropped by the other.
+	 */
+	public function test_modal_reuses_the_shared_picker_field_list() {
+		$modal = file_get_contents( \NEWSPACK_BLOCKS__PLUGIN_DIR . 'src/modal-checkout/modal.js' );
+		$this->assertStringContainsString( 'PICKER_CONTEXT_FIELDS.forEach', $modal );
+		// The old inline duplicate started with this literal.
+		$this->assertStringNotContainsString( "\t\t\t\t\t\t'after_success_behavior',\n", $modal );
+	}
+
+	/**
+	 * Test that a custom after-checkout destination becomes the block's
+	 * after-success attributes.
+	 */
+	public function test_after_success_custom_url_rides_along() {
+		$attrs = Modal_Checkout::build_url_triggered_button_attrs(
+			'subscription',
+			11,
+			0,
+			'',
+			[
+				'behavior'     => 'custom',
+				'url'          => 'https://example.com/welcome',
+				'button_label' => 'Get started',
+			]
+		);
+		$this->assertSame( 'custom', $attrs['afterSuccessBehavior'] );
+		$this->assertSame( 'https://example.com/welcome', $attrs['afterSuccessURL'] );
+		$this->assertSame( 'Get started', $attrs['afterSuccessButtonLabel'] );
+	}
+
+	/**
+	 * Test that a custom behavior with no destination is dropped: it would leave
+	 * the reader on a continue button that goes nowhere.
+	 */
+	public function test_after_success_custom_without_a_url_is_dropped() {
+		$attrs = Modal_Checkout::build_url_triggered_button_attrs( 'subscription', 11, 0, '', [ 'behavior' => 'custom' ] );
+		$this->assertArrayNotHasKey( 'afterSuccessBehavior', $attrs );
+		$this->assertArrayNotHasKey( 'afterSuccessURL', $attrs );
+	}
+
+	/**
+	 * Test that `referrer` is not accepted: a reader arriving from an email or a
+	 * QR code has no same-origin referrer and no history entry to return to.
+	 */
+	public function test_after_success_referrer_is_not_accepted() {
+		$attrs = Modal_Checkout::build_url_triggered_button_attrs(
+			'subscription',
+			11,
+			0,
+			'',
+			[
+				'behavior' => 'referrer',
+				'url'      => 'https://example.com/welcome',
+			]
+		);
+		$this->assertArrayNotHasKey( 'afterSuccessBehavior', $attrs );
+	}
+
+	/**
+	 * Test that the button label alone never fabricates an after-success config,
+	 * and that no after-success input leaves the attributes clean.
+	 */
+	public function test_after_success_absent_by_default() {
+		$attrs = Modal_Checkout::build_url_triggered_button_attrs( 'subscription', 11 );
+		$this->assertArrayNotHasKey( 'afterSuccessBehavior', $attrs );
+
+		$label_only = Modal_Checkout::build_url_triggered_button_attrs( 'subscription', 11, 0, '', [ 'button_label' => 'Continue' ] );
+		$this->assertArrayNotHasKey( 'afterSuccessBehavior', $label_only );
+		$this->assertArrayNotHasKey( 'afterSuccessButtonLabel', $label_only );
+	}
+
+	/**
 	 * Test that nothing is rendered into the footer without a trigger.
 	 */
 	public function test_no_button_rendered_without_a_trigger() {
