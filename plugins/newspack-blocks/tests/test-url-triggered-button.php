@@ -119,19 +119,20 @@ class Newspack_Blocks_Test_Url_Triggered_Button extends WP_UnitTestCase {
 	 * after-success attributes.
 	 */
 	public function test_after_success_custom_url_rides_along() {
-		$attrs = Modal_Checkout::build_url_triggered_button_attrs(
+		$destination = home_url( '/welcome' );
+		$attrs       = Modal_Checkout::build_url_triggered_button_attrs(
 			'subscription',
 			11,
 			0,
 			'',
 			[
 				'behavior'     => 'custom',
-				'url'          => 'https://example.com/welcome',
+				'url'          => $destination,
 				'button_label' => 'Get started',
 			]
 		);
 		$this->assertSame( 'custom', $attrs['afterSuccessBehavior'] );
-		$this->assertSame( 'https://example.com/welcome', $attrs['afterSuccessURL'] );
+		$this->assertSame( $destination, $attrs['afterSuccessURL'] );
 		$this->assertSame( 'Get started', $attrs['afterSuccessButtonLabel'] );
 	}
 
