@@ -440,7 +440,9 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Resolve package directory
         id: pkg
-        run: echo "dir=$(pnpm --silent --filter "$PKG" exec pwd)" >> "$GITHUB_OUTPUT"
+        run: |
+          dir=$(pnpm --silent --filter "$PKG" exec pwd)
+          echo "dir=$dir" >> "$GITHUB_OUTPUT"
       - name: Build assets
         run: pnpm --filter "$PKG" run --if-present build
       # The distributable ZIP includes vendor/ (see each plugin's .distignore),
