@@ -334,18 +334,18 @@ class Content_Restriction_Control {
 			return $is_post_restricted;
 		}
 
-		// Audience Management is a hard prerequisite for Access Control (NPPD-1846).
-		// A gate hands the reader off to registration, sign-in and account surfaces that
-		// only exist while Audience Management is on, so enforcing one without it locks
-		// readers out with no way in. Gates stay configured and go inert instead, which
-		// is what lets Audience Management be switched off without stranding a live
-		// restriction nobody can reach the screens to lift.
+		// Gating stands down rather than half-working ({@see Content_Gate::is_gating_active()}).
 		//
-		// Passes the incoming value through rather than returning false: this decides
-		// only whether *our* gates restrict, and other callbacks on
-		// `newspack_is_post_restricted` (Woo Memberships, newsletter access) own their
-		// own restrictions and are unaffected by Audience Management.
-		if ( ! Reader_Activation::is_enabled() ) {
+		// Passes the incoming value through rather than returning false, so this decides
+		// only whether *our* gates restrict and never overrides a verdict another
+		// callback already reached. At this position the two are equivalent — the
+		// Memberships early return above has already fired, and the only other callbacks
+		// either lower the value (`Newsletters_Access::filter_post_restricted`, a bypass)
+		// or run later and win regardless (`Gate_Preview::filter_is_post_restricted` at
+		// PHP_INT_MAX, which still forces a preview restricted so a publisher can see the
+		// gate they are editing). Pass-through is the safer default to keep as new
+		// callbacks are added.
+		if ( ! Content_Gate::is_gating_active() ) {
 			return $is_post_restricted;
 		}
 

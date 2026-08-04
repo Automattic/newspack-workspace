@@ -53,6 +53,15 @@ class Block_Visibility {
 			return $block_content;
 		}
 
+		// This path evaluates gate rules itself rather than asking
+		// `newspack_is_post_restricted`, so it needs the gating predicate explicitly.
+		// Without it a members-only block stayed hidden while the article around it
+		// rendered in full, leaving the reader a hole in the page and — with Audience
+		// Management off — no registration surface to fill it.
+		if ( ! Content_Gate::is_gating_active() ) {
+			return $block_content;
+		}
+
 		// Bypass access control in admin screens and REST requests (block renderer,
 		// preview, query-loop rendering inside the editor) so blocks are never hidden
 		// from editors during content authoring.

@@ -21,9 +21,9 @@ defined( 'ABSPATH' ) || exit;
  * Account. A gate enforced without Audience Management locks readers out and
  * then gives them no way in.
  *
- * Gating therefore stands down rather than half-works: with Audience Management
- * off, gates stay configured but stop restricting anything
- * ({@see Content_Restriction_Control::is_post_restricted()}). This trait is the
+ * Gating therefore stands down rather than half-works: every reader-facing
+ * enforcement path asks {@see Content_Gate::is_gating_active()}, so with Audience
+ * Management off gates stay configured and restrict nothing. This trait is the
  * other half of that — it keeps the publisher from authoring new gating that
  * would do nothing, and points them at the setting that makes it work.
  *
@@ -88,9 +88,13 @@ trait Audience_Management_Dependency {
 	 * Deliberately scoped to creation. Reads, updates, priority changes and
 	 * deletes stay open, so a publisher who switches Audience Management off can
 	 * still be handed back the screens to manage what they already built. Nothing
-	 * is at stake in leaving them open: gates go inert while Audience Management
-	 * is off ({@see Content_Restriction_Control::is_post_restricted()}), so a gate
-	 * reached by those routes is restricting nothing at the time.
+	 * is at stake in leaving them open: gates go inert while Audience Management is
+	 * off ({@see Content_Gate::is_gating_active()}), so a gate reached by those
+	 * routes is restricting nothing at the time.
+	 *
+	 * This one is a nudge rather than a safety property, and is worth keeping as
+	 * one: a gate authored now would do nothing until Audience Management is set
+	 * up, and finding that out at save time is worse than being told up front.
 	 *
 	 * Wizard-scoped, not entity-scoped: `np_content_gate` is registered with
 	 * `show_ui` and `show_in_rest`, so an administrator can still create the bare

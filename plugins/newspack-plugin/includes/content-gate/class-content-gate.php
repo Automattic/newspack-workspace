@@ -248,6 +248,38 @@ class Content_Gate {
 	}
 
 	/**
+	 * Whether gating actually enforces anything for readers right now.
+	 *
+	 * The single predicate every reader-facing enforcement path asks, so that
+	 * "gating is off" means the same thing everywhere. Enforcing surfaces that
+	 * answer this question for themselves drift: block-level access control
+	 * evaluated gate rules directly and kept hiding blocks with the feature
+	 * constant undefined, which is the shape of bug this exists to prevent.
+	 *
+	 * Two conditions, either of which stands gating down:
+	 *
+	 * - The feature constant. Access Control is only on where someone put it.
+	 * - Audience Management (NPPD-1846). Everything a gate hands the reader off
+	 *   to — registration, magic-link sign-in, account emails, session
+	 *   hydration, My Account — is gated on it, so a gate enforced without it
+	 *   locks readers out with no way in. Gates stay configured and go inert
+	 *   instead, which is what lets Audience Management be switched off without
+	 *   stranding a live restriction nobody can reach the screens to lift.
+	 *
+	 * Deliberately NOT the predicate for admin surfaces. The Access Control
+	 * screens stay registered on {@see self::is_newspack_feature_enabled()}
+	 * alone, so the dependency is explained rather than hidden: a publisher
+	 * whose gates are inert can still open the screen and read why. When the
+	 * feature constant retires, the two converge on the reader side and the
+	 * admin side keeps its own predicate.
+	 *
+	 * @return bool
+	 */
+	public static function is_gating_active() {
+		return self::is_newspack_feature_enabled() && Reader_Activation::is_enabled();
+	}
+
+	/**
 	 * Restrict the post.
 	 *
 	 * @param \WP_Post  $post Post object.

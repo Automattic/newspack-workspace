@@ -285,6 +285,13 @@ class Premium_Newsletters {
 	 * @return void
 	 */
 	private static function check_access( $user_id, $source = '' ) {
+		// This uses restriction as an *access* decision, not a render decision, so it
+		// cannot inherit the render path's "inert means unrestricted" reading: that
+		// would turn every restricted list from one to remove into one to add and push
+		// the result to the ESP. Bail before any per-user or per-list lookup.
+		if ( ! Content_Gate::is_gating_active() ) {
+			return;
+		}
 		$user = get_user_by( 'id', $user_id );
 		if ( ! $user ) {
 			return;
@@ -436,6 +443,17 @@ class Premium_Newsletters {
 	 * @return void
 	 */
 	public static function register_access_check_event() {
+		// Runs on every `init`, which is what makes this self-healing: the event is
+		// cleared on the first request after gating goes inactive and re-armed on the
+		// first request after it comes back, whatever changed the setting. A hook on the
+		// setting transition would miss a direct option write, and unscheduling from
+		// there would be undone by this method on the very next request anyway.
+		if ( ! Content_Gate::is_gating_active() ) {
+			if ( wp_next_scheduled( self::SCHEDULED_HOOK ) || ! empty( get_option( self::QUEUE_OPTION, [] ) ) ) {
+				self::unschedule_access_check_event();
+			}
+			return;
+		}
 		if ( ! wp_next_scheduled( self::SCHEDULED_HOOK ) ) {
 			self::process_access_check_queue();
 			wp_schedule_event( time(), 'hourly', self::SCHEDULED_HOOK );
@@ -552,6 +570,12 @@ class Premium_Newsletters {
 	 *                          may omit this for an untagged enqueue.
 	 */
 	public static function maybe_enqueue_access_check( $timestamp, $data, $client_id, $source = '' ) {
+		// Nothing accumulates while gating is inactive, so re-enabling processes current
+		// events rather than a backlog of stale ones. The triggering data events are
+		// WooCommerce-driven and keep firing regardless.
+		if ( ! Content_Gate::is_gating_active() ) {
+			return;
+		}
 		if ( empty( $data['user_id'] ) ) {
 			return;
 		}

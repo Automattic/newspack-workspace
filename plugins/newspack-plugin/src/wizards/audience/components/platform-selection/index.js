@@ -48,7 +48,7 @@ const PlatformSelection = ( { onComplete, onCancel, config, saveConfig, inFlight
 	const { confirmDialog: disableDialog, requestConfirm: requestDisable } = useConfirmDialog( {
 		title: __( 'Disable Audience Management?', 'newspack-plugin' ),
 		message: __(
-			'Disabling Audience Management turns off reader registration, the My Account dashboard, content gates, premium newsletters, and related reader features. Any gated content becomes publicly readable while it is off. Your settings are preserved and you can re-enable it later.',
+			'Disabling Audience Management turns off reader registration, the My Account dashboard, and related reader features. Content gates stop applying, so gated posts become readable by anyone and restricted newsletters become open to sign up for. Gates and settings are kept, and start applying again when you re-enable it.',
 			'newspack-plugin'
 		),
 		confirmButtonText: __( 'Disable', 'newspack-plugin' ),
