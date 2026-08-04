@@ -24,7 +24,7 @@ import {
 	getCheckoutData,
 	getFormattedAmount,
 } from './utils';
-import { resolveCheckoutButtonForm, readCheckoutData } from './checkout-button-trigger';
+import { resolveCheckoutButtonForm, readCheckoutData, PICKER_CONTEXT_FIELDS } from './checkout-button-trigger';
 import { applyCtaAttribution } from '../shared/js/cta-attribution';
 
 const CLASS_PREFIX = newspackBlocksModal.newspack_class_prefix;
@@ -363,15 +363,10 @@ domReady( () => {
 			const variationModal = [ ...variationModals ].find( modal => modal.dataset.productId === checkoutData.product_id );
 			if ( variationModal ) {
 				variationModal.querySelectorAll( `form[target="${ IFRAME_NAME }"]` ).forEach( singleVariationForm => {
-					// Fill in the hidden params in the variation modal.
-					[
-						'after_success_behavior',
-						'after_success_url',
-						'after_success_button_label',
-						'gate_post_id',
-						'newspack_popup_id',
-						'prompt_title',
-					].forEach( hiddenParam => {
+					// Fill in the hidden params in the variation modal. Shares the
+					// field list with the URL-trigger path so a field added for one
+					// isn't silently dropped by the other.
+					PICKER_CONTEXT_FIELDS.forEach( hiddenParam => {
 						const existingInputs = singleVariationForm.querySelectorAll( 'input[name="' + hiddenParam + '"]' );
 						if ( 0 === existingInputs.length ) {
 							singleVariationForm.prepend( createHiddenInput( hiddenParam, checkoutData[ hiddenParam ] ) );
