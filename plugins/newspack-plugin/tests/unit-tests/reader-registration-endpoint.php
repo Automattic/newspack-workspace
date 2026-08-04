@@ -897,6 +897,8 @@ class Newspack_Test_Frontend_Registration_Endpoint extends WP_UnitTestCase {
 	public function test_register_metadata_cannot_write_reserved_keys() {
 		global $wpdb;
 
+		$caps_key = $wpdb->get_blog_prefix() . 'capabilities';
+
 		$response = $this->do_register_request(
 			[
 				'npe'             => self::$reader_email,
@@ -908,8 +910,7 @@ class Newspack_Test_Frontend_Registration_Endpoint extends WP_UnitTestCase {
 					'newspack_reader_data_item_is_donor' => 'injected-reader-data',
 					'newspack_reader_data_keys'          => 'injected-key-list',
 					'_newspack_group_subscription'       => 'injected-subscription',
-					'wp_capabilities'                    => 'administrator',
-					$wpdb->base_prefix . 'capabilities'  => 'administrator',
+					$caps_key                            => 'administrator',
 					'wpcom_user_id'                      => '12345',
 					'session_tokens'                     => 'injected-session',
 					'_application_passwords'             => 'injected-password',
@@ -956,7 +957,7 @@ class Newspack_Test_Frontend_Registration_Endpoint extends WP_UnitTestCase {
 		// The harm at the capabilities key is not escalation — sanitize_text_field()
 		// makes the value a scalar, which core ignores — it is that writing a scalar
 		// replaces the role array, stripping the account of every role.
-		$caps = get_user_meta( $user->ID, $wpdb->get_blog_prefix() . 'capabilities', true );
+		$caps = get_user_meta( $user->ID, $caps_key, true );
 		$this->assertIsArray(
 			$caps,
 			'Request metadata must not be able to overwrite the capabilities meta.'
