@@ -24,6 +24,11 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Newspack_Popups_Contextual_Prompt_Render {
 	/**
+	 * Handle the classic-theme layout CSS is delivered on.
+	 */
+	const LAYOUT_STYLE_HANDLE = 'newspack-popups-contextual-prompt-layout';
+
+	/**
 	 * Whether the block being rendered came from the pattern.
 	 *
 	 * @var bool
@@ -46,6 +51,86 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 		add_filter( 'render_block_core/block', [ __CLASS__, 'suppress_empty_instance' ], 9, 2 );
 		add_filter( 'render_block_core/group', [ __CLASS__, 'add_analytics_attributes' ], 10, 2 );
 		add_filter( 'render_block_core/block', [ __CLASS__, 'close_instance_window' ], 999, 2 );
+		add_action( 'wp_enqueue_scripts', [ __CLASS__, 'enqueue_layout_styles' ] );
+		add_filter( 'block_editor_settings_all', [ __CLASS__, 'add_editor_layout_styles' ] );
+	}
+
+	/**
+	 * What a classic theme leaves the card without. Block themes get both rules
+	 * from layout support, so nothing is delivered there.
+	 *
+	 * Without that support core restores the Group's inner container, in the
+	 * editor and at render alike, so the card's children sit a level deeper —
+	 * except under a flex layout, which drops the container on both surfaces.
+	 * Hence the pair of selectors for each rule.
+	 *
+	 * The card's blockGap emits no CSS at all without the support, leaving the
+	 * gap to the theme on one surface and to the browser on the other; it is
+	 * owned here, at the value the card is seeded with, so the editor shows what
+	 * a reader gets. The theme's own group spacing is zeroed first: an
+	 * unreconciled bottom margin would collapse with it and win.
+	 *
+	 * A flex item holding a CTA shrinks to its narrowest wrap — one letter per
+	 * line — so it is held at its own width, at a specificity anything set on a
+	 * single prompt still beats.
+	 *
+	 * @return string CSS, or an empty string on a block theme.
+	 */
+	public static function get_layout_css() {
+		if ( wp_is_block_theme() ) {
+			return '';
+		}
+
+		$card   = '.wp-block-group.' . Newspack_Popups_Contextual_Prompt_Pattern::MARKER_CLASS;
+		$stacks = [ $card . ' > .wp-block-group__inner-container', $card . '.is-layout-flow', $card . '.is-layout-constrained' ];
+		$reset  = [];
+		$gap    = [];
+		foreach ( $stacks as $stack ) {
+			$reset[] = $stack . ' > *';
+			$gap[]   = $stack . ' > * + *';
+		}
+
+		$flex = ':where(.' . Newspack_Popups_Contextual_Prompt_Pattern::MARKER_CLASS . '.is-layout-flex) > ';
+
+		return implode( ',', $reset ) . '{margin-block-start:0;margin-block-end:0}'
+			. implode( ',', $gap ) . '{margin-block-start:var(--wp--preset--spacing--30,1rem)}'
+			. $flex . '.wp-block-buttons,' . $flex . '.wpbnbd{flex-shrink:0}';
+	}
+
+	/**
+	 * Front end: an inline stylesheet of its own, so it lands wherever the theme
+	 * prints its styles and carries no file to version.
+	 */
+	public static function enqueue_layout_styles() {
+		$css = self::get_layout_css();
+		if ( '' === $css ) {
+			return;
+		}
+
+		wp_register_style( self::LAYOUT_STYLE_HANDLE, false ); // phpcs:ignore WordPress.WP.EnqueuedResourceParameters.MissingVersion -- Inline styles only, no source file to version.
+		wp_enqueue_style( self::LAYOUT_STYLE_HANDLE );
+		wp_add_inline_style( self::LAYOUT_STYLE_HANDLE, $css );
+	}
+
+	/**
+	 * Editor: the same CSS in the canvas, after the entries core added from
+	 * theme.json.
+	 *
+	 * @param array $settings Block editor settings.
+	 * @return array
+	 */
+	public static function add_editor_layout_styles( $settings ) {
+		$css = self::get_layout_css();
+		if ( '' === $css ) {
+			return $settings;
+		}
+
+		if ( ! isset( $settings['styles'] ) || ! is_array( $settings['styles'] ) ) {
+			$settings['styles'] = [];
+		}
+		$settings['styles'][] = [ 'css' => $css ];
+
+		return $settings;
 	}
 
 	/**

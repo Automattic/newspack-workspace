@@ -183,6 +183,81 @@ describe( 'planPromptCorrections: detached card locks', () => {
 	} );
 } );
 
+describe( 'createPromptCorrectionApplier', () => {
+	const emptyPlan = {
+		remove: [],
+		unlockRemovals: [],
+		stripGroupLock: [],
+		pinTemplateLock: [],
+		lockChildren: [],
+	};
+
+	const setUp = ( { canRemoveBlocks = () => true, removed = true } = {} ) => {
+		const { createPromptCorrectionApplier } = loadGuard();
+		const deps = {
+			updateBlockAttributes: jest.fn(),
+			removeBlocks: jest.fn(),
+			markNextChangeAsNotPersistent: jest.fn(),
+			canRemoveBlocks: jest.fn( canRemoveBlocks ),
+			getBlock: jest.fn( () => ( removed ? undefined : { clientId: 'second' } ) ),
+			createNotice: jest.fn(),
+		};
+		return { apply: createPromptCorrectionApplier( deps ), ...deps };
+	};
+
+	it( 'removes the surplus card and says so', () => {
+		const guard = setUp();
+
+		guard.apply( { ...emptyPlan, remove: [ 'second' ] } );
+
+		expect( guard.removeBlocks ).toHaveBeenCalledWith( [ 'second' ], false );
+		expect( guard.markNextChangeAsNotPersistent ).toHaveBeenCalledTimes( 1 );
+		expect( guard.createNotice ).toHaveBeenCalledWith( 'info', expect.stringContaining( 'Only one Contextual Prompt' ), expect.any( Object ) );
+	} );
+
+	// The mark arms exactly one change, so arming it for a removal the store
+	// refuses would demote whatever the publisher does next out of the undo stack.
+	it( 'arms nothing when the store would refuse the removal', () => {
+		const guard = setUp( { canRemoveBlocks: () => false } );
+
+		guard.apply( { ...emptyPlan, remove: [ 'second' ] } );
+
+		expect( guard.markNextChangeAsNotPersistent ).not.toHaveBeenCalled();
+		expect( guard.removeBlocks ).not.toHaveBeenCalled();
+		expect( guard.createNotice ).not.toHaveBeenCalled();
+	} );
+
+	// The unlock is a correction of its own and still landed, so its mark stands.
+	it( 'still marks the unlock it dispatched before the refusal', () => {
+		const guard = setUp( { canRemoveBlocks: () => false } );
+
+		guard.apply( { ...emptyPlan, remove: [ 'second' ], unlockRemovals: [ 'second' ] } );
+
+		expect( guard.markNextChangeAsNotPersistent ).toHaveBeenCalledTimes( 1 );
+		expect( guard.updateBlockAttributes ).toHaveBeenCalledWith( [ 'second' ], { lock: undefined } );
+		expect( guard.removeBlocks ).not.toHaveBeenCalled();
+	} );
+
+	// A notice about a card the post visibly still carries would be a lie.
+	it( 'raises no notice when the removal was silently refused', () => {
+		const guard = setUp( { removed: false } );
+
+		guard.apply( { ...emptyPlan, remove: [ 'second' ] } );
+
+		expect( guard.removeBlocks ).toHaveBeenCalled();
+		expect( guard.createNotice ).not.toHaveBeenCalled();
+	} );
+
+	it( 'never asks the store about a removal it is not making', () => {
+		const guard = setUp();
+
+		guard.apply( { ...emptyPlan, lockChildren: [ 'copy' ] } );
+
+		expect( guard.updateBlockAttributes ).toHaveBeenCalledWith( [ 'copy' ], { lock: CHILD_LOCK } );
+		expect( guard.canRemoveBlocks ).not.toHaveBeenCalled();
+	} );
+} );
+
 describe( 'createPromptCardHold', () => {
 	const setUp = ( trees, { isPattern = () => false } = {} ) => {
 		const { createPromptCardHold } = loadGuard();

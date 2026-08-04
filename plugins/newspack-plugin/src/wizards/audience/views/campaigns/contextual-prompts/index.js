@@ -16,7 +16,7 @@ import { moreVertical } from '@wordpress/icons';
 /**
  * Internal dependencies
  */
-import { withWizardScreen, Button, Waiting, useUnsavedChangesDialog } from '../../../../../../packages/components/src';
+import { withWizardScreen, Button, Handoff, Waiting, useUnsavedChangesDialog } from '../../../../../../packages/components/src';
 import ContextualPromptsSettings from './contextual-prompts-settings';
 import './style.scss';
 
@@ -159,10 +159,18 @@ const ContextualPrompts = props => {
 					},
 				] }
 			/>
+			{ /* A handoff rather than a link: the pattern opens in the block editor,
+			     which has no way back to the wizard without the return banner. */ }
 			{ status.pattern_edit_url && (
-				<Button variant="secondary" href={ status.pattern_edit_url }>
+				<Handoff
+					variant="secondary"
+					url={ status.pattern_edit_url }
+					showOnBlockEditor
+					bannerText={ __( 'Return to Contextual Prompts after editing the design', 'newspack-plugin' ) }
+					bannerButtonText={ __( 'Back to Contextual Prompts', 'newspack-plugin' ) }
+				>
 					{ __( 'Edit design', 'newspack-plugin' ) }
-				</Button>
+				</Handoff>
 			) }
 			<Button variant="primary" onClick={ onSave } disabled={ inFlight || ! isDirty }>
 				{ __( 'Save', 'newspack-plugin' ) }

@@ -39,11 +39,19 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 	const PLATFORM_OPTION = 'newspack_reader_revenue_platform';
 
 	/**
+	 * The theme the test env started on.
+	 *
+	 * @var string
+	 */
+	private $original_stylesheet;
+
+	/**
 	 * Register the stub donate block and clear the per-request render state the
 	 * previous test left behind.
 	 */
 	public function set_up() {
 		parent::set_up();
+		$this->original_stylesheet = get_stylesheet();
 		$this->reset_request_state();
 		// Instances are stripped without the admin opt-in.
 		update_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION, true );
@@ -78,6 +86,9 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 		delete_option( 'newspack_contextual_prompts_override_label' );
 		delete_option( 'newspack_contextual_prompts_override_url' );
 		delete_option( self::PLATFORM_OPTION );
+		if ( get_stylesheet() !== $this->original_stylesheet ) {
+			switch_theme( $this->original_stylesheet );
+		}
 		if ( WP_Block_Type_Registry::get_instance()->is_registered( 'newspack-blocks/donate' ) ) {
 			unregister_block_type( 'newspack-blocks/donate' );
 		}
@@ -727,14 +738,26 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A caller that cannot claim answers with whatever is recorded: the winner may
-	 * already have recorded its pattern, and nothing else is this caller's to say.
+	 * A caller that cannot claim answers with the winner's pattern, once there is
+	 * one: a record still pointing at nothing is no answer, and a caller handed it
+	 * would address instances at a hole.
 	 */
 	public function test_a_held_seed_claim_answers_with_the_record() {
 		update_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_PATTERN_ID, 4242 );
 		add_option( Newspack_Popups_Contextual_Prompt_Pattern::SEEDING_LOCK_OPTION, time(), '', false );
 
-		$this->assertSame( 4242, Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id() );
+		$this->assertSame( 0, Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id(), 'A record pointing at nothing is not an answer.' );
+
+		// The winner finished writing while this caller waited.
+		$recorded = self::factory()->post->create(
+			[
+				'post_type'   => 'wp_block',
+				'post_status' => 'publish',
+			]
+		);
+		update_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_PATTERN_ID, $recorded );
+
+		$this->assertSame( $recorded, Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id() );
 	}
 
 	/**
@@ -893,6 +916,125 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The copy paragraph's binding is the address every prompt's own copy is
+	 * written to, not a design choice: the pattern editor's Overrides control can
+	 * switch it off, which would orphan the copy of every prompt already
+	 * published, so it is bound back under the seeded name.
+	 */
+	public function test_a_disabled_copy_binding_is_restored() {
+		$this->set_platform( true );
+		$ref = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
+
+		$blocks = parse_blocks( get_post( $ref )->post_content );
+		unset( $blocks[0]['innerBlocks'][0]['attrs']['metadata'] );
+		Newspack_Popups_Contextual_Prompt_Pattern::save_pattern_content( $ref, serialize_blocks( $blocks ) );
+
+		Newspack_Popups_Contextual_Prompt_Pattern::repair();
+
+		$para = $this->stored_group()['innerBlocks'][0];
+		$this->assertSame( Newspack_Popups_Contextual_Prompt_Pattern::BOUND_NAME, $para['attrs']['metadata']['name'] );
+		$this->assertSame(
+			[ '__default' => [ 'source' => 'core/pattern-overrides' ] ],
+			$para['attrs']['metadata']['bindings']
+		);
+		$this->assertStringContainsString( self::PER_POST_COPY, $this->render_instance(), 'And each story\'s own copy resolves again.' );
+	}
+
+	/**
+	 * The marker class is the card's whole identity — analytics, placement and the
+	 * handling of a detached card all find it by that class — and the Additional
+	 * CSS classes field can take it off. It is put back in the attribute and in
+	 * the saved wrapper alike: core validates a block against what it would
+	 * serialize now, so one without the other is a recovery prompt.
+	 */
+	public function test_a_stripped_marker_class_is_restored() {
+		$this->set_platform( true );
+		$ref = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
+
+		$marker = Newspack_Popups_Contextual_Prompt_Pattern::MARKER_CLASS;
+		$blocks = parse_blocks( get_post( $ref )->post_content );
+		$blocks[0]['attrs']['className'] = 'publisher-class';
+		$blocks[0]['innerHTML']          = str_replace( $marker, 'publisher-class', $blocks[0]['innerHTML'] );
+		foreach ( $blocks[0]['innerContent'] as $index => $chunk ) {
+			if ( is_string( $chunk ) ) {
+				$blocks[0]['innerContent'][ $index ] = str_replace( $marker, 'publisher-class', $chunk );
+			}
+		}
+		Newspack_Popups_Contextual_Prompt_Pattern::save_pattern_content( $ref, serialize_blocks( $blocks ) );
+
+		Newspack_Popups_Contextual_Prompt_Pattern::repair();
+
+		$group = $this->stored_group();
+		$this->assertStringContainsString( $marker, $group['attrs']['className'] );
+		$this->assertStringContainsString( 'publisher-class', $group['attrs']['className'], 'Classes the publisher added are kept.' );
+		$this->assertStringContainsString( $marker, $group['innerHTML'], 'The saved wrapper carries it too.' );
+		$this->assertStringContainsString( 'data-newspack-cp-post-id', $this->render_instance(), 'And the card is stamped again.' );
+	}
+
+	/**
+	 * Repair reads the pattern, works on the parsed copy and writes it back, so a
+	 * pattern the publisher saved from the editor in between would be overwritten
+	 * with content derived from before their edit. The write is refused instead.
+	 *
+	 * The editor save is simulated on the stamp record, which repair reads after
+	 * the pattern and before writing it.
+	 */
+	public function test_repair_refuses_to_overwrite_a_concurrent_save() {
+		global $wpdb;
+		$this->set_platform( false );
+		$this->set_donor_landing_page();
+		$ref = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
+		// A platform change repair would otherwise write.
+		$this->set_platform( true );
+
+		$saved = "<!-- wp:paragraph -->\n<p>Saved from the editor.</p>\n<!-- /wp:paragraph -->";
+		$bump  = function ( $value ) use ( $ref, $saved, $wpdb ) {
+			$wpdb->update( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+				$wpdb->posts,
+				[
+					'post_content'      => $saved,
+					'post_modified_gmt' => gmdate( 'Y-m-d H:i:s', time() + 60 ),
+				],
+				[ 'ID' => $ref ]
+			);
+			clean_post_cache( $ref );
+			return $value;
+		};
+		$option = Newspack_Popups_Contextual_Prompt_Pattern::OPTION_STAMPED_ACCENT;
+		add_filter( 'option_' . $option, $bump );
+		add_filter( 'default_option_' . $option, $bump );
+
+		Newspack_Popups_Contextual_Prompt_Pattern::repair();
+
+		remove_filter( 'option_' . $option, $bump );
+		remove_filter( 'default_option_' . $option, $bump );
+		$this->assertSame( $saved, get_post( $ref )->post_content, 'The publisher\'s save stands.' );
+	}
+
+	/**
+	 * The guard itself: content read at one revision is never written over a
+	 * later one, and a write that names no revision is unconditional.
+	 */
+	public function test_the_freshness_guard_refuses_a_stale_write() {
+		global $wpdb;
+		$ref  = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
+		$read = get_post( $ref )->post_modified_gmt;
+		$wpdb->update( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$wpdb->posts,
+			[ 'post_modified_gmt' => gmdate( 'Y-m-d H:i:s', time() + 60 ) ],
+			[ 'ID' => $ref ]
+		);
+		clean_post_cache( $ref );
+		$stored = get_post( $ref )->post_content;
+
+		$this->assertFalse( Newspack_Popups_Contextual_Prompt_Pattern::save_pattern_content( $ref, 'stale', $read ) );
+		$this->assertSame( $stored, get_post( $ref )->post_content );
+
+		$this->assertTrue( Newspack_Popups_Contextual_Prompt_Pattern::save_pattern_content( $ref, 'fresh' ) );
+		$this->assertSame( 'fresh', get_post( $ref )->post_content );
+	}
+
+	/**
 	 * A reader's render never writes: persisting from an unprivileged request
 	 * would push the pattern through KSES and stabilize on the filtered copy. The
 	 * reader still gets the CTA the platform calls for, in memory.
@@ -909,6 +1051,48 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 
 		$this->assertStringContainsString( self::DONATE_STUB_CLASS, $html, 'The reader gets the normalized CTA.' );
 		$this->assertSame( $stored, get_post( $ref )->post_content, 'And the stored pattern is left alone.' );
+	}
+
+	/**
+	 * Switch to any installed theme of the requested family, skipping the test
+	 * when the env has none.
+	 *
+	 * @param bool $block_theme Whether to switch to a block theme.
+	 */
+	private function switch_to_theme_family( $block_theme ) {
+		foreach ( wp_get_themes() as $stylesheet => $theme ) {
+			if ( method_exists( $theme, 'is_block_theme' ) && $block_theme === $theme->is_block_theme() ) {
+				switch_theme( $stylesheet );
+				wp_clean_theme_json_cache();
+				return;
+			}
+		}
+
+		$this->markTestSkipped( $block_theme ? 'No block theme is available in this test environment.' : 'No classic theme is available in this test environment.' );
+	}
+
+	/**
+	 * A classic theme has no layout support, so the card's own gap emits no CSS
+	 * and its children sit in the restored inner container — a structure the
+	 * editor and the front end share, and which the card's CSS has to address for
+	 * the two to agree. A block theme needs none of it: layout support emits both
+	 * rules itself.
+	 */
+	public function test_the_layout_css_is_classic_only() {
+		$this->switch_to_theme_family( false );
+
+		$css = Newspack_Popups_Contextual_Prompt_Render::get_layout_css();
+		$this->assertStringContainsString( '.newspack-contextual-prompt > .wp-block-group__inner-container > * + *', $css );
+		$this->assertStringContainsString( 'margin-block-start:var(--wp--preset--spacing--30,1rem)', $css );
+		$this->assertStringContainsString( 'flex-shrink:0', $css );
+
+		$settings = Newspack_Popups_Contextual_Prompt_Render::add_editor_layout_styles( [] );
+		$this->assertSame( [ [ 'css' => $css ] ], $settings['styles'], 'The editor canvas gets the same CSS.' );
+
+		$this->switch_to_theme_family( true );
+
+		$this->assertSame( '', Newspack_Popups_Contextual_Prompt_Render::get_layout_css() );
+		$this->assertSame( [], Newspack_Popups_Contextual_Prompt_Render::add_editor_layout_styles( [] ), 'And the editor canvas gets nothing.' );
 	}
 
 	/**

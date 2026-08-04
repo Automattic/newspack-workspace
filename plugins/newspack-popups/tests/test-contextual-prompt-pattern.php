@@ -168,17 +168,21 @@ class ContextualPromptPatternTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The seeded copy is empty: an uninitialized instance displays nothing rather
-	 * than placeholder copy, which is what the empty-prompt suppression keys on.
-	 * The placeholder is an attribute, which core shows in the editor only.
+	 * The seeded copy is a general ask, in the markup rather than behind an editor
+	 * placeholder: it is what an instance nobody has written story-specific copy
+	 * for falls back to, and a placeholder never reaches a reader.
 	 */
-	public function test_seeded_copy_is_empty_behind_an_editor_placeholder() {
+	public function test_seeded_copy_is_the_default_ask() {
 		add_filter( 'newspack_contextual_prompts_use_donate_block', '__return_true' );
 
 		$para = $this->seeded_group()['innerBlocks'][0];
 
-		$this->assertSame( '<p></p>', trim( $para['innerHTML'] ) );
-		$this->assertSame( 'Copy is generated for each story.', $para['attrs']['placeholder'] );
+		$this->assertSame(
+			'<p>Reporting like this takes time and costs money. If you value it, consider supporting our newsroom.</p>',
+			trim( $para['innerHTML'] )
+		);
+		$this->assertSame( $para['innerHTML'], $para['innerContent'][0], 'The markup carries the copy once, in both places core reads it.' );
+		$this->assertArrayNotHasKey( 'placeholder', $para['attrs'] );
 	}
 
 	/**

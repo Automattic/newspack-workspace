@@ -146,9 +146,14 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 
 		// Hold a lock while inserting, so two concurrent first calls can't both seed
 		// a pattern. A caller that loses the claim yields rather than seeding a
-		// second one: instances made against it would never be managed again.
+		// second one: instances made against it would never be managed again. It
+		// answers with the winner's pattern only once that pattern exists — a
+		// record still pointing at nothing is no answer, and a caller handed one
+		// would address instances at a hole.
 		if ( ! self::claim_seeding_lock() ) {
-			return (int) get_option( self::OPTION_PATTERN_ID, 0 );
+			$recorded = (int) get_option( self::OPTION_PATTERN_ID, 0 );
+
+			return $recorded && 'wp_block' === get_post_type( $recorded ) ? $recorded : 0;
 		}
 
 		try {
@@ -173,26 +178,50 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 	}
 
 	/**
-	 * Claim the right to seed. add_option() is the atomic INSERT: a check
-	 * followed by a write would let two concurrent first loads both pass. The
-	 * claim is timestamped rather than expiring on its own, so a request that
-	 * died mid-seed blocks seeding for seconds rather than for good.
+	 * Claim the right to seed, the way core's upgrader claims its lock: an
+	 * INSERT IGNORE, which exactly one of two concurrent first loads can win.
+	 * add_option() would report success to both — it is a cached existence check
+	 * followed by an INSERT ... ON DUPLICATE KEY UPDATE. The claim is timestamped
+	 * rather than expiring on its own, so a request that died mid-seed blocks
+	 * seeding for seconds rather than for good, and the reclaim is conditional on
+	 * the stale value so only one of the callers that find it can take it.
+	 *
+	 * The held value is read from the table rather than through get_option(),
+	 * whose cache the raw INSERT above does not refresh.
 	 *
 	 * @return bool Whether this caller may seed.
 	 */
 	private static function claim_seeding_lock() {
-		if ( add_option( self::SEEDING_LOCK_OPTION, time(), '', false ) ) {
+		global $wpdb;
+
+		$claimed = $wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Options API cannot express an atomic claim.
+			$wpdb->prepare(
+				"INSERT IGNORE INTO {$wpdb->options} ( option_name, option_value, autoload ) VALUES ( %s, %s, 'off' )",
+				self::SEEDING_LOCK_OPTION,
+				(string) time()
+			)
+		);
+		if ( $claimed ) {
 			return true;
 		}
 
-		$claimed = (int) get_option( self::SEEDING_LOCK_OPTION, 0 );
-		if ( $claimed && time() - $claimed < self::SEEDING_LOCK_TTL ) {
+		$held = $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- The claim above is not in the options cache.
+			$wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", self::SEEDING_LOCK_OPTION )
+		);
+		if ( null === $held || time() - (int) $held < self::SEEDING_LOCK_TTL ) {
 			return false;
 		}
 
-		delete_option( self::SEEDING_LOCK_OPTION );
+		$reclaimed = $wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Options API cannot express an atomic claim.
+			$wpdb->prepare(
+				"UPDATE {$wpdb->options} SET option_value = %s WHERE option_name = %s AND option_value = %s",
+				(string) time(),
+				self::SEEDING_LOCK_OPTION,
+				$held
+			)
+		);
 
-		return (bool) add_option( self::SEEDING_LOCK_OPTION, time(), '', false );
+		return 1 === (int) $reclaimed;
 	}
 
 	/**
@@ -247,17 +276,41 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 	 * strips the escapes serialize_blocks() emits, so the content has to be
 	 * slashed on the way in.
 	 *
-	 * @param int    $pattern_id Pattern post ID.
-	 * @param string $content    Serialized block markup.
+	 * @param int         $pattern_id Pattern post ID.
+	 * @param string      $content    Serialized block markup.
+	 * @param string|null $read_at    The post_modified_gmt the content was read
+	 *                                at, to write only while the stored pattern
+	 *                                is still the one it was derived from.
 	 *
 	 * @return bool Whether the write landed.
 	 */
-	public static function save_pattern_content( $pattern_id, $content ) {
+	public static function save_pattern_content( $pattern_id, $content, $read_at = null ) {
+		if ( null !== $read_at && $read_at !== self::read_modified_gmt( $pattern_id ) ) {
+			return false;
+		}
+
 		return self::update_pattern_post(
 			[
 				'ID'           => $pattern_id,
 				'post_content' => $content,
 			]
+		);
+	}
+
+	/**
+	 * When the pattern was last written, read from the table: the post cache
+	 * still holds whatever this request read, which is the copy a freshness
+	 * check exists to doubt.
+	 *
+	 * @param int $pattern_id Pattern post ID.
+	 *
+	 * @return string|null Post modified time in GMT, or null when the post is gone.
+	 */
+	private static function read_modified_gmt( $pattern_id ) {
+		global $wpdb;
+
+		return $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- A cached read cannot answer whether the cache is stale.
+			$wpdb->prepare( "SELECT post_modified_gmt FROM {$wpdb->posts} WHERE ID = %d", (int) $pattern_id )
 		);
 	}
 
@@ -293,10 +346,11 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 
 	/**
 	 * Reconcile the stored pattern with the site: its CTA with the current
-	 * donation platform, its donate color with the theme's accent, the name its
-	 * copy paragraph is bound under with the one instances key their overrides by.
-	 * Runs when the platform changes and, defensively, on the first instance of a
-	 * request — a pattern the editor opens has to show what readers actually see.
+	 * donation platform, its donate color with the theme's accent, the marker
+	 * class and the bound name every instance is addressed through with the ones
+	 * this class relies on. Runs when the platform changes and, defensively, on
+	 * the first instance of a request — a pattern the editor opens has to show
+	 * what readers actually see.
 	 *
 	 * The record is read raw and never seeded: a hook must not create the
 	 * pattern.
@@ -314,21 +368,24 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 			return;
 		}
 
-		$post   = get_post( $pattern_id );
-		$blocks = parse_blocks( $post->post_content );
-		$stamp  = null;
+		$post    = get_post( $pattern_id );
+		$read_at = $post->post_modified_gmt;
+		$blocks  = parse_blocks( $post->post_content );
+		$stamp   = null;
 
 		foreach ( $blocks as $index => $group ) {
-			if (
-				'core/group' !== ( $group['blockName'] ?? '' )
-				|| false === strpos( (string) ( $group['attrs']['className'] ?? '' ), self::MARKER_CLASS )
-			) {
+			if ( ! self::is_prompt_card( $group ) ) {
 				continue;
 			}
 
-			// Written back on its own, because the CTA branches below can bail out of
-			// persisting the group.
-			if ( self::repin_bound_name( $group['innerBlocks'] ) ) {
+			// Each runs, then the results are weighed: written back on their own,
+			// because the CTA branches below can bail out of persisting the group.
+			$restored = [
+				self::restore_marker_class( $group ),
+				self::restore_copy_binding( $group['innerBlocks'] ),
+				self::repin_bound_name( $group['innerBlocks'] ),
+			];
+			if ( in_array( true, $restored, true ) ) {
 				$blocks[ $index ] = $group;
 			}
 
@@ -365,10 +422,121 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 		}
 
 		// The record describes the stored pattern's donate child, so it is only
-		// truthful once that pattern has actually been written.
-		if ( self::save_pattern_content( $pattern_id, $content ) && null !== $stamp ) {
+		// truthful once that pattern has actually been written — which a pattern
+		// saved from the editor since it was read here refuses, rather than
+		// overwriting the publisher's edit with content derived from before it.
+		if ( self::save_pattern_content( $pattern_id, $content, $read_at ) && null !== $stamp ) {
 			self::record_stamp( $stamp );
 		}
+	}
+
+	/**
+	 * Whether a parsed block is the prompt card. The marker class is what the
+	 * render pipeline, the editor and the analytics stamp all key on, so a card
+	 * the publisher stripped it from has to be recognizable by something else to
+	 * be repairable at all: the name the seed writes into the Group's metadata.
+	 *
+	 * @param array $block Parsed block.
+	 * @return bool
+	 */
+	private static function is_prompt_card( $block ) {
+		if ( 'core/group' !== ( $block['blockName'] ?? '' ) ) {
+			return false;
+		}
+
+		return false !== strpos( (string) ( $block['attrs']['className'] ?? '' ), self::MARKER_CLASS )
+			|| self::PATTERN_NAME === ( $block['attrs']['metadata']['name'] ?? '' );
+	}
+
+	/**
+	 * Hold the card to its marker class. The Additional CSS classes field can
+	 * take it off, and it is the card's whole identity — analytics, placement and
+	 * the handling of a detached card all find the card by it. Classes the
+	 * publisher added are theirs and are kept.
+	 *
+	 * The saved wrapper carries the class too, and core validates a block against
+	 * what it would serialize now: restoring one without the other is the block
+	 * recovery prompt on the next open.
+	 *
+	 * @param array $group Parsed prompt card, mutated in place.
+	 * @return bool Whether anything changed.
+	 */
+	private static function restore_marker_class( &$group ) {
+		$classes = trim( (string) ( $group['attrs']['className'] ?? '' ) );
+		if ( in_array( self::MARKER_CLASS, preg_split( '/\s+/', $classes, -1, PREG_SPLIT_NO_EMPTY ), true ) ) {
+			return false;
+		}
+
+		$group['attrs']['className'] = '' === $classes ? self::MARKER_CLASS : $classes . ' ' . self::MARKER_CLASS;
+
+		$marked = self::mark_wrapper( $group['innerHTML'] ?? '' );
+		if ( null !== $marked ) {
+			$group['innerHTML'] = $marked;
+		}
+
+		foreach ( $group['innerContent'] ?? [] as $chunk_index => $chunk ) {
+			$marked = self::mark_wrapper( $chunk );
+			if ( null !== $marked ) {
+				$group['innerContent'][ $chunk_index ] = $marked;
+				break;
+			}
+		}
+
+		return true;
+	}
+
+	/**
+	 * Add the marker class to a markup chunk's opening tag.
+	 *
+	 * @param mixed $html Markup chunk, or null for a child placeholder.
+	 * @return string|null The marked markup, or null when there was no tag to mark.
+	 */
+	private static function mark_wrapper( $html ) {
+		if ( ! is_string( $html ) || '' === trim( $html ) ) {
+			return null;
+		}
+
+		$processor = new WP_HTML_Tag_Processor( $html );
+		if ( ! $processor->next_tag() || $processor->has_class( self::MARKER_CLASS ) ) {
+			return null;
+		}
+
+		$processor->add_class( self::MARKER_CLASS );
+
+		return $processor->get_updated_html();
+	}
+
+	/**
+	 * Restore the copy paragraph's override binding. The pattern editor's
+	 * Overrides control can switch it off, and the binding is the address every
+	 * prompt's copy is written to: without it each instance renders the pattern's
+	 * own copy and the story-specific copy already written is orphaned. So the
+	 * first paragraph — the copy child — is bound back under the seeded name.
+	 *
+	 * @param array $blocks Card children, mutated in place.
+	 * @return bool Whether anything changed.
+	 */
+	private static function restore_copy_binding( &$blocks ) {
+		foreach ( $blocks as $index => $block ) {
+			if ( 'core/paragraph' !== ( $block['blockName'] ?? '' ) ) {
+				continue;
+			}
+
+			$bindings = $block['attrs']['metadata']['bindings'] ?? [];
+			foreach ( $bindings as $binding ) {
+				if ( 'core/pattern-overrides' === ( $binding['source'] ?? '' ) ) {
+					return false;
+				}
+			}
+
+			$bindings['__default']                             = [ 'source' => 'core/pattern-overrides' ];
+			$blocks[ $index ]['attrs']['metadata']['name']     = self::BOUND_NAME;
+			$blocks[ $index ]['attrs']['metadata']['bindings'] = $bindings;
+
+			return true;
+		}
+
+		return false;
 	}
 
 	/**
@@ -523,27 +691,27 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 
 	/**
 	 * The copy paragraph, bound to pattern overrides so each instance carries its
-	 * own story-specific copy. Seeded empty: an instance nobody has written copy
-	 * for renders nothing rather than placeholder text. The placeholder is editor
-	 * chrome — core never renders it — so it says what the empty block is for
-	 * without putting words in front of readers.
+	 * own story-specific copy. Seeded with a general ask, which is what an
+	 * instance nobody has written copy for falls back to — a working prompt
+	 * rather than a card that suppresses itself.
 	 *
 	 * @return array Parsed core/paragraph block.
 	 */
 	private static function build_copy_child() {
+		$copy = esc_html__( 'Reporting like this takes time and costs money. If you value it, consider supporting our newsroom.', 'newspack-popups' );
+
 		return [
 			'blockName'    => 'core/paragraph',
 			'attrs'        => [
-				'metadata'    => [
+				'metadata' => [
 					'name'     => self::BOUND_NAME,
 					'bindings' => [ '__default' => [ 'source' => 'core/pattern-overrides' ] ],
 				],
-				'lock'        => self::BLOCK_LOCK,
-				'placeholder' => __( 'Copy is generated for each story.', 'newspack-popups' ),
+				'lock'     => self::BLOCK_LOCK,
 			],
 			'innerBlocks'  => [],
-			'innerHTML'    => "\n<p></p>\n",
-			'innerContent' => [ "\n<p></p>\n" ],
+			'innerHTML'    => "\n<p>" . $copy . "</p>\n",
+			'innerContent' => [ "\n<p>" . $copy . "</p>\n" ],
 		];
 	}
 

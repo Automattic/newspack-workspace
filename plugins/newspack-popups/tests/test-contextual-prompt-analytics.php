@@ -132,7 +132,14 @@ class ContextualPromptAnalyticsTest extends WP_UnitTestCase {
 	 */
 	private function detached_markup( $copy = 'Detached copy.' ) {
 		$content = get_post( Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id() )->post_content;
-		return str_replace( '<p></p>', '<p>' . $copy . '</p>', $content );
+		return preg_replace_callback(
+			'#<p\b[^>]*>.*?</p>#s',
+			function () use ( $copy ) {
+				return '<p>' . $copy . '</p>';
+			},
+			$content,
+			1
+		);
 	}
 
 	/**
@@ -329,26 +336,28 @@ class ContextualPromptAnalyticsTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * An instance nobody wrote copy for — generation failed and the post was
-	 * published anyway — renders nothing rather than a CTA-only card.
+	 * An instance whose copy resolves to nothing — the story's own copy deleted in
+	 * the editor and the post published anyway — renders nothing rather than a
+	 * CTA-only card.
 	 */
 	public function test_empty_copy_instance_renders_nothing() {
 		$this->set_platform( false );
 		$this->set_donor_landing_page();
 
-		$this->assertSame( '', trim( do_blocks( $this->instance_markup( null ) ) ) );
+		$this->assertSame( '', trim( do_blocks( $this->instance_markup( '' ) ) ) );
 	}
 
 	/**
-	 * The pattern's copy paragraph is seeded empty, so what a prompt displays is
-	 * its instance override — an instance carrying one renders. So does one whose
-	 * copy the active site-wide override supplies.
+	 * What a prompt displays is its instance override; an instance carrying none
+	 * falls back to the pattern's own general ask, and one the active site-wide
+	 * override reaches displays that.
 	 */
-	public function test_default_empty_copy_with_override_value_renders() {
+	public function test_copy_falls_back_to_the_pattern_then_to_the_override() {
 		$this->set_platform( false );
 		$this->set_donor_landing_page();
 
 		$this->assertStringContainsString( self::INSTANCE_COPY, do_blocks( $this->instance_markup() ) );
+		$this->assertStringContainsString( 'Reporting like this takes time', do_blocks( $this->instance_markup( null ) ) );
 
 		update_option( Newspack_Popups_Settings::OVERRIDE_ENABLED_OPTION, true );
 		update_option( 'newspack_contextual_prompts_override_body', 'Support our spring drive.' );

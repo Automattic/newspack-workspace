@@ -1,7 +1,7 @@
 /**
  * Contextual Prompts tab: a failed initial status fetch surfaces an error with a
  * Retry that re-runs the fetch, profile fields lock while a save is pending, and
- * the header's Edit design action links out to the prompt pattern's editor.
+ * the header's Edit design action hands off to the prompt pattern's editor.
  */
 
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
@@ -96,15 +96,41 @@ describe( 'ContextualPrompts tab', () => {
 		expect( screen.getByRole( 'textbox', { name: 'Publisher name' } ) ).toHaveValue( 'Newsroom X' );
 	} );
 
-	it( 'links the header Edit design action to the pattern editor, with no in-page design controls', async () => {
+	// A plain link would strand the publisher in the editor: the handoff is what
+	// puts a way back to the wizard on the destination screen.
+	it( 'hands off to the pattern editor from the header, with no in-page design controls', async () => {
+		const HANDOFF_LINK = 'https://example.test/wp-admin/site-editor.php?handoff=1';
+		const location = window.location;
+		delete window.location;
+		window.location = { href: 'https://example.test/wp-admin/admin.php?page=newspack-audience' };
+
 		apiFetch.mockResolvedValueOnce( patternStatus() );
+		apiFetch.mockResolvedValueOnce( { HandoffLink: HANDOFF_LINK } );
 		renderTab();
 
-		await waitFor( () => expect( screen.getByRole( 'link', { name: 'Edit design' } ) ).toBeInTheDocument() );
-		expect( screen.getByRole( 'link', { name: 'Edit design' } ) ).toHaveAttribute( 'href', PATTERN_EDIT_URL );
+		await waitFor( () => expect( screen.getByRole( 'button', { name: 'Edit design' } ) ).toBeInTheDocument() );
 		// The design lives in the pattern: the tab body carries no style controls.
 		expect( screen.queryByRole( 'heading', { name: 'Style' } ) ).toBeNull();
 		expect( screen.queryByRole( 'button', { name: 'Background' } ) ).toBeNull();
+
+		fireEvent.click( screen.getByRole( 'button', { name: 'Edit design' } ) );
+
+		await waitFor( () => expect( window.location.href ).toBe( HANDOFF_LINK ) );
+		expect( apiFetch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				path: '/newspack/v1/handoff',
+				method: 'POST',
+				data: expect.objectContaining( {
+					destinationUrl: PATTERN_EDIT_URL,
+					// The pattern opens in the block editor, where the banner is a notice.
+					showOnBlockEditor: true,
+					bannerText: 'Return to Contextual Prompts after editing the design',
+					bannerButtonText: 'Back to Contextual Prompts',
+				} ),
+			} )
+		);
+
+		window.location = location;
 	} );
 
 	it( 'omits the Edit design action when the pattern edit URL is empty', async () => {
@@ -112,7 +138,7 @@ describe( 'ContextualPrompts tab', () => {
 		renderTab();
 
 		await waitFor( () => expect( screen.getByRole( 'textbox', { name: 'Publisher name' } ) ).toBeInTheDocument() );
-		expect( screen.queryByRole( 'link', { name: 'Edit design' } ) ).toBeNull();
+		expect( screen.queryByRole( 'button', { name: 'Edit design' } ) ).toBeNull();
 	} );
 
 	it( 'sends the profile fields alone in the save payload', async () => {
