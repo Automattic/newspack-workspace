@@ -25,6 +25,38 @@ function register_block() {
 add_action( 'init', __NAMESPACE__ . '\\register_block' );
 
 /**
+ * Expose whether a product is a donation to the products REST response.
+ *
+ * The block editor needs this to tell the publisher that an attached coupon
+ * will not be applied: Newspack disables coupons for any cart containing a
+ * donation (see Newspack\Donations::disable_coupons()). It cannot be derived
+ * from the product meta alone, because the legacy donation product and its
+ * children are matched by ID rather than by the donation flag, so the answer
+ * is delegated to Donations::is_donation_product().
+ */
+function register_donation_rest_field() {
+	if ( ! class_exists( '\Newspack\Donations' ) || ! method_exists( '\Newspack\Donations', 'is_donation_product' ) ) {
+		return;
+	}
+	register_rest_field(
+		'product',
+		'newspack_is_donation',
+		[
+			'get_callback' => function ( $product ) {
+				return (bool) \Newspack\Donations::is_donation_product( $product['id'] );
+			},
+			'schema'       => [
+				'description' => __( 'Whether the product is treated as a donation by Newspack.', 'newspack-blocks' ),
+				'type'        => 'boolean',
+				'context'     => [ 'view', 'edit' ],
+				'readonly'    => true,
+			],
+		]
+	);
+}
+add_action( 'rest_api_init', __NAMESPACE__ . '\\register_donation_rest_field' );
+
+/**
  * Render the block.
  *
  * @param array $attributes Block attributes.

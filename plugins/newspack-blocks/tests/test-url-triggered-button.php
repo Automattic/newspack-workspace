@@ -109,8 +109,10 @@ class Newspack_Blocks_Test_Url_Triggered_Button extends WP_UnitTestCase {
 	 */
 	public function test_modal_reuses_the_shared_picker_field_list() {
 		$modal = file_get_contents( \NEWSPACK_BLOCKS__PLUGIN_DIR . 'src/modal-checkout/modal.js' );
-		$this->assertStringContainsString( 'PICKER_CONTEXT_FIELDS.forEach', $modal );
-		// The old inline duplicate started with this literal.
+		// The picker context comes from the shared helper, not a second copy of
+		// the field list — a duplicate is how a field gets added for one path and
+		// silently dropped by the other.
+		$this->assertStringContainsString( 'applyContextFields( singleVariationForm', $modal );
 		$this->assertStringNotContainsString( "\t\t\t\t\t\t'after_success_behavior',\n", $modal );
 	}
 
