@@ -1885,9 +1885,18 @@ final class Modal_Checkout {
 		if ( '' === $coupon_code || ! function_exists( 'wc_coupons_enabled' ) || ! \wc_coupons_enabled() ) {
 			return;
 		}
-		$coupon    = new \WC_Coupon( $coupon_code );
-		$discounts = new \WC_Discounts( \WC()->cart );
-		if ( true === $discounts->is_coupon_valid( $coupon ) && \WC()->cart->apply_coupon( $coupon_code ) ) {
+		try {
+			$coupon    = new \WC_Coupon( $coupon_code );
+			$discounts = new \WC_Discounts( \WC()->cart );
+			$applied   = true === $discounts->is_coupon_valid( $coupon ) && \WC()->cart->apply_coupon( $coupon_code );
+		} catch ( \Exception $e ) {
+			// A persistent object cache can hold a code-to-ID mapping that
+			// outlives the coupon post, and WooCommerce's data store throws
+			// when it reads the missing post. Skip the coupon rather than
+			// fataling the checkout the reader is standing on.
+			return;
+		}
+		if ( $applied ) {
 			// apply_coupon() queues a "Coupon code applied successfully." success
 			// notice; clear it so the auto-apply stays silent for the reader.
 			if ( function_exists( 'wc_clear_notices' ) ) {
