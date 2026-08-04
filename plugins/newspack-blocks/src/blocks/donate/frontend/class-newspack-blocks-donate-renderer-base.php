@@ -213,12 +213,13 @@ abstract class Newspack_Blocks_Donate_Renderer_Base {
 				<?php
 			}
 
-			// Signed here because this is the last point the destination is known to come from
-			// the block's own settings rather than from the request.
-			$after_success_url = isset( $attributes['afterSuccessURL'] ) ? $attributes['afterSuccessURL'] : '';
-			if ( $after_success_url ) {
+			// Vouched for here because this is the last point the destination is known to come
+			// from the block's own settings rather than from the request.
+			$after_success_url   = isset( $attributes['afterSuccessURL'] ) ? $attributes['afterSuccessURL'] : '';
+			$after_success_token = $after_success_url ? \Newspack_Blocks\Modal_Checkout::get_after_success_token( $after_success_url ) : '';
+			if ( $after_success_token ) {
 				?>
-					<input type='hidden' name='after_success_signature' value='<?php echo esc_attr( \Newspack_Blocks\Modal_Checkout::get_after_success_url_signature( $after_success_url ) ); ?>' />
+					<input type='hidden' name='after_success_token' value='<?php echo esc_attr( $after_success_token ); ?>' />
 				<?php
 			}
 		}

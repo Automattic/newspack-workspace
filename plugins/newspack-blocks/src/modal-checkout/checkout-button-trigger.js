@@ -104,7 +104,7 @@ export const PICKER_CONTEXT_FIELDS = [
 	'after_success_behavior',
 	'after_success_url',
 	'after_success_button_label',
-	'after_success_signature',
+	'after_success_token',
 	'gate_post_id',
 	'newspack_popup_id',
 	'prompt_title',

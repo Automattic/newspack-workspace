@@ -878,11 +878,14 @@ class Donations {
 		if ( $is_modal_checkout ) {
 			$query_args['modal_checkout'] = 1;
 		}
-		// `after_success_signature` travels with the destination it signs: drop it here and a
-		// publisher-configured destination arrives unsigned and gets refused as if a link had
-		// supplied it.
-		foreach ( [ 'after_success_behavior', 'after_success_button_label', 'after_success_url', 'after_success_signature' ] as $attribute_name ) {
-			$value = filter_input( INPUT_GET, $attribute_name, FILTER_SANITIZE_FULL_SPECIAL_CHARS );
+		// `after_success_token` carries the destination this site vouched for: drop it here
+		// and a publisher-configured destination arrives unvouched and is refused as if a link
+		// had supplied it.
+		foreach ( [ 'after_success_behavior', 'after_success_button_label', 'after_success_url', 'after_success_token' ] as $attribute_name ) {
+			// The destination is a URL, not display text: HTML-encoding it here would turn
+			// `&` into `&amp;` in the value itself.
+			$filter = 'after_success_url' === $attribute_name ? FILTER_SANITIZE_URL : FILTER_SANITIZE_FULL_SPECIAL_CHARS;
+			$value  = filter_input( INPUT_GET, $attribute_name, $filter );
 			if ( ! empty( $value ) ) {
 				$query_args[ $attribute_name ] = $value;
 			}
