@@ -240,6 +240,7 @@ class Newspack_Blocks {
 				'recaptcha_url'              => admin_url( 'admin.php?page=newspack-settings' ),
 				'custom_taxonomies'          => self::get_custom_taxonomies(),
 				'can_use_name_your_price'    => self::can_use_name_your_price(),
+				'coupons_enabled'            => function_exists( 'wc_coupons_enabled' ) && \wc_coupons_enabled(),
 				'tier_amounts_template'      => self::get_formatted_amount(),
 				'currency'                   => function_exists( 'get_woocommerce_currency' ) ? \get_woocommerce_currency() : 'USD',
 			];

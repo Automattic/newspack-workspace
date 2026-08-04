@@ -3,6 +3,10 @@
 
 /** Webhooks */
 .newspack-webhooks {
+	&__header {
+		margin-bottom: 32px;
+	}
+
 	.newspack-webhooks__endpoint {
 		.newspack-webhooks__endpoint-action {
 			font-weight: 700;

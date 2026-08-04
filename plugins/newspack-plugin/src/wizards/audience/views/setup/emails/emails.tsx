@@ -67,7 +67,7 @@ const DEFAULT_VIEW: View = {
 	mediaField: 'preview',
 };
 
-const PageHeading = () => <h1 className="screen-reader-text">{ __( 'Emails', 'newspack-plugin' ) }</h1>;
+const PageHeading = () => <h2 className="screen-reader-text">{ __( 'Emails', 'newspack-plugin' ) }</h2>;
 
 // The chip bar is a strict two-way toggle — every email belongs to exactly
 // one of these two groups. Defaults to 'reader-revenue' on first load.
@@ -468,44 +468,37 @@ const Emails = () => {
 		<Fragment>
 			<PageHeading />
 			{ errorMessage && <Notice isError noticeText={ errorMessage } /> }
-			<HStack className="newspack-emails__chip-bar" justify="space-between" alignment="center">
-				{ /* Chip bar only on the Newspack platform (the only one with
-				     both groups). The empty span preserves the space-between
-				     layout so Settings stays right-aligned when chips are hidden. */ }
-				{ isNewspackPlatform ? (
-					<HStack
-						className="newspack-emails__chips"
-						role="group"
-						aria-label={ __( 'Filter emails by group', 'newspack-plugin' ) }
-						spacing={ 2 }
-						justify="flex-start"
-					>
-						{ CHIPS.map( chip => {
-							// During an active search, neither chip is filtering —
-							// render both as unpressed so the visual matches reality.
-							// Clicking either chip clears the search via selectChip
-							// and engages that chip's view.
-							const isActive = ! isSearching && activeChip === chip.value;
-							return (
-								<Button
-									key={ chip.value }
-									variant={ isActive ? 'primary' : 'secondary' }
-									aria-pressed={ isActive }
-									onClick={ () => selectChip( chip.value ) }
-									className="newspack-emails__chip"
-								>
-									{ chip.label }
-								</Button>
-							);
-						} ) }
-					</HStack>
-				) : (
-					<span />
-				) }
-				<Button variant="secondary" onClick={ () => setShowSettingsModal( true ) }>
-					{ __( 'Settings', 'newspack-plugin' ) }
-				</Button>
-			</HStack>
+			{ /* Chip bar only on the Newspack platform (the only one with both
+			     groups). Settings lives in the DataViews toolbar (see `header`
+			     below), so there's nothing to render here off-platform. */ }
+			{ isNewspackPlatform && (
+				<HStack
+					className="newspack-emails__chip-bar newspack-emails__chips"
+					role="group"
+					aria-label={ __( 'Filter emails by group', 'newspack-plugin' ) }
+					spacing={ 2 }
+					justify="flex-start"
+				>
+					{ CHIPS.map( chip => {
+						// During an active search, neither chip is filtering —
+						// render both as unpressed so the visual matches reality.
+						// Clicking either chip clears the search via selectChip
+						// and engages that chip's view.
+						const isActive = ! isSearching && activeChip === chip.value;
+						return (
+							<Button
+								key={ chip.value }
+								variant={ isActive ? 'primary' : 'secondary' }
+								aria-pressed={ isActive }
+								onClick={ () => selectChip( chip.value ) }
+								className="newspack-emails__chip"
+							>
+								{ chip.label }
+							</Button>
+						);
+					} ) }
+				</HStack>
+			) }
 			<SettingsModal showModal={ showSettingsModal } closeModal={ () => setShowSettingsModal( false ) } />
 			<DataViews
 				className="newspack-emails"
@@ -519,6 +512,11 @@ const Emails = () => {
 				isLoading={ isFetching }
 				getItemId={ ( item: EmailItem ) => String( item.post_id ) }
 				search
+				header={
+					<Button variant="secondary" size="compact" onClick={ () => setShowSettingsModal( true ) }>
+						{ __( 'Settings', 'newspack-plugin' ) }
+					</Button>
+				}
 			/>
 		</Fragment>
 	);

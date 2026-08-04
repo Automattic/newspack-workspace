@@ -156,6 +156,23 @@ class Google_OAuth {
 
 
 	/**
+	 * Shorten a response body for the error log.
+	 *
+	 * The proxy can fail with a full HTML error page; log enough to identify it, not all of it.
+	 *
+	 * @param string $body Raw response body.
+	 *
+	 * @return string
+	 */
+	private static function truncate_for_log( $body ) {
+		if ( ! is_string( $body ) || '' === $body ) {
+			return '(empty)';
+		}
+		$body = trim( $body );
+		return strlen( $body ) > 500 ? substr( $body, 0, 500 ) . '…' : $body;
+	}
+
+	/**
 	 * Get the URL for a redirection to Google consent page.
 	 *
 	 * @param array $auth_params OAuth proxy params.
@@ -173,25 +190,51 @@ class Google_OAuth {
 			if ( is_wp_error( $result ) ) {
 				return $result;
 			}
-			if ( 200 !== $result['response']['code'] ) {
-				$error_text  = __( 'Request failed.', 'newspack' );
-				$parsed_data = json_decode( $result['body'] );
-				if ( property_exists( $parsed_data, 'message' ) ) {
+			$response_code = wp_remote_retrieve_response_code( $result );
+			$response_raw  = wp_remote_retrieve_body( $result );
+			if ( 200 !== $response_code ) {
+				$error_text  = __( 'Request failed.', 'newspack-plugin' );
+				$parsed_data = json_decode( $response_raw );
+				if ( is_object( $parsed_data ) && ! empty( $parsed_data->message ) && is_string( $parsed_data->message ) ) {
 					$error_text = $parsed_data->message;
 				}
+				Logger::error( sprintf( 'OAuth proxy /start responded with HTTP %s. Body: %s', $response_code, self::truncate_for_log( $response_raw ) ) );
 				return new WP_Error(
 					'newspack_google_oauth',
-					$error_text
+					$error_text,
+					[ 'status' => $response_code ]
 				);
 			}
-			$response_body = json_decode( $result['body'] );
+			$response_body = json_decode( $response_raw );
+			// Guard against an unparseable or malformed proxy response. The url is handed to a
+			// popup opened as about:blank, which inherits this site's origin, so confirm it is a
+			// well-formed http(s) address rather than any string the proxy happened to return.
+			if (
+				! is_object( $response_body )
+				|| empty( $response_body->url )
+				|| ! is_string( $response_body->url )
+				|| ! wp_http_validate_url( $response_body->url )
+			) {
+				Logger::error( sprintf( 'OAuth proxy /start returned an unusable body: %s', self::truncate_for_log( $response_raw ) ) );
+				return new WP_Error(
+					'newspack_google_oauth',
+					__( 'Could not parse the authentication response.', 'newspack-plugin' )
+				);
+			}
 			// Remember the client id the proxy issues tokens for, so received tokens can be
-			// confirmed to have been issued to this app.
-			if ( isset( $response_body->client_id ) ) {
+			// confirmed to have been issued to this app. Only a usable value may replace a stored
+			// one: sanitize_text_field() flattens an array to '', and an empty expected client id
+			// is what makes validate_token_and_get_email_address() skip the audience check.
+			if ( ! empty( $response_body->client_id ) && is_string( $response_body->client_id ) ) {
 				update_option( self::CLIENT_ID_OPTION_NAME, sanitize_text_field( $response_body->client_id ), false );
+			} elseif ( isset( $response_body->client_id ) ) {
+				Logger::error( 'OAuth proxy /start returned an unusable client id; keeping the stored value.' );
 			}
 			return $response_body->url;
-		} catch ( \Exception $e ) {
+		} catch ( \Throwable $e ) {
+			// \Throwable, not \Exception: a TypeError from dereferencing an unexpected response
+			// shape extends \Error, and would otherwise escape as a fatal from a public route.
+			Logger::error( 'Failed getting the Google OAuth URL: ' . $e->getMessage() );
 			return new WP_Error(
 				'newspack_google_oauth',
 				$e->getMessage()
