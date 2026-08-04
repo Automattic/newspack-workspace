@@ -307,6 +307,14 @@ class Test_Account_Deletion extends \WP_UnitTestCase {
 	 * When handling='flag', the dispatcher must push the contact with a
 	 * prefixed `Account_Deleted` datetime in metadata and not call
 	 * delete_contact.
+	 *
+	 * This drives handle_account_deletion() directly, which in production is the
+	 * v1 path: Contact_Sync_Connector::register_handlers() wires
+	 * `reader_delete_sync` to this dispatcher only outside legacy mode, and
+	 * registers the older `reader_deleted` handler in legacy mode. The test runs
+	 * at the default (legacy) version, so the prefixed-key assertions below are
+	 * about the dispatcher's own contract, not a change to legacy deletion
+	 * payloads — legacy deletion never reaches this dispatcher.
 	 */
 	public function test_handle_account_deletion_calls_push_with_timestamp_when_handling_flag() {
 		$this->reset_integrations();

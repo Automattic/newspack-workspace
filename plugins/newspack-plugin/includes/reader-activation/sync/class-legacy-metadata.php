@@ -32,6 +32,17 @@ class Legacy_Metadata {
 	const SYNC_CONTROL_KEYS = [ 'status', 'status_if_new' ];
 
 	/**
+	 * Raw keys whose fields are emitted as a family of suffixed sub-keys
+	 * (`<label>source`, `<label>medium`, …) rather than a single key, so their
+	 * label matches by prefix. Only these keys get prefix-match semantics: a
+	 * label registered through `newspack_ras_metadata_keys` that happens to end
+	 * in `': '` is matched exactly, like any other field.
+	 *
+	 * @var string[]
+	 */
+	const UTM_RAW_KEYS = [ 'signup_page_utm', 'payment_page_utm' ];
+
+	/**
 	 * Metadata keys map for Reader Activation.
 	 *
 	 * @var array
@@ -123,7 +134,7 @@ class Legacy_Metadata {
 	 * @return string|false Formatted key if it is a UTM key, false otherwise.
 	 */
 	public static function get_utm_key( $key ) {
-		$keys     = [ 'signup_page_utm', 'payment_page_utm' ];
+		$keys     = self::UTM_RAW_KEYS;
 		$raw_keys = Metadata::get_raw_keys();
 		foreach ( $keys as $utm_key ) {
 			if ( ! in_array( $utm_key, $raw_keys, true ) ) { // Skip if the UTM key is not in the list of fields to sync.

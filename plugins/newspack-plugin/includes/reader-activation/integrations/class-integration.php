@@ -831,6 +831,9 @@ abstract class Integration {
 	 * disabled never syncs even when enabled here); and once a selection is
 	 * saved, only deleting the integration's option restores inheritance.
 	 *
+	 * What gets inherited is overridable — see
+	 * get_inherited_legacy_outgoing_fields().
+	 *
 	 * @return string[] List of enabled field names.
 	 */
 	public function get_enabled_outgoing_fields() {
@@ -840,24 +843,29 @@ abstract class Integration {
 		}
 
 		if ( 'legacy' === Sync\Metadata::get_version() && 'esp' !== $this->get_id() ) {
-			$esp = Integrations::get_integration( 'esp' );
-			if ( $esp ) {
-				return array_values( $esp->get_enabled_outgoing_fields() );
-			}
-
-			// Registry miss (pre-init or a directly constructed integration —
-			// integrations register on init priority 5): mirror the ESP
-			// integration's own fallback chain instead of failing closed to an
-			// empty selection, which would strip every field where the
-			// pre-selection behavior was full passthrough.
-			$legacy = \get_option( Sync\Metadata::FIELDS_OPTION, null );
-			if ( null !== $legacy && is_array( $legacy ) ) {
-				return array_values( $legacy );
-			}
-			return Sync\Metadata::get_default_fields();
+			return array_values( $this->get_inherited_legacy_outgoing_fields() );
 		}
 
 		return [];
+	}
+
+	/**
+	 * The selection this integration inherits in legacy mode when it has never
+	 * saved one of its own.
+	 *
+	 * Defaults to the ESP integration's effective selection — the set the legacy
+	 * metadata pipeline filters by — so an un-migrated site keeps its existing
+	 * payloads. Sync\Metadata::get_fields() is the single definition of that
+	 * set, including its registry-miss fallbacks.
+	 *
+	 * Override to inherit something else, or return an empty array to opt out of
+	 * inheritance entirely (an integration that does so pushes no metadata until
+	 * an Outbound selection is saved).
+	 *
+	 * @return string[] List of inherited field names.
+	 */
+	protected function get_inherited_legacy_outgoing_fields() {
+		return Sync\Metadata::get_fields();
 	}
 
 	/**
@@ -1168,11 +1176,9 @@ abstract class Integration {
 	 * selection via get_enabled_outgoing_fields(), preserving pre-existing
 	 * legacy behavior (NPPD-2107).
 	 *
-	 * Keys are de-prefixed with the legacy pipeline's prefix (the one the
-	 * data actually carries — not this integration's own, which may differ)
-	 * and matched against enabled labels: exact match, or prefix match for
-	 * labels ending in `: ` (the UTM shape, e.g. enabled `Signup UTM: `
-	 * matches `Signup UTM: source`). Unprefixed sync-control keys
+	 * Matching runs against whole keys rather than de-prefixed remainders, so a
+	 * key reshaped by the `newspack_ras_metadata_key` filter still matches (see
+	 * get_legacy_enabled_key_shapes()). Unprefixed sync-control keys
 	 * (Legacy_Metadata::SYNC_CONTROL_KEYS — `status`, `status_if_new`) always
 	 * pass through; any other unprefixed key is dropped, so future unprefixed
 	 * metadata cannot bypass the outbound selection filter.
@@ -1185,23 +1191,22 @@ abstract class Integration {
 			return $contact;
 		}
 
-		$enabled_fields = $this->get_enabled_outgoing_fields();
-		$prefix         = Sync\Metadata::get_prefix();
-		$prepared       = [];
+		[ $exact_keys, $utm_prefixes ] = $this->get_legacy_enabled_key_shapes();
+		$prepared                      = [];
 
 		foreach ( $contact['metadata'] as $key => $value ) {
-			if ( 0 !== strpos( $key, $prefix ) ) {
-				if ( in_array( $key, Sync\Legacy_Metadata::SYNC_CONTROL_KEYS, true ) ) {
-					$prepared[ $key ] = $value;
-				}
+			if ( in_array( $key, Sync\Legacy_Metadata::SYNC_CONTROL_KEYS, true ) ) {
+				$prepared[ $key ] = $value;
 				continue;
 			}
-			$field_name = substr( $key, strlen( $prefix ) );
-			foreach ( $enabled_fields as $enabled_field ) {
-				if (
-					$field_name === $enabled_field ||
-					( str_ends_with( $enabled_field, ': ' ) && 0 === strpos( $field_name, $enabled_field ) )
-				) {
+			if ( isset( $exact_keys[ $key ] ) ) {
+				$prepared[ $key ] = $value;
+				continue;
+			}
+			foreach ( $utm_prefixes as $utm_prefix ) {
+				// A UTM label only carries its own suffixed sub-keys, never a
+				// bare re-match of itself (that is the exact-key case above).
+				if ( 0 === strpos( $key, $utm_prefix ) && strlen( $key ) > strlen( $utm_prefix ) ) {
 					$prepared[ $key ] = $value;
 					break;
 				}
@@ -1210,6 +1215,71 @@ abstract class Integration {
 
 		$contact['metadata'] = $prepared;
 		return $contact;
+	}
+
+	/**
+	 * Build the legacy-mode match shapes for this integration's enabled fields.
+	 *
+	 * Returns two sets of whole keys, both built with the legacy pipeline's own
+	 * prefix (Sync\Metadata::get_prefix() — the one the data actually carries,
+	 * not this integration's own, which may differ):
+	 *
+	 * - exact keys, matched by identity;
+	 * - UTM prefixes, matched by prefix with a non-empty remainder.
+	 *
+	 * Each enabled label contributes both the key Sync\Metadata::get_key()
+	 * produces (so a key reshaped by the `newspack_ras_metadata_key` filter
+	 * still matches) and the plain `prefix . label` shape (so a label absent
+	 * from the current key map still matches as it did before).
+	 *
+	 * Only the raw keys in Legacy_Metadata::UTM_RAW_KEYS get prefix-match
+	 * semantics. `newspack_ras_metadata_keys` lets any plugin register labels,
+	 * and a registered label ending in `': '` that happened to prefix another
+	 * label would otherwise carry that other field past the selection.
+	 *
+	 * @return array{0: array<string, true>, 1: string[]} Exact-key set and UTM prefixes.
+	 */
+	private function get_legacy_enabled_key_shapes(): array {
+		$enabled_fields = $this->get_enabled_outgoing_fields();
+		$prefix         = Sync\Metadata::get_prefix();
+		$keys_map       = Sync\Metadata::get_keys();
+		$exact_keys     = [];
+		$utm_prefixes   = [];
+
+		$utm_labels = [];
+		foreach ( Sync\Legacy_Metadata::UTM_RAW_KEYS as $utm_raw_key ) {
+			if ( isset( $keys_map[ $utm_raw_key ] ) ) {
+				$utm_labels[] = $keys_map[ $utm_raw_key ];
+			}
+		}
+
+		foreach ( $keys_map as $raw_key => $label ) {
+			if ( ! in_array( $label, $enabled_fields, true ) ) {
+				continue;
+			}
+			$filtered_key = Sync\Metadata::get_key( $raw_key );
+			if ( ! is_string( $filtered_key ) || '' === $filtered_key ) {
+				continue;
+			}
+			if ( in_array( $raw_key, Sync\Legacy_Metadata::UTM_RAW_KEYS, true ) ) {
+				$utm_prefixes[] = $filtered_key;
+			} else {
+				$exact_keys[ $filtered_key ] = true;
+			}
+		}
+
+		foreach ( $enabled_fields as $label ) {
+			if ( ! is_string( $label ) || '' === $label ) {
+				continue;
+			}
+			if ( in_array( $label, $utm_labels, true ) ) {
+				$utm_prefixes[] = $prefix . $label;
+			} else {
+				$exact_keys[ $prefix . $label ] = true;
+			}
+		}
+
+		return [ $exact_keys, array_values( array_unique( $utm_prefixes ) ) ];
 	}
 
 	/**
