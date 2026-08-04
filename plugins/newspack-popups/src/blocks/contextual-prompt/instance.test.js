@@ -81,26 +81,29 @@ describe( 'isPromptInstance', () => {
 	} );
 } );
 
-describe( 'getBoundName', () => {
+describe( 'findBoundName', () => {
 	it( 'finds the bound paragraph name', () => {
-		const { getBoundName } = loadInstance();
-		expect( getBoundName( group( paragraph( BOUND_ATTRS ) ) ) ).toBe( 'Prompt copy' );
+		const { findBoundName } = loadInstance();
+		expect( findBoundName( group( paragraph( BOUND_ATTRS ) ) ) ).toBe( 'Prompt copy' );
 	} );
 
 	// The name is the publisher's to change in the pattern, so it is read from
-	// the record rather than assumed.
+	// the record rather than assumed. Repair pins it back server-side, but a
+	// record read before that has to be taken at its word.
 	it( 'finds a renamed bound paragraph', () => {
-		const { getBoundName } = loadInstance();
+		const { findBoundName } = loadInstance();
 		const attrs = { metadata: { ...BOUND_ATTRS.metadata, name: 'Story copy' } };
-		expect( getBoundName( group( paragraph( attrs ) ) ) ).toBe( 'Story copy' );
+		expect( findBoundName( group( paragraph( attrs ) ) ) ).toBe( 'Story copy' );
 	} );
 
 	it( 'skips paragraphs that are not bound', () => {
-		const { getBoundName } = loadInstance();
+		const { findBoundName } = loadInstance();
 		const unbound = paragraph( { metadata: { name: 'Heading copy' } }, 'Static.' );
-		expect( getBoundName( group( unbound + paragraph( BOUND_ATTRS ) ) ) ).toBe( 'Prompt copy' );
+		expect( findBoundName( group( unbound + paragraph( BOUND_ATTRS ) ) ) ).toBe( 'Prompt copy' );
 	} );
 
+	// Null is what the callers gate on: there is nowhere to put copy, so a name
+	// guessed here would key an override nothing reads.
 	it.each( [
 		[ 'an empty string', '' ],
 		[ 'undefined', undefined ],
@@ -112,9 +115,9 @@ describe( 'getBoundName', () => {
 			group( paragraph( { metadata: { name: 'Meta copy', bindings: { __default: { source: 'core/post-meta' } } } } ) ),
 		],
 		[ 'a bound paragraph with no name', group( paragraph( { metadata: { bindings: { __default: { source: 'core/pattern-overrides' } } } } ) ) ],
-	] )( 'falls back to the seeded name for %s', ( label, content ) => {
-		const { getBoundName } = loadInstance();
-		expect( getBoundName( content ) ).toBe( 'Prompt copy' );
+	] )( 'returns null for %s', ( label, content ) => {
+		const { findBoundName } = loadInstance();
+		expect( findBoundName( content ) ).toBeNull();
 	} );
 } );
 

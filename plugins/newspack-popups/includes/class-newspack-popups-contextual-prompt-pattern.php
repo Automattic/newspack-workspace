@@ -20,6 +20,8 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 	const OPTION_STAMPED_ACCENT = 'newspack_contextual_prompts_stamped_accent';
 	const MARKER_CLASS          = 'newspack-contextual-prompt';
 	const BOUND_NAME            = 'Prompt copy';
+	const SEEDING_LOCK          = 'newspack_contextual_prompts_seeding';
+	const SEEDING_LOCK_TTL      = 30;
 
 	/**
 	 * The pattern's own name, in its Group metadata. Not translated: it is stored
@@ -88,24 +90,29 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 	}
 
 	/**
-	 * The pattern post ID, seeding on demand. A record pointing at a missing or
-	 * invalid post is re-seeded rather than left dangling.
+	 * The pattern post ID, seeding on demand. A record pointing at a post that is
+	 * merely unpublished — trashed, drafted — is restored in place: every instance
+	 * references it by id, so a replacement would empty them all. Only a record
+	 * pointing at nothing is re-seeded.
 	 *
 	 * @return int Pattern post ID, or 0 when seeding failed.
 	 */
 	public static function get_pattern_id() {
 		$id = (int) get_option( self::OPTION_PATTERN_ID, 0 );
-		if ( $id && 'wp_block' === get_post_type( $id ) && 'publish' === get_post_status( $id ) ) {
+		if ( $id && 'wp_block' === get_post_type( $id ) ) {
+			if ( 'publish' !== get_post_status( $id ) ) {
+				self::restore_pattern( $id );
+			}
 			return $id;
 		}
 
-		// Claim the record before inserting, so two concurrent first calls can't
-		// both seed a pattern: add_option() writes only when nothing is there, and
-		// a record holding 0 is a claim the other call is still acting on. A record
-		// holding a stale id — the pattern was deleted — re-seeds below instead.
-		if ( ! $id && ! add_option( self::OPTION_PATTERN_ID, 0 ) ) {
+		// Hold a short lock while inserting, so two concurrent first calls can't
+		// both seed a pattern. It expires on its own: a request that dies mid-seed
+		// must not leave seeding claimed for good.
+		if ( get_transient( self::SEEDING_LOCK ) ) {
 			return 0;
 		}
+		set_transient( self::SEEDING_LOCK, 1, self::SEEDING_LOCK_TTL );
 
 		$new_id = wp_insert_post(
 			wp_slash(
@@ -118,16 +125,35 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 			)
 		);
 		if ( is_wp_error( $new_id ) || ! $new_id ) {
-			if ( ! $id ) {
-				// Nothing was seeded: a claim left behind would block every retry.
-				delete_option( self::OPTION_PATTERN_ID );
-			}
+			delete_transient( self::SEEDING_LOCK );
 			return 0;
 		}
 
 		update_option( self::OPTION_PATTERN_ID, $new_id );
+		delete_transient( self::SEEDING_LOCK );
 
 		return (int) $new_id;
+	}
+
+	/**
+	 * Republish the pattern rather than seeding a replacement. wp_untrash_post()
+	 * restores to draft, so the publish follows it.
+	 *
+	 * @param int $pattern_id Pattern post ID.
+	 */
+	private static function restore_pattern( $pattern_id ) {
+		if ( 'trash' === get_post_status( $pattern_id ) ) {
+			wp_untrash_post( $pattern_id );
+		}
+
+		if ( 'publish' !== get_post_status( $pattern_id ) ) {
+			self::update_pattern_post(
+				[
+					'ID'          => $pattern_id,
+					'post_status' => 'publish',
+				]
+			);
+		}
 	}
 
 	/**
@@ -139,21 +165,45 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 	 * @param string $content    Serialized block markup.
 	 */
 	public static function save_pattern_content( $pattern_id, $content ) {
-		wp_update_post(
-			wp_slash(
-				[
-					'ID'           => $pattern_id,
-					'post_content' => $content,
-				]
-			)
+		self::update_pattern_post(
+			[
+				'ID'           => $pattern_id,
+				'post_content' => $content,
+			]
 		);
 	}
 
 	/**
+	 * Update the pattern post with KSES suspended. The markup is programmatic,
+	 * parsed from what is already stored, and a write can land in a context with
+	 * no unfiltered_html — where filtering would mangle the publisher's own
+	 * content and repair would then stabilize on the mangled copy.
+	 *
+	 * @param array $postarr Post data, unslashed.
+	 */
+	private static function update_pattern_post( $postarr ) {
+		// Restored rather than re-initialized unconditionally: a context that never
+		// had the filters must not come out of this with them installed.
+		$filtered = has_filter( 'content_save_pre', 'wp_filter_post_kses' );
+		if ( $filtered ) {
+			kses_remove_filters();
+		}
+
+		try {
+			wp_update_post( wp_slash( $postarr ) );
+		} finally {
+			if ( $filtered ) {
+				kses_init_filters();
+			}
+		}
+	}
+
+	/**
 	 * Reconcile the stored pattern with the site: its CTA with the current
-	 * donation platform, its donate color with the theme's accent. Runs when the
-	 * platform changes and, defensively, on the first instance of a request — a
-	 * pattern the editor opens has to show what readers actually see.
+	 * donation platform, its donate color with the theme's accent, the name its
+	 * copy paragraph is bound under with the one instances key their overrides by.
+	 * Runs when the platform changes and, defensively, on the first instance of a
+	 * request — a pattern the editor opens has to show what readers actually see.
 	 *
 	 * The record is read raw and never seeded: a hook must not create the
 	 * pattern.
@@ -181,6 +231,12 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 				|| false === strpos( (string) ( $group['attrs']['className'] ?? '' ), self::MARKER_CLASS )
 			) {
 				continue;
+			}
+
+			// Written back on its own, because the CTA branches below can bail out of
+			// persisting the group.
+			if ( self::repin_bound_name( $group['innerBlocks'] ) ) {
+				$blocks[ $index ] = $group;
 			}
 
 			// Before normalization, which can replace the child the record
@@ -222,6 +278,37 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 		if ( null !== $stamp ) {
 			self::record_stamp( $stamp );
 		}
+	}
+
+	/**
+	 * Restore the bound paragraph's name. It is the key every instance's copy is
+	 * stored under, not a label: renaming it in the pattern editor would orphan
+	 * the copy of every prompt already written, so the seeded name is pinned back.
+	 *
+	 * @param array $blocks Parsed blocks, mutated in place.
+	 * @return bool Whether a name was restored.
+	 */
+	private static function repin_bound_name( &$blocks ) {
+		foreach ( $blocks as $index => $block ) {
+			$bound = false;
+			foreach ( $block['attrs']['metadata']['bindings'] ?? [] as $binding ) {
+				if ( 'core/pattern-overrides' === ( $binding['source'] ?? '' ) ) {
+					$bound = true;
+					break;
+				}
+			}
+
+			if ( $bound && self::BOUND_NAME !== ( $block['attrs']['metadata']['name'] ?? '' ) ) {
+				$blocks[ $index ]['attrs']['metadata']['name'] = self::BOUND_NAME;
+				return true;
+			}
+
+			if ( ! empty( $block['innerBlocks'] ) && self::repin_bound_name( $blocks[ $index ]['innerBlocks'] ) ) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/**
@@ -275,7 +362,8 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 	 */
 	private static function build_group() {
 		$text_color = self::get_text_color_slug();
-		$classes    = 'wp-block-group ' . self::MARKER_CLASS . ' has-text-color has-' . $text_color . '-color has-background has-medium-font-size';
+		$font_size  = self::get_font_size_slug();
+		$classes    = 'wp-block-group ' . self::MARKER_CLASS . ' has-text-color has-' . $text_color . '-color has-background has-' . $font_size . '-font-size';
 		$wrapper    = '<div class="' . $classes . '" style="border-radius:10px;background-color:#f7f7f7;padding-top:var(--wp--preset--spacing--50);padding-right:var(--wp--preset--spacing--50);padding-bottom:var(--wp--preset--spacing--50);padding-left:var(--wp--preset--spacing--50)">';
 
 		return [
@@ -299,7 +387,7 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 						'blockGap' => 'var:preset|spacing|30',
 					],
 				],
-				'fontSize'     => 'medium',
+				'fontSize'     => $font_size,
 				'layout'       => [ 'type' => 'constrained' ],
 			],
 			'innerBlocks'  => [ self::build_copy_child(), self::build_cta_child() ],
@@ -473,6 +561,18 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 	 */
 	public static function get_text_color_slug() {
 		return wp_is_block_theme() ? 'contrast' : 'dark-gray';
+	}
+
+	/**
+	 * The typography preset the card's text is seeded with. Both families offer an
+	 * "M" step, under different slugs — the classic theme declares no `medium`, and
+	 * a slug it does not declare would leave the size control empty with no CSS
+	 * behind the class.
+	 *
+	 * @return string Font size slug.
+	 */
+	public static function get_font_size_slug() {
+		return wp_is_block_theme() ? 'medium' : 'normal';
 	}
 
 	/**

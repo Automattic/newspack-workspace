@@ -25,7 +25,7 @@ import {
 /**
  * Internal dependencies
  */
-import { buildOverrideAttrs, getBoundName, isPromptInstance, PATTERN_ID } from '../blocks/contextual-prompt/instance';
+import { buildOverrideAttrs, findBoundName, isPromptInstance, PATTERN_ID } from '../blocks/contextual-prompt/instance';
 import { POST_TYPE_LABEL, framingForPosition, generateCandidates, GenerateButton, CandidateList } from '../blocks/contextual-prompt/candidates';
 
 const ContextualPromptPanel = () => {
@@ -93,6 +93,14 @@ const ContextualPromptPanel = () => {
 		return null;
 	}
 
+	// Copy is stored under the name the pattern binds, read off its record: a
+	// record that resolved to nothing to bind — the fetch failed, or the binding
+	// was removed — has nowhere to put copy, so nothing may be generated or
+	// applied. hasFinishedResolution() is true for a failed fetch too, which is
+	// why the name is read rather than assumed once it settles.
+	const boundName = findBoundName( patternContent );
+	const canApply = patternResolved && Boolean( boundName );
+
 	// Asking again is a rejection of what came back, so whenever the button reads
 	// "Regenerate" the request must bypass the cached response. Only the very
 	// first Generate in a fresh context is served from cache.
@@ -151,7 +159,10 @@ const ContextualPromptPanel = () => {
 	};
 
 	const applyCandidate = candidate => {
-		const overrideAttrs = buildOverrideAttrs( getBoundName( patternContent ), candidate.body );
+		if ( ! canApply ) {
+			return;
+		}
+		const overrideAttrs = buildOverrideAttrs( boundName, candidate.body );
 		if ( instance ) {
 			updateBlockAttributes( instance.clientId, overrideAttrs );
 			selectBlock( instance.clientId );
@@ -186,15 +197,18 @@ const ContextualPromptPanel = () => {
 						  ) }
 				</p>
 
-				<GenerateButton busy={ generating } onClick={ generate }>
-					{ generateLabel }
-				</GenerateButton>
+				{ patternResolved && ! boundName ? (
+					<Notice status="warning" isDismissible={ false }>
+						{ __( 'The Contextual Prompt pattern has no editable copy field, so generated copy cannot be applied.', 'newspack-popups' ) }
+					</Notice>
+				) : (
+					<GenerateButton busy={ generating } onClick={ generate }>
+						{ generateLabel }
+					</GenerateButton>
+				) }
 			</VStack>
 
-			{ /* Copy is keyed by the name the pattern binds, read off its record:
-			     nothing may be applied until that record has resolved, or a
-			     renamed pattern gets an override under a key it does not bind. */ }
-			<CandidateList candidates={ patternResolved ? candidates : [] } onApply={ applyCandidate } />
+			<CandidateList candidates={ canApply ? candidates : [] } onApply={ applyCandidate } />
 		</PluginDocumentSettingPanel>
 	);
 };

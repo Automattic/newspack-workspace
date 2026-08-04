@@ -38,6 +38,7 @@ class ContextualPromptPatternTest extends WP_UnitTestCase {
 	 * block type.
 	 */
 	public function tear_down() {
+		delete_transient( Newspack_Popups_Contextual_Prompt_Pattern::SEEDING_LOCK );
 		delete_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_PATTERN_ID );
 		delete_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_STAMPED_ACCENT );
 		delete_option( 'newspack_popups_donor_landing_page' );
@@ -184,21 +185,26 @@ class ContextualPromptPatternTest extends WP_UnitTestCase {
 	 * The card seeds explicit typography and text color, and the wrapper carries
 	 * exactly the classes core serializes for them: a class set the editor would
 	 * regenerate differently is a block validation error the moment it opens.
+	 *
+	 * The classic theme's "M" step is `normal` — it declares no `medium`, and a
+	 * slug it does not declare has no CSS behind it and leaves the size control
+	 * empty.
 	 */
-	public function test_classic_theme_seeds_dark_gray_text_at_medium_size() {
+	public function test_classic_theme_seeds_dark_gray_text_at_normal_size() {
 		$this->switch_to_theme_family( false );
 
 		$group = $this->seeded_group();
 
 		$this->assertSame( 'dark-gray', $group['attrs']['textColor'] );
-		$this->assertSame( 'medium', $group['attrs']['fontSize'] );
+		$this->assertSame( 'normal', $group['attrs']['fontSize'] );
 		$this->assertStringContainsString( 'has-text-color has-dark-gray-color', $group['innerHTML'] );
-		$this->assertStringContainsString( 'has-medium-font-size', $group['innerHTML'] );
+		$this->assertStringContainsString( 'has-normal-font-size', $group['innerHTML'] );
 	}
 
 	/**
-	 * Block themes name their body-text color differently, so the seed follows the
-	 * palette rather than the slug the classic theme happens to declare.
+	 * Block themes name their body-text color and their typography steps
+	 * differently, so the seed follows the active theme rather than the slugs the
+	 * classic theme happens to declare.
 	 */
 	public function test_block_theme_seeds_contrast_text_at_medium_size() {
 		$this->switch_to_theme_family( true );

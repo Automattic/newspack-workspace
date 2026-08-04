@@ -32,11 +32,6 @@ import {
 	CandidateList,
 } from './candidates';
 
-// The name the pattern's bound paragraph is seeded with, mirroring
-// Newspack_Popups_Contextual_Prompt_Pattern::BOUND_NAME. Used until the pattern
-// record resolves, and when it carries no binding to read a name from.
-const BOUND_NAME = 'Prompt copy';
-
 // The block editor and the document-settings panel are separate entries with
 // separate localized objects; either may be the one present. Both stringify the
 // id, so it is compared as a number.
@@ -54,12 +49,15 @@ export const PATTERN_ID = Number(
 export const isPromptInstance = ( name, attributes ) => 'core/block' === name && Boolean( PATTERN_ID ) && Number( attributes?.ref ) === PATTERN_ID;
 
 /**
- * The name of the pattern's override-bound paragraph, or null when it has none.
+ * The name of the pattern's override-bound paragraph — the key an instance's
+ * copy is stored under — or null when it has none. Null is the answer a caller
+ * has to act on: an override under a name the pattern does not bind is copy
+ * nothing will ever render.
  *
  * @param {string} patternContent The pattern's markup.
  * @return {string|null} The bound paragraph's name.
  */
-const findBoundName = patternContent => {
+export const findBoundName = patternContent => {
 	const walk = blocks => {
 		for ( const block of blocks ) {
 			const metadata = block.attributes?.metadata;
@@ -81,14 +79,6 @@ const findBoundName = patternContent => {
 		return null;
 	}
 };
-
-/**
- * The override key an instance's copy is stored under.
- *
- * @param {string} patternContent The pattern's markup.
- * @return {string} The bound paragraph's name, or the seeded one.
- */
-export const getBoundName = patternContent => findBoundName( patternContent ) || BOUND_NAME;
 
 /**
  * The instance attributes carrying a piece of copy as a pattern override.

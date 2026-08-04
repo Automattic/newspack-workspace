@@ -79,7 +79,8 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 	 *
 	 * The pattern record is read raw — a render must never seed. The repair is
 	 * gated on the same pair the strip is, so a feature an admin has switched off
-	 * never writes.
+	 * never writes, and on the capability to edit the pattern: a reader's render
+	 * gets the in-memory normalization only, never a write.
 	 *
 	 * @param array $parsed_block The block being rendered.
 	 * @return array
@@ -89,7 +90,7 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 			return $parsed_block;
 		}
 
-		if ( ! self::$repaired && self::is_feature_on() ) {
+		if ( ! self::$repaired && self::is_feature_on() && current_user_can( 'edit_post', (int) $parsed_block['attrs']['ref'] ) ) {
 			self::$repaired = true;
 			Newspack_Popups_Contextual_Prompt_Pattern::repair();
 		}
@@ -256,6 +257,10 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 	 * top-level blocks — measured, not the framing the editor first chose, since
 	 * it can be moved after insertion. This is the "which placement converts best"
 	 * grant metric.
+	 *
+	 * The bucket is the first prompt card's and is memoized per post, so a post
+	 * carrying several cards reports that one bucket for all of them — the product
+	 * model is one prompt per post.
 	 *
 	 * Memoized for the request: add_analytics_attributes() calls this on every
 	 * render and each miss reparses the whole post. Only a resolved post is

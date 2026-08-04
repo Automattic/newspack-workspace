@@ -47,6 +47,9 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 		$this->reset_request_state();
 		// Instances are stripped without the admin opt-in.
 		update_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION, true );
+		// The render path persists only for a user who could edit the pattern
+		// anyway; a reader's render never writes.
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
 		if ( ! WP_Block_Type_Registry::get_instance()->is_registered( 'newspack-blocks/donate' ) ) {
 			register_block_type(
 				'newspack-blocks/donate',
@@ -63,6 +66,8 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 	 * Reset the pattern record, the donor landing page and the stub block type.
 	 */
 	public function tear_down() {
+		wp_set_current_user( 0 );
+		delete_transient( Newspack_Popups_Contextual_Prompt_Pattern::SEEDING_LOCK );
 		delete_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION );
 		delete_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_PATTERN_ID );
 		delete_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_STAMPED_ACCENT );
@@ -682,11 +687,11 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The seed claims the record before inserting, so a second call arriving while
-	 * the first is still writing gets nothing rather than a second pattern.
+	 * The seed holds a lock while inserting, so a second call arriving while the
+	 * first is still writing gets nothing rather than a second pattern.
 	 */
-	public function test_a_claimed_seed_does_not_insert_a_second_pattern() {
-		add_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_PATTERN_ID, 0 );
+	public function test_a_held_seed_lock_does_not_insert_a_second_pattern() {
+		set_transient( Newspack_Popups_Contextual_Prompt_Pattern::SEEDING_LOCK, 1, 30 );
 
 		$this->assertSame( 0, Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id() );
 		$this->assertEmpty(
@@ -701,7 +706,20 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The claim does not stand in the way of re-seeding: a record left pointing at
+	 * The lock expires on its own, so a request that died mid-seed leaves seeding
+	 * blocked for seconds rather than for good.
+	 */
+	public function test_an_expired_seed_lock_seeds_anyway() {
+		set_transient( Newspack_Popups_Contextual_Prompt_Pattern::SEEDING_LOCK, 1, -1 );
+
+		$id = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
+
+		$this->assertGreaterThan( 0, $id );
+		$this->assertSame( 'wp_block', get_post_type( $id ) );
+	}
+
+	/**
+	 * The lock does not stand in the way of re-seeding: a record left pointing at
 	 * a pattern the publisher deleted anyway is replaced.
 	 */
 	public function test_a_deleted_pattern_is_seeded_again() {
@@ -713,6 +731,87 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 		$this->assertGreaterThan( 0, $second );
 		$this->assertNotSame( $first, $second );
 		$this->assertSame( 'wp_block', get_post_type( $second ) );
+	}
+
+	/**
+	 * A trashed pattern is restored in place rather than replaced: instances
+	 * reference it by id, so a new pattern would empty every prompt on the site.
+	 */
+	public function test_a_trashed_pattern_is_restored_in_place() {
+		$this->set_platform( true );
+		$ref = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
+		wp_trash_post( $ref );
+
+		$restored = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
+
+		$this->assertSame( $ref, $restored, 'The recorded id survives the trash.' );
+		$this->assertSame( 'publish', get_post_status( $ref ) );
+		$this->assertStringContainsString( self::PER_POST_COPY, $this->render_instance(), 'And instances render again.' );
+	}
+
+	/**
+	 * The same for a pattern left unpublished — a draft the publisher saved from
+	 * the pattern editor, say.
+	 */
+	public function test_an_unpublished_pattern_is_republished_in_place() {
+		$this->set_platform( true );
+		$ref = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
+		wp_update_post(
+			[
+				'ID'          => $ref,
+				'post_status' => 'draft',
+			]
+		);
+
+		$restored = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
+
+		$this->assertSame( $ref, $restored );
+		$this->assertSame( 'publish', get_post_status( $ref ) );
+		$this->assertStringContainsString( self::PER_POST_COPY, $this->render_instance() );
+	}
+
+	/**
+	 * The bound paragraph's name is the key every instance's copy is stored under,
+	 * so a rename in the pattern editor is reverted rather than left to orphan the
+	 * copy of every prompt already written.
+	 */
+	public function test_a_renamed_bound_paragraph_is_pinned_back() {
+		$this->set_platform( true );
+		$ref = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
+
+		$blocks = parse_blocks( get_post( $ref )->post_content );
+		$blocks[0]['innerBlocks'][0]['attrs']['metadata']['name'] = 'Story copy';
+		Newspack_Popups_Contextual_Prompt_Pattern::save_pattern_content( $ref, serialize_blocks( $blocks ) );
+
+		Newspack_Popups_Contextual_Prompt_Pattern::repair();
+
+		$para = $this->stored_group()['innerBlocks'][0];
+		$this->assertSame( Newspack_Popups_Contextual_Prompt_Pattern::BOUND_NAME, $para['attrs']['metadata']['name'] );
+		$this->assertSame(
+			[ '__default' => [ 'source' => 'core/pattern-overrides' ] ],
+			$para['attrs']['metadata']['bindings'],
+			'The binding is left alone.'
+		);
+		$this->assertStringContainsString( self::PER_POST_COPY, $this->render_instance(), 'Overrides written under the seeded name still resolve.' );
+	}
+
+	/**
+	 * A reader's render never writes: persisting from an unprivileged request
+	 * would push the pattern through KSES and stabilize on the filtered copy. The
+	 * reader still gets the CTA the platform calls for, in memory.
+	 */
+	public function test_an_anonymous_render_does_not_persist_the_repair() {
+		$this->set_platform( false );
+		$this->set_donor_landing_page();
+		$ref = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
+		$this->set_platform( true );
+		$stored = get_post( $ref )->post_content;
+
+		wp_set_current_user( 0 );
+		$html = $this->render_instance();
+
+		$this->assertStringContainsString( self::DONATE_STUB_CLASS, $html, 'The reader gets the normalized CTA.' );
+		$this->assertSame( $stored, get_post( $ref )->post_content, 'And the stored pattern is left alone.' );
 	}
 
 	/**
