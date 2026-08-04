@@ -279,7 +279,9 @@ class EditorAssetsTest extends WP_UnitTestCase {
 
 		$blocks_data = $this->get_localized_data( 'newspack-popups-blocks', 'newspack_popups_blocks_data' );
 		self::assertNotEmpty( $blocks_data['contextual_prompts_enabled'] );
-		self::assertSame( (int) get_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_PATTERN_ID, 0 ), (int) $blocks_data['contextual_prompts_pattern_id'] );
+		$pattern_id = (int) get_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_PATTERN_ID, 0 );
+		self::assertGreaterThan( 0, $pattern_id );
+		self::assertSame( $pattern_id, (int) $blocks_data['contextual_prompts_pattern_id'] );
 	}
 
 	/**

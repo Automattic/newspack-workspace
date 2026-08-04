@@ -373,6 +373,39 @@ class ContextualPromptAnalyticsTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The strip runs on every synced pattern on the site, so it has to key on the
+	 * pattern ref: another pattern renders as its author wrote it, feature on or
+	 * off.
+	 */
+	public function test_the_strip_leaves_another_pattern_alone() {
+		$this->set_platform( false );
+		Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
+		$other = self::factory()->post->create(
+			[
+				'post_type'    => 'wp_block',
+				'post_status'  => 'publish',
+				'post_content' => "<!-- wp:paragraph -->\n<p>Another pattern.</p>\n<!-- /wp:paragraph -->",
+			]
+		);
+
+		update_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION, false );
+
+		$this->assertStringContainsString( 'Another pattern.', do_blocks( '<!-- wp:block {"ref":' . $other . '} /-->' ) );
+	}
+
+	/**
+	 * Posts saved while a prompt was its own block carry markup nothing registers
+	 * any more; it renders empty rather than as a card nothing manages.
+	 */
+	public function test_legacy_beta_block_renders_empty() {
+		$legacy = "<!-- wp:newspack-popups/contextual-prompt {\"body\":\"Support us.\"} -->\n"
+			. '<div class="wp-block-newspack-popups-contextual-prompt"><p>Support us.</p></div>'
+			. "\n<!-- /wp:newspack-popups/contextual-prompt -->";
+
+		$this->assertSame( '', trim( do_blocks( $legacy ) ) );
+	}
+
+	/**
 	 * A detached card is the publisher's own content, so the feature strip leaves
 	 * it alone: turning Contextual Prompts off must not empty a story.
 	 */

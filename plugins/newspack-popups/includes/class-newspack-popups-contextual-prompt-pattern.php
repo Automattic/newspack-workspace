@@ -43,8 +43,11 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 		add_filter( 'map_meta_cap', [ __CLASS__, 'protect_pattern' ], 10, 4 );
 		add_filter( 'block_editor_settings_all', [ __CLASS__, 'lock_pattern_editor' ], 10, 2 );
 		// \Newspack\Donations may not be loaded when hooks register, so the option
-		// name it owns is spelled out rather than read off the class.
+		// name it owns is spelled out rather than read off the class. Configuring
+		// the platform for the first time adds the option rather than updating
+		// one, so both hooks are needed.
 		add_action( 'update_option_newspack_reader_revenue_platform', [ __CLASS__, 'repair' ] );
+		add_action( 'add_option_newspack_reader_revenue_platform', [ __CLASS__, 'repair' ] );
 	}
 
 	/**
@@ -96,7 +99,15 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 			return $id;
 		}
 
-		$id = wp_insert_post(
+		// Claim the record before inserting, so two concurrent first calls can't
+		// both seed a pattern: add_option() writes only when nothing is there, and
+		// a record holding 0 is a claim the other call is still acting on. A record
+		// holding a stale id — the pattern was deleted — re-seeds below instead.
+		if ( ! $id && ! add_option( self::OPTION_PATTERN_ID, 0 ) ) {
+			return 0;
+		}
+
+		$new_id = wp_insert_post(
 			wp_slash(
 				[
 					'post_type'    => 'wp_block',
@@ -106,13 +117,17 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 				]
 			)
 		);
-		if ( is_wp_error( $id ) || ! $id ) {
+		if ( is_wp_error( $new_id ) || ! $new_id ) {
+			if ( ! $id ) {
+				// Nothing was seeded: a claim left behind would block every retry.
+				delete_option( self::OPTION_PATTERN_ID );
+			}
 			return 0;
 		}
 
-		update_option( self::OPTION_PATTERN_ID, $id );
+		update_option( self::OPTION_PATTERN_ID, $new_id );
 
-		return (int) $id;
+		return (int) $new_id;
 	}
 
 	/**
@@ -158,6 +173,7 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 
 		$post   = get_post( $pattern_id );
 		$blocks = parse_blocks( $post->post_content );
+		$stamp  = null;
 
 		foreach ( $blocks as $index => $group ) {
 			if (
@@ -169,24 +185,42 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 
 			// Before normalization, which can replace the child the record
 			// describes.
-			$group = self::maybe_restamp_accent( $group );
+			$restamped = self::maybe_restamp_accent( $group );
 
 			$before = Newspack_Popups_Contextual_Prompt_Render::find_cta( $group );
 			$group  = Newspack_Popups_Contextual_Prompt_Render::normalize_cta( $group );
 			$after  = Newspack_Popups_Contextual_Prompt_Render::find_cta( $group );
 
+			// Nothing is configured to point a CTA at, so normalization dropped it.
+			// Persisting that fallback would discard the publisher's CTA for good —
+			// the pattern takes no inserts, so nothing could put one back; the
+			// render path still stands in.
+			if ( null !== $before && null === $after ) {
+				continue;
+			}
+
 			$was_donate = 'newspack-blocks/donate' === ( $before['name'] ?? '' );
 			$is_donate  = 'newspack-blocks/donate' === ( $after['name'] ?? '' );
 			if ( $was_donate !== $is_donate ) {
-				self::record_stamp( $is_donate ? (string) ( $group['innerBlocks'][ $after['index'] ]['attrs']['buttonColor'] ?? '' ) : '' );
+				$stamp = $is_donate ? (string) ( $group['innerBlocks'][ $after['index'] ]['attrs']['buttonColor'] ?? '' ) : '';
+			} elseif ( null !== $restamped ) {
+				$stamp = $restamped;
 			}
 
 			$blocks[ $index ] = $group;
 		}
 
 		$content = serialize_blocks( $blocks );
-		if ( $content !== $post->post_content ) {
-			self::save_pattern_content( $pattern_id, $content );
+		if ( $content === $post->post_content ) {
+			return;
+		}
+
+		self::save_pattern_content( $pattern_id, $content );
+
+		// The record describes the stored pattern's donate child, so it is only
+		// truthful once that pattern has actually been written.
+		if ( null !== $stamp ) {
+			self::record_stamp( $stamp );
 		}
 	}
 
@@ -196,18 +230,21 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 	 * With no record — a site seeded off-site, or before the record existed —
 	 * seeded and chosen colors are indistinguishable, so nothing is touched.
 	 *
-	 * @param array $group Parsed prompt card.
-	 * @return array
+	 * The record is not written here: it describes the stored pattern, so only a
+	 * caller that goes on to store the mutated group may move it.
+	 *
+	 * @param array $group Parsed prompt card, mutated in place.
+	 * @return string|null The color stamped, or null when nothing was restamped.
 	 */
-	public static function maybe_restamp_accent( $group ) {
+	public static function maybe_restamp_accent( &$group ) {
 		$recorded = (string) get_option( self::OPTION_STAMPED_ACCENT, '' );
 		if ( '' === $recorded || ! self::use_donate_block() ) {
-			return $group;
+			return null;
 		}
 
 		$accent = self::get_accent_color();
 		if ( ! $accent || $accent === $recorded ) {
-			return $group;
+			return null;
 		}
 
 		foreach ( $group['innerBlocks'] ?? [] as $index => $child ) {
@@ -215,11 +252,10 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 				continue;
 			}
 			$group['innerBlocks'][ $index ]['attrs']['buttonColor'] = $accent;
-			update_option( self::OPTION_STAMPED_ACCENT, $accent );
-			break;
+			return $accent;
 		}
 
-		return $group;
+		return null;
 	}
 
 	/**

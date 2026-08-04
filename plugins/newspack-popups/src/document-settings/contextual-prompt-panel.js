@@ -25,13 +25,11 @@ import {
 /**
  * Internal dependencies
  */
-import { buildOverrideAttrs, getBoundName, isPromptInstance } from '../blocks/contextual-prompt/instance';
+import { buildOverrideAttrs, getBoundName, isPromptInstance, PATTERN_ID } from '../blocks/contextual-prompt/instance';
 import { POST_TYPE_LABEL, framingForPosition, generateCandidates, GenerateButton, CandidateList } from '../blocks/contextual-prompt/candidates';
 
-const PATTERN_ID = Number( window.newspackPopupsContextualPrompt?.patternId || 0 );
-
 const ContextualPromptPanel = () => {
-	const { postId, postType, blockCount, instance, instanceFraming, patternContent } = useSelect( select => {
+	const { postId, postType, blockCount, instance, instanceFraming, patternContent, patternResolved } = useSelect( select => {
 		const editor = select( 'core/editor' );
 		const blockEditor = select( 'core/block-editor' );
 		const blocks = blockEditor.getBlocks() || [];
@@ -51,6 +49,9 @@ const ContextualPromptPanel = () => {
 			instanceFraming: -1 === topLevelIndex ? null : framingForPosition( topLevelIndex, blocks.length ),
 			// Copy is stored under the key the pattern names.
 			patternContent: PATTERN_ID ? select( 'core' ).getEntityRecord( 'postType', 'wp_block', PATTERN_ID )?.content?.raw ?? '' : '',
+			patternResolved: PATTERN_ID
+				? Boolean( select( 'core' ).hasFinishedResolution( 'getEntityRecord', [ 'postType', 'wp_block', PATTERN_ID ] ) )
+				: false,
 		};
 	}, [] );
 
@@ -190,7 +191,10 @@ const ContextualPromptPanel = () => {
 				</GenerateButton>
 			</VStack>
 
-			<CandidateList candidates={ candidates } onApply={ applyCandidate } />
+			{ /* Copy is keyed by the name the pattern binds, read off its record:
+			     nothing may be applied until that record has resolved, or a
+			     renamed pattern gets an override under a key it does not bind. */ }
+			<CandidateList candidates={ patternResolved ? candidates : [] } onApply={ applyCandidate } />
 		</PluginDocumentSettingPanel>
 	);
 };

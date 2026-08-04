@@ -77,7 +77,9 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 	 * pattern would otherwise be normalized for every reader without the editor
 	 * ever showing what they actually publish.
 	 *
-	 * The pattern record is read raw — a render must never seed.
+	 * The pattern record is read raw — a render must never seed. The repair is
+	 * gated on the same pair the strip is, so a feature an admin has switched off
+	 * never writes.
 	 *
 	 * @param array $parsed_block The block being rendered.
 	 * @return array
@@ -87,7 +89,7 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 			return $parsed_block;
 		}
 
-		if ( ! self::$repaired ) {
+		if ( ! self::$repaired && self::is_feature_on() ) {
 			self::$repaired = true;
 			Newspack_Popups_Contextual_Prompt_Pattern::repair();
 		}
@@ -129,11 +131,32 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 			return $block_content;
 		}
 
-		if ( Newspack_Popups::is_contextual_prompts_enabled() && Newspack_Popups_Settings::is_ai_copy_assistant_enabled() ) {
-			return $block_content;
-		}
+		return self::is_feature_on() ? $block_content : '';
+	}
 
-		return '';
+	/**
+	 * Whether Contextual Prompts are fully on: the rollout flag defined and the
+	 * admin opt-in active.
+	 *
+	 * @return bool
+	 */
+	private static function is_feature_on() {
+		return Newspack_Popups::is_contextual_prompts_enabled() && Newspack_Popups_Settings::is_ai_copy_assistant_enabled();
+	}
+
+	/**
+	 * Retire the pre-pattern beta markup. Posts saved while Contextual Prompts
+	 * were their own block carry a `newspack-popups/contextual-prompt` block no
+	 * longer registered, which would render as a card nothing here manages.
+	 *
+	 * @param string $block_content Rendered block markup.
+	 * @param array  $block         The parsed block.
+	 * @return string
+	 */
+	public static function strip_legacy_block( $block_content, $block = [] ) {
+		$name = is_array( $block ) ? ( $block['blockName'] ?? '' ) : '';
+
+		return 'newspack-popups/contextual-prompt' === $name ? '' : $block_content;
 	}
 
 	/**

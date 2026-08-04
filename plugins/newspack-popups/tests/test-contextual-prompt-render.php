@@ -33,6 +33,12 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 	const PER_POST_COPY = 'Per-post copy';
 
 	/**
+	 * The reader revenue platform option repair hooks on, spelled out the way the
+	 * pattern class spells it.
+	 */
+	const PLATFORM_OPTION = 'newspack_reader_revenue_platform';
+
+	/**
 	 * Register the stub donate block and clear the per-request render state the
 	 * previous test left behind.
 	 */
@@ -66,6 +72,7 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 		delete_option( 'newspack_contextual_prompts_override_body' );
 		delete_option( 'newspack_contextual_prompts_override_label' );
 		delete_option( 'newspack_contextual_prompts_override_url' );
+		delete_option( self::PLATFORM_OPTION );
 		if ( WP_Block_Type_Registry::get_instance()->is_registered( 'newspack-blocks/donate' ) ) {
 			unregister_block_type( 'newspack-blocks/donate' );
 		}
@@ -235,7 +242,9 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 
 	/**
 	 * Off site with no donor landing page: the CTA is dropped entirely — copy
-	 * alone, never a dead button or a form on a disabled platform.
+	 * alone, never a dead button or a form on a disabled platform. The drop is a
+	 * render-time fallback: the stored pattern keeps its CTA, because the pattern
+	 * takes no inserts and a persisted removal could never be undone.
 	 */
 	public function test_offsite_without_landing_page_drops_the_cta() {
 		$this->set_platform( true );
@@ -248,8 +257,62 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 		$this->assertStringNotContainsString( 'wp-block-button', $html );
 
 		$group = $this->stored_group();
-		$this->assertCount( 1, $group['innerBlocks'], 'Only the copy paragraph remains.' );
-		$this->assertSame( 1, count( array_filter( $group['innerContent'], 'is_null' ) ), 'One placeholder per remaining child.' );
+		$this->assertCount( 2, $group['innerBlocks'], 'The stored pattern keeps its CTA.' );
+
+		$dropped = Newspack_Popups_Contextual_Prompt_Render::normalize_cta( $group );
+		$this->assertCount( 1, $dropped['innerBlocks'], 'In memory, only the copy paragraph remains.' );
+		$this->assertSame( 1, count( array_filter( $dropped['innerContent'], 'is_null' ) ), 'One placeholder per remaining child.' );
+	}
+
+	/**
+	 * A donor landing page taken down leaves nothing to point the CTA at, so the
+	 * render drops it — but the stored button survives. Persisting the removal
+	 * would lose it for good: find_cta() would never see one again, and the
+	 * pattern accepts no inserts to put one back by hand.
+	 */
+	public function test_a_dropped_cta_survives_in_the_stored_pattern() {
+		$this->set_platform( false );
+		$permalink = $this->set_donor_landing_page();
+		$ref       = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
+		$this->assertStringContainsString( 'href="' . esc_url( $permalink ) . '"', get_post( $ref )->post_content );
+
+		wp_update_post(
+			[
+				'ID'          => (int) get_option( 'newspack_popups_donor_landing_page' ),
+				'post_status' => 'draft',
+			]
+		);
+
+		// The stored button points at a page readers can no longer reach, so the
+		// publisher clears it in the pattern editor.
+		$blocks                      = parse_blocks( get_post( $ref )->post_content );
+		$blocks[0]['innerBlocks'][1] = Newspack_Popups_Contextual_Prompt_Pattern::build_buttons_child( '', 'Donate' );
+		Newspack_Popups_Contextual_Prompt_Pattern::save_pattern_content( $ref, serialize_blocks( $blocks ) );
+
+		$html = $this->render_instance();
+
+		$this->assertStringNotContainsString( 'wp-block-button', $html, 'The reader is never shown a dead ask.' );
+		$this->assertStringContainsString( 'wp:buttons', get_post( $ref )->post_content, 'The stored CTA is still there.' );
+	}
+
+	/**
+	 * And once a landing page is configured again, the next render repoints the
+	 * CTA it kept rather than leaving the prompt copy-only for good.
+	 */
+	public function test_a_dropped_cta_comes_back_once_a_landing_page_exists() {
+		$this->set_platform( false );
+		$ref = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
+
+		// Nothing to point at yet: this render drops the CTA.
+		$this->assertStringNotContainsString( 'wp-block-button', $this->render_instance() );
+
+		$permalink = $this->set_donor_landing_page();
+		$this->reset_request_state();
+
+		$html = $this->render_instance();
+
+		$this->assertStringContainsString( 'href="' . esc_url( $permalink ) . '"', $html );
+		$this->assertStringContainsString( 'href="' . esc_url( $permalink ) . '"', get_post( $ref )->post_content, 'And the stored pattern is repointed too.' );
 	}
 
 	/**
@@ -580,6 +643,76 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 
 		$this->assertStringContainsString( 'Give $5 today — just ${1} a week.', $html );
 		$this->assertStringContainsString( '>Give $5</a>', $html );
+	}
+
+	/**
+	 * Configuring the donation platform for the first time adds the option rather
+	 * than updating one, and repair has to run on that too — otherwise the very
+	 * publisher who has just set donations up keeps the wrong CTA.
+	 */
+	public function test_first_platform_configuration_repairs_the_pattern() {
+		$this->set_platform( true );
+		$ref = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
+		$this->assertStringContainsString( 'wp:newspack-blocks/donate', get_post( $ref )->post_content );
+
+		$permalink = $this->set_donor_landing_page();
+		$this->set_platform( false );
+
+		delete_option( self::PLATFORM_OPTION );
+		add_option( self::PLATFORM_OPTION, 'stripe' );
+
+		$this->assertStringContainsString( 'href="' . esc_url( $permalink ) . '"', get_post( $ref )->post_content );
+	}
+
+	/**
+	 * A feature the admin has switched off never writes: the instance is stripped
+	 * anyway, so a render must not repair the pattern on its way past.
+	 */
+	public function test_a_withdrawn_opt_in_does_not_repair_the_pattern() {
+		$this->set_platform( false );
+		$this->set_donor_landing_page();
+		$ref = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
+		$this->set_platform( true );
+		$stored = get_post( $ref )->post_content;
+
+		update_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION, false );
+
+		$this->assertSame( '', trim( $this->render_instance() ), 'The instance is stripped.' );
+		$this->assertSame( $stored, get_post( $ref )->post_content, 'And the stale pattern is left alone.' );
+	}
+
+	/**
+	 * The seed claims the record before inserting, so a second call arriving while
+	 * the first is still writing gets nothing rather than a second pattern.
+	 */
+	public function test_a_claimed_seed_does_not_insert_a_second_pattern() {
+		add_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_PATTERN_ID, 0 );
+
+		$this->assertSame( 0, Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id() );
+		$this->assertEmpty(
+			get_posts(
+				[
+					'post_type'   => 'wp_block',
+					'post_status' => 'any',
+					'numberposts' => 5,
+				]
+			)
+		);
+	}
+
+	/**
+	 * The claim does not stand in the way of re-seeding: a record left pointing at
+	 * a pattern the publisher deleted anyway is replaced.
+	 */
+	public function test_a_deleted_pattern_is_seeded_again() {
+		$first = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
+		wp_delete_post( $first, true );
+
+		$second = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
+
+		$this->assertGreaterThan( 0, $second );
+		$this->assertNotSame( $first, $second );
+		$this->assertSame( 'wp_block', get_post_type( $second ) );
 	}
 
 	/**

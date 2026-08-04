@@ -119,8 +119,10 @@ final class Newspack_Popups {
 			Newspack_Popups_Contextual_Prompt_Render::init();
 		}
 		// Registered whether or not the feature is on, so turning it off hides the
-		// prompts a site already publishes.
+		// prompts a site already publishes — and so a post saved on the beta, when
+		// a prompt was its own block, stops rendering an unmanaged card.
 		add_filter( 'render_block_core/block', [ 'Newspack_Popups_Contextual_Prompt_Render', 'maybe_strip_instance' ], 8, 2 );
+		add_filter( 'render_block', [ 'Newspack_Popups_Contextual_Prompt_Render', 'strip_legacy_block' ], 8, 2 );
 		include_once __DIR__ . '/class-newspack-popups-inserter.php';
 		include_once __DIR__ . '/class-newspack-popups-api.php';
 		include_once __DIR__ . '/class-newspack-popups-settings.php';
