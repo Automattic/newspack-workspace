@@ -424,4 +424,141 @@ class Newspack_Test_Guest_Contributor_Role extends WP_UnitTestCase {
 		);
 		$this->assertNotContains( 'someuser@example.com', $to, 'The dummy to-recipient must still be stripped.' );
 	}
+
+	/**
+	 * The guard's filter registrations are a contract: the pre_wp_mail
+	 * short-circuit runs at priority 1, before mailer plugins' own callbacks
+	 * (typically priority 10) could dispatch an all-dummy send.
+	 *
+	 * Precondition (shared by every mail-guard test in this file): the test
+	 * bootstrap defines no WP_ENVIRONMENT_TYPE, so wp_get_environment_type()
+	 * resolves to 'production' and initialize() registered the guard.
+	 */
+	public function test_mail_guard_filter_priorities() {
+		$this->assertSame( 1, has_filter( 'pre_wp_mail', [ Guest_Contributor_Role::class, 'short_circuit_dummy_only_email' ] ) );
+		$this->assertSame( 10, has_filter( 'wp_mail', [ Guest_Contributor_Role::class, 'remove_dummy_email_recipients' ] ) );
+	}
+
+	/**
+	 * The registration wiring honors the activity filter: forced inactive,
+	 * register_mail_guard() adds nothing; forced active again, it re-registers
+	 * both filters at their contract priorities.
+	 */
+	public function test_mail_guard_registration_honors_activity_filter() {
+		remove_filter( 'pre_wp_mail', [ Guest_Contributor_Role::class, 'short_circuit_dummy_only_email' ], 1 );
+		remove_filter( 'wp_mail', [ Guest_Contributor_Role::class, 'remove_dummy_email_recipients' ], 10 );
+
+		add_filter( 'newspack_guest_author_mail_guard_active', '__return_false' );
+		$this->assertFalse( Guest_Contributor_Role::register_mail_guard(), 'A false activity filter must prevent registration.' );
+		$this->assertFalse( has_filter( 'pre_wp_mail', [ Guest_Contributor_Role::class, 'short_circuit_dummy_only_email' ] ) );
+		remove_filter( 'newspack_guest_author_mail_guard_active', '__return_false' );
+
+		$this->assertTrue( Guest_Contributor_Role::register_mail_guard(), 'With no overriding filter the guard must register.' );
+		$this->assertSame( 1, has_filter( 'pre_wp_mail', [ Guest_Contributor_Role::class, 'short_circuit_dummy_only_email' ] ) );
+		$this->assertSame( 10, has_filter( 'wp_mail', [ Guest_Contributor_Role::class, 'remove_dummy_email_recipients' ] ) );
+	}
+
+	/**
+	 * The guard is active everywhere except local and development
+	 * environments, where mail terminates in a capture tool instead of
+	 * bouncing.
+	 */
+	public function test_mail_guard_environment_gate() {
+		$this->assertFalse( Guest_Contributor_Role::is_mail_guard_active_for_environment( 'local' ) );
+		$this->assertFalse( Guest_Contributor_Role::is_mail_guard_active_for_environment( 'development' ) );
+		$this->assertTrue( Guest_Contributor_Role::is_mail_guard_active_for_environment( 'staging' ) );
+		$this->assertTrue( Guest_Contributor_Role::is_mail_guard_active_for_environment( 'production' ) );
+	}
+
+	/**
+	 * Recipients in "Name <address>" form are matched on the address, both
+	 * for the all-dummy short-circuit and for mixed-list stripping.
+	 */
+	public function test_mail_guard_handles_display_name_recipients() {
+		reset_phpmailer_instance();
+		$result = wp_mail( 'Guest Author <someuser@example.com>', 'Test subject', 'Test body' ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.wp_mail_wp_mail
+		$this->assertTrue( $result, 'Suppressed mail must still report success to callers.' );
+		$this->assertEmpty( tests_retrieve_phpmailer_instance()->get_sent(), 'A display-name placeholder recipient must be suppressed.' );
+
+		reset_phpmailer_instance();
+		wp_mail( [ 'Real Person <real@realdomain.org>', 'Guest Author <fake@example.com>' ], 'Test subject', 'Test body' ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.wp_mail_wp_mail
+		$sent = tests_retrieve_phpmailer_instance()->get_sent();
+		$this->assertNotEmpty( $sent, 'Mail with at least one real recipient must still send.' );
+		$recipients = array_map(
+			function ( $recipient ) {
+				return $recipient[0];
+			},
+			$sent->to
+		);
+		$this->assertContains( 'real@realdomain.org', $recipients );
+		$this->assertNotContains( 'fake@example.com', $recipients );
+	}
+
+	/**
+	 * Mail with an all-dummy "to" but a real Bcc header must NOT be
+	 * suppressed — the Bcc recipient's delivery is legitimate.
+	 */
+	public function test_all_dummy_to_with_bcc_header_still_sends() {
+		reset_phpmailer_instance();
+		wp_mail( 'someuser@example.com', 'Test subject', 'Test body', [ 'Bcc: real-bcc@realdomain.org' ] ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.wp_mail_wp_mail
+		$mailer = tests_retrieve_phpmailer_instance();
+		$sent   = $mailer->get_sent();
+		$this->assertNotEmpty( $sent, 'Mail with a Bcc header must not be short-circuited.' );
+		$bcc = array_map(
+			function ( $recipient ) {
+				return $recipient[0];
+			},
+			$sent->bcc
+		);
+		$this->assertContains( 'real-bcc@realdomain.org', $bcc );
+		$to = array_map(
+			function ( $recipient ) {
+				return $recipient[0];
+			},
+			$sent->to
+		);
+		$this->assertNotContains( 'someuser@example.com', $to, 'The dummy to-recipient must still be stripped.' );
+	}
+
+	/**
+	 * The placeholder match is case-insensitive — a widening introduced with
+	 * the end-anchored match, pinned here as intended behavior.
+	 */
+	public function test_is_dummy_email_address_case_insensitive() {
+		$this->assertTrue( Guest_Contributor_Role::is_dummy_email_address( 'Foo@EXAMPLE.COM' ) );
+
+		reset_phpmailer_instance();
+		$result = wp_mail( 'Foo@EXAMPLE.COM', 'Test subject', 'Test body' ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.wp_mail_wp_mail
+		$this->assertTrue( $result, 'Suppressed mail must still report success to callers.' );
+		$this->assertEmpty( tests_retrieve_phpmailer_instance()->get_sent(), 'An uppercase placeholder recipient must be suppressed.' );
+	}
+
+	/**
+	 * Suppression follows the filterable dummy domain: with a custom domain
+	 * set, mail to it is suppressed and mail to the default domain flows.
+	 * The other tests hard-code the default domain deliberately, pinning the
+	 * publisher-facing default; this one exercises the filter axis.
+	 */
+	public function test_mail_guard_follows_filtered_dummy_domain() {
+		$set_domain = function () {
+			return 'placeholder.invalid';
+		};
+		add_filter( 'newspack_guest_author_email_domain', $set_domain );
+
+		try {
+			$this->assertTrue( Guest_Contributor_Role::is_dummy_email_address( 'someuser@placeholder.invalid' ) );
+			$this->assertFalse( Guest_Contributor_Role::is_dummy_email_address( 'someuser@example.com' ) );
+
+			reset_phpmailer_instance();
+			$result = wp_mail( 'someuser@placeholder.invalid', 'Test subject', 'Test body' ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.wp_mail_wp_mail
+			$this->assertTrue( $result, 'Mail to the filtered placeholder domain must be suppressed.' );
+			$this->assertEmpty( tests_retrieve_phpmailer_instance()->get_sent() );
+
+			reset_phpmailer_instance();
+			wp_mail( 'someuser@example.com', 'Test subject', 'Test body' ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.wp_mail_wp_mail
+			$this->assertNotEmpty( tests_retrieve_phpmailer_instance()->get_sent(), 'With a custom placeholder domain, default-domain mail must flow.' );
+		} finally {
+			remove_filter( 'newspack_guest_author_email_domain', $set_domain );
+		}
+	}
 }

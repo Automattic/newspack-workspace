@@ -90,8 +90,7 @@ class Guest_Contributor_Role {
 		// Never send email to generated placeholder addresses — they bounce and
 		// can get the site's outbound email blocked (e.g. comment notifications
 		// to Guest Contributors created without a real email).
-		\add_filter( 'pre_wp_mail', [ __CLASS__, 'short_circuit_dummy_only_email' ], 10, 2 );
-		\add_filter( 'wp_mail', [ __CLASS__, 'remove_dummy_email_recipients' ], 10, 1 );
+		self::register_mail_guard();
 
 		// Make sure we check again if the site has guest authors every hour.
 		$re_check_guest_authors = 'newspack_re_check_guest_authors';
@@ -279,6 +278,18 @@ class Guest_Contributor_Role {
 	 * Get dummy email domain.
 	 */
 	public static function get_dummy_email_domain() {
+		/**
+		 * Filters the domain used for generated Guest Contributor placeholder
+		 * email addresses.
+		 *
+		 * This domain is also treated as unroutable by the outbound-mail guard:
+		 * wp_mail() recipients on it are stripped, and mail addressed only to it
+		 * is suppressed. Point it at a reserved, undeliverable domain (RFC 2606)
+		 * only — on a real domain, mail to every address on it would be silently
+		 * dropped site-wide.
+		 *
+		 * @param string $domain Placeholder email domain. Default 'example.com'.
+		 */
 		return \apply_filters( 'newspack_guest_author_email_domain', 'example.com' );
 	}
 
@@ -297,6 +308,58 @@ class Guest_Contributor_Role {
 	}
 
 	/**
+	 * Whether the outbound-mail guard should be active for an environment type.
+	 *
+	 * On local and development environments outbound mail terminates in a
+	 * capture tool (e.g. MailHog) instead of bouncing, so suppression would
+	 * only hide mail developers are trying to inspect. Everywhere else —
+	 * including staging, which delivers real mail — the guard is active.
+	 *
+	 * Note: a production site whose WP_ENVIRONMENT_TYPE is set to 'local' or
+	 * 'development' loses this protection.
+	 *
+	 * @param string $environment_type Environment type, as returned by wp_get_environment_type().
+	 *
+	 * @return bool
+	 */
+	public static function is_mail_guard_active_for_environment( string $environment_type ): bool {
+		return ! in_array( $environment_type, [ 'local', 'development' ], true );
+	}
+
+	/**
+	 * Register the outbound-mail guard filters, unless the environment (or a
+	 * filter) says otherwise. Safe to call more than once — add_filter() with
+	 * an identical callback and priority replaces the existing entry.
+	 *
+	 * The short-circuit registers at priority 1 so it runs before mailer
+	 * plugins' own pre_wp_mail callbacks. That protects the all-placeholder
+	 * case against callbacks that honor a non-null incoming value (the
+	 * well-behaved majority); a callback that ignores the incoming value can
+	 * still dispatch and overwrite the result regardless of priority.
+	 *
+	 * @return bool Whether the guard filters were registered.
+	 */
+	public static function register_mail_guard(): bool {
+		/**
+		 * Filters whether the outbound-mail guard is active.
+		 *
+		 * Defaults to active everywhere except local and development
+		 * environments (see is_mail_guard_active_for_environment()). Hook from
+		 * a must-use plugin or a wp-config-included file to force the guard on
+		 * or off — for example, to re-enable it on a site whose declared
+		 * environment type would otherwise switch it off.
+		 *
+		 * @param bool $active Whether the guard registers its mail filters.
+		 */
+		if ( ! \apply_filters( 'newspack_guest_author_mail_guard_active', self::is_mail_guard_active_for_environment( \wp_get_environment_type() ) ) ) {
+			return false;
+		}
+		\add_filter( 'pre_wp_mail', [ __CLASS__, 'short_circuit_dummy_only_email' ], 1, 2 );
+		\add_filter( 'wp_mail', [ __CLASS__, 'remove_dummy_email_recipients' ], 10, 1 );
+		return true;
+	}
+
+	/**
 	 * Short-circuit wp_mail() when every recipient is a generated placeholder
 	 * address. Returning true reports the email as sent without dispatching
 	 * anything, so callers behave as if delivery succeeded.
@@ -311,8 +374,13 @@ class Guest_Contributor_Role {
 	 * short-circuited — suppressing it would also suppress delivery to those
 	 * (possibly real) header recipients. Dummy addresses inside Cc/Bcc headers
 	 * are not scrubbed by this guard. Mailer plugins that take over delivery
-	 * from their own pre_wp_mail callback bypass the wp_mail filter below, so
-	 * mixed-list stripping does not apply there.
+	 * from their own pre_wp_mail callback still receive the stripped list —
+	 * core applies the wp_mail filter before any pre_wp_mail callback. The
+	 * priority-1 registration (see register_mail_guard()) protects the
+	 * all-placeholder case only against callbacks that honor a non-null
+	 * incoming value; one that ignores it can still dispatch regardless of
+	 * priority. Plugins that replace the pluggable wp_mail() itself bypass
+	 * both filters and this guard.
 	 *
 	 * @param null|bool $return Short-circuit return value.
 	 * @param array     $atts   wp_mail() arguments.
@@ -331,6 +399,7 @@ class Guest_Contributor_Role {
 		}
 		$recipients = self::parse_recipients( $atts['to'] );
 		if ( ! empty( $recipients ) && empty( self::remove_dummy_addresses( $recipients ) ) ) {
+			Logger::log( 'Suppressing outbound email to placeholder-only recipient list: ' . implode( ', ', $recipients ), 'NEWSPACK-GC-MAIL-GUARD' );
 			return true;
 		}
 		return $return;
@@ -357,6 +426,7 @@ class Guest_Contributor_Role {
 			return $args;
 		}
 		if ( ! empty( $filtered ) ) {
+			Logger::log( 'Removing placeholder recipient(s) from outbound email: ' . implode( ', ', array_diff( $recipients, $filtered ) ), 'NEWSPACK-GC-MAIL-GUARD' );
 			$args['to'] = $filtered;
 			return $args;
 		}
@@ -367,6 +437,7 @@ class Guest_Contributor_Role {
 		// instead of reporting success. With Cc/Bcc present the mail proceeds
 		// to those recipients only.
 		if ( self::has_cc_or_bcc_headers( $args['headers'] ?? '' ) ) {
+			Logger::log( 'Removing placeholder-only recipient list from outbound email; delivering to Cc/Bcc recipients only: ' . implode( ', ', $recipients ), 'NEWSPACK-GC-MAIL-GUARD' );
 			$args['to'] = [];
 		}
 		return $args;
