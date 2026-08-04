@@ -425,11 +425,9 @@ class Group_Subscription_Invite {
 				}
 			)
 		);
-		$subscription_settings = Group_Subscription_Settings::get_subscription_settings( $subscription );
-		if ( $subscription_settings['limit'] > 0 ) {
-			if ( $pending_invites_count + count( Group_Subscription::get_members( $subscription ) ) >= $subscription_settings['limit'] ) {
-				return new \WP_Error( 'newspack_group_subscription_invite_limit_reached', __( 'You have reached the group member limit for this subscription. Please remove some members or cancel pending invitations before inviting more group members.', 'newspack-plugin' ) );
-			}
+		$seat_limit = Group_Subscription::get_member_seat_limit( $subscription );
+		if ( null !== $seat_limit && $pending_invites_count + count( Group_Subscription::get_members( $subscription ) ) >= $seat_limit ) {
+			return new \WP_Error( 'newspack_group_subscription_invite_limit_reached', __( 'You have reached the group member limit for this subscription. Please remove some members or cancel pending invitations before inviting more group members.', 'newspack-plugin' ) );
 		}
 
 		// Add the new invite.
@@ -810,11 +808,11 @@ class Group_Subscription_Invite {
 		}
 
 		// Member-limit check.
-		$settings             = Group_Subscription_Settings::get_subscription_settings( $subscription );
+		$seat_limit           = Group_Subscription::get_member_seat_limit( $subscription );
 		$member_count         = count( Group_Subscription::get_members( $subscription ) );
 		$pending_invite_count = count( self::get_invites( $subscription, false ) );
 
-		if ( $settings['limit'] > 0 && ( $member_count + $pending_invite_count ) >= $settings['limit'] ) {
+		if ( null !== $seat_limit && ( $member_count + $pending_invite_count ) >= $seat_limit ) {
 			self::redirect_with_result( 'link_full', $error_target_url );
 			return;
 		}
