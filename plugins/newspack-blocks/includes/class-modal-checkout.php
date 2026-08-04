@@ -613,7 +613,8 @@ final class Modal_Checkout {
 				return;
 			}
 		}
-		$attrs = self::build_url_triggered_button_attrs( $product->get_type(), $product_id, $variation_id );
+		$coupon = (string) filter_input( INPUT_GET, 'coupon', FILTER_SANITIZE_FULL_SPECIAL_CHARS );
+		$attrs  = self::build_url_triggered_button_attrs( $product->get_type(), $product_id, $variation_id, $coupon );
 		if ( empty( $attrs ) ) {
 			return;
 		}
@@ -632,12 +633,18 @@ final class Modal_Checkout {
 	 * and specific products are `product` alone. A variation lock on a
 	 * non-variable product has no serving form, so it is rejected.
 	 *
+	 * A `coupon` becomes the block's own coupon attribute, so it rides to the
+	 * checkout as the form's hidden `coupon` field exactly as a block-configured
+	 * one does — process_checkout_request() then validates and applies it
+	 * against the real cart.
+	 *
 	 * @param string $product_type Product type slug from WC_Product::get_type().
 	 * @param int    $product_id   Requested product ID.
 	 * @param int    $variation_id Requested variation ID (0 for none).
+	 * @param string $coupon       Requested coupon code ('' for none).
 	 * @return array Block attributes, or [] when the combination can't be served.
 	 */
-	public static function build_url_triggered_button_attrs( $product_type, $product_id, $variation_id = 0 ) {
+	public static function build_url_triggered_button_attrs( $product_type, $product_id, $variation_id = 0, $coupon = '' ) {
 		$is_variable = in_array( $product_type, [ 'variable', 'variable-subscription' ], true );
 		if ( $variation_id && ! $is_variable ) {
 			return [];
@@ -652,6 +659,10 @@ final class Modal_Checkout {
 			if ( $variation_id ) {
 				$attrs['variation'] = (string) $variation_id;
 			}
+		}
+		// Strict check so a coupon code of "0" still rides along.
+		if ( '' !== $coupon ) {
+			$attrs['coupon'] = $coupon;
 		}
 		return $attrs;
 	}

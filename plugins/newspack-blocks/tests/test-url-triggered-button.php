@@ -69,6 +69,40 @@ class Newspack_Blocks_Test_Url_Triggered_Button extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test that a requested coupon becomes the block's coupon attribute, which
+	 * view.php emits as the form's hidden `coupon` field.
+	 */
+	public function test_coupon_rides_along_as_a_block_attribute() {
+		$attrs = Modal_Checkout::build_url_triggered_button_attrs( 'subscription', 11, 0, 'SPRING20' );
+		$this->assertSame( 'SPRING20', $attrs['coupon'] );
+
+		$variable = Modal_Checkout::build_url_triggered_button_attrs( 'variable-subscription', 11, 22, 'SPRING20' );
+		$this->assertSame( 'SPRING20', $variable['coupon'] );
+	}
+
+	/**
+	 * Test that no coupon attribute is set without one, and that a code of "0"
+	 * still counts as a coupon.
+	 */
+	public function test_coupon_attribute_is_omitted_when_absent() {
+		$this->assertArrayNotHasKey( 'coupon', Modal_Checkout::build_url_triggered_button_attrs( 'subscription', 11 ) );
+		$this->assertArrayNotHasKey( 'coupon', Modal_Checkout::build_url_triggered_button_attrs( 'subscription', 11, 0, '' ) );
+		$this->assertSame( '0', Modal_Checkout::build_url_triggered_button_attrs( 'subscription', 11, 0, '0' )['coupon'] );
+	}
+
+	/**
+	 * Test that the picker submission copies the coupon: the picker form carries
+	 * none of its own, so without this a reader choosing a variation would lose
+	 * the coupon.
+	 */
+	public function test_picker_context_fields_include_the_coupon() {
+		$trigger = file_get_contents( \NEWSPACK_BLOCKS__PLUGIN_DIR . 'src/modal-checkout/checkout-button-trigger.js' );
+		$fields  = substr( $trigger, strpos( $trigger, 'PICKER_CONTEXT_FIELDS = [' ) );
+		$fields  = substr( $fields, 0, strpos( $fields, '];' ) );
+		$this->assertStringContainsString( "'coupon'", $fields );
+	}
+
+	/**
 	 * Test that nothing is rendered into the footer without a trigger.
 	 */
 	public function test_no_button_rendered_without_a_trigger() {

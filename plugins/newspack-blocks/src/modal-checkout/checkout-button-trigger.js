@@ -98,12 +98,17 @@ export function selectPickerForm( root, productId, variationId, options = {} ) {
 /**
  * Hidden fields copied from a source checkout button to a picker submission.
  *
+ * `coupon` is included because the picker form carries none of its own: without
+ * copying it, a coupon configured on the button (or on the promotional URL that
+ * synthesized it) would be dropped the moment the reader picks a variation.
+ *
  * @type {string[]}
  */
 export const PICKER_CONTEXT_FIELDS = [
 	'after_success_behavior',
 	'after_success_url',
 	'after_success_button_label',
+	'coupon',
 	'gate_post_id',
 	'newspack_popup_id',
 	'prompt_title',
