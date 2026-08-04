@@ -44,6 +44,7 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 	public static function init() {
 		add_filter( 'map_meta_cap', [ __CLASS__, 'protect_pattern' ], 10, 4 );
 		add_filter( 'block_editor_settings_all', [ __CLASS__, 'lock_pattern_editor' ], 10, 2 );
+		add_filter( 'rest_wp_block_query', [ __CLASS__, 'hide_pattern_from_collections' ] );
 		// \Newspack\Donations may not be loaded when hooks register, so the option
 		// name it owns is spelled out rather than read off the class. Configuring
 		// the platform for the first time adds the option rather than updating
@@ -70,6 +71,33 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 		}
 
 		return $caps;
+	}
+
+	/**
+	 * Keep the pattern out of the patterns browser and the inserter: a post takes
+	 * one prompt, placed from the Contextual Prompt panel, so the pattern is not a
+	 * thing to insert by hand. Only collections are filtered — the single-item
+	 * route is how an instance resolves its content, and how the editor opens the
+	 * pattern to edit its design.
+	 *
+	 * @param array $args Query arguments for the collection.
+	 *
+	 * @return array
+	 */
+	public static function hide_pattern_from_collections( $args ) {
+		$pattern_id = (int) get_option( self::OPTION_PATTERN_ID, 0 );
+		if ( ! $pattern_id ) {
+			return $args;
+		}
+
+		$exclude   = isset( $args['post__not_in'] ) ? (array) $args['post__not_in'] : [];
+		$exclude[] = $pattern_id;
+
+		// One id, on a collection only the editor requests: the VIP caution is about
+		// exclusion sets large enough to defeat the index.
+		$args['post__not_in'] = $exclude; // phpcs:ignore WordPressVIPMinimum.Performance.WPQueryParams.PostNotIn_post__not_in
+
+		return $args;
 	}
 
 	/**

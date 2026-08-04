@@ -3,10 +3,11 @@
  *
  * The prompt is an instance of the site's synced pattern, living in the post
  * content: copy is edited inline as a pattern override, position is the
- * instance's position, and the design comes from the pattern. The panel's only
- * jobs are AI generation and managing that one instance. Generation and
- * candidate presentation are shared with the instance inspector (see the
- * candidates module).
+ * instance's position, and the design comes from the pattern. A card the
+ * publisher has detached from the pattern is still the post's prompt — its copy
+ * is just written to its own paragraph. The panel's only jobs are AI generation
+ * and managing that one card. Generation and candidate presentation are shared
+ * with the instance inspector (see the candidates module).
  */
 
 /**
@@ -25,35 +26,56 @@ import {
 /**
  * Internal dependencies
  */
-import { buildOverrideAttrs, findBoundName, isPromptInstance, PATTERN_ID } from '../blocks/contextual-prompt/instance';
-import { POST_TYPE_LABEL, framingForPosition, generateCandidates, GenerateButton, CandidateList } from '../blocks/contextual-prompt/candidates';
+import {
+	buildOverrideAttrs,
+	findBoundName,
+	findCopyClientId,
+	findPromptCards,
+	isPromptInstance,
+	PATTERN_ID,
+} from '../blocks/contextual-prompt/instance';
+import {
+	POST_TYPE_LABEL,
+	framingForPosition,
+	generateCandidates,
+	toRichTextContent,
+	GenerateButton,
+	CandidateList,
+} from '../blocks/contextual-prompt/candidates';
 
 const ContextualPromptPanel = () => {
-	const { postId, postType, blockCount, instance, instanceFraming, patternContent, patternResolved } = useSelect( select => {
-		const editor = select( 'core/editor' );
-		const blockEditor = select( 'core/block-editor' );
-		const blocks = blockEditor.getBlocks() || [];
-		// The prompt can sit anywhere, including nested inside a group or columns.
-		const promptClientId = blockEditor
-			.getClientIdsWithDescendants()
-			.find( clientId => isPromptInstance( blockEditor.getBlockName( clientId ), blockEditor.getBlockAttributes( clientId ) ) );
-		const topLevelIndex = promptClientId ? blocks.findIndex( block => promptClientId === block.clientId ) : -1;
-		return {
-			postId: editor.getCurrentPostId(),
-			postType: editor.getCurrentPostType(),
-			blockCount: blocks.length,
-			instance: promptClientId ? blockEditor.getBlock( promptClientId ) : null,
-			// Once the prompt is placed, its position decides the framing — the
-			// top/mid/end choice is only on offer before the first insert. A nested
-			// prompt can't be bucketed, matching get_placement()'s 'unknown'.
-			instanceFraming: -1 === topLevelIndex ? null : framingForPosition( topLevelIndex, blocks.length ),
-			// Copy is stored under the key the pattern names.
-			patternContent: PATTERN_ID ? select( 'core' ).getEntityRecord( 'postType', 'wp_block', PATTERN_ID )?.content?.raw ?? '' : '',
-			patternResolved: PATTERN_ID
-				? Boolean( select( 'core' ).hasFinishedResolution( 'getEntityRecord', [ 'postType', 'wp_block', PATTERN_ID ] ) )
-				: false,
-		};
-	}, [] );
+	// Flat values only: the panel re-renders whenever this mapping stops being
+	// shallow-equal, and the editor's store ticks on every keystroke.
+	const { postId, postType, blockCount, promptClientId, promptDetached, promptCopyClientId, promptFraming, patternContent, patternResolved } =
+		useSelect( select => {
+			const editor = select( 'core/editor' );
+			const blockEditor = select( 'core/block-editor' );
+			const blocks = blockEditor.getBlocks() || [];
+			// The prompt can sit anywhere, including nested inside a group or columns,
+			// and is the post's prompt whether it still references the pattern or has
+			// been detached from it.
+			const [ card = null ] = findPromptCards( blocks );
+			const detached = Boolean( card ) && ! isPromptInstance( card.name, card.attributes );
+			const topLevelIndex = card ? blocks.findIndex( block => card.clientId === block.clientId ) : -1;
+			return {
+				postId: editor.getCurrentPostId(),
+				postType: editor.getCurrentPostType(),
+				blockCount: blocks.length,
+				promptClientId: card?.clientId ?? null,
+				promptDetached: detached,
+				// Detached copy is the paragraph itself, not an override.
+				promptCopyClientId: detached ? findCopyClientId( card ) : null,
+				// Once the prompt is placed, its position decides the framing — the
+				// top/mid/end choice is only on offer before the first insert. A nested
+				// prompt can't be bucketed, matching get_placement()'s 'unknown'.
+				promptFraming: -1 === topLevelIndex ? null : framingForPosition( topLevelIndex, blocks.length ),
+				// Copy is stored under the key the pattern names.
+				patternContent: PATTERN_ID ? select( 'core' ).getEntityRecord( 'postType', 'wp_block', PATTERN_ID )?.content?.raw ?? '' : '',
+				patternResolved: PATTERN_ID
+					? Boolean( select( 'core' ).hasFinishedResolution( 'getEntityRecord', [ 'postType', 'wp_block', PATTERN_ID ] ) )
+					: false,
+			};
+		}, [] );
 
 	const { insertBlock, updateBlockAttributes, selectBlock } = useDispatch( 'core/block-editor' );
 
@@ -71,9 +93,9 @@ const ContextualPromptPanel = () => {
 
 	// The block can be moved after a request is in flight; a request framed for
 	// the old position must not overwrite the current one's candidates.
-	const framingRef = useRef( instanceFraming );
+	const framingRef = useRef( promptFraming );
 	useEffect( () => {
-		framingRef.current = instanceFraming;
+		framingRef.current = promptFraming;
 	} );
 
 	// Candidates are framed for a specific position, so a move to a different
@@ -82,7 +104,7 @@ const ContextualPromptPanel = () => {
 		setCandidates( [] );
 		setError( '' );
 		hasGenerated.current = false;
-	}, [ instanceFraming ] );
+	}, [ promptFraming ] );
 
 	const optedIn = window.newspackPopupsContextualPrompt?.enabled;
 	const isPrompt = 'newspack_popups_cpt' === postType;
@@ -99,19 +121,22 @@ const ContextualPromptPanel = () => {
 	// applied. hasFinishedResolution() is true for a failed fetch too, which is
 	// why the name is read rather than assumed once it settles.
 	const boundName = findBoundName( patternContent );
-	const canApply = patternResolved && Boolean( boundName );
+	// A detached card is no longer keyed by the pattern: its copy is written to
+	// its own paragraph, so the pattern's binding neither gates nor keys it.
+	const warnsNoCopyField = ! promptDetached && patternResolved && ! boundName;
+	const canApply = promptDetached ? Boolean( promptCopyClientId ) : patternResolved && Boolean( boundName );
 
 	// Asking again is a rejection of what came back, so whenever the button reads
 	// "Regenerate" the request must bypass the cached response. Only the very
 	// first Generate in a fresh context is served from cache.
-	const isRegenerate = Boolean( candidates.length || instance || hasGenerated.current );
+	const isRegenerate = Boolean( candidates.length || promptClientId || hasGenerated.current );
 
 	const generate = async () => {
 		const requestId = ++requestIdRef.current;
 		const isCurrent = () => requestId === requestIdRef.current;
 		setGenerating( true );
 		setError( '' );
-		const requestedFraming = instanceFraming || undefined;
+		const requestedFraming = promptFraming || undefined;
 		try {
 			const list = await generateCandidates( {
 				postId,
@@ -162,12 +187,18 @@ const ContextualPromptPanel = () => {
 		if ( ! canApply ) {
 			return;
 		}
-		const overrideAttrs = buildOverrideAttrs( boundName, candidate.body );
-		if ( instance ) {
-			updateBlockAttributes( instance.clientId, overrideAttrs );
-			selectBlock( instance.clientId );
+		if ( promptDetached ) {
+			updateBlockAttributes( promptCopyClientId, { content: toRichTextContent( candidate.body ) } );
+		} else if ( promptClientId ) {
+			updateBlockAttributes( promptClientId, buildOverrideAttrs( boundName, candidate.body ) );
 		} else {
-			insertBlock( createBlock( 'core/block', { ref: PATTERN_ID, ...overrideAttrs } ), positionForFraming( candidate.framing ) );
+			insertBlock(
+				createBlock( 'core/block', { ref: PATTERN_ID, ...buildOverrideAttrs( boundName, candidate.body ) } ),
+				positionForFraming( candidate.framing )
+			);
+		}
+		if ( promptClientId ) {
+			selectBlock( promptClientId );
 		}
 		setCandidates( [] );
 	};
@@ -184,7 +215,7 @@ const ContextualPromptPanel = () => {
 				) }
 
 				<p style={ { margin: 0 } }>
-					{ instance
+					{ promptClientId
 						? sprintf(
 								/* translators: %1$s: the edited content's post type label, e.g. "post", "page". */
 								__( 'This %1$s has a Contextual Prompt. Edit its copy directly in the %1$s.', 'newspack-popups' ),
@@ -197,7 +228,7 @@ const ContextualPromptPanel = () => {
 						  ) }
 				</p>
 
-				{ patternResolved && ! boundName ? (
+				{ warnsNoCopyField ? (
 					<Notice status="warning" isDismissible={ false }>
 						{ __( 'The Contextual Prompt pattern has no editable copy field, so generated copy cannot be applied.', 'newspack-popups' ) }
 					</Notice>

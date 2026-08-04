@@ -48,6 +48,81 @@ export const PATTERN_ID = Number(
  */
 export const isPromptInstance = ( name, attributes ) => 'core/block' === name && Boolean( PATTERN_ID ) && Number( attributes?.ref ) === PATTERN_ID;
 
+// Mirrors MARKER_CLASS in class-newspack-popups-contextual-prompt-pattern.php:
+// the class the pattern's card carries, and the only thing a copy detached from
+// the pattern still has to identify it by.
+export const MARKER_CLASS = 'newspack-contextual-prompt';
+
+/**
+ * Whether a block is a Contextual Prompt detached from the pattern: the card's
+ * own markup, no longer referencing the pattern post.
+ *
+ * @param {string} name       Block name.
+ * @param {Object} attributes Block attributes.
+ * @return {boolean} Whether the block is a detached prompt card.
+ */
+export const isDetachedPromptCard = ( name, attributes ) =>
+	'core/group' === name &&
+	String( attributes?.className || '' )
+		.split( /\s+/ )
+		.includes( MARKER_CLASS );
+
+/**
+ * Whether a block is the post's prompt, however it is stored.
+ *
+ * @param {string} name       Block name.
+ * @param {Object} attributes Block attributes.
+ * @return {boolean} Whether the block is a prompt card.
+ */
+export const isPromptCard = ( name, attributes ) => isPromptInstance( name, attributes ) || isDetachedPromptCard( name, attributes );
+
+/**
+ * Every prompt card in a block tree, in document order.
+ *
+ * A card is never descended into: an instance carries the pattern's own
+ * marker-classed Group as an inner block, which is the same card, not a second
+ * one.
+ *
+ * @param {Object[]} blocks Block tree.
+ * @return {Object[]} The prompt cards.
+ */
+export const findPromptCards = blocks => {
+	const found = [];
+	const walk = list => {
+		for ( const block of list || [] ) {
+			if ( isPromptCard( block?.name, block?.attributes ) ) {
+				found.push( block );
+				continue;
+			}
+			walk( block?.innerBlocks );
+		}
+	};
+	walk( blocks );
+
+	return found;
+};
+
+/**
+ * The first `core/paragraph` under a block: a detached card's copy, which is
+ * written directly rather than as a pattern override.
+ *
+ * @param {Object} block Block to search.
+ * @return {string|null} The paragraph's client id.
+ */
+export const findCopyClientId = block => {
+	for ( const child of block?.innerBlocks || [] ) {
+		if ( 'core/paragraph' === child.name ) {
+			return child.clientId;
+		}
+		const found = findCopyClientId( child );
+		if ( found ) {
+			return found;
+		}
+	}
+
+	return null;
+};
+
 /**
  * The name of the pattern's override-bound paragraph — the key an instance's
  * copy is stored under — or null when it has none. Null is the answer a caller

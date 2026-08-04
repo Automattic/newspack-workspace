@@ -168,3 +168,44 @@ describe( 'shouldAutoGenerate', () => {
 		expect( shouldAutoGenerate( { ...ready, ...override } ) ).toBe( false );
 	} );
 } );
+
+describe( 'isDetachedPromptCard', () => {
+	// The marker sits among the classes core writes for the card's own supports,
+	// and identifies the card whether or not the pattern id resolved.
+	it.each( [
+		[ 'the card core writes on detach', 'core/group', { className: 'wp-block-group newspack-contextual-prompt has-background' }, true ],
+		[ 'the marker on its own', 'core/group', { className: 'newspack-contextual-prompt' }, true ],
+		[ 'a group with other classes', 'core/group', { className: 'wp-block-group has-background' }, false ],
+		[ 'a class the marker is only part of', 'core/group', { className: 'newspack-contextual-prompt-legacy' }, false ],
+		[ 'another block carrying the marker', 'core/column', { className: 'newspack-contextual-prompt' }, false ],
+		[ 'a group with no classes', 'core/group', {}, false ],
+		[ 'undefined attributes', 'core/group', undefined, false ],
+	] )( 'is %s → %s', ( label, name, attributes, expected ) => {
+		const { isDetachedPromptCard } = loadInstance( { blocksData: { contextual_prompts_pattern_id: '12' } } );
+		expect( isDetachedPromptCard( name, attributes ) ).toBe( expected );
+	} );
+} );
+
+describe( 'findCopyClientId', () => {
+	const block = ( name, clientId, innerBlocks = [] ) => ( { name, clientId, attributes: {}, innerBlocks } );
+
+	it( 'finds the card copy however deeply it sits', () => {
+		const { findCopyClientId } = loadInstance();
+		const card = block( 'core/group', 'card', [
+			block( 'core/columns', 'cols', [ block( 'core/column', 'col', [ block( 'core/paragraph', 'copy' ) ] ) ] ),
+			block( 'core/paragraph', 'later' ),
+		] );
+		expect( findCopyClientId( card ) ).toBe( 'copy' );
+	} );
+
+	// Nothing to write to is what the caller gates on: a card whose paragraph was
+	// deleted takes no generated copy.
+	it.each( [
+		[ 'a card with no paragraph', block( 'core/group', 'card', [ block( 'core/buttons', 'cta' ) ] ) ],
+		[ 'a card with no children', block( 'core/group', 'card' ) ],
+		[ 'nothing', undefined ],
+	] )( 'returns null for %s', ( label, card ) => {
+		const { findCopyClientId } = loadInstance();
+		expect( findCopyClientId( card ) ).toBeNull();
+	} );
+} );

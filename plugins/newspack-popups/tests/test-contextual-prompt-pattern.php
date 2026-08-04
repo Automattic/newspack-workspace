@@ -307,6 +307,27 @@ class ContextualPromptPatternTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A post takes one prompt, placed from the Contextual Prompt panel, so the
+	 * pattern is not offered in the patterns browser or the inserter. Only the
+	 * collection is filtered: instances resolve their content through the
+	 * single-item route, as does the editor that opens the pattern.
+	 */
+	public function test_the_pattern_is_hidden_from_the_patterns_collection() {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'editor' ] ) );
+		$pattern_id = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
+		$other      = self::factory()->post->create( [ 'post_type' => 'wp_block' ] );
+
+		$collection = rest_do_request( new WP_REST_Request( 'GET', '/wp/v2/blocks' ) );
+		$listed     = wp_list_pluck( $collection->get_data(), 'id' );
+
+		$this->assertNotContains( $pattern_id, $listed );
+		$this->assertContains( $other, $listed, 'Other synced patterns stay listed.' );
+
+		$single = rest_do_request( new WP_REST_Request( 'GET', '/wp/v2/blocks/' . $pattern_id ) );
+		$this->assertSame( $pattern_id, $single->get_data()['id'], 'The pattern still resolves by id.' );
+	}
+
+	/**
 	 * The pattern's own locks are what keep instances uniform, so the editor that
 	 * opens it offers no way to lift them. Other posts keep block locking.
 	 */

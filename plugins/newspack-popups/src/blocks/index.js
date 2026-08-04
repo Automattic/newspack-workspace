@@ -5,6 +5,7 @@ import { registerCustomPlacementBlock } from './custom-placement';
 import { registerSinglePromptBlock } from './single-prompt';
 import { registerContextualPromptInstance } from './contextual-prompt/instance';
 import { registerContextualPromptEditorLocks } from './contextual-prompt/editor-locks';
+import { registerContextualPromptCardGuard } from './contextual-prompt/card-guard';
 import './contextual-prompt/editor.scss';
 import './prompt-editor-canvas.scss';
 
@@ -16,4 +17,5 @@ registerSinglePromptBlock();
 if ( Boolean( window.newspack_popups_blocks_data?.contextual_prompts_enabled ) ) {
 	registerContextualPromptInstance();
 	registerContextualPromptEditorLocks();
+	registerContextualPromptCardGuard();
 }

@@ -2,7 +2,8 @@
  * The document-settings panel's copy-application decision: an override may only
  * be keyed by the name the pattern actually binds, so a record that resolved
  * without one — the fetch failed, or the binding was removed — offers nothing to
- * generate or apply.
+ * generate or apply. A card detached from the pattern is keyed by nothing: its
+ * copy is written straight to its own paragraph.
  *
  * The editor's ESM chain is not transformable, so every editor module the panel
  * pulls in is stubbed down to what it actually uses.
@@ -52,6 +53,23 @@ jest.mock( '@wordpress/components', () => ( {
 
 const PATTERN_ID = 12;
 const NO_COPY_FIELD = 'The Contextual Prompt pattern has no editable copy field, so generated copy cannot be applied.';
+const HAS_PROMPT = 'This post has a Contextual Prompt. Edit its copy directly in the post.';
+
+// No prompt in the post: the panel offers to insert one.
+const NO_PROMPT = {
+	postId: 7,
+	postType: 'post',
+	blockCount: 3,
+	promptClientId: null,
+	promptDetached: false,
+	promptCopyClientId: null,
+	promptFraming: null,
+	patternContent: '<!-- wp:group /-->',
+	patternResolved: true,
+};
+
+// A card the publisher detached from the pattern, copy paragraph and all.
+const DETACHED = { ...NO_PROMPT, promptClientId: 'card', promptDetached: true, promptCopyClientId: 'copy', promptFraming: 'top' };
 
 const bound = {
 	name: 'core/paragraph',
@@ -78,15 +96,7 @@ beforeEach( () => {
 	dispatchers.updateBlockAttributes = jest.fn();
 	dispatchers.selectBlock = jest.fn();
 	useDispatch.mockReturnValue( dispatchers );
-	useSelect.mockReturnValue( {
-		postId: 7,
-		postType: 'post',
-		blockCount: 3,
-		instance: null,
-		instanceFraming: null,
-		patternContent: '<!-- wp:group /-->',
-		patternResolved: true,
-	} );
+	useSelect.mockReturnValue( NO_PROMPT );
 	apiFetch.mockResolvedValue( { candidates: [ { body: 'Support us.', framing: 'top' } ] } );
 } );
 
@@ -127,15 +137,7 @@ describe( 'ContextualPromptPanel', () => {
 	// Nothing is applied until the record has resolved: the candidates are held
 	// back rather than written under a name that may not be the pattern's.
 	it( 'lists no candidates while the pattern record is unresolved', async () => {
-		useSelect.mockReturnValue( {
-			postId: 7,
-			postType: 'post',
-			blockCount: 3,
-			instance: null,
-			instanceFraming: null,
-			patternContent: '',
-			patternResolved: false,
-		} );
+		useSelect.mockReturnValue( { ...NO_PROMPT, patternContent: '', patternResolved: false } );
 
 		render( <ContextualPromptPanel /> );
 
@@ -144,5 +146,54 @@ describe( 'ContextualPromptPanel', () => {
 
 		expect( screen.queryByText( 'Apply' ) ).toBeNull();
 		expect( dispatchers.insertBlock ).not.toHaveBeenCalled();
+	} );
+
+	// Detaching a prompt breaks its reference to the pattern, not its place in
+	// the post: it is still the one prompt the post has.
+	it( "reports a detached card as the post's prompt", () => {
+		useSelect.mockReturnValue( DETACHED );
+
+		render( <ContextualPromptPanel /> );
+
+		expect( screen.getByText( HAS_PROMPT ) ).toBeTruthy();
+		expect( screen.getByText( 'Regenerate Suggestions' ) ).toBeTruthy();
+	} );
+
+	it( "rewrites a detached card's copy rather than inserting a second prompt", async () => {
+		useSelect.mockReturnValue( DETACHED );
+
+		render( <ContextualPromptPanel /> );
+		fireEvent.click( screen.getByText( 'Regenerate Suggestions' ) );
+		fireEvent.click( await screen.findByText( 'Apply' ) );
+
+		expect( dispatchers.updateBlockAttributes ).toHaveBeenCalledWith( 'copy', { content: 'Support us.' } );
+		expect( dispatchers.selectBlock ).toHaveBeenCalledWith( 'card' );
+		expect( dispatchers.insertBlock ).not.toHaveBeenCalled();
+	} );
+
+	// The pattern's binding keys an override; a detached card has none to key,
+	// so what the pattern does or does not bind cannot gate it.
+	it( 'applies to a detached card whatever the pattern binds', async () => {
+		mockParsed = [ unbound ];
+		useSelect.mockReturnValue( DETACHED );
+
+		render( <ContextualPromptPanel /> );
+		fireEvent.click( screen.getByText( 'Regenerate Suggestions' ) );
+		fireEvent.click( await screen.findByText( 'Apply' ) );
+
+		expect( screen.queryByText( NO_COPY_FIELD ) ).toBeNull();
+		expect( dispatchers.updateBlockAttributes ).toHaveBeenCalledWith( 'copy', { content: 'Support us.' } );
+	} );
+
+	// A card whose copy paragraph was deleted has nowhere to put the result.
+	it( 'applies nothing to a detached card with no copy paragraph', async () => {
+		useSelect.mockReturnValue( { ...DETACHED, promptCopyClientId: null } );
+
+		render( <ContextualPromptPanel /> );
+		fireEvent.click( screen.getByText( 'Regenerate Suggestions' ) );
+		await screen.findByText( 'Regenerate Suggestions' );
+
+		expect( screen.queryByText( 'Apply' ) ).toBeNull();
+		expect( dispatchers.updateBlockAttributes ).not.toHaveBeenCalled();
 	} );
 } );
