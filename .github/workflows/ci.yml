@@ -102,11 +102,13 @@ jobs:
           # paths. Fail loudly: a rejected path would otherwise go unlinted behind a
           # green check. `set -f` because the unquoted expansion that does the word
           # splitting would otherwise glob first, so a `<file>*</file>` would expand to
-          # real filenames and sail through the check it is meant to fail. The leading
-          # character is restricted separately so a path cannot arrive as an option
-          # flag (`-i`), which phpcs would accept and then lint nothing.
+          # real filenames and sail through the check it is meant to fail. The match
+          # rejects, in order: a `..` component, so a path cannot walk outside the
+          # checkout; any character outside the allowed set; and a leading character
+          # that would make the path arrive as an option flag (`-i`), which phpcs
+          # accepts and then lints nothing.
           set -f
-          if [ -n "$NW_PATHS" ] && printf '%s\n' $NW_PATHS | grep -vE '^[A-Za-z0-9._][A-Za-z0-9._/-]*$' >/dev/null; then
+          if [ -n "$NW_PATHS" ] && printf '%s\n' $NW_PATHS | grep -E '\.\.|[^A-Za-z0-9._/-]|^[^A-Za-z0-9._]' >/dev/null; then
             echo "Rejected phpcs.xml <file> path(s): $NW_PATHS"
             exit 1
           fi
