@@ -165,7 +165,7 @@ final class Newspack_Popups_Inserter {
 		}
 		if ( Newspack_Popups::preset_popup_id() ) {
 			$preset_popup = Newspack_Popups_Presets::retrieve_preset_popup( Newspack_Popups::preset_popup_id() );
-			return [ $preset_popup ];
+			return $preset_popup ? [ $preset_popup ] : [];
 		}
 
 		// Popups disabled for this page.
