@@ -13,7 +13,7 @@ import { people } from '@wordpress/icons';
 /**
  * Internal dependencies
  */
-import { Card, Grid, SectionHeader } from '../../../../../packages/components/src';
+import { Button, Grid, SectionHeader } from '../../../../../packages/components/src';
 import Router from '../../../../../packages/components/src/proxied-imports/router';
 import { hasAudienceManagement } from './utils';
 
@@ -31,46 +31,29 @@ const AudienceManagementRequired = ( { isNewsletter = false }: { isNewsletter?: 
 					description={
 						isNewsletter
 							? __(
-									'Premium newsletters need reader accounts, sign-in and account emails. Audience Management provides them.',
+									'Premium newsletters need accounts, sign-in, and account emails. Audience Management provides them.',
 									'newspack-plugin'
 							  )
 							: __(
-									'Access Control needs reader accounts, sign-in and account emails. Audience Management provides them.',
+									'Access Control needs accounts, sign-in, and account emails. Audience Management provides them.',
 									'newspack-plugin'
 							  )
 					}
 					pageHeader
 					noMargin
 				/>
-				<VStack spacing={ 4 }>
-					{ /* Rendered only with a real destination: a card pointing at href=""
-					     reloads this same screen, which is worse than offering no action. */ }
+				<VStack alignment="center" spacing={ 4 }>
+					{ /* Rendered only with a real destination: a primary CTA pointing at href=""
+					     reloads this same screen, which is worse than offering no button. */ }
 					{ audienceManagementUrl && (
-						<Card
-							actionType="chevron"
-							isSmall
-							__experimentalCoreCard
-							__experimentalCoreProps={ {
-								as: 'a',
-								header: (
-									<>
-										<h3>{ __( 'Enable Audience Management', 'newspack-plugin' ) }</h3>
-										<p>
-											{ isNewsletter
-												? __( 'Turn it on to start configuring premium newsletters.', 'newspack-plugin' )
-												: __( 'Turn it on to start configuring access control.', 'newspack-plugin' ) }
-										</p>
-									</>
-								),
-								href: audienceManagementUrl,
-								icon: people,
-								iconBackgroundColor: true,
-							} }
-						/>
+						<Button variant="primary" href={ audienceManagementUrl }>
+							{ __( 'Set up Audience Management', 'newspack-plugin' ) }
+						</Button>
 					) }
-					<ExternalLink href="https://help.newspack.com/engagement/audience-management-system/">
-						{ __( 'Learn more', 'newspack-plugin' ) }
-					</ExternalLink>
+					{ /* Points at the Access Control doc rather than the Audience Management one:
+					     the prerequisite is being added there, and that page is where the original
+					     support question started. */ }
+					<ExternalLink href="https://help.newspack.com/access-control/">{ __( 'Learn more', 'newspack-plugin' ) }</ExternalLink>
 				</VStack>
 			</VStack>
 		</Grid>

@@ -38,9 +38,9 @@ jest.mock( '../../../../../packages/components/src', () => {
 	const React = require( 'react' );
 	return {
 		Grid: ( { children } ) => React.createElement( 'div', null, children ),
-		// The action is a Card rendered as an anchor, so keep it a real anchor: the
-		// href assertions below are what stop a dead link shipping.
-		Card: ( { __experimentalCoreProps: coreProps = {} } ) => React.createElement( 'a', { href: coreProps.href }, coreProps.header ),
+		// Button must survive as a real anchor: the href assertions below are what
+		// stop a dead link shipping.
+		Button: ( { children, href } ) => React.createElement( 'a', { href }, children ),
 		SectionHeader: ( { title, description } ) =>
 			React.createElement( 'div', null, React.createElement( 'h2', null, title ), React.createElement( 'p', null, description ) ),
 	};
@@ -57,7 +57,7 @@ jest.mock( '../../../../../packages/components/src/proxied-imports/router', () =
 } );
 
 const PREREQUISITE_HEADING = 'Set up Audience Management first';
-const ACTION_LABEL = 'Enable Audience Management';
+const ACTION_LABEL = 'Set up Audience Management';
 const SETUP_URL = '/wp-admin/admin.php?page=newspack-audience#/';
 
 const setAudienceManagement = enabled => {
@@ -86,7 +86,7 @@ describe( 'requireAudienceManagement (NPPD-1846)', () => {
 		expect( screen.getByText( PREREQUISITE_HEADING ) ).toBeInTheDocument();
 		expect( screen.queryByText( 'the real section' ) ).not.toBeInTheDocument();
 		// The action must route to the setup flow, not merely carry a label.
-		expect( screen.getByText( ACTION_LABEL ).closest( 'a' ) ).toHaveAttribute( 'href', SETUP_URL );
+		expect( screen.getByText( ACTION_LABEL ) ).toHaveAttribute( 'href', SETUP_URL );
 	} );
 
 	it( 'renders the section untouched when Audience Management is on', () => {
@@ -115,7 +115,7 @@ describe( 'requireAudienceManagement (NPPD-1846)', () => {
 		const Guarded = requireAudienceManagement( Section, { isNewsletter: true } );
 		render( <Guarded /> );
 
-		expect( screen.getByText( /Premium newsletters need reader accounts/ ) ).toBeInTheDocument();
+		expect( screen.getByText( /Premium newsletters need accounts/ ) ).toBeInTheDocument();
 	} );
 
 	it( 'uses Access Control copy by default', () => {
@@ -123,7 +123,7 @@ describe( 'requireAudienceManagement (NPPD-1846)', () => {
 
 		render( <AudienceManagementRequired /> );
 
-		expect( screen.getByText( /Access Control needs reader accounts/ ) ).toBeInTheDocument();
+		expect( screen.getByText( /Access Control needs accounts/ ) ).toBeInTheDocument();
 	} );
 
 	it( 'omits the action rather than rendering a dead link when the URL is missing', () => {
