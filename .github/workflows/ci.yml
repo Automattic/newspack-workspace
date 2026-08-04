@@ -141,8 +141,8 @@ jobs:
           # The second pattern rejects `..`, which the first one allows: pnpm reads a
           # trailing `...` as graph-selector syntax, so `foo...` would silently filter
           # to a different set of packages than the one that changed.
-          INVALID=$(printf '%s\n' "$CHANGED" | grep -vE '^(@[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*$' || true)
-          INVALID="$INVALID$(printf '%s\n' "$CHANGED" | grep -E '\.\.' || true)"
+          INVALID=$( { printf '%s\n' "$CHANGED" | grep -vE '^(@[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*$' || true;
+                       printf '%s\n' "$CHANGED" | grep -E '\.\.' || true; } | sort -u )
           if [ -n "$INVALID" ]; then
             echo "Rejected package name(s):"
             printf '%s\n' "$INVALID"
