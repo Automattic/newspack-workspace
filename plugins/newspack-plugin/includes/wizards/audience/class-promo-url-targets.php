@@ -516,5 +516,4 @@ final class Promo_Url_Targets {
 		}
 		return [ 'valid' => true ];
 	}
-
 }
