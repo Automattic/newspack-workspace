@@ -429,8 +429,10 @@ final class Reader_Registration {
 		}
 
 		// Step 5: Honeypot — the `email` field must be empty. Real email is in `npe`.
+		// A decoy value matching `npe` is autofill rather than a bot; see
+		// Reader_Activation::is_honeypot_tripped().
 		$honeypot = $request->get_param( 'email' );
-		if ( ! empty( $honeypot ) ) {
+		if ( Reader_Activation::is_honeypot_tripped( $honeypot, $request->get_param( 'npe' ) ) ) {
 			// Return fake success to avoid revealing the honeypot to bots.
 			// @todo Consider returning the npe value instead of the honeypot value to make
 			// the fake response indistinguishable from a real one.

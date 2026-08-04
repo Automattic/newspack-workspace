@@ -85,6 +85,48 @@ class Newspack_Test_Reader_Activation_Honeypot extends WP_UnitTestCase {
 	}
 
 	/**
+	 * An empty decoy is the normal case and never a bot.
+	 */
+	public function test_empty_honeypot_is_not_tripped() {
+		$this->assertFalse( Reader_Activation::is_honeypot_tripped( '', 'reader@example.test' ) );
+		$this->assertFalse( Reader_Activation::is_honeypot_tripped( null, 'reader@example.test' ) );
+	}
+
+	/**
+	 * A decoy matching the real field is autofill, not a bot.
+	 *
+	 * This is the second line of defence behind the markup: a browser fills both
+	 * fields from one profile entry, so identical values are the autofill signature.
+	 */
+	public function test_honeypot_matching_the_real_email_is_not_tripped() {
+		$this->assertFalse( Reader_Activation::is_honeypot_tripped( 'reader@example.test', 'reader@example.test' ) );
+	}
+
+	/**
+	 * Matching is insensitive to case and surrounding whitespace.
+	 */
+	public function test_honeypot_match_ignores_case_and_whitespace() {
+		$this->assertFalse( Reader_Activation::is_honeypot_tripped( ' Reader@Example.test ', 'reader@example.test' ) );
+	}
+
+	/**
+	 * A decoy that differs from the real field is still a bot.
+	 */
+	public function test_honeypot_differing_from_the_real_email_is_tripped() {
+		$this->assertTrue( Reader_Activation::is_honeypot_tripped( 'bot@spam.test', 'reader@example.test' ) );
+	}
+
+	/**
+	 * A decoy filled with no real address is still a bot.
+	 *
+	 * Filling only the decoy is the behaviour the trap was built for, and nothing
+	 * about autofill produces it.
+	 */
+	public function test_honeypot_without_a_real_email_is_tripped() {
+		$this->assertTrue( Reader_Activation::is_honeypot_tripped( 'bot@spam.test', '' ) );
+	}
+
+	/**
 	 * The honeypot gives way to reCAPTCHA, which supersedes it.
 	 */
 	public function test_honeypot_is_not_rendered_when_recaptcha_is_active() {

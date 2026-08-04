@@ -1447,6 +1447,42 @@ final class Reader_Activation {
 	}
 
 	/**
+	 * Whether a submitted honeypot value should be read as a bot.
+	 *
+	 * Hiding the decoy from browsers is the first defence, but it depends on
+	 * browser internals we don't control. This is the second: a browser that
+	 * autofills the form puts the reader's own address in both the decoy and the
+	 * real field, so a decoy value matching what the reader submitted is autofill
+	 * rather than a bot. Reading it as a bot is what tells a reader they're signed
+	 * in while creating no session.
+	 *
+	 * The trade is deliberate. A bot that fills every field it recognises with one
+	 * address gets past this, and that is the cheaper failure: the decoy is not the
+	 * only defence against spam, while a reader locked out of their account has no
+	 * way to diagnose or recover from it.
+	 *
+	 * @param string $honeypot Value submitted in the honeypot field (`email`).
+	 * @param string $email    Value submitted in the real email field (`npe`).
+	 *
+	 * @return bool Whether to treat the submission as a bot.
+	 */
+	public static function is_honeypot_tripped( $honeypot, $email = '' ) {
+		if ( empty( $honeypot ) ) {
+			return false;
+		}
+
+		$honeypot = strtolower( trim( (string) $honeypot ) );
+		$email    = strtolower( trim( (string) $email ) );
+
+		// Autofill puts the same address in both fields.
+		if ( '' !== $email && $honeypot === $email ) {
+			return false;
+		}
+
+		return true;
+	}
+
+	/**
 	 * Renders reader authentication form.
 	 *
 	 * @param boolean $in_modal Whether the form is rendiner in a modal; defaults to true.
@@ -2137,7 +2173,7 @@ final class Reader_Activation {
 		$redirect = ! empty( $redirect_url ) ? $redirect_url : $current_page_url;
 
 		// Honeypot trap.
-		if ( ! empty( $honeypot ) ) {
+		if ( self::is_honeypot_tripped( $honeypot, $email ) ) {
 			return self::send_auth_form_response(
 				[
 					'email'         => $honeypot,

@@ -458,8 +458,9 @@ function process_form() {
 
 	$honeypot_trap = filter_input( INPUT_POST, 'email', FILTER_SANITIZE_EMAIL );
 
-	// Honeypot trap.
-	if ( ! empty( $honeypot_trap ) ) {
+	// Honeypot trap. A decoy value matching the real field is autofill, not a bot —
+	// see Reader_Activation::is_honeypot_tripped().
+	if ( Reader_Activation::is_honeypot_tripped( $honeypot_trap, filter_input( INPUT_POST, 'npe', FILTER_SANITIZE_EMAIL ) ) ) {
 		return send_form_response(
 			[
 				'email'         => \sanitize_email( $honeypot_trap ),
