@@ -107,7 +107,7 @@ final class Newspack_Popups_Contextual_Prompt_Block {
 	 * @return string 'donate_block' | 'button' | 'none'.
 	 */
 	private static function get_cta_type( $block ) {
-		$cta = self::find_cta( $block );
+		$cta = Newspack_Popups_Contextual_Prompt_Render::find_cta( $block );
 		if ( null === $cta ) {
 			return 'none';
 		}
@@ -412,95 +412,13 @@ final class Newspack_Popups_Contextual_Prompt_Block {
 			return $parsed_block;
 		}
 
-		$parsed_block = self::normalize_cta( $parsed_block );
+		$parsed_block = Newspack_Popups_Contextual_Prompt_Render::normalize_cta( $parsed_block );
 
 		if ( class_exists( 'Newspack_Popups_Settings' ) && Newspack_Popups_Settings::is_override_active() ) {
 			$parsed_block = self::apply_override( $parsed_block );
 		}
 
 		return $parsed_block;
-	}
-
-	/**
-	 * Locate the CTA child: the donate block or the buttons wrapper.
-	 *
-	 * @param array $parsed_block Parsed prompt block.
-	 * @return array|null [ 'index' => int, 'name' => string ], or null.
-	 */
-	private static function find_cta( $parsed_block ) {
-		foreach ( $parsed_block['innerBlocks'] ?? [] as $index => $child ) {
-			if ( in_array( $child['blockName'] ?? '', [ 'newspack-blocks/donate', 'core/buttons' ], true ) ) {
-				return [
-					'index' => $index,
-					'name'  => $child['blockName'],
-				];
-			}
-		}
-		return null;
-	}
-
-	/**
-	 * A block's CTA type is fixed when it is inserted, so after a change of
-	 * donation platform the stored CTA can disagree with the site. Normalize at
-	 * render: the native platform renders the donate form, off-site renders a
-	 * button to the donor landing page — or copy only when none is configured.
-	 * Matching CTAs pass through untouched, preserving per-story customization.
-	 *
-	 * @param array $parsed_block Parsed prompt block.
-	 * @return array
-	 */
-	private static function normalize_cta( $parsed_block ) {
-		$cta = self::find_cta( $parsed_block );
-		if ( null === $cta ) {
-			return $parsed_block;
-		}
-
-		if ( self::use_donate_block() ) {
-			if ( 'core/buttons' === $cta['name'] ) {
-				$parsed_block['innerBlocks'][ $cta['index'] ] = self::build_donate_child();
-			}
-			return $parsed_block;
-		}
-
-		$needs_destination = 'newspack-blocks/donate' === $cta['name']
-			// A plain-button CTA without a destination anywhere — a fresh insert
-			// made before a donor landing page was configured — is a dead ask.
-			// Buttons carrying any URL pass through untouched.
-			|| ! self::buttons_have_destination( $parsed_block['innerBlocks'][ $cta['index'] ] );
-
-		if ( $needs_destination ) {
-			$url = Newspack_Popups::get_donor_landing_url();
-			if ( '' === $url ) {
-				// No destination to point a button at: render the copy alone
-				// rather than a dead button or a form on a disabled platform.
-				return self::remove_child( $parsed_block, $cta['index'] );
-			}
-			$parsed_block['innerBlocks'][ $cta['index'] ] = self::build_buttons_child( $url, __( 'Donate', 'newspack-popups' ) );
-		}
-
-		return $parsed_block;
-	}
-
-	/**
-	 * Whether a buttons wrapper contains at least one button with a destination,
-	 * as a URL attribute or an href in its markup.
-	 *
-	 * @param array $buttons Parsed core/buttons child.
-	 * @return bool
-	 */
-	private static function buttons_have_destination( $buttons ) {
-		foreach ( $buttons['innerBlocks'] ?? [] as $child ) {
-			if ( '' !== trim( (string) ( $child['attrs']['url'] ?? '' ) ) ) {
-				return true;
-			}
-			if ( false !== strpos( (string) ( $child['innerHTML'] ?? '' ), 'href=' ) ) {
-				return true;
-			}
-			if ( ! empty( $child['innerBlocks'] ) && self::buttons_have_destination( $child ) ) {
-				return true;
-			}
-		}
-		return false;
 	}
 
 	/**
@@ -519,16 +437,16 @@ final class Newspack_Popups_Contextual_Prompt_Block {
 
 		if ( 'button' === Newspack_Popups_Settings::get_override_cta() ) {
 			$label = trim( (string) get_option( 'newspack_contextual_prompts_override_label', '' ) );
-			$child = self::build_buttons_child(
+			$child = Newspack_Popups_Contextual_Prompt_Pattern::build_buttons_child(
 				(string) get_option( 'newspack_contextual_prompts_override_url', '' ),
-				'' !== $label ? $label : __( 'Donate', 'newspack-popups' )
+				'' !== $label ? $label : null
 			);
 
-			$cta = self::find_cta( $parsed_block );
+			$cta = Newspack_Popups_Contextual_Prompt_Render::find_cta( $parsed_block );
 			if ( null !== $cta ) {
 				$parsed_block['innerBlocks'][ $cta['index'] ] = $child;
 			} else {
-				$parsed_block = self::append_child( $parsed_block, $child );
+				$parsed_block = Newspack_Popups_Contextual_Prompt_Render::append_child( $parsed_block, $child );
 			}
 		}
 
@@ -571,97 +489,6 @@ final class Newspack_Popups_Contextual_Prompt_Block {
 			$parsed_block['innerBlocks'][ $index ] = $child;
 			break;
 		}
-
-		return $parsed_block;
-	}
-
-	/**
-	 * Parsed newspack-blocks/donate child in the block's default style. The
-	 * accent color is stamped when it renders, by inherit_accent_color().
-	 *
-	 * @return array
-	 */
-	private static function build_donate_child() {
-		return [
-			'blockName'    => 'newspack-blocks/donate',
-			'attrs'        => [ 'className' => 'is-style-modern' ],
-			'innerBlocks'  => [],
-			'innerHTML'    => '',
-			'innerContent' => [],
-		];
-	}
-
-	/**
-	 * Parsed core/buttons child holding a single link button.
-	 *
-	 * @param string $url   Button destination.
-	 * @param string $label Button label, unescaped.
-	 * @return array
-	 */
-	private static function build_buttons_child( $url, $label ) {
-		$anchor = '<div class="wp-block-button"><a class="wp-block-button__link wp-element-button" href="' . esc_url( $url ) . '">' . esc_html( $label ) . '</a></div>';
-		return [
-			'blockName'    => 'core/buttons',
-			'attrs'        => [],
-			'innerBlocks'  => [
-				[
-					'blockName'    => 'core/button',
-					'attrs'        => [ 'url' => $url ],
-					'innerBlocks'  => [],
-					'innerHTML'    => $anchor,
-					'innerContent' => [ $anchor ],
-				],
-			],
-			'innerHTML'    => '<div class="wp-block-buttons"></div>',
-			'innerContent' => [ '<div class="wp-block-buttons">', null, '</div>' ],
-		];
-	}
-
-	/**
-	 * Remove the Nth child and its innerContent placeholder.
-	 *
-	 * The innerContent array interleaves HTML chunks with one null placeholder
-	 * per child, in order — the placeholder count must track the child count or
-	 * the block renders misaligned.
-	 *
-	 * @param array $parsed_block Parsed block.
-	 * @param int   $index        Child index to remove.
-	 * @return array
-	 */
-	private static function remove_child( $parsed_block, $index ) {
-		array_splice( $parsed_block['innerBlocks'], $index, 1 );
-
-		$seen = 0;
-		foreach ( $parsed_block['innerContent'] as $chunk_index => $chunk ) {
-			if ( null !== $chunk ) {
-				continue;
-			}
-			if ( $seen === $index ) {
-				array_splice( $parsed_block['innerContent'], $chunk_index, 1 );
-				break;
-			}
-			++$seen;
-		}
-
-		return $parsed_block;
-	}
-
-	/**
-	 * Append a child, inserting its innerContent placeholder before the block's
-	 * closing markup chunk.
-	 *
-	 * @param array $parsed_block Parsed block.
-	 * @param array $child        Parsed child block.
-	 * @return array
-	 */
-	private static function append_child( $parsed_block, $child ) {
-		$parsed_block['innerBlocks'][] = $child;
-
-		$last_chunk = count( $parsed_block['innerContent'] ) - 1;
-		while ( $last_chunk >= 0 && null === $parsed_block['innerContent'][ $last_chunk ] ) {
-			--$last_chunk;
-		}
-		array_splice( $parsed_block['innerContent'], max( 0, $last_chunk ), 0, [ null ] );
 
 		return $parsed_block;
 	}

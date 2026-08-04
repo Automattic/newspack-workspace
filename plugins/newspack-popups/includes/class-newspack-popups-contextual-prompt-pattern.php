@@ -42,6 +42,9 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 	public static function init() {
 		add_filter( 'map_meta_cap', [ __CLASS__, 'protect_pattern' ], 10, 4 );
 		add_filter( 'block_editor_settings_all', [ __CLASS__, 'lock_pattern_editor' ], 10, 2 );
+		// \Newspack\Donations may not be loaded when hooks register, so the option
+		// name it owns is spelled out rather than read off the class.
+		add_action( 'update_option_newspack_reader_revenue_platform', [ __CLASS__, 'repair' ] );
 	}
 
 	/**
@@ -132,6 +135,94 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 	}
 
 	/**
+	 * Reconcile the stored pattern with the site: its CTA with the current
+	 * donation platform, its donate color with the theme's accent. Runs when the
+	 * platform changes and, defensively, on the first instance of a request — a
+	 * pattern the editor opens has to show what readers actually see.
+	 *
+	 * The record is read raw and never seeded: a hook must not create the
+	 * pattern.
+	 */
+	public static function repair() {
+		$pattern_id = (int) get_option( self::OPTION_PATTERN_ID, 0 );
+		if ( ! $pattern_id || 'wp_block' !== get_post_type( $pattern_id ) ) {
+			return;
+		}
+
+		// The site wants the native CTA but the block is gone (Newspack Blocks
+		// deactivated). Persisting that fallback would discard the publisher's
+		// donate configuration for good; the render path still stands in.
+		if ( self::wants_donate_block() && ! self::use_donate_block() ) {
+			return;
+		}
+
+		$post   = get_post( $pattern_id );
+		$blocks = parse_blocks( $post->post_content );
+
+		foreach ( $blocks as $index => $group ) {
+			if (
+				'core/group' !== ( $group['blockName'] ?? '' )
+				|| false === strpos( (string) ( $group['attrs']['className'] ?? '' ), self::MARKER_CLASS )
+			) {
+				continue;
+			}
+
+			// Before normalization, which can replace the child the record
+			// describes.
+			$group = self::maybe_restamp_accent( $group );
+
+			$before = Newspack_Popups_Contextual_Prompt_Render::find_cta( $group );
+			$group  = Newspack_Popups_Contextual_Prompt_Render::normalize_cta( $group );
+			$after  = Newspack_Popups_Contextual_Prompt_Render::find_cta( $group );
+
+			$was_donate = 'newspack-blocks/donate' === ( $before['name'] ?? '' );
+			$is_donate  = 'newspack-blocks/donate' === ( $after['name'] ?? '' );
+			if ( $was_donate !== $is_donate ) {
+				self::record_stamp( $is_donate ? (string) ( $group['innerBlocks'][ $after['index'] ]['attrs']['buttonColor'] ?? '' ) : '' );
+			}
+
+			$blocks[ $index ] = $group;
+		}
+
+		$content = serialize_blocks( $blocks );
+		if ( $content !== $post->post_content ) {
+			self::save_pattern_content( $pattern_id, $content );
+		}
+	}
+
+	/**
+	 * Follow the theme's accent color, but only on a donate child still carrying
+	 * the color the seed stamped: anything else is the publisher's own choice.
+	 * With no record — a site seeded off-site, or before the record existed —
+	 * seeded and chosen colors are indistinguishable, so nothing is touched.
+	 *
+	 * @param array $group Parsed prompt card.
+	 * @return array
+	 */
+	public static function maybe_restamp_accent( $group ) {
+		$recorded = (string) get_option( self::OPTION_STAMPED_ACCENT, '' );
+		if ( '' === $recorded || ! self::use_donate_block() ) {
+			return $group;
+		}
+
+		$accent = self::get_accent_color();
+		if ( ! $accent || $accent === $recorded ) {
+			return $group;
+		}
+
+		foreach ( $group['innerBlocks'] ?? [] as $index => $child ) {
+			if ( 'newspack-blocks/donate' !== ( $child['blockName'] ?? '' ) || $recorded !== ( $child['attrs']['buttonColor'] ?? '' ) ) {
+				continue;
+			}
+			$group['innerBlocks'][ $index ]['attrs']['buttonColor'] = $accent;
+			update_option( self::OPTION_STAMPED_ACCENT, $accent );
+			break;
+		}
+
+		return $group;
+	}
+
+	/**
 	 * The pattern's serialized markup.
 	 *
 	 * @return string
@@ -211,22 +302,28 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 	}
 
 	/**
-	 * The native donate block, stamped with the theme's accent color. The stamp
-	 * is recorded so a later restamp can tell the seeded color from one the
-	 * publisher chose; with no accent to stamp, the record goes too.
+	 * The native donate block, stamped with the theme's accent color.
+	 *
+	 * Only the callers that persist the result record the stamp. A render-time
+	 * rebuild is thrown away when the request ends, and recording it would leave
+	 * the record describing a child no stored pattern carries — which the restamp
+	 * would then read as a color the publisher chose, and never touch again.
+	 *
+	 * @param bool $record Whether to record the stamp.
 	 *
 	 * @return array Parsed newspack-blocks/donate block.
 	 */
-	private static function build_donate_child() {
+	public static function build_donate_child( $record = true ) {
 		$attrs  = [ 'className' => 'is-style-modern' ];
 		$accent = self::get_accent_color();
 		if ( $accent ) {
 			$attrs['buttonColor'] = $accent;
-			update_option( self::OPTION_STAMPED_ACCENT, $accent );
-		} else {
-			delete_option( self::OPTION_STAMPED_ACCENT );
 		}
 		$attrs['lock'] = self::BLOCK_LOCK;
+
+		if ( $record ) {
+			self::record_stamp( (string) $accent );
+		}
 
 		return [
 			'blockName'    => 'newspack-blocks/donate',
@@ -238,16 +335,39 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 	}
 
 	/**
+	 * Record the color the stored pattern's donate child was stamped with, so a
+	 * later restamp can tell it from one the publisher chose. Nothing stamped
+	 * means nothing to record.
+	 *
+	 * @param string $color Hex color, or an empty string.
+	 */
+	private static function record_stamp( $color ) {
+		if ( '' === $color ) {
+			delete_option( self::OPTION_STAMPED_ACCENT );
+			return;
+		}
+
+		update_option( self::OPTION_STAMPED_ACCENT, $color );
+	}
+
+	/**
 	 * A single link button to the donor landing page. Seeded without a
 	 * destination when none is configured — core saves such a button href-less,
 	 * and the render pipeline drops it rather than showing a dead ask.
 	 *
+	 * The site-wide override passes its own destination and label; everything
+	 * else takes the donation settings.
+	 *
+	 * @param string|null $url  Button destination, or null for the configured one.
+	 * @param string|null $text Button label, unescaped, or null for the default.
+	 *
 	 * @return array Parsed core/buttons block.
 	 */
-	private static function build_buttons_child() {
-		$url    = self::get_button_url();
+	public static function build_buttons_child( $url = null, $text = null ) {
+		$url    = null === $url ? self::get_button_url() : (string) $url;
+		$text   = null === $text ? self::get_button_text() : (string) $text;
 		$href   = '' !== $url ? ' href="' . esc_url( $url ) . '"' : '';
-		$anchor = '<div class="wp-block-button"><a class="wp-block-button__link wp-element-button"' . $href . '>' . esc_html( self::get_button_text() ) . '</a></div>';
+		$anchor = '<div class="wp-block-button"><a class="wp-block-button__link wp-element-button"' . $href . '>' . esc_html( $text ) . '</a></div>';
 
 		return [
 			'blockName'    => 'core/buttons',
@@ -277,6 +397,21 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 	 * @return bool
 	 */
 	public static function use_donate_block() {
+		return self::wants_donate_block() && \WP_Block_Type_Registry::get_instance()->is_registered( 'newspack-blocks/donate' );
+	}
+
+	/**
+	 * Whether the site's donation settings call for the native CTA, before asking
+	 * whether the block is there to render it. The two differ exactly while
+	 * Newspack Blocks is inactive, which is a reason to fall back for one render
+	 * — not to rewrite what the publisher configured.
+	 *
+	 * The class guard is method_exists(), which is false for a class that isn't
+	 * loaded — and \Newspack\Donations may well not be.
+	 *
+	 * @return bool
+	 */
+	public static function wants_donate_block() {
 		$default = method_exists( '\Newspack\Donations', 'is_platform_wc' ) && \Newspack\Donations::is_platform_wc();
 
 		/**
@@ -284,9 +419,7 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 		 *
 		 * @param bool $use_donate_block Whether to use the donate block.
 		 */
-		$use_donate_block = (bool) apply_filters( 'newspack_contextual_prompts_use_donate_block', $default );
-
-		return $use_donate_block && \WP_Block_Type_Registry::get_instance()->is_registered( 'newspack-blocks/donate' );
+		return (bool) apply_filters( 'newspack_contextual_prompts_use_donate_block', $default );
 	}
 
 	/**
