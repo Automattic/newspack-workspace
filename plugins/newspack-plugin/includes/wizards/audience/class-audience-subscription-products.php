@@ -83,7 +83,6 @@ class Audience_Subscription_Products extends Wizard {
 	 */
 	public function __construct() {
 		parent::__construct();
-		Promo_Url_Targets::init();
 		add_action( 'rest_api_init', [ $this, 'register_api_endpoints' ] );
 
 		// Guard against orphaning live subscriptions: block trashing/deleting a subscription
@@ -270,21 +269,27 @@ class Audience_Subscription_Products extends Wizard {
 	/**
 	 * GET promo-link context for a plan.
 	 *
-	 * Donation links need a page carrying a Donate block, so the donate type
-	 * returns the scanned targets. Product links work over any URL (the
-	 * checkout button is rendered on demand by newspack-blocks), so the
-	 * checkout_button type returns the homepage default plus which plan
-	 * children a link may name.
+	 * Links work over any page, so this returns the homepage default plus what
+	 * the generator must not offer beyond: which plan children a link may name,
+	 * or the frequency/amount options the Donate block will accept.
 	 *
 	 * @param \WP_REST_Request $request The request.
 	 * @return \WP_REST_Response|\WP_Error
 	 */
 	public function api_get_promo_targets( $request ) {
-		$type       = $request->get_param( 'type' );
-		$product_id = absint( $request->get_param( 'product_id' ) );
-		if ( 'donate' === $type ) {
-			return rest_ensure_response( Promo_Url_Targets::get_donate_targets() );
+		$front_page_id = (int) get_option( 'page_on_front' );
+		$response      = [
+			'homepage' => [
+				'id'    => $front_page_id,
+				'title' => $front_page_id ? get_the_title( $front_page_id ) : __( 'Homepage', 'newspack-plugin' ),
+				'url'   => home_url( '/' ),
+			],
+		];
+		if ( 'donate' === $request->get_param( 'type' ) ) {
+			$response['donate_config'] = Promo_Url_Config::get_donate_config();
+			return rest_ensure_response( $response );
 		}
+		$product_id = absint( $request->get_param( 'product_id' ) );
 		if ( ! $product_id ) {
 			return new \WP_Error(
 				'newspack_promo_targets_missing_product',
@@ -292,17 +297,8 @@ class Audience_Subscription_Products extends Wizard {
 				[ 'status' => 400 ]
 			);
 		}
-		$front_page_id = (int) get_option( 'page_on_front' );
-		return rest_ensure_response(
-			[
-				'homepage'          => [
-					'id'    => $front_page_id,
-					'title' => $front_page_id ? get_the_title( $front_page_id ) : __( 'Homepage', 'newspack-plugin' ),
-					'url'   => home_url( '/' ),
-				],
-				'eligible_children' => Promo_Url_Targets::get_eligible_children( Promo_Url_Targets::get_product_family( $product_id ) ),
-			]
-		);
+		$response['eligible_children'] = Promo_Url_Config::get_eligible_children( Promo_Url_Config::get_product_family( $product_id ) );
+		return rest_ensure_response( $response );
 	}
 
 	/**
@@ -316,7 +312,7 @@ class Audience_Subscription_Products extends Wizard {
 	 * variation or grouped member), its family is expanded to include the
 	 * parent and the parent's whole family, so a coupon restricted to the
 	 * parent — or to a category, which lives on the parent for variations —
-	 * still validates. See {@see Promo_Url_Targets::evaluate_coupon()}.
+	 * still validates. See {@see Promo_Url_Config::evaluate_coupon()}.
 	 *
 	 * @param \WP_REST_Request $request The request.
 	 * @return \WP_REST_Response
@@ -363,11 +359,11 @@ class Audience_Subscription_Products extends Wizard {
 		$product_id      = absint( $request->get_param( 'product_id' ) );
 		if ( $product_id && function_exists( 'wc_get_product' ) ) {
 			$product    = wc_get_product( $product_id );
-			$family     = Promo_Url_Targets::get_product_family( $product_id );
+			$family     = Promo_Url_Config::get_product_family( $product_id );
 			$family_ids = array_merge( [ $family['parent'] ], $family['variations'], $family['members'] );
 			$parent_id  = $product ? (int) $product->get_parent_id() : 0;
 			if ( $parent_id ) {
-				$parent_family = Promo_Url_Targets::get_product_family( $parent_id );
+				$parent_family = Promo_Url_Config::get_product_family( $parent_id );
 				$family_ids    = array_merge( $family_ids, [ $parent_family['parent'] ], $parent_family['variations'], $parent_family['members'] );
 			}
 			$parent_product  = $parent_id && $product ? wc_get_product( $parent_id ) : null;
@@ -378,7 +374,7 @@ class Audience_Subscription_Products extends Wizard {
 				'reference_price'     => $product && '' !== $product->get_price() ? (float) $product->get_price() : null,
 			];
 		}
-		return rest_ensure_response( Promo_Url_Targets::evaluate_coupon( $coupon_data, $product_context ) );
+		return rest_ensure_response( Promo_Url_Config::evaluate_coupon( $coupon_data, $product_context ) );
 	}
 
 	/**

@@ -22,26 +22,14 @@ export type PromoTargetDonateConfig = {
 	minimum: number;
 };
 
-export type PromoDonateTarget = {
-	id: number;
-	title: string;
-	url: string;
-	blocks: PromoTargetDonateConfig[];
-};
-
-// Donation links must target a page carrying a Donate block.
-export type DonateTargetsResponse = {
-	targets: PromoDonateTarget[];
-	truncated: boolean;
-};
-
-// Product links work over any URL; the server supplies the homepage default
-// and which plan children a link may name.
-export type ProductPromoContext = {
+// Links work over any page; the server supplies the homepage default plus the
+// options the generator must not exceed.
+export type PromoContext = {
 	homepage: { id: number; title: string; url: string };
-	// Children a picker can actually serve — for a grouped plan this excludes
-	// children the tiers form skips (non-subscription, private).
-	eligible_children: number[];
+	// Children a picker can serve — for a grouped plan this excludes children
+	// the tiers form skips (non-subscription, private).
+	eligible_children?: number[];
+	donate_config?: PromoTargetDonateConfig | null;
 };
 
 export type PromoPageChoice = { value: string; label: string; url: string };

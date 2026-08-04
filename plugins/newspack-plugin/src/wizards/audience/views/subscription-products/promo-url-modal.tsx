@@ -1,16 +1,10 @@
 /**
  * Promotional URL generator modal (NPPD-1707).
  *
- * Rendered inside the DataViews action modal for a Plans row. Builds a link
- * that opens the modal checkout over a page — the checkout template is built
- * for the modal, so there is no standalone variant.
- *
- * Product links work over any page (Homepage by default): newspack-blocks
- * renders the checkout button for the requested product when the link's
- * trigger params are present, so no pre-existing block is required. Donation
- * links still target a page carrying a Donate block, because the link's
- * frequency/amount/layout params only mean something against that block's
- * configuration.
+ * Rendered inside the DataViews action modal for a Plans row. Builds a link that
+ * opens the modal checkout over any page (Homepage by default): newspack-blocks
+ * renders the block the link needs when its trigger params are present, so no
+ * page has to carry one.
  */
 
 /**
@@ -49,7 +43,7 @@ import {
 	getValidationError,
 	resolveProductParams,
 } from './promo-url-options';
-import type { DonateTargetsResponse, ProductPromoContext, PromoCouponResponse, PromoPageChoice, PromoTargetDonateConfig } from './promo-url-options';
+import type { PromoContext, PromoCouponResponse, PromoPageChoice } from './promo-url-options';
 
 const API_BASE = '/newspack/v1/wizard/newspack-audience-subscription-products';
 const HOMEPAGE_VALUE = 'home';
@@ -62,15 +56,12 @@ export default function PromoUrlModal( { item, closeModal }: { item: Subscriptio
 
 	const [ isLoading, setIsLoading ] = useState( true );
 	const [ fetchError, setFetchError ] = useState( false );
-	const [ productContext, setProductContext ] = useState< ProductPromoContext | null >( null );
-	const [ donateResponse, setDonateResponse ] = useState< DonateTargetsResponse | null >( null );
+	const [ context, setContext ] = useState< PromoContext | null >( null );
 
-	// Product path: any page, Homepage by default; search adds more choices.
+	// Any page, Homepage by default; search adds more choices.
 	const [ pageValue, setPageValue ] = useState< string | null | undefined >( HOMEPAGE_VALUE );
 	const [ searchChoices, setSearchChoices ] = useState< PromoPageChoice[] >( [] );
 	const searchTimeout = useRef< ReturnType< typeof setTimeout > >();
-	// Donation path: one of the scanned Donate pages.
-	const [ donatePageId, setDonatePageId ] = useState< number | '' >( '' );
 
 	const [ variationId, setVariationId ] = useState< number | '' >( '' );
 	const [ frequency, setFrequency ] = useState< DonateFrequencySlug >( 'month' );
@@ -86,32 +77,26 @@ export default function PromoUrlModal( { item, closeModal }: { item: Subscriptio
 	const [ utmCampaign, setUtmCampaign ] = useState( '' );
 
 	useEffect( () => {
-		apiFetch< ProductPromoContext | DonateTargetsResponse >( {
+		apiFetch< PromoContext >( {
 			path: addQueryArgs( `${ API_BASE }/promo-targets`, {
 				type: kind === 'product' ? 'checkout_button' : 'donate',
 				...( kind === 'product' ? { product_id: item.id } : {} ),
 			} ),
 		} )
-			.then( result => {
-				if ( kind === 'product' ) {
-					setProductContext( result as ProductPromoContext );
-				} else {
-					setDonateResponse( result as DonateTargetsResponse );
-				}
-			} )
+			.then( setContext )
 			.catch( () => setFetchError( true ) )
 			.finally( () => setIsLoading( false ) );
 	}, [ item.id, kind ] );
 
-	const homepageChoice: PromoPageChoice | null = productContext
-		? { value: HOMEPAGE_VALUE, label: productContext.homepage.title, url: productContext.homepage.url }
+	const homepageChoice: PromoPageChoice | null = context
+		? { value: HOMEPAGE_VALUE, label: context.homepage.title, url: context.homepage.url }
 		: null;
 	const pageChoices: PromoPageChoice[] = useMemo( () => {
 		if ( ! homepageChoice ) {
 			return [];
 		}
 		return [ homepageChoice, ...searchChoices.filter( choice => choice.url !== homepageChoice.url ) ];
-	}, [ productContext, searchChoices ] );
+	}, [ context, searchChoices ] );
 	const selectedPage = pageChoices.find( choice => choice.value === pageValue ) || null;
 
 	const searchPages = ( search: string ) => {
@@ -135,15 +120,11 @@ export default function PromoUrlModal( { item, closeModal }: { item: Subscriptio
 		}, 300 );
 	};
 
-	const donateTarget = useMemo(
-		() => donateResponse?.targets.find( target => target.id === donatePageId ) || null,
-		[ donateResponse, donatePageId ]
-	);
-	const donateConfig: PromoTargetDonateConfig | null = donateTarget ? donateTarget.blocks[ 0 ] || null : null;
+	const donateConfig = kind === 'donation' ? context?.donate_config || null : null;
 
 	const planChoices = useMemo(
-		() => ( kind === 'product' ? getPlanChoices( item, productContext?.eligible_children || [] ) : [] ),
-		[ kind, item, productContext ]
+		() => ( kind === 'product' ? getPlanChoices( item, context?.eligible_children || [] ) : [] ),
+		[ kind, item, context ]
 	);
 	const frequencyChoices = useMemo( () => getFrequencyChoices( donateConfig ), [ donateConfig ] );
 	const amountChoices = useMemo( () => getAmountChoices( donateConfig, frequency ), [ donateConfig, frequency ] );
@@ -208,7 +189,7 @@ export default function PromoUrlModal( { item, closeModal }: { item: Subscriptio
 	}, [ kind, amount, customAmount, donateConfig ] );
 
 	const productParams = resolveProductParams( item, variationId );
-	const pageUrl = kind === 'product' ? selectedPage?.url || '' : donateTarget?.url || '';
+	const pageUrl = selectedPage?.url || '';
 
 	const selections: PromoUrlSelections = {
 		pageUrl,
@@ -242,7 +223,7 @@ export default function PromoUrlModal( { item, closeModal }: { item: Subscriptio
 				couponReason: couponStatus.reason,
 				afterSuccess: kind === 'product' ? afterSuccess : '',
 				afterSuccessUrl,
-				siteOrigin: productContext?.homepage.url,
+				siteOrigin: context?.homepage.url,
 			} ),
 		[
 			kind,
@@ -306,7 +287,7 @@ export default function PromoUrlModal( { item, closeModal }: { item: Subscriptio
 			</HStack>
 		);
 	}
-	if ( fetchError || ( kind === 'product' && ! productContext ) ) {
+	if ( fetchError || ! context ) {
 		return (
 			<Notice status="error" isDismissible={ false }>
 				{ __( 'Could not load link options. Please close and try again.', 'newspack-plugin' ) }
@@ -329,14 +310,11 @@ export default function PromoUrlModal( { item, closeModal }: { item: Subscriptio
 			couponHelp = __( 'Optional. Applied automatically at checkout.', 'newspack-plugin' );
 	}
 
-	if ( kind === 'donation' && ! donateResponse?.targets.length ) {
+	if ( kind === 'donation' && ! donateConfig ) {
 		return (
 			<VStack spacing={ 4 }>
 				<Notice status="info" isDismissible={ false }>
-					{ __(
-						'No published page or post contains a Donate block using the modal checkout. Add one to a page, then generate the link from here. Only pages and posts are searched.',
-						'newspack-plugin'
-					) }
+					{ __( 'Donations are not configured for WooCommerce on this site.', 'newspack-plugin' ) }
 				</Notice>
 				<HStack justify="flex-end">
 					<Button variant="tertiary" onClick={ () => closeModal?.() }>
@@ -349,41 +327,15 @@ export default function PromoUrlModal( { item, closeModal }: { item: Subscriptio
 
 	return (
 		<VStack spacing={ 4 }>
-			{ kind === 'product' ? (
-				<ComboboxControl
-					label={ __( 'Target page', 'newspack-plugin' ) }
-					help={ __(
-						'The checkout opens over this page, keeping it in view. Any page works; search to pick a different one.',
-						'newspack-plugin'
-					) }
-					value={ pageValue }
-					options={ pageChoices.map( ( { value, label } ) => ( { value, label } ) ) }
-					onChange={ value => setPageValue( value ) }
-					onFilterValueChange={ searchPages }
-					allowReset={ false }
-				/>
-			) : (
-				<>
-					{ donateResponse?.truncated && (
-						<Notice status="warning" isDismissible={ false }>
-							{ __( 'Only the most recently updated pages were checked; older pages may be missing.', 'newspack-plugin' ) }
-						</Notice>
-					) }
-					<SelectControl
-						label={ __( 'Target page', 'newspack-plugin' ) }
-						help={ __( 'The checkout opens over this page. Donation links need a page with a Donate block.', 'newspack-plugin' ) }
-						value={ String( donatePageId ) }
-						options={ [
-							{ label: __( 'Select a page…', 'newspack-plugin' ), value: '' },
-							...( donateResponse?.targets || [] ).map( target => ( {
-								label: target.title,
-								value: String( target.id ),
-							} ) ),
-						] }
-						onChange={ value => setDonatePageId( value ? parseInt( value, 10 ) : '' ) }
-					/>
-				</>
-			) }
+			<ComboboxControl
+				label={ __( 'Target page', 'newspack-plugin' ) }
+				help={ __( 'The checkout opens over this page, keeping it in view. Any page works; search to pick a different one.', 'newspack-plugin' ) }
+				value={ pageValue }
+				options={ pageChoices.map( ( { value, label } ) => ( { value, label } ) ) }
+				onChange={ value => setPageValue( value ) }
+				onFilterValueChange={ searchPages }
+				allowReset={ false }
+			/>
 			{ kind === 'product' && planChoices.length > 0 && (
 				<SelectControl
 					label={ __( 'Plan option', 'newspack-plugin' ) }
@@ -442,7 +394,7 @@ export default function PromoUrlModal( { item, closeModal }: { item: Subscriptio
 								label={ __( 'Custom URL', 'newspack-plugin' ) }
 								value={ afterSuccessUrl }
 								onChange={ setAfterSuccessUrl }
-								placeholder={ productContext?.homepage.url || 'https://example.com' }
+								placeholder={ context?.homepage.url || 'https://example.com' }
 								help={ __( 'Must be a page on this site.', 'newspack-plugin' ) }
 							/>
 							<TextControl

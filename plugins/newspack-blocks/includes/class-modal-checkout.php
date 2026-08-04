@@ -56,13 +56,12 @@ final class Modal_Checkout {
 	private static $has_modal = false;
 
 	/**
-	 * Rendered markup for a checkout button synthesized from URL trigger
-	 * params, echoed (hidden) in the footer. Empty when the request carries no
-	 * valid trigger.
+	 * Block markup synthesized from URL trigger params, echoed (hidden) in the
+	 * footer. Empty when the request carries no valid trigger.
 	 *
 	 * @var string
 	 */
-	private static $url_triggered_button_html = '';
+	private static $url_triggered_block_html = '';
 
 	/**
 	 * Products that are being rendered a checkout modal for.
@@ -176,7 +175,7 @@ final class Modal_Checkout {
 		add_filter( 'wp_redirect', [ __CLASS__, 'pass_url_param_on_redirect' ] );
 		add_filter( 'woocommerce_cart_product_cannot_be_purchased_message', [ __CLASS__, 'woocommerce_cart_product_cannot_be_purchased_message' ], 10, 2 );
 		add_filter( 'woocommerce_add_error', [ __CLASS__, 'hide_expiry_message_shop_link' ] );
-		add_action( 'wp', [ __CLASS__, 'maybe_setup_url_triggered_button' ], 11 );
+		add_action( 'wp', [ __CLASS__, 'maybe_setup_url_triggered_checkout' ], 11 );
 		add_action( 'wp_footer', [ __CLASS__, 'render_modal_markup' ], 100 );
 		add_action( 'wp_footer', [ __CLASS__, 'render_variation_selection' ], 100 );
 		add_action( 'wp_enqueue_scripts', [ __CLASS__, 'enqueue_scripts' ] );
@@ -575,18 +574,16 @@ final class Modal_Checkout {
 	}
 
 	/**
-	 * Serve a `?checkout=1&type=checkout_button&product_id=N` trigger on any
-	 * front-end URL by rendering the checkout button block for the requested
-	 * product into the footer (hidden), so a page needs no pre-existing block
-	 * to open the modal checkout. Rendering the real block brings everything
-	 * the trigger relies on: the form with its `data-checkout` payload, the
-	 * variation/tiers picker modals, and the modal assets. A page that does
-	 * carry a matching block still wins — its form comes first in DOM order,
-	 * so block-level context such as a coupon keeps applying.
+	 * Serve a `?checkout=1&type=…` trigger on any front-end URL by rendering the
+	 * block it needs into the footer (hidden), so no page has to carry one.
+	 * Rendering the real block brings everything the trigger relies on: the form
+	 * it submits, the variation/tiers picker modals, and the modal assets. A page
+	 * that does carry a matching block still wins — its form comes first in DOM
+	 * order, so block-level context such as a coupon keeps applying.
 	 *
 	 * Runs on `wp` so the render-time asset enqueues land in the normal queue.
 	 */
-	public static function maybe_setup_url_triggered_button() {
+	public static function maybe_setup_url_triggered_checkout() {
 		if ( is_admin() || wp_doing_ajax() || ( function_exists( 'is_checkout' ) && is_checkout() ) ) {
 			return;
 		}
@@ -594,44 +591,61 @@ final class Modal_Checkout {
 			return;
 		}
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		if ( ! isset( $_GET['checkout'] ) || ! isset( $_GET['type'] ) || 'checkout_button' !== $_GET['type'] ) {
+		if ( ! isset( $_GET['checkout'] ) || ! isset( $_GET['type'] ) ) {
 			return;
 		}
+		$type = filter_input( INPUT_GET, 'type', FILTER_SANITIZE_SPECIAL_CHARS );
+		if ( 'donate' === $type ) {
+			// Defaults resolve to the site's donation settings, which is what the
+			// generator derived its frequency/amount options from.
+			self::$url_triggered_block_html = do_blocks( '<!-- wp:newspack-blocks/donate /-->' );
+		} elseif ( 'checkout_button' === $type ) {
+			$attrs = self::build_url_triggered_button_attrs_from_request();
+			if ( empty( $attrs ) ) {
+				return;
+			}
+			self::$url_triggered_block_html = do_blocks( '<!-- wp:newspack-blocks/checkout-button ' . wp_json_encode( $attrs ) . ' /-->' );
+		} else {
+			return;
+		}
+		if ( '' !== self::$url_triggered_block_html ) {
+			add_action( 'wp_footer', [ __CLASS__, 'render_url_triggered_block' ], 1 );
+		}
+	}
+
+	/**
+	 * Resolve checkout button attributes from the current request, validating the
+	 * product and variation. Returns [] when the request can't be served.
+	 *
+	 * @return array Block attributes.
+	 */
+	private static function build_url_triggered_button_attrs_from_request() {
 		$product_id   = absint( filter_input( INPUT_GET, 'product_id', FILTER_SANITIZE_NUMBER_INT ) );
 		$variation_id = absint( filter_input( INPUT_GET, 'variation_id', FILTER_SANITIZE_NUMBER_INT ) );
 		if ( ! $product_id ) {
-			return;
+			return [];
 		}
 		$product = wc_get_product( $product_id );
 		if ( ! $product || 'publish' !== $product->get_status() ) {
-			return;
+			return [];
 		}
-		$variation = null;
 		if ( $variation_id ) {
 			$variation = wc_get_product( $variation_id );
 			if ( ! $variation || $variation->get_parent_id() !== $product_id || 'publish' !== $variation->get_status() ) {
-				return;
+				return [];
 			}
 		}
-		$coupon = (string) filter_input( INPUT_GET, 'coupon', FILTER_SANITIZE_FULL_SPECIAL_CHARS );
-		$attrs  = self::build_url_triggered_button_attrs(
+		return self::build_url_triggered_button_attrs(
 			$product->get_type(),
 			$product_id,
 			$variation_id,
-			$coupon,
+			(string) filter_input( INPUT_GET, 'coupon', FILTER_SANITIZE_FULL_SPECIAL_CHARS ),
 			[
 				'behavior'     => (string) filter_input( INPUT_GET, 'after_success_behavior', FILTER_SANITIZE_SPECIAL_CHARS ),
 				'url'          => (string) filter_input( INPUT_GET, 'after_success_url', FILTER_SANITIZE_URL ),
 				'button_label' => (string) filter_input( INPUT_GET, 'after_success_button_label', FILTER_SANITIZE_SPECIAL_CHARS ),
 			]
 		);
-		if ( empty( $attrs ) ) {
-			return;
-		}
-		self::$url_triggered_button_html = do_blocks( '<!-- wp:newspack-blocks/checkout-button ' . wp_json_encode( $attrs ) . ' /-->' );
-		if ( '' !== self::$url_triggered_button_html ) {
-			add_action( 'wp_footer', [ __CLASS__, 'render_url_triggered_button' ], 1 );
-		}
 	}
 
 	/**
@@ -779,15 +793,15 @@ final class Modal_Checkout {
 	}
 
 	/**
-	 * Output the synthesized checkout button, hidden. The URL trigger submits
-	 * it programmatically; the picker modals it may open render separately via
+	 * Output the synthesized block, hidden. The URL trigger drives it
+	 * programmatically; any picker modals render separately via
 	 * render_variation_selection(), outside this hidden wrapper.
 	 */
-	public static function render_url_triggered_button() {
-		if ( '' === self::$url_triggered_button_html ) {
+	public static function render_url_triggered_block() {
+		if ( '' === self::$url_triggered_block_html ) {
 			return;
 		}
-		echo '<div class="newspack-blocks__url-triggered-checkout" style="display:none">' . self::$url_triggered_button_html . '</div>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+		echo '<div class="newspack-blocks__url-triggered-checkout" style="display:none">' . self::$url_triggered_block_html . '</div>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 	}
 
 	/**

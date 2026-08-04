@@ -300,7 +300,7 @@ class Newspack_Blocks_Test_Url_Triggered_Button extends WP_UnitTestCase {
 	 */
 	public function test_no_button_rendered_without_a_trigger() {
 		ob_start();
-		Modal_Checkout::render_url_triggered_button();
+		Modal_Checkout::render_url_triggered_block();
 		$this->assertSame( '', ob_get_clean() );
 	}
 }
