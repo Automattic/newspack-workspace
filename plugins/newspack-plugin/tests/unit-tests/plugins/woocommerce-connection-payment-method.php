@@ -388,9 +388,11 @@ class Newspack_Test_WooCommerce_Connection_Payment_Method extends WP_UnitTestCas
 	/**
 	 * Regression (env-setup fatal): a completed order with no items must not
 	 * crash the receipt email path when no donation products are configured.
-	 * Donations::get_order_donation_product_id() returns null in that state,
-	 * which the guard's `!== false` comparison let through, and the code then
-	 * fataled on `$item->get_product_id()` with an empty items array.
+	 * Before the fix, Donations::get_order_donation_product_id() bare-returned
+	 * null in that state, the guard's old `!== false` comparison let null
+	 * through, and the code then fataled on `$item->get_product_id()` with an
+	 * empty items array. The helper now returns its documented false and the
+	 * guard is a falsy check; this test pins the no-send, no-crash behavior.
 	 */
 	public function test_receipt_email_bails_on_order_without_donation_items() {
 		// Ensure the receipt email is enabled, so the guard is what stops the send.
