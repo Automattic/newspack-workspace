@@ -80,6 +80,18 @@ function get_form_id() {
  * this field is named `email` to hopefully catch more bots who might be
  * looking for such fields, where as the "real" field is named "npe".
  *
+ * Only a bot should ever fill this in: a non-empty value makes the form report
+ * success without subscribing anyone. Browsers and password managers autofill
+ * a field like this one whatever `autocomplete="off"` asks, and they skip a
+ * field only when it isn't rendered at all — so the field hides itself inline
+ * instead of through the block stylesheet, and opts out of the password
+ * managers that publish an opt-out attribute. The `.nphp` rule carries the same
+ * `display:none` as a fallback for a policy that strips the style attribute.
+ *
+ * newspack-plugin renders its own copy of this field in
+ * `Newspack\Reader_Activation::render_honeypot_field()`. Changes here belong
+ * there too.
+ *
  * Not rendered if reCAPTCHA is enabled as it's a superior spam protection.
  *
  * @param string $placeholder Placeholder text to render in the field.
@@ -93,7 +105,7 @@ function render_honeypot_field( $placeholder = '' ) {
 		$placeholder = __( 'Enter your email address', 'newspack-plugin' );
 	}
 	?>
-	<input class="nphp" tabindex="-1" aria-hidden="true" name="email" type="email" autocomplete="off" placeholder="<?php echo \esc_attr( $placeholder ); ?>" />
+	<input class="nphp" tabindex="-1" aria-hidden="true" name="email" type="email" autocomplete="off" data-1p-ignore data-lpignore="true" data-form-type="other" style="display:none;" placeholder="<?php echo \esc_attr( $placeholder ); ?>" />
 	<?php
 }
 
