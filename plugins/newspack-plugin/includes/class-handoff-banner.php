@@ -49,6 +49,12 @@ class Handoff_Banner {
 			return;
 		}
 
+		// When the handoff requested the in-editor notice, that notice is the
+		// block editor's return UI; rendering the banner too would duplicate it.
+		if ( $screen && $screen->is_block_editor() && self::needs_block_editor_handoff_return_ui() ) {
+			return;
+		}
+
 		printf(
 			"<div id='newspack-handoff-banner' data-primary_button_url='%s' data-banner_text='%s' data-banner_button_text='%s'></div>",
 			esc_url( get_option( NEWSPACK_HANDOFF_RETURN_URL ) ),
@@ -158,6 +164,13 @@ class Handoff_Banner {
 		if ( ! self::needs_handoff_return_ui() ) {
 			return;
 		}
+
+		// Nothing to style or mount when the in-editor notice replaces the banner.
+		$screen = get_current_screen();
+		if ( $screen && $screen->is_block_editor() && self::needs_block_editor_handoff_return_ui() ) {
+			return;
+		}
+
 		$handle = 'newspack-handoff-banner';
 		wp_register_style(
 			$handle,
@@ -170,7 +183,6 @@ class Handoff_Banner {
 		// On Newspack screens the banner is rendered server-side via
 		// insert_handoff_banner_static(); enqueuing the JS would find the same
 		// element id and clobber the server-rendered markup.
-		$screen = get_current_screen();
 		if ( $screen && stristr( $screen->id, 'newspack' ) ) {
 			return;
 		}
