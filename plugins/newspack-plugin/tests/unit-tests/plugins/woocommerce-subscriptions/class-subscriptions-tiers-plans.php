@@ -583,7 +583,19 @@ class Newspack_Test_Subscriptions_Tiers_Plans extends WP_UnitTestCase {
 		$this->assertStringContainsString( 'name="convert_to_sub_350"', $markup );
 		$this->assertStringContainsString( 'value="mkey"', $markup );
 		$this->assertStringContainsString( 'value="ykey"', $markup );
-		$this->assertStringContainsString( 'checked', $markup );
+		// Exactly one radio checked - assertStringContainsString( 'checked' )
+		// alone would pass with zero or with both checked, neither of which
+		// is a valid form state. Count the `checked='checked'` attribute
+		// checked() emits, not the bare word "checked" - it appears twice
+		// within that single attribute (name and value).
+		$this->assertSame( 1, substr_count( $markup, "checked='checked'" ), 'Exactly one radio should be checked.' );
+		// And it must be the one for the initially-visible panel (`month_1`,
+		// the $current_frequency argument), not just any radio.
+		if ( preg_match( '/<input[^>]*value="mkey"[^>]*>/s', $markup, $checked_input ) ) {
+			$this->assertStringContainsString( 'checked', $checked_input[0], 'The month_1/mkey radio should be the checked one.' );
+		} else {
+			$this->fail( 'Could not find the mkey radio in the markup.' );
+		}
 	}
 
 	/**
@@ -595,6 +607,266 @@ class Newspack_Test_Subscriptions_Tiers_Plans extends WP_UnitTestCase {
 		$markup = ob_get_clean();
 
 		$this->assertStringContainsString( '<button', $markup );
+		$this->assertStringNotContainsString( 'convert_to_sub', $markup );
+	}
+
+	/**
+	 * NPPM-3053 critical regression: a product with exactly one plan (the
+	 * ordinary publisher setup - one monthly plan plus price-tier
+	 * variations) has only one frequency bucket, so
+	 * render_frequency_control() is never called (it only runs for >1
+	 * frequency). render_form() must fall back to a hidden input carrying
+	 * that single plan's key, or the reader is charged once instead of
+	 * subscribing - exactly the bug this task exists to fix, for the most
+	 * common case.
+	 */
+	public function test_render_form_posts_the_plan_key_for_a_single_plan_product() {
+		$plans = [
+			'mkey' => [
+				'period'   => 'month',
+				'interval' => 1,
+			],
+		];
+
+		$parent = wc_create_mock_product(
+			[
+				'id'       => 380,
+				'type'     => 'variable',
+				'children' => [ 381, 382 ],
+			]
+		);
+		$this->give_plans( 380, $plans );
+		foreach ( [ 381, 382 ] as $vid ) {
+			wc_create_mock_product(
+				[
+					'id'        => $vid,
+					'type'      => 'variation',
+					'parent_id' => 380,
+					'price'     => 5,
+				]
+			);
+			$this->give_plans( $vid, $plans );
+		}
+
+		ob_start();
+		\Newspack\Subscriptions_Tiers::render_form( $parent );
+		$markup = ob_get_clean();
+
+		// Exactly one convert_to_sub input, and it's the hidden fallback -
+		// not a radio, since there's only one plan to choose from. The form
+		// still has other, unrelated radios: the price-tier `product_id`
+		// selection (see render_product_card()), which is untouched by this
+		// task and deliberately excluded from this assertion.
+		$this->assertSame( 1, substr_count( $markup, 'convert_to_sub_380' ), 'Exactly one convert_to_sub input should be posted.' );
+		$this->assertStringContainsString( '<input type="hidden" name="convert_to_sub_380" value="mkey">', $markup );
+		$this->assertStringNotContainsString( 'type="radio" name="convert_to_sub_380"', $markup, 'A single plan has nothing to choose between, so no plan radio should render.' );
+	}
+
+	/**
+	 * A product with more than one plan renders the plan-radio control
+	 * (render_frequency_control()'s job, covered directly above), and
+	 * render_form() must wire it up with the correct plan-key map and
+	 * parent ID, with exactly one radio checked - the one for the
+	 * initially-visible panel.
+	 */
+	public function test_render_form_wires_up_the_plan_radios_for_a_multi_plan_product() {
+		$plans = [
+			'mkey' => [
+				'period'   => 'month',
+				'interval' => 1,
+			],
+			'ykey' => [
+				'period'   => 'year',
+				'interval' => 1,
+			],
+		];
+
+		// Two variations per plan (price tiers), matching the ordinary
+		// publisher setup and keeping is_single_tier() false, so render_form()
+		// takes the tabbed-panel path this test targets rather than the flat
+		// "current subscription" card layout used when every frequency has
+		// exactly one product.
+		$parent = wc_create_mock_product(
+			[
+				'id'       => 420,
+				'type'     => 'variable',
+				'children' => [ 421, 422 ],
+			]
+		);
+		$this->give_plans( 420, $plans );
+		foreach ( [ 421, 422 ] as $vid ) {
+			wc_create_mock_product(
+				[
+					'id'        => $vid,
+					'type'      => 'variation',
+					'parent_id' => 420,
+					'price'     => 5,
+				]
+			);
+			$this->give_plans( $vid, $plans );
+		}
+
+		ob_start();
+		\Newspack\Subscriptions_Tiers::render_form( $parent );
+		$markup = ob_get_clean();
+
+		$this->assertStringContainsString( 'name="convert_to_sub_420"', $markup );
+		$this->assertStringContainsString( 'value="mkey"', $markup );
+		$this->assertStringContainsString( 'value="ykey"', $markup );
+		// No hidden fallback when the radio control itself posts the plan.
+		$this->assertStringNotContainsString( 'type="hidden" name="convert_to_sub_420"', $markup );
+
+		preg_match_all( '/<input[^>]*name="convert_to_sub_420"[^>]*>/s', $markup, $inputs );
+		$checked_inputs = array_filter(
+			$inputs[0],
+			function ( $input ) {
+				return false !== strpos( $input, 'checked' );
+			}
+		);
+		$this->assertCount( 1, $checked_inputs, 'Exactly one plan radio should be checked.' );
+		$this->assertStringContainsString( 'value="mkey"', reset( $checked_inputs ), 'The first (initially-visible) frequency should be the checked one.' );
+	}
+
+	/**
+	 * Switch-flow fallback: when the subscriber's current subscription
+	 * matches none of the tiers (a retired plan, or filtered out by the
+	 * ownership check), get_current_tier() returns a null frequency. Without
+	 * a fallback, zero radios get checked and the switch form posts no plan
+	 * - the same one-time-charge bug, in the switch flow.
+	 */
+	public function test_render_form_checks_a_radio_when_switching_with_no_matching_tier() {
+		$user_id = self::factory()->user->create();
+		wp_set_current_user( $user_id );
+
+		$plans = [
+			'mkey' => [
+				'period'   => 'month',
+				'interval' => 1,
+			],
+			'ykey' => [
+				'period'   => 'year',
+				'interval' => 1,
+			],
+		];
+
+		// Two variations per plan - see the comment in the multi-plan wiring
+		// test above for why this keeps render_form() on the tabbed-panel
+		// path this test targets.
+		$parent = wc_create_mock_product(
+			[
+				'id'       => 430,
+				'type'     => 'variable',
+				'children' => [ 431, 432 ],
+			]
+		);
+		$this->give_plans( 430, $plans );
+		foreach ( [ 431, 432 ] as $vid ) {
+			wc_create_mock_product(
+				[
+					'id'        => $vid,
+					'type'      => 'variation',
+					'parent_id' => 430,
+					'price'     => 5,
+				]
+			);
+			$this->give_plans( $vid, $plans );
+		}
+
+		// Logged in with no subscriptions at all, so get_current_tier() can't
+		// match anything - the fallback path this test targets.
+		$switch_data = [
+			'subscription' => new WC_Subscription( [ 'id' => 999 ] ),
+			'item_id'      => 111,
+		];
+
+		ob_start();
+		\Newspack\Subscriptions_Tiers::render_form( $parent, null, null, $switch_data );
+		$markup = ob_get_clean();
+
+		preg_match_all( '/<input[^>]*name="convert_to_sub_430"[^>]*>/s', $markup, $inputs );
+		$checked_inputs = array_filter(
+			$inputs[0],
+			function ( $input ) {
+				return false !== strpos( $input, 'checked' );
+			}
+		);
+		$this->assertCount( 1, $checked_inputs, 'A radio should still be checked with no matching tier.' );
+	}
+
+	/**
+	 * A grouped product's cart item posts its child product's ID, not the
+	 * grouped parent's - so a convert_to_sub keyed on the grouped parent ID
+	 * would never be read by APFS. render_form() must not emit one.
+	 */
+	public function test_render_form_skips_plan_posting_for_a_grouped_product() {
+		$parent = wc_create_mock_product(
+			[
+				'id'       => 440,
+				'type'     => 'grouped',
+				'children' => [ 441 ],
+			]
+		);
+		wc_create_mock_product(
+			[
+				'id'    => 441,
+				'type'  => 'subscription',
+				'price' => 5,
+				'meta'  => [
+					'_subscription_period'          => 'month',
+					'_subscription_period_interval' => '1',
+				],
+			]
+		);
+		$this->give_plans(
+			441,
+			[
+				'mkey' => [
+					'period'   => 'month',
+					'interval' => 1,
+				],
+			]
+		);
+
+		ob_start();
+		\Newspack\Subscriptions_Tiers::render_form( $parent );
+		$markup = ob_get_clean();
+
+		$this->assertStringNotContainsString( 'convert_to_sub', $markup, 'Grouped products have no single parent ID to post a plan against.' );
+	}
+
+	/**
+	 * With no product, render_form() aggregates every non-donation
+	 * subscription product with no common parent, so it must never fall
+	 * back to "convert_to_sub_0" - a key that looks real but is read by
+	 * nothing.
+	 */
+	public function test_render_form_skips_plan_posting_with_no_product() {
+		// Registered so get_tiers_by_frequency( null ) picks it up in its
+		// catalog-wide aggregation, giving the form something to render.
+		wc_create_mock_product(
+			[
+				'id'   => 450,
+				'type' => 'subscription',
+				'meta' => [
+					'_subscription_period'          => 'month',
+					'_subscription_period_interval' => '1',
+				],
+			]
+		);
+		$this->give_plans(
+			450,
+			[
+				'mkey' => [
+					'period'   => 'month',
+					'interval' => 1,
+				],
+			]
+		);
+
+		ob_start();
+		\Newspack\Subscriptions_Tiers::render_form( null );
+		$markup = ob_get_clean();
+
 		$this->assertStringNotContainsString( 'convert_to_sub', $markup );
 	}
 }

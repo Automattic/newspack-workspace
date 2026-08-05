@@ -294,6 +294,15 @@ class WC_Product {
 	public function get_name() {
 		return $this->data['name'] ?? '';
 	}
+	public function get_title() {
+		return $this->data['title'] ?? $this->get_name();
+	}
+	public function get_description() {
+		return $this->data['description'] ?? '';
+	}
+	public function get_price_html() {
+		return $this->data['price_html'] ?? '';
+	}
 	public function get_type() {
 		return $this->data['type'] ?? 'simple';
 	}

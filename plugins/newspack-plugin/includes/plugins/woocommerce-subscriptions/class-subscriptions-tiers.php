@@ -795,10 +795,16 @@ class Subscriptions_Tiers {
 	/**
 	 * Render frequency form control.
 	 *
-	 * Up until 3 frequencies, we render buttons.
-	 * After that, we render a select control.
+	 * Up until 3 frequencies, we render buttons (or plan-posting radios, see
+	 * below). After that, we render a select control - unreachable for
+	 * plan-based products, since the plan-radio branch below runs first
+	 * regardless of $frequencies count when $plan_keys/$parent_id are set.
 	 *
-	 * @param array  $frequencies       Frequencies.
+	 * @param array  $frequencies       Frequencies. Expected to be exactly the
+	 *                                  keys present in $plan_keys when the
+	 *                                  latter is non-empty, so the caller's
+	 *                                  panel loop and this tab loop stay
+	 *                                  positionally in sync.
 	 * @param string $current_frequency Current frequency.
 	 * @param bool   $is_form_control   Whether to treat it as a form input.
 	 * @param array  $plan_keys         Optional frequency key => scheme key map. When
@@ -875,18 +881,40 @@ class Subscriptions_Tiers {
 			return;
 		}
 
+		// The plan-radio control (and its hidden-input fallback below) only
+		// make sense when $product is the actual parent WooCommerce will add
+		// to the cart: a variable or simple subscription product. For a
+		// grouped product each tier can come from a different child product
+		// with its own parent ID, and for the "all products" view ($product
+		// is null) there is no common parent at all - a single
+		// convert_to_sub_<id> input can't carry the right key for every
+		// tier in either case, so the plan path is skipped rather than
+		// emitting a key nothing reads (or, for the null case, a
+		// convert_to_sub_0 that reads as a real but wrong parent ID).
+		$parent_id = ( $product && ! $product->is_type( 'grouped' ) ) ? $product->get_id() : 0;
+
+		$plan_keys = [];
+		if ( $parent_id ) {
+			foreach ( $tiers as $frequency => $tier_products ) {
+				$plan_key = empty( $tier_products ) ? '' : WooCommerce_Subscriptions::get_active_plan_key( $tier_products[0] );
+				if ( $plan_key ) {
+					$plan_keys[ $frequency ] = $plan_key;
+				}
+			}
+			// Keep the tab headers and the panels positionally in sync: a
+			// frequency without a resolvable plan key would otherwise still
+			// get a panel below but no tab here, shifting every subsequent
+			// tab onto the wrong panel (setupTabController() pairs
+			// tab_headers[i] with tab_contents[i] by index).
+			if ( ! empty( $plan_keys ) ) {
+				$tiers = array_intersect_key( $tiers, $plan_keys );
+			}
+		}
+
 		$is_single_tier = self::is_single_tier( $tiers );
 		$is_nyp         = $is_single_tier && self::is_nyp( $tiers ); // Only treat as NYP form if there's only 1 tier.
 
 		$frequencies = array_keys( $tiers );
-
-		$plan_keys = [];
-		foreach ( $tiers as $frequency => $tier_products ) {
-			$plan_key = empty( $tier_products ) ? '' : WooCommerce_Subscriptions::get_active_plan_key( $tier_products[0] );
-			if ( $plan_key ) {
-				$plan_keys[ $frequency ] = $plan_key;
-			}
-		}
 
 		$current_frequency = null;
 		$current_product   = null;
@@ -896,6 +924,12 @@ class Subscriptions_Tiers {
 		}
 
 		if ( ! $switch_data ) {
+			$current_frequency = $frequencies[0];
+		} elseif ( ! $current_frequency ) {
+			// A subscriber on a retired plan, or one filtered out by the
+			// ownership check, has no matching tier. Fall back to the first
+			// frequency so a radio is checked and the plan gets posted,
+			// rather than leaving nothing selected (and posting no plan).
 			$current_frequency = $frequencies[0];
 		}
 
@@ -934,13 +968,22 @@ class Subscriptions_Tiers {
 		}
 
 		$should_render_tabs = ! $is_single_tier || $is_nyp;
+
+		// Whether render_frequency_control() below will actually post the
+		// plan. When it won't - a single frequency, or the flat (no-tabs)
+		// product-card layout - the hidden input further down carries the
+		// plan for $current_frequency instead. Without this, a product with
+		// exactly one plan (the ordinary case: one monthly plan plus
+		// price-tier variations) posts no plan at all and the reader is
+		// charged once instead of subscribing.
+		$frequency_control_rendered = $should_render_tabs && count( $frequencies ) > 1;
 		?>
 		<form class="newspack__subscription-tiers__form <?php echo esc_attr( $is_nyp ? 'nyp' : '' ); ?>" target="newspack_modal_checkout_iframe" data-title="<?php echo esc_attr( $title ); ?>" data-product-id="<?php echo esc_attr( $product ? $product->get_id() : '' ); ?>">
 			<?php if ( $should_render_tabs ) : ?>
 				<div class="newspack-ui__segmented-control">
 					<?php
-					if ( count( $frequencies ) > 1 ) {
-						self::render_frequency_control( $frequencies, $current_frequency, $is_nyp, $plan_keys, $product ? $product->get_id() : 0 );
+					if ( $frequency_control_rendered ) {
+						self::render_frequency_control( $frequencies, $current_frequency, $is_nyp, $plan_keys, $parent_id );
 					}
 					?>
 					<div class="newspack-ui__segmented-control__content">
@@ -971,6 +1014,9 @@ class Subscriptions_Tiers {
 			?>
 			<input type="hidden" name="newspack_checkout" value="1">
 			<input type="hidden" name="modal_checkout" value="1">
+			<?php if ( ! $frequency_control_rendered && ! empty( $plan_keys[ $current_frequency ] ) ) : ?>
+				<input type="hidden" name="convert_to_sub_<?php echo absint( $parent_id ); ?>" value="<?php echo esc_attr( $plan_keys[ $current_frequency ] ); ?>">
+			<?php endif; ?>
 			<?php if ( ! empty( $switch_data ) ) : ?>
 				<input type="hidden" name="switch-subscription" value="<?php echo esc_attr( $switch_data['subscription']->get_id() ); ?>">
 				<input type="hidden" name="item" value="<?php echo absint( $switch_data['item_id'] ); ?>">
