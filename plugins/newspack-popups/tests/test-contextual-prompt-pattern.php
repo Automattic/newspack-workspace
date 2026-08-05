@@ -40,6 +40,7 @@ class ContextualPromptPatternTest extends WP_UnitTestCase {
 	public function tear_down() {
 		delete_option( Newspack_Popups_Contextual_Prompt_Pattern::SEEDING_LOCK_OPTION );
 		delete_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_PATTERN_ID );
+		delete_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION );
 		delete_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_STAMPED_ACCENT );
 		delete_option( 'newspack_popups_donor_landing_page' );
 		if ( get_stylesheet() !== $this->original_stylesheet ) {
@@ -68,6 +69,30 @@ class ContextualPromptPatternTest extends WP_UnitTestCase {
 		}
 
 		$this->markTestSkipped( $block_theme ? 'No block theme is available in this test environment.' : 'No classic theme is available in this test environment.' );
+	}
+
+	/**
+	 * Delete the pattern post the way a migration or a direct query would: past
+	 * the guard that refuses it, leaving the record pointing at nothing.
+	 *
+	 * @param int $pattern_id Pattern post ID.
+	 */
+	private function delete_pattern_post( $pattern_id ) {
+		$guard = [ 'Newspack_Popups_Contextual_Prompt_Pattern', 'prevent_pattern_deletion' ];
+		remove_filter( 'pre_delete_post', $guard );
+		wp_delete_post( $pattern_id, true );
+		add_filter( 'pre_delete_post', $guard, 10, 2 );
+	}
+
+	/**
+	 * The pattern an opted-in site is using.
+	 *
+	 * @return int Pattern post ID.
+	 */
+	private function opt_in() {
+		update_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION, true );
+
+		return Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
 	}
 
 	/**
@@ -387,17 +412,110 @@ class ContextualPromptPatternTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A deleted pattern post is re-seeded rather than leaving instances pointing
-	 * at a hole.
+	 * A pattern post that vanished — a migration, a direct query, a restored
+	 * backup — is re-seeded rather than leaving instances pointing at a hole.
 	 */
 	public function test_reseeds_when_the_post_vanishes() {
 		$id = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
-		wp_delete_post( $id, true );
+		$this->delete_pattern_post( $id );
 
 		$new = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
 
 		$this->assertGreaterThan( 0, $new );
 		$this->assertNotSame( $id, $new );
+	}
+
+	/**
+	 * Opting out is a newsroom deciding against AI use, so the design it
+	 * generated leaves the site: the pattern is unpublished, which takes it out
+	 * of the patterns browser and leaves instances resolving to nothing.
+	 */
+	public function test_opting_out_takes_the_pattern_off_the_site() {
+		$pattern_id = $this->opt_in();
+
+		update_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION, false );
+
+		$this->assertNotSame( 'publish', get_post_status( $pattern_id ) );
+	}
+
+	/**
+	 * But the pattern itself is kept: every prompt already published references it
+	 * by id and carries its story-specific copy as an override on that reference,
+	 * so a newsroom that pauses AI use and resumes months later gets the same
+	 * pattern back, and with it the prompts it had written.
+	 */
+	public function test_opting_back_in_restores_the_same_pattern() {
+		$pattern_id = $this->opt_in();
+		$content    = get_post( $pattern_id )->post_content;
+		update_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION, false );
+
+		update_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION, true );
+
+		$this->assertSame( $pattern_id, (int) get_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_PATTERN_ID, 0 ) );
+		$this->assertSame( 'publish', get_post_status( $pattern_id ) );
+		$this->assertSame( $content, get_post( $pattern_id )->post_content, 'The design is what it was.' );
+	}
+
+	/**
+	 * Withdrawing the opt-in altogether is opting out.
+	 */
+	public function test_withdrawing_the_opt_in_takes_the_pattern_off_the_site() {
+		$pattern_id = $this->opt_in();
+
+		delete_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION );
+
+		$this->assertNotSame( 'publish', get_post_status( $pattern_id ) );
+	}
+
+	/**
+	 * A site whose pattern is gone for good gets a fresh one on the next request
+	 * for it, rather than an opt-in that answers with nothing.
+	 */
+	public function test_opting_back_in_seeds_when_the_pattern_is_gone() {
+		$pattern_id = $this->opt_in();
+		update_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION, false );
+		$this->delete_pattern_post( $pattern_id );
+
+		update_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION, true );
+		$new = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
+
+		$this->assertGreaterThan( 0, $new );
+		$this->assertNotSame( $pattern_id, $new );
+		$this->assertSame( 'publish', get_post_status( $new ) );
+	}
+
+	/**
+	 * Sites that disable the trash delete on trash instead, which the deletion
+	 * guard refuses — so the status is written directly there, and the pattern
+	 * still leaves the site.
+	 */
+	public function test_a_site_without_a_trash_unpublishes_the_pattern_in_place() {
+		$pattern_id = $this->opt_in();
+		add_filter( 'pre_trash_post', '__return_false' );
+
+		update_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION, false );
+
+		remove_filter( 'pre_trash_post', '__return_false' );
+		$this->assertSame( 'draft', get_post_status( $pattern_id ) );
+	}
+
+	/**
+	 * An opted-out site keeps its pattern in the trash, and core purges the trash
+	 * on a schedule: losing it there would orphan every instance the site still
+	 * carries, so nothing may delete the recorded pattern outright.
+	 */
+	public function test_the_recorded_pattern_cannot_be_deleted_outright() {
+		$pattern_id = $this->opt_in();
+		update_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION, false );
+
+		// What core's scheduled purge calls on a post that has been in the trash
+		// for longer than EMPTY_TRASH_DAYS.
+		$this->assertFalse( wp_delete_post( $pattern_id ) );
+		$this->assertFalse( wp_delete_post( $pattern_id, true ) );
+		$this->assertInstanceOf( 'WP_Post', get_post( $pattern_id ) );
+
+		$other = self::factory()->post->create( [ 'post_type' => 'wp_block' ] );
+		$this->assertNotFalse( wp_delete_post( $other, true ), 'Other synced patterns stay deletable.' );
 	}
 
 	/**

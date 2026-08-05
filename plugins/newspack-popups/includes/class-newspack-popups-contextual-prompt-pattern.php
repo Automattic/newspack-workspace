@@ -47,6 +47,7 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 	 */
 	public static function init_protection() {
 		add_filter( 'map_meta_cap', [ __CLASS__, 'protect_pattern' ], 10, 4 );
+		add_filter( 'pre_delete_post', [ __CLASS__, 'prevent_pattern_deletion' ], 10, 2 );
 		add_filter( 'block_editor_settings_all', [ __CLASS__, 'lock_pattern_editor' ], 10, 2 );
 		add_filter( 'rest_wp_block_query', [ __CLASS__, 'hide_pattern_from_collections' ] );
 		add_filter( 'wp_insert_post_data', [ __CLASS__, 'lock_pattern_title' ], 10, 2 );
@@ -114,6 +115,93 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 		// one, so both hooks are needed.
 		add_action( 'update_option_newspack_reader_revenue_platform', [ __CLASS__, 'repair' ] );
 		add_action( 'add_option_newspack_reader_revenue_platform', [ __CLASS__, 'repair' ] );
+		// Newspack_Popups_Settings is included after this runs, so the option it
+		// owns is spelled out too. Hooked on the option rather than on the endpoint
+		// that writes it, so a flip made over WP-CLI leaves the same site: the
+		// first opt-in adds the option, and withdrawing it is an opt-out.
+		add_action( 'add_option_newspack_contextual_prompts_enabled', [ __CLASS__, 'follow_opt_in_added' ], 10, 2 );
+		add_action( 'update_option_newspack_contextual_prompts_enabled', [ __CLASS__, 'follow_opt_in_changed' ], 10, 2 );
+		add_action( 'delete_option_newspack_contextual_prompts_enabled', [ __CLASS__, 'follow_opt_in_withdrawn' ] );
+	}
+
+	/**
+	 * The site opting in for the first time.
+	 *
+	 * @param string $option Option name.
+	 * @param mixed  $value  The opt-in state stored.
+	 */
+	public static function follow_opt_in_added( $option, $value ) {
+		self::follow_opt_in( $value );
+	}
+
+	/**
+	 * The site changing its mind.
+	 *
+	 * @param mixed $old_value The previous opt-in state.
+	 * @param mixed $value     The opt-in state stored.
+	 */
+	public static function follow_opt_in_changed( $old_value, $value ) {
+		self::follow_opt_in( $value );
+	}
+
+	/**
+	 * The opt-in withdrawn entirely, which is an opt-out.
+	 */
+	public static function follow_opt_in_withdrawn() {
+		self::follow_opt_in( false );
+	}
+
+	/**
+	 * Follow the site's opt-in: the pattern is the feature's design, so opting out
+	 * takes it off the site and opting back in puts it back.
+	 *
+	 * Opting out never deletes it. Every prompt already published references the
+	 * pattern by id and carries its story-specific copy as an override on that
+	 * reference, so the prompts a newsroom wrote come back only if this same
+	 * pattern does — a newsroom that pauses AI use over a policy and resumes
+	 * months later keeps its work. While the site is opted out the instances stay
+	 * in the content and render nothing.
+	 *
+	 * @param mixed $enabled The opt-in state.
+	 */
+	private static function follow_opt_in( $enabled ) {
+		if ( ! $enabled ) {
+			self::retire_pattern();
+			return;
+		}
+
+		// Restored, never seeded: seeding stays on demand, so opting in writes
+		// nothing until the wizard or the editor asks for the pattern — which is
+		// also what puts a pattern back on a site that lost its own.
+		$pattern_id = (int) get_option( self::OPTION_PATTERN_ID, 0 );
+		if ( $pattern_id && 'wp_block' === get_post_type( $pattern_id ) && 'publish' !== get_post_status( $pattern_id ) ) {
+			self::restore_pattern( $pattern_id );
+		}
+	}
+
+	/**
+	 * Unpublish the pattern, so an opted-out site carries no Contextual Prompt
+	 * design: it leaves the patterns browser and the editor, and an instance
+	 * resolves to nothing. Trashed by preference; a site that disables the trash
+	 * deletes on trash instead, which the deletion guard refuses, so the status is
+	 * written directly there. get_pattern_id() restores either in place.
+	 */
+	private static function retire_pattern() {
+		$pattern_id = (int) get_option( self::OPTION_PATTERN_ID, 0 );
+		if ( ! $pattern_id || 'wp_block' !== get_post_type( $pattern_id ) || 'publish' !== get_post_status( $pattern_id ) ) {
+			return;
+		}
+
+		wp_trash_post( $pattern_id );
+
+		if ( 'publish' === get_post_status( $pattern_id ) ) {
+			self::update_pattern_post(
+				[
+					'ID'          => $pattern_id,
+					'post_status' => 'draft',
+				]
+			);
+		}
 	}
 
 	/**
@@ -150,6 +238,25 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 		}
 
 		return $caps;
+	}
+
+	/**
+	 * Refuse to delete the pattern outright, whatever asks. The capability guard
+	 * covers what the publisher can reach, but wp_delete_post() checks none — and
+	 * an opted-out site keeps its pattern in the trash, where core's scheduled
+	 * purge would take it after EMPTY_TRASH_DAYS and orphan every instance the
+	 * site still carries. A pattern the record does not name is nobody's to keep,
+	 * including the orphan a losing seeder deletes.
+	 *
+	 * @param WP_Post|false|null $delete Whether to short-circuit the deletion.
+	 * @param WP_Post            $post   The post about to be deleted.
+	 *
+	 * @return WP_Post|false|null
+	 */
+	public static function prevent_pattern_deletion( $delete, $post ) {
+		$pattern_id = (int) get_option( self::OPTION_PATTERN_ID, 0 );
+
+		return $pattern_id && (int) $post->ID === $pattern_id ? false : $delete;
 	}
 
 	/**

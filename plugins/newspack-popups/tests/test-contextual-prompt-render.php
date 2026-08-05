@@ -747,6 +747,30 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A newsroom that opts out keeps the prompts it has already published: they
+	 * stop rendering for readers, and come back with their own copy when the
+	 * newsroom opts back in.
+	 */
+	public function test_published_prompts_are_hidden_while_opted_out_and_come_back() {
+		$this->set_platform( true );
+		$ref     = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
+		$content = '<!-- wp:block ' . wp_json_encode(
+			[
+				'ref'     => $ref,
+				'content' => [ Newspack_Popups_Contextual_Prompt_Pattern::BOUND_NAME => [ 'content' => self::PER_POST_COPY ] ],
+			]
+		) . ' /-->';
+
+		update_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION, false );
+
+		$this->assertSame( '', trim( do_blocks( $content ) ), 'Readers see nothing while the site is opted out.' );
+
+		update_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION, true );
+
+		$this->assertStringContainsString( self::PER_POST_COPY, do_blocks( $content ), 'And the prompt comes back with its copy.' );
+	}
+
+	/**
 	 * The seed claims a lock before inserting, so a call arriving while another
 	 * request is still writing gets nothing rather than a second pattern —
 	 * instances made against the loser's pattern would never be managed again.
@@ -877,11 +901,14 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 
 	/**
 	 * The lock does not stand in the way of re-seeding: a record left pointing at
-	 * a pattern the publisher deleted anyway is replaced.
+	 * a pattern that vanished anyway — a migration, a direct query — is replaced.
 	 */
 	public function test_a_deleted_pattern_is_seeded_again() {
 		$first = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
+		$guard = [ 'Newspack_Popups_Contextual_Prompt_Pattern', 'prevent_pattern_deletion' ];
+		remove_filter( 'pre_delete_post', $guard );
 		wp_delete_post( $first, true );
+		add_filter( 'pre_delete_post', $guard, 10, 2 );
 
 		$second = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
 
