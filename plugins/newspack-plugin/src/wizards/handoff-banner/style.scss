@@ -59,6 +59,21 @@ $banner-height: var(--newspack-handoff-banner-height, 0px);
 
 .newspack-handoff-banner-visible body.post-php,
 .newspack-handoff-banner-visible body.post-new-php {
+	/*
+	 * The editor root reserves a full viewport below the banner, so the document
+	 * scrolls by the space the banner takes — and the pinned editor stays put
+	 * while the banner is carried out of sight. Stick it to the top instead, in a
+	 * container tall enough to stick within.
+	 */
+	#wpcontent {
+		min-height: 100vh;
+	}
+
+	#newspack-handoff-banner {
+		position: sticky;
+		top: 0;
+	}
+
 	.interface-interface-skeleton {
 		top: $banner-height;
 	}
