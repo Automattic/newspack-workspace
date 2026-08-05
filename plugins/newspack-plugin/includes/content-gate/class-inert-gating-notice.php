@@ -1,0 +1,250 @@
+<?php
+/**
+ * Newspack Inert Gating Notice.
+ *
+ * Warns an administrator when Access Control is configured but not applying,
+ * which happens whenever Audience Management is switched off on a site that
+ * has gates, premium newsletters or block-level access rules set up.
+ *
+ * @package Newspack
+ */
+
+namespace Newspack;
+
+defined( 'ABSPATH' ) || exit;
+
+/**
+ * Persistent admin notice for configured-but-inert Access Control.
+ *
+ * Switching Audience Management off makes every Access Control surface stand
+ * down: gated posts, premium newsletter lists and member-only blocks all become
+ * public ({@see Content_Gate::is_gating_active()}). That is intended, and the
+ * confirmation dialog says so — but the dialog is a single moment, and after it
+ * nothing on the site says the paywall is down. This is the standing reminder,
+ * so an accidental toggle doesn't quietly leave paid content open.
+ *
+ * Shown only when there is something to be inert. A site that never configured
+ * Access Control gets nothing.
+ */
+class Inert_Gating_Notice {
+
+	/**
+	 * Option holding the cached "has anything configured" answer.
+	 *
+	 * An option rather than a transient: this is read on every admin page load,
+	 * so it wants to be autoloaded, and it must not expire on a timer — the
+	 * answer only changes when the underlying objects do, and every one of those
+	 * writes invalidates it explicitly below.
+	 */
+	const CACHE_OPTION = 'newspack_content_gate_has_surfaces';
+
+	/**
+	 * Substring identifying a block carrying access-control attributes.
+	 *
+	 * Matches the `newspackAccessControlMode` / `...Visibility` / `...GateIds` /
+	 * `...Rules` attributes that Block_Visibility registers, all of which share
+	 * this prefix in the serialized block comment.
+	 */
+	const BLOCK_ATTRIBUTE_PREFIX = 'newspackAccessControl';
+
+	/**
+	 * Initialize hooks.
+	 */
+	public static function init() {
+		// Core admin screens only. Wizard screens render this as a Notice component
+		// below their header and tabs instead ({@see get_script_data()}), because a
+		// core notice there lands above the wizard's own header. Wizards strip all
+		// notices at priority -9999 anyway, so the default priority is what keeps this
+		// from fighting them.
+		add_action( 'admin_notices', [ __CLASS__, 'render' ] );
+
+		// Cache invalidation. The answer changes only when Audience Management is
+		// toggled or a queried object is created, deleted or edited, so each of those
+		// clears it and nothing else does — no TTL, no periodic recompute.
+		add_action( 'newspack_reader_activation_update_setting', [ __CLASS__, 'flush_cache_on_setting' ], 10, 2 );
+		add_action( 'save_post', [ __CLASS__, 'flush_cache_on_post' ], 10, 2 );
+		add_action( 'deleted_post', [ __CLASS__, 'flush_cache_on_post' ], 10, 2 );
+	}
+
+	/**
+	 * Clear the cache when Audience Management is toggled.
+	 *
+	 * The notice's visibility flips with this setting, and the cached value is the
+	 * other half of that decision.
+	 *
+	 * @param string $key   Setting key.
+	 * @param mixed  $value Setting value.
+	 */
+	public static function flush_cache_on_setting( $key, $value ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed
+		if ( 'enabled' === $key ) {
+			self::flush_cache();
+		}
+	}
+
+	/**
+	 * Clear the cache when a queried object is written or removed.
+	 *
+	 * Gates always count. Any other post type only matters if it carries block
+	 * access-control attributes, so the content is checked before invalidating —
+	 * otherwise every post save on the site would clear a cache that could not
+	 * have changed.
+	 *
+	 * @param int           $post_id Post ID.
+	 * @param \WP_Post|null $post Post object, when the hook supplies one.
+	 */
+	public static function flush_cache_on_post( $post_id, $post = null ) {
+		$post = $post instanceof \WP_Post ? $post : get_post( $post_id );
+		if ( ! $post ) {
+			return;
+		}
+		if ( Content_Gate::GATE_CPT === $post->post_type ) {
+			self::flush_cache();
+			return;
+		}
+		if ( false !== strpos( (string) $post->post_content, self::BLOCK_ATTRIBUTE_PREFIX ) ) {
+			self::flush_cache();
+		}
+	}
+
+	/**
+	 * Clear the cached answer.
+	 */
+	public static function flush_cache() {
+		delete_option( self::CACHE_OPTION );
+	}
+
+	/**
+	 * Whether the site has any Access Control surface configured.
+	 *
+	 * Widened past gates on purpose: a publisher who only ever used block-level
+	 * visibility has just as much content quietly going public, and would get no
+	 * warning from a gates-only check.
+	 *
+	 * Cached because the block-attribute half is a `LIKE` over post content, which
+	 * is too expensive to run on every admin page load. The query is bounded to a
+	 * single row — this only ever answers "any", never "how many".
+	 *
+	 * @return bool
+	 */
+	public static function has_surfaces(): bool {
+		$cached = get_option( self::CACHE_OPTION, null );
+		if ( null !== $cached && '' !== $cached ) {
+			return (bool) $cached;
+		}
+
+		$has_surfaces = self::has_gates() || self::has_block_rules();
+
+		// Stored as '1'/'0' rather than a bool: update_option() round-trips false to
+		// an empty string, which is indistinguishable from "not cached yet" and would
+		// make a negative answer recompute the LIKE query on every page load.
+		update_option( self::CACHE_OPTION, $has_surfaces ? '1' : '0' );
+
+		return $has_surfaces;
+	}
+
+	/**
+	 * Whether any published gate exists, of either kind.
+	 *
+	 * Published only: a draft gate was not applying before Audience Management was
+	 * switched off either, so it is not something the publisher has lost.
+	 *
+	 * @return bool
+	 */
+	private static function has_gates(): bool {
+		$gates = get_posts(
+			[
+				'post_type'      => Content_Gate::GATE_CPT,
+				'post_status'    => 'publish',
+				'posts_per_page' => 1,
+				'fields'         => 'ids',
+				'no_found_rows'  => true,
+			]
+		);
+		return ! empty( $gates );
+	}
+
+	/**
+	 * Whether any post carries block-level access-control attributes.
+	 *
+	 * A direct query rather than WP_Query: this is a content `LIKE`, which
+	 * WP_Query can only express through `s` (which also searches titles and
+	 * excerpts and applies relevance ordering). Bounded to one row and cached by
+	 * the caller.
+	 *
+	 * @return bool
+	 */
+	private static function has_block_rules(): bool {
+		global $wpdb;
+		$found = $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$wpdb->prepare(
+				"SELECT ID FROM {$wpdb->posts}
+				WHERE post_status = 'publish'
+				AND post_content LIKE %s
+				LIMIT 1",
+				'%' . $wpdb->esc_like( self::BLOCK_ATTRIBUTE_PREFIX ) . '%'
+			)
+		);
+		return ! empty( $found );
+	}
+
+	/**
+	 * Whether the site is configured for Access Control but not applying it.
+	 *
+	 * @return bool
+	 */
+	public static function is_inert(): bool {
+		if ( ! Content_Gate::is_newspack_feature_enabled() || Content_Gate::is_gating_active() ) {
+			return false;
+		}
+		return self::has_surfaces();
+	}
+
+	/**
+	 * Notice payload for the wizard shell.
+	 *
+	 * Returns the strings rather than a flag so the two surfaces cannot drift into
+	 * saying different things about the same state.
+	 *
+	 * @return array{show: bool, message: string, url: string, link_text: string}
+	 */
+	public static function get_script_data(): array {
+		return [
+			'show'      => current_user_can( 'manage_options' ) && self::is_inert(),
+			'message'   => self::get_message(),
+			'url'       => admin_url( 'admin.php?page=newspack-audience#/' ),
+			'link_text' => __( 'Turn on Audience Management', 'newspack-plugin' ),
+		];
+	}
+
+	/**
+	 * The notice text, shared by both surfaces.
+	 *
+	 * @return string
+	 */
+	private static function get_message(): string {
+		return __( 'Access Control is not applying. Audience Management is off, so gated posts, premium newsletters and member-only blocks are public to everyone. The configuration is kept and starts applying again when Audience Management is turned back on.', 'newspack-plugin' );
+	}
+
+	/**
+	 * Render the core admin notice.
+	 */
+	public static function render() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+		if ( ! self::is_inert() ) {
+			return;
+		}
+		?>
+		<div class="notice notice-warning">
+			<p><?php echo esc_html( self::get_message() ); ?></p>
+			<p>
+				<a href="<?php echo esc_url( admin_url( 'admin.php?page=newspack-audience#/' ) ); ?>">
+					<?php esc_html_e( 'Turn on Audience Management', 'newspack-plugin' ); ?>
+				</a>
+			</p>
+		</div>
+		<?php
+	}
+}
+Inert_Gating_Notice::init();

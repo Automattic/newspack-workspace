@@ -161,9 +161,20 @@ const Wizard = (
 		</TabbedNavigation>
 	);
 
+	// Sits at the top of the content region, which the header and tabbed navigation
+	// wrap — so it reads below them rather than above the wizard's own header, where
+	// a core admin notice would land.
+	const inertGating = window.newspack_aux_data?.inert_gating;
+
 	const content = (
 		<>
 			<HandoffMessage />
+
+			{ inertGating?.show && (
+				<Notice isWarning className="newspack-wizard__inert-gating-notice">
+					{ inertGating.message } <a href={ inertGating.url }>{ inertGating.link_text }</a>
+				</Notice>
+			) }
 
 			{ sections.length > 1 && <ResetHeaderData /> }
 
