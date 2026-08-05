@@ -15,6 +15,7 @@ define( 'NEWSPACK_HANDOFF_SHOW_ON_BLOCK_EDITOR', 'newspack_handoff_show_on_block
 define( 'NEWSPACK_HANDOFF_BANNER_TEXT', 'newspack_handoff_banner_text' );
 define( 'NEWSPACK_HANDOFF_BANNER_BUTTON_TEXT', 'newspack_handoff_banner_button_text' );
 define( 'NEWSPACK_HANDOFF_DESTINATION_PAGE', 'newspack_handoff_destination_page' );
+define( 'NEWSPACK_HANDOFF_DESTINATION_URL', 'newspack_handoff_destination_url' );
 
 /**
  * Manages the API as a whole.
@@ -247,18 +248,23 @@ class Handoff_Banner {
 		delete_option( NEWSPACK_HANDOFF_BANNER_TEXT );
 		delete_option( NEWSPACK_HANDOFF_BANNER_BUTTON_TEXT );
 		delete_option( NEWSPACK_HANDOFF_DESTINATION_PAGE );
+		delete_option( NEWSPACK_HANDOFF_DESTINATION_URL );
 		delete_option( NEWSPACK_HANDOFF_RETURN_URL );
 	}
 
 	/**
 	 * Clear the handoff state when the user explicitly returns.
 	 *
-	 * The banner is sticky throughout the detour: it survives login redirects
-	 * and sub-page navigation within the destination plugin so the user never
-	 * loses their way back. Two trigger points end the handoff:
+	 * The banner is sticky throughout a plugin-setup detour: it survives login
+	 * redirects and sub-page navigation within the destination plugin so the
+	 * user never loses their way back. A handoff into the block editor is
+	 * different — the editor is a single screen, so leaving it ends the handoff
+	 * rather than dragging the banner onto unrelated screens. Trigger points:
 	 *   1. The user reaches the stored return URL (typically via the banner's
 	 *      "Back" button), when one is set.
-	 *   2. The user reaches any Newspack admin screen — fallback for plugin
+	 *   2. The stored destination is a block editor screen and the user is on
+	 *      neither it nor the return URL.
+	 *   3. The user reaches any Newspack admin screen — fallback for plugin
 	 *      handoffs that don't supply a return URL.
 	 *
 	 * @param WP_Screen $current_screen The current screen object.
@@ -271,10 +277,18 @@ class Handoff_Banner {
 
 		$return_url = get_option( NEWSPACK_HANDOFF_RETURN_URL, '' );
 
+		if ( $return_url && $this->matches_current_request( $return_url ) ) {
+			$this->clear_all_handoff_options();
+			return;
+		}
+
+		$destination_url = get_option( NEWSPACK_HANDOFF_DESTINATION_URL, '' );
+		if ( $destination_url && self::is_editor_destination( $destination_url ) && ! $this->matches_current_request( $destination_url ) ) {
+			$this->clear_all_handoff_options();
+			return;
+		}
+
 		if ( $return_url ) {
-			if ( $this->is_on_return_url( $return_url ) ) {
-				$this->clear_all_handoff_options();
-			}
 			return;
 		}
 
@@ -284,16 +298,27 @@ class Handoff_Banner {
 	}
 
 	/**
-	 * Check whether the current admin request matches a stored return URL.
+	 * Whether a handoff destination is a block editor screen.
 	 *
-	 * Compares the script filename (e.g. `admin.php`) and every query parameter
-	 * declared in the return URL. Same-site validation is enforced upstream at
-	 * the REST layer, so host is not compared here.
-	 *
-	 * @param string $return_url Stored handoff return URL.
+	 * @param string $url Stored destination URL.
 	 * @return bool
 	 */
-	private function is_on_return_url( $return_url ) {
+	private static function is_editor_destination( $url ) {
+		$path = (string) wp_parse_url( $url, PHP_URL_PATH );
+		return in_array( basename( $path ), [ 'post.php', 'post-new.php', 'site-editor.php' ], true );
+	}
+
+	/**
+	 * Check whether the current admin request matches a stored handoff URL.
+	 *
+	 * Compares the script filename (e.g. `admin.php`) and every query parameter
+	 * declared in the stored URL. Same-site validation is enforced upstream at
+	 * the REST layer, so host is not compared here.
+	 *
+	 * @param string $return_url Stored handoff URL.
+	 * @return bool
+	 */
+	private function matches_current_request( $return_url ) {
 		$parsed = wp_parse_url( $return_url );
 		if ( empty( $parsed ) ) {
 			return false;
