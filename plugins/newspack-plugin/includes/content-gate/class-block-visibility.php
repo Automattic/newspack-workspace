@@ -183,6 +183,19 @@ class Block_Visibility {
 			return;
 		}
 
+		// No panel while the rules it configures are inert for readers — offering
+		// controls that do nothing is worse than offering none. Matches the predicate
+		// filter_render_block() enforces on, so the panel is present exactly when the
+		// settings it writes have an effect.
+		//
+		// Only the panel. register_block_type_args() stays unconditional on purpose:
+		// the attributes must keep round-tripping through save and load, so a block
+		// configured before Audience Management was switched off still carries its
+		// settings and starts applying again the moment it is switched back on.
+		if ( ! Reader_Activation::is_enabled() ) {
+			return;
+		}
+
 		$available_post_types = array_column(
 			Content_Restriction_Control::get_available_post_types(),
 			'value'

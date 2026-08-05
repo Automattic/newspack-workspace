@@ -222,6 +222,47 @@ class Gating_Inertness_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The editor panel goes with the enforcement: no point offering controls that
+	 * write settings readers will never feel.
+	 *
+	 * The attributes must survive it, though. `register_block_type_args()` stays
+	 * unconditional so a block configured before Audience Management was switched
+	 * off keeps its settings through save and load, and starts applying again the
+	 * moment it is switched back on. Losing them would make the toggle destructive.
+	 */
+	public function test_block_editor_panel_hides_but_attributes_survive() {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+		// enqueue_block_editor_assets() bails when no post is in context (Site Editor,
+		// widget screens), so without this the enqueue assertion below would hold
+		// whether or not the guard exists.
+		$GLOBALS['post'] = get_post( self::factory()->post->create() ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		$this->disable_audience_management();
+
+		// The method also bails when the built asset is absent, which would make the
+		// enqueue assertion pass without proving anything. Say so rather than let it
+		// quietly stop discriminating in an unbuilt checkout.
+		if ( ! file_exists( dirname( NEWSPACK_PLUGIN_FILE ) . '/dist/content-gate-block-visibility.asset.php' ) ) {
+			$this->markTestSkipped( 'dist/content-gate-block-visibility.asset.php is not built; the enqueue guard cannot be exercised.' );
+		}
+
+		wp_dequeue_script( 'newspack-content-gate-block-visibility' );
+		Block_Visibility::enqueue_block_editor_assets();
+		$this->assertFalse(
+			wp_script_is( 'newspack-content-gate-block-visibility', 'enqueued' ),
+			'The block visibility panel should not load while gating is inactive.'
+		);
+
+		$args = Block_Visibility::register_block_type_args( [ 'attributes' => [] ], 'core/group' );
+		foreach ( [ 'newspackAccessControlVisibility', 'newspackAccessControlMode', 'newspackAccessControlGateIds', 'newspackAccessControlRules' ] as $attribute ) {
+			$this->assertArrayHasKey(
+				$attribute,
+				$args['attributes'],
+				"$attribute must stay registered while gating is inactive, or a block's settings are lost on save."
+			);
+		}
+	}
+
+	/**
 	 * The article path: a gate that restricts stops restricting.
 	 */
 	public function test_post_restriction_goes_inert() {
