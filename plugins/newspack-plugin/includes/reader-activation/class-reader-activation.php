@@ -1411,6 +1411,24 @@ final class Reader_Activation {
 	 * this field is named `email` to hopefully catch more bots who might be
 	 * looking for such fields, where as the "real" field is named "npe".
 	 *
+	 * Only a bot should ever fill this in: a non-empty value makes the form return
+	 * a fake success without signing anyone in, so a reader whose browser fills it
+	 * is told they're signed in and then meets a login form on the next page.
+	 * Keeping browsers out of it takes more than `autocomplete="off"`, which is
+	 * advisory and widely ignored on address fields: browsers and password managers
+	 * fill a field that renders, however small or clipped, and skip one that
+	 * doesn't render at all. Hence `display:none` inline — inline so a stripped or
+	 * deferred stylesheet can't expose the field either — plus the opt-out
+	 * attributes the password managers that publish one look for. The `.nphp`
+	 * stylesheet rules carry the same `display:none`, so they remain a real fallback
+	 * for a policy that strips the style attribute rather than a merely visual one.
+	 *
+	 * The trade is deliberate: a bot that checks computed style can now skip the
+	 * field, in exchange for readers never being locked out of their accounts.
+	 *
+	 * newspack-newsletters renders its own copy of this field in its Subscribe block
+	 * (`src/blocks/subscribe/index.php`). Changes here belong there too.
+	 *
 	 * Not rendered if reCAPTCHA is enabled as it's a superior spam protection.
 	 *
 	 * @param string $placeholder Placeholder text to render in the field.
@@ -1424,7 +1442,7 @@ final class Reader_Activation {
 			$placeholder = __( 'Enter your email address', 'newspack-plugin' );
 		}
 		?>
-		<input class="nphp" tabindex="-1" aria-hidden="true" name="email" type="email" autocomplete="off" placeholder="<?php echo \esc_attr( $placeholder ); ?>" />
+		<input class="nphp" tabindex="-1" aria-hidden="true" name="email" type="email" autocomplete="off" data-1p-ignore data-lpignore="true" data-form-type="other" style="display:none;" placeholder="<?php echo \esc_attr( $placeholder ); ?>" />
 		<?php
 	}
 

@@ -266,8 +266,12 @@
 		display: none;
 	}
 
+	/* `display: none` rather than only clipping: a clipped field still renders, and
+	 * browsers autofill fields that render. The field also carries this inline, so
+	 * this rule is the fallback for a policy that strips the style attribute. */
 	.nphp,
 	input[type="email"].nphp {
+		display: none;
 		@include mixins.visuallyHidden;
 	}
 
