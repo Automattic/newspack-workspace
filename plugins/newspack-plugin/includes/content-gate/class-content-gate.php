@@ -275,7 +275,7 @@ class Content_Gate {
 	 *
 	 * @return bool
 	 */
-	public static function is_gating_active() {
+	public static function is_gating_active(): bool {
 		return self::is_newspack_feature_enabled() && Reader_Activation::is_enabled();
 	}
 

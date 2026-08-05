@@ -53,19 +53,29 @@ class Block_Visibility {
 			return $block_content;
 		}
 
-		// This path evaluates gate rules itself rather than asking
-		// `newspack_is_post_restricted`, so it needs the gating predicate explicitly.
-		// Without it a members-only block stayed hidden while the article around it
-		// rendered in full, leaving the reader a hole in the page and — with Audience
-		// Management off — no registration surface to fill it.
-		if ( ! Content_Gate::is_gating_active() ) {
-			return $block_content;
-		}
-
 		// Bypass access control in admin screens and REST requests (block renderer,
 		// preview, query-loop rendering inside the editor) so blocks are never hidden
 		// from editors during content authoring.
 		if ( is_admin() || ( defined( 'REST_REQUEST' ) && REST_REQUEST ) ) {
+			return $block_content;
+		}
+
+		// This path evaluates rules itself rather than asking
+		// `newspack_is_post_restricted`, so it needs the dependency stated explicitly.
+		// Without it a members-only block stayed hidden while the article around it
+		// rendered in full, leaving the reader a hole in the page and no registration
+		// surface to fill it.
+		//
+		// Reader Activation alone, NOT Content_Gate::is_gating_active(): block
+		// visibility is flag-independent by design — this class registers
+		// unconditionally, its editor panel loads without `NEWSPACK_CONTENT_GATES`,
+		// and in `custom` mode a block needs no gate at all, just a registration rule.
+		// So the feature is live on sites that never enabled content gates, and ANDing
+		// in the constant would make blocks they deliberately hid render to everyone.
+		// What this rule actually depends on is a reader's ability to register, which
+		// is Reader Activation. Sits after the bypass above so editor and REST renders
+		// don't pay for the option read.
+		if ( ! Reader_Activation::is_enabled() ) {
 			return $block_content;
 		}
 

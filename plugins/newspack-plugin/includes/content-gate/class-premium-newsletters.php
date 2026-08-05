@@ -385,6 +385,14 @@ class Premium_Newsletters {
 	 * @return void
 	 */
 	private static function add_user_to_queue( $user_id, $source = '' ) {
+		// Guarded at the chokepoint rather than per handler: the renewal handler
+		// reaches this directly rather than through maybe_enqueue_access_check(), and
+		// a fifth entry point would otherwise have to remember on its own. Nothing
+		// accumulates while gating is inactive, so re-enabling processes current
+		// events rather than a backlog of stale ones.
+		if ( ! Content_Gate::is_gating_active() ) {
+			return;
+		}
 		$user_id = (int) $user_id;
 		if ( ! $user_id ) {
 			return;
@@ -448,6 +456,15 @@ class Premium_Newsletters {
 		// first request after it comes back, whatever changed the setting. A hook on the
 		// setting transition would miss a direct option write, and unscheduling from
 		// there would be undone by this method on the very next request anyway.
+		//
+		// Clearing discards pending entries rather than holding them, so re-enabling
+		// processes current events instead of replaying a stale backlog. The cost is
+		// that entitlement changes made during the off window are not reconciled: a
+		// reader who cancels while gating is inactive keeps their premium list
+		// membership until their next subscription event. Accepted deliberately —
+		// acting on hours-old subscription state is the worse failure — but it means
+		// the off window is not free, and a reconciliation sweep on re-enable is the
+		// fix if that ever bites.
 		if ( ! Content_Gate::is_gating_active() ) {
 			if ( wp_next_scheduled( self::SCHEDULED_HOOK ) || ! empty( get_option( self::QUEUE_OPTION, [] ) ) ) {
 				self::unschedule_access_check_event();
@@ -531,6 +548,12 @@ class Premium_Newsletters {
 	 * @param int   $client_id ID of the client that triggered the event.
 	 */
 	public static function set_subscribed_lists( $timestamp, $data, $client_id ) {
+		// Bail before the work, not just before the queue write: the snapshot below
+		// costs a remote ESP round-trip and a user-meta write, and it exists only to
+		// inform an access check that cannot run while gating is inactive.
+		if ( ! Content_Gate::is_gating_active() ) {
+			return;
+		}
 		if ( empty( $data['user_id'] ) ) {
 			return;
 		}
@@ -570,12 +593,6 @@ class Premium_Newsletters {
 	 *                          may omit this for an untagged enqueue.
 	 */
 	public static function maybe_enqueue_access_check( $timestamp, $data, $client_id, $source = '' ) {
-		// Nothing accumulates while gating is inactive, so re-enabling processes current
-		// events rather than a backlog of stale ones. The triggering data events are
-		// WooCommerce-driven and keep firing regardless.
-		if ( ! Content_Gate::is_gating_active() ) {
-			return;
-		}
 		if ( empty( $data['user_id'] ) ) {
 			return;
 		}

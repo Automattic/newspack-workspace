@@ -50,6 +50,23 @@ const AudienceManagementRequired = ( { isNewsletter = false }: { isNewsletter?: 
 							{ __( 'Set up Audience Management', 'newspack-plugin' ) }
 						</Button>
 					) }
+					{ /* This screen is also what a publisher sees after switching Audience
+					     Management off on a site that already has gates, and they are given no
+					     other signal: the gate list is replaced by this state, every sub-route
+					     redirects here, and the CPT is hidden from the menu. Say plainly that
+					     nothing was deleted, so "where did my gates go" has an answer on the
+					     screen that replaced them. */ }
+					<p>
+						{ isNewsletter
+							? __(
+									'Any premium newsletters you have already set up are kept. They stop applying while Audience Management is off, and start again once it is on.',
+									'newspack-plugin'
+							  )
+							: __(
+									'Any content gates you have already set up are kept. They stop applying while Audience Management is off, and start again once it is on.',
+									'newspack-plugin'
+							  ) }
+					</p>
 					{ /* Points at the Access Control doc rather than the Audience Management one:
 					     the prerequisite is being added there, and that page is where the original
 					     support question started. */ }

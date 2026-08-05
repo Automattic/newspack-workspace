@@ -22,7 +22,7 @@ defined( 'ABSPATH' ) || exit;
  * then gives them no way in.
  *
  * Gating therefore stands down rather than half-works: every reader-facing
- * enforcement path asks {@see Content_Gate::is_gating_active()}, so with Audience
+ * enforcement path asks {@see \Newspack\Content_Gate::is_gating_active()}, so with Audience
  * Management off gates stay configured and restrict nothing. This trait is the
  * other half of that — it keeps the publisher from authoring new gating that
  * would do nothing, and points them at the setting that makes it work.
@@ -86,13 +86,19 @@ trait Audience_Management_Dependency {
 	 * a stale browser tab from POSTing a gate into existence behind it.
 	 *
 	 * Deliberately scoped to creation. Reads, updates, priority changes and
-	 * deletes stay open, so a publisher who switches Audience Management off can
-	 * still be handed back the screens to manage what they already built. Nothing
-	 * is at stake in leaving them open: gates go inert while Audience Management is
-	 * off ({@see Content_Gate::is_gating_active()}), so a gate reached by those
-	 * routes is restricting nothing at the time.
+	 * deletes stay open because nothing is at stake in leaving them open: gates go
+	 * inert while Audience Management is off
+	 * ({@see \Newspack\Content_Gate::is_gating_active()}), so a gate reached by
+	 * those routes is restricting nothing at the time.
 	 *
-	 * This one is a nudge rather than a safety property, and is worth keeping as
+	 * Note that with Audience Management off there is currently no screen those
+	 * routes back: the gate list is replaced by the prerequisite state, every
+	 * sub-route redirects to it, and the CPT is registered `show_in_menu => false`.
+	 * Gates are frozen and out of reach until Audience Management is switched back
+	 * on, at which point they all resume together. Leaving the routes open is what
+	 * keeps a read-only list possible later without another permissions change.
+	 *
+	 * This guard is a nudge rather than a safety property, and is worth keeping as
 	 * one: a gate authored now would do nothing until Audience Management is set
 	 * up, and finding that out at save time is worse than being told up front.
 	 *

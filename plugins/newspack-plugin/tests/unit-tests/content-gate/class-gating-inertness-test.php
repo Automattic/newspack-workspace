@@ -20,6 +20,17 @@
  * surface that asks the question for itself is the failure this suite is
  * designed to catch, so a new path belongs here as a new case.
  *
+ * NOT covered here, deliberately rather than by oversight: the two premium
+ * newsletter paths that consume restriction as an access decision
+ * (`Premium_Newsletters::check_access()` and `::filter_subscription_lists()`).
+ * `Newspack\Newsletters\Subscription_Lists` is not loaded under PHPUnit, so
+ * `Content_Restriction_Control::get_post_gates()` can never classify a post as a
+ * newsletter, `get_restricted_lists()` is always empty, and both methods return
+ * before reaching the branch under test. A test written against them here passes
+ * with the guard deleted — verified — which is worse than no test. They are
+ * covered by the enqueue and renewal cases below, which gate the same queue those
+ * paths consume, and by runtime verification recorded on the PR.
+ *
  * @package Newspack\Tests
  */
 
@@ -129,16 +140,24 @@ class Gating_Inertness_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The predicate tracks the feature flag as well, so the two converge cleanly
-	 * when the constant eventually retires.
+	 * The renewal handler reaches the queue directly rather than through
+	 * `maybe_enqueue_access_check()`, which is why the guard lives at the queue
+	 * chokepoint. It also has to bail before the snapshot it takes, since that costs
+	 * a remote ESP round-trip for an access check that cannot run.
 	 */
-	public function test_is_gating_active_requires_the_feature_flag() {
-		add_filter( 'newspack_reader_activation_enabled', '__return_true' );
+	public function test_renewal_events_are_not_enqueued() {
+		$user_id = self::factory()->user->create();
+		$this->disable_audience_management();
 
-		$this->assertSame(
-			Content_Gate::is_newspack_feature_enabled(),
-			Content_Gate::is_gating_active(),
-			'With Audience Management on, gating should track the feature flag exactly.'
+		Premium_Newsletters::set_subscribed_lists( time(), [ 'user_id' => $user_id ], 0 );
+
+		$this->assertEmpty(
+			get_option( Premium_Newsletters::QUEUE_OPTION, [] ),
+			'A renewal event should not queue an access check while gating is inactive.'
+		);
+		$this->assertEmpty(
+			get_user_meta( $user_id, Premium_Newsletters::SUBSCRIBED_LISTS_META_KEY, true ),
+			'The renewal snapshot should not be taken while gating is inactive.'
 		);
 	}
 
@@ -250,7 +269,7 @@ class Gating_Inertness_Test extends WP_UnitTestCase {
 			'Expected the pending queue to be discarded rather than held while gating is inactive.'
 		);
 
-		remove_all_filters( 'newspack_reader_activation_enabled' );
+		remove_filter( 'newspack_reader_activation_enabled', '__return_false' );
 		Premium_Newsletters::register_access_check_event();
 
 		$this->assertNotFalse(
