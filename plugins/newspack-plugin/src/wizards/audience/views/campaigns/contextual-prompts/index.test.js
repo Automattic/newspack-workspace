@@ -1,7 +1,7 @@
 /**
  * Contextual Prompts tab: a failed initial status fetch surfaces an error with a
  * Retry that re-runs the fetch, profile fields lock while a save is pending, and
- * the header's Edit design action hands off to the prompt pattern's editor.
+ * the header's Edit Design action hands off to the prompt pattern's editor.
  */
 
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
@@ -170,12 +170,12 @@ describe( 'ContextualPrompts tab', () => {
 		apiFetch.mockResolvedValueOnce( { HandoffLink: HANDOFF_LINK } );
 		renderTab();
 
-		await waitFor( () => expect( screen.getByRole( 'button', { name: 'Edit design' } ) ).toBeInTheDocument() );
+		await waitFor( () => expect( screen.getByRole( 'button', { name: 'Edit Design' } ) ).toBeInTheDocument() );
 		// The design lives in the pattern: the tab body carries no style controls.
 		expect( screen.queryByRole( 'heading', { name: 'Style' } ) ).toBeNull();
 		expect( screen.queryByRole( 'button', { name: 'Background' } ) ).toBeNull();
 
-		fireEvent.click( screen.getByRole( 'button', { name: 'Edit design' } ) );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Edit Design' } ) );
 
 		await waitFor( () => expect( window.location.href ).toBe( HANDOFF_LINK ) );
 		expect( apiFetch ).toHaveBeenCalledWith(
@@ -198,7 +198,7 @@ describe( 'ContextualPrompts tab', () => {
 
 	// The handoff POSTs and navigates itself, so there is no link for the
 	// unsaved-changes guard to intercept: the discard dialog is asked for here.
-	it( 'confirms before Edit design leaves with unsaved edits, and discarding hands off', async () => {
+	it( 'confirms before Edit Design leaves with unsaved edits, and discarding hands off', async () => {
 		const HANDOFF_LINK = 'https://example.test/wp-admin/site-editor.php?handoff=1';
 		const location = window.location;
 		delete window.location;
@@ -210,7 +210,7 @@ describe( 'ContextualPrompts tab', () => {
 		await waitFor( () => expect( screen.getByRole( 'textbox', { name: 'Publisher name' } ) ).toBeInTheDocument() );
 		fireEvent.change( screen.getByRole( 'textbox', { name: 'Publisher name' } ), { target: { value: 'Newsroom X' } } );
 
-		fireEvent.click( screen.getByRole( 'button', { name: 'Edit design' } ) );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Edit Design' } ) );
 		expect( screen.getByText( /unsaved changes that will be lost/i ) ).toBeInTheDocument();
 		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
 		// A refresh with edits pending still prompts.
@@ -240,12 +240,12 @@ describe( 'ContextualPrompts tab', () => {
 		window.location = location;
 	} );
 
-	it( 'omits the Edit design action when the pattern edit URL is empty', async () => {
+	it( 'omits the Edit Design action when the pattern edit URL is empty', async () => {
 		apiFetch.mockResolvedValueOnce( { ...patternStatus(), pattern_id: 0, pattern_edit_url: '' } );
 		renderTab();
 
 		await waitFor( () => expect( screen.getByRole( 'textbox', { name: 'Publisher name' } ) ).toBeInTheDocument() );
-		expect( screen.queryByRole( 'button', { name: 'Edit design' } ) ).toBeNull();
+		expect( screen.queryByRole( 'button', { name: 'Edit Design' } ) ).toBeNull();
 	} );
 
 	it( 'sends the profile fields alone in the save payload', async () => {

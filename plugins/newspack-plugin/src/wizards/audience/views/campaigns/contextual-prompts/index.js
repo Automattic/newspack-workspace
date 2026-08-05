@@ -218,11 +218,11 @@ const ContextualPrompts = props => {
 			{ status.pattern_edit_url &&
 				( isDirty ? (
 					<Button variant="secondary" onClick={ () => requestConfirm( goToPattern ) }>
-						{ __( 'Edit design', 'newspack-plugin' ) }
+						{ __( 'Edit Design', 'newspack-plugin' ) }
 					</Button>
 				) : (
 					<Handoff variant="secondary" url={ status.pattern_edit_url } bannerText={ bannerText } bannerButtonText={ bannerButtonText }>
-						{ __( 'Edit design', 'newspack-plugin' ) }
+						{ __( 'Edit Design', 'newspack-plugin' ) }
 					</Handoff>
 				) ) }
 			<Button variant="primary" onClick={ onSave } disabled={ inFlight || ! isDirty }>
