@@ -28,17 +28,22 @@ const LOCK = {
 };
 
 describe( 'useLockedPosts', () => {
+	const originalWp = window.wp;
 	let connectNow;
 
 	beforeEach( () => {
 		connectNow = jest.fn();
 		window.jQuery = createJQuery();
-		window.wp = { ...window.wp, heartbeat: { connectNow } };
+		window.wp = { heartbeat: { connectNow } };
 	} );
 
 	afterEach( () => {
 		delete window.jQuery;
-		delete window.wp.heartbeat;
+		if ( originalWp ) {
+			window.wp = originalWp;
+		} else {
+			delete window.wp;
+		}
 	} );
 
 	it( 'sends the ids as heartbeat post keys and connects immediately', () => {
