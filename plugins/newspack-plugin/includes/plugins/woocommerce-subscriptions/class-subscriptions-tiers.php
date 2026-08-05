@@ -341,20 +341,56 @@ class Subscriptions_Tiers {
 			// Extract the variations if it's a variable subscription product.
 			if ( WooCommerce_Subscriptions::is_variable_subscription_product( $product ) ) {
 				$variations = $product->get_available_variations();
+				$tier_products = [];
 				foreach ( $variations as $variation ) {
-					$selected_products[] = new \WC_Product_Variation( $variation['variation_id'] );
+					$tier_products[] = new \WC_Product_Variation( $variation['variation_id'] );
 				}
 			} else {
-				$selected_products[] = $product;
+				$tier_products = [ $product ];
+			}
+
+			$plans = WooCommerce_Subscriptions::get_subscription_plans( $product );
+			if ( empty( $plans ) ) {
+				$selected_products = array_merge( $selected_products, $tier_products );
+				continue;
+			}
+
+			// Under the plan model the frequency is the plan and the variations are
+			// orthogonal to it, so every tier is purchasable on every plan. Stamp a
+			// separate instance per pair - APFS filters price off the active plan,
+			// so each instance prices itself.
+			foreach ( $plans as $plan_key => $plan ) {
+				foreach ( $tier_products as $tier_product ) {
+					$instance = clone $tier_product;
+					\WCS_ATT_Product_Schemes::set_subscription_scheme( $instance, $plan_key );
+					$selected_products[] = $instance;
+				}
 			}
 		}
 
 		$products_by_frequency = [];
+		$frequency_plans       = [];
 		foreach ( $selected_products as $product ) {
 			$frequency = self::get_frequency( $product );
 			if ( ! $frequency ) {
 				continue;
 			}
+
+			// Two plans can share a period and interval - a monthly plan and a
+			// discounted monthly plan, say. Give the second its own bucket instead
+			// of merging it into the first, which would duplicate the tiers and
+			// hide one of the plans.
+			$plan_key = WooCommerce_Subscriptions::get_active_plan_key( $product );
+			if ( $plan_key ) {
+				$base   = $frequency;
+				$suffix = 1;
+				while ( isset( $frequency_plans[ $frequency ] ) && $frequency_plans[ $frequency ] !== $plan_key ) {
+					++$suffix;
+					$frequency = $base . '_' . $suffix;
+				}
+				$frequency_plans[ $frequency ] = $plan_key;
+			}
+
 			$products_by_frequency[ $frequency ][] = $product;
 		}
 

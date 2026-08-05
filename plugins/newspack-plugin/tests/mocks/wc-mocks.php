@@ -1237,6 +1237,51 @@ function woocommerce_wp_text_input( $field ) {
 	);
 }
 /**
+ * Minimal `wc_get_products()` stub: filters the mock product database by
+ * `type`, the only query arg `Subscriptions_Tiers` reads.
+ *
+ * @param array $args Query args. Only `type` is honored.
+ *
+ * @return \WC_Product[] Matching mock products.
+ */
+function wc_get_products( $args = [] ) {
+	global $products_database;
+	$products = array_values( $products_database );
+	if ( isset( $args['type'] ) ) {
+		$types    = (array) $args['type'];
+		$products = array_values(
+			array_filter(
+				$products,
+				function ( $product ) use ( $types ) {
+					return in_array( $product->get_type(), $types, true );
+				}
+			)
+		);
+	}
+	return $products;
+}
+/**
+ * Minimal `wcs_user_has_subscription()` stub, present so
+ * `function_exists( 'wcs_user_has_subscription' )` guards pass. Tests that
+ * need real subscription-ownership behavior use
+ * `wcs_get_users_subscriptions()` instead.
+ *
+ * @param int   $user_id    User ID.
+ * @param mixed $product_id Product ID, unused by this stub.
+ * @param mixed $status     Status, unused by this stub.
+ *
+ * @return bool Whether the user holds any subscription.
+ */
+function wcs_user_has_subscription( $user_id = 0, $product_id = '', $status = 'any' ) {
+	global $subscriptions_database;
+	foreach ( (array) $subscriptions_database as $subscription ) {
+		if ( $subscription->get_customer_id() === $user_id ) {
+			return true;
+		}
+	}
+	return false;
+}
+/**
  * Recording mock: notices land on the $wc_mock_notices global so tests can
  * assert the reader-facing half of code paths gated on
  * function_exists( 'wc_add_notice' ).

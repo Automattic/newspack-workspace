@@ -139,4 +139,97 @@ class Newspack_Test_Subscriptions_Tiers_Plans extends WP_UnitTestCase {
 
 		$this->assertSame( 'week_2', \Newspack\Subscriptions_Tiers::get_frequency( $product ) );
 	}
+
+	/**
+	 * A plan-based variable product yields one bucket per plan, each holding
+	 * every variation. This is the NPPM-3053 regression: an annual plan that
+	 * never reached the modal at all.
+	 */
+	public function test_plan_based_variable_product_yields_one_bucket_per_plan() {
+		$plans = [
+			'mkey' => [
+				'period'   => 'month',
+				'interval' => 1,
+			],
+			'ykey' => [
+				'period'   => 'year',
+				'interval' => 1,
+			],
+		];
+
+		$parent = wc_create_mock_product(
+			[
+				'id'       => 320,
+				'type'     => 'variable',
+				'children' => [ 321, 322 ],
+			]
+		);
+		$this->give_plans( 320, $plans );
+		foreach ( [ 321, 322 ] as $vid ) {
+			wc_create_mock_product(
+				[
+					'id'        => $vid,
+					'type'      => 'variation',
+					'parent_id' => 320,
+				]
+			);
+			$this->give_plans( $vid, $plans );
+		}
+
+		$tiers = \Newspack\Subscriptions_Tiers::get_tiers_by_frequency( $parent );
+
+		$this->assertSame( [ 'month_1', 'year_1' ], array_keys( $tiers ) );
+		$this->assertCount( 2, $tiers['month_1'] );
+		$this->assertCount( 2, $tiers['year_1'] );
+		$this->assertSame(
+			[ 321, 322 ],
+			array_map(
+				function ( $p ) {
+					return $p->get_id();
+				},
+				$tiers['year_1']
+			)
+		);
+	}
+
+	/**
+	 * Two plans sharing a period and interval get their own buckets rather than
+	 * merging into one and duplicating the tiers.
+	 */
+	public function test_plans_sharing_a_frequency_do_not_merge() {
+		$plans = [
+			'cheap' => [
+				'period'   => 'month',
+				'interval' => 1,
+			],
+			'dear'  => [
+				'period'   => 'month',
+				'interval' => 1,
+			],
+		];
+
+		$parent = wc_create_mock_product(
+			[
+				'id'       => 330,
+				'type'     => 'variable',
+				'children' => [ 331 ],
+			]
+		);
+		$this->give_plans( 330, $plans );
+		wc_create_mock_product(
+			[
+				'id'        => 331,
+				'type'      => 'variation',
+				'parent_id' => 330,
+			]
+		);
+		$this->give_plans( 331, $plans );
+
+		$tiers = \Newspack\Subscriptions_Tiers::get_tiers_by_frequency( $parent );
+
+		$this->assertCount( 2, $tiers, 'Both plans should survive, in separate buckets.' );
+		foreach ( $tiers as $products ) {
+			$this->assertCount( 1, $products );
+		}
+	}
 }
