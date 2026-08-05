@@ -205,6 +205,7 @@ const ContextualPromptPanel = () => {
 	};
 
 	const generateLabel = isRegenerate ? __( 'Regenerate Suggestions', 'newspack-popups' ) : __( 'Generate Suggestions', 'newspack-popups' );
+	const listedCandidates = canApply ? candidates : [];
 
 	return (
 		<PluginDocumentSettingPanel name="newspack-contextual-prompt" title={ __( 'Contextual Prompt', 'newspack-popups' ) }>
@@ -234,20 +235,26 @@ const ContextualPromptPanel = () => {
 						{ __( 'The Contextual Prompt pattern has no editable copy field, so generated copy cannot be applied.', 'newspack-popups' ) }
 					</Notice>
 				) : (
-					<GenerateButton busy={ generating } disabled={ applying } onClick={ generate }>
-						{ generateLabel }
-					</GenerateButton>
+					/* Without a prompt in the post, applying inserts one rather than
+					   replacing its copy: confirm what actually happened. */
+					<CandidateList
+						candidates={ listedCandidates }
+						onApply={ applyCandidate }
+						onApplyingChange={ setApplying }
+						confirmation={ ! promptDetached && ! promptClientId ? __( 'Contextual Prompt added.', 'newspack-popups' ) : undefined }
+						action={
+							<GenerateButton
+								variant={ listedCandidates.length ? 'tertiary' : 'secondary' }
+								busy={ generating }
+								disabled={ applying }
+								onClick={ generate }
+							>
+								{ generateLabel }
+							</GenerateButton>
+						}
+					/>
 				) }
 			</VStack>
-
-			{ /* Without a prompt in the post, applying inserts one rather than
-			     replacing its copy: confirm what actually happened. */ }
-			<CandidateList
-				candidates={ canApply ? candidates : [] }
-				onApply={ applyCandidate }
-				onApplyingChange={ setApplying }
-				confirmation={ ! promptDetached && ! promptClientId ? __( 'Contextual Prompt added.', 'newspack-popups' ) : undefined }
-			/>
 		</PluginDocumentSettingPanel>
 	);
 };

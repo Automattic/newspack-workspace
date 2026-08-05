@@ -40,6 +40,7 @@ jest.mock( '@wordpress/components', () => ( {
 	Notice: ( { children } ) => <div>{ children }</div>,
 	PanelBody: ( { children } ) => <section>{ children }</section>,
 	Button: ( { children, onClick } ) => <button onClick={ onClick }>{ children }</button>,
+	__experimentalVStack: ( { children } ) => <div>{ children }</div>,
 } ) );
 
 const PATTERN_ID = 12;

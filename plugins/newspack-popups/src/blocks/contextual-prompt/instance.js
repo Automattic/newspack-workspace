@@ -17,7 +17,8 @@ import { useEffect, useRef, useState } from '@wordpress/element';
 import { useSelect, useDispatch, select as coreSelect } from '@wordpress/data';
 import { InspectorControls, store as blockEditorStore } from '@wordpress/block-editor';
 import { parse } from '@wordpress/blocks';
-import { Notice, PanelBody } from '@wordpress/components';
+// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
+import { Notice, PanelBody, __experimentalVStack as VStack } from '@wordpress/components';
 
 /**
  * Internal dependencies.
@@ -352,43 +353,57 @@ const PromptInstanceInspector = ( { clientId, attributes } ) => {
 		// would never render.
 		<InspectorControls group="content">
 			<PanelBody title={ __( 'Prompt Copy', 'newspack-popups' ) } initialOpen>
-				{ error && (
-					<Notice status="error" isDismissible={ false }>
-						{ error }
-					</Notice>
-				) }
-				<p style={ { marginTop: 0 } }>
-					{ framing
-						? sprintf(
-								/* translators: %1$s: the edited content's post type label. %2$s: the prompt's position. */
-								__(
-									'Copy is generated from this %1$s, framed for its position (%2$s). Review a suggestion and apply it to replace the current copy.',
-									'newspack-popups'
-								),
-								POST_TYPE_LABEL,
-								FRAMING_LABELS[ framing ].toLowerCase()
-						  )
-						: sprintf(
-								/* translators: %s: the edited content's post type label. */
-								__(
-									'Copy is generated from this %s. Review a suggestion and apply it to replace the current copy.',
-									'newspack-popups'
-								),
-								POST_TYPE_LABEL
-						  ) }
-				</p>
-				{ patternResolved && ! boundName ? (
-					<Notice status="warning" isDismissible={ false }>
-						{ __( 'The Contextual Prompt pattern has no editable copy field, so generated copy cannot be applied.', 'newspack-popups' ) }
-					</Notice>
-				) : (
-					<>
-						<GenerateButton busy={ generating } disabled={ applying } onClick={ regenerate }>
-							{ __( 'Regenerate Suggestions', 'newspack-popups' ) }
-						</GenerateButton>
-						<CandidateList candidates={ candidates } onApply={ apply } onApplyingChange={ setApplying } />
-					</>
-				) }
+				<VStack spacing={ 4 }>
+					{ error && (
+						<Notice status="error" isDismissible={ false }>
+							{ error }
+						</Notice>
+					) }
+					<p style={ { margin: 0 } }>
+						{ framing
+							? sprintf(
+									/* translators: %1$s: the edited content's post type label. %2$s: the prompt's position. */
+									__(
+										'Copy is generated from this %1$s, framed for its position (%2$s). Review a suggestion and apply it to replace the current copy.',
+										'newspack-popups'
+									),
+									POST_TYPE_LABEL,
+									FRAMING_LABELS[ framing ].toLowerCase()
+							  )
+							: sprintf(
+									/* translators: %s: the edited content's post type label. */
+									__(
+										'Copy is generated from this %s. Review a suggestion and apply it to replace the current copy.',
+										'newspack-popups'
+									),
+									POST_TYPE_LABEL
+							  ) }
+					</p>
+					{ patternResolved && ! boundName ? (
+						<Notice status="warning" isDismissible={ false }>
+							{ __(
+								'The Contextual Prompt pattern has no editable copy field, so generated copy cannot be applied.',
+								'newspack-popups'
+							) }
+						</Notice>
+					) : (
+						<CandidateList
+							candidates={ candidates }
+							onApply={ apply }
+							onApplyingChange={ setApplying }
+							action={
+								<GenerateButton
+									variant={ candidates.length ? 'tertiary' : 'secondary' }
+									busy={ generating }
+									disabled={ applying }
+									onClick={ regenerate }
+								>
+									{ __( 'Regenerate Suggestions', 'newspack-popups' ) }
+								</GenerateButton>
+							}
+						/>
+					) }
+				</VStack>
 			</PanelBody>
 		</InspectorControls>
 	);

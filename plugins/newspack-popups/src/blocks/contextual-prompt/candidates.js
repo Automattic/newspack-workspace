@@ -109,9 +109,9 @@ export const generateCandidates = async ( { postId, content, framing, regenerate
 	);
 };
 
-export const GenerateButton = ( { busy, disabled, onClick, children } ) => (
+export const GenerateButton = ( { busy, disabled, onClick, variant = 'secondary', children } ) => (
 	<Button
-		variant="secondary"
+		variant={ variant }
 		onClick={ onClick }
 		disabled={ busy || disabled }
 		isBusy={ busy }
@@ -129,7 +129,7 @@ const ARROW_STEPS = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 };
 // read as an acknowledgement rather than a flicker.
 const MIN_APPLY_MS = 900;
 
-export const CandidateList = ( { candidates, onApply, onApplyingChange, confirmation } ) => {
+export const CandidateList = ( { candidates, onApply, onApplyingChange, confirmation, action } ) => {
 	const [ selected, setSelected ] = useState( -1 );
 	const [ listed, setListed ] = useState( candidates );
 	const [ applying, setApplying ] = useState( false );
@@ -142,8 +142,9 @@ export const CandidateList = ( { candidates, onApply, onApplyingChange, confirma
 		setSelected( -1 );
 	}
 
+	// With nothing to choose from, generating is the only thing on offer.
 	if ( ! candidates.length ) {
-		return null;
+		return action || null;
 	}
 
 	const select = index => {
@@ -237,25 +238,28 @@ export const CandidateList = ( { candidates, onApply, onApplyingChange, confirma
 					);
 				} ) }
 			</VStack>
-			<Button
-				variant="primary"
-				__next40pxDefaultSize
-				className="newspack-popups__contextual-prompt-apply"
-				disabled={ applying || 0 > selected }
-				isBusy={ applying }
-				onClick={ applySelected }
-				aria-label={
-					selectedFraming
-						? sprintf(
-								/* translators: %s: the selected suggestion's framing label, e.g. "Top of Post". */
-								__( 'Apply suggestion: %s', 'newspack-popups' ),
-								selectedFraming
-						  )
-						: __( 'Apply the selected suggestion', 'newspack-popups' )
-				}
-			>
-				{ __( 'Apply', 'newspack-popups' ) }
-			</Button>
+			<VStack spacing={ 2 }>
+				<Button
+					variant="primary"
+					__next40pxDefaultSize
+					className="newspack-popups__contextual-prompt-apply"
+					disabled={ applying || 0 > selected }
+					isBusy={ applying }
+					onClick={ applySelected }
+					aria-label={
+						selectedFraming
+							? sprintf(
+									/* translators: %s: the selected suggestion's framing label, e.g. "Top of Post". */
+									__( 'Apply suggestion: %s', 'newspack-popups' ),
+									selectedFraming
+							  )
+							: __( 'Apply the selected suggestion', 'newspack-popups' )
+					}
+				>
+					{ __( 'Apply', 'newspack-popups' ) }
+				</Button>
+				{ action }
+			</VStack>
 		</>
 	);
 };

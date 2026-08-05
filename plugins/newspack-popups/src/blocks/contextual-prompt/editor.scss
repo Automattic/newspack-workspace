@@ -1,10 +1,6 @@
 @use "~@wordpress/base-styles/variables" as wp-vars;
 
 .newspack-popups {
-	&__contextual-prompt-candidates {
-		margin-top: wp-vars.$grid-unit-20;
-	}
-
 	&__contextual-prompt-candidate {
 		cursor: pointer;
 
@@ -27,7 +23,6 @@
 
 	&__contextual-prompt-apply {
 		justify-content: center;
-		margin-top: wp-vars.$grid-unit-20;
 		width: 100%;
 	}
 
