@@ -316,12 +316,15 @@ class Newspack_Test_WooCommerce_Connection_Payment_Method extends WP_UnitTestCas
 		Donations::reset_flagged_donation_product_ids_cache();
 
 		WC_Payment_Tokens::$tokens[301] = new WC_Payment_Token_CC( 'visa', '4242', 'pm_success1', 9, 'stripe' );
+		// Not @example.com: the outbound-mail guard suppresses sends to the
+		// placeholder domain while reporting success, and it is active in the
+		// test environment (only local/development env types are exempt).
 		$order                          = new WC_Order(
 			[
 				'status'               => 'completed',
 				'customer_id'          => 9,
 				'total'                => 20,
-				'billing_email'        => 'donor@example.com',
+				'billing_email'        => 'donor@tests.com',
 				'payment_method'       => 'stripe',
 				'payment_method_title' => 'Credit / Debit Card',
 				'meta'                 => [ '_stripe_source_id' => 'pm_success1' ],
