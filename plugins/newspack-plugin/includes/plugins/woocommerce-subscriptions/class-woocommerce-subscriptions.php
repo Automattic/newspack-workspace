@@ -768,6 +768,65 @@ class WooCommerce_Subscriptions {
 	}
 
 	/**
+	 * Get the subscription plans configured for a product.
+	 *
+	 * Plans may be defined on the product or inherited from the storewide plans,
+	 * so they are always read through the Subscriptions API rather than from
+	 * product meta.
+	 *
+	 * @param \WC_Product $product Product object.
+	 *
+	 * @return array Schemes keyed by scheme key. Empty when the product has no
+	 *               plans or the APFS API is unavailable.
+	 */
+	public static function get_subscription_plans( $product ) {
+		if ( ! self::has_subscription_plans( $product ) ) {
+			return [];
+		}
+		if ( ! method_exists( 'WCS_ATT_Product_Schemes', 'get_subscription_schemes' ) ) {
+			return [];
+		}
+		return (array) \WCS_ATT_Product_Schemes::get_subscription_schemes( $product );
+	}
+
+	/**
+	 * Frequency key for a subscription plan.
+	 *
+	 * Uses the same `<period>_<interval>` shape the legacy product model
+	 * produces, so frequency labels and controls work unchanged.
+	 *
+	 * @param \WCS_ATT_Scheme $plan Subscription plan.
+	 *
+	 * @return string Frequency key, or an empty string if the plan has no period.
+	 */
+	public static function get_plan_frequency( $plan ) {
+		if ( ! is_object( $plan ) || ! method_exists( $plan, 'get_period' ) ) {
+			return '';
+		}
+		$period = $plan->get_period();
+		if ( empty( $period ) ) {
+			return '';
+		}
+		$interval = (int) $plan->get_interval();
+		return $period . '_' . ( $interval > 0 ? $interval : 1 );
+	}
+
+	/**
+	 * The subscription plan currently stamped on a product instance.
+	 *
+	 * @param \WC_Product $product Product object.
+	 *
+	 * @return string Scheme key, or an empty string if none is set.
+	 */
+	public static function get_active_plan_key( $product ) {
+		if ( ! class_exists( 'WCS_ATT_Product_Schemes' ) || ! method_exists( 'WCS_ATT_Product_Schemes', 'get_subscription_scheme' ) ) {
+			return '';
+		}
+		$key = \WCS_ATT_Product_Schemes::get_subscription_scheme( $product );
+		return is_string( $key ) ? $key : '';
+	}
+
+	/**
 	 * Sanitize and validate a subscription ID or object as a WC_Subscription object.
 	 *
 	 * @param int|WC_Subscription $subscription The subscription ID or object.

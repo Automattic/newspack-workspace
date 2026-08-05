@@ -280,8 +280,8 @@ class WC_Order_Item_Product implements ArrayAccess {
 }
 
 class WC_Product {
-	private $data = [];
-	private $meta = [];
+	protected $data = [];
+	private $meta   = [];
 	public function __construct( $data = [] ) {
 		$this->data = $data;
 		if ( isset( $data['meta'] ) ) {
@@ -306,6 +306,20 @@ class WC_Product {
 	}
 	public function get_children() {
 		return $this->data['children'] ?? [];
+	}
+	public function get_status() {
+		return $this->data['status'] ?? 'publish';
+	}
+	public function get_available_variations() {
+		return array_map(
+			function ( $id ) {
+				return [ 'variation_id' => $id ];
+			},
+			$this->get_children()
+		);
+	}
+	public function get_mock_data() {
+		return $this->data;
 	}
 	public function get_regular_price() {
 		return $this->data['regular_price'] ?? ( $this->meta['_regular_price'] ?? 0 );
@@ -364,6 +378,21 @@ function wc_create_mock_product( $data = [] ) {
 	$product = new WC_Product( $data );
 	$products_database[ $product->get_id() ] = $product;
 	return $product;
+}
+
+if ( ! class_exists( 'WC_Product_Variation' ) ) {
+	/**
+	 * Minimal variation stub. Resolves from the mock product database by ID so
+	 * `new WC_Product_Variation( $id )` behaves like the real constructor, which
+	 * is how Subscriptions_Tiers rebuilds variations.
+	 */
+	class WC_Product_Variation extends WC_Product {
+		public function __construct( $id = 0 ) {
+			global $products_database;
+			$existing = $products_database[ $id ] ?? null;
+			parent::__construct( $existing ? $existing->get_mock_data() : [ 'id' => $id ] );
+		}
+	}
 }
 
 class WC_Order {
@@ -1601,16 +1630,151 @@ function wc_get_webhook( $id ) {
 	return isset( WC_Webhook::$registry[ (int) $id ] ) ? WC_Webhook::$registry[ (int) $id ] : null;
 }
 
+if ( ! class_exists( 'WCS_ATT_Scheme' ) ) {
+	/**
+	 * Stub of an All Products for Subscriptions scheme (a "subscription plan").
+	 */
+	class WCS_ATT_Scheme {
+		/**
+		 * Scheme data.
+		 *
+		 * @var array
+		 */
+		private $data;
+
+		/**
+		 * Constructor.
+		 *
+		 * @param string $key  Scheme key.
+		 * @param array  $data [ 'period' => string, 'interval' => int ].
+		 */
+		public function __construct( $key, $data ) {
+			$this->data = array_merge(
+				[
+					'key'      => $key,
+					'period'   => 'month',
+					'interval' => 1,
+				],
+				$data
+			);
+		}
+
+		/**
+		 * Scheme key.
+		 *
+		 * @return string
+		 */
+		public function get_key() {
+			return $this->data['key'];
+		}
+
+		/**
+		 * Billing period.
+		 *
+		 * @return string
+		 */
+		public function get_period() {
+			return $this->data['period'];
+		}
+
+		/**
+		 * Billing interval.
+		 *
+		 * @return int
+		 */
+		public function get_interval() {
+			return $this->data['interval'];
+		}
+	}
+}
+
 if ( ! class_exists( 'WCS_ATT_Product_Schemes' ) ) {
 	/**
 	 * Stub of the All Products for Subscriptions scheme reader that WooCommerce
 	 * Subscriptions 9.0+ ships in core. Tests opt products in by ID via
-	 * self::$products_with_schemes.
+	 * self::$products_with_schemes, and describe their plans via
+	 * self::$product_schemes.
 	 */
 	class WCS_ATT_Product_Schemes {
+		/**
+		 * Product IDs treated as carrying schemes.
+		 *
+		 * @var int[]
+		 */
 		public static $products_with_schemes = [];
-		public static function has_subscription_schemes( $product ) {
+
+		/**
+		 * Plans per product: [ product_id => [ scheme_key => [ 'period', 'interval' ] ] ].
+		 *
+		 * @var array
+		 */
+		public static $product_schemes = [];
+
+		/**
+		 * Active scheme key per product instance, keyed by spl_object_id.
+		 *
+		 * @var array
+		 */
+		public static $active_schemes = [];
+
+		/**
+		 * Whether the product has schemes.
+		 *
+		 * @param \WC_Product $product Product.
+		 * @param string      $context Unused, matches the real signature.
+		 *
+		 * @return bool
+		 */
+		public static function has_subscription_schemes( $product, $context = 'any' ) {
 			return in_array( $product->get_id(), self::$products_with_schemes, true );
+		}
+
+		/**
+		 * The product's schemes, keyed by scheme key.
+		 *
+		 * @param \WC_Product $product Product.
+		 * @param string      $context Unused, matches the real signature.
+		 *
+		 * @return array
+		 */
+		public static function get_subscription_schemes( $product, $context = 'any' ) {
+			$id = $product->get_id();
+			if ( ! isset( self::$product_schemes[ $id ] ) ) {
+				return [];
+			}
+			$schemes = [];
+			foreach ( self::$product_schemes[ $id ] as $key => $data ) {
+				$schemes[ $key ] = new WCS_ATT_Scheme( $key, $data );
+			}
+			return $schemes;
+		}
+
+		/**
+		 * Stamp an active scheme onto a product instance.
+		 *
+		 * @param \WC_Product $product Product.
+		 * @param string      $key     Scheme key.
+		 */
+		public static function set_subscription_scheme( $product, $key ) {
+			self::$active_schemes[ spl_object_id( $product ) ] = $key;
+		}
+
+		/**
+		 * The active scheme stamped on a product instance.
+		 *
+		 * @param \WC_Product $product    Product.
+		 * @param string      $return     'key' or 'object'.
+		 * @param string      $scheme_key Unused, matches the real signature.
+		 *
+		 * @return mixed
+		 */
+		public static function get_subscription_scheme( $product, $return = 'key', $scheme_key = '' ) {
+			$key = self::$active_schemes[ spl_object_id( $product ) ] ?? false;
+			if ( 'object' !== $return || ! $key ) {
+				return $key;
+			}
+			$schemes = self::get_subscription_schemes( $product );
+			return $schemes[ $key ] ?? null;
 		}
 	}
 }
