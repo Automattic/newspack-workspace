@@ -1,16 +1,16 @@
 <?php
 /**
- * Tests that Subscriptions_Tiers recognises both subscription product models.
+ * Tests that WooCommerce_Subscriptions recognises both subscription product models.
  *
  * @package Newspack\Tests
  */
 
-use Newspack\Subscriptions_Tiers;
+use Newspack\WooCommerce_Subscriptions;
 
 require_once __DIR__ . '/../../../mocks/wc-mocks.php';
 
 /**
- * Test Subscriptions_Tiers product-model detection.
+ * Test WooCommerce_Subscriptions product-model detection.
  *
  * Subscriptions 9.0 folded All Products for Subscriptions into core, so a
  * recurring product is no longer necessarily of the `subscription` /
@@ -20,7 +20,7 @@ require_once __DIR__ . '/../../../mocks/wc-mocks.php';
  *
  * @group WooCommerce_Subscriptions_Integration
  */
-class Newspack_Test_Subscriptions_Tiers_Product_Models extends WP_UnitTestCase {
+class Newspack_Test_WooCommerce_Subscriptions_Product_Models extends WP_UnitTestCase {
 	/**
 	 * Reset the mock databases and scheme registry before each test.
 	 */
@@ -63,8 +63,8 @@ class Newspack_Test_Subscriptions_Tiers_Product_Models extends WP_UnitTestCase {
 	 */
 	public function test_legacy_subscription_type_is_a_subscription() {
 		$product = $this->make_product( 201, 'subscription' );
-		$this->assertTrue( Subscriptions_Tiers::is_subscription_product( $product ) );
-		$this->assertFalse( Subscriptions_Tiers::is_variable_subscription_product( $product ) );
+		$this->assertTrue( WooCommerce_Subscriptions::is_subscription_product( $product ) );
+		$this->assertFalse( WooCommerce_Subscriptions::is_variable_subscription_product( $product ) );
 	}
 
 	/**
@@ -72,8 +72,8 @@ class Newspack_Test_Subscriptions_Tiers_Product_Models extends WP_UnitTestCase {
 	 */
 	public function test_legacy_variable_subscription_type_is_variable() {
 		$product = $this->make_product( 202, 'variable-subscription' );
-		$this->assertTrue( Subscriptions_Tiers::is_subscription_product( $product ) );
-		$this->assertTrue( Subscriptions_Tiers::is_variable_subscription_product( $product ) );
+		$this->assertTrue( WooCommerce_Subscriptions::is_subscription_product( $product ) );
+		$this->assertTrue( WooCommerce_Subscriptions::is_variable_subscription_product( $product ) );
 	}
 
 	/**
@@ -82,9 +82,9 @@ class Newspack_Test_Subscriptions_Tiers_Product_Models extends WP_UnitTestCase {
 	public function test_plain_product_is_not_a_subscription() {
 		$simple   = $this->make_product( 203, 'simple' );
 		$variable = $this->make_product( 204, 'variable' );
-		$this->assertFalse( Subscriptions_Tiers::is_subscription_product( $simple ) );
-		$this->assertFalse( Subscriptions_Tiers::is_subscription_product( $variable ) );
-		$this->assertFalse( Subscriptions_Tiers::is_variable_subscription_product( $variable ) );
+		$this->assertFalse( WooCommerce_Subscriptions::is_subscription_product( $simple ) );
+		$this->assertFalse( WooCommerce_Subscriptions::is_subscription_product( $variable ) );
+		$this->assertFalse( WooCommerce_Subscriptions::is_variable_subscription_product( $variable ) );
 	}
 
 	/**
@@ -97,9 +97,9 @@ class Newspack_Test_Subscriptions_Tiers_Product_Models extends WP_UnitTestCase {
 		$product = $this->make_product( 205, 'variable' );
 		WCS_ATT_Product_Schemes::$products_with_schemes = [ 205 ];
 
-		$this->assertTrue( Subscriptions_Tiers::has_subscription_plans( $product ) );
-		$this->assertTrue( Subscriptions_Tiers::is_subscription_product( $product ) );
-		$this->assertTrue( Subscriptions_Tiers::is_variable_subscription_product( $product ) );
+		$this->assertTrue( WooCommerce_Subscriptions::has_subscription_plans( $product ) );
+		$this->assertTrue( WooCommerce_Subscriptions::is_subscription_product( $product ) );
+		$this->assertTrue( WooCommerce_Subscriptions::is_variable_subscription_product( $product ) );
 	}
 
 	/**
@@ -110,8 +110,8 @@ class Newspack_Test_Subscriptions_Tiers_Product_Models extends WP_UnitTestCase {
 		$product = $this->make_product( 206, 'simple' );
 		WCS_ATT_Product_Schemes::$products_with_schemes = [ 206 ];
 
-		$this->assertTrue( Subscriptions_Tiers::is_subscription_product( $product ) );
-		$this->assertFalse( Subscriptions_Tiers::is_variable_subscription_product( $product ) );
+		$this->assertTrue( WooCommerce_Subscriptions::is_subscription_product( $product ) );
+		$this->assertFalse( WooCommerce_Subscriptions::is_variable_subscription_product( $product ) );
 	}
 
 	/**
@@ -122,8 +122,8 @@ class Newspack_Test_Subscriptions_Tiers_Product_Models extends WP_UnitTestCase {
 		$product = $this->make_product( 207, 'variable', [ '_wcsatt_disabled' => 'yes' ] );
 		WCS_ATT_Product_Schemes::$products_with_schemes = [ 207 ];
 
-		$this->assertFalse( Subscriptions_Tiers::has_subscription_plans( $product ) );
-		$this->assertFalse( Subscriptions_Tiers::is_subscription_product( $product ) );
-		$this->assertFalse( Subscriptions_Tiers::is_variable_subscription_product( $product ) );
+		$this->assertFalse( WooCommerce_Subscriptions::has_subscription_plans( $product ) );
+		$this->assertFalse( WooCommerce_Subscriptions::is_subscription_product( $product ) );
+		$this->assertFalse( WooCommerce_Subscriptions::is_variable_subscription_product( $product ) );
 	}
 }

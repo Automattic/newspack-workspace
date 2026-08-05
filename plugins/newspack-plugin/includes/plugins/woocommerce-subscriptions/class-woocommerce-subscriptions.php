@@ -702,6 +702,72 @@ class WooCommerce_Subscriptions {
 	}
 
 	/**
+	 * Whether a product carries WooCommerce Subscriptions "subscription plans".
+	 *
+	 * Subscriptions 9.0 folded All Products for Subscriptions into core, so a
+	 * recurring product no longer has to use the dedicated `subscription` /
+	 * `variable-subscription` product types: an ordinary `simple` or `variable`
+	 * product with subscription schemes attached is now the way the product
+	 * editor creates one.
+	 *
+	 * Subscriptions makes this same check in
+	 * `WCSG_Product::product_has_subscription_plans()`, but that class lives in
+	 * the gifting module, which `WC_Subscriptions_Plugin::init_gifting()` skips
+	 * entirely when the standalone gifting plugin is active — in which case
+	 * `WCSG_Product` is that plugin's class and may not have the method. So we
+	 * mirror it here, opt-out meta included, rather than depend on it.
+	 *
+	 * @param \WC_Product $product Product object.
+	 *
+	 * @return bool Whether the product has subscription plans.
+	 */
+	public static function has_subscription_plans( $product ) {
+		if ( ! class_exists( 'WCS_ATT_Product_Schemes' ) || ! method_exists( 'WCS_ATT_Product_Schemes', 'has_subscription_schemes' ) ) {
+			return false;
+		}
+		if ( 'yes' === $product->get_meta( '_wcsatt_disabled' ) ) {
+			return false;
+		}
+		return (bool) \WCS_ATT_Product_Schemes::has_subscription_schemes( $product );
+	}
+
+	/**
+	 * Whether a product is a subscription, under either product model.
+	 *
+	 * `WC_Subscriptions_Product::is_subscription()` is not a substitute: it
+	 * recognises a plan-based product only once a scheme is active on the
+	 * product object (a cart/runtime state, via the `woocommerce_is_subscription`
+	 * filter APFS adds), so it returns false for a product read from the catalog.
+	 *
+	 * @param \WC_Product $product Product object.
+	 *
+	 * @return bool Whether the product is a subscription.
+	 */
+	public static function is_subscription_product( $product ) {
+		if ( in_array( $product->get_type(), [ 'subscription', 'variable-subscription' ], true ) ) {
+			return true;
+		}
+		return self::has_subscription_plans( $product );
+	}
+
+	/**
+	 * Whether a product is a variable subscription, under either product model.
+	 *
+	 * Determines whether tiers come from the product's variations rather than
+	 * from the product itself.
+	 *
+	 * @param \WC_Product $product Product object.
+	 *
+	 * @return bool Whether the product is a variable subscription.
+	 */
+	public static function is_variable_subscription_product( $product ) {
+		if ( $product->is_type( 'variable-subscription' ) ) {
+			return true;
+		}
+		return $product->is_type( 'variable' ) && self::has_subscription_plans( $product );
+	}
+
+	/**
 	 * Sanitize and validate a subscription ID or object as a WC_Subscription object.
 	 *
 	 * @param int|WC_Subscription $subscription The subscription ID or object.
