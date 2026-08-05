@@ -1014,6 +1014,44 @@ class Newspack_Test_Subscriptions_Tiers_Plans extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The switch flow prices a name-your-price card off the subscription's
+	 * current product. That product can have been deleted since, in which case
+	 * `wc_get_product()` returns false - which used to flow straight into the
+	 * plan accessors and fatal, taking the whole modal down. Fall back to the
+	 * target product's own price instead.
+	 */
+	public function test_nyp_card_survives_a_deleted_switch_product() {
+		$product = wc_create_mock_product(
+			[
+				'id'    => 480,
+				'type'  => 'simple',
+				'price' => 10,
+				'meta'  => [
+					'_nyp'                          => 'yes',
+					'_subscription_period'          => 'month',
+					'_subscription_period_interval' => '1',
+				],
+			]
+		);
+
+		ob_start();
+		\Newspack\Subscriptions_Tiers::render_nyp_product_card(
+			$product,
+			false,
+			[
+				'item' => [
+					'product_id' => 4809, // Never registered: a deleted product.
+					'line_total' => 20,
+				],
+			]
+		);
+		$markup = ob_get_clean();
+
+		$this->assertStringContainsString( 'name="price"', $markup );
+		$this->assertStringContainsString( 'value="10"', $markup, 'With no base product to convert from, the target price stands.' );
+	}
+
+	/**
 	 * A grouped product's cart item posts its child product's ID, not the
 	 * grouped parent's - so a convert_to_sub keyed on the grouped parent ID
 	 * would never be read by APFS. render_form() must not emit one.

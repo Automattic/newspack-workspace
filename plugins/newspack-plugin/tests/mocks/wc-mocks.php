@@ -1246,6 +1246,30 @@ function woocommerce_wp_text_input( $field ) {
 	);
 }
 /**
+ * Minimal currency stubs, enough for `render_nyp_product_card()` to render.
+ *
+ * @return string
+ */
+function get_woocommerce_currency_symbol() {
+	return '$';
+}
+/**
+ * Store currency code.
+ *
+ * @return string
+ */
+function get_woocommerce_currency() {
+	return 'USD';
+}
+/**
+ * Number of decimals prices are displayed with.
+ *
+ * @return int
+ */
+function wc_get_price_decimals() {
+	return 2;
+}
+/**
  * Minimal `wc_get_products()` stub: filters the mock product database by
  * `type`, the only query arg `Subscriptions_Tiers` reads.
  *

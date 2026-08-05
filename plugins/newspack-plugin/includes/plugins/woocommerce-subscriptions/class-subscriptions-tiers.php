@@ -749,8 +749,14 @@ class Subscriptions_Tiers {
 		$frequency = $parts['period'];
 		$interval  = $parts['interval'];
 
-		if ( $switch_subscription ) {
-			$base_product   = wc_get_product( $switch_subscription['item']['product_id'] );
+		$base_product = $switch_subscription ? wc_get_product( $switch_subscription['item']['product_id'] ) : null;
+
+		// A deleted product leaves behind an ID that no longer resolves, and
+		// wc_get_product() returns false for it. There's no billing period to
+		// convert from in that case, so keep the target product's own price
+		// rather than feeding `false` into the plan accessors - the same way
+		// the tier composition skips a grouped child that no longer resolves.
+		if ( $base_product instanceof \WC_Product ) {
 			$base_parts     = self::get_frequency_parts( $base_product );
 			$base_frequency = $base_parts['period'];
 			$base_interval  = $base_parts['interval'];
