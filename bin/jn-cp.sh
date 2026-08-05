@@ -85,7 +85,7 @@ for opt in "${!opts[@]}"
 do
     if [[ ${opts["$opt"]} == "(x)" ]]
     then
-        process_plugin $opt $password
+        process_plugin "$opt" "$password"
     fi
 done
 

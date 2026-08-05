@@ -1639,3 +1639,10 @@ $colors: (
 .has-grad-6-gradient-background {
 	background-image: linear-gradient(135deg, rgb(221, 221, 221) 0%, rgb(255, 255, 255) 100%);
 }
+
+// Gutenberg's inline text-color format wraps text in mark.has-inline-color.
+// Keep the editor canvas consistent with the frontend fix: color-carrier
+// marks get no highlight background (browser default is yellow).
+mark.has-inline-color {
+	background-color: transparent;
+}

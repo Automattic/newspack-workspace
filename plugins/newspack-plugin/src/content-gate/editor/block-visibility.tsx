@@ -17,12 +17,13 @@ import {
 } from '@wordpress/components';
 import { useState, useEffect } from '@wordpress/element';
 import apiFetch from '@wordpress/api-fetch';
-import { __, sprintf } from '@wordpress/i18n';
+import { __ } from '@wordpress/i18n';
 
 /**
  * Internal dependencies
  */
 import './block-visibility.scss';
+import OneTimePurchaseRuleControl from '../components/one-time-purchase-rule-control';
 
 /**
  * Target block types that receive access control attributes.
@@ -186,6 +187,10 @@ const AccessRuleValueControl = ( {
 		};
 	}, [ slug ] ); // eslint-disable-line react-hooks/exhaustive-deps
 
+	if ( 'one_time_purchase' === slug ) {
+		return <OneTimePurchaseRuleControl value={ value } onChange={ onChange } options={ options } productsLabel={ config.name } />;
+	}
+
 	if ( options.length > 0 ) {
 		// Map stored IDs to labels for display; silently drop IDs with no matching option.
 		const valueArr = Array.isArray( value ) ? value : [];
@@ -345,7 +350,7 @@ const BlockVisibilityPanel = ( { attributes, setAttributes }: BlockEditProps ) =
 		<InspectorControls>
 			<PanelBody
 				className="newspack-access-control-block-visibility-panel"
-				title={ __( 'Access control', 'newspack-plugin' ) }
+				title={ __( 'Access Control', 'newspack-plugin' ) }
 				initialOpen={ rulesActive }
 			>
 				{ /* Mode toggle: Gate (default) or Custom */ }
@@ -389,11 +394,11 @@ const BlockVisibilityPanel = ( { attributes, setAttributes }: BlockEditProps ) =
 
 				<VisibilityControl
 					label={ __( 'Visibility', 'newspack-plugin' ) }
-					help={ sprintf(
-						// translators: %s is either 'gates' or 'rules'.
-						__( 'Content visibility for readers who match any of the selected %s.', 'newspack-plugin' ),
-						mode === 'gate' ? __( 'gates', 'newspack-plugin' ) : __( 'rules', 'newspack-plugin' )
-					) }
+					help={
+						'gate' === mode
+							? __( 'Content visibility for readers who match any of the selected gates.', 'newspack-plugin' )
+							: __( 'Content visibility for readers who match any of the selected rules.', 'newspack-plugin' )
+					}
 					value={ visibility }
 					onChange={ ( v: string ) => setAttributes( { newspackAccessControlVisibility: v } ) }
 					disabled={ ! rulesActive }

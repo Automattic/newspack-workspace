@@ -459,6 +459,16 @@ abstract class Newspack_Newsletters_Service_Provider implements Newspack_Newslet
 
 		if ( true === $result ) {
 			Newspack_Newsletters::set_newsletter_sent( $post_id );
+			// Stamp the engine active at send time as the producing engine. Send time is
+			// the source of truth: the dispatched HTML reflects the engine resolved here,
+			// and for a scheduled send the flag is read on dispatch (not at authoring), so
+			// a flag flip between authoring and send is recorded as the send-time engine.
+			// The write is intentionally lossy toward MJML: if it fails, the resolver's
+			// default (Renderer_Controller::get_post_renderer) reports mjml.
+			\Newspack\Newsletters\Email_Renderers\Renderer_Controller::stamp_renderer(
+				$post_id,
+				\Newspack\Newsletters\Email_Renderers\Renderer_Controller::active_engine()
+			);
 		}
 
 		if ( \is_wp_error( $result ) ) {
@@ -665,7 +675,9 @@ Error message(s) received:
 			$params,
 			$raw_error
 		);
-		return $reader_error;
+		// The message reaches reader-facing surfaces that render markup (including
+		// innerHTML in the subscribe block), so sanitize whatever any callback produced.
+		return wp_kses_post( (string) $reader_error );
 	}
 
 	/**
@@ -1014,5 +1026,37 @@ Error message(s) received:
 	 */
 	public function get_contact_fields_for_integrations( $list_id = null ) {
 		return [];
+	}
+
+	/**
+	 * Drop contact fields the contact has no value for.
+	 *
+	 * Providers disagree on whether valueless fields are reported: Mailchimp
+	 * returns every merge field defined on the audience, using an empty string
+	 * for ones the contact hasn't filled in, while ActiveCampaign's API mostly
+	 * omits them but can report an empty value. Every provider filters its
+	 * `metadata` through this helper so the key means the same thing
+	 * everywhere — the fields the contact has a value for — and a caller
+	 * storing it (e.g. a reader-data pull) doesn't persist empty entries for
+	 * one ESP and not another.
+	 *
+	 * Only unset values are dropped. A falsy-but-real value — `0` from a number
+	 * field, `'0'` from a text field — is a value the contact has, and callers
+	 * such as reader data store it as one.
+	 *
+	 * @param array $fields Contact field values keyed by field key.
+	 *
+	 * @return array Fields the contact has a value for.
+	 */
+	protected static function filter_set_field_values( $fields ) {
+		if ( ! is_array( $fields ) ) {
+			return [];
+		}
+		return array_filter(
+			$fields,
+			function ( $value ) {
+				return null !== $value && '' !== $value && [] !== $value;
+			}
+		);
 	}
 }
