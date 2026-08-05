@@ -145,7 +145,12 @@ class InDesign_Converter {
 		// steps above introduce their own. A single stray CR or LF makes part of
 		// the file Mac- or Unix-terminated while the header promises CRLF, and
 		// InDesign then places that stretch as literal markup.
-		return preg_replace( '/\r\n|\r|\n/', self::EOL, $content );
+		$normalized = preg_replace( '/\r\n|\r|\n/', self::EOL, $content );
+
+		// preg_replace() yields null on a PCRE failure. Returning it would break
+		// the documented string|false contract and reach the download headers as
+		// an empty body, so fall back to the un-normalized content.
+		return null === $normalized ? $content : $normalized;
 	}
 
 	/**
