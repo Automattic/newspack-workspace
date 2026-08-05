@@ -66,22 +66,47 @@ class Newspack_Test_InDesign_Exporter extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test that the default export declares a header matching the line endings
-	 * it actually writes.
+	 * Content shapes whose conversion has historically produced a line ending
+	 * that disagreed with the declared header.
+	 *
+	 * @return array<string, array{0: string}>
+	 */
+	public function line_ending_content_provider() {
+		return [
+			// Block content: the shape that broke under <ASCII-MAC> (NPPM-3098).
+			'block paragraphs'   => [ "<!-- wp:paragraph -->\n<p>First para.</p>\n<!-- /wp:paragraph -->\n\n<!-- wp:paragraph -->\n<p>Second para.</p>\n<!-- /wp:paragraph -->" ],
+			// Classic content: the shape that broke under <ASCII-WIN> (NPPM-2813).
+			// Newline-separated <p> tags left a bare CR ahead of each CRLF.
+			'classic paragraphs' => [ "<p>Classic one.</p>\n<p>Classic two.</p>\n<p>Classic three.</p>" ],
+			'mixed line endings' => [ "<p>CRLF source.</p>\r\n<p>LF source.</p>\n<p>CR source.</p>\r<p>Last.</p>" ],
+			'blank line runs'    => [ "<p>Before.</p>\n\n\n<p>After.</p>" ],
+			'heading and list'   => [ "<h2>A subhead</h2>\n<ul><li>One</li>\n<li>Two</li></ul>\n<p>Body.</p>" ],
+			'group block'        => [ "<!-- wp:group -->\n<div class=\"wp-block-group\"><!-- wp:paragraph -->\n<p>Inside.</p>\n<!-- /wp:paragraph --></div>\n<!-- /wp:group -->" ],
+			'blockquote'         => [ "<!-- wp:quote -->\n<blockquote class=\"wp-block-quote\"><p>Quoted.</p><cite>Someone</cite></blockquote>\n<!-- /wp:quote -->" ],
+		];
+	}
+
+	/**
+	 * Test that every export is terminated uniformly with CRLF, matching the
+	 * <ASCII-WIN> header it declares.
 	 *
 	 * The tagged-text start tag describes the file, not the machine running
-	 * InDesign: <ASCII-WIN> means CRLF-delimited, <ASCII-MAC> means bare-CR.
-	 * The converter joins every part with CRLF unconditionally, so <ASCII-WIN>
-	 * is the only header that describes the bytes. Declaring <ASCII-MAC> over
-	 * CRLF leaves an orphan LF at the head of each paragraph, which pushes the
-	 * <pstyle:...> tag off the paragraph start and makes InDesign render the
-	 * markup literally (NPPM-3098).
+	 * InDesign: <ASCII-WIN> promises CRLF, <ASCII-MAC> promises bare CR. When
+	 * any stretch of the file disagrees with the header, InDesign stops treating
+	 * the following <pstyle:...> as paragraph-initial and places it as literal
+	 * text. Both reported forms of this bug came from the same cause — a file
+	 * whose line endings varied with the shape of the post content, so classic
+	 * copy needed one header (NPPM-2813) and block copy the other (NPPM-3098).
+	 *
+	 * @dataProvider line_ending_content_provider
+	 *
+	 * @param string $post_content Post content to convert.
 	 */
-	public function test_convert_post_default_header_matches_line_endings() {
+	public function test_convert_post_line_endings_are_uniformly_crlf( $post_content ) {
 		$post_id = $this->factory->post->create(
 			[
 				'post_title'   => 'Test Post',
-				'post_content' => '<p>First paragraph.</p><p>Second paragraph.</p>',
+				'post_content' => $post_content,
 			]
 		);
 
@@ -89,9 +114,11 @@ class Newspack_Test_InDesign_Exporter extends WP_UnitTestCase {
 		$content   = $converter->convert_post( $post_id );
 
 		$this->assertStringContainsString( '<ASCII-WIN>', $content );
-		$this->assertStringContainsString( "\r\n", $content );
-		// Every CR belongs to a CRLF pair — no bare-CR (Mac-format) terminators.
-		$this->assertSame( substr_count( $content, "\r\n" ), substr_count( $content, "\r" ) );
+
+		$crlf = substr_count( $content, "\r\n" );
+		$this->assertGreaterThan( 0, $crlf, 'Expected at least one line terminator.' );
+		$this->assertSame( $crlf, substr_count( $content, "\r" ), 'Found a bare CR: part of the file is Mac-terminated.' );
+		$this->assertSame( $crlf, substr_count( $content, "\n" ), 'Found a bare LF: part of the file is Unix-terminated.' );
 	}
 
 	/**
