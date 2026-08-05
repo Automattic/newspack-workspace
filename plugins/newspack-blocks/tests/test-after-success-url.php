@@ -293,6 +293,12 @@ class AfterSuccessUrlTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 			'a non-ASCII path'    => [ 'https://elsewhere.example.test/gracias-señor/' ],
 			'a fragment'          => [ 'https://elsewhere.example.test/thanks#supporters' ],
 			'a port'              => [ 'https://elsewhere.example.test:8443/thanks' ],
+			// The token alphabet is inert to all four transforms, so the shapes above exercise
+			// one property rather than six. These two do vary the outcome: normalising a
+			// protocol-relative destination has to keep the `//`, or the value read back is a
+			// relative path rather than the destination that was vouched for.
+			'protocol relative'   => [ '//ELSEWHERE.example.test/thanks' ],
+			'protocol relative with a port' => [ '//ELSEWHERE.example.test:8443/thanks' ],
 		];
 	}
 
@@ -300,9 +306,11 @@ class AfterSuccessUrlTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	 * Host normalisation touches the authority and nothing else.
 	 */
 	public function test_normalisation_lowercases_only_the_host() {
+		// A literal `://` in the query, not `%3A//`: the encoded form never matched the
+		// replacement this guards against, so it passed either way.
 		$this->assertSame(
-			'https://example.test/go?next=https%3A//Example.test/x',
-			\Newspack_Blocks\Modal_Checkout::normalize_after_success_url( 'https://Example.test/go?next=https%3A//Example.test/x' ),
+			'https://example.test/go?next=https://Example.test/x',
+			\Newspack_Blocks\Modal_Checkout::normalize_after_success_url( 'https://Example.test/go?next=https://Example.test/x' ),
 			'Host lowercasing reached into the query string.'
 		);
 
@@ -311,6 +319,46 @@ class AfterSuccessUrlTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 			\Newspack_Blocks\Modal_Checkout::normalize_after_success_url( 'https://User@Example.test/' ),
 			'A host behind userinfo was left capitalised.'
 		);
+	}
+
+	/**
+	 * Normalising twice gives the same string as normalising once.
+	 *
+	 * The token signs a normalised destination at mint and normalises again at read, so a
+	 * normaliser that changes its own output cannot verify.
+	 *
+	 * @dataProvider awkward_destinations
+	 *
+	 * @param string $url The destination to normalise.
+	 */
+	public function test_normalisation_is_idempotent( $url ) {
+		$once = \Newspack_Blocks\Modal_Checkout::normalize_after_success_url( $url );
+
+		$this->assertSame(
+			$once,
+			\Newspack_Blocks\Modal_Checkout::normalize_after_success_url( $once ),
+			'Normalising twice changed the destination.'
+		);
+	}
+
+	/**
+	 * A destination this site will not redirect to is announced, however it is shaped.
+	 */
+	public function test_announces_a_refused_protocol_relative_destination() {
+		$seen = [];
+		add_action(
+			'newspack_blocks_modal_checkout_after_success_url_rejected',
+			function ( $url ) use ( &$seen ) {
+				$seen[] = $url;
+			}
+		);
+
+		$result = \Newspack_Blocks\Modal_Checkout::sanitize_after_success_url( '//ELSEWHERE.example.test/thanks' );
+
+		remove_all_actions( 'newspack_blocks_modal_checkout_after_success_url_rejected' );
+
+		$this->assertSame( '', $result, 'An off-site destination was kept.' );
+		$this->assertNotEmpty( $seen, 'A refused destination slipped past the hook that reports refusals.' );
 	}
 
 	/**

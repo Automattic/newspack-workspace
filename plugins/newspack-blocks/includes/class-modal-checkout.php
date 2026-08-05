@@ -1242,13 +1242,58 @@ final class Modal_Checkout {
 		$pass = isset( $parts['pass'] ) ? ':' . $parts['pass'] : '';
 		$auth = $user ? $user . $pass . '@' : '';
 
-		return ( isset( $parts['scheme'] ) ? $parts['scheme'] . '://' : '' )
+		// A destination with a host but no scheme is protocol-relative. Losing the `//` here
+		// would turn it into a relative path, which changes where the reader lands and makes
+		// this function non-idempotent — and the token signs a normalised value at mint and
+		// normalises again at read, so idempotence is what makes it verify.
+		$prefix = isset( $parts['scheme'] )
+			? $parts['scheme'] . '://'
+			: ( isset( $parts['host'] ) ? '//' : '' );
+
+		return $prefix
 			. $auth
 			. ( $parts['host'] ?? '' )
 			. ( isset( $parts['port'] ) ? ':' . $parts['port'] : '' )
 			. ( $parts['path'] ?? '' )
 			. ( isset( $parts['query'] ) ? '?' . $parts['query'] : '' )
 			. ( isset( $parts['fragment'] ) ? '#' . $parts['fragment'] : '' );
+	}
+
+	/**
+	 * Whether a post is published, read from the stored status.
+	 *
+	 * `get_post_status()` reports an attachment as `publish` whatever its stored status, so a
+	 * token could be minted from one and could not be revoked by unpublishing. Reading the
+	 * field directly returns the real status, and also steps around the `get_post_status`
+	 * filter, which would otherwise let any plugin move this gate.
+	 *
+	 * @param int $post_id The post to check.
+	 *
+	 * @return boolean
+	 */
+	private static function is_published_post( $post_id ) {
+		return 'publish' === get_post_field( 'post_status', (int) $post_id );
+	}
+
+	/**
+	 * The post a block is being rendered for.
+	 *
+	 * `get_the_ID()` is empty outside the loop, which is where a block in a widget or a footer
+	 * template part renders. The queried object covers that, but only when it is a post: on an
+	 * archive it is a term, whose ID would otherwise be read as an unrelated post's.
+	 *
+	 * @return int Post ID, or 0.
+	 */
+	private static function get_after_success_post_id() {
+		$post_id = (int) get_the_ID();
+
+		if ( $post_id ) {
+			return $post_id;
+		}
+
+		$queried = get_queried_object();
+
+		return $queried instanceof WP_Post ? (int) $queried->ID : 0;
 	}
 
 	/**
@@ -1263,7 +1308,17 @@ final class Modal_Checkout {
 	 * @return string
 	 */
 	private static function sign_after_success_payload( $payload ) {
-		return hash_hmac( 'sha256', 'newspack_blocks_after_success|' . $payload, wp_salt( 'auth' ) );
+		// The namespace prefix is what separates this from every other use of the same key and
+		// algorithm. `Reader_Registration::get_frontend_registration_key()` also produces
+		// `hash_hmac( 'sha256', …, wp_salt( 'auth' ) )` and publishes the result to the front
+		// end, so nothing but this prefix distinguishes the two. Never register an integration
+		// ID that begins with it.
+		//
+		// The blog ID is included because `wp_salt()` is network-scoped: without it, a token
+		// minted on one site of a network verifies on every other site in that network.
+		$namespace = 'newspack_blocks_after_success|' . get_current_blog_id() . '|';
+
+		return hash_hmac( 'sha256', $namespace . $payload, wp_salt( 'auth' ) );
 	}
 
 	/**
@@ -1297,9 +1352,9 @@ final class Modal_Checkout {
 			return '';
 		}
 
-		$post_id = $post_id ? (int) $post_id : (int) get_the_ID();
+		$post_id = $post_id ? (int) $post_id : self::get_after_success_post_id();
 
-		if ( ! $post_id || 'publish' !== get_post_status( $post_id ) ) {
+		if ( ! $post_id || ! self::is_published_post( $post_id ) ) {
 			return '';
 		}
 
@@ -1345,7 +1400,7 @@ final class Modal_Checkout {
 
 		// Checked at read time as well as at mint time: a post that has since been
 		// unpublished should stop vouching for its destination.
-		if ( 'publish' !== get_post_status( (int) $claims['p'] ) ) {
+		if ( ! self::is_published_post( (int) $claims['p'] ) ) {
 			return '';
 		}
 
