@@ -127,6 +127,51 @@ class Newspack_Test_Reader_Activation_Honeypot extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A decoy filled with something that isn't an address is still a bot.
+	 *
+	 * Bots spray one canned string into every field they find, so most decoy values
+	 * are not addresses at all. Normalizing the decoy as an email before testing it
+	 * would blank those and let the submission through.
+	 */
+	public function test_non_email_honeypot_is_tripped() {
+		$this->assertTrue( Reader_Activation::is_honeypot_tripped( 'buy-cheap-pills', 'reader@example.test' ) );
+		$this->assertTrue( Reader_Activation::is_honeypot_tripped( 'John Smith', 'reader@example.test' ) );
+		$this->assertTrue( Reader_Activation::is_honeypot_tripped( 'https://spam.test', 'reader@example.test' ) );
+	}
+
+	/**
+	 * A decoy filled with "0" is filled.
+	 */
+	public function test_zero_string_honeypot_is_tripped() {
+		$this->assertTrue( Reader_Activation::is_honeypot_tripped( '0', 'reader@example.test' ) );
+	}
+
+	/**
+	 * The two sides reach this method through different sanitizers.
+	 *
+	 * `process_auth_form()` hands over a text-sanitized decoy and an email-sanitized
+	 * address, and those disagree on non-ASCII: `sanitize_email()` drops the accent.
+	 * Comparing them without normalizing would leave the reader locked out — the very
+	 * bug this guard exists to prevent.
+	 */
+	public function test_honeypot_match_survives_mismatched_sanitizers() {
+		$this->assertFalse(
+			Reader_Activation::is_honeypot_tripped( 'réader@example.test', sanitize_email( 'réader@example.test' ) ),
+			'A decoy and address that differ only by what sanitize_email() strips are the same reader.'
+		);
+	}
+
+	/**
+	 * Non-scalar input is not a filled decoy.
+	 *
+	 * `email[]=x` makes the decoy an array. It must not reach a string function.
+	 */
+	public function test_non_scalar_input_is_handled() {
+		$this->assertFalse( Reader_Activation::is_honeypot_tripped( [ 'bot@spam.test' ], 'reader@example.test' ) );
+		$this->assertTrue( Reader_Activation::is_honeypot_tripped( 'bot@spam.test', [ 'reader@example.test' ] ) );
+	}
+
+	/**
 	 * The honeypot gives way to reCAPTCHA, which supersedes it.
 	 */
 	public function test_honeypot_is_not_rendered_when_recaptcha_is_active() {

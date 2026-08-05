@@ -1461,21 +1461,39 @@ final class Reader_Activation {
 	 * only defence against spam, while a reader locked out of their account has no
 	 * way to diagnose or recover from it.
 	 *
-	 * @param string $honeypot Value submitted in the honeypot field (`email`).
-	 * @param string $email    Value submitted in the real email field (`npe`).
+	 * Callers reach this through different sanitizers — the decoy arrives as text, the
+	 * real address as a sanitized email — and those disagree on anything non-ASCII
+	 * (`sanitize_email()` drops the accent in `réader@example.test`). So both sides are
+	 * normalized here rather than at the call sites, and a match on either the raw or
+	 * the email-sanitized form counts. Sanitizing the decoy as an email before the
+	 * emptiness test would be worse than useless: it blanks any value that isn't
+	 * address-shaped, so a bot writing junk into the decoy would pass unnoticed.
+	 *
+	 * @param string|null|false $honeypot Value submitted in the honeypot field (`email`).
+	 * @param string|null|false $email    Value submitted in the real email field (`npe`).
 	 *
 	 * @return bool Whether to treat the submission as a bot.
 	 */
-	public static function is_honeypot_tripped( $honeypot, $email = '' ) {
-		if ( empty( $honeypot ) ) {
+	public static function is_honeypot_tripped( $honeypot, $email ) {
+		// Not `empty()`: a decoy filled with "0" is filled.
+		$honeypot = \is_scalar( $honeypot ) ? trim( (string) $honeypot ) : '';
+		if ( '' === $honeypot ) {
 			return false;
 		}
 
-		$honeypot = strtolower( trim( (string) $honeypot ) );
-		$email    = strtolower( trim( (string) $email ) );
+		$email = \is_scalar( $email ) ? trim( (string) $email ) : '';
+		if ( '' === $email ) {
+			return true;
+		}
 
 		// Autofill puts the same address in both fields.
-		if ( '' !== $email && $honeypot === $email ) {
+		if ( strtolower( $honeypot ) === strtolower( $email ) ) {
+			return false;
+		}
+
+		$honeypot_as_email = strtolower( trim( (string) \sanitize_email( $honeypot ) ) );
+		$email_as_email    = strtolower( trim( (string) \sanitize_email( $email ) ) );
+		if ( '' !== $honeypot_as_email && $honeypot_as_email === $email_as_email ) {
 			return false;
 		}
 

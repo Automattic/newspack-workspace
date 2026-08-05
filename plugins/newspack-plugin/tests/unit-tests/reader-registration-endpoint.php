@@ -370,6 +370,29 @@ class Newspack_Test_Frontend_Registration_Endpoint extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test an autofilled honeypot registers the reader instead of faking success.
+	 *
+	 * A browser fills the decoy and the real field from one profile entry, so matching
+	 * values are a reader, not a bot. This is the user-facing half of the honeypot
+	 * contract: its sibling above covers the bot case.
+	 */
+	public function test_honeypot_matching_the_real_email_registers_the_reader() {
+		$response = $this->do_register_request(
+			[
+				'npe'             => self::$reader_email,
+				'email'           => self::$reader_email,
+				'integration_id'  => self::$integration_id,
+				'integration_key' => self::generate_key( self::$integration_id ),
+			]
+		);
+		// 201 Created, where the bot case returns a 200 carrying a fake success.
+		$this->assertEquals( 201, $response->get_status() );
+		$data = $response->get_data();
+		$this->assertTrue( $data['success'] );
+		$this->assertInstanceOf( 'WP_User', get_user_by( 'email', self::$reader_email ) );
+	}
+
+	/**
 	 * Test logged-in user returns current reader data.
 	 */
 	public function test_register_while_logged_in() {

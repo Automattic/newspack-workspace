@@ -109,6 +109,48 @@ function render_honeypot_field( $placeholder = '' ) {
 }
 
 /**
+ * Whether a submitted honeypot value should be read as a bot.
+ *
+ * A browser that autofills the form puts the reader's own address in both the decoy
+ * and the real field, so a decoy matching `npe` is autofill rather than a bot. Reading
+ * it as a bot reports a subscription that never happened, silently on both sides.
+ *
+ * Newspack owns this rule; this defers to it and keeps a local copy only for sites
+ * running a newspack-plugin that predates the shared helper. The local branch must
+ * stay in step with `Newspack\Reader_Activation::is_honeypot_tripped()`.
+ *
+ * @param string|null|false $honeypot Value submitted in the honeypot field (`email`).
+ * @param string|null|false $email    Value submitted in the real email field (`npe`).
+ *
+ * @return bool Whether to treat the submission as a bot.
+ */
+function is_honeypot_tripped( $honeypot, $email ) {
+	if ( method_exists( '\Newspack\Reader_Activation', 'is_honeypot_tripped' ) ) {
+		return \Newspack\Reader_Activation::is_honeypot_tripped( $honeypot, $email );
+	}
+
+	// Not `empty()`: a decoy filled with "0" is filled.
+	$honeypot = is_scalar( $honeypot ) ? trim( (string) $honeypot ) : '';
+	if ( '' === $honeypot ) {
+		return false;
+	}
+
+	$email = is_scalar( $email ) ? trim( (string) $email ) : '';
+	if ( '' === $email ) {
+		return true;
+	}
+
+	if ( strtolower( $honeypot ) === strtolower( $email ) ) {
+		return false;
+	}
+
+	$honeypot_as_email = strtolower( trim( (string) \sanitize_email( $honeypot ) ) );
+	$email_as_email    = strtolower( trim( (string) \sanitize_email( $email ) ) );
+
+	return '' === $honeypot_as_email || $honeypot_as_email !== $email_as_email;
+}
+
+/**
  * Render Registration Block.
  *
  * @param array[] $attrs Block attributes.
@@ -465,18 +507,17 @@ function process_form() {
 		return;
 	}
 
-	// Honeypot trap. A browser that autofills the form puts the reader's own address
-	// in both the decoy and the real field, so a decoy matching `npe` is autofill
-	// rather than a bot — treating it as a bot reports a subscription that never
-	// happened. Kept in step with Newspack's `Reader_Activation::is_honeypot_tripped()`;
-	// implemented locally so this doesn't depend on a newspack-plugin version.
-	// phpcs:disable WordPress.Security.NonceVerification.Recommended
-	$honeypot_trap = isset( $_REQUEST['email'] ) ? strtolower( trim( \sanitize_email( $_REQUEST['email'] ) ) ) : '';
-	$real_email    = isset( $_REQUEST['npe'] ) ? strtolower( trim( \sanitize_email( $_REQUEST['npe'] ) ) ) : '';
-	if ( ! empty( $honeypot_trap ) && ( '' === $real_email || $honeypot_trap !== $real_email ) ) {
-		return send_form_response( [ 'email' => \sanitize_email( $_REQUEST['email'] ) ] );
+	// Honeypot trap. The decoy is read as text, not as an email: a bot fills it with
+	// whatever it likes, and email-sanitizing first would blank a non-address value
+	// and let the submission through. Read from `$_POST`, not `$_REQUEST` — the form
+	// is POST-only, and a query string is not something the submitter controls.
+	// phpcs:disable WordPress.Security.NonceVerification.Missing
+	$honeypot_trap = isset( $_POST['email'] ) && is_scalar( $_POST['email'] ) ? \sanitize_text_field( \wp_unslash( $_POST['email'] ) ) : '';
+	$real_email    = isset( $_POST['npe'] ) && is_scalar( $_POST['npe'] ) ? \sanitize_text_field( \wp_unslash( $_POST['npe'] ) ) : '';
+	// phpcs:enable WordPress.Security.NonceVerification.Missing
+	if ( is_honeypot_tripped( $honeypot_trap, $real_email ) ) {
+		return send_form_response( [ 'email' => \sanitize_email( $honeypot_trap ) ] );
 	}
-	// phpcs:enable WordPress.Security.NonceVerification.Recommended
 
 	// reCAPTCHA test.
 	$current_page_url = \wp_parse_url( \wp_get_raw_referer() );

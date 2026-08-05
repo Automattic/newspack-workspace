@@ -68,4 +68,62 @@ class Subscribe_Block_Honeypot_Test extends WP_UnitTestCase {
 		$this->assertStringContainsString( 'name="email"', $markup, 'The honeypot must stay named `email`.' );
 		$this->assertStringContainsString( 'type="email"', $markup, 'The honeypot must stay an email input.' );
 	}
+
+	/**
+	 * Call the submit-side predicate.
+	 *
+	 * @param mixed $honeypot Decoy value.
+	 * @param mixed $email    Real address value.
+	 *
+	 * @return bool
+	 */
+	private static function tripped( $honeypot, $email ) {
+		return Newspack_Newsletters\Blocks\Subscribe\is_honeypot_tripped( $honeypot, $email );
+	}
+
+	/**
+	 * An empty decoy is the normal case and never a bot.
+	 */
+	public function test_empty_honeypot_is_not_tripped() {
+		$this->assertFalse( self::tripped( '', 'reader@example.test' ) );
+		$this->assertFalse( self::tripped( null, 'reader@example.test' ) );
+	}
+
+	/**
+	 * A decoy matching the real field is autofill, not a bot.
+	 */
+	public function test_honeypot_matching_the_real_email_is_not_tripped() {
+		$this->assertFalse( self::tripped( 'reader@example.test', 'reader@example.test' ) );
+		$this->assertFalse( self::tripped( ' Reader@Example.test ', 'reader@example.test' ) );
+	}
+
+	/**
+	 * A decoy that differs from the real field is still a bot.
+	 */
+	public function test_honeypot_differing_from_the_real_email_is_tripped() {
+		$this->assertTrue( self::tripped( 'bot@spam.test', 'reader@example.test' ) );
+		$this->assertTrue( self::tripped( 'bot@spam.test', '' ) );
+	}
+
+	/**
+	 * A decoy filled with something that isn't an address is still a bot.
+	 *
+	 * This is the case that regressed once already: email-sanitizing the decoy before
+	 * testing whether it was filled blanks every non-address value, which is most of
+	 * what bots put in it.
+	 */
+	public function test_non_email_honeypot_is_tripped() {
+		$this->assertTrue( self::tripped( 'buy-cheap-pills', 'reader@example.test' ) );
+		$this->assertTrue( self::tripped( 'John Smith', 'reader@example.test' ) );
+		$this->assertTrue( self::tripped( 'https://spam.test', 'reader@example.test' ) );
+		$this->assertTrue( self::tripped( '0', 'reader@example.test' ) );
+	}
+
+	/**
+	 * Non-scalar input is not a filled decoy.
+	 */
+	public function test_non_scalar_input_is_handled() {
+		$this->assertFalse( self::tripped( [ 'bot@spam.test' ], 'reader@example.test' ) );
+		$this->assertTrue( self::tripped( 'bot@spam.test', [ 'reader@example.test' ] ) );
+	}
 }
