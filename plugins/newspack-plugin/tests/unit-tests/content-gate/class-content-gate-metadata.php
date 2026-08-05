@@ -1012,4 +1012,38 @@ class Newspack_Test_Content_Gate_Metadata extends WP_UnitTestCase {
 			'Grace on: both the active and the in-recovery subscription are sources.'
 		);
 	}
+
+	/**
+	 * A reader whose only route in is a one-time purchase still gets a source.
+	 * The rule shipped in NPPD-2053 after this resolver was written, so it used
+	 * to fall through and sync Content_Access "Yes" with an empty source.
+	 */
+	public function test_one_time_purchase_rule_reports_a_source() {
+		$this->create_gate_with_rules(
+			'One-time purchase gate',
+			[
+				[
+					[
+						'slug'  => 'one_time_purchase',
+						'value' => [
+							'product_ids'    => [ 4242 ],
+							'duration_value' => 1,
+							'duration_unit'  => 'months',
+						],
+					],
+				],
+			]
+		);
+
+		// Force the purchase check to pass without standing up a WooCommerce
+		// order; the rule's own coverage lives with Access_Rules.
+		add_filter( 'newspack_access_rules_has_one_time_purchase', '__return_true' );
+
+		$result = ( new Content_Gate_Metadata( get_user_by( 'id', self::$user_id ) ) )->get_metadata();
+
+		remove_filter( 'newspack_access_rules_has_one_time_purchase', '__return_true' );
+
+		$this->assertSame( 'Yes', $result['Content_Access'] );
+		$this->assertSame( 'one_time_purchase', $result['Content_Access_Source'] );
+	}
 }
