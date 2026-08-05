@@ -160,10 +160,30 @@ class Premium_Newsletters {
 		if ( is_admin() ) {
 			return $lists;
 		}
+
+		// Deliberately does NOT go inert with the rest of gating. This is a signup
+		// surface, and the Newsletter Subscribe block takes an email rather than an
+		// account, so an inert filter would put paid lists into a public form and let
+		// anyone join them. Unlike an article — which re-restricts the moment gating
+		// comes back — an ESP list membership persists, and the access-check queue is
+		// discarded while inert, so nothing removes those subscribers afterwards.
+		//
+		// Nor does hiding them strand anybody: with gating inactive there is no gate to
+		// be locked out of and no registration surface a reader would need. Inertness
+		// here would buy nothing and cost a durable entitlement leak.
+		//
+		// Falls back to gate presence rather than per-reader restriction because with
+		// Audience Management off there are no reader sessions, so nobody can be
+		// authenticated into qualifying for a premium list anyway.
+		$is_inert = ! Content_Gate::is_gating_active();
+
 		$lists = array_values(
 			array_filter(
 				$lists,
-				function( $list ) {
+				function( $list ) use ( $is_inert ) {
+					if ( $is_inert ) {
+						return empty( Content_Restriction_Control::get_post_gates( $list->get_id() ) );
+					}
 					return ! Content_Restriction_Control::is_post_restricted( false, $list->get_id() );
 				}
 			)

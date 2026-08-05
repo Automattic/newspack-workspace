@@ -250,11 +250,17 @@ class Content_Gate {
 	/**
 	 * Whether gating actually enforces anything for readers right now.
 	 *
-	 * The single predicate every reader-facing enforcement path asks, so that
-	 * "gating is off" means the same thing everywhere. Enforcing surfaces that
-	 * answer this question for themselves drift: block-level access control
-	 * evaluated gate rules directly and kept hiding blocks with the feature
-	 * constant undefined, which is the shape of bug this exists to prevent.
+	 * The predicate reader-facing enforcement asks, so that "gating is off" means
+	 * the same thing across the surfaces that share both conditions. Surfaces that
+	 * answer the question for themselves drift, which is what this exists to stop.
+	 *
+	 * ONE DELIBERATE EXCEPTION: {@see Block_Visibility::filter_render_block()} uses
+	 * `Reader_Activation::is_enabled()` alone, not this. Block visibility predates
+	 * the feature constant and is independent of it — the class registers
+	 * unconditionally, its editor panel loads without the constant, and in `custom`
+	 * mode a block needs no gate at all. ANDing the constant in there would unhide
+	 * blocks on sites that never enabled content gates. Don't "fix" it to call this
+	 * method; the asymmetry is the point.
 	 *
 	 * Two conditions, either of which stands gating down:
 	 *

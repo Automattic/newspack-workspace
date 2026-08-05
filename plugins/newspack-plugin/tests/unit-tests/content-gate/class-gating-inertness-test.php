@@ -20,16 +20,24 @@
  * surface that asks the question for itself is the failure this suite is
  * designed to catch, so a new path belongs here as a new case.
  *
- * NOT covered here, deliberately rather than by oversight: the two premium
- * newsletter paths that consume restriction as an access decision
- * (`Premium_Newsletters::check_access()` and `::filter_subscription_lists()`).
- * `Newspack\Newsletters\Subscription_Lists` is not loaded under PHPUnit, so
- * `Content_Restriction_Control::get_post_gates()` can never classify a post as a
- * newsletter, `get_restricted_lists()` is always empty, and both methods return
- * before reaching the branch under test. A test written against them here passes
- * with the guard deleted — verified — which is worse than no test. They are
- * covered by the enqueue and renewal cases below, which gate the same queue those
- * paths consume, and by runtime verification recorded on the PR.
+ * Note that `is_gating_active()` is NOT the predicate everywhere: block-level
+ * access control uses `Reader_Activation::is_enabled()` alone, because it is
+ * flag-independent and ANDing the feature constant in would unhide blocks on
+ * sites that never enabled content gates. See `Block_Visibility::filter_render_block()`.
+ *
+ * Every case here is mutation-tested: removing its guard must fail it. A case that
+ * passes either way is worse than no case.
+ *
+ * One guard is deliberately NOT covered here: the one in
+ * `Premium_Newsletters::check_access()`. Four attempts at it were all vacuous —
+ * they passed with the guard deleted, because `add_and_remove_lists()` returns
+ * before touching the ESP once `get_public_id()` yields nothing for a plain list
+ * fixture, so the branch under test is never reached. Covering it needs a list
+ * fixture carrying a real public ID, which `Newspack_Test_Premium_Newsletters`
+ * already builds; that is where the case belongs. The guard itself is defence in
+ * depth — the chokepoint and renewal guards below stop the queue filling in the
+ * first place — but it is the one whose failure would write to the ESP, so it
+ * deserves its own test.
  *
  * @package Newspack\Tests
  */
@@ -140,10 +148,10 @@ class Gating_Inertness_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The renewal handler reaches the queue directly rather than through
-	 * `maybe_enqueue_access_check()`, which is why the guard lives at the queue
-	 * chokepoint. It also has to bail before the snapshot it takes, since that costs
-	 * a remote ESP round-trip for an access check that cannot run.
+	 * The renewal handler bails before the snapshot it would otherwise take, which
+	 * costs a remote ESP round-trip and a user-meta write for an access check that
+	 * cannot run. (The chokepoint guard that also covers this handler is exercised by
+	 * test_premium_newsletter_access_checks_are_not_enqueued, which reaches it.)
 	 */
 	public function test_renewal_events_are_not_enqueued() {
 		$user_id = self::factory()->user->create();
@@ -158,6 +166,58 @@ class Gating_Inertness_Test extends WP_UnitTestCase {
 		$this->assertEmpty(
 			get_user_meta( $user_id, Premium_Newsletters::SUBSCRIBED_LISTS_META_KEY, true ),
 			'The renewal snapshot should not be taken while gating is inactive.'
+		);
+	}
+
+	/**
+	 * Signup forms are the exception that proves the rule: this one does NOT go inert.
+	 * The Newsletter Subscribe block takes an email rather than an account, so an
+	 * inert filter would offer paid lists to anyone, and an ESP membership persists
+	 * where an unrestricted article simply re-restricts.
+	 */
+	public function test_premium_lists_stay_hidden_from_signup_forms_while_inert() {
+		$this->create_registration_gate();
+		$list_id = self::factory()->post->create();
+		// filter_subscription_lists() only ever calls get_id() on each list.
+		$list = new class( $list_id ) {
+			/**
+			 * List ID.
+			 *
+			 * @var int
+			 */
+			private $id;
+
+			/**
+			 * Constructor.
+			 *
+			 * @param int $id List ID.
+			 */
+			public function __construct( $id ) {
+				$this->id = $id;
+			}
+
+			/**
+			 * Get the list ID.
+			 *
+			 * @return int
+			 */
+			public function get_id() {
+				return $this->id;
+			}
+		};
+
+		$this->assertSame(
+			[],
+			Premium_Newsletters::filter_subscription_lists( [ $list ] ),
+			'A gated list should be hidden from signup forms while gating is active.'
+		);
+
+		$this->disable_audience_management();
+
+		$this->assertSame(
+			[],
+			Premium_Newsletters::filter_subscription_lists( [ $list ] ),
+			'A gated list must stay hidden while gating is inactive, or paid lists become open to anyone.'
 		);
 	}
 

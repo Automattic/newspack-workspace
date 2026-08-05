@@ -62,9 +62,9 @@ class Block_Visibility {
 
 		// This path evaluates rules itself rather than asking
 		// `newspack_is_post_restricted`, so it needs the dependency stated explicitly.
-		// Without it a members-only block stayed hidden while the article around it
-		// rendered in full, leaving the reader a hole in the page and no registration
-		// surface to fill it.
+		// Without it, with Audience Management off, a members-only block stayed hidden
+		// while the article around it rendered in full — a hole in the page and no
+		// registration surface to fill it.
 		//
 		// Reader Activation alone, NOT Content_Gate::is_gating_active(): block
 		// visibility is flag-independent by design — this class registers
@@ -73,8 +73,11 @@ class Block_Visibility {
 		// So the feature is live on sites that never enabled content gates, and ANDing
 		// in the constant would make blocks they deliberately hid render to everyone.
 		// What this rule actually depends on is a reader's ability to register, which
-		// is Reader Activation. Sits after the bypass above so editor and REST renders
-		// don't pay for the option read.
+		// is Reader Activation. So on a constant-off site with Reader Activation on,
+		// blocks keep hiding while page-level gating is off — that asymmetry is left
+		// in place knowingly, because block visibility predates the flag and is used
+		// without it. Sits after the bypass above so editor and REST renders don't pay
+		// for the option read.
 		if ( ! Reader_Activation::is_enabled() ) {
 			return $block_content;
 		}

@@ -21,8 +21,8 @@ defined( 'ABSPATH' ) || exit;
  * Account. A gate enforced without Audience Management locks readers out and
  * then gives them no way in.
  *
- * Gating therefore stands down rather than half-works: every reader-facing
- * enforcement path asks {@see \Newspack\Content_Gate::is_gating_active()}, so with Audience
+ * Gating therefore stands down rather than half-works: reader-facing enforcement
+ * asks {@see \Newspack\Content_Gate::is_gating_active()}, so with Audience
  * Management off gates stay configured and restrict nothing. This trait is the
  * other half of that — it keeps the publisher from authoring new gating that
  * would do nothing, and points them at the setting that makes it work.
