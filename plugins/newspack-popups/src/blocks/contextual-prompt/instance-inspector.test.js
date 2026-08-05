@@ -67,7 +67,7 @@ const BlockEdit = jest.fn( () => <div>Block edit</div> );
 const instanceProps = {
 	name: 'core/block',
 	clientId: 'prompt-1',
-	attributes: { ref: PATTERN_ID, content: { 'Prompt copy': { content: 'Support us.' } } },
+	attributes: { ref: PATTERN_ID, content: { 'Prompt Copy': { content: 'Support us.' } } },
 };
 
 describe( 'withPromptInstanceInspector', () => {

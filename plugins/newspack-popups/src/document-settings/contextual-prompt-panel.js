@@ -81,6 +81,7 @@ const ContextualPromptPanel = () => {
 
 	const [ candidates, setCandidates ] = useState( [] );
 	const [ generating, setGenerating ] = useState( false );
+	const [ applying, setApplying ] = useState( false );
 	const [ error, setError ] = useState( '' );
 
 	// Whether a generation attempt has completed in the current framing context,
@@ -233,13 +234,20 @@ const ContextualPromptPanel = () => {
 						{ __( 'The Contextual Prompt pattern has no editable copy field, so generated copy cannot be applied.', 'newspack-popups' ) }
 					</Notice>
 				) : (
-					<GenerateButton busy={ generating } onClick={ generate }>
+					<GenerateButton busy={ generating } disabled={ applying } onClick={ generate }>
 						{ generateLabel }
 					</GenerateButton>
 				) }
 			</VStack>
 
-			<CandidateList candidates={ canApply ? candidates : [] } onApply={ applyCandidate } />
+			{ /* Without a prompt in the post, applying inserts one rather than
+			     replacing its copy: confirm what actually happened. */ }
+			<CandidateList
+				candidates={ canApply ? candidates : [] }
+				onApply={ applyCandidate }
+				onApplyingChange={ setApplying }
+				confirmation={ ! promptDetached && ! promptClientId ? __( 'Contextual Prompt added.', 'newspack-popups' ) : undefined }
+			/>
 		</PluginDocumentSettingPanel>
 	);
 };

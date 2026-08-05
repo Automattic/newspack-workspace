@@ -229,6 +229,7 @@ const PromptInstanceInspector = ( { clientId, attributes } ) => {
 
 	const [ generating, setGenerating ] = useState( false );
 	const [ candidates, setCandidates ] = useState( [] );
+	const [ applying, setApplying ] = useState( false );
 	const [ error, setError ] = useState( '' );
 	const autoAttempted = useRef( new Set() );
 
@@ -350,7 +351,7 @@ const PromptInstanceInspector = ( { clientId, attributes } ) => {
 		// only the content and list slot groups for one — a default-group fill
 		// would never render.
 		<InspectorControls group="content">
-			<PanelBody title={ __( 'Copy', 'newspack-popups' ) } initialOpen>
+			<PanelBody title={ __( 'Prompt Copy', 'newspack-popups' ) } initialOpen>
 				{ error && (
 					<Notice status="error" isDismissible={ false }>
 						{ error }
@@ -382,10 +383,10 @@ const PromptInstanceInspector = ( { clientId, attributes } ) => {
 					</Notice>
 				) : (
 					<>
-						<GenerateButton busy={ generating } onClick={ regenerate }>
+						<GenerateButton busy={ generating } disabled={ applying } onClick={ regenerate }>
 							{ __( 'Regenerate Suggestions', 'newspack-popups' ) }
 						</GenerateButton>
-						<CandidateList candidates={ candidates } onApply={ apply } />
+						<CandidateList candidates={ candidates } onApply={ apply } onApplyingChange={ setApplying } />
 					</>
 				) }
 			</PanelBody>

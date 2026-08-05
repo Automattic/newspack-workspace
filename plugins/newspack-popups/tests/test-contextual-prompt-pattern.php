@@ -145,7 +145,7 @@ class ContextualPromptPatternTest extends WP_UnitTestCase {
 
 		$para = $group['innerBlocks'][0];
 		$this->assertSame( 'core/paragraph', $para['blockName'] );
-		$this->assertSame( 'Prompt copy', $para['attrs']['metadata']['name'] );
+		$this->assertSame( 'Prompt Copy', $para['attrs']['metadata']['name'] );
 		$this->assertSame( [ '__default' => [ 'source' => 'core/pattern-overrides' ] ], $para['attrs']['metadata']['bindings'] );
 		$this->assertSame(
 			[

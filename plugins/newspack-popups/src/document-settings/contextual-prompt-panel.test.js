@@ -12,7 +12,7 @@
 /**
  * WordPress dependencies.
  */
-import { render, screen, fireEvent } from '@testing-library/react';
+import { act, render, screen, fireEvent } from '@testing-library/react';
 import { useSelect, useDispatch } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
 
@@ -23,6 +23,7 @@ jest.mock( '@wordpress/data', () => ( {
 	useSelect: jest.fn(),
 	useDispatch: jest.fn(),
 	select: () => ( { getEditedPostContent: () => '' } ),
+	dispatch: () => ( { createSuccessNotice: jest.fn() } ),
 } ) );
 
 jest.mock( '@wordpress/blocks', () => ( {
@@ -90,18 +91,24 @@ const DETACHED = { ...NO_PROMPT, promptClientId: 'card', promptDetached: true, p
 
 const bound = {
 	name: 'core/paragraph',
-	attributes: { metadata: { name: 'Prompt copy', bindings: { __default: { source: 'core/pattern-overrides' } } } },
+	attributes: { metadata: { name: 'Prompt Copy', bindings: { __default: { source: 'core/pattern-overrides' } } } },
 	innerBlocks: [],
 };
-const unbound = { name: 'core/paragraph', attributes: { metadata: { name: 'Prompt copy' } }, innerBlocks: [] };
+const unbound = { name: 'core/paragraph', attributes: { metadata: { name: 'Prompt Copy' } }, innerBlocks: [] };
 
 let ContextualPromptPanel;
 const dispatchers = {};
 
-// A suggestion is picked from the list, then applied with the one Apply button.
+// A suggestion is picked from the list, then applied with the one Apply
+// button. The application lands only after the busy hold plays out.
 const pickAndApply = async () => {
 	fireEvent.click( await screen.findByRole( 'radio' ) );
+	jest.useFakeTimers();
 	fireEvent.click( screen.getByText( 'Apply' ) );
+	await act( async () => {
+		jest.advanceTimersByTime( 900 );
+	} );
+	jest.useRealTimers();
 };
 
 beforeAll( () => {
@@ -153,7 +160,7 @@ describe( 'ContextualPromptPanel', () => {
 		await pickAndApply();
 
 		expect( dispatchers.insertBlock ).toHaveBeenCalledWith(
-			{ name: 'core/block', attributes: { ref: PATTERN_ID, content: { 'Prompt copy': { content: 'Support us.' } } } },
+			{ name: 'core/block', attributes: { ref: PATTERN_ID, content: { 'Prompt Copy': { content: 'Support us.' } } } },
 			0
 		);
 	} );

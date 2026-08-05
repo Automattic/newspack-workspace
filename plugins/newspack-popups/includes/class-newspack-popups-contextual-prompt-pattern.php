@@ -19,7 +19,7 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 	const OPTION_PATTERN_ID     = 'newspack_contextual_prompts_pattern_id';
 	const OPTION_STAMPED_ACCENT = 'newspack_contextual_prompts_stamped_accent';
 	const MARKER_CLASS          = 'newspack-contextual-prompt';
-	const BOUND_NAME            = 'Prompt copy';
+	const BOUND_NAME            = 'Prompt Copy';
 	const SEEDING_LOCK_OPTION   = 'newspack_contextual_prompts_seeding';
 	const SEEDING_LOCK_TTL      = 30;
 

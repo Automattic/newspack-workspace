@@ -11,6 +11,7 @@
  */
 import { __, sprintf } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
+import { dispatch } from '@wordpress/data';
 import { useRef, useState } from '@wordpress/element';
 // eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 import { Button, Card, CardBody, __experimentalVStack as VStack } from '@wordpress/components';
@@ -108,11 +109,11 @@ export const generateCandidates = async ( { postId, content, framing, regenerate
 	);
 };
 
-export const GenerateButton = ( { busy, onClick, children } ) => (
+export const GenerateButton = ( { busy, disabled, onClick, children } ) => (
 	<Button
 		variant="secondary"
 		onClick={ onClick }
-		disabled={ busy }
+		disabled={ busy || disabled }
 		isBusy={ busy }
 		__next40pxDefaultSize
 		className="newspack-popups__contextual-prompt-generate"
@@ -124,9 +125,14 @@ export const GenerateButton = ( { busy, onClick, children } ) => (
 // Arrow keys move the selection within a radiogroup, in either orientation.
 const ARROW_STEPS = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 };
 
-export const CandidateList = ( { candidates, onApply } ) => {
+// Applying is near-instant, so the busy state is held first, long enough to
+// read as an acknowledgement rather than a flicker.
+const MIN_APPLY_MS = 900;
+
+export const CandidateList = ( { candidates, onApply, onApplyingChange, confirmation } ) => {
 	const [ selected, setSelected ] = useState( -1 );
 	const [ listed, setListed ] = useState( candidates );
+	const [ applying, setApplying ] = useState( false );
 	const cardRefs = useRef( [] );
 
 	// Regenerating replaces the list, so a selection made against the previous
@@ -141,8 +147,28 @@ export const CandidateList = ( { candidates, onApply } ) => {
 	}
 
 	const select = index => {
+		if ( applying ) {
+			return;
+		}
 		setSelected( index );
 		cardRefs.current[ index ]?.focus();
+	};
+
+	const applySelected = () => {
+		const candidate = candidates[ selected ];
+		setApplying( true );
+		onApplyingChange?.( true );
+		// Both hosts hide the list as soon as the copy lands, so the busy state
+		// has to play out before the application, not during it.
+		setTimeout( () => {
+			Promise.resolve( onApply( candidate ) ).then( () => {
+				setApplying( false );
+				onApplyingChange?.( false );
+				dispatch( 'core/notices' ).createSuccessNotice( confirmation || __( 'Suggestion applied.', 'newspack-popups' ), {
+					type: 'snackbar',
+				} );
+			} );
+		}, MIN_APPLY_MS );
 	};
 
 	const onKeyDown = ( event, index ) => {
@@ -162,6 +188,8 @@ export const CandidateList = ( { candidates, onApply } ) => {
 	// Roving tab stop: the group is one stop, entered on the selection or, with
 	// nothing selected, on the first card.
 	const tabStop = 0 > selected ? 0 : selected;
+
+	const selectedFraming = 0 <= selected ? FRAMING_LABELS[ candidates[ selected ].framing ] || candidates[ selected ].framing : '';
 
 	return (
 		<>
@@ -213,8 +241,18 @@ export const CandidateList = ( { candidates, onApply } ) => {
 				variant="primary"
 				__next40pxDefaultSize
 				className="newspack-popups__contextual-prompt-apply"
-				disabled={ 0 > selected }
-				onClick={ () => onApply( candidates[ selected ] ) }
+				disabled={ applying || 0 > selected }
+				isBusy={ applying }
+				onClick={ applySelected }
+				aria-label={
+					selectedFraming
+						? sprintf(
+								/* translators: %s: the selected suggestion's framing label, e.g. "Top of Post". */
+								__( 'Apply suggestion: %s', 'newspack-popups' ),
+								selectedFraming
+						  )
+						: __( 'Apply the selected suggestion', 'newspack-popups' )
+				}
 			>
 				{ __( 'Apply', 'newspack-popups' ) }
 			</Button>

@@ -1,9 +1,14 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { act, render, screen, fireEvent } from '@testing-library/react';
 import apiFetch from '@wordpress/api-fetch';
 
 import { CandidateList, framingForPosition, generateCandidates, toRichTextContent } from './candidates';
 
 jest.mock( '@wordpress/api-fetch' );
+
+const mockCreateSuccessNotice = jest.fn();
+jest.mock( '@wordpress/data', () => ( {
+	dispatch: () => ( { createSuccessNotice: mockCreateSuccessNotice } ),
+} ) );
 
 // Card is the radio, so the stub has to carry the props that make it one — and
 // forward the ref the list focuses it with.
@@ -31,8 +36,8 @@ jest.mock( '@wordpress/components', () => {
 				{ children }
 			</div>
 		),
-		Button: ( { children, onClick, disabled } ) => (
-			<button onClick={ onClick } disabled={ disabled }>
+		Button: ( { children, onClick, disabled, 'aria-label': ariaLabel } ) => (
+			<button onClick={ onClick } disabled={ disabled } aria-label={ ariaLabel }>
 				{ children }
 			</button>
 		),
@@ -112,8 +117,25 @@ describe( 'CandidateList', () => {
 		{ body: 'Give today.', framing: 'end' },
 	];
 
-	const applyButton = () => screen.getByRole( 'button', { name: 'Apply' } );
+	const applyButton = () => screen.getByRole( 'button', { name: /^Apply/ } );
 	const card = label => screen.getByRole( 'radio', { name: new RegExp( label ) } );
+
+	// The application only lands after the busy hold plays out.
+	const applyNow = async () => {
+		fireEvent.click( applyButton() );
+		await act( async () => {
+			jest.advanceTimersByTime( 900 );
+		} );
+	};
+
+	beforeEach( () => {
+		jest.useFakeTimers();
+		mockCreateSuccessNotice.mockClear();
+	} );
+
+	afterEach( () => {
+		jest.useRealTimers();
+	} );
 
 	it( 'renders nothing without candidates', () => {
 		const { container } = render( <CandidateList candidates={ [] } onApply={ jest.fn() } /> );
@@ -129,23 +151,61 @@ describe( 'CandidateList', () => {
 		expect( applyButton() ).toBeDisabled();
 	} );
 
-	it( 'applies the picked suggestion', () => {
+	it( 'applies the picked suggestion', async () => {
 		const onApply = jest.fn();
 		render( <CandidateList candidates={ CANDIDATES } onApply={ onApply } /> );
 
 		fireEvent.click( card( 'Mid-Post' ) );
 
 		expect( card( 'Mid-Post' ) ).toBeChecked();
-		fireEvent.click( applyButton() );
+		// The single Apply button names the choice for screen readers.
+		expect( screen.getByRole( 'button', { name: 'Apply suggestion: Mid-Post' } ) ).toBeInTheDocument();
+		await applyNow();
 		expect( onApply ).toHaveBeenCalledWith( CANDIDATES[ 1 ] );
 	} );
 
-	it.each( [ [ 'Enter' ], [ ' ' ] ] )( 'picks the focused suggestion on %s', key => {
+	// The busy hold plays out before the copy lands (the hosts hide the list as
+	// soon as it does), and closes with a snackbar.
+	it( 'holds Apply busy, reports it to the host, then applies and confirms', async () => {
+		const onApply = jest.fn();
+		const onApplyingChange = jest.fn();
+		render( <CandidateList candidates={ CANDIDATES } onApply={ onApply } onApplyingChange={ onApplyingChange } /> );
+
+		fireEvent.click( card( 'Top of Post' ) );
+		fireEvent.click( applyButton() );
+
+		expect( onApply ).not.toHaveBeenCalled();
+		expect( onApplyingChange ).toHaveBeenCalledWith( true );
+		expect( applyButton() ).toBeDisabled();
+		expect( mockCreateSuccessNotice ).not.toHaveBeenCalled();
+
+		await act( async () => {
+			jest.advanceTimersByTime( 900 );
+		} );
+
+		expect( onApply ).toHaveBeenCalledWith( CANDIDATES[ 0 ] );
+		expect( onApplyingChange ).toHaveBeenLastCalledWith( false );
+		expect( applyButton() ).toBeEnabled();
+		expect( mockCreateSuccessNotice ).toHaveBeenCalledWith( 'Suggestion applied.', { type: 'snackbar' } );
+	} );
+
+	// Hosts whose apply does more than replace copy (the panel inserts the
+	// prompt when the post has none) name what actually happened.
+	it( 'confirms with the host-provided message', async () => {
+		render( <CandidateList candidates={ CANDIDATES } onApply={ jest.fn() } confirmation="Contextual Prompt added." /> );
+
+		fireEvent.click( card( 'Top of Post' ) );
+		await applyNow();
+
+		expect( mockCreateSuccessNotice ).toHaveBeenCalledWith( 'Contextual Prompt added.', { type: 'snackbar' } );
+	} );
+
+	it.each( [ [ 'Enter' ], [ ' ' ] ] )( 'picks the focused suggestion on %s', async key => {
 		const onApply = jest.fn();
 		render( <CandidateList candidates={ CANDIDATES } onApply={ onApply } /> );
 
 		fireEvent.keyDown( card( 'End of Post' ), { key } );
-		fireEvent.click( applyButton() );
+		await applyNow();
 
 		expect( onApply ).toHaveBeenCalledWith( CANDIDATES[ 2 ] );
 	} );
@@ -156,12 +216,12 @@ describe( 'CandidateList', () => {
 		[ 'ArrowRight', 'Chip in.' ],
 		[ 'ArrowUp', 'Give today.' ],
 		[ 'ArrowLeft', 'Give today.' ],
-	] )( '%s moves the choice to %s', ( key, expected ) => {
+	] )( '%s moves the choice to %s', async ( key, expected ) => {
 		const onApply = jest.fn();
 		render( <CandidateList candidates={ CANDIDATES } onApply={ onApply } /> );
 
 		fireEvent.keyDown( card( 'Top of Post' ), { key } );
-		fireEvent.click( applyButton() );
+		await applyNow();
 
 		expect( onApply ).toHaveBeenCalledWith( expect.objectContaining( { body: expected } ) );
 	} );

@@ -39,7 +39,7 @@ const loadInstance = ( { blocksData, panelData } = {} ) => {
 
 const paragraph = ( attrs, content = '' ) => `<!-- wp:paragraph ${ JSON.stringify( attrs ) } -->\n<p>${ content }</p>\n<!-- /wp:paragraph -->`;
 
-const BOUND_ATTRS = { metadata: { name: 'Prompt copy', bindings: { __default: { source: 'core/pattern-overrides' } } } };
+const BOUND_ATTRS = { metadata: { name: 'Prompt Copy', bindings: { __default: { source: 'core/pattern-overrides' } } } };
 
 const group = inner =>
 	`<!-- wp:group {"metadata":{"name":"Contextual Prompt"}} -->\n<div class="wp-block-group">${ inner }</div>\n<!-- /wp:group -->`;
@@ -84,7 +84,7 @@ describe( 'isPromptInstance', () => {
 describe( 'findBoundName', () => {
 	it( 'finds the bound paragraph name', () => {
 		const { findBoundName } = loadInstance();
-		expect( findBoundName( group( paragraph( BOUND_ATTRS ) ) ) ).toBe( 'Prompt copy' );
+		expect( findBoundName( group( paragraph( BOUND_ATTRS ) ) ) ).toBe( 'Prompt Copy' );
 	} );
 
 	// The name is the publisher's to change in the pattern, so it is read from
@@ -99,7 +99,7 @@ describe( 'findBoundName', () => {
 	it( 'skips paragraphs that are not bound', () => {
 		const { findBoundName } = loadInstance();
 		const unbound = paragraph( { metadata: { name: 'Heading copy' } }, 'Static.' );
-		expect( findBoundName( group( unbound + paragraph( BOUND_ATTRS ) ) ) ).toBe( 'Prompt copy' );
+		expect( findBoundName( group( unbound + paragraph( BOUND_ATTRS ) ) ) ).toBe( 'Prompt Copy' );
 	} );
 
 	// Null is what the callers gate on: there is nowhere to put copy, so a name
@@ -131,9 +131,9 @@ describe( 'buildOverrideAttrs', () => {
 	// raw HTML.
 	it( 'encodes markup in the body', () => {
 		const { buildOverrideAttrs } = loadInstance();
-		const attrs = buildOverrideAttrs( 'Prompt copy', '<script>alert("xss")</script>' );
-		expect( attrs.content[ 'Prompt copy' ].content ).toBe( '&lt;script>alert("xss")&lt;/script>' );
-		expect( attrs.content[ 'Prompt copy' ].content ).not.toMatch( /</ );
+		const attrs = buildOverrideAttrs( 'Prompt Copy', '<script>alert("xss")</script>' );
+		expect( attrs.content[ 'Prompt Copy' ].content ).toBe( '&lt;script>alert("xss")&lt;/script>' );
+		expect( attrs.content[ 'Prompt Copy' ].content ).not.toMatch( /</ );
 	} );
 } );
 
@@ -144,7 +144,7 @@ describe( 'shouldAutoGenerate', () => {
 		canGenerate: true,
 		overrideIsEmpty: true,
 		patternResolved: true,
-		boundName: 'Prompt copy',
+		boundName: 'Prompt Copy',
 		attempted: false,
 	};
 
