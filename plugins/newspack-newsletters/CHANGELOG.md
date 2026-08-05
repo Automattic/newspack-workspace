@@ -1,3 +1,10 @@
+## newspack-newsletters [3.38.2](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.38.1...newspack-newsletters@3.38.2) (2026-08-05)
+
+
+### Bug Fixes
+
+* accept Gutenberg theme.json data class in filter callbacks ([#807](https://github.com/Automattic/newspack-workspace/issues/807)) ([94e18e2](https://github.com/Automattic/newspack-workspace/commit/94e18e24cabac25b9f6a491cf6a1ba2e321b9550))
+
 ## newspack-newsletters [3.38.1](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.38.0...newspack-newsletters@3.38.1) (2026-08-04)
 
 
