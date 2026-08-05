@@ -147,13 +147,37 @@ class Inert_Gating_Notice_Test extends WP_UnitTestCase {
 		self::factory()->post->create(
 			[
 				'post_status'  => 'publish',
-				'post_content' => '<!-- wp:group {"newspackAccessControlMode":"custom"} --><div></div><!-- /wp:group -->',
+				'post_content' => '<!-- wp:group {"newspackAccessControlMode":"custom","newspackAccessControlRules":{"registration":{"active":true}}} --><div></div><!-- /wp:group -->',
 			]
 		);
 		Inert_Gating_Notice::flush_cache();
 		$this->disable_audience_management();
 
 		$this->assertStringContainsString( 'are public for all readers', $this->render() );
+	}
+
+	/**
+	 * A block that only records a mode choice is not configured.
+	 *
+	 * Someone who switches a block to custom mode and never adds a rule leaves
+	 * `newspackAccessControlMode` in the content for good — the editor has no reason
+	 * to remove it, and it is a preference rather than a rule. Counting it would tell
+	 * that publisher their content is public when nothing was ever gated, and with no
+	 * TTL nothing would correct it.
+	 */
+	public function test_a_mode_choice_alone_is_not_a_surface() {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+		self::factory()->post->create(
+			[
+				'post_status'  => 'publish',
+				'post_content' => '<!-- wp:group {"newspackAccessControlMode":"custom"} --><div></div><!-- /wp:group -->',
+			]
+		);
+		Inert_Gating_Notice::flush_cache();
+		$this->disable_audience_management();
+
+		$this->assertFalse( Inert_Gating_Notice::has_surfaces(), 'A mode with no rules behind it gates nothing.' );
+		$this->assertStringNotContainsString( 'are public for all readers', $this->render() );
 	}
 
 	/**
@@ -246,7 +270,7 @@ class Inert_Gating_Notice_Test extends WP_UnitTestCase {
 		self::factory()->post->create(
 			[
 				'post_status'  => 'publish',
-				'post_content' => '<!-- wp:group {"newspackAccessControlVisibility":"visible"} --><div></div><!-- /wp:group -->',
+				'post_content' => '<!-- wp:group {"newspackAccessControlGateIds":[12]} --><div></div><!-- /wp:group -->',
 			]
 		);
 		$this->assertFalse(
@@ -338,7 +362,7 @@ class Inert_Gating_Notice_Test extends WP_UnitTestCase {
 		$post_id = self::factory()->post->create(
 			[
 				'post_status'  => 'publish',
-				'post_content' => '<!-- wp:group {"newspackAccessControlMode":"custom"} --><div></div><!-- /wp:group -->',
+				'post_content' => '<!-- wp:group {"newspackAccessControlMode":"custom","newspackAccessControlRules":{"registration":{"active":true}}} --><div></div><!-- /wp:group -->',
 			]
 		);
 		Inert_Gating_Notice::flush_cache();

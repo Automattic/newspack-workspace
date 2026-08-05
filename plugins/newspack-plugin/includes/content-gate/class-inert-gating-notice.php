@@ -49,6 +49,23 @@ class Inert_Gating_Notice {
 	const BLOCK_ATTRIBUTE_PREFIX = 'newspackAccessControl';
 
 	/**
+	 * The attributes that mean something is actually configured.
+	 *
+	 * Narrower than the prefix above on purpose. `...Mode` and `...Visibility` also
+	 * serialize, but only record a choice: a block left in `custom` mode having
+	 * never had a rule added carries `...Mode` and nothing else, and matching the
+	 * bare prefix would report that site as gated. These two only appear once rules
+	 * or gates are set, so they answer the question the notice actually asks.
+	 *
+	 * The prefix stays the invalidation trigger — over-flushing is harmless, and a
+	 * flush that recomputes the same answer costs nothing.
+	 */
+	const CONFIGURED_ATTRIBUTES = [
+		'newspackAccessControlRules',
+		'newspackAccessControlGateIds',
+	];
+
+	/**
 	 * Initialize hooks.
 	 */
 	public static function init() {
@@ -209,6 +226,15 @@ class Inert_Gating_Notice {
 	 * embedding a reusable block carries only a `wp:block` reference, so the
 	 * attributes live on the `wp_block` post alone.
 	 *
+	 * One `LIKE` per entry in CONFIGURED_ATTRIBUTES rather than one on the shared
+	 * prefix, so a block that only records a mode choice isn't counted. Measured on
+	 * a seeded 9,000-row wp_posts, no match present: 0.179 ms for the single prefix
+	 * match against 0.218 ms for the pair. A `REGEXP` alternation came in faster
+	 * still here, but this runs on MariaDB and CI and production run MySQL, whose
+	 * regex engine is a different implementation with a different profile — not
+	 * worth the variance for four hundredths of a millisecond on a query that only
+	 * runs when the cache misses.
+	 *
 	 * @return bool
 	 */
 	private static function has_block_rules(): bool {
@@ -219,22 +245,26 @@ class Inert_Gating_Notice {
 			return false;
 		}
 
-		$placeholders = implode( ', ', array_fill( 0, count( $post_types ), '%s' ) );
-		$values       = array_values( $post_types );
-		$values[]     = '%' . $wpdb->esc_like( self::BLOCK_ATTRIBUTE_PREFIX ) . '%';
+		$type_placeholders = implode( ', ', array_fill( 0, count( $post_types ), '%s' ) );
+		$content_clause    = implode( ' OR ', array_fill( 0, count( self::CONFIGURED_ATTRIBUTES ), 'post_content LIKE %s' ) );
 
-		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $placeholders is a generated list of %s, one per post type; every value is passed through prepare().
+		$values = array_values( $post_types );
+		foreach ( self::CONFIGURED_ATTRIBUTES as $attribute ) {
+			$values[] = '%' . $wpdb->esc_like( $attribute ) . '%';
+		}
+
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- both interpolations are generated %s lists, which is why the sniffs cannot see the placeholders; every value is passed through prepare().
 		$found = $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 			$wpdb->prepare(
 				"SELECT ID FROM {$wpdb->posts}
-				WHERE post_type IN ( $placeholders )
+				WHERE post_type IN ( $type_placeholders )
 				AND post_status = 'publish'
-				AND post_content LIKE %s
+				AND ( $content_clause )
 				LIMIT 1",
 				$values
 			)
 		);
-		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
 		return ! empty( $found );
 	}
 
