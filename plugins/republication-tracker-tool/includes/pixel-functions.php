@@ -337,7 +337,10 @@ function wprtt_record_view( WP_Post $shared_post, string $referrer_url, string $
 	$shared_post_permalink = get_permalink( $shared_post_id );
 
 	// add_query_arg() does not encode values itself; a secret containing & or #
-	// would silently corrupt the URL without the explicit encoding.
+	// would silently corrupt the URL without the explicit encoding. Verified
+	// live: newly added args pass through add_query_arg() unencoded — only
+	// values parsed from an existing query string on the base URL are
+	// re-encoded, and this base URL has none. No double-encoding here.
 	$base_url = add_query_arg(
 		[
 			'api_secret'     => rawurlencode( $ga4_secret ),
