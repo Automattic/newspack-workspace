@@ -177,7 +177,7 @@ class Newspack_Blocks_Donate_Renderer_Frequency_Based extends Newspack_Blocks_Do
 								id='tab-panel-<?php echo esc_attr( $frequency_slug . '-' . $uid ); ?>'
 								role='tabpanel'
 								aria-labelledby='tab-newspack-donate-<?php echo esc_attr( $frequency_slug . '-' . $uid ); ?>'
-								data-checkout='<?php echo esc_attr( wp_json_encode( Checkout_Data::get_donation_checkout_data( $frequency_slug, $amount ) ) ); ?>'
+								<?php Checkout_Data::print_data_checkout_attr( Checkout_Data::get_donation_checkout_data( $frequency_slug, $amount ) ); ?>
 								<?php ( $frequency_slug === $configuration['defaultFrequency'] ? 'tabindex="0"' : '' ); ?>
 							>
 								<?php echo self::render_frequency_selection( $frequency_slug, $frequency_name, $uid, $configuration ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
@@ -262,7 +262,7 @@ class Newspack_Blocks_Donate_Renderer_Frequency_Based extends Newspack_Blocks_Do
 										?>
 										<div
 											class='wp-block-newspack-blocks-donate__tier donation-tier__<?php echo esc_attr( $frequency_slug ); ?>'
-											data-checkout='<?php echo esc_attr( wp_json_encode( Checkout_Data::get_donation_checkout_data( $frequency_slug, $amount ) ) ); ?>'
+											<?php Checkout_Data::print_data_checkout_attr( Checkout_Data::get_donation_checkout_data( $frequency_slug, $amount ) ); ?>
 										>
 											<?php if ( 3 === $index ) : // The "other" tier. ?>
 												<input

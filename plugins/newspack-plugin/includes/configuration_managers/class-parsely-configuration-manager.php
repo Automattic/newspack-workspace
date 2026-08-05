@@ -64,7 +64,7 @@ class Parsely_Configuration_Manager extends Configuration_Manager {
 				'track_page_types'            => [ 'page' ],
 				'disable_javascript'          => false,
 				'disable_amp'                 => false,
-				'meta_type'                   => 'json_ld',
+				'meta_type'                   => 'repeated_metas',
 				'logo'                        => '',
 				'metadata_secret'             => '',
 				'parsely_wipe_metadata_cache' => false,

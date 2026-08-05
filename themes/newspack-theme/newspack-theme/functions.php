@@ -179,6 +179,7 @@ if ( ! function_exists( 'newspack_setup' ) ) :
 		$secondary_color_variation = newspack_adjust_brightness( $secondary_color, -40 );
 
 		// Editor color palette.
+		// phpcs:disable Squiz.Commenting.InlineComment.InvalidEndChar -- Let's not be too precious about the brief comments here.
 		add_theme_support(
 			'editor-color-palette',
 			array(
@@ -224,6 +225,7 @@ if ( ! function_exists( 'newspack_setup' ) ) :
 				),
 			)
 		);
+		// phpcs:enable Squiz.Commenting.InlineComment.InvalidEndChar
 
 		add_theme_support(
 			'editor-gradient-presets',
@@ -267,7 +269,7 @@ if ( ! function_exists( 'newspack_setup' ) ) :
 		// Add support for responsive embedded content.
 		add_theme_support( 'responsive-embeds' );
 
-		// Make our theme AMP/PWA Native
+		// Make our theme AMP/PWA Native.
 		add_theme_support(
 			'amp',
 			array(
@@ -278,7 +280,7 @@ if ( ! function_exists( 'newspack_setup' ) ) :
 			)
 		);
 
-		// Add custom theme support - post subtitle
+		// Add custom theme support - post subtitle.
 		add_theme_support( 'post-subtitle' );
 	}
 endif;
@@ -411,7 +413,7 @@ add_action( 'widgets_init', 'newspack_widgets_init' );
 function newspack_content_width() {
 	$content_width = 780;
 
-	// Check if front page or using One-Column Wide template
+	// Check if front page or using One-Column Wide template.
 	if ( ( is_front_page() && 'posts' !== get_option( 'show_on_front' ) ) || is_page_template( 'single-wide.php' ) ) {
 		$content_width = 1200;
 	}
@@ -585,6 +587,7 @@ function newspack_enqueue_scripts() {
 	}
 
 	// Featured Image options.
+	// phpcs:ignore WordPress.WP.EnqueuedResourceParameters.NotInFooter -- TODO: Should we set $in_footer?
 	wp_register_script(
 		'newspack-extend-featured-image-script',
 		get_theme_file_uri( '/js/dist/extend-featured-image-editor.js' ),
@@ -814,6 +817,8 @@ function newspack_check_current_template() {
  *
  * The 'admin-color-' prefix is used to make sure the classes get moved to the <body> tag in the iframed editor as a work-around.
  * See https://github.com/WordPress/gutenberg/issues/28538 for more details.
+ *
+ * @param string $classes Existing classes.
  */
 function newspack_filter_admin_body_class( $classes ) {
 	if ( ! function_exists( 'get_current_screen' ) ) {
@@ -1044,6 +1049,9 @@ add_action( 'admin_init', 'newspack_prevent_classic_metabox_meta_clobber' );
 /**
  * Migrate theme settings when switching within the family of Newspack themes.
  *
+ * @param string         $old_name  The name of the old theme.
+ * @param WP_Theme|false $old_theme The old theme object (default: false).
+ *
  * @since Newspack Theme 1.0.0
  */
 function newspack_migrate_settings( $old_name, $old_theme = false ) {
@@ -1193,6 +1201,10 @@ function newspack_sanitize_svgs() {
 
 /**
  * Truncates text to a specific character length, without breaking a character.
+ *
+ * @param string $content The text to truncate.
+ * @param int    $length The character length to truncate to.
+ * @param string $after Text to append after truncation. Default is '...'.
  */
 function newspack_truncate_text( $content, $length, $after = '...' ) {
 	// If content is already shorter than the truncate length, return it.
@@ -1200,10 +1212,10 @@ function newspack_truncate_text( $content, $length, $after = '...' ) {
 		return $content;
 	}
 
-	// Find the first space after the desired length:
+	// Find the first space after the desired length.
 	$breakpoint = strpos( $content, ' ', $length );
 
-	// Make sure $breakpoint isn't returning false, and is less than length of content:
+	// Make sure $breakpoint isn't returning false, and is less than length of content.
 	if ( false !== $breakpoint && $breakpoint < strlen( $content ) - 1 ) {
 		$content = substr( $content, 0, $breakpoint ) . $after;
 	}
@@ -1270,9 +1282,11 @@ add_filter( 'newspack_ads_maybe_use_responsive_placement', 'newspack_theme_newsp
 
 /**
  * Add a extra span and class to the_archive_title, for easier styling.
+ *
+ * @param string $title Archive title to be displayed.
  */
 function newspack_update_the_archive_title( $title ) {
-	// Split the title into parts so we can wrap them with spans:
+	// Split the title into parts so we can wrap them with spans.
 	$title_parts  = explode( '<span class="page-description">', $title, 2 );
 	$title_format = get_theme_mod( 'archive_title_format', 'default' );
 
@@ -1405,6 +1419,13 @@ if ( function_exists( '\Newspack_Sponsors\get_sponsors_for_post' ) ) {
 }
 
 /**
+ * Load Tag Labels compatibility file.
+ */
+if ( class_exists( '\Newspack\Tag_Labels' ) ) {
+	require get_template_directory() . '/inc/newspack-tag-labels.php';
+}
+
+/**
  * Load Newsletters compatibility file.
  */
 if ( class_exists( '\Newspack_Newsletters' ) ) {
@@ -1441,4 +1462,3 @@ if ( defined( 'BEC_PLUGIN_VERSION' ) ) {
  * Woo Templates cache handling
  */
 require get_template_directory() . '/woocommerce/templates.php';
-

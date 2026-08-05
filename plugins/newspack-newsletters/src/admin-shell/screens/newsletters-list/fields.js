@@ -5,12 +5,13 @@
  * field so sent/scheduled is never re-derived client-side.
  */
 
-import { Icon } from '@wordpress/components';
+import { ExternalLink, Icon } from '@wordpress/components';
 import { __, sprintf } from '@wordpress/i18n';
 import { commentAuthorAvatar, drafts, envelope, globe, published, scheduled, trash } from '@wordpress/icons';
 import { dateI18n, getSettings as getDateSettings } from '@wordpress/date';
 
 import { getAdminUrl } from '../../admin-globals';
+import { isManualProvider } from '../../../utils/service-provider';
 import { formatPostDate } from '../../utils/format-date';
 import { termsForTaxonomy } from '../../utils/terms';
 import { statusKindLabel, STATUS_KIND_LABELS } from './status-label';
@@ -58,11 +59,16 @@ const renderStatus = ( { item } ) => {
 
 	let label;
 	if ( 'sent' === kind && status.sent_at ) {
-		label = sprintf(
+		// The manual provider publishes rather than sends through an ESP, so the date reads "Published %s".
+		let dateFormat;
+		if ( isManualProvider() ) {
+			/* translators: %s: formatted publish date */
+			dateFormat = __( 'Published %s', 'newspack-newsletters' );
+		} else {
 			/* translators: %s: formatted send date */
-			__( 'Sent %s', 'newspack-newsletters' ),
-			formatDate( status.sent_at )
-		);
+			dateFormat = __( 'Sent %s', 'newspack-newsletters' );
+		}
+		label = sprintf( dateFormat, formatDate( status.sent_at ) );
 	} else if ( 'scheduled' === kind && status.scheduled_at ) {
 		label = sprintf(
 			/* translators: %s: formatted scheduled date */
@@ -128,10 +134,19 @@ const renderPublicPage = ( { item } ) => {
 	const isPublic = !! item?.meta?.is_public;
 	const icon = isPublic ? globe : envelope;
 	const label = isPublic ? __( 'Email and web', 'newspack-newsletters' ) : __( 'Email only', 'newspack-newsletters' );
+	// Real anchor so the public page opens in one click and supports
+	// cmd/middle-click; mirrors the `view-public-page` action's gate.
+	const publicUrl = isPublic && 'publish' === item?.status && item?.link ? item.link : null;
 	return (
 		<span className="newspack-newsletters-list__visibility">
 			<Icon className="newspack-newsletters-list__visibility-icon" icon={ icon } size={ 24 } />
-			<span>{ label }</span>
+			{ publicUrl ? (
+				<ExternalLink href={ publicUrl } onClickCapture={ event => event.stopPropagation() }>
+					{ label }
+				</ExternalLink>
+			) : (
+				<span>{ label }</span>
+			) }
 		</span>
 	);
 };
@@ -159,13 +174,14 @@ export function getFields( { authors = [], categories = [], tags = [], sendLists
 				{ value: 'draft,pending,auto-draft', label: statusLabels.draft },
 				{ value: 'trash', label: statusLabels.trash },
 			],
-			filterBy: { operators: [ 'isAny' ] },
+			filterBy: { operators: [ 'isAny' ], isPrimary: true },
 			getValue: ( { item } ) => item?.newspack_newsletters_status?.kind || 'draft',
 			render: renderStatus,
 		},
 		{
 			id: 'send_date',
-			label: __( 'Send date', 'newspack-newsletters' ),
+			// For the manual provider the date is a publish date, not an ESP send date.
+			label: isManualProvider() ? __( 'Publish date', 'newspack-newsletters' ) : __( 'Send date', 'newspack-newsletters' ),
 			enableSorting: true,
 			getValue: ( { item } ) => item?.newspack_newsletters_status?.sent_at || item?.newspack_newsletters_status?.scheduled_at || 0,
 			render: renderSendDate,
@@ -177,7 +193,7 @@ export function getFields( { authors = [], categories = [], tags = [], sendLists
 				value: String( id ),
 				label: String( label ),
 			} ) ),
-			filterBy: { operators: [ 'isAny' ] },
+			filterBy: { operators: [ 'isAny' ], isPrimary: true },
 			enableSorting: false,
 			getValue: ( { item } ) => item?.meta?.send_list_id || '',
 			render: renderSendList,
@@ -189,7 +205,7 @@ export function getFields( { authors = [], categories = [], tags = [], sendLists
 				value: String( id ),
 				label: String( label ),
 			} ) ),
-			filterBy: { operators: [ 'isAny' ] },
+			filterBy: { operators: [ 'isAny' ], isPrimary: true },
 			enableSorting: true,
 			getValue: ( { item } ) => String( item?._embedded?.author?.[ 0 ]?.id || '' ),
 			render: renderAuthor,
@@ -201,7 +217,7 @@ export function getFields( { authors = [], categories = [], tags = [], sendLists
 				value: String( id ),
 				label: String( label ),
 			} ) ),
-			filterBy: { operators: [ 'isAny' ] },
+			filterBy: { operators: [ 'isAny' ], isPrimary: true },
 			enableSorting: false,
 			getValue: ( { item } ) =>
 				termsForTaxonomy( item, 'category' )
@@ -217,7 +233,7 @@ export function getFields( { authors = [], categories = [], tags = [], sendLists
 				value: String( id ),
 				label: String( label ),
 			} ) ),
-			filterBy: { operators: [ 'isAny' ] },
+			filterBy: { operators: [ 'isAny' ], isPrimary: true },
 			enableSorting: false,
 			getValue: ( { item } ) =>
 				termsForTaxonomy( item, 'post_tag' )
@@ -233,7 +249,7 @@ export function getFields( { authors = [], categories = [], tags = [], sendLists
 				{ value: '1', label: __( 'Email and web', 'newspack-newsletters' ) },
 				{ value: '0', label: __( 'Email only', 'newspack-newsletters' ) },
 			],
-			filterBy: { operators: [ 'is' ] },
+			filterBy: { operators: [ 'is' ], isPrimary: true },
 			getValue: ( { item } ) => ( item?.meta?.is_public ? '1' : '0' ),
 			render: renderPublicPage,
 		},

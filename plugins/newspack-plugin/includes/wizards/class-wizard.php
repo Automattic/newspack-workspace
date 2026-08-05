@@ -215,14 +215,13 @@ abstract class Wizard {
 		wp_enqueue_script( 'newspack_data' );
 
 		/**
-		 * Register wizards.js with cache busting
+		 * Register wizards.js with content-hash cache busting.
 		 */
-		$asset_file = include dirname( NEWSPACK_PLUGIN_FILE ) . '/dist/wizards.asset.php';
 		wp_register_script(
 			'newspack-wizards',
 			Newspack::plugin_url() . '/dist/wizards.js',
 			$this->get_script_dependencies(),
-			NEWSPACK_PLUGIN_VERSION,
+			Newspack::asset_version( 'wizards' ),
 			true
 		);
 	}

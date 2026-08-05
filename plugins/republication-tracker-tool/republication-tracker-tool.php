@@ -6,7 +6,7 @@
  * Author URI:      https://labs.inn.org
  * Text Domain:     republication-tracker-tool
  * Domain Path:     /languages
- * Version:         2.8.2
+ * Version:         2.8.4
  *
  * @package         Republication_Tracker_Tool
  */
@@ -32,6 +32,8 @@ require plugin_dir_path( __FILE__ ) . 'includes/class-article-settings.php';
 require plugin_dir_path( __FILE__ ) . 'includes/class-widget.php';
 require plugin_dir_path( __FILE__ ) . 'includes/compatibility-co-authors-plus.php';
 require plugin_dir_path( __FILE__ ) . 'includes/class-republication-rewrite.php';
+require plugin_dir_path( __FILE__ ) . 'includes/class-republish-button-block.php';
+require plugin_dir_path( __FILE__ ) . 'includes/class-republish-pattern.php';
 require plugin_dir_path( __FILE__ ) . 'includes/pixel-functions.php';
 
 /**
@@ -72,6 +74,13 @@ final class Republication_Tracker_Tool {
 	 * @since  1.0
 	 */
 	protected static $single_instance = null;
+
+	/**
+	 * Whether the modal has been rendered on this page.
+	 *
+	 * @var bool
+	 */
+	public static $modal_rendered = false;
 
 	/**
 	 * Instance of Republication_Tracker_Tool_Settings
