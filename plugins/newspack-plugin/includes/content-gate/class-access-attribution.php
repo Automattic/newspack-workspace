@@ -1,0 +1,157 @@
+<?php
+/**
+ * Access source attribution, shared by the ESP contact sync and the GA4 layer.
+ *
+ * @package Newspack
+ */
+
+namespace Newspack;
+
+defined( 'ABSPATH' ) || exit;
+
+/**
+ * Maps a passing access rule to source labels, and picks a single label when
+ * more than one rule granted access.
+ *
+ * Deliberately free of request state: the ESP walks every published gate for a
+ * reader, while the GA4 layer walks only the gates on the current post. Both
+ * need the same rule-to-label mapping and the same precedence, and nothing else
+ * in common.
+ */
+final class Access_Attribution {
+
+	/**
+	 * Generic source labels in precedence order, strongest first.
+	 *
+	 * Any label absent from this list is a product name, which outranks all of
+	 * them: naming the product a reader bought is more informative than saying
+	 * they bought something. `subscription` and `one_time_purchase` sit at the
+	 * top because they still mean ownership, only with the product unresolved.
+	 *
+	 * @var string[]
+	 */
+	const GENERIC_PRECEDENCE = [
+		'subscription',
+		'one_time_purchase',
+		'group',
+		'institution',
+		'domain',
+		'reader_data',
+	];
+
+	/**
+	 * Pick the single strongest label from a set of source labels.
+	 *
+	 * @param string[] $labels Source labels collected from passing rules.
+	 * @return string The winning label, or '' when there is nothing to attribute.
+	 */
+	public static function pick_primary( $labels ) {
+		if ( empty( $labels ) ) {
+			return '';
+		}
+
+		// Sorting first keeps the answer stable when a reader owns more than one
+		// product, so the same reader and gate never report different values.
+		sort( $labels, SORT_NATURAL | SORT_FLAG_CASE );
+
+		foreach ( $labels as $label ) {
+			if ( ! in_array( $label, self::GENERIC_PRECEDENCE, true ) ) {
+				return $label;
+			}
+		}
+
+		foreach ( self::GENERIC_PRECEDENCE as $candidate ) {
+			if ( in_array( $candidate, $labels, true ) ) {
+				return $candidate;
+			}
+		}
+
+		return '';
+	}
+
+	/**
+	 * Map an access rule slug and value to source labels.
+	 *
+	 * @param string $slug    Rule slug.
+	 * @param mixed  $value   Rule value.
+	 * @param int    $user_id User ID.
+	 * @param array  $context Evaluation context the gate's rules were evaluated
+	 *                        under, from User_Gate_Access::evaluate_gate_for_user().
+	 * @return string[] Source labels.
+	 */
+	public static function get_source_labels( $slug, $value, $user_id, $context = [] ) {
+		switch ( $slug ) {
+			case 'subscription':
+				if ( ! is_array( $value ) || ! function_exists( 'wc_get_product' ) ) {
+					return [ 'subscription' ];
+				}
+				// These re-run the rule callback to work out *which* subscription
+				// granted access, so they must see the same gate settings the rule
+				// itself was evaluated under. Called bare they would fall back to
+				// the callback's own defaults — notably grace-ON — and attribute
+				// access to an in-recovery subscription on a gate whose publisher
+				// turned payment-recovery grace off.
+				return Access_Rules::with_evaluation_context(
+					$context,
+					function () use ( $value, $user_id ) {
+						// Determine ownership first so an owner of a sub matching an
+						// "any subscription" rule (empty $value) isn't mislabeled as
+						// `group` by the non-strict check below.
+						if ( Access_Rules::has_active_subscription( $user_id, $value, true ) ) {
+							$names = [];
+							foreach ( $value as $product_id ) {
+								if ( Access_Rules::has_active_subscription( $user_id, [ $product_id ], true ) ) {
+									$product = wc_get_product( $product_id );
+									if ( $product ) {
+										$names[] = html_entity_decode( (string) $product->get_name(), ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+									}
+								}
+							}
+							return ! empty( $names ) ? $names : [ 'subscription' ];
+						}
+						// Not an owner — check group subscription membership.
+						if ( Access_Rules::has_active_subscription( $user_id, $value ) ) {
+							return [ 'group' ];
+						}
+						// They might still have access via the
+						// `newspack_access_rules_has_active_subscription` filter hook.
+						return [ 'subscription' ];
+					}
+				);
+
+			case 'one_time_purchase':
+				$sanitized = Access_Rules::sanitize_one_time_purchase_value( $value );
+				if ( empty( $sanitized['product_ids'] ) || ! function_exists( 'wc_get_product' ) ) {
+					return [ 'one_time_purchase' ];
+				}
+				// Probe per product to find which one granted access.
+				// Access_Rules::has_one_time_purchase() memoizes per user and value,
+				// and wc_customer_bought_product() is cached by WooCommerce, so the
+				// repeated calls stay cheap.
+				$names = [];
+				foreach ( $sanitized['product_ids'] as $product_id ) {
+					$single = array_merge( $sanitized, [ 'product_ids' => [ $product_id ] ] );
+					if ( ! Access_Rules::has_one_time_purchase( $user_id, $single ) ) {
+						continue;
+					}
+					$product = wc_get_product( $product_id );
+					if ( $product ) {
+						$names[] = html_entity_decode( (string) $product->get_name(), ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+					}
+				}
+				return ! empty( $names ) ? $names : [ 'one_time_purchase' ];
+
+			case 'email_domain':
+				return [ 'domain' ];
+
+			case 'institution':
+				return [ 'institution' ];
+
+			case 'reader_data':
+				return [ 'reader_data' ];
+
+			default:
+				return [];
+		}
+	}
+}
