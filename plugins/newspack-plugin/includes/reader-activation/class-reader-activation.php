@@ -1427,7 +1427,9 @@ final class Reader_Activation {
 	 * field, in exchange for readers never being locked out of their accounts.
 	 *
 	 * newspack-newsletters renders its own copy of this field in its Subscribe block
-	 * (`src/blocks/subscribe/index.php`). Changes here belong there too.
+	 * (`src/blocks/subscribe/index.php`). The markup is duplicated; the submit-side
+	 * rule is not, since that copy defers to `is_honeypot_tripped()` below. Markup
+	 * changes here belong there too.
 	 *
 	 * Not rendered if reCAPTCHA is enabled as it's a superior spam protection.
 	 *
@@ -1444,6 +1446,65 @@ final class Reader_Activation {
 		?>
 		<input class="nphp" tabindex="-1" aria-hidden="true" name="email" type="email" autocomplete="off" data-1p-ignore data-lpignore="true" data-form-type="other" style="display:none;" placeholder="<?php echo \esc_attr( $placeholder ); ?>" />
 		<?php
+	}
+
+	/**
+	 * Whether a submitted honeypot value should be read as a bot.
+	 *
+	 * Hiding the decoy from browsers is the first defence, but it depends on
+	 * browser internals we don't control. This is the second: a browser that
+	 * autofills the form puts the reader's own address in both the decoy and the
+	 * real field, so a decoy value matching what the reader submitted is autofill
+	 * rather than a bot. Reading it as a bot is what tells a reader they're signed
+	 * in while creating no session.
+	 *
+	 * The trade is deliberate. A bot that fills every field it recognises with one
+	 * address gets past this, and that is the cheaper failure: the decoy is not the
+	 * only defence against spam, while a reader locked out of their account has no
+	 * way to diagnose or recover from it.
+	 *
+	 * Callers reach this through different sanitizers — the decoy arrives as text, the
+	 * real address as a sanitized email — and those disagree on anything non-ASCII
+	 * (`sanitize_email()` drops the accent in `réader@example.test`). So both sides are
+	 * normalized here rather than at the call sites, and a match on either the raw or
+	 * the email-sanitized form counts. Sanitizing the decoy as an email before the
+	 * emptiness test would be worse than useless: it blanks any value that isn't
+	 * address-shaped, so a bot writing junk into the decoy would pass unnoticed.
+	 *
+	 * A filled decoy with no address alongside it counts as a bot. That deliberately
+	 * also catches the reader whose address is entirely non-ASCII, since
+	 * `sanitize_email()` blanks it — they can't register through Newspack either way,
+	 * so the decoy is not what stands between them and an account.
+	 *
+	 * @param string|null|false $honeypot Value submitted in the honeypot field (`email`).
+	 * @param string|null|false $email    Value submitted in the real email field (`npe`).
+	 *
+	 * @return bool Whether to treat the submission as a bot.
+	 */
+	public static function is_honeypot_tripped( $honeypot, $email ) {
+		// Not `empty()`: a decoy filled with "0" is filled.
+		$honeypot = \is_scalar( $honeypot ) ? trim( (string) $honeypot ) : '';
+		if ( '' === $honeypot ) {
+			return false;
+		}
+
+		$email = \is_scalar( $email ) ? trim( (string) $email ) : '';
+		if ( '' === $email ) {
+			return true;
+		}
+
+		// Autofill puts the same address in both fields.
+		if ( strtolower( $honeypot ) === strtolower( $email ) ) {
+			return false;
+		}
+
+		$honeypot_as_email = strtolower( trim( (string) \sanitize_email( $honeypot ) ) );
+		$email_as_email    = strtolower( trim( (string) \sanitize_email( $email ) ) );
+		if ( '' !== $honeypot_as_email && $honeypot_as_email === $email_as_email ) {
+			return false;
+		}
+
+		return true;
 	}
 
 	/**
@@ -2137,7 +2198,7 @@ final class Reader_Activation {
 		$redirect = ! empty( $redirect_url ) ? $redirect_url : $current_page_url;
 
 		// Honeypot trap.
-		if ( ! empty( $honeypot ) ) {
+		if ( self::is_honeypot_tripped( $honeypot, $email ) ) {
 			return self::send_auth_form_response(
 				[
 					'email'         => $honeypot,

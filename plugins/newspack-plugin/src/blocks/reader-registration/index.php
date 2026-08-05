@@ -456,10 +456,15 @@ function process_form() {
 		return;
 	}
 
-	$honeypot_trap = filter_input( INPUT_POST, 'email', FILTER_SANITIZE_EMAIL );
+	// Read the decoy as text, not as an email. `FILTER_SANITIZE_EMAIL` strips every
+	// character an address can't contain, so a decoy written in a non-Latin script
+	// blanks out entirely and the submission stops looking like a bot.
+	// phpcs:ignore WordPress.Security.NonceVerification.Missing
+	$honeypot_trap = isset( $_POST['email'] ) && is_scalar( $_POST['email'] ) ? \sanitize_text_field( \wp_unslash( $_POST['email'] ) ) : '';
 
-	// Honeypot trap.
-	if ( ! empty( $honeypot_trap ) ) {
+	// Honeypot trap. A decoy value matching the real field is autofill, not a bot —
+	// see Reader_Activation::is_honeypot_tripped().
+	if ( Reader_Activation::is_honeypot_tripped( $honeypot_trap, filter_input( INPUT_POST, 'npe', FILTER_SANITIZE_EMAIL ) ) ) {
 		return send_form_response(
 			[
 				'email'         => \sanitize_email( $honeypot_trap ),
