@@ -161,33 +161,33 @@ const Wizard = (
 		</TabbedNavigation>
 	);
 
-	// Sits at the top of the content region, which the header and tabbed navigation
-	// wrap — so it reads below them rather than above the wizard's own header, where
-	// a core admin notice would land.
+	// Rendered as the first child of .newspack-wizard__main rather than as a core
+	// admin notice: that puts it below the header and tabbed navigation, and inside
+	// the container that bounds the wizard's own width, so it lines up with the
+	// content it is about instead of spanning the viewport.
 	const inertGating = window.newspack_aux_data?.inert_gating;
 
 	const content = (
 		<>
 			<HandoffMessage />
 
-			{ inertGating?.show && (
-				<Notice isWarning className="newspack-wizard__inert-gating-notice">
-					{ /* createInterpolateElement's conversion map takes childless elements and
-					     fills them from the translated string, so jsx-a11y can't see the
-					     content it will end up with. */ }
-					{ createInterpolateElement( inertGating.message, {
-						/* eslint-disable jsx-a11y/anchor-has-content */
-						gates: <a href={ inertGating.urls.gates } />,
-						newsletters: <a href={ inertGating.urls.newsletters } />,
-						audience: <a href={ inertGating.urls.audience } />,
-						/* eslint-enable jsx-a11y/anchor-has-content */
-					} ) }
-				</Notice>
-			) }
-
 			{ sections.length > 1 && <ResetHeaderData /> }
 
 			<div className="newspack-wizard__main">
+				{ inertGating?.show && (
+					<Notice isWarning className="newspack-wizard__inert-gating-notice">
+						{ /* createInterpolateElement's conversion map takes childless elements and
+						     fills them from the translated string, so jsx-a11y can't see the
+						     content it will end up with. */ }
+						{ createInterpolateElement( inertGating.message, {
+							/* eslint-disable jsx-a11y/anchor-has-content */
+							gates: <a href={ inertGating.urls.gates } />,
+							newsletters: <a href={ inertGating.urls.newsletters } />,
+							audience: <a href={ inertGating.urls.audience } />,
+							/* eslint-enable jsx-a11y/anchor-has-content */
+						} ) }
+					</Notice>
+				) }
 				<Switch>
 					{ routedSections.map( ( section, index ) => {
 						const SectionComponent = section.render;
