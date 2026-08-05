@@ -23,6 +23,15 @@ class Newspack_Test_GoogleSiteKit_Access_Source extends WP_UnitTestCase {
 	private $gate_id;
 
 	/**
+	 * Institution post IDs to delete in tear_down(). Institution posts are
+	 * inserted directly rather than through $this->factory, so they are not
+	 * rolled back for us.
+	 *
+	 * @var int[]
+	 */
+	private $institution_ids = [];
+
+	/**
 	 * Enable the content gating feature flag.
 	 *
 	 * Without it `get_custom_event_parameters()` never reaches the resolver, so
@@ -33,6 +42,18 @@ class Newspack_Test_GoogleSiteKit_Access_Source extends WP_UnitTestCase {
 		if ( ! defined( 'NEWSPACK_CONTENT_GATES' ) ) {
 			define( 'NEWSPACK_CONTENT_GATES', true );
 		}
+		require_once dirname( __DIR__, 2 ) . '/mocks/wc-mocks.php';
+	}
+
+	/**
+	 * Start each test from an empty WooCommerce store.
+	 */
+	public function set_up() {
+		parent::set_up();
+		global $subscriptions_database, $products_database;
+		$subscriptions_database = [];
+		$products_database      = [];
+		Newspack\Group_Subscription::reset_cache();
 	}
 
 	/**
@@ -40,6 +61,13 @@ class Newspack_Test_GoogleSiteKit_Access_Source extends WP_UnitTestCase {
 	 * inherits another's answer.
 	 */
 	public function tear_down() {
+		foreach ( $this->institution_ids as $institution_id ) {
+			wp_delete_post( $institution_id, true );
+		}
+		$this->institution_ids = [];
+		delete_transient( Newspack\Institution::TRANSIENT_KEY );
+		Newspack\Institution::reset_matching_cache();
+		Newspack\Group_Subscription::reset_cache();
 		Newspack\Access_Attribution::reset_memo();
 		Newspack\Access_Rules::flush_one_time_purchase_memo();
 		GoogleSiteKit::reset_access_source_memo();
@@ -176,6 +204,179 @@ class Newspack_Test_GoogleSiteKit_Access_Source extends WP_UnitTestCase {
 		wp_set_current_user( $user_id );
 		$this->go_to( get_permalink( $post_id ) );
 		$this->assertSame( 'domain', GoogleSiteKit::get_request_access_source() );
+	}
+
+	/**
+	 * A reader recognised by an institution reports `institution`, not the
+	 * institution's name: the name identifies the organisation to anyone with
+	 * the GA4 report open, and the whole vocabulary is deliberately generic
+	 * except for products the publisher sells.
+	 */
+	public function test_institutional_reader_reports_institution() {
+		$institution_id = $this->factory->post->create(
+			[
+				'post_type'   => 'np_institution',
+				'post_status' => 'publish',
+				'post_title'  => 'Test University',
+			]
+		);
+		$this->institution_ids[] = $institution_id;
+		update_post_meta( $institution_id, 'np_institution_email_domain', 'university.example' );
+		Newspack\Institution::invalidate_cache();
+
+		$post_id = $this->create_gated_post(
+			[
+				'custom_access' => [
+					'active'       => true,
+					'access_rules' => [
+						[
+							[
+								'slug'  => 'institution',
+								'value' => [ $institution_id ],
+							],
+						],
+					],
+				],
+			]
+		);
+		$user_id = $this->factory->user->create( [ 'user_email' => 'reader@university.example' ] );
+		Newspack\Reader_Activation::set_reader_verified( $user_id );
+		wp_set_current_user( $user_id );
+		$this->go_to( get_permalink( $post_id ) );
+
+		$this->assertSame( 'institution', GoogleSiteKit::get_request_access_source() );
+	}
+
+	/**
+	 * A seat holder on somebody else's group subscription reports `group`, not
+	 * the product name. The name belongs to the buyer; reporting it here would
+	 * credit a purchase the reader never made.
+	 */
+	public function test_group_seat_holder_reports_group() {
+		$product_id = 701;
+		\wc_create_mock_product(
+			[
+				'id'   => $product_id,
+				'name' => 'Campus Plan',
+			]
+		);
+		$owner_id  = $this->factory->user->create( [ 'user_email' => 'owner@example.org' ] );
+		$member_id = $this->factory->user->create( [ 'user_email' => 'member@example.org' ] );
+
+		$subscription = \wcs_create_subscription(
+			[
+				'customer_id'    => $owner_id,
+				'status'         => 'active',
+				'billing_period' => 'month',
+				'products'       => [ $product_id ],
+			]
+		);
+		$subscription->update_meta_data( Newspack\Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'enabled', 'yes' );
+		$subscription->update_meta_data( Newspack\Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'name', 'ACME Corp' );
+		add_user_meta( $member_id, Newspack\Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY, $subscription->get_id() );
+		Newspack\Group_Subscription::reset_cache();
+
+		$post_id = $this->create_gated_post(
+			[
+				'custom_access' => [
+					'active'       => true,
+					'access_rules' => [
+						[
+							[
+								'slug'  => 'subscription',
+								'value' => [ $product_id ],
+							],
+						],
+					],
+				],
+			]
+		);
+		Newspack\Reader_Activation::set_reader_verified( $member_id );
+		wp_set_current_user( $member_id );
+		$this->go_to( get_permalink( $post_id ) );
+
+		$this->assertSame( 'group', GoogleSiteKit::get_request_access_source() );
+	}
+
+	/**
+	 * The owner of the same subscription is credited with the product, which is
+	 * the contrast that makes the `group` label above mean something.
+	 */
+	public function test_subscription_owner_reports_the_product_name() {
+		$product_id = 702;
+		\wc_create_mock_product(
+			[
+				'id'   => $product_id,
+				'name' => 'Campus Plan',
+			]
+		);
+		$owner_id = $this->factory->user->create( [ 'user_email' => 'owner@example.org' ] );
+		\wcs_create_subscription(
+			[
+				'customer_id'    => $owner_id,
+				'status'         => 'active',
+				'billing_period' => 'month',
+				'products'       => [ $product_id ],
+			]
+		);
+
+		$post_id = $this->create_gated_post(
+			[
+				'custom_access' => [
+					'active'       => true,
+					'access_rules' => [
+						[
+							[
+								'slug'  => 'subscription',
+								'value' => [ $product_id ],
+							],
+						],
+					],
+				],
+			]
+		);
+		Newspack\Reader_Activation::set_reader_verified( $owner_id );
+		wp_set_current_user( $owner_id );
+		$this->go_to( get_permalink( $post_id ) );
+
+		$this->assertSame( 'Campus Plan', GoogleSiteKit::get_request_access_source() );
+	}
+
+	/**
+	 * Metering is the one part of this vocabulary anonymous visitors reach, and
+	 * they are the majority of the traffic it describes — a gate that meters
+	 * before it blocks is a different reader experience from one that blocks
+	 * outright, and GA4 is where that difference gets measured.
+	 */
+	public function test_anonymous_reader_on_a_metering_gate_reports_metering_eligible() {
+		wp_set_current_user( 0 );
+		$post_id = $this->create_gated_post(
+			[
+				'custom_access' => [
+					'active'       => true,
+					'access_rules' => [
+						[
+							[
+								'slug'  => 'email_domain',
+								'value' => 'nobody.example',
+							],
+						],
+					],
+					'metering'     => [
+						'enabled' => true,
+						'count'   => 3,
+						'period'  => 'month',
+					],
+				],
+			]
+		);
+		$this->assertTrue(
+			Newspack\Metering::offers_metering( $this->gate_id, false ),
+			'The fixture gate must meter anonymous readers, or this asserts nothing.'
+		);
+		$this->go_to( get_permalink( $post_id ) );
+
+		$this->assertSame( 'metering_eligible', GoogleSiteKit::get_request_access_source() );
 	}
 
 	/**
