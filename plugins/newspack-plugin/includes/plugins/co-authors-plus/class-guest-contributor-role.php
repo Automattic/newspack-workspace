@@ -495,9 +495,14 @@ class Guest_Contributor_Role {
 	/**
 	 * Whether a wp_mail() headers value carries Cc or Bcc recipients.
 	 *
-	 * A header with an empty value ("Cc:") carries no recipients and does not
-	 * count — treating it as recipients would route an all-placeholder send
-	 * past the short-circuit into a hard wp_mail() failure.
+	 * Recipients are counted at the same level core parses them: the header
+	 * value split on commas, empty tokens dropped. A header whose value is
+	 * empty or all separators ("Cc:", "Cc: ,") carries no recipients and does
+	 * not count — treating it as recipients would route an all-placeholder
+	 * send past the short-circuit into a hard wp_mail() failure. A non-empty
+	 * token that is not a valid address still counts: the caller explicitly
+	 * addressed someone, and core's own failure behavior is the right feedback
+	 * there.
 	 *
 	 * @param string|string[] $headers Headers, as a string or array of lines.
 	 *
@@ -506,8 +511,13 @@ class Guest_Contributor_Role {
 	private static function has_cc_or_bcc_headers( $headers ): bool {
 		$lines = is_array( $headers ) ? $headers : preg_split( '/\r\n|\r|\n/', (string) $headers );
 		foreach ( $lines as $line ) {
-			if ( preg_match( '/^\s*b?cc\s*:\s*\S/i', (string) $line ) ) {
-				return true;
+			if ( ! preg_match( '/^\s*b?cc\s*:(.*)$/i', (string) $line, $matches ) ) {
+				continue;
+			}
+			foreach ( explode( ',', $matches[1] ) as $token ) {
+				if ( '' !== trim( $token ) ) {
+					return true;
+				}
 			}
 		}
 		return false;

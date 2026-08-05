@@ -519,6 +519,13 @@ class Newspack_Test_Guest_Contributor_Role extends WP_UnitTestCase {
 		$result = wp_mail( 'someuser@example.com', 'Test subject', 'Test body', [ 'Cc:' ] ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.wp_mail_wp_mail
 		$this->assertTrue( $result, 'Suppressed mail must still report success despite an empty Cc header.' );
 		$this->assertEmpty( tests_retrieve_phpmailer_instance()->get_sent() );
+
+		// Same for a value that is only separators: it parses to zero
+		// recipient tokens, so it must not defeat the short-circuit.
+		reset_phpmailer_instance();
+		$result = wp_mail( 'someuser@example.com', 'Test subject', 'Test body', [ 'Cc: ,' ] ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.wp_mail_wp_mail
+		$this->assertTrue( $result, 'Suppressed mail must still report success despite a separators-only Cc header.' );
+		$this->assertEmpty( tests_retrieve_phpmailer_instance()->get_sent() );
 	}
 
 	/**
