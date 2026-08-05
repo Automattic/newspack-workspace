@@ -32,9 +32,16 @@ class Content_Gate extends Contact_Metadata {
 
 	/**
 	 * Reset the cached custom access gates.
+	 *
+	 * Also clears the attribution memo of readers' owned subscriptions. A sync
+	 * run is one PHP process spanning many readers, and a subscription that
+	 * activates between two syncs in that process would otherwise be missed —
+	 * degrading the source label from the product's name to a bare
+	 * `subscription`.
 	 */
 	public static function reset_cache() {
 		self::$custom_access_gates_cache = null;
+		Access_Attribution::reset_memo();
 	}
 
 	/**
