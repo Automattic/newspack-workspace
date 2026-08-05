@@ -155,10 +155,20 @@ jobs:
       # without it they cannot tell a plugin that had no release from one whose
       # deploy silently resolved a stale version. Always runs, so a skipped
       # release yields an empty list rather than a missing output.
+      #
+      # Every command here must fail loudly. An empty list is meaningful -- the
+      # deploy jobs read it as "this plugin had no release" and skip -- so a
+      # swallowed error would silently skip every WP.org deploy of a real
+      # release, which is the exact failure this gating exists to prevent.
+      # Hence no `|| true`, pipefail on, and both sides materialised as files
+      # rather than process substitutions (whose exit status bash discards).
       - name: Collect released tags
         id: released
         run: |
-          new_tags=$(comm -13 <(sort "$RUNNER_TEMP/tags-before.txt") <(git tag | sort) || true)
+          set -euo pipefail
+          sort "$RUNNER_TEMP/tags-before.txt" > "$RUNNER_TEMP/tags-before-sorted.txt"
+          git tag | sort > "$RUNNER_TEMP/tags-after-sorted.txt"
+          new_tags=$(comm -13 "$RUNNER_TEMP/tags-before-sorted.txt" "$RUNNER_TEMP/tags-after-sorted.txt")
           echo "Tags created by this run:"
           echo "${new_tags:-(none)}"
           {
