@@ -45,12 +45,14 @@ const fireBeforeUnload = () => {
 	return event;
 };
 
-const patternStatus = () => ( {
+const patternStatus = ( extra = {} ) => ( {
 	enabled: true,
 	can_manage: true,
 	fields: [ PROFILE_FIELD ],
 	pattern_id: 42,
 	pattern_edit_url: PATTERN_EDIT_URL,
+	design_modified: true,
+	...extra,
 } );
 
 describe( 'ContextualPrompts tab', () => {
@@ -102,6 +104,57 @@ describe( 'ContextualPrompts tab', () => {
 		fireEvent.click( screen.getByText( 'Cancel' ) );
 		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
 		expect( screen.getByRole( 'textbox', { name: 'Publisher name' } ) ).toHaveValue( 'Newsroom X' );
+	} );
+
+	// The pattern cannot be deleted and re-created, so resetting is the only way
+	// back from a design edit that went wrong — and it is destructive enough to
+	// ask first.
+	it( 'resets the design from the header after confirming', async () => {
+		apiFetch.mockResolvedValueOnce( patternStatus() );
+		renderTab();
+
+		await waitFor( () => expect( screen.getByRole( 'button', { name: 'More options' } ) ).toBeInTheDocument() );
+		fireEvent.click( screen.getByRole( 'button', { name: 'More options' } ) );
+		fireEvent.click( screen.getByRole( 'menuitem', { name: 'Reset Design' } ) );
+
+		// Nothing has happened yet: the dialog explains what is lost and what is not.
+		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
+		expect( screen.getByText( /copy written for each story is kept/i ) ).toBeInTheDocument();
+
+		apiFetch.mockResolvedValueOnce( patternStatus() );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Reset Design' } ) );
+
+		await waitFor( () =>
+			expect( apiFetch ).toHaveBeenCalledWith(
+				expect.objectContaining( { path: '/newspack-popups/v1/contextual-prompt/reset-design', method: 'POST' } )
+			)
+		);
+		// The snackbar, and the same words announced to screen readers.
+		await waitFor( () => expect( screen.getAllByText( 'Prompt design reset.' ).length ).toBeGreaterThan( 0 ) );
+	} );
+
+	// A design still as shipped has nothing to go back to.
+	it( 'offers no reset while the design is unchanged', async () => {
+		apiFetch.mockResolvedValueOnce( patternStatus( { design_modified: false } ) );
+		renderTab();
+
+		await waitFor( () => expect( screen.getByRole( 'button', { name: 'More options' } ) ).toBeInTheDocument() );
+		fireEvent.click( screen.getByRole( 'button', { name: 'More options' } ) );
+
+		expect( screen.queryByRole( 'menuitem', { name: 'Reset Design' } ) ).toBeNull();
+		expect( screen.getByRole( 'menuitem', { name: 'Disable' } ) ).toBeInTheDocument();
+	} );
+
+	it( 'leaves the design alone when the reset is cancelled', async () => {
+		apiFetch.mockResolvedValueOnce( patternStatus() );
+		renderTab();
+
+		await waitFor( () => expect( screen.getByRole( 'button', { name: 'More options' } ) ).toBeInTheDocument() );
+		fireEvent.click( screen.getByRole( 'button', { name: 'More options' } ) );
+		fireEvent.click( screen.getByRole( 'menuitem', { name: 'Reset Design' } ) );
+		fireEvent.click( screen.getByText( 'Cancel' ) );
+
+		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
 	} );
 
 	// A plain link would strand the publisher in the editor: the handoff is what

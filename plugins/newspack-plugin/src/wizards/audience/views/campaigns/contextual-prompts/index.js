@@ -16,13 +16,14 @@ import { moreVertical } from '@wordpress/icons';
 /**
  * Internal dependencies
  */
-import { withWizardScreen, Button, Handoff, Waiting, useUnsavedChangesDialog } from '../../../../../../packages/components/src';
+import { withWizardScreen, Button, Handoff, Waiting, useConfirmDialog, useUnsavedChangesDialog } from '../../../../../../packages/components/src';
 import ContextualPromptsSettings from './contextual-prompts-settings';
 import './style.scss';
 
 const STATUS_PATH = '/newspack-popups/v1/contextual-prompt/status';
 const ENABLE_PATH = '/newspack-popups/v1/contextual-prompt/enable';
 const PROFILE_PATH = '/newspack-popups/v1/contextual-prompt/profile';
+const RESET_DESIGN_PATH = '/newspack-popups/v1/contextual-prompt/reset-design';
 
 // Minimum time the enable/disable busy state is shown, so it doesn't flash.
 const MIN_TOGGLE_MS = 2000;
@@ -146,6 +147,24 @@ const ContextualPrompts = props => {
 	const onDisable = () => requestConfirm( disable );
 	const onEnable = () => setEnabled( true ).then( () => setSnackbar( __( 'Contextual Prompts enabled.', 'newspack-plugin' ) ) );
 
+	// The pattern cannot be deleted and re-created, so this is the only way back
+	// from a design edit that went wrong.
+	const { confirmDialog: resetDialog, requestConfirm: requestReset } = useConfirmDialog( {
+		title: __( 'Reset the prompt design?', 'newspack-plugin' ),
+		message: __(
+			'The design goes back to the one Newspack ships, and any changes made to it are lost. The copy written for each story is kept.',
+			'newspack-plugin'
+		),
+		confirmButtonText: __( 'Reset Design', 'newspack-plugin' ),
+		isDestructive: true,
+	} );
+	const onResetDesign = () =>
+		requestReset( () =>
+			request( RESET_DESIGN_PATH )
+				.then( () => setSnackbar( __( 'Prompt design reset.', 'newspack-plugin' ) ) )
+				.catch( () => {} )
+		);
+
 	const bannerText = __( 'Return to Contextual Prompts after editing the design', 'newspack-plugin' );
 	const bannerButtonText = __( 'Back to Contextual Prompts', 'newspack-plugin' );
 	// What Handoff does on click: register the return banner, then leave for the
@@ -174,6 +193,17 @@ const ContextualPrompts = props => {
 				icon={ moreVertical }
 				label={ __( 'More options', 'newspack-plugin' ) }
 				controls={ [
+					// Offered only where there is an edit to undo: a design still as
+					// shipped has nothing to go back to.
+					...( status.design_modified
+						? [
+								{
+									title: __( 'Reset Design', 'newspack-plugin' ),
+									onClick: onResetDesign,
+									isDisabled: inFlight,
+								},
+						  ]
+						: [] ),
 					{
 						title: __( 'Disable', 'newspack-plugin' ),
 						onClick: onDisable,
@@ -236,6 +266,7 @@ const ContextualPrompts = props => {
 	return (
 		<ContextualPromptsScreen { ...props } headerActions={ headerActions }>
 			{ confirmDialog }
+			{ resetDialog }
 			{ content }
 			{ snackbar &&
 				createPortal(

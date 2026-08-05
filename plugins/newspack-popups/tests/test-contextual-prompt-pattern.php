@@ -519,6 +519,96 @@ class ContextualPromptPatternTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The pattern is not a pattern the publisher composes with, and every action
+	 * the list table offers on it is denied, so it is not listed there either.
+	 * Other synced patterns are untouched, and the counts the status links are
+	 * built from match what is listed.
+	 */
+	public function test_the_pattern_is_hidden_from_the_patterns_screen() {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+		$pattern_id = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
+		$other      = self::factory()->post->create( [ 'post_type' => 'wp_block' ] );
+		set_current_screen( 'edit-wp_block' );
+
+		// The screen's own query: only the main query is filtered.
+		$previous                = $GLOBALS['wp_the_query'];
+		$query                   = new WP_Query();
+		$GLOBALS['wp_the_query'] = $query;
+		$listed                  = wp_list_pluck( $query->query( [ 'post_type' => 'wp_block' ] ), 'ID' );
+		$counts                  = wp_count_posts( 'wp_block' );
+		$GLOBALS['wp_the_query'] = $previous;
+		set_current_screen( 'front' );
+
+		$this->assertNotContains( $pattern_id, $listed );
+		$this->assertContains( $other, $listed, 'Other synced patterns stay listed.' );
+		$this->assertSame( count( $listed ), (int) $counts->publish, 'And the count matches what is listed.' );
+	}
+
+	/**
+	 * A reset is only worth offering where there is an edit to undo. Opening the
+	 * pattern and saving it rewrites the markup in the editor's own order —
+	 * attributes and class lists — which is not an edit to the design.
+	 */
+	public function test_a_design_still_as_shipped_reads_as_unmodified() {
+		$pattern_id = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
+
+		$this->assertFalse( Newspack_Popups_Contextual_Prompt_Pattern::is_design_modified() );
+
+		// As the editor re-serializes it: same design, different spelling.
+		$resaved = get_post( $pattern_id )->post_content;
+		$resaved = str_replace( 'has-text-color has-dark-gray-color', 'has-dark-gray-color has-text-color', $resaved );
+		$resaved = str_replace( 'has-text-color has-contrast-color', 'has-contrast-color has-text-color', $resaved );
+		$resaved = str_replace(
+			'{"metadata":{"name":"Contextual Prompt"},"className":"newspack-contextual-prompt"',
+			'{"className":"newspack-contextual-prompt","metadata":{"name":"Contextual Prompt"}',
+			$resaved
+		);
+		Newspack_Popups_Contextual_Prompt_Pattern::save_pattern_content( $pattern_id, $resaved );
+
+		$this->assertFalse( Newspack_Popups_Contextual_Prompt_Pattern::is_design_modified(), 'A re-save is not a design change.' );
+	}
+
+	/**
+	 * A real edit does read as one.
+	 */
+	public function test_an_edited_design_reads_as_modified() {
+		$pattern_id = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
+		$edited     = str_replace( '#f7f7f7', '#ffee00', get_post( $pattern_id )->post_content );
+		Newspack_Popups_Contextual_Prompt_Pattern::save_pattern_content( $pattern_id, $edited );
+
+		$this->assertTrue( Newspack_Popups_Contextual_Prompt_Pattern::is_design_modified() );
+
+		Newspack_Popups_Contextual_Prompt_Pattern::reset_pattern();
+
+		$this->assertFalse( Newspack_Popups_Contextual_Prompt_Pattern::is_design_modified(), 'And the reset settles it.' );
+	}
+
+	/**
+	 * A design edit that went wrong has no undo in the pattern editor once saved,
+	 * and the pattern cannot be deleted and re-created, so the design can be put
+	 * back to the one the plugin ships. The copy each prompt carries lives on its
+	 * own instance and is untouched.
+	 */
+	public function test_the_design_can_be_reset() {
+		$pattern_id = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
+		$seeded     = get_post( $pattern_id )->post_content;
+		Newspack_Popups_Contextual_Prompt_Pattern::save_pattern_content( $pattern_id, '<!-- wp:paragraph --><p>Wrecked.</p><!-- /wp:paragraph -->' );
+		wp_update_post(
+			[
+				'ID'           => $pattern_id,
+				'post_excerpt' => 'Edited description.',
+			]
+		);
+
+		$this->assertTrue( Newspack_Popups_Contextual_Prompt_Pattern::reset_pattern() );
+
+		$post = get_post( $pattern_id );
+		$this->assertSame( $seeded, $post->post_content );
+		$this->assertStringContainsString( 'The Contextual Prompt design used across the site.', $post->post_excerpt );
+		$this->assertSame( $pattern_id, Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id(), 'The same pattern, so instances still resolve.' );
+	}
+
+	/**
 	 * Block markup survives a write unchanged: the row is written directly, so
 	 * the escapes serialize_blocks() emits go in as they are — there is no
 	 * unslashing to survive, and slashing them would store the backslashes.

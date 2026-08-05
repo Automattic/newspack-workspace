@@ -150,6 +150,16 @@ final class Newspack_Popups_API {
 			);
 			register_rest_route(
 				'newspack-popups/v1',
+				'/contextual-prompt/reset-design',
+				[
+					'methods'             => \WP_REST_Server::EDITABLE,
+					// The design is the site's, and the pattern is administrator-only.
+					'callback'            => [ __CLASS__, 'api_reset_contextual_prompt_design' ],
+					'permission_callback' => [ $this, 'permission_callback' ],
+				]
+			);
+			register_rest_route(
+				'newspack-popups/v1',
 				'/contextual-prompt/profile',
 				[
 					'methods'             => \WP_REST_Server::EDITABLE,
@@ -205,6 +215,9 @@ final class Newspack_Popups_API {
 			'pattern_id'       => $pattern_id,
 			// Guarded: get_edit_post_link() resolves an id of 0 against the global post.
 			'pattern_edit_url' => $pattern_id ? (string) get_edit_post_link( $pattern_id, 'raw' ) : '',
+			// Whether the design has been changed from the one the plugin ships,
+			// which is the only state a reset has anything to undo.
+			'design_modified'  => $pattern_id ? Newspack_Popups_Contextual_Prompt_Pattern::is_design_modified() : false,
 		];
 	}
 
@@ -221,6 +234,28 @@ final class Newspack_Popups_API {
 		}
 
 		Newspack_Popups_Settings::save_ai_copy_assistant_fields( (array) $request['fields'] );
+		return rest_ensure_response( self::contextual_prompt_status() );
+	}
+
+	/**
+	 * Put the prompt design back to the one this plugin ships. Administrator-only.
+	 *
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public static function api_reset_contextual_prompt_design() {
+		$enabled = self::require_contextual_prompts_enabled();
+		if ( is_wp_error( $enabled ) ) {
+			return $enabled;
+		}
+
+		if ( ! Newspack_Popups_Contextual_Prompt_Pattern::reset_pattern() ) {
+			return new \WP_Error(
+				'newspack_contextual_prompts_reset_failed',
+				esc_html__( 'The design could not be reset. Try again.', 'newspack-popups' ),
+				[ 'status' => 500 ]
+			);
+		}
+
 		return rest_ensure_response( self::contextual_prompt_status() );
 	}
 

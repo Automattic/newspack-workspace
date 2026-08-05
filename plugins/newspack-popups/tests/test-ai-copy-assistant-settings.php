@@ -256,7 +256,7 @@ class AiCopyAssistantSettingsTest extends WP_UnitTestCase {
 		$data = Newspack_Popups_Api::api_get_contextual_prompt_status()->get_data();
 
 		$this->assertSame(
-			[ 'enabled', 'can_manage', 'fields', 'override_active', 'pattern_id', 'pattern_edit_url' ],
+			[ 'enabled', 'can_manage', 'fields', 'override_active', 'pattern_id', 'pattern_edit_url', 'design_modified' ],
 			array_keys( $data )
 		);
 	}
@@ -348,5 +348,29 @@ class AiCopyAssistantSettingsTest extends WP_UnitTestCase {
 		update_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION, true );
 		$this->assertNotWPError( Newspack_Popups_Api::api_save_contextual_prompt_profile( $profile_request ) );
 		$this->assertSame( 'Somewhere', get_option( 'newspack_contextual_prompts_coverage_area', '' ) );
+	}
+
+	/**
+	 * Resetting the design is inert before opt-in too — it would seed a pattern
+	 * on a site that has not agreed to the feature — and puts the shipped design
+	 * back once the site has opted in.
+	 */
+	public function test_reset_design_endpoint_is_blocked_when_disabled() {
+		$blocked = Newspack_Popups_Api::api_reset_contextual_prompt_design();
+		$this->assertWPError( $blocked );
+		$this->assertSame( 'newspack_contextual_prompts_disabled', $blocked->get_error_code() );
+		$this->assertSame( 0, (int) get_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_PATTERN_ID, 0 ), 'No pattern was seeded.' );
+
+		// The status the reset answers with reports the pattern to an administrator.
+		wp_set_current_user( $this->factory->user->create( [ 'role' => 'administrator' ] ) );
+		update_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION, true );
+		$pattern_id = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
+		Newspack_Popups_Contextual_Prompt_Pattern::save_pattern_content( $pattern_id, '<!-- wp:paragraph --><p>Wrecked.</p><!-- /wp:paragraph -->' );
+
+		$response = Newspack_Popups_Api::api_reset_contextual_prompt_design();
+
+		$this->assertNotWPError( $response );
+		$this->assertSame( $pattern_id, $response->get_data()['pattern_id'] );
+		$this->assertStringContainsString( Newspack_Popups_Contextual_Prompt_Pattern::MARKER_CLASS, get_post( $pattern_id )->post_content );
 	}
 }

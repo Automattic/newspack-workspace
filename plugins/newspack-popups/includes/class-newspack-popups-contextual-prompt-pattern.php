@@ -50,6 +50,8 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 		add_filter( 'pre_delete_post', [ __CLASS__, 'prevent_pattern_deletion' ], 10, 2 );
 		add_filter( 'block_editor_settings_all', [ __CLASS__, 'lock_pattern_editor' ], 10, 2 );
 		add_filter( 'rest_wp_block_query', [ __CLASS__, 'hide_pattern_from_collections' ] );
+		add_action( 'pre_get_posts', [ __CLASS__, 'hide_pattern_from_admin_list' ] );
+		add_filter( 'wp_count_posts', [ __CLASS__, 'hide_pattern_from_counts' ], 10, 2 );
 		add_filter( 'wp_insert_post_data', [ __CLASS__, 'lock_pattern_title' ], 10, 2 );
 		add_filter( 'rest_pre_insert_wp_block', [ __CLASS__, 'prevent_pattern_duplication' ], 10, 2 );
 	}
@@ -287,6 +289,56 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 	}
 
 	/**
+	 * Keep the pattern out of the Patterns list table too. It is not a pattern the
+	 * publisher composes with — it is the design behind a feature, edited from the
+	 * Contextual Prompts screen — and a row offering Edit, Trash and Export for
+	 * something none of those may do to it is a dead end. The single-post routes
+	 * are untouched, so the design still opens from the wizard.
+	 *
+	 * @param WP_Query $query The query about to run.
+	 */
+	public static function hide_pattern_from_admin_list( $query ) {
+		if ( ! is_admin() || ! $query->is_main_query() || 'wp_block' !== $query->get( 'post_type' ) ) {
+			return;
+		}
+
+		$pattern_id = (int) get_option( self::OPTION_PATTERN_ID, 0 );
+		if ( ! $pattern_id ) {
+			return;
+		}
+
+		$exclude   = (array) $query->get( 'post__not_in' );
+		$exclude[] = $pattern_id;
+
+		// One id, on the patterns screen only: the VIP caution is about exclusion
+		// sets large enough to defeat the index.
+		$query->set( 'post__not_in', $exclude ); // phpcs:ignore WordPressVIPMinimum.Performance.WPQueryParams.PostNotIn_post__not_in
+	}
+
+	/**
+	 * And out of the counts the screen's status links are built from, so the
+	 * pattern is not a row nobody can see.
+	 *
+	 * @param stdClass $counts Post counts by status.
+	 * @param string   $type   Post type the counts are for.
+	 *
+	 * @return stdClass
+	 */
+	public static function hide_pattern_from_counts( $counts, $type ) {
+		if ( 'wp_block' !== $type ) {
+			return $counts;
+		}
+
+		$pattern_id = (int) get_option( self::OPTION_PATTERN_ID, 0 );
+		$status     = $pattern_id ? get_post_status( $pattern_id ) : false;
+		if ( $status && isset( $counts->$status ) && $counts->$status > 0 ) {
+			--$counts->$status;
+		}
+
+		return $counts;
+	}
+
+	/**
 	 * Hide block locking in the editor that opens the pattern: its locks are what
 	 * keep instances uniform, so they are not the publisher's to lift.
 	 *
@@ -364,7 +416,7 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 						'post_type'    => 'wp_block',
 						'post_status'  => 'publish',
 						'post_title'   => __( 'Contextual Prompt', 'newspack-popups' ),
-						'post_excerpt' => __( 'The Contextual Prompt design used across the site. Changes here apply to every story; the copy itself is written in each story.', 'newspack-popups' ),
+						'post_excerpt' => self::pattern_description(),
 						'post_content' => self::build_pattern_content(),
 					]
 				)
@@ -376,6 +428,149 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 		}
 
 		return is_wp_error( $new_id ) ? 0 : (int) $new_id;
+	}
+
+	/**
+	 * What the pattern says about itself in the editor's summary panel.
+	 *
+	 * @return string
+	 */
+	private static function pattern_description() {
+		return __( 'The Contextual Prompt design used across the site. Changes here apply to every story; the copy itself is written in each story.', 'newspack-popups' );
+	}
+
+	/**
+	 * Put the pattern back to the design this plugin seeds, discarding whatever
+	 * has been made of it since — the way out of an edit that went wrong, in an
+	 * editor where the usual answer, deleting the pattern and starting again, is
+	 * denied. Only the design is replaced: the copy each prompt carries lives on
+	 * its own instance and is untouched.
+	 *
+	 * @return bool Whether the pattern was reset.
+	 */
+	public static function reset_pattern() {
+		$pattern_id = self::get_pattern_id();
+		if ( ! $pattern_id ) {
+			return false;
+		}
+
+		if ( ! self::save_pattern_content( $pattern_id, self::build_pattern_content() ) ) {
+			return false;
+		}
+
+		// The description is the pattern editor's to edit too, and it describes
+		// what this pattern is for rather than what it looks like.
+		self::update_pattern_post(
+			[
+				'ID'           => $pattern_id,
+				'post_excerpt' => self::pattern_description(),
+			]
+		);
+
+		return true;
+	}
+
+	/**
+	 * Whether the stored design differs from the one this plugin seeds — which is
+	 * the only state a reset has anything to undo.
+	 *
+	 * Both sides are parsed and re-serialized with their attributes in a settled
+	 * order first: opening the pattern and saving it rewrites the block markup in
+	 * the editor's own order, and that is not an edit to the design.
+	 *
+	 * @return bool
+	 */
+	public static function is_design_modified() {
+		$pattern_id = (int) get_option( self::OPTION_PATTERN_ID, 0 );
+		if ( ! $pattern_id || 'wp_block' !== get_post_type( $pattern_id ) ) {
+			return false;
+		}
+
+		return self::canonical_content( get_post( $pattern_id )->post_content ) !== self::canonical_content( self::build_pattern_content() );
+	}
+
+	/**
+	 * Block markup in a form two serializations of the same design agree on:
+	 * attributes in key order, and the class lists the editor writes in its own
+	 * order settled into one.
+	 *
+	 * @param string $content Serialized block markup.
+	 *
+	 * @return string
+	 */
+	private static function canonical_content( $content ) {
+		return trim( serialize_blocks( self::canonicalize_blocks( parse_blocks( $content ) ) ) );
+	}
+
+	/**
+	 * Settle every block's attributes and markup, innermost included.
+	 *
+	 * @param array $blocks Parsed blocks.
+	 *
+	 * @return array
+	 */
+	private static function canonicalize_blocks( $blocks ) {
+		foreach ( $blocks as $index => $block ) {
+			if ( ! empty( $block['attrs'] ) && is_array( $block['attrs'] ) ) {
+				$blocks[ $index ]['attrs'] = self::sort_attrs_deep( $block['attrs'] );
+			}
+			if ( isset( $block['innerHTML'] ) ) {
+				$blocks[ $index ]['innerHTML'] = self::sort_html_classes( $block['innerHTML'] );
+			}
+			foreach ( $block['innerContent'] ?? [] as $chunk_index => $chunk ) {
+				$blocks[ $index ]['innerContent'][ $chunk_index ] = self::sort_html_classes( $chunk );
+			}
+			if ( ! empty( $block['innerBlocks'] ) ) {
+				$blocks[ $index ]['innerBlocks'] = self::canonicalize_blocks( $block['innerBlocks'] );
+			}
+		}
+
+		return $blocks;
+	}
+
+	/**
+	 * Sort the class list of every tag in a markup chunk.
+	 *
+	 * @param mixed $html Markup chunk, or null for a child placeholder.
+	 *
+	 * @return mixed
+	 */
+	private static function sort_html_classes( $html ) {
+		if ( ! is_string( $html ) || '' === trim( $html ) ) {
+			return $html;
+		}
+
+		$processor = new WP_HTML_Tag_Processor( $html );
+		while ( $processor->next_tag() ) {
+			$classes = $processor->get_attribute( 'class' );
+			if ( ! is_string( $classes ) ) {
+				continue;
+			}
+
+			$tokens = preg_split( '/\s+/', trim( $classes ), -1, PREG_SPLIT_NO_EMPTY );
+			sort( $tokens );
+			$processor->set_attribute( 'class', implode( ' ', $tokens ) );
+		}
+
+		return $processor->get_updated_html();
+	}
+
+	/**
+	 * Sort an attribute array by key, recursively.
+	 *
+	 * @param array $attrs Block attributes.
+	 *
+	 * @return array
+	 */
+	private static function sort_attrs_deep( $attrs ) {
+		ksort( $attrs );
+		foreach ( $attrs as $key => $value ) {
+			if ( is_array( $value ) ) {
+				$attrs[ $key ] = self::sort_attrs_deep( $value );
+			}
+		}
+
+		return $attrs;
 	}
 
 	/**
