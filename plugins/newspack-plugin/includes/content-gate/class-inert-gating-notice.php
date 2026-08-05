@@ -31,10 +31,10 @@ class Inert_Gating_Notice {
 	/**
 	 * Option holding the cached "has anything configured" answer.
 	 *
-	 * An option rather than a transient: this is read on every admin page load,
-	 * so it wants to be autoloaded, and it must not expire on a timer — the
-	 * answer only changes when the underlying objects do, and every one of those
-	 * writes invalidates it explicitly below.
+	 * An option rather than a transient: it must not expire on a timer, since the
+	 * answer only changes when the underlying objects do and every one of those
+	 * writes invalidates it explicitly below. Stored un-autoloaded — see
+	 * has_surfaces().
 	 */
 	const CACHE_OPTION = 'newspack_content_gate_has_surfaces';
 
@@ -137,7 +137,10 @@ class Inert_Gating_Notice {
 		// Stored as '1'/'0' rather than a bool: update_option() round-trips false to
 		// an empty string, which is indistinguishable from "not cached yet" and would
 		// make a negative answer recompute the LIKE query on every page load.
-		update_option( self::CACHE_OPTION, $has_surfaces ? '1' : '0' );
+		//
+		// Not autoloaded: this is read in wp-admin and nowhere else, so autoloading it
+		// would put it in every front-end request's option payload for nothing.
+		update_option( self::CACHE_OPTION, $has_surfaces ? '1' : '0', false );
 
 		return $has_surfaces;
 	}
@@ -205,24 +208,40 @@ class Inert_Gating_Notice {
 	 * Returns the strings rather than a flag so the two surfaces cannot drift into
 	 * saying different things about the same state.
 	 *
-	 * @return array{show: bool, message: string, url: string, link_text: string}
+	 * @return array{show: bool, message: string, urls: array<string, string>}
 	 */
 	public static function get_script_data(): array {
 		return [
-			'show'      => current_user_can( 'manage_options' ) && self::is_inert(),
-			'message'   => self::get_message(),
-			'url'       => admin_url( 'admin.php?page=newspack-audience#/' ),
-			'link_text' => __( 'Turn on Audience Management', 'newspack-plugin' ),
+			'show'    => current_user_can( 'manage_options' ) && self::is_inert(),
+			'message' => self::get_message(),
+			'urls'    => self::get_urls(),
 		];
 	}
 
 	/**
 	 * The notice text, shared by both surfaces.
 	 *
+	 * Carries named tags rather than finished anchors so the core notice and the
+	 * wizard's React notice compose the same sentence from the same translation —
+	 * two strings would drift, and a translator would see the markup either way.
+	 *
 	 * @return string
 	 */
 	private static function get_message(): string {
-		return __( 'Access Control is not applying. Audience Management is off, so gated posts, premium newsletters and member-only blocks are public to everyone. The configuration is kept and starts applying again when Audience Management is turned back on.', 'newspack-plugin' );
+		return __( 'Audience Management is off, so <gates>gated content</gates>, <newsletters>premium newsletters</newsletters>, and member-only blocks are currently public for all readers. <audience>Turn on Audience Management</audience> to enable Access Control.', 'newspack-plugin' );
+	}
+
+	/**
+	 * Destinations for the message's named tags.
+	 *
+	 * @return array<string, string>
+	 */
+	private static function get_urls(): array {
+		return [
+			'gates'       => admin_url( 'admin.php?page=newspack-audience-access-control' ),
+			'newsletters' => admin_url( 'admin.php?page=newspack-premium-newsletters' ),
+			'audience'    => admin_url( 'admin.php?page=newspack-audience#/' ),
+		];
 	}
 
 	/**
@@ -235,14 +254,17 @@ class Inert_Gating_Notice {
 		if ( ! self::is_inert() ) {
 			return;
 		}
+		$message = self::get_message();
+		foreach ( self::get_urls() as $tag => $url ) {
+			$message = str_replace(
+				[ '<' . $tag . '>', '</' . $tag . '>' ],
+				[ '<a href="' . esc_url( $url ) . '">', '</a>' ],
+				$message
+			);
+		}
 		?>
 		<div class="notice notice-warning">
-			<p><?php echo esc_html( self::get_message() ); ?></p>
-			<p>
-				<a href="<?php echo esc_url( admin_url( 'admin.php?page=newspack-audience#/' ) ); ?>">
-					<?php esc_html_e( 'Turn on Audience Management', 'newspack-plugin' ); ?>
-				</a>
-			</p>
+			<p><?php echo wp_kses( $message, [ 'a' => [ 'href' => [] ] ] ); ?></p>
 		</div>
 		<?php
 	}

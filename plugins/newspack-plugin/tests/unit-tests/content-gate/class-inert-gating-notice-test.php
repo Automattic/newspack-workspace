@@ -103,7 +103,7 @@ class Inert_Gating_Notice_Test extends WP_UnitTestCase {
 		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
 		$this->disable_audience_management();
 
-		$this->assertStringNotContainsString( 'Access Control is not applying', $this->render() );
+		$this->assertStringNotContainsString( 'currently public for all readers', $this->render() );
 	}
 
 	/**
@@ -115,18 +115,25 @@ class Inert_Gating_Notice_Test extends WP_UnitTestCase {
 		Inert_Gating_Notice::flush_cache();
 
 		$this->assertStringNotContainsString(
-			'Access Control is not applying',
+			'currently public for all readers',
 			$this->render(),
 			'Nothing to warn about while gating is doing its job.'
 		);
 
 		$this->disable_audience_management();
 
+		$rendered = $this->render();
 		$this->assertStringContainsString(
-			'Access Control is not applying',
-			$this->render(),
+			'currently public for all readers',
+			$rendered,
 			'A configured site with gating inactive should be told its content is public.'
 		);
+		// The copy exists to route the publisher somewhere, so the destinations are
+		// part of the contract, not decoration.
+		foreach ( [ 'page=newspack-audience-access-control', 'page=newspack-premium-newsletters', 'page=newspack-audience' ] as $destination ) {
+			$this->assertStringContainsString( $destination, $rendered, "Expected the notice to link to $destination." );
+		}
+		$this->assertStringNotContainsString( '<gates>', $rendered, 'Interpolation tags must not reach the page.' );
 	}
 
 	/**
@@ -145,7 +152,7 @@ class Inert_Gating_Notice_Test extends WP_UnitTestCase {
 		Inert_Gating_Notice::flush_cache();
 		$this->disable_audience_management();
 
-		$this->assertStringContainsString( 'Access Control is not applying', $this->render() );
+		$this->assertStringContainsString( 'currently public for all readers', $this->render() );
 	}
 
 	/**
@@ -157,7 +164,7 @@ class Inert_Gating_Notice_Test extends WP_UnitTestCase {
 		Inert_Gating_Notice::flush_cache();
 		$this->disable_audience_management();
 
-		$this->assertStringNotContainsString( 'Access Control is not applying', $this->render() );
+		$this->assertStringNotContainsString( 'currently public for all readers', $this->render() );
 	}
 
 	/**

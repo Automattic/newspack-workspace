@@ -8,7 +8,7 @@ import classnames from 'classnames';
  */
 import { DropdownMenu, MenuGroup, MenuItem } from '@wordpress/components';
 import { useDispatch, useSelect } from '@wordpress/data';
-import { cloneElement, isValidElement, useEffect, useState, forwardRef } from '@wordpress/element';
+import { cloneElement, createInterpolateElement, isValidElement, useEffect, useState, forwardRef } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { category, chevronLeft, moreVertical } from '@wordpress/icons';
 
@@ -172,7 +172,16 @@ const Wizard = (
 
 			{ inertGating?.show && (
 				<Notice isWarning className="newspack-wizard__inert-gating-notice">
-					{ inertGating.message } <a href={ inertGating.url }>{ inertGating.link_text }</a>
+					{ /* createInterpolateElement's conversion map takes childless elements and
+					     fills them from the translated string, so jsx-a11y can't see the
+					     content it will end up with. */ }
+					{ createInterpolateElement( inertGating.message, {
+						/* eslint-disable jsx-a11y/anchor-has-content */
+						gates: <a href={ inertGating.urls.gates } />,
+						newsletters: <a href={ inertGating.urls.newsletters } />,
+						audience: <a href={ inertGating.urls.audience } />,
+						/* eslint-enable jsx-a11y/anchor-has-content */
+					} ) }
 				</Notice>
 			) }
 
