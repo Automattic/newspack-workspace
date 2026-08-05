@@ -40,6 +40,34 @@ const resolveIcon = icon => {
 const { HashRouter, Redirect, Route, Switch, useLocation } = Router;
 
 /**
+ * Interpolate a translated message's named tags, falling back to plain text.
+ *
+ * The message is translated, so its tags are site-controlled: any .mo file under
+ * wp-content/languages/plugins, any GlotPress export, or any `gettext`-filter
+ * plugin can supply one. `createInterpolateElement` throws on an unbalanced
+ * closing tag whose name is in the conversion map - verified against core's own
+ * element.js, which is what runs here since the bundle externalizes wp-element.
+ * Nothing above this renders an error boundary, so an uncaught throw would blank
+ * the whole wizard, including the screen the inert-gating notice links to as the
+ * fix. Degraded copy is recoverable; a blank screen is not.
+ *
+ * The other malformed cases already degrade on their own and are left alone: an
+ * unclosed opener drops that tag and renders the rest as text, and a tag not in
+ * the map renders literally.
+ *
+ * @param {string} message    Translated message carrying named tags.
+ * @param {Object} conversion Conversion map for createInterpolateElement.
+ * @return {JSX.Element|string} The interpolated message, or the message with its tags stripped.
+ */
+const interpolateOrPlainText = ( message, conversion ) => {
+	try {
+		return createInterpolateElement( message, conversion );
+	} catch {
+		return message.replace( /<\/?[a-zA-Z][a-zA-Z0-9]*\s*\/?>/g, '' );
+	}
+};
+
+/**
  * Reset the header data when a new section is rendered.
  */
 const ResetHeaderData = () => {
@@ -191,10 +219,10 @@ const Wizard = (
 									>
 										{ inertGating?.show && (
 											<Notice isWarning className="newspack-wizard__inert-gating-notice">
-												{ /* createInterpolateElement's conversion map takes childless
-												     elements and fills them from the translated string, so
-												     jsx-a11y can't see the content they end up with. */ }
-												{ createInterpolateElement( inertGating.message, {
+												{ /* The conversion map takes childless elements and fills them
+												     from the translated string, so jsx-a11y can't see the content
+												     they end up with. */ }
+												{ interpolateOrPlainText( inertGating.message, {
 													/* eslint-disable jsx-a11y/anchor-has-content */
 													accessControl: <a href={ inertGating.urls.accessControl } />,
 													audience: <a href={ inertGating.urls.audience } />,
