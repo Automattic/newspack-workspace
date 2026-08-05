@@ -161,7 +161,7 @@ const Wizard = (
 		</TabbedNavigation>
 	);
 
-	// Rendered as the first child of .newspack-wizard__main rather than as a core
+	// Rendered as the first child of .newspack-wizard__content rather than as a core
 	// admin notice: that puts it below the header and tabbed navigation, and inside
 	// the container that bounds the wizard's own width, so it lines up with the
 	// content it is about instead of spanning the viewport.
@@ -174,20 +174,6 @@ const Wizard = (
 			{ sections.length > 1 && <ResetHeaderData /> }
 
 			<div className="newspack-wizard__main">
-				{ inertGating?.show && (
-					<Notice isWarning className="newspack-wizard__inert-gating-notice">
-						{ /* createInterpolateElement's conversion map takes childless elements and
-						     fills them from the translated string, so jsx-a11y can't see the
-						     content it will end up with. */ }
-						{ createInterpolateElement( inertGating.message, {
-							/* eslint-disable jsx-a11y/anchor-has-content */
-							gates: <a href={ inertGating.urls.gates } />,
-							newsletters: <a href={ inertGating.urls.newsletters } />,
-							audience: <a href={ inertGating.urls.audience } />,
-							/* eslint-enable jsx-a11y/anchor-has-content */
-						} ) }
-					</Notice>
-				) }
 				<Switch>
 					{ routedSections.map( ( section, index ) => {
 						const SectionComponent = section.render;
@@ -203,6 +189,20 @@ const Wizard = (
 											'newspack-wizard__content--full-width': section.fullWidth,
 										} ) }
 									>
+										{ inertGating?.show && (
+											<Notice isWarning className="newspack-wizard__inert-gating-notice">
+												{ /* createInterpolateElement's conversion map takes childless
+												     elements and fills them from the translated string, so
+												     jsx-a11y can't see the content they end up with. */ }
+												{ createInterpolateElement( inertGating.message, {
+													/* eslint-disable jsx-a11y/anchor-has-content */
+													accessControl: <a href={ inertGating.urls.accessControl } />,
+													audience: <a href={ inertGating.urls.audience } />,
+													/* eslint-enable jsx-a11y/anchor-has-content */
+													strong: <strong />,
+												} ) }
+											</Notice>
+										) }
 										{ 'function' === typeof renderAboveSections ? renderAboveSections() : null }
 										{ ( sectionTitle || section.title ) && (
 											<SectionHeader

@@ -228,7 +228,7 @@ class Inert_Gating_Notice {
 	 * @return string
 	 */
 	private static function get_message(): string {
-		return __( 'Audience Management is off, so <gates>gated content</gates>, <newsletters>premium newsletters</newsletters>, and member-only blocks are currently public for all readers. <audience>Turn on Audience Management</audience> to enable Access Control.', 'newspack-plugin' );
+		return __( '<accessControl>Access Control</accessControl> features are currently <strong>disabled</strong>: gated content, premium newsletters, and member-only blocks are public for all readers. <audience>Turn on Audience Management</audience> to enable Access Control.', 'newspack-plugin' );
 	}
 
 	/**
@@ -238,9 +238,8 @@ class Inert_Gating_Notice {
 	 */
 	private static function get_urls(): array {
 		return [
-			'gates'       => admin_url( 'admin.php?page=newspack-audience-access-control' ),
-			'newsletters' => admin_url( 'admin.php?page=newspack-premium-newsletters' ),
-			'audience'    => admin_url( 'admin.php?page=newspack-audience#/' ),
+			'accessControl' => admin_url( 'admin.php?page=newspack-audience-access-control' ),
+			'audience'      => admin_url( 'admin.php?page=newspack-audience#/' ),
 		];
 	}
 
@@ -264,7 +263,17 @@ class Inert_Gating_Notice {
 		}
 		?>
 		<div class="notice notice-warning">
-			<p><?php echo wp_kses( $message, [ 'a' => [ 'href' => [] ] ] ); ?></p>
+			<p>
+				<?php
+				echo wp_kses(
+					$message,
+					[
+						'a'      => [ 'href' => [] ],
+						'strong' => [],
+					]
+				);
+				?>
+			</p>
 		</div>
 		<?php
 	}

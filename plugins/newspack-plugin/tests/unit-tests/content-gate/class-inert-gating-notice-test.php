@@ -103,7 +103,7 @@ class Inert_Gating_Notice_Test extends WP_UnitTestCase {
 		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
 		$this->disable_audience_management();
 
-		$this->assertStringNotContainsString( 'currently public for all readers', $this->render() );
+		$this->assertStringNotContainsString( 'are public for all readers', $this->render() );
 	}
 
 	/**
@@ -115,7 +115,7 @@ class Inert_Gating_Notice_Test extends WP_UnitTestCase {
 		Inert_Gating_Notice::flush_cache();
 
 		$this->assertStringNotContainsString(
-			'currently public for all readers',
+			'are public for all readers',
 			$this->render(),
 			'Nothing to warn about while gating is doing its job.'
 		);
@@ -124,16 +124,17 @@ class Inert_Gating_Notice_Test extends WP_UnitTestCase {
 
 		$rendered = $this->render();
 		$this->assertStringContainsString(
-			'currently public for all readers',
+			'are public for all readers',
 			$rendered,
 			'A configured site with gating inactive should be told its content is public.'
 		);
 		// The copy exists to route the publisher somewhere, so the destinations are
 		// part of the contract, not decoration.
-		foreach ( [ 'page=newspack-audience-access-control', 'page=newspack-premium-newsletters', 'page=newspack-audience' ] as $destination ) {
+		foreach ( [ 'page=newspack-audience-access-control', 'page=newspack-audience' ] as $destination ) {
 			$this->assertStringContainsString( $destination, $rendered, "Expected the notice to link to $destination." );
 		}
-		$this->assertStringNotContainsString( '<gates>', $rendered, 'Interpolation tags must not reach the page.' );
+		$this->assertStringNotContainsString( '<accessControl>', $rendered, 'Interpolation tags must not reach the page.' );
+		$this->assertStringContainsString( '<strong>disabled</strong>', $rendered, 'Expected the emphasis to survive wp_kses.' );
 	}
 
 	/**
@@ -152,7 +153,7 @@ class Inert_Gating_Notice_Test extends WP_UnitTestCase {
 		Inert_Gating_Notice::flush_cache();
 		$this->disable_audience_management();
 
-		$this->assertStringContainsString( 'currently public for all readers', $this->render() );
+		$this->assertStringContainsString( 'are public for all readers', $this->render() );
 	}
 
 	/**
@@ -164,7 +165,7 @@ class Inert_Gating_Notice_Test extends WP_UnitTestCase {
 		Inert_Gating_Notice::flush_cache();
 		$this->disable_audience_management();
 
-		$this->assertStringNotContainsString( 'currently public for all readers', $this->render() );
+		$this->assertStringNotContainsString( 'are public for all readers', $this->render() );
 	}
 
 	/**
