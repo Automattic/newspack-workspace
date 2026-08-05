@@ -51,7 +51,7 @@ class Test_Print_Section extends WP_UnitTestCase {
 		$this->assertArrayHasKey( 'available_post_types', $result );
 
 		$this->assertFalse( $result['module_enabled_print'] );
-		$this->assertSame( 'auto', $result['indesign_platform'] );
+		$this->assertSame( 'win', $result['indesign_platform'] );
 		$this->assertSame( [ 'post' ], $result['indesign_post_types'] );
 		$this->assertIsArray( $result['available_post_types'] );
 	}

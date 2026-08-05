@@ -36,9 +36,18 @@ class InDesign_Exporter {
 	/**
 	 * Default value for the platform option.
 	 *
+	 * 'win' rather than 'auto': the Tagged Text start tag declares the format of
+	 * the exported file itself — <ASCII-WIN> for CRLF-delimited, <ASCII-MAC> for
+	 * bare-CR — not the operating system running InDesign. The converter joins
+	 * every line with CRLF unconditionally, so <ASCII-WIN> is the only header
+	 * that describes what is actually written. Resolving from the requesting
+	 * browser meant Mac users received files declaring <ASCII-MAC> over CRLF
+	 * bytes, which InDesign imports as literal markup instead of formatting
+	 * (NPPM-3098).
+	 *
 	 * @var string
 	 */
-	public const PLATFORM_DEFAULT = 'auto';
+	public const PLATFORM_DEFAULT = 'win';
 
 	/**
 	 * Allowed values for the platform option.
