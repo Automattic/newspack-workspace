@@ -20,10 +20,15 @@ class Newspack_Test_Subscriptions_Tiers_Plans extends WP_UnitTestCase {
 	 */
 	public function set_up() {
 		parent::set_up();
-		global $products_database;
+		global $products_database, $subscriptions_database;
 		$products_database                              = [];
+		$subscriptions_database                          = [];
 		WCS_ATT_Product_Schemes::$products_with_schemes = [];
 		WCS_ATT_Product_Schemes::$product_schemes       = [];
+		// spl_object_id() is recycled once a clone is freed, so a stale plan key
+		// from a previous test's clone can otherwise leak onto an unrelated
+		// object in this one.
+		WCS_ATT_Product_Schemes::$active_schemes = [];
 	}
 
 	/**
@@ -32,6 +37,7 @@ class Newspack_Test_Subscriptions_Tiers_Plans extends WP_UnitTestCase {
 	public function tear_down() {
 		WCS_ATT_Product_Schemes::$products_with_schemes = [];
 		WCS_ATT_Product_Schemes::$product_schemes       = [];
+		WCS_ATT_Product_Schemes::$active_schemes         = [];
 		parent::tear_down();
 	}
 
@@ -231,5 +237,173 @@ class Newspack_Test_Subscriptions_Tiers_Plans extends WP_UnitTestCase {
 		foreach ( $tiers as $products ) {
 			$this->assertCount( 1, $products );
 		}
+	}
+
+	/**
+	 * A legacy `variable-subscription` product (no plans) must produce exactly
+	 * the buckets it produced before NPPM-3053: one bucket keyed by the legacy
+	 * period/interval, the same product IDs, in the same order. This pins the
+	 * "expansion is additive, legacy flow unperturbed" constraint in CI —
+	 * previously only exercised manually against a live fixture.
+	 */
+	public function test_legacy_variable_subscription_product_is_unchanged() {
+		$parent = wc_create_mock_product(
+			[
+				'id'       => 340,
+				'type'     => 'variable-subscription',
+				'children' => [ 341, 342 ],
+			]
+		);
+		foreach ( [ 341, 342 ] as $vid ) {
+			wc_create_mock_product(
+				[
+					'id'        => $vid,
+					'type'      => 'variation',
+					'parent_id' => 340,
+					'meta'      => [
+						'_subscription_period'          => 'month',
+						'_subscription_period_interval' => '1',
+					],
+				]
+			);
+		}
+
+		$tiers = \Newspack\Subscriptions_Tiers::get_tiers_by_frequency( $parent );
+
+		$this->assertSame( [ 'month_1' ], array_keys( $tiers ) );
+		$this->assertSame(
+			[ 341, 342 ],
+			array_map(
+				function ( $p ) {
+					return $p->get_id();
+				},
+				$tiers['month_1']
+			)
+		);
+	}
+
+	/**
+	 * NPPM-3053 regression for get_current_tier(): under the plan model the
+	 * same variation ID is stamped into every plan's bucket
+	 * (get_tiers_by_frequency()'s expansion), so ID-only matching resolved an
+	 * annual subscriber to whichever bucket happened to be checked first
+	 * (`month_1`). A reader on the annual plan must resolve to `year_1`.
+	 */
+	public function test_get_current_tier_matches_the_subscribed_plan() {
+		$user_id = self::factory()->user->create();
+
+		$plans = [
+			'mkey' => [
+				'period'   => 'month',
+				'interval' => 1,
+			],
+			'ykey' => [
+				'period'   => 'year',
+				'interval' => 1,
+			],
+		];
+
+		$parent = wc_create_mock_product(
+			[
+				'id'       => 350,
+				'type'     => 'variable',
+				'children' => [ 351 ],
+			]
+		);
+		$this->give_plans( 350, $plans );
+		wc_create_mock_product(
+			[
+				'id'        => 351,
+				'type'      => 'variation',
+				'parent_id' => 350,
+			]
+		);
+		$this->give_plans( 351, $plans );
+
+		$tiers = \Newspack\Subscriptions_Tiers::get_tiers_by_frequency( $parent );
+		$this->assertSame( [ 'month_1', 'year_1' ], array_keys( $tiers ), 'Precondition: both buckets exist.' );
+
+		// The reader's subscription holds variation 351, checked out on the
+		// annual scheme - `_wcsatt_scheme` is the order item meta APFS records
+		// at checkout.
+		$item = new WC_Order_Item_Product(
+			[
+				'id'         => 900,
+				'product_id' => 351,
+				'meta'       => [ '_wcsatt_scheme' => 'ykey' ],
+			]
+		);
+		wcs_create_subscription(
+			[
+				'customer_id'      => $user_id,
+				'status'           => 'active',
+				'products'         => [ 351 ],
+				'items'            => [ $item ],
+				'billing_period'   => 'year',
+				'billing_interval' => 1,
+			]
+		);
+
+		[ $frequency, $product, $subscription ] = \Newspack\Subscriptions_Tiers::get_current_tier( $tiers, $user_id );
+
+		$this->assertSame( 'year_1', $frequency );
+		$this->assertNotNull( $product );
+		$this->assertNotNull( $subscription );
+	}
+
+	/**
+	 * The get_current_tier() fallback path: when the subscription's line item
+	 * carries no resolvable scheme key, the match falls back to comparing
+	 * billing period/interval against the bucket's frequency - still enough
+	 * to tell the annual bucket from the monthly one.
+	 */
+	public function test_get_current_tier_falls_back_to_billing_period_without_a_scheme_key() {
+		$user_id = self::factory()->user->create();
+
+		$plans = [
+			'mkey' => [
+				'period'   => 'month',
+				'interval' => 1,
+			],
+			'ykey' => [
+				'period'   => 'year',
+				'interval' => 1,
+			],
+		];
+
+		$parent = wc_create_mock_product(
+			[
+				'id'       => 360,
+				'type'     => 'variable',
+				'children' => [ 361 ],
+			]
+		);
+		$this->give_plans( 360, $plans );
+		wc_create_mock_product(
+			[
+				'id'        => 361,
+				'type'      => 'variation',
+				'parent_id' => 360,
+			]
+		);
+		$this->give_plans( 361, $plans );
+
+		$tiers = \Newspack\Subscriptions_Tiers::get_tiers_by_frequency( $parent );
+
+		// No item, so no `_wcsatt_scheme` to resolve - only the billing
+		// period/interval on the subscription itself.
+		wcs_create_subscription(
+			[
+				'customer_id'      => $user_id,
+				'status'           => 'active',
+				'products'         => [ 361 ],
+				'billing_period'   => 'year',
+				'billing_interval' => 1,
+			]
+		);
+
+		[ $frequency ] = \Newspack\Subscriptions_Tiers::get_current_tier( $tiers, $user_id );
+
+		$this->assertSame( 'year_1', $frequency );
 	}
 }

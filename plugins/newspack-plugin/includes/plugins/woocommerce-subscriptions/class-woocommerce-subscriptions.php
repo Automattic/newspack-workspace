@@ -827,6 +827,22 @@ class WooCommerce_Subscriptions {
 	}
 
 	/**
+	 * Stamp a subscription plan onto a product instance.
+	 *
+	 * Mirrors {@see self::get_active_plan_key()}: a no-op when the APFS API is
+	 * unavailable, rather than a fatal, so callers can stamp unconditionally.
+	 *
+	 * @param \WC_Product $product Product instance to stamp.
+	 * @param string      $key     Scheme key.
+	 */
+	public static function set_active_plan_key( $product, $key ) {
+		if ( ! class_exists( 'WCS_ATT_Product_Schemes' ) || ! method_exists( 'WCS_ATT_Product_Schemes', 'set_subscription_scheme' ) ) {
+			return;
+		}
+		\WCS_ATT_Product_Schemes::set_subscription_scheme( $product, $key );
+	}
+
+	/**
 	 * Sanitize and validate a subscription ID or object as a WC_Subscription object.
 	 *
 	 * @param int|WC_Subscription $subscription The subscription ID or object.

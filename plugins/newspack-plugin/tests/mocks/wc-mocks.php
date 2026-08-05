@@ -1261,23 +1261,30 @@ function wc_get_products( $args = [] ) {
 	return $products;
 }
 /**
- * Minimal `wcs_user_has_subscription()` stub, present so
- * `function_exists( 'wcs_user_has_subscription' )` guards pass. Tests that
- * need real subscription-ownership behavior use
- * `wcs_get_users_subscriptions()` instead.
+ * Minimal `wcs_user_has_subscription()` stub, matching the real signature:
+ * a product ID and/or status narrow the match, not just the user.
  *
- * @param int   $user_id    User ID.
- * @param mixed $product_id Product ID, unused by this stub.
- * @param mixed $status     Status, unused by this stub.
+ * @param int    $user_id    User ID.
+ * @param string $product_id Product ID to require on the subscription. Empty string matches any product.
+ * @param string $status     Status to require, or 'any' to match regardless of status.
  *
- * @return bool Whether the user holds any subscription.
+ * @return bool Whether the user holds a matching subscription.
  */
 function wcs_user_has_subscription( $user_id = 0, $product_id = '', $status = 'any' ) {
 	global $subscriptions_database;
 	foreach ( (array) $subscriptions_database as $subscription ) {
-		if ( $subscription->get_customer_id() === $user_id ) {
-			return true;
+		// Customer IDs arrive as both int and numeric string depending on the
+		// fixture, so compare loosely rather than with a strict ===.
+		if ( (int) $subscription->get_customer_id() !== (int) $user_id ) {
+			continue;
 		}
+		if ( '' !== $product_id && ! $subscription->has_product( $product_id ) ) {
+			continue;
+		}
+		if ( 'any' !== $status && ! $subscription->has_status( $status ) ) {
+			continue;
+		}
+		return true;
 	}
 	return false;
 }

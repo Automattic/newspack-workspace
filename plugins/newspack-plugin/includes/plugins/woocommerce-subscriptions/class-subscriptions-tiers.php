@@ -362,7 +362,7 @@ class Subscriptions_Tiers {
 			foreach ( $plans as $plan_key => $plan ) {
 				foreach ( $tier_products as $tier_product ) {
 					$instance = clone $tier_product;
-					\WCS_ATT_Product_Schemes::set_subscription_scheme( $instance, $plan_key );
+					WooCommerce_Subscriptions::set_active_plan_key( $instance, $plan_key );
 					$selected_products[] = $instance;
 				}
 			}
@@ -442,23 +442,99 @@ class Subscriptions_Tiers {
 		$user_subscriptions = wcs_get_users_subscriptions( $user_id );
 		foreach ( $tiers as $frequency => $products ) {
 			foreach ( $products as $product ) {
+				// Under the plan model the same product/variation ID is stamped
+				// into every plan's bucket (NPPM-3053's expansion in
+				// get_tiers_by_frequency()), so an ID match alone can no longer
+				// tell a monthly subscriber from an annual one apart. A
+				// plan-carrying product only counts as "current" if the
+				// subscription is actually on that plan.
+				$plan_key = WooCommerce_Subscriptions::get_active_plan_key( $product );
+
 				foreach ( $user_subscriptions as $subscription ) {
 					if (
-						$subscription->has_product( $product->get_id() )
-						&& $subscription->has_status( WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES )
+						! $subscription->has_product( $product->get_id() )
+						|| ! $subscription->has_status( WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES )
 						// `wcs_get_users_subscriptions` is filtered (e.g. group
 						// subscriptions inject subs the user is only a member of, owned
 						// by someone else); only a subscription the user owns is their
 						// "current" tier — matching the ownership test the switch
 						// backstop applies.
-						&& (int) $subscription->get_user_id() === (int) $user_id
+						|| (int) $subscription->get_user_id() !== (int) $user_id
 					) {
-						return [ $frequency, $product, $subscription ];
+						continue;
 					}
+
+					if ( $plan_key && ! self::subscription_is_on_plan( $subscription, $product, $plan_key, $frequency ) ) {
+						continue;
+					}
+
+					return [ $frequency, $product, $subscription ];
 				}
 			}
 		}
 		return $none;
+	}
+
+	/**
+	 * Whether a subscription is on the same plan as a plan-stamped tier
+	 * product instance.
+	 *
+	 * Tries the subscription's own scheme key first — the `_wcsatt_scheme`
+	 * order item meta APFS records on the line item at checkout. When that
+	 * can't be resolved (older order, meta absent, or the constant isn't the
+	 * one this WCS version uses), falls back to comparing the subscription's
+	 * billing period/interval against the bucket's frequency. The fallback is
+	 * a weaker signal — it can't tell apart two plans that share a period and
+	 * interval (NPPM-3053's own "colliding plans" case) — but degrades
+	 * gracefully rather than hiding a legitimate match outright.
+	 *
+	 * @param \WC_Subscription $subscription Subscription instance.
+	 * @param \WC_Product      $product      Plan-stamped tier product instance.
+	 * @param string           $plan_key     The product's stamped plan key.
+	 * @param string           $frequency    The bucket's frequency key.
+	 *
+	 * @return bool Whether the subscription is on the product's stamped plan.
+	 */
+	private static function subscription_is_on_plan( $subscription, $product, $plan_key, $frequency ) {
+		$subscription_plan_key = self::get_subscription_plan_key( $subscription, $product );
+		if ( $subscription_plan_key ) {
+			return $subscription_plan_key === $plan_key;
+		}
+
+		if ( ! method_exists( $subscription, 'get_billing_period' ) || ! method_exists( $subscription, 'get_billing_interval' ) ) {
+			return false;
+		}
+		$subscription_frequency = $subscription->get_billing_period() . '_' . $subscription->get_billing_interval();
+		return $frequency === $subscription_frequency || 0 === strpos( $frequency, $subscription_frequency . '_' );
+	}
+
+	/**
+	 * The subscription plan key stamped on the line item holding a product,
+	 * if the subscription still carries it.
+	 *
+	 * @param \WC_Subscription $subscription Subscription instance.
+	 * @param \WC_Product      $product      Product to locate the line item for.
+	 *
+	 * @return string Scheme key, or an empty string if it can't be determined.
+	 */
+	private static function get_subscription_plan_key( $subscription, $product ) {
+		if ( ! method_exists( $subscription, 'get_items' ) ) {
+			return '';
+		}
+		foreach ( $subscription->get_items() as $item ) {
+			if ( ! method_exists( $item, 'get_product_id' ) || ! method_exists( $item, 'get_meta' ) ) {
+				continue;
+			}
+			$item_product_id = method_exists( $item, 'get_variation_id' ) && $item->get_variation_id()
+				? $item->get_variation_id()
+				: $item->get_product_id();
+			if ( (int) $item_product_id !== (int) $product->get_id() ) {
+				continue;
+			}
+			$scheme_key = $item->get_meta( '_wcsatt_scheme', true );
+			return is_string( $scheme_key ) ? $scheme_key : '';
+		}
+		return '';
 	}
 
 	/**
