@@ -58,7 +58,7 @@ afterAll( () => {
 
 beforeEach( () => {
 	mockInspectorProps.length = 0;
-	useSelect.mockReturnValue( { postId: 7, framing: 'top', patternContent: '', patternResolved: true } );
+	useSelect.mockReturnValue( { postId: 7, framing: 'top', patternContent: '', patternResolved: true, patternExists: true } );
 	useDispatch.mockReturnValue( { updateBlockAttributes: jest.fn() } );
 } );
 
@@ -93,7 +93,7 @@ describe( 'withPromptInstanceInspector', () => {
 	// The widgets editor has no post to generate copy from, so the panel has
 	// nothing to offer there.
 	it( 'mounts nothing where there is no post to generate from', () => {
-		useSelect.mockReturnValue( { postId: undefined, framing: null, patternContent: '', patternResolved: true } );
+		useSelect.mockReturnValue( { postId: undefined, framing: null, patternContent: '', patternResolved: true, patternExists: true } );
 		const Wrapped = withPromptInstanceInspector( BlockEdit );
 
 		const { container } = render( <Wrapped { ...instanceProps } /> );

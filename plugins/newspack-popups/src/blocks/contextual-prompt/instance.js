@@ -200,7 +200,7 @@ export const shouldAutoGenerate = ( { canGenerate, overrideIsEmpty, patternResol
 	Boolean( canGenerate && overrideIsEmpty && patternResolved && boundName && ! attempted );
 
 const PromptInstanceInspector = ( { clientId, attributes } ) => {
-	const { postId, framing, patternContent, patternResolved } = useSelect(
+	const { postId, framing, patternContent, patternResolved, patternExists } = useSelect(
 		select => {
 			const blockEditor = select( blockEditorStore );
 			const record = select( 'core' ).getEntityRecord( 'postType', 'wp_block', PATTERN_ID );
@@ -216,6 +216,7 @@ const PromptInstanceInspector = ( { clientId, attributes } ) => {
 						: null,
 				patternContent: record?.content?.raw ?? '',
 				patternResolved: select( 'core' ).hasFinishedResolution( 'getEntityRecord', [ 'postType', 'wp_block', PATTERN_ID ] ),
+				patternExists: Boolean( record ),
 			};
 		},
 		[ clientId ]
@@ -343,7 +344,10 @@ const PromptInstanceInspector = ( { clientId, attributes } ) => {
 		}
 	}, [ canGenerate, overrideIsEmpty, patternResolved, boundName, framing ] );
 
-	if ( ! canGenerate ) {
+	// The pattern is gone from under this editor: the site opted out, or it was
+	// lost. Nothing here can generate or apply copy, and the reason is not this
+	// screen's to explain — the wizard owns the feature's state.
+	if ( ! canGenerate || ( patternResolved && ! patternExists ) ) {
 		return null;
 	}
 

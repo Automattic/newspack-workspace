@@ -84,6 +84,7 @@ const NO_PROMPT = {
 	promptFraming: null,
 	patternContent: '<!-- wp:group /-->',
 	patternResolved: true,
+	patternExists: true,
 };
 
 // A card the publisher detached from the pattern, copy paragraph and all.
@@ -150,6 +151,17 @@ describe( 'ContextualPromptPanel', () => {
 
 		expect( screen.getByText( NO_COPY_FIELD ) ).toBeTruthy();
 		expect( screen.queryByText( 'Generate Suggestions' ) ).toBeNull();
+	} );
+
+	// A pattern that has gone — the site opted out while this editor was open —
+	// is not a pattern missing a copy field: the panel says nothing rather than
+	// blaming the design, and the wizard is where the feature's state is told.
+	it( 'renders nothing when the pattern is gone', () => {
+		useSelect.mockReturnValue( { ...NO_PROMPT, patternContent: '', patternExists: false } );
+
+		const { container } = render( <ContextualPromptPanel /> );
+
+		expect( container ).toBeEmptyDOMElement();
 	} );
 
 	it( 'inserts an instance keyed by the name the pattern binds', async () => {

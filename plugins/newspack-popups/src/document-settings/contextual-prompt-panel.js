@@ -46,36 +46,47 @@ import {
 const ContextualPromptPanel = () => {
 	// Flat values only: the panel re-renders whenever this mapping stops being
 	// shallow-equal, and the editor's store ticks on every keystroke.
-	const { postId, postType, blockCount, promptClientId, promptDetached, promptCopyClientId, promptFraming, patternContent, patternResolved } =
-		useSelect( select => {
-			const editor = select( 'core/editor' );
-			const blockEditor = select( 'core/block-editor' );
-			const blocks = blockEditor.getBlocks() || [];
-			// The prompt can sit anywhere, including nested inside a group or columns,
-			// and is the post's prompt whether it still references the pattern or has
-			// been detached from it.
-			const [ card = null ] = findPromptCards( blocks );
-			const detached = Boolean( card ) && ! isPromptInstance( card.name, card.attributes );
-			const topLevelIndex = card ? blocks.findIndex( block => card.clientId === block.clientId ) : -1;
-			return {
-				postId: editor.getCurrentPostId(),
-				postType: editor.getCurrentPostType(),
-				blockCount: blocks.length,
-				promptClientId: card?.clientId ?? null,
-				promptDetached: detached,
-				// Detached copy is the paragraph itself, not an override.
-				promptCopyClientId: detached ? findCopyClientId( card ) : null,
-				// Once the prompt is placed, its position decides the framing — the
-				// top/mid/end choice is only on offer before the first insert. A nested
-				// prompt can't be bucketed, matching get_placement()'s 'unknown'.
-				promptFraming: -1 === topLevelIndex ? null : framingForPosition( topLevelIndex, blocks.length ),
-				// Copy is stored under the key the pattern names.
-				patternContent: PATTERN_ID ? select( 'core' ).getEntityRecord( 'postType', 'wp_block', PATTERN_ID )?.content?.raw ?? '' : '',
-				patternResolved: PATTERN_ID
-					? Boolean( select( 'core' ).hasFinishedResolution( 'getEntityRecord', [ 'postType', 'wp_block', PATTERN_ID ] ) )
-					: false,
-			};
-		}, [] );
+	const {
+		postId,
+		postType,
+		blockCount,
+		promptClientId,
+		promptDetached,
+		promptCopyClientId,
+		promptFraming,
+		patternContent,
+		patternResolved,
+		patternExists,
+	} = useSelect( select => {
+		const editor = select( 'core/editor' );
+		const blockEditor = select( 'core/block-editor' );
+		const blocks = blockEditor.getBlocks() || [];
+		// The prompt can sit anywhere, including nested inside a group or columns,
+		// and is the post's prompt whether it still references the pattern or has
+		// been detached from it.
+		const [ card = null ] = findPromptCards( blocks );
+		const detached = Boolean( card ) && ! isPromptInstance( card.name, card.attributes );
+		const topLevelIndex = card ? blocks.findIndex( block => card.clientId === block.clientId ) : -1;
+		return {
+			postId: editor.getCurrentPostId(),
+			postType: editor.getCurrentPostType(),
+			blockCount: blocks.length,
+			promptClientId: card?.clientId ?? null,
+			promptDetached: detached,
+			// Detached copy is the paragraph itself, not an override.
+			promptCopyClientId: detached ? findCopyClientId( card ) : null,
+			// Once the prompt is placed, its position decides the framing — the
+			// top/mid/end choice is only on offer before the first insert. A nested
+			// prompt can't be bucketed, matching get_placement()'s 'unknown'.
+			promptFraming: -1 === topLevelIndex ? null : framingForPosition( topLevelIndex, blocks.length ),
+			// Copy is stored under the key the pattern names.
+			patternContent: PATTERN_ID ? select( 'core' ).getEntityRecord( 'postType', 'wp_block', PATTERN_ID )?.content?.raw ?? '' : '',
+			patternExists: PATTERN_ID ? Boolean( select( 'core' ).getEntityRecord( 'postType', 'wp_block', PATTERN_ID ) ) : false,
+			patternResolved: PATTERN_ID
+				? Boolean( select( 'core' ).hasFinishedResolution( 'getEntityRecord', [ 'postType', 'wp_block', PATTERN_ID ] ) )
+				: false,
+		};
+	}, [] );
 
 	const { insertBlock, updateBlockAttributes, selectBlock } = useDispatch( 'core/block-editor' );
 
@@ -111,8 +122,10 @@ const ContextualPromptPanel = () => {
 	const isPrompt = 'newspack_popups_cpt' === postType;
 
 	// Hidden until an administrator opts the site into AI use; never on a prompt,
-	// and never without the pattern every instance references.
-	if ( ! optedIn || isPrompt || ! PATTERN_ID ) {
+	// and never without the pattern every instance references — including one
+	// that has gone from under an editor left open across an opt-out, where the
+	// panel would otherwise blame the pattern for having no copy field.
+	if ( ! optedIn || isPrompt || ! PATTERN_ID || ( patternResolved && ! patternExists ) ) {
 		return null;
 	}
 
