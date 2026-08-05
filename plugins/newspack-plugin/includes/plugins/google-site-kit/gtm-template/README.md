@@ -53,8 +53,8 @@ stop here until it ships.
 
 `newspack-ga4-reader-params.gtm.json` is a GTM container export containing:
 
-- the **9 Data Layer Variables** (named `DLV - Newspack - <key>`), and
-- one **`Newspack - GA4 Reader Params (config settings)`** variable that bundles all 9 as
+- the **10 Data Layer Variables** (named `DLV - Newspack - <key>`), and
+- one **`Newspack - GA4 Reader Params (config settings)`** variable that bundles all 10 as
   Google-tag configuration parameters – so you wire them with a single reference.
 
 1. GTM → **Admin → Import Container**.
@@ -62,7 +62,7 @@ stop here until it ships.
 3. Select an **existing workspace** (create a throwaway one to review first).
 4. Choose **Merge → Rename conflicting tags, triggers, and variables** (safe; never
    overwrites your existing config).
-5. Preview the changes (should be 10 new variables, nothing else), then **Confirm**.
+5. Preview the changes (should be 11 new variables, nothing else), then **Confirm**.
 
 ## Step 2 – Attach the params to your GA4 tag
 
@@ -75,7 +75,7 @@ variable** field to:
 ```
 
 That's the whole wiring step – config-level params propagate to `page_view` and every
-subsequent event, so all 9 reader params now ride your existing pageview.
+subsequent event, so all 10 reader params now ride your existing pageview.
 
 <details>
 <summary>Manual alternative (if you'd rather not use the bundling variable)</summary>

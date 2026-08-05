@@ -179,6 +179,55 @@ class Newspack_Test_GoogleSiteKit_Access_Source extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The resolution is memoized per post and reader for the life of the request.
+	 *
+	 * Reader verification is the probe because it is the one input here that
+	 * changes the answer without being cached anywhere else: the gate list is
+	 * memoized by Content_Restriction_Control::get_post_gates(), so mutating
+	 * the gates would prove nothing about this memo.
+	 */
+	public function test_resolution_is_memoized_per_post_and_reader() {
+		$post_id = $this->create_gated_post(
+			[
+				'custom_access' => [
+					'active'       => true,
+					'access_rules' => [
+						[
+							[
+								'slug'  => 'email_domain',
+								'value' => 'example.org',
+							],
+						],
+					],
+				],
+			]
+		);
+		$user_id = $this->factory->user->create( [ 'user_email' => 'reader@example.org' ] );
+		update_user_meta( $user_id, Newspack\Reader_Activation::READER, true );
+		wp_set_current_user( $user_id );
+		$this->go_to( get_permalink( $post_id ) );
+
+		// Unverified: the email_domain rule refuses to grant access.
+		$this->assertSame( 'gated', GoogleSiteKit::get_request_access_source() );
+
+		Newspack\Reader_Activation::set_reader_verified( $user_id );
+
+		$this->assertSame(
+			'gated',
+			GoogleSiteKit::get_request_access_source(),
+			'The second call in the same request must come from the memo, not a re-evaluation.'
+		);
+
+		GoogleSiteKit::reset_access_source_memo();
+
+		$this->assertSame(
+			'domain',
+			GoogleSiteKit::get_request_access_source(),
+			'After the memo is cleared the reader is re-evaluated, proving the stale answer above was the memo.'
+		);
+	}
+
+	/**
 	 * Building the parameters must not record a metered view. An analytics
 	 * parameter that spends a reader's allowance is worse than a missing one.
 	 */
