@@ -1420,14 +1420,16 @@ final class Reader_Activation {
 	 * doesn't render at all. Hence `display:none` inline — inline so a stripped or
 	 * deferred stylesheet can't expose the field either — plus the opt-out
 	 * attributes the password managers that publish one look for. The `.nphp`
-	 * stylesheet rules stay as a second layer for a strict `style-src` CSP.
+	 * stylesheet rules carry the same `display:none`, so they remain a real fallback
+	 * for a policy that strips the style attribute rather than a merely visual one.
 	 *
 	 * The trade is deliberate: a bot that checks computed style can now skip the
 	 * field, in exchange for readers never being locked out of their accounts.
 	 *
-	 * newspack-newsletters keeps its own copy of this field, and the same
-	 * submit-side contract, in its Subscribe block
-	 * (`src/blocks/subscribe/index.php`). Changes here belong there too.
+	 * newspack-newsletters renders its own copy of this field in its Subscribe block
+	 * (`src/blocks/subscribe/index.php`). The markup is duplicated; the submit-side
+	 * rule is not, since that copy defers to `is_honeypot_tripped()` below. Markup
+	 * changes here belong there too.
 	 *
 	 * Not rendered if reCAPTCHA is enabled as it's a superior spam protection.
 	 *
@@ -1468,6 +1470,11 @@ final class Reader_Activation {
 	 * the email-sanitized form counts. Sanitizing the decoy as an email before the
 	 * emptiness test would be worse than useless: it blanks any value that isn't
 	 * address-shaped, so a bot writing junk into the decoy would pass unnoticed.
+	 *
+	 * A filled decoy with no address alongside it counts as a bot. That deliberately
+	 * also catches the reader whose address is entirely non-ASCII, since
+	 * `sanitize_email()` blanks it — they can't register through Newspack either way,
+	 * so the decoy is not what stands between them and an account.
 	 *
 	 * @param string|null|false $honeypot Value submitted in the honeypot field (`email`).
 	 * @param string|null|false $email    Value submitted in the real email field (`npe`).
