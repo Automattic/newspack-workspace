@@ -1830,3 +1830,33 @@ if ( ! class_exists( 'WCS_ATT_Product_Schemes' ) ) {
 		}
 	}
 }
+
+if ( ! class_exists( 'WCS_ATT_Order' ) ) {
+	/**
+	 * Stub of WCS's order-item scheme accessor
+	 * (`includes/apfs/class-wcs-att-order.php` in real WooCommerce
+	 * Subscriptions 9.x). Reads `_wcsatt_scheme`, falling back to the pre-9.0
+	 * APFS-v1 meta key `_wcsatt_scheme_id` when absent — mirrors the real
+	 * accessor's own fallback closely enough to pin the v1-key regression
+	 * path in tests.
+	 */
+	class WCS_ATT_Order {
+		/**
+		 * The subscription scheme key recorded on an order/subscription line item.
+		 *
+		 * @param \WC_Order_Item $order_item Order item.
+		 *
+		 * @return string|false Scheme key, or false if none is recorded.
+		 */
+		public static function get_subscription_scheme( $order_item ) {
+			if ( ! method_exists( $order_item, 'get_meta' ) ) {
+				return false;
+			}
+			$scheme_key = $order_item->get_meta( '_wcsatt_scheme', true );
+			if ( '' === $scheme_key ) {
+				$scheme_key = $order_item->get_meta( '_wcsatt_scheme_id', true );
+			}
+			return '' === $scheme_key ? false : $scheme_key;
+		}
+	}
+}

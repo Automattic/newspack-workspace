@@ -479,11 +479,11 @@ class Subscriptions_Tiers {
 	 * Whether a subscription is on the same plan as a plan-stamped tier
 	 * product instance.
 	 *
-	 * Tries the subscription's own scheme key first — the `_wcsatt_scheme`
-	 * order item meta APFS records on the line item at checkout. When that
-	 * can't be resolved (older order, meta absent, or the constant isn't the
-	 * one this WCS version uses), falls back to comparing the subscription's
-	 * billing period/interval against the bucket's frequency. The fallback is
+	 * Tries the subscription's own scheme key first — see
+	 * {@see self::get_item_subscription_scheme()} for how that's resolved.
+	 * When it can't be resolved at all (older order, no matching line item),
+	 * falls back to comparing the subscription's billing period/interval
+	 * against the bucket's frequency. The fallback is
 	 * a weaker signal — it can't tell apart two plans that share a period and
 	 * interval (NPPM-3053's own "colliding plans" case) — but degrades
 	 * gracefully rather than hiding a legitimate match outright.
@@ -531,10 +531,35 @@ class Subscriptions_Tiers {
 			if ( (int) $item_product_id !== (int) $product->get_id() ) {
 				continue;
 			}
-			$scheme_key = $item->get_meta( '_wcsatt_scheme', true );
-			return is_string( $scheme_key ) ? $scheme_key : '';
+			return self::get_item_subscription_scheme( $item );
 		}
 		return '';
+	}
+
+	/**
+	 * The scheme key APFS recorded on an order/subscription line item.
+	 *
+	 * Prefers WCS's own `WCS_ATT_Order::get_subscription_scheme()` accessor
+	 * over a direct meta read: it also falls back to the pre-9.0 APFS-v1 meta
+	 * key (`_wcsatt_scheme_id`) and normalises the result through
+	 * `WCS_ATT_Product_Schemes::parse_subscription_scheme_key()`, both of
+	 * which a direct `_wcsatt_scheme` read would miss — most importantly for
+	 * publishers who ran the standalone All Products for Subscriptions plugin
+	 * before WCS 9.0 folded it into core. Falls back to the direct meta read
+	 * when the accessor isn't available, so nothing regresses on a site
+	 * without APFS.
+	 *
+	 * @param \WC_Order_Item $item Order/subscription line item.
+	 *
+	 * @return string Scheme key, or an empty string if none is recorded.
+	 */
+	private static function get_item_subscription_scheme( $item ) {
+		if ( class_exists( 'WCS_ATT_Order' ) && method_exists( 'WCS_ATT_Order', 'get_subscription_scheme' ) ) {
+			$scheme_key = \WCS_ATT_Order::get_subscription_scheme( $item );
+			return is_string( $scheme_key ) ? $scheme_key : '';
+		}
+		$scheme_key = $item->get_meta( '_wcsatt_scheme', true );
+		return is_string( $scheme_key ) ? $scheme_key : '';
 	}
 
 	/**

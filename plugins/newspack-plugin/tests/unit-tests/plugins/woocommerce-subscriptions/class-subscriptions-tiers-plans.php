@@ -406,4 +406,74 @@ class Newspack_Test_Subscriptions_Tiers_Plans extends WP_UnitTestCase {
 
 		$this->assertSame( 'year_1', $frequency );
 	}
+
+	/**
+	 * A subscription created back when the site ran the standalone All
+	 * Products for Subscriptions plugin (pre-WCS-9.0) carries the APFS-v1
+	 * meta key `_wcsatt_scheme_id`, not the current `_wcsatt_scheme`. The
+	 * scheme lookup must still resolve it via `WCS_ATT_Order::get_subscription_scheme()`
+	 * rather than reading `_wcsatt_scheme` directly, or these are exactly the
+	 * publishers most likely to have plan-based products - the ones who were
+	 * early on APFS - and they'd silently drop to the weaker billing-period
+	 * fallback instead.
+	 */
+	public function test_get_current_tier_resolves_the_v1_scheme_key() {
+		$user_id = self::factory()->user->create();
+
+		$plans = [
+			'mkey' => [
+				'period'   => 'month',
+				'interval' => 1,
+			],
+			'ykey' => [
+				'period'   => 'year',
+				'interval' => 1,
+			],
+		];
+
+		$parent = wc_create_mock_product(
+			[
+				'id'       => 370,
+				'type'     => 'variable',
+				'children' => [ 371 ],
+			]
+		);
+		$this->give_plans( 370, $plans );
+		wc_create_mock_product(
+			[
+				'id'        => 371,
+				'type'      => 'variation',
+				'parent_id' => 370,
+			]
+		);
+		$this->give_plans( 371, $plans );
+
+		$tiers = \Newspack\Subscriptions_Tiers::get_tiers_by_frequency( $parent );
+		$this->assertSame( [ 'month_1', 'year_1' ], array_keys( $tiers ), 'Precondition: both buckets exist.' );
+
+		// The v1 key, no `_wcsatt_scheme` present - and a billing period/interval
+		// that would itself resolve to the *wrong* bucket if the v1 key weren't
+		// read, proving the scheme-key path (not the fallback) is what matched.
+		$item = new WC_Order_Item_Product(
+			[
+				'id'         => 901,
+				'product_id' => 371,
+				'meta'       => [ '_wcsatt_scheme_id' => 'ykey' ],
+			]
+		);
+		wcs_create_subscription(
+			[
+				'customer_id'      => $user_id,
+				'status'           => 'active',
+				'products'         => [ 371 ],
+				'items'            => [ $item ],
+				'billing_period'   => 'month',
+				'billing_interval' => 1,
+			]
+		);
+
+		[ $frequency ] = \Newspack\Subscriptions_Tiers::get_current_tier( $tiers, $user_id );
+
+		$this->assertSame( 'year_1', $frequency );
+	}
 }
