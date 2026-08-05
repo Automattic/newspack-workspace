@@ -287,6 +287,39 @@ class Subscriptions_Tiers {
 	}
 
 	/**
+	 * Billing period and interval for a product, plan-aware.
+	 *
+	 * Prefers the subscription plan stamped on the product instance, because the
+	 * legacy meta is either absent under the plan model or a hardcoded default
+	 * unrelated to the configured plan.
+	 *
+	 * @param \WC_Product $product Product object.
+	 *
+	 * @return array{period: string, interval: int} Billing period and interval.
+	 */
+	public static function get_frequency_parts( $product ) {
+		$plan_key = WooCommerce_Subscriptions::get_active_plan_key( $product );
+		if ( $plan_key ) {
+			$plans = WooCommerce_Subscriptions::get_subscription_plans( $product );
+			if ( isset( $plans[ $plan_key ] ) && method_exists( $plans[ $plan_key ], 'get_period' ) ) {
+				$period = $plans[ $plan_key ]->get_period();
+				if ( ! empty( $period ) ) {
+					$interval = (int) $plans[ $plan_key ]->get_interval();
+					return [
+						'period'   => $period,
+						'interval' => $interval > 0 ? $interval : 1,
+					];
+				}
+			}
+		}
+
+		return [
+			'period'   => (string) $product->get_meta( '_subscription_period' ),
+			'interval' => (int) $product->get_meta( '_subscription_period_interval' ),
+		];
+	}
+
+	/**
 	 * Get tiered products by frequency given a grouped or
 	 * variable subscription product.
 	 *
@@ -635,11 +668,12 @@ class Subscriptions_Tiers {
 		$price  = '';
 		if ( ! $is_nyp ) {
 			if ( function_exists( 'wcs_price_string' ) ) {
+				$parts = self::get_frequency_parts( $product );
 				$price = wcs_price_string(
 					[
 						'recurring_amount'      => $product->get_price(),
-						'subscription_period'   => $product->get_meta( '_subscription_period' ),
-						'subscription_interval' => $product->get_meta( '_subscription_period_interval' ),
+						'subscription_period'   => $parts['period'],
+						'subscription_interval' => $parts['interval'],
 					]
 				);
 			} else {
@@ -689,13 +723,15 @@ class Subscriptions_Tiers {
 		$symbol    = get_woocommerce_currency_symbol();
 		$currency  = get_woocommerce_currency();
 		$value     = $product->get_price();
-		$frequency = $product->get_meta( '_subscription_period' );
-		$interval  = $product->get_meta( '_subscription_period_interval' );
+		$parts     = self::get_frequency_parts( $product );
+		$frequency = $parts['period'];
+		$interval  = $parts['interval'];
 
 		if ( $switch_subscription ) {
 			$base_product   = wc_get_product( $switch_subscription['item']['product_id'] );
-			$base_frequency = $base_product->get_meta( '_subscription_period' );
-			$base_interval  = $base_product->get_meta( '_subscription_period_interval' );
+			$base_parts     = self::get_frequency_parts( $base_product );
+			$base_frequency = $base_parts['period'];
+			$base_interval  = $base_parts['interval'];
 			$base_amount    = $switch_subscription['item']['line_total'] / $base_interval;
 
 			// Get the direct conversion multiplier from base frequency to target frequency.

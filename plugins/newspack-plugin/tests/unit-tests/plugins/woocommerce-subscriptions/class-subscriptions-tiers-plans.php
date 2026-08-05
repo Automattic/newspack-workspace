@@ -476,4 +476,39 @@ class Newspack_Test_Subscriptions_Tiers_Plans extends WP_UnitTestCase {
 
 		$this->assertSame( 'year_1', $frequency );
 	}
+
+	/**
+	 * Card period and interval follow the stamped plan, not the legacy meta the
+	 * editor stamps on generated variations.
+	 */
+	public function test_frequency_parts_follow_the_plan() {
+		$product = wc_create_mock_product(
+			[
+				'id'   => 340,
+				'type' => 'variable',
+				'meta' => [
+					'_subscription_period'          => 'month',
+					'_subscription_period_interval' => '1',
+				],
+			]
+		);
+		$this->give_plans(
+			340,
+			[
+				'ykey' => [
+					'period'   => 'year',
+					'interval' => 2,
+				],
+			]
+		);
+		WCS_ATT_Product_Schemes::set_subscription_scheme( $product, 'ykey' );
+
+		$this->assertSame(
+			[
+				'period'   => 'year',
+				'interval' => 2,
+			],
+			\Newspack\Subscriptions_Tiers::get_frequency_parts( $product )
+		);
+	}
 }
