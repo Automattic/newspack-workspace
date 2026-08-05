@@ -11,7 +11,6 @@ use Newspack\Reader_Activation\Sync\Contact_Metadata;
 use Newspack\Reader_Activation\Sync\Legacy_Metadata;
 use Newspack\Reader_Activation\Sync\Metadata;
 use Newspack\Access_Attribution;
-use Newspack\Access_Rules;
 use Newspack\Content_Gate as Content_Gate_CPT;
 use Newspack\Group_Subscription;
 use Newspack\Institution;
