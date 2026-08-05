@@ -41,15 +41,32 @@ jest.mock( '@wordpress/edit-post', () => ( {
 
 jest.mock( '@wordpress/api-fetch' );
 
-jest.mock( '@wordpress/components', () => ( {
-	Notice: ( { children } ) => <div>{ children }</div>,
-	Button: ( { children, onClick, disabled } ) => (
-		<button onClick={ onClick } disabled={ disabled }>
-			{ children }
-		</button>
-	),
-	__experimentalVStack: ( { children } ) => <div>{ children }</div>,
-} ) );
+jest.mock( '@wordpress/components', () => {
+	const { forwardRef } = require( 'react' );
+	return {
+		Notice: ( { children } ) => <div>{ children }</div>,
+		Button: ( { children, onClick, disabled } ) => (
+			<button onClick={ onClick } disabled={ disabled }>
+				{ children }
+			</button>
+		),
+		// A suggestion card is the radio the publisher picks before applying.
+		Card: forwardRef( ( props, ref ) => (
+			<div
+				ref={ ref }
+				role={ props.role }
+				aria-checked={ props[ 'aria-checked' ] }
+				tabIndex={ props.tabIndex }
+				onClick={ props.onClick }
+				onKeyDown={ props.onKeyDown }
+			>
+				{ props.children }
+			</div>
+		) ),
+		CardBody: ( { children } ) => <div>{ children }</div>,
+		__experimentalVStack: ( { children } ) => <div>{ children }</div>,
+	};
+} );
 
 const PATTERN_ID = 12;
 const NO_COPY_FIELD = 'The Contextual Prompt pattern has no editable copy field, so generated copy cannot be applied.';
@@ -80,6 +97,12 @@ const unbound = { name: 'core/paragraph', attributes: { metadata: { name: 'Promp
 
 let ContextualPromptPanel;
 const dispatchers = {};
+
+// A suggestion is picked from the list, then applied with the one Apply button.
+const pickAndApply = async () => {
+	fireEvent.click( await screen.findByRole( 'radio' ) );
+	fireEvent.click( screen.getByText( 'Apply' ) );
+};
 
 beforeAll( () => {
 	window.newspackPopupsContextualPrompt = { enabled: true, patternId: String( PATTERN_ID ) };
@@ -126,7 +149,8 @@ describe( 'ContextualPromptPanel', () => {
 		render( <ContextualPromptPanel /> );
 
 		fireEvent.click( screen.getByText( 'Generate Suggestions' ) );
-		fireEvent.click( await screen.findByText( 'Apply' ) );
+		expect( await screen.findByText( 'Apply' ) ).toBeDisabled();
+		await pickAndApply();
 
 		expect( dispatchers.insertBlock ).toHaveBeenCalledWith(
 			{ name: 'core/block', attributes: { ref: PATTERN_ID, content: { 'Prompt copy': { content: 'Support us.' } } } },
@@ -144,6 +168,7 @@ describe( 'ContextualPromptPanel', () => {
 		fireEvent.click( screen.getByText( 'Generate Suggestions' ) );
 		await screen.findByText( 'Regenerate Suggestions' );
 
+		expect( screen.queryByRole( 'radio' ) ).toBeNull();
 		expect( screen.queryByText( 'Apply' ) ).toBeNull();
 		expect( dispatchers.insertBlock ).not.toHaveBeenCalled();
 	} );
@@ -164,7 +189,7 @@ describe( 'ContextualPromptPanel', () => {
 
 		render( <ContextualPromptPanel /> );
 		fireEvent.click( screen.getByText( 'Regenerate Suggestions' ) );
-		fireEvent.click( await screen.findByText( 'Apply' ) );
+		await pickAndApply();
 
 		expect( dispatchers.updateBlockAttributes ).toHaveBeenCalledWith( 'copy', { content: 'Support us.' } );
 		expect( dispatchers.selectBlock ).toHaveBeenCalledWith( 'card' );
@@ -179,7 +204,7 @@ describe( 'ContextualPromptPanel', () => {
 
 		render( <ContextualPromptPanel /> );
 		fireEvent.click( screen.getByText( 'Regenerate Suggestions' ) );
-		fireEvent.click( await screen.findByText( 'Apply' ) );
+		await pickAndApply();
 
 		expect( screen.queryByText( NO_COPY_FIELD ) ).toBeNull();
 		expect( dispatchers.updateBlockAttributes ).toHaveBeenCalledWith( 'copy', { content: 'Support us.' } );

@@ -1,20 +1,34 @@
 @use "~@wordpress/base-styles/variables" as wp-vars;
 
 .newspack-popups {
-	&__contextual-prompt-candidate {
+	&__contextual-prompt-candidates {
 		margin-top: wp-vars.$grid-unit-20;
 	}
 
-	// The stroke token ships in this bundle with the newspack-components styles;
-	// the fallback matches its value.
-	&__contextual-prompt-candidate-divider {
-		border: none;
-		border-top: 1px solid var(--wpds-color-stroke-surface-neutral-weak, #f0f0f0);
-		margin: 0 0 wp-vars.$grid-unit-20;
+	&__contextual-prompt-candidate {
+		cursor: pointer;
+
+		&:hover,
+		&[aria-checked="true"] {
+			background: color-mix(in srgb, var(--wp-components-color-accent, var(--wp-admin-theme-color)) 4%, transparent);
+			box-shadow: 0 0 0 var(--wp-admin-border-width-focus, 2px) var(--wp-admin-theme-color);
+			color: var(--wp-components-color-accent, var(--wp-admin-theme-color));
+		}
+
+		&:focus-visible {
+			box-shadow: 0 0 0 currentcolor inset, 0 0 0 var(--wp-admin-border-width-focus) var(--wp-components-color-accent, var(--wp-admin-theme-color));
+			outline: none;
+		}
 	}
 
 	&__contextual-prompt-candidate-body {
-		margin: wp-vars.$grid-unit-05 0 wp-vars.$grid-unit-10;
+		margin: wp-vars.$grid-unit-05 0 0;
+	}
+
+	&__contextual-prompt-apply {
+		justify-content: center;
+		margin-top: wp-vars.$grid-unit-20;
+		width: 100%;
 	}
 
 	&__contextual-prompt-generate {

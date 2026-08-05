@@ -11,7 +11,9 @@
  */
 import { __, sprintf } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
-import { Button } from '@wordpress/components';
+import { useRef, useState } from '@wordpress/element';
+// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
+import { Button, Card, CardBody, __experimentalVStack as VStack } from '@wordpress/components';
 import { escapeHTML } from '@wordpress/escape-html';
 
 // The block editor and the document-settings panel are separate entries with
@@ -119,30 +121,103 @@ export const GenerateButton = ( { busy, onClick, children } ) => (
 	</Button>
 );
 
-export const CandidateList = ( { candidates, onApply } ) =>
-	candidates.map( ( candidate, index ) => {
-		const framingLabel = FRAMING_LABELS[ candidate.framing ] || candidate.framing;
-		return (
-			<div key={ index } className="newspack-popups__contextual-prompt-candidate">
-				{ index > 0 && <hr className="newspack-popups__contextual-prompt-candidate-divider" /> }
-				<strong>{ framingLabel }</strong>
-				<p className="newspack-popups__contextual-prompt-candidate-body">{ candidate.body }</p>
-				<Button
-					variant="primary"
-					size="small"
-					onClick={ () => onApply( candidate ) }
-					aria-label={
-						framingLabel
-							? sprintf(
-									/* translators: %s: the suggestion's framing label, e.g. "Top of Post". */
-									__( 'Apply suggestion: %s', 'newspack-popups' ),
-									framingLabel
-							  )
-							: undefined
-					}
-				>
-					{ __( 'Apply', 'newspack-popups' ) }
-				</Button>
-			</div>
-		);
-	} );
+// Arrow keys move the selection within a radiogroup, in either orientation.
+const ARROW_STEPS = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 };
+
+export const CandidateList = ( { candidates, onApply } ) => {
+	const [ selected, setSelected ] = useState( -1 );
+	const [ listed, setListed ] = useState( candidates );
+	const cardRefs = useRef( [] );
+
+	// Regenerating replaces the list, so a selection made against the previous
+	// one points at copy nobody chose.
+	if ( listed !== candidates ) {
+		setListed( candidates );
+		setSelected( -1 );
+	}
+
+	if ( ! candidates.length ) {
+		return null;
+	}
+
+	const select = index => {
+		setSelected( index );
+		cardRefs.current[ index ]?.focus();
+	};
+
+	const onKeyDown = ( event, index ) => {
+		const step = ARROW_STEPS[ event.key ];
+		if ( step ) {
+			event.preventDefault();
+			const from = 0 > selected ? index : selected;
+			select( ( from + step + candidates.length ) % candidates.length );
+			return;
+		}
+		if ( 'Enter' === event.key || ' ' === event.key ) {
+			event.preventDefault();
+			select( index );
+		}
+	};
+
+	// Roving tab stop: the group is one stop, entered on the selection or, with
+	// nothing selected, on the first card.
+	const tabStop = 0 > selected ? 0 : selected;
+
+	return (
+		<>
+			<VStack
+				spacing={ 4 }
+				className="newspack-popups__contextual-prompt-candidates"
+				role="radiogroup"
+				aria-label={ __( 'Suggestions', 'newspack-popups' ) }
+			>
+				{ candidates.map( ( candidate, index ) => {
+					const framingLabel = FRAMING_LABELS[ candidate.framing ] || candidate.framing;
+					return (
+						<Card
+							key={ index }
+							ref={ node => {
+								cardRefs.current[ index ] = node;
+							} }
+							className="newspack-popups__contextual-prompt-candidate"
+							size="small"
+							role="radio"
+							aria-checked={ index === selected }
+							aria-label={
+								framingLabel
+									? sprintf(
+											/* translators: %1$s: the suggestion's framing label, e.g. "Top of Post". %2$s: the suggested copy. */
+											__( 'Suggestion (%1$s): %2$s', 'newspack-popups' ),
+											framingLabel,
+											candidate.body
+									  )
+									: sprintf(
+											/* translators: %s: the suggested copy. */
+											__( 'Suggestion: %s', 'newspack-popups' ),
+											candidate.body
+									  )
+							}
+							tabIndex={ index === tabStop ? 0 : -1 }
+							onClick={ () => select( index ) }
+							onKeyDown={ event => onKeyDown( event, index ) }
+						>
+							<CardBody>
+								{ framingLabel && <strong>{ framingLabel }</strong> }
+								<p className="newspack-popups__contextual-prompt-candidate-body">{ candidate.body }</p>
+							</CardBody>
+						</Card>
+					);
+				} ) }
+			</VStack>
+			<Button
+				variant="primary"
+				__next40pxDefaultSize
+				className="newspack-popups__contextual-prompt-apply"
+				disabled={ 0 > selected }
+				onClick={ () => onApply( candidates[ selected ] ) }
+			>
+				{ __( 'Apply', 'newspack-popups' ) }
+			</Button>
+		</>
+	);
+};
