@@ -218,7 +218,7 @@ class Newspack_Popups_Settings {
 	 * @return string 'form' or 'button'.
 	 */
 	public static function get_override_cta() {
-		if ( ! Newspack_Popups_Contextual_Prompt_Block::use_donate_block() ) {
+		if ( ! Newspack_Popups_Contextual_Prompt_Pattern::use_donate_block() ) {
 			return 'button';
 		}
 		return 'button' === get_option( self::OVERRIDE_CTA_OPTION, 'form' ) ? 'button' : 'form';
@@ -309,7 +309,7 @@ class Newspack_Popups_Settings {
 
 		// The form/button choice only exists where a native donate form exists;
 		// off-site sites are always button mode.
-		if ( ! Newspack_Popups_Contextual_Prompt_Block::use_donate_block() ) {
+		if ( ! Newspack_Popups_Contextual_Prompt_Pattern::use_donate_block() ) {
 			$fields = array_values(
 				array_filter(
 					$fields,

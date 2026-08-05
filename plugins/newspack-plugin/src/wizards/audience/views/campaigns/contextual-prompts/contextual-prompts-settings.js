@@ -32,12 +32,12 @@ import { Button, Divider, Grid, Modal, SectionHeader } from '../../../../../../p
 import WizardsTab from '../../../../wizards-tab';
 
 const DISCLOSURE = __(
-	"Contextual Prompts lets editors draft donation call-to-action copy with AI. The story's content is sent to a third-party AI provider, which retains it for up to 30 days for abuse monitoring and never uses it to train AI models or in other AI products. Every suggestion is a draft an editor reviews and approves; nothing is published automatically.",
+	'Story content is sent to a third-party AI provider, which retains it for up to 30 days for abuse monitoring and never uses it to train AI models. Every suggestion is a draft an editor reviews and approves; nothing is published automatically.',
 	'newspack-plugin'
 );
 
 const CONFIRMATION = __(
-	'Some newsrooms restrict AI use by policy or union agreement; by enabling this, you confirm yours permits it. Only administrators can change this setting, and you can turn it off at any time.',
+	'Some newsrooms restrict AI use by policy or union agreement; by enabling this, you confirm your newsroom permits it. You can turn it off at any time.',
 	'newspack-plugin'
 );
 
@@ -71,7 +71,7 @@ const ContextualPromptsSettings = ( { status, values, error, inFlight, onSetValu
 							icon={ megaphone }
 							title={ __( 'Get started with Contextual Prompts', 'newspack-plugin' ) }
 							description={ __(
-								'Let editors generate story-specific donation prompts with AI. Approved copy appears in the story as a Contextual Prompt block, pairing a tailored message with your donation call to action.',
+								'Let editors generate story-specific donation prompts with AI. Approved copy appears in the story as a Contextual Prompt, pairing a tailored message with your donation call to action.',
 								'newspack-plugin'
 							) }
 							pageHeader

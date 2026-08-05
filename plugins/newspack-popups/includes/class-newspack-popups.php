@@ -110,19 +110,23 @@ final class Newspack_Popups {
 		include_once __DIR__ . '/class-newspack-segments-migration.php';
 		include_once __DIR__ . '/class-newspack-segments-model.php';
 		include_once __DIR__ . '/class-newspack-popups-presets.php';
-		include_once __DIR__ . '/class-newspack-popups-contextual-prompt-block.php';
+		include_once __DIR__ . '/class-newspack-popups-contextual-prompt-pattern.php';
+		// Registered whether or not the feature is on: rolling the flag back must
+		// not leave the pattern deletable, since deleting it and re-enabling would
+		// orphan every instance a site already published.
+		Newspack_Popups_Contextual_Prompt_Pattern::init_protection();
 		if ( self::is_contextual_prompts_enabled() ) {
-			Newspack_Popups_Contextual_Prompt_Block::init();
+			Newspack_Popups_Contextual_Prompt_Pattern::init();
 		}
-		include_once __DIR__ . '/class-newspack-popups-contextual-prompt-styles.php';
+		include_once __DIR__ . '/class-newspack-popups-contextual-prompt-render.php';
 		if ( self::is_contextual_prompts_enabled() ) {
-			Newspack_Popups_Contextual_Prompt_Styles::init();
+			Newspack_Popups_Contextual_Prompt_Render::init();
 		}
-		// Feature off — rollout flag absent OR admin opt-in withdrawn: strip any
-		// stored Contextual Prompt markup so it never reaches the front end as an
-		// orphaned call to action (or keeps a stale site-wide override alive).
-		// The opt-in is an option, so it is checked at render time.
-		add_filter( 'render_block', [ __CLASS__, 'maybe_strip_contextual_prompt_block' ], 10, 2 );
+		// Registered whether or not the feature is on, so turning it off hides the
+		// prompts a site already publishes — and so a post saved on the beta, when
+		// a prompt was its own block, stops rendering an unmanaged card.
+		add_filter( 'render_block_core/block', [ 'Newspack_Popups_Contextual_Prompt_Render', 'maybe_strip_instance' ], 8, 2 );
+		add_filter( 'render_block', [ 'Newspack_Popups_Contextual_Prompt_Render', 'strip_legacy_block' ], 8, 2 );
 		include_once __DIR__ . '/class-newspack-popups-inserter.php';
 		include_once __DIR__ . '/class-newspack-popups-api.php';
 		include_once __DIR__ . '/class-newspack-popups-settings.php';
@@ -792,41 +796,6 @@ final class Newspack_Popups {
 	}
 
 	/**
-	 * Strip Contextual Prompt blocks from rendered output when the feature is
-	 * not fully on: the rollout flag must be defined AND the admin opt-in active.
-	 * Checked at render time because the opt-in is an option an admin can flip
-	 * without a reload; without this, disabling the feature would leave stored
-	 * prompts (and a live site-wide override) rendering with no UI to stop them.
-	 *
-	 * @param string $block_content The block's rendered HTML.
-	 * @param array  $block         The parsed block.
-	 * @return string
-	 */
-	public static function maybe_strip_contextual_prompt_block( $block_content, $block ) {
-		if ( self::is_contextual_prompts_enabled() && Newspack_Popups_Settings::is_ai_copy_assistant_enabled() ) {
-			return $block_content;
-		}
-		return self::strip_contextual_prompt_block( $block_content, $block );
-	}
-
-	/**
-	 * Strip Contextual Prompt blocks from rendered output.
-	 *
-	 * A pure function: returns '' for a Contextual Prompt block, the content
-	 * unchanged for any other block — so it is testable without toggling the flag.
-	 *
-	 * @param string $block_content The block's rendered HTML.
-	 * @param array  $block         The parsed block.
-	 * @return string
-	 */
-	public static function strip_contextual_prompt_block( $block_content, $block ) {
-		if ( isset( $block['blockName'] ) && Newspack_Popups_Contextual_Prompt_Block::BLOCK_NAME === $block['blockName'] ) {
-			return '';
-		}
-		return $block_content;
-	}
-
-	/**
 	 * Load block assets in the editor.
 	 */
 	public static function enqueue_block_assets() {
@@ -842,15 +811,9 @@ final class Newspack_Popups {
 			return;
 		}
 
-		// The blocks bundle also loads in the widgets editor, Site Editor and
-		// customizer, where the Contextual Prompt block cannot be authored: it
-		// needs the core/editor post context. Only post-editor screens carry a
-		// post type, and the generation API only accepts the popups-supported
-		// post types. The block still registers everywhere the feature is on, so
-		// the Site Editor lists it under Styles > Blocks — which is where the
-		// wizard's block-theme handoff sends publishers to style it.
-		$screen                   = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
-		$is_supported_post_editor = $screen && ! empty( $screen->post_type ) && in_array( $screen->post_type, Newspack_Popups_Model::get_default_popup_post_types(), true );
+		// The rollout flag plus the admin opt-in: nothing Contextual Prompts is
+		// exposed, and no pattern is seeded, before the AI disclosure is accepted.
+		$contextual_prompts_enabled = self::is_contextual_prompts_enabled() && Newspack_Popups_Settings::is_ai_copy_assistant_enabled();
 
 		$blocks_asset = require $blocks_asset_path;
 		\wp_enqueue_script(
@@ -869,29 +832,17 @@ final class Newspack_Popups {
 				'endpoint'                      => '/newspack-popups/v1/prompts',
 				'post_type'                     => self::NEWSPACK_POPUPS_CPT,
 				'is_prompt'                     => self::NEWSPACK_POPUPS_CPT == get_post_type(),
-				// Gates client-side registration of the Contextual Prompt block:
-				// the rollout flag plus the admin opt-in, so nothing registers
-				// before the AI disclosure is accepted.
-				'contextual_prompts_enabled'    => self::is_contextual_prompts_enabled() && Newspack_Popups_Settings::is_ai_copy_assistant_enabled(),
-				// Whether this screen can author one. Registration is wider than
-				// insertion so the Site Editor can style the block, but only a
-				// supported post editor offers it in the inserter.
-				'contextual_prompts_insertable' => $is_supported_post_editor,
-				// So the editor previews the Contextual Prompt CTA in the same
-				// accent the front end resolves at render.
-				'accent_color'                  => Newspack_Popups_Contextual_Prompt_Block::get_accent_color(),
+				// Gates the Contextual Prompt inspector on the client.
+				'contextual_prompts_enabled'    => $contextual_prompts_enabled,
+				// The pattern every Contextual Prompt instance references, which is
+				// how the editor recognizes one.
+				'contextual_prompts_pattern_id' => $contextual_prompts_enabled ? Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id() : 0,
 				// The edited content's own noun ("post", "page", "listing"…), so
 				// prompt UI strings speak the publisher's language.
 				'post_type_label'               => self::get_current_post_type_label(),
 				// The label as the post type declares it, for headings; recasing
 				// the lowercased noun client-side would mis-case some locales.
 				'post_type_heading'             => self::get_current_post_type_heading(),
-				// Whether the Contextual Prompt CTA is the native donate block
-				// or a plain button.
-				'donations_native'              => Newspack_Popups_Contextual_Prompt_Block::use_donate_block(),
-				// Default target for the plain-button CTA: the donor landing
-				// page, when one is configured in Campaigns settings.
-				'donor_landing_url'             => self::get_donor_landing_url(),
 			]
 		);
 
@@ -978,11 +929,16 @@ final class Newspack_Popups {
 				// The script also carries the long-standing "Disable prompts" panel,
 				// so only the Contextual Prompt data is gated on the rollout flag.
 				if ( self::is_contextual_prompts_enabled() ) {
+					$opted_in = Newspack_Popups_Settings::is_ai_copy_assistant_enabled();
 					\wp_localize_script(
 						'newspack-popups',
 						'newspackPopupsContextualPrompt',
 						[
-							'enabled'         => Newspack_Popups_Settings::is_ai_copy_assistant_enabled(),
+							'enabled'         => $opted_in,
+							// The pattern instances the panel inserts and updates.
+							// Reading the id seeds it, so it is only asked for once
+							// the site has opted in.
+							'patternId'       => $opted_in ? Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id() : 0,
 							'postTypeLabel'   => self::get_current_post_type_label(),
 							'postTypeHeading' => self::get_current_post_type_heading(),
 						]
