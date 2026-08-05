@@ -49,7 +49,7 @@ export default function Institutions() {
 		const actions: HeaderAction[] = [
 			{
 				type: 'secondary',
-				label: __( 'Back to Access control', 'newspack-plugin' ),
+				label: __( 'Back to Access Control', 'newspack-plugin' ),
 				icon: 'chevronLeft',
 				href: '#/content-gates',
 			},
@@ -57,12 +57,11 @@ export default function Institutions() {
 		if ( data.length !== 0 ) {
 			actions.push( {
 				type: 'primary',
-				label: __( 'Add new institution', 'newspack-plugin' ),
+				label: __( 'Add Institution', 'newspack-plugin' ),
 				href: '#/institutions/new',
 			} );
 		}
 		setHeaderData( {
-			sectionName: __( 'Institutions', 'newspack-plugin' ),
 			actions,
 		} );
 	}, [ setHeaderData, data, isLoading ] );
@@ -96,6 +95,17 @@ export default function Institutions() {
 					return url ? <img src={ url } alt={ item.title.raw } /> : null;
 				},
 				enableSorting: false,
+			},
+			{
+				id: 'id',
+				label: __( 'ID', 'newspack-plugin' ),
+				// The integer type gives numeric sorting; suppress its default filter so ID stays a
+				// searchable, sortable column without adding a lone numeric filter to the toolbar.
+				type: 'integer',
+				filterBy: false,
+				enableGlobalSearch: true,
+				getValue: ( { item }: { item: Institution } ) => item.id,
+				render: ( { item }: { item: Institution } ) => <code>{ item.id }</code>,
 			},
 			{
 				id: 'title',

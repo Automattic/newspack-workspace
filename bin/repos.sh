@@ -49,3 +49,41 @@ get_repo_host_path() {
 	done
 	echo ""
 }
+
+# Maps a name to its standalone checkout under the gitignored repos/ dir,
+# returning the host-side path relative to the workspace root (e.g.
+# "repos/plugins/newspack-manager") or "" when no such checkout exists.
+#
+# Host-side only: needs $NABSPATH (the workspace root), so never call this from
+# code that runs inside the container, where repos.sh is sourced without it.
+# Monorepo plugins/themes take precedence, so callers should try
+# get_repo_host_path first and fall back to this.
+get_standalone_repo_host_path() {
+	local name="$1"
+	if [[ -d "$NABSPATH/repos/plugins/$name" ]]; then
+		echo "repos/plugins/$name"
+	elif [[ -d "$NABSPATH/repos/themes/$name" ]]; then
+		echo "repos/themes/$name"
+	else
+		echo ""
+	fi
+}
+
+# Verifies that a repos/ checkout is its own git repository (so a worktree can
+# be created from it). Some repos/ entries are plain unzipped plugins whose git
+# lookups resolve up to the monorepo's own .git — those cannot be worktree'd.
+# Prints nothing; returns 0 when standalone, 1 otherwise. Needs $NABSPATH.
+#
+# Both toplevels are taken from git (physical, symlink-resolved paths) so the
+# comparison holds even when $NABSPATH reaches the workspace through a symlink
+# (bin/_common.sh derives it with a plain `pwd`, which keeps symlinks). A raw
+# string compare against $NABSPATH would misclassify an unzipped plugin as
+# standalone in that case.
+is_standalone_git_repo() {
+	local host_path="$1"
+	local dir="$NABSPATH/$host_path"
+	local toplevel monorepo_toplevel
+	toplevel=$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null)
+	monorepo_toplevel=$(git -C "$NABSPATH" rev-parse --show-toplevel 2>/dev/null)
+	[[ -n "$toplevel" && "$toplevel" != "$monorepo_toplevel" ]]
+}

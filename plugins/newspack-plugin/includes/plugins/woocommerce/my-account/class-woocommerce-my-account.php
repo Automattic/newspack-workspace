@@ -323,7 +323,7 @@ class WooCommerce_My_Account {
 				'newspack-my-account',
 				\Newspack\Newspack::plugin_url() . '/dist/my-account.js',
 				[],
-				NEWSPACK_PLUGIN_VERSION,
+				\Newspack\Newspack::asset_version( 'my-account' ),
 				true
 			);
 			\wp_localize_script(
@@ -525,7 +525,7 @@ class WooCommerce_My_Account {
 				self::DELETE_ACCOUNT_FORM => $form_nonce,
 				'token'                   => $token,
 			],
-			\wc_get_account_endpoint_url( 'edit-account' )
+			My_Account::get_endpoint_url( My_Account::ENDPOINT_EDIT_ACCOUNT )
 		);
 		\set_transient( 'np_reader_account_delete_' . $user_id, $token, DAY_IN_SECONDS );
 
@@ -899,12 +899,14 @@ class WooCommerce_My_Account {
 	 * @return string The filtered destination URL.
 	 */
 	public static function redirect_to_home_after_logout( $redirect_to ) {
-		if ( ! function_exists( 'wc_get_page_permalink' ) ) {
-			return;
-		}
-
-		if ( \wc_get_page_permalink( 'myaccount' ) === $redirect_to ) {
-			$redirect_to = \get_home_url();
+		// Compare without a trailing slash: on the WooCommerce path
+		// My_Account::get_endpoint_url() resolves to the dashboard endpoint URL,
+		// which can differ from $redirect_to by a trailing slash even though both
+		// point at the account page. Normalizing keeps the redirect-home behavior
+		// equivalent to the previous wc_get_page_permalink( 'myaccount' ) check.
+		$account_url = My_Account::get_endpoint_url();
+		if ( $account_url && \untrailingslashit( $account_url ) === \untrailingslashit( $redirect_to ) ) {
+			return \get_home_url();
 		}
 
 		return $redirect_to;

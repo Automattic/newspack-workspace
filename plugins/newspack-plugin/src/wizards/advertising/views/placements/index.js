@@ -168,7 +168,9 @@ const Placements = () => {
 		<Fragment>
 			{ ! inFlight && ! providers.length && <Notice isWarning noticeText={ __( 'There is no provider available.', 'newspack-plugin' ) } /> }
 			<Grid columns={ 12 } noMargin gutter={ 0 }>
-				<h1 style={ { gridColumn: 'span 4' } }>{ __( 'Placements', 'newspack-plugin' ) }</h1>
+				<h2 className="newspack-wizard__heading" style={ { gridColumn: 'span 4' } }>
+					{ __( 'Placements', 'newspack-plugin' ) }
+				</h2>
 				<VStack
 					spacing={ 4 }
 					style={ { gridColumn: 'span 8' } }
@@ -189,6 +191,13 @@ const Placements = () => {
 							hasAdUnit = Object.keys( placement.hooks ).every( hookKey => !! placement.data?.hooks?.[ hookKey ]?.ad_unit );
 						}
 
+						/* translators: %s: placement name (e.g. "Sticky Footer"). */
+						const editButtonLabel = sprintf( __( 'Edit %s', 'newspack-plugin' ), placement.name );
+						/* translators: %s: placement name (e.g. "Sticky Footer"). */
+						const cancelButtonLabel = sprintf( __( 'Cancel editing %s', 'newspack-plugin' ), placement.name );
+						/* translators: %s: placement name (e.g. "Sticky Footer"). */
+						const enableButtonLabel = sprintf( __( 'Enable %s', 'newspack-plugin' ), placement.name );
+
 						return (
 							<CardForm
 								key={ key }
@@ -204,6 +213,8 @@ const Placements = () => {
 										<Button
 											variant="tertiary"
 											size="compact"
+											// Load-bearing: the grid stack keeps both labels in the DOM (only `visibility: hidden`), so this aria-label is the button's only clean accessible name.
+											aria-label={ isEditing ? cancelButtonLabel : editButtonLabel }
 											disabled={ inFlight || ( !! editingPlacement && ! isEditing ) }
 											onClick={ () => {
 												if ( isEditing ) {
@@ -214,12 +225,20 @@ const Placements = () => {
 												}
 											} }
 										>
-											{ isEditing ? __( 'Cancel', 'newspack-plugin' ) : __( 'Edit', 'newspack-plugin' ) }
+											<span className="newspack-wizard-ads-placements__toggle-label">
+												<span className={ classnames( { 'is-visible': isEditing } ) }>
+													{ __( 'Cancel', 'newspack-plugin' ) }
+												</span>
+												<span className={ classnames( { 'is-visible': ! isEditing } ) }>
+													{ __( 'Edit', 'newspack-plugin' ) }
+												</span>
+											</span>
 										</Button>
 									) : (
 										<Button
 											variant="secondary"
 											size="compact"
+											aria-label={ enableButtonLabel }
 											isBusy={ inFlight }
 											disabled={ inFlight || ! providers.length || !! editingPlacement }
 											onClick={ () => handlePlacementToggle( key )( true ) }

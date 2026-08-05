@@ -14,6 +14,11 @@
 	svg {
 		transition: fill 125ms ease-in-out;
 	}
+	// Slot for a pre-rendered icon element that owns its own badge.
+	&__icon-slot {
+		align-items: center;
+		display: flex;
+	}
 	&__icon {
 		border-radius: wp-vars.$radius-round;
 		display: grid;
@@ -149,6 +154,15 @@
 		border: none;
 		cursor: pointer;
 		text-align: left;
+
+		// The header becomes a real button (headerIsButton) with no border, so
+		// give keyboard focus an explicit on-brand ring. Inset so it isn't clipped
+		// by the card; the transparent outline keeps it visible under Windows High
+		// Contrast / forced-colors mode.
+		&:focus-visible {
+			box-shadow: inset 0 0 0 2px var(--wp-admin-theme-color);
+			outline: 2px solid transparent;
+		}
 	}
 	&__header-content {
 		display: grid;

@@ -1,0 +1,180 @@
+name: Dependabot pnpm.overrides sync
+
+# When Dependabot bumps a pnpm override (e.g. @typescript-eslint/parser), it
+# updates the `overrides:` block in pnpm-lock.yaml but does not touch the
+# matching `pnpm.overrides` block in package.json. That leaves
+# `pnpm install --frozen-lockfile` rejecting the lockfile, which the
+# `Install deps` job in ci.yml only catches when a source package also
+# changed -- so a lockfile-only Dependabot PR can auto-merge with a broken
+# state.
+#
+# This workflow patches package.json to match the lockfile and pushes the
+# fix back to the Dependabot branch before auto-merge completes. Pairs with
+# the path-trigger in ci.yml so manual lockfile edits are also caught.
+
+on:
+  pull_request_target:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+# Serialize per-PR: a fresh event supersedes any in-flight run on the same PR.
+# Without this, concurrent runs (opened + synchronize from Dependabot rebase,
+# or label/edit churn) race on `git push` and the loser fails non-fast-forward,
+# posting a red check on the PR. Mirrors dependabot-branch-auto-update.yml.
+concurrency:
+  group: dependabot-sync-overrides-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    name: Sync pnpm.overrides with lockfile
+    # Gate on the PR author (stable across pushes) rather than github.actor
+    # (per-event pusher). github.actor changes to whoever last pushed -- so on
+    # a synchronize event triggered by a human collaborator amending the PR,
+    # github.actor would be the human and the sync would skip exactly when a
+    # manual edit most needs reconciling. PR author stays dependabot[bot].
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    # Single-sourced here so the loop-break gate (which matches HEAD's commit
+    # subject against this string) and the commit step that writes it can never
+    # drift apart. Job-level env is inherited by every step's run shell.
+    env:
+      SYNC_COMMIT_SUBJECT: 'build(deps): sync package.json pnpm.overrides with lockfile'
+    steps:
+      # SECURITY INVARIANT (pull_request_target): this job is privileged --
+      # `contents: write` plus a PAT -- and it checks out an attacker-
+      # influenceable tree (anyone with write access can push to a Dependabot
+      # branch). Every step below MUST treat that tree as DATA ONLY: git
+      # plumbing, yaml.safe_load, json.load. NEVER execute anything from it --
+      # no `pnpm install`, no build, no lifecycle scripts. Running checked-out
+      # code here would hand it the PAT (the classic pull_request_target RCE).
+      # Keep this job read-as-data; do not add execution steps.
+      #
+      # PAT, not GITHUB_TOKEN: a push from GITHUB_TOKEN does not re-fire CI on
+      # the PR, which would leave required checks pending forever. Same reason
+      # as dependabot-branch-auto-update.yml.
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GH_TOKEN }}
+          ref: ${{ github.event.pull_request.head.ref }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          fetch-depth: 0
+
+      - name: Skip if head is sync's own commit or lockfile unchanged
+        id: lockfile
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          # Loop-break: gating on user.login (above) keeps the sync running
+          # on the workflow's own PAT-authored push, so guard against a re-sync
+          # of an already-synced HEAD here. Without this, every sync push would
+          # spin up a second run that does nothing useful.
+          head_subject=$(git log -1 --format='%s')
+          if [ "$head_subject" = "$SYNC_COMMIT_SUBJECT" ]; then
+            echo "HEAD is the sync workflow's own commit; nothing to do."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # If Dependabot rebased the PR after the workflow was queued, the
+          # original base.sha may no longer be reachable in the head fork's
+          # local history. Fetch it explicitly so the diff below doesn't fail
+          # with "fatal: bad revision".
+          git fetch --no-tags --depth=1 origin "$BASE_SHA" 2>/dev/null || true
+
+          # -F: fixed string, not a regex. Avoids the unescaped-dot pitfall
+          # ('pnpm-lock.yaml' as a regex matches 'pnpm-lockXyaml').
+          if git diff --name-only "$BASE_SHA...HEAD" \
+            | grep -Fqx 'pnpm-lock.yaml'; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Sync overrides
+        if: steps.lockfile.outputs.changed == 'true'
+        id: sync
+        run: |
+          python3 <<'PY'
+          import json, os
+          import yaml  # PyYAML is preinstalled on ubuntu-latest runners.
+
+          with open('pnpm-lock.yaml') as f:
+              lock = yaml.safe_load(f) or {}
+          with open('package.json') as f:
+              pkg = json.load(f)
+
+          # `(d.get('k') or {})` instead of `d.get('k', {})`: dict.get returns
+          # None when the key exists with value null, and `None.get(...)` would
+          # crash. Coercing None to {} keeps the chain safe.
+          lock_ov = lock.get('overrides') or {}
+          pkg_ov  = (pkg.get('pnpm') or {}).get('overrides') or {}
+
+          # YAML's safe_load coerces numeric-looking values to int/float
+          # (`foo: 8` -> int 8, `foo: 5.3` -> float 5.3). package.json overrides
+          # must be strings; without str() on both sides of the compare, a
+          # future bump pinning a two-part version would silently write an
+          # unquoted JSON number into package.json and break pnpm.
+          def _str(v):
+              return v if isinstance(v, str) else str(v)
+
+          # Only sync keys already present in package.json. package.json is
+          # the source of truth for *which* deps we override; the lockfile is
+          # the source of truth for their resolved versions. Never add or
+          # remove keys -- those decisions require a human change.
+          changed = []
+          stale = []
+          for key, val in pkg_ov.items():
+              if key not in lock_ov:
+                  stale.append(key)
+                  continue
+              new_val = _str(lock_ov[key])
+              if new_val != _str(val):
+                  changed.append(f'{key}: {val} -> {new_val}')
+                  pkg_ov[key] = new_val
+
+          # Surface (but don't fix) keys present in package.json but missing
+          # from the lockfile. `pnpm install --frozen-lockfile` will still
+          # reject that mismatch; ci.yml's path-trigger catches it. Removing
+          # keys is a deliberate human change, not a sync.
+          if stale:
+              print('::warning::package.json has pnpm.overrides keys not in '
+                    'pnpm-lock.yaml (' + ', '.join(stale) + '); the lockfile '
+                    'is stale or a human needs to remove the entries.')
+
+          if changed:
+              pkg['pnpm']['overrides'] = pkg_ov
+              with open('package.json', 'w') as f:
+                  # package.json is tab-indented in this repo. ensure_ascii=False
+                  # preserves UTF-8 rather than rewriting non-ASCII chars as
+                  # \uXXXX escapes (which would produce large unrelated diffs
+                  # the first time package.json picks up a non-ASCII char).
+                  json.dump(pkg, f, indent='\t', ensure_ascii=False)
+                  f.write('\n')
+              flag = 'changed=true'
+              print('Synced overrides:')
+              for c in changed:
+                  print(f'  {c}')
+          else:
+              flag = 'changed=false'
+              print('No mismatch found between package.json and pnpm-lock.yaml.')
+
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write(flag + '\n')
+          PY
+
+      - name: Commit and push
+        if: steps.sync.outputs.changed == 'true'
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          git config user.name  'dependabot[bot]'
+          git config user.email '49699333+dependabot[bot]@users.noreply.github.com'
+          git add package.json
+          git commit -m "$SYNC_COMMIT_SUBJECT"
+          # Explicit refspec so the push target is unambiguous even if the
+          # checkout left the local branch without an upstream.
+          git push origin "HEAD:$HEAD_REF"

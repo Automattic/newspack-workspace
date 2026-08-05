@@ -205,9 +205,11 @@ class Newspack_Test_Frontend_Registration_Endpoint extends WP_UnitTestCase {
 		if ( $user ) {
 			wp_delete_user( $user->ID );
 		}
-		// Reset rate limit state.
+		// Reset rate limit state for both buckets.
 		delete_transient( 'newspack_reg_ip_' . md5( '127.0.0.1' ) );
 		wp_cache_delete( 'newspack_reg_ip_' . md5( '127.0.0.1' ), 'newspack_rate_limit' );
+		delete_transient( 'newspack_check_email_ip_' . md5( '127.0.0.1' ) );
+		wp_cache_delete( 'newspack_check_email_ip_' . md5( '127.0.0.1' ), 'newspack_rate_limit' );
 		// Clean up any $_POST pollution.
 		unset( $_POST['g-recaptcha-response'] );
 		parent::tear_down();
@@ -757,5 +759,308 @@ class Newspack_Test_Frontend_Registration_Endpoint extends WP_UnitTestCase {
 		$integrations = Reader_Registration::get_frontend_registration_integrations();
 		$this->assertArrayHasKey( 'registry-test', $integrations );
 		$this->assertEquals( 'Registry Test', $integrations['registry-test'] );
+	}
+
+	/**
+	 * Helper to make a /check-email preflight request.
+	 *
+	 * @param array $body Request body.
+	 * @return WP_REST_Response
+	 */
+	private function do_check_email_request( $body = [] ) {
+		$request = new WP_REST_Request( 'POST', '/newspack/v1/reader-activation/check-email' );
+		$request->set_header( 'Content-Type', 'application/json' );
+		$request->set_body( wp_json_encode( $body ) );
+		return $this->server->dispatch( $request );
+	}
+
+	/**
+	 * /check-email returns `exists: true` only for accounts that are readers — a
+	 * staff / admin / editor that shares the email must surface as `exists: false`
+	 * so the endpoint can't be used to enumerate non-reader logins.
+	 */
+	public function test_check_email_reader_vs_non_reader() {
+		$reader_email     = 'check-reader@test.com';
+		$non_reader_email = 'check-editor@test.com';
+		$reader_id        = Reader_Activation::register_reader( $reader_email, 'Reader' );
+		wp_set_current_user( 0 );
+		$non_reader_id = self::factory()->user->create(
+			[
+				'user_email' => $non_reader_email,
+				'role'       => 'editor',
+			]
+		);
+
+		// Reader account → exists: true.
+		$response = $this->do_check_email_request( [ 'email' => $reader_email ] );
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertTrue( $response->get_data()['exists'], 'A reader account must surface as exists:true.' );
+
+		// Non-reader (editor) sharing an email → exists: false (privacy filter).
+		$response = $this->do_check_email_request( [ 'email' => $non_reader_email ] );
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertFalse( $response->get_data()['exists'], 'Non-reader accounts must surface as exists:false to prevent enumeration.' );
+
+		// Unknown email → exists: false.
+		$response = $this->do_check_email_request( [ 'email' => 'nobody@test.com' ] );
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertFalse( $response->get_data()['exists'] );
+
+		// Clean up.
+		wp_delete_user( $reader_id );
+		wp_delete_user( $non_reader_id );
+	}
+
+	/**
+	 * /check-email must reject missing or invalid email addresses with a 400 — the
+	 * frontend confirmation-modal helper relies on this to fall open via its
+	 * res.ok gate instead of treating malformed input as exists:false.
+	 */
+	public function test_check_email_invalid_email_rejected() {
+		// Missing email entirely.
+		$response = $this->do_check_email_request( [] );
+		$this->assertEquals( 400, $response->get_status(), 'Missing email must return 400.' );
+
+		// Malformed email.
+		$response = $this->do_check_email_request( [ 'email' => 'not-an-email' ] );
+		$this->assertEquals( 400, $response->get_status(), 'Malformed email must return 400.' );
+	}
+
+	/**
+	 * /check-email has its own per-IP rate-limit bucket separate from /register so
+	 * an enumeration sweep can't be unbounded while still allowing legitimate
+	 * users 10 full registrations per hour (1 preflight + 1 register per
+	 * submission, each bucket counted independently).
+	 */
+	public function test_check_email_rate_limit() {
+		add_filter(
+			'newspack_frontend_registration_rate_limit',
+			static function ( $limit, $ip, $bucket = 'registration' ) {
+				return 'check_email' === $bucket ? 2 : $limit;
+			},
+			10,
+			3
+		);
+
+		$ok1 = $this->do_check_email_request( [ 'email' => 'rl-a@test.com' ] );
+		$this->assertEquals( 200, $ok1->get_status(), '1st check-email under the limit must succeed.' );
+
+		$ok2 = $this->do_check_email_request( [ 'email' => 'rl-b@test.com' ] );
+		$this->assertEquals( 200, $ok2->get_status(), '2nd check-email under the limit must succeed.' );
+
+		$blocked = $this->do_check_email_request( [ 'email' => 'rl-c@test.com' ] );
+		$this->assertEquals( 429, $blocked->get_status(), 'Over-limit check-email must return 429.' );
+
+		remove_all_filters( 'newspack_frontend_registration_rate_limit' );
+		delete_transient( 'newspack_check_email_ip_' . md5( '127.0.0.1' ) );
+		wp_cache_delete( 'newspack_check_email_ip_' . md5( '127.0.0.1' ), 'newspack_rate_limit' );
+	}
+
+	/**
+	 * The /check-email rate-limit bucket must NOT consume the /register budget.
+	 * A legitimate user submission (1 preflight + 1 register) should still buy 10
+	 * full registrations per hour regardless of how many preflights happened.
+	 */
+	public function test_check_email_does_not_drain_registration_bucket() {
+		// Saturate the check-email bucket.
+		add_filter(
+			'newspack_frontend_registration_rate_limit',
+			static function ( $limit, $ip, $bucket = 'registration' ) {
+				return 'check_email' === $bucket ? 1 : $limit;
+			},
+			10,
+			3
+		);
+		$ok      = $this->do_check_email_request( [ 'email' => 'bucket-a@test.com' ] );
+		$blocked = $this->do_check_email_request( [ 'email' => 'bucket-b@test.com' ] );
+		$this->assertEquals( 200, $ok->get_status() );
+		$this->assertEquals( 429, $blocked->get_status(), 'check-email bucket must saturate independently.' );
+
+		// /register cache key must still be untouched.
+		$register_attempts = (int) get_transient( 'newspack_reg_ip_' . md5( '127.0.0.1' ) );
+		$this->assertSame( 0, $register_attempts, '/register bucket must remain at 0 after exhausting /check-email.' );
+
+		// Object cache fallback path.
+		$wp_cache_attempts = (int) wp_cache_get( 'newspack_reg_ip_' . md5( '127.0.0.1' ), 'newspack_rate_limit' );
+		$this->assertSame( 0, $wp_cache_attempts, '/register object-cache bucket must remain at 0.' );
+
+		remove_all_filters( 'newspack_frontend_registration_rate_limit' );
+		delete_transient( 'newspack_check_email_ip_' . md5( '127.0.0.1' ) );
+		wp_cache_delete( 'newspack_check_email_ip_' . md5( '127.0.0.1' ), 'newspack_rate_limit' );
+	}
+
+	/**
+	 * Metadata sent to the endpoint must not be able to set state the site trusts.
+	 * The endpoint is unauthenticated, so reader state (email verification), reader
+	 * data (which content gates read) and WordPress account state are all off limits.
+	 */
+	public function test_register_metadata_cannot_write_reserved_keys() {
+		global $wpdb;
+
+		$caps_key = $wpdb->get_blog_prefix() . 'capabilities';
+
+		$response = $this->do_register_request(
+			[
+				'npe'             => self::$reader_email,
+				'integration_id'  => self::$integration_id,
+				'integration_key' => self::generate_key( self::$integration_id ),
+				'metadata'        => [
+					'np_reader_email_verified'           => '1',
+					'_np_reader_email_verified'          => '1',
+					'newspack_reader_data_item_is_donor' => 'injected-reader-data',
+					'newspack_reader_data_keys'          => 'injected-key-list',
+					'_newspack_group_subscription'       => 'injected-subscription',
+					$caps_key                            => 'administrator',
+					'wpcom_user_id'                      => '12345',
+					'_stripe_customer_id'                => 'cus_attacker',
+					'_wcpay_customer_id'                 => 'cus_attacker',
+					'_wcpay_customer_id_live'            => 'cus_attacker',
+					'_wcpay_customer_id_test'            => 'cus_attacker',
+					'session_tokens'                     => 'injected-session',
+					'_application_passwords'             => 'injected-password',
+					'partner_member_id'                  => 'abc-123',
+				],
+			]
+		);
+
+		$this->assertEquals( 201, $response->get_status() );
+		$user = get_user_by( 'email', self::$reader_email );
+		$this->assertInstanceOf( 'WP_User', $user );
+
+		$this->assertFalse(
+			Reader_Activation::is_reader_verified( $user ),
+			'Request metadata must not be able to mark the reader email-verified.'
+		);
+		$this->assertSame(
+			'',
+			get_user_meta( $user->ID, 'newspack_reader_data_item_is_donor', true ),
+			'Request metadata must not be able to write reader data that access rules read.'
+		);
+		$this->assertSame(
+			'',
+			get_user_meta( $user->ID, '_newspack_group_subscription', true ),
+			'Request metadata must not be able to write underscore-prefixed Newspack keys.'
+		);
+		// Identifiers other systems resolve their own records against. get_user_option()
+		// falls back to the unprefixed key, so an unprefixed write is what gets read.
+		foreach ( [ 'wpcom_user_id', '_stripe_customer_id', '_wcpay_customer_id', '_wcpay_customer_id_live', '_wcpay_customer_id_test' ] as $identity_key ) {
+			$this->assertSame(
+				'',
+				get_user_meta( $user->ID, $identity_key, true ),
+				sprintf( 'Request metadata must not be able to claim another account via "%s".', $identity_key )
+			);
+			$this->assertFalse(
+				get_user_option( $identity_key, $user->ID ),
+				sprintf( 'get_user_option() must not resolve a caller-supplied "%s".', $identity_key )
+			);
+		}
+
+		// Registration authenticates the new reader, so these two may legitimately hold
+		// a real value. What must never happen is a caller-supplied scalar landing in
+		// them, which is what their consumers would choke on.
+		foreach ( [ 'newspack_reader_data_keys', 'session_tokens', '_application_passwords' ] as $array_key ) {
+			$stored = get_user_meta( $user->ID, $array_key, true );
+			$this->assertTrue(
+				'' === $stored || is_array( $stored ),
+				sprintf( 'Request metadata must not be able to write a scalar into "%s".', $array_key )
+			);
+		}
+
+		// The harm at the capabilities key is not escalation — sanitize_text_field()
+		// makes the value a scalar, which core ignores — it is that writing a scalar
+		// replaces the role array, stripping the account of every role.
+		$caps = get_user_meta( $user->ID, $caps_key, true );
+		$this->assertIsArray(
+			$caps,
+			'Request metadata must not be able to overwrite the capabilities meta.'
+		);
+		$this->assertArrayNotHasKey( 'administrator', $caps );
+		$this->assertNotEmpty( $caps, 'The account keeps the role register_reader() gave it.' );
+
+		// The drop is reported back, so an integration author can tell "saved" from
+		// "silently discarded".
+		$data = $response->get_data();
+		$this->assertArrayHasKey( 'skipped_metadata_keys', $data );
+		$this->assertContains( 'np_reader_email_verified', $data['skipped_metadata_keys'] );
+		$this->assertNotContains( 'partner_member_id', $data['skipped_metadata_keys'] );
+
+		// The prefixed account keys are blocked but not echoed. Echoing only the one
+		// matching this install would tell an unauthenticated caller the table prefix.
+		$this->assertNotContains(
+			$caps_key,
+			$data['skipped_metadata_keys'],
+			'The response must not disclose which table prefix matched.'
+		);
+
+		// Keys outside the reserved set still write: the metadata contract that
+		// integrations rely on is unchanged.
+		$this->assertSame(
+			'abc-123',
+			get_user_meta( $user->ID, 'partner_member_id', true ),
+			'Non-reserved metadata keys must still be saved.'
+		);
+	}
+
+	/**
+	 * Reserved-key classification, including the case and whitespace variants a
+	 * caller could use to try to slip past the guard.
+	 */
+	public function test_is_reserved_meta_key() {
+		global $wpdb;
+
+		$reserved = [
+			'np_reader',
+			'np_reader_email_verified',
+			'_np_reader',
+			'newspack_reader_data_keys',
+			'newspack_reader_data_item_is_donor',
+			'_newspack_anything',
+			'wp_capabilities',
+			'wp_user_level',
+			'wp_2_capabilities',
+			'wp_2_user_level',
+			$wpdb->base_prefix . 'capabilities',
+			$wpdb->base_prefix . '3_capabilities',
+			$wpdb->base_prefix . 'user_level',
+			'wpcom_user_id',
+			'_stripe_customer_id',
+			'_wcpay_customer_id',
+			'_wcpay_customer_id_live',
+			'_wcpay_customer_id_test',
+			'session_tokens',
+			'_application_passwords',
+			'wp_user-settings',
+			'wp_user-settings-time',
+			$wpdb->base_prefix . 'user-settings',
+			$wpdb->base_prefix . 'user-settings-time',
+			'default_password_nag',
+			'NP_Reader_Email_Verified',
+			'  np_reader  ',
+			'np\\_reader',
+			'',
+		];
+		foreach ( $reserved as $key ) {
+			$this->assertTrue(
+				Reader_Registration::is_reserved_meta_key( $key ),
+				sprintf( 'Key "%s" must be treated as reserved.', $key )
+			);
+		}
+
+		$allowed = [
+			'partner_member_id',
+			'billing_city',
+			'nps_score',
+			'newspaper_subscriber_id',
+			'crm_contact_id',
+			'capabilities',
+			'user_level',
+			'reader_source',
+		];
+		foreach ( $allowed as $key ) {
+			$this->assertFalse(
+				Reader_Registration::is_reserved_meta_key( $key ),
+				sprintf( 'Key "%s" must remain writable.', $key )
+			);
+		}
 	}
 }

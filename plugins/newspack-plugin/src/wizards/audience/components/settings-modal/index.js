@@ -3,11 +3,12 @@
  */
 import { __, sprintf } from '@wordpress/i18n';
 import { useState } from '@wordpress/element';
+import { __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 
 /**
  * Internal dependencies.
  */
-import { Button, Card, CategoryAutocomplete, Grid, Modal, SelectControl, Settings, hooks } from '../../../../../packages/components/src';
+import { Button, CategoryAutocomplete, Grid, Modal, SelectControl, Settings, hooks } from '../../../../../packages/components/src';
 import { frequenciesForPopup, isOverlay, placementsForPopups, overlaySizesForPopups } from '../../views/campaigns/utils';
 
 const { SettingsCard } = Settings;
@@ -171,14 +172,14 @@ const PromptSettingsModal = ( { prompt, disabled, onClose, updatePopup } ) => {
 				</SettingsCard>
 			</Grid>
 
-			<Card buttonsCard noBorder className="justify-end">
+			<HStack justify="flex-end" spacing={ 4 } wrap className="newspack-modal__footer">
 				<Button onClick={ onClose } variant="secondary">
 					{ __( 'Cancel', 'newspack-plugin' ) }
 				</Button>
 				<Button onClick={ handleSave } variant="primary">
 					{ __( 'Save', 'newspack-plugin' ) }
 				</Button>
-			</Card>
+			</HStack>
 		</Modal>
 	);
 };

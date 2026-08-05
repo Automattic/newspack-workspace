@@ -51,7 +51,7 @@ export const LogsView = ( { integrations, match } ) => {
 	useEffect( () => {
 		if ( integration ) {
 			setHeaderData( {
-				sectionName: `${ integration.name } / ${ __( 'Logs', 'newspack-plugin' ) }`,
+				sectionName: [ { label: integration.name, url: `#/settings/${ integrationId }` }, { label: __( 'Logs', 'newspack-plugin' ) } ],
 				actions: [
 					{
 						type: 'secondary',
@@ -62,7 +62,7 @@ export const LogsView = ( { integrations, match } ) => {
 				],
 			} );
 		}
-	}, [ integration, setHeaderData ] );
+	}, [ integration, integrationId, setHeaderData ] );
 
 	const statusFilter = view.filters?.find( f => f.field === 'status' )?.value;
 
