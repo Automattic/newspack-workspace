@@ -172,19 +172,41 @@ class Inert_Gating_Notice {
 	 * excerpts and applies relevance ordering). Bounded to one row and cached by
 	 * the caller.
 	 *
+	 * Constrained by post type so the `type_status_date` index is usable: without
+	 * it MySQL full-scans wp_posts (`type: ALL, key: NULL`), with it the plan drops
+	 * to a range scan. The list is derived rather than hardcoded, because any post
+	 * type could carry these blocks — `show_in_rest` is the prerequisite for the
+	 * block editor, so it cannot miss one, and it excludes `revision`, which is
+	 * usually the largest slice of the table. `wp_block` has to stay in: a post
+	 * embedding a reusable block carries only a `wp:block` reference, so the
+	 * attributes live on the `wp_block` post alone.
+	 *
 	 * @return bool
 	 */
 	private static function has_block_rules(): bool {
 		global $wpdb;
+
+		$post_types = get_post_types( [ 'show_in_rest' => true ], 'names' );
+		if ( empty( $post_types ) ) {
+			return false;
+		}
+
+		$placeholders = implode( ', ', array_fill( 0, count( $post_types ), '%s' ) );
+		$values       = array_values( $post_types );
+		$values[]     = '%' . $wpdb->esc_like( self::BLOCK_ATTRIBUTE_PREFIX ) . '%';
+
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $placeholders is a generated list of %s, one per post type; every value is passed through prepare().
 		$found = $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 			$wpdb->prepare(
 				"SELECT ID FROM {$wpdb->posts}
-				WHERE post_status = 'publish'
+				WHERE post_type IN ( $placeholders )
+				AND post_status = 'publish'
 				AND post_content LIKE %s
 				LIMIT 1",
-				'%' . $wpdb->esc_like( self::BLOCK_ATTRIBUTE_PREFIX ) . '%'
+				$values
 			)
 		);
+		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		return ! empty( $found );
 	}
 
