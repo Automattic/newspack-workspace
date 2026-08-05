@@ -46,25 +46,10 @@
 	}
 }
 
-/*
- * The site editor pins `.edit-site` to the viewport (`position: fixed`, top 0,
- * `100vh` tall), so the banner would sit underneath it instead of pushing it
- * down. `newspack-handoff-banner-visible` and the measured offset come from the
- * banner component — the space to clear at the top of the document, which is the
- * banner plus anything above it, not just its own height. Shift the editor down
- * and shrink it by that much. The offsets are scoped to this screen, so nothing
- * else reacts to the class.
- */
 $banner-height: var(--newspack-handoff-banner-height, 0px);
 
 .newspack-handoff-banner-visible body.post-php,
 .newspack-handoff-banner-visible body.post-new-php {
-	/*
-	 * The editor root reserves a full viewport below the banner, so the document
-	 * scrolls by the space the banner takes — and the pinned editor stays put
-	 * while the banner is carried out of sight. Stick it to the top instead, in a
-	 * container tall enough to stick within.
-	 */
 	#wpcontent {
 		min-height: 100vh;
 	}
@@ -86,8 +71,6 @@ $banner-height: var(--newspack-handoff-banner-height, 0px);
 		top: $banner-height;
 	}
 
-	// In full-canvas mode the sidebar region is fixed to the viewport rather
-	// than to `.edit-site`, so it needs the same treatment.
 	.edit-site-layout.is-full-canvas .edit-site-layout__sidebar-region {
 		height: calc(100vh - #{$banner-height});
 		top: $banner-height;
