@@ -305,6 +305,11 @@ class GoogleSiteKit {
 		if ( Content_Gate::is_newspack_feature_enabled() ) {
 			$group_labels    = self::get_user_group_labels( $current_user );
 			$params['group'] = empty( $group_labels ) ? 'none' : implode( ', ', $group_labels );
+
+			$access_source = self::get_request_access_source();
+			if ( '' !== $access_source ) {
+				$params['access_source'] = $access_source;
+			}
 		}
 
 		/**
@@ -355,6 +360,94 @@ class GoogleSiteKit {
 		}
 		sort( $labels, SORT_NATURAL | SORT_FLAG_CASE );
 		return $labels;
+	}
+
+	/**
+	 * How the current reader got into the post being viewed.
+	 *
+	 * Scoped to gates with custom access active, mirroring how the ESP scopes
+	 * the Content Access fields. Registration-mode gates are excluded: reader
+	 * account state is already reported by `is_reader` and `logged_in`, and
+	 * detecting a regwall pass would mean reimplementing verification logic
+	 * that lives in Content_Restriction_Control.
+	 *
+	 * Every call here is free of side effects. In particular it must never
+	 * reach Metering::is_logged_in_metering_allowed(), which records a metered
+	 * view as it answers.
+	 *
+	 * @return string A vocabulary value, or '' to omit the parameter.
+	 */
+	public static function get_request_access_source() {
+		if ( ! is_singular() ) {
+			return 'no_custom_access_gate';
+		}
+
+		$post_id    = get_the_ID();
+		$gates      = [];
+		$unreadable = false;
+		foreach ( (array) Content_Restriction_Control::get_post_gates( $post_id ) as $gate ) {
+			if ( is_wp_error( $gate ) ) {
+				$unreadable = true;
+				continue;
+			}
+			if ( ! empty( $gate['custom_access']['active'] ) ) {
+				$gates[] = $gate;
+			}
+		}
+		if ( empty( $gates ) ) {
+			// A gate we could not read is not the same as no gate. Omit the
+			// parameter rather than assert a state that was never computed;
+			// GA4's (not set) is the honest answer for "we don't know".
+			return $unreadable ? '' : 'no_custom_access_gate';
+		}
+
+		$user_id      = get_current_user_id();
+		$labels       = [];
+		$unrestricted = false;
+		$meters       = false;
+
+		foreach ( $gates as $gate ) {
+			$result = User_Gate_Access::evaluate_gate_for_user( $gate, $user_id );
+
+			// A gate whose custom access is on but whose rule set is empty
+			// restricts nobody, so it is not evidence of gating.
+			if ( empty( $result['groups'] ) ) {
+				$unrestricted = true;
+				continue;
+			}
+
+			if ( ! empty( $gate['id'] ) && Metering::offers_metering( $gate['id'] ) ) {
+				$meters = true;
+			}
+
+			if ( empty( $result['can_bypass'] ) ) {
+				continue;
+			}
+
+			foreach ( $result['groups'] as $group ) {
+				if ( empty( $group['passes'] ) ) {
+					continue;
+				}
+				foreach ( $group['rules'] as $rule ) {
+					if ( empty( $rule['passes'] ) ) {
+						continue;
+					}
+					$labels = array_merge(
+						$labels,
+						Access_Attribution::get_source_labels( $rule['slug'], $rule['value'], $user_id, $result['context'] ?? [] )
+					);
+				}
+			}
+		}
+
+		$primary = Access_Attribution::pick_primary( array_values( array_unique( $labels ) ) );
+		if ( '' !== $primary ) {
+			return $primary;
+		}
+		if ( $unrestricted ) {
+			return 'no_custom_access_gate';
+		}
+		return $meters ? 'metering_eligible' : 'gated';
 	}
 
 	/**
