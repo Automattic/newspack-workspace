@@ -26,6 +26,8 @@ class Newspack_Test_InDesign_Exporter extends WP_UnitTestCase {
 	 * inline at the end of each test) makes failures self-contained.
 	 */
 	public function tear_down() {
+		unset( $GLOBALS['_test_cap_coauthors'] );
+
 		delete_option( InDesign_Exporter::POST_TYPES_OPTION );
 		delete_option( InDesign_Exporter::EXCLUDE_CAPTIONS_OPTION );
 
@@ -472,6 +474,9 @@ class Newspack_Test_InDesign_Exporter extends WP_UnitTestCase {
 
 	/**
 	 * Test converting HTML entities.
+	 *
+	 * The bracket entities resolve to escaped literals rather than bare brackets,
+	 * which Tagged Text would read as tag delimiters.
 	 */
 	public function test_convert_html_entities() {
 		$post_id = $this->factory->post->create(
@@ -483,7 +488,7 @@ class Newspack_Test_InDesign_Exporter extends WP_UnitTestCase {
 
 		$converter = new InDesign_Converter();
 		$content = $converter->convert_post( $post_id );
-		$this->assertStringContainsString( '<pstyle:text>This is a test post with  , &, <, > and <CharStyle:bullet>n<CharStyle:>.', $content );
+		$this->assertStringContainsString( '<pstyle:text>This is a test post with  , &, \\<, \\> and <CharStyle:bullet>n<CharStyle:>.', $content );
 	}
 
 	/**
@@ -869,8 +874,8 @@ class Newspack_Test_InDesign_Exporter extends WP_UnitTestCase {
 
 		$converter = new InDesign_Converter();
 		$content = $converter->convert_post( $post_id );
-		$this->assertStringContainsString( '<pstyle:PhotoCaption>Image Caption with <0x00E1> <0x00E9> <0x00ED> <0x00F3> <0x00FA> <0x00F1> <0x00E7> <0x00F0> <0x00F0>  , &, <, > and <CharStyle:bullet>n<CharStyle:>.', $content );
-		$this->assertStringContainsString( '<pstyle:PhotoCredit>Image Credit with <0x00E1> <0x00E9> <0x00ED> <0x00F3> <0x00FA> <0x00F1> <0x00E7> <0x00F0> <0x00F0>  , &, <, > and <CharStyle:bullet>n<CharStyle:>.', $content );
+		$this->assertStringContainsString( '<pstyle:PhotoCaption>Image Caption with <0x00E1> <0x00E9> <0x00ED> <0x00F3> <0x00FA> <0x00F1> <0x00E7> <0x00F0> <0x00F0>  , &, \\<, \\> and <CharStyle:bullet>n<CharStyle:>.', $content );
+		$this->assertStringContainsString( '<pstyle:PhotoCredit>Image Credit with <0x00E1> <0x00E9> <0x00ED> <0x00F3> <0x00FA> <0x00F1> <0x00E7> <0x00F0> <0x00F0>  , &, \\<, \\> and <CharStyle:bullet>n<CharStyle:>.', $content );
 	}
 
 	/**
@@ -1059,5 +1064,197 @@ class Newspack_Test_InDesign_Exporter extends WP_UnitTestCase {
 		$without   = $converter->convert_post( $without_image, [ 'include_captions' => false ] );
 
 		$this->assertSame( $without, $with );
+	}
+
+	/**
+	 * Test that angle brackets written as entities in the body survive as escaped
+	 * literals.
+	 *
+	 * Tagged Text reserves < and > as tag delimiters, so a literal one has to be
+	 * backslash-escaped. An article about HTML that mentions "<div>" would
+	 * otherwise reach InDesign as an unknown tag.
+	 */
+	public function test_escapes_angle_brackets_in_body_content() {
+		$post_id = $this->factory->post->create(
+			[
+				'post_title'   => 'Test Post',
+				'post_content' => '<p>Use &lt;div&gt; tags for layout.</p>',
+			]
+		);
+
+		$converter = new InDesign_Converter();
+		$content   = $converter->convert_post( $post_id );
+
+		$this->assertStringContainsString( '<pstyle:text>Use \\<div\\> tags for layout.', $content );
+		$this->assertStringNotContainsString( '<div>', $content );
+	}
+
+	/**
+	 * Test that angle brackets inside a block are escaped rather than swallowed.
+	 *
+	 * Block inner HTML is converted before the body-wide HTML-to-tag pass, so an
+	 * unescaped "<div>" here was consumed by the unsupported-tag removal and the
+	 * text vanished from the export entirely.
+	 */
+	public function test_escapes_angle_brackets_in_block_content() {
+		$post_id = $this->factory->post->create(
+			[
+				'post_title'   => 'Test Post',
+				'post_content' => '<!-- wp:paragraph --><p>Use &lt;div&gt; tags for layout.</p><!-- /wp:paragraph -->',
+			]
+		);
+
+		$converter = new InDesign_Converter();
+		$content   = $converter->convert_post( $post_id );
+
+		$this->assertStringContainsString( '<pstyle:text>Use \\<div\\> tags for layout.', $content );
+		$this->assertStringNotContainsString( '<div>', $content );
+	}
+
+	/**
+	 * Test that a comparison written with bare angle brackets is escaped.
+	 *
+	 * Generic copy like "a < b" carries no markup intent but still hits the
+	 * Tagged Text grammar.
+	 */
+	public function test_escapes_bare_angle_brackets_in_body_content() {
+		$post_id = $this->factory->post->create(
+			[
+				'post_title'   => 'Test Post',
+				'post_content' => '<p>The rule is a &lt; b and c &gt; d.</p>',
+			]
+		);
+
+		$converter = new InDesign_Converter();
+		$content   = $converter->convert_post( $post_id );
+
+		$this->assertStringContainsString( 'The rule is a \\< b and c \\> d.', $content );
+	}
+
+	/**
+	 * Test that angle brackets in the post title are escaped.
+	 *
+	 * Titles are stored unencoded, so a headline comparison arrives as a raw
+	 * bracket rather than an entity.
+	 */
+	public function test_escapes_angle_brackets_in_title() {
+		// Editors and admins hold unfiltered_html, so their titles reach the
+		// database with the brackets intact rather than kses-stripped.
+		wp_set_current_user( $this->factory->user->create( [ 'role' => 'administrator' ] ) );
+
+		$post_id = $this->factory->post->create(
+			[
+				'post_title'   => 'Why 3 < 4 and 5 > 4',
+				'post_content' => '<p>Body copy.</p>',
+			]
+		);
+
+		$converter = new InDesign_Converter();
+		$content   = $converter->convert_post( $post_id );
+
+		$this->assertStringContainsString( '<pstyle:24head>Why 3 \\< 4 and 5 \\> 4', $content );
+	}
+
+	/**
+	 * Test that angle brackets in the subtitle and byline are escaped.
+	 */
+	public function test_escapes_angle_brackets_in_subtitle_and_byline() {
+		// get_coauthors() is mocked for the whole suite, so the byline is sourced
+		// from here rather than from the post author. Cleared in tear_down().
+		$GLOBALS['_test_cap_coauthors'] = [ (object) [ 'display_name' => 'Ada <Lovelace>' ] ];
+
+		$post_id = $this->factory->post->create(
+			[
+				'post_title'   => 'Test Post',
+				'post_content' => '<p>Body copy.</p>',
+			]
+		);
+		update_post_meta( $post_id, 'newspack_post_subtitle', 'Revenue > costs' );
+
+		$converter = new InDesign_Converter();
+		$content   = $converter->convert_post( $post_id );
+
+		$this->assertStringContainsString( '<pstyle:12sub>Revenue \\> costs', $content );
+		$this->assertStringContainsString( '<pstyle:byline>By Ada \\<Lovelace\\>', $content );
+	}
+
+	/**
+	 * Test that angle brackets in photo captions and credits are escaped.
+	 */
+	public function test_escapes_angle_brackets_in_caption_and_credit() {
+		// See test_escapes_angle_brackets_in_title(): without unfiltered_html the
+		// caption's brackets would be kses-stripped before the converter sees them.
+		wp_set_current_user( $this->factory->user->create( [ 'role' => 'administrator' ] ) );
+
+		$image_id = $this->factory->attachment->create();
+		wp_update_post(
+			[
+				'ID'           => $image_id,
+				'post_excerpt' => 'Caption with <angle> brackets',
+			]
+		);
+		update_post_meta( $image_id, '_media_credit', 'Credit &lt;tag&gt;' );
+
+		$post_id = $this->factory->post->create(
+			[
+				'post_title'   => 'Test Post',
+				'post_content' => '<!-- wp:image {"id":' . $image_id . '} --><!-- /wp:image -->',
+			]
+		);
+
+		$converter = new InDesign_Converter();
+		$content   = $converter->convert_post( $post_id );
+
+		$this->assertStringContainsString( '<pstyle:PhotoCaption>Caption with \\<angle\\> brackets', $content );
+		$this->assertStringContainsString( '<pstyle:PhotoCredit>Credit \\<tag\\>', $content );
+	}
+
+	/**
+	 * Test that a literal backslash in content is escaped.
+	 *
+	 * A bare backslash is the Tagged Text escape character, so InDesign would
+	 * otherwise absorb the character that follows it.
+	 */
+	public function test_escapes_backslash_in_content() {
+		$post_id = $this->factory->post->create(
+			[
+				'post_title'   => 'Test Post',
+				// wp_insert_post() unslashes what it is given, so slash the fixture
+				// to store the single literal backslash written here.
+				'post_content' => wp_slash( '<p>Open C:\Users to continue.</p>' ),
+			]
+		);
+
+		$converter = new InDesign_Converter();
+		$content   = $converter->convert_post( $post_id );
+
+		// Two literal backslashes: the escaped form of the one above.
+		$this->assertStringContainsString( 'Open C:\\\\Users to continue.', $content );
+	}
+
+	/**
+	 * Test that escaping leaves the converter's own tags alone.
+	 *
+	 * Escaping is a content-text concern; the paragraph, heading, typeface and
+	 * code-point tags the converter emits must stay readable as markup.
+	 */
+	public function test_does_not_escape_converter_tags() {
+		$post_id = $this->factory->post->create(
+			[
+				'post_title'   => 'Test Post',
+				'post_content' => '<h2>Sub &lt;head&gt;</h2><p>Some <strong>bold</strong> text and an em—dash.</p>',
+			]
+		);
+
+		$converter = new InDesign_Converter();
+		$content   = $converter->convert_post( $post_id );
+
+		$this->assertStringContainsString( '<pstyle:h2>Sub \\<head\\>', $content );
+		$this->assertStringContainsString( '<cTypeface:Bold>bold<cTypeface:>', $content );
+		$this->assertStringContainsString( 'em<0x2014>dash', $content );
+		$this->assertStringNotContainsString( '\\<pstyle:', $content );
+		$this->assertStringNotContainsString( '\\<cTypeface:', $content );
+		$this->assertStringNotContainsString( '\\<0x2014', $content );
+		$this->assertStringNotContainsString( '\\<ASCII-WIN\\>', $content );
 	}
 }

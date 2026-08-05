@@ -118,19 +118,19 @@ class InDesign_Converter {
 		$content_parts = [];
 
 		$content_parts[] = self::START_TAG;
-		$content_parts[] = $this->styles['headline'] . $this->get_transformed_text( $post->post_title );
+		$content_parts[] = $this->styles['headline'] . $this->get_transformed_plain_text( $post->post_title );
 
 		if ( $options['include_subtitle'] ) {
 			$subtitle = $this->get_post_subtitle( $post );
 			if ( $subtitle ) {
-				$content_parts[] = $this->styles['subhead'] . $this->get_transformed_text( $subtitle );
+				$content_parts[] = $this->styles['subhead'] . $this->get_transformed_plain_text( $subtitle );
 			}
 		}
 
 		if ( $options['include_byline'] ) {
 			$byline = $this->get_byline( $post );
 			if ( ! empty( $byline ) ) {
-				$content_parts[] = $this->styles['byline'] . $this->get_transformed_text( $byline );
+				$content_parts[] = $this->styles['byline'] . $this->get_transformed_plain_text( $byline );
 			}
 		}
 
@@ -247,7 +247,11 @@ class InDesign_Converter {
 		foreach ( $blocks as $block ) {
 			$tag = $this->get_block_tag( $block );
 			if ( ! empty( $tag ) ) {
-				$content .= $tag . $this->get_transformed_text( preg_replace( '/^<[^>]+>(.*)<\/[^>]+>$/s', '$1', trim( $block['innerHTML'] ) ) );
+				// Left untransformed: process_post_content() transforms the whole
+				// body once the HTML is gone. Decoding entities here would turn a
+				// bracket the author wrote as text into a bare one, which the
+				// HTML-to-tag pass below then reads — and removes — as markup.
+				$content .= $tag . preg_replace( '/^<[^>]+>(.*)<\/[^>]+>$/s', '$1', trim( $block['innerHTML'] ) );
 			} else {
 				$content .= serialize_block( $block );
 			}
@@ -363,7 +367,9 @@ class InDesign_Converter {
 		$content = preg_replace_callback(
 			'/<h([1-6])[^>]*>(.*?)<\/h[1-6]>/is',
 			function ( $matches ) {
-				return sprintf( '<pstyle:h%d>%s', $matches[1], $this->get_transformed_text( $matches[2] ) );
+				// Heading text is transformed with the rest of the body, for the
+				// reason given in process_blocks().
+				return sprintf( '<pstyle:h%d>%s', $matches[1], $matches[2] );
 			},
 			$content
 		);
@@ -463,7 +469,31 @@ class InDesign_Converter {
 	}
 
 	/**
+	 * Convert a plain-text field for InDesign.
+	 *
+	 * Every character in these fields — titles, subtitles, bylines, captions,
+	 * credits — is content, so an angle bracket in one is text rather than a tag
+	 * delimiter. Encoding those brackets routes them through the same escaping
+	 * get_transformed_text() applies to bracket entities in the body.
+	 *
+	 * Use this instead of get_transformed_text() wherever the whole string is
+	 * known to be content. get_transformed_text() also runs over strings that
+	 * already carry the converter's own tags, where a bare bracket is markup.
+	 *
+	 * @param string $text Text to convert.
+	 *
+	 * @return string Converted text.
+	 */
+	private function get_transformed_plain_text( $text ) {
+		return $this->get_transformed_text( str_replace( [ '<', '>' ], [ '&lt;', '&gt;' ], $text ) );
+	}
+
+	/**
 	 * Convert text for InDesign, handling special characters and typography.
+	 *
+	 * Angle brackets already present in $text are left alone: this also runs over
+	 * strings carrying the converter's own tags, where they are markup. Brackets
+	 * that arrive encoded are content, and come out backslash-escaped.
 	 *
 	 * @param string $text Text to convert.
 	 *
@@ -488,11 +518,27 @@ class InDesign_Converter {
 		];
 
 		$text = str_replace( array_keys( $conversions ), array_values( $conversions ), $text );
+
+		// Escape literal backslashes before the escapes below introduce any, so
+		// those aren't escaped a second time. The converter emits no backslash of
+		// its own, so every backslash reaching this point is content.
+		$text = str_replace( '\\', '\\\\', $text );
+
+		// Angle brackets written as entities are content, not tag delimiters.
+		// Shield them from the decode below — which would hand InDesign a bare
+		// bracket to read as the start or end of a tag — then resolve them to
+		// escaped literals. Covers the named and numeric forms of both brackets.
+		$text = preg_replace( '/&(lt|gt|#0*6[02]|#[xX]0*3[cCeE]);/', '&amp;$1;', $text );
+
 		$text = html_entity_decode( $text, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+
+		$text = preg_replace( '/&(?:lt|#0*60|#[xX]0*3[cC]);/', '\\\\<', $text );
+		$text = preg_replace( '/&(?:gt|#0*62|#[xX]0*3[eE]);/', '\\\\>', $text );
+
 		// Convert remaining HTML entities.
 		$text = str_replace(
-			[ '&nbsp;', '&amp;', '&lt;', '&gt;' ],
-			[ ' ', '&', '<', '>' ],
+			[ '&nbsp;', '&amp;' ],
+			[ ' ', '&' ],
 			$text
 		);
 
@@ -620,10 +666,10 @@ class InDesign_Converter {
 
 			$tag_content .= self::EOL;
 			if ( $caption ) {
-				$tag_content .= '<pstyle:PhotoCaption>' . $this->get_transformed_text( $caption ) . self::EOL;
+				$tag_content .= '<pstyle:PhotoCaption>' . $this->get_transformed_plain_text( $caption ) . self::EOL;
 			}
 			if ( $credit ) {
-				$tag_content .= '<pstyle:PhotoCredit>' . $this->get_transformed_text( $credit ) . self::EOL;
+				$tag_content .= '<pstyle:PhotoCredit>' . $this->get_transformed_plain_text( $credit ) . self::EOL;
 			}
 		}
 
