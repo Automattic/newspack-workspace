@@ -87,9 +87,10 @@ function get_form_id() {
  * instead of through the block stylesheet, and opts out of the password
  * managers that publish an opt-out attribute.
  *
- * newspack-plugin keeps its own copy of this field, and the same submit-side
- * contract, in `Newspack\Reader_Activation::render_honeypot_field()`. Changes
- * here belong there too.
+ * newspack-plugin renders its own copy of this field in
+ * `Newspack\Reader_Activation::render_honeypot_field()`. Only the markup is
+ * duplicated — the submit-side rule defers to that plugin. Changes here belong
+ * there too.
  *
  * Not rendered if reCAPTCHA is enabled as it's a superior spam protection.
  *
@@ -106,6 +107,24 @@ function render_honeypot_field( $placeholder = '' ) {
 	?>
 	<input class="nphp" tabindex="-1" aria-hidden="true" name="email" type="email" autocomplete="off" data-1p-ignore data-lpignore="true" data-form-type="other" style="display:none;" placeholder="<?php echo \esc_attr( $placeholder ); ?>" />
 	<?php
+}
+
+/**
+ * The request fields belonging to the submission itself.
+ *
+ * The block's script posts, but the form carries no `method`, so a submission without
+ * JS arrives as a GET and that path is first-class — `send_form_response()` has its own
+ * GET branch. Reading only `$_POST` would leave those submissions unchecked, which is
+ * exactly the population that doesn't run JS. Reading `$_REQUEST` instead would let a
+ * query string fill a field the body left empty, so take the transport the submission
+ * actually used and read only that.
+ *
+ * @return array The submitted fields, still slashed.
+ */
+function get_submitted_fields() {
+	$method = \sanitize_text_field( \wp_unslash( $_SERVER['REQUEST_METHOD'] ?? '' ) );
+	// phpcs:ignore WordPress.Security.NonceVerification
+	return 'POST' === strtoupper( $method ) ? $_POST : $_GET;
 }
 
 /**
@@ -518,8 +537,8 @@ function process_form() {
 	// with reCAPTCHA the decoy isn't rendered, so a POST carries no `email` field and a
 	// query string appended to the page URL would fill the slot, making every
 	// subscription from that link report success and record nobody.
+	$submitted = get_submitted_fields();
 	// phpcs:disable WordPress.Security.NonceVerification
-	$submitted     = 'POST' === strtoupper( \sanitize_text_field( \wp_unslash( $_SERVER['REQUEST_METHOD'] ?? '' ) ) ) ? $_POST : $_GET;
 	$honeypot_trap = isset( $submitted['email'] ) && is_scalar( $submitted['email'] ) ? \sanitize_text_field( \wp_unslash( $submitted['email'] ) ) : '';
 	$real_email    = isset( $submitted['npe'] ) && is_scalar( $submitted['npe'] ) ? \sanitize_text_field( \wp_unslash( $submitted['npe'] ) ) : '';
 	// phpcs:enable WordPress.Security.NonceVerification

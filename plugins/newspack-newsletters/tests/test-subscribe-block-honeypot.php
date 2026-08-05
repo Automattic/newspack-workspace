@@ -72,6 +72,10 @@ class Subscribe_Block_Honeypot_Test extends WP_UnitTestCase {
 	/**
 	 * Call the submit-side predicate.
 	 *
+	 * This bootstrap doesn't load newspack-plugin, so these exercise the local
+	 * fallback rather than the delegating branch. newspack-plugin owns the canonical
+	 * tests for the shared helper; these keep the fallback from drifting from it.
+	 *
 	 * @param mixed $honeypot Decoy value.
 	 * @param mixed $email    Real address value.
 	 *
@@ -125,5 +129,47 @@ class Subscribe_Block_Honeypot_Test extends WP_UnitTestCase {
 	public function test_non_scalar_input_is_handled() {
 		$this->assertFalse( self::tripped( [ 'bot@spam.test' ], 'reader@example.test' ) );
 		$this->assertTrue( self::tripped( 'bot@spam.test', [ 'reader@example.test' ] ) );
+	}
+
+	/**
+	 * A decoy written in a non-Latin script is still a bot.
+	 *
+	 * Email sanitizers strip every character an address can't contain, which blanks a
+	 * non-Latin string entirely. Whichever implementation runs, the decoy has to be
+	 * read as text for this to trip.
+	 */
+	public function test_non_latin_honeypot_is_tripped() {
+		$this->assertTrue( self::tripped( '买便宜药', 'reader@example.test' ) );
+		$this->assertTrue( self::tripped( 'дешевые таблетки', 'reader@example.test' ) );
+	}
+
+	/**
+	 * A non-ASCII address matching the real field is still autofill.
+	 *
+	 * Pins the local fallback's second comparison, which the delegating branch would
+	 * otherwise be the only thing covering.
+	 */
+	public function test_non_ascii_match_is_not_tripped() {
+		$this->assertFalse( self::tripped( 'réader@example.test', sanitize_email( 'réader@example.test' ) ) );
+	}
+
+	/**
+	 * The decoy is read from the transport the submission used.
+	 *
+	 * Reading only `$_POST` leaves a no-JS GET submission unchecked; reading
+	 * `$_REQUEST` lets a query string fill a decoy slot the POST body left empty.
+	 * This line has been wrong in both directions, so it is pinned.
+	 */
+	public function test_submitted_fields_follow_the_request_method() {
+		$_POST['probe'] = 'from-post';
+		$_GET['probe']  = 'from-get';
+
+		$_SERVER['REQUEST_METHOD'] = 'POST';
+		$this->assertSame( 'from-post', Newspack_Newsletters\Blocks\Subscribe\get_submitted_fields()['probe'] );
+
+		$_SERVER['REQUEST_METHOD'] = 'GET';
+		$this->assertSame( 'from-get', Newspack_Newsletters\Blocks\Subscribe\get_submitted_fields()['probe'] );
+
+		unset( $_POST['probe'], $_GET['probe'], $_SERVER['REQUEST_METHOD'] );
 	}
 }
