@@ -101,8 +101,6 @@ type JetpackSSOSettings = Partial< {
 } >;
 
 /** Print */
-type IndesignPlatform = 'auto' | 'mac' | 'win';
-
 type IndesignPostTypeOption = {
 	value: string;
 	label: string;
@@ -113,7 +111,6 @@ type IndesignPostTypeOption = {
  */
 type PrintData = {
 	module_enabled_print: boolean;
-	indesign_platform: IndesignPlatform;
 	indesign_post_types: string[];
 	available_post_types: IndesignPostTypeOption[];
 	indesign_exclude_captions: boolean;

@@ -32,7 +32,6 @@ class Test_Print_Section extends WP_UnitTestCase {
 	public function set_up() {
 		parent::set_up();
 		delete_option( Optional_Modules::OPTION_NAME );
-		delete_option( InDesign_Exporter::PLATFORM_OPTION );
 		delete_option( InDesign_Exporter::POST_TYPES_OPTION );
 		delete_option( InDesign_Exporter::EXCLUDE_CAPTIONS_OPTION );
 		$this->section = new Print_Section();
@@ -46,12 +45,10 @@ class Test_Print_Section extends WP_UnitTestCase {
 
 		$this->assertIsArray( $result );
 		$this->assertArrayHasKey( 'module_enabled_print', $result );
-		$this->assertArrayHasKey( 'indesign_platform', $result );
 		$this->assertArrayHasKey( 'indesign_post_types', $result );
 		$this->assertArrayHasKey( 'available_post_types', $result );
 
 		$this->assertFalse( $result['module_enabled_print'] );
-		$this->assertSame( 'win', $result['indesign_platform'] );
 		$this->assertSame( [ 'post' ], $result['indesign_post_types'] );
 		$this->assertIsArray( $result['available_post_types'] );
 	}
@@ -99,36 +96,7 @@ class Test_Print_Section extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test that a valid platform value is persisted.
-	 */
-	public function test_api_update_print_settings_persists_platform() {
-		$request = new WP_REST_Request();
-		$request->set_param( 'module_enabled_print', true );
-		$request->set_param( 'indesign_platform', 'mac' );
-
-		$result = $this->section->api_update_print_settings( $request );
-
-		$this->assertSame( 'mac', $result['indesign_platform'] );
-		$this->assertSame( 'mac', get_option( InDesign_Exporter::PLATFORM_OPTION ) );
-	}
-
-	/**
-	 * Test that an invalid platform value is rejected.
-	 */
-	public function test_api_update_print_settings_rejects_invalid_platform() {
-		$request = new WP_REST_Request();
-		$request->set_param( 'module_enabled_print', true );
-		$request->set_param( 'indesign_platform', 'linux' );
-
-		$result = $this->section->api_update_print_settings( $request );
-
-		$this->assertInstanceOf( WP_Error::class, $result );
-		$this->assertSame( 'invalid_param', $result->get_error_code() );
-		$this->assertSame( 400, $result->get_error_data()['status'] );
-	}
-
-	/**
-	 * Test that an invalid platform value does NOT trigger a module toggle.
+	 * Test that an invalid parameter does NOT trigger a module toggle.
 	 *
 	 * Regression test for an earlier bug where the module was activated
 	 * before parameter validation finished.
@@ -138,7 +106,7 @@ class Test_Print_Section extends WP_UnitTestCase {
 
 		$request = new WP_REST_Request();
 		$request->set_param( 'module_enabled_print', true );
-		$request->set_param( 'indesign_platform', 'linux' );
+		$request->set_param( 'indesign_post_types', 'not-an-array' );
 
 		$result = $this->section->api_update_print_settings( $request );
 

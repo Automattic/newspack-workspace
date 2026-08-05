@@ -15,6 +15,33 @@ defined( 'ABSPATH' ) || exit;
 class InDesign_Converter {
 
 	/**
+	 * Tagged Text start tag, written as the first line of every export.
+	 *
+	 * This declares the format of the file itself — not the operating system
+	 * running InDesign, which reads this format on both macOS and Windows.
+	 * ASCII because get_transformed_text() escapes every code point above 127
+	 * to a <0xXXXX> tag, leaving the payload 7-bit; WIN because every line ends
+	 * with self::EOL.
+	 *
+	 * @var string
+	 */
+	private const START_TAG = '<ASCII-WIN>';
+
+	/**
+	 * Line terminator used throughout the exported file.
+	 *
+	 * Must stay consistent with self::START_TAG: <ASCII-WIN> promises InDesign
+	 * that lines end with CRLF, and <ASCII-MAC> would promise a bare CR. When
+	 * the header and the terminators disagree, the leftover byte pushes each
+	 * <pstyle:...> tag off the start of its paragraph and InDesign renders the
+	 * markup as literal text (NPPM-3098). Change one and you must change the
+	 * other.
+	 *
+	 * @var string
+	 */
+	private const EOL = "\r\n";
+
+	/**
 	 * Block types with no print equivalent, excluded from InDesign export by default.
 	 * Filterable via the newspack_indesign_export_excluded_blocks filter.
 	 *
@@ -72,10 +99,6 @@ class InDesign_Converter {
 	 *     @type bool   $include_captions Whether to append photo captions. Photo credits are
 	 *                                    a separate attribution field and are always exported.
 	 *                                    Default true.
-	 *     @type string $platform         Target platform for the tagged-text header.
-	 *                                    'win' emits <ASCII-WIN>, 'mac' emits <ASCII-MAC>.
-	 *                                    InDesign requires the header to match the host OS,
-	 *                                    otherwise markup is rendered literally. Default 'win'.
 	 * }
 	 * @return string|false InDesign Tagged Text content, or false on failure.
 	 */
@@ -89,13 +112,12 @@ class InDesign_Converter {
 			'include_subtitle' => true,
 			'include_byline'   => true,
 			'include_captions' => true,
-			'platform'         => 'win',
 		];
 		$options = wp_parse_args( $options, $default_options );
 
 		$content_parts = [];
 
-		$content_parts[] = 'mac' === $options['platform'] ? '<ASCII-MAC>' : '<ASCII-WIN>';
+		$content_parts[] = self::START_TAG;
 		$content_parts[] = $this->styles['headline'] . $this->get_transformed_text( $post->post_title );
 
 		if ( $options['include_subtitle'] ) {
@@ -115,7 +137,7 @@ class InDesign_Converter {
 		$content_parts[] = $this->process_post_content( $post->post_content, $options );
 		$content_parts[] = $this->process_post_images( $post, $options );
 
-		return implode( "\r\n", array_filter( $content_parts ) );
+		return implode( self::EOL, array_filter( $content_parts ) );
 	}
 
 	/**
@@ -366,7 +388,7 @@ class InDesign_Converter {
 			if ( ! empty( $cite_matches ) ) {
 				$cite = $cite_matches[1];
 				if ( ! empty( $cite ) ) {
-					$quote_content .= "\r\n" . $this->styles['pullquote_name'] . wp_strip_all_tags( $cite );
+					$quote_content .= self::EOL . $this->styles['pullquote_name'] . wp_strip_all_tags( $cite );
 				}
 			}
 
@@ -415,7 +437,7 @@ class InDesign_Converter {
 			'/<(?:div|ol|ul|a|img|figure)[^>]*>/'  => '',
 
 			// Replace paragraphs and remaining lists end tags with line breaks.
-			'/<\/(?:p|ul|ol)[^>]*>/'               => "\r\n",
+			'/<\/(?:p|ul|ol)[^>]*>/'               => self::EOL,
 
 			// Remove all remaining closing tags.
 			'/<\/[^>]*>/'                          => '',
@@ -491,7 +513,7 @@ class InDesign_Converter {
 	 * @return string Cleaned content.
 	 */
 	private function clean_whitespace( $content ) {
-		$content = preg_replace( '/\n{2,}/', "\r\n", $content );
+		$content = preg_replace( '/\n{2,}/', self::EOL, $content );
 		$content = trim( $content );
 
 		return $content;
@@ -584,12 +606,12 @@ class InDesign_Converter {
 				continue;
 			}
 
-			$tag_content .= "\r\n";
+			$tag_content .= self::EOL;
 			if ( $caption ) {
-				$tag_content .= '<pstyle:PhotoCaption>' . $this->get_transformed_text( $caption ) . "\r\n";
+				$tag_content .= '<pstyle:PhotoCaption>' . $this->get_transformed_text( $caption ) . self::EOL;
 			}
 			if ( $credit ) {
-				$tag_content .= '<pstyle:PhotoCredit>' . $this->get_transformed_text( $credit ) . "\r\n";
+				$tag_content .= '<pstyle:PhotoCredit>' . $this->get_transformed_text( $credit ) . self::EOL;
 			}
 		}
 
@@ -600,7 +622,7 @@ class InDesign_Converter {
 			return '';
 		}
 
-		return "\r\n" . $tag_content;
+		return self::EOL . $tag_content;
 	}
 
 	/**
