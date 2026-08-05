@@ -68,6 +68,34 @@ class Inert_Gating_Notice {
 		// that has to render this notice.
 		add_action( 'save_post', [ __CLASS__, 'flush_cache_on_post' ], 10, 2 );
 		add_action( 'deleted_post', [ __CLASS__, 'flush_cache_on_post' ], 10, 2 );
+		add_action( 'post_updated', [ __CLASS__, 'flush_cache_on_update' ], 10, 3 );
+	}
+
+	/**
+	 * Clear the cache when an edit removes the last block access-control attributes.
+	 *
+	 * `save_post` sees only the content as it now is, so an edit that strips the
+	 * last `newspackAccessControl*` attribute looks like an ordinary post save and
+	 * flushes nothing — leaving the cached answer stuck at "configured" with no
+	 * later write to correct it. `post_updated` is the one hook that supplies the
+	 * content as it was.
+	 *
+	 * Only the "before" side is checked here; `save_post` already covers the after.
+	 *
+	 * @param int      $post_id     Post ID.
+	 * @param \WP_Post $post_after  Post object after the update.
+	 * @param \WP_Post $post_before Post object before the update.
+	 */
+	public static function flush_cache_on_update( $post_id, $post_after, $post_before ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.Found
+		if ( wp_is_post_revision( $post_id ) ) {
+			return;
+		}
+		if ( ! $post_before instanceof \WP_Post ) {
+			return;
+		}
+		if ( false !== strpos( (string) $post_before->post_content, self::BLOCK_ATTRIBUTE_PREFIX ) ) {
+			self::flush_cache();
+		}
 	}
 
 	/**

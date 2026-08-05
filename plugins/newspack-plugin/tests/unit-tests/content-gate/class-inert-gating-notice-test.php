@@ -257,6 +257,79 @@ class Inert_Gating_Notice_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Removing the last block rules flips the answer from true to false, and only the
+	 * pre-update content carries the evidence — the saved content no longer mentions
+	 * access control at all, so it reads as an ordinary post save. Without this the
+	 * notice keeps warning about content nobody has gated, with no later write to
+	 * correct it.
+	 */
+	public function test_removing_block_rules_invalidates_the_cache() {
+		$post_id = self::factory()->post->create(
+			[
+				'post_status'  => 'publish',
+				'post_content' => '<!-- wp:group {"newspackAccessControlRules":{"registration":{"active":true}}} --><div></div><!-- /wp:group -->',
+			]
+		);
+		Inert_Gating_Notice::flush_cache();
+		$this->assertTrue( Inert_Gating_Notice::has_surfaces(), 'Expected the block rules to be found and cached.' );
+
+		wp_update_post(
+			[
+				'ID'           => $post_id,
+				'post_content' => '<!-- wp:group --><div></div><!-- /wp:group -->',
+			]
+		);
+
+		$this->assertFalse(
+			get_option( Inert_Gating_Notice::CACHE_OPTION, false ),
+			'Stripping the last access-control attributes must invalidate the cached answer.'
+		);
+		$this->assertFalse( Inert_Gating_Notice::has_surfaces(), 'Nothing is configured any more.' );
+	}
+
+	/**
+	 * The second and later autosaves update the same autosave row rather than
+	 * inserting a new one, so they arrive on `post_updated` with a "before" that
+	 * still carries the attributes. Without the revision guard on that handler the
+	 * flush comes straight back through the new hook.
+	 */
+	public function test_repeated_autosaves_do_not_invalidate_the_cache() {
+		$user_id = self::factory()->user->create( [ 'role' => 'administrator' ] );
+		wp_set_current_user( $user_id );
+
+		$content = '<!-- wp:group {"newspackAccessControlRules":{"registration":{"active":true}}} --><div></div><!-- /wp:group -->';
+		$post_id = self::factory()->post->create(
+			[
+				'post_status'  => 'publish',
+				'post_author'  => $user_id,
+				'post_content' => $content,
+			]
+		);
+
+		$autosave = [
+			'post_ID'      => $post_id,
+			'post_type'    => 'post',
+			'post_title'   => 'Draft in progress',
+			'post_content' => $content,
+		];
+		$first = wp_create_post_autosave( $autosave );
+		$this->assertNotEmpty( $first, 'Fixture failed: no autosave was created.' );
+
+		Inert_Gating_Notice::flush_cache();
+		$this->assertTrue( Inert_Gating_Notice::has_surfaces() );
+
+		$autosave['post_content'] = $content . '<!-- wp:paragraph --><p>Still typing.</p><!-- /wp:paragraph -->';
+		$second                   = wp_create_post_autosave( $autosave );
+		$this->assertSame( $first, $second, 'Fixture failed: the second autosave should reuse the same row.' );
+
+		$this->assertSame(
+			'1',
+			get_option( Inert_Gating_Notice::CACHE_OPTION ),
+			'An autosave cannot change the answer, so it must leave the cached value in place.'
+		);
+	}
+
+	/**
 	 * Revisions copy the parent's content verbatim, so without a guard every autosave
 	 * of a gated post flushes — about once a minute while anyone has one open, on
 	 * exactly the sites this cache exists for.
