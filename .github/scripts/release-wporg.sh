@@ -40,9 +40,13 @@ fi
 
 mkdir -p "$SVN_REPO_LOCAL_PATH" && cd "$SVN_REPO_LOCAL_PATH"
 
-# Skip if this version is already published.
+# Skip if this version is already published. A legitimate no-op on a re-run,
+# but it is also the last line of defence against deploying a stale version, so
+# it warns rather than passing quietly: this branch used to hide a run that
+# resolved the previous release's version and "succeeded" without publishing
+# anything. The workflow's gate step should normally catch that first.
 if svn ls "$SVN_REPO_URL/tags/$SVN_TAG" > /dev/null 2>&1; then
-  echo "Tag $SVN_TAG already exists on WordPress.org. No deployment needed."
+  echo "::warning::Tag $SVN_TAG already exists on WordPress.org; nothing deployed. Expected on a re-run -- otherwise check that $SVN_TAG is the version this run released."
   exit 0
 fi
 

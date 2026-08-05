@@ -1,0 +1,41 @@
+name: Deploy to WordPress.org (manual)
+
+# Escape hatch for the WP.org deploy, which normally runs only as part of a
+# release (release.yml). Use it when a published release did not reach the SVN
+# repo -- a failed deploy job, or a run whose deploy resolved the wrong version.
+#
+# It deploys whatever version the SELECTED BRANCH currently carries in the
+# plugin's package.json, so run it against `release` unless you know otherwise.
+# No released-tags are passed, so _release-wporg.yml's gate defers to the SVN
+# already-published check: re-running for a version that is already live is a
+# harmless no-op.
+#
+# GitHub only shows the "Run workflow" button for workflows present on the
+# default branch, so this file must be synced to `main` before the button
+# appears; the branch picker then runs the selected branch's copy.
+
+on:
+  workflow_dispatch:
+    inputs:
+      plugin:
+        description: 'Plugin to deploy (its package.json version on the selected branch).'
+        required: true
+        type: choice
+        options:
+          - newspack-newsletters
+          - super-cool-ad-inserter
+          - republication-tracker-tool
+
+jobs:
+  deploy:
+    name: WP.org / ${{ inputs.plugin }}
+    # The three wp.org-distributed plugins all live at plugins/<name>, and their
+    # directory name, package name and wp.org slug are identical -- so the path
+    # needs no lookup table. Revisit if that ever stops being true.
+    uses: ./.github/workflows/_release-wporg.yml
+    with:
+      plugin-name: ${{ inputs.plugin }}
+      plugin-path: plugins/${{ inputs.plugin }}
+    secrets:
+      WP_ORG_USERNAME: ${{ secrets.WP_ORG_USERNAME }}
+      WP_ORG_PASSWORD: ${{ secrets.WP_ORG_PASSWORD }}

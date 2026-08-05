@@ -35,6 +35,11 @@ jobs:
   release:
     name: Release
     runs-on: ubuntu-latest
+    outputs:
+      # Newline-separated `<pkg>@<version>` tags created by this run, consumed
+      # by the WP.org deploy jobs below to tell "this plugin released" from
+      # "this plugin was untouched". See the "Collect released tags" step.
+      released-tags: ${{ steps.released.outputs.tags }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -144,6 +149,23 @@ jobs:
           # auth 401s. Set it to the same secret so npm actually authenticates.
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NODE_OPTIONS: --max-old-space-size=12288
+      # Which packages actually published, as `<pkg>@<version>` tags. Same
+      # before/after tag diff notify-release.sh uses for its Slack summary,
+      # surfaced as a job output so the WP.org deploy jobs can gate on it:
+      # without it they cannot tell a plugin that had no release from one whose
+      # deploy silently resolved a stale version. Always runs, so a skipped
+      # release yields an empty list rather than a missing output.
+      - name: Collect released tags
+        id: released
+        run: |
+          new_tags=$(comm -13 <(sort "$RUNNER_TEMP/tags-before.txt") <(git tag | sort) || true)
+          echo "Tags created by this run:"
+          echo "${new_tags:-(none)}"
+          {
+            echo 'tags<<RELEASED_TAGS_EOF'
+            echo "$new_tags"
+            echo 'RELEASED_TAGS_EOF'
+          } >> "$GITHUB_OUTPUT"
       # package.json is deliberately excluded from the @semantic-release/git
       # prepare commit: that keeps multi-semantic-release's concretized
       # workspace:* deps off the branch (they'd break the next
@@ -226,6 +248,8 @@ jobs:
     with:
       plugin-name: newspack-newsletters
       plugin-path: plugins/newspack-newsletters
+      released-tags: ${{ needs.release.outputs.released-tags }}
+      require-release: true
     secrets:
       WP_ORG_USERNAME: ${{ secrets.WP_ORG_USERNAME }}
       WP_ORG_PASSWORD: ${{ secrets.WP_ORG_PASSWORD }}
@@ -238,6 +262,8 @@ jobs:
     with:
       plugin-name: super-cool-ad-inserter
       plugin-path: plugins/super-cool-ad-inserter
+      released-tags: ${{ needs.release.outputs.released-tags }}
+      require-release: true
     secrets:
       WP_ORG_USERNAME: ${{ secrets.WP_ORG_USERNAME }}
       WP_ORG_PASSWORD: ${{ secrets.WP_ORG_PASSWORD }}
@@ -250,6 +276,8 @@ jobs:
     with:
       plugin-name: republication-tracker-tool
       plugin-path: plugins/republication-tracker-tool
+      released-tags: ${{ needs.release.outputs.released-tags }}
+      require-release: true
     secrets:
       WP_ORG_USERNAME: ${{ secrets.WP_ORG_USERNAME }}
       WP_ORG_PASSWORD: ${{ secrets.WP_ORG_PASSWORD }}
