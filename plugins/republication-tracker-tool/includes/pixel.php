@@ -21,6 +21,9 @@ if ( $wprtt_guards_enabled ) {
 		batcache_cancel();
 	}
 	if ( ! defined( 'DONOTCACHEPAGE' ) ) {
+		// For page caches other than batcache: the batcache Newspack ships
+		// never reads this constant, so on that stack the protection rests on
+		// batcache_cancel() above.
 		define( 'DONOTCACHEPAGE', true );
 	}
 	if ( ! headers_sent() ) {
