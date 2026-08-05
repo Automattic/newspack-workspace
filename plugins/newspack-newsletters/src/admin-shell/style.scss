@@ -241,7 +241,7 @@ body.newspack-newsletters-admin-screen .dataviews-filters__visibility-toggle[ari
 }
 
 .newspack-newsletters-list {
-	&__author,
+	&__user,
 	&__status,
 	&__visibility {
 		align-items: center;
@@ -249,13 +249,13 @@ body.newspack-newsletters-admin-screen .dataviews-filters__visibility-toggle[ari
 		gap: wp-vars.$grid-unit-10;
 	}
 
-	&__author-icon,
+	&__user-icon,
 	&__status-icon,
 	&__visibility-icon {
 		@include inline-icon;
 	}
 
-	&__author-avatar {
+	&__user-avatar {
 		align-items: center;
 		display: inline-flex;
 		flex-shrink: 0;
@@ -267,6 +267,16 @@ body.newspack-newsletters-admin-screen .dataviews-filters__visibility-toggle[ari
 			border-radius: 50%;
 			display: block;
 		}
+	}
+
+	&__title-cell,
+	&__locked {
+		min-width: 0;
+	}
+
+	&__locked {
+		color: wp-colors.$gray-700;
+		font-weight: wp-vars.$font-weight-regular;
 	}
 }
 
@@ -431,13 +441,13 @@ body.newspack-newsletters-admin-screen .dataviews-filters__visibility-toggle[ari
 
 // Trim the WP icon's 4px viewBox padding to its visible 16px footprint.
 .dataviews-view-table {
-	.newspack-newsletters-list__author-icon,
+	.newspack-newsletters-list__user-icon,
 	.newspack-newsletters-list__status-icon,
 	.newspack-newsletters-list__visibility-icon {
 		margin: -4px;
 	}
 
-	.newspack-newsletters-list__author-avatar {
+	.newspack-newsletters-list__user-avatar {
 		height: 16px;
 		width: 16px;
 	}

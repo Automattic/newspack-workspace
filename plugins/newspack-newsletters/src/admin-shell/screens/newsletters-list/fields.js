@@ -5,11 +5,12 @@
  * field so sent/scheduled is never re-derived client-side.
  */
 
-import { ExternalLink, Icon } from '@wordpress/components';
+import { ExternalLink, Icon, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 import { __, sprintf } from '@wordpress/i18n';
-import { commentAuthorAvatar, drafts, envelope, globe, published, scheduled, trash } from '@wordpress/icons';
+import { drafts, envelope, globe, published, scheduled, trash } from '@wordpress/icons';
 import { dateI18n, getSettings as getDateSettings } from '@wordpress/date';
 
+import UserRow, { avatarPropsFromAuthor } from '../../../components/user-row';
 import { getAdminUrl } from '../../admin-globals';
 import { isManualProvider } from '../../../utils/service-provider';
 import { formatPostDate } from '../../utils/format-date';
@@ -41,16 +42,35 @@ const editUrl = item => `${ getAdminUrl() }post.php?post=${ item.id }&action=edi
 // search / sort / display stay consistent.
 const getTitle = item => item?.title?.raw ?? item?.title?.rendered ?? '';
 
-const renderTitle = ( { item } ) => {
-	const raw = getTitle( item );
-	// New newsletters carry WordPress's "Auto Draft" placeholder title; show a friendly label instead.
-	const title = ! raw || 'auto-draft' === item?.status ? __( '(no subject)', 'newspack-newsletters' ) : raw;
-	return (
-		<a className="newspack-newsletters-list__title" href={ editUrl( item ) } onClickCapture={ event => event.stopPropagation() }>
-			<strong>{ title }</strong>
-		</a>
-	);
-};
+// `lock` is a `wp_check_locked_posts()` payload: pre-translated text and
+// avatar URLs for whoever holds the lock, mirroring the classic list table.
+const renderLock = lock => (
+	<UserRow
+		avatarUrl={ lock.avatar_src }
+		avatarSrcSet={ lock.avatar_src_2x ? `${ lock.avatar_src_2x } 2x` : undefined }
+		label={ lock.text }
+		className="newspack-newsletters-list__locked"
+	/>
+);
+
+const renderTitle =
+	( locks = {} ) =>
+	( { item } ) => {
+		const raw = getTitle( item );
+		// New newsletters carry WordPress's "Auto Draft" placeholder title; show a friendly label instead.
+		const title = ! raw || 'auto-draft' === item?.status ? __( '(no subject)', 'newspack-newsletters' ) : raw;
+		const lock = locks[ item?.id ];
+		// DataViews lays the title cell out as a nowrap flex row, so the lock
+		// line needs its own column wrapper to sit under the subject.
+		return (
+			<VStack className="newspack-newsletters-list__title-cell" spacing={ 1 }>
+				<a className="newspack-newsletters-list__title" href={ editUrl( item ) } onClickCapture={ event => event.stopPropagation() }>
+					<strong>{ title }</strong>
+				</a>
+				{ lock && renderLock( lock ) }
+			</VStack>
+		);
+	};
 
 const renderStatus = ( { item } ) => {
 	const status = item?.newspack_newsletters_status || {};
@@ -107,19 +127,7 @@ const renderAuthor = ( { item } ) => {
 	if ( ! author ) {
 		return '';
 	}
-	const avatarUrl = author.avatar_urls?.[ 48 ] || author.avatar_urls?.[ 24 ];
-	return (
-		<span className="newspack-newsletters-list__author">
-			{ avatarUrl ? (
-				<span className="newspack-newsletters-list__author-avatar">
-					<img src={ avatarUrl } width={ 16 } height={ 16 } alt="" />
-				</span>
-			) : (
-				<Icon className="newspack-newsletters-list__author-icon" icon={ commentAuthorAvatar } size={ 24 } />
-			) }
-			<span>{ author.name || '' }</span>
-		</span>
-	);
+	return <UserRow { ...avatarPropsFromAuthor( author ) } label={ author.name || '' } />;
 };
 
 const renderTerms =
@@ -153,7 +161,7 @@ const renderPublicPage = ( { item } ) => {
 
 const renderDate = ( { item } ) => formatPostDate( item );
 
-export function getFields( { authors = [], categories = [], tags = [], sendLists = [] } = {} ) {
+export function getFields( { authors = [], categories = [], tags = [], sendLists = [] } = {}, locks = {} ) {
 	const statusLabels = STATUS_KIND_LABELS();
 
 	return [
@@ -162,7 +170,7 @@ export function getFields( { authors = [], categories = [], tags = [], sendLists
 			label: __( 'Subject', 'newspack-newsletters' ),
 			enableGlobalSearch: true,
 			getValue: ( { item } ) => getTitle( item ),
-			render: renderTitle,
+			render: renderTitle( locks ),
 		},
 		{
 			id: 'status',

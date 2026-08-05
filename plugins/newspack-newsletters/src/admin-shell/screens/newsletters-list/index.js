@@ -13,6 +13,7 @@ import EmptyState from '../../components/empty-state';
 import HeaderCount from '../../components/header-count';
 import ItemsPerPage from '../../components/items-per-page';
 import { useHeaderActions } from '../../header-actions-context';
+import useLockedPosts from '../../hooks/use-locked-posts';
 import usePersistedView from '../../hooks/use-persisted-view';
 import useNewslettersData from './use-newsletters-data';
 import useFilterElements from './use-filter-elements';
@@ -45,10 +46,11 @@ export default function NewslettersListScreen() {
 	const [ quickEditItem, setQuickEditItem ] = useState( null );
 	const { data, paginationInfo, isLoading, hasResolved, hasLoadedOnce, trashCount, progress, refresh } = useNewslettersData( view );
 	const filterElements = useFilterElements();
+	const locks = useLockedPosts( data.map( item => item.id ) );
 
 	const addNewHref = `${ getAdminUrl() }post-new.php?post_type=${ getCptSlug() }`;
 
-	const fields = useMemo( () => getFields( filterElements ), [ filterElements ] );
+	const fields = useMemo( () => getFields( filterElements, locks ), [ filterElements, locks ] );
 	const actions = useMemo( () => getActions( { refresh, openQuickEdit: setQuickEditItem } ), [ refresh ] );
 
 	const isStrictEmpty =

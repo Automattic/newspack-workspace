@@ -28,8 +28,9 @@ class Admin_Shell_Assets {
 	/**
 	 * Enqueue the shared admin-shell bundle on registered admin pages.
 	 *
-	 * Pages contribute style deps via `get_admin_shell_style_deps()`
-	 * and sibling enqueues via `enqueue_extras()`.
+	 * Pages contribute script/style deps via `get_admin_shell_script_deps()`
+	 * and `get_admin_shell_style_deps()`, and sibling enqueues via
+	 * `enqueue_extras()`.
 	 */
 	public static function enqueue() {
 		$current_page = Admin_Shell::get_current_page();
@@ -42,7 +43,7 @@ class Admin_Shell_Assets {
 			'admin-shell',
 			NEWSPACK_NEWSLETTERS_PLUGIN_FILE . 'dist',
 			plugins_url( '../../dist', __FILE__ ),
-			[],
+			$current_page->get_admin_shell_script_deps(),
 			$current_page->get_admin_shell_style_deps()
 		);
 		if ( ! $asset ) {

@@ -73,6 +73,16 @@ class Newsletters_List_Page extends Hidden_React_List_Page {
 	}
 
 	/**
+	 * Post locks are exposed over Heartbeat only (`wp_check_locked_posts()`),
+	 * so the list can flag newsletters someone else is editing.
+	 *
+	 * @return string[]
+	 */
+	public function get_admin_shell_script_deps(): array {
+		return [ 'heartbeat' ];
+	}
+
+	/**
 	 * Explicit admin-header breadcrumb trail.
 	 *
 	 * @return array<array{label: string}>

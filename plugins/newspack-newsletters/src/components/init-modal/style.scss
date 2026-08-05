@@ -230,22 +230,22 @@
 	}
 }
 
-// Mirrors `.newspack-newsletters-list__author*` from `admin-shell/style.scss`.
+// Mirrors `.newspack-newsletters-list__user*` from `admin-shell/style.scss`.
 .newspack-newsletters-list {
-	&__author {
+	&__user {
 		align-items: center;
 		display: inline-flex;
 		gap: wp-vars.$grid-unit-10;
 		font-size: wp-vars.$grid-unit-15;
 	}
 
-	&__author-icon {
+	&__user-icon {
 		fill: currentcolor;
 		flex-shrink: 0;
 		margin: (-1 * wp-vars.$grid-unit-05);
 	}
 
-	&__author-avatar {
+	&__user-avatar {
 		align-items: center;
 		display: inline-flex;
 		flex-shrink: 0;

@@ -152,6 +152,16 @@ abstract class Admin_Page {
 	}
 
 	/**
+	 * Extra script deps for the admin-shell bundle — guarantees a core
+	 * script has executed before the bundle mounts.
+	 *
+	 * @return string[]
+	 */
+	public function get_admin_shell_script_deps(): array {
+		return [];
+	}
+
+	/**
 	 * Page-specific extras attached after the admin-shell bundle is
 	 * registered under `$handle`.
 	 *
