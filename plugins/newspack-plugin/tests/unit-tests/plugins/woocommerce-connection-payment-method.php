@@ -319,7 +319,7 @@ class Newspack_Test_WooCommerce_Connection_Payment_Method extends WP_UnitTestCas
 		// Not @example.com: the outbound-mail guard suppresses sends to the
 		// placeholder domain while reporting success, and it is active in the
 		// test environment (only local/development env types are exempt).
-		$order                          = new WC_Order(
+		$order = new WC_Order(
 			[
 				'status'               => 'completed',
 				'customer_id'          => 9,
