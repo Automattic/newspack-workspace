@@ -15,6 +15,14 @@ use Newspack\Access_Attribution;
 class Newspack_Test_Access_Attribution extends WP_UnitTestCase {
 
 	/**
+	 * Reset the request memo so counts start clean in each test.
+	 */
+	public function set_up() {
+		parent::set_up();
+		Access_Attribution::reset_memo();
+	}
+
+	/**
 	 * With no labels there is nothing to attribute.
 	 */
 	public function test_pick_primary_returns_empty_string_for_no_labels() {
@@ -108,5 +116,29 @@ class Newspack_Test_Access_Attribution extends WP_UnitTestCase {
 	 */
 	public function test_one_time_purchase_rule_falls_back_to_slug_without_products() {
 		$this->assertSame( [ 'one_time_purchase' ], Access_Attribution::get_source_labels( 'one_time_purchase', [], 1 ) );
+	}
+
+	/**
+	 * Resolving which of several products granted access must not re-query per
+	 * product. Without this the mapping degrades to N+2 full subscription loads
+	 * on every logged-in pageview, and the regression is invisible in output.
+	 */
+	public function test_subscription_labels_resolve_with_a_single_ownership_lookup() {
+		$calls = 0;
+		add_filter(
+			'newspack_access_rules_has_active_subscription',
+			function ( $has, $user_id, $product_ids, $strict ) use ( &$calls ) {
+				$calls++;
+				return $has;
+			},
+			10,
+			4
+		);
+
+		Access_Attribution::get_source_labels( 'subscription', [ 101, 102, 103, 104 ], 1, [] );
+
+		remove_all_filters( 'newspack_access_rules_has_active_subscription' );
+
+		$this->assertLessThanOrEqual( 2, $calls, 'Product attribution must not probe once per product.' );
 	}
 }

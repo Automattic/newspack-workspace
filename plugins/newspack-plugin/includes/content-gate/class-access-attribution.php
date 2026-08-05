@@ -40,6 +40,55 @@ final class Access_Attribution {
 	];
 
 	/**
+	 * Request-scoped memo of a reader's active subscriptions, keyed on user ID
+	 * and payment-recovery grace. Request-scoped on purpose: a purchase
+	 * mid-request should not be served a stale answer on the next one.
+	 *
+	 * @var array<string,\WC_Subscription[]>
+	 */
+	private static $owned_subscriptions_memo = [];
+
+	/**
+	 * Clear the request memo. Used by tests and long-running CLI processes,
+	 * where one PHP process spans many readers.
+	 */
+	public static function reset_memo() {
+		self::$owned_subscriptions_memo = [];
+	}
+
+	/**
+	 * The reader's active subscriptions, loaded once per request.
+	 *
+	 * Loads the reader's subscriptions once instead of asking "do you own a
+	 * subscription with product N?" once per product in the rule — each of
+	 * those probes re-runs the full ownership query on its own.
+	 *
+	 * @param int  $user_id User ID.
+	 * @param bool $grace   Whether payment-recovery grace applies.
+	 * @return \WC_Subscription[] Subscriptions, keyed by subscription ID.
+	 */
+	private static function get_owned_subscriptions( $user_id, $grace ) {
+		$memo_key = $user_id . ':' . ( $grace ? '1' : '0' );
+		if ( isset( self::$owned_subscriptions_memo[ $memo_key ] ) ) {
+			return self::$owned_subscriptions_memo[ $memo_key ];
+		}
+
+		$subscriptions = [];
+		if ( function_exists( 'wcs_get_subscription' ) ) {
+			$subscription_ids = WooCommerce_Connection::get_active_subscriptions_for_user( $user_id, [], $grace );
+			foreach ( $subscription_ids as $subscription_id ) {
+				$subscription = \wcs_get_subscription( $subscription_id );
+				if ( $subscription ) {
+					$subscriptions[ $subscription_id ] = $subscription;
+				}
+			}
+		}
+
+		self::$owned_subscriptions_memo[ $memo_key ] = $subscriptions;
+		return self::$owned_subscriptions_memo[ $memo_key ];
+	}
+
+	/**
 	 * Pick the single strongest label from a set of source labels.
 	 *
 	 * @param string[] $labels Source labels collected from passing rules.
@@ -93,18 +142,24 @@ final class Access_Attribution {
 				// turned payment-recovery grace off.
 				return Access_Rules::with_evaluation_context(
 					$context,
-					function () use ( $value, $user_id ) {
+					function () use ( $value, $user_id, $context ) {
 						// Determine ownership first so an owner of a sub matching an
 						// "any subscription" rule (empty $value) isn't mislabeled as
 						// `group` by the non-strict check below.
 						if ( Access_Rules::has_active_subscription( $user_id, $value, true ) ) {
-							$names = [];
+							$grace         = (bool) Access_Rules::get_evaluation_context( 'payment_recovery_grace', true );
+							$subscriptions = self::get_owned_subscriptions( $user_id, $grace );
+							$names         = [];
 							foreach ( $value as $product_id ) {
-								if ( Access_Rules::has_active_subscription( $user_id, [ $product_id ], true ) ) {
+								foreach ( $subscriptions as $subscription ) {
+									if ( ! $subscription->has_product( $product_id ) ) {
+										continue;
+									}
 									$product = wc_get_product( $product_id );
 									if ( $product ) {
 										$names[] = html_entity_decode( (string) $product->get_name(), ENT_QUOTES | ENT_HTML5, 'UTF-8' );
 									}
+									break;
 								}
 							}
 							return ! empty( $names ) ? $names : [ 'subscription' ];
