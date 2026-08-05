@@ -988,15 +988,31 @@ class Subscriptions_Tiers {
 			}
 		}
 
-		$should_render_tabs = ! $is_single_tier || $is_nyp;
+		// Under the plan model the reader's choice of plan can only be carried
+		// by the frequency control's convert_to_sub_<parent_id> value: every
+		// bucket holds the same product (or the same variations) stamped with a
+		// different plan, so a card's product_id cannot tell one plan from
+		// another. More than one plan on offer therefore *requires* the
+		// control. Without this the flat card layout would print one card per
+		// plan, each with its own price, while the single hidden input below
+		// pinned every one of them to the first plan - the reader picks
+		// "Yearly $100" and is billed $10 monthly.
+		//
+		// $plan_keys and $frequencies have identical keys at this point (see
+		// the array_intersect_key() above), so this also guarantees
+		// $frequency_control_rendered below is true whenever it is set.
+		$has_multiple_plans = count( $frequencies ) > 1 && ! empty( $plan_keys );
+
+		$should_render_tabs = ! $is_single_tier || $is_nyp || $has_multiple_plans;
 
 		// Whether render_frequency_control() below will actually post the
 		// plan. When it won't - a single frequency, or the flat (no-tabs)
-		// product-card layout - the hidden input further down carries the
-		// plan for $current_frequency instead. Without this, a product with
-		// exactly one plan (the ordinary case: one monthly plan plus
-		// price-tier variations) posts no plan at all and the reader is
-		// charged once instead of subscribing.
+		// product-card layout, which $has_multiple_plans above keeps to at
+		// most one plan - the hidden input further down carries the plan for
+		// $current_frequency instead. Without this, a product with exactly one
+		// plan (the ordinary case: one monthly plan plus price-tier
+		// variations) posts no plan at all and the reader is charged once
+		// instead of subscribing.
 		$frequency_control_rendered = $should_render_tabs && count( $frequencies ) > 1;
 		?>
 		<form class="newspack__subscription-tiers__form <?php echo esc_attr( $is_nyp ? 'nyp' : '' ); ?>" target="newspack_modal_checkout_iframe" data-title="<?php echo esc_attr( $title ); ?>" data-product-id="<?php echo esc_attr( $product ? $product->get_id() : '' ); ?>">
@@ -1025,6 +1041,10 @@ class Subscriptions_Tiers {
 				</div>
 			<?php endif; ?>
 			<?php
+			// The flat layout renders every bucket's cards at once with no
+			// frequency control, so it may only ever run when at most one plan
+			// is in play - see $has_multiple_plans above, which is what
+			// guarantees it.
 			if ( ! $should_render_tabs ) {
 				foreach ( $tiers as $products ) {
 					foreach ( $products as $product ) {

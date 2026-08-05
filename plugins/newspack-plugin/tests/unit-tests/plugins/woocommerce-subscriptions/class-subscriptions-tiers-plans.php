@@ -840,6 +840,114 @@ class Newspack_Test_Subscriptions_Tiers_Plans extends WP_UnitTestCase {
 	}
 
 	/**
+	 * NPPM-3053 mis-selling regression: when every plan's bucket holds exactly
+	 * one tier - a `simple` product with a monthly and an annual plan - the
+	 * form used to take the flat, no-tabs card layout, printing one card per
+	 * plan at that plan's own price while a single hidden input pinned all of
+	 * them to the *first* plan. The reader picked "Yearly" and was billed
+	 * monthly, and since every card carries the same product_id nothing
+	 * downstream could tell them apart either. More than one plan on offer
+	 * must always render the control that posts which plan was chosen.
+	 */
+	public function test_render_form_posts_the_plan_choice_with_one_tier_per_plan() {
+		$plans = [
+			'mkey' => [
+				'period'   => 'month',
+				'interval' => 1,
+			],
+			'ykey' => [
+				'period'   => 'year',
+				'interval' => 1,
+			],
+		];
+
+		// A simple product is its own single tier, so each plan's bucket holds
+		// exactly one product and is_single_tier() is true.
+		$product = wc_create_mock_product(
+			[
+				'id'    => 460,
+				'type'  => 'simple',
+				'price' => 5,
+			]
+		);
+		$this->give_plans( 460, $plans );
+
+		ob_start();
+		\Newspack\Subscriptions_Tiers::render_form( $product );
+		$markup = ob_get_clean();
+
+		$this->assertStringContainsString( 'name="convert_to_sub_460"', $markup, 'The plan-posting control must render.' );
+
+		// The posted key varies with the reader's selection: one radio per
+		// plan, each carrying its own scheme key, in a single named group.
+		preg_match_all( '/<input[^>]*name="convert_to_sub_460"[^>]*>/s', $markup, $inputs );
+		$this->assertCount( 2, $inputs[0], 'One plan-posting input per plan.' );
+		foreach ( $inputs[0] as $input ) {
+			$this->assertStringContainsString( 'type="radio"', $input, 'The plan must be posted by a control the reader can change.' );
+		}
+		$this->assertStringContainsString( 'value="mkey"', $inputs[0][0] );
+		$this->assertStringContainsString( 'value="ykey"', $inputs[0][1] );
+
+		// No hidden input pinning every card to one plan - that was the bug.
+		$this->assertStringNotContainsString( 'type="hidden" name="convert_to_sub_460"', $markup );
+
+		$checked_inputs = array_filter(
+			$inputs[0],
+			function ( $input ) {
+				return false !== strpos( $input, 'checked' );
+			}
+		);
+		$this->assertCount( 1, $checked_inputs, 'Exactly one plan radio should be checked.' );
+		$this->assertStringContainsString( 'value="mkey"', reset( $checked_inputs ), 'The first (initially-visible) plan should be the checked one.' );
+	}
+
+	/**
+	 * The same mis-selling case reached through a `variable` product with a
+	 * single variation: one variation across two plans is still one tier per
+	 * bucket, so it took the same flat layout with the same pinned plan.
+	 */
+	public function test_render_form_posts_the_plan_choice_for_a_single_variation() {
+		$plans = [
+			'mkey' => [
+				'period'   => 'month',
+				'interval' => 1,
+			],
+			'ykey' => [
+				'period'   => 'year',
+				'interval' => 1,
+			],
+		];
+
+		$parent = wc_create_mock_product(
+			[
+				'id'       => 470,
+				'type'     => 'variable',
+				'children' => [ 471 ],
+			]
+		);
+		$this->give_plans( 470, $plans );
+		wc_create_mock_product(
+			[
+				'id'        => 471,
+				'type'      => 'variation',
+				'parent_id' => 470,
+				'price'     => 5,
+			]
+		);
+		$this->give_plans( 471, $plans );
+
+		ob_start();
+		\Newspack\Subscriptions_Tiers::render_form( $parent );
+		$markup = ob_get_clean();
+
+		preg_match_all( '/<input[^>]*name="convert_to_sub_470"[^>]*>/s', $markup, $inputs );
+		$this->assertCount( 2, $inputs[0], 'One plan-posting radio per plan.' );
+		$this->assertStringContainsString( 'value="mkey"', $inputs[0][0] );
+		$this->assertStringContainsString( 'value="ykey"', $inputs[0][1] );
+		$this->assertStringNotContainsString( 'type="hidden" name="convert_to_sub_470"', $markup );
+	}
+
+	/**
 	 * Switch-flow fallback: when the subscriber's current subscription
 	 * matches none of the tiers (a retired plan, or filtered out by the
 	 * ownership check), get_current_tier() returns a null frequency. Without
