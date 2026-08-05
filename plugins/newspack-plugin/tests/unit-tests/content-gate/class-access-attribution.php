@@ -6,6 +6,7 @@
  */
 
 use Newspack\Access_Attribution;
+use Newspack\Access_Rules;
 
 /**
  * Test access source label mapping and precedence.
@@ -15,11 +16,39 @@ use Newspack\Access_Attribution;
 class Newspack_Test_Access_Attribution extends WP_UnitTestCase {
 
 	/**
-	 * Reset the request memo so counts start clean in each test.
+	 * Load the WooCommerce mocks once for the class. Resolving a rule to a
+	 * product name is the interesting half of this mapping, and it is dead code
+	 * without them.
+	 */
+	public static function set_up_before_class() {
+		parent::set_up_before_class();
+		require_once dirname( __DIR__, 2 ) . '/mocks/wc-mocks.php';
+	}
+
+	/**
+	 * Reset the mock stores and every request memo, so no test inherits
+	 * another's subscriptions, orders or counts.
 	 */
 	public function set_up() {
 		parent::set_up();
+
+		global $subscriptions_database, $products_database, $orders_database;
+		$subscriptions_database = [];
+		$products_database      = [];
+		$orders_database        = [];
+
 		Access_Attribution::reset_memo();
+		Access_Rules::flush_one_time_purchase_memo();
+	}
+
+	/**
+	 * Clear the memos again on the way out: they are static, so a test that
+	 * leaves one populated would speak for the next class in the process.
+	 */
+	public function tear_down() {
+		Access_Attribution::reset_memo();
+		Access_Rules::flush_one_time_purchase_memo();
+		parent::tear_down();
 	}
 
 	/**
@@ -103,10 +132,11 @@ class Newspack_Test_Access_Attribution extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Without WooCommerce there is no product to name, so the subscription rule
-	 * falls back to its bare slug rather than reporting no source at all.
+	 * With no product list to resolve against there is no product to name, so
+	 * the subscription rule falls back to its bare slug rather than reporting no
+	 * source at all.
 	 */
-	public function test_subscription_rule_falls_back_to_slug_without_woocommerce() {
+	public function test_subscription_rule_falls_back_to_slug_for_a_non_array_value() {
 		$this->assertSame( [ 'subscription' ], Access_Attribution::get_source_labels( 'subscription', 'not-an-array', 1 ) );
 	}
 
@@ -124,6 +154,28 @@ class Newspack_Test_Access_Attribution extends WP_UnitTestCase {
 	 * on every logged-in pageview, and the regression is invisible in output.
 	 */
 	public function test_subscription_labels_resolve_with_a_single_ownership_lookup() {
+		$user_id     = $this->factory->user->create();
+		$product_ids = [ 101, 102, 103, 104 ];
+		foreach ( $product_ids as $product_id ) {
+			\wc_create_mock_product(
+				[
+					'id'   => $product_id,
+					'name' => 'Plan ' . $product_id,
+				]
+			);
+		}
+		// The reader must actually own one of them: the strict ownership check
+		// guards the per-product loop, and without a subscription behind it the
+		// loop this test exists to protect never runs at all.
+		\wcs_create_subscription(
+			[
+				'customer_id'    => $user_id,
+				'status'         => 'active',
+				'billing_period' => 'month',
+				'products'       => [ 103 ],
+			]
+		);
+
 		$calls = 0;
 		add_filter(
 			'newspack_access_rules_has_active_subscription',
@@ -135,10 +187,93 @@ class Newspack_Test_Access_Attribution extends WP_UnitTestCase {
 			4
 		);
 
-		Access_Attribution::get_source_labels( 'subscription', [ 101, 102, 103, 104 ], 1, [] );
+		$labels = Access_Attribution::get_source_labels( 'subscription', $product_ids, $user_id, [] );
 
 		remove_all_filters( 'newspack_access_rules_has_active_subscription' );
 
+		$this->assertSame(
+			[ 'Plan 103' ],
+			$labels,
+			'The per-product loop must have resolved the owned product, or the call count below measures nothing.'
+		);
 		$this->assertLessThanOrEqual( 2, $calls, 'Product attribution must not probe once per product.' );
+	}
+
+	/**
+	 * A one-time purchase resolves to the name of the product the reader
+	 * actually bought, not to the bare slug and not to the whole rule's product
+	 * list. The generic fallback is well covered; this is the branch that puts a
+	 * publisher-recognisable value in the report.
+	 */
+	public function test_one_time_purchase_labels_name_only_the_purchased_product() {
+		$user_id = $this->factory->user->create();
+		\wc_create_mock_product(
+			[
+				'id'   => 201,
+				'name' => 'Day Pass',
+			]
+		);
+		\wc_create_mock_product(
+			[
+				'id'   => 202,
+				'name' => 'Weekend Pass',
+			]
+		);
+		\wc_create_order(
+			[
+				'customer_id'  => $user_id,
+				'status'       => 'completed',
+				'total'        => 100,
+				'date_created' => gmdate( 'Y-m-d H:i:s' ),
+				'items'        => [ new \WC_Order_Item_Product( [ 'product_id' => 201 ] ) ],
+			]
+		);
+
+		$labels = Access_Attribution::get_source_labels(
+			'one_time_purchase',
+			[
+				'product_ids'    => [ 201, 202 ],
+				'duration_value' => 30,
+				'duration_unit'  => 'days',
+			],
+			$user_id
+		);
+
+		$this->assertSame( [ 'Day Pass' ], $labels );
+	}
+
+	/**
+	 * HTML entities are decoded, so a publisher reading the report sees the
+	 * product name they typed rather than its escaped form.
+	 */
+	public function test_one_time_purchase_product_name_is_entity_decoded() {
+		$user_id = $this->factory->user->create();
+		\wc_create_mock_product(
+			[
+				'id'   => 203,
+				'name' => 'Readers&#8217; Pass',
+			]
+		);
+		\wc_create_order(
+			[
+				'customer_id'  => $user_id,
+				'status'       => 'completed',
+				'total'        => 100,
+				'date_created' => gmdate( 'Y-m-d H:i:s' ),
+				'items'        => [ new \WC_Order_Item_Product( [ 'product_id' => 203 ] ) ],
+			]
+		);
+
+		$labels = Access_Attribution::get_source_labels(
+			'one_time_purchase',
+			[
+				'product_ids'    => [ 203 ],
+				'duration_value' => 1,
+				'duration_unit'  => 'months',
+			],
+			$user_id
+		);
+
+		$this->assertSame( [ 'Readers’ Pass' ], $labels );
 	}
 }
