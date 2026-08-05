@@ -131,8 +131,9 @@ describe( 'ContextualPrompts tab', () => {
 				method: 'POST',
 				data: expect.objectContaining( {
 					destinationUrl: PATTERN_EDIT_URL,
-					// The pattern opens in the block editor, where the banner is a notice.
-					showOnBlockEditor: true,
+					// The banner itself follows into the block editor; the in-editor
+					// notice is not requested.
+					showOnBlockEditor: false,
 					bannerText: 'Return to Contextual Prompts after editing the design',
 					bannerButtonText: 'Back to Contextual Prompts',
 				} ),
@@ -175,12 +176,13 @@ describe( 'ContextualPrompts tab', () => {
 				method: 'POST',
 				data: expect.objectContaining( {
 					destinationUrl: PATTERN_EDIT_URL,
-					showOnBlockEditor: true,
 					bannerText: 'Return to Contextual Prompts after editing the design',
 					bannerButtonText: 'Back to Contextual Prompts',
 				} ),
 			} )
 		);
+		// The in-editor notice is not requested (the REST default is false).
+		expect( apiFetch.mock.calls.at( -1 )[ 0 ].data.showOnBlockEditor ).toBeUndefined();
 
 		window.location = location;
 	} );

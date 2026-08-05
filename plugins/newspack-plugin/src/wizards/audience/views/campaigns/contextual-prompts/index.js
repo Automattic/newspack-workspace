@@ -158,7 +158,6 @@ const ContextualPrompts = props => {
 			data: {
 				destinationUrl: status.pattern_edit_url,
 				handoffReturnUrl: window.location.href,
-				showOnBlockEditor: true,
 				bannerText,
 				bannerButtonText,
 			},
@@ -192,13 +191,7 @@ const ContextualPrompts = props => {
 						{ __( 'Edit design', 'newspack-plugin' ) }
 					</Button>
 				) : (
-					<Handoff
-						variant="secondary"
-						url={ status.pattern_edit_url }
-						showOnBlockEditor
-						bannerText={ bannerText }
-						bannerButtonText={ bannerButtonText }
-					>
+					<Handoff variant="secondary" url={ status.pattern_edit_url } bannerText={ bannerText } bannerButtonText={ bannerButtonText }>
 						{ __( 'Edit design', 'newspack-plugin' ) }
 					</Handoff>
 				) ) }

@@ -57,6 +57,13 @@
  */
 $banner-height: var(--newspack-handoff-banner-height, 0px);
 
+.newspack-handoff-banner-visible body.post-php,
+.newspack-handoff-banner-visible body.post-new-php {
+	.interface-interface-skeleton {
+		top: $banner-height;
+	}
+}
+
 .newspack-handoff-banner-visible body.site-editor-php {
 	.edit-site {
 		height: calc(100vh - #{$banner-height});
