@@ -6,7 +6,7 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { CheckboxControl, Notice, SelectControl } from '@wordpress/components';
+import { CheckboxControl, Notice } from '@wordpress/components';
 import { useEffect, useRef, useState } from '@wordpress/element';
 
 /**
@@ -17,12 +17,6 @@ import WizardSection from '../../../../wizards-section';
 import WizardsActionCard from '../../../../wizards-action-card';
 import useWizardApiFetchToggle from '../../../../hooks/use-wizard-api-fetch-toggle';
 
-const PLATFORM_OPTIONS: { label: string; value: IndesignPlatform }[] = [
-	{ label: __( 'Auto-detect (per export)', 'newspack-plugin' ), value: 'auto' },
-	{ label: __( 'Mac', 'newspack-plugin' ), value: 'mac' },
-	{ label: __( 'Windows', 'newspack-plugin' ), value: 'win' },
-];
-
 // Coalesce a rapid series of post-type checkbox clicks into a single save.
 const POST_TYPES_SAVE_DEBOUNCE_MS = 500;
 
@@ -32,7 +26,6 @@ function Print() {
 		apiNamespace: 'newspack-settings/print',
 		data: {
 			module_enabled_print: false,
-			indesign_platform: 'auto',
 			indesign_post_types: [ 'post' ],
 			available_post_types: [],
 			indesign_exclude_captions: false,
@@ -120,21 +113,6 @@ function Print() {
 			</WizardSection>
 			{ apiData.module_enabled_print && (
 				<>
-					<WizardSection
-						title={ __( 'Header platform', 'newspack-plugin' ) }
-						description={ __(
-							'InDesign requires the export file to declare its host platform on the first line. Choose "Auto-detect" to match the operating system of whoever clicks Export, or pick a specific platform if your team always lays out on the same OS.',
-							'newspack-plugin'
-						) }
-					>
-						<SelectControl
-							label={ __( 'Platform', 'newspack-plugin' ) }
-							value={ apiData.indesign_platform }
-							disabled={ isFetching }
-							options={ PLATFORM_OPTIONS }
-							onChange={ ( value: IndesignPlatform ) => save( { indesign_platform: value } ) }
-						/>
-					</WizardSection>
 					<WizardSection
 						title={ __( 'Available post types', 'newspack-plugin' ) }
 						description={ __(

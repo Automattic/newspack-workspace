@@ -69,7 +69,6 @@ class Print_Section extends Wizard_Section {
 	public function api_get_print_settings() {
 		return [
 			'module_enabled_print'      => Optional_Modules::is_optional_module_active( InDesign_Exporter::MODULE_NAME ),
-			'indesign_platform'         => InDesign_Exporter::get_platform_setting(),
 			'indesign_post_types'       => InDesign_Exporter::get_post_types_setting(),
 			'available_post_types'      => InDesign_Exporter::get_available_post_types(),
 			'indesign_exclude_captions' => InDesign_Exporter::get_exclude_captions_setting(),
@@ -86,12 +85,6 @@ class Print_Section extends Wizard_Section {
 		$module_enabled_print = $request->get_param( 'module_enabled_print' );
 		if ( ! is_bool( $module_enabled_print ) ) {
 			return new \WP_Error( 'invalid_param', __( 'Invalid parameter for module_enabled_print.', 'newspack-plugin' ), [ 'status' => 400 ] );
-		}
-
-		$has_platform_param = $request->has_param( 'indesign_platform' );
-		$platform           = $has_platform_param ? $request->get_param( 'indesign_platform' ) : null;
-		if ( $has_platform_param && ! in_array( $platform, InDesign_Exporter::ALLOWED_PLATFORMS, true ) ) {
-			return new \WP_Error( 'invalid_param', __( 'Invalid parameter for indesign_platform.', 'newspack-plugin' ), [ 'status' => 400 ] );
 		}
 
 		$has_post_types_param = $request->has_param( 'indesign_post_types' );
@@ -130,10 +123,6 @@ class Print_Section extends Wizard_Section {
 			Optional_Modules::deactivate_optional_module( InDesign_Exporter::MODULE_NAME );
 		}
 
-		if ( $has_platform_param ) {
-			update_option( InDesign_Exporter::PLATFORM_OPTION, $platform );
-		}
-
 		if ( $has_post_types_param ) {
 			update_option( InDesign_Exporter::POST_TYPES_OPTION, $post_types );
 		}
@@ -144,7 +133,6 @@ class Print_Section extends Wizard_Section {
 
 		return [
 			'module_enabled_print'      => $module_enabled_print,
-			'indesign_platform'         => InDesign_Exporter::get_platform_setting(),
 			'indesign_post_types'       => InDesign_Exporter::get_post_types_setting(),
 			'available_post_types'      => InDesign_Exporter::get_available_post_types(),
 			'indesign_exclude_captions' => InDesign_Exporter::get_exclude_captions_setting(),

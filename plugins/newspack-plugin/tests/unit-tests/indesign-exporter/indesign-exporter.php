@@ -21,38 +21,11 @@ class Newspack_Test_InDesign_Exporter extends WP_UnitTestCase {
 	private const TEST_POST_TYPES = [ 'product', 'hidden_cpt', 'partner_rss_feed', 'newspack_nl_list', 'newspack_collection', 'event', 'flyer', 'reviewcpt' ];
 
 	/**
-	 * The ambient User-Agent, captured so platform-resolution tests can restore it.
-	 *
-	 * @var string|null
-	 */
-	private $original_user_agent;
-
-	/**
-	 * Capture request state that individual tests may mutate.
-	 */
-	public function set_up() {
-		parent::set_up();
-		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__HTTP_USER_AGENT__
-		$this->original_user_agent = $_SERVER['HTTP_USER_AGENT'] ?? null;
-	}
-
-	/**
-	 * Set the request User-Agent for the current test. Wraps the write so the VIP
-	 * cache-constraint sniff — not meaningful for a unit test — is silenced once.
-	 *
-	 * @param string $user_agent User-Agent string to set.
-	 */
-	private function set_request_user_agent( $user_agent ) {
-		$_SERVER['HTTP_USER_AGENT'] = $user_agent; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__HTTP_USER_AGENT__
-	}
-
-	/**
-	 * Reset options, post-type registrations, and request state after every test,
-	 * regardless of whether the test's own assertions passed. Keeping cleanup here
-	 * (rather than inline at the end of each test) makes failures self-contained.
+	 * Reset options and post-type registrations after every test, regardless of
+	 * whether the test's own assertions passed. Keeping cleanup here (rather than
+	 * inline at the end of each test) makes failures self-contained.
 	 */
 	public function tear_down() {
-		delete_option( InDesign_Exporter::PLATFORM_OPTION );
 		delete_option( InDesign_Exporter::POST_TYPES_OPTION );
 		delete_option( InDesign_Exporter::EXCLUDE_CAPTIONS_OPTION );
 
@@ -70,12 +43,6 @@ class Newspack_Test_InDesign_Exporter extends WP_UnitTestCase {
 		remove_filter( 'handle_bulk_actions-edit-reviewcpt', [ InDesign_Exporter::class, 'handle_bulk_action' ], 100 );
 		remove_filter( 'post_row_actions', [ InDesign_Exporter::class, 'add_row_action' ], 10 );
 		remove_filter( 'page_row_actions', [ InDesign_Exporter::class, 'add_row_action' ], 10 );
-
-		if ( null === $this->original_user_agent ) {
-			unset( $_SERVER['HTTP_USER_AGENT'] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__HTTP_USER_AGENT__
-		} else {
-			$_SERVER['HTTP_USER_AGENT'] = $this->original_user_agent; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__HTTP_USER_AGENT__
-		}
 
 		parent::tear_down();
 	}
@@ -125,80 +92,6 @@ class Newspack_Test_InDesign_Exporter extends WP_UnitTestCase {
 		$this->assertStringContainsString( "\r\n", $content );
 		// Every CR belongs to a CRLF pair — no bare-CR (Mac-format) terminators.
 		$this->assertSame( substr_count( $content, "\r\n" ), substr_count( $content, "\r" ) );
-	}
-
-	/**
-	 * Test that the Mac platform option emits the <ASCII-MAC> header.
-	 *
-	 * Note this only swaps the declared header — the converter still writes CRLF
-	 * line endings, so a 'mac' export misdescribes its own format. See
-	 * test_convert_post_default_header_matches_line_endings().
-	 */
-	public function test_convert_post_mac_platform() {
-		$post_id = $this->factory->post->create(
-			[
-				'post_title'   => 'Test Post',
-				'post_content' => '<p>This is a test post.</p>',
-			]
-		);
-
-		$converter = new InDesign_Converter();
-		$content   = $converter->convert_post( $post_id, [ 'platform' => 'mac' ] );
-		$this->assertStringContainsString( '<ASCII-MAC>', $content );
-		$this->assertStringNotContainsString( '<ASCII-WIN>', $content );
-	}
-
-	/**
-	 * Test that the Win platform option emits the <ASCII-WIN> header.
-	 */
-	public function test_convert_post_win_platform() {
-		$post_id = $this->factory->post->create(
-			[
-				'post_title'   => 'Test Post',
-				'post_content' => '<p>This is a test post.</p>',
-			]
-		);
-
-		$converter = new InDesign_Converter();
-		$content   = $converter->convert_post( $post_id, [ 'platform' => 'win' ] );
-		$this->assertStringContainsString( '<ASCII-WIN>', $content );
-		$this->assertStringNotContainsString( '<ASCII-MAC>', $content );
-	}
-
-	/**
-	 * Test that the platform setting defaults to 'win' when unset.
-	 *
-	 * The exporter always writes CRLF-delimited files, so 'win' is the only
-	 * default that describes them accurately (NPPM-3098).
-	 */
-	public function test_platform_setting_default() {
-		delete_option( InDesign_Exporter::PLATFORM_OPTION );
-		$this->assertSame( 'win', InDesign_Exporter::get_platform_setting() );
-	}
-
-	/**
-	 * Test that the platform setting returns the stored value when valid.
-	 */
-	public function test_platform_setting_valid_values() {
-		update_option( InDesign_Exporter::PLATFORM_OPTION, 'mac' );
-		$this->assertSame( 'mac', InDesign_Exporter::get_platform_setting() );
-
-		update_option( InDesign_Exporter::PLATFORM_OPTION, 'win' );
-		$this->assertSame( 'win', InDesign_Exporter::get_platform_setting() );
-
-		update_option( InDesign_Exporter::PLATFORM_OPTION, 'auto' );
-		$this->assertSame( 'auto', InDesign_Exporter::get_platform_setting() );
-	}
-
-	/**
-	 * Test that the platform setting sanitizes invalid stored values.
-	 */
-	public function test_platform_setting_rejects_invalid_value() {
-		update_option( InDesign_Exporter::PLATFORM_OPTION, 'linux' );
-		$this->assertSame( 'win', InDesign_Exporter::get_platform_setting() );
-
-		update_option( InDesign_Exporter::PLATFORM_OPTION, '' );
-		$this->assertSame( 'win', InDesign_Exporter::get_platform_setting() );
 	}
 
 	/**
@@ -346,39 +239,6 @@ class Newspack_Test_InDesign_Exporter extends WP_UnitTestCase {
 		$this->assertNotContains( 'flyer', $slugs );
 
 		remove_filter( 'newspack_indesign_export_excluded_post_types', $callback );
-	}
-
-	/**
-	 * Test User-Agent → platform mapping for representative strings.
-	 */
-	public function test_sniff_user_agent_platform() {
-		// macOS Safari / Chrome.
-		$this->assertSame(
-			'mac',
-			InDesign_Exporter::sniff_user_agent_platform( 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15' )
-		);
-		// iPad.
-		$this->assertSame(
-			'mac',
-			InDesign_Exporter::sniff_user_agent_platform( 'Mozilla/5.0 (iPad; CPU OS 17_5 like Mac OS X) AppleWebKit/605.1.15' )
-		);
-		// iPhone.
-		$this->assertSame(
-			'mac',
-			InDesign_Exporter::sniff_user_agent_platform( 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15' )
-		);
-		// Windows Chrome.
-		$this->assertSame(
-			'win',
-			InDesign_Exporter::sniff_user_agent_platform( 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' )
-		);
-		// Linux (treated as Windows-compatible by InDesign Tagged Text — there is no Linux variant).
-		$this->assertSame(
-			'win',
-			InDesign_Exporter::sniff_user_agent_platform( 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36' )
-		);
-		// Empty.
-		$this->assertSame( 'win', InDesign_Exporter::sniff_user_agent_platform( '' ) );
 	}
 
 	/**
@@ -1121,96 +981,6 @@ class Newspack_Test_InDesign_Exporter extends WP_UnitTestCase {
 		);
 		// The filters registered here are removed in tear_down(), so a failed
 		// assertion above can't leak them into later tests.
-	}
-
-	/**
-	 * Test that an explicit platform setting wins over the request User-Agent.
-	 */
-	public function test_resolve_platform_setting_overrides_user_agent() {
-		update_option( InDesign_Exporter::PLATFORM_OPTION, 'mac' );
-		$this->set_request_user_agent( 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' );
-		$this->assertSame( 'mac', InDesign_Exporter::resolve_platform() );
-
-		update_option( InDesign_Exporter::PLATFORM_OPTION, 'win' );
-		$this->set_request_user_agent( 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5)' );
-		$this->assertSame( 'win', InDesign_Exporter::resolve_platform() );
-	}
-
-	/**
-	 * Test that an unconfigured site resolves to 'win' for a Mac client.
-	 *
-	 * Regression guard for NPPM-3098: the header describes the file's own
-	 * format, not the OS the reader runs on, so the requesting browser must not
-	 * influence it on a site that never picked a platform. Exports reaching Mac
-	 * users had been declaring <ASCII-MAC> over CRLF bytes, which InDesign
-	 * imports as literal markup.
-	 */
-	public function test_resolve_platform_default_ignores_mac_user_agent() {
-		delete_option( InDesign_Exporter::PLATFORM_OPTION );
-
-		$this->set_request_user_agent( 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15' );
-		$this->assertSame( 'win', InDesign_Exporter::resolve_platform() );
-	}
-
-	/**
-	 * Test that the 'auto' setting resolves the platform from the User-Agent.
-	 *
-	 * Retained to document the behavior of a site that explicitly stored 'auto'.
-	 * It is no longer the default — see
-	 * test_resolve_platform_default_ignores_mac_user_agent().
-	 */
-	public function test_resolve_platform_auto_sniffs_user_agent() {
-		update_option( InDesign_Exporter::PLATFORM_OPTION, 'auto' );
-
-		$this->set_request_user_agent( 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5)' );
-		$this->assertSame( 'mac', InDesign_Exporter::resolve_platform() );
-
-		$this->set_request_user_agent( 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' );
-		$this->assertSame( 'win', InDesign_Exporter::resolve_platform() );
-	}
-
-	/**
-	 * Test that the platform filter can override the resolved value, and that a
-	 * non-'mac' return normalizes to 'win' instead of leaking an invalid platform.
-	 */
-	public function test_resolve_platform_filter_overrides_and_normalizes() {
-		update_option( InDesign_Exporter::PLATFORM_OPTION, 'win' );
-
-		$to_mac = static function () {
-			return 'mac';
-		};
-		add_filter( 'newspack_indesign_export_platform', $to_mac );
-		$this->assertSame( 'mac', InDesign_Exporter::resolve_platform() );
-		remove_filter( 'newspack_indesign_export_platform', $to_mac );
-
-		$to_auto = static function () {
-			return 'auto';
-		};
-		add_filter( 'newspack_indesign_export_platform', $to_auto );
-		$this->assertSame( 'win', InDesign_Exporter::resolve_platform() );
-		remove_filter( 'newspack_indesign_export_platform', $to_auto );
-	}
-
-	/**
-	 * Test that the platform filter receives the resolved platform, the stored
-	 * setting, and the sanitized User-Agent.
-	 */
-	public function test_resolve_platform_filter_receives_context() {
-		update_option( InDesign_Exporter::PLATFORM_OPTION, 'auto' );
-		$this->set_request_user_agent( 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5)' );
-
-		$captured = [];
-		$callback = static function ( $platform, $setting, $user_agent ) use ( &$captured ) {
-			$captured = compact( 'platform', 'setting', 'user_agent' );
-			return $platform;
-		};
-		add_filter( 'newspack_indesign_export_platform', $callback, 10, 3 );
-		InDesign_Exporter::resolve_platform();
-		remove_filter( 'newspack_indesign_export_platform', $callback, 10 );
-
-		$this->assertSame( 'mac', $captured['platform'] );
-		$this->assertSame( 'auto', $captured['setting'] );
-		$this->assertStringContainsString( 'Macintosh', $captured['user_agent'] );
 	}
 
 	/**

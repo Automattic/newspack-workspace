@@ -24,39 +24,6 @@ class InDesign_Exporter {
 	public const MODULE_NAME = 'indesign-export';
 
 	/**
-	 * Option name storing the platform header preference.
-	 *
-	 * Accepts 'auto', 'mac', or 'win'. 'auto' resolves the header at export
-	 * time from the requesting browser's User-Agent.
-	 *
-	 * @var string
-	 */
-	public const PLATFORM_OPTION = 'newspack_indesign_export_platform';
-
-	/**
-	 * Default value for the platform option.
-	 *
-	 * 'win' rather than 'auto': the Tagged Text start tag declares the format of
-	 * the exported file itself — <ASCII-WIN> for CRLF-delimited, <ASCII-MAC> for
-	 * bare-CR — not the operating system running InDesign. The converter joins
-	 * every line with CRLF unconditionally, so <ASCII-WIN> is the only header
-	 * that describes what is actually written. Resolving from the requesting
-	 * browser meant Mac users received files declaring <ASCII-MAC> over CRLF
-	 * bytes, which InDesign imports as literal markup instead of formatting
-	 * (NPPM-3098).
-	 *
-	 * @var string
-	 */
-	public const PLATFORM_DEFAULT = 'win';
-
-	/**
-	 * Allowed values for the platform option.
-	 *
-	 * @var string[]
-	 */
-	public const ALLOWED_PLATFORMS = [ 'auto', 'mac', 'win' ];
-
-	/**
 	 * Option name storing the list of post types whose admin screens get the export action.
 	 *
 	 * @var string
@@ -450,7 +417,6 @@ class InDesign_Exporter {
 	 */
 	private static function export_posts( $post_ids ) {
 		$converter        = new InDesign_Converter();
-		$platform         = self::resolve_platform();
 		$include_captions = ! self::get_exclude_captions_setting();
 		$exported_files   = [];
 
@@ -462,10 +428,7 @@ class InDesign_Exporter {
 
 			$content          = $converter->convert_post(
 				$post,
-				[
-					'platform'         => $platform,
-					'include_captions' => $include_captions,
-				]
+				[ 'include_captions' => $include_captions ]
 			);
 			$filename         = self::generate_filename( $post );
 			$exported_files[] = [
@@ -485,16 +448,6 @@ class InDesign_Exporter {
 	}
 
 	/**
-	 * Get the configured platform setting.
-	 *
-	 * @return string One of 'auto', 'mac', 'win'.
-	 */
-	public static function get_platform_setting() {
-		$value = get_option( self::PLATFORM_OPTION, self::PLATFORM_DEFAULT );
-		return in_array( $value, self::ALLOWED_PLATFORMS, true ) ? $value : self::PLATFORM_DEFAULT;
-	}
-
-	/**
 	 * Whether photo captions should be excluded from exports.
 	 *
 	 * Photo credits are a separate attribution field and are always exported.
@@ -503,62 +456,6 @@ class InDesign_Exporter {
 	 */
 	public static function get_exclude_captions_setting() {
 		return (bool) get_option( self::EXCLUDE_CAPTIONS_OPTION, self::EXCLUDE_CAPTIONS_DEFAULT );
-	}
-
-	/**
-	 * Map a User-Agent string to a platform.
-	 *
-	 * Pure helper extracted so the auto-detect branch of resolve_platform()
-	 * is testable without spoofing $_SERVER globals.
-	 *
-	 * @param string $user_agent User-Agent string to inspect.
-	 * @return string Either 'mac' or 'win'. Empty/non-Mac strings yield 'win'.
-	 */
-	public static function sniff_user_agent_platform( $user_agent ) {
-		return ( false !== stripos( $user_agent, 'Mac' ) || false !== stripos( $user_agent, 'iPad' ) || false !== stripos( $user_agent, 'iPhone' ) ) ? 'mac' : 'win';
-	}
-
-	/**
-	 * Resolve the InDesign Tagged Text header platform for the current export.
-	 *
-	 * Honors the site setting first. When the setting is 'auto', the platform
-	 * is sniffed from the requesting browser's User-Agent — InDesign requires
-	 * the header to match the host OS or markup is rendered literally. A
-	 * non-browser client (WP-CLI, a direct REST call) under 'auto' has no
-	 * User-Agent and therefore resolves to 'win'.
-	 *
-	 * The return value is normalized to exactly 'mac' or 'win' after the filter
-	 * runs, so a callback returning 'auto', null, or any other value degrades to
-	 * 'win' (the converter's default header) rather than an invalid platform.
-	 *
-	 * @return string Either 'mac' or 'win'.
-	 */
-	public static function resolve_platform() {
-		$setting    = self::get_platform_setting();
-		$user_agent = '';
-
-		if ( 'mac' === $setting || 'win' === $setting ) {
-			$platform = $setting;
-		} else {
-			// The export runs from an authenticated admin request (admin-post.php
-			// for a single export, or an edit.php bulk action) that is never cached.
-			// phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__HTTP_USER_AGENT__
-			$user_agent = isset( $_SERVER['HTTP_USER_AGENT'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) ) : '';
-			$platform   = self::sniff_user_agent_platform( $user_agent );
-		}
-
-		/**
-		 * Filters the resolved platform for an InDesign export.
-		 *
-		 * @param string $platform   'mac' or 'win'.
-		 * @param string $setting    The stored platform setting ('auto', 'mac', or 'win').
-		 * @param string $user_agent The User-Agent header from the request after
-		 *                           sanitize_text_field() + wp_unslash(), or '' when
-		 *                           not consulted (i.e. setting is not 'auto').
-		 */
-		$platform = apply_filters( 'newspack_indesign_export_platform', $platform, $setting, $user_agent );
-
-		return 'mac' === $platform ? 'mac' : 'win';
 	}
 
 	/**
