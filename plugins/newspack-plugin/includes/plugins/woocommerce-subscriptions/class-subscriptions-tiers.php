@@ -367,6 +367,11 @@ class Subscriptions_Tiers {
 				$product = wc_get_product( $product );
 			}
 
+			// A deleted grouped child leaves an ID that no longer resolves.
+			if ( ! $product instanceof \WC_Product ) {
+				continue;
+			}
+
 			if ( ! WooCommerce_Subscriptions::is_subscription_product( $product ) ) {
 				continue;
 			}
