@@ -49,7 +49,9 @@ if ( $wprtt_shared_post instanceof WP_Post ) {
 	wprtt_record_view( $wprtt_shared_post, $wprtt_referrer, $wprtt_ga4_param, $wprtt_guards_enabled );
 }
 
-header( 'Content-Type: image/png' );
-// A transparent 1x1 px .gif image.
+if ( ! headers_sent() ) {
+	header( 'Content-Type: image/png' );
+}
+// A transparent 1x1 px PNG image.
 echo base64_decode( 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABAQMAAAAl21bKAAAAA1BMVEUAAACnej3aAAAAAXRSTlMAQObYZgAAAApJREFUCNdjYAAAAAIAAeIhvDMAAAAASUVORK5CYII=' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 exit;

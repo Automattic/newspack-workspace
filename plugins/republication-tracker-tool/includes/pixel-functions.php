@@ -1,9 +1,11 @@
 <?php
 /**
- * Tracking pixel counting guards: bot filtering and per-client deduplication.
+ * Tracking pixel counting: request validation, view recording, and the
+ * counting guards (bot filtering and per-client deduplication).
  *
- * These run on every pixel request, before the view counter and the GA4
- * Measurement Protocol event, so filtered hits affect neither number.
+ * The guards gate only the guarded shadow count. The raw counter and the GA4
+ * Measurement Protocol event keep their legacy per-view behavior in both flag
+ * states.
  *
  * @package Republication_Tracker_Tool
  */
@@ -12,10 +14,12 @@
  * Whether the counting guards (bot filtering, deduplication, uncacheable
  * responses) are enabled.
  *
- * Off by default for a gradual rollout: enabling changes what the "views"
- * number means, and counts visibly drop. Enable per site (or fleet-wide via a
- * managed define) with the WPRTT_COUNTING_GUARDS_ENABLED constant, or in code
- * via the filter. When off, the pixel counts exactly as it always has.
+ * Off by default for a gradual rollout. Enabling switches no displayed number:
+ * the raw counter keeps its legacy counting rules, and the plugin additionally
+ * records a guarded comparison count and makes pixel responses uncacheable
+ * (which can itself raise the raw count on busy stories — see
+ * wprtt_record_view()). Enable per site (or fleet-wide via a managed define)
+ * with the WPRTT_COUNTING_GUARDS_ENABLED constant, or in code via the filter.
  *
  * @return bool True if the counting guards are enabled.
  */
@@ -193,11 +197,12 @@ function wprtt_get_dedup_identity(): string {
 function wprtt_get_referring_page_title( string $url ): string {
 	// The 2-second timeout bounds how long a pixel request can hold a worker on
 	// this blocking outbound call — the endpoint is public, and with the
-	// counting guards on its responses are uncacheable. wp_safe_remote_get
+	// counting guards on its responses are uncacheable. The VIP helper gets the
+	// same bound explicitly (its own default is 1s). wp_safe_remote_get
 	// (reject_unsafe_urls) re-validates every redirect hop: the caller's
 	// wp_http_validate_url() gate only covers the first hop, so without it a
 	// referrer host that 302s to an internal address would be followed.
-	$response = function_exists( 'vip_safe_wp_remote_get' ) ? vip_safe_wp_remote_get( $url ) : wp_safe_remote_get( $url, [ 'timeout' => 2 ] );
+	$response = function_exists( 'vip_safe_wp_remote_get' ) ? vip_safe_wp_remote_get( $url, '', 3, 2 ) : wp_safe_remote_get( $url, [ 'timeout' => 2 ] );
 
 	$title = '';
 
