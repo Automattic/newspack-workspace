@@ -337,6 +337,8 @@ class Subscriptions_Tiers {
 			return [];
 		}
 
+		$is_grouped_parent = false;
+
 		if ( empty( $product ) ) {
 			$products = wc_get_products(
 				[
@@ -346,8 +348,9 @@ class Subscriptions_Tiers {
 			);
 			$sort_by_price = $sort_by_price ?? true;
 		} elseif ( $product->is_type( 'grouped' ) ) {
-			$products = $product->get_children();
-			$sort_by_price = $sort_by_price ?? false;
+			$products          = $product->get_children();
+			$sort_by_price     = $sort_by_price ?? false;
+			$is_grouped_parent = true;
 		} elseif ( $product->is_type( 'variable' ) || WooCommerce_Subscriptions::is_subscription_product( $product ) ) {
 			$products = [ $product ];
 			$sort_by_price = $sort_by_price ?? true;
@@ -369,6 +372,19 @@ class Subscriptions_Tiers {
 			}
 
 			if ( $product->get_status() === 'private' ) {
+				continue;
+			}
+
+			// A grouped product's children are each their own cart-item parent,
+			// so APFS's convert_to_sub_<parent_id> - a single key at the form
+			// level - can never be keyed correctly for a plan-based child. Skip
+			// it here, in composition, so the tier never exists: rendering it
+			// would produce a purchasable form that silently takes a one-time
+			// payment instead of creating a subscription. Legacy `subscription`/
+			// `variable-subscription` children (no APFS schemes) are unaffected -
+			// they carry their recurrence in their own meta, not a plan, so
+			// there's no parent-ID mismatch for them to trip over.
+			if ( $is_grouped_parent && WooCommerce_Subscriptions::has_subscription_plans( $product ) ) {
 				continue;
 			}
 

@@ -283,6 +283,118 @@ class Newspack_Test_Subscriptions_Tiers_Plans extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A grouped product's children are each their own cart-item parent, so
+	 * APFS's convert_to_sub_<parent_id> - a single key at the form level -
+	 * can never be keyed correctly for a plan-based child. On `release`, a
+	 * grouped product with a plan-based (`variable`) child already yields no
+	 * tiers, because the legacy child-type check rejects `variable`. This
+	 * pins that same "no tiers" outcome for the plan model, rather than
+	 * letting the child's plans expand into a purchasable-but-unaddressable
+	 * form that would take a one-time payment instead of subscribing.
+	 */
+	public function test_grouped_product_with_only_a_plan_based_child_yields_no_tiers() {
+		$plans = [
+			'mkey' => [
+				'period'   => 'month',
+				'interval' => 1,
+			],
+		];
+
+		$parent = wc_create_mock_product(
+			[
+				'id'       => 350,
+				'type'     => 'grouped',
+				'children' => [ 351 ],
+			]
+		);
+		wc_create_mock_product(
+			[
+				'id'       => 351,
+				'type'     => 'variable',
+				'children' => [ 352, 353 ],
+			]
+		);
+		$this->give_plans( 351, $plans );
+		foreach ( [ 352, 353 ] as $vid ) {
+			wc_create_mock_product(
+				[
+					'id'        => $vid,
+					'type'      => 'variation',
+					'parent_id' => 351,
+				]
+			);
+			$this->give_plans( $vid, $plans );
+		}
+
+		$tiers = \Newspack\Subscriptions_Tiers::get_tiers_by_frequency( $parent );
+
+		$this->assertSame( [], $tiers );
+	}
+
+	/**
+	 * A grouped product mixing a legacy child and a plan-based child must
+	 * still yield the legacy child's tiers, unchanged - the plan-based
+	 * child's exclusion (see the test above) is additive, not a blanket
+	 * "grouped products are broken" regression.
+	 */
+	public function test_grouped_product_with_mixed_children_yields_only_the_legacy_tiers() {
+		$parent = wc_create_mock_product(
+			[
+				'id'       => 355,
+				'type'     => 'grouped',
+				'children' => [ 356, 357 ],
+			]
+		);
+		wc_create_mock_product(
+			[
+				'id'   => 356,
+				'type' => 'subscription',
+				'meta' => [
+					'_subscription_period'          => 'month',
+					'_subscription_period_interval' => '1',
+				],
+			]
+		);
+		wc_create_mock_product(
+			[
+				'id'       => 357,
+				'type'     => 'variable',
+				'children' => [ 358, 359 ],
+			]
+		);
+		$plans = [
+			'mkey' => [
+				'period'   => 'month',
+				'interval' => 1,
+			],
+		];
+		$this->give_plans( 357, $plans );
+		foreach ( [ 358, 359 ] as $vid ) {
+			wc_create_mock_product(
+				[
+					'id'        => $vid,
+					'type'      => 'variation',
+					'parent_id' => 357,
+				]
+			);
+			$this->give_plans( $vid, $plans );
+		}
+
+		$tiers = \Newspack\Subscriptions_Tiers::get_tiers_by_frequency( $parent );
+
+		$this->assertSame( [ 'month_1' ], array_keys( $tiers ) );
+		$this->assertSame(
+			[ 356 ],
+			array_map(
+				function ( $p ) {
+					return $p->get_id();
+				},
+				$tiers['month_1']
+			)
+		);
+	}
+
+	/**
 	 * NPPM-3053 regression for get_current_tier(): under the plan model the
 	 * same variation ID is stamped into every plan's bucket
 	 * (get_tiers_by_frequency()'s expansion), so ID-only matching resolved an
