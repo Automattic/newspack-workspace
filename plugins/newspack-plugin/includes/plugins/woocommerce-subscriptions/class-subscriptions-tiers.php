@@ -800,16 +800,44 @@ class Subscriptions_Tiers {
 	 *
 	 * @param array  $frequencies       Frequencies.
 	 * @param string $current_frequency Current frequency.
-	 * @param bool   $is_form_control     Whether to treat it as a form input.
+	 * @param bool   $is_form_control   Whether to treat it as a form input.
+	 * @param array  $plan_keys         Optional frequency key => scheme key map. When
+	 *                                  non-empty along with $parent_id, tabs render as
+	 *                                  radios posting the chosen plan.
+	 * @param int    $parent_id         Optional parent product ID, used to name the
+	 *                                  radio input group.
 	 */
-	public static function render_frequency_control( $frequencies, $current_frequency, $is_form_control = false ) {
+	public static function render_frequency_control( $frequencies, $current_frequency, $is_form_control = false, $plan_keys = [], $parent_id = 0 ) {
 		if ( $is_form_control ) :
 			?>
 			<div class="newspack-ui__segmented-control__form-control">
 				<label><?php _e( 'Frequency', 'newspack-plugin' ); ?></label>
 				<?php
 		endif;
-		if ( count( $frequencies ) <= 3 ) :
+		if ( ! empty( $plan_keys ) && $parent_id ) :
+			// Under the plan model the frequency IS the subscription plan, so the
+			// control carries the value APFS reads from $_REQUEST to resolve which
+			// plan the reader chose. A hidden input synced by JS would revert to a
+			// one-time purchase whenever the JS did not run.
+			?>
+			<div class="newspack-ui__segmented-control__tabs">
+				<?php foreach ( $frequencies as $frequency ) : ?>
+					<?php if ( empty( $plan_keys[ $frequency ] ) ) : ?>
+						<?php continue; ?>
+					<?php endif; ?>
+					<label class="newspack-ui__button newspack-ui__button--small <?php echo esc_attr( $frequency === $current_frequency ? 'selected' : '' ); ?>">
+						<input
+							type="radio"
+							name="convert_to_sub_<?php echo absint( $parent_id ); ?>"
+							value="<?php echo esc_attr( $plan_keys[ $frequency ] ); ?>"
+							<?php checked( $frequency, $current_frequency ); ?>
+						>
+						<?php echo esc_html( WooCommerce_Subscriptions::get_frequency_label( $frequency ) ); ?>
+					</label>
+				<?php endforeach; ?>
+			</div>
+			<?php
+		elseif ( count( $frequencies ) <= 3 ) :
 			?>
 			<div class="newspack-ui__segmented-control__tabs">
 				<?php foreach ( $frequencies as $frequency ) : ?>
@@ -850,7 +878,16 @@ class Subscriptions_Tiers {
 		$is_single_tier = self::is_single_tier( $tiers );
 		$is_nyp         = $is_single_tier && self::is_nyp( $tiers ); // Only treat as NYP form if there's only 1 tier.
 
-		$frequencies       = array_keys( $tiers );
+		$frequencies = array_keys( $tiers );
+
+		$plan_keys = [];
+		foreach ( $tiers as $frequency => $tier_products ) {
+			$plan_key = empty( $tier_products ) ? '' : WooCommerce_Subscriptions::get_active_plan_key( $tier_products[0] );
+			if ( $plan_key ) {
+				$plan_keys[ $frequency ] = $plan_key;
+			}
+		}
+
 		$current_frequency = null;
 		$current_product   = null;
 		$user_subscription = null;
@@ -903,7 +940,7 @@ class Subscriptions_Tiers {
 				<div class="newspack-ui__segmented-control">
 					<?php
 					if ( count( $frequencies ) > 1 ) {
-						self::render_frequency_control( $frequencies, $current_frequency, $is_nyp );
+						self::render_frequency_control( $frequencies, $current_frequency, $is_nyp, $plan_keys, $product ? $product->get_id() : 0 );
 					}
 					?>
 					<div class="newspack-ui__segmented-control__content">

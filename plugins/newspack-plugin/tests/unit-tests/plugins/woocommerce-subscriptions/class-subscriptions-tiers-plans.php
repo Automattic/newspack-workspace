@@ -560,4 +560,41 @@ class Newspack_Test_Subscriptions_Tiers_Plans extends WP_UnitTestCase {
 			\Newspack\Subscriptions_Tiers::get_frequency_parts( $product )
 		);
 	}
+
+	/**
+	 * The frequency control posts the chosen plan, so APFS can resolve it from
+	 * $_REQUEST. Without this the cart falls back to no plan and the reader is
+	 * charged once instead of subscribing.
+	 */
+	public function test_frequency_control_posts_the_plan_key() {
+		ob_start();
+		\Newspack\Subscriptions_Tiers::render_frequency_control(
+			[ 'month_1', 'year_1' ],
+			'month_1',
+			false,
+			[
+				'month_1' => 'mkey',
+				'year_1'  => 'ykey',
+			],
+			350
+		);
+		$markup = ob_get_clean();
+
+		$this->assertStringContainsString( 'name="convert_to_sub_350"', $markup );
+		$this->assertStringContainsString( 'value="mkey"', $markup );
+		$this->assertStringContainsString( 'value="ykey"', $markup );
+		$this->assertStringContainsString( 'checked', $markup );
+	}
+
+	/**
+	 * Legacy products keep the button control - there is no plan to post.
+	 */
+	public function test_frequency_control_stays_buttons_without_plans() {
+		ob_start();
+		\Newspack\Subscriptions_Tiers::render_frequency_control( [ 'month_1', 'year_1' ], 'month_1' );
+		$markup = ob_get_clean();
+
+		$this->assertStringContainsString( '<button', $markup );
+		$this->assertStringNotContainsString( 'convert_to_sub', $markup );
+	}
 }
