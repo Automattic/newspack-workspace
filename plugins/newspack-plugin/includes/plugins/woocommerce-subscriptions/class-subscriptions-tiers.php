@@ -260,6 +260,21 @@ class Subscriptions_Tiers {
 	 * @return string Frequency.
 	 */
 	public static function get_frequency( $product ) {
+		// Under the subscription-plan model the recurrence lives on the plan, not
+		// in post meta - APFS only ever applies it as in-memory runtime meta, so
+		// the legacy keys are either absent or a hardcoded default unrelated to
+		// the configured plan.
+		$plan_key = WooCommerce_Subscriptions::get_active_plan_key( $product );
+		if ( $plan_key ) {
+			$plans = WooCommerce_Subscriptions::get_subscription_plans( $product );
+			if ( isset( $plans[ $plan_key ] ) ) {
+				$frequency = WooCommerce_Subscriptions::get_plan_frequency( $plans[ $plan_key ] );
+				if ( $frequency ) {
+					return $frequency;
+				}
+			}
+		}
+
 		$period = $product->get_meta( '_subscription_period', true );
 		if ( empty( $period ) ) {
 			$period = 'once';

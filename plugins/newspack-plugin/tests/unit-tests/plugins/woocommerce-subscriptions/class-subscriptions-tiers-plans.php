@@ -88,4 +88,55 @@ class Newspack_Test_Subscriptions_Tiers_Plans extends WP_UnitTestCase {
 		);
 		$this->assertSame( [], WooCommerce_Subscriptions::get_subscription_plans( $product ) );
 	}
+
+	/**
+	 * A stamped plan wins over legacy meta.
+	 *
+	 * The legacy meta here is the hardcoded `month` that
+	 * WC_Subscriptions_Admin::set_variation_meta_defaults_on_bulk_add() writes
+	 * onto every generated variation. An annual plan must not render as monthly.
+	 */
+	public function test_frequency_comes_from_the_stamped_plan() {
+		$product = wc_create_mock_product(
+			[
+				'id'   => 310,
+				'type' => 'variable',
+				'meta' => [
+					'_subscription_period'          => 'month',
+					'_subscription_period_interval' => '1',
+				],
+			]
+		);
+		$this->give_plans(
+			310,
+			[
+				'ykey' => [
+					'period'   => 'year',
+					'interval' => 1,
+				],
+			]
+		);
+
+		WCS_ATT_Product_Schemes::set_subscription_scheme( $product, 'ykey' );
+
+		$this->assertSame( 'year_1', \Newspack\Subscriptions_Tiers::get_frequency( $product ) );
+	}
+
+	/**
+	 * With no plan stamped, legacy meta still drives the frequency.
+	 */
+	public function test_frequency_falls_back_to_legacy_meta() {
+		$product = wc_create_mock_product(
+			[
+				'id'   => 311,
+				'type' => 'subscription',
+				'meta' => [
+					'_subscription_period'          => 'week',
+					'_subscription_period_interval' => '2',
+				],
+			]
+		);
+
+		$this->assertSame( 'week_2', \Newspack\Subscriptions_Tiers::get_frequency( $product ) );
+	}
 }
