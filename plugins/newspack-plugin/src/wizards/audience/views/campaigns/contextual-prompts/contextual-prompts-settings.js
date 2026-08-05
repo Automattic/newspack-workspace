@@ -32,12 +32,12 @@ import { Button, Divider, Grid, Modal, SectionHeader } from '../../../../../../p
 import WizardsTab from '../../../../wizards-tab';
 
 const DISCLOSURE = __(
-	"Contextual Prompts lets editors draft donation call-to-action copy with AI. The story's content is sent to a third-party AI provider, which retains it for up to 30 days for abuse monitoring and never uses it to train AI models or in other AI products. Every suggestion is a draft an editor reviews and approves; nothing is published automatically.",
+	'Story content is sent to a third-party AI provider, which retains it for up to 30 days for abuse monitoring and never uses it to train AI models. Every suggestion is a draft an editor reviews and approves; nothing is published automatically.',
 	'newspack-plugin'
 );
 
 const CONFIRMATION = __(
-	'Some newsrooms restrict AI use by policy or union agreement; by enabling this, you confirm yours permits it. Only administrators can change this setting, and you can turn it off at any time.',
+	'Some newsrooms restrict AI use by policy or union agreement; by enabling this, you confirm your newsroom permits it. You can turn it off at any time.',
 	'newspack-plugin'
 );
 
