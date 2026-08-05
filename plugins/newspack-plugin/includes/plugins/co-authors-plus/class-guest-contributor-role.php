@@ -46,6 +46,12 @@ class Guest_Contributor_Role {
 	const SITE_HAS_GUEST_AUTHORS_OPTION_NAME = 'newspack_check_site_has_cap_guest_authors';
 
 	/**
+	 * Log code for outbound-mail-guard suppression events (Logger::newspack_log()).
+	 * The `mode` key in the log data discriminates the three cases sharing it.
+	 */
+	const MAIL_GUARD_LOG_CODE = 'newspack_guest_author_mail_suppressed';
+
+	/**
 	 * Initialize hooks and filters.
 	 */
 	public static function initialize() {
@@ -327,36 +333,44 @@ class Guest_Contributor_Role {
 	}
 
 	/**
-	 * Register the outbound-mail guard filters, unless the environment (or a
-	 * filter) says otherwise. Safe to call more than once — add_filter() with
-	 * an identical callback and priority replaces the existing entry.
+	 * Register the outbound-mail guard filters. Registration is unconditional;
+	 * whether anything is suppressed is decided per send by
+	 * is_mail_guard_active(), so the activity filter stays reachable from any
+	 * plugin, not only code that runs before this class loads.
 	 *
 	 * The short-circuit registers at priority 1 so it runs before mailer
 	 * plugins' own pre_wp_mail callbacks. That protects the all-placeholder
 	 * case against callbacks that honor a non-null incoming value (the
 	 * well-behaved majority); a callback that ignores the incoming value can
 	 * still dispatch and overwrite the result regardless of priority.
-	 *
-	 * @return bool Whether the guard filters were registered.
 	 */
-	public static function register_mail_guard(): bool {
-		/**
-		 * Filters whether the outbound-mail guard is active.
-		 *
-		 * Defaults to active everywhere except local and development
-		 * environments (see is_mail_guard_active_for_environment()). Hook from
-		 * a must-use plugin or a wp-config-included file to force the guard on
-		 * or off — for example, to re-enable it on a site whose declared
-		 * environment type would otherwise switch it off.
-		 *
-		 * @param bool $active Whether the guard registers its mail filters.
-		 */
-		if ( ! \apply_filters( 'newspack_guest_author_mail_guard_active', self::is_mail_guard_active_for_environment( \wp_get_environment_type() ) ) ) {
-			return false;
-		}
+	public static function register_mail_guard(): void {
 		\add_filter( 'pre_wp_mail', [ __CLASS__, 'short_circuit_dummy_only_email' ], 1, 2 );
 		\add_filter( 'wp_mail', [ __CLASS__, 'remove_dummy_email_recipients' ], 10, 1 );
-		return true;
+	}
+
+	/**
+	 * Whether the outbound-mail guard should suppress anything right now.
+	 * Evaluated on every send, so the filter below can be hooked from any
+	 * plugin, theme, or must-use plugin at any point before mail goes out.
+	 * wp_get_environment_type() memoizes, so the per-call cost is negligible.
+	 *
+	 * @return bool
+	 */
+	public static function is_mail_guard_active(): bool {
+		/**
+		 * Filters whether the outbound-mail guard suppresses placeholder mail.
+		 *
+		 * Defaults to active everywhere except local and development
+		 * environments (see is_mail_guard_active_for_environment()). Because
+		 * this runs per send, any plugin can hook it — to force the guard back
+		 * on for a site whose declared environment type would switch it off,
+		 * or to switch it off for testing. The workspace's Docker mu-plugin
+		 * disables it on dev containers so captured mail stays inspectable.
+		 *
+		 * @param bool $active Whether the guard suppresses placeholder mail.
+		 */
+		return (bool) \apply_filters( 'newspack_guest_author_mail_guard_active', self::is_mail_guard_active_for_environment( \wp_get_environment_type() ) );
 	}
 
 	/**
@@ -370,8 +384,9 @@ class Guest_Contributor_Role {
 	 * all-dummy list intact (absent Cc/Bcc) so it can be recognized and
 	 * suppressed here.
 	 *
-	 * Scope notes: mail whose headers carry Cc/Bcc recipients is never
-	 * short-circuited — suppressing it would also suppress delivery to those
+	 * Scope notes: both guard callbacks no-op when is_mail_guard_active()
+	 * says the guard is off. Mail whose headers carry Cc/Bcc recipients is
+	 * never short-circuited — suppressing it would also suppress delivery to those
 	 * (possibly real) header recipients. Dummy addresses inside Cc/Bcc headers
 	 * are not scrubbed by this guard. Mailer plugins that take over delivery
 	 * from their own pre_wp_mail callback still receive the stripped list —
@@ -391,6 +406,9 @@ class Guest_Contributor_Role {
 		if ( null !== $return ) {
 			return $return;
 		}
+		if ( ! self::is_mail_guard_active() ) {
+			return $return;
+		}
 		if ( empty( $atts['to'] ) ) {
 			return $return;
 		}
@@ -399,7 +417,16 @@ class Guest_Contributor_Role {
 		}
 		$recipients = self::parse_recipients( $atts['to'] );
 		if ( ! empty( $recipients ) && empty( self::remove_dummy_addresses( $recipients ) ) ) {
-			Logger::log( 'Suppressing outbound email to placeholder-only recipient list: ' . implode( ', ', $recipients ), 'NEWSPACK-GC-MAIL-GUARD' );
+			Logger::newspack_log(
+				self::MAIL_GUARD_LOG_CODE,
+				'Suppressed an outbound email: every recipient is a generated placeholder address.',
+				[
+					'mode'       => 'suppressed_all',
+					'count'      => count( $recipients ),
+					'recipients' => array_slice( array_map( [ __CLASS__, 'extract_address' ], $recipients ), 0, 20 ),
+				],
+				'info'
+			);
 			return true;
 		}
 		return $return;
@@ -416,6 +443,9 @@ class Guest_Contributor_Role {
 	 * @return array
 	 */
 	public static function remove_dummy_email_recipients( $args ) {
+		if ( ! self::is_mail_guard_active() ) {
+			return $args;
+		}
 		if ( empty( $args['to'] ) ) {
 			return $args;
 		}
@@ -426,7 +456,17 @@ class Guest_Contributor_Role {
 			return $args;
 		}
 		if ( ! empty( $filtered ) ) {
-			Logger::log( 'Removing placeholder recipient(s) from outbound email: ' . implode( ', ', array_diff( $recipients, $filtered ) ), 'NEWSPACK-GC-MAIL-GUARD' );
+			$removed = array_values( array_map( [ __CLASS__, 'extract_address' ], array_diff( $recipients, $filtered ) ) );
+			Logger::newspack_log(
+				self::MAIL_GUARD_LOG_CODE,
+				'Removed generated placeholder recipient(s) from an outbound email.',
+				[
+					'mode'       => 'stripped_mixed',
+					'count'      => count( $removed ),
+					'recipients' => array_slice( $removed, 0, 20 ),
+				],
+				'info'
+			);
 			$args['to'] = $filtered;
 			return $args;
 		}
@@ -437,7 +477,16 @@ class Guest_Contributor_Role {
 		// instead of reporting success. With Cc/Bcc present the mail proceeds
 		// to those recipients only.
 		if ( self::has_cc_or_bcc_headers( $args['headers'] ?? '' ) ) {
-			Logger::log( 'Removing placeholder-only recipient list from outbound email; delivering to Cc/Bcc recipients only: ' . implode( ', ', $recipients ), 'NEWSPACK-GC-MAIL-GUARD' );
+			Logger::newspack_log(
+				self::MAIL_GUARD_LOG_CODE,
+				'Removed a placeholder-only recipient list from an outbound email; delivering to its Cc/Bcc recipients only.',
+				[
+					'mode'       => 'stripped_to_cc_bcc',
+					'count'      => count( $recipients ),
+					'recipients' => array_slice( array_map( [ __CLASS__, 'extract_address' ], $recipients ), 0, 20 ),
+				],
+				'info'
+			);
 			$args['to'] = [];
 		}
 		return $args;
@@ -499,14 +548,28 @@ class Guest_Contributor_Role {
 			array_filter(
 				$recipients,
 				function ( $recipient ) {
-					$address = $recipient;
-					if ( preg_match( '/<([^>]+)>/', $address, $matches ) ) {
-						$address = $matches[1];
-					}
-					return ! self::is_dummy_email_address( $address );
+					return ! self::is_dummy_email_address( self::extract_address( $recipient ) );
 				}
 			)
 		);
+	}
+
+	/**
+	 * Extract the dispatch address from a recipient entry, which may be a bare
+	 * address or "Name <address>". Uses the same greedy pattern as core's
+	 * wp_mail() recipient parsing (wp-includes/pluggable.php), so the address
+	 * judged here is the address core will actually dispatch to — even when a
+	 * quoted display name itself contains angle brackets.
+	 *
+	 * @param string $recipient Recipient entry.
+	 *
+	 * @return string Bare email address.
+	 */
+	private static function extract_address( $recipient ): string {
+		if ( preg_match( '/(.*)<(.+)>/', (string) $recipient, $matches ) ) {
+			return trim( $matches[2] );
+		}
+		return trim( (string) $recipient );
 	}
 
 	/**

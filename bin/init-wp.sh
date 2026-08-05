@@ -48,17 +48,6 @@ if [ ! -f /var/www/html/wp-config.php ]; then
 	wp --allow-root config set JETPACK_DOCKER_ENV true --raw --type=constant
 fi
 
-# Declare the environment type (set only when absent — an explicit value in
-# wp-config.php or the container environment is never overridden) so
-# environment-gated behavior, e.g. the newspack-plugin outbound-mail guard,
-# can tell local development from production. Runs on every container start
-# so existing installs pick it up too. To exercise environment-gated
-# production behavior locally, set the constant to production for the site
-# and restore local afterward.
-if [ -f /var/www/html/wp-config.php ] && [ -z "${WP_ENVIRONMENT_TYPE:-}" ] && ! wp --allow-root config has WP_ENVIRONMENT_TYPE 2>/dev/null; then
-	wp --allow-root config set WP_ENVIRONMENT_TYPE local --type=constant
-fi
-
 # Copy single site htaccess if none is present
 if [ ! -f /var/www/html/.htaccess ]; then
 	cp /var/lib/jetpack-config/htaccess /var/www/html/.htaccess

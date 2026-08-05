@@ -467,18 +467,6 @@ case $1 in
     pull)
         echo "Pulling latest from origin..."
         cd "$NABSPATH" && git pull
-        # Declare the environment type on running containers (set only when
-        # absent — an explicit value in wp-config.php or the container
-        # environment is never overridden) so environment-gated behavior,
-        # e.g. the newspack-plugin outbound-mail guard, recognizes local envs
-        # without waiting for the next container restart.
-        for c in $(docker ps --format '{{.Names}}' 2>/dev/null | grep -E '^newspack_dev$|^newspack_env_'); do
-            if docker exec "$c" sh -c "[ -n \"\${WP_ENVIRONMENT_TYPE:-}\" ] || wp --allow-root config has WP_ENVIRONMENT_TYPE" > /dev/null 2>&1; then
-                continue
-            fi
-            docker exec "$c" sh -c "wp --allow-root config set WP_ENVIRONMENT_TYPE local --type=constant" > /dev/null 2>&1 \
-                || echo "  Could not set WP_ENVIRONMENT_TYPE on $c — environment-gated behavior may act as production there."
-        done
         ;;
     branch)
         switch_all_repos_to_branch $2

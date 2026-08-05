@@ -220,13 +220,13 @@ class Newspack_Test_Emails extends WP_UnitTestCase {
 
 		$send_result = Emails::send_email(
 			$test_email['post_id'],
-			'someone@example.com'
+			'someone@example.org'
 		);
 		self::assertTrue( $send_result, 'Email has been sent.' );
 
 		$send_result = Emails::send_email(
 			9999,
-			'someone@example.com'
+			'someone@example.org'
 		);
 		self::assertFalse( $send_result, 'Non-existent email is not sent.' );
 	}
@@ -266,7 +266,7 @@ class Newspack_Test_Emails extends WP_UnitTestCase {
 				Emails::can_send_email( 'test-email-config' ),
 				'can_send_email() must return false for draft (auto-send gate).'
 			);
-			$auto_send_result = Emails::send_email( 'test-email-config', 'someone@example.com' );
+			$auto_send_result = Emails::send_email( 'test-email-config', 'someone@example.org' );
 			self::assertFalse( $auto_send_result, 'send_email() must not dispatch for draft (auto-send gate).' );
 
 			// TEST-SEND: draft is allowed. The headline contract of NPPD-1547.
@@ -274,7 +274,7 @@ class Newspack_Test_Emails extends WP_UnitTestCase {
 			// log in as admin for the duration of the call.
 			$admin = self::login_as_admin();
 			try {
-				$test_send_result = Emails::send_test_email( $test_email['post_id'], 'someone@example.com' );
+				$test_send_result = Emails::send_test_email( $test_email['post_id'], 'someone@example.org' );
 				self::assertTrue(
 					$test_send_result,
 					'send_test_email() must return true for draft — the admin "Send test" operation is decoupled from the auto-send status gate.'
@@ -341,6 +341,31 @@ class Newspack_Test_Emails extends WP_UnitTestCase {
 					'post_status' => $original_status,
 				]
 			);
+		}
+	}
+
+	/**
+	 * Test-send refuses generated placeholder recipients: the outbound-mail
+	 * guard suppresses them while reporting success, so accepting one would
+	 * certify a broken configuration as healthy.
+	 */
+	public function test_test_send_rejects_placeholder_recipient() {
+		$test_email = self::get_test_email( 'test-email-config' );
+		$admin      = self::login_as_admin();
+		// Pin the mail guard active: the rejection only applies where
+		// suppression would otherwise lie, and this keeps the test independent
+		// of ambient environment state.
+		add_filter( 'newspack_guest_author_mail_guard_active', '__return_true', 20 );
+		try {
+			reset_phpmailer_instance();
+			$result = Emails::send_test_email( $test_email['post_id'], 'tester@example.com' );
+
+			self::assertWPError( $result, 'A generated placeholder recipient must be rejected, not silently suppressed.' );
+			self::assertSame( 'newspack_emails_test_placeholder_recipient', $result->get_error_code() );
+			self::assertFalse( tests_retrieve_phpmailer_instance()->get_sent(), 'Nothing may be dispatched for a rejected test-send.' );
+		} finally {
+			remove_filter( 'newspack_guest_author_mail_guard_active', '__return_true', 20 );
+			self::logout_admin( $admin );
 		}
 	}
 
