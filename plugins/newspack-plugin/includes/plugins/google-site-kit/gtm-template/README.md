@@ -40,6 +40,7 @@ stop here until it ships.
 | `author` | singular views | name(s) |
 | `categories` | singular / category archive | comma-separated |
 | `group` | when Content Gate is enabled | anon group IDs / `none` |
+| `access_source` | singular views, when Content Gate is enabled | product name / `subscription` / `one_time_purchase` / `group` / `institution` / `domain` / `reader_data` / `metering_eligible` / `gated` / `no_custom_access_gate` |
 
 `email_hash` is intentionally **not** in the dataLayer (kept out of third-party reach).
 
@@ -92,6 +93,7 @@ Add each param as an individual **configuration parameter** row on the tag inste
 | `author` | `{{DLV - Newspack - author}}` |
 | `categories` | `{{DLV - Newspack - categories}}` |
 | `group` | `{{DLV - Newspack - group}}` |
+| `access_source` | `{{DLV - Newspack - access_source}}` |
 
 </details>
 

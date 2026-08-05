@@ -36,10 +36,13 @@ class Newspack_Test_GoogleSiteKit_Access_Source extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Clear the shared attribution memo between tests.
+	 * Clear every request-scoped memo this code path populates, so no test
+	 * inherits another's answer.
 	 */
 	public function tear_down() {
 		Newspack\Access_Attribution::reset_memo();
+		Newspack\Access_Rules::flush_one_time_purchase_memo();
+		GoogleSiteKit::reset_access_source_memo();
 		parent::tear_down();
 	}
 
@@ -76,6 +79,59 @@ class Newspack_Test_GoogleSiteKit_Access_Source extends WP_UnitTestCase {
 	 */
 	public function test_blocked_reader_reports_gated() {
 		$post_id = $this->create_gated_post(
+			[
+				'custom_access' => [
+					'active'       => true,
+					'access_rules' => [
+						[
+							[
+								'slug'  => 'email_domain',
+								'value' => 'nobody.example',
+							],
+						],
+					],
+				],
+			]
+		);
+		$this->go_to( get_permalink( $post_id ) );
+		$this->assertSame( 'gated', GoogleSiteKit::get_request_access_source() );
+	}
+
+	/**
+	 * On its own, a custom-access gate with an empty rule set restricts nobody,
+	 * so there is no gating to report.
+	 */
+	public function test_only_unrestricting_gate_reports_no_custom_access_gate() {
+		$post_id = $this->create_gated_post(
+			[
+				'custom_access' => [
+					'active'       => true,
+					'access_rules' => [],
+				],
+			]
+		);
+		$this->go_to( get_permalink( $post_id ) );
+		$this->assertSame( 'no_custom_access_gate', GoogleSiteKit::get_request_access_source() );
+	}
+
+	/**
+	 * A gate whose custom access is on but whose rule set is empty restricts
+	 * nobody — but it must not speak for the whole post. Content_Restriction_Control
+	 * stops at the first gate that restricts, so a reader blocked by a second
+	 * gate is genuinely blocked, and reporting "no gate applies" would describe
+	 * the opposite of what the reader sees.
+	 */
+	public function test_unrestricting_gate_does_not_mask_a_restricting_one() {
+		$post_id = $this->create_gated_post(
+			[
+				'custom_access' => [
+					'active'       => true,
+					'access_rules' => [],
+				],
+			]
+		);
+		$this->attach_gate(
+			$post_id,
 			[
 				'custom_access' => [
 					'active'       => true,
@@ -181,6 +237,18 @@ class Newspack_Test_GoogleSiteKit_Access_Source extends WP_UnitTestCase {
 	 */
 	private function create_gated_post( $gate_meta ) {
 		$post_id = $this->factory->post->create();
+		$this->attach_gate( $post_id, $gate_meta );
+		return $post_id;
+	}
+
+	/**
+	 * Publish a gate and bind it to an existing post.
+	 *
+	 * @param int   $post_id   Post the gate applies to.
+	 * @param array $gate_meta Post meta to set on the gate, keyed by meta key.
+	 * @return int Post ID of the gate.
+	 */
+	private function attach_gate( $post_id, $gate_meta ) {
 		$gate_id = $this->factory->post->create(
 			[
 				'post_type'   => Newspack\Content_Gate::GATE_CPT,
@@ -201,6 +269,6 @@ class Newspack_Test_GoogleSiteKit_Access_Source extends WP_UnitTestCase {
 			]
 		);
 		$this->gate_id = $gate_id;
-		return $post_id;
+		return $gate_id;
 	}
 }

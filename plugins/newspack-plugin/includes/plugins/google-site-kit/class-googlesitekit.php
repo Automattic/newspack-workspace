@@ -19,6 +19,25 @@ class GoogleSiteKit {
 	const GA4_SETUP_DONE_OPTION_NAME = 'newspack_analytics_has_set_up_ga4';
 
 	/**
+	 * Request-scoped memo of access source resolutions, keyed by post ID and
+	 * user ID.
+	 *
+	 * The parameters are built at least twice per request — once for Site
+	 * Kit's gtag config and once for the dataLayer mirror — and resolving
+	 * the source re-runs every access rule on the post's gates. The rules
+	 * themselves are not uniformly memoized (notably
+	 * WooCommerce_Connection::get_active_subscriptions_for_user()), so without
+	 * this a logged-in reader on a subscription gate would pay several full
+	 * subscription loads at wp_head.
+	 *
+	 * Request-scoped on purpose, and keyed by user as well as post: a single
+	 * CLI process may resolve for many readers.
+	 *
+	 * @var array<string,string>
+	 */
+	private static $access_source_memo = [];
+
+	/**
 	 * Initialize hooks and filters.
 	 */
 	public static function init() {
@@ -375,6 +394,9 @@ class GoogleSiteKit {
 	 * reach Metering::is_logged_in_metering_allowed(), which records a metered
 	 * view as it answers.
 	 *
+	 * Memoized per post and reader for the life of the request; see
+	 * $access_source_memo.
+	 *
 	 * @return string A vocabulary value, or '' to omit the parameter.
 	 */
 	public static function get_request_access_source() {
@@ -382,7 +404,13 @@ class GoogleSiteKit {
 			return 'no_custom_access_gate';
 		}
 
-		$post_id    = get_the_ID();
+		$post_id  = get_the_ID();
+		$user_id  = get_current_user_id();
+		$memo_key = $post_id . ':' . $user_id;
+		if ( isset( self::$access_source_memo[ $memo_key ] ) ) {
+			return self::$access_source_memo[ $memo_key ];
+		}
+
 		$gates      = [];
 		$unreadable = false;
 		foreach ( (array) Content_Restriction_Control::get_post_gates( $post_id ) as $gate ) {
@@ -398,23 +426,27 @@ class GoogleSiteKit {
 			// A gate we could not read is not the same as no gate. Omit the
 			// parameter rather than assert a state that was never computed;
 			// GA4's (not set) is the honest answer for "we don't know".
-			return $unreadable ? '' : 'no_custom_access_gate';
+			// Not memoized: an unreadable gate is a transient condition, and
+			// caching '' would freeze it for the rest of the request.
+			return $unreadable ? '' : self::memo_access_source( $memo_key, 'no_custom_access_gate' );
 		}
 
-		$user_id      = get_current_user_id();
-		$labels       = [];
-		$unrestricted = false;
-		$meters       = false;
+		$labels      = [];
+		$restricting = false;
+		$meters      = false;
 
 		foreach ( $gates as $gate ) {
 			$result = User_Gate_Access::evaluate_gate_for_user( $gate, $user_id );
 
 			// A gate whose custom access is on but whose rule set is empty
-			// restricts nobody, so it is not evidence of gating.
+			// restricts nobody, so it is not evidence of gating. Note it is
+			// also not evidence of *not* being gated: a second gate on the same
+			// post can still restrict, and Content_Restriction_Control stops at
+			// the first restricting one.
 			if ( empty( $result['groups'] ) ) {
-				$unrestricted = true;
 				continue;
 			}
+			$restricting = true;
 
 			if ( ! empty( $gate['id'] ) && Metering::offers_metering( $gate['id'] ) ) {
 				$meters = true;
@@ -442,12 +474,39 @@ class GoogleSiteKit {
 
 		$primary = Access_Attribution::pick_primary( array_values( array_unique( $labels ) ) );
 		if ( '' !== $primary ) {
-			return $primary;
+			return self::memo_access_source( $memo_key, $primary );
 		}
-		if ( $unrestricted ) {
-			return 'no_custom_access_gate';
+		if ( $meters ) {
+			return self::memo_access_source( $memo_key, 'metering_eligible' );
 		}
-		return $meters ? 'metering_eligible' : 'gated';
+		// Any gate with a non-empty rule set that the reader did not pass is
+		// restricting them, even if another gate on the post does not.
+		if ( $restricting ) {
+			return self::memo_access_source( $memo_key, 'gated' );
+		}
+		return self::memo_access_source( $memo_key, 'no_custom_access_gate' );
+	}
+
+	/**
+	 * Store an access source resolution in the request memo and return it.
+	 *
+	 * @param string $memo_key Memo key, post ID and user ID.
+	 * @param string $value    Resolved vocabulary value.
+	 * @return string The value, unchanged.
+	 */
+	private static function memo_access_source( $memo_key, $value ) {
+		self::$access_source_memo[ $memo_key ] = $value;
+		return $value;
+	}
+
+	/**
+	 * Clear the request-scoped access source memo.
+	 *
+	 * Used by tests and long-running CLI processes, where one PHP process can
+	 * outlive the reader and post state the memo was built for.
+	 */
+	public static function reset_access_source_memo() {
+		self::$access_source_memo = [];
 	}
 
 	/**
