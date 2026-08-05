@@ -511,4 +511,53 @@ class Newspack_Test_Subscriptions_Tiers_Plans extends WP_UnitTestCase {
 			\Newspack\Subscriptions_Tiers::get_frequency_parts( $product )
 		);
 	}
+
+	/**
+	 * Without a stamped plan, get_frequency_parts() falls back to legacy meta.
+	 */
+	public function test_frequency_parts_falls_back_to_legacy_meta() {
+		$product = wc_create_mock_product(
+			[
+				'id'   => 411,
+				'type' => 'subscription',
+				'meta' => [
+					'_subscription_period'          => 'week',
+					'_subscription_period_interval' => '2',
+				],
+			]
+		);
+
+		$this->assertSame(
+			[
+				'period'   => 'week',
+				'interval' => 2,
+			],
+			\Newspack\Subscriptions_Tiers::get_frequency_parts( $product )
+		);
+	}
+
+	/**
+	 * When legacy meta is absent, get_frequency_parts() floors the interval at 1,
+	 * preventing division-by-zero errors in render_nyp_product_card().
+	 */
+	public function test_frequency_parts_floors_absent_interval_at_one() {
+		$product = wc_create_mock_product(
+			[
+				'id'   => 412,
+				'type' => 'subscription',
+				'meta' => [
+					'_subscription_period' => 'month',
+					// No _subscription_period_interval meta.
+				],
+			]
+		);
+
+		$this->assertSame(
+			[
+				'period'   => 'month',
+				'interval' => 1,
+			],
+			\Newspack\Subscriptions_Tiers::get_frequency_parts( $product )
+		);
+	}
 }

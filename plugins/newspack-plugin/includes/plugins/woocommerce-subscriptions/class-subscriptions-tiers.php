@@ -313,9 +313,10 @@ class Subscriptions_Tiers {
 			}
 		}
 
+		$interval = (int) $product->get_meta( '_subscription_period_interval' );
 		return [
 			'period'   => (string) $product->get_meta( '_subscription_period' ),
-			'interval' => (int) $product->get_meta( '_subscription_period_interval' ),
+			'interval' => $interval > 0 ? $interval : 1,
 		];
 	}
 
