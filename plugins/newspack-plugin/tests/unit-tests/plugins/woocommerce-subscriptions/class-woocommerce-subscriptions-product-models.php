@@ -115,6 +115,27 @@ class Newspack_Test_WooCommerce_Subscriptions_Product_Models extends WP_UnitTest
 	}
 
 	/**
+	 * A legacy-typed product never takes the plan path, whatever the scheme
+	 * registry says about it.
+	 *
+	 * The two product models are mutually exclusive, and APFS's own
+	 * `supports_feature()` excludes the legacy types — so on a real store a
+	 * `variable-subscription` product reports no schemes even with storewide
+	 * plans configured. This pins that as a contract rather than an APFS
+	 * implementation detail: were it ever to change, the plan path would start
+	 * rewriting the frequency, price and cart key of every legacy subscription
+	 * product on the site.
+	 */
+	public function test_legacy_types_never_take_the_plan_path() {
+		foreach ( [ 'subscription', 'variable-subscription' ] as $i => $type ) {
+			$product = $this->make_product( 208 + $i, $type );
+			WCS_ATT_Product_Schemes::$products_with_schemes[] = 208 + $i;
+
+			$this->assertFalse( WooCommerce_Subscriptions::has_subscription_plans( $product ), $type . ' must not report subscription plans.' );
+		}
+	}
+
+	/**
 	 * The `_wcsatt_disabled` opt-out wins over the presence of schemes, matching
 	 * the check Subscriptions itself makes.
 	 */

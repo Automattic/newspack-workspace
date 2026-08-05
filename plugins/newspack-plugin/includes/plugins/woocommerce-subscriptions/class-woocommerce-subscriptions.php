@@ -722,6 +722,17 @@ class WooCommerce_Subscriptions {
 	 * @return bool Whether the product has subscription plans.
 	 */
 	public static function has_subscription_plans( $product ) {
+		// Belt and braces, and deliberately not dead code: the two models are
+		// mutually exclusive, and a legacy product must keep behaving exactly
+		// as it does today. APFS's own `supports_feature()` excludes the legacy
+		// types, so a `variable-subscription` product on a store with storewide
+		// plans configured reports no schemes — but that is an APFS
+		// implementation detail, and if it ever changed, the plan path would
+		// start rewriting the frequency, price and cart key of every legacy
+		// subscription product on the site. Keep this guard.
+		if ( in_array( $product->get_type(), [ 'subscription', 'variable-subscription' ], true ) ) {
+			return false;
+		}
 		if ( ! class_exists( 'WCS_ATT_Product_Schemes' ) || ! method_exists( 'WCS_ATT_Product_Schemes', 'has_subscription_schemes' ) ) {
 			return false;
 		}

@@ -1062,23 +1062,19 @@ class Newspack_Test_Subscriptions_Tiers_Plans extends WP_UnitTestCase {
 	 */
 	public function test_render_form_skips_plan_posting_with_no_product() {
 		// Registered so get_tiers_by_frequency( null ) picks it up in its
-		// catalog-wide aggregation, giving the form something to render.
+		// catalog-wide aggregation, giving the form something to render. The
+		// aggregation queries the legacy product types only, and a legacy
+		// product never carries plans (see
+		// WooCommerce_Subscriptions::has_subscription_plans()) - which is
+		// precisely why this path can never have a plan key to post.
 		wc_create_mock_product(
 			[
-				'id'   => 450,
-				'type' => 'subscription',
-				'meta' => [
+				'id'    => 450,
+				'type'  => 'subscription',
+				'price' => 5,
+				'meta'  => [
 					'_subscription_period'          => 'month',
 					'_subscription_period_interval' => '1',
-				],
-			]
-		);
-		$this->give_plans(
-			450,
-			[
-				'mkey' => [
-					'period'   => 'month',
-					'interval' => 1,
 				],
 			]
 		);
@@ -1087,6 +1083,7 @@ class Newspack_Test_Subscriptions_Tiers_Plans extends WP_UnitTestCase {
 		\Newspack\Subscriptions_Tiers::render_form( null );
 		$markup = ob_get_clean();
 
+		$this->assertStringContainsString( '<form', $markup, 'Precondition: the form actually renders.' );
 		$this->assertStringNotContainsString( 'convert_to_sub', $markup );
 	}
 }
