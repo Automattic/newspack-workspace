@@ -7,6 +7,7 @@ import { domReady, formatTime } from '../utils';
 import { getPendingCheckout } from '../reader-activation/checkout';
 import { openNewslettersSignupModal } from '../reader-activation-newsletters/newsletters-modal';
 import { openVerificationModal } from './verification-modal';
+import { maybeConfirmRegistration } from './confirmation-modal';
 
 import './google-oauth';
 import './otp-input';
@@ -330,7 +331,7 @@ window.newspackRAS.push( function ( readerActivation ) {
 					// modal before completing the auth flow. The newsletters signup modal is shown after the
 					// verification step (or its dismissal) and before the original onSuccess/onClose callbacks.
 					const needsVerification =
-						data?.registered && newspack_ras_config?.require_account_verification && data?.verified !== true && data?.verification_nonce;
+						data?.registered && newspack_ras_config?.verify_new_reader_accounts && data?.verified !== true && data?.verification_nonce;
 
 					let callback;
 					if ( ! container.config?.skipNewslettersSignup && data?.registered && container.authCallback ) {
@@ -518,54 +519,74 @@ window.newspackRAS.push( function ( readerActivation ) {
 							form.endLoginFlow( data.message, 400 );
 						} );
 				} else {
-					fetch( form.getAttribute( 'action' ) || window.location.pathname, {
-						method: 'POST',
-						headers: {
-							Accept: 'application/json',
-						},
-						body,
-					} )
-						.then( res => {
-							container.setAttribute( 'data-form-status', res.status );
-							res.json()
-								.then( ( { message, data } ) => {
-									const status = res.status;
-									if ( status === 200 ) {
-										readerActivation.setReaderEmail( body.get( 'npe' ) );
-									}
-									if ( data.action ) {
-										container.setFormAction( data.action, true );
-										if ( data.action === 'otp' ) {
-											readerActivation.setOTPTimer();
-											handleOTPTimer();
+					const submitForm = () =>
+						fetch( form.getAttribute( 'action' ) || window.location.pathname, {
+							method: 'POST',
+							headers: {
+								Accept: 'application/json',
+							},
+							body,
+						} )
+							.then( res => {
+								container.setAttribute( 'data-form-status', res.status );
+								res.json()
+									.then( ( { message, data } ) => {
+										const status = res.status;
+										if ( status === 200 ) {
+											readerActivation.setReaderEmail( body.get( 'npe' ) );
 										}
-										if ( data.action === 'otp' || data.action === 'pwd' ) {
+										if ( data.action ) {
+											container.setFormAction( data.action, true );
+											if ( data.action === 'otp' ) {
+												readerActivation.setOTPTimer();
+												handleOTPTimer();
+											}
+											if ( data.action === 'otp' || data.action === 'pwd' ) {
+												form.style.opacity = 1;
+											}
+											submitButtons.forEach( button => {
+												button.disabled = false;
+											} );
+										} else {
+											form.endLoginFlow( message, status, data );
+										}
+									} )
+									.catch( () => {
+										form.endLoginFlow();
+									} )
+									.finally( () => {
+										const status = res.status;
+										// Check if modal should close on success. If no, reset opacity to 1.
+										// If yes, only reset opacity to 1 if the status is not successful.
+										if ( container.config?.closeOnSuccess ) {
+											form.style.opacity = 1;
+										} else if ( status !== 200 && ! container.config?.closeOnSuccess ) {
 											form.style.opacity = 1;
 										}
-										submitButtons.forEach( button => {
-											button.disabled = false;
-										} );
-									} else {
-										form.endLoginFlow( message, status, data );
-									}
-								} )
-								.catch( () => {
-									form.endLoginFlow();
-								} )
-								.finally( () => {
-									const status = res.status;
-									// Check if modal should close on success. If no, reset opacity to 1.
-									// If yes, only reset opacity to 1 if the status is not successful.
-									if ( container.config?.closeOnSuccess ) {
-										form.style.opacity = 1;
-									} else if ( status !== 200 && ! container.config?.closeOnSuccess ) {
-										form.style.opacity = 1;
-									}
+									} );
+							} )
+							.catch( () => {
+								form.endLoginFlow();
+							} );
+
+					// Only the unified `signin` action can become a new registration server-side;
+					// `pwd` and `link` always require an existing user, so they skip the confirmation
+					// step. When verification is OFF and the email is new, the confirmation modal
+					// appears before the actual register POST.
+					if ( 'signin' === action ) {
+						maybeConfirmRegistration( {
+							email: body.get( 'npe' ),
+							onProceed: submitForm,
+							onCancel: () => {
+								submitButtons.forEach( button => {
+									button.disabled = false;
 								} );
-						} )
-						.catch( () => {
-							form.endLoginFlow();
+								form.style.opacity = 1;
+							},
 						} );
+					} else {
+						submitForm();
+					}
 				}
 			} );
 		} );

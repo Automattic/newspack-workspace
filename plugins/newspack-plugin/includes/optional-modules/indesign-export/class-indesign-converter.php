@@ -63,8 +63,20 @@ class InDesign_Converter {
 	/**
 	 * Convert a WordPress post to InDesign Tagged Text format.
 	 *
-	 * @param int|\WP_Post $post Post ID or WP_Post object.
-	 * @param array        $options Optional conversion options.
+	 * @param int|\WP_Post $post    Post ID or WP_Post object.
+	 * @param array        $options {
+	 *     Optional. Conversion options.
+	 *
+	 *     @type bool   $include_subtitle Whether to include the post subtitle. Default true.
+	 *     @type bool   $include_byline   Whether to include the byline. Default true.
+	 *     @type bool   $include_captions Whether to append photo captions. Photo credits are
+	 *                                    a separate attribution field and are always exported.
+	 *                                    Default true.
+	 *     @type string $platform         Target platform for the tagged-text header.
+	 *                                    'win' emits <ASCII-WIN>, 'mac' emits <ASCII-MAC>.
+	 *                                    InDesign requires the header to match the host OS,
+	 *                                    otherwise markup is rendered literally. Default 'win'.
+	 * }
 	 * @return string|false InDesign Tagged Text content, or false on failure.
 	 */
 	public function convert_post( $post, $options = [] ) {
@@ -76,12 +88,14 @@ class InDesign_Converter {
 		$default_options = [
 			'include_subtitle' => true,
 			'include_byline'   => true,
+			'include_captions' => true,
+			'platform'         => 'win',
 		];
 		$options = wp_parse_args( $options, $default_options );
 
 		$content_parts = [];
 
-		$content_parts[] = '<ASCII-WIN>';
+		$content_parts[] = 'mac' === $options['platform'] ? '<ASCII-MAC>' : '<ASCII-WIN>';
 		$content_parts[] = $this->styles['headline'] . $this->get_transformed_text( $post->post_title );
 
 		if ( $options['include_subtitle'] ) {
@@ -99,7 +113,7 @@ class InDesign_Converter {
 		}
 
 		$content_parts[] = $this->process_post_content( $post->post_content, $options );
-		$content_parts[] = $this->process_post_images( $post );
+		$content_parts[] = $this->process_post_images( $post, $options );
 
 		return implode( "\r\n", array_filter( $content_parts ) );
 	}
@@ -431,7 +445,7 @@ class InDesign_Converter {
 			// Dashes.
 			'--' => '<0x2014>',
 			'—'  => '<0x2014>',
-			'–'  => '<0x2014>',
+			'–'  => '<0x2013>',
 
 			// Quotes.
 			'“'  => '"',
@@ -507,13 +521,16 @@ class InDesign_Converter {
 	/**
 	 * Process post images metadata to generate photo credit and caption tags.
 	 *
-	 * @param \WP_Post $post Post object.
+	 * @param \WP_Post $post    Post object.
+	 * @param array    $options Conversion options. Honors 'include_captions' (default
+	 *                          true); credits are always emitted regardless.
 	 *
 	 * @return string Photo credit and caption tags.
 	 */
-	private function process_post_images( $post ) {
-		$images          = [];
-		$inline_captions = [];
+	private function process_post_images( $post, $options = [] ) {
+		$include_captions = ! isset( $options['include_captions'] ) || $options['include_captions'];
+		$images           = [];
+		$inline_captions  = [];
 
 		$featured_image_id = get_post_thumbnail_id( $post->ID );
 		if ( $featured_image_id ) {
@@ -553,14 +570,14 @@ class InDesign_Converter {
 			return '';
 		}
 
-		$tag_content = "\r\n";
+		$tag_content = '';
 
 		foreach ( $images as $image_id => $insert_tag ) {
 			if ( ! $insert_tag ) {
 				continue;
 			}
 
-			$caption = $inline_captions[ $image_id ] ?? wp_get_attachment_caption( $image_id );
+			$caption = $include_captions ? ( $inline_captions[ $image_id ] ?? wp_get_attachment_caption( $image_id ) ) : '';
 			$credit  = get_post_meta( $image_id, '_media_credit', true ) ?? '';
 
 			if ( ! $caption && ! $credit ) {
@@ -576,7 +593,14 @@ class InDesign_Converter {
 			}
 		}
 
-		return $tag_content;
+		// Every image was skipped (no caption/credit to emit, e.g. caption-only
+		// images with captions excluded). Return nothing so array_filter() in
+		// convert_post() drops this block instead of appending a blank line.
+		if ( '' === $tag_content ) {
+			return '';
+		}
+
+		return "\r\n" . $tag_content;
 	}
 
 	/**

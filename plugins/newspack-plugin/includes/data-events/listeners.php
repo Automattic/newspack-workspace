@@ -50,7 +50,7 @@ Data_Events::register_listener(
 		}
 		return [
 			'user_id' => $user_id,
-			'user'    => $user,
+			'email'   => $user->user_email,
 		];
 	}
 );
@@ -68,7 +68,7 @@ Data_Events::register_listener(
 		}
 		return [
 			'user_id' => $user_id,
-			'user'    => $user,
+			'email'   => $user->user_email,
 		];
 	}
 );

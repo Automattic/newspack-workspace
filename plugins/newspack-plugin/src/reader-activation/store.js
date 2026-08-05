@@ -399,6 +399,13 @@ export default function Store() {
 		// Reset the in-memory server-known-items cache that syncItem reads to
 		// short-circuit no-op writes. window.newspack_reader_data is initialized
 		// at module load (top of this file), so no presence guard is needed.
+		//
+		// Load-bearing: this REASSIGNS the property to a fresh object rather than
+		// mutating it in place. init()'s account-switch restore (NPPM-2899) captures a
+		// reference to the prior items object *before* calling clear() and replays it
+		// after the wipe to rehydrate the switched-in reader's own server data. That
+		// relies on the captured reference staying intact — switching to in-place key
+		// deletion (e.g. `delete items[k]`) would silently empty it and break the restore.
 		window.newspack_reader_data.items = {};
 		// Reseed via _set (not public set) so the reseed itself doesn't enqueue a
 		// server write — and so init()'s trailing equality check skips its own

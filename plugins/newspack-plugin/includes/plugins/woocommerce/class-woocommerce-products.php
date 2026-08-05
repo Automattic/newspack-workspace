@@ -50,7 +50,7 @@ class WooCommerce_Products {
 			'newspack-products-custom-options',
 			Newspack::plugin_url() . '/dist/other-scripts/custom-product-options.js',
 			[],
-			NEWSPACK_PLUGIN_VERSION,
+			Newspack::asset_version( 'other-scripts/custom-product-options' ),
 			true
 		);
 	}

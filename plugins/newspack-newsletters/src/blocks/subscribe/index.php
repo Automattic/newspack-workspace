@@ -170,12 +170,25 @@ function render_block( $attrs ) {
 	$display_input_label = ! empty( $attrs['displayInputLabels'] );
 	$email_label         = $display_input_label ? $attrs['emailLabel'] : '';
 	$input_id            = sprintf( 'newspack-newsletters-subscribe-block-input-%s', $block_id );
+
+	// After-subscribe redirect config. Mirrors the Checkout Button block's
+	// afterSuccess* attributes; the Continue button + redirect are wired up on
+	// the front end in view.js (see the success branch of form.endFlow).
+	$after_success_behavior = $attrs['afterSuccessBehavior'] ?? '';
+	$after_success_url      = $attrs['afterSuccessURL'] ?? '';
+	$after_success_label    = $attrs['afterSuccessButtonLabel'] ?? '';
 	// phpcs:enable
 	ob_start();
 	?>
 	<div
 		class="wp-block-newspack-newsletters-subscribe newspack-newsletters-subscribe <?php echo esc_attr( get_block_classes( $attrs ) ); ?>"
 		data-success-message="<?php echo \esc_attr( $attrs['successMessage'] ); ?>"
+		<?php if ( $after_success_behavior ) : ?>
+			data-after-success-behavior="<?php echo \esc_attr( $after_success_behavior ); ?>"
+			<?php // The redirect URL is escaped with esc_url() rather than the Checkout Button's esc_attr(): it strips javascript:/data: schemes and only ever feeds window.location.href. This intentionally diverges from strict parity — esc_url() rewrites a schemeless relative path without a leading slash (e.g. "foo/bar" → "http://foo/bar"), so publishers should use a leading slash ("/foo/bar") or an absolute URL for a same-site destination. ?>
+			data-after-success-url="<?php echo \esc_url( $after_success_url ); ?>"
+			data-after-success-label="<?php echo \esc_attr( $after_success_label ); ?>"
+		<?php endif; ?>
 		<?php echo $subscribed ? 'data-status="200"' : ''; ?>
 	>
 		<?php if ( ! $subscribed ) : ?>
@@ -496,20 +509,36 @@ function process_form() {
 
 	$registered_user      = false;
 	$verification_payload = [];
-	if ( ! \is_user_logged_in() && \class_exists( '\Newspack\Reader_Activation' ) && \Newspack\Reader_Activation::is_enabled() ) {
+	// Default to "did not authenticate" so the response-side registration gate below is safe
+	// even when Reader Activation is disabled/unavailable (the branch that assigns it is skipped).
+	$authenticate = false;
+	if ( \class_exists( '\Newspack\Reader_Activation' ) && \Newspack\Reader_Activation::is_enabled() ) {
 		$metadata = array_merge( $metadata, [ 'registration_method' => 'newsletters-subscription' ] );
 		if ( $popup_id ) {
 			$metadata['registration_method'] = 'newsletters-subscription-popup';
 		}
-		$registered_user = \Newspack\Reader_Activation::register_reader( $email, $name, true, $metadata );
+		// Authenticate the new reader only when the browser has no existing session. A
+		// logged-in browser (a returning reader, or a shared device still carrying a prior
+		// reader's cookie) must still get an account created for the submitted email — but
+		// without re-authenticating as that email. Skipping registration entirely when logged
+		// in is what silently orphaned these signups: the email landed in the ESP list with
+		// no WordPress account. See NPPM-2936.
+		$authenticate    = ! \is_user_logged_in();
+		$registered_user = \Newspack\Reader_Activation::register_reader( $email, $name, $authenticate, $metadata );
 		// register_reader() can return false (existing user) or a WP_Error; only proceed when
 		// we got a positive integer user ID for a freshly-created reader.
-		if ( is_int( $registered_user ) && $registered_user > 0 ) {
+		// Only signal a registration to the current browser when this signup authenticated
+		// the new reader (a clean, logged-out visitor). When a reader is already logged in we
+		// create the account for the submitted email without authenticating it, so the current
+		// session must not be told "you just registered" — otherwise the other reader's
+		// registration (its `registered` flag, verification prompt, and `reader_registered`
+		// activity) would be recorded against this browser's reader. See NPPM-2936.
+		if ( $authenticate && is_int( $registered_user ) && $registered_user > 0 ) {
 			$metadata['registered'] = '1';
 
 			// Surface verification state so the frontend can trigger the post-registration
-			// verification flow. Guarded with method_exists so we degrade gracefully when running
-			// against an older newspack-plugin that doesn't expose the helper yet.
+			// verification flow. Guarded with method_exists so we degrade gracefully when
+			// running against an older newspack-plugin that doesn't expose the helper yet.
 			if ( method_exists( '\Newspack\Reader_Activation', 'get_verification_payload' ) ) {
 				$verification_payload = \Newspack\Reader_Activation::get_verification_payload( (int) $registered_user );
 			}
@@ -564,11 +593,13 @@ function process_form() {
 	$result['metadata'] = $metadata;
 
 	// Surface registration + verification state so the frontend can trigger the
-	// post-registration verification flow when a brand-new reader account was created.
-	// `get_verification_payload()` always returns both `verified` and `verification_nonce`
-	// keys (with empty/null sentinels when not applicable); the frontend gates on the
-	// `verification_nonce` being a non-empty string.
-	if ( is_int( $registered_user ) && $registered_user > 0 ) {
+	// post-registration verification flow when a brand-new reader account was created and
+	// authenticated in this browser. `get_verification_payload()` always returns both
+	// `verified` and `verification_nonce` keys (with empty/null sentinels when not
+	// applicable); the frontend gates on the `verification_nonce` being a non-empty string.
+	// Skipped when a reader is already logged in: the new account belongs to a different
+	// email, not this session, so registration must not be surfaced to the current reader.
+	if ( $authenticate && is_int( $registered_user ) && $registered_user > 0 ) {
 		$result['email']      = $email;
 		$result['registered'] = 1;
 		$result               = array_merge( $result, $verification_payload );

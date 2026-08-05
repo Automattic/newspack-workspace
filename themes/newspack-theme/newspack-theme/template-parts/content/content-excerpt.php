@@ -14,6 +14,9 @@ if ( function_exists( 'newspack_get_all_sponsors' ) ) {
 	$display_sponsors_and_categories = newspack_display_sponsors_and_categories( $native_sponsors );
 	$display_sponsors_and_authors    = newspack_display_sponsors_and_authors( $native_sponsors );
 }
+
+// Get tag labels for this post (null when the Newspack plugin isn't loaded).
+$tag_labels = function_exists( 'newspack_get_tag_labels' ) ? newspack_get_tag_labels( get_the_ID() ) : null;
 ?>
 
 <article id="post-<?php the_ID(); ?>" <?php post_class(); ?>>
@@ -25,10 +28,16 @@ if ( function_exists( 'newspack_get_all_sponsors' ) ) {
 			if ( ! empty( $native_sponsors ) ) {
 				// Get label for native post sponsors.
 				newspack_sponsor_label( $native_sponsors );
+				if ( $tag_labels ) {
+					newspack_display_tag_labels( $tag_labels );
+				}
 				if ( $display_sponsors_and_categories ) {
 					newspack_categories();
 				}
 			} else {
+				if ( $tag_labels ) {
+					newspack_display_tag_labels( $tag_labels );
+				}
 				newspack_categories();
 			}
 		}
@@ -37,7 +46,7 @@ if ( function_exists( 'newspack_get_all_sponsors' ) ) {
 			<?php the_title( sprintf( '<h2 class="entry-title"><a href="%s" rel="bookmark">', esc_url( get_permalink() ) ), '</a></h2>' ); ?>
 			<?php if ( is_archive() && get_theme_mod( 'archive_show_subtitle', false ) && ! empty( newspack_post_subtitle() ) ) : ?>
 				<div class="newspack-post-subtitle">
-					<?php echo wp_kses_post( newspack_post_subtitle() ); ?>
+					<?php echo newspack_post_subtitle(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped internally via wp_kses() with custom allowlist + wptexturize() in newspack_post_subtitle(). ?>
 				</div>
 			<?php endif; ?>
 		</header><!-- .entry-header -->
