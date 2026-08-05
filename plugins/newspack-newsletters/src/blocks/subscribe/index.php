@@ -89,7 +89,8 @@ function get_form_id() {
  * `display:none` as a fallback for a policy that strips the style attribute.
  *
  * newspack-plugin renders its own copy of this field in
- * `Newspack\Reader_Activation::render_honeypot_field()`. Changes here belong
+ * `Newspack\Reader_Activation::render_honeypot_field()`. Only the markup is
+ * duplicated — the submit-side rule defers to that plugin. Changes here belong
  * there too.
  *
  * Not rendered if reCAPTCHA is enabled as it's a superior spam protection.
@@ -107,6 +108,66 @@ function render_honeypot_field( $placeholder = '' ) {
 	?>
 	<input class="nphp" tabindex="-1" aria-hidden="true" name="email" type="email" autocomplete="off" data-1p-ignore data-lpignore="true" data-form-type="other" style="display:none;" placeholder="<?php echo \esc_attr( $placeholder ); ?>" />
 	<?php
+}
+
+/**
+ * The request fields belonging to the submission itself.
+ *
+ * The block's script posts, but the form carries no `method`, so a submission without
+ * JS arrives as a GET and that path is first-class — `send_form_response()` has its own
+ * GET branch. Reading only `$_POST` would leave those submissions unchecked, which is
+ * exactly the population that doesn't run JS. Reading `$_REQUEST` instead would let a
+ * query string fill a field the body left empty, so take the transport the submission
+ * actually used and read only that.
+ *
+ * @return array The submitted fields, still slashed.
+ */
+function get_submitted_fields() {
+	$method = \sanitize_text_field( \wp_unslash( $_SERVER['REQUEST_METHOD'] ?? '' ) );
+	// phpcs:ignore WordPress.Security.NonceVerification
+	return 'POST' === strtoupper( $method ) ? $_POST : $_GET;
+}
+
+/**
+ * Whether a submitted honeypot value should be read as a bot.
+ *
+ * A browser that autofills the form puts the reader's own address in both the decoy
+ * and the real field, so a decoy matching `npe` is autofill rather than a bot. Reading
+ * it as a bot reports a subscription that never happened, silently on both sides.
+ *
+ * Newspack owns this rule; this defers to it and keeps a local copy only for sites
+ * running a newspack-plugin that predates the shared helper. The local branch must
+ * stay in step with `Newspack\Reader_Activation::is_honeypot_tripped()`.
+ *
+ * @param string|null|false $honeypot Value submitted in the honeypot field (`email`).
+ * @param string|null|false $email    Value submitted in the real email field (`npe`).
+ *
+ * @return bool Whether to treat the submission as a bot.
+ */
+function is_honeypot_tripped( $honeypot, $email ) {
+	if ( method_exists( '\Newspack\Reader_Activation', 'is_honeypot_tripped' ) ) {
+		return \Newspack\Reader_Activation::is_honeypot_tripped( $honeypot, $email );
+	}
+
+	// Not `empty()`: a decoy filled with "0" is filled.
+	$honeypot = is_scalar( $honeypot ) ? trim( (string) $honeypot ) : '';
+	if ( '' === $honeypot ) {
+		return false;
+	}
+
+	$email = is_scalar( $email ) ? trim( (string) $email ) : '';
+	if ( '' === $email ) {
+		return true;
+	}
+
+	if ( strtolower( $honeypot ) === strtolower( $email ) ) {
+		return false;
+	}
+
+	$honeypot_as_email = strtolower( trim( (string) \sanitize_email( $honeypot ) ) );
+	$email_as_email    = strtolower( trim( (string) \sanitize_email( $email ) ) );
+
+	return '' === $honeypot_as_email || $honeypot_as_email !== $email_as_email;
 }
 
 /**
@@ -466,9 +527,24 @@ function process_form() {
 		return;
 	}
 
-	// Honeypot trap.
-	if ( ! empty( $_REQUEST['email'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		return send_form_response( [ 'email' => \sanitize_email( $_REQUEST['email'] ) ] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+	// Honeypot trap. The decoy is read as text, not as an email: a bot fills it with
+	// whatever it likes, and email-sanitizing first would blank a non-address value
+	// and let the submission through.
+	//
+	// Read both fields from the transport the submission actually used, rather than
+	// from `$_REQUEST`. The block's script posts, but the form carries no `method`, so
+	// a submission without JS arrives as a GET — reading only `$_POST` would leave the
+	// decoy unchecked there. Reading `$_REQUEST` has the opposite problem: on a site
+	// with reCAPTCHA the decoy isn't rendered, so a POST carries no `email` field and a
+	// query string appended to the page URL would fill the slot, making every
+	// subscription from that link report success and record nobody.
+	$submitted = get_submitted_fields();
+	// phpcs:disable WordPress.Security.NonceVerification
+	$honeypot_trap = isset( $submitted['email'] ) && is_scalar( $submitted['email'] ) ? \sanitize_text_field( \wp_unslash( $submitted['email'] ) ) : '';
+	$real_email    = isset( $submitted['npe'] ) && is_scalar( $submitted['npe'] ) ? \sanitize_text_field( \wp_unslash( $submitted['npe'] ) ) : '';
+	// phpcs:enable WordPress.Security.NonceVerification
+	if ( is_honeypot_tripped( $honeypot_trap, $real_email ) ) {
+		return send_form_response( [ 'email' => \sanitize_email( $honeypot_trap ) ] );
 	}
 
 	// reCAPTCHA test.
