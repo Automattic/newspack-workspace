@@ -170,12 +170,12 @@ class Gating_Inertness_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Signup forms are the exception that proves the rule: this one does NOT go inert.
-	 * The Newsletter Subscribe block takes an email rather than an account, so an
-	 * inert filter would offer paid lists to anyone, and an ESP membership persists
-	 * where an unrestricted article simply re-restricts.
+	 * Signup forms follow the same rule as everything else: with gating inactive a
+	 * restricted list stops being filtered out and becomes joinable by anyone. That
+	 * is intended — "Audience Management off" means Access Control restricts nothing
+	 * at all — and the disable confirmation states it before the publisher commits.
 	 */
-	public function test_premium_lists_stay_hidden_from_signup_forms_while_inert() {
+	public function test_premium_lists_reappear_in_signup_forms_while_inert() {
 		$this->create_registration_gate();
 		$list_id = self::factory()->post->create();
 		// filter_subscription_lists() only ever calls get_id() on each list.
@@ -215,9 +215,9 @@ class Gating_Inertness_Test extends WP_UnitTestCase {
 		$this->disable_audience_management();
 
 		$this->assertSame(
-			[],
+			[ $list ],
 			Premium_Newsletters::filter_subscription_lists( [ $list ] ),
-			'A gated list must stay hidden while gating is inactive, or paid lists become open to anyone.'
+			'A gated list should be offered again once gating is inactive.'
 		);
 	}
 
