@@ -266,19 +266,23 @@ final class Click {
 		if ( $with_redirect ) {
 			/*
 			 * By this point the destination is either this site or a link verified to
-			 * exist in the ad's rendered email, so allow that one host through the
-			 * safe-redirect check. wp_validate_redirect() runs first only to set the
-			 * fallback: anything unexpected lands on the home page rather than wp-admin.
+			 * exist in the ad's rendered email, so allow that one host for the length of
+			 * the validation call and take it back off straight after — nothing else in
+			 * the request should inherit it. This is what wp_safe_redirect() does, minus
+			 * its wp-admin fallback, which is no use to a reader who is not logged in.
 			 */
-			$destination_host = self::get_url_host( $url );
-			\add_filter(
-				'allowed_redirect_hosts',
-				function ( $hosts ) use ( $destination_host ) {
+			$destination_host       = self::get_url_host( $url );
+			$allow_destination_host = function ( $hosts ) use ( $destination_host ) {
+				if ( $destination_host ) {
 					$hosts[] = $destination_host;
-					return $hosts;
 				}
-			);
-			\wp_safe_redirect( \wp_validate_redirect( $url, \home_url() ) );
+				return $hosts;
+			};
+			\add_filter( 'allowed_redirect_hosts', $allow_destination_host );
+			$location = \wp_validate_redirect( $url, \home_url() );
+			\remove_filter( 'allowed_redirect_hosts', $allow_destination_host );
+
+			\wp_redirect( $location ); // phpcs:ignore WordPress.Security.SafeRedirect.wp_redirect_wp_redirect -- Validated by wp_validate_redirect() above.
 			exit;
 		}
 	}
