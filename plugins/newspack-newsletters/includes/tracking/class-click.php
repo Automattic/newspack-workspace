@@ -169,6 +169,44 @@ final class Click {
 	}
 
 	/**
+	 * Get the lowercased host of a URL.
+	 *
+	 * @param string $url URL to read the host from.
+	 *
+	 * @return string Host, or an empty string when the URL carries none.
+	 */
+	private static function get_url_host( $url ) {
+		$host = \wp_parse_url( (string) $url, PHP_URL_HOST );
+		return is_string( $host ) ? strtolower( $host ) : '';
+	}
+
+	/**
+	 * Whether a URL points at this site.
+	 *
+	 * Compares the host, exactly and case-insensitively. Comparing whole URLs is not
+	 * equivalent: a destination can contain the site URL — in its own hostname, in its
+	 * path, or ahead of an "@" — and still resolve somewhere else, so the two tests
+	 * disagree on where a reader would actually land.
+	 *
+	 * @param string $url URL to check.
+	 *
+	 * @return bool
+	 */
+	public static function is_same_site_url( $url ) {
+		$host = self::get_url_host( $url );
+		if ( ! $host ) {
+			return false;
+		}
+		// home_url() and site_url() differ when WordPress lives in its own subdirectory.
+		foreach ( [ \home_url(), \get_site_url() ] as $site_url ) {
+			if ( $host === self::get_url_host( $site_url ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
 	 * Handle proxied URL click and redirect to destination.
 	 *
 	 * @param bool $with_redirect Whether to redirect after tracking the link click. This is for testing convenience.
@@ -189,7 +227,7 @@ final class Click {
 		$is_admin_user = current_user_can( 'edit_others_posts' );
 		// If the redirect URL does not point to the site, double-check it is actually a URL within the email.
 		$url_without_query_args = untrailingslashit( strtok( $url, '?' ) );
-		if ( false === strpos( $url_without_query_args, \get_site_url() ) ) {
+		if ( ! self::is_same_site_url( $url ) ) {
 			// The tracked id is the ad post; its rendered email HTML holds the link.
 			$ad_content = (string) get_post_meta( $ad_id, 'newspack_email_html', true );
 			if (
@@ -226,7 +264,21 @@ final class Click {
 		}
 
 		if ( $with_redirect ) {
-			\wp_redirect( $url ); // phpcs:ignore WordPress.Security.SafeRedirect.wp_redirect_wp_redirect
+			/*
+			 * By this point the destination is either this site or a link verified to
+			 * exist in the ad's rendered email, so allow that one host through the
+			 * safe-redirect check. wp_validate_redirect() runs first only to set the
+			 * fallback: anything unexpected lands on the home page rather than wp-admin.
+			 */
+			$destination_host = self::get_url_host( $url );
+			\add_filter(
+				'allowed_redirect_hosts',
+				function ( $hosts ) use ( $destination_host ) {
+					$hosts[] = $destination_host;
+					return $hosts;
+				}
+			);
+			\wp_safe_redirect( \wp_validate_redirect( $url, \home_url() ) );
 			exit;
 		}
 	}

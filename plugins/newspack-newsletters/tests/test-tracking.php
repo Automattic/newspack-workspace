@@ -196,6 +196,106 @@ class Newsletters_Tracking_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Run the click handler for a destination that should be turned away, and
+	 * assert it was.
+	 *
+	 * @param int    $ad_id   Ad post ID to attribute the click to.
+	 * @param string $url     Destination URL.
+	 * @param string $message Assertion message.
+	 */
+	private function assert_click_destination_rejected( $ad_id, $url, $message ) {
+		$_GET['np_newsletters_click'] = 1;
+		$_GET['id']                   = $ad_id;
+		$_GET['url']                  = $url;
+
+		$rejected = false;
+		try {
+			Click::handle_click( false );
+		} catch ( \Throwable $th ) {
+			$rejected = true;
+			$this->assertEquals( 'Invalid URL', $th->getMessage() );
+			$this->assertEquals( 400, $th->getCode() );
+		} finally {
+			unset( $_GET['np_newsletters_click'], $_GET['id'], $_GET['url'] );
+		}
+
+		$this->assertTrue( $rejected, $message );
+	}
+
+	/**
+	 * Create an ad whose rendered email holds a single external link.
+	 *
+	 * @return int Ad post ID.
+	 */
+	private function create_ad_with_link() {
+		$content = "<!-- wp:paragraph -->\n<p><a href=\"https://google.com/article/\">Link</a><\/p>\n<!-- \/wp:paragraph -->";
+		$ad_id   = $this->factory->post->create(
+			[
+				'post_type'    => Ads::CPT,
+				'post_title'   => 'Ad with a link.',
+				'post_content' => $content,
+			]
+		);
+		update_post_meta( $ad_id, 'newspack_email_html', $content );
+		return $ad_id;
+	}
+
+	/**
+	 * Only a destination on the site's own host counts as same-site.
+	 */
+	public function test_is_same_site_url() {
+		$site_host = \wp_parse_url( \home_url(), PHP_URL_HOST );
+
+		$this->assertTrue( Click::is_same_site_url( \home_url( '/' ) ) );
+		$this->assertTrue( Click::is_same_site_url( \home_url( '/some/page/?with=args' ) ) );
+		$this->assertTrue( Click::is_same_site_url( 'https://' . $site_host . '/page/' ), 'The scheme should not decide the answer.' );
+		$this->assertTrue( Click::is_same_site_url( 'http://' . strtoupper( $site_host ) . '/page/' ), 'Host comparison should be case-insensitive.' );
+
+		$not_the_site = [
+			[ 'https://' . $site_host . '.elsewhere.test/', 'a host that only starts with the site host' ],
+			[ 'https://elsewhere.test/' . \home_url( '/page/' ), 'the site URL sitting in the path' ],
+			[ 'https://' . $site_host . '@elsewhere.test/', 'the site URL sitting in the userinfo' ],
+			[ 'https://sub.' . $site_host . '/page/', 'a subdomain of the site host' ],
+			[ '/a/relative/path/', 'a URL with no host at all' ],
+			[ '', 'an empty URL' ],
+		];
+		foreach ( $not_the_site as [ $url, $description ] ) {
+			$this->assertFalse( Click::is_same_site_url( $url ), "Should not treat $description as same-site." );
+		}
+	}
+
+	/**
+	 * The click handler applies that classification: a destination that merely
+	 * mentions the site URL still has to be found in the ad's email.
+	 */
+	public function test_handle_click_rejects_destination_that_only_mentions_the_site() {
+		$this->assert_click_destination_rejected(
+			$this->create_ad_with_link(),
+			'https://google.com/' . \home_url( '/page/' ),
+			'A destination that only mentions the site URL should not skip the ad check.'
+		);
+	}
+
+	/**
+	 * A destination on the site itself is still allowed through without appearing
+	 * in the ad's email.
+	 */
+	public function test_handle_click_allows_same_site_destination() {
+		$ad_id = $this->create_ad_with_link();
+
+		$_GET['np_newsletters_click'] = 1;
+		$_GET['id']                   = $ad_id;
+		$_GET['em']                   = 'reader@example.com';
+		$_GET['url']                  = \home_url( '/a-page-not-in-the-ad/' );
+
+		Click::handle_click( false );
+
+		$this->assertEquals( 1, \get_post_meta( $ad_id, 'tracking_clicks', true ), 'A same-site destination should be tracked and allowed.' );
+
+		unset( $_GET['np_newsletters_click'], $_GET['id'], $_GET['em'], $_GET['url'] );
+	}
+
+	/**
 	 * Test logs processing.
 	 */
 	public function test_process_logs() {
