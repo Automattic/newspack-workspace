@@ -124,6 +124,56 @@ class ContextualPromptPatternTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The seeded pattern explains itself where admins land: the description
+	 * shown in the pattern editor's summary panel.
+	 */
+	public function test_seeds_a_description() {
+		$id = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
+
+		$this->assertNotSame( '', get_post( $id )->post_excerpt );
+	}
+
+	/**
+	 * Rename is not capability-gated the way delete is, so a rename is reverted
+	 * at the data layer while the rest of the save goes through.
+	 */
+	public function test_rename_is_reverted() {
+		$id = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
+
+		wp_update_post(
+			[
+				'ID'         => $id,
+				'post_title' => 'Renamed',
+			]
+		);
+
+		$this->assertSame( 'Contextual Prompt', get_post( $id )->post_title );
+	}
+
+	/**
+	 * A new wp_block carrying the marker — what the editor's Duplicate action
+	 * would create — is refused; updates to the pattern itself pass, as do
+	 * unrelated new patterns.
+	 */
+	public function test_duplication_is_refused() {
+		$id      = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
+		$content = get_post( $id )->post_content;
+
+		$duplicate               = new stdClass();
+		$duplicate->post_content = $content;
+		$this->assertWPError( Newspack_Popups_Contextual_Prompt_Pattern::prevent_pattern_duplication( $duplicate, null ) );
+
+		$update               = new stdClass();
+		$update->ID           = $id;
+		$update->post_content = $content;
+		$this->assertSame( $update, Newspack_Popups_Contextual_Prompt_Pattern::prevent_pattern_duplication( $update, null ) );
+
+		$unrelated               = new stdClass();
+		$unrelated->post_content = '<!-- wp:paragraph --><p>Plain</p><!-- /wp:paragraph -->';
+		$this->assertSame( $unrelated, Newspack_Popups_Contextual_Prompt_Pattern::prevent_pattern_duplication( $unrelated, null ) );
+	}
+
+	/**
 	 * The seeded structure: a marker-classed Group that accepts no inserts, the
 	 * bound copy paragraph, and the CTA — all unmovable and unremovable.
 	 */

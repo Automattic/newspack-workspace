@@ -49,6 +49,59 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 		add_filter( 'map_meta_cap', [ __CLASS__, 'protect_pattern' ], 10, 4 );
 		add_filter( 'block_editor_settings_all', [ __CLASS__, 'lock_pattern_editor' ], 10, 2 );
 		add_filter( 'rest_wp_block_query', [ __CLASS__, 'hide_pattern_from_collections' ] );
+		add_filter( 'wp_insert_post_data', [ __CLASS__, 'lock_pattern_title' ], 10, 2 );
+		add_filter( 'rest_pre_insert_wp_block', [ __CLASS__, 'prevent_pattern_duplication' ], 10, 2 );
+	}
+
+	/**
+	 * Keep the pattern's title fixed. The editor's Rename action is not
+	 * capability-gated the way Delete is, so a rename is reverted at the data
+	 * layer instead; the rest of the save (design, description) goes through.
+	 *
+	 * @param array $data    Slashed post data about to be written.
+	 * @param array $postarr Raw post array, carrying the target ID.
+	 *
+	 * @return array
+	 */
+	public static function lock_pattern_title( $data, $postarr ) {
+		$pattern_id = (int) get_option( self::OPTION_PATTERN_ID, 0 );
+		if ( ! $pattern_id || (int) ( $postarr['ID'] ?? 0 ) !== $pattern_id ) {
+			return $data;
+		}
+
+		$current = get_post( $pattern_id );
+		if ( $current ) {
+			$data['post_title'] = wp_slash( $current->post_title );
+		}
+
+		return $data;
+	}
+
+	/**
+	 * Refuse a second pattern built around the prompt. The editor's Duplicate
+	 * action would create a look-alike wp_block whose design edits silently go
+	 * nowhere, so a new pattern may not carry the marker.
+	 *
+	 * @param stdClass        $prepared_post Post object about to be inserted.
+	 * @param WP_REST_Request $request       The create/update request.
+	 *
+	 * @return stdClass|WP_Error
+	 */
+	public static function prevent_pattern_duplication( $prepared_post, $request ) {
+		$pattern_id = (int) get_option( self::OPTION_PATTERN_ID, 0 );
+		if ( ! $pattern_id || ! empty( $prepared_post->ID ) ) {
+			return $prepared_post;
+		}
+
+		if ( false === strpos( (string) ( $prepared_post->post_content ?? '' ), self::MARKER_CLASS ) ) {
+			return $prepared_post;
+		}
+
+		return new WP_Error(
+			'newspack_popups_contextual_prompt_duplicate',
+			__( 'A new pattern cannot contain the Contextual Prompt.', 'newspack-popups' ),
+			[ 'status' => 400 ]
+		);
 	}
 
 	/**
@@ -204,6 +257,7 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 						'post_type'    => 'wp_block',
 						'post_status'  => 'publish',
 						'post_title'   => __( 'Contextual Prompt', 'newspack-popups' ),
+						'post_excerpt' => __( 'The Contextual Prompt design used across the site. Changes here apply to every story; the copy itself is written in each story.', 'newspack-popups' ),
 						'post_content' => self::build_pattern_content(),
 					]
 				)
