@@ -169,6 +169,46 @@ class Inert_Gating_Notice_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The wizard surface is the one most admins actually see, since wizards strip
+	 * core notices. It gets its own capability check, so it needs its own case —
+	 * the one on render() is pinned separately above.
+	 */
+	public function test_wizard_payload_tracks_capability_and_inertness() {
+		$this->create_gate();
+		Inert_Gating_Notice::flush_cache();
+		$this->disable_audience_management();
+
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'editor' ] ) );
+		$this->assertFalse(
+			Inert_Gating_Notice::get_script_data()['show'],
+			'An editor cannot turn Audience Management back on, so the wizard must not show them the notice.'
+		);
+
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+		$this->assertTrue( Inert_Gating_Notice::get_script_data()['show'] );
+
+		remove_all_filters( 'newspack_reader_activation_enabled' );
+		$this->assertFalse(
+			Inert_Gating_Notice::get_script_data()['show'],
+			'Nothing to warn about while gating is doing its job.'
+		);
+	}
+
+	/**
+	 * The cached answer must actually be read back, not just written. Without this
+	 * the early return in has_surfaces() can be deleted with every other case still
+	 * green, and the `LIKE` runs on every admin page load.
+	 */
+	public function test_the_cached_answer_is_read_back() {
+		$this->assertFalse( Inert_Gating_Notice::has_surfaces(), 'No gates, no block rules.' );
+
+		// Nothing on this site says otherwise, so a `true` answer can only have come
+		// from the cache.
+		update_option( Inert_Gating_Notice::CACHE_OPTION, '1', false );
+		$this->assertTrue( Inert_Gating_Notice::has_surfaces() );
+	}
+
+	/**
 	 * Creating or deleting a gate changes the answer, so both must invalidate.
 	 */
 	public function test_cache_is_invalidated_by_gate_writes() {
@@ -214,6 +254,31 @@ class Inert_Gating_Notice_Test extends WP_UnitTestCase {
 			'A post carrying block rules must invalidate the cached answer.'
 		);
 		$this->assertTrue( Inert_Gating_Notice::has_surfaces() );
+	}
+
+	/**
+	 * Revisions copy the parent's content verbatim, so without a guard every autosave
+	 * of a gated post flushes — about once a minute while anyone has one open, on
+	 * exactly the sites this cache exists for.
+	 */
+	public function test_revisions_do_not_invalidate_the_cache() {
+		$post_id = self::factory()->post->create(
+			[
+				'post_status'  => 'publish',
+				'post_content' => '<!-- wp:group {"newspackAccessControlMode":"custom"} --><div></div><!-- /wp:group -->',
+			]
+		);
+		Inert_Gating_Notice::flush_cache();
+		$this->assertTrue( Inert_Gating_Notice::has_surfaces(), 'Expected the block rules to be found and cached.' );
+
+		$revision_id = wp_save_post_revision( $post_id );
+		$this->assertNotEmpty( $revision_id, 'Fixture failed: no revision was created.' );
+
+		$this->assertSame(
+			'1',
+			get_option( Inert_Gating_Notice::CACHE_OPTION ),
+			'A revision cannot change the answer, so it must leave the cached value in place.'
+		);
 	}
 
 	/**

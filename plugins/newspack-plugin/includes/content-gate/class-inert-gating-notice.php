@@ -33,8 +33,9 @@ class Inert_Gating_Notice {
 	 *
 	 * An option rather than a transient: it must not expire on a timer, since the
 	 * answer only changes when the underlying objects do and every one of those
-	 * writes invalidates it explicitly below. Stored un-autoloaded — see
-	 * has_surfaces().
+	 * writes invalidates it explicitly below. Holds only "is anything configured" —
+	 * whether that configuration is currently applying is read live by is_inert().
+	 * Stored un-autoloaded — see has_surfaces().
 	 */
 	const CACHE_OPTION = 'newspack_content_gate_has_surfaces';
 
@@ -58,27 +59,15 @@ class Inert_Gating_Notice {
 		// from fighting them.
 		add_action( 'admin_notices', [ __CLASS__, 'render' ] );
 
-		// Cache invalidation. The answer changes only when Audience Management is
-		// toggled or a queried object is created, deleted or edited, so each of those
-		// clears it and nothing else does — no TTL, no periodic recompute.
-		add_action( 'newspack_reader_activation_update_setting', [ __CLASS__, 'flush_cache_on_setting' ], 10, 2 );
+		// Cache invalidation. The answer changes only when a queried object is
+		// created, deleted or edited, so those clear it and nothing else does — no
+		// TTL, no periodic recompute. Deliberately NOT hooked to Audience Management:
+		// the cached value is only "is anything configured", which that setting cannot
+		// change, and is_inert() reads the setting live. Flushing there would just
+		// throw away a valid answer and force the recompute onto the very page load
+		// that has to render this notice.
 		add_action( 'save_post', [ __CLASS__, 'flush_cache_on_post' ], 10, 2 );
 		add_action( 'deleted_post', [ __CLASS__, 'flush_cache_on_post' ], 10, 2 );
-	}
-
-	/**
-	 * Clear the cache when Audience Management is toggled.
-	 *
-	 * The notice's visibility flips with this setting, and the cached value is the
-	 * other half of that decision.
-	 *
-	 * @param string $key   Setting key.
-	 * @param mixed  $value Setting value.
-	 */
-	public static function flush_cache_on_setting( $key, $value ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed
-		if ( 'enabled' === $key ) {
-			self::flush_cache();
-		}
 	}
 
 	/**
@@ -93,6 +82,15 @@ class Inert_Gating_Notice {
 	 * @param \WP_Post|null $post Post object, when the hook supplies one.
 	 */
 	public static function flush_cache_on_post( $post_id, $post = null ) {
+		// Revisions carry a verbatim copy of the parent's content, so they match the
+		// prefix check below and would flush on every autosave — roughly once a minute
+		// while anyone has a gated post open, on exactly the sites this cache exists
+		// for. They can never change the answer: has_block_rules() counts only
+		// published posts and revisions are 'inherit'. Autosaves are revisions too
+		// (see _wp_post_revision_data()), so one guard covers both.
+		if ( wp_is_post_revision( $post_id ) ) {
+			return;
+		}
 		$post = $post instanceof \WP_Post ? $post : get_post( $post_id );
 		if ( ! $post ) {
 			return;
