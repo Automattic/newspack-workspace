@@ -499,19 +499,38 @@ class WooCommerce_Connection {
 	/**
 	 * Get a human-readable payment method label for an order.
 	 *
-	 * Prefers the card brand and last four digits from a saved payment token,
-	 * which is available for saved-card and subscription orders. Falls back to
-	 * the payment gateway's customer-facing title (e.g. "Credit / Debit Card"),
-	 * since the card details of a one-time payment are not stored locally.
+	 * Prefers the card brand and last four digits from a saved payment token —
+	 * read from the order's own tokens (as WooPayments attaches them), or
+	 * recovered from the customer's saved tokens via the gateway reference the
+	 * Stripe gateway stores in order meta. Falls back to the payment gateway's
+	 * customer-facing title (e.g. "Credit / Debit Card"), since the card details
+	 * of a plain one-time payment are not stored locally at all.
 	 *
 	 * @param \WC_Order $order The order.
 	 *
 	 * @return string Payment method label.
 	 */
 	public static function get_payment_method_label( $order ) {
-		if ( class_exists( 'WC_Payment_Tokens' ) && method_exists( $order, 'get_payment_tokens' ) ) {
+		if ( class_exists( 'WC_Payment_Tokens' ) ) {
+			$tokens = [];
 			foreach ( $order->get_payment_tokens() as $token_id ) {
-				$token = \WC_Payment_Tokens::get( $token_id );
+				$tokens[] = \WC_Payment_Tokens::get( $token_id );
+			}
+			/**
+			 * Gateways like Stripe save cards against the customer, not the order —
+			 * the order carries only the gateway's payment method reference in meta.
+			 * Match that reference to the customer's saved tokens to recover the card.
+			 */
+			$source_id   = $order->get_meta( '_stripe_source_id' );
+			$customer_id = $order->get_customer_id();
+			if ( $source_id && $customer_id ) {
+				foreach ( \WC_Payment_Tokens::get_customer_tokens( $customer_id, $order->get_payment_method() ) as $customer_token ) {
+					if ( $customer_token->get_token() === $source_id ) {
+						$tokens[] = $customer_token;
+					}
+				}
+			}
+			foreach ( $tokens as $token ) {
 				if ( ! $token || ! is_a( $token, 'WC_Payment_Token_CC' ) ) {
 					continue;
 				}
@@ -523,7 +542,9 @@ class WooCommerce_Connection {
 					continue;
 				}
 				$brand = function_exists( 'wc_get_credit_card_type_label' ) ? \wc_get_credit_card_type_label( $type ) : ucwords( str_replace( [ '-', '_' ], ' ', (string) $type ) );
-				return trim(
+				// The label is substituted into the email HTML unescaped, and the
+				// brand passes through a public filter — strip any markup, like *AMOUNT*.
+				return \wp_strip_all_tags(
 					sprintf(
 						/* translators: 1: card brand, e.g. "Visa". 2: the card's last four digits. */
 						__( '%1$s ending in %2$s', 'newspack-plugin' ),
@@ -535,7 +556,7 @@ class WooCommerce_Connection {
 		}
 		$title = $order->get_payment_method_title();
 		if ( ! empty( $title ) ) {
-			return $title;
+			return \wp_strip_all_tags( $title );
 		}
 		return __( 'Card', 'newspack-plugin' );
 	}
@@ -555,10 +576,7 @@ class WooCommerce_Connection {
 		}
 
 		// If there are no donation products in the order, do not override the default WC receipt email.
-		// Note: get_order_donation_product_id() returns null (not false) when no donation
-		// products are configured at all, so an emptiness check is required here.
-		$has_donation_product = ! empty( \Newspack\Donations::get_order_donation_product_id( $order->get_id() ) );
-		if ( ! $has_donation_product ) {
+		if ( ! Donations::get_order_donation_product_id( $order->get_id() ) ) {
 			return false;
 		}
 
@@ -646,9 +664,9 @@ class WooCommerce_Connection {
 		);
 		if ( $sent ) {
 			$order->add_meta_data( $email_sent_meta, true, true );
-			return false;
+			return true;
 		}
-		return true;
+		return false;
 	}
 
 	/**

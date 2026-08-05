@@ -16,15 +16,26 @@ class WC_Payment_Token {
 class WC_Payment_Token_CC extends WC_Payment_Token {
 	private $card_type;
 	private $last4;
-	public function __construct( $card_type = '', $last4 = '' ) {
+	private $token;
+	private $user_id;
+	public function __construct( $card_type = '', $last4 = '', $token = '', $user_id = 0, $gateway_id = '' ) {
+		parent::__construct( $gateway_id );
 		$this->card_type = $card_type;
 		$this->last4     = $last4;
+		$this->token     = $token;
+		$this->user_id   = $user_id;
 	}
 	public function get_card_type() {
 		return $this->card_type;
 	}
 	public function get_last4() {
 		return $this->last4;
+	}
+	public function get_token() {
+		return $this->token;
+	}
+	public function get_user_id() {
+		return $this->user_id;
 	}
 }
 
@@ -33,17 +44,51 @@ class WC_Payment_Tokens {
 	public static function get( $token_id ) {
 		return self::$tokens[ $token_id ] ?? null;
 	}
+	/**
+	 * Faithful to WC_Payment_Tokens::get_customer_tokens(): customers below 1
+	 * (guests) get an empty array, and a non-empty $gateway_id restricts the
+	 * result to that gateway's tokens.
+	 *
+	 * @param int    $customer_id Customer ID.
+	 * @param string $gateway_id  Optional gateway ID filter.
+	 */
+	public static function get_customer_tokens( $customer_id, $gateway_id = '' ) {
+		if ( $customer_id < 1 ) {
+			return [];
+		}
+		return array_filter(
+			self::$tokens,
+			function ( $token ) use ( $customer_id, $gateway_id ) {
+				if ( ! method_exists( $token, 'get_user_id' ) || (int) $token->get_user_id() !== (int) $customer_id ) {
+					return false;
+				}
+				return '' === $gateway_id || $token->get_gateway_id() === $gateway_id;
+			}
+		);
+	}
 }
 
 /**
- * Note: real WC maps through a labels array first (amex => "American Express",
- * jcb => "JCB") and applies the woocommerce_credit_card_type_labels filter;
- * this mock only replicates the ucwords fallback.
+ * Faithful to wc_get_credit_card_type_label(): normalizes case and -/_ to
+ * spaces, maps known types through the labels array (note the real map keys on
+ * "american express", not Stripe's "amex" slug), and falls back to ucwords.
+ * The woocommerce_credit_card_type_labels / woocommerce_get_credit_card_type_label
+ * filters are not applied.
  *
  * @param string $type Card type slug.
  */
 function wc_get_credit_card_type_label( $type ) {
-	return ucwords( str_replace( [ '-', '_' ], ' ', (string) $type ) );
+	$type   = strtolower( str_replace( [ '-', '_' ], ' ', (string) $type ) );
+	$labels = [
+		'mastercard'       => 'MasterCard',
+		'visa'             => 'Visa',
+		'discover'         => 'Discover',
+		'american express' => 'American Express',
+		'cartes bancaires' => 'Cartes Bancaires',
+		'diners'           => 'Diners',
+		'jcb'              => 'JCB',
+	];
+	return $labels[ $type ] ?? ucwords( $type );
 }
 
 class WC_Install {
@@ -125,6 +170,9 @@ class WC_Payment_Gateways {
 class WC_DateTime extends DateTime {
 	public function date( $format ) {
 		return gmdate( $format, $this->getTimestamp() );
+	}
+	public function date_i18n( $format = 'Y-m-d' ) {
+		return $this->date( $format );
 	}
 	public function getOffsetTimestamp() {
 		return $this->getTimestamp() + $this->getOffset();
@@ -472,6 +520,11 @@ class WC_Order {
 	public function update_meta_data( $field_name, $value ) {
 		$this->meta[ $field_name ] = $value;
 	}
+	public function add_meta_data( $field_name, $value, $unique = false ) {
+		if ( $unique || ! isset( $this->meta[ $field_name ] ) ) {
+			$this->meta[ $field_name ] = $value;
+		}
+	}
 	public function delete_meta_data( $field_name ) {
 		unset( $this->meta[ $field_name ] );
 	}
@@ -501,6 +554,15 @@ class WC_Order {
 	}
 	public function get_billing_last_name() {
 		return $this->data['billing_last_name'] ?? '';
+	}
+	public function get_date_created() {
+		return new WC_DateTime( $this->data['date_created'] ?? $this->data['date_paid'] ?? 'now' );
+	}
+	public function get_formatted_order_total() {
+		return '$' . number_format( (float) $this->get_total(), 2 );
+	}
+	public function get_view_order_url() {
+		return $this->data['view_order_url'] ?? 'https://example.test/my-account/view-order/' . $this->get_id();
 	}
 }
 

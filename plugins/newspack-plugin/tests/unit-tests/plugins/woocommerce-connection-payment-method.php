@@ -5,9 +5,11 @@
  * @package Newspack\Tests
  */
 
+use Newspack\Donations;
 use Newspack\Emails;
 use Newspack\Reader_Revenue_Emails;
 use Newspack\WooCommerce_Connection;
+use Newspack\WooCommerce_Products;
 
 require_once __DIR__ . '/../../mocks/wc-mocks.php';
 
@@ -27,6 +29,11 @@ class Newspack_Test_WooCommerce_Connection_Payment_Method extends WP_UnitTestCas
 		$products_database      = [];
 		$subscriptions_database = [];
 		WC_Payment_Tokens::$tokens = [];
+		reset_phpmailer_instance();
+		Emails::reset_email_configs_cache();
+		// The flagged-product list is memoized in a static — reset it so a
+		// product staged (and rolled back) by one test can't leak into the next.
+		Donations::reset_flagged_donation_product_ids_cache();
 	}
 
 	/**
@@ -132,6 +139,238 @@ class Newspack_Test_WooCommerce_Connection_Payment_Method extends WP_UnitTestCas
 			'Credit / Debit Card',
 			WooCommerce_Connection::get_payment_method_label( $order ),
 			'Tokens without a card brand should not produce a brandless label.'
+		);
+	}
+
+	/**
+	 * Stripe saves cards against the customer, not the order — the order carries
+	 * only a gateway reference in `_stripe_source_id` meta. The label must
+	 * recover the brand and last4 by matching that reference to the customer's
+	 * saved tokens.
+	 */
+	public function test_label_recovers_customer_token_via_stripe_source_id() {
+		WC_Payment_Tokens::$tokens[201] = new WC_Payment_Token_CC( 'visa', '4242', 'pm_abc123', 7, 'stripe' );
+		$order                          = new WC_Order(
+			[
+				'status'               => 'processing',
+				'customer_id'          => 7,
+				'total'                => 20,
+				'payment_method'       => 'stripe',
+				'payment_method_title' => 'Credit / Debit Card',
+				'meta'                 => [ '_stripe_source_id' => 'pm_abc123' ],
+			]
+		);
+		self::assertSame(
+			'Visa ending in 4242',
+			WooCommerce_Connection::get_payment_method_label( $order ),
+			'Customer-scoped tokens referenced by the order\'s _stripe_source_id should render the card details.'
+		);
+	}
+
+	/**
+	 * Subscription renewal orders carry the copied `_stripe_source_id` but no
+	 * gateway title — exactly the shape that previously rendered a bare "Card".
+	 * The customer-token recovery must cover them.
+	 */
+	public function test_label_recovers_customer_token_on_renewal_order() {
+		WC_Payment_Tokens::$tokens[202] = new WC_Payment_Token_CC( 'mastercard', '5556', 'pm_renewal9', 8, 'stripe' );
+		$order                          = new WC_Order(
+			[
+				'status'         => 'completed',
+				'customer_id'    => 8,
+				'total'          => 10,
+				'payment_method' => 'stripe',
+				'meta'           => [
+					'_subscription_renewal' => 12,
+					'_stripe_source_id'     => 'pm_renewal9',
+				],
+			]
+		);
+		self::assertSame(
+			'MasterCard ending in 5556',
+			WooCommerce_Connection::get_payment_method_label( $order ),
+			'Renewal orders should recover the card details from the customer\'s saved token.'
+		);
+	}
+
+	/**
+	 * A `_stripe_source_id` that matches none of the customer's saved tokens
+	 * (e.g. the card was deleted, or the reference belongs to a payment that was
+	 * never saved) must fall through to the gateway title.
+	 */
+	public function test_label_ignores_unmatched_stripe_source_id() {
+		WC_Payment_Tokens::$tokens[203] = new WC_Payment_Token_CC( 'visa', '4242', 'pm_other', 7, 'stripe' );
+		$order                          = new WC_Order(
+			[
+				'status'               => 'processing',
+				'customer_id'          => 7,
+				'total'                => 20,
+				'payment_method'       => 'stripe',
+				'payment_method_title' => 'Credit / Debit Card',
+				'meta'                 => [ '_stripe_source_id' => 'pm_abc123' ],
+			]
+		);
+		self::assertSame(
+			'Credit / Debit Card',
+			WooCommerce_Connection::get_payment_method_label( $order ),
+			'An unmatched gateway reference should not borrow another saved card\'s details.'
+		);
+	}
+
+	/**
+	 * Guest orders have no customer to look tokens up against — even with a
+	 * `_stripe_source_id` present, the label must fall through to the gateway
+	 * title rather than matching another customer's token.
+	 */
+	public function test_label_ignores_stripe_source_id_for_guest_orders() {
+		WC_Payment_Tokens::$tokens[204] = new WC_Payment_Token_CC( 'visa', '4242', 'pm_abc123', 7, 'stripe' );
+		$order                          = new WC_Order(
+			[
+				'status'               => 'processing',
+				'customer_id'          => 0,
+				'total'                => 20,
+				'payment_method'       => 'stripe',
+				'payment_method_title' => 'Credit / Debit Card',
+				'meta'                 => [ '_stripe_source_id' => 'pm_abc123' ],
+			]
+		);
+		self::assertSame(
+			'Credit / Debit Card',
+			WooCommerce_Connection::get_payment_method_label( $order ),
+			'Guest orders should never resolve card details from saved tokens.'
+		);
+	}
+
+	/**
+	 * The label lands unescaped inside the email template's HTML (the
+	 * placeholder substitution is a bare str_replace), so markup sneaking in
+	 * through a gateway title or a third-party label filter must be stripped —
+	 * the same defense the *AMOUNT* placeholder applies.
+	 */
+	public function test_label_strips_markup_from_gateway_title() {
+		$order = new WC_Order(
+			[
+				'status'               => 'processing',
+				'customer_id'          => 1,
+				'total'                => 5,
+				'payment_method'       => 'custom_gateway',
+				'payment_method_title' => 'Credit Card <img src=x onerror=alert(1)>',
+			]
+		);
+		self::assertSame(
+			'Credit Card',
+			WooCommerce_Connection::get_payment_method_label( $order ),
+			'Markup in a gateway-supplied title must not reach the email HTML.'
+		);
+	}
+
+	/**
+	 * Stripe stores the card brand as "amex", while WooCommerce's label map keys
+	 * on "american express" — so the ucwords fallback applies and the receipt
+	 * reads "Amex ending in …". Pinned as accepted behavior: "Amex" is the
+	 * recognizable brand name, and normalizing gateway slugs would mean
+	 * maintaining a mapping of every gateway's vocabulary.
+	 */
+	public function test_label_renders_stripe_amex_slug_as_amex() {
+		WC_Payment_Tokens::$tokens[205] = new WC_Payment_Token_CC( 'amex', '0005' );
+		$order                          = new WC_Order(
+			[
+				'status'               => 'processing',
+				'customer_id'          => 1,
+				'total'                => 20,
+				'payment_method'       => 'stripe',
+				'payment_method_title' => 'Credit / Debit Card',
+				'payment_tokens'       => [ 205 ],
+			]
+		);
+		self::assertSame(
+			'Amex ending in 0005',
+			WooCommerce_Connection::get_payment_method_label( $order ),
+			'Stripe\'s "amex" slug falls through WC\'s label map to the ucwords fallback.'
+		);
+	}
+
+	/**
+	 * The full success path: a donation order sends the receipt, reports true —
+	 * the docblock contract — writes the sent marker, and the delivered mail
+	 * carries the card details recovered from the customer's saved token.
+	 */
+	public function test_receipt_email_sends_for_donation_order_with_card_details() {
+		add_filter(
+			'newspack_email_configs',
+			function ( $configs ) {
+				$configs[ Reader_Revenue_Emails::EMAIL_TYPES['RECEIPT'] ] = [
+					'name'        => Reader_Revenue_Emails::EMAIL_TYPES['RECEIPT'],
+					'label'       => 'Receipt',
+					'description' => 'Test receipt email.',
+					'template'    => dirname( NEWSPACK_PLUGIN_FILE ) . '/includes/templates/reader-revenue-emails/receipt.php',
+					'category'    => 'reader-revenue',
+				];
+				return $configs;
+			}
+		);
+		Emails::reset_email_configs_cache();
+
+		$product_id = self::factory()->post->create( [ 'post_type' => 'product' ] );
+		update_post_meta( $product_id, WooCommerce_Products::DONATION_FLAG_META_KEY, wc_bool_to_string( true ) );
+		Donations::reset_flagged_donation_product_ids_cache();
+
+		WC_Payment_Tokens::$tokens[301] = new WC_Payment_Token_CC( 'visa', '4242', 'pm_success1', 9, 'stripe' );
+		$order                          = new WC_Order(
+			[
+				'status'               => 'completed',
+				'customer_id'          => 9,
+				'total'                => 20,
+				'billing_email'        => 'donor@example.com',
+				'payment_method'       => 'stripe',
+				'payment_method_title' => 'Credit / Debit Card',
+				'meta'                 => [ '_stripe_source_id' => 'pm_success1' ],
+				'items'                => [
+					new WC_Order_Item_Product(
+						[
+							'name'       => 'Donate: Monthly',
+							'product_id' => $product_id,
+							'total'      => 20,
+						]
+					),
+				],
+			]
+		);
+
+		self::assertTrue(
+			WooCommerce_Connection::send_customizable_receipt_email( $order->get_id() ),
+			'A successful send must return true, per the docblock.'
+		);
+		self::assertTrue(
+			$order->meta_exists( '_newspack_receipt_email_sent' ),
+			'A successful send must write the sent marker.'
+		);
+		$mailer = tests_retrieve_phpmailer_instance();
+		self::assertStringContainsString(
+			'Visa ending in 4242',
+			$mailer->get_sent()->body,
+			'The delivered receipt must carry the card details recovered from the saved token.'
+		);
+	}
+
+	/**
+	 * With no donation products configured, get_order_donation_product_id() must
+	 * return false per its `int|false` docblock — not a bare-return null, which
+	 * forces every caller to know about a third state (and let non-donation
+	 * orders through `false ===` guards like order_paid()'s).
+	 */
+	public function test_get_order_donation_product_id_is_false_when_donations_unconfigured() {
+		$order = new WC_Order(
+			[
+				'status'      => 'completed',
+				'customer_id' => 1,
+				'total'       => 20,
+				'items'       => [],
+			]
+		);
+		self::assertFalse(
+			Donations::get_order_donation_product_id( $order->get_id() ),
+			'A site with no donation products should get the documented false, never null.'
 		);
 	}
 
