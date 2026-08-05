@@ -531,7 +531,17 @@ class WC_Order {
 	public function meta_exists( $field_name ) {
 		return isset( $this->meta[ $field_name ] );
 	}
+	/**
+	 * Counts calls so tests can pin that a meta write is followed by persistence.
+	 * The mock cannot model real persistence: wc_get_order() hands back the same
+	 * instance, so unsaved meta looks saved. Real WC hydrates a fresh order per
+	 * lookup and discards unsaved meta at end of request.
+	 *
+	 * @var int
+	 */
+	public $save_calls = 0;
 	public function save() {
+		$this->save_calls++;
 		return true;
 	}
 	public function get_billing_email() {

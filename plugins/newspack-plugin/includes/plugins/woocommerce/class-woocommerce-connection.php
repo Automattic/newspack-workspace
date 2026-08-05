@@ -512,46 +512,31 @@ class WooCommerce_Connection {
 	 */
 	public static function get_payment_method_label( $order ) {
 		if ( class_exists( 'WC_Payment_Tokens' ) ) {
-			$tokens = [];
+			// First attempt: tokens attached to the order itself, as WooPayments does.
 			foreach ( $order->get_payment_tokens() as $token_id ) {
-				$tokens[] = \WC_Payment_Tokens::get( $token_id );
+				$label = self::get_card_token_label( \WC_Payment_Tokens::get( $token_id ) );
+				if ( $label ) {
+					return $label;
+				}
 			}
 			/**
-			 * Gateways like Stripe save cards against the customer, not the order —
-			 * the order carries only the gateway's payment method reference in meta.
-			 * Match that reference to the customer's saved tokens to recover the card.
+			 * Second attempt: gateways like Stripe save cards against the customer,
+			 * not the order — the order carries only the gateway's payment method
+			 * reference in meta. Match that reference to the customer's saved
+			 * tokens to recover the card.
 			 */
 			$source_id   = $order->get_meta( '_stripe_source_id' );
 			$customer_id = $order->get_customer_id();
 			if ( $source_id && $customer_id ) {
 				foreach ( \WC_Payment_Tokens::get_customer_tokens( $customer_id, $order->get_payment_method() ) as $customer_token ) {
-					if ( $customer_token->get_token() === $source_id ) {
-						$tokens[] = $customer_token;
+					if ( $customer_token->get_token() !== $source_id ) {
+						continue;
+					}
+					$label = self::get_card_token_label( $customer_token );
+					if ( $label ) {
+						return $label;
 					}
 				}
-			}
-			foreach ( $tokens as $token ) {
-				if ( ! $token || ! is_a( $token, 'WC_Payment_Token_CC' ) ) {
-					continue;
-				}
-				$last4 = $token->get_last4();
-				$type  = $token->get_card_type();
-				// Both parts are needed for a meaningful label — some gateways store
-				// tokens without a brand or last4; fall through to the gateway title.
-				if ( ! $last4 || ! $type ) {
-					continue;
-				}
-				$brand = function_exists( 'wc_get_credit_card_type_label' ) ? \wc_get_credit_card_type_label( $type ) : ucwords( str_replace( [ '-', '_' ], ' ', (string) $type ) );
-				// The label is substituted into the email HTML unescaped, and the
-				// brand passes through a public filter — strip any markup, like *AMOUNT*.
-				return \wp_strip_all_tags(
-					sprintf(
-						/* translators: 1: card brand, e.g. "Visa". 2: the card's last four digits. */
-						__( '%1$s ending in %2$s', 'newspack-plugin' ),
-						$brand,
-						$last4
-					)
-				);
 			}
 		}
 		$title = $order->get_payment_method_title();
@@ -559,6 +544,40 @@ class WooCommerce_Connection {
 			return \wp_strip_all_tags( $title );
 		}
 		return __( 'Card', 'newspack-plugin' );
+	}
+
+	/**
+	 * Build a "<Brand> ending in <last4>" label from a saved credit card token.
+	 *
+	 * @param \WC_Payment_Token|null $token The token, or null.
+	 *
+	 * @return string|false The label, or false when the token isn't a credit
+	 *                      card or is missing its brand or last four digits —
+	 *                      some gateways store tokens without either, and a
+	 *                      partial label would be worse than the gateway title.
+	 */
+	private static function get_card_token_label( $token ) {
+		if ( ! $token || ! is_a( $token, 'WC_Payment_Token_CC' ) ) {
+			return false;
+		}
+		$last4 = $token->get_last4();
+		$type  = $token->get_card_type();
+		if ( ! $last4 || ! $type ) {
+			return false;
+		}
+		$brand = function_exists( 'wc_get_credit_card_type_label' ) ? \wc_get_credit_card_type_label( $type ) : ucwords( str_replace( [ '-', '_' ], ' ', (string) $type ) );
+		// The label lands in the email HTML unescaped, and the brand passes
+		// through a public filter — strip HTML tags, the same treatment the
+		// *AMOUNT* placeholder gets. Placeholder literals are a separate,
+		// negligible concern handled by substitution order, not by this strip.
+		return \wp_strip_all_tags(
+			sprintf(
+				/* translators: 1: card brand, e.g. "Visa". 2: the card's last four digits. */
+				__( '%1$s ending in %2$s', 'newspack-plugin' ),
+				$brand,
+				$last4
+			)
+		);
 	}
 
 	/**
@@ -664,6 +683,10 @@ class WooCommerce_Connection {
 		);
 		if ( $sent ) {
 			$order->add_meta_data( $email_sent_meta, true, true );
+			// Persist the marker: this hook fires after the status transition has
+			// already saved the order, on a freshly hydrated instance, so without
+			// an explicit save the already-sent guard never holds across requests.
+			$order->save();
 			return true;
 		}
 		return false;

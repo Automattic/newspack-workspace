@@ -345,6 +345,17 @@ class Newspack_Test_WooCommerce_Connection_Payment_Method extends WP_UnitTestCas
 			$order->meta_exists( '_newspack_receipt_email_sent' ),
 			'A successful send must write the sent marker.'
 		);
+		// The marker write must be persisted: the send hook fires after
+		// WC_Order::update_status() has already saved, on a freshly hydrated
+		// instance, so without an explicit save() the marker is discarded at end
+		// of request and the already-sent guard never fires across requests.
+		// Asserted via the mock's save counter — the mock aliases instances, so
+		// meta_exists() alone cannot distinguish saved from unsaved meta.
+		self::assertGreaterThan(
+			0,
+			$order->save_calls,
+			'The sent marker must be persisted with save(), not left on the in-memory order.'
+		);
 		$mailer = tests_retrieve_phpmailer_instance();
 		self::assertStringContainsString(
 			'Visa ending in 4242',
