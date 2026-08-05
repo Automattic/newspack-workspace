@@ -1,15 +1,18 @@
 /**
- * WordPress dependencies.
+ * WordPress dependencies
  */
-import { __ } from '@wordpress/i18n';
-import { category } from '@wordpress/icons';
+import { cloneElement } from '@wordpress/element';
 
 /**
  * Internal dependencies
  */
-import { Button, Handoff, NewspackIcon, Notice, HandoffMessage, TabbedNavigation } from '../';
+import { Button, Handoff, Notice, HandoffMessage, TabbedNavigation, Page } from '../';
+import { activeBreadcrumbs } from '../wizard/breadcrumbs-select';
 import { buttonProps } from '../button-props';
+import Router from '../proxied-imports/router';
 import './style.scss';
+
+const { useLocation } = Router;
 
 /**
  * External dependencies
@@ -17,9 +20,24 @@ import './style.scss';
 import classnames from 'classnames';
 
 /**
+ * Derives the active-tab breadcrumb trail from the current route. Only rendered
+ * for tabbed wizards, which always mount inside a Router, so calling useLocation
+ * here keeps router-free consumers (e.g. standalone multibranded) from crashing.
+ *
+ * @param {Object}   props          Component props.
+ * @param {Array}    props.sections Tabbed navigation sections.
+ * @param {Function} props.render   Renders the page given the breadcrumb trail.
+ * @return {JSX.Element} The rendered page.
+ */
+const RouteBreadcrumbs = ( { sections, render } ) => {
+	const { pathname } = useLocation();
+	return render( activeBreadcrumbs( sections, pathname ) );
+};
+
+/**
  * Higher-Order Component to provide plugin management and error handling to Newspack Wizards.
  */
-export default function withWizardScreen( WrappedComponent, { hidePrimaryButton } = {} ) {
+export default function withWizardScreen( WrappedComponent, { hidePrimaryButton, hideHeader } = {} ) {
 	const WrappedWithWizardScreen = props => {
 		const {
 			className,
@@ -29,6 +47,8 @@ export default function withWizardScreen( WrappedComponent, { hidePrimaryButton 
 			headerText,
 			subHeaderText,
 			tabbedNavigation,
+			breadcrumbItems,
+			headerActions,
 			secondaryButtonText,
 			secondaryButtonAction,
 			renderAboveContent,
@@ -57,37 +77,15 @@ export default function withWizardScreen( WrappedComponent, { hidePrimaryButton 
 					{ ...overridingProps }
 				/>
 			);
-		return (
+		const tabbedNavigationRegion = tabbedNavigation && (
+			<TabbedNavigation
+				disableUpcoming={ disableUpcomingInTabbedNavigation }
+				items={ tabbedNavigation.filter( item => ! item.isHiddenInNav ) }
+			/>
+		);
+
+		const content = (
 			<>
-				{ newspack_aux_data.is_debug_mode && <Notice debugMode /> }
-				<div className="newspack-wizard__header">
-					<div className="newspack-wizard__header__inner">
-						<div className="newspack-wizard__title">
-							<Button
-								isLink
-								href={ newspack_urls.dashboard }
-								label={ __( 'Return to Dashboard', 'newspack-plugin' ) }
-								showTooltip={ true }
-								icon={ category }
-								iconSize={ 36 }
-							>
-								<NewspackIcon size={ 36 } />
-							</Button>
-							<div>
-								{ headerText && <h2>{ headerText }</h2> }
-								{ subHeaderText && <span>{ subHeaderText }</span> }
-							</div>
-						</div>
-					</div>
-				</div>
-
-				{ tabbedNavigation && (
-					<TabbedNavigation
-						disableUpcoming={ disableUpcomingInTabbedNavigation }
-						items={ tabbedNavigation.filter( item => ! item.isHiddenInNav ) }
-					/>
-				) }
-
 				<HandoffMessage />
 
 				<div className={ classnames( 'newspack-wizard newspack-wizard__content', className ) }>
@@ -106,6 +104,43 @@ export default function withWizardScreen( WrappedComponent, { hidePrimaryButton 
 				</div>
 			</>
 		);
+
+		const renderPage = crumbs => {
+			let pageBreadcrumbs = crumbs ?? [];
+			if ( ! pageBreadcrumbs.length && headerText ) {
+				pageBreadcrumbs = [ { label: headerText } ];
+			}
+			return (
+				<>
+					{ newspack_aux_data.is_debug_mode && <Notice debugMode /> }
+					{ hideHeader ? (
+						// Without the Page shell the tabs still own the content: it
+						// renders inside the active tab's panel.
+						<>{ tabbedNavigationRegion ? cloneElement( tabbedNavigationRegion, { content } ) : content }</>
+					) : (
+						<Page
+							breadcrumbItems={ pageBreadcrumbs }
+							subTitle={ subHeaderText }
+							actions={ headerActions }
+							tabbedNavigation={ tabbedNavigationRegion }
+						>
+							{ content }
+						</Page>
+					) }
+				</>
+			);
+		};
+
+		if ( hideHeader ) {
+			return renderPage();
+		}
+		if ( breadcrumbItems ) {
+			return renderPage( breadcrumbItems );
+		}
+		if ( tabbedNavigation ) {
+			return <RouteBreadcrumbs sections={ tabbedNavigation } render={ renderPage } />;
+		}
+		return renderPage();
 	};
 	return WrappedWithWizardScreen;
 }

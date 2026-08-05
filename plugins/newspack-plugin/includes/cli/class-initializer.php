@@ -31,6 +31,7 @@ class Initializer {
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-woocommerce-subscriptions.php';
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-ga4-dimensions.php';
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-teams-for-memberships-diagnostics.php';
+		include_once NEWSPACK_ABSPATH . 'includes/cli/class-teams-migration.php';
 	}
 
 	/**
@@ -80,6 +81,7 @@ class Initializer {
 		WP_CLI::add_command( 'newspack migrate-co-authors-guest-authors', [ 'Newspack\CLI\Co_Authors_Plus', 'migrate_guest_authors' ] );
 		WP_CLI::add_command( 'newspack backfill-non-editing-contributors', [ 'Newspack\CLI\Co_Authors_Plus', 'backfill_non_editing_contributor' ] );
 		WP_CLI::add_command( 'newspack migrate-expired-subscriptions', [ 'Newspack\CLI\WooCommerce_Subscriptions', 'migrate_expired_subscriptions' ] );
+		WP_CLI::add_command( 'newspack card-expiry-warning-backfill', [ 'Newspack\CLI\WooCommerce_Subscriptions', 'card_expiry_warning_backfill' ] );
 		WP_CLI::add_command( 'newspack ga4-dimensions', 'Newspack\CLI\GA4_Dimensions' );
 
 		// Only register the Teams for Memberships diagnostics command on sites where the
@@ -89,6 +91,16 @@ class Initializer {
 				'newspack teams-for-memberships diagnostics',
 				[ 'Newspack\CLI\Teams_For_Memberships_Diagnostics', 'diagnostics' ]
 			);
+		}
+
+		// WooCommerce Memberships → Access Control group subscription migration commands.
+		// Only register them where WooCommerce Memberships is active — they operate on
+		// Memberships teams/plans and are useless (and clutter `wp help`) otherwise.
+		if ( \Newspack\Memberships::is_active() ) {
+			WP_CLI::add_command( 'newspack migrate-teams', [ 'Newspack\CLI\Teams_Migration', 'migrate_teams' ] );
+			WP_CLI::add_command( 'newspack migrate-team-products', [ 'Newspack\CLI\Teams_Migration', 'migrate_team_products' ] );
+			WP_CLI::add_command( 'newspack migrate-manual-members', [ 'Newspack\CLI\Teams_Migration', 'migrate_manual_members' ] );
+			WP_CLI::add_command( 'newspack backfill-team-managers', [ 'Newspack\CLI\Teams_Migration', 'backfill_team_managers' ] );
 		}
 
 		Optional_Modules::register_commands();

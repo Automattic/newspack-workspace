@@ -109,7 +109,7 @@ const ContentGatesPriority = ( {
 
 	return (
 		showModal && (
-			<Modal title={ __( 'Gate priority', 'newspack-plugin' ) } onRequestClose={ closeModal }>
+			<Modal title={ __( 'Gate Priority', 'newspack-plugin' ) } onRequestClose={ closeModal }>
 				<VStack spacing={ 6 }>
 					<span>
 						{ __(

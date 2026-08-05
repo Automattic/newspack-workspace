@@ -35,6 +35,7 @@ class WooCommerce_Connection {
 		include_once __DIR__ . '/class-woocommerce-cli.php';
 		include_once __DIR__ . '/class-woocommerce-cover-fees.php';
 		include_once __DIR__ . '/class-woocommerce-emails.php';
+		include_once __DIR__ . '/class-woocommerce-email-style-sync.php';
 		include_once __DIR__ . '/class-woocommerce-order-utm.php';
 		include_once __DIR__ . '/class-woocommerce-products.php';
 		include_once __DIR__ . '/class-woocommerce-checkout.php';

@@ -135,7 +135,7 @@ $criteria = [
 	],
 	'donation'                 => [
 		'name'        => __( 'Donation', 'newspack-popups' ),
-		'description' => __( 'If the reader has completed an onsite donation.', 'newspack-popups' ),
+		'description' => __( 'If the reader has completed an onsite donation. Readers arriving from a newsletter email flagged as a donor are also matched as donors, for the rest of their browsing session.', 'newspack-popups' ),
 		'category'    => 'reader_revenue',
 		'options'     => [
 			[

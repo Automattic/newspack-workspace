@@ -42,10 +42,16 @@ function useWizardApiFetchToggle< T >( {
 	/**
 	 * Toggle function for the Wizard API fetch.
 	 *
+	 * `dataToSend` is a `Partial< T >` so callers can send only the writable
+	 * fields and omit server-derived, read-only ones. The fetched response
+	 * (always the full `T`) is what gets written back into state.
+	 *
 	 * @param dataToSend Data to send to endpoint.
 	 * @param isToggleOn If set method will default to POST, otherwise GET.
+	 * @return The request promise, so callers can react to failures. Rejects
+	 *         with the API error (already surfaced via `errorMessage`).
 	 */
-	function apiFetchToggle( dataToSend?: T, isToggleOn?: boolean ) {
+	function apiFetchToggle( dataToSend?: Partial< T >, isToggleOn?: boolean ) {
 		const method = typeof isToggleOn === 'boolean' && isToggleOn ? 'POST' : 'GET';
 
 		const options: ApiFetchOptions = {
@@ -55,11 +61,18 @@ function useWizardApiFetchToggle< T >( {
 		if ( dataToSend ) {
 			options.data = dataToSend;
 		}
-		wizardApiFetch< T >( options, {
+		if ( method === 'POST' ) {
+			// Mirror a successful save into the store's GET cache. The mount
+			// GET is served from that cache, so without this a remount (e.g.
+			// revisiting a settings tab) would show — and a later save could
+			// write back — the stale first-load snapshot.
+			options.updateCacheMethods = [ 'GET' ];
+		}
+		return wizardApiFetch< T >( options, {
 			onSuccess: setApiData,
 			onFinally() {
 				if ( refreshOn.includes( method ) ) {
-					setActionText( createElement( 'span', { className: 'gray' }, __( 'Page reloading…', 'newspack-plugin' ) ) );
+					setActionText( createElement( 'span', { className: 'newspack-text-muted' }, __( 'Page reloading…', 'newspack-plugin' ) ) );
 					if ( ! errorMessage ) {
 						window.location.reload();
 					}

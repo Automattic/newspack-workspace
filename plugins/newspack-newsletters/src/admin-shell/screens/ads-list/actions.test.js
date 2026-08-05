@@ -24,14 +24,14 @@ describe( 'ads list actions', () => {
 		expect( ids ).toEqual( [ 'quick-edit', 'trash', 'edit', 'rename', 'restore', 'delete-permanently' ] );
 	} );
 
-	it( 'marks Quick Edit and Trash as primary actions', () => {
+	it( 'marks Quick Edit as the only primary action', () => {
 		expect( byId( 'quick-edit' ).isPrimary ).toBe( true );
-		expect( byId( 'trash' ).isPrimary ).toBe( true );
 	} );
 
-	it( 'does not mark Edit or Rename as primary actions', () => {
+	it( 'does not mark Edit, Rename, or Trash as primary actions', () => {
 		expect( byId( 'edit' ).isPrimary ).toBeFalsy();
 		expect( byId( 'rename' ).isPrimary ).toBeFalsy();
+		expect( byId( 'trash' ).isPrimary ).toBeFalsy();
 	} );
 
 	it( 'Quick Edit is eligible on non-trashed rows only', () => {

@@ -240,6 +240,7 @@ class Newspack_Blocks {
 				'recaptcha_url'              => admin_url( 'admin.php?page=newspack-settings' ),
 				'custom_taxonomies'          => self::get_custom_taxonomies(),
 				'can_use_name_your_price'    => self::can_use_name_your_price(),
+				'coupons_enabled'            => function_exists( 'wc_coupons_enabled' ) && \wc_coupons_enabled(),
 				'tier_amounts_template'      => self::get_formatted_amount(),
 				'currency'                   => function_exists( 'get_woocommerce_currency' ) ? \get_woocommerce_currency() : 'USD',
 			];
@@ -1094,6 +1095,35 @@ class Newspack_Blocks {
 			return \Newspack_Sponsors\newspack_display_sponsors_and_categories( $sponsors );
 		}
 		return false;
+	}
+
+	/**
+	 * Support for Tag Labels.
+	 *
+	 * @param int|WP_Post|null $post Post to retrieve tag labels for.
+	 *
+	 * @return array|null Tag labels, if any, for this post.
+	 */
+	public static function get_tag_labels( $post = null ) {
+		if ( class_exists( '\Newspack\Tag_Labels' ) && method_exists( '\Newspack\Tag_Labels', 'get_labels_for_post' ) ) {
+			return \Newspack\Tag_Labels::get_labels_for_post( $post );
+		}
+
+		return null;
+	}
+
+	/**
+	 * Outputs HTML for given tag labels.
+	 *
+	 * @param array|null $labels Labels to display.
+	 * @param bool       $links  Whether to include links to tag archives.
+	 *
+	 * @return void
+	 */
+	public static function display_tag_labels( $labels = null, $links = true ) {
+		if ( class_exists( '\Newspack\Tag_Labels' ) && method_exists( '\Newspack\Tag_Labels', 'display' ) ) {
+			\Newspack\Tag_Labels::display( $labels, $links, 'div' );
+		}
 	}
 
 	/**
