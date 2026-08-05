@@ -99,10 +99,40 @@ class Newspack_Test_InDesign_Exporter extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test that the default export declares a header matching the line endings
+	 * it actually writes.
+	 *
+	 * The tagged-text start tag describes the file, not the machine running
+	 * InDesign: <ASCII-WIN> means CRLF-delimited, <ASCII-MAC> means bare-CR.
+	 * The converter joins every part with CRLF unconditionally, so <ASCII-WIN>
+	 * is the only header that describes the bytes. Declaring <ASCII-MAC> over
+	 * CRLF leaves an orphan LF at the head of each paragraph, which pushes the
+	 * <pstyle:...> tag off the paragraph start and makes InDesign render the
+	 * markup literally (NPPM-3098).
+	 */
+	public function test_convert_post_default_header_matches_line_endings() {
+		$post_id = $this->factory->post->create(
+			[
+				'post_title'   => 'Test Post',
+				'post_content' => '<p>First paragraph.</p><p>Second paragraph.</p>',
+			]
+		);
+
+		$converter = new InDesign_Converter();
+		$content   = $converter->convert_post( $post_id );
+
+		$this->assertStringContainsString( '<ASCII-WIN>', $content );
+		$this->assertStringContainsString( "\r\n", $content );
+		// Every CR belongs to a CRLF pair — no bare-CR (Mac-format) terminators.
+		$this->assertSame( substr_count( $content, "\r\n" ), substr_count( $content, "\r" ) );
+	}
+
+	/**
 	 * Test that the Mac platform option emits the <ASCII-MAC> header.
 	 *
-	 * InDesign on macOS requires the file to begin with <ASCII-MAC> for the
-	 * tagged text to be interpreted as markup rather than literal content.
+	 * Note this only swaps the declared header — the converter still writes CRLF
+	 * line endings, so a 'mac' export misdescribes its own format. See
+	 * test_convert_post_default_header_matches_line_endings().
 	 */
 	public function test_convert_post_mac_platform() {
 		$post_id = $this->factory->post->create(
@@ -136,11 +166,14 @@ class Newspack_Test_InDesign_Exporter extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test that the platform setting defaults to 'auto' when unset.
+	 * Test that the platform setting defaults to 'win' when unset.
+	 *
+	 * The exporter always writes CRLF-delimited files, so 'win' is the only
+	 * default that describes them accurately (NPPM-3098).
 	 */
 	public function test_platform_setting_default() {
 		delete_option( InDesign_Exporter::PLATFORM_OPTION );
-		$this->assertSame( 'auto', InDesign_Exporter::get_platform_setting() );
+		$this->assertSame( 'win', InDesign_Exporter::get_platform_setting() );
 	}
 
 	/**
@@ -162,10 +195,10 @@ class Newspack_Test_InDesign_Exporter extends WP_UnitTestCase {
 	 */
 	public function test_platform_setting_rejects_invalid_value() {
 		update_option( InDesign_Exporter::PLATFORM_OPTION, 'linux' );
-		$this->assertSame( 'auto', InDesign_Exporter::get_platform_setting() );
+		$this->assertSame( 'win', InDesign_Exporter::get_platform_setting() );
 
 		update_option( InDesign_Exporter::PLATFORM_OPTION, '' );
-		$this->assertSame( 'auto', InDesign_Exporter::get_platform_setting() );
+		$this->assertSame( 'win', InDesign_Exporter::get_platform_setting() );
 	}
 
 	/**
@@ -1104,7 +1137,27 @@ class Newspack_Test_InDesign_Exporter extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test that an unconfigured site resolves to 'win' for a Mac client.
+	 *
+	 * Regression guard for NPPM-3098: the header describes the file's own
+	 * format, not the OS the reader runs on, so the requesting browser must not
+	 * influence it on a site that never picked a platform. Exports reaching Mac
+	 * users had been declaring <ASCII-MAC> over CRLF bytes, which InDesign
+	 * imports as literal markup.
+	 */
+	public function test_resolve_platform_default_ignores_mac_user_agent() {
+		delete_option( InDesign_Exporter::PLATFORM_OPTION );
+
+		$this->set_request_user_agent( 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15' );
+		$this->assertSame( 'win', InDesign_Exporter::resolve_platform() );
+	}
+
+	/**
 	 * Test that the 'auto' setting resolves the platform from the User-Agent.
+	 *
+	 * Retained to document the behavior of a site that explicitly stored 'auto'.
+	 * It is no longer the default — see
+	 * test_resolve_platform_default_ignores_mac_user_agent().
 	 */
 	public function test_resolve_platform_auto_sniffs_user_agent() {
 		update_option( InDesign_Exporter::PLATFORM_OPTION, 'auto' );
