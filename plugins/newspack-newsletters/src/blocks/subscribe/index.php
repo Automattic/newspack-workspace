@@ -509,12 +509,20 @@ function process_form() {
 
 	// Honeypot trap. The decoy is read as text, not as an email: a bot fills it with
 	// whatever it likes, and email-sanitizing first would blank a non-address value
-	// and let the submission through. Read from `$_POST`, not `$_REQUEST` — the form
-	// is POST-only, and a query string is not something the submitter controls.
-	// phpcs:disable WordPress.Security.NonceVerification.Missing
-	$honeypot_trap = isset( $_POST['email'] ) && is_scalar( $_POST['email'] ) ? \sanitize_text_field( \wp_unslash( $_POST['email'] ) ) : '';
-	$real_email    = isset( $_POST['npe'] ) && is_scalar( $_POST['npe'] ) ? \sanitize_text_field( \wp_unslash( $_POST['npe'] ) ) : '';
-	// phpcs:enable WordPress.Security.NonceVerification.Missing
+	// and let the submission through.
+	//
+	// Read both fields from the transport the submission actually used, rather than
+	// from `$_REQUEST`. The block's script posts, but the form carries no `method`, so
+	// a submission without JS arrives as a GET — reading only `$_POST` would leave the
+	// decoy unchecked there. Reading `$_REQUEST` has the opposite problem: on a site
+	// with reCAPTCHA the decoy isn't rendered, so a POST carries no `email` field and a
+	// query string appended to the page URL would fill the slot, making every
+	// subscription from that link report success and record nobody.
+	// phpcs:disable WordPress.Security.NonceVerification
+	$submitted     = 'POST' === strtoupper( \sanitize_text_field( \wp_unslash( $_SERVER['REQUEST_METHOD'] ?? '' ) ) ) ? $_POST : $_GET;
+	$honeypot_trap = isset( $submitted['email'] ) && is_scalar( $submitted['email'] ) ? \sanitize_text_field( \wp_unslash( $submitted['email'] ) ) : '';
+	$real_email    = isset( $submitted['npe'] ) && is_scalar( $submitted['npe'] ) ? \sanitize_text_field( \wp_unslash( $submitted['npe'] ) ) : '';
+	// phpcs:enable WordPress.Security.NonceVerification
 	if ( is_honeypot_tripped( $honeypot_trap, $real_email ) ) {
 		return send_form_response( [ 'email' => \sanitize_email( $honeypot_trap ) ] );
 	}
