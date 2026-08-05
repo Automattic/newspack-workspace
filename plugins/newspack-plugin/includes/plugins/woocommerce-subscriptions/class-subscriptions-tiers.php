@@ -927,6 +927,14 @@ class Subscriptions_Tiers {
 			// get a panel below but no tab here, shifting every subsequent
 			// tab onto the wrong panel (setupTabController() pairs
 			// tab_headers[i] with tab_contents[i] by index).
+			//
+			// Dropping the bucket is deliberate, and must stay that way: a tier
+			// we cannot post a plan for is a tier we cannot bill correctly.
+			// Rendering it anyway - with the legacy button control, say - would
+			// give the reader a purchasable card that posts no plan, and APFS
+			// would take a single one-time payment instead of starting a
+			// subscription. An offer we can't fulfil is worse than an offer
+			// that isn't shown, so an unbillable tier must not be purchasable.
 			if ( ! empty( $plan_keys ) ) {
 				$tiers = array_intersect_key( $tiers, $plan_keys );
 			}
