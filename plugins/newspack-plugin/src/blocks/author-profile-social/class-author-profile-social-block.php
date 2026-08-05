@@ -63,10 +63,15 @@ final class Author_Profile_Social_Block {
 	 * This matches what newspack-block-theme does for core/social-links
 	 * but works with any block theme.
 	 *
-	 * @param WP_Theme_JSON_Data $theme_json Theme JSON data.
-	 * @return WP_Theme_JSON_Data
+	 * Left untyped on purpose: with the Gutenberg plugin active this filter carries
+	 * `WP_Theme_JSON_Data_Gutenberg`, a standalone class that does not extend
+	 * `WP_Theme_JSON_Data`. A core-only type declaration is checked before the body
+	 * runs, so it would fatal on every request. Both classes expose `update_with()`.
+	 *
+	 * @param WP_Theme_JSON_Data|WP_Theme_JSON_Data_Gutenberg $theme_json Theme JSON data.
+	 * @return WP_Theme_JSON_Data|WP_Theme_JSON_Data_Gutenberg
 	 */
-	public static function set_default_block_gap( WP_Theme_JSON_Data $theme_json ): WP_Theme_JSON_Data {
+	public static function set_default_block_gap( $theme_json ) {
 		$theme_json->update_with(
 			[
 				'version' => 3,

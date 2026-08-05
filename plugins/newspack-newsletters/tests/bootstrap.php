@@ -71,6 +71,9 @@ require_once 'mocks/wc-memberships.php';
 // WC CLI mock.
 require_once 'mocks/wp-cli.php';
 
+// Gutenberg's standalone theme.json data class, which the plugin is not installed to provide.
+require_once 'mocks/theme-json-data-gutenberg.php';
+
 // Stubs for RDB methods.
 if ( ! class_exists( 'BlockBindings' ) ) {
 	require_once __DIR__ . '/mocks/class-blockbindings.php';

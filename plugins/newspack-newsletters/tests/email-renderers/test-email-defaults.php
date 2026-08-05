@@ -355,4 +355,80 @@ class Test_Email_Defaults extends WP_UnitTestCase {
 			'A theme-origin button radius must override the Newspack default-origin fallback after merge.'
 		);
 	}
+
+	// -------------------------------------------------------------------------
+	// Gutenberg plugin compatibility.
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Data provider: both callbacks registered on wp_theme_json_data_default.
+	 *
+	 * @return array<string,array{0:string}>
+	 */
+	public function callback_provider(): array {
+		return [
+			'button radius' => [ 'inject_button_border_radius' ],
+			'fonts'         => [ 'inject_fonts' ],
+		];
+	}
+
+	/**
+	 * With Gutenberg active the filter carries WP_Theme_JSON_Data_Gutenberg, which does NOT
+	 * extend WP_Theme_JSON_Data. The guards live inside the callback bodies, but PHP checks
+	 * the argument type BEFORE entering the function — so a core-only type declaration fatals
+	 * on every request regardless of the flag, including the whole frontend.
+	 *
+	 * @dataProvider callback_provider
+	 * @param string $callback Method name on Email_Defaults.
+	 */
+	public function test_accepts_gutenberg_data_object_when_guards_are_closed( string $callback ) {
+		// Flag off and not an email-editor request: the production frontend case.
+		$data = new \WP_Theme_JSON_Data_Gutenberg( [ 'version' => 3 ], 'default' );
+
+		$result = Email_Defaults::{$callback}( $data );
+
+		$this->assertSame(
+			$data,
+			$result,
+			"Email_Defaults::{$callback}() must pass a Gutenberg data object straight through instead of throwing a TypeError."
+		);
+	}
+
+	/**
+	 * The Gutenberg data object is not just tolerated but handled: with both guards open the
+	 * callback injects through it exactly as it does through the core class.
+	 */
+	public function test_injects_button_radius_into_gutenberg_data_object() {
+		update_option( Feature_Flag::OPTION, '1' );
+		$this->simulate_email_editor_request();
+
+		$data   = new \WP_Theme_JSON_Data_Gutenberg( [ 'version' => 3 ], 'default' );
+		$result = Email_Defaults::inject_button_border_radius( $data );
+
+		$raw = $result->get_data();
+
+		$this->assertSame(
+			Email_Defaults::DEFAULT_BUTTON_BORDER_RADIUS,
+			$raw['styles']['elements']['button']['border']['radius'] ?? null,
+			'inject_button_border_radius() must inject through a Gutenberg data object too.'
+		);
+	}
+
+	/**
+	 * Same for the font callback — proves the Gutenberg path is handled, not merely survived.
+	 */
+	public function test_injects_fonts_into_gutenberg_data_object() {
+		update_option( Feature_Flag::OPTION, '1' );
+		$this->simulate_email_editor_request();
+
+		$data   = new \WP_Theme_JSON_Data_Gutenberg( [ 'version' => 3 ], 'default' );
+		$result = Email_Defaults::inject_fonts( $data );
+
+		$raw = $result->get_data();
+
+		$this->assertNotEmpty(
+			$raw['styles']['typography']['fontFamily'] ?? null,
+			'inject_fonts() must inject through a Gutenberg data object too.'
+		);
+	}
 }
