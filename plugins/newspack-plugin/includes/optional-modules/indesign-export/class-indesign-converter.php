@@ -137,7 +137,15 @@ class InDesign_Converter {
 		$content_parts[] = $this->process_post_content( $post->post_content, $options );
 		$content_parts[] = $this->process_post_images( $post, $options );
 
-		return implode( self::EOL, array_filter( $content_parts ) );
+		$content = implode( self::EOL, array_filter( $content_parts ) );
+
+		// Final guarantee that the file matches what self::START_TAG declares.
+		// Post content reaches the converter with line endings of every flavor
+		// (pasted copy, imported HTML, serialized blocks), and the conversion
+		// steps above introduce their own. A single stray CR or LF makes part of
+		// the file Mac- or Unix-terminated while the header promises CRLF, and
+		// InDesign then places that stretch as literal markup.
+		return preg_replace( '/\r\n|\r|\n/', self::EOL, $content );
 	}
 
 	/**
@@ -513,7 +521,11 @@ class InDesign_Converter {
 	 * @return string Cleaned content.
 	 */
 	private function clean_whitespace( $content ) {
-		$content = preg_replace( '/\n{2,}/', self::EOL, $content );
+		// Collapse runs of blank lines into a single terminator. The alternation
+		// consumes CRLF as one unit: matching on \n alone would count the LF of a
+		// CRLF pair as a separate break and rewrite it, stranding the CR in front
+		// as a bare Mac-style terminator (NPPM-2813).
+		$content = preg_replace( '/(?:\r\n|\r|\n){2,}/', self::EOL, $content );
 		$content = trim( $content );
 
 		return $content;
