@@ -142,7 +142,7 @@ final class Access_Attribution {
 				// turned payment-recovery grace off.
 				return Access_Rules::with_evaluation_context(
 					$context,
-					function () use ( $value, $user_id, $context ) {
+					function () use ( $value, $user_id ) {
 						// Determine ownership first so an owner of a sub matching an
 						// "any subscription" rule (empty $value) isn't mislabeled as
 						// `group` by the non-strict check below.
