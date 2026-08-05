@@ -362,7 +362,7 @@ class Newspack_Test_Emails extends WP_UnitTestCase {
 
 			self::assertWPError( $result, 'A generated placeholder recipient must be rejected, not silently suppressed.' );
 			self::assertSame( 'newspack_emails_test_placeholder_recipient', $result->get_error_code() );
-			self::assertFalse( tests_retrieve_phpmailer_instance()->get_sent(), 'Nothing may be dispatched for a rejected test-send.' );
+			self::assertEmpty( tests_retrieve_phpmailer_instance()->get_sent(), 'Nothing may be dispatched for a rejected test-send.' );
 		} finally {
 			remove_filter( 'newspack_guest_author_mail_guard_active', '__return_true', 20 );
 			self::logout_admin( $admin );
