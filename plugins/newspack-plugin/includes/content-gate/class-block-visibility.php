@@ -192,6 +192,17 @@ class Block_Visibility {
 		// the attributes must keep round-tripping through save and load, so a block
 		// configured before Audience Management was switched off still carries its
 		// settings and starts applying again the moment it is switched back on.
+		//
+		// That works because core bootstraps the PHP-registered attributes into the
+		// client registry independently of our script: get_block_editor_server_block_settings()
+		// prints them on `wp-blocks`, the bootstrap reducer keeps that first definition,
+		// and processBlockType merges it under the block's JS settings — which for
+		// core/group carry no `attributes` key. So the parser keeps and re-serializes
+		// newspackAccessControl* even with this script suppressed. Registering these
+		// attributes ONLY from the JS side would therefore be silent data loss on every
+		// re-save; keep the PHP registration primary. The same caveat applies to any
+		// block added through `newspack_content_gate_block_visibility_blocks` that is
+		// not registered in PHP.
 		if ( ! Reader_Activation::is_enabled() ) {
 			return;
 		}

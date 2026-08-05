@@ -60,6 +60,10 @@ class Gating_Inertness_Test extends WP_UnitTestCase {
 		if ( ! defined( 'NEWSPACK_CONTENT_GATES' ) ) {
 			define( 'NEWSPACK_CONTENT_GATES', true );
 		}
+		// Only the un-namespaced mock: it supplies Newspack_Newsletters_Subscription so
+		// the renewal case's snapshot write has something to write. The namespaced one
+		// defines a partial Subscription_List that breaks Test_Newsletters_Access.
+		require_once dirname( __DIR__, 2 ) . '/mocks/newsletters-mocks.php';
 	}
 
 	/**
@@ -78,6 +82,7 @@ class Gating_Inertness_Test extends WP_UnitTestCase {
 	 * Remove any filter a case added, so cases don't leak into each other.
 	 */
 	public function tear_down() {
+		unset( $GLOBALS['post'] );
 		remove_all_filters( 'newspack_reader_activation_enabled' );
 		delete_option( Premium_Newsletters::QUEUE_OPTION );
 		wp_clear_scheduled_hook( Premium_Newsletters::SCHEDULED_HOOK );
@@ -155,6 +160,10 @@ class Gating_Inertness_Test extends WP_UnitTestCase {
 	 */
 	public function test_renewal_events_are_not_enqueued() {
 		$user_id = self::factory()->user->create();
+		// Give the snapshot write something to write: with the mock returning [] for an
+		// unseeded email, an unguarded set_subscribed_lists() would store an empty array
+		// and the assertion below would pass either way.
+		\Newspack_Newsletters_Subscription::$contact_lists[ get_userdata( $user_id )->user_email ] = [ 'list-123' ];
 		$this->disable_audience_management();
 
 		Premium_Newsletters::set_subscribed_lists( time(), [ 'user_id' => $user_id ], 0 );
@@ -222,42 +231,79 @@ class Gating_Inertness_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The editor panel goes with the enforcement: no point offering controls that
-	 * write settings readers will never feel.
+	 * The attributes must survive the toggle: a block configured before Audience
+	 * Management was switched off keeps its settings through save and load, and starts
+	 * applying again the moment it is switched back on. Losing them would make the
+	 * toggle destructive.
 	 *
-	 * The attributes must survive it, though. `register_block_type_args()` stays
-	 * unconditional so a block configured before Audience Management was switched
-	 * off keeps its settings through save and load, and starts applying again the
-	 * moment it is switched back on. Losing them would make the toggle destructive.
+	 * Kept separate from the enqueue case below so it runs everywhere. It needs no
+	 * built assets, and data loss is the destructive failure — a missing panel is
+	 * cosmetic — so this is the half that must not go unverified in CI.
 	 */
-	public function test_block_editor_panel_hides_but_attributes_survive() {
-		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
-		// enqueue_block_editor_assets() bails when no post is in context (Site Editor,
-		// widget screens), so without this the enqueue assertion below would hold
-		// whether or not the guard exists.
-		$GLOBALS['post'] = get_post( self::factory()->post->create() ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+	public function test_block_attributes_survive_while_inert() {
 		$this->disable_audience_management();
 
-		// The method also bails when the built asset is absent, which would make the
-		// enqueue assertion pass without proving anything. Say so rather than let it
-		// quietly stop discriminating in an unbuilt checkout.
-		if ( ! file_exists( dirname( NEWSPACK_PLUGIN_FILE ) . '/dist/content-gate-block-visibility.asset.php' ) ) {
-			$this->markTestSkipped( 'dist/content-gate-block-visibility.asset.php is not built; the enqueue guard cannot be exercised.' );
-		}
-
-		wp_dequeue_script( 'newspack-content-gate-block-visibility' );
-		Block_Visibility::enqueue_block_editor_assets();
-		$this->assertFalse(
-			wp_script_is( 'newspack-content-gate-block-visibility', 'enqueued' ),
-			'The block visibility panel should not load while gating is inactive.'
-		);
-
 		$args = Block_Visibility::register_block_type_args( [ 'attributes' => [] ], 'core/group' );
+
 		foreach ( [ 'newspackAccessControlVisibility', 'newspackAccessControlMode', 'newspackAccessControlGateIds', 'newspackAccessControlRules' ] as $attribute ) {
 			$this->assertArrayHasKey(
 				$attribute,
 				$args['attributes'],
 				"$attribute must stay registered while gating is inactive, or a block's settings are lost on save."
+			);
+		}
+	}
+
+	/**
+	 * The editor panels go with the enforcement: no point offering controls that write
+	 * settings readers will never feel, or telling an author a gate applies when none
+	 * does.
+	 *
+	 * Asserts both directions, so the capability and post-type guards these methods
+	 * also carry can't silently start swallowing the call and leave this passing for
+	 * the wrong reason.
+	 */
+	public function test_editor_panels_hide_while_inert() {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+		// Both methods bail when no post is in context (Site Editor, widget screens).
+		$GLOBALS['post'] = get_post( self::factory()->post->create() ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+
+		// They also bail when the built asset is absent, which would make the negative
+		// assertions pass without proving anything. Say so rather than let this quietly
+		// stop discriminating in an unbuilt checkout.
+		$assets = [
+			'newspack-content-gate-block-visibility' => '/dist/content-gate-block-visibility.asset.php',
+			'newspack-content-gate-post-settings'    => '/dist/content-gate-post-settings.asset.php',
+		];
+		foreach ( $assets as $asset_path ) {
+			if ( ! file_exists( dirname( NEWSPACK_PLUGIN_FILE ) . $asset_path ) ) {
+				$this->markTestSkipped( "$asset_path is not built; the enqueue guards cannot be exercised." );
+			}
+		}
+		// A gate must exist, or the post-settings panel bails on its own count check.
+		$this->create_registration_gate();
+
+		foreach ( array_keys( $assets ) as $handle ) {
+			wp_dequeue_script( $handle );
+		}
+		Block_Visibility::enqueue_block_editor_assets();
+		Content_Gate::enqueue_block_editor_assets();
+		$this->assertTrue(
+			wp_script_is( 'newspack-content-gate-block-visibility', 'enqueued' ),
+			'The block visibility panel should load while gating is active.'
+		);
+
+		$this->disable_audience_management();
+		foreach ( array_keys( $assets ) as $handle ) {
+			wp_dequeue_script( $handle );
+		}
+		Block_Visibility::enqueue_block_editor_assets();
+		Content_Gate::enqueue_block_editor_assets();
+
+		foreach ( array_keys( $assets ) as $handle ) {
+			$this->assertFalse(
+				wp_script_is( $handle, 'enqueued' ),
+				"$handle should not load while gating is inactive."
 			);
 		}
 	}

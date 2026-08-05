@@ -684,7 +684,12 @@ class Content_Gate {
 		// with the flag off the exempt key is absent from the REST schema, so the panel
 		// must not render a toggle that could not persist. In practice get_gates() is
 		// already empty when the flag is off, but gating both on the flag keeps them aligned.
-		if ( ! self::is_newspack_feature_enabled() ) {
+		// Gating rather than the flag alone: with Audience Management off no gate
+		// applies to any reader, so this panel would name gates that are doing nothing
+		// and offer an exemption toggle that suppresses nothing. Mirrors the block
+		// visibility panel. The exempt post meta stays registered either way, so a
+		// post's exemption survives the toggle exactly as block attributes do.
+		if ( ! self::is_gating_active() ) {
 			return;
 		}
 		if ( ! in_array( get_post_type(), array_column( Content_Restriction_Control::get_available_post_types(), 'value' ), true ) ) {
