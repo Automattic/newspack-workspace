@@ -495,6 +495,10 @@ class Guest_Contributor_Role {
 	/**
 	 * Whether a wp_mail() headers value carries Cc or Bcc recipients.
 	 *
+	 * A header with an empty value ("Cc:") carries no recipients and does not
+	 * count — treating it as recipients would route an all-placeholder send
+	 * past the short-circuit into a hard wp_mail() failure.
+	 *
 	 * @param string|string[] $headers Headers, as a string or array of lines.
 	 *
 	 * @return bool
@@ -502,7 +506,7 @@ class Guest_Contributor_Role {
 	private static function has_cc_or_bcc_headers( $headers ): bool {
 		$lines = is_array( $headers ) ? $headers : preg_split( '/\r\n|\r|\n/', (string) $headers );
 		foreach ( $lines as $line ) {
-			if ( preg_match( '/^\s*b?cc\s*:/i', (string) $line ) ) {
+			if ( preg_match( '/^\s*b?cc\s*:\s*\S/i', (string) $line ) ) {
 				return true;
 			}
 		}

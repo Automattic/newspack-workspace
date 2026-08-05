@@ -510,6 +510,18 @@ class Newspack_Test_Guest_Contributor_Role extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A bare Cc/Bcc header with no value carries no recipients, so an
+	 * all-placeholder To must still be suppressed and reported as sent — not
+	 * passed through to fail on an empty recipient list.
+	 */
+	public function test_all_dummy_to_with_empty_cc_header_is_suppressed() {
+		reset_phpmailer_instance();
+		$result = wp_mail( 'someuser@example.com', 'Test subject', 'Test body', [ 'Cc:' ] ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.wp_mail_wp_mail
+		$this->assertTrue( $result, 'Suppressed mail must still report success despite an empty Cc header.' );
+		$this->assertEmpty( tests_retrieve_phpmailer_instance()->get_sent() );
+	}
+
+	/**
 	 * Mail with an all-dummy "to" but a real Bcc header must NOT be
 	 * suppressed — the Bcc recipient's delivery is legitimate.
 	 */
