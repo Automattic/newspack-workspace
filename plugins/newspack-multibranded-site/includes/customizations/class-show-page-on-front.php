@@ -33,6 +33,13 @@ class Show_Page_On_Front {
 	protected static $filtered = false;
 
 	/**
+	 * The ID of the brand whose front page is being displayed, if any.
+	 *
+	 * @var ?int
+	 */
+	protected static $filtered_brand_id = null;
+
+	/**
 	 * Initializes
 	 */
 	public static function init() {
@@ -54,6 +61,18 @@ class Show_Page_On_Front {
 	}
 
 	/**
+	 * Returns the ID of the brand whose front page is being displayed.
+	 *
+	 * Authoritative on a brand front page: it is the displayed brand, regardless of any
+	 * brand terms assigned to the cover page itself.
+	 *
+	 * @return ?int
+	 */
+	public static function get_filtered_brand_id() {
+		return self::$filtered_brand_id;
+	}
+
+	/**
 	 * Change the query if we want to display a page on front
 	 *
 	 * @param \WP_Query $query The WP_Query object.
@@ -65,7 +84,8 @@ class Show_Page_On_Front {
 			return;
 		}
 
-		self::$filtered = false;
+		self::$filtered          = false;
+		self::$filtered_brand_id = null;
 
 		if ( is_admin() || is_feed() ) {
 			return;
@@ -86,7 +106,8 @@ class Show_Page_On_Front {
 					// Pass the query as an argument so parse_query() resets the flags; otherwise the
 					// brand archive's is_archive/is_tax survive and consumers misread the page as an archive.
 					$query->parse_query( [ 'page_id' => $page->ID ] );
-					self::$filtered = true;
+					self::$filtered          = true;
+					self::$filtered_brand_id = (int) $term->term_id;
 				}
 			}
 		}

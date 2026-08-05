@@ -152,6 +152,45 @@ class TestCustomizationPageOnFront extends WP_UnitTestCase {
 	}
 
 	/**
+	 * An ordinary page must not get the front page body class.
+	 *
+	 * Makes the is_filtered() guard in body_class() load-bearing: is_page() alone is
+	 * true on any page, so without the guard this class would leak onto every page.
+	 */
+	public function test_ordinary_page_does_not_get_front_page_class() {
+		$page = $this->factory->post->create_and_get(
+			array(
+				'post_title' => 'Ordinary Page',
+				'post_type'  => 'page',
+			)
+		);
+
+		$this->go_to( get_permalink( $page ) );
+
+		$this->assertNotContains( 'newspack-front-page', get_body_class() );
+	}
+
+	/**
+	 * The displayed brand wins over a brand assigned to the cover page.
+	 *
+	 * With the query flags fixed, get_queried_object() returns the cover page, so the
+	 * resolution cascade would otherwise pick up a brand assigned to that page. The
+	 * displayed brand is authoritative.
+	 */
+	public function test_current_brand_prefers_the_front_page_brand() {
+		list( $brand_a, $page ) = $this->create_brand_with_page_on_front();
+
+		$brand_b = $this->factory->term->create_and_get( array( 'taxonomy' => Taxonomy::SLUG ) );
+		wp_set_object_terms( $page->ID, array( $brand_b->term_id ), Taxonomy::SLUG );
+
+		$this->go_to( get_term_link( $brand_a ) );
+
+		$current = Taxonomy::get_current();
+		$this->assertInstanceOf( 'WP_Term', $current );
+		$this->assertSame( $brand_a->term_id, $current->term_id );
+	}
+
+	/**
 	 * Ensure that front page filter is not applied when visiting the feed for the brand
 	 */
 	public function test_rss_feed_intact() {
