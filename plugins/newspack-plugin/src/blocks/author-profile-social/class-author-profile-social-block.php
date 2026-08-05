@@ -68,8 +68,8 @@ final class Author_Profile_Social_Block {
 	 * not a subclass — and a WP_Theme_JSON_Data declaration would fatal with a TypeError
 	 * on every theme.json resolution, front end included.
 	 *
-	 * @param WP_Theme_JSON_Data $theme_json Theme JSON data.
-	 * @return WP_Theme_JSON_Data
+	 * @param WP_Theme_JSON_Data|\WP_Theme_JSON_Data_Gutenberg $theme_json Theme JSON data.
+	 * @return WP_Theme_JSON_Data|\WP_Theme_JSON_Data_Gutenberg
 	 */
 	public static function set_default_block_gap( $theme_json ) {
 		$theme_json->update_with(

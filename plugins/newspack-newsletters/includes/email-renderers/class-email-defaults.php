@@ -59,9 +59,8 @@ class Email_Defaults {
 	 * email-editor request. The default origin fires before _theme, so any
 	 * theme-origin radius still wins.
 	 *
-	 * @param \WP_Theme_JSON_Data $theme_json Incoming default theme.json data. Untyped:
-	 *                                        Gutenberg passes WP_Theme_JSON_Data_Gutenberg.
-	 * @return \WP_Theme_JSON_Data Potentially modified default theme.json data.
+	 * @param \WP_Theme_JSON_Data|\WP_Theme_JSON_Data_Gutenberg $theme_json Incoming default theme.json data.
+	 * @return \WP_Theme_JSON_Data|\WP_Theme_JSON_Data_Gutenberg Potentially modified default theme.json data.
 	 */
 	public static function inject_button_border_radius( $theme_json ) {
 		if ( ! Feature_Flag::is_enabled() ) {
@@ -96,9 +95,8 @@ class Email_Defaults {
 	 * (no post yet) fonts resolve via global → theme → fallback, so new newsletters
 	 * show theme fonts instead of the hardcoded builder defaults.
 	 *
-	 * @param \WP_Theme_JSON_Data $theme_json Incoming default theme.json data. Untyped:
-	 *                                        Gutenberg passes WP_Theme_JSON_Data_Gutenberg.
-	 * @return \WP_Theme_JSON_Data Potentially modified default theme.json data.
+	 * @param \WP_Theme_JSON_Data|\WP_Theme_JSON_Data_Gutenberg $theme_json Incoming default theme.json data.
+	 * @return \WP_Theme_JSON_Data|\WP_Theme_JSON_Data_Gutenberg Potentially modified default theme.json data.
 	 */
 	public static function inject_fonts( $theme_json ) {
 		if ( ! Feature_Flag::is_enabled() ) {

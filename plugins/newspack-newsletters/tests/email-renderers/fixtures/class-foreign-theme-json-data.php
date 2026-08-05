@@ -48,6 +48,10 @@ class Foreign_Theme_JSON_Data {
 	/**
 	 * Merge new data in, mirroring WP_Theme_JSON_Data::update_with().
 	 *
+	 * Left untyped on purpose: core's `WP_Theme_JSON_Data::update_with( $new_data )`
+	 * declares no parameter type, and a stand-in that is stricter than the class it
+	 * imitates would defeat the point of the fixture.
+	 *
 	 * @param array $new_data Data to merge in.
 	 * @return self
 	 */
