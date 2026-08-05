@@ -1017,13 +1017,21 @@ class Newspack_Test_Subscriptions_Tiers_Plans extends WP_UnitTestCase {
 	 * A grouped product's cart item posts its child product's ID, not the
 	 * grouped parent's - so a convert_to_sub keyed on the grouped parent ID
 	 * would never be read by APFS. render_form() must not emit one.
+	 *
+	 * The fixture deliberately mixes a legacy child with a plan-based one: the
+	 * plan-based child is dropped in composition, so a grouped product with
+	 * *only* plan-based children yields no tiers at all and render_form()
+	 * returns before emitting a single byte - against which "the markup
+	 * contains no convert_to_sub" is vacuously true and would pass against
+	 * unimplemented code. The legacy child keeps the form rendering, so the
+	 * assertion has something to bite on.
 	 */
 	public function test_render_form_skips_plan_posting_for_a_grouped_product() {
 		$parent = wc_create_mock_product(
 			[
 				'id'       => 440,
 				'type'     => 'grouped',
-				'children' => [ 441 ],
+				'children' => [ 441, 442 ],
 			]
 		);
 		wc_create_mock_product(
@@ -1037,20 +1045,37 @@ class Newspack_Test_Subscriptions_Tiers_Plans extends WP_UnitTestCase {
 				],
 			]
 		);
-		$this->give_plans(
-			441,
+		$plans = [
+			'mkey' => [
+				'period'   => 'month',
+				'interval' => 1,
+			],
+		];
+		wc_create_mock_product(
 			[
-				'mkey' => [
-					'period'   => 'month',
-					'interval' => 1,
-				],
+				'id'       => 442,
+				'type'     => 'variable',
+				'children' => [ 443 ],
 			]
 		);
+		$this->give_plans( 442, $plans );
+		wc_create_mock_product(
+			[
+				'id'        => 443,
+				'type'      => 'variation',
+				'parent_id' => 442,
+				'price'     => 7,
+			]
+		);
+		$this->give_plans( 443, $plans );
 
 		ob_start();
 		\Newspack\Subscriptions_Tiers::render_form( $parent );
 		$markup = ob_get_clean();
 
+		$this->assertStringContainsString( '<form', $markup, 'Precondition: the legacy child keeps the form rendering.' );
+		$this->assertStringContainsString( 'name="product_id" value="441"', $markup, 'The legacy child is still offered.' );
+		$this->assertStringNotContainsString( 'value="443"', $markup, 'The plan-based child is dropped in composition.' );
 		$this->assertStringNotContainsString( 'convert_to_sub', $markup, 'Grouped products have no single parent ID to post a plan against.' );
 	}
 
