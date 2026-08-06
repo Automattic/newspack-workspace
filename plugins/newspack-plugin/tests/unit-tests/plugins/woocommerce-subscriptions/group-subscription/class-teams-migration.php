@@ -94,6 +94,12 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 		Group_Subscription::reset_cache();
 
 		reset_phpmailer_instance();
+		// The outbound-mail guard treats the example.com placeholder domain as
+		// unroutable: it short-circuits wp_mail() and reports success without
+		// dispatching — exactly the false-success shape this suite's mailer
+		// assertions exist to catch, and the mixed-case fixtures below live on
+		// Example.com. Off, so a suppressed send can never pass as a delivered one.
+		add_filter( 'newspack_guest_author_mail_guard_active', '__return_false' );
 		$this->email_config_filter = function ( $configs ) {
 			return Group_Subscription_Invite::add_email_config( $configs );
 		};
@@ -139,6 +145,7 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 			$this->email_post_id = null;
 		}
 		remove_filter( 'pre_wp_mail', '__return_false' );
+		remove_filter( 'newspack_guest_author_mail_guard_active', '__return_false' );
 		reset_phpmailer_instance();
 		foreach ( $this->user_ids as $user_id ) {
 			wp_delete_user( $user_id );
@@ -628,6 +635,34 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The bulk pre-pass reader must return exactly what the per-team reader returns
+	 * for each team — one query instead of one per team is a shape change, not a
+	 * behaviour change — and it counts the pending invitations it drops for holding
+	 * a non-email title, the one case the re-invite list cannot show.
+	 */
+	public function test_bulk_invitation_reader_matches_per_team_reader_and_counts_drops() {
+		$owner  = $this->create_reader();
+		$team_a = $this->create_team( $owner, [], null );
+		$team_b = $this->create_team( $owner, [], null );
+		$team_c = $this->create_team( $owner, [], null ); // No invitations at all.
+
+		$this->create_team_invitation( $team_a, 'bulk-a-one@test.com' );
+		$this->create_team_invitation( $team_a, 'Bulk-A-One@TEST.com' ); // Case-variant dupe — deduped, not dropped.
+		$this->create_team_invitation( $team_a, 'not-an-email' ); // Dropped and counted.
+		$this->create_team_invitation( $team_a, 'accepted@test.com', 'wcmti-accepted' ); // Not pending — excluded, not a drop.
+		$this->create_team_invitation( $team_b, 'bulk-b-one@test.com' );
+		$this->create_team_invitation( $team_b, 'also not an email' ); // Dropped and counted.
+
+		$dropped = 0;
+		$bulk    = Teams_Migration::get_pending_team_invitation_emails_for_teams( [ $team_a, $team_b, $team_c ], $dropped );
+
+		$this->assertSame( Teams_Migration::get_pending_team_invitation_emails( $team_a ), $bulk[ $team_a ], 'Bulk and per-team readers must agree on team A.' );
+		$this->assertSame( Teams_Migration::get_pending_team_invitation_emails( $team_b ), $bulk[ $team_b ], 'Bulk and per-team readers must agree on team B.' );
+		$this->assertArrayNotHasKey( $team_c, $bulk, 'A team with no pending invitations is omitted from the bulk result.' );
+		$this->assertSame( 2, $dropped, 'Each pending invitation with a non-email title is counted exactly once.' );
+	}
+
+	/**
 	 * With sending disabled (the default, and always the case in a dry-run or without
 	 * --migrate-invitations), migrate_team_invitations() still reports the pending
 	 * invitees so the re-invite list is never lost — but writes no invite and sends
@@ -647,6 +682,29 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 		$this->assertSame( [], $result['sent'], 'No invites should be sent when sending is disabled.' );
 		$this->assertSame( [], $result['skipped'], 'Nothing should be skipped when no send is attempted.' );
 		$this->assertEmpty( Group_Subscription_Invite::get_invites( $subscription ), 'A disabled run must not write any invite onto the subscription.' );
+	}
+
+	/**
+	 * The dry run is the rehearsal an operator trusts before the recovery re-run.
+	 * After a completed live run it must report the already-invited readers as
+	 * skipped, not as still waiting — a rehearsal promising N sends where a live
+	 * run would send zero rehearses the wrong play.
+	 */
+	public function test_migrate_team_invitations_dry_rehearsal_reflects_live_invites() {
+		$owner        = $this->create_reader();
+		$subscription = $this->create_group_subscription( $owner );
+		$team_id      = $this->create_team( $owner, [], $subscription->get_id() );
+		$invitee      = 'rehearsal-invitee@test.com';
+		$this->create_team_invitation( $team_id, $invitee );
+
+		$live = Teams_Migration::migrate_team_invitations( $subscription, $team_id, true );
+		$this->assertSame( [ $invitee ], $live['sent'], 'The live run should send the invite.' );
+
+		$rehearsal = Teams_Migration::migrate_team_invitations( $subscription, $team_id, false );
+
+		$this->assertSame( [], $rehearsal['sent'], 'A rehearsal must send nothing.' );
+		$this->assertArrayHasKey( $invitee, $rehearsal['skipped'], 'After a live run, the rehearsal must report the invitee as already invited rather than still waiting.' );
+		$this->assertCount( 1, $this->get_sent_emails(), 'The rehearsal must not dispatch mail — only the live run\'s message leaves.' );
 	}
 
 	/**
@@ -806,6 +864,39 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 		// The retry the operator is told to run now actually reaches the reader.
 		$retry = Teams_Migration::migrate_team_invitations( $subscription, $team_id, true );
 		$this->assertSame( [ $invitee ], $retry['sent'], 'The re-run must be able to send the invitation that failed.' );
+		$this->assertCount( 1, $this->get_sent_emails(), 'The retry is the only message that leaves.' );
+	}
+
+	/**
+	 * The send path propagates throws — Emails::send_email() wraps the dispatch in
+	 * try/finally with no catch — and a throw lands after generate_invite() has
+	 * already written the invite row. The catch must roll that row back exactly like
+	 * a false `email_sent`: without the rollback, the stored invite answers "Already
+	 * invited." to every corrective re-run for its 30-day life, while the reader was
+	 * emailed zero times and the phantom invite holds a seat of the group's limit.
+	 */
+	public function test_migrate_team_invitations_rolls_back_an_invite_whose_send_threw() {
+		$owner        = $this->create_reader();
+		$subscription = $this->create_group_subscription( $owner );
+		$team_id      = $this->create_team( $owner, [], $subscription->get_id() );
+		$invitee      = 'throwing-send@test.com';
+		$this->create_team_invitation( $team_id, $invitee );
+
+		$thrower = function () {
+			throw new \RuntimeException( 'Mail provider rejected the connection.' );
+		};
+		add_filter( 'pre_wp_mail', $thrower );
+		$failed_run = Teams_Migration::migrate_team_invitations( $subscription, $team_id, true );
+		remove_filter( 'pre_wp_mail', $thrower );
+
+		$this->assertSame( [], $failed_run['sent'], 'A throwing send must not be counted as sent.' );
+		$this->assertArrayHasKey( $invitee, $failed_run['failed'], 'The invitee whose send threw should be reported as failed.' );
+		$this->assertStringContainsString( 'rolled back', $failed_run['failed'][ $invitee ], 'The failure reason should say the invite was rolled back.' );
+		$this->assertEmpty( Group_Subscription_Invite::get_invites( $subscription ), 'The stored invite must be rolled back after a throwing send, or the re-run could never retry this reader.' );
+
+		// The corrective re-run the FAILED wording recommends now actually sends.
+		$retry = Teams_Migration::migrate_team_invitations( $subscription, $team_id, true );
+		$this->assertSame( [ $invitee ], $retry['sent'], 'The re-run must be able to send the invitation whose send threw.' );
 		$this->assertCount( 1, $this->get_sent_emails(), 'The retry is the only message that leaves.' );
 	}
 
