@@ -40,7 +40,7 @@ const PixelCard = ( { title, description, namespace, path, validate, renderHelp 
 	const [ draft, setDraft ] = useState< string >( '' );
 	const [ isOpen, setIsOpen ] = useState( false );
 	const [ isEnabling, setIsEnabling ] = useState( false );
-	const [ hasTouched, setHasTouched ] = useState( false );
+	const [ hasBlurred, setHasBlurred ] = useState( false );
 	const [ errorNonce, setErrorNonce ] = useState( 0 );
 
 	const bumpErrorNonce = () => setErrorNonce( current => current + 1 );
@@ -72,7 +72,7 @@ const PixelCard = ( { title, description, namespace, path, validate, renderHelp 
 					setDraft( res.pixel_id ?? '' );
 					setIsOpen( false );
 					setIsEnabling( false );
-					setHasTouched( false );
+					setHasBlurred( false );
 					notify( message );
 				},
 			}
@@ -83,7 +83,7 @@ const PixelCard = ( { title, description, namespace, path, validate, renderHelp 
 		setDraft( settings.pixel_id ?? '' );
 		setIsOpen( false );
 		setIsEnabling( false );
-		setHasTouched( false );
+		setHasBlurred( false );
 		resetError();
 	};
 
@@ -170,16 +170,16 @@ const PixelCard = ( { title, description, namespace, path, validate, renderHelp 
 						label={ __( 'Pixel ID', 'newspack-plugin' ) }
 						onChange={ ( value: string ) => {
 							setDraft( value );
-							setHasTouched( true );
 							setError( null );
 						} }
+						onBlur={ () => setHasBlurred( true ) }
 						help={ renderHelp() }
 						disabled={ isFetching }
 						autoComplete="one-time-code"
 						withMargin={ false }
 						__nextHasNoMarginBottom
 					/>
-					{ hasTouched && validationError && <p className="newspack-social-settings__field-error">{ validationError }</p> }
+					{ hasBlurred && validationError && <p className="newspack-social-settings__field-error">{ validationError }</p> }
 				</VStack>
 				<HStack justify="flex-start" spacing={ 2 }>
 					<Button

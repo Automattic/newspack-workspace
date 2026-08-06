@@ -64,6 +64,7 @@ export const Onboarding = ( {
 	// last submitted from here — `settings` alone would report every visit as dirty.
 	const [ savedSecret, setSavedSecret ] = useState( settings.client_secret || '' );
 	const [ email, setEmail ] = useState( '' );
+	const [ hasBlurredEmail, setHasBlurredEmail ] = useState( false );
 	const [ country, setCountry ] = useState( window.newspackSettings?.social?.nextdoor?.default_country || 'US' );
 	const [ publicationUrl, setPublicationUrl ] = useState( settings.publication_url || '' );
 	const [ isSaving, setIsSaving ] = useState( false );
@@ -113,9 +114,10 @@ export const Onboarding = ( {
 	// Deliberately permissive: the server rejects with is_email(), this only
 	// catches the obvious typo before a round trip.
 	const isEmailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test( email.trim() );
-	// An empty field is not a mistake worth calling out — the disabled button
-	// already says the step is not ready.
-	const emailError = email.trim() && ! isEmailValid ? __( 'That does not look like a valid email address.', 'newspack-plugin' ) : null;
+	// Only after leaving the field: an empty one is not a mistake worth calling
+	// out, and a half-typed address is not either.
+	const emailError =
+		hasBlurredEmail && email.trim() && ! isEmailValid ? __( 'That does not look like a valid email address.', 'newspack-plugin' ) : null;
 
 	const hasCredentialChanges = clientId !== ( settings.client_id || '' ) || clientSecret !== savedSecret;
 
@@ -266,6 +268,7 @@ export const Onboarding = ( {
 							label={ __( 'Email Address', 'newspack-plugin' ) }
 							value={ email }
 							onChange={ setEmail }
+							onBlur={ () => setHasBlurredEmail( true ) }
 							type="email"
 							placeholder={ __( 'Enter your Nextdoor account email', 'newspack-plugin' ) }
 							help={ __( 'This should be the email address associated with your Nextdoor account.', 'newspack-plugin' ) }

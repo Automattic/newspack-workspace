@@ -164,14 +164,18 @@ describe( 'PixelCard', () => {
 		expect( await screen.findByText( 'Missing pixel ID' ) ).toBeInTheDocument();
 	} );
 
-	it( 'shows the validation message only once the field is touched', async () => {
+	it( 'holds the validation message until the field is left', async () => {
 		primeFetch( { active: false, pixel_id: '' } );
 		renderCard();
 
 		fireEvent.click( screen.getByRole( 'button', { name: 'Enable Meta Pixel' } ) );
 		expect( screen.queryByText( 'Value may only contain numbers!' ) ).not.toBeInTheDocument();
 
+		// Still typing: nothing is said yet.
 		fireEvent.change( screen.getByLabelText( 'Pixel ID' ), { target: { value: 'abc' } } );
+		expect( screen.queryByText( 'Value may only contain numbers!' ) ).not.toBeInTheDocument();
+
+		fireEvent.blur( screen.getByLabelText( 'Pixel ID' ) );
 		expect( screen.getByText( 'Value may only contain numbers!' ) ).toBeInTheDocument();
 
 		fireEvent.change( screen.getByLabelText( 'Pixel ID' ), { target: { value: '123' } } );
@@ -184,6 +188,7 @@ describe( 'PixelCard', () => {
 
 		fireEvent.click( await screen.findByRole( 'button', { name: 'Edit Meta Pixel' } ) );
 		fireEvent.change( screen.getByLabelText( 'Pixel ID' ), { target: { value: 'abc' } } );
+		fireEvent.blur( screen.getByLabelText( 'Pixel ID' ) );
 		expect( screen.getByText( 'Value may only contain numbers!' ) ).toBeInTheDocument();
 
 		fireEvent.click( screen.getByRole( 'button', { name: 'Disable' } ) );
