@@ -16,7 +16,14 @@ jest.mock( '../../context', () => ( {
 const mockReload = jest.fn();
 // A successful claim reloads, which jsdom cannot do.
 delete window.location;
-window.location = { href: 'https://example.com/', search: '', reload: mockReload };
+window.location = { href: 'https://example.com/', pathname: '/wp-admin/admin.php', search: '', hash: '#social', reload: mockReload };
+
+// jsdom's own history has no way to reach the stub above, so the rewrite is
+// mirrored onto it.
+const mockReplaceState = jest.fn( ( state, unused, url ) => {
+	window.location.search = new URL( url, 'https://example.com' ).search;
+} );
+window.history.replaceState = mockReplaceState;
 
 window.newspackSettings = {
 	social: {
@@ -55,6 +62,7 @@ const CLAIMED_SETTINGS = { ...SETTINGS, publication_url: 'https://example.com', 
 const mockUpdateSettings = jest.fn();
 const mockClaimPage = jest.fn();
 const mockStartOAuthFlow = jest.fn();
+const mockSetError = jest.fn();
 
 // A factory rather than a render, so `rerender` can hand the form the fresh
 // `settings` object the parent rebuilds on every apiData change.
@@ -66,7 +74,7 @@ const form = ( { status = {}, settings = {} } = {} ) => (
 		updateSettings={ mockUpdateSettings }
 		startOAuthFlow={ mockStartOAuthFlow }
 		claimPage={ mockClaimPage }
-		setError={ jest.fn() }
+		setError={ mockSetError }
 	/>
 );
 
@@ -75,8 +83,11 @@ const renderForm = props => render( form( props ) );
 const renderClaimedForm = () => renderForm( { status: CLAIMED, settings: CLAIMED_SETTINGS } );
 
 beforeEach( () => {
+	window.location.search = '';
+	mockReplaceState.mockClear();
 	mockNotify.mockReset();
 	mockReload.mockReset();
+	mockSetError.mockReset();
 	mockUpdateSettings.mockReset().mockResolvedValue( undefined );
 	mockClaimPage.mockReset().mockResolvedValue( { success: true } );
 	mockStartOAuthFlow.mockReset().mockResolvedValue( { login_url: 'https://nextdoor.example.com/oauth' } );
@@ -204,8 +215,14 @@ describe( 'NextdoorForm', () => {
 		fireEvent.change( field, { target: { value: '' } } );
 		fireEvent.blur( field );
 
-		const describedBy = field.getAttribute( 'aria-describedby' );
-		expect( describedBy ).toContain( screen.getByText( 'The main URL of your news publication.' ).id );
+		// The composed value is worth nothing unless the help text really carries
+		// the id it names, so the id is pinned before it is looked for.
+		const helpId = screen.getByText( 'The main URL of your news publication.' ).id;
+		expect( helpId ).not.toBe( '' );
+		expect( helpId ).toBe( `${ field.id }__help` );
+
+		const describedBy = ( field.getAttribute( 'aria-describedby' ) ?? '' ).split( ' ' );
+		expect( describedBy ).toContain( helpId );
 		expect( describedBy ).toContain( screen.getByText( 'Enter the URL of your publication.' ).id );
 	} );
 
@@ -231,6 +248,33 @@ describe( 'NextdoorForm', () => {
 		fireEvent.click( screen.getByRole( 'button', { name: 'Connect to Nextdoor' } ) );
 
 		await waitFor( () => expect( mockUpdateSettings ).toHaveBeenCalledWith( { client_id: 'stored-id', client_secret: 'fresh-secret' } ) );
+	} );
+
+	it( 'trims the email address before signing in', async () => {
+		renderForm( { status: STORED_CREDENTIALS, settings: { client_id: 'stored-id' } } );
+
+		// Non-breaking spaces: an email input strips the ASCII kind itself, so this
+		// is the padding that survives a paste and reaches the endpoint.
+		fireEvent.change( screen.getByLabelText( 'Email Address' ), { target: { value: '\u00a0editor@example.com\u00a0' } } );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Connect to Nextdoor' } ) );
+
+		await waitFor( () => expect( mockStartOAuthFlow ).toHaveBeenCalledWith( 'editor@example.com', 'US' ) );
+	} );
+
+	it( 'reports a failed sign-in once and takes it out of the URL', () => {
+		window.location.search = '?page=newspack-settings&nextdoor_oauth_error=Nextdoor%20refused%20the%20sign-in';
+
+		const { unmount } = renderForm();
+
+		expect( mockSetError ).toHaveBeenCalledWith( 'Nextdoor refused the sign-in' );
+		// The page and the settings tab both survive the rewrite.
+		expect( mockReplaceState ).toHaveBeenCalledWith( null, '', '/wp-admin/admin.php?page=newspack-settings#social' );
+
+		unmount();
+		mockSetError.mockClear();
+		renderForm();
+
+		expect( mockSetError ).not.toHaveBeenCalled();
 	} );
 
 	it( 'picks up a client ID that changed on the server', () => {

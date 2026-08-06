@@ -40,6 +40,13 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 	protected $http_body = '{}';
 
 	/**
+	 * Requests the stub intercepted, in order.
+	 *
+	 * @var array[]
+	 */
+	protected $http_requests = [];
+
+	/**
 	 * Set up a REST server, an administrator and a clean set of options.
 	 */
 	public function set_up() {
@@ -50,7 +57,15 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 		$this->server   = $wp_rest_server;
 		do_action( 'rest_api_init' );
 
+		// The module's classes are only loaded while it is active, so the routes under
+		// test are not guaranteed to have been registered by the action above.
+		if ( ! isset( $this->server->get_routes()['/newspack/v1/nextdoor/oauth/start'] ) ) {
+			Controller::register_api_endpoints();
+		}
+
 		wp_set_current_user( $this->factory->user->create( [ 'role' => 'administrator' ] ) );
+
+		$this->http_requests = [];
 
 		delete_option( Nextdoor::SETTINGS_SLUG );
 		delete_option( Optional_Modules::OPTION_NAME );
@@ -89,6 +104,11 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 			return $preempt;
 		}
 
+		$this->http_requests[] = [
+			'url'  => $url,
+			'args' => $args,
+		];
+
 		return [
 			'headers'  => [],
 			'body'     => $this->http_body,
@@ -102,17 +122,28 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Dispatch a POST as JSON.
+	 *
+	 * @param string $route  Route to dispatch to.
+	 * @param array  $params Request body.
+	 * @return WP_REST_Response
+	 */
+	private function post( $route, $params ) {
+		$request = new WP_REST_Request( 'POST', $route );
+		$request->set_header( 'content-type', 'application/json' );
+		$request->set_body( wp_json_encode( $params ) );
+
+		return $this->server->dispatch( $request );
+	}
+
+	/**
 	 * Dispatch a settings update as JSON.
 	 *
 	 * @param array $params Request body.
 	 * @return WP_REST_Response
 	 */
 	private function update_settings( $params ) {
-		$request = new WP_REST_Request( 'POST', self::SETTINGS_ROUTE );
-		$request->set_header( 'content-type', 'application/json' );
-		$request->set_body( wp_json_encode( $params ) );
-
-		return $this->server->dispatch( $request );
+		return $this->post( self::SETTINGS_ROUTE, $params );
 	}
 
 	/**
@@ -283,9 +314,12 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Starting the flow hands Nextdoor a state this site can recognise.
+	 * Set credentials, stub Nextdoor and start the flow.
+	 *
+	 * @param string $email Optional. Email to connect with.
+	 * @return WP_REST_Response|WP_Error
 	 */
-	public function test_oauth_start_binds_a_state_to_the_login_url() {
+	private function start_oauth( $email = 'publisher@example.com' ) {
 		Nextdoor::update_settings(
 			[
 				'client_id'     => 'site-id',
@@ -293,18 +327,248 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 			]
 		);
 
-		$this->http_body = wp_json_encode( [ 'login_url' => 'https://auth.nextdoor.com/login?foo=bar' ] );
 		add_filter( 'pre_http_request', [ $this, 'stub_nextdoor_response' ], 10, 3 );
 
 		$request = new WP_REST_Request( 'POST', '/newspack/v1/nextdoor/oauth/start' );
-		$request->set_param( 'email', 'publisher@example.com' );
+		$request->set_param( 'email', $email );
 		$request->set_param( 'country', 'US' );
 
-		$login_url = Controller::api_start_oauth( $request )->get_data()['login_url'];
-		parse_str( (string) wp_parse_url( $login_url, PHP_URL_QUERY ), $query );
+		return Controller::api_start_oauth( $request );
+	}
 
-		self::assertSame( 'bar', $query['foo'] );
+	/**
+	 * Starting the flow hands Nextdoor a redirect URI this site can recognise on the way back.
+	 */
+	public function test_oauth_start_binds_a_state_to_the_redirect_uri() {
+		$this->http_body = wp_json_encode( [ 'login_url' => 'https://auth.nextdoor.com/login?foo=bar' ] );
+
+		$login_url = $this->start_oauth()->get_data()['login_url'];
+
+		// The login URL is Nextdoor's to build: the state rides on the redirect URI.
+		self::assertSame( 'https://auth.nextdoor.com/login?foo=bar', $login_url );
+
+		$sent = json_decode( $this->http_requests[0]['args']['body'], true );
+		parse_str( (string) wp_parse_url( $sent['redirect_uri'], PHP_URL_QUERY ), $query );
+
+		self::assertSame( '1', $query['nextdoor_oauth_callback'] );
 		self::assertNotEmpty( $query['state'] );
 		self::assertTrue( Auth::verify_oauth_state( $query['state'] ) );
+	}
+
+	/**
+	 * The token exchange can rebuild the redirect URI the authorization was requested with,
+	 * and the URI the publisher registers with Nextdoor is not the one carrying the state.
+	 */
+	public function test_the_redirect_uri_is_stable() {
+		$state = Auth::create_oauth_state();
+
+		self::assertSame( admin_url( 'admin.php?page=newspack-settings&nextdoor_oauth_callback=1' ), Nextdoor::get_redirect_uri() );
+		self::assertSame( Nextdoor::get_redirect_uri( $state ), Nextdoor::get_redirect_uri( $state ) );
+		self::assertNotSame( Nextdoor::get_redirect_uri(), Nextdoor::get_redirect_uri( $state ) );
+	}
+
+	/**
+	 * A start response with no login URL is an error, not a redirect to nowhere.
+	 */
+	public function test_oauth_start_reports_a_response_without_a_login_url() {
+		$this->http_body = wp_json_encode( [ 'status' => 'PENDING' ] );
+
+		$result = $this->start_oauth();
+
+		self::assertInstanceOf( 'WP_Error', $result );
+		self::assertSame( 'nextdoor_oauth_start_failed', $result->get_error_code() );
+	}
+
+	/**
+	 * A login URL the browser must not navigate to is refused.
+	 */
+	public function test_oauth_start_refuses_a_login_url_that_is_not_a_url() {
+		$this->http_body = wp_json_encode( [ 'login_url' => 'javascript:alert(1)' ] );
+
+		$result = $this->start_oauth();
+
+		self::assertInstanceOf( 'WP_Error', $result );
+		self::assertSame( 'nextdoor_oauth_start_failed', $result->get_error_code() );
+	}
+
+	/**
+	 * An address pasted with whitespace is accepted, and reaches Nextdoor trimmed.
+	 */
+	public function test_oauth_start_accepts_an_email_with_surrounding_whitespace() {
+		Nextdoor::update_settings(
+			[
+				'client_id'     => 'site-id',
+				'client_secret' => 'site-secret',
+			]
+		);
+
+		$this->http_body = wp_json_encode( [ 'login_url' => 'https://auth.nextdoor.com/login' ] );
+		add_filter( 'pre_http_request', [ $this, 'stub_nextdoor_response' ], 10, 3 );
+
+		$response = $this->post(
+			'/newspack/v1/nextdoor/oauth/start',
+			[
+				'email'   => '  publisher@example.com  ',
+				'country' => 'US',
+			]
+		);
+		$sent     = json_decode( $this->http_requests[0]['args']['body'], true );
+
+		self::assertSame( 200, $response->get_status() );
+		self::assertSame( 'publisher@example.com', $sent['email_address'] );
+	}
+
+	/**
+	 * A publication URL that is not a URL never reaches the endpoint.
+	 */
+	public function test_claim_page_rejects_a_publication_url_that_is_not_a_url() {
+		$response = $this->post( '/newspack/v1/nextdoor/claim-page', [ 'publication_url' => 'not a url' ] );
+
+		self::assertSame( 400, $response->get_status() );
+		self::assertSame( 'rest_invalid_param', $response->get_data()['code'] );
+		self::assertSame( '', Nextdoor::get_settings()['publication_url'] );
+	}
+
+	/**
+	 * A publication URL pasted with whitespace is stored as a URL.
+	 */
+	public function test_claim_page_trims_the_publication_url() {
+		$this->http_body = wp_json_encode( [ 'page_id' => 'page-123' ] );
+		add_filter( 'pre_http_request', [ $this, 'stub_nextdoor_response' ], 10, 3 );
+
+		$response = $this->post( '/newspack/v1/nextdoor/claim-page', [ 'publication_url' => '  https://example.com  ' ] );
+
+		self::assertSame( 200, $response->get_status() );
+		self::assertSame( 'https://example.com', Nextdoor::get_settings()['publication_url'] );
+	}
+
+	/**
+	 * The callback guards accept the administrator who started the flow, once.
+	 */
+	public function test_oauth_callback_authorization_is_single_use() {
+		$state = Auth::create_oauth_state();
+
+		self::assertTrue( Auth::authorize_oauth_callback( $state ) );
+
+		$replayed = Auth::authorize_oauth_callback( $state );
+
+		self::assertInstanceOf( 'WP_Error', $replayed );
+		self::assertSame( 'nextdoor_oauth_invalid_state', $replayed->get_error_code() );
+	}
+
+	/**
+	 * Someone without the capability is turned away before the state is consumed.
+	 */
+	public function test_a_non_administrator_cannot_consume_an_oauth_state() {
+		$administrator = get_current_user_id();
+		$state         = Auth::create_oauth_state();
+
+		wp_set_current_user( $this->factory->user->create( [ 'role' => 'subscriber' ] ) );
+
+		$result = Auth::authorize_oauth_callback( $state );
+
+		self::assertInstanceOf( 'WP_Error', $result );
+		self::assertSame( 'nextdoor_oauth_forbidden', $result->get_error_code() );
+
+		wp_set_current_user( $administrator );
+
+		self::assertTrue( Auth::authorize_oauth_callback( $state ) );
+	}
+
+	/**
+	 * A grant that carries no token is an error, and nothing is stored.
+	 */
+	public function test_a_grant_without_a_token_is_an_error() {
+		$this->http_body = wp_json_encode( [ 'error' => 'invalid_grant' ] );
+		add_filter( 'pre_http_request', [ $this, 'stub_nextdoor_response' ], 10, 3 );
+
+		$result = Auth::get_access_token( 'site-id', 'site-secret', 'auth-code', Nextdoor::get_redirect_uri( 'state' ) );
+
+		self::assertInstanceOf( 'WP_Error', $result );
+		self::assertSame( 'nextdoor_oauth_invalid_response', $result->get_error_code() );
+		self::assertSame( '', Nextdoor::get_settings()['access_token'] );
+	}
+
+	/**
+	 * Refreshing sends the stored refresh token and stores what comes back.
+	 */
+	public function test_refresh_sends_the_stored_refresh_token() {
+		Nextdoor::update_settings(
+			[
+				'access_token'  => 'old-access',
+				'refresh_token' => 'stored-refresh',
+			]
+		);
+
+		$this->http_body = wp_json_encode(
+			[
+				'access_token'  => 'new-access',
+				'refresh_token' => 'new-refresh',
+				'expires_in'    => 3600,
+			]
+		);
+		add_filter( 'pre_http_request', [ $this, 'stub_nextdoor_response' ], 10, 3 );
+
+		$settings = Nextdoor::get_settings();
+		$result   = Auth::refresh_access_token( 'site-id', 'site-secret', $settings['refresh_token'] );
+		$stored   = Nextdoor::get_settings();
+
+		self::assertIsArray( $result );
+		self::assertSame( 'stored-refresh', $this->http_requests[0]['args']['body']['refresh_token'] );
+		self::assertSame( 'new-access', $stored['access_token'] );
+		self::assertSame( 'new-refresh', $stored['refresh_token'] );
+		self::assertGreaterThan( time(), $stored['token_expires_at'] );
+	}
+
+	/**
+	 * A malformed refresh response leaves the working token where it is.
+	 */
+	public function test_a_malformed_refresh_response_leaves_the_stored_token() {
+		Nextdoor::update_settings(
+			[
+				'access_token'     => 'working-access',
+				'refresh_token'    => 'stored-refresh',
+				'token_expires_at' => 1,
+			]
+		);
+
+		$this->http_body = wp_json_encode( [ 'error' => 'invalid_grant' ] );
+		add_filter( 'pre_http_request', [ $this, 'stub_nextdoor_response' ], 10, 3 );
+
+		$result = Auth::refresh_access_token( 'site-id', 'site-secret', 'stored-refresh' );
+		$stored = Nextdoor::get_settings();
+
+		self::assertInstanceOf( 'WP_Error', $result );
+		self::assertSame( 'nextdoor_oauth_invalid_response', $result->get_error_code() );
+		self::assertSame( 'working-access', $stored['access_token'] );
+		self::assertSame( 'stored-refresh', $stored['refresh_token'] );
+		self::assertSame( 1, $stored['token_expires_at'] );
+	}
+
+	/**
+	 * Reporting the connection status never calls Nextdoor.
+	 */
+	public function test_token_validity_is_reported_without_calling_nextdoor() {
+		add_filter( 'pre_http_request', [ $this, 'stub_nextdoor_response' ], 10, 3 );
+
+		Nextdoor::update_settings(
+			[
+				'access_token'     => 'expired-access',
+				'token_expires_at' => time() - 10,
+			]
+		);
+
+		self::assertFalse( Auth::has_usable_token() );
+
+		Nextdoor::update_settings(
+			[
+				'access_token'     => 'expired-access',
+				'refresh_token'    => 'stored-refresh',
+				'token_expires_at' => time() - 10,
+			]
+		);
+
+		self::assertTrue( Auth::has_usable_token() );
+		self::assertSame( [], $this->http_requests );
 	}
 }
