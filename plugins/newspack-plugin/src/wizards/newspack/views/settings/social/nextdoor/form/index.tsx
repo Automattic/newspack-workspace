@@ -37,6 +37,24 @@ const STORED_SECRET_MASK = '\u2022'.repeat( 12 );
 // truncated before it can fill the notice with arbitrary prose.
 const OAUTH_ERROR_MAX_LENGTH = 200;
 
+// What the redirect adds to the settings URL.
+const OAUTH_PARAMS = [ 'nextdoor_oauth_error', 'oauth_success' ];
+
+// The redirect carries a one-time message, so it is dropped from the URL once
+// this form has read it: the card is reopenable for the rest of the page's
+// life, and a stale failure notice must not come back with it. `nextdoor.tsx`
+// reads the same parameters on its first render, which always precedes this
+// mount.
+const consumeOAuthParams = () => {
+	const params = new URLSearchParams( window.location.search );
+	if ( ! OAUTH_PARAMS.some( param => params.has( param ) ) ) {
+		return;
+	}
+	OAUTH_PARAMS.forEach( param => params.delete( param ) );
+	const query = params.toString();
+	window.history.replaceState( null, '', `${ window.location.pathname }${ query ? `?${ query }` : '' }${ window.location.hash }` );
+};
+
 const isSameRoles = ( current: string[], stored: string[] ) => current.length === stored.length && current.every( role => stored.includes( role ) );
 
 // `aria-errormessage` is unimplemented in WebKit, so the error is composed into
@@ -126,6 +144,7 @@ export const NextdoorForm = ( {
 		if ( oauthError ) {
 			setError( oauthError.slice( 0, OAUTH_ERROR_MAX_LENGTH ) );
 		}
+		consumeOAuthParams();
 	}, [] );
 
 	// Shape only, but stricter than is_email(), which accepts a one-letter TLD.
@@ -183,7 +202,9 @@ export const NextdoorForm = ( {
 			if ( isManualMode && hasCredentialChanges ) {
 				await updateSettings( clientSecret ? { client_id: clientId, client_secret: clientSecret } : { client_id: clientId } );
 			}
-			const response = await startOAuthFlow( email, country );
+			// Trimmed to match what the button was enabled on: the endpoint validates
+			// before it sanitises, so surrounding whitespace comes back rejected.
+			const response = await startOAuthFlow( email.trim(), country );
 			window.location.href = response.login_url ?? window.location.href;
 		} catch {
 			// Already surfaced by the card's error notice.

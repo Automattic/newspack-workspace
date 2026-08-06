@@ -31,9 +31,14 @@ import { NextdoorForm } from './nextdoor/form';
 // Brand name, deliberately untranslated.
 const TITLE = 'Nextdoor';
 
-const hasOAuthError = () => !! new URLSearchParams( window.location.search ).get( 'nextdoor_oauth_error' );
-
-const isOAuthReturn = () => new URLSearchParams( window.location.search ).get( 'oauth_success' ) === '1' || hasOAuthError();
+// Read on the first render and kept: the form consumes these parameters from
+// the URL when it mounts, which is always later, so the latch below cannot be
+// left reading a URL that has already been cleaned.
+const readOAuthReturn = () => {
+	const params = new URLSearchParams( window.location.search );
+	const hasError = !! params.get( 'nextdoor_oauth_error' );
+	return { hasError, isReturn: hasError || '1' === params.get( 'oauth_success' ) };
+};
 
 // While the module is off the endpoint returns `connection_status` and
 // `settings` as an empty JSON array, which is truthy — so the presence of a
@@ -57,6 +62,7 @@ function Nextdoor() {
 	const [ hasSyncedStatus, setHasSyncedStatus ] = useState( false );
 	const [ error, setError ] = useState< string | null >( null );
 	const [ errorNonce, setErrorNonce ] = useState( 0 );
+	const [ oauthReturn ] = useState( readOAuthReturn );
 
 	const bumpErrorNonce = () => setErrorNonce( current => current + 1 );
 
@@ -98,6 +104,13 @@ function Nextdoor() {
 		),
 	} );
 
+	// The card has two error channels — the hook's request failures and its own
+	// reported errors — and every caller wants both gone.
+	const clearErrors = () => {
+		setError( null );
+		resetError();
+	};
+
 	useEffect( () => {
 		if ( ! hasConnectionStatus( apiData ) ) {
 			return;
@@ -112,8 +125,7 @@ function Nextdoor() {
 	// former, and a remount (switching settings tabs) is served the latter.
 	// Failures surface through `errorMessage`, which the card already renders.
 	const updateSettings = async ( payload: NextdoorUpdatePayload ): Promise< void > => {
-		setError( null );
-		resetError();
+		clearErrors();
 		try {
 			await apiFetchToggle( payload, true );
 		} catch ( fetchError ) {
@@ -124,8 +136,7 @@ function Nextdoor() {
 
 	const startOAuthFlow = async ( email: string, country: string ): Promise< OAuthResponse > => {
 		try {
-			setError( null );
-			resetError();
+			clearErrors();
 			const response = await apiFetch( {
 				path: '/newspack/v1/nextdoor/oauth/start',
 				method: 'POST',
@@ -144,8 +155,7 @@ function Nextdoor() {
 
 	const claimPage = async ( publicationUrl: string, test: boolean = false ): Promise< ClaimPageResponse > => {
 		try {
-			setError( null );
-			resetError();
+			clearErrors();
 			const response = await apiFetch( {
 				path: '/newspack/v1/nextdoor/claim-page',
 				method: 'POST',
@@ -182,12 +192,12 @@ function Nextdoor() {
 		if ( hasAutoOpened || isFetching || ! isEnabled ) {
 			return;
 		}
-		if ( ! hasOAuthError() && ( isConnected || ! isOAuthReturn() ) ) {
+		if ( ! oauthReturn.hasError && ( isConnected || ! oauthReturn.isReturn ) ) {
 			return;
 		}
 		setHasAutoOpened( true );
 		setIsOpen( true );
-	}, [ hasAutoOpened, isFetching, isEnabled, isConnected ] );
+	}, [ hasAutoOpened, isFetching, isEnabled, isConnected, oauthReturn ] );
 
 	const badge = ( () => {
 		if ( errorMessage ) {
@@ -218,7 +228,7 @@ function Nextdoor() {
 	// Every user-initiated action starts from a clean error state, so a failure
 	// the user has since retried past stops showing in the header.
 	const enable = async () => {
-		resetError();
+		clearErrors();
 		try {
 			await setModuleEnabled( true );
 		} catch {
@@ -229,7 +239,7 @@ function Nextdoor() {
 	};
 
 	const disable = async () => {
-		resetError();
+		clearErrors();
 		try {
 			await setModuleEnabled( false );
 		} catch {
@@ -243,7 +253,7 @@ function Nextdoor() {
 
 	// Cancel: abandoning a fresh Enable rolls the module back off.
 	const cancel = async () => {
-		resetError();
+		clearErrors();
 		if ( isEnabling ) {
 			try {
 				await setModuleEnabled( false );
@@ -259,7 +269,7 @@ function Nextdoor() {
 	// already have saved credentials into, so the module stays on and the card
 	// leaves its enabling session behind.
 	const dismiss = () => {
-		resetError();
+		clearErrors();
 		setIsEnabling( false );
 		setIsOpen( false );
 	};
