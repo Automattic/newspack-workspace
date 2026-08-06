@@ -1,9 +1,8 @@
 import { reportMatchedSegments, EVENT_NAME, STORE_KEY, EMPTY_VALUE, SESSION_TIMEOUT } from './segments';
-import { getCarriedSegmentIds, getMatchingSegmentIds, getPreviewedPromptId, sendEvent } from '../utils';
+import { getMatchingSegmentIds, getPreviewedPromptId, sendEvent } from '../utils';
 import { getCriteria } from '../../criteria/utils';
 
 jest.mock( '../utils', () => ( {
-	getCarriedSegmentIds: jest.fn(),
 	getMatchingSegmentIds: jest.fn(),
 	getPreviewedPromptId: jest.fn(),
 	sendEvent: jest.fn(),
@@ -46,7 +45,6 @@ describe( 'reportMatchedSegments', () => {
 	beforeEach( () => {
 		jest.clearAllMocks();
 		getPreviewedPromptId.mockReturnValue( null );
-		getCarriedSegmentIds.mockReturnValue( [] );
 		getCriteria.mockReturnValue( { id: 'registered' } );
 		global.gtag = jest.fn();
 		// Criteria-less segments match every reader and are always reportable.
@@ -69,7 +67,7 @@ describe( 'reportMatchedSegments', () => {
 		expect( sendEvent ).toHaveBeenCalledWith( { segment_id: '12' }, EVENT_NAME );
 		expect( sendEvent ).toHaveBeenCalledWith( { segment_id: '45' }, EVENT_NAME );
 		// The reported set is stored without syncing to reader meta.
-		expect( ras.store.set ).toHaveBeenCalledWith( STORE_KEY, expect.objectContaining( { value: [ '12', '45' ] } ), false );
+		expect( ras.store.set ).toHaveBeenCalledWith( STORE_KEY, expect.objectContaining( { ids: [ '12', '45' ] } ), false );
 	} );
 
 	it( 'stays silent when the same segments match again', () => {
@@ -237,30 +235,6 @@ describe( 'reportMatchedSegments', () => {
 		expect( () => reportMatchedSegments( ras ) ).not.toThrow();
 		reportMatchedSegments( ras );
 		expect( sendEvent ).toHaveBeenCalledTimes( 2 );
-	} );
-
-	it( 'reports carried segments alongside local matches, once per session', () => {
-		getMatchingSegmentIds.mockReturnValue( [ '12' ] );
-		getCarriedSegmentIds.mockReturnValue( [ '45' ] );
-		reportMatchedSegments( ras );
-		reportMatchedSegments( ras );
-		const reportedIds = sendEvent.mock.calls.map( call => call[ 0 ].segment_id );
-		expect( reportedIds ).toEqual( [ '12', '45' ] );
-	} );
-
-	it( 'reports a carried segment even when no local segment is reportable', () => {
-		// Every page segment uses an unregistered criterion, so local
-		// evaluation is withheld entirely...
-		window.newspack_popups_view = {
-			segments: { 12: { criteria: [ { criteria_id: 'active_memberships' } ] } },
-		};
-		getCriteria.mockReturnValue( undefined );
-		getMatchingSegmentIds.mockReturnValue( [] );
-		// ...but the newsletter link asserted one of them.
-		getCarriedSegmentIds.mockReturnValue( [ '12' ] );
-		reportMatchedSegments( ras );
-		expect( sendEvent ).toHaveBeenCalledTimes( 1 );
-		expect( sendEvent ).toHaveBeenCalledWith( { segment_id: '12' }, EVENT_NAME );
 	} );
 
 	it( 'dedupes against the real getMatchingSegmentIds return type', () => {

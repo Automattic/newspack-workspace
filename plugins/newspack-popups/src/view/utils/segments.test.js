@@ -1,14 +1,5 @@
 import { registerCriteria } from '../../criteria/utils';
-import {
-	getBestPrioritySegment,
-	getCarriedSegmentIds,
-	getMatchingSegmentIds,
-	syncMatchedSegments,
-	getOverride,
-	shouldPromptBeDisplayed,
-	periods,
-	CARRIED_SEGMENTS_KEY,
-} from './index.js';
+import { getBestPrioritySegment, getMatchingSegmentIds, syncMatchedSegments, getOverride, shouldPromptBeDisplayed, periods } from './index.js';
 
 // Mock the window.location object. See: https://developer.mozilla.org/en-US/docs/Web/API/Location
 const setWindowLocation = ( domain = 'example.com', search = '' ) => {
@@ -286,47 +277,6 @@ describe( 'segmentation API', () => {
 		syncMatchedSegments( ras, segments );
 		expect( setSpy ).not.toHaveBeenCalledWith( 'matched_segments', expect.anything() );
 		setSpy.mockRestore();
-	} );
-
-	// Seed session-scoped carried-segment state as ingestCarriedSegments would
-	// (no GA cookie in this suite, so a fresh timestamp keeps it live).
-	const carrySegments = ids => {
-		ras.store.set( CARRIED_SEGMENTS_KEY, { sid: null, ts: Date.now(), value: ids } );
-	};
-
-	it( 'getCarriedSegmentIds returns only carried IDs that exist on the page', () => {
-		carrySegments( [ 'segment1', 'segment99' ] );
-		expect( getCarriedSegmentIds( segments ) ).toEqual( [ 'segment1' ] );
-	} );
-
-	it( 'getCarriedSegmentIds returns an empty array when nothing was carried', () => {
-		expect( getCarriedSegmentIds( segments ) ).toEqual( [] );
-	} );
-
-	it( 'getBestPrioritySegment counts carried segments as matched', () => {
-		ras.store.set( 'simple', 'no-match' );
-		expect( getBestPrioritySegment( segments ) ).toEqual( null );
-		// The carried segment matches without its criteria matching locally.
-		carrySegments( [ 'segment1' ] );
-		expect( getBestPrioritySegment( segments ) ).toEqual( 'segment1' );
-	} );
-
-	it( 'getBestPrioritySegment still prefers the higher-priority local match', () => {
-		ras.store.set( 'simple', 'simple-match' ); // segment2, priority 1.
-		carrySegments( [ 'segment4' ] ); // Priority 2 — lower.
-		expect( getBestPrioritySegment( segments ) ).toEqual( 'segment2' );
-	} );
-
-	it( 'carried segments stay out of the reader profile', () => {
-		ras.store.set( 'reader', { authenticated: true } );
-		ras.store.set( 'simple', 'simple-match' );
-		carrySegments( [ 'segment4' ] );
-		// Local evaluation ignores the carried segment...
-		expect( getMatchingSegmentIds( segments ) ).toEqual( [ 'segment2', 'segment3' ] );
-		// ...so the profile write — which syncs outbound to the ESP — never
-		// contains it, and a carried ID cannot echo into future newsletters.
-		syncMatchedSegments( ras, segments );
-		expect( ras.store.get( 'matched_segments' ) ).toEqual( [ 'segment2', 'segment3' ] );
 	} );
 
 	it( 'should return false if the reader has or had the UTM Suppression value in utm_source params', () => {

@@ -20,20 +20,53 @@
  * Each segment reports once per GA4 session, the first time the reader
  * matches it. A segment that starts matching mid-session reports then; one
  * that stops matching is not reported again, since reach means the reader
- * matched it at some point during the session. The bookkeeping is
- * session-scoped state on the Reader Activation store (see
- * `../utils/session-store.js`), so the once-per-session rule tracks the same
- * session boundary GA4 reports group by.
+ * matched it at some point during the session. The bookkeeping lives in the
+ * Reader Activation store — namespaced per site and shared across a session's
+ * tabs — and resets when the GA4 session ID read from the `_ga_*` cookie
+ * changes (falling back to a 30-minute sliding window when no GA cookie is
+ * readable), so the once-per-session rule tracks the same session boundary
+ * GA4 reports group by.
  */
 
-import { getCarriedSegmentIds, getMatchingSegmentIds, getPreviewedPromptId, sendEvent } from '../utils';
+import { getMatchingSegmentIds, getPreviewedPromptId, sendEvent } from '../utils';
 import { getCriteria } from '../../criteria/utils';
-import { readSessionValue, writeSessionValue } from '../utils/session-store';
 
 export const EVENT_NAME = 'np_segment_matched';
 export const STORE_KEY = 'popups_reported_segments';
 export const EMPTY_VALUE = 'none';
-export { SESSION_TIMEOUT } from '../utils/session-store';
+// GA4's session inactivity timeout, for the fallback session boundary.
+export const SESSION_TIMEOUT = 30 * 60 * 1000;
+
+/**
+ * Read the GA4 session ID from the `_ga_<container>` cookie.
+ *
+ * Mirrors the server-side parse in newspack-plugin's
+ * `GoogleSiteKit::extract_sid_from_cookies()` — the third dot-piece of the
+ * cookie value — reduced to its leading digits so the GS1 and GS2 cookie
+ * formats both yield the bare session ID (in GS2 the piece carries
+ * `$`-delimited counters that change within a session).
+ *
+ * @return {string|null} Session ID, or null when no GA cookie is readable.
+ */
+const getGa4SessionId = () => {
+	try {
+		const cookies = document.cookie ? document.cookie.split( '; ' ) : [];
+		for ( const cookie of cookies ) {
+			const separator = cookie.indexOf( '=' );
+			if ( 0 !== cookie.indexOf( '_ga_' ) || -1 === separator ) {
+				continue;
+			}
+			const pieces = cookie.slice( separator + 1 ).split( '.' );
+			const sid = pieces[ 2 ] ? ( pieces[ 2 ].match( /\d+/ ) || [] )[ 0 ] : null;
+			if ( sid ) {
+				return sid;
+			}
+		}
+	} catch ( e ) {
+		// document.cookie unreadable; use the time-based boundary instead.
+	}
+	return null;
+};
 
 /**
  * Whether the request is a prompt or segment preview (`pid` or `view_as`),
@@ -65,6 +98,51 @@ const isPreviewRequest = () => {
 const hasRegisteredCriteria = segment => ( segment?.criteria || [] ).every( item => getCriteria( item.criteria_id ) );
 
 /**
+ * Read the reporting state, resetting the reported list when the session
+ * boundary has moved on: a new GA4 session ID, or — when no GA cookie is
+ * readable — more than the session timeout since the last evaluation.
+ *
+ * @param {Object} ras Reader Activation library object.
+ *
+ * @return {Object} `{ sid, ids }` — current boundary token and reported IDs.
+ */
+const readState = ras => {
+	const sid = getGa4SessionId();
+	try {
+		const state = ras.store.get( STORE_KEY ) || {};
+		const ids = Array.isArray( state.ids ) ? state.ids : [];
+		if ( sid ) {
+			return { sid, ids: state.sid === sid ? ids : [] };
+		}
+		const expired = ! state.ts || Date.now() - state.ts > SESSION_TIMEOUT;
+		return { sid, ids: expired ? [] : ids };
+	} catch ( e ) {
+		// Unreadable state degrades the reader to per-pageview dispatch, which
+		// costs volume but loses no data.
+		return { sid, ids: [] };
+	}
+};
+
+/**
+ * Remember the segment IDs reported so far, so the rest of the session stays
+ * quiet about them. Also stamps the boundary token: the GA4 session ID and
+ * the time of the last evaluation, which keeps the fallback window sliding.
+ *
+ * @param {Object}      ras Reader Activation library object.
+ * @param {string|null} sid GA4 session ID, if readable.
+ * @param {string[]}    ids Every ID reported in this session.
+ */
+const writeState = ( ras, sid, ids ) => {
+	try {
+		// `false`: this is per-device bookkeeping; never sync it to reader meta.
+		ras.store.set( STORE_KEY, { sid, ts: Date.now(), ids }, false );
+	} catch ( e ) {
+		// See readState: an unwritable state only costs the volume saving —
+		// and must never unwind into the RAS queue drain.
+	}
+};
+
+/**
  * Evaluate the reader's segments and report any that are new to this session.
  *
  * @param {Object} ras Reader Activation library object.
@@ -91,26 +169,19 @@ const reportFreshMatches = ras => {
 			reportableSegments[ id ] = segments[ id ];
 		}
 	} );
-	// Segments carried in from a newsletter link count as matched for the
-	// session, on top of anything matched locally. They assert the reader's
-	// ESP-synced snapshot rather than local criteria evaluation, so they are
-	// validated only for existence and bypass the withholding above.
-	const carried = getCarriedSegmentIds( segments );
-	if ( ! Object.keys( reportableSegments ).length && ! carried.length ) {
+	if ( ! Object.keys( reportableSegments ).length ) {
 		return;
 	}
-	const localIds = getMatchingSegmentIds( reportableSegments );
-	const ids = localIds.concat( carried.filter( id => ! localIds.includes( id ) ) );
+	const ids = getMatchingSegmentIds( reportableSegments );
 	// The empty match is tracked as a pseudo-ID, so "matched nothing" is
 	// measurable and follows the same once-per-session rule as a real segment.
 	const matched = ids.length ? ids : [ EMPTY_VALUE ];
-	const { sid, value } = readSessionValue( ras, STORE_KEY );
-	const reported = Array.isArray( value ) ? value : [];
+	const { sid, ids: reported } = readState( ras );
 	const fresh = matched.filter( id => ! reported.includes( id ) );
 	if ( ! fresh.length ) {
 		// Nothing new to report; re-stamp the state so the fallback session
 		// window keeps sliding with reader activity.
-		writeSessionValue( ras, STORE_KEY, sid, reported );
+		writeState( ras, sid, reported );
 		return;
 	}
 	const sent = [];
@@ -125,7 +196,7 @@ const reportFreshMatches = ras => {
 		// display. IDs sent before the throw are recorded below, so only the
 		// unsent remainder retries on the next pageview.
 	}
-	writeSessionValue( ras, STORE_KEY, sid, reported.concat( sent ) );
+	writeState( ras, sid, reported.concat( sent ) );
 };
 
 /**

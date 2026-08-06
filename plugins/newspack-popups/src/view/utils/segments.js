@@ -1,10 +1,5 @@
 import { debug, getRawId } from './prompts';
 import { getCriteria } from '../../criteria/utils';
-import { readSessionValue } from './session-store';
-
-// Session-scoped store key holding segment IDs carried in from newsletter
-// links (`np_segments`) — see src/view/carried-segments.js.
-export const CARRIED_SEGMENTS_KEY = 'popups_carried_segments';
 
 const day = 1000 * 60 * 60 * 24;
 export const periods = {
@@ -83,34 +78,7 @@ const match = segmentCriteria => {
 };
 
 /**
- * Get the segment IDs carried into this session from a newsletter link
- * (`np_segments`), validated against the segments shipped to the page.
- *
- * Carried segments count as matched for the browsing session — the sending
- * ESP substituted the reader's synced snapshot into the link, so the signal
- * exists even when the browser holds no matching data. They are session-only
- * assertions: keep them out of anything that writes the reader profile
- * (see syncMatchedSegments).
- *
- * @param {Object} segments Segments keyed by ID.
- *
- * @return {string[]} Carried segment IDs present in `segments`.
- */
-export const getCarriedSegmentIds = segments => {
-	const ras = window.newspackReaderActivation;
-	if ( ! ras?.store || ! segments ) {
-		return [];
-	}
-	const { value } = readSessionValue( ras, CARRIED_SEGMENTS_KEY );
-	const ids = Array.isArray( value ) ? value : [];
-	return ids.filter( id => segments[ id ] );
-};
-
-/**
  * Get the reader's highest-priority segment match, or the segment to preview.
- *
- * Segments carried in from a newsletter link count as matched alongside the
- * locally evaluated ones, so prompt targeting honors them.
  *
  * @param {Object}      segments     Segments.
  * @param {string|null} viewAsString Optional, for testing. A query string with viewAs params for previewing a segment.
@@ -124,10 +92,9 @@ export const getBestPrioritySegment = ( segments, viewAsString = null ) => {
 		return viewAs.segment;
 	}
 
-	const carried = getCarriedSegmentIds( segments );
 	const matchingSegments = [];
 	for ( const segmentId in segments ) {
-		if ( carried.includes( segmentId ) || match( segments[ segmentId ].criteria ) ) {
+		if ( match( segments[ segmentId ].criteria ) ) {
 			matchingSegments.push( {
 				id: segmentId,
 				priority: segments[ segmentId ].priority,
@@ -149,10 +116,6 @@ export const getBestPrioritySegment = ( segments, viewAsString = null ) => {
  * serialization (so equal sets compare equal). Unlike getBestPrioritySegment,
  * this returns the full set, not just the highest-priority winner.
  *
- * Local criteria evaluation only: segment IDs carried in from newsletter
- * links are deliberately excluded — this feeds syncMatchedSegments, which
- * writes the reader profile, and carried segments must stay session-only.
- *
  * @param {Object} segments Segments keyed by ID with { criteria, priority } values.
  *
  * @return {string[]} Sorted array of matching segment IDs.
@@ -172,11 +135,6 @@ export const getMatchingSegmentIds = segments => {
  * server-side consumers can read it. Writes only for authenticated readers
  * (anonymous readers have no server-side snapshot) and only when the set
  * changed (the store syncs the write to user meta; avoid redundant churn).
- *
- * Uses local evaluation only: segments carried in from newsletter links are
- * session-scoped assertions and must never enter the profile — the profile is
- * what syncs outbound to the ESP, and a carried ID written here would echo
- * back into every future newsletter link, self-perpetuating.
  *
  * @param {Object} ras      Reader Activation library object (window.newspackReaderActivation).
  * @param {Object} segments Segments keyed by ID.
