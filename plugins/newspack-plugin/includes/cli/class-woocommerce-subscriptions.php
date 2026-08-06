@@ -459,9 +459,11 @@ class WooCommerce_Subscriptions {
 	 * `newspackAccessControlRules` attribute store raw product IDs, and
 	 * `Access_Rules::has_active_subscription()` never re-validates them, so a trashed product
 	 * either one still lists keeps granting access. Those subscriptions are matched by Access
-	 * Control today, so they are reported separately as fragile (the picker can no longer
-	 * offer the product for a fresh configuration) and are refused by --map — re-pointing them
-	 * would move the subscription off the very ID the surface matches on and revoke access.
+	 * Control today, so they are reported separately as fragile — tagged variant G in the
+	 * table (granted: matched by a persisted reference, while the picker can no longer offer
+	 * the product for a fresh configuration) — and are refused by --map, since re-pointing
+	 * them would move the subscription off the very ID the surface matches on and revoke
+	 * access.
 	 *
 	 * With no --map the command audits only (read-only): it prints one row per at-risk
 	 * subscription with a best-guess intended product derived from the line-item name. The
@@ -501,13 +503,17 @@ class WooCommerce_Subscriptions {
 
 		$live_products      = self::get_live_subscription_products();
 		$access_product_ids = self::get_access_referenced_product_ids();
-		$rows               = self::audit_active_subscriptions( $live_products, $access_product_ids );
+		$audit              = self::audit_active_subscriptions( $live_products, $access_product_ids );
+		$rows               = $audit['rows'];
 
 		$at_risk = self::filter_rows_by_status( $rows, 'at_risk' );
 		$fragile = self::filter_rows_by_status( $rows, 'access_referenced' );
 
 		if ( empty( $at_risk ) ) {
-			WP_CLI::success( 'No active subscriptions with a missing or non-gate-selectable line-item product were found.' );
+			// Reports what was scanned rather than asserting nothing exists: a subscription
+			// leaving active status mid-scan can still shift later offset windows, so the
+			// wording must not read as a guarantee of completeness.
+			WP_CLI::success( sprintf( 'Scanned %d active subscription(s); none flagged with a missing or non-gate-selectable line-item product.', $audit['scanned'] ) );
 		} else {
 			WP_CLI::line( sprintf( '%d active subscription(s) have a line-item product Access Control cannot match:', count( $at_risk ) ) );
 			WP_CLI::line( '' );
@@ -522,9 +528,12 @@ class WooCommerce_Subscriptions {
 		}
 
 		$raw_map = \WP_CLI\Utils\get_flag_value( $assoc_args, 'map', '' );
-		// WP-CLI hands a bare `--map` through as boolean true; stringify it so it falls
-		// through the same malformed-token reporting as any other unparseable value.
-		$raw_map = is_string( $raw_map ) ? $raw_map : (string) (int) $raw_map;
+		// WP-CLI hands a bare `--map` (or `--no-map`) through as a boolean. Name the actual
+		// mistake — stringifying it would warn about a "1"/"0" token the operator never typed.
+		if ( ! is_string( $raw_map ) ) {
+			WP_CLI::error( '--map requires a value in <subscription_id>:<product_id> form.' );
+			return;
+		}
 		if ( '' === trim( $raw_map ) ) {
 			return;
 		}
@@ -604,7 +613,7 @@ class WooCommerce_Subscriptions {
 	 *
 	 * @param array $rows Audit rows as returned by `build_audit_rows()`.
 	 */
-	private static function render_audit_table( array $rows ) {
+	private static function render_audit_table( array $rows ): void {
 		$table = array_map(
 			function( $row ) {
 				return [
@@ -708,11 +717,12 @@ class WooCommerce_Subscriptions {
 	 * Re-attach (variant A) or swap onto (variant B) a live product for a single subscription.
 	 *
 	 * Executes only the explicit mapping the operator passed — never a guess. The swap
-	 * target must be a gate-selectable subscription product (a gate can only ever reference
-	 * one of those), and the subscription must be one the audit flagged as at risk. Refuses
-	 * subscriptions with more than one broken line item, the no-line-items case, line items
-	 * carrying a variation ID, and subscriptions a gate or block still matches, so the operator
-	 * resolves those by hand. This edits billing-relevant data, so an order note records the
+	 * target must be a gate-selectable simple `subscription` product (a gate can only ever
+	 * reference a selectable product, and a `variable-subscription` target would pair a
+	 * variable parent with no variation — a shape purchases never record), and the
+	 * subscription must be one the audit flagged as at risk. Refuses subscriptions with more
+	 * than one broken line item, the no-line-items case, line items carrying a variation ID,
+	 * and subscriptions a gate or block still matches, so the operator resolves those by hand. This edits billing-relevant data, so an order note records the
 	 * prior product ID and the caller logs exactly what changed.
 	 *
 	 * @param \WC_Subscription $subscription       The subscription to repair.
@@ -743,7 +753,17 @@ class WooCommerce_Subscriptions {
 			return $result;
 		}
 		if ( ! self::is_selectable_product( $target ) ) {
-			$result['message'] = sprintf( 'Mapped product #%d is not a gate-selectable subscription product (type: %s, status: %s) — map onto a listed subscription/variable-subscription product.', $product_id, $target->get_type(), $target->get_status() );
+			$result['message'] = sprintf( 'Mapped product #%d is not a gate-selectable subscription product (type: %s, status: %s) — map onto a listed subscription product.', $product_id, $target->get_type(), $target->get_status() );
+			return $result;
+		}
+		// A variable-subscription target would mint a line item pairing a variable parent
+		// with variation_id = 0 — a shape normal purchase flow never records (buying a
+		// variable subscription always stores its variation), and one the variation-first
+		// consumers (tier-switch lookup, teams renewal match) don't expect. The audit and
+		// guess still surface variable products as evidence; repairing onto one is a manual
+		// job where the operator picks the variation deliberately.
+		if ( 'variable-subscription' === $target->get_type() ) {
+			$result['message'] = sprintf( 'Mapped product #%d is a variable subscription — attaching its parent without a variation creates a line-item shape purchases never produce. Repair this subscription manually, choosing the variation deliberately.', $product_id );
 			return $result;
 		}
 
@@ -880,12 +900,13 @@ class WooCommerce_Subscriptions {
 	 * configuration. Testing picker-selectability alone would both over-report the at-risk
 	 * population and let a repair move a working subscription off the ID its gate/block matches on.
 	 *
-	 * Keys on the line item's parent `product_id`, deliberately ignoring `variation_id`:
-	 * gates and blocks are only ever configured with a parent product ID (the picker,
-	 * `Access_Rules::get_subscription_products_options`, offers `subscription` /
-	 * `variable-subscription` parents, never variations), and `WC_Subscription::has_product()`
-	 * matches that parent ID against the line item's `product_id`. So it is the parent's
-	 * liveness — not the specific variation's — that decides whether Access Control can match.
+	 * Liveness keys on the line item's parent `product_id`: the picker
+	 * (`Access_Rules::get_subscription_products_options`) offers `subscription` /
+	 * `variable-subscription` parents, never variations, so it is the parent's liveness — not
+	 * the specific variation's — that decides whether a fresh gate can be configured to match.
+	 * The access-referenced check is wider: `WC_Subscription::has_product()` compares a stored
+	 * rule value against both `product_id` and `variation_id`, so an already-persisted rule
+	 * holding either ID keeps granting access and both are honored here.
 	 *
 	 * @param \WC_Subscription $subscription       The subscription to classify.
 	 * @param array            $access_product_ids Product IDs persisted on gates/blocks as `product_id => [ reference_label, ... ]`.
@@ -931,19 +952,30 @@ class WooCommerce_Subscriptions {
 				$has_live_product = true;
 				continue;
 			}
-			// A gate or block that already lists this ID keeps matching it whatever happened to
-			// the product afterwards, so the reader has access — checked before the missing /
-			// non-selectable branches because it holds for a hard-deleted product too.
+			// A gate or block that already lists an ID this line item carries keeps matching it
+			// whatever happened to the product afterwards, so the reader has access — checked
+			// before the missing / non-selectable branches because it holds for a hard-deleted
+			// product too. `WC_Subscription::has_product()` compares a stored rule value against
+			// BOTH the line item's product_id and its variation_id, so a legacy or hand-edited
+			// rule storing a variation ID grants access exactly as a parent ID does.
+			$variation_id  = (int) $item->get_variation_id();
+			$referenced_id = 0;
 			if ( isset( $access_product_ids[ $product_id ] ) ) {
+				$referenced_id = $product_id;
+			} elseif ( $variation_id > 0 && isset( $access_product_ids[ $variation_id ] ) ) {
+				$referenced_id = $variation_id;
+			}
+			if ( $referenced_id > 0 ) {
 				$access_referenced[] = [
 					'item'       => $item,
 					'name'       => $name,
 					'variant'    => 'G',
-					'references' => $access_product_ids[ $product_id ],
+					'references' => $access_product_ids[ $referenced_id ],
 					'evidence'   => sprintf(
-						'Line-item product #%d is not gate-selectable but is still referenced by %s, so Access Control matches it today.',
+						'Line-item product #%d is not gate-selectable but %s is still referenced by %s, so Access Control matches it today.',
 						$product_id,
-						implode( ', ', $access_product_ids[ $product_id ] )
+						$referenced_id === $product_id ? 'it' : sprintf( 'its variation #%d', $referenced_id ),
+						implode( ', ', $access_product_ids[ $referenced_id ] )
 					),
 				];
 				continue;
@@ -1071,7 +1103,7 @@ class WooCommerce_Subscriptions {
 	}
 
 	/**
-	 * Collect subscription product IDs persisted in block-level access rules across published content.
+	 * Collect subscription product IDs persisted in block-level access rules across post content.
 	 *
 	 * Group/row/stack blocks carry the same paid-access rule shape inline as the
 	 * `newspackAccessControlRules` attribute (custom mode), and `Block_Visibility` evaluates it
@@ -1092,9 +1124,15 @@ class WooCommerce_Subscriptions {
 		global $wpdb;
 		// A one-shot content LIKE for a manually-run audit: narrows to posts carrying the
 		// attribute before parsing, with nothing worth caching for the life of a single CLI run.
+		// No post_status filter: `Block_Visibility::filter_render_block()` applies none — a
+		// custom-visibility block on a private, scheduled or draft post runs the same
+		// `Access_Rules` match whenever that post renders (and a trashed post can be
+		// restored). Missing such a reference would both list the subscription as at-risk
+		// and disarm the --map refusal that protects it; over-collecting only ever refuses
+		// a repair, per this method's invariant.
 		$post_ids = $wpdb->get_col( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 			$wpdb->prepare(
-				"SELECT ID FROM {$wpdb->posts} WHERE post_status = 'publish' AND post_content LIKE %s",
+				"SELECT ID FROM {$wpdb->posts} WHERE post_content LIKE %s",
 				'%' . $wpdb->esc_like( 'newspackAccessControlRules' ) . '%'
 			)
 		);
@@ -1110,8 +1148,14 @@ class WooCommerce_Subscriptions {
 				}
 			}
 			// Parsing walks the full post; drop it from the cache so a wide content set doesn't
-			// accumulate every post object in memory over the sweep.
-			clean_post_cache( $post_id );
+			// accumulate every post object in memory over the sweep. Targeted deletes only:
+			// `clean_post_cache()` also fires purge hooks and bumps the shared posts
+			// last-changed key — invalidating every cached WP_Query site-wide once per matched
+			// post, from a read-only audit against the live persistent cache. Same reason
+			// `clean_object_term_cache()` is not called: it bumps the terms last-changed key,
+			// and nothing in this loop populates term caches to begin with.
+			wp_cache_delete( $post_id, 'posts' );
+			wp_cache_delete( $post_id, 'post_meta' );
 		}
 		return $referenced;
 	}
@@ -1232,11 +1276,12 @@ class WooCommerce_Subscriptions {
 	 *
 	 * @param array $live_products      Live subscription products as `[ 'id' => int, 'name' => string ]`.
 	 * @param array $access_product_ids Product IDs persisted on gates/blocks as `product_id => [ reference_label, ... ]`.
-	 * @return array List of audit rows.
+	 * @return array `[ 'rows' => audit rows, 'scanned' => subscriptions scanned ]`.
 	 */
 	private static function audit_active_subscriptions( array $live_products, array $access_product_ids = [] ): array {
 		$per_page       = 100;
 		$offset         = 0;
+		$scanned        = 0;
 		$rows           = [];
 		$previous_batch = [];
 		do {
@@ -1245,6 +1290,13 @@ class WooCommerce_Subscriptions {
 					'subscription_status'    => WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES,
 					'subscriptions_per_page' => $per_page,
 					'offset'                 => $offset,
+					// The default sort (start_date DESC) has no ID tiebreaker, so rows sharing
+					// a creation second — the norm on bulk-imported stores — have no guaranteed
+					// order across offset windows and a subscription can slip between pages
+					// unnoticed. ID is deterministic, and ASC pins new subscriptions to the
+					// unvisited end of the scan instead of shifting every later window.
+					'orderby'                => 'ID',
+					'order'                  => 'ASC',
 				]
 			);
 			// `wcs_get_subscriptions()` keys its return by subscription ID, so an identical
@@ -1263,14 +1315,18 @@ class WooCommerce_Subscriptions {
 			}
 			$previous_batch = $batch_ids;
 			$batch_size     = count( $batch );
+			$scanned       += $batch_size;
 			$rows           = array_merge( $rows, self::build_audit_rows( $batch, $live_products, $access_product_ids ) );
 			$offset        += $per_page;
 			// A long scan is otherwise indistinguishable from a hung one; there is no total
 			// to drive a real progress bar, since the query is paginated blind.
-			WP_CLI::log( sprintf( 'Scanned %d active subscription(s), %d flagged so far...', $offset - $per_page + $batch_size, count( $rows ) ) );
+			WP_CLI::log( sprintf( 'Scanned %d active subscription(s), %d flagged so far...', $scanned, count( $rows ) ) );
 			\WP_CLI\Utils\wp_clear_object_cache();
 		} while ( $batch_size === $per_page );
-		return $rows;
+		return [
+			'rows'    => $rows,
+			'scanned' => $scanned,
+		];
 	}
 
 	/**

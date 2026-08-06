@@ -49,10 +49,11 @@ class Newspack_Test_Audit_Subscription_Products extends WP_UnitTestCase {
 	 */
 	public function set_up() {
 		parent::set_up();
-		global $subscriptions_database, $products_database, $wcs_mock_ignore_offset;
+		global $subscriptions_database, $products_database, $wcs_mock_ignore_offset, $wcs_mock_query_log;
 		$subscriptions_database = [];
 		$products_database      = [];
 		$wcs_mock_ignore_offset = false;
+		$wcs_mock_query_log     = [];
 		WP_CLI::reset();
 		$this->user_id = self::factory()->user->create( [ 'role' => 'subscriber' ] );
 	}
@@ -61,10 +62,11 @@ class Newspack_Test_Audit_Subscription_Products extends WP_UnitTestCase {
 	 * Clean up the mock databases after each test.
 	 */
 	public function tear_down() {
-		global $subscriptions_database, $products_database, $wcs_mock_ignore_offset;
+		global $subscriptions_database, $products_database, $wcs_mock_ignore_offset, $wcs_mock_query_log;
 		$subscriptions_database = [];
 		$products_database      = [];
 		$wcs_mock_ignore_offset = false;
+		$wcs_mock_query_log     = [];
 		parent::tear_down();
 	}
 
@@ -489,9 +491,28 @@ class Newspack_Test_Audit_Subscription_Products extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A mapping onto a variable-subscription parent is rejected: variation-carrying line
+	 * items are refused, so the only shape such a repair could mint is a variable parent
+	 * with variation_id = 0 — a pairing normal purchase flow never records, and one the
+	 * variation-first consumers (tier-switch lookup, teams renewal match) don't expect.
+	 */
+	public function test_repair_rejects_variable_subscription_target() {
+		$variable_parent_id = 812;
+		$replacement_sub_id = 51;
+		$this->register_product( $variable_parent_id, 'Membership Variable', 'publish', 'variable-subscription' );
+		$subscription = $this->register_subscription( $replacement_sub_id, [ $this->line_item( 'Membership Variable', 0 ) ] );
+
+		$result = WooCommerce_Subscriptions::repair_subscription_product( $subscription, $variable_parent_id, false );
+
+		$this->assertFalse( $result['ok'], 'A variable-subscription target must be refused: attaching the parent without a variation creates a line-item shape purchases never produce.' );
+		$this->assertStringContainsString( 'variable subscription', $result['message'] );
+		$items = $subscription->get_items();
+		$this->assertSame( 0, $items[0]->get_product_id(), 'The line item must be left untouched.' );
+	}
+
+	/**
 	 * A mapping onto a product variation is rejected — WC_Order_Item_Product::set_product_id()
-	 * only accepts a `product` post type and would throw, aborting the batch. Gates key on
-	 * parents anyway.
+	 * would throw on the non-`product` post type and abort the batch.
 	 */
 	public function test_repair_rejects_variation_target() {
 		$variation_id = 811;
@@ -623,6 +644,32 @@ class Newspack_Test_Audit_Subscription_Products extends WP_UnitTestCase {
 	}
 
 	/**
+	 * `has_product()` compares a stored rule value against the line item's variation_id as
+	 * well as its product_id, so a legacy or hand-edited rule holding a VARIATION ID still
+	 * grants access at runtime. A subscription in that state is fragile, not at risk —
+	 * listing it as at-risk would overstate the population and invite a repair that moves
+	 * the line item off the very ID the rule matches on.
+	 */
+	public function test_variation_id_referenced_by_rule_is_not_at_risk() {
+		$trashed_parent_id = 900;
+		$variation_id      = 901;
+		$this->register_product( $trashed_parent_id, 'Membership Variable', 'trash' );
+		$this->register_product( $variation_id, 'Membership Variable - Annual', 'publish' );
+		$this->register_subscription( 78, [ $this->line_item( 'Membership Variable - Annual', $trashed_parent_id, $variation_id ) ] );
+
+		$rows = WooCommerce_Subscriptions::build_audit_rows(
+			[ 78 => $GLOBALS['subscriptions_database'][78] ],
+			[],
+			[ $variation_id => [ 'gate #42' ] ]
+		);
+
+		$this->assertCount( 1, $rows );
+		$this->assertSame( 'access_referenced', $rows[0]['status'], 'A rule holding the variation ID matches at runtime, so the row must not be counted as at risk.' );
+		$this->assertStringContainsString( sprintf( 'variation #%d', $variation_id ), $rows[0]['evidence'], 'The evidence should name the variation ID the rule matches on.' );
+		$this->assertStringContainsString( 'gate #42', $rows[0]['evidence'], 'The evidence should name the surface still holding the ID.' );
+	}
+
+	/**
 	 * Repairing a gate-referenced subscription would move it off the very ID the gate
 	 * matches on and revoke the access it has today, so --map refuses it.
 	 */
@@ -680,12 +727,15 @@ class Newspack_Test_Audit_Subscription_Products extends WP_UnitTestCase {
 		$live_variation_id      = 801;
 		$replacement_product_id = 500;
 		$this->register_product( $trashed_parent_id, 'Membership Variable', 'trash' );
-		$this->register_product( $replacement_product_id, 'Membership Variable', 'publish', 'variable-subscription' );
+		// A plain `subscription` target, so the refusal under test is the variation-carrying
+		// line item — not the (separate, earlier) variable-subscription target refusal.
+		$this->register_product( $replacement_product_id, 'Membership Variable', 'publish' );
 		$subscription = $this->register_subscription( 92, [ $this->line_item( 'Membership Variable - Annual', $trashed_parent_id, $live_variation_id ) ] );
 
 		$result = WooCommerce_Subscriptions::repair_subscription_product( $subscription, $replacement_product_id, false );
 
 		$this->assertFalse( $result['ok'], 'A line item carrying a variation ID must be refused.' );
+		$this->assertStringContainsString( 'variation ID', $result['message'], 'The refusal must be the variation-line-item guard, not the target check.' );
 		$items = $subscription->get_items();
 		$this->assertSame( $trashed_parent_id, $items[0]->get_product_id(), 'A refused repair must not touch the line item.' );
 		$this->assertSame( $live_variation_id, $items[0]->get_variation_id(), 'The variation ID must survive a refused repair.' );
@@ -726,8 +776,11 @@ class Newspack_Test_Audit_Subscription_Products extends WP_UnitTestCase {
 	/**
 	 * The CLI's live-product set must stay identical to the gate picker's. The allowlist
 	 * constants restate `Access_Rules::get_subscription_products_options()`'s implicit
-	 * defaults, so this pins the mirror: a `status` argument or a third type added there
-	 * (and not here) makes the sets diverge and this test fail.
+	 * defaults, so this pins Newspack-side drift: a `status` argument or a third type added
+	 * there (and not here) makes the sets diverge and this test fail. It cannot catch
+	 * WooCommerce-side drift — the `wc_get_products` mock hardcodes WC's current no-`status`
+	 * default (draft/pending/private/publish), so a change to `WC_Product_Query`'s defaults
+	 * would move the real picker while the mock (and this test) stand still.
 	 */
 	public function test_live_product_set_matches_the_gate_picker() {
 		$this->register_product( 10, 'Published Sub', 'publish' );
@@ -810,7 +863,7 @@ class Newspack_Test_Audit_Subscription_Products extends WP_UnitTestCase {
 
 		$audit_active_subscriptions = new ReflectionMethod( WooCommerce_Subscriptions::class, 'audit_active_subscriptions' );
 		$audit_active_subscriptions->setAccessible( true );
-		$rows = $audit_active_subscriptions->invoke(
+		$audit = $audit_active_subscriptions->invoke(
 			null,
 			[
 				[
@@ -819,9 +872,22 @@ class Newspack_Test_Audit_Subscription_Products extends WP_UnitTestCase {
 				],
 			]
 		);
+		$rows  = $audit['rows'];
 
 		$this->assertCount( 1, $rows, 'The at-risk subscription on the second page must be found — pagination must continue past a full first page.' );
 		$this->assertSame( 101, $rows[0]['subscription_id'] );
+		$this->assertSame( 101, $audit['scanned'], 'The scan count reported to the operator must cover every subscription visited.' );
+
+		// Pin the query contract, not just the outcome: the WCS default sort
+		// (start_date DESC) has no ID tiebreaker, so same-second rows — the norm on
+		// bulk-imported stores — can swap across offset windows and slip a subscription
+		// between pages. Every page of the scan must request the deterministic sort.
+		global $wcs_mock_query_log;
+		$this->assertNotEmpty( $wcs_mock_query_log );
+		foreach ( $wcs_mock_query_log as $query_args ) {
+			$this->assertSame( 'ID', $query_args['orderby'] ?? null, 'Every audit page must sort by ID — a timestamp sort has no guaranteed order across offset windows.' );
+			$this->assertSame( 'ASC', $query_args['order'] ?? null, 'Ascending ID keeps subscriptions created mid-scan at the unvisited end of the window.' );
+		}
 	}
 
 	/**
@@ -873,6 +939,39 @@ class Newspack_Test_Audit_Subscription_Products extends WP_UnitTestCase {
 
 		$this->assertArrayHasKey( $product_id, $referenced, 'A product referenced only by a block-level access rule must be collected.' );
 		$this->assertSame( [ 'block on post #' . $post_id ], $referenced[ $product_id ], 'The reference must name the post that carries the block.' );
+	}
+
+	/**
+	 * The sweep must not narrow to published posts: `Block_Visibility::filter_render_block()`
+	 * applies no status filter, so a custom-visibility block on a private or scheduled post
+	 * runs the same `Access_Rules` match whenever that post renders. Missing it would list
+	 * the subscription as at-risk AND disarm the --map refusal that protects it — a repair
+	 * would then strand the reader when the post goes live.
+	 */
+	public function test_block_scan_collects_rules_from_unpublished_posts() {
+		$product_id = 36427;
+		$content    = '<!-- wp:group {"newspackAccessControlMode":"custom","newspackAccessControlRules":{"custom_access":{"active":true,"access_rules":[[{"slug":"subscription","value":[' . $product_id . ']}]]}}} --><div class="wp-block-group"></div><!-- /wp:group -->';
+		$private_id = self::factory()->post->create(
+			[
+				'post_status'  => 'private',
+				'post_content' => $content,
+			]
+		);
+		$future_id  = self::factory()->post->create(
+			[
+				'post_status'  => 'future',
+				'post_date'    => gmdate( 'Y-m-d H:i:s', time() + DAY_IN_SECONDS ),
+				'post_content' => $content,
+			]
+		);
+
+		$get_block_referenced_product_ids = new ReflectionMethod( WooCommerce_Subscriptions::class, 'get_block_referenced_product_ids' );
+		$get_block_referenced_product_ids->setAccessible( true );
+		$referenced = $get_block_referenced_product_ids->invoke( null );
+
+		$this->assertArrayHasKey( $product_id, $referenced, 'Block rules on unpublished posts still enforce at render time and must be collected.' );
+		$this->assertContains( 'block on post #' . $private_id, $referenced[ $product_id ], 'The private post carrying the rule must be named.' );
+		$this->assertContains( 'block on post #' . $future_id, $referenced[ $product_id ], 'The scheduled post carrying the rule must be named.' );
 	}
 
 	/**

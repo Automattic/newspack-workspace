@@ -972,6 +972,10 @@ function wcs_get_subscriptions( $args = [] ) {
 	// declares it among its own defaults and strips it before building the query,
 	// so a mock that honored it would make a broken caller look correct.
 	global $subscriptions_database;
+	// Every call's args are recorded so tests can pin the query contract itself
+	// (e.g. that a paginating caller requests a deterministic sort).
+	global $wcs_mock_query_log;
+	$wcs_mock_query_log[] = $args;
 	$customer_id = $args['customer_id'] ?? null;
 	$statuses    = $args['subscription_status'] ?? 'any';
 	$per_page    = isset( $args['subscriptions_per_page'] ) ? (int) $args['subscriptions_per_page'] : 0;
