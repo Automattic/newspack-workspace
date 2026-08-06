@@ -7,7 +7,8 @@
 /**
  * WordPress dependencies
  */
-import { __ } from '@wordpress/i18n';
+import { __, _x } from '@wordpress/i18n';
+import { backup, lifesaver, plus, reusableBlock, settings } from '@wordpress/icons';
 
 export type PricingPath = 'new_subscriptions' | 'retention' | 'save' | 'winback' | 'custom';
 
@@ -67,14 +68,14 @@ export const RECIPES: Record< PricingPath, Recipe > = {
 	},
 };
 
-/** Path options for the editor's first SelectControl (ordered). */
-export function pathOptions(): { label: string; value: PricingPath }[] {
+/** Path options for the editor's goal picker (ordered), each with its card icon. */
+export function pathOptions(): { label: string; value: PricingPath; icon: JSX.Element }[] {
 	return [
-		{ label: __( 'New subscriptions', 'newspack-plugin' ), value: 'new_subscriptions' },
-		{ label: __( 'Subscription retention', 'newspack-plugin' ), value: 'retention' },
-		{ label: __( 'Save', 'newspack-plugin' ), value: 'save' },
-		{ label: __( 'Win-back', 'newspack-plugin' ), value: 'winback' },
-		{ label: __( 'Custom', 'newspack-plugin' ), value: 'custom' },
+		{ label: __( 'New Subscriptions', 'newspack-plugin' ), value: 'new_subscriptions', icon: plus },
+		{ label: __( 'Subscription Retention', 'newspack-plugin' ), value: 'retention', icon: reusableBlock },
+		{ label: _x( 'Save', 'pricing-rule goal', 'newspack-plugin' ), value: 'save', icon: lifesaver },
+		{ label: __( 'Win-Back', 'newspack-plugin' ), value: 'winback', icon: backup },
+		{ label: _x( 'Custom', 'pricing-rule goal', 'newspack-plugin' ), value: 'custom', icon: settings },
 	];
 }
 
@@ -100,7 +101,15 @@ export function applyRecipeConditions( path: PricingPath, conditions: Conditions
  * segmentation ('select'); Custom exposes everything.
  */
 export function isConditionVisible( path: PricingPath, fieldType: string ): boolean {
-	return RECIPES[ path ].isCustom ? true : 'select' === fieldType;
+	return RECIPES[ path ]?.isCustom ? true : 'select' === fieldType;
+}
+
+/**
+ * Whether a raw value names a real path. Own keys only: `in` would accept inherited
+ * members, letting `#/new/toString` past the route guard.
+ */
+export function isPricingPath( value: string ): value is PricingPath {
+	return Object.prototype.hasOwnProperty.call( RECIPES, value );
 }
 
 /** Human label for a stored intent value (falls back to the raw value). */
@@ -108,7 +117,19 @@ export function intentLabel( value: string ): string {
 	return pathOptions().find( o => o.value === value )?.label ?? value;
 }
 
-/** A plain-language explanation of a path's use and what it presets, shown under the goal picker. */
+/** A one-line summary of a path, shown on its card in the goal picker. */
+export function pathSummary( path: PricingPath ): string {
+	const map: Record< PricingPath, string > = {
+		new_subscriptions: __( 'An intro or stepped offer for first-time subscribers.', 'newspack-plugin' ),
+		retention: __( 'A renewal discount to keep existing subscribers.', 'newspack-plugin' ),
+		save: __( 'A last-chance offer at the cancellation moment.', 'newspack-plugin' ),
+		winback: __( 'Re-acquisition pricing to bring lapsed subscribers back.', 'newspack-plugin' ),
+		custom: __( 'Full manual control, with none of the options preset.', 'newspack-plugin' ),
+	};
+	return map[ path ];
+}
+
+/** A plain-language explanation of a path's use and what it presets, shown on the chosen goal in the editor. */
 export function pathDescription( path: PricingPath ): string {
 	const map: Record< PricingPath, string > = {
 		new_subscriptions: __(
@@ -132,5 +153,5 @@ export function pathDescription( path: PricingPath ): string {
 			'newspack-plugin'
 		),
 	};
-	return map[ path ];
+	return map[ path ] ?? '';
 }

@@ -156,6 +156,34 @@ class Group_Subscription {
 	}
 
 	/**
+	 * Get the publisher's raw container-label override.
+	 *
+	 * Callers that need to tell a custom noun from the default — rather than just
+	 * render one — read this instead of get_label().
+	 *
+	 * @param string $variant Either 'singular' or 'plural'. Unknown variants fall back to singular.
+	 *
+	 * @return string The trimmed override, or an empty string when the publisher has set none.
+	 */
+	public static function get_label_override( $variant = 'singular' ) {
+		$option_key = 'newspack_group_subscription_label_' . ( 'plural' === $variant ? 'plural' : 'singular' );
+		return trim( (string) \get_option( $option_key, '' ) );
+	}
+
+	/**
+	 * Get the translated default container label.
+	 *
+	 * @param string $variant Either 'singular' or 'plural'. Unknown variants fall back to singular.
+	 *
+	 * @return string The translated default.
+	 */
+	public static function get_default_label( $variant = 'singular' ) {
+		return 'plural' === $variant
+			? __( 'Groups', 'newspack-plugin' )
+			: __( 'Group', 'newspack-plugin' );
+	}
+
+	/**
 	 * Get the publisher-configurable container label.
 	 *
 	 * @param string $variant Either 'singular' or 'plural'. Unknown variants fall back to singular.
@@ -163,15 +191,8 @@ class Group_Subscription {
 	 * @return string The override if the publisher has set a non-blank one, otherwise the translated default.
 	 */
 	public static function get_label( $variant = 'singular' ) {
-		$variant    = 'plural' === $variant ? 'plural' : 'singular';
-		$option_key = 'newspack_group_subscription_label_' . $variant;
-		$override   = trim( (string) \get_option( $option_key, '' ) );
-		if ( '' !== $override ) {
-			return $override;
-		}
-		return 'plural' === $variant
-			? __( 'Groups', 'newspack-plugin' )
-			: __( 'Group', 'newspack-plugin' );
+		$override = self::get_label_override( $variant );
+		return '' !== $override ? $override : self::get_default_label( $variant );
 	}
 
 	/**

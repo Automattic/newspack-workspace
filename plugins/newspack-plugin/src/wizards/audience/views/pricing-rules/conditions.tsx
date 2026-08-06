@@ -60,7 +60,7 @@ function DatetimeCondition( {
 		return 'custom';
 	};
 	const [ mode, setMode ] = useState< DateMode >( derive );
-	const [ customTs, setCustomTs ] = useState< number | null >( derive() === 'custom' ? value : null );
+	const [ customTs, setCustomTs ] = useState< number | null >( value );
 
 	const resolvePublish = () => publishedAt ?? Math.floor( Date.now() / 1000 );
 
@@ -81,14 +81,35 @@ function DatetimeCondition( {
 		} else if ( 'publish' === m ) {
 			onChange( resolvePublish() );
 		} else {
-			onChange( customTs );
+			// Custom must always carry a date: a null gate is stored as no gate at all,
+			// which the engine reads as "everyone qualifies". On a fresh rule, or after a
+			// detour through Anytime, neither the remembered nor the stored value is set.
+			const inForce = customTs ?? value ?? resolvePublish();
+			setCustomTs( inForce );
+			onChange( inForce );
 		}
 	};
 
+	// A datetime-local reads as empty until every segment is filled, so mid-edit it
+	// reports null. Hold the last good date rather than storing the permissive gate.
 	const changeCustom = ( s: string ) => {
 		const ts = localInputToTs( s );
 		setCustomTs( ts );
-		onChange( ts );
+		if ( null !== ts ) {
+			onChange( ts );
+		}
+	};
+
+	// A cleared field is only final once focus leaves; put the stored date back so the
+	// control never shows a blank Custom over a date that is still saved. Blur covers
+	// alt-tabbing away too, which costs a keystroke to retype but is the only reading
+	// under which the field and the value it saves cannot drift apart.
+	const commitCustom = () => {
+		if ( null === customTs ) {
+			const restored = value ?? resolvePublish();
+			setCustomTs( restored );
+			onChange( restored );
+		}
 	};
 
 	return (
@@ -112,6 +133,7 @@ function DatetimeCondition( {
 					type="datetime-local"
 					value={ tsToLocalInput( customTs ) }
 					onChange={ changeCustom }
+					onBlur={ commitCustom }
 					__next40pxDefaultSize
 				/>
 			) }

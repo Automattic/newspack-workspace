@@ -1,4 +1,5 @@
 @use "~@wordpress/base-styles/colors" as wp-colors;
+@use "~@wordpress/base-styles/variables" as wp-vars;
 
 .newspack-breadcrumbs__list {
 	list-style: none;
@@ -23,6 +24,23 @@
 	> li:last-child {
 		flex-shrink: 1;
 		min-width: 0;
+	}
+}
+
+.newspack-breadcrumbs__count {
+	color: wp-colors.$gray-700;
+	font-weight: wp-vars.$font-weight-regular;
+
+	.screen-reader-text {
+		border: 0;
+		clip-path: inset(50%);
+		height: 1px;
+		margin: -1px;
+		overflow: hidden;
+		padding: 0;
+		position: absolute;
+		width: 1px;
+		word-wrap: normal;
 	}
 }
 

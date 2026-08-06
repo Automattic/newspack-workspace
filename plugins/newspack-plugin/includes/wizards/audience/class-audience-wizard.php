@@ -1095,8 +1095,9 @@ class Audience_Wizard extends Wizard {
 	}
 
 	/**
-	 * Get the publisher-configurable group subscription labels. Empty values fall back
-	 * to the defaults baked into Group_Subscription::get_label().
+	 * Get the publisher-configurable group subscription labels. The override and the
+	 * default travel separately so the client can tell a custom noun from the default;
+	 * both come from Group_Subscription, which owns the option keys and the defaults.
 	 *
 	 * @return WP_REST_Response|WP_Error
 	 */
@@ -1107,10 +1108,10 @@ class Audience_Wizard extends Wizard {
 		}
 		return rest_ensure_response(
 			[
-				'label_singular'         => (string) get_option( 'newspack_group_subscription_label_singular', '' ),
-				'label_plural'           => (string) get_option( 'newspack_group_subscription_label_plural', '' ),
-				'label_singular_default' => __( 'Group', 'newspack-plugin' ),
-				'label_plural_default'   => __( 'Groups', 'newspack-plugin' ),
+				'label_singular'         => Group_Subscription::get_label_override( 'singular' ),
+				'label_plural'           => Group_Subscription::get_label_override( 'plural' ),
+				'label_singular_default' => Group_Subscription::get_default_label( 'singular' ),
+				'label_plural_default'   => Group_Subscription::get_default_label( 'plural' ),
 			]
 		);
 	}

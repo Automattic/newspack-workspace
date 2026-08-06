@@ -59,6 +59,19 @@
 			}
 		}
 	}
+	&__is-vertical {
+		.newspack-card--core__header {
+			align-items: flex-start;
+			flex-direction: column;
+			height: 100%;
+			justify-content: flex-start;
+		}
+		.newspack-card--core__header-content {
+			display: flex;
+			flex-direction: column;
+			gap: wp-vars.$grid-unit-10;
+		}
+	}
 	&__no-margin .components-card__body {
 		padding: 0 !important;
 	}

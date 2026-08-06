@@ -39,4 +39,12 @@ describe( 'CoreCard', () => {
 		const { container } = render( <CoreCard header="Settings" isDraggable onHeaderClick={ () => {} } /> );
 		expect( getHeader( container ).tagName ).not.toBe( 'BUTTON' );
 	} );
+
+	it( 'marks the card vertical only when isVertical is passed', () => {
+		const { container: plain } = render( <CoreCard header="Settings" /> );
+		expect( plain.querySelector( '.newspack-card--core__is-vertical' ) ).toBeNull();
+
+		const { container: vertical } = render( <CoreCard header="Settings" isVertical /> );
+		expect( vertical.querySelector( '.newspack-card--core__is-vertical' ) ).not.toBeNull();
+	} );
 } );

@@ -87,7 +87,7 @@ const WizardHeaderRegion = ( { hideHeader, headerText, sections, sectionName, su
 
 /**
  * @typedef  {Object}     WizardProps
- * @property {string}     headerText                The header text.
+ * @property {string}     [headerText]              Fallback heading, used only when no section declares breadcrumbs.
  * @property {string}     [subHeaderText]           The sub-header text, optional.
  * @property {string}     [apiSlug]                 The API slug, optional.
  * @property {string}     [className]               CSS classes, optional.

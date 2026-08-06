@@ -10,7 +10,7 @@
 /**
  * WordPress dependencies
  */
-import { __ } from '@wordpress/i18n';
+import { __, _n, sprintf } from '@wordpress/i18n';
 import { useState, useEffect, useCallback, useMemo } from '@wordpress/element';
 import { useDispatch } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
@@ -22,6 +22,7 @@ import { Spinner, Notice, Button } from '@wordpress/components';
  * Internal dependencies
  */
 import { DataViews, Badge, Router } from '../../../../../packages/components/src';
+import { formatCount } from '../../../../../packages/components/src/breadcrumbs/format-count';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import { PolicyChips, EffectivePrice } from './policy-cells';
 
@@ -48,6 +49,36 @@ const inScope = ( item: SubscriptionProduct, scope: Scope ): boolean => {
 		return false;
 	}
 	return scope === 'donations' ? item.is_donation : ! item.is_donation;
+};
+
+// Breadcrumb leaf per scope. Kept in step with the tab labels in index.tsx.
+const SCOPE_LABELS: Record< Scope, string > = {
+	subscriptions: __( 'Subscriptions', 'newspack-plugin' ),
+	donations: __( 'Donations', 'newspack-plugin' ),
+	groups: __( 'Plan bundles', 'newspack-plugin' ),
+};
+
+// Each scope names what it counts, so the heading announces "12 donations total"
+// rather than the generic "12 items" every other counted surface avoids.
+const SCOPE_COUNT_LABELS: Record< Scope, ( total: number ) => string > = {
+	subscriptions: total =>
+		sprintf(
+			/* translators: %s: number of subscription plans matching the current view. */
+			_n( '%s subscription total', '%s subscriptions total', total, 'newspack-plugin' ),
+			formatCount( total )
+		),
+	donations: total =>
+		sprintf(
+			/* translators: %s: number of donation products matching the current view. */
+			_n( '%s donation total', '%s donations total', total, 'newspack-plugin' ),
+			formatCount( total )
+		),
+	groups: total =>
+		sprintf(
+			/* translators: %s: number of plan bundles matching the current view. */
+			_n( '%s plan bundle total', '%s plan bundles total', total, 'newspack-plugin' ),
+			formatCount( total )
+		),
 };
 
 const DEFAULT_VIEW: View = {
@@ -79,6 +110,7 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 	const [ currency, setCurrency ] = useState< SubscriptionProductsCurrency >( DEFAULT_CURRENCY );
 	const [ policyIsMock, setPolicyIsMock ] = useState( false );
 	const [ isLoading, setIsLoading ] = useState( true );
+	const [ hasError, setHasError ] = useState( false );
 	const [ view, setView ] = useState< View >( () => ( {
 		...DEFAULT_VIEW,
 		fields: DEFAULT_VIEW.fields.filter( field => scope === 'subscriptions' || ( field !== 'policies' && field !== 'effective_price' ) ),
@@ -99,7 +131,7 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 				},
 				{
 					type: 'primary',
-					label: __( 'Add plan', 'newspack-plugin' ),
+					label: __( 'Add Plan', 'newspack-plugin' ),
 					href: '#/new',
 				},
 			],
@@ -108,6 +140,7 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 
 	const fetchData = useCallback( () => {
 		setIsLoading( true );
+		setHasError( false );
 		apiFetch< SubscriptionProductsResponse >( { path: API_PATH } )
 			.then( response => {
 				setData( response.products || [] );
@@ -117,6 +150,7 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 				setPolicyIsMock( Boolean( response.policy_source_is_mock ) );
 			} )
 			.catch( () => {
+				setHasError( true );
 				addNotice( {
 					message: __( 'Failed to load subscription products. Please refresh the page.', 'newspack-plugin' ),
 					type: 'error',
@@ -335,6 +369,20 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 		() => filterSortAndPaginate( scopedData, view, visibleFields ),
 		[ scopedData, view, visibleFields ]
 	);
+
+	// No count while the fetch is in flight or after it failed: a "(0)" would read as an empty scope.
+	const totalItems = paginationInfo.totalItems;
+	useEffect( () => {
+		setHeaderData( {
+			sectionName: [
+				{
+					label: SCOPE_LABELS[ scope ],
+					count: isLoading || hasError ? undefined : totalItems,
+					countLabel: SCOPE_COUNT_LABELS[ scope ]( totalItems ),
+				},
+			],
+		} );
+	}, [ setHeaderData, scope, totalItems, isLoading, hasError ] );
 
 	if ( isLoading ) {
 		return (
