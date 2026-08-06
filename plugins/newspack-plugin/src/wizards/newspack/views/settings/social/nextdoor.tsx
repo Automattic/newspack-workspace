@@ -29,7 +29,8 @@ import { NextdoorData, NextdoorSettings, NextdoorStatus, NextdoorUpdatePayload, 
 import { Onboarding } from './nextdoor/onboarding';
 import { Settings } from './nextdoor/settings';
 
-const TITLE = __( 'Nextdoor Integration', 'newspack-plugin' );
+// Brand name, deliberately untranslated.
+const TITLE = 'Nextdoor';
 
 const isOAuthReturn = () => {
 	const params = new URLSearchParams( window.location.search );
@@ -261,7 +262,8 @@ function Nextdoor() {
 		}
 		setIsEnabling( false );
 		setIsOpen( false );
-		notify( __( 'Nextdoor Integration disabled.', 'newspack-plugin' ) );
+		/* translators: %s: integration name (e.g. "Nextdoor"). */
+		notify( sprintf( __( '%s disabled.', 'newspack-plugin' ), TITLE ) );
 	};
 
 	// Cancel: abandoning a fresh Enable rolls the module back off.
@@ -287,11 +289,11 @@ function Nextdoor() {
 		setIsOpen( false );
 	};
 
-	/* translators: %s: integration name (e.g. "Nextdoor Integration"). */
+	/* translators: %s: integration name (e.g. "Nextdoor"). */
 	const editLabel = sprintf( __( 'Edit %s', 'newspack-plugin' ), TITLE );
-	/* translators: %s: integration name (e.g. "Nextdoor Integration"). */
+	/* translators: %s: integration name (e.g. "Nextdoor"). */
 	const cancelLabel = sprintf( __( 'Cancel editing %s', 'newspack-plugin' ), TITLE );
-	/* translators: %s: integration name (e.g. "Nextdoor Integration"). */
+	/* translators: %s: integration name (e.g. "Nextdoor"). */
 	const enableLabel = sprintf( __( 'Enable %s', 'newspack-plugin' ), TITLE );
 
 	const actions = isEnabled ? (

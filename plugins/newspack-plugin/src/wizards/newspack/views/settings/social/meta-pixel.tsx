@@ -31,10 +31,7 @@ const validate = ( value: string ) => {
 const MetaPixel = () => (
 	<PixelCard
 		title={ __( 'Meta Pixel', 'newspack-plugin' ) }
-		description={ __(
-			'Add the Meta pixel (formerly known as Facebook pixel) to your site to measure the results of Facebook and Instagram ad campaigns.',
-			'newspack-plugin'
-		) }
+		description={ __( 'Add the Meta pixel to your site to measure the results of Facebook and Instagram ad campaigns.', 'newspack-plugin' ) }
 		namespace={ `${ PAGE_NAMESPACE }/social/pixels/meta` }
 		path="/newspack/v1/wizard/newspack-settings/social/meta_pixel"
 		validate={ validate }
