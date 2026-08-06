@@ -64,6 +64,7 @@ declare global {
 						label: string;
 						value: string;
 					}[];
+					default_country: string;
 					redirect_uri: string;
 				};
 			};

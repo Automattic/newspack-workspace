@@ -62,7 +62,7 @@ export const Onboarding = ( {
 	const [ clientId, setClientId ] = useState( settings.client_id || '' );
 	const [ clientSecret, setClientSecret ] = useState( settings.client_secret || '' );
 	const [ email, setEmail ] = useState( '' );
-	const [ country, setCountry ] = useState( 'US' );
+	const [ country, setCountry ] = useState( window.newspackSettings?.social?.nextdoor?.default_country || 'US' );
 	const [ publicationUrl, setPublicationUrl ] = useState( settings.publication_url || '' );
 	const [ isSaving, setIsSaving ] = useState( false );
 	const [ currentStep, setCurrentStep ] = useState( 1 );
@@ -272,6 +272,7 @@ export const Onboarding = ( {
 						value={ country }
 						onChange={ setCountry }
 						options={ countryOptions }
+						help={ __( 'Where your publication is based. Nextdoor creates your publisher account in this country.', 'newspack-plugin' ) }
 						__next40pxDefaultSize
 						__nextHasNoMarginBottom
 						// Escape dismisses the select's own menu. Capture phase because CardForm's

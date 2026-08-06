@@ -81,6 +81,7 @@ class Newspack_Settings extends Wizard {
 				'nextdoor' => [
 					'available_roles' => Nextdoor::get_available_roles(),
 					'country_options' => Nextdoor::get_available_countries(),
+					'default_country' => Nextdoor::get_default_country(),
 					'redirect_uri'    => Nextdoor::get_redirect_uri(),
 				],
 			],

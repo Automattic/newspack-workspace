@@ -351,6 +351,26 @@ class Nextdoor {
 		 */
 		return apply_filters( 'newspack_nextdoor_available_countries', $countries );
 	}
+
+	/**
+	 * Get the country to preselect when connecting an account, taken from the
+	 * store's base country when Nextdoor publishes there. Sites outside the
+	 * programme fall back to the first available country.
+	 *
+	 * @return string Country code in ISO 3166-1 alpha-2 format.
+	 */
+	public static function get_default_country() {
+		$available  = wp_list_pluck( self::get_available_countries(), 'value' );
+		$wc_country = get_option( 'woocommerce_default_country', false );
+		if ( $wc_country ) {
+			// Remove region code.
+			$wc_country = explode( ':', $wc_country )[0];
+		}
+		if ( $wc_country && in_array( $wc_country, $available, true ) ) {
+			return $wc_country;
+		}
+		return $available[0] ?? 'US';
+	}
 }
 
 Nextdoor::init();
