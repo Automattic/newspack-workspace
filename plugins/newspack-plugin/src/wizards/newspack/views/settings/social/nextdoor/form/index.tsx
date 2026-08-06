@@ -62,10 +62,20 @@ const isSameRoles = ( current: string[], stored: string[] ) => current.length ==
 // and keeping it preserves that association rather than replacing it.
 const describedBy = ( fieldId: string, errorId: string | null ) => [ `${ fieldId }__help`, errorId ].filter( Boolean ).join( ' ' );
 
+// Anything outside this set is stripped or percent-encoded by the server's
+// esc_url_raw() canonical-form check, which then rejects the value. URL() would
+// normalise the same characters and report it valid, so the button would enable
+// on a URL that comes back as an unattributed error.
+const UNSTORABLE_CHARACTER = /[^-a-z0-9~+_.?#=!&;,/:%@$|*'()\u0080-\uffff]/i;
+
 // Shape only: a scheme Nextdoor can fetch and a host that could resolve.
 const isPublicationUrlValid = ( value: string ) => {
+	const trimmed = value.trim();
+	if ( UNSTORABLE_CHARACTER.test( trimmed ) ) {
+		return false;
+	}
 	try {
-		const url = new URL( value.trim() );
+		const url = new URL( trimmed );
 		return ( 'http:' === url.protocol || 'https:' === url.protocol ) && url.hostname.includes( '.' );
 	} catch {
 		return false;
