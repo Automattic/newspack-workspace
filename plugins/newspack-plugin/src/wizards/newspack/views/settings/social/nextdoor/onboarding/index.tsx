@@ -22,31 +22,19 @@ import CopyButton from './copy-button';
  */
 import './style.scss';
 
-/**
- * Step configuration.
- */
-const STEPS = {
-	// When auth is managed by Newspack
-	centralized: {
-		ACCOUNT_AUTH: 1,
-		CLAIM_PAGE: 2,
-		SUCCESS: 3,
-	},
-	// When user provides their own credentials
-	manual: {
-		CREDENTIALS: 1,
-		ACCOUNT_AUTH: 2,
-		CLAIM_PAGE: 3,
-		SUCCESS: 4,
-	},
-} as const;
+// Stands in for a secret the server holds but never returns.
+const STORED_SECRET_MASK = '\u2022'.repeat( 12 );
 
 // The OAuth error is attacker-controllable through the redirect link, so it is
 // truncated before it can fill the notice with arbitrary prose.
 const OAUTH_ERROR_MAX_LENGTH = 200;
 
 /**
- * Onboarding component.
+ * Onboarding view.
+ *
+ * One screen rather than a wizard: signing in leaves the page and returns on a
+ * fresh load, so a step counter would only ever restate what the server already
+ * reports. Each section unlocks on the connection status instead.
  */
 export const Onboarding = ( {
 	settings,
@@ -59,57 +47,32 @@ export const Onboarding = ( {
 	renderSecondaryActions,
 }: OnboardingProps ) => {
 	const [ clientId, setClientId ] = useState( settings.client_id || '' );
-	const [ clientSecret, setClientSecret ] = useState( settings.client_secret || '' );
-	// The GET never returns the secret, so a dirty check has to remember what was
-	// last submitted from here — `settings` alone would report every visit as dirty.
-	const [ savedSecret, setSavedSecret ] = useState( settings.client_secret || '' );
+	// Always starts blank: the GET never returns the secret. Left empty on a
+	// later save, the server keeps the stored one.
+	const [ clientSecret, setClientSecret ] = useState( '' );
 	const [ email, setEmail ] = useState( '' );
 	const [ hasBlurredEmail, setHasBlurredEmail ] = useState( false );
 	const [ country, setCountry ] = useState( window.newspackSettings?.social?.nextdoor?.default_country || 'US' );
 	const [ publicationUrl, setPublicationUrl ] = useState( settings.publication_url || window.newspackSettings?.social?.nextdoor?.site_url || '' );
 	const [ isSaving, setIsSaving ] = useState( false );
-	const [ currentStep, setCurrentStep ] = useState( 1 );
 
-	// Get country options and redirect URI from localized data
 	const countryOptions = window.newspackSettings?.social?.nextdoor?.country_options || [];
 	const redirectUri = window.newspackSettings?.social?.nextdoor?.redirect_uri || '';
 
-	// Decide steps/UI based on auth.
-	const steps = status.has_centralized_credentials ? STEPS.centralized : STEPS.manual;
-	const isManualMode = 'CREDENTIALS' in steps;
+	// Newspack supplies the credentials on some sites, and there is nothing for
+	// the publisher to enter or change when it does.
+	const isManualMode = ! status.has_centralized_credentials;
+	const canConnectAccount = status.has_credentials;
+	const canClaimPage = status.has_tokens;
 
 	useEffect( () => {
-		// Check URL params for OAuth success
-		const urlParams = new URLSearchParams( window.location.search );
-		if ( urlParams.get( 'oauth_success' ) === '1' ) {
-			setCurrentStep( steps.CLAIM_PAGE );
-			setError( null );
-		}
-	}, [ steps.CLAIM_PAGE ] );
-
-	useEffect( () => {
-		// Check for OAuth error in URL params. `get()` has already decoded the
-		// value; decoding again throws on any lone `%` an attacker puts in the link.
-		const urlParams = new URLSearchParams( window.location.search );
-		const oauthError = urlParams.get( 'nextdoor_oauth_error' );
-
+		// `get()` has already decoded the value; decoding again throws on any lone
+		// `%` an attacker puts in the link.
+		const oauthError = new URLSearchParams( window.location.search ).get( 'nextdoor_oauth_error' );
 		if ( oauthError ) {
 			setError( oauthError.slice( 0, OAUTH_ERROR_MAX_LENGTH ) );
 		}
 	}, [] );
-
-	useEffect( () => {
-		// Determine current step based on connection status
-		if ( status.is_connected ) {
-			setCurrentStep( steps.SUCCESS );
-		} else if ( status.has_tokens ) {
-			setCurrentStep( steps.CLAIM_PAGE );
-		} else if ( status.has_credentials ) {
-			setCurrentStep( steps.ACCOUNT_AUTH );
-		} else {
-			setCurrentStep( 1 );
-		}
-	}, [ status, steps ] );
 
 	// Shape only, but stricter than is_email(), which accepts a one-letter TLD.
 	// The lookahead keeps an all-numeric TLD out while still allowing a
@@ -121,23 +84,20 @@ export const Onboarding = ( {
 	const emailError =
 		hasBlurredEmail && email.trim() && ! isEmailValid ? __( 'That does not look like a valid email address.', 'newspack-plugin' ) : null;
 
-	const hasCredentialChanges = clientId !== ( settings.client_id || '' ) || clientSecret !== savedSecret;
+	// A blank secret is a change only before there is one stored to fall back on.
+	const hasCredentialChanges = clientId !== ( settings.client_id || '' ) || !! clientSecret;
+	const canSaveCredentials = !! clientId && ( canConnectAccount || !! clientSecret ) && hasCredentialChanges;
 
 	const handleSaveCredentials = async () => {
-		if ( ! clientId || ! clientSecret ) {
-			setError( __( 'Please enter both Client ID and Client Secret.', 'newspack-plugin' ) );
+		if ( ! canSaveCredentials ) {
 			return;
 		}
-
 		try {
 			setIsSaving( true );
 			setError( null );
-			await updateSettings( {
-				client_id: clientId,
-				client_secret: clientSecret,
-			} );
-			setSavedSecret( clientSecret );
-			setCurrentStep( steps.ACCOUNT_AUTH );
+			// Omitting the secret is what tells the server to keep the stored one.
+			await updateSettings( clientSecret ? { client_id: clientId, client_secret: clientSecret } : { client_id: clientId } );
+			setClientSecret( '' );
 		} catch {
 			// Already surfaced by the card's error notice.
 		} finally {
@@ -166,7 +126,6 @@ export const Onboarding = ( {
 
 	const handleClaimPage = async () => {
 		if ( ! publicationUrl ) {
-			setError( __( 'Please enter your publication URL.', 'newspack-plugin' ) );
 			return;
 		}
 
@@ -187,15 +146,16 @@ export const Onboarding = ( {
 	};
 
 	return (
-		<VStack spacing={ 4 }>
+		<VStack spacing={ 6 }>
 			{ error && (
 				<WPNotice status="error" isDismissible={ false } spokenMessage={ null }>
 					{ error }
 				</WPNotice>
 			) }
 
-			{ isManualMode && currentStep === STEPS.manual.CREDENTIALS && (
+			{ isManualMode && (
 				<VStack spacing={ 4 }>
+					<h4 className="nextdoor-onboarding__subheading">{ __( 'API Credentials', 'newspack-plugin' ) }</h4>
 					<ReadonlyField
 						id="nextdoor-onboarding-redirect-uri"
 						label={ __( 'Redirect URI', 'newspack-plugin' ) }
@@ -236,8 +196,14 @@ export const Onboarding = ( {
 						value={ clientSecret }
 						onChange={ setClientSecret }
 						type="password"
-						placeholder={ __( 'Enter your Nextdoor Client Secret', 'newspack-plugin' ) }
-						help={ __( 'Issued with the Client ID. Stored securely, and never shown here again.', 'newspack-plugin' ) }
+						// Dots stand in for the stored secret. The field itself stays empty,
+						// which is what tells the server to keep what it already has.
+						placeholder={ canConnectAccount ? STORED_SECRET_MASK : __( 'Enter your Nextdoor Client Secret', 'newspack-plugin' ) }
+						help={
+							canConnectAccount
+								? __( 'Leave blank to keep the stored secret, or enter a new one to replace it.', 'newspack-plugin' )
+								: __( 'Issued with the Client ID. Stored securely, and never shown here again.', 'newspack-plugin' )
+						}
 						withMargin={ false }
 						__nextHasNoMarginBottom
 					/>
@@ -247,108 +213,113 @@ export const Onboarding = ( {
 							variant="primary"
 							__next40pxDefaultSize
 							onClick={ handleSaveCredentials }
-							disabled={ ! clientId || ! clientSecret || ! hasCredentialChanges || isSaving }
+							disabled={ ! canSaveCredentials || isSaving }
 							isBusy={ isSaving }
 						>
 							{ __( 'Save Credentials', 'newspack-plugin' ) }
 						</Button>
-						{ /* Only an escape once there is a saved pair to go back to. */ }
-						{ status.has_credentials && (
-							<Button variant="secondary" __next40pxDefaultSize onClick={ () => setCurrentStep( steps.ACCOUNT_AUTH ) }>
-								{ __( 'Cancel', 'newspack-plugin' ) }
-							</Button>
-						) }
-						{ renderSecondaryActions?.() }
 					</HStack>
 				</VStack>
 			) }
 
-			{ currentStep === steps.ACCOUNT_AUTH && (
-				<VStack spacing={ 4 }>
-					<VStack spacing={ 0 }>
-						<TextControl
-							label={ __( 'Email Address', 'newspack-plugin' ) }
-							value={ email }
-							onChange={ setEmail }
-							onBlur={ () => setHasBlurredEmail( true ) }
-							type="email"
-							placeholder={ __( 'Enter your Nextdoor account email', 'newspack-plugin' ) }
-							help={ __( 'This should be the email address associated with your Nextdoor account.', 'newspack-plugin' ) }
-							withMargin={ false }
-							__nextHasNoMarginBottom
-						/>
-						{ emailError && <p className="newspack-social-settings__field-error">{ emailError }</p> }
-					</VStack>
-					<SelectControl
-						label={ __( 'Country', 'newspack-plugin' ) }
-						value={ country }
-						onChange={ setCountry }
-						options={ countryOptions }
-						help={ __( 'Where your publication is based. Nextdoor creates your publisher account in this country.', 'newspack-plugin' ) }
-						__next40pxDefaultSize
-						__nextHasNoMarginBottom
-						// Escape dismisses the select's own menu. Capture phase because CardForm's
-						// close listener sits on the body and would otherwise run first.
-						onKeyDownCapture={ ( event: React.KeyboardEvent< HTMLSelectElement > ) => {
-							if ( 'Escape' === event.key ) {
-								event.preventDefault();
-							}
-						} }
-					/>
-
-					<HStack justify="flex-start" spacing={ 2 }>
-						<Button
-							variant="primary"
-							__next40pxDefaultSize
-							onClick={ handleStartOAuth }
-							disabled={ ! isEmailValid || isSaving }
-							isBusy={ isSaving }
-						>
-							{ __( 'Connect Account', 'newspack-plugin' ) }
-						</Button>
-						{ isManualMode && (
-							<Button variant="secondary" __next40pxDefaultSize onClick={ () => setCurrentStep( STEPS.manual.CREDENTIALS ) }>
-								{ __( 'Edit Credentials', 'newspack-plugin' ) }
-							</Button>
-						) }
-						{ renderSecondaryActions?.() }
-					</HStack>
-				</VStack>
-			) }
-
-			{ currentStep === steps.CLAIM_PAGE && (
-				<VStack spacing={ 4 }>
-					<p className="nextdoor-onboarding__intro">
-						{ __( 'Claim your news page on Nextdoor to start publishing articles.', 'newspack-plugin' ) }
+			<VStack spacing={ 4 }>
+				<h4 className="nextdoor-onboarding__subheading">{ __( 'Nextdoor Account', 'newspack-plugin' ) }</h4>
+				{ ! canConnectAccount && (
+					<p className="newspack-text-muted nextdoor-onboarding__intro">
+						{ __( 'Available once your API credentials are saved.', 'newspack-plugin' ) }
 					</p>
-
-					<TextControl
-						label={ __( 'Publication URL', 'newspack-plugin' ) }
-						value={ publicationUrl }
-						onChange={ setPublicationUrl }
-						type="url"
-						placeholder={ __( 'https://yoursite.com', 'newspack-plugin' ) }
-						help={ __( 'The main URL of your news publication.', 'newspack-plugin' ) }
-						withMargin={ false }
-						__nextHasNoMarginBottom
-					/>
-
-					<HStack justify="flex-start" spacing={ 2 }>
-						<Button
-							variant="primary"
+				) }
+				{ canClaimPage ? (
+					<p className="newspack-text-muted nextdoor-onboarding__intro">
+						{ __( 'Your Nextdoor account is connected.', 'newspack-plugin' ) }
+					</p>
+				) : (
+					<>
+						<VStack spacing={ 0 }>
+							<TextControl
+								label={ __( 'Email Address', 'newspack-plugin' ) }
+								value={ email }
+								onChange={ setEmail }
+								onBlur={ () => setHasBlurredEmail( true ) }
+								type="email"
+								placeholder={ __( 'Enter your Nextdoor account email', 'newspack-plugin' ) }
+								help={ __( 'This should be the email address associated with your Nextdoor account.', 'newspack-plugin' ) }
+								disabled={ ! canConnectAccount }
+								withMargin={ false }
+								__nextHasNoMarginBottom
+							/>
+							{ emailError && <p className="newspack-social-settings__field-error">{ emailError }</p> }
+						</VStack>
+						<SelectControl
+							label={ __( 'Country', 'newspack-plugin' ) }
+							value={ country }
+							onChange={ setCountry }
+							options={ countryOptions }
+							help={ __(
+								'Where your publication is based. Nextdoor creates your publisher account in this country.',
+								'newspack-plugin'
+							) }
+							disabled={ ! canConnectAccount }
 							__next40pxDefaultSize
-							onClick={ handleClaimPage }
-							disabled={ ! publicationUrl || isSaving }
-							isBusy={ isSaving }
-						>
-							{ __( 'Claim Page', 'newspack-plugin' ) }
-						</Button>
-						<Button variant="secondary" __next40pxDefaultSize onClick={ () => setCurrentStep( steps.ACCOUNT_AUTH ) }>
-							{ __( 'Change Account', 'newspack-plugin' ) }
-						</Button>
-						{ renderSecondaryActions?.() }
-					</HStack>
-				</VStack>
+							__nextHasNoMarginBottom
+							// Escape dismisses the select's own menu. Capture phase because CardForm's
+							// close listener sits on the body and would otherwise run first.
+							onKeyDownCapture={ ( event: React.KeyboardEvent< HTMLSelectElement > ) => {
+								if ( 'Escape' === event.key ) {
+									event.preventDefault();
+								}
+							} }
+						/>
+						<HStack justify="flex-start" spacing={ 2 }>
+							<Button
+								variant="primary"
+								__next40pxDefaultSize
+								onClick={ handleStartOAuth }
+								disabled={ ! canConnectAccount || ! isEmailValid || isSaving }
+								isBusy={ isSaving }
+							>
+								{ __( 'Connect Account', 'newspack-plugin' ) }
+							</Button>
+						</HStack>
+					</>
+				) }
+			</VStack>
+
+			<VStack spacing={ 4 }>
+				<h4 className="nextdoor-onboarding__subheading">{ __( 'Publication Page', 'newspack-plugin' ) }</h4>
+				{ ! canClaimPage && (
+					<p className="newspack-text-muted nextdoor-onboarding__intro">
+						{ __( 'Available once your Nextdoor account is connected.', 'newspack-plugin' ) }
+					</p>
+				) }
+				<TextControl
+					label={ __( 'Publication URL', 'newspack-plugin' ) }
+					value={ publicationUrl }
+					onChange={ setPublicationUrl }
+					type="url"
+					placeholder={ __( 'https://yoursite.com', 'newspack-plugin' ) }
+					help={ __( 'The main URL of your news publication.', 'newspack-plugin' ) }
+					disabled={ ! canClaimPage }
+					withMargin={ false }
+					__nextHasNoMarginBottom
+				/>
+				<HStack justify="flex-start" spacing={ 2 }>
+					<Button
+						variant="primary"
+						__next40pxDefaultSize
+						onClick={ handleClaimPage }
+						disabled={ ! canClaimPage || ! publicationUrl || isSaving }
+						isBusy={ isSaving }
+					>
+						{ __( 'Claim Page', 'newspack-plugin' ) }
+					</Button>
+				</HStack>
+			</VStack>
+
+			{ renderSecondaryActions && (
+				<HStack justify="flex-start" spacing={ 2 }>
+					{ renderSecondaryActions() }
+				</HStack>
 			) }
 		</VStack>
 	);

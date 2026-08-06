@@ -99,18 +99,18 @@ const nextdoorDemoAction = () => Promise.reject( new Error( 'Demo only.' ) );
 
 const NEXTDOOR_STEPS = [
 	{
-		title: __( 'Step 1: API credentials', 'newspack-plugin' ),
-		description: __( 'Shown when the publisher supplies their own Nextdoor app credentials.', 'newspack-plugin' ),
+		title: __( 'Nothing set up yet', 'newspack-plugin' ),
+		description: __( 'Credentials are the only section open. The two below are visible but disabled.', 'newspack-plugin' ),
 		status: NEXTDOOR_STATUS,
 	},
 	{
-		title: __( 'Step 2: Connect account', 'newspack-plugin' ),
-		description: __( 'Reached once credentials are stored. Sends the publisher to Nextdoor to authorise.', 'newspack-plugin' ),
+		title: __( 'Credentials saved', 'newspack-plugin' ),
+		description: __( 'The account section unlocks, and the secret shows as stored rather than blank.', 'newspack-plugin' ),
 		status: { ...NEXTDOOR_STATUS, has_credentials: true },
 	},
 	{
-		title: __( 'Step 3: Claim page', 'newspack-plugin' ),
-		description: __( 'Reached after the OAuth return, and the last step before the card reports Enabled.', 'newspack-plugin' ),
+		title: __( 'Account connected', 'newspack-plugin' ),
+		description: __( 'How the screen looks on return from Nextdoor, with only the page claim left.', 'newspack-plugin' ),
 		status: { ...NEXTDOOR_STATUS, has_credentials: true, has_tokens: true },
 	},
 ];
@@ -1311,7 +1311,7 @@ class ComponentsDemo extends Component {
 							<h2>{ __( 'Nextdoor onboarding', 'newspack-plugin' ) }</h2>
 							<p>
 								{ __(
-									'Every state of Newspack > Settings > Social > Nextdoor, each pinned open so the layout can be reviewed without a Nextdoor account. These render the real components, so they cannot drift from what a publisher sees. The primary buttons are inert here.',
+									'Every state of Newspack > Settings > Social > Nextdoor, pinned open so the layout can be reviewed without a Nextdoor account. Setup is one screen whose sections unlock in turn, so these are the same screen at four points. They render the real components, so they cannot drift from what a publisher sees. The primary buttons are inert here.',
 									'newspack-plugin'
 								) }
 							</p>
@@ -1331,7 +1331,7 @@ class ComponentsDemo extends Component {
 										</CardForm>
 									) ) }
 									<CardForm
-										title={ __( 'Step 4: Connected', 'newspack-plugin' ) }
+										title={ __( 'Fully connected', 'newspack-plugin' ) }
 										description={ __(
 											'Once the page is claimed the card swaps to the settings view, and the badge reads Enabled.',
 											'newspack-plugin'
