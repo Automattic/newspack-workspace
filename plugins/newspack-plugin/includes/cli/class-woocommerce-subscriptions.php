@@ -1050,7 +1050,7 @@ class WooCommerce_Subscriptions {
 			[
 				'post_type'      => Content_Gate::GATE_CPT,
 				'post_status'    => 'publish',
-				'posts_per_page' => -1,
+				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Content-gate CPT; config-scale.
 				'fields'         => 'ids',
 			]
 		);
