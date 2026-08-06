@@ -296,7 +296,7 @@ export const Onboarding = ( {
 						</Button>
 						{ isManualMode && (
 							<Button variant="secondary" __next40pxDefaultSize onClick={ () => setCurrentStep( STEPS.manual.CREDENTIALS ) }>
-								{ __( 'Back', 'newspack-plugin' ) }
+								{ __( 'Edit credentials', 'newspack-plugin' ) }
 							</Button>
 						) }
 						{ renderSecondaryActions?.() }
@@ -332,7 +332,7 @@ export const Onboarding = ( {
 							{ __( 'Claim Page', 'newspack-plugin' ) }
 						</Button>
 						<Button variant="secondary" __next40pxDefaultSize onClick={ () => setCurrentStep( steps.ACCOUNT_AUTH ) }>
-							{ __( 'Back', 'newspack-plugin' ) }
+							{ __( 'Change account', 'newspack-plugin' ) }
 						</Button>
 						{ renderSecondaryActions?.() }
 					</HStack>
