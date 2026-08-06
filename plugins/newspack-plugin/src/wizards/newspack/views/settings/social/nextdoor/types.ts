@@ -4,7 +4,6 @@
 
 export interface NextdoorSettings {
 	client_id: string;
-	client_secret: string;
 	publication_url: string;
 	allowed_roles: string[];
 }

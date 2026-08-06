@@ -31,10 +31,9 @@ import { NextdoorForm } from './nextdoor/form';
 // Brand name, deliberately untranslated.
 const TITLE = 'Nextdoor';
 
-const isOAuthReturn = () => {
-	const params = new URLSearchParams( window.location.search );
-	return params.get( 'oauth_success' ) === '1' || !! params.get( 'nextdoor_oauth_error' );
-};
+const hasOAuthError = () => !! new URLSearchParams( window.location.search ).get( 'nextdoor_oauth_error' );
+
+const isOAuthReturn = () => new URLSearchParams( window.location.search ).get( 'oauth_success' ) === '1' || hasOAuthError();
 
 // While the module is off the endpoint returns `connection_status` and
 // `settings` as an empty JSON array, which is truthy — so the presence of a
@@ -44,7 +43,6 @@ const hasConnectionStatus = ( data: NextdoorData ) => typeof data?.connection_st
 function Nextdoor() {
 	const [ settings, setSettings ] = useState< NextdoorSettings >( {
 		client_id: '',
-		client_secret: '',
 		publication_url: '',
 		allowed_roles: [],
 	} );
@@ -90,7 +88,6 @@ function Nextdoor() {
 			},
 			settings: {
 				client_id: '',
-				client_secret: '',
 				publication_url: '',
 				allowed_roles: [],
 			},
@@ -107,9 +104,7 @@ function Nextdoor() {
 		}
 		setStatus( apiData.connection_status );
 		setHasSyncedStatus( true );
-		// The secret is the one field left blank: the GET returns it in plaintext
-		// and the onboarding field is a password input the publisher retypes.
-		setSettings( current => ( { ...current, ...apiData.settings, client_secret: '' } ) );
+		setSettings( current => ( { ...current, ...apiData.settings } ) );
 	}, [ apiData ] );
 
 	// Routed through the toggle hook rather than a raw `apiFetch`, so a save also
@@ -181,9 +176,13 @@ function Nextdoor() {
 
 	// Only the OAuth redirect reopens the card: that user arrives on a fresh page
 	// load mid-setup, so the step they were on would otherwise be invisible. Any
-	// other unfinished setup stays collapsed behind its badge.
+	// other unfinished setup stays collapsed behind its badge. A failure reopens it
+	// even when connected, since the form is the only place its notice is rendered.
 	useEffect( () => {
-		if ( hasAutoOpened || isFetching || ! isEnabled || isConnected || ! isOAuthReturn() ) {
+		if ( hasAutoOpened || isFetching || ! isEnabled ) {
+			return;
+		}
+		if ( ! hasOAuthError() && ( isConnected || ! isOAuthReturn() ) ) {
 			return;
 		}
 		setHasAutoOpened( true );
@@ -209,7 +208,7 @@ function Nextdoor() {
 	} )();
 
 	// Only the flag: a full snapshot would write back read-only fields the endpoint
-	// ignores, and put the plaintext client secret on the wire for no reason.
+	// ignores.
 	const setModuleEnabled = ( value: boolean ) =>
 		apiFetchToggle( { module_enabled_nextdoor: value }, true ).catch( fetchError => {
 			bumpErrorNonce();
