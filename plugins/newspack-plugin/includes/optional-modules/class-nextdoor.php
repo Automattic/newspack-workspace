@@ -106,6 +106,24 @@ class Nextdoor {
 	}
 
 	/**
+	 * Remove the Nextdoor publishing capability from every role.
+	 *
+	 * Roles keep the capabilities they are granted, and nothing reconciles them once the
+	 * module is off, so deactivating it has to revoke the capability itself.
+	 *
+	 * @return void
+	 */
+	public static function remove_nextdoor_capability() {
+		foreach ( array_keys( wp_roles()->roles ) as $role_name ) {
+			$role = get_role( $role_name );
+
+			if ( $role && $role->has_cap( self::CAPABILITY_SLUG ) ) {
+				$role->remove_cap( self::CAPABILITY_SLUG );
+			}
+		}
+	}
+
+	/**
 	 * Get roles that have Nextdoor publishing capability.
 	 *
 	 * @return array
@@ -320,10 +338,22 @@ class Nextdoor {
 	/**
 	 * Get the OAuth redirect URI for Nextdoor.
 	 *
+	 * Called without a state this returns the URI the publisher registers with Nextdoor,
+	 * which is also the value shown in the settings screen and must stay stable. The state
+	 * is added per request: Nextdoor preserves the redirect URI's query string on the way
+	 * back, which is how the callback recognises the publisher's own return.
+	 *
+	 * @param string $state Optional. OAuth state to carry through the round trip.
 	 * @return string
 	 */
-	public static function get_redirect_uri() {
-		return admin_url( 'admin.php?page=newspack-settings&nextdoor_oauth_callback=1' );
+	public static function get_redirect_uri( $state = '' ) {
+		$redirect_uri = admin_url( 'admin.php?page=newspack-settings&nextdoor_oauth_callback=1' );
+
+		if ( '' === $state ) {
+			return $redirect_uri;
+		}
+
+		return add_query_arg( 'state', $state, $redirect_uri );
 	}
 
 	/**

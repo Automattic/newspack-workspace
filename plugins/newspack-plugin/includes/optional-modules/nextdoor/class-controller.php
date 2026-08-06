@@ -45,13 +45,14 @@ class Controller {
 						'type'              => 'string',
 						'sanitize_callback' => 'sanitize_email',
 						// sanitize_email only strips; without this a malformed address
-						// reaches Nextdoor, or arrives as an empty string.
+						// reaches Nextdoor, or arrives as an empty string. Validation runs
+						// on the raw value, so it has to trim what the sanitizer would.
 						'validate_callback' => function ( $value, $request, $param ) {
 							$valid = rest_validate_request_arg( $value, $request, $param );
 							if ( is_wp_error( $valid ) ) {
 								return $valid;
 							}
-							return (bool) is_email( $value );
+							return (bool) is_email( trim( (string) $value ) );
 						},
 					],
 					'country' => [
@@ -76,8 +77,25 @@ class Controller {
 					'publication_url' => [
 						'required'          => true,
 						'type'              => 'string',
-						'sanitize_callback' => 'esc_url_raw',
-						'validate_callback' => 'rest_validate_request_arg',
+						'format'            => 'uri',
+						// esc_url_raw() turns trailing whitespace into %20, so trim before it
+						// runs and validate the same value below.
+						'sanitize_callback' => function ( $value ) {
+							return esc_url_raw( trim( (string) $value ) );
+						},
+						// Core does not validate the `uri` format, and esc_url_raw() answers
+						// garbage with a mangled URL rather than an error, which would then be
+						// stored and sent upstream. Require a value that survives it unchanged.
+						'validate_callback' => function ( $value, $request, $param ) {
+							$valid = rest_validate_request_arg( $value, $request, $param );
+							if ( is_wp_error( $valid ) ) {
+								return $valid;
+							}
+							$url = trim( (string) $value );
+							return $url === esc_url_raw( $url )
+								&& in_array( strtolower( (string) wp_parse_url( $url, PHP_URL_SCHEME ) ), [ 'http', 'https' ], true )
+								&& ! empty( wp_parse_url( $url, PHP_URL_HOST ) );
+						},
 					],
 					'test'            => [
 						'required'          => false,
@@ -205,7 +223,11 @@ class Controller {
 		$email   = $request->get_param( 'email' );
 		$country = $request->get_param( 'country' );
 
-		$redirect_uri     = Nextdoor::get_redirect_uri();
+		// Ties the authorization request to this user, so the callback can tell the
+		// publisher's own return apart from someone else's code. It rides on the redirect
+		// URI because that is the query string Nextdoor is known to preserve.
+		$redirect_uri = Nextdoor::get_redirect_uri( Auth::create_oauth_state() );
+
 		$api              = API::instance();
 		$account_response = $api->create_account( $email, $country, $redirect_uri );
 
@@ -213,12 +235,17 @@ class Controller {
 			return $account_response;
 		}
 
-		$login_url = isset( $account_response['login_url'] ) ? $account_response['login_url'] : '';
+		// The client navigates to this, so refuse anything that is not a URL.
+		$login_url = is_array( $account_response ) && ! empty( $account_response['login_url'] ) && is_string( $account_response['login_url'] )
+			? esc_url_raw( $account_response['login_url'] )
+			: '';
 
-		if ( $login_url ) {
-			// Ties the authorization request to this user, so the callback can tell
-			// the publisher's own return apart from someone else's code.
-			$login_url = add_query_arg( 'state', Auth::create_oauth_state(), $login_url );
+		if ( empty( $login_url ) ) {
+			return new \WP_Error(
+				'nextdoor_oauth_start_failed',
+				__( 'Nextdoor did not return a sign-in link. Please try again.', 'newspack-plugin' ),
+				[ 'status' => 502 ]
+			);
 		}
 
 		return rest_ensure_response( [ 'login_url' => $login_url ] );
