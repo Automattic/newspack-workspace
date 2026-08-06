@@ -150,7 +150,7 @@ class Controller {
 			]
 		);
 
-		// Disconnect endpoint.
+		// Disconnect endpoint. Deliberately API-only: the admin UI no longer calls it.
 		register_rest_route(
 			NEWSPACK_API_NAMESPACE,
 			'/nextdoor/disconnect',
@@ -209,7 +209,7 @@ class Controller {
 	 * Callback for claiming a page via API.
 	 *
 	 * @param WP_REST_Request $request Request object.
-	 * @return WP_REST_Response
+	 * @return WP_REST_Response|WP_Error
 	 */
 	public static function api_claim_page( $request ) {
 		$publication_url = $request->get_param( 'publication_url' );
@@ -218,33 +218,47 @@ class Controller {
 		$api    = API::instance();
 		$result = $api->claim_page( $publication_url, $test );
 
-		if ( is_array( $result ) && isset( $result['page_id'] ) ) {
-			$settings                    = Nextdoor::get_settings();
-			$settings['page_id']         = $result['page_id'];
-			$settings['publication_url'] = $publication_url;
-
-			Nextdoor::update_settings( $settings );
-		}
-
 		if ( is_wp_error( $result ) ) {
 			return $result;
 		}
 
-		return rest_ensure_response( [ 'success' => true ] );
+		if ( ! is_array( $result ) || empty( $result['page_id'] ) ) {
+			return new \WP_Error(
+				'nextdoor_claim_page_failed',
+				__( 'Nextdoor did not return a page for this publication URL. Check the URL and try again.', 'newspack-plugin' ),
+				[ 'status' => 502 ]
+			);
+		}
+
+		$settings                    = Nextdoor::get_settings();
+		$settings['page_id']         = $result['page_id'];
+		$settings['publication_url'] = $publication_url;
+
+		Nextdoor::update_settings( $settings );
+
+		return rest_ensure_response(
+			[
+				'success' => true,
+				'page_id' => $result['page_id'],
+			]
+		);
 	}
 
 	/**
 	 * Disconnect Nextdoor account via API.
 	 *
-	 * @return WP_REST_Response
+	 * @return WP_REST_Response|WP_Error
 	 */
 	public static function api_disconnect() {
-		$result = Nextdoor::delete_settings();
+		Nextdoor::delete_settings();
 
-		if ( ! $result ) {
+		// delete_option() also reports failure when the option is already absent,
+		// so check the settings are gone rather than trusting its return value.
+		if ( false !== get_option( Nextdoor::SETTINGS_SLUG, false ) ) {
 			return new \WP_Error(
 				'disconnect_failed',
-				__( 'Failed to disconnect Nextdoor account.', 'newspack-plugin' )
+				__( 'Failed to disconnect Nextdoor account.', 'newspack-plugin' ),
+				[ 'status' => 500 ]
 			);
 		}
 
