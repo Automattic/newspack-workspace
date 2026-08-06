@@ -61,6 +61,12 @@ $drawer-size-x-large: 640px;
 		max-width: 100vw;
 	}
 
+	@media (max-width: $drawer-size-x-large) {
+		&.newspack-drawer--size-x-large {
+			border-radius: 0;
+		}
+	}
+
 	@media (max-width: wp-breakpoints.$break-small) {
 		&.newspack-drawer--size-small,
 		&.newspack-drawer--size-medium,
