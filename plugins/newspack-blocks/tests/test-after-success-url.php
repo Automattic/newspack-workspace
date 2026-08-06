@@ -114,7 +114,7 @@ class AfterSuccessUrlTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	public function test_announces_a_refused_destination() {
 		$seen = [];
 		add_action(
-			'newspack_blocks_after_success_url_rejected',
+			'newspack_blocks_modal_checkout_after_success_url_rejected',
 			function ( $url ) use ( &$seen ) {
 				$seen[] = $url;
 			}
@@ -123,13 +123,282 @@ class AfterSuccessUrlTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		\Newspack_Blocks\Modal_Checkout::sanitize_after_success_url( 'https://elsewhere.example.test/collect' );
 		\Newspack_Blocks\Modal_Checkout::sanitize_after_success_url( home_url( '/thanks/' ) );
 
-		remove_all_actions( 'newspack_blocks_after_success_url_rejected' );
+		remove_all_actions( 'newspack_blocks_modal_checkout_after_success_url_rejected' );
 
 		$this->assertSame(
 			[ 'https://elsewhere.example.test/collect' ],
 			$seen,
 			'The refused destination was not announced, or an accepted one was.'
 		);
+	}
+
+	/**
+	 * Create a published post to render a destination against.
+	 *
+	 * @return int Post ID.
+	 */
+	private function published_post() {
+		return self::factory()->post->create( [ 'post_status' => 'publish' ] );
+	}
+
+	/**
+	 * A destination this site vouched for is honoured wherever it points.
+	 *
+	 * This is what lets a publisher send readers to a host they own without anyone adding
+	 * that host to this site's allowlist in code.
+	 */
+	public function test_keeps_a_vouched_destination_off_site() {
+		$url   = 'https://elsewhere.example.test/thanks';
+		$token = \Newspack_Blocks\Modal_Checkout::get_after_success_token( $url, $this->published_post() );
+
+		$this->assertNotEmpty( $token, 'No token was minted for a published post.' );
+		$this->assertSame(
+			$url,
+			\Newspack_Blocks\Modal_Checkout::sanitize_after_success_url( '', $token ),
+			'A destination this site vouched for was refused.'
+		);
+	}
+
+	/**
+	 * The same destination without a token is still refused.
+	 *
+	 * A link can carry the destination; it cannot carry a token.
+	 */
+	public function test_drops_the_same_destination_without_a_token() {
+		$url = 'https://elsewhere.example.test/thanks';
+
+		$this->assertSame( '', \Newspack_Blocks\Modal_Checkout::sanitize_after_success_url( $url ) );
+		$this->assertSame( '', \Newspack_Blocks\Modal_Checkout::sanitize_after_success_url( $url, 'not.atoken' ) );
+	}
+
+	/**
+	 * Nothing is vouched for on a post that is not published.
+	 *
+	 * The block renderer is reachable over REST by anyone who can edit posts, and draft
+	 * preview reaches it too, so minting has to depend on something a contributor cannot do.
+	 *
+	 * @dataProvider unpublished_statuses
+	 *
+	 * @param string $status Post status.
+	 */
+	public function test_does_not_vouch_from_an_unpublished_post( $status ) {
+		$post_id = self::factory()->post->create( [ 'post_status' => $status ] );
+
+		$this->assertSame(
+			'',
+			\Newspack_Blocks\Modal_Checkout::get_after_success_token( 'https://elsewhere.example.test/thanks', $post_id ),
+			'A destination was vouched for from a post the reader cannot see.'
+		);
+	}
+
+	/**
+	 * Statuses a contributor can reach without publishing.
+	 *
+	 * @return array[]
+	 */
+	public function unpublished_statuses() {
+		return [
+			'a draft'          => [ 'draft' ],
+			'a pending review' => [ 'pending' ],
+			'a private post'   => [ 'private' ],
+		];
+	}
+
+	/**
+	 * Nothing is vouched for with no post at all, which is the REST render case.
+	 */
+	public function test_does_not_vouch_without_a_post() {
+		$this->assertSame( '', \Newspack_Blocks\Modal_Checkout::get_after_success_token( 'https://elsewhere.example.test/thanks', 0 ) );
+	}
+
+	/**
+	 * A token stops working once its post is no longer published.
+	 */
+	public function test_refuses_a_token_whose_post_was_unpublished() {
+		$post_id = $this->published_post();
+		$token   = \Newspack_Blocks\Modal_Checkout::get_after_success_token( 'https://elsewhere.example.test/thanks', $post_id );
+
+		wp_update_post(
+			[
+				'ID'          => $post_id,
+				'post_status' => 'draft',
+			]
+		);
+
+		$this->assertSame( '', \Newspack_Blocks\Modal_Checkout::sanitize_after_success_url( '', $token ) );
+	}
+
+	/**
+	 * A token is not this site's if any of it has been altered.
+	 */
+	public function test_refuses_a_tampered_token() {
+		$post_id = $this->published_post();
+		$token   = \Newspack_Blocks\Modal_Checkout::get_after_success_token( 'https://elsewhere.example.test/thanks', $post_id );
+
+		list( $payload, $signature ) = explode( '.', $token, 2 );
+
+		$other = \Newspack_Blocks\Modal_Checkout::get_after_success_token( 'https://attacker.example.test/collect', $post_id );
+		list( $other_payload ) = explode( '.', $other, 2 );
+
+		$this->assertSame( '', \Newspack_Blocks\Modal_Checkout::sanitize_after_success_url( '', $other_payload . '.' . $signature ), 'A payload was swapped under a valid signature.' );
+		$this->assertSame( '', \Newspack_Blocks\Modal_Checkout::sanitize_after_success_url( '', $payload . '.' . strrev( $signature ) ), 'A tampered signature was accepted.' );
+		$this->assertSame( '', \Newspack_Blocks\Modal_Checkout::sanitize_after_success_url( '', $payload ), 'A payload with no signature was accepted.' );
+	}
+
+	/**
+	 * The destination survives the sanitising it actually meets in transit.
+	 *
+	 * This is the failure this design exists to prevent, so the test reproduces the real
+	 * transforms rather than a stand-in. Modelling transit as `sanitize_url()` — the one
+	 * transform the normaliser itself applies — cannot fail, and would report the broken
+	 * shapes below as working.
+	 *
+	 * @dataProvider awkward_destinations
+	 *
+	 * @param string $url A destination that transit is known to alter.
+	 */
+	public function test_destination_survives_real_transit( $url ) {
+		$token = \Newspack_Blocks\Modal_Checkout::get_after_success_token( $url, $this->published_post() );
+		$this->assertNotEmpty( $token );
+
+		$transits = [
+			'FILTER_SANITIZE_URL (checkout entry)'  => filter_var( $token, FILTER_SANITIZE_URL ),
+			'sanitize_text_field (params reader)'   => sanitize_text_field( $token ),
+			'FULL_SPECIAL_CHARS (donations path)'   => filter_var( $token, FILTER_SANITIZE_FULL_SPECIAL_CHARS ),
+			'esc_attr round trip (hidden input)'    => html_entity_decode( esc_attr( $token ) ),
+		];
+
+		foreach ( $transits as $label => $in_transit ) {
+			$this->assertSame(
+				\Newspack_Blocks\Modal_Checkout::normalize_after_success_url( $url ),
+				\Newspack_Blocks\Modal_Checkout::sanitize_after_success_url( '', $in_transit ),
+				'The destination did not survive: ' . $label
+			);
+		}
+	}
+
+	/**
+	 * Destination shapes that transit is known to alter.
+	 *
+	 * Each of these breaks at least one of the transforms above when the destination itself
+	 * is what travels.
+	 *
+	 * @return array[]
+	 */
+	public function awkward_destinations() {
+		return [
+			'two query params'    => [ 'https://elsewhere.example.test/thanks?utm_campaign=spring&utm_source=email' ],
+			'an apostrophe'       => [ "https://elsewhere.example.test/thanks?utm_campaign=don't" ],
+			'an encoded space'    => [ 'https://elsewhere.example.test/thank%20you/' ],
+			'a non-ASCII path'    => [ 'https://elsewhere.example.test/gracias-señor/' ],
+			'a fragment'          => [ 'https://elsewhere.example.test/thanks#supporters' ],
+			'a port'              => [ 'https://elsewhere.example.test:8443/thanks' ],
+			// The token alphabet is inert to all four transforms, so the shapes above exercise
+			// one property rather than six. These two do vary the outcome: normalising a
+			// protocol-relative destination has to keep the `//`, or the value read back is a
+			// relative path rather than the destination that was vouched for.
+			'protocol relative'   => [ '//ELSEWHERE.example.test/thanks' ],
+			'protocol relative with a port' => [ '//ELSEWHERE.example.test:8443/thanks' ],
+		];
+	}
+
+	/**
+	 * Host normalisation touches the authority and nothing else.
+	 */
+	public function test_normalisation_lowercases_only_the_host() {
+		// A literal `://` in the query, not `%3A//`: the encoded form never matched the
+		// replacement this guards against, so it passed either way.
+		$this->assertSame(
+			'https://example.test/go?next=https://Example.test/x',
+			\Newspack_Blocks\Modal_Checkout::normalize_after_success_url( 'https://Example.test/go?next=https://Example.test/x' ),
+			'Host lowercasing reached into the query string.'
+		);
+
+		$this->assertStringContainsString(
+			'@example.test',
+			\Newspack_Blocks\Modal_Checkout::normalize_after_success_url( 'https://User@Example.test/' ),
+			'A host behind userinfo was left capitalised.'
+		);
+	}
+
+	/**
+	 * Normalising twice gives the same string as normalising once.
+	 *
+	 * The token signs a normalised destination at mint and normalises again at read, so a
+	 * normaliser that changes its own output cannot verify.
+	 *
+	 * @dataProvider awkward_destinations
+	 *
+	 * @param string $url The destination to normalise.
+	 */
+	public function test_normalisation_is_idempotent( $url ) {
+		$once = \Newspack_Blocks\Modal_Checkout::normalize_after_success_url( $url );
+
+		$this->assertSame(
+			$once,
+			\Newspack_Blocks\Modal_Checkout::normalize_after_success_url( $once ),
+			'Normalising twice changed the destination.'
+		);
+	}
+
+	/**
+	 * A destination this site will not redirect to is announced, however it is shaped.
+	 */
+	public function test_announces_a_refused_protocol_relative_destination() {
+		$seen = [];
+		add_action(
+			'newspack_blocks_modal_checkout_after_success_url_rejected',
+			function ( $url ) use ( &$seen ) {
+				$seen[] = $url;
+			}
+		);
+
+		$result = \Newspack_Blocks\Modal_Checkout::sanitize_after_success_url( '//ELSEWHERE.example.test/thanks' );
+
+		remove_all_actions( 'newspack_blocks_modal_checkout_after_success_url_rejected' );
+
+		$this->assertSame( '', $result, 'An off-site destination was kept.' );
+		$this->assertNotEmpty( $seen, 'A refused destination slipped past the hook that reports refusals.' );
+	}
+
+	/**
+	 * A vouched destination is not announced as refused.
+	 */
+	public function test_does_not_announce_a_vouched_destination() {
+		$seen = [];
+		add_action(
+			'newspack_blocks_modal_checkout_after_success_url_rejected',
+			function ( $url ) use ( &$seen ) {
+				$seen[] = $url;
+			}
+		);
+
+		$token = \Newspack_Blocks\Modal_Checkout::get_after_success_token( 'https://elsewhere.example.test/thanks', $this->published_post() );
+		\Newspack_Blocks\Modal_Checkout::sanitize_after_success_url( '', $token );
+
+		remove_all_actions( 'newspack_blocks_modal_checkout_after_success_url_rejected' );
+
+		$this->assertSame( [], $seen, 'A destination this site vouched for was reported as refused.' );
+	}
+
+	/**
+	 * The checkout carries the token through with the destination it vouches for.
+	 */
+	public function test_checkout_carries_a_vouched_destination() {
+		$url   = 'https://elsewhere.example.test/thanks';
+		$token = \Newspack_Blocks\Modal_Checkout::get_after_success_token( $url, $this->published_post() );
+
+		$_REQUEST['after_success_behavior'] = 'custom';
+		$_REQUEST['after_success_url']      = $url;
+		$_REQUEST['after_success_token']    = $token;
+
+		$params = $this->get_after_success_params();
+
+		unset( $_REQUEST['after_success_behavior'], $_REQUEST['after_success_url'], $_REQUEST['after_success_token'] );
+
+		$this->assertSame( $url, $params['after_success_url'] ?? '', 'A vouched destination did not reach the page.' );
+		$this->assertSame( 'custom', $params['after_success_behavior'] ?? '' );
+		$this->assertNotEmpty( $params['after_success_token'] ?? '', 'The token was not carried onward.' );
 	}
 
 	/**
