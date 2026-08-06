@@ -9,6 +9,7 @@ import {
 	getOverride,
 	handleSeen,
 	shouldPromptBeDisplayed,
+	syncMatchedSegments,
 } from './utils';
 
 /**
@@ -29,6 +30,10 @@ export const handleSegmentation = prompts => {
 			ras.segments.register( segments );
 			ras.segments.setMatch( matchingSegment );
 		}
+
+		// Persist the full matching set server-side for logged-in readers, so
+		// server-side consumers (dynamic pricing, available-deals) can read it.
+		syncMatchedSegments( ras, segments );
 
 		let overlayDisplayed;
 

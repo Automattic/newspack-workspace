@@ -508,4 +508,19 @@ class SchemasTest extends WP_UnitTestCase {
 		$schema = new Newspack\Campaigns\Schemas\Segments( $value );
 		$this->assertSame( $expected_result, $schema->is_valid() );
 	}
+
+	/**
+	 * A decimal min/max range value validates against the segment criteria schema.
+	 */
+	public function test_segment_criteria_allows_decimal_range() {
+		$schema = \Newspack_Segments_Model::get_meta_schema()['criteria']['items']['properties']['value'];
+		$valid  = rest_validate_value_from_schema(
+			[
+				'min' => 10.5,
+				'max' => 99.99,
+			],
+			$schema
+		);
+		$this->assertNotWPError( $valid );
+	}
 }
