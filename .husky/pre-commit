@@ -1,6 +1,27 @@
-# `|| exit $?` blocks the commit on lint failure independent of `set -e` (husky
-# runs this as `sh -e`, but don't depend on that — keep the gate self-contained).
-pnpm exec lint-staged --config .lintstagedrc.json || exit $?
+# The lint's contract is "check what the author staged". A merge breaks that
+# assumption: completing one stages the entire base integration — every file the
+# merge brings in, hundreds on a typical `main` merge — so lint-staged would
+# judge the merge commit against the base branch's pre-existing lint debt and
+# block it over files nobody touched. Skip the lint while a merge is in
+# progress; CI lints the pushed head regardless.
+#
+# Two states, because they stage the same thing by different routes: a regular
+# merge left mid-resolution (MERGE_HEAD), and `git merge --squash`, which never
+# sets MERGE_HEAD and is identifiable only by SQUASH_MSG. Both files are removed
+# by git on commit and on `git reset --hard`, so neither can go stale and leave
+# the lint silently disabled.
+#
+# Nothing else is exempt. A rebase, cherry-pick or revert replays one commit's
+# worth of changes that the committer is deliberately introducing here, so the
+# contract still holds and the lint stays on.
+if git rev-parse -q --verify MERGE_HEAD >/dev/null ||
+	[ -f "$(git rev-parse --git-dir)/SQUASH_MSG" ]; then
+	echo "husky: merge in progress, skipping lint-staged (CI lints the pushed head)."
+else
+	# `|| exit $?` blocks the commit on lint failure independent of `set -e` (husky
+	# runs this as `sh -e`, but don't depend on that — keep the gate self-contained).
+	pnpm exec lint-staged --config .lintstagedrc.json || exit $?
+fi
 
 # Optional personal pre-commit hook. Drop your own commands in
 # `.husky/pre-commit.local` (gitignored, per-checkout — `.husky/pre-commit` is

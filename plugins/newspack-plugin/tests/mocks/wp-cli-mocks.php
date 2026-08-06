@@ -49,31 +49,77 @@ namespace {
 			public static $messages = [];
 
 			/**
+			 * Level-keyed surfaces mirroring the sibling `wp-cli-mock.php` stub, so
+			 * suites written against either mock run under this one — only one WP_CLI
+			 * class can exist per process, so this file is the superset both requires
+			 * resolve to.
+			 *
+			 * @var string[]
+			 */
+			public static $logs      = [];
+			public static $successes = [];
+			public static $warnings  = [];
+
+			/**
+			 * Structured rows recorded by the format_items() stub, one entry per
+			 * call: [ 'format' => ..., 'items' => ..., 'fields' => ... ].
+			 *
+			 * @var array[]
+			 */
+			public static $tables = [];
+
+			/**
+			 * Exit code recorded by halt(), null when halt() was never called.
+			 *
+			 * @var int|null
+			 */
+			public static $halt_code = null;
+
+			/**
 			 * Clear recorded output. Call from a test's set_up().
 			 */
 			public static function reset() {
-				self::$output   = [];
-				self::$messages = [];
+				self::$output    = [];
+				self::$messages  = [];
+				self::$logs      = [];
+				self::$successes = [];
+				self::$warnings  = [];
+				self::$tables    = [];
+				self::$halt_code = null;
+			}
+
+			/**
+			 * Real WP_CLI::halt() exits the process; the mock records the code so
+			 * callers must return immediately after calling it.
+			 *
+			 * @param int $code Exit code.
+			 */
+			public static function halt( $code = 0 ) {
+				self::$halt_code = $code;
 			}
 
 			public static function line( $message = '' ) {
 				self::$output[]   = (string) $message;
 				self::$messages[] = [ 'line', (string) $message ];
+				self::$logs[]     = (string) $message;
 			}
 
 			public static function log( $message ) {
 				self::$output[]   = (string) $message;
 				self::$messages[] = [ 'log', (string) $message ];
+				self::$logs[]     = (string) $message;
 			}
 
 			public static function warning( $message ) {
 				self::$output[]   = 'Warning: ' . $message;
 				self::$messages[] = [ 'warning', (string) $message ];
+				self::$warnings[] = (string) $message;
 			}
 
 			public static function success( $message ) {
-				self::$output[]   = 'Success: ' . $message;
-				self::$messages[] = [ 'success', (string) $message ];
+				self::$output[]    = 'Success: ' . $message;
+				self::$messages[]  = [ 'success', (string) $message ];
+				self::$successes[] = (string) $message;
 			}
 
 			/**
@@ -103,6 +149,11 @@ namespace WP_CLI\Utils {
 			$items               = is_array( $items ) ? $items : iterator_to_array( $items );
 			\WP_CLI::$output[]   = sprintf( '(%s: %d row(s))', $format, count( $items ) );
 			\WP_CLI::$messages[] = [ 'table', wp_json_encode( array_values( $items ) ) ];
+			\WP_CLI::$tables[]   = [
+				'format' => $format,
+				'items'  => $items,
+				'fields' => $fields,
+			];
 		}
 	}
 

@@ -6,7 +6,7 @@
  * Author URI:      https://labs.inn.org
  * Text Domain:     republication-tracker-tool
  * Domain Path:     /languages
- * Version:         2.8.2
+ * Version:         2.8.4
  *
  * @package         Republication_Tracker_Tool
  */
@@ -32,7 +32,7 @@ require plugin_dir_path( __FILE__ ) . 'includes/class-article-settings.php';
 require plugin_dir_path( __FILE__ ) . 'includes/class-widget.php';
 require plugin_dir_path( __FILE__ ) . 'includes/compatibility-co-authors-plus.php';
 require plugin_dir_path( __FILE__ ) . 'includes/class-republication-rewrite.php';
-require plugin_dir_path( __FILE__ ) . 'src/blocks/republish-button/class-republish-button-block.php';
+require plugin_dir_path( __FILE__ ) . 'includes/class-republish-button-block.php';
 require plugin_dir_path( __FILE__ ) . 'includes/class-republish-pattern.php';
 
 /**

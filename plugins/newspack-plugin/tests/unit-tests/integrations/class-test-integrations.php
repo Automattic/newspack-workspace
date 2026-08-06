@@ -389,6 +389,87 @@ class Test_Integrations extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A per-field matching_function choice is persisted into the stored raw_data,
+	 * and a plain key list still stores fields without overriding the operator.
+	 *
+	 * @group integrations
+	 */
+	public function test_update_enabled_incoming_fields_persists_operator() {
+		$integration = new Sample_Integration( 'test-id', 'Test Integration' );
+
+		// Associative map: key => chosen matching_function.
+		$integration->update_enabled_incoming_fields( [ 'amount' => 'range' ] );
+		$stored = \get_option( 'newspack_integration_incoming_fields_test-id' );
+		$this->assertArrayHasKey( 'amount', $stored );
+		$this->assertSame( 'range', $stored['amount']['matching_function'] );
+
+		// Rejects an operator not on the allowlist (never stores the bogus value).
+		$integration->update_enabled_incoming_fields( [ 'amount' => 'bogus' ] );
+		$stored = \get_option( 'newspack_integration_incoming_fields_test-id' );
+		$this->assertArrayNotHasKey( 'matching_function', $stored['amount'] );
+
+		// Backward compatibility: a sequential key list still works.
+		$integration->update_enabled_incoming_fields( [ 'first_name', 'last_name' ] );
+		$result_keys = array_map( fn( $f ) => $f->get_key(), $integration->get_enabled_incoming_fields() );
+		$this->assertSame( [ 'first_name', 'last_name' ], $result_keys );
+	}
+
+	/**
+	 * A stored per-field operator survives an integration whose
+	 * configure_incoming_field() doesn't set matching_function (the non-ESP case),
+	 * so the registered segment criterion gets the publisher's chosen operator.
+	 *
+	 * @group integrations
+	 */
+	public function test_get_enabled_incoming_fields_applies_stored_operator() {
+		$integration = new Sample_Integration( 'test-id', 'Test Integration' );
+		$integration->update_enabled_incoming_fields( [ 'amount' => 'range' ] );
+
+		$by_key = [];
+		foreach ( $integration->get_enabled_incoming_fields() as $field ) {
+			$by_key[ $field->get_key() ] = $field;
+		}
+		$this->assertArrayHasKey( 'amount', $by_key );
+		$this->assertSame( 'range', $by_key['amount']->get_matching_function() );
+	}
+
+	/**
+	 * Non-array input to update_enabled_incoming_fields() no-ops instead of fataling.
+	 *
+	 * @group integrations
+	 */
+	public function test_update_enabled_incoming_fields_tolerates_non_array() {
+		$integration = new Sample_Integration( 'test-id', 'Test Integration' );
+		$integration->update_enabled_incoming_fields( 'not-an-array' );
+		$this->assertSame( [], $integration->get_enabled_incoming_fields() );
+	}
+
+	/**
+	 * The incoming-fields settings value is a map of key => matching_function.
+	 *
+	 * @group integrations
+	 */
+	public function test_get_settings_value_returns_operator_map() {
+		$integration = new Sample_Integration( 'test-id', 'Test Integration' );
+		$integration->update_enabled_incoming_fields(
+			[
+				'amount'     => 'range',
+				'first_name' => 'default',
+			]
+		);
+
+		$value = $integration->get_settings_field_value( 'incoming_metadata_fields' );
+		$this->assertIsArray( $value );
+		$this->assertEquals(
+			[
+				'amount'     => 'range',
+				'first_name' => 'default',
+			],
+			$value
+		);
+	}
+
+	/**
 	 * Test enqueue is skipped when no user is logged in.
 	 */
 	public function test_enqueue_skipped_when_not_logged_in() {
@@ -1583,6 +1664,64 @@ class Test_Integrations extends \WP_UnitTestCase {
 				[ 'nope' ]
 			)
 		);
+	}
+
+	/**
+	 * Incoming metadata payloads keep per-field operators; outgoing stays a key list.
+	 *
+	 * @group integrations
+	 */
+	public function test_sanitize_incoming_metadata_preserves_operators() {
+		$integration = new Sample_Integration( 'test-id', 'Test Integration' );
+		$method      = new \ReflectionMethod( $integration, 'sanitize_settings_field_value' );
+		$method->setAccessible( true );
+
+		$incoming_field = [
+			'key'     => 'incoming_metadata_fields',
+			'type'    => 'metadata',
+			'default' => [],
+		];
+		$out = $method->invoke(
+			$integration,
+			$incoming_field,
+			[
+				'amount' => 'range',
+				'evil'   => '<b>x</b>',
+			]
+		);
+		$this->assertSame( 'range', $out['amount'] );
+		// An unknown operator maps to null (no override) rather than 'default', which is
+		// itself a valid operator: coercing would silently downgrade a typed field's
+		// provider default (e.g. list__in) to exact match. The field stays enabled.
+		$this->assertArrayHasKey( 'evil', $out );
+		$this->assertNull( $out['evil'] );
+
+		$outgoing_field = [
+			'key'     => 'outgoing_metadata_fields',
+			'type'    => 'metadata',
+			'default' => [],
+		];
+		$this->assertSame( [ 'a', 'b' ], $method->invoke( $integration, $outgoing_field, [ 'a', 'b' ] ) );
+	}
+
+	/**
+	 * A legacy plain-list incoming payload is sanitized back into a list (not a
+	 * key=>'default' map), so provider-default operators are preserved on save.
+	 *
+	 * @group integrations
+	 */
+	public function test_sanitize_incoming_metadata_keeps_legacy_list() {
+		$integration = new Sample_Integration( 'test-id', 'Test Integration' );
+		$method      = new \ReflectionMethod( $integration, 'sanitize_settings_field_value' );
+		$method->setAccessible( true );
+
+		$field = [
+			'key'     => 'incoming_metadata_fields',
+			'type'    => 'metadata',
+			'default' => [],
+		];
+		$out = $method->invoke( $integration, $field, [ 'FIELD_A', 'FIELD_B' ] );
+		$this->assertSame( [ 'FIELD_A', 'FIELD_B' ], $out );
 	}
 
 	/**

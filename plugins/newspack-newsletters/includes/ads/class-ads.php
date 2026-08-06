@@ -592,7 +592,7 @@ final class Ads {
 		$all_ads = get_posts(
 			[
 				'post_type'      => self::CPT,
-				'posts_per_page' => -1,
+				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Newsletter ads CPT; config-scale.
 			]
 		);
 		$ads     = [];
@@ -899,6 +899,24 @@ final class Ads {
 	 */
 	public static function is_ad_inserted( $newsletter_id, $ad_id ) {
 		return ! empty( self::$inserted_ads[ $newsletter_id ] ) && in_array( $ad_id, self::$inserted_ads[ $newsletter_id ], true );
+	}
+
+	/**
+	 * Reset the in-memory inserted-ads tracking.
+	 *
+	 * `mark_ad_inserted()`/`is_ad_inserted()` use a process-global static that is
+	 * otherwise never cleared within a request, so a second render of the same
+	 * newsletter in one request would see every ad already inserted and drop it.
+	 * Callers starting a fresh render should reset first.
+	 *
+	 * @param int|null $newsletter_id Newsletter to reset, or null to reset all.
+	 */
+	public static function reset_inserted_ads( $newsletter_id = null ) {
+		if ( null === $newsletter_id ) {
+			self::$inserted_ads = [];
+			return;
+		}
+		unset( self::$inserted_ads[ $newsletter_id ] );
 	}
 
 	/**
