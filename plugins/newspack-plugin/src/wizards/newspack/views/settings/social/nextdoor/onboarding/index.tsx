@@ -112,9 +112,10 @@ export const Onboarding = ( {
 	}, [ status, steps ] );
 
 	// Shape only, but stricter than is_email(), which accepts a one-letter TLD.
-	// Whether the address exists is Nextdoor's problem, not something a pattern
-	// can answer.
-	const isEmailValid = /^[^\s@]+@[^\s@.]+(\.[^\s@.]+)*\.[a-z]{2,}$/i.test( email.trim() );
+	// The lookahead keeps an all-numeric TLD out while still allowing a
+	// non-ASCII one and its punycode form. Whether the address exists is
+	// Nextdoor's problem, not something a pattern can answer.
+	const isEmailValid = /^[^\s@]+@[^\s@.]+(\.[^\s@.]+)*\.(?=[^\s@.]*\p{L})[^\s@.]{2,}$/u.test( email.trim() );
 	// Only after leaving the field: an empty one is not a mistake worth calling
 	// out, and a half-typed address is not either.
 	const emailError =
