@@ -248,7 +248,7 @@ export const Onboarding = ( {
 							disabled={ ! clientId || ! clientSecret || isSaving }
 							isBusy={ isSaving }
 						>
-							{ __( 'Save & Continue', 'newspack-plugin' ) }
+							{ __( 'Save Credentials', 'newspack-plugin' ) }
 						</Button>
 						{ renderSecondaryActions?.() }
 					</HStack>
