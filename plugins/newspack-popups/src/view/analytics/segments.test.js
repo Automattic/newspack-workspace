@@ -1,4 +1,4 @@
-import { reportMatchedSegments, EVENT_NAME, STORE_KEY, EMPTY_VALUE, SESSION_TIMEOUT } from './segments';
+import { reportMatchedSegments, EVENT_NAME, STORAGE_KEY, EMPTY_VALUE, SESSION_TIMEOUT } from './segments';
 import { getMatchingSegmentIds, getPreviewedPromptId, sendEvent } from '../utils';
 import { getCriteria } from '../../criteria/utils';
 
@@ -27,94 +27,83 @@ const clearGaCookies = () => {
 	} );
 };
 
-const makeRas = () => {
-	const data = {};
-	return {
-		store: {
-			get: jest.fn( key => data[ key ] ),
-			set: jest.fn( ( key, value ) => {
-				data[ key ] = value;
-			} ),
-		},
-	};
-};
+const storedState = ( siteId = 0 ) => JSON.parse( window.localStorage.getItem( `${ STORAGE_KEY }-${ siteId }` ) );
 
 describe( 'reportMatchedSegments', () => {
-	let ras;
-
 	beforeEach( () => {
 		jest.clearAllMocks();
 		getPreviewedPromptId.mockReturnValue( null );
 		getCriteria.mockReturnValue( { id: 'registered' } );
+		window.localStorage.clear();
 		global.gtag = jest.fn();
 		// Criteria-less segments match every reader and are always reportable.
 		window.newspack_popups_view = { segments: { 12: { criteria: [] }, 45: { criteria: [] } } };
 		window.history.replaceState( {}, '', '/' );
 		clearGaCookies();
-		ras = makeRas();
 	} );
 
 	afterEach( () => {
-		// Restore any spies even when a test fails partway through, so one
-		// failure here cannot cascade into unrelated tests.
+		// Restore any Storage.prototype spies even when a test fails partway
+		// through, so one failure here cannot cascade into unrelated tests.
 		jest.restoreAllMocks();
 	} );
 
-	it( 'reports one event per matched segment, with device-only bookkeeping', () => {
+	it( 'reports one event per matched segment, with bookkeeping outside reader data', () => {
 		getMatchingSegmentIds.mockReturnValue( [ '12', '45' ] );
-		reportMatchedSegments( ras );
+		reportMatchedSegments();
 		expect( sendEvent ).toHaveBeenCalledTimes( 2 );
 		expect( sendEvent ).toHaveBeenCalledWith( { segment_id: '12' }, EVENT_NAME );
 		expect( sendEvent ).toHaveBeenCalledWith( { segment_id: '45' }, EVENT_NAME );
-		// The reported set is stored without syncing to reader meta.
-		expect( ras.store.set ).toHaveBeenCalledWith( STORE_KEY, expect.objectContaining( { ids: [ '12', '45' ] } ), false );
+		// The reported set lives in a Campaigns-owned localStorage key — segment
+		// IDs are deliberately not reader data items.
+		expect( storedState().ids ).toEqual( [ '12', '45' ] );
 	} );
 
 	it( 'stays silent when the same segments match again', () => {
 		getMatchingSegmentIds.mockReturnValue( [ '12', '45' ] );
-		reportMatchedSegments( ras );
-		reportMatchedSegments( ras );
+		reportMatchedSegments();
+		reportMatchedSegments();
 		expect( sendEvent ).toHaveBeenCalledTimes( 2 );
 	} );
 
 	it( 'reports only the segment newly matched mid-session', () => {
 		getMatchingSegmentIds.mockReturnValue( [ '12' ] );
-		reportMatchedSegments( ras );
+		reportMatchedSegments();
 		getMatchingSegmentIds.mockReturnValue( [ '12', '45' ] );
-		reportMatchedSegments( ras );
+		reportMatchedSegments();
 		expect( sendEvent ).toHaveBeenCalledTimes( 2 );
 		expect( sendEvent ).toHaveBeenLastCalledWith( { segment_id: '45' }, EVENT_NAME );
 	} );
 
 	it( 'does not report a segment again after it stops and resumes matching', () => {
 		getMatchingSegmentIds.mockReturnValue( [ '12' ] );
-		reportMatchedSegments( ras );
+		reportMatchedSegments();
 		getMatchingSegmentIds.mockReturnValue( [] );
-		reportMatchedSegments( ras );
+		reportMatchedSegments();
 		getMatchingSegmentIds.mockReturnValue( [ '12' ] );
-		reportMatchedSegments( ras );
+		reportMatchedSegments();
 		const reportedIds = sendEvent.mock.calls.map( call => call[ 0 ].segment_id );
 		expect( reportedIds ).toEqual( [ '12', EMPTY_VALUE ] );
 	} );
 
 	it( 'reports an empty match explicitly so "matches nothing" is measurable', () => {
 		getMatchingSegmentIds.mockReturnValue( [] );
-		reportMatchedSegments( ras );
+		reportMatchedSegments();
 		expect( sendEvent ).toHaveBeenCalledWith( { segment_id: EMPTY_VALUE }, EVENT_NAME );
 	} );
 
 	it( 'reports the empty match only once per session', () => {
 		getMatchingSegmentIds.mockReturnValue( [] );
-		reportMatchedSegments( ras );
-		reportMatchedSegments( ras );
+		reportMatchedSegments();
+		reportMatchedSegments();
 		expect( sendEvent ).toHaveBeenCalledTimes( 1 );
 	} );
 
 	it( 'reports a segment matched after an earlier empty match', () => {
 		getMatchingSegmentIds.mockReturnValue( [] );
-		reportMatchedSegments( ras );
+		reportMatchedSegments();
 		getMatchingSegmentIds.mockReturnValue( [ '12' ] );
-		reportMatchedSegments( ras );
+		reportMatchedSegments();
 		const reportedIds = sendEvent.mock.calls.map( call => call[ 0 ].segment_id );
 		expect( reportedIds ).toEqual( [ EMPTY_VALUE, '12' ] );
 	} );
@@ -122,15 +111,15 @@ describe( 'reportMatchedSegments', () => {
 	it( 'does nothing, and remembers nothing, when gtag is unavailable', () => {
 		delete global.gtag;
 		getMatchingSegmentIds.mockReturnValue( [ '12' ] );
-		reportMatchedSegments( ras );
+		reportMatchedSegments();
 		expect( sendEvent ).not.toHaveBeenCalled();
-		expect( ras.store.set ).not.toHaveBeenCalled();
+		expect( storedState() ).toBeNull();
 	} );
 
 	it( 'does nothing when segmentation is not active on the page', () => {
 		window.newspack_popups_view = {};
 		getMatchingSegmentIds.mockReturnValue( [ '12' ] );
-		reportMatchedSegments( ras );
+		reportMatchedSegments();
 		expect( sendEvent ).not.toHaveBeenCalled();
 	} );
 
@@ -139,18 +128,18 @@ describe( 'reportMatchedSegments', () => {
 		// an empty segments object must not produce a `none` event stream.
 		window.newspack_popups_view = { segments: {} };
 		getMatchingSegmentIds.mockReturnValue( [] );
-		reportMatchedSegments( ras );
+		reportMatchedSegments();
 		expect( sendEvent ).not.toHaveBeenCalled();
-		expect( ras.store.set ).not.toHaveBeenCalled();
+		expect( storedState() ).toBeNull();
 	} );
 
 	it( 'does not count preview traffic toward reach', () => {
 		getMatchingSegmentIds.mockReturnValue( [ '12' ] );
 		getPreviewedPromptId.mockReturnValue( 123 );
-		reportMatchedSegments( ras );
+		reportMatchedSegments();
 		getPreviewedPromptId.mockReturnValue( null );
 		window.history.replaceState( {}, '', '/?view_as=segment:12' );
-		reportMatchedSegments( ras );
+		reportMatchedSegments();
 		expect( sendEvent ).not.toHaveBeenCalled();
 	} );
 
@@ -162,7 +151,7 @@ describe( 'reportMatchedSegments', () => {
 		window.newspack_popups_view = { segments };
 		getCriteria.mockImplementation( id => ( 'articles_read' === id ? { id } : undefined ) );
 		getMatchingSegmentIds.mockReturnValue( [ '45' ] );
-		reportMatchedSegments( ras );
+		reportMatchedSegments();
 		// Only the fully registered segment is evaluated and reported.
 		expect( getMatchingSegmentIds ).toHaveBeenCalledWith( { 45: segments[ 45 ] } );
 		expect( sendEvent ).toHaveBeenCalledTimes( 1 );
@@ -174,21 +163,21 @@ describe( 'reportMatchedSegments', () => {
 			segments: { 12: { criteria: [ { criteria_id: 'active_memberships' } ] } },
 		};
 		getCriteria.mockReturnValue( undefined );
-		reportMatchedSegments( ras );
+		reportMatchedSegments();
 		expect( sendEvent ).not.toHaveBeenCalled();
-		expect( ras.store.set ).not.toHaveBeenCalled();
+		expect( storedState() ).toBeNull();
 	} );
 
 	it( 'resets the reported set when the GA4 session ID changes', () => {
 		setGaSession( '1700000001' );
 		getMatchingSegmentIds.mockReturnValue( [ '12' ] );
-		reportMatchedSegments( ras );
-		reportMatchedSegments( ras );
+		reportMatchedSegments();
+		reportMatchedSegments();
 		expect( sendEvent ).toHaveBeenCalledTimes( 1 );
 		// A new GA4 session (30 minutes of inactivity or the midnight cutover
 		// mints a new session ID) reports the still-matching segment again.
 		setGaSession( '1700009999' );
-		reportMatchedSegments( ras );
+		reportMatchedSegments();
 		expect( sendEvent ).toHaveBeenCalledTimes( 2 );
 	} );
 
@@ -196,16 +185,29 @@ describe( 'reportMatchedSegments', () => {
 		const now = 1700000000000;
 		const dateSpy = jest.spyOn( Date, 'now' ).mockReturnValue( now );
 		getMatchingSegmentIds.mockReturnValue( [ '12' ] );
-		reportMatchedSegments( ras );
+		reportMatchedSegments();
 		// Within the window: same session, nothing new to report.
 		dateSpy.mockReturnValue( now + SESSION_TIMEOUT - 1000 );
-		reportMatchedSegments( ras );
+		reportMatchedSegments();
 		expect( sendEvent ).toHaveBeenCalledTimes( 1 );
 		// The window slides with activity: measured from the quiet pageview
 		// above, not from the first report.
 		dateSpy.mockReturnValue( now + 2 * SESSION_TIMEOUT );
-		reportMatchedSegments( ras );
+		reportMatchedSegments();
 		expect( sendEvent ).toHaveBeenCalledTimes( 2 );
+	} );
+
+	it( 'keeps sites on a shared origin from suppressing each other', () => {
+		getMatchingSegmentIds.mockReturnValue( [ '12' ] );
+		window.newspack_popups_view.site_id = 7;
+		reportMatchedSegments();
+		// Same segment ID on a sibling site is a different segment — it must
+		// report on its own, from its own storage key.
+		window.newspack_popups_view.site_id = 8;
+		reportMatchedSegments();
+		expect( sendEvent ).toHaveBeenCalledTimes( 2 );
+		expect( storedState( 7 ).ids ).toEqual( [ '12' ] );
+		expect( storedState( 8 ).ids ).toEqual( [ '12' ] );
 	} );
 
 	it( 'contains a throwing dispatch, recording only the IDs that sent', () => {
@@ -216,24 +218,24 @@ describe( 'reportMatchedSegments', () => {
 				throw new Error( 'consent shim' );
 			} );
 		// A throwing gtag shim must not unwind into the RAS queue drain.
-		expect( () => reportMatchedSegments( ras ) ).not.toThrow();
+		expect( () => reportMatchedSegments() ).not.toThrow();
 		// The ID sent before the throw is recorded; the unsent one retries.
 		sendEvent.mockImplementation( () => {} );
-		reportMatchedSegments( ras );
+		reportMatchedSegments();
 		expect( sendEvent ).toHaveBeenCalledTimes( 3 );
 		expect( sendEvent ).toHaveBeenLastCalledWith( { segment_id: '45' }, EVENT_NAME );
 	} );
 
-	it( 'dispatches every pageview when the store is unusable, without throwing', () => {
-		ras.store.get.mockImplementation( () => {
+	it( 'dispatches every pageview when storage is unavailable, without throwing', () => {
+		jest.spyOn( Storage.prototype, 'getItem' ).mockImplementation( () => {
 			throw new Error( 'denied' );
 		} );
-		ras.store.set.mockImplementation( () => {
+		jest.spyOn( Storage.prototype, 'setItem' ).mockImplementation( () => {
 			throw new Error( 'denied' );
 		} );
 		getMatchingSegmentIds.mockReturnValue( [ '12' ] );
-		expect( () => reportMatchedSegments( ras ) ).not.toThrow();
-		reportMatchedSegments( ras );
+		expect( () => reportMatchedSegments() ).not.toThrow();
+		reportMatchedSegments();
 		expect( sendEvent ).toHaveBeenCalledTimes( 2 );
 	} );
 
@@ -244,8 +246,8 @@ describe( 'reportMatchedSegments', () => {
 		// return type fails here instead of silently breaking the dedup.
 		const { getMatchingSegmentIds: realGetMatchingSegmentIds } = jest.requireActual( '../utils' );
 		getMatchingSegmentIds.mockImplementation( realGetMatchingSegmentIds );
-		reportMatchedSegments( ras );
-		reportMatchedSegments( ras );
+		reportMatchedSegments();
+		reportMatchedSegments();
 		expect( sendEvent ).toHaveBeenCalledTimes( 2 );
 		expect( sendEvent ).toHaveBeenCalledWith( { segment_id: '12' }, EVENT_NAME );
 		expect( sendEvent ).toHaveBeenCalledWith( { segment_id: '45' }, EVENT_NAME );

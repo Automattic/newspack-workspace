@@ -20,22 +20,37 @@
  * Each segment reports once per GA4 session, the first time the reader
  * matches it. A segment that starts matching mid-session reports then; one
  * that stops matching is not reported again, since reach means the reader
- * matched it at some point during the session. The bookkeeping lives in the
- * Reader Activation store — namespaced per site and shared across a session's
- * tabs — and resets when the GA4 session ID read from the `_ga_*` cookie
- * changes (falling back to a 30-minute sliding window when no GA cookie is
- * readable), so the once-per-session rule tracks the same session boundary
- * GA4 reports group by.
+ * matched it at some point during the session. The bookkeeping lives in
+ * Campaigns-owned, site-namespaced localStorage — shared across a session's
+ * tabs, and deliberately not a reader data item: it is dispatch bookkeeping
+ * for this device, not audience data.
+ *
+ * localStorage outlives any single session on purpose — no browser storage
+ * has the GA4 session's lifetime (sessionStorage is per-tab: it splits one
+ * session across tabs and spans many sessions in a pinned tab) — so the
+ * boundary is enforced on read instead: the stored set is discarded when the
+ * GA4 session ID from the `_ga_*` cookie no longer matches, or, when no GA
+ * cookie is readable, after a 30-minute sliding window matching GA4's
+ * inactivity timeout. The once-per-session rule therefore tracks the same
+ * session boundary GA4 reports group by, whatever the storage's own lifetime.
  */
 
 import { getMatchingSegmentIds, getPreviewedPromptId, sendEvent } from '../utils';
 import { getCriteria } from '../../criteria/utils';
 
 export const EVENT_NAME = 'np_segment_matched';
-export const STORE_KEY = 'popups_reported_segments';
+export const STORAGE_KEY = 'newspack-popups-reported-segments';
 export const EMPTY_VALUE = 'none';
 // GA4's session inactivity timeout, for the fallback session boundary.
 export const SESSION_TIMEOUT = 30 * 60 * 1000;
+
+/**
+ * The storage key, namespaced per site so sites sharing an origin
+ * (subdirectory multisite) cannot suppress each other's segment IDs.
+ *
+ * @return {string} Site-scoped storage key.
+ */
+const storageKey = () => `${ STORAGE_KEY }-${ window.newspack_popups_view?.site_id || 0 }`;
 
 /**
  * Read the GA4 session ID from the `_ga_<container>` cookie.
@@ -102,14 +117,12 @@ const hasRegisteredCriteria = segment => ( segment?.criteria || [] ).every( item
  * boundary has moved on: a new GA4 session ID, or — when no GA cookie is
  * readable — more than the session timeout since the last evaluation.
  *
- * @param {Object} ras Reader Activation library object.
- *
  * @return {Object} `{ sid, ids }` — current boundary token and reported IDs.
  */
-const readState = ras => {
+const readState = () => {
 	const sid = getGa4SessionId();
 	try {
-		const state = ras.store.get( STORE_KEY ) || {};
+		const state = JSON.parse( window.localStorage.getItem( storageKey() ) ) || {};
 		const ids = Array.isArray( state.ids ) ? state.ids : [];
 		if ( sid ) {
 			return { sid, ids: state.sid === sid ? ids : [] };
@@ -117,8 +130,8 @@ const readState = ras => {
 		const expired = ! state.ts || Date.now() - state.ts > SESSION_TIMEOUT;
 		return { sid, ids: expired ? [] : ids };
 	} catch ( e ) {
-		// Unreadable state degrades the reader to per-pageview dispatch, which
-		// costs volume but loses no data.
+		// Unreadable state (storage unavailable or corrupted) degrades the
+		// reader to per-pageview dispatch, which costs volume but loses no data.
 		return { sid, ids: [] };
 	}
 };
@@ -128,14 +141,12 @@ const readState = ras => {
  * quiet about them. Also stamps the boundary token: the GA4 session ID and
  * the time of the last evaluation, which keeps the fallback window sliding.
  *
- * @param {Object}      ras Reader Activation library object.
  * @param {string|null} sid GA4 session ID, if readable.
  * @param {string[]}    ids Every ID reported in this session.
  */
-const writeState = ( ras, sid, ids ) => {
+const writeState = ( sid, ids ) => {
 	try {
-		// `false`: this is per-device bookkeeping; never sync it to reader meta.
-		ras.store.set( STORE_KEY, { sid, ts: Date.now(), ids }, false );
+		window.localStorage.setItem( storageKey(), JSON.stringify( { sid, ts: Date.now(), ids } ) );
 	} catch ( e ) {
 		// See readState: an unwritable state only costs the volume saving —
 		// and must never unwind into the RAS queue drain.
@@ -144,14 +155,12 @@ const writeState = ( ras, sid, ids ) => {
 
 /**
  * Evaluate the reader's segments and report any that are new to this session.
- *
- * @param {Object} ras Reader Activation library object.
  */
-const reportFreshMatches = ras => {
+const reportFreshMatches = () => {
 	const segments = window.newspack_popups_view?.segments;
 	// Check gtag before writing state, so a pageview that could not report
 	// does not silence the next one that can.
-	if ( ! segments || 'function' !== typeof gtag || ! ras?.store ) {
+	if ( ! segments || 'function' !== typeof gtag ) {
 		return;
 	}
 	// A site with no segments has no reach to measure: `none` is only
@@ -176,12 +185,12 @@ const reportFreshMatches = ras => {
 	// The empty match is tracked as a pseudo-ID, so "matched nothing" is
 	// measurable and follows the same once-per-session rule as a real segment.
 	const matched = ids.length ? ids : [ EMPTY_VALUE ];
-	const { sid, ids: reported } = readState( ras );
+	const { sid, ids: reported } = readState();
 	const fresh = matched.filter( id => ! reported.includes( id ) );
 	if ( ! fresh.length ) {
 		// Nothing new to report; re-stamp the state so the fallback session
 		// window keeps sliding with reader activity.
-		writeState( ras, sid, reported );
+		writeState( sid, reported );
 		return;
 	}
 	const sent = [];
@@ -196,7 +205,7 @@ const reportFreshMatches = ras => {
 		// display. IDs sent before the throw are recorded below, so only the
 		// unsent remainder retries on the next pageview.
 	}
-	writeState( ras, sid, reported.concat( sent ) );
+	writeState( sid, reported.concat( sent ) );
 };
 
 /**
@@ -205,14 +214,13 @@ const reportFreshMatches = ras => {
  * error isolation of its own — an exception here would abort prompt display
  * and every callback queued behind it.
  *
- * Pushed onto `window.newspackRAS`, which calls it with the Reader Activation
- * library; the library's store keeps the once-per-session bookkeeping.
- *
- * @param {Object} ras Reader Activation library object.
+ * Takes no arguments: it is pushed onto `window.newspackRAS` only for timing
+ * — segment criteria read from the RAS store, so evaluation needs RAS ready —
+ * while its own bookkeeping stays out of the reader data store.
  */
-export const reportMatchedSegments = ras => {
+export const reportMatchedSegments = () => {
 	try {
-		reportFreshMatches( ras );
+		reportFreshMatches();
 	} catch ( e ) {
 		// Never let segment reporting take the prompt pipeline down with it.
 	}
