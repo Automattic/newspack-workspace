@@ -71,6 +71,9 @@ class Test_Teams_Migration_Manual_Members extends WP_UnitTestCase {
 		$products_database      = [];
 		WP_CLI::reset();
 		Group_Subscription::reset_cache();
+		if ( class_exists( 'WCS_Gifting' ) && property_exists( 'WCS_Gifting', 'recipients' ) ) {
+			WCS_Gifting::$recipients = [];
+		}
 		// The membership fixtures use WCM's custom post status; register it so the
 		// explicit post_status query in the command resolves it like on a live site.
 		register_post_status( 'wcm-active' );
@@ -192,9 +195,10 @@ class Test_Teams_Migration_Manual_Members extends WP_UnitTestCase {
 	 * from when --access-product-ids is omitted.
 	 *
 	 * @param int[] $product_ids Products the gate accepts.
+	 * @param bool  $active      Whether the gate's custom access is switched on.
 	 * @return int Gate post ID.
 	 */
-	private function create_gate_requiring_subscription_to( array $product_ids ): int {
+	private function create_gate_requiring_subscription_to( array $product_ids, bool $active = true ): int {
 		$gate_id = Content_Gate::create_gate( [ 'title' => 'Paywall' ] );
 		$this->assertNotWPError( $gate_id, 'Fixture gate creation should succeed.' );
 		$this->gate_ids[] = $gate_id;
@@ -207,7 +211,7 @@ class Test_Teams_Migration_Manual_Members extends WP_UnitTestCase {
 		Content_Gate::update_custom_access_settings(
 			$gate_id,
 			[
-				'active'       => true,
+				'active'       => $active,
 				'access_rules' => [
 					[
 						[
@@ -234,8 +238,22 @@ class Test_Teams_Migration_Manual_Members extends WP_UnitTestCase {
 				'customer_id'    => $user_id,
 				'status'         => $status,
 				'billing_period' => 'month',
+				// The migration product, so these fixtures stay covered when a run
+				// scopes liveness with --access-product-ids (a --live run now
+				// requires a non-empty covered set).
+				'products'       => [ self::MIGRATION_PRODUCT_ID ],
 			]
 		);
+	}
+
+	/**
+	 * The access-product scope live runs are pinned to in these tests: the
+	 * migration product itself, matching a gate that accepts it.
+	 *
+	 * @return string
+	 */
+	private function access_products_flag(): string {
+		return (string) self::MIGRATION_PRODUCT_ID;
 	}
 
 	/**
@@ -295,6 +313,7 @@ class Test_Teams_Migration_Manual_Members extends WP_UnitTestCase {
 			[
 				'plan-ids'                       => (string) $purchase_plan_id,
 				'only-without-live-subscription' => true,
+				'access-product-ids'             => $this->access_products_flag(),
 				'live'                           => true,
 			]
 		);
@@ -306,6 +325,8 @@ class Test_Teams_Migration_Manual_Members extends WP_UnitTestCase {
 		$this->assertCount( 1, $this->get_migration_subscription_ids_for_user( $member_with_expired ), 'A member whose only subscription is expired must get a $0 subscription.' );
 		$this->assertCount( 1, $this->get_migration_subscription_ids_for_user( $member_without_any_sub ), 'A member with no subscription must get a $0 subscription.' );
 		$this->assertStringContainsString( 'Skipped 3 member(s) holding a live (active/on-hold/pending-cancel) subscription.', $output, 'The skipped-because-subscribed count must be reported for reconciliation.' );
+		$this->assertStringContainsString( 'Live-status breakdown: active: 1, on-hold: 1, pending-cancel: 1.', $output, 'The skip tally must break down by matched status.' );
+		$this->assertStringContainsString( 'on-hold members are counted live by design', $output, 'On-hold skips must carry the named scope explanation (NPPD-2052).' );
 	}
 
 	/**
@@ -392,6 +413,7 @@ class Test_Teams_Migration_Manual_Members extends WP_UnitTestCase {
 		$this->run_migrate_manual_members(
 			[
 				'only-without-live-subscription' => true,
+				'access-product-ids'             => $this->access_products_flag(),
 				'live'                           => true,
 			]
 		);
@@ -589,6 +611,7 @@ class Test_Teams_Migration_Manual_Members extends WP_UnitTestCase {
 		$flags = [
 			'plan-ids'                       => $first_plan_id . ',' . $second_plan_id,
 			'only-without-live-subscription' => true,
+			'access-product-ids'             => $this->access_products_flag(),
 		];
 
 		$dry_run_output = $this->run_migrate_manual_members( $flags );
@@ -638,6 +661,7 @@ class Test_Teams_Migration_Manual_Members extends WP_UnitTestCase {
 		$flags = [
 			'plan-ids'                       => (string) $purchase_plan_id,
 			'only-without-live-subscription' => true,
+			'access-product-ids'             => $this->access_products_flag(),
 			'live'                           => true,
 		];
 
@@ -667,6 +691,7 @@ class Test_Teams_Migration_Manual_Members extends WP_UnitTestCase {
 				'plan-ids'                       => (string) $purchase_plan_id,
 				'user-ids'                       => (string) $listed_live_member,
 				'only-without-live-subscription' => true,
+				'access-product-ids'             => $this->access_products_flag(),
 				'live'                           => true,
 			]
 		);
@@ -818,25 +843,50 @@ class Test_Teams_Migration_Manual_Members extends WP_UnitTestCase {
 
 	/**
 	 * With no gates configured yet and no explicit flag there is nothing to scope
-	 * by, so any live subscription counts (matching a gate with no product filter)
-	 * — but the run says so, because that is the reading under which a member with
-	 * an unrelated subscription is wrongly treated as covered.
+	 * by, so in a dry-run any live subscription counts (matching a gate with no
+	 * product filter) — and the run says so, because that is the reading under
+	 * which a member with an unrelated subscription is wrongly treated as
+	 * covered.
 	 */
-	public function test_unscoped_run_warns_that_liveness_is_product_agnostic() {
+	public function test_unscoped_dry_run_warns_that_liveness_is_product_agnostic() {
 		$purchase_plan_id   = $this->create_plan( 'purchase' );
 		$member_with_active = $this->create_member( $purchase_plan_id );
 		$this->create_subscription_with_status( $member_with_active, 'active' );
 
+		global $subscriptions_database;
+		$staged_subscription_count = count( $subscriptions_database );
+
 		$output = $this->run_migrate_manual_members(
+			[
+				'plan-ids'                       => (string) $purchase_plan_id,
+				'only-without-live-subscription' => true,
+			]
+		);
+
+		$this->assertStringContainsString( 'no access products could be determined', $output, 'An unscoped dry-run must warn rather than silently treat any subscription as covering access.' );
+		$this->assertStringContainsString( 'holds a live subscription', $output, 'Unscoped, any live subscription still counts as covered in the dry-run preview.' );
+		$this->assertCount( $staged_subscription_count, $subscriptions_database, 'A dry-run writes nothing.' );
+	}
+
+	/**
+	 * The same unscoped state refuses a --live run: an empty covered set is the
+	 * reading that skips the most members, and skipping is the direction that
+	 * costs readers their access at the flip.
+	 */
+	public function test_unscoped_live_run_is_refused() {
+		$purchase_plan_id   = $this->create_plan( 'purchase' );
+		$member_with_active = $this->create_member( $purchase_plan_id );
+		$this->create_subscription_with_status( $member_with_active, 'active' );
+
+		$this->expectException( WP_CLI_Mock_Exception::class );
+		$this->expectExceptionMessage( 'No access products could be determined' );
+		$this->run_migrate_manual_members(
 			[
 				'plan-ids'                       => (string) $purchase_plan_id,
 				'only-without-live-subscription' => true,
 				'live'                           => true,
 			]
 		);
-
-		$this->assertStringContainsString( 'no access products could be determined', $output, 'An unscoped run must warn rather than silently treat any subscription as covering access.' );
-		$this->assertEmpty( $this->get_migration_subscription_ids_for_user( $member_with_active ), 'Unscoped, any live subscription still counts as covered.' );
 	}
 
 	/**
@@ -934,6 +984,7 @@ class Test_Teams_Migration_Manual_Members extends WP_UnitTestCase {
 				'as-group'                       => true,
 				'group-owner-id'                 => $group_owner_id,
 				'only-without-live-subscription' => true,
+				'access-product-ids'             => $this->access_products_flag(),
 				'live'                           => true,
 			]
 		);
@@ -946,5 +997,262 @@ class Test_Teams_Migration_Manual_Members extends WP_UnitTestCase {
 		$this->assertTrue( (bool) Group_Subscription::user_is_member( $member_without_sub, $group_subscription ), 'The residual member must join the group.' );
 		$this->assertFalse( (bool) Group_Subscription::user_is_member( $member_with_active, $group_subscription ), 'The live-subscription member must be filtered out before the group add.' );
 		$this->assertStringContainsString( 'Skipped 1 member(s) holding a live', $output, 'The live skip must be reported in group mode too.' );
+	}
+
+	/**
+	 * The raw-argv guard: WP-CLI strips a valueless value flag (with only a
+	 * warning) before the command runs, so the in-method boolean-flag guards
+	 * never see it — the raw command line is the only place the mistake is
+	 * still visible, and the run must abort rather than proceed with a
+	 * different scope than the operator intended.
+	 */
+	public function test_valueless_flags_are_detected_on_the_raw_command_line() {
+		$this->assertSame(
+			[ '--user-ids' ],
+			Teams_Migration::get_valueless_value_flags( [ 'wp', 'newspack', 'migrate-manual-members', '--product-id=5', '--user-ids', '--plan-ids=1,2' ] ),
+			'A bare value flag must be detected among valued ones.'
+		);
+		$this->assertSame(
+			[],
+			Teams_Migration::get_valueless_value_flags( [ 'wp', 'newspack', 'migrate-manual-members', '--product-id=5', '--user-ids=1,2', '--live' ] ),
+			'Valued flags and boolean flags must not be flagged.'
+		);
+	}
+
+	/**
+	 * End-to-end: a command line carrying a bare --user-ids aborts even though
+	 * WP-CLI has already stripped the flag from $assoc_args.
+	 */
+	public function test_bare_flag_on_the_command_line_aborts_the_run() {
+		$purchase_plan_id = $this->create_plan( 'purchase' );
+		$paying_member    = $this->create_member( $purchase_plan_id );
+		$this->create_subscription_with_status( $paying_member, 'active' );
+
+		$original_argv     = $_SERVER['argv'] ?? null; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- raw argv is the fixture under test.
+		$_SERVER['argv']   = [ 'wp', 'newspack', 'migrate-manual-members', '--product-id=' . self::MIGRATION_PRODUCT_ID, '--user-ids', '--live' ];
+		$aborted           = false;
+		try {
+			// WP-CLI would have stripped --user-ids, so $assoc_args carries only the
+			// surviving flags — exactly the state the argv guard exists to catch.
+			$this->run_migrate_manual_members( [ 'live' => true ] );
+		} catch ( WP_CLI_Mock_Exception $abort ) {
+			$aborted = true;
+			$this->assertStringContainsString( '--user-ids', $abort->getMessage(), 'The abort must name the offending flag.' );
+			$this->assertStringContainsString( 'require a value', $abort->getMessage(), 'The abort must say the flag needs a value.' );
+		} finally {
+			if ( null === $original_argv ) {
+				unset( $_SERVER['argv'] );
+			} else {
+				$_SERVER['argv'] = $original_argv;
+			}
+		}
+		$this->assertTrue( $aborted, 'A bare value flag on the raw command line must abort the run.' );
+		$this->assertEmpty( $this->get_migration_subscription_ids_for_user( $paying_member ), 'No subscription may be created on the aborted run.' );
+	}
+
+	/**
+	 * --plan-ids gets the same strict parse as the other ID flags: a typo'd
+	 * token halts the run instead of silently narrowing the plan scope it pins.
+	 */
+	public function test_plan_ids_parsing_is_strict() {
+		$this->expectException( WP_CLI_Mock_Exception::class );
+		$this->expectExceptionMessage( 'not a valid plan ID' );
+		$this->run_migrate_manual_members(
+			[
+				'plan-ids' => '12x,34',
+				'live'     => true,
+			]
+		);
+	}
+
+	/**
+	 * Gifted subscriptions follow the gates' rule: a gifted subscription covers
+	 * only its recipient. The purchaser owns it but the gate denies them (they
+	 * are a residual); the recipient does not own it but the gate grants them
+	 * (a $0 subscription would be redundant).
+	 */
+	public function test_gifted_subscriptions_cover_the_recipient_not_the_purchaser() {
+		$purchase_plan_id = $this->create_plan( 'purchase' );
+		$purchaser        = $this->create_member( $purchase_plan_id );
+		$recipient        = $this->create_member( $purchase_plan_id );
+
+		$gifted_subscription = $this->create_subscription_with_status( $purchaser, 'active' );
+		WCS_Gifting::$recipients[ $gifted_subscription->get_id() ] = $recipient;
+
+		// Mirror WCS Gifting's production behavior: the recipient sees the gifted
+		// subscription in wcs_get_users_subscriptions() without owning it.
+		add_filter(
+			'wcs_get_users_subscriptions',
+			function ( $subscriptions, $user_id ) use ( $gifted_subscription, $recipient ) {
+				if ( (int) $user_id === (int) $recipient ) {
+					$subscriptions[ $gifted_subscription->get_id() ] = $gifted_subscription;
+				}
+				return $subscriptions;
+			},
+			10,
+			2
+		);
+
+		$this->assertFalse( Teams_Migration::member_has_live_subscription( $purchaser ), 'The purchaser of a gifted-away subscription is not covered by it.' );
+		$this->assertTrue( Teams_Migration::member_has_live_subscription( $recipient ), 'The gift recipient is covered by the gifted subscription.' );
+
+		$output = $this->run_migrate_manual_members(
+			[
+				'plan-ids'                       => (string) $purchase_plan_id,
+				'only-without-live-subscription' => true,
+				'access-product-ids'             => $this->access_products_flag(),
+			]
+		);
+		$this->assertSame( 1, substr_count( $output, '[DRY RUN] Would create subscription' ), 'Only the purchaser is a residual.' );
+		$this->assertStringContainsString( 'Skipped 1 member(s) holding a live', $output, 'The recipient must be skipped as covered.' );
+	}
+
+	/**
+	 * The covered-products derivation honors the gate's custom-access toggle: a
+	 * published gate with rules retained but custom access switched off grants
+	 * nothing, so its products must not widen the covered set.
+	 */
+	public function test_inactive_gates_do_not_contribute_access_products() {
+		$purchase_plan_id    = $this->create_plan( 'purchase' );
+		$active_product_id   = 909010;
+		$inactive_product_id = 909011;
+		wc_create_mock_product(
+			[
+				'id'   => $active_product_id,
+				'name' => 'Digital subscription',
+			]
+		);
+		wc_create_mock_product(
+			[
+				'id'   => $inactive_product_id,
+				'name' => 'Legacy tier',
+			]
+		);
+		$this->create_gate_requiring_subscription_to( [ $active_product_id, self::MIGRATION_PRODUCT_ID ] );
+		$this->create_gate_requiring_subscription_to( [ $inactive_product_id ], false );
+		$this->create_member( $purchase_plan_id );
+
+		$output = $this->run_migrate_manual_members(
+			[
+				'plan-ids'                       => (string) $purchase_plan_id,
+				'only-without-live-subscription' => true,
+			]
+		);
+
+		$this->assertStringContainsString( sprintf( 'Access products: %d, %d (derived from published gates)', $active_product_id, self::MIGRATION_PRODUCT_ID ), $output, 'The derived list must come from gates with custom access switched on.' );
+		$this->assertStringNotContainsString( (string) $inactive_product_id, $output, 'A gate with custom access switched off must not contribute its products.' );
+	}
+
+	/**
+	 * --as-group across several plans grants each member once: the second plan
+	 * reports the member as already added instead of adding them to a second
+	 * group (or, dry-run, counting them twice) — and a plan left with no
+	 * qualifying members creates no group subscription at all.
+	 */
+	public function test_as_group_across_plans_grants_once_and_creates_no_orphan_group() {
+		$first_plan_id     = $this->create_plan( 'purchase' );
+		$second_plan_id    = $this->create_plan( 'purchase' );
+		$multi_plan_member = $this->create_member( $first_plan_id );
+		$this->create_membership( $second_plan_id, $multi_plan_member );
+		$group_owner_id = $this->create_reader_user();
+
+		$flags = [
+			'plan-ids'                       => $first_plan_id . ',' . $second_plan_id,
+			'as-group'                       => true,
+			'group-owner-id'                 => $group_owner_id,
+			'only-without-live-subscription' => true,
+			'access-product-ids'             => $this->access_products_flag(),
+		];
+
+		$dry_run_output = $this->run_migrate_manual_members( $flags );
+		$this->assertSame( 1, substr_count( $dry_run_output, '[DRY RUN] Would add' ), 'Dry-run must count a multi-plan member once.' );
+		$this->assertStringContainsString( 'a group membership for this user was already planned in this run', $dry_run_output, 'The second membership must be reported as already planned.' );
+
+		WP_CLI::reset();
+		$live_output = $this->run_migrate_manual_members( array_merge( $flags, [ 'live' => true ] ) );
+
+		$this->assertSame( 1, substr_count( $live_output, 'added as group member' ), 'A live run must add the member to exactly one group.' );
+		$this->assertStringContainsString( 'a group membership for this user was already added in this run', $live_output, 'The second plan must report the member as already added.' );
+		$this->assertCount( 1, $this->get_migration_subscription_ids_for_user( $group_owner_id ), 'Only the plan with a qualifying member gets a group subscription — no orphan for the second plan.' );
+	}
+
+	/**
+	 * Group subscriptions are created lazily: a plan where every member is
+	 * filtered out (the expected outcome on a purchase plan swept with
+	 * --only-without-live-subscription) leaves no orphan empty active $0 group
+	 * subscription credited to the owner.
+	 */
+	public function test_as_group_plan_with_no_qualifying_members_creates_no_group_subscription() {
+		$purchase_plan_id   = $this->create_plan( 'purchase' );
+		$member_with_active = $this->create_member( $purchase_plan_id );
+		$this->create_subscription_with_status( $member_with_active, 'active' );
+		$group_owner_id = $this->create_reader_user();
+
+		$output = $this->run_migrate_manual_members(
+			[
+				'plan-ids'                       => (string) $purchase_plan_id,
+				'as-group'                       => true,
+				'group-owner-id'                 => $group_owner_id,
+				'only-without-live-subscription' => true,
+				'access-product-ids'             => $this->access_products_flag(),
+				'live'                           => true,
+			]
+		);
+
+		$this->assertEmpty( $this->get_migration_subscription_ids_for_user( $group_owner_id ), 'No group subscription may be created for a plan with no qualifying members.' );
+		$this->assertStringNotContainsString( 'Created group subscription', $output, 'The group subscription must not be created before a member qualifies.' );
+		$this->assertStringContainsString( 'Skipped 1 member(s) holding a live', $output, 'The live skip must still be reported.' );
+	}
+
+	/**
+	 * A user-IDs file led by a UTF-8 BOM (routine in spreadsheet exports)
+	 * parses cleanly instead of failing the strict parse with an error showing
+	 * an apparently-valid ID.
+	 */
+	public function test_user_ids_file_with_utf8_bom_parses() {
+		$user_ids_file_path = get_temp_dir() . 'nppd2055-bom-user-ids-' . wp_generate_password( 8, false ) . '.txt';
+		file_put_contents( $user_ids_file_path, "\xEF\xBB\xBF101\n102\n" ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_file_put_contents
+		$this->assertSame( [ 101, 102 ], Teams_Migration::parse_user_ids( '', $user_ids_file_path ), 'A BOM-led file must parse to its IDs.' );
+		unlink( $user_ids_file_path ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_unlink
+	}
+}
+
+/**
+ * Minimal WCS_Gifting stub mirroring the surface
+ * WooCommerce_Connection/Teams_Migration consult. A subscription is "gifted"
+ * when an entry exists in $recipients; the store is reset per test.
+ */
+if ( ! class_exists( 'WCS_Gifting' ) ) {
+	// phpcs:disable WordPress.Files.FileName.InvalidClassFileName, Generic.Files.OneObjectStructurePerFile.MultipleFound
+	/**
+	 * Recording WCS_Gifting stub: gifted iff an entry exists in $recipients.
+	 */
+	class WCS_Gifting {
+		/**
+		 * Map of subscription ID => recipient user ID.
+		 *
+		 * @var array
+		 */
+		public static $recipients = [];
+
+		/**
+		 * Whether the subscription was purchased as a gift.
+		 *
+		 * @param object $subscription Subscription object.
+		 * @return bool
+		 */
+		public static function is_gifted_subscription( $subscription ) {
+			return isset( self::$recipients[ $subscription->get_id() ] );
+		}
+
+		/**
+		 * The recipient user ID for a gifted subscription.
+		 *
+		 * @param object $subscription Subscription object.
+		 * @return int
+		 */
+		public static function get_recipient_user( $subscription ) {
+			return (int) ( self::$recipients[ $subscription->get_id() ] ?? 0 );
+		}
 	}
 }
