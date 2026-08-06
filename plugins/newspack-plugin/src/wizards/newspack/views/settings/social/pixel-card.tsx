@@ -164,7 +164,7 @@ const PixelCard = ( { title, description, namespace, path, validate, renderHelp 
 						{ errorMessage }
 					</WPNotice>
 				) }
-				<VStack spacing={ 2 }>
+				<VStack spacing={ 0 }>
 					<TextControl
 						value={ draft }
 						label={ __( 'Pixel ID', 'newspack-plugin' ) }
