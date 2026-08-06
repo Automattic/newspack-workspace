@@ -160,7 +160,7 @@
         "variableId": "10",
         "name": "DLV - Newspack - access_source",
         "type": "v",
-        "notes": "Newspack reader param. Present on singular views when the Content Gate feature is enabled. How the reader reached the post: a product name, or one of subscription | one_time_purchase | group | institution | domain | reader_data | metering_eligible | gated | no_custom_access_gate.",
+        "notes": "Newspack reader param. Present on every page when the Content Gate feature is enabled; non-singular views report no_custom_access_gate. How the reader reached the post: a product name, or one of subscription | one_time_purchase | group | institution | domain | reader_data | metering_eligible | gated | no_custom_access_gate.",
         "parameter": [
           { "type": "INTEGER", "key": "dataLayerVersion", "value": "2" },
           { "type": "BOOLEAN", "key": "setDefaultValue", "value": "false" },

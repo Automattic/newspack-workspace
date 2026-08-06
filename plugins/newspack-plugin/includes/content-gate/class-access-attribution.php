@@ -13,10 +13,11 @@ defined( 'ABSPATH' ) || exit;
  * Maps a passing access rule to source labels, and picks a single label when
  * more than one rule granted access.
  *
- * Deliberately free of request state: the ESP walks every published gate for a
- * reader, while the GA4 layer walks only the gates on the current post. Both
- * need the same rule-to-label mapping and the same precedence, and nothing else
- * in common.
+ * Deliberately free of request-context coupling: the ESP walks every published
+ * gate for a reader, while the GA4 layer walks only the gates on the current
+ * post. Both need the same rule-to-label mapping and the same precedence, and
+ * nothing else in common. (Request-scoped state does live here — see
+ * $owned_subscriptions_memo — it simply does not depend on which surface called.)
  */
 final class Access_Attribution {
 
@@ -27,6 +28,13 @@ final class Access_Attribution {
 	 * them: naming the product a reader bought is more informative than saying
 	 * they bought something. `subscription` and `one_time_purchase` sit at the
 	 * top because they still mean ownership, only with the product unresolved.
+	 *
+	 * Product names share this namespace, so a product literally named
+	 * `subscription`, `group`, `institution`, `domain` or `reader_data` is read
+	 * as the generic label and demoted accordingly. Left as is: the collision
+	 * needs a publisher to name a product after a vocabulary term, and the
+	 * alternative — tagging labels by origin — would push a structure through
+	 * every caller to fix a case nobody has hit.
 	 *
 	 * @var string[]
 	 */

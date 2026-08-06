@@ -40,7 +40,7 @@ stop here until it ships.
 | `author` | singular views | name(s) |
 | `categories` | singular / category archive | comma-separated |
 | `group` | when Content Gate is enabled | anon group IDs / `none` |
-| `access_source` | singular views, when Content Gate is enabled | product name / `subscription` / `one_time_purchase` / `group` / `institution` / `domain` / `reader_data` / `metering_eligible` / `gated` / `no_custom_access_gate` |
+| `access_source` | every page, when Content Gate is enabled | product name / `subscription` / `one_time_purchase` / `group` / `institution` / `domain` / `reader_data` / `metering_eligible` / `gated` / `no_custom_access_gate` |
 
 `email_hash` is intentionally **not** in the dataLayer (kept out of third-party reach).
 
@@ -63,6 +63,21 @@ stop here until it ships.
 4. Choose **Merge → Rename conflicting tags, triggers, and variables** (safe; never
    overwrites your existing config).
 5. Preview the changes (should be 11 new variables, nothing else), then **Confirm**.
+
+### Already imported an earlier version?
+
+Merge → *Rename conflicting* never overwrites, so the incoming
+`Newspack - GA4 Reader Params (config settings)` variable arrives renamed (GTM appends a
+suffix) and your GA4 tag stays wired to the **old** bundle — which has no `access_source`
+row. The dataLayer variable imports fine; the tag just never reads it, and the dimension
+stays `(not set)`. Two ways to fix it, either is fine:
+
+- Re-import choosing **Overwrite** for that one config-settings variable, or
+- Open your existing bundle variable and add the row by hand: parameter `access_source`,
+  value `{{DLV - Newspack - access_source}}`.
+
+Then confirm in **GTM Preview** that `access_source` actually arrives on a `page_view` —
+the rename is silent, so the tag looks correctly wired until you check the event.
 
 ## Step 2 – Attach the params to your GA4 tag
 
@@ -117,6 +132,12 @@ report on (Dimension name of your choice; **Event parameter** = the exact key, e
   GTM tag both fire `page_view` to the same measurement ID, pageviews are double-counted.
   Pick one tagging path per property (for GTM-tier sites, keep GTM and turn off Site Kit's
   GA snippet).
+- **Treat anonymous `institution` counts as approximate.** Institutional access can be
+  matched by IP, so an anonymous visitor's `access_source` (and `group`) is baked into the
+  page HTML. Full-page caching serves that same HTML to the *next* anonymous visitor on the
+  same URL, whatever network they're on — so `institution` can be over-reported and
+  under-reported for anonymous traffic. Logged-in readers bypass the page cache and are
+  unaffected.
 - **Watch for a drifted "Google tag".** A property's Google tag (`GT-…`) can be configured
   to deliver to a *different* measurement ID than the one you report on, sending your
   param-rich hits to a property nobody reads. Confirm in GA4 Admin → Data streams →
