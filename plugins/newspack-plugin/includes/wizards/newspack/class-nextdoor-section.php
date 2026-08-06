@@ -78,12 +78,31 @@ class Nextdoor_Section extends Wizard_Section {
 						'sanitize_callback' => 'sanitize_text_field',
 					],
 					'allowed_roles'           => [
-						'required' => false,
-						'type'     => 'array',
+						'required'          => false,
+						'type'              => 'array',
+						'items'             => [ 'type' => 'string' ],
+						'sanitize_callback' => [ $this, 'sanitize_allowed_roles' ],
 					],
 				],
 			]
 		);
+	}
+
+	/**
+	 * Restrict the submitted roles to the roles registered on this site.
+	 *
+	 * @param mixed $value Submitted value.
+	 * @return string[] Role names, re-indexed.
+	 */
+	public function sanitize_allowed_roles( $value ) {
+		if ( ! is_array( $value ) ) {
+			return [];
+		}
+
+		$submitted = array_filter( $value, 'is_string' );
+		$roles     = array_keys( wp_roles()->roles );
+
+		return array_values( array_unique( array_intersect( $submitted, $roles ) ) );
 	}
 
 	/**
@@ -113,7 +132,6 @@ class Nextdoor_Section extends Wizard_Section {
 
 			$settings = [
 				'client_id'       => $settings['client_id'] ?? '',
-				'client_secret'   => $settings['client_secret'] ?? '',
 				'publication_url' => $settings['publication_url'] ?? '',
 				'allowed_roles'   => $settings['allowed_roles'] ?? [],
 			];
