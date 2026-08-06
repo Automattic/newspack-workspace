@@ -7,7 +7,7 @@
  */
 import { __ } from '@wordpress/i18n';
 import { useState, useEffect } from '@wordpress/element';
-import { CheckboxControl, __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { CheckboxControl, Notice as WPNotice, __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 
 /**
  * Internal dependencies
@@ -78,7 +78,11 @@ export const Settings = ( { settings, status, error, updateSettings, disconnect,
 
 	return (
 		<VStack spacing={ 6 }>
-			{ error && <Notice noticeText={ error } isError /> }
+			{ error && (
+				<WPNotice status="error" isDismissible={ false } spokenMessage={ null }>
+					{ error }
+				</WPNotice>
+			) }
 
 			<VStack spacing={ 4 }>
 				<h4 className="nextdoor-settings__subheading">{ __( 'Connection Information', 'newspack-plugin' ) }</h4>

@@ -14,7 +14,7 @@ import isEqual from 'lodash/isEqual';
 import apiFetch from '@wordpress/api-fetch';
 import { Fragment, useState, useEffect, createPortal } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
-import { __experimentalHStack as HStack, __experimentalVStack as VStack, Snackbar, ToggleControl } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { Notice as WPNotice, __experimentalHStack as HStack, __experimentalVStack as VStack, Snackbar, ToggleControl } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 
 /**
  * Internal dependencies
@@ -243,7 +243,11 @@ const Placements = () => {
 							} ) }
 						>
 							<VStack spacing={ 4 }>
-								{ error && <Notice isError noticeText={ error.message } /> }
+								{ error && (
+									<WPNotice status="error" isDismissible={ false } spokenMessage={ null }>
+										{ error.message }
+									</WPNotice>
+								) }
 								{ biddersError && <Notice isWarning noticeText={ biddersError.message } /> }
 								{ ( enabled || isEnabling ) && placement.hook_name && (
 									<PlacementControl

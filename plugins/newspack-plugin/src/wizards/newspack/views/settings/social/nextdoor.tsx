@@ -13,12 +13,12 @@ import classnames from 'classnames';
 import { __, sprintf } from '@wordpress/i18n';
 import { useState, useEffect } from '@wordpress/element';
 import apiFetch from '@wordpress/api-fetch';
-import { __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { Notice as WPNotice, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 
 /**
  * Internal dependencies
  */
-import { Button, CardForm, Notice } from '../../../../../../packages/components/src';
+import { Button, CardForm } from '../../../../../../packages/components/src';
 import useWizardApiFetchToggle from '../../../../hooks/use-wizard-api-fetch-toggle';
 import { useErrorAnnouncement, useSocialCards } from './context';
 
@@ -337,7 +337,11 @@ function Nextdoor() {
 			onRequestClose={ dismiss }
 		>
 			<VStack spacing={ 4 }>
-				{ errorMessage && <Notice isError noticeText={ errorMessage } /> }
+				{ errorMessage && (
+					<WPNotice status="error" isDismissible={ false } spokenMessage={ null }>
+						{ errorMessage }
+					</WPNotice>
+				) }
 				{ isConnected ? (
 					<Settings
 						settings={ settings }

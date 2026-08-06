@@ -7,11 +7,12 @@
  */
 import { __ } from '@wordpress/i18n';
 import { useEffect, useState } from '@wordpress/element';
+import { Notice as WPNotice } from '@wordpress/components';
 
 /**
  * Internal dependencies
  */
-import { Button, CardForm, Handoff, Notice } from '../../../../../../packages/components/src';
+import { Button, CardForm, Handoff } from '../../../../../../packages/components/src';
 import { useWizardApiFetch } from '../../../../hooks/use-wizard-api-fetch';
 import { useErrorAnnouncement } from './context';
 
@@ -120,7 +121,11 @@ const Publicize = () => {
 			actions={ actions }
 			isOpen={ !! errorMessage }
 		>
-			<Notice isError noticeText={ errorMessage } />
+			{ errorMessage && (
+				<WPNotice status="error" isDismissible={ false } spokenMessage={ null }>
+					{ errorMessage }
+				</WPNotice>
+			) }
 		</CardForm>
 	);
 };

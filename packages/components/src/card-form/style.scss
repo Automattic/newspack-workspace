@@ -17,4 +17,9 @@
 		font-size: wp.$font-size-medium;
 		line-height: wp.$font-line-height-medium;
 	}
+
+	// The body stack owns the rhythm between its children.
+	&__body .components-notice {
+		margin: 0;
+	}
 }

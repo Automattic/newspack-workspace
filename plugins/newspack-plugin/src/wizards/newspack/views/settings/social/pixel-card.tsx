@@ -12,12 +12,12 @@ import classnames from 'classnames';
  */
 import { __, sprintf } from '@wordpress/i18n';
 import { useEffect, useState } from '@wordpress/element';
-import { __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { Notice as WPNotice, __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 
 /**
  * Internal dependencies
  */
-import { Button, CardForm, Notice, TextControl } from '../../../../../../packages/components/src';
+import { Button, CardForm, TextControl } from '../../../../../../packages/components/src';
 import { useWizardApiFetch } from '../../../../hooks/use-wizard-api-fetch';
 import { useErrorAnnouncement, useSocialCards } from './context';
 
@@ -159,7 +159,11 @@ const PixelCard = ( { title, description, namespace, path, validate, renderHelp 
 			onRequestClose={ close }
 		>
 			<VStack spacing={ 4 }>
-				{ errorMessage && <Notice isError noticeText={ errorMessage } /> }
+				{ errorMessage && (
+					<WPNotice status="error" isDismissible={ false } spokenMessage={ null }>
+						{ errorMessage }
+					</WPNotice>
+				) }
 				<TextControl
 					value={ draft }
 					label={ __( 'Pixel ID', 'newspack-plugin' ) }
@@ -174,7 +178,11 @@ const PixelCard = ( { title, description, namespace, path, validate, renderHelp 
 					withMargin={ false }
 					__nextHasNoMarginBottom
 				/>
-				{ hasTouched && validationError && <Notice isError noticeText={ validationError } /> }
+				{ hasTouched && validationError && (
+					<WPNotice status="error" isDismissible={ false } spokenMessage={ null }>
+						{ validationError }
+					</WPNotice>
+				) }
 				<HStack justify="flex-start" spacing={ 2 }>
 					<Button
 						variant="primary"

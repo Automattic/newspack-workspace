@@ -7,7 +7,7 @@
  */
 import { __ } from '@wordpress/i18n';
 import { createInterpolateElement, useState, useEffect } from '@wordpress/element';
-import { ExternalLink, __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { ExternalLink, Notice as WPNotice, __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 
 /**
  * Internal dependencies
@@ -186,7 +186,11 @@ export const Onboarding = ( {
 
 	return (
 		<VStack spacing={ 4 }>
-			{ error && <Notice noticeText={ error } isError /> }
+			{ error && (
+				<WPNotice status="error" isDismissible={ false } spokenMessage={ null }>
+					{ error }
+				</WPNotice>
+			) }
 
 			{ isManualMode && currentStep === STEPS.manual.CREDENTIALS && (
 				<VStack spacing={ 4 }>
