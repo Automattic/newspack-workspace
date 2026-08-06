@@ -143,7 +143,8 @@ class Nextdoor_Section extends Wizard_Section {
 				'has_centralized_credentials' => $has_centralized_credentials,
 				'has_tokens'                  => ! empty( $settings['access_token'] ),
 				'has_page'                    => ! empty( $settings['page_id'] ),
-				'token_valid'                 => Auth::validate_token(),
+				// Read off the stored token: refreshing here would make every settings load wait on Nextdoor.
+				'token_valid'                 => Auth::has_usable_token(),
 			];
 
 			$settings = [
@@ -181,13 +182,19 @@ class Nextdoor_Section extends Wizard_Section {
 			} else {
 				$module_settings = Optional_Modules::deactivate_optional_module( 'nextdoor' );
 			}
-	
+
 			if ( ! $module_settings ) {
 				return new WP_Error(
 					'newspack_nextdoor_module_update_failed',
 					__( 'Failed to update Nextdoor module settings.', 'newspack-plugin' ),
 					[ 'status' => 500 ]
 				);
+			}
+
+			// Once the module is off nothing is left running to reconcile the publishing
+			// capability, so it has to be revoked on the way out.
+			if ( ! $module_enabled ) {
+				Nextdoor_Module::remove_nextdoor_capability();
 			}
 		}
 
