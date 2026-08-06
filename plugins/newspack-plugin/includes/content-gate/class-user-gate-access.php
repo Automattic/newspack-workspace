@@ -123,24 +123,37 @@ class User_Gate_Access {
 	 * @return string Formatted value.
 	 */
 	private static function format_rule_value( $slug, $value ) {
+		// Ahead of the generic empty-value branch below: an unconfigured
+		// one_time_purchase rule denies access, so reporting it as "(any)" would
+		// tell the reader the opposite of how the rule just evaluated.
+		if ( 'one_time_purchase' === $slug ) {
+			$sanitized_value = Access_Rules::sanitize_one_time_purchase_value( $value );
+			$products_label  = empty( $sanitized_value['product_ids'] )
+				? __( '(no products selected)', 'newspack-plugin' )
+				: self::format_product_names( $sanitized_value['product_ids'] );
+			if ( 'forever' === $sanitized_value['duration_unit'] ) {
+				/* translators: %s: list of product names. */
+				return sprintf( __( '%s (forever)', 'newspack-plugin' ), $products_label );
+			}
+			$duration_value = $sanitized_value['duration_value'];
+			if ( 'days' === $sanitized_value['duration_unit'] ) {
+				/* translators: 1: list of product names, 2: number of days. */
+				return sprintf( _n( '%1$s (%2$d day from purchase)', '%1$s (%2$d days from purchase)', $duration_value, 'newspack-plugin' ), $products_label, $duration_value );
+			}
+			if ( 'months' === $sanitized_value['duration_unit'] ) {
+				/* translators: 1: list of product names, 2: number of months. */
+				return sprintf( _n( '%1$s (%2$d month from purchase)', '%1$s (%2$d months from purchase)', $duration_value, 'newspack-plugin' ), $products_label, $duration_value );
+			}
+			/* translators: %s: list of product names. Shown when the stored duration is unrecognized; the rule then never grants access. */
+			return sprintf( __( '%s (invalid duration, grants no access)', 'newspack-plugin' ), $products_label );
+		}
+
 		if ( empty( $value ) ) {
 			return __( '(any)', 'newspack-plugin' );
 		}
 
 		if ( 'subscription' === $slug && is_array( $value ) ) {
-			$names = array_map(
-				function( $product_id ) {
-					if ( function_exists( 'wc_get_product' ) ) {
-						$product = wc_get_product( $product_id );
-						if ( $product ) {
-							return $product->get_name();
-						}
-					}
-					return '#' . $product_id;
-				},
-				$value
-			);
-			return implode( ', ', $names );
+			return self::format_product_names( $value );
 		}
 
 		if ( is_array( $value ) ) {
@@ -148,6 +161,29 @@ class User_Gate_Access {
 		}
 
 		return (string) $value;
+	}
+
+	/**
+	 * Format a list of product IDs as a comma-separated list of product names.
+	 *
+	 * @param array $product_ids Product IDs.
+	 *
+	 * @return string Comma-separated product names.
+	 */
+	private static function format_product_names( $product_ids ) {
+		$names = array_map(
+			function( $product_id ) {
+				if ( function_exists( 'wc_get_product' ) ) {
+					$product = wc_get_product( $product_id );
+					if ( $product ) {
+						return $product->get_name();
+					}
+				}
+				return '#' . $product_id;
+			},
+			$product_ids
+		);
+		return implode( ', ', $names );
 	}
 
 	/**

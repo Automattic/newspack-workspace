@@ -17,7 +17,9 @@ type HeaderAction = {
 // or an `href` carries the behaviour.
 type SectionMenuItem = Omit< HeaderAction, 'type' >;
 
-type GateAccessRuleValue = string | string[] | boolean;
+// Single source of truth for the composite value shape lives with the control.
+type OneTimePurchaseRuleValue = import( '../../../../../content-gate/components/one-time-purchase-rule-control' ).OneTimePurchaseValue;
+type GateAccessRuleValue = string | string[] | boolean | OneTimePurchaseRuleValue;
 type AccessRule = {
 	name: string;
 	default: GateAccessRuleValue;
@@ -152,8 +154,11 @@ type MeteringCountdownConfig = {
 	cta_product_id: number;
 };
 
+type FeedRestrictionMode = 'truncate' | 'exclude';
+
 type AdvancedSettingsConfig = {
 	restrict_feeds: boolean;
+	feed_restriction_mode: FeedRestrictionMode;
 	newsletter_link_bypass_enabled: boolean;
 };
 
