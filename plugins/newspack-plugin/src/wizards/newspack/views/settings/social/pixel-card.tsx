@@ -62,9 +62,16 @@ const PixelCard = ( { title, description, namespace, path, validate, renderHelp 
 
 	const validationError = validate( draft );
 	const hasChanges = draft !== settings.pixel_id;
-	// More than one card renders per page, so the error needs its own id.
-	const errorId = useInstanceId( PixelCard, 'newspack-pixel-card-error' );
+	// More than one card renders per page, so the field and its error need ids of
+	// their own.
+	const instanceId = useInstanceId( PixelCard, 'newspack-pixel-card' );
+	const fieldId = `${ instanceId }-pixel-id`;
+	const errorId = `${ fieldId }-error`;
 	const shownError = hasBlurred && validationError ? validationError : null;
+	// `aria-errormessage` is unimplemented in WebKit, so the error is composed into
+	// `aria-describedby` instead. `__help` is the id BaseControl gives the help
+	// text, and keeping it preserves that association rather than replacing it.
+	const describedBy = [ `${ fieldId }__help`, shownError ? errorId : null ].filter( Boolean ).join( ' ' );
 
 	const save = ( data: PixelData, message: string ) => {
 		resetError();
@@ -123,6 +130,7 @@ const PixelCard = ( { title, description, namespace, path, validate, renderHelp 
 			size="compact"
 			aria-label={ isOpen ? cancelLabel : editLabel }
 			disabled={ isFetching }
+			accessibleWhenDisabled
 			onClick={ () => ( isOpen ? close() : setIsOpen( true ) ) }
 		>
 			<span className="newspack-social-settings__toggle-label">
@@ -137,6 +145,7 @@ const PixelCard = ( { title, description, namespace, path, validate, renderHelp 
 			aria-label={ isOpen ? cancelLabel : enableLabel }
 			isBusy={ ! isOpen && isFetching }
 			disabled={ isFetching }
+			accessibleWhenDisabled
 			onClick={ () => {
 				if ( isOpen ) {
 					close();
@@ -168,8 +177,9 @@ const PixelCard = ( { title, description, namespace, path, validate, renderHelp 
 						{ errorMessage }
 					</WPNotice>
 				) }
-				<VStack spacing={ 0 }>
+				<VStack spacing={ 2 }>
 					<TextControl
+						id={ fieldId }
 						value={ draft }
 						label={ __( 'Pixel ID', 'newspack-plugin' ) }
 						onChange={ ( value: string ) => {
@@ -181,7 +191,7 @@ const PixelCard = ( { title, description, namespace, path, validate, renderHelp 
 						disabled={ isFetching }
 						autoComplete="one-time-code"
 						aria-invalid={ !! shownError }
-						aria-errormessage={ shownError ? errorId : undefined }
+						aria-describedby={ describedBy }
 						withMargin={ false }
 						__nextHasNoMarginBottom
 					/>
@@ -198,6 +208,9 @@ const PixelCard = ( { title, description, namespace, path, validate, renderHelp 
 						isBusy={ isFetching }
 						disabled={ isFetching || !! validationError || ( ! isEnabling && ! hasChanges ) }
 						accessibleWhenDisabled
+						// The button is disabled before the field has been blurred, so its
+						// own reason is the only one exposed anywhere.
+						description={ validationError ? __( 'Enter a valid pixel ID to continue.', 'newspack-plugin' ) : undefined }
 						onClick={ () => save( { active: true, pixel_id: draft.trim() }, isEnabling ? enabledMessage : updatedMessage ) }
 					>
 						{ isEnabling ? __( 'Enable', 'newspack-plugin' ) : __( 'Update', 'newspack-plugin' ) }
@@ -209,6 +222,7 @@ const PixelCard = ( { title, description, namespace, path, validate, renderHelp 
 							isDestructive
 							isBusy={ isFetching }
 							disabled={ isFetching }
+							accessibleWhenDisabled
 							onClick={ () => save( { active: false, pixel_id: settings.pixel_id ?? '' }, disabledMessage ) }
 						>
 							{ __( 'Disable', 'newspack-plugin' ) }

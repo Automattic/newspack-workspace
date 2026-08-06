@@ -4,7 +4,7 @@
 
 .components-button {
 	&.is-destructive {
-		&:hover:not(:disabled) {
+		&:hover:not(:disabled, [aria-disabled="true"]) {
 			box-shadow: none;
 		}
 	}

@@ -277,6 +277,7 @@ function Nextdoor() {
 			size="compact"
 			aria-label={ isOpen ? cancelLabel : editLabel }
 			disabled={ isFetching }
+			accessibleWhenDisabled
 			onClick={ () => ( isOpen ? cancel() : setIsOpen( true ) ) }
 		>
 			<span className="newspack-social-settings__toggle-label">
@@ -285,7 +286,15 @@ function Nextdoor() {
 			</span>
 		</Button>
 	) : (
-		<Button variant="secondary" size="compact" aria-label={ enableLabel } isBusy={ isFetching } disabled={ isFetching } onClick={ enable }>
+		<Button
+			variant="secondary"
+			size="compact"
+			aria-label={ enableLabel }
+			isBusy={ isFetching }
+			disabled={ isFetching }
+			accessibleWhenDisabled
+			onClick={ enable }
+		>
 			<span className="newspack-social-settings__toggle-label">
 				<span>{ __( 'Cancel', 'newspack-plugin' ) }</span>
 				<span className="is-visible">{ __( 'Enable', 'newspack-plugin' ) }</span>
@@ -294,7 +303,15 @@ function Nextdoor() {
 	);
 
 	const renderSecondaryActions = () => (
-		<Button variant="tertiary" __next40pxDefaultSize isDestructive isBusy={ isFetching } disabled={ isFetching } onClick={ disable }>
+		<Button
+			variant="tertiary"
+			__next40pxDefaultSize
+			isDestructive
+			isBusy={ isFetching }
+			disabled={ isFetching }
+			accessibleWhenDisabled
+			onClick={ disable }
+		>
 			{ __( 'Disable', 'newspack-plugin' ) }
 		</Button>
 	);
