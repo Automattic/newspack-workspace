@@ -38,6 +38,9 @@ class Content_Gate extends Contact_Metadata {
 	 * activates between two syncs in that process would otherwise be missed —
 	 * degrading the source label from the product's name to a bare
 	 * `subscription`.
+	 *
+	 * Called at every batch boundary of the bulk contact loops, alongside the
+	 * object cache flush — see RAS_Contact_Sync::batch_boundary_pause().
 	 */
 	public static function reset_cache() {
 		self::$custom_access_gates_cache = null;
