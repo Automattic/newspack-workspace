@@ -427,6 +427,13 @@ class Newspack_Test_Frontend_Registration_Endpoint extends WP_UnitTestCase {
 	 *
 	 * The logged-in branch used to run before the key check, so any visitor with
 	 * a session could reach integration hooks unauthenticated.
+	 *
+	 * A 403 only implies the logged-in branch was never reached; it isn't the
+	 * security property itself, and a status code could change for unrelated
+	 * reasons without this test noticing. The actual property is that
+	 * `newspack_frontend_registration_existing_user` — the hook integrations use
+	 * to act on a logged-in registration attempt — never fires behind a failed
+	 * key check, so this also spies on that action directly.
 	 */
 	public function test_register_while_logged_in_requires_valid_key() {
 		$admin_id = self::factory()->user->create(
@@ -437,6 +444,12 @@ class Newspack_Test_Frontend_Registration_Endpoint extends WP_UnitTestCase {
 		);
 		wp_set_current_user( $admin_id );
 
+		$fire_count = 0;
+		$spy        = function () use ( &$fire_count ) {
+			$fire_count++;
+		};
+		add_action( 'newspack_frontend_registration_existing_user', $spy );
+
 		$response = $this->do_register_request(
 			[
 				'npe'             => self::$reader_email,
@@ -445,9 +458,12 @@ class Newspack_Test_Frontend_Registration_Endpoint extends WP_UnitTestCase {
 			]
 		);
 
+		remove_action( 'newspack_frontend_registration_existing_user', $spy );
+
 		$this->assertEquals( 403, $response->get_status() );
 		$data = $response->get_data();
 		$this->assertEquals( 'invalid_integration_key', $data['code'] );
+		$this->assertSame( 0, $fire_count, 'newspack_frontend_registration_existing_user must not fire behind a failed integration key check.' );
 
 		wp_delete_user( $admin_id );
 	}
