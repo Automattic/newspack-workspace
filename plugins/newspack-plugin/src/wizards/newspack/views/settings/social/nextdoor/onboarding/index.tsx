@@ -355,30 +355,16 @@ export const Onboarding = ( {
 			{ ( ! isManualMode || currentStep > STEPS.manual.CREDENTIALS ) && (
 				<VStack spacing={ 4 }>
 					<Grid columns={ 2 } gutter={ 16 } noMargin>
-						<div>
-							<div className="nextdoor-onboarding__status-label">{ __( 'Authorization:', 'newspack-plugin' ) }</div>
-							{ ( () => {
-								if ( ! isManualMode ) {
-									return (
-										<span className="nextdoor-onboarding__status-value nextdoor-onboarding__status-value--success">
-											{ __( 'Managed by Newspack', 'newspack-plugin' ) }
-										</span>
-									);
-								}
-								if ( status.has_credentials ) {
-									return (
-										<span className="nextdoor-onboarding__status-value nextdoor-onboarding__status-value--success">
-											{ __( 'Configured', 'newspack-plugin' ) }
-										</span>
-									);
-								}
-								return (
-									<span className="nextdoor-onboarding__status-value nextdoor-onboarding__status-value--error">
-										{ __( 'Not configured', 'newspack-plugin' ) }
-									</span>
-								);
-							} )() }
-						</div>
+						{ /* Only worth stating when Newspack supplies the credentials: in manual
+						     mode the grid is unreachable until the publisher has saved a pair. */ }
+						{ ! isManualMode && (
+							<div>
+								<div className="nextdoor-onboarding__status-label">{ __( 'API credentials:', 'newspack-plugin' ) }</div>
+								<span className="nextdoor-onboarding__status-value nextdoor-onboarding__status-value--success">
+									{ __( 'Managed by Newspack', 'newspack-plugin' ) }
+								</span>
+							</div>
+						) }
 						<div>
 							<div className="nextdoor-onboarding__status-label">{ __( 'Account Connected:', 'newspack-plugin' ) }</div>
 							{ status.has_tokens ? (
