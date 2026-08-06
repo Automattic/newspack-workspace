@@ -286,13 +286,24 @@ class Inert_Gating_Notice {
 	 * Returns the strings rather than a flag so the two surfaces cannot drift into
 	 * saying different things about the same state.
 	 *
-	 * @return array{show: bool, message: string, urls: array<string, string>}
+	 * `has_surfaces` answers a different question from `show`, which is why both are
+	 * here: `show` is "is content public right now", and is false while Audience
+	 * Management is still on. The confirmation dialog for switching it off needs to
+	 * know what would happen, so it asks whether anything is configured at all.
+	 *
+	 * Unlike `show`, it is not gated on the feature flag. Block-level visibility is
+	 * flag-independent ({@see Block_Visibility}), so a site without the constant can
+	 * still have member-only blocks that go public.
+	 *
+	 * @return array{show: bool, has_surfaces: bool, message: string, urls: array<string, string>}
 	 */
 	public static function get_script_data(): array {
+		$can_manage = current_user_can( 'manage_options' );
 		return [
-			'show'    => current_user_can( 'manage_options' ) && self::is_inert(),
-			'message' => self::get_message(),
-			'urls'    => self::get_urls(),
+			'show'         => $can_manage && self::is_inert(),
+			'has_surfaces' => $can_manage && self::has_surfaces(),
+			'message'      => self::get_message(),
+			'urls'         => self::get_urls(),
 		];
 	}
 

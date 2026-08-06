@@ -219,6 +219,29 @@ class Inert_Gating_Notice_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * `has_surfaces` answers what `show` cannot.
+	 *
+	 * The confirmation dialog for switching Audience Management off runs while it is
+	 * still on, so nothing is inert yet and `show` is false. The dialog still needs to
+	 * know whether there is anything to warn about, which is a different question.
+	 */
+	public function test_wizard_payload_reports_configured_surfaces_while_gating_is_active() {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+		$this->create_gate();
+		Inert_Gating_Notice::flush_cache();
+
+		$data = Inert_Gating_Notice::get_script_data();
+		$this->assertFalse( $data['show'], 'Nothing is public while gating is doing its job.' );
+		$this->assertTrue( $data['has_surfaces'], 'The dialog has to know what switching off would expose.' );
+
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'editor' ] ) );
+		$this->assertFalse(
+			Inert_Gating_Notice::get_script_data()['has_surfaces'],
+			'An editor cannot reach that dialog, so the payload should tell them nothing.'
+		);
+	}
+
+	/**
 	 * The cached answer must actually be read back, not just written. Without this
 	 * the early return in has_surfaces() can be deleted with every other case still
 	 * green, and the `LIKE` runs on every admin page load.
