@@ -74,6 +74,7 @@ window.newspackSettings.social.nextdoor = window.newspackSettings.social.nextdoo
 		{ label: 'Australia', value: 'AU' },
 	],
 	default_country: 'US',
+	site_url: 'https://example.com',
 	available_roles: [
 		{ label: 'Administrator', value: 'administrator' },
 		{ label: 'Editor', value: 'editor' },

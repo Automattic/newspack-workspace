@@ -66,7 +66,7 @@ export const Onboarding = ( {
 	const [ email, setEmail ] = useState( '' );
 	const [ hasBlurredEmail, setHasBlurredEmail ] = useState( false );
 	const [ country, setCountry ] = useState( window.newspackSettings?.social?.nextdoor?.default_country || 'US' );
-	const [ publicationUrl, setPublicationUrl ] = useState( settings.publication_url || '' );
+	const [ publicationUrl, setPublicationUrl ] = useState( settings.publication_url || window.newspackSettings?.social?.nextdoor?.site_url || '' );
 	const [ isSaving, setIsSaving ] = useState( false );
 	const [ currentStep, setCurrentStep ] = useState( 1 );
 

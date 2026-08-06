@@ -65,6 +65,7 @@ declare global {
 						value: string;
 					}[];
 					default_country: string;
+					site_url: string;
 					redirect_uri: string;
 				};
 			};

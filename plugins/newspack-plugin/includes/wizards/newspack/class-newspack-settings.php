@@ -83,6 +83,9 @@ class Newspack_Settings extends Wizard {
 					'country_options' => Nextdoor::get_available_countries(),
 					'default_country' => Nextdoor::get_default_country(),
 					'redirect_uri'    => Nextdoor::get_redirect_uri(),
+					// Prefills the claim step. Editable, since a publication may run
+					// several sites and claim under a different one.
+					'site_url'        => \home_url(),
 				],
 			],
 			'syndication'       => [
