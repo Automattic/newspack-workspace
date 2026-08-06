@@ -14,6 +14,8 @@ import { ExternalLink, __experimentalHStack as HStack, __experimentalVStack as V
  */
 import { Button, Grid, Notice, SelectControl, TextControl } from '../../../../../../../../packages/components/src';
 import { OnboardingProps } from '../types';
+import ReadonlyField from './readonly-field';
+import CopyButton from './copy-button';
 
 /**
  * Styles
@@ -188,30 +190,37 @@ export const Onboarding = ( {
 
 			{ isManualMode && currentStep === STEPS.manual.CREDENTIALS && (
 				<VStack spacing={ 4 }>
-					<p className="nextdoor-onboarding__intro">
-						{ __( 'To get started, you need to register your site with Nextdoor and obtain API credentials.', 'newspack-plugin' ) }
-					</p>
-					<div className="nextdoor-onboarding__redirect-uri-box">
-						<strong>{ __( 'Redirect URI:', 'newspack-plugin' ) }</strong>
-						<br />
-						<div className="nextdoor-onboarding__redirect-uri-container">
-							<code className="nextdoor-onboarding__redirect-uri-code">{ redirectUri }</code>
-						</div>
-						<small className="nextdoor-onboarding__redirect-uri-help">
-							{ __( 'Use this URL as the Redirect URI when signing up for Nextdoor credentials.', 'newspack-plugin' ) }
-						</small>
-					</div>
-					<p className="nextdoor-onboarding__intro">
-						<ExternalLink href="https://developer.nextdoor.com/reference/applying-for-access">
-							{ __( 'Get your API credentials from Nextdoor Developer Portal', 'newspack-plugin' ) }
-						</ExternalLink>
-					</p>
+					<VStack spacing={ 0 }>
+						<p className="nextdoor-onboarding__intro">
+							{ __( 'To get started, you need to register your site with Nextdoor and obtain API credentials.', 'newspack-plugin' ) }
+						</p>
+						<p className="nextdoor-onboarding__intro">
+							<ExternalLink href="https://developer.nextdoor.com/reference/applying-for-access">
+								{ __( 'Get your API credentials from Nextdoor Developer Portal', 'newspack-plugin' ) }
+							</ExternalLink>
+						</p>
+					</VStack>
+					<ReadonlyField
+						id="nextdoor-onboarding-redirect-uri"
+						label={ __( 'Redirect URI', 'newspack-plugin' ) }
+						help={ __( 'Use this URL as the Redirect URI when signing up for Nextdoor credentials.', 'newspack-plugin' ) }
+						value={ redirectUri }
+						isMonospace
+					>
+						<CopyButton
+							value={ redirectUri }
+							label={ __( 'Copy Redirect URI', 'newspack-plugin' ) }
+							successMessage={ __( 'Redirect URI copied to clipboard.', 'newspack-plugin' ) }
+							errorMessage={ __( 'Could not copy the Redirect URI.', 'newspack-plugin' ) }
+						/>
+					</ReadonlyField>
 
 					<TextControl
 						label={ __( 'Client ID', 'newspack-plugin' ) }
 						value={ clientId }
 						onChange={ setClientId }
 						placeholder={ __( 'Enter your Nextdoor Client ID', 'newspack-plugin' ) }
+						help={ __( 'The public identifier for your app in the Nextdoor Developer Portal.', 'newspack-plugin' ) }
 						withMargin={ false }
 						__nextHasNoMarginBottom
 					/>
@@ -221,6 +230,7 @@ export const Onboarding = ( {
 						onChange={ setClientSecret }
 						type="password"
 						placeholder={ __( 'Enter your Nextdoor Client Secret', 'newspack-plugin' ) }
+						help={ __( 'Issued with the Client ID. Stored securely, and never shown here again.', 'newspack-plugin' ) }
 						withMargin={ false }
 						__nextHasNoMarginBottom
 					/>
@@ -228,7 +238,7 @@ export const Onboarding = ( {
 					<HStack justify="flex-start" spacing={ 2 }>
 						<Button
 							variant="primary"
-							size="compact"
+							__next40pxDefaultSize
 							onClick={ handleSaveCredentials }
 							disabled={ ! clientId || ! clientSecret || isSaving }
 							isBusy={ isSaving }
@@ -272,11 +282,17 @@ export const Onboarding = ( {
 					/>
 
 					<HStack justify="flex-start" spacing={ 2 }>
-						<Button variant="primary" size="compact" onClick={ handleStartOAuth } disabled={ ! email || isSaving } isBusy={ isSaving }>
+						<Button
+							variant="primary"
+							__next40pxDefaultSize
+							onClick={ handleStartOAuth }
+							disabled={ ! email || isSaving }
+							isBusy={ isSaving }
+						>
 							{ __( 'Connect Account', 'newspack-plugin' ) }
 						</Button>
 						{ isManualMode && (
-							<Button variant="secondary" size="compact" onClick={ () => setCurrentStep( STEPS.manual.CREDENTIALS ) }>
+							<Button variant="secondary" __next40pxDefaultSize onClick={ () => setCurrentStep( STEPS.manual.CREDENTIALS ) }>
 								{ __( 'Back', 'newspack-plugin' ) }
 							</Button>
 						) }
@@ -305,14 +321,14 @@ export const Onboarding = ( {
 					<HStack justify="flex-start" spacing={ 2 }>
 						<Button
 							variant="primary"
-							size="compact"
+							__next40pxDefaultSize
 							onClick={ handleClaimPage }
 							disabled={ ! publicationUrl || isSaving }
 							isBusy={ isSaving }
 						>
 							{ __( 'Claim Page', 'newspack-plugin' ) }
 						</Button>
-						<Button variant="secondary" size="compact" onClick={ () => setCurrentStep( steps.ACCOUNT_AUTH ) }>
+						<Button variant="secondary" __next40pxDefaultSize onClick={ () => setCurrentStep( steps.ACCOUNT_AUTH ) }>
 							{ __( 'Back', 'newspack-plugin' ) }
 						</Button>
 						{ renderSecondaryActions?.() }
@@ -399,7 +415,7 @@ export const Onboarding = ( {
 						<HStack justify="flex-start" spacing={ 2 }>
 							<Button
 								variant="tertiary"
-								size="compact"
+								__next40pxDefaultSize
 								isDestructive
 								onClick={ handleDisconnect }
 								disabled={ isSaving }
