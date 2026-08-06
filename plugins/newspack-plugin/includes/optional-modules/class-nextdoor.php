@@ -252,13 +252,36 @@ class Nextdoor {
 	}
 
 	/**
+	 * Remove credentials that come from a constant or environment variable.
+	 *
+	 * Every write path reads through get_settings(), which overlays the centralized
+	 * credentials, so persisting the result as-is would copy the platform's shared
+	 * secret into this site's option and leave a stale copy behind if the constant
+	 * is ever unset.
+	 *
+	 * @param array $settings Settings array.
+	 * @return array Settings array without the centralized credentials.
+	 */
+	private static function strip_centralized_credentials( $settings ) {
+		$centralized = self::get_centralized_credentials();
+
+		foreach ( [ 'client_id', 'client_secret' ] as $key ) {
+			if ( ! empty( $centralized[ $key ] ) && isset( $settings[ $key ] ) && $settings[ $key ] === $centralized[ $key ] ) {
+				unset( $settings[ $key ] );
+			}
+		}
+
+		return $settings;
+	}
+
+	/**
 	 * Update Nextdoor settings.
 	 *
 	 * @param array $settings Settings array.
 	 * @return bool
 	 */
 	public static function update_settings( $settings ) {
-		return update_option( self::SETTINGS_SLUG, $settings );
+		return update_option( self::SETTINGS_SLUG, self::strip_centralized_credentials( $settings ) );
 	}
 
 	/**
