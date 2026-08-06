@@ -12,6 +12,7 @@ import classnames from 'classnames';
  */
 import { __, sprintf } from '@wordpress/i18n';
 import { useEffect, useState } from '@wordpress/element';
+import { useInstanceId } from '@wordpress/compose';
 import { Notice as WPNotice, __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 
 /**
@@ -61,6 +62,9 @@ const PixelCard = ( { title, description, namespace, path, validate, renderHelp 
 
 	const validationError = validate( draft );
 	const hasChanges = draft !== settings.pixel_id;
+	// More than one card renders per page, so the error needs its own id.
+	const errorId = useInstanceId( PixelCard, 'newspack-pixel-card-error' );
+	const shownError = hasBlurred && validationError ? validationError : null;
 
 	const save = ( data: PixelData, message: string ) => {
 		resetError();
@@ -176,10 +180,16 @@ const PixelCard = ( { title, description, namespace, path, validate, renderHelp 
 						help={ renderHelp() }
 						disabled={ isFetching }
 						autoComplete="one-time-code"
+						aria-invalid={ !! shownError }
+						aria-errormessage={ shownError ? errorId : undefined }
 						withMargin={ false }
 						__nextHasNoMarginBottom
 					/>
-					{ hasBlurred && validationError && <p className="newspack-social-settings__field-error">{ validationError }</p> }
+					{ shownError && (
+						<p className="newspack-social-settings__field-error" id={ errorId }>
+							{ shownError }
+						</p>
+					) }
 				</VStack>
 				<HStack justify="flex-start" spacing={ 2 }>
 					<Button
@@ -187,6 +197,7 @@ const PixelCard = ( { title, description, namespace, path, validate, renderHelp 
 						__next40pxDefaultSize
 						isBusy={ isFetching }
 						disabled={ isFetching || !! validationError || ( ! isEnabling && ! hasChanges ) }
+						accessibleWhenDisabled
 						onClick={ () => save( { active: true, pixel_id: draft.trim() }, isEnabling ? enabledMessage : updatedMessage ) }
 					>
 						{ isEnabling ? __( 'Enable', 'newspack-plugin' ) : __( 'Update', 'newspack-plugin' ) }

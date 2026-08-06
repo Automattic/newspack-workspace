@@ -96,14 +96,15 @@ describe( 'PixelCard', () => {
 
 		fireEvent.click( screen.getByRole( 'button', { name: 'Enable Meta Pixel' } ) );
 
+		// The primary stays focusable while disabled, so the state is on aria-disabled.
 		const confirm = screen.getByRole( 'button', { name: 'Enable' } );
-		expect( confirm ).toBeDisabled();
+		expect( confirm ).toHaveAttribute( 'aria-disabled', 'true' );
 
 		fireEvent.change( screen.getByLabelText( 'Pixel ID' ), { target: { value: 'abc' } } );
-		expect( screen.getByRole( 'button', { name: 'Enable' } ) ).toBeDisabled();
+		expect( screen.getByRole( 'button', { name: 'Enable' } ) ).toHaveAttribute( 'aria-disabled', 'true' );
 
 		fireEvent.change( screen.getByLabelText( 'Pixel ID' ), { target: { value: '123' } } );
-		expect( screen.getByRole( 'button', { name: 'Enable' } ) ).toBeEnabled();
+		expect( screen.getByRole( 'button', { name: 'Enable' } ) ).not.toHaveAttribute( 'aria-disabled' );
 
 		fireEvent.click( screen.getByRole( 'button', { name: 'Enable' } ) );
 
@@ -134,10 +135,10 @@ describe( 'PixelCard', () => {
 
 		fireEvent.click( await screen.findByRole( 'button', { name: 'Edit Meta Pixel' } ) );
 
-		expect( screen.getByRole( 'button', { name: 'Update' } ) ).toBeDisabled();
+		expect( screen.getByRole( 'button', { name: 'Update' } ) ).toHaveAttribute( 'aria-disabled', 'true' );
 
 		fireEvent.change( screen.getByLabelText( 'Pixel ID' ), { target: { value: '456' } } );
-		expect( screen.getByRole( 'button', { name: 'Update' } ) ).toBeEnabled();
+		expect( screen.getByRole( 'button', { name: 'Update' } ) ).not.toHaveAttribute( 'aria-disabled' );
 	} );
 
 	it( 'preserves the stored pixel ID when disabling', async () => {
