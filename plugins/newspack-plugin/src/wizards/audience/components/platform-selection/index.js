@@ -41,25 +41,31 @@ export const OPTIONS = [
 	},
 ];
 
-const PlatformSelection = ( {
-	onComplete,
-	onCancel,
-	config,
-	saveConfig,
-	inFlight,
-	showEnableToggle,
-	platform,
-	platformSelected,
-	disablingBlockedByGates = false,
-} ) => {
+const PlatformSelection = ( { onComplete, onCancel, config, saveConfig, inFlight, showEnableToggle, platform, platformSelected } ) => {
 	const { saveWizardSettings } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const [ installing, setInstalling ] = useState( null );
 	const [ installFailed, setInstallFailed ] = useState( false );
+	// Only warn about Access Control when the site has something to lose. The flag is
+	// the same one behind the standing inert-gating notice, so the dialog and that
+	// notice agree about what counts as configured.
+	const hasAccessControl = window.newspack_aux_data?.inert_gating?.has_surfaces;
 	const { confirmDialog: disableDialog, requestConfirm: requestDisable } = useConfirmDialog( {
 		title: __( 'Disable Audience Management?', 'newspack-plugin' ),
-		message: __(
-			'Disabling Audience Management turns off reader registration, the My Account dashboard, and related reader features. Your settings are preserved and you can re-enable it later.',
-			'newspack-plugin'
+		message: (
+			<>
+				<p>
+					{ __(
+						'Disabling Audience Management turns off reader registration, the My Account dashboard, and related reader features.',
+						'newspack-plugin'
+					) }
+				</p>
+				{ hasAccessControl && (
+					<p>
+						{ __( 'Gated content, premium newsletters, and member-only blocks will become public for all readers.', 'newspack-plugin' ) }
+					</p>
+				) }
+				<p>{ __( 'Are you sure you want to disable these features?', 'newspack-plugin' ) }</p>
+			</>
 		),
 		confirmButtonText: __( 'Disable', 'newspack-plugin' ),
 		isDestructive: true,
@@ -143,18 +149,7 @@ const PlatformSelection = ( {
 							isMedium
 							title={ __( 'Audience Management', 'newspack-plugin' ) }
 							description={
-								/*
-								 * Content gating depends on Audience Management, so while any gate
-								 * exists the toggle explains why it is locked rather than letting the
-								 * publisher confirm a destructive dialog and then hit a REST refusal.
-								 */
-								// eslint-disable-next-line no-nested-ternary
-								disablingBlockedByGates && config?.enabled
-									? __(
-											'Audience Management is enabled. It cannot be disabled while content gates exist, because readers would be unable to register or sign in to reach gated content. Delete your gates under Audience → Access Control first.',
-											'newspack-plugin'
-									  )
-									: config?.enabled
+								config?.enabled
 									? __( 'Audience Management is enabled.', 'newspack-plugin' )
 									: __( 'Audience Management is disabled.', 'newspack-plugin' )
 							}
@@ -167,7 +162,7 @@ const PlatformSelection = ( {
 									requestDisable( () => saveConfig( { enabled: false } ) );
 								}
 							} }
-							disabled={ inFlight || ( disablingBlockedByGates && Boolean( config?.enabled ) ) }
+							disabled={ inFlight }
 						/>
 					) }
 					{ OPTIONS.map( option => {

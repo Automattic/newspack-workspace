@@ -7,16 +7,18 @@
  * guard behind those screens, so a stale browser tab cannot POST a gate into
  * existence that no reader could ever satisfy.
  *
- * Note on the disabled state: Reader_Activation::is_enabled() returns true
- * unconditionally under IS_TEST_ENV, short-circuiting before its
- * `newspack_reader_activation_enabled` filter — so "Audience Management off"
- * cannot be simulated here at all, and the enabled assertions below are
- * correspondingly weak (they would hold even against a stubbed method body).
- * The disabled path uses subclasses overriding the single delegating method; the
- * real disabled path is verified at runtime against a site with Reader
- * Activation off. An existing skipped test in this suite
- * (Newspack_Test_Frontend_Registration_Endpoint::test_register_when_ras_disabled)
- * records the same limitation.
+ * Note on the disabled state: this used to be unsimulatable, because
+ * Reader_Activation::is_enabled() short-circuited to true under IS_TEST_ENV
+ * before applying its `newspack_reader_activation_enabled` filter. That default
+ * now applies before the filter rather than instead of it, so the disabled path
+ * is reachable from tests: `add_filter( 'newspack_reader_activation_enabled',
+ * '__return_false' )` works, as {@see Gating_Inertness_Test} relies on.
+ *
+ * The subclass doubles below predate that and override the single delegating
+ * method rather than driving the real one, which makes their disabled
+ * assertions weaker than they need to be — they would hold against a stubbed
+ * method body. Worth retiring in favour of the filter next time this file is
+ * touched.
  *
  * @package Newspack\Tests
  */

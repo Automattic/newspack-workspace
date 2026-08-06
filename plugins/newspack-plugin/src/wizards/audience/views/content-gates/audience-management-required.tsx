@@ -14,7 +14,10 @@ import { people } from '@wordpress/icons';
  * Internal dependencies
  */
 import { Button, Grid, SectionHeader } from '../../../../../packages/components/src';
+import Router from '../../../../../packages/components/src/proxied-imports/router';
 import { hasAudienceManagement } from './utils';
+
+const { Redirect } = Router;
 
 const AudienceManagementRequired = ( { isNewsletter = false }: { isNewsletter?: boolean } ) => {
 	const audienceManagementUrl = window.newspackAudienceContentGates?.audience_management_url || '';
@@ -28,11 +31,11 @@ const AudienceManagementRequired = ( { isNewsletter = false }: { isNewsletter?: 
 					description={
 						isNewsletter
 							? __(
-									'Premium newsletters need reader accounts, sign-in and account emails. Audience Management provides them.',
+									'Premium newsletters need accounts, sign-in, and account emails. Audience Management provides them.',
 									'newspack-plugin'
 							  )
 							: __(
-									'Access Control needs reader accounts, sign-in and account emails. Audience Management provides them.',
+									'Access Control needs accounts, sign-in, and account emails. Audience Management provides them.',
 									'newspack-plugin'
 							  )
 					}
@@ -41,15 +44,16 @@ const AudienceManagementRequired = ( { isNewsletter = false }: { isNewsletter?: 
 				/>
 				<VStack alignment="center" spacing={ 4 }>
 					{ /* Rendered only with a real destination: a primary CTA pointing at href=""
-					     reloads the blocked screen, which is worse than offering no button. */ }
+					     reloads this same screen, which is worse than offering no button. */ }
 					{ audienceManagementUrl && (
 						<Button variant="primary" href={ audienceManagementUrl }>
 							{ __( 'Set up Audience Management', 'newspack-plugin' ) }
 						</Button>
 					) }
-					<ExternalLink href="https://help.newspack.com/engagement/audience-management-system/">
-						{ __( 'Learn more', 'newspack-plugin' ) }
-					</ExternalLink>
+					{ /* Points at the Access Control doc rather than the Audience Management one:
+					     the prerequisite is being added there, and that page is where the original
+					     support question started. */ }
+					<ExternalLink href="https://help.newspack.com/access-control/">{ __( 'Learn more', 'newspack-plugin' ) }</ExternalLink>
 				</VStack>
 			</VStack>
 		</Grid>
@@ -60,15 +64,20 @@ const AudienceManagementRequired = ( { isNewsletter = false }: { isNewsletter?: 
  * Wrap a wizard section so it is replaced by the prerequisite state when Audience
  * Management is off.
  *
- * Applied at the router level rather than inside each view, because every section of
- * these screens depends on the prerequisite - not just the gate list. `#/edit/new/all`,
- * the settings sections and Institutions are all reachable directly by bookmark or
- * browser history, and the gate editor there offers a working Save, so a publisher
- * could fill in an entire gate before the REST guard refused it. Guarding the router
- * means a new section inherits the block instead of relying on someone remembering.
+ * Reserved for a screen's landing section - the one route that is allowed to render
+ * the prerequisite state. Every other section redirects to it via
+ * `redirectWithoutAudienceManagement()` rather than rendering its own copy, because
+ * the Wizard draws `section.title` and `section.description` above the section
+ * component: on `#/settings/countdown-banner` that produced the settings page header,
+ * implying the feature was configurable, stacked directly on top of this one.
  *
  * Safe to short-circuit the whole section: the Wizard resets header data on every
  * route change, so no stale header action survives into the blocked state.
+ *
+ * Call at module scope, never inside a component body. Each call mints a new
+ * component type, and the Wizard renders sections as `<SectionComponent />` - a type
+ * that changes identity between renders remounts the section subtree and discards
+ * in-progress editor state.
  */
 export const requireAudienceManagement = < P extends object >(
 	Section: React.ComponentType< P >,
@@ -76,9 +85,25 @@ export const requireAudienceManagement = < P extends object >(
 ) => {
 	const Guarded = ( props: P ) =>
 		hasAudienceManagement() ? <Section { ...props } /> : <AudienceManagementRequired isNewsletter={ isNewsletter } />;
-	// Named so the nine guarded sections are distinguishable in React DevTools
+	// Named so the guarded sections are distinguishable in React DevTools
 	// rather than all reading as `Anonymous`.
 	Guarded.displayName = `RequireAudienceManagement(${ Section.displayName || Section.name || 'Section' })`;
+	return Guarded;
+};
+
+/**
+ * Wrap a wizard section so it redirects to the screen's landing route when Audience
+ * Management is off.
+ *
+ * These routes stay reachable by bookmark and browser history, and the gate editor
+ * among them offers a working Save, so they cannot simply render. Sending them to the
+ * one route that explains the prerequisite keeps the explanation in a single place.
+ *
+ * Same module-scope requirement as `requireAudienceManagement()`.
+ */
+export const redirectWithoutAudienceManagement = < P extends object >( Section: React.ComponentType< P >, redirectTo: string ) => {
+	const Guarded = ( props: P ) => ( hasAudienceManagement() ? <Section { ...props } /> : <Redirect to={ redirectTo } /> );
+	Guarded.displayName = `RedirectWithoutAudienceManagement(${ Section.displayName || Section.name || 'Section' })`;
 	return Guarded;
 };
 

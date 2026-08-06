@@ -15,16 +15,17 @@ defined( 'ABSPATH' ) || exit;
  * Trait Audience_Management_Dependency
  *
  * Audience Management is a hard prerequisite for the wizards that surface the
- * content gate editor (Audience Access Control and Premium Newsletters). The
- * gate itself has no Reader Activation dependency, so it restricts content
- * perfectly well without Audience Management — but everything a gate hands the
- * reader off to is gated on it: reader registration, magic link login, account
- * emails, session hydration and My Account. A gate built without Audience
- * Management locks readers out and then gives them no way in.
+ * content gate editor (Audience Access Control and Premium Newsletters).
+ * Everything a gate hands the reader off to is gated on it: reader
+ * registration, magic link login, account emails, session hydration and My
+ * Account. A gate enforced without Audience Management locks readers out and
+ * then gives them no way in.
  *
- * Premium newsletters fail in both directions: restricted lists are filtered
- * out of every signup form whether or not Audience Management is on, while the
- * `reader_verified` event that would grant access is only dispatched when it is.
+ * Gating therefore stands down rather than half-works: reader-facing enforcement
+ * asks {@see \Newspack\Content_Gate::is_gating_active()}, so with Audience
+ * Management off gates stay configured and restrict nothing. This trait is the
+ * other half of that — it keeps the publisher from authoring new gating that
+ * would do nothing, and points them at the setting that makes it work.
  *
  * Shared by both surfaces so the dependency cannot be enforced on one and
  * forgotten on the other.
@@ -85,19 +86,27 @@ trait Audience_Management_Dependency {
 	 * a stale browser tab from POSTing a gate into existence behind it.
 	 *
 	 * Deliberately scoped to creation. Reads, updates, priority changes and
-	 * deletes stay open, which costs nothing: Audience Management cannot be
-	 * switched off while any gate exists ({@see Content_Gate::has_any_gates()},
-	 * enforced in Audience_Wizard::api_update_reader_activation_settings()), so
-	 * reaching this refusal means the site has no gates for those routes to act
-	 * on. That invariant is also what lets the gate screens replace themselves
-	 * wholesale without stranding a live restriction nobody can lift.
+	 * deletes stay open because nothing is at stake in leaving them open: gates go
+	 * inert while Audience Management is off
+	 * ({@see \Newspack\Content_Gate::is_gating_active()}), so a gate reached by
+	 * those routes is restricting nothing at the time.
+	 *
+	 * Note that with Audience Management off there is currently no screen those
+	 * routes back: the gate list is replaced by the prerequisite state, every
+	 * sub-route redirects to it, and the CPT is registered `show_in_menu => false`.
+	 * Gates are frozen and out of reach until Audience Management is switched back
+	 * on, at which point they all resume together. Leaving the routes open is what
+	 * keeps a read-only list possible later without another permissions change.
+	 *
+	 * This guard is a nudge rather than a safety property, and is worth keeping as
+	 * one: a gate authored now would do nothing until Audience Management is set
+	 * up, and finding that out at save time is worse than being told up front.
 	 *
 	 * Wizard-scoped, not entity-scoped: `np_content_gate` is registered with
 	 * `show_ui` and `show_in_rest`, so an administrator can still create the bare
 	 * CPT outside these wizards. That is adequate for the stale-tab threat this
-	 * guards against — such a gate carries no rules and restricts nothing — and
-	 * the disable guard counts those gates too, so it cannot be used to sneak the
-	 * site back into a gates-without-Audience-Management state.
+	 * guards against, and such a gate stays inert like any other until Audience
+	 * Management is switched back on.
 	 *
 	 * @param \WP_REST_Request $request API request object.
 	 *
