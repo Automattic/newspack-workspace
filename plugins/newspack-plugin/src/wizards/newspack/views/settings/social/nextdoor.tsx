@@ -96,7 +96,7 @@ function Nextdoor() {
 			},
 		},
 		description: __(
-			'Enable publishers to easily connect their Nextdoor account to Newspack and share posts directly to their Nextdoor community.',
+			'Enable publishers to easily connect their Nextdoor account and share posts directly to their Nextdoor community.',
 			'newspack-plugin'
 		),
 	} );
