@@ -280,8 +280,8 @@ class WC_Order_Item_Product implements ArrayAccess {
 }
 
 class WC_Product {
-	private $data = [];
-	private $meta = [];
+	protected $data = [];
+	private $meta   = [];
 	public function __construct( $data = [] ) {
 		$this->data = $data;
 		if ( isset( $data['meta'] ) ) {
@@ -293,6 +293,15 @@ class WC_Product {
 	}
 	public function get_name() {
 		return $this->data['name'] ?? '';
+	}
+	public function get_title() {
+		return $this->data['title'] ?? $this->get_name();
+	}
+	public function get_description() {
+		return $this->data['description'] ?? '';
+	}
+	public function get_price_html() {
+		return $this->data['price_html'] ?? '';
 	}
 	public function get_type() {
 		return $this->data['type'] ?? 'simple';
@@ -306,6 +315,20 @@ class WC_Product {
 	}
 	public function get_children() {
 		return $this->data['children'] ?? [];
+	}
+	public function get_status() {
+		return $this->data['status'] ?? 'publish';
+	}
+	public function get_available_variations() {
+		return array_map(
+			function ( $id ) {
+				return [ 'variation_id' => $id ];
+			},
+			$this->get_children()
+		);
+	}
+	public function get_mock_data() {
+		return $this->data;
 	}
 	public function get_regular_price() {
 		return $this->data['regular_price'] ?? ( $this->meta['_regular_price'] ?? 0 );
@@ -364,6 +387,21 @@ function wc_create_mock_product( $data = [] ) {
 	$product = new WC_Product( $data );
 	$products_database[ $product->get_id() ] = $product;
 	return $product;
+}
+
+if ( ! class_exists( 'WC_Product_Variation' ) ) {
+	/**
+	 * Minimal variation stub. Resolves from the mock product database by ID so
+	 * `new WC_Product_Variation( $id )` behaves like the real constructor, which
+	 * is how Subscriptions_Tiers rebuilds variations.
+	 */
+	class WC_Product_Variation extends WC_Product {
+		public function __construct( $id = 0 ) {
+			global $products_database;
+			$existing = $products_database[ $id ] ?? null;
+			parent::__construct( $existing ? $existing->get_mock_data() : [ 'id' => $id ] );
+		}
+	}
 }
 
 class WC_Order {
@@ -1208,6 +1246,82 @@ function woocommerce_wp_text_input( $field ) {
 	);
 }
 /**
+ * Minimal currency stubs, enough for `render_nyp_product_card()` to render.
+ *
+ * @return string
+ */
+function get_woocommerce_currency_symbol() {
+	return '$';
+}
+/**
+ * Store currency code.
+ *
+ * @return string
+ */
+function get_woocommerce_currency() {
+	return 'USD';
+}
+/**
+ * Number of decimals prices are displayed with.
+ *
+ * @return int
+ */
+function wc_get_price_decimals() {
+	return 2;
+}
+/**
+ * Minimal `wc_get_products()` stub: filters the mock product database by
+ * `type`, the only query arg `Subscriptions_Tiers` reads.
+ *
+ * @param array $args Query args. Only `type` is honored.
+ *
+ * @return \WC_Product[] Matching mock products.
+ */
+function wc_get_products( $args = [] ) {
+	global $products_database;
+	$products = array_values( $products_database );
+	if ( isset( $args['type'] ) ) {
+		$types    = (array) $args['type'];
+		$products = array_values(
+			array_filter(
+				$products,
+				function ( $product ) use ( $types ) {
+					return in_array( $product->get_type(), $types, true );
+				}
+			)
+		);
+	}
+	return $products;
+}
+/**
+ * Minimal `wcs_user_has_subscription()` stub, matching the real signature:
+ * a product ID and/or status narrow the match, not just the user.
+ *
+ * @param int    $user_id    User ID.
+ * @param string $product_id Product ID to require on the subscription. Empty string matches any product.
+ * @param string $status     Status to require, or 'any' to match regardless of status.
+ *
+ * @return bool Whether the user holds a matching subscription.
+ */
+function wcs_user_has_subscription( $user_id = 0, $product_id = '', $status = 'any' ) {
+	global $subscriptions_database;
+	foreach ( (array) $subscriptions_database as $subscription ) {
+		// Customer IDs arrive as both int and numeric string depending on the
+		// fixture, so compare loosely rather than with a strict ===.
+		if ( (int) $subscription->get_customer_id() !== (int) $user_id ) {
+			continue;
+		}
+		if ( '' !== $product_id && ! $subscription->has_product( $product_id ) ) {
+			continue;
+		}
+		if ( 'any' !== $status && ! $subscription->has_status( $status ) ) {
+			continue;
+		}
+		return true;
+	}
+	return false;
+}
+/**
  * Recording mock: notices land on the $wc_mock_notices global so tests can
  * assert the reader-facing half of code paths gated on
  * function_exists( 'wc_add_notice' ).
@@ -1599,4 +1713,183 @@ class WC_Webhook {
 }
 function wc_get_webhook( $id ) {
 	return isset( WC_Webhook::$registry[ (int) $id ] ) ? WC_Webhook::$registry[ (int) $id ] : null;
+}
+
+if ( ! class_exists( 'WCS_ATT_Scheme' ) ) {
+	/**
+	 * Stub of an All Products for Subscriptions scheme (a "subscription plan").
+	 */
+	class WCS_ATT_Scheme {
+		/**
+		 * Scheme data.
+		 *
+		 * @var array
+		 */
+		private $data;
+
+		/**
+		 * Constructor.
+		 *
+		 * @param string $key  Scheme key.
+		 * @param array  $data [ 'period' => string, 'interval' => int ].
+		 */
+		public function __construct( $key, $data ) {
+			$this->data = array_merge(
+				[
+					'key'      => $key,
+					'period'   => 'month',
+					'interval' => 1,
+				],
+				$data
+			);
+		}
+
+		/**
+		 * Scheme key.
+		 *
+		 * @return string
+		 */
+		public function get_key() {
+			return $this->data['key'];
+		}
+
+		/**
+		 * Billing period.
+		 *
+		 * @return string
+		 */
+		public function get_period() {
+			return $this->data['period'];
+		}
+
+		/**
+		 * Billing interval.
+		 *
+		 * @return int
+		 */
+		public function get_interval() {
+			return $this->data['interval'];
+		}
+	}
+}
+
+if ( ! class_exists( 'WCS_ATT_Product_Schemes' ) ) {
+	/**
+	 * Stub of the All Products for Subscriptions scheme reader that WooCommerce
+	 * Subscriptions 9.0+ ships in core. Tests opt products in by ID via
+	 * self::$products_with_schemes, and describe their plans via
+	 * self::$product_schemes.
+	 */
+	class WCS_ATT_Product_Schemes {
+		/**
+		 * Product IDs treated as carrying schemes.
+		 *
+		 * @var int[]
+		 */
+		public static $products_with_schemes = [];
+
+		/**
+		 * Plans per product: [ product_id => [ scheme_key => [ 'period', 'interval' ] ] ].
+		 *
+		 * @var array
+		 */
+		public static $product_schemes = [];
+
+		/**
+		 * Active scheme key per product instance, keyed by spl_object_id.
+		 *
+		 * @var array
+		 */
+		public static $active_schemes = [];
+
+		/**
+		 * Whether the product has schemes.
+		 *
+		 * @param \WC_Product $product Product.
+		 * @param string      $context Unused, matches the real signature.
+		 *
+		 * @return bool
+		 */
+		public static function has_subscription_schemes( $product, $context = 'any' ) {
+			return in_array( $product->get_id(), self::$products_with_schemes, true );
+		}
+
+		/**
+		 * The product's schemes, keyed by scheme key.
+		 *
+		 * @param \WC_Product $product Product.
+		 * @param string      $context Unused, matches the real signature.
+		 *
+		 * @return array
+		 */
+		public static function get_subscription_schemes( $product, $context = 'any' ) {
+			$id = $product->get_id();
+			if ( ! isset( self::$product_schemes[ $id ] ) ) {
+				return [];
+			}
+			$schemes = [];
+			foreach ( self::$product_schemes[ $id ] as $key => $data ) {
+				$schemes[ $key ] = new WCS_ATT_Scheme( $key, $data );
+			}
+			return $schemes;
+		}
+
+		/**
+		 * Stamp an active scheme onto a product instance.
+		 *
+		 * @param \WC_Product $product Product.
+		 * @param string      $key     Scheme key.
+		 */
+		public static function set_subscription_scheme( $product, $key ) {
+			self::$active_schemes[ spl_object_id( $product ) ] = $key;
+		}
+
+		/**
+		 * The active scheme stamped on a product instance.
+		 *
+		 * @param \WC_Product $product    Product.
+		 * @param string      $return     'key' or 'object'.
+		 * @param string      $scheme_key Unused, matches the real signature.
+		 *
+		 * @return mixed
+		 */
+		public static function get_subscription_scheme( $product, $return = 'key', $scheme_key = '' ) {
+			$key = self::$active_schemes[ spl_object_id( $product ) ] ?? false;
+			if ( 'object' !== $return || ! $key ) {
+				return $key;
+			}
+			$schemes = self::get_subscription_schemes( $product );
+			return $schemes[ $key ] ?? null;
+		}
+	}
+}
+
+if ( ! class_exists( 'WCS_ATT_Order' ) ) {
+	/**
+	 * Stub of WCS's order-item scheme accessor
+	 * (`includes/apfs/class-wcs-att-order.php` in real WooCommerce
+	 * Subscriptions 9.x). Reads `_wcsatt_scheme`, falling back to the pre-9.0
+	 * APFS-v1 meta key `_wcsatt_scheme_id` when absent — mirrors the real
+	 * accessor's own fallback closely enough to pin the v1-key regression
+	 * path in tests.
+	 */
+	class WCS_ATT_Order {
+		/**
+		 * The subscription scheme key recorded on an order/subscription line item.
+		 *
+		 * @param \WC_Order_Item $order_item Order item.
+		 *
+		 * @return string|false Scheme key, or false if none is recorded.
+		 */
+		public static function get_subscription_scheme( $order_item ) {
+			if ( ! method_exists( $order_item, 'get_meta' ) ) {
+				return false;
+			}
+			$scheme_key = $order_item->get_meta( '_wcsatt_scheme', true );
+			if ( '' === $scheme_key ) {
+				$scheme_key = $order_item->get_meta( '_wcsatt_scheme_id', true );
+			}
+			return '' === $scheme_key ? false : $scheme_key;
+		}
+	}
 }

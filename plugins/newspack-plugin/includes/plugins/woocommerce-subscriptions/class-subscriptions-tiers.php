@@ -260,6 +260,21 @@ class Subscriptions_Tiers {
 	 * @return string Frequency.
 	 */
 	public static function get_frequency( $product ) {
+		// Under the subscription-plan model the recurrence lives on the plan, not
+		// in post meta - APFS only ever applies it as in-memory runtime meta, so
+		// the legacy keys are either absent or a hardcoded default unrelated to
+		// the configured plan.
+		$plan_key = WooCommerce_Subscriptions::get_active_plan_key( $product );
+		if ( $plan_key ) {
+			$plans = WooCommerce_Subscriptions::get_subscription_plans( $product );
+			if ( isset( $plans[ $plan_key ] ) ) {
+				$frequency = WooCommerce_Subscriptions::get_plan_frequency( $plans[ $plan_key ] );
+				if ( $frequency ) {
+					return $frequency;
+				}
+			}
+		}
+
 		$period = $product->get_meta( '_subscription_period', true );
 		if ( empty( $period ) ) {
 			$period = 'once';
@@ -269,6 +284,40 @@ class Subscriptions_Tiers {
 			$interval = 1;
 		}
 		return $period . '_' . $interval;
+	}
+
+	/**
+	 * Billing period and interval for a product, plan-aware.
+	 *
+	 * Prefers the subscription plan stamped on the product instance, because the
+	 * legacy meta is either absent under the plan model or a hardcoded default
+	 * unrelated to the configured plan.
+	 *
+	 * @param \WC_Product $product Product object.
+	 *
+	 * @return array{period: string, interval: int} Billing period and interval.
+	 */
+	public static function get_frequency_parts( $product ) {
+		$plan_key = WooCommerce_Subscriptions::get_active_plan_key( $product );
+		if ( $plan_key ) {
+			$plans = WooCommerce_Subscriptions::get_subscription_plans( $product );
+			if ( isset( $plans[ $plan_key ] ) && method_exists( $plans[ $plan_key ], 'get_period' ) ) {
+				$period = $plans[ $plan_key ]->get_period();
+				if ( ! empty( $period ) ) {
+					$interval = (int) $plans[ $plan_key ]->get_interval();
+					return [
+						'period'   => $period,
+						'interval' => $interval > 0 ? $interval : 1,
+					];
+				}
+			}
+		}
+
+		$interval = (int) $product->get_meta( '_subscription_period_interval' );
+		return [
+			'period'   => (string) $product->get_meta( '_subscription_period' ),
+			'interval' => $interval > 0 ? $interval : 1,
+		];
 	}
 
 	/**
@@ -288,6 +337,8 @@ class Subscriptions_Tiers {
 			return [];
 		}
 
+		$is_grouped_parent = false;
+
 		if ( empty( $product ) ) {
 			$products = wc_get_products(
 				[
@@ -297,9 +348,10 @@ class Subscriptions_Tiers {
 			);
 			$sort_by_price = $sort_by_price ?? true;
 		} elseif ( $product->is_type( 'grouped' ) ) {
-			$products = $product->get_children();
-			$sort_by_price = $sort_by_price ?? false;
-		} elseif ( $product->is_type( 'variable' ) || $product->is_type( 'variable-subscription' ) || $product->is_type( 'subscription' ) ) {
+			$products          = $product->get_children();
+			$sort_by_price     = $sort_by_price ?? false;
+			$is_grouped_parent = true;
+		} elseif ( $product->is_type( 'variable' ) || WooCommerce_Subscriptions::is_subscription_product( $product ) ) {
 			$products = [ $product ];
 			$sort_by_price = $sort_by_price ?? true;
 		}
@@ -315,7 +367,12 @@ class Subscriptions_Tiers {
 				$product = wc_get_product( $product );
 			}
 
-			if ( ! in_array( $product->get_type(), [ 'subscription', 'variable-subscription' ], true ) ) {
+			// A deleted grouped child leaves an ID that no longer resolves.
+			if ( ! $product instanceof \WC_Product ) {
+				continue;
+			}
+
+			if ( ! WooCommerce_Subscriptions::is_subscription_product( $product ) ) {
 				continue;
 			}
 
@@ -323,23 +380,72 @@ class Subscriptions_Tiers {
 				continue;
 			}
 
+			// A grouped product's children are each their own cart-item parent,
+			// so APFS's convert_to_sub_<parent_id> - a single key at the form
+			// level - can never be keyed correctly for a plan-based child. Skip
+			// it here, in composition, so the tier never exists: rendering it
+			// would produce a purchasable form that silently takes a one-time
+			// payment instead of creating a subscription. Legacy `subscription`/
+			// `variable-subscription` children (no APFS schemes) are unaffected -
+			// they carry their recurrence in their own meta, not a plan, so
+			// there's no parent-ID mismatch for them to trip over.
+			if ( $is_grouped_parent && WooCommerce_Subscriptions::has_subscription_plans( $product ) ) {
+				continue;
+			}
+
 			// Extract the variations if it's a variable subscription product.
-			if ( $product->is_type( 'variable-subscription' ) ) {
+			if ( WooCommerce_Subscriptions::is_variable_subscription_product( $product ) ) {
 				$variations = $product->get_available_variations();
+				$tier_products = [];
 				foreach ( $variations as $variation ) {
-					$selected_products[] = new \WC_Product_Variation( $variation['variation_id'] );
+					$tier_products[] = new \WC_Product_Variation( $variation['variation_id'] );
 				}
 			} else {
-				$selected_products[] = $product;
+				$tier_products = [ $product ];
+			}
+
+			$plans = WooCommerce_Subscriptions::get_subscription_plans( $product );
+			if ( empty( $plans ) ) {
+				$selected_products = array_merge( $selected_products, $tier_products );
+				continue;
+			}
+
+			// Under the plan model the frequency is the plan and the variations are
+			// orthogonal to it, so every tier is purchasable on every plan. Stamp a
+			// separate instance per pair - APFS filters price off the active plan,
+			// so each instance prices itself.
+			foreach ( $plans as $plan_key => $plan ) {
+				foreach ( $tier_products as $tier_product ) {
+					$instance = clone $tier_product;
+					WooCommerce_Subscriptions::set_active_plan_key( $instance, $plan_key );
+					$selected_products[] = $instance;
+				}
 			}
 		}
 
 		$products_by_frequency = [];
+		$frequency_plans       = [];
 		foreach ( $selected_products as $product ) {
 			$frequency = self::get_frequency( $product );
 			if ( ! $frequency ) {
 				continue;
 			}
+
+			// Two plans can share a period and interval - a monthly plan and a
+			// discounted monthly plan, say. Give the second its own bucket instead
+			// of merging it into the first, which would duplicate the tiers and
+			// hide one of the plans.
+			$plan_key = WooCommerce_Subscriptions::get_active_plan_key( $product );
+			if ( $plan_key ) {
+				$base   = $frequency;
+				$suffix = 1;
+				while ( isset( $frequency_plans[ $frequency ] ) && $frequency_plans[ $frequency ] !== $plan_key ) {
+					++$suffix;
+					$frequency = $base . '_' . $suffix;
+				}
+				$frequency_plans[ $frequency ] = $plan_key;
+			}
+
 			$products_by_frequency[ $frequency ][] = $product;
 		}
 
@@ -391,23 +497,124 @@ class Subscriptions_Tiers {
 		$user_subscriptions = wcs_get_users_subscriptions( $user_id );
 		foreach ( $tiers as $frequency => $products ) {
 			foreach ( $products as $product ) {
+				// Under the plan model the same product/variation ID is stamped
+				// into every plan's bucket (NPPM-3053's expansion in
+				// get_tiers_by_frequency()), so an ID match alone can no longer
+				// tell a monthly subscriber from an annual one apart. A
+				// plan-carrying product only counts as "current" if the
+				// subscription is actually on that plan.
+				$plan_key = WooCommerce_Subscriptions::get_active_plan_key( $product );
+
 				foreach ( $user_subscriptions as $subscription ) {
 					if (
-						$subscription->has_product( $product->get_id() )
-						&& $subscription->has_status( WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES )
+						! $subscription->has_product( $product->get_id() )
+						|| ! $subscription->has_status( WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES )
 						// `wcs_get_users_subscriptions` is filtered (e.g. group
 						// subscriptions inject subs the user is only a member of, owned
 						// by someone else); only a subscription the user owns is their
 						// "current" tier — matching the ownership test the switch
 						// backstop applies.
-						&& (int) $subscription->get_user_id() === (int) $user_id
+						|| (int) $subscription->get_user_id() !== (int) $user_id
 					) {
-						return [ $frequency, $product, $subscription ];
+						continue;
 					}
+
+					if ( $plan_key && ! self::subscription_is_on_plan( $subscription, $product, $plan_key, $frequency ) ) {
+						continue;
+					}
+
+					return [ $frequency, $product, $subscription ];
 				}
 			}
 		}
 		return $none;
+	}
+
+	/**
+	 * Whether a subscription is on the same plan as a plan-stamped tier
+	 * product instance.
+	 *
+	 * Tries the subscription's own scheme key first — see
+	 * {@see self::get_item_subscription_scheme()} for how that's resolved.
+	 * When it can't be resolved at all (older order, no matching line item),
+	 * falls back to comparing the subscription's billing period/interval
+	 * against the bucket's frequency. The fallback is
+	 * a weaker signal — it can't tell apart two plans that share a period and
+	 * interval (NPPM-3053's own "colliding plans" case) — but degrades
+	 * gracefully rather than hiding a legitimate match outright.
+	 *
+	 * @param \WC_Subscription $subscription Subscription instance.
+	 * @param \WC_Product      $product      Plan-stamped tier product instance.
+	 * @param string           $plan_key     The product's stamped plan key.
+	 * @param string           $frequency    The bucket's frequency key.
+	 *
+	 * @return bool Whether the subscription is on the product's stamped plan.
+	 */
+	private static function subscription_is_on_plan( $subscription, $product, $plan_key, $frequency ) {
+		$subscription_plan_key = self::get_subscription_plan_key( $subscription, $product );
+		if ( $subscription_plan_key ) {
+			return $subscription_plan_key === $plan_key;
+		}
+
+		if ( ! method_exists( $subscription, 'get_billing_period' ) || ! method_exists( $subscription, 'get_billing_interval' ) ) {
+			return false;
+		}
+		$subscription_frequency = $subscription->get_billing_period() . '_' . $subscription->get_billing_interval();
+		return $frequency === $subscription_frequency || 0 === strpos( $frequency, $subscription_frequency . '_' );
+	}
+
+	/**
+	 * The subscription plan key stamped on the line item holding a product,
+	 * if the subscription still carries it.
+	 *
+	 * @param \WC_Subscription $subscription Subscription instance.
+	 * @param \WC_Product      $product      Product to locate the line item for.
+	 *
+	 * @return string Scheme key, or an empty string if it can't be determined.
+	 */
+	private static function get_subscription_plan_key( $subscription, $product ) {
+		if ( ! method_exists( $subscription, 'get_items' ) ) {
+			return '';
+		}
+		foreach ( $subscription->get_items() as $item ) {
+			if ( ! method_exists( $item, 'get_product_id' ) || ! method_exists( $item, 'get_meta' ) ) {
+				continue;
+			}
+			$item_product_id = method_exists( $item, 'get_variation_id' ) && $item->get_variation_id()
+				? $item->get_variation_id()
+				: $item->get_product_id();
+			if ( (int) $item_product_id !== (int) $product->get_id() ) {
+				continue;
+			}
+			return self::get_item_subscription_scheme( $item );
+		}
+		return '';
+	}
+
+	/**
+	 * The scheme key APFS recorded on an order/subscription line item.
+	 *
+	 * Prefers WCS's own `WCS_ATT_Order::get_subscription_scheme()` accessor
+	 * over a direct meta read: it also falls back to the pre-9.0 APFS-v1 meta
+	 * key (`_wcsatt_scheme_id`) and normalises the result through
+	 * `WCS_ATT_Product_Schemes::parse_subscription_scheme_key()`, both of
+	 * which a direct `_wcsatt_scheme` read would miss — most importantly for
+	 * publishers who ran the standalone All Products for Subscriptions plugin
+	 * before WCS 9.0 folded it into core. Falls back to the direct meta read
+	 * when the accessor isn't available, so nothing regresses on a site
+	 * without APFS.
+	 *
+	 * @param \WC_Order_Item $item Order/subscription line item.
+	 *
+	 * @return string Scheme key, or an empty string if none is recorded.
+	 */
+	private static function get_item_subscription_scheme( $item ) {
+		if ( class_exists( 'WCS_ATT_Order' ) && method_exists( 'WCS_ATT_Order', 'get_subscription_scheme' ) ) {
+			$scheme_key = \WCS_ATT_Order::get_subscription_scheme( $item );
+			return is_string( $scheme_key ) ? $scheme_key : '';
+		}
+		$scheme_key = $item->get_meta( '_wcsatt_scheme', true );
+		return is_string( $scheme_key ) ? $scheme_key : '';
 	}
 
 	/**
@@ -483,11 +690,12 @@ class Subscriptions_Tiers {
 		$price  = '';
 		if ( ! $is_nyp ) {
 			if ( function_exists( 'wcs_price_string' ) ) {
+				$parts = self::get_frequency_parts( $product );
 				$price = wcs_price_string(
 					[
 						'recurring_amount'      => $product->get_price(),
-						'subscription_period'   => $product->get_meta( '_subscription_period' ),
-						'subscription_interval' => $product->get_meta( '_subscription_period_interval' ),
+						'subscription_period'   => $parts['period'],
+						'subscription_interval' => $parts['interval'],
 					]
 				);
 			} else {
@@ -537,13 +745,21 @@ class Subscriptions_Tiers {
 		$symbol    = get_woocommerce_currency_symbol();
 		$currency  = get_woocommerce_currency();
 		$value     = $product->get_price();
-		$frequency = $product->get_meta( '_subscription_period' );
-		$interval  = $product->get_meta( '_subscription_period_interval' );
+		$parts     = self::get_frequency_parts( $product );
+		$frequency = $parts['period'];
+		$interval  = $parts['interval'];
 
-		if ( $switch_subscription ) {
-			$base_product   = wc_get_product( $switch_subscription['item']['product_id'] );
-			$base_frequency = $base_product->get_meta( '_subscription_period' );
-			$base_interval  = $base_product->get_meta( '_subscription_period_interval' );
+		$base_product = $switch_subscription ? wc_get_product( $switch_subscription['item']['product_id'] ) : null;
+
+		// A deleted product leaves behind an ID that no longer resolves, and
+		// wc_get_product() returns false for it. There's no billing period to
+		// convert from in that case, so keep the target product's own price
+		// rather than feeding `false` into the plan accessors - the same way
+		// the tier composition skips a grouped child that no longer resolves.
+		if ( $base_product instanceof \WC_Product ) {
+			$base_parts     = self::get_frequency_parts( $base_product );
+			$base_frequency = $base_parts['period'];
+			$base_interval  = $base_parts['interval'];
 			$base_amount    = $switch_subscription['item']['line_total'] / $base_interval;
 
 			// Get the direct conversion multiplier from base frequency to target frequency.
@@ -606,21 +822,55 @@ class Subscriptions_Tiers {
 	/**
 	 * Render frequency form control.
 	 *
-	 * Up until 3 frequencies, we render buttons.
-	 * After that, we render a select control.
+	 * Up until 3 frequencies, we render buttons (or plan-posting radios, see
+	 * below). After that, we render a select control - unreachable for
+	 * plan-based products, since the plan-radio branch below runs first
+	 * regardless of $frequencies count when $plan_keys/$parent_id are set.
 	 *
-	 * @param array  $frequencies       Frequencies.
+	 * @param array  $frequencies       Frequencies. Expected to be exactly the
+	 *                                  keys present in $plan_keys when the
+	 *                                  latter is non-empty, so the caller's
+	 *                                  panel loop and this tab loop stay
+	 *                                  positionally in sync.
 	 * @param string $current_frequency Current frequency.
-	 * @param bool   $is_form_control     Whether to treat it as a form input.
+	 * @param bool   $is_form_control   Whether to treat it as a form input.
+	 * @param array  $plan_keys         Optional frequency key => scheme key map. When
+	 *                                  non-empty along with $parent_id, tabs render as
+	 *                                  radios posting the chosen plan.
+	 * @param int    $parent_id         Optional parent product ID, used to name the
+	 *                                  radio input group.
 	 */
-	public static function render_frequency_control( $frequencies, $current_frequency, $is_form_control = false ) {
+	public static function render_frequency_control( $frequencies, $current_frequency, $is_form_control = false, $plan_keys = [], $parent_id = 0 ) {
 		if ( $is_form_control ) :
 			?>
 			<div class="newspack-ui__segmented-control__form-control">
 				<label><?php _e( 'Frequency', 'newspack-plugin' ); ?></label>
 				<?php
 		endif;
-		if ( count( $frequencies ) <= 3 ) :
+		if ( ! empty( $plan_keys ) && $parent_id ) :
+			// Under the plan model the frequency IS the subscription plan, so the
+			// control carries the value APFS reads from $_REQUEST to resolve which
+			// plan the reader chose. A hidden input synced by JS would revert to a
+			// one-time purchase whenever the JS did not run.
+			?>
+			<div class="newspack-ui__segmented-control__tabs">
+				<?php foreach ( $frequencies as $frequency ) : ?>
+					<?php if ( empty( $plan_keys[ $frequency ] ) ) : ?>
+						<?php continue; ?>
+					<?php endif; ?>
+					<label class="newspack-ui__button newspack-ui__button--small <?php echo esc_attr( $frequency === $current_frequency ? 'selected' : '' ); ?>">
+						<input
+							type="radio"
+							name="convert_to_sub_<?php echo absint( $parent_id ); ?>"
+							value="<?php echo esc_attr( $plan_keys[ $frequency ] ); ?>"
+							<?php checked( $frequency, $current_frequency ); ?>
+						>
+						<?php echo esc_html( WooCommerce_Subscriptions::get_frequency_label( $frequency ) ); ?>
+					</label>
+				<?php endforeach; ?>
+			</div>
+			<?php
+		elseif ( count( $frequencies ) <= 3 ) :
 			?>
 			<div class="newspack-ui__segmented-control__tabs">
 				<?php foreach ( $frequencies as $frequency ) : ?>
@@ -658,10 +908,49 @@ class Subscriptions_Tiers {
 			return;
 		}
 
+		// The plan-radio control (and its hidden-input fallback below) only
+		// make sense when $product is the actual parent WooCommerce will add
+		// to the cart: a variable or simple subscription product. For a
+		// grouped product each tier can come from a different child product
+		// with its own parent ID, and for the "all products" view ($product
+		// is null) there is no common parent at all - a single
+		// convert_to_sub_<id> input can't carry the right key for every
+		// tier in either case, so the plan path is skipped rather than
+		// emitting a key nothing reads (or, for the null case, a
+		// convert_to_sub_0 that reads as a real but wrong parent ID).
+		$parent_id = ( $product && ! $product->is_type( 'grouped' ) ) ? $product->get_id() : 0;
+
+		$plan_keys = [];
+		if ( $parent_id ) {
+			foreach ( $tiers as $frequency => $tier_products ) {
+				$plan_key = empty( $tier_products ) ? '' : WooCommerce_Subscriptions::get_active_plan_key( $tier_products[0] );
+				if ( $plan_key ) {
+					$plan_keys[ $frequency ] = $plan_key;
+				}
+			}
+			// Keep the tab headers and the panels positionally in sync: a
+			// frequency without a resolvable plan key would otherwise still
+			// get a panel below but no tab here, shifting every subsequent
+			// tab onto the wrong panel (setupTabController() pairs
+			// tab_headers[i] with tab_contents[i] by index).
+			//
+			// Dropping the bucket is deliberate, and must stay that way: a tier
+			// we cannot post a plan for is a tier we cannot bill correctly.
+			// Rendering it anyway - with the legacy button control, say - would
+			// give the reader a purchasable card that posts no plan, and APFS
+			// would take a single one-time payment instead of starting a
+			// subscription. An offer we can't fulfil is worse than an offer
+			// that isn't shown, so an unbillable tier must not be purchasable.
+			if ( ! empty( $plan_keys ) ) {
+				$tiers = array_intersect_key( $tiers, $plan_keys );
+			}
+		}
+
 		$is_single_tier = self::is_single_tier( $tiers );
 		$is_nyp         = $is_single_tier && self::is_nyp( $tiers ); // Only treat as NYP form if there's only 1 tier.
 
-		$frequencies       = array_keys( $tiers );
+		$frequencies = array_keys( $tiers );
+
 		$current_frequency = null;
 		$current_product   = null;
 		$user_subscription = null;
@@ -670,6 +959,12 @@ class Subscriptions_Tiers {
 		}
 
 		if ( ! $switch_data ) {
+			$current_frequency = $frequencies[0];
+		} elseif ( ! $current_frequency ) {
+			// A subscriber on a retired plan, or one filtered out by the
+			// ownership check, has no matching tier. Fall back to the first
+			// frequency so a radio is checked and the plan gets posted,
+			// rather than leaving nothing selected (and posting no plan).
 			$current_frequency = $frequencies[0];
 		}
 
@@ -707,14 +1002,39 @@ class Subscriptions_Tiers {
 			}
 		}
 
-		$should_render_tabs = ! $is_single_tier || $is_nyp;
+		// Under the plan model the reader's choice of plan can only be carried
+		// by the frequency control's convert_to_sub_<parent_id> value: every
+		// bucket holds the same product (or the same variations) stamped with a
+		// different plan, so a card's product_id cannot tell one plan from
+		// another. More than one plan on offer therefore *requires* the
+		// control. Without this the flat card layout would print one card per
+		// plan, each with its own price, while the single hidden input below
+		// pinned every one of them to the first plan - the reader picks
+		// "Yearly $100" and is billed $10 monthly.
+		//
+		// $plan_keys and $frequencies have identical keys at this point (see
+		// the array_intersect_key() above), so this also guarantees
+		// $frequency_control_rendered below is true whenever it is set.
+		$has_multiple_plans = count( $frequencies ) > 1 && ! empty( $plan_keys );
+
+		$should_render_tabs = ! $is_single_tier || $is_nyp || $has_multiple_plans;
+
+		// Whether render_frequency_control() below will actually post the
+		// plan. When it won't - a single frequency, or the flat (no-tabs)
+		// product-card layout, which $has_multiple_plans above keeps to at
+		// most one plan - the hidden input further down carries the plan for
+		// $current_frequency instead. Without this, a product with exactly one
+		// plan (the ordinary case: one monthly plan plus price-tier
+		// variations) posts no plan at all and the reader is charged once
+		// instead of subscribing.
+		$frequency_control_rendered = $should_render_tabs && count( $frequencies ) > 1;
 		?>
 		<form class="newspack__subscription-tiers__form <?php echo esc_attr( $is_nyp ? 'nyp' : '' ); ?>" target="newspack_modal_checkout_iframe" data-title="<?php echo esc_attr( $title ); ?>" data-product-id="<?php echo esc_attr( $product ? $product->get_id() : '' ); ?>">
 			<?php if ( $should_render_tabs ) : ?>
 				<div class="newspack-ui__segmented-control">
 					<?php
-					if ( count( $frequencies ) > 1 ) {
-						self::render_frequency_control( $frequencies, $current_frequency, $is_nyp );
+					if ( $frequency_control_rendered ) {
+						self::render_frequency_control( $frequencies, $current_frequency, $is_nyp, $plan_keys, $parent_id );
 					}
 					?>
 					<div class="newspack-ui__segmented-control__content">
@@ -735,6 +1055,10 @@ class Subscriptions_Tiers {
 				</div>
 			<?php endif; ?>
 			<?php
+			// The flat layout renders every bucket's cards at once with no
+			// frequency control, so it may only ever run when at most one plan
+			// is in play - see $has_multiple_plans above, which is what
+			// guarantees it.
 			if ( ! $should_render_tabs ) {
 				foreach ( $tiers as $products ) {
 					foreach ( $products as $product ) {
@@ -745,6 +1069,9 @@ class Subscriptions_Tiers {
 			?>
 			<input type="hidden" name="newspack_checkout" value="1">
 			<input type="hidden" name="modal_checkout" value="1">
+			<?php if ( ! $frequency_control_rendered && ! empty( $plan_keys[ $current_frequency ] ) ) : ?>
+				<input type="hidden" name="convert_to_sub_<?php echo absint( $parent_id ); ?>" value="<?php echo esc_attr( $plan_keys[ $current_frequency ] ); ?>">
+			<?php endif; ?>
 			<?php if ( ! empty( $switch_data ) ) : ?>
 				<input type="hidden" name="switch-subscription" value="<?php echo esc_attr( $switch_data['subscription']->get_id() ); ?>">
 				<input type="hidden" name="item" value="<?php echo absint( $switch_data['item_id'] ); ?>">

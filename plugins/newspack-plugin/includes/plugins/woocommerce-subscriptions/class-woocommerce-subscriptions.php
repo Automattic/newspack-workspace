@@ -702,6 +702,158 @@ class WooCommerce_Subscriptions {
 	}
 
 	/**
+	 * Whether a product carries WooCommerce Subscriptions "subscription plans".
+	 *
+	 * Subscriptions 9.0 folded All Products for Subscriptions into core, so a
+	 * recurring product no longer has to use the dedicated `subscription` /
+	 * `variable-subscription` product types: an ordinary `simple` or `variable`
+	 * product with subscription schemes attached is now the way the product
+	 * editor creates one.
+	 *
+	 * Subscriptions makes this same check in
+	 * `WCSG_Product::product_has_subscription_plans()`, but that class lives in
+	 * the gifting module, which `WC_Subscriptions_Plugin::init_gifting()` skips
+	 * entirely when the standalone gifting plugin is active — in which case
+	 * `WCSG_Product` is that plugin's class and may not have the method. So we
+	 * mirror it here, opt-out meta included, rather than depend on it.
+	 *
+	 * @param \WC_Product $product Product object.
+	 *
+	 * @return bool Whether the product has subscription plans.
+	 */
+	public static function has_subscription_plans( $product ) {
+		// Belt and braces, and deliberately not dead code: the two models are
+		// mutually exclusive, and a legacy product must keep behaving exactly
+		// as it does today. APFS's own `supports_feature()` excludes the legacy
+		// types, so a `variable-subscription` product on a store with storewide
+		// plans configured reports no schemes — but that is an APFS
+		// implementation detail, and if it ever changed, the plan path would
+		// start rewriting the frequency, price and cart key of every legacy
+		// subscription product on the site. Keep this guard.
+		if ( in_array( $product->get_type(), [ 'subscription', 'variable-subscription' ], true ) ) {
+			return false;
+		}
+		if ( ! class_exists( 'WCS_ATT_Product_Schemes' ) || ! method_exists( 'WCS_ATT_Product_Schemes', 'has_subscription_schemes' ) ) {
+			return false;
+		}
+		if ( 'yes' === $product->get_meta( '_wcsatt_disabled' ) ) {
+			return false;
+		}
+		return (bool) \WCS_ATT_Product_Schemes::has_subscription_schemes( $product );
+	}
+
+	/**
+	 * Whether a product is a subscription, under either product model.
+	 *
+	 * `WC_Subscriptions_Product::is_subscription()` is not a substitute: it
+	 * recognises a plan-based product only once a scheme is active on the
+	 * product object (a cart/runtime state, via the `woocommerce_is_subscription`
+	 * filter APFS adds), so it returns false for a product read from the catalog.
+	 *
+	 * @param \WC_Product $product Product object.
+	 *
+	 * @return bool Whether the product is a subscription.
+	 */
+	public static function is_subscription_product( $product ) {
+		if ( in_array( $product->get_type(), [ 'subscription', 'variable-subscription' ], true ) ) {
+			return true;
+		}
+		return self::has_subscription_plans( $product );
+	}
+
+	/**
+	 * Whether a product is a variable subscription, under either product model.
+	 *
+	 * Determines whether tiers come from the product's variations rather than
+	 * from the product itself.
+	 *
+	 * @param \WC_Product $product Product object.
+	 *
+	 * @return bool Whether the product is a variable subscription.
+	 */
+	public static function is_variable_subscription_product( $product ) {
+		if ( $product->is_type( 'variable-subscription' ) ) {
+			return true;
+		}
+		return $product->is_type( 'variable' ) && self::has_subscription_plans( $product );
+	}
+
+	/**
+	 * Get the subscription plans configured for a product.
+	 *
+	 * Plans may be defined on the product or inherited from the storewide plans,
+	 * so they are always read through the Subscriptions API rather than from
+	 * product meta.
+	 *
+	 * @param \WC_Product $product Product object.
+	 *
+	 * @return array Schemes keyed by scheme key. Empty when the product has no
+	 *               plans or the APFS API is unavailable.
+	 */
+	public static function get_subscription_plans( $product ) {
+		if ( ! self::has_subscription_plans( $product ) ) {
+			return [];
+		}
+		if ( ! method_exists( 'WCS_ATT_Product_Schemes', 'get_subscription_schemes' ) ) {
+			return [];
+		}
+		return (array) \WCS_ATT_Product_Schemes::get_subscription_schemes( $product );
+	}
+
+	/**
+	 * Frequency key for a subscription plan.
+	 *
+	 * Uses the same `<period>_<interval>` shape the legacy product model
+	 * produces, so frequency labels and controls work unchanged.
+	 *
+	 * @param \WCS_ATT_Scheme $plan Subscription plan.
+	 *
+	 * @return string Frequency key, or an empty string if the plan has no period.
+	 */
+	public static function get_plan_frequency( $plan ) {
+		if ( ! is_object( $plan ) || ! method_exists( $plan, 'get_period' ) ) {
+			return '';
+		}
+		$period = $plan->get_period();
+		if ( empty( $period ) ) {
+			return '';
+		}
+		$interval = (int) $plan->get_interval();
+		return $period . '_' . ( $interval > 0 ? $interval : 1 );
+	}
+
+	/**
+	 * The subscription plan currently stamped on a product instance.
+	 *
+	 * @param \WC_Product $product Product object.
+	 *
+	 * @return string Scheme key, or an empty string if none is set.
+	 */
+	public static function get_active_plan_key( $product ) {
+		if ( ! class_exists( 'WCS_ATT_Product_Schemes' ) || ! method_exists( 'WCS_ATT_Product_Schemes', 'get_subscription_scheme' ) ) {
+			return '';
+		}
+		$key = \WCS_ATT_Product_Schemes::get_subscription_scheme( $product );
+		return is_string( $key ) ? $key : '';
+	}
+
+	/**
+	 * Stamp a subscription plan onto a product instance.
+	 *
+	 * Mirrors {@see self::get_active_plan_key()}: a no-op when the APFS API is
+	 * unavailable, rather than a fatal, so callers can stamp unconditionally.
+	 *
+	 * @param \WC_Product $product Product instance to stamp.
+	 * @param string      $key     Scheme key.
+	 */
+	public static function set_active_plan_key( $product, $key ) {
+		if ( ! class_exists( 'WCS_ATT_Product_Schemes' ) || ! method_exists( 'WCS_ATT_Product_Schemes', 'set_subscription_scheme' ) ) {
+			return;
+		}
+		\WCS_ATT_Product_Schemes::set_subscription_scheme( $product, $key );
+	}
+
+	/**
 	 * Sanitize and validate a subscription ID or object as a WC_Subscription object.
 	 *
 	 * @param int|WC_Subscription $subscription The subscription ID or object.
