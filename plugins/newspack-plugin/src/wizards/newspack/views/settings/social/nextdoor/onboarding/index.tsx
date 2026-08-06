@@ -276,6 +276,7 @@ export const Onboarding = ( {
 						value={ country }
 						onChange={ setCountry }
 						options={ countryOptions }
+						__next40pxDefaultSize
 						__nextHasNoMarginBottom
 						// Escape dismisses the select's own menu. Capture phase because CardForm's
 						// close listener sits on the body and would otherwise run first.
