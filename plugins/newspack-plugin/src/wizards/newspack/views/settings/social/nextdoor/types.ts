@@ -43,6 +43,7 @@ export interface OnboardingProps {
 	claimPage: ( publicationUrl: string, test?: boolean ) => Promise< ClaimPageResponse >;
 	setError: ( error: string | null ) => void;
 	disconnect: () => Promise< void >;
+	renderSecondaryActions?: () => React.ReactNode;
 }
 
 export interface SettingsProps {
@@ -52,4 +53,5 @@ export interface SettingsProps {
 	updateSettings: ( settings: Partial< NextdoorSettings > ) => Promise< NextdoorSettings >;
 	setError: ( error: string | null ) => void;
 	disconnect: () => Promise< void >;
+	renderSecondaryActions?: () => React.ReactNode;
 }

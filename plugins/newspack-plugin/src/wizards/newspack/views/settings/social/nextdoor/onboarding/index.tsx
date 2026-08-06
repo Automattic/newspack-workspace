@@ -7,12 +7,12 @@
  */
 import { __ } from '@wordpress/i18n';
 import { useState, useEffect } from '@wordpress/element';
-import { ExternalLink } from '@wordpress/components';
+import { ExternalLink, __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 
 /**
  * Internal dependencies
  */
-import { ActionCard, Button, Card, Grid, Notice, SelectControl, TextControl } from '../../../../../../../../packages/components/src';
+import { Button, Grid, Notice, SelectControl, TextControl } from '../../../../../../../../packages/components/src';
 import { OnboardingProps } from '../types';
 
 /**
@@ -42,7 +42,17 @@ const STEPS = {
 /**
  * Onboarding component.
  */
-export const Onboarding = ( { settings, status, error, updateSettings, startOAuthFlow, claimPage, disconnect, setError }: OnboardingProps ) => {
+export const Onboarding = ( {
+	settings,
+	status,
+	error,
+	updateSettings,
+	startOAuthFlow,
+	claimPage,
+	disconnect,
+	setError,
+	renderSecondaryActions,
+}: OnboardingProps ) => {
 	const [ clientId, setClientId ] = useState( settings.client_id || '' );
 	const [ clientSecret, setClientSecret ] = useState( settings.client_secret || '' );
 	const [ email, setEmail ] = useState( '' );
@@ -160,12 +170,11 @@ export const Onboarding = ( { settings, status, error, updateSettings, startOAut
 	};
 
 	return (
-		<>
+		<VStack spacing={ 6 }>
 			{ error && <Notice noticeText={ error } isError onClose={ () => setError( null ) } /> }
 
-			{ /* Step 1: API Credentials - Only shown in manual mode */ }
 			{ isManualMode && currentStep === STEPS.manual.CREDENTIALS && (
-				<Card>
+				<VStack spacing={ 4 }>
 					<p>{ __( 'To get started, you need to register your site with Nextdoor and obtain API credentials.', 'newspack-plugin' ) }</p>
 					<div className="nextdoor-onboarding__redirect-uri-box">
 						<strong>{ __( 'Redirect URI:', 'newspack-plugin' ) }</strong>
@@ -199,22 +208,23 @@ export const Onboarding = ( { settings, status, error, updateSettings, startOAut
 						/>
 					</Grid>
 
-					<div className="newspack-buttons-card">
+					<HStack justify="flex-start" spacing={ 2 }>
 						<Button
 							variant="primary"
+							size="compact"
 							onClick={ handleSaveCredentials }
 							disabled={ ! clientId || ! clientSecret || isSaving }
 							isBusy={ isSaving }
 						>
 							{ __( 'Save & Continue', 'newspack-plugin' ) }
 						</Button>
-					</div>
-				</Card>
+						{ renderSecondaryActions?.() }
+					</HStack>
+				</VStack>
 			) }
 
-			{ /* Step 2: Account Authentication */ }
 			{ currentStep === steps.ACCOUNT_AUTH && (
-				<Card>
+				<VStack spacing={ 4 }>
 					<p>{ __( 'Connect your Nextdoor account to authorize publishing articles.', 'newspack-plugin' ) }</p>
 
 					<Grid columns={ 1 } gutter={ 16 }>
@@ -234,22 +244,22 @@ export const Onboarding = ( { settings, status, error, updateSettings, startOAut
 						/>
 					</Grid>
 
-					<div className="newspack-buttons-card">
-						<Button variant="primary" onClick={ handleStartOAuth } disabled={ ! email || isSaving } isBusy={ isSaving }>
+					<HStack justify="flex-start" spacing={ 2 }>
+						<Button variant="primary" size="compact" onClick={ handleStartOAuth } disabled={ ! email || isSaving } isBusy={ isSaving }>
 							{ __( 'Connect Account', 'newspack-plugin' ) }
 						</Button>
 						{ isManualMode && (
-							<Button variant="secondary" onClick={ () => setCurrentStep( STEPS.manual.CREDENTIALS ) }>
+							<Button variant="secondary" size="compact" onClick={ () => setCurrentStep( STEPS.manual.CREDENTIALS ) }>
 								{ __( 'Back', 'newspack-plugin' ) }
 							</Button>
 						) }
-					</div>
-				</Card>
+						{ renderSecondaryActions?.() }
+					</HStack>
+				</VStack>
 			) }
 
-			{ /* Step 3: Claim Page */ }
 			{ currentStep === steps.CLAIM_PAGE && (
-				<Card>
+				<VStack spacing={ 4 }>
 					<p>{ __( 'Claim your news page on Nextdoor to start publishing articles.', 'newspack-plugin' ) }</p>
 
 					<Grid columns={ 1 } gutter={ 16 }>
@@ -263,35 +273,36 @@ export const Onboarding = ( { settings, status, error, updateSettings, startOAut
 						/>
 					</Grid>
 
-					<div className="newspack-buttons-card">
-						<Button variant="primary" onClick={ handleClaimPage } disabled={ ! publicationUrl || isSaving } isBusy={ isSaving }>
+					<HStack justify="flex-start" spacing={ 2 }>
+						<Button
+							variant="primary"
+							size="compact"
+							onClick={ handleClaimPage }
+							disabled={ ! publicationUrl || isSaving }
+							isBusy={ isSaving }
+						>
 							{ __( 'Claim Page', 'newspack-plugin' ) }
 						</Button>
-						<Button variant="secondary" onClick={ () => setCurrentStep( steps.ACCOUNT_AUTH ) }>
+						<Button variant="secondary" size="compact" onClick={ () => setCurrentStep( steps.ACCOUNT_AUTH ) }>
 							{ __( 'Back', 'newspack-plugin' ) }
 						</Button>
-					</div>
-				</Card>
+						{ renderSecondaryActions?.() }
+					</HStack>
+				</VStack>
 			) }
 
-			{ /* Step 4: Success */ }
 			{ currentStep === steps.SUCCESS && status.is_connected && (
-				<ActionCard
-					title={ __( 'Nextdoor Connected Successfully!', 'newspack-plugin' ) }
-					description={ __(
+				<Notice
+					isSuccess
+					noticeText={ __(
 						'Your site is now connected to Nextdoor. You can start publishing articles to your local community.',
 						'newspack-plugin'
 					) }
-					actionText={ __( 'Configure Settings', 'newspack-plugin' ) }
-					handoff={ 'settings' }
-					editLink="#/settings"
-					hasGreyHeader={ false }
 				/>
 			) }
 
-			{ /* Connection Status */ }
 			{ ( ! isManualMode || currentStep > STEPS.manual.CREDENTIALS ) && (
-				<Card>
+				<VStack spacing={ 4 }>
 					<Grid columns={ 2 } gutter={ 16 }>
 						<div>
 							<div className="nextdoor-onboarding__status-label">{ __( 'Authorization:', 'newspack-plugin' ) }</div>
@@ -356,15 +367,22 @@ export const Onboarding = ( { settings, status, error, updateSettings, startOAut
 					</Grid>
 
 					{ status.is_connected && (
-						<div className="newspack-buttons-card">
-							<Button isDestructive onClick={ handleDisconnect } disabled={ isSaving } isBusy={ isSaving }>
+						<HStack justify="flex-start" spacing={ 2 }>
+							<Button
+								variant="tertiary"
+								size="compact"
+								isDestructive
+								onClick={ handleDisconnect }
+								disabled={ isSaving }
+								isBusy={ isSaving }
+							>
 								{ __( 'Disconnect', 'newspack-plugin' ) }
 							</Button>
-						</div>
+						</HStack>
 					) }
-				</Card>
+				</VStack>
 			) }
-		</>
+		</VStack>
 	);
 };
 
