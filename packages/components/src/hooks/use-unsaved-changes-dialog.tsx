@@ -46,7 +46,7 @@ function isSameOriginNavigation( link: HTMLAnchorElement ): boolean {
  * a dialog. A development-only warning surfaces this.
  */
 function useUnsavedChangesDialog( { when }: UseUnsavedChangesDialogOptions ) {
-	const { confirmDialog, requestConfirm } = useConfirmDialog( {
+	const { confirmDialog, requestConfirm, cancelConfirm } = useConfirmDialog( {
 		when,
 		message: __( 'You have unsaved changes that will be lost. Discard changes?', 'newspack-plugin' ),
 		confirmButtonText: __( 'Discard changes', 'newspack-plugin' ),
@@ -134,7 +134,7 @@ function useUnsavedChangesDialog( { when }: UseUnsavedChangesDialogOptions ) {
 		return () => window.removeEventListener( 'beforeunload', handler );
 	}, [ when ] );
 
-	return { confirmDialog, requestConfirm };
+	return { confirmDialog, requestConfirm, cancelConfirm };
 }
 
 export default useUnsavedChangesDialog;

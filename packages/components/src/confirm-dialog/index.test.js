@@ -140,3 +140,80 @@ describe( 'ConfirmDialog navigation blocking', () => {
 		expect( dialog() ).toBeInTheDocument();
 	} );
 } );
+
+// Consumers outside a wizard have no react-router, so useHistory returns
+// undefined. There is no navigation to block there, and the imperative `isOpen`
+// path has to keep working rather than crash on a history that isn't there.
+describe( 'ConfirmDialog without a router', () => {
+	const renderUnrouted = ( props = {} ) =>
+		render(
+			<ConfirmDialog isOpen confirmButtonText="Discard changes" cancelButtonText="Keep editing" { ...props }>
+				Unsaved changes
+			</ConfirmDialog>
+		);
+
+	it( 'cancels with no history to re-sync', () => {
+		const onCancel = jest.fn();
+		renderUnrouted( { onCancel } );
+		expect( dialog() ).toBeInTheDocument();
+
+		cancelNavigation();
+		expect( onCancel ).toHaveBeenCalled();
+		expect( dialog() ).not.toBeInTheDocument();
+	} );
+
+	it( 'confirms with no history to re-sync', () => {
+		const onConfirm = jest.fn();
+		renderUnrouted( { onConfirm } );
+
+		confirmNavigation();
+		expect( onConfirm ).toHaveBeenCalled();
+		expect( dialog() ).not.toBeInTheDocument();
+	} );
+
+	// `when` asks for a blocker there is no history to install one on.
+	it( 'installs no blocker when asked to block without a router', () => {
+		expect( () => renderUnrouted( { when: true } ) ).not.toThrow();
+		expect( dialog() ).toBeInTheDocument();
+	} );
+} );
+
+describe( 'ConfirmDialog controlled by isOpen', () => {
+	const tree = isOpen => (
+		<ConfirmDialog isOpen={ isOpen } confirmButtonText="Discard changes" cancelButtonText="Keep editing">
+			Unsaved changes
+		</ConfirmDialog>
+	);
+
+	it( 'closes when isOpen goes false', () => {
+		const { rerender } = render( tree( true ) );
+		expect( dialog() ).toBeInTheDocument();
+
+		rerender( tree( false ) );
+		expect( dialog() ).not.toBeInTheDocument();
+	} );
+
+	it( 'opens again afterwards', () => {
+		const { rerender } = render( tree( true ) );
+		rerender( tree( false ) );
+
+		rerender( tree( true ) );
+		expect( dialog() ).toBeInTheDocument();
+	} );
+
+	// The blocker raises the dialog without touching isOpen.
+	it( 'leaves a blocked navigation prompt up', () => {
+		const historyRef = { current: null };
+		render(
+			<MemoryRouter>
+				<HistoryGrabber historyRef={ historyRef } />
+				<ConfirmDialog when isOpen={ false } confirmButtonText="Discard changes" cancelButtonText="Keep editing">
+					Unsaved changes
+				</ConfirmDialog>
+			</MemoryRouter>
+		);
+
+		act( () => historyRef.current.push( '/next' ) );
+		expect( dialog() ).toBeInTheDocument();
+	} );
+} );

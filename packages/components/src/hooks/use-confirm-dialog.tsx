@@ -23,6 +23,7 @@ type UseConfirmDialogOptions = {
 type UseConfirmDialogResult = {
 	confirmDialog: React.ReactElement;
 	requestConfirm: ( callback: () => void ) => void;
+	cancelConfirm: () => void;
 };
 
 /**
@@ -59,14 +60,22 @@ function useConfirmDialog( options: UseConfirmDialogOptions ): UseConfirmDialogR
 		}
 	}, [] );
 
+	// Drops a pending request without running it.
+	const cancelConfirm = useCallback( () => setPendingAction( null ), [] );
+
 	const confirmDialog = (
 		<ConfirmDialog
 			{ ...dialogProps }
 			when={ when }
 			isOpen={ !! pendingAction }
 			onConfirm={ () => {
-				pendingAction?.();
-				setPendingAction( null );
+				// Cleared either way: a throwing callback would otherwise leave the
+				// dialog permanently unraisable for this instance.
+				try {
+					pendingAction?.();
+				} finally {
+					setPendingAction( null );
+				}
 			} }
 			onCancel={ () => setPendingAction( null ) }
 		>
@@ -74,7 +83,7 @@ function useConfirmDialog( options: UseConfirmDialogOptions ): UseConfirmDialogR
 		</ConfirmDialog>
 	);
 
-	return { confirmDialog, requestConfirm };
+	return { confirmDialog, requestConfirm, cancelConfirm };
 }
 
 export default useConfirmDialog;
