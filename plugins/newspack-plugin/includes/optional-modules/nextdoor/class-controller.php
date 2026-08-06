@@ -35,6 +35,10 @@ class Controller {
 				'methods'             => \WP_REST_Server::CREATABLE,
 				'callback'            => [ __CLASS__, 'api_start_oauth' ],
 				'permission_callback' => [ __CLASS__, 'api_permissions_check' ],
+				// Declaring a `sanitize_callback` stops WordPress from installing its
+				// default validator, so every arg on every route below names
+				// `rest_validate_request_arg`. Without it the types are documentation,
+				// not rules, and a non-string reaches a sanitizer that cannot take one.
 				'args'                => [
 					'email'   => [
 						'required'          => true,
@@ -42,7 +46,11 @@ class Controller {
 						'sanitize_callback' => 'sanitize_email',
 						// sanitize_email only strips; without this a malformed address
 						// reaches Nextdoor, or arrives as an empty string.
-						'validate_callback' => function ( $value ) {
+						'validate_callback' => function ( $value, $request, $param ) {
+							$valid = rest_validate_request_arg( $value, $request, $param );
+							if ( is_wp_error( $valid ) ) {
+								return $valid;
+							}
 							return (bool) is_email( $value );
 						},
 					],
@@ -50,6 +58,7 @@ class Controller {
 						'required'          => true,
 						'type'              => 'string',
 						'sanitize_callback' => 'sanitize_text_field',
+						'validate_callback' => 'rest_validate_request_arg',
 					],
 				],
 			]
@@ -68,11 +77,13 @@ class Controller {
 						'required'          => true,
 						'type'              => 'string',
 						'sanitize_callback' => 'esc_url_raw',
+						'validate_callback' => 'rest_validate_request_arg',
 					],
 					'test'            => [
 						'required'          => false,
 						'type'              => 'boolean',
 						'sanitize_callback' => 'rest_sanitize_boolean',
+						'validate_callback' => 'rest_validate_request_arg',
 					],
 				],
 			]
@@ -91,6 +102,7 @@ class Controller {
 						'required'          => true,
 						'type'              => 'integer',
 						'sanitize_callback' => 'absint',
+						'validate_callback' => 'rest_validate_request_arg',
 					],
 				],
 			]
@@ -109,6 +121,7 @@ class Controller {
 						'required'          => true,
 						'type'              => 'integer',
 						'sanitize_callback' => 'absint',
+						'validate_callback' => 'rest_validate_request_arg',
 					],
 				],
 			]
@@ -127,6 +140,7 @@ class Controller {
 						'required'          => true,
 						'type'              => 'integer',
 						'sanitize_callback' => 'absint',
+						'validate_callback' => 'rest_validate_request_arg',
 					],
 				],
 			]
@@ -145,6 +159,7 @@ class Controller {
 						'required'          => true,
 						'type'              => 'integer',
 						'sanitize_callback' => 'absint',
+						'validate_callback' => 'rest_validate_request_arg',
 					],
 				],
 			]
@@ -184,7 +199,7 @@ class Controller {
 	 * Start OAuth flow via API.
 	 *
 	 * @param WP_REST_Request $request Request object.
-	 * @return WP_REST_Response
+	 * @return WP_REST_Response|WP_Error
 	 */
 	public static function api_start_oauth( $request ) {
 		$email   = $request->get_param( 'email' );
@@ -198,11 +213,15 @@ class Controller {
 			return $account_response;
 		}
 
-		return rest_ensure_response(
-			[
-				'login_url' => isset( $account_response['login_url'] ) ? $account_response['login_url'] : '',
-			]
-		);
+		$login_url = isset( $account_response['login_url'] ) ? $account_response['login_url'] : '';
+
+		if ( $login_url ) {
+			// Ties the authorization request to this user, so the callback can tell
+			// the publisher's own return apart from someone else's code.
+			$login_url = add_query_arg( 'state', Auth::create_oauth_state(), $login_url );
+		}
+
+		return rest_ensure_response( [ 'login_url' => $login_url ] );
 	}
 
 	/**

@@ -21,6 +21,11 @@ class Auth {
 	const OAUTH_BASE_URL = 'https://auth.nextdoor.com';
 
 	/**
+	 * Transient prefix for the pending OAuth state value, one per user.
+	 */
+	const STATE_TRANSIENT_PREFIX = 'newspack_nextdoor_oauth_state_';
+
+	/**
 	 * Initialise.
 	 */
 	public static function init() {
@@ -162,28 +167,84 @@ class Auth {
 	}
 
 	/**
+	 * Create and store a single-use OAuth state value for the current user.
+	 *
+	 * @return string State value to send to Nextdoor.
+	 */
+	public static function create_oauth_state() {
+		$state = wp_generate_password( 32, false );
+
+		set_transient( self::STATE_TRANSIENT_PREFIX . get_current_user_id(), $state, 15 * MINUTE_IN_SECONDS );
+
+		return $state;
+	}
+
+	/**
+	 * Consume the stored OAuth state and compare it with the returned one.
+	 *
+	 * @param string $state State returned by Nextdoor.
+	 * @return bool
+	 */
+	public static function verify_oauth_state( $state ) {
+		$key    = self::STATE_TRANSIENT_PREFIX . get_current_user_id();
+		$stored = get_transient( $key );
+
+		delete_transient( $key );
+
+		if ( ! is_string( $state ) || ! is_string( $stored ) || '' === $stored ) {
+			return false;
+		}
+
+		return hash_equals( $stored, $state );
+	}
+
+	/**
+	 * Redirect back to the settings screen carrying an error message.
+	 *
+	 * @param string $message Message to show.
+	 * @return void
+	 */
+	private static function redirect_with_error( $message ) {
+		wp_safe_redirect(
+			add_query_arg(
+				[
+					'page'                 => 'newspack-settings',
+					'nextdoor_oauth_error' => rawurlencode( $message ),
+				],
+				admin_url( 'admin.php' )
+			) . '#social'
+		);
+		exit;
+	}
+
+	/**
 	 * Handle OAuth callback.
+	 *
+	 * @return void
 	 */
 	public static function handle_oauth_callback() {
 		if ( ! isset( $_GET['nextdoor_oauth_callback'] ) || ! isset( $_GET['code'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			return;
 		}
 
-		$code = isset( $_GET['code'] ) ? sanitize_text_field( wp_unslash( $_GET['code'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		// This fires on `init`, ahead of the admin's own authentication, and on every
+		// front-end request too. Without this gate anyone could hand the site an
+		// authorization code and have it bound to the publisher's integration.
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+
+		$code  = sanitize_text_field( wp_unslash( $_GET['code'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$state = isset( $_GET['state'] ) ? sanitize_text_field( wp_unslash( $_GET['state'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
+		if ( ! self::verify_oauth_state( $state ) ) {
+			self::redirect_with_error( __( 'This Nextdoor connection could not be verified. Please try connecting again.', 'newspack-plugin' ) );
+		}
 
 		$settings = Nextdoor::get_settings();
 
 		if ( empty( $settings['client_id'] ) || empty( $settings['client_secret'] ) ) {
-			wp_safe_redirect( 
-				add_query_arg(
-					[
-						'page'                 => 'newspack-settings',
-						'nextdoor_oauth_error' => rawurlencode( __( 'Nextdoor client credentials not configured.', 'newspack-plugin' ) ),
-					],
-					admin_url( 'admin.php' )
-				) . '#social'
-			);
-			exit;
+			self::redirect_with_error( __( 'Nextdoor client credentials not configured.', 'newspack-plugin' ) );
 		}
 
 		$redirect_uri = Nextdoor::get_redirect_uri();
@@ -196,16 +257,7 @@ class Auth {
 		);
 
 		if ( is_wp_error( $token_response ) ) {
-			wp_safe_redirect( 
-				add_query_arg(
-					[
-						'page'                 => 'newspack-settings',
-						'nextdoor_oauth_error' => rawurlencode( $token_response->get_error_message() ),
-					],
-					admin_url( 'admin.php' )
-				) . '#social'
-			);
-			exit;
+			self::redirect_with_error( $token_response->get_error_message() );
 		}
 
 		$settings['access_token']     = $token_response['access_token'];
