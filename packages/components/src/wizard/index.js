@@ -6,7 +6,8 @@ import classnames from 'classnames';
 /**
  * WordPress dependencies.
  */
-import { DropdownMenu, MenuGroup, MenuItem } from '@wordpress/components';
+// Notice is aliased: `Notice` below is Newspack's own, which this file also uses.
+import { DropdownMenu, MenuGroup, MenuItem, Notice as CoreNotice } from '@wordpress/components';
 import { useDispatch, useSelect } from '@wordpress/data';
 import { cloneElement, createInterpolateElement, isValidElement, useEffect, useState, forwardRef } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
@@ -189,11 +190,25 @@ const Wizard = (
 		</TabbedNavigation>
 	);
 
-	// Rendered as the first child of .newspack-wizard__content rather than as a core
-	// admin notice: that puts it below the header and tabbed navigation, and inside
-	// the container that bounds the wizard's own width, so it lines up with the
-	// content it is about instead of spanning the viewport.
+	// Rendered here rather than as a core admin notice, which wizards strip at
+	// priority -9999. Sits as the first child of .newspack-wizard__main so it lands
+	// flush beneath the header region and spans the full width in every view: this
+	// describes the state of the whole site, not of the section below it, so it reads
+	// as page chrome rather than as content.
 	const inertGating = window.newspack_aux_data?.inert_gating;
+	const inertGatingNotice = inertGating?.show && (
+		<CoreNotice status="warning" isDismissible={ false } className="newspack-wizard__inert-gating-notice">
+			{ /* The conversion map takes childless elements and fills them from the
+			     translated string, so jsx-a11y can't see the content they end up with. */ }
+			{ interpolateOrPlainText( inertGating.message, {
+				/* eslint-disable jsx-a11y/anchor-has-content */
+				accessControl: <a href={ inertGating.urls.accessControl } />,
+				audience: <a href={ inertGating.urls.audience } />,
+				/* eslint-enable jsx-a11y/anchor-has-content */
+				strong: <strong />,
+			} ) }
+		</CoreNotice>
+	);
 
 	const content = (
 		<>
@@ -202,6 +217,7 @@ const Wizard = (
 			{ sections.length > 1 && <ResetHeaderData /> }
 
 			<div className="newspack-wizard__main">
+				{ inertGatingNotice }
 				<Switch>
 					{ routedSections.map( ( section, index ) => {
 						const SectionComponent = section.render;
@@ -217,20 +233,6 @@ const Wizard = (
 											'newspack-wizard__content--full-width': section.fullWidth,
 										} ) }
 									>
-										{ inertGating?.show && (
-											<Notice isWarning className="newspack-wizard__inert-gating-notice">
-												{ /* The conversion map takes childless elements and fills them
-												     from the translated string, so jsx-a11y can't see the content
-												     they end up with. */ }
-												{ interpolateOrPlainText( inertGating.message, {
-													/* eslint-disable jsx-a11y/anchor-has-content */
-													accessControl: <a href={ inertGating.urls.accessControl } />,
-													audience: <a href={ inertGating.urls.audience } />,
-													/* eslint-enable jsx-a11y/anchor-has-content */
-													strong: <strong />,
-												} ) }
-											</Notice>
-										) }
 										{ 'function' === typeof renderAboveSections ? renderAboveSections() : null }
 										{ ( sectionTitle || section.title ) && (
 											<SectionHeader
