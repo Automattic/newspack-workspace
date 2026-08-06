@@ -236,6 +236,13 @@ class Content_Gate {
 		self::$is_gated          = true;
 		self::$is_content_locked = true;
 
+		// Mark before rendering: the renders below run the post content and the
+		// gate layout through the block pipeline, and any block that runs a
+		// secondary loop ends it with wp_reset_postdata(), which re-fires
+		// `the_post` for the main post. The has_rendered() guard above must
+		// already be set by then, or this method re-enters itself unboundedly.
+		self::mark_gate_as_rendered();
+
 		$content = self::get_restricted_post_excerpt( $post );
 
 		$post->post_content   = $content . self::get_inline_gate_html();
@@ -244,8 +251,6 @@ class Content_Gate {
 		$post->comment_count  = 0;
 
 		self::$restricted_content[ $post->ID ] = $post->post_content;
-
-		self::mark_gate_as_rendered();
 	}
 
 	/**
