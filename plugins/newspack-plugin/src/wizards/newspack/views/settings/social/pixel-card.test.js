@@ -114,6 +114,7 @@ describe( 'PixelCard', () => {
 		renderCard();
 
 		fireEvent.click( await screen.findByRole( 'button', { name: 'Edit Meta Pixel' } ) );
+		fireEvent.change( screen.getByLabelText( 'Pixel ID' ), { target: { value: '456' } } );
 		fireEvent.click( screen.getByRole( 'button', { name: 'Disable' } ) );
 
 		await waitFor( () =>

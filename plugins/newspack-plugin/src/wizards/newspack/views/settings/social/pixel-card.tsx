@@ -50,7 +50,7 @@ const PixelCard = ( { title, description, namespace, path, validate, renderHelp 
 					setDraft( res.pixel_id ?? '' );
 				},
 			}
-		);
+		).catch( () => {} );
 	}, [] );
 
 	const validationError = validate( draft );
@@ -80,6 +80,9 @@ const PixelCard = ( { title, description, namespace, path, validate, renderHelp 
 	};
 
 	const badge = ( () => {
+		if ( errorMessage ) {
+			return { level: 'error' as const, text: __( 'Error', 'newspack-plugin' ) };
+		}
 		if ( ! settings.active ) {
 			return undefined;
 		}
@@ -135,7 +138,14 @@ const PixelCard = ( { title, description, namespace, path, validate, renderHelp 
 	);
 
 	return (
-		<CardForm title={ title } description={ description } badge={ badge } actions={ actions } isOpen={ isOpen } onRequestClose={ close }>
+		<CardForm
+			title={ title }
+			description={ errorMessage || description }
+			badge={ badge }
+			actions={ actions }
+			isOpen={ isOpen }
+			onRequestClose={ close }
+		>
 			<VStack spacing={ 4 }>
 				{ errorMessage && <Notice isError noticeText={ errorMessage } /> }
 				<TextControl
