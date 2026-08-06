@@ -189,110 +189,23 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 						$wrapper.removeClass( 'hidden' );
 					}
 
-					const $details = $( '#after_customer_details' );
-					const expanded = $details.hasClass( 'transaction-details-expanded' );
-
 					// Move new order review table to the payment methods.
 					const $payment_methods = $( '.payment_methods' );
 					if ( $payment_methods.length ) {
 						const $el = $wrapper.clone();
-						// Make sure Transaction Details toggle's aria-expanded value is correct in cloned version.
-						if ( expanded ) {
-							$( '[id="order_review_heading"]', $el ).attr( 'aria-expanded', 'true' );
-						}
 						$( '.order-review-wrapper' ).remove();
 						$payment_methods.after( $el );
-					} else if ( ! expanded ) {
-						// If there's no payment method, make sure to expand the Transaction Details on load.
-						$wrapper.find( '#order_review_heading' ).trigger( 'click' );
 					}
 				} );
 
 				/**
-				 * Keep the static product summary aligned with recalculated order-review totals.
+				 * Serialize the checkout form for cart-recalculation AJAX requests.
 				 */
-				function setProductSummary( productDetails, allowHtml = true ) {
-					const $productDetails = $( '#modal-checkout-product-details strong' );
-					if ( ! $productDetails.length || ! productDetails ) {
-						return false;
-					}
-					if ( allowHtml && $productDetails.html() !== productDetails ) {
-						$productDetails.html( productDetails );
-					} else if ( ! allowHtml && $productDetails.text() !== productDetails ) {
-						$productDetails.text( productDetails );
-					}
-					return true;
-				}
-				let productSummaryRequest = false;
 				function getCheckoutPostData() {
 					const $checkoutForm = $( 'form.checkout' );
 					// Repeat-trial checks can only resolve once the checkout form includes a billing email.
 					return $checkoutForm.length ? $checkoutForm.serialize() : '';
 				}
-				function requestUpdatedProductSummary() {
-					if ( productSummaryRequest ) {
-						productSummaryRequest.abort();
-					}
-					const request = $.ajax( {
-						url: newspackBlocksModalCheckout.ajax_url,
-						method: 'POST',
-						data: {
-							action: 'get_cart_product_summary',
-							modal_checkout: 1,
-							post_data: getCheckoutPostData(),
-						},
-						success: response => {
-							if ( productSummaryRequest === request ) {
-								setProductSummary( response );
-							}
-						},
-						complete: () => {
-							if ( productSummaryRequest === request ) {
-								productSummaryRequest = false;
-							}
-						},
-					} );
-					productSummaryRequest = request;
-				}
-				function updateProductSummaryFromOrderReview() {
-					const $cartItem = $( '.order-review-wrapper .woocommerce-checkout-review-order-table tr.cart_item' ).first();
-					if ( ! $cartItem.length ) {
-						return false;
-					}
-
-					const $productName = $cartItem.find( '.product-name' ).clone();
-					$productName.find( '.product-quantity' ).remove();
-					// Keep the DOM path text-only; the AJAX fallback is the HTML path because PHP runs it through wp_kses.
-					const productName = $productName.text().replace( /\s+/g, ' ' ).trim();
-					const productTotal = $cartItem.find( '.product-total' ).text().replace( /\s+/g, ' ' ).trim();
-					if ( productName && productTotal ) {
-						return setProductSummary( `${ productName }: ${ productTotal }`, false );
-					}
-					return false;
-				}
-				function syncProductSummary() {
-					if ( updateProductSummaryFromOrderReview() ) {
-						if ( productSummaryRequest ) {
-							productSummaryRequest.abort();
-							productSummaryRequest = false;
-						}
-						return;
-					}
-					requestUpdatedProductSummary();
-				}
-				$( document ).on( 'updated_checkout', syncProductSummary );
-
-				/**
-				 * Toggle Transaction Details
-				 */
-				$( document ).on( 'click', '#order_review_heading', function () {
-					// Toggle the aria-expanded attribute.
-					$( this ).attr( 'aria-expanded', function ( index, attr ) {
-						return attr === 'false' ? 'true' : 'false';
-					} );
-					// Toggle the CSS class to show/hide the Transaction Details.
-					$( '#after_customer_details' ).toggleClass( 'transaction-details-expanded' );
-				} );
 
 				/**
 				 * Get updated cart total to update the "Place Order" button.
@@ -748,7 +661,12 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 						}
 					}
 
-					$( '.order-details-summary' ).after( '<div id="checkout_details">' + html.join( '' ) + '</div>' );
+					// Anchor the summary to the hidden product-details carrier, falling back to
+					// #after_customer_details when the carrier isn't present (e.g. multi-item carts).
+					const $anchor = $( '#modal-checkout-product-details' ).length
+						? $( '#modal-checkout-product-details' )
+						: $( '#after_customer_details' );
+					$anchor.after( '<div id="checkout_details">' + html.join( '' ) + '</div>' );
 				}
 
 				/**

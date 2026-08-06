@@ -6,11 +6,80 @@
  */
 
 use Newspack\Optional_Modules\InDesign_Export\InDesign_Converter;
+use Newspack\Optional_Modules\InDesign_Exporter;
 
 /**
  * Tests the InDesign Exporter functionality.
  */
 class Newspack_Test_InDesign_Exporter extends WP_UnitTestCase {
+	/**
+	 * Post types individual tests may register. Torn down centrally so a failed
+	 * assertion mid-test can't leak a registration into later tests.
+	 *
+	 * @var string[]
+	 */
+	private const TEST_POST_TYPES = [ 'product', 'hidden_cpt', 'partner_rss_feed', 'newspack_nl_list', 'newspack_collection', 'event', 'flyer', 'reviewcpt' ];
+
+	/**
+	 * The ambient User-Agent, captured so platform-resolution tests can restore it.
+	 *
+	 * @var string|null
+	 */
+	private $original_user_agent;
+
+	/**
+	 * Capture request state that individual tests may mutate.
+	 */
+	public function set_up() {
+		parent::set_up();
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__HTTP_USER_AGENT__
+		$this->original_user_agent = $_SERVER['HTTP_USER_AGENT'] ?? null;
+	}
+
+	/**
+	 * Set the request User-Agent for the current test. Wraps the write so the VIP
+	 * cache-constraint sniff — not meaningful for a unit test — is silenced once.
+	 *
+	 * @param string $user_agent User-Agent string to set.
+	 */
+	private function set_request_user_agent( $user_agent ) {
+		$_SERVER['HTTP_USER_AGENT'] = $user_agent; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__HTTP_USER_AGENT__
+	}
+
+	/**
+	 * Reset options, post-type registrations, and request state after every test,
+	 * regardless of whether the test's own assertions passed. Keeping cleanup here
+	 * (rather than inline at the end of each test) makes failures self-contained.
+	 */
+	public function tear_down() {
+		delete_option( InDesign_Exporter::PLATFORM_OPTION );
+		delete_option( InDesign_Exporter::POST_TYPES_OPTION );
+		delete_option( InDesign_Exporter::EXCLUDE_CAPTIONS_OPTION );
+
+		foreach ( self::TEST_POST_TYPES as $post_type ) {
+			if ( post_type_exists( $post_type ) ) {
+				unregister_post_type( $post_type );
+			}
+		}
+
+		// Filters added by the register_list_table_actions() test. Removing a
+		// filter that was never added is a no-op, so this is safe to run
+		// unconditionally — and here (rather than inline after the test's
+		// assertions) so a mid-test failure can't leak the hooks.
+		remove_filter( 'bulk_actions-edit-reviewcpt', [ InDesign_Exporter::class, 'add_bulk_action' ] );
+		remove_filter( 'handle_bulk_actions-edit-reviewcpt', [ InDesign_Exporter::class, 'handle_bulk_action' ], 100 );
+		remove_filter( 'post_row_actions', [ InDesign_Exporter::class, 'add_row_action' ], 10 );
+		remove_filter( 'page_row_actions', [ InDesign_Exporter::class, 'add_row_action' ], 10 );
+
+		if ( null === $this->original_user_agent ) {
+			unset( $_SERVER['HTTP_USER_AGENT'] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__HTTP_USER_AGENT__
+		} else {
+			$_SERVER['HTTP_USER_AGENT'] = $this->original_user_agent; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__HTTP_USER_AGENT__
+		}
+
+		parent::tear_down();
+	}
+
 	/**
 	 * Test converting a simple post.
 	 */
@@ -27,6 +96,294 @@ class Newspack_Test_InDesign_Exporter extends WP_UnitTestCase {
 		$this->assertStringContainsString( '<ASCII-WIN>', $content );
 		$this->assertStringContainsString( '<pstyle:24head>Test Post', $content );
 		$this->assertStringContainsString( '<pstyle:text>This is a test post.', $content );
+	}
+
+	/**
+	 * Test that the Mac platform option emits the <ASCII-MAC> header.
+	 *
+	 * InDesign on macOS requires the file to begin with <ASCII-MAC> for the
+	 * tagged text to be interpreted as markup rather than literal content.
+	 */
+	public function test_convert_post_mac_platform() {
+		$post_id = $this->factory->post->create(
+			[
+				'post_title'   => 'Test Post',
+				'post_content' => '<p>This is a test post.</p>',
+			]
+		);
+
+		$converter = new InDesign_Converter();
+		$content   = $converter->convert_post( $post_id, [ 'platform' => 'mac' ] );
+		$this->assertStringContainsString( '<ASCII-MAC>', $content );
+		$this->assertStringNotContainsString( '<ASCII-WIN>', $content );
+	}
+
+	/**
+	 * Test that the Win platform option emits the <ASCII-WIN> header.
+	 */
+	public function test_convert_post_win_platform() {
+		$post_id = $this->factory->post->create(
+			[
+				'post_title'   => 'Test Post',
+				'post_content' => '<p>This is a test post.</p>',
+			]
+		);
+
+		$converter = new InDesign_Converter();
+		$content   = $converter->convert_post( $post_id, [ 'platform' => 'win' ] );
+		$this->assertStringContainsString( '<ASCII-WIN>', $content );
+		$this->assertStringNotContainsString( '<ASCII-MAC>', $content );
+	}
+
+	/**
+	 * Test that the platform setting defaults to 'auto' when unset.
+	 */
+	public function test_platform_setting_default() {
+		delete_option( InDesign_Exporter::PLATFORM_OPTION );
+		$this->assertSame( 'auto', InDesign_Exporter::get_platform_setting() );
+	}
+
+	/**
+	 * Test that the platform setting returns the stored value when valid.
+	 */
+	public function test_platform_setting_valid_values() {
+		update_option( InDesign_Exporter::PLATFORM_OPTION, 'mac' );
+		$this->assertSame( 'mac', InDesign_Exporter::get_platform_setting() );
+
+		update_option( InDesign_Exporter::PLATFORM_OPTION, 'win' );
+		$this->assertSame( 'win', InDesign_Exporter::get_platform_setting() );
+
+		update_option( InDesign_Exporter::PLATFORM_OPTION, 'auto' );
+		$this->assertSame( 'auto', InDesign_Exporter::get_platform_setting() );
+	}
+
+	/**
+	 * Test that the platform setting sanitizes invalid stored values.
+	 */
+	public function test_platform_setting_rejects_invalid_value() {
+		update_option( InDesign_Exporter::PLATFORM_OPTION, 'linux' );
+		$this->assertSame( 'auto', InDesign_Exporter::get_platform_setting() );
+
+		update_option( InDesign_Exporter::PLATFORM_OPTION, '' );
+		$this->assertSame( 'auto', InDesign_Exporter::get_platform_setting() );
+	}
+
+	/**
+	 * Test that the post types setting defaults to ['post'] when unset.
+	 */
+	public function test_post_types_setting_default() {
+		delete_option( InDesign_Exporter::POST_TYPES_OPTION );
+		$this->assertSame( [ 'post' ], InDesign_Exporter::get_post_types_setting() );
+	}
+
+	/**
+	 * Test that valid stored post types are returned.
+	 */
+	public function test_post_types_setting_valid_values() {
+		update_option( InDesign_Exporter::POST_TYPES_OPTION, [ 'post', 'page' ] );
+		$this->assertSame( [ 'post', 'page' ], InDesign_Exporter::get_post_types_setting() );
+	}
+
+	/**
+	 * Test that slugs whose post type is no longer registered get filtered out.
+	 */
+	public function test_post_types_setting_drops_stale_slugs() {
+		update_option( InDesign_Exporter::POST_TYPES_OPTION, [ 'post', 'no_such_cpt', 42, '' ] );
+		$this->assertSame( [ 'post' ], InDesign_Exporter::get_post_types_setting() );
+	}
+
+	/**
+	 * Test that a non-array stored value falls back to the default.
+	 */
+	public function test_post_types_setting_rejects_non_array() {
+		update_option( InDesign_Exporter::POST_TYPES_OPTION, 'post' );
+		$this->assertSame( [ 'post' ], InDesign_Exporter::get_post_types_setting() );
+	}
+
+	/**
+	 * Test that slugs hidden from the settings UI (excluded, or not public/no
+	 * admin UI) are dropped from the stored setting, even if registered. This
+	 * keeps the stored value in sync with what the admin can actually manage.
+	 */
+	public function test_post_types_setting_drops_unavailable_slugs() {
+		// `product` is registered and public but lives in EXCLUDED_POST_TYPES.
+		register_post_type(
+			'product',
+			[
+				'public'  => true,
+				'show_ui' => true,
+			]
+		);
+		// Registered but not exposed in the admin UI, so never "available".
+		register_post_type(
+			'hidden_cpt',
+			[
+				'public'  => false,
+				'show_ui' => false,
+			]
+		);
+
+		update_option( InDesign_Exporter::POST_TYPES_OPTION, [ 'post', 'product', 'hidden_cpt' ] );
+		$this->assertSame( [ 'post' ], InDesign_Exporter::get_post_types_setting() );
+	}
+
+	/**
+	 * Test that get_supported_post_types() honors the stored setting.
+	 */
+	public function test_get_supported_post_types_uses_setting() {
+		update_option( InDesign_Exporter::POST_TYPES_OPTION, [ 'page' ] );
+		$this->assertSame( [ 'page' ], InDesign_Exporter::get_supported_post_types() );
+	}
+
+	/**
+	 * Test that available_post_types excludes attachments, RSS feeds,
+	 * subscription lists, collections, and WooCommerce products.
+	 */
+	public function test_get_available_post_types_excludes_non_editorial_types() {
+		register_post_type(
+			'partner_rss_feed',
+			[
+				'public'  => true,
+				'show_ui' => true,
+			]
+		);
+		register_post_type(
+			'newspack_nl_list',
+			[
+				'public'  => true,
+				'show_ui' => true,
+			]
+		);
+		register_post_type(
+			'newspack_collection',
+			[
+				'public'  => true,
+				'show_ui' => true,
+			]
+		);
+		register_post_type(
+			'product',
+			[
+				'public'  => true,
+				'show_ui' => true,
+			]
+		);
+		register_post_type(
+			'event',
+			[
+				'public'  => true,
+				'show_ui' => true,
+			]
+		);
+
+		$available = InDesign_Exporter::get_available_post_types();
+		$slugs     = array_column( $available, 'value' );
+
+		$this->assertContains( 'post', $slugs );
+		$this->assertContains( 'page', $slugs );
+		$this->assertContains( 'event', $slugs, 'Editorial CPTs should remain available.' );
+		$this->assertNotContains( 'attachment', $slugs );
+		$this->assertNotContains( 'partner_rss_feed', $slugs );
+		$this->assertNotContains( 'newspack_nl_list', $slugs );
+		$this->assertNotContains( 'newspack_collection', $slugs );
+		$this->assertNotContains( 'product', $slugs );
+	}
+
+	/**
+	 * Test that the excluded-types filter can add or remove exclusions.
+	 */
+	public function test_get_available_post_types_filter() {
+		register_post_type(
+			'flyer',
+			[
+				'public'  => true,
+				'show_ui' => true,
+			]
+		);
+
+		$callback = static function ( $excluded ) {
+			$excluded[] = 'flyer';
+			return $excluded;
+		};
+		add_filter( 'newspack_indesign_export_excluded_post_types', $callback );
+
+		$available = InDesign_Exporter::get_available_post_types();
+		$slugs     = array_column( $available, 'value' );
+
+		$this->assertNotContains( 'flyer', $slugs );
+
+		remove_filter( 'newspack_indesign_export_excluded_post_types', $callback );
+	}
+
+	/**
+	 * Test User-Agent → platform mapping for representative strings.
+	 */
+	public function test_sniff_user_agent_platform() {
+		// macOS Safari / Chrome.
+		$this->assertSame(
+			'mac',
+			InDesign_Exporter::sniff_user_agent_platform( 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15' )
+		);
+		// iPad.
+		$this->assertSame(
+			'mac',
+			InDesign_Exporter::sniff_user_agent_platform( 'Mozilla/5.0 (iPad; CPU OS 17_5 like Mac OS X) AppleWebKit/605.1.15' )
+		);
+		// iPhone.
+		$this->assertSame(
+			'mac',
+			InDesign_Exporter::sniff_user_agent_platform( 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15' )
+		);
+		// Windows Chrome.
+		$this->assertSame(
+			'win',
+			InDesign_Exporter::sniff_user_agent_platform( 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' )
+		);
+		// Linux (treated as Windows-compatible by InDesign Tagged Text — there is no Linux variant).
+		$this->assertSame(
+			'win',
+			InDesign_Exporter::sniff_user_agent_platform( 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36' )
+		);
+		// Empty.
+		$this->assertSame( 'win', InDesign_Exporter::sniff_user_agent_platform( '' ) );
+	}
+
+	/**
+	 * Test that is_post_supported gates posts by the configured post types setting.
+	 */
+	public function test_is_post_supported() {
+		update_option( InDesign_Exporter::POST_TYPES_OPTION, [ 'post' ] );
+
+		$post_id = $this->factory->post->create();
+		$page_id = $this->factory->post->create( [ 'post_type' => 'page' ] );
+
+		$this->assertTrue( InDesign_Exporter::is_post_supported( $post_id ) );
+		$this->assertFalse( InDesign_Exporter::is_post_supported( $page_id ) );
+		$this->assertFalse( InDesign_Exporter::is_post_supported( 0 ) );
+		$this->assertFalse( InDesign_Exporter::is_post_supported( 99999999 ) );
+
+		update_option( InDesign_Exporter::POST_TYPES_OPTION, [ 'post', 'page' ] );
+		$this->assertTrue( InDesign_Exporter::is_post_supported( $page_id ) );
+	}
+
+	/**
+	 * Test that en-dashes and em-dashes map to their own Unicode code points.
+	 *
+	 * Previously '–' (en-dash, U+2013) was incorrectly mapped to <0x2014> (em-dash).
+	 */
+	public function test_convert_dashes() {
+		$post_id = $this->factory->post->create(
+			[
+				'post_title'   => 'Test Post',
+				'post_content' => '<p>en–dash and em—dash and double--hyphen.</p>',
+			]
+		);
+
+		$converter = new InDesign_Converter();
+		$content   = $converter->convert_post( $post_id );
+		$this->assertStringContainsString( 'en<0x2013>dash', $content );
+		$this->assertStringContainsString( 'em<0x2014>dash', $content );
+		$this->assertStringContainsString( 'double<0x2014>hyphen', $content );
 	}
 
 	/**
@@ -594,5 +951,263 @@ class Newspack_Test_InDesign_Exporter extends WP_UnitTestCase {
 		$content = $converter->convert_post( $post_id );
 		$this->assertStringContainsString( '<pstyle:PhotoCaption>Image Caption with <0x00E1> <0x00E9> <0x00ED> <0x00F3> <0x00FA> <0x00F1> <0x00E7> <0x00F0> <0x00F0>  , &, <, > and <CharStyle:bullet>n<CharStyle:>.', $content );
 		$this->assertStringContainsString( '<pstyle:PhotoCredit>Image Credit with <0x00E1> <0x00E9> <0x00ED> <0x00F3> <0x00FA> <0x00F1> <0x00E7> <0x00F0> <0x00F0>  , &, <, > and <CharStyle:bullet>n<CharStyle:>.', $content );
+	}
+
+	/**
+	 * Test that photo captions are dropped when include_captions is false, while
+	 * photo credits — a separate attribution field — are still exported.
+	 */
+	public function test_convert_post_excludes_captions_when_disabled() {
+		$image_id = $this->factory->attachment->create();
+		wp_update_post(
+			[
+				'ID'           => $image_id,
+				'post_excerpt' => 'Image Caption',
+			]
+		);
+		update_post_meta( $image_id, '_media_credit', 'Image Credit' );
+
+		$post_id = $this->factory->post->create(
+			[
+				'post_title'   => 'Test Post',
+				'post_content' => '<!-- wp:image {"id":' . $image_id . '} --><!-- /wp:image -->',
+			]
+		);
+
+		$converter = new InDesign_Converter();
+		$content   = $converter->convert_post( $post_id, [ 'include_captions' => false ] );
+
+		$this->assertStringNotContainsString( '<pstyle:PhotoCaption>', $content );
+		$this->assertStringNotContainsString( 'Image Caption', $content );
+		$this->assertStringContainsString( '<pstyle:PhotoCredit>Image Credit', $content );
+	}
+
+	/**
+	 * Test that an image carrying only a caption (no credit) produces no photo
+	 * block at all when captions are disabled.
+	 */
+	public function test_convert_post_excludes_caption_only_image_when_disabled() {
+		$image_id = $this->factory->attachment->create();
+		wp_update_post(
+			[
+				'ID'           => $image_id,
+				'post_excerpt' => 'Caption Only Image',
+			]
+		);
+
+		$post_id = $this->factory->post->create(
+			[
+				'post_title'   => 'Test Post',
+				'post_content' => '<!-- wp:image {"id":' . $image_id . '} --><!-- /wp:image -->',
+			]
+		);
+
+		$converter = new InDesign_Converter();
+		$content   = $converter->convert_post( $post_id, [ 'include_captions' => false ] );
+
+		$this->assertStringNotContainsString( 'Caption Only Image', $content );
+		$this->assertStringNotContainsString( '<pstyle:PhotoCaption>', $content );
+		$this->assertStringNotContainsString( '<pstyle:PhotoCredit>', $content );
+	}
+
+	/**
+	 * Test that captions are included by default (preserves prior behavior when
+	 * the option is omitted).
+	 */
+	public function test_convert_post_includes_captions_by_default() {
+		$image_id = $this->factory->attachment->create();
+		wp_update_post(
+			[
+				'ID'           => $image_id,
+				'post_excerpt' => 'Default Caption',
+			]
+		);
+
+		$post_id = $this->factory->post->create(
+			[
+				'post_title'   => 'Test Post',
+				'post_content' => '<!-- wp:image {"id":' . $image_id . '} --><!-- /wp:image -->',
+			]
+		);
+
+		$converter = new InDesign_Converter();
+		$content   = $converter->convert_post( $post_id );
+
+		$this->assertStringContainsString( '<pstyle:PhotoCaption>Default Caption', $content );
+	}
+
+	/**
+	 * Test that the exclude-captions setting defaults to false when unset.
+	 */
+	public function test_exclude_captions_setting_default() {
+		delete_option( InDesign_Exporter::EXCLUDE_CAPTIONS_OPTION );
+		$this->assertFalse( InDesign_Exporter::get_exclude_captions_setting() );
+	}
+
+	/**
+	 * Test that the exclude-captions setting returns the stored boolean value.
+	 */
+	public function test_exclude_captions_setting_returns_stored_bool() {
+		update_option( InDesign_Exporter::EXCLUDE_CAPTIONS_OPTION, true );
+		$this->assertTrue( InDesign_Exporter::get_exclude_captions_setting() );
+
+		update_option( InDesign_Exporter::EXCLUDE_CAPTIONS_OPTION, false );
+		$this->assertFalse( InDesign_Exporter::get_exclude_captions_setting() );
+	}
+
+	/**
+	 * Test that register_list_table_actions() registers the bulk export action
+	 * for a configured custom post type.
+	 *
+	 * Guards the hook-ordering fix: the module boots at file scope (before
+	 * `init`), but custom post types register on `init`, so bulk-action
+	 * registration is deferred to `init` priority 20. Calling the deferred
+	 * method directly here reproduces that post-`init` timing.
+	 */
+	public function test_register_list_table_actions_registers_bulk_action_for_custom_post_type() {
+		register_post_type(
+			'reviewcpt',
+			[
+				'public'  => true,
+				'show_ui' => true,
+			]
+		);
+		update_option( InDesign_Exporter::POST_TYPES_OPTION, [ 'reviewcpt' ] );
+
+		// The dynamic bulk-action filter must not exist before registration runs.
+		$this->assertFalse( has_filter( 'bulk_actions-edit-reviewcpt', [ InDesign_Exporter::class, 'add_bulk_action' ] ) );
+
+		InDesign_Exporter::register_list_table_actions();
+
+		$this->assertNotFalse(
+			has_filter( 'bulk_actions-edit-reviewcpt', [ InDesign_Exporter::class, 'add_bulk_action' ] ),
+			'The bulk export action must be registered for a configured custom post type.'
+		);
+		$this->assertNotFalse(
+			has_filter( 'handle_bulk_actions-edit-reviewcpt', [ InDesign_Exporter::class, 'handle_bulk_action' ] )
+		);
+		// The filters registered here are removed in tear_down(), so a failed
+		// assertion above can't leak them into later tests.
+	}
+
+	/**
+	 * Test that an explicit platform setting wins over the request User-Agent.
+	 */
+	public function test_resolve_platform_setting_overrides_user_agent() {
+		update_option( InDesign_Exporter::PLATFORM_OPTION, 'mac' );
+		$this->set_request_user_agent( 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' );
+		$this->assertSame( 'mac', InDesign_Exporter::resolve_platform() );
+
+		update_option( InDesign_Exporter::PLATFORM_OPTION, 'win' );
+		$this->set_request_user_agent( 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5)' );
+		$this->assertSame( 'win', InDesign_Exporter::resolve_platform() );
+	}
+
+	/**
+	 * Test that the 'auto' setting resolves the platform from the User-Agent.
+	 */
+	public function test_resolve_platform_auto_sniffs_user_agent() {
+		update_option( InDesign_Exporter::PLATFORM_OPTION, 'auto' );
+
+		$this->set_request_user_agent( 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5)' );
+		$this->assertSame( 'mac', InDesign_Exporter::resolve_platform() );
+
+		$this->set_request_user_agent( 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' );
+		$this->assertSame( 'win', InDesign_Exporter::resolve_platform() );
+	}
+
+	/**
+	 * Test that the platform filter can override the resolved value, and that a
+	 * non-'mac' return normalizes to 'win' instead of leaking an invalid platform.
+	 */
+	public function test_resolve_platform_filter_overrides_and_normalizes() {
+		update_option( InDesign_Exporter::PLATFORM_OPTION, 'win' );
+
+		$to_mac = static function () {
+			return 'mac';
+		};
+		add_filter( 'newspack_indesign_export_platform', $to_mac );
+		$this->assertSame( 'mac', InDesign_Exporter::resolve_platform() );
+		remove_filter( 'newspack_indesign_export_platform', $to_mac );
+
+		$to_auto = static function () {
+			return 'auto';
+		};
+		add_filter( 'newspack_indesign_export_platform', $to_auto );
+		$this->assertSame( 'win', InDesign_Exporter::resolve_platform() );
+		remove_filter( 'newspack_indesign_export_platform', $to_auto );
+	}
+
+	/**
+	 * Test that the platform filter receives the resolved platform, the stored
+	 * setting, and the sanitized User-Agent.
+	 */
+	public function test_resolve_platform_filter_receives_context() {
+		update_option( InDesign_Exporter::PLATFORM_OPTION, 'auto' );
+		$this->set_request_user_agent( 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5)' );
+
+		$captured = [];
+		$callback = static function ( $platform, $setting, $user_agent ) use ( &$captured ) {
+			$captured = compact( 'platform', 'setting', 'user_agent' );
+			return $platform;
+		};
+		add_filter( 'newspack_indesign_export_platform', $callback, 10, 3 );
+		InDesign_Exporter::resolve_platform();
+		remove_filter( 'newspack_indesign_export_platform', $callback, 10 );
+
+		$this->assertSame( 'mac', $captured['platform'] );
+		$this->assertSame( 'auto', $captured['setting'] );
+		$this->assertStringContainsString( 'Macintosh', $captured['user_agent'] );
+	}
+
+	/**
+	 * Test that a supported-post-types filter returning a non-array value does not
+	 * break get_supported_post_types() (defensive (array) cast).
+	 */
+	public function test_get_supported_post_types_survives_non_array_filter() {
+		update_option( InDesign_Exporter::POST_TYPES_OPTION, [ 'post' ] );
+
+		$callback = static function () {
+			return null;
+		};
+		add_filter( 'newspack_indesign_export_supported_post_types', $callback );
+		$result = InDesign_Exporter::get_supported_post_types();
+		remove_filter( 'newspack_indesign_export_supported_post_types', $callback );
+
+		$this->assertIsArray( $result );
+	}
+
+	/**
+	 * Test that a caption-only image contributes nothing to the export when
+	 * captions are excluded — no stray blank line from an otherwise-empty image
+	 * block. The export with the image must be byte-identical to one without it.
+	 */
+	public function test_caption_only_image_adds_no_content_when_captions_excluded() {
+		$image_id = $this->factory->attachment->create();
+		wp_update_post(
+			[
+				'ID'           => $image_id,
+				'post_excerpt' => 'Caption Only Image',
+			]
+		);
+
+		$with_image = $this->factory->post->create(
+			[
+				'post_title'   => 'Blank Line Post',
+				'post_content' => '<!-- wp:paragraph --><p>Body copy.</p><!-- /wp:paragraph --><!-- wp:image {"id":' . $image_id . '} --><!-- /wp:image -->',
+			]
+		);
+		$without_image = $this->factory->post->create(
+			[
+				'post_title'   => 'Blank Line Post',
+				'post_content' => '<!-- wp:paragraph --><p>Body copy.</p><!-- /wp:paragraph -->',
+			]
+		);
+
+		$converter = new InDesign_Converter();
+		$with      = $converter->convert_post( $with_image, [ 'include_captions' => false ] );
+		$without   = $converter->convert_post( $without_image, [ 'include_captions' => false ] );
+
+		$this->assertSame( $without, $with );
 	}
 }
