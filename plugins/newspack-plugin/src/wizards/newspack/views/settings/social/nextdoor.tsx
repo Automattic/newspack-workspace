@@ -155,6 +155,14 @@ function Nextdoor() {
 			setError( errorMsg );
 			throw new Error( errorMsg );
 		}
+
+		// The disconnect endpoint only clears tokens; it doesn't touch apiData, so
+		// apiData/status would still read "connected" without this. A bare GET
+		// would just replay the cached pre-disconnect response (useWizardApiFetchToggle
+		// serves GETs from cache), so this goes through the POST path instead, with no
+		// module_enabled_nextdoor field, which the backend treats as a no-op toggle
+		// and answers with a freshly recomputed connection status.
+		await apiFetchToggle( undefined, true );
 	};
 
 	const { notify } = useSocialCards();
@@ -177,6 +185,9 @@ function Nextdoor() {
 	}, [ hasAutoOpened, isFetching, isEnabled, isConnected ] );
 
 	const badge = ( () => {
+		if ( errorMessage ) {
+			return { level: 'error' as const, text: __( 'Error', 'newspack-plugin' ) };
+		}
 		if ( ! isEnabled || ( isOpen && isEnabling ) ) {
 			return undefined;
 		}
@@ -254,11 +265,14 @@ function Nextdoor() {
 			{ __( 'Disable', 'newspack-plugin' ) }
 		</Button>
 	);
+	// Suppressed during a fresh Enable: Cancel already covers that exit, and Disable
+	// would otherwise announce a module the user hasn't finished enabling.
+	const secondaryActions = isEnabling ? undefined : renderSecondaryActions;
 
 	return (
 		<CardForm
 			title={ __( 'Nextdoor Integration', 'newspack-plugin' ) }
-			description={ description }
+			description={ errorMessage || description }
 			badge={ badge }
 			actions={ actions }
 			isOpen={ isOpen }
@@ -274,7 +288,7 @@ function Nextdoor() {
 						updateSettings={ updateSettings }
 						setError={ setError }
 						disconnect={ disconnect }
-						renderSecondaryActions={ renderSecondaryActions }
+						renderSecondaryActions={ secondaryActions }
 					/>
 				) : (
 					<Onboarding
@@ -286,7 +300,7 @@ function Nextdoor() {
 						claimPage={ claimPage }
 						disconnect={ disconnect }
 						setError={ setError }
-						renderSecondaryActions={ renderSecondaryActions }
+						renderSecondaryActions={ secondaryActions }
 					/>
 				) }
 			</VStack>
