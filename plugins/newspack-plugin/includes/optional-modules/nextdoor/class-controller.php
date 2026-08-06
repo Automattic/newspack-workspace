@@ -40,6 +40,11 @@ class Controller {
 						'required'          => true,
 						'type'              => 'string',
 						'sanitize_callback' => 'sanitize_email',
+						// sanitize_email only strips; without this a malformed address
+						// reaches Nextdoor, or arrives as an empty string.
+						'validate_callback' => function ( $value ) {
+							return (bool) is_email( $value );
+						},
 					],
 					'country' => [
 						'required'          => true,
