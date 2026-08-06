@@ -403,18 +403,6 @@ export const Onboarding = ( {
 								</span>
 							) }
 						</div>
-						<div>
-							<div className="nextdoor-onboarding__status-label">{ __( 'Overall Status:', 'newspack-plugin' ) }</div>
-							{ status.is_connected ? (
-								<span className="nextdoor-onboarding__status-value nextdoor-onboarding__status-value--success">
-									{ __( 'Connected', 'newspack-plugin' ) }
-								</span>
-							) : (
-								<span className="nextdoor-onboarding__status-value nextdoor-onboarding__status-value--error">
-									{ __( 'Not connected', 'newspack-plugin' ) }
-								</span>
-							) }
-						</div>
 					</Grid>
 
 					{ status.is_connected && (
