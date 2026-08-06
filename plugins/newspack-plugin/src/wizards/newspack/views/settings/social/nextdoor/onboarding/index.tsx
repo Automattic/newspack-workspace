@@ -60,6 +60,9 @@ export const Onboarding = ( {
 }: OnboardingProps ) => {
 	const [ clientId, setClientId ] = useState( settings.client_id || '' );
 	const [ clientSecret, setClientSecret ] = useState( settings.client_secret || '' );
+	// The GET never returns the secret, so a dirty check has to remember what was
+	// last submitted from here — `settings` alone would report every visit as dirty.
+	const [ savedSecret, setSavedSecret ] = useState( settings.client_secret || '' );
 	const [ email, setEmail ] = useState( '' );
 	const [ country, setCountry ] = useState( window.newspackSettings?.social?.nextdoor?.default_country || 'US' );
 	const [ publicationUrl, setPublicationUrl ] = useState( settings.publication_url || '' );
@@ -107,6 +110,8 @@ export const Onboarding = ( {
 		}
 	}, [ status, steps ] );
 
+	const hasCredentialChanges = clientId !== ( settings.client_id || '' ) || clientSecret !== savedSecret;
+
 	const handleSaveCredentials = async () => {
 		if ( ! clientId || ! clientSecret ) {
 			setError( __( 'Please enter both Client ID and Client Secret.', 'newspack-plugin' ) );
@@ -120,7 +125,8 @@ export const Onboarding = ( {
 				client_id: clientId,
 				client_secret: clientSecret,
 			} );
-			setCurrentStep( 2 );
+			setSavedSecret( clientSecret );
+			setCurrentStep( steps.ACCOUNT_AUTH );
 		} catch {
 			// Already surfaced by the card's error notice.
 		} finally {
@@ -231,11 +237,17 @@ export const Onboarding = ( {
 							variant="primary"
 							__next40pxDefaultSize
 							onClick={ handleSaveCredentials }
-							disabled={ ! clientId || ! clientSecret || isSaving }
+							disabled={ ! clientId || ! clientSecret || ! hasCredentialChanges || isSaving }
 							isBusy={ isSaving }
 						>
 							{ __( 'Save Credentials', 'newspack-plugin' ) }
 						</Button>
+						{ /* Only an escape once there is a saved pair to go back to. */ }
+						{ status.has_credentials && (
+							<Button variant="secondary" __next40pxDefaultSize onClick={ () => setCurrentStep( steps.ACCOUNT_AUTH ) }>
+								{ __( 'Cancel', 'newspack-plugin' ) }
+							</Button>
+						) }
 						{ renderSecondaryActions?.() }
 					</HStack>
 				</VStack>
