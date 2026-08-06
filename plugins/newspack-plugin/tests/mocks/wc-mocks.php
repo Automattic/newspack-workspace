@@ -257,6 +257,15 @@ class WC_Order_Item_Product implements ArrayAccess {
 	public function get_variation_id() {
 		return $this->data['variation_id'] ?? 0;
 	}
+	public function set_product_id( $product_id ) {
+		$this->data['product_id'] = (int) $product_id;
+	}
+	public function set_variation_id( $variation_id ) {
+		$this->data['variation_id'] = (int) $variation_id;
+	}
+	public function save() {
+		return true;
+	}
 	public function get_id() {
 		return $this->data['id'] ?? 0;
 	}
@@ -293,6 +302,9 @@ class WC_Product {
 	}
 	public function get_name() {
 		return $this->data['name'] ?? '';
+	}
+	public function get_status() {
+		return $this->data['status'] ?? 'publish';
 	}
 	public function get_type() {
 		return $this->data['type'] ?? 'simple';
@@ -960,10 +972,18 @@ function wcs_get_subscriptions( $args = [] ) {
 	// declares it among its own defaults and strips it before building the query,
 	// so a mock that honored it would make a broken caller look correct.
 	global $subscriptions_database;
+	// Every call's args are recorded so tests can pin the query contract itself
+	// (e.g. that a paginating caller requests a deterministic sort).
+	global $wcs_mock_query_log;
+	$wcs_mock_query_log[] = $args;
 	$customer_id = $args['customer_id'] ?? null;
 	$statuses    = $args['subscription_status'] ?? 'any';
 	$per_page    = isset( $args['subscriptions_per_page'] ) ? (int) $args['subscriptions_per_page'] : 0;
-	$offset      = isset( $args['offset'] ) ? max( 0, (int) $args['offset'] ) : 0;
+	// Stageable: set $wcs_mock_ignore_offset to reproduce a query that never advances —
+	// what the real function does when handed `paged`, and what a third-party
+	// `woocommerce_get_subscriptions_query_args` filter dropping `offset` would do.
+	global $wcs_mock_ignore_offset;
+	$offset = ( isset( $args['offset'] ) && empty( $wcs_mock_ignore_offset ) ) ? max( 0, (int) $args['offset'] ) : 0;
 	if ( 'any' === $statuses ) {
 		$statuses = null;
 	} elseif ( null !== $statuses ) {
@@ -974,11 +994,12 @@ function wcs_get_subscriptions( $args = [] ) {
 		if ( null !== $customer_id && $subscription->get_customer_id() !== $customer_id ) {
 			continue;
 		}
-		if ( null !== $statuses && ! in_array( $subscription->get_status(), $statuses, true ) ) {
+		if ( null !== $statuses && ! $subscription->has_status( $statuses ) ) {
 			continue;
 		}
 		$matches[ $id ] = $subscription;
 	}
+	// Page the results so a caller looping `offset` terminates on a short final page.
 	if ( $per_page > 0 || $offset > 0 ) {
 		$matches = array_slice( $matches, $offset, $per_page > 0 ? $per_page : null, true );
 	}
@@ -1190,6 +1211,33 @@ function wc_get_order( $order_id ) {
 function wc_get_product( $product_id ) {
 	global $products_database;
 	return $products_database[ $product_id ] ?? false;
+}
+/**
+ * Minimal WC_Product_Query stand-in: filters $products_database on `type` and `status`.
+ *
+ * The `status` default reproduces WC_Product_Query's own default
+ * ( draft, pending, private, publish ), which is what a caller that omits `status`
+ * actually gets — the property the CLI's SELECTABLE_PRODUCT_STATUSES constant claims to
+ * mirror. `limit` is accepted and ignored (fixtures are small).
+ *
+ * @param array $args Query args.
+ * @return WC_Product[] The matching products.
+ */
+function wc_get_products( $args = [] ) {
+	global $products_database;
+	$types    = isset( $args['type'] ) ? (array) $args['type'] : null;
+	$statuses = isset( $args['status'] ) ? (array) $args['status'] : [ 'draft', 'pending', 'private', 'publish' ];
+	$matches  = [];
+	foreach ( $products_database as $product ) {
+		if ( null !== $types && ! in_array( $product->get_type(), $types, true ) ) {
+			continue;
+		}
+		if ( ! in_array( $product->get_status(), $statuses, true ) ) {
+			continue;
+		}
+		$matches[] = $product;
+	}
+	return $matches;
 }
 /**
  * Minimal stand-in for WooCommerce's admin field renderer. Only enough markup to let a metabox

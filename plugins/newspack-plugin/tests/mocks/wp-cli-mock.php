@@ -15,12 +15,14 @@ if ( ! class_exists( 'WP_CLI' ) ) {
 		public static $logs      = [];
 		public static $successes = [];
 		public static $warnings  = [];
+		public static $tables    = [];
 		public static $halt_code = null;
 
 		public static function reset() {
 			self::$logs      = [];
 			self::$successes = [];
 			self::$warnings  = [];
+			self::$tables    = [];
 			self::$halt_code = null;
 		}
 		public static function halt( $code = 0 ) {
