@@ -100,12 +100,12 @@ const nextdoorDemoAction = () => Promise.reject( new Error( 'Demo only.' ) );
 const NEXTDOOR_STEPS = [
 	{
 		title: __( 'Nothing set up yet', 'newspack-plugin' ),
-		description: __( 'Credentials are the only section open. The two below are visible but disabled.', 'newspack-plugin' ),
+		description: __( 'Credentials and account are one action. Claiming the page waits until Nextdoor has authorised.', 'newspack-plugin' ),
 		status: NEXTDOOR_STATUS,
 	},
 	{
 		title: __( 'Credentials saved', 'newspack-plugin' ),
-		description: __( 'The account section unlocks, and the secret shows as stored rather than blank.', 'newspack-plugin' ),
+		description: __( 'Same screen on a return visit: the secret reads as stored, and leaving it blank keeps it.', 'newspack-plugin' ),
 		status: { ...NEXTDOOR_STATUS, has_credentials: true },
 	},
 	{
@@ -1311,7 +1311,7 @@ class ComponentsDemo extends Component {
 							<h2>{ __( 'Nextdoor onboarding', 'newspack-plugin' ) }</h2>
 							<p>
 								{ __(
-									'Every state of Newspack > Settings > Social > Nextdoor, pinned open so the layout can be reviewed without a Nextdoor account. Setup is one screen whose sections unlock in turn, so these are the same screen at four points. They render the real components, so they cannot drift from what a publisher sees. The primary buttons are inert here.',
+									'Every state of Newspack > Settings > Social > Nextdoor, pinned open so the layout can be reviewed without a Nextdoor account. Setup is one screen, so these are the same screen at four points. They render the real components, so they cannot drift from what a publisher sees. The primary buttons are inert here.',
 									'newspack-plugin'
 								) }
 							</p>
