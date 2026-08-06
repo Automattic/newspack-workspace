@@ -60,6 +60,9 @@ class Nextdoor_Section extends Wizard_Section {
 				'callback'            => [ $this, 'api_update_nextdoor_settings' ],
 				'permission_callback' => [ $this, 'api_permissions_check' ],
 				'args'                => [
+					// An omitted `module_enabled_nextdoor` deliberately means "no change": the handler below
+					// only acts on a non-null value. The settings card POSTs just the fields it touches, so
+					// adding a `default` here would silently deactivate the module on every one of those saves.
 					'module_enabled_nextdoor' => [
 						'required'          => false,
 						'sanitize_callback' => 'rest_sanitize_boolean',

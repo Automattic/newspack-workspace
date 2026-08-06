@@ -42,7 +42,7 @@ function Nextdoor() {
 	} );
 	const [ error, setError ] = useState< string | null >( null );
 
-	const { description, apiData, isFetching, apiFetchToggle, errorMessage } = useWizardApiFetchToggle< NextdoorData >( {
+	const { description, apiData, isFetching, apiFetchToggle, errorMessage, refresh, resetError } = useWizardApiFetchToggle< NextdoorData >( {
 		path: '/newspack/v1/wizard/newspack-settings/social/nextdoor',
 		apiNamespace: 'newspack-settings/social/nextdoor',
 		data: {
@@ -143,6 +143,7 @@ function Nextdoor() {
 	const disconnect = async (): Promise< void > => {
 		try {
 			setError( null );
+			resetError();
 			await apiFetch( {
 				path: '/newspack/v1/nextdoor/disconnect',
 				method: 'DELETE',
@@ -157,12 +158,8 @@ function Nextdoor() {
 		}
 
 		// The disconnect endpoint only clears tokens; it doesn't touch apiData, so
-		// apiData/status would still read "connected" without this. A bare GET
-		// would just replay the cached pre-disconnect response (useWizardApiFetchToggle
-		// serves GETs from cache), so this goes through the POST path instead, with no
-		// module_enabled_nextdoor field, which the backend treats as a no-op toggle
-		// and answers with a freshly recomputed connection status.
-		await apiFetchToggle( undefined, true );
+		// apiData/status would still read "connected" without this.
+		await refresh();
 	};
 
 	const { notify } = useSocialCards();
@@ -199,7 +196,10 @@ function Nextdoor() {
 
 	const setModuleEnabled = ( value: boolean ) => apiFetchToggle( { ...apiData, module_enabled_nextdoor: value }, true );
 
+	// Every user-initiated action starts from a clean error state, so a failure
+	// the user has since retried past stops showing in the header.
 	const enable = async () => {
+		resetError();
 		try {
 			await setModuleEnabled( true );
 		} catch {
@@ -210,6 +210,7 @@ function Nextdoor() {
 	};
 
 	const disable = async () => {
+		resetError();
 		try {
 			await setModuleEnabled( false );
 		} catch {
@@ -221,6 +222,7 @@ function Nextdoor() {
 	};
 
 	const close = async () => {
+		resetError();
 		if ( isEnabling ) {
 			try {
 				await setModuleEnabled( false );
