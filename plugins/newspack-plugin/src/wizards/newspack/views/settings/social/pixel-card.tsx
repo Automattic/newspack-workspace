@@ -40,6 +40,7 @@ const PixelCard = ( { title, description, namespace, path, validate, renderHelp 
 	const [ draft, setDraft ] = useState< string >( '' );
 	const [ isOpen, setIsOpen ] = useState( false );
 	const [ isEnabling, setIsEnabling ] = useState( false );
+	const [ hasTouched, setHasTouched ] = useState( false );
 
 	useEffect( () => {
 		wizardApiFetch< PixelData >(
@@ -76,6 +77,7 @@ const PixelCard = ( { title, description, namespace, path, validate, renderHelp 
 		setDraft( settings.pixel_id ?? '' );
 		setIsOpen( false );
 		setIsEnabling( false );
+		setHasTouched( false );
 		resetError();
 	};
 
@@ -153,12 +155,14 @@ const PixelCard = ( { title, description, namespace, path, validate, renderHelp 
 					label={ __( 'Pixel ID', 'newspack-plugin' ) }
 					onChange={ ( value: string ) => {
 						setDraft( value );
+						setHasTouched( true );
 						setError( null );
 					} }
 					help={ renderHelp() }
 					disabled={ isFetching }
 					autoComplete="one-time-code"
 				/>
+				{ hasTouched && validationError && <Notice isError noticeText={ validationError } /> }
 				<HStack justify="flex-start" spacing={ 2 }>
 					<Button
 						variant="primary"
