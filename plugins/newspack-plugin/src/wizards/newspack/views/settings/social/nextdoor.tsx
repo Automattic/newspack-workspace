@@ -227,7 +227,7 @@ function Nextdoor() {
 			return undefined;
 		}
 		if ( ! isConnected ) {
-			return { level: 'warning' as const, text: __( 'Not connected', 'newspack-plugin' ) };
+			return { level: 'error' as const, text: __( 'Not connected', 'newspack-plugin' ) };
 		}
 		return { level: 'success' as const, text: __( 'Enabled', 'newspack-plugin' ) };
 	} )();

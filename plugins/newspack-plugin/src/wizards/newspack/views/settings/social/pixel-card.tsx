@@ -95,7 +95,7 @@ const PixelCard = ( { title, description, namespace, path, validate, renderHelp 
 			return undefined;
 		}
 		if ( ! settings.pixel_id ) {
-			return { level: 'warning' as const, text: __( 'Missing pixel ID', 'newspack-plugin' ) };
+			return { level: 'error' as const, text: __( 'Missing pixel ID', 'newspack-plugin' ) };
 		}
 		return { level: 'success' as const, text: __( 'Enabled', 'newspack-plugin' ) };
 	} )();
