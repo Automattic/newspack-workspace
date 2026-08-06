@@ -20,6 +20,7 @@ import {
  * Internal dependencies
  */
 import { Button, Grid, Notice } from '../../../../../../../../packages/components/src';
+import { useSocialCards } from '../../context';
 import { SettingsProps } from '../types';
 
 /**
@@ -31,6 +32,7 @@ import './style.scss';
  * Settings component.
  */
 export const Settings = ( { settings, status, error, updateSettings, disconnect, setError, renderSecondaryActions }: SettingsProps ) => {
+	const { notify } = useSocialCards();
 	const [ allowedRoles, setAllowedRoles ] = useState< string[] >( settings.allowed_roles || [] );
 	const [ isSaving, setIsSaving ] = useState( false );
 	const [ hasChanges, setHasChanges ] = useState( false );
@@ -61,6 +63,7 @@ export const Settings = ( { settings, status, error, updateSettings, disconnect,
 			} );
 
 			setHasChanges( false );
+			notify( __( 'Nextdoor settings updated.', 'newspack-plugin' ) );
 		} finally {
 			setIsSaving( false );
 		}

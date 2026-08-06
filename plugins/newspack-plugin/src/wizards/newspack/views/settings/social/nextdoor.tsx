@@ -1,4 +1,8 @@
 /**
+ * Newspack > Settings > Social: Nextdoor integration.
+ */
+
+/**
  * External dependencies
  */
 import classnames from 'classnames';
@@ -6,7 +10,7 @@ import classnames from 'classnames';
 /**
  * WordPress dependencies
  */
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 import { useState, useEffect } from '@wordpress/element';
 import apiFetch from '@wordpress/api-fetch';
 import { __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
@@ -24,6 +28,13 @@ import { useSocialCards } from './context';
 import { NextdoorData, NextdoorSettings, NextdoorStatus, OAuthResponse, ClaimPageResponse } from './nextdoor/types';
 import { Onboarding } from './nextdoor/onboarding';
 import { Settings } from './nextdoor/settings';
+
+const TITLE = __( 'Nextdoor Integration', 'newspack-plugin' );
+
+const isOAuthReturn = () => {
+	const params = new URLSearchParams( window.location.search );
+	return params.get( 'oauth_success' ) === '1' || !! params.get( 'nextdoor_oauth_error' );
+};
 
 function Nextdoor() {
 	const [ settings, setSettings ] = useState< NextdoorSettings >( {
@@ -170,11 +181,11 @@ function Nextdoor() {
 	const isEnabled = apiData.module_enabled_nextdoor;
 	const isConnected = apiData.is_connected;
 
-	// A user returning from the Nextdoor OAuth redirect arrives on a fresh page
-	// load, so an unfinished setup has to reopen itself or the step they were on
-	// is invisible.
+	// Only the OAuth redirect reopens the card: that user arrives on a fresh page
+	// load mid-setup, so the step they were on would otherwise be invisible. Any
+	// other unfinished setup stays collapsed behind its badge.
 	useEffect( () => {
-		if ( hasAutoOpened || isFetching || ! isEnabled || isConnected ) {
+		if ( hasAutoOpened || isFetching || ! isEnabled || isConnected || ! isOAuthReturn() ) {
 			return;
 		}
 		setHasAutoOpened( true );
@@ -234,13 +245,18 @@ function Nextdoor() {
 		setIsOpen( false );
 	};
 
+	/* translators: %s: integration name (e.g. "Nextdoor Integration"). */
+	const editLabel = sprintf( __( 'Edit %s', 'newspack-plugin' ), TITLE );
+	/* translators: %s: integration name (e.g. "Nextdoor Integration"). */
+	const cancelLabel = sprintf( __( 'Cancel editing %s', 'newspack-plugin' ), TITLE );
+	/* translators: %s: integration name (e.g. "Nextdoor Integration"). */
+	const enableLabel = sprintf( __( 'Enable %s', 'newspack-plugin' ), TITLE );
+
 	const actions = isEnabled ? (
 		<Button
 			variant="tertiary"
 			size="compact"
-			aria-label={
-				isOpen ? __( 'Cancel editing Nextdoor Integration', 'newspack-plugin' ) : __( 'Edit Nextdoor Integration', 'newspack-plugin' )
-			}
+			aria-label={ isOpen ? cancelLabel : editLabel }
 			disabled={ isFetching }
 			onClick={ () => ( isOpen ? close() : setIsOpen( true ) ) }
 		>
@@ -250,14 +266,7 @@ function Nextdoor() {
 			</span>
 		</Button>
 	) : (
-		<Button
-			variant="secondary"
-			size="compact"
-			aria-label={ __( 'Enable Nextdoor Integration', 'newspack-plugin' ) }
-			isBusy={ isFetching }
-			disabled={ isFetching }
-			onClick={ enable }
-		>
+		<Button variant="secondary" size="compact" aria-label={ enableLabel } isBusy={ isFetching } disabled={ isFetching } onClick={ enable }>
 			{ __( 'Enable', 'newspack-plugin' ) }
 		</Button>
 	);
@@ -273,8 +282,8 @@ function Nextdoor() {
 
 	return (
 		<CardForm
-			title={ __( 'Nextdoor Integration', 'newspack-plugin' ) }
-			description={ errorMessage || description }
+			title={ TITLE }
+			description={ ! isOpen && errorMessage ? errorMessage : description }
 			badge={ badge }
 			actions={ actions }
 			isOpen={ isOpen }

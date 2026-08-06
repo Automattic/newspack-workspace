@@ -9,12 +9,13 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import PixelCard from './pixel-card';
 
 const mockApiFetch = jest.fn();
+let mockErrorMessage = null;
 
 jest.mock( '../../../../hooks/use-wizard-api-fetch', () => ( {
 	useWizardApiFetch: () => ( {
 		wizardApiFetch: mockApiFetch,
 		isFetching: false,
-		errorMessage: null,
+		errorMessage: mockErrorMessage,
 		setError: jest.fn(),
 		resetError: jest.fn(),
 	} ),
@@ -56,6 +57,7 @@ const primeFetch = stored => {
 beforeEach( () => {
 	mockApiFetch.mockReset();
 	mockNotify.mockReset();
+	mockErrorMessage = null;
 } );
 
 describe( 'PixelCard', () => {
@@ -145,5 +147,36 @@ describe( 'PixelCard', () => {
 
 		fireEvent.change( screen.getByLabelText( 'Pixel ID' ), { target: { value: '123' } } );
 		expect( screen.queryByText( 'Value may only contain numbers!' ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'reopens a clean form after a save', async () => {
+		primeFetch( { active: true, pixel_id: '' } );
+		renderCard();
+
+		fireEvent.click( await screen.findByRole( 'button', { name: 'Edit Meta Pixel' } ) );
+		fireEvent.change( screen.getByLabelText( 'Pixel ID' ), { target: { value: 'abc' } } );
+		expect( screen.getByText( 'Value may only contain numbers!' ) ).toBeInTheDocument();
+
+		fireEvent.click( screen.getByRole( 'button', { name: 'Disable' } ) );
+		await waitFor( () => expect( mockNotify ).toHaveBeenCalledWith( 'Meta Pixel disabled.' ) );
+
+		fireEvent.click( screen.getByRole( 'button', { name: 'Enable Meta Pixel' } ) );
+
+		expect( screen.getByLabelText( 'Pixel ID' ) ).toHaveValue( '' );
+		expect( screen.queryByText( 'Value may only contain numbers!' ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'shows an API error in the header only while the card is closed', async () => {
+		mockErrorMessage = 'Something went wrong.';
+		primeFetch( { active: true, pixel_id: '123' } );
+		renderCard();
+
+		expect( await screen.findByText( 'Something went wrong.' ) ).toBeInTheDocument();
+		expect( screen.queryByText( 'Add the Meta pixel to your site.' ) ).not.toBeInTheDocument();
+
+		fireEvent.click( screen.getByRole( 'button', { name: 'Edit Meta Pixel' } ) );
+
+		expect( screen.getByText( 'Add the Meta pixel to your site.' ) ).toBeInTheDocument();
+		expect( screen.getAllByText( 'Something went wrong.' ) ).toHaveLength( 1 );
 	} );
 } );

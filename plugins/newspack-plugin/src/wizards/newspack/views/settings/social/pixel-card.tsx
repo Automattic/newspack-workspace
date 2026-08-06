@@ -67,6 +67,7 @@ const PixelCard = ( { title, description, namespace, path, validate, renderHelp 
 					setDraft( res.pixel_id ?? '' );
 					setIsOpen( false );
 					setIsEnabling( false );
+					setHasTouched( false );
 					notify( message );
 				},
 			}
@@ -125,6 +126,7 @@ const PixelCard = ( { title, description, namespace, path, validate, renderHelp 
 			variant={ isOpen ? 'tertiary' : 'secondary' }
 			size="compact"
 			aria-label={ isOpen ? cancelLabel : enableLabel }
+			isBusy={ ! isOpen && isFetching }
 			disabled={ isFetching }
 			onClick={ () => {
 				if ( isOpen ) {
@@ -142,7 +144,7 @@ const PixelCard = ( { title, description, namespace, path, validate, renderHelp 
 	return (
 		<CardForm
 			title={ title }
-			description={ errorMessage || description }
+			description={ ! isOpen && errorMessage ? errorMessage : description }
 			badge={ badge }
 			actions={ actions }
 			isOpen={ isOpen }
