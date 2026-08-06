@@ -59,29 +59,37 @@ class Nextdoor_Section extends Wizard_Section {
 				'methods'             => WP_REST_Server::EDITABLE,
 				'callback'            => [ $this, 'api_update_nextdoor_settings' ],
 				'permission_callback' => [ $this, 'api_permissions_check' ],
+				// Declaring a `sanitize_callback` stops WordPress from installing its default
+				// validator, so every arg below names `rest_validate_request_arg` explicitly.
+				// Without it the types are documentation rather than rules.
 				'args'                => [
 					// An omitted `module_enabled_nextdoor` deliberately means "no change": the handler below
 					// only acts on a non-null value. The settings card POSTs just the fields it touches, so
 					// adding a `default` here would silently deactivate the module on every one of those saves.
 					'module_enabled_nextdoor' => [
 						'required'          => false,
+						'type'              => 'boolean',
 						'sanitize_callback' => 'rest_sanitize_boolean',
+						'validate_callback' => 'rest_validate_request_arg',
 					],
 					'client_id'               => [
 						'required'          => false,
 						'type'              => 'string',
 						'sanitize_callback' => 'sanitize_text_field',
+						'validate_callback' => 'rest_validate_request_arg',
 					],
 					'client_secret'           => [
 						'required'          => false,
 						'type'              => 'string',
 						'sanitize_callback' => 'sanitize_text_field',
+						'validate_callback' => 'rest_validate_request_arg',
 					],
 					'allowed_roles'           => [
 						'required'          => false,
 						'type'              => 'array',
 						'items'             => [ 'type' => 'string' ],
 						'sanitize_callback' => [ $this, 'sanitize_allowed_roles' ],
+						'validate_callback' => 'rest_validate_request_arg',
 					],
 				],
 			]
@@ -91,12 +99,20 @@ class Nextdoor_Section extends Wizard_Section {
 	/**
 	 * Restrict the submitted roles to the roles registered on this site.
 	 *
+	 * `rest_is_array()` accepts a comma-separated scalar, so the schema alone would
+	 * let one through to be stored as an empty list. Refuse it instead of emptying
+	 * the publishing roles behind the publisher's back.
+	 *
 	 * @param mixed $value Submitted value.
-	 * @return string[] Role names, re-indexed.
+	 * @return string[]|WP_Error Role names, re-indexed, or an error if not a list.
 	 */
 	public function sanitize_allowed_roles( $value ) {
 		if ( ! is_array( $value ) ) {
-			return [];
+			return new WP_Error(
+				'newspack_nextdoor_invalid_allowed_roles',
+				__( 'Publishing roles must be submitted as a list.', 'newspack-plugin' ),
+				[ 'status' => 400 ]
+			);
 		}
 
 		$submitted = array_filter( $value, 'is_string' );
@@ -191,6 +207,10 @@ class Nextdoor_Section extends Wizard_Section {
 			}
 
 			Nextdoor_Module::update_settings( $nextdoor_settings );
+
+			// `admin_init` never fires on a REST request, so grant and revoke the
+			// publishing capability here rather than on the next wp-admin page load.
+			Nextdoor_Module::add_nextdoor_capability();
 		}
 
 		return $this->api_get_nextdoor_settings();
