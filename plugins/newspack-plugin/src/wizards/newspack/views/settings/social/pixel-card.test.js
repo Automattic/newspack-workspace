@@ -10,20 +10,31 @@ import PixelCard from './pixel-card';
 
 const mockApiFetch = jest.fn();
 let mockErrorMessage = null;
+// Assigned on every render of the mocked hook, so a rejected request can push an
+// error into state the way the real hook does — otherwise nothing re-renders.
+let pushError = () => {};
 
-jest.mock( '../../../../hooks/use-wizard-api-fetch', () => ( {
-	useWizardApiFetch: () => ( {
-		wizardApiFetch: mockApiFetch,
-		isFetching: false,
-		errorMessage: mockErrorMessage,
-		setError: jest.fn(),
-		resetError: jest.fn(),
-	} ),
-} ) );
+jest.mock( '../../../../hooks/use-wizard-api-fetch', () => {
+	const { useState } = require( '@wordpress/element' );
+	return {
+		useWizardApiFetch: () => {
+			const [ error, setErrorMessage ] = useState( mockErrorMessage );
+			pushError = setErrorMessage;
+			return {
+				wizardApiFetch: mockApiFetch,
+				isFetching: false,
+				errorMessage: error,
+				setError: jest.fn(),
+				resetError: jest.fn(),
+			};
+		},
+	};
+} );
 
 const mockNotify = jest.fn();
 jest.mock( './context', () => ( {
 	useSocialCards: () => ( { notify: mockNotify } ),
+	useErrorAnnouncement: () => {},
 } ) );
 
 const validate = value => ( /^[0-9]+$/.test( value.trim() ) ? null : 'Value may only contain numbers!' );
@@ -51,6 +62,24 @@ const primeFetch = stored => {
 		const response = opts.method === 'POST' ? opts.data : stored;
 		callbacks?.onSuccess?.( response );
 		return Promise.resolve( response );
+	} );
+};
+
+/**
+ * As `primeFetch`, but every POST rejects and surfaces `message` the way the
+ * real hook does.
+ *
+ * @param {Object} stored  Stored pixel settings.
+ * @param {string} message Error message the failed save reports.
+ */
+const primeFailingSave = ( stored, message ) => {
+	mockApiFetch.mockImplementation( ( opts, callbacks ) => {
+		if ( opts.method !== 'POST' ) {
+			callbacks?.onSuccess?.( stored );
+			return Promise.resolve( stored );
+		}
+		pushError( message );
+		return Promise.reject( new Error( message ) );
 	} );
 };
 
@@ -164,6 +193,35 @@ describe( 'PixelCard', () => {
 
 		expect( screen.getByLabelText( 'Pixel ID' ) ).toHaveValue( '' );
 		expect( screen.queryByText( 'Value may only contain numbers!' ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'sends an empty string when disabling a row that stored no pixel ID', async () => {
+		primeFetch( { active: true } );
+		renderCard();
+
+		fireEvent.click( await screen.findByRole( 'button', { name: 'Edit Meta Pixel' } ) );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Disable' } ) );
+
+		await waitFor( () =>
+			expect( mockApiFetch ).toHaveBeenCalledWith(
+				expect.objectContaining( { method: 'POST', data: { active: false, pixel_id: '' } } ),
+				expect.anything()
+			)
+		);
+	} );
+
+	it( 'keeps the form open and surfaces the error when an enable fails', async () => {
+		primeFailingSave( { active: false, pixel_id: '' }, 'Could not save.' );
+		renderCard();
+
+		fireEvent.click( screen.getByRole( 'button', { name: 'Enable Meta Pixel' } ) );
+		fireEvent.change( screen.getByLabelText( 'Pixel ID' ), { target: { value: '123' } } );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Enable' } ) );
+
+		expect( await screen.findByText( 'Could not save.' ) ).toBeInTheDocument();
+		expect( screen.getByLabelText( 'Pixel ID' ) ).toHaveValue( '123' );
+		expect( screen.getByRole( 'button', { name: 'Cancel editing Meta Pixel' } ) ).toBeInTheDocument();
+		expect( mockNotify ).not.toHaveBeenCalled();
 	} );
 
 	it( 'shows an API error in the header only while the card is closed', async () => {

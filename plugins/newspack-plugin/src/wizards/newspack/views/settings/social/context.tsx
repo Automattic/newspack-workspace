@@ -5,8 +5,9 @@
 /**
  * WordPress dependencies
  */
-import { createContext, createPortal, useCallback, useContext, useMemo, useState } from '@wordpress/element';
+import { createContext, createPortal, useCallback, useContext, useEffect, useMemo, useRef, useState } from '@wordpress/element';
 import { Snackbar } from '@wordpress/components';
+import { speak } from '@wordpress/a11y';
 
 type SocialCardsContextValue = {
 	notify: ( message: string ) => void;
@@ -16,11 +17,30 @@ const SocialCardsContext = createContext< SocialCardsContextValue >( { notify: (
 
 export const useSocialCards = () => useContext( SocialCardsContext );
 
+/**
+ * Announce an error as it appears. The notices that carry it are not live
+ * regions, so a screen reader user would otherwise get no signal at all —
+ * unlike the success path, which the snackbar announces.
+ *
+ * @param message Current error message, or null when there is none.
+ */
+export const useErrorAnnouncement = ( message: string | null ) => {
+	useEffect( () => {
+		if ( message ) {
+			speak( message, 'assertive' );
+		}
+	}, [ message ] );
+};
+
 export const SocialCardsProvider = ( { children }: { children: React.ReactNode } ) => {
 	const [ notice, setNotice ] = useState< { id: number; content: string } | null >( null );
+	// Doubles as the Snackbar's key, which is what remounts it and re-triggers
+	// its announcement. A timestamp collides for two messages in one millisecond.
+	const nextNoticeId = useRef( 0 );
 
 	const notify = useCallback( ( message: string ) => {
-		setNotice( { id: Date.now(), content: message } );
+		nextNoticeId.current += 1;
+		setNotice( { id: nextNoticeId.current, content: message } );
 	}, [] );
 
 	const value = useMemo( () => ( { notify } ), [ notify ] );

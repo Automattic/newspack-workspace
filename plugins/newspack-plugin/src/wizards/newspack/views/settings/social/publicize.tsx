@@ -11,19 +11,24 @@ import { useEffect, useState } from '@wordpress/element';
 /**
  * Internal dependencies
  */
-import { Button, CardForm, Handoff } from '../../../../../../packages/components/src';
+import { Button, CardForm, Handoff, Notice } from '../../../../../../packages/components/src';
 import { useWizardApiFetch } from '../../../../hooks/use-wizard-api-fetch';
+import { useErrorAnnouncement } from './context';
 
 const JETPACK_EDIT_LINK = 'admin.php?page=jetpack#/sharing';
 
+const ATTRIBUTION = __( 'Powered by Jetpack.', 'newspack-plugin' );
 const DESCRIPTION = __(
-	"Powered by Jetpack. Publicize makes it easy to share your site's posts on several social media networks automatically when you publish a new post.",
+	"Publicize makes it easy to share your site's posts on several social media networks automatically when you publish a new post.",
 	'newspack-plugin'
 );
 
 const Publicize = () => {
 	const { wizardApiFetch, isFetching, errorMessage } = useWizardApiFetch( '/newspack/wizards/plugins/jetpack' );
 	const [ plugin, setPlugin ] = useState< { status: string; configured: boolean } | null >( null );
+	const [ isReloading, setIsReloading ] = useState( false );
+
+	useErrorAnnouncement( errorMessage );
 
 	const load = () =>
 		wizardApiFetch< PluginResponse >(
@@ -43,34 +48,42 @@ const Publicize = () => {
 		if ( errorMessage ) {
 			return { level: 'error' as const, text: __( 'Error', 'newspack-plugin' ) };
 		}
-		if ( ! plugin ) {
-			return undefined;
-		}
-		if ( ! isInstalled ) {
-			return { level: 'default' as const, text: __( 'Not installed', 'newspack-plugin' ) };
-		}
 		if ( ! isActive ) {
-			return { level: 'default' as const, text: __( 'Inactive', 'newspack-plugin' ) };
+			return undefined;
 		}
 		if ( ! isConfigured ) {
 			return { level: 'warning' as const, text: __( 'Not connected', 'newspack-plugin' ) };
 		}
-		return { level: 'success' as const, text: __( 'Connected', 'newspack-plugin' ) };
+		return { level: 'success' as const, text: __( 'Enabled', 'newspack-plugin' ) };
 	} )();
 
 	const install = () =>
 		wizardApiFetch< PluginResponse >(
 			{ path: '/newspack/v1/plugins/jetpack/activate', method: 'POST' },
-			{ onSuccess: () => window.location.reload() }
+			{
+				onSuccess: () => {
+					setIsReloading( true );
+					window.location.reload();
+				},
+			}
 		).catch( () => {} );
 
 	const actions = ( () => {
+		if ( isReloading ) {
+			return <span className="newspack-text-muted">{ __( 'Page reloading…', 'newspack-plugin' ) }</span>;
+		}
 		if ( ! plugin ) {
-			return null;
+			return (
+				<Button variant="secondary" size="compact" isBusy={ isFetching } disabled>
+					{ __( 'Loading…', 'newspack-plugin' ) }
+				</Button>
+			);
 		}
 		if ( isActive ) {
+			// `url` rather than `plugin`, so Handoff skips the duplicate plugin GET it
+			// would otherwise fire on mount. Both endpoints register the return banner.
 			return (
-				<Handoff plugin="jetpack" editLink={ JETPACK_EDIT_LINK } variant="tertiary" size="compact" compact>
+				<Handoff url={ JETPACK_EDIT_LINK } variant="tertiary" size="compact" compact>
 					{ isConfigured ? __( 'Configure', 'newspack-plugin' ) : __( 'Complete setup', 'newspack-plugin' ) }
 				</Handoff>
 			);
@@ -85,11 +98,15 @@ const Publicize = () => {
 	return (
 		<CardForm
 			title={ __( 'Publicize', 'newspack-plugin' ) }
-			description={ errorMessage ?? DESCRIPTION }
+			description={ `${ ATTRIBUTION } ${ DESCRIPTION }` }
 			badge={ badge }
 			actions={ actions }
-			isOpen={ false }
-		/>
+			isOpen={ !! errorMessage }
+		>
+			<div role="alert">
+				<Notice isError noticeText={ errorMessage } />
+			</div>
+		</CardForm>
 	);
 };
 

@@ -19,7 +19,7 @@ import { __experimentalHStack as HStack, __experimentalVStack as VStack } from '
  */
 import { Button, CardForm, Notice, TextControl } from '../../../../../../packages/components/src';
 import { useWizardApiFetch } from '../../../../hooks/use-wizard-api-fetch';
-import { useSocialCards } from './context';
+import { useErrorAnnouncement, useSocialCards } from './context';
 
 type PixelCardProps = {
 	title: string;
@@ -41,6 +41,8 @@ const PixelCard = ( { title, description, namespace, path, validate, renderHelp 
 	const [ isOpen, setIsOpen ] = useState( false );
 	const [ isEnabling, setIsEnabling ] = useState( false );
 	const [ hasTouched, setHasTouched ] = useState( false );
+
+	useErrorAnnouncement( errorMessage );
 
 	useEffect( () => {
 		wizardApiFetch< PixelData >(
@@ -137,7 +139,10 @@ const PixelCard = ( { title, description, namespace, path, validate, renderHelp 
 				setIsOpen( true );
 			} }
 		>
-			{ isOpen ? __( 'Cancel', 'newspack-plugin' ) : __( 'Enable', 'newspack-plugin' ) }
+			<span className="newspack-social-settings__toggle-label">
+				<span className={ classnames( { 'is-visible': isOpen } ) }>{ __( 'Cancel', 'newspack-plugin' ) }</span>
+				<span className={ classnames( { 'is-visible': ! isOpen } ) }>{ __( 'Enable', 'newspack-plugin' ) }</span>
+			</span>
 		</Button>
 	);
 
@@ -151,7 +156,11 @@ const PixelCard = ( { title, description, namespace, path, validate, renderHelp 
 			onRequestClose={ close }
 		>
 			<VStack spacing={ 4 }>
-				{ errorMessage && <Notice isError noticeText={ errorMessage } /> }
+				{ errorMessage && (
+					<div role="alert">
+						<Notice isError noticeText={ errorMessage } />
+					</div>
+				) }
 				<TextControl
 					value={ draft }
 					label={ __( 'Pixel ID', 'newspack-plugin' ) }
@@ -182,7 +191,7 @@ const PixelCard = ( { title, description, namespace, path, validate, renderHelp 
 							isDestructive
 							isBusy={ isFetching }
 							disabled={ isFetching }
-							onClick={ () => save( { active: false, pixel_id: settings.pixel_id }, disabledMessage ) }
+							onClick={ () => save( { active: false, pixel_id: settings.pixel_id ?? '' }, disabledMessage ) }
 						>
 							{ __( 'Disable', 'newspack-plugin' ) }
 						</Button>

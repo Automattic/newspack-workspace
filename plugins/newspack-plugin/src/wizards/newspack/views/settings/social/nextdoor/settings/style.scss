@@ -3,8 +3,16 @@
  */
 
 @use "~@wordpress/base-styles/colors" as wp-colors;
+@use "~@wordpress/base-styles/variables" as wp-vars;
 
 .nextdoor-settings {
+	&__subheading {
+		font-size: wp-vars.$font-size-medium;
+		font-weight: 600;
+		line-height: wp-vars.$font-line-height-medium;
+		margin: 0;
+	}
+
 	&__status-value {
 		&--success {
 			color: wp-colors.$alert-green;

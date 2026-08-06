@@ -7,14 +7,7 @@
  */
 import { __ } from '@wordpress/i18n';
 import { useState, useEffect } from '@wordpress/element';
-/* eslint-disable @wordpress/no-unsafe-wp-apis */
-import {
-	CheckboxControl,
-	__experimentalHeading as Heading,
-	__experimentalHStack as HStack,
-	__experimentalVStack as VStack,
-} from '@wordpress/components';
-/* eslint-enable @wordpress/no-unsafe-wp-apis */
+import { CheckboxControl, __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 
 /**
  * Internal dependencies
@@ -64,27 +57,35 @@ export const Settings = ( { settings, status, error, updateSettings, disconnect,
 
 			setHasChanges( false );
 			notify( __( 'Nextdoor settings updated.', 'newspack-plugin' ) );
+		} catch {
+			// Already surfaced by the card's error notice.
 		} finally {
 			setIsSaving( false );
 		}
 	};
 
 	const handleDisconnect = async () => {
-		await disconnect();
+		try {
+			await disconnect();
+		} catch {
+			// Already surfaced by the card's error notice.
+		}
 	};
 
 	if ( ! status.is_connected ) {
-		return (
-			<Notice noticeText={ __( 'Nextdoor is not connected. Please complete the setup process first.', 'newspack-plugin' ) } isError={ false } />
-		);
+		return <Notice noticeText={ __( 'Nextdoor is not connected. Please complete the setup process first.', 'newspack-plugin' ) } isWarning />;
 	}
 
 	return (
-		<VStack spacing={ 6 }>
-			{ error && <Notice noticeText={ error } isError onClose={ () => setError( null ) } /> }
+		<VStack spacing={ 4 }>
+			{ error && (
+				<div role="alert">
+					<Notice noticeText={ error } isError />
+				</div>
+			) }
 
 			<VStack spacing={ 4 }>
-				<Heading level={ 4 }>{ __( 'Connection Information', 'newspack-plugin' ) }</Heading>
+				<h4 className="nextdoor-settings__subheading">{ __( 'Connection Information', 'newspack-plugin' ) }</h4>
 				<Grid columns={ 2 } gutter={ 16 }>
 					<div>
 						<strong>{ __( 'Status:', 'newspack-plugin' ) } </strong>
@@ -102,10 +103,10 @@ export const Settings = ( { settings, status, error, updateSettings, disconnect,
 			</VStack>
 
 			<VStack spacing={ 4 }>
-				<Heading level={ 4 }>{ __( 'Settings', 'newspack-plugin' ) }</Heading>
+				<h4 className="nextdoor-settings__subheading">{ __( 'Settings', 'newspack-plugin' ) }</h4>
 				<p>{ __( 'Select which user roles are allowed to publish articles to Nextdoor.', 'newspack-plugin' ) }</p>
 
-				<Grid columns={ 4 } gutter={ 16 }>
+				<Grid columns={ 2 } gutter={ 16 }>
 					{ availableRoles.map( ( { label, value } ) => (
 						<CheckboxControl
 							key={ value }

@@ -39,6 +39,10 @@ const STEPS = {
 	},
 } as const;
 
+// The OAuth error is attacker-controllable through the redirect link, so it is
+// truncated before it can fill the notice with arbitrary prose.
+const OAUTH_ERROR_MAX_LENGTH = 200;
+
 /**
  * Onboarding component.
  */
@@ -79,12 +83,13 @@ export const Onboarding = ( {
 	}, [ steps.CLAIM_PAGE ] );
 
 	useEffect( () => {
-		// Check for OAuth error in URL params
+		// Check for OAuth error in URL params. `get()` has already decoded the
+		// value; decoding again throws on any lone `%` an attacker puts in the link.
 		const urlParams = new URLSearchParams( window.location.search );
 		const oauthError = urlParams.get( 'nextdoor_oauth_error' );
 
 		if ( oauthError ) {
-			setError( decodeURIComponent( oauthError ) );
+			setError( oauthError.slice( 0, OAUTH_ERROR_MAX_LENGTH ) );
 		}
 	}, [] );
 
@@ -115,6 +120,8 @@ export const Onboarding = ( {
 				client_secret: clientSecret,
 			} );
 			setCurrentStep( 2 );
+		} catch {
+			// Already surfaced by the card's error notice.
 		} finally {
 			setIsSaving( false );
 		}
@@ -133,6 +140,8 @@ export const Onboarding = ( {
 
 			// Redirect to login URL
 			window.location.href = response.login_url ?? window.location.href;
+		} catch {
+			// Already surfaced by the card's error notice.
 		} finally {
 			setIsSaving( false );
 		}
@@ -153,6 +162,8 @@ export const Onboarding = ( {
 			} else {
 				setError( __( 'Failed to claim page.', 'newspack-plugin' ) );
 			}
+		} catch {
+			// Already surfaced by the card's error notice.
 		} finally {
 			setIsSaving( false );
 		}
@@ -164,14 +175,20 @@ export const Onboarding = ( {
 			setError( null );
 			await disconnect();
 			setCurrentStep( 1 );
+		} catch {
+			// Already surfaced by the card's error notice.
 		} finally {
 			setIsSaving( false );
 		}
 	};
 
 	return (
-		<VStack spacing={ 6 }>
-			{ error && <Notice noticeText={ error } isError onClose={ () => setError( null ) } /> }
+		<VStack spacing={ 4 }>
+			{ error && (
+				<div role="alert">
+					<Notice noticeText={ error } isError />
+				</div>
+			) }
 
 			{ isManualMode && currentStep === STEPS.manual.CREDENTIALS && (
 				<VStack spacing={ 4 }>
@@ -192,21 +209,23 @@ export const Onboarding = ( {
 						</ExternalLink>
 					</p>
 
-					<Grid columns={ 1 } gutter={ 16 }>
-						<TextControl
-							label={ __( 'Client ID', 'newspack-plugin' ) }
-							value={ clientId }
-							onChange={ setClientId }
-							placeholder={ __( 'Enter your Nextdoor Client ID', 'newspack-plugin' ) }
-						/>
-						<TextControl
-							label={ __( 'Client Secret', 'newspack-plugin' ) }
-							value={ clientSecret }
-							onChange={ setClientSecret }
-							type="password"
-							placeholder={ __( 'Enter your Nextdoor Client Secret', 'newspack-plugin' ) }
-						/>
-					</Grid>
+					<TextControl
+						label={ __( 'Client ID', 'newspack-plugin' ) }
+						value={ clientId }
+						onChange={ setClientId }
+						placeholder={ __( 'Enter your Nextdoor Client ID', 'newspack-plugin' ) }
+						withMargin={ false }
+						__nextHasNoMarginBottom
+					/>
+					<TextControl
+						label={ __( 'Client Secret', 'newspack-plugin' ) }
+						value={ clientSecret }
+						onChange={ setClientSecret }
+						type="password"
+						placeholder={ __( 'Enter your Nextdoor Client Secret', 'newspack-plugin' ) }
+						withMargin={ false }
+						__nextHasNoMarginBottom
+					/>
 
 					<HStack justify="flex-start" spacing={ 2 }>
 						<Button
@@ -227,29 +246,30 @@ export const Onboarding = ( {
 				<VStack spacing={ 4 }>
 					<p>{ __( 'Connect your Nextdoor account to authorize publishing articles.', 'newspack-plugin' ) }</p>
 
-					<Grid columns={ 1 } gutter={ 16 }>
-						<TextControl
-							label={ __( 'Email Address', 'newspack-plugin' ) }
-							value={ email }
-							onChange={ setEmail }
-							type="email"
-							placeholder={ __( 'Enter your Nextdoor account email', 'newspack-plugin' ) }
-							help={ __( 'This should be the email address associated with your Nextdoor account.', 'newspack-plugin' ) }
-						/>
-						<SelectControl
-							label={ __( 'Country', 'newspack-plugin' ) }
-							value={ country }
-							onChange={ setCountry }
-							options={ countryOptions }
-							// Escape dismisses the select's own menu. Capture phase because CardForm's
-							// close listener sits on the body and would otherwise run first.
-							onKeyDownCapture={ ( event: React.KeyboardEvent< HTMLSelectElement > ) => {
-								if ( 'Escape' === event.key ) {
-									event.preventDefault();
-								}
-							} }
-						/>
-					</Grid>
+					<TextControl
+						label={ __( 'Email Address', 'newspack-plugin' ) }
+						value={ email }
+						onChange={ setEmail }
+						type="email"
+						placeholder={ __( 'Enter your Nextdoor account email', 'newspack-plugin' ) }
+						help={ __( 'This should be the email address associated with your Nextdoor account.', 'newspack-plugin' ) }
+						withMargin={ false }
+						__nextHasNoMarginBottom
+					/>
+					<SelectControl
+						label={ __( 'Country', 'newspack-plugin' ) }
+						value={ country }
+						onChange={ setCountry }
+						options={ countryOptions }
+						__nextHasNoMarginBottom
+						// Escape dismisses the select's own menu. Capture phase because CardForm's
+						// close listener sits on the body and would otherwise run first.
+						onKeyDownCapture={ ( event: React.KeyboardEvent< HTMLSelectElement > ) => {
+							if ( 'Escape' === event.key ) {
+								event.preventDefault();
+							}
+						} }
+					/>
 
 					<HStack justify="flex-start" spacing={ 2 }>
 						<Button variant="primary" size="compact" onClick={ handleStartOAuth } disabled={ ! email || isSaving } isBusy={ isSaving }>
@@ -269,16 +289,16 @@ export const Onboarding = ( {
 				<VStack spacing={ 4 }>
 					<p>{ __( 'Claim your news page on Nextdoor to start publishing articles.', 'newspack-plugin' ) }</p>
 
-					<Grid columns={ 1 } gutter={ 16 }>
-						<TextControl
-							label={ __( 'Publication URL', 'newspack-plugin' ) }
-							value={ publicationUrl }
-							onChange={ setPublicationUrl }
-							type="url"
-							placeholder={ __( 'https://yoursite.com', 'newspack-plugin' ) }
-							help={ __( 'The main URL of your news publication.', 'newspack-plugin' ) }
-						/>
-					</Grid>
+					<TextControl
+						label={ __( 'Publication URL', 'newspack-plugin' ) }
+						value={ publicationUrl }
+						onChange={ setPublicationUrl }
+						type="url"
+						placeholder={ __( 'https://yoursite.com', 'newspack-plugin' ) }
+						help={ __( 'The main URL of your news publication.', 'newspack-plugin' ) }
+						withMargin={ false }
+						__nextHasNoMarginBottom
+					/>
 
 					<HStack justify="flex-start" spacing={ 2 }>
 						<Button

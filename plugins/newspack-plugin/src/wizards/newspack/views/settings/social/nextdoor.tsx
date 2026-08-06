@@ -20,7 +20,7 @@ import { __experimentalVStack as VStack } from '@wordpress/components'; // eslin
  */
 import { Button, CardForm, Notice } from '../../../../../../packages/components/src';
 import useWizardApiFetchToggle from '../../../../hooks/use-wizard-api-fetch-toggle';
-import { useSocialCards } from './context';
+import { useErrorAnnouncement, useSocialCards } from './context';
 
 /**
  * Components
@@ -35,6 +35,11 @@ const isOAuthReturn = () => {
 	const params = new URLSearchParams( window.location.search );
 	return params.get( 'oauth_success' ) === '1' || !! params.get( 'nextdoor_oauth_error' );
 };
+
+// While the module is off the endpoint returns `connection_status` and
+// `settings` as an empty JSON array, which is truthy — so the presence of a
+// real field, not the object itself, is what says the payload is populated.
+const hasConnectionStatus = ( data: NextdoorData ) => typeof data?.connection_status?.is_connected === 'boolean';
 
 function Nextdoor() {
 	const [ settings, setSettings ] = useState< NextdoorSettings >( {
@@ -81,36 +86,22 @@ function Nextdoor() {
 	} );
 
 	useEffect( () => {
-		if ( apiData.connection_status ) {
-			setStatus( apiData.connection_status );
-			setSettings( { ...settings, allowed_roles: apiData.settings.allowed_roles } );
+		if ( ! hasConnectionStatus( apiData ) ) {
+			return;
 		}
+		setStatus( apiData.connection_status );
+		setSettings( current => ( { ...current, allowed_roles: apiData.settings.allowed_roles } ) );
 	}, [ apiData ] );
 
+	// Routed through the toggle hook rather than a raw `apiFetch`, so a save also
+	// updates `apiData` and the store's GET cache — the status grid below reads
+	// the former, and a remount (switching settings tabs) is served the latter.
+	// Failures surface through `errorMessage`, which the card already renders.
 	const updateSettings = async ( newSettings: Partial< NextdoorSettings > ): Promise< NextdoorSettings > => {
-		try {
-			setError( null );
-			const response = await apiFetch< NextdoorData >( {
-				path: '/newspack/v1/wizard/newspack-settings/social/nextdoor',
-				method: 'POST',
-				data: newSettings,
-			} );
-
-			if ( response.settings ) {
-				const updatedSettings = { ...settings, ...response.settings };
-				setSettings( updatedSettings );
-				return updatedSettings;
-			}
-
-			return settings;
-		} catch ( fetchError ) {
-			const errorMsg: string =
-				fetchError instanceof Object && 'message' in fetchError
-					? ( fetchError as { message: string } ).message
-					: __( 'Failed to update settings.', 'newspack-plugin' );
-			setError( errorMsg );
-			throw new Error( errorMsg );
-		}
+		setError( null );
+		resetError();
+		const response: NextdoorData = await apiFetchToggle( newSettings, true );
+		return hasConnectionStatus( response ) ? { ...settings, ...response.settings } : settings;
 	};
 
 	const startOAuthFlow = async ( email: string, country: string ): Promise< OAuthResponse > => {
@@ -168,12 +159,18 @@ function Nextdoor() {
 			throw new Error( errorMsg );
 		}
 
+		// The tokens are gone, so stop claiming a connection before the refresh
+		// lands: a refresh that fails would otherwise leave the card reporting
+		// "Connected" and offering Disconnect for a connection that no longer exists.
+		setStatus( current => ( { ...current, is_connected: false, has_tokens: false, has_page: false, token_valid: false } ) );
+
 		// The disconnect endpoint only clears tokens; it doesn't touch apiData, so
-		// apiData/status would still read "connected" without this.
+		// apiData would still read "connected" without this.
 		await refresh();
 	};
 
 	const { notify } = useSocialCards();
+	useErrorAnnouncement( errorMessage ?? error );
 	const [ isOpen, setIsOpen ] = useState( false );
 	const [ isEnabling, setIsEnabling ] = useState( false );
 	const [ hasAutoOpened, setHasAutoOpened ] = useState( false );
@@ -200,12 +197,14 @@ function Nextdoor() {
 			return undefined;
 		}
 		if ( ! isConnected ) {
-			return { level: 'warning' as const, text: __( 'Setup incomplete', 'newspack-plugin' ) };
+			return { level: 'warning' as const, text: __( 'Not connected', 'newspack-plugin' ) };
 		}
-		return { level: 'success' as const, text: __( 'Connected', 'newspack-plugin' ) };
+		return { level: 'success' as const, text: __( 'Enabled', 'newspack-plugin' ) };
 	} )();
 
-	const setModuleEnabled = ( value: boolean ) => apiFetchToggle( { ...apiData, module_enabled_nextdoor: value }, true );
+	// Only the flag: a full snapshot would write back read-only fields the endpoint
+	// ignores, and put the plaintext client secret on the wire for no reason.
+	const setModuleEnabled = ( value: boolean ) => apiFetchToggle( { module_enabled_nextdoor: value }, true );
 
 	// Every user-initiated action starts from a clean error state, so a failure
 	// the user has since retried past stops showing in the header.
@@ -232,7 +231,8 @@ function Nextdoor() {
 		notify( __( 'Nextdoor Integration disabled.', 'newspack-plugin' ) );
 	};
 
-	const close = async () => {
+	// Cancel: abandoning a fresh Enable rolls the module back off.
+	const cancel = async () => {
 		resetError();
 		if ( isEnabling ) {
 			try {
@@ -242,6 +242,15 @@ function Nextdoor() {
 			}
 			setIsEnabling( false );
 		}
+		setIsOpen( false );
+	};
+
+	// Escape: a pure UI dismissal. It must never deactivate a module the user may
+	// already have saved credentials into, so the module stays on and the card
+	// leaves its enabling session behind.
+	const dismiss = () => {
+		resetError();
+		setIsEnabling( false );
 		setIsOpen( false );
 	};
 
@@ -258,7 +267,7 @@ function Nextdoor() {
 			size="compact"
 			aria-label={ isOpen ? cancelLabel : editLabel }
 			disabled={ isFetching }
-			onClick={ () => ( isOpen ? close() : setIsOpen( true ) ) }
+			onClick={ () => ( isOpen ? cancel() : setIsOpen( true ) ) }
 		>
 			<span className="newspack-social-settings__toggle-label">
 				<span className={ classnames( { 'is-visible': isOpen } ) }>{ __( 'Cancel', 'newspack-plugin' ) }</span>
@@ -267,7 +276,10 @@ function Nextdoor() {
 		</Button>
 	) : (
 		<Button variant="secondary" size="compact" aria-label={ enableLabel } isBusy={ isFetching } disabled={ isFetching } onClick={ enable }>
-			{ __( 'Enable', 'newspack-plugin' ) }
+			<span className="newspack-social-settings__toggle-label">
+				<span>{ __( 'Cancel', 'newspack-plugin' ) }</span>
+				<span className="is-visible">{ __( 'Enable', 'newspack-plugin' ) }</span>
+			</span>
 		</Button>
 	);
 
@@ -287,10 +299,14 @@ function Nextdoor() {
 			badge={ badge }
 			actions={ actions }
 			isOpen={ isOpen }
-			onRequestClose={ close }
+			onRequestClose={ dismiss }
 		>
 			<VStack spacing={ 4 }>
-				{ errorMessage && <Notice isError noticeText={ errorMessage } /> }
+				{ errorMessage && (
+					<div role="alert">
+						<Notice isError noticeText={ errorMessage } />
+					</div>
+				) }
 				{ isConnected ? (
 					<Settings
 						settings={ settings }
