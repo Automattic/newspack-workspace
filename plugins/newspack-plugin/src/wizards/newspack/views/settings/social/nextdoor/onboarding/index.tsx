@@ -12,7 +12,7 @@ import { ExternalLink, Notice as WPNotice, __experimentalHStack as HStack, __exp
 /**
  * Internal dependencies
  */
-import { Button, Grid, Notice, SelectControl, TextControl } from '../../../../../../../../packages/components/src';
+import { Button, SelectControl, TextControl } from '../../../../../../../../packages/components/src';
 import { OnboardingProps } from '../types';
 import ReadonlyField from './readonly-field';
 import CopyButton from './copy-button';
@@ -55,7 +55,6 @@ export const Onboarding = ( {
 	updateSettings,
 	startOAuthFlow,
 	claimPage,
-	disconnect,
 	setError,
 	renderSecondaryActions,
 }: OnboardingProps ) => {
@@ -164,19 +163,6 @@ export const Onboarding = ( {
 			} else {
 				setError( __( 'Failed to claim page.', 'newspack-plugin' ) );
 			}
-		} catch {
-			// Already surfaced by the card's error notice.
-		} finally {
-			setIsSaving( false );
-		}
-	};
-
-	const handleDisconnect = async () => {
-		try {
-			setIsSaving( true );
-			setError( null );
-			await disconnect();
-			setCurrentStep( 1 );
 		} catch {
 			// Already surfaced by the card's error notice.
 		} finally {
@@ -336,48 +322,6 @@ export const Onboarding = ( {
 						</Button>
 						{ renderSecondaryActions?.() }
 					</HStack>
-				</VStack>
-			) }
-
-			{ currentStep === steps.SUCCESS && status.is_connected && (
-				<Notice
-					isSuccess
-					noticeText={ __(
-						'Your site is now connected to Nextdoor. You can start publishing articles to your local community.',
-						'newspack-plugin'
-					) }
-				/>
-			) }
-
-			{ ( ! isManualMode || currentStep > STEPS.manual.CREDENTIALS ) && (
-				<VStack spacing={ 4 }>
-					<Grid columns={ 2 } gutter={ 16 } noMargin>
-						{ /* Only worth stating when Newspack supplies the credentials: in manual
-						     mode the grid is unreachable until the publisher has saved a pair. */ }
-						{ ! isManualMode && (
-							<div>
-								<div className="nextdoor-onboarding__status-label">{ __( 'API credentials:', 'newspack-plugin' ) }</div>
-								<span className="nextdoor-onboarding__status-value nextdoor-onboarding__status-value--success">
-									{ __( 'Managed by Newspack', 'newspack-plugin' ) }
-								</span>
-							</div>
-						) }
-					</Grid>
-
-					{ status.is_connected && (
-						<HStack justify="flex-start" spacing={ 2 }>
-							<Button
-								variant="tertiary"
-								__next40pxDefaultSize
-								isDestructive
-								onClick={ handleDisconnect }
-								disabled={ isSaving }
-								isBusy={ isSaving }
-							>
-								{ __( 'Disconnect', 'newspack-plugin' ) }
-							</Button>
-						</HStack>
-					) }
 				</VStack>
 			) }
 		</VStack>

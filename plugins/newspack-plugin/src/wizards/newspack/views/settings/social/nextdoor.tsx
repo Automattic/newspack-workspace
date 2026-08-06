@@ -360,7 +360,6 @@ function Nextdoor() {
 						updateSettings={ updateSettings }
 						startOAuthFlow={ startOAuthFlow }
 						claimPage={ claimPage }
-						disconnect={ disconnect }
 						setError={ reportError }
 						renderSecondaryActions={ secondaryActions }
 					/>

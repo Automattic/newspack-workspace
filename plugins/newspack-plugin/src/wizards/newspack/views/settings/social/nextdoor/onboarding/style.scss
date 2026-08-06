@@ -17,19 +17,4 @@
 	&__readonly.is-monospace input[readonly] {
 		font-family: wp-vars.$font-family-mono;
 	}
-
-	&__status-label {
-		font-weight: 600;
-		margin-bottom: 4px;
-	}
-
-	&__status-value {
-		&--success {
-			color: wp-colors.$alert-green;
-		}
-
-		&--error {
-			color: wp-colors.$alert-red;
-		}
-	}
 }

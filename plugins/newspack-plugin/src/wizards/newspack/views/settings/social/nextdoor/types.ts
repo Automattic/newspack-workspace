@@ -54,7 +54,6 @@ export interface OnboardingProps {
 	startOAuthFlow: ( email: string, country: string ) => Promise< OAuthResponse >;
 	claimPage: ( publicationUrl: string, test?: boolean ) => Promise< ClaimPageResponse >;
 	setError: ( error: string | null ) => void;
-	disconnect: () => Promise< void >;
 	renderSecondaryActions?: () => React.ReactNode;
 }
 
