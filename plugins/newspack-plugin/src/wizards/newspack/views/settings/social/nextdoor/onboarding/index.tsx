@@ -55,6 +55,9 @@ export const Onboarding = ( {
 	const [ country, setCountry ] = useState( window.newspackSettings?.social?.nextdoor?.default_country || 'US' );
 	const [ publicationUrl, setPublicationUrl ] = useState( settings.publication_url || window.newspackSettings?.social?.nextdoor?.site_url || '' );
 	const [ isSaving, setIsSaving ] = useState( false );
+	// The only navigation left: reopening the connect form once it has been put
+	// away, so changing credentials or account is not a dead end.
+	const [ isEditingConnection, setIsEditingConnection ] = useState( false );
 
 	const countryOptions = window.newspackSettings?.social?.nextdoor?.country_options || [];
 	const redirectUri = window.newspackSettings?.social?.nextdoor?.redirect_uri || '';
@@ -87,6 +90,9 @@ export const Onboarding = ( {
 	const hasCredentialChanges = clientId !== ( settings.client_id || '' ) || !! clientSecret;
 	const hasCredentials = ! isManualMode || ( !! clientId && ( status.has_credentials || !! clientSecret ) );
 	const canConnect = hasCredentials && isEmailValid;
+	// Claiming is the only thing left once Nextdoor has authorised, unless the
+	// publisher asks to change the connection.
+	const showConnect = ! canClaimPage || isEditingConnection;
 
 	const handleConnect = async () => {
 		if ( ! canConnect ) {
@@ -139,150 +145,153 @@ export const Onboarding = ( {
 				</WPNotice>
 			) }
 
-			<VStack spacing={ 4 }>
-				<h4 className="nextdoor-onboarding__subheading">{ __( 'Connect to Nextdoor', 'newspack-plugin' ) }</h4>
-				{ canClaimPage ? (
-					<p className="newspack-text-muted nextdoor-onboarding__intro">
-						{ __( 'Your Nextdoor account is connected.', 'newspack-plugin' ) }
-					</p>
-				) : (
-					<>
-						{ isManualMode && (
-							<>
-								<ReadonlyField
-									id="nextdoor-onboarding-redirect-uri"
-									label={ __( 'Redirect URI', 'newspack-plugin' ) }
-									help={ __( 'Use this URL as the Redirect URI when signing up for Nextdoor credentials.', 'newspack-plugin' ) }
-									value={ redirectUri }
-									isMonospace
-								>
-									<CopyButton
+			{ showConnect && (
+				<VStack spacing={ 4 }>
+					<h4 className="nextdoor-onboarding__subheading">{ __( 'Connect to Nextdoor', 'newspack-plugin' ) }</h4>
+					{ showConnect ? (
+						<>
+							{ isManualMode && (
+								<>
+									<ReadonlyField
+										id="nextdoor-onboarding-redirect-uri"
+										label={ __( 'Redirect URI', 'newspack-plugin' ) }
+										help={ __( 'Use this URL as the Redirect URI when signing up for Nextdoor credentials.', 'newspack-plugin' ) }
 										value={ redirectUri }
-										label={ __( 'Copy Redirect URI', 'newspack-plugin' ) }
-										successMessage={ __( 'Redirect URI copied to clipboard.', 'newspack-plugin' ) }
-										errorMessage={ __( 'Could not copy the Redirect URI.', 'newspack-plugin' ) }
-									/>
-								</ReadonlyField>
-								<TextControl
-									label={ __( 'Client ID', 'newspack-plugin' ) }
-									value={ clientId }
-									onChange={ setClientId }
-									placeholder={ __( 'Enter your Nextdoor Client ID', 'newspack-plugin' ) }
-									help={ createInterpolateElement(
-										__(
-											'The public identifier for your app. Get your API credentials from the <linkToNextdoor>Nextdoor Developer Portal</linkToNextdoor>.',
-											'newspack-plugin'
-										),
-										{
-											// createInterpolateElement replaces the child with the tagged text.
-											linkToNextdoor: (
-												<ExternalLink href="https://developer.nextdoor.com/reference/applying-for-access">
-													{ '' }
-												</ExternalLink>
+										isMonospace
+									>
+										<CopyButton
+											value={ redirectUri }
+											label={ __( 'Copy Redirect URI', 'newspack-plugin' ) }
+											successMessage={ __( 'Redirect URI copied to clipboard.', 'newspack-plugin' ) }
+											errorMessage={ __( 'Could not copy the Redirect URI.', 'newspack-plugin' ) }
+										/>
+									</ReadonlyField>
+									<TextControl
+										label={ __( 'Client ID', 'newspack-plugin' ) }
+										value={ clientId }
+										onChange={ setClientId }
+										placeholder={ __( 'Enter your Nextdoor Client ID', 'newspack-plugin' ) }
+										help={ createInterpolateElement(
+											__(
+												'The public identifier for your app. Get your API credentials from the <linkToNextdoor>Nextdoor Developer Portal</linkToNextdoor>.',
+												'newspack-plugin'
 											),
+											{
+												// createInterpolateElement replaces the child with the tagged text.
+												linkToNextdoor: (
+													<ExternalLink href="https://developer.nextdoor.com/reference/applying-for-access">
+														{ '' }
+													</ExternalLink>
+												),
+											}
+										) }
+										withMargin={ false }
+										__nextHasNoMarginBottom
+									/>
+									<TextControl
+										label={ __( 'Client Secret', 'newspack-plugin' ) }
+										value={ clientSecret }
+										onChange={ setClientSecret }
+										type="password"
+										// Dots stand in for the stored secret. The field itself stays empty,
+										// which is what tells the server to keep what it already has.
+										placeholder={
+											status.has_credentials ? STORED_SECRET_MASK : __( 'Enter your Nextdoor Client Secret', 'newspack-plugin' )
 										}
-									) }
-									withMargin={ false }
-									__nextHasNoMarginBottom
-								/>
-								<TextControl
-									label={ __( 'Client Secret', 'newspack-plugin' ) }
-									value={ clientSecret }
-									onChange={ setClientSecret }
-									type="password"
-									// Dots stand in for the stored secret. The field itself stays empty,
-									// which is what tells the server to keep what it already has.
-									placeholder={
-										status.has_credentials ? STORED_SECRET_MASK : __( 'Enter your Nextdoor Client Secret', 'newspack-plugin' )
-									}
-									help={
-										status.has_credentials
-											? __( 'Leave blank to keep the stored secret, or enter a new one to replace it.', 'newspack-plugin' )
-											: __( 'Issued with the Client ID. Stored securely, and never shown here again.', 'newspack-plugin' )
-									}
-									withMargin={ false }
-									__nextHasNoMarginBottom
-								/>
-							</>
-						) }
-						<VStack spacing={ 0 }>
-							<TextControl
-								label={ __( 'Email Address', 'newspack-plugin' ) }
-								value={ email }
-								onChange={ setEmail }
-								onBlur={ () => setHasBlurredEmail( true ) }
-								type="email"
-								placeholder={ __( 'Enter your Nextdoor account email', 'newspack-plugin' ) }
-								help={ __( 'This should be the email address associated with your Nextdoor account.', 'newspack-plugin' ) }
-								withMargin={ false }
-								__nextHasNoMarginBottom
-							/>
-							{ emailError && <p className="newspack-social-settings__field-error">{ emailError }</p> }
-						</VStack>
-						<SelectControl
-							label={ __( 'Country', 'newspack-plugin' ) }
-							value={ country }
-							onChange={ setCountry }
-							options={ countryOptions }
-							help={ __(
-								'Where your publication is based. Nextdoor creates your publisher account in this country.',
-								'newspack-plugin'
+										help={
+											status.has_credentials
+												? __( 'Leave blank to keep the stored secret, or enter a new one to replace it.', 'newspack-plugin' )
+												: __( 'Issued with the Client ID. Stored securely, and never shown here again.', 'newspack-plugin' )
+										}
+										withMargin={ false }
+										__nextHasNoMarginBottom
+									/>
+								</>
 							) }
-							__next40pxDefaultSize
-							__nextHasNoMarginBottom
-							// Escape dismisses the select's own menu. Capture phase because CardForm's
-							// close listener sits on the body and would otherwise run first.
-							onKeyDownCapture={ ( event: React.KeyboardEvent< HTMLSelectElement > ) => {
-								if ( 'Escape' === event.key ) {
-									event.preventDefault();
-								}
-							} }
-						/>
-						<HStack justify="flex-start" spacing={ 2 }>
-							<Button
-								variant="primary"
+							<VStack spacing={ 0 }>
+								<TextControl
+									label={ __( 'Email Address', 'newspack-plugin' ) }
+									value={ email }
+									onChange={ setEmail }
+									onBlur={ () => setHasBlurredEmail( true ) }
+									type="email"
+									placeholder={ __( 'Enter your Nextdoor account email', 'newspack-plugin' ) }
+									help={ __( 'This should be the email address associated with your Nextdoor account.', 'newspack-plugin' ) }
+									withMargin={ false }
+									__nextHasNoMarginBottom
+								/>
+								{ emailError && <p className="newspack-social-settings__field-error">{ emailError }</p> }
+							</VStack>
+							<SelectControl
+								label={ __( 'Country', 'newspack-plugin' ) }
+								value={ country }
+								onChange={ setCountry }
+								options={ countryOptions }
+								help={ __(
+									'Where your publication is based. Nextdoor creates your publisher account in this country.',
+									'newspack-plugin'
+								) }
 								__next40pxDefaultSize
-								onClick={ handleConnect }
-								disabled={ ! canConnect || isSaving }
-								isBusy={ isSaving }
-							>
-								{ __( 'Connect to Nextdoor', 'newspack-plugin' ) }
-							</Button>
-						</HStack>
-					</>
-				) }
-			</VStack>
+								__nextHasNoMarginBottom
+								// Escape dismisses the select's own menu. Capture phase because CardForm's
+								// close listener sits on the body and would otherwise run first.
+								onKeyDownCapture={ ( event: React.KeyboardEvent< HTMLSelectElement > ) => {
+									if ( 'Escape' === event.key ) {
+										event.preventDefault();
+									}
+								} }
+							/>
+							<HStack justify="flex-start" spacing={ 2 }>
+								<Button
+									variant="primary"
+									__next40pxDefaultSize
+									aria-label={ __( 'Connect to Nextdoor', 'newspack-plugin' ) }
+									onClick={ handleConnect }
+									disabled={ ! canConnect || isSaving }
+									isBusy={ isSaving }
+								>
+									{ __( 'Connect', 'newspack-plugin' ) }
+								</Button>
+								{ canClaimPage && (
+									<Button variant="secondary" __next40pxDefaultSize onClick={ () => setIsEditingConnection( false ) }>
+										{ __( 'Cancel', 'newspack-plugin' ) }
+									</Button>
+								) }
+							</HStack>
+						</>
+					) : null }
+				</VStack>
+			) }
 
-			<VStack spacing={ 4 }>
-				<h4 className="nextdoor-onboarding__subheading">{ __( 'Publication Page', 'newspack-plugin' ) }</h4>
-				{ ! canClaimPage && (
-					<p className="newspack-text-muted nextdoor-onboarding__intro">
-						{ __( 'Available once your Nextdoor account is connected.', 'newspack-plugin' ) }
-					</p>
-				) }
-				<TextControl
-					label={ __( 'Publication URL', 'newspack-plugin' ) }
-					value={ publicationUrl }
-					onChange={ setPublicationUrl }
-					type="url"
-					placeholder={ __( 'https://yoursite.com', 'newspack-plugin' ) }
-					help={ __( 'The main URL of your news publication.', 'newspack-plugin' ) }
-					disabled={ ! canClaimPage }
-					withMargin={ false }
-					__nextHasNoMarginBottom
-				/>
-				<HStack justify="flex-start" spacing={ 2 }>
-					<Button
-						variant="primary"
-						__next40pxDefaultSize
-						onClick={ handleClaimPage }
-						disabled={ ! canClaimPage || ! publicationUrl || isSaving }
-						isBusy={ isSaving }
-					>
-						{ __( 'Claim Page', 'newspack-plugin' ) }
-					</Button>
-				</HStack>
-			</VStack>
+			{ canClaimPage && ! isEditingConnection && (
+				<VStack spacing={ 4 }>
+					<h4 className="nextdoor-onboarding__subheading">{ __( 'Publication Page', 'newspack-plugin' ) }</h4>
+					<TextControl
+						label={ __( 'Publication URL', 'newspack-plugin' ) }
+						value={ publicationUrl }
+						onChange={ setPublicationUrl }
+						type="url"
+						placeholder={ __( 'https://yoursite.com', 'newspack-plugin' ) }
+						help={ __( 'The main URL of your news publication.', 'newspack-plugin' ) }
+						withMargin={ false }
+						__nextHasNoMarginBottom
+					/>
+					<HStack justify="flex-start" spacing={ 2 }>
+						<Button
+							variant="primary"
+							__next40pxDefaultSize
+							onClick={ handleClaimPage }
+							disabled={ ! publicationUrl || isSaving }
+							isBusy={ isSaving }
+						>
+							{ __( 'Claim Page', 'newspack-plugin' ) }
+						</Button>
+						<Button variant="secondary" __next40pxDefaultSize onClick={ () => setIsEditingConnection( true ) }>
+							{ __( 'Update Connection', 'newspack-plugin' ) }
+						</Button>
+					</HStack>
+				</VStack>
+			) }
 
 			{ renderSecondaryActions && (
 				<HStack justify="flex-start" spacing={ 2 }>
