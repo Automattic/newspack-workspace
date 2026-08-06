@@ -2138,6 +2138,39 @@ final class Reader_Activation {
 
 		// Honeypot trap.
 		if ( ! empty( $honeypot ) ) {
+			/*
+			 * This branch returns a fake success without creating a session, and the
+			 * frontend can't tell that apart from a real sign-in. Readers have reported
+			 * landing in exactly that state — told they're signed in, then met with a
+			 * login form — but the branch writes nothing, so there has never been a way
+			 * to tell whether it fires for real people or only for bots.
+			 *
+			 * `newspack_log` records the user agent, which is what identifies whatever
+			 * filled a field no human can see. The addresses themselves are deliberately
+			 * not logged: the shape of the submission is enough to tell a browser filling
+			 * both fields from one profile entry (`matches_npe`) apart from a bot filling
+			 * the decoy alone.
+			 *
+			 * Throttled, because `newspack_log` reaches central logging and on a site
+			 * without reCAPTCHA this trap can fire on ordinary bot traffic. The question
+			 * is whether it fires and what fills it, which a sample answers; every
+			 * occurrence would push one site's spam volume into a shared store.
+			 */
+			$honeypot_log_throttle = 'newspack_honeypot_log_throttle';
+			if ( false === \get_transient( $honeypot_log_throttle ) ) {
+				\set_transient( $honeypot_log_throttle, 1, 5 * MINUTE_IN_SECONDS );
+				Logger::newspack_log(
+					'newspack_auth_honeypot_tripped',
+					'Reader auth honeypot tripped — returning a fake success with no session.',
+					[
+						'has_npe'        => ! empty( $email ),
+						'matches_npe'    => ! empty( $email ) && strtolower( trim( $honeypot ) ) === strtolower( trim( $email ) ),
+						'decoy_length'   => strlen( $honeypot ),
+						'decoy_is_email' => (bool) \is_email( $honeypot ),
+					],
+					'warning'
+				);
+			}
 			return self::send_auth_form_response(
 				[
 					'email'         => $honeypot,
