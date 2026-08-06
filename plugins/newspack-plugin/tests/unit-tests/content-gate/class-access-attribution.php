@@ -200,6 +200,37 @@ class Newspack_Test_Access_Attribution extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A subscription bought on a sibling site has no local record for the
+	 * owned-subscriptions intersection to find: newspack-network answers the
+	 * ownership filter on its behalf. The reader is still a subscriber to a
+	 * product the publisher sells, so the label must be the product's name,
+	 * not the bare `subscription` fallback the intersection alone produces.
+	 */
+	public function test_network_granted_subscription_resolves_the_product_name() {
+		$user_id = $this->factory->user->create();
+		\wc_create_mock_product(
+			[
+				'id'   => 301,
+				'name' => 'Sibling Site Plan',
+			]
+		);
+
+		// Stands in for newspack-network's Access::has_active_subscription().
+		// No local subscription is created: that is the point.
+		add_filter( 'newspack_access_rules_has_active_subscription', '__return_true' );
+
+		$labels = Access_Attribution::get_source_labels( 'subscription', [ 301 ], $user_id, [] );
+
+		remove_all_filters( 'newspack_access_rules_has_active_subscription' );
+
+		$this->assertSame(
+			[ 'Sibling Site Plan' ],
+			$labels,
+			'A network-granted subscription must resolve to the product name, not the generic slug.'
+		);
+	}
+
+	/**
 	 * A one-time purchase resolves to the name of the product the reader
 	 * actually bought, not to the bare slug and not to the whole rule's product
 	 * list. The generic fallback is well covered; this is the branch that puts a

@@ -89,6 +89,38 @@ final class Access_Attribution {
 	}
 
 	/**
+	 * Ask the ownership filter, product by product, which one granted access.
+	 *
+	 * The owned-subscriptions intersection only sees subscriptions recorded on
+	 * this site. On a Newspack Network node the reader's subscription lives on
+	 * a sibling site and is answered by newspack-network's
+	 * `newspack_access_rules_has_active_subscription` callback, so there is no
+	 * local record for that intersection to match and the label would degrade
+	 * to a bare `subscription`. Probing runs the filter and gets the name.
+	 *
+	 * Only reached when the intersection named nothing at all, so a locally
+	 * owned subscription — the common case — still resolves in a single
+	 * ownership lookup and never pays for this loop.
+	 *
+	 * @param array $product_ids Product IDs from the rule's value.
+	 * @param int   $user_id     User ID.
+	 * @return string[] Names of the products the filter grants, possibly empty.
+	 */
+	private static function probe_product_names( $product_ids, $user_id ) {
+		$names = [];
+		foreach ( $product_ids as $product_id ) {
+			if ( ! Access_Rules::has_active_subscription( $user_id, [ $product_id ], true ) ) {
+				continue;
+			}
+			$product = wc_get_product( $product_id );
+			if ( $product ) {
+				$names[] = html_entity_decode( (string) $product->get_name(), ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+			}
+		}
+		return $names;
+	}
+
+	/**
 	 * Pick the single strongest label from a set of source labels.
 	 *
 	 * @param string[] $labels Source labels collected from passing rules.
@@ -161,6 +193,9 @@ final class Access_Attribution {
 									}
 									break;
 								}
+							}
+							if ( empty( $names ) ) {
+								$names = self::probe_product_names( $value, $user_id );
 							}
 							return ! empty( $names ) ? $names : [ 'subscription' ];
 						}
