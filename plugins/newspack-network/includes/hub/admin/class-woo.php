@@ -60,7 +60,7 @@ abstract class Woo {
 			add_filter( 'disable_formats_dropdown', [ __CLASS__, 'disable_restrict_manage_posts' ], 10, 2 );
 
 			add_action( 'restrict_manage_posts', [ __CLASS__, 'restrict_manage_posts' ], 10, 2 );
-			add_filter( 'pre_get_posts', [ __CLASS__, 'pre_get_posts' ] );
+			add_action( 'pre_get_posts', [ __CLASS__, 'pre_get_posts' ] );
 		}
 	}
 

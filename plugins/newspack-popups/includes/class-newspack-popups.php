@@ -944,11 +944,17 @@ final class Newspack_Popups {
 	 * @return string|null Popup slug, if found in the URL
 	 */
 	public static function preset_popup_id() {
+		// Param first, so a normal request does not pay for a capability check.
 		// Not using filter_input since it's not playing well with phpunit.
-		if ( isset( $_GET[ self::NEWSPACK_POPUP_PRESET_QUERY_PARAM ] ) && $_GET[ self::NEWSPACK_POPUP_PRESET_QUERY_PARAM ] ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
-			return sanitize_text_field( $_GET[ self::NEWSPACK_POPUP_PRESET_QUERY_PARAM ] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( ! isset( $_GET[ self::NEWSPACK_POPUP_PRESET_QUERY_PARAM ] ) || ! $_GET[ self::NEWSPACK_POPUP_PRESET_QUERY_PARAM ] ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+			return null;
 		}
-		return null;
+		// Ignored for everyone else: preview mode suppresses prompts and swaps the
+		// reader data store.
+		if ( ! self::is_user_admin() ) {
+			return null;
+		}
+		return sanitize_text_field( $_GET[ self::NEWSPACK_POPUP_PRESET_QUERY_PARAM ] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 	}
 
 	/**
@@ -1050,11 +1056,17 @@ final class Newspack_Popups {
 	 * Is the user an admin or editor user?
 	 * If so, prompts will be shown to these users while logged in, but analytics
 	 * will not be fired for them.
+	 *
+	 * This also gates the prompt and preset preview paths, which render
+	 * request-supplied content, so widening it widens who can reach those.
 	 */
 	public static function is_user_admin() {
 		/**
 		 * Filter to allow other plugins to decide which capability should be checked
 		 * to determine whether a user's activity should be tracked via Google Analytics.
+		 *
+		 * Also gates the prompt and preset previews, so widening this widens who can
+		 * render request-supplied content through them.
 		 *
 		 * @param string $capability Capability to check. Default: edit_others_pages.
 		 * @return string Filtered capability string.
@@ -1280,7 +1292,7 @@ final class Newspack_Popups {
 				'fields'           => 'ids',
 				'post_status'      => 'any',
 				'post_type'        => self::NEWSPACK_POPUPS_CPT,
-				'posts_per_page'   => -1,
+				'posts_per_page'   => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Prompt CPT; config-scale.
 			]
 		);
 

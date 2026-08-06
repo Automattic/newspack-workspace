@@ -1,5 +1,12 @@
 <?php // phpcs:disable WordPress.Files.FileName.InvalidClassFileName, Squiz.Commenting.FunctionComment.Missing, Squiz.Commenting.ClassComment.Missing, Squiz.Commenting.VariableComment.Missing, Squiz.Commenting.FileComment.Missing, Generic.Files.OneObjectStructurePerFile.MultipleFound, Universal.Files.SeparateFunctionsFromOO.Mixed
 
+// WooCommerce's plugin path constant. Code under test uses it both to locate
+// WC files and as an "is WooCommerce loaded" proxy; the mocks below stand in
+// for the files themselves, so nothing ever reads the path.
+if ( ! defined( 'WC_ABSPATH' ) ) {
+	define( 'WC_ABSPATH', '/woocommerce/' );
+}
+
 /**
  * Minimal mock for WC_Payment_Token, used when WooCommerce is not loaded in the test environment.
  */
@@ -420,6 +427,14 @@ class WC_Order {
 		}
 		return new WC_DateTime( $this->data['date_paid'] );
 	}
+	public function get_date_created() {
+		// Fall back to date_paid like fixtures that predate the date_created key.
+		$date_created = $this->data['date_created'] ?? $this->data['date_paid'];
+		if ( empty( $date_created ) ) {
+			return null;
+		}
+		return new WC_DateTime( $date_created );
+	}
 	public function get_date_completed() {
 		return new WC_DateTime( $this->data['date_completed'] );
 	}
@@ -664,8 +679,24 @@ class WC_Subscription {
 	public function needs_payment() {
 		return ! empty( $this->data['needs_payment'] );
 	}
+	public function get_parent_id() {
+		return $this->data['parent_id'] ?? 0;
+	}
+	public function get_payment_method_title() {
+		return $this->data['payment_method_title'] ?? '';
+	}
 	public function is_manual() {
-		return ! empty( $this->data['is_manual'] );
+		// Real WC_Subscription keys this 'requires_manual_renewal'; fixtures also stage the shorter 'is_manual'.
+		return ! empty( $this->data['requires_manual_renewal'] ) || ! empty( $this->data['is_manual'] );
+	}
+	public function __call( $name, $arguments ) {
+		// Address getters: get_billing_first_name(), get_shipping_city(), etc.
+		// resolve to flat data keys ('billing_first_name'), matching how the
+		// fixtures stage address data.
+		if ( 0 === strpos( $name, 'get_billing_' ) || 0 === strpos( $name, 'get_shipping_' ) ) {
+			return $this->data[ substr( $name, 4 ) ] ?? '';
+		}
+		throw new BadMethodCallException( sprintf( 'Call to undefined method %s::%s()', __CLASS__, $name ) ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped
 	}
 	public function get_view_order_url() {
 		return $this->data['view_order_url'] ?? 'https://example.test/my-account/view-order/' . $this->get_id();
@@ -993,6 +1024,10 @@ function wcs_get_subscriptions_for_product( $product_ids, $fields = 'ids', $args
 }
 function wcs_get_canonical_product_id( $item ) {
 	if ( is_object( $item ) && method_exists( $item, 'get_product_id' ) ) {
+		// Real WCS: the variation ID is the canonical ID when present.
+		if ( method_exists( $item, 'get_variation_id' ) && $item->get_variation_id() ) {
+			return $item->get_variation_id();
+		}
 		return $item->get_product_id();
 	}
 	return null;
@@ -1038,6 +1073,12 @@ function wc_prices_include_tax() {
 	global $wcs_mock_prices_include_tax;
 	return ! empty( $wcs_mock_prices_include_tax );
 }
+/**
+ * Real WC: order statuses considered "paid" (payment received).
+ */
+function wc_get_is_paid_statuses() {
+	return [ 'processing', 'completed' ];
+}
 function wc_get_orders( $args ) {
 	global $orders_database;
 	// For simplicity, this mock will only return a single page of results.
@@ -1048,18 +1089,63 @@ function wc_get_orders( $args ) {
 	if ( isset( $args['customer_id'] ) ) {
 		// Filter by customer.
 		$orders = array_filter(
-			$orders_database,
+			$orders,
 			function( $order ) use ( $args ) {
 				return $order->get_customer_id() === $args['customer_id'];
 			}
 		);
 	}
+	if ( ! empty( $args['customer'] ) ) {
+		// Real WC: 'customer' accepts a user ID or billing email (or an array of
+		// either) and matches orders belonging to ANY of the values — guest
+		// orders (customer_id 0) match via their billing email. Email matching
+		// happens in SQL under a case-insensitive collation, so compare with
+		// strcasecmp() rather than a strict string comparison.
+		//
+		// The `! empty()` gate is deliberate: both order stores test the query var
+		// with `! empty()` too, so an empty value drops the constraint entirely and
+		// matches EVERY customer's orders. Guarding with isset() here would invert
+		// that and make callers passing an empty customer look safe.
+		$customer_values = (array) $args['customer'];
+		$orders          = array_filter(
+			$orders,
+			function( $order ) use ( $customer_values ) {
+				foreach ( $customer_values as $customer_value ) {
+					if ( is_numeric( $customer_value ) && $order->get_customer_id() === (int) $customer_value ) {
+						return true;
+					}
+					if ( is_string( $customer_value ) && ! is_numeric( $customer_value ) && 0 === strcasecmp( (string) $order->get_billing_email(), $customer_value ) ) {
+						return true;
+					}
+				}
+				return false;
+			}
+		);
+	}
 	if ( isset( $args['status'] ) ) {
-		// Filter by status.
+		// Filter by status. Real wc_get_orders accepts statuses with or without
+		// the 'wc-' prefix; normalize both sides so either form matches.
+		$statuses = array_map(
+			function( $status ) {
+				return preg_replace( '/^wc-/', '', $status );
+			},
+			(array) $args['status']
+		);
+		$orders   = array_filter(
+			$orders,
+			function( $order ) use ( $statuses ) {
+				return in_array( $order->get_status(), $statuses, true );
+			}
+		);
+	}
+	if ( isset( $args['date_created'] ) && is_string( $args['date_created'] ) && str_starts_with( $args['date_created'], '>' ) ) {
+		// Support the '>{timestamp}' comparison form used by date-bounded queries.
+		$cutoff = (int) substr( $args['date_created'], 1 );
 		$orders = array_filter(
-			$orders_database,
-			function( $order ) use ( $args ) {
-				return 'wc-' . $order->get_status() === $args['status'][0];
+			$orders,
+			function( $order ) use ( $cutoff ) {
+				$date_created = $order->get_date_created();
+				return $date_created && $date_created->getTimestamp() > $cutoff;
 			}
 		);
 	}
@@ -1069,17 +1155,36 @@ function wc_get_orders( $args ) {
 			return $b->get_date_paid()->getTimestamp() <=> $a->get_date_paid()->getTimestamp();
 		}
 	);
+	if ( isset( $args['limit'] ) && (int) $args['limit'] > 0 ) {
+		$orders = array_slice( $orders, 0, (int) $args['limit'] );
+	}
 	return $orders;
 }
 
 function wc_customer_bought_product( $customer_email, $user_id, $product_id ) {
 	global $orders_database;
+	// Real WC hands the question to third parties first and returns whatever they
+	// answer verbatim, ahead of its own identity check.
+	$filtered = apply_filters( 'woocommerce_pre_customer_bought_product', null, $customer_email, $user_id, $product_id );
+	if ( null !== $filtered ) {
+		return $filtered;
+	}
 	foreach ( $orders_database as $order ) {
-		if ( $order->get_customer_id() !== $user_id ) {
+		// Real WC matches the customer user ID OR the billing email, so guest
+		// orders count toward the buyer's history. The email comparison runs in
+		// SQL under a case-insensitive collation.
+		$matches_user  = $user_id && $order->get_customer_id() === $user_id;
+		$matches_email = $customer_email && 0 === strcasecmp( (string) $order->get_billing_email(), (string) $customer_email );
+		if ( ! $matches_user && ! $matches_email ) {
+			continue;
+		}
+		// Real WC only counts orders in paid statuses (processing/completed).
+		if ( ! $order->has_status( wc_get_is_paid_statuses() ) ) {
 			continue;
 		}
 		foreach ( $order->get_items() as $item ) {
-			if ( $item->get_product_id() === $product_id ) {
+			// Real WC matches both _product_id and _variation_id order item meta.
+			if ( $item->get_product_id() === $product_id || ( $item->get_variation_id() && $item->get_variation_id() === $product_id ) ) {
 				return true;
 			}
 		}
@@ -1168,6 +1273,322 @@ function wcs_get_subscription_status_name( $status ) {
 function wcs_get_all_user_actions_for_subscription( $subscription, $user_id ) {
 	return apply_filters( 'wcs_view_subscription_actions', [], $subscription, $user_id );
 }
+if ( ! class_exists( 'WC_CSV_Exporter' ) ) {
+	/**
+	 * Mock of WooCommerce's WC_CSV_Exporter abstract (includes/export/abstract-wc-csv-exporter.php).
+	 *
+	 * Replicates the column handling, escaping, and row-formatting semantics of the
+	 * real class so Newspack exporter subclasses can be unit-tested without WC.
+	 * File-writing and header-sending surfaces are intentionally omitted; the
+	 * mock_export_rows() / get_prepared_row_data() / get_mock_total_rows() helpers
+	 * are test-only accessors that do not exist on the real class.
+	 */
+	abstract class WC_CSV_Exporter {
+		protected $export_type       = '';
+		protected $filename          = 'wc-export.csv';
+		protected $limit             = 50;
+		protected $exported_row_count = 0;
+		protected $row_data          = [];
+		protected $total_rows        = 0;
+		protected $column_names      = [];
+		protected $columns_to_export = [];
+		protected $delimiter         = ',';
+
+		abstract public function prepare_data_to_export();
+
+		public function get_column_names() {
+			return apply_filters( "woocommerce_{$this->export_type}_export_column_names", $this->column_names, $this );
+		}
+		public function set_column_names( $column_names ) {
+			$this->column_names = [];
+			foreach ( $column_names as $column_id => $column_name ) {
+				$this->column_names[ wc_clean( $column_id ) ] = wc_clean( $column_name );
+			}
+		}
+		public function get_columns_to_export() {
+			return $this->columns_to_export;
+		}
+		public function get_delimiter() {
+			return apply_filters( "woocommerce_{$this->export_type}_export_delimiter", $this->delimiter );
+		}
+		public function set_columns_to_export( $columns ) {
+			$this->columns_to_export = array_map( 'wc_clean', $columns );
+		}
+		public function is_column_exporting( $column_id ) {
+			$column_id         = strstr( $column_id, ':' ) ? current( explode( ':', $column_id ) ) : $column_id;
+			$columns_to_export = $this->get_columns_to_export();
+			if ( empty( $columns_to_export ) ) {
+				return true;
+			}
+			return in_array( $column_id, $columns_to_export, true ) || 'meta' === $column_id;
+		}
+		public function get_default_column_names() {
+			return [];
+		}
+		public function set_filename( $filename ) {
+			$this->filename = sanitize_file_name( str_replace( '.csv', '', $filename ) . '.csv' );
+		}
+		public function get_filename() {
+			return sanitize_file_name( apply_filters( "woocommerce_{$this->export_type}_export_get_filename", $this->filename ) );
+		}
+		protected function get_csv_data() {
+			return $this->export_rows();
+		}
+		protected function export_column_headers() {
+			$columns    = $this->get_column_names();
+			$export_row = [];
+			$buffer     = fopen( 'php://output', 'w' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_read_fopen
+			ob_start();
+			foreach ( $columns as $column_id => $column_name ) {
+				if ( ! $this->is_column_exporting( $column_id ) ) {
+					continue;
+				}
+				$export_row[] = $this->format_data( $column_name );
+			}
+			$this->fputcsv( $buffer, $export_row );
+			return ob_get_clean();
+		}
+		protected function get_data_to_export() {
+			return $this->row_data;
+		}
+		protected function export_rows() {
+			$data   = $this->get_data_to_export();
+			$buffer = fopen( 'php://output', 'w' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_read_fopen
+			ob_start();
+			array_walk( $data, [ $this, 'export_row' ], $buffer );
+			return apply_filters( "woocommerce_{$this->export_type}_export_rows", ob_get_clean(), $this );
+		}
+		protected function export_row( $row_data, $key, $buffer ) {
+			$columns    = $this->get_column_names();
+			$export_row = [];
+			foreach ( $columns as $column_id => $column_name ) {
+				if ( ! $this->is_column_exporting( $column_id ) ) {
+					continue;
+				}
+				if ( isset( $row_data[ $column_id ] ) ) {
+					$export_row[] = $this->format_data( $row_data[ $column_id ] );
+				} else {
+					$export_row[] = '';
+				}
+			}
+			$this->fputcsv( $buffer, $export_row );
+			++$this->exported_row_count;
+		}
+		public function get_limit() {
+			return apply_filters( "woocommerce_{$this->export_type}_export_batch_limit", $this->limit, $this );
+		}
+		public function set_limit( $limit ) {
+			$this->limit = absint( $limit );
+		}
+		public function get_total_exported() {
+			return $this->exported_row_count;
+		}
+		public function escape_data( $data ) {
+			$active_content_triggers = [ '=', '+', '-', '@', chr( 0x09 ), chr( 0x0d ) ];
+			if ( is_int( $data ) || is_float( $data ) ) {
+				return $data;
+			}
+			if ( in_array( mb_substr( $data, 0, 1 ), $active_content_triggers, true ) ) {
+				$data = "'" . $data;
+			}
+			return $data;
+		}
+		public function format_data( $data ) {
+			if ( ! is_scalar( $data ) ) {
+				if ( is_a( $data, 'WC_Datetime' ) ) {
+					$data = $data->date( 'Y-m-d G:i:s' );
+				} else {
+					$data = '';
+				}
+			} elseif ( is_bool( $data ) ) {
+				$data = $data ? 1 : 0;
+			}
+			return $this->escape_data( $data );
+		}
+		protected function implode_values( $values ) {
+			$values_to_implode = [];
+			foreach ( $values as $value ) {
+				$value               = (string) is_scalar( $value ) ? html_entity_decode( $value, ENT_QUOTES ) : '';
+				$values_to_implode[] = str_replace( ',', '\\,', $value );
+			}
+			return implode( ', ', $values_to_implode );
+		}
+		protected function fputcsv( $buffer, $export_row ) {
+			fputcsv( $buffer, $export_row, $this->get_delimiter(), '"', "\0" ); // phpcs:ignore
+		}
+
+		/** Test-only accessors below (not present on the real WC_CSV_Exporter). */
+		public function mock_export_rows() {
+			return $this->export_rows();
+		}
+		public function test_set_row_data( $rows ) {
+			$this->row_data = $rows;
+		}
+		public function get_prepared_row_data() {
+			return $this->row_data;
+		}
+		public function get_mock_total_rows() {
+			return $this->total_rows;
+		}
+	}
+}
+
+if ( ! class_exists( 'WC_CSV_Batch_Exporter' ) ) {
+	/**
+	 * Mock of WC_CSV_Batch_Exporter (includes/export/abstract-wc-csv-batch-exporter.php).
+	 * Paging/percent semantics match the real class, and generate_file() appends
+	 * each page to the data file as the real class does — the export file is the
+	 * only evidence the AJAX handler has that a page was written, so a mock that
+	 * skipped it could not exercise that path. Use
+	 * newspack_test_remove_export_files() to clear the staged files.
+	 */
+	abstract class WC_CSV_Batch_Exporter extends WC_CSV_Exporter {
+		protected $page = 1;
+		public function __construct() {
+			$this->column_names = $this->get_default_column_names();
+		}
+		public function get_page() {
+			return $this->page;
+		}
+		public function set_page( $page ) {
+			$this->page = absint( $page );
+		}
+		public function get_total_exported() {
+			return ( ( $this->get_page() - 1 ) * $this->get_limit() ) + $this->exported_row_count;
+		}
+		public function get_percent_complete() {
+			return $this->total_rows ? (int) floor( ( $this->get_total_exported() / $this->total_rows ) * 100 ) : 100;
+		}
+		public function generate_file() {
+			// phpcs:disable WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents, WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_file_put_contents, WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_unlink
+			if ( 1 === $this->get_page() ) {
+				// A run starts from a clean file, as in the real class.
+				foreach ( [ $this->get_file_path(), $this->get_headers_row_file_path() ] as $temp_file ) {
+					if ( file_exists( $temp_file ) ) {
+						unlink( $temp_file );
+					}
+				}
+			}
+			$this->prepare_data_to_export();
+			file_put_contents( $this->get_file_path(), $this->export_rows(), FILE_APPEND );
+			// phpcs:enable WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents, WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_file_put_contents, WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_unlink
+		}
+		public function get_headers_row_file() {
+			$file = chr( 239 ) . chr( 187 ) . chr( 191 ) . $this->export_column_headers();
+			if ( file_exists( $this->get_headers_row_file_path() ) ) {
+				$file = file_get_contents( $this->get_headers_row_file_path() ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents, WordPressVIPMinimum.Performance.FetchingRemoteData.FileGetContentsUnknown
+			}
+			return $file;
+		}
+		protected function get_headers_row_file_path() {
+			return $this->get_file_path() . '.headers';
+		}
+		protected function get_file_path() {
+			return trailingslashit( sys_get_temp_dir() ) . $this->get_filename();
+		}
+	}
+}
+
+if ( ! class_exists( 'WCS_Customer_Store' ) ) {
+	/**
+	 * Mock of WCS_Customer_Store. Drive get_users_subscription_ids() via the
+	 * static $mock_user_subscription_ids fixture map ( user_id => int[] ).
+	 */
+	class WCS_Customer_Store {
+		public static $mock_user_subscription_ids = [];
+		public static function instance() {
+			return new self();
+		}
+		public function get_users_subscription_ids( $user_id ) {
+			return self::$mock_user_subscription_ids[ $user_id ] ?? [];
+		}
+	}
+}
+
+if ( ! class_exists( 'WCS_Admin_Post_Types' ) ) {
+	/**
+	 * Mock of WCS_Admin_Post_Types exposing set_post__in_query_var() with the
+	 * real class's intersect/none semantics ($post__in_none = [ 0 ]).
+	 */
+	class WCS_Admin_Post_Types {
+		public static function set_post__in_query_var( $query_vars, $post_ids ) {
+			$post__in_none = [ 0 ];
+			if ( empty( $post_ids ) ) {
+				$query_vars['post__in'] = $post__in_none;
+			} elseif ( ! isset( $query_vars['post__in'] ) ) {
+				$query_vars['post__in'] = $post_ids;
+			} elseif ( $post__in_none !== $query_vars['post__in'] ) {
+				$intersecting_post_ids  = array_intersect( $query_vars['post__in'], $post_ids );
+				$query_vars['post__in'] = empty( $intersecting_post_ids ) ? $post__in_none : $intersecting_post_ids;
+			}
+			return $query_vars;
+		}
+	}
+}
+
+function wcs_get_subscription_statuses() {
+	return [
+		'wc-pending'        => 'Pending',
+		'wc-active'         => 'Active',
+		'wc-on-hold'        => 'On hold',
+		'wc-cancelled'      => 'Cancelled',
+		'wc-switched'       => 'Switched',
+		'wc-expired'        => 'Expired',
+		'wc-pending-cancel' => 'Pending Cancellation',
+	];
+}
+function wcs_sanitize_subscription_status_key( $status_key ) {
+	$status_key = sanitize_key( $status_key );
+	return 'wc-' === substr( $status_key, 0, 3 ) ? $status_key : 'wc-' . $status_key;
+}
+function wcs_subscription_search( $term ) {
+	global $wcs_mock_subscription_search_results;
+	return $wcs_mock_subscription_search_results[ $term ] ?? [];
+}
+function wcs_is_custom_order_tables_usage_enabled() {
+	global $wcs_mock_hpos_enabled;
+	return ! empty( $wcs_mock_hpos_enabled );
+}
+function wcs_get_orders_with_meta_query( $args ) {
+	global $wcs_mock_orders_with_meta_query_args, $wcs_mock_orders_with_meta_query_result, $subscriptions_database;
+	$wcs_mock_orders_with_meta_query_args = $args;
+	if ( isset( $wcs_mock_orders_with_meta_query_result ) ) {
+		return $wcs_mock_orders_with_meta_query_result;
+	}
+	// Default: page the mock subscriptions database honoring limit/offset,
+	// mirroring wc_get_orders' paginate => true return shape.
+	$ids    = array_keys( $subscriptions_database );
+	$total  = count( $ids );
+	$offset = isset( $args['offset'] ) ? (int) $args['offset'] : 0;
+	$limit  = isset( $args['limit'] ) && (int) $args['limit'] > 0 ? (int) $args['limit'] : $total;
+	$ids    = array_slice( $ids, $offset, $limit );
+	if ( ! empty( $args['paginate'] ) ) {
+		return (object) [
+			'orders'        => $ids,
+			'total'         => $total,
+			'max_num_pages' => $limit > 0 ? (int) ceil( $total / $limit ) : 1,
+		];
+	}
+	return $ids;
+}
+
+/**
+ * Delete the CSV export temp files staged by the batch-exporter mock, so a
+ * test class that drives generate_file() leaves the uploads dir as it found
+ * it. No-op unless the exporter base class is loaded.
+ */
+function newspack_test_remove_export_files() {
+	if ( ! class_exists( '\Newspack\CSV_Batch_Exporter' ) ) {
+		return;
+	}
+	$files = glob( trailingslashit( \Newspack\CSV_Batch_Exporter::get_exports_dir() ) . '*.csv*' );
+	// phpcs:disable WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_unlink
+	foreach ( (array) $files as $file ) {
+		unlink( $file );
+	}
+	// phpcs:enable WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_unlink
+}
+
 function wc_get_template( $template_name, $args = [] ) {
 	$plugin_dir   = dirname( __DIR__, 2 );
 	$templates_dir = $plugin_dir . '/includes/plugins/woocommerce/my-account/templates/v1/';

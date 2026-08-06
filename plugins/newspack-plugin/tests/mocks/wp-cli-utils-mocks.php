@@ -2,14 +2,14 @@
 /**
  * Minimal `WP_CLI\Utils` stubs for testing CLI command code under PHPUnit.
  *
- * Companion to class-wp-cli.php, which stubs the WP_CLI facade itself.
+ * Companion to wp-cli-mock.php, which stubs the WP_CLI facade itself.
  *
  * @package Newspack\Tests
  */
 
 namespace WP_CLI\Utils;
 
-require_once __DIR__ . '/class-wp-cli.php';
+require_once __DIR__ . '/wp-cli-mock.php';
 
 if ( ! function_exists( 'WP_CLI\Utils\wp_clear_object_cache' ) ) {
 	/**
@@ -41,7 +41,7 @@ if ( ! function_exists( 'WP_CLI\Utils\format_items' ) ) {
 	 * @param array  $fields Columns.
 	 */
 	function format_items( $format, $items, $fields ) {
-		\WP_CLI::$messages['table'][] = [
+		\WP_CLI::$tables[] = [
 			'format' => $format,
 			'items'  => $items,
 			'fields' => $fields,
