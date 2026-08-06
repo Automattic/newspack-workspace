@@ -314,7 +314,7 @@ class Nextdoor {
 
 		foreach ( $wp_roles->roles as $role_name => $role_info ) {
 			$roles[] = [
-				'label' => translate_user_role( $role_info['name'], 'newspack-plugin' ),
+				'label' => translate_user_role( $role_info['name'] ),
 				'value' => $role_name,
 			];
 		}
