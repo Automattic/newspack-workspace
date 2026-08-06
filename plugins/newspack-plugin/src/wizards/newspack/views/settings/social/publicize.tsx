@@ -102,7 +102,7 @@ const Publicize = () => {
 			// would otherwise fire on mount. Both endpoints register the return banner.
 			return (
 				<Handoff url={ JETPACK_EDIT_LINK } variant="tertiary" size="compact" compact>
-					{ isConfigured ? __( 'Configure', 'newspack-plugin' ) : __( 'Complete setup', 'newspack-plugin' ) }
+					{ isConfigured ? __( 'Configure', 'newspack-plugin' ) : __( 'Complete Setup', 'newspack-plugin' ) }
 				</Handoff>
 			);
 		}

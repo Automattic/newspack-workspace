@@ -296,7 +296,7 @@ export const Onboarding = ( {
 						</Button>
 						{ isManualMode && (
 							<Button variant="secondary" __next40pxDefaultSize onClick={ () => setCurrentStep( STEPS.manual.CREDENTIALS ) }>
-								{ __( 'Edit credentials', 'newspack-plugin' ) }
+								{ __( 'Edit Credentials', 'newspack-plugin' ) }
 							</Button>
 						) }
 						{ renderSecondaryActions?.() }
@@ -332,7 +332,7 @@ export const Onboarding = ( {
 							{ __( 'Claim Page', 'newspack-plugin' ) }
 						</Button>
 						<Button variant="secondary" __next40pxDefaultSize onClick={ () => setCurrentStep( steps.ACCOUNT_AUTH ) }>
-							{ __( 'Change account', 'newspack-plugin' ) }
+							{ __( 'Change Account', 'newspack-plugin' ) }
 						</Button>
 						{ renderSecondaryActions?.() }
 					</HStack>
@@ -362,30 +362,6 @@ export const Onboarding = ( {
 								</span>
 							</div>
 						) }
-						<div>
-							<div className="nextdoor-onboarding__status-label">{ __( 'Account Connected:', 'newspack-plugin' ) }</div>
-							{ status.has_tokens ? (
-								<span className="nextdoor-onboarding__status-value nextdoor-onboarding__status-value--success">
-									{ __( 'Yes', 'newspack-plugin' ) }
-								</span>
-							) : (
-								<span className="nextdoor-onboarding__status-value nextdoor-onboarding__status-value--error">
-									{ __( 'No', 'newspack-plugin' ) }
-								</span>
-							) }
-						</div>
-						<div>
-							<div className="nextdoor-onboarding__status-label">{ __( 'Page Claimed:', 'newspack-plugin' ) }</div>
-							{ status.has_page ? (
-								<span className="nextdoor-onboarding__status-value nextdoor-onboarding__status-value--success">
-									{ __( 'Yes', 'newspack-plugin' ) }
-								</span>
-							) : (
-								<span className="nextdoor-onboarding__status-value nextdoor-onboarding__status-value--error">
-									{ __( 'No', 'newspack-plugin' ) }
-								</span>
-							) }
-						</div>
 					</Grid>
 
 					{ status.is_connected && (
