@@ -443,6 +443,19 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A legal mixed-case scheme is accepted, and stored in canonical form.
+	 */
+	public function test_claim_page_accepts_a_mixed_case_scheme() {
+		$this->http_body = wp_json_encode( [ 'page_id' => 'page-123' ] );
+		add_filter( 'pre_http_request', [ $this, 'stub_nextdoor_response' ], 10, 3 );
+
+		$response = $this->post( '/newspack/v1/nextdoor/claim-page', [ 'publication_url' => 'HTTPS://example.com' ] );
+
+		self::assertSame( 200, $response->get_status() );
+		self::assertSame( 'https://example.com', Nextdoor::get_settings()['publication_url'] );
+	}
+
+	/**
 	 * The callback guards accept the administrator who started the flow, once.
 	 */
 	public function test_oauth_callback_authorization_is_single_use() {
@@ -569,6 +582,90 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 		);
 
 		self::assertTrue( Auth::has_usable_token() );
+		self::assertSame( [], $this->http_requests );
+	}
+
+	/**
+	 * Connect a page whose access token has expired, and stub a refresh that renews it.
+	 *
+	 * @return int ID of a published post already shared to Nextdoor.
+	 */
+	private function share_a_post_with_an_expired_token() {
+		Nextdoor::update_settings(
+			[
+				'client_id'        => 'site-id',
+				'client_secret'    => 'site-secret',
+				'access_token'     => 'expired-access',
+				'refresh_token'    => 'stored-refresh',
+				'token_expires_at' => time() - 10,
+				'page_id'          => 'page-123',
+				'publication_url'  => 'https://example.com',
+			]
+		);
+
+		$this->http_body = wp_json_encode(
+			[
+				'access_token' => 'new-access',
+				'expires_in'   => 3600,
+			]
+		);
+		add_filter( 'pre_http_request', [ $this, 'stub_nextdoor_response' ], 10, 3 );
+
+		$post_id = $this->factory->post->create( [ 'post_status' => 'publish' ] );
+		update_post_meta( $post_id, '_nextdoor_guid', 'guid-1' );
+
+		return $post_id;
+	}
+
+	/**
+	 * Updating a shared post renews an expired token, and sends the renewed one.
+	 */
+	public function test_update_post_refreshes_an_expired_token() {
+		$post_id = $this->share_a_post_with_an_expired_token();
+
+		$request = new WP_REST_Request( 'PUT', '/newspack/v1/nextdoor/update-post/' . $post_id );
+		$request->set_param( 'id', $post_id );
+
+		$response = Controller::api_update_post( $request );
+
+		self::assertTrue( $response->get_data()['success'] );
+		self::assertSame( 'new-access', Nextdoor::get_settings()['access_token'] );
+		self::assertStringContainsString( 'auth.nextdoor.com', $this->http_requests[0]['url'] );
+		self::assertSame( 'Bearer new-access', $this->http_requests[1]['args']['headers']['Authorization'] );
+	}
+
+	/**
+	 * Removing a shared post renews an expired token, and sends the renewed one.
+	 */
+	public function test_delete_post_refreshes_an_expired_token() {
+		$post_id = $this->share_a_post_with_an_expired_token();
+
+		$request = new WP_REST_Request( 'DELETE', '/newspack/v1/nextdoor/delete-post/' . $post_id );
+		$request->set_param( 'id', $post_id );
+
+		$response = Controller::api_delete_post( $request );
+
+		self::assertTrue( $response->get_data()['success'] );
+		self::assertSame( 'new-access', Nextdoor::get_settings()['access_token'] );
+		self::assertStringContainsString( 'auth.nextdoor.com', $this->http_requests[0]['url'] );
+		self::assertSame( 'Bearer new-access', $this->http_requests[1]['args']['headers']['Authorization'] );
+	}
+
+	/**
+	 * A token that cannot be renewed stops the update before it reaches Nextdoor.
+	 */
+	public function test_update_post_refuses_an_unrenewable_token() {
+		$post_id = $this->share_a_post_with_an_expired_token();
+
+		Nextdoor::update_settings( array_merge( Nextdoor::get_settings(), [ 'refresh_token' => '' ] ) );
+
+		$request = new WP_REST_Request( 'PUT', '/newspack/v1/nextdoor/update-post/' . $post_id );
+		$request->set_param( 'id', $post_id );
+
+		$result = Controller::api_update_post( $request );
+
+		self::assertInstanceOf( 'WP_Error', $result );
+		self::assertSame( 'nextdoor_token_invalid', $result->get_error_code() );
 		self::assertSame( [], $this->http_requests );
 	}
 }
