@@ -334,6 +334,21 @@ class Content_Restriction_Control {
 			return $is_post_restricted;
 		}
 
+		// Gating stands down rather than half-working ({@see Content_Gate::is_gating_active()}).
+		//
+		// Passes the incoming value through rather than returning false, so this decides
+		// only whether *our* gates restrict and never overrides a verdict another
+		// callback already reached. At this position the two are equivalent — the
+		// Memberships early return above has already fired, and the only other callbacks
+		// either lower the value (`Newsletters_Access::filter_post_restricted`, a bypass)
+		// or run later and win regardless (`Gate_Preview::filter_is_post_restricted` at
+		// PHP_INT_MAX, which still forces a preview restricted so a publisher can see the
+		// gate they are editing). Pass-through is the safer default to keep as new
+		// callbacks are added.
+		if ( ! Content_Gate::is_gating_active() ) {
+			return $is_post_restricted;
+		}
+
 		// Return early if this post is exempt from access control restrictions.
 		if ( $post_id && get_post_meta( $post_id, self::IS_EXEMPT_META_KEY, true ) ) {
 			return false;
