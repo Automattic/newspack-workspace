@@ -28,7 +28,10 @@ const validate = ( value: string ) => {
 const XPixel = () => (
 	<PixelCard
 		title={ __( 'X Pixel', 'newspack-plugin' ) }
-		description={ __( 'Add the X pixel (formerly known as Twitter pixel) to your site.', 'newspack-plugin' ) }
+		description={ __(
+			'Add the X pixel (formerly known as Twitter pixel) to your site to measure the results of ad campaigns running on X.',
+			'newspack-plugin'
+		) }
 		namespace={ `${ PAGE_NAMESPACE }/social/pixels/x` }
 		path="/newspack/v1/wizard/newspack-settings/social/x_pixel"
 		validate={ validate }
