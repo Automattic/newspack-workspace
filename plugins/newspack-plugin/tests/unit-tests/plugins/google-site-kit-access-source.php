@@ -590,6 +590,67 @@ class Newspack_Test_GoogleSiteKit_Access_Source extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Metering is a property of the gate that blocked, not of the post. A
+	 * reader who sails through a metering gate and is then stopped by a hard
+	 * one gets no free views at all — reporting them as metering_eligible would
+	 * count a soft block that never happened.
+	 */
+	public function test_metering_on_a_gate_the_reader_passed_does_not_soften_a_hard_block() {
+		$post_id = $this->create_gated_post(
+			[
+				'custom_access' => [
+					'active'       => true,
+					'access_rules' => [
+						[
+							[
+								'slug'  => 'email_domain',
+								'value' => 'example.org',
+							],
+						],
+					],
+					'metering'     => [
+						'enabled' => true,
+						'count'   => 3,
+						'period'  => 'month',
+					],
+				],
+			]
+		);
+		$passed_gate_id = $this->gate_id;
+		$this->attach_gate(
+			$post_id,
+			[
+				'custom_access' => [
+					'active'       => true,
+					'access_rules' => [
+						[
+							[
+								'slug'  => 'email_domain',
+								'value' => 'nobody.example',
+							],
+						],
+					],
+				],
+			]
+		);
+		$blocking_gate_id = $this->gate_id;
+		$user_id          = $this->factory->user->create( [ 'user_email' => 'reader@example.org' ] );
+		Newspack\Reader_Activation::set_reader_verified( $user_id );
+		wp_set_current_user( $user_id );
+		$this->assertTrue(
+			Newspack\Metering::offers_metering( $passed_gate_id, true ),
+			'The passed gate must meter, or this asserts nothing about which gate is consulted.'
+		);
+		$this->assertFalse(
+			Newspack\Metering::offers_metering( $blocking_gate_id, true ),
+			'The blocking gate must not meter, or both gates would give the same answer.'
+		);
+		$this->go_to( get_permalink( $post_id ) );
+
+		$this->assertSame( 'gated', GoogleSiteKit::get_request_access_source() );
+	}
+
+	/**
 	 * A post the publisher marked exempt is not restricted no matter what its
 	 * gates say, so there is no gating to report on it.
 	 */

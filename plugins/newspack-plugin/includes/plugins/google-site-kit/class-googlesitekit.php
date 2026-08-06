@@ -392,11 +392,16 @@ class GoogleSiteKit {
 	 * do the passing rules get mapped to a source label; a blocked reader is
 	 * reported as blocked no matter what any individual gate would have granted.
 	 *
-	 * Scoped to gates with custom access active, mirroring how the ESP scopes
-	 * the Content Access fields. Registration-mode gates are excluded: reader
-	 * account state is already reported by `is_reader` and `logged_in`, and
-	 * detecting a regwall pass would mean reimplementing verification logic
-	 * that lives in Content_Restriction_Control.
+	 * The two halves are scoped differently, on purpose. *Attribution* looks
+	 * only at rules on gates with custom access active, mirroring how the ESP
+	 * scopes the Content Access fields: reader account state is already
+	 * reported by `is_reader` and `logged_in`, and naming a regwall pass as an
+	 * access source would mean reimplementing verification logic that lives in
+	 * Content_Restriction_Control. The *blocked* outcome reflects the whole
+	 * restriction path, so `gated` and `metering_eligible` can originate from a
+	 * registration wall or a Woo Memberships plan on a post that also carries a
+	 * custom-access gate. That is the reader's experience either way — the post
+	 * has a custom-access gate on it and they did not get in.
 	 *
 	 * Every call here is free of side effects. In particular it must never
 	 * reach Metering::is_logged_in_metering_allowed(), which records a metered
@@ -455,10 +460,16 @@ class GoogleSiteKit {
 		// plus the verification walls and exemptions this class does not model.
 		// A blocked reader is reported as blocked; no passing gate outranks it.
 		if ( Content_Gate::is_post_restricted( $post_id ) ) {
-			foreach ( $gates as $gate ) {
-				if ( ! empty( $gate['id'] ) && Metering::offers_metering( $gate['id'] ) ) {
-					return self::memo_access_source( $memo_key, 'metering_eligible' );
-				}
+			// Metering belongs to the gate that actually stopped this reader,
+			// which is the one is_post_restricted() just recorded — not to any
+			// gate on the post. A reader who passes a metering gate and is then
+			// stopped by a hard one gets no free views, so reading the whole
+			// list here would report a soft block that never happened. A
+			// restriction with no recorded gate (a filter forcing the outcome)
+			// falls through to the hard answer.
+			$blocking_gate_id = Content_Gate::get_gate_post_id( $post_id );
+			if ( $blocking_gate_id && Metering::offers_metering( $blocking_gate_id ) ) {
+				return self::memo_access_source( $memo_key, 'metering_eligible' );
 			}
 			return self::memo_access_source( $memo_key, 'gated' );
 		}
