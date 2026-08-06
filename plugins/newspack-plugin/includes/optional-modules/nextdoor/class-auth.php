@@ -73,7 +73,7 @@ class Auth {
 			$error_data = json_decode( $body, true );
 			return new \WP_Error(
 				'nextdoor_oauth_error',
-				isset( $error_data['error_description'] ) ? $error_data['error_description'] : 'OAuth error',
+				isset( $error_data['error_description'] ) ? $error_data['error_description'] : __( 'OAuth error', 'newspack-plugin' ),
 				[ 'status' => $code ]
 			);
 		}
@@ -122,7 +122,7 @@ class Auth {
 			$error_data = json_decode( $body, true );
 			return new \WP_Error(
 				'nextdoor_oauth_refresh_error',
-				isset( $error_data['error_description'] ) ? $error_data['error_description'] : 'Token refresh error',
+				isset( $error_data['error_description'] ) ? $error_data['error_description'] : __( 'Token refresh error', 'newspack-plugin' ),
 				[ 'status' => $code ]
 			);
 		}

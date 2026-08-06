@@ -78,10 +78,10 @@ class Controller {
 						'required'          => true,
 						'type'              => 'string',
 						'format'            => 'uri',
-						// esc_url_raw() turns trailing whitespace into %20, so trim before it
-						// runs and validate the same value below.
+						// esc_url_raw() turns trailing whitespace into %20, so normalize before
+						// it runs and validate the same value below.
 						'sanitize_callback' => function ( $value ) {
-							return esc_url_raw( trim( (string) $value ) );
+							return esc_url_raw( self::normalize_publication_url( $value ) );
 						},
 						// Core does not validate the `uri` format, and esc_url_raw() answers
 						// garbage with a mangled URL rather than an error, which would then be
@@ -91,9 +91,9 @@ class Controller {
 							if ( is_wp_error( $valid ) ) {
 								return $valid;
 							}
-							$url = trim( (string) $value );
+							$url = self::normalize_publication_url( $value );
 							return $url === esc_url_raw( $url )
-								&& in_array( strtolower( (string) wp_parse_url( $url, PHP_URL_SCHEME ) ), [ 'http', 'https' ], true )
+								&& in_array( (string) wp_parse_url( $url, PHP_URL_SCHEME ), [ 'http', 'https' ], true )
 								&& ! empty( wp_parse_url( $url, PHP_URL_HOST ) );
 						},
 					],
@@ -415,6 +415,15 @@ class Controller {
 		$settings = Nextdoor::get_settings();
 		$api      = API::instance();
 
+		// Check if the access token is valid.
+		$token_valid = Auth::validate_token();
+		if ( ! $token_valid ) {
+			return new \WP_Error(
+				'nextdoor_token_invalid',
+				__( 'Nextdoor access token is invalid or expired. Please reconnect your account.', 'newspack-plugin' )
+			);
+		}
+
 		$article_data = self::prepare_article_data( $post_id, $settings );
 
 		$article_data['modified_at'] = get_the_modified_date( 'c', $post_id );
@@ -457,6 +466,15 @@ class Controller {
 			return new \WP_Error(
 				'post_not_shared',
 				__( 'Post has not been shared to Nextdoor.', 'newspack-plugin' )
+			);
+		}
+
+		// Check if the access token is valid.
+		$token_valid = Auth::validate_token();
+		if ( ! $token_valid ) {
+			return new \WP_Error(
+				'nextdoor_token_invalid',
+				__( 'Nextdoor access token is invalid or expired. Please reconnect your account.', 'newspack-plugin' )
 			);
 		}
 
@@ -540,6 +558,26 @@ class Controller {
 		];
 
 		return rest_ensure_response( $response );
+	}
+
+	/**
+	 * Normalize a publication URL before it is validated or stored.
+	 *
+	 * Schemes are case-insensitive per RFC 3986, so a mixed-case one is legal and must
+	 * not be turned away by the canonical-form check the validator applies.
+	 *
+	 * @param mixed $value Raw parameter value.
+	 * @return string
+	 */
+	private static function normalize_publication_url( $value ) {
+		$url    = trim( (string) $value );
+		$scheme = wp_parse_url( $url, PHP_URL_SCHEME );
+
+		if ( is_string( $scheme ) && '' !== $scheme ) {
+			$url = strtolower( $scheme ) . substr( $url, strlen( $scheme ) );
+		}
+
+		return $url;
 	}
 
 	/**
