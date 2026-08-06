@@ -398,6 +398,71 @@ class Newspack_Test_Frontend_Registration_Endpoint extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A logged-in caller must still present a valid integration key.
+	 *
+	 * The logged-in branch used to run before the key check, so any visitor with
+	 * a session could reach integration hooks unauthenticated.
+	 */
+	public function test_register_while_logged_in_requires_valid_key() {
+		$admin_id = self::factory()->user->create(
+			[
+				'role'       => 'administrator',
+				'user_email' => 'admin-key@test.com',
+			]
+		);
+		wp_set_current_user( $admin_id );
+
+		$response = $this->do_register_request(
+			[
+				'npe'             => self::$reader_email,
+				'integration_id'  => self::$integration_id,
+				'integration_key' => 'not-the-key',
+			]
+		);
+
+		$this->assertEquals( 403, $response->get_status() );
+		$data = $response->get_data();
+		$this->assertEquals( 'invalid_integration_key', $data['code'] );
+
+		wp_delete_user( $admin_id );
+	}
+
+	/**
+	 * A logged-in caller is subject to the per-IP rate limit.
+	 */
+	public function test_register_while_logged_in_respects_rate_limit() {
+		$set_limit = function () {
+			return 1;
+		};
+		add_filter( 'newspack_frontend_registration_rate_limit', $set_limit );
+
+		$admin_id = self::factory()->user->create(
+			[
+				'role'       => 'administrator',
+				'user_email' => 'admin-rate@test.com',
+			]
+		);
+		wp_set_current_user( $admin_id );
+
+		$body = [
+			'npe'             => self::$reader_email,
+			'integration_id'  => self::$integration_id,
+			'integration_key' => self::generate_key( self::$integration_id ),
+		];
+
+		$first = $this->do_register_request( $body );
+		$this->assertEquals( 200, $first->get_status() );
+
+		$second = $this->do_register_request( $body );
+		$this->assertEquals( 429, $second->get_status() );
+		$data = $second->get_data();
+		$this->assertEquals( 'rate_limit_exceeded', $data['code'] );
+
+		remove_filter( 'newspack_frontend_registration_rate_limit', $set_limit );
+		wp_delete_user( $admin_id );
+	}
+
+	/**
 	 * Test registration with profile fields.
 	 */
 	public function test_register_with_profile_fields() {

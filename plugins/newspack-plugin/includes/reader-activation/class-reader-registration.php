@@ -346,14 +346,20 @@ final class Reader_Registration {
 	 * REST API handler for frontend integration reader registration.
 	 *
 	 * Validation sequence:
-	 * 1. Already logged in — return current reader data
+	 * 1. Integration ID is registered
 	 * 2. Reader Activation is enabled
-	 * 3. Integration ID is registered
-	 * 4. Integration key matches HMAC
-	 * 5. Honeypot field is empty
-	 * 6. Per-IP rate limit
-	 * 7. reCAPTCHA (when configured)
+	 * 3. Honeypot field is empty
+	 * 4. Per-IP rate limit
+	 * 5. Integration key matches HMAC
+	 * 6. reCAPTCHA (when configured)
+	 * 7. Already logged in — return current reader data
 	 * 8. Email is valid
+	 *
+	 * The rate limit sits ahead of the key check because
+	 * Integration::validate_registration_request() is an extension point that
+	 * may make outbound API calls, so an unauthenticated flood must be bounded
+	 * before it reaches one. The logged-in branch sits behind every gate so a
+	 * session cannot be used to skip them.
 	 *
 	 * @param \WP_REST_Request $request Request object.
 	 * @return \WP_REST_Response|\WP_Error
@@ -374,7 +380,75 @@ final class Reader_Registration {
 			);
 		}
 
-		// Step 2: If caller is already logged in, return current reader data.
+		// Step 2: Check RAS is enabled.
+		if ( ! Reader_Activation::is_enabled() ) {
+			return new \WP_Error(
+				'reader_activation_disabled',
+				__( 'Reader Activation is not enabled.', 'newspack-plugin' ),
+				[ 'status' => 403 ]
+			);
+		}
+
+		// Step 3: Honeypot — the `email` field must be empty. Real email is in `npe`.
+		$honeypot = $request->get_param( 'email' );
+		if ( ! empty( $honeypot ) ) {
+			// Return fake success to avoid revealing the honeypot to bots.
+			// @todo Consider returning the npe value instead of the honeypot value to make
+			// the fake response indistinguishable from a real one.
+			return new \WP_REST_Response(
+				[
+					'success' => true,
+					'status'  => 'created',
+					'email'   => $honeypot,
+				],
+				200
+			);
+		}
+
+		// Step 4: Per-IP rate limit. Ahead of both the integration key check and
+		// reCAPTCHA so neither external call can be driven by a rate-limited IP.
+		$rate_check = self::check_registration_rate_limit();
+		if ( \is_wp_error( $rate_check ) ) {
+			return $rate_check;
+		}
+
+		// Step 5: Validate integration key.
+		$integration_key = $request->get_param( 'integration_key' );
+		if ( $integration_instance && $integration_instance->supports_frontend_registration() ) {
+			$key_valid = $integration_instance->validate_registration_request( $integration_key, $request );
+		} else {
+			// Fallback for filter-only registrations.
+			$expected_key = self::get_frontend_registration_key( $integration_id );
+			$key_valid    = hash_equals( $expected_key, $integration_key );
+		}
+		if ( ! $key_valid ) {
+			Logger::log( 'Frontend registration rejected: invalid key for integration "' . $integration_id . '"' );
+			return new \WP_Error(
+				'invalid_integration_key',
+				__( 'Invalid integration key.', 'newspack-plugin' ),
+				[ 'status' => 403 ]
+			);
+		}
+
+		// Step 6: reCAPTCHA (when configured).
+		$recaptcha_token = $request->get_param( 'g-recaptcha-response' );
+		$should_verify   = \apply_filters( 'newspack_recaptcha_verify_captcha', Recaptcha::can_use_captcha(), '', 'integration_registration' );
+		if ( $should_verify ) {
+			// Bridge: verify_captcha() reads from $_POST.
+			// @todo Refactor Recaptcha::verify_captcha() to accept an optional $token parameter, eliminating this $_POST mutation.
+			$_POST['g-recaptcha-response'] = $recaptcha_token; // phpcs:ignore WordPress.Security.NonceVerification.Missing
+			$captcha_result                = Recaptcha::verify_captcha();
+			unset( $_POST['g-recaptcha-response'] );
+			if ( \is_wp_error( $captcha_result ) ) {
+				return new \WP_Error(
+					'recaptcha_failed',
+					$captcha_result->get_error_message(),
+					[ 'status' => 403 ]
+				);
+			}
+		}
+
+		// Step 7: If caller is already logged in, return current reader data.
 		// This makes the API idempotent — integrations don't need to check
 		// authentication state before calling register().
 		if ( \is_user_logged_in() ) {
@@ -399,74 +473,6 @@ final class Reader_Registration {
 				],
 				200
 			);
-		}
-
-		// Step 3: Check RAS is enabled.
-		if ( ! Reader_Activation::is_enabled() ) {
-			return new \WP_Error(
-				'reader_activation_disabled',
-				__( 'Reader Activation is not enabled.', 'newspack-plugin' ),
-				[ 'status' => 403 ]
-			);
-		}
-
-		// Step 4: Validate integration key.
-		$integration_key = $request->get_param( 'integration_key' );
-		if ( $integration_instance && $integration_instance->supports_frontend_registration() ) {
-			$key_valid = $integration_instance->validate_registration_request( $integration_key, $request );
-		} else {
-			// Fallback for filter-only registrations.
-			$expected_key = self::get_frontend_registration_key( $integration_id );
-			$key_valid    = hash_equals( $expected_key, $integration_key );
-		}
-		if ( ! $key_valid ) {
-			Logger::log( 'Frontend registration rejected: invalid key for integration "' . $integration_id . '"' );
-			return new \WP_Error(
-				'invalid_integration_key',
-				__( 'Invalid integration key.', 'newspack-plugin' ),
-				[ 'status' => 403 ]
-			);
-		}
-
-		// Step 5: Honeypot — the `email` field must be empty. Real email is in `npe`.
-		$honeypot = $request->get_param( 'email' );
-		if ( ! empty( $honeypot ) ) {
-			// Return fake success to avoid revealing the honeypot to bots.
-			// @todo Consider returning the npe value instead of the honeypot value to make
-			// the fake response indistinguishable from a real one.
-			return new \WP_REST_Response(
-				[
-					'success' => true,
-					'status'  => 'created',
-					'email'   => $honeypot,
-				],
-				200
-			);
-		}
-
-		// Step 6: Per-IP rate limit. Checked before reCAPTCHA to avoid
-		// triggering external verification calls for rate-limited IPs.
-		$rate_check = self::check_registration_rate_limit();
-		if ( \is_wp_error( $rate_check ) ) {
-			return $rate_check;
-		}
-
-		// Step 7: reCAPTCHA (when configured).
-		$recaptcha_token = $request->get_param( 'g-recaptcha-response' );
-		$should_verify   = \apply_filters( 'newspack_recaptcha_verify_captcha', Recaptcha::can_use_captcha(), '', 'integration_registration' );
-		if ( $should_verify ) {
-			// Bridge: verify_captcha() reads from $_POST.
-			// @todo Refactor Recaptcha::verify_captcha() to accept an optional $token parameter, eliminating this $_POST mutation.
-			$_POST['g-recaptcha-response'] = $recaptcha_token; // phpcs:ignore WordPress.Security.NonceVerification.Missing
-			$captcha_result                = Recaptcha::verify_captcha();
-			unset( $_POST['g-recaptcha-response'] );
-			if ( \is_wp_error( $captcha_result ) ) {
-				return new \WP_Error(
-					'recaptcha_failed',
-					$captcha_result->get_error_message(),
-					[ 'status' => 403 ]
-				);
-			}
 		}
 
 		// Step 8: Validate email.
