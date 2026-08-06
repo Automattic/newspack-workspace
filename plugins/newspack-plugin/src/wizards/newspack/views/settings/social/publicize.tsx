@@ -5,7 +5,7 @@
 /**
  * WordPress dependencies
  */
-import { __, sprintf } from '@wordpress/i18n';
+import { __ } from '@wordpress/i18n';
 import { useEffect, useState } from '@wordpress/element';
 
 /**
@@ -17,13 +17,10 @@ import { useErrorAnnouncement } from './context';
 
 const JETPACK_EDIT_LINK = 'admin.php?page=jetpack#/sharing';
 
-const ATTRIBUTION = __( 'Powered by Jetpack.', 'newspack-plugin' );
-const DESCRIPTION = __(
+const CARD_DESCRIPTION = __(
 	"Publicize makes it easy to share your site's posts on several social media networks automatically when you publish a new post.",
 	'newspack-plugin'
 );
-/* translators: 1: attribution sentence, e.g. "Powered by Jetpack." 2: sentence describing what the feature does. */
-const CARD_DESCRIPTION = sprintf( __( '%1$s %2$s', 'newspack-plugin' ), ATTRIBUTION, DESCRIPTION );
 
 const Publicize = () => {
 	const { wizardApiFetch, isFetching, errorMessage, resetError } = useWizardApiFetch( '/newspack/wizards/plugins/jetpack' );
@@ -117,7 +114,7 @@ const Publicize = () => {
 
 	return (
 		<CardForm
-			title={ __( 'Publicize', 'newspack-plugin' ) }
+			title={ __( 'Jetpack Publicize', 'newspack-plugin' ) }
 			description={ CARD_DESCRIPTION }
 			badge={ badge }
 			actions={ actions }
