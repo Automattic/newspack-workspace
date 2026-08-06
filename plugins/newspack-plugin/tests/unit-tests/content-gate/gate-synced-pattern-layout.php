@@ -168,7 +168,7 @@ class Test_Gate_Synced_Pattern_Layout extends \WP_UnitTestCase {
 			$count++;
 			if ( $count > $threshold ) {
 				throw new \RuntimeException(
-					'newspack_gate_content re-entered more than ' . esc_html( (string) $threshold ) . ' times — unbounded gate render recursion.'
+					sprintf( 'newspack_gate_content re-entered more than %d times — unbounded gate render recursion.', (int) $threshold )
 				);
 			}
 			return $content;
