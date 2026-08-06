@@ -384,6 +384,14 @@ class GoogleSiteKit {
 	/**
 	 * How the current reader got into the post being viewed.
 	 *
+	 * Answers the restriction outcome first and attributes second. Whether the
+	 * reader is blocked is decided by Content_Gate::is_post_restricted(), the
+	 * same filter the rendering path enforces — restriction is AND across every
+	 * gate on the post, so a gate the reader passes says nothing about a second
+	 * gate that still blocks them. Only once the reader is known to be through
+	 * do the passing rules get mapped to a source label; a blocked reader is
+	 * reported as blocked no matter what any individual gate would have granted.
+	 *
 	 * Scoped to gates with custom access active, mirroring how the ESP scopes
 	 * the Content Access fields. Registration-mode gates are excluded: reader
 	 * account state is already reported by `is_reader` and `logged_in`, and
@@ -392,7 +400,9 @@ class GoogleSiteKit {
 	 *
 	 * Every call here is free of side effects. In particular it must never
 	 * reach Metering::is_logged_in_metering_allowed(), which records a metered
-	 * view as it answers.
+	 * view as it answers. The `newspack_is_post_restricted` filter consulted
+	 * here is a different hook from the `newspack_content_gate_restrict_post`
+	 * one Metering registers against, and every callback on it is read-only.
 	 *
 	 * Memoized per post and reader for the life of the request; see
 	 * $access_source_memo.
@@ -409,6 +419,15 @@ class GoogleSiteKit {
 		$memo_key = $post_id . ':' . $user_id;
 		if ( isset( self::$access_source_memo[ $memo_key ] ) ) {
 			return self::$access_source_memo[ $memo_key ];
+		}
+
+		// A post the publisher exempted is never restricted, whatever its gates
+		// say, so there is no gating to report and no point evaluating rules.
+		// Checked here rather than left to is_post_restricted() below because
+		// the gate walk in between would otherwise report an exempt post as
+		// having a gate that applies to the reader.
+		if ( $post_id && get_post_meta( $post_id, Content_Restriction_Control::IS_EXEMPT_META_KEY, true ) ) {
+			return self::memo_access_source( $memo_key, 'no_custom_access_gate' );
 		}
 
 		$gates      = [];
@@ -431,26 +450,31 @@ class GoogleSiteKit {
 			return $unreadable ? '' : self::memo_access_source( $memo_key, 'no_custom_access_gate' );
 		}
 
-		$labels      = [];
-		$restricting = false;
-		$meters      = false;
+		// The single source of truth for "did this reader get in", and the same
+		// one the rendering path enforces: AND across every gate on the post,
+		// plus the verification walls and exemptions this class does not model.
+		// A blocked reader is reported as blocked; no passing gate outranks it.
+		if ( Content_Gate::is_post_restricted( $post_id ) ) {
+			foreach ( $gates as $gate ) {
+				if ( ! empty( $gate['id'] ) && Metering::offers_metering( $gate['id'] ) ) {
+					return self::memo_access_source( $memo_key, 'metering_eligible' );
+				}
+			}
+			return self::memo_access_source( $memo_key, 'gated' );
+		}
+
+		$labels    = [];
+		$has_rules = false;
 
 		foreach ( $gates as $gate ) {
 			$result = User_Gate_Access::evaluate_gate_for_user( $gate, $user_id );
 
 			// A gate whose custom access is on but whose rule set is empty
-			// restricts nobody, so it is not evidence of gating. Note it is
-			// also not evidence of *not* being gated: a second gate on the same
-			// post can still restrict, and Content_Restriction_Control stops at
-			// the first restricting one.
+			// restricts nobody, so it is not evidence of a gate having applied.
 			if ( empty( $result['groups'] ) ) {
 				continue;
 			}
-			$restricting = true;
-
-			if ( ! empty( $gate['id'] ) && Metering::offers_metering( $gate['id'] ) ) {
-				$meters = true;
-			}
+			$has_rules = true;
 
 			if ( empty( $result['can_bypass'] ) ) {
 				continue;
@@ -476,15 +500,18 @@ class GoogleSiteKit {
 		if ( '' !== $primary ) {
 			return self::memo_access_source( $memo_key, $primary );
 		}
-		if ( $meters ) {
-			return self::memo_access_source( $memo_key, 'metering_eligible' );
+		if ( $has_rules ) {
+			// The reader is through, but nothing here can say how: a rule slug
+			// registered outside this vocabulary (Promoted_Fields turns every
+			// access-rule ESP field into one), or a `newspack_is_post_restricted`
+			// consumer that granted access without a rule passing at all. Omit
+			// the parameter rather than name a source we did not observe; GA4's
+			// (not set) is the honest answer. Not memoized, matching the
+			// unreadable-gate case above.
+			return '';
 		}
-		// Any gate with a non-empty rule set that the reader did not pass is
-		// restricting them, even if another gate on the post does not.
-		if ( $restricting ) {
-			return self::memo_access_source( $memo_key, 'gated' );
-		}
-		return self::memo_access_source( $memo_key, 'no_custom_access_gate' );
+		// Every gate's rule set was empty, so no gate ever applied to anybody.
+		return $unreadable ? '' : self::memo_access_source( $memo_key, 'no_custom_access_gate' );
 	}
 
 	/**
@@ -504,9 +531,15 @@ class GoogleSiteKit {
 	 *
 	 * Used by tests and long-running CLI processes, where one PHP process can
 	 * outlive the reader and post state the memo was built for.
+	 *
+	 * Also clears Access_Attribution's memo of the reader's owned
+	 * subscriptions, which this resolver populates on its way to a product
+	 * name. Clearing only this memo would re-evaluate the gates against a
+	 * previous reader's subscriptions and attribute the wrong product.
 	 */
 	public static function reset_access_source_memo() {
 		self::$access_source_memo = [];
+		Access_Attribution::reset_memo();
 	}
 
 	/**

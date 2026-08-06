@@ -16,6 +16,14 @@ use Newspack\GoogleSiteKit;
 class Newspack_Test_GoogleSiteKit_Access_Source extends WP_UnitTestCase {
 
 	/**
+	 * Slug of the test-only access rule standing in for a rule registered
+	 * outside this vocabulary (see Promoted_Fields::register_access_rules()).
+	 *
+	 * @var string
+	 */
+	const UNMAPPED_RULE_SLUG = 'newspack_test_unmapped_source';
+
+	/**
 	 * Gate post ID created by the most recent create_gated_post() call.
 	 *
 	 * @var int
@@ -386,6 +394,13 @@ class Newspack_Test_GoogleSiteKit_Access_Source extends WP_UnitTestCase {
 	 * changes the answer without being cached anywhere else: the gate list is
 	 * memoized by Content_Restriction_Control::get_post_gates(), so mutating
 	 * the gates would prove nothing about this memo.
+	 *
+	 * The reader starts verified and is then un-verified, rather than the other
+	 * way round. Content_Restriction_Control caches the gate that restricted a
+	 * post+reader pair in $post_gate_id_map and short-circuits to "restricted"
+	 * on every later call, with no public reset — so a reader who starts blocked
+	 * stays blocked for the rest of the process regardless of this memo. Running
+	 * the probe from unrestricted to restricted leaves that cache untouched.
 	 */
 	public function test_resolution_is_memoized_per_post_and_reader() {
 		$post_id = $this->create_gated_post(
@@ -405,16 +420,17 @@ class Newspack_Test_GoogleSiteKit_Access_Source extends WP_UnitTestCase {
 		);
 		$user_id = $this->factory->user->create( [ 'user_email' => 'reader@example.org' ] );
 		update_user_meta( $user_id, Newspack\Reader_Activation::READER, true );
+		Newspack\Reader_Activation::set_reader_verified( $user_id );
 		wp_set_current_user( $user_id );
 		$this->go_to( get_permalink( $post_id ) );
 
-		// Unverified: the email_domain rule refuses to grant access.
-		$this->assertSame( 'gated', GoogleSiteKit::get_request_access_source() );
+		// Verified: the email_domain rule grants access and names the source.
+		$this->assertSame( 'domain', GoogleSiteKit::get_request_access_source() );
 
-		Newspack\Reader_Activation::set_reader_verified( $user_id );
+		delete_user_meta( $user_id, Newspack\Reader_Activation::EMAIL_VERIFIED );
 
 		$this->assertSame(
-			'gated',
+			'domain',
 			GoogleSiteKit::get_request_access_source(),
 			'The second call in the same request must come from the memo, not a re-evaluation.'
 		);
@@ -422,7 +438,7 @@ class Newspack_Test_GoogleSiteKit_Access_Source extends WP_UnitTestCase {
 		GoogleSiteKit::reset_access_source_memo();
 
 		$this->assertSame(
-			'domain',
+			'gated',
 			GoogleSiteKit::get_request_access_source(),
 			'After the memo is cleared the reader is re-evaluated, proving the stale answer above was the memo.'
 		);
@@ -474,6 +490,190 @@ class Newspack_Test_GoogleSiteKit_Access_Source extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A gate the reader passes cannot speak for a post another gate still
+	 * blocks. Restriction is AND across every gate on the post — the reader
+	 * sees the gate overlay — so attributing their access to the gate they
+	 * happened to pass reports the opposite of what they experienced.
+	 */
+	public function test_passing_gate_does_not_mask_a_blocking_gate() {
+		$post_id = $this->create_gated_post(
+			[
+				'custom_access' => [
+					'active'       => true,
+					'access_rules' => [
+						[
+							[
+								'slug'  => 'email_domain',
+								'value' => 'example.org',
+							],
+						],
+					],
+				],
+			]
+		);
+		$this->attach_gate(
+			$post_id,
+			[
+				'custom_access' => [
+					'active'       => true,
+					'access_rules' => [
+						[
+							[
+								'slug'  => 'email_domain',
+								'value' => 'nobody.example',
+							],
+						],
+					],
+				],
+			]
+		);
+		$user_id = $this->factory->user->create( [ 'user_email' => 'reader@example.org' ] );
+		Newspack\Reader_Activation::set_reader_verified( $user_id );
+		wp_set_current_user( $user_id );
+		$this->go_to( get_permalink( $post_id ) );
+
+		$this->assertSame( 'gated', GoogleSiteKit::get_request_access_source() );
+	}
+
+	/**
+	 * The metering half of the case above: a blocked reader on a post whose
+	 * gates meter is metering_eligible, not the label of the gate they passed.
+	 * Blocked is blocked; only the flavour of the block changes.
+	 */
+	public function test_blocked_reader_on_a_metering_post_is_metering_eligible_not_attributed() {
+		$post_id = $this->create_gated_post(
+			[
+				'custom_access' => [
+					'active'       => true,
+					'access_rules' => [
+						[
+							[
+								'slug'  => 'email_domain',
+								'value' => 'example.org',
+							],
+						],
+					],
+				],
+			]
+		);
+		$metering_gate_id = $this->attach_gate(
+			$post_id,
+			[
+				'custom_access' => [
+					'active'       => true,
+					'access_rules' => [
+						[
+							[
+								'slug'  => 'email_domain',
+								'value' => 'nobody.example',
+							],
+						],
+					],
+					'metering'     => [
+						'enabled' => true,
+						'count'   => 3,
+						'period'  => 'month',
+					],
+				],
+			]
+		);
+		$user_id = $this->factory->user->create( [ 'user_email' => 'reader@example.org' ] );
+		Newspack\Reader_Activation::set_reader_verified( $user_id );
+		wp_set_current_user( $user_id );
+		$this->assertTrue(
+			Newspack\Metering::offers_metering( $metering_gate_id, true ),
+			'The blocking gate must meter this reader, or the assertion below proves nothing.'
+		);
+		$this->go_to( get_permalink( $post_id ) );
+
+		$this->assertSame( 'metering_eligible', GoogleSiteKit::get_request_access_source() );
+	}
+
+	/**
+	 * A post the publisher marked exempt is not restricted no matter what its
+	 * gates say, so there is no gating to report on it.
+	 */
+	public function test_exempt_post_reports_no_custom_access_gate() {
+		$post_id = $this->create_gated_post(
+			[
+				'custom_access' => [
+					'active'       => true,
+					'access_rules' => [
+						[
+							[
+								'slug'  => 'email_domain',
+								'value' => 'nobody.example',
+							],
+						],
+					],
+				],
+			]
+		);
+		update_post_meta( $post_id, Newspack\Content_Restriction_Control::IS_EXEMPT_META_KEY, true );
+		$this->go_to( get_permalink( $post_id ) );
+
+		$this->assertSame( 'no_custom_access_gate', GoogleSiteKit::get_request_access_source() );
+	}
+
+	/**
+	 * Rules registered by other code — Promoted_Fields turns every access-rule
+	 * ESP field into one — carry slugs this vocabulary has no mapping for. A
+	 * reader admitted by one of those is not gated, and naming their source
+	 * would be a guess, so the parameter is omitted and GA4 reports (not set).
+	 */
+	public function test_unmapped_rule_slug_omits_the_parameter() {
+		$user_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$this->register_unmapped_rule();
+
+		$post_id = $this->create_gated_post(
+			[
+				'custom_access' => [
+					'active'       => true,
+					'access_rules' => [
+						[
+							[
+								'slug'  => self::UNMAPPED_RULE_SLUG,
+								'value' => $user_id,
+							],
+						],
+					],
+				],
+			]
+		);
+		wp_set_current_user( $user_id );
+		$this->go_to( get_permalink( $post_id ) );
+
+		$this->assertSame( '', GoogleSiteKit::get_request_access_source() );
+		$this->assertArrayNotHasKey(
+			'access_source',
+			GoogleSiteKit::get_custom_event_parameters(),
+			'An omitted source must not reach GA4 as an empty string.'
+		);
+	}
+
+	/**
+	 * Register an access rule whose slug Access_Attribution has no label for.
+	 *
+	 * Access_Rules::$rules is static with no unregister counterpart, so
+	 * registration is guarded and the slug is namespaced to this test file.
+	 * The rule admits exactly the user named in its value.
+	 */
+	private function register_unmapped_rule() {
+		if ( isset( Newspack\Access_Rules::get_registered_rules()[ self::UNMAPPED_RULE_SLUG ] ) ) {
+			return;
+		}
+		Newspack\Access_Rules::register_rule(
+			[
+				'id'       => self::UNMAPPED_RULE_SLUG,
+				'name'     => 'Unmapped test source',
+				'callback' => function ( $user_id, $value ) {
+					return (int) $user_id === (int) $value;
+				},
+			]
+		);
+	}
+
+	/**
 	 * Build a post with a published gate bound to it.
 	 *
 	 * Binding uses a `specific_posts` content rule, which
@@ -506,7 +706,21 @@ class Newspack_Test_GoogleSiteKit_Access_Source extends WP_UnitTestCase {
 				'post_title'  => 'Access source test gate',
 			]
 		);
+		$layout_id = $this->factory->post->create(
+			[
+				'post_type'   => Newspack\Content_Gate::GATE_LAYOUT_CPT,
+				'post_status' => 'publish',
+				'post_title'  => 'Access source test layout',
+			]
+		);
 		foreach ( $gate_meta as $meta_key => $meta_value ) {
+			// Content_Restriction_Control only restricts once it has a layout to
+			// render, so a gate left on the stored default of 0 restricts nobody
+			// however its rules evaluate. Every gate here gets one, or the
+			// fixtures would describe gates that cannot gate.
+			if ( in_array( $meta_key, [ 'custom_access', 'registration' ], true ) && empty( $meta_value['gate_layout_id'] ) ) {
+				$meta_value['gate_layout_id'] = $layout_id;
+			}
 			update_post_meta( $gate_id, $meta_key, $meta_value );
 		}
 		Newspack\Content_Rules::update_gate_content_rules(
