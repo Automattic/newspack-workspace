@@ -9,10 +9,9 @@
 /**
  * WordPress dependencies
  */
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 import { useState, useEffect } from '@wordpress/element';
 import {
-	TextControl,
 	SelectControl,
 	ToggleControl,
 	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
@@ -22,6 +21,7 @@ import {
  * Internal dependencies
  */
 import { AutocompleteTokenField } from '../../../../../packages/components/src';
+import DateTimeField from './datetime-field';
 import { tsToLocalInput, localInputToTs } from './datetime';
 import { isConditionVisible, type PricingPath } from './recipes';
 
@@ -87,35 +87,21 @@ function DatetimeCondition( {
 		} else if ( 'publish' === m ) {
 			onChange( resolvePublish() );
 		} else {
-			// Custom must always carry a date: a null gate is stored as no gate at all,
-			// which the engine reads as "everyone qualifies". On a fresh rule, or after a
-			// detour through Anytime, neither the remembered nor the stored value is set.
+			// Never null: the engine reads a missing gate as "applies to everyone".
 			const inForce = customTs ?? value ?? resolvePublish();
 			setCustomTs( inForce );
 			onChange( inForce );
 		}
 	};
 
-	// A datetime-local reads as empty until every segment is filled, so mid-edit it
-	// reports null. Hold the last good date rather than storing the permissive gate.
+	// Clearing stores null, so the selector has to follow it to Anytime.
 	const changeCustom = ( s: string ) => {
 		const ts = localInputToTs( s );
 		setCustomTs( ts );
-		if ( null !== ts ) {
-			onChange( ts );
+		if ( null === ts ) {
+			setMode( 'none' );
 		}
-	};
-
-	// A cleared field is only final once focus leaves; put the stored date back so the
-	// control never shows a blank Custom over a date that is still saved. Blur covers
-	// alt-tabbing away too, which costs a keystroke to retype but is the only reading
-	// under which the field and the value it saves cannot drift apart.
-	const commitCustom = () => {
-		if ( null === customTs ) {
-			const restored = value ?? resolvePublish();
-			setCustomTs( restored );
-			onChange( restored );
-		}
+		onChange( ts );
 	};
 
 	return (
@@ -133,14 +119,17 @@ function DatetimeCondition( {
 				__next40pxDefaultSize
 			/>
 			{ 'custom' === mode && (
-				<TextControl
-					label={ matcher.label }
+				<DateTimeField
+					id={ `newspack-pricing-rule-condition-${ matcher.id }` }
+					label={ sprintf(
+						/* translators: %s: the condition's label, e.g. "Subscriptions started on/after". */
+						__( '%s: custom date', 'newspack-plugin' ),
+						matcher.label
+					) }
 					hideLabelFromVision
-					type="datetime-local"
 					value={ tsToLocalInput( customTs ) }
+					placeholder={ __( 'Select a date', 'newspack-plugin' ) }
 					onChange={ changeCustom }
-					onBlur={ commitCustom }
-					__next40pxDefaultSize
 				/>
 			) }
 		</VStack>
@@ -179,7 +168,7 @@ interface ConditionsProps {
 	value: ConditionsMap;
 	publishedAt: number | null;
 	isNew: boolean;
-	onChange: ( next: ConditionsMap ) => void;
+	onChange: ( next: ( prev: ConditionsMap ) => ConditionsMap ) => void;
 	onDateModeChange?: ( id: string, mode: DateMode ) => void;
 	path: string;
 }
@@ -189,7 +178,8 @@ export default function Conditions( { vocab, value, publishedAt, isNew, onChange
 		return null;
 	}
 
-	const setOne = ( id: string, v: boolean | number | number[] | null ) => onChange( { ...value, [ id ]: v } );
+	// Functional, so two matchers writing in the same flush cannot clobber each other.
+	const setOne = ( id: string, v: boolean | number | number[] | null ) => onChange( prev => ( { ...prev, [ id ]: v } ) );
 
 	// Under a named path the recipe owns the lifecycle matcher (hidden); show only
 	// the editable segmentation conditions. Custom shows the full set.
@@ -203,7 +193,7 @@ export default function Conditions( { vocab, value, publishedAt, isNew, onChange
 	const ordered = [ ...visible ].sort( ( a, b ) => ( 'boolean' === a.field_type ? 1 : 0 ) - ( 'boolean' === b.field_type ? 1 : 0 ) );
 
 	return (
-		<VStack spacing={ 4 }>
+		<VStack spacing={ 6 }>
 			{ ordered.map( matcher => {
 				if ( 'datetime' === matcher.field_type ) {
 					const ts = typeof value[ matcher.id ] === 'number' ? ( value[ matcher.id ] as number ) : null;

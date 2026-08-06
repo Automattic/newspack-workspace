@@ -95,6 +95,12 @@
 		@include wp-mixins.heading-x-large();
 	}
 
+	&#{&}--small {
+		.newspack-section-header__title {
+			@include wp-mixins.heading-large();
+		}
+	}
+
 	&__title-container {
 		align-items: center;
 		display: flex;
@@ -165,6 +171,11 @@
 			svg {
 				fill: var(--wp-admin-theme-color);
 			}
+		}
+		&.newspack-section-header--small .newspack-section-header__icon {
+			height: wp-vars.$grid-unit-50;
+			margin-bottom: wp-vars.$grid-unit-05 !important;
+			width: wp-vars.$grid-unit-50;
 		}
 	}
 }

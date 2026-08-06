@@ -40,6 +40,17 @@ describe( 'CoreCard', () => {
 		expect( getHeader( container ).tagName ).not.toBe( 'BUTTON' );
 	} );
 
+	it( 'gives the body large padding when size is large', () => {
+		const { container } = render( <CoreCard size="large" /> );
+		expect( container.querySelector( '.newspack-card--core__is-large' ) ).not.toBeNull();
+	} );
+
+	it( 'lets isSmall win over a large size', () => {
+		const { container } = render( <CoreCard size="large" isSmall /> );
+		expect( container.querySelector( '.newspack-card--core__is-large' ) ).toBeNull();
+		expect( container.querySelector( '.newspack-card--core__is-small' ) ).not.toBeNull();
+	} );
+
 	it( 'marks the card vertical only when isVertical is passed', () => {
 		const { container: plain } = render( <CoreCard header="Settings" /> );
 		expect( plain.querySelector( '.newspack-card--core__is-vertical' ) ).toBeNull();

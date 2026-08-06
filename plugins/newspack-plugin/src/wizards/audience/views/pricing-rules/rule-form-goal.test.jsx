@@ -143,6 +143,18 @@ async function renderSavedRule( rule ) {
 const field = label => screen.getByLabelText( label );
 const goal = label => screen.getByRole( 'radio', { name: new RegExp( label ) } );
 const appliesTo = () => [ ...document.querySelectorAll( 'select' ) ].find( s => [ ...s.options ].some( o => o.value === 'all_subscriptions' ) );
+const startsToggle = () => screen.getByRole( 'button', { name: /^Starts:/ } );
+
+/** Choose the first day the schedule popover offers, and return what the toggle then reads. */
+function pickStartDate() {
+	const before = startsToggle().textContent;
+	fireEvent.click( startsToggle() );
+	fireEvent.click( screen.getAllByRole( 'button', { name: /^[A-Z][a-z]+ \d{1,2}, \d{4}$/ } )[ 0 ] );
+	fireEvent.click( startsToggle() );
+	const picked = startsToggle().textContent;
+	expect( picked ).not.toBe( before );
+	return picked;
+}
 
 /** Pick a goal. Confirms the warning when one is raised. */
 async function changeGoalTo( label ) {
@@ -178,14 +190,14 @@ describe( 'choosing the goal from the form', () => {
 		await renderForm( 'custom' );
 		fireEvent.change( field( 'Name' ), { target: { value: 'Loyalty deal' } } );
 		fireEvent.change( field( 'Value' ), { target: { value: '12.5' } } );
-		fireEvent.change( field( 'Starts' ), { target: { value: '2026-09-01T10:00' } } );
+		const starts = pickStartDate();
 		expect( appliesTo().value ).toBe( 'all_products' );
 
 		await changeGoalTo( 'Retention' );
 
 		expect( field( 'Name' ) ).toHaveValue( 'Loyalty deal' );
 		expect( field( 'Value' ) ).toHaveValue( 12.5 );
-		expect( field( 'Starts' ) ).toHaveValue( '2026-09-01T10:00' );
+		expect( startsToggle().textContent ).toBe( starts );
 		expect( appliesTo().value ).toBe( 'all_subscriptions' );
 	} );
 

@@ -9,6 +9,11 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 
 /**
+ * WordPress dependencies
+ */
+import { getSettings, gmdateI18n } from '@wordpress/date';
+
+/**
  * Internal dependencies
  */
 import Conditions from './conditions';
@@ -19,6 +24,18 @@ jest.mock( '../../../../../packages/components/src', () => ( { AutocompleteToken
 const LABEL = 'Subscriptions started on or after';
 const VOCAB = [ { id: 'cohort_start', label: LABEL, field_type: 'datetime' } ];
 
+const lastValue = ( onChange, prev = {} ) => {
+	const arg = onChange.mock.calls[ onChange.mock.calls.length - 1 ][ 0 ];
+	return 'function' === typeof arg ? arg( prev ) : arg;
+};
+
+// Derived rather than hard-coded, which would depend on the suite's timezone.
+const customToggle = ts => {
+	const { formats } = getSettings();
+	const display = gmdateI18n( `${ formats.date } ${ formats.time }`, `${ tsToLocalInput( ts ) }Z` );
+	return `${ LABEL }: custom date: ${ display }`;
+};
+
 describe( 'the cohort-gate datetime condition', () => {
 	it( 'arms a new rule with the publish-date default', () => {
 		const onChange = jest.fn();
@@ -26,7 +43,7 @@ describe( 'the cohort-gate datetime condition', () => {
 
 		expect( screen.getByLabelText( LABEL ) ).toHaveValue( 'publish' );
 		expect( onChange ).toHaveBeenCalledTimes( 1 );
-		const armed = onChange.mock.calls[ 0 ][ 0 ].cohort_start;
+		const armed = onChange.mock.calls[ 0 ][ 0 ]( {} ).cohort_start;
 		expect( Math.abs( armed - Math.floor( Date.now() / 1000 ) ) ).toBeLessThan( 60 );
 	} );
 
@@ -48,8 +65,8 @@ describe( 'the cohort-gate datetime condition', () => {
 
 		fireEvent.change( mode, { target: { value: 'custom' } } );
 
-		expect( screen.getByDisplayValue( tsToLocalInput( publishedAt ) ) ).toBeInTheDocument();
-		expect( onChange ).toHaveBeenLastCalledWith( { cohort_start: publishedAt } );
+		expect( screen.getByRole( 'button', { name: customToggle( publishedAt ) } ) ).toBeInTheDocument();
+		expect( lastValue( onChange ) ).toEqual( { cohort_start: publishedAt } );
 	} );
 
 	it( 'restores the date in force after a detour through Anytime', () => {
@@ -59,13 +76,13 @@ describe( 'the cohort-gate datetime condition', () => {
 		const { rerender } = render( <Conditions { ...props } value={ { cohort_start: publishedAt } } /> );
 
 		fireEvent.change( screen.getByLabelText( LABEL ), { target: { value: 'none' } } );
-		expect( onChange ).toHaveBeenLastCalledWith( { cohort_start: null } );
+		expect( lastValue( onChange ) ).toEqual( { cohort_start: null } );
 		rerender( <Conditions { ...props } value={ { cohort_start: null } } /> );
 
 		fireEvent.change( screen.getByLabelText( LABEL ), { target: { value: 'custom' } } );
 
-		expect( onChange ).toHaveBeenLastCalledWith( { cohort_start: publishedAt } );
-		expect( screen.getByDisplayValue( tsToLocalInput( publishedAt ) ) ).toBeInTheDocument();
+		expect( lastValue( onChange ) ).toEqual( { cohort_start: publishedAt } );
+		expect( screen.getByRole( 'button', { name: customToggle( publishedAt ) } ) ).toBeInTheDocument();
 	} );
 
 	it( 'carries the armed default into Custom on a new rule', () => {
@@ -74,50 +91,88 @@ describe( 'the cohort-gate datetime condition', () => {
 		const { rerender } = render( <Conditions { ...props } value={ {} } /> );
 
 		// The parent now holds the timestamp the mount effect armed, so feed it back.
-		const armed = onChange.mock.calls[ 0 ][ 0 ].cohort_start;
+		const armed = onChange.mock.calls[ 0 ][ 0 ]( {} ).cohort_start;
 		rerender( <Conditions { ...props } value={ { cohort_start: armed } } /> );
 
 		fireEvent.change( screen.getByLabelText( LABEL ), { target: { value: 'custom' } } );
 
-		expect( onChange ).toHaveBeenLastCalledWith( { cohort_start: armed } );
-		expect( screen.getByDisplayValue( tsToLocalInput( armed ) ) ).toBeInTheDocument();
+		expect( lastValue( onChange ) ).toEqual( { cohort_start: armed } );
+		expect( screen.getByRole( 'button', { name: customToggle( armed ) } ) ).toBeInTheDocument();
 	} );
 
-	// A null gate is stored as no gate at all, which the engine reads as "everyone
-	// qualifies" — so Custom must never be selectable without a date behind it.
+	it( 'drops the selector to Anytime when the date is cleared', () => {
+		const publishedAt = 1750000000;
+		const onChange = jest.fn();
+		render(
+			<Conditions
+				vocab={ VOCAB }
+				value={ { cohort_start: publishedAt } }
+				publishedAt={ publishedAt }
+				isNew={ false }
+				onChange={ onChange }
+				path="custom"
+			/>
+		);
+
+		fireEvent.change( screen.getByLabelText( LABEL ), { target: { value: 'custom' } } );
+		fireEvent.click( screen.getByRole( 'button', { name: customToggle( publishedAt ) } ) );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Clear' } ) );
+
+		expect( lastValue( onChange ) ).toEqual( { cohort_start: null } );
+		expect( screen.getByLabelText( LABEL ) ).toHaveValue( 'none' );
+		expect( screen.queryByRole( 'button', { name: /custom date:/ } ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'seeds a date when Custom is chosen on a rule with no gate', () => {
+		const onChange = jest.fn();
+		render(
+			<Conditions vocab={ VOCAB } value={ { cohort_start: null } } publishedAt={ null } isNew={ false } onChange={ onChange } path="custom" />
+		);
+
+		fireEvent.change( screen.getByLabelText( LABEL ), { target: { value: 'custom' } } );
+
+		const stored = lastValue( onChange ).cohort_start;
+		expect( stored ).not.toBeNull();
+		expect( Math.abs( stored - Math.floor( Date.now() / 1000 ) ) ).toBeLessThan( 60 );
+		expect( screen.getByRole( 'button', { name: /: custom date:/ } ) ).toBeInTheDocument();
+	} );
+
+	it( 'sets the custom date through the shared picker', () => {
+		const publishedAt = 1750000000;
+		const onChange = jest.fn();
+		render(
+			<Conditions
+				vocab={ VOCAB }
+				value={ { cohort_start: publishedAt } }
+				publishedAt={ publishedAt }
+				isNew={ false }
+				onChange={ onChange }
+				path="custom"
+			/>
+		);
+
+		fireEvent.change( screen.getByLabelText( LABEL ), { target: { value: 'custom' } } );
+		fireEvent.click( screen.getByRole( 'button', { name: customToggle( publishedAt ) } ) );
+
+		expect( screen.getByRole( 'button', { name: 'Clear' } ) ).toBeInTheDocument();
+	} );
+
+	// The engine reads an absent gate as "everyone qualifies", so Custom must never be
+	// selectable without a date behind it — including on a new rule that detoured through
+	// Anytime, where neither the remembered nor the stored value survives.
 	it( 'still carries a date into Custom on a new rule that detoured through Anytime', () => {
 		const onChange = jest.fn();
 		const props = { vocab: VOCAB, publishedAt: null, isNew: true, onChange, path: 'custom' };
 		const { rerender } = render( <Conditions { ...props } value={ {} } /> );
 
 		fireEvent.change( screen.getByLabelText( LABEL ), { target: { value: 'none' } } );
-		expect( onChange ).toHaveBeenLastCalledWith( { cohort_start: null } );
+		expect( lastValue( onChange ) ).toEqual( { cohort_start: null } );
 		rerender( <Conditions { ...props } value={ { cohort_start: null } } /> );
 
 		fireEvent.change( screen.getByLabelText( LABEL ), { target: { value: 'custom' } } );
 
-		const stored = onChange.mock.calls[ onChange.mock.calls.length - 1 ][ 0 ].cohort_start;
+		const stored = lastValue( onChange ).cohort_start;
 		expect( stored ).not.toBeNull();
-		expect( screen.getByDisplayValue( tsToLocalInput( stored ) ) ).toBeInTheDocument();
-	} );
-
-	// A datetime-local reads as empty until every segment is filled, so an in-progress
-	// entry must not be mistaken for "no gate".
-	it( 'keeps the stored date while a Custom entry is cleared, and restores it on blur', () => {
-		const publishedAt = 1750000000;
-		const onChange = jest.fn();
-		const props = { vocab: VOCAB, publishedAt, isNew: false, onChange, path: 'custom' };
-		render( <Conditions { ...props } value={ { cohort_start: publishedAt } } /> );
-
-		fireEvent.change( screen.getByLabelText( LABEL ), { target: { value: 'custom' } } );
-		const field = screen.getByDisplayValue( tsToLocalInput( publishedAt ) );
-		fireEvent.change( field, { target: { value: '' } } );
-
-		expect( onChange ).toHaveBeenLastCalledWith( { cohort_start: publishedAt } );
-
-		fireEvent.blur( field );
-
-		expect( onChange ).toHaveBeenLastCalledWith( { cohort_start: publishedAt } );
-		expect( screen.getByDisplayValue( tsToLocalInput( publishedAt ) ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'button', { name: customToggle( stored ) } ) ).toBeInTheDocument();
 	} );
 } );
