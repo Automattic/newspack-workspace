@@ -92,7 +92,14 @@ const NEXTDOOR_STATUS = {
 	token_valid: false,
 };
 
-const NEXTDOOR_CLAIMED = { ...NEXTDOOR_STATUS, is_connected: true, has_credentials: true, has_tokens: true, has_page: true };
+const NEXTDOOR_CLAIMED = {
+	...NEXTDOOR_STATUS,
+	is_connected: true,
+	has_credentials: true,
+	has_tokens: true,
+	has_page: true,
+	token_valid: true,
+};
 
 const NEXTDOOR_SETTINGS = { client_id: '', publication_url: '', allowed_roles: [] };
 
@@ -117,7 +124,7 @@ const NEXTDOOR_STATES = [
 			'Back from Nextdoor with the page still to claim, so the publishing roles are visible but not yet selectable.',
 			'newspack-plugin'
 		),
-		status: { ...NEXTDOOR_STATUS, has_credentials: true, has_tokens: true },
+		status: { ...NEXTDOOR_STATUS, has_credentials: true, has_tokens: true, token_valid: true },
 	},
 	{
 		title: __( 'Fully connected', 'newspack-plugin' ),
@@ -125,14 +132,17 @@ const NEXTDOOR_STATES = [
 			'The everyday view: the publication page and the roles allowed to publish, with the badge reading Enabled.',
 			'newspack-plugin'
 		),
-		status: { ...NEXTDOOR_CLAIMED, token_valid: true },
+		status: NEXTDOOR_CLAIMED,
 		settings: { ...NEXTDOOR_SETTINGS, allowed_roles: [ 'administrator' ] },
 		badge: { level: 'success', text: __( 'Enabled', 'newspack-plugin' ) },
 	},
 	{
 		title: __( 'Sign-in expired', 'newspack-plugin' ),
-		description: __( 'Everything is still set up, but Nextdoor has to be signed into again from Update Connection.', 'newspack-plugin' ),
-		status: NEXTDOOR_CLAIMED,
+		description: __(
+			'Everything is still set up, but the sign-in has lapsed, so the form asks for it again, with the badge reading Reconnect needed. Cancel goes back to the publication page and roles.',
+			'newspack-plugin'
+		),
+		status: { ...NEXTDOOR_CLAIMED, token_valid: false },
 		settings: { ...NEXTDOOR_SETTINGS, allowed_roles: [ 'administrator' ] },
 		badge: { level: 'error', text: __( 'Reconnect needed', 'newspack-plugin' ) },
 	},

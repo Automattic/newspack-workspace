@@ -44,12 +44,17 @@ const STATUS = {
 
 const CLAIMED = { ...STATUS, is_connected: true, has_credentials: true, has_tokens: true, has_page: true, token_valid: true };
 
+const EXPIRED = { ...CLAIMED, token_valid: false };
+
+const STORED_CREDENTIALS = { ...STATUS, has_credentials: true };
+
 const SETTINGS = { client_id: '', publication_url: '', allowed_roles: [] };
 
 const CLAIMED_SETTINGS = { ...SETTINGS, publication_url: 'https://example.com', allowed_roles: [ 'administrator' ] };
 
 const mockUpdateSettings = jest.fn();
 const mockClaimPage = jest.fn();
+const mockStartOAuthFlow = jest.fn();
 
 // A factory rather than a render, so `rerender` can hand the form the fresh
 // `settings` object the parent rebuilds on every apiData change.
@@ -59,7 +64,7 @@ const form = ( { status = {}, settings = {} } = {} ) => (
 		status={ { ...STATUS, ...status } }
 		error={ null }
 		updateSettings={ mockUpdateSettings }
-		startOAuthFlow={ jest.fn() }
+		startOAuthFlow={ mockStartOAuthFlow }
 		claimPage={ mockClaimPage }
 		setError={ jest.fn() }
 	/>
@@ -74,6 +79,7 @@ beforeEach( () => {
 	mockReload.mockReset();
 	mockUpdateSettings.mockReset().mockResolvedValue( undefined );
 	mockClaimPage.mockReset().mockResolvedValue( { success: true } );
+	mockStartOAuthFlow.mockReset().mockResolvedValue( { login_url: 'https://nextdoor.example.com/oauth' } );
 } );
 
 describe( 'NextdoorForm', () => {
@@ -82,7 +88,7 @@ describe( 'NextdoorForm', () => {
 
 		expect( screen.getByRole( 'checkbox', { name: 'Editor' } ) ).toBeDisabled();
 		expect( screen.getByText( /Available once the page is claimed\./ ) ).toBeInTheDocument();
-		expect( screen.getByRole( 'button', { name: 'Claim Page' } ) ).toBeEnabled();
+		expect( screen.getByRole( 'button', { name: 'Claim Page' } ) ).not.toHaveAttribute( 'aria-disabled' );
 	} );
 
 	it( 'keeps Save disabled until the roles or the publication URL change', () => {
@@ -189,5 +195,70 @@ describe( 'NextdoorForm', () => {
 		rerender( form( { status: CLAIMED, settings: { ...CLAIMED_SETTINGS, publication_url: 'https://moved.example.com' } } ) );
 
 		expect( screen.getByLabelText( 'Publication URL' ) ).toHaveValue( 'https://moved.example.com' );
+	} );
+
+	it( 'describes an invalid publication URL without dropping its help text', () => {
+		renderClaimedForm();
+
+		const field = screen.getByLabelText( 'Publication URL' );
+		fireEvent.change( field, { target: { value: '' } } );
+		fireEvent.blur( field );
+
+		const describedBy = field.getAttribute( 'aria-describedby' );
+		expect( describedBy ).toContain( screen.getByText( 'The main URL of your news publication.' ).id );
+		expect( describedBy ).toContain( screen.getByText( 'Enter the URL of your publication.' ).id );
+	} );
+
+	it( 'leaves the client secret out of the payload when the field is untouched', async () => {
+		renderForm( { status: STORED_CREDENTIALS, settings: { client_id: 'stored-id' } } );
+
+		fireEvent.change( screen.getByLabelText( 'Client ID' ), { target: { value: 'new-id' } } );
+		fireEvent.change( screen.getByLabelText( 'Email Address' ), { target: { value: 'editor@example.com' } } );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Connect to Nextdoor' } ) );
+
+		await waitFor( () => expect( mockUpdateSettings ).toHaveBeenCalledWith( { client_id: 'new-id' } ) );
+		// The missing key is what tells the server to keep the secret it holds; an
+		// empty string would blank it.
+		expect( mockUpdateSettings.mock.calls[ 0 ][ 0 ] ).not.toHaveProperty( 'client_secret' );
+		expect( mockStartOAuthFlow ).toHaveBeenCalledWith( 'editor@example.com', 'US' );
+	} );
+
+	it( 'sends the client secret when a new one is typed', async () => {
+		renderForm( { status: STORED_CREDENTIALS, settings: { client_id: 'stored-id' } } );
+
+		fireEvent.change( screen.getByLabelText( 'Client Secret' ), { target: { value: 'fresh-secret' } } );
+		fireEvent.change( screen.getByLabelText( 'Email Address' ), { target: { value: 'editor@example.com' } } );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Connect to Nextdoor' } ) );
+
+		await waitFor( () => expect( mockUpdateSettings ).toHaveBeenCalledWith( { client_id: 'stored-id', client_secret: 'fresh-secret' } ) );
+	} );
+
+	it( 'picks up a client ID that changed on the server', () => {
+		const { rerender } = renderForm( { status: STORED_CREDENTIALS } );
+
+		expect( screen.getByLabelText( 'Client ID' ) ).toHaveValue( '' );
+
+		rerender( form( { status: STORED_CREDENTIALS, settings: { client_id: 'from-server' } } ) );
+
+		expect( screen.getByLabelText( 'Client ID' ) ).toHaveValue( 'from-server' );
+	} );
+
+	it( 'asks for the sign-in again once it has expired, and takes Cancel back', () => {
+		renderForm( { status: EXPIRED, settings: CLAIMED_SETTINGS } );
+
+		expect( screen.getByLabelText( 'Email Address' ) ).toBeInTheDocument();
+		expect( screen.queryByLabelText( 'Publication URL' ) ).not.toBeInTheDocument();
+
+		fireEvent.click( screen.getByRole( 'button', { name: 'Cancel' } ) );
+
+		expect( screen.getByLabelText( 'Publication URL' ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'checkbox', { name: 'Editor' } ) ).toBeInTheDocument();
+	} );
+
+	it( 'offers no way back while the sign-in is all there is', () => {
+		renderForm();
+
+		expect( screen.getByLabelText( 'Email Address' ) ).toBeInTheDocument();
+		expect( screen.queryByRole( 'button', { name: 'Cancel' } ) ).not.toBeInTheDocument();
 	} );
 } );
