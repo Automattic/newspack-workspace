@@ -210,7 +210,10 @@ describe( 'PixelCard', () => {
 		);
 	} );
 
-	it( 'keeps the form open and surfaces the error when an enable fails', async () => {
+	// Characterises `save()`'s `.catch()` contract: a rejected save must not tear
+	// down the form or fire a success notice. Not a guard for the error-display
+	// work — the message and the Cancel label are both findable without it.
+	it( 'swallows a failed save, leaving the draft and the open form intact', async () => {
 		primeFailingSave( { active: false, pixel_id: '' }, 'Could not save.' );
 		renderCard();
 

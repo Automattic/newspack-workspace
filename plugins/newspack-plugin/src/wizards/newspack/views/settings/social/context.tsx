@@ -22,14 +22,19 @@ export const useSocialCards = () => useContext( SocialCardsContext );
  * regions, so a screen reader user would otherwise get no signal at all —
  * unlike the success path, which the snackbar announces.
  *
+ * `nonce` is what makes a repeat announceable: a retry that fails the same way
+ * produces an identical message, and message identity alone would swallow it.
+ * Callers bump it once per failed attempt.
+ *
  * @param message Current error message, or null when there is none.
+ * @param nonce   Bumped by the caller on every failed attempt.
  */
-export const useErrorAnnouncement = ( message: string | null ) => {
+export const useErrorAnnouncement = ( message: string | null, nonce: number = 0 ) => {
 	useEffect( () => {
 		if ( message ) {
 			speak( message, 'assertive' );
 		}
-	}, [ message ] );
+	}, [ message, nonce ] );
 };
 
 export const SocialCardsProvider = ( { children }: { children: React.ReactNode } ) => {

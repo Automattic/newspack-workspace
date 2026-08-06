@@ -77,16 +77,12 @@ export const Settings = ( { settings, status, error, updateSettings, disconnect,
 	}
 
 	return (
-		<VStack spacing={ 4 }>
-			{ error && (
-				<div role="alert">
-					<Notice noticeText={ error } isError />
-				</div>
-			) }
+		<VStack spacing={ 6 }>
+			{ error && <Notice noticeText={ error } isError /> }
 
 			<VStack spacing={ 4 }>
 				<h4 className="nextdoor-settings__subheading">{ __( 'Connection Information', 'newspack-plugin' ) }</h4>
-				<Grid columns={ 2 } gutter={ 16 }>
+				<Grid columns={ 2 } gutter={ 16 } noMargin>
 					<div>
 						<strong>{ __( 'Status:', 'newspack-plugin' ) } </strong>
 						<span className="nextdoor-settings__status-value--success">{ __( 'Connected', 'newspack-plugin' ) }</span>
@@ -104,9 +100,11 @@ export const Settings = ( { settings, status, error, updateSettings, disconnect,
 
 			<VStack spacing={ 4 }>
 				<h4 className="nextdoor-settings__subheading">{ __( 'Settings', 'newspack-plugin' ) }</h4>
-				<p>{ __( 'Select which user roles are allowed to publish articles to Nextdoor.', 'newspack-plugin' ) }</p>
+				<p className="nextdoor-settings__intro">
+					{ __( 'Select which user roles are allowed to publish articles to Nextdoor.', 'newspack-plugin' ) }
+				</p>
 
-				<Grid columns={ 2 } gutter={ 16 }>
+				<Grid columns={ 2 } gutter={ 16 } noMargin>
 					{ availableRoles.map( ( { label, value } ) => (
 						<CheckboxControl
 							key={ value }

@@ -25,6 +25,18 @@ export interface NextdoorData {
 	settings: NextdoorSettings;
 }
 
+/**
+ * The endpoint's write shape: a flat partial of the settings it accepts, plus
+ * the module flag. It is deliberately not a `Partial< NextdoorData >` — the
+ * server takes these fields at the top level and ignores the read-only ones.
+ */
+export interface NextdoorUpdatePayload {
+	module_enabled_nextdoor?: boolean;
+	client_id?: string;
+	client_secret?: string;
+	allowed_roles?: string[];
+}
+
 export interface OAuthResponse {
 	login_url?: string;
 }
@@ -38,7 +50,7 @@ export interface OnboardingProps {
 	settings: NextdoorSettings;
 	status: NextdoorStatus;
 	error: string | null;
-	updateSettings: ( settings: Partial< NextdoorSettings > ) => Promise< NextdoorSettings >;
+	updateSettings: ( payload: NextdoorUpdatePayload ) => Promise< void >;
 	startOAuthFlow: ( email: string, country: string ) => Promise< OAuthResponse >;
 	claimPage: ( publicationUrl: string, test?: boolean ) => Promise< ClaimPageResponse >;
 	setError: ( error: string | null ) => void;
@@ -50,7 +62,7 @@ export interface SettingsProps {
 	settings: NextdoorSettings;
 	status: NextdoorStatus;
 	error: string | null;
-	updateSettings: ( settings: Partial< NextdoorSettings > ) => Promise< NextdoorSettings >;
+	updateSettings: ( payload: NextdoorUpdatePayload ) => Promise< void >;
 	setError: ( error: string | null ) => void;
 	disconnect: () => Promise< void >;
 	renderSecondaryActions?: () => React.ReactNode;

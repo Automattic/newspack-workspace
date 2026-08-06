@@ -25,7 +25,7 @@ import { useErrorAnnouncement, useSocialCards } from './context';
 /**
  * Components
  */
-import { NextdoorData, NextdoorSettings, NextdoorStatus, OAuthResponse, ClaimPageResponse } from './nextdoor/types';
+import { NextdoorData, NextdoorSettings, NextdoorStatus, NextdoorUpdatePayload, OAuthResponse, ClaimPageResponse } from './nextdoor/types';
 import { Onboarding } from './nextdoor/onboarding';
 import { Settings } from './nextdoor/settings';
 
@@ -56,9 +56,25 @@ function Nextdoor() {
 		has_page: false,
 		token_valid: false,
 	} );
+	const [ hasSyncedStatus, setHasSyncedStatus ] = useState( false );
 	const [ error, setError ] = useState< string | null >( null );
+	const [ errorNonce, setErrorNonce ] = useState( 0 );
 
-	const { description, apiData, isFetching, apiFetchToggle, errorMessage, refresh, resetError } = useWizardApiFetchToggle< NextdoorData >( {
+	const bumpErrorNonce = () => setErrorNonce( current => current + 1 );
+
+	// Every error the card shows goes through here, so a retry that fails the
+	// same way still counts as a fresh occurrence for the announcement.
+	const reportError = ( message: string | null ) => {
+		setError( message );
+		if ( message ) {
+			bumpErrorNonce();
+		}
+	};
+
+	const { description, apiData, isFetching, apiFetchToggle, errorMessage, refresh, resetError } = useWizardApiFetchToggle<
+		NextdoorData,
+		NextdoorUpdatePayload
+	>( {
 		path: '/newspack/v1/wizard/newspack-settings/social/nextdoor',
 		apiNamespace: 'newspack-settings/social/nextdoor',
 		data: {
@@ -90,23 +106,31 @@ function Nextdoor() {
 			return;
 		}
 		setStatus( apiData.connection_status );
-		setSettings( current => ( { ...current, allowed_roles: apiData.settings.allowed_roles } ) );
+		setHasSyncedStatus( true );
+		// The secret is the one field left blank: the GET returns it in plaintext
+		// and the onboarding field is a password input the publisher retypes.
+		setSettings( current => ( { ...current, ...apiData.settings, client_secret: '' } ) );
 	}, [ apiData ] );
 
 	// Routed through the toggle hook rather than a raw `apiFetch`, so a save also
 	// updates `apiData` and the store's GET cache — the status grid below reads
 	// the former, and a remount (switching settings tabs) is served the latter.
 	// Failures surface through `errorMessage`, which the card already renders.
-	const updateSettings = async ( newSettings: Partial< NextdoorSettings > ): Promise< NextdoorSettings > => {
+	const updateSettings = async ( payload: NextdoorUpdatePayload ): Promise< void > => {
 		setError( null );
 		resetError();
-		const response: NextdoorData = await apiFetchToggle( newSettings, true );
-		return hasConnectionStatus( response ) ? { ...settings, ...response.settings } : settings;
+		try {
+			await apiFetchToggle( payload, true );
+		} catch ( fetchError ) {
+			bumpErrorNonce();
+			throw fetchError;
+		}
 	};
 
 	const startOAuthFlow = async ( email: string, country: string ): Promise< OAuthResponse > => {
 		try {
 			setError( null );
+			resetError();
 			const response = await apiFetch( {
 				path: '/newspack/v1/nextdoor/oauth/start',
 				method: 'POST',
@@ -118,7 +142,7 @@ function Nextdoor() {
 				fetchError instanceof Object && 'message' in fetchError
 					? ( fetchError as { message: string } ).message
 					: __( 'Failed to start OAuth flow.', 'newspack-plugin' );
-			setError( errorMsg );
+			reportError( errorMsg );
 			throw new Error( errorMsg );
 		}
 	};
@@ -126,6 +150,7 @@ function Nextdoor() {
 	const claimPage = async ( publicationUrl: string, test: boolean = false ): Promise< ClaimPageResponse > => {
 		try {
 			setError( null );
+			resetError();
 			const response = await apiFetch( {
 				path: '/newspack/v1/nextdoor/claim-page',
 				method: 'POST',
@@ -137,7 +162,7 @@ function Nextdoor() {
 				fetchError instanceof Object && 'message' in fetchError
 					? ( fetchError as { message: string } ).message
 					: __( 'Failed to claim page.', 'newspack-plugin' );
-			setError( errorMsg );
+			reportError( errorMsg );
 			throw new Error( errorMsg );
 		}
 	};
@@ -155,7 +180,7 @@ function Nextdoor() {
 				fetchError instanceof Object && 'message' in fetchError
 					? ( fetchError as { message: string } ).message
 					: __( 'Failed to disconnect.', 'newspack-plugin' );
-			setError( errorMsg );
+			reportError( errorMsg );
 			throw new Error( errorMsg );
 		}
 
@@ -170,13 +195,17 @@ function Nextdoor() {
 	};
 
 	const { notify } = useSocialCards();
-	useErrorAnnouncement( errorMessage ?? error );
+	useErrorAnnouncement( errorMessage ?? error, errorNonce );
 	const [ isOpen, setIsOpen ] = useState( false );
 	const [ isEnabling, setIsEnabling ] = useState( false );
 	const [ hasAutoOpened, setHasAutoOpened ] = useState( false );
 
 	const isEnabled = apiData.module_enabled_nextdoor;
-	const isConnected = apiData.is_connected;
+	// `status` is what the body reads and what `disconnect()` clears optimistically,
+	// so the badge follows it — but only once it has been synced: its initial `false`
+	// is indistinguishable from a real "not connected" and would flash the wrong badge
+	// on every load of a connected site.
+	const isConnected = hasSyncedStatus ? status.is_connected : apiData.is_connected;
 
 	// Only the OAuth redirect reopens the card: that user arrives on a fresh page
 	// load mid-setup, so the step they were on would otherwise be invisible. Any
@@ -204,7 +233,11 @@ function Nextdoor() {
 
 	// Only the flag: a full snapshot would write back read-only fields the endpoint
 	// ignores, and put the plaintext client secret on the wire for no reason.
-	const setModuleEnabled = ( value: boolean ) => apiFetchToggle( { module_enabled_nextdoor: value }, true );
+	const setModuleEnabled = ( value: boolean ) =>
+		apiFetchToggle( { module_enabled_nextdoor: value }, true ).catch( fetchError => {
+			bumpErrorNonce();
+			throw fetchError;
+		} );
 
 	// Every user-initiated action starts from a clean error state, so a failure
 	// the user has since retried past stops showing in the header.
@@ -302,18 +335,14 @@ function Nextdoor() {
 			onRequestClose={ dismiss }
 		>
 			<VStack spacing={ 4 }>
-				{ errorMessage && (
-					<div role="alert">
-						<Notice isError noticeText={ errorMessage } />
-					</div>
-				) }
+				{ errorMessage && <Notice isError noticeText={ errorMessage } /> }
 				{ isConnected ? (
 					<Settings
 						settings={ settings }
 						status={ status }
 						error={ error }
 						updateSettings={ updateSettings }
-						setError={ setError }
+						setError={ reportError }
 						disconnect={ disconnect }
 						renderSecondaryActions={ secondaryActions }
 					/>
@@ -326,7 +355,7 @@ function Nextdoor() {
 						startOAuthFlow={ startOAuthFlow }
 						claimPage={ claimPage }
 						disconnect={ disconnect }
-						setError={ setError }
+						setError={ reportError }
 						renderSecondaryActions={ secondaryActions }
 					/>
 				) }

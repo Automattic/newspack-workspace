@@ -41,8 +41,11 @@ const PixelCard = ( { title, description, namespace, path, validate, renderHelp 
 	const [ isOpen, setIsOpen ] = useState( false );
 	const [ isEnabling, setIsEnabling ] = useState( false );
 	const [ hasTouched, setHasTouched ] = useState( false );
+	const [ errorNonce, setErrorNonce ] = useState( 0 );
 
-	useErrorAnnouncement( errorMessage );
+	const bumpErrorNonce = () => setErrorNonce( current => current + 1 );
+
+	useErrorAnnouncement( errorMessage, errorNonce );
 
 	useEffect( () => {
 		wizardApiFetch< PixelData >(
@@ -53,7 +56,7 @@ const PixelCard = ( { title, description, namespace, path, validate, renderHelp 
 					setDraft( res.pixel_id ?? '' );
 				},
 			}
-		).catch( () => {} );
+		).catch( bumpErrorNonce );
 	}, [] );
 
 	const validationError = validate( draft );
@@ -73,7 +76,7 @@ const PixelCard = ( { title, description, namespace, path, validate, renderHelp 
 					notify( message );
 				},
 			}
-		).catch( () => {} );
+		).catch( bumpErrorNonce );
 	};
 
 	const close = () => {
@@ -156,11 +159,7 @@ const PixelCard = ( { title, description, namespace, path, validate, renderHelp 
 			onRequestClose={ close }
 		>
 			<VStack spacing={ 4 }>
-				{ errorMessage && (
-					<div role="alert">
-						<Notice isError noticeText={ errorMessage } />
-					</div>
-				) }
+				{ errorMessage && <Notice isError noticeText={ errorMessage } /> }
 				<TextControl
 					value={ draft }
 					label={ __( 'Pixel ID', 'newspack-plugin' ) }

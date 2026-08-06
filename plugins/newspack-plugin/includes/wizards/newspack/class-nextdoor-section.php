@@ -133,7 +133,7 @@ class Nextdoor_Section extends Wizard_Section {
 	 * Update Nextdoor settings via API.
 	 *
 	 * @param WP_REST_Request $request Request object.
-	 * @return WP_REST_Response
+	 * @return WP_REST_Response|WP_Error
 	 */
 	public function api_update_nextdoor_settings( $request ) {
 		$module_enabled = $request->get_param( 'module_enabled_nextdoor' );

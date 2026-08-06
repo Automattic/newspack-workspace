@@ -184,15 +184,13 @@ export const Onboarding = ( {
 
 	return (
 		<VStack spacing={ 4 }>
-			{ error && (
-				<div role="alert">
-					<Notice noticeText={ error } isError />
-				</div>
-			) }
+			{ error && <Notice noticeText={ error } isError /> }
 
 			{ isManualMode && currentStep === STEPS.manual.CREDENTIALS && (
 				<VStack spacing={ 4 }>
-					<p>{ __( 'To get started, you need to register your site with Nextdoor and obtain API credentials.', 'newspack-plugin' ) }</p>
+					<p className="nextdoor-onboarding__intro">
+						{ __( 'To get started, you need to register your site with Nextdoor and obtain API credentials.', 'newspack-plugin' ) }
+					</p>
 					<div className="nextdoor-onboarding__redirect-uri-box">
 						<strong>{ __( 'Redirect URI:', 'newspack-plugin' ) }</strong>
 						<br />
@@ -203,7 +201,7 @@ export const Onboarding = ( {
 							{ __( 'Use this URL as the Redirect URI when signing up for Nextdoor credentials.', 'newspack-plugin' ) }
 						</small>
 					</div>
-					<p>
+					<p className="nextdoor-onboarding__intro">
 						<ExternalLink href="https://developer.nextdoor.com/reference/applying-for-access">
 							{ __( 'Get your API credentials from Nextdoor Developer Portal', 'newspack-plugin' ) }
 						</ExternalLink>
@@ -244,7 +242,9 @@ export const Onboarding = ( {
 
 			{ currentStep === steps.ACCOUNT_AUTH && (
 				<VStack spacing={ 4 }>
-					<p>{ __( 'Connect your Nextdoor account to authorize publishing articles.', 'newspack-plugin' ) }</p>
+					<p className="nextdoor-onboarding__intro">
+						{ __( 'Connect your Nextdoor account to authorize publishing articles.', 'newspack-plugin' ) }
+					</p>
 
 					<TextControl
 						label={ __( 'Email Address', 'newspack-plugin' ) }
@@ -287,7 +287,9 @@ export const Onboarding = ( {
 
 			{ currentStep === steps.CLAIM_PAGE && (
 				<VStack spacing={ 4 }>
-					<p>{ __( 'Claim your news page on Nextdoor to start publishing articles.', 'newspack-plugin' ) }</p>
+					<p className="nextdoor-onboarding__intro">
+						{ __( 'Claim your news page on Nextdoor to start publishing articles.', 'newspack-plugin' ) }
+					</p>
 
 					<TextControl
 						label={ __( 'Publication URL', 'newspack-plugin' ) }
@@ -330,7 +332,7 @@ export const Onboarding = ( {
 
 			{ ( ! isManualMode || currentStep > STEPS.manual.CREDENTIALS ) && (
 				<VStack spacing={ 4 }>
-					<Grid columns={ 2 } gutter={ 16 }>
+					<Grid columns={ 2 } gutter={ 16 } noMargin>
 						<div>
 							<div className="nextdoor-onboarding__status-label">{ __( 'Authorization:', 'newspack-plugin' ) }</div>
 							{ ( () => {

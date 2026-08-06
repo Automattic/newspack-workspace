@@ -299,7 +299,7 @@ abstract class Wizard {
 	 * @return array An array of script dependencies.
 	 */
 	public function get_script_dependencies( $dependencies = [] ) {
-		$base_dependencies = [ 'wp-components', 'wp-api-fetch', 'mediaelement-core' ];
+		$base_dependencies = [ 'wp-components', 'wp-api-fetch', 'wp-a11y', 'mediaelement-core' ];
 		return array_merge( $base_dependencies, $dependencies );
 	}
 

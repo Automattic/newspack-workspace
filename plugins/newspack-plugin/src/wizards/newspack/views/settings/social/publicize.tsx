@@ -5,7 +5,7 @@
 /**
  * WordPress dependencies
  */
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 import { useEffect, useState } from '@wordpress/element';
 
 /**
@@ -22,19 +22,28 @@ const DESCRIPTION = __(
 	"Publicize makes it easy to share your site's posts on several social media networks automatically when you publish a new post.",
 	'newspack-plugin'
 );
+/* translators: 1: attribution sentence, e.g. "Powered by Jetpack." 2: sentence describing what the feature does. */
+const CARD_DESCRIPTION = sprintf( __( '%1$s %2$s', 'newspack-plugin' ), ATTRIBUTION, DESCRIPTION );
 
 const Publicize = () => {
-	const { wizardApiFetch, isFetching, errorMessage } = useWizardApiFetch( '/newspack/wizards/plugins/jetpack' );
+	const { wizardApiFetch, isFetching, errorMessage, resetError } = useWizardApiFetch( '/newspack/wizards/plugins/jetpack' );
 	const [ plugin, setPlugin ] = useState< { status: string; configured: boolean } | null >( null );
 	const [ isReloading, setIsReloading ] = useState( false );
+	const [ errorNonce, setErrorNonce ] = useState( 0 );
 
-	useErrorAnnouncement( errorMessage );
+	const bumpErrorNonce = () => setErrorNonce( current => current + 1 );
 
-	const load = () =>
-		wizardApiFetch< PluginResponse >(
+	useErrorAnnouncement( errorMessage, errorNonce );
+
+	// Clears first so a retry that succeeds also clears the Error badge and the
+	// notice the previous failure left behind.
+	const load = () => {
+		resetError();
+		return wizardApiFetch< PluginResponse >(
 			{ path: '/newspack/v1/plugins/jetpack' },
 			{ onSuccess: res => setPlugin( { status: res.Status, configured: res.Configured } ) }
-		).catch( () => {} );
+		).catch( bumpErrorNonce );
+	};
 
 	useEffect( () => {
 		load();
@@ -57,8 +66,9 @@ const Publicize = () => {
 		return { level: 'success' as const, text: __( 'Enabled', 'newspack-plugin' ) };
 	} )();
 
-	const install = () =>
-		wizardApiFetch< PluginResponse >(
+	const install = () => {
+		resetError();
+		return wizardApiFetch< PluginResponse >(
 			{ path: '/newspack/v1/plugins/jetpack/activate', method: 'POST' },
 			{
 				onSuccess: () => {
@@ -66,13 +76,23 @@ const Publicize = () => {
 					window.location.reload();
 				},
 			}
-		).catch( () => {} );
+		).catch( bumpErrorNonce );
+	};
 
 	const actions = ( () => {
 		if ( isReloading ) {
 			return <span className="newspack-text-muted">{ __( 'Page reloading…', 'newspack-plugin' ) }</span>;
 		}
 		if ( ! plugin ) {
+			// A failed mount fetch leaves `plugin` null with nothing in flight, so
+			// the card would otherwise sit on a dead "Loading…" button for good.
+			if ( ! isFetching && errorMessage ) {
+				return (
+					<Button variant="secondary" size="compact" onClick={ load }>
+						{ __( 'Retry', 'newspack-plugin' ) }
+					</Button>
+				);
+			}
 			return (
 				<Button variant="secondary" size="compact" isBusy={ isFetching } disabled>
 					{ __( 'Loading…', 'newspack-plugin' ) }
@@ -98,14 +118,12 @@ const Publicize = () => {
 	return (
 		<CardForm
 			title={ __( 'Publicize', 'newspack-plugin' ) }
-			description={ `${ ATTRIBUTION } ${ DESCRIPTION }` }
+			description={ CARD_DESCRIPTION }
 			badge={ badge }
 			actions={ actions }
 			isOpen={ !! errorMessage }
 		>
-			<div role="alert">
-				<Notice isError noticeText={ errorMessage } />
-			</div>
+			<Notice isError noticeText={ errorMessage } />
 		</CardForm>
 	);
 };

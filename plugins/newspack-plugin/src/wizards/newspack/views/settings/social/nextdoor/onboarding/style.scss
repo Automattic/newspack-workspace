@@ -5,6 +5,10 @@
 @use "~@wordpress/base-styles/colors" as wp-colors;
 
 .nextdoor-onboarding {
+	&__intro {
+		margin: 0;
+	}
+
 	&__redirect-uri-box {
 		background-color: wp-colors.$gray-100;
 		padding: 16px;

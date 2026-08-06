@@ -13,6 +13,10 @@
 		margin: 0;
 	}
 
+	&__intro {
+		margin: 0;
+	}
+
 	&__status-value {
 		&--success {
 			color: wp-colors.$alert-green;
