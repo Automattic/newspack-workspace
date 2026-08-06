@@ -160,6 +160,8 @@ const PlacementControl = ( {
 								value={ value.bidders_ids ? value.bidders_ids[ bidderKey ] : null }
 								label={ bidderLabel }
 								disabled={ biddersErrors[ bidderKey ] || disabled }
+								withMargin={ false }
+								__nextHasNoMarginBottom
 								onChange={ data => {
 									onChange( {
 										...value,

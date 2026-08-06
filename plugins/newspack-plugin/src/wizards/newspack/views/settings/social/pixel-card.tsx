@@ -171,6 +171,8 @@ const PixelCard = ( { title, description, namespace, path, validate, renderHelp 
 					help={ renderHelp() }
 					disabled={ isFetching }
 					autoComplete="one-time-code"
+					withMargin={ false }
+					__nextHasNoMarginBottom
 				/>
 				{ hasTouched && validationError && <Notice isError noticeText={ validationError } /> }
 				<HStack justify="flex-start" spacing={ 2 }>
