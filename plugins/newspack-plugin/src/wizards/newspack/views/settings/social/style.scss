@@ -1,0 +1,22 @@
+@use "~@wordpress/base-styles/mixins" as wp-mixins;
+
+.newspack-social-settings {
+	&__snackbar {
+		@include wp-mixins.snackbar-container();
+		z-index: 99999;
+	}
+
+	&__toggle-label {
+		display: inline-grid;
+		justify-items: center;
+
+		span {
+			grid-area: 1 / 1;
+			visibility: hidden;
+
+			&.is-visible {
+				visibility: visible;
+			}
+		}
+	}
+}
