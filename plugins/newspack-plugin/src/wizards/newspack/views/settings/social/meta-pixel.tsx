@@ -17,13 +17,13 @@ import PixelCard from './pixel-card';
 const validate = ( value: string ) => {
 	const trimmed = value.trim();
 	if ( trimmed === '' ) {
-		return __( 'Value cannot be empty!', 'newspack-plugin' );
+		return __( 'Enter your Meta pixel ID.', 'newspack-plugin' );
 	}
 	if ( ! /^[0-9]+$/.test( trimmed ) ) {
-		return __( 'Value may only contain numbers!', 'newspack-plugin' );
+		return __( 'The Meta pixel ID is numbers only.', 'newspack-plugin' );
 	}
 	if ( trimmed === '0' ) {
-		return __( 'Value cannot be zero!', 'newspack-plugin' );
+		return __( 'That is not a valid Meta pixel ID.', 'newspack-plugin' );
 	}
 	return null;
 };

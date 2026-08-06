@@ -17,10 +17,10 @@ import PixelCard from './pixel-card';
 const validate = ( value: string ) => {
 	const trimmed = value.trim();
 	if ( trimmed === '' ) {
-		return __( 'Value cannot be empty!', 'newspack-plugin' );
+		return __( 'Enter your X pixel ID.', 'newspack-plugin' );
 	}
 	if ( ! /^[a-zA-Z0-9]+$/.test( trimmed ) ) {
-		return __( 'Value may only contain numbers and letters.', 'newspack-plugin' );
+		return __( 'The X pixel ID uses letters and numbers only.', 'newspack-plugin' );
 	}
 	return null;
 };
