@@ -670,8 +670,54 @@ class WooCommerce_Subscriptions {
 		Subscriptions_Meta::init();
 		Subscriptions_Confirmation::init();
 		Card_Expiry_Warning::init();
+
+		if ( self::is_active() ) {
+			self::maybe_enable_legacy_product_types();
+		}
 	}
 
+	/**
+	 * Enable the `subscription` and `variable-subscription` product types, once.
+	 *
+	 * WooCommerce Subscriptions 9.0 added a "Subscription product creation" section
+	 * whose two checkboxes default to off, which removes those product types from
+	 * the product-type dropdown. Newspack still creates them — the Audience wizard
+	 * writes them directly — so on an unconfigured site a publisher cannot create
+	 * or switch to a product type our own wizard produces.
+	 *
+	 * Only an option that has never been written is touched. `get_option()` returns
+	 * `false` when no row exists but `'no'` once anything has saved it, and
+	 * WooCommerce's settings screen writes `'no'` when the box is unticked — so an
+	 * absent row is the only safe signal that the publisher has no preference. That
+	 * also makes this self-limiting: after the first write the row exists, so the
+	 * check never passes again and an unticked box stays unticked.
+	 *
+	 * Deliberately not gated on the Subscriptions version. Writing the option before
+	 * a site reaches 9.0 is the point — the new default then never applies.
+	 */
+	public static function maybe_enable_legacy_product_types() {
+		/**
+		 * Filters whether Newspack enables the legacy subscription product types.
+		 *
+		 * Returning false leaves the WooCommerce settings untouched.
+		 *
+		 * @param bool $enable Whether to enable the legacy subscription product types.
+		 */
+		if ( ! apply_filters( 'newspack_enable_legacy_subscription_product_types', true ) ) {
+			return;
+		}
+
+		$options = [
+			'woocommerce_subscriptions_enable_simple_subscription',
+			'woocommerce_subscriptions_enable_variable_subscription',
+		];
+
+		foreach ( $options as $option ) {
+			if ( false === get_option( $option ) ) {
+				update_option( $option, 'yes' );
+			}
+		}
+	}
 
 	/**
 	 * Check if WooCommerce Subscriptions is active.
