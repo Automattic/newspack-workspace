@@ -6,7 +6,7 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { useState, useEffect } from '@wordpress/element';
+import { createInterpolateElement, useState, useEffect } from '@wordpress/element';
 import { ExternalLink, __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 
 /**
@@ -190,16 +190,6 @@ export const Onboarding = ( {
 
 			{ isManualMode && currentStep === STEPS.manual.CREDENTIALS && (
 				<VStack spacing={ 4 }>
-					<VStack spacing={ 0 }>
-						<p className="nextdoor-onboarding__intro">
-							{ __( 'To get started, you need to register your site with Nextdoor and obtain API credentials.', 'newspack-plugin' ) }
-						</p>
-						<p className="nextdoor-onboarding__intro">
-							<ExternalLink href="https://developer.nextdoor.com/reference/applying-for-access">
-								{ __( 'Get your API credentials from Nextdoor Developer Portal', 'newspack-plugin' ) }
-							</ExternalLink>
-						</p>
-					</VStack>
 					<ReadonlyField
 						id="nextdoor-onboarding-redirect-uri"
 						label={ __( 'Redirect URI', 'newspack-plugin' ) }
@@ -220,7 +210,18 @@ export const Onboarding = ( {
 						value={ clientId }
 						onChange={ setClientId }
 						placeholder={ __( 'Enter your Nextdoor Client ID', 'newspack-plugin' ) }
-						help={ __( 'The public identifier for your app in the Nextdoor Developer Portal.', 'newspack-plugin' ) }
+						help={ createInterpolateElement(
+							__(
+								'The public identifier for your app. Get your API credentials from the <linkToNextdoor>Nextdoor Developer Portal</linkToNextdoor>.',
+								'newspack-plugin'
+							),
+							{
+								// createInterpolateElement replaces the child with the tagged text.
+								linkToNextdoor: (
+									<ExternalLink href="https://developer.nextdoor.com/reference/applying-for-access">{ '' }</ExternalLink>
+								),
+							}
+						) }
 						withMargin={ false }
 						__nextHasNoMarginBottom
 					/>
