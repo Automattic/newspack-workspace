@@ -915,6 +915,11 @@ function wcs_create_subscription( $data = [] ) {
 	}
 	return $subscription;
 }
+function wcs_get_product_limitation( $product ) {
+	// Real WCS reads the product's _subscription_limit setting: 'no' | 'active' | 'any'.
+	$limitation = is_object( $product ) && method_exists( $product, 'get_meta' ) ? $product->get_meta( '_subscription_limit' ) : '';
+	return '' !== $limitation ? $limitation : 'no';
+}
 function wcs_get_subscription( $subscription_id ) {
 	global $subscriptions_database;
 	return $subscriptions_database[ $subscription_id ] ?? null;

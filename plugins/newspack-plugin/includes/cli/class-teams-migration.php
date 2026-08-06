@@ -830,6 +830,15 @@ class Teams_Migration {
 			WP_CLI::error( sprintf( 'Product %d could not be found.', $product_id ) );
 		}
 
+		// Readers granted a $0 subscription to a limited product cannot purchase
+		// it again until that subscription is cancelled — and the lapsed cohort
+		// this command targets is exactly who a win-back campaign would send to
+		// that checkout. Named in the header so the operator knows before writing.
+		$product_limitation = function_exists( 'wcs_get_product_limitation' ) ? \wcs_get_product_limitation( $product ) : 'no';
+		if ( 'no' !== $product_limitation ) {
+			WP_CLI::warning( sprintf( 'Product %d limits customers to one %s subscription: readers granted a $0 subscription cannot buy it again until that subscription is cancelled. Plan any win-back outreach to the migrated cohort accordingly.', $product_id, $product_limitation ) );
+		}
+
 		if ( $as_group ) {
 			if ( ! $group_owner_id ) {
 				WP_CLI::error( '--as-group requires --group-owner-id=<id>.' );

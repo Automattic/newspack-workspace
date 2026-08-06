@@ -1205,6 +1205,45 @@ class Test_Teams_Migration_Manual_Members extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A migration product limited to one subscription per customer blocks the
+	 * lapsed cohort from re-purchasing until the $0 subscription is cancelled —
+	 * the run header must say so before anything is written.
+	 */
+	public function test_limited_product_is_named_in_the_run_header() {
+		$limited_product_id = 909012;
+		wc_create_mock_product(
+			[
+				'id'   => $limited_product_id,
+				'name' => 'Limited membership product',
+				'meta' => [ '_subscription_limit' => 'active' ],
+			]
+		);
+		$purchase_plan_id = $this->create_plan( 'purchase' );
+		$this->create_member( $purchase_plan_id );
+
+		$output = $this->run_migrate_manual_members(
+			[
+				'product-id'                     => $limited_product_id,
+				'plan-ids'                       => (string) $purchase_plan_id,
+				'only-without-live-subscription' => true,
+				'access-product-ids'             => (string) $limited_product_id,
+			]
+		);
+
+		$this->assertStringContainsString( sprintf( 'Product %d limits customers to one active subscription', $limited_product_id ), $output, 'A limited product must be named in the run header.' );
+
+		WP_CLI::reset();
+		$unlimited_output = $this->run_migrate_manual_members(
+			[
+				'plan-ids'                       => (string) $purchase_plan_id,
+				'only-without-live-subscription' => true,
+				'access-product-ids'             => $this->access_products_flag(),
+			]
+		);
+		$this->assertStringNotContainsString( 'limits customers to one', $unlimited_output, 'An unlimited product must not draw the notice.' );
+	}
+
+	/**
 	 * A user-IDs file led by a UTF-8 BOM (routine in spreadsheet exports)
 	 * parses cleanly instead of failing the strict parse with an error showing
 	 * an apparently-valid ID.
