@@ -370,6 +370,31 @@ class Newspack_Test_Frontend_Registration_Endpoint extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Order guard: the honeypot check must run before the integration key check.
+	 *
+	 * Existing honeypot coverage (test_honeypot_returns_fake_success() above)
+	 * sends a valid key, so it can't tell the two orderings apart. A request
+	 * with the honeypot filled AND an invalid key must still get the
+	 * fake-success response — if the key check ran first, it would return 403
+	 * instead.
+	 */
+	public function test_honeypot_precedes_integration_key_check() {
+		$response = $this->do_register_request(
+			[
+				'npe'             => self::$reader_email,
+				'email'           => 'bot-filled@spam.com',
+				'integration_id'  => self::$integration_id,
+				'integration_key' => 'not-the-key',
+			]
+		);
+		$this->assertEquals( 200, $response->get_status() );
+		$data = $response->get_data();
+		$this->assertTrue( $data['success'] );
+		// Verify user was NOT actually created.
+		$this->assertFalse( get_user_by( 'email', self::$reader_email ) );
+	}
+
+	/**
 	 * Test logged-in user returns current reader data.
 	 */
 	public function test_register_while_logged_in() {
@@ -565,6 +590,54 @@ class Newspack_Test_Frontend_Registration_Endpoint extends WP_UnitTestCase {
 			if ( $user ) {
 				wp_delete_user( $user->ID );
 			}
+		}
+	}
+
+	/**
+	 * Order guard: the rate limit must be checked before the integration key.
+	 *
+	 * Existing rate-limit coverage (test_rate_limit_exceeded() above) sends a
+	 * valid key on every request, so it can't tell the two orderings apart. A
+	 * request that is both over the limit AND carries an invalid key must
+	 * still be rejected as rate-limited — if the key check ran first, it
+	 * would return 403 instead of 429.
+	 */
+	public function test_rate_limit_precedes_integration_key_check() {
+		// Lower limit to 1 for testing.
+		$set_limit = function() {
+			return 1;
+		};
+		add_filter( 'newspack_frontend_registration_rate_limit', $set_limit );
+
+		$base_body = [
+			'integration_id'  => self::$integration_id,
+			'integration_key' => self::generate_key( self::$integration_id ),
+		];
+
+		// First request exhausts the limit.
+		// Reset current user between requests since successful registration authenticates the reader.
+		$this->do_register_request( array_merge( $base_body, [ 'npe' => 'order-guard-rate1@test.com' ] ) );
+		wp_set_current_user( 0 );
+
+		// Second request is over the limit AND carries an invalid key — must
+		// be rejected as rate-limited, not as an invalid key.
+		$response = $this->do_register_request(
+			[
+				'npe'             => 'order-guard-rate2@test.com',
+				'integration_id'  => self::$integration_id,
+				'integration_key' => 'not-the-key',
+			]
+		);
+		$this->assertEquals( 429, $response->get_status() );
+		$data = $response->get_data();
+		$this->assertEquals( 'rate_limit_exceeded', $data['code'] );
+
+		remove_filter( 'newspack_frontend_registration_rate_limit', $set_limit );
+
+		// Clean up created user.
+		$user = get_user_by( 'email', 'order-guard-rate1@test.com' );
+		if ( $user ) {
+			wp_delete_user( $user->ID );
 		}
 	}
 
