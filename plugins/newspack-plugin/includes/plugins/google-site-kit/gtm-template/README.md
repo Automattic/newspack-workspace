@@ -57,7 +57,11 @@ stop here until it ships.
 - one **`Newspack - GA4 Reader Params (config settings)`** variable that bundles all 10 as
   Google-tag configuration parameters – so you wire them with a single reference.
 
-1. GTM → **Admin → Import Container**.
+Everything in Steps 1–2 happens in **Google Tag Manager** ([tagmanager.google.com](https://tagmanager.google.com)),
+not the GA4 dashboard — GA4 has no import surface for this.
+
+1. In Tag Manager, open the container that fires the site's GA4 tag, then **Admin →
+   Import Container**.
 2. Choose the JSON file.
 3. Select an **existing workspace** (create a throwaway one to review first).
 4. Choose **Merge → Rename conflicting tags, triggers, and variables** (safe; never
@@ -65,6 +69,11 @@ stop here until it ships.
 5. Preview the changes (should be 11 new variables, nothing else), then **Confirm**.
 
 ### Already imported an earlier version?
+
+The whole fix below happens in **Tag Manager** — the same container you imported into the
+first time. Nothing needs to change in the GA4 dashboard: the dimension registration from
+your original setup still applies, and on Access Control sites Newspack registers
+`access_source` there automatically.
 
 Merge → *Rename conflicting* never overwrites, so the incoming
 `Newspack - GA4 Reader Params (config settings)` variable arrives renamed (GTM appends a
@@ -77,7 +86,9 @@ stays `(not set)`. Two ways to fix it, either is fine:
   value `{{DLV - Newspack - access_source}}`.
 
 Then confirm in **GTM Preview** that `access_source` actually arrives on a `page_view` —
-the rename is silent, so the tag looks correctly wired until you check the event.
+the rename is silent, so the tag looks correctly wired until you check the event. Finally,
+**Submit → Publish** the container version. Preview only shows your draft workspace; live
+traffic keeps the old container until you publish.
 
 ## Step 2 – Attach the params to your GA4 tag
 
@@ -114,17 +125,22 @@ Add each param as an individual **configuration parameter** row on the tag inste
 
 ## Step 3 – Register the GA4 custom dimensions
 
-GA4 only reports event params it's told to keep. In GA4 → **Admin → Custom definitions →
-Create custom dimension**, add an **event-scoped** dimension for each param you want to
-report on (Dimension name of your choice; **Event parameter** = the exact key, e.g.
-`logged_in`). Several may already exist – don't duplicate.
+This is the one step that happens in the **GA4 dashboard**
+([analytics.google.com](https://analytics.google.com)), not Tag Manager. GA4 only reports
+event params it's told to keep. In GA4 → **Admin → Custom definitions → Create custom
+dimension**, add an **event-scoped** dimension for each param you want to report on
+(Dimension name of your choice; **Event parameter** = the exact key, e.g. `logged_in`).
+Several may already exist – don't duplicate. On sites with Access Control enabled,
+Newspack registers `access_source` automatically, so check before adding it by hand.
 
-## Step 4 – Verify
+## Step 4 – Verify and publish
 
 1. GTM → **Preview**, load the site.
 2. Confirm the `DLV - Newspack - *` variables resolve (e.g. `logged_in = no`).
 3. GA4 → **Admin → DebugView**: open a `page_view` and confirm `logged_in` (and the
    others) appear as parameters with real values – not `(not set)`.
+4. Back in GTM, **Submit → Publish** the container version. Live traffic keeps serving
+   the previous container until this step — Preview alone ships nothing.
 
 ## Watch-outs
 
