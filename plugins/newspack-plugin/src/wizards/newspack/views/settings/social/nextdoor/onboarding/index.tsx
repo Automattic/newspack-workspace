@@ -147,7 +147,6 @@ export const Onboarding = ( {
 
 			{ showConnect && (
 				<VStack spacing={ 4 }>
-					<h4 className="nextdoor-onboarding__subheading">{ __( 'Connect to Nextdoor', 'newspack-plugin' ) }</h4>
 					{ showConnect ? (
 						<>
 							{ isManualMode && (
@@ -257,6 +256,7 @@ export const Onboarding = ( {
 										{ __( 'Cancel', 'newspack-plugin' ) }
 									</Button>
 								) }
+								{ renderSecondaryActions?.() }
 							</HStack>
 						</>
 					) : null }
@@ -265,7 +265,6 @@ export const Onboarding = ( {
 
 			{ canClaimPage && ! isEditingConnection && (
 				<VStack spacing={ 4 }>
-					<h4 className="nextdoor-onboarding__subheading">{ __( 'Publication Page', 'newspack-plugin' ) }</h4>
 					<TextControl
 						label={ __( 'Publication URL', 'newspack-plugin' ) }
 						value={ publicationUrl }
@@ -289,14 +288,9 @@ export const Onboarding = ( {
 						<Button variant="secondary" __next40pxDefaultSize onClick={ () => setIsEditingConnection( true ) }>
 							{ __( 'Update Connection', 'newspack-plugin' ) }
 						</Button>
+						{ renderSecondaryActions?.() }
 					</HStack>
 				</VStack>
-			) }
-
-			{ renderSecondaryActions && (
-				<HStack justify="flex-start" spacing={ 2 }>
-					{ renderSecondaryActions() }
-				</HStack>
 			) }
 		</VStack>
 	);
