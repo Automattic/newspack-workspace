@@ -111,13 +111,21 @@ final class GA4_Custom_Dimensions {
 	/**
 	 * Keep a recurring monthly recheck scheduled while a GA4 property is
 	 * connected, and drop it when none is. The recheck re-runs provisioning so
-	 * additions to Newspack's dimension list, or dimensions deleted in GA4,
-	 * self-heal without a manual CLI run. When everything is already in place it
-	 * is a no-op: one list call, zero writes.
+	 * dimensions deleted in GA4 self-heal without a manual CLI run. When
+	 * everything is already in place it is a no-op: one list call, zero writes.
+	 *
+	 * Additions to Newspack's dimension list do not wait for the recheck:
+	 * they schedule an immediate run (see
+	 * `maybe_schedule_provisioning_for_new_dimensions()`), because GA4
+	 * dimensions are not retroactive — events sent before a dimension exists
+	 * never become queryable, so a month-long wait would lose exactly the
+	 * launch data a new dimension ships for.
 	 *
 	 * Idempotent and safe to call repeatedly (e.g. on every admin page load).
 	 */
 	public static function maybe_schedule_recheck() {
+		// WP-Cron based, deliberately ahead of the Action Scheduler guard.
+		self::maybe_schedule_provisioning_for_new_dimensions();
 		if ( ! function_exists( 'as_schedule_recurring_action' ) || ! function_exists( 'as_has_scheduled_action' ) ) {
 			return;
 		}
@@ -133,6 +141,42 @@ final class GA4_Custom_Dimensions {
 		}
 		as_schedule_recurring_action( time() + MONTH_IN_SECONDS, MONTH_IN_SECONDS, self::RECHECK_ACTION, [], self::RECHECK_GROUP );
 		Logger::log( 'Scheduled monthly GA4 dimension recheck.', self::LOGGER_HEADER );
+	}
+
+	/**
+	 * Schedule an immediate provisioning run when Newspack's dimension list has
+	 * grown since the last run on this property, so a newly shipped dimension
+	 * exists before (or moments after) its events start flowing instead of up
+	 * to a month later.
+	 *
+	 * A summary without a recorded list — written before the list was recorded
+	 * in the summary — counts as grown, so already-provisioned sites converge
+	 * on their first admin visit after this code ships. Growth triggers one
+	 * run per change: the run records the current list in the summary even
+	 * when individual creates fail, leaving retries of failed creates to the
+	 * monthly recheck like any other create error.
+	 *
+	 * Never-provisioned sites are not scheduled here; first-time provisioning
+	 * belongs to the property-connection path (`schedule_provisioning()`).
+	 */
+	private static function maybe_schedule_provisioning_for_new_dimensions() {
+		if ( ! self::get_property_id() ) {
+			return;
+		}
+		$provisioned = get_option( self::PROVISIONED_OPTION, [] );
+		if ( ! is_array( $provisioned ) || empty( $provisioned['property_id'] ) ) {
+			return;
+		}
+		$known = isset( $provisioned['dimensions'] ) && is_array( $provisioned['dimensions'] ) ? $provisioned['dimensions'] : [];
+		$new   = array_diff( array_keys( self::get_dimensions() ), $known );
+		if ( empty( $new ) ) {
+			return;
+		}
+		if ( wp_next_scheduled( self::PROVISION_ACTION ) ) {
+			return;
+		}
+		wp_schedule_single_event( time() + 10, self::PROVISION_ACTION );
+		Logger::log( 'Scheduled GA4 dimension provisioning for new dimensions: ' . implode( ', ', $new ) . '.', self::LOGGER_HEADER );
 	}
 
 	/**
@@ -426,6 +470,9 @@ final class GA4_Custom_Dimensions {
 			'property_id'    => $property_id,
 			'auth_source'    => $used_source,
 			'timestamp'      => time(),
+			// The list this run knew about, so a later addition to
+			// get_dimensions() is detectable and can provision immediately.
+			'dimensions'     => array_keys( self::get_dimensions() ),
 			'created'        => $created,
 			'skipped_exists' => $skipped_exists,
 			'errors'         => $errors,
