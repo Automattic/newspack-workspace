@@ -14,6 +14,7 @@ import {
 	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
+import { useInstanceId } from '@wordpress/compose';
 
 /**
  * Internal dependencies
@@ -37,6 +38,21 @@ const STORED_SECRET_MASK = '\u2022'.repeat( 12 );
 const OAUTH_ERROR_MAX_LENGTH = 200;
 
 const isSameRoles = ( current: string[], stored: string[] ) => current.length === stored.length && current.every( role => stored.includes( role ) );
+
+// `aria-errormessage` is unimplemented in WebKit, so the error is composed into
+// `aria-describedby` instead. `__help` is the id BaseControl gives the help text,
+// and keeping it preserves that association rather than replacing it.
+const describedBy = ( fieldId: string, errorId: string | null ) => [ `${ fieldId }__help`, errorId ].filter( Boolean ).join( ' ' );
+
+// Shape only: a scheme Nextdoor can fetch and a host that could resolve.
+const isPublicationUrlValid = ( value: string ) => {
+	try {
+		const url = new URL( value.trim() );
+		return ( 'http:' === url.protocol || 'https:' === url.protocol ) && url.hostname.includes( '.' );
+	} catch {
+		return false;
+	}
+};
 
 /**
  * Nextdoor form.
@@ -62,7 +78,9 @@ export const NextdoorForm = ( {
 	// not reset a draft the publisher is still editing.
 	const storedClientId = settings.client_id || '';
 	const storedPublicationUrl = settings.publication_url || window.newspackSettings?.social?.nextdoor?.site_url || '';
-	const storedRolesKey = [ ...( settings.allowed_roles || [] ) ].sort().join( ',' );
+	// Serialised rather than joined: role slugs are not sanitised by `add_role()`,
+	// so a slug containing the separator would otherwise collide with two roles.
+	const storedRolesKey = JSON.stringify( [ ...( settings.allowed_roles || [] ) ].sort() );
 
 	const [ clientId, setClientId ] = useState( storedClientId );
 	// Always starts blank: the GET never returns the secret. Left empty on a
@@ -75,9 +93,19 @@ export const NextdoorForm = ( {
 	const [ hasBlurredPublicationUrl, setHasBlurredPublicationUrl ] = useState( false );
 	const [ allowedRoles, setAllowedRoles ] = useState< string[] >( settings.allowed_roles || [] );
 	const [ isSaving, setIsSaving ] = useState( false );
-	// The only navigation left: reopening the connect form once it has been put
-	// away, so changing credentials or account is not a dead end.
-	const [ isEditingConnection, setIsEditingConnection ] = useState( false );
+	// The only navigation left: `null` follows the connection status, `true`
+	// reopens the connect form and `false` puts it away, so neither changing the
+	// connection nor dismissing a reconnect prompt is a dead end.
+	const [ connectOverride, setConnectOverride ] = useState< boolean | null >( null );
+
+	// More than one form renders per page, so every id is scoped to the instance.
+	const instanceId = useInstanceId( NextdoorForm, 'newspack-nextdoor-form' );
+	const redirectUriId = `${ instanceId }-redirect-uri`;
+	const emailId = `${ instanceId }-email`;
+	const emailErrorId = `${ emailId }-error`;
+	const publicationUrlId = `${ instanceId }-publication-url`;
+	const publicationUrlErrorId = `${ publicationUrlId }-error`;
+	const rolesDescriptionId = `${ instanceId }-roles-description`;
 
 	const availableRoles = window.newspackSettings?.social?.nextdoor?.available_roles || [];
 	const countryOptions = window.newspackSettings?.social?.nextdoor?.country_options || [];
@@ -109,18 +137,35 @@ export const NextdoorForm = ( {
 	// out, and a half-typed address is not either.
 	const emailError =
 		hasBlurredEmail && email.trim() && ! isEmailValid ? __( 'That does not look like a valid email address.', 'newspack-plugin' ) : null;
-	const publicationUrlError = hasBlurredPublicationUrl && ! publicationUrl ? __( 'Enter the URL of your publication.', 'newspack-plugin' ) : null;
+	const isUrlValid = isPublicationUrlValid( publicationUrl );
+	const publicationUrlError = ( () => {
+		if ( ! hasBlurredPublicationUrl ) {
+			return null;
+		}
+		if ( ! publicationUrl ) {
+			return __( 'Enter the URL of your publication.', 'newspack-plugin' );
+		}
+		return isUrlValid ? null : __( 'That does not look like a valid URL.', 'newspack-plugin' );
+	} )();
 
 	// A blank secret is a change only before there is one stored to fall back on.
 	const hasCredentialChanges = clientId !== storedClientId || !! clientSecret;
 	const hasCredentials = ! isManualMode || ( !! clientId && ( status.has_credentials || !! clientSecret ) );
 	const canConnect = hasCredentials && isEmailValid;
+	const connectHint = ( () => {
+		if ( canConnect ) {
+			return undefined;
+		}
+		return hasCredentials
+			? __( 'Enter a valid email address to connect.', 'newspack-plugin' )
+			: __( 'Enter your Nextdoor credentials to connect.', 'newspack-plugin' );
+	} )();
 	// An expired token is still a token, but it cannot claim anything, so the body
 	// has to offer the reconnection its badge advertises.
 	const needsConnect = ! status.has_tokens || ! status.token_valid;
 	// Claiming is the only thing left once Nextdoor has authorised, unless the
 	// publisher asks to change the connection.
-	const showConnect = needsConnect || isEditingConnection;
+	const showConnect = connectOverride ?? needsConnect;
 
 	const hasRoleChanges = ! isSameRoles( allowedRoles, settings.allowed_roles || [] );
 	const hasUrlChanges = publicationUrl !== ( settings.publication_url || '' );
@@ -151,7 +196,7 @@ export const NextdoorForm = ( {
 		// Before a page exists every submission claims one; afterwards only a
 		// changed URL does, since `publication_url` is not a settings write param.
 		const shouldClaim = ! status.has_page || hasUrlChanges;
-		if ( shouldClaim && ! publicationUrl ) {
+		if ( shouldClaim && ! isUrlValid ) {
 			return;
 		}
 		if ( ! shouldClaim && ! hasRoleChanges ) {
@@ -191,6 +236,7 @@ export const NextdoorForm = ( {
 			onClick={ handleConnect }
 			disabled={ ! canConnect || isSaving }
 			accessibleWhenDisabled
+			description={ connectHint }
 			isBusy={ isSaving }
 		>
 			{ __( 'Connect', 'newspack-plugin' ) }
@@ -200,8 +246,9 @@ export const NextdoorForm = ( {
 			variant="primary"
 			__next40pxDefaultSize
 			onClick={ handleSubmit }
-			disabled={ ! publicationUrl || ( status.has_page && ! hasRoleChanges && ! hasUrlChanges ) || isSaving }
+			disabled={ ! isUrlValid || ( status.has_page && ! hasRoleChanges && ! hasUrlChanges ) || isSaving }
 			accessibleWhenDisabled
+			description={ isUrlValid ? undefined : __( 'Enter a valid publication URL to continue.', 'newspack-plugin' ) }
 			isBusy={ isSaving }
 		>
 			{ status.has_page ? __( 'Save', 'newspack-plugin' ) : __( 'Claim Page', 'newspack-plugin' ) }
@@ -211,16 +258,17 @@ export const NextdoorForm = ( {
 	const secondary = ( () => {
 		if ( ! showConnect ) {
 			return (
-				<Button variant="secondary" __next40pxDefaultSize onClick={ () => setIsEditingConnection( true ) }>
+				<Button variant="secondary" __next40pxDefaultSize onClick={ () => setConnectOverride( true ) }>
 					{ __( 'Update Connection', 'newspack-plugin' ) }
 				</Button>
 			);
 		}
 		// Only an offer to go back, so it is withheld when the connect form is the
-		// only thing the publisher can act on.
-		if ( ! needsConnect ) {
+		// only thing the publisher can act on. A claimed page is something to go
+		// back to, even while the token needs renewing.
+		if ( ! needsConnect || status.has_page ) {
 			return (
-				<Button variant="secondary" __next40pxDefaultSize onClick={ () => setIsEditingConnection( false ) }>
+				<Button variant="secondary" __next40pxDefaultSize onClick={ () => setConnectOverride( false ) }>
 					{ __( 'Cancel', 'newspack-plugin' ) }
 				</Button>
 			);
@@ -242,7 +290,7 @@ export const NextdoorForm = ( {
 						{ isManualMode && (
 							<>
 								<ReadonlyField
-									id="nextdoor-form-redirect-uri"
+									id={ redirectUriId }
 									label={ __( 'Redirect URI', 'newspack-plugin' ) }
 									help={ __( 'Use this URL as the Redirect URI when signing up for Nextdoor credentials.', 'newspack-plugin' ) }
 									value={ redirectUri }
@@ -297,8 +345,9 @@ export const NextdoorForm = ( {
 								/>
 							</>
 						) }
-						<VStack spacing={ 0 }>
+						<VStack spacing={ 2 }>
 							<TextControl
+								id={ emailId }
 								label={ __( 'Email Address', 'newspack-plugin' ) }
 								value={ email }
 								onChange={ setEmail }
@@ -307,12 +356,12 @@ export const NextdoorForm = ( {
 								placeholder={ __( 'Enter your Nextdoor account email', 'newspack-plugin' ) }
 								help={ __( 'This should be the email address associated with your Nextdoor account.', 'newspack-plugin' ) }
 								aria-invalid={ !! emailError }
-								aria-errormessage={ emailError ? 'nextdoor-form-email-error' : undefined }
+								aria-describedby={ describedBy( emailId, emailError ? emailErrorId : null ) }
 								withMargin={ false }
 								__nextHasNoMarginBottom
 							/>
 							{ emailError && (
-								<p className="newspack-social-settings__field-error" id="nextdoor-form-email-error">
+								<p className="newspack-social-settings__field-error" id={ emailErrorId }>
 									{ emailError }
 								</p>
 							) }
@@ -339,8 +388,9 @@ export const NextdoorForm = ( {
 					</>
 				) : (
 					<>
-						<VStack spacing={ 0 }>
+						<VStack spacing={ 2 }>
 							<TextControl
+								id={ publicationUrlId }
 								label={ __( 'Publication URL', 'newspack-plugin' ) }
 								value={ publicationUrl }
 								onChange={ setPublicationUrl }
@@ -349,22 +399,30 @@ export const NextdoorForm = ( {
 								placeholder="https://yoursite.com"
 								help={ __( 'The main URL of your news publication.', 'newspack-plugin' ) }
 								aria-invalid={ !! publicationUrlError }
-								aria-errormessage={ publicationUrlError ? 'nextdoor-form-publication-url-error' : undefined }
+								aria-describedby={ describedBy( publicationUrlId, publicationUrlError ? publicationUrlErrorId : null ) }
 								withMargin={ false }
 								__nextHasNoMarginBottom
 							/>
 							{ publicationUrlError && (
-								<p className="newspack-social-settings__field-error" id="nextdoor-form-publication-url-error">
+								<p className="newspack-social-settings__field-error" id={ publicationUrlErrorId }>
 									{ publicationUrlError }
 								</p>
 							) }
 						</VStack>
 						{ /* Disabled checkboxes are still announced, but leave tab order and form-control quick-nav, so the prose accounts for the inert roles. */ }
-						<p className="nextdoor-form__intro" id="nextdoor-form-roles-description">
+						<p className="nextdoor-form__intro" id={ rolesDescriptionId }>
 							{ __( 'Select which user roles are allowed to publish articles to Nextdoor.', 'newspack-plugin' ) }
 							{ ! status.has_page && ` ${ __( 'Available once the page is claimed.', 'newspack-plugin' ) }` }
 						</p>
-						<Grid columns={ 2 } gutter={ 16 } noMargin role="group" aria-describedby="nextdoor-form-roles-description">
+						{ /* Named as well as described: an unnamed group is skipped, taking its description with it. */ }
+						<Grid
+							columns={ 2 }
+							gutter={ 16 }
+							noMargin
+							role="group"
+							aria-label={ __( 'Publishing roles', 'newspack-plugin' ) }
+							aria-describedby={ rolesDescriptionId }
+						>
 							{ availableRoles.map( ( { label, value } ) => (
 								<CheckboxControl
 									key={ value }
@@ -373,7 +431,7 @@ export const NextdoorForm = ( {
 									onChange={ ( checked: boolean ) =>
 										setAllowedRoles( checked ? [ ...allowedRoles, value ] : allowedRoles.filter( role => role !== value ) )
 									}
-									disabled={ ! status.has_page || 'administrator' === value }
+									disabled={ ! status.has_page || isSaving || 'administrator' === value }
 									help={
 										'administrator' === value
 											? __( 'Administrators always have publishing permissions.', 'newspack-plugin' )
