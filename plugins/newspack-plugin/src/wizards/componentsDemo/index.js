@@ -58,6 +58,54 @@ import {
 	WebPreview,
 } from '../../../packages/components/src';
 import * as newspackIcons from '../../../packages/icons';
+import { SocialCardsProvider } from '../newspack/views/settings/social/context';
+import { Onboarding as NextdoorOnboarding } from '../newspack/views/settings/social/nextdoor/onboarding';
+import '../newspack/views/settings/social/style.scss';
+
+// The demo page does not localise the settings wizard data the Nextdoor flow
+// reads, so stand in for it without clobbering the real thing.
+window.newspackSettings = window.newspackSettings || {};
+window.newspackSettings.social = window.newspackSettings.social || {};
+window.newspackSettings.social.nextdoor = window.newspackSettings.social.nextdoor || {
+	country_options: [
+		{ label: 'United States', value: 'US' },
+		{ label: 'Canada', value: 'CA' },
+		{ label: 'Australia', value: 'AU' },
+	],
+	default_country: 'US',
+	redirect_uri: 'https://example.com/wp-admin/admin.php?page=newspack-settings&nextdoor_oauth_callback=1',
+};
+
+const NEXTDOOR_STATUS = {
+	is_connected: false,
+	has_credentials: false,
+	has_centralized_credentials: false,
+	has_tokens: false,
+	has_page: false,
+	token_valid: false,
+};
+
+// Connect Account and Claim Page navigate away in the real flow. Rejecting keeps
+// the demo on the page: Onboarding catches, so each card stays on its own step.
+const nextdoorDemoAction = () => Promise.reject( new Error( 'Demo only.' ) );
+
+const NEXTDOOR_STEPS = [
+	{
+		title: __( 'Step 1: API credentials', 'newspack-plugin' ),
+		description: __( 'Shown when the publisher supplies their own Nextdoor app credentials.', 'newspack-plugin' ),
+		status: NEXTDOOR_STATUS,
+	},
+	{
+		title: __( 'Step 2: Connect account', 'newspack-plugin' ),
+		description: __( 'Reached once credentials are stored. Sends the publisher to Nextdoor to authorise.', 'newspack-plugin' ),
+		status: { ...NEXTDOOR_STATUS, has_credentials: true },
+	},
+	{
+		title: __( 'Step 3: Claim page', 'newspack-plugin' ),
+		description: __( 'Reached after the OAuth return, and the last step before the card reports Enabled.', 'newspack-plugin' ),
+		status: { ...NEXTDOOR_STATUS, has_credentials: true, has_tokens: true },
+	},
+];
 
 class ComponentsDemo extends Component {
 	/**
@@ -1250,6 +1298,32 @@ class ComponentsDemo extends Component {
 									/>
 								) ) }
 							</VStack>
+						</Card>
+						<Card>
+							<h2>{ __( 'Nextdoor onboarding', 'newspack-plugin' ) }</h2>
+							<p>
+								{ __(
+									'The three steps of Newspack > Settings > Social > Nextdoor, each pinned open so the layout can be reviewed without a Nextdoor account. These render the real component, so they cannot drift from what a publisher sees. The primary buttons are inert here.',
+									'newspack-plugin'
+								) }
+							</p>
+							<SocialCardsProvider>
+								<VStack spacing={ 2 }>
+									{ NEXTDOOR_STEPS.map( step => (
+										<CardForm key={ step.title } title={ step.title } description={ step.description } isOpen>
+											<NextdoorOnboarding
+												settings={ { client_id: '', client_secret: '', publication_url: '', allowed_roles: [] } }
+												status={ step.status }
+												error={ null }
+												updateSettings={ nextdoorDemoAction }
+												startOAuthFlow={ nextdoorDemoAction }
+												claimPage={ nextdoorDemoAction }
+												setError={ () => {} }
+											/>
+										</CardForm>
+									) ) }
+								</VStack>
+							</SocialCardsProvider>
 						</Card>
 						<Card>
 							<h2>{ __( 'Newspack Icons', 'newspack-plugin' ) }</h2>
