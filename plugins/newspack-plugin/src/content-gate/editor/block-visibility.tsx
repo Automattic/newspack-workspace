@@ -319,7 +319,12 @@ const BlockVisibilityPanel = ( { attributes, setAttributes }: BlockEditProps ) =
 		const newRules: BlockVisibilityRules = { ...rules, ...updates };
 		const stillActive = hasActiveRules( newRules, mode, gateIds );
 		setAttributes( {
-			newspackAccessControlRules: newRules,
+			// Reset to the registered default when the last rule is turned off, rather
+			// than storing every rule set to inactive. Gutenberg omits an attribute that
+			// deep-equals its default, so the block stops carrying any access-control
+			// markup at all - which is what tells the rest of the plugin that this block
+			// no longer has rules on it.
+			newspackAccessControlRules: stillActive ? newRules : {},
 			// Reset visibility to 'visible' when all custom rules are cleared.
 			...( ! stillActive ? { newspackAccessControlVisibility: 'visible' } : {} ),
 		} );
