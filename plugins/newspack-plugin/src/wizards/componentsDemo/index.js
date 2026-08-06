@@ -59,8 +59,7 @@ import {
 } from '../../../packages/components/src';
 import * as newspackIcons from '../../../packages/icons';
 import { SocialCardsProvider } from '../newspack/views/settings/social/context';
-import { Onboarding as NextdoorOnboarding } from '../newspack/views/settings/social/nextdoor/onboarding';
-import { Settings as NextdoorSettings } from '../newspack/views/settings/social/nextdoor/settings';
+import { NextdoorForm } from '../newspack/views/settings/social/nextdoor/form';
 import '../newspack/views/settings/social/style.scss';
 
 // The demo page does not localise the settings wizard data the Nextdoor flow
@@ -93,11 +92,15 @@ const NEXTDOOR_STATUS = {
 	token_valid: false,
 };
 
-// Connect Account and Claim Page navigate away in the real flow. Rejecting keeps
-// the demo on the page: Onboarding catches, so each card stays on its own step.
+const NEXTDOOR_CLAIMED = { ...NEXTDOOR_STATUS, is_connected: true, has_credentials: true, has_tokens: true, has_page: true };
+
+const NEXTDOOR_SETTINGS = { client_id: '', client_secret: '', publication_url: '', allowed_roles: [] };
+
+// Connect and Claim Page navigate away in the real flow. Rejecting keeps the
+// demo on the page: the form catches, so each card stays on its own state.
 const nextdoorDemoAction = () => Promise.reject( new Error( 'Demo only.' ) );
 
-const NEXTDOOR_STEPS = [
+const NEXTDOOR_STATES = [
 	{
 		title: __( 'Nothing set up yet', 'newspack-plugin' ),
 		description: __( 'Credentials and account are one action. Claiming the page waits until Nextdoor has authorised.', 'newspack-plugin' ),
@@ -110,8 +113,28 @@ const NEXTDOOR_STEPS = [
 	},
 	{
 		title: __( 'Account connected', 'newspack-plugin' ),
-		description: __( 'How the screen looks on return from Nextdoor, with only the page claim left.', 'newspack-plugin' ),
+		description: __(
+			'Back from Nextdoor with the page still to claim, so the publishing roles are visible but not yet selectable.',
+			'newspack-plugin'
+		),
 		status: { ...NEXTDOOR_STATUS, has_credentials: true, has_tokens: true },
+	},
+	{
+		title: __( 'Fully connected', 'newspack-plugin' ),
+		description: __(
+			'The everyday view: the publication page and the roles allowed to publish, with the badge reading Enabled.',
+			'newspack-plugin'
+		),
+		status: { ...NEXTDOOR_CLAIMED, token_valid: true },
+		settings: { ...NEXTDOOR_SETTINGS, allowed_roles: [ 'administrator' ] },
+		badge: { level: 'success', text: __( 'Enabled', 'newspack-plugin' ) },
+	},
+	{
+		title: __( 'Sign-in expired', 'newspack-plugin' ),
+		description: __( 'Everything is still set up, but Nextdoor has to be signed into again from Update Connection.', 'newspack-plugin' ),
+		status: NEXTDOOR_CLAIMED,
+		settings: { ...NEXTDOOR_SETTINGS, allowed_roles: [ 'administrator' ] },
+		badge: { level: 'error', text: __( 'Reconnect needed', 'newspack-plugin' ) },
 	},
 ];
 
@@ -1308,20 +1331,26 @@ class ComponentsDemo extends Component {
 							</VStack>
 						</Card>
 						<Card>
-							<h2>{ __( 'Nextdoor onboarding', 'newspack-plugin' ) }</h2>
+							<h2>{ __( 'Nextdoor integration', 'newspack-plugin' ) }</h2>
 							<p>
 								{ __(
-									'Every state of Newspack > Settings > Social > Nextdoor, pinned open so the layout can be reviewed without a Nextdoor account. Setup is one screen, so these are the same screen at four points. They render the real components, so they cannot drift from what a publisher sees. The primary buttons are inert here.',
+									'Every state of Newspack > Settings > Social > Nextdoor, pinned open so the layout can be reviewed without a Nextdoor account. One form covers setup and everyday use, so these are the same screen at five points. It is the real form, so it cannot drift from what a publisher sees. The primary buttons are inert here.',
 									'newspack-plugin'
 								) }
 							</p>
 							<SocialCardsProvider>
 								<VStack spacing={ 2 }>
-									{ NEXTDOOR_STEPS.map( step => (
-										<CardForm key={ step.title } title={ step.title } description={ step.description } isOpen>
-											<NextdoorOnboarding
-												settings={ { client_id: '', client_secret: '', publication_url: '', allowed_roles: [] } }
-												status={ step.status }
+									{ NEXTDOOR_STATES.map( state => (
+										<CardForm
+											key={ state.title }
+											title={ state.title }
+											description={ state.description }
+											badge={ state.badge }
+											isOpen
+										>
+											<NextdoorForm
+												settings={ state.settings || NEXTDOOR_SETTINGS }
+												status={ state.status }
 												error={ null }
 												updateSettings={ nextdoorDemoAction }
 												startOAuthFlow={ nextdoorDemoAction }
@@ -1330,31 +1359,6 @@ class ComponentsDemo extends Component {
 											/>
 										</CardForm>
 									) ) }
-									<CardForm
-										title={ __( 'Fully connected', 'newspack-plugin' ) }
-										description={ __(
-											'Once the page is claimed the card swaps to the settings view, and the badge reads Enabled.',
-											'newspack-plugin'
-										) }
-										badge={ { level: 'success', text: __( 'Enabled', 'newspack-plugin' ) } }
-										isOpen
-									>
-										<NextdoorSettings
-											settings={ { client_id: '', client_secret: '', publication_url: '', allowed_roles: [ 'administrator' ] } }
-											status={ {
-												...NEXTDOOR_STATUS,
-												is_connected: true,
-												has_credentials: true,
-												has_tokens: true,
-												has_page: true,
-												token_valid: true,
-											} }
-											error={ null }
-											updateSettings={ nextdoorDemoAction }
-											disconnect={ nextdoorDemoAction }
-											setError={ () => {} }
-										/>
-									</CardForm>
 								</VStack>
 							</SocialCardsProvider>
 						</Card>
