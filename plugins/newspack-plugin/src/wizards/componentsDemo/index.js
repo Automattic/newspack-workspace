@@ -60,6 +60,7 @@ import {
 import * as newspackIcons from '../../../packages/icons';
 import { SocialCardsProvider } from '../newspack/views/settings/social/context';
 import { Onboarding as NextdoorOnboarding } from '../newspack/views/settings/social/nextdoor/onboarding';
+import { Settings as NextdoorSettings } from '../newspack/views/settings/social/nextdoor/settings';
 import '../newspack/views/settings/social/style.scss';
 
 // The demo page does not localise the settings wizard data the Nextdoor flow
@@ -73,6 +74,12 @@ window.newspackSettings.social.nextdoor = window.newspackSettings.social.nextdoo
 		{ label: 'Australia', value: 'AU' },
 	],
 	default_country: 'US',
+	available_roles: [
+		{ label: 'Administrator', value: 'administrator' },
+		{ label: 'Editor', value: 'editor' },
+		{ label: 'Author', value: 'author' },
+		{ label: 'Contributor', value: 'contributor' },
+	],
 	redirect_uri: 'https://example.com/wp-admin/admin.php?page=newspack-settings&nextdoor_oauth_callback=1',
 };
 
@@ -1303,7 +1310,7 @@ class ComponentsDemo extends Component {
 							<h2>{ __( 'Nextdoor onboarding', 'newspack-plugin' ) }</h2>
 							<p>
 								{ __(
-									'The three steps of Newspack > Settings > Social > Nextdoor, each pinned open so the layout can be reviewed without a Nextdoor account. These render the real component, so they cannot drift from what a publisher sees. The primary buttons are inert here.',
+									'Every state of Newspack > Settings > Social > Nextdoor, each pinned open so the layout can be reviewed without a Nextdoor account. These render the real components, so they cannot drift from what a publisher sees. The primary buttons are inert here.',
 									'newspack-plugin'
 								) }
 							</p>
@@ -1322,6 +1329,31 @@ class ComponentsDemo extends Component {
 											/>
 										</CardForm>
 									) ) }
+									<CardForm
+										title={ __( 'Step 4: Connected', 'newspack-plugin' ) }
+										description={ __(
+											'Once the page is claimed the card swaps to the settings view, and the badge reads Enabled.',
+											'newspack-plugin'
+										) }
+										badge={ { level: 'success', text: __( 'Enabled', 'newspack-plugin' ) } }
+										isOpen
+									>
+										<NextdoorSettings
+											settings={ { client_id: '', client_secret: '', publication_url: '', allowed_roles: [ 'administrator' ] } }
+											status={ {
+												...NEXTDOOR_STATUS,
+												is_connected: true,
+												has_credentials: true,
+												has_tokens: true,
+												has_page: true,
+												token_valid: true,
+											} }
+											error={ null }
+											updateSettings={ nextdoorDemoAction }
+											disconnect={ nextdoorDemoAction }
+											setError={ () => {} }
+										/>
+									</CardForm>
 								</VStack>
 							</SocialCardsProvider>
 						</Card>

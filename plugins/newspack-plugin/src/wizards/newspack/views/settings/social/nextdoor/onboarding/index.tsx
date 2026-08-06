@@ -111,9 +111,10 @@ export const Onboarding = ( {
 		}
 	}, [ status, steps ] );
 
-	// Deliberately permissive: the server rejects with is_email(), this only
-	// catches the obvious typo before a round trip.
-	const isEmailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test( email.trim() );
+	// Shape only, but stricter than is_email(), which accepts a one-letter TLD.
+	// Whether the address exists is Nextdoor's problem, not something a pattern
+	// can answer.
+	const isEmailValid = /^[^\s@]+@[^\s@.]+(\.[^\s@.]+)*\.[a-z]{2,}$/i.test( email.trim() );
 	// Only after leaving the field: an empty one is not a mistake worth calling
 	// out, and a half-typed address is not either.
 	const emailError =
