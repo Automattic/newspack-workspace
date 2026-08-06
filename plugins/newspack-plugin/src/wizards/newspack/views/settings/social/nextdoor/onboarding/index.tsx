@@ -64,7 +64,6 @@ export const Onboarding = ( {
 	// last submitted from here — `settings` alone would report every visit as dirty.
 	const [ savedSecret, setSavedSecret ] = useState( settings.client_secret || '' );
 	const [ email, setEmail ] = useState( '' );
-	const [ hasTouchedEmail, setHasTouchedEmail ] = useState( false );
 	const [ country, setCountry ] = useState( window.newspackSettings?.social?.nextdoor?.default_country || 'US' );
 	const [ publicationUrl, setPublicationUrl ] = useState( settings.publication_url || '' );
 	const [ isSaving, setIsSaving ] = useState( false );
@@ -111,18 +110,12 @@ export const Onboarding = ( {
 		}
 	}, [ status, steps ] );
 
-	const emailError = ( () => {
-		const trimmed = email.trim();
-		if ( ! trimmed ) {
-			return __( 'Enter the email address for your Nextdoor account.', 'newspack-plugin' );
-		}
-		// Deliberately permissive: the server rejects with is_email(), this only
-		// catches the obvious typo before a round trip.
-		if ( ! /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test( trimmed ) ) {
-			return __( 'That does not look like a valid email address.', 'newspack-plugin' );
-		}
-		return null;
-	} )();
+	// Deliberately permissive: the server rejects with is_email(), this only
+	// catches the obvious typo before a round trip.
+	const isEmailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test( email.trim() );
+	// An empty field is not a mistake worth calling out — the disabled button
+	// already says the step is not ready.
+	const emailError = email.trim() && ! isEmailValid ? __( 'That does not look like a valid email address.', 'newspack-plugin' ) : null;
 
 	const hasCredentialChanges = clientId !== ( settings.client_id || '' ) || clientSecret !== savedSecret;
 
@@ -149,8 +142,7 @@ export const Onboarding = ( {
 	};
 
 	const handleStartOAuth = async () => {
-		if ( emailError ) {
-			setHasTouchedEmail( true );
+		if ( ! isEmailValid ) {
 			return;
 		}
 
@@ -273,17 +265,14 @@ export const Onboarding = ( {
 						<TextControl
 							label={ __( 'Email Address', 'newspack-plugin' ) }
 							value={ email }
-							onChange={ ( value: string ) => {
-								setEmail( value );
-								setHasTouchedEmail( true );
-							} }
+							onChange={ setEmail }
 							type="email"
 							placeholder={ __( 'Enter your Nextdoor account email', 'newspack-plugin' ) }
 							help={ __( 'This should be the email address associated with your Nextdoor account.', 'newspack-plugin' ) }
 							withMargin={ false }
 							__nextHasNoMarginBottom
 						/>
-						{ hasTouchedEmail && emailError && <p className="newspack-social-settings__field-error">{ emailError }</p> }
+						{ emailError && <p className="newspack-social-settings__field-error">{ emailError }</p> }
 					</VStack>
 					<SelectControl
 						label={ __( 'Country', 'newspack-plugin' ) }
@@ -307,7 +296,7 @@ export const Onboarding = ( {
 							variant="primary"
 							__next40pxDefaultSize
 							onClick={ handleStartOAuth }
-							disabled={ !! emailError || isSaving }
+							disabled={ ! isEmailValid || isSaving }
 							isBusy={ isSaving }
 						>
 							{ __( 'Connect Account', 'newspack-plugin' ) }
