@@ -31,9 +31,9 @@ interface ReadonlyFieldProps {
 export default function ReadonlyField( { id, label, help, value, isMonospace, children }: ReadonlyFieldProps ) {
 	return (
 		<BaseControl id={ id } label={ label } help={ help } __nextHasNoMarginBottom>
-			<HStack className={ classnames( 'nextdoor-onboarding__readonly', { 'is-monospace': isMonospace } ) } alignment="center" spacing={ 2 }>
+			<HStack className={ classnames( 'nextdoor-form__readonly', { 'is-monospace': isMonospace } ) } alignment="center" spacing={ 2 }>
 				{ /* The fill goes on the container: the backdrop paints over the value. */ }
-				<FlexBlock className="nextdoor-onboarding__readonly-value">
+				<FlexBlock className="nextdoor-form__readonly-value">
 					<InputControl id={ id } value={ value } aria-describedby={ help ? `${ id }__help` : undefined } readOnly __next40pxDefaultSize />
 				</FlexBlock>
 				{ children }

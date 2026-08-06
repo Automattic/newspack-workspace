@@ -46,7 +46,7 @@ export interface ClaimPageResponse {
 	success?: boolean;
 }
 
-export interface OnboardingProps {
+export interface NextdoorFormProps {
 	settings: NextdoorSettings;
 	status: NextdoorStatus;
 	error: string | null;
@@ -54,15 +54,5 @@ export interface OnboardingProps {
 	startOAuthFlow: ( email: string, country: string ) => Promise< OAuthResponse >;
 	claimPage: ( publicationUrl: string, test?: boolean ) => Promise< ClaimPageResponse >;
 	setError: ( error: string | null ) => void;
-	renderSecondaryActions?: () => React.ReactNode;
-}
-
-export interface SettingsProps {
-	settings: NextdoorSettings;
-	status: NextdoorStatus;
-	error: string | null;
-	updateSettings: ( payload: NextdoorUpdatePayload ) => Promise< void >;
-	setError: ( error: string | null ) => void;
-	disconnect: () => Promise< void >;
 	renderSecondaryActions?: () => React.ReactNode;
 }

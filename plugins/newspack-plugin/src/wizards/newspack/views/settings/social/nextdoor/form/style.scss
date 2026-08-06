@@ -1,11 +1,7 @@
-/**
- * Nextdoor Onboarding Component Styles
- */
-
 @use "~@wordpress/base-styles/colors" as wp-colors;
 @use "~@wordpress/base-styles/variables" as wp-vars;
 
-.nextdoor-onboarding {
+.nextdoor-form {
 	&__intro {
 		margin: 0;
 	}

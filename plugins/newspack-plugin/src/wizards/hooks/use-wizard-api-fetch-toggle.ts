@@ -84,28 +84,6 @@ function useWizardApiFetchToggle< T, P = Partial< T > >( {
 			},
 		} );
 	}
-
-	/**
-	 * Re-read the settings from the server, bypassing the store's `GET` cache.
-	 *
-	 * `apiFetchToggle()` is served from that cache once it is populated, so a
-	 * change made through another endpoint would stay invisible. The fresh
-	 * response replaces both `apiData` and the cached `GET`.
-	 *
-	 * @return The request promise, so callers can react to failures.
-	 */
-	function refresh() {
-		return wizardApiFetch< T >(
-			{
-				path,
-				method: 'GET',
-				isCached: false,
-				updateCacheMethods: [ 'GET' ],
-			},
-			{ onSuccess: setApiData }
-		);
-	}
-
 	return {
 		actionText: isFetching ? createElement( Waiting ) : actionText,
 		apiData,
@@ -113,7 +91,6 @@ function useWizardApiFetchToggle< T, P = Partial< T > >( {
 		description: isFetching ? __( 'Loading…', 'newspack-plugin' ) : description,
 		errorMessage,
 		isFetching,
-		refresh,
 		resetError,
 	};
 }

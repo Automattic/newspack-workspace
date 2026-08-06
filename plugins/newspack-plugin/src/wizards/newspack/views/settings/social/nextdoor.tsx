@@ -26,8 +26,7 @@ import { useErrorAnnouncement, useSocialCards } from './context';
  * Components
  */
 import { NextdoorData, NextdoorSettings, NextdoorStatus, NextdoorUpdatePayload, OAuthResponse, ClaimPageResponse } from './nextdoor/types';
-import { Onboarding } from './nextdoor/onboarding';
-import { Settings } from './nextdoor/settings';
+import { NextdoorForm } from './nextdoor/form';
 
 // Brand name, deliberately untranslated.
 const TITLE = 'Nextdoor';
@@ -72,7 +71,7 @@ function Nextdoor() {
 		}
 	};
 
-	const { description, apiData, isFetching, apiFetchToggle, errorMessage, refresh, resetError } = useWizardApiFetchToggle<
+	const { description, apiData, isFetching, apiFetchToggle, errorMessage, resetError } = useWizardApiFetchToggle<
 		NextdoorData,
 		NextdoorUpdatePayload
 	>( {
@@ -114,8 +113,8 @@ function Nextdoor() {
 	}, [ apiData ] );
 
 	// Routed through the toggle hook rather than a raw `apiFetch`, so a save also
-	// updates `apiData` and the store's GET cache — the status grid below reads
-	// the former, and a remount (switching settings tabs) is served the latter.
+	// updates `apiData` and the store's GET cache — the form below reads the
+	// former, and a remount (switching settings tabs) is served the latter.
 	// Failures surface through `errorMessage`, which the card already renders.
 	const updateSettings = async ( payload: NextdoorUpdatePayload ): Promise< void > => {
 		setError( null );
@@ -168,33 +167,6 @@ function Nextdoor() {
 		}
 	};
 
-	const disconnect = async (): Promise< void > => {
-		try {
-			setError( null );
-			resetError();
-			await apiFetch( {
-				path: '/newspack/v1/nextdoor/disconnect',
-				method: 'DELETE',
-			} );
-		} catch ( fetchError ) {
-			const errorMsg: string =
-				fetchError instanceof Object && 'message' in fetchError
-					? ( fetchError as { message: string } ).message
-					: __( 'Failed to disconnect.', 'newspack-plugin' );
-			reportError( errorMsg );
-			throw new Error( errorMsg );
-		}
-
-		// The tokens are gone, so stop claiming a connection before the refresh
-		// lands: a refresh that fails would otherwise leave the card reporting
-		// "Connected" and offering Disconnect for a connection that no longer exists.
-		setStatus( current => ( { ...current, is_connected: false, has_tokens: false, has_page: false, token_valid: false } ) );
-
-		// The disconnect endpoint only clears tokens; it doesn't touch apiData, so
-		// apiData would still read "connected" without this.
-		await refresh();
-	};
-
 	const { notify } = useSocialCards();
 	useErrorAnnouncement( errorMessage ?? error, errorNonce );
 	const [ isOpen, setIsOpen ] = useState( false );
@@ -202,10 +174,9 @@ function Nextdoor() {
 	const [ hasAutoOpened, setHasAutoOpened ] = useState( false );
 
 	const isEnabled = apiData.module_enabled_nextdoor;
-	// `status` is what the body reads and what `disconnect()` clears optimistically,
-	// so the badge follows it — but only once it has been synced: its initial `false`
-	// is indistinguishable from a real "not connected" and would flash the wrong badge
-	// on every load of a connected site.
+	// `status` is what the body reads, so the badge follows it — but only once it has
+	// been synced: its initial `false` is indistinguishable from a real "not connected"
+	// and would flash the wrong badge on every load of a connected site.
 	const isConnected = hasSyncedStatus ? status.is_connected : apiData.is_connected;
 
 	// Only the OAuth redirect reopens the card: that user arrives on a fresh page
@@ -228,6 +199,11 @@ function Nextdoor() {
 		}
 		if ( ! isConnected ) {
 			return { level: 'error' as const, text: __( 'Not connected', 'newspack-plugin' ) };
+		}
+		// Same sync gate as above: the initial `token_valid: false` is
+		// indistinguishable from a real expiry.
+		if ( hasSyncedStatus && ! status.token_valid ) {
+			return { level: 'error' as const, text: __( 'Reconnect needed', 'newspack-plugin' ) };
 		}
 		return { level: 'success' as const, text: __( 'Enabled', 'newspack-plugin' ) };
 	} )();
@@ -342,28 +318,16 @@ function Nextdoor() {
 						{ errorMessage }
 					</WPNotice>
 				) }
-				{ isConnected ? (
-					<Settings
-						settings={ settings }
-						status={ status }
-						error={ error }
-						updateSettings={ updateSettings }
-						setError={ reportError }
-						disconnect={ disconnect }
-						renderSecondaryActions={ secondaryActions }
-					/>
-				) : (
-					<Onboarding
-						settings={ settings }
-						status={ status }
-						error={ error }
-						updateSettings={ updateSettings }
-						startOAuthFlow={ startOAuthFlow }
-						claimPage={ claimPage }
-						setError={ reportError }
-						renderSecondaryActions={ secondaryActions }
-					/>
-				) }
+				<NextdoorForm
+					settings={ settings }
+					status={ status }
+					error={ error }
+					updateSettings={ updateSettings }
+					startOAuthFlow={ startOAuthFlow }
+					claimPage={ claimPage }
+					setError={ reportError }
+					renderSecondaryActions={ secondaryActions }
+				/>
 			</VStack>
 		</CardForm>
 	);
