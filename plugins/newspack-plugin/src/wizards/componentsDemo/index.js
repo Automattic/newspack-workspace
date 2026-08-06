@@ -94,7 +94,7 @@ const NEXTDOOR_STATUS = {
 
 const NEXTDOOR_CLAIMED = { ...NEXTDOOR_STATUS, is_connected: true, has_credentials: true, has_tokens: true, has_page: true };
 
-const NEXTDOOR_SETTINGS = { client_id: '', client_secret: '', publication_url: '', allowed_roles: [] };
+const NEXTDOOR_SETTINGS = { client_id: '', publication_url: '', allowed_roles: [] };
 
 // Connect and Claim Page navigate away in the real flow. Rejecting keeps the
 // demo on the page: the form catches, so each card stays on its own state.

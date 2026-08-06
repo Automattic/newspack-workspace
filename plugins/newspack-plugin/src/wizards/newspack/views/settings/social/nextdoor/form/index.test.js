@@ -44,26 +44,30 @@ const STATUS = {
 
 const CLAIMED = { ...STATUS, is_connected: true, has_credentials: true, has_tokens: true, has_page: true, token_valid: true };
 
-const SETTINGS = { client_id: '', client_secret: '', publication_url: '', allowed_roles: [] };
+const SETTINGS = { client_id: '', publication_url: '', allowed_roles: [] };
+
+const CLAIMED_SETTINGS = { ...SETTINGS, publication_url: 'https://example.com', allowed_roles: [ 'administrator' ] };
 
 const mockUpdateSettings = jest.fn();
 const mockClaimPage = jest.fn();
 
-const renderForm = ( { status = {}, settings = {} } = {} ) =>
-	render(
-		<NextdoorForm
-			settings={ { ...SETTINGS, ...settings } }
-			status={ { ...STATUS, ...status } }
-			error={ null }
-			updateSettings={ mockUpdateSettings }
-			startOAuthFlow={ jest.fn() }
-			claimPage={ mockClaimPage }
-			setError={ jest.fn() }
-		/>
-	);
+// A factory rather than a render, so `rerender` can hand the form the fresh
+// `settings` object the parent rebuilds on every apiData change.
+const form = ( { status = {}, settings = {} } = {} ) => (
+	<NextdoorForm
+		settings={ { ...SETTINGS, ...settings } }
+		status={ { ...STATUS, ...status } }
+		error={ null }
+		updateSettings={ mockUpdateSettings }
+		startOAuthFlow={ jest.fn() }
+		claimPage={ mockClaimPage }
+		setError={ jest.fn() }
+	/>
+);
 
-const renderClaimedForm = () =>
-	renderForm( { status: CLAIMED, settings: { publication_url: 'https://example.com', allowed_roles: [ 'administrator' ] } } );
+const renderForm = props => render( form( props ) );
+
+const renderClaimedForm = () => renderForm( { status: CLAIMED, settings: CLAIMED_SETTINGS } );
 
 beforeEach( () => {
 	mockNotify.mockReset();
@@ -74,7 +78,7 @@ beforeEach( () => {
 
 describe( 'NextdoorForm', () => {
 	it( 'holds the roles inert until the page is claimed', () => {
-		renderForm( { status: { ...STATUS, has_credentials: true, has_tokens: true } } );
+		renderForm( { status: { ...STATUS, has_credentials: true, has_tokens: true, token_valid: true } } );
 
 		expect( screen.getByRole( 'checkbox', { name: 'Editor' } ) ).toBeDisabled();
 		expect( screen.getByText( /Available once the page is claimed\./ ) ).toBeInTheDocument();
@@ -84,16 +88,17 @@ describe( 'NextdoorForm', () => {
 	it( 'keeps Save disabled until the roles or the publication URL change', () => {
 		renderClaimedForm();
 
-		expect( screen.getByRole( 'button', { name: 'Save' } ) ).toBeDisabled();
+		// The primary stays focusable while disabled, so the state is on aria-disabled.
+		expect( screen.getByRole( 'button', { name: 'Save' } ) ).toHaveAttribute( 'aria-disabled', 'true' );
 
 		fireEvent.click( screen.getByRole( 'checkbox', { name: 'Editor' } ) );
-		expect( screen.getByRole( 'button', { name: 'Save' } ) ).toBeEnabled();
+		expect( screen.getByRole( 'button', { name: 'Save' } ) ).not.toHaveAttribute( 'aria-disabled' );
 
 		fireEvent.click( screen.getByRole( 'checkbox', { name: 'Editor' } ) );
-		expect( screen.getByRole( 'button', { name: 'Save' } ) ).toBeDisabled();
+		expect( screen.getByRole( 'button', { name: 'Save' } ) ).toHaveAttribute( 'aria-disabled', 'true' );
 
 		fireEvent.change( screen.getByLabelText( 'Publication URL' ), { target: { value: 'https://news.example.com' } } );
-		expect( screen.getByRole( 'button', { name: 'Save' } ) ).toBeEnabled();
+		expect( screen.getByRole( 'button', { name: 'Save' } ) ).not.toHaveAttribute( 'aria-disabled' );
 	} );
 
 	it( 'saves changed roles without reclaiming the page', async () => {
@@ -115,5 +120,74 @@ describe( 'NextdoorForm', () => {
 
 		await waitFor( () => expect( mockClaimPage ).toHaveBeenCalledWith( 'https://news.example.com' ) );
 		expect( mockUpdateSettings ).not.toHaveBeenCalled();
+	} );
+
+	it( 'saves the roles before claiming the page', async () => {
+		renderClaimedForm();
+
+		fireEvent.click( screen.getByRole( 'checkbox', { name: 'Editor' } ) );
+		fireEvent.change( screen.getByLabelText( 'Publication URL' ), { target: { value: 'https://news.example.com' } } );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Save' } ) );
+
+		await waitFor( () => expect( mockClaimPage ).toHaveBeenCalledWith( 'https://news.example.com' ) );
+		expect( mockUpdateSettings ).toHaveBeenCalledWith( { allowed_roles: [ 'administrator', 'editor' ] } );
+		expect( mockUpdateSettings.mock.invocationCallOrder[ 0 ] ).toBeLessThan( mockClaimPage.mock.invocationCallOrder[ 0 ] );
+	} );
+
+	it( 'reloads the page once the claim succeeds', async () => {
+		renderClaimedForm();
+
+		fireEvent.change( screen.getByLabelText( 'Publication URL' ), { target: { value: 'https://news.example.com' } } );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Save' } ) );
+
+		await waitFor( () => expect( mockReload ).toHaveBeenCalled() );
+	} );
+
+	it( 'keeps a typed publication URL when a save hands back new settings', async () => {
+		const { rerender } = renderClaimedForm();
+
+		fireEvent.change( screen.getByLabelText( 'Publication URL' ), { target: { value: 'https://news.example.com' } } );
+		fireEvent.click( screen.getByRole( 'checkbox', { name: 'Editor' } ) );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Save' } ) );
+
+		await waitFor( () => expect( mockReload ).toHaveBeenCalled() );
+
+		rerender( form( { status: CLAIMED, settings: { ...CLAIMED_SETTINGS, allowed_roles: [ 'administrator', 'editor' ] } } ) );
+
+		expect( screen.getByLabelText( 'Publication URL' ) ).toHaveValue( 'https://news.example.com' );
+	} );
+
+	it( 'leaves the draft and the form usable when the claim fails', async () => {
+		mockClaimPage.mockRejectedValue( new Error( 'Failed to claim page.' ) );
+		renderClaimedForm();
+
+		fireEvent.change( screen.getByLabelText( 'Publication URL' ), { target: { value: 'https://news.example.com' } } );
+		fireEvent.click( screen.getByRole( 'checkbox', { name: 'Editor' } ) );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Save' } ) );
+
+		await waitFor( () => expect( mockClaimPage ).toHaveBeenCalledWith( 'https://news.example.com' ) );
+		expect( mockUpdateSettings ).toHaveBeenCalledWith( { allowed_roles: [ 'administrator', 'editor' ] } );
+
+		await waitFor( () => expect( screen.getByRole( 'button', { name: 'Save' } ) ).not.toHaveAttribute( 'aria-disabled' ) );
+		expect( screen.getByLabelText( 'Publication URL' ) ).toHaveValue( 'https://news.example.com' );
+		expect( mockReload ).not.toHaveBeenCalled();
+	} );
+
+	it( 'refuses an empty publication URL and says so once the field is left', () => {
+		renderClaimedForm();
+
+		fireEvent.change( screen.getByLabelText( 'Publication URL' ), { target: { value: '' } } );
+		fireEvent.blur( screen.getByLabelText( 'Publication URL' ) );
+
+		expect( screen.getByRole( 'button', { name: 'Save' } ) ).toHaveAttribute( 'aria-disabled', 'true' );
+		expect( screen.getByText( 'Enter the URL of your publication.' ) ).toBeInTheDocument();
+	} );
+
+	it( 'picks up a publication URL that changed on the server', () => {
+		const { rerender } = renderClaimedForm();
+
+		rerender( form( { status: CLAIMED, settings: { ...CLAIMED_SETTINGS, publication_url: 'https://moved.example.com' } } ) );
+
+		expect( screen.getByLabelText( 'Publication URL' ) ).toHaveValue( 'https://moved.example.com' );
 	} );
 } );
