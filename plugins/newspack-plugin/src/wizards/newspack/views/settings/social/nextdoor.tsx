@@ -1,6 +1,7 @@
 /**
- * Nextdoor integration for Newspack section
+ * External dependencies
  */
+import classnames from 'classnames';
 
 /**
  * WordPress dependencies
@@ -8,12 +9,14 @@
 import { __ } from '@wordpress/i18n';
 import { useState, useEffect } from '@wordpress/element';
 import apiFetch from '@wordpress/api-fetch';
+import { __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 
 /**
  * Internal dependencies
  */
+import { Button, CardForm, Notice } from '../../../../../../packages/components/src';
 import useWizardApiFetchToggle from '../../../../hooks/use-wizard-api-fetch-toggle';
-import WizardsActionCard from '../../../../wizards-action-card';
+import { useSocialCards } from './context';
 
 /**
  * Components
@@ -39,7 +42,7 @@ function Nextdoor() {
 	} );
 	const [ error, setError ] = useState< string | null >( null );
 
-	const { description, apiData, isFetching, actionText, apiFetchToggle, errorMessage } = useWizardApiFetchToggle< NextdoorData >( {
+	const { description, apiData, isFetching, apiFetchToggle, errorMessage } = useWizardApiFetchToggle< NextdoorData >( {
 		path: '/newspack/v1/wizard/newspack-settings/social/nextdoor',
 		apiNamespace: 'newspack-settings/social/nextdoor',
 		data: {
@@ -144,7 +147,6 @@ function Nextdoor() {
 				path: '/newspack/v1/nextdoor/disconnect',
 				method: 'DELETE',
 			} );
-			handleToggle( true );
 		} catch ( fetchError ) {
 			const errorMsg: string =
 				fetchError instanceof Object && 'message' in fetchError
@@ -155,63 +157,140 @@ function Nextdoor() {
 		}
 	};
 
-	const getDescription = () => {
-		if ( isFetching ) {
-			return __( 'Loading…', 'newspack-plugin' );
-		}
+	const { notify } = useSocialCards();
+	const [ isOpen, setIsOpen ] = useState( false );
+	const [ isEnabling, setIsEnabling ] = useState( false );
+	const [ hasAutoOpened, setHasAutoOpened ] = useState( false );
 
-		if ( apiData.module_enabled_nextdoor ) {
-			if ( apiData.is_connected ) {
-				return __( 'Nextdoor integration is enabled and connected.', 'newspack-plugin' );
+	const isEnabled = apiData.module_enabled_nextdoor;
+	const isConnected = apiData.is_connected;
+
+	// A user returning from the Nextdoor OAuth redirect arrives on a fresh page
+	// load, so an unfinished setup has to reopen itself or the step they were on
+	// is invisible.
+	useEffect( () => {
+		if ( hasAutoOpened || isFetching || ! isEnabled || isConnected ) {
+			return;
+		}
+		setHasAutoOpened( true );
+		setIsOpen( true );
+	}, [ hasAutoOpened, isFetching, isEnabled, isConnected ] );
+
+	const badge = ( () => {
+		if ( ! isEnabled || ( isOpen && isEnabling ) ) {
+			return undefined;
+		}
+		if ( ! isConnected ) {
+			return { level: 'warning' as const, text: __( 'Setup incomplete', 'newspack-plugin' ) };
+		}
+		return { level: 'success' as const, text: __( 'Connected', 'newspack-plugin' ) };
+	} )();
+
+	const setModuleEnabled = ( value: boolean ) => apiFetchToggle( { ...apiData, module_enabled_nextdoor: value }, true );
+
+	const enable = async () => {
+		try {
+			await setModuleEnabled( true );
+		} catch {
+			return;
+		}
+		setIsEnabling( true );
+		setIsOpen( true );
+	};
+
+	const disable = async () => {
+		try {
+			await setModuleEnabled( false );
+		} catch {
+			return;
+		}
+		setIsEnabling( false );
+		setIsOpen( false );
+		notify( __( 'Nextdoor Integration disabled.', 'newspack-plugin' ) );
+	};
+
+	const close = async () => {
+		if ( isEnabling ) {
+			try {
+				await setModuleEnabled( false );
+			} catch {
+				return;
 			}
-			return __( 'Nextdoor integration is enabled but not connected. Complete the setup to start sharing posts.', 'newspack-plugin' );
+			setIsEnabling( false );
 		}
-
-		return description;
+		setIsOpen( false );
 	};
 
-	const handleToggle = ( value: boolean ) => {
-		apiFetchToggle( { ...apiData, module_enabled_nextdoor: value }, true );
-	};
+	const actions = isEnabled ? (
+		<Button
+			variant="tertiary"
+			size="compact"
+			aria-label={
+				isOpen ? __( 'Cancel editing Nextdoor Integration', 'newspack-plugin' ) : __( 'Edit Nextdoor Integration', 'newspack-plugin' )
+			}
+			disabled={ isFetching }
+			onClick={ () => ( isOpen ? close() : setIsOpen( true ) ) }
+		>
+			<span className="newspack-social-settings__toggle-label">
+				<span className={ classnames( { 'is-visible': isOpen } ) }>{ __( 'Cancel', 'newspack-plugin' ) }</span>
+				<span className={ classnames( { 'is-visible': ! isOpen } ) }>{ __( 'Edit', 'newspack-plugin' ) }</span>
+			</span>
+		</Button>
+	) : (
+		<Button
+			variant="secondary"
+			size="compact"
+			aria-label={ __( 'Enable Nextdoor Integration', 'newspack-plugin' ) }
+			isBusy={ isFetching }
+			disabled={ isFetching }
+			onClick={ enable }
+		>
+			{ __( 'Enable', 'newspack-plugin' ) }
+		</Button>
+	);
+
+	const renderSecondaryActions = () => (
+		<Button variant="tertiary" size="compact" isDestructive isBusy={ isFetching } disabled={ isFetching } onClick={ disable }>
+			{ __( 'Disable', 'newspack-plugin' ) }
+		</Button>
+	);
 
 	return (
-		<>
-			<WizardsActionCard
-				title={ __( 'Nextdoor Integration', 'newspack-plugin' ) }
-				description={ getDescription() }
-				disabled={ isFetching }
-				actionText={ actionText }
-				error={ errorMessage }
-				toggleChecked={ apiData.module_enabled_nextdoor }
-				toggleOnChange={ handleToggle }
-			>
-				{ apiData.module_enabled_nextdoor && (
-					<>
-						{ apiData.is_connected ? (
-							<Settings
-								settings={ settings }
-								status={ status }
-								error={ error }
-								updateSettings={ updateSettings }
-								setError={ setError }
-								disconnect={ disconnect }
-							/>
-						) : (
-							<Onboarding
-								settings={ settings }
-								status={ status }
-								error={ error }
-								updateSettings={ updateSettings }
-								startOAuthFlow={ startOAuthFlow }
-								claimPage={ claimPage }
-								disconnect={ disconnect }
-								setError={ setError }
-							/>
-						) }
-					</>
+		<CardForm
+			title={ __( 'Nextdoor Integration', 'newspack-plugin' ) }
+			description={ description }
+			badge={ badge }
+			actions={ actions }
+			isOpen={ isOpen }
+			onRequestClose={ close }
+		>
+			<VStack spacing={ 4 }>
+				{ errorMessage && <Notice isError noticeText={ errorMessage } /> }
+				{ isConnected ? (
+					<Settings
+						settings={ settings }
+						status={ status }
+						error={ error }
+						updateSettings={ updateSettings }
+						setError={ setError }
+						disconnect={ disconnect }
+						renderSecondaryActions={ renderSecondaryActions }
+					/>
+				) : (
+					<Onboarding
+						settings={ settings }
+						status={ status }
+						error={ error }
+						updateSettings={ updateSettings }
+						startOAuthFlow={ startOAuthFlow }
+						claimPage={ claimPage }
+						disconnect={ disconnect }
+						setError={ setError }
+						renderSecondaryActions={ renderSecondaryActions }
+					/>
 				) }
-			</WizardsActionCard>
-		</>
+			</VStack>
+		</CardForm>
 	);
 }
 
