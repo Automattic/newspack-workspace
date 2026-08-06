@@ -1,6 +1,15 @@
+@use "~@wordpress/base-styles/colors" as wp-colors;
 @use "~@wordpress/base-styles/mixins" as wp-mixins;
+@use "~@wordpress/base-styles/variables" as wp-vars;
 
 .newspack-social-settings {
+	&__field-error {
+		color: wp-colors.$alert-red;
+		font-size: wp-vars.$helptext-font-size;
+		line-height: 1.5;
+		margin: 0;
+	}
+
 	&__snackbar {
 		@include wp-mixins.snackbar-container();
 		z-index: 99999;

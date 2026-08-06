@@ -164,25 +164,23 @@ const PixelCard = ( { title, description, namespace, path, validate, renderHelp 
 						{ errorMessage }
 					</WPNotice>
 				) }
-				<TextControl
-					value={ draft }
-					label={ __( 'Pixel ID', 'newspack-plugin' ) }
-					onChange={ ( value: string ) => {
-						setDraft( value );
-						setHasTouched( true );
-						setError( null );
-					} }
-					help={ renderHelp() }
-					disabled={ isFetching }
-					autoComplete="one-time-code"
-					withMargin={ false }
-					__nextHasNoMarginBottom
-				/>
-				{ hasTouched && validationError && (
-					<WPNotice status="error" isDismissible={ false } spokenMessage={ null }>
-						{ validationError }
-					</WPNotice>
-				) }
+				<VStack spacing={ 2 }>
+					<TextControl
+						value={ draft }
+						label={ __( 'Pixel ID', 'newspack-plugin' ) }
+						onChange={ ( value: string ) => {
+							setDraft( value );
+							setHasTouched( true );
+							setError( null );
+						} }
+						help={ renderHelp() }
+						disabled={ isFetching }
+						autoComplete="one-time-code"
+						withMargin={ false }
+						__nextHasNoMarginBottom
+					/>
+					{ hasTouched && validationError && <p className="newspack-social-settings__field-error">{ validationError }</p> }
+				</VStack>
 				<HStack justify="flex-start" spacing={ 2 }>
 					<Button
 						variant="primary"
