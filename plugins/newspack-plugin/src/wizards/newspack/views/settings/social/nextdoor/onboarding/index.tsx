@@ -257,10 +257,6 @@ export const Onboarding = ( {
 
 			{ currentStep === steps.ACCOUNT_AUTH && (
 				<VStack spacing={ 4 }>
-					<p className="nextdoor-onboarding__intro">
-						{ __( 'Connect your Nextdoor account to authorize publishing articles.', 'newspack-plugin' ) }
-					</p>
-
 					<TextControl
 						label={ __( 'Email Address', 'newspack-plugin' ) }
 						value={ email }
