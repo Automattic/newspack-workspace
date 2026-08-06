@@ -178,7 +178,7 @@ const PixelCard = ( { title, description, namespace, path, validate, renderHelp 
 				<HStack justify="flex-start" spacing={ 2 }>
 					<Button
 						variant="primary"
-						size="compact"
+						__next40pxDefaultSize
 						isBusy={ isFetching }
 						disabled={ isFetching || !! validationError || ( ! isEnabling && ! hasChanges ) }
 						onClick={ () => save( { active: true, pixel_id: draft.trim() }, isEnabling ? enabledMessage : updatedMessage ) }
@@ -188,7 +188,7 @@ const PixelCard = ( { title, description, namespace, path, validate, renderHelp 
 					{ ! isEnabling && (
 						<Button
 							variant="tertiary"
-							size="compact"
+							__next40pxDefaultSize
 							isDestructive
 							isBusy={ isFetching }
 							disabled={ isFetching }

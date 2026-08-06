@@ -120,10 +120,16 @@ export const Settings = ( { settings, status, error, updateSettings, disconnect,
 				</Grid>
 
 				<HStack justify="flex-start" spacing={ 2 }>
-					<Button variant="primary" size="compact" onClick={ handleSaveSettings } disabled={ ! hasChanges || isSaving } isBusy={ isSaving }>
+					<Button
+						variant="primary"
+						__next40pxDefaultSize
+						onClick={ handleSaveSettings }
+						disabled={ ! hasChanges || isSaving }
+						isBusy={ isSaving }
+					>
 						{ __( 'Save', 'newspack-plugin' ) }
 					</Button>
-					<Button variant="tertiary" size="compact" isDestructive onClick={ handleDisconnect }>
+					<Button variant="tertiary" __next40pxDefaultSize isDestructive onClick={ handleDisconnect }>
 						{ __( 'Disconnect', 'newspack-plugin' ) }
 					</Button>
 					{ renderSecondaryActions?.() }

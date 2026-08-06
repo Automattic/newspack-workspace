@@ -319,7 +319,7 @@ function Nextdoor() {
 	);
 
 	const renderSecondaryActions = () => (
-		<Button variant="tertiary" size="compact" isDestructive isBusy={ isFetching } disabled={ isFetching } onClick={ disable }>
+		<Button variant="tertiary" __next40pxDefaultSize isDestructive isBusy={ isFetching } disabled={ isFetching } onClick={ disable }>
 			{ __( 'Disable', 'newspack-plugin' ) }
 		</Button>
 	);

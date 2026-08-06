@@ -133,6 +133,8 @@ const PlacementControl = ( {
 						options={ getProvidersForSelect( providers ) }
 						onChange={ provider => onChange( { ...value, provider } ) }
 						disabled={ disabled }
+						__next40pxDefaultSize
+						__nextHasNoMarginBottom
 					/>
 				) }
 				<SelectControl
@@ -147,6 +149,8 @@ const PlacementControl = ( {
 						} );
 					} }
 					disabled={ disabled }
+					__next40pxDefaultSize
+					__nextHasNoMarginBottom
 					{ ...props }
 				/>
 				{ effectiveProvider?.id === 'gam' &&
@@ -161,6 +165,7 @@ const PlacementControl = ( {
 								label={ bidderLabel }
 								disabled={ biddersErrors[ bidderKey ] || disabled }
 								withMargin={ false }
+								__next40pxDefaultSize
 								__nextHasNoMarginBottom
 								onChange={ data => {
 									onChange( {

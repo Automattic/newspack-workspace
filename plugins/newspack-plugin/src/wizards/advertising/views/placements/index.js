@@ -293,7 +293,7 @@ const Placements = () => {
 								<HStack justify="flex-start" spacing={ 2 }>
 									<Button
 										variant="primary"
-										size="compact"
+										__next40pxDefaultSize
 										isBusy={ inFlight }
 										disabled={ inFlight || ( isEnabling ? ! hasAdUnit : ! hasChanges ) }
 										onClick={ async () => {
@@ -318,7 +318,7 @@ const Placements = () => {
 									{ ! isEnabling && (
 										<Button
 											variant="tertiary"
-											size="compact"
+											__next40pxDefaultSize
 											isBusy={ inFlight }
 											isDestructive
 											disabled={ inFlight }
