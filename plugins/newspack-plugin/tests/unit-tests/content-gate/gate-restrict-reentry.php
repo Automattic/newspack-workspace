@@ -17,6 +17,8 @@ use Newspack\Content_Restriction_Control;
 
 /**
  * Gate render re-entrancy tests.
+ *
+ * @group content-gate
  */
 class Test_Gate_Restrict_Reentry extends \WP_UnitTestCase {
 
@@ -44,7 +46,8 @@ class Test_Gate_Restrict_Reentry extends \WP_UnitTestCase {
 	private $loop_block_renders = 0;
 
 	/**
-	 * Define the Content Gates feature flag for this test class only.
+	 * Define the Content Gates feature flag (process-wide once defined) so the
+	 * gate code paths are active for these tests.
 	 */
 	public static function setUpBeforeClass(): void {
 		parent::setUpBeforeClass();
@@ -195,15 +198,23 @@ class Test_Gate_Restrict_Reentry extends \WP_UnitTestCase {
 
 		// Production wiring: restrict_post() listens on `the_post`, which is
 		// how wp_reset_postdata() re-enters it. Content_Gate::init() hooks are
-		// not registered in the test bootstrap, so wire it explicitly.
-		add_action( 'the_post', [ Content_Gate::class, 'restrict_post' ], 10, 2 );
+		// not registered in the test bootstrap, so wire it explicitly — but
+		// only add (and later remove) the hook if it isn't already registered,
+		// so this test never strips a production-registered listener.
+		$hook_added = false;
+		if ( false === has_action( 'the_post', [ Content_Gate::class, 'restrict_post' ] ) ) {
+			add_action( 'the_post', [ Content_Gate::class, 'restrict_post' ], 10, 2 );
+			$hook_added = true;
+		}
 
 		try {
 			$this->go_to( get_permalink( $post_id ) );
 			$post = get_post( $post_id );
 			Content_Gate::restrict_post( $post, $GLOBALS['wp_query'] );
 		} finally {
-			remove_action( 'the_post', [ Content_Gate::class, 'restrict_post' ], 10 );
+			if ( $hook_added ) {
+				remove_action( 'the_post', [ Content_Gate::class, 'restrict_post' ], 10 );
+			}
 			remove_filter( 'newspack_gate_layout_content', $counter );
 		}
 

@@ -11,9 +11,13 @@ use Newspack\Content_Gate;
 use Newspack\Content_Restriction_Control;
 
 /**
- * Tests that a gate layout referencing a synced pattern renders without
- * re-entering the gate render pipeline (NPPD-2166: memory exhaustion when the
- * paid access layout ends with a synced pattern).
+ * Characterization tests pinning synced-pattern (core/block) rendering inside
+ * gate layouts — the surface NPPD-2166 originally suspected. These pass with
+ * or without the re-entrancy fix (a synced pattern alone runs no secondary
+ * loop); the regression proof for the fix lives in gate-restrict-reentry.php.
+ * The re-entry guard here future-proofs the pattern path against recursion.
+ *
+ * @group content-gate
  */
 class Test_Gate_Synced_Pattern_Layout extends \WP_UnitTestCase {
 
@@ -32,7 +36,8 @@ class Test_Gate_Synced_Pattern_Layout extends \WP_UnitTestCase {
 	protected $post_ids = [];
 
 	/**
-	 * Define the Content Gates feature flag for this test class only.
+	 * Define the Content Gates feature flag (process-wide once defined) so the
+	 * gate code paths are active for these tests.
 	 */
 	public static function setUpBeforeClass(): void {
 		parent::setUpBeforeClass();
@@ -195,8 +200,9 @@ class Test_Gate_Synced_Pattern_Layout extends \WP_UnitTestCase {
 
 	/**
 	 * Full front-end flow: a restricted post rendered through restrict_post()
-	 * and the_content must produce the gate with the pattern content, without
-	 * re-entering the gate render pipeline.
+	 * and the_content must produce the gate with the pattern content. The
+	 * re-entry guard is a safety net for the assertions, not the subject under
+	 * test — see gate-restrict-reentry.php for the re-entrancy coverage.
 	 */
 	public function test_restricted_post_renders_gate_with_synced_pattern() {
 		$ids     = $this->create_pattern_backed_layout();

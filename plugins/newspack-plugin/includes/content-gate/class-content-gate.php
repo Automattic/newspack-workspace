@@ -642,14 +642,21 @@ class Content_Gate {
 	}
 
 	/**
-	 * Public method for marking the gate as rendered.
+	 * Public method for marking the gate render as claimed.
+	 *
+	 * Every render path sets this BEFORE producing output, so the flag acts as
+	 * a once-per-request re-entrancy lock, not a signal that gate markup
+	 * already exists.
 	 */
 	public static function mark_gate_as_rendered() {
 		self::$gate_rendered = true;
 	}
 
 	/**
-	 * Whether the gate has rendered.
+	 * Whether a gate render has been claimed for this request.
+	 *
+	 * True from the moment a render path commits to rendering (see
+	 * mark_gate_as_rendered()), which may be before any markup is output.
 	 */
 	public static function has_rendered() {
 		return self::$gate_rendered;
