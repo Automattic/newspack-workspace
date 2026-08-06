@@ -38,7 +38,6 @@ final class Newspack_Popups_Segmentation {
 	 * behind the HMAC-signed newsletter pass (see Newspack\Newsletters_Access).
 	 */
 	const DONOR_SEGMENT_QUERY_PARAM = 'np_seg_donor';
-	const SEGMENTS_QUERY_PARAM      = 'np_segments';
 
 	/**
 	 * Installed version number of the custom table.
@@ -93,7 +92,7 @@ final class Newspack_Popups_Segmentation {
 		// an unresolved `%FIELD%` is a malformed percent-escape that crashes
 		// consumers which decode query params strictly — see NPPM-3032. Priority 1
 		// so it runs before redirect_canonical() and before any HTML is generated.
-		add_action( 'template_redirect', [ __CLASS__, 'scrub_unsubstituted_segment_params' ], 1 );
+		add_action( 'template_redirect', [ __CLASS__, 'scrub_unsubstituted_donor_param' ], 1 );
 	}
 
 	/**
@@ -322,9 +321,8 @@ final class Newspack_Popups_Segmentation {
 	 * segmentation; this side uses it to decide the param is safe to drop.
 	 *
 	 * Matching the bare-bracket Campaign Monitor form would be risky for an
-	 * arbitrary query value, but the segmentation params only ever carry a
-	 * donor-status value (`np_seg_donor`: e.g. `true`, `monthly`, `$50.00`) or
-	 * a comma-separated ID list (`np_segments`) — never a `[…]`-wrapped string.
+	 * arbitrary query value, but `np_seg_donor` only ever carries a donor-status
+	 * value (e.g. `true`, `monthly`, `$50.00`) — never a `[…]`-wrapped string.
 	 *
 	 * @param string $value Decoded query-param value.
 	 *
@@ -347,24 +345,21 @@ final class Newspack_Popups_Segmentation {
 
 	/**
 	 * Action callback: redirect away any inbound URL still carrying an
-	 * unsubstituted merge tag in a segmentation param (`np_seg_donor`,
-	 * `np_segments`).
+	 * unsubstituted donor merge tag.
 	 *
-	 * Newsletters already in inboxes keep arriving with whatever their links
-	 * carried at send time, so an ESP that never substituted a tag delivers
-	 * e.g. `?np_seg_donor=%DONAT%`. That value is a malformed percent-escape:
-	 * `decodeURIComponent( '%DONAT%' )` throws, and Jetpack Instant Search
-	 * decodes every query param on load with no try/catch, so the exception
-	 * blanks the page (NPPM-3032). Redirecting before any output means no such
-	 * consumer ever sees the param.
+	 * Newsletters sent before the tag stopped being emitted are already in
+	 * inboxes, so their links keep arriving with e.g. `?np_seg_donor=%DONAT%`.
+	 * That value is a malformed percent-escape: `decodeURIComponent( '%DONAT%' )`
+	 * throws, and Jetpack Instant Search decodes every query param on load with
+	 * no try/catch, so the exception blanks the page (NPPM-3032). Redirecting
+	 * before any output means no such consumer ever sees the param.
 	 *
-	 * Dropping the value costs nothing: an unsubstituted tag is not a reader
-	 * signal, and the client scripts already ignore it (isUnsubstitutedMergeTag()
-	 * in donation.js; the numeric-ID validation in carried-segments.js).
-	 * Substituted values — the ones that actually segment — are left alone, as
-	 * is every other query param.
+	 * Dropping the value costs nothing: an unsubstituted tag is not a donor
+	 * signal, and the criteria script already ignores it (see
+	 * isUnsubstitutedMergeTag() in donation.js). Substituted values — the ones
+	 * that actually segment — are left alone, as is every other query param.
 	 */
-	public static function scrub_unsubstituted_segment_params() {
+	public static function scrub_unsubstituted_donor_param() {
 		// Redirecting a POST would discard its body, and a redirect is only
 		// meaningful for a document request in a browser.
 		if ( ! isset( $_SERVER['REQUEST_METHOD'] ) || 'GET' !== $_SERVER['REQUEST_METHOD'] ) {
@@ -373,33 +368,30 @@ final class Newspack_Popups_Segmentation {
 		if ( ! isset( $_SERVER['REQUEST_URI'] ) ) {
 			return;
 		}
-		$request_uri  = esc_url_raw( wp_unslash( $_SERVER['REQUEST_URI'] ) );
-		$scrub_params = [];
-		foreach ( [ self::DONOR_SEGMENT_QUERY_PARAM, self::SEGMENTS_QUERY_PARAM ] as $param ) {
-			// Reading a URL param to decide whether the URL itself is malformed; there
-			// is no form submission or state change here to nonce-verify.
-			if ( ! isset( $_GET[ $param ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-				continue;
-			}
-			// Match against BOTH the raw query value and the percent-decoded one. PHP
-			// decodes $_GET before this runs, so a tag whose field name begins with a hex
-			// pair — `%CAFE%`, `%ABCD%` — arrives already mangled (`%CA` becomes one byte)
-			// and no longer looks like a `%…%` tag, yet the raw URL still throws in a
-			// strict client-side decoder (decodeURIComponent) and blanks the page. The raw
-			// REQUEST_URI query preserves the literal `%XX` so the check can catch it. The
-			// decoded value is still checked too, so a merge tag whose delimiters were
-			// percent-encoded in transit (e.g. `%2A%7C…%7C%2A` for Mailchimp) is not
-			// missed. See NPPM-3032.
-			$raw_value     = self::get_raw_query_param( $request_uri, $param );
-			$decoded_value = sanitize_text_field( wp_unslash( $_GET[ $param ] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-			if ( self::is_unsubstituted_merge_tag( $raw_value ) || self::is_unsubstituted_merge_tag( $decoded_value ) ) {
-				$scrub_params[] = $param;
-			}
-		}
-		if ( empty( $scrub_params ) ) {
+		// Reading a URL param to decide whether the URL itself is malformed; there
+		// is no form submission or state change here to nonce-verify.
+		if ( ! isset( $_GET[ self::DONOR_SEGMENT_QUERY_PARAM ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			return;
 		}
-		$clean_url = remove_query_arg( $scrub_params, $request_uri );
+		$request_uri = esc_url_raw( wp_unslash( $_SERVER['REQUEST_URI'] ) );
+		// Match against BOTH the raw query value and the percent-decoded one. PHP
+		// decodes $_GET before this runs, so a tag whose field name begins with a hex
+		// pair — `%CAFE%`, `%ABCD%` — arrives already mangled (`%CA` becomes one byte)
+		// and no longer looks like a `%…%` tag, yet the raw URL still throws in a
+		// strict client-side decoder (decodeURIComponent) and blanks the page. The raw
+		// REQUEST_URI query preserves the literal `%XX` so the check can catch it. The
+		// decoded value is still checked too, so a merge tag whose delimiters were
+		// percent-encoded in transit (e.g. `%2A%7C…%7C%2A` for Mailchimp) is not
+		// missed. See NPPM-3032.
+		$raw_value     = self::get_raw_query_param( $request_uri, self::DONOR_SEGMENT_QUERY_PARAM );
+		$decoded_value = sanitize_text_field( wp_unslash( $_GET[ self::DONOR_SEGMENT_QUERY_PARAM ] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( ! self::is_unsubstituted_merge_tag( $raw_value ) && ! self::is_unsubstituted_merge_tag( $decoded_value ) ) {
+			return;
+		}
+		$clean_url = remove_query_arg(
+			self::DONOR_SEGMENT_QUERY_PARAM,
+			$request_uri
+		);
 		// Temporary: the param is a property of this one link, not of the page, so
 		// nothing should cache the mapping permanently.
 		wp_safe_redirect( $clean_url, 302 );

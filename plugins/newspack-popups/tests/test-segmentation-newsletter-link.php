@@ -187,7 +187,7 @@ class SegmentationNewsletterLinkTest extends WP_UnitTestCase {
 
 		add_filter( 'wp_redirect', $filter );
 		try {
-			Newspack_Popups_Segmentation::scrub_unsubstituted_segment_params();
+			Newspack_Popups_Segmentation::scrub_unsubstituted_donor_param();
 		} catch ( Segmentation_Redirect_Exception $e ) {
 			unset( $e ); // Expected: stands in for the exit() after the redirect.
 		} finally {
@@ -317,34 +317,6 @@ class SegmentationNewsletterLinkTest extends WP_UnitTestCase {
 		$once = $this->scrub( '/p/?a=1&np_seg_donor=%DONAT%' );
 		$this->assertSame( '/p/?a=1', $once );
 		$this->assertNull( $this->scrub( $once ) );
-	}
-
-	/**
-	 * An unsubstituted tag in `np_segments` is scrubbed like the donor param,
-	 * for every supported ESP syntax.
-	 *
-	 * @param string $tag Raw merge tag as it arrives in the query string.
-	 *
-	 * @dataProvider unsubstituted_tag_provider
-	 */
-	public function test_scrub_strips_unsubstituted_np_segments_tag( $tag ) {
-		$this->assertSame( '/p/?a=1', $this->scrub( '/p/?a=1&np_segments=' . $tag ) );
-	}
-
-	/**
-	 * A substituted `np_segments` value — the recipient's comma-separated ID
-	 * list — is not a merge tag and must reach the client script untouched.
-	 */
-	public function test_scrub_leaves_substituted_np_segments_value_alone() {
-		$this->assertNull( $this->scrub( '/p/?np_segments=123,124' ) );
-	}
-
-	/**
-	 * Both segmentation params arriving raw in one URL are stripped in a
-	 * single redirect.
-	 */
-	public function test_scrub_strips_both_segment_params_in_one_redirect() {
-		$this->assertSame( '/p/?a=1', $this->scrub( '/p/?a=1&np_seg_donor=%DONAT%&np_segments=%SEGMENTS%' ) );
 	}
 
 	/**
