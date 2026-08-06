@@ -19,7 +19,7 @@ import { __experimentalHStack as HStack, __experimentalVStack as VStack, Snackba
 /**
  * Internal dependencies
  */
-import { Button, CardForm, Grid, Notice, withWizardScreen } from '../../../../../packages/components/src';
+import { Button, CardForm, Notice, withWizardScreen } from '../../../../../packages/components/src';
 import PlacementControl from '../../components/placement-control';
 
 /**
@@ -167,194 +167,182 @@ const Placements = () => {
 	return (
 		<Fragment>
 			{ ! inFlight && ! providers.length && <Notice isWarning noticeText={ __( 'There is no provider available.', 'newspack-plugin' ) } /> }
-			<Grid columns={ 12 } noMargin gutter={ 0 }>
-				<h2 className="newspack-wizard__heading" style={ { gridColumn: 'span 4' } }>
-					{ __( 'Placements', 'newspack-plugin' ) }
-				</h2>
-				<VStack
-					spacing={ 4 }
-					style={ { gridColumn: 'span 8' } }
-					className={ classnames( {
-						'newspack-wizard-ads-placements': true,
-						'newspack-wizard-section__is-loading': inFlight && ! Object.keys( placements ).length,
-					} ) }
-				>
-					{ Object.keys( placements ).map( key => {
-						const placement = placements[ key ];
-						const enabled = isEnabled( key );
-						const isEditing = editingPlacement === key;
-						const hasChanges = isEditing && ! isEqual( placement.data, originalData );
-						let hasAdUnit = true;
-						if ( placement.hook_name ) {
-							hasAdUnit = !! placement.data?.ad_unit;
-						} else if ( placement.hooks ) {
-							hasAdUnit = Object.keys( placement.hooks ).every( hookKey => !! placement.data?.hooks?.[ hookKey ]?.ad_unit );
-						}
+			<VStack
+				spacing={ 4 }
+				className={ classnames( {
+					'newspack-wizard-ads-placements': true,
+					'newspack-wizard-section__is-loading': inFlight && ! Object.keys( placements ).length,
+				} ) }
+			>
+				{ Object.keys( placements ).map( key => {
+					const placement = placements[ key ];
+					const enabled = isEnabled( key );
+					const isEditing = editingPlacement === key;
+					const hasChanges = isEditing && ! isEqual( placement.data, originalData );
+					let hasAdUnit = true;
+					if ( placement.hook_name ) {
+						hasAdUnit = !! placement.data?.ad_unit;
+					} else if ( placement.hooks ) {
+						hasAdUnit = Object.keys( placement.hooks ).every( hookKey => !! placement.data?.hooks?.[ hookKey ]?.ad_unit );
+					}
 
-						/* translators: %s: placement name (e.g. "Sticky Footer"). */
-						const editButtonLabel = sprintf( __( 'Edit %s', 'newspack-plugin' ), placement.name );
-						/* translators: %s: placement name (e.g. "Sticky Footer"). */
-						const cancelButtonLabel = sprintf( __( 'Cancel editing %s', 'newspack-plugin' ), placement.name );
-						/* translators: %s: placement name (e.g. "Sticky Footer"). */
-						const enableButtonLabel = sprintf( __( 'Enable %s', 'newspack-plugin' ), placement.name );
+					/* translators: %s: placement name (e.g. "Sticky Footer"). */
+					const editButtonLabel = sprintf( __( 'Edit %s', 'newspack-plugin' ), placement.name );
+					/* translators: %s: placement name (e.g. "Sticky Footer"). */
+					const cancelButtonLabel = sprintf( __( 'Cancel editing %s', 'newspack-plugin' ), placement.name );
+					/* translators: %s: placement name (e.g. "Sticky Footer"). */
+					const enableButtonLabel = sprintf( __( 'Enable %s', 'newspack-plugin' ), placement.name );
 
-						return (
-							<CardForm
-								key={ key }
-								title={ placement.name }
-								description={ placement.description }
-								badge={
-									enabled && ! ( isEditing && isEnabling )
-										? { level: 'success', text: __( 'Enabled', 'newspack-plugin' ) }
-										: undefined
-								}
-								actions={
-									enabled ? (
+					return (
+						<CardForm
+							key={ key }
+							title={ placement.name }
+							description={ placement.description }
+							badge={
+								enabled && ! ( isEditing && isEnabling ) ? { level: 'success', text: __( 'Enabled', 'newspack-plugin' ) } : undefined
+							}
+							actions={
+								enabled ? (
+									<Button
+										variant="tertiary"
+										size="compact"
+										// Load-bearing: the grid stack keeps both labels in the DOM (only `visibility: hidden`), so this aria-label is the button's only clean accessible name.
+										aria-label={ isEditing ? cancelButtonLabel : editButtonLabel }
+										disabled={ inFlight || ( !! editingPlacement && ! isEditing ) }
+										onClick={ () => {
+											if ( isEditing ) {
+												cancelEditing();
+											} else {
+												setOriginalData( placement.data );
+												setEditingPlacement( key );
+											}
+										} }
+									>
+										<span className="newspack-wizard-ads-placements__toggle-label">
+											<span className={ classnames( { 'is-visible': isEditing } ) }>{ __( 'Cancel', 'newspack-plugin' ) }</span>
+											<span className={ classnames( { 'is-visible': ! isEditing } ) }>{ __( 'Edit', 'newspack-plugin' ) }</span>
+										</span>
+									</Button>
+								) : (
+									<Button
+										variant="secondary"
+										size="compact"
+										aria-label={ enableButtonLabel }
+										isBusy={ inFlight }
+										disabled={ inFlight || ! providers.length || !! editingPlacement }
+										onClick={ () => handlePlacementToggle( key )( true ) }
+									>
+										{ __( 'Enable', 'newspack-plugin' ) }
+									</Button>
+								)
+							}
+							isOpen={ isEditing }
+							onRequestClose={ cancelEditing }
+							className={ classnames( 'newspack-wizard-ads-placement', {
+								'newspack-wizard-ads-placement--enabled': enabled,
+							} ) }
+						>
+							<VStack spacing={ 4 }>
+								{ error && <Notice isError noticeText={ error.message } /> }
+								{ biddersError && <Notice isWarning noticeText={ biddersError.message } /> }
+								{ ( enabled || isEnabling ) && placement.hook_name && (
+									<PlacementControl
+										providers={ providers }
+										bidders={ bidders }
+										value={ placement.data }
+										disabled={ inFlight }
+										onChange={ handlePlacementChange( key ) }
+									/>
+								) }
+								{ placement.hooks &&
+									Object.keys( placement.hooks ).map( hookKey => {
+										const hook = {
+											hookKey,
+											...placement.hooks[ hookKey ],
+										};
+										return (
+											<PlacementControl
+												key={ hookKey }
+												label={ hook.name + ' ' + __( 'Ad Unit', 'newspack-plugin' ) }
+												providers={ providers }
+												bidders={ bidders }
+												value={ placement.data?.hooks ? placement.data.hooks[ hookKey ] : {} }
+												disabled={ inFlight }
+												onChange={ handlePlacementChange( key, hookKey ) }
+											/>
+										);
+									} ) }
+								{ placement.supports?.indexOf( 'stick_to_top' ) > -1 && (
+									<ToggleControl
+										label={ __( 'Stick to Top', 'newspack-plugin' ) }
+										checked={ !! placement.data?.stick_to_top }
+										onChange={ value => {
+											setPlacements( {
+												...placements,
+												[ key ]: {
+													...placements[ key ],
+													data: {
+														...placements[ key ].data,
+														stick_to_top: value,
+													},
+												},
+											} );
+										} }
+									/>
+								) }
+								<HStack justify="flex-start" spacing={ 2 }>
+									<Button
+										variant="primary"
+										size="compact"
+										isBusy={ inFlight }
+										disabled={ inFlight || ( isEnabling ? ! hasAdUnit : ! hasChanges ) }
+										onClick={ async () => {
+											const success = await updatePlacement( key );
+											if ( ! success ) {
+												return;
+											}
+											const name = placement.name;
+											setIsEnabling( false );
+											setOriginalData( null );
+											setEditingPlacement( null );
+											// translators: %s: placement name.
+											const enabledContent = sprintf( __( '%s enabled.', 'newspack-plugin' ), name );
+											// translators: %s: placement name.
+											const updatedContent = sprintf( __( '%s updated.', 'newspack-plugin' ), name );
+											const savedContent = isEnabling ? enabledContent : updatedContent;
+											setNotice( { id: Date.now(), content: savedContent } );
+										} }
+									>
+										{ isEnabling ? __( 'Enable', 'newspack-plugin' ) : __( 'Update', 'newspack-plugin' ) }
+									</Button>
+									{ ! isEnabling && (
 										<Button
 											variant="tertiary"
 											size="compact"
-											// Load-bearing: the grid stack keeps both labels in the DOM (only `visibility: hidden`), so this aria-label is the button's only clean accessible name.
-											aria-label={ isEditing ? cancelButtonLabel : editButtonLabel }
-											disabled={ inFlight || ( !! editingPlacement && ! isEditing ) }
-											onClick={ () => {
-												if ( isEditing ) {
-													cancelEditing();
-												} else {
-													setOriginalData( placement.data );
-													setEditingPlacement( key );
-												}
-											} }
-										>
-											<span className="newspack-wizard-ads-placements__toggle-label">
-												<span className={ classnames( { 'is-visible': isEditing } ) }>
-													{ __( 'Cancel', 'newspack-plugin' ) }
-												</span>
-												<span className={ classnames( { 'is-visible': ! isEditing } ) }>
-													{ __( 'Edit', 'newspack-plugin' ) }
-												</span>
-											</span>
-										</Button>
-									) : (
-										<Button
-											variant="secondary"
-											size="compact"
-											aria-label={ enableButtonLabel }
 											isBusy={ inFlight }
-											disabled={ inFlight || ! providers.length || !! editingPlacement }
-											onClick={ () => handlePlacementToggle( key )( true ) }
-										>
-											{ __( 'Enable', 'newspack-plugin' ) }
-										</Button>
-									)
-								}
-								isOpen={ isEditing }
-								onRequestClose={ cancelEditing }
-								className={ classnames( 'newspack-wizard-ads-placement', {
-									'newspack-wizard-ads-placement--enabled': enabled,
-								} ) }
-							>
-								<VStack spacing={ 4 }>
-									{ error && <Notice isError noticeText={ error.message } /> }
-									{ biddersError && <Notice isWarning noticeText={ biddersError.message } /> }
-									{ ( enabled || isEnabling ) && placement.hook_name && (
-										<PlacementControl
-											providers={ providers }
-											bidders={ bidders }
-											value={ placement.data }
+											isDestructive
 											disabled={ inFlight }
-											onChange={ handlePlacementChange( key ) }
-										/>
-									) }
-									{ placement.hooks &&
-										Object.keys( placement.hooks ).map( hookKey => {
-											const hook = {
-												hookKey,
-												...placement.hooks[ hookKey ],
-											};
-											return (
-												<PlacementControl
-													key={ hookKey }
-													label={ hook.name + ' ' + __( 'Ad Unit', 'newspack-plugin' ) }
-													providers={ providers }
-													bidders={ bidders }
-													value={ placement.data?.hooks ? placement.data.hooks[ hookKey ] : {} }
-													disabled={ inFlight }
-													onChange={ handlePlacementChange( key, hookKey ) }
-												/>
-											);
-										} ) }
-									{ placement.supports?.indexOf( 'stick_to_top' ) > -1 && (
-										<ToggleControl
-											label={ __( 'Stick to Top', 'newspack-plugin' ) }
-											checked={ !! placement.data?.stick_to_top }
-											onChange={ value => {
-												setPlacements( {
-													...placements,
-													[ key ]: {
-														...placements[ key ],
-														data: {
-															...placements[ key ].data,
-															stick_to_top: value,
-														},
-													},
-												} );
-											} }
-										/>
-									) }
-									<HStack justify="flex-start" spacing={ 2 }>
-										<Button
-											variant="primary"
-											size="compact"
-											isBusy={ inFlight }
-											disabled={ inFlight || ( isEnabling ? ! hasAdUnit : ! hasChanges ) }
 											onClick={ async () => {
-												const success = await updatePlacement( key );
+												const name = placement.name;
+												const success = await handlePlacementToggle( key )( false );
 												if ( ! success ) {
 													return;
 												}
-												const name = placement.name;
-												setIsEnabling( false );
-												setOriginalData( null );
 												setEditingPlacement( null );
 												// translators: %s: placement name.
-												const enabledContent = sprintf( __( '%s enabled.', 'newspack-plugin' ), name );
-												// translators: %s: placement name.
-												const updatedContent = sprintf( __( '%s updated.', 'newspack-plugin' ), name );
-												const savedContent = isEnabling ? enabledContent : updatedContent;
-												setNotice( { id: Date.now(), content: savedContent } );
+												const disabledContent = sprintf( __( '%s disabled.', 'newspack-plugin' ), name );
+												setNotice( { id: Date.now(), content: disabledContent } );
 											} }
 										>
-											{ isEnabling ? __( 'Enable', 'newspack-plugin' ) : __( 'Update', 'newspack-plugin' ) }
+											{ __( 'Disable', 'newspack-plugin' ) }
 										</Button>
-										{ ! isEnabling && (
-											<Button
-												variant="tertiary"
-												size="compact"
-												isBusy={ inFlight }
-												isDestructive
-												disabled={ inFlight }
-												onClick={ async () => {
-													const name = placement.name;
-													const success = await handlePlacementToggle( key )( false );
-													if ( ! success ) {
-														return;
-													}
-													setEditingPlacement( null );
-													// translators: %s: placement name.
-													const disabledContent = sprintf( __( '%s disabled.', 'newspack-plugin' ), name );
-													setNotice( { id: Date.now(), content: disabledContent } );
-												} }
-											>
-												{ __( 'Disable', 'newspack-plugin' ) }
-											</Button>
-										) }
-									</HStack>
-								</VStack>
-							</CardForm>
-						);
-					} ) }
-				</VStack>
-			</Grid>
+									) }
+								</HStack>
+							</VStack>
+						</CardForm>
+					);
+				} ) }
+			</VStack>
 			{ notice &&
 				createPortal(
 					<div className="newspack-wizard-ads-placements__snackbar">
