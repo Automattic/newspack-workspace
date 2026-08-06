@@ -61,6 +61,14 @@ namespace {
 			public static $warnings  = [];
 
 			/**
+			 * Structured rows recorded by the format_items() stub, one entry per
+			 * call: [ 'format' => ..., 'items' => ..., 'fields' => ... ].
+			 *
+			 * @var array[]
+			 */
+			public static $tables = [];
+
+			/**
 			 * Exit code recorded by halt(), null when halt() was never called.
 			 *
 			 * @var int|null
@@ -76,6 +84,7 @@ namespace {
 				self::$logs      = [];
 				self::$successes = [];
 				self::$warnings  = [];
+				self::$tables    = [];
 				self::$halt_code = null;
 			}
 
@@ -140,6 +149,11 @@ namespace WP_CLI\Utils {
 			$items               = is_array( $items ) ? $items : iterator_to_array( $items );
 			\WP_CLI::$output[]   = sprintf( '(%s: %d row(s))', $format, count( $items ) );
 			\WP_CLI::$messages[] = [ 'table', wp_json_encode( array_values( $items ) ) ];
+			\WP_CLI::$tables[]   = [
+				'format' => $format,
+				'items'  => $items,
+				'fields' => $fields,
+			];
 		}
 	}
 
