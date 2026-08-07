@@ -216,4 +216,52 @@ describe( 'ConfirmDialog controlled by isOpen', () => {
 		act( () => historyRef.current.push( '/next' ) );
 		expect( dialog() ).toBeInTheDocument();
 	} );
+
+	// `isOpen` is authoritative both ways, so a prompt the blocker raised goes with
+	// it, taking the navigation it was holding.
+	it( 'withdraws a blocked navigation prompt when isOpen goes false', () => {
+		const historyRef = { current: null };
+		const withOpen = isOpen => (
+			<MemoryRouter>
+				<HistoryGrabber historyRef={ historyRef } />
+				<ConfirmDialog when isOpen={ isOpen } confirmButtonText="Discard changes" cancelButtonText="Keep editing">
+					Unsaved changes
+				</ConfirmDialog>
+			</MemoryRouter>
+		);
+		const { rerender } = render( withOpen( true ) );
+		act( () => historyRef.current.push( '/next' ) );
+		expect( dialog() ).toBeInTheDocument();
+
+		rerender( withOpen( false ) );
+		expect( dialog() ).not.toBeInTheDocument();
+		expect( historyRef.current.location.pathname ).toBe( '/' );
+	} );
+} );
+
+// Both the drawer and `useUnsavedChangesDialog` name their prompt this way: the
+// heading is the accessible name and never renders.
+describe( 'ConfirmDialog named by a hidden title', () => {
+	it( 'takes its accessible name from the title while hiding the header', () => {
+		render(
+			<ConfirmDialog isOpen hideTitle title="Unsaved changes" confirmButtonText="Discard changes">
+				You have unsaved changes that will be lost. Discard changes?
+			</ConfirmDialog>
+		);
+
+		const frame = screen.getByRole( 'dialog', { name: 'Unsaved changes' } );
+		expect( frame ).toHaveClass( 'newspack-modal--hide-title' );
+		expect( frame.querySelector( '.components-modal__header' ) ).toContainElement( screen.getByRole( 'heading', { name: 'Unsaved changes' } ) );
+	} );
+
+	it( 'has no accessible name without a title', () => {
+		render(
+			<ConfirmDialog isOpen hideTitle confirmButtonText="Discard changes">
+				You have unsaved changes that will be lost. Discard changes?
+			</ConfirmDialog>
+		);
+
+		expect( screen.queryByRole( 'dialog', { name: 'Unsaved changes' } ) ).not.toBeInTheDocument();
+		expect( screen.getByRole( 'dialog' ) ).not.toHaveAttribute( 'aria-labelledby' );
+	} );
 } );
