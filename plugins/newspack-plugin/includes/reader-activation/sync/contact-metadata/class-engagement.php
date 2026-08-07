@@ -107,7 +107,7 @@ class Engagement extends Contact_Metadata {
 				'name'        => 'Last Payment Page',
 				'description' => __( 'URL of the checkout page from the reader\'s most recent completed order, of any product type. Unlike the legacy Payment Page, which follows the reader\'s current subscription or last one-time donation, this can diverge for recurring subscribers and one-time non-donation purchasers.', 'newspack-plugin' ),
 				'example'     => 'https://example.com/support-us',
-				'status'      => 'existing',
+				'status'      => 'updated',
 				'supersedes'  => 'v1:payment_page',
 			],
 			'Payment_UTM_Source'   => [
