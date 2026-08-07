@@ -205,7 +205,7 @@ export default function ImpactTable( { baseline, segmentGroups, currency, showCy
 						{ /* Divider margins are raw px, not a step scale. */ }
 						<Divider variant="tertiary" marginTop={ 0 } marginBottom={ 8 } />
 						<div>
-							<Button variant="link" aria-expanded={ expanded } onClick={ () => setExpanded( ! expanded ) }>
+							<Button variant="tertiary" aria-expanded={ expanded } onClick={ () => setExpanded( ! expanded ) }>
 								{ expanded ? __( 'See less', 'newspack-plugin' ) : __( 'See more', 'newspack-plugin' ) }
 							</Button>
 						</div>
