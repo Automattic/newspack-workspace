@@ -230,6 +230,7 @@ final class Newspack {
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/class-gravityforms.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/google-site-kit/class-googlesitekit.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/google-site-kit/class-googlesitekit-logger.php';
+		include_once NEWSPACK_ABSPATH . 'includes/plugins/google-site-kit/class-ga4-client.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/google-site-kit/class-ga4-custom-dimensions.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/class-mailchimp-for-woocommerce.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/class-onesignal.php';
