@@ -566,9 +566,11 @@ class Controller {
 		$ingestion_response   = [];
 		$ingestion_error_msgs = [];
 		// Two different failures, and only one of them is the publisher's to fix. A token
-		// with nothing left to renew it needs a reconnection; anything else that stops the
-		// report coming back means Nextdoor is unreachable, which passes on its own.
-		$needs_reconnect = ! empty( $guid ) && ! Auth::has_usable_token();
+		// with nothing left to renew it needs a reconnection; anything else that stops a
+		// response coming back means Nextdoor is unreachable, which passes on its own.
+		// The connection is site-wide, so this is reported whether or not the post has
+		// been shared: sharing needs a working token as much as updating does.
+		$needs_reconnect = ! Auth::has_usable_token();
 		$is_unreachable  = false;
 
 		if ( ! empty( $guid ) && ! $needs_reconnect && ! Auth::validate_token() ) {
@@ -582,9 +584,15 @@ class Controller {
 			$api                = API::instance();
 			$ingestion_response = $api->get_ingestion_report( [ $guid ] );
 
-			// The report is the other way this can fail, and it is the one the publisher
-			// actually came for, so a lost response reads as unreachable too.
-			$is_unreachable = is_wp_error( $ingestion_response );
+			if ( is_wp_error( $ingestion_response ) ) {
+				// An access token still inside its window can be revoked at the other end,
+				// where nothing local sees it and only the report says so. Being refused is
+				// a reconnection; everything else is the network.
+				$error_data      = $ingestion_response->get_error_data();
+				$error_status    = is_array( $error_data ) && isset( $error_data['status'] ) ? (int) $error_data['status'] : 0;
+				$needs_reconnect = in_array( $error_status, [ 401, 403 ], true );
+				$is_unreachable  = ! $needs_reconnect;
+			}
 
 			if ( ! is_wp_error( $ingestion_response ) &&
 				isset( $ingestion_response['results'] ) &&
