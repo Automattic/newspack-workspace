@@ -188,6 +188,10 @@ final class Click {
 	 * path, or ahead of an "@" — and still resolve somewhere else, so the two tests
 	 * disagree on where a reader would actually land.
 	 *
+	 * Measured against home_url() alone, which is the same host wp_validate_redirect()
+	 * treats as this site. site_url() only parts company over the path, when WordPress
+	 * lives in its own subdirectory, so it has nothing to add to a host comparison.
+	 *
 	 * @param string $url URL to check.
 	 *
 	 * @return bool
@@ -197,13 +201,7 @@ final class Click {
 		if ( ! $host ) {
 			return false;
 		}
-		// home_url() and site_url() differ when WordPress lives in its own subdirectory.
-		foreach ( [ \home_url(), \get_site_url() ] as $site_url ) {
-			if ( $host === self::get_url_host( $site_url ) ) {
-				return true;
-			}
-		}
-		return false;
+		return $host === self::get_url_host( \home_url() );
 	}
 
 	/**
@@ -264,27 +262,50 @@ final class Click {
 		}
 
 		if ( $with_redirect ) {
-			/*
-			 * By this point the destination is either this site or a link verified to
-			 * exist in the ad's rendered email, so allow that one host for the length of
-			 * the validation call and take it back off straight after — nothing else in
-			 * the request should inherit it. This is what wp_safe_redirect() does, minus
-			 * its wp-admin fallback, which is no use to a reader who is not logged in.
-			 */
-			$destination_host       = self::get_url_host( $url );
-			$allow_destination_host = function ( $hosts ) use ( $destination_host ) {
-				if ( $destination_host ) {
-					$hosts[] = $destination_host;
-				}
-				return $hosts;
-			};
-			\add_filter( 'allowed_redirect_hosts', $allow_destination_host );
-			$location = \wp_validate_redirect( $url, \home_url() );
-			\remove_filter( 'allowed_redirect_hosts', $allow_destination_host );
-
-			\wp_redirect( $location ); // phpcs:ignore WordPress.Security.SafeRedirect.wp_redirect_wp_redirect -- Validated by wp_validate_redirect() above.
+			\wp_redirect( self::get_redirect_location( $url ) ); // phpcs:ignore WordPress.Security.SafeRedirect.wp_redirect_wp_redirect -- Validated by get_redirect_location().
 			exit;
 		}
+	}
+
+	/**
+	 * Resolve the location a click should send the reader to.
+	 *
+	 * By the time this runs the destination is either this site or a link verified to
+	 * exist in the ad's rendered email, so its host is allowed for the length of the
+	 * validation call and taken back off straight after — nothing else in the request
+	 * should inherit it. This is what wp_safe_redirect() does, minus its wp-admin
+	 * fallback, which is no use to a reader who is not logged in.
+	 *
+	 * The host is allowed both as written and lowercased. wp_validate_redirect()
+	 * matches with a strict in_array() against the host it parses out of the location,
+	 * without normalising its case, so an allowance registered only in lower case
+	 * would miss a destination written as "Example.com" and drop the reader on the
+	 * fallback instead of the link they clicked.
+	 *
+	 * @param string $url Destination URL.
+	 *
+	 * @return string A validated location, or home_url() when the destination doesn't pass.
+	 */
+	public static function get_redirect_location( $url ) {
+		$destination_hosts = array_values(
+			array_unique(
+				array_filter(
+					[
+						(string) \wp_parse_url( (string) $url, PHP_URL_HOST ),
+						self::get_url_host( $url ),
+					]
+				)
+			)
+		);
+
+		$allow_destination_host = function ( $hosts ) use ( $destination_hosts ) {
+			return array_merge( $hosts, $destination_hosts );
+		};
+		\add_filter( 'allowed_redirect_hosts', $allow_destination_host );
+		$location = \wp_validate_redirect( $url, \home_url() );
+		\remove_filter( 'allowed_redirect_hosts', $allow_destination_host );
+
+		return $location;
 	}
 }
 Click::init();

@@ -296,6 +296,44 @@ class Newsletters_Tracking_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A verified destination is redirected to as written, whatever case its host
+	 * carries.
+	 *
+	 * The host parsed out of the location is matched against the allowed list with a
+	 * strict in_array(), so an allowance registered in one case doesn't cover a
+	 * destination written in another — the reader would land on the fallback instead
+	 * of the link they clicked.
+	 */
+	public function test_redirect_location_keeps_destination_whatever_the_host_case() {
+		$cases = [
+			'https://example.com/article/' => 'a lowercase host',
+			'https://Example.com/article/' => 'a capitalised host',
+			'https://EXAMPLE.COM/article/' => 'an uppercase host',
+			'https://ExAmPlE.com/a?b=c#d'  => 'a mixed-case host with a query and fragment',
+		];
+		foreach ( $cases as $url => $description ) {
+			$this->assertSame(
+				$url,
+				Click::get_redirect_location( $url ),
+				"A destination with $description should be redirected to as written."
+			);
+		}
+	}
+
+	/**
+	 * A location that can't be validated falls back to the site's front page, rather
+	 * than the wp-admin default a logged-out reader can't use.
+	 *
+	 * Defence in depth rather than a path a click can take: handle_click() rejects
+	 * anything wp_http_validate_url() turns down, and what survives that always has
+	 * an http(s) scheme and a host, which this method then allows. The fallback is
+	 * pinned here so it stays correct if that ordering ever changes.
+	 */
+	public function test_redirect_location_falls_back_to_home() {
+		$this->assertSame( \home_url(), Click::get_redirect_location( 'javascript:alert(1)' ) );
+	}
+
+	/**
 	 * Test logs processing.
 	 */
 	public function test_process_logs() {
