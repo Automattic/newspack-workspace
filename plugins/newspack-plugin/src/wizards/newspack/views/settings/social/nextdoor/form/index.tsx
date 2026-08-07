@@ -163,10 +163,13 @@ export const NextdoorForm = ( {
 	}, [] );
 
 	// Shape only, but stricter than is_email(), which accepts a one-letter TLD.
-	// The lookahead keeps an all-numeric TLD out while still allowing a
-	// non-ASCII one and its punycode form. Whether the address exists is
-	// Nextdoor's problem, not something a pattern can answer.
-	const isEmailValid = /^[^\s@]+@[^\s@.]+(\.[^\s@.]+)*\.(?=[^\s@.]*\p{L})[^\s@.]{2,}$/u.test( email.trim() );
+	// The lookahead keeps an all-numeric TLD out. The alphabet is is_email()'s,
+	// which is ASCII: a non-ASCII address the endpoint refuses must not enable
+	// Connect. Whether the address exists is Nextdoor's problem, not something a
+	// pattern can answer.
+	const isEmailValid = /^[A-Za-z0-9!#$%&'*+\/=?^_`{|}~.-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.(?=[A-Za-z0-9-]*[A-Za-z])[A-Za-z0-9-]{2,}$/.test(
+		email.trim()
+	);
 	// Only after leaving the field: an empty one is not a mistake worth calling
 	// out, and a half-typed address is not either.
 	const emailError =

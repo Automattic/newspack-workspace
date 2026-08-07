@@ -261,6 +261,23 @@ describe( 'NextdoorForm', () => {
 		await waitFor( () => expect( mockStartOAuthFlow ).toHaveBeenCalledWith( 'editor@example.com', 'US' ) );
 	} );
 
+	it( 'refuses an address the endpoint will not accept', () => {
+		renderForm( { status: STORED_CREDENTIALS, settings: { client_id: 'stored-id' } } );
+
+		// The route validates with is_email(), which reads ASCII only. Enabling Connect
+		// here would send the publisher to a sign-in the server answers with a 400.
+		fireEvent.change( screen.getByLabelText( 'Email Address' ), { target: { value: 'editor@example.рф' } } );
+		fireEvent.blur( screen.getByLabelText( 'Email Address' ) );
+
+		expect( screen.getByRole( 'button', { name: 'Connect to Nextdoor' } ) ).toHaveAttribute( 'aria-disabled', 'true' );
+		expect( screen.getByText( 'That does not look like a valid email address.' ) ).toBeInTheDocument();
+
+		// The punycode form of the same domain is ASCII, and is accepted.
+		fireEvent.change( screen.getByLabelText( 'Email Address' ), { target: { value: 'editor@example.xn--p1ai' } } );
+
+		expect( screen.getByRole( 'button', { name: 'Connect to Nextdoor' } ) ).not.toHaveAttribute( 'aria-disabled' );
+	} );
+
 	it( 'reports a failed sign-in once and takes it out of the URL', () => {
 		window.location.search = '?page=newspack-settings&nextdoor_oauth_error=Nextdoor%20refused%20the%20sign-in';
 
