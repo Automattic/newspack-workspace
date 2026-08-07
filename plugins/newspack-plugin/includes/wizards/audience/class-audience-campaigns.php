@@ -515,7 +515,7 @@ class Audience_Campaigns extends Wizard {
 				},
 				$newspack_popups_configuration_manager->get_prompts( true, true )
 			);
-			$response['segments']  = $newspack_popups_configuration_manager->get_segments( true );
+			$response['segments']  = GA4_Segment_Reach::decorate_segments( $newspack_popups_configuration_manager->get_segments( true ) );
 			$response['settings']  = $newspack_popups_configuration_manager->get_settings();
 			$response['campaigns'] = $newspack_popups_configuration_manager->get_campaigns();
 		}
@@ -727,7 +727,7 @@ class Audience_Campaigns extends Wizard {
 	 */
 	public function api_get_segments() {
 		$newspack_popups_configuration_manager = Configuration_Managers::configuration_manager_class_for_plugin_slug( 'newspack-popups' );
-		$response                              = $newspack_popups_configuration_manager->get_segments();
+		$response                              = GA4_Segment_Reach::decorate_segments( $newspack_popups_configuration_manager->get_segments() );
 		return $response;
 	}
 
