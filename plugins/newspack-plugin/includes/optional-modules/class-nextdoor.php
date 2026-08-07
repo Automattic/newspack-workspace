@@ -222,21 +222,20 @@ class Nextdoor {
 	public static function get_settings() {
 		$default_settings = [
 			// OAuth credentials.
-			'client_id'         => '',
-			'client_secret'     => '',
+			'client_id'        => '',
+			'client_secret'    => '',
 
 			// OAuth token.
-			'refresh_token'     => '',
-			'access_token'      => '',
-			'token_expires_at'  => 0,
-			'refresh_failed_at' => 0,
+			'refresh_token'    => '',
+			'access_token'     => '',
+			'token_expires_at' => 0,
 
 			// Nextdoor page info.
-			'page_id'           => '',
-			'publication_url'   => '',
+			'page_id'          => '',
+			'publication_url'  => '',
 
 			// User configs.
-			'allowed_roles'     => [ 'administrator' ],
+			'allowed_roles'    => [ 'administrator' ],
 		];
 
 		/**

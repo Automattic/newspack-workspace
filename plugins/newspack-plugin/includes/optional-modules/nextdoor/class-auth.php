@@ -26,6 +26,15 @@ class Auth {
 	const STATE_TRANSIENT_PREFIX = 'newspack_nextdoor_oauth_state_';
 
 	/**
+	 * When Nextdoor last refused the stored grant.
+	 *
+	 * Its own option rather than a settings key: the request that records a refusal is by
+	 * definition racing one that may be renewing the token, and writing the whole settings
+	 * array would put a stale snapshot of the credentials back over the winner's.
+	 */
+	const REFUSAL_OPTION = 'newspack_nextdoor_token_refused_at';
+
+	/**
 	 * Initialise.
 	 */
 	public static function init() {
@@ -148,6 +157,7 @@ class Auth {
 		}
 
 		Nextdoor::update_settings( self::apply_token_response( Nextdoor::get_settings(), $token_data ) );
+		self::clear_token_refusal();
 
 		return $token_data;
 	}
@@ -188,9 +198,8 @@ class Auth {
 		// stamped as already due and the next call renews it.
 		$expires_in = isset( $token_data['expires_in'] ) && is_numeric( $token_data['expires_in'] ) ? (int) $token_data['expires_in'] : 0;
 
-		$settings['access_token']      = $token_data['access_token'];
-		$settings['token_expires_at']  = time() + $expires_in;
-		$settings['refresh_failed_at'] = 0;
+		$settings['access_token']     = $token_data['access_token'];
+		$settings['token_expires_at'] = time() + $expires_in;
 
 		// Nextdoor rotates the refresh token, and omits it when it has not changed.
 		if ( ! empty( $token_data['refresh_token'] ) && is_string( $token_data['refresh_token'] ) ) {
@@ -366,6 +375,7 @@ class Auth {
 		$settings['page_id'] = '';
 
 		Nextdoor::update_settings( $settings );
+		self::clear_token_refusal();
 
 		wp_safe_redirect( admin_url( 'admin.php?page=newspack-settings&oauth_success=1#social' ) );
 		exit;
@@ -393,8 +403,16 @@ class Auth {
 			}
 		}
 
-		$settings['refresh_failed_at'] = time();
-		Nextdoor::update_settings( $settings );
+		update_option( self::REFUSAL_OPTION, time() );
+	}
+
+	/**
+	 * Forget a recorded refusal, because a fresh grant has replaced what was refused.
+	 *
+	 * @return void
+	 */
+	public static function clear_token_refusal() {
+		delete_option( self::REFUSAL_OPTION );
 	}
 
 	/**
@@ -432,7 +450,7 @@ class Auth {
 			return false;
 		}
 
-		if ( ! empty( $settings['refresh_failed_at'] ) ) {
+		if ( get_option( self::REFUSAL_OPTION ) ) {
 			return false;
 		}
 

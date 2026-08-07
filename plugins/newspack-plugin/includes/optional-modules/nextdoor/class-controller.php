@@ -618,6 +618,11 @@ class Controller {
 				// the connection as working.
 				if ( $needs_reconnect ) {
 					Auth::record_token_refusal( [ 'access_token' => $token_used ] );
+					// The recorder declines when another request rotated the token while this
+					// one was in flight, so ask again rather than sending the publisher to a
+					// card that reports the connection as working.
+					$needs_reconnect = ! Auth::has_usable_token();
+					$is_unreachable  = ! $needs_reconnect;
 				}
 			}
 
