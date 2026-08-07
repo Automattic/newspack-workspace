@@ -5,8 +5,6 @@ on:
     branches:
       - release
       - alpha
-      - 'hotfix/**'
-      - 'epic/**'
 
 concurrency:
   group: release-${{ github.ref }}
@@ -156,13 +154,13 @@ jobs:
       # ancestry check is unaffected by the extra commit.
       #
       # Runs only on the `release` branch. Version/changelog stamps are authored
-      # on a single channel (see config/release-helpers.js): prerelease channels
-      # (alpha, hotfix/*, epic/*) build their zip/tag from the working-tree bump
-      # but never commit it, so only `release` ever edits the version-stamp
-      # lines. That keeps the committed CHANGELOG free of prerelease noise and
-      # stops post-release.sh's release -> alpha / default-branch sync from
-      # colliding on version headers. The prerelease zip is built from the
-      # working tree regardless, so nothing downstream needs this commit.
+      # on a single channel (see config/release-helpers.js): the alpha prerelease
+      # channel builds its zip/tag from the working-tree bump but never commits
+      # it, so only `release` ever edits the version-stamp lines. That keeps the
+      # committed CHANGELOG free of prerelease noise and stops post-release.sh's
+      # release -> alpha / default-branch sync from colliding on version headers.
+      # The prerelease zip is built from the working tree regardless, so nothing
+      # downstream needs this commit.
       - name: Sync package.json versions
         if: ${{ github.ref_name == 'release' }}
         run: |
@@ -176,8 +174,7 @@ jobs:
           }
 
       # Post a release-success summary to Slack: stable releases (release branch)
-      # go to the a8c workspace, alpha releases to the Newspack workspace. Only
-      # these two branches notify; hotfix/* and epic/* publish silently.
+      # go to the a8c workspace, alpha releases to the Newspack workspace.
       # Only the workspace for this branch's release type gets its token, so an
       # alpha run never sees the a8c token and vice versa (the empty fallback is
       # fine: the script skips when its token/channel is unset). continue-on-error
@@ -196,7 +193,7 @@ jobs:
         run: ./.github/scripts/notify-release.sh
 
   # Branch maintenance after a stable release: reset alpha and sync release into
-  # the default branch. Only runs on the release branch (not alpha/hotfix/epic).
+  # the default branch. Only runs on the release branch (not alpha).
   post-release:
     name: Post-release branch sync
     if: github.ref == 'refs/heads/release'
