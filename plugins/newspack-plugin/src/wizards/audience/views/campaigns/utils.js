@@ -228,8 +228,11 @@ export const segmentReachDescription = segment => {
 		return __( 'No reach data yet', 'newspack-plugin' );
 	}
 	return sprintf(
-		// Translators: %1$s: sessions count. %2$s: prompt-audience sessions count. %3$s: date of the data.
-		__( 'Reach (7d): %1$s sessions · prompt audience: %2$s · as of %3$s', 'newspack-plugin' ),
+		/* Translators: %1$d: number of days the report covers. %2$s: sessions count. %3$s: prompt-audience sessions count. %4$s: date of the data. */
+		__( 'Reach (%1$dd): %2$s sessions · prompt audience: %3$s · as of %4$s', 'newspack-plugin' ),
+		// The window is a server-side constant, passed through so the label
+		// can't drift from the report it describes.
+		Number( reach.range_days ) || 7,
 		Number( reach.matched ).toLocaleString(),
 		Number( reach.won ).toLocaleString(),
 		// `as_of` is the last calendar day the report covers, computed in UTC.

@@ -98,8 +98,24 @@ describe( 'segmentReachDescription', () => {
 	} );
 
 	it( 'renders sessions, prompt audience, and the data date', () => {
-		const line = segmentReachDescription( { id: '12', reach: { matched: 1240, won: 320, as_of: '2026-08-06' } } );
+		const line = segmentReachDescription( {
+			id: '12',
+			reach: { matched: 1240, won: 320, as_of: '2026-08-06', range_days: 7 },
+		} );
 		expect( line ).toBe( `Reach (7d): ${ ( 1240 ).toLocaleString() } sessions · prompt audience: ${ ( 320 ).toLocaleString() } · as of Aug 6` );
+	} );
+
+	it( 'names the window the server reported rather than a fixed one', () => {
+		const line = segmentReachDescription( {
+			id: '12',
+			reach: { matched: 5, won: 1, as_of: '2026-08-06', range_days: 28 },
+		} );
+		expect( line ).toContain( 'Reach (28d)' );
+	} );
+
+	it( 'falls back to 7 days for a cache written before the window was reported', () => {
+		const line = segmentReachDescription( { id: '12', reach: { matched: 5, won: 1, as_of: '2026-08-06' } } );
+		expect( line ).toContain( 'Reach (7d)' );
 	} );
 
 	it.each( [
