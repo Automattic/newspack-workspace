@@ -75,13 +75,13 @@ class Nextdoor_Section extends Wizard_Section {
 					'client_id'               => [
 						'required'          => false,
 						'type'              => 'string',
-						'sanitize_callback' => 'sanitize_text_field',
+						'sanitize_callback' => [ $this, 'sanitize_credential' ],
 						'validate_callback' => 'rest_validate_request_arg',
 					],
 					'client_secret'           => [
 						'required'          => false,
 						'type'              => 'string',
-						'sanitize_callback' => 'sanitize_text_field',
+						'sanitize_callback' => [ $this, 'sanitize_credential' ],
 						'validate_callback' => 'rest_validate_request_arg',
 					],
 					'allowed_roles'           => [
@@ -94,6 +94,22 @@ class Nextdoor_Section extends Wizard_Section {
 				],
 			]
 		);
+	}
+
+	/**
+	 * Keep a credential exactly as the publisher pasted it.
+	 *
+	 * `sanitize_text_field()` drops every `%` followed by two hex digits, which is
+	 * display-text hygiene an opaque bearer string does not want: a secret carrying one
+	 * would be stored short, and the only symptom is a sign-in that never works. Nothing
+	 * renders these as HTML, so what is left to exclude is whitespace and control
+	 * characters, which no credential carries and which would travel into a header.
+	 *
+	 * @param mixed $value Submitted value.
+	 * @return string Credential, stripped of anything unprintable.
+	 */
+	public function sanitize_credential( $value ) {
+		return preg_replace( '/[^\x21-\x7e]/', '', (string) $value );
 	}
 
 	/**
