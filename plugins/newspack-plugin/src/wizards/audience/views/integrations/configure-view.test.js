@@ -27,14 +27,6 @@ jest.mock( '@wordpress/components', () => ( {
 			onChange={ e => onChange( e.target.checked ) }
 		/>
 	),
-	// OutboundFields renders one of these per row (the field-details cog); a
-	// null stub would leave the row's onClick undriveable and, more importantly,
-	// an undefined component throws as soon as any outbound row renders.
-	Button: ( { children, label, onClick } ) => (
-		<button type="button" aria-label={ label } onClick={ onClick }>
-			{ children }
-		</button>
-	),
 	ToggleControl: ( { label, checked, onChange } ) => (
 		<input
 			type="checkbox"
@@ -56,6 +48,10 @@ jest.mock( '@wordpress/components', () => ( {
 jest.mock( '../../../../../packages/components/src', () => ( {
 	Accordion: ( { children } ) => children,
 	AccordionPanel: ( { children } ) => children,
+	// Outbound rows render one per Legacy/New badge; the fixtures below are all
+	// unbadged 'existing' fields, so this only guards a future badged fixture
+	// from rendering `undefined`.
+	Badge: ( { text } ) => <span>{ text }</span>,
 	Button: ( { children } ) => children,
 	// Section dividers pass alignment="full-width"; the divider under a section
 	// toggle does not, so the stub tags them apart for the tests that assert on

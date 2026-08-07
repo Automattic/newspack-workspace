@@ -273,27 +273,24 @@ class Test_Field_Registry extends \WP_UnitTestCase {
 		$this->assertSame( 'v1:registration_method', $row['supersedes'] );
 		$this->assertNotEmpty( $row['description'] );
 		$this->assertNotEmpty( $row['example'] );
-		$this->assertFalse( $row['in_conflict_group'] );
 		$this->assertIsBool( $row['available'] );
 		$this->assertIsBool( $row['dynamic_suffix'] );
 		$this->assertIsArray( $row['superseded_by'] );
 		$this->assertArrayNotHasKey( 'class', $row );
 
-		// Conflict membership: Last Payment Amount exists in both schemas.
-		$this->assertTrue( $by_id['v1:last_payment_amount']['in_conflict_group'] );
-		$this->assertTrue( $by_id['v2:Last_Payment_Amount']['in_conflict_group'] );
-
-		// Equivalence is serialized for the UI's row collapse.
-		$this->assertTrue( $by_id['v2:Account']['equivalent'] );
-		$this->assertFalse( $by_id['v2:Last_Payment_Amount']['equivalent'] );
-		$this->assertFalse( $by_id['v1:account']['equivalent'] );
+		// No conflict or equivalence flags: the UI has no version choice to
+		// offer, and reads a collapsed pair off the pair itself.
+		$this->assertArrayNotHasKey( 'in_conflict_group', $row );
+		$this->assertArrayNotHasKey( 'equivalent', $row );
 
 		// Superseded side of a rename carries the reverse link.
 		$this->assertContains( 'v2:Registration_Strategy', $by_id['v1:registration_method']['superseded_by'] );
 
-		// Fields with no declared status serialize with safe defaults.
+		// `status` is the badge vocabulary: legacy badges Legacy, new/updated
+		// badge New, and a field with no declared status is a safe 'existing'.
+		$this->assertSame( 'legacy', $by_id['v1:account']['status'] );
 		foreach ( $rows as $r ) {
-			$this->assertContains( $r['status'], [ 'new', 'updated', 'existing' ] );
+			$this->assertContains( $r['status'], [ 'new', 'updated', 'legacy', 'existing' ] );
 			$this->assertIsString( $r['section'] );
 		}
 	}

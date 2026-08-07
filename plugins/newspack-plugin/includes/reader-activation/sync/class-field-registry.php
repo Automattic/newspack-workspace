@@ -406,37 +406,35 @@ class Field_Registry {
 	/**
 	 * Serialize every definition for the integrations settings payload.
 	 *
-	 * Flat list, all schema versions — the per-field UI derives rows,
-	 * visibility (non-origin fields show only while enabled) and the
-	 * version-picker cards client-side, so it needs both sides of every
-	 * conflict and rename regardless of the site's origin.
+	 * Flat list, all schema versions — the per-field UI derives its rows and
+	 * their visibility (non-origin fields show only while enabled) client-side,
+	 * so it needs both sides of every rename regardless of the site's origin.
+	 *
+	 * Deliberately carries no conflict or equivalence flags. The UI has no
+	 * version choice to offer: get_conflict_groups() is empty by construction,
+	 * so an ESP name appearing under both versions is always a collapsed
+	 * equivalent pair, and the UI reads that off the pair itself. `status`
+	 * carries the badge vocabulary — 'legacy' and 'new'/'updated' badge, and
+	 * anything else (or nothing) is an unbadged 'existing'.
 	 *
 	 * @return array[] List of definition arrays (see the settings REST contract).
 	 */
 	public static function get_definitions_for_settings() {
-		$conflict_ids = [];
-		foreach ( self::get_conflict_groups() as $ids ) {
-			$conflict_ids = array_merge( $conflict_ids, $ids );
-		}
-		$conflict_ids = array_flip( $conflict_ids );
-
 		$rows = [];
 		foreach ( self::get_definitions() as $id => $definition ) {
 			$rows[] = [
-				'id'                => $id,
-				'version'           => $definition['version'],
-				'raw_key'           => $definition['raw_key'],
-				'name'              => $definition['name'],
-				'section'           => (string) ( $definition['section'] ?? '' ),
-				'available'         => (bool) $definition['available'],
-				'dynamic_suffix'    => (bool) $definition['dynamic_suffix'],
-				'description'       => (string) ( $definition['description'] ?? '' ),
-				'example'           => (string) ( $definition['example'] ?? '' ),
-				'status'            => in_array( $definition['status'] ?? '', [ 'new', 'updated' ], true ) ? $definition['status'] : 'existing',
-				'supersedes'        => $definition['supersedes'] ?? null,
-				'superseded_by'     => array_values( $definition['superseded_by'] ?? [] ),
-				'in_conflict_group' => isset( $conflict_ids[ $id ] ),
-				'equivalent'        => ! empty( $definition['equivalent'] ),
+				'id'             => $id,
+				'version'        => $definition['version'],
+				'raw_key'        => $definition['raw_key'],
+				'name'           => $definition['name'],
+				'section'        => (string) ( $definition['section'] ?? '' ),
+				'available'      => (bool) $definition['available'],
+				'dynamic_suffix' => (bool) $definition['dynamic_suffix'],
+				'description'    => (string) ( $definition['description'] ?? '' ),
+				'example'        => (string) ( $definition['example'] ?? '' ),
+				'status'         => in_array( $definition['status'] ?? '', [ 'new', 'updated', 'legacy' ], true ) ? $definition['status'] : 'existing',
+				'supersedes'     => $definition['supersedes'] ?? null,
+				'superseded_by'  => array_values( $definition['superseded_by'] ?? [] ),
 			];
 		}
 		return $rows;

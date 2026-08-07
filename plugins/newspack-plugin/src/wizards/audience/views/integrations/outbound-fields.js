@@ -2,25 +2,29 @@
  * WordPress dependencies
  */
 import { __, sprintf } from '@wordpress/i18n';
-import { Button, CheckboxControl } from '@wordpress/components';
-import { useMemo, useState } from '@wordpress/element';
+import { CheckboxControl } from '@wordpress/components';
+import { useMemo } from '@wordpress/element';
 
 /**
  * Internal dependencies
  */
 import { Accordion, AccordionPanel, Badge, Grid } from '../../../../../packages/components/src';
-import FieldDetailsModal from './field-details-modal';
 
 const VERSIONS = [ 'v1', 'v2', 'neutral' ];
 
 /**
  * Build UI rows from the merged definitions payload.
  *
- * One row per ESP field name. A name present in both v1 and v2 is a conflict
- * row: one checkbox, the modal's comparison cards pick the version. A
- * single-version name renders per the sunset rule: origin-version and neutral
- * fields always list; non-origin fields list only while enabled. Unavailable
- * definitions never list (matching the pre-Phase-2 UI).
+ * One row per ESP field name, and never a version choice: the two schemas no
+ * longer claim an ESP name in common (Field_Registry::get_conflict_groups() is
+ * empty by construction, guarded by
+ * Test_Field_Registry::test_no_esp_name_is_claimed_by_both_schemas), so a name
+ * carrying both a v1 and a v2 definition is always a value-equivalent pair —
+ * one field whose stored v1 ids the save path upgrades to the v2 twin. Those
+ * collapse to a single row under the surviving identity. A single-version name
+ * renders per the sunset rule: origin-version and neutral fields always list;
+ * non-origin fields list only while enabled. Unavailable definitions never list
+ * (matching the pre-Phase-2 UI).
  *
  * @param {Object[]} definitions Definitions from the settings payload.
  * @param {string[]} enabledIds  Enabled field ids.
@@ -40,48 +44,38 @@ export const buildFieldRows = ( definitions, enabledIds, origin ) => {
 	const rows = [];
 	byName.forEach( ( candidates, name ) => {
 		const present = VERSIONS.filter( v => candidates[ v ].length );
-		const bothVersions = candidates.v1.length > 0 && candidates.v2.length > 0;
-		// A name in both versions whose every v2 member declares value
-		// equivalence is one field, not a conflict: the save path upgrades
-		// stored v1 ids to the v2 twin, so the row renders the surviving v2
-		// identity with no version picker.
-		const equivalentGroup = bothVersions && candidates.v2.every( d => d.equivalent );
-		const conflict = bothVersions && ! equivalentGroup;
+		const collapsed = candidates.v1.length > 0 && candidates.v2.length > 0;
 		const enabledVersion = VERSIONS.find( v => candidates[ v ].some( d => enabled.has( d.id ) ) );
 		const hasAvailable = v => candidates[ v ].some( d => d.available );
-		let activeVersion = enabledVersion || ( conflict ? origin : present[ 0 ] );
-		if ( equivalentGroup ) {
+		// A collapsed pair renders under v2, its surviving spelling — falling
+		// back to v1 only while v2 is unavailable. This overrides an enabled v1
+		// id on purpose: a selection stored before the upgrade still means the
+		// one field, so it shows checked under the v2 identity.
+		let activeVersion = enabledVersion || present[ 0 ];
+		if ( collapsed ) {
 			activeVersion = hasAvailable( 'v2' ) || ! hasAvailable( 'v1' ) ? 'v2' : 'v1';
 		}
-		if ( ! enabledVersion && conflict && ! hasAvailable( activeVersion ) ) {
-			const alternate = 'v1' === activeVersion ? 'v2' : 'v1';
-			if ( hasAvailable( alternate ) ) {
-				activeVersion = alternate;
-			}
-		}
 		const active = candidates[ activeVersion ];
-		const anyAvailable = conflict ? [ 'v1', 'v2' ].some( v => candidates[ v ].some( d => d.available ) ) : active.some( d => d.available );
-		if ( ! active.length || ! anyAvailable ) {
+		if ( ! active.length || ! active.some( d => d.available ) ) {
 			return;
 		}
 		const checked = Boolean( enabledVersion );
-		if ( ! conflict && ! equivalentGroup && ! checked && 'neutral' !== activeVersion && activeVersion !== origin ) {
+		if ( ! collapsed && ! checked && 'neutral' !== activeVersion && activeVersion !== origin ) {
 			return; // Sunset rule: non-origin fields list only while enabled.
 		}
 		const activeDefinition = active[ 0 ];
 		const supersededByDef = ( activeDefinition.superseded_by || [] ).map( id => ( definitions || [] ).find( d => d.id === id ) ).find( Boolean );
 		rows.push( {
-			key: conflict ? `name:${ name }` : activeDefinition.id,
+			key: activeDefinition.id,
 			name,
 			section: activeDefinition.section || __( 'Additional', 'newspack-plugin' ),
-			conflict,
 			activeVersion,
 			activeDefinition,
-			candidates,
 			ids: active.map( d => d.id ),
+			// Every version's ids, so unchecking a collapsed pair clears the
+			// legacy side too.
 			allIds: VERSIONS.flatMap( v => candidates[ v ].map( d => d.id ) ),
 			checked,
-			availableVersions: { v1: candidates.v1.some( d => d.available ), v2: candidates.v2.some( d => d.available ) },
 			supersededHint: supersededByDef ? supersededByDef.name : null,
 			originOrder: activeVersion === origin || 'neutral' === activeVersion ? 0 : 1,
 		} );
@@ -124,44 +118,27 @@ export const toggleRow = ( enabledIds, row, checked ) => {
 };
 
 /**
- * Pick a schema version for a conflict row. Always enables the chosen
- * version's ids (picking a card is an explicit enable).
+ * Badges for a row, read straight off the active definition's status: legacy
+ * fields are on the way out, new and updated ones arrived with the current
+ * schema. Everything else is unbadged.
  *
- * @param {string[]} enabledIds Current enabled ids.
- * @param {Object}   row        Row from buildFieldRows.
- * @param {string}   version    'v1' or 'v2'.
- * @return {string[]} Next enabled ids.
- */
-export const pickRowVersion = ( enabledIds, row, version ) => {
-	const without = ( enabledIds || [] ).filter( id => ! row.allIds.includes( id ) );
-	return [ ...without, ...( row.candidates[ version ] || [] ).map( d => d.id ) ];
-};
-
-/**
- * Badges for a row: New (status), Legacy (v1 on the way out), and the active
- * version on conflict rows.
- *
- * @param {Object} row    Row from buildFieldRows.
- * @param {string} origin The site's schema origin.
+ * @param {Object} row Row from buildFieldRows.
  * @return {{text: string, level: string}[]} Badge descriptors.
  */
-export const badgesForRow = ( row, origin ) => {
-	const badges = [];
-	if ( row.conflict ) {
-		badges.push( { text: row.activeVersion, level: 'info' } );
+export const badgesForRow = row => {
+	const status = row.activeDefinition.status;
+	if ( 'new' === status || 'updated' === status ) {
+		return [ { text: __( 'New', 'newspack-plugin' ), level: 'success' } ];
 	}
-	if ( 'new' === row.activeDefinition.status ) {
-		badges.push( { text: __( 'New', 'newspack-plugin' ), level: 'success' } );
+	if ( 'legacy' === status ) {
+		return [ { text: __( 'Legacy', 'newspack-plugin' ), level: 'default' } ];
 	}
-	if ( 'v1' === row.activeVersion && ( 'v2' === origin || ( row.activeDefinition.superseded_by || [] ).length ) ) {
-		badges.push( { text: __( 'Legacy', 'newspack-plugin' ), level: 'default' } );
-	}
-	return badges;
+	return [];
 };
 
 /**
- * The per-field Outbound selection list: merged v1/v2 rows with inline
- * description, badges and a details cog; posts ids via onChange.
+ * The per-field Outbound selection list: one row per ESP field name with an
+ * inline description and badges; posts ids via onChange.
  *
  * @param {Object}   props          Component props.
  * @param {Object}   props.field    The outgoing_metadata_fields settings payload entry.
@@ -169,69 +146,49 @@ export const badgesForRow = ( row, origin ) => {
  * @param {Function} props.onChange Receives the next ids array.
  */
 const OutboundFields = ( { field, value, onChange } ) => {
-	const [ detailsRowKey, setDetailsRowKey ] = useState( null );
 	const enabledIds = Array.isArray( value ) ? value : field.value_ids || [];
 	const rows = useMemo(
 		() => buildFieldRows( field.definitions, enabledIds, field.schema_origin ),
 		[ field.definitions, enabledIds, field.schema_origin ]
 	);
 	const sections = useMemo( () => visibleSections( rows ), [ rows ] );
-	const detailsRow = rows.find( r => r.key === detailsRowKey );
 	return (
-		<>
-			<Accordion hideSingleTitle>
-				{ sections.map( ( { section, rows: sectionRows }, index ) => (
-					<AccordionPanel key={ section } title={ section } defaultOpen={ index === 0 }>
-						<Grid columns={ 1 } rowGap={ 8 } noMargin>
-							{ sectionRows.map( row => (
-								<div className="newspack-outbound-field-row" key={ row.key }>
-									<CheckboxControl
-										className="newspack-outbound-field-row__checkbox"
-										label={ row.name }
-										help={
-											[
-												row.activeDefinition.description,
-												row.supersededHint &&
-													sprintf(
-														/* translators: %s: name of the replacing field. */
-														__( 'Superseded by %s.', 'newspack-plugin' ),
-														row.supersededHint
-													),
-											]
-												.filter( Boolean )
-												.join( ' — ' ) || undefined
-										}
-										checked={ row.checked }
-										onChange={ checked => onChange( toggleRow( enabledIds, row, checked ) ) }
-									/>
-									<span className="newspack-outbound-field-row__badges">
-										{ badgesForRow( row, field.schema_origin ).map( badge => (
-											<Badge key={ badge.text } text={ badge.text } level={ badge.level } />
-										) ) }
-									</span>
-									<Button
-										className="newspack-outbound-field-row__details"
-										icon="admin-generic"
-										label={ __( 'Field details', 'newspack-plugin' ) }
-										onClick={ () => setDetailsRowKey( row.key ) }
-									/>
-								</div>
-							) ) }
-						</Grid>
-					</AccordionPanel>
-				) ) }
-			</Accordion>
-			{ detailsRow && (
-				<FieldDetailsModal
-					row={ detailsRow }
-					onPickVersion={ version => {
-						onChange( pickRowVersion( enabledIds, detailsRow, version ) );
-						setDetailsRowKey( null );
-					} }
-					onClose={ () => setDetailsRowKey( null ) }
-				/>
-			) }
-		</>
+		<Accordion hideSingleTitle>
+			{ sections.map( ( { section, rows: sectionRows }, index ) => (
+				<AccordionPanel key={ section } title={ section } defaultOpen={ index === 0 }>
+					<Grid columns={ 1 } rowGap={ 8 } noMargin>
+						{ sectionRows.map( row => (
+							<div className="newspack-outbound-field-row" key={ row.key }>
+								<CheckboxControl
+									className="newspack-outbound-field-row__checkbox"
+									label={ row.name }
+									help={
+										[
+											row.activeDefinition.description,
+											row.supersededHint &&
+												sprintf(
+													/* translators: %s: name of the replacing field. */
+													__( 'Superseded by %s.', 'newspack-plugin' ),
+													row.supersededHint
+												),
+										]
+											.filter( Boolean )
+											.join( ' — ' ) || undefined
+									}
+									checked={ row.checked }
+									onChange={ checked => onChange( toggleRow( enabledIds, row, checked ) ) }
+								/>
+								<span className="newspack-outbound-field-row__badges">
+									{ badgesForRow( row ).map( badge => (
+										<Badge key={ badge.text } text={ badge.text } level={ badge.level } />
+									) ) }
+								</span>
+							</div>
+						) ) }
+					</Grid>
+				</AccordionPanel>
+			) ) }
+		</Accordion>
 	);
 };
 

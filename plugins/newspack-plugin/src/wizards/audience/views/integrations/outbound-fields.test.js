@@ -1,5 +1,5 @@
 import { render, fireEvent, screen } from '@testing-library/react';
-import OutboundFields, { buildFieldRows, toggleRow, pickRowVersion, badgesForRow, visibleSections } from './outbound-fields';
+import OutboundFields, { buildFieldRows, toggleRow, badgesForRow, visibleSections } from './outbound-fields';
 
 const def = ( id, name, extra = {} ) => {
 	const [ version, raw_key ] = id.split( ':' );
@@ -17,35 +17,52 @@ const def = ( id, name, extra = {} ) => {
 		status: 'existing',
 		supersedes: null,
 		superseded_by: [],
-		in_conflict_group: false,
-		equivalent: false,
 		...extra,
 	};
 };
 
 const DEFS = [
-	def( 'v1:account', 'Account', { in_conflict_group: true } ),
-	def( 'v2:Account', 'Account', { in_conflict_group: true } ),
-	def( 'v1:registration_page', 'Registration Page' ),
-	def( 'v1:current_page_url', 'Registration Page' ),
-	def( 'v1:registration_method', 'Registration Method', { superseded_by: [ 'v2:Registration_Strategy' ] } ),
+	// One field under two spellings: both schemas carry the ESP name "Account",
+	// which post-pivot can only mean a value-equivalent pair.
+	def( 'v1:account', 'Account', { status: 'legacy' } ),
+	def( 'v2:Account', 'Account' ),
+	// Same-version siblings sharing one ESP name.
+	def( 'v1:registration_page', 'Registration Page', { status: 'legacy' } ),
+	def( 'v1:current_page_url', 'Registration Page', { status: 'legacy' } ),
+	// A rename: the v2 field took its own ESP name, so these are two rows.
+	def( 'v1:registration_method', 'Registration Method', { status: 'legacy', superseded_by: [ 'v2:Registration_Strategy' ] } ),
 	def( 'v2:Registration_Strategy', 'Registration Strategy', { status: 'new', supersedes: 'v1:registration_method' } ),
 	def( 'neutral:woo_team', 'Team Name' ),
 	def( 'v1:unavailable_thing', 'Unavailable Thing', { available: false } ),
 ];
 
 describe( 'buildFieldRows', () => {
-	it( 'merges conflict names into one row with the enabled version active', () => {
-		const rows = buildFieldRows( DEFS, [ 'v2:Account' ], 'v1' );
-		const account = rows.find( r => r.name === 'Account' );
-		expect( account.conflict ).toBe( true );
+	it( 'collapses a name carried by both schemas into one row under the v2 identity', () => {
+		const account = buildFieldRows( DEFS, [], 'v1' ).find( r => r.name === 'Account' );
+		expect( account ).toBeDefined();
 		expect( account.activeVersion ).toBe( 'v2' );
-		expect( account.checked ).toBe( true );
+		expect( account.checked ).toBe( false );
+		expect( toggleRow( [], account, true ) ).toEqual( [ 'v2:Account' ] );
 	} );
 
-	it( 'defaults a conflict row to the origin version when disabled', () => {
-		const rows = buildFieldRows( DEFS, [], 'v1' );
-		expect( rows.find( r => r.name === 'Account' ).activeVersion ).toBe( 'v1' );
+	it( 'renders a stale v1-enabled pair checked under its v2 identity', () => {
+		const row = buildFieldRows( DEFS, [ 'v1:account' ], 'v1' ).find( r => r.name === 'Account' );
+		expect( row.checked ).toBe( true );
+		expect( row.activeVersion ).toBe( 'v2' );
+		expect( toggleRow( [ 'v1:account' ], row, false ) ).toEqual( [] );
+	} );
+
+	it( 'falls back to the v1 side of a pair while v2 is unavailable', () => {
+		const defs = [ def( 'v1:total_paid', 'Total Paid' ), def( 'v2:Total_Paid', 'Total Paid', { available: false } ) ];
+		const row = buildFieldRows( defs, [], 'v1' ).find( r => r.name === 'Total Paid' );
+		expect( row ).toBeDefined();
+		expect( row.activeVersion ).toBe( 'v1' );
+		expect( row.ids ).toEqual( [ 'v1:total_paid' ] );
+	} );
+
+	it( 'hides a pair only when both versions are unavailable', () => {
+		const defs = [ def( 'v1:total_paid', 'Total Paid', { available: false } ), def( 'v2:Total_Paid', 'Total Paid', { available: false } ) ];
+		expect( buildFieldRows( defs, [], 'v1' ).find( r => r.name === 'Total Paid' ) ).toBeUndefined();
 	} );
 
 	it( 'groups same-version raw keys sharing a name into one row', () => {
@@ -69,69 +86,13 @@ describe( 'buildFieldRows', () => {
 		const rows = buildFieldRows( DEFS, [], 'v1' );
 		expect( rows.find( r => r.name === 'Registration Method' ).supersededHint ).toBe( 'Registration Strategy' );
 	} );
-
-	it( 'falls back to the other version when the origin side of a conflict is unavailable', () => {
-		const defs = [
-			def( 'v1:last_payment', 'Last Payment', { in_conflict_group: true, available: false } ),
-			def( 'v2:Last_Payment', 'Last Payment', { in_conflict_group: true } ),
-		];
-		const row = buildFieldRows( defs, [], 'v1' ).find( r => r.name === 'Last Payment' );
-		expect( row ).toBeDefined();
-		expect( row.activeVersion ).toBe( 'v2' );
-	} );
-
-	it( 'hides a conflict row only when both versions are unavailable', () => {
-		const defs = [
-			def( 'v1:last_payment', 'Last Payment', { in_conflict_group: true, available: false } ),
-			def( 'v2:Last_Payment', 'Last Payment', { in_conflict_group: true, available: false } ),
-		];
-		expect( buildFieldRows( defs, [], 'v1' ).find( r => r.name === 'Last Payment' ) ).toBeUndefined();
-	} );
-
-	it( 'collapses value-equivalent pairs into one v2 row with no picker', () => {
-		const defs = [
-			def( 'v1:account', 'Account', { in_conflict_group: true } ),
-			def( 'v2:Account', 'Account', { in_conflict_group: true, equivalent: true } ),
-		];
-		const account = buildFieldRows( defs, [], 'v1' ).find( r => r.name === 'Account' );
-		expect( account ).toBeDefined();
-		expect( account.conflict ).toBe( false );
-		expect( account.activeVersion ).toBe( 'v2' );
-		expect( account.checked ).toBe( false );
-		expect( badgesForRow( account, 'v1' ) ).toEqual( [] );
-		expect( toggleRow( [], account, true ) ).toEqual( [ 'v2:Account' ] );
-	} );
-
-	it( 'renders a stale v1-enabled equivalent row checked under its v2 identity', () => {
-		const defs = [
-			def( 'v1:account', 'Account', { in_conflict_group: true } ),
-			def( 'v2:Account', 'Account', { in_conflict_group: true, equivalent: true } ),
-		];
-		const row = buildFieldRows( defs, [ 'v1:account' ], 'v1' ).find( r => r.name === 'Account' );
-		expect( row.checked ).toBe( true );
-		expect( row.activeVersion ).toBe( 'v2' );
-		expect( toggleRow( [ 'v1:account' ], row, false ) ).toEqual( [] );
-	} );
-
-	it( 'keeps a conflict row visible when its enabled version becomes unavailable', () => {
-		const defs = [
-			def( 'v1:last_payment', 'Last Payment', { in_conflict_group: true } ),
-			def( 'v2:Last_Payment', 'Last Payment', { in_conflict_group: true, available: false } ),
-		];
-		const row = buildFieldRows( defs, [ 'v2:Last_Payment' ], 'v1' ).find( r => r.name === 'Last Payment' );
-		expect( row ).toBeDefined();
-		expect( row.activeVersion ).toBe( 'v2' );
-		expect( row.checked ).toBe( true );
-		expect( row.availableVersions ).toEqual( { v1: true, v2: false } );
-	} );
 } );
 
-describe( 'toggleRow / pickRowVersion', () => {
-	it( 'toggling a conflict row on enables all active-version ids; off removes both versions', () => {
+describe( 'toggleRow', () => {
+	it( 'toggling on enables the active-version ids; off removes every version', () => {
 		const rows = buildFieldRows( DEFS, [], 'v1' );
 		const account = rows.find( r => r.name === 'Account' );
-		const on = toggleRow( [], account, true );
-		expect( on ).toEqual( [ 'v1:account' ] );
+		expect( toggleRow( [], account, true ) ).toEqual( [ 'v2:Account' ] );
 		const rows2 = buildFieldRows( DEFS, [ 'v2:Account' ], 'v1' );
 		expect(
 			toggleRow(
@@ -140,20 +101,6 @@ describe( 'toggleRow / pickRowVersion', () => {
 				false
 			)
 		).toEqual( [] );
-	} );
-
-	it( 'picking a version swaps and enables', () => {
-		const rows = buildFieldRows( DEFS, [ 'v1:account' ], 'v1' );
-		const account = rows.find( r => r.name === 'Account' );
-		expect( pickRowVersion( [ 'v1:account' ], account, 'v2' ) ).toEqual( [ 'v2:Account' ] );
-		const rowsOff = buildFieldRows( DEFS, [], 'v1' );
-		expect(
-			pickRowVersion(
-				[],
-				rowsOff.find( r => r.name === 'Account' ),
-				'v2'
-			)
-		).toEqual( [ 'v2:Account' ] );
 	} );
 
 	it( 'toggle preserves unrelated ids', () => {
@@ -168,26 +115,19 @@ describe( 'toggleRow / pickRowVersion', () => {
 } );
 
 describe( 'badgesForRow', () => {
-	it( 'labels new, legacy and conflict-version rows', () => {
-		const v1Rows = buildFieldRows( DEFS, [ 'v2:Registration_Strategy' ], 'v1' );
-		expect(
-			badgesForRow(
-				v1Rows.find( r => r.name === 'Registration Strategy' ),
-				'v1'
-			).map( b => b.text )
-		).toContain( 'New' );
-		expect(
-			badgesForRow(
-				v1Rows.find( r => r.name === 'Registration Method' ),
-				'v1'
-			).map( b => b.text )
-		).toContain( 'Legacy' );
-		expect(
-			badgesForRow(
-				v1Rows.find( r => r.name === 'Account' ),
-				'v1'
-			).map( b => b.text )
-		).toContain( 'v1' );
+	const badgeText = row => badgesForRow( row ).map( b => b.text );
+
+	it( 'badges new and updated fields New and legacy fields Legacy', () => {
+		const rows = buildFieldRows( DEFS, [ 'v2:Registration_Strategy' ], 'v1' );
+		expect( badgeText( rows.find( r => r.name === 'Registration Strategy' ) ) ).toEqual( [ 'New' ] );
+		expect( badgeText( rows.find( r => r.name === 'Registration Method' ) ) ).toEqual( [ 'Legacy' ] );
+		expect( badgeText( { activeDefinition: { status: 'updated' } } ) ).toEqual( [ 'New' ] );
+	} );
+
+	it( 'leaves existing fields unbadged, including the surviving side of a pair', () => {
+		const rows = buildFieldRows( DEFS, [], 'v1' );
+		expect( badgeText( rows.find( r => r.name === 'Account' ) ) ).toEqual( [] );
+		expect( badgeText( rows.find( r => r.name === 'Team Name' ) ) ).toEqual( [] );
 	} );
 } );
 
@@ -206,34 +146,14 @@ describe( 'OutboundFields', () => {
 		const onChange = jest.fn();
 		render( <OutboundFields field={ field } value={ [] } onChange={ onChange } /> );
 		fireEvent.click( screen.getByRole( 'checkbox', { name: /^Account/ } ) );
-		expect( onChange ).toHaveBeenCalledWith( [ 'v1:account' ] );
-	} );
-
-	it( 'opens the details modal from the row cog', () => {
-		render( <OutboundFields field={ field } value={ [ 'v1:account' ] } onChange={ () => {} } /> );
-		fireEvent.click( screen.getAllByRole( 'button', { name: /field details/i } )[ 0 ] );
-		expect( screen.getByRole( 'dialog' ) ).toBeInTheDocument();
-	} );
-
-	// Regression guard for the whole pick-a-version path: the "Account" row is a
-	// conflict row (both versions available), so its cog opens the picker modal;
-	// picking v2 there must reach onChange with pickRowVersion's result.
-	it( 'picks a version from the details modal and posts its ids', () => {
-		const onChange = jest.fn();
-		render( <OutboundFields field={ field } value={ [] } onChange={ onChange } /> );
-		fireEvent.click( screen.getAllByRole( 'button', { name: /field details/i } )[ 0 ] );
-		fireEvent.click( screen.getByRole( 'button', { name: /use v2/i } ) );
 		expect( onChange ).toHaveBeenCalledWith( [ 'v2:Account' ] );
 	} );
 
-	it( 'disables the modal picker for a version with no available candidates', () => {
-		const unavailableV2 = DEFS.map( d => ( 'v2:Account' === d.id ? { ...d, available: false } : d ) );
-		const onChange = jest.fn();
-		render( <OutboundFields field={ { ...field, definitions: unavailableV2 } } value={ [] } onChange={ onChange } /> );
-		fireEvent.click( screen.getAllByRole( 'button', { name: /field details/i } )[ 0 ] );
-		const useV2Button = screen.getByRole( 'button', { name: /use v2/i } );
-		expect( useV2Button ).toBeDisabled();
-		fireEvent.click( useV2Button );
-		expect( onChange ).not.toHaveBeenCalled();
+	// Regression guard for the dropped version picker: no field ever needs a
+	// version choice, so rows carry no per-field details control to open one.
+	it( 'renders no per-row details control', () => {
+		render( <OutboundFields field={ field } value={ [ 'v1:account' ] } onChange={ () => {} } /> );
+		expect( screen.queryByRole( 'button', { name: /field details/i } ) ).not.toBeInTheDocument();
+		expect( screen.queryByRole( 'dialog' ) ).not.toBeInTheDocument();
 	} );
 } );
