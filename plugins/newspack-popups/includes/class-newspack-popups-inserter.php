@@ -1064,6 +1064,9 @@ final class Newspack_Popups_Inserter {
 			$script_data = [
 				'debug'                => self::should_log_debug_info(),
 				'has_disabled_prompts' => is_singular() && ! empty( get_post_meta( get_the_ID(), 'newspack_popups_has_disabled_popups', true ) ) && ! Newspack_Popups::is_preview_request(),
+				// Namespaces the view script's browser storage per site, so sites
+				// sharing an origin (subdirectory multisite) cannot mix state.
+				'site_id'              => \get_current_blog_id(),
 			];
 
 			if ( Newspack_Popups::$segmentation_enabled ) {

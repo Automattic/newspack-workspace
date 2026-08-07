@@ -295,6 +295,75 @@ class Newspack_Test_GA4_Custom_Dimensions extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A dimension added to Newspack's list after a site was provisioned
+	 * schedules an immediate run on the next recheck instead of waiting for
+	 * the monthly recheck: GA4 dimensions are not retroactive, so events sent
+	 * before the dimension exists never become queryable.
+	 */
+	public function test_new_dimension_schedules_provisioning_on_provisioned_sites() {
+		$this->connect_property( 'PROP-GROW' );
+
+		// A summary written before the dimension list was recorded counts as
+		// grown, so pre-existing provisioned sites converge on first recheck.
+		update_option(
+			GA4_Custom_Dimensions::PROVISIONED_OPTION,
+			[
+				'property_id' => 'PROP-GROW',
+				'created'     => [],
+			]
+		);
+		GA4_Custom_Dimensions::maybe_schedule_recheck();
+		$this->assertNotFalse( wp_next_scheduled( GA4_Custom_Dimensions::PROVISION_ACTION ), 'A summary without a recorded dimension list schedules provisioning.' );
+
+		// An up-to-date recorded list does not reschedule.
+		wp_clear_scheduled_hook( GA4_Custom_Dimensions::PROVISION_ACTION );
+		update_option(
+			GA4_Custom_Dimensions::PROVISIONED_OPTION,
+			[
+				'property_id' => 'PROP-GROW',
+				'dimensions'  => array_keys( GA4_Custom_Dimensions::get_dimensions() ),
+				'created'     => [],
+			]
+		);
+		GA4_Custom_Dimensions::maybe_schedule_recheck();
+		$this->assertFalse( wp_next_scheduled( GA4_Custom_Dimensions::PROVISION_ACTION ), 'An up-to-date dimension list does not reschedule.' );
+
+		// A recorded list missing a current dimension reschedules.
+		$known = array_keys( GA4_Custom_Dimensions::get_dimensions() );
+		array_pop( $known );
+		update_option(
+			GA4_Custom_Dimensions::PROVISIONED_OPTION,
+			[
+				'property_id' => 'PROP-GROW',
+				'dimensions'  => $known,
+				'created'     => [],
+			]
+		);
+		GA4_Custom_Dimensions::maybe_schedule_recheck();
+		$this->assertNotFalse( wp_next_scheduled( GA4_Custom_Dimensions::PROVISION_ACTION ), 'A grown dimension list schedules provisioning.' );
+
+		// A never-provisioned site is left to the property-connection path.
+		wp_clear_scheduled_hook( GA4_Custom_Dimensions::PROVISION_ACTION );
+		delete_option( GA4_Custom_Dimensions::PROVISIONED_OPTION );
+		GA4_Custom_Dimensions::maybe_schedule_recheck();
+		$this->assertFalse( wp_next_scheduled( GA4_Custom_Dimensions::PROVISION_ACTION ), 'A never-provisioned site is not scheduled by the recheck path.' );
+	}
+
+	/**
+	 * The provisioning summary records the dimension list the run knew about,
+	 * which is what makes a later addition detectable.
+	 */
+	public function test_provision_records_the_dimension_list_in_the_summary() {
+		$this->connect_property( 'PROP-LIST' );
+		$this->configure_newspack_oauth( true );
+		$this->mock_admin_api( 'PROP-LIST', [] );
+
+		$summary = GA4_Custom_Dimensions::provision();
+		$this->assertIsArray( $summary );
+		$this->assertSame( array_keys( GA4_Custom_Dimensions::get_dimensions() ), $summary['dimensions'] );
+	}
+
+	/**
 	 * With Newspack OAuth configured and its token carrying `analytics.edit`,
 	 * that route is used in preference to Site Kit.
 	 */
