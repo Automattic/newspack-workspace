@@ -104,6 +104,12 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 	// The Retry buttons live inside the notices they refresh, so a successful retry
 	// unmounts the control that was pressed.
 	const retryStatus = async () => {
+		// `Notice` gives its actions no disabled state, so the guard lives here: without it
+		// repeated presses stack 30-second requests and an older failure can land on top of
+		// a newer success.
+		if ( isLoading ) {
+			return;
+		}
 		await fetchStatus();
 		restoreFocus();
 	};
