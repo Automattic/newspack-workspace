@@ -36,7 +36,6 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 		$this->reset_integrations();
 		$this->integration = new Sample_Integration( 'storage-test', 'Storage Test' );
 		Integrations::register( $this->integration );
-		\delete_option( Field_Registry::SCHEMA_ORIGIN_OPTION );
 		Field_Registry::reset();
 	}
 
@@ -47,7 +46,6 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 		\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test' );
 		\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'esp' );
 		\delete_option( Metadata::FIELDS_OPTION );
-		\delete_option( Field_Registry::SCHEMA_ORIGIN_OPTION );
 		Field_Registry::reset();
 		$this->reset_integrations();
 		Integrations::register_integrations();
@@ -69,7 +67,6 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 	 * read, and the option is written back in the new format.
 	 */
 	public function test_legacy_format_migrates_to_v1_ids_on_read() {
-		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
 		\update_option(
 			Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test',
 			[ 'Account', 'Last Payment Amount', 'Signup UTM: ' ]
@@ -96,7 +93,6 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 	 * stored entry resolves, the write-back proceeds as normal.
 	 */
 	public function test_migration_skips_write_back_when_name_unresolvable() {
-		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
 		\update_option(
 			Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test',
 			[ 'Account', 'Field That Does Not Exist' ]
@@ -133,7 +129,6 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 	 * resolved and aliased is pinned in Test_Field_Registry.
 	 */
 	public function test_migration_resolves_multi_raw_key_names_to_all_ids() {
-		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
 		\update_option(
 			Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test',
 			[ 'Registration Page' ]
@@ -156,7 +151,6 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 	 * the legacy definition is the one that feeds it.
 	 */
 	public function test_legacy_format_migrates_to_v2_ids_when_origin_is_v2() {
-		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v2' );
 		\update_option(
 			Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test',
 			[ 'Total Paid', 'Registration UTM Source' ]
@@ -173,7 +167,6 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 	 * stored ids, for the old settings UI.
 	 */
 	public function test_display_names_api_still_returns_names() {
-		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
 		\update_option(
 			Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test',
 			[ 'v1:account', 'v1:last_payment_amount' ]
@@ -199,7 +192,6 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 	 * WC activates.
 	 */
 	public function test_update_accepts_names_and_ids_and_stores_ids() {
-		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
 
 		$this->integration->update_enabled_outgoing_fields( [ 'Account', 'v2:Registration_UTM_Source' ] );
 
@@ -222,7 +214,6 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 	 * this asserts through the migration read.
 	 */
 	public function test_both_versions_of_a_renamed_field_coexist() {
-		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
 		\update_option(
 			Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test',
 			[ 'v1:last_payment_amount', 'v2:Last_Payment_Amount' ]
@@ -246,7 +237,6 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 	 * being stored twice.
 	 */
 	public function test_update_stores_both_versions_without_validation() {
-		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
 
 		$this->integration->update_enabled_outgoing_fields(
 			[ 'v1:registration_method', 'v2:Registration_Strategy', 'v1:registration_date', 'v2:Registration_Date' ]
@@ -259,101 +249,11 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * A fresh site — no outgoing-fields options, no legacy global fields
-	 * option — defaults its schema origin to v2.
-	 */
-	public function test_fresh_site_origin_defaults_to_v2() {
-		$this->assertSame( 'v2', Field_Registry::get_schema_origin() );
-	}
-
-	/**
-	 * A site with existing outgoing-field selections (any integration) is
-	 * detected as a v1-origin site.
-	 */
-	public function test_existing_legacy_site_origin_is_v1() {
-		\update_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'esp', [ 'Account' ] );
-		$this->assertSame( 'v1', Field_Registry::get_schema_origin() );
-		\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'esp' );
-	}
-
-	/**
-	 * A site with the pre-integrations global fields option set (and no
-	 * per-integration outgoing-fields options, and no ESP registered) is
-	 * detected as a v1-origin site. This exercises the global-option branch,
-	 * which runs before the ESP-configured check, on its own.
-	 */
-	public function test_legacy_global_fields_option_origin_is_v1() {
-		\update_option( Metadata::FIELDS_OPTION, [ 'Account' ] );
-		$this->assertSame( 'v1', Field_Registry::get_schema_origin() );
-	}
-
-	/**
-	 * A site with a configured ESP integration but no stored outgoing-field
-	 * selections and no legacy global fields option is an existing legacy
-	 * site that has been syncing dynamic defaults all along — not a fresh
-	 * install — so it is detected as v1.
-	 */
-	public function test_configured_esp_with_no_selections_origin_is_v1() {
-		Sample_Integration::$is_set_up_value = true;
-		Integrations::register( new Sample_Integration( 'esp', 'ESP' ) );
-
-		$this->assertSame( 'v1', Field_Registry::get_schema_origin() );
-	}
-
-	/**
-	 * Origin detection's final fallback (see detect_schema_origin()) needs a
-	 * registered 'esp' integration to tell a genuinely fresh site from a
-	 * legacy site whose ESP integration simply hasn't registered yet (e.g.
-	 * get_schema_origin() is called before init priority 5). Without that
-	 * signal, get_schema_origin() must not persist its guess — persisting a
-	 * wrong 'v2' would freeze it forever. Once the registry is populated, a
-	 * later call detects and persists the real answer.
-	 */
-	public function test_origin_skips_persist_when_esp_not_yet_registered() {
-		$this->assertSame( 'v2', Field_Registry::get_schema_origin() );
-		$this->assertFalse( \get_option( Field_Registry::SCHEMA_ORIGIN_OPTION ) );
-
-		Sample_Integration::$is_set_up_value = true;
-		Integrations::register( new Sample_Integration( 'esp', 'ESP' ) );
-
-		$this->assertSame( 'v1', Field_Registry::get_schema_origin() );
-		$this->assertSame( 'v1', \get_option( Field_Registry::SCHEMA_ORIGIN_OPTION ) );
-	}
-
-	/**
-	 * When detection runs without persisting (no ESP registered yet), the
-	 * result is cached for the rest of the request so repeated calls don't
-	 * re-run detection — including its options-table LIKE query. Changing a
-	 * detection input mid-request is therefore not observed until
-	 * Field_Registry::reset() drops the cache.
-	 */
-	public function test_origin_detection_is_cached_per_request_and_cleared_by_reset() {
-		$this->assertSame( 'v2', Field_Registry::get_schema_origin() );
-
-		// A v1 signal appears after the first detection. Without an ESP
-		// registered there is no re-detect trigger, so the cached value stands.
-		\update_option( Metadata::FIELDS_OPTION, [ 'Account' ] );
-		$this->assertSame(
-			'v2',
-			Field_Registry::get_schema_origin(),
-			'A second call must be served from the per-request cache, not re-detected.'
-		);
-
-		Field_Registry::reset();
-		$this->assertSame(
-			'v1',
-			Field_Registry::get_schema_origin(),
-			'reset() must clear the detection cache so the next call re-detects.'
-		);
-	}
-
-	/**
 	 * The concrete ESP integration overrides get_enabled_outgoing_fields()
 	 * directly (rather than inheriting the base Integration behavior), so it
 	 * needs its own coverage: stored ids resolve back to display names.
 	 */
 	public function test_esp_stored_ids_return_names() {
-		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
 		\update_option(
 			Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'esp',
 			[ 'v1:account', 'v1:registration_date' ]
@@ -373,7 +273,6 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 	 * class does not have — seeding the per-integration option on first read.
 	 */
 	public function test_esp_global_option_migrates_to_ids() {
-		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
 		\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'esp' );
 		\update_option( Metadata::FIELDS_OPTION, [ 'Account' ] );
 
@@ -388,67 +287,99 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 
 	/**
 	 * With neither the per-integration option nor the legacy global option
-	 * ever stored, the ESP falls back to all available fields resolved to
-	 * ids against the schema origin, without persisting the fallback.
+	 * ever stored, and an ESP that is not set up, the read falls back to all
+	 * available fields resolved to ids against the merged registry — without
+	 * persisting anything.
+	 *
+	 * Lazy seeding deliberately declines here: with the ESP unconfigured,
+	 * detection cannot tell this site from a legacy one whose provider is
+	 * momentarily unavailable, and freezing the wrong answer would change the
+	 * field names a real legacy site's ESP automations key on. Nothing syncs
+	 * from an unconfigured ESP, so the derived set never reaches a provider.
 	 */
 	public function test_esp_defaults_resolve_to_ids_without_persisting() {
-		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
 		\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'esp' );
 		\delete_option( Metadata::FIELDS_OPTION );
 
 		$esp = new ESP();
+		$this->assertFalse( $esp->is_set_up(), 'This test covers the unconfident-detection path.' );
+
 		$ids = $esp->get_enabled_outgoing_field_ids();
 
 		$this->assertNotEmpty( $ids );
 		foreach ( $ids as $id ) {
-			$this->assertMatchesRegularExpression( '/^(v1|v2|neutral):/', $id );
+			$this->assertMatchesRegularExpression( '/^(v2|neutral):/', $id );
 		}
-		// Not canonicalized (NPPD-2067): a v1-origin site resolves its own
-		// version's id, un-upgraded. See test_esp_does_not_inherit_from_itself
-		// and Test_Sync_Metadata_Classes for why.
-		$this->assertContains( 'v1:account', $ids );
-		$this->assertNotContains( 'v2:Account', $ids );
-		$this->assertNull( \get_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'esp', null ) );
+		$this->assertContains( 'v2:Account', $ids );
+		$this->assertNull(
+			\get_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'esp', null ),
+			'An unconfident detection must not be frozen into a stored selection.'
+		);
 	}
 
 	/**
-	 * Derived id sets are deliberately NOT canonicalized (NPPD-2067): a field
-	 * the two schemas share is reported under whichever version name
-	 * resolution answers in, even though that is not the id a save would
-	 * store. Upgrading these on the way out looked more consistent, but the
-	 * version prefix is also what Metadata::get_sync_metadata_classes() reads
-	 * to decide which metadata classes to instantiate — canonicalizing a
-	 * v1-origin site's derived defaults to v2 ids pulled the v2
-	 * Engagement/Subscription compute (wc_get_orders(),
-	 * wcs_get_users_subscriptions()) into every sync for the large cohort of
-	 * v1-origin sites with no stored selection. See
-	 * Test_Sync_Metadata_Classes::test_no_stored_selection_skips_v2_classes_for_shared_fields.
+	 * A derived selection is scoped to ONE schema version, never the merged
+	 * registry — the set does reach real providers, through a configured
+	 * non-ESP push integration inheriting while the ESP is unconfigured, and
+	 * merged resolution would put both schemas' field names in front of them.
+	 *
+	 * Which version is a derivation-only question (nothing is stored, and no
+	 * confidence is required), so both answers are pinned: an unseeded site
+	 * with no evidence derives the new schema, and one carrying legacy evidence
+	 * derives the legacy schema.
+	 */
+	public function test_derived_defaults_are_scoped_to_one_version() {
+		\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test' );
+		\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'esp' );
+		\delete_option( Metadata::FIELDS_OPTION );
+		Integrations::register( new ESP() );
+
+		$inherited = $this->integration->get_enabled_outgoing_field_ids();
+
+		$this->assertContains( 'v2:Account', $inherited );
+		$this->assertNotContains( 'v1:account', $inherited, 'A derived set must not span both schemas.' );
+
+		// Legacy evidence — another integration's pre-coexistence, bare-name
+		// selection — makes the same derivation answer in the legacy schema.
+		\update_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'evidence', [ 'Account' ] );
+		Field_Registry::reset();
+
+		$derived = $this->integration->get_enabled_outgoing_field_ids();
+
+		$this->assertContains( 'v1:account', $derived );
+		$this->assertNotContains( 'v2:Account', $derived, 'A derived set must not span both schemas.' );
+
+		\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'evidence' );
+	}
+
+	/**
+	 * Derived id sets are deliberately NOT canonicalized: the equivalence
+	 * upgrade is a write-path behavior (see update_enabled_outgoing_fields()),
+	 * and a derived set may not write — persisting it would freeze the
+	 * fallback and stop it tracking availability and the ESP's own selection.
+	 * So both ids of a value-equivalent pair survive a derived read, rather
+	 * than collapsing onto the v2 twin.
 	 *
 	 * The payload is unaffected: prepare_contact() resolves an id to its ESP
-	 * name/raw key regardless of version, so an un-upgraded v1 id for an
-	 * equivalent field still emits under the shared canonical name (see
+	 * name/raw key regardless of version, so the pair emits once, under the
+	 * shared canonical name (see
 	 * Test_Prepare_Contact::test_unupgraded_default_id_still_emits_canonical_name).
-	 * Read-only either way: nothing here may write the option, or the derived
-	 * set would freeze and stop tracking the ESP.
 	 */
 	public function test_derived_id_sets_are_not_canonicalized() {
-		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
 		\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test' );
 		\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'esp' );
 
-		// Defaults (the ESP's own fallback): 'Account' resolves to v1 on a
-		// v1-origin site, and is reported as its own v1 id, un-upgraded.
-		$defaults = ( new ESP() )->get_enabled_outgoing_field_ids();
-		$this->assertContains( 'v1:account', $defaults );
-		$this->assertNotContains( 'v2:Account', $defaults );
-
-		// The legacy-global inheritance fallback resolves names the same way.
+		// The legacy-global inheritance fallback, with no ESP registered. This
+		// branch resolves the publisher's own stored names, so it stays
+		// version-agnostic (both spellings of a shared field emit one ESP
+		// name) — unlike the defaults tail, which derives from the full field
+		// list and is version-scoped.
 		\update_option( Metadata::FIELDS_OPTION, [ 'Account', 'Registration Method' ] );
 		$this->assertNull( Integrations::get_integration( 'esp' ), 'This covers the registry-miss path.' );
 		$this->assertEqualsCanonicalizing(
-			[ 'v1:account', 'v1:registration_method' ],
+			[ 'v1:account', 'v2:Account', 'v1:registration_method' ],
 			$this->integration->get_enabled_outgoing_field_ids(),
-			'Neither a shared nor a legacy-only field is upgraded on this read path.'
+			'A shared name resolves to both its ids, and neither is upgraded on this read path.'
 		);
 		$this->assertNull( \get_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test', null ) );
 	}
@@ -460,7 +391,6 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 	 * everything available.
 	 */
 	public function test_never_configured_integration_inherits_esp_selection() {
-		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
 		\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test' );
 		\update_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'esp', [ 'v1:account' ] );
 		Integrations::register( new ESP() );
@@ -480,7 +410,6 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 	 * silently stop syncing every field.
 	 */
 	public function test_corrupt_stored_selection_falls_back_to_inheritance() {
-		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
 		\update_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test', 'corrupt' );
 		\update_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'esp', [ 'v1:account' ] );
 		Integrations::register( new ESP() );
@@ -497,13 +426,16 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 	 * behavior was full passthrough.
 	 */
 	public function test_inheritance_without_registered_esp_uses_legacy_global_option() {
-		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
 		\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test' );
 		\update_option( Metadata::FIELDS_OPTION, [ 'Account' ] );
 
 		$this->assertNull( Integrations::get_integration( 'esp' ), 'This test covers the registry-miss path.' );
-		// Not canonicalized (NPPD-2067): the v1 id is reported as-is.
-		$this->assertSame( [ 'v1:account' ], $this->integration->get_enabled_outgoing_field_ids() );
+		// Not canonicalized: the stored name resolves to both ids of the pair
+		// and neither is upgraded on this read path.
+		$this->assertEqualsCanonicalizing(
+			[ 'v1:account', 'v2:Account' ],
+			$this->integration->get_enabled_outgoing_field_ids()
+		);
 	}
 
 	/**
@@ -513,17 +445,15 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 	 * so a third-party push integration silently synced no metadata at all.
 	 */
 	public function test_inheritance_without_esp_or_global_option_defaults_to_all_fields() {
-		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
 		\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test' );
 		\delete_option( Metadata::FIELDS_OPTION );
 
 		$ids = $this->integration->get_enabled_outgoing_field_ids();
 
 		$this->assertNotEmpty( $ids, 'A never-configured integration must not fail closed to an empty selection.' );
-		// Not canonicalized (NPPD-2067): v1-origin names resolve to their own
-		// v1 ids here, un-upgraded.
-		$this->assertContains( 'v1:account', $ids );
-		$this->assertContains( 'v1:total_paid', $ids );
+		// Scoped to the derived version (see test_derived_defaults_are_scoped_to_one_version).
+		$this->assertContains( 'v2:Account', $ids );
+		$this->assertContains( 'v2:Total_Paid', $ids );
 		$this->assertNull(
 			\get_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test', null ),
 			'The defaults fallback must not persist, so it keeps tracking availability changes.'
@@ -531,11 +461,12 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * The ESP has nothing above it to inherit from, so it keeps the dynamic
-	 * all-defaults fallback. Inheriting from itself would recurse.
+	 * The ESP has nothing above it to inherit from, so an option-less read
+	 * resolves through seeding and then the defaults, never through
+	 * inheritance. Inheriting from itself — or seeding re-entering its own
+	 * lazy trigger — would recurse; this asserts an answer comes back at all.
 	 */
 	public function test_esp_does_not_inherit_from_itself() {
-		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
 		\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'esp' );
 		\delete_option( Metadata::FIELDS_OPTION );
 
@@ -544,9 +475,8 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 
 		$ids = $esp->get_enabled_outgoing_field_ids();
 
-		// Not canonicalized (NPPD-2067): see test_derived_id_sets_are_not_canonicalized.
-		$this->assertContains( 'v1:account', $ids );
-		$this->assertContains( 'v1:total_paid', $ids );
+		$this->assertNotEmpty( $ids );
+		$this->assertContains( 'v2:Account', $ids );
 	}
 
 	/**
@@ -554,7 +484,6 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 	 * NOT be treated as never-configured.
 	 */
 	public function test_stored_empty_selection_means_no_fields() {
-		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
 		\update_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test', [] );
 
 		$this->assertSame( [], $this->integration->get_enabled_outgoing_field_ids() );
@@ -568,7 +497,6 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 	 * definitions — would lose those selections for good.
 	 */
 	public function test_esp_seeding_preserves_unavailable_field_selections() {
-		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
 		\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'esp' );
 		// 'Last Payment Amount' is declared by Legacy_Payment, which reports
 		// available === false without WooCommerce in the test environment.
@@ -589,71 +517,11 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * The fresh-install fallback is a guess — its discriminator (a set-up ESP)
-	 * is transiently false whenever Newspack Newsletters is deactivated — so
-	 * it must never be persisted. A legacy site touched during that window
-	 * would otherwise be branded v2 forever and start writing v2 field names
-	 * to the publisher's ESP.
-	 */
-	public function test_unconfident_fresh_install_guess_is_not_persisted() {
-		Sample_Integration::$is_set_up_value = false;
-		Integrations::register( new Sample_Integration( 'esp', 'ESP' ) );
-
-		$this->assertSame( 'v2', Field_Registry::get_schema_origin() );
-		$this->assertFalse(
-			\get_option( Field_Registry::SCHEMA_ORIGIN_OPTION ),
-			'An unconfigured ESP makes the v2 answer a guess; it must stay unpersisted.'
-		);
-
-		// Once the ESP reports itself set up, the answer is evidence — and it
-		// resolves to v1, the value the guess would have frozen incorrectly.
-		Sample_Integration::$is_set_up_value = true;
-		Field_Registry::reset();
-
-		$this->assertSame( 'v1', Field_Registry::get_schema_origin() );
-		$this->assertSame( 'v1', \get_option( Field_Registry::SCHEMA_ORIGIN_OPTION ) );
-	}
-
-	/**
-	 * A genuinely fresh install records v2 at activation, when "no prior
-	 * usage" is unambiguous — lazy detection can't distinguish it later.
-	 */
-	public function test_activation_seeds_fresh_install_origin() {
-		Field_Registry::seed_fresh_install_origin();
-
-		$this->assertSame( 'v2', \get_option( Field_Registry::SCHEMA_ORIGIN_OPTION ) );
-	}
-
-	/**
-	 * Activation seeding must leave a site with prior usage alone — its
-	 * origin is evidence-based and belongs to lazy detection.
-	 */
-	public function test_activation_seeding_skips_site_with_prior_usage() {
-		\update_option( Metadata::FIELDS_OPTION, [ 'Account' ] );
-
-		Field_Registry::seed_fresh_install_origin();
-
-		$this->assertFalse( \get_option( Field_Registry::SCHEMA_ORIGIN_OPTION ) );
-	}
-
-	/**
-	 * Detection reads the version out of stored selections rather than
-	 * treating the mere existence of the option as "legacy": a site that
-	 * saved v2 ids before its origin settled is a v2 site.
-	 */
-	public function test_stored_v2_ids_detect_v2_origin() {
-		\update_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test', [ 'v2:Registration_Date' ] );
-
-		$this->assertSame( 'v2', Field_Registry::get_schema_origin() );
-	}
-
-	/**
 	 * The outgoing-fields settings entry carries the id-space payload the
 	 * per-field UI consumes, alongside the legacy name-space keys external
 	 * consumers still read.
 	 */
 	public function test_settings_config_carries_definitions_and_value_ids() {
-		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
 		\update_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test', [ 'v1:account' ] );
 
 		$outgoing = null;
@@ -665,21 +533,18 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 
 		$this->assertNotNull( $outgoing );
 		$this->assertSame( [ 'v1:account' ], $outgoing['value_ids'] );
-		$this->assertSame( 'v1', $outgoing['schema_origin'] );
 		$this->assertNotEmpty( $outgoing['definitions'] );
-		$this->assertContains( 'v2:Registration_Strategy', array_column( $outgoing['definitions'], 'id' ), 'Definitions must include non-origin versions.' );
+		$this->assertContains( 'v2:Registration_Strategy', array_column( $outgoing['definitions'], 'id' ), 'Definitions must include every schema version.' );
 		// Legacy keys stay for external consumers.
 		$this->assertArrayHasKey( 'options', $outgoing );
 		$this->assertArrayHasKey( 'grouped_options', $outgoing );
 	}
 
 	/**
-	 * The filter_enabled_outgoing_fields() method must operate in id-space: a non-origin
-	 * enabled id matches its raw key even though the origin-scoped keys map
-	 * does not contain it.
+	 * The filter_enabled_outgoing_fields() method must operate in id-space: an
+	 * enabled id of either schema version matches its raw key.
 	 */
-	public function test_filter_enabled_outgoing_fields_covers_non_origin_ids() {
-		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
+	public function test_filter_enabled_outgoing_fields_covers_both_schema_versions() {
 		\update_option(
 			Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test',
 			[ 'v1:account', 'v2:Registration_Strategy' ]
@@ -688,17 +553,15 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 		$filtered = $this->integration->filter_enabled_outgoing_fields( [ 'account', 'Registration_Strategy', 'registration_date' ] );
 
 		$this->assertSame( 'Account', $filtered['account'] );
-		$this->assertSame( 'Registration Strategy', $filtered['Registration_Strategy'], 'Enabled non-origin ids must match their raw keys.' );
+		$this->assertSame( 'Registration Strategy', $filtered['Registration_Strategy'], 'Enabled ids of either version must match their raw keys.' );
 		$this->assertArrayNotHasKey( 'registration_date', $filtered, 'Non-enabled keys must not match.' );
 	}
 
 	/**
 	 * The filter_enabled_outgoing_fields() method must cover neutral ids (filter-added fields)
-	 * end to end: resolving neutral ids to their raw keys and names regardless of schema origin.
+	 * end to end: resolving neutral ids to their raw keys and names.
 	 */
 	public function test_filter_enabled_outgoing_fields_covers_neutral_ids() {
-		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
-
 		// Register a custom filter-added field as neutral.
 		$callback = function ( $keys ) {
 			$keys['custom_extra'] = 'Custom Extra';
@@ -725,11 +588,10 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * The get_enabled_outgoing_fields_keys() method must cover enabled non-origin ids,
-	 * raw and prefixed.
+	 * The get_enabled_outgoing_fields_keys() method must cover enabled ids of
+	 * either schema version, raw and prefixed.
 	 */
-	public function test_enabled_outgoing_fields_keys_cover_non_origin_ids() {
-		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
+	public function test_enabled_outgoing_fields_keys_cover_both_schema_versions() {
 		\update_option(
 			Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test',
 			[ 'v1:account', 'v2:Registration_Strategy' ]
@@ -751,7 +613,6 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 	 * option; the upgrade is a write-path behavior.
 	 */
 	public function test_update_upgrades_equivalent_ids_to_v2() {
-		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
 
 		$this->integration->update_enabled_outgoing_fields( [ 'v1:account', 'v1:registration_method' ] );
 

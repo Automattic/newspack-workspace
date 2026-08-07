@@ -18,19 +18,34 @@ require_once __DIR__ . '/integrations/class-failing-sample-integration.php';
  */
 class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 	/**
-	 * Pin the schema origin: these tests describe the legacy (v1) field set.
+	 * Option name carrying this class's "legacy site" evidence.
+	 *
+	 * @var string
+	 */
+	const LEGACY_EVIDENCE_OPTION = \Newspack\Reader_Activation\Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'legacy-evidence';
+
+	/**
+	 * These tests describe the legacy field set and its labels, so the site has
+	 * to read as a legacy one. A pre-coexistence, bare-display-name selection
+	 * stored by some other integration is exactly that evidence, and it makes
+	 * the ESP's never-configured read seed the legacy defaults.
+	 *
+	 * The registry reset guards the other half: these tests derive their
+	 * expectations from the live field maps, so a cache left over from another
+	 * test's filters would silently change what they assert against.
 	 */
 	public function set_up() {
 		parent::set_up();
-		update_option( Sync\Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
+		update_option( self::LEGACY_EVIDENCE_OPTION, [ 'Account' ] );
 		Sync\Field_Registry::reset();
 	}
 
 	/**
-	 * Restore the schema-origin state.
+	 * Drop the evidence and the registry cache for whatever runs next.
 	 */
 	public function tear_down() {
-		delete_option( Sync\Field_Registry::SCHEMA_ORIGIN_OPTION );
+		delete_option( self::LEGACY_EVIDENCE_OPTION );
+		delete_option( \Newspack\Reader_Activation\Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'esp' );
 		Sync\Field_Registry::reset();
 		parent::tear_down();
 	}
@@ -59,7 +74,11 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 			'name'     => 'Test Contact',
 			'metadata' => [],
 		];
-		foreach ( array_keys( Sync\Metadata::get_keys() ) as $key ) {
+		// Built from the fields the ESP actually syncs, not the merged map: the
+		// two schemas coexist in the registry, and a contact carrying fields the
+		// site has not enabled would be filtered down by design rather than by
+		// the behavior these tests are about.
+		foreach ( Integrations::get_integration( 'esp' )->get_enabled_outgoing_fields_keys() as $key ) {
 			$contact['metadata'][ Sync\Metadata::get_key( $key ) ] = 'value';
 		}
 		return $contact;

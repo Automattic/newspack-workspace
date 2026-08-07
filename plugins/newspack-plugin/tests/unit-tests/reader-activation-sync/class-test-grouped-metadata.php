@@ -17,15 +17,11 @@ class Test_Grouped_Metadata extends WP_UnitTestCase {
 
 	public function set_up() {
 		parent::set_up();
-		// Pin the schema origin to v2 so Identity / Registration / Engagement
-		// etc. participate in get_origin_metadata_classes() (the v1 legacy
-		// classes return empty section names and would all fall into the
-		// "Additional" bucket).
-		update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v2' );
+		Field_Registry::reset();
 	}
 
 	public function tear_down() {
-		delete_option( Field_Registry::SCHEMA_ORIGIN_OPTION );
+		Field_Registry::reset();
 		remove_all_filters( 'newspack_ras_metadata_keys' );
 		remove_all_filters( 'newspack_ras_grouped_metadata_fields' );
 		parent::tear_down();

@@ -343,16 +343,30 @@ class ESP extends Integration {
 	}
 
 	/**
-	 * Ensure the per-integration outgoing fields option is seeded from the
-	 * legacy global option when possible.
+	 * Ensure the per-integration outgoing fields option is seeded.
 	 *
-	 * Seeding copies the legacy option's raw display names verbatim and lets
-	 * the base class's lazy migration resolve them to ids on read, under its
-	 * preserve-unresolved rules. Resolving here (via
+	 * Two sources, in order. The legacy global option
+	 * (Sync\Metadata::FIELDS_OPTION) is copied verbatim, raw display names and
+	 * all, and the base class's lazy migration resolves them to ids on read
+	 * under its preserve-unresolved rules. Resolving here (via
 	 * update_enabled_outgoing_fields()) would drop any currently-unavailable
 	 * definition — e.g. every payment field while WooCommerce is inactive —
-	 * and since the seeded option shadows the legacy option permanently,
-	 * those selections could never be restored.
+	 * and since the seeded option shadows the legacy option permanently, those
+	 * selections could never be restored.
+	 *
+	 * With nothing stored anywhere, the site has never made a selection, and
+	 * the registry seeder materialises the one it has effectively been syncing
+	 * all along. That call is the lazy half of seeding, and the half that
+	 * actually matters: `newspack_activation` fires only on plugin activation,
+	 * so an in-place update — the normal upgrade path — would otherwise leave a
+	 * legacy site unseeded, deriving from the merged all-versions default set
+	 * and pushing the other schema's field names to the publisher's ESP. Doing
+	 * it here makes the WordPress trigger irrelevant: the first sync or admin
+	 * read after the upgrade seeds correctly.
+	 *
+	 * Only the ESP seeds. Every other integration inherits the ESP's effective
+	 * selection (NPPD-2107), so its inheritance read reaches this method and
+	 * seeds transitively rather than materialising a selection of its own.
 	 *
 	 * @return bool True if a stored per-integration option exists (parent
 	 *              accessors can be used), false if the ESP should fall back
@@ -361,6 +375,7 @@ class ESP extends Integration {
 	private function ensure_outgoing_fields_seeded() {
 		$stored = \get_option( self::OUTGOING_FIELDS_OPTION_PREFIX . $this->id, null );
 		if ( null !== $stored && is_array( $stored ) ) {
+			Sync\Field_Registry::retire_origin_marker();
 			return true;
 		}
 
@@ -372,19 +387,31 @@ class ESP extends Integration {
 				array_values( array_unique( array_map( 'strval', $legacy ) ) ),
 				false
 			);
+			Sync\Field_Registry::retire_origin_marker();
 			return true;
 		}
 
-		return false;
+		// Never configured: materialise the effective default selection. A
+		// no-op once a selection exists, so repeat reads cost one option read.
+		//
+		// Confident detections only. This can run at any point in any request,
+		// including before the ESP's own settings are in place, and the one
+		// detection that would be wrong then — the fresh-install guess, which
+		// keys on is_set_up() — would freeze a legacy site onto the new schema
+		// permanently. An unconfigured ESP cannot sync anyway, so declining to
+		// seed just defers the decision to a read that can answer it.
+		Sync\Field_Registry::seed_default_field_selections( true );
+
+		return is_array( \get_option( self::OUTGOING_FIELDS_OPTION_PREFIX . $this->id, null ) );
 	}
 
 	/**
 	 * Get the enabled outgoing metadata fields for the ESP integration.
 	 *
-	 * Overrides the parent to seed the per-integration option from the
-	 * legacy global option (Metadata::FIELDS_OPTION) first; the parent
-	 * provides the dynamic all-defaults fallback when nothing was ever
-	 * stored anywhere.
+	 * Overrides the parent to seed the per-integration option first — from the
+	 * legacy global option (Metadata::FIELDS_OPTION), or from the registry's
+	 * default selection when nothing was ever stored anywhere. The parent's
+	 * dynamic all-defaults fallback only answers if seeding could not.
 	 *
 	 * @return string[] List of enabled field names.
 	 */
@@ -396,10 +423,9 @@ class ESP extends Integration {
 	/**
 	 * Get the enabled outgoing metadata field ids for the ESP integration.
 	 *
-	 * Mirrors get_enabled_outgoing_fields(): seed from the legacy global
-	 * option first, then defer to the parent, whose never-configured
-	 * fallback resolves the default fields to ids against the site's schema
-	 * origin without persisting.
+	 * Mirrors get_enabled_outgoing_fields(): seed first, then defer to the
+	 * parent. This is the read that makes seeding trigger-independent — the
+	 * outgoing sync path and the settings screen both come through here.
 	 *
 	 * @return string[] List of enabled field ids.
 	 */

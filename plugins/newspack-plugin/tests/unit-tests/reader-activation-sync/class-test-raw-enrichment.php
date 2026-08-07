@@ -88,22 +88,42 @@ class Test_Raw_Enrichment extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Guards get_utm_key() against a get_raw_keys() match that is not backed
-	 * by an origin-scoped prefixed key. get_raw_keys() is id-space (any
-	 * schema version an integration has enabled), while get_key() stays
-	 * scoped to the site's schema origin and returns false when the raw key
-	 * belongs to a non-origin version. On PHP 8, strpos( $key, false )
-	 * coerces the needle to '' and matches at position 0, so without an
-	 * explicit guard every key looked like a match once get_key() missed.
+	 * Guards get_utm_key() against a get_raw_keys() match that get_key()
+	 * cannot resolve. get_raw_keys() is id-space — every id an integration
+	 * has enabled, available or not — while get_key() only knows currently
+	 * available fields and returns false for the rest, as the legacy payment
+	 * UTM field is while WooCommerce is inactive. On PHP 8, strpos( $key,
+	 * false ) coerces the needle to '' and matches at position 0, so without
+	 * an explicit guard every key looked like a match once get_key() missed,
+	 * and get_utm_key() echoed the unrelated key straight back.
 	 */
-	public function test_get_utm_key_rejects_a_non_origin_raw_key_match() {
-		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v2' );
-		\update_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'esp', [ 'v1:signup_page_utm' ] );
+	public function test_get_utm_key_rejects_an_unresolvable_raw_key_match() {
+		// Stands in for a field whose declaring class is unavailable — the
+		// legacy payment fields on a site without WooCommerce: the registry
+		// (and so id-space) still carries the raw key, the available-only keys
+		// map behind get_key() does not.
+		$hide_from_available_map = function ( $keys, $only_available ) {
+			if ( $only_available ) {
+				unset( $keys['payment_page_utm'] );
+			}
+			return $keys;
+		};
+		\add_filter( 'newspack_ras_metadata_keys', $hide_from_available_map, 10, 2 );
+		\update_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'esp', [ 'v1:payment_page_utm' ] );
 		Field_Registry::reset();
 
+		$this->assertContains(
+			'payment_page_utm',
+			Metadata::get_raw_keys(),
+			'Precondition: the enabled id is still visible in id-space.'
+		);
+		$this->assertFalse(
+			Metadata::get_key( 'payment_page_utm' ),
+			'Precondition: the unavailable field has no prefixed key.'
+		);
 		$this->assertFalse( Metadata::get_utm_key( 'Some_Random_Key' ) );
 
-		\delete_option( Field_Registry::SCHEMA_ORIGIN_OPTION );
+		\remove_filter( 'newspack_ras_metadata_keys', $hide_from_available_map, 10 );
 		\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'esp' );
 		Field_Registry::reset();
 	}

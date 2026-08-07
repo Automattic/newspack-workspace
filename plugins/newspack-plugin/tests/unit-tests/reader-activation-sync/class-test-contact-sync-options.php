@@ -61,9 +61,6 @@ class Test_Contact_Sync_Options extends WP_UnitTestCase {
 		parent::set_up();
 		Content_Gate_Metadata::reset_cache();
 		Newspack_Newsletters_Contacts::reset_calls();
-		// Pin the site to the legacy (v1) schema origin: these tests assert the
-		// legacy field set and its labels.
-		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
 		Field_Registry::reset();
 
 		$this->user_id = $this->factory->user->create(
@@ -80,7 +77,6 @@ class Test_Contact_Sync_Options extends WP_UnitTestCase {
 	}
 
 	public function tear_down() {
-		\delete_option( Field_Registry::SCHEMA_ORIGIN_OPTION );
 		Field_Registry::reset();
 		Content_Gate_Metadata::reset_cache();
 		Failing_Sample_Integration::reset();
@@ -177,9 +173,13 @@ class Test_Contact_Sync_Options extends WP_UnitTestCase {
 		// filter leaves it present in get_all_fields( false ) but absent from ( true ),
 		// the exact shape a feature-flag/plugin-gated field takes. In CI every real
 		// field is available, so relying on one would leave this branch untested.
+		//
+		// Both raw keys have to go: the map is merged across schema versions, and
+		// the legacy `account` and the new `Account` carry the same label, so
+		// leaving either behind keeps the label resolvable.
 		$drop_from_available = function ( $keys, $only_available ) {
 			if ( $only_available ) {
-				unset( $keys['account'] );
+				unset( $keys['account'], $keys['Account'] );
 			}
 			return $keys;
 		};
@@ -231,12 +231,11 @@ class Test_Contact_Sync_Options extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Field scoping is origin-aware: on a v2-origin site the requested labels
-	 * resolve against the v2 field set, so the v2 classes that own them run and
-	 * every other class is skipped.
+	 * Field scoping resolves requested labels against the merged field map,
+	 * so only the classes that own them run — whichever schema those classes
+	 * belong to. Every other class is skipped, legacy and new alike.
 	 */
-	public function test_compute_v2_origin_returns_requested_content_access_fields_only() {
-		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v2' );
+	public function test_compute_returns_requested_content_access_fields_only() {
 		Field_Registry::reset();
 		Content_Gate_Metadata::reset_cache();
 		$this->create_custom_access_gate( $this->passing_email_domain_rules() );
@@ -244,8 +243,8 @@ class Test_Contact_Sync_Options extends WP_UnitTestCase {
 		$contact = Metadata::get_contact_with_metadata( $this->user_id, $this->content_access_labels );
 
 		$this->assertArrayHasKey( 'Content_Access', $contact['metadata'], 'Computation returns raw (unprefixed) keys.' );
-		$this->assertArrayNotHasKey( 'Registration_Date', $contact['metadata'], 'Non-requested v2 classes must be skipped.' );
-		$this->assertArrayNotHasKey( 'account', $contact['metadata'], 'Legacy classes must be skipped on a v2-origin site.' );
+		$this->assertArrayNotHasKey( 'Registration_Date', $contact['metadata'], 'Non-requested new-schema classes must be skipped.' );
+		$this->assertArrayNotHasKey( 'account', $contact['metadata'], 'Non-requested legacy classes must be skipped.' );
 	}
 
 	public function test_prepare_contact_for_integration_keeps_only_requested_fields() {

@@ -21,6 +21,9 @@ class Test_Field_Registry extends \WP_UnitTestCase {
 	 * Reset the registry's static cache after each test.
 	 */
 	public function tear_down() {
+		// Spelled out because production code no longer exposes a constant
+		// for it (see test_get_derivation_schema_version_memoizes_detection).
+		\delete_option( 'newspack_sync_schema_origin' );
 		Field_Registry::reset();
 		parent::tear_down();
 	}
@@ -360,6 +363,52 @@ class Test_Field_Registry extends \WP_UnitTestCase {
 		$this->assertEqualsCanonicalizing(
 			[ 'registration_page', 'current_page_url' ],
 			Field_Registry::get_equivalent_input_raw_keys( 'v2:Registration_Page' )
+		);
+	}
+
+	/**
+	 * The schema-version derivation is memoized per request. An unseeded
+	 * site reaches get_derivation_schema_version() once per contact per
+	 * push-capable integration on the sync path (see
+	 * Metadata::get_sync_metadata_classes() and
+	 * Integration::get_default_outgoing_field_ids()), and re-running
+	 * detect_retired_schema_version() — a $wpdb LIKE query plus an
+	 * ESP::is_set_up() chain — that often would be wasteful.
+	 *
+	 * Spied through detect_retired_schema_version()'s own corrupt-marker
+	 * cleanup, since that is a side effect only a real detection run
+	 * performs: a meaningless marker value is deleted the moment detection
+	 * sees it. Restoring the marker between two calls and asserting it
+	 * survives the second proves the second call did not run detection
+	 * again — the marker would otherwise be gone, exactly as it is after
+	 * the first call.
+	 */
+	public function test_get_derivation_schema_version_memoizes_detection() {
+		Field_Registry::reset();
+		$marker = 'newspack_sync_schema_origin';
+		\update_option( $marker, 'not-a-real-version' );
+
+		$first = Field_Registry::get_derivation_schema_version();
+
+		$this->assertFalse( \get_option( $marker ), 'The first call must run detection and clear the corrupt marker.' );
+
+		\update_option( $marker, 'not-a-real-version' );
+
+		$second = Field_Registry::get_derivation_schema_version();
+
+		$this->assertSame( $first, $second, 'The memoized call must answer identically to the first.' );
+		$this->assertSame(
+			'not-a-real-version',
+			\get_option( $marker ),
+			'A second call must be served from the per-request cache, not re-run detection.'
+		);
+
+		Field_Registry::reset();
+		Field_Registry::get_derivation_schema_version();
+
+		$this->assertFalse(
+			\get_option( $marker ),
+			'reset() must clear the cache, so the next call re-runs detection.'
 		);
 	}
 }

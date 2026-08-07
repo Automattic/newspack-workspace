@@ -21,17 +21,22 @@ const VERSIONS = [ 'v1', 'v2', 'neutral' ];
  * Test_Field_Registry::test_no_esp_name_is_claimed_by_both_schemas), so a name
  * carrying both a v1 and a v2 definition is always a value-equivalent pair —
  * one field whose stored v1 ids the save path upgrades to the v2 twin. Those
- * collapse to a single row under the surviving identity. A single-version name
- * renders per the sunset rule: origin-version and neutral fields always list;
- * non-origin fields list only while enabled. Unavailable definitions never list
- * (matching the pre-Phase-2 UI).
+ * collapse to a single row under the surviving identity.
+ *
+ * Visibility is the sunset rule, read off the active definition's `status`:
+ * a legacy field lists only while enabled, so a site never picks up a new
+ * dependency on a field that is on its way out, while a site already syncing
+ * one keeps seeing (and can turn off) what it has. Everything else — new,
+ * updated, existing, filter-added — always lists, on every site: there is no
+ * per-site schema any more, so every current field has to be discoverable and
+ * enableable everywhere. Unavailable definitions never list (matching the
+ * pre-Phase-2 UI).
  *
  * @param {Object[]} definitions Definitions from the settings payload.
  * @param {string[]} enabledIds  Enabled field ids.
- * @param {string}   origin      The site's schema origin ('v1'|'v2').
  * @return {Object[]} Ordered row objects.
  */
-export const buildFieldRows = ( definitions, enabledIds, origin ) => {
+export const buildFieldRows = ( definitions, enabledIds ) => {
 	const enabled = new Set( enabledIds || [] );
 	const byName = new Map();
 	( definitions || [] ).forEach( d => {
