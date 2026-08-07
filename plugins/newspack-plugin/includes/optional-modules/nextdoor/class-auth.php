@@ -156,7 +156,17 @@ class Auth {
 			return $token_data;
 		}
 
-		Nextdoor::update_settings( self::apply_token_response( Nextdoor::get_settings(), $token_data ) );
+		$settings = Nextdoor::get_settings();
+
+		// The response describes the grant this request set out with, and the call can take
+		// 30 seconds. A disconnect or a fresh sign-in in the meantime has replaced it, so
+		// applying it would resurrect credentials that were dropped on purpose, or put the
+		// old grant back over a newer one.
+		if ( $settings['refresh_token'] !== $refresh_token ) {
+			return $token_data;
+		}
+
+		Nextdoor::update_settings( self::apply_token_response( $settings, $token_data ) );
 		self::clear_token_refusal();
 
 		return $token_data;
