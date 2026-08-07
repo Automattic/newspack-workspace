@@ -134,12 +134,16 @@ function ConfirmDialog(
 	if ( wasOpen !== isOpen ) {
 		setWasOpen( isOpen );
 		setShowDialog( isOpen );
-		// Withdrawn, so a navigation the blocker was holding must not replay on the
-		// next prompt the way a confirm or cancel would have released it.
+	}
+
+	// Withdrawn, so a navigation the blocker was holding must not replay on the next
+	// prompt the way a confirm or cancel would have released it. After the commit
+	// rather than during render, so a discarded render cannot drop a live one.
+	useEffect( () => {
 		if ( ! isOpen ) {
 			pendingNavigation.current = null;
 		}
-	}
+	}, [ isOpen ] );
 
 	if ( ! showDialog ) {
 		return null;
