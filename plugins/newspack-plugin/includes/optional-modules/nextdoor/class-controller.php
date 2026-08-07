@@ -416,15 +416,15 @@ class Controller {
 			);
 		}
 
-		$settings = Nextdoor::get_settings();
-		$api      = API::instance();
+		$api = API::instance();
 
 		$unusable = self::require_usable_token();
 		if ( $unusable ) {
 			return $unusable;
 		}
 
-		$article_data = self::prepare_article_data( $post_id, $settings );
+		// Read after the token check, which can renew the grant and rewrite the option.
+		$article_data = self::prepare_article_data( $post_id, Nextdoor::get_settings() );
 
 		$response = $api->create_article( $article_data );
 
@@ -484,15 +484,15 @@ class Controller {
 			);
 		}
 
-		$settings = Nextdoor::get_settings();
-		$api      = API::instance();
+		$api = API::instance();
 
 		$unusable = self::require_usable_token();
 		if ( $unusable ) {
 			return $unusable;
 		}
 
-		$article_data = self::prepare_article_data( $post_id, $settings );
+		// Read after the token check, which can renew the grant and rewrite the option.
+		$article_data = self::prepare_article_data( $post_id, Nextdoor::get_settings() );
 
 		$article_data['modified_at'] = get_the_modified_date( 'c', $post_id );
 
