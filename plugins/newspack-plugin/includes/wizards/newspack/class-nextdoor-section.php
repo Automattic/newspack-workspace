@@ -116,7 +116,9 @@ class Nextdoor_Section extends Wizard_Section {
 		}
 
 		$submitted = array_filter( $value, 'is_string' );
-		$roles     = array_keys( wp_roles()->roles );
+		// The offered roles, not every role on the site, so the endpoint cannot grant
+		// what the picker withholds.
+		$roles = wp_list_pluck( Nextdoor_Module::get_available_roles(), 'value' );
 
 		return array_values( array_unique( array_intersect( $submitted, $roles ) ) );
 	}

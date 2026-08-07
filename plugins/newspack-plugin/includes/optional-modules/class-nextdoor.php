@@ -218,20 +218,21 @@ class Nextdoor {
 	public static function get_settings() {
 		$default_settings = [
 			// OAuth credentials.
-			'client_id'        => '',
-			'client_secret'    => '',
+			'client_id'         => '',
+			'client_secret'     => '',
 
 			// OAuth token.
-			'refresh_token'    => '',
-			'access_token'     => '',
-			'token_expires_at' => 0,
+			'refresh_token'     => '',
+			'access_token'      => '',
+			'token_expires_at'  => 0,
+			'refresh_failed_at' => 0,
 
 			// Nextdoor page info.
-			'page_id'          => '',
-			'publication_url'  => '',
+			'page_id'           => '',
+			'publication_url'   => '',
 
 			// User configs.
-			'allowed_roles'    => [ 'administrator' ],
+			'allowed_roles'     => [ 'administrator' ],
 		];
 
 		/**
@@ -282,9 +283,24 @@ class Nextdoor {
 	 */
 	private static function strip_centralized_credentials( $settings ) {
 		$centralized = self::get_centralized_credentials();
+		$stored      = get_option( self::SETTINGS_SLUG, [] );
+
+		if ( ! is_array( $stored ) ) {
+			$stored = [];
+		}
 
 		foreach ( [ 'client_id', 'client_secret' ] as $key ) {
-			if ( ! empty( $centralized[ $key ] ) && isset( $settings[ $key ] ) && $settings[ $key ] === $centralized[ $key ] ) {
+			if ( empty( $centralized[ $key ] ) || ! isset( $settings[ $key ] ) || $settings[ $key ] !== $centralized[ $key ] ) {
+				continue;
+			}
+
+			// get_settings() overlays the platform value on every read, so a match here
+			// cannot tell it apart from a value the site entered itself. Put back what was
+			// stored rather than dropping the key, or a site that had its own credentials
+			// loses them the first time anything writes.
+			if ( ! empty( $stored[ $key ] ) ) {
+				$settings[ $key ] = $stored[ $key ];
+			} else {
 				unset( $settings[ $key ] );
 			}
 		}
@@ -363,9 +379,15 @@ class Nextdoor {
 	 */
 	public static function get_available_roles() {
 		$wp_roles = wp_roles();
-		$roles = [];
+		$roles    = [];
+		// Reader roles are held by every self-registered account, so offering them would
+		// let one tick hand publishing rights to the whole audience.
+		$excluded = class_exists( '\Newspack\Reader_Activation' ) ? \Newspack\Reader_Activation::get_reader_roles() : [ 'subscriber', 'customer' ];
 
 		foreach ( $wp_roles->roles as $role_name => $role_info ) {
+			if ( in_array( $role_name, $excluded, true ) ) {
+				continue;
+			}
 			$roles[] = [
 				'label' => translate_user_role( $role_info['name'] ),
 				'value' => $role_name,
