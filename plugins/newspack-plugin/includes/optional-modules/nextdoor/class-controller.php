@@ -606,18 +606,18 @@ class Controller {
 				// a reconnection; everything else is the network.
 				$error_data      = $ingestion_response->get_error_data();
 				$error_status    = is_array( $error_data ) && isset( $error_data['status'] ) ? (int) $error_data['status'] : 0;
-				$needs_reconnect = in_array( $error_status, [ 401, 403 ], true );
+				// Only an outright rejection of the bearer is a reconnection. A 403 can come
+				// from an edge in front of the content API, or from a scope the grant never
+				// had, and reconnecting cures neither, so it reads as unreachable along with
+				// the timeouts.
+				$needs_reconnect = 401 === $error_status;
 				$is_unreachable  = ! $needs_reconnect;
 
 				// Recorded, not just reported: the reconnect this answer offers leads to the
 				// settings card, which reads the stored state and would otherwise still show
-				// the connection as working. Only an outright rejection of the token this
-				// request actually used earns that, though. A 403 can come from an edge in
-				// front of the content API, or from a scope the grant never had, and neither
-				// is cured by reconnecting; and a token another request has since replaced is
-				// not this answer's to condemn.
-				if ( 401 === $error_status && $token_used === Nextdoor::get_settings()['access_token'] ) {
-					Auth::record_token_refusal();
+				// the connection as working.
+				if ( $needs_reconnect ) {
+					Auth::record_token_refusal( [ 'access_token' => $token_used ] );
 				}
 			}
 

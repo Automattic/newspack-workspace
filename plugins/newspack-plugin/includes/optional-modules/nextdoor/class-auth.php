@@ -130,9 +130,8 @@ class Auth {
 			// Nextdoor rotates refresh tokens, so two requests can enter the refresh window
 			// together and the loser comes back refused. Its token is no longer the stored
 			// one, which is how the winner's healthy token is told apart from a real refusal.
-			$settings = Nextdoor::get_settings();
-			if ( $is_refusal && $settings['refresh_token'] === $refresh_token ) {
-				self::record_token_refusal();
+			if ( $is_refusal ) {
+				self::record_token_refusal( [ 'refresh_token' => $refresh_token ] );
 			}
 
 			return new \WP_Error(
@@ -378,10 +377,22 @@ class Auth {
 	 * Persisted rather than answered per request, so the card the publisher is sent to
 	 * reports the same thing the request that discovered it did.
 	 *
+	 * @param array $expected Settings values the refusal was about, checked against what
+	 *                        is stored now. A request whose token has since been rotated
+	 *                        away by a concurrent refresh or sign-in records nothing: its
+	 *                        answer is about a grant that no longer exists. Checked here
+	 *                        rather than by the caller so no window opens between the two.
 	 * @return void
 	 */
-	public static function record_token_refusal() {
-		$settings                      = Nextdoor::get_settings();
+	public static function record_token_refusal( $expected = [] ) {
+		$settings = Nextdoor::get_settings();
+
+		foreach ( $expected as $key => $value ) {
+			if ( ! isset( $settings[ $key ] ) || $settings[ $key ] !== $value ) {
+				return;
+			}
+		}
+
 		$settings['refresh_failed_at'] = time();
 		Nextdoor::update_settings( $settings );
 	}
