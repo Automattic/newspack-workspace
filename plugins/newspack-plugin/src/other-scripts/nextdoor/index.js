@@ -42,7 +42,13 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 	// Whether anything has ever arrived, as against whether a request is in flight. Only
 	// the first tells us the panel has nothing to show yet.
 	const [ hasLoaded, setHasLoaded ] = useState( false );
+	// Distinct from `isLoading`, which any refresh sets: only a retry should say so on the
+	// button the publisher pressed, or announce it.
+	const [ isRetrying, setIsRetrying ] = useState( false );
 	const contentRef = useRef( null );
+	// Each status request takes a number, so a slow answer arriving after a newer one can
+	// be told apart and dropped rather than overwriting it.
+	const requestRef = useRef( 0 );
 
 	// A successful action or retry replaces the control that was pressed, which would
 	// otherwise drop keyboard position to the top of the document. Only ever called for
@@ -61,6 +67,9 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 	 * Fetch Nextdoor status for the current post
 	 */
 	const fetchStatus = async () => {
+		const request = ++requestRef.current;
+		const isCurrent = () => request === requestRef.current;
+
 		try {
 			setIsLoading( true );
 			setError( null );
@@ -69,12 +78,18 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 				path: `/newspack/v1/nextdoor/post-status/${ postId }`,
 			} );
 
-			setNextdoorStatus( response );
+			if ( isCurrent() ) {
+				setNextdoorStatus( response );
+			}
 		} catch ( fetchError ) {
-			setError( fetchError.message || __( 'Failed to load Nextdoor status.', 'newspack-plugin' ) );
+			if ( isCurrent() ) {
+				setError( fetchError.message || __( 'Failed to load Nextdoor status.', 'newspack-plugin' ) );
+			}
 		} finally {
-			setIsLoading( false );
-			setHasLoaded( true );
+			if ( isCurrent() ) {
+				setIsLoading( false );
+				setHasLoaded( true );
+			}
 		}
 	};
 
@@ -110,7 +125,12 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 		if ( isLoading ) {
 			return;
 		}
-		await fetchStatus();
+		setIsRetrying( true );
+		try {
+			await fetchStatus();
+		} finally {
+			setIsRetrying( false );
+		}
 		restoreFocus();
 	};
 
@@ -200,12 +220,12 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 					status="error"
 					isDismissible={ false }
 					spokenMessage={
-						isLoading
+						isRetrying
 							? __( 'Retrying the Nextdoor status request.', 'newspack-plugin' )
 							: error || __( 'Failed to load Nextdoor status.', 'newspack-plugin' )
 					}
 					actions={ [
-						{ label: isLoading ? __( 'Retrying…', 'newspack-plugin' ) : __( 'Retry', 'newspack-plugin' ), onClick: retryStatus },
+						{ label: isRetrying ? __( 'Retrying…', 'newspack-plugin' ) : __( 'Retry', 'newspack-plugin' ), onClick: retryStatus },
 					] }
 				>
 					{ error || __( 'Failed to load Nextdoor status.', 'newspack-plugin' ) }
@@ -278,12 +298,12 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 						status="warning"
 						isDismissible={ false }
 						spokenMessage={
-							isLoading
+							isRetrying
 								? __( 'Retrying the Nextdoor status request.', 'newspack-plugin' )
 								: __( 'Nextdoor could not be reached, so the sharing status is unavailable.', 'newspack-plugin' )
 						}
 						actions={ [
-							{ label: isLoading ? __( 'Retrying…', 'newspack-plugin' ) : __( 'Retry', 'newspack-plugin' ), onClick: retryStatus },
+							{ label: isRetrying ? __( 'Retrying…', 'newspack-plugin' ) : __( 'Retry', 'newspack-plugin' ), onClick: retryStatus },
 						] }
 					>
 						{ __( 'Nextdoor could not be reached, so the sharing status is unavailable. Please try again shortly.', 'newspack-plugin' ) }
