@@ -128,8 +128,7 @@ class Auth {
 			// one, which is how the winner's healthy token is told apart from a real refusal.
 			$settings = Nextdoor::get_settings();
 			if ( $is_refusal && $settings['refresh_token'] === $refresh_token ) {
-				$settings['refresh_failed_at'] = time();
-				Nextdoor::update_settings( $settings );
+				self::record_token_refusal();
 			}
 
 			$error_data = json_decode( $body, true );
@@ -368,6 +367,20 @@ class Auth {
 
 		wp_safe_redirect( admin_url( 'admin.php?page=newspack-settings&oauth_success=1#social' ) );
 		exit;
+	}
+
+	/**
+	 * Record that Nextdoor refused the stored grant.
+	 *
+	 * Persisted rather than answered per request, so the card the publisher is sent to
+	 * reports the same thing the request that discovered it did.
+	 *
+	 * @return void
+	 */
+	public static function record_token_refusal() {
+		$settings                      = Nextdoor::get_settings();
+		$settings['refresh_failed_at'] = time();
+		Nextdoor::update_settings( $settings );
 	}
 
 	/**

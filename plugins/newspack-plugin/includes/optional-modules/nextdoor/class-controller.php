@@ -290,7 +290,8 @@ class Controller {
 		if ( ! Auth::validate_token() ) {
 			return new \WP_Error(
 				'nextdoor_token_invalid',
-				__( 'Nextdoor access token is invalid or expired. Please reconnect your account.', 'newspack-plugin' )
+				__( 'Nextdoor access token is invalid or expired. Please reconnect your account.', 'newspack-plugin' ),
+				[ 'status' => 400 ]
 			);
 		}
 
@@ -365,7 +366,8 @@ class Controller {
 		if ( ! Nextdoor::is_connected() ) {
 			return new \WP_Error(
 				'nextdoor_not_connected',
-				__( 'Nextdoor is not connected.', 'newspack-plugin' )
+				__( 'Nextdoor is not connected.', 'newspack-plugin' ),
+				[ 'status' => 400 ]
 			);
 		}
 
@@ -373,7 +375,8 @@ class Controller {
 		if ( ! $post || $post->post_status !== 'publish' ) {
 			return new \WP_Error(
 				'invalid_post',
-				__( 'Post not found or not published.', 'newspack-plugin' )
+				__( 'Post not found or not published.', 'newspack-plugin' ),
+				[ 'status' => 400 ]
 			);
 		}
 
@@ -382,7 +385,8 @@ class Controller {
 		if ( $nextdoor_guid ) {
 			return new \WP_Error(
 				'already_shared',
-				__( 'Post has already been shared to Nextdoor.', 'newspack-plugin' )
+				__( 'Post has already been shared to Nextdoor.', 'newspack-plugin' ),
+				[ 'status' => 409 ]
 			);
 		}
 
@@ -394,7 +398,8 @@ class Controller {
 		if ( ! $token_valid ) {
 			return new \WP_Error(
 				'nextdoor_token_invalid',
-				__( 'Nextdoor access token is invalid or expired. Please reconnect your account.', 'newspack-plugin' )
+				__( 'Nextdoor access token is invalid or expired. Please reconnect your account.', 'newspack-plugin' ),
+				[ 'status' => 400 ]
 			);
 		}
 
@@ -434,7 +439,8 @@ class Controller {
 		if ( ! Nextdoor::is_connected() ) {
 			return new \WP_Error(
 				'nextdoor_not_connected',
-				__( 'Nextdoor is not connected.', 'newspack-plugin' )
+				__( 'Nextdoor is not connected.', 'newspack-plugin' ),
+				[ 'status' => 400 ]
 			);
 		}
 
@@ -442,7 +448,8 @@ class Controller {
 		if ( ! $post || $post->post_status !== 'publish' ) {
 			return new \WP_Error(
 				'invalid_post',
-				__( 'Post not found or not published.', 'newspack-plugin' )
+				__( 'Post not found or not published.', 'newspack-plugin' ),
+				[ 'status' => 400 ]
 			);
 		}
 
@@ -451,7 +458,8 @@ class Controller {
 		if ( ! $guid ) {
 			return new \WP_Error(
 				'post_not_shared',
-				__( 'Post has not been shared to Nextdoor yet.', 'newspack-plugin' )
+				__( 'Post has not been shared to Nextdoor yet.', 'newspack-plugin' ),
+				[ 'status' => 409 ]
 			);
 		}
 
@@ -463,7 +471,8 @@ class Controller {
 		if ( ! $token_valid ) {
 			return new \WP_Error(
 				'nextdoor_token_invalid',
-				__( 'Nextdoor access token is invalid or expired. Please reconnect your account.', 'newspack-plugin' )
+				__( 'Nextdoor access token is invalid or expired. Please reconnect your account.', 'newspack-plugin' ),
+				[ 'status' => 400 ]
 			);
 		}
 
@@ -504,7 +513,8 @@ class Controller {
 		if ( ! Nextdoor::is_connected() ) {
 			return new \WP_Error(
 				'nextdoor_not_connected',
-				__( 'Nextdoor is not connected.', 'newspack-plugin' )
+				__( 'Nextdoor is not connected.', 'newspack-plugin' ),
+				[ 'status' => 400 ]
 			);
 		}
 
@@ -513,7 +523,8 @@ class Controller {
 		if ( ! $guid ) {
 			return new \WP_Error(
 				'post_not_shared',
-				__( 'Post has not been shared to Nextdoor.', 'newspack-plugin' )
+				__( 'Post has not been shared to Nextdoor.', 'newspack-plugin' ),
+				[ 'status' => 409 ]
 			);
 		}
 
@@ -522,7 +533,8 @@ class Controller {
 		if ( ! $token_valid ) {
 			return new \WP_Error(
 				'nextdoor_token_invalid',
-				__( 'Nextdoor access token is invalid or expired. Please reconnect your account.', 'newspack-plugin' )
+				__( 'Nextdoor access token is invalid or expired. Please reconnect your account.', 'newspack-plugin' ),
+				[ 'status' => 400 ]
 			);
 		}
 
@@ -595,6 +607,13 @@ class Controller {
 				$error_status    = is_array( $error_data ) && isset( $error_data['status'] ) ? (int) $error_data['status'] : 0;
 				$needs_reconnect = in_array( $error_status, [ 401, 403 ], true );
 				$is_unreachable  = ! $needs_reconnect;
+
+				// Recorded, not just reported: the reconnect this answer offers leads to the
+				// settings card, which reads the stored state and would otherwise still show
+				// the connection as working.
+				if ( $needs_reconnect ) {
+					Auth::record_token_refusal();
+				}
 			}
 
 			if ( ! is_wp_error( $ingestion_response ) &&
