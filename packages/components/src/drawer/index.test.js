@@ -212,7 +212,11 @@ describe( 'Drawer sections', () => {
 	// footer actually abuts may reach it, however many the children split into.
 	it( 'leaves the footer immediately after the last scroll container', () => {
 		renderDrawer( {
-			contents: [ <Drawer.Content key="one">One</Drawer.Content>, <div key="split">Split</div>, <Drawer.Content key="two">Two</Drawer.Content> ],
+			contents: [
+				<Drawer.Content key="one">One</Drawer.Content>,
+				<div key="split">Split</div>,
+				<Drawer.Content key="two">Two</Drawer.Content>,
+			],
 			footer: <Drawer.Footer>Actions</Drawer.Footer>,
 		} );
 
