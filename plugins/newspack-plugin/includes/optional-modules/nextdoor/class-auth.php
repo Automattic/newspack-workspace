@@ -119,6 +119,15 @@ class Auth {
 		$code = wp_remote_retrieve_response_code( $response );
 
 		if ( $code >= 400 ) {
+			// A 4xx is Nextdoor refusing the grant, which no retry will cure. Record it so
+			// the connection can report itself as needing a reconnection instead of staying
+			// green forever. A 5xx or a transport error is transient, so it is left alone.
+			if ( $code < 500 ) {
+				$settings                      = Nextdoor::get_settings();
+				$settings['refresh_failed_at'] = time();
+				Nextdoor::update_settings( $settings );
+			}
+
 			$error_data = json_decode( $body, true );
 			return new \WP_Error(
 				'nextdoor_oauth_refresh_error',
@@ -170,8 +179,9 @@ class Auth {
 	 * @return array Settings carrying the new token.
 	 */
 	private static function apply_token_response( $settings, $token_data ) {
-		$settings['access_token']     = $token_data['access_token'];
-		$settings['token_expires_at'] = isset( $token_data['expires_in'] ) && is_numeric( $token_data['expires_in'] ) ? time() + (int) $token_data['expires_in'] : 0;
+		$settings['access_token']      = $token_data['access_token'];
+		$settings['token_expires_at']  = isset( $token_data['expires_in'] ) && is_numeric( $token_data['expires_in'] ) ? time() + (int) $token_data['expires_in'] : 0;
+		$settings['refresh_failed_at'] = 0;
 
 		// Nextdoor rotates the refresh token, and omits it when it has not changed.
 		if ( ! empty( $token_data['refresh_token'] ) && is_string( $token_data['refresh_token'] ) ) {
@@ -358,8 +368,10 @@ class Auth {
 	 * Whether the connection still holds, without calling Nextdoor.
 	 *
 	 * Reports what `validate_token()` would, read off the stored token: a token that is
-	 * not near expiry is usable, and one that is can be renewed as long as a refresh
-	 * token was stored with it. False still means the publisher has to reconnect.
+	 * not near expiry is usable, and one that is can be renewed as long as the refresh
+	 * token and the credentials it is exchanged with are all present and a previous
+	 * refresh has not already been refused. False still means the publisher has to
+	 * reconnect.
 	 *
 	 * @return bool
 	 */
@@ -370,11 +382,15 @@ class Auth {
 			return false;
 		}
 
+		if ( ! empty( $settings['refresh_failed_at'] ) ) {
+			return false;
+		}
+
 		if ( ! self::needs_token_refresh() ) {
 			return true;
 		}
 
-		return ! empty( $settings['refresh_token'] );
+		return ! empty( $settings['refresh_token'] ) && ! empty( $settings['client_id'] ) && ! empty( $settings['client_secret'] );
 	}
 
 	/**
