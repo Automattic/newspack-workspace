@@ -1214,6 +1214,46 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A fresh grant never inherits the refresh token of the one it replaces.
+	 */
+	public function test_signing_in_again_drops_the_previous_refresh_token() {
+		Nextdoor::update_settings(
+			[
+				'client_id'     => 'site-id',
+				'client_secret' => 'site-secret',
+				'access_token'  => 'old-access',
+				'refresh_token' => 'previous-refresh',
+			]
+		);
+
+		// An authorization-code grant that carries no refresh token of its own.
+		$this->http_body = wp_json_encode(
+			[
+				'access_token' => 'new-access',
+				'expires_in'   => 3600,
+			]
+		);
+		add_filter( 'pre_http_request', [ $this, 'stub_nextdoor_response' ], 10, 3 );
+
+		$_GET['nextdoor_oauth_callback'] = '1';
+		$_GET['code']                    = 'auth-code';
+		$_GET['state']                   = Auth::create_oauth_state();
+
+		try {
+			Auth::handle_oauth_callback();
+		} catch ( Exception $e ) {
+			unset( $e );
+		}
+
+		$settings = Nextdoor::get_settings();
+
+		self::assertSame( 'new-access', $settings['access_token'] );
+		self::assertSame( '', $settings['refresh_token'] );
+
+		unset( $_GET['nextdoor_oauth_callback'], $_GET['code'], $_GET['state'] );
+	}
+
+	/**
 	 * A report that never comes back is an outage, not a silent blank.
 	 */
 	public function test_a_failed_ingestion_report_reads_as_unreachable() {
