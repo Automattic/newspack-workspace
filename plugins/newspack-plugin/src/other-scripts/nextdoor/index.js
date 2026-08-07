@@ -175,6 +175,15 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 
 		return (
 			<>
+				{ nextdoorStatus?.needs_reconnect && (
+					<Notice status="error" isDismissible={ false }>
+						{ __(
+							'The Nextdoor connection needs renewing before this post can be updated. Reconnect it in Newspack > Settings > Social.',
+							'newspack-plugin'
+						) }
+					</Notice>
+				) }
+
 				{ error && (
 					<Notice status="error" isDismissible={ false }>
 						{ error }
