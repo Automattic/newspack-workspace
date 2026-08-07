@@ -132,6 +132,9 @@ class Teams_Migration {
 	 * [--migrate-invitations]
 	 * : Also carry each team's pending (unaccepted) WooCommerce Teams invitations over as group-subscription invites, which SENDS an invitation email to every pending invitee. Off by default because it emails readers; the pending invitees are always listed at the end of the run regardless of this flag. In dry-run mode nothing is sent, but the flag still shapes the rehearsal: per-invitee outcomes and recipient accounting preview what a live run would send, and any dry run with pending invitees warns when the invitation email is not sendable. The run asks for confirmation before the first email goes out, and aborts up front if the invitation email is not sendable on this site while there is something to send. Re-running is safe while the invites it wrote are still live (30 days by default) — an invitee whose invite has lapsed is invited again, and those are reported separately. To recover an invitee reported as FAILED: fix the cause and re-run — or cancel the reader's pending invitation from the group subscription's panel on the WooCommerce subscription screen and re-invite from there. That manual cancel is also the escape hatch for a stored invite the automatic rollback could not remove.
 	 *
+	 * [--limit=<n>]
+	 * : With --migrate-invitations --live, cap how many invitation emails this run sends. Invitees beyond the cap stay listed with a re-run note, and the already-invited gate makes the next run resume where this one stopped — use it to drain a large site in operator-sized batches instead of one long burst. No effect on dry runs or without --migrate-invitations.
+	 *
 	 * [--yes]
 	 * : Skip the confirmation prompt shown before invitation emails are sent. Auto-handled by WP_CLI::confirm.
 	 *
@@ -142,6 +145,7 @@ class Teams_Migration {
 	 *     wp newspack migrate-teams --skip-unlinked --live
 	 *     wp newspack migrate-teams --product-id=519858 --only-unlinked --live
 	 *     wp newspack migrate-teams --product-id=519858 --migrate-invitations --live
+	 *     wp newspack migrate-teams --product-id=519858 --migrate-invitations --limit=100 --live
 	 *
 	 * @param array $args       Positional args (unused).
 	 * @param array $assoc_args Named args.
@@ -154,6 +158,7 @@ class Teams_Migration {
 		$skip_unlinked       = (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'skip-unlinked', false );
 		$only_unlinked       = (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'only-unlinked', false );
 		$migrate_invitations = (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'migrate-invitations', false );
+		$send_limit          = max( 0, (int) \WP_CLI\Utils\get_flag_value( $assoc_args, 'limit', 0 ) ); // 0 = no cap.
 
 		// Sending is gated behind the opt-in flag and never happens in a dry-run — but
 		// the pending-invitation list is always reported (below) so the data is never
@@ -262,7 +267,16 @@ class Teams_Migration {
 		}
 
 		if ( $send_invitations && $recipient_count ) {
-			WP_CLI::confirm( sprintf( 'This will send group subscription invitation emails to up to %d reader(s). Continue?', $recipient_count ), $assoc_args );
+			// Name the shared relay in the prompt: the burst rides the same mail path
+			// as reader sign-in links and purchase receipts, and that is the one fact
+			// an operator needs to pick a quiet hour — the recipient count alone
+			// doesn't show it.
+			if ( $send_limit > 0 && $recipient_count > $send_limit ) {
+				$prompt = sprintf( 'This will send up to %1$d of %2$d pending group subscription invitation email(s) (--limit=%1$d) through the site\'s mail relay — the same relay that carries reader sign-in links and purchase receipts. Re-run to send the rest. Continue?', $send_limit, $recipient_count );
+			} else {
+				$prompt = sprintf( 'This will send up to %d group subscription invitation email(s) in one uninterrupted burst through the site\'s mail relay — the same relay that carries reader sign-in links and purchase receipts, so consider a quiet hour for a large batch. Continue?', $recipient_count );
+			}
+			WP_CLI::confirm( $prompt, $assoc_args );
 		}
 
 		$summary               = [];
@@ -515,8 +529,11 @@ class Teams_Migration {
 			// which would take every summary table below down with it.
 			$team_emails                       = $pending_invitations[ $team_id ] ?? [];
 			$invitation_teams_seen[ $team_id ] = true;
+			// Hand each team the remainder of --limit's budget; $invites_sent
+			// accumulates across teams, so the cap holds run-wide.
+			$sends_remaining = ( $send_invitations && $send_limit > 0 ) ? max( 0, $send_limit - $invites_sent ) : null;
 			try {
-				$invitation_result = self::migrate_team_invitations( $subscription, $team_id, $send_invitations, $team_emails );
+				$invitation_result = self::migrate_team_invitations( $subscription, $team_id, $send_invitations, $team_emails, $sends_remaining );
 			} catch ( \Throwable $e ) {
 				$errors[]          = sprintf( 'invitations: %s', $e->getMessage() );
 				$invitation_result = [
@@ -1756,7 +1773,10 @@ class Teams_Migration {
 	 *
 	 * The gate is read even when not sending, so a dry rehearsal run after a completed
 	 * live run reports the already-invited readers as skipped rather than everyone as
-	 * still waiting — the rehearsal previews what a live run would actually send.
+	 * still waiting — the rehearsal previews what a live run would actually send. The
+	 * rehearsal also applies generate_invite()'s cheap, side-effect-free rejections
+	 * (existing member, non-reader account) with the live run's wording, so per-invitee
+	 * outcomes match a live run for every reason except the seat limit.
 	 *
 	 * Addresses are compared case-insensitively but invited in their original casing:
 	 * the acceptance handler compares the invite address strictly against the reader's
@@ -1767,6 +1787,10 @@ class Teams_Migration {
 	 * @param int                   $team_id      The team post ID.
 	 * @param bool                  $send         Whether to actually create and send invites.
 	 * @param string[]|null         $emails       Pre-read pending invitee emails; read from the team when null.
+	 * @param int|null              $max_sends    Cap on how many invites this call may email (null = no cap).
+	 *                                            Invitees beyond the cap are skipped with a re-run note; the
+	 *                                            already-invited gate makes the follow-up run resume where
+	 *                                            this one stopped. Carries the remainder of --limit's budget.
 	 *
 	 * @return array {
 	 *     @type string[]              $emails  Pending invitee emails for the team.
@@ -1776,7 +1800,7 @@ class Teams_Migration {
 	 *     @type array<string, string> $failed  Email => failure reason for invitees whose invite could not be delivered.
 	 * }
 	 */
-	public static function migrate_team_invitations( $subscription, $team_id, $send, $emails = null ) {
+	public static function migrate_team_invitations( $subscription, $team_id, $send, $emails = null, $max_sends = null ) {
 		$emails = null === $emails ? self::get_pending_team_invitation_emails( $team_id ) : $emails;
 		$result = [
 			'emails'  => $emails,
@@ -1815,9 +1839,28 @@ class Teams_Migration {
 				continue;
 			}
 			if ( ! $send ) {
-				// Not skipped and not sent: the outcome chain labels these "would
-				// send (dry run)" / "not sent", which is now truthful — an
-				// already-invited reader was skipped above instead.
+				// Rehearse the cheap, side-effect-free rejections generate_invite()
+				// would apply on a live run — same checks, same wording — so a
+				// rehearsal's per-invitee outcome matches the live run for every
+				// reason except the seat limit, which depends on the order invites
+				// land within a run. Invitees none of these catch fall through to
+				// the outcome chain's "would send (dry run)" / "not sent" labels.
+				$existing_user = \get_user_by( 'email', $email );
+				if ( $existing_user && ! Reader_Activation::is_user_reader( $existing_user ) ) {
+					$result['skipped'][ $email ] = __( 'Not a valid reader account.', 'newspack-plugin' );
+					continue;
+				}
+				if ( $existing_user && in_array( (int) $existing_user->ID, array_map( 'absint', Group_Subscription::get_members( $subscription ) ), true ) ) {
+					$result['skipped'][ $email ] = __( 'User is already a member of this group subscription.', 'newspack-plugin' );
+					continue;
+				}
+				continue;
+			}
+			if ( null !== $max_sends && count( $result['sent'] ) >= $max_sends ) {
+				// The --limit budget for this run is spent: keep the invitee listed
+				// with an actionable reason instead of a send. The already-invited
+				// gate makes the follow-up run resume exactly here.
+				$result['skipped'][ $email ] = __( 'Not sent this run (--limit reached); re-run to send.', 'newspack-plugin' );
 				continue;
 			}
 			try {
@@ -1828,17 +1871,20 @@ class Teams_Migration {
 				}
 				if ( empty( $invite['email_sent'] ) ) {
 					// Roll the invite back so it can't answer "Already invited." on the
-					// re-run that is meant to reach this reader. Guarded like the
-					// throw-path rollback below: unguarded, a throwing cancel_invite()
-					// would land in the outer catch, re-attempt the rollback, and build
-					// the FAILED reason from the rollback error alone — dropping the
+					// re-run that is meant to reach this reader. Guarded and checked
+					// like the throw-path rollback below: cancel_invites() reports
+					// failure as a WP_Error return, not only a throw, so the success
+					// wording is gated on `true ===` — and a throwing rollback here
+					// would otherwise land in the outer catch and drop the
 					// send-failure fact that explains the row.
 					try {
-						Group_Subscription_Invite::cancel_invite( $subscription, $email );
-						$result['failed'][ $email ] = __( 'Invitation email was not sent — the invite was rolled back so a re-run can retry.', 'newspack-plugin' );
+						$rolled_back = true === Group_Subscription_Invite::cancel_invite( $subscription, $email );
 					} catch ( \Throwable $rollback_error ) {
-						$result['failed'][ $email ] = __( 'Invitation email was not sent, and the stored invite could not be rolled back afterwards. If the subscription\'s group panel shows a pending invitation for this reader, cancel it before re-running, or the re-run will answer "Already invited."', 'newspack-plugin' );
+						$rolled_back = false;
 					}
+					$result['failed'][ $email ] = $rolled_back
+						? __( 'Invitation email was not sent — the invite was rolled back so a re-run can retry.', 'newspack-plugin' )
+						: __( 'Invitation email was not sent, and the stored invite could not be rolled back afterwards. If the subscription\'s group panel shows a pending invitation for this reader, cancel it before re-running, or the re-run will answer "Already invited."', 'newspack-plugin' );
 					continue;
 				}
 			} catch ( \Throwable $e ) {
@@ -1966,6 +2012,11 @@ class Teams_Migration {
 					'orderby'                => 'ID',
 					'order'                  => 'ASC',
 					'no_found_rows'          => true,
+					// Without this, get_posts() stores every fetched post in the
+					// long-lived posts object cache (cache_results defaults true),
+					// so the peak would grow monotonically across chunks and the
+					// chunking would bound nothing.
+					'cache_results'          => false,
 					'update_post_meta_cache' => false,
 					'update_post_term_cache' => false,
 				]

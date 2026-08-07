@@ -743,6 +743,71 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The rehearsal applies generate_invite()'s cheap rejections with the live run's
+	 * wording, so an invitee a live run would refuse as a member or non-reader is not
+	 * previewed as "would send". Only the seat limit is exempt (order-dependent).
+	 */
+	public function test_migrate_team_invitations_dry_rehearsal_reports_live_rejections() {
+		$owner        = $this->create_reader();
+		$subscription = $this->create_group_subscription( $owner );
+		$team_id      = $this->create_team( $owner, [], $subscription->get_id() );
+
+		$member       = $this->create_reader();
+		$member_email = get_userdata( $member )->user_email;
+		Teams_Migration::add_group_member( $subscription, $member );
+		$this->create_team_invitation( $team_id, $member_email );
+
+		$editor       = $this->create_editor();
+		$editor_email = get_userdata( $editor )->user_email;
+		$this->create_team_invitation( $team_id, $editor_email );
+
+		$fresh = 'fresh-rehearsal@test.com';
+		$this->create_team_invitation( $team_id, $fresh );
+
+		$rehearsal = Teams_Migration::migrate_team_invitations( $subscription, $team_id, false );
+
+		$this->assertSame( [], $rehearsal['sent'], 'A rehearsal sends nothing.' );
+		$this->assertArrayHasKey( $member_email, $rehearsal['skipped'], 'A current member is reported as a live run would report them.' );
+		$this->assertArrayHasKey( $editor_email, $rehearsal['skipped'], 'A non-reader is reported as a live run would report them.' );
+		$this->assertCount( 2, $rehearsal['skipped'], 'The fresh invitee stays unlisted so the outcome chain labels them "would send".' );
+		$this->assertCount( 0, $this->get_sent_emails(), 'A rehearsal dispatches no mail.' );
+		$this->assertEmpty( Group_Subscription_Invite::get_invites( $subscription ), 'A rehearsal writes no invite.' );
+
+		// The reasons match the live run word for word, so tables compare across runs.
+		$live = Teams_Migration::migrate_team_invitations( $subscription, $team_id, true );
+		$this->assertSame( $rehearsal['skipped'][ $member_email ], $live['skipped'][ $member_email ], 'Member rejection wording must match the live run.' );
+		$this->assertSame( $rehearsal['skipped'][ $editor_email ], $live['skipped'][ $editor_email ], 'Non-reader rejection wording must match the live run.' );
+		$this->assertSame( [ $fresh ], $live['sent'], 'The live run sends exactly the invitee the rehearsal previewed.' );
+	}
+
+	/**
+	 * --limit's per-run budget: sends stop at the cap, the invitees beyond it stay
+	 * listed with an actionable reason, and the already-invited gate makes the
+	 * follow-up run resume where the capped run stopped — each reader emailed once.
+	 */
+	public function test_migrate_team_invitations_send_limit_caps_and_resumes() {
+		$owner        = $this->create_reader();
+		$subscription = $this->create_group_subscription( $owner );
+		$team_id      = $this->create_team( $owner, [], $subscription->get_id() );
+		$this->create_team_invitation( $team_id, 'limit-a@test.com' );
+		$this->create_team_invitation( $team_id, 'limit-b@test.com' );
+		$this->create_team_invitation( $team_id, 'limit-c@test.com' );
+
+		$first = Teams_Migration::migrate_team_invitations( $subscription, $team_id, true, null, 2 );
+
+		$this->assertCount( 2, $first['sent'], 'The cap limits this run to two sends.' );
+		$this->assertCount( 1, $first['skipped'], 'The invitee beyond the cap is listed, not lost.' );
+		$this->assertStringContainsString( '--limit', (string) array_values( $first['skipped'] )[0], 'The reason names the flag so the operator knows why.' );
+		$this->assertCount( 2, $this->get_sent_emails(), 'Exactly two messages leave under the cap.' );
+
+		$second = Teams_Migration::migrate_team_invitations( $subscription, $team_id, true, null, 2 );
+
+		$this->assertCount( 1, $second['sent'], 'The follow-up run resumes with the remaining invitee.' );
+		$this->assertCount( 2, $second['skipped'], 'The two already-invited readers are skipped, not re-emailed.' );
+		$this->assertCount( 3, $this->get_sent_emails(), 'Across both runs each invitee is emailed exactly once.' );
+	}
+
+	/**
 	 * With sending enabled, migrate_team_invitations() creates a group-subscription
 	 * invite for each pending invitee and the invites land on the subscription.
 	 */
