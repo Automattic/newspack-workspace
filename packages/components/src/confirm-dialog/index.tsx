@@ -82,7 +82,6 @@ function ConfirmDialog(
 		pendingNavigation.current = null;
 		// A POP may have moved the URL to the target before it was blocked; put
 		// it back so the address bar matches the page the user chose to stay on.
-		// Outside a Router there is no history, so no blocker and nothing to undo.
 		if ( history ) {
 			bypassBlock.current = true;
 			try {
@@ -94,8 +93,7 @@ function ConfirmDialog(
 		onCancel();
 	}, [ onCancel, history ] );
 
-	// Block navigation when there are unsaved changes. Nothing to block without a
-	// Router; `isOpen` still works.
+	// Block navigation when there are unsaved changes.
 	useEffect( () => {
 		if ( ! when || ! history ) {
 			return;
@@ -128,17 +126,16 @@ function ConfirmDialog(
 		return unblock;
 	}, [ when, history ] );
 
-	// Both ways, and during render: a commit later the dialog would still hold
-	// focus while the caller unmounted. The blocker below bypasses `isOpen`.
+	// During render: a commit later the dialog would still hold focus while the
+	// caller unmounted. The blocker above raises it without touching `isOpen`.
 	const [ wasOpen, setWasOpen ] = useState( isOpen );
 	if ( wasOpen !== isOpen ) {
 		setWasOpen( isOpen );
 		setShowDialog( isOpen );
 	}
 
-	// Withdrawn, so a navigation the blocker was holding must not replay on the next
-	// prompt the way a confirm or cancel would have released it. After the commit
-	// rather than during render, so a discarded render cannot drop a live one.
+	// A withdrawn prompt releases what the blocker held, as confirm and cancel do.
+	// After the commit, so a discarded render cannot drop a live one.
 	useEffect( () => {
 		if ( ! isOpen ) {
 			pendingNavigation.current = null;

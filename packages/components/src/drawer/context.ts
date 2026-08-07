@@ -11,7 +11,6 @@ import type { DrawerTitleInfo } from './types';
 type DrawerContextValue = {
 	requestClose: () => void;
 	title: DrawerTitleInfo | null;
-	/** `forId` unregisters only while that title is still the registered one. */
 	setTitle: ( title: DrawerTitleInfo | null, forId?: string ) => void;
 };
 

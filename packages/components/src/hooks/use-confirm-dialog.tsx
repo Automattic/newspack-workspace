@@ -60,7 +60,6 @@ function useConfirmDialog( options: UseConfirmDialogOptions ): UseConfirmDialogR
 		}
 	}, [] );
 
-	// Drops a pending request without running it.
 	const cancelConfirm = useCallback( () => setPendingAction( null ), [] );
 
 	const confirmDialog = (

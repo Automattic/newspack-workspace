@@ -4,7 +4,7 @@
 import { useReducedMotion } from '@wordpress/compose';
 import { useEffect, useState } from '@wordpress/element';
 
-// Covers an animation that never ends — jsdom never fires animationend.
+// Covers an animationend that never arrives.
 const EXIT_FALLBACK_MS = 400;
 
 /** Holds a panel mounted while its exit animation plays. */

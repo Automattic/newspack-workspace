@@ -24,7 +24,6 @@ describe( 'useDrawerContext', () => {
 	} );
 
 	it( 'throws outside Drawer.Root', () => {
-		// Silence React's error boundary logging for the expected throw.
 		const consoleError = jest.spyOn( console, 'error' ).mockImplementation( () => {} );
 		expect( () => render( <Probe /> ) ).toThrow( 'Drawer subcomponents must be rendered inside Drawer.Root.' );
 		consoleError.mockRestore();

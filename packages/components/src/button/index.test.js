@@ -40,8 +40,8 @@ describe( 'Button href with onClick', () => {
 	} );
 } );
 
-// Consumers outside a wizard have no react-router, so useHistory returns
-// undefined and there is no route table for the href to name.
+// `useHistory` returns undefined outside a wizard, leaving no route table for the
+// href to name.
 describe( 'Button href with onClick outside a router', () => {
 	// jsdom's real location logs "Not implemented: navigation" rather than
 	// navigating, so swap in a plain object to assert against and put the
@@ -72,7 +72,6 @@ describe( 'Button href with onClick outside a router', () => {
 		} );
 	} );
 
-	// The widened onClick type promises the event on every path that accepts one.
 	it( 'hands the click event to a combined href and onClick handler', async () => {
 		const onClick = jest.fn();
 		await withStubbedLocation( async () => {
@@ -118,7 +117,6 @@ describe( 'Button href with onClick outside a router', () => {
 	} );
 } );
 
-// The same href reaches an anchor when no handler sits beside it.
 describe( 'Button with a javascript: href alone', () => {
 	const link = () => screen.getByText( 'Save' ).closest( 'a' );
 

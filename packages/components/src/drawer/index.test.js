@@ -207,9 +207,8 @@ describe( 'Drawer sections', () => {
 		expect( bodyOf( one ) ).not.toContainElement( screen.getByText( 'Actions' ) );
 	} );
 
-	// The stylesheet drops the last section's bottom padding through
-	// `.newspack-drawer__body:has(+ .newspack-drawer__footer)`, so only the body the
-	// footer actually abuts may reach it, however many the children split into.
+	// `.newspack-drawer__body:has(+ .newspack-drawer__footer)` drops the last
+	// section's bottom padding, so only the body the footer abuts may reach it.
 	it( 'leaves the footer immediately after the last scroll container', () => {
 		renderDrawer( {
 			contents: [
@@ -521,7 +520,6 @@ describe( 'Drawer closing', () => {
 		expect( screen.getByText( 'Discard changes', { selector: 'button' } ) ).toBeInTheDocument();
 
 		rerender( <Delegating open={ false } /> );
-		// Still up: the Root withdraws only the dialog it owns.
 		expect( screen.getByText( 'Discard changes', { selector: 'button' } ) ).toBeInTheDocument();
 		expect( error ).not.toHaveBeenCalled();
 		error.mockRestore();

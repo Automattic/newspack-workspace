@@ -115,8 +115,6 @@ const Root = forwardRef< HTMLDivElement, DrawerRootProps >( function Root(
 				prompted = false;
 				onRequestClose();
 			} );
-			// A delegated requestConfirm runs its callback on the spot when its own
-			// `when` is false, which the Root cannot see.
 			if ( 'production' !== process.env.NODE_ENV && ! prompted ) {
 				// eslint-disable-next-line no-console
 				console.warn(
@@ -172,8 +170,8 @@ const Root = forwardRef< HTMLDivElement, DrawerRootProps >( function Root(
 			// eslint-disable-next-line @wordpress/no-global-active-element
 			openerRef.current = typeof document === 'undefined' ? null : document.activeElement;
 		} else {
-			// During render, so it is gone in the commit that starts the exit rather than
-			// holding focus while the panel goes inert. Only ours: the slot is shared.
+			// During render, so it is gone in the commit that starts the exit rather
+			// than holding focus while the panel goes inert. Only ours to withdraw.
 			ownCancelConfirm();
 		}
 	}
@@ -192,8 +190,8 @@ const Root = forwardRef< HTMLDivElement, DrawerRootProps >( function Root(
 			return;
 		}
 		if ( isExiting ) {
-			// Focus goes home before `inert` blurs it, unless parked elsewhere. Reclaiming
-			// it from a sibling frame would take it from a modal that is still open.
+			// Focus goes home before `inert` blurs it, unless parked elsewhere:
+			// reclaiming it from a sibling frame would take it from an open modal.
 			const active = frame.ownerDocument.activeElement;
 			if ( frame.contains( active ) || ! active || active === frame.ownerDocument.body ) {
 				movedFocusOut.current = true;

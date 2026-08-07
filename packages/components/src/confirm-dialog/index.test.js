@@ -141,9 +141,8 @@ describe( 'ConfirmDialog navigation blocking', () => {
 	} );
 } );
 
-// Consumers outside a wizard have no react-router, so useHistory returns
-// undefined. There is no navigation to block there, and the imperative `isOpen`
-// path has to keep working rather than crash on a history that isn't there.
+// `useHistory` returns undefined outside a wizard, where `newspack-multibranded-site`
+// runs react-router v6 against this package's v5.
 describe( 'ConfirmDialog without a router', () => {
 	const renderUnrouted = ( props = {} ) =>
 		render(
@@ -171,7 +170,6 @@ describe( 'ConfirmDialog without a router', () => {
 		expect( dialog() ).not.toBeInTheDocument();
 	} );
 
-	// `when` asks for a blocker there is no history to install one on.
 	it( 'installs no blocker when asked to block without a router', () => {
 		expect( () => renderUnrouted( { when: true } ) ).not.toThrow();
 		expect( dialog() ).toBeInTheDocument();
@@ -217,8 +215,6 @@ describe( 'ConfirmDialog controlled by isOpen', () => {
 		expect( dialog() ).toBeInTheDocument();
 	} );
 
-	// `isOpen` is authoritative both ways, so a prompt the blocker raised goes with
-	// it, and the navigation it was holding goes too.
 	it( 'withdraws a blocked navigation prompt when isOpen goes false', () => {
 		const historyRef = { current: null };
 		const withOpen = isOpen => (
@@ -244,8 +240,7 @@ describe( 'ConfirmDialog controlled by isOpen', () => {
 	} );
 } );
 
-// Both the drawer and `useUnsavedChangesDialog` name their prompt this way: the
-// heading is the accessible name and never renders.
+// How both the drawer and `useUnsavedChangesDialog` name their prompt.
 describe( 'ConfirmDialog named by a hidden title', () => {
 	it( 'takes its accessible name from the title while hiding the header', () => {
 		render(
