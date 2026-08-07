@@ -615,6 +615,50 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A grant that never said how long it lasts is due, not good forever.
+	 */
+	public function test_a_token_without_an_expiry_is_treated_as_due() {
+		Nextdoor::update_settings(
+			[
+				'client_id'     => 'site-id',
+				'client_secret' => 'site-secret',
+				'access_token'  => 'no-expiry-access',
+			]
+		);
+
+		self::assertTrue( Auth::needs_token_refresh() );
+		// Nothing to renew it with, so the connection reports itself as unusable.
+		self::assertFalse( Auth::has_usable_token() );
+
+		Nextdoor::update_settings( array_merge( Nextdoor::get_settings(), [ 'refresh_token' => 'stored-refresh' ] ) );
+
+		self::assertTrue( Auth::has_usable_token() );
+	}
+
+	/**
+	 * A grant response with no expiry is stored as already due.
+	 */
+	public function test_a_grant_without_an_expiry_is_stored_as_due() {
+		Nextdoor::update_settings(
+			[
+				'client_id'     => 'site-id',
+				'client_secret' => 'site-secret',
+				'access_token'  => 'old-access',
+				'refresh_token' => 'stored-refresh',
+			]
+		);
+
+		$this->http_body = wp_json_encode( [ 'access_token' => 'new-access' ] );
+		add_filter( 'pre_http_request', [ $this, 'stub_nextdoor_response' ], 10, 3 );
+
+		Auth::refresh_access_token( 'site-id', 'site-secret', 'stored-refresh' );
+
+		self::assertSame( 'new-access', Nextdoor::get_settings()['access_token'] );
+		self::assertNotEmpty( Nextdoor::get_settings()['token_expires_at'] );
+		self::assertTrue( Auth::needs_token_refresh() );
+	}
+
+	/**
 	 * A refresh token with nothing to exchange it with cannot renew anything.
 	 */
 	public function test_an_expired_token_without_credentials_is_not_usable() {
