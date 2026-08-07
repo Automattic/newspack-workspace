@@ -69,6 +69,7 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 
 		delete_option( Nextdoor::SETTINGS_SLUG );
 		delete_option( Optional_Modules::OPTION_NAME );
+		delete_option( Auth::REFUSAL_OPTION );
 	}
 
 	/**
@@ -87,6 +88,7 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 
 		delete_option( Nextdoor::SETTINGS_SLUG );
 		delete_option( Optional_Modules::OPTION_NAME );
+		delete_option( Auth::REFUSAL_OPTION );
 
 		parent::tear_down();
 	}
@@ -647,7 +649,7 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 		$result = Auth::refresh_access_token( 'site-id', 'wrong-secret', 'stored-refresh' );
 
 		self::assertInstanceOf( 'WP_Error', $result );
-		self::assertEmpty( Nextdoor::get_settings()['refresh_failed_at'] );
+		self::assertEmpty( get_option( Auth::REFUSAL_OPTION ) );
 		// Still renewable, so fixing the credentials is all it takes.
 		self::assertTrue( Auth::has_usable_token() );
 	}
@@ -697,7 +699,7 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 
 		self::assertTrue( Auth::validate_token() );
 		self::assertSame( 'winner-access', Nextdoor::get_settings()['access_token'] );
-		self::assertEmpty( Nextdoor::get_settings()['refresh_failed_at'] );
+		self::assertEmpty( get_option( Auth::REFUSAL_OPTION ) );
 	}
 
 	/**
@@ -1188,7 +1190,7 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 		self::assertTrue( $data['needs_reconnect'] );
 		self::assertFalse( $data['is_unreachable'] );
 		// Persisted, so the card the reconnect link leads to agrees with this answer.
-		self::assertNotEmpty( Nextdoor::get_settings()['refresh_failed_at'] );
+		self::assertNotEmpty( get_option( Auth::REFUSAL_OPTION ) );
 		self::assertFalse( Auth::has_usable_token() );
 	}
 
@@ -1224,7 +1226,7 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 
 		self::assertFalse( $data['needs_reconnect'] );
 		self::assertTrue( $data['is_unreachable'] );
-		self::assertEmpty( Nextdoor::get_settings()['refresh_failed_at'] );
+		self::assertEmpty( get_option( Auth::REFUSAL_OPTION ) );
 		// Still renewable, so the next load can recover without a reconnection.
 		self::assertTrue( Auth::has_usable_token() );
 	}
@@ -1262,7 +1264,7 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 
 		Controller::api_get_post_sharing_status( $request );
 
-		self::assertEmpty( Nextdoor::get_settings()['refresh_failed_at'] );
+		self::assertEmpty( get_option( Auth::REFUSAL_OPTION ) );
 		self::assertTrue( Auth::has_usable_token() );
 	}
 
@@ -1496,14 +1498,15 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 
 		Nextdoor::update_settings(
 			[
-				'client_id'         => 'site-id',
-				'client_secret'     => 'site-secret',
-				'access_token'      => 'expired-access',
-				'refresh_token'     => 'stored-refresh',
-				'token_expires_at'  => time() - 10,
-				'refresh_failed_at' => time(),
+				'client_id'        => 'site-id',
+				'client_secret'    => 'site-secret',
+				'access_token'     => 'expired-access',
+				'refresh_token'    => 'stored-refresh',
+				'token_expires_at' => time() - 10,
 			]
 		);
+
+		update_option( Auth::REFUSAL_OPTION, time() );
 
 		self::assertFalse( Auth::validate_token() );
 		self::assertSame( [], $this->http_requests );
@@ -1542,7 +1545,7 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 		$result = Auth::refresh_access_token( 'site-id', 'site-secret', 'stored-refresh' );
 
 		self::assertInstanceOf( 'WP_Error', $result );
-		self::assertEmpty( Nextdoor::get_settings()['refresh_failed_at'] );
+		self::assertEmpty( get_option( Auth::REFUSAL_OPTION ) );
 		self::assertTrue( Auth::has_usable_token() );
 	}
 
@@ -1580,7 +1583,7 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 		$result = Auth::refresh_access_token( 'site-id', 'site-secret', 'superseded-refresh' );
 
 		self::assertInstanceOf( 'WP_Error', $result );
-		self::assertEmpty( Nextdoor::get_settings()['refresh_failed_at'] );
+		self::assertEmpty( get_option( Auth::REFUSAL_OPTION ) );
 		self::assertTrue( Auth::has_usable_token() );
 	}
 }
