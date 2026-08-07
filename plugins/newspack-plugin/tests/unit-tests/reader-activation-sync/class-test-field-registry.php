@@ -253,6 +253,32 @@ class Test_Field_Registry extends \WP_UnitTestCase {
 		$this->assertTrue( Field_Registry::name_is_registered( 'Signup UTM: source' ) );
 		$this->assertFalse( Field_Registry::name_is_registered( 'Totally Custom Field' ) );
 	}
+
+	/**
+	 * Every renamed v2 field (supersedes a v1 field under a DIFFERENT ESP
+	 * name) must carry a badge-worthy status, so the UI shows it as New.
+	 */
+	public function test_renamed_fields_carry_badge_worthy_status() {
+		$definitions = Field_Registry::get_definitions();
+		$checked     = 0;
+		foreach ( $definitions as $definition ) {
+			if ( 'v2' !== $definition['version'] || empty( $definition['supersedes'] ) ) {
+				continue;
+			}
+			$superseded = $definitions[ $definition['supersedes'] ] ?? null;
+			if ( ! $superseded || $superseded['name'] === $definition['name'] ) {
+				continue;
+			}
+			++$checked;
+			$this->assertContains(
+				$definition['status'],
+				[ 'new', 'updated' ],
+				"Renamed field {$definition['id']} must carry a badge-worthy status."
+			);
+		}
+		$this->assertGreaterThanOrEqual( 6, $checked );
+	}
+
 	/**
 	 * Value-equivalent pairs (declared on the v2 config) upgrade their v1 ids
 	 * to the v2 twin at storage time. A v1 field whose v2 counterpart carries
