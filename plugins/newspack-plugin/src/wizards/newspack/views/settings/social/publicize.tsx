@@ -92,7 +92,7 @@ const Publicize = () => {
 				);
 			}
 			return (
-				<Button variant="secondary" size="compact" isBusy={ isFetching } disabled>
+				<Button variant="secondary" size="compact" isBusy={ isFetching } disabled accessibleWhenDisabled>
 					{ __( 'Loading…', 'newspack-plugin' ) }
 				</Button>
 			);
@@ -107,7 +107,7 @@ const Publicize = () => {
 			);
 		}
 		return (
-			<Button variant="secondary" size="compact" isBusy={ isFetching } disabled={ isFetching } onClick={ install }>
+			<Button variant="secondary" size="compact" isBusy={ isFetching } disabled={ isFetching } accessibleWhenDisabled onClick={ install }>
 				{ isInstalled ? __( 'Activate Jetpack', 'newspack-plugin' ) : __( 'Install Jetpack', 'newspack-plugin' ) }
 			</Button>
 		);
