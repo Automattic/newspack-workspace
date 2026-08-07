@@ -593,17 +593,16 @@ class Test_Prepare_Contact extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Derived selections — get_default_outgoing_field_ids() and the
-	 * legacy-global branch of get_inherited_outgoing_field_ids() — deliberately
-	 * do NOT run Field_Registry::upgrade_equivalent_ids() on their result: the
-	 * equivalence upgrade is a write-path behavior, and a derived set may not
-	 * write. So an unseeded site derives BOTH ids of a value-equivalent pair.
+	 * A value-equivalent pair's v1 id must emit under the shared canonical ESP
+	 * name, un-upgraded, and the pair must emit ONE field rather than two.
 	 *
-	 * That must not double the payload: prepare_contact() builds its
-	 * raw-key/name lookup from Field_Registry::get_definition() per id, and an
-	 * equivalent pair's v1 and v2 definitions share the same 'name' by
-	 * construction — so both ids resolve the 'account' raw key to one
-	 * canonical ESP name, 'Account', emitted once.
+	 * This is what lets the equivalence upgrade stay a write-path behavior:
+	 * read paths that skip it (the defaults fallback, the legacy-global branch
+	 * of get_inherited_outgoing_field_ids()) surface both ids of a pair.
+	 * prepare_contact() builds its raw-key/name lookup from
+	 * Field_Registry::get_definition() per id, and a pair's two definitions
+	 * share the same 'name' by construction — so either id, or both, resolves
+	 * the 'account' raw key to 'Account'.
 	 */
 	public function test_unupgraded_default_id_still_emits_canonical_name() {
 
@@ -613,8 +612,9 @@ class Test_Prepare_Contact extends \WP_UnitTestCase {
 		\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'esp' );
 		\delete_option( Metadata::FIELDS_OPTION );
 
-		// The un-configured ESP's own defaults fallback resolves 'Account' to
-		// both its ids and upgrades neither.
+		// The un-configured ESP derives rather than seeding (detection cannot
+		// be confident without a set-up ESP), resolving 'Account' to both its
+		// ids and upgrading neither.
 		$ids = $esp->get_enabled_outgoing_field_ids();
 		$this->assertContains( 'v1:account', $ids );
 		$this->assertContains( 'v2:Account', $ids );

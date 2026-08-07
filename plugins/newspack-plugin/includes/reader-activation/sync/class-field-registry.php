@@ -504,6 +504,20 @@ class Field_Registry {
 	private const RETIRED_ORIGIN_OPTION = 'newspack_sync_schema_origin';
 
 	/**
+	 * Re-entrancy guard for seed_default_field_selections().
+	 *
+	 * Detection asks the ESP integration whether it is set up, and the lazy
+	 * trigger sits on the ESP's own read path, so a future is_set_up() that
+	 * consulted the selection would loop. Structurally it cannot today —
+	 * seeding resolves ids from the registry's definitions, never from an
+	 * integration read — and this makes that a hard guarantee rather than a
+	 * property of the current call graph.
+	 *
+	 * @var bool
+	 */
+	private static $seeding = false;
+
+	/**
 	 * Seed the ESP integration's stored outgoing-field selection, once.
 	 *
 	 * Coexistence made the registry a merged, all-versions view: a site with
@@ -513,15 +527,39 @@ class Field_Registry {
 	 * ids freezes what it already syncs, and is what lets every runtime path
 	 * stop asking which schema the site came from.
 	 *
-	 * This is the last consumer of the retired origin logic, and deliberately
-	 * a one-shot: after it runs, no code path reads the origin marker, the
-	 * `NEWSPACK_SYNC_METADATA_VERSION*` constants, or any notion of a
-	 * site-wide schema version ever again. An existing selection — including
-	 * a deliberately empty one — is never overwritten.
+	 * Idempotent and trigger-independent, because the trigger cannot be
+	 * relied on: `newspack_activation` fires only on plugin activation, which
+	 * an in-place update never does. So this runs from two places — the
+	 * activation hook as an early bird, and lazily from
+	 * ESP::ensure_outgoing_fields_seeded() the first time the ESP is read
+	 * without a stored option. Whichever fires first wins; the other becomes
+	 * a no-op.
+	 *
+	 * This is the last consumer of the retired origin logic: after it runs, no
+	 * code path reads the origin marker, the `NEWSPACK_SYNC_METADATA_VERSION*`
+	 * constants, or any notion of a site-wide schema version ever again. An
+	 * existing selection — including a deliberately empty one — is never
+	 * overwritten.
+	 *
+	 * @param bool $only_when_confident Skip seeding when detection had to fall
+	 *   back to its fresh-install guess. The lazy caller passes true: that
+	 *   guess is discriminated by ESP::is_set_up(), which is transiently false
+	 *   whenever Newspack Newsletters is deactivated, unconfigured, or simply
+	 *   read mid-request before its settings are in place — and a legacy site
+	 *   read during that window would be frozen onto the new schema forever,
+	 *   silently changing the field names its ESP automations key on. Declining
+	 *   to seed costs nothing there: an ESP that is not set up cannot sync, so
+	 *   the derived fallback never reaches a provider, and a later read seeds
+	 *   correctly. Activation passes false, because activation is the one
+	 *   moment "no prior usage at all" is unambiguous.
 	 *
 	 * @return void
 	 */
-	public static function seed_default_field_selections() {
+	public static function seed_default_field_selections( $only_when_confident = false ) {
+		if ( self::$seeding ) {
+			return;
+		}
+
 		$option = \Newspack\Reader_Activation\Integration::OUTGOING_FIELDS_OPTION_PREFIX . \Newspack\Reader_Activation\Integration::ESP_INTEGRATION_ID;
 		if ( null !== \get_option( $option, null ) ) {
 			// Already configured: nothing to seed, and the marker is dead.
@@ -529,11 +567,21 @@ class Field_Registry {
 			return;
 		}
 
-		$ids = self::get_version_default_field_ids( self::detect_retired_schema_version() );
+		self::$seeding = true;
+		try {
+			$detection = self::detect_retired_schema_version();
+			if ( $only_when_confident && ! $detection['confident'] ) {
+				return;
+			}
+			$ids = self::get_version_default_field_ids( $detection['version'] );
+		} finally {
+			self::$seeding = false;
+		}
+
 		if ( empty( $ids ) ) {
 			// No definitions available (the metadata classes have not loaded).
 			// Storing an empty selection here would read as "push nothing", so
-			// leave both options untouched and retry on a later activation.
+			// leave both options untouched and retry on the next read.
 			return;
 		}
 
@@ -580,12 +628,17 @@ class Field_Registry {
 	 * still an existing legacy site syncing dynamic defaults, so it is also
 	 * v1; everything else is a fresh install and starts on v2.
 	 *
-	 * @return string 'v1' or 'v2'.
+	 * Every branch but the last rests on stored evidence and is reported as
+	 * confident. The last is a guess — a legacy site whose ESP is momentarily
+	 * unconfigured is indistinguishable from a fresh install — which is why
+	 * the lazy caller refuses to act on it.
+	 *
+	 * @return array{version: string, confident: bool}
 	 */
 	private static function detect_retired_schema_version() {
 		$recorded = \get_option( self::RETIRED_ORIGIN_OPTION );
 		if ( in_array( $recorded, [ self::VERSION_V1, self::VERSION_V2 ], true ) ) {
-			return $recorded;
+			return self::certain( $recorded );
 		}
 
 		$flag_version = null;
@@ -595,16 +648,16 @@ class Field_Registry {
 			$flag_version = '1.0';
 		}
 		if ( null !== $flag_version ) {
-			return 'legacy' === $flag_version ? self::VERSION_V1 : self::VERSION_V2;
+			return self::certain( 'legacy' === $flag_version ? self::VERSION_V1 : self::VERSION_V2 );
 		}
 
 		$selection_values = self::get_stored_selection_values();
 		if ( null !== $selection_values ) {
-			return self::version_from_selection_values( $selection_values );
+			return self::certain( self::version_from_selection_values( $selection_values ) );
 		}
 
 		if ( false !== \get_option( Metadata::FIELDS_OPTION, false ) ) {
-			return self::VERSION_V1;
+			return self::certain( self::VERSION_V1 );
 		}
 
 		// A configured ESP with no stored selections is an existing legacy
@@ -617,10 +670,27 @@ class Field_Registry {
 			$esp = new \Newspack\Reader_Activation\Integrations\ESP();
 		}
 		if ( $esp && $esp->is_set_up() ) {
-			return self::VERSION_V1;
+			return self::certain( self::VERSION_V1 );
 		}
 
-		return self::VERSION_V2;
+		return [
+			'version'   => self::VERSION_V2,
+			'confident' => false,
+		];
+	}
+
+	/**
+	 * Wrap an evidence-backed detection result.
+	 *
+	 * @param string $version Detected schema version.
+	 *
+	 * @return array{version: string, confident: bool}
+	 */
+	private static function certain( $version ) {
+		return [
+			'version'   => $version,
+			'confident' => true,
+		];
 	}
 
 	/**

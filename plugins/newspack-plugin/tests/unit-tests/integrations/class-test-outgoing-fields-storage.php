@@ -287,20 +287,23 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 
 	/**
 	 * With neither the per-integration option nor the legacy global option
-	 * ever stored, the ESP falls back to all available fields resolved to ids
-	 * against the merged registry, without persisting the fallback.
+	 * ever stored, and an ESP that is not set up, the read falls back to all
+	 * available fields resolved to ids against the merged registry — without
+	 * persisting anything.
 	 *
-	 * The seeder (Field_Registry::seed_default_field_selections()) is what
-	 * normally spares a site this path, by storing a selection at activation.
-	 * Reaching it means the site is unseeded, and it answers with both
-	 * schemas' fields — including both ids of a value-equivalent pair, which
-	 * name resolution no longer has to choose between.
+	 * Lazy seeding deliberately declines here: with the ESP unconfigured,
+	 * detection cannot tell this site from a legacy one whose provider is
+	 * momentarily unavailable, and freezing the wrong answer would change the
+	 * field names a real legacy site's ESP automations key on. Nothing syncs
+	 * from an unconfigured ESP, so the derived set never reaches a provider.
 	 */
 	public function test_esp_defaults_resolve_to_ids_without_persisting() {
 		\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'esp' );
 		\delete_option( Metadata::FIELDS_OPTION );
 
 		$esp = new ESP();
+		$this->assertFalse( $esp->is_set_up(), 'This test covers the unconfident-detection path.' );
+
 		$ids = $esp->get_enabled_outgoing_field_ids();
 
 		$this->assertNotEmpty( $ids );
@@ -309,7 +312,10 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 		}
 		$this->assertContains( 'v1:account', $ids );
 		$this->assertContains( 'v2:Account', $ids );
-		$this->assertNull( \get_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'esp', null ) );
+		$this->assertNull(
+			\get_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'esp', null ),
+			'An unconfident detection must not be frozen into a stored selection.'
+		);
 	}
 
 	/**
@@ -334,7 +340,7 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 		$defaults = ( new ESP() )->get_enabled_outgoing_field_ids();
 		$this->assertContains( 'v1:account', $defaults );
 
-		// The legacy-global inheritance fallback resolves names the same way.
+		// The legacy-global inheritance fallback, with no ESP registered.
 		\update_option( Metadata::FIELDS_OPTION, [ 'Account', 'Registration Method' ] );
 		$this->assertNull( Integrations::get_integration( 'esp' ), 'This covers the registry-miss path.' );
 		$this->assertEqualsCanonicalizing(
@@ -421,8 +427,10 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * The ESP has nothing above it to inherit from, so it keeps the dynamic
-	 * all-defaults fallback. Inheriting from itself would recurse.
+	 * The ESP has nothing above it to inherit from, so an option-less read
+	 * resolves through seeding and then the defaults, never through
+	 * inheritance. Inheriting from itself — or seeding re-entering its own
+	 * lazy trigger — would recurse; this asserts an answer comes back at all.
 	 */
 	public function test_esp_does_not_inherit_from_itself() {
 		\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'esp' );

@@ -103,6 +103,29 @@ class Test_Field_Selection_Seeding extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Build the shape an in-place plugin update leaves behind: a real ESP
+	 * integration that is configured and syncing, no stored selection, no
+	 * legacy global option, no marker, no constants — and no activation hook
+	 * ever having fired.
+	 *
+	 * The real ESP class is required rather than the sample: only it carries
+	 * the lazy-seeding override, and only its is_set_up() reads the stored
+	 * provider configuration this sets up.
+	 *
+	 * @return ESP The registered ESP integration.
+	 */
+	private function register_upgraded_legacy_esp() {
+		$esp = new ESP();
+		Integrations::register( $esp );
+		$esp->update_settings_field_value( 'mailchimp_audience_id', '123' );
+		$this->assertTrue(
+			$esp->is_set_up(),
+			'This shape needs a configured ESP, or detection would read the site as a fresh install.'
+		);
+		return $esp;
+	}
+
+	/**
 	 * The cohort seeding exists for: a legacy site that never opened the field
 	 * picker, so it has no stored selection and no marker, and was syncing the
 	 * legacy defaults all along. Its selection must be materialised as legacy
@@ -208,26 +231,131 @@ class Test_Field_Selection_Seeding extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * The retired global version switch still decides for a site that set it,
-	 * ranking below only the recorded marker.
+	 * The shape seeding actually has to survive: an in-place plugin update,
+	 * where `newspack_activation` never fires. The first read of the ESP's
+	 * selection seeds it from the same decision chain the activation hook
+	 * would have used, so the site keeps syncing the legacy field set instead
+	 * of deriving from the merged all-versions default.
 	 *
-	 * Declared last on purpose: the constant cannot be undefined once set, and
-	 * this class is the only caller of the seeder, so leaving it defined
-	 * cannot reach another test.
+	 * The second read must come from storage, not from a re-run of detection —
+	 * proven by flipping what detection would answer (a `v2` marker) between
+	 * the two calls and getting the same legacy ids back.
 	 */
-	public function test_version_constant_forces_the_new_schema() {
-		if ( defined( 'NEWSPACK_SYNC_METADATA_VERSION' ) ) {
-			$this->markTestSkipped( 'NEWSPACK_SYNC_METADATA_VERSION is already defined in this process.' );
-		}
-		// A configured ESP would otherwise make this look like a legacy site.
-		$this->register_configured_esp();
-		define( 'NEWSPACK_SYNC_METADATA_VERSION', '1.0' );
+	public function test_in_place_update_seeds_on_first_read() {
+		$esp = $this->register_upgraded_legacy_esp();
 
-		Field_Registry::seed_default_field_selections();
+		$first = $esp->get_enabled_outgoing_field_ids();
 
-		$ids = \get_option( self::ESP_OPTION );
-		$this->assertContains( 'v2:Account', $ids );
-		$this->assertNotContains( 'v1:account', $ids );
-		$this->assertAllIdsOnVersion( 'v2', $ids );
+		$this->assertContains( 'v1:account', $first );
+		$this->assertNotContains( 'v2:Account', $first );
+		$this->assertAllIdsOnVersion( 'v1', $first );
+		$this->assertSame(
+			$first,
+			\get_option( self::ESP_OPTION ),
+			'The first read must have persisted the selection, not merely derived it.'
+		);
+
+		// Detection would now answer v2. A second read must not consult it.
+		\update_option( self::ORIGIN_MARKER, 'v2' );
+
+		$this->assertSame( $first, $esp->get_enabled_outgoing_field_ids() );
+		$this->assertSame( $first, \get_option( self::ESP_OPTION ) );
 	}
+
+	/**
+	 * A never-configured non-ESP integration inherits the ESP's effective
+	 * selection (NPPD-2107), and that inheritance read goes through the ESP's
+	 * accessor — so it seeds the ESP transitively and inherits the seeded ids.
+	 *
+	 * Seeding stays the ESP's alone: the inheriting integration must not
+	 * materialise a selection of its own, or it would stop tracking the ESP.
+	 */
+	public function test_non_esp_inheritance_seeds_the_esp_transitively() {
+		$this->register_upgraded_legacy_esp();
+		$other = new Sample_Integration( 'inheriting-test', 'Inheriting Test' );
+		Integrations::register( $other );
+
+		$inherited = $other->get_enabled_outgoing_field_ids();
+
+		$this->assertContains( 'v1:account', $inherited );
+		$this->assertNotContains( 'v2:Account', $inherited );
+		$this->assertSame(
+			\get_option( self::ESP_OPTION ),
+			$inherited,
+			'The inherited set must be exactly the ESP\'s seeded selection.'
+		);
+		$this->assertNull(
+			\get_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'inheriting-test', null ),
+			'Only the ESP seeds; an inheriting integration must keep tracking it.'
+		);
+
+		\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'inheriting-test' );
+	}
+
+	/**
+	 * The lazy path retires the marker just as the activation path does — the
+	 * marker's whole purpose is spent the moment a selection is stored, and
+	 * leaving it behind would strand dead state on every upgraded site.
+	 */
+	public function test_lazy_seeding_deletes_the_origin_marker() {
+		$esp = $this->register_upgraded_legacy_esp();
+		\update_option( self::ORIGIN_MARKER, 'v2' );
+
+		$ids = $esp->get_enabled_outgoing_field_ids();
+
+		// The marker outranks the configured-ESP signal, so it decided this.
+		$this->assertContains( 'v2:Account', $ids );
+		$this->assertFalse( \get_option( self::ORIGIN_MARKER ) );
+	}
+
+	/**
+	 * The lazy path must not act on the fresh-install guess.
+	 *
+	 * Its discriminator is ESP::is_set_up(), which is transiently false any
+	 * time Newspack Newsletters is deactivated or unconfigured — and, as
+	 * Test_Contact_Sync_Options' own set_up demonstrates, any time the ESP is
+	 * read earlier in a request than its settings are written. Freezing a
+	 * legacy site onto the new schema in that window would silently change the
+	 * field names its ESP automations key on, permanently.
+	 *
+	 * Nothing is lost by waiting: an ESP that is not set up cannot sync. Once
+	 * it reports itself configured, the next read seeds the legacy set — the
+	 * answer the guess would have gotten wrong.
+	 */
+	public function test_lazy_seeding_defers_an_unconfident_detection() {
+		$esp = new ESP();
+		Integrations::register( $esp );
+		$this->assertFalse( $esp->is_set_up(), 'This test needs the unconfident path.' );
+
+		$derived = $esp->get_enabled_outgoing_field_ids();
+
+		$this->assertNotEmpty( $derived, 'The read still answers, from the merged defaults.' );
+		$this->assertNull(
+			\get_option( self::ESP_OPTION, null ),
+			'An unconfident guess must never be frozen into a stored selection.'
+		);
+
+		// The ESP comes back. Now detection has evidence, and it says legacy.
+		$esp->update_settings_field_value( 'mailchimp_audience_id', '123' );
+
+		$seeded = $esp->get_enabled_outgoing_field_ids();
+
+		$this->assertContains( 'v1:account', $seeded );
+		$this->assertNotContains( 'v2:Account', $seeded );
+		$this->assertSame( $seeded, \get_option( self::ESP_OPTION ) );
+	}
+
+	/*
+	 * The retired `NEWSPACK_SYNC_METADATA_VERSION` / `..._VERSION_1` branch of
+	 * detect_retired_schema_version() is deliberately NOT covered here.
+	 *
+	 * A PHP constant cannot be undefined once set, and seeding is now reachable
+	 * from any ESP read (see ESP::ensure_outgoing_fields_seeded()), so a test
+	 * that defined it would force a confident "new schema" detection for every
+	 * test that ran afterwards in the same process — which is exactly what it
+	 * did before this note replaced it, breaking eight unrelated tests. The
+	 * retired origin machinery never covered this branch either, for the same
+	 * reason. It is six lines of straight defined() checks, carried over
+	 * verbatim, and it decides only the one-shot seeding input.
+	 */
 }

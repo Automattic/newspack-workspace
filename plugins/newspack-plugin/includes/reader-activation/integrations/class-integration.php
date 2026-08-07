@@ -940,12 +940,13 @@ abstract class Integration {
 	 * defaults keep tracking availability changes.
 	 *
 	 * A safety net rather than a normal read path. The ESP integration's
-	 * selection is materialised once at activation (see
-	 * Field_Registry::seed_default_field_selections()) and every other
-	 * integration inherits it, so this only answers for a site whose seeding
-	 * has not run yet, or for an integration constructed outside the registry.
-	 * It resolves against the merged registry, so it returns both schemas'
-	 * ids for the five fields the two spell the same way.
+	 * selection is materialised by Field_Registry::seed_default_field_selections(),
+	 * at activation or lazily on the ESP's first option-less read, and every
+	 * other integration inherits it — so this only answers when seeding could
+	 * not store anything (no definitions loaded), or for an integration
+	 * constructed outside the registry with no ESP to inherit from. It
+	 * resolves against the merged registry, so it returns both schemas' ids
+	 * for the five fields the two spell the same way.
 	 *
 	 * Memoized per (registry generation, names): prepare_contact() calls this
 	 * once per contact per integration, and a CLI backfill must not rebuild
