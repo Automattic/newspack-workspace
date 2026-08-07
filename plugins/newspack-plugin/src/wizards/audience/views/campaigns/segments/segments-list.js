@@ -9,7 +9,7 @@ import { __ } from '@wordpress/i18n';
  * Internal dependencies.
  */
 import { Card, CardSortableList, Notice, Router } from '../../../../../../packages/components/src';
-import { segmentDescription } from '../utils';
+import { segmentDescription, segmentReachDescription } from '../utils';
 
 const { useHistory } = Router;
 
@@ -95,25 +95,42 @@ const SegmentsList = ( { wizardApiFetch, segments, setSegments, isLoading } ) =>
 	};
 	const items = useMemo(
 		() =>
-			segments.map( segment => ( {
-				id: segment.id,
-				title: segment.name,
-				description: segmentDescription( segment ),
-				badge: segment.is_criteria_duplicated ? { label: __( 'Duplicate', 'newspack-plugin' ), intent: 'medium' } : undefined,
-				toggleChecked: ! segment.configuration.is_disabled,
-				onToggleChange: () => toggleSegmentStatus( segment ),
-				actions: [
-					{
-						label: __( 'Edit', 'newspack-plugin' ),
-						action: () => history.push( `/segments/${ segment.id }` ),
-					},
-					{
-						label: __( 'Delete', 'newspack-plugin' ),
-						action: () => deleteSegment( segment ),
-						destructive: true,
-					},
-				],
-			} ) ),
+			segments.map( segment => {
+				const criteriaDescription = segmentDescription( segment );
+				const reachLine = segmentReachDescription( segment );
+				return {
+					id: segment.id,
+					title: segment.name,
+					// segmentDescription returns React nodes (NPPD-1852), so compose
+					// as nodes rather than joining strings. The reach line, when the
+					// site reports it, sits on its own line below the criteria.
+					description: reachLine ? (
+						<Fragment>
+							{ criteriaDescription }
+							{ criteriaDescription && <br /> }
+							{ reachLine }
+						</Fragment>
+					) : (
+						criteriaDescription
+					),
+					badge: segment.is_criteria_duplicated
+						? { label: __( 'Duplicate', 'newspack-plugin' ), intent: 'medium' }
+						: undefined,
+					toggleChecked: ! segment.configuration.is_disabled,
+					onToggleChange: () => toggleSegmentStatus( segment ),
+					actions: [
+						{
+							label: __( 'Edit', 'newspack-plugin' ),
+							action: () => history.push( `/segments/${ segment.id }` ),
+						},
+						{
+							label: __( 'Delete', 'newspack-plugin' ),
+							action: () => deleteSegment( segment ),
+							destructive: true,
+						},
+					],
+				};
+			} ),
 		[ segments, toggleSegmentStatus, deleteSegment, history ]
 	);
 

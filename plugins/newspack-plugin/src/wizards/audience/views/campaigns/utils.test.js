@@ -260,3 +260,28 @@ describe( 'warningForPopup', () => {
 		expect( () => warningForPopup( [ prompt, conflict ], prompt ) ).not.toThrow();
 	} );
 } );
+
+describe( 'segmentReachDescription', () => {
+	let segmentReachDescription;
+
+	beforeAll( async () => {
+		window.newspackAudienceCampaigns = window.newspackAudienceCampaigns || {
+			api: '/newspack/v1/wizard/newspack-audience-campaigns',
+			criteria: CRITERIA,
+		};
+		( { segmentReachDescription } = await import( './utils' ) );
+	} );
+
+	it( 'returns null when reach reporting is inactive', () => {
+		expect( segmentReachDescription( { id: '12' } ) ).toBeNull();
+	} );
+
+	it( 'renders sessions, prompt audience, and the data date', () => {
+		const line = segmentReachDescription( { id: '12', reach: { matched: 1240, won: 320, as_of: '2026-08-06' } } );
+		expect( line ).toBe( `Reach (7d): ${ ( 1240 ).toLocaleString() } sessions · prompt audience: ${ ( 320 ).toLocaleString() } · as of Aug 6` );
+	} );
+
+	it( 'renders the no-data state distinctly from zero', () => {
+		expect( segmentReachDescription( { id: '12', reach: { matched: null, won: null, as_of: '2026-08-06' } } ) ).toBe( 'No reach data yet' );
+	} );
+} );
