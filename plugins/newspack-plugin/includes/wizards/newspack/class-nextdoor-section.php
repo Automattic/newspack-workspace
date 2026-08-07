@@ -185,11 +185,10 @@ class Nextdoor_Section extends Wizard_Section {
 				$module_settings = Optional_Modules::deactivate_optional_module( 'nextdoor' );
 			}
 
-			$module_key = Optional_Modules::MODULE_ENABLED_PREFIX . 'nextdoor';
-			// The activate/deactivate helpers answer with the whole settings array, which is
-			// never empty, so the module's own key is the only thing that says whether the
-			// write landed.
-			if ( ! is_array( $module_settings ) || ! isset( $module_settings[ $module_key ] ) || (bool) $module_settings[ $module_key ] !== (bool) $module_enabled ) {
+			// The activate/deactivate helpers answer with the array they built in memory, so
+			// it says what was asked for whether or not the write landed. Only a fresh read
+			// can tell.
+			if ( Optional_Modules::is_optional_module_active( 'nextdoor' ) !== (bool) $module_enabled ) {
 				return new WP_Error(
 					'newspack_nextdoor_module_update_failed',
 					__( 'Failed to update Nextdoor module settings.', 'newspack-plugin' ),
