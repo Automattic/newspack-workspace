@@ -50,7 +50,6 @@ class Test_Prepare_Contact extends \WP_UnitTestCase {
 			\delete_option( Integration::METADATA_PREFIX_OPTION_PREFIX . $id );
 		}
 		\delete_option( Metadata::FIELDS_OPTION );
-		\delete_option( Field_Registry::SCHEMA_ORIGIN_OPTION );
 		Field_Registry::reset();
 		$this->reset_integrations();
 		Integrations::register_integrations();
@@ -72,7 +71,6 @@ class Test_Prepare_Contact extends \WP_UnitTestCase {
 	 * raw key; everything else is dropped.
 	 */
 	public function test_v1_ids_resolve_raw_keys() {
-		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
 		$this->integration->update_enabled_outgoing_fields( [ 'v1:account' ] );
 
 		$contact = [
@@ -96,7 +94,6 @@ class Test_Prepare_Contact extends \WP_UnitTestCase {
 	 * pushed `NP_Total Paid`.
 	 */
 	public function test_never_configured_integration_pushes_only_inherited_esp_fields() {
-		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
 
 		$esp = new ESP();
 		Integrations::register( $esp );
@@ -132,7 +129,6 @@ class Test_Prepare_Contact extends \WP_UnitTestCase {
 	 * with nothing checked means "push no metadata fields", not "inherit".
 	 */
 	public function test_explicit_empty_selection_beats_inheritance() {
-		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
 
 		$esp = new ESP();
 		Integrations::register( $esp );
@@ -162,7 +158,6 @@ class Test_Prepare_Contact extends \WP_UnitTestCase {
 	 * key; the later input wins, matching the pre-refactor normalization.
 	 */
 	public function test_raw_and_prefixed_forms_of_same_field_collapse() {
-		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
 		$this->integration->update_enabled_outgoing_fields( [ 'v1:account' ] );
 
 		$result = $this->integration->prepare_contact(
@@ -184,7 +179,6 @@ class Test_Prepare_Contact extends \WP_UnitTestCase {
 	 * syncable field and must be dropped, as it was before the refactor.
 	 */
 	public function test_dynamic_suffix_fields_require_a_suffix() {
-		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
 		$this->integration->update_enabled_outgoing_fields( [ 'v1:signup_page_utm' ] );
 
 		$result = $this->integration->prepare_contact(
@@ -214,7 +208,6 @@ class Test_Prepare_Contact extends \WP_UnitTestCase {
 	 * fields, so they pass through even with no enabled outgoing fields.
 	 */
 	public function test_status_keys_pass_through_unfiltered() {
-		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
 		$this->integration->update_enabled_outgoing_fields( [] );
 
 		$result = $this->integration->prepare_contact(
@@ -241,7 +234,6 @@ class Test_Prepare_Contact extends \WP_UnitTestCase {
 	 * Test that prepare_contact returns contact unchanged when metadata is empty.
 	 */
 	public function test_empty_metadata_returns_unchanged() {
-		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v2' );
 
 		$contact = [
 			'email'    => 'test@example.com',
@@ -257,7 +249,6 @@ class Test_Prepare_Contact extends \WP_UnitTestCase {
 	 * Test that prepare_contact returns contact unchanged when metadata key is missing.
 	 */
 	public function test_missing_metadata_key_returns_unchanged() {
-		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v2' );
 
 		$contact = [
 			'email' => 'test@example.com',
@@ -272,7 +263,6 @@ class Test_Prepare_Contact extends \WP_UnitTestCase {
 	 * Test that prepare_contact filters to enabled fields and adds prefix.
 	 */
 	public function test_filters_and_prefixes_raw_keys() {
-		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v2' );
 
 		// Get the actual keys map to find valid raw keys.
 		$keys_map      = Metadata::get_keys();
@@ -317,7 +307,6 @@ class Test_Prepare_Contact extends \WP_UnitTestCase {
 	 * Test that prepare_contact uses integration-specific prefix.
 	 */
 	public function test_uses_integration_prefix() {
-		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v2' );
 		$this->integration->update_metadata_prefix( 'CUSTOM_' );
 
 		$keys_map      = Metadata::get_keys();
@@ -341,7 +330,6 @@ class Test_Prepare_Contact extends \WP_UnitTestCase {
 	 * Test that already-prefixed keys are kept as-is and not double-prefixed.
 	 */
 	public function test_already_prefixed_keys_not_double_prefixed() {
-		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v2' );
 
 		$keys_map      = Metadata::get_keys();
 		$enabled_field = reset( $keys_map );
@@ -369,7 +357,6 @@ class Test_Prepare_Contact extends \WP_UnitTestCase {
 	 * Test that already-prefixed keys for disabled fields are filtered out.
 	 */
 	public function test_already_prefixed_disabled_fields_filtered() {
-		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v2' );
 
 		$keys_map = Metadata::get_keys();
 		$fields   = array_values( $keys_map );
@@ -395,7 +382,6 @@ class Test_Prepare_Contact extends \WP_UnitTestCase {
 	 * Test that unknown raw keys not in the keys map are excluded.
 	 */
 	public function test_unknown_keys_excluded() {
-		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v2' );
 
 		$keys_map = Metadata::get_keys();
 		$this->integration->update_enabled_outgoing_fields( array_values( $keys_map ) );
@@ -420,7 +406,6 @@ class Test_Prepare_Contact extends \WP_UnitTestCase {
 	 * raw key would overwrite the caller's value.
 	 */
 	public function test_supplied_prefixed_value_wins_over_raw_expansion() {
-		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
 		$this->integration->update_enabled_outgoing_fields( [ 'v1:signup_page_utm' ] );
 
 		$contact = [
@@ -442,7 +427,6 @@ class Test_Prepare_Contact extends \WP_UnitTestCase {
 	 * the same ESP name.
 	 */
 	public function test_supplied_prefixed_value_wins_over_raw_key() {
-		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
 		$this->integration->update_enabled_outgoing_fields( [ 'v1:account' ] );
 
 		$contact = [
@@ -462,7 +446,6 @@ class Test_Prepare_Contact extends \WP_UnitTestCase {
 	 * Test that email and name are preserved through prepare_contact.
 	 */
 	public function test_preserves_email_and_name() {
-		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v2' );
 
 		$contact = [
 			'email'    => 'test@example.com',
@@ -485,7 +468,6 @@ class Test_Prepare_Contact extends \WP_UnitTestCase {
 	 * per-integration selection.
 	 */
 	public function test_already_prefixed_keys_follow_registry_contract() {
-		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v2' );
 
 		// Write the enabled-fields option directly, bypassing the
 		// update_enabled_outgoing_fields() intersect filter, to simulate a stale
@@ -533,7 +515,6 @@ class Test_Prepare_Contact extends \WP_UnitTestCase {
 	 * Test mixed raw and already-prefixed keys in the same contact.
 	 */
 	public function test_mixed_raw_and_prefixed_keys() {
-		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v2' );
 
 		$keys_map = Metadata::get_keys();
 		$fields   = array_values( $keys_map );
@@ -570,7 +551,6 @@ class Test_Prepare_Contact extends \WP_UnitTestCase {
 	 * passes `account`), and the pair's values are identical by declaration.
 	 */
 	public function test_equivalent_id_accepts_legacy_raw_key_input() {
-		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
 		$this->integration->update_enabled_outgoing_fields( [ 'v1:account' ] );
 		// Stored as the v2 twin by the equivalence upgrade.
 		$this->assertSame( [ 'v2:Account' ], $this->integration->get_enabled_outgoing_field_ids() );
@@ -596,7 +576,6 @@ class Test_Prepare_Contact extends \WP_UnitTestCase {
 	 * once only the v2 twin is enabled.
 	 */
 	public function test_equivalent_id_accepts_second_legacy_raw_key_input() {
-		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
 		$this->integration->update_enabled_outgoing_fields( [ 'v2:Registration_Page' ] );
 
 		$contact = [
@@ -614,23 +593,19 @@ class Test_Prepare_Contact extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * NPPD-2067 Strand B, Fix 3: get_default_outgoing_field_ids() and the
-	 * legacy-global branch of get_inherited_outgoing_field_ids() deliberately
-	 * do NOT run Field_Registry::upgrade_equivalent_ids() on their return
-	 * value, so a v1-origin site with no stored ESP selection derives 'Account'
-	 * as 'v1:account', not its v2 twin — see
-	 * Test_Sync_Metadata_Classes::test_no_stored_selection_skips_v2_classes_for_shared_fields
-	 * for why (it keeps Metadata::get_sync_metadata_classes() from pulling in
-	 * the v2 Engagement/Subscription compute for this large cohort).
+	 * Derived selections — get_default_outgoing_field_ids() and the
+	 * legacy-global branch of get_inherited_outgoing_field_ids() — deliberately
+	 * do NOT run Field_Registry::upgrade_equivalent_ids() on their result: the
+	 * equivalence upgrade is a write-path behavior, and a derived set may not
+	 * write. So an unseeded site derives BOTH ids of a value-equivalent pair.
 	 *
-	 * That must not regress the payload: prepare_contact() builds its
+	 * That must not double the payload: prepare_contact() builds its
 	 * raw-key/name lookup from Field_Registry::get_definition() per id, and an
-	 * equivalent pair's v1 and v2 definitions share the same 'name' and
-	 * 'raw_key' by construction — so the un-upgraded v1 id still resolves the
-	 * 'account' raw key to the shared canonical ESP name, 'Account'.
+	 * equivalent pair's v1 and v2 definitions share the same 'name' by
+	 * construction — so both ids resolve the 'account' raw key to one
+	 * canonical ESP name, 'Account', emitted once.
 	 */
 	public function test_unupgraded_default_id_still_emits_canonical_name() {
-		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
 
 		$esp = new ESP();
 		Integrations::register( $esp );
@@ -639,10 +614,10 @@ class Test_Prepare_Contact extends \WP_UnitTestCase {
 		\delete_option( Metadata::FIELDS_OPTION );
 
 		// The un-configured ESP's own defaults fallback resolves 'Account' to
-		// its v1 id and does not upgrade it.
+		// both its ids and upgrades neither.
 		$ids = $esp->get_enabled_outgoing_field_ids();
 		$this->assertContains( 'v1:account', $ids );
-		$this->assertNotContains( 'v2:Account', $ids );
+		$this->assertContains( 'v2:Account', $ids );
 
 		$result = $esp->prepare_contact(
 			[
@@ -654,7 +629,12 @@ class Test_Prepare_Contact extends \WP_UnitTestCase {
 		$this->assertSame(
 			7,
 			$result['metadata']['NP_Account'] ?? null,
-			'An equivalent field must emit under its canonical ESP name even when the resolving id is the un-upgraded v1 form.'
+			'An equivalent field must emit under its canonical ESP name from either of the pair\'s ids.'
+		);
+		$this->assertCount(
+			1,
+			array_filter( array_keys( $result['metadata'] ), fn( $key ) => 'NP_Account' === $key ),
+			'The pair must emit one field, not two.'
 		);
 	}
 
@@ -671,7 +651,6 @@ class Test_Prepare_Contact extends \WP_UnitTestCase {
 	 * WooCommerce-gated and the test environment has no WooCommerce.
 	 */
 	public function test_both_versions_of_a_renamed_field_reach_the_provider() {
-		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
 		\update_option(
 			Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'prepare-test',
 			[ 'v1:last_payment_amount', 'v2:Last_Payment_Amount' ]

@@ -14,7 +14,6 @@ use Newspack\Reader_Activation\Integration;
 use Newspack\Reader_Activation\Integrations;
 use Newspack\Reader_Activation\Integrations\Contact_Pull;
 use Newspack\Reader_Activation\Integrations\ESP;
-use Newspack\Reader_Activation\Sync\Field_Registry;
 use Newspack\Reader_Activation\Sync\Metadata;
 use Newspack_Subscription_Migrations\CSV_Importers\CSV_Importer;
 use Newspack_Subscription_Migrations\Stripe_Sync;
@@ -1026,89 +1025,6 @@ class RAS_Contact_Sync {
 		}
 
 		WP_CLI::success( $summary );
-	}
-
-	/**
-	 * Inspect or repair the site's ESP metadata schema origin.
-	 *
-	 * Shows the recorded `newspack_sync_schema_origin` marker (or the
-	 * unpersisted per-request detection when none is recorded) and, per
-	 * push-capable integration, the prefixed field names its enabled
-	 * selection would actually sync — so a wrong origin or an emptied field
-	 * list is visible without database access.
-	 *
-	 * ## OPTIONS
-	 *
-	 * [--set=<version>]
-	 * : Record the schema origin explicitly. Accepts 'v1' or 'v2'. Use to repair a misdetected marker.
-	 *
-	 * ## EXAMPLES
-	 *
-	 *     wp newspack integrations schema-origin
-	 *     wp newspack integrations schema-origin --set=v1
-	 *
-	 * @param array $args       Positional args.
-	 * @param array $assoc_args Associative args.
-	 */
-	public static function cli_schema_origin( $args, $assoc_args ) {
-		$set = $assoc_args['set'] ?? null;
-		if ( null !== $set ) {
-			if ( ! in_array( $set, [ Field_Registry::VERSION_V1, Field_Registry::VERSION_V2 ], true ) ) {
-				WP_CLI::error( 'Invalid --set value. Accepts: v1, v2.' );
-			}
-			\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, $set, false );
-			Field_Registry::reset();
-			WP_CLI::success( sprintf( 'Schema origin recorded as "%s".', $set ) );
-		}
-
-		$stored    = \get_option( Field_Registry::SCHEMA_ORIGIN_OPTION );
-		$is_stored = in_array( $stored, [ Field_Registry::VERSION_V1, Field_Registry::VERSION_V2 ], true );
-		WP_CLI::log( sprintf( 'Recorded schema origin: %s', $is_stored ? $stored : 'not recorded' ) );
-		if ( ! $is_stored ) {
-			WP_CLI::log( sprintf( 'Detected origin (unpersisted, this request): %s', Field_Registry::get_schema_origin() ) );
-		}
-
-		foreach ( Integrations::get_available_integrations() as $id => $integration ) {
-			if ( ! $integration->supports_push() ) {
-				continue;
-			}
-			// Match the storage guard in Integration::get_enabled_outgoing_field_ids():
-			// a corrupt non-array option is treated as never configured there, so it
-			// must be reported as inherited here too, not as the integration's own.
-			$has_stored_selection = is_array( \get_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . $id, false ) );
-			$prefix               = $integration->get_metadata_prefix();
-			$names                = [];
-			foreach ( $integration->get_enabled_outgoing_field_ids() as $field_id ) {
-				$definition = Field_Registry::get_definition( $field_id );
-				if ( $definition ) {
-					$names[] = $prefix . $definition['name'] . ( $definition['dynamic_suffix'] ? '*' : '' );
-				}
-			}
-			// Several raw keys can map to one ESP name (legacy "Registration
-			// Page"), and the question this answers is which field names the
-			// provider would receive — so list each name once.
-			$names = array_values( array_unique( $names ) );
-			// Without a stored selection the set is not the integration's own:
-			// the ESP falls back to the dynamic defaults, and every other
-			// integration inherits the ESP's effective selection (NPPD-2107).
-			// Say which, so an unexpected list points at the right option.
-			$source = '';
-			if ( ! $has_stored_selection ) {
-				$source = Integration::ESP_INTEGRATION_ID === $id ? ' (no stored selection — dynamic defaults)' : ' (no stored selection — inherited from the ESP integration)';
-			}
-			WP_CLI::log( '' );
-			WP_CLI::log(
-				sprintf(
-					'Integration "%s" would sync %d field(s)%s:',
-					$id,
-					count( $names ),
-					$source
-				)
-			);
-			foreach ( $names as $name ) {
-				WP_CLI::log( '  - ' . $name );
-			}
-		}
 	}
 
 	/**

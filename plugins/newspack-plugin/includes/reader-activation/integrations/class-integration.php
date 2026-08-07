@@ -848,11 +848,10 @@ abstract class Integration {
 	 * Get the enabled outgoing metadata field ids for this integration.
 	 *
 	 * Lazily migrates stored display names (pre-coexistence format) to
-	 * version-qualified field ids, resolving names against the site's
-	 * schema origin, and writes the option back in the new format. The
-	 * write-back is conditional: it is skipped whenever any stored name
-	 * fails to resolve, so migration can retry (and succeed) on a later
-	 * read instead of permanently losing that entry from the option.
+	 * version-qualified field ids and writes the option back in the new
+	 * format. The write-back is conditional: it is skipped whenever any
+	 * stored name fails to resolve, so migration can retry (and succeed) on a
+	 * later read instead of permanently losing that entry from the option.
 	 *
 	 * An integration that never saved a selection inherits one — see
 	 * get_inherited_outgoing_field_ids(). An explicitly saved selection
@@ -884,7 +883,6 @@ abstract class Integration {
 			return array_values( $stored );
 		}
 
-		$origin         = Sync\Field_Registry::get_schema_origin();
 		$ids            = [];
 		$has_unresolved = false;
 		foreach ( $stored as $entry ) {
@@ -892,9 +890,9 @@ abstract class Integration {
 				$ids[] = $entry;
 				continue;
 			}
-			// A display name may be shared by several same-version raw keys
-			// (legacy "Registration Page"); resolve to all of them.
-			$definitions = Sync\Field_Registry::resolve_name( (string) $entry, $origin );
+			// A display name may be shared by several raw keys (legacy
+			// "Registration Page"); resolve to all of them.
+			$definitions = Sync\Field_Registry::resolve_name( (string) $entry );
 			if ( empty( $definitions ) ) {
 				// Route through newspack_log so the repeating, never-resolving
 				// migration is operator-visible (Newspack Manager consumes the
@@ -938,45 +936,42 @@ abstract class Integration {
 
 	/**
 	 * Get the default outgoing metadata field ids for this integration:
-	 * every available field, resolved to ids against the site's schema
-	 * origin (falling back to any version, which covers version-neutral
-	 * fields) without persisting, so defaults keep tracking availability
-	 * changes.
+	 * every available field, resolved to ids, without persisting — so
+	 * defaults keep tracking availability changes.
 	 *
-	 * Memoized per (registry generation, origin, names): prepare_contact()
-	 * calls this once per contact per integration, and a CLI backfill must
-	 * not rebuild the name resolution for every row. The key derives from
-	 * the resolution inputs, so registry resets and availability changes
-	 * invalidate it naturally.
+	 * A safety net rather than a normal read path. The ESP integration's
+	 * selection is materialised once at activation (see
+	 * Field_Registry::seed_default_field_selections()) and every other
+	 * integration inherits it, so this only answers for a site whose seeding
+	 * has not run yet, or for an integration constructed outside the registry.
+	 * It resolves against the merged registry, so it returns both schemas'
+	 * ids for the five fields the two spell the same way.
 	 *
-	 * Deliberately NOT canonicalized (NPPD-2067): name resolution answers in
-	 * the origin's version, so a v1-origin site derives v1 ids for fields the
-	 * two schemas share. Upgrading those to their v2 twins here would look
-	 * more consistent, but it also flips the version prefix that
-	 * Metadata::get_sync_metadata_classes() reads to decide which classes to
-	 * instantiate — pulling the v2 Engagement/Subscription compute
-	 * (wc_get_orders(), wcs_get_users_subscriptions()) into every sync for a
-	 * v1-origin site with no stored selection, which is a large cohort.
-	 * prepare_contact() resolves ids to their ESP name/raw key regardless of
+	 * Memoized per (registry generation, names): prepare_contact() calls this
+	 * once per contact per integration, and a CLI backfill must not rebuild
+	 * the name resolution for every row. The key derives from the resolution
+	 * inputs, so registry resets and availability changes invalidate it
+	 * naturally.
+	 *
+	 * Deliberately NOT canonicalized: the equivalence upgrade is a write-path
+	 * behavior (see update_enabled_outgoing_fields()), and nothing here may
+	 * write — a persisted derived set would stop tracking availability.
+	 * prepare_contact() resolves an id to its ESP name/raw key regardless of
 	 * version, so an un-upgraded v1 id for an equivalent field still emits
-	 * under the shared canonical name — see Test_Prepare_Contact. The
-	 * equivalence upgrade stays a write-path behavior (see
-	 * update_enabled_outgoing_fields()); a stored selection is what actually
-	 * retires the v1 id.
+	 * under the shared canonical name (see Test_Prepare_Contact).
 	 *
 	 * @return string[] List of field ids.
 	 */
 	protected function get_default_outgoing_field_ids() {
 		static $cache = [];
-		$origin = Sync\Field_Registry::get_schema_origin();
-		$names  = Sync\Metadata::get_default_fields();
-		$key    = Sync\Field_Registry::get_generation() . '|' . $origin . '|' . md5( (string) \wp_json_encode( $names ) );
+		$names = Sync\Metadata::get_default_fields();
+		$key   = Sync\Field_Registry::get_generation() . '|' . md5( (string) \wp_json_encode( $names ) );
 		if ( isset( $cache[ $key ] ) ) {
 			return $cache[ $key ];
 		}
 		$ids = [];
 		foreach ( $names as $name ) {
-			foreach ( Sync\Field_Registry::resolve_name( $name, $origin ) as $definition ) {
+			foreach ( Sync\Field_Registry::resolve_name( $name ) as $definition ) {
 				$ids[] = $definition['id'];
 			}
 		}
@@ -1022,22 +1017,18 @@ abstract class Integration {
 		// rather than failing closed to an empty selection.
 		$legacy = \get_option( Sync\Metadata::FIELDS_OPTION, null );
 		if ( is_array( $legacy ) ) {
-			$origin = Sync\Field_Registry::get_schema_origin();
-			$ids    = [];
+			$ids = [];
 			foreach ( $legacy as $name ) {
-				foreach ( Sync\Field_Registry::resolve_name( (string) $name, $origin ) as $definition ) {
+				foreach ( Sync\Field_Registry::resolve_name( (string) $name ) as $definition ) {
 					$ids[] = $definition['id'];
 				}
 			}
 			// Deliberately not canonicalized, same reasoning as
-			// get_default_outgoing_field_ids() (NPPD-2067): these names come from
-			// a pre-coexistence option and resolve to v1 ids, and upgrading them
-			// here would pull the v2 compute classes into every sync for this
-			// registry-miss fallback too. Still de-duplicated, the same way
-			// get_default_outgoing_field_ids() is: this is defensive, since
-			// resolve_name() guarantees distinct names yield distinct ids, but a
-			// duplicated name in this hand-edited legacy option would otherwise
-			// yield duplicate ids.
+			// get_default_outgoing_field_ids(): this is a read path and the
+			// equivalence upgrade belongs to writes. Still de-duplicated the
+			// same way — defensive, since resolve_name() guarantees distinct
+			// names yield distinct ids, but a duplicated name in this
+			// hand-edited legacy option would otherwise yield duplicate ids.
 			return array_values( array_unique( $ids ) );
 		}
 
@@ -1048,12 +1039,11 @@ abstract class Integration {
 	 * Get the enabled outgoing metadata fields for this integration.
 	 *
 	 * Back-compat surface: returns display names derived from the stored
-	 * field ids. The old settings UI consumes and posts these names. Note
-	 * the round-trip is lossy across schema versions: ids collapse to bare
-	 * names here, and update_enabled_outgoing_fields() re-resolves bare
-	 * names against the site's origin — so a non-origin selection saved
-	 * through this surface would be rewritten to the origin's ids. The
-	 * per-field UI (Phase 2) must post ids, not names.
+	 * field ids. The old settings UI consumes and posts these names. The
+	 * round-trip is lossy for the five value-equivalent pairs, whose two ids
+	 * share one name: they collapse to that name here, and
+	 * update_enabled_outgoing_fields() re-resolves it to the surviving v2 id.
+	 * The per-field UI (Phase 2) must post ids, not names.
 	 *
 	 * The never-configured fallback (inheriting the ESP integration's
 	 * effective selection) lives in get_enabled_outgoing_field_ids(), so the
@@ -1141,29 +1131,29 @@ abstract class Integration {
 	/**
 	 * Update the enabled outgoing metadata fields for this integration.
 	 *
-	 * Accepts field ids and/or display names (the old UI posts names;
-	 * names resolve against the site's schema origin, so a non-origin id
-	 * that was collapsed to a bare name by get_enabled_outgoing_fields()
-	 * round-trips to the origin's ids — the Phase-2 UI must post ids).
+	 * Accepts field ids and/or display names (the old UI posts names). A name
+	 * resolves against the merged registry: the two schemas no longer contest
+	 * one, so a name identifies a field outright, and where both schemas spell
+	 * a shared field the same way the equivalence upgrade below collapses the
+	 * pair onto the surviving v2 id.
 	 *
-	 * Stores ids, with no version validation: the two schemas no longer share
-	 * an ESP name, so any mix of v1 and v2 ids is storable and both versions of
-	 * a field can be enabled at once (Field_Registry::get_conflict_groups() is
-	 * empty by construction). The equivalence upgrade below is not validation —
-	 * it collapses the id of a shared field onto its surviving spelling.
+	 * Stores ids, with no version validation: any mix of v1 and v2 ids is
+	 * storable and both versions of a renamed field can be enabled at once
+	 * (Field_Registry::get_conflict_groups() is empty by construction). The
+	 * equivalence upgrade is not validation — it collapses the id of a shared
+	 * field onto its surviving spelling.
 	 *
 	 * @param array $fields List of field ids and/or names to enable.
 	 * @return bool True if updated, false otherwise.
 	 */
 	public function update_enabled_outgoing_fields( $fields ) {
-		$origin = Sync\Field_Registry::get_schema_origin();
-		$ids    = [];
+		$ids = [];
 		foreach ( (array) $fields as $entry ) {
 			$entry = (string) $entry;
 			if ( preg_match( '/^(v1|v2|neutral):/', $entry ) ) {
 				$definitions = array_filter( [ Sync\Field_Registry::get_definition( $entry ) ] );
 			} else {
-				$definitions = Sync\Field_Registry::resolve_name( $entry, $origin );
+				$definitions = Sync\Field_Registry::resolve_name( $entry );
 			}
 			foreach ( $definitions as $definition ) {
 				if ( $definition['available'] ) {

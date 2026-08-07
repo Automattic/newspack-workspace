@@ -71,11 +71,6 @@ class Initializer {
 		);
 
 		WP_CLI::add_command(
-			'newspack integrations schema-origin',
-			[ 'Newspack\CLI\RAS_Contact_Sync', 'cli_schema_origin' ]
-		);
-
-		WP_CLI::add_command(
 			'newspack mailchimp merge-fields list',
 			[ 'Newspack\CLI\Mailchimp', 'cli_mailchimp_list_merge_fields' ]
 		);

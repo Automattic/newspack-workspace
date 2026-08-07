@@ -29,18 +29,6 @@ class Field_Registry {
 	private static $definitions = null;
 
 	/**
-	 * Per-request cache of a detected-but-not-persisted schema origin.
-	 *
-	 * Keyed nowhere — there is at most one origin per request. Records
-	 * whether the 'esp' integration was registered when the value was
-	 * detected, because that is the one input that can change the answer
-	 * within a request (see get_schema_origin()).
-	 *
-	 * @var array|null { origin: string, esp_registered: bool }
-	 */
-	private static $detected_origin = null;
-
-	/**
 	 * Lazily-built index of ESP field name => list of definition ids, in
 	 * definition order. Backs the name-resolution helpers so lookups don't
 	 * scan the full definition set per call.
@@ -98,7 +86,6 @@ class Field_Registry {
 	 */
 	public static function reset() {
 		self::$definitions         = null;
-		self::$detected_origin     = null;
 		self::$name_index          = null;
 		self::$equivalent_upgrades = null;
 		self::$generation++;
@@ -262,22 +249,23 @@ class Field_Registry {
 	}
 
 	/**
-	 * Get every definition of a version that shares an ESP field name.
+	 * Get every definition sharing an ESP field name, optionally restricted
+	 * to one schema version.
 	 *
 	 * Needed because the legacy schema maps multiple raw keys to a single
 	 * ESP name (registration_page and current_page_url both map to
 	 * "Registration Page") — resolving a name must yield all of them.
 	 *
-	 * @param string $name    ESP field name (unprefixed).
-	 * @param string $version Schema version.
+	 * @param string      $name    ESP field name (unprefixed).
+	 * @param string|null $version Schema version, or null for every version.
 	 *
 	 * @return array[] List of definitions (possibly empty).
 	 */
-	public static function get_all_by_name( $name, $version ) {
+	public static function get_all_by_name( $name, $version = null ) {
 		$definitions = self::get_definitions();
 		$matches     = [];
 		foreach ( self::get_name_index()[ $name ] ?? [] as $id ) {
-			if ( $definitions[ $id ]['version'] === $version ) {
+			if ( null === $version || $definitions[ $id ]['version'] === $version ) {
 				$matches[] = $definitions[ $id ];
 			}
 		}
@@ -285,21 +273,27 @@ class Field_Registry {
 	}
 
 	/**
-	 * Resolve an ESP field name to its definitions for a version, with the
-	 * shared any-version fallback.
+	 * Resolve an ESP field name to its definitions, with the single-match
+	 * fallback.
 	 *
 	 * Encodes the resolution invariant used by defaults, migration and
-	 * settings saves: prefer every same-version definition sharing the name
-	 * (legacy maps several raw keys to one name), and when the version has
-	 * none, fall back to a single any-version match — which is what covers
+	 * settings saves. Production callers resolve without a version: the two
+	 * schemas no longer contest a name, so a name identifies a field
+	 * outright. It can still map to several definitions — the legacy schema
+	 * maps two raw keys to "Registration Page", and the five value-equivalent
+	 * pairs are one field spelled twice, whose ids the write paths collapse
+	 * onto the v2 twin (see upgrade_equivalent_ids()).
+	 *
+	 * Passing a version restricts the match to that version, falling back to
+	 * a single any-version match when it has none — which is what covers
 	 * version-neutral (filter-added) fields.
 	 *
-	 * @param string $name    ESP field name (unprefixed).
-	 * @param string $version Preferred schema version.
+	 * @param string      $name    ESP field name (unprefixed).
+	 * @param string|null $version Preferred schema version, or null for every version.
 	 *
 	 * @return array[] List of definitions (possibly empty).
 	 */
-	public static function resolve_name( $name, $version ) {
+	public static function resolve_name( $name, $version = null ) {
 		$definitions = self::get_all_by_name( $name, $version );
 		if ( ! empty( $definitions ) ) {
 			return $definitions;
@@ -500,111 +494,133 @@ class Field_Registry {
 		return array_values( array_unique( $aliases ) );
 	}
 
-	const SCHEMA_ORIGIN_OPTION = 'newspack_sync_schema_origin';
-
 	/**
-	 * Get the site's schema origin: the schema version it was on before
-	 * per-field coexistence. Decides presentation defaults, migration
-	 * name-resolution and the origin-scoped compatibility maps (e.g.
-	 * Metadata::get_keys()); it does not decide what actually syncs — that
-	 * is decided per-integration by each integration's enabled field ids.
+	 * The retired schema-origin marker. Read once, by the seeder below, and
+	 * deleted the moment it has done its job. Nothing else in the codebase
+	 * knows this option exists.
 	 *
-	 * @return string 'v1' or 'v2'.
+	 * @var string
 	 */
-	public static function get_schema_origin() {
-		$origin = \get_option( self::SCHEMA_ORIGIN_OPTION );
-		if ( in_array( $origin, [ self::VERSION_V1, self::VERSION_V2 ], true ) ) {
-			return $origin;
-		}
-		$esp_integration = \Newspack\Reader_Activation\Integrations::get_integration( 'esp' );
-
-		// Reuse the per-request detection rather than re-running it (and its
-		// $wpdb LIKE query) on every call. The only input that can change the
-		// answer mid-request is the 'esp' integration registering, so a value
-		// detected before that happened is re-detected once an integration is
-		// present; anything else is served from the cache.
-		if ( null !== self::$detected_origin && ( self::$detected_origin['esp_registered'] || null === $esp_integration ) ) {
-			return self::$detected_origin['origin'];
-		}
-
-		$detection             = self::detect_schema_origin();
-		$origin                = $detection['origin'];
-		self::$detected_origin = [
-			'origin'         => $origin,
-			'esp_registered' => null !== $esp_integration,
-		];
-
-		// Persist only confident answers. Two inputs make a detection a guess
-		// rather than evidence: the 'esp' integration not being registered yet
-		// (this ran before init priority 5), and the fresh-install fallback,
-		// whose discriminator — ESP::is_set_up() — is transiently false
-		// whenever Newspack Newsletters is deactivated or unconfigured. A
-		// legacy site touched during that window must not be frozen as v2
-		// forever (its ESP automations key on the v1 field names); an
-		// unpersisted guess self-heals on a later, correctly-timed call.
-		// Genuinely fresh installs don't rely on this path at all: their
-		// origin is persisted at activation (see seed_fresh_install_origin()).
-		if ( null === $esp_integration || ! $detection['confident'] ) {
-			return $origin;
-		}
-
-		return self::persist_origin( $origin );
-	}
+	private const RETIRED_ORIGIN_OPTION = 'newspack_sync_schema_origin';
 
 	/**
-	 * Persist a detected schema origin, settle-once.
+	 * Seed the ESP integration's stored outgoing-field selection, once.
 	 *
-	 * The get_option() miss that precedes detection registers the option in
-	 * the persistent 'notoptions' cache, which makes add_option() skip its
-	 * existence check and issue an unconditional upsert — overwriting a value
-	 * a concurrent request may have just stored. Clear the notoptions entry
-	 * so add_option() re-checks the database, then re-read: whatever value
-	 * actually settled wins.
+	 * Coexistence made the registry a merged, all-versions view: a site with
+	 * no stored selection would derive its defaults from that merged view and
+	 * start pushing the other schema's field names to the publisher's ESP.
+	 * Materialising the site's current effective default selection as stored
+	 * ids freezes what it already syncs, and is what lets every runtime path
+	 * stop asking which schema the site came from.
 	 *
-	 * @param string $origin Detected origin ('v1' or 'v2').
-	 *
-	 * @return string The persisted origin (the concurrent winner on a race).
-	 */
-	private static function persist_origin( $origin ) {
-		\wp_cache_delete( 'notoptions', 'options' );
-		\add_option( self::SCHEMA_ORIGIN_OPTION, $origin, '', false );
-		$stored = \get_option( self::SCHEMA_ORIGIN_OPTION );
-		if ( in_array( $stored, [ self::VERSION_V1, self::VERSION_V2 ], true ) ) {
-			self::$detected_origin = null;
-			return $stored;
-		}
-		return $origin;
-	}
-
-	/**
-	 * Persist the schema origin for a genuinely fresh install, at activation.
-	 *
-	 * Activation is the one moment "no prior Newspack usage" is unambiguous:
-	 * lazy detection cannot tell a fresh site whose ESP got configured before
-	 * its first origin-scoped call apart from an existing legacy site, so
-	 * fresh installs get their marker here instead. Reactivating a site with
-	 * any prior-usage evidence (completed setup, stored field selections)
-	 * skips seeding and leaves the decision to lazy detection.
+	 * This is the last consumer of the retired origin logic, and deliberately
+	 * a one-shot: after it runs, no code path reads the origin marker, the
+	 * `NEWSPACK_SYNC_METADATA_VERSION*` constants, or any notion of a
+	 * site-wide schema version ever again. An existing selection — including
+	 * a deliberately empty one — is never overwritten.
 	 *
 	 * @return void
 	 */
-	public static function seed_fresh_install_origin() {
-		$origin = \get_option( self::SCHEMA_ORIGIN_OPTION );
-		if ( in_array( $origin, [ self::VERSION_V1, self::VERSION_V2 ], true ) ) {
+	public static function seed_default_field_selections() {
+		$option = \Newspack\Reader_Activation\Integration::OUTGOING_FIELDS_OPTION_PREFIX . \Newspack\Reader_Activation\Integration::ESP_INTEGRATION_ID;
+		if ( null !== \get_option( $option, null ) ) {
+			// Already configured: nothing to seed, and the marker is dead.
+			\delete_option( self::RETIRED_ORIGIN_OPTION );
 			return;
 		}
-		$setup_option = defined( 'NEWSPACK_SETUP_COMPLETE' ) ? NEWSPACK_SETUP_COMPLETE : 'newspack_setup_complete';
-		if ( '1' === \get_option( $setup_option, '0' ) ) {
+
+		$ids = self::get_version_default_field_ids( self::detect_retired_schema_version() );
+		if ( empty( $ids ) ) {
+			// No definitions available (the metadata classes have not loaded).
+			// Storing an empty selection here would read as "push nothing", so
+			// leave both options untouched and retry on a later activation.
 			return;
 		}
+
+		\update_option( $option, $ids, false );
+		\delete_option( self::RETIRED_ORIGIN_OPTION );
+	}
+
+	/**
+	 * Every available definition belonging to a schema version, plus the
+	 * version-neutral ones.
+	 *
+	 * Reproduces what the pre-seeding default selection resolved to: the
+	 * origin-scoped field list (available classes only), each display name
+	 * resolved to its same-version definitions, with version-neutral fields
+	 * picked up through the any-version fallback.
+	 *
+	 * @param string $version Schema version.
+	 *
+	 * @return string[] List of field ids.
+	 */
+	private static function get_version_default_field_ids( $version ) {
+		$ids = [];
+		foreach ( self::get_definitions() as $id => $definition ) {
+			if ( empty( $definition['available'] ) ) {
+				continue;
+			}
+			if ( $definition['version'] === $version || self::VERSION_NEUTRAL === $definition['version'] ) {
+				$ids[] = $id;
+			}
+		}
+		return $ids;
+	}
+
+	/**
+	 * Which schema the site was on before coexistence — the seeding input,
+	 * and the only place this question is still asked.
+	 *
+	 * A marker recorded by an earlier release wins outright. Otherwise the
+	 * retired global version switch decides directly; sites with existing
+	 * outgoing-field selections resolve to the version those selections carry
+	 * (bare display names are the pre-coexistence format, so v1); the
+	 * pre-integrations global fields option is v1; a site with a configured
+	 * ESP but none of those (it never opened the metadata-fields settings) is
+	 * still an existing legacy site syncing dynamic defaults, so it is also
+	 * v1; everything else is a fresh install and starts on v2.
+	 *
+	 * @return string 'v1' or 'v2'.
+	 */
+	private static function detect_retired_schema_version() {
+		$recorded = \get_option( self::RETIRED_ORIGIN_OPTION );
+		if ( in_array( $recorded, [ self::VERSION_V1, self::VERSION_V2 ], true ) ) {
+			return $recorded;
+		}
+
+		$flag_version = null;
+		if ( defined( 'NEWSPACK_SYNC_METADATA_VERSION' ) ) {
+			$flag_version = NEWSPACK_SYNC_METADATA_VERSION;
+		} elseif ( defined( 'NEWSPACK_SYNC_METADATA_VERSION_1' ) && NEWSPACK_SYNC_METADATA_VERSION_1 ) {
+			$flag_version = '1.0';
+		}
+		if ( null !== $flag_version ) {
+			return 'legacy' === $flag_version ? self::VERSION_V1 : self::VERSION_V2;
+		}
+
+		$selection_values = self::get_stored_selection_values();
+		if ( null !== $selection_values ) {
+			return self::version_from_selection_values( $selection_values );
+		}
+
 		if ( false !== \get_option( Metadata::FIELDS_OPTION, false ) ) {
-			return;
+			return self::VERSION_V1;
 		}
-		if ( null !== self::get_stored_selection_values() ) {
-			return;
+
+		// A configured ESP with no stored selections is an existing legacy
+		// site syncing dynamic defaults — not a fresh install. Seeding runs at
+		// activation, before integrations register on init priority 5, so fall
+		// back to constructing the ESP integration directly; is_set_up() reads
+		// stored configuration only, never the live provider API.
+		$esp = \Newspack\Reader_Activation\Integrations::get_integration( \Newspack\Reader_Activation\Integration::ESP_INTEGRATION_ID );
+		if ( ! $esp && class_exists( \Newspack\Reader_Activation\Integrations\ESP::class ) ) {
+			$esp = new \Newspack\Reader_Activation\Integrations\ESP();
 		}
-		self::persist_origin( self::detect_schema_origin()['origin'] );
-		self::$detected_origin = null;
+		if ( $esp && $esp->is_set_up() ) {
+			return self::VERSION_V1;
+		}
+
+		return self::VERSION_V2;
 	}
 
 	/**
@@ -625,79 +641,19 @@ class Field_Registry {
 	}
 
 	/**
-	 * Detect the schema origin for a site that has not recorded one yet.
-	 *
-	 * This is the single remaining consumer of the old global version
-	 * switch: an explicit flag decides directly; sites with existing
-	 * outgoing-field selections resolve to the version those selections
-	 * carry (bare display names are the pre-coexistence format, so v1);
-	 * the pre-integrations global fields option is v1; a site with a
-	 * configured ESP but none of those (never opened the metadata-fields
-	 * settings) is still an existing legacy site syncing dynamic defaults,
-	 * so it is also v1; everything else looks like a fresh install and
-	 * starts on v2 — but only as an unpersistable guess, because a legacy
-	 * site whose ESP is temporarily unconfigured looks identical.
-	 *
-	 * @return array { origin: 'v1'|'v2', confident: bool }
-	 */
-	private static function detect_schema_origin() {
-		$flag_version = null;
-		if ( defined( 'NEWSPACK_SYNC_METADATA_VERSION' ) ) {
-			$flag_version = NEWSPACK_SYNC_METADATA_VERSION;
-		} elseif ( defined( 'NEWSPACK_SYNC_METADATA_VERSION_1' ) && NEWSPACK_SYNC_METADATA_VERSION_1 ) {
-			$flag_version = '1.0';
-		}
-		if ( null !== $flag_version ) {
-			return [
-				'origin'    => 'legacy' === $flag_version ? self::VERSION_V1 : self::VERSION_V2,
-				'confident' => true,
-			];
-		}
-
-		$selection_values = self::get_stored_selection_values();
-		if ( null !== $selection_values ) {
-			return [
-				'origin'    => self::origin_from_selection_values( $selection_values ),
-				'confident' => true,
-			];
-		}
-		if ( false !== \get_option( Metadata::FIELDS_OPTION, false ) ) {
-			return [
-				'origin'    => self::VERSION_V1,
-				'confident' => true,
-			];
-		}
-
-		// A configured ESP with no stored selections is an existing legacy
-		// site syncing dynamic defaults — not a fresh install.
-		$esp_integration = \Newspack\Reader_Activation\Integrations::get_integration( 'esp' );
-		if ( $esp_integration && $esp_integration->is_set_up() ) {
-			return [
-				'origin'    => self::VERSION_V1,
-				'confident' => true,
-			];
-		}
-
-		return [
-			'origin'    => self::VERSION_V2,
-			'confident' => false,
-		];
-	}
-
-	/**
-	 * Derive the schema origin from stored selection values.
+	 * Derive the pre-coexistence schema version from stored selection values.
 	 *
 	 * Bare display names are the pre-coexistence storage format, so any of
 	 * them means v1. All-id selections carry their version explicitly: the
-	 * first non-neutral version wins (a site that saved v2 ids while its
-	 * origin was still undecided must not be branded v1 by the mere
-	 * existence of the option).
+	 * first non-neutral version wins (a site that saved v2 ids before the
+	 * question was settled must not be read as v1 by the mere existence of
+	 * the option).
 	 *
 	 * @param array $selection_values Stored option values (unserialized).
 	 *
 	 * @return string 'v1' or 'v2'.
 	 */
-	private static function origin_from_selection_values( $selection_values ) {
+	private static function version_from_selection_values( $selection_values ) {
 		$id_version = null;
 		foreach ( $selection_values as $value ) {
 			if ( ! is_array( $value ) ) {

@@ -151,7 +151,7 @@ class Contact_Sync extends Sync {
 	public static function init_hooks() {
 		add_action( 'newspack_scheduled_esp_sync', [ __CLASS__, 'scheduled_sync' ], 10, 2 );
 		add_action( 'shutdown', [ __CLASS__, 'run_queued_syncs' ] );
-		add_action( 'newspack_activation', [ Sync\Field_Registry::class, 'seed_fresh_install_origin' ] );
+		add_action( 'newspack_activation', [ Sync\Field_Registry::class, 'seed_default_field_selections' ] );
 		add_action( self::RETRY_HOOK, [ __CLASS__, 'execute_integration_retry' ] );
 		add_action( self::RETRY_DELETION_HOOK, [ __CLASS__, 'execute_deletion_retry' ] );
 		add_action( 'action_scheduler_begin_execute', [ __CLASS__, 'set_current_as_action_id' ] );

@@ -53,7 +53,6 @@ class Test_Schema_Parity extends \WP_UnitTestCase {
 		// Defensive cleanup: guarantees no test-registered callback survives
 		// even if a test fails before reaching its own remove_filter() call.
 		\remove_all_filters( 'newspack_esp_sync_normalize_contact' );
-		\delete_option( Field_Registry::SCHEMA_ORIGIN_OPTION );
 		Field_Registry::reset();
 		$this->reset_integrations();
 		Integrations::register_integrations();
@@ -76,7 +75,6 @@ class Test_Schema_Parity extends \WP_UnitTestCase {
 	 * and prefix.
 	 */
 	public function test_legacy_normalize_golden() {
-		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
 		$this->esp->update_enabled_outgoing_fields(
 			[ 'Account', 'Registration Date', 'Registration Method', 'Registration Page', 'Signup UTM: ' ]
 		);
@@ -117,7 +115,6 @@ class Test_Schema_Parity extends \WP_UnitTestCase {
 	 * pre-refactor pipeline produced.
 	 */
 	public function test_legacy_end_to_end_payload() {
-		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
 		$this->esp->update_enabled_outgoing_fields( [ 'Account', 'Registration Date' ] );
 
 		$normalized = Metadata::normalize_contact_data(
@@ -144,7 +141,6 @@ class Test_Schema_Parity extends \WP_UnitTestCase {
 	 * V2-flag site: raw keys are filtered and prefixed per integration.
 	 */
 	public function test_v2_prepare_contact_golden() {
-		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v2' );
 		$this->esp->update_enabled_outgoing_fields(
 			[ 'Registration Date', 'Registration UTM Source' ]
 		);
@@ -178,7 +174,6 @@ class Test_Schema_Parity extends \WP_UnitTestCase {
 	 * the filter to mutate outgoing contacts keeps firing on the main path.
 	 */
 	public function test_normalize_filter_fires_on_class_built_contacts() {
-		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
 		$this->esp->update_enabled_outgoing_fields( [ 'Newsletter Selection', 'Account' ] );
 
 		$call_count = 0;

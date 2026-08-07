@@ -54,10 +54,6 @@ class Test_Content_Gate_Legacy extends WP_UnitTestCase {
 	public function set_up() {
 		parent::set_up();
 		Content_Gate_Metadata::reset_cache();
-		// Pin the schema origin so the origin-scoped field surfaces describe a
-		// v1 (legacy) site regardless of what the detection heuristic infers
-		// from this test environment.
-		update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
 		// The registry caches availability, and Content Gate availability only
 		// flips on once this class defines NEWSPACK_CONTENT_GATES.
 		Field_Registry::reset();
@@ -73,7 +69,6 @@ class Test_Content_Gate_Legacy extends WP_UnitTestCase {
 
 	public function tear_down() {
 		Metadata::update_fields( ! empty( $this->original_enabled_fields ) ? $this->original_enabled_fields : [] );
-		delete_option( Field_Registry::SCHEMA_ORIGIN_OPTION );
 		Field_Registry::reset();
 		Content_Gate_Metadata::reset_cache();
 		parent::tear_down();
@@ -232,13 +227,18 @@ class Test_Content_Gate_Legacy extends WP_UnitTestCase {
 		);
 	}
 
-	public function test_v2_origin_also_exposes_content_access_fields() {
-		update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v2' );
+	/**
+	 * Content Gate is version-neutral, so its fields sit in the merged field
+	 * map alongside the legacy ones this class otherwise exercises — no
+	 * schema-version condition gates them.
+	 */
+	public function test_merged_field_map_also_exposes_content_access_fields() {
 		Content_Gate_Metadata::reset_cache();
 
 		$fields = Metadata::get_all_fields();
-		$this->assertArrayHasKey( 'Content_Access', $fields, 'A v2-origin site should also expose Content_Access.' );
+		$this->assertArrayHasKey( 'Content_Access', $fields );
 		$this->assertArrayHasKey( 'Content_Access_Source', $fields );
+		$this->assertArrayHasKey( 'account', $fields, 'The legacy fields are in the same map.' );
 	}
 
 	public function test_no_gate_matches_yields_content_access_no() {

@@ -90,21 +90,6 @@ class Metadata {
 	}
 
 	/**
-	 * Get the metadata classes scoped to the site's schema origin.
-	 *
-	 * Phase-1 UI freeze: the existing field-selection UI keeps rendering
-	 * the origin version's list until the per-field UI ships.
-	 *
-	 * @return array List of metadata classes.
-	 */
-	protected static function get_origin_metadata_classes() {
-		$origin = Field_Registry::get_schema_origin();
-		$v1     = [ Contact_Metadata\Legacy_Basic::class, Contact_Metadata\Legacy_Payment::class, Contact_Metadata\Content_Gate::class ];
-		$v2     = [ Contact_Metadata\Identity::class, Contact_Metadata\Registration::class, Contact_Metadata\Engagement::class, Contact_Metadata\Subscription::class, Contact_Metadata\Donation::class, Contact_Metadata\Content_Gate::class ];
-		return array_values( array_filter( Field_Registry::VERSION_V1 === $origin ? $v1 : $v2, 'class_exists' ) );
-	}
-
-	/**
 	 * Get the metadata classes whose schema versions are actually in play
 	 * for outgoing sync.
 	 *
@@ -113,8 +98,8 @@ class Metadata {
 	 * subscription/order queries on every sync only for
 	 * Integration::prepare_contact() to discard the result. Scope the
 	 * compute to the union of versions enabled across push-capable
-	 * integrations, falling back to the origin version's classes when no
-	 * integration has a stored selection. Version-neutral classes
+	 * integrations. No enabled ids at all means nothing version-scoped is
+	 * pushed, so nothing version-scoped is computed. Version-neutral classes
 	 * (Content Gate) are always included, in the same position they hold in
 	 * the full merged list so key-collision precedence is unchanged.
 	 *
@@ -132,10 +117,6 @@ class Metadata {
 					$versions[ $version ] = true;
 				}
 			}
-		}
-
-		if ( empty( $versions ) ) {
-			return self::get_origin_metadata_classes();
 		}
 
 		$classes = [];
@@ -238,6 +219,12 @@ class Metadata {
 	 * Port of the legacy helper: validates the UTM family against the
 	 * fields enabled for the ESP integration and returns the prefixed,
 	 * suffixed ESP name (e.g. "NP_Signup UTM: source"), or false.
+	 *
+	 * The dynamic-suffix UTM fields are declared only by the legacy schema
+	 * (the new schema splits them into discrete source/medium/campaign
+	 * fields under their own names), so the get_raw_keys() check is now
+	 * purely "is this field enabled for the ESP" — it no longer doubles as a
+	 * filter on which schema the site started from.
 	 *
 	 * @param string $key Key to check.
 	 *
@@ -401,18 +388,24 @@ class Metadata {
 	 * Get the list of possible fields to be synced, grouped by section.
 	 *
 	 * Returns an array of groups, each with a 'section' label and 'fields' array.
-	 * Only includes non-legacy classes with a section name. Fields are intersected
-	 * with the filtered available fields list so extensions using the
-	 * `newspack_ras_metadata_keys` filter are respected. Fields added by the filter
-	 * that don't belong to any class are collected in an "Additional" group.
+	 * Only includes classes with a section name — the legacy classes declare
+	 * none, so their fields land in "Additional" alongside filter-added ones
+	 * that belong to no class.
+	 *
+	 * A class's labels are read out of the filtered map by the class's own raw
+	 * keys, so `newspack_ras_metadata_keys` removals and renames are respected
+	 * per key. Matching on the labels themselves would let a class survive on
+	 * another class's identically-labelled field, which the merged map makes
+	 * possible: the legacy `account` and the new `Account` are both "Account".
 	 *
 	 * @return array<int, array{section: string, fields: list<string>}> List of
 	 *   groups, each with a non-empty section label and an ordered list of field
 	 *   names. May be filtered by `newspack_ras_grouped_metadata_fields`.
 	 */
 	public static function get_grouped_default_fields(): array {
-		$classes          = self::get_origin_metadata_classes();
-		$available_fields = array_values( array_unique( array_values( self::get_all_fields( true ) ) ) );
+		$classes          = self::get_metadata_classes();
+		$label_map        = self::get_all_fields( true );
+		$available_fields = array_values( array_unique( array_values( $label_map ) ) );
 		$groups           = [];
 		$grouped_fields   = [];
 
@@ -423,8 +416,13 @@ class Metadata {
 					continue;
 				}
 
-				$fields = array_values( array_unique( array_values( $class::get_fields() ) ) );
-				$fields = array_values( array_intersect( $fields, $available_fields ) );
+				$fields = [];
+				foreach ( array_keys( $class::get_fields() ) as $raw_key ) {
+					if ( isset( $label_map[ $raw_key ] ) ) {
+						$fields[] = $label_map[ $raw_key ];
+					}
+				}
+				$fields = array_values( array_unique( $fields ) );
 
 				if ( empty( $fields ) ) {
 					continue;
@@ -458,15 +456,17 @@ class Metadata {
 	/**
 	 * Get all metadata fields.
 	 *
-	 * Scoped to the site's schema origin: this feeds the field-selection UI,
-	 * get_key() and the partial-payload builders, which stay on the origin
-	 * version's list until the per-field UI ships.
+	 * The merged, all-versions raw_key => label map. Both schemas' raw keys
+	 * are distinct and, since the pivot, so are their ESP names, so this is a
+	 * plain superset: it feeds the field-selection UI, get_key() and the
+	 * partial-payload builders, none of which can now miss a field because it
+	 * belongs to the schema the site did not start on.
 	 *
 	 * @param boolean $only_available Whether to return only available fields or all fields.
 	 * @return array List of fields.
 	 */
 	public static function get_all_fields( $only_available = false ) {
-		$classes = self::get_origin_metadata_classes();
+		$classes = self::get_metadata_classes();
 		$keys    = [];
 		foreach ( $classes as $class ) {
 			if ( ! $only_available || $class::is_available() ) {
@@ -477,13 +477,13 @@ class Metadata {
 		/**
 		 * Filters the list of key/value pairs for metadata fields to be synced to the connected ESP.
 		 *
-		 * Applied twice per request against two different map shapes: here,
-		 * on the origin-scoped raw_key => label map, and in
-		 * Field_Registry::get_definitions(), on the merged all-versions map
-		 * (with $only_available hardcoded to false). Add/remove/rename
-		 * callbacks behave identically on both; a callback that replaces the
-		 * map wholesale also constrains the registry, and one that inspects
-		 * the incoming map sees different contents per call site.
+		 * Applied twice per request against the same merged raw_key => label
+		 * map: here, optionally narrowed to available fields, and in
+		 * Field_Registry::get_definitions() with $only_available hardcoded to
+		 * false. Add/remove/rename callbacks behave identically on both; a
+		 * callback that replaces the map wholesale also constrains the
+		 * registry, and one that inspects the incoming map sees the available
+		 * subset here and the full set there.
 		 *
 		 * @param array $keys The list of key/value pairs for metadata fields to be synced to the connected ESP.
 		 * @param boolean $only_available Whether the list of fields is filtered to only available fields or not.

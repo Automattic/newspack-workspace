@@ -36,7 +36,6 @@ class Test_Sync_Metadata_Classes extends \WP_UnitTestCase {
 		$this->reset_integrations();
 		$this->integration = new Sample_Integration( 'scope-test', 'Scope Test' );
 		Integrations::register( $this->integration );
-		\delete_option( Field_Registry::SCHEMA_ORIGIN_OPTION );
 		Field_Registry::reset();
 	}
 
@@ -45,7 +44,6 @@ class Test_Sync_Metadata_Classes extends \WP_UnitTestCase {
 	 */
 	public function tear_down() {
 		\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'scope-test' );
-		\delete_option( Field_Registry::SCHEMA_ORIGIN_OPTION );
 		Field_Registry::reset();
 		$this->reset_integrations();
 		Integrations::register_integrations();
@@ -80,7 +78,6 @@ class Test_Sync_Metadata_Classes extends \WP_UnitTestCase {
 	 * a sync, and syncs run inside registration, login and checkout requests.
 	 */
 	public function test_v1_only_selection_skips_v2_classes() {
-		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
 		// A legacy-only field: one the two schemas share would be stored as its
 		// v2 twin and pull the v2 classes in.
 		$this->integration->update_enabled_outgoing_fields( [ 'v1:registration_method' ] );
@@ -97,7 +94,6 @@ class Test_Sync_Metadata_Classes extends \WP_UnitTestCase {
 	 * Symmetrically, a v2-only selection skips the legacy classes.
 	 */
 	public function test_v2_only_selection_skips_v1_classes() {
-		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v2' );
 		$this->integration->update_enabled_outgoing_fields( [ 'v2:Registration_Date' ] );
 
 		$classes = $this->get_sync_classes();
@@ -112,7 +108,6 @@ class Test_Sync_Metadata_Classes extends \WP_UnitTestCase {
 	 * both halves are computed — the capability the registry exists for.
 	 */
 	public function test_mixed_selection_computes_both_versions() {
-		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
 		$this->integration->update_enabled_outgoing_fields( [ 'v1:registration_method', 'v2:Registration_Strategy' ] );
 
 		$classes = $this->get_sync_classes();
@@ -126,42 +121,41 @@ class Test_Sync_Metadata_Classes extends \WP_UnitTestCase {
 	 * since their fields belong to no schema version.
 	 */
 	public function test_neutral_classes_always_participate() {
-		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
 		$this->integration->update_enabled_outgoing_fields( [ 'v1:registration_date' ] );
 
 		$this->assertContains( Contact_Metadata\Content_Gate::class, $this->get_sync_classes() );
 	}
 
 	/**
-	 * With no stored selection, the derived default set is NOT canonicalized
-	 * (NPPD-2067): the fields both schemas share are reported under their v1
-	 * ids on a v1-origin site (get_default_outgoing_field_ids() and the
-	 * legacy-global branch of get_inherited_outgoing_field_ids() deliberately
-	 * skip Field_Registry::upgrade_equivalent_ids()), so only the legacy
-	 * classes are computed.
+	 * A saved-empty selection means "push no metadata fields", so no
+	 * version-scoped class is computed at all — there is no site-wide schema
+	 * version left to fall back to, and computing one version's classes for a
+	 * site that pushes nothing would be pure waste.
 	 *
-	 * This is the perf-sensitive half of the chain: "configured ESP, no
-	 * stored selections" is a large v1-origin cohort (every legacy site that
-	 * never opened the Outbound field picker), and syncs run inside
-	 * registration, login and checkout requests. Computing the v2 Engagement
-	 * (wc_get_orders()) and Subscription (wcs_get_users_subscriptions())
-	 * classes just to resolve a shared field's canonical id would tax all of
-	 * them on every sync. prepare_contact() does not need the upgrade to emit
-	 * the field under its canonical ESP name — see
-	 * Test_Prepare_Contact::test_unupgraded_default_id_still_emits_canonical_name.
+	 * Version-neutral classes still participate: they belong to no version, so
+	 * an empty version set does not exclude them.
 	 */
-	public function test_no_stored_selection_skips_v2_classes_for_shared_fields() {
-		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
+	public function test_stored_empty_selection_computes_no_version_classes() {
+		$this->integration->update_enabled_outgoing_fields( [] );
+
+		$classes = $this->get_sync_classes();
+
+		$this->assertSame( [ Contact_Metadata\Content_Gate::class ], $classes );
+	}
+
+	/**
+	 * A site that has not been seeded yet (no stored selection anywhere) falls
+	 * back to the merged default set, so both halves are computed. This is a
+	 * safety net, not a normal state: seeding stores the ESP's selection at
+	 * activation and every other integration inherits it.
+	 */
+	public function test_unseeded_site_computes_both_versions() {
 		\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'scope-test' );
 
 		$classes = $this->get_sync_classes();
 
 		$this->assertContains( Contact_Metadata\Legacy_Basic::class, $classes );
-		$this->assertContains( Contact_Metadata\Legacy_Payment::class, $classes );
-		$this->assertNotContains( Contact_Metadata\Subscription::class, $classes );
-		$this->assertNotContains( Contact_Metadata\Engagement::class, $classes );
-		$this->assertNotContains( Contact_Metadata\Registration::class, $classes );
-		$this->assertNotContains( Contact_Metadata\Identity::class, $classes );
-		$this->assertNotContains( Contact_Metadata\Donation::class, $classes );
+		$this->assertContains( Contact_Metadata\Registration::class, $classes );
+		$this->assertContains( Contact_Metadata\Content_Gate::class, $classes );
 	}
 }

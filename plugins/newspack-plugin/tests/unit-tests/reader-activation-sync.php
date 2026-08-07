@@ -18,19 +18,19 @@ require_once __DIR__ . '/integrations/class-failing-sample-integration.php';
  */
 class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 	/**
-	 * Pin the schema origin: these tests describe the legacy (v1) field set.
+	 * Start from a clean registry: these tests derive their expectations from
+	 * the live field maps, so a cache left over from another test's filters
+	 * would silently change what they assert against.
 	 */
 	public function set_up() {
 		parent::set_up();
-		update_option( Sync\Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
 		Sync\Field_Registry::reset();
 	}
 
 	/**
-	 * Restore the schema-origin state.
+	 * Drop the registry cache again for whatever runs next.
 	 */
 	public function tear_down() {
-		delete_option( Sync\Field_Registry::SCHEMA_ORIGIN_OPTION );
 		Sync\Field_Registry::reset();
 		parent::tear_down();
 	}
