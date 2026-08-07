@@ -226,15 +226,34 @@ const reachShare = ( value, total ) => {
 };
 
 /**
+ * Format a `Y-m-d` day from the reach payload.
+ *
+ * These label calendar days rather than marking moments, so they must read the
+ * same everywhere: anchor to UTC midnight and format in UTC. Site time would
+ * shift the day for negative offsets (`dateI18n` renders 2026-08-06 as "Aug 5"
+ * at UTC-5).
+ *
+ * @param {string} day Date as `Y-m-d`.
+ * @return {string} Formatted day, e.g. "Aug 6".
+ */
+const reachDay = day => gmdateI18n( 'M j', `${ day }T00:00:00+00:00` );
+
+/**
  * One-line reach summary for a segment row, from the GA4 numbers the segments
  * endpoint attaches (GA4_Segment_Reach::decorate_segments).
  *
  * `matched` counts sessions where the reader satisfied the segment's criteria;
- * `won` counts the subset where the segment won the priority match, which is
- * the audience its prompts can actually reach. Both read as a share of the
- * sessions segmentation evaluated — a raw session count says little without
- * knowing how big the week was, and the gap between the two shares is what
- * shows higher-priority segments absorbing readers.
+ * `won` counts the subset where the segment won the priority match, so its
+ * prompts were the ones shown. Both read as a share of the sessions
+ * segmentation evaluated — a raw session count says little without knowing how
+ * big the week was, and the gap between the two shares is what shows
+ * higher-priority segments absorbing readers.
+ *
+ * Written as a record, not a capability: the window leads and every verb is
+ * past tense. These numbers describe sessions that already happened, and
+ * reordering segments changes which prompts readers see from here on without
+ * moving them at all — a "prompt audience: 9%" reads like a live figure that
+ * ought to jump when a segment is dragged to the top, and it does not.
  *
  * The denominator stays on the line rather than being folded away: 34% of 40
  * sessions and 34% of 40,000 support very different decisions, and a segment
@@ -258,20 +277,66 @@ export const segmentReachDescription = segment => {
 		return __( 'No reach data yet', 'newspack-plugin' );
 	}
 	return sprintf(
-		/* Translators: %1$d: number of days the report covers. %2$s: share of the audience the segment reached, e.g. 34%. %3$s: total session count. %4$s: share the segment's prompts can reach. %5$s: date of the data. */
-		__( 'Reach (%1$dd): %2$s of %3$s sessions · prompt audience: %4$s · as of %5$s', 'newspack-plugin' ),
+		/* Translators: %1$d: number of days the report covers. %2$s: last day of the report, e.g. Aug 6. %3$s: share of the audience that matched, e.g. 34%. %4$s: total session count. %5$s: share that was shown this segment's prompts. */
+		__( '%1$d days to %2$s: matched %3$s of %4$s sessions · prompts reached %5$s', 'newspack-plugin' ),
 		// The window is a server-side constant, passed through so the label
 		// can't drift from the report it describes.
 		Number( reach.range_days ) || 7,
+		reachDay( reach.as_of ),
 		reachShare( Number( reach.matched ), total ),
 		total.toLocaleString(),
-		reachShare( Number( reach.won ), total ),
-		// `as_of` is the last calendar day the report covers, computed in UTC.
-		// It labels a day rather than marking a moment, so it must read the
-		// same everywhere: anchor it to UTC midnight and format in UTC. Site
-		// time would shift it a day for negative offsets (`dateI18n` renders
-		// 2026-08-06 as "Aug 5" at UTC-5).
-		gmdateI18n( 'M j', `${ reach.as_of }T00:00:00+00:00` )
+		reachShare( Number( reach.won ), total )
+	);
+};
+
+/**
+ * The caveat shown under a segment whose priority moved inside the reported
+ * window.
+ *
+ * Reordering is exactly when someone expects these numbers to move, and it is
+ * the one thing that cannot move them: the report still covers the same days,
+ * most of which ran under the previous order. Saying so at the row is what
+ * catches the misreading — a standing note above the list is easy to skim past
+ * and is not on screen at the moment the segment gets dragged.
+ *
+ * @param {Object} segment Segment, possibly carrying a `reach` object.
+ * @return {string|null} The caveat, or null when priority held all window.
+ */
+export const segmentReachCaveat = segment => {
+	const changedOn = segment?.reach?.priority_changed;
+	if ( ! changedOn ) {
+		return null;
+	}
+	return sprintf(
+		/* Translators: %s: the day priority last changed, e.g. Aug 5. */
+		__( 'Priority changed %s. Part of this window ran under the previous order.', 'newspack-plugin' ),
+		reachDay( changedOn )
+	);
+};
+
+/**
+ * The standing explainer above the segments list.
+ *
+ * Says the two things the per-row line cannot carry on its own: where the
+ * numbers come from and how often they move, and that reordering segments
+ * changes future prompts rather than this record.
+ *
+ * @param {Array} segments Segments, possibly carrying `reach` objects.
+ * @return {string|null} The notice, or null when nothing reports reach.
+ */
+export const segmentReachNotice = segments => {
+	const reach = segments?.find( segment => Number( segment?.reach?.total_sessions ) > 0 )?.reach;
+	if ( ! reach ) {
+		return null;
+	}
+	return sprintf(
+		/* Translators: %1$d: number of days the report covers. %2$s: last day of the report, e.g. Aug 6. */
+		__(
+			'Figures come from Google Analytics for the %1$d days to %2$s and refresh once a day. They record what already happened: reordering segments changes which prompts readers see from now on, not these numbers.',
+			'newspack-plugin'
+		),
+		Number( reach.range_days ) || 7,
+		reachDay( reach.as_of )
 	);
 };
 

@@ -29,6 +29,7 @@ final class GA4_Segment_Reach {
 
 	const OPTION                 = 'newspack_ga4_segment_reach';
 	const FAILURE_OPTION         = 'newspack_ga4_segment_reach_failures';
+	const PRIORITY_OPTION        = 'newspack_ga4_segment_reach_priority_changed';
 	const REFRESH_ACTION         = 'newspack_ga4_segment_reach_refresh';
 	const GROUP                  = 'newspack';
 	const ASYNC_GROUP            = 'newspack-async';
@@ -55,6 +56,69 @@ final class GA4_Segment_Reach {
 	public static function init() {
 		add_action( self::REFRESH_ACTION, [ __CLASS__, 'refresh' ] );
 		add_action( 'admin_init', [ __CLASS__, 'maybe_schedule' ] );
+		// Segment priority lives in term meta, and Campaigns writes it from
+		// several paths — the drag-reorder, a single-segment save, and the
+		// reindex that follows a deletion. Watching the meta key catches all
+		// of them, including changes made outside the wizard.
+		add_action( 'updated_term_meta', [ __CLASS__, 'record_priority_change' ], 10, 3 );
+		add_action( 'added_term_meta', [ __CLASS__, 'record_priority_change' ], 10, 3 );
+	}
+
+	/**
+	 * Note when segment priority last changed.
+	 *
+	 * Reordering is the moment someone most expects these numbers to move, and
+	 * it is the one thing that cannot move them: the report still covers the
+	 * same days, most of which ran under the previous order. Recording the day
+	 * lets the list say so rather than showing figures that quietly answer a
+	 * different question.
+	 *
+	 * @param int    $meta_id  Meta row ID (unused).
+	 * @param int    $term_id  Term the meta belongs to.
+	 * @param string $meta_key Meta key.
+	 */
+	public static function record_priority_change( $meta_id, $term_id, $meta_key ) {
+		if ( 'priority' !== $meta_key ) {
+			return;
+		}
+		// Campaigns owns the taxonomy, so prefer its constant; the literal
+		// keeps this working (and testable) when newspack-popups is not
+		// loaded, where the hook simply never matches a real segment.
+		$taxonomy = class_exists( 'Newspack_Segments_Model' ) ? \Newspack_Segments_Model::TAX_SLUG : 'popup_segment';
+		$term     = get_term( $term_id );
+		if ( ! $term || is_wp_error( $term ) || $taxonomy !== $term->taxonomy ) {
+			return;
+		}
+		// A reorder rewrites every segment's priority, so this fires once per
+		// segment. Each write carries the same timestamp within a second, and
+		// update_option short-circuits an unchanged value, so the burst costs
+		// at most a couple of writes to a non-autoloaded option. Cheaper than
+		// a per-request static, which would also swallow a second legitimate
+		// change in a long-running WP-CLI process.
+		update_option( self::PRIORITY_OPTION, time(), false );
+	}
+
+	/**
+	 * The day priority last changed, when that falls inside the reported
+	 * window — otherwise null, since a change older than the window no longer
+	 * describes any of these sessions.
+	 *
+	 * A change *after* the window still counts: the whole report then predates
+	 * the current order, which is the most misleading case of all.
+	 *
+	 * @param string $as_of      Last day the report covers, `Y-m-d`.
+	 * @param int    $range_days Days the report covers.
+	 * @return string|null `Y-m-d`, or null.
+	 */
+	private static function priority_change_in_window( $as_of, $range_days ) {
+		$changed_at = (int) get_option( self::PRIORITY_OPTION, 0 );
+		if ( ! $changed_at ) {
+			return null;
+		}
+		$changed_on   = gmdate( 'Y-m-d', $changed_at );
+		$window_start = gmdate( 'Y-m-d', strtotime( $as_of . ' -' . max( 0, $range_days - 1 ) . ' days' ) );
+		// Both are Y-m-d, which compares correctly as a string.
+		return $changed_on < $window_start ? null : $changed_on;
 	}
 
 	/**
@@ -407,17 +471,22 @@ final class GA4_Segment_Reach {
 		// presentation at fetch time and lose the sample size, which is what
 		// tells a publisher whether a share is worth acting on.
 		$total = isset( $cache['total_sessions'] ) ? (int) $cache['total_sessions'] : 0;
+		// Site-wide rather than per-segment: reordering changes which segment
+		// wins for a shared set of readers, so a change anywhere in the list
+		// qualifies every row's prompt figure, not just the moved segment's.
+		$priority_changed = self::priority_change_in_window( $as_of, $range_days );
 		foreach ( $segments as &$segment ) {
 			if ( ! is_array( $segment ) || ! isset( $segment['id'] ) ) {
 				continue;
 			}
 			$row              = $cache['rows'][ (string) $segment['id'] ] ?? null;
 			$segment['reach'] = [
-				'matched'        => $row ? (int) $row['matched'] : null,
-				'won'            => $row ? (int) $row['won'] : null,
-				'total_sessions' => $total,
-				'as_of'          => $as_of,
-				'range_days'     => $range_days,
+				'matched'          => $row ? (int) $row['matched'] : null,
+				'won'              => $row ? (int) $row['won'] : null,
+				'total_sessions'   => $total,
+				'as_of'            => $as_of,
+				'range_days'       => $range_days,
+				'priority_changed' => $priority_changed,
 			];
 		}
 		// The loop variable stays bound to the last element, so a caller that

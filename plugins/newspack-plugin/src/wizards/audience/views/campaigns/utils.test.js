@@ -78,6 +78,8 @@ describe( 'segmentDescription', () => {
 
 describe( 'segmentReachDescription', () => {
 	let segmentReachDescription;
+	let segmentReachCaveat;
+	let segmentReachNotice;
 	let baseDateSettings;
 
 	beforeAll( async () => {
@@ -86,7 +88,7 @@ describe( 'segmentReachDescription', () => {
 			criteria: CRITERIA,
 		};
 		baseDateSettings = getSettings();
-		( { segmentReachDescription } = await import( './utils' ) );
+		( { segmentReachDescription, segmentReachCaveat, segmentReachNotice } = await import( './utils' ) );
 	} );
 
 	afterEach( () => {
@@ -102,7 +104,22 @@ describe( 'segmentReachDescription', () => {
 			id: '12',
 			reach: { matched: 1240, won: 320, total_sessions: 3620, as_of: '2026-08-06', range_days: 7 },
 		} );
-		expect( line ).toBe( `Reach (7d): 34% of ${ ( 3620 ).toLocaleString() } sessions · prompt audience: 9% · as of Aug 6` );
+		expect( line ).toBe( `7 days to Aug 6: matched 34% of ${ ( 3620 ).toLocaleString() } sessions · prompts reached 9%` );
+	} );
+
+	it( 'reads as a record of past sessions, not a live capability', () => {
+		// Reordering segments changes which prompts readers see from here on
+		// and cannot move these numbers, so the line must not read as a
+		// standing "this segment can reach X" figure. The window leads and
+		// every verb is past tense.
+		const line = segmentReachDescription( {
+			id: '12',
+			reach: { matched: 1240, won: 320, total_sessions: 3620, as_of: '2026-08-06', range_days: 7 },
+		} );
+		expect( line ).toMatch( /^7 days to Aug 6:/ );
+		expect( line ).toContain( 'matched' );
+		expect( line ).toContain( 'prompts reached' );
+		expect( line ).not.toContain( 'prompt audience' );
 	} );
 
 	it( 'keeps the denominator visible so a small sample reads as one', () => {
@@ -123,8 +140,8 @@ describe( 'segmentReachDescription', () => {
 			id: '12',
 			reach: { matched: 8, won: 0, total_sessions: 4000, as_of: '2026-08-06', range_days: 7 },
 		} );
-		expect( line ).toContain( 'Reach (7d): <1% of' );
-		expect( line ).toContain( 'prompt audience: 0%' );
+		expect( line ).toContain( 'matched <1% of' );
+		expect( line ).toContain( 'prompts reached 0%' );
 	} );
 
 	it( 'names the window the server reported rather than a fixed one', () => {
@@ -132,7 +149,7 @@ describe( 'segmentReachDescription', () => {
 			id: '12',
 			reach: { matched: 5, won: 1, total_sessions: 100, as_of: '2026-08-06', range_days: 28 },
 		} );
-		expect( line ).toContain( 'Reach (28d)' );
+		expect( line ).toContain( '28 days to Aug 6' );
 	} );
 
 	it( 'falls back to 7 days for a cache written before the window was reported', () => {
@@ -140,7 +157,7 @@ describe( 'segmentReachDescription', () => {
 			id: '12',
 			reach: { matched: 5, won: 1, total_sessions: 100, as_of: '2026-08-06' },
 		} );
-		expect( line ).toContain( 'Reach (7d)' );
+		expect( line ).toContain( '7 days to Aug 6' );
 	} );
 
 	it.each( [
@@ -155,7 +172,7 @@ describe( 'segmentReachDescription', () => {
 			id: '12',
 			reach: { matched: 1, won: 0, total_sessions: 100, as_of: '2026-08-06' },
 		} );
-		expect( line ).toContain( 'as of Aug 6' );
+		expect( line ).toContain( '7 days to Aug 6' );
 	} );
 
 	it( 'renders the no-data state distinctly from zero', () => {
@@ -174,5 +191,72 @@ describe( 'segmentReachDescription', () => {
 				reach: { matched: 0, won: 0, total_sessions: 0, as_of: '2026-08-06' },
 			} )
 		).toBe( 'No reach data yet' );
+	} );
+
+	describe( 'segmentReachCaveat', () => {
+		it( 'says nothing while priority held for the whole window', () => {
+			expect(
+				segmentReachCaveat( {
+					id: '12',
+					reach: { matched: 1240, won: 320, total_sessions: 3620, as_of: '2026-08-06', range_days: 7 },
+				} )
+			).toBeNull();
+		} );
+
+		it( 'names the day priority moved inside the reported window', () => {
+			// The moment someone drags a segment is the moment they expect
+			// these numbers to move, and it is the one thing that cannot move
+			// them: the window still spans days that ran under the old order.
+			const caveat = segmentReachCaveat( {
+				id: '12',
+				reach: {
+					matched: 1240,
+					won: 320,
+					total_sessions: 3620,
+					as_of: '2026-08-06',
+					range_days: 7,
+					priority_changed: '2026-08-05',
+				},
+			} );
+			expect( caveat ).toBe( 'Priority changed Aug 5. Part of this window ran under the previous order.' );
+		} );
+
+		it( 'reports the same day whatever the site timezone', () => {
+			setSettings( { ...baseDateSettings, timezone: { offset: -5, string: '', abbr: '' } } );
+			const caveat = segmentReachCaveat( {
+				id: '12',
+				reach: { matched: 1, won: 0, total_sessions: 100, as_of: '2026-08-06', priority_changed: '2026-08-05' },
+			} );
+			expect( caveat ).toContain( 'Aug 5' );
+		} );
+	} );
+
+	describe( 'segmentReachNotice', () => {
+		it( 'says nothing when no segment reports reach', () => {
+			expect( segmentReachNotice( [ { id: '12' }, { id: '13' } ] ) ).toBeNull();
+		} );
+
+		it( 'says nothing when the reported window found no sessions', () => {
+			expect( segmentReachNotice( [ { id: '12', reach: { matched: 0, won: 0, total_sessions: 0, as_of: '2026-08-06' } } ] ) ).toBeNull();
+		} );
+
+		it( 'names the source, the window, the refresh rate, and the reorder consequence', () => {
+			const notice = segmentReachNotice( [
+				{ id: '12', reach: { matched: 1240, won: 320, total_sessions: 3620, as_of: '2026-08-06', range_days: 7 } },
+			] );
+			expect( notice ).toContain( 'Google Analytics' );
+			expect( notice ).toContain( '7 days to Aug 6' );
+			expect( notice ).toContain( 'refresh once a day' );
+			expect( notice ).toContain( 'reordering segments changes which prompts readers see from now on' );
+		} );
+
+		it( 'reads the window off whichever segment has numbers', () => {
+			const notice = segmentReachNotice( [
+				{ id: '12' },
+				{ id: '13', reach: { matched: null, won: null, total_sessions: 0, as_of: '2026-08-06' } },
+				{ id: '14', reach: { matched: 5, won: 1, total_sessions: 900, as_of: '2026-08-06', range_days: 28 } },
+			] );
+			expect( notice ).toContain( '28 days to Aug 6' );
+		} );
 	} );
 } );
