@@ -37,17 +37,50 @@ final class GA4_Segment_Reach {
 	}
 
 	/**
+	 * The cached reach for the currently connected property, if any.
+	 *
+	 * A cache left over from a previously connected property is not "the
+	 * cache" — its numbers describe a different site's audience. Both the
+	 * display path and the scheduling path treat it as absent, which is why
+	 * this lives in one place: if only the display path discounted it, a
+	 * property switch would show nothing until the next daily refresh.
+	 *
+	 * @param string|false $property_id Connected property, or false to look it up.
+	 * @return array|null Cache payload for the connected property, or null.
+	 */
+	private static function get_valid_cache( $property_id = false ) {
+		if ( false === $property_id ) {
+			$property_id = GA4_Client::get_property_id();
+		}
+		if ( ! $property_id ) {
+			return null;
+		}
+		$cache = get_option( self::OPTION, false );
+		if (
+			! is_array( $cache )
+			|| ! isset( $cache['rows'] )
+			|| ! is_array( $cache['rows'] )
+			|| ( $cache['property_id'] ?? '' ) !== $property_id
+		) {
+			return null;
+		}
+		return $cache;
+	}
+
+	/**
 	 * Keep a daily refresh scheduled while a GA4 property is connected, drop
-	 * it when none is, and enqueue an immediate first fetch when no cache
-	 * exists yet — a fresh site should see numbers on the next cron tick, not
-	 * after a day. Idempotent; runs on every admin page load.
+	 * it when none is, and enqueue an immediate first fetch when there is no
+	 * usable cache yet — a fresh site, or one just pointed at a new property,
+	 * should see numbers on the next cron tick, not after a day. Idempotent;
+	 * runs on every admin page load.
 	 */
 	public static function maybe_schedule() {
 		if ( ! function_exists( 'as_schedule_recurring_action' ) || ! function_exists( 'as_has_scheduled_action' ) ) {
 			return;
 		}
 		$is_scheduled = as_has_scheduled_action( self::REFRESH_ACTION, [], self::GROUP );
-		if ( ! GA4_Client::get_property_id() ) {
+		$property_id  = GA4_Client::get_property_id();
+		if ( ! $property_id ) {
 			if ( $is_scheduled && function_exists( 'as_unschedule_all_actions' ) ) {
 				as_unschedule_all_actions( self::REFRESH_ACTION, [], self::GROUP );
 			}
@@ -57,11 +90,14 @@ final class GA4_Segment_Reach {
 			as_schedule_recurring_action( time() + DAY_IN_SECONDS, DAY_IN_SECONDS, self::REFRESH_ACTION, [], self::GROUP );
 			Logger::log( 'Scheduled daily GA4 segment reach refresh.', self::LOGGER_HEADER );
 		}
-		// First fetch. The transient backs off retries while the fetch keeps
-		// failing (e.g. no auth route), so a broken site attempts at most once
-		// an hour instead of on every admin page load.
+		// First fetch, also covering a switch to a new property: a cache from
+		// the old one is not usable (see get_valid_cache), and waiting a day
+		// for the recurring refresh would leave the list blank meanwhile. The
+		// transient backs off retries while the fetch keeps failing (e.g. no
+		// auth route), so a broken site attempts at most once an hour rather
+		// than on every admin page load.
 		if (
-			false === get_option( self::OPTION, false )
+			null === self::get_valid_cache( $property_id )
 			&& false === get_transient( self::LAST_ATTEMPT_TRANSIENT )
 			&& function_exists( 'as_enqueue_async_action' )
 			&& ! as_has_scheduled_action( self::REFRESH_ACTION, [], self::ASYNC_GROUP )
@@ -168,15 +204,8 @@ final class GA4_Segment_Reach {
 		if ( ! is_array( $segments ) ) {
 			return $segments;
 		}
-		$cache       = get_option( self::OPTION, false );
-		$property_id = GA4_Client::get_property_id();
-		if (
-			! is_array( $cache )
-			|| ! isset( $cache['rows'] )
-			|| ! is_array( $cache['rows'] )
-			|| ! $property_id
-			|| ( $cache['property_id'] ?? '' ) !== $property_id
-		) {
+		$cache = self::get_valid_cache();
+		if ( null === $cache ) {
 			return $segments;
 		}
 		// The report range ends the day before the fetch.
