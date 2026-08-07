@@ -60,9 +60,9 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 		}
 	};
 
-	const callApi = async ( path, method, messages ) => {
+	const callApi = async ( name, path, method, messages ) => {
 		try {
-			setAction( method );
+			setAction( name );
 			setError( null );
 			setSuccess( null );
 
@@ -86,7 +86,7 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 	 * Handle publishing post to Nextdoor
 	 */
 	const handlePublish = () => {
-		callApi( `/newspack/v1/nextdoor/publish-post/${ postId }`, 'POST', {
+		callApi( 'publish', `/newspack/v1/nextdoor/publish-post/${ postId }`, 'POST', {
 			success: __( 'Published to Nextdoor.', 'newspack-plugin' ),
 			error: __( 'Failed to publish.', 'newspack-plugin' ),
 		} );
@@ -96,7 +96,7 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 	 * Handle updating post on Nextdoor
 	 */
 	const handleUpdate = () => {
-		callApi( `/newspack/v1/nextdoor/update-post/${ postId }`, 'PUT', {
+		callApi( 'update', `/newspack/v1/nextdoor/update-post/${ postId }`, 'PUT', {
 			success: __( 'Update sent to Nextdoor.', 'newspack-plugin' ),
 			error: __( 'Failed to update.', 'newspack-plugin' ),
 		} );
@@ -106,7 +106,7 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 	 * Handle deleting post from Nextdoor
 	 */
 	const handleDelete = () => {
-		callApi( `/newspack/v1/nextdoor/delete-post/${ postId }`, 'DELETE', {
+		callApi( 'delete', `/newspack/v1/nextdoor/delete-post/${ postId }`, 'DELETE', {
 			success: __( 'Post removed from Nextdoor.', 'newspack-plugin' ),
 			error: __( 'Failed to remove post.', 'newspack-plugin' ),
 		} );
@@ -222,16 +222,17 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 						}
 					>
 						{ nextdoorStatus.can_reconnect
-							? __( 'Nextdoor setup is not finished, so this post cannot be shared yet.', 'newspack-plugin' )
-							: __(
-									'Nextdoor setup is not finished, so this post cannot be shared yet. Please contact the site administrator.',
-									'newspack-plugin'
-							  ) }
+							? __( 'Sharing to Nextdoor is unavailable until setup is finished.', 'newspack-plugin' )
+							: __( 'Sharing to Nextdoor is unavailable until the site administrator finishes setup.', 'newspack-plugin' ) }
 					</Notice>
 				) }
 
 				{ nextdoorStatus.is_unreachable && (
-					<Notice status="warning" isDismissible={ false }>
+					<Notice
+						status="warning"
+						isDismissible={ false }
+						actions={ [ { label: __( 'Retry', 'newspack-plugin' ), onClick: fetchStatus } ] }
+					>
 						{ __( 'Nextdoor could not be reached, so the sharing status is unavailable. Please try again shortly.', 'newspack-plugin' ) }
 					</Notice>
 				) }
