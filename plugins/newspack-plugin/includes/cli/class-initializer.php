@@ -33,6 +33,7 @@ class Initializer {
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-teams-for-memberships-diagnostics.php';
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-export.php';
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-teams-migration.php';
+		include_once NEWSPACK_ABSPATH . 'includes/cli/class-institutions-migration.php';
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-membership-gates-migration.php';
 	}
 
@@ -111,6 +112,7 @@ class Initializer {
 			WP_CLI::add_command( 'newspack migrate-team-products', [ 'Newspack\CLI\Teams_Migration', 'migrate_team_products' ] );
 			WP_CLI::add_command( 'newspack migrate-manual-members', [ 'Newspack\CLI\Teams_Migration', 'migrate_manual_members' ] );
 			WP_CLI::add_command( 'newspack backfill-team-managers', [ 'Newspack\CLI\Teams_Migration', 'backfill_team_managers' ] );
+			WP_CLI::add_command( 'newspack migrate-institutions', [ 'Newspack\CLI\Institutions_Migration', 'migrate_institutions' ] );
 			// The standalone `migrate-memberships` drop-in registers the same command
 			// name with the opposite, write-by-default flag convention. Registration is
 			// last-wins with no error, so the warning is hooked here — at registration
