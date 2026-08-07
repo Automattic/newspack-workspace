@@ -54,6 +54,7 @@ class Newspack_Test_GA4_Segment_Reach extends WP_UnitTestCase {
 
 		delete_option( 'newspack_ga4_segment_reach' );
 		delete_option( 'newspack_ga4_segment_reach_failures' );
+		delete_option( 'newspack_ga4_segment_reach_priority_changed' );
 		delete_transient( 'newspack_ga4_segment_reach_attempt' );
 		delete_option( self::SK_SETTINGS_OPTION );
 
@@ -598,6 +599,97 @@ class Newspack_Test_GA4_Segment_Reach extends WP_UnitTestCase {
 		// Cache for a different property is treated as absent.
 		$this->connect_property( 'PROP-OTHER' );
 		$this->assertSame( $segments, GA4_Segment_Reach::decorate_segments( $segments ) );
+	}
+
+	/**
+	 * Priority changing inside the reported window qualifies every row: the
+	 * figures still cover days that ran under the previous order, and no
+	 * refetch can change that. Reordering is exactly when someone expects the
+	 * numbers to move, so the list has to say why they did not.
+	 */
+	public function test_decorate_flags_a_priority_change_inside_the_window() {
+		$this->connect_property( 'PROP-REACH' );
+		$segments = [ [ 'id' => '12' ] ];
+		update_option(
+			'newspack_ga4_segment_reach',
+			[
+				'property_id'    => 'PROP-REACH',
+				'fetched_at'     => time(),
+				'range_days'     => 7,
+				'as_of'          => '2026-08-06',
+				'total_sessions' => 3620,
+				'rows'           => [
+					'12' => [
+						'matched' => 1240,
+						'won'     => 320,
+					],
+				],
+			],
+			false
+		);
+
+		// Window runs 2026-07-31 .. 2026-08-06.
+		$decorated = GA4_Segment_Reach::decorate_segments( $segments );
+		$this->assertNull( $decorated[0]['reach']['priority_changed'], 'No recorded change means nothing to caveat.' );
+
+		// A change the day before the window ends.
+		update_option( 'newspack_ga4_segment_reach_priority_changed', strtotime( '2026-08-05 12:00:00 UTC' ), false );
+		$decorated = GA4_Segment_Reach::decorate_segments( $segments );
+		$this->assertSame( '2026-08-05', $decorated[0]['reach']['priority_changed'] );
+
+		// A change on the first day of the window still counts.
+		update_option( 'newspack_ga4_segment_reach_priority_changed', strtotime( '2026-07-31 12:00:00 UTC' ), false );
+		$decorated = GA4_Segment_Reach::decorate_segments( $segments );
+		$this->assertSame( '2026-07-31', $decorated[0]['reach']['priority_changed'] );
+
+		// One day earlier is outside it: those sessions all ran under the
+		// current order, so there is nothing to warn about.
+		update_option( 'newspack_ga4_segment_reach_priority_changed', strtotime( '2026-07-30 12:00:00 UTC' ), false );
+		$decorated = GA4_Segment_Reach::decorate_segments( $segments );
+		$this->assertNull( $decorated[0]['reach']['priority_changed'] );
+
+		// A change AFTER the window is the most misleading case of all — the
+		// whole report predates the current order.
+		update_option( 'newspack_ga4_segment_reach_priority_changed', strtotime( '2026-08-07 12:00:00 UTC' ), false );
+		$decorated = GA4_Segment_Reach::decorate_segments( $segments );
+		$this->assertSame( '2026-08-07', $decorated[0]['reach']['priority_changed'] );
+	}
+
+	/**
+	 * Priority is written as term meta from several paths — the drag-reorder,
+	 * a single-segment save, and the reindex after a deletion — so the record
+	 * watches the meta key rather than any one endpoint. Meta on other
+	 * taxonomies, and other keys, must not trip it.
+	 */
+	public function test_priority_change_is_recorded_from_term_meta() {
+		// newspack-popups is not loaded in this suite, so register the
+		// taxonomy it owns and exercise the hook against it directly.
+		register_taxonomy( 'popup_segment', 'post' );
+		register_taxonomy( 'unrelated_tax', 'post' );
+		$segment = $this->factory()->term->create( [ 'taxonomy' => 'popup_segment' ] );
+		$other   = $this->factory()->term->create( [ 'taxonomy' => 'unrelated_tax' ] );
+
+		// Another key on a segment term is not a priority change.
+		add_term_meta( $segment, 'criteria', 'anything' );
+		$this->assertFalse( get_option( 'newspack_ga4_segment_reach_priority_changed' ) );
+
+		// Neither is `priority` on a term Campaigns does not own.
+		add_term_meta( $other, 'priority', 1 );
+		$this->assertFalse( get_option( 'newspack_ga4_segment_reach_priority_changed' ) );
+
+		add_term_meta( $segment, 'priority', 3 );
+		$recorded = get_option( 'newspack_ga4_segment_reach_priority_changed' );
+		$this->assertIsInt( $recorded );
+		$this->assertEqualsWithDelta( time(), $recorded, 60 );
+
+		// A later reorder moves the record forward rather than sticking at
+		// the first change ever seen.
+		update_option( 'newspack_ga4_segment_reach_priority_changed', time() - DAY_IN_SECONDS, false );
+		update_term_meta( $segment, 'priority', 1 );
+		$this->assertEqualsWithDelta( time(), get_option( 'newspack_ga4_segment_reach_priority_changed' ), 60 );
+
+		unregister_taxonomy( 'popup_segment' );
+		unregister_taxonomy( 'unrelated_tax' );
 	}
 
 	/**

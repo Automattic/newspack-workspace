@@ -9,7 +9,7 @@ import { __ } from '@wordpress/i18n';
  * Internal dependencies.
  */
 import { Card, CardSortableList, Notice, Router } from '../../../../../../packages/components/src';
-import { segmentDescription, segmentReachDescription } from '../utils';
+import { segmentDescription, segmentReachCaveat, segmentReachDescription, segmentReachNotice } from '../utils';
 
 const { useHistory } = Router;
 
@@ -98,24 +98,27 @@ const SegmentsList = ( { wizardApiFetch, segments, setSegments, isLoading } ) =>
 			segments.map( segment => {
 				const criteriaDescription = segmentDescription( segment );
 				const reachLine = segmentReachDescription( segment );
+				// Only meaningful next to numbers it qualifies.
+				const reachCaveat = reachLine ? segmentReachCaveat( segment ) : null;
 				return {
 					id: segment.id,
 					title: segment.name,
 					// segmentDescription returns React nodes (NPPD-1852), so compose
 					// as nodes rather than joining strings. The reach line, when the
-					// site reports it, sits on its own line below the criteria.
+					// site reports it, sits on its own line below the criteria, with
+					// the priority caveat under that when one applies.
 					description: reachLine ? (
 						<Fragment>
 							{ criteriaDescription }
 							{ criteriaDescription && <br /> }
 							{ reachLine }
+							{ reachCaveat && <br /> }
+							{ reachCaveat }
 						</Fragment>
 					) : (
 						criteriaDescription
 					),
-					badge: segment.is_criteria_duplicated
-						? { label: __( 'Duplicate', 'newspack-plugin' ), intent: 'medium' }
-						: undefined,
+					badge: segment.is_criteria_duplicated ? { label: __( 'Duplicate', 'newspack-plugin' ), intent: 'medium' } : undefined,
 					toggleChecked: ! segment.configuration.is_disabled,
 					onToggleChange: () => toggleSegmentStatus( segment ),
 					actions: [
@@ -133,6 +136,7 @@ const SegmentsList = ( { wizardApiFetch, segments, setSegments, isLoading } ) =>
 			} ),
 		[ segments, toggleSegmentStatus, deleteSegment, history ]
 	);
+	const reachNotice = useMemo( () => segmentReachNotice( segments ), [ segments ] );
 
 	if ( segments === null ) {
 		return null;
@@ -144,6 +148,7 @@ const SegmentsList = ( { wizardApiFetch, segments, setSegments, isLoading } ) =>
 			<Card headerActions noBorder>
 				<h2>{ __( 'Audience segments', 'newspack-plugin' ) }</h2>
 			</Card>
+			{ reachNotice && <Notice noticeText={ reachNotice } isHelp /> }
 			<CardSortableList disabled={ inFlight || isLoading > 0 } items={ items } onDragCallback={ sortSegments } />
 		</Fragment>
 	) : (
