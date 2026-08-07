@@ -361,6 +361,10 @@ class Auth {
 			self::redirect_with_error( $token_response->get_error_message() );
 		}
 
+		// Re-read after the exchange, which can take 30 seconds: the snapshot taken before
+		// it would put back whatever another request saved in the meantime.
+		$settings = Nextdoor::get_settings();
+
 		// Carrying a refresh token over would be right for a renewal, where Nextdoor omits
 		// it when it has not changed, but this is a fresh grant: the stored one belongs to
 		// the authorization being replaced and would renew the wrong connection.
