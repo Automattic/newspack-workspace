@@ -615,6 +615,54 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Losing a refresh race does not fail the request that lost it.
+	 */
+	public function test_losing_a_refresh_race_still_reports_a_valid_token() {
+		Nextdoor::update_settings(
+			[
+				'client_id'        => 'site-id',
+				'client_secret'    => 'site-secret',
+				'access_token'     => 'expired-access',
+				'refresh_token'    => 'superseded-refresh',
+				'token_expires_at' => time() - 10,
+			]
+		);
+
+		// The winner rotates the token and renews the grant while this request is in
+		// flight; Nextdoor then refuses the token this one set out with.
+		add_filter(
+			'pre_http_request',
+			function () {
+				Nextdoor::update_settings(
+					array_merge(
+						Nextdoor::get_settings(),
+						[
+							'access_token'     => 'winner-access',
+							'refresh_token'    => 'rotated-refresh',
+							'token_expires_at' => time() + HOUR_IN_SECONDS,
+						]
+					)
+				);
+
+				return [
+					'headers'  => [],
+					'body'     => wp_json_encode( [ 'error' => 'invalid_grant' ] ),
+					'response' => [
+						'code'    => 400,
+						'message' => 'Bad Request',
+					],
+					'cookies'  => [],
+					'filename' => null,
+				];
+			}
+		);
+
+		self::assertTrue( Auth::validate_token() );
+		self::assertSame( 'winner-access', Nextdoor::get_settings()['access_token'] );
+		self::assertEmpty( Nextdoor::get_settings()['refresh_failed_at'] );
+	}
+
+	/**
 	 * A grant that never said how long it lasts is due, not good forever.
 	 */
 	public function test_a_token_without_an_expiry_is_treated_as_due() {
