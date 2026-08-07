@@ -922,6 +922,9 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 	 * A dead grant asks for a reconnection; an unreachable Nextdoor does not.
 	 */
 	public function test_the_status_route_tells_a_dead_grant_from_an_outage() {
+		// Installed first so the "nothing went out" assertion below has something to see.
+		add_filter( 'pre_http_request', [ $this, 'stub_nextdoor_response' ], 10, 3 );
+
 		$post_id = $this->factory->post->create( [ 'post_status' => 'publish' ] );
 		update_post_meta( $post_id, '_nextdoor_guid', 'guid-1' );
 
@@ -964,6 +967,77 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 		self::assertFalse( $outage['needs_reconnect'] );
 		self::assertTrue( $outage['is_unreachable'] );
 		self::assertTrue( Auth::has_usable_token() );
+	}
+
+	/**
+	 * A refusal discovered mid-request is a reconnection, not an outage.
+	 */
+	public function test_a_grant_refused_during_the_refresh_asks_for_a_reconnection() {
+		$post_id = $this->factory->post->create( [ 'post_status' => 'publish' ] );
+		update_post_meta( $post_id, '_nextdoor_guid', 'guid-1' );
+
+		Nextdoor::update_settings(
+			[
+				'client_id'        => 'site-id',
+				'client_secret'    => 'site-secret',
+				'access_token'     => 'expired-access',
+				'refresh_token'    => 'stored-refresh',
+				'token_expires_at' => time() - 10,
+			]
+		);
+
+		// The grant is still usable on the way in; the refresh is what discovers otherwise.
+		self::assertTrue( Auth::has_usable_token() );
+
+		add_filter(
+			'pre_http_request',
+			function () {
+				return [
+					'headers'  => [],
+					'body'     => wp_json_encode( [ 'error' => 'invalid_grant' ] ),
+					'response' => [
+						'code'    => 400,
+						'message' => 'Bad Request',
+					],
+					'cookies'  => [],
+					'filename' => null,
+				];
+			}
+		);
+
+		$request = new WP_REST_Request( 'GET', '/newspack/v1/nextdoor/post-status/' . $post_id );
+		$request->set_param( 'id', $post_id );
+
+		$data = Controller::api_get_post_sharing_status( $request )->get_data();
+
+		self::assertTrue( $data['needs_reconnect'] );
+		self::assertFalse( $data['is_unreachable'] );
+	}
+
+	/**
+	 * A report that never comes back is an outage, not a silent blank.
+	 */
+	public function test_a_failed_ingestion_report_reads_as_unreachable() {
+		$post_id = $this->factory->post->create( [ 'post_status' => 'publish' ] );
+		update_post_meta( $post_id, '_nextdoor_guid', 'guid-1' );
+
+		$this->connect_with_a_valid_token();
+
+		add_filter(
+			'pre_http_request',
+			function () {
+				return new WP_Error( 'http_request_failed', 'Connection timed out' );
+			}
+		);
+
+		$request = new WP_REST_Request( 'GET', '/newspack/v1/nextdoor/post-status/' . $post_id );
+		$request->set_param( 'id', $post_id );
+
+		$data = Controller::api_get_post_sharing_status( $request )->get_data();
+
+		self::assertFalse( $data['needs_reconnect'] );
+		self::assertTrue( $data['is_unreachable'] );
+		self::assertNull( $data['ingestion_status'] );
 	}
 
 	/**
