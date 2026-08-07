@@ -21,12 +21,26 @@ defined( 'ABSPATH' ) || exit;
 final class GA4_Segment_Reach {
 
 	const OPTION                 = 'newspack_ga4_segment_reach';
+	const FAILURE_OPTION         = 'newspack_ga4_segment_reach_failures';
 	const REFRESH_ACTION         = 'newspack_ga4_segment_reach_refresh';
 	const GROUP                  = 'newspack';
 	const ASYNC_GROUP            = 'newspack-async';
 	const LAST_ATTEMPT_TRANSIENT = 'newspack_ga4_segment_reach_attempt';
 	const LOGGER_HEADER          = 'NEWSPACK-GA4-REACH';
 	const RANGE_DAYS             = 7;
+
+	/**
+	 * Consecutive failed refreshes after which this site stops trying.
+	 *
+	 * A report that cannot succeed — most commonly because the `segment_id`
+	 * custom dimension is not on the property yet — would otherwise retry on
+	 * the daily schedule plus once an hour of admin traffic, forever, with
+	 * nothing to observe it: the only record is a `Logger::log` call, which
+	 * compiles out unless the site defines `NEWSPACK_LOG_LEVEL`. Give up after
+	 * a handful of attempts and record why; connecting a different property or
+	 * a fresh dimension provisioning run clears the count.
+	 */
+	const MAX_FAILURES = 5;
 
 	/**
 	 * Register hooks.
@@ -68,6 +82,53 @@ final class GA4_Segment_Reach {
 	}
 
 	/**
+	 * The consecutive-failure record for the currently connected property.
+	 *
+	 * Scoped to a property for the same reason the cache is: a count carried
+	 * over from a property that no longer exists here says nothing about this
+	 * one, so connecting a different property starts from zero.
+	 *
+	 * @param string $property_id Connected property.
+	 * @return array `count` (int) and `last_error` (string).
+	 */
+	private static function get_failures( $property_id ) {
+		$record = get_option( self::FAILURE_OPTION, false );
+		if ( ! is_array( $record ) || ( $record['property_id'] ?? '' ) !== $property_id ) {
+			return [
+				'count'      => 0,
+				'last_error' => '',
+			];
+		}
+		return [
+			'count'      => isset( $record['count'] ) ? (int) $record['count'] : 0,
+			'last_error' => isset( $record['last_error'] ) ? (string) $record['last_error'] : '',
+		];
+	}
+
+	/**
+	 * Whether this site has stopped trying for the connected property.
+	 *
+	 * @param string $property_id Connected property.
+	 * @return bool
+	 */
+	private static function has_given_up( $property_id ) {
+		return self::get_failures( $property_id )['count'] >= self::MAX_FAILURES;
+	}
+
+	/**
+	 * Clear the failure record so refreshes resume.
+	 *
+	 * Called on a successful fetch, and by GA4_Custom_Dimensions after a
+	 * provisioning run — a run that adds the `segment_id` dimension is exactly
+	 * what makes a previously impossible report possible, so it should not
+	 * have to wait for a property switch.
+	 */
+	public static function reset_failures() {
+		delete_option( self::FAILURE_OPTION );
+		delete_transient( self::LAST_ATTEMPT_TRANSIENT );
+	}
+
+	/**
 	 * Keep a daily refresh scheduled while a GA4 property is connected, drop
 	 * it when none is, and enqueue an immediate first fetch when there is no
 	 * usable cache yet — a fresh site, or one just pointed at a new property,
@@ -78,26 +139,40 @@ final class GA4_Segment_Reach {
 		if ( ! function_exists( 'as_schedule_recurring_action' ) || ! function_exists( 'as_has_scheduled_action' ) ) {
 			return;
 		}
-		$is_scheduled = as_has_scheduled_action( self::REFRESH_ACTION, [], self::GROUP );
-		$property_id  = GA4_Client::get_property_id();
+		// `admin_init` also fires on admin-ajax.php, authenticated or not, so
+		// this runs on every heartbeat tick, autosave and nopriv AJAX hit.
+		// Rescheduling only needs to happen when someone who could have
+		// changed the GA4 connection is looking at the admin.
+		if ( wp_doing_ajax() ) {
+			return;
+		}
+		// Cheap check first: a non-autoloaded, object-cached get_option, so
+		// sites with no GA4 property never pay for a query against
+		// actionscheduler_actions (a large table on busy sites).
+		$property_id = GA4_Client::get_property_id();
 		if ( ! $property_id ) {
-			if ( $is_scheduled && function_exists( 'as_unschedule_all_actions' ) ) {
+			if (
+				function_exists( 'as_unschedule_all_actions' )
+				&& as_has_scheduled_action( self::REFRESH_ACTION, [], self::GROUP )
+			) {
 				as_unschedule_all_actions( self::REFRESH_ACTION, [], self::GROUP );
 			}
 			return;
 		}
-		if ( ! $is_scheduled ) {
+		if ( ! as_has_scheduled_action( self::REFRESH_ACTION, [], self::GROUP ) ) {
 			as_schedule_recurring_action( time() + DAY_IN_SECONDS, DAY_IN_SECONDS, self::REFRESH_ACTION, [], self::GROUP );
 			Logger::log( 'Scheduled daily GA4 segment reach refresh.', self::LOGGER_HEADER );
 		}
 		// First fetch, also covering a switch to a new property: a cache from
 		// the old one is not usable (see get_valid_cache), and waiting a day
 		// for the recurring refresh would leave the list blank meanwhile. The
-		// transient backs off retries while the fetch keeps failing (e.g. no
-		// auth route), so a broken site attempts at most once an hour rather
-		// than on every admin page load.
+		// transient backs off while the fetch keeps failing (e.g. no auth
+		// route), so a broken site attempts at most once an hour rather than
+		// on every admin page load — and the failure ceiling stops it entirely
+		// once the report looks impossible rather than merely unlucky.
 		if (
 			null === self::get_valid_cache( $property_id )
+			&& ! self::has_given_up( $property_id )
 			&& false === get_transient( self::LAST_ATTEMPT_TRANSIENT )
 			&& function_exists( 'as_enqueue_async_action' )
 			&& ! as_has_scheduled_action( self::REFRESH_ACTION, [], self::ASYNC_GROUP )
@@ -117,6 +192,16 @@ final class GA4_Segment_Reach {
 		if ( ! $property_id ) {
 			return;
 		}
+		// Stop calling Google once the report looks impossible rather than
+		// merely unlucky. The recurring action stays scheduled so a later
+		// reset_failures() — a property switch, or a provisioning run that
+		// adds the missing dimension — resumes it without rescheduling.
+		if ( self::has_given_up( $property_id ) ) {
+			return;
+		}
+		// Armed before the call so a refresh that dies mid-flight still backs
+		// off; cleared on success so a property switch minutes later gets its
+		// immediate fetch rather than waiting out the hour.
 		set_transient( self::LAST_ATTEMPT_TRANSIENT, time(), HOUR_IN_SECONDS );
 		$request  = [
 			'dateRanges'      => [
@@ -149,7 +234,18 @@ final class GA4_Segment_Reach {
 			[ 'require_edit_scope' => false ]
 		);
 		if ( is_wp_error( $response ) ) {
-			Logger::log( 'Reach refresh failed: ' . $response->get_error_message(), self::LOGGER_HEADER );
+			self::record_failure( $property_id, $response->get_error_message() );
+			return;
+		}
+		// A response that is not a report must not overwrite good numbers.
+		// Both client paths can hand back a non-error, non-report value: the
+		// OAuth client returns [] for a 2xx carrying a non-JSON body (an edge
+		// error page, a proxy interstitial), and the Site Kit client returns
+		// null if the re-encode fails. Either would parse to zero rows and
+		// blank every segment for a day. A report always carries `rows` or,
+		// when it genuinely found nothing, `rowCount`.
+		if ( ! is_array( $response ) || ( ! isset( $response['rows'] ) && ! isset( $response['rowCount'] ) ) ) {
+			self::record_failure( $property_id, 'Response was not a report.' );
 			return;
 		}
 
@@ -181,11 +277,61 @@ final class GA4_Segment_Reach {
 				'property_id' => $property_id,
 				'fetched_at'  => time(),
 				'range_days'  => self::RANGE_DAYS,
+				'as_of'       => self::report_end_date( $response ),
 				'rows'        => $rows,
 			],
 			false
 		);
+		self::reset_failures();
 		Logger::log( sprintf( 'Stored reach for %d segment IDs on property %s.', count( $rows ), $property_id ), self::LOGGER_HEADER );
+	}
+
+	/**
+	 * The last calendar day the report covers.
+	 *
+	 * The request asks for `yesterday`, which GA4 resolves against the
+	 * property's own reporting timezone — not ours. Deriving the label from
+	 * our clock disagrees with what GA actually counted whenever the two are
+	 * on different days: a refresh at 01:00 UTC against a Los Angeles property
+	 * covers through the 5th locally while a UTC derivation says the 6th. The
+	 * report response carries the property timezone, so use it; fall back to
+	 * the UTC derivation only when it is absent.
+	 *
+	 * @param array $response Decoded runReport response.
+	 * @return string `Y-m-d`.
+	 */
+	private static function report_end_date( array $response ) {
+		$timezone = $response['metadata']['timeZone'] ?? '';
+		if ( $timezone ) {
+			try {
+				$yesterday = new \DateTimeImmutable( 'yesterday', new \DateTimeZone( $timezone ) );
+				return $yesterday->format( 'Y-m-d' );
+			} catch ( \Exception $e ) {
+				Logger::log( "Unusable report timezone '$timezone'; falling back to UTC.", self::LOGGER_HEADER );
+			}
+		}
+		return gmdate( 'Y-m-d', time() - DAY_IN_SECONDS );
+	}
+
+	/**
+	 * Record a failed refresh and log why.
+	 *
+	 * @param string $property_id Connected property.
+	 * @param string $message     Failure reason.
+	 */
+	private static function record_failure( $property_id, $message ) {
+		$count = self::get_failures( $property_id )['count'] + 1;
+		update_option(
+			self::FAILURE_OPTION,
+			[
+				'property_id' => $property_id,
+				'count'       => $count,
+				'last_error'  => $message,
+				'last_failed' => time(),
+			],
+			false
+		);
+		Logger::log( sprintf( 'Reach refresh failed (%d/%d): %s', $count, self::MAX_FAILURES, $message ), self::LOGGER_HEADER );
 	}
 
 	/**
@@ -208,19 +354,28 @@ final class GA4_Segment_Reach {
 		if ( null === $cache ) {
 			return $segments;
 		}
-		// The report range ends the day before the fetch.
-		$as_of = gmdate( 'Y-m-d', ( isset( $cache['fetched_at'] ) ? (int) $cache['fetched_at'] : time() ) - DAY_IN_SECONDS );
+		// Recorded at fetch time from the property's own reporting timezone
+		// (see report_end_date). Caches written before that was stored fall
+		// back to the old derivation: the range ends the day before the fetch.
+		$as_of = $cache['as_of'] ?? gmdate( 'Y-m-d', ( isset( $cache['fetched_at'] ) ? (int) $cache['fetched_at'] : time() ) - DAY_IN_SECONDS );
+		// Surfaced so the label can name the window instead of hardcoding it.
+		$range_days = isset( $cache['range_days'] ) ? (int) $cache['range_days'] : self::RANGE_DAYS;
 		foreach ( $segments as &$segment ) {
 			if ( ! is_array( $segment ) || ! isset( $segment['id'] ) ) {
 				continue;
 			}
 			$row              = $cache['rows'][ (string) $segment['id'] ] ?? null;
 			$segment['reach'] = [
-				'matched' => $row ? (int) $row['matched'] : null,
-				'won'     => $row ? (int) $row['won'] : null,
-				'as_of'   => $as_of,
+				'matched'    => $row ? (int) $row['matched'] : null,
+				'won'        => $row ? (int) $row['won'] : null,
+				'as_of'      => $as_of,
+				'range_days' => $range_days,
 			];
 		}
+		// The loop variable stays bound to the last element, so a caller that
+		// copies the result and writes to that element would also mutate this
+		// array. Costs one line to close.
+		unset( $segment );
 		return $segments;
 	}
 }

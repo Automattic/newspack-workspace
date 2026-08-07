@@ -341,6 +341,13 @@ final class GA4_Custom_Dimensions {
 
 		update_option( self::PROVISIONED_OPTION, $summary, false );
 
+		// A run that adds a dimension is what makes a report querying it
+		// possible, so let the segment-reach fetch start over rather than
+		// stay given-up until the property changes.
+		if ( ! empty( $created ) ) {
+			GA4_Segment_Reach::reset_failures();
+		}
+
 		Logger::log(
 			sprintf(
 				'GA4 dimension provisioning complete for property %s. Created: %d, existed: %d, errors: %d',

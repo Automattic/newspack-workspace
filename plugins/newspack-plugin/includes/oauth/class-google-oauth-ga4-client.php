@@ -149,7 +149,8 @@ final class Google_OAuth_GA4_Client {
 	 * @throws \RuntimeException On HTTP or API error.
 	 */
 	public function run_report( $property_id, array $request ) {
-		return $this->request( 'POST', self::DATA_BASE_URL . "/properties/$property_id:runReport", $request );
+		// The `:runReport` suffix stays outside the encoded segment.
+		return $this->request( 'POST', self::DATA_BASE_URL . '/properties/' . rawurlencode( $property_id ) . ':runReport', $request );
 	}
 
 	/**
