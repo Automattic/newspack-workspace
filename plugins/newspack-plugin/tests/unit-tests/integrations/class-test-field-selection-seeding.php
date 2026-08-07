@@ -49,6 +49,7 @@ class Test_Field_Selection_Seeding extends \WP_UnitTestCase {
 		\delete_option( self::ESP_OPTION );
 		\delete_option( self::ORIGIN_MARKER );
 		\delete_option( Metadata::FIELDS_OPTION );
+		\delete_option( 'newspack_setup_complete' );
 		Field_Registry::reset();
 	}
 
@@ -59,6 +60,7 @@ class Test_Field_Selection_Seeding extends \WP_UnitTestCase {
 		\delete_option( self::ESP_OPTION );
 		\delete_option( self::ORIGIN_MARKER );
 		\delete_option( Metadata::FIELDS_OPTION );
+		\delete_option( 'newspack_setup_complete' );
 		Sample_Integration::$is_set_up_value = true;
 		Field_Registry::reset();
 		$this->reset_integrations();
@@ -126,6 +128,35 @@ class Test_Field_Selection_Seeding extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Seeding stores a version's ENTIRE definition set, availability included.
+	 *
+	 * The stored snapshot is permanent while availability is a property of the
+	 * moment seeding runs — a fresh install seeds before WooCommerce
+	 * Subscriptions is installed or the content gates are switched on. Filtering
+	 * unavailable definitions out would bar those fields from ever syncing, with
+	 * nothing left to un-bar them. Storing them is inert until their class
+	 * lights up (Metadata::get_contact_with_metadata() skips unavailable
+	 * classes), so the set is pinned structurally rather than by toggling
+	 * availability, which the WooCommerce mocks make unfakeable here.
+	 */
+	public function test_seeding_stores_every_definition_of_the_version() {
+		$expected = [];
+		foreach ( Field_Registry::get_definitions() as $id => $definition ) {
+			if ( Field_Registry::VERSION_V2 === $definition['version'] || Field_Registry::VERSION_NEUTRAL === $definition['version'] ) {
+				$expected[] = $id;
+			}
+		}
+		// Non-vacuous only if the version really does declare fields whose
+		// classes can be unavailable.
+		$this->assertContains( 'v2:Donor_Status', $expected );
+		$this->assertContains( 'v2:Subscriber_Status', $expected );
+
+		Field_Registry::seed_default_field_selections();
+
+		$this->assertEqualsCanonicalizing( $expected, \get_option( self::ESP_OPTION ) );
+	}
+
+	/**
 	 * The cohort seeding exists for: a legacy site that never opened the field
 	 * picker, so it has no stored selection and no marker, and was syncing the
 	 * legacy defaults all along. Its selection must be materialised as legacy
@@ -170,13 +201,15 @@ class Test_Field_Selection_Seeding extends \WP_UnitTestCase {
 
 	/**
 	 * A marker recorded by an earlier release is the site's own answer and
-	 * outranks every heuristic below it — here, a configured ESP and a legacy
-	 * global fields option, both of which would otherwise say v1. It is
-	 * deleted the moment it has been used.
+	 * outranks every heuristic below it — here a configured ESP, which would
+	 * otherwise say v1. It is deleted the moment it has been used.
+	 *
+	 * A legacy global fields option is deliberately NOT part of this shape: it
+	 * short-circuits ahead of detection entirely, so the ESP can copy it
+	 * verbatim (see test_legacy_global_selection_is_copied_not_replaced_by_defaults).
 	 */
 	public function test_recorded_marker_wins_over_detection_then_is_deleted() {
 		\update_option( self::ORIGIN_MARKER, 'v2' );
-		\update_option( Metadata::FIELDS_OPTION, [ 'Account' ] );
 		$this->register_configured_esp();
 
 		Field_Registry::seed_default_field_selections();
@@ -306,6 +339,53 @@ class Test_Field_Selection_Seeding extends \WP_UnitTestCase {
 		// The marker outranks the configured-ESP signal, so it decided this.
 		$this->assertContains( 'v2:Account', $ids );
 		$this->assertFalse( \get_option( self::ORIGIN_MARKER ) );
+	}
+
+	/**
+	 * Activation may act on the fresh-install guess, but only for a site that
+	 * has not completed setup.
+	 *
+	 * A completed setup means an existing site — one whose ESP merely happens
+	 * to be unconfigured at this moment, which is exactly what the guess cannot
+	 * tell apart from a new one. Reactivating the plugin during a Newsletters
+	 * outage must not freeze it onto the new schema. This is the prior-usage
+	 * guard the retired seed_fresh_install_origin() carried.
+	 */
+	public function test_activation_declines_the_guess_on_a_set_up_site() {
+		\update_option( 'newspack_setup_complete', '1' );
+		$this->assertFalse( ( new ESP() )->is_set_up(), 'This test needs the unconfident path.' );
+
+		Field_Registry::seed_default_field_selections();
+
+		$this->assertNull(
+			\get_option( self::ESP_OPTION, null ),
+			'A site that has completed setup is not a fresh install, whatever the ESP looks like right now.'
+		);
+	}
+
+	/**
+	 * The pre-integrations global option is the publisher's own selection, and
+	 * usually a narrowed one. The seeder must leave it to
+	 * ESP::ensure_outgoing_fields_seeded(), which copies it verbatim — writing
+	 * the full default set here would shadow it permanently and silently
+	 * re-enable every field they had turned off.
+	 */
+	public function test_legacy_global_selection_is_copied_not_replaced_by_defaults() {
+		$narrowed = [ 'Account', 'Registration Date' ];
+		\update_option( Metadata::FIELDS_OPTION, $narrowed );
+		$esp = $this->register_upgraded_legacy_esp();
+
+		// Activation runs first, then the ESP's own read.
+		Field_Registry::seed_default_field_selections();
+		$esp->get_enabled_outgoing_field_ids();
+
+		$stored = \get_option( self::ESP_OPTION );
+		$this->assertEqualsCanonicalizing(
+			[ 'v2:Account', 'v2:Registration_Date' ],
+			$stored,
+			'The stored selection must be the publisher\'s narrowed set, migrated to ids — not the full default set.'
+		);
+		$this->assertNotContains( 'v1:referer', $stored, 'A field they had turned off must stay off.' );
 	}
 
 	/**

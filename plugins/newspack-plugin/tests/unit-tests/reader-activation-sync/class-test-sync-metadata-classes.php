@@ -145,17 +145,22 @@ class Test_Sync_Metadata_Classes extends \WP_UnitTestCase {
 
 	/**
 	 * A site that has not been seeded yet (no stored selection anywhere) falls
-	 * back to the merged default set, so both halves are computed. This is a
-	 * safety net, not a normal state: seeding stores the ESP's selection at
-	 * activation and every other integration inherits it.
+	 * back to a DERIVED default set, and that set is scoped to a single schema
+	 * version — so only that version's classes are computed, never both.
+	 *
+	 * Deriving from the merged registry instead would compute every class on
+	 * every sync for an unseeded site, on top of putting both schemas' field
+	 * names in front of the provider. With no evidence of prior use here, the
+	 * derivation answers with the new schema.
 	 */
-	public function test_unseeded_site_computes_both_versions() {
+	public function test_unseeded_site_computes_one_version() {
 		\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'scope-test' );
 
 		$classes = $this->get_sync_classes();
 
-		$this->assertContains( Contact_Metadata\Legacy_Basic::class, $classes );
 		$this->assertContains( Contact_Metadata\Registration::class, $classes );
 		$this->assertContains( Contact_Metadata\Content_Gate::class, $classes );
+		$this->assertNotContains( Contact_Metadata\Legacy_Basic::class, $classes );
+		$this->assertNotContains( Contact_Metadata\Legacy_Payment::class, $classes );
 	}
 }

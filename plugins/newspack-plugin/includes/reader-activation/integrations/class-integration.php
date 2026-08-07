@@ -944,15 +944,19 @@ abstract class Integration {
 	 * at activation or lazily on the ESP's first option-less read, and every
 	 * other integration inherits it — so this only answers when seeding could
 	 * not store anything (no definitions loaded), or for an integration
-	 * constructed outside the registry with no ESP to inherit from. It
-	 * resolves against the merged registry, so it returns both schemas' ids
-	 * for the five fields the two spell the same way.
+	 * constructed outside the registry with no ESP to inherit from.
 	 *
-	 * Memoized per (registry generation, names): prepare_contact() calls this
-	 * once per contact per integration, and a CLI backfill must not rebuild
-	 * the name resolution for every row. The key derives from the resolution
-	 * inputs, so registry resets and availability changes invalidate it
-	 * naturally.
+	 * Scoped to one schema version, derived and never stored (see
+	 * Field_Registry::get_derivation_schema_version()). Resolving against the
+	 * merged registry instead would answer with both schemas' field names, and
+	 * this set does reach real providers: a configured non-ESP push integration
+	 * inheriting while the ESP is unconfigured pushes whatever this returns.
+	 *
+	 * Memoized per (registry generation, version, names): prepare_contact()
+	 * calls this once per contact per integration, and a CLI backfill must not
+	 * rebuild the name resolution for every row. The key derives from the
+	 * resolution inputs, so registry resets and availability changes
+	 * invalidate it naturally.
 	 *
 	 * Deliberately NOT canonicalized: the equivalence upgrade is a write-path
 	 * behavior (see update_enabled_outgoing_fields()), and nothing here may
@@ -965,15 +969,23 @@ abstract class Integration {
 	 */
 	protected function get_default_outgoing_field_ids() {
 		static $cache = [];
-		$names = Sync\Metadata::get_default_fields();
-		$key   = Sync\Field_Registry::get_generation() . '|' . md5( (string) \wp_json_encode( $names ) );
+		$version = Sync\Field_Registry::get_derivation_schema_version();
+		$names   = Sync\Metadata::get_default_fields();
+		$key     = Sync\Field_Registry::get_generation() . '|' . $version . '|' . md5( (string) \wp_json_encode( $names ) );
 		if ( isset( $cache[ $key ] ) ) {
 			return $cache[ $key ];
 		}
 		$ids = [];
 		foreach ( $names as $name ) {
-			foreach ( Sync\Field_Registry::resolve_name( $name ) as $definition ) {
-				$ids[] = $definition['id'];
+			foreach ( Sync\Field_Registry::resolve_name( $name, $version ) as $definition ) {
+				// The name list is the merged one, so a label only the other
+				// schema declares reaches resolve_name()'s any-version fallback
+				// and would smuggle that schema back in. Keep the derived
+				// version's own fields, plus the version-neutral ones, which
+				// belong to every version's default set.
+				if ( $version === $definition['version'] || Sync\Field_Registry::VERSION_NEUTRAL === $definition['version'] ) {
+					$ids[] = $definition['id'];
+				}
 			}
 		}
 		// This dedup is defensive: resolve_name() guarantees distinct names

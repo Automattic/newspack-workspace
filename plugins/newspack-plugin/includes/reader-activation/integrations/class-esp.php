@@ -375,6 +375,7 @@ class ESP extends Integration {
 	private function ensure_outgoing_fields_seeded() {
 		$stored = \get_option( self::OUTGOING_FIELDS_OPTION_PREFIX . $this->id, null );
 		if ( null !== $stored && is_array( $stored ) ) {
+			Sync\Field_Registry::retire_origin_marker();
 			return true;
 		}
 
@@ -386,6 +387,7 @@ class ESP extends Integration {
 				array_values( array_unique( array_map( 'strval', $legacy ) ) ),
 				false
 			);
+			Sync\Field_Registry::retire_origin_marker();
 			return true;
 		}
 

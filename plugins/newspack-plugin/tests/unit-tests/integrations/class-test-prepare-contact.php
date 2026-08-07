@@ -597,26 +597,29 @@ class Test_Prepare_Contact extends \WP_UnitTestCase {
 	 * name, un-upgraded, and the pair must emit ONE field rather than two.
 	 *
 	 * This is what lets the equivalence upgrade stay a write-path behavior:
-	 * read paths that skip it (the defaults fallback, the legacy-global branch
-	 * of get_inherited_outgoing_field_ids()) surface both ids of a pair.
-	 * prepare_contact() builds its raw-key/name lookup from
-	 * Field_Registry::get_definition() per id, and a pair's two definitions
-	 * share the same 'name' by construction — so either id, or both, resolves
-	 * the 'account' raw key to 'Account'.
+	 * read paths that skip it (the legacy-global branch of
+	 * get_inherited_outgoing_field_ids(), a selection stored before the upgrade
+	 * existed) can surface either id of a pair, or both. prepare_contact()
+	 * builds its raw-key/name lookup from Field_Registry::get_definition() per
+	 * id, and a pair's two definitions share the same 'name' by construction —
+	 * so either id, or both, resolves the 'account' raw key to 'Account'.
+	 *
+	 * Stored directly: a save would upgrade the v1 id to its v2 twin, and an
+	 * option-less read either seeds or derives a single version's ids, so
+	 * neither route can produce the mixed pair this has to cover.
 	 */
 	public function test_unupgraded_default_id_still_emits_canonical_name() {
 
 		$esp = new ESP();
 		Integrations::register( $esp );
 		$esp->update_metadata_prefix( 'NP_' );
-		\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'esp' );
-		\delete_option( Metadata::FIELDS_OPTION );
+		\update_option(
+			Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'esp',
+			[ 'v1:account', 'v2:Account' ]
+		);
 
-		// The un-configured ESP derives rather than seeding (detection cannot
-		// be confident without a set-up ESP), resolving 'Account' to both its
-		// ids and upgrading neither.
 		$ids = $esp->get_enabled_outgoing_field_ids();
-		$this->assertContains( 'v1:account', $ids );
+		$this->assertContains( 'v1:account', $ids, 'A stored v1 id is never rewritten on read.' );
 		$this->assertContains( 'v2:Account', $ids );
 
 		$result = $esp->prepare_contact(

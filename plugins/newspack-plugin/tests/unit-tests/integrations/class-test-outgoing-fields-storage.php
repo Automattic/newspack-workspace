@@ -308,14 +308,48 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 
 		$this->assertNotEmpty( $ids );
 		foreach ( $ids as $id ) {
-			$this->assertMatchesRegularExpression( '/^(v1|v2|neutral):/', $id );
+			$this->assertMatchesRegularExpression( '/^(v2|neutral):/', $id );
 		}
-		$this->assertContains( 'v1:account', $ids );
 		$this->assertContains( 'v2:Account', $ids );
 		$this->assertNull(
 			\get_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'esp', null ),
 			'An unconfident detection must not be frozen into a stored selection.'
 		);
+	}
+
+	/**
+	 * A derived selection is scoped to ONE schema version, never the merged
+	 * registry — the set does reach real providers, through a configured
+	 * non-ESP push integration inheriting while the ESP is unconfigured, and
+	 * merged resolution would put both schemas' field names in front of them.
+	 *
+	 * Which version is a derivation-only question (nothing is stored, and no
+	 * confidence is required), so both answers are pinned: an unseeded site
+	 * with no evidence derives the new schema, and one carrying legacy evidence
+	 * derives the legacy schema.
+	 */
+	public function test_derived_defaults_are_scoped_to_one_version() {
+		\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test' );
+		\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'esp' );
+		\delete_option( Metadata::FIELDS_OPTION );
+		Integrations::register( new ESP() );
+
+		$inherited = $this->integration->get_enabled_outgoing_field_ids();
+
+		$this->assertContains( 'v2:Account', $inherited );
+		$this->assertNotContains( 'v1:account', $inherited, 'A derived set must not span both schemas.' );
+
+		// Legacy evidence — another integration's pre-coexistence, bare-name
+		// selection — makes the same derivation answer in the legacy schema.
+		\update_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'evidence', [ 'Account' ] );
+		Field_Registry::reset();
+
+		$derived = $this->integration->get_enabled_outgoing_field_ids();
+
+		$this->assertContains( 'v1:account', $derived );
+		$this->assertNotContains( 'v2:Account', $derived, 'A derived set must not span both schemas.' );
+
+		\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'evidence' );
 	}
 
 	/**
@@ -335,12 +369,11 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 		\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test' );
 		\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'esp' );
 
-		// Defaults (the ESP's own fallback): the v1 id is reported as-is
-		// alongside its v2 twin, not replaced by it.
-		$defaults = ( new ESP() )->get_enabled_outgoing_field_ids();
-		$this->assertContains( 'v1:account', $defaults );
-
-		// The legacy-global inheritance fallback, with no ESP registered.
+		// The legacy-global inheritance fallback, with no ESP registered. This
+		// branch resolves the publisher's own stored names, so it stays
+		// version-agnostic (both spellings of a shared field emit one ESP
+		// name) — unlike the defaults tail, which derives from the full field
+		// list and is version-scoped.
 		\update_option( Metadata::FIELDS_OPTION, [ 'Account', 'Registration Method' ] );
 		$this->assertNull( Integrations::get_integration( 'esp' ), 'This covers the registry-miss path.' );
 		$this->assertEqualsCanonicalizing(
@@ -418,8 +451,9 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 		$ids = $this->integration->get_enabled_outgoing_field_ids();
 
 		$this->assertNotEmpty( $ids, 'A never-configured integration must not fail closed to an empty selection.' );
-		$this->assertContains( 'v1:account', $ids );
-		$this->assertContains( 'v1:total_paid', $ids );
+		// Scoped to the derived version (see test_derived_defaults_are_scoped_to_one_version).
+		$this->assertContains( 'v2:Account', $ids );
+		$this->assertContains( 'v2:Total_Paid', $ids );
 		$this->assertNull(
 			\get_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test', null ),
 			'The defaults fallback must not persist, so it keeps tracking availability changes.'
@@ -441,9 +475,8 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 
 		$ids = $esp->get_enabled_outgoing_field_ids();
 
-		// Not canonicalized: see test_derived_id_sets_are_not_canonicalized.
-		$this->assertContains( 'v1:account', $ids );
-		$this->assertContains( 'v1:total_paid', $ids );
+		$this->assertNotEmpty( $ids );
+		$this->assertContains( 'v2:Account', $ids );
 	}
 
 	/**

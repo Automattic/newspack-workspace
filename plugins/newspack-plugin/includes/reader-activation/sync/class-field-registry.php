@@ -535,10 +535,13 @@ class Field_Registry {
 	 * without a stored option. Whichever fires first wins; the other becomes
 	 * a no-op.
 	 *
-	 * This is the last consumer of the retired origin logic: after it runs, no
-	 * code path reads the origin marker, the `NEWSPACK_SYNC_METADATA_VERSION*`
-	 * constants, or any notion of a site-wide schema version ever again. An
-	 * existing selection — including a deliberately empty one — is never
+	 * The only path that PERSISTS anything derived from the retired origin
+	 * logic. Once a selection is stored, that logic is out of the picture for
+	 * good: reads answer from the stored ids, and neither the marker nor the
+	 * `NEWSPACK_SYNC_METADATA_VERSION*` constants are consulted again. (An
+	 * unseeded site still consults the same detection to scope a derived
+	 * fallback — see get_derivation_schema_version() — but stores nothing.) An
+	 * existing selection, including a deliberately empty one, is never
 	 * overwritten.
 	 *
 	 * @param bool $only_when_confident Skip seeding when detection had to fall
@@ -550,8 +553,12 @@ class Field_Registry {
 	 *   silently changing the field names its ESP automations key on. Declining
 	 *   to seed costs nothing there: an ESP that is not set up cannot sync, so
 	 *   the derived fallback never reaches a provider, and a later read seeds
-	 *   correctly. Activation passes false, because activation is the one
-	 *   moment "no prior usage at all" is unambiguous.
+	 *   correctly. (`NEWSPACK_FORCE_ALLOW_ESP_SYNC` bypasses the validation
+	 *   that premise rests on, but it forces sync past an unconfigured ESP
+	 *   too — a site running it is already outside the guarantee.) Activation
+	 *   passes false and may act on the guess, since activation is the one
+	 *   moment "no prior usage at all" is checkable; it still refuses on a
+	 *   site that has completed setup.
 	 *
 	 * @return void
 	 */
@@ -563,15 +570,36 @@ class Field_Registry {
 		$option = \Newspack\Reader_Activation\Integration::OUTGOING_FIELDS_OPTION_PREFIX . \Newspack\Reader_Activation\Integration::ESP_INTEGRATION_ID;
 		if ( null !== \get_option( $option, null ) ) {
 			// Already configured: nothing to seed, and the marker is dead.
-			\delete_option( self::RETIRED_ORIGIN_OPTION );
+			self::retire_origin_marker();
+			return;
+		}
+
+		// The pre-integrations global option is the publisher's own selection,
+		// and very likely a narrowed one. ESP::ensure_outgoing_fields_seeded()
+		// copies it verbatim; seeding the full default set here would shadow it
+		// permanently, silently re-enabling fields the publisher turned off.
+		// Defer to that copy — the shapes are mutually exclusive by design.
+		if ( is_array( \get_option( Metadata::FIELDS_OPTION, null ) ) ) {
+			self::retire_origin_marker();
 			return;
 		}
 
 		self::$seeding = true;
 		try {
 			$detection = self::detect_retired_schema_version();
-			if ( $only_when_confident && ! $detection['confident'] ) {
-				return;
+			if ( ! $detection['confident'] ) {
+				if ( $only_when_confident ) {
+					return;
+				}
+				// Activation, on a guess. Only a site with no prior usage can be
+				// the fresh install this branch assumes: a completed setup means
+				// an existing site whose ESP merely happens to be unconfigured
+				// right now, and freezing it onto the new schema would change
+				// the field names its ESP automations key on.
+				$setup_option = defined( 'NEWSPACK_SETUP_COMPLETE' ) ? NEWSPACK_SETUP_COMPLETE : 'newspack_setup_complete';
+				if ( '1' === \get_option( $setup_option, '0' ) ) {
+					return;
+				}
 			}
 			$ids = self::get_version_default_field_ids( $detection['version'] );
 		} finally {
@@ -579,24 +607,28 @@ class Field_Registry {
 		}
 
 		if ( empty( $ids ) ) {
-			// No definitions available (the metadata classes have not loaded).
+			// No definitions at all (the metadata classes have not loaded).
 			// Storing an empty selection here would read as "push nothing", so
 			// leave both options untouched and retry on the next read.
 			return;
 		}
 
 		\update_option( $option, $ids, false );
-		\delete_option( self::RETIRED_ORIGIN_OPTION );
+		self::retire_origin_marker();
 	}
 
 	/**
-	 * Every available definition belonging to a schema version, plus the
-	 * version-neutral ones.
+	 * Every definition belonging to a schema version, plus the version-neutral
+	 * ones.
 	 *
-	 * Reproduces what the pre-seeding default selection resolved to: the
-	 * origin-scoped field list (available classes only), each display name
-	 * resolved to its same-version definitions, with version-neutral fields
-	 * picked up through the any-version fallback.
+	 * Availability is deliberately NOT filtered. The stored snapshot is
+	 * permanent, but availability is a runtime property of the moment seeding
+	 * happens: a fresh install seeds before WooCommerce Subscriptions is
+	 * installed or the content gates are switched on, so filtering here would
+	 * bar those fields from ever syncing, with nothing to un-bar them.
+	 * Storing an unavailable id is inert — Metadata::get_contact_with_metadata()
+	 * skips any class whose is_available() is false, so the field simply
+	 * produces no value until its class lights up, and then starts working.
 	 *
 	 * @param string $version Schema version.
 	 *
@@ -605,14 +637,44 @@ class Field_Registry {
 	private static function get_version_default_field_ids( $version ) {
 		$ids = [];
 		foreach ( self::get_definitions() as $id => $definition ) {
-			if ( empty( $definition['available'] ) ) {
-				continue;
-			}
 			if ( $definition['version'] === $version || self::VERSION_NEUTRAL === $definition['version'] ) {
 				$ids[] = $id;
 			}
 		}
 		return $ids;
+	}
+
+	/**
+	 * Drop the retired schema-origin marker.
+	 *
+	 * Idempotent, and safe to call from any path that has settled the question
+	 * the marker existed to answer — including the ESP's own short-circuits,
+	 * which reach a stored selection without going through the seeder at all.
+	 * Leaving it behind would strand dead state on every upgraded site.
+	 *
+	 * @return void
+	 */
+	public static function retire_origin_marker() {
+		\delete_option( self::RETIRED_ORIGIN_OPTION );
+	}
+
+	/**
+	 * The schema version a derived — never persisted — default selection
+	 * resolves against.
+	 *
+	 * Not a reinstatement of the origin marker: nothing is stored, no
+	 * confidence is required, and a wrong answer costs one request rather than
+	 * the site's future. It exists because the alternative for an unseeded site
+	 * is resolving names against the merged registry, which yields both
+	 * schemas' field names — and a configured non-ESP push integration
+	 * inheriting from an unconfigured ESP would put them in front of a real
+	 * provider. Scoping the derivation restores the pre-coexistence behavior
+	 * for exactly that window.
+	 *
+	 * @return string 'v1' or 'v2'.
+	 */
+	public static function get_derivation_schema_version() {
+		return self::detect_retired_schema_version()['version'];
 	}
 
 	/**
@@ -636,9 +698,15 @@ class Field_Registry {
 	 * @return array{version: string, confident: bool}
 	 */
 	private static function detect_retired_schema_version() {
-		$recorded = \get_option( self::RETIRED_ORIGIN_OPTION );
+		$recorded = \get_option( self::RETIRED_ORIGIN_OPTION, null );
 		if ( in_array( $recorded, [ self::VERSION_V1, self::VERSION_V2 ], true ) ) {
 			return self::certain( $recorded );
+		}
+		if ( null !== $recorded ) {
+			// Stored but meaningless. It can never decide anything, so retire it
+			// on sight rather than leaving it to be re-read by every later
+			// attempt on a site seeding declines to seed.
+			\delete_option( self::RETIRED_ORIGIN_OPTION );
 		}
 
 		$flag_version = null;
