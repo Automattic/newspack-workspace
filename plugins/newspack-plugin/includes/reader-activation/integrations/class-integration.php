@@ -57,6 +57,16 @@ abstract class Integration {
 	const OUTGOING_FIELDS_OPTION_PREFIX = 'newspack_integration_outgoing_fields_';
 
 	/**
+	 * Id of the built-in ESP integration, whose outgoing selection every other
+	 * integration inherits until it saves one of its own (NPPD-2107). Named
+	 * here rather than referencing Integrations\ESP so the base class does not
+	 * depend on one of its own subclasses.
+	 *
+	 * @var string
+	 */
+	const ESP_INTEGRATION_ID = 'esp';
+
+	/**
 	 * Option name prefix for storing all integration settings.
 	 *
 	 * @var string
@@ -69,6 +79,16 @@ abstract class Integration {
 	 * @var string
 	 */
 	const METADATA_PREFIX_OPTION_PREFIX = 'newspack_integration_metadata_prefix_';
+
+	/**
+	 * WP_Error code pull_contact_data() should return when the provider has no
+	 * contact for the reader. Not a failure: no re-run can make an absent
+	 * contact appear, so batch drivers count these readers as skipped rather
+	 * than errored.
+	 *
+	 * @var string
+	 */
+	const CONTACT_NOT_FOUND_ERROR_CODE = 'ras_contact_not_found';
 
 	/**
 	 * The unique identifier for this integration.
@@ -834,19 +854,22 @@ abstract class Integration {
 	 * fails to resolve, so migration can retry (and succeed) on a later
 	 * read instead of permanently losing that entry from the option.
 	 *
+	 * An integration that never saved a selection inherits one — see
+	 * get_inherited_outgoing_field_ids(). An explicitly saved selection
+	 * always wins, including an empty one (NPPD-2107).
+	 *
 	 * @return string[] List of enabled field ids.
 	 */
 	public function get_enabled_outgoing_field_ids() {
 		$stored = \get_option( self::OUTGOING_FIELDS_OPTION_PREFIX . $this->id, false );
-		if ( false === $stored ) {
-			// Never configured: match the pre-coexistence behavior, where an
-			// integration without a stored selection received the full
-			// prefixed payload from the legacy passthrough — default to every
-			// available field. A stored empty selection (the admin deselected
-			// everything) still means none.
-			return $this->get_default_outgoing_field_ids();
+		if ( ! is_array( $stored ) ) {
+			// Never configured (option absent), or a corrupt non-array value:
+			// inherit rather than fail closed to an empty selection, which
+			// would silently stop syncing every field. A stored empty array
+			// (the admin deselected everything) still means none.
+			return $this->get_inherited_outgoing_field_ids();
 		}
-		if ( empty( $stored ) || ! is_array( $stored ) ) {
+		if ( empty( $stored ) ) {
 			return [];
 		}
 
@@ -942,6 +965,53 @@ abstract class Integration {
 	}
 
 	/**
+	 * The selection this integration inherits when it has never saved one of
+	 * its own.
+	 *
+	 * Every integration other than the ESP inherits the ESP integration's
+	 * effective selection, so a newly registered integration pushes exactly
+	 * what the site already pushes rather than everything available — the
+	 * NPPD-2107 bug, where an ESP narrowed to Account-only still saw
+	 * ActiveCampaign push `NP_Total Paid`. The ESP itself has nothing above
+	 * it to inherit from, so it keeps the dynamic all-defaults fallback that
+	 * matches the pre-selection passthrough.
+	 *
+	 * Override to inherit something else, or return an empty array to opt out
+	 * of inheritance entirely (an integration that does so pushes no metadata
+	 * until an Outbound selection is saved).
+	 *
+	 * @return string[] List of inherited field ids.
+	 */
+	protected function get_inherited_outgoing_field_ids() {
+		if ( self::ESP_INTEGRATION_ID === $this->get_id() ) {
+			return $this->get_default_outgoing_field_ids();
+		}
+
+		$esp = Integrations::get_integration( self::ESP_INTEGRATION_ID );
+		if ( $esp instanceof self && $esp !== $this ) {
+			return $esp->get_enabled_outgoing_field_ids();
+		}
+
+		// Registry miss (pre-init, or a directly constructed integration —
+		// integrations register on init priority 5). Mirror the ESP's own
+		// fallback chain: the legacy global option, then the full default set,
+		// rather than failing closed to an empty selection.
+		$legacy = \get_option( Sync\Metadata::FIELDS_OPTION, null );
+		if ( is_array( $legacy ) ) {
+			$origin = Sync\Field_Registry::get_schema_origin();
+			$ids    = [];
+			foreach ( $legacy as $name ) {
+				foreach ( Sync\Field_Registry::resolve_name( (string) $name, $origin ) as $definition ) {
+					$ids[] = $definition['id'];
+				}
+			}
+			return array_values( array_unique( $ids ) );
+		}
+
+		return $this->get_default_outgoing_field_ids();
+	}
+
+	/**
 	 * Get the enabled outgoing metadata fields for this integration.
 	 *
 	 * Back-compat surface: returns display names derived from the stored
@@ -951,6 +1021,10 @@ abstract class Integration {
 	 * names against the site's origin — so a non-origin selection saved
 	 * through this surface would be rewritten to the origin's ids. The
 	 * per-field UI (Phase 2) must post ids, not names.
+	 *
+	 * The never-configured fallback (inheriting the ESP integration's
+	 * effective selection) lives in get_enabled_outgoing_field_ids(), so the
+	 * Outbound UI reflects what is actually pushed (NPPD-2107).
 	 *
 	 * @return string[] List of enabled field names.
 	 */
@@ -1286,6 +1360,11 @@ abstract class Integration {
 	 * name (the raw UTM expansion must not overwrite a supplied
 	 * `NP_Signup UTM: source`).
 	 *
+	 * Filtering is unconditional and per-integration, including for `esp`:
+	 * there is no upstream pre-filter to defer to any more, so an explicitly
+	 * saved empty Outbound selection means no metadata fields, not all of
+	 * them (NPPD-2107).
+	 *
 	 * @param array $contact Contact data with raw metadata keys.
 	 * @return array Contact data with filtered, prefixed metadata.
 	 */
@@ -1295,7 +1374,7 @@ abstract class Integration {
 		}
 
 		$prefix      = $this->get_metadata_prefix();
-		$passthrough = [ 'status', 'status_if_new' ];
+		$passthrough = Sync\Metadata::SYNC_CONTROL_KEYS;
 		$by_raw      = [];
 		$by_name     = [];
 		$dynamic     = [];

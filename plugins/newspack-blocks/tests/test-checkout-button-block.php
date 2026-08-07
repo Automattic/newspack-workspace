@@ -5,12 +5,35 @@
  * @package Newspack_Blocks
  */
 
+require_once __DIR__ . '/class-newspack-donations-stub.php';
 require_once dirname( __DIR__ ) . '/src/blocks/checkout-button/view.php';
 
 /**
  * Checkout Button Block.
  */
 class CheckoutButtonBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
+
+	/**
+	 * Reset the Donations stub between tests.
+	 */
+	public function set_up() {
+		parent::set_up();
+		\Newspack\Donations::$stub_donation_product_ids = [];
+		\Newspack\Donations::$stub_calls                = [];
+	}
+
+	/**
+	 * Register the donation REST field and return its registered definition.
+	 *
+	 * Only reads the REST registry — registering twice overwrites the same key,
+	 * so there is nothing to reset and no global left mutated for other tests.
+	 *
+	 * @return array The field definition.
+	 */
+	private function register_donation_field() {
+		\Newspack_Blocks\Checkout_Button\register_donation_rest_field();
+		return $GLOBALS['wp_rest_additional_fields']['product']['newspack_is_donation'] ?? [];
+	}
 
 	/**
 	 * Render the block with the given attributes merged into a minimal valid set.
@@ -174,5 +197,34 @@ class CheckoutButtonBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	public function test_empty_coupon_attribute_emits_no_field() {
 		$output = $this->render( [ 'coupon' => '' ] );
 		$this->assertStringNotContainsString( 'name="coupon"', $output );
+	}
+
+	/**
+	 * The field must be registered under the 'product' object type.
+	 *
+	 * That string is what WooCommerce's products controller resolves to, since
+	 * its schema title is the post type. If it ever stopped matching, the editor
+	 * would silently never learn a product is a donation.
+	 */
+	public function test_donation_rest_field_registers_on_the_product_object_type() {
+		$field = $this->register_donation_field();
+
+		$this->assertNotEmpty( $field, 'newspack_is_donation should be registered for the "product" object type.' );
+		$this->assertArrayHasKey( 'get_callback', $field );
+		$this->assertSame( 'boolean', $field['schema']['type'] );
+		$this->assertTrue( $field['schema']['readonly'] );
+		$this->assertContains( 'view', $field['schema']['context'], 'The editor fetches without a context param, so it receives "view".' );
+	}
+
+	/**
+	 * The field must delegate to Donations::is_donation_product() and cast to bool.
+	 */
+	public function test_donation_rest_field_delegates_to_donations() {
+		$field = $this->register_donation_field();
+		\Newspack\Donations::$stub_donation_product_ids = [ 42 ];
+
+		$this->assertTrue( $field['get_callback']( [ 'id' => 42 ] ) );
+		$this->assertFalse( $field['get_callback']( [ 'id' => 7 ] ) );
+		$this->assertSame( [ 42, 7 ], \Newspack\Donations::$stub_calls );
 	}
 }

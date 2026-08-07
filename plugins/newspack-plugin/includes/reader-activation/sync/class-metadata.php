@@ -31,6 +31,35 @@ class Metadata {
 	const FIELDS_OPTION = '_newspack_metadata_fields';
 
 	/**
+	 * Metadata keys that carry sync-control semantics rather than field data.
+	 * They pass through syncing unprefixed and are never subject to outbound
+	 * field selection.
+	 *
+	 * Re-homed here from the retired Legacy_Metadata class; the surviving
+	 * consumer is Integration::prepare_contact(), whose passthrough list this
+	 * is.
+	 *
+	 * @var string[]
+	 */
+	const SYNC_CONTROL_KEYS = [ 'status', 'status_if_new' ];
+
+	/**
+	 * Raw keys whose fields are emitted as a family of suffixed sub-keys
+	 * (`<raw_key>_source`, `<raw_key>_medium`, …) rather than a single key.
+	 * Only these keys get suffix-match semantics; every other field matches
+	 * exactly, so a label that happens to prefix another can never carry that
+	 * other field past the selection.
+	 *
+	 * Re-homed here from the retired Legacy_Metadata class. The registry
+	 * marks the same fields with `dynamic_suffix`, which is what
+	 * Integration::prepare_contact() matches on; this constant is the raw-key
+	 * form the pre-registry helpers (get_utm_key()) still work in.
+	 *
+	 * @var string[]
+	 */
+	const UTM_RAW_KEYS = [ 'signup_page_utm', 'payment_page_utm' ];
+
+	/**
 	 * Get the metadata classes to be used for syncing contact metadata to the ESP.
 	 *
 	 * All schema versions' classes are always registered; per-integration
@@ -136,6 +165,11 @@ class Metadata {
 	 * This method is deprecated. Now, each integration has its own metadata prefix, which can be retrieved with Integration::get_metadata_prefix().
 	 * As a fallback, this method returns the metadata prefix for the ESP Integration.
 	 *
+	 * It resolves more than the per-integration accessor does — the
+	 * `newspack_ras_metadata_prefix` filter and the pre-init PREFIX_OPTION
+	 * fallback — so a caller that needs the site-wide prefix rather than one
+	 * integration's must keep using this.
+	 *
 	 * @deprecated Use Integration::get_metadata_prefix() instead.
 	 *
 	 * @return string
@@ -210,7 +244,7 @@ class Metadata {
 	 * @return string|false
 	 */
 	public static function get_utm_key( $key ) {
-		$utm_keys = [ 'signup_page_utm', 'payment_page_utm' ];
+		$utm_keys = self::UTM_RAW_KEYS;
 		$raw_keys = self::get_raw_keys();
 		foreach ( $utm_keys as $utm_key ) {
 			if ( ! in_array( $utm_key, $raw_keys, true ) ) {
@@ -234,12 +268,33 @@ class Metadata {
 	 * This method is deprecated. Now, each integration has its own set of enabled fields, which can be retrieved with Integration::get_enabled_outgoing_fields().
 	 * As a fallback, this method returns the fields enabled for the ESP Integration.
 	 *
+	 * This is the name-space view of "the ESP's effective selection" — the set
+	 * every other integration inherits until it saves one of its own
+	 * (NPPD-2107). The inheritance itself works in id space and lives in
+	 * Integration::get_inherited_outgoing_field_ids(); the registry-miss chain
+	 * below mirrors it, minus Esp::get_enabled_outgoing_fields()'s
+	 * lazy-migration write, which stays on the ESP integration itself.
+	 *
 	 * @deprecated Use Integration::get_enabled_outgoing_fields() instead.
 	 * @return string[] List of fields to be synced.
 	 */
 	public static function get_fields() {
 		$esp_integration = Integrations::get_integration( 'esp' );
-		return $esp_integration ? $esp_integration->get_enabled_outgoing_fields() : [];
+		if ( $esp_integration ) {
+			return $esp_integration->get_enabled_outgoing_fields();
+		}
+
+		// Registry miss (pre-init, or a directly constructed integration —
+		// integrations register on init priority 5). Fall back to the legacy
+		// global option and then the full default set, rather than failing
+		// closed to an empty selection, which would strip every field where the
+		// pre-selection behavior was full passthrough.
+		$legacy = \get_option( self::FIELDS_OPTION, null );
+		if ( null !== $legacy && is_array( $legacy ) ) {
+			return array_values( $legacy );
+		}
+
+		return self::get_default_fields();
 	}
 
 	/**

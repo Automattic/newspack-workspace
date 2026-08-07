@@ -304,12 +304,14 @@ class Test_Account_Deletion extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * When handling='flag', the dispatcher must push the contact with an
-	 * `Account_Deleted` datetime in metadata and not call delete_contact.
+	 * When handling='flag', the dispatcher must push the contact with a
+	 * prefixed `Account_Deleted` datetime in metadata and not call
+	 * delete_contact.
 	 *
 	 * Because prepare_contact() drops the raw `account_deleted` key (it is not
 	 * a registered outgoing field), the dispatcher re-injects the signal under
-	 * the integration's prefix afterwards.
+	 * the integration's prefix afterwards. That prefixed key is the durable
+	 * ESP-side contract.
 	 */
 	public function test_handle_account_deletion_calls_push_with_timestamp_when_handling_flag() {
 		$this->reset_integrations();
@@ -333,8 +335,12 @@ class Test_Account_Deletion extends \WP_UnitTestCase {
 
 		$pushed = $spy->push_calls[0]['contact'];
 		$this->assertSame( 'reader@example.com', $pushed['email'] );
-		$prefix       = $spy->get_metadata_prefix();
-		$deleted_key  = $prefix . 'Account_Deleted';
+		// The raw `account_deleted` flag is dropped by prepare_contact() like any
+		// other non-selected metadata (only sync-control keys pass unprefixed);
+		// the dispatcher re-injects the signal under the prefixed key.
+		$prefix      = $spy->get_metadata_prefix();
+		$deleted_key = $prefix . 'Account_Deleted';
+		$this->assertArrayNotHasKey( 'account_deleted', $pushed['metadata'] );
 		$this->assertArrayHasKey( $deleted_key, $pushed['metadata'] );
 		$this->assertNotFalse(
 			strtotime( $pushed['metadata'][ $deleted_key ] ),

@@ -248,6 +248,44 @@ class Content_Gate {
 	}
 
 	/**
+	 * Whether gating actually enforces anything for readers right now.
+	 *
+	 * The predicate reader-facing enforcement asks, so that "gating is off" means
+	 * the same thing across the surfaces that share both conditions. Surfaces that
+	 * answer the question for themselves drift, which is what this exists to stop.
+	 *
+	 * ONE DELIBERATE EXCEPTION: {@see Block_Visibility::filter_render_block()} uses
+	 * `Reader_Activation::is_enabled()` alone, not this. Block visibility predates
+	 * the feature constant and is independent of it — the class registers
+	 * unconditionally, its editor panel loads without the constant, and in `custom`
+	 * mode a block needs no gate at all. ANDing the constant in there would unhide
+	 * blocks on sites that never enabled content gates. Don't "fix" it to call this
+	 * method; the asymmetry is the point.
+	 *
+	 * Two conditions, either of which stands gating down:
+	 *
+	 * - The feature constant. Access Control is only on where someone put it.
+	 * - Audience Management (NPPD-1846). Everything a gate hands the reader off
+	 *   to — registration, magic-link sign-in, account emails, session
+	 *   hydration, My Account — is gated on it, so a gate enforced without it
+	 *   locks readers out with no way in. Gates stay configured and go inert
+	 *   instead, which is what lets Audience Management be switched off without
+	 *   stranding a live restriction nobody can reach the screens to lift.
+	 *
+	 * Deliberately NOT the predicate for admin surfaces. The Access Control
+	 * screens stay registered on {@see self::is_newspack_feature_enabled()}
+	 * alone, so the dependency is explained rather than hidden: a publisher
+	 * whose gates are inert can still open the screen and read why. When the
+	 * feature constant retires, the two converge on the reader side and the
+	 * admin side keeps its own predicate.
+	 *
+	 * @return bool
+	 */
+	public static function is_gating_active(): bool {
+		return self::is_newspack_feature_enabled() && Reader_Activation::is_enabled();
+	}
+
+	/**
 	 * Restrict the post.
 	 *
 	 * @param \WP_Post  $post Post object.
@@ -633,7 +671,16 @@ class Content_Gate {
 			if ( is_singular() && self::has_gate() && self::is_post_restricted() && Metering::is_frontend_metering() ) {
 				$asset['dependencies'][] = 'newspack-content-gate-metering';
 			}
-			wp_enqueue_script( 'newspack-content-banner', Newspack::plugin_url() . '/dist/content-banner.js', $asset['dependencies'], Newspack::asset_version( 'content-banner' ), true );
+			wp_enqueue_script(
+				'newspack-content-banner',
+				Newspack::plugin_url() . '/dist/content-banner.js',
+				$asset['dependencies'],
+				Newspack::asset_version( 'content-banner' ),
+				[
+					'in_footer' => true,
+					'strategy'  => 'defer',
+				]
+			);
 			wp_enqueue_style( 'newspack-content-banner', Newspack::plugin_url() . '/dist/content-banner.css', [], Newspack::asset_version( 'content-banner' ) );
 		}
 	}
@@ -646,7 +693,12 @@ class Content_Gate {
 		// with the flag off the exempt key is absent from the REST schema, so the panel
 		// must not render a toggle that could not persist. In practice get_gates() is
 		// already empty when the flag is off, but gating both on the flag keeps them aligned.
-		if ( ! self::is_newspack_feature_enabled() ) {
+		// Gating rather than the flag alone: with Audience Management off no gate
+		// applies to any reader, so this panel would name gates that are doing nothing
+		// and offer an exemption toggle that suppresses nothing. Mirrors the block
+		// visibility panel. The exempt post meta stays registered either way, so a
+		// post's exemption survives the toggle exactly as block attributes do.
+		if ( ! self::is_gating_active() ) {
 			return;
 		}
 		if ( ! in_array( get_post_type(), array_column( Content_Restriction_Control::get_available_post_types(), 'value' ), true ) ) {

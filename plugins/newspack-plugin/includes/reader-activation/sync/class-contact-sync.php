@@ -196,7 +196,9 @@ class Contact_Sync extends Sync {
 	 * @param array  $options          Optional. Sync options threaded to the integration push:
 	 *                                 `skip_lists` (bool) and `fields` (string[]|null). These apply
 	 *                                 only to the direct push path below — not the queued Data Events
-	 *                                 branch, which never runs under WP-CLI.
+	 *                                 branch, which never runs under WP-CLI. `integration_id`
+	 *                                 (string|null) restricts the push fan-out to a single active
+	 *                                 integration.
 	 *
 	 * @return true|\WP_Error True if succeeded or WP_Error.
 	 */
@@ -321,6 +323,8 @@ class Contact_Sync extends Sync {
 	 *                                 full contact and would push it with the master list,
 	 *                                 undoing the list-less/field-scoped intent. Operators
 	 *                                 re-run the affected `--offset` window instead.
+	 *                                 `integration_id` (string|null) restricts the fan-out to
+	 *                                 that integration; retries for it are scheduled normally.
 	 *
 	 * @return true|\WP_Error True if all succeeded, or WP_Error with combined messages.
 	 */
@@ -333,7 +337,10 @@ class Contact_Sync extends Sync {
 		 */
 		$contact = \apply_filters( 'newspack_esp_sync_contact', $contact, $context );
 		$integrations = Integrations::get_active_configured_integrations();
-		$errors       = [];
+		if ( ! empty( $options['integration_id'] ) ) {
+			$integrations = array_intersect_key( $integrations, [ $options['integration_id'] => true ] );
+		}
+		$errors = [];
 
 		// Resolve user ID for retry scheduling.
 		$user    = ! empty( $contact['email'] ) ? \get_user_by( 'email', $contact['email'] ) : false;
@@ -1487,6 +1494,8 @@ class Contact_Sync extends Sync {
 	 *                                        `fields` (string[]|null, canonical labels). `fields`
 	 *                                        restricts both what metadata is computed and what is
 	 *                                        pushed; `skip_lists` upserts without a master list.
+	 *                                        `integration_id` (string|null) restricts the push
+	 *                                        fan-out to a single active integration.
 	 *
 	 * @return true|\WP_Error True if the contact was synced successfully, WP_Error otherwise.
 	 */
@@ -1543,8 +1552,12 @@ class Contact_Sync extends Sync {
 		// publisher filter contributes.
 		/** This filter is documented in includes/reader-activation/sync/class-contact-sync.php. */
 		$contact    = \apply_filters( 'newspack_esp_sync_contact', $contact, $context );
-		$skip_lists = ! empty( $options['skip_lists'] );
-		foreach ( Integrations::get_active_configured_integrations() as $integration_id => $integration ) {
+		$skip_lists   = ! empty( $options['skip_lists'] );
+		$integrations = Integrations::get_active_configured_integrations();
+		if ( ! empty( $options['integration_id'] ) ) {
+			$integrations = array_intersect_key( $integrations, [ $options['integration_id'] => true ] );
+		}
+		foreach ( $integrations as $integration_id => $integration ) {
 			// The real push path skips integrations without an (enabled) push, so
 			// report the skip rather than a payload the run would never send —
 			// a preview that disagrees with the run defeats the point of --dry-run.
@@ -1558,6 +1571,7 @@ class Contact_Sync extends Sync {
 				);
 				continue;
 			}
+
 
 			$prepared = self::prepare_contact_for_integration( $integration, $contact, $options );
 			$metadata = $prepared['metadata'] ?? [];

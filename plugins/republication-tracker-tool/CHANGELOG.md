@@ -1,3 +1,16 @@
+## republication-tracker-tool [2.8.4](https://github.com/Automattic/newspack-workspace/compare/republication-tracker-tool@2.8.3...republication-tracker-tool@2.8.4) (2026-08-03)
+
+
+### Bug Fixes
+
+* add project-level .eslintrc.js to align lint setup ([#340](https://github.com/Automattic/newspack-workspace/issues/340)) ([9d05641](https://github.com/Automattic/newspack-workspace/commit/9d056414fe9ec3b9bf9885203ff423b9d884d002))
+* **republication-tracker-tool:** load block from shipped paths ([#720](https://github.com/Automattic/newspack-workspace/issues/720)) ([d850db8](https://github.com/Automattic/newspack-workspace/commit/d850db86de5d43aae9e1e04e450b19ec656f71c5))
+
+
+### Dependencies
+
+* **newspack-scripts:** upgraded to 5.10.0
+
 ## republication-tracker-tool [2.8.3](https://github.com/Automattic/newspack-workspace/compare/republication-tracker-tool@2.8.2...republication-tracker-tool@2.8.3) (2026-06-01)
 
 
