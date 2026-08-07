@@ -4,6 +4,7 @@
  */
 import apiFetch from '@wordpress/api-fetch';
 import { __, sprintf } from '@wordpress/i18n';
+import { dateI18n } from '@wordpress/date';
 import { addQueryArgs } from '@wordpress/url';
 import { applyFilters, addFilter } from '@wordpress/hooks';
 import { useEffect, useState, Fragment } from '@wordpress/element';
@@ -201,6 +202,37 @@ export const segmentDescription = segment => {
 				</Fragment>
 			) ) }
 		</Fragment>
+	);
+};
+
+/**
+ * One-line reach summary for a segment row, from the GA4 numbers the segments
+ * endpoint attaches (GA4_Segment_Reach::decorate_segments).
+ *
+ * `matched` counts sessions where the reader satisfied the segment's criteria;
+ * `won` counts the subset where the segment won the priority match, which is
+ * the audience its prompts can actually reach.
+ *
+ * @param {Object} segment Segment, possibly carrying a `reach` object.
+ * @return {string|null} The line, or null when reach reporting is inactive.
+ */
+export const segmentReachDescription = segment => {
+	const reach = segment?.reach;
+	if ( ! reach ) {
+		return null;
+	}
+	// Null numbers mean the cache exists but this segment has no rows yet — a
+	// young segment, no traffic, or GA thresholding. All honestly "no data
+	// yet"; rendering 0 would overclaim.
+	if ( null === reach.matched || undefined === reach.matched ) {
+		return __( 'No reach data yet', 'newspack-plugin' );
+	}
+	return sprintf(
+		// Translators: %1$s: sessions count. %2$s: prompt-audience sessions count. %3$s: date of the data.
+		__( 'Reach (7d): %1$s sessions · prompt audience: %2$s · as of %3$s', 'newspack-plugin' ),
+		Number( reach.matched ).toLocaleString(),
+		Number( reach.won ).toLocaleString(),
+		dateI18n( 'M j', reach.as_of )
 	);
 };
 
