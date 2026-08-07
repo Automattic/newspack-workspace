@@ -26,13 +26,13 @@ class Auth {
 	const STATE_TRANSIENT_PREFIX = 'newspack_nextdoor_oauth_state_';
 
 	/**
-	 * When Nextdoor last refused the stored grant.
+	 * The grant Nextdoor refused, as a map of settings key to hashed credential.
 	 *
 	 * Its own option rather than a settings key: the request that records a refusal is by
 	 * definition racing one that may be renewing the token, and writing the whole settings
 	 * array would put a stale snapshot of the credentials back over the winner's.
 	 */
-	const REFUSAL_OPTION = 'newspack_nextdoor_token_refused_at';
+	const REFUSAL_OPTION = 'newspack_nextdoor_refused_grant';
 
 	/**
 	 * Initialise.
@@ -387,14 +387,19 @@ class Auth {
 	 * Persisted rather than answered per request, so the card the publisher is sent to
 	 * reports the same thing the request that discovered it did.
 	 *
-	 * @param array $expected Settings values the refusal was about, checked against what
+	 * @param array $expected Settings values the refusal was about, and what the record is
+	 *                        keyed on, so it is required. Checked against what
 	 *                        is stored now. A request whose token has since been rotated
 	 *                        away by a concurrent refresh or sign-in records nothing: its
 	 *                        answer is about a grant that no longer exists. Checked here
 	 *                        rather than by the caller so no window opens between the two.
 	 * @return void
 	 */
-	public static function record_token_refusal( $expected = [] ) {
+	public static function record_token_refusal( array $expected ) {
+		if ( empty( $expected ) ) {
+			return;
+		}
+
 		$settings = Nextdoor::get_settings();
 
 		foreach ( $expected as $key => $value ) {
