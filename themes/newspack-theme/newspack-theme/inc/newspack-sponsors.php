@@ -64,6 +64,124 @@ function newspack_get_all_sponsors( $id = null, $scope = null, $type = null, $lo
 }
 
 /**
+ * Get logo size presets for the sponsor footer bio.
+ *
+ * @return array Logo size presets.
+ */
+function newspack_sponsor_footer_bio_logo_size_presets() {
+	$presets = array(
+		'default' => array(
+			'maxwidth'  => 150,
+			'maxheight' => 100,
+			'size'      => 'medium',
+		),
+		'medium'  => array(
+			'maxwidth'  => 300,
+			'maxheight' => 300,
+			'size'      => 'large',
+		),
+		'large'   => array(
+			'maxwidth'  => 420,
+			'maxheight' => 420,
+			'size'      => 'large',
+		),
+		'xlarge'  => array(
+			'maxwidth'  => 640,
+			'maxheight' => 640,
+			'size'      => 'full',
+		),
+	);
+
+	return apply_filters(
+		'newspack_sponsor_footer_bio_logo_size_presets',
+		$presets
+	);
+}
+
+/**
+ * Get logo options for the sponsor footer bio.
+ *
+ * @param array $sponsor Sponsor object.
+ * @return array Logo options.
+ */
+function newspack_sponsor_footer_bio_logo_options( $sponsor = array() ) {
+	$presets = newspack_sponsor_footer_bio_logo_size_presets();
+	$size    = ! empty( $sponsor['sponsor_footer_bio_logo_size'] ) && is_string( $sponsor['sponsor_footer_bio_logo_size'] ) ? sanitize_key( $sponsor['sponsor_footer_bio_logo_size'] ) : 'default';
+
+	if ( ! isset( $presets['default'] ) ) {
+		$presets['default'] = array(
+			'maxwidth'  => 150,
+			'maxheight' => 100,
+			'size'      => 'medium',
+		);
+	}
+
+	if ( ! isset( $presets[ $size ] ) ) {
+		$size = 'default';
+	}
+
+	$options            = $presets[ $size ];
+	$options['display'] = $size;
+
+	return apply_filters( 'newspack_sponsor_footer_bio_logo_options', $options, $sponsor );
+}
+
+/**
+ * Check if a sponsor logo object has the data needed for rendering.
+ *
+ * @param array $logo Sponsor logo object.
+ * @return bool Whether the sponsor logo object can be rendered.
+ */
+function newspack_sponsor_footer_bio_has_valid_logo( $logo ) {
+	return is_array( $logo )
+		&& ! empty( $logo['src'] )
+		&& ! empty( $logo['img_width'] )
+		&& ! empty( $logo['img_height'] );
+}
+
+/**
+ * Get inline styles for the sponsor footer bio logo.
+ *
+ * @param array $logo_options Sponsor logo options.
+ * @return string Sponsor footer bio logo styles.
+ */
+function newspack_sponsor_footer_bio_logo_styles( $logo_options ) {
+	$maxwidth  = ! empty( $logo_options['maxwidth'] ) ? absint( $logo_options['maxwidth'] ) : 150;
+	$maxheight = ! empty( $logo_options['maxheight'] ) ? absint( $logo_options['maxheight'] ) : 100;
+
+	return sprintf(
+		'--newspack-theme-sponsor-footer-bio-logo-max-width:%1$dpx;--newspack-theme-sponsor-footer-bio-logo-max-height:%2$dpx;',
+		$maxwidth,
+		$maxheight
+	);
+}
+
+/**
+ * Get a sponsor object prepared for the footer bio.
+ *
+ * @param array $sponsor Sponsor object.
+ * @return array Sponsor object with footer bio logo data.
+ */
+function newspack_sponsor_footer_bio_prepare_sponsor( $sponsor ) {
+	$logo_options = newspack_sponsor_footer_bio_logo_options( $sponsor );
+	$display      = is_array( $logo_options ) && isset( $logo_options['display'] ) ? $logo_options['display'] : 'default';
+	$has_logo     = ! empty( $sponsor['sponsor_logo'] ) && newspack_sponsor_footer_bio_has_valid_logo( $sponsor['sponsor_logo'] );
+
+	if ( ! empty( $sponsor['sponsor_id'] ) && function_exists( '\Newspack_Sponsors\get_logo_info' ) && ( ! $has_logo || 'default' !== $display ) ) {
+		$logo = \Newspack_Sponsors\get_logo_info( $sponsor['sponsor_id'], $logo_options );
+
+		if ( newspack_sponsor_footer_bio_has_valid_logo( $logo ) ) {
+			$sponsor['sponsor_logo'] = $logo;
+		}
+	}
+
+	$sponsor['sponsor_footer_bio_logo_options'] = $logo_options;
+	$sponsor['sponsor_footer_bio_logo_styles']  = newspack_sponsor_footer_bio_logo_styles( $logo_options );
+
+	return $sponsor;
+}
+
+/**
  * Filters given sponsors for 'native' sponsors.
  *
  * @param array $sponsors Array of sponsors.
@@ -330,24 +448,37 @@ if ( ! function_exists( 'newspack_sponsor_footer_bio' ) ) :
 	 * such as Jetpack's Related Posts module.
 	 */
 	function newspack_sponsor_footer_bio( $sponsors = null, $id = null, $scope = 'native', $type = 'post' ) {
-		$sponsors = newspack_get_all_sponsors(
-			$id,
-			$scope,
-			$type,
-			array(
-				'maxwidth'  => 150,
-				'maxheight' => 100,
-			)
-		);
+		if ( null === $sponsors ) {
+			$sponsors = newspack_get_all_sponsors(
+				$id,
+				$scope,
+				$type,
+				newspack_sponsor_footer_bio_logo_options()
+			);
+		}
+
+		if ( ! empty( $sponsors ) && is_array( $sponsors ) ) {
+			$sponsors = array_map( 'newspack_sponsor_footer_bio_prepare_sponsor', $sponsors );
+		} else {
+			$sponsors = array();
+		}
+
 		add_filter(
 			'the_content',
 			function ( $content ) use ( $sponsors ) {
 				ob_start();
 				if ( ! empty( $sponsors ) ) {
 					foreach ( $sponsors as $sponsor ) {
+						$logo_options = ! empty( $sponsor['sponsor_footer_bio_logo_options'] ) ? $sponsor['sponsor_footer_bio_logo_options'] : array();
+						$bio_classes  = array( 'author-bio', 'sponsor-bio' );
+						$bio_styles   = ! empty( $sponsor['sponsor_footer_bio_logo_styles'] ) ? $sponsor['sponsor_footer_bio_logo_styles'] : newspack_sponsor_footer_bio_logo_styles( $logo_options );
+
+						if ( ! empty( $logo_options['display'] ) ) {
+							$bio_classes[] = 'sponsor-bio-logo-' . sanitize_html_class( $logo_options['display'] );
+						}
 						?>
 
-						<div class="author-bio sponsor-bio">
+						<div class="<?php echo esc_attr( implode( ' ', $bio_classes ) ); ?>" style="<?php echo esc_attr( $bio_styles ); ?>">
 
 							<?php
 							if ( ! empty( $sponsor['sponsor_logo'] ) ) {

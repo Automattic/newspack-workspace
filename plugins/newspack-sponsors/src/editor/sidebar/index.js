@@ -22,6 +22,7 @@ const SidebarComponent = props => {
 		newspack_sponsor_native_category_display,
 		newspack_sponsor_underwriter_style,
 		newspack_sponsor_underwriter_placement,
+		newspack_sponsor_footer_bio_logo_size,
 		newspack_sponsor_only_direct,
 		newspack_sponsor_disclaimer_override,
 	} = meta;
@@ -53,6 +54,12 @@ const SidebarComponent = props => {
 	const underwriterPlacementOptions = [
 		{ value: 'top', label: __( 'Top', 'newspack-sponsors' ) },
 		{ value: 'bottom', label: __( 'Bottom', 'newspack-sponsors' ) },
+	];
+	const footerBioLogoSizeOptions = [
+		{ value: 'default', label: __( 'Small (default)', 'newspack-sponsors' ) },
+		{ value: 'medium', label: __( 'Medium', 'newspack-sponsors' ) },
+		{ value: 'large', label: __( 'Large', 'newspack-sponsors' ) },
+		{ value: 'xlarge', label: __( 'Extra large', 'newspack-sponsors' ) },
 	];
 	if ( ! isSponsor ) {
 		const defaultOption = {
@@ -137,6 +144,17 @@ const SidebarComponent = props => {
 						type="url"
 						value={ newspack_sponsor_url }
 						onChange={ value => updateMetaValue( 'newspack_sponsor_url', value ) }
+					/>
+					<SelectControl
+						className="newspack-sponsors__select-control"
+						label={ __( 'Footer bio logo size', 'newspack-sponsors' ) }
+						value={ newspack_sponsor_footer_bio_logo_size || 'default' }
+						options={ footerBioLogoSizeOptions }
+						onChange={ value => updateMetaValue( 'newspack_sponsor_footer_bio_logo_size', value ) }
+						help={ __(
+							'Controls the logo size in the sponsor bio at the bottom of sponsored posts. Larger sizes stack the logo above the bio text on small screens; the extra large size always stacks it.',
+							'newspack-sponsors'
+						) }
 					/>
 					<TextControl
 						className="newspack-sponsors__text-control"

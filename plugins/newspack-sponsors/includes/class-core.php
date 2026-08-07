@@ -22,6 +22,7 @@ final class Core {
 
 	const NEWSPACK_SPONSORS_CPT = 'newspack_spnsrs_cpt';
 	const NEWSPACK_SPONSORS_TAX = 'newspack_spnsrs_tax';
+	const FOOTER_BIO_LOGO_SIZES = [ 'default', 'medium', 'large', 'xlarge' ];
 
 	/**
 	 * The single instance of the class.
@@ -114,6 +115,19 @@ final class Core {
 	 */
 	public static function is_sponsor() {
 		return self::NEWSPACK_SPONSORS_CPT === get_post_type();
+	}
+
+	/**
+	 * Sanitize footer bio logo size choices.
+	 *
+	 * @param string $value Footer bio logo size value.
+	 * @return string Sanitized footer bio logo size value.
+	 */
+	public static function sanitize_footer_bio_logo_size( $value ) {
+		$value         = is_string( $value ) ? sanitize_key( $value ) : 'default';
+		$allowed_sizes = self::FOOTER_BIO_LOGO_SIZES;
+
+		return in_array( $value, $allowed_sizes, true ) ? $value : 'default';
 	}
 
 	/**
@@ -213,6 +227,28 @@ final class Core {
 				'sanitize_callback' => 'sanitize_text_field',
 				'single'            => true,
 				'show_in_rest'      => true,
+				'auth_callback'     => function() {
+					return current_user_can( 'edit_posts' );
+				},
+			]
+		);
+		register_meta(
+			'post',
+			'newspack_sponsor_footer_bio_logo_size',
+			[
+				'object_subtype'    => self::NEWSPACK_SPONSORS_CPT,
+				'description'       => __( 'Display size for this sponsor’s footer bio logo.', 'newspack-sponsors' ),
+				'type'              => 'string',
+				'default'           => 'default',
+				'sanitize_callback' => [ __CLASS__, 'sanitize_footer_bio_logo_size' ],
+				'single'            => true,
+				'show_in_rest'      => [
+					'schema' => [
+						'type'    => 'string',
+						'enum'    => self::FOOTER_BIO_LOGO_SIZES,
+						'default' => 'default',
+					],
+				],
 				'auth_callback'     => function() {
 					return current_user_can( 'edit_posts' );
 				},

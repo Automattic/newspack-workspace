@@ -29,6 +29,7 @@ use WP_Error;
  * @param array       $logo_options Optional array of logo options. Valid options:
  *                                  maxwidth: max width of the logo image, in pixels.
  *                                  maxheight: max height of the logo image, in pixels.
+ *                                  size: WordPress image size to use for the logo source.
  *
  * @return array|bool Array of associated sponsors, or false if none.
  */
@@ -79,6 +80,7 @@ function site_has_sponsors() {
  * @param array       $logo_options Optional array of logo options. Valid options:
  *                                  maxwidth: max width of the logo image, in pixels.
  *                                  maxheight: max height of the logo image, in pixels.
+ *                                  size: WordPress image size to use for the logo source.
  * @return array|bool|WP_Error Array of sponsor objects associated with the
  *                             post, false if we can't find a post with given
  *                             $post_id or any sponsors for it, or WP_Error if
@@ -208,6 +210,7 @@ function get_sponsors_for_post( $post_id = null, $scope = null, $logo_options = 
  * @param array       $logo_options Optional array of logo options. Valid options:
  *                                  maxwidth: max width of the logo image, in pixels.
  *                                  maxheight: max height of the logo image, in pixels.
+ *                                  size: WordPress image size to use for the logo source.
  * @return array|bool|WP_Error Array of sponsor objects associated with the
  *                             term, false if we can't find a term with given
  *                             $term_id or any sponsors for it, or WP_Error if
@@ -421,6 +424,7 @@ function get_all_sponsored_terms() {
  * @param array  $logo_options Optional array of logo options. Valid options:
  *                             maxwidth: max width of the logo image, in pixels.
  *                             maxheight: max height of the logo image, in pixels.
+ *                             size: WordPress image size to use for the logo source.
  * @return array|bool Sponsor object, or false.
  */
 function convert_post_to_sponsor( $post, $type = 'direct', $logo_options = [] ) {
@@ -438,6 +442,7 @@ function convert_post_to_sponsor( $post, $type = 'direct', $logo_options = [] ) 
 	$sponsor_category_display      = get_post_meta( $post->ID, 'newspack_sponsor_native_category_display', true );
 	$sponsor_underwriter_style     = get_post_meta( $post->ID, 'newspack_sponsor_underwriter_style', true );
 	$sponsor_underwriter_placement = get_post_meta( $post->ID, 'newspack_sponsor_underwriter_placement', true );
+	$sponsor_footer_bio_logo_size  = get_post_meta( $post->ID, 'newspack_sponsor_footer_bio_logo_size', true );
 	$sponsor_disclaimer            = get_post_meta( $post->ID, 'newspack_sponsor_disclaimer_override', true );
 	$sponsor_logo                  = get_logo_info( $post->ID, $logo_options );
 
@@ -466,6 +471,8 @@ function convert_post_to_sponsor( $post, $type = 'direct', $logo_options = [] ) 
 		'sponsor_disclaimer' => $sponsor_disclaimer,
 	];
 
+	$sponsor['sponsor_footer_bio_logo_size'] = Core::sanitize_footer_bio_logo_size( $sponsor_footer_bio_logo_size );
+
 	if ( 'native' === $sponsor['sponsor_scope'] ) {
 		$sponsor['sponsor_byline_display']   = $sponsor_byline_display;
 		$sponsor['sponsor_category_display'] = $sponsor_category_display;
@@ -485,18 +492,27 @@ function convert_post_to_sponsor( $post, $type = 'direct', $logo_options = [] ) 
  * @param array $logo_options Optional array of logo options. Valid options:
  *                            maxwidth: max width of the logo image, in pixels.
  *                            maxheight: max height of the logo image, in pixels.
+ *                            size: WordPress image size to use for the logo source.
  */
 function get_logo_info( $sponsor_id, $logo_options = [] ) {
-	$sponsor_logo = wp_get_attachment_image_src( get_post_thumbnail_id( $sponsor_id ), 'medium' );
 	$logo_info    = [];
-	$maxwidth     = ! empty( $logo_options['maxwidth'] ) && is_numeric( $logo_options['maxwidth'] ) ? $logo_options['maxwidth'] : 130;
-	$maxheight    = ! empty( $logo_options['maxheight'] ) && is_numeric( $logo_options['maxheight'] ) ? $logo_options['maxheight'] : 45;
+	$maxwidth     = ! empty( $logo_options['maxwidth'] ) && is_numeric( $logo_options['maxwidth'] ) ? absint( $logo_options['maxwidth'] ) : 130;
+	$maxheight    = ! empty( $logo_options['maxheight'] ) && is_numeric( $logo_options['maxheight'] ) ? absint( $logo_options['maxheight'] ) : 45;
+	$size         = ! empty( $logo_options['size'] ) && is_string( $logo_options['size'] ) ? sanitize_key( $logo_options['size'] ) : 'medium';
+	$sponsor_logo = wp_get_attachment_image_src( get_post_thumbnail_id( $sponsor_id ), $size );
 
 	if ( ! empty( $sponsor_logo ) ) {
 		// Break out src, original width and original height.
 		$logo_info['src'] = $sponsor_logo[0];
 		$image_width      = $sponsor_logo[1];
 		$image_height     = $sponsor_logo[2];
+
+		if ( 0 >= $image_width || 0 >= $image_height ) {
+			$logo_info['img_width']  = $maxwidth;
+			$logo_info['img_height'] = $maxheight;
+
+			return $logo_info;
+		}
 
 		// Set the max-height, and width based off that to maintain aspect ratio.
 		$logo_info['img_height'] = $maxheight;
