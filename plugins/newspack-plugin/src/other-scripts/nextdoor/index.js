@@ -49,6 +49,9 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 	// Each status request takes a number, so a slow answer arriving after a newer one can
 	// be told apart and dropped rather than overwriting it.
 	const requestRef = useRef( 0 );
+	// Which post the panel is on now, readable from a call bound to an earlier render.
+	const postIdRef = useRef( postId );
+	postIdRef.current = postId;
 
 	// A successful action or retry replaces the control that was pressed, which would
 	// otherwise drop keyboard position to the top of the document. Only ever called for
@@ -67,6 +70,13 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 	 * Fetch Nextdoor status for the current post
 	 */
 	const fetchStatus = async () => {
+		// `callApi()` signs off with a refresh, and that binding belongs to the render the
+		// action was fired in. Once the editor has moved on, it describes the previous post,
+		// and taking a number would make its answer the current one.
+		if ( postId !== postIdRef.current ) {
+			return;
+		}
+
 		const request = ++requestRef.current;
 		const isCurrent = () => request === requestRef.current;
 
@@ -189,9 +199,12 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 	useEffect( () => {
 		if ( postId ) {
 			// The answer on screen describes the previous post, and the actions below it
-			// already target the new one, so it goes before the request does.
+			// already target the new one, so it goes before the request does. The notices
+			// go with it: an outcome reported for one post is not news about another.
 			setNextdoorStatus( null );
 			setHasLoaded( false );
+			setSuccess( null );
+			setError( null );
 			fetchStatus();
 		}
 	}, [ postId ] );
