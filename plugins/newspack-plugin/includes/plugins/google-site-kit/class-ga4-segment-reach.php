@@ -4,9 +4,16 @@
  * Campaigns segments list.
  *
  * Reads back the events newspack-popups sends (np_segment_matched /
- * np_segment_won, one per segment per GA4 session), so `eventCount` is the
- * "sessions matching segment" figure directly. One runReport a day covers
- * every segment.
+ * np_segment_won). The report asks for `sessions` rather than `eventCount`:
+ * the client aims for one event per segment per session but cannot guarantee
+ * it — np_segment_won fires again when a session's priority winner changes,
+ * and a reader whose localStorage is unwritable dispatches on every pageview —
+ * so counting events would overstate both figures. GA4 deduplicates sessions
+ * itself.
+ *
+ * One runReport a day covers every segment, and its TOTAL aggregation carries
+ * the denominator: the deduplicated count of sessions where segmentation ran,
+ * which the list reads each segment's share against.
  *
  * @package Newspack
  */
@@ -203,25 +210,41 @@ final class GA4_Segment_Reach {
 		// off; cleared on success so a property switch minutes later gets its
 		// immediate fetch rather than waiting out the hour.
 		set_transient( self::LAST_ATTEMPT_TRANSIENT, time(), HOUR_IN_SECONDS );
-		$request  = [
-			'dateRanges'      => [
+		$request = [
+			'dateRanges'         => [
 				[
 					'startDate' => self::RANGE_DAYS . 'daysAgo',
 					'endDate'   => 'yesterday',
 				],
 			],
-			'dimensions'      => [
+			'dimensions'         => [
 				[ 'name' => 'customEvent:segment_id' ],
 				[ 'name' => 'eventName' ],
 			],
-			'metrics'         => [ [ 'name' => 'eventCount' ] ],
-			'dimensionFilter' => [
+			// `sessions`, not `eventCount`. The events are deduplicated per
+			// session by the client, but only on a best effort: a reader whose
+			// localStorage is unwritable falls back to dispatching on every
+			// pageview, and np_segment_won fires once per *segment* per session,
+			// so a session whose priority winner changes — a reader registering
+			// mid-session, say — emits more than one. Counting events would
+			// inflate both figures by however much of that happens. GA4
+			// deduplicates `sessions` itself, so the numbers mean what the UI
+			// says they mean regardless of dispatch volume.
+			'metrics'            => [ [ 'name' => 'sessions' ] ],
+			// `sessions` is non-additive, so GA4 computes this total over the
+			// underlying data rather than summing the rows — the deduplicated
+			// count of sessions touched by either event. Every session where
+			// segmentation ran emits at least one np_segment_matched (a real
+			// segment, or `none`), which makes this the denominator: the
+			// audience Campaigns could actually see and classify.
+			'metricAggregations' => [ 'TOTAL' ],
+			'dimensionFilter'    => [
 				'filter' => [
 					'fieldName'    => 'eventName',
 					'inListFilter' => [ 'values' => [ 'np_segment_matched', 'np_segment_won' ] ],
 				],
 			],
-			'limit'           => '10000',
+			'limit'              => '10000',
 		];
 		$response = GA4_Client::with_admin_client(
 			function ( $client, $source ) use ( $property_id, $request ) {
@@ -274,16 +297,35 @@ final class GA4_Segment_Reach {
 		update_option(
 			self::OPTION,
 			[
-				'property_id' => $property_id,
-				'fetched_at'  => time(),
-				'range_days'  => self::RANGE_DAYS,
-				'as_of'       => self::report_end_date( $response ),
-				'rows'        => $rows,
+				'property_id'    => $property_id,
+				'fetched_at'     => time(),
+				'range_days'     => self::RANGE_DAYS,
+				'as_of'          => self::report_end_date( $response ),
+				'total_sessions' => self::report_total( $response ),
+				'rows'           => $rows,
 			],
 			false
 		);
 		self::reset_failures();
 		Logger::log( sprintf( 'Stored reach for %d segment IDs on property %s.', count( $rows ), $property_id ), self::LOGGER_HEADER );
+	}
+
+	/**
+	 * Total sessions where segmentation ran — the denominator the percentages
+	 * are read against.
+	 *
+	 * The `TOTAL` aggregation requested above, not a sum of the rows: a session
+	 * matching three segments appears in three rows, so summing would count it
+	 * three times. GA4 computes the total for a non-additive metric over the
+	 * underlying data, deduplicated.
+	 *
+	 * @param array $response Decoded runReport response.
+	 * @return int Sessions, or 0 when the total is absent.
+	 */
+	private static function report_total( array $response ) {
+		return isset( $response['totals'][0]['metricValues'][0]['value'] )
+			? (int) $response['totals'][0]['metricValues'][0]['value']
+			: 0;
 	}
 
 	/**
@@ -360,16 +402,22 @@ final class GA4_Segment_Reach {
 		$as_of = $cache['as_of'] ?? gmdate( 'Y-m-d', ( isset( $cache['fetched_at'] ) ? (int) $cache['fetched_at'] : time() ) - DAY_IN_SECONDS );
 		// Surfaced so the label can name the window instead of hardcoding it.
 		$range_days = isset( $cache['range_days'] ) ? (int) $cache['range_days'] : self::RANGE_DAYS;
+		// Raw counts and the denominator both travel; the percentages are
+		// computed for display. Storing the ratio instead would fix the
+		// presentation at fetch time and lose the sample size, which is what
+		// tells a publisher whether a share is worth acting on.
+		$total = isset( $cache['total_sessions'] ) ? (int) $cache['total_sessions'] : 0;
 		foreach ( $segments as &$segment ) {
 			if ( ! is_array( $segment ) || ! isset( $segment['id'] ) ) {
 				continue;
 			}
 			$row              = $cache['rows'][ (string) $segment['id'] ] ?? null;
 			$segment['reach'] = [
-				'matched'    => $row ? (int) $row['matched'] : null,
-				'won'        => $row ? (int) $row['won'] : null,
-				'as_of'      => $as_of,
-				'range_days' => $range_days,
+				'matched'        => $row ? (int) $row['matched'] : null,
+				'won'            => $row ? (int) $row['won'] : null,
+				'total_sessions' => $total,
+				'as_of'          => $as_of,
+				'range_days'     => $range_days,
 			];
 		}
 		// The loop variable stays bound to the last element, so a caller that

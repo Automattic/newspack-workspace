@@ -178,6 +178,16 @@ class Newspack_Test_GA4_Segment_Reach extends WP_UnitTestCase {
 				$row( '45', 'np_segment_matched', 90 ),
 				$row( 'none', 'np_segment_matched', 500 ),
 			],
+			// GA4's TOTAL aggregation for a non-additive metric: the
+			// deduplicated session count, deliberately NOT the sum of the rows
+			// above (1830), since a session matching several segments appears
+			// in several rows.
+			'totals'   => [
+				[
+					'dimensionValues' => [ [ 'value' => 'RESERVED_TOTAL' ], [ 'value' => 'RESERVED_TOTAL' ] ],
+					'metricValues'    => [ [ 'value' => '3620' ] ],
+				],
+			],
 			'metadata' => [ 'timeZone' => $timezone ],
 		];
 	}
@@ -252,6 +262,11 @@ class Newspack_Test_GA4_Segment_Reach extends WP_UnitTestCase {
 			$cache['rows']['45']
 		);
 		$this->assertSame( 500, $cache['rows']['none']['matched'] );
+		// The denominator comes from GA4's TOTAL aggregation, not from summing
+		// the rows: a session matching several segments appears in several
+		// rows, so the sum (1830) would over-count the audience and understate
+		// every segment's share.
+		$this->assertSame( 3620, $cache['total_sessions'] );
 
 		// The request shape is contract with a remote API that nothing local
 		// exercises, so assert it exactly: a wrong dimension name is a
@@ -276,7 +291,13 @@ class Newspack_Test_GA4_Segment_Reach extends WP_UnitTestCase {
 			],
 			$body['dimensions']
 		);
-		$this->assertSame( [ [ 'name' => 'eventCount' ] ], $body['metrics'] );
+		// `sessions`, not `eventCount`: the client's per-session dedupe is best
+		// effort (np_segment_won fires once per segment per session, and an
+		// unwritable localStorage falls back to per-pageview dispatch), so
+		// counting events would inflate both figures. GA4 deduplicates
+		// `sessions` itself.
+		$this->assertSame( [ [ 'name' => 'sessions' ] ], $body['metrics'] );
+		$this->assertSame( [ 'TOTAL' ], $body['metricAggregations'] );
 		$this->assertSame(
 			[
 				'filter' => [
@@ -537,10 +558,11 @@ class Newspack_Test_GA4_Segment_Reach extends WP_UnitTestCase {
 		update_option(
 			'newspack_ga4_segment_reach',
 			[
-				'property_id' => 'PROP-REACH',
-				'fetched_at'  => strtotime( '2026-08-07 06:00:00' ),
-				'range_days'  => 7,
-				'rows'        => [
+				'property_id'    => 'PROP-REACH',
+				'fetched_at'     => strtotime( '2026-08-07 06:00:00' ),
+				'range_days'     => 7,
+				'total_sessions' => 3620,
+				'rows'           => [
 					'12' => [
 						'matched' => 1240,
 						'won'     => 320,
@@ -551,6 +573,10 @@ class Newspack_Test_GA4_Segment_Reach extends WP_UnitTestCase {
 		);
 
 		$decorated = GA4_Segment_Reach::decorate_segments( $segments );
+		// Raw counts and the denominator both travel; the display computes the
+		// shares, so the sample size stays available to the UI.
+		$this->assertSame( 3620, $decorated[0]['reach']['total_sessions'] );
+		$this->assertSame( 3620, $decorated[1]['reach']['total_sessions'] );
 		$this->assertSame( 1240, $decorated[0]['reach']['matched'] );
 		$this->assertSame( 320, $decorated[0]['reach']['won'] );
 		// No `as_of` recorded: fall back to the day before the fetch.
