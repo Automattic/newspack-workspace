@@ -32,33 +32,33 @@ const row = ( over = {} ) => ( {
 const sample = count => Array.from( { length: count }, ( _, i ) => row( { product_id: i + 1, name: `Product ${ i + 1 }`, regular: count - i } ) );
 
 const bodyRows = () => screen.getAllByRole( 'row' ).length - 1;
-const toggle = () => screen.queryByRole( 'button', { name: /See (more|less)/ } );
+const toggle = () => screen.queryByRole( 'button', { name: /See (More|Less)/ } );
 
 describe( 'ImpactTable', () => {
-	it( 'shows the first ten of a longer sample behind a See more link', () => {
+	it( 'shows the first ten of a longer sample behind a See More button', () => {
 		render( <ImpactTable baseline={ sample( 25 ) } segmentGroups={ [] } currency={ CURRENCY } /> );
 
 		expect( bodyRows() ).toBe( 10 );
-		expect( toggle() ).toHaveTextContent( 'See more' );
+		expect( toggle() ).toHaveTextContent( 'See More' );
 		expect( toggle() ).toHaveAttribute( 'aria-expanded', 'false' );
 	} );
 
-	it( 'reveals the rest and flips the label when the link is used', () => {
+	it( 'reveals the rest and flips the label when the button is used', () => {
 		render( <ImpactTable baseline={ sample( 25 ) } segmentGroups={ [] } currency={ CURRENCY } /> );
 		fireEvent.click( toggle() );
 
 		expect( bodyRows() ).toBe( 25 );
-		expect( toggle() ).toHaveTextContent( 'See less' );
+		expect( toggle() ).toHaveTextContent( 'See Less' );
 		expect( toggle() ).toHaveAttribute( 'aria-expanded', 'true' );
 	} );
 
-	it( 'collapses back to ten when the link is used again', () => {
+	it( 'collapses back to ten when the button is used again', () => {
 		render( <ImpactTable baseline={ sample( 25 ) } segmentGroups={ [] } currency={ CURRENCY } /> );
 		fireEvent.click( toggle() );
 		fireEvent.click( toggle() );
 
 		expect( bodyRows() ).toBe( 10 );
-		expect( toggle() ).toHaveTextContent( 'See more' );
+		expect( toggle() ).toHaveTextContent( 'See More' );
 		expect( toggle() ).toHaveAttribute( 'aria-expanded', 'false' );
 	} );
 
@@ -80,7 +80,7 @@ describe( 'ImpactTable', () => {
 		expect( screen.queryByText( 'Product 1' ) ).not.toBeInTheDocument();
 	} );
 
-	it( 'offers no link when the sample fits the limit', () => {
+	it( 'offers no button when the sample fits the limit', () => {
 		render( <ImpactTable baseline={ sample( 10 ) } segmentGroups={ [] } currency={ CURRENCY } /> );
 
 		expect( bodyRows() ).toBe( 10 );

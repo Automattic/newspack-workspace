@@ -12,7 +12,7 @@
  * present, so a segment named for existing subscribers isn't misread as
  * modeling their lifecycle (NPPD-1853).
  *
- * Long samples collapse to the first ROW_LIMIT rows behind a See more toggle,
+ * Long samples collapse to the first ROW_LIMIT rows behind a See More toggle,
  * matching Insights' InsightsDataView: rows are sorted in full and then sliced,
  * so a collapsed table always shows the current top N rather than whichever
  * rows happened to come first.
@@ -205,8 +205,8 @@ export default function ImpactTable( { baseline, segmentGroups, currency, showCy
 						{ /* Divider margins are raw px, not a step scale. */ }
 						<Divider variant="tertiary" marginTop={ 0 } marginBottom={ 8 } />
 						<div>
-							<Button variant="tertiary" aria-expanded={ expanded } onClick={ () => setExpanded( ! expanded ) }>
-								{ expanded ? __( 'See less', 'newspack-plugin' ) : __( 'See more', 'newspack-plugin' ) }
+							<Button variant="secondary" aria-expanded={ expanded } onClick={ () => setExpanded( ! expanded ) }>
+								{ expanded ? __( 'See Less', 'newspack-plugin' ) : __( 'See More', 'newspack-plugin' ) }
 							</Button>
 						</div>
 					</>
