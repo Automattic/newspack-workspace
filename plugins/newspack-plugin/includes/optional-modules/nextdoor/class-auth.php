@@ -119,10 +119,14 @@ class Auth {
 		$code = wp_remote_retrieve_response_code( $response );
 
 		if ( $code >= 400 ) {
-			// Only the two codes that mean the grant itself was refused. A 403 from an edge
-			// proxy, a 408 and a 429 are all transient, and a 5xx plainly so. Recording one
-			// of those would send the publisher through a reconnection they do not need.
-			$is_refusal = in_array( $code, [ 400, 401 ], true );
+			$error_data = json_decode( $body, true );
+
+			// RFC 6749 gives one error for a refresh token that is dead: `invalid_grant`.
+			// The rest of the 4xx family means the request or the app configuration is
+			// wrong, which correcting fixes, and a 5xx or an edge refusal is transient.
+			// Recording any of those would send the publisher through a reconnection they
+			// do not need, and one they cannot undo.
+			$is_refusal = is_array( $error_data ) && isset( $error_data['error'] ) && 'invalid_grant' === $error_data['error'];
 			// Nextdoor rotates refresh tokens, so two requests can enter the refresh window
 			// together and the loser comes back refused. Its token is no longer the stored
 			// one, which is how the winner's healthy token is told apart from a real refusal.
@@ -131,7 +135,6 @@ class Auth {
 				self::record_token_refusal();
 			}
 
-			$error_data = json_decode( $body, true );
 			return new \WP_Error(
 				'nextdoor_oauth_refresh_error',
 				isset( $error_data['error_description'] ) ? $error_data['error_description'] : __( 'Token refresh error', 'newspack-plugin' ),
