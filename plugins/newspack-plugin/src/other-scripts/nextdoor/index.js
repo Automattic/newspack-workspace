@@ -44,6 +44,19 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 	const [ hasLoaded, setHasLoaded ] = useState( false );
 	const contentRef = useRef( null );
 
+	// A successful action or retry replaces the control that was pressed, which would
+	// otherwise drop keyboard position to the top of the document. Only ever called for
+	// something the publisher initiated: on an ordinary editor load focus belongs on the
+	// canvas, not pulled into this sidebar.
+	const restoreFocus = () => {
+		window.requestAnimationFrame( () => {
+			const content = contentRef.current;
+			if ( content && content.ownerDocument.activeElement === content.ownerDocument.body ) {
+				content.focus();
+			}
+		} );
+	};
+
 	/**
 	 * Fetch Nextdoor status for the current post
 	 */
@@ -84,15 +97,15 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 		} finally {
 			setAction( null );
 			clearMessages();
-			// A successful action replaces the control that was pressed, which would
-			// otherwise drop keyboard position to the top of the document.
-			window.requestAnimationFrame( () => {
-				const content = contentRef.current;
-				if ( content && content.ownerDocument.activeElement === content.ownerDocument.body ) {
-					content.focus();
-				}
-			} );
+			restoreFocus();
 		}
+	};
+
+	// The Retry buttons live inside the notices they refresh, so a successful retry
+	// unmounts the control that was pressed.
+	const retryStatus = async () => {
+		await fetchStatus();
+		restoreFocus();
 	};
 
 	/**
@@ -180,8 +193,13 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 				<Notice
 					status="error"
 					isDismissible={ false }
+					spokenMessage={
+						isLoading
+							? __( 'Retrying the Nextdoor status request.', 'newspack-plugin' )
+							: error || __( 'Failed to load Nextdoor status.', 'newspack-plugin' )
+					}
 					actions={ [
-						{ label: isLoading ? __( 'Retrying…', 'newspack-plugin' ) : __( 'Retry', 'newspack-plugin' ), onClick: fetchStatus },
+						{ label: isLoading ? __( 'Retrying…', 'newspack-plugin' ) : __( 'Retry', 'newspack-plugin' ), onClick: retryStatus },
 					] }
 				>
 					{ error || __( 'Failed to load Nextdoor status.', 'newspack-plugin' ) }
@@ -253,8 +271,13 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 					<Notice
 						status="warning"
 						isDismissible={ false }
+						spokenMessage={
+							isLoading
+								? __( 'Retrying the Nextdoor status request.', 'newspack-plugin' )
+								: __( 'Nextdoor could not be reached, so the sharing status is unavailable.', 'newspack-plugin' )
+						}
 						actions={ [
-							{ label: isLoading ? __( 'Retrying…', 'newspack-plugin' ) : __( 'Retry', 'newspack-plugin' ), onClick: fetchStatus },
+							{ label: isLoading ? __( 'Retrying…', 'newspack-plugin' ) : __( 'Retry', 'newspack-plugin' ), onClick: retryStatus },
 						] }
 					>
 						{ __( 'Nextdoor could not be reached, so the sharing status is unavailable. Please try again shortly.', 'newspack-plugin' ) }
