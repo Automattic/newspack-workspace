@@ -643,8 +643,13 @@ class Controller {
 			) {
 				foreach ( $ingestion_response['results'] as $result ) {
 					if ( isset( $result['guid'] ) && $result['guid'] === $guid ) {
-						$ingestion_status     = isset( $result['status'] ) ? $result['status'] : null;
-						$ingestion_error_msgs = isset( $result['error_msgs'] ) ? $result['error_msgs'] : [];
+						// The editor renders both of these directly, so a shape it does not expect
+						// takes the sidebar down rather than degrading. What Nextdoor sends is not
+						// ours to guarantee, so it is pinned to the shape here.
+						$ingestion_status     = isset( $result['status'] ) && is_scalar( $result['status'] ) ? (string) $result['status'] : null;
+						$ingestion_error_msgs = isset( $result['error_msgs'] ) && is_array( $result['error_msgs'] )
+							? array_values( array_filter( $result['error_msgs'], 'is_string' ) )
+							: [];
 						break;
 					}
 				}
