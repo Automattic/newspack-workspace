@@ -50,6 +50,8 @@ function useUnsavedChangesDialog( { when }: UseUnsavedChangesDialogOptions ) {
 		when,
 		message: __( 'You have unsaved changes that will be lost. Discard changes?', 'newspack-plugin' ),
 		confirmButtonText: __( 'Discard changes', 'newspack-plugin' ),
+		// Hidden, but still the dialog's accessible name.
+		title: __( 'Unsaved changes', 'newspack-plugin' ),
 		hideTitle: true,
 	} );
 
