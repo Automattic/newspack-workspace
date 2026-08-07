@@ -351,6 +351,11 @@ class Auth {
 			self::redirect_with_error( $token_response->get_error_message() );
 		}
 
+		// Carrying a refresh token over would be right for a renewal, where Nextdoor omits
+		// it when it has not changed, but this is a fresh grant: the stored one belongs to
+		// the authorization being replaced and would renew the wrong connection.
+		$settings['refresh_token'] = '';
+
 		$settings = self::apply_token_response( $settings, $token_response );
 
 		// Nothing in the grant says which account it belongs to, so a claimed page cannot
