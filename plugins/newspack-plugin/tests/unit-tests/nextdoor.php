@@ -615,7 +615,7 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A misconfigured app is a 400 too, and correcting it should be enough.
+	 * A misconfigured app is refused too, and correcting it should be enough.
 	 */
 	public function test_a_configuration_error_is_not_recorded_as_a_refusal() {
 		Nextdoor::update_settings(
@@ -1193,9 +1193,9 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A 403 is reported but not recorded: an edge or a scope gap is not a dead grant.
+	 * A 403 reads as an outage: an edge or a scope gap is not cured by reconnecting.
 	 */
-	public function test_a_forbidden_ingestion_report_is_not_recorded_as_a_refusal() {
+	public function test_a_forbidden_ingestion_report_reads_as_unreachable() {
 		$post_id = $this->factory->post->create( [ 'post_status' => 'publish' ] );
 		update_post_meta( $post_id, '_nextdoor_guid', 'guid-1' );
 
@@ -1222,7 +1222,8 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 
 		$data = Controller::api_get_post_sharing_status( $request )->get_data();
 
-		self::assertTrue( $data['needs_reconnect'] );
+		self::assertFalse( $data['needs_reconnect'] );
+		self::assertTrue( $data['is_unreachable'] );
 		self::assertEmpty( Nextdoor::get_settings()['refresh_failed_at'] );
 		// Still renewable, so the next load can recover without a reconnection.
 		self::assertTrue( Auth::has_usable_token() );
