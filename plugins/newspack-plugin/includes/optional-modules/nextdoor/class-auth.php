@@ -446,7 +446,13 @@ class Auth {
 			$settings['refresh_token']
 		);
 
-		return ! is_wp_error( $refresh_response );
+		if ( ! is_wp_error( $refresh_response ) ) {
+			return true;
+		}
+
+		// Losing a refresh race is not a failure: the winner rotated the token while this
+		// request was in flight, so its refusal says nothing about what is stored now.
+		return Nextdoor::get_settings()['refresh_token'] !== $settings['refresh_token'] && self::has_usable_token();
 	}
 }
 
