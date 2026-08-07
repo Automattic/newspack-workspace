@@ -1072,7 +1072,10 @@ class RAS_Contact_Sync {
 			if ( ! $integration->supports_push() ) {
 				continue;
 			}
-			$has_stored_selection = false !== \get_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . $id, false );
+			// Match the storage guard in Integration::get_enabled_outgoing_field_ids():
+			// a corrupt non-array option is treated as never configured there, so it
+			// must be reported as inherited here too, not as the integration's own.
+			$has_stored_selection = is_array( \get_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . $id, false ) );
 			$prefix               = $integration->get_metadata_prefix();
 			$names                = [];
 			foreach ( $integration->get_enabled_outgoing_field_ids() as $field_id ) {
