@@ -6,7 +6,7 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { useState, useEffect } from '@wordpress/element';
+import { useState, useEffect, useRef } from '@wordpress/element';
 import { useSelect } from '@wordpress/data';
 import { Button, Spinner, Notice, Panel, PanelBody, PanelHeader, Flex, FlexItem, SVG } from '@wordpress/components';
 import { PluginSidebar } from '@wordpress/editor';
@@ -39,6 +39,10 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 	const [ nextdoorStatus, setNextdoorStatus ] = useState( null );
 	const [ error, setError ] = useState( null );
 	const [ success, setSuccess ] = useState( null );
+	// Whether anything has ever arrived, as against whether a request is in flight. Only
+	// the first tells us the panel has nothing to show yet.
+	const [ hasLoaded, setHasLoaded ] = useState( false );
+	const contentRef = useRef( null );
 
 	/**
 	 * Fetch Nextdoor status for the current post
@@ -57,6 +61,7 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 			setError( fetchError.message || __( 'Failed to load Nextdoor status.', 'newspack-plugin' ) );
 		} finally {
 			setIsLoading( false );
+			setHasLoaded( true );
 		}
 	};
 
@@ -79,6 +84,14 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 		} finally {
 			setAction( null );
 			clearMessages();
+			// A successful action replaces the control that was pressed, which would
+			// otherwise drop keyboard position to the top of the document.
+			window.requestAnimationFrame( () => {
+				const content = contentRef.current;
+				if ( content && content.ownerDocument.activeElement === content.ownerDocument.body ) {
+					content.focus();
+				}
+			} );
 		}
 	};
 
@@ -144,10 +157,10 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 	 * Render the main content
 	 */
 	const renderContent = () => {
-		// Only the first load blanks the panel. A refetch after an action keeps it mounted,
-		// so the button the publisher pressed re-renders in place instead of taking their
+		// Only the very first load blanks the panel. Every later request keeps it mounted,
+		// so the control the publisher pressed re-renders in place instead of taking their
 		// focus to the top of the document with it.
-		if ( isLoading && ! nextdoorStatus ) {
+		if ( isLoading && ! hasLoaded ) {
 			return (
 				<Flex justify="center" className="nextdoor-sidebar__loading">
 					<FlexItem>
@@ -164,7 +177,13 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 		// `can_publish` off a missing response would report that as a permissions problem.
 		if ( ! nextdoorStatus ) {
 			return (
-				<Notice status="error" isDismissible={ false } actions={ [ { label: __( 'Retry', 'newspack-plugin' ), onClick: fetchStatus } ] }>
+				<Notice
+					status="error"
+					isDismissible={ false }
+					actions={ [
+						{ label: isLoading ? __( 'Retrying…', 'newspack-plugin' ) : __( 'Retry', 'newspack-plugin' ), onClick: fetchStatus },
+					] }
+				>
 					{ error || __( 'Failed to load Nextdoor status.', 'newspack-plugin' ) }
 				</Notice>
 			);
@@ -234,7 +253,9 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 					<Notice
 						status="warning"
 						isDismissible={ false }
-						actions={ [ { label: __( 'Retry', 'newspack-plugin' ), onClick: fetchStatus } ] }
+						actions={ [
+							{ label: isLoading ? __( 'Retrying…', 'newspack-plugin' ) : __( 'Retry', 'newspack-plugin' ), onClick: fetchStatus },
+						] }
 					>
 						{ __( 'Nextdoor could not be reached, so the sharing status is unavailable. Please try again shortly.', 'newspack-plugin' ) }
 					</Notice>
@@ -355,7 +376,10 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 
 	return (
 		<PluginSidebar name="nextdoor-publish" title={ __( 'Nextdoor', 'newspack-plugin' ) } icon={ nextdoorIcon } className="nextdoor-post-plugin">
-			{ renderContent() }
+			{ /* Focusable so keyboard position can be returned here when an action removes the control that held it. */ }
+			<div ref={ contentRef } tabIndex={ -1 }>
+				{ renderContent() }
+			</div>
 		</PluginSidebar>
 	);
 };
