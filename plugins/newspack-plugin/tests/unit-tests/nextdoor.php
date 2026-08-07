@@ -1015,6 +1015,109 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A revoked token shows up only on the report, and is still a reconnection.
+	 */
+	public function test_a_refused_ingestion_report_asks_for_a_reconnection() {
+		$post_id = $this->factory->post->create( [ 'post_status' => 'publish' ] );
+		update_post_meta( $post_id, '_nextdoor_guid', 'guid-1' );
+
+		$this->connect_with_a_valid_token();
+
+		add_filter(
+			'pre_http_request',
+			function () {
+				return [
+					'headers'  => [],
+					'body'     => wp_json_encode( [ 'error' => 'unauthorized' ] ),
+					'response' => [
+						'code'    => 401,
+						'message' => 'Unauthorized',
+					],
+					'cookies'  => [],
+					'filename' => null,
+				];
+			}
+		);
+
+		$request = new WP_REST_Request( 'GET', '/newspack/v1/nextdoor/post-status/' . $post_id );
+		$request->set_param( 'id', $post_id );
+
+		$data = Controller::api_get_post_sharing_status( $request )->get_data();
+
+		self::assertTrue( $data['needs_reconnect'] );
+		self::assertFalse( $data['is_unreachable'] );
+	}
+
+	/**
+	 * The connection is site-wide, so an unshared post hears about it too.
+	 */
+	public function test_an_unshared_post_is_told_the_connection_is_dead() {
+		$post_id = $this->factory->post->create( [ 'post_status' => 'publish' ] );
+		add_filter( 'pre_http_request', [ $this, 'stub_nextdoor_response' ], 10, 3 );
+
+		Nextdoor::update_settings(
+			[
+				'access_token'     => 'expired-access',
+				'token_expires_at' => time() - 10,
+			]
+		);
+
+		$request = new WP_REST_Request( 'GET', '/newspack/v1/nextdoor/post-status/' . $post_id );
+		$request->set_param( 'id', $post_id );
+
+		$data = Controller::api_get_post_sharing_status( $request )->get_data();
+
+		self::assertFalse( $data['is_shared'] );
+		self::assertTrue( $data['needs_reconnect'] );
+		self::assertSame( [], $this->http_requests );
+	}
+
+	/**
+	 * A fresh grant cannot be assumed to own the page the last one claimed.
+	 */
+	public function test_signing_in_again_drops_the_claimed_page() {
+		Nextdoor::update_settings(
+			[
+				'client_id'       => 'site-id',
+				'client_secret'   => 'site-secret',
+				'page_id'         => 'page-123',
+				'publication_url' => 'https://example.com',
+			]
+		);
+
+		$this->http_body = wp_json_encode(
+			[
+				'access_token'  => 'new-access',
+				'refresh_token' => 'new-refresh',
+				'expires_in'    => 3600,
+			]
+		);
+		add_filter( 'pre_http_request', [ $this, 'stub_nextdoor_response' ], 10, 3 );
+
+		$state = Auth::create_oauth_state();
+
+		$_GET['nextdoor_oauth_callback'] = '1';
+		$_GET['code']                    = 'auth-code';
+		$_GET['state']                   = $state;
+
+		try {
+			Auth::handle_oauth_callback();
+		} catch ( Exception $e ) {
+			// wp_safe_redirect() exits, which the test bootstrap turns into an exception.
+			unset( $e );
+		}
+
+		$settings = Nextdoor::get_settings();
+
+		self::assertSame( 'new-access', $settings['access_token'] );
+		self::assertSame( '', $settings['page_id'] );
+		// The URL is still the publisher's own, so it stays to prefill the claim step.
+		self::assertSame( 'https://example.com', $settings['publication_url'] );
+
+		unset( $_GET['nextdoor_oauth_callback'], $_GET['code'], $_GET['state'] );
+	}
+
+	/**
 	 * A report that never comes back is an outage, not a silent blank.
 	 */
 	public function test_a_failed_ingestion_report_reads_as_unreachable() {
