@@ -134,6 +134,11 @@ function ConfirmDialog(
 	if ( wasOpen !== isOpen ) {
 		setWasOpen( isOpen );
 		setShowDialog( isOpen );
+		// Withdrawn, so a navigation the blocker was holding must not replay on the
+		// next prompt the way a confirm or cancel would have released it.
+		if ( ! isOpen ) {
+			pendingNavigation.current = null;
+		}
 	}
 
 	if ( ! showDialog ) {

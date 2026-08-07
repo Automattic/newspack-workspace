@@ -218,7 +218,7 @@ describe( 'ConfirmDialog controlled by isOpen', () => {
 	} );
 
 	// `isOpen` is authoritative both ways, so a prompt the blocker raised goes with
-	// it, taking the navigation it was holding.
+	// it, and the navigation it was holding goes too.
 	it( 'withdraws a blocked navigation prompt when isOpen goes false', () => {
 		const historyRef = { current: null };
 		const withOpen = isOpen => (
@@ -235,6 +235,11 @@ describe( 'ConfirmDialog controlled by isOpen', () => {
 
 		rerender( withOpen( false ) );
 		expect( dialog() ).not.toBeInTheDocument();
+		expect( historyRef.current.location.pathname ).toBe( '/' );
+
+		// Confirming the next prompt must not replay the abandoned destination.
+		rerender( withOpen( true ) );
+		confirmNavigation();
 		expect( historyRef.current.location.pathname ).toBe( '/' );
 	} );
 } );
