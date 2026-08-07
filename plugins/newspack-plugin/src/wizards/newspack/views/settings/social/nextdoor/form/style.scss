@@ -3,6 +3,8 @@
 
 .nextdoor-form {
 	&__intro {
+		color: wp-colors.$gray-700;
+		font-size: wp-vars.$helptext-font-size;
 		margin: 0;
 	}
 

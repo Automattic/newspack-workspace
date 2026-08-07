@@ -11,6 +11,7 @@ import {
 	CheckboxControl,
 	ExternalLink,
 	Notice as WPNotice,
+	SelectControl,
 	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
@@ -19,7 +20,7 @@ import { useInstanceId } from '@wordpress/compose';
 /**
  * Internal dependencies
  */
-import { Button, Grid, SelectControl, TextControl } from '../../../../../../../../packages/components/src';
+import { Button, Grid, TextControl } from '../../../../../../../../packages/components/src';
 import { useSocialCards } from '../../context';
 import { NextdoorFormProps } from '../types';
 import ReadonlyField from './readonly-field';
@@ -66,12 +67,16 @@ const describedBy = ( fieldId: string, errorId: string | null ) => [ `${ fieldId
 // esc_url_raw() canonical-form check, which then rejects the value. URL() would
 // normalise the same characters and report it valid, so the button would enable
 // on a URL that comes back as an unattributed error.
-const UNSTORABLE_CHARACTER = /[^-a-z0-9~+_.?#=!&;,/:%@$|*'()\u0080-\uffff]/i;
+const UNSTORABLE_CHARACTER = /[^-a-z0-9~+_.?#=!&;,/:%@$|*'()[\]\u0080-\uffff]/i;
+
+// esc_url() additionally runs _deep_replace() over these two, so a URL carrying either
+// survives the character check and comes back mangled rather than rejected.
+const STRIPPED_ESCAPE = /%0[da]/i;
 
 // Shape only: a scheme Nextdoor can fetch and a host that could resolve.
 const isPublicationUrlValid = ( value: string ) => {
 	const trimmed = value.trim();
-	if ( UNSTORABLE_CHARACTER.test( trimmed ) ) {
+	if ( UNSTORABLE_CHARACTER.test( trimmed ) || STRIPPED_ESCAPE.test( trimmed ) ) {
 		return false;
 	}
 	try {
@@ -198,6 +203,11 @@ export const NextdoorForm = ( {
 
 	const hasRoleChanges = ! isSameRoles( allowedRoles, settings.allowed_roles || [] );
 	const hasUrlChanges = publicationUrl !== ( settings.publication_url || '' );
+	// Before a page exists every submission claims one; afterwards only a changed URL
+	// does, since `publication_url` is not a settings write param. URL validity gates
+	// only the claim, so a role-only save is unaffected by a stored URL this rejects.
+	const shouldClaim = ! status.has_page || hasUrlChanges;
+	const canSubmit = shouldClaim ? isUrlValid : hasRoleChanges;
 
 	const handleConnect = async () => {
 		if ( ! canConnect ) {
@@ -224,9 +234,6 @@ export const NextdoorForm = ( {
 	};
 
 	const handleSubmit = async () => {
-		// Before a page exists every submission claims one; afterwards only a
-		// changed URL does, since `publication_url` is not a settings write param.
-		const shouldClaim = ! status.has_page || hasUrlChanges;
 		if ( shouldClaim && ! isUrlValid ) {
 			return;
 		}
@@ -277,9 +284,9 @@ export const NextdoorForm = ( {
 			variant="primary"
 			__next40pxDefaultSize
 			onClick={ handleSubmit }
-			disabled={ ! isUrlValid || ( status.has_page && ! hasRoleChanges && ! hasUrlChanges ) || isSaving }
+			disabled={ ! canSubmit || isSaving }
 			accessibleWhenDisabled
-			description={ isUrlValid ? undefined : __( 'Enter a valid publication URL to continue.', 'newspack-plugin' ) }
+			description={ shouldClaim && ! isUrlValid ? __( 'Enter a valid publication URL to continue.', 'newspack-plugin' ) : undefined }
 			isBusy={ isSaving }
 		>
 			{ status.has_page ? __( 'Save', 'newspack-plugin' ) : __( 'Claim Page', 'newspack-plugin' ) }
@@ -354,6 +361,7 @@ export const NextdoorForm = ( {
 										}
 									) }
 									withMargin={ false }
+									__next40pxDefaultSize
 									__nextHasNoMarginBottom
 								/>
 								<TextControl
@@ -372,6 +380,7 @@ export const NextdoorForm = ( {
 											: __( 'Issued with the Client ID. Stored securely, and never shown here again.', 'newspack-plugin' )
 									}
 									withMargin={ false }
+									__next40pxDefaultSize
 									__nextHasNoMarginBottom
 								/>
 							</>
@@ -389,6 +398,7 @@ export const NextdoorForm = ( {
 								aria-invalid={ !! emailError }
 								aria-describedby={ describedBy( emailId, emailError ? emailErrorId : null ) }
 								withMargin={ false }
+								__next40pxDefaultSize
 								__nextHasNoMarginBottom
 							/>
 							{ emailError && (
@@ -432,6 +442,7 @@ export const NextdoorForm = ( {
 								aria-invalid={ !! publicationUrlError }
 								aria-describedby={ describedBy( publicationUrlId, publicationUrlError ? publicationUrlErrorId : null ) }
 								withMargin={ false }
+								__next40pxDefaultSize
 								__nextHasNoMarginBottom
 							/>
 							{ publicationUrlError && (
@@ -440,38 +451,41 @@ export const NextdoorForm = ( {
 								</p>
 							) }
 						</VStack>
-						{ /* Disabled checkboxes are still announced, but leave tab order and form-control quick-nav, so the prose accounts for the inert roles. */ }
-						<p className="nextdoor-form__intro" id={ rolesDescriptionId }>
-							{ __( 'Select which user roles are allowed to publish articles to Nextdoor.', 'newspack-plugin' ) }
-							{ ! status.has_page && ` ${ __( 'Available once the page is claimed.', 'newspack-plugin' ) }` }
-						</p>
-						{ /* Named as well as described: an unnamed group is skipped, taking its description with it. */ }
-						<Grid
-							columns={ 2 }
-							gutter={ 16 }
-							noMargin
-							role="group"
-							aria-label={ __( 'Publishing roles', 'newspack-plugin' ) }
-							aria-describedby={ rolesDescriptionId }
-						>
-							{ availableRoles.map( ( { label, value } ) => (
-								<CheckboxControl
-									key={ value }
-									label={ label }
-									checked={ allowedRoles.includes( value ) || 'administrator' === value }
-									onChange={ ( checked: boolean ) =>
-										setAllowedRoles( checked ? [ ...allowedRoles, value ] : allowedRoles.filter( role => role !== value ) )
-									}
-									disabled={ ! status.has_page || isSaving || 'administrator' === value }
-									help={
-										'administrator' === value
-											? __( 'Administrators always have publishing permissions.', 'newspack-plugin' )
-											: undefined
-									}
-									__nextHasNoMarginBottom
-								/>
-							) ) }
-						</Grid>
+						{ /* Grouped so the description reads as the group's own, rather than sitting equidistant from the field above it. */ }
+						<VStack spacing={ 2 }>
+							{ /* Disabled checkboxes are still announced, but leave tab order and form-control quick-nav, so the prose accounts for the inert roles. */ }
+							<p className="nextdoor-form__intro" id={ rolesDescriptionId }>
+								{ __( 'Select which user roles are allowed to publish articles to Nextdoor.', 'newspack-plugin' ) }
+								{ ! status.has_page && ` ${ __( 'Available once the page is claimed.', 'newspack-plugin' ) }` }
+							</p>
+							{ /* Named as well as described: an unnamed group is skipped, taking its description with it. */ }
+							<Grid
+								columns={ 2 }
+								gutter={ 16 }
+								noMargin
+								role="group"
+								aria-label={ __( 'Publishing roles', 'newspack-plugin' ) }
+								aria-describedby={ rolesDescriptionId }
+							>
+								{ availableRoles.map( ( { label, value } ) => (
+									<CheckboxControl
+										key={ value }
+										label={ label }
+										checked={ allowedRoles.includes( value ) || 'administrator' === value }
+										onChange={ ( checked: boolean ) =>
+											setAllowedRoles( checked ? [ ...allowedRoles, value ] : allowedRoles.filter( role => role !== value ) )
+										}
+										disabled={ ! status.has_page || isSaving || 'administrator' === value }
+										help={
+											'administrator' === value
+												? __( 'Administrators always have publishing permissions.', 'newspack-plugin' )
+												: undefined
+										}
+										__nextHasNoMarginBottom
+									/>
+								) ) }
+							</Grid>
+						</VStack>
 					</>
 				) }
 				<HStack justify="flex-start" spacing={ 2 }>

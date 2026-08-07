@@ -193,6 +193,7 @@ const PixelCard = ( { title, description, namespace, path, validate, renderHelp 
 						aria-invalid={ !! shownError }
 						aria-describedby={ describedBy }
 						withMargin={ false }
+						__next40pxDefaultSize
 						__nextHasNoMarginBottom
 					/>
 					{ shownError && (
