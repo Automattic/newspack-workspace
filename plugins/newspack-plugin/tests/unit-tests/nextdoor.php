@@ -1149,6 +1149,82 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 
 		self::assertTrue( $data['needs_reconnect'] );
 		self::assertFalse( $data['is_unreachable'] );
+		// Persisted, so the card the reconnect link leads to agrees with this answer.
+		self::assertNotEmpty( Nextdoor::get_settings()['refresh_failed_at'] );
+		self::assertFalse( Auth::has_usable_token() );
+	}
+
+	/**
+	 * A 403 is reported but not recorded: an edge or a scope gap is not a dead grant.
+	 */
+	public function test_a_forbidden_ingestion_report_is_not_recorded_as_a_refusal() {
+		$post_id = $this->factory->post->create( [ 'post_status' => 'publish' ] );
+		update_post_meta( $post_id, '_nextdoor_guid', 'guid-1' );
+
+		$this->connect_with_a_claimed_page();
+
+		add_filter(
+			'pre_http_request',
+			function () {
+				return [
+					'headers'  => [],
+					'body'     => wp_json_encode( [ 'error' => 'insufficient_scope' ] ),
+					'response' => [
+						'code'    => 403,
+						'message' => 'Forbidden',
+					],
+					'cookies'  => [],
+					'filename' => null,
+				];
+			}
+		);
+
+		$request = new WP_REST_Request( 'GET', '/newspack/v1/nextdoor/post-status/' . $post_id );
+		$request->set_param( 'id', $post_id );
+
+		$data = Controller::api_get_post_sharing_status( $request )->get_data();
+
+		self::assertTrue( $data['needs_reconnect'] );
+		self::assertEmpty( Nextdoor::get_settings()['refresh_failed_at'] );
+		// Still renewable, so the next load can recover without a reconnection.
+		self::assertTrue( Auth::has_usable_token() );
+	}
+
+	/**
+	 * A refusal of a token another request has already replaced is not recorded.
+	 */
+	public function test_a_refusal_of_a_superseded_token_is_not_recorded() {
+		$post_id = $this->factory->post->create( [ 'post_status' => 'publish' ] );
+		update_post_meta( $post_id, '_nextdoor_guid', 'guid-1' );
+
+		$this->connect_with_a_claimed_page();
+
+		// A concurrent sign-in replaces the token while this report is in flight.
+		add_filter(
+			'pre_http_request',
+			function () {
+				Nextdoor::update_settings( array_merge( Nextdoor::get_settings(), [ 'access_token' => 'newer-access' ] ) );
+
+				return [
+					'headers'  => [],
+					'body'     => wp_json_encode( [ 'error' => 'unauthorized' ] ),
+					'response' => [
+						'code'    => 401,
+						'message' => 'Unauthorized',
+					],
+					'cookies'  => [],
+					'filename' => null,
+				];
+			}
+		);
+
+		$request = new WP_REST_Request( 'GET', '/newspack/v1/nextdoor/post-status/' . $post_id );
+		$request->set_param( 'id', $post_id );
+
+		Controller::api_get_post_sharing_status( $request );
+
+		self::assertEmpty( Nextdoor::get_settings()['refresh_failed_at'] );
+		self::assertTrue( Auth::has_usable_token() );
 	}
 
 	/**
