@@ -217,4 +217,148 @@ class Newspack_Test_GA4_Segment_Reach extends WP_UnitTestCase {
 		$this->expectException( \RuntimeException::class );
 		$client->run_report( 'PROP-1', [] );
 	}
+
+	/**
+	 * Refresh runs the reach report through the read path — Newspack OAuth
+	 * WITHOUT the analytics.edit scope — and stores parsed per-segment counts.
+	 */
+	public function test_refresh_stores_parsed_reach() {
+		$this->connect_property( 'PROP-REACH' );
+		$this->configure_newspack_oauth();
+		$this->http_routes[':runReport'] = $this->json_response( 200, $this->report_response() );
+
+		GA4_Segment_Reach::refresh();
+
+		$cache = get_option( 'newspack_ga4_segment_reach' );
+		$this->assertSame( 'PROP-REACH', $cache['property_id'] );
+		$this->assertSame( 7, $cache['range_days'] );
+		$this->assertSame(
+			[
+				'matched' => 1240,
+				'won'     => 320,
+			],
+			$cache['rows']['12']
+		);
+		// A segment with no won rows records zero, not null: the report ran.
+		$this->assertSame(
+			[
+				'matched' => 90,
+				'won'     => 0,
+			],
+			$cache['rows']['45']
+		);
+		$this->assertSame( 500, $cache['rows']['none']['matched'] );
+		// The request went to the Data API with both event names filtered.
+		$last = end( $this->http_log );
+		$this->assertStringContainsString( 'analyticsdata.googleapis.com', $last['url'] );
+		$this->assertStringContainsString( 'np_segment_won', $last['body'] );
+	}
+
+	/**
+	 * A failed fetch preserves the previous cache — the UI shows staler
+	 * numbers, never none.
+	 */
+	public function test_refresh_failure_keeps_previous_cache() {
+		$this->connect_property( 'PROP-REACH' );
+		$this->configure_newspack_oauth();
+		$previous = [
+			'property_id' => 'PROP-REACH',
+			'fetched_at'  => time() - DAY_IN_SECONDS,
+			'range_days'  => 7,
+			'rows'        => [
+				'12' => [
+					'matched' => 5,
+					'won'     => 1,
+				],
+			],
+		];
+		update_option( 'newspack_ga4_segment_reach', $previous, false );
+		$this->http_routes[':runReport'] = $this->json_response( 500, [ 'error' => [ 'message' => 'boom' ] ] );
+
+		GA4_Segment_Reach::refresh();
+
+		$this->assertSame( $previous, get_option( 'newspack_ga4_segment_reach' ) );
+	}
+
+	/**
+	 * Decoration: numbers when a row exists, explicit nulls when the cache
+	 * exists without the segment, untouched payload when there is no cache or
+	 * the cache belongs to a different property.
+	 */
+	public function test_decorate_segments_states() {
+		$segments = [
+			[
+				'id'   => '12',
+				'name' => 'Donors',
+			],
+			[
+				'id'   => '99',
+				'name' => 'Young segment',
+			],
+		];
+
+		// No cache: payload untouched.
+		$this->assertSame( $segments, GA4_Segment_Reach::decorate_segments( $segments ) );
+
+		$this->connect_property( 'PROP-REACH' );
+		update_option(
+			'newspack_ga4_segment_reach',
+			[
+				'property_id' => 'PROP-REACH',
+				'fetched_at'  => strtotime( '2026-08-07 06:00:00' ),
+				'range_days'  => 7,
+				'rows'        => [
+					'12' => [
+						'matched' => 1240,
+						'won'     => 320,
+					],
+				],
+			],
+			false
+		);
+
+		$decorated = GA4_Segment_Reach::decorate_segments( $segments );
+		$this->assertSame( 1240, $decorated[0]['reach']['matched'] );
+		$this->assertSame( 320, $decorated[0]['reach']['won'] );
+		$this->assertSame( '2026-08-06', $decorated[0]['reach']['as_of'] );
+		// Cache present, no row: explicit nulls — "no data yet", not zero.
+		$this->assertNull( $decorated[1]['reach']['matched'] );
+		$this->assertNull( $decorated[1]['reach']['won'] );
+
+		// Cache for a different property is treated as absent.
+		$this->connect_property( 'PROP-OTHER' );
+		$this->assertSame( $segments, GA4_Segment_Reach::decorate_segments( $segments ) );
+	}
+
+	/**
+	 * The daily refresh follows the property: scheduled while connected,
+	 * dropped when disconnected. Skipped when Action Scheduler is absent.
+	 */
+	public function test_schedule_follows_property() {
+		if ( ! function_exists( 'as_has_scheduled_action' ) ) {
+			$this->markTestSkipped( 'Action Scheduler not available.' );
+		}
+		$this->connect_property( 'PROP-REACH' );
+		GA4_Segment_Reach::maybe_schedule();
+		$this->assertTrue( as_has_scheduled_action( GA4_Segment_Reach::REFRESH_ACTION, [], GA4_Segment_Reach::GROUP ) );
+		// With no cache yet, the first fetch is enqueued immediately — and the
+		// has-scheduled guard keeps a second pass from enqueuing another.
+		$this->assertTrue( as_has_scheduled_action( GA4_Segment_Reach::REFRESH_ACTION, [], GA4_Segment_Reach::ASYNC_GROUP ) );
+		GA4_Segment_Reach::maybe_schedule();
+		$this->assertCount(
+			1,
+			as_get_scheduled_actions(
+				[
+					'hook'   => GA4_Segment_Reach::REFRESH_ACTION,
+					'group'  => GA4_Segment_Reach::ASYNC_GROUP,
+					'status' => \ActionScheduler_Store::STATUS_PENDING,
+				],
+				'ids'
+			)
+		);
+
+		delete_option( self::SK_SETTINGS_OPTION );
+		GA4_Segment_Reach::maybe_schedule();
+		$this->assertFalse( as_has_scheduled_action( GA4_Segment_Reach::REFRESH_ACTION, [], GA4_Segment_Reach::GROUP ) );
+	}
 }
