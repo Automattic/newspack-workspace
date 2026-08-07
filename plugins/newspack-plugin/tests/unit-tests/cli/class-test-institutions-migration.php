@@ -348,16 +348,27 @@ class Test_Institutions_Migration extends WP_UnitTestCase {
 
 	/**
 	 * Command-level: a live run where creation fails prints a FAILED warning with
-	 * the reason and tallies the error in the Done line — it must never render as
-	 * a success in an access-granting migration.
+	 * the reason and aborts non-zero via WP_CLI::error carrying the error tally —
+	 * it must never render as a success in an access-granting migration, and a
+	 * scripted caller must be able to detect the partial failure from the exit.
 	 */
 	public function test_migrate_institutions_command_reports_create_errors() {
 		$team_id = $this->create_team( 'Command Error University' );
 		update_option( Institutions_Migration::ACCESS_BY_IP_OPTION, [ $team_id => '10.5.0.0/16' ] );
 
 		add_filter( 'wp_insert_post_empty_content', '__return_true' );
-		( new Institutions_Migration() )->migrate_institutions( [], [ 'live' => true ] );
-		remove_filter( 'wp_insert_post_empty_content', '__return_true' );
+		$abort_message = '';
+		try {
+			( new Institutions_Migration() )->migrate_institutions( [], [ 'live' => true ] );
+			$this->fail( 'A run with a failed create must abort via WP_CLI::error (non-zero exit).' );
+		} catch ( WP_CLI_Mock_Exception $abort ) {
+			$abort_message = $abort->getMessage();
+		} finally {
+			remove_filter( 'wp_insert_post_empty_content', '__return_true' );
+		}
+
+		$this->assertStringContainsString( '1 error(s)', $abort_message, 'The aborting Done tally must count the error.' );
+		$this->assertStringContainsString( 'NOT migrated', $abort_message, 'The abort must state that errored teams were not migrated.' );
 
 		$warning_messages = array_column( array_filter( WP_CLI::$messages, fn( $entry ) => 'warning' === $entry[0] ), 1 );
 		$success_messages = array_column( array_filter( WP_CLI::$messages, fn( $entry ) => 'success' === $entry[0] ), 1 );
@@ -370,9 +381,157 @@ class Test_Institutions_Migration extends WP_UnitTestCase {
 			$this->assertStringNotContainsString( 'created institution', $success_message, 'A failed create must never print as a created-institution success.' );
 		}
 
-		$done_warnings = array_filter( $warning_messages, fn( $message ) => str_contains( $message, '1 error(s)' ) );
-		$this->assertCount( 1, $done_warnings, 'The Done tally must count the error and be emitted as a warning.' );
 		$this->assertCount( 0, $this->get_all_institutions(), 'Nothing should have been created.' );
+	}
+
+	/**
+	 * Range breadth is judged by the numeric mask the access check will use, not
+	 * by the range's spelling: zero-length masks (however written), private and
+	 * reserved subnets, and very wide public blocks are all flagged; ordinary
+	 * public ranges and non-IP values are not.
+	 */
+	public function test_get_range_breadth_warning_flags_dangerous_ranges() {
+		$this->assertStringContainsString( 'EVERY visitor IP', Institutions_Migration::get_range_breadth_warning( '0.0.0.0/0' ), 'A zero mask must be flagged as matching everyone.' );
+		$this->assertStringContainsString( 'private or reserved', Institutions_Migration::get_range_breadth_warning( '10.0.0.0/8' ), 'A private subnet must be flagged.' );
+		$this->assertStringContainsString( 'private or reserved', Institutions_Migration::get_range_breadth_warning( '127.0.0.1' ), 'A reserved address must be flagged.' );
+		$this->assertStringContainsString( 'very wide block', Institutions_Migration::get_range_breadth_warning( '8.0.0.0/8' ), 'A very wide public block must be flagged.' );
+		$this->assertSame( '', Institutions_Migration::get_range_breadth_warning( '198.51.100.7' ), 'An ordinary public address is unremarkable.' );
+		$this->assertSame( '', Institutions_Migration::get_range_breadth_warning( '128.100.0.0/16' ), 'An ordinary public /16 is unremarkable.' );
+		$this->assertSame( '', Institutions_Migration::get_range_breadth_warning( 'not-an-ip' ), 'Non-IP values (operator-owned meta on existing institutions) are left alone.' );
+	}
+
+	/**
+	 * A leading-zero mask like `/00` must be canonicalized on validation: stored
+	 * as `/0` so no string-shape check downstream can be evaded, and flagged by
+	 * the command's breadth warning like any other zero mask.
+	 */
+	public function test_normalize_ip_ranges_canonicalizes_leading_zero_bits() {
+		$normalized = Institutions_Migration::normalize_ip_ranges( '0.0.0.0/00, 10.0.0.0/016' );
+		$this->assertSame( [ '0.0.0.0/0', '10.0.0.0/16' ], $normalized['valid'], 'Leading-zero mask bits must be canonicalized to their numeric value.' );
+		$this->assertSame( [], $normalized['invalid'] );
+	}
+
+	/**
+	 * Command-level: dangerously broad ranges are flagged per team in the run
+	 * output — including a zero mask written with a leading zero.
+	 */
+	public function test_migrate_institutions_command_warns_on_broad_ranges() {
+		$everyone_team_id = $this->create_team( 'Everyone University' );
+		$private_team_id  = $this->create_team( 'Intranet College' );
+		update_option(
+			Institutions_Migration::ACCESS_BY_IP_OPTION,
+			[
+				$everyone_team_id => '0.0.0.0/00',
+				$private_team_id  => '192.168.0.0/16',
+			]
+		);
+
+		( new Institutions_Migration() )->migrate_institutions( [], [] );
+
+		$warning_messages  = array_column( array_filter( WP_CLI::$messages, fn( $entry ) => 'warning' === $entry[0] ), 1 );
+		$everyone_warnings = array_filter( $warning_messages, fn( $message ) => str_contains( $message, 'EVERY visitor IP' ) && str_contains( $message, '0.0.0.0/0' ) );
+		$private_warnings  = array_filter( $warning_messages, fn( $message ) => str_contains( $message, 'private or reserved' ) && str_contains( $message, '192.168.0.0/16' ) );
+		$this->assertCount( 1, $everyone_warnings, 'A zero mask written as /00 must be flagged as matching everyone.' );
+		$this->assertCount( 1, $private_warnings, 'A private range must be flagged in the run output.' );
+		$this->assertCount( 0, $this->get_all_institutions(), 'The dry-run must still write nothing.' );
+	}
+
+	/**
+	 * A --domains-csv path that is a directory must be a hard error, exactly like
+	 * a missing file — is_readable() alone passes for a directory, which would
+	 * otherwise "read" as an empty CSV and silently migrate zero domains.
+	 */
+	public function test_parse_domains_csv_directory_is_an_error() {
+		$parse_result = Institutions_Migration::parse_domains_csv( untrailingslashit( get_temp_dir() ) );
+		$this->assertWPError( $parse_result, 'A directory path must be a hard error, not an empty map.' );
+	}
+
+	/**
+	 * Command-level: a supplied CSV that yields no team → domain rows (empty file,
+	 * header-only file, or all rows malformed) aborts the run before any team is
+	 * processed — an operator typo must not silently migrate zero domains.
+	 */
+	public function test_migrate_institutions_command_aborts_on_empty_domains_csv() {
+		$team_id = $this->create_team( 'Empty CSV University' );
+		update_option( Institutions_Migration::ACCESS_BY_IP_OPTION, [ $team_id => '128.100.0.0/16' ] );
+		$csv_path = $this->write_csv( "team_id,domain\n" );
+
+		try {
+			( new Institutions_Migration() )->migrate_institutions( [], [ 'domains-csv' => $csv_path, 'live' => true ] );
+			$this->fail( 'A supplied-but-empty domains CSV must abort the run.' );
+		} catch ( WP_CLI_Mock_Exception $abort ) {
+			$this->assertStringContainsString( 'yielded no team', $abort->getMessage(), 'The abort must name the empty-CSV cause.' );
+		}
+
+		$this->assertCount( 0, $this->get_all_institutions(), 'Nothing may be migrated when the CSV was supplied but empty.' );
+	}
+
+	/**
+	 * A malformed FIRST data row is reported, not absorbed as a phantom header:
+	 * only a cell that actually reads as a header (`team_id` and variants) is
+	 * skipped silently — wherever it appears, including after a leading blank line.
+	 */
+	public function test_parse_domains_csv_reports_malformed_first_row() {
+		$parse_result = Institutions_Migration::parse_domains_csv(
+			$this->write_csv( "12a,uni.edu\n34,ok.edu\n" )
+		);
+		$this->assertSame( [ 34 => [ 'ok.edu' ] ], $parse_result['map'], 'Only the valid row should be mapped.' );
+		$this->assertCount( 1, $parse_result['errors'], 'A typo\'d team ID on row 1 must be reported, not swallowed as a header.' );
+		$this->assertStringContainsString( '12a', $parse_result['errors'][0] );
+
+		$blank_lead_result = Institutions_Migration::parse_domains_csv(
+			$this->write_csv( "\nTeam ID,domain\n12,uni.edu\n" )
+		);
+		$this->assertSame( [ 12 => [ 'uni.edu' ] ], $blank_lead_result['map'], 'A real header after a leading blank line still parses.' );
+		$this->assertSame( [], $blank_lead_result['errors'], 'A recognized header must not be reported as a malformed row.' );
+	}
+
+	/**
+	 * An already-migrated team never has new source values applied — but the
+	 * values the re-run declined to add are computed and surfaced, so a second
+	 * run with a newly-obtained CSV cannot be mistaken for a successful apply.
+	 */
+	public function test_migrate_team_exists_reports_withheld_values() {
+		$team_id = $this->create_team( 'Withheld University' );
+
+		$first_run_result = Institutions_Migration::migrate_team( $team_id, '128.100.0.0/16', [ 'old.edu' ], true );
+		$this->assertSame( 'created', $first_run_result['status'] );
+
+		$second_run_result = Institutions_Migration::migrate_team( $team_id, '128.100.0.0/16, 198.51.100.9', [ 'old.edu', 'new.edu' ], true );
+
+		$this->assertSame( 'exists', $second_run_result['status'] );
+		$this->assertSame( [ '198.51.100.9' ], $second_run_result['withheld_ranges'], 'A newly-supplied range the institution lacks must be reported as withheld.' );
+		$this->assertSame( [ 'new.edu' ], $second_run_result['withheld_domains'], 'A newly-supplied domain the institution lacks must be reported as withheld.' );
+		$this->assertSame(
+			'128.100.0.0/16',
+			get_post_meta( $second_run_result['institution_id'], Institution::META_PREFIX . 'ip_range', true ),
+			'The withheld values must NOT be applied.'
+		);
+		$this->assertSame(
+			'old.edu',
+			get_post_meta( $second_run_result['institution_id'], Institution::META_PREFIX . 'email_domain', true ),
+			'The withheld domains must NOT be applied.'
+		);
+	}
+
+	/**
+	 * Command-level: the withheld values are named in the run output so the
+	 * operator sees exactly what the re-run declined to add.
+	 */
+	public function test_migrate_institutions_command_names_withheld_values() {
+		$team_id = $this->create_team( 'Second Pass University' );
+		update_option( Institutions_Migration::ACCESS_BY_IP_OPTION, [ $team_id => '128.100.0.0/16' ] );
+
+		( new Institutions_Migration() )->migrate_institutions( [], [ 'live' => true ] );
+		WP_CLI::reset();
+
+		$csv_path = $this->write_csv( "$team_id,latecomer.edu\n" );
+		( new Institutions_Migration() )->migrate_institutions( [], [ 'domains-csv' => $csv_path, 'live' => true ] );
+
+		$warning_messages  = array_column( array_filter( WP_CLI::$messages, fn( $entry ) => 'warning' === $entry[0] ), 1 );
+		$withheld_warnings = array_filter( $warning_messages, fn( $message ) => str_contains( $message, 'NOT applied' ) && str_contains( $message, 'latecomer.edu' ) );
+		$this->assertCount( 1, $withheld_warnings, 'The re-run must name the withheld domain in a warning.' );
+		$this->assertCount( 1, $this->get_all_institutions(), 'No duplicate institution may be created by the re-run.' );
 	}
 
 	/**

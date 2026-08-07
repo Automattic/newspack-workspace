@@ -15,6 +15,7 @@
 
 namespace Newspack\CLI;
 
+use Newspack\Content_Gate;
 use Newspack\Institution;
 use WP_CLI;
 use WP_Error;
@@ -83,7 +84,7 @@ class Institutions_Migration {
 	 * ## OPTIONS
 	 *
 	 * [--domains-csv=<path>]
-	 * : Path to a CSV mapping team IDs to email domains. Each row is `team_id,domain[,domain...]`; rows with the same team ID accumulate. An optional header row is ignored. Domains are matched exactly against the reader's email domain (no wildcards) and must be ASCII/punycode — pre-convert internationalized domains (e.g. `xn--…`).
+	 * : Path to a CSV mapping team IDs to email domains. Each row is `team_id,domain[,domain...]`; rows with the same team ID accumulate. An optional `team_id` header row is ignored. Domains are matched exactly against the reader's email domain (no wildcards) and must be ASCII/punycode — pre-convert internationalized domains (e.g. `xn--…`). A supplied CSV that yields no usable rows aborts the command.
 	 *
 	 * [--live]
 	 * : Apply the changes. Without this flag the command runs as a dry-run and writes nothing.
@@ -113,6 +114,16 @@ class Institutions_Migration {
 			foreach ( $csv_result['errors'] as $csv_error ) {
 				WP_CLI::warning( sprintf( 'domains-csv: %s', $csv_error ) );
 			}
+			// A supplied CSV that yields zero rows is indistinguishable from a site
+			// with no domain rules, and the difference only surfaces after teams have
+			// been marked migrated — which a corrected re-run cannot repair. Stop.
+			if ( empty( $domains_map ) ) {
+				WP_CLI::error( sprintf( 'The domains CSV (%s) yielded no team → domain rows. Aborting so an empty or wrongly-pathed file cannot silently migrate zero domains — fix the CSV, or run without --domains-csv.', $csv_path ) );
+			}
+		}
+
+		if ( ! Content_Gate::is_newspack_feature_enabled() ) {
+			WP_CLI::warning( 'The content gates feature (NEWSPACK_CONTENT_GATES) is not enabled on this site: institutions will be created but will remain dormant until it is enabled.' );
 		}
 
 		if ( $dry_run ) {
@@ -183,16 +194,28 @@ class Institutions_Migration {
 			} elseif ( 'exists' === $result['status'] ) {
 				$status_note = 'publish' !== $result['institution_status'] ? sprintf( ' (status: %s — restore it or delete it to re-migrate)', $result['institution_status'] ) : '';
 				WP_CLI::line( sprintf( 'Team %d: already migrated to institution %d%s — skipping (rules left untouched).', $team_id, $result['institution_id'], $status_note ) );
+				// The skip protects operator edits, but the operator must know which
+				// supplied values the re-run declined to add — otherwise a second run
+				// with a newly-obtained CSV looks successful while adding nothing.
+				$withheld_values = array_merge( $result['withheld_ranges'], $result['withheld_domains'] );
+				if ( ! empty( $withheld_values ) ) {
+					WP_CLI::warning( sprintf( 'Team %d: the source data supplies %d value(s) institution %d does not have: [%s] — NOT applied (re-runs never modify an existing institution); add manually if intended.', $team_id, count( $withheld_values ), $result['institution_id'], implode( ', ', $withheld_values ) ) );
+				}
 			} elseif ( $dry_run ) {
 				WP_CLI::success( sprintf( 'Team %d: would create institution "%s" — IP ranges: [%s], domains: [%s].', $team_id, $team_name, implode( ', ', $result['ip_ranges'] ), implode( ', ', $result['domains'] ) ) );
 			} else {
 				WP_CLI::success( sprintf( 'Team %d: created institution %d ("%s") — IP ranges: [%s], domains: [%s].', $team_id, $result['institution_id'], $team_name, implode( ', ', $result['ip_ranges'] ), implode( ', ', $result['domains'] ) ) );
 			}
 
-			// A /0 block matches every visitor — surface it as the access grant it is.
-			foreach ( $result['ip_ranges'] as $migrated_range ) {
-				if ( str_ends_with( $migrated_range, '/0' ) ) {
-					WP_CLI::warning( sprintf( 'Team %d: range "%s" is a /0 block — it matches EVERY visitor IP and grants this institution\'s access to everyone. Confirm this is intended.', $team_id, $migrated_range ) );
+			// A malformed or too-broad range turns an institution into a whitelist for
+			// everyone — judge breadth by the numeric mask the access check will use,
+			// not by how the range was typed. Error rows wrote nothing, so no warning.
+			if ( 'error' !== $result['status'] ) {
+				foreach ( $result['ip_ranges'] as $migrated_range ) {
+					$breadth_warning = self::get_range_breadth_warning( $migrated_range );
+					if ( '' !== $breadth_warning ) {
+						WP_CLI::warning( sprintf( 'Team %d: range "%s" %s. Confirm this is intended.', $team_id, $migrated_range, $breadth_warning ) );
+					}
 				}
 			}
 
@@ -248,19 +271,22 @@ class Institutions_Migration {
 		WP_CLI::line( '' );
 		$done_report = sprintf( 'Done. %d team(s) processed: %d institution(s) %s, %d already migrated, %d unmappable, %d error(s).', count( $teams ), $created_count, $dry_run ? 'would be created' : 'created', $exists_count, count( $unmappable ), $error_count );
 		if ( $error_count > 0 ) {
-			WP_CLI::warning( $done_report . ' Errored teams were NOT migrated — see the warnings above.' );
-		} else {
-			WP_CLI::success( $done_report );
+			// error() exits non-zero, so a scripted caller can detect partial failure.
+			WP_CLI::error( $done_report . ' Errored teams were NOT migrated — see the warnings above.' );
 		}
+		WP_CLI::success( $done_report );
 	}
 
 	/**
 	 * Parse the operator-supplied team → email-domain CSV.
 	 *
 	 * Each row is `team_id,domain[,domain...]`. Rows sharing a team ID
-	 * accumulate. A first row whose first cell is not numeric is treated as a
-	 * header and skipped. Domains are lowercased and a leading `@` is stripped;
-	 * anything that doesn't look like a hostname is collected as an error.
+	 * accumulate. A row whose first cell is `team_id`/`team id`/`team-id`
+	 * (case-insensitive) is treated as a header and skipped; any other
+	 * non-numeric first cell — including on row 1 — is collected as an error,
+	 * so a typo'd team ID can never vanish as a phantom header. Domains are
+	 * lowercased and a leading `@` is stripped; anything that doesn't look
+	 * like a hostname is collected as an error.
 	 *
 	 * @param string $csv_path Path to the CSV file.
 	 *
@@ -272,7 +298,8 @@ class Institutions_Migration {
 	 * }
 	 */
 	public static function parse_domains_csv( $csv_path ) {
-		if ( ! is_readable( $csv_path ) ) {
+		// is_readable() alone passes for a directory, which "reads" as empty.
+		if ( ! is_file( $csv_path ) || ! is_readable( $csv_path ) ) {
 			return new WP_Error( 'newspack_migrate_institutions_csv', sprintf( 'Cannot read domains CSV: %s', $csv_path ) );
 		}
 		$csv_content = file_get_contents( $csv_path ); // phpcs:ignore WordPressVIPMinimum.Performance.FetchingRemoteData.FileGetContentsUnknown
@@ -296,8 +323,10 @@ class Institutions_Migration {
 			$cells   = array_map( 'trim', str_getcsv( $line ) );
 			$team_id = $cells[0];
 			if ( ! ctype_digit( $team_id ) ) {
-				// The first row may be a header; anything later is malformed.
-				if ( 0 !== $line_index ) {
+				// Only a cell that actually reads as a header is skipped silently;
+				// any other non-numeric team ID — row 1 included — is reported, so
+				// a typo'd team ID can never vanish as a phantom header.
+				if ( ! preg_match( '/^team[ _-]?ids?$/i', $team_id ) ) {
 					$errors[] = sprintf( 'row %d: "%s" is not a team ID — row skipped.', $line_index + 1, $team_id );
 				}
 				continue;
@@ -380,7 +409,10 @@ class Institutions_Migration {
 				$subnet                = trim( $subnet );
 				$bits                  = trim( $bits );
 				if ( ctype_digit( $bits ) && (int) $bits <= 32 && filter_var( $subnet, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 ) ) {
-					$valid[] = $subnet . '/' . $bits;
+					// (int)-cast the bits so the stored range is canonical: a
+					// leading-zero mask like `/00` would otherwise evade every
+					// string-shape breadth check while still matching numerically.
+					$valid[] = $subnet . '/' . (int) $bits;
 				} else {
 					$invalid[] = $token;
 				}
@@ -395,6 +427,40 @@ class Institutions_Migration {
 			'valid'   => array_values( $valid ),
 			'invalid' => array_values( $invalid ),
 		];
+	}
+
+	/**
+	 * Describe why a migrated range is dangerously broad, if it is.
+	 *
+	 * Breadth is judged by the numeric mask the access check will use
+	 * (IP_Access_Rule casts the bits to int), never by the range's spelling.
+	 * Three shapes are flagged: a zero mask (matches every visitor), a private
+	 * or reserved subnet (never matches real visitors behind the platform's
+	 * proxy handling, and can match everyone on a misconfigured host), and a
+	 * very wide public block. Non-IPv4 values return '' — for already-migrated
+	 * institutions the ranges are operator-owned meta this command must not
+	 * second-guess.
+	 *
+	 * @param string $range A migrated IPv4 address or CIDR range.
+	 *
+	 * @return string Human-readable reason, or '' when the range is unremarkable.
+	 */
+	public static function get_range_breadth_warning( $range ) {
+		list( $subnet, $bits ) = array_pad( explode( '/', $range, 2 ), 2, '32' );
+		if ( ! filter_var( $subnet, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 ) || ! ctype_digit( trim( $bits ) ) ) {
+			return '';
+		}
+		$mask_bits = (int) $bits;
+		if ( 0 === $mask_bits ) {
+			return 'is a zero-length mask — it matches EVERY visitor IP and grants this institution\'s access to everyone';
+		}
+		if ( ! filter_var( $subnet, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 | FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE ) ) {
+			return 'is a private or reserved range — it will never match real visitors\' public egress IPs (see the proxy caveat below)';
+		}
+		if ( $mask_bits < 16 ) {
+			return sprintf( 'is a very wide block (~%s addresses) — confirm it really is the institution\'s public egress range', number_format( 2 ** ( 32 - $mask_bits ) ) );
+		}
+		return '';
 	}
 
 	/**
@@ -447,6 +513,10 @@ class Institutions_Migration {
 	 *     @type string[] $invalid_ranges     Rejected source ranges, for reporting (empty for 'exists' —
 	 *                                        source data is not consulted for an already-migrated team).
 	 *     @type string[] $domains            Email domains applied (current meta for 'exists').
+	 *     @type string[] $withheld_ranges    For 'exists' only: valid source ranges the existing
+	 *                                        institution does not carry — reported, never applied.
+	 *     @type string[] $withheld_domains   For 'exists' only: supplied domains the existing
+	 *                                        institution does not carry — reported, never applied.
 	 *     @type int      $subscription_id    The team's linked subscription ID, or 0.
 	 *     @type string   $subscription_note  Status note about the linked subscription.
 	 *     @type string   $reason             Reason, when unmappable or errored.
@@ -462,6 +532,8 @@ class Institutions_Migration {
 			'ip_ranges'          => $ranges['valid'],
 			'invalid_ranges'     => $ranges['invalid'],
 			'domains'            => array_values( $domains ),
+			'withheld_ranges'    => [],
+			'withheld_domains'   => [],
 			'subscription_id'    => 0,
 			'subscription_note'  => '',
 			'reason'             => '',
@@ -492,6 +564,10 @@ class Institutions_Migration {
 			$result['ip_ranges']          = $split_meta_list( 'ip_range' );
 			$result['domains']            = $split_meta_list( 'email_domain' );
 			$result['invalid_ranges']     = [];
+			// Never applied — but supplied values the institution lacks are surfaced
+			// so a re-run with a newly-obtained CSV can't be mistaken for a no-op.
+			$result['withheld_ranges']    = array_values( array_diff( $ranges['valid'], $result['ip_ranges'] ) );
+			$result['withheld_domains']   = array_values( array_diff( array_values( $domains ), $result['domains'] ) );
 			return $result;
 		}
 
