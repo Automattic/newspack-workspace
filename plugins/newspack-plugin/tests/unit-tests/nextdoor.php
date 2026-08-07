@@ -1181,6 +1181,31 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 	}
 
 	/**
+	 * An outage stops the write without telling the publisher to reconnect.
+	 */
+	public function test_an_unreachable_refresh_does_not_ask_for_a_reconnection() {
+		$post_id = $this->share_a_post_with_an_expired_token();
+
+		remove_all_filters( 'pre_http_request' );
+		add_filter(
+			'pre_http_request',
+			function () {
+				return new WP_Error( 'http_request_failed', 'Connection timed out' );
+			}
+		);
+
+		$request = new WP_REST_Request( 'PUT', '/newspack/v1/nextdoor/update-post/' . $post_id );
+		$request->set_param( 'id', $post_id );
+
+		$result = Controller::api_update_post( $request );
+
+		self::assertInstanceOf( 'WP_Error', $result );
+		self::assertSame( 'nextdoor_unreachable', $result->get_error_code() );
+		// The grant is intact, so reconnecting would cost the page claim for nothing.
+		self::assertTrue( Auth::has_usable_token() );
+	}
+
+	/**
 	 * A revoked token shows up only on the report, and is still a reconnection.
 	 */
 	public function test_a_refused_ingestion_report_asks_for_a_reconnection() {
