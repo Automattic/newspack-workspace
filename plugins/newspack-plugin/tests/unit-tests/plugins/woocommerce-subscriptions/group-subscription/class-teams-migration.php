@@ -660,6 +660,41 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 		$this->assertSame( Teams_Migration::get_pending_team_invitation_emails( $team_b ), $bulk[ $team_b ], 'Bulk and per-team readers must agree on team B.' );
 		$this->assertArrayNotHasKey( $team_c, $bulk, 'A team with no pending invitations is omitted from the bulk result.' );
 		$this->assertSame( 2, $dropped, 'Each pending invitation with a non-email title is counted exactly once.' );
+
+		// Chunking only bounds the per-query load; it must not change the result.
+		$chunked_dropped = 0;
+		$chunked         = Teams_Migration::get_pending_team_invitation_emails_for_teams( [ $team_a, $team_b, $team_c ], $chunked_dropped, 2 );
+		$this->assertSame( $bulk, $chunked, 'A chunked read must return exactly what the one-shot read returns.' );
+		$this->assertSame( $dropped, $chunked_dropped, 'The drop tally must be chunk-independent.' );
+	}
+
+	/**
+	 * The dry-run sendability check must not repair the state it reports:
+	 * can_send_email()'s default miss path publishes the email post (and rewrites
+	 * newsletter palette keys), which would break the rehearsal's no-writes promise
+	 * and silence the warning by fixing the unsendable condition it exists to
+	 * surface. The read-only probe answers without writing.
+	 */
+	public function test_sendability_probe_is_read_only() {
+		wp_delete_post( $this->email_post_id, true );
+		$this->email_post_id = null;
+
+		$count_email_posts = function () {
+			return count(
+				get_posts(
+					[
+						'post_type'      => Emails::POST_TYPE,
+						'post_status'    => 'any',
+						'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Test fixture; the suite seeds at most one email post.
+						'fields'         => 'ids',
+					]
+				)
+			);
+		};
+		$before            = $count_email_posts();
+
+		$this->assertFalse( Emails::can_send_email( Group_Subscription_Invite::EMAIL_TYPE, false ), 'With no email post, the probe reports unsendable.' );
+		$this->assertSame( $before, $count_email_posts(), 'The probe must not create the email post — the dry-run rehearsal depends on it being read-only.' );
 	}
 
 	/**
