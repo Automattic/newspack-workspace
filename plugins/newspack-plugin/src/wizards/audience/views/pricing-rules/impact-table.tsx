@@ -11,6 +11,11 @@
  * checkout. A note below the table spells this out whenever segment columns are
  * present, so a segment named for existing subscribers isn't misread as
  * modeling their lifecycle (NPPD-1853).
+ *
+ * Long samples collapse to the first ROW_LIMIT rows behind a See more toggle,
+ * matching Insights' InsightsDataView: rows are sorted in full and then sliced,
+ * so a collapsed table always shows the current top N rather than whichever
+ * rows happened to come first.
  */
 
 /**
@@ -18,6 +23,10 @@
  */
 import { __ } from '@wordpress/i18n';
 import { useState, useEffect, useMemo } from '@wordpress/element';
+import {
+	Button,
+	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
+} from '@wordpress/components';
 // Not the Newspack wrapper: with-wizard-screen/style.scss gives `.newspack-dataviews`
 // a -48px page bleed that hangs this embedded table past the form column.
 import { DataViews, filterSortAndPaginate } from '@wordpress/dataviews';
@@ -26,7 +35,11 @@ import type { Field, View } from '@wordpress/dataviews';
 /**
  * Internal dependencies
  */
+import { Divider } from '../../../../../packages/components/src';
 import { cycleMarkerNote, formatPrice, formatSegment } from './impact-format';
+
+/** Rows shown before the publisher asks for the rest. */
+const ROW_LIMIT = 10;
 
 interface PriceColumn {
 	key: string;
@@ -75,6 +88,7 @@ interface ImpactTableProps {
 
 export default function ImpactTable( { baseline, segmentGroups, currency, showCycleNote = true }: ImpactTableProps ) {
 	const hasSegments = segmentGroups.length > 0;
+	const [ expanded, setExpanded ] = useState( false );
 
 	const columns: PriceColumn[] = useMemo(
 		() => [
@@ -159,28 +173,45 @@ export default function ImpactTable( { baseline, segmentGroups, currency, showCy
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [ fieldIdsKey, perPage ] );
 
-	const { data, paginationInfo } = useMemo( () => filterSortAndPaginate( baseline, view, fields ), [ baseline, view, fields ] );
+	const { data: sorted } = useMemo( () => filterSortAndPaginate( baseline, view, fields ), [ baseline, view, fields ] );
+
+	// Sliced after the sort, so collapsing keeps the current top rows.
+	const collapsible = sorted.length > ROW_LIMIT;
+	const data = collapsible && ! expanded ? sorted.slice( 0, ROW_LIMIT ) : sorted;
 
 	return (
 		<>
-			<div
-				className="newspack-pricing-rules__impact-table"
-				role="region"
-				aria-label={ __( 'Resulting prices by product and reader segment', 'newspack-plugin' ) }
-			>
-				<DataViews
-					data={ data }
-					fields={ fields }
-					view={ view }
-					onChangeView={ setView }
-					paginationInfo={ paginationInfo }
-					defaultLayouts={ { table: {} } }
-					getItemId={ ( item: CatalogImpactRow ) => String( item.product_id ) }
-					empty={ <p>{ __( 'No products to show.', 'newspack-plugin' ) }</p> }
+			<VStack spacing={ 0 }>
+				<div
+					className="newspack-pricing-rules__impact-table"
+					role="region"
+					aria-label={ __( 'Resulting prices by product and reader segment', 'newspack-plugin' ) }
 				>
-					<DataViews.Layout />
-				</DataViews>
-			</div>
+					<DataViews
+						data={ data }
+						fields={ fields }
+						view={ view }
+						onChangeView={ setView }
+						paginationInfo={ { totalItems: data.length, totalPages: 1 } }
+						defaultLayouts={ { table: {} } }
+						getItemId={ ( item: CatalogImpactRow ) => String( item.product_id ) }
+						empty={ <p>{ __( 'No products to show.', 'newspack-plugin' ) }</p> }
+					>
+						<DataViews.Layout />
+					</DataViews>
+				</div>
+				{ collapsible && (
+					<>
+						{ /* Divider margins are raw px, not a step scale. */ }
+						<Divider variant="tertiary" marginTop={ 0 } marginBottom={ 8 } />
+						<div>
+							<Button variant="link" aria-expanded={ expanded } onClick={ () => setExpanded( ! expanded ) }>
+								{ expanded ? __( 'See less', 'newspack-plugin' ) : __( 'See more', 'newspack-plugin' ) }
+							</Button>
+						</div>
+					</>
+				) }
+			</VStack>
 			{ showCycleNote && hasCycles && <p className="newspack-pricing-rules__muted">{ cycleMarkerNote() }</p> }
 			{ hasSegments && (
 				<p className="newspack-pricing-rules__muted">
