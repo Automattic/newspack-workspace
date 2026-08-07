@@ -218,6 +218,35 @@ class Controller {
 	}
 
 	/**
+	 * Require a token Nextdoor will accept, and say why when there is not one.
+	 *
+	 * A refresh that could not reach Nextdoor leaves the grant intact, so the remedy is to
+	 * wait rather than to reconnect, which would cost the publisher their page claim. The
+	 * status route already tells the two apart; the write paths have to agree with it.
+	 *
+	 * @return WP_Error|null Error when the request should not go out.
+	 */
+	private static function require_usable_token() {
+		if ( Auth::validate_token() ) {
+			return null;
+		}
+
+		if ( Auth::has_usable_token() ) {
+			return new \WP_Error(
+				'nextdoor_unreachable',
+				__( 'Nextdoor could not be reached. Please try again shortly.', 'newspack-plugin' ),
+				[ 'status' => 503 ]
+			);
+		}
+
+		return new \WP_Error(
+			'nextdoor_token_invalid',
+			__( 'Nextdoor access token is invalid or expired. Please reconnect your account.', 'newspack-plugin' ),
+			[ 'status' => 400 ]
+		);
+	}
+
+	/**
 	 * Check the current user against the post a request names.
 	 *
 	 * The capability says whether a user may share to Nextdoor at all; it cannot say
@@ -287,12 +316,9 @@ class Controller {
 		$publication_url = $request->get_param( 'publication_url' );
 		$test            = $request->get_param( 'test' );
 
-		if ( ! Auth::validate_token() ) {
-			return new \WP_Error(
-				'nextdoor_token_invalid',
-				__( 'Nextdoor access token is invalid or expired. Please reconnect your account.', 'newspack-plugin' ),
-				[ 'status' => 400 ]
-			);
+		$unusable = self::require_usable_token();
+		if ( $unusable ) {
+			return $unusable;
 		}
 
 		$api    = API::instance();
@@ -393,14 +419,9 @@ class Controller {
 		$settings = Nextdoor::get_settings();
 		$api      = API::instance();
 
-		// Check if the access token is valid.
-		$token_valid = Auth::validate_token();
-		if ( ! $token_valid ) {
-			return new \WP_Error(
-				'nextdoor_token_invalid',
-				__( 'Nextdoor access token is invalid or expired. Please reconnect your account.', 'newspack-plugin' ),
-				[ 'status' => 400 ]
-			);
+		$unusable = self::require_usable_token();
+		if ( $unusable ) {
+			return $unusable;
 		}
 
 		$article_data = self::prepare_article_data( $post_id, $settings );
@@ -466,14 +487,9 @@ class Controller {
 		$settings = Nextdoor::get_settings();
 		$api      = API::instance();
 
-		// Check if the access token is valid.
-		$token_valid = Auth::validate_token();
-		if ( ! $token_valid ) {
-			return new \WP_Error(
-				'nextdoor_token_invalid',
-				__( 'Nextdoor access token is invalid or expired. Please reconnect your account.', 'newspack-plugin' ),
-				[ 'status' => 400 ]
-			);
+		$unusable = self::require_usable_token();
+		if ( $unusable ) {
+			return $unusable;
 		}
 
 		$article_data = self::prepare_article_data( $post_id, $settings );
@@ -528,14 +544,9 @@ class Controller {
 			);
 		}
 
-		// Check if the access token is valid.
-		$token_valid = Auth::validate_token();
-		if ( ! $token_valid ) {
-			return new \WP_Error(
-				'nextdoor_token_invalid',
-				__( 'Nextdoor access token is invalid or expired. Please reconnect your account.', 'newspack-plugin' ),
-				[ 'status' => 400 ]
-			);
+		$unusable = self::require_usable_token();
+		if ( $unusable ) {
+			return $unusable;
 		}
 
 		$api      = API::instance();
