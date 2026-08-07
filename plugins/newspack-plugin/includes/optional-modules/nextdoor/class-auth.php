@@ -347,7 +347,15 @@ class Auth {
 			self::redirect_with_error( $token_response->get_error_message() );
 		}
 
-		Nextdoor::update_settings( self::apply_token_response( $settings, $token_response ) );
+		$settings = self::apply_token_response( $settings, $token_response );
+
+		// Nothing in the grant says which account it belongs to, so a claimed page cannot
+		// be assumed to still be this one's. Dropping it sends the publisher back through
+		// the claim step, which is one press with the URL already filled in, rather than
+		// leaving a reconnection publishing to whichever page was claimed before.
+		$settings['page_id'] = '';
+
+		Nextdoor::update_settings( $settings );
 
 		wp_safe_redirect( admin_url( 'admin.php?page=newspack-settings&oauth_success=1#social' ) );
 		exit;
