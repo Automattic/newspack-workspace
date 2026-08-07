@@ -41,6 +41,9 @@ type UseConfirmDialogResult = {
  *
  * The `confirmDialog` element must be rendered somewhere in the component's
  * JSX for the dialog to appear.
+ *
+ * `cancelConfirm()` withdraws a pending request without invoking its callback,
+ * for when whatever raised the prompt goes away on its own.
  */
 function useConfirmDialog( options: UseConfirmDialogOptions ): UseConfirmDialogResult {
 	const { message, when, ...dialogProps } = options;

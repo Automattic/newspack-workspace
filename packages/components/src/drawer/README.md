@@ -347,7 +347,14 @@ deliberately does not: the same dialog serves the whole wizard, and it has no wa
 to tell a prompt it raised from one your own navigation guard raised.
 
 ```jsx
-const { confirmDialog, requestConfirm } = useUnsavedChangesDialog( { when: isDirty } );
+const { confirmDialog, requestConfirm, cancelConfirm } = useUnsavedChangesDialog( { when: isDirty } );
+
+const save = async () => {
+	await persist();
+	// The panel closes on its own here, so withdraw the prompt along with it.
+	cancelConfirm();
+	setIsOpen( false );
+};
 
 <Drawer.Root
 	isOpen={ isOpen }

@@ -92,6 +92,7 @@ Accepts all `ConfirmDialog` props except `isOpen`, `onConfirm`, `onCancel`, and 
 |-----|------|-------------|
 | `confirmDialog` | `React.ReactElement` | The dialog element — render this somewhere in your JSX. |
 | `requestConfirm` | `( callback: () => void ) => void` | Call with a callback to request confirmation. Shows the dialog (unless `when` is `false`); invokes the callback only if the user confirms. |
+| `cancelConfirm` | `() => void` | Withdraws a pending request without invoking its callback. Call it when whatever raised the prompt goes away on its own, so the dialog does not outlive it. |
 
 ### Usage
 
