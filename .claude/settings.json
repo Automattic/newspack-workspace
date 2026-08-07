@@ -8,8 +8,8 @@
   "extraKnownMarketplaces": {
     "newspack-devkit": {
       "source": {
-        "source": "github",
-        "repo": "Automattic/newspack-devkit"
+        "source": "git",
+        "url": "git@github.a8c.com:automattic/newspack-devkit.git"
       }
     }
   }

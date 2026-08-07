@@ -177,7 +177,7 @@ One repository, so a cross-plugin change is one branch and one PR. Before changi
 With the `newspack` plugin installed: `newspack:pr-create` → `newspack:pr-feedback` → `newspack:pr-ready` → `newspack:pr-merge`, plus `newspack:pr-test` to test a PR in an isolated env. Install it with `n setup-agents`, or:
 
 ```
-/plugin marketplace add Automattic/newspack-devkit
+/plugin marketplace add git@github.a8c.com:automattic/newspack-devkit.git
 /plugin install newspack@newspack-devkit
 ```
 
