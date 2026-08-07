@@ -98,6 +98,8 @@ const Root = forwardRef< HTMLDivElement, DrawerRootProps >( function Root(
 	} = useConfirmDialog( {
 		message: confirmCloseMessage,
 		confirmButtonText,
+		// Hidden, but still the dialog's accessible name.
+		title: __( 'Unsaved changes', 'newspack-plugin' ),
 		hideTitle: true,
 	} );
 

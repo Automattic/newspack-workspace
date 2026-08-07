@@ -179,6 +179,15 @@ describe( 'Drawer accessible name', () => {
 		expect( warn ).not.toHaveBeenCalled();
 		warn.mockRestore();
 	} );
+
+	it( 'names its own confirmation, whose heading never shows', () => {
+		renderDrawer( { rootProps: { isDirty: true } } );
+		fireEvent.click( closeButton() );
+
+		const confirmation = screen.getByRole( 'dialog', { name: 'Unsaved changes' } );
+		expect( confirmation ).not.toBe( panel() );
+		expect( confirmation ).toHaveClass( 'newspack-modal--hide-title' );
+	} );
 } );
 
 const bodyOf = node => node.parentElement;
@@ -605,7 +614,7 @@ describe( 'Drawer closing', () => {
 		pointerUp( overlay() );
 
 		expect( onRequestClose ).not.toHaveBeenCalled();
-		expect( screen.getByText( /unsaved changes/i ) ).toBeInTheDocument();
+		expect( dialogButton( 'Discard changes' ) ).toBeInTheDocument();
 	} );
 
 	it( 'does not close when the press ends inside the panel', () => {
