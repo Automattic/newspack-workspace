@@ -26,7 +26,7 @@ import type { Field, View } from '@wordpress/dataviews';
 /**
  * Internal dependencies
  */
-import { formatPrice, formatSegment } from './impact-format';
+import { cycleMarkerNote, formatPrice, formatSegment } from './impact-format';
 
 interface PriceColumn {
 	key: string;
@@ -68,9 +68,12 @@ interface ImpactTableProps {
 	baseline: CatalogImpactRow[];
 	segmentGroups: SegmentImpactGroup[];
 	currency: PricingRulesCurrency;
+	// The editor carries this note in its section header instead, where it can
+	// appear before the preview has loaded.
+	showCycleNote?: boolean;
 }
 
-export default function ImpactTable( { baseline, segmentGroups, currency }: ImpactTableProps ) {
+export default function ImpactTable( { baseline, segmentGroups, currency, showCycleNote = true }: ImpactTableProps ) {
 	const hasSegments = segmentGroups.length > 0;
 
 	const columns: PriceColumn[] = useMemo(
@@ -178,14 +181,7 @@ export default function ImpactTable( { baseline, segmentGroups, currency }: Impa
 					<DataViews.Layout />
 				</DataViews>
 			</div>
-			{ hasCycles && (
-				<p className="newspack-pricing-rules__muted">
-					{ __(
-						'Each price is marked with the billing cycle it starts from: c1 is the initial purchase, c2 the first renewal.',
-						'newspack-plugin'
-					) }
-				</p>
-			) }
+			{ showCycleNote && hasCycles && <p className="newspack-pricing-rules__muted">{ cycleMarkerNote() }</p> }
 			{ hasSegments && (
 				<p className="newspack-pricing-rules__muted">
 					{ __(

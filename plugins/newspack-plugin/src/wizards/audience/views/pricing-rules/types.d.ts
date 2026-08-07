@@ -17,6 +17,17 @@ interface PricingRuleStep {
 	label: string;
 }
 
+/**
+ * A schedule price as the form holds it. Numbers stay strings until save, so a
+ * half-typed field is not coerced under the publisher.
+ */
+interface SchedulePriceInput {
+	at: string;
+	calc_type: string;
+	value: string;
+	label: string;
+}
+
 interface PricingRuleRow {
 	id: number;
 	deal_key: string;

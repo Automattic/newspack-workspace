@@ -116,6 +116,17 @@ describe( 'ImpactTable', () => {
 		expect( screen.queryByText( /c1 is the initial purchase/ ) ).not.toBeInTheDocument();
 	} );
 
+	it( 'leaves the marker note to its host when asked to', () => {
+		const segments = [
+			{ from_cycle: 1, amount: 5, rule_id: 'r', rule_title: 't', rule_edit_link: '', changed: false },
+			{ from_cycle: 7, amount: 8, rule_id: 'r', rule_title: 't', rule_edit_link: '', changed: false },
+		];
+		render( <ImpactTable baseline={ [ row( { segments } ) ] } segmentGroups={ [] } currency={ CURRENCY } showCycleNote={ false } /> );
+
+		expect( screen.getByText( /c1 \$5\.00/ ) ).toBeInTheDocument();
+		expect( screen.queryByText( /c1 is the initial purchase/ ) ).not.toBeInTheDocument();
+	} );
+
 	it( 'renders without the Newspack DataViews page wrapper', () => {
 		const { container } = render( <ImpactTable baseline={ [ row() ] } segmentGroups={ [] } currency={ CURRENCY } /> );
 		expect( container.querySelector( '.newspack-dataviews' ) ).toBeNull();
