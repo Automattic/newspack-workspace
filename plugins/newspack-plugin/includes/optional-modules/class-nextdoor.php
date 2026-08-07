@@ -34,18 +34,14 @@ class Nextdoor {
 	 * Initialize the module.
 	 */
 	public static function init() {
-		// Only initialize if the module is active.
 		if ( ! Optional_Modules::is_optional_module_active( 'nextdoor' ) ) {
 			return;
 		}
 
-		// Add custom capability.
 		add_action( 'admin_init', [ __CLASS__, 'add_nextdoor_capability' ] );
 
-		// Enqueue post editor scripts.
 		add_action( 'enqueue_block_editor_assets', [ __CLASS__, 'enqueue_post_editor_assets' ] );
 
-		// Include required files.
 		require_once NEWSPACK_ABSPATH . 'includes/optional-modules/nextdoor/class-api.php';
 		require_once NEWSPACK_ABSPATH . 'includes/optional-modules/nextdoor/class-auth.php';
 		require_once NEWSPACK_ABSPATH . 'includes/optional-modules/nextdoor/class-controller.php';
@@ -55,7 +51,6 @@ class Nextdoor {
 	 * Enqueue post editor assets.
 	 */
 	public static function enqueue_post_editor_assets() {
-		// Only load on post editor for users who can publish to Nextdoor.
 		$screen     = get_current_screen();
 		$post_types = apply_filters( 'newspack_nextdoor_publish_cap_post_types', [ 'post' ] );
 		if ( ! $screen || ! in_array( $screen->post_type, $post_types, true ) || ! self::can_user_publish() ) {
@@ -95,11 +90,9 @@ class Nextdoor {
 
 			$is_allowed = in_array( $role_name, $allowed_roles, true );
 
-			// Add capability to allowed roles.
 			if ( $is_allowed && ! $role->has_cap( self::CAPABILITY_SLUG ) ) {
 				$role->add_cap( self::CAPABILITY_SLUG );
 			} elseif ( ! $is_allowed && $role->has_cap( self::CAPABILITY_SLUG ) ) {
-				// Remove capability from disallowed roles.
 				$role->remove_cap( self::CAPABILITY_SLUG );
 			}
 		}
@@ -108,8 +101,8 @@ class Nextdoor {
 	/**
 	 * Remove the Nextdoor publishing capability from every role.
 	 *
-	 * Roles keep the capabilities they are granted, and nothing reconciles them once the
-	 * module is off, so deactivating it has to revoke the capability itself.
+	 * Roles keep granted capabilities and nothing reconciles them once the module is off,
+	 * so deactivating has to revoke the capability itself.
 	 *
 	 * @return void
 	 */
@@ -133,7 +126,7 @@ class Nextdoor {
 		$roles_with_cap = isset( $settings['allowed_roles'] ) ? (array) $settings['allowed_roles'] : [ 'administrator' ];
 
 		// The grant, not just the picker: a site that stored a reader role before it was
-		// withheld would otherwise keep handing the capability out on every admin load.
+		// withheld would keep handing the capability out on every admin load.
 		$roles_with_cap = array_values( array_intersect( $roles_with_cap, wp_list_pluck( self::get_available_roles(), 'value' ) ) );
 
 		/**
@@ -143,7 +136,6 @@ class Nextdoor {
 		 */
 		$roles_with_cap = apply_filters( 'newspack_nextdoor_publish_cap_roles', $roles_with_cap );
 
-		// Ensure administrator always has capability.
 		if ( ! in_array( 'administrator', $roles_with_cap, true ) ) {
 			$roles_with_cap[] = 'administrator';
 		}
@@ -221,20 +213,16 @@ class Nextdoor {
 	 */
 	public static function get_settings() {
 		$default_settings = [
-			// OAuth credentials.
 			'client_id'        => '',
 			'client_secret'    => '',
 
-			// OAuth token.
 			'refresh_token'    => '',
 			'access_token'     => '',
 			'token_expires_at' => 0,
 
-			// Nextdoor page info.
 			'page_id'          => '',
 			'publication_url'  => '',
 
-			// User configs.
 			'allowed_roles'    => [ 'administrator' ],
 		];
 
@@ -277,9 +265,8 @@ class Nextdoor {
 	 * Remove credentials that come from a constant or environment variable.
 	 *
 	 * Every write path reads through get_settings(), which overlays the centralized
-	 * credentials, so persisting the result as-is would copy the platform's shared
-	 * secret into this site's option and leave a stale copy behind if the constant
-	 * is ever unset.
+	 * credentials, so persisting the result as-is would copy the platform's shared secret
+	 * into this site's option and leave it behind if the constant is ever unset.
 	 *
 	 * @param array $settings Settings array.
 	 * @return array Settings array without the centralized credentials.
@@ -297,10 +284,9 @@ class Nextdoor {
 				continue;
 			}
 
-			// get_settings() overlays the platform value on every read, so a match here
-			// cannot tell it apart from a value the site entered itself. Put back what was
-			// stored rather than dropping the key, or a site that had its own credentials
-			// loses them the first time anything writes.
+			// A match cannot tell the overlaid platform value from one the site entered itself,
+			// so put back what was stored rather than dropping the key: otherwise a site with
+			// its own credentials loses them the first time anything writes.
 			if ( ! empty( $stored[ $key ] ) ) {
 				$settings[ $key ] = $stored[ $key ];
 			} else {
@@ -357,10 +343,10 @@ class Nextdoor {
 	/**
 	 * Get the OAuth redirect URI for Nextdoor.
 	 *
-	 * Called without a state this returns the URI the publisher registers with Nextdoor,
-	 * which is also the value shown in the settings screen and must stay stable. The state
-	 * is added per request: Nextdoor preserves the redirect URI's query string on the way
-	 * back, which is how the callback recognises the publisher's own return.
+	 * Without a state this returns the URI the publisher registers with Nextdoor, also shown
+	 * in the settings screen, so it must stay stable. The state is added per request:
+	 * Nextdoor preserves the query string on the way back, which is how the callback
+	 * recognises the publisher's own return.
 	 *
 	 * @param string $state Optional. OAuth state to carry through the round trip.
 	 * @return string
@@ -383,8 +369,8 @@ class Nextdoor {
 	public static function get_available_roles() {
 		$wp_roles = wp_roles();
 		$roles    = [];
-		// Reader roles are held by every self-registered account, so offering them would
-		// let one tick hand publishing rights to the whole audience.
+		// Reader roles are held by every self-registered account, so offering them would let
+		// one tick hand publishing rights to the whole audience.
 		$excluded = class_exists( '\Newspack\Reader_Activation' ) ? \Newspack\Reader_Activation::get_reader_roles() : [ 'subscriber', 'customer' ];
 
 		foreach ( $wp_roles->roles as $role_name => $role_info ) {
@@ -441,7 +427,7 @@ class Nextdoor {
 		$available  = wp_list_pluck( self::get_available_countries(), 'value' );
 		$wc_country = get_option( 'woocommerce_default_country', false );
 		if ( $wc_country ) {
-			// Remove region code.
+			// WooCommerce stores country:region, e.g. `US:CA`.
 			$wc_country = explode( ':', $wc_country )[0];
 		}
 		if ( $wc_country && in_array( $wc_country, $available, true ) ) {

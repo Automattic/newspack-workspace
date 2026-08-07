@@ -41,7 +41,6 @@ class Nextdoor_Section extends Wizard_Section {
 	 * @return void
 	 */
 	public function register_rest_routes() {
-		// Nextdoor module toggle endpoint.
 		register_rest_route(
 			NEWSPACK_API_NAMESPACE,
 			'/wizard/' . $this->wizard_slug . '/social/nextdoor',
@@ -59,13 +58,11 @@ class Nextdoor_Section extends Wizard_Section {
 				'methods'             => WP_REST_Server::EDITABLE,
 				'callback'            => [ $this, 'api_update_nextdoor_settings' ],
 				'permission_callback' => [ $this, 'api_permissions_check' ],
-				// Declaring a `sanitize_callback` stops WordPress from installing its default
-				// validator, so every arg below names `rest_validate_request_arg` explicitly.
-				// Without it the types are documentation rather than rules.
+				// Declaring a `sanitize_callback` stops WordPress installing its default
+				// validator, so every arg below names `rest_validate_request_arg`.
 				'args'                => [
-					// An omitted `module_enabled_nextdoor` deliberately means "no change": the handler below
-					// only acts on a non-null value. The settings card POSTs just the fields it touches, so
-					// adding a `default` here would silently deactivate the module on every one of those saves.
+					// An omitted `module_enabled_nextdoor` means "no change". The card POSTs only the
+					// fields it touches, so a `default` here would deactivate the module on every save.
 					'module_enabled_nextdoor' => [
 						'required'          => false,
 						'type'              => 'boolean',
@@ -99,11 +96,10 @@ class Nextdoor_Section extends Wizard_Section {
 	/**
 	 * Keep a credential exactly as the publisher pasted it.
 	 *
-	 * `sanitize_text_field()` drops every `%` followed by two hex digits, which is
-	 * display-text hygiene an opaque bearer string does not want: a secret carrying one
-	 * would be stored short, and the only symptom is a sign-in that never works. Nothing
-	 * renders these as HTML, so what is left to exclude is whitespace and control
-	 * characters, which no credential carries and which would travel into a header.
+	 * `sanitize_text_field()` drops every `%` followed by two hex digits, so a secret
+	 * carrying one is stored short and the only symptom is a sign-in that never works.
+	 * Nothing renders these as HTML, leaving only whitespace and control characters to
+	 * exclude.
 	 *
 	 * @param mixed $value Submitted value.
 	 * @return string Credential, stripped of anything unprintable.
@@ -115,9 +111,8 @@ class Nextdoor_Section extends Wizard_Section {
 	/**
 	 * Restrict the submitted roles to the roles registered on this site.
 	 *
-	 * `rest_is_array()` accepts a comma-separated scalar, so the schema alone would
-	 * let one through to be stored as an empty list. Refuse it instead of emptying
-	 * the publishing roles behind the publisher's back.
+	 * `rest_is_array()` accepts a comma-separated scalar, so the schema alone would let one
+	 * through to be stored as an empty list, emptying the roles behind the publisher's back.
 	 *
 	 * @param mixed $value Submitted value.
 	 * @return string[]|WP_Error Role names, re-indexed, or an error if not a list.
@@ -132,8 +127,7 @@ class Nextdoor_Section extends Wizard_Section {
 		}
 
 		$submitted = array_filter( $value, 'is_string' );
-		// The offered roles, not every role on the site, so the endpoint cannot grant
-		// what the picker withholds.
+		// The offered roles, so the endpoint cannot grant what the picker withholds.
 		$roles = wp_list_pluck( Nextdoor_Module::get_available_roles(), 'value' );
 
 		return array_values( array_unique( array_intersect( $submitted, $roles ) ) );
@@ -201,9 +195,8 @@ class Nextdoor_Section extends Wizard_Section {
 				Optional_Modules::deactivate_optional_module( 'nextdoor' );
 			}
 
-			// The activate/deactivate helpers answer with the array they built in memory, so
-			// it says what was asked for whether or not the write landed. Only a fresh read
-			// can tell.
+			// The activate/deactivate helpers answer from memory, so they report what was asked
+			// for whether or not the write landed. Only a fresh read can tell.
 			if ( Optional_Modules::is_optional_module_active( 'nextdoor' ) !== (bool) $module_enabled ) {
 				return new WP_Error(
 					'newspack_nextdoor_module_update_failed',
@@ -212,8 +205,7 @@ class Nextdoor_Section extends Wizard_Section {
 				);
 			}
 
-			// Once the module is off nothing is left running to reconcile the publishing
-			// capability, so it has to be revoked on the way out.
+			// Nothing reconciles the capability once the module is off, so revoke on the way out.
 			if ( ! $module_enabled ) {
 				Nextdoor_Module::remove_nextdoor_capability();
 			}
@@ -236,8 +228,8 @@ class Nextdoor_Section extends Wizard_Section {
 
 			Nextdoor_Module::update_settings( $nextdoor_settings );
 
-			// `admin_init` never fires on a REST request, so grant and revoke the
-			// publishing capability here rather than on the next wp-admin page load.
+			// `admin_init` never fires on a REST request, so reconcile here rather than on the
+			// next wp-admin page load.
 			Nextdoor_Module::add_nextdoor_capability();
 		}
 

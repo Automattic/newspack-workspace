@@ -53,10 +53,9 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 	const postIdRef = useRef( postId );
 	postIdRef.current = postId;
 
-	// A successful action or retry replaces the control that was pressed, which would
-	// otherwise drop keyboard position to the top of the document. Only ever called for
-	// something the publisher initiated: on an ordinary editor load focus belongs on the
-	// canvas, not pulled into this sidebar.
+	// A successful action replaces the control that was pressed, dropping keyboard position
+	// to the top of the document. Only called for something the publisher initiated: on an
+	// ordinary load focus belongs on the canvas.
 	const restoreFocus = () => {
 		window.requestAnimationFrame( () => {
 			const content = contentRef.current;
@@ -66,13 +65,9 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 		} );
 	};
 
-	/**
-	 * Fetch Nextdoor status for the current post
-	 */
 	const fetchStatus = async () => {
-		// `callApi()` signs off with a refresh, and that binding belongs to the render the
-		// action was fired in. Once the editor has moved on, it describes the previous post,
-		// and taking a number would make its answer the current one.
+		// `callApi()` signs off with a refresh bound to the render its action fired in. Once
+		// the editor has moved on, taking a number would make that stale answer the current one.
 		if ( postId !== postIdRef.current ) {
 			return;
 		}
@@ -129,9 +124,8 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 	// The Retry buttons live inside the notices they refresh, so a successful retry
 	// unmounts the control that was pressed.
 	const retryStatus = async () => {
-		// `Notice` gives its actions no disabled state, so the guard lives here: without it
-		// repeated presses stack 30-second requests and an older failure can land on top of
-		// a newer success.
+		// `Notice` gives its actions no disabled state, so the guard lives here: repeated
+		// presses would stack 30-second requests and land an older failure on a newer success.
 		if ( isLoading ) {
 			return;
 		}
@@ -144,9 +138,6 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 		restoreFocus();
 	};
 
-	/**
-	 * Handle publishing post to Nextdoor
-	 */
 	const handlePublish = () => {
 		callApi( 'publish', `/newspack/v1/nextdoor/publish-post/${ postId }`, 'POST', {
 			success: __( 'Published to Nextdoor.', 'newspack-plugin' ),
@@ -154,9 +145,6 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 		} );
 	};
 
-	/**
-	 * Handle updating post on Nextdoor
-	 */
 	const handleUpdate = () => {
 		callApi( 'update', `/newspack/v1/nextdoor/update-post/${ postId }`, 'PUT', {
 			success: __( 'Update sent to Nextdoor.', 'newspack-plugin' ),
@@ -164,9 +152,6 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 		} );
 	};
 
-	/**
-	 * Handle deleting post from Nextdoor
-	 */
 	const handleDelete = () => {
 		callApi( 'delete', `/newspack/v1/nextdoor/delete-post/${ postId }`, 'DELETE', {
 			success: __( 'Post removed from Nextdoor.', 'newspack-plugin' ),
@@ -174,9 +159,6 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 		} );
 	};
 
-	/**
-	 * Clear messages after a delay
-	 */
 	const clearMessages = () => {
 		setTimeout( () => {
 			setError( null );
@@ -184,9 +166,6 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 		}, 5000 );
 	};
 
-	/**
-	 * Format date for display
-	 */
 	const formatDate = dateString => {
 		if ( ! dateString ) {
 			return '';
@@ -195,12 +174,10 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 		return dateI18n( dateFormat, dateString );
 	};
 
-	// Load status on mount and when post ID changes
 	useEffect( () => {
 		if ( postId ) {
-			// The answer on screen describes the previous post, and the actions below it
-			// already target the new one, so it goes before the request does. The notices
-			// go with it: an outcome reported for one post is not news about another.
+			// The answer on screen describes the previous post while the actions below it
+			// already target the new one, so both it and the notices go before the request.
 			setNextdoorStatus( null );
 			setHasLoaded( false );
 			setSuccess( null );
@@ -209,13 +186,9 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 		}
 	}, [ postId ] );
 
-	/**
-	 * Render the main content
-	 */
 	const renderContent = () => {
-		// Only the very first load blanks the panel. Every later request keeps it mounted,
-		// so the control the publisher pressed re-renders in place instead of taking their
-		// focus to the top of the document with it.
+		// Only the first load blanks the panel. Later requests keep it mounted, so the
+		// control the publisher pressed re-renders in place rather than taking focus with it.
 		if ( isLoading && ! hasLoaded ) {
 			return (
 				<Flex justify="center" className="nextdoor-sidebar__loading">
@@ -450,14 +423,12 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 	);
 };
 
-// Nextdoor Icon.
 const nextdoorIcon = (
 	<SVG xmlns="http://www.w3.org/2000/svg" enable-background="new 0 0 24 24" viewBox="0 0 24 24" id="nextdoor">
 		<polygon points="19.879 21.5 19.879 11.703 22.039 13.014 24 9.821 12.001 2.5 7.88 5.017 7.88 2.5 4.122 2.5 4.122 7.305 0 9.821 1.962 13.014 4.123 11.703 4.123 21.5" />
 	</SVG>
 );
 
-// Plugin wrapper.
 const NextdoorPostSidebarPlugin = () => {
 	const { postId, postStatus } = useSelect( select => {
 		const { getCurrentPostId, getCurrentPostAttribute } = select( 'core/editor' );
@@ -470,7 +441,6 @@ const NextdoorPostSidebarPlugin = () => {
 	return <NextdoorPostSidebar postId={ postId } postStatus={ postStatus } />;
 };
 
-// Register the plugin.
 registerPlugin( 'newspack-nextdoor-post-plugin', {
 	render: NextdoorPostSidebarPlugin,
 	icon: nextdoorIcon,

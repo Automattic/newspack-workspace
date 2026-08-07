@@ -31,18 +31,16 @@ import { NextdoorForm } from './nextdoor/form';
 // Brand name, deliberately untranslated.
 const TITLE = 'Nextdoor';
 
-// Read on the first render and kept: the form consumes these parameters from
-// the URL when it mounts, which is always later, so the latch below cannot be
-// left reading a URL that has already been cleaned.
+// Read on the first render and kept: the form consumes these parameters when it mounts,
+// which is always later, so the latch below would otherwise read an already-cleaned URL.
 const readOAuthReturn = () => {
 	const params = new URLSearchParams( window.location.search );
 	const hasError = !! params.get( 'nextdoor_oauth_error' );
 	return { hasError, isReturn: hasError || '1' === params.get( 'oauth_success' ) };
 };
 
-// While the module is off the endpoint returns `connection_status` and
-// `settings` as an empty JSON array, which is truthy — so the presence of a
-// real field, not the object itself, is what says the payload is populated.
+// While the module is off the endpoint returns these as an empty JSON array, which is
+// truthy, so a real field rather than the object itself says the payload is populated.
 const hasConnectionStatus = ( data: NextdoorData ) => typeof data?.connection_status?.is_connected === 'boolean';
 
 function Nextdoor() {
@@ -66,8 +64,8 @@ function Nextdoor() {
 
 	const bumpErrorNonce = () => setErrorNonce( current => current + 1 );
 
-	// Every error the card shows goes through here, so a retry that fails the
-	// same way still counts as a fresh occurrence for the announcement.
+	// Every error goes through here, so a retry failing the same way still counts as a
+	// fresh occurrence for the announcement.
 	const reportError = ( message: string | null ) => {
 		setError( message );
 		if ( message ) {
@@ -104,8 +102,8 @@ function Nextdoor() {
 		),
 	} );
 
-	// The card has two error channels — the hook's request failures and its own
-	// reported errors — and every caller wants both gone.
+	// Two error channels, the hook's request failures and the card's own, and every caller
+	// wants both gone.
 	const clearErrors = () => {
 		setError( null );
 		resetError();
@@ -120,10 +118,8 @@ function Nextdoor() {
 		setSettings( current => ( { ...current, ...apiData.settings } ) );
 	}, [ apiData ] );
 
-	// Routed through the toggle hook rather than a raw `apiFetch`, so a save also
-	// updates `apiData` and the store's GET cache — the form below reads the
-	// former, and a remount (switching settings tabs) is served the latter.
-	// Failures surface through `errorMessage`, which the card already renders.
+	// Through the toggle hook rather than a raw `apiFetch`, so a save also updates `apiData`
+	// (which the form reads) and the store's GET cache (which serves a remount).
 	const updateSettings = async ( payload: NextdoorUpdatePayload ): Promise< void > => {
 		clearErrors();
 		try {
@@ -179,15 +175,13 @@ function Nextdoor() {
 	const [ hasAutoOpened, setHasAutoOpened ] = useState( false );
 
 	const isEnabled = apiData.module_enabled_nextdoor;
-	// `status` is what the body reads, so the badge follows it — but only once it has
-	// been synced: its initial `false` is indistinguishable from a real "not connected"
-	// and would flash the wrong badge on every load of a connected site.
+	// The badge follows `status`, but only once synced: its initial `false` is
+	// indistinguishable from a real "not connected" and would flash on every load.
 	const isConnected = hasSyncedStatus ? status.is_connected : apiData.is_connected;
 
-	// Only the OAuth redirect reopens the card: that user arrives on a fresh page
-	// load mid-setup, so the step they were on would otherwise be invisible. Any
-	// other unfinished setup stays collapsed behind its badge. A failure reopens it
-	// even when connected, since the form is the only place its notice is rendered.
+	// Only the OAuth redirect reopens the card: that user arrives on a fresh page load
+	// mid-setup, so their step would otherwise be invisible. A failure reopens it even when
+	// connected, since the form is the only place its notice renders.
 	useEffect( () => {
 		if ( hasAutoOpened || isFetching || ! isEnabled ) {
 			return;
@@ -209,24 +203,21 @@ function Nextdoor() {
 		if ( ! isConnected ) {
 			return { level: 'error' as const, text: __( 'Not connected', 'newspack-plugin' ) };
 		}
-		// Same sync gate as above: the initial `token_valid: false` is
-		// indistinguishable from a real expiry.
+		// Same sync gate: the initial `token_valid: false` is indistinguishable from expiry.
 		if ( hasSyncedStatus && ! status.token_valid ) {
 			return { level: 'error' as const, text: __( 'Reconnect needed', 'newspack-plugin' ) };
 		}
 		return { level: 'success' as const, text: __( 'Enabled', 'newspack-plugin' ) };
 	} )();
 
-	// Only the flag: a full snapshot would write back read-only fields the endpoint
-	// ignores.
+	// Only the flag: a full snapshot would write back read-only fields the endpoint ignores.
 	const setModuleEnabled = ( value: boolean ) =>
 		apiFetchToggle( { module_enabled_nextdoor: value }, true ).catch( fetchError => {
 			bumpErrorNonce();
 			throw fetchError;
 		} );
 
-	// Every user-initiated action starts from a clean error state, so a failure
-	// the user has since retried past stops showing in the header.
+	// Actions start from a clean error state, so a failure since retried past stops showing.
 	const enable = async () => {
 		clearErrors();
 		try {
@@ -265,9 +256,8 @@ function Nextdoor() {
 		setIsOpen( false );
 	};
 
-	// Escape: a pure UI dismissal. It must never deactivate a module the user may
-	// already have saved credentials into, so the module stays on and the card
-	// leaves its enabling session behind.
+	// Escape is a pure UI dismissal: it must never deactivate a module the user may already
+	// have saved credentials into, so the module stays on.
 	const dismiss = () => {
 		clearErrors();
 		setIsEnabling( false );
@@ -326,8 +316,8 @@ function Nextdoor() {
 			{ __( 'Disable', 'newspack-plugin' ) }
 		</Button>
 	);
-	// Suppressed during a fresh Enable: Cancel already covers that exit, and Disable
-	// would otherwise announce a module the user hasn't finished enabling.
+	// Suppressed during a fresh Enable: Cancel covers that exit, and Disable would announce
+	// a module the user hasn't finished enabling.
 	const secondaryActions = isEnabling ? undefined : renderSecondaryActions;
 
 	return (

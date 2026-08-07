@@ -1,7 +1,3 @@
-/**
- * CardForm
- */
-
 @use "~@wordpress/base-styles/colors" as wp-colors;
 
 .newspack-card-form {
@@ -13,7 +9,6 @@
 		color: wp-colors.$gray-700;
 	}
 
-	// The body stack owns the rhythm between its children.
 	&__body .components-notice {
 		margin: 0;
 	}

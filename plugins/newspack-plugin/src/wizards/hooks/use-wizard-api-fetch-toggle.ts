@@ -36,9 +36,6 @@ function useWizardApiFetchToggle< T, P = Partial< T > >( {
 
 	const { wizardApiFetch, isFetching, errorMessage, resetError } = useWizardApiFetch( apiNamespace );
 
-	/**
-	 * Perform `GET` request on initial load.
-	 */
 	useEffect( () => {
 		// The rejection is already surfaced through `errorMessage`; swallowing it here
 		// keeps a failed first load from raising an unhandled rejection.
@@ -68,10 +65,8 @@ function useWizardApiFetchToggle< T, P = Partial< T > >( {
 			options.data = dataToSend;
 		}
 		if ( method === 'POST' ) {
-			// Mirror a successful save into the store's GET cache. The mount
-			// GET is served from that cache, so without this a remount (e.g.
-			// revisiting a settings tab) would show — and a later save could
-			// write back — the stale first-load snapshot.
+			// The mount GET is served from the store's cache, so without mirroring the save
+			// into it a remount would show, and a later save write back, a stale snapshot.
 			options.updateCacheMethods = [ 'GET' ];
 		}
 		return wizardApiFetch< T >( options, {

@@ -53,9 +53,8 @@ const CardForm = ( { title, description, badge, actions, isOpen = false, onReque
 	const titleId = `${ instanceId }__title`;
 	const bodyId = `${ instanceId }__body`;
 
-	// Scope Escape handling to the open form's body, so multiple open CardForms
-	// don't all close on a single keypress, and callers can preventDefault from
-	// inner controls (e.g. select menus) without tripping the close.
+	// Scoped to the open form's body, so multiple open CardForms don't all close on one
+	// keypress and inner controls can preventDefault without tripping the close.
 	useEffect( () => {
 		if ( ! isOpen || ! onRequestClose ) {
 			return;
@@ -73,7 +72,6 @@ const CardForm = ( { title, description, badge, actions, isOpen = false, onReque
 		return () => node.removeEventListener( 'keydown', handleKeyDown );
 	}, [ isOpen, onRequestClose ] );
 
-	// Move focus into the body on open and restore it to the trigger on close.
 	useEffect( () => {
 		if ( ! isOpen ) {
 			return;
@@ -88,8 +86,8 @@ const CardForm = ( { title, description, badge, actions, isOpen = false, onReque
 		}
 		return () => {
 			const previous = previousActiveRef.current;
-			// A card opened without a trigger captured the body, and focusing that on close
-			// would send the reader to the top of the page rather than leaving them be.
+			// A card opened without a trigger captured the body; focusing that on close would
+			// send the reader to the top of the page.
 			if ( previous && previous !== previous.ownerDocument?.body ) {
 				previous.focus?.();
 			}

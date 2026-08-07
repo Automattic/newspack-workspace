@@ -1412,7 +1412,7 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 		try {
 			Auth::handle_oauth_callback();
 		} catch ( Exception $e ) {
-			// wp_safe_redirect() exits, which the test bootstrap turns into an exception.
+			// The handler ends in a redirect and never returns normally.
 			unset( $e );
 		}
 
@@ -1753,9 +1753,8 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 
 		wp_set_current_user( $this->factory->user->create( [ 'role' => 'subscriber' ] ) );
 
-		// Required arguments are validated before the permission callback runs, so each
-		// route is given a well-formed body: without one the refusal under test never
-		// happens and a 400 stands in for it.
+		// Required arguments are validated before the permission callback runs, so without a
+		// well-formed body a 400 would stand in for the refusal under test.
 		$routes = [
 			[
 				'POST',

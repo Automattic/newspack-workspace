@@ -38,14 +38,11 @@ const STORED_SECRET_MASK = '\u2022'.repeat( 12 );
 // truncated before it can fill the notice with arbitrary prose.
 const OAUTH_ERROR_MAX_LENGTH = 200;
 
-// What the redirect adds to the settings URL.
 const OAUTH_PARAMS = [ 'nextdoor_oauth_error', 'oauth_success' ];
 
-// The redirect carries a one-time message, so it is dropped from the URL once
-// this form has read it: the card is reopenable for the rest of the page's
-// life, and a stale failure notice must not come back with it. `nextdoor.tsx`
-// reads the same parameters on its first render, which always precedes this
-// mount.
+// A one-time message, dropped from the URL once read: the card stays reopenable for the
+// rest of the page's life and a stale failure must not come back with it. `nextdoor.tsx`
+// reads the same parameters on its first render, which always precedes this mount.
 const consumeOAuthParams = () => {
 	const params = new URLSearchParams( window.location.search );
 	if ( ! OAUTH_PARAMS.some( param => params.has( param ) ) ) {
@@ -58,15 +55,13 @@ const consumeOAuthParams = () => {
 
 const isSameRoles = ( current: string[], stored: string[] ) => current.length === stored.length && current.every( role => stored.includes( role ) );
 
-// `aria-errormessage` is unimplemented in WebKit, so the error is composed into
-// `aria-describedby` instead. `__help` is the id BaseControl gives the help text,
-// and keeping it preserves that association rather than replacing it.
+// `aria-errormessage` is unimplemented in WebKit, so the error joins `aria-describedby`.
+// `__help` is BaseControl's own help-text id, kept so that association survives.
 const describedBy = ( fieldId: string, errorId: string | null ) => [ `${ fieldId }__help`, errorId ].filter( Boolean ).join( ' ' );
 
-// Anything outside this set is stripped or percent-encoded by the server's
-// esc_url_raw() canonical-form check, which then rejects the value. URL() would
-// normalise the same characters and report it valid, so the button would enable
-// on a URL that comes back as an unattributed error.
+// Anything outside this set is stripped or percent-encoded by the server's esc_url_raw()
+// check, which then rejects the value. URL() would normalise the same characters and
+// report it valid, enabling the button on a URL that comes back as an unattributed error.
 const UNSTORABLE_CHARACTER = /[^-a-z0-9~+_.?#=!&;,/:%@$|*'()[\]\u0080-\uffff]/i;
 
 // esc_url() additionally runs _deep_replace() over these two, so a URL carrying either
@@ -90,9 +85,8 @@ const isPublicationUrlValid = ( value: string ) => {
 /**
  * Nextdoor form.
  *
- * One screen rather than a wizard: signing in leaves the page and returns on a
- * fresh load, so a step counter would only ever restate what the server already
- * reports. Each section unlocks on the connection status instead.
+ * One screen rather than a wizard: signing in leaves the page and returns on a fresh load,
+ * so a step counter would only restate what the server reports. Sections unlock on status.
  */
 export const NextdoorForm = ( {
 	settings,
@@ -106,9 +100,8 @@ export const NextdoorForm = ( {
 }: NextdoorFormProps ) => {
 	const { notify } = useSocialCards();
 
-	// The parent rebuilds `settings` on every save, so the mirrored fields below
-	// are keyed on the stored values: a save that returns a field unchanged must
-	// not reset a draft the publisher is still editing.
+	// The parent rebuilds `settings` on every save, so the mirrored fields are keyed on the
+	// stored values: a save returning a field unchanged must not reset a live draft.
 	const storedClientId = settings.client_id || '';
 	const storedPublicationUrl = settings.publication_url || window.newspackSettings?.social?.nextdoor?.site_url || '';
 	// Serialised rather than joined: role slugs are not sanitised by `add_role()`,
@@ -126,9 +119,8 @@ export const NextdoorForm = ( {
 	const [ hasBlurredPublicationUrl, setHasBlurredPublicationUrl ] = useState( false );
 	const [ allowedRoles, setAllowedRoles ] = useState< string[] >( settings.allowed_roles || [] );
 	const [ isSaving, setIsSaving ] = useState( false );
-	// The only navigation left: `null` follows the connection status, `true`
-	// reopens the connect form and `false` puts it away, so neither changing the
-	// connection nor dismissing a reconnect prompt is a dead end.
+	// `null` follows the connection status, `true` reopens the connect form and `false` puts
+	// it away, so neither changing the connection nor dismissing a prompt is a dead end.
 	const [ connectOverride, setConnectOverride ] = useState< boolean | null >( null );
 
 	// More than one form renders per page, so every id is scoped to the instance.
@@ -144,8 +136,7 @@ export const NextdoorForm = ( {
 	const countryOptions = window.newspackSettings?.social?.nextdoor?.country_options || [];
 	const redirectUri = window.newspackSettings?.social?.nextdoor?.redirect_uri || '';
 
-	// Newspack supplies the credentials on some sites, and there is nothing for
-	// the publisher to enter or change when it does.
+	// Newspack supplies the credentials on some sites, leaving nothing to enter or change.
 	const isManualMode = ! status.has_centralized_credentials;
 
 	useEffect( () => setClientId( storedClientId ), [ storedClientId ] );
@@ -162,16 +153,13 @@ export const NextdoorForm = ( {
 		consumeOAuthParams();
 	}, [] );
 
-	// Shape only, but stricter than is_email(), which accepts a one-letter TLD.
-	// The lookahead keeps an all-numeric TLD out. The alphabet is is_email()'s,
-	// which is ASCII: a non-ASCII address the endpoint refuses must not enable
-	// Connect. Whether the address exists is Nextdoor's problem, not something a
-	// pattern can answer.
+	// Shape only, but stricter than is_email(), which accepts a one-letter TLD; the lookahead
+	// keeps an all-numeric one out. The alphabet is is_email()'s ASCII, so the field cannot
+	// enable Connect on an address the endpoint refuses.
 	const isEmailValid = /^[A-Za-z0-9!#$%&'*+\/=?^_`{|}~.-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.(?=[A-Za-z0-9-]*[A-Za-z])[A-Za-z0-9-]{2,}$/.test(
 		email.trim()
 	);
-	// Only after leaving the field: an empty one is not a mistake worth calling
-	// out, and a half-typed address is not either.
+	// Only after leaving the field: an empty or half-typed address is not a mistake yet.
 	const emailError =
 		hasBlurredEmail && email.trim() && ! isEmailValid ? __( 'That does not look like a valid email address.', 'newspack-plugin' ) : null;
 	const isUrlValid = isPublicationUrlValid( publicationUrl );
@@ -200,15 +188,14 @@ export const NextdoorForm = ( {
 	// An expired token is still a token, but it cannot claim anything, so the body
 	// has to offer the reconnection its badge advertises.
 	const needsConnect = ! status.has_tokens || ! status.token_valid;
-	// Claiming is the only thing left once Nextdoor has authorised, unless the
-	// publisher asks to change the connection.
+	// Claiming is all that is left once Nextdoor has authorised, unless the connection changes.
 	const showConnect = connectOverride ?? needsConnect;
 
 	const hasRoleChanges = ! isSameRoles( allowedRoles, settings.allowed_roles || [] );
 	const hasUrlChanges = publicationUrl !== ( settings.publication_url || '' );
-	// Before a page exists every submission claims one; afterwards only a changed URL
-	// does, since `publication_url` is not a settings write param. URL validity gates
-	// only the claim, so a role-only save is unaffected by a stored URL this rejects.
+	// Before a page exists every submission claims one; afterwards only a changed URL does,
+	// since `publication_url` is not a settings write param. Validity gates only the claim,
+	// so a role-only save is unaffected by a stored URL this rejects.
 	const shouldClaim = ! status.has_page || hasUrlChanges;
 	const canSubmit = shouldClaim ? isUrlValid : hasRoleChanges;
 
@@ -219,9 +206,8 @@ export const NextdoorForm = ( {
 		try {
 			setIsSaving( true );
 			setError( null );
-			// The server reads the credentials out of options when it calls Nextdoor,
-			// so they have to land before the OAuth request goes out. Omitting the
-			// secret is what tells it to keep the stored one.
+			// The server reads credentials from options when it calls Nextdoor, so they have to
+			// land before the OAuth request. Omitting the secret keeps the stored one.
 			if ( isManualMode && hasCredentialChanges ) {
 				await updateSettings( clientSecret ? { client_id: clientId, client_secret: clientSecret } : { client_id: clientId } );
 			}
@@ -247,8 +233,7 @@ export const NextdoorForm = ( {
 		try {
 			setIsSaving( true );
 			setError( null );
-			// Roles first: a successful claim reloads the page, so the reload lands
-			// on state that is already persisted.
+			// Roles first: a successful claim reloads, so the reload lands on persisted state.
 			if ( hasRoleChanges ) {
 				await updateSettings( { allowed_roles: allowedRoles } );
 			}
@@ -304,9 +289,8 @@ export const NextdoorForm = ( {
 				</Button>
 			);
 		}
-		// Only an offer to go back, so it is withheld when the connect form is the
-		// only thing the publisher can act on. A claimed page is something to go
-		// back to, even while the token needs renewing.
+		// Only an offer to go back, so it is withheld when the connect form is all there is
+		// to act on. A claimed page is something to return to, even while the token renews.
 		if ( ! needsConnect || status.has_page ) {
 			return (
 				<Button variant="secondary" __next40pxDefaultSize onClick={ () => setConnectOverride( false ) }>
@@ -372,8 +356,8 @@ export const NextdoorForm = ( {
 									value={ clientSecret }
 									onChange={ setClientSecret }
 									type="password"
-									// Dots stand in for the stored secret. The field itself stays empty,
-									// which is what tells the server to keep what it already has.
+									// Dots stand in for the stored secret; the field stays empty, which is
+									// what tells the server to keep what it has.
 									placeholder={
 										status.has_credentials ? STORED_SECRET_MASK : __( 'Enter your Nextdoor Client Secret', 'newspack-plugin' )
 									}

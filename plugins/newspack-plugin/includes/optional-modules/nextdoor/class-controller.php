@@ -27,7 +27,6 @@ class Controller {
 	 * Register REST API endpoints.
 	 */
 	public static function register_api_endpoints() {
-		// OAuth endpoints.
 		register_rest_route(
 			NEWSPACK_API_NAMESPACE,
 			'/nextdoor/oauth/start',
@@ -35,18 +34,16 @@ class Controller {
 				'methods'             => \WP_REST_Server::CREATABLE,
 				'callback'            => [ __CLASS__, 'api_start_oauth' ],
 				'permission_callback' => [ __CLASS__, 'api_permissions_check' ],
-				// Declaring a `sanitize_callback` stops WordPress from installing its
-				// default validator, so every arg on every route below names
-				// `rest_validate_request_arg`. Without it the types are documentation,
-				// not rules, and a non-string reaches a sanitizer that cannot take one.
+				// Declaring a `sanitize_callback` stops WordPress installing its default
+				// validator, so every arg below names `rest_validate_request_arg`. Without it
+				// the types are documentation, not rules.
 				'args'                => [
 					'email'   => [
 						'required'          => true,
 						'type'              => 'string',
 						'sanitize_callback' => 'sanitize_email',
-						// sanitize_email only strips; without this a malformed address
-						// reaches Nextdoor, or arrives as an empty string. Validation runs
-						// on the raw value, so it has to trim what the sanitizer would.
+						// sanitize_email only strips, so without this a malformed address reaches
+						// Nextdoor. Validation sees the raw value, so it trims as the sanitizer would.
 						'validate_callback' => function ( $value, $request, $param ) {
 							$valid = rest_validate_request_arg( $value, $request, $param );
 							if ( is_wp_error( $valid ) ) {
@@ -58,8 +55,7 @@ class Controller {
 					'country' => [
 						'required'          => true,
 						'type'              => 'string',
-						// The site owns the list the picker is built from, so a bad value can
-						// be named here instead of coming back as an opaque error from Nextdoor.
+						// Named here rather than coming back as an opaque error from Nextdoor.
 						'enum'              => wp_list_pluck( Nextdoor::get_available_countries(), 'value' ),
 						'sanitize_callback' => 'sanitize_text_field',
 						'validate_callback' => 'rest_validate_request_arg',
@@ -68,7 +64,6 @@ class Controller {
 			]
 		);
 
-		// Page claim endpoint.
 		register_rest_route(
 			NEWSPACK_API_NAMESPACE,
 			'/nextdoor/claim-page',
@@ -86,9 +81,8 @@ class Controller {
 						'sanitize_callback' => function ( $value ) {
 							return esc_url_raw( self::normalize_publication_url( $value ) );
 						},
-						// Core does not validate the `uri` format, and esc_url_raw() answers
-						// garbage with a mangled URL rather than an error, which would then be
-						// stored and sent upstream. Require a value that survives it unchanged.
+						// Core does not validate the `uri` format, and esc_url_raw() answers garbage
+						// with a mangled URL rather than an error, so require one that survives it.
 						'validate_callback' => function ( $value, $request, $param ) {
 							$valid = rest_validate_request_arg( $value, $request, $param );
 							if ( is_wp_error( $valid ) ) {
@@ -111,7 +105,6 @@ class Controller {
 			]
 		);
 
-		// Post sharing status endpoint.
 		register_rest_route(
 			NEWSPACK_API_NAMESPACE,
 			'/nextdoor/post-status/(?P<id>\d+)',
@@ -130,7 +123,6 @@ class Controller {
 			]
 		);
 
-		// Publish post endpoint.
 		register_rest_route(
 			NEWSPACK_API_NAMESPACE,
 			'/nextdoor/publish-post/(?P<id>\d+)',
@@ -149,7 +141,6 @@ class Controller {
 			]
 		);
 
-		// Update post endpoint.
 		register_rest_route(
 			NEWSPACK_API_NAMESPACE,
 			'/nextdoor/update-post/(?P<id>\d+)',
@@ -168,7 +159,6 @@ class Controller {
 			]
 		);
 
-		// Delete post endpoint.
 		register_rest_route(
 			NEWSPACK_API_NAMESPACE,
 			'/nextdoor/delete-post/(?P<id>\d+)',
@@ -187,7 +177,7 @@ class Controller {
 			]
 		);
 
-		// Disconnect endpoint. Deliberately API-only: the admin UI no longer calls it.
+		// Deliberately API-only: the admin UI no longer calls this.
 		register_rest_route(
 			NEWSPACK_API_NAMESPACE,
 			'/nextdoor/disconnect',
@@ -221,8 +211,7 @@ class Controller {
 	 * Require a token Nextdoor will accept, and say why when there is not one.
 	 *
 	 * A refresh that could not reach Nextdoor leaves the grant intact, so the remedy is to
-	 * wait rather than to reconnect, which would cost the publisher their page claim. The
-	 * status route already tells the two apart; the write paths have to agree with it.
+	 * wait rather than to reconnect, which would cost the publisher their page claim.
 	 *
 	 * @return WP_Error|null Error when the request should not go out.
 	 */
@@ -249,8 +238,8 @@ class Controller {
 	/**
 	 * Check the current user against the post a request names.
 	 *
-	 * The capability says whether a user may share to Nextdoor at all; it cannot say
-	 * which posts they may act on, and the post comes from the route.
+	 * The capability says whether a user may share to Nextdoor at all, not which posts they
+	 * may act on, and the post comes from the route.
 	 *
 	 * @param int    $post_id    Post ID.
 	 * @param string $capability Capability to check against the post.
@@ -278,9 +267,9 @@ class Controller {
 		$email   = $request->get_param( 'email' );
 		$country = $request->get_param( 'country' );
 
-		// Ties the authorization request to this user, so the callback can tell the
-		// publisher's own return apart from someone else's code. It rides on the redirect
-		// URI because that is the query string Nextdoor is known to preserve.
+		// Ties the request to this user so the callback can tell the publisher's own return
+		// from someone else's code. It rides on the redirect URI because that is the query
+		// string Nextdoor is known to preserve.
 		$redirect_uri = Nextdoor::get_redirect_uri( Auth::create_oauth_state() );
 
 		$api              = API::instance();
@@ -406,7 +395,6 @@ class Controller {
 			);
 		}
 
-		// Check if post is already shared.
 		$nextdoor_guid = get_post_meta( $post_id, '_nextdoor_guid', true );
 		if ( $nextdoor_guid ) {
 			return new \WP_Error(
@@ -474,7 +462,6 @@ class Controller {
 			);
 		}
 
-		// Check if post has been shared to Nextdoor.
 		$guid = get_post_meta( $post_id, '_nextdoor_guid', true );
 		if ( ! $guid ) {
 			return new \WP_Error(
@@ -534,7 +521,6 @@ class Controller {
 			);
 		}
 
-		// Check if post has been shared to Nextdoor.
 		$guid = get_post_meta( $post_id, '_nextdoor_guid', true );
 		if ( ! $guid ) {
 			return new \WP_Error(
@@ -556,7 +542,6 @@ class Controller {
 			return $response;
 		}
 
-		// Mark the post as deleted in post meta.
 		update_post_meta( $post_id, '_nextdoor_deleted_at', current_time( 'mysql' ) );
 		delete_post_meta( $post_id, '_nextdoor_shared_at' );
 		delete_post_meta( $post_id, '_nextdoor_updated_at' );
@@ -588,20 +573,17 @@ class Controller {
 		$ingestion_status     = null;
 		$ingestion_response   = [];
 		$ingestion_error_msgs = [];
-		// Three states stop sharing, and they read differently. A grant that existed and
-		// stopped working is a reconnection; a connection that was never finished, or
-		// whose page claim a fresh sign-in dropped, is setup; anything that stops a
-		// response coming back is an outage, which passes on its own. All are site-wide,
-		// so they are reported whether or not this post has been shared: sharing needs a
-		// working connection as much as updating does.
+		// Three states stop sharing and read differently: a grant that stopped working is a
+		// reconnection, one never finished is setup, and no response at all is an outage,
+		// which passes on its own. All are site-wide, so all are reported for an unshared post.
 		$has_tokens      = ! empty( Nextdoor::get_settings()['access_token'] );
 		$needs_reconnect = $has_tokens && ! Auth::has_usable_token();
 		$needs_setup     = ! $needs_reconnect && ! Nextdoor::is_connected();
 		$is_unreachable  = false;
 
 		if ( ! empty( $guid ) && ! $needs_reconnect && ! $needs_setup && ! Auth::validate_token() ) {
-			// The refresh itself can discover the grant is dead, and records it when it
-			// does, so ask again rather than reporting a refusal as an outage.
+			// The refresh can itself discover the grant is dead and record it, so ask again
+			// rather than reporting a refusal as an outage.
 			$needs_reconnect = ! Auth::has_usable_token();
 			$is_unreachable  = ! $needs_reconnect;
 		}
@@ -612,26 +594,21 @@ class Controller {
 			$ingestion_response = $api->get_ingestion_report( [ $guid ] );
 
 			if ( is_wp_error( $ingestion_response ) ) {
-				// An access token still inside its window can be revoked at the other end,
-				// where nothing local sees it and only the report says so. Being refused is
-				// a reconnection; everything else is the network.
+				// A token inside its window can still be revoked at the other end, where only
+				// the report says so.
 				$error_data      = $ingestion_response->get_error_data();
 				$error_status    = is_array( $error_data ) && isset( $error_data['status'] ) ? (int) $error_data['status'] : 0;
 				// Only an outright rejection of the bearer is a reconnection. A 403 can come
-				// from an edge in front of the content API, or from a scope the grant never
-				// had, and reconnecting cures neither, so it reads as unreachable along with
-				// the timeouts.
+				// from an edge in front of the content API, or a scope the grant never had,
+				// and reconnecting cures neither.
 				$needs_reconnect = 401 === $error_status;
 				$is_unreachable  = ! $needs_reconnect;
 
-				// Recorded, not just reported: the reconnect this answer offers leads to the
-				// settings card, which reads the stored state and would otherwise still show
-				// the connection as working.
+				// Recorded, not just reported: the reconnect offered leads to the settings
+				// card, which would otherwise still show the connection as working.
 				if ( $needs_reconnect ) {
 					Auth::record_token_refusal( [ 'access_token' => $token_used ] );
-					// The recorder declines when another request rotated the token while this
-					// one was in flight, so ask again rather than sending the publisher to a
-					// card that reports the connection as working.
+					// The recorder declines if another request rotated the token meanwhile.
 					$needs_reconnect = ! Auth::has_usable_token();
 					$is_unreachable  = ! $needs_reconnect;
 				}
@@ -643,9 +620,8 @@ class Controller {
 			) {
 				foreach ( $ingestion_response['results'] as $result ) {
 					if ( isset( $result['guid'] ) && $result['guid'] === $guid ) {
-						// The editor renders both of these directly, so a shape it does not expect
-						// takes the sidebar down rather than degrading. What Nextdoor sends is not
-						// ours to guarantee, so it is pinned to the shape here.
+						// The editor renders both directly, so an unexpected shape takes the sidebar
+						// down rather than degrading. What Nextdoor sends is not ours to guarantee.
 						$ingestion_status     = isset( $result['status'] ) && is_scalar( $result['status'] ) ? (string) $result['status'] : null;
 						$ingestion_error_msgs = isset( $result['error_msgs'] ) && is_array( $result['error_msgs'] )
 							? array_values( array_filter( $result['error_msgs'], 'is_string' ) )
@@ -655,7 +631,6 @@ class Controller {
 				}
 			}
 
-			// If the post was deleted on Nextdoor, update local meta & response accordingly.
 			if ( 'deleted' === $ingestion_status ) {
 				update_post_meta( $post_id, '_nextdoor_deleted_at', current_time( 'mysql' ) );
 				delete_post_meta( $post_id, '_nextdoor_shared_at' );
@@ -663,7 +638,6 @@ class Controller {
 			}
 		}
 
-		// Prepare response.
 		$shared_at    = get_post_meta( $post_id, '_nextdoor_shared_at', true );
 		$updated_at   = get_post_meta( $post_id, '_nextdoor_updated_at', true );
 		$deleted_at   = get_post_meta( $post_id, '_nextdoor_deleted_at', true );
@@ -686,7 +660,7 @@ class Controller {
 			'needs_setup'      => $needs_setup,
 			'is_unreachable'   => $is_unreachable,
 			// Reconnecting lives in the settings wizard, which is `manage_options`, so the
-			// remedy offered has to match what this user can actually reach.
+			// remedy offered has to match what this user can reach.
 			'can_reconnect'    => current_user_can( 'manage_options' ),
 		];
 
@@ -696,8 +670,8 @@ class Controller {
 	/**
 	 * Normalize a publication URL before it is validated or stored.
 	 *
-	 * Schemes are case-insensitive per RFC 3986, so a mixed-case one is legal and must
-	 * not be turned away by the canonical-form check the validator applies.
+	 * Schemes are case-insensitive per RFC 3986, so a mixed-case one is legal and must not
+	 * be turned away by the validator's canonical-form check.
 	 *
 	 * @param mixed $value Raw parameter value.
 	 * @return string
@@ -723,7 +697,6 @@ class Controller {
 	private static function prepare_article_data( $post_id, $settings ) {
 		$post = get_post( $post_id );
 
-		// Generate GUID for the article.
 		$guid = get_post_meta( $post_id, '_nextdoor_guid', true );
 		if ( ! $guid ) {
 			$site_name_slug = sanitize_title( get_bloginfo( 'name' ) );
@@ -742,7 +715,6 @@ class Controller {
 			'content'         => wp_strip_all_tags( get_the_content( null, false, $post_id ), true ),
 		];
 
-		// Add featured image if available.
 		$featured_image_id = get_post_thumbnail_id( $post_id );
 		if ( $featured_image_id ) {
 			$image_url = wp_get_attachment_image_url( $featured_image_id, 'large' );
@@ -754,7 +726,6 @@ class Controller {
 			}
 		}
 
-		// Add categories as tags.
 		$categories = get_the_category( $post_id );
 		if ( $categories ) {
 			$article_data['tags'] = array_map(

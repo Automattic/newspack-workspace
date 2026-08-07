@@ -62,15 +62,13 @@ const PixelCard = ( { title, description, namespace, path, validate, renderHelp 
 
 	const validationError = validate( draft );
 	const hasChanges = draft !== settings.pixel_id;
-	// More than one card renders per page, so the field and its error need ids of
-	// their own.
+	// More than one card renders per page, so the ids have to be per-instance.
 	const instanceId = useInstanceId( PixelCard, 'newspack-pixel-card' );
 	const fieldId = `${ instanceId }-pixel-id`;
 	const errorId = `${ fieldId }-error`;
 	const shownError = hasBlurred && validationError ? validationError : null;
-	// `aria-errormessage` is unimplemented in WebKit, so the error is composed into
-	// `aria-describedby` instead. `__help` is the id BaseControl gives the help
-	// text, and keeping it preserves that association rather than replacing it.
+	// `aria-errormessage` is unimplemented in WebKit, so the error joins `aria-describedby`.
+	// `__help` is BaseControl's own help-text id, kept so that association survives.
 	const describedBy = [ `${ fieldId }__help`, shownError ? errorId : null ].filter( Boolean ).join( ' ' );
 
 	const save = ( data: PixelData, message: string ) => {
@@ -211,8 +209,7 @@ const PixelCard = ( { title, description, namespace, path, validate, renderHelp 
 						isBusy={ isFetching }
 						disabled={ isFetching || !! validationError || ( ! isEnabling && ! hasChanges ) }
 						accessibleWhenDisabled
-						// The button is disabled before the field has been blurred, so its
-						// own reason is the only one exposed anywhere.
+						// Disabled before the field is blurred, so this is the only reason exposed.
 						description={ validationError ? __( 'Enter a valid pixel ID to continue.', 'newspack-plugin' ) : undefined }
 						onClick={ () => save( { active: true, pixel_id: draft.trim() }, isEnabling ? enabledMessage : updatedMessage ) }
 					>

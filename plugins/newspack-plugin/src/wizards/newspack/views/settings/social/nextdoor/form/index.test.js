@@ -215,8 +215,7 @@ describe( 'NextdoorForm', () => {
 		fireEvent.change( field, { target: { value: '' } } );
 		fireEvent.blur( field );
 
-		// The composed value is worth nothing unless the help text really carries
-		// the id it names, so the id is pinned before it is looked for.
+		// The composed value is worth nothing unless the help text carries the id it names.
 		const helpId = screen.getByText( 'The main URL of your news publication.' ).id;
 		expect( helpId ).not.toBe( '' );
 		expect( helpId ).toBe( `${ field.id }__help` );

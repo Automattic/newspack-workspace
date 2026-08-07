@@ -28,9 +28,8 @@ class Auth {
 	/**
 	 * The grant Nextdoor refused, as a map of settings key to hashed credential.
 	 *
-	 * Its own option rather than a settings key: the request that records a refusal is by
-	 * definition racing one that may be renewing the token, and writing the whole settings
-	 * array would put a stale snapshot of the credentials back over the winner's.
+	 * Its own option, not a settings key: recording a refusal races a renewal, and writing
+	 * the whole settings array would put a stale snapshot back over the winner's.
 	 */
 	const REFUSAL_OPTION = 'newspack_nextdoor_refused_grant';
 
@@ -93,9 +92,8 @@ class Auth {
 	/**
 	 * Refresh access token.
 	 *
-	 * A successful refresh replaces the stored token; anything else leaves it alone. The
-	 * payload is returned either way, so a caller reading it as proof of a working
-	 * connection has to check the stored settings itself.
+	 * The payload is returned whether or not it was applied, so a caller treating it as
+	 * proof of a working connection has to check the stored settings itself.
 	 *
 	 * @param string $client_id Client ID.
 	 * @param string $client_secret Client secret.
@@ -132,15 +130,11 @@ class Auth {
 		if ( $code >= 400 ) {
 			$error_data = json_decode( $body, true );
 
-			// RFC 6749 gives one error for a refresh token that is dead: `invalid_grant`.
-			// The rest of the 4xx family means the request or the app configuration is
-			// wrong, which correcting fixes, and a 5xx or an edge refusal is transient.
-			// Recording any of those would send the publisher through a reconnection they
-			// do not need, and one they cannot undo.
+			// Only `invalid_grant` means the token is dead. Other 4xx are configuration
+			// errors and 5xx are transient, and recording either would send the publisher
+			// through a reconnection they cannot undo.
 			$is_refusal = is_array( $error_data ) && isset( $error_data['error'] ) && 'invalid_grant' === $error_data['error'];
-			// Nextdoor rotates refresh tokens, so two requests can enter the refresh window
-			// together and the loser comes back refused. Its token is no longer the stored
-			// one, which is how the winner's healthy token is told apart from a real refusal.
+
 			if ( $is_refusal ) {
 				self::record_token_refusal( [ 'refresh_token' => $refresh_token ] );
 			}
@@ -160,10 +154,8 @@ class Auth {
 
 		$settings = Nextdoor::get_settings();
 
-		// The response describes the grant this request set out with, and the call can take
-		// 30 seconds. A disconnect or a fresh sign-in in the meantime has replaced it, so
-		// applying it would resurrect credentials that were dropped on purpose, or put the
-		// old grant back over a newer one.
+		// The call can take 30 seconds. If a disconnect or fresh sign-in replaced the grant
+		// meanwhile, applying this would revive dropped credentials or overwrite a newer one.
 		if ( $settings['refresh_token'] !== $refresh_token ) {
 			return $token_data;
 		}
@@ -177,9 +169,8 @@ class Auth {
 	/**
 	 * Read a token payload out of an OAuth response body.
 	 *
-	 * A 200 is not a grant: the body can be malformed, or carry an error object. Both
-	 * decode to something without a token, and storing that would replace a working
-	 * connection with nothing.
+	 * A 200 is not a grant: a malformed body or an error object both decode to something
+	 * without a token, and storing that would replace a working connection with nothing.
 	 *
 	 * @param string $body Raw response body.
 	 * @return array|\WP_Error Token data, or an error if the body carries no access token.
@@ -206,8 +197,7 @@ class Auth {
 	 * @return array Settings carrying the new token.
 	 */
 	private static function apply_token_response( $settings, $token_data ) {
-		// Without an expiry there is nothing to say the token is still good, so it is
-		// stamped as already due and the next call renews it.
+		// No expiry means nothing vouches for the token, so it is stamped as already due.
 		$expires_in = isset( $token_data['expires_in'] ) && is_numeric( $token_data['expires_in'] ) ? (int) $token_data['expires_in'] : 0;
 
 		$settings['access_token']     = $token_data['access_token'];
@@ -304,10 +294,9 @@ class Auth {
 	/**
 	 * Decide whether an OAuth callback may be acted on.
 	 *
-	 * The callback fires on `init`, ahead of the admin's own authentication and on every
-	 * front-end request too. Without the capability gate anyone could hand the site an
-	 * authorization code and have it bound to the publisher's integration; it runs first
-	 * so that nobody else can consume the state this site issued.
+	 * The callback fires on `init`, before the admin authenticates and on front-end requests
+	 * too. Without this gate anyone could bind their own authorization code to the
+	 * publisher's integration, or consume the state this site issued.
 	 *
 	 * @param string $state State returned by Nextdoor.
 	 * @return true|\WP_Error True when the callback belongs to this administrator.
@@ -364,8 +353,7 @@ class Auth {
 			$settings['client_id'],
 			$settings['client_secret'],
 			$code,
-			// The token exchange has to repeat the redirect URI the authorization was
-			// requested with, state included, or the grant is refused.
+			// Must repeat the redirect URI the authorization used, state included.
 			Nextdoor::get_redirect_uri( $state )
 		);
 
@@ -373,21 +361,17 @@ class Auth {
 			self::redirect_with_error( $token_response->get_error_message() );
 		}
 
-		// Re-read after the exchange, which can take 30 seconds: the snapshot taken before
-		// it would put back whatever another request saved in the meantime.
+		// The exchange can take 30 seconds, so the earlier snapshot is stale by now.
 		$settings = Nextdoor::get_settings();
 
-		// Carrying a refresh token over would be right for a renewal, where Nextdoor omits
-		// it when it has not changed, but this is a fresh grant: the stored one belongs to
-		// the authorization being replaced and would renew the wrong connection.
+		// A fresh grant, not a renewal: the stored refresh token belongs to the authorization
+		// being replaced and would renew the wrong connection.
 		$settings['refresh_token'] = '';
 
 		$settings = self::apply_token_response( $settings, $token_response );
 
-		// Nothing in the grant says which account it belongs to, so a claimed page cannot
-		// be assumed to still be this one's. Dropping it sends the publisher back through
-		// the claim step, which is one press with the URL already filled in, rather than
-		// leaving a reconnection publishing to whichever page was claimed before.
+		// Nothing in the grant identifies the account, so the claimed page may not belong to
+		// it. Re-claiming costs one press; keeping it could publish to the wrong page.
 		$settings['page_id'] = '';
 
 		Nextdoor::update_settings( $settings );
@@ -400,15 +384,13 @@ class Auth {
 	/**
 	 * Record that Nextdoor refused the stored grant.
 	 *
-	 * Persisted rather than answered per request, so the card the publisher is sent to
-	 * reports the same thing the request that discovered it did.
+	 * Persisted, so the card the publisher is sent to reports what the request that
+	 * discovered the refusal did.
 	 *
 	 * @param array $expected Settings values the refusal was about, and what the record is
-	 *                        keyed on, so it is required. Checked against what
-	 *                        is stored now. A request whose token has since been rotated
-	 *                        away by a concurrent refresh or sign-in records nothing: its
-	 *                        answer is about a grant that no longer exists. Checked here
-	 *                        rather than by the caller so no window opens between the two.
+	 *                        keyed on. Nothing is recorded if they no longer match what is
+	 *                        stored: a concurrent refresh or sign-in has since replaced the
+	 *                        grant. Checked here, not by the caller, so no window opens.
 	 * @return void
 	 */
 	public static function record_token_refusal( array $expected ) {
@@ -424,9 +406,9 @@ class Auth {
 			}
 		}
 
-		// Stored against the credential it was about, hashed so the option never carries a
-		// second copy of a token. A grant that is later replaced makes the record stale by
-		// value, rather than relying on every future write path remembering to clear it.
+		// Hashed so the option never holds a second copy of a token, and keyed on the
+		// credential so replacing it lapses the record by value rather than by every future
+		// write path remembering to clear it.
 		update_option( self::REFUSAL_OPTION, array_map( 'wp_hash', $expected ) );
 	}
 
@@ -454,8 +436,6 @@ class Auth {
 
 		foreach ( $refused as $key => $hash ) {
 			if ( ! isset( $settings[ $key ] ) || wp_hash( $settings[ $key ] ) !== $hash ) {
-				// The credential the refusal named is gone, so the refusal is about a grant
-				// this connection no longer holds.
 				return false;
 			}
 		}
@@ -472,8 +452,7 @@ class Auth {
 		$settings = Nextdoor::get_settings();
 
 		if ( empty( $settings['token_expires_at'] ) ) {
-			// A grant that arrived without a usable expiry says nothing about how long it
-			// lasts, so it is treated as due rather than as good forever.
+			// No expiry says nothing about how long the grant lasts, so it is treated as due.
 			return true;
 		}
 
@@ -483,12 +462,9 @@ class Auth {
 	/**
 	 * Whether the connection still holds, without calling Nextdoor.
 	 *
-	 * Reports what `validate_token()` would, read off the stored token. A grant Nextdoor
-	 * has already refused is unusable however much life the access token has left, since a
-	 * refusal can come from the content API as well as from a refresh. Otherwise a token
-	 * that is not near expiry is usable, and one that is can be renewed as long as the
-	 * refresh token and the credentials it is exchanged with are all present. False still
-	 * means the publisher has to reconnect.
+	 * Reports what `validate_token()` would, read off the stored token. A refused grant is
+	 * unusable however much life the access token has left, since a refusal can come from
+	 * the content API as well as from a refresh. False means the publisher has to reconnect.
 	 *
 	 * @return bool
 	 */
@@ -519,30 +495,26 @@ class Auth {
 	 * @return bool
 	 */
 	public static function validate_token() {
-		// The cheap read answers every case a refresh could not fix, so a connection
-		// already known to be unrenewable never spends a blocking request finding out
-		// again on each editor load.
+		// The cheap read answers every case a refresh could not fix, so a connection already
+		// known to be unrenewable never spends a blocking request on each editor load.
 		if ( ! self::has_usable_token() ) {
 			return false;
 		}
 
 		$settings = Nextdoor::get_settings();
 
-		// Check if token needs refresh.
 		if ( ! self::needs_token_refresh() ) {
-			return true; // Token is still valid.
+			return true;
 		}
 
-		// Refresh the token.
 		$refresh_response = self::refresh_access_token(
 			$settings['client_id'],
 			$settings['client_secret'],
 			$settings['refresh_token']
 		);
 
-		// A refresh whose grant was replaced mid-flight comes back honoured but unapplied,
-		// so the answer is whatever replaced it: a fresh sign-in leaves a usable token, a
-		// disconnect leaves none, and only the stored settings tell the two apart.
+		// A refresh replaced mid-flight comes back honoured but unapplied, so only the stored
+		// settings say whether what replaced it is usable.
 		if ( ! is_wp_error( $refresh_response ) ) {
 			return self::has_usable_token();
 		}
