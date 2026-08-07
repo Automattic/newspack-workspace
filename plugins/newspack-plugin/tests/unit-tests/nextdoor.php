@@ -875,7 +875,7 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 
 		self::assertTrue( Nextdoor::can_user_publish() );
 
-		foreach ( [ 'api_publish_post', 'api_update_post', 'api_delete_post' ] as $handler ) {
+		foreach ( [ 'api_publish_post', 'api_update_post', 'api_delete_post', 'api_get_post_sharing_status' ] as $handler ) {
 			$request = new WP_REST_Request( 'POST', '/newspack/v1/nextdoor/' . $handler );
 			$request->set_param( 'id', $post_id );
 
@@ -916,5 +916,131 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 
 		self::assertSame( 'own-id', Nextdoor::get_settings()['client_id'] );
 		self::assertSame( 'own-secret', Nextdoor::get_settings()['client_secret'] );
+	}
+
+	/**
+	 * A reader role stored before it was withheld loses the capability, without a save.
+	 */
+	public function test_a_stored_reader_role_is_not_granted_the_capability() {
+		Optional_Modules::activate_optional_module( 'nextdoor' );
+		update_option(
+			Nextdoor::SETTINGS_SLUG,
+			[ 'allowed_roles' => [ 'administrator', 'editor', 'subscriber' ] ]
+		);
+
+		Nextdoor::add_nextdoor_capability();
+
+		self::assertTrue( get_role( 'editor' )->has_cap( Nextdoor::CAPABILITY_SLUG ) );
+		self::assertFalse( get_role( 'subscriber' )->has_cap( Nextdoor::CAPABILITY_SLUG ) );
+		self::assertNotContains( 'subscriber', Nextdoor::get_nextdoor_capability_roles() );
+	}
+
+	/**
+	 * A grant already handed to a reader role is taken back on the next reconciliation.
+	 */
+	public function test_a_stale_reader_grant_is_revoked() {
+		Optional_Modules::activate_optional_module( 'nextdoor' );
+		get_role( 'subscriber' )->add_cap( Nextdoor::CAPABILITY_SLUG );
+		update_option( Nextdoor::SETTINGS_SLUG, [ 'allowed_roles' => [ 'administrator', 'subscriber' ] ] );
+
+		Nextdoor::add_nextdoor_capability();
+
+		self::assertFalse( get_role( 'subscriber' )->has_cap( Nextdoor::CAPABILITY_SLUG ) );
+	}
+
+	/**
+	 * A connection already known to be unrenewable is not re-tried on every read.
+	 */
+	public function test_validate_token_does_not_retry_a_refused_connection() {
+		add_filter( 'pre_http_request', [ $this, 'stub_nextdoor_response' ], 10, 3 );
+
+		Nextdoor::update_settings(
+			[
+				'client_id'         => 'site-id',
+				'client_secret'     => 'site-secret',
+				'access_token'      => 'expired-access',
+				'refresh_token'     => 'stored-refresh',
+				'token_expires_at'  => time() - 10,
+				'refresh_failed_at' => time(),
+			]
+		);
+
+		self::assertFalse( Auth::validate_token() );
+		self::assertSame( [], $this->http_requests );
+	}
+
+	/**
+	 * A transient refusal is not mistaken for a dead grant.
+	 */
+	public function test_a_rate_limited_refresh_is_not_recorded_as_a_refusal() {
+		Nextdoor::update_settings(
+			[
+				'client_id'        => 'site-id',
+				'client_secret'    => 'site-secret',
+				'access_token'     => 'expired-access',
+				'refresh_token'    => 'stored-refresh',
+				'token_expires_at' => time() - 10,
+			]
+		);
+
+		add_filter(
+			'pre_http_request',
+			function () {
+				return [
+					'headers'  => [],
+					'body'     => wp_json_encode( [ 'error' => 'rate_limited' ] ),
+					'response' => [
+						'code'    => 429,
+						'message' => 'Too Many Requests',
+					],
+					'cookies'  => [],
+					'filename' => null,
+				];
+			}
+		);
+
+		$result = Auth::refresh_access_token( 'site-id', 'site-secret', 'stored-refresh' );
+
+		self::assertInstanceOf( 'WP_Error', $result );
+		self::assertEmpty( Nextdoor::get_settings()['refresh_failed_at'] );
+		self::assertTrue( Auth::has_usable_token() );
+	}
+
+	/**
+	 * Losing a refresh race does not mark the token the winner just renewed.
+	 */
+	public function test_a_losing_concurrent_refresh_leaves_the_renewed_token_alone() {
+		Nextdoor::update_settings(
+			[
+				'client_id'        => 'site-id',
+				'client_secret'    => 'site-secret',
+				'access_token'     => 'new-access',
+				'refresh_token'    => 'rotated-refresh',
+				'token_expires_at' => time() + HOUR_IN_SECONDS,
+			]
+		);
+
+		add_filter(
+			'pre_http_request',
+			function () {
+				return [
+					'headers'  => [],
+					'body'     => wp_json_encode( [ 'error' => 'invalid_grant' ] ),
+					'response' => [
+						'code'    => 400,
+						'message' => 'Bad Request',
+					],
+					'cookies'  => [],
+					'filename' => null,
+				];
+			}
+		);
+
+		// The refresh token this request set out with has since been rotated away.
+		$result = Auth::refresh_access_token( 'site-id', 'site-secret', 'superseded-refresh' );
+
+		self::assertInstanceOf( 'WP_Error', $result );
+		self::assertEmpty( Nextdoor::get_settings()['refresh_failed_at'] );
+		self::assertTrue( Auth::has_usable_token() );
 	}
 }
