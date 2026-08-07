@@ -130,7 +130,7 @@ class Teams_Migration {
 	 * : Only process teams that have no linked subscription. Use to safely re-run the command for previously skipped teams.
 	 *
 	 * [--migrate-invitations]
-	 * : Also carry each team's pending (unaccepted) WooCommerce Teams invitations over as group-subscription invites, which SENDS an invitation email to every pending invitee. Off by default because it emails readers; the pending invitees are always listed at the end of the run regardless of this flag. Ignored in dry-run mode (nothing is sent). The run asks for confirmation before the first email goes out, and aborts up front if the invitation email is not sendable on this site while there is something to send. Re-running is safe while the invites it wrote are still live (30 days by default) — an invitee whose invite has lapsed is invited again, and those are reported separately. To recover an invitee reported as FAILED: fix the cause and re-run — or cancel the reader's pending invitation from the group subscription's panel on the WooCommerce subscription screen and re-invite from there. That manual cancel is also the escape hatch for a stored invite the automatic rollback could not remove.
+	 * : Also carry each team's pending (unaccepted) WooCommerce Teams invitations over as group-subscription invites, which SENDS an invitation email to every pending invitee. Off by default because it emails readers; the pending invitees are always listed at the end of the run regardless of this flag. In dry-run mode nothing is sent, but the flag still shapes the rehearsal: per-invitee outcomes and recipient accounting preview what a live run would send, and any dry run with pending invitees warns when the invitation email is not sendable. The run asks for confirmation before the first email goes out, and aborts up front if the invitation email is not sendable on this site while there is something to send. Re-running is safe while the invites it wrote are still live (30 days by default) — an invitee whose invite has lapsed is invited again, and those are reported separately. To recover an invitee reported as FAILED: fix the cause and re-run — or cancel the reader's pending invitation from the group subscription's panel on the WooCommerce subscription screen and re-invite from there. That manual cancel is also the escape hatch for a stored invite the automatic rollback could not remove.
 	 *
 	 * [--yes]
 	 * : Skip the confirmation prompt shown before invitation emails are sent. Auto-handled by WP_CLI::confirm.
@@ -229,13 +229,15 @@ class Teams_Migration {
 		}
 
 		// Upper bound: an invitee who is already invited, already a member, or over
-		// the group's seat limit is rejected without an email.
+		// the group's seat limit is rejected without an email. Computed on every run:
+		// the dry-run sendability warning below fires whenever pending invitees
+		// exist, not only when --migrate-invitations is being rehearsed, so the
+		// tool's own suggested workflow (rehearse plain, then send live) passes
+		// through the check.
 		$recipient_count = 0;
-		if ( $migrate_invitations ) {
-			foreach ( $pending_invitations as $team_id => $team_emails ) {
-				if ( ! self::team_is_skipped_by_flags( $team_id, $skip_unlinked, $only_unlinked ) ) {
-					$recipient_count += count( $team_emails );
-				}
+		foreach ( $pending_invitations as $team_id => $team_emails ) {
+			if ( ! self::team_is_skipped_by_flags( $team_id, $skip_unlinked, $only_unlinked ) ) {
+				$recipient_count += count( $team_emails );
 			}
 		}
 
@@ -244,15 +246,19 @@ class Teams_Migration {
 		// whether or not the email goes out, so without this an unsendable site
 		// would report hundreds of invitations sent with nobody contacted. Gated on
 		// the recipient count so a site whose invitation email is broken can still
-		// migrate its teams when there is nothing to send anyway — and surfaced as a
-		// warning on a dry run, which is the only rehearsal an operator gets before
-		// a live run refuses at the top.
-		if ( $migrate_invitations && $recipient_count && ! Emails::can_send_email( Group_Subscription_Invite::EMAIL_TYPE ) ) {
-			$sendability_message = 'The group subscription invitation email is not currently sendable. The email post may be in draft status, Newspack Newsletters may be inactive, or the Access Control feature (NEWSPACK_CONTENT_GATES) may be off — which leaves the invitation email unregistered.';
-			if ( $send_invitations ) {
+		// migrate its teams when there is nothing to send anyway. Only the live
+		// branch may use the repairing check: can_send_email()'s miss path
+		// publishes the email post and rewrites newsletter palette keys, so the
+		// dry-run branch asks via the read-only probe — a rehearsal that wrote
+		// would break its own no-writes banner, and would silence this very
+		// warning by repairing the condition it reports.
+		$sendability_message = 'The group subscription invitation email is not currently sendable. The email post may be in draft status, Newspack Newsletters may be inactive, or the Access Control feature (NEWSPACK_CONTENT_GATES) may be off — which leaves the invitation email unregistered.';
+		if ( $recipient_count ) {
+			if ( $send_invitations && ! Emails::can_send_email( Group_Subscription_Invite::EMAIL_TYPE ) ) {
 				WP_CLI::error( $sendability_message . ' Fix that and re-run, or drop --migrate-invitations to migrate without sending.' );
+			} elseif ( $dry_run && ! Emails::can_send_email( Group_Subscription_Invite::EMAIL_TYPE, false ) ) {
+				WP_CLI::warning( $sendability_message . ' Review and publish the invitation email before running with --migrate-invitations --live.' );
 			}
-			WP_CLI::warning( $sendability_message . ' A --live run will abort before sending until that is fixed.' );
 		}
 
 		if ( $send_invitations && $recipient_count ) {
@@ -1822,9 +1828,17 @@ class Teams_Migration {
 				}
 				if ( empty( $invite['email_sent'] ) ) {
 					// Roll the invite back so it can't answer "Already invited." on the
-					// re-run that is meant to reach this reader.
-					Group_Subscription_Invite::cancel_invite( $subscription, $email );
-					$result['failed'][ $email ] = __( 'Invitation email was not sent — the invite was rolled back so a re-run can retry.', 'newspack-plugin' );
+					// re-run that is meant to reach this reader. Guarded like the
+					// throw-path rollback below: unguarded, a throwing cancel_invite()
+					// would land in the outer catch, re-attempt the rollback, and build
+					// the FAILED reason from the rollback error alone — dropping the
+					// send-failure fact that explains the row.
+					try {
+						Group_Subscription_Invite::cancel_invite( $subscription, $email );
+						$result['failed'][ $email ] = __( 'Invitation email was not sent — the invite was rolled back so a re-run can retry.', 'newspack-plugin' );
+					} catch ( \Throwable $rollback_error ) {
+						$result['failed'][ $email ] = __( 'Invitation email was not sent, and the stored invite could not be rolled back afterwards. If the subscription\'s group panel shows a pending invitation for this reader, cancel it before re-running, or the re-run will answer "Already invited."', 'newspack-plugin' );
+					}
 					continue;
 				}
 			} catch ( \Throwable $e ) {
@@ -1837,15 +1851,19 @@ class Teams_Migration {
 				} catch ( \Throwable $rollback_error ) {
 					$rolled_back = false;
 				}
+				// "Any stored invite" / "if the panel shows": generate_invite() can
+				// throw at its own save, before the row persists, and cancel_invites()
+				// returns true whether or not it matched anything — so neither branch
+				// can claim a row certainly existed.
 				$result['failed'][ $email ] = $rolled_back
 					? sprintf(
 						/* translators: %s: the error thrown by the send path. */
-						__( '%s — the invite was rolled back so a re-run can retry.', 'newspack-plugin' ),
+						__( '%s — any stored invite was rolled back so a re-run can retry.', 'newspack-plugin' ),
 						$e->getMessage()
 					)
 					: sprintf(
 						/* translators: %s: the error thrown by the send path. */
-						__( '%s — the stored invite could NOT be rolled back. Cancel this reader\'s pending invitation from the subscription\'s group panel before re-running, or the re-run will answer "Already invited."', 'newspack-plugin' ),
+						__( '%s — the invite could not be rolled back. If the subscription\'s group panel shows a pending invitation for this reader, cancel it before re-running, or the re-run will answer "Already invited."', 'newspack-plugin' ),
 						$e->getMessage()
 					);
 				continue;
@@ -1908,51 +1926,62 @@ class Teams_Migration {
 	 * Read the pending invitation emails of many teams in a single query.
 	 *
 	 * Bulk twin of get_pending_team_invitation_emails(), used by the migrate-teams
-	 * pre-pass: one `post_parent__in` round trip bucketed by team in PHP, where the
-	 * per-team helper would front-load one query per team into the silent stretch
+	 * pre-pass: chunked `post_parent__in` round trips bucketed by team in PHP, where
+	 * the per-team helper would front-load one query per team into the silent stretch
 	 * before the progress bar appears. Both share extract_pending_invitation_emails(),
 	 * so their filtering guarantees cannot drift; the per-team helper remains the
 	 * entry point for reading one team.
 	 *
-	 * @param int[] $team_ids Team post IDs.
-	 * @param int   $dropped  Out-param: incremented once per pending invitation dropped
-	 *                        because its stored address is not a valid email, so the
-	 *                        caller can warn instead of losing those invitees silently.
+	 * @param int[] $team_ids   Team post IDs.
+	 * @param int   $dropped    Out-param: incremented once per pending invitation dropped
+	 *                          because its stored address is not a valid email, so the
+	 *                          caller can warn instead of losing those invitees silently.
+	 * @param int   $chunk_size Teams per query. The status clause only narrows the query
+	 *                          while WooCommerce Teams (which registers `wcmti-pending`)
+	 *                          is active; on the post-migration configuration this command
+	 *                          supports, WP_Query drops the unregistered status entirely
+	 *                          and each round trip returns the chunk's full invitation
+	 *                          history — accepted and cancelled included, the bulk of the
+	 *                          table. Chunking bounds that peak while keeping the query
+	 *                          count low; the PHP re-filter does the narrowing either way.
 	 *
 	 * @return array<int, string[]> Team ID => pending invitee emails, in their original
 	 *                              casing and deduped case-insensitively per team. Teams
 	 *                              with no pending invitations are omitted.
 	 */
-	public static function get_pending_team_invitation_emails_for_teams( $team_ids, &$dropped = 0 ) {
+	public static function get_pending_team_invitation_emails_for_teams( $team_ids, &$dropped = 0, $chunk_size = 100 ) {
 		$team_ids = array_values( array_filter( array_map( 'absint', (array) $team_ids ) ) );
 		if ( empty( $team_ids ) ) {
 			return [];
 		}
 
-		$invitations = \get_posts(
-			[
-				'post_type'              => 'wc_team_invitation',
-				'post_status'            => 'wcmti-pending',
-				'post_parent__in'        => $team_ids,
-				'posts_per_page'         => -1,
-				'orderby'                => 'ID',
-				'order'                  => 'ASC',
-				'no_found_rows'          => true,
-				'update_post_meta_cache' => false,
-				'update_post_term_cache' => false,
-			]
-		);
-
-		$by_team = [];
-		foreach ( $invitations as $invitation ) {
-			$by_team[ (int) $invitation->post_parent ][] = $invitation;
-		}
-
 		$result = [];
-		foreach ( $by_team as $team_id => $team_invitations ) {
-			$emails = self::extract_pending_invitation_emails( $team_invitations, $dropped );
-			if ( ! empty( $emails ) ) {
-				$result[ $team_id ] = $emails;
+		foreach ( array_chunk( $team_ids, max( 1, (int) $chunk_size ) ) as $chunk ) {
+			$invitations = \get_posts(
+				[
+					'post_type'              => 'wc_team_invitation',
+					'post_status'            => 'wcmti-pending',
+					'post_parent__in'        => $chunk,
+					'posts_per_page'         => -1,
+					'orderby'                => 'ID',
+					'order'                  => 'ASC',
+					'no_found_rows'          => true,
+					'update_post_meta_cache' => false,
+					'update_post_term_cache' => false,
+				]
+			);
+
+			// Bucket and reduce inside the chunk loop, so each chunk's post objects
+			// are released before the next chunk loads.
+			$by_team = [];
+			foreach ( $invitations as $invitation ) {
+				$by_team[ (int) $invitation->post_parent ][] = $invitation;
+			}
+			foreach ( $by_team as $team_id => $team_invitations ) {
+				$emails = self::extract_pending_invitation_emails( $team_invitations, $dropped );
+				if ( ! empty( $emails ) ) {
+					$result[ $team_id ] = $emails;
+				}
 			}
 		}
 
