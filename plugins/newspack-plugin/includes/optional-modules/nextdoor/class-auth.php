@@ -183,8 +183,12 @@ class Auth {
 	 * @return array Settings carrying the new token.
 	 */
 	private static function apply_token_response( $settings, $token_data ) {
+		// Without an expiry there is nothing to say the token is still good, so it is
+		// stamped as already due and the next call renews it.
+		$expires_in = isset( $token_data['expires_in'] ) && is_numeric( $token_data['expires_in'] ) ? (int) $token_data['expires_in'] : 0;
+
 		$settings['access_token']      = $token_data['access_token'];
-		$settings['token_expires_at']  = isset( $token_data['expires_in'] ) && is_numeric( $token_data['expires_in'] ) ? time() + (int) $token_data['expires_in'] : 0;
+		$settings['token_expires_at']  = time() + $expires_in;
 		$settings['refresh_failed_at'] = 0;
 
 		// Nextdoor rotates the refresh token, and omits it when it has not changed.
@@ -370,7 +374,9 @@ class Auth {
 		$settings = Nextdoor::get_settings();
 
 		if ( empty( $settings['token_expires_at'] ) ) {
-			return false;
+			// A grant that arrived without a usable expiry says nothing about how long it
+			// lasts, so it is treated as due rather than as good forever.
+			return true;
 		}
 
 		return ( $settings['token_expires_at'] - 300 ) < time();
