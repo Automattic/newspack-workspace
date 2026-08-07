@@ -368,24 +368,95 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * A push integration whose outgoing-fields option was never stored keeps
-	 * the pre-coexistence behavior: the full default field set, not an empty
-	 * payload. Before this, only the ESP had a defaults fallback, so a
-	 * third-party push integration on a legacy site silently synced no
-	 * metadata at all.
+	 * A never-configured push integration inherits the ESP integration's
+	 * effective selection rather than the full default set (NPPD-2107): a
+	 * newly connected integration must push what the site already pushes, not
+	 * everything available.
 	 */
-	public function test_never_configured_integration_defaults_to_all_fields() {
+	public function test_never_configured_integration_inherits_esp_selection() {
 		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
 		\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test' );
+		\update_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'esp', [ 'v1:account' ] );
+		Integrations::register( new ESP() );
 
 		$ids = $this->integration->get_enabled_outgoing_field_ids();
 
-		$this->assertNotEmpty( $ids, 'A never-configured integration must default to the full field set.' );
+		$this->assertSame( [ 'v1:account' ], $ids, 'The inherited selection is the ESP\'s, not the defaults.' );
+		$this->assertNull(
+			\get_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test', null ),
+			'Inheritance must not persist, so it keeps tracking the ESP selection.'
+		);
+	}
+
+	/**
+	 * A corrupt (non-array) stored value is treated as never-configured and
+	 * inherits, rather than failing closed to an empty selection that would
+	 * silently stop syncing every field.
+	 */
+	public function test_corrupt_stored_selection_falls_back_to_inheritance() {
+		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
+		\update_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test', 'corrupt' );
+		\update_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'esp', [ 'v1:account' ] );
+		Integrations::register( new ESP() );
+
+		$this->assertSame( [ 'v1:account' ], $this->integration->get_enabled_outgoing_field_ids() );
+	}
+
+	/**
+	 * With no ESP integration in the registry (pre-init, or a directly
+	 * constructed integration — integrations register on init priority 5),
+	 * inheritance mirrors the ESP's own fallback chain: the legacy global
+	 * option first, then the full default set. Failing closed to an empty
+	 * selection there would strip every field on a site whose pre-selection
+	 * behavior was full passthrough.
+	 */
+	public function test_inheritance_without_registered_esp_uses_legacy_global_option() {
+		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
+		\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test' );
+		\update_option( Metadata::FIELDS_OPTION, [ 'Account' ] );
+
+		$this->assertNull( Integrations::get_integration( 'esp' ), 'This test covers the registry-miss path.' );
+		$this->assertSame( [ 'v1:account' ], $this->integration->get_enabled_outgoing_field_ids() );
+	}
+
+	/**
+	 * Registry miss with no legacy global option either: the full default
+	 * field set, keeping the pre-coexistence passthrough behavior. Before
+	 * per-integration selection existed, only the ESP had a defaults fallback,
+	 * so a third-party push integration silently synced no metadata at all.
+	 */
+	public function test_inheritance_without_esp_or_global_option_defaults_to_all_fields() {
+		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
+		\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test' );
+		\delete_option( Metadata::FIELDS_OPTION );
+
+		$ids = $this->integration->get_enabled_outgoing_field_ids();
+
+		$this->assertNotEmpty( $ids, 'A never-configured integration must not fail closed to an empty selection.' );
 		$this->assertContains( 'v1:account', $ids );
+		$this->assertContains( 'v1:total_paid', $ids );
 		$this->assertNull(
 			\get_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test', null ),
 			'The defaults fallback must not persist, so it keeps tracking availability changes.'
 		);
+	}
+
+	/**
+	 * The ESP has nothing above it to inherit from, so it keeps the dynamic
+	 * all-defaults fallback. Inheriting from itself would recurse.
+	 */
+	public function test_esp_does_not_inherit_from_itself() {
+		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
+		\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'esp' );
+		\delete_option( Metadata::FIELDS_OPTION );
+
+		$esp = new ESP();
+		Integrations::register( $esp );
+
+		$ids = $esp->get_enabled_outgoing_field_ids();
+
+		$this->assertContains( 'v1:account', $ids );
+		$this->assertContains( 'v1:total_paid', $ids );
 	}
 
 	/**

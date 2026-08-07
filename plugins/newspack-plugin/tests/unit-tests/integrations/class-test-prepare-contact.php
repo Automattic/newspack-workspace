@@ -7,7 +7,9 @@
 
 namespace Newspack\Tests\Unit\Integrations;
 
+use Newspack\Reader_Activation\Integration;
 use Newspack\Reader_Activation\Integrations;
+use Newspack\Reader_Activation\Integrations\ESP;
 use Newspack\Reader_Activation\Sync\Field_Registry;
 use Newspack\Reader_Activation\Sync\Metadata;
 use Sample_Integration;
@@ -43,6 +45,11 @@ class Test_Prepare_Contact extends \WP_UnitTestCase {
 	 * Tear down test environment.
 	 */
 	public function tear_down() {
+		foreach ( [ 'prepare-test', 'inheritor', 'esp' ] as $id ) {
+			\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . $id );
+			\delete_option( Integration::METADATA_PREFIX_OPTION_PREFIX . $id );
+		}
+		\delete_option( Metadata::FIELDS_OPTION );
 		\delete_option( Field_Registry::SCHEMA_ORIGIN_OPTION );
 		Field_Registry::reset();
 		$this->reset_integrations();
@@ -79,6 +86,75 @@ class Test_Prepare_Contact extends \WP_UnitTestCase {
 		$result = $this->integration->prepare_contact( $contact );
 
 		$this->assertSame( [ 'NP_Account' => 5 ], $result['metadata'] );
+	}
+
+	/**
+	 * The NPPD-2107 regression: with the ESP integration narrowed to a single
+	 * field, a second integration that never saved an Outbound selection of
+	 * its own must push that same single field — not the full default set. The
+	 * live bug was an ESP narrowed to Account-only while ActiveCampaign still
+	 * pushed `NP_Total Paid`.
+	 */
+	public function test_never_configured_integration_pushes_only_inherited_esp_fields() {
+		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
+
+		$esp = new ESP();
+		Integrations::register( $esp );
+		$esp->update_enabled_outgoing_fields( [ 'v1:account' ] );
+
+		// A second integration with no stored Outbound selection at all.
+		$inheritor = new Sample_Integration( 'inheritor', 'Inheritor' );
+		Integrations::register( $inheritor );
+		$inheritor->update_metadata_prefix( 'NP_' );
+		\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'inheritor' );
+
+		$result = $inheritor->prepare_contact(
+			[
+				'email'    => 'test@example.com',
+				'metadata' => [
+					'account'                => 5,
+					'total_paid'             => '120.00',
+					'membership_status'      => 'Monthly Donor',
+					'signup_page_utm_source' => 'newsletter',
+				],
+			]
+		);
+
+		$this->assertSame(
+			[ 'NP_Account' => 5 ],
+			$result['metadata'],
+			'A never-configured integration pushes exactly the ESP selection.'
+		);
+	}
+
+	/**
+	 * Inheritance yields to an explicit save, including an empty one: saving
+	 * with nothing checked means "push no metadata fields", not "inherit".
+	 */
+	public function test_explicit_empty_selection_beats_inheritance() {
+		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
+
+		$esp = new ESP();
+		Integrations::register( $esp );
+		$esp->update_enabled_outgoing_fields( [ 'v1:account' ] );
+
+		$this->integration->update_enabled_outgoing_fields( [] );
+
+		$result = $this->integration->prepare_contact(
+			[
+				'email'    => 'test@example.com',
+				'metadata' => [
+					'account'       => 5,
+					'status_if_new' => 'transactional',
+				],
+			]
+		);
+
+		$this->assertSame(
+			[ 'status_if_new' => 'transactional' ],
+			$result['metadata'],
+			'Only unprefixed sync-control keys survive an explicitly empty selection.'
+		);
 	}
 
 	/**
