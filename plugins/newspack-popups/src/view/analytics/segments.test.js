@@ -1,4 +1,4 @@
-import { reportMatchedSegments, EVENT_NAME, SESSION_KEY, EMPTY_VALUE } from './segments';
+import { reportMatchedSegments, EVENT_NAME, WON_EVENT_NAME, SESSION_KEY, WON_SESSION_KEY, EMPTY_VALUE } from './segments';
 import { getMatchingSegmentIds, sendEvent } from '../utils';
 
 jest.mock( '../utils', () => ( {
@@ -6,12 +6,16 @@ jest.mock( '../utils', () => ( {
 	sendEvent: jest.fn(),
 } ) );
 
+// IDs reported through a given event, in call order.
+const reportedIds = eventName => sendEvent.mock.calls.filter( call => call[ 1 ] === eventName ).map( call => call[ 0 ].segment_id );
+
 describe( 'reportMatchedSegments', () => {
 	beforeEach( () => {
 		jest.clearAllMocks();
 		window.sessionStorage.clear();
 		global.gtag = jest.fn();
-		window.newspack_popups_view = { segments: { 12: {}, 45: {} } };
+		// Lower priority number wins: 12 outranks 45.
+		window.newspack_popups_view = { segments: { 12: { priority: 0 }, 45: { priority: 1 } } };
 	} );
 
 	afterEach( () => {
@@ -20,28 +24,38 @@ describe( 'reportMatchedSegments', () => {
 		jest.restoreAllMocks();
 	} );
 
-	it( 'reports one event per matched segment', () => {
+	it( 'reports one matched event per segment and one won event for the priority winner', () => {
 		getMatchingSegmentIds.mockReturnValue( [ '12', '45' ] );
 		reportMatchedSegments();
-		expect( sendEvent ).toHaveBeenCalledTimes( 2 );
-		expect( sendEvent ).toHaveBeenCalledWith( { segment_id: '12' }, EVENT_NAME );
-		expect( sendEvent ).toHaveBeenCalledWith( { segment_id: '45' }, EVENT_NAME );
+		expect( reportedIds( EVENT_NAME ) ).toEqual( [ '12', '45' ] );
+		expect( reportedIds( WON_EVENT_NAME ) ).toEqual( [ '12' ] );
 	} );
 
 	it( 'stays silent when the same segments match again', () => {
 		getMatchingSegmentIds.mockReturnValue( [ '12', '45' ] );
 		reportMatchedSegments();
 		reportMatchedSegments();
-		expect( sendEvent ).toHaveBeenCalledTimes( 2 );
+		expect( reportedIds( EVENT_NAME ) ).toEqual( [ '12', '45' ] );
+		expect( reportedIds( WON_EVENT_NAME ) ).toEqual( [ '12' ] );
 	} );
 
-	it( 'reports only the segment newly matched mid-session', () => {
-		getMatchingSegmentIds.mockReturnValue( [ '12' ] );
+	it( 'reports a newly matched segment mid-session, and the won event follows the new winner', () => {
+		getMatchingSegmentIds.mockReturnValue( [ '45' ] );
 		reportMatchedSegments();
 		getMatchingSegmentIds.mockReturnValue( [ '12', '45' ] );
 		reportMatchedSegments();
-		expect( sendEvent ).toHaveBeenCalledTimes( 2 );
-		expect( sendEvent ).toHaveBeenLastCalledWith( { segment_id: '45' }, EVENT_NAME );
+		expect( reportedIds( EVENT_NAME ) ).toEqual( [ '45', '12' ] );
+		expect( reportedIds( WON_EVENT_NAME ) ).toEqual( [ '45', '12' ] );
+	} );
+
+	it( 'passes the won event to the next segment when the winner stops matching', () => {
+		getMatchingSegmentIds.mockReturnValue( [ '12', '45' ] );
+		reportMatchedSegments();
+		getMatchingSegmentIds.mockReturnValue( [ '45' ] );
+		reportMatchedSegments();
+		// 45 was already reported as matched; inheriting the win is the only new fact.
+		expect( reportedIds( EVENT_NAME ) ).toEqual( [ '12', '45' ] );
+		expect( reportedIds( WON_EVENT_NAME ) ).toEqual( [ '12', '45' ] );
 	} );
 
 	it( 'does not report a segment again after it stops and resumes matching', () => {
@@ -51,14 +65,15 @@ describe( 'reportMatchedSegments', () => {
 		reportMatchedSegments();
 		getMatchingSegmentIds.mockReturnValue( [ '12' ] );
 		reportMatchedSegments();
-		const reportedIds = sendEvent.mock.calls.map( call => call[ 0 ].segment_id );
-		expect( reportedIds ).toEqual( [ '12', EMPTY_VALUE ] );
+		expect( reportedIds( EVENT_NAME ) ).toEqual( [ '12', EMPTY_VALUE ] );
+		expect( reportedIds( WON_EVENT_NAME ) ).toEqual( [ '12' ] );
 	} );
 
-	it( 'reports an empty match explicitly so "matches nothing" is measurable', () => {
+	it( 'reports an empty match explicitly, with no won event', () => {
 		getMatchingSegmentIds.mockReturnValue( [] );
 		reportMatchedSegments();
-		expect( sendEvent ).toHaveBeenCalledWith( { segment_id: EMPTY_VALUE }, EVENT_NAME );
+		expect( reportedIds( EVENT_NAME ) ).toEqual( [ EMPTY_VALUE ] );
+		expect( reportedIds( WON_EVENT_NAME ) ).toEqual( [] );
 	} );
 
 	it( 'reports the empty match only once per session', () => {
@@ -73,8 +88,8 @@ describe( 'reportMatchedSegments', () => {
 		reportMatchedSegments();
 		getMatchingSegmentIds.mockReturnValue( [ '12' ] );
 		reportMatchedSegments();
-		const reportedIds = sendEvent.mock.calls.map( call => call[ 0 ].segment_id );
-		expect( reportedIds ).toEqual( [ EMPTY_VALUE, '12' ] );
+		expect( reportedIds( EVENT_NAME ) ).toEqual( [ EMPTY_VALUE, '12' ] );
+		expect( reportedIds( WON_EVENT_NAME ) ).toEqual( [ '12' ] );
 	} );
 
 	it( 'does nothing, and remembers nothing, when gtag is unavailable', () => {
@@ -83,6 +98,7 @@ describe( 'reportMatchedSegments', () => {
 		reportMatchedSegments();
 		expect( sendEvent ).not.toHaveBeenCalled();
 		expect( window.sessionStorage.getItem( SESSION_KEY ) ).toBeNull();
+		expect( window.sessionStorage.getItem( WON_SESSION_KEY ) ).toBeNull();
 	} );
 
 	it( 'does nothing when segmentation is not active on the page', () => {
@@ -90,6 +106,14 @@ describe( 'reportMatchedSegments', () => {
 		getMatchingSegmentIds.mockReturnValue( [ '12' ] );
 		reportMatchedSegments();
 		expect( sendEvent ).not.toHaveBeenCalled();
+	} );
+
+	it( 'does not report during a segment preview', () => {
+		window.history.pushState( {}, '', '/?view_as=segment:45' );
+		getMatchingSegmentIds.mockReturnValue( [ '12' ] );
+		reportMatchedSegments();
+		expect( sendEvent ).not.toHaveBeenCalled();
+		window.history.pushState( {}, '', '/' );
 	} );
 
 	it( 'dispatches every time when sessionStorage is unavailable', () => {
@@ -102,6 +126,7 @@ describe( 'reportMatchedSegments', () => {
 		getMatchingSegmentIds.mockReturnValue( [ '12' ] );
 		reportMatchedSegments();
 		reportMatchedSegments();
-		expect( sendEvent ).toHaveBeenCalledTimes( 2 );
+		expect( reportedIds( EVENT_NAME ) ).toEqual( [ '12', '12' ] );
+		expect( reportedIds( WON_EVENT_NAME ) ).toEqual( [ '12', '12' ] );
 	} );
 } );
