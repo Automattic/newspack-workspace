@@ -1740,4 +1740,51 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 		self::assertFalse( Auth::validate_token() );
 		self::assertSame( '', Nextdoor::get_settings()['access_token'] );
 	}
+
+	/**
+	 * Every route turns away a reader, from the registration rather than the handler.
+	 *
+	 * The handlers are called directly elsewhere, which is what makes the assertions
+	 * about their own guards readable, but it also means nothing else here would notice
+	 * a `permission_callback` going missing from a route.
+	 */
+	public function test_every_route_refuses_a_reader() {
+		$post_id = $this->factory->post->create( [ 'post_status' => 'publish' ] );
+
+		wp_set_current_user( $this->factory->user->create( [ 'role' => 'subscriber' ] ) );
+
+		// Required arguments are validated before the permission callback runs, so each
+		// route is given a well-formed body: without one the refusal under test never
+		// happens and a 400 stands in for it.
+		$routes = [
+			[
+				'POST',
+				'/newspack/v1/nextdoor/oauth/start',
+				[
+					'email'   => 'editor@example.com',
+					'country' => 'US',
+				],
+			],
+			[ 'PUT', '/newspack/v1/nextdoor/claim-page', [ 'publication_url' => 'https://example.com' ] ],
+			[ 'DELETE', '/newspack/v1/nextdoor/disconnect', [] ],
+			[ 'GET', '/newspack/v1/nextdoor/post-status/' . $post_id, [] ],
+			[ 'POST', '/newspack/v1/nextdoor/publish-post/' . $post_id, [] ],
+			[ 'PUT', '/newspack/v1/nextdoor/update-post/' . $post_id, [] ],
+			[ 'DELETE', '/newspack/v1/nextdoor/delete-post/' . $post_id, [] ],
+			[ 'POST', self::SETTINGS_ROUTE, [] ],
+		];
+
+		foreach ( $routes as list( $method, $route, $params ) ) {
+			$request = new WP_REST_Request( $method, $route );
+			foreach ( $params as $param => $value ) {
+				$request->set_param( $param, $value );
+			}
+
+			$response = $this->server->dispatch( $request );
+
+			self::assertSame( 403, $response->get_status(), $route );
+		}
+
+		self::assertSame( [], $this->http_requests );
+	}
 }
