@@ -520,7 +520,7 @@ describe( 'ConfigureView per-direction sections', () => {
 	// so this suite's outbound fixtures carry the same id-space shape the real
 	// settings payload does. Only the properties buildFieldRows/toggleRow/
 	// badgesForRow actually read are set; the rest default to values that keep
-	// every row a plain, single-version, unconflicted, non-badged row unless a
+	// every row a plain, single-version, uncollapsed, non-badged row unless a
 	// test opts into something else via `extra`.
 	const outboundDef = ( id, name, extra = {} ) => ( {
 		id,
