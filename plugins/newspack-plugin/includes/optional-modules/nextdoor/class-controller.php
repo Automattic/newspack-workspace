@@ -58,6 +58,9 @@ class Controller {
 					'country' => [
 						'required'          => true,
 						'type'              => 'string',
+						// The site owns the list the picker is built from, so a bad value can
+						// be named here instead of coming back as an opaque error from Nextdoor.
+						'enum'              => wp_list_pluck( Nextdoor::get_available_countries(), 'value' ),
 						'sanitize_callback' => 'sanitize_text_field',
 						'validate_callback' => 'rest_validate_request_arg',
 					],
@@ -100,6 +103,7 @@ class Controller {
 					'test'            => [
 						'required'          => false,
 						'type'              => 'boolean',
+						'default'           => false,
 						'sanitize_callback' => 'rest_sanitize_boolean',
 						'validate_callback' => 'rest_validate_request_arg',
 					],
@@ -214,6 +218,28 @@ class Controller {
 	}
 
 	/**
+	 * Check the current user against the post a request names.
+	 *
+	 * The capability says whether a user may share to Nextdoor at all; it cannot say
+	 * which posts they may act on, and the post comes from the route.
+	 *
+	 * @param int    $post_id    Post ID.
+	 * @param string $capability Capability to check against the post.
+	 * @return WP_Error|null Error when the user may not act on the post.
+	 */
+	private static function check_post_capability( $post_id, $capability ) {
+		if ( current_user_can( $capability, $post_id ) ) {
+			return null;
+		}
+
+		return new \WP_Error(
+			'nextdoor_post_forbidden',
+			__( 'Sorry, you are not allowed to manage Nextdoor sharing for this post.', 'newspack-plugin' ),
+			[ 'status' => rest_authorization_required_code() ]
+		);
+	}
+
+	/**
 	 * Start OAuth flow via API.
 	 *
 	 * @param WP_REST_Request $request Request object.
@@ -260,6 +286,13 @@ class Controller {
 	public static function api_claim_page( $request ) {
 		$publication_url = $request->get_param( 'publication_url' );
 		$test            = $request->get_param( 'test' );
+
+		if ( ! Auth::validate_token() ) {
+			return new \WP_Error(
+				'nextdoor_token_invalid',
+				__( 'Nextdoor access token is invalid or expired. Please reconnect your account.', 'newspack-plugin' )
+			);
+		}
 
 		$api    = API::instance();
 		$result = $api->claim_page( $publication_url, $test );
@@ -323,7 +356,12 @@ class Controller {
 	 * @return WP_REST_Response
 	 */
 	public static function api_publish_post( $request ) {
-		$post_id = $request->get_param( 'id' );
+		$post_id   = $request->get_param( 'id' );
+		$forbidden = self::check_post_capability( $post_id, 'edit_post' );
+		if ( $forbidden ) {
+			return $forbidden;
+		}
+
 		if ( ! Nextdoor::is_connected() ) {
 			return new \WP_Error(
 				'nextdoor_not_connected',
@@ -387,7 +425,12 @@ class Controller {
 	 * @return WP_REST_Response
 	 */
 	public static function api_update_post( $request ) {
-		$post_id = $request->get_param( 'id' );
+		$post_id   = $request->get_param( 'id' );
+		$forbidden = self::check_post_capability( $post_id, 'edit_post' );
+		if ( $forbidden ) {
+			return $forbidden;
+		}
+
 		if ( ! Nextdoor::is_connected() ) {
 			return new \WP_Error(
 				'nextdoor_not_connected',
@@ -452,7 +495,12 @@ class Controller {
 	 * @return WP_REST_Response
 	 */
 	public static function api_delete_post( $request ) {
-		$post_id = $request->get_param( 'id' );
+		$post_id   = $request->get_param( 'id' );
+		$forbidden = self::check_post_capability( $post_id, 'edit_post' );
+		if ( $forbidden ) {
+			return $forbidden;
+		}
+
 		if ( ! Nextdoor::is_connected() ) {
 			return new \WP_Error(
 				'nextdoor_not_connected',
@@ -505,13 +553,21 @@ class Controller {
 	 * @return WP_REST_Response
 	 */
 	public static function api_get_post_sharing_status( $request ) {
-		$post_id              = $request->get_param( 'id' );
+		$post_id   = $request->get_param( 'id' );
+		$forbidden = self::check_post_capability( $post_id, 'read_post' );
+		if ( $forbidden ) {
+			return $forbidden;
+		}
+
 		$guid                 = get_post_meta( $post_id, '_nextdoor_guid', true );
 		$ingestion_status     = null;
 		$ingestion_response   = [];
 		$ingestion_error_msgs = [];
+		// An unusable token answers with a 401 the caller cannot tell from "no report yet",
+		// so report the reconnection rather than sending a doomed request.
+		$needs_reconnect = ! empty( $guid ) && ! Auth::validate_token();
 
-		if ( ! empty( $guid ) ) {
+		if ( ! empty( $guid ) && ! $needs_reconnect ) {
 			$api                = API::instance();
 			$ingestion_response = $api->get_ingestion_report( [ $guid ] );
 
@@ -555,6 +611,7 @@ class Controller {
 			'last_modified'    => $post ? get_the_modified_date( 'c', $post_id ) : null,
 			'ingestion_status' => $ingestion_status,
 			'ingestion_errors' => $ingestion_error_msgs,
+			'needs_reconnect'  => $needs_reconnect,
 		];
 
 		return rest_ensure_response( $response );
