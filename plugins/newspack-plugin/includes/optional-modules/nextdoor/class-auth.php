@@ -119,11 +119,15 @@ class Auth {
 		$code = wp_remote_retrieve_response_code( $response );
 
 		if ( $code >= 400 ) {
-			// A 4xx is Nextdoor refusing the grant, which no retry will cure. Record it so
-			// the connection can report itself as needing a reconnection instead of staying
-			// green forever. A 5xx or a transport error is transient, so it is left alone.
-			if ( $code < 500 ) {
-				$settings                      = Nextdoor::get_settings();
+			// Only the two codes that mean the grant itself was refused. A 403 from an edge
+			// proxy, a 408 and a 429 are all transient, and a 5xx plainly so. Recording one
+			// of those would send the publisher through a reconnection they do not need.
+			$is_refusal = in_array( $code, [ 400, 401 ], true );
+			// Nextdoor rotates refresh tokens, so two requests can enter the refresh window
+			// together and the loser comes back refused. Its token is no longer the stored
+			// one, which is how the winner's healthy token is told apart from a real refusal.
+			$settings = Nextdoor::get_settings();
+			if ( $is_refusal && $settings['refresh_token'] === $refresh_token ) {
 				$settings['refresh_failed_at'] = time();
 				Nextdoor::update_settings( $settings );
 			}
@@ -402,19 +406,18 @@ class Auth {
 	 * @return bool
 	 */
 	public static function validate_token() {
-		$settings = Nextdoor::get_settings();
-
-		if ( empty( $settings['access_token'] ) ) {
+		// The cheap read answers every case a refresh could not fix, so a connection
+		// already known to be unrenewable never spends a blocking request finding out
+		// again on each editor load.
+		if ( ! self::has_usable_token() ) {
 			return false;
 		}
+
+		$settings = Nextdoor::get_settings();
 
 		// Check if token needs refresh.
 		if ( ! self::needs_token_refresh() ) {
 			return true; // Token is still valid.
-		}
-
-		if ( empty( $settings['refresh_token'] ) ) {
-			return false;
 		}
 
 		// Refresh the token.
