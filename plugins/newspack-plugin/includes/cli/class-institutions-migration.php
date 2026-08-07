@@ -55,6 +55,25 @@ class Institutions_Migration {
 	const MIGRATED_SUBSCRIPTION_META_KEY = '_np_institution_migrated_subscription_id';
 
 	/**
+	 * Institution meta recording the IP ranges actually applied at creation
+	 * time. Re-run reporting diffs the source against THIS, not the current
+	 * rules — so a value the operator deliberately removed (e.g. an internal
+	 * range replaced by a proxy egress IP) is never re-suggested, while a value
+	 * that later appears in the source is named as genuinely new.
+	 *
+	 * @var string
+	 */
+	const APPLIED_IP_RANGES_META_KEY = '_np_institution_migrated_applied_ip_range';
+
+	/**
+	 * Institution meta recording the email domains actually applied at
+	 * creation time. Same role as APPLIED_IP_RANGES_META_KEY, for domains.
+	 *
+	 * @var string
+	 */
+	const APPLIED_DOMAINS_META_KEY = '_np_institution_migrated_applied_email_domain';
+
+	/**
 	 * Migrate teams-based institutional access to Access Control Institutions.
 	 *
 	 * Reads the `wc_memberships_team` inventory and the
@@ -89,6 +108,9 @@ class Institutions_Migration {
 	 * [--live]
 	 * : Apply the changes. Without this flag the command runs as a dry-run and writes nothing.
 	 *
+	 * [--ignore-csv-errors]
+	 * : Proceed with a live run even when the domains CSV has malformed rows or rows referencing non-existent teams. Without this flag a live run stops on such rows, because affected teams would be permanently stamped as migrated without their domain rules. Dry-runs always proceed and report the problems.
+	 *
 	 * ## EXAMPLES
 	 *
 	 *     wp newspack migrate-institutions
@@ -101,8 +123,10 @@ class Institutions_Migration {
 	 * @return void
 	 */
 	public function migrate_institutions( $args, $assoc_args ) {
-		$dry_run  = ! (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'live', false );
-		$csv_path = (string) \WP_CLI\Utils\get_flag_value( $assoc_args, 'domains-csv', '' );
+		$dry_run           = ! (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'live', false );
+		$csv_path          = (string) \WP_CLI\Utils\get_flag_value( $assoc_args, 'domains-csv', '' );
+		$ignore_csv_errors = (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'ignore-csv-errors', false );
+		$csv_error_count   = 0;
 
 		$domains_map = [];
 		if ( '' !== $csv_path ) {
@@ -110,7 +134,8 @@ class Institutions_Migration {
 			if ( \is_wp_error( $csv_result ) ) {
 				WP_CLI::error( $csv_result->get_error_message() );
 			}
-			$domains_map = $csv_result['map'];
+			$domains_map     = $csv_result['map'];
+			$csv_error_count = count( $csv_result['errors'] );
 			foreach ( $csv_result['errors'] as $csv_error ) {
 				WP_CLI::warning( sprintf( 'domains-csv: %s', $csv_error ) );
 			}
@@ -156,10 +181,21 @@ class Institutions_Migration {
 				WP_CLI::warning( sprintf( 'Access-by-IP option references team "%s", which is not a published team — its ranges will not be migrated.', $mapped_team_id ) );
 			}
 		}
+		$csv_orphan_count = 0;
 		foreach ( array_keys( $domains_map ) as $mapped_team_id ) {
 			if ( ! in_array( (int) $mapped_team_id, $teams, true ) ) {
+				++$csv_orphan_count;
 				WP_CLI::warning( sprintf( 'domains-csv references team %d, which is not a published team — its domains will not be migrated.', $mapped_team_id ) );
 			}
+		}
+
+		// A live run with a partially-bad CSV is as irrecoverable as one with an
+		// empty CSV: the affected teams are stamped as migrated without their
+		// domain rules, and a corrected re-run never modifies them. Stop before
+		// writing unless the operator explicitly opts to proceed. Dry-runs
+		// continue so the operator can preview everything at once.
+		if ( ! $dry_run && ! $ignore_csv_errors && ( $csv_error_count > 0 || $csv_orphan_count > 0 ) ) {
+			WP_CLI::error( sprintf( 'The domains CSV has %d malformed row(s) and %d row(s) referencing non-existent teams (see the warnings above). A live run would permanently stamp the affected teams as migrated without their domain rules. Fix the CSV, or pass --ignore-csv-errors to proceed anyway.', $csv_error_count, $csv_orphan_count ) );
 		}
 
 		$summary    = [];
@@ -197,9 +233,11 @@ class Institutions_Migration {
 				// The skip protects operator edits, but the operator must know which
 				// supplied values the re-run declined to add — otherwise a second run
 				// with a newly-obtained CSV looks successful while adding nothing.
+				// (Values the operator deliberately removed are not re-listed: the
+				// diff runs against what was applied at creation, not current rules.)
 				$withheld_values = array_merge( $result['withheld_ranges'], $result['withheld_domains'] );
 				if ( ! empty( $withheld_values ) ) {
-					WP_CLI::warning( sprintf( 'Team %d: the source data supplies %d value(s) institution %d does not have: [%s] — NOT applied (re-runs never modify an existing institution); add manually if intended.', $team_id, count( $withheld_values ), $result['institution_id'], implode( ', ', $withheld_values ) ) );
+					WP_CLI::warning( sprintf( 'Team %d: the source data supplies %d value(s) never migrated to institution %d: [%s] — NOT applied (re-runs never modify an existing institution); add manually if intended.', $team_id, count( $withheld_values ), $result['institution_id'], implode( ', ', $withheld_values ) ) );
 				}
 			} elseif ( $dry_run ) {
 				WP_CLI::success( sprintf( 'Team %d: would create institution "%s" — IP ranges: [%s], domains: [%s].', $team_id, $team_name, implode( ', ', $result['ip_ranges'] ), implode( ', ', $result['domains'] ) ) );
@@ -259,6 +297,15 @@ class Institutions_Migration {
 			foreach ( $rows_with_ranges as $row ) {
 				WP_CLI::line( sprintf( '  - %s (team %d): %s', $row['Name'], $row['Team'], $row['IP ranges'] ) );
 			}
+		}
+
+		// Institutions grant nothing on their own — a content gate must select
+		// them, and a gate whose institutional rule is enabled with NO
+		// institutions selected admits every visitor. Name the step so the
+		// closing success line can't read as "migration done, job done".
+		if ( ! empty( $summary ) ) {
+			WP_CLI::line( '' );
+			WP_CLI::line( 'Next step: institutions grant access only where a content gate\'s institutional-access rule selects them. Configure the gates after migrating — a gate with the rule enabled and no institutions selected admits EVERY visitor.' );
 		}
 
 		if ( ! $dry_run ) {
@@ -447,7 +494,12 @@ class Institutions_Migration {
 	 */
 	public static function get_range_breadth_warning( $range ) {
 		list( $subnet, $bits ) = array_pad( explode( '/', $range, 2 ), 2, '32' );
-		if ( ! filter_var( $subnet, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 ) || ! ctype_digit( trim( $bits ) ) ) {
+		// Trim BOTH halves, exactly like the access check's parser — a spelling
+		// like `0.0.0.0 / 0` must not evade breadth judgment while matching at
+		// read time.
+		$subnet = trim( $subnet );
+		$bits   = trim( $bits );
+		if ( ! filter_var( $subnet, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 ) || ! ctype_digit( $bits ) ) {
 			return '';
 		}
 		$mask_bits = (int) $bits;
@@ -481,6 +533,7 @@ class Institutions_Migration {
 				'post_status'    => array_keys( \get_post_stati() ),
 				'posts_per_page' => 1,
 				'fields'         => 'ids',
+				'no_found_rows'  => true,
 				'meta_key'       => self::MIGRATED_FROM_TEAM_META_KEY, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
 				'meta_value'     => (string) $team_id, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
 			]
@@ -513,10 +566,13 @@ class Institutions_Migration {
 	 *     @type string[] $invalid_ranges     Rejected source ranges, for reporting (empty for 'exists' —
 	 *                                        source data is not consulted for an already-migrated team).
 	 *     @type string[] $domains            Email domains applied (current meta for 'exists').
-	 *     @type string[] $withheld_ranges    For 'exists' only: valid source ranges the existing
-	 *                                        institution does not carry — reported, never applied.
-	 *     @type string[] $withheld_domains   For 'exists' only: supplied domains the existing
-	 *                                        institution does not carry — reported, never applied.
+	 *     @type string[] $withheld_ranges    For 'exists' only: valid source ranges never applied to
+	 *                                        the institution (diffed against the applied-at-creation
+	 *                                        record, so operator-removed values are not re-listed;
+	 *                                        falls back to current rules for institutions migrated
+	 *                                        before the record existed) — reported, never applied.
+	 *     @type string[] $withheld_domains   For 'exists' only: supplied domains never applied to
+	 *                                        the institution (same diff base) — reported, never applied.
 	 *     @type int      $subscription_id    The team's linked subscription ID, or 0.
 	 *     @type string   $subscription_note  Status note about the linked subscription.
 	 *     @type string   $reason             Reason, when unmappable or errored.
@@ -564,10 +620,21 @@ class Institutions_Migration {
 			$result['ip_ranges']          = $split_meta_list( 'ip_range' );
 			$result['domains']            = $split_meta_list( 'email_domain' );
 			$result['invalid_ranges']     = [];
-			// Never applied — but supplied values the institution lacks are surfaced
-			// so a re-run with a newly-obtained CSV can't be mistaken for a no-op.
-			$result['withheld_ranges']    = array_values( array_diff( $ranges['valid'], $result['ip_ranges'] ) );
-			$result['withheld_domains']   = array_values( array_diff( array_values( $domains ), $result['domains'] ) );
+			// Never applied — but supplied values never migrated are surfaced so a
+			// re-run with a newly-obtained CSV can't be mistaken for a no-op. Diff
+			// against the applied-at-creation record, NOT current rules: a value the
+			// operator deliberately removed (internal range → proxy egress IP) must
+			// not be re-suggested. Institutions migrated before the record existed
+			// fall back to a current-rules diff.
+			$split_list                   = fn( $value ) => array_values( array_filter( array_map( 'trim', explode( ',', (string) $value ) ) ) );
+			$applied_ranges               = \metadata_exists( 'post', $existing_institution_id, self::APPLIED_IP_RANGES_META_KEY )
+				? $split_list( \get_post_meta( $existing_institution_id, self::APPLIED_IP_RANGES_META_KEY, true ) )
+				: $result['ip_ranges'];
+			$applied_domains              = \metadata_exists( 'post', $existing_institution_id, self::APPLIED_DOMAINS_META_KEY )
+				? $split_list( \get_post_meta( $existing_institution_id, self::APPLIED_DOMAINS_META_KEY, true ) )
+				: $result['domains'];
+			$result['withheld_ranges']    = array_values( array_diff( $ranges['valid'], $applied_ranges ) );
+			$result['withheld_domains']   = array_values( array_diff( array_values( $domains ), $applied_domains ) );
 			return $result;
 		}
 
@@ -605,6 +672,10 @@ class Institutions_Migration {
 		}
 
 		\update_post_meta( $institution_id, self::MIGRATED_FROM_TEAM_META_KEY, (string) $team_id );
+		// Record what was actually applied, so re-run reporting can distinguish
+		// genuinely-new source values from ones the operator later removed.
+		\update_post_meta( $institution_id, self::APPLIED_IP_RANGES_META_KEY, implode( ',', $ranges['valid'] ) );
+		\update_post_meta( $institution_id, self::APPLIED_DOMAINS_META_KEY, implode( ',', $domains ) );
 		if ( $linked_subscription_id ) {
 			\update_post_meta( $institution_id, self::MIGRATED_SUBSCRIPTION_META_KEY, (string) $linked_subscription_id );
 		}

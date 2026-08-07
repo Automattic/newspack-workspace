@@ -392,6 +392,7 @@ class Test_Institutions_Migration extends WP_UnitTestCase {
 	 */
 	public function test_get_range_breadth_warning_flags_dangerous_ranges() {
 		$this->assertStringContainsString( 'EVERY visitor IP', Institutions_Migration::get_range_breadth_warning( '0.0.0.0/0' ), 'A zero mask must be flagged as matching everyone.' );
+		$this->assertStringContainsString( 'EVERY visitor IP', Institutions_Migration::get_range_breadth_warning( '0.0.0.0 / 0' ), 'Whitespace around the slash must not evade the breadth check — the access check trims and matches this spelling.' );
 		$this->assertStringContainsString( 'private or reserved', Institutions_Migration::get_range_breadth_warning( '10.0.0.0/8' ), 'A private subnet must be flagged.' );
 		$this->assertStringContainsString( 'private or reserved', Institutions_Migration::get_range_breadth_warning( '127.0.0.1' ), 'A reserved address must be flagged.' );
 		$this->assertStringContainsString( 'very wide block', Institutions_Migration::get_range_breadth_warning( '8.0.0.0/8' ), 'A very wide public block must be flagged.' );
@@ -429,10 +430,20 @@ class Test_Institutions_Migration extends WP_UnitTestCase {
 		( new Institutions_Migration() )->migrate_institutions( [], [] );
 
 		$warning_messages  = array_column( array_filter( WP_CLI::$messages, fn( $entry ) => 'warning' === $entry[0] ), 1 );
-		$everyone_warnings = array_filter( $warning_messages, fn( $message ) => str_contains( $message, 'EVERY visitor IP' ) && str_contains( $message, '0.0.0.0/0' ) );
+		$everyone_warnings = array_filter( $warning_messages, fn( $message ) => str_contains( $message, 'EVERY visitor IP' ) && str_contains( $message, 'range "0.0.0.0/0"' ) );
 		$private_warnings  = array_filter( $warning_messages, fn( $message ) => str_contains( $message, 'private or reserved' ) && str_contains( $message, '192.168.0.0/16' ) );
-		$this->assertCount( 1, $everyone_warnings, 'A zero mask written as /00 must be flagged as matching everyone.' );
+		$this->assertCount( 1, $everyone_warnings, 'A zero mask written as /00 must be flagged as matching everyone, under its CANONICAL spelling — the quoted-range assertion fails if canonicalization regresses to storing /00.' );
 		$this->assertCount( 1, $private_warnings, 'A private range must be flagged in the run output.' );
+
+		// The content-gates pre-flight warning: NEWSPACK_CONTENT_GATES is undefined
+		// in the test env, so every command run must carry it.
+		$gates_warnings = array_filter( $warning_messages, fn( $message ) => str_contains( $message, 'NEWSPACK_CONTENT_GATES' ) );
+		$this->assertCount( 1, $gates_warnings, 'The command must warn when the content gates feature is disabled.' );
+
+		// The closing reminder that gates still need configuring.
+		$reminder_lines = array_filter( WP_CLI::$logs, fn( $line ) => str_contains( $line, 'admits EVERY visitor' ) );
+		$this->assertCount( 1, $reminder_lines, 'The run must close by naming the gate-configuration step.' );
+
 		$this->assertCount( 0, $this->get_all_institutions(), 'The dry-run must still write nothing.' );
 	}
 
@@ -518,6 +529,99 @@ class Test_Institutions_Migration extends WP_UnitTestCase {
 			get_post_meta( $second_run_result['institution_id'], Institution::META_PREFIX . 'email_domain', true ),
 			'The withheld domains must NOT be applied.'
 		);
+	}
+
+	/**
+	 * A value the operator deliberately removed after migration must NOT be
+	 * re-listed as withheld on re-runs: the diff runs against the
+	 * applied-at-creation record, so the proxy-egress workflow (replace the
+	 * internal range with the egress IP) gets no standing prompt to restore
+	 * the range it removed.
+	 */
+	public function test_migrate_team_does_not_relist_operator_removed_values() {
+		$team_id = $this->create_team( 'Egress Fix University' );
+
+		$first_run_result = Institutions_Migration::migrate_team( $team_id, '10.2.0.0/16', [ 'egress.edu' ], true );
+		$institution_id   = $first_run_result['institution_id'];
+
+		// The operator replaces the internal range with the proxy egress IP.
+		update_post_meta( $institution_id, Institution::META_PREFIX . 'ip_range', '203.0.113.7' );
+
+		$second_run_result = Institutions_Migration::migrate_team( $team_id, '10.2.0.0/16', [ 'egress.edu' ], true );
+
+		$this->assertSame( 'exists', $second_run_result['status'] );
+		$this->assertSame( [], $second_run_result['withheld_ranges'], 'A range applied at creation and later removed by the operator must not be re-suggested.' );
+		$this->assertSame( [], $second_run_result['withheld_domains'], 'Unchanged domains must not read as withheld.' );
+
+		// A genuinely NEW source value still surfaces.
+		$third_run_result = Institutions_Migration::migrate_team( $team_id, '10.2.0.0/16, 198.51.100.9', [ 'egress.edu' ], true );
+		$this->assertSame( [ '198.51.100.9' ], $third_run_result['withheld_ranges'], 'A source range that was never applied must still be reported.' );
+	}
+
+	/**
+	 * Institutions migrated before the applied-at-creation record existed fall
+	 * back to a current-rules diff, so legacy re-runs keep reporting rather
+	 * than failing silent.
+	 */
+	public function test_migrate_team_withheld_falls_back_without_applied_record() {
+		$team_id = $this->create_team( 'Legacy Record University' );
+
+		$first_run_result = Institutions_Migration::migrate_team( $team_id, '128.100.0.0/16', [], true );
+		$institution_id   = $first_run_result['institution_id'];
+		delete_post_meta( $institution_id, Institutions_Migration::APPLIED_IP_RANGES_META_KEY );
+		delete_post_meta( $institution_id, Institutions_Migration::APPLIED_DOMAINS_META_KEY );
+
+		$second_run_result = Institutions_Migration::migrate_team( $team_id, '128.100.0.0/16, 198.51.100.9', [ 'late.edu' ], true );
+
+		$this->assertSame( [ '198.51.100.9' ], $second_run_result['withheld_ranges'], 'Without the applied record, the diff must fall back to current rules.' );
+		$this->assertSame( [ 'late.edu' ], $second_run_result['withheld_domains'] );
+	}
+
+	/**
+	 * Command-level: a live run with a partially-bad domains CSV (malformed
+	 * rows or rows referencing non-existent teams) aborts before any team is
+	 * stamped — the same irrecoverability as the empty-CSV case — while a
+	 * dry-run proceeds and reports, and --ignore-csv-errors overrides.
+	 */
+	public function test_migrate_institutions_command_aborts_live_on_partial_csv_errors() {
+		$team_id = $this->create_team( 'Partial CSV University' );
+		update_option( Institutions_Migration::ACCESS_BY_IP_OPTION, [ $team_id => '128.100.0.0/16' ] );
+		$csv_path = $this->write_csv( "$team_id,good.edu\nnot-a-team-id,bad.edu\n424242,orphan.edu\n" );
+
+		// Dry-run proceeds (warnings only).
+		( new Institutions_Migration() )->migrate_institutions( [], [ 'domains-csv' => $csv_path ] );
+		$this->assertCount( 0, $this->get_all_institutions(), 'Dry-run writes nothing.' );
+
+		// Live aborts before any write.
+		WP_CLI::reset();
+		try {
+			( new Institutions_Migration() )->migrate_institutions(
+				[],
+				[
+					'domains-csv' => $csv_path,
+					'live'        => true,
+				]
+			);
+			$this->fail( 'A live run with CSV errors must abort.' );
+		} catch ( WP_CLI_Mock_Exception $abort ) {
+			$this->assertStringContainsString( '1 malformed row(s)', $abort->getMessage(), 'The abort must count the malformed rows.' );
+			$this->assertStringContainsString( '1 row(s) referencing non-existent teams', $abort->getMessage(), 'The abort must count the orphan rows.' );
+		}
+		$this->assertCount( 0, $this->get_all_institutions(), 'Nothing may be stamped when the live run aborts on CSV errors.' );
+
+		// The explicit override proceeds and migrates the valid rows.
+		WP_CLI::reset();
+		( new Institutions_Migration() )->migrate_institutions(
+			[],
+			[
+				'domains-csv'       => $csv_path,
+				'live'              => true,
+				'ignore-csv-errors' => true,
+			]
+		);
+		$institutions = $this->get_all_institutions();
+		$this->assertCount( 1, $institutions, 'With --ignore-csv-errors the valid rows must migrate.' );
+		$this->assertSame( 'good.edu', get_post_meta( $institutions[0]->ID, Institution::META_PREFIX . 'email_domain', true ), 'The valid CSV row must be applied.' );
 	}
 
 	/**
