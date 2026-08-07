@@ -144,7 +144,10 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 	 * Render the main content
 	 */
 	const renderContent = () => {
-		if ( isLoading ) {
+		// Only the first load blanks the panel. A refetch after an action keeps it mounted,
+		// so the button the publisher pressed re-renders in place instead of taking their
+		// focus to the top of the document with it.
+		if ( isLoading && ! nextdoorStatus ) {
 			return (
 				<Flex justify="center" className="nextdoor-sidebar__loading">
 					<FlexItem>
