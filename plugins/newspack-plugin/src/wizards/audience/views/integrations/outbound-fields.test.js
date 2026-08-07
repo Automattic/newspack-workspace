@@ -124,6 +124,19 @@ describe( 'badgesForRow', () => {
 		expect( badgeText( { activeDefinition: { status: 'updated' } } ) ).toEqual( [ 'New' ] );
 	} );
 
+	// A renamed field (own v2 ESP name, `supersedes` a v1 field, status
+	// 'updated') mirrors the real Payment_Page -> Last Payment Page rename:
+	// distinct names keep it a non-collapsed row, and its badge comes from
+	// the full buildFieldRows -> badgesForRow pipeline, not a bare object.
+	it( 'badges a renamed field New via the full row pipeline', () => {
+		const defs = [
+			def( 'v1:payment_page', 'Payment Page', { status: 'legacy', superseded_by: [ 'v2:Payment_Page' ] } ),
+			def( 'v2:Payment_Page', 'Last Payment Page', { status: 'updated', supersedes: 'v1:payment_page' } ),
+		];
+		const row = buildFieldRows( defs, [ 'v2:Payment_Page' ], 'v1' ).find( r => r.name === 'Last Payment Page' );
+		expect( badgeText( row ) ).toEqual( [ 'New' ] );
+	} );
+
 	it( 'leaves existing fields unbadged, including the surviving side of a pair', () => {
 		const rows = buildFieldRows( DEFS, [], 'v1' );
 		expect( badgeText( rows.find( r => r.name === 'Account' ) ) ).toEqual( [] );
