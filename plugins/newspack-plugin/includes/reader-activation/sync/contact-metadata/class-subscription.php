@@ -67,8 +67,8 @@ class Subscription extends Contact_Metadata {
 		return [
 			'Subscriber_Status'                      => 'Subscriber Status',
 			'Active_Subscription_Count'              => 'Active Subscription Count',
-			'Current_Subscription_Start_Date'        => 'Current Subscription Start Date',
-			'Current_Subscription_End_Date'          => 'Current Subscription End Date',
+			'Current_Subscription_Start_Date'        => 'Subscription Start Date',
+			'Current_Subscription_End_Date'          => 'Subscription End Date',
 			'Subscription_Cancellation_Reason'       => 'Subscription Cancellation Reason',
 			'Current_Subscription_Billing_Cycle'     => 'Current Subscription Billing Cycle',
 			'Current_Subscription_Recurring_Payment' => 'Current Subscription Recurring Payment',
@@ -76,8 +76,8 @@ class Subscription extends Contact_Metadata {
 			'Current_Subscription_Product_Name'      => 'Current Subscription Product Name',
 			'Previous_Subscription_Product'          => 'Previous Subscription Product',
 			'Current_Subscription_Coupon_Code'       => 'Current Subscription Coupon Code',
-			'Last_Payment_Amount'                    => 'Last Payment Amount',
-			'Last_Payment_Date'                      => 'Last Payment Date',
+			'Last_Payment_Amount'                    => 'Last Subscription Payment Amount',
+			'Last_Payment_Date'                      => 'Last Subscription Payment Date',
 		];
 	}
 
@@ -100,23 +100,34 @@ class Subscription extends Contact_Metadata {
 				'example'     => '2',
 				'status'      => 'new',
 			],
+			// Placeholder name pending naming review (NPPD-2067). Renamed away
+			// from the legacy "Current Subscription Start Date" because the two
+			// fields do not mean the same thing: the legacy field covers the most
+			// recent subscription of ANY product type, this one only non-donation
+			// subscriptions. A distinct ESP name lets both schemas sync at once.
 			'Current_Subscription_Start_Date'        => [
-				'name'        => 'Current Subscription Start Date',
-				'description' => __( 'Start date of the most recent active non-donation subscription (MM/DD/YYYY)', 'newspack-plugin' ),
+				'name'        => 'Subscription Start Date',
+				'description' => __( 'Start date of the most recent active non-donation subscription (MM/DD/YYYY). Unlike the legacy Current Subscription Start Date, donation subscriptions are excluded.', 'newspack-plugin' ),
 				'example'     => '09/19/2022',
 				'status'      => 'existing',
+				'supersedes'  => 'v1:sub_start_date',
 			],
+			// Placeholder name pending naming review (NPPD-2067). See the note on
+			// Current_Subscription_Start_Date above.
 			'Current_Subscription_End_Date'          => [
-				'name'        => 'Current Subscription End Date',
-				'description' => __( 'End/renewal date of the most recent non-donation subscription (MM/DD/YYYY)', 'newspack-plugin' ),
+				'name'        => 'Subscription End Date',
+				'description' => __( 'End/renewal date of the most recent non-donation subscription (MM/DD/YYYY). Unlike the legacy Current Subscription End Date, donation subscriptions are excluded.', 'newspack-plugin' ),
 				'example'     => '09/19/2023',
 				'status'      => 'existing',
+				'supersedes'  => 'v1:sub_end_date',
 			],
 			'Subscription_Cancellation_Reason'       => [
 				'name'        => 'Subscription Cancellation Reason',
-				'description' => __( 'Reason for a cancelled subscription. One of: user-canceled, manually-canceled, expired', 'newspack-plugin' ),
+				'description' => __( 'Reason the reader\'s most recent subscription was cancelled. One of: user-canceled, manually-canceled, expired', 'newspack-plugin' ),
 				'example'     => 'user-canceled',
 				'status'      => 'existing',
+				'supersedes'  => 'v1:cancellation_reason',
+				'equivalent'  => true,
 			],
 			'Current_Subscription_Billing_Cycle'     => [
 				'name'        => 'Current Subscription Billing Cycle',
@@ -158,17 +169,26 @@ class Subscription extends Contact_Metadata {
 				'example'     => 'freemonth',
 				'status'      => 'existing',
 			],
+			// Placeholder name pending naming review (NPPD-2067). Renamed away
+			// from the legacy "Last Payment Amount" because the two fields do not
+			// mean the same thing: the legacy field covers the most recent payment
+			// for ANY product, donations included, this one only payments on the
+			// reader's current non-donation subscription.
 			'Last_Payment_Amount'                    => [
-				'name'        => 'Last Payment Amount',
-				'description' => __( 'Amount of the most recent subscription payment (non-donation products)', 'newspack-plugin' ),
+				'name'        => 'Last Subscription Payment Amount',
+				'description' => __( 'Amount of the most recent payment on the reader\'s current non-donation subscription. Unlike the legacy Last Payment Amount, one-time purchases and donations are excluded.', 'newspack-plugin' ),
 				'example'     => '15',
 				'status'      => 'existing',
+				'supersedes'  => 'v1:last_payment_amount',
 			],
+			// Placeholder name pending naming review (NPPD-2067). See the note on
+			// Last_Payment_Amount above.
 			'Last_Payment_Date'                      => [
-				'name'        => 'Last Payment Date',
-				'description' => __( 'Date of most recent subscription payment (MM/DD/YYYY)', 'newspack-plugin' ),
+				'name'        => 'Last Subscription Payment Date',
+				'description' => __( 'Date of the most recent payment on the reader\'s current non-donation subscription (MM/DD/YYYY). Unlike the legacy Last Payment Date, one-time purchases and donations are excluded.', 'newspack-plugin' ),
 				'example'     => '09/19/2022',
 				'status'      => 'existing',
+				'supersedes'  => 'v1:last_payment_date',
 			],
 		];
 	}

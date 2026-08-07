@@ -63,12 +63,21 @@ class Registration extends Contact_Metadata {
 				'description' => __( 'Date reader created their account (MM/DD/YYYY)', 'newspack-plugin' ),
 				'example'     => '09/19/2022',
 				'status'      => 'existing',
+				'supersedes'  => 'v1:registration_date',
+				'equivalent'  => true,
 			],
+			// Value-equivalent to the legacy pair: this reads the same
+			// REGISTRATION_PAGE user meta the legacy `registration_page`
+			// enrichment reads, and every registration producer of the legacy
+			// `current_page_url` writes that same meta in the same request. Both
+			// legacy raw keys therefore alias onto this field as inputs.
 			'Registration_Page'         => [
 				'name'        => 'Registration Page',
 				'description' => __( 'URL of the page where reader registered', 'newspack-plugin' ),
 				'example'     => 'https://example.com/newsletter',
 				'status'      => 'updated',
+				'supersedes'  => 'v1:registration_page',
+				'equivalent'  => true,
 			],
 			'Registration_Strategy'     => [
 				'name'        => 'Registration Strategy',

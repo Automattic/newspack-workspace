@@ -81,7 +81,9 @@ class Test_Sync_Metadata_Classes extends \WP_UnitTestCase {
 	 */
 	public function test_v1_only_selection_skips_v2_classes() {
 		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
-		$this->integration->update_enabled_outgoing_fields( [ 'v1:registration_date' ] );
+		// A legacy-only field: one the two schemas share would be stored as its
+		// v2 twin and pull the v2 classes in.
+		$this->integration->update_enabled_outgoing_fields( [ 'v1:registration_method' ] );
 
 		$classes = $this->get_sync_classes();
 
@@ -111,7 +113,7 @@ class Test_Sync_Metadata_Classes extends \WP_UnitTestCase {
 	 */
 	public function test_mixed_selection_computes_both_versions() {
 		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
-		$this->integration->update_enabled_outgoing_fields( [ 'v1:registration_date', 'v2:Registration_Strategy' ] );
+		$this->integration->update_enabled_outgoing_fields( [ 'v1:registration_method', 'v2:Registration_Strategy' ] );
 
 		$classes = $this->get_sync_classes();
 
@@ -131,16 +133,24 @@ class Test_Sync_Metadata_Classes extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * With no stored selection anywhere, scoping falls back to the origin
-	 * version's classes rather than computing everything.
+	 * With no stored selection, the derived default set is canonicalized, so
+	 * the fields both schemas share are reported under their v2 ids and a
+	 * v1-origin site computes the v2 classes that own them — Engagement
+	 * ("Payment Page", "Total Paid") and Subscription ("Subscription
+	 * Cancellation Reason") — alongside the legacy ones.
+	 *
+	 * That is a deliberate cost, pinned here so it cannot regress silently:
+	 * those two classes run wc_get_orders() and wcs_get_users_subscriptions(),
+	 * and a legacy site that never opened the settings now pays for them on
+	 * every sync. Saving any narrower selection drops them again.
 	 */
-	public function test_no_stored_selection_falls_back_to_origin_classes() {
+	public function test_no_stored_selection_computes_both_versions_of_shared_fields() {
 		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
 		\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'scope-test' );
 
 		$classes = $this->get_sync_classes();
 
 		$this->assertContains( Contact_Metadata\Legacy_Basic::class, $classes );
-		$this->assertNotContains( Contact_Metadata\Subscription::class, $classes );
+		$this->assertContains( Contact_Metadata\Subscription::class, $classes );
 	}
 }

@@ -949,6 +949,12 @@ abstract class Integration {
 	 * the resolution inputs, so registry resets and availability changes
 	 * invalidate it naturally.
 	 *
+	 * Equivalence is applied on the way out. Name resolution answers in the
+	 * origin's version, so a v1-origin site would otherwise derive v1 ids for
+	 * fields the two schemas now share, and the picker would show a legacy id
+	 * for a field that upgrades to its v2 twin the moment anything is saved.
+	 * Canonicalizing here is read-only — no option is written.
+	 *
 	 * @return string[] List of field ids.
 	 */
 	protected function get_default_outgoing_field_ids() {
@@ -965,7 +971,7 @@ abstract class Integration {
 				$ids[] = $definition['id'];
 			}
 		}
-		$cache[ $key ] = array_values( array_unique( $ids ) );
+		$cache[ $key ] = Sync\Field_Registry::upgrade_equivalent_ids( $ids );
 		return $cache[ $key ];
 	}
 
@@ -1010,7 +1016,10 @@ abstract class Integration {
 					$ids[] = $definition['id'];
 				}
 			}
-			return array_values( array_unique( $ids ) );
+			// Same read-side canonicalization as the defaults: these names come
+			// from a pre-coexistence option and resolve to v1 ids, which for a
+			// shared field is not the id that survives a save.
+			return Sync\Field_Registry::upgrade_equivalent_ids( $ids );
 		}
 
 		return $this->get_default_outgoing_field_ids();
@@ -1117,9 +1126,12 @@ abstract class Integration {
 	 * names resolve against the site's schema origin, so a non-origin id
 	 * that was collapsed to a bare name by get_enabled_outgoing_fields()
 	 * round-trips to the origin's ids — the Phase-2 UI must post ids).
-	 * Stores ids and enforces one enabled version per name-conflict group
-	 * (keep-first-version: same-version siblings sharing a name are fine,
-	 * a second version's ids for a claimed name are dropped and logged).
+	 *
+	 * Stores ids, with no version validation: the two schemas no longer share
+	 * an ESP name, so any mix of v1 and v2 ids is storable and both versions of
+	 * a field can be enabled at once (Field_Registry::get_conflict_groups() is
+	 * empty by construction). The equivalence upgrade below is not validation —
+	 * it collapses the id of a shared field onto its surviving spelling.
 	 *
 	 * @param array $fields List of field ids and/or names to enable.
 	 * @return bool True if updated, false otherwise.
@@ -1147,37 +1159,7 @@ abstract class Integration {
 		// save time retires legacy ids with no observable payload change.
 		$ids = Sync\Field_Registry::upgrade_equivalent_ids( $ids );
 
-		// Enforce one enabled version per conflict group (keep-first-version).
-		$conflict_groups  = Sync\Field_Registry::get_conflict_groups();
-		$claimed_versions = [];
-		$validated        = [];
-		foreach ( $ids as $id ) {
-			$definition = Sync\Field_Registry::get_definition( $id );
-			$name       = $definition['name'];
-			if ( isset( $conflict_groups[ $name ] ) ) {
-				if ( isset( $claimed_versions[ $name ] ) && $claimed_versions[ $name ] !== $definition['version'] ) {
-					// Route through newspack_log so a save that silently stores
-					// less than was submitted stays operator-visible — the
-					// settings endpoint reports success either way, and
-					// Logger::log() is a no-op at the default production level.
-					Logger::newspack_log(
-						'outgoing_fields_conflict_drop',
-						sprintf( 'Dropping "%s": conflict group "%s" is already enabled as %s.', $id, $name, $claimed_versions[ $name ] ),
-						[
-							'integration_id' => $this->id,
-							'dropped_id'     => $id,
-							'kept_version'   => $claimed_versions[ $name ],
-						],
-						'warning'
-					);
-					continue;
-				}
-				$claimed_versions[ $name ] = $definition['version'];
-			}
-			$validated[] = $id;
-		}
-
-		return \update_option( self::OUTGOING_FIELDS_OPTION_PREFIX . $this->id, $validated, false );
+		return \update_option( self::OUTGOING_FIELDS_OPTION_PREFIX . $this->id, $ids, false );
 	}
 
 	/**
@@ -1355,9 +1337,10 @@ abstract class Integration {
 	 * Incoming metadata may mix raw keys from any schema version. Raw keys
 	 * survive only when enabled for this integration; enabled dynamic-suffix
 	 * fields (UTM) match by raw-key prefix and never by their bare key, which
-	 * carries no suffix and is therefore not a syncable field. Save-time
-	 * validation guarantees at most one enabled version per ESP name, so no
-	 * two raw inputs can write the same output key.
+	 * carries no suffix and is therefore not a syncable field. No two enabled
+	 * fields can write the same output key: the two schemas share no ESP name
+	 * (see Field_Registry::get_conflict_groups()), and where they share a
+	 * field outright the v1 raw keys alias onto the surviving v2 definition.
 	 *
 	 * Already-prefixed inputs are explicit injections (callers, the
 	 * normalize filter): they pass through when they match an enabled field

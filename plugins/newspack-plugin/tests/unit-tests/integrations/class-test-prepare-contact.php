@@ -584,4 +584,43 @@ class Test_Prepare_Contact extends \WP_UnitTestCase {
 
 		$this->assertSame( 42, $result['metadata']['NP_Account'] ?? null, 'Legacy raw key must map through the equivalent v2 id.' );
 	}
+
+	/**
+	 * What dissolving the name conflicts buys: both versions of a
+	 * changed-meaning field can be enabled at once and each reaches the
+	 * provider as its own ESP field. "Last Payment Amount" is every payment
+	 * including donations; "Last Subscription Payment Amount" is only the
+	 * current non-donation subscription — a publisher mid-migration wants both,
+	 * and under the old pick-one rule could only have had one.
+	 *
+	 * Stored directly rather than through update_enabled_outgoing_fields(),
+	 * which drops fields whose class is unavailable — both of these are
+	 * WooCommerce-gated and the test environment has no WooCommerce.
+	 */
+	public function test_both_versions_of_a_renamed_field_reach_the_provider() {
+		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
+		\update_option(
+			Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'prepare-test',
+			[ 'v1:last_payment_amount', 'v2:Last_Payment_Amount' ]
+		);
+
+		$result = $this->integration->prepare_contact(
+			[
+				'email'    => 'test@example.com',
+				'metadata' => [
+					'last_payment_amount' => '120.00',
+					'Last_Payment_Amount' => '15.00',
+				],
+			]
+		);
+
+		$this->assertSame(
+			[
+				'NP_Last Payment Amount'              => '120.00',
+				'NP_Last Subscription Payment Amount' => '15.00',
+			],
+			$result['metadata'],
+			'Each version must land on its own ESP field name.'
+		);
+	}
 }

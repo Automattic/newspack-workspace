@@ -127,8 +127,10 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 
 	/**
 	 * Legacy maps two raw keys (registration_page, current_page_url) to this
-	 * one name; migration must resolve the stored name to both ids, since
-	 * dropping either would lose payload fields.
+	 * one name. Migration resolves the stored name to both ids and the
+	 * equivalence upgrade then collapses both onto the single v2 field they
+	 * share — one id, one ESP field, no payload lost. That both raw keys are
+	 * resolved and aliased is pinned in Test_Field_Registry.
 	 */
 	public function test_migration_resolves_multi_raw_key_names_to_all_ids() {
 		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
@@ -138,7 +140,7 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 		);
 
 		$this->assertEqualsCanonicalizing(
-			[ 'v1:registration_page', 'v1:current_page_url' ],
+			[ 'v2:Registration_Page' ],
 			$this->integration->get_enabled_outgoing_field_ids()
 		);
 	}
@@ -146,16 +148,22 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 	/**
 	 * A v2-origin site with legacy display-name storage migrates to v2 ids
 	 * on read.
+	 *
+	 * "Payment Page" is claimed by both schemas, so the v2-origin resolution
+	 * picks the v2 definition. A name only the legacy schema declares (the
+	 * renamed payment fields, say) would resolve to its v1 id even here, and
+	 * must: the stored name is what the publisher's ESP field is called, and
+	 * the legacy definition is the one that feeds it.
 	 */
 	public function test_legacy_format_migrates_to_v2_ids_when_origin_is_v2() {
 		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v2' );
 		\update_option(
 			Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test',
-			[ 'Last Payment Amount', 'Registration UTM Source' ]
+			[ 'Payment Page', 'Registration UTM Source' ]
 		);
 
 		$this->assertEqualsCanonicalizing(
-			[ 'v2:Last_Payment_Amount', 'v2:Registration_UTM_Source' ],
+			[ 'v2:Payment_Page', 'v2:Registration_UTM_Source' ],
 			$this->integration->get_enabled_outgoing_field_ids()
 		);
 	}
@@ -202,21 +210,50 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Keep-first-version: when both versions of a conflict-group name are
-	 * submitted, the version enabled first wins and the other is dropped;
-	 * an unrelated field not in any conflict group always survives.
+	 * Both versions of a field can be enabled at once: they no longer share an
+	 * ESP name, so there is nothing to arbitrate and nothing is dropped. This
+	 * is the behavior that replaced the keep-first-version rule.
+	 *
+	 * `v1:last_payment_amount` and `v2:Last_Payment_Amount` are the changed-
+	 * meaning pair — legacy counts any payment including donations, the new
+	 * field only the current non-donation subscription — so they are two
+	 * separate ESP fields and a publisher may want both during a transition.
+	 * Storage does not gate on availability, unlike update(), which is why
+	 * this asserts through the migration read.
 	 */
-	public function test_update_enforces_one_version_per_conflict_group() {
+	public function test_both_versions_of_a_renamed_field_coexist() {
+		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
+		\update_option(
+			Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test',
+			[ 'v1:last_payment_amount', 'v2:Last_Payment_Amount' ]
+		);
+
+		$this->assertEqualsCanonicalizing(
+			[ 'v1:last_payment_amount', 'v2:Last_Payment_Amount' ],
+			$this->integration->get_enabled_outgoing_field_ids()
+		);
+		$this->assertEqualsCanonicalizing(
+			[ 'Last Payment Amount', 'Last Subscription Payment Amount' ],
+			$this->integration->get_enabled_outgoing_fields(),
+			'The two versions must resolve to two distinct ESP field names.'
+		);
+	}
+
+	/**
+	 * A save carrying both versions of a field stores both — no version
+	 * validation remains. The equivalence upgrade still applies, so a pair
+	 * that is one shared field collapses to the surviving v2 id rather than
+	 * being stored twice.
+	 */
+	public function test_update_stores_both_versions_without_validation() {
 		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
 
 		$this->integration->update_enabled_outgoing_fields(
-			[ 'v1:registration_date', 'v2:Registration_Date', 'v2:Registration_UTM_Source' ]
+			[ 'v1:registration_method', 'v2:Registration_Strategy', 'v1:registration_date', 'v2:Registration_Date' ]
 		);
 
-		// Keep-first-version: the v2 member of the claimed conflict group is
-		// dropped; the unrelated v2 field survives.
 		$this->assertEqualsCanonicalizing(
-			[ 'v1:registration_date', 'v2:Registration_UTM_Source' ],
+			[ 'v1:registration_method', 'v2:Registration_Strategy', 'v2:Registration_Date' ],
 			\get_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test' )
 		);
 	}
@@ -366,8 +403,40 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 		foreach ( $ids as $id ) {
 			$this->assertMatchesRegularExpression( '/^(v1|v2|neutral):/', $id );
 		}
-		$this->assertContains( 'v1:account', $ids );
+		$this->assertContains( 'v2:Account', $ids );
 		$this->assertNull( \get_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'esp', null ) );
+	}
+
+	/**
+	 * Derived id sets are canonical: a field the two schemas share is reported
+	 * under the id that survives a save, even on a v1-origin site where name
+	 * resolution answers in v1. Otherwise the picker would show a legacy id
+	 * for a field that silently becomes its v2 twin the moment anything is
+	 * saved, and the UI would appear to change a selection nobody touched.
+	 *
+	 * Read-only: canonicalizing must not write the option, or the derived set
+	 * would freeze and stop tracking the ESP.
+	 */
+	public function test_derived_id_sets_are_canonicalized_without_persisting() {
+		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
+		\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test' );
+		\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'esp' );
+
+		// Defaults (the ESP's own fallback): 'Account' resolves to v1 on a
+		// v1-origin site, and is reported as its v2 twin.
+		$defaults = ( new ESP() )->get_enabled_outgoing_field_ids();
+		$this->assertContains( 'v2:Account', $defaults );
+		$this->assertNotContains( 'v1:account', $defaults );
+
+		// The legacy-global inheritance fallback resolves names the same way.
+		\update_option( Metadata::FIELDS_OPTION, [ 'Account', 'Registration Method' ] );
+		$this->assertNull( Integrations::get_integration( 'esp' ), 'This covers the registry-miss path.' );
+		$this->assertEqualsCanonicalizing(
+			[ 'v2:Account', 'v1:registration_method' ],
+			$this->integration->get_enabled_outgoing_field_ids(),
+			'Only shared fields canonicalize; a legacy-only field keeps its v1 id.'
+		);
+		$this->assertNull( \get_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test', null ) );
 	}
 
 	/**
@@ -419,7 +488,7 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 		\update_option( Metadata::FIELDS_OPTION, [ 'Account' ] );
 
 		$this->assertNull( Integrations::get_integration( 'esp' ), 'This test covers the registry-miss path.' );
-		$this->assertSame( [ 'v1:account' ], $this->integration->get_enabled_outgoing_field_ids() );
+		$this->assertSame( [ 'v2:Account' ], $this->integration->get_enabled_outgoing_field_ids() );
 	}
 
 	/**
@@ -436,8 +505,8 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 		$ids = $this->integration->get_enabled_outgoing_field_ids();
 
 		$this->assertNotEmpty( $ids, 'A never-configured integration must not fail closed to an empty selection.' );
-		$this->assertContains( 'v1:account', $ids );
-		$this->assertContains( 'v1:total_paid', $ids );
+		$this->assertContains( 'v2:Account', $ids );
+		$this->assertContains( 'v2:Total_Paid', $ids );
 		$this->assertNull(
 			\get_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test', null ),
 			'The defaults fallback must not persist, so it keeps tracking availability changes.'
@@ -458,8 +527,8 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 
 		$ids = $esp->get_enabled_outgoing_field_ids();
 
-		$this->assertContains( 'v1:account', $ids );
-		$this->assertContains( 'v1:total_paid', $ids );
+		$this->assertContains( 'v2:Account', $ids );
+		$this->assertContains( 'v2:Total_Paid', $ids );
 	}
 
 	/**
@@ -560,17 +629,19 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 		$this->assertSame( 'v2', Field_Registry::get_schema_origin() );
 	}
 	/**
-	 * Saving a value-equivalent v1 id stores the v2 twin; divergent v1 ids
-	 * are stored as submitted. Reads of an already-stored v1 id do not
-	 * rewrite the option (upgrade is a write-path behavior).
+	 * Saving a value-equivalent v1 id stores the v2 twin. A v1 id whose v2
+	 * counterpart is a separate ESP field (`registration_method` was renamed
+	 * to "Registration Strategy") is stored as submitted — it has no twin to
+	 * collapse onto. Reads of an already-stored v1 id do not rewrite the
+	 * option; the upgrade is a write-path behavior.
 	 */
 	public function test_update_upgrades_equivalent_ids_to_v2() {
 		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
 
-		$this->integration->update_enabled_outgoing_fields( [ 'v1:account', 'v1:registration_date' ] );
+		$this->integration->update_enabled_outgoing_fields( [ 'v1:account', 'v1:registration_method' ] );
 
 		$this->assertEqualsCanonicalizing(
-			[ 'v2:Account', 'v1:registration_date' ],
+			[ 'v2:Account', 'v1:registration_method' ],
 			\get_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test' )
 		);
 	}

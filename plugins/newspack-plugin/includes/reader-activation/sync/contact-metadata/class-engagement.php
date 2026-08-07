@@ -97,6 +97,8 @@ class Engagement extends Contact_Metadata {
 				'description' => __( 'URL of the page the reader most recently checked out on', 'newspack-plugin' ),
 				'example'     => 'https://example.com/support-us',
 				'status'      => 'existing',
+				'supersedes'  => 'v1:payment_page',
+				'equivalent'  => true,
 			],
 			'Payment_UTM_Source'   => [
 				'name'        => 'Payment UTM Source',
@@ -124,6 +126,8 @@ class Engagement extends Contact_Metadata {
 				'description' => __( 'Lifetime total amount the reader has paid through Newspack\'s WooCommerce system', 'newspack-plugin' ),
 				'example'     => '120',
 				'status'      => 'existing',
+				'supersedes'  => 'v1:total_paid',
+				'equivalent'  => true,
 			],
 		];
 	}
