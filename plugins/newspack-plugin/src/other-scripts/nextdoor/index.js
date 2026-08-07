@@ -157,7 +157,17 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 			);
 		}
 
-		if ( ! nextdoorStatus?.can_publish ) {
+		// No response means the fetch failed, which the error notice explains. Reading
+		// `can_publish` off a missing response would report that as a permissions problem.
+		if ( ! nextdoorStatus ) {
+			return (
+				<Notice status="error" isDismissible={ false }>
+					{ error || __( 'Failed to load Nextdoor status.', 'newspack-plugin' ) }
+				</Notice>
+			);
+		}
+
+		if ( ! nextdoorStatus.can_publish ) {
 			return (
 				<Notice status="warning" isDismissible={ false }>
 					{ __( 'You do not have permission to publish to Nextdoor. Please contact the site administrator.', 'newspack-plugin' ) }
@@ -191,9 +201,9 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 						}
 					>
 						{ nextdoorStatus.can_reconnect
-							? __( 'The Nextdoor connection needs renewing before this post can be updated.', 'newspack-plugin' )
+							? __( 'Sharing to Nextdoor is unavailable until the connection is renewed.', 'newspack-plugin' )
 							: __(
-									'The Nextdoor connection needs renewing before this post can be updated. Please contact the site administrator.',
+									'Sharing to Nextdoor is unavailable until the connection is renewed. Please contact the site administrator.',
 									'newspack-plugin'
 							  ) }
 					</Notice>
@@ -272,7 +282,8 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 										onClick={ handleUpdate }
 										isBusy={ 'update' === action }
 										disabled={ 'update' === action || 'delete' === action || nextdoorStatus.needs_reconnect }
-										size="small"
+										accessibleWhenDisabled
+										size="compact"
 									>
 										{ 'update' === action ? __( 'Updating…', 'newspack-plugin' ) : __( 'Update', 'newspack-plugin' ) }
 									</Button>
@@ -282,7 +293,8 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 										onClick={ handleDelete }
 										isBusy={ 'delete' === action }
 										disabled={ 'update' === action || 'delete' === action || nextdoorStatus.needs_reconnect }
-										size="small"
+										accessibleWhenDisabled
+										size="compact"
 									>
 										{ 'delete' === action ? __( 'Removing…', 'newspack-plugin' ) : __( 'Remove', 'newspack-plugin' ) }
 									</Button>
@@ -296,7 +308,13 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 							<p className="nextdoor-sidebar__description">
 								{ __( 'Share this post to your Nextdoor community to engage local readers.', 'newspack-plugin' ) }
 							</p>
-							<Button variant="primary" onClick={ handlePublish } isBusy={ 'publish' === action } disabled={ 'publish' === action }>
+							<Button
+								variant="primary"
+								onClick={ handlePublish }
+								isBusy={ 'publish' === action }
+								disabled={ 'publish' === action || nextdoorStatus.needs_reconnect }
+								accessibleWhenDisabled
+							>
 								{ 'publish' === action ? __( 'Publishing…', 'newspack-plugin' ) : __( 'Publish on Nextdoor', 'newspack-plugin' ) }
 							</Button>
 						</PanelBody>
