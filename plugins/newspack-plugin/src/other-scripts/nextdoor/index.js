@@ -188,6 +188,10 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 	// Load status on mount and when post ID changes
 	useEffect( () => {
 		if ( postId ) {
+			// The answer on screen describes the previous post, and the actions below it
+			// already target the new one, so it goes before the request does.
+			setNextdoorStatus( null );
+			setHasLoaded( false );
 			fetchStatus();
 		}
 	}, [ postId ] );
