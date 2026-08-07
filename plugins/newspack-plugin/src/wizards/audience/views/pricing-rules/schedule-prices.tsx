@@ -21,6 +21,7 @@ import type { Action, Field, View } from '@wordpress/dataviews';
 /**
  * Internal dependencies
  */
+import { Divider } from '../../../../../packages/components/src';
 import { byCycle, cycleRange, priceSummary } from './schedule-format';
 import SchedulePriceDrawer from './schedule-price-drawer';
 
@@ -168,7 +169,7 @@ export default function SchedulePrices( { steps, onChange, publicize, calcTypes,
 	return (
 		<>
 			{ /* One child of the section's stack, so the button sits with its table. */ }
-			<VStack spacing={ 2 }>
+			<VStack spacing={ 0 }>
 				<div className="newspack-pricing-rules__schedule-table">
 					<DataViews
 						data={ data }
@@ -184,6 +185,8 @@ export default function SchedulePrices( { steps, onChange, publicize, calcTypes,
 						<DataViews.Layout />
 					</DataViews>
 				</div>
+				{ /* Divider margins are raw px, not a step scale. */ }
+				<Divider variant="tertiary" marginTop={ 0 } marginBottom={ 8 } />
 				<div>
 					<Button variant="secondary" onClick={ add }>
 						{ __( 'Add Price', 'newspack-plugin' ) }
