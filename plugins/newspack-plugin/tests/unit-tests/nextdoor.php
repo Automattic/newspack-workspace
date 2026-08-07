@@ -1634,4 +1634,110 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 		self::assertEmpty( get_option( Auth::REFUSAL_OPTION ) );
 		self::assertTrue( Auth::has_usable_token() );
 	}
+
+	/**
+	 * A refresh Nextdoor honours still describes the grant it set out with, and putting
+	 * that back over a newer one would undo the sign-in that replaced it.
+	 */
+	public function test_a_superseded_refresh_does_not_replace_a_newer_token() {
+		Nextdoor::update_settings(
+			array_merge(
+				Nextdoor::get_settings(),
+				[
+					'client_id'        => 'site-id',
+					'client_secret'    => 'site-secret',
+					'access_token'     => 'winner-access',
+					'refresh_token'    => 'rotated-refresh',
+					'token_expires_at' => time() + HOUR_IN_SECONDS,
+				]
+			)
+		);
+
+		add_filter(
+			'pre_http_request',
+			function () {
+				return [
+					'headers'  => [],
+					'body'     => wp_json_encode(
+						[
+							'access_token'  => 'superseded-access',
+							'refresh_token' => 'superseded-rotated',
+							'expires_in'    => 3600,
+						]
+					),
+					'response' => [
+						'code'    => 200,
+						'message' => 'OK',
+					],
+					'cookies'  => [],
+					'filename' => null,
+				];
+			}
+		);
+
+		$result = Auth::refresh_access_token( 'site-id', 'site-secret', 'superseded-refresh' );
+
+		// The payload comes back, so the caller can see what Nextdoor said.
+		self::assertSame( 'superseded-access', $result['access_token'] );
+		// What is stored belongs to the grant that replaced it.
+		self::assertSame( 'winner-access', Nextdoor::get_settings()['access_token'] );
+		self::assertSame( 'rotated-refresh', Nextdoor::get_settings()['refresh_token'] );
+	}
+
+	/**
+	 * A disconnect landing inside the refresh window leaves nothing to authorise with,
+	 * and an honoured refresh that was never applied does not say otherwise.
+	 */
+	public function test_a_disconnect_during_a_refresh_reports_no_usable_token() {
+		Nextdoor::update_settings(
+			array_merge(
+				Nextdoor::get_settings(),
+				[
+					'client_id'        => 'site-id',
+					'client_secret'    => 'site-secret',
+					'access_token'     => 'expired-access',
+					'refresh_token'    => 'stored-refresh',
+					'token_expires_at' => time() - 10,
+				]
+			)
+		);
+
+		self::assertTrue( Auth::has_usable_token() );
+
+		add_filter(
+			'pre_http_request',
+			function () {
+				// The publisher disconnects while this request is out.
+				Nextdoor::update_settings(
+					array_merge(
+						Nextdoor::get_settings(),
+						[
+							'access_token'  => '',
+							'refresh_token' => '',
+						]
+					)
+				);
+
+				return [
+					'headers'  => [],
+					'body'     => wp_json_encode(
+						[
+							'access_token'  => 'renewed-access',
+							'refresh_token' => 'renewed-refresh',
+							'expires_in'    => 3600,
+						]
+					),
+					'response' => [
+						'code'    => 200,
+						'message' => 'OK',
+					],
+					'cookies'  => [],
+					'filename' => null,
+				];
+			}
+		);
+
+		self::assertFalse( Auth::validate_token() );
+		self::assertSame( '', Nextdoor::get_settings()['access_token'] );
+	}
 }
