@@ -615,6 +615,44 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A misconfigured app is a 400 too, and correcting it should be enough.
+	 */
+	public function test_a_configuration_error_is_not_recorded_as_a_refusal() {
+		Nextdoor::update_settings(
+			[
+				'client_id'        => 'site-id',
+				'client_secret'    => 'wrong-secret',
+				'access_token'     => 'expired-access',
+				'refresh_token'    => 'stored-refresh',
+				'token_expires_at' => time() - 10,
+			]
+		);
+
+		add_filter(
+			'pre_http_request',
+			function () {
+				return [
+					'headers'  => [],
+					'body'     => wp_json_encode( [ 'error' => 'invalid_client' ] ),
+					'response' => [
+						'code'    => 401,
+						'message' => 'Unauthorized',
+					],
+					'cookies'  => [],
+					'filename' => null,
+				];
+			}
+		);
+
+		$result = Auth::refresh_access_token( 'site-id', 'wrong-secret', 'stored-refresh' );
+
+		self::assertInstanceOf( 'WP_Error', $result );
+		self::assertEmpty( Nextdoor::get_settings()['refresh_failed_at'] );
+		// Still renewable, so fixing the credentials is all it takes.
+		self::assertTrue( Auth::has_usable_token() );
+	}
+
+	/**
 	 * Losing a refresh race does not fail the request that lost it.
 	 */
 	public function test_losing_a_refresh_race_still_reports_a_valid_token() {
