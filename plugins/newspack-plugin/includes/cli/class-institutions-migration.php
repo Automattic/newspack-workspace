@@ -138,7 +138,7 @@ class Institutions_Migration {
 			[
 				'post_type'      => 'wc_memberships_team',
 				'post_status'    => 'publish',
-				'posts_per_page' => -1,
+				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging.posts_per_page_posts_per_page -- One-shot operator-run CLI migration; every team must be enumerated, and team counts are operator-scale (dozens).
 				'fields'         => 'ids',
 				'orderby'        => 'ID',
 				'order'          => 'ASC',

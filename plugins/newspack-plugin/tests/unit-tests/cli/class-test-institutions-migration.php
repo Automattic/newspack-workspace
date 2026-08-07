@@ -88,7 +88,7 @@ class Test_Institutions_Migration extends WP_UnitTestCase {
 			[
 				'post_type'      => Institution::POST_TYPE,
 				'post_status'    => array_keys( get_post_stati() ),
-				'posts_per_page' => -1,
+				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging.posts_per_page_posts_per_page -- Test helper counting a handful of fixture posts.
 			]
 		);
 	}
@@ -457,7 +457,13 @@ class Test_Institutions_Migration extends WP_UnitTestCase {
 		$csv_path = $this->write_csv( "team_id,domain\n" );
 
 		try {
-			( new Institutions_Migration() )->migrate_institutions( [], [ 'domains-csv' => $csv_path, 'live' => true ] );
+			( new Institutions_Migration() )->migrate_institutions(
+				[],
+				[
+					'domains-csv' => $csv_path,
+					'live'        => true,
+				]
+			);
 			$this->fail( 'A supplied-but-empty domains CSV must abort the run.' );
 		} catch ( WP_CLI_Mock_Exception $abort ) {
 			$this->assertStringContainsString( 'yielded no team', $abort->getMessage(), 'The abort must name the empty-CSV cause.' );
@@ -526,7 +532,13 @@ class Test_Institutions_Migration extends WP_UnitTestCase {
 		WP_CLI::reset();
 
 		$csv_path = $this->write_csv( "$team_id,latecomer.edu\n" );
-		( new Institutions_Migration() )->migrate_institutions( [], [ 'domains-csv' => $csv_path, 'live' => true ] );
+		( new Institutions_Migration() )->migrate_institutions(
+			[],
+			[
+				'domains-csv' => $csv_path,
+				'live'        => true,
+			]
+		);
 
 		$warning_messages  = array_column( array_filter( WP_CLI::$messages, fn( $entry ) => 'warning' === $entry[0] ), 1 );
 		$withheld_warnings = array_filter( $warning_messages, fn( $message ) => str_contains( $message, 'NOT applied' ) && str_contains( $message, 'latecomer.edu' ) );
