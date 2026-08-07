@@ -87,7 +87,12 @@ const CardForm = ( { title, description, badge, actions, isOpen = false, onReque
 			( focusable ?? node ).focus();
 		}
 		return () => {
-			previousActiveRef.current?.focus?.();
+			const previous = previousActiveRef.current;
+			// A card opened without a trigger captured the body, and focusing that on close
+			// would send the reader to the top of the page rather than leaving them be.
+			if ( previous && previous !== previous.ownerDocument?.body ) {
+				previous.focus?.();
+			}
 		};
 	}, [ isOpen ] );
 
