@@ -565,22 +565,25 @@ class Controller {
 		$ingestion_status     = null;
 		$ingestion_response   = [];
 		$ingestion_error_msgs = [];
-		// Two different failures, and only one of them is the publisher's to fix. A token
-		// with nothing left to renew it needs a reconnection; anything else that stops a
-		// response coming back means Nextdoor is unreachable, which passes on its own.
-		// The connection is site-wide, so this is reported whether or not the post has
-		// been shared: sharing needs a working token as much as updating does.
-		$needs_reconnect = ! Auth::has_usable_token();
+		// Three states stop sharing, and they read differently. A grant that existed and
+		// stopped working is a reconnection; a connection that was never finished, or
+		// whose page claim a fresh sign-in dropped, is setup; anything that stops a
+		// response coming back is an outage, which passes on its own. All are site-wide,
+		// so they are reported whether or not this post has been shared: sharing needs a
+		// working connection as much as updating does.
+		$has_tokens      = ! empty( Nextdoor::get_settings()['access_token'] );
+		$needs_reconnect = $has_tokens && ! Auth::has_usable_token();
+		$needs_setup     = ! $needs_reconnect && ! Nextdoor::is_connected();
 		$is_unreachable  = false;
 
-		if ( ! empty( $guid ) && ! $needs_reconnect && ! Auth::validate_token() ) {
+		if ( ! empty( $guid ) && ! $needs_reconnect && ! $needs_setup && ! Auth::validate_token() ) {
 			// The refresh itself can discover the grant is dead, and records it when it
 			// does, so ask again rather than reporting a refusal as an outage.
 			$needs_reconnect = ! Auth::has_usable_token();
 			$is_unreachable  = ! $needs_reconnect;
 		}
 
-		if ( ! empty( $guid ) && ! $needs_reconnect && ! $is_unreachable ) {
+		if ( ! empty( $guid ) && ! $needs_reconnect && ! $needs_setup && ! $is_unreachable ) {
 			$api                = API::instance();
 			$ingestion_response = $api->get_ingestion_report( [ $guid ] );
 
@@ -635,6 +638,7 @@ class Controller {
 			'ingestion_status' => $ingestion_status,
 			'ingestion_errors' => $ingestion_error_msgs,
 			'needs_reconnect'  => $needs_reconnect,
+			'needs_setup'      => $needs_setup,
 			'is_unreachable'   => $is_unreachable,
 			// Reconnecting lives in the settings wizard, which is `manage_options`, so the
 			// remedy offered has to match what this user can actually reach.

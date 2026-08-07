@@ -161,7 +161,7 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 		// `can_publish` off a missing response would report that as a permissions problem.
 		if ( ! nextdoorStatus ) {
 			return (
-				<Notice status="error" isDismissible={ false }>
+				<Notice status="error" isDismissible={ false } actions={ [ { label: __( 'Retry', 'newspack-plugin' ), onClick: fetchStatus } ] }>
 					{ error || __( 'Failed to load Nextdoor status.', 'newspack-plugin' ) }
 				</Notice>
 			);
@@ -185,7 +185,7 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 
 		return (
 			<>
-				{ nextdoorStatus?.needs_reconnect && (
+				{ nextdoorStatus.needs_reconnect && (
 					<Notice
 						status="error"
 						isDismissible={ false }
@@ -201,15 +201,36 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 						}
 					>
 						{ nextdoorStatus.can_reconnect
-							? __( 'Sharing to Nextdoor is unavailable until the connection is renewed.', 'newspack-plugin' )
+							? __( 'Sharing to Nextdoor is unavailable until you reconnect.', 'newspack-plugin' )
+							: __( 'Sharing to Nextdoor is unavailable until the site administrator reconnects it.', 'newspack-plugin' ) }
+					</Notice>
+				) }
+
+				{ nextdoorStatus.needs_setup && (
+					<Notice
+						status="warning"
+						isDismissible={ false }
+						actions={
+							nextdoorStatus.can_reconnect
+								? [
+										{
+											label: __( 'Set Up Nextdoor', 'newspack-plugin' ),
+											url: 'admin.php?page=newspack-settings#social',
+										},
+								  ]
+								: []
+						}
+					>
+						{ nextdoorStatus.can_reconnect
+							? __( 'Nextdoor setup is not finished, so this post cannot be shared yet.', 'newspack-plugin' )
 							: __(
-									'Sharing to Nextdoor is unavailable until the connection is renewed. Please contact the site administrator.',
+									'Nextdoor setup is not finished, so this post cannot be shared yet. Please contact the site administrator.',
 									'newspack-plugin'
 							  ) }
 					</Notice>
 				) }
 
-				{ nextdoorStatus?.is_unreachable && (
+				{ nextdoorStatus.is_unreachable && (
 					<Notice status="warning" isDismissible={ false }>
 						{ __( 'Nextdoor could not be reached, so the sharing status is unavailable. Please try again shortly.', 'newspack-plugin' ) }
 					</Notice>
@@ -227,7 +248,7 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 					</Notice>
 				) }
 
-				{ nextdoorStatus?.is_shared ? (
+				{ nextdoorStatus.is_shared ? (
 					<Panel>
 						<PanelHeader>
 							<p className="nextdoor-sidebar__status-header">
@@ -281,7 +302,9 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 										variant="primary"
 										onClick={ handleUpdate }
 										isBusy={ 'update' === action }
-										disabled={ 'update' === action || 'delete' === action || nextdoorStatus.needs_reconnect }
+										disabled={
+											'update' === action || 'delete' === action || nextdoorStatus.needs_reconnect || nextdoorStatus.needs_setup
+										}
 										accessibleWhenDisabled
 										size="compact"
 									>
@@ -292,7 +315,9 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 										isDestructive
 										onClick={ handleDelete }
 										isBusy={ 'delete' === action }
-										disabled={ 'update' === action || 'delete' === action || nextdoorStatus.needs_reconnect }
+										disabled={
+											'update' === action || 'delete' === action || nextdoorStatus.needs_reconnect || nextdoorStatus.needs_setup
+										}
 										accessibleWhenDisabled
 										size="compact"
 									>
@@ -312,7 +337,7 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 								variant="primary"
 								onClick={ handlePublish }
 								isBusy={ 'publish' === action }
-								disabled={ 'publish' === action || nextdoorStatus.needs_reconnect }
+								disabled={ 'publish' === action || nextdoorStatus.needs_reconnect || nextdoorStatus.needs_setup }
 								accessibleWhenDisabled
 							>
 								{ 'publish' === action ? __( 'Publishing…', 'newspack-plugin' ) : __( 'Publish on Nextdoor', 'newspack-plugin' ) }
