@@ -553,8 +553,10 @@ class Controller {
 	 * @return WP_REST_Response
 	 */
 	public static function api_get_post_sharing_status( $request ) {
-		$post_id   = $request->get_param( 'id' );
-		$forbidden = self::check_post_capability( $post_id, 'read_post' );
+		$post_id = $request->get_param( 'id' );
+		// `read_post` reduces to plain `read` for a published post, so it gates nothing. The
+		// only caller is the editor sidebar, which mounts on a post the user is editing.
+		$forbidden = self::check_post_capability( $post_id, 'edit_post' );
 		if ( $forbidden ) {
 			return $forbidden;
 		}
