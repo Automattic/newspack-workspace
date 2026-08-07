@@ -162,6 +162,14 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Store a finished connection: a token nowhere near expiry and a claimed page.
+	 */
+	private function connect_with_a_claimed_page() {
+		$this->connect_with_a_valid_token();
+		Nextdoor::update_settings( array_merge( Nextdoor::get_settings(), [ 'page_id' => 'page-123' ] ) );
+	}
+
+	/**
 	 * Unknown roles are dropped, duplicates collapse and the keys are a list.
 	 */
 	public function test_sanitize_allowed_roles_keeps_only_known_roles() {
@@ -936,6 +944,7 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 			[
 				'access_token'     => 'expired-access',
 				'token_expires_at' => time() - 10,
+				'page_id'          => 'page-123',
 			]
 		);
 
@@ -953,6 +962,7 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 				'access_token'     => 'expired-access',
 				'refresh_token'    => 'stored-refresh',
 				'token_expires_at' => time() - 10,
+				'page_id'          => 'page-123',
 			]
 		);
 		add_filter(
@@ -983,6 +993,7 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 				'access_token'     => 'expired-access',
 				'refresh_token'    => 'stored-refresh',
 				'token_expires_at' => time() - 10,
+				'page_id'          => 'page-123',
 			]
 		);
 
@@ -1021,7 +1032,7 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 		$post_id = $this->factory->post->create( [ 'post_status' => 'publish' ] );
 		update_post_meta( $post_id, '_nextdoor_guid', 'guid-1' );
 
-		$this->connect_with_a_valid_token();
+		$this->connect_with_a_claimed_page();
 
 		add_filter(
 			'pre_http_request',
@@ -1059,6 +1070,7 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 			[
 				'access_token'     => 'expired-access',
 				'token_expires_at' => time() - 10,
+				'page_id'          => 'page-123',
 			]
 		);
 
@@ -1069,6 +1081,46 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 
 		self::assertFalse( $data['is_shared'] );
 		self::assertTrue( $data['needs_reconnect'] );
+		self::assertFalse( $data['needs_setup'] );
+		self::assertSame( [], $this->http_requests );
+	}
+
+	/**
+	 * A connection that was never made is setup, not a reconnection.
+	 */
+	public function test_a_site_that_never_connected_is_told_to_finish_setup() {
+		$post_id = $this->factory->post->create( [ 'post_status' => 'publish' ] );
+		add_filter( 'pre_http_request', [ $this, 'stub_nextdoor_response' ], 10, 3 );
+
+		$request = new WP_REST_Request( 'GET', '/newspack/v1/nextdoor/post-status/' . $post_id );
+		$request->set_param( 'id', $post_id );
+
+		$data = Controller::api_get_post_sharing_status( $request )->get_data();
+
+		self::assertFalse( $data['needs_reconnect'] );
+		self::assertTrue( $data['needs_setup'] );
+		self::assertSame( [], $this->http_requests );
+	}
+
+	/**
+	 * A fresh grant with no page yet is setup too, not a working connection.
+	 */
+	public function test_a_reconnection_awaiting_its_page_claim_reports_setup() {
+		$post_id = $this->factory->post->create( [ 'post_status' => 'publish' ] );
+		update_post_meta( $post_id, '_nextdoor_guid', 'guid-1' );
+		add_filter( 'pre_http_request', [ $this, 'stub_nextdoor_response' ], 10, 3 );
+
+		// What the OAuth callback leaves behind: a good token and no claimed page.
+		$this->connect_with_a_valid_token();
+
+		$request = new WP_REST_Request( 'GET', '/newspack/v1/nextdoor/post-status/' . $post_id );
+		$request->set_param( 'id', $post_id );
+
+		$data = Controller::api_get_post_sharing_status( $request )->get_data();
+
+		self::assertFalse( $data['needs_reconnect'] );
+		self::assertTrue( $data['needs_setup'] );
+		self::assertFalse( $data['is_unreachable'] );
 		self::assertSame( [], $this->http_requests );
 	}
 
@@ -1124,7 +1176,7 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 		$post_id = $this->factory->post->create( [ 'post_status' => 'publish' ] );
 		update_post_meta( $post_id, '_nextdoor_guid', 'guid-1' );
 
-		$this->connect_with_a_valid_token();
+		$this->connect_with_a_claimed_page();
 
 		add_filter(
 			'pre_http_request',
