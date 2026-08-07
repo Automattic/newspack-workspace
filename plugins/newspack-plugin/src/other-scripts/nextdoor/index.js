@@ -176,12 +176,22 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 		return (
 			<>
 				{ nextdoorStatus?.needs_reconnect && (
-					<Notice status="error" isDismissible={ false }>
+					<Notice
+						status="error"
+						isDismissible={ false }
+						actions={
+							nextdoorStatus.can_reconnect
+								? [
+										{
+											label: __( 'Reconnect Nextdoor', 'newspack-plugin' ),
+											url: 'admin.php?page=newspack-settings#social',
+										},
+								  ]
+								: []
+						}
+					>
 						{ nextdoorStatus.can_reconnect
-							? __(
-									'The Nextdoor connection needs renewing before this post can be updated. Reconnect it in Newspack > Settings > Social.',
-									'newspack-plugin'
-							  )
+							? __( 'The Nextdoor connection needs renewing before this post can be updated.', 'newspack-plugin' )
 							: __(
 									'The Nextdoor connection needs renewing before this post can be updated. Please contact the site administrator.',
 									'newspack-plugin'
@@ -211,7 +221,7 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 					<Panel>
 						<PanelHeader>
 							<p className="nextdoor-sidebar__status-header">
-								{ __( 'Status:', 'newspack-plugin' ) } { nextdoorStatus.ingestion_status }
+								{ __( 'Status:', 'newspack-plugin' ) } { nextdoorStatus.ingestion_status || __( 'Unavailable', 'newspack-plugin' ) }
 							</p>
 						</PanelHeader>
 						<PanelBody>
@@ -261,7 +271,7 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 										variant="primary"
 										onClick={ handleUpdate }
 										isBusy={ 'update' === action }
-										disabled={ 'update' === action || 'delete' === action }
+										disabled={ 'update' === action || 'delete' === action || nextdoorStatus.needs_reconnect }
 										size="small"
 									>
 										{ 'update' === action ? __( 'Updating…', 'newspack-plugin' ) : __( 'Update', 'newspack-plugin' ) }
@@ -271,7 +281,7 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 										isDestructive
 										onClick={ handleDelete }
 										isBusy={ 'delete' === action }
-										disabled={ 'update' === action || 'delete' === action }
+										disabled={ 'update' === action || 'delete' === action || nextdoorStatus.needs_reconnect }
 										size="small"
 									>
 										{ 'delete' === action ? __( 'Removing…', 'newspack-plugin' ) : __( 'Remove', 'newspack-plugin' ) }
