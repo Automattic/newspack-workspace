@@ -403,7 +403,10 @@ class Auth {
 			}
 		}
 
-		update_option( self::REFUSAL_OPTION, time() );
+		// Stored against the credential it was about, hashed so the option never carries a
+		// second copy of a token. A grant that is later replaced makes the record stale by
+		// value, rather than relying on every future write path remembering to clear it.
+		update_option( self::REFUSAL_OPTION, array_map( 'wp_hash', $expected ) );
 	}
 
 	/**
@@ -413,6 +416,30 @@ class Auth {
 	 */
 	public static function clear_token_refusal() {
 		delete_option( self::REFUSAL_OPTION );
+	}
+
+	/**
+	 * Whether a recorded refusal still describes the stored credentials.
+	 *
+	 * @param array $settings Nextdoor settings.
+	 * @return bool
+	 */
+	private static function is_token_refused( $settings ) {
+		$refused = get_option( self::REFUSAL_OPTION );
+
+		if ( ! is_array( $refused ) || empty( $refused ) ) {
+			return false;
+		}
+
+		foreach ( $refused as $key => $hash ) {
+			if ( ! isset( $settings[ $key ] ) || wp_hash( $settings[ $key ] ) !== $hash ) {
+				// The credential the refusal named is gone, so the refusal is about a grant
+				// this connection no longer holds.
+				return false;
+			}
+		}
+
+		return true;
 	}
 
 	/**
@@ -450,7 +477,7 @@ class Auth {
 			return false;
 		}
 
-		if ( get_option( self::REFUSAL_OPTION ) ) {
+		if ( self::is_token_refused( $settings ) ) {
 			return false;
 		}
 
