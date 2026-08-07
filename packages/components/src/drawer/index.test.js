@@ -207,6 +207,22 @@ describe( 'Drawer sections', () => {
 		expect( bodyOf( one ) ).not.toContainElement( screen.getByText( 'Actions' ) );
 	} );
 
+	// The stylesheet drops the last section's bottom padding through
+	// `.newspack-drawer__body:has(+ .newspack-drawer__footer)`, so only the body the
+	// footer actually abuts may reach it, however many the children split into.
+	it( 'leaves the footer immediately after the last scroll container', () => {
+		renderDrawer( {
+			contents: [ <Drawer.Content key="one">One</Drawer.Content>, <div key="split">Split</div>, <Drawer.Content key="two">Two</Drawer.Content> ],
+			footer: <Drawer.Footer>Actions</Drawer.Footer>,
+		} );
+
+		const bodies = document.querySelectorAll( '.newspack-drawer__body' );
+		const footer = document.querySelector( '.newspack-drawer__footer' );
+		expect( bodies ).toHaveLength( 2 );
+		expect( footer.previousElementSibling ).toBe( bodies[ 1 ] );
+		expect( bodies[ 0 ].nextElementSibling ).not.toBe( footer );
+	} );
+
 	// jsdom has no layout, so the overflow the body measures is stubbed on the node.
 	describe( 'keyboard access to the scroll container', () => {
 		let observers;
