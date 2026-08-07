@@ -233,8 +233,8 @@ class Institutions_Migration {
 				// The skip protects operator edits, but the operator must know which
 				// supplied values the re-run declined to add — otherwise a second run
 				// with a newly-obtained CSV looks successful while adding nothing.
-				// (Values the operator deliberately removed are not re-listed: the
-				// diff runs against what was applied at creation, not current rules.)
+				// Values the operator deliberately removed are not re-listed: the
+				// diff runs against what was applied at creation, not current rules.
 				$withheld_values = array_merge( $result['withheld_ranges'], $result['withheld_domains'] );
 				if ( ! empty( $withheld_values ) ) {
 					WP_CLI::warning( sprintf( 'Team %d: the source data supplies %d value(s) never migrated to institution %d: [%s] — NOT applied (re-runs never modify an existing institution); add manually if intended.', $team_id, count( $withheld_values ), $result['institution_id'], implode( ', ', $withheld_values ) ) );
