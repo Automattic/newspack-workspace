@@ -177,10 +177,21 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 			<>
 				{ nextdoorStatus?.needs_reconnect && (
 					<Notice status="error" isDismissible={ false }>
-						{ __(
-							'The Nextdoor connection needs renewing before this post can be updated. Reconnect it in Newspack > Settings > Social.',
-							'newspack-plugin'
-						) }
+						{ nextdoorStatus.can_reconnect
+							? __(
+									'The Nextdoor connection needs renewing before this post can be updated. Reconnect it in Newspack > Settings > Social.',
+									'newspack-plugin'
+							  )
+							: __(
+									'The Nextdoor connection needs renewing before this post can be updated. Please contact the site administrator.',
+									'newspack-plugin'
+							  ) }
+					</Notice>
+				) }
+
+				{ nextdoorStatus?.is_unreachable && (
+					<Notice status="warning" isDismissible={ false }>
+						{ __( 'Nextdoor could not be reached, so the sharing status is unavailable. Please try again shortly.', 'newspack-plugin' ) }
 					</Notice>
 				) }
 

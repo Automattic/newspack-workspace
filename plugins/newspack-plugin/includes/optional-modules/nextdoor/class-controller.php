@@ -565,11 +565,13 @@ class Controller {
 		$ingestion_status     = null;
 		$ingestion_response   = [];
 		$ingestion_error_msgs = [];
-		// An unusable token answers with a 401 the caller cannot tell from "no report yet",
-		// so report the reconnection rather than sending a doomed request.
-		$needs_reconnect = ! empty( $guid ) && ! Auth::validate_token();
+		// Two different failures, and only one of them is the publisher's to fix. A token
+		// with nothing left to renew it needs a reconnection; a renewable token whose
+		// refresh did not come back means Nextdoor is unreachable, which passes on its own.
+		$needs_reconnect = ! empty( $guid ) && ! Auth::has_usable_token();
+		$is_unreachable  = ! empty( $guid ) && ! $needs_reconnect && ! Auth::validate_token();
 
-		if ( ! empty( $guid ) && ! $needs_reconnect ) {
+		if ( ! empty( $guid ) && ! $needs_reconnect && ! $is_unreachable ) {
 			$api                = API::instance();
 			$ingestion_response = $api->get_ingestion_report( [ $guid ] );
 
@@ -614,6 +616,10 @@ class Controller {
 			'ingestion_status' => $ingestion_status,
 			'ingestion_errors' => $ingestion_error_msgs,
 			'needs_reconnect'  => $needs_reconnect,
+			'is_unreachable'   => $is_unreachable,
+			// Reconnecting lives in the settings wizard, which is `manage_options`, so the
+			// remedy offered has to match what this user can actually reach.
+			'can_reconnect'    => current_user_can( 'manage_options' ),
 		];
 
 		return rest_ensure_response( $response );
