@@ -919,6 +919,70 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A dead grant asks for a reconnection; an unreachable Nextdoor does not.
+	 */
+	public function test_the_status_route_tells_a_dead_grant_from_an_outage() {
+		$post_id = $this->factory->post->create( [ 'post_status' => 'publish' ] );
+		update_post_meta( $post_id, '_nextdoor_guid', 'guid-1' );
+
+		$request = new WP_REST_Request( 'GET', '/newspack/v1/nextdoor/post-status/' . $post_id );
+		$request->set_param( 'id', $post_id );
+
+		// Nothing left to renew with.
+		Nextdoor::update_settings(
+			[
+				'access_token'     => 'expired-access',
+				'token_expires_at' => time() - 10,
+			]
+		);
+
+		$dead = Controller::api_get_post_sharing_status( $request )->get_data();
+
+		self::assertTrue( $dead['needs_reconnect'] );
+		self::assertFalse( $dead['is_unreachable'] );
+		self::assertSame( [], $this->http_requests );
+
+		// Renewable, but Nextdoor does not answer.
+		Nextdoor::update_settings(
+			[
+				'client_id'        => 'site-id',
+				'client_secret'    => 'site-secret',
+				'access_token'     => 'expired-access',
+				'refresh_token'    => 'stored-refresh',
+				'token_expires_at' => time() - 10,
+			]
+		);
+		add_filter(
+			'pre_http_request',
+			function () {
+				return new WP_Error( 'http_request_failed', 'Connection timed out' );
+			}
+		);
+
+		$outage = Controller::api_get_post_sharing_status( $request )->get_data();
+
+		self::assertFalse( $outage['needs_reconnect'] );
+		self::assertTrue( $outage['is_unreachable'] );
+		self::assertTrue( Auth::has_usable_token() );
+	}
+
+	/**
+	 * The remedy offered matches what the reader of it can reach.
+	 */
+	public function test_the_status_route_reports_who_can_reconnect() {
+		$post_id = $this->factory->post->create( [ 'post_status' => 'publish' ] );
+		$request = new WP_REST_Request( 'GET', '/newspack/v1/nextdoor/post-status/' . $post_id );
+		$request->set_param( 'id', $post_id );
+
+		self::assertTrue( Controller::api_get_post_sharing_status( $request )->get_data()['can_reconnect'] );
+
+		get_role( 'editor' )->add_cap( Nextdoor::CAPABILITY_SLUG );
+		wp_set_current_user( $this->factory->user->create( [ 'role' => 'editor' ] ) );
+
+		self::assertFalse( Controller::api_get_post_sharing_status( $request )->get_data()['can_reconnect'] );
+	}
+
+	/**
 	 * A reader role stored before it was withheld loses the capability, without a save.
 	 */
 	public function test_a_stored_reader_role_is_not_granted_the_capability() {
