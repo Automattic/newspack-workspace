@@ -586,6 +586,34 @@ class Test_Prepare_Contact extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Registration Page's equivalence spans two legacy raw keys, not one:
+	 * the direct `registration_page` enrichment and the event-time
+	 * `current_page_url` (see
+	 * Test_Field_Registry::test_equivalence_spans_multiple_legacy_raw_keys).
+	 * This pins the second alias at the payload level, the same way
+	 * test_equivalent_id_accepts_legacy_raw_key_input pins Account's single
+	 * one — a hand-built contact using the event-time key must keep syncing
+	 * once only the v2 twin is enabled.
+	 */
+	public function test_equivalent_id_accepts_second_legacy_raw_key_input() {
+		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
+		$this->integration->update_enabled_outgoing_fields( [ 'v2:Registration_Page' ] );
+
+		$contact = [
+			'email'    => 'test@example.com',
+			'metadata' => [ 'current_page_url' => 'https://example.com/signup?utm_source=facebook' ],
+		];
+
+		$result = $this->integration->prepare_contact( $contact );
+
+		$this->assertSame(
+			'https://example.com/signup?utm_source=facebook',
+			$result['metadata']['NP_Registration Page'] ?? null,
+			'The event-time raw key must map through the equivalent v2 id.'
+		);
+	}
+
+	/**
 	 * NPPD-2067 Strand B, Fix 3: get_default_outgoing_field_ids() and the
 	 * legacy-global branch of get_inherited_outgoing_field_ids() deliberately
 	 * do NOT run Field_Registry::upgrade_equivalent_ids() on their return

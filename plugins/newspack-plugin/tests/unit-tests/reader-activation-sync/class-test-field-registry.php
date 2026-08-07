@@ -76,13 +76,27 @@ class Test_Field_Registry extends \WP_UnitTestCase {
 	/**
 	 * Content Gate fields are registered as version-neutral and are always
 	 * excluded from conflict groups.
+	 *
+	 * This must reach past get_conflict_groups(), which is permanently empty
+	 * (see test_no_esp_name_is_claimed_by_both_schemas) — a loop over its
+	 * return value would never iterate, so it could never actually catch a
+	 * neutral field sneaking into a group. Reflection reaches the private raw
+	 * derivation, get_name_collision_groups(), instead — its groups are not
+	 * empty, so this exercises real data and actually verifies neutral fields
+	 * are excluded, rather than passing vacuously.
 	 */
 	public function test_content_gate_is_neutral() {
 		$defs    = Field_Registry::get_definitions();
 		$neutral = array_filter( $defs, fn( $d ) => 'neutral' === $d['version'] && null !== $d['class'] );
 		$this->assertNotEmpty( $neutral );
-		// Neutral fields never form conflict groups.
-		foreach ( Field_Registry::get_conflict_groups() as $ids ) {
+
+		$method = new \ReflectionMethod( Field_Registry::class, 'get_name_collision_groups' );
+		$method->setAccessible( true );
+		$collision_groups = $method->invoke( null );
+		$this->assertNotEmpty( $collision_groups, 'This must exercise real collision groups, not an empty derivation.' );
+
+		// Neutral fields never form (raw) collision groups.
+		foreach ( $collision_groups as $ids ) {
 			foreach ( $ids as $id ) {
 				$this->assertNotSame( 'neutral', Field_Registry::get_definition( $id )['version'] );
 			}
@@ -120,10 +134,10 @@ class Test_Field_Registry extends \WP_UnitTestCase {
 	 * which id survives a save.
 	 */
 	public function test_get_by_name_prefers_requested_version() {
-		$v1 = Field_Registry::get_by_name( 'Payment Page', 'v1' );
-		$v2 = Field_Registry::get_by_name( 'Payment Page', 'v2' );
-		$this->assertSame( 'v1:payment_page', $v1['id'] );
-		$this->assertSame( 'v2:Payment_Page', $v2['id'] );
+		$v1 = Field_Registry::get_by_name( 'Total Paid', 'v1' );
+		$v2 = Field_Registry::get_by_name( 'Total Paid', 'v2' );
+		$this->assertSame( 'v1:total_paid', $v1['id'] );
+		$this->assertSame( 'v2:Total_Paid', $v2['id'] );
 		// Unqualified lookup returns some definition for the name.
 		$this->assertNotNull( Field_Registry::get_by_name( 'Newsletter Selection' ) );
 	}

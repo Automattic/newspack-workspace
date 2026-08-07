@@ -980,7 +980,11 @@ abstract class Integration {
 				$ids[] = $definition['id'];
 			}
 		}
-		$cache[ $key ] = $ids;
+		// Multiple default names can resolve to the same id (e.g. a
+		// multi-raw-key name like "Registration Page"), so de-duplicate here —
+		// this no longer routes through upgrade_equivalent_ids(), which used to
+		// do it as a side effect.
+		$cache[ $key ] = array_values( array_unique( $ids ) );
 		return $cache[ $key ];
 	}
 
@@ -1029,8 +1033,10 @@ abstract class Integration {
 			// get_default_outgoing_field_ids() (NPPD-2067): these names come from
 			// a pre-coexistence option and resolve to v1 ids, and upgrading them
 			// here would pull the v2 compute classes into every sync for this
-			// registry-miss fallback too.
-			return $ids;
+			// registry-miss fallback too. Still de-duplicated, the same way
+			// get_default_outgoing_field_ids() is: upgrade_equivalent_ids() used
+			// to do this as a side effect before the revert above.
+			return array_values( array_unique( $ids ) );
 		}
 
 		return $this->get_default_outgoing_field_ids();
@@ -1348,10 +1354,20 @@ abstract class Integration {
 	 * Incoming metadata may mix raw keys from any schema version. Raw keys
 	 * survive only when enabled for this integration; enabled dynamic-suffix
 	 * fields (UTM) match by raw-key prefix and never by their bare key, which
-	 * carries no suffix and is therefore not a syncable field. No two enabled
-	 * fields can write the same output key: the two schemas share no ESP name
-	 * (see Field_Registry::get_conflict_groups()), and where they share a
-	 * field outright the v1 raw keys alias onto the surviving v2 definition.
+	 * carries no suffix and is therefore not a syncable field. Schema-owned
+	 * field names are collision-free by construction —
+	 * Field_Registry::get_conflict_groups() is permanently empty, guarded by
+	 * Test_Field_Registry::test_no_esp_name_is_claimed_by_both_schemas — and
+	 * where a v1/v2 pair shares a field outright the v1 raw keys alias onto
+	 * the surviving v2 definition. That guarantee is scoped to schema-owned
+	 * definitions: a `newspack_ras_metadata_keys` callback can add an extra
+	 * that sits outside the collision derivation, or rename a schema-owned
+	 * definition at runtime, either of which can still produce two enabled
+	 * fields with the same output name. When two raw keys resolve to the
+	 * same output key — a filter collision, or legacy same-name siblings
+	 * like registration_page / current_page_url — resolution keeps
+	 * last-write-wins; only an explicitly-supplied prefixed value is
+	 * protected from being overwritten.
 	 *
 	 * Already-prefixed inputs are explicit injections (callers, the
 	 * normalize filter): they pass through when they match an enabled field

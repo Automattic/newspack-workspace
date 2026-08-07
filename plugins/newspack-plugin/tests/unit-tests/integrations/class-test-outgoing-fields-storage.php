@@ -149,7 +149,7 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 	 * A v2-origin site with legacy display-name storage migrates to v2 ids
 	 * on read.
 	 *
-	 * "Payment Page" is claimed by both schemas, so the v2-origin resolution
+	 * "Total Paid" is claimed by both schemas, so the v2-origin resolution
 	 * picks the v2 definition. A name only the legacy schema declares (the
 	 * renamed payment fields, say) would resolve to its v1 id even here, and
 	 * must: the stored name is what the publisher's ESP field is called, and
@@ -159,11 +159,11 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v2' );
 		\update_option(
 			Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test',
-			[ 'Payment Page', 'Registration UTM Source' ]
+			[ 'Total Paid', 'Registration UTM Source' ]
 		);
 
 		$this->assertEqualsCanonicalizing(
-			[ 'v2:Payment_Page', 'v2:Registration_UTM_Source' ],
+			[ 'v2:Total_Paid', 'v2:Registration_UTM_Source' ],
 			$this->integration->get_enabled_outgoing_field_ids()
 		);
 	}
