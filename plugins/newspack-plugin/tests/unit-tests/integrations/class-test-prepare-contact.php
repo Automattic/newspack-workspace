@@ -7,7 +7,9 @@
 
 namespace Newspack\Tests\Unit\Integrations;
 
+use Newspack\Reader_Activation\Integration;
 use Newspack\Reader_Activation\Integrations;
+use Newspack\Reader_Activation\Integrations\ESP;
 use Newspack\Reader_Activation\Sync\Field_Registry;
 use Newspack\Reader_Activation\Sync\Metadata;
 use Sample_Integration;
@@ -43,6 +45,11 @@ class Test_Prepare_Contact extends \WP_UnitTestCase {
 	 * Tear down test environment.
 	 */
 	public function tear_down() {
+		foreach ( [ 'prepare-test', 'inheritor', 'esp' ] as $id ) {
+			\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . $id );
+			\delete_option( Integration::METADATA_PREFIX_OPTION_PREFIX . $id );
+		}
+		\delete_option( Metadata::FIELDS_OPTION );
 		\delete_option( Field_Registry::SCHEMA_ORIGIN_OPTION );
 		Field_Registry::reset();
 		$this->reset_integrations();
@@ -79,6 +86,75 @@ class Test_Prepare_Contact extends \WP_UnitTestCase {
 		$result = $this->integration->prepare_contact( $contact );
 
 		$this->assertSame( [ 'NP_Account' => 5 ], $result['metadata'] );
+	}
+
+	/**
+	 * The NPPD-2107 regression: with the ESP integration narrowed to a single
+	 * field, a second integration that never saved an Outbound selection of
+	 * its own must push that same single field — not the full default set. The
+	 * live bug was an ESP narrowed to Account-only while ActiveCampaign still
+	 * pushed `NP_Total Paid`.
+	 */
+	public function test_never_configured_integration_pushes_only_inherited_esp_fields() {
+		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
+
+		$esp = new ESP();
+		Integrations::register( $esp );
+		$esp->update_enabled_outgoing_fields( [ 'v1:account' ] );
+
+		// A second integration with no stored Outbound selection at all.
+		$inheritor = new Sample_Integration( 'inheritor', 'Inheritor' );
+		Integrations::register( $inheritor );
+		$inheritor->update_metadata_prefix( 'NP_' );
+		\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'inheritor' );
+
+		$result = $inheritor->prepare_contact(
+			[
+				'email'    => 'test@example.com',
+				'metadata' => [
+					'account'                => 5,
+					'total_paid'             => '120.00',
+					'membership_status'      => 'Monthly Donor',
+					'signup_page_utm_source' => 'newsletter',
+				],
+			]
+		);
+
+		$this->assertSame(
+			[ 'NP_Account' => 5 ],
+			$result['metadata'],
+			'A never-configured integration pushes exactly the ESP selection.'
+		);
+	}
+
+	/**
+	 * Inheritance yields to an explicit save, including an empty one: saving
+	 * with nothing checked means "push no metadata fields", not "inherit".
+	 */
+	public function test_explicit_empty_selection_beats_inheritance() {
+		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
+
+		$esp = new ESP();
+		Integrations::register( $esp );
+		$esp->update_enabled_outgoing_fields( [ 'v1:account' ] );
+
+		$this->integration->update_enabled_outgoing_fields( [] );
+
+		$result = $this->integration->prepare_contact(
+			[
+				'email'    => 'test@example.com',
+				'metadata' => [
+					'account'       => 5,
+					'status_if_new' => 'transactional',
+				],
+			]
+		);
+
+		$this->assertSame(
+			[ 'status_if_new' => 'transactional' ],
+			$result['metadata'],
+			'Only unprefixed sync-control keys survive an explicitly empty selection.'
+		);
 	}
 
 	/**
@@ -507,5 +583,117 @@ class Test_Prepare_Contact extends \WP_UnitTestCase {
 		$result = $this->integration->prepare_contact( $contact );
 
 		$this->assertSame( 42, $result['metadata']['NP_Account'] ?? null, 'Legacy raw key must map through the equivalent v2 id.' );
+	}
+
+	/**
+	 * Registration Page's equivalence spans two legacy raw keys, not one:
+	 * the direct `registration_page` enrichment and the event-time
+	 * `current_page_url` (see
+	 * Test_Field_Registry::test_equivalence_spans_multiple_legacy_raw_keys).
+	 * This pins the second alias at the payload level, the same way
+	 * test_equivalent_id_accepts_legacy_raw_key_input pins Account's single
+	 * one — a hand-built contact using the event-time key must keep syncing
+	 * once only the v2 twin is enabled.
+	 */
+	public function test_equivalent_id_accepts_second_legacy_raw_key_input() {
+		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
+		$this->integration->update_enabled_outgoing_fields( [ 'v2:Registration_Page' ] );
+
+		$contact = [
+			'email'    => 'test@example.com',
+			'metadata' => [ 'current_page_url' => 'https://example.com/signup?utm_source=facebook' ],
+		];
+
+		$result = $this->integration->prepare_contact( $contact );
+
+		$this->assertSame(
+			'https://example.com/signup?utm_source=facebook',
+			$result['metadata']['NP_Registration Page'] ?? null,
+			'The event-time raw key must map through the equivalent v2 id.'
+		);
+	}
+
+	/**
+	 * NPPD-2067 Strand B, Fix 3: get_default_outgoing_field_ids() and the
+	 * legacy-global branch of get_inherited_outgoing_field_ids() deliberately
+	 * do NOT run Field_Registry::upgrade_equivalent_ids() on their return
+	 * value, so a v1-origin site with no stored ESP selection derives 'Account'
+	 * as 'v1:account', not its v2 twin — see
+	 * Test_Sync_Metadata_Classes::test_no_stored_selection_skips_v2_classes_for_shared_fields
+	 * for why (it keeps Metadata::get_sync_metadata_classes() from pulling in
+	 * the v2 Engagement/Subscription compute for this large cohort).
+	 *
+	 * That must not regress the payload: prepare_contact() builds its
+	 * raw-key/name lookup from Field_Registry::get_definition() per id, and an
+	 * equivalent pair's v1 and v2 definitions share the same 'name' and
+	 * 'raw_key' by construction — so the un-upgraded v1 id still resolves the
+	 * 'account' raw key to the shared canonical ESP name, 'Account'.
+	 */
+	public function test_unupgraded_default_id_still_emits_canonical_name() {
+		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
+
+		$esp = new ESP();
+		Integrations::register( $esp );
+		$esp->update_metadata_prefix( 'NP_' );
+		\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'esp' );
+		\delete_option( Metadata::FIELDS_OPTION );
+
+		// The un-configured ESP's own defaults fallback resolves 'Account' to
+		// its v1 id and does not upgrade it.
+		$ids = $esp->get_enabled_outgoing_field_ids();
+		$this->assertContains( 'v1:account', $ids );
+		$this->assertNotContains( 'v2:Account', $ids );
+
+		$result = $esp->prepare_contact(
+			[
+				'email'    => 'test@example.com',
+				'metadata' => [ 'account' => 7 ],
+			]
+		);
+
+		$this->assertSame(
+			7,
+			$result['metadata']['NP_Account'] ?? null,
+			'An equivalent field must emit under its canonical ESP name even when the resolving id is the un-upgraded v1 form.'
+		);
+	}
+
+	/**
+	 * What dissolving the name conflicts buys: both versions of a
+	 * changed-meaning field can be enabled at once and each reaches the
+	 * provider as its own ESP field. "Last Payment Amount" is every payment
+	 * including donations; "Last Subscription Payment Amount" is only the
+	 * current non-donation subscription — a publisher mid-migration wants both,
+	 * and under the old pick-one rule could only have had one.
+	 *
+	 * Stored directly rather than through update_enabled_outgoing_fields(),
+	 * which drops fields whose class is unavailable — both of these are
+	 * WooCommerce-gated and the test environment has no WooCommerce.
+	 */
+	public function test_both_versions_of_a_renamed_field_reach_the_provider() {
+		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
+		\update_option(
+			Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'prepare-test',
+			[ 'v1:last_payment_amount', 'v2:Last_Payment_Amount' ]
+		);
+
+		$result = $this->integration->prepare_contact(
+			[
+				'email'    => 'test@example.com',
+				'metadata' => [
+					'last_payment_amount' => '120.00',
+					'Last_Payment_Amount' => '15.00',
+				],
+			]
+		);
+
+		$this->assertSame(
+			[
+				'NP_Last Payment Amount'              => '120.00',
+				'NP_Last Subscription Payment Amount' => '15.00',
+			],
+			$result['metadata'],
+			'Each version must land on its own ESP field name.'
+		);
 	}
 }

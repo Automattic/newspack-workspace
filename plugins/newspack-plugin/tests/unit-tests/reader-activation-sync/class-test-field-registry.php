@@ -26,8 +26,10 @@ class Test_Field_Registry extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Definitions are keyed by a `{version}:{raw_key}` id, and the same ESP
-	 * name is preserved across both the legacy and new raw keys.
+	 * Definitions are keyed by a `{version}:{raw_key}` id. The id is the raw
+	 * key's version-qualified spelling and is independent of the ESP name, so
+	 * a v2 field that was renamed to stop colliding with its legacy
+	 * counterpart keeps its id and changes only its `name`.
 	 */
 	public function test_ids_are_version_qualified() {
 		$defs = Field_Registry::get_definitions();
@@ -35,33 +37,29 @@ class Test_Field_Registry extends \WP_UnitTestCase {
 		$this->assertArrayHasKey( 'v2:Last_Payment_Amount', $defs );
 		$this->assertSame( 'v1', $defs['v1:last_payment_amount']['version'] );
 		$this->assertSame( 'Last Payment Amount', $defs['v1:last_payment_amount']['name'] );
-		$this->assertSame( 'Last Payment Amount', $defs['v2:Last_Payment_Amount']['name'] );
+		$this->assertSame( 'Last Subscription Payment Amount', $defs['v2:Last_Payment_Amount']['name'] );
 	}
 
 	/**
-	 * Conflict groups are derived from ESP names claimed by both the v1 and
-	 * v2 schemas; names unique to a single version never form a group.
+	 * The structural guarantee schema coexistence rests on: no ESP field name
+	 * is claimed by both schemas, so a publisher can enable both versions of
+	 * any field at once and nothing has to arbitrate between them.
+	 *
+	 * Every collision is dissolved one of two ways — same-meaning pairs
+	 * declare the v2 field `equivalent` and collapse into one field, and
+	 * changed-meaning v2 fields carry their own ESP name. A failure here means
+	 * a new or renamed field has re-created a conflict: fix the field, not
+	 * this test. Restoring the pick-one save rule this replaced would break
+	 * dual-schema sync.
 	 */
-	public function test_conflict_groups_derived_from_shared_names() {
-		$groups = Field_Registry::get_conflict_groups();
-		$expected_names = [
-			'Account',
-			'Connected Account',
-			'Registration Date',
-			'Registration Page',
-			'Payment Page',
-			'Current Subscription Start Date',
-			'Current Subscription End Date',
-			'Subscription Cancellation Reason',
-			'Last Payment Date',
-			'Last Payment Amount',
-			'Total Paid',
-		];
-		$this->assertEqualsCanonicalizing( $expected_names, array_keys( $groups ) );
-		$this->assertEqualsCanonicalizing(
-			[ 'v1:last_payment_amount', 'v2:Last_Payment_Amount' ],
-			$groups['Last Payment Amount']
-		);
+	public function test_no_esp_name_is_claimed_by_both_schemas() {
+		$this->assertSame( [], Field_Registry::get_conflict_groups() );
+
+		// Not vacuous: shared names still exist, they are collapsed rather than
+		// contested. A derivation that returned [] because it stopped seeing
+		// shared names at all would pass the assertion above on its own.
+		$this->assertSame( 'v1:account', Field_Registry::get_by_name( 'Account', 'v1' )['id'] );
+		$this->assertSame( 'v2:Account', Field_Registry::get_by_name( 'Account', 'v2' )['id'] );
 	}
 
 	/**
@@ -78,13 +76,27 @@ class Test_Field_Registry extends \WP_UnitTestCase {
 	/**
 	 * Content Gate fields are registered as version-neutral and are always
 	 * excluded from conflict groups.
+	 *
+	 * This must reach past get_conflict_groups(), which is permanently empty
+	 * (see test_no_esp_name_is_claimed_by_both_schemas) — a loop over its
+	 * return value would never iterate, so it could never actually catch a
+	 * neutral field sneaking into a group. Reflection reaches the private raw
+	 * derivation, get_name_collision_groups(), instead — its groups are not
+	 * empty, so this exercises real data and actually verifies neutral fields
+	 * are excluded, rather than passing vacuously.
 	 */
 	public function test_content_gate_is_neutral() {
 		$defs    = Field_Registry::get_definitions();
 		$neutral = array_filter( $defs, fn( $d ) => 'neutral' === $d['version'] && null !== $d['class'] );
 		$this->assertNotEmpty( $neutral );
-		// Neutral fields never form conflict groups.
-		foreach ( Field_Registry::get_conflict_groups() as $ids ) {
+
+		$method = new \ReflectionMethod( Field_Registry::class, 'get_name_collision_groups' );
+		$method->setAccessible( true );
+		$collision_groups = $method->invoke( null );
+		$this->assertNotEmpty( $collision_groups, 'This must exercise real collision groups, not an empty derivation.' );
+
+		// Neutral fields never form (raw) collision groups.
+		foreach ( $collision_groups as $ids ) {
 			foreach ( $ids as $id ) {
 				$this->assertNotSame( 'neutral', Field_Registry::get_definition( $id )['version'] );
 			}
@@ -113,14 +125,19 @@ class Test_Field_Registry extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * `get_by_name()` prefers the requested version on a name collision, and
-	 * still resolves an unqualified lookup to some definition.
+	 * `get_by_name()` prefers the requested version when both schemas declare
+	 * the name, and still resolves an unqualified lookup to some definition.
+	 *
+	 * Since the conflicting names were dissolved, the only remaining shape
+	 * where one name maps to both versions is a collapsed equivalent pair —
+	 * equivalence does not rewrite either definition's name, it only decides
+	 * which id survives a save.
 	 */
 	public function test_get_by_name_prefers_requested_version() {
-		$v1 = Field_Registry::get_by_name( 'Last Payment Amount', 'v1' );
-		$v2 = Field_Registry::get_by_name( 'Last Payment Amount', 'v2' );
-		$this->assertSame( 'v1:last_payment_amount', $v1['id'] );
-		$this->assertSame( 'v2:Last_Payment_Amount', $v2['id'] );
+		$v1 = Field_Registry::get_by_name( 'Total Paid', 'v1' );
+		$v2 = Field_Registry::get_by_name( 'Total Paid', 'v2' );
+		$this->assertSame( 'v1:total_paid', $v1['id'] );
+		$this->assertSame( 'v2:Total_Paid', $v2['id'] );
 		// Unqualified lookup returns some definition for the name.
 		$this->assertNotNull( Field_Registry::get_by_name( 'Newsletter Selection' ) );
 	}
@@ -282,9 +299,10 @@ class Test_Field_Registry extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Value-equivalent conflict pairs (declared on the v2 config) upgrade
-	 * their v1 ids to the v2 twin at storage time; divergent pairs, v2 ids
-	 * and unknown ids pass through untouched.
+	 * Value-equivalent pairs (declared on the v2 config) upgrade their v1 ids
+	 * to the v2 twin at storage time. A v1 field whose v2 counterpart carries
+	 * its own ESP name is a separate field, not a pair, so it passes through
+	 * untouched — as do v2 ids and unknown ids.
 	 */
 	public function test_equivalent_pairs_upgrade_and_alias() {
 		$this->assertSame(
@@ -295,10 +313,31 @@ class Test_Field_Registry extends \WP_UnitTestCase {
 			[ 'v2:Connected_Account' ],
 			Field_Registry::upgrade_equivalent_ids( [ 'v1:connected_account', 'v2:Connected_Account' ] )
 		);
-		// The v2 twin accepts the v1 raw key as an input alias; divergent v2
-		// ids and v1 ids alias nothing.
+		// The v2 twin accepts the v1 raw key as an input alias; separately
+		// named v2 fields and v1 ids alias nothing.
 		$this->assertSame( [ 'account' ], Field_Registry::get_equivalent_input_raw_keys( 'v2:Account' ) );
 		$this->assertSame( [], Field_Registry::get_equivalent_input_raw_keys( 'v2:Last_Payment_Amount' ) );
 		$this->assertSame( [], Field_Registry::get_equivalent_input_raw_keys( 'v1:account' ) );
+	}
+
+	/**
+	 * Equivalence spans every legacy raw key sharing the name. The legacy
+	 * schema maps two raw keys to "Registration Page" — `registration_page`
+	 * and the event-time `current_page_url` — and the v2 field is equivalent
+	 * to both: they are the same value at two moments, since every
+	 * registration producer of `current_page_url` writes it to the same user
+	 * meta the v2 field reads. Both have to upgrade to the v2 twin, and both
+	 * have to alias onto it as inputs, or a hand-built contact carrying the
+	 * legacy key would silently stop syncing.
+	 */
+	public function test_equivalence_spans_multiple_legacy_raw_keys() {
+		$this->assertSame(
+			[ 'v2:Registration_Page' ],
+			Field_Registry::upgrade_equivalent_ids( [ 'v1:registration_page', 'v1:current_page_url' ] )
+		);
+		$this->assertEqualsCanonicalizing(
+			[ 'registration_page', 'current_page_url' ],
+			Field_Registry::get_equivalent_input_raw_keys( 'v2:Registration_Page' )
+		);
 	}
 }

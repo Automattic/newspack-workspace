@@ -23,6 +23,13 @@ class Test_Registration_Metadata extends WP_UnitTestCase {
 	private static $user_id;
 
 	/**
+	 * Site timezone options as they were before set_site_timezone(), if called.
+	 *
+	 * @var array|null
+	 */
+	private $original_timezone = null;
+
+	/**
 	 * Set up test fixtures.
 	 */
 	public static function set_up_before_class() {
@@ -44,7 +51,37 @@ class Test_Registration_Metadata extends WP_UnitTestCase {
 		delete_user_meta( self::$user_id, Reader_Activation::REGISTRATION_UTM_SOURCE );
 		delete_user_meta( self::$user_id, Reader_Activation::REGISTRATION_UTM_MEDIUM );
 		delete_user_meta( self::$user_id, Reader_Activation::REGISTRATION_UTM_CAMPAIGN );
+		$this->restore_site_timezone();
 		parent::tear_down();
+	}
+
+	/**
+	 * Set the site timezone, remembering the prior value for restore_site_timezone().
+	 *
+	 * @param string $timezone_string Timezone string (e.g. 'America/New_York'), or '' to use gmt_offset.
+	 * @param int    $gmt_offset      GMT offset in hours, used when $timezone_string is ''.
+	 */
+	private function set_site_timezone( string $timezone_string, $gmt_offset ) {
+		if ( null === $this->original_timezone ) {
+			$this->original_timezone = [
+				'timezone_string' => get_option( 'timezone_string' ),
+				'gmt_offset'      => get_option( 'gmt_offset' ),
+			];
+		}
+		update_option( 'timezone_string', $timezone_string );
+		update_option( 'gmt_offset', $gmt_offset );
+	}
+
+	/**
+	 * Put back whatever set_site_timezone() replaced, if anything.
+	 */
+	private function restore_site_timezone() {
+		if ( null === $this->original_timezone ) {
+			return;
+		}
+		update_option( 'timezone_string', $this->original_timezone['timezone_string'] );
+		update_option( 'gmt_offset', $this->original_timezone['gmt_offset'] );
+		$this->original_timezone = null;
 	}
 
 	/**
@@ -55,6 +92,31 @@ class Test_Registration_Metadata extends WP_UnitTestCase {
 		$this->assertNotEmpty( $metadata['Registration_Date'] );
 		// Should match Y-m-d H:i:s format.
 		$this->assertMatchesRegularExpression( '/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/', $metadata['Registration_Date'] );
+	}
+
+	/**
+	 * Registration_Date is equivalent-flagged to the legacy `registration_date`
+	 * field (Sync\WooCommerce::get_contact_from_customer()), which converts the
+	 * UTC `user_registered` value to the site's local timezone via
+	 * get_date_from_gmt(). On a non-UTC site the two must keep agreeing: this
+	 * pins the site-local value, not the UTC one format_date() would have
+	 * produced before this fix.
+	 */
+	public function test_registration_date_matches_site_local_timezone() {
+		// 23:30 UTC is 19:30 the same day in a UTC-4 zone (America/New_York, DST).
+		$this->set_site_timezone( 'America/New_York', 0 );
+		wp_update_user(
+			[
+				'ID'              => self::$user_id,
+				'user_registered' => '2024-06-15 23:30:00',
+			]
+		);
+
+		$metadata = ( new Registration( self::$user_id ) )->get_metadata();
+
+		$this->assertSame( '2024-06-15 19:30:00', $metadata['Registration_Date'] );
+		// The pre-fix behavior would have emitted the un-adjusted UTC value.
+		$this->assertNotSame( '2024-06-15 23:30:00', $metadata['Registration_Date'] );
 	}
 
 	/**

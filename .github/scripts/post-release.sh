@@ -52,7 +52,11 @@ restore_workspace_deps_and_commit() {
   node -e '
     const fs = require("fs"), path = require("path");
     const WS_PACKAGES = ["newspack-scripts", "newspack-components", "newspack-colors", "newspack-icons"];
-    const roots = ["plugins", "themes"];
+    // "packages" belongs here too: msr pins the shared packages the same way
+    // it pins plugins and themes, and pnpm-lock.yaml is keyed to workspace:*
+    // for all three roots. Leaving packages out is what made every release
+    // since need a hand-written restore PR.
+    const roots = ["packages", "plugins", "themes"];
     const changed = [];
     for (const r of roots) {
       if (!fs.existsSync(r)) continue;

@@ -21,6 +21,8 @@ use Newspack\Reader_Activation;
  */
 class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 
+	use \Newspack\Tests\Content_Gate\Traits\Trait_Restriction_Cache_Test;
+
 	/**
 	 * Gate IDs created during tests.
 	 *
@@ -40,6 +42,13 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 	 */
 	public static function set_up_before_class() {
 		parent::set_up_before_class();
+		// Gating is flag-gated, and these tests exercise enforcement. Defined here
+		// rather than relied on from another class: constants are process-wide, so
+		// without this the group passes only when an alphabetically-earlier class
+		// happens to define it first, and `n test-php --group ...` fails on its own.
+		if ( ! defined( 'NEWSPACK_CONTENT_GATES' ) ) {
+			define( 'NEWSPACK_CONTENT_GATES', true );
+		}
 		require_once dirname( __DIR__, 2 ) . '/mocks/newsletters-mocks.php';
 		require_once dirname( __DIR__, 2 ) . '/mocks/newsletters-namespaced-mocks.php';
 		require_once dirname( __DIR__, 2 ) . '/mocks/wc-mocks.php';
@@ -53,6 +62,10 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 	 */
 	public function set_up() {
 		parent::set_up();
+		// Post IDs are reused across test cases (each case is rolled back), so a
+		// gate lookup cached for the same ID by an earlier case would otherwise be
+		// served here — reporting "no gates" for a post that has one.
+		$this->reset_restriction_cache();
 		\Newspack_Newsletters_Contacts::reset_calls();
 		\Newspack_Newsletters_Subscription::reset_calls();
 		$prop = new \ReflectionProperty( Premium_Newsletters::class, 'restricted_lists' );

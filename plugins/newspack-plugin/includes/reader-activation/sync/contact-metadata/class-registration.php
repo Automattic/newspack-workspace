@@ -63,12 +63,21 @@ class Registration extends Contact_Metadata {
 				'description' => __( 'Date reader created their account (MM/DD/YYYY)', 'newspack-plugin' ),
 				'example'     => '09/19/2022',
 				'status'      => 'existing',
+				'supersedes'  => 'v1:registration_date',
+				'equivalent'  => true,
 			],
+			// Value-equivalent to the legacy pair: this reads the same
+			// REGISTRATION_PAGE user meta the legacy `registration_page`
+			// enrichment reads, and every registration producer of the legacy
+			// `current_page_url` writes that same meta in the same request. Both
+			// legacy raw keys therefore alias onto this field as inputs.
 			'Registration_Page'         => [
 				'name'        => 'Registration Page',
 				'description' => __( 'URL of the page where reader registered', 'newspack-plugin' ),
 				'example'     => 'https://example.com/newsletter',
 				'status'      => 'updated',
+				'supersedes'  => 'v1:registration_page',
+				'equivalent'  => true,
 			],
 			'Registration_Strategy'     => [
 				'name'        => 'Registration Strategy',
@@ -112,7 +121,15 @@ class Registration extends Contact_Metadata {
 		}
 
 		return [
-			'Registration_Date'         => $this->format_date( $this->user->user_registered ),
+			// Equivalent-flagged to the legacy `registration_date` field, which
+			// converts this same UTC value to the site's local timezone via
+			// get_date_from_gmt() (see Sync\WooCommerce::get_contact_from_customer()).
+			// format_date() is deliberately not used here: it renders in UTC via
+			// gmdate(), which would make this field's value diverge from its v1
+			// twin on any non-UTC site. Other date fields on this class (and on
+			// Sync\Contact_Metadata\Subscription) are not equivalence-flagged and
+			// keep using format_date().
+			'Registration_Date'         => $this->user->user_registered ? \get_date_from_gmt( $this->user->user_registered, self::DATE_FORMAT ) : '',
 			'Registration_Page'         => (string) \get_user_meta( $this->user->ID, Reader_Activation::REGISTRATION_PAGE, true ),
 			'Registration_Strategy'     => (string) \get_user_meta( $this->user->ID, Reader_Activation::REGISTRATION_METHOD, true ),
 			'Registration_UTM_Source'   => $this->get_registration_utm( 'utm_source' ),

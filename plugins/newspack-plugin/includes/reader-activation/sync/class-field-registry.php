@@ -339,11 +339,18 @@ class Field_Registry {
 	}
 
 	/**
-	 * Get conflict groups: ESP names claimed by both schema versions.
+	 * Get name-collision groups: ESP names claimed by both schema versions,
+	 * including the pairs equivalence has since collapsed.
+	 *
+	 * The raw derivation, and deliberately private. get_equivalent_upgrades()
+	 * has to read this rather than the public view: the collapse is defined in
+	 * terms of these groups, so reading the filtered view would empty the
+	 * upgrade map — and with it the id upgrade and the input aliasing that make
+	 * a collapsed pair work at all.
 	 *
 	 * @return array Map of ESP name => list of definition ids.
 	 */
-	public static function get_conflict_groups() {
+	private static function get_name_collision_groups() {
 		$by_name = [];
 		foreach ( self::get_definitions() as $definition ) {
 			if ( self::VERSION_NEUTRAL === $definition['version'] ) {
@@ -356,6 +363,41 @@ class Field_Registry {
 		foreach ( $by_name as $name => $versions ) {
 			if ( isset( $versions[ self::VERSION_V1 ], $versions[ self::VERSION_V2 ] ) ) {
 				$groups[ $name ] = array_merge( $versions[ self::VERSION_V1 ], $versions[ self::VERSION_V2 ] );
+			}
+		}
+		return $groups;
+	}
+
+	/**
+	 * Get conflict groups: ESP names a publisher cannot enable on both schema
+	 * versions at once.
+	 *
+	 * Empty by construction, and meant to stay that way. Every v1/v2 name
+	 * collision is dissolved one of two ways: same-meaning pairs declare the v2
+	 * field `equivalent` and become one field (the v1 ids upgrade to the v2
+	 * twin, the v1 raw keys alias onto it as inputs), and changed-meaning v2
+	 * fields get their own ESP name. That is what lets both schemas run at once
+	 * with no backfill. Test_Field_Registry asserts this returns [], so a new
+	 * field that re-claims a legacy name fails the suite instead of silently
+	 * needing back the pick-one save rule this replaced.
+	 *
+	 * @return array Map of ESP name => list of definition ids.
+	 */
+	public static function get_conflict_groups() {
+		$upgrades = self::get_equivalent_upgrades();
+		$groups   = [];
+		foreach ( self::get_name_collision_groups() as $name => $ids ) {
+			// Every v1 member of a collapsed group is a key of the upgrade map,
+			// so one hit settles the group.
+			$collapsed = false;
+			foreach ( $ids as $id ) {
+				if ( isset( $upgrades[ $id ] ) ) {
+					$collapsed = true;
+					break;
+				}
+			}
+			if ( ! $collapsed ) {
+				$groups[ $name ] = $ids;
 			}
 		}
 		return $groups;
@@ -402,7 +444,7 @@ class Field_Registry {
 
 	/**
 	 * Build the equivalent-upgrade map: v1 id => v2 ids, restricted to
-	 * conflict groups whose every v2 member declares `equivalent`.
+	 * name-collision groups whose every v2 member declares `equivalent`.
 	 *
 	 * Equivalence is an authored claim on the v2 config — "the v2 pipeline
 	 * produces the identical value for the same ESP name" — audited against
@@ -416,7 +458,7 @@ class Field_Registry {
 		}
 		$definitions = self::get_definitions();
 		$map         = [];
-		foreach ( self::get_conflict_groups() as $ids ) {
+		foreach ( self::get_name_collision_groups() as $ids ) {
 			$v1_ids         = [];
 			$v2_ids         = [];
 			$all_equivalent = true;

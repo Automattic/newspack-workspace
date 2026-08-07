@@ -81,7 +81,9 @@ class Test_Sync_Metadata_Classes extends \WP_UnitTestCase {
 	 */
 	public function test_v1_only_selection_skips_v2_classes() {
 		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
-		$this->integration->update_enabled_outgoing_fields( [ 'v1:registration_date' ] );
+		// A legacy-only field: one the two schemas share would be stored as its
+		// v2 twin and pull the v2 classes in.
+		$this->integration->update_enabled_outgoing_fields( [ 'v1:registration_method' ] );
 
 		$classes = $this->get_sync_classes();
 
@@ -111,7 +113,7 @@ class Test_Sync_Metadata_Classes extends \WP_UnitTestCase {
 	 */
 	public function test_mixed_selection_computes_both_versions() {
 		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
-		$this->integration->update_enabled_outgoing_fields( [ 'v1:registration_date', 'v2:Registration_Strategy' ] );
+		$this->integration->update_enabled_outgoing_fields( [ 'v1:registration_method', 'v2:Registration_Strategy' ] );
 
 		$classes = $this->get_sync_classes();
 
@@ -131,16 +133,35 @@ class Test_Sync_Metadata_Classes extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * With no stored selection anywhere, scoping falls back to the origin
-	 * version's classes rather than computing everything.
+	 * With no stored selection, the derived default set is NOT canonicalized
+	 * (NPPD-2067): the fields both schemas share are reported under their v1
+	 * ids on a v1-origin site (get_default_outgoing_field_ids() and the
+	 * legacy-global branch of get_inherited_outgoing_field_ids() deliberately
+	 * skip Field_Registry::upgrade_equivalent_ids()), so only the legacy
+	 * classes are computed.
+	 *
+	 * This is the perf-sensitive half of the chain: "configured ESP, no
+	 * stored selections" is a large v1-origin cohort (every legacy site that
+	 * never opened the Outbound field picker), and syncs run inside
+	 * registration, login and checkout requests. Computing the v2 Engagement
+	 * (wc_get_orders()) and Subscription (wcs_get_users_subscriptions())
+	 * classes just to resolve a shared field's canonical id would tax all of
+	 * them on every sync. prepare_contact() does not need the upgrade to emit
+	 * the field under its canonical ESP name — see
+	 * Test_Prepare_Contact::test_unupgraded_default_id_still_emits_canonical_name.
 	 */
-	public function test_no_stored_selection_falls_back_to_origin_classes() {
+	public function test_no_stored_selection_skips_v2_classes_for_shared_fields() {
 		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
 		\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'scope-test' );
 
 		$classes = $this->get_sync_classes();
 
 		$this->assertContains( Contact_Metadata\Legacy_Basic::class, $classes );
+		$this->assertContains( Contact_Metadata\Legacy_Payment::class, $classes );
 		$this->assertNotContains( Contact_Metadata\Subscription::class, $classes );
+		$this->assertNotContains( Contact_Metadata\Engagement::class, $classes );
+		$this->assertNotContains( Contact_Metadata\Registration::class, $classes );
+		$this->assertNotContains( Contact_Metadata\Identity::class, $classes );
+		$this->assertNotContains( Contact_Metadata\Donation::class, $classes );
 	}
 }

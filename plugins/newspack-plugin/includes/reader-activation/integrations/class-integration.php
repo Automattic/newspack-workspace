@@ -57,6 +57,16 @@ abstract class Integration {
 	const OUTGOING_FIELDS_OPTION_PREFIX = 'newspack_integration_outgoing_fields_';
 
 	/**
+	 * Id of the built-in ESP integration, whose outgoing selection every other
+	 * integration inherits until it saves one of its own (NPPD-2107). Named
+	 * here rather than referencing Integrations\ESP so the base class does not
+	 * depend on one of its own subclasses.
+	 *
+	 * @var string
+	 */
+	const ESP_INTEGRATION_ID = 'esp';
+
+	/**
 	 * Option name prefix for storing all integration settings.
 	 *
 	 * @var string
@@ -69,6 +79,16 @@ abstract class Integration {
 	 * @var string
 	 */
 	const METADATA_PREFIX_OPTION_PREFIX = 'newspack_integration_metadata_prefix_';
+
+	/**
+	 * WP_Error code pull_contact_data() should return when the provider has no
+	 * contact for the reader. Not a failure: no re-run can make an absent
+	 * contact appear, so batch drivers count these readers as skipped rather
+	 * than errored.
+	 *
+	 * @var string
+	 */
+	const CONTACT_NOT_FOUND_ERROR_CODE = 'ras_contact_not_found';
 
 	/**
 	 * The unique identifier for this integration.
@@ -834,19 +854,22 @@ abstract class Integration {
 	 * fails to resolve, so migration can retry (and succeed) on a later
 	 * read instead of permanently losing that entry from the option.
 	 *
+	 * An integration that never saved a selection inherits one — see
+	 * get_inherited_outgoing_field_ids(). An explicitly saved selection
+	 * always wins, including an empty one (NPPD-2107).
+	 *
 	 * @return string[] List of enabled field ids.
 	 */
 	public function get_enabled_outgoing_field_ids() {
 		$stored = \get_option( self::OUTGOING_FIELDS_OPTION_PREFIX . $this->id, false );
-		if ( false === $stored ) {
-			// Never configured: match the pre-coexistence behavior, where an
-			// integration without a stored selection received the full
-			// prefixed payload from the legacy passthrough — default to every
-			// available field. A stored empty selection (the admin deselected
-			// everything) still means none.
-			return $this->get_default_outgoing_field_ids();
+		if ( ! is_array( $stored ) ) {
+			// Never configured (option absent), or a corrupt non-array value:
+			// inherit rather than fail closed to an empty selection, which
+			// would silently stop syncing every field. A stored empty array
+			// (the admin deselected everything) still means none.
+			return $this->get_inherited_outgoing_field_ids();
 		}
-		if ( empty( $stored ) || ! is_array( $stored ) ) {
+		if ( empty( $stored ) ) {
 			return [];
 		}
 
@@ -926,6 +949,21 @@ abstract class Integration {
 	 * the resolution inputs, so registry resets and availability changes
 	 * invalidate it naturally.
 	 *
+	 * Deliberately NOT canonicalized (NPPD-2067): name resolution answers in
+	 * the origin's version, so a v1-origin site derives v1 ids for fields the
+	 * two schemas share. Upgrading those to their v2 twins here would look
+	 * more consistent, but it also flips the version prefix that
+	 * Metadata::get_sync_metadata_classes() reads to decide which classes to
+	 * instantiate — pulling the v2 Engagement/Subscription compute
+	 * (wc_get_orders(), wcs_get_users_subscriptions()) into every sync for a
+	 * v1-origin site with no stored selection, which is a large cohort.
+	 * prepare_contact() resolves ids to their ESP name/raw key regardless of
+	 * version, so an un-upgraded v1 id for an equivalent field still emits
+	 * under the shared canonical name — see Test_Prepare_Contact. The
+	 * equivalence upgrade stays a write-path behavior (see
+	 * update_enabled_outgoing_fields()); a stored selection is what actually
+	 * retires the v1 id.
+	 *
 	 * @return string[] List of field ids.
 	 */
 	protected function get_default_outgoing_field_ids() {
@@ -942,8 +980,68 @@ abstract class Integration {
 				$ids[] = $definition['id'];
 			}
 		}
+		// This dedup is defensive: resolve_name() guarantees distinct names
+		// yield distinct ids, so this only matters if $names itself contains a
+		// duplicate name. It no longer routes through upgrade_equivalent_ids(),
+		// which used to do it as a side effect.
 		$cache[ $key ] = array_values( array_unique( $ids ) );
 		return $cache[ $key ];
+	}
+
+	/**
+	 * The selection this integration inherits when it has never saved one of
+	 * its own.
+	 *
+	 * Every integration other than the ESP inherits the ESP integration's
+	 * effective selection, so a newly registered integration pushes exactly
+	 * what the site already pushes rather than everything available — the
+	 * NPPD-2107 bug, where an ESP narrowed to Account-only still saw
+	 * ActiveCampaign push `NP_Total Paid`. The ESP itself has nothing above
+	 * it to inherit from, so it keeps the dynamic all-defaults fallback that
+	 * matches the pre-selection passthrough.
+	 *
+	 * Override to inherit something else, or return an empty array to opt out
+	 * of inheritance entirely (an integration that does so pushes no metadata
+	 * until an Outbound selection is saved).
+	 *
+	 * @return string[] List of inherited field ids.
+	 */
+	protected function get_inherited_outgoing_field_ids() {
+		if ( self::ESP_INTEGRATION_ID === $this->get_id() ) {
+			return $this->get_default_outgoing_field_ids();
+		}
+
+		$esp = Integrations::get_integration( self::ESP_INTEGRATION_ID );
+		if ( $esp instanceof self && $esp !== $this ) {
+			return $esp->get_enabled_outgoing_field_ids();
+		}
+
+		// Registry miss (pre-init, or a directly constructed integration —
+		// integrations register on init priority 5). Mirror the ESP's own
+		// fallback chain: the legacy global option, then the full default set,
+		// rather than failing closed to an empty selection.
+		$legacy = \get_option( Sync\Metadata::FIELDS_OPTION, null );
+		if ( is_array( $legacy ) ) {
+			$origin = Sync\Field_Registry::get_schema_origin();
+			$ids    = [];
+			foreach ( $legacy as $name ) {
+				foreach ( Sync\Field_Registry::resolve_name( (string) $name, $origin ) as $definition ) {
+					$ids[] = $definition['id'];
+				}
+			}
+			// Deliberately not canonicalized, same reasoning as
+			// get_default_outgoing_field_ids() (NPPD-2067): these names come from
+			// a pre-coexistence option and resolve to v1 ids, and upgrading them
+			// here would pull the v2 compute classes into every sync for this
+			// registry-miss fallback too. Still de-duplicated, the same way
+			// get_default_outgoing_field_ids() is: this is defensive, since
+			// resolve_name() guarantees distinct names yield distinct ids, but a
+			// duplicated name in this hand-edited legacy option would otherwise
+			// yield duplicate ids.
+			return array_values( array_unique( $ids ) );
+		}
+
+		return $this->get_default_outgoing_field_ids();
 	}
 
 	/**
@@ -956,6 +1054,10 @@ abstract class Integration {
 	 * names against the site's origin — so a non-origin selection saved
 	 * through this surface would be rewritten to the origin's ids. The
 	 * per-field UI (Phase 2) must post ids, not names.
+	 *
+	 * The never-configured fallback (inheriting the ESP integration's
+	 * effective selection) lives in get_enabled_outgoing_field_ids(), so the
+	 * Outbound UI reflects what is actually pushed (NPPD-2107).
 	 *
 	 * @return string[] List of enabled field names.
 	 */
@@ -1043,9 +1145,12 @@ abstract class Integration {
 	 * names resolve against the site's schema origin, so a non-origin id
 	 * that was collapsed to a bare name by get_enabled_outgoing_fields()
 	 * round-trips to the origin's ids — the Phase-2 UI must post ids).
-	 * Stores ids and enforces one enabled version per name-conflict group
-	 * (keep-first-version: same-version siblings sharing a name are fine,
-	 * a second version's ids for a claimed name are dropped and logged).
+	 *
+	 * Stores ids, with no version validation: the two schemas no longer share
+	 * an ESP name, so any mix of v1 and v2 ids is storable and both versions of
+	 * a field can be enabled at once (Field_Registry::get_conflict_groups() is
+	 * empty by construction). The equivalence upgrade below is not validation —
+	 * it collapses the id of a shared field onto its surviving spelling.
 	 *
 	 * @param array $fields List of field ids and/or names to enable.
 	 * @return bool True if updated, false otherwise.
@@ -1073,37 +1178,7 @@ abstract class Integration {
 		// save time retires legacy ids with no observable payload change.
 		$ids = Sync\Field_Registry::upgrade_equivalent_ids( $ids );
 
-		// Enforce one enabled version per conflict group (keep-first-version).
-		$conflict_groups  = Sync\Field_Registry::get_conflict_groups();
-		$claimed_versions = [];
-		$validated        = [];
-		foreach ( $ids as $id ) {
-			$definition = Sync\Field_Registry::get_definition( $id );
-			$name       = $definition['name'];
-			if ( isset( $conflict_groups[ $name ] ) ) {
-				if ( isset( $claimed_versions[ $name ] ) && $claimed_versions[ $name ] !== $definition['version'] ) {
-					// Route through newspack_log so a save that silently stores
-					// less than was submitted stays operator-visible — the
-					// settings endpoint reports success either way, and
-					// Logger::log() is a no-op at the default production level.
-					Logger::newspack_log(
-						'outgoing_fields_conflict_drop',
-						sprintf( 'Dropping "%s": conflict group "%s" is already enabled as %s.', $id, $name, $claimed_versions[ $name ] ),
-						[
-							'integration_id' => $this->id,
-							'dropped_id'     => $id,
-							'kept_version'   => $claimed_versions[ $name ],
-						],
-						'warning'
-					);
-					continue;
-				}
-				$claimed_versions[ $name ] = $definition['version'];
-			}
-			$validated[] = $id;
-		}
-
-		return \update_option( self::OUTGOING_FIELDS_OPTION_PREFIX . $this->id, $validated, false );
+		return \update_option( self::OUTGOING_FIELDS_OPTION_PREFIX . $this->id, $ids, false );
 	}
 
 	/**
@@ -1285,9 +1360,20 @@ abstract class Integration {
 	 * Incoming metadata may mix raw keys from any schema version. Raw keys
 	 * survive only when enabled for this integration; enabled dynamic-suffix
 	 * fields (UTM) match by raw-key prefix and never by their bare key, which
-	 * carries no suffix and is therefore not a syncable field. Save-time
-	 * validation guarantees at most one enabled version per ESP name, so no
-	 * two raw inputs can write the same output key.
+	 * carries no suffix and is therefore not a syncable field. Schema-owned
+	 * field names are collision-free by construction —
+	 * Field_Registry::get_conflict_groups() is permanently empty, guarded by
+	 * Test_Field_Registry::test_no_esp_name_is_claimed_by_both_schemas — and
+	 * where a v1/v2 pair shares a field outright the v1 raw keys alias onto
+	 * the surviving v2 definition. That guarantee is scoped to schema-owned
+	 * definitions: a `newspack_ras_metadata_keys` callback can add an extra
+	 * that sits outside the collision derivation, or rename a schema-owned
+	 * definition at runtime, either of which can still produce two enabled
+	 * fields with the same output name. When two raw keys resolve to the
+	 * same output key — a filter collision, or legacy same-name siblings
+	 * like registration_page / current_page_url — resolution keeps
+	 * last-write-wins; only an explicitly-supplied prefixed value is
+	 * protected from being overwritten.
 	 *
 	 * Already-prefixed inputs are explicit injections (callers, the
 	 * normalize filter): they pass through when they match an enabled field
@@ -1300,6 +1386,11 @@ abstract class Integration {
 	 * name (the raw UTM expansion must not overwrite a supplied
 	 * `NP_Signup UTM: source`).
 	 *
+	 * Filtering is unconditional and per-integration, including for `esp`:
+	 * there is no upstream pre-filter to defer to any more, so an explicitly
+	 * saved empty Outbound selection means no metadata fields, not all of
+	 * them (NPPD-2107).
+	 *
 	 * @param array $contact Contact data with raw metadata keys.
 	 * @return array Contact data with filtered, prefixed metadata.
 	 */
@@ -1309,7 +1400,7 @@ abstract class Integration {
 		}
 
 		$prefix      = $this->get_metadata_prefix();
-		$passthrough = [ 'status', 'status_if_new' ];
+		$passthrough = Sync\Metadata::SYNC_CONTROL_KEYS;
 		$by_raw      = [];
 		$by_name     = [];
 		$dynamic     = [];

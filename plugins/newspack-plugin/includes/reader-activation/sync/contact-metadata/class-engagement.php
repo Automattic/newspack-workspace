@@ -53,7 +53,7 @@ class Engagement extends Contact_Metadata {
 			'Last_Active'          => 'Last Active',
 			'Paywall_Hits'         => 'Paywall Hits',
 			'Favorite_Categories'  => 'Favorite Categories',
-			'Payment_Page'         => 'Payment Page',
+			'Payment_Page'         => 'Last Payment Page',
 			'Payment_UTM_Source'   => 'Payment UTM Source',
 			'Payment_UTM_Medium'   => 'Payment UTM Medium',
 			'Payment_UTM_Campaign' => 'Payment UTM Campaign',
@@ -92,29 +92,41 @@ class Engagement extends Contact_Metadata {
 				'example'     => 'politics,climate,local',
 				'status'      => 'new',
 			],
+			// Placeholder name pending naming review (NPPD-2067). Renamed away
+			// from the legacy "Payment Page" because the two fields do not mean
+			// the same thing: the legacy field follows the reader's "Current
+			// Product" order (active subscription, then most recently
+			// cancelled/expired subscription, then last one-time donation),
+			// while this one is always the latest completed order of any
+			// product type. Renewal orders never carry the original referer, so
+			// the two permanently diverge for recurring subscribers; for a
+			// one-time non-donation purchaser the legacy field is always empty
+			// while this one is not. A distinct ESP name lets both schemas sync
+			// at once.
 			'Payment_Page'         => [
-				'name'        => 'Payment Page',
-				'description' => __( 'URL of the page the reader most recently checked out on', 'newspack-plugin' ),
+				'name'        => 'Last Payment Page',
+				'description' => __( 'URL of the checkout page from the reader\'s most recent completed order, of any product type. Unlike the legacy Payment Page, which follows the reader\'s current subscription or last one-time donation, this can diverge for recurring subscribers and one-time non-donation purchasers.', 'newspack-plugin' ),
 				'example'     => 'https://example.com/support-us',
 				'status'      => 'existing',
+				'supersedes'  => 'v1:payment_page',
 			],
 			'Payment_UTM_Source'   => [
 				'name'        => 'Payment UTM Source',
-				'description' => __( 'UTM source on payment page if present', 'newspack-plugin' ),
+				'description' => __( 'UTM source on payment page if present. Values come from the reader\'s most recent completed order, which for recurring donors is a renewal that may lack the original campaign parameters.', 'newspack-plugin' ),
 				'example'     => 'email',
 				'status'      => 'existing',
 				'supersedes'  => 'v1:payment_page_utm',
 			],
 			'Payment_UTM_Medium'   => [
 				'name'        => 'Payment UTM Medium',
-				'description' => __( 'UTM medium on payment page if present', 'newspack-plugin' ),
+				'description' => __( 'UTM medium on payment page if present. Values come from the reader\'s most recent completed order, which for recurring donors is a renewal that may lack the original campaign parameters.', 'newspack-plugin' ),
 				'example'     => 'newsletter',
 				'status'      => 'existing',
 				'supersedes'  => 'v1:payment_page_utm',
 			],
 			'Payment_UTM_Campaign' => [
 				'name'        => 'Payment UTM Campaign',
-				'description' => __( 'UTM campaign on payment page if present', 'newspack-plugin' ),
+				'description' => __( 'UTM campaign on payment page if present. Values come from the reader\'s most recent completed order, which for recurring donors is a renewal that may lack the original campaign parameters.', 'newspack-plugin' ),
 				'example'     => 'year-end-2024',
 				'status'      => 'existing',
 				'supersedes'  => 'v1:payment_page_utm',
@@ -124,6 +136,8 @@ class Engagement extends Contact_Metadata {
 				'description' => __( 'Lifetime total amount the reader has paid through Newspack\'s WooCommerce system', 'newspack-plugin' ),
 				'example'     => '120',
 				'status'      => 'existing',
+				'supersedes'  => 'v1:total_paid',
+				'equivalent'  => true,
 			],
 		];
 	}
