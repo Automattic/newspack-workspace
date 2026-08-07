@@ -13,6 +13,10 @@
 import { _n, sprintf } from '@wordpress/i18n';
 import { useState, useEffect, useRef } from '@wordpress/element';
 import apiFetch from '@wordpress/api-fetch';
+import {
+	Spinner,
+	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
+} from '@wordpress/components';
 
 /**
  * Internal dependencies
@@ -21,7 +25,7 @@ import ImpactEmpty, { type ImpactEmptyReason } from './impact-empty';
 import ImpactStats from './impact-stats';
 import ImpactTable from './impact-table';
 import { formatCount } from './impact-format';
-import { RULE_PREVIEW_API_PATH as PREVIEW_PATH } from './constants';
+import { RULE_PREVIEW_API_PATH as PREVIEW_PATH, RULE_PREVIEW_SAMPLE_LIMIT } from './constants';
 
 const DEBOUNCE_MS = 500;
 
@@ -77,7 +81,11 @@ export default function RulePreview( { body, hasPrice }: RulePreviewProps ) {
 	}, [ bodyKey, hasPrice ] );
 
 	if ( hasPrice && ! data && ! hasResolved ) {
-		return null;
+		return (
+			<VStack className="newspack-pricing-rules__preview-loading" alignment="center" justify="center">
+				<Spinner />
+			</VStack>
+		);
 	}
 
 	let reason: ImpactEmptyReason | null = null;
@@ -99,7 +107,7 @@ export default function RulePreview( { body, hasPrice }: RulePreviewProps ) {
 		<div className={ `newspack-pricing-rules__preview${ isLoading ? ' is-loading' : '' }` }>
 			<ImpactStats totalMatching={ preview.total_matching } countLimited={ preview.count_limited } audience={ preview.audience } />
 			<ImpactTable baseline={ preview.sample } segmentGroups={ preview.segment_groups ?? [] } currency={ preview.currency } />
-			{ preview.preview_limited && (
+			{ preview.preview_limited && preview.sample_count >= RULE_PREVIEW_SAMPLE_LIMIT && (
 				<p className="newspack-pricing-rules__muted">
 					{ sprintf(
 						/* translators: %s: how many products the table lists. */

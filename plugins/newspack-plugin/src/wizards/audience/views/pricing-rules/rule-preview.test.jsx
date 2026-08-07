@@ -89,12 +89,13 @@ describe( 'RulePreview', () => {
 		expect( screen.getByText( 'Products affected' ) ).toBeInTheDocument();
 	} );
 
-	it( 'renders nothing rather than an empty card while the first request is in flight', async () => {
+	it( 'spins rather than showing an empty card while the first request is in flight', async () => {
 		apiFetch.mockReturnValue( pending() );
 		const { container } = render( <RulePreview body={ {} } hasPrice /> );
-		expect( container ).toBeEmptyDOMElement();
+		expect( container.querySelector( '.components-spinner' ) ).toBeInTheDocument();
 		await settle();
-		expect( container ).toBeEmptyDOMElement();
+		expect( container.querySelector( '.components-spinner' ) ).toBeInTheDocument();
+		expect( screen.queryByRole( 'heading', { name: 'No products match this rule' } ) ).not.toBeInTheDocument();
 	} );
 
 	it( 'leads with the stats and follows with the table', async () => {
@@ -120,14 +121,22 @@ describe( 'RulePreview', () => {
 
 	// The stat strip reports the total, so without this the table reads as the whole set.
 	it( 'says the table is a sample when the preview was capped', async () => {
-		apiFetch.mockResolvedValue( response( { preview_limited: true, sample_count: 1, total_matching: 3 } ) );
+		apiFetch.mockResolvedValue( response( { preview_limited: true, sample_count: 50, total_matching: 120 } ) );
 		render( <RulePreview body={ {} } hasPrice /> );
 		await settle();
-		expect( screen.getByText( 'Showing a sample of 1 product.' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Showing a sample of 50 products.' ) ).toBeInTheDocument();
 	} );
 
 	it( 'says nothing about sampling when the whole set is shown', async () => {
 		apiFetch.mockResolvedValue( response( { preview_limited: false, sample_count: 1, total_matching: 1 } ) );
+		render( <RulePreview body={ {} } hasPrice /> );
+		await settle();
+		expect( screen.queryByText( /Showing a sample of/ ) ).not.toBeInTheDocument();
+	} );
+
+	// The engine flags a preview as limited when it merely skipped an unpriceable product.
+	it( 'says nothing about sampling when the table never reached the cap', async () => {
+		apiFetch.mockResolvedValue( response( { preview_limited: true, sample_count: 33, total_matching: 36 } ) );
 		render( <RulePreview body={ {} } hasPrice /> );
 		await settle();
 		expect( screen.queryByText( /Showing a sample of/ ) ).not.toBeInTheDocument();

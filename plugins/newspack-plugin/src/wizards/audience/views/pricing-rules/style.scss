@@ -80,7 +80,8 @@
 	}
 
 	&__stat-value {
-		@include wp-mixins.heading-x-large();
+		@include wp-mixins.heading-2x-large();
+		margin-bottom: calc(#{wp-vars.$grid-unit-10} / 2);
 	}
 
 	&__stat-label {
@@ -102,6 +103,10 @@
 		td:last-child {
 			padding-right: 0;
 		}
+	}
+
+	&__preview-loading {
+		min-height: 200px;
 	}
 
 	&__preview {

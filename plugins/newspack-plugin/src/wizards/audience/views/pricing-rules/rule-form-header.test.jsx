@@ -7,7 +7,7 @@
 /**
  * External dependencies
  */
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent, act, within } from '@testing-library/react';
 
 /**
  * WordPress dependencies
@@ -50,6 +50,8 @@ const HistoryProbe = () => {
 
 const headerSave = () => screen.queryByRole( 'button', { name: 'Save' } );
 const currentPage = () => screen.getByRole( 'heading', { level: 1 } );
+// Scoped: the status and pricing-details toggles are radios too.
+const goals = () => within( screen.getByRole( 'radiogroup', { name: 'Rule goal' } ) );
 
 describe( 'the rule editor header', () => {
 	beforeEach( async () => {
@@ -59,7 +61,7 @@ describe( 'the rule editor header', () => {
 			render( <Wizard sections={ SECTIONS } renderAboveSections={ () => <HistoryProbe /> } /> );
 		} );
 		await act( async () => {
-			fireEvent.click( screen.getByRole( 'radio', { name: /Win-Back/ } ) );
+			fireEvent.click( goals().getByRole( 'radio', { name: /Win-Back/ } ) );
 		} );
 	} );
 
@@ -86,7 +88,7 @@ describe( 'the rule editor header', () => {
 		} );
 
 		expect( window.location.hash ).toBe( '#/new/winback' );
-		expect( screen.getByRole( 'radio', { checked: true } ) ).toHaveAccessibleName( /^Win-Back/ );
+		expect( goals().getByRole( 'radio', { checked: true } ) ).toHaveAccessibleName( /^Win-Back/ );
 		expect( headerSave() ).toBeInTheDocument();
 		expect( headerSave() ).not.toBeDisabled();
 		expect( currentPage() ).toHaveTextContent( 'Add Rule' );

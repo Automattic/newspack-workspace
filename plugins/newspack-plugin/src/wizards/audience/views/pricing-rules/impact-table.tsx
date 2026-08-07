@@ -3,7 +3,7 @@
  * per product, one resulting-price column per reader segment. The first price
  * column is the "Everyone else" baseline (no segment / not-logged-in); each
  * segment the preview computed adds a column, so prices compare side by side.
- * Flat rules show a bare price; stepped rules join cycles with ` · `.
+ * Flat rules show a bare price; stepped rules chain cycles with ` → `.
  *
  * Every column prices a NEW subscriber — the calculator projects with no
  * customer at acquisition intent — so a first-time-only/locked rule shows in
@@ -56,7 +56,7 @@ function ResultingCell( { row, currency }: { row?: CatalogImpactRow; currency: P
 		<>
 			{ row.segments.map( ( seg, i ) => (
 				<span key={ i } className={ seg.changed ? 'is-changed' : undefined }>
-					{ i > 0 ? ' · ' : '' }
+					{ i > 0 ? ' → ' : '' }
 					{ formatSegment( seg, currency ) }
 				</span>
 			) ) }
@@ -131,6 +131,8 @@ export default function ImpactTable( { baseline, segmentGroups, currency }: Impa
 		[ columns, currency ]
 	);
 
+	const hasCycles = useMemo( () => columns.some( col => Object.values( col.byId ).some( row => row.segments.length > 1 ) ), [ columns ] );
+
 	const fieldIds = useMemo( () => [ 'regular', ...columns.map( col => col.key ) ], [ columns ] );
 	const fieldIdsKey = fieldIds.join( '|' );
 
@@ -176,6 +178,14 @@ export default function ImpactTable( { baseline, segmentGroups, currency }: Impa
 					<DataViews.Layout />
 				</DataViews>
 			</div>
+			{ hasCycles && (
+				<p className="newspack-pricing-rules__muted">
+					{ __(
+						'Each price is marked with the billing cycle it starts from: c1 is the initial purchase, c2 the first renewal.',
+						'newspack-plugin'
+					) }
+				</p>
+			) }
 			{ hasSegments && (
 				<p className="newspack-pricing-rules__muted">
 					{ __(

@@ -75,13 +75,14 @@ describe( 'ImpactTable', () => {
 		expect( container.querySelector( '.is-changed' ) ).toBeInTheDocument();
 	} );
 
-	it( 'joins a stepped rule with a separator', () => {
+	it( 'chains a stepped rule with an arrow', () => {
 		const segments = [
 			{ from_cycle: 1, amount: 5, rule_id: 'r', rule_title: 't', rule_edit_link: '', changed: false },
 			{ from_cycle: 2, amount: 8, rule_id: 'r', rule_title: 't', rule_edit_link: '', changed: false },
 		];
 		const { container } = render( <ImpactTable baseline={ [ row( { segments } ) ] } segmentGroups={ [] } currency={ CURRENCY } /> );
-		expect( container.textContent ).toContain( '·' );
+		expect( container.textContent ).toContain( '→' );
+		expect( container.textContent ).not.toContain( '·' );
 	} );
 
 	it( 'marks only the changed cycle of a stepped rule, not the whole cell', () => {
@@ -94,7 +95,25 @@ describe( 'ImpactTable', () => {
 		);
 		const marked = container.querySelectorAll( '.is-changed' );
 		expect( marked ).toHaveLength( 1 );
-		expect( marked[ 0 ] ).toHaveTextContent( 'then $8.00 from cycle 2' );
+		expect( marked[ 0 ] ).toHaveTextContent( 'c2 $8.00' );
+	} );
+
+	it( 'leads each cycle with its marker and explains the marker once', () => {
+		const segments = [
+			{ from_cycle: 1, amount: 5, rule_id: 'r', rule_title: 't', rule_edit_link: '', changed: false },
+			{ from_cycle: 7, amount: 8, rule_id: 'r', rule_title: 't', rule_edit_link: '', changed: false },
+		];
+		render( <ImpactTable baseline={ [ row( { segments } ) ] } segmentGroups={ [] } currency={ CURRENCY } /> );
+
+		expect( screen.getByText( /c1 \$5\.00/ ) ).toBeInTheDocument();
+		expect( screen.getByText( /c7 \$8\.00/ ) ).toBeInTheDocument();
+		expect( screen.queryByText( /from cycle 7/ ) ).not.toBeInTheDocument();
+		expect( screen.getByText( /c1 is the initial purchase/ ) ).toBeInTheDocument();
+	} );
+
+	it( 'says nothing about cycle markers when no cell is stepped', () => {
+		render( <ImpactTable baseline={ [ row() ] } segmentGroups={ [] } currency={ CURRENCY } /> );
+		expect( screen.queryByText( /c1 is the initial purchase/ ) ).not.toBeInTheDocument();
 	} );
 
 	it( 'renders without the Newspack DataViews page wrapper', () => {
