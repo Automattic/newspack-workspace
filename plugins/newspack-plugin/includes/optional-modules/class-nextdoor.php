@@ -132,6 +132,10 @@ class Nextdoor {
 		$settings       = self::get_settings();
 		$roles_with_cap = isset( $settings['allowed_roles'] ) ? (array) $settings['allowed_roles'] : [ 'administrator' ];
 
+		// The grant, not just the picker: a site that stored a reader role before it was
+		// withheld would otherwise keep handing the capability out on every admin load.
+		$roles_with_cap = array_values( array_intersect( $roles_with_cap, wp_list_pluck( self::get_available_roles(), 'value' ) ) );
+
 		/**
 		 * Filter for roles that should have Nextdoor capabilities.
 		 *
