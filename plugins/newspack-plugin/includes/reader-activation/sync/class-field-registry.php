@@ -29,6 +29,16 @@ class Field_Registry {
 	private static $definitions = null;
 
 	/**
+	 * Per-request cache of a derived — never persisted — schema version.
+	 * Records whether the 'esp' integration was registered when the value
+	 * was computed, because that is the one input that can change the
+	 * answer within a request (see get_derivation_schema_version()).
+	 *
+	 * @var array|null { version: string, esp_registered: bool }
+	 */
+	private static $derivation_cache = null;
+
+	/**
 	 * Lazily-built index of ESP field name => list of definition ids, in
 	 * definition order. Backs the name-resolution helpers so lookups don't
 	 * scan the full definition set per call.
@@ -86,6 +96,7 @@ class Field_Registry {
 	 */
 	public static function reset() {
 		self::$definitions         = null;
+		self::$derivation_cache    = null;
 		self::$name_index          = null;
 		self::$equivalent_upgrades = null;
 		self::$generation++;
@@ -525,7 +536,9 @@ class Field_Registry {
 	 * start pushing the other schema's field names to the publisher's ESP.
 	 * Materialising the site's current effective default selection as stored
 	 * ids freezes what it already syncs, and is what lets every runtime path
-	 * stop asking which schema the site came from.
+	 * stop asking which schema the site came from. That freeze holds only
+	 * until the next Outbound settings save, since update_enabled_outgoing_fields()
+	 * drops any currently-unavailable id.
 	 *
 	 * Idempotent and trigger-independent, because the trigger cannot be
 	 * relied on: `newspack_activation` fires only on plugin activation, which
@@ -662,19 +675,43 @@ class Field_Registry {
 	 * The schema version a derived — never persisted — default selection
 	 * resolves against.
 	 *
-	 * Not a reinstatement of the origin marker: nothing is stored, no
-	 * confidence is required, and a wrong answer costs one request rather than
-	 * the site's future. It exists because the alternative for an unseeded site
-	 * is resolving names against the merged registry, which yields both
+	 * Not a reinstatement of the origin marker: nothing is stored (though a
+	 * meaningless, corrupt marker may be deleted on sight), no confidence is
+	 * required, and a wrong answer costs one request rather than the site's
+	 * future. It exists because the alternative for an unseeded site is
+	 * resolving names against the merged registry, which yields both
 	 * schemas' field names — and a configured non-ESP push integration
 	 * inheriting from an unconfigured ESP would put them in front of a real
 	 * provider. Scoping the derivation restores the pre-coexistence behavior
 	 * for exactly that window.
 	 *
+	 * Memoized per request: an unseeded site reaches this once per contact
+	 * per push-capable integration on the sync path — get_enabled_outgoing_field_ids()
+	 * calling get_default_outgoing_field_ids(), fanned out across
+	 * integrations by Metadata::get_sync_metadata_classes() — and re-running
+	 * detection's $wpdb LIKE query and ESP::is_set_up() chain that often
+	 * would be wasteful. The one input that can change the answer
+	 * mid-request is the 'esp' integration registering, so a value computed
+	 * before that happened is re-detected once an integration is present;
+	 * anything else is served from the cache. reset() clears it.
+	 *
 	 * @return string 'v1' or 'v2'.
 	 */
 	public static function get_derivation_schema_version() {
-		return self::detect_retired_schema_version()['version'];
+		$esp_integration = \Newspack\Reader_Activation\Integrations::get_integration( \Newspack\Reader_Activation\Integration::ESP_INTEGRATION_ID );
+
+		if ( null !== self::$derivation_cache && ( self::$derivation_cache['esp_registered'] || null === $esp_integration ) ) {
+			return self::$derivation_cache['version'];
+		}
+
+		$version = self::detect_retired_schema_version()['version'];
+
+		self::$derivation_cache = [
+			'version'        => $version,
+			'esp_registered' => null !== $esp_integration,
+		];
+
+		return $version;
 	}
 
 	/**
