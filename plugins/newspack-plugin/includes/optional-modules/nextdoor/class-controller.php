@@ -566,14 +566,25 @@ class Controller {
 		$ingestion_response   = [];
 		$ingestion_error_msgs = [];
 		// Two different failures, and only one of them is the publisher's to fix. A token
-		// with nothing left to renew it needs a reconnection; a renewable token whose
-		// refresh did not come back means Nextdoor is unreachable, which passes on its own.
+		// with nothing left to renew it needs a reconnection; anything else that stops the
+		// report coming back means Nextdoor is unreachable, which passes on its own.
 		$needs_reconnect = ! empty( $guid ) && ! Auth::has_usable_token();
-		$is_unreachable  = ! empty( $guid ) && ! $needs_reconnect && ! Auth::validate_token();
+		$is_unreachable  = false;
+
+		if ( ! empty( $guid ) && ! $needs_reconnect && ! Auth::validate_token() ) {
+			// The refresh itself can discover the grant is dead, and records it when it
+			// does, so ask again rather than reporting a refusal as an outage.
+			$needs_reconnect = ! Auth::has_usable_token();
+			$is_unreachable  = ! $needs_reconnect;
+		}
 
 		if ( ! empty( $guid ) && ! $needs_reconnect && ! $is_unreachable ) {
 			$api                = API::instance();
 			$ingestion_response = $api->get_ingestion_report( [ $guid ] );
+
+			// The report is the other way this can fail, and it is the one the publisher
+			// actually came for, so a lost response reads as unreachable too.
+			$is_unreachable = is_wp_error( $ingestion_response );
 
 			if ( ! is_wp_error( $ingestion_response ) &&
 				isset( $ingestion_response['results'] ) &&
