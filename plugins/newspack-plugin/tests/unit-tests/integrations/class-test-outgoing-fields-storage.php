@@ -77,8 +77,11 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 
 		$ids = $this->integration->get_enabled_outgoing_field_ids();
 
+		// The value-equivalent Account pair comes back as its v2 twin —
+		// migration is a write path and applies the equivalence upgrade;
+		// divergent fields stay on their v1 ids.
 		$this->assertEqualsCanonicalizing(
-			[ 'v1:account', 'v1:last_payment_amount', 'v1:signup_page_utm' ],
+			[ 'v2:Account', 'v1:last_payment_amount', 'v1:signup_page_utm' ],
 			$ids
 		);
 		// Written back in the new format.
@@ -101,7 +104,7 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 
 		$ids = $this->integration->get_enabled_outgoing_field_ids();
 
-		$this->assertEqualsCanonicalizing( [ 'v1:account' ], $ids );
+		$this->assertEqualsCanonicalizing( [ 'v2:Account' ], $ids );
 		// Not written back: the option must still hold the original names so
 		// migration can retry once the missing field becomes resolvable.
 		$this->assertEqualsCanonicalizing(
@@ -113,11 +116,11 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 		\update_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test', [ 'Account' ] );
 
 		$this->assertEqualsCanonicalizing(
-			[ 'v1:account' ],
+			[ 'v2:Account' ],
 			$this->integration->get_enabled_outgoing_field_ids()
 		);
 		$this->assertEqualsCanonicalizing(
-			[ 'v1:account' ],
+			[ 'v2:Account' ],
 			\get_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test' )
 		);
 	}
@@ -193,7 +196,7 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 		$this->integration->update_enabled_outgoing_fields( [ 'Account', 'v2:Registration_UTM_Source' ] );
 
 		$this->assertEqualsCanonicalizing(
-			[ 'v1:account', 'v2:Registration_UTM_Source' ],
+			[ 'v2:Account', 'v2:Registration_UTM_Source' ],
 			\get_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test' )
 		);
 	}
@@ -341,7 +344,7 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 
 		$this->assertEqualsCanonicalizing( [ 'Account' ], $esp->get_enabled_outgoing_fields() );
 		$this->assertEqualsCanonicalizing(
-			[ 'v1:account' ],
+			[ 'v2:Account' ],
 			\get_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'esp' )
 		);
 	}
@@ -555,5 +558,20 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 		\update_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test', [ 'v2:Registration_Date' ] );
 
 		$this->assertSame( 'v2', Field_Registry::get_schema_origin() );
+	}
+	/**
+	 * Saving a value-equivalent v1 id stores the v2 twin; divergent v1 ids
+	 * are stored as submitted. Reads of an already-stored v1 id do not
+	 * rewrite the option (upgrade is a write-path behavior).
+	 */
+	public function test_update_upgrades_equivalent_ids_to_v2() {
+		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
+
+		$this->integration->update_enabled_outgoing_fields( [ 'v1:account', 'v1:registration_date' ] );
+
+		$this->assertEqualsCanonicalizing(
+			[ 'v2:Account', 'v1:registration_date' ],
+			\get_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test' )
+		);
 	}
 }

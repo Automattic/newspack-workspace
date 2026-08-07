@@ -81,7 +81,7 @@ class Test_Sync_Metadata_Classes extends \WP_UnitTestCase {
 	 */
 	public function test_v1_only_selection_skips_v2_classes() {
 		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
-		$this->integration->update_enabled_outgoing_fields( [ 'v1:account' ] );
+		$this->integration->update_enabled_outgoing_fields( [ 'v1:registration_date' ] );
 
 		$classes = $this->get_sync_classes();
 
@@ -111,7 +111,7 @@ class Test_Sync_Metadata_Classes extends \WP_UnitTestCase {
 	 */
 	public function test_mixed_selection_computes_both_versions() {
 		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
-		$this->integration->update_enabled_outgoing_fields( [ 'v1:account', 'v2:Registration_Date' ] );
+		$this->integration->update_enabled_outgoing_fields( [ 'v1:registration_date', 'v2:Registration_Strategy' ] );
 
 		$classes = $this->get_sync_classes();
 
@@ -125,7 +125,7 @@ class Test_Sync_Metadata_Classes extends \WP_UnitTestCase {
 	 */
 	public function test_neutral_classes_always_participate() {
 		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
-		$this->integration->update_enabled_outgoing_fields( [ 'v1:account' ] );
+		$this->integration->update_enabled_outgoing_fields( [ 'v1:registration_date' ] );
 
 		$this->assertContains( Contact_Metadata\Content_Gate::class, $this->get_sync_classes() );
 	}

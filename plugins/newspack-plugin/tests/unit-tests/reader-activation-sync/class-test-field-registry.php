@@ -127,8 +127,7 @@ class Test_Field_Registry extends \WP_UnitTestCase {
 
 	/**
 	 * Every class-owned definition (i.e. not a filter-added extra) must
-	 * carry a description and a valid sync_type, since these back the
-	 * Phase-2 field-picker UI.
+	 * carry a description, since these back the Phase-2 field-picker UI.
 	 */
 	public function test_all_class_owned_definitions_have_descriptions() {
 		foreach ( Field_Registry::get_definitions() as $id => $definition ) {
@@ -136,7 +135,6 @@ class Test_Field_Registry extends \WP_UnitTestCase {
 				continue; // Filter extras carry no authored metadata.
 			}
 			$this->assertNotEmpty( $definition['description'] ?? '', "Missing description for {$id}" );
-			$this->assertContains( $definition['sync_type'] ?? '', [ 'field', 'tag' ], "Missing sync_type for {$id}" );
 		}
 	}
 
@@ -237,5 +235,25 @@ class Test_Field_Registry extends \WP_UnitTestCase {
 		$this->assertTrue( Field_Registry::name_is_registered( 'Account' ) );
 		$this->assertTrue( Field_Registry::name_is_registered( 'Signup UTM: source' ) );
 		$this->assertFalse( Field_Registry::name_is_registered( 'Totally Custom Field' ) );
+	}
+	/**
+	 * Value-equivalent conflict pairs (declared on the v2 config) upgrade
+	 * their v1 ids to the v2 twin at storage time; divergent pairs, v2 ids
+	 * and unknown ids pass through untouched.
+	 */
+	public function test_equivalent_pairs_upgrade_and_alias() {
+		$this->assertSame(
+			[ 'v2:Account', 'v1:last_payment_amount' ],
+			Field_Registry::upgrade_equivalent_ids( [ 'v1:account', 'v1:last_payment_amount' ] )
+		);
+		$this->assertSame(
+			[ 'v2:Connected_Account' ],
+			Field_Registry::upgrade_equivalent_ids( [ 'v1:connected_account', 'v2:Connected_Account' ] )
+		);
+		// The v2 twin accepts the v1 raw key as an input alias; divergent v2
+		// ids and v1 ids alias nothing.
+		$this->assertSame( [ 'account' ], Field_Registry::get_equivalent_input_raw_keys( 'v2:Account' ) );
+		$this->assertSame( [], Field_Registry::get_equivalent_input_raw_keys( 'v2:Last_Payment_Amount' ) );
+		$this->assertSame( [], Field_Registry::get_equivalent_input_raw_keys( 'v1:account' ) );
 	}
 }

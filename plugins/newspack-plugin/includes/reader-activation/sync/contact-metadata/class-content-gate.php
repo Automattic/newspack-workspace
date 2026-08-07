@@ -77,7 +77,6 @@ class Content_Gate extends Contact_Metadata {
 				'name'        => 'Content Access',
 				'description' => __( 'Whether the reader currently has access to gated content', 'newspack-plugin' ),
 				'example'     => 'Yes',
-				'sync_type'   => 'tag',
 				'status'      => 'new',
 				'supersedes'  => 'v1:membership_status',
 			],
@@ -85,14 +84,12 @@ class Content_Gate extends Contact_Metadata {
 				'name'        => 'Content Access Source',
 				'description' => __( 'The specific entity granting access. Value based on subscription product name OR "group" OR "institution"', 'newspack-plugin' ),
 				'example'     => 'Digital Supporter',
-				'sync_type'   => 'field',
 				'status'      => 'new',
 			],
 			'Content_Access_Group'  => [
 				'name'        => 'Content Access Group',
 				'description' => __( 'Name of the reader group or institution granting content access, when access is granted via a group subscription or institution rule', 'newspack-plugin' ),
 				'example'     => 'State University',
-				'sync_type'   => 'field',
 				'status'      => 'new',
 			],
 		];
