@@ -97,24 +97,49 @@ describe( 'segmentReachDescription', () => {
 		expect( segmentReachDescription( { id: '12' } ) ).toBeNull();
 	} );
 
-	it( 'renders sessions, prompt audience, and the data date', () => {
+	it( 'renders both shares against the audience, with the sample size', () => {
 		const line = segmentReachDescription( {
 			id: '12',
-			reach: { matched: 1240, won: 320, as_of: '2026-08-06', range_days: 7 },
+			reach: { matched: 1240, won: 320, total_sessions: 3620, as_of: '2026-08-06', range_days: 7 },
 		} );
-		expect( line ).toBe( `Reach (7d): ${ ( 1240 ).toLocaleString() } sessions · prompt audience: ${ ( 320 ).toLocaleString() } · as of Aug 6` );
+		expect( line ).toBe( `Reach (7d): 34% of ${ ( 3620 ).toLocaleString() } sessions · prompt audience: 9% · as of Aug 6` );
+	} );
+
+	it( 'keeps the denominator visible so a small sample reads as one', () => {
+		// 34% of 41 sessions and 34% of 41,000 support very different calls;
+		// the share alone cannot tell them apart.
+		const line = segmentReachDescription( {
+			id: '12',
+			reach: { matched: 14, won: 4, total_sessions: 41, as_of: '2026-08-06', range_days: 7 },
+		} );
+		expect( line ).toContain( '34% of 41 sessions' );
+	} );
+
+	it( 'distinguishes a segment that reached somebody from one that reached nobody', () => {
+		// Rounding 0.2% to "0%" would erase the distinction these numbers
+		// exist to draw: a probation segment with a handful of readers is not
+		// the same as one with none.
+		const line = segmentReachDescription( {
+			id: '12',
+			reach: { matched: 8, won: 0, total_sessions: 4000, as_of: '2026-08-06', range_days: 7 },
+		} );
+		expect( line ).toContain( 'Reach (7d): <1% of' );
+		expect( line ).toContain( 'prompt audience: 0%' );
 	} );
 
 	it( 'names the window the server reported rather than a fixed one', () => {
 		const line = segmentReachDescription( {
 			id: '12',
-			reach: { matched: 5, won: 1, as_of: '2026-08-06', range_days: 28 },
+			reach: { matched: 5, won: 1, total_sessions: 100, as_of: '2026-08-06', range_days: 28 },
 		} );
 		expect( line ).toContain( 'Reach (28d)' );
 	} );
 
 	it( 'falls back to 7 days for a cache written before the window was reported', () => {
-		const line = segmentReachDescription( { id: '12', reach: { matched: 5, won: 1, as_of: '2026-08-06' } } );
+		const line = segmentReachDescription( {
+			id: '12',
+			reach: { matched: 5, won: 1, total_sessions: 100, as_of: '2026-08-06' },
+		} );
 		expect( line ).toContain( 'Reach (7d)' );
 	} );
 
@@ -126,11 +151,28 @@ describe( 'segmentReachDescription', () => {
 		// Formatting it in site time shifted the day westward: at UTC-5 this
 		// rendered "Aug 5" for an as_of of 2026-08-06.
 		setSettings( { ...baseDateSettings, timezone: { offset, string: '', abbr: '' } } );
-		const line = segmentReachDescription( { id: '12', reach: { matched: 1, won: 0, as_of: '2026-08-06' } } );
+		const line = segmentReachDescription( {
+			id: '12',
+			reach: { matched: 1, won: 0, total_sessions: 100, as_of: '2026-08-06' },
+		} );
 		expect( line ).toContain( 'as of Aug 6' );
 	} );
 
 	it( 'renders the no-data state distinctly from zero', () => {
-		expect( segmentReachDescription( { id: '12', reach: { matched: null, won: null, as_of: '2026-08-06' } } ) ).toBe( 'No reach data yet' );
+		expect(
+			segmentReachDescription( {
+				id: '12',
+				reach: { matched: null, won: null, total_sessions: 3620, as_of: '2026-08-06' },
+			} )
+		).toBe( 'No reach data yet' );
+	} );
+
+	it( 'reads as no data rather than dividing by an empty week', () => {
+		expect(
+			segmentReachDescription( {
+				id: '12',
+				reach: { matched: 0, won: 0, total_sessions: 0, as_of: '2026-08-06' },
+			} )
+		).toBe( 'No reach data yet' );
 	} );
 } );

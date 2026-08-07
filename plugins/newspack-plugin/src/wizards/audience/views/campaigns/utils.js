@@ -206,12 +206,39 @@ export const segmentDescription = segment => {
 };
 
 /**
+ * A count as a share of the segmented audience.
+ *
+ * Rounds to whole percent, which is as much precision as a weekly sample
+ * supports — with one exception: a segment that reached somebody must not
+ * round down to a flat `0%`, which reads as "nobody" and is the one thing
+ * these numbers exist to distinguish.
+ *
+ * @param {number} value Sessions for this segment.
+ * @param {number} total Sessions where segmentation ran.
+ * @return {string} Formatted percentage.
+ */
+const reachShare = ( value, total ) => {
+	if ( 0 === value ) {
+		return '0%';
+	}
+	const percent = ( value / total ) * 100;
+	return percent < 1 ? '<1%' : `${ Math.round( percent ) }%`;
+};
+
+/**
  * One-line reach summary for a segment row, from the GA4 numbers the segments
  * endpoint attaches (GA4_Segment_Reach::decorate_segments).
  *
  * `matched` counts sessions where the reader satisfied the segment's criteria;
  * `won` counts the subset where the segment won the priority match, which is
- * the audience its prompts can actually reach.
+ * the audience its prompts can actually reach. Both read as a share of the
+ * sessions segmentation evaluated — a raw session count says little without
+ * knowing how big the week was, and the gap between the two shares is what
+ * shows higher-priority segments absorbing readers.
+ *
+ * The denominator stays on the line rather than being folded away: 34% of 40
+ * sessions and 34% of 40,000 support very different decisions, and a segment
+ * list is exactly where someone decides what to target.
  *
  * @param {Object} segment Segment, possibly carrying a `reach` object.
  * @return {string|null} The line, or null when reach reporting is inactive.
@@ -221,20 +248,24 @@ export const segmentReachDescription = segment => {
 	if ( ! reach ) {
 		return null;
 	}
+	const total = Number( reach.total_sessions );
 	// Null numbers mean the cache exists but this segment has no rows yet — a
 	// young segment, no traffic, or GA thresholding. All honestly "no data
-	// yet"; rendering 0 would overclaim.
-	if ( null === reach.matched || undefined === reach.matched ) {
+	// yet"; rendering 0 would overclaim. A missing or zero denominator is the
+	// same story from the other side: a week GA reported nothing for, where
+	// every share would divide by zero.
+	if ( null === reach.matched || undefined === reach.matched || ! total ) {
 		return __( 'No reach data yet', 'newspack-plugin' );
 	}
 	return sprintf(
-		/* Translators: %1$d: number of days the report covers. %2$s: sessions count. %3$s: prompt-audience sessions count. %4$s: date of the data. */
-		__( 'Reach (%1$dd): %2$s sessions · prompt audience: %3$s · as of %4$s', 'newspack-plugin' ),
+		/* Translators: %1$d: number of days the report covers. %2$s: share of the audience the segment reached, e.g. 34%. %3$s: total session count. %4$s: share the segment's prompts can reach. %5$s: date of the data. */
+		__( 'Reach (%1$dd): %2$s of %3$s sessions · prompt audience: %4$s · as of %5$s', 'newspack-plugin' ),
 		// The window is a server-side constant, passed through so the label
 		// can't drift from the report it describes.
 		Number( reach.range_days ) || 7,
-		Number( reach.matched ).toLocaleString(),
-		Number( reach.won ).toLocaleString(),
+		reachShare( Number( reach.matched ), total ),
+		total.toLocaleString(),
+		reachShare( Number( reach.won ), total ),
 		// `as_of` is the last calendar day the report covers, computed in UTC.
 		// It labels a day rather than marking a moment, so it must read the
 		// same everywhere: anchor it to UTC midnight and format in UTC. Site
