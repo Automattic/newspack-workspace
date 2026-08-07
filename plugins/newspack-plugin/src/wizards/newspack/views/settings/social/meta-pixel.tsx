@@ -7,6 +7,7 @@
  */
 import { __ } from '@wordpress/i18n';
 import { createInterpolateElement } from '@wordpress/element';
+import { ExternalLink } from '@wordpress/components';
 
 /**
  * Internal dependencies
@@ -44,7 +45,7 @@ const MetaPixel = () => (
 				{
 					linkToFb: (
 						/* eslint-disable-next-line jsx-a11y/anchor-has-content */
-						<a href="https://www.facebook.com/ads/manager/pixel/facebook_pixel" target="_blank" rel="noopener noreferrer" />
+						<ExternalLink href="https://www.facebook.com/ads/manager/pixel/facebook_pixel">{ '' }</ExternalLink>
 					),
 				}
 			)

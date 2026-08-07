@@ -7,6 +7,7 @@
  */
 import { __ } from '@wordpress/i18n';
 import { createInterpolateElement } from '@wordpress/element';
+import { ExternalLink } from '@wordpress/components';
 
 /**
  * Internal dependencies
@@ -41,7 +42,7 @@ const XPixel = () => (
 				{
 					linkToX: (
 						/* eslint-disable-next-line jsx-a11y/anchor-has-content */
-						<a href="https://ads.x.com/" target="_blank" rel="noopener noreferrer" />
+						<ExternalLink href="https://ads.x.com/">{ '' }</ExternalLink>
 					),
 				}
 			)
