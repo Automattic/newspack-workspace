@@ -17,6 +17,7 @@ import { render, waitFor } from '@testing-library/react';
  * WordPress dependencies
  */
 import apiFetch from '@wordpress/api-fetch';
+import { getSettings, setSettings } from '@wordpress/date';
 
 jest.mock( '@wordpress/api-fetch', () => jest.fn() );
 
@@ -77,13 +78,19 @@ describe( 'segmentDescription', () => {
 
 describe( 'segmentReachDescription', () => {
 	let segmentReachDescription;
+	let baseDateSettings;
 
 	beforeAll( async () => {
 		window.newspackAudienceCampaigns = window.newspackAudienceCampaigns || {
 			api: '/newspack/v1/wizard/newspack-audience-campaigns',
 			criteria: CRITERIA,
 		};
+		baseDateSettings = getSettings();
 		( { segmentReachDescription } = await import( './utils' ) );
+	} );
+
+	afterEach( () => {
+		setSettings( baseDateSettings );
 	} );
 
 	it( 'returns null when reach reporting is inactive', () => {
@@ -93,6 +100,18 @@ describe( 'segmentReachDescription', () => {
 	it( 'renders sessions, prompt audience, and the data date', () => {
 		const line = segmentReachDescription( { id: '12', reach: { matched: 1240, won: 320, as_of: '2026-08-06' } } );
 		expect( line ).toBe( `Reach (7d): ${ ( 1240 ).toLocaleString() } sessions · prompt audience: ${ ( 320 ).toLocaleString() } · as of Aug 6` );
+	} );
+
+	it.each( [
+		[ 'a negative offset', -5 ],
+		[ 'a positive offset', 13 ],
+	] )( 'reports the same calendar day on a site with %s', ( _label, offset ) => {
+		// `as_of` labels the last day the GA4 report covers, computed in UTC.
+		// Formatting it in site time shifted the day westward: at UTC-5 this
+		// rendered "Aug 5" for an as_of of 2026-08-06.
+		setSettings( { ...baseDateSettings, timezone: { offset, string: '', abbr: '' } } );
+		const line = segmentReachDescription( { id: '12', reach: { matched: 1, won: 0, as_of: '2026-08-06' } } );
+		expect( line ).toContain( 'as of Aug 6' );
 	} );
 
 	it( 'renders the no-data state distinctly from zero', () => {

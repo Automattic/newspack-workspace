@@ -361,4 +361,39 @@ class Newspack_Test_GA4_Segment_Reach extends WP_UnitTestCase {
 		GA4_Segment_Reach::maybe_schedule();
 		$this->assertFalse( as_has_scheduled_action( GA4_Segment_Reach::REFRESH_ACTION, [], GA4_Segment_Reach::GROUP ) );
 	}
+
+	/**
+	 * Connecting a different GA4 property fetches immediately rather than
+	 * waiting out the daily refresh. The old property's cache is not usable —
+	 * decoration already hides it — so leaving it to the recurring action
+	 * would blank the segments list for up to a day.
+	 */
+	public function test_property_switch_fetches_without_waiting_for_the_daily_refresh() {
+		if ( ! function_exists( 'as_has_scheduled_action' ) ) {
+			$this->markTestSkipped( 'Action Scheduler not available.' );
+		}
+		$this->connect_property( 'PROP-OLD' );
+		update_option(
+			'newspack_ga4_segment_reach',
+			[
+				'property_id' => 'PROP-OLD',
+				'fetched_at'  => time(),
+				'range_days'  => 7,
+				'rows'        => [
+					'12' => [
+						'matched' => 1240,
+						'won'     => 320,
+					],
+				],
+			],
+			false
+		);
+		// A current, matching cache is no reason to fetch.
+		GA4_Segment_Reach::maybe_schedule();
+		$this->assertFalse( as_has_scheduled_action( GA4_Segment_Reach::REFRESH_ACTION, [], GA4_Segment_Reach::ASYNC_GROUP ) );
+
+		$this->connect_property( 'PROP-NEW' );
+		GA4_Segment_Reach::maybe_schedule();
+		$this->assertTrue( as_has_scheduled_action( GA4_Segment_Reach::REFRESH_ACTION, [], GA4_Segment_Reach::ASYNC_GROUP ) );
+	}
 }

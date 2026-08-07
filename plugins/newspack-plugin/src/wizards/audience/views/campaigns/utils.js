@@ -4,7 +4,7 @@
  */
 import apiFetch from '@wordpress/api-fetch';
 import { __, sprintf } from '@wordpress/i18n';
-import { dateI18n } from '@wordpress/date';
+import { gmdateI18n } from '@wordpress/date';
 import { addQueryArgs } from '@wordpress/url';
 import { applyFilters, addFilter } from '@wordpress/hooks';
 import { useEffect, useState, Fragment } from '@wordpress/element';
@@ -232,7 +232,12 @@ export const segmentReachDescription = segment => {
 		__( 'Reach (7d): %1$s sessions · prompt audience: %2$s · as of %3$s', 'newspack-plugin' ),
 		Number( reach.matched ).toLocaleString(),
 		Number( reach.won ).toLocaleString(),
-		dateI18n( 'M j', reach.as_of )
+		// `as_of` is the last calendar day the report covers, computed in UTC.
+		// It labels a day rather than marking a moment, so it must read the
+		// same everywhere: anchor it to UTC midnight and format in UTC. Site
+		// time would shift it a day for negative offsets (`dateI18n` renders
+		// 2026-08-06 as "Aug 5" at UTC-5).
+		gmdateI18n( 'M j', `${ reach.as_of }T00:00:00+00:00` )
 	);
 };
 
