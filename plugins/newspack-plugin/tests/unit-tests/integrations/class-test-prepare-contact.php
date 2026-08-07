@@ -586,6 +586,51 @@ class Test_Prepare_Contact extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * NPPD-2067 Strand B, Fix 3: get_default_outgoing_field_ids() and the
+	 * legacy-global branch of get_inherited_outgoing_field_ids() deliberately
+	 * do NOT run Field_Registry::upgrade_equivalent_ids() on their return
+	 * value, so a v1-origin site with no stored ESP selection derives 'Account'
+	 * as 'v1:account', not its v2 twin — see
+	 * Test_Sync_Metadata_Classes::test_no_stored_selection_skips_v2_classes_for_shared_fields
+	 * for why (it keeps Metadata::get_sync_metadata_classes() from pulling in
+	 * the v2 Engagement/Subscription compute for this large cohort).
+	 *
+	 * That must not regress the payload: prepare_contact() builds its
+	 * raw-key/name lookup from Field_Registry::get_definition() per id, and an
+	 * equivalent pair's v1 and v2 definitions share the same 'name' and
+	 * 'raw_key' by construction — so the un-upgraded v1 id still resolves the
+	 * 'account' raw key to the shared canonical ESP name, 'Account'.
+	 */
+	public function test_unupgraded_default_id_still_emits_canonical_name() {
+		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
+
+		$esp = new ESP();
+		Integrations::register( $esp );
+		$esp->update_metadata_prefix( 'NP_' );
+		\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'esp' );
+		\delete_option( Metadata::FIELDS_OPTION );
+
+		// The un-configured ESP's own defaults fallback resolves 'Account' to
+		// its v1 id and does not upgrade it.
+		$ids = $esp->get_enabled_outgoing_field_ids();
+		$this->assertContains( 'v1:account', $ids );
+		$this->assertNotContains( 'v2:Account', $ids );
+
+		$result = $esp->prepare_contact(
+			[
+				'email'    => 'test@example.com',
+				'metadata' => [ 'account' => 7 ],
+			]
+		);
+
+		$this->assertSame(
+			7,
+			$result['metadata']['NP_Account'] ?? null,
+			'An equivalent field must emit under its canonical ESP name even when the resolving id is the un-upgraded v1 form.'
+		);
+	}
+
+	/**
 	 * What dissolving the name conflicts buys: both versions of a
 	 * changed-meaning field can be enabled at once and each reaches the
 	 * provider as its own ESP field. "Last Payment Amount" is every payment

@@ -69,7 +69,7 @@ class Subscription extends Contact_Metadata {
 			'Active_Subscription_Count'              => 'Active Subscription Count',
 			'Current_Subscription_Start_Date'        => 'Subscription Start Date',
 			'Current_Subscription_End_Date'          => 'Subscription End Date',
-			'Subscription_Cancellation_Reason'       => 'Subscription Cancellation Reason',
+			'Subscription_Cancellation_Reason'       => 'Current Subscription Cancellation Reason',
 			'Current_Subscription_Billing_Cycle'     => 'Current Subscription Billing Cycle',
 			'Current_Subscription_Recurring_Payment' => 'Current Subscription Recurring Payment',
 			'Current_Subscription_Next_Payment_Date' => 'Current Subscription Next Payment Date',
@@ -121,13 +121,19 @@ class Subscription extends Contact_Metadata {
 				'status'      => 'existing',
 				'supersedes'  => 'v1:sub_end_date',
 			],
+			// Placeholder name pending naming review (NPPD-2067). Renamed away
+			// from the legacy "Subscription Cancellation Reason" because the two
+			// fields do not mean the same thing: the legacy field reads the
+			// cancellation reason off the most recent subscription of ANY
+			// product type, donations included; this one excludes donation
+			// subscriptions (see is_relevant_subscription()). A distinct ESP
+			// name lets both schemas sync at once.
 			'Subscription_Cancellation_Reason'       => [
-				'name'        => 'Subscription Cancellation Reason',
-				'description' => __( 'Reason the reader\'s most recent subscription was cancelled. One of: user-canceled, manually-canceled, expired', 'newspack-plugin' ),
+				'name'        => 'Current Subscription Cancellation Reason',
+				'description' => __( 'Reason the reader\'s most recent non-donation subscription was cancelled. One of: user-canceled, manually-canceled, expired. Unlike the legacy Subscription Cancellation Reason, donation subscriptions are excluded.', 'newspack-plugin' ),
 				'example'     => 'user-canceled',
 				'status'      => 'existing',
 				'supersedes'  => 'v1:cancellation_reason',
-				'equivalent'  => true,
 			],
 			'Current_Subscription_Billing_Cycle'     => [
 				'name'        => 'Current Subscription Billing Cycle',

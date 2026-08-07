@@ -403,38 +403,52 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 		foreach ( $ids as $id ) {
 			$this->assertMatchesRegularExpression( '/^(v1|v2|neutral):/', $id );
 		}
-		$this->assertContains( 'v2:Account', $ids );
+		// Not canonicalized (NPPD-2067): a v1-origin site resolves its own
+		// version's id, un-upgraded. See test_esp_does_not_inherit_from_itself
+		// and Test_Sync_Metadata_Classes for why.
+		$this->assertContains( 'v1:account', $ids );
+		$this->assertNotContains( 'v2:Account', $ids );
 		$this->assertNull( \get_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'esp', null ) );
 	}
 
 	/**
-	 * Derived id sets are canonical: a field the two schemas share is reported
-	 * under the id that survives a save, even on a v1-origin site where name
-	 * resolution answers in v1. Otherwise the picker would show a legacy id
-	 * for a field that silently becomes its v2 twin the moment anything is
-	 * saved, and the UI would appear to change a selection nobody touched.
+	 * Derived id sets are deliberately NOT canonicalized (NPPD-2067): a field
+	 * the two schemas share is reported under whichever version name
+	 * resolution answers in, even though that is not the id a save would
+	 * store. Upgrading these on the way out looked more consistent, but the
+	 * version prefix is also what Metadata::get_sync_metadata_classes() reads
+	 * to decide which metadata classes to instantiate — canonicalizing a
+	 * v1-origin site's derived defaults to v2 ids pulled the v2
+	 * Engagement/Subscription compute (wc_get_orders(),
+	 * wcs_get_users_subscriptions()) into every sync for the large cohort of
+	 * v1-origin sites with no stored selection. See
+	 * Test_Sync_Metadata_Classes::test_no_stored_selection_skips_v2_classes_for_shared_fields.
 	 *
-	 * Read-only: canonicalizing must not write the option, or the derived set
-	 * would freeze and stop tracking the ESP.
+	 * The payload is unaffected: prepare_contact() resolves an id to its ESP
+	 * name/raw key regardless of version, so an un-upgraded v1 id for an
+	 * equivalent field still emits under the shared canonical name (see
+	 * Test_Prepare_Contact::test_unupgraded_default_id_still_emits_canonical_name).
+	 * Read-only either way: nothing here may write the option, or the derived
+	 * set would freeze and stop tracking the ESP.
 	 */
-	public function test_derived_id_sets_are_canonicalized_without_persisting() {
+	public function test_derived_id_sets_are_not_canonicalized() {
 		\update_option( Field_Registry::SCHEMA_ORIGIN_OPTION, 'v1' );
 		\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test' );
 		\delete_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'esp' );
 
 		// Defaults (the ESP's own fallback): 'Account' resolves to v1 on a
-		// v1-origin site, and is reported as its v2 twin.
+		// v1-origin site, and is reported as its own v1 id, un-upgraded.
 		$defaults = ( new ESP() )->get_enabled_outgoing_field_ids();
-		$this->assertContains( 'v2:Account', $defaults );
-		$this->assertNotContains( 'v1:account', $defaults );
+		$this->assertContains( 'v1:account', $defaults );
+		$this->assertNotContains( 'v2:Account', $defaults );
 
 		// The legacy-global inheritance fallback resolves names the same way.
 		\update_option( Metadata::FIELDS_OPTION, [ 'Account', 'Registration Method' ] );
 		$this->assertNull( Integrations::get_integration( 'esp' ), 'This covers the registry-miss path.' );
 		$this->assertEqualsCanonicalizing(
-			[ 'v2:Account', 'v1:registration_method' ],
+			[ 'v1:account', 'v1:registration_method' ],
 			$this->integration->get_enabled_outgoing_field_ids(),
-			'Only shared fields canonicalize; a legacy-only field keeps its v1 id.'
+			'Neither a shared nor a legacy-only field is upgraded on this read path.'
 		);
 		$this->assertNull( \get_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test', null ) );
 	}
@@ -488,7 +502,8 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 		\update_option( Metadata::FIELDS_OPTION, [ 'Account' ] );
 
 		$this->assertNull( Integrations::get_integration( 'esp' ), 'This test covers the registry-miss path.' );
-		$this->assertSame( [ 'v2:Account' ], $this->integration->get_enabled_outgoing_field_ids() );
+		// Not canonicalized (NPPD-2067): the v1 id is reported as-is.
+		$this->assertSame( [ 'v1:account' ], $this->integration->get_enabled_outgoing_field_ids() );
 	}
 
 	/**
@@ -505,8 +520,10 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 		$ids = $this->integration->get_enabled_outgoing_field_ids();
 
 		$this->assertNotEmpty( $ids, 'A never-configured integration must not fail closed to an empty selection.' );
-		$this->assertContains( 'v2:Account', $ids );
-		$this->assertContains( 'v2:Total_Paid', $ids );
+		// Not canonicalized (NPPD-2067): v1-origin names resolve to their own
+		// v1 ids here, un-upgraded.
+		$this->assertContains( 'v1:account', $ids );
+		$this->assertContains( 'v1:total_paid', $ids );
 		$this->assertNull(
 			\get_option( Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'storage-test', null ),
 			'The defaults fallback must not persist, so it keeps tracking availability changes.'
@@ -527,8 +544,9 @@ class Test_Outgoing_Fields_Storage extends \WP_UnitTestCase {
 
 		$ids = $esp->get_enabled_outgoing_field_ids();
 
-		$this->assertContains( 'v2:Account', $ids );
-		$this->assertContains( 'v2:Total_Paid', $ids );
+		// Not canonicalized (NPPD-2067): see test_derived_id_sets_are_not_canonicalized.
+		$this->assertContains( 'v1:account', $ids );
+		$this->assertContains( 'v1:total_paid', $ids );
 	}
 
 	/**

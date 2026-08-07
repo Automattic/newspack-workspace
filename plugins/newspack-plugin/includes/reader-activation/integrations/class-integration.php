@@ -949,11 +949,20 @@ abstract class Integration {
 	 * the resolution inputs, so registry resets and availability changes
 	 * invalidate it naturally.
 	 *
-	 * Equivalence is applied on the way out. Name resolution answers in the
-	 * origin's version, so a v1-origin site would otherwise derive v1 ids for
-	 * fields the two schemas now share, and the picker would show a legacy id
-	 * for a field that upgrades to its v2 twin the moment anything is saved.
-	 * Canonicalizing here is read-only — no option is written.
+	 * Deliberately NOT canonicalized (NPPD-2067): name resolution answers in
+	 * the origin's version, so a v1-origin site derives v1 ids for fields the
+	 * two schemas share. Upgrading those to their v2 twins here would look
+	 * more consistent, but it also flips the version prefix that
+	 * Metadata::get_sync_metadata_classes() reads to decide which classes to
+	 * instantiate — pulling the v2 Engagement/Subscription compute
+	 * (wc_get_orders(), wcs_get_users_subscriptions()) into every sync for a
+	 * v1-origin site with no stored selection, which is a large cohort.
+	 * prepare_contact() resolves ids to their ESP name/raw key regardless of
+	 * version, so an un-upgraded v1 id for an equivalent field still emits
+	 * under the shared canonical name — see Test_Prepare_Contact. The
+	 * equivalence upgrade stays a write-path behavior (see
+	 * update_enabled_outgoing_fields()); a stored selection is what actually
+	 * retires the v1 id.
 	 *
 	 * @return string[] List of field ids.
 	 */
@@ -971,7 +980,7 @@ abstract class Integration {
 				$ids[] = $definition['id'];
 			}
 		}
-		$cache[ $key ] = Sync\Field_Registry::upgrade_equivalent_ids( $ids );
+		$cache[ $key ] = $ids;
 		return $cache[ $key ];
 	}
 
@@ -1016,10 +1025,12 @@ abstract class Integration {
 					$ids[] = $definition['id'];
 				}
 			}
-			// Same read-side canonicalization as the defaults: these names come
-			// from a pre-coexistence option and resolve to v1 ids, which for a
-			// shared field is not the id that survives a save.
-			return Sync\Field_Registry::upgrade_equivalent_ids( $ids );
+			// Deliberately not canonicalized, same reasoning as
+			// get_default_outgoing_field_ids() (NPPD-2067): these names come from
+			// a pre-coexistence option and resolve to v1 ids, and upgrading them
+			// here would pull the v2 compute classes into every sync for this
+			// registry-miss fallback too.
+			return $ids;
 		}
 
 		return $this->get_default_outgoing_field_ids();
