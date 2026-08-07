@@ -3,7 +3,7 @@
  */
 
 .components-button {
-	&.is-destructive {
+	&.is-destructive.is-tertiary {
 		&:hover:not(:disabled, [aria-disabled="true"], :focus) {
 			box-shadow: none;
 		}
