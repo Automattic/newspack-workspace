@@ -180,9 +180,9 @@ class Nextdoor_Section extends Wizard_Section {
 
 		if ( null !== $module_enabled ) {
 			if ( $module_enabled ) {
-				$module_settings = Optional_Modules::activate_optional_module( 'nextdoor' );
+				Optional_Modules::activate_optional_module( 'nextdoor' );
 			} else {
-				$module_settings = Optional_Modules::deactivate_optional_module( 'nextdoor' );
+				Optional_Modules::deactivate_optional_module( 'nextdoor' );
 			}
 
 			// The activate/deactivate helpers answer with the array they built in memory, so
