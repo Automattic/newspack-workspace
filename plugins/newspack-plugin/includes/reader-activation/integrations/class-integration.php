@@ -980,10 +980,10 @@ abstract class Integration {
 				$ids[] = $definition['id'];
 			}
 		}
-		// Multiple default names can resolve to the same id (e.g. a
-		// multi-raw-key name like "Registration Page"), so de-duplicate here —
-		// this no longer routes through upgrade_equivalent_ids(), which used to
-		// do it as a side effect.
+		// This dedup is defensive: resolve_name() guarantees distinct names
+		// yield distinct ids, so this only matters if $names itself contains a
+		// duplicate name. It no longer routes through upgrade_equivalent_ids(),
+		// which used to do it as a side effect.
 		$cache[ $key ] = array_values( array_unique( $ids ) );
 		return $cache[ $key ];
 	}
@@ -1034,8 +1034,10 @@ abstract class Integration {
 			// a pre-coexistence option and resolve to v1 ids, and upgrading them
 			// here would pull the v2 compute classes into every sync for this
 			// registry-miss fallback too. Still de-duplicated, the same way
-			// get_default_outgoing_field_ids() is: upgrade_equivalent_ids() used
-			// to do this as a side effect before the revert above.
+			// get_default_outgoing_field_ids() is: this is defensive, since
+			// resolve_name() guarantees distinct names yield distinct ids, but a
+			// duplicated name in this hand-edited legacy option would otherwise
+			// yield duplicate ids.
 			return array_values( array_unique( $ids ) );
 		}
 

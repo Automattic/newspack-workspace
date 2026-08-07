@@ -108,7 +108,7 @@ class Subscription extends Contact_Metadata {
 			'Current_Subscription_Start_Date'        => [
 				'name'        => 'Subscription Start Date',
 				'description' => __( 'Start date of the most recent active non-donation subscription (YYYY-MM-DD HH:MM:SS). Unlike the legacy Current Subscription Start Date, donation subscriptions are excluded.', 'newspack-plugin' ),
-				'example'     => '09/19/2022',
+				'example'     => '2022-09-19 00:00:00',
 				'status'      => 'existing',
 				'supersedes'  => 'v1:sub_start_date',
 			],
@@ -117,7 +117,7 @@ class Subscription extends Contact_Metadata {
 			'Current_Subscription_End_Date'          => [
 				'name'        => 'Subscription End Date',
 				'description' => __( 'End/renewal date of the most recent non-donation subscription (YYYY-MM-DD HH:MM:SS). Unlike the legacy Current Subscription End Date, donation subscriptions are excluded.', 'newspack-plugin' ),
-				'example'     => '09/19/2023',
+				'example'     => '2023-09-19 00:00:00',
 				'status'      => 'existing',
 				'supersedes'  => 'v1:sub_end_date',
 			],
@@ -192,7 +192,7 @@ class Subscription extends Contact_Metadata {
 			'Last_Payment_Date'                      => [
 				'name'        => 'Last Subscription Payment Date',
 				'description' => __( 'Date of the most recent payment on the reader\'s current non-donation subscription (YYYY-MM-DD HH:MM:SS). Unlike the legacy Last Payment Date, one-time purchases and donations are excluded.', 'newspack-plugin' ),
-				'example'     => '09/19/2022',
+				'example'     => '2022-09-19 00:00:00',
 				'status'      => 'existing',
 				'supersedes'  => 'v1:last_payment_date',
 			],
