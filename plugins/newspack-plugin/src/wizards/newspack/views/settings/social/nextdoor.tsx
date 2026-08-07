@@ -285,6 +285,7 @@ function Nextdoor() {
 		<Button
 			variant="tertiary"
 			size="compact"
+			aria-expanded={ isOpen }
 			aria-label={ isOpen ? cancelLabel : editLabel }
 			disabled={ isFetching }
 			accessibleWhenDisabled

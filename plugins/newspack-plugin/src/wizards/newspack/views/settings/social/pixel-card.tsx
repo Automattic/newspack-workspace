@@ -128,6 +128,7 @@ const PixelCard = ( { title, description, namespace, path, validate, renderHelp 
 		<Button
 			variant="tertiary"
 			size="compact"
+			aria-expanded={ isOpen }
 			aria-label={ isOpen ? cancelLabel : editLabel }
 			disabled={ isFetching }
 			accessibleWhenDisabled
@@ -142,6 +143,7 @@ const PixelCard = ( { title, description, namespace, path, validate, renderHelp 
 		<Button
 			variant={ isOpen ? 'tertiary' : 'secondary' }
 			size="compact"
+			aria-expanded={ isOpen }
 			aria-label={ isOpen ? cancelLabel : enableLabel }
 			isBusy={ ! isOpen && isFetching }
 			disabled={ isFetching }

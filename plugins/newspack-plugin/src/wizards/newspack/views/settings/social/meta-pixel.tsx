@@ -44,7 +44,7 @@ const MetaPixel = () => (
 				),
 				{
 					linkToFb: (
-						/* eslint-disable-next-line jsx-a11y/anchor-has-content */
+						// createInterpolateElement replaces the child with the tagged text.
 						<ExternalLink href="https://www.facebook.com/ads/manager/pixel/facebook_pixel">{ '' }</ExternalLink>
 					),
 				}
