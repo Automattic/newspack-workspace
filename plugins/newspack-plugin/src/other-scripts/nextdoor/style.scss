@@ -3,6 +3,7 @@
  */
 
 @use "~@wordpress/base-styles/colors" as wp-colors;
+@use "~@wordpress/base-styles/variables" as wp-vars;
 
 .nextdoor-sidebar {
 	&__loading {
@@ -19,8 +20,8 @@
 
 	&__status-text {
 		margin: 0 0 1rem 0;
-		font-size: 13px;
-		color: wp-colors.$gray-600;
+		font-size: wp-vars.$default-font-size;
+		color: wp-colors.$gray-700;
 
 		&--default {
 			color: inherit;
@@ -47,7 +48,7 @@
 		list-style-type: disc;
 
 		li {
-			font-size: 13px;
+			font-size: wp-vars.$default-font-size;
 			color: wp-colors.$alert-red;
 			margin-bottom: 0.25rem;
 		}
