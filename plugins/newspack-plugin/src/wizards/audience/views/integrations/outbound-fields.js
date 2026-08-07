@@ -13,6 +13,16 @@ import { Accordion, AccordionPanel, Badge, Grid } from '../../../../../packages/
 const VERSIONS = [ 'v1', 'v2', 'neutral' ];
 
 /**
+ * Whether a definition is on its way out. The single input to both the sunset
+ * visibility rule and sunset-last ordering, so a field's fate is only ever
+ * `status` — no site-level schema is consulted.
+ *
+ * @param {Object} definition A definition from the settings payload.
+ * @return {boolean} True for legacy definitions.
+ */
+const isSunset = definition => 'legacy' === definition?.status;
+
+/**
  * Build UI rows from the merged definitions payload.
  *
  * One row per ESP field name, and never a version choice: the two schemas no
@@ -65,10 +75,10 @@ export const buildFieldRows = ( definitions, enabledIds ) => {
 			return;
 		}
 		const checked = Boolean( enabledVersion );
-		if ( ! collapsed && ! checked && 'neutral' !== activeVersion && activeVersion !== origin ) {
-			return; // Sunset rule: non-origin fields list only while enabled.
-		}
 		const activeDefinition = active[ 0 ];
+		if ( ! checked && isSunset( activeDefinition ) ) {
+			return; // Sunset rule: legacy fields list only while enabled.
+		}
 		const supersededByDef = ( activeDefinition.superseded_by || [] ).map( id => ( definitions || [] ).find( d => d.id === id ) ).find( Boolean );
 		rows.push( {
 			key: activeDefinition.id,
@@ -82,10 +92,24 @@ export const buildFieldRows = ( definitions, enabledIds ) => {
 			allIds: VERSIONS.flatMap( v => candidates[ v ].map( d => d.id ) ),
 			checked,
 			supersededHint: supersededByDef ? supersededByDef.name : null,
-			originOrder: activeVersion === origin || 'neutral' === activeVersion ? 0 : 1,
 		} );
 	} );
-	rows.sort( ( a, b ) => a.originOrder - b.originOrder );
+	// Sunset-last, scoped to each section: the rows a site should be adopting
+	// come first, the ones it is keeping alive sink to the bottom of their own
+	// section. Sorting on the section's first-appearance index leaves the
+	// section order itself alone, and the sort is stable, so rows that tie keep
+	// their definition order.
+	const sectionOrder = new Map();
+	rows.forEach( row => {
+		if ( ! sectionOrder.has( row.section ) ) {
+			sectionOrder.set( row.section, sectionOrder.size );
+		}
+	} );
+	rows.sort(
+		( a, b ) =>
+			sectionOrder.get( a.section ) - sectionOrder.get( b.section ) ||
+			Number( isSunset( a.activeDefinition ) ) - Number( isSunset( b.activeDefinition ) )
+	);
 	return rows;
 };
 
@@ -152,10 +176,7 @@ export const badgesForRow = row => {
  */
 const OutboundFields = ( { field, value, onChange } ) => {
 	const enabledIds = Array.isArray( value ) ? value : field.value_ids || [];
-	const rows = useMemo(
-		() => buildFieldRows( field.definitions, enabledIds, field.schema_origin ),
-		[ field.definitions, enabledIds, field.schema_origin ]
-	);
+	const rows = useMemo( () => buildFieldRows( field.definitions, enabledIds ), [ field.definitions, enabledIds ] );
 	const sections = useMemo( () => visibleSections( rows ), [ rows ] );
 	return (
 		<Accordion hideSingleTitle>

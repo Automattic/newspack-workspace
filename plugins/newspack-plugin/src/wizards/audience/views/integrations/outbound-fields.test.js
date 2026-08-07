@@ -38,7 +38,7 @@ const DEFS = [
 
 describe( 'buildFieldRows', () => {
 	it( 'collapses a name carried by both schemas into one row under the v2 identity', () => {
-		const account = buildFieldRows( DEFS, [], 'v1' ).find( r => r.name === 'Account' );
+		const account = buildFieldRows( DEFS, [] ).find( r => r.name === 'Account' );
 		expect( account ).toBeDefined();
 		expect( account.activeVersion ).toBe( 'v2' );
 		expect( account.checked ).toBe( false );
@@ -46,7 +46,7 @@ describe( 'buildFieldRows', () => {
 	} );
 
 	it( 'renders a stale v1-enabled pair checked under its v2 identity', () => {
-		const row = buildFieldRows( DEFS, [ 'v1:account' ], 'v1' ).find( r => r.name === 'Account' );
+		const row = buildFieldRows( DEFS, [ 'v1:account' ] ).find( r => r.name === 'Account' );
 		expect( row.checked ).toBe( true );
 		expect( row.activeVersion ).toBe( 'v2' );
 		expect( toggleRow( [ 'v1:account' ], row, false ) ).toEqual( [] );
@@ -54,7 +54,7 @@ describe( 'buildFieldRows', () => {
 
 	it( 'falls back to the v1 side of a pair while v2 is unavailable', () => {
 		const defs = [ def( 'v1:total_paid', 'Total Paid' ), def( 'v2:Total_Paid', 'Total Paid', { available: false } ) ];
-		const row = buildFieldRows( defs, [], 'v1' ).find( r => r.name === 'Total Paid' );
+		const row = buildFieldRows( defs, [] ).find( r => r.name === 'Total Paid' );
 		expect( row ).toBeDefined();
 		expect( row.activeVersion ).toBe( 'v1' );
 		expect( row.ids ).toEqual( [ 'v1:total_paid' ] );
@@ -62,38 +62,78 @@ describe( 'buildFieldRows', () => {
 
 	it( 'hides a pair only when both versions are unavailable', () => {
 		const defs = [ def( 'v1:total_paid', 'Total Paid', { available: false } ), def( 'v2:Total_Paid', 'Total Paid', { available: false } ) ];
-		expect( buildFieldRows( defs, [], 'v1' ).find( r => r.name === 'Total Paid' ) ).toBeUndefined();
+		expect( buildFieldRows( defs, [] ).find( r => r.name === 'Total Paid' ) ).toBeUndefined();
 	} );
 
 	it( 'groups same-version raw keys sharing a name into one row', () => {
-		const rows = buildFieldRows( DEFS, [], 'v1' );
+		// Enabled, since the pair is legacy and would otherwise be sunset out.
+		const rows = buildFieldRows( DEFS, [ 'v1:registration_page' ] );
 		const page = rows.find( r => r.name === 'Registration Page' );
 		expect( page.ids.sort() ).toEqual( [ 'v1:current_page_url', 'v1:registration_page' ] );
 	} );
 
-	it( 'hides non-origin single-version fields unless enabled', () => {
-		expect( buildFieldRows( DEFS, [], 'v1' ).find( r => r.name === 'Registration Strategy' ) ).toBeUndefined();
-		expect( buildFieldRows( DEFS, [ 'v2:Registration_Strategy' ], 'v1' ).find( r => r.name === 'Registration Strategy' )?.checked ).toBe( true );
+	// The sunset rule is read off `status` alone, so it holds identically on
+	// every site — there is no site-level schema left to consult.
+	it( 'hides legacy fields unless enabled', () => {
+		expect( buildFieldRows( DEFS, [] ).find( r => r.name === 'Registration Method' ) ).toBeUndefined();
+		expect( buildFieldRows( DEFS, [ 'v1:registration_method' ] ).find( r => r.name === 'Registration Method' )?.checked ).toBe( true );
 	} );
 
-	it( 'shows neutral fields on every origin and hides unavailable ones', () => {
-		const rows = buildFieldRows( DEFS, [], 'v2' );
+	// The migration motion the pivot needs: every current field is offered
+	// everywhere, including on sites that only ever synced the legacy schema.
+	it( 'lists non-legacy fields whether or not they are enabled', () => {
+		const rows = buildFieldRows( DEFS, [] );
+		expect( rows.find( r => r.name === 'Registration Strategy' ) ).toBeDefined();
+		expect( rows.find( r => r.name === 'Registration Strategy' ).checked ).toBe( false );
+		expect( buildFieldRows( DEFS, [ 'v2:Registration_Strategy' ] ).find( r => r.name === 'Registration Strategy' ).checked ).toBe( true );
+	} );
+
+	// A collapsed pair lists under the v2 identity, whose status is not
+	// 'legacy' — the legacy status on its v1 side never sunsets the row.
+	it( 'lists a collapsed pair even though its legacy side is on the way out', () => {
+		expect( buildFieldRows( DEFS, [] ).find( r => r.name === 'Account' ) ).toBeDefined();
+	} );
+
+	it( 'shows neutral fields and hides unavailable ones', () => {
+		const rows = buildFieldRows( DEFS, [] );
 		expect( rows.find( r => r.name === 'Team Name' ) ).toBeDefined();
 		expect( rows.find( r => r.name === 'Unavailable Thing' ) ).toBeUndefined();
 	} );
 
+	it( 'orders legacy rows last within their section', () => {
+		const defs = [
+			def( 'v1:legacy_one', 'Legacy One', { status: 'legacy' } ),
+			def( 'v2:New_One', 'New One', { status: 'new' } ),
+			def( 'v1:legacy_two', 'Legacy Two', { status: 'legacy' } ),
+			def( 'v2:New_Two', 'New Two', { status: 'new' } ),
+		];
+		const rows = buildFieldRows( defs, [ 'v1:legacy_one', 'v1:legacy_two' ] );
+		expect( rows.map( r => r.name ) ).toEqual( [ 'New One', 'New Two', 'Legacy One', 'Legacy Two' ] );
+	} );
+
+	it( 'keeps section order and sorts sunset rows within each section', () => {
+		const defs = [
+			def( 'v1:first_legacy', 'First Legacy', { section: 'First', status: 'legacy' } ),
+			def( 'v2:Second_New', 'Second New', { section: 'Second' } ),
+			def( 'v2:First_New', 'First New', { section: 'First' } ),
+		];
+		const sections = visibleSections( buildFieldRows( defs, [ 'v1:first_legacy' ] ) );
+		expect( sections.map( s => s.section ) ).toEqual( [ 'First', 'Second' ] );
+		expect( sections[ 0 ].rows.map( r => r.name ) ).toEqual( [ 'First New', 'First Legacy' ] );
+	} );
+
 	it( 'carries the superseded hint on visible legacy rows', () => {
-		const rows = buildFieldRows( DEFS, [], 'v1' );
+		const rows = buildFieldRows( DEFS, [ 'v1:registration_method' ] );
 		expect( rows.find( r => r.name === 'Registration Method' ).supersededHint ).toBe( 'Registration Strategy' );
 	} );
 } );
 
 describe( 'toggleRow', () => {
 	it( 'toggling on enables the active-version ids; off removes every version', () => {
-		const rows = buildFieldRows( DEFS, [], 'v1' );
+		const rows = buildFieldRows( DEFS, [] );
 		const account = rows.find( r => r.name === 'Account' );
 		expect( toggleRow( [], account, true ) ).toEqual( [ 'v2:Account' ] );
-		const rows2 = buildFieldRows( DEFS, [ 'v2:Account' ], 'v1' );
+		const rows2 = buildFieldRows( DEFS, [ 'v2:Account' ] );
 		expect(
 			toggleRow(
 				[ 'v2:Account' ],
@@ -104,7 +144,7 @@ describe( 'toggleRow', () => {
 	} );
 
 	it( 'toggle preserves unrelated ids', () => {
-		const rows = buildFieldRows( DEFS, [ 'neutral:woo_team' ], 'v1' );
+		const rows = buildFieldRows( DEFS, [ 'neutral:woo_team', 'v1:registration_page' ] );
 		const page = rows.find( r => r.name === 'Registration Page' );
 		expect( toggleRow( [ 'neutral:woo_team' ], page, true ).sort() ).toEqual( [
 			'neutral:woo_team',
@@ -118,7 +158,7 @@ describe( 'badgesForRow', () => {
 	const badgeText = row => badgesForRow( row ).map( b => b.text );
 
 	it( 'badges new and updated fields New and legacy fields Legacy', () => {
-		const rows = buildFieldRows( DEFS, [ 'v2:Registration_Strategy' ], 'v1' );
+		const rows = buildFieldRows( DEFS, [ 'v1:registration_method', 'v2:Registration_Strategy' ] );
 		expect( badgeText( rows.find( r => r.name === 'Registration Strategy' ) ) ).toEqual( [ 'New' ] );
 		expect( badgeText( rows.find( r => r.name === 'Registration Method' ) ) ).toEqual( [ 'Legacy' ] );
 		expect( badgeText( { activeDefinition: { status: 'updated' } } ) ).toEqual( [ 'New' ] );
@@ -133,12 +173,12 @@ describe( 'badgesForRow', () => {
 			def( 'v1:payment_page', 'Payment Page', { status: 'legacy', superseded_by: [ 'v2:Payment_Page' ] } ),
 			def( 'v2:Payment_Page', 'Last Payment Page', { status: 'updated', supersedes: 'v1:payment_page' } ),
 		];
-		const row = buildFieldRows( defs, [ 'v2:Payment_Page' ], 'v1' ).find( r => r.name === 'Last Payment Page' );
+		const row = buildFieldRows( defs, [ 'v2:Payment_Page' ] ).find( r => r.name === 'Last Payment Page' );
 		expect( badgeText( row ) ).toEqual( [ 'New' ] );
 	} );
 
 	it( 'leaves existing fields unbadged, including the surviving side of a pair', () => {
-		const rows = buildFieldRows( DEFS, [], 'v1' );
+		const rows = buildFieldRows( DEFS, [] );
 		expect( badgeText( rows.find( r => r.name === 'Account' ) ) ).toEqual( [] );
 		expect( badgeText( rows.find( r => r.name === 'Team Name' ) ) ).toEqual( [] );
 	} );
@@ -146,14 +186,14 @@ describe( 'badgesForRow', () => {
 
 describe( 'visibleSections', () => {
 	it( 'groups rows by section with empty sections labeled Additional', () => {
-		const sections = visibleSections( buildFieldRows( [ ...DEFS, def( 'v1:extra', 'Extra', { section: '' } ) ], [], 'v1' ) );
+		const sections = visibleSections( buildFieldRows( [ ...DEFS, def( 'v1:extra', 'Extra', { section: '' } ) ], [] ) );
 		expect( sections.map( s => s.section ) ).toContain( 'Additional' );
 		expect( sections.find( s => s.section === 'Test' ).rows.length ).toBeGreaterThan( 0 );
 	} );
 } );
 
 describe( 'OutboundFields', () => {
-	const field = { key: 'outgoing_metadata_fields', definitions: DEFS, value_ids: [], schema_origin: 'v1' };
+	const field = { key: 'outgoing_metadata_fields', definitions: DEFS, value_ids: [] };
 
 	it( 'renders sections with checkboxes and posts ids on toggle', () => {
 		const onChange = jest.fn();

@@ -548,7 +548,6 @@ describe( 'ConfigureView per-direction sections', () => {
 					definitions: [ outboundDef( 'v1:full_name', 'Full Name' ), outboundDef( 'v1:signup_date', 'Signup Date' ) ],
 					value_ids: [ 'v1:full_name' ],
 					value: [ 'Full Name' ],
-					schema_origin: 'v1',
 				},
 				{ key: 'incoming_sync_enabled', type: 'checkbox', label: 'Enable inbound sync', value: true },
 				{
@@ -598,9 +597,9 @@ describe( 'ConfigureView per-direction sections', () => {
 	} );
 
 	// The outbound picker now posts ids, not names: <OutboundFields> receives
-	// the settings payload's definitions/value_ids/schema_origin and routes
-	// its onChange back through the same handleFieldChange draft path every
-	// other field uses, so Save submits an ids array under the field's key.
+	// the settings payload's definitions/value_ids and routes its onChange
+	// back through the same handleFieldChange draft path every other field
+	// uses, so Save submits an ids array under the field's key.
 	it( 'posts ids for the outbound field selection', async () => {
 		const onSave = jest.fn( () => Promise.resolve() );
 		const integrations = {
@@ -613,7 +612,6 @@ describe( 'ConfigureView per-direction sections', () => {
 						label: 'Outgoing metadata fields',
 						definitions: [ outboundDef( 'v1:account', 'Account' ) ],
 						value_ids: [],
-						schema_origin: 'v1',
 					},
 				],
 			},

@@ -412,15 +412,16 @@ class Field_Registry {
 	 * Serialize every definition for the integrations settings payload.
 	 *
 	 * Flat list, all schema versions — the per-field UI derives its rows and
-	 * their visibility (non-origin fields show only while enabled) client-side,
-	 * so it needs both sides of every rename regardless of the site's origin.
+	 * their visibility client-side, so it needs both sides of every rename.
 	 *
 	 * Deliberately carries no conflict or equivalence flags. The UI has no
 	 * version choice to offer: get_conflict_groups() is empty by construction,
 	 * so an ESP name appearing under both versions is always a collapsed
-	 * equivalent pair, and the UI reads that off the pair itself. `status`
-	 * carries the badge vocabulary — 'legacy' and 'new'/'updated' badge, and
-	 * anything else (or nothing) is an unbadged 'existing'.
+	 * equivalent pair, and the UI reads that off the pair itself. `status` is
+	 * the whole of a field's fate: it drives the badges — 'legacy' and
+	 * 'new'/'updated' badge, anything else (or nothing) is an unbadged
+	 * 'existing' — and the sunset rule, under which a legacy field lists only
+	 * while enabled and every other field lists everywhere.
 	 *
 	 * @return array[] List of definition arrays (see the settings REST contract).
 	 */
