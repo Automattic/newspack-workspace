@@ -93,12 +93,14 @@ class Auth {
 	/**
 	 * Refresh access token.
 	 *
-	 * A successful refresh replaces the stored token; anything else leaves it alone.
+	 * A successful refresh replaces the stored token; anything else leaves it alone. The
+	 * payload is returned either way, so a caller reading it as proof of a working
+	 * connection has to check the stored settings itself.
 	 *
 	 * @param string $client_id Client ID.
 	 * @param string $client_secret Client secret.
 	 * @param string $refresh_token Refresh token issued alongside the access token.
-	 * @return array|\WP_Error Token data, or an error if the refresh failed or carried no token.
+	 * @return array|\WP_Error Token data, applied unless the grant it describes was replaced, or an error if the refresh failed or carried no token.
 	 */
 	public static function refresh_access_token( $client_id, $client_secret, $refresh_token ) {
 		$body = [
@@ -538,8 +540,11 @@ class Auth {
 			$settings['refresh_token']
 		);
 
+		// A refresh whose grant was replaced mid-flight comes back honoured but unapplied,
+		// so the answer is whatever replaced it: a fresh sign-in leaves a usable token, a
+		// disconnect leaves none, and only the stored settings tell the two apart.
 		if ( ! is_wp_error( $refresh_response ) ) {
-			return true;
+			return self::has_usable_token();
 		}
 
 		// Losing a refresh race is not a failure: the winner rotated the token while this
