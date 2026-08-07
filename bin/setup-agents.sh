@@ -47,10 +47,10 @@ reset="\033[0m"
 echo ""
 echo -e "${bold}🤖 Setting up AI agent tooling...${reset}"
 
-# Add marketplaces from extraKnownMarketplaces (github sources only)
+# Add marketplaces from extraKnownMarketplaces (github and git sources)
 echo ""
 echo -e "${cyan}📦 Adding marketplaces...${reset}"
-jq -r '.extraKnownMarketplaces // {} | to_entries[] | select(.value.source.source == "github") | .value.source | if .ref then "\(.repo)#\(.ref)" else .repo end' "$SETTINGS_FILE" | while read -r m; do
+jq -r '.extraKnownMarketplaces // {} | to_entries[] | .value.source | if .source == "github" then (if .ref then "\(.repo)#\(.ref)" else .repo end) elif .source == "git" then .url else empty end' "$SETTINGS_FILE" | while read -r m; do
   echo -e "   ${dim}${m}${reset}"
   claude plugin marketplace add "$m" 2>/dev/null || true
 done
