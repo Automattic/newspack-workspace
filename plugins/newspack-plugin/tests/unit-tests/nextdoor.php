@@ -147,6 +147,21 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Store a token that is nowhere near expiry, so nothing has to be renewed.
+	 */
+	private function connect_with_a_valid_token() {
+		Nextdoor::update_settings(
+			[
+				'client_id'        => 'site-id',
+				'client_secret'    => 'site-secret',
+				'access_token'     => 'valid-access',
+				'refresh_token'    => 'stored-refresh',
+				'token_expires_at' => time() + HOUR_IN_SECONDS,
+			]
+		);
+	}
+
+	/**
 	 * Unknown roles are dropped, duplicates collapse and the keys are a list.
 	 */
 	public function test_sanitize_allowed_roles_keeps_only_known_roles() {
@@ -246,6 +261,7 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 	 * A claim response with no page is an error, not a success.
 	 */
 	public function test_claim_page_reports_a_response_without_a_page() {
+		$this->connect_with_a_valid_token();
 		$this->http_body = wp_json_encode( [ 'status' => 'PENDING' ] );
 		add_filter( 'pre_http_request', [ $this, 'stub_nextdoor_response' ], 10, 3 );
 
@@ -263,6 +279,7 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 	 * A claimed page is stored and reported back.
 	 */
 	public function test_claim_page_stores_the_returned_page() {
+		$this->connect_with_a_valid_token();
 		$this->http_body = wp_json_encode( [ 'page_id' => 'page-123' ] );
 		add_filter( 'pre_http_request', [ $this, 'stub_nextdoor_response' ], 10, 3 );
 
@@ -433,6 +450,7 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 	 * A publication URL pasted with whitespace is stored as a URL.
 	 */
 	public function test_claim_page_trims_the_publication_url() {
+		$this->connect_with_a_valid_token();
 		$this->http_body = wp_json_encode( [ 'page_id' => 'page-123' ] );
 		add_filter( 'pre_http_request', [ $this, 'stub_nextdoor_response' ], 10, 3 );
 
@@ -446,6 +464,7 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 	 * A legal mixed-case scheme is accepted, and stored in canonical form.
 	 */
 	public function test_claim_page_accepts_a_mixed_case_scheme() {
+		$this->connect_with_a_valid_token();
 		$this->http_body = wp_json_encode( [ 'page_id' => 'page-123' ] );
 		add_filter( 'pre_http_request', [ $this, 'stub_nextdoor_response' ], 10, 3 );
 
@@ -575,6 +594,8 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 
 		Nextdoor::update_settings(
 			[
+				'client_id'        => 'site-id',
+				'client_secret'    => 'site-secret',
 				'access_token'     => 'expired-access',
 				'refresh_token'    => 'stored-refresh',
 				'token_expires_at' => time() - 10,
@@ -583,6 +604,60 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 
 		self::assertTrue( Auth::has_usable_token() );
 		self::assertSame( [], $this->http_requests );
+	}
+
+	/**
+	 * A refresh token with nothing to exchange it with cannot renew anything.
+	 */
+	public function test_an_expired_token_without_credentials_is_not_usable() {
+		Nextdoor::update_settings(
+			[
+				'access_token'     => 'expired-access',
+				'refresh_token'    => 'stored-refresh',
+				'token_expires_at' => time() - 10,
+			]
+		);
+
+		self::assertFalse( Auth::has_usable_token() );
+	}
+
+	/**
+	 * A refusal from Nextdoor is recorded, so the card stops reporting a dead connection.
+	 */
+	public function test_a_refused_refresh_marks_the_connection_as_unusable() {
+		Nextdoor::update_settings(
+			[
+				'client_id'        => 'site-id',
+				'client_secret'    => 'site-secret',
+				'access_token'     => 'expired-access',
+				'refresh_token'    => 'stored-refresh',
+				'token_expires_at' => time() - 10,
+			]
+		);
+
+		self::assertTrue( Auth::has_usable_token() );
+
+		$this->http_body = wp_json_encode( [ 'error' => 'invalid_grant' ] );
+		add_filter(
+			'pre_http_request',
+			function () {
+				return [
+					'headers'  => [],
+					'body'     => $this->http_body,
+					'response' => [
+						'code'    => 400,
+						'message' => 'Bad Request',
+					],
+					'cookies'  => [],
+					'filename' => null,
+				];
+			}
+		);
+
+		$result = Auth::refresh_access_token( 'site-id', 'site-secret', 'stored-refresh' );
+
+		self::assertInstanceOf( 'WP_Error', $result );
+		self::assertFalse( Auth::has_usable_token() );
 	}
 
 	/**
@@ -667,5 +742,179 @@ class Newspack_Test_Nextdoor extends WP_UnitTestCase {
 		self::assertInstanceOf( 'WP_Error', $result );
 		self::assertSame( 'nextdoor_token_invalid', $result->get_error_code() );
 		self::assertSame( [], $this->http_requests );
+	}
+
+	/**
+	 * Claiming a page renews an expired token, and sends the renewed one.
+	 */
+	public function test_claim_page_refreshes_an_expired_token() {
+		Nextdoor::update_settings(
+			[
+				'client_id'        => 'site-id',
+				'client_secret'    => 'site-secret',
+				'access_token'     => 'expired-access',
+				'refresh_token'    => 'stored-refresh',
+				'token_expires_at' => time() - 10,
+			]
+		);
+
+		$this->http_body = wp_json_encode(
+			[
+				'access_token' => 'new-access',
+				'expires_in'   => 3600,
+				'page_id'      => 'page-123',
+			]
+		);
+		add_filter( 'pre_http_request', [ $this, 'stub_nextdoor_response' ], 10, 3 );
+
+		$request = new WP_REST_Request( 'POST', '/newspack/v1/nextdoor/claim-page' );
+		$request->set_param( 'publication_url', 'https://example.com' );
+
+		$result = Controller::api_claim_page( $request );
+
+		self::assertTrue( $result->get_data()['success'] );
+		self::assertSame( 'new-access', Nextdoor::get_settings()['access_token'] );
+		self::assertStringContainsString( 'auth.nextdoor.com', $this->http_requests[0]['url'] );
+		self::assertSame( 'Bearer new-access', $this->http_requests[1]['args']['headers']['Authorization'] );
+	}
+
+	/**
+	 * A token that cannot be renewed stops the claim before it reaches Nextdoor.
+	 */
+	public function test_claim_page_refuses_an_unrenewable_token() {
+		Nextdoor::update_settings(
+			[
+				'client_id'        => 'site-id',
+				'client_secret'    => 'site-secret',
+				'access_token'     => 'expired-access',
+				'refresh_token'    => '',
+				'token_expires_at' => time() - 10,
+			]
+		);
+		add_filter( 'pre_http_request', [ $this, 'stub_nextdoor_response' ], 10, 3 );
+
+		$request = new WP_REST_Request( 'POST', '/newspack/v1/nextdoor/claim-page' );
+		$request->set_param( 'publication_url', 'https://example.com' );
+
+		$result = Controller::api_claim_page( $request );
+
+		self::assertInstanceOf( 'WP_Error', $result );
+		self::assertSame( 'nextdoor_token_invalid', $result->get_error_code() );
+		self::assertSame( [], $this->http_requests );
+	}
+
+	/**
+	 * The settings response carries what the form needs and nothing secret.
+	 */
+	public function test_settings_response_never_carries_the_client_secret() {
+		Optional_Modules::activate_optional_module( 'nextdoor' );
+		$this->connect_with_a_valid_token();
+
+		$response = $this->server->dispatch( new WP_REST_Request( 'GET', self::SETTINGS_ROUTE ) );
+		$settings = $response->get_data()['settings'];
+
+		self::assertSame( 200, $response->get_status() );
+		self::assertArrayNotHasKey( 'client_secret', $settings );
+		self::assertArrayNotHasKey( 'access_token', $settings );
+		self::assertArrayNotHasKey( 'refresh_token', $settings );
+		self::assertSame( [ 'client_id', 'publication_url', 'allowed_roles' ], array_keys( $settings ) );
+	}
+
+	/**
+	 * Turning the module off takes the publishing capability with it.
+	 */
+	public function test_disabling_the_module_revokes_the_publishing_capability() {
+		Optional_Modules::activate_optional_module( 'nextdoor' );
+		$this->update_settings( [ 'allowed_roles' => [ 'administrator', 'editor' ] ] );
+
+		self::assertTrue( get_role( 'editor' )->has_cap( Nextdoor::CAPABILITY_SLUG ) );
+
+		$response = $this->update_settings( [ 'module_enabled_nextdoor' => false ] );
+
+		self::assertSame( 200, $response->get_status() );
+		self::assertFalse( get_role( 'editor' )->has_cap( Nextdoor::CAPABILITY_SLUG ) );
+		self::assertFalse( get_role( 'administrator' )->has_cap( Nextdoor::CAPABILITY_SLUG ) );
+
+		$this->update_settings( [ 'module_enabled_nextdoor' => true ] );
+
+		self::assertTrue( get_role( 'editor' )->has_cap( Nextdoor::CAPABILITY_SLUG ) );
+	}
+
+	/**
+	 * Reader roles are neither offered nor grantable, so one tick cannot reach the audience.
+	 */
+	public function test_reader_roles_are_not_offered_or_granted() {
+		Optional_Modules::activate_optional_module( 'nextdoor' );
+
+		$offered = wp_list_pluck( Nextdoor::get_available_roles(), 'value' );
+
+		self::assertNotContains( 'subscriber', $offered );
+		self::assertContains( 'editor', $offered );
+
+		$response = $this->update_settings( [ 'allowed_roles' => [ 'administrator', 'subscriber' ] ] );
+
+		self::assertSame( 200, $response->get_status() );
+		self::assertSame( [ 'administrator' ], Nextdoor::get_settings()['allowed_roles'] );
+		self::assertFalse( get_role( 'subscriber' )->has_cap( Nextdoor::CAPABILITY_SLUG ) );
+	}
+
+	/**
+	 * The capability says whether a user may share at all; the post says which ones.
+	 */
+	public function test_post_routes_refuse_a_post_the_user_cannot_edit() {
+		$post_id = $this->share_a_post_with_an_expired_token();
+		wp_update_post(
+			[
+				'ID'          => $post_id,
+				'post_author' => $this->factory->user->create( [ 'role' => 'author' ] ),
+			]
+		);
+
+		get_role( 'author' )->add_cap( Nextdoor::CAPABILITY_SLUG );
+		wp_set_current_user( $this->factory->user->create( [ 'role' => 'author' ] ) );
+
+		self::assertTrue( Nextdoor::can_user_publish() );
+
+		foreach ( [ 'api_publish_post', 'api_update_post', 'api_delete_post' ] as $handler ) {
+			$request = new WP_REST_Request( 'POST', '/newspack/v1/nextdoor/' . $handler );
+			$request->set_param( 'id', $post_id );
+
+			$result = Controller::$handler( $request );
+
+			self::assertInstanceOf( 'WP_Error', $result, $handler );
+			self::assertSame( 'nextdoor_post_forbidden', $result->get_error_code(), $handler );
+		}
+
+		self::assertSame( [], $this->http_requests );
+	}
+
+	/**
+	 * Platform constants arriving later do not take the site's own credentials with them.
+	 */
+	public function test_a_site_keeps_its_own_credentials_when_platform_constants_appear() {
+		if ( defined( 'NEWSPACK_NEXTDOOR_CLIENT_ID' ) || defined( 'NEWSPACK_NEXTDOOR_CLIENT_SECRET' ) ) {
+			self::markTestSkipped( 'Centralized credentials are defined as constants in this environment.' );
+		}
+
+		Nextdoor::update_settings(
+			[
+				'client_id'     => 'own-id',
+				'client_secret' => 'own-secret',
+			]
+		);
+
+		putenv( 'NEWSPACK_NEXTDOOR_CLIENT_ID=platform-id' ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.runtime_configuration_putenv
+		putenv( 'NEWSPACK_NEXTDOOR_CLIENT_SECRET=platform-secret' ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.runtime_configuration_putenv
+
+		// Any write reads through get_settings(), which overlays the platform values.
+		Nextdoor::update_settings( Nextdoor::get_settings() );
+
+		self::assertSame( 'platform-secret', Nextdoor::get_settings()['client_secret'] );
+
+		putenv( 'NEWSPACK_NEXTDOOR_CLIENT_ID' ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.runtime_configuration_putenv
+		putenv( 'NEWSPACK_NEXTDOOR_CLIENT_SECRET' ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.runtime_configuration_putenv
+
+		self::assertSame( 'own-id', Nextdoor::get_settings()['client_id'] );
+		self::assertSame( 'own-secret', Nextdoor::get_settings()['client_secret'] );
 	}
 }
