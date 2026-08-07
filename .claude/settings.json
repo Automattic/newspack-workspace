@@ -1,16 +1,7 @@
 {
   "enabledPlugins": {
-    "newspack@newspack-devkit": true,
     "context7@claude-plugins-official": true,
     "linear@claude-plugins-official": true,
     "figma@claude-plugins-official": true
-  },
-  "extraKnownMarketplaces": {
-    "newspack-devkit": {
-      "source": {
-        "source": "git",
-        "url": "git@github.a8c.com:automattic/newspack-devkit.git"
-      }
-    }
   }
 }
