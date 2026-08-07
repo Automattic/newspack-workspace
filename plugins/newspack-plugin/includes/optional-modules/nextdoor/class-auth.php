@@ -467,11 +467,12 @@ class Auth {
 	/**
 	 * Whether the connection still holds, without calling Nextdoor.
 	 *
-	 * Reports what `validate_token()` would, read off the stored token: a token that is
-	 * not near expiry is usable, and one that is can be renewed as long as the refresh
-	 * token and the credentials it is exchanged with are all present and a previous
-	 * refresh has not already been refused. False still means the publisher has to
-	 * reconnect.
+	 * Reports what `validate_token()` would, read off the stored token. A grant Nextdoor
+	 * has already refused is unusable however much life the access token has left, since a
+	 * refusal can come from the content API as well as from a refresh. Otherwise a token
+	 * that is not near expiry is usable, and one that is can be renewed as long as the
+	 * refresh token and the credentials it is exchanged with are all present. False still
+	 * means the publisher has to reconnect.
 	 *
 	 * @return bool
 	 */
