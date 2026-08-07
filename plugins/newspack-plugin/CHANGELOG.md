@@ -1,3 +1,19 @@
+## newspack [6.47.4](https://github.com/Automattic/newspack-workspace/compare/newspack@6.47.3...newspack@6.47.4) (2026-08-07)
+
+
+### Bug Fixes
+
+* **blocks:** input validation hardening for author, iframe and checkout surfaces ([#782](https://github.com/Automattic/newspack-workspace/issues/782)) ([20230c1](https://github.com/Automattic/newspack-workspace/commit/20230c12471e327e8cbdf6d3ffe7d9823a28b00b))
+* **content-gate:** prevent restrict_post re-entry via wp_reset_postdata ([#821](https://github.com/Automattic/newspack-workspace/issues/821)) ([6f5c479](https://github.com/Automattic/newspack-workspace/commit/6f5c479147b99356531e175bffe5b1846d2bfa71))
+* **reader-activation:** error on non-reader email in registration block ([#625](https://github.com/Automattic/newspack-workspace/issues/625)) ([f2c0db7](https://github.com/Automattic/newspack-workspace/commit/f2c0db725e4c3e376d4e85d01e19da625154e421))
+
+## newspack [6.47.3](https://github.com/Automattic/newspack-workspace/compare/newspack@6.47.2...newspack@6.47.3) (2026-08-05)
+
+
+### Bug Fixes
+
+* **guest-contributors:** don't email generated placeholder addresses ([#572](https://github.com/Automattic/newspack-workspace/issues/572)) ([9f0e73c](https://github.com/Automattic/newspack-workspace/commit/9f0e73cda02949076d83a49b476c94755f481ba9))
+
 ## newspack [6.47.2](https://github.com/Automattic/newspack-workspace/compare/newspack@6.47.1...newspack@6.47.2) (2026-08-05)
 
 
