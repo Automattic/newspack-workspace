@@ -133,7 +133,7 @@ $drawer-size-x-large: 640px;
 	padding-top: 0;
 }
 
-.newspack-drawer__body .newspack-drawer__content:last-child {
+.newspack-drawer__body:has(~ .newspack-drawer__footer) .newspack-drawer__content:last-child {
 	padding-bottom: 0;
 }
 

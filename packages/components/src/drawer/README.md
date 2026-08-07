@@ -171,8 +171,10 @@ with markup in your own element and hand the section that instead.
 Consecutive sections share one scroll container, so they scroll together between
 the pinned header and footer. Sections are not self-separating: put a
 [`Drawer.Divider`](#drawerdivider) between two of them to draw a rule. The
-first section after the header drops its top padding and the last section drops
-its bottom padding, so the seam at each end is the chrome's own 16px padding.
+first section drops its top padding when a header precedes it, and the last
+section drops its bottom padding when a footer follows, so the seam at each end
+is the chrome's own 16px padding. Without that chrome the section keeps its own
+padding and sits against the edge of the panel.
 
 **Sections must be direct children of `Drawer.Root`.** The Root walks its direct
 children to build that scroll container. A section nested in a fragment or any
