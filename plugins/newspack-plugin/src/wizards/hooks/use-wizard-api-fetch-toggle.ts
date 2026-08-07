@@ -40,7 +40,9 @@ function useWizardApiFetchToggle< T, P = Partial< T > >( {
 	 * Perform `GET` request on initial load.
 	 */
 	useEffect( () => {
-		apiFetchToggle();
+		// The rejection is already surfaced through `errorMessage`; swallowing it here
+		// keeps a failed first load from raising an unhandled rejection.
+		apiFetchToggle().catch( () => {} );
 	}, [] );
 
 	/**
