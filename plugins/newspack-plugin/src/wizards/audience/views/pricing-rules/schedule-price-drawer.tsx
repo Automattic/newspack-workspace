@@ -47,30 +47,39 @@ export default function SchedulePriceDrawer( {
 }: SchedulePriceDrawerProps ) {
 	const [ draft, setDraft ] = useState< SchedulePriceInput >( price );
 	const [ errors, setErrors ] = useState< FieldErrors >( {} );
+	// Counts rejections rather than tracking them, so the focus effect below fires
+	// once per Save and never off a keystroke that merely cleared one of them.
+	const [ rejections, setRejections ] = useState( 0 );
 	const atRef = useRef< HTMLInputElement >( null );
 	const valueRef = useRef< HTMLInputElement >( null );
-	const wasOpen = useRef( false );
 
-	// The panel outlives a close so it can play its exit, so the draft is seeded
-	// on the way in rather than at mount, and only on that transition: a parent
-	// re-render that hands down a fresh price object must not wipe the edits.
-	useEffect( () => {
-		if ( isOpen && ! wasOpen.current ) {
+	// The panel outlives a close so it can play its exit, so the draft is seeded on
+	// the way in rather than at mount, and only on that transition: a parent re-render
+	// that hands down a fresh price object must not wipe the edits. During render, as
+	// Drawer.Root does — an effect would paint the entrance on the last price first.
+	const [ wasOpen, setWasOpen ] = useState( isOpen );
+	if ( wasOpen !== isOpen ) {
+		setWasOpen( isOpen );
+		if ( isOpen ) {
 			setDraft( price );
 			setErrors( {} );
 		}
-		wasOpen.current = isOpen;
-	}, [ isOpen, price ] );
+	}
 
 	// Focus follows the rejection, so the message reaches a screen reader through
-	// the field's own aria-describedby rather than needing a live region.
+	// the field's own aria-describedby rather than needing a live region. `errors`
+	// only says which field; `rejections` is what says a Save just rejected one.
 	useEffect( () => {
+		if ( ! rejections ) {
+			return;
+		}
 		if ( errors.at ) {
 			atRef.current?.focus();
 		} else if ( errors.value ) {
 			valueRef.current?.focus();
 		}
-	}, [ errors ] );
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [ rejections ] );
 
 	const isDirty = draft.at !== price.at || draft.calc_type !== price.calc_type || draft.value !== price.value || draft.label !== price.label;
 
@@ -79,8 +88,6 @@ export default function SchedulePriceDrawer( {
 	const update = ( key: keyof SchedulePriceInput, value: string ) => {
 		setDraft( prev => ( { ...prev, [ key ]: value } ) );
 		if ( 'at' === key || 'value' === key ) {
-			// Same object back when there is nothing to clear, so the focus effect
-			// below only ever runs off a real change of state.
 			setErrors( prev => ( prev[ key ] ? { ...prev, [ key ]: undefined } : prev ) );
 		}
 	};
@@ -88,8 +95,11 @@ export default function SchedulePriceDrawer( {
 	const save = () => {
 		const next: FieldErrors = {};
 		const at = Number( draft.at );
-		if ( ! Number.isInteger( at ) || at < 1 ) {
+		if ( ! Number.isFinite( at ) || at < 1 ) {
 			next.at = __( 'Enter a cycle number of 1 or higher.', 'newspack-plugin' );
+		} else if ( ! Number.isInteger( at ) ) {
+			// Cycles are counted, so 1.5 is not a smaller version of the same mistake.
+			next.at = __( 'Enter a whole cycle number.', 'newspack-plugin' );
 		} else if ( takenCycles.includes( at ) ) {
 			/* translators: %d: a billing cycle number. */
 			next.at = sprintf( __( 'Cycle %d already has a price.', 'newspack-plugin' ), at );
@@ -106,9 +116,11 @@ export default function SchedulePriceDrawer( {
 			next.value = __( 'Enter a value of 0 or higher.', 'newspack-plugin' );
 		}
 		setErrors( next );
-		if ( ! next.at && ! next.value ) {
-			onSave( draft );
+		if ( next.at || next.value ) {
+			setRejections( n => n + 1 );
+			return;
 		}
+		onSave( draft );
 	};
 
 	// A saved price can name a calculation the vocabulary no longer offers. Listing it
@@ -136,6 +148,7 @@ export default function SchedulePriceDrawer( {
 					aria-invalid={ !! errors.at }
 					type="number"
 					min={ 1 }
+					step={ 1 }
 					value={ draft.at }
 					onChange={ v => update( 'at', v ) }
 					__next40pxDefaultSize

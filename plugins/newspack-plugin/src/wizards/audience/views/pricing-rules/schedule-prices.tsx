@@ -1,7 +1,7 @@
 /**
  * The Price Schedule list: one row per price, none of them editable in place.
  * Editing moves to a drawer so the cells hold short strings, which is what lets
- * four columns of controls become three columns of text in the form's column.
+ * four columns of controls become three columns of text.
  */
 
 /**
@@ -82,10 +82,12 @@ export default function SchedulePrices( { steps, onChange, publicize, calcTypes,
 	);
 
 	// Removing a row unmounts the control that triggered it, which would drop focus
-	// to the body and lose the publisher's place in the form.
+	// to the body and lose the publisher's place in the form. Disarmed on any change
+	// of length, so a stale claim cannot steal focus from a later add.
 	useEffect( () => {
-		if ( claimFocus.current ) {
-			claimFocus.current = false;
+		const claimed = claimFocus.current;
+		claimFocus.current = false;
+		if ( claimed ) {
 			addRef.current?.focus();
 		}
 	}, [ rows.length ] );
@@ -149,7 +151,7 @@ export default function SchedulePrices( { steps, onChange, publicize, calcTypes,
 		// An index past the end would leave `map` silently dropping the edit.
 		const isReplace = null !== index && index < ordered.length;
 		const list = isReplace ? ordered.map( ( step, i ) => ( i === index ? price : step ) ) : [ ...ordered, price ];
-		onChange( [ ...list ].sort( byCycle ) );
+		onChange( list.sort( byCycle ) );
 		setIsOpen( false );
 	};
 

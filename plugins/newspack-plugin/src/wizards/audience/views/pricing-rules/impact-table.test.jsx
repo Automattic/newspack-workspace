@@ -95,9 +95,7 @@ describe( 'ImpactTable', () => {
 		expect( region.id ).not.toBe( '' );
 	} );
 
-	// A wider sample used to paint once as a short, un-collapsible table before the
-	// page size caught up.
-	it( 'collapses a widened sample on the render that receives it', () => {
+	it( 'collapses a sample that widens past the limit', () => {
 		const { rerender } = render( <ImpactTable baseline={ sample( 3 ) } segmentGroups={ [] } currency={ CURRENCY } /> );
 		expect( toggle() ).not.toBeInTheDocument();
 
@@ -107,7 +105,7 @@ describe( 'ImpactTable', () => {
 		expect( toggle() ).toHaveTextContent( 'See More' );
 	} );
 
-	it( 'returns to the collapsed view when a fresh sample arrives', () => {
+	it( 'returns to the collapsed view when a different set of products arrives', () => {
 		const { rerender } = render( <ImpactTable baseline={ sample( 25 ) } segmentGroups={ [] } currency={ CURRENCY } /> );
 		fireEvent.click( toggle() );
 		expect( bodyRows() ).toBe( 25 );
@@ -116,6 +114,20 @@ describe( 'ImpactTable', () => {
 
 		expect( bodyRows() ).toBe( 10 );
 		expect( toggle() ).toHaveTextContent( 'See More' );
+	} );
+
+	// The publisher watching their own edit reprice the same products has not asked
+	// to be collapsed again.
+	it( 'keeps the expansion when the same products come back repriced', () => {
+		const { rerender } = render( <ImpactTable baseline={ sample( 25 ) } segmentGroups={ [] } currency={ CURRENCY } /> );
+		fireEvent.click( toggle() );
+		expect( bodyRows() ).toBe( 25 );
+
+		const repriced = sample( 25 ).map( item => ( { ...item, adjusted: item.adjusted + 1 } ) );
+		rerender( <ImpactTable baseline={ repriced } segmentGroups={ [] } currency={ CURRENCY } /> );
+
+		expect( bodyRows() ).toBe( 25 );
+		expect( toggle() ).toHaveTextContent( 'See Less' );
 	} );
 
 	it( 'renders one row per product with its regular and resulting price', () => {

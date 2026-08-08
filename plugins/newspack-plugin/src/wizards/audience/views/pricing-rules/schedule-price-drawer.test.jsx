@@ -75,6 +75,15 @@ describe( 'the schedule price drawer', () => {
 		expect( onSave ).not.toHaveBeenCalled();
 	} );
 
+	it( 'refuses a cycle that is not a whole number', async () => {
+		const { onSave } = renderDrawer();
+		await type( 'From cycle #', '1.5' );
+		await type( 'Value ($)', '5' );
+		await save();
+		expect( screen.getByText( 'Enter a whole cycle number.' ) ).toBeInTheDocument();
+		expect( onSave ).not.toHaveBeenCalled();
+	} );
+
 	it( 'refuses a cycle another price already claims', async () => {
 		const { onSave } = renderDrawer( { takenCycles: [ 1, 2 ] } );
 		await type( 'Value ($)', '5' );
@@ -155,6 +164,28 @@ describe( 'the schedule price drawer', () => {
 		await save();
 		expect( screen.getByText( 'Enter a value of 0 or higher.' ) ).toBeInTheDocument();
 		expect( onSave ).not.toHaveBeenCalled();
+	} );
+
+	// Clearing one rejection must not send focus chasing the other one.
+	it( 'leaves focus alone while a rejected field is being corrected', async () => {
+		renderDrawer();
+		await type( 'From cycle #', '0' );
+		await save();
+		expect( screen.getByLabelText( 'From cycle #' ) ).toHaveFocus();
+
+		await type( 'From cycle #', '3' );
+
+		expect( screen.getByLabelText( 'From cycle #' ) ).toHaveFocus();
+		expect( screen.getByText( 'Enter a value for this price.' ) ).toBeInTheDocument();
+	} );
+
+	it( 'sends focus to the still-rejected field on the next save', async () => {
+		renderDrawer();
+		await type( 'From cycle #', '0' );
+		await save();
+		await type( 'From cycle #', '3' );
+		await save();
+		expect( screen.getByLabelText( 'Value ($)' ) ).toHaveFocus();
 	} );
 
 	it( 'drops a rejection as soon as the field is corrected', async () => {

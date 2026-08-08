@@ -193,7 +193,9 @@ export default function RuleForm( { isNew, initialPath = null, rule, vocab, onDo
 	// Ordered on the way in, so what the table ranges, the preview asks about and the
 	// save posts are one and the same list even before anything is touched.
 	const [ steps, setSteps ] = useState< SchedulePriceInput[] >( () =>
-		( rule?.steps ?? [] ).map( s => ( { at: String( s.at ), calc_type: s.calc_type, value: String( s.value ), label: s.label } ) ).sort( byCycle )
+		( rule?.steps ?? [] )
+			.map( s => ( { at: String( s.at ), calc_type: s.calc_type, value: String( s.value ), label: s.label ?? '' } ) )
+			.sort( byCycle )
 	);
 	const isSchedule = strategyId === 'stepped_by_cycle';
 	// The subscriptions bootstrap registers the schedule strategy, so a site without

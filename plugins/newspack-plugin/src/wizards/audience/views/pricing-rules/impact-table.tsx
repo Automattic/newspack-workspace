@@ -22,7 +22,7 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { useState, useEffect, useMemo, useId } from '@wordpress/element';
+import { useState, useMemo, useId } from '@wordpress/element';
 import {
 	Button,
 	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
@@ -175,9 +175,16 @@ export default function ImpactTable( { baseline, segmentGroups, currency, showCy
 
 	const { data: sorted, paginationInfo } = useMemo( () => filterSortAndPaginate( baseline, tableView, fields ), [ baseline, tableView, fields ] );
 
-	// A fresh sample is a fresh answer to "show me the rest", so the collapse returns.
+	// A different set of products is a fresh answer to "show me the rest", so the
+	// collapse returns. Keyed on the ids alone: a refetch that reprices the same
+	// products is the publisher watching their own edit, and keeps the expansion.
+	// During render, so the wider sample never paints expanded before collapsing.
 	const sampleKey = useMemo( () => baseline.map( row => row.product_id ).join( ',' ), [ baseline ] );
-	useEffect( () => setExpanded( false ), [ sampleKey ] );
+	const [ lastSample, setLastSample ] = useState( sampleKey );
+	if ( lastSample !== sampleKey ) {
+		setLastSample( sampleKey );
+		setExpanded( false );
+	}
 
 	// Sliced after the sort, so collapsing keeps the current top rows.
 	const collapsible = sorted.length > ROW_LIMIT;

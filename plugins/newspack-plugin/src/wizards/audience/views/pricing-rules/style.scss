@@ -45,6 +45,10 @@
 		margin-bottom: wp-vars.$grid-unit-60;
 		padding: 0 wp-vars.$grid-unit-60;
 
+		> p {
+			margin-top: wp-vars.$grid-unit-15;
+		}
+
 		&--loading {
 			display: flex;
 			justify-content: center;
