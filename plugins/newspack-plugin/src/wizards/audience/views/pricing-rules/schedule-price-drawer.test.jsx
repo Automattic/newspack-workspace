@@ -84,6 +84,17 @@ describe( 'the schedule price drawer', () => {
 		expect( onSave ).not.toHaveBeenCalled();
 	} );
 
+	// Whole, but past the range the engine can be handed as an integer.
+	it( 'refuses a cycle beyond the safe integer range', async () => {
+		const { onSave } = renderDrawer( {
+			isNew: false,
+			price: { at: '1e21', calc_type: 'fixed_price', value: '5', label: '' },
+		} );
+		await save();
+		expect( screen.getByText( 'Enter a whole cycle number.' ) ).toBeInTheDocument();
+		expect( onSave ).not.toHaveBeenCalled();
+	} );
+
 	it( 'refuses a cycle another price already claims', async () => {
 		const { onSave } = renderDrawer( { takenCycles: [ 1, 2 ] } );
 		await type( 'Value ($)', '5' );
@@ -217,6 +228,36 @@ describe( 'the schedule price drawer', () => {
 		await type( 'From cycle #', '0' );
 		await save();
 		expect( screen.getByLabelText( 'From cycle #' ) ).toHaveFocus();
+	} );
+
+	// The reseed clears errors on both edges, so neither the exit nor the next
+	// entrance carries the last rejection.
+	it( 'reopens on another price with no trace of the last rejection', async () => {
+		const panel = props => (
+			<SchedulePriceDrawer
+				isOpen={ props.isOpen }
+				price={ props.price }
+				isNew={ false }
+				takenCycles={ [] }
+				publicize={ false }
+				calcTypes={ CALC_TYPES }
+				currency={ USD }
+				onSave={ jest.fn() }
+				onClose={ jest.fn() }
+			/>
+		);
+		const { rerender } = render( panel( { isOpen: true, price: BLANK } ) );
+		await save();
+		expect( screen.getByText( 'Enter a value for this price.' ) ).toBeInTheDocument();
+
+		await act( async () => rerender( panel( { isOpen: false, price: BLANK } ) ) );
+		expect( screen.queryByText( 'Enter a value for this price.' ) ).not.toBeInTheDocument();
+
+		await act( async () => rerender( panel( { isOpen: true, price: { at: '5', calc_type: 'fixed_price', value: '9', label: '' } } ) ) );
+
+		expect( screen.queryByText( 'Enter a value for this price.' ) ).not.toBeInTheDocument();
+		expect( screen.getByLabelText( 'Value ($)' ) ).toHaveAttribute( 'aria-invalid', 'false' );
+		expect( screen.getByLabelText( 'Value ($)' ) ).toHaveValue( 9 );
 	} );
 
 	it( 'survives a parent re-render that rebuilds the price it was given', async () => {

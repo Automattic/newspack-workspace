@@ -154,7 +154,8 @@ export default function ImpactTable( { baseline, segmentGroups, currency, showCy
 
 	const fieldIds = useMemo( () => [ 'regular', ...columns.map( col => col.key ) ], [ columns ] );
 
-	// The server already caps the sample, so show all of it rather than re-truncating.
+	// One page of everything the server sent: DataViews' own pagination is off, and
+	// the See More slice below is what actually shortens the table.
 	const perPage = Math.max( baseline.length, 1 );
 
 	const [ view, setView ] = useState< View >( () => ( {

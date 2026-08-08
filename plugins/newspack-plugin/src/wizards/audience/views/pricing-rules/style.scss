@@ -142,6 +142,12 @@
 		}
 	}
 
+	&__preview-section {
+		> p {
+			margin-top: wp-vars.$grid-unit-15;
+		}
+	}
+
 	&__preview-loading {
 		min-height: 200px;
 	}

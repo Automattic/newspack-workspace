@@ -62,8 +62,10 @@ export default function SchedulePriceDrawer( {
 		setWasOpen( isOpen );
 		if ( isOpen ) {
 			setDraft( price );
-			setErrors( {} );
 		}
+		// Either way: a rejection the publisher walked away from should not play the
+		// exit animation in red.
+		setErrors( {} );
 	}
 
 	// Focus follows the rejection, so the message reaches a screen reader through
@@ -97,8 +99,9 @@ export default function SchedulePriceDrawer( {
 		const at = Number( draft.at );
 		if ( ! Number.isFinite( at ) || at < 1 ) {
 			next.at = __( 'Enter a cycle number of 1 or higher.', 'newspack-plugin' );
-		} else if ( ! Number.isInteger( at ) ) {
+		} else if ( ! Number.isSafeInteger( at ) ) {
 			// Cycles are counted, so 1.5 is not a smaller version of the same mistake.
+			// Safe rather than merely whole: 1e21 is an integer PHP cannot be handed.
 			next.at = __( 'Enter a whole cycle number.', 'newspack-plugin' );
 		} else if ( takenCycles.includes( at ) ) {
 			/* translators: %d: a billing cycle number. */
@@ -170,6 +173,7 @@ export default function SchedulePriceDrawer( {
 					help={ errors.value ?? valueHelp( draft.calc_type ) }
 					aria-invalid={ !! errors.value }
 					type="number"
+					min={ 0 }
 					value={ draft.value }
 					onChange={ v => update( 'value', v ) }
 					__next40pxDefaultSize
