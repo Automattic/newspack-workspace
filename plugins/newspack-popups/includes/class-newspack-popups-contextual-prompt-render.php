@@ -98,11 +98,45 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 	}
 
 	/**
+	 * What the card's own text colour costs it on the Newspack classic theme.
+	 *
+	 * That theme makes every link inside a colour-carrying block inherit the
+	 * block's text colour, at a specificity above its own button rule. The card
+	 * carries one so its copy stays legible on the panel whatever the theme sets
+	 * for body text, so its CTA inherits that colour over the button's own
+	 * background: at the seeded design, near-black on the theme's dark button.
+	 * The button's colour is restated here, above the rule that would have it
+	 * inherit and below anything a publisher sets on the button itself, which
+	 * core emits as `!important` for a palette colour and inline for a custom
+	 * one.
+	 *
+	 * Outline buttons are left to inherit: their label sits on the card, not on a
+	 * filled background, so the card's text colour is the right one for it.
+	 *
+	 * Named for the theme it compensates rather than for classic themes at large:
+	 * the variable below is that theme's, and on any other one an undefined
+	 * variable would drop the declaration and leave the label inheriting the very
+	 * colour this removes.
+	 *
+	 * @return string CSS, or an empty string off the Newspack classic theme.
+	 */
+	public static function get_button_color_css() {
+		if ( 'newspack-theme' !== get_template() ) {
+			return '';
+		}
+
+		$filled = '.' . Newspack_Popups_Contextual_Prompt_Pattern::MARKER_CLASS
+			. ' .wp-block-button:not(.is-style-outline) > .wp-block-button__link:not(.is-style-outline)';
+
+		return $filled . '{color:var(--newspack-theme-color-against-secondary)}';
+	}
+
+	/**
 	 * Front end: an inline stylesheet of its own, so it lands wherever the theme
 	 * prints its styles and carries no file to version.
 	 */
 	public static function enqueue_layout_styles() {
-		$css = self::get_layout_css();
+		$css = self::get_layout_css() . self::get_button_color_css();
 		if ( '' === $css ) {
 			return;
 		}
@@ -120,7 +154,7 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 	 * @return array
 	 */
 	public static function add_editor_layout_styles( $settings ) {
-		$css = self::get_layout_css();
+		$css = self::get_layout_css() . self::get_button_color_css();
 		if ( '' === $css ) {
 			return $settings;
 		}

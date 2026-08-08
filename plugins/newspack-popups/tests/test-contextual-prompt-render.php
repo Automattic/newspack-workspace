@@ -1203,13 +1203,42 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 		$this->assertStringContainsString( 'margin-block-start:var(--wp--preset--spacing--30,1rem)', $css );
 		$this->assertStringContainsString( 'flex-shrink:0', $css );
 
-		$settings = Newspack_Popups_Contextual_Prompt_Render::add_editor_layout_styles( [] );
-		$this->assertSame( [ [ 'css' => $css ] ], $settings['styles'], 'The editor canvas gets the same CSS.' );
+		$delivered = $css . Newspack_Popups_Contextual_Prompt_Render::get_button_color_css();
+		$settings  = Newspack_Popups_Contextual_Prompt_Render::add_editor_layout_styles( [] );
+		$this->assertSame( [ [ 'css' => $delivered ] ], $settings['styles'], 'The editor canvas gets the same CSS.' );
 
 		$this->switch_to_theme_family( true );
 
 		$this->assertSame( '', Newspack_Popups_Contextual_Prompt_Render::get_layout_css() );
 		$this->assertSame( [], Newspack_Popups_Contextual_Prompt_Render::add_editor_layout_styles( [] ), 'And the editor canvas gets nothing.' );
+	}
+
+	/**
+	 * The card's text colour is the CTA's problem on the theme that hands every
+	 * link inside a coloured block that colour: the label would take it over the
+	 * button's own background. The colour is restated for a filled button, left
+	 * alone for an outline one, and never sent to a theme whose buttons the rule
+	 * does not describe.
+	 */
+	public function test_the_button_colour_css_is_newspack_classic_only() {
+		$newspack = static function () {
+			return 'newspack-theme';
+		};
+		$other    = static function () {
+			return 'twentytwentyfour';
+		};
+
+		add_filter( 'template', $newspack );
+		$css = Newspack_Popups_Contextual_Prompt_Render::get_button_color_css();
+		remove_filter( 'template', $newspack );
+
+		$this->assertStringContainsString( '.newspack-contextual-prompt .wp-block-button:not(.is-style-outline)', $css );
+		$this->assertStringContainsString( '> .wp-block-button__link:not(.is-style-outline)', $css );
+		$this->assertStringContainsString( '{color:var(--newspack-theme-color-against-secondary)}', $css );
+
+		add_filter( 'template', $other );
+		$this->assertSame( '', Newspack_Popups_Contextual_Prompt_Render::get_button_color_css(), 'Another theme is left to colour its own buttons.' );
+		remove_filter( 'template', $other );
 	}
 
 	/**
