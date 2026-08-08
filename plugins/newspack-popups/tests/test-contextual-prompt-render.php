@@ -1213,12 +1213,8 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The card's text colour is the CTA's problem on the theme that hands every
-	 * link inside a coloured block that colour: the label would take it over the
-	 * button's own background. The colour is restated for a filled button, left
-	 * alone for an outline one, and never sent to a theme whose buttons the rule
-	 * does not describe. The theme is faulted in rather than switched to: no
-	 * Newspack theme is installed in the test environment.
+	 * The theme is faulted in rather than switched to: the test environment has no
+	 * Newspack theme installed.
 	 */
 	public function test_the_button_colour_css_is_newspack_classic_only() {
 		$css   = $this->under_theme( 'newspack-theme', [ Newspack_Popups_Contextual_Prompt_Render::class, 'get_button_color_css' ] );
@@ -1232,9 +1228,8 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A button whose background the publisher changed carries `has-background`,
-	 * and the colour restated here is the theme's pair for the theme's own
-	 * background — so that button is out of the selector's reach.
+	 * The restated colour pairs with the theme's own button background, so a
+	 * background the publisher chose is left alone.
 	 */
 	public function test_a_publisher_background_is_out_of_reach() {
 		$css = $this->under_theme( 'newspack-theme', [ Newspack_Popups_Contextual_Prompt_Render::class, 'get_button_color_css' ] );
@@ -1243,8 +1238,7 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The filter is how a theme this does not name opts in, and one it does opt
-	 * out — the only route onto a fork under its own slug.
+	 * The filter is the only route onto a theme the slug check misses.
 	 */
 	public function test_the_button_colour_css_is_filterable() {
 		$opt_in = static function () {
@@ -1261,9 +1255,8 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Both surfaces are served the same string, and neither can lose the CTA's
-	 * colour to an edit that touches only the other. The front end is the one
-	 * that regressed, so it is read back off the handle it actually rides on.
+	 * Neither surface can lose the CTA's colour to an edit that touches only the
+	 * other. The front end is read back off the handle it rides on.
 	 */
 	public function test_both_surfaces_are_delivered_the_same_css() {
 		$this->switch_to_theme_family( false );
@@ -1289,8 +1282,7 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Run a callable with `get_template()` faulted to a given slug, leaving the
-	 * filter off whether the call succeeds or not.
+	 * Run a callable with `get_template()` reporting a given slug.
 	 *
 	 * @param string   $template Theme slug to report.
 	 * @param callable $callback Callable to run.
