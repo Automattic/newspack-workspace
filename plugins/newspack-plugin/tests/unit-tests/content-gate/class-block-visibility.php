@@ -421,6 +421,68 @@ class Newspack_Test_Block_Visibility extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A REST request is not exempt from access control.
+	 *
+	 * Access rules are evaluated for REST reads on the same terms as the front end. The
+	 * authoring case is served by the `edit_post` check below rather than by exempting REST
+	 * as a whole, so this pins that the exemption is not reintroduced.
+	 *
+	 * `REST_REQUEST` is defined only for real HTTP REST requests (wp-includes/rest-api.php),
+	 * so the constant is set explicitly here. Dispatching through `rest_do_request()` never
+	 * defines it, and a test written that way would not exercise this path at all.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_rest_request_is_not_exempt_from_access_rules() {
+		if ( ! defined( 'REST_REQUEST' ) ) {
+			define( 'REST_REQUEST', true );
+		}
+		$post_id         = $this->factory->post->create();
+		$GLOBALS['post'] = get_post( $post_id );
+
+		wp_set_current_user( 0 );
+		Block_Visibility::reset_cache_for_tests();
+
+		$rules  = [ 'registration' => [ 'active' => true ] ];
+		$block  = $this->make_block_with_rules( 'core/group', $rules, 'visible' );
+		$result = Block_Visibility::filter_render_block( '<div>restricted</div>', $block );
+
+		$this->assertSame( '', $result, 'A logged-out caller reading over REST is subject to the same access rules as on the front end.' );
+
+		unset( $GLOBALS['post'] );
+	}
+
+	/**
+	 * An editor reading over REST still sees the gated block.
+	 *
+	 * This is the authoring case the removed exemption existed for; it survives through the
+	 * `edit_post` check rather than through a blanket REST exemption.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_editor_still_sees_gated_block_over_rest() {
+		if ( ! defined( 'REST_REQUEST' ) ) {
+			define( 'REST_REQUEST', true );
+		}
+		$editor_id       = $this->factory->user->create( [ 'role' => 'editor' ] );
+		$post_id         = $this->factory->post->create();
+		$GLOBALS['post'] = get_post( $post_id );
+
+		wp_set_current_user( $editor_id );
+		Block_Visibility::reset_cache_for_tests();
+
+		$rules  = [ 'registration' => [ 'active' => true ] ];
+		$block  = $this->make_block_with_rules( 'core/group', $rules, 'visible' );
+		$result = Block_Visibility::filter_render_block( '<div>restricted</div>', $block );
+
+		$this->assertSame( '<div>restricted</div>', $result, 'Someone who can edit the post still sees its gated blocks while authoring over REST.' );
+
+		unset( $GLOBALS['post'] );
+	}
+
+	/**
 	 * Core/group block has both visibility attributes registered server-side.
 	 */
 	public function test_group_block_has_visibility_attribute_registered() {
