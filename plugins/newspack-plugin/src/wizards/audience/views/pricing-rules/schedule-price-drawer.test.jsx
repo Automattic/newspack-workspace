@@ -131,9 +131,47 @@ describe( 'the schedule price drawer', () => {
 		expect( onClose ).not.toHaveBeenCalled();
 	} );
 
-	it( 'offers a way out that does not save', () => {
+	it( 'offers a way out that does not save', async () => {
+		const { onSave, onClose } = renderDrawer();
+		await act( () => void fireEvent.click( screen.getByRole( 'button', { name: 'Cancel' } ) ) );
+		expect( onSave ).not.toHaveBeenCalled();
+		expect( onClose ).toHaveBeenCalled();
+	} );
+
+	// `1e999` reaches Number() as Infinity, which JSON.stringify posts as null.
+	it( 'refuses a value that is not a finite number', async () => {
+		const { onSave } = renderDrawer( {
+			isNew: false,
+			price: { at: '2', calc_type: 'fixed_price', value: '1e999', label: '' },
+		} );
+		await save();
+		expect( screen.getByText( 'Enter a number.' ) ).toBeInTheDocument();
+		expect( onSave ).not.toHaveBeenCalled();
+	} );
+
+	it( 'refuses a negative value', async () => {
+		const { onSave } = renderDrawer();
+		await type( 'Value ($)', '-5' );
+		await save();
+		expect( screen.getByText( 'Enter a value of 0 or higher.' ) ).toBeInTheDocument();
+		expect( onSave ).not.toHaveBeenCalled();
+	} );
+
+	it( 'drops a rejection as soon as the field is corrected', async () => {
 		renderDrawer();
-		expect( screen.getByRole( 'button', { name: 'Cancel' } ) ).toBeInTheDocument();
+		await save();
+		expect( screen.getByLabelText( 'Value ($)' ) ).toHaveAttribute( 'aria-invalid', 'true' );
+		await type( 'Value ($)', '5' );
+		expect( screen.getByLabelText( 'Value ($)' ) ).toHaveAttribute( 'aria-invalid', 'false' );
+		expect( screen.queryByText( 'Enter a value for this price.' ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'keeps showing a calculation the vocabulary no longer offers', () => {
+		renderDrawer( {
+			isNew: false,
+			price: { at: '2', calc_type: 'discount_fixed', value: '5', label: '' },
+		} );
+		expect( screen.getByLabelText( 'Calculation' ) ).toHaveValue( 'discount_fixed' );
 	} );
 
 	it( 'marks the rejected field invalid and leaves the accepted one alone', async () => {

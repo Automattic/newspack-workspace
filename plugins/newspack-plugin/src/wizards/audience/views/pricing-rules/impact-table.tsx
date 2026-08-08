@@ -22,9 +22,10 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { useState, useEffect, useMemo } from '@wordpress/element';
+import { useState, useEffect, useMemo, useId } from '@wordpress/element';
 import {
 	Button,
+	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
 // Not the Newspack wrapper: with-wizard-screen/style.scss gives `.newspack-dataviews`
@@ -89,6 +90,7 @@ interface ImpactTableProps {
 export default function ImpactTable( { baseline, segmentGroups, currency, showCycleNote = true }: ImpactTableProps ) {
 	const hasSegments = segmentGroups.length > 0;
 	const [ expanded, setExpanded ] = useState( false );
+	const tableId = useId();
 
 	const columns: PriceColumn[] = useMemo(
 		() => [
@@ -151,7 +153,6 @@ export default function ImpactTable( { baseline, segmentGroups, currency, showCy
 	const hasCycles = useMemo( () => columns.some( col => Object.values( col.byId ).some( row => row.segments.length > 1 ) ), [ columns ] );
 
 	const fieldIds = useMemo( () => [ 'regular', ...columns.map( col => col.key ) ], [ columns ] );
-	const fieldIdsKey = fieldIds.join( '|' );
 
 	// The server already caps the sample, so show all of it rather than re-truncating.
 	const perPage = Math.max( baseline.length, 1 );
@@ -159,7 +160,6 @@ export default function ImpactTable( { baseline, segmentGroups, currency, showCy
 	const [ view, setView ] = useState< View >( () => ( {
 		type: 'table',
 		page: 1,
-		perPage,
 		search: '',
 		filters: [],
 		layout: { density: 'compact', enableMoving: false },
@@ -167,13 +167,17 @@ export default function ImpactTable( { baseline, segmentGroups, currency, showCy
 		fields: fieldIds,
 	} ) );
 
-	// A segment column can appear or vanish while the publisher is editing.
-	useEffect( () => {
-		setView( prev => ( prev.fields?.join( '|' ) === fieldIdsKey && prev.perPage === perPage ? prev : { ...prev, fields: fieldIds, perPage } ) );
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [ fieldIdsKey, perPage ] );
+	// A segment column can appear or vanish while the publisher is editing, and the
+	// page holds the whole sample. Both follow the data rather than living in view
+	// state, where an effect would land them a paint late — long enough for a wider
+	// sample to paint once as a short, un-collapsible table.
+	const tableView = useMemo( () => ( { ...view, perPage, fields: fieldIds } ), [ view, perPage, fieldIds ] );
 
-	const { data: sorted } = useMemo( () => filterSortAndPaginate( baseline, view, fields ), [ baseline, view, fields ] );
+	const { data: sorted, paginationInfo } = useMemo( () => filterSortAndPaginate( baseline, tableView, fields ), [ baseline, tableView, fields ] );
+
+	// A fresh sample is a fresh answer to "show me the rest", so the collapse returns.
+	const sampleKey = useMemo( () => baseline.map( row => row.product_id ).join( ',' ), [ baseline ] );
+	useEffect( () => setExpanded( false ), [ sampleKey ] );
 
 	// Sliced after the sort, so collapsing keeps the current top rows.
 	const collapsible = sorted.length > ROW_LIMIT;
@@ -183,6 +187,7 @@ export default function ImpactTable( { baseline, segmentGroups, currency, showCy
 		<>
 			<VStack spacing={ 0 }>
 				<div
+					id={ tableId }
 					className="newspack-pricing-rules__impact-table"
 					role="region"
 					aria-label={ __( 'Resulting prices by product and reader segment', 'newspack-plugin' ) }
@@ -190,12 +195,12 @@ export default function ImpactTable( { baseline, segmentGroups, currency, showCy
 					<DataViews
 						data={ data }
 						fields={ fields }
-						view={ view }
+						view={ tableView }
 						onChangeView={ setView }
-						paginationInfo={ { totalItems: data.length, totalPages: 1 } }
+						paginationInfo={ paginationInfo }
 						defaultLayouts={ { table: {} } }
 						getItemId={ ( item: CatalogImpactRow ) => String( item.product_id ) }
-						empty={ <p>{ __( 'No products to show.', 'newspack-plugin' ) }</p> }
+						empty={ <p className="newspack-pricing-rules__muted">{ __( 'No products to show.', 'newspack-plugin' ) }</p> }
 					>
 						<DataViews.Layout />
 					</DataViews>
@@ -204,11 +209,17 @@ export default function ImpactTable( { baseline, segmentGroups, currency, showCy
 					<>
 						{ /* Divider margins are raw px, not a step scale. */ }
 						<Divider variant="tertiary" marginTop={ 0 } marginBottom={ 8 } />
-						<div>
-							<Button variant="secondary" aria-expanded={ expanded } onClick={ () => setExpanded( ! expanded ) }>
+						<HStack justify="flex-start">
+							<Button
+								variant="secondary"
+								aria-expanded={ expanded }
+								aria-controls={ tableId }
+								onClick={ () => setExpanded( ! expanded ) }
+								__next40pxDefaultSize
+							>
 								{ expanded ? __( 'See Less', 'newspack-plugin' ) : __( 'See More', 'newspack-plugin' ) }
 							</Button>
-						</div>
+						</HStack>
 					</>
 				) }
 			</VStack>

@@ -23,7 +23,7 @@ interface SchedulePriceDrawerProps {
 	isNew: boolean;
 	takenCycles: number[];
 	publicize: boolean;
-	calcTypes: { value: string; label: string }[];
+	calcTypes: PricingRulesCalcType[];
 	currency: PricingRulesCurrency;
 	onSave: ( price: SchedulePriceInput ) => void;
 	onClose: () => void;
@@ -74,7 +74,16 @@ export default function SchedulePriceDrawer( {
 
 	const isDirty = draft.at !== price.at || draft.calc_type !== price.calc_type || draft.value !== price.value || draft.label !== price.label;
 
-	const update = ( key: keyof SchedulePriceInput, value: string ) => setDraft( prev => ( { ...prev, [ key ]: value } ) );
+	// A corrected field drops its rejection as it is typed in, so the help text and
+	// `aria-invalid` never outlast the value that earned them.
+	const update = ( key: keyof SchedulePriceInput, value: string ) => {
+		setDraft( prev => ( { ...prev, [ key ]: value } ) );
+		if ( 'at' === key || 'value' === key ) {
+			// Same object back when there is nothing to clear, so the focus effect
+			// below only ever runs off a real change of state.
+			setErrors( prev => ( prev[ key ] ? { ...prev, [ key ]: undefined } : prev ) );
+		}
+	};
 
 	const save = () => {
 		const next: FieldErrors = {};
@@ -86,14 +95,31 @@ export default function SchedulePriceDrawer( {
 			next.at = sprintf( __( 'Cycle %d already has a price.', 'newspack-plugin' ), at );
 		}
 		// Blank is "not set"; a typed 0 is a deliberate free price (NPPD-1854).
+		const value = Number( draft.value );
 		if ( '' === String( draft.value ).trim() ) {
 			next.value = __( 'Enter a value for this price.', 'newspack-plugin' );
+		} else if ( ! Number.isFinite( value ) ) {
+			// `1e999` clears the number input but serialises as null, so the engine
+			// would store a price nobody typed.
+			next.value = __( 'Enter a number.', 'newspack-plugin' );
+		} else if ( value < 0 ) {
+			next.value = __( 'Enter a value of 0 or higher.', 'newspack-plugin' );
 		}
 		setErrors( next );
 		if ( ! next.at && ! next.value ) {
 			onSave( draft );
 		}
 	};
+
+	// A saved price can name a calculation the vocabulary no longer offers. Listing it
+	// keeps the control showing what the price actually is instead of silently
+	// displaying the first option while the stored value rides along underneath.
+	const options = calcTypes.map( c => ( { label: c.label, value: c.value } ) );
+	if ( draft.calc_type && ! calcTypes.some( c => c.value === draft.calc_type ) ) {
+		options.push( { label: draft.calc_type, value: draft.calc_type } );
+	}
+
+	const errorClass = 'newspack-pricing-rules__field--error';
 
 	return (
 		<Drawer.Root isOpen={ isOpen } isDirty={ isDirty } onRequestClose={ onClose }>
@@ -104,6 +130,7 @@ export default function SchedulePriceDrawer( {
 			<Drawer.Content>
 				<TextControl
 					ref={ atRef }
+					className={ errors.at ? errorClass : undefined }
 					label={ __( 'From cycle #', 'newspack-plugin' ) }
 					help={ errors.at ?? __( 'Cycle 1 is the initial purchase; cycle 2 is the first renewal.', 'newspack-plugin' ) }
 					aria-invalid={ !! errors.at }
@@ -112,17 +139,20 @@ export default function SchedulePriceDrawer( {
 					value={ draft.at }
 					onChange={ v => update( 'at', v ) }
 					__next40pxDefaultSize
+					__nextHasNoMarginBottom
 				/>
 				<SelectControl
 					label={ __( 'Calculation', 'newspack-plugin' ) }
 					help={ calcTypeHelp( draft.calc_type, calcTypes.find( c => c.value === draft.calc_type )?.label ?? '' ) }
 					value={ draft.calc_type }
-					options={ calcTypes.map( c => ( { label: c.label, value: c.value } ) ) }
+					options={ options }
 					onChange={ v => update( 'calc_type', v ) }
 					__next40pxDefaultSize
+					__nextHasNoMarginBottom
 				/>
 				<TextControl
 					ref={ valueRef }
+					className={ errors.value ? errorClass : undefined }
 					label={ valueLabel( draft.calc_type, currency.symbol ) }
 					help={ errors.value ?? valueHelp( draft.calc_type ) }
 					aria-invalid={ !! errors.value }
@@ -130,6 +160,7 @@ export default function SchedulePriceDrawer( {
 					value={ draft.value }
 					onChange={ v => update( 'value', v ) }
 					__next40pxDefaultSize
+					__nextHasNoMarginBottom
 				/>
 				{ publicize && (
 					<TextControl
@@ -138,6 +169,7 @@ export default function SchedulePriceDrawer( {
 						value={ draft.label }
 						onChange={ v => update( 'label', v ) }
 						__next40pxDefaultSize
+						__nextHasNoMarginBottom
 					/>
 				) }
 			</Drawer.Content>

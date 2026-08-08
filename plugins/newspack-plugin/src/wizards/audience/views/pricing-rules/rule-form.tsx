@@ -415,6 +415,14 @@ export default function RuleForm( { isNew, initialPath = null, rule, vocab, onDo
 			} );
 			return;
 		}
+		if ( isSchedule && ! steps.length ) {
+			addNotice( {
+				message: __( 'Add at least one price.', 'newspack-plugin' ),
+				type: 'error',
+				id: 'pricing-rule-steps',
+			} );
+			return;
+		}
 		setIsSaving( true );
 		const body: Record< string, unknown > = {
 			title,
@@ -433,15 +441,6 @@ export default function RuleForm( { isNew, initialPath = null, rule, vocab, onDo
 			conditions,
 		};
 		if ( isSchedule ) {
-			if ( ! steps.length ) {
-				addNotice( {
-					message: __( 'Add at least one price.', 'newspack-plugin' ),
-					type: 'error',
-					id: 'pricing-rule-steps',
-				} );
-				setIsSaving( false );
-				return;
-			}
 			body.strategy_id = 'stepped_by_cycle';
 			body.steps = steps.map( s => ( {
 				at: Number( s.at ) || 1,
@@ -837,7 +836,7 @@ export default function RuleForm( { isNew, initialPath = null, rule, vocab, onDo
 					noMargin
 				/>
 				{ hasCycleDimension && <p className="newspack-pricing-rules__muted">{ cycleMarkerNote() }</p> }
-				<RulePreview body={ previewBody } hasPrice={ isSchedule || String( value ).trim() !== '' } />
+				<RulePreview body={ previewBody } hasPrice={ isSchedule ? steps.length > 0 : String( value ).trim() !== '' } />
 			</div>
 			{ goalDialog }
 		</div>

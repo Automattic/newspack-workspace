@@ -136,6 +136,24 @@ describe( 'the schedule section of the rule form', () => {
 		] );
 	} );
 
+	// A rule saved before the redesign can hold its prices in any order.
+	it( 'orders a rule stored out of sequence for both the table and the save', async () => {
+		await renderScheduleForm( {
+			...SCHEDULED_RULE,
+			steps: [
+				{ at: 3, calc_type: 'fixed_price', value: 9, label: 'Year 1' },
+				{ at: 1, calc_type: 'fixed_price', value: 5, label: 'Intro' },
+			],
+		} );
+
+		expect( screen.getByRole( 'button', { name: '1 to 2' } ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'button', { name: '3 onward' } ) ).toBeInTheDocument();
+		expect( ( await save() ).steps ).toEqual( [
+			{ at: 1, calc_type: 'fixed_price', value: 5, label: 'Intro' },
+			{ at: 3, calc_type: 'fixed_price', value: 9, label: 'Year 1' },
+		] );
+	} );
+
 	it( 'refuses to save a schedule with no prices', async () => {
 		await renderScheduleForm( { ...SCHEDULED_RULE, steps: [] } );
 

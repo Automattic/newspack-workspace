@@ -70,6 +70,12 @@ interface PricingRulesVocabItem {
 	requires_value?: boolean;
 }
 
+/** Keyed on `value`, not `id`, which is what the calculation controls bind to. */
+interface PricingRulesCalcType {
+	value: string;
+	label: string;
+}
+
 interface PricingRuleConditionVocab {
 	id: string;
 	field_type: 'boolean' | 'datetime' | 'select' | string;
@@ -84,7 +90,7 @@ interface PricingRulesResponse {
 	currency: PricingRulesCurrency;
 	strategies: PricingRulesVocabItem[];
 	scopes: PricingRulesVocabItem[];
-	calc_types: { value: string; label: string }[];
+	calc_types: PricingRulesCalcType[];
 	conditions: PricingRuleConditionVocab[];
 }
 

@@ -44,7 +44,12 @@ export function cycleRange( at: number, nextAt: number | null ): { display: stri
 	};
 }
 
-export function priceSummary( price: SchedulePriceInput, currency: PricingRulesCurrency ): string {
+/**
+ * The engine's calculation vocabulary is server-supplied, so a type this cell has no
+ * wording for falls back to naming it beside the raw value. Formatting an unknown
+ * type as currency would read as a price the reader never pays.
+ */
+export function priceSummary( price: SchedulePriceInput, currency: PricingRulesCurrency, calcLabel = '' ): string {
 	const amount = Number( price.value ) || 0;
 	if ( 'percent_of_base' === price.calc_type ) {
 		/* translators: %s: the percentage of the regular price a reader pays, for example 80. */
@@ -54,5 +59,9 @@ export function priceSummary( price: SchedulePriceInput, currency: PricingRulesC
 		/* translators: %s: a formatted price, for example $2.00. */
 		return sprintf( __( '%s off', 'newspack-plugin' ), formatPrice( amount, currency ) );
 	}
-	return formatPrice( amount, currency );
+	if ( 'fixed_price' === price.calc_type ) {
+		return formatPrice( amount, currency );
+	}
+	/* translators: 1: the name of a price calculation, 2: its raw value. */
+	return sprintf( __( '%1$s: %2$s', 'newspack-plugin' ), calcLabel || price.calc_type, String( amount ) );
 }

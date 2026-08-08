@@ -27,21 +27,6 @@ export function formatSegment( seg: ImpactSegment, currency: PricingRulesCurrenc
 }
 
 /**
- * The resulting-price cell as a single string: flat rules show the adjusted price;
- * scheduled rules chain each cycle with ` → `.
- */
-export function describeResulting( row: CatalogImpactRow, currency: PricingRulesCurrency ): string {
-	if ( row.segments.length <= 1 ) {
-		return formatPrice( row.adjusted, currency );
-	}
-	return row.segments.map( seg => formatSegment( seg, currency ) ).join( ' → ' );
-}
-
-/**
- * Group a count's digits. The externalized @wordpress/i18n has no numberFormat, and
- * WordPress ships locales Intl rejects (pt_PT_ao90), hence the fall back.
- */
-/**
  * The legend for the `c1`/`c2` markers a stepped rule puts on its prices. Shared
  * so the editor's section header and the catalog panel cannot drift apart.
  */
@@ -49,6 +34,10 @@ export function cycleMarkerNote(): string {
 	return __( 'Each price is marked with the billing cycle it starts from: c1 is the initial purchase, c2 the first renewal.', 'newspack-plugin' );
 }
 
+/**
+ * Group a count's digits. The externalized @wordpress/i18n has no numberFormat, and
+ * WordPress ships locales Intl rejects (pt_PT_ao90), hence the fall back.
+ */
 export function formatCount( value: number ): string {
 	const n = Number( value );
 	try {

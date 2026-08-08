@@ -87,6 +87,37 @@ describe( 'ImpactTable', () => {
 		expect( toggle() ).not.toBeInTheDocument();
 	} );
 
+	it( 'points the toggle at the table it expands', () => {
+		render( <ImpactTable baseline={ sample( 25 ) } segmentGroups={ [] } currency={ CURRENCY } /> );
+		const region = screen.getByRole( 'region', { name: /Resulting prices/ } );
+
+		expect( toggle() ).toHaveAttribute( 'aria-controls', region.id );
+		expect( region.id ).not.toBe( '' );
+	} );
+
+	// A wider sample used to paint once as a short, un-collapsible table before the
+	// page size caught up.
+	it( 'collapses a widened sample on the render that receives it', () => {
+		const { rerender } = render( <ImpactTable baseline={ sample( 3 ) } segmentGroups={ [] } currency={ CURRENCY } /> );
+		expect( toggle() ).not.toBeInTheDocument();
+
+		rerender( <ImpactTable baseline={ sample( 25 ) } segmentGroups={ [] } currency={ CURRENCY } /> );
+
+		expect( bodyRows() ).toBe( 10 );
+		expect( toggle() ).toHaveTextContent( 'See More' );
+	} );
+
+	it( 'returns to the collapsed view when a fresh sample arrives', () => {
+		const { rerender } = render( <ImpactTable baseline={ sample( 25 ) } segmentGroups={ [] } currency={ CURRENCY } /> );
+		fireEvent.click( toggle() );
+		expect( bodyRows() ).toBe( 25 );
+
+		rerender( <ImpactTable baseline={ sample( 30 ) } segmentGroups={ [] } currency={ CURRENCY } /> );
+
+		expect( bodyRows() ).toBe( 10 );
+		expect( toggle() ).toHaveTextContent( 'See More' );
+	} );
+
 	it( 'renders one row per product with its regular and resulting price', () => {
 		render( <ImpactTable baseline={ [ row() ] } segmentGroups={ [] } currency={ CURRENCY } /> );
 		expect( screen.getByRole( 'link', { name: 'Monthly' } ) ).toHaveAttribute( 'href', 'https://example.test/edit/1' );

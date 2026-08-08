@@ -223,6 +223,21 @@ describe( 'the schedule prices table', () => {
 		expect( onChange ).toHaveBeenCalledWith( [ expect.objectContaining( { at: '1' } ), expect.objectContaining( { at: '7' } ) ] );
 	} );
 
+	// The kebab that triggered it is gone, so focus would otherwise fall to the body.
+	it( 'keeps focus in the form after a price is removed', async () => {
+		render( <Schedule /> );
+		await chooseFromKebab( 1, 'Remove' );
+		expect( screen.getByRole( 'button', { name: 'Add Price' } ) ).toHaveFocus();
+	} );
+
+	it( 'names a calculation it has no wording for rather than pricing it', () => {
+		renderPrices( {
+			steps: [ { at: '1', calc_type: 'discount_percent', value: '20', label: '' } ],
+			calcTypes: [ ...CALC_TYPES, { value: 'discount_percent', label: 'Percentage off' } ],
+		} );
+		expect( screen.getByText( 'Percentage off: 20' ) ).toBeInTheDocument();
+	} );
+
 	it( 'ignores a click on a non-interactive part of a row', async () => {
 		renderPrices();
 		await act( async () => {
