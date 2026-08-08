@@ -1213,6 +1213,96 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The theme is faulted in rather than switched to: the test environment has no
+	 * Newspack theme installed.
+	 */
+	public function test_the_button_colour_css_is_newspack_classic_only() {
+		$css   = $this->under_theme( 'newspack-theme', [ Newspack_Popups_Contextual_Prompt_Render::class, 'get_button_color_css' ] );
+		$other = $this->under_theme( 'twentytwentyfour', [ Newspack_Popups_Contextual_Prompt_Render::class, 'get_button_color_css' ] );
+
+		$this->assertStringContainsString( '.newspack-contextual-prompt .wp-block-button:not(.is-style-outline)', $css );
+		$this->assertStringContainsString( '> .wp-block-button__link:not(.is-style-outline):not(.has-background)', $css );
+		$this->assertStringContainsString( '{color:var(--newspack-theme-color-against-secondary)}', $css );
+
+		$this->assertSame( '', $other, 'Another theme is left to colour its own buttons.' );
+	}
+
+	/**
+	 * The restated colour pairs with the theme's own button background, so a
+	 * background the publisher chose is left alone.
+	 */
+	public function test_a_publisher_background_is_out_of_reach() {
+		$css = $this->under_theme( 'newspack-theme', [ Newspack_Popups_Contextual_Prompt_Render::class, 'get_button_color_css' ] );
+
+		$this->assertStringContainsString( ':not(.has-background)', $css );
+	}
+
+	/**
+	 * The filter is the only route onto a theme the slug check misses.
+	 */
+	public function test_the_button_colour_css_is_filterable() {
+		$opt_in = static function () {
+			return '.custom{color:#fff}';
+		};
+
+		add_filter( 'newspack_contextual_prompts_button_color_css', $opt_in );
+		$forked   = $this->under_theme( 'some-fork', [ Newspack_Popups_Contextual_Prompt_Render::class, 'get_button_color_css' ] );
+		$newspack = $this->under_theme( 'newspack-theme', [ Newspack_Popups_Contextual_Prompt_Render::class, 'get_button_color_css' ] );
+		remove_filter( 'newspack_contextual_prompts_button_color_css', $opt_in );
+
+		$this->assertSame( '.custom{color:#fff}', $forked, 'A theme this does not name can opt in.' );
+		$this->assertSame( '.custom{color:#fff}', $newspack, 'And one it does can replace what it sends.' );
+	}
+
+	/**
+	 * Neither surface can lose the CTA's colour to an edit that touches only the
+	 * other. The front end is read back off the handle it rides on.
+	 */
+	public function test_both_surfaces_are_delivered_the_same_css() {
+		$this->switch_to_theme_family( false );
+		wp_deregister_style( Newspack_Popups_Contextual_Prompt_Render::LAYOUT_STYLE_HANDLE );
+
+		$newspack = static function () {
+			return 'newspack-theme';
+		};
+		add_filter( 'template', $newspack );
+
+		$expected = Newspack_Popups_Contextual_Prompt_Render::get_layout_css()
+			. Newspack_Popups_Contextual_Prompt_Render::get_button_color_css();
+		$settings = Newspack_Popups_Contextual_Prompt_Render::add_editor_layout_styles( [] );
+		Newspack_Popups_Contextual_Prompt_Render::enqueue_layout_styles();
+		$inline = wp_styles()->get_data( Newspack_Popups_Contextual_Prompt_Render::LAYOUT_STYLE_HANDLE, 'after' );
+
+		remove_filter( 'template', $newspack );
+
+		$this->assertStringContainsString( '{color:var(--newspack-theme-color-against-secondary)}', $expected, 'The colour rule is part of what is delivered.' );
+		$this->assertSame( [ [ 'css' => $expected ] ], $settings['styles'], 'The editor canvas gets it.' );
+		$this->assertIsArray( $inline );
+		$this->assertSame( $expected, implode( '', $inline ), 'And so does the front end.' );
+	}
+
+	/**
+	 * Run a callable with `get_template()` reporting a given slug.
+	 *
+	 * @param string   $template Theme slug to report.
+	 * @param callable $callback Callable to run.
+	 *
+	 * @return mixed The callable's return value.
+	 */
+	private function under_theme( $template, $callback ) {
+		$filter = static function () use ( $template ) {
+			return $template;
+		};
+
+		add_filter( 'template', $filter );
+		try {
+			return call_user_func( $callback );
+		} finally {
+			remove_filter( 'template', $filter );
+		}
+	}
+
+	/**
 	 * An inactive override — enabled with no copy — leaves the instance alone, so
 	 * the story's own copy renders.
 	 */

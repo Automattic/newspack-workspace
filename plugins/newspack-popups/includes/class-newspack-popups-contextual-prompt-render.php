@@ -24,7 +24,7 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Newspack_Popups_Contextual_Prompt_Render {
 	/**
-	 * Handle the classic-theme layout CSS is delivered on.
+	 * Handle the card's own inline CSS is delivered on.
 	 */
 	const LAYOUT_STYLE_HANDLE = 'newspack-popups-contextual-prompt-layout';
 
@@ -98,11 +98,55 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 	}
 
 	/**
+	 * Restates the CTA's label colour on the Newspack classic theme, where a link
+	 * inside a colour-carrying block inherits that colour above the theme's own
+	 * button rule, leaving the card's near-black label on a dark button. What a
+	 * publisher sets on the button still wins: core emits `!important` for a
+	 * palette colour and inline for a custom one.
+	 *
+	 * The colour is the theme's pair for the theme's button background, so it is
+	 * wrong for a background a publisher chose and unnecessary for an outline
+	 * button the theme already colours. Gated on that theme because elsewhere the
+	 * variable is undefined, which would drop the declaration and restore the
+	 * inheritance.
+	 *
+	 * @return string CSS, or an empty string off the Newspack classic theme.
+	 */
+	public static function get_button_color_css() {
+		$css = '';
+
+		if ( 'newspack-theme' === get_template() ) {
+			$filled = '.' . Newspack_Popups_Contextual_Prompt_Pattern::MARKER_CLASS
+				. ' .wp-block-button:not(.is-style-outline) > .wp-block-button__link:not(.is-style-outline):not(.has-background)';
+			$css    = $filled . '{color:var(--newspack-theme-color-against-secondary)}';
+		}
+
+		/**
+		 * Filters the CSS restating the Contextual Prompt CTA's label colour.
+		 *
+		 * Applied off the theme gate too, so a theme the check misses can opt in.
+		 *
+		 * @param string $css The CSS, or an empty string.
+		 */
+		return (string) apply_filters( 'newspack_contextual_prompts_button_color_css', $css );
+	}
+
+	/**
+	 * Everything the card is delivered. Both hooks read this, so the editor and
+	 * the front end cannot drift apart through an edit to one of them.
+	 *
+	 * @return string
+	 */
+	private static function get_delivered_css() {
+		return self::get_layout_css() . self::get_button_color_css();
+	}
+
+	/**
 	 * Front end: an inline stylesheet of its own, so it lands wherever the theme
 	 * prints its styles and carries no file to version.
 	 */
 	public static function enqueue_layout_styles() {
-		$css = self::get_layout_css();
+		$css = self::get_delivered_css();
 		if ( '' === $css ) {
 			return;
 		}
@@ -120,7 +164,7 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 	 * @return array
 	 */
 	public static function add_editor_layout_styles( $settings ) {
-		$css = self::get_layout_css();
+		$css = self::get_delivered_css();
 		if ( '' === $css ) {
 			return $settings;
 		}
