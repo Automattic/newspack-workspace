@@ -103,6 +103,30 @@ describe( 'the schedule price drawer', () => {
 		expect( onSave ).not.toHaveBeenCalled();
 	} );
 
+	// Schedules written by the previous editor can hold two prices at one cycle.
+	it( 'reprices a price that shares its cycle without making it move first', async () => {
+		const { onSave } = renderDrawer( {
+			isNew: false,
+			price: { at: '2', calc_type: 'fixed_price', value: '5', label: '' },
+			takenCycles: [ 2 ],
+		} );
+		await type( 'Value ($)', '7' );
+		await save();
+		expect( onSave ).toHaveBeenCalledWith( expect.objectContaining( { at: '2', value: '7' } ) );
+	} );
+
+	it( 'still refuses to move a price onto a cycle another one claims', async () => {
+		const { onSave } = renderDrawer( {
+			isNew: false,
+			price: { at: '2', calc_type: 'fixed_price', value: '5', label: '' },
+			takenCycles: [ 3 ],
+		} );
+		await type( 'From cycle #', '3' );
+		await save();
+		expect( screen.getByText( 'Cycle 3 already has a price.' ) ).toBeInTheDocument();
+		expect( onSave ).not.toHaveBeenCalled();
+	} );
+
 	it( 'lets an edited price keep its own cycle', async () => {
 		const { onSave } = renderDrawer( {
 			isNew: false,

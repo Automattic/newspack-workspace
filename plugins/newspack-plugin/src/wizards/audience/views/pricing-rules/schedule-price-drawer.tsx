@@ -97,13 +97,17 @@ export default function SchedulePriceDrawer( {
 	const save = () => {
 		const next: FieldErrors = {};
 		const at = Number( draft.at );
+		// A schedule written by the previous editor can hold two prices at one cycle:
+		// nothing deduplicated them. Repricing one of those should not first require
+		// renumbering it, so the collision only counts against a cycle actually moved.
+		const keptItsCycle = ! isNew && at === Number( price.at );
 		if ( ! Number.isFinite( at ) || at < 1 ) {
 			next.at = __( 'Enter a cycle number of 1 or higher.', 'newspack-plugin' );
 		} else if ( ! Number.isSafeInteger( at ) ) {
 			// Cycles are counted, so 1.5 is not a smaller version of the same mistake.
 			// Safe rather than merely whole: 1e21 is an integer PHP cannot be handed.
 			next.at = __( 'Enter a whole cycle number.', 'newspack-plugin' );
-		} else if ( takenCycles.includes( at ) ) {
+		} else if ( ! keptItsCycle && takenCycles.includes( at ) ) {
 			/* translators: %d: a billing cycle number. */
 			next.at = sprintf( __( 'Cycle %d already has a price.', 'newspack-plugin' ), at );
 		}
