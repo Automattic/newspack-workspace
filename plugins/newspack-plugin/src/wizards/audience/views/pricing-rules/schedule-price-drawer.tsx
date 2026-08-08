@@ -1,7 +1,7 @@
 /**
  * Add and edit one price in a schedule. The fields stack at full width so the
  * engine's long calculation labels read in full, which they cannot do inside a
- * table cell in the form's column.
+ * table cell.
  */
 
 /**
@@ -33,6 +33,9 @@ interface FieldErrors {
 	at?: string;
 	value?: string;
 }
+
+/** Recolours the control's own help text, which is where a rejection is shown. */
+const ERROR_CLASS = 'newspack-pricing-rules__field--error';
 
 export default function SchedulePriceDrawer( {
 	isOpen,
@@ -138,8 +141,6 @@ export default function SchedulePriceDrawer( {
 		options.push( { label: draft.calc_type, value: draft.calc_type } );
 	}
 
-	const errorClass = 'newspack-pricing-rules__field--error';
-
 	return (
 		<Drawer.Root isOpen={ isOpen } isDirty={ isDirty } onRequestClose={ onClose }>
 			<Drawer.Header>
@@ -149,7 +150,7 @@ export default function SchedulePriceDrawer( {
 			<Drawer.Content>
 				<TextControl
 					ref={ atRef }
-					className={ errors.at ? errorClass : undefined }
+					className={ errors.at ? ERROR_CLASS : undefined }
 					label={ __( 'From cycle #', 'newspack-plugin' ) }
 					help={ errors.at ?? __( 'Cycle 1 is the initial purchase; cycle 2 is the first renewal.', 'newspack-plugin' ) }
 					aria-invalid={ !! errors.at }
@@ -172,7 +173,7 @@ export default function SchedulePriceDrawer( {
 				/>
 				<TextControl
 					ref={ valueRef }
-					className={ errors.value ? errorClass : undefined }
+					className={ errors.value ? ERROR_CLASS : undefined }
 					label={ valueLabel( draft.calc_type, currency.symbol ) }
 					help={ errors.value ?? valueHelp( draft.calc_type ) }
 					aria-invalid={ !! errors.value }
