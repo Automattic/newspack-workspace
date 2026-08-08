@@ -363,4 +363,38 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		self::assertContains( $allowed_id, $ids, 'An allow-listed non-viewable post type is served.' );
 		self::assertNotContains( $excluded_id, $ids, 'A non-viewable post type not on the allow-list is still dropped.' );
 	}
+
+	/**
+	 * Opting a post type into the endpoint opts in its published posts only. The
+	 * status gate in build_articles_query() is what keeps unpublished posts of an
+	 * allow-listed type away from an anonymous caller, so assert it directly.
+	 */
+	public function test_articles_endpoint_allowlist_still_hides_unpublished() {
+		$allowed = $this->register_non_viewable_cpt( 'newspack_status_cpt' );
+		$published_id = self::factory()->post->create( [ 'post_type' => $allowed, 'post_status' => 'publish' ] );
+		$draft_id     = self::factory()->post->create( [ 'post_type' => $allowed, 'post_status' => 'draft' ] );
+		$private_id   = self::factory()->post->create( [ 'post_type' => $allowed, 'post_status' => 'private' ] );
+
+		$filter = function ( $types ) use ( $allowed ) {
+			$types[] = $allowed;
+			return $types;
+		};
+		add_filter( 'newspack_blocks_articles_allowed_post_types', $filter );
+		wp_set_current_user( 0 );
+
+		$controller = new WP_REST_Newspack_Articles_Controller();
+		$request    = new WP_REST_Request( 'GET', '/newspack-blocks/v1/articles' );
+		$request->set_param( 'postType', [ $allowed ] );
+		$request->set_param( 'postsToShow', 10 );
+		try {
+			$ids = $controller->get_items( $request )->get_data()['ids'];
+		} finally {
+			// Always drop the global filter so a failure here can't leak into later tests.
+			remove_filter( 'newspack_blocks_articles_allowed_post_types', $filter );
+		}
+
+		self::assertContains( $published_id, $ids, 'A published post of an allow-listed type is served.' );
+		self::assertNotContains( $draft_id, $ids, 'A draft of an allow-listed type stays hidden from an anonymous caller.' );
+		self::assertNotContains( $private_id, $ids, 'A private post of an allow-listed type stays hidden from an anonymous caller.' );
+	}
 }

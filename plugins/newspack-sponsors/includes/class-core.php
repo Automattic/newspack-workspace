@@ -51,7 +51,7 @@ final class Core {
 		add_filter( 'newspack_ads_should_show_ads', [ __CLASS__, 'suppress_ads' ], 10, 2 );
 		add_filter( 'newspack_ads_ad_targeting', [ __CLASS__, 'ad_targeting' ], 10, 2 );
 		add_action( 'pre_get_posts', [ __CLASS__, 'ensure_only_sponsors' ] );
-		add_filter( 'newspack_blocks_articles_allowed_post_types', [ __CLASS__, 'allow_in_articles_endpoint' ] );
+		add_filter( 'newspack_blocks_articles_allowed_post_types', [ __CLASS__, 'allow_in_articles_endpoint' ], 10, 1 );
 	}
 
 	/**
@@ -67,6 +67,7 @@ final class Core {
 	 * @return string[]
 	 */
 	public static function allow_in_articles_endpoint( $post_types ) {
+		$post_types   = (array) $post_types;
 		$post_types[] = self::NEWSPACK_SPONSORS_CPT;
 		return $post_types;
 	}
