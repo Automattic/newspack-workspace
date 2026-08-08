@@ -1203,9 +1203,8 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 		$this->assertStringContainsString( 'margin-block-start:var(--wp--preset--spacing--30,1rem)', $css );
 		$this->assertStringContainsString( 'flex-shrink:0', $css );
 
-		$delivered = $css . Newspack_Popups_Contextual_Prompt_Render::get_button_color_css();
-		$settings  = Newspack_Popups_Contextual_Prompt_Render::add_editor_layout_styles( [] );
-		$this->assertSame( [ [ 'css' => $delivered ] ], $settings['styles'], 'The editor canvas gets the same CSS.' );
+		$settings = Newspack_Popups_Contextual_Prompt_Render::add_editor_layout_styles( [] );
+		$this->assertSame( [ [ 'css' => $css ] ], $settings['styles'], 'The editor canvas gets the same CSS.' );
 
 		$this->switch_to_theme_family( true );
 
@@ -1218,27 +1217,97 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 	 * link inside a coloured block that colour: the label would take it over the
 	 * button's own background. The colour is restated for a filled button, left
 	 * alone for an outline one, and never sent to a theme whose buttons the rule
-	 * does not describe.
+	 * does not describe. The theme is faulted in rather than switched to: no
+	 * Newspack theme is installed in the test environment.
 	 */
 	public function test_the_button_colour_css_is_newspack_classic_only() {
+		$css   = $this->under_theme( 'newspack-theme', [ Newspack_Popups_Contextual_Prompt_Render::class, 'get_button_color_css' ] );
+		$other = $this->under_theme( 'twentytwentyfour', [ Newspack_Popups_Contextual_Prompt_Render::class, 'get_button_color_css' ] );
+
+		$this->assertStringContainsString( '.newspack-contextual-prompt .wp-block-button:not(.is-style-outline)', $css );
+		$this->assertStringContainsString( '> .wp-block-button__link:not(.is-style-outline):not(.has-background)', $css );
+		$this->assertStringContainsString( '{color:var(--newspack-theme-color-against-secondary)}', $css );
+
+		$this->assertSame( '', $other, 'Another theme is left to colour its own buttons.' );
+	}
+
+	/**
+	 * A button whose background the publisher changed carries `has-background`,
+	 * and the colour restated here is the theme's pair for the theme's own
+	 * background — so that button is out of the selector's reach.
+	 */
+	public function test_a_publisher_background_is_out_of_reach() {
+		$css = $this->under_theme( 'newspack-theme', [ Newspack_Popups_Contextual_Prompt_Render::class, 'get_button_color_css' ] );
+
+		$this->assertStringContainsString( ':not(.has-background)', $css );
+	}
+
+	/**
+	 * The filter is how a theme this does not name opts in, and one it does opt
+	 * out — the only route onto a fork under its own slug.
+	 */
+	public function test_the_button_colour_css_is_filterable() {
+		$opt_in = static function () {
+			return '.custom{color:#fff}';
+		};
+
+		add_filter( 'newspack_contextual_prompts_button_color_css', $opt_in );
+		$forked   = $this->under_theme( 'some-fork', [ Newspack_Popups_Contextual_Prompt_Render::class, 'get_button_color_css' ] );
+		$newspack = $this->under_theme( 'newspack-theme', [ Newspack_Popups_Contextual_Prompt_Render::class, 'get_button_color_css' ] );
+		remove_filter( 'newspack_contextual_prompts_button_color_css', $opt_in );
+
+		$this->assertSame( '.custom{color:#fff}', $forked, 'A theme this does not name can opt in.' );
+		$this->assertSame( '.custom{color:#fff}', $newspack, 'And one it does can replace what it sends.' );
+	}
+
+	/**
+	 * Both surfaces are served the same string, and neither can lose the CTA's
+	 * colour to an edit that touches only the other. The front end is the one
+	 * that regressed, so it is read back off the handle it actually rides on.
+	 */
+	public function test_both_surfaces_are_delivered_the_same_css() {
+		$this->switch_to_theme_family( false );
+		wp_deregister_style( Newspack_Popups_Contextual_Prompt_Render::LAYOUT_STYLE_HANDLE );
+
 		$newspack = static function () {
 			return 'newspack-theme';
 		};
-		$other    = static function () {
-			return 'twentytwentyfour';
-		};
-
 		add_filter( 'template', $newspack );
-		$css = Newspack_Popups_Contextual_Prompt_Render::get_button_color_css();
+
+		$expected = Newspack_Popups_Contextual_Prompt_Render::get_layout_css()
+			. Newspack_Popups_Contextual_Prompt_Render::get_button_color_css();
+		$settings = Newspack_Popups_Contextual_Prompt_Render::add_editor_layout_styles( [] );
+		Newspack_Popups_Contextual_Prompt_Render::enqueue_layout_styles();
+		$inline = wp_styles()->get_data( Newspack_Popups_Contextual_Prompt_Render::LAYOUT_STYLE_HANDLE, 'after' );
+
 		remove_filter( 'template', $newspack );
 
-		$this->assertStringContainsString( '.newspack-contextual-prompt .wp-block-button:not(.is-style-outline)', $css );
-		$this->assertStringContainsString( '> .wp-block-button__link:not(.is-style-outline)', $css );
-		$this->assertStringContainsString( '{color:var(--newspack-theme-color-against-secondary)}', $css );
+		$this->assertStringContainsString( '{color:var(--newspack-theme-color-against-secondary)}', $expected, 'The colour rule is part of what is delivered.' );
+		$this->assertSame( [ [ 'css' => $expected ] ], $settings['styles'], 'The editor canvas gets it.' );
+		$this->assertIsArray( $inline );
+		$this->assertSame( $expected, implode( '', $inline ), 'And so does the front end.' );
+	}
 
-		add_filter( 'template', $other );
-		$this->assertSame( '', Newspack_Popups_Contextual_Prompt_Render::get_button_color_css(), 'Another theme is left to colour its own buttons.' );
-		remove_filter( 'template', $other );
+	/**
+	 * Run a callable with `get_template()` faulted to a given slug, leaving the
+	 * filter off whether the call succeeds or not.
+	 *
+	 * @param string   $template Theme slug to report.
+	 * @param callable $callback Callable to run.
+	 *
+	 * @return mixed The callable's return value.
+	 */
+	private function under_theme( $template, $callback ) {
+		$filter = static function () use ( $template ) {
+			return $template;
+		};
+
+		add_filter( 'template', $filter );
+		try {
+			return call_user_func( $callback );
+		} finally {
+			remove_filter( 'template', $filter );
+		}
 	}
 
 	/**

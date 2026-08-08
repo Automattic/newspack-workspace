@@ -24,7 +24,8 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Newspack_Popups_Contextual_Prompt_Render {
 	/**
-	 * Handle the classic-theme layout CSS is delivered on.
+	 * Handle the card's own inline CSS is delivered on — the classic-theme layout
+	 * rules, and on the Newspack classic theme its CTA's colour as well.
 	 */
 	const LAYOUT_STYLE_HANDLE = 'newspack-popups-contextual-prompt-layout';
 
@@ -110,25 +111,54 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 	 * core emits as `!important` for a palette colour and inline for a custom
 	 * one.
 	 *
-	 * Outline buttons are left to inherit: their label sits on the card, not on a
-	 * filled background, so the card's text colour is the right one for it.
+	 * Only the button this plugin ships is restated: the colour below is the
+	 * theme's pair for the theme's button background, so it is the wrong answer
+	 * for a background a publisher chose. Core marks those on the link itself,
+	 * for a palette colour and a custom one alike, and they are left alone.
+	 *
+	 * Outline buttons are left alone too, for a different reason: the theme
+	 * already colours them, above the rule that would have them inherit. The
+	 * editor disagrees there — its own outline rule declares no colour, so the
+	 * label falls through to the filled one — but that is the theme's to
+	 * reconcile, not this card's.
 	 *
 	 * Named for the theme it compensates rather than for classic themes at large:
 	 * the variable below is that theme's, and on any other one an undefined
 	 * variable would drop the declaration and leave the label inheriting the very
-	 * colour this removes.
+	 * colour this removes. The filter is the way onto a theme this cannot name —
+	 * a fork under its own slug, or a child theme that would rather this stopped.
 	 *
 	 * @return string CSS, or an empty string off the Newspack classic theme.
 	 */
 	public static function get_button_color_css() {
-		if ( 'newspack-theme' !== get_template() ) {
-			return '';
+		$css = '';
+
+		if ( 'newspack-theme' === get_template() ) {
+			$filled = '.' . Newspack_Popups_Contextual_Prompt_Pattern::MARKER_CLASS
+				. ' .wp-block-button:not(.is-style-outline) > .wp-block-button__link:not(.is-style-outline):not(.has-background)';
+			$css    = $filled . '{color:var(--newspack-theme-color-against-secondary)}';
 		}
 
-		$filled = '.' . Newspack_Popups_Contextual_Prompt_Pattern::MARKER_CLASS
-			. ' .wp-block-button:not(.is-style-outline) > .wp-block-button__link:not(.is-style-outline)';
+		/**
+		 * Filters the CSS restating the Contextual Prompt CTA's label colour.
+		 *
+		 * Runs whether or not this theme is one the plugin compensates, so a theme
+		 * it does not name can opt in as readily as one it does can opt out.
+		 *
+		 * @param string $css The CSS, or an empty string.
+		 */
+		return (string) apply_filters( 'newspack_contextual_prompts_button_color_css', $css );
+	}
 
-		return $filled . '{color:var(--newspack-theme-color-against-secondary)}';
+	/**
+	 * Everything the card is delivered, whichever surface is asking. Both hooks
+	 * read this rather than composing their own, so neither can come to disagree
+	 * with the other through an edit to one of them.
+	 *
+	 * @return string
+	 */
+	private static function get_delivered_css() {
+		return self::get_layout_css() . self::get_button_color_css();
 	}
 
 	/**
@@ -136,7 +166,7 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 	 * prints its styles and carries no file to version.
 	 */
 	public static function enqueue_layout_styles() {
-		$css = self::get_layout_css() . self::get_button_color_css();
+		$css = self::get_delivered_css();
 		if ( '' === $css ) {
 			return;
 		}
@@ -154,7 +184,7 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 	 * @return array
 	 */
 	public static function add_editor_layout_styles( $settings ) {
-		$css = self::get_layout_css() . self::get_button_color_css();
+		$css = self::get_delivered_css();
 		if ( '' === $css ) {
 			return $settings;
 		}
