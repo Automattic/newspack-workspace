@@ -56,13 +56,13 @@ class Block_Visibility {
 		// Bypass access control in admin screens so blocks are never hidden from
 		// editors during content authoring.
 		//
-		// REST requests are deliberately NOT bypassed here. Core serves
-		// `content.rendered` for published posts to any unauthenticated caller, so a
-		// blanket REST exemption makes every gated block readable by requesting the
-		// post through the API instead of loading the page. Authoring contexts that
+		// REST requests are deliberately NOT exempt: a context check is not a permission
+		// check, and access has to be evaluated per requester. Authoring contexts that
 		// arrive over REST (block renderer, preview, query-loop rendering inside the
-		// editor) are covered by the `edit_post` capability check further down, which
-		// passes for the editor and fails for everyone else.
+		// editor) are covered by the `edit_post` check further down, which needs a post
+		// in scope — where none is set up, it fails closed. Re-adding a blanket REST
+		// exemption here would widen what is readable; the REST cases in
+		// tests/unit-tests/content-gate/class-block-visibility.php pin the behaviour.
 		if ( is_admin() ) {
 			return $block_content;
 		}
