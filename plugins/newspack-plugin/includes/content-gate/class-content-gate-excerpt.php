@@ -22,7 +22,10 @@ class Content_Gate_Excerpt {
 		// wrapper that hands core the same work over sanitized content, rather than
 		// reimplementing the trimming: two copies of that logic already exist in this
 		// monorepo and both have drifted from core.
-		remove_filter( 'get_the_excerpt', 'wp_trim_excerpt', 10 );
+		$removed = remove_filter( 'get_the_excerpt', 'wp_trim_excerpt', 10 );
+		if ( ! $removed ) {
+			Logger::log( 'Failed to remove core wp_trim_excerpt filter; excerpts may bypass the content gate.', 'CONTENT-GATE-EXCERPT' );
+		}
 		add_filter( 'get_the_excerpt', [ __CLASS__, 'filter_get_the_excerpt' ], 10, 2 );
 	}
 
@@ -34,18 +37,20 @@ class Content_Gate_Excerpt {
 	 * @return string
 	 */
 	public static function filter_get_the_excerpt( $text, $post = null ) {
-		if ( ! $post instanceof \WP_Post ) {
+		$resolved = $post instanceof \WP_Post ? $post : get_post( $post );
+
+		if ( ! $resolved instanceof \WP_Post ) {
 			return wp_trim_excerpt( $text, $post );
 		}
 
 		// A manually written excerpt is the author's own words; core returns it
 		// untouched and so do we.
 		if ( '' !== trim( (string) $text ) ) {
-			return wp_trim_excerpt( $text, $post );
+			return wp_trim_excerpt( $text, $resolved );
 		}
 
-		$sanitized               = clone $post;
-		$sanitized->post_content = Block_Visibility::strip_blocks_hidden_from_public( $post->post_content );
+		$sanitized               = clone $resolved;
+		$sanitized->post_content = Block_Visibility::strip_blocks_hidden_from_public( $resolved->post_content );
 
 		// Gated blocks never contribute to a teaser. A post whose readable content is
 		// entirely gated gets a blank excerpt, matching what its article page already
