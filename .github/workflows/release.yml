@@ -70,8 +70,12 @@ jobs:
           # would silently skip a real release, the one outcome we must avoid.
           set +e
           pnpm exec multi-semantic-release --dry-run --sequential-init 2>&1 | tee msr-dryrun.log
-          dryrun_status=${PIPESTATUS[0]}
-          tee_status=${PIPESTATUS[1]}
+          # Copy the whole array in one go: PIPESTATUS is rebuilt after every
+          # command, and an assignment is a command, so reading [1] on the line
+          # after reading [0] returns empty and the tee check below never fires.
+          pipe_status=("${PIPESTATUS[@]}")
+          dryrun_status=${pipe_status[0]}
+          tee_status=${pipe_status[1]}
           set -e
           if [ "$dryrun_status" -ne 0 ]; then
             echo "multi-semantic-release dry-run failed (exit $dryrun_status)"
