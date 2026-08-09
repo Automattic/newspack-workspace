@@ -47,19 +47,10 @@ class Content_Gate_Excerpt {
 		$sanitized               = clone $post;
 		$sanitized->post_content = Block_Visibility::strip_blocks_hidden_from_public( $post->post_content );
 
-		$excerpt = wp_trim_excerpt( $text, $sanitized );
-
-		// Everything the reader could see was gated. Fall back to the gate's own
-		// teaser only where the publisher configured one for the whole post; for a
-		// post gated only at block level nobody authorized a preview.
-		if ( '' === trim( wp_strip_all_tags( $excerpt ) ) && Content_Gate::is_post_restricted( $post->ID ) ) {
-			return Content_Gate::get_restricted_post_excerpt_for_gate(
-				$post,
-				Content_Gate::get_gate_layout_id( $post->ID )
-			);
-		}
-
-		return $excerpt;
+		// Gated blocks never contribute to a teaser. A post whose readable content is
+		// entirely gated gets a blank excerpt, matching what its article page already
+		// shows a non-member.
+		return wp_trim_excerpt( $text, $sanitized );
 	}
 }
 Content_Gate_Excerpt::init();

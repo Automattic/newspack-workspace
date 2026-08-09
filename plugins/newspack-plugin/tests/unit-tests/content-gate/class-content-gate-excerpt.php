@@ -6,7 +6,6 @@
  */
 
 use Newspack\Block_Visibility;
-use Newspack\Content_Gate;
 
 /**
  * Excerpt gating tests.
@@ -74,10 +73,10 @@ class Newspack_Test_Content_Gate_Excerpt extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A post whose readable content is entirely gated gets a blank excerpt when no
-	 * whole-post gate is configured — nobody authorized a preview of that text.
+	 * A post whose readable content is entirely gated gets a blank excerpt — the
+	 * article page shows a non-member no more than that already.
 	 */
-	public function test_fully_gated_post_without_a_whole_post_gate_has_a_blank_excerpt() {
+	public function test_fully_gated_post_has_a_blank_excerpt() {
 		$gate    = '{"newspackAccessControlMode":"custom","newspackAccessControlRules":{"registration":{"active":true}},"newspackAccessControlVisibility":"visible"}';
 		$post_id = $this->factory->post->create(
 			[
@@ -94,53 +93,7 @@ class Newspack_Test_Content_Gate_Excerpt extends WP_UnitTestCase {
 		$excerpt = get_the_excerpt( $post_id );
 
 		$this->assertStringNotContainsString( 'SECRETMARK', $excerpt );
-		$this->assertSame( '', trim( wp_strip_all_tags( $excerpt ) ), 'No teaser without a configured whole-post gate.' );
-
-		unset( $GLOBALS['post'] );
-	}
-
-	/**
-	 * The same post falls back to the gate's own teaser when the publisher has
-	 * configured a whole-post gate, which is a preview they authorized.
-	 */
-	public function test_fully_gated_post_with_a_whole_post_gate_falls_back_to_the_teaser() {
-		$gate    = '{"newspackAccessControlMode":"custom","newspackAccessControlRules":{"registration":{"active":true}},"newspackAccessControlVisibility":"visible"}';
-		$post_id = $this->factory->post->create(
-			[
-				'post_status'  => 'publish',
-				'post_excerpt' => '',
-				'post_content' => '<!-- wp:group ' . $gate . ' --><div class="wp-block-group"><!-- wp:paragraph --><p>SECRETMARK</p><!-- /wp:paragraph --></div><!-- /wp:group -->',
-			]
-		);
-		$GLOBALS['post'] = get_post( $post_id );
-		setup_postdata( $GLOBALS['post'] );
-		wp_set_current_user( 0 );
-		Block_Visibility::reset_cache_for_tests();
-
-		// A real gate layout post, so get_restricted_post_excerpt_for_gate() has
-		// something to build a teaser from instead of bailing out on a missing layout.
-		$gate_layout_id = $this->factory->post->create(
-			[
-				'post_type'   => Content_Gate::GATE_CPT,
-				'post_status' => 'publish',
-			]
-		);
-		update_post_meta( $gate_layout_id, 'visible_paragraphs', 2 );
-
-		// newspack_is_post_restricted is the shared decision filter the content gate
-		// itself reads, so forcing it avoids wiring a full gate layout's rule
-		// evaluation in a unit test; newspack_content_gate_layout_id points the
-		// fallback at the layout post created above.
-		$force_gate_layout_id = function () use ( $gate_layout_id ) {
-			return $gate_layout_id;
-		};
-		add_filter( 'newspack_is_post_restricted', '__return_true' );
-		add_filter( 'newspack_content_gate_layout_id', $force_gate_layout_id );
-		$excerpt = get_the_excerpt( $post_id );
-		remove_filter( 'newspack_is_post_restricted', '__return_true' );
-		remove_filter( 'newspack_content_gate_layout_id', $force_gate_layout_id );
-
-		$this->assertNotSame( '', trim( wp_strip_all_tags( $excerpt ) ), 'A configured whole-post gate yields its teaser.' );
+		$this->assertSame( '', trim( wp_strip_all_tags( $excerpt ) ), 'No teaser when every readable block is gated.' );
 
 		unset( $GLOBALS['post'] );
 	}
