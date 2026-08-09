@@ -36,11 +36,11 @@ require_once __DIR__ . '/class-newspack-block-visibility-stub.php';
 // Print errors to stdout.
 ini_set( 'error_log', 'php://stdout' ); // phpcs:ignore WordPress.PHP.IniSet.Risky
 
-// Load the composer autoloader. Use the monorepo root autoloader if available,
-// otherwise fall back to the plugin's own vendor directory.
+// Load the composer autoloader. Use the plugin's own vendor directory if
+// available, otherwise fall back to the monorepo root autoloader.
 $autoloader_paths = [
-	dirname( dirname( dirname( __DIR__ ) ) ) . '/vendor/autoload.php', // monorepo root
 	__DIR__ . '/../vendor/autoload.php', // plugin vendor
+	dirname( dirname( dirname( __DIR__ ) ) ) . '/vendor/autoload.php', // monorepo root
 ];
 foreach ( $autoloader_paths as $autoloader_path ) {
 	if ( file_exists( $autoloader_path ) ) {
