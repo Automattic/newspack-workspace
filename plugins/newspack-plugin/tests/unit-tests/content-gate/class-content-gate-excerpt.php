@@ -6,6 +6,7 @@
  */
 
 use Newspack\Block_Visibility;
+use Newspack\Content_Gate;
 
 /**
  * Excerpt gating tests.
@@ -116,11 +117,28 @@ class Newspack_Test_Content_Gate_Excerpt extends WP_UnitTestCase {
 		wp_set_current_user( 0 );
 		Block_Visibility::reset_cache_for_tests();
 
+		// A real gate layout post, so get_restricted_post_excerpt_for_gate() has
+		// something to build a teaser from instead of bailing out on a missing layout.
+		$gate_layout_id = $this->factory->post->create(
+			[
+				'post_type'   => Content_Gate::GATE_CPT,
+				'post_status' => 'publish',
+			]
+		);
+		update_post_meta( $gate_layout_id, 'visible_paragraphs', 2 );
+
 		// newspack_is_post_restricted is the shared decision filter the content gate
-		// itself reads, so forcing it avoids wiring a full gate layout in a unit test.
+		// itself reads, so forcing it avoids wiring a full gate layout's rule
+		// evaluation in a unit test; newspack_content_gate_layout_id points the
+		// fallback at the layout post created above.
+		$force_gate_layout_id = function () use ( $gate_layout_id ) {
+			return $gate_layout_id;
+		};
 		add_filter( 'newspack_is_post_restricted', '__return_true' );
+		add_filter( 'newspack_content_gate_layout_id', $force_gate_layout_id );
 		$excerpt = get_the_excerpt( $post_id );
 		remove_filter( 'newspack_is_post_restricted', '__return_true' );
+		remove_filter( 'newspack_content_gate_layout_id', $force_gate_layout_id );
 
 		$this->assertNotSame( '', trim( wp_strip_all_tags( $excerpt ) ), 'A configured whole-post gate yields its teaser.' );
 
