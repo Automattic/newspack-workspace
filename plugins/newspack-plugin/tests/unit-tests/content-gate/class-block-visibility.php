@@ -421,6 +421,24 @@ class Newspack_Test_Block_Visibility extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The hide-decision is callable directly with an explicit user, so the excerpt
+	 * path can ask what an anonymous reader would see without changing the current user.
+	 */
+	public function test_is_hidden_for_user_is_callable_with_an_explicit_user() {
+		$rules = [ 'registration' => [ 'active' => true ] ];
+		$block = $this->make_block_with_rules( 'core/group', $rules, 'visible' );
+
+		$this->assertTrue(
+			Block_Visibility::is_hidden_for_user( $block, 0 ),
+			'A registration-gated block is hidden from a logged-out reader.'
+		);
+		$this->assertFalse(
+			Block_Visibility::is_hidden_for_user( $block, $this->test_user_id ),
+			'The same block is visible to a reader who matches the rule.'
+		);
+	}
+
+	/**
 	 * Core/group block has both visibility attributes registered server-side.
 	 */
 	public function test_group_block_has_visibility_attribute_registered() {

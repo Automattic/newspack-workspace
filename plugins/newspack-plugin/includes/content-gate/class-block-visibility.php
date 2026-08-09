@@ -60,23 +60,45 @@ class Block_Visibility {
 			return $block_content;
 		}
 
+		return self::is_hidden_for_user( $block, get_current_user_id(), get_the_ID() )
+			? ''
+			: $block_content;
+	}
+
+	/**
+	 * Whether a block should be withheld from a given reader.
+	 *
+	 * Split out of filter_render_block() so callers that are not rendering — the
+	 * excerpt path in particular — can ask the same question for a specific reader
+	 * rather than the current one. Returning false means "show it", which covers
+	 * every pass-through case: a non-target block, no active gates, no active rules.
+	 *
+	 * @param array    $block   Parsed block.
+	 * @param int      $user_id Reader to evaluate against. 0 for logged-out.
+	 * @param int|null $post_id Post the block is being rendered in, or null when
+	 *                          there is no post context. Only used for the
+	 *                          edit-capability bypass.
+	 * @return bool
+	 */
+	public static function is_hidden_for_user( $block, $user_id, $post_id = null ) {
+		if ( ! in_array( $block['blockName'] ?? '', self::get_target_blocks(), true ) ) {
+			return false;
+		}
+
 		$mode       = $block['attrs']['newspackAccessControlMode'] ?? 'gate';
 		$visibility = $block['attrs']['newspackAccessControlVisibility'] ?? 'visible';
+		$gate_ids   = [];
+		$rules      = [];
 
 		if ( 'gate' === $mode ) {
 			$gate_ids = array_filter( array_map( 'intval', $block['attrs']['newspackAccessControlGateIds'] ?? [] ) );
 			if ( empty( $gate_ids ) ) {
-				return $block_content; // No gates selected → pass-through.
+				return false;
 			}
-			// If every referenced gate has been deleted or unpublished, treat as
-			// pass-through regardless of the visibility setting. This mirrors the
-			// "no gates selected" case and prevents 'hidden' mode from permanently
-			// hiding the block after a gate is removed.
 			if ( ! self::has_active_gates( $gate_ids ) ) {
-				return $block_content;
+				return false;
 			}
 		} else {
-			// Custom mode: check whether any rules are active before going further.
 			$rules = $block['attrs']['newspackAccessControlRules'] ?? [];
 
 			// Defensive cast: the block parser can occasionally yield a stdClass for
@@ -92,26 +114,20 @@ class Block_Visibility {
 								&& ! empty( $rules['custom_access']['access_rules'] );
 
 			if ( ! $has_registration && ! $has_access_rules ) {
-				return $block_content; // No active rules → pass-through.
+				return false;
 			}
 		}
 
 		// Don't restrict content for users who can edit the post it's in.
-		$post_id = get_the_ID();
-		$user_id = get_current_user_id();
 		if ( ! empty( $post_id ) && user_can( $user_id, 'edit_post', $post_id ) ) {
-			return $block_content;
+			return false;
 		}
 
 		$user_matches = ( 'gate' === $mode )
 			? self::evaluate_gate_rules_for_user( $gate_ids, $user_id )
 			: self::evaluate_rules_for_user( $rules, $user_id );
 
-		if ( 'visible' === $visibility ) {
-			return $user_matches ? $block_content : '';
-		}
-		// 'hidden'
-		return $user_matches ? '' : $block_content;
+		return 'visible' === $visibility ? ! $user_matches : $user_matches;
 	}
 
 	/**
