@@ -90,8 +90,12 @@ jobs:
           # X" for an existing package, but "There is no previous release, the
           # next release version is X" for a package's first-ever release --
           # missing the latter would silently skip that release.
-          grep -qi 'the next release version is' msr-dryrun.log
-          grep_status=$?
+          # `|| grep_status=$?` rather than a bare call: under `set -e` a bare grep
+          # that matches nothing exits 1 and kills the script, so the "no release
+          # needed" branch below is never reached. Exit 2 (a real grep error) still
+          # falls through to the failure branch.
+          grep_status=0
+          grep -qi 'the next release version is' msr-dryrun.log || grep_status=$?
           if [ "$grep_status" -eq 0 ]; then
             echo "release_needed=true" >> "$GITHUB_OUTPUT"
           elif [ "$grep_status" -eq 1 ]; then
