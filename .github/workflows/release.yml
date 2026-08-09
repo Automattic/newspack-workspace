@@ -103,6 +103,17 @@ jobs:
           if [ "$grep_status" -eq 0 ]; then
             echo "release_needed=true" >> "$GITHUB_OUTPUT"
           elif [ "$grep_status" -eq 1 ]; then
+            # Absence of the version phrase is weak evidence on its own: a
+            # wording change upstream would read as "nothing to release" and
+            # silently skip a real one. Require multi-semantic-release's own
+            # zero-count line to corroborate before trusting the skip.
+            zero_status=0
+            grep -qiE 'released 0 of [0-9]+ packages' msr-dryrun.log || zero_status=$?
+            if [ "$zero_status" -ne 0 ]; then
+              echo "Neither a release version nor a zero-release marker found; the dry-run output may have changed."
+              tail -n 20 msr-dryrun.log
+              exit 1
+            fi
             echo "release_needed=false" >> "$GITHUB_OUTPUT"
             echo "No package requires a release; skipping build and release."
           else
