@@ -57,22 +57,10 @@ body.newspack-newsletters-admin-screen--bundled {
 	--wp-admin-theme-color-lighter-10: #{np-colors.$primary-000};
 	--wp-admin-theme-color-lighter-10--rgb: #{np-colors.$primary-000--rgb};
 
-	#newspack-wizards-admin-header .newspack-wizard__header {
+	.newspack-newsletters-admin__header-actions--in-newspack-header {
 		align-items: center;
 		display: flex;
-
-		.newspack-wizard__header__inner {
-			flex: 1 1 100%;
-		}
-
-		.newspack-wizard__header__actions {
-			align-items: center;
-			display: flex;
-			flex: 1 1 auto;
-			gap: wp-vars.$grid-unit-10;
-			justify-content: flex-end;
-			padding: 0 wp-vars.$grid-unit-30 0 0;
-		}
+		gap: wp-vars.$grid-unit-10;
 	}
 }
 
@@ -197,6 +185,59 @@ body.newspack-newsletters-admin-screen--bundled {
 		font-weight: normal;
 		margin-top: wp-vars.$grid-unit-10;
 	}
+}
+
+// Centered over the admin content while an "All" fetch walks the
+// collection (portalled to body — inside the DataViews tree every
+// ancestor stack is a positioning context, which would pin it to the
+// actions row). `left` is set inline from #wpbody's box. The delayed
+// fade keeps fast walks from flashing the overlay in and out.
+.newspack-newsletters-fetch-all-progress {
+	animation: newspack-newsletters-fetch-all-progress-in 150ms ease-in-out 300ms both;
+	left: 50%;
+	pointer-events: none;
+	position: fixed;
+	top: 50%;
+	transform: translate(-50%, -50%);
+	z-index: 10;
+
+	.components-spinner {
+		margin: 0;
+	}
+}
+
+@keyframes newspack-newsletters-fetch-all-progress-in {
+	from {
+		opacity: 0;
+	}
+
+	to {
+		opacity: 1;
+	}
+}
+
+
+body.newspack-newsletters-admin-screen .dataviews-view-table a:not(.newspack-newsletters-list__title) {
+	color: var(--wp-admin-theme-color);
+
+	&:focus,
+	&:hover {
+		color: var(--wp-admin-theme-color-darker-20);
+	}
+}
+
+// The funnel toggle is permanently disabled once a primary filter pins
+// the filter row open (core can't hide the row anymore) — drop it.
+body.newspack-newsletters-admin-screen .dataviews-filters__visibility-toggle:disabled,
+body.newspack-newsletters-admin-screen .dataviews-filters__visibility-toggle[aria-disabled="true"] {
+	display: none;
+}
+
+// Muted item count portalled next to the breadcrumbs page title.
+.newspack-newsletters-header-count {
+	color: wp-colors.$gray-700;
+	font-weight: wp-vars.$font-weight-regular;
+	white-space: pre;
 }
 
 .newspack-newsletters-list {

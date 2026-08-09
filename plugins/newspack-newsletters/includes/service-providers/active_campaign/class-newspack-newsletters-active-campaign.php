@@ -1999,8 +1999,50 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 			$existing_fields = $this->get_all_contact_fields();
 			foreach ( $contact['metadata'] as $field_title => $value ) {
 				$field_perstag = strtoupper( str_replace( '-', '_', sanitize_title( $field_title ) ) );
-				/** For optimization, don't add the field if it already exists. */
-				if ( is_wp_error( $existing_fields ) || false === array_search( $field_perstag, array_column( $existing_fields, 'perstag' ) ) ) {
+
+				/**
+				 * For optimization, don't add the field if it already exists.
+				 * Match by perstag first, then by title — an ActiveCampaign
+				 * admin may have renamed a field's perstag, and creating a
+				 * field with a duplicate title fails.
+				 */
+				$existing_index = false;
+				if ( ! is_wp_error( $existing_fields ) ) {
+					// Index-preserving lookups: array_column() would reindex and skip
+					// rows missing the key, mapping a match to the wrong field.
+					// A row with an empty perstag can't supply a usable payload key, so
+					// it must never match — `! empty()` rather than `isset()`.
+					foreach ( $existing_fields as $index => $existing_field ) {
+						if ( ! empty( $existing_field['perstag'] ) && $existing_field['perstag'] === $field_perstag ) {
+							$existing_index = $index;
+							break;
+						}
+					}
+					if ( false === $existing_index ) {
+						foreach ( $existing_fields as $index => $existing_field ) {
+							if (
+								! empty( $existing_field['title'] ) && ! empty( $existing_field['perstag'] ) &&
+								0 === strcasecmp( trim( $existing_field['title'] ), trim( $field_title ) )
+							) {
+								$existing_index = $index;
+								break;
+							}
+						}
+					}
+				}
+
+				if ( false !== $existing_index ) {
+					/** Use the existing field's actual perstag — it may differ from the generated one. */
+					$field_perstag = $existing_fields[ $existing_index ]['perstag'];
+				} elseif ( empty( $field_perstag ) ) {
+					/**
+					 * The title sanitized down to nothing, so there's no perstag to create the
+					 * field under and no valid payload key to write to. Skip rather than emit a
+					 * malformed `field[%%,0]` key that two such fields would collide on.
+					 */
+					error_log( '[NEWSPACK-NEWSLETTERS]: Skipped ActiveCampaign field "' . sanitize_text_field( $field_title ) . '": title produced an empty perstag.' ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+					continue;
+				} else {
 					$field_res = $this->api_v3_request(
 						'fields',
 						'POST',
@@ -2018,7 +2060,20 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 						]
 					);
 					if ( \is_wp_error( $field_res ) ) {
-						return $field_res;
+						/**
+						 * A field that can't be registered must never block the signup — sync the
+						 * contact without it.
+						 *
+						 * Logged with error_log() rather than Newspack_Newsletters_Logger, which
+						 * no-ops unless NEWSPACK_LOG_LEVEL is defined — undefined on a default
+						 * production site. The dropped field carries Reader Activation data that
+						 * segments and automations key on, so it must stay diagnosable.
+						 *
+						 * Both interpolated values are sanitized: the error message is remote
+						 * API text, and a newline in it would forge a second log line.
+						 */
+						error_log( '[NEWSPACK-NEWSLETTERS]: Error creating ActiveCampaign field "' . sanitize_text_field( $field_title ) . '": ' . sanitize_text_field( $field_res->get_error_message() ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+						continue;
 					}
 					/** Set list relation. */
 					$this->api_v3_request(
@@ -2248,7 +2303,10 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 			return $result;
 		}
 		if ( ! isset( $result['contacts'], $result['contacts'][0] ) ) {
-			return new WP_Error( 'newspack_newsletters', __( 'No contact data found.' ) );
+			// A dedicated code (rather than the generic `newspack_newsletters`) so
+			// callers can tell "no such contact" from an actual failure, matching
+			// Mailchimp's dedicated not-found code.
+			return new WP_Error( 'newspack_newsletters_contact_not_found', __( 'No contact data found.' ) );
 		}
 		$contact_data = $result['contacts'][0];
 		if ( $return_details ) {
@@ -2268,7 +2326,7 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 			if ( \is_wp_error( $contact_result ) ) {
 				return $contact_result;
 			}
-			$contact_fields           = array_reduce(
+			$contact_fields = array_reduce(
 				$contact_result['fieldValues'],
 				function ( $acc, $field ) use ( $fields_perstag_by_id ) {
 					if ( isset( $field['value'] ) && isset( $fields_perstag_by_id[ $field['field'] ] ) ) {
@@ -2278,7 +2336,11 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 				},
 				[]
 			);
-			$contact_data['metadata'] = $contact_fields;
+			// The API mostly omits fields the contact has no value for, but can
+			// report an empty value — filter those out explicitly so `metadata`
+			// carries the same meaning as on other providers rather than leaning
+			// on that API behavior.
+			$contact_data['metadata'] = self::filter_set_field_values( $contact_fields );
 		}
 		return $contact_data;
 	}
@@ -2420,9 +2482,11 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 	 * but not promoted by default.
 	 *
 	 * Matching function depends on selection cardinality. Per AC's Contact Custom Fields API
-	 * Guide, dropdown / radio / listbox are single-selection types (their stored value is the
-	 * raw chosen option), so 'default' (strict equality) matching is correct. Checkbox and
-	 * multiselect are multi-selection types: AC stores the chosen options with a `||` delimiter
+	 * Guide, dropdown / radio are single-selection types (their stored value is the raw chosen
+	 * option), so 'default' (strict equality) matching is correct. Checkbox, listbox and
+	 * multiselect are multi-selection types — AC's "Checkbox" is a multi-select checkbox group
+	 * (not a boolean toggle) and its "List Box" is a multi-select list, so a contact can hold
+	 * several values for either. AC stores the chosen options with a `||` delimiter
 	 * (e.g. `||Option A||Option C||`), which `default` matching cannot resolve — those types
 	 * use 'list__in', and the consumer's parse_list_value() recognizes the delimiter.
 	 *
@@ -2436,8 +2500,8 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 		}
 
 		$type                       = isset( $field['type'] ) ? $field['type'] : 'text';
-		$single_select_enum_types   = [ 'dropdown', 'radio', 'listbox' ];
-		$multi_select_enum_types    = [ 'checkbox', 'multiselect' ];
+		$single_select_enum_types   = [ 'dropdown', 'radio' ];
+		$multi_select_enum_types    = [ 'checkbox', 'listbox', 'multiselect' ];
 		$enumerated_types           = array_merge( $single_select_enum_types, $multi_select_enum_types );
 		$eligible_types             = array_merge( [ 'text', 'textarea', 'date', 'datetime' ], $enumerated_types );
 		$is_promoted_by_default     = in_array( $type, $eligible_types, true );
@@ -2448,10 +2512,26 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 			$options = $this->fetch_field_options( $field['id'] );
 		}
 
+		// Derive value_type from AC's field type so the framework constrains the
+		// operator dropdown to the field shape (a date field can't be typed
+		// "Number"). Mirrors newspack-manager's ActiveCampaign integration so the
+		// same field types identically whether a contact syncs through this ESP
+		// path or the managed integration.
+		$value_type = 'string';
+		if ( $is_multi_select ) {
+			$value_type = 'multiselect';
+		} elseif ( in_array( $type, $single_select_enum_types, true ) ) {
+			$value_type = 'select';
+		} elseif ( 'datetime' === $type ) {
+			$value_type = 'datetime';
+		} elseif ( 'date' === $type || false !== strpos( (string) $type, 'date' ) ) {
+			$value_type = 'date';
+		}
+
 		return [
 			'key'                 => $perstag,
 			'name'                => ! empty( $field['title'] ) ? $field['title'] : $perstag,
-			'value_type'          => 'string',
+			'value_type'          => $value_type,
 			'matching_function'   => $is_multi_select ? 'list__in' : 'default',
 			'options'             => $options,
 			'description'         => ! empty( $field['descript'] ) ? $field['descript'] : '',

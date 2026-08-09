@@ -6,16 +6,18 @@ import classnames from 'classnames';
 /**
  * WordPress dependencies.
  */
-import { DropdownMenu, MenuGroup, MenuItem } from '@wordpress/components';
+// Notice is aliased: `Notice` below is Newspack's own, which this file also uses.
+import { DropdownMenu, MenuGroup, MenuItem, Notice as CoreNotice } from '@wordpress/components';
 import { useDispatch, useSelect } from '@wordpress/data';
-import { useEffect, useState, forwardRef } from '@wordpress/element';
+import { cloneElement, createInterpolateElement, isValidElement, useEffect, useState, forwardRef } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { category, chevronLeft, moreVertical } from '@wordpress/icons';
 
 /**
  * Internal dependencies
  */
-import { Footer, Notice, Button, NewspackIcon, TabbedNavigation, PluginInstaller, SectionHeader, HandoffMessage } from '../';
+import { Footer, Notice, Button, TabbedNavigation, PluginInstaller, SectionHeader, HandoffMessage, Page } from '../';
+import { activeBreadcrumbs, appendSectionName } from './breadcrumbs-select';
 import Router from '../proxied-imports/router';
 import registerStore, { WIZARD_STORE_NAMESPACE } from './store';
 import WizardSnackbar from './components/WizardSnackbar';
@@ -39,6 +41,34 @@ const resolveIcon = icon => {
 const { HashRouter, Redirect, Route, Switch, useLocation } = Router;
 
 /**
+ * Interpolate a translated message's named tags, falling back to plain text.
+ *
+ * The message is translated, so its tags are site-controlled: any .mo file under
+ * wp-content/languages/plugins, any GlotPress export, or any `gettext`-filter
+ * plugin can supply one. `createInterpolateElement` throws on an unbalanced
+ * closing tag whose name is in the conversion map - verified against core's own
+ * element.js, which is what runs here since the bundle externalizes wp-element.
+ * Nothing above this renders an error boundary, so an uncaught throw would blank
+ * the whole wizard, including the screen the inert-gating notice links to as the
+ * fix. Degraded copy is recoverable; a blank screen is not.
+ *
+ * The other malformed cases already degrade on their own and are left alone: an
+ * unclosed opener drops that tag and renders the rest as text, and a tag not in
+ * the map renders literally.
+ *
+ * @param {string} message    Translated message carrying named tags.
+ * @param {Object} conversion Conversion map for createInterpolateElement.
+ * @return {JSX.Element|string} The interpolated message, or the message with its tags stripped.
+ */
+const interpolateOrPlainText = ( message, conversion ) => {
+	try {
+		return createInterpolateElement( message, conversion );
+	} catch {
+		return message.replace( /<\/?[a-zA-Z][a-zA-Z0-9]*\s*\/?>/g, '' );
+	}
+};
+
+/**
  * Reset the header data when a new section is rendered.
  */
 const ResetHeaderData = () => {
@@ -51,6 +81,37 @@ const ResetHeaderData = () => {
 	}, [ location.pathname, resetHeaderData ] );
 
 	return null;
+};
+
+/**
+ * Wizard header + content region. Rendered inside the wizard's HashRouter so it
+ * can read the current route and derive the active-tab breadcrumb.
+ */
+const WizardHeaderRegion = ( { hideHeader, headerText, sections, sectionName, subTitle, actions, tabbedNavigation, children } ) => {
+	const { pathname } = useLocation();
+
+	if ( hideHeader ) {
+		// Without the Page shell the tabs still own the content: it renders
+		// inside the active tab's panel.
+		if ( isValidElement( tabbedNavigation ) ) {
+			return cloneElement( tabbedNavigation, { content: children } );
+		}
+		return children;
+	}
+
+	let breadcrumbItems = activeBreadcrumbs( sections, pathname );
+	if ( ! breadcrumbItems.length && headerText ) {
+		breadcrumbItems = [ { label: headerText } ];
+	}
+	// Append any render-time leaf crumb(s) the section supplied via
+	// headerData.sectionName (deduped against the current trailing label).
+	breadcrumbItems = appendSectionName( breadcrumbItems, sectionName );
+
+	return (
+		<Page breadcrumbItems={ breadcrumbItems } subTitle={ subTitle } actions={ actions } tabbedNavigation={ tabbedNavigation }>
+			{ children }
+		</Page>
+	);
 };
 
 /**
@@ -86,7 +147,7 @@ const Wizard = (
 		renderAboveSections,
 		requiredPlugins = [],
 		isInitialFetchTriggered = true,
-		fixedHeader = false,
+		hideHeader = false,
 	},
 	ref
 ) => {
@@ -123,159 +184,162 @@ const Wizard = (
 	// the PluginInstaller. Use it for routing so the installer actually mounts and runs.
 	const routedSections = pluginRequirementsSatisfied ? sections : displayedSections;
 
-	const urlWithoutHash = window.location.href.split( '#' )[ 0 ];
+	const tabbedNavigation = displayedSections.length > 1 && (
+		<TabbedNavigation items={ displayedSections }>
+			<WizardError />
+		</TabbedNavigation>
+	);
+
+	// Rendered here rather than as a core admin notice, which wizards strip at
+	// priority -9999. Sits as the first child of .newspack-wizard__main so it lands
+	// flush beneath the header region and spans the full width in every view: this
+	// describes the state of the whole site, not of the section below it, so it reads
+	// as page chrome rather than as content.
+	const inertGating = window.newspack_aux_data?.inert_gating;
+	const inertGatingNotice = inertGating?.show && (
+		<CoreNotice status="warning" isDismissible={ false } className="newspack-wizard__inert-gating-notice">
+			{ /* The conversion map takes childless elements and fills them from the
+			     translated string, so jsx-a11y can't see the content they end up with. */ }
+			{ interpolateOrPlainText( inertGating.message, {
+				/* eslint-disable jsx-a11y/anchor-has-content */
+				accessControl: <a href={ inertGating.urls.accessControl } />,
+				audience: <a href={ inertGating.urls.audience } />,
+				/* eslint-enable jsx-a11y/anchor-has-content */
+				strong: <strong />,
+			} ) }
+		</CoreNotice>
+	);
+
+	const content = (
+		<>
+			<HandoffMessage />
+
+			{ sections.length > 1 && <ResetHeaderData /> }
+
+			<div className="newspack-wizard__main">
+				{ inertGatingNotice }
+				<Switch>
+					{ routedSections.map( ( section, index ) => {
+						const SectionComponent = section.render;
+						const sectionProps = section.props || {};
+						return (
+							<Route
+								key={ index }
+								exact={ section.exact ?? false }
+								path={ section.path }
+								render={ routerProps => (
+									<div
+										className={ classnames( 'newspack-wizard__content', className, {
+											'newspack-wizard__content--full-width': section.fullWidth,
+										} ) }
+									>
+										{ 'function' === typeof renderAboveSections ? renderAboveSections() : null }
+										{ ( sectionTitle || section.title ) && (
+											<SectionHeader
+												className="newspack-wizard__section-header"
+												backNav={ backNav || section.backNav }
+												title={ sectionTitle || section.title }
+												description={ sectionDescription || section.description }
+												badges={ badges || section.badges }
+												menu={ sectionMenu || section.menu }
+												primaryAction={ sectionPrimaryAction || section.primaryAction }
+												secondaryAction={ sectionSecondaryAction || section.secondaryAction }
+												heading={ 2 }
+												noMargin
+											/>
+										) }
+										<SectionComponent { ...routerProps } { ...sectionProps } { ...sharedProps } />
+									</div>
+								) }
+							/>
+						);
+					} ) }
+					<Redirect to={ displayedSections[ 0 ].path } />
+				</Switch>
+			</div>
+		</>
+	);
+
+	const headerActions =
+		actions?.length > 0 ? (
+			<>
+				{ mainActions.map( ( action, index ) => (
+					<Button
+						key={ index }
+						className="newspack-wizard__actions__main"
+						href={ action.href }
+						icon={ resolveIcon( action.icon ) }
+						variant={ action.type }
+						onClick={ action.action }
+						disabled={ action.disabled || false }
+						isDestructive={ action.destructive || false }
+					>
+						{ action.label }
+					</Button>
+				) ) }
+				<DropdownMenu
+					className={ moreActions?.length === 0 ? 'newspack-wizard__actions__more--primary-only' : '' }
+					icon={ moreVertical }
+					label={ __( 'More', 'newspack-plugin' ) }
+					popoverProps={ { className: 'newspack-wizard__actions__more' } }
+				>
+					{ () =>
+						// Split actions into groups whenever an action opts in via `separator: true`.
+						// Consecutive MenuGroups render the WordPress-standard divider between them.
+						actions
+							.reduce( ( groups, action ) => {
+								if ( action.separator || groups.length === 0 ) {
+									groups.push( [] );
+								}
+								groups[ groups.length - 1 ].push( action );
+								return groups;
+							}, [] )
+							.map( ( group, groupIndex ) => (
+								<MenuGroup key={ groupIndex }>
+									{ group.map( ( action, index ) => (
+										<MenuItem
+											key={ index }
+											className={
+												action.type === 'primary' || action.type === 'secondary'
+													? 'newspack-wizard__actions__more__main'
+													: 'newspack-wizard__actions__more__more'
+											}
+											icon={ action.icon }
+											href={ action.href }
+											onClick={ action.action }
+											disabled={ action.disabled || false }
+											isDestructive={ action.destructive || false }
+										>
+											{ action.label }
+										</MenuItem>
+									) ) }
+								</MenuGroup>
+							) )
+					}
+				</DropdownMenu>
+			</>
+		) : undefined;
 
 	return (
 		<div ref={ ref }>
 			<div
 				className={ classnames( isLoading ? 'newspack-wizard__is-loading' : 'newspack-wizard__is-loaded', {
 					'newspack-wizard__is-loading-quiet': isQuietLoading,
-					'newspack-wizard__fixed-header': fixedHeader,
 				} ) }
 			>
 				<HashRouter hashType="slash">
 					{ newspack_aux_data.is_debug_mode && <Notice debugMode /> }
-					<div className="newspack-wizard__header">
-						<div className="newspack-wizard__header__inner">
-							<div className="newspack-wizard__title">
-								{ newspack_urls.dashboard !== urlWithoutHash ? (
-									<Button
-										isLink
-										href={ newspack_urls.dashboard }
-										label={ __( 'Return to Dashboard', 'newspack-plugin' ) }
-										showTooltip={ true }
-										icon={ category }
-										iconSize={ 36 }
-									>
-										<NewspackIcon size={ 36 } />
-									</Button>
-								) : (
-									<NewspackIcon size={ 36 } />
-								) }
-								<div>
-									{ headerText && (
-										<h2 className="newspack-wizard__header__title">
-											{ headerText }
-											{ sectionName && (
-												<span className="newspack-wizard__header__section">
-													<span className="newspack-wizard__header__section__separator"> / </span> { sectionName }
-												</span>
-											) }
-										</h2>
-									) }
-									{ subHeaderText && <span>{ subHeaderText }</span> }
-								</div>
-							</div>
-						</div>
-						{ actions?.length > 0 && (
-							<div className="newspack-wizard__header__actions">
-								{ mainActions.map( ( action, index ) => (
-									<Button
-										key={ index }
-										className="newspack-wizard__header__actions__main"
-										href={ action.href }
-										icon={ resolveIcon( action.icon ) }
-										variant={ action.type }
-										onClick={ action.action }
-										disabled={ action.disabled || false }
-										isDestructive={ action.destructive || false }
-									>
-										{ action.label }
-									</Button>
-								) ) }
-								<DropdownMenu
-									className={ moreActions?.length === 0 ? 'newspack-wizard__header__actions__more--primary-only' : '' }
-									icon={ moreVertical }
-									label={ __( 'More', 'newspack-plugin' ) }
-									popoverProps={ { className: 'newspack-wizard__header__actions__more' } }
-								>
-									{ () =>
-										// Split actions into groups whenever an action opts in via `separator: true`.
-										// Consecutive MenuGroups render the WordPress-standard divider between them.
-										actions
-											.reduce( ( groups, action ) => {
-												if ( action.separator || groups.length === 0 ) {
-													groups.push( [] );
-												}
-												groups[ groups.length - 1 ].push( action );
-												return groups;
-											}, [] )
-											.map( ( group, groupIndex ) => (
-												<MenuGroup key={ groupIndex }>
-													{ group.map( ( action, index ) => (
-														<MenuItem
-															key={ index }
-															className={
-																action.type === 'primary' || action.type === 'secondary'
-																	? 'newspack-wizard__header__actions__more__main'
-																	: 'newspack-wizard__header__actions__more__more'
-															}
-															icon={ action.icon }
-															href={ action.href }
-															onClick={ action.action }
-															disabled={ action.disabled || false }
-															isDestructive={ action.destructive || false }
-														>
-															{ action.label }
-														</MenuItem>
-													) ) }
-												</MenuGroup>
-											) )
-									}
-								</DropdownMenu>
-							</div>
-						) }
-					</div>
-
-					{ displayedSections.length > 1 && (
-						<TabbedNavigation items={ displayedSections }>
-							<WizardError />
-						</TabbedNavigation>
-					) }
-					<HandoffMessage />
-
-					{ sections.length > 1 && <ResetHeaderData /> }
-
-					<div className="newspack-wizard__main">
-						<Switch>
-							{ routedSections.map( ( section, index ) => {
-								const SectionComponent = section.render;
-								const sectionProps = section.props || {};
-								return (
-									<Route
-										key={ index }
-										exact={ section.exact ?? false }
-										path={ section.path }
-										render={ routerProps => (
-											<div
-												className={ classnames( 'newspack-wizard__content', className, {
-													'newspack-wizard__content--full-width': section.fullWidth,
-												} ) }
-											>
-												{ 'function' === typeof renderAboveSections ? renderAboveSections() : null }
-												{ ( sectionTitle || section.title ) && (
-													<SectionHeader
-														className="newspack-wizard__section-header"
-														backNav={ backNav || section.backNav }
-														title={ sectionTitle || section.title }
-														description={ sectionDescription || section.description }
-														badges={ badges || section.badges }
-														menu={ sectionMenu || section.menu }
-														primaryAction={ sectionPrimaryAction || section.primaryAction }
-														secondaryAction={ sectionSecondaryAction || section.secondaryAction }
-														heading={ 1 }
-														noMargin
-													/>
-												) }
-												<SectionComponent { ...routerProps } { ...sectionProps } { ...sharedProps } />
-											</div>
-										) }
-									/>
-								);
-							} ) }
-							<Redirect to={ displayedSections[ 0 ].path } />
-						</Switch>
-					</div>
+					<WizardHeaderRegion
+						hideHeader={ hideHeader }
+						headerText={ headerText }
+						sections={ routedSections }
+						sectionName={ sectionName }
+						subTitle={ subHeaderText }
+						actions={ headerActions }
+						tabbedNavigation={ tabbedNavigation }
+					>
+						{ content }
+					</WizardHeaderRegion>
 				</HashRouter>
 				{ notices?.length > 0 && (
 					<div className="newspack-wizard__snackbar-list">

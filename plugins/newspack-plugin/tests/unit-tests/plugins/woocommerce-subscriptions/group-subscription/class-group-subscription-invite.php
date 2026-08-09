@@ -225,6 +225,10 @@ class Test_Group_Subscription_Invite extends WP_UnitTestCase {
 		$key = array_key_first( Group_Subscription_Invite::get_invites( $subscription ) );
 		Group_Subscription::update_members( $subscription, [ $member_id ] );
 
+		// Every caller binds the invited email to the acting user before accepting -- when logged in,
+		// process_invite_request() rejects any mismatch; when not, it creates and logs in the account
+		// for that email. Model that here rather than accepting as nobody.
+		wp_set_current_user( $member_id );
 		$result = Group_Subscription_Invite::accept_invite( $subscription, $key, $email );
 
 		$this->assertTrue( $result, 'Accepting when already a member should succeed.' );
@@ -244,7 +248,7 @@ class Test_Group_Subscription_Invite extends WP_UnitTestCase {
 	 * @throws \RuntimeException If the request fails for a reason other than the redirect.
 	 */
 	private function run_invite_request() {
-		$redirect = function () {
+		$redirect = function ( $location ) {
 			throw new \RuntimeException( self::REDIRECTED ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped
 		};
 		add_filter( 'wp_redirect', $redirect, 1 );

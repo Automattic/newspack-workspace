@@ -81,7 +81,13 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 		content_rules: isNewsletter ? [ { slug: 'newsletters', value: [] } ] : [ { slug: 'post_types', value: [ 'post' ] } ],
 		content_rules_match: 'all',
 		registration: { active: false, metering: { enabled: false, count: 1, period: 'month' }, require_verification: false, gate_layout_id: 0 },
-		custom_access: { active: false, metering: { enabled: false, count: 1, period: 'month' }, gate_layout_id: 0, access_rules: [] },
+		custom_access: {
+			active: false,
+			metering: { enabled: false, count: 1, period: 'month' },
+			gate_layout_id: 0,
+			access_rules: [],
+			payment_recovery_grace: true,
+		},
 	};
 
 	const history = useHistory();
@@ -665,7 +671,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 					{ ! isNewsletter && (
 						<CardSettingsGroup
 							actionType="toggle"
-							title={ __( 'Registered access', 'newspack-plugin' ) }
+							title={ __( 'Registered Access', 'newspack-plugin' ) }
 							description={ sprintf(
 								// translators: %s is the type of content to restrict.
 								__( 'Readers must log in to view %s.', 'newspack-plugin' ),
@@ -690,7 +696,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 					) }
 					<CardSettingsGroup
 						actionType="toggle"
-						title={ __( 'Paid access', 'newspack-plugin' ) }
+						title={ __( 'Paid Access', 'newspack-plugin' ) }
 						description={ __( 'Readers must meet at least one condition to gain access.', 'newspack-plugin' ) }
 						headerAction={
 							customAccess?.active && ! isNewsletter

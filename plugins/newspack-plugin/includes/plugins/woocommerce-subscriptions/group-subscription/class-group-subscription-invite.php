@@ -408,10 +408,12 @@ class Group_Subscription_Invite {
 			return new \WP_Error( 'newspack_group_subscription_invite_existing_user', __( 'User is already a member of this group subscription.', 'newspack-plugin' ) );
 		}
 
-		// Delete any invites for the given email address. There should only be one invitation per email address.
+		// Delete any invites for the given email address. There should only be one invitation per
+		// email address -- matched case-insensitively, since a stored invite and a re-invite of the
+		// same address can differ in case (sanitize_email() preserves it).
 		$all_invites = self::get_invites( $subscription );
 		foreach ( $all_invites as $key => $invite ) {
-			if ( $invite['email'] === $email ) {
+			if ( strtolower( $invite['email'] ) === strtolower( $email ) ) {
 				unset( $all_invites[ $key ] );
 			}
 		}
@@ -425,11 +427,9 @@ class Group_Subscription_Invite {
 				}
 			)
 		);
-		$subscription_settings = Group_Subscription_Settings::get_subscription_settings( $subscription );
-		if ( $subscription_settings['limit'] > 0 ) {
-			if ( $pending_invites_count + count( Group_Subscription::get_members( $subscription ) ) >= $subscription_settings['limit'] ) {
-				return new \WP_Error( 'newspack_group_subscription_invite_limit_reached', __( 'You have reached the group member limit for this subscription. Please remove some members or cancel pending invitations before inviting more group members.', 'newspack-plugin' ) );
-			}
+		$seat_limit = Group_Subscription::get_member_seat_limit( $subscription );
+		if ( null !== $seat_limit && $pending_invites_count + count( Group_Subscription::get_members( $subscription ) ) >= $seat_limit ) {
+			return new \WP_Error( 'newspack_group_subscription_invite_limit_reached', __( 'You have reached the group member limit for this subscription. Please remove some members or cancel pending invitations before inviting more group members.', 'newspack-plugin' ) );
 		}
 
 		// Add the new invite.
@@ -518,7 +518,13 @@ class Group_Subscription_Invite {
 		}
 		$invite = self::get_invite_by_key( $subscription, $key );
 		if ( ! $invite || $invite['email'] !== $email ) {
-			// No need to display an error if the user is already a member: just give a success message.
+			// No need to display an error if the invite is already fulfilled: just give a success
+			// message. This covers a direct member add cancelling the invite before it is accepted.
+			// Only the acting user is checked, deliberately: every caller binds $email to the current
+			// session (process_invite_request() rejects a mismatch when logged in, and creates and
+			// logs in the account for $email otherwise), so the invitee is always the current user.
+			// Checking the $_GET-supplied $email's account instead would turn this into a "does this
+			// address belong to this group?" oracle for any future caller that skips that binding.
 			$current_user_id = get_current_user_id();
 			if (
 				Group_Subscription::user_is_manager( $current_user_id, $subscription )
@@ -810,11 +816,11 @@ class Group_Subscription_Invite {
 		}
 
 		// Member-limit check.
-		$settings             = Group_Subscription_Settings::get_subscription_settings( $subscription );
+		$seat_limit           = Group_Subscription::get_member_seat_limit( $subscription );
 		$member_count         = count( Group_Subscription::get_members( $subscription ) );
 		$pending_invite_count = count( self::get_invites( $subscription, false ) );
 
-		if ( $settings['limit'] > 0 && ( $member_count + $pending_invite_count ) >= $settings['limit'] ) {
+		if ( null !== $seat_limit && ( $member_count + $pending_invite_count ) >= $seat_limit ) {
 			self::redirect_with_result( 'link_full', $error_target_url );
 			return;
 		}
@@ -911,16 +917,42 @@ class Group_Subscription_Invite {
 	 * @return true|\WP_Error Whether the invite was cancelled, or a WP_Error if the invite cannot be cancelled.
 	 */
 	public static function cancel_invite( $subscription, $email ) {
+		return self::cancel_invites( $subscription, [ $email ] );
+	}
+
+	/**
+	 * Cancel every pending invite for a given subscription addressed to any of the given emails.
+	 *
+	 * Batched so a caller cancelling several invites at once (e.g. a bulk member add) performs a
+	 * single subscription write, rather than one save -- and one `woocommerce_update_subscription`
+	 * cascade -- per invite.
+	 *
+	 * @param \WC_Subscription|int $subscription The subscription object or ID.
+	 * @param string[]             $emails The email addresses whose invites should be cancelled.
+	 *
+	 * @return true|\WP_Error True on success, or a WP_Error if the invites cannot be cancelled.
+	 */
+	public static function cancel_invites( $subscription, $emails ) {
 		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $subscription );
 		if ( ! $subscription || ! Group_Subscription::is_group_subscription( $subscription ) ) {
 			return new \WP_Error( 'newspack_group_subscription_invite_invalid_subscription', __( 'Invalid subscription.', 'newspack-plugin' ) );
 		}
-		if ( ! $email ) {
+		// Invites are stored as sanitize_email() output, which preserves case, and wp_insert_user()
+		// does not lowercase user_email -- so a stored invite and the matching account can legitimately
+		// differ in case. Match case-insensitively, as email addresses are in practice, otherwise a
+		// mixed-case invite survives the cancellation and keeps consuming a seat.
+		$needles = [];
+		foreach ( (array) $emails as $email ) {
+			if ( $email ) {
+				$needles[] = strtolower( $email );
+			}
+		}
+		if ( empty( $needles ) ) {
 			return new \WP_Error( 'newspack_group_subscription_invite_invalid_email', __( 'Invalid email address.', 'newspack-plugin' ) );
 		}
 		$all_invites = self::get_invites( $subscription );
 		foreach ( $all_invites as $key => $invite ) {
-			if ( $invite['email'] === $email ) {
+			if ( in_array( strtolower( $invite['email'] ), $needles, true ) ) {
 				unset( $all_invites[ $key ] );
 			}
 		}

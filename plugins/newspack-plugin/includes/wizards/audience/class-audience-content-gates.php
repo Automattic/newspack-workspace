@@ -15,6 +15,7 @@ defined( 'ABSPATH' ) || exit;
 class Audience_Content_Gates extends Wizard {
 
 	use Wizards\Traits\Content_Gate_Preferences;
+	use Wizards\Traits\Audience_Management_Dependency;
 
 	/**
 	 * Admin page slug.
@@ -76,7 +77,7 @@ class Audience_Content_Gates extends Wizard {
 	 * @return string The wizard name.
 	 */
 	public function get_name() {
-		return esc_html__( 'Audience Management / Access control', 'newspack-plugin' );
+		return esc_html__( 'Audience Management / Access Control', 'newspack-plugin' );
 	}
 
 	/**
@@ -94,14 +95,18 @@ class Audience_Content_Gates extends Wizard {
 		\wp_localize_script(
 			'newspack-wizards',
 			'newspackAudienceContentGates',
-			[
-				'api'                     => '/' . NEWSPACK_API_NAMESPACE . '/wizard/' . $this->slug,
-				'available_access_rules'  => Access_Rules::get_access_rules(),
-				'available_content_rules' => Content_Rules::get_content_rules(),
-				'edit_gate_layout_url'    => Content_Gate::get_edit_gate_layout_url(),
-				'presave_checks_enabled'  => Content_Gate::get_presave_checks_enabled(),
-				'default_gate_status'     => Content_Gate::get_default_new_gate_status(),
-			]
+			array_merge(
+				[
+					'api'                     => '/' . NEWSPACK_API_NAMESPACE . '/wizard/' . $this->slug,
+					'available_access_rules'  => Access_Rules::get_access_rules_for_client(),
+					'available_content_rules' => Content_Rules::get_content_rules(),
+					'edit_gate_layout_url'    => Content_Gate::get_edit_gate_layout_url(),
+					'presave_checks_enabled'  => Content_Gate::get_presave_checks_enabled(),
+					'default_gate_status'     => Content_Gate::get_default_new_gate_status(),
+					'feed_restriction_modes'  => Content_Gate_Advanced_Settings::get_feed_restriction_mode_options(),
+				],
+				$this->get_audience_management_script_data()
+			)
 		);
 
 		\wp_localize_script(
@@ -132,7 +137,7 @@ class Audience_Content_Gates extends Wizard {
 		add_submenu_page(
 			$this->parent_slug,
 			$this->get_name(),
-			esc_html__( 'Access control', 'newspack-plugin' ),
+			esc_html__( 'Access Control', 'newspack-plugin' ),
 			$this->capability,
 			$this->slug,
 			[ $this, 'render_wizard' ]
@@ -175,11 +180,24 @@ class Audience_Content_Gates extends Wizard {
 				'permission_callback' => [ $this, 'api_permissions_check' ],
 				'args'                => [
 					'advanced_settings' => [
-						'type'       => 'object',
-						'properties' => [
-							'restrict_feeds' => [ 'type' => 'boolean' ],
+						'type'                 => 'object',
+						'required'             => true,
+						// Unknown keys are ignored by the update handler anyway;
+						// rejecting them makes that contract explicit.
+						'additionalProperties' => false,
+						'properties'           => [
+							'restrict_feeds'        => [ 'type' => 'boolean' ],
+							'feed_restriction_mode' => [
+								'type' => 'string',
+								'enum' => Content_Gate_Advanced_Settings::get_feed_restriction_modes(),
+							],
 							'newsletter_link_bypass_enabled' => [ 'type' => 'boolean' ],
 						],
+						// Validate the whole object against the schema so the nested
+						// feed_restriction_mode enum is actually enforced (a bad value
+						// returns a 400 instead of being silently coerced to exclude).
+						'validate_callback'    => 'rest_validate_request_arg',
+						'sanitize_callback'    => 'rest_sanitize_request_arg',
 					],
 				],
 			]
@@ -276,7 +294,7 @@ class Audience_Content_Gates extends Wizard {
 						'properties'        => Content_Gate_API::$gate_properties,
 					],
 				],
-				'permission_callback' => [ $this, 'api_permissions_check' ],
+				'permission_callback' => [ $this, 'api_permissions_check_audience_management' ],
 			]
 		);
 
@@ -337,6 +355,22 @@ class Audience_Content_Gates extends Wizard {
 
 		register_rest_route(
 			NEWSPACK_API_NAMESPACE,
+			'/wizard/' . $this->slug . '/(?P<id>\d+)/duplicate',
+			[
+				'methods'             => 'POST',
+				'callback'            => [ $this, 'api_duplicate_gate' ],
+				'permission_callback' => [ $this, 'api_permissions_check_audience_management' ],
+				'args'                => [
+					'id' => [
+						'type'              => 'integer',
+						'sanitize_callback' => 'absint',
+					],
+				],
+			]
+		);
+
+		register_rest_route(
+			NEWSPACK_API_NAMESPACE,
 			'/wizard/' . $this->slug . '/posts-search',
 			[
 				'methods'             => 'GET',
@@ -372,13 +406,7 @@ class Audience_Content_Gates extends Wizard {
 	 * @return \WP_REST_Response
 	 */
 	public function get_config() {
-		$advanced = Content_Gate_Advanced_Settings::get_settings();
-		// Cast to bool at the REST boundary so the TS type (boolean) is satisfied.
-		// Internal storage remains as 0/1 integers — only the REST response payload is cast.
-		$advanced_settings_response = [
-			'restrict_feeds'                 => (bool) ( $advanced['restrict_feeds'] ?? false ),
-			'newsletter_link_bypass_enabled' => (bool) ( $advanced['newsletter_link_bypass_enabled'] ?? false ),
-		];
+		$advanced_settings_response = $this->prepare_advanced_settings_response( Content_Gate_Advanced_Settings::get_settings() );
 		$config = [
 			'gates'  => Content_Gate::get_gates(),
 			'config' => [
@@ -386,6 +414,7 @@ class Audience_Content_Gates extends Wizard {
 				'content_gifting'   => Content_Gifting::get_settings(),
 				'advanced_settings' => $advanced_settings_response,
 				'has_newsletters'   => Reader_Activation::is_esp_configured(),
+				'has_institutions'  => Institution::has_institutions(),
 			],
 		];
 		return rest_ensure_response( $config );
@@ -401,7 +430,30 @@ class Audience_Content_Gates extends Wizard {
 	public function update_settings( $request ) {
 		$settings = $request->get_param( 'advanced_settings' );
 		$updated = Content_Gate_Advanced_Settings::update_settings( $settings );
-		return rest_ensure_response( $updated );
+		// Shaped exactly like the GET response: the wizard writes this payload
+		// into the same store slot it read the config from and compares the two
+		// with JSON.stringify, so an int here where the GET returned a bool would
+		// leave the Save button enabled after a successful save.
+		return rest_ensure_response( $this->prepare_advanced_settings_response( $updated ) );
+	}
+
+	/**
+	 * Shape the advanced settings for a REST response.
+	 *
+	 * The boolean flags are stored as 0/1 integers; the TS types (and the
+	 * wizard's dirty-state comparison) expect booleans. feed_restriction_mode is
+	 * stored and returned as a string.
+	 *
+	 * @param array $advanced Stored advanced settings.
+	 *
+	 * @return array
+	 */
+	private function prepare_advanced_settings_response( $advanced ) {
+		return [
+			'restrict_feeds'                 => (bool) ( $advanced['restrict_feeds'] ?? false ),
+			'feed_restriction_mode'          => (string) ( $advanced['feed_restriction_mode'] ?? Content_Gate_Advanced_Settings::FEED_MODE_EXCLUDE ),
+			'newsletter_link_bypass_enabled' => (bool) ( $advanced['newsletter_link_bypass_enabled'] ?? false ),
+		];
 	}
 
 	/**
@@ -495,6 +547,34 @@ class Audience_Content_Gates extends Wizard {
 		}
 		wp_delete_post( $id, true );
 		return rest_ensure_response( true );
+	}
+
+	/**
+	 * Duplicate a gate.
+	 *
+	 * @param \WP_REST_Request $request The request object.
+	 *
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public function api_duplicate_gate( $request ) {
+		$id   = $request->get_param( 'id' );
+		$gate = get_post( $id );
+		if ( ! $gate ) {
+			return new \WP_Error( 'invalid_gate_id', __( 'Invalid gate ID.', 'newspack-plugin' ), [ 'status' => 400 ] );
+		}
+		if ( Content_Gate::GATE_CPT !== $gate->post_type ) {
+			return new \WP_Error( 'invalid_gate_type', __( 'Invalid gate type.', 'newspack-plugin' ), [ 'status' => 400 ] );
+		}
+		// A copy of a newsletter gate belongs to the Premium Newsletters list, where this wizard could not show it.
+		if ( get_post_meta( $id, 'is_newsletter', true ) ) {
+			return new \WP_Error( 'invalid_content_gate', __( 'Invalid content gate.', 'newspack-plugin' ), [ 'status' => 400 ] );
+		}
+
+		$new_gate_id = Content_Gate::duplicate_gate( $id );
+		if ( is_wp_error( $new_gate_id ) ) {
+			return $new_gate_id;
+		}
+		return rest_ensure_response( Content_Gate::get_gate( $new_gate_id ) );
 	}
 
 	/**

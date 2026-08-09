@@ -1632,6 +1632,20 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 	}
 
 	/**
+	 * The fallback message shown to readers whose Mailchimp contact is in a
+	 * compliance state, used when no custom message has been configured.
+	 *
+	 * Shared with the settings list, which uses it as the field placeholder so the
+	 * wizard previews the real fallback copy. A method rather than a class constant
+	 * because gettext extraction requires a string literal inside __().
+	 *
+	 * @return string The default resubscribe error message.
+	 */
+	public static function get_default_resubscribe_message() {
+		return __( "We'll need to subscribe this email address manually. Please contact our support team.", 'newspack-newsletters' );
+	}
+
+	/**
 	 * Filters the error message shown to readers when an error occurs.
 	 *
 	 * @param string $reader_error The default error message.
@@ -1643,7 +1657,13 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 	public function reader_error_message( $reader_error, $params, $raw_error ) {
 		// Handle special case where a user is in compliance state.
 		if ( is_wp_error( $raw_error ) && false !== strpos( $raw_error->get_error_message(), 'Member In Compliance State' ) ) {
-			$reader_error = __( "We'll need to subscribe this email address manually. Please contact our support team.", 'newspack-newsletters' );
+			// Mailchimp forbids resubscribing such contacts via its API, so the reader must be
+			// pointed elsewhere — publishers can customize the message (HTML links allowed).
+			$custom_message = trim( (string) get_option( 'newspack_newsletters_mailchimp_resubscribe_message', '' ) );
+			if ( ! empty( $custom_message ) ) {
+				return $custom_message;
+			}
+			$reader_error = self::get_default_resubscribe_message();
 		}
 		return $reader_error;
 	}
@@ -2290,6 +2310,9 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 				'interests'    => [],
 				'merge_fields' => [],
 			];
+			// Collected alongside the loop but only exposed under $return_details,
+			// so a plain lookup keeps its historical keys.
+			$merge_fields_by_list = [];
 			foreach ( $found as $contact ) {
 				foreach ( $keys as $key ) {
 					if ( ! isset( $data[ $key ] ) || empty( $data[ $key ] ) ) {
@@ -2308,9 +2331,39 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 					'status'     => $contact['status'],
 				];
 				if ( isset( $contact['merge_fields'] ) ) {
+					// Flat and last-wins, preserved as-is: existing callers read this
+					// shape. Merge fields are defined per audience, so for a contact in
+					// several audiences it holds whichever came back last — which is why
+					// the per-audience map below exists.
 					$data['merge_fields'] = $contact['merge_fields'];
+
+					// Mailchimp reports every merge field defined on the audience, using
+					// an empty string for ones the contact hasn't filled in — filter
+					// those out so `metadata` keeps the shared meaning of "fields the
+					// contact has a value for".
+					$merge_fields_by_list[ $contact['list_id'] ] = self::filter_set_field_values( $contact['merge_fields'] );
 				}
 			}
+
+			// Expose the merge fields under the provider-neutral `metadata` key that
+			// callers requesting full details read, as ActiveCampaign already does.
+			// Merge fields are keyed by merge tag, which is the same identifier
+			// get_contact_fields_for_integrations() reports as a field's `key`, so
+			// the two line up without remapping. Without this an ESP contact pull
+			// finds no `metadata` and stores nothing while reporting success.
+			//
+			// `metadata_by_list` carries the same values keyed by audience. Merge
+			// fields are per-audience in Mailchimp, and a caller's field schema comes
+			// from one specific audience (get_contact_fields_for_integrations() takes
+			// a list ID), so a caller that knows which audience it configured should
+			// read its entry rather than the flat `metadata` — which, like
+			// `merge_fields`, can only report one audience for a multi-audience
+			// contact.
+			if ( $return_details ) {
+				$data['metadata']         = self::filter_set_field_values( $data['merge_fields'] );
+				$data['metadata_by_list'] = $merge_fields_by_list;
+			}
+
 			return $data;
 		} catch ( \Exception $e ) {
 			return new WP_Error(
@@ -2740,11 +2793,26 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 			}
 		}
 
+		// Derive value_type (and the numeric range default) from Mailchimp's
+		// merge-field type so the framework constrains the operator dropdown to the
+		// field shape — a date field can't be typed "Number", a numeric field gets
+		// range matching. Mirrors the ActiveCampaign mapper for cross-ESP consistency.
+		$value_type        = 'string';
+		$matching_function = 'default';
+		if ( in_array( $type, [ 'dropdown', 'radio' ], true ) ) {
+			$value_type = 'select';
+		} elseif ( in_array( $type, [ 'date', 'birthday' ], true ) ) {
+			$value_type = 'date';
+		} elseif ( 'number' === $type ) {
+			$value_type        = 'number';
+			$matching_function = 'range';
+		}
+
 		return [
 			'key'                 => $tag,
 			'name'                => ! empty( $field['name'] ) ? $field['name'] : $tag,
-			'value_type'          => 'string',
-			'matching_function'   => 'default',
+			'value_type'          => $value_type,
+			'matching_function'   => $matching_function,
 			'options'             => $options,
 			'description'         => isset( $field['help_text'] ) ? $field['help_text'] : '',
 			'is_access_rule'      => $is_promoted_by_default,

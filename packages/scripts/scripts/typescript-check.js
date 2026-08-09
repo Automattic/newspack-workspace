@@ -1,8 +1,9 @@
 /**
- * DEPRECATION NOTICE: As of v5.8.0, this script is deprecated as @wordpress/eslint-plugin
- * will perform TypeScript checks on .ts and .tsx files.
+ * Type-check the calling package with tsc against its own tsconfig.json.
  *
- * This script and its dependencies will be removed in a future version of Newspack Scripts.
+ * This is the canonical type gate: the build pipeline strips types via Babel
+ * without checking them, and ESLint runs without a type-aware parserOptions.project,
+ * so this script is the only place type errors are actually caught.
  */
 
 'use strict';
@@ -13,7 +14,7 @@ const tsc = require.resolve( 'typescript/bin/tsc' );
 
 utils.log( 'Starting TypeScript check…' );
 
-const result = spawn.sync( tsc, [], {
+const result = spawn.sync( tsc, [ '--noEmit', ...process.argv.slice( 2 ) ], {
 	stdio: 'inherit',
 } );
 
