@@ -44,18 +44,25 @@ class Content_Gate_Excerpt {
 		}
 
 		// A manually written excerpt is the author's own words; core returns it
-		// untouched and so do we.
-		if ( '' !== trim( (string) $text ) ) {
+		// untouched and so do we. Read it from the post rather than from $text:
+		// $text is whatever the filter chain holds by the time this runs, which is
+		// not necessarily the manual excerpt.
+		if ( '' !== trim( (string) $resolved->post_excerpt ) ) {
 			return wp_trim_excerpt( $text, $resolved );
 		}
 
 		$sanitized               = clone $resolved;
 		$sanitized->post_content = Block_Visibility::strip_blocks_hidden_from_public( $resolved->post_content );
 
+		// Pass an empty $text so core rebuilds from the sanitized post.
+		// wp_trim_excerpt() returns $text unchanged when it is non-empty, so
+		// forwarding a value another filter already produced would skip the
+		// sanitized content entirely.
+		//
 		// Gated blocks never contribute to a teaser. A post whose readable content is
 		// entirely gated gets a blank excerpt, matching what its article page already
 		// shows a non-member.
-		return wp_trim_excerpt( $text, $sanitized );
+		return wp_trim_excerpt( '', $sanitized );
 	}
 }
 Content_Gate_Excerpt::init();

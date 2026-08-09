@@ -119,6 +119,37 @@ class Newspack_Test_Content_Gate_Excerpt extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A value another filter already placed in $text must not bypass sanitization.
+	 *
+	 * Core's wp_trim_excerpt() returns $text unchanged when it is non-empty, so an
+	 * excerpt produced earlier in the chain would be handed straight back if this
+	 * filter forwarded it. Detection of a manual excerpt reads the post, not $text.
+	 */
+	public function test_prepopulated_text_does_not_bypass_sanitization() {
+		$gate    = '{"newspackAccessControlMode":"custom","newspackAccessControlRules":{"registration":{"active":true}},"newspackAccessControlVisibility":"visible"}';
+		$post_id = $this->make_post( $gate );
+
+		$GLOBALS['post'] = get_post( $post_id );
+		setup_postdata( $GLOBALS['post'] );
+		wp_set_current_user( 0 );
+		Block_Visibility::reset_cache_for_tests();
+
+		// Stand in for any filter that runs before ours and produces an excerpt from
+		// unsanitized content.
+		$contaminate = function () {
+			return 'PUBLICMARK and SECRETMARK from an earlier filter';
+		};
+		add_filter( 'get_the_excerpt', $contaminate, 9 );
+		$excerpt = get_the_excerpt( $post_id );
+		remove_filter( 'get_the_excerpt', $contaminate, 9 );
+
+		$this->assertStringNotContainsString( 'SECRETMARK', $excerpt, 'An excerpt produced earlier in the chain is still rebuilt from sanitized content.' );
+		$this->assertStringContainsString( 'PUBLICMARK', $excerpt, 'Ungated content still reaches the excerpt.' );
+
+		unset( $GLOBALS['post'] );
+	}
+
+	/**
 	 * A manually written excerpt is returned untouched.
 	 */
 	public function test_manual_excerpt_is_untouched() {
