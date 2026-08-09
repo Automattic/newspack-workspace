@@ -43,16 +43,20 @@ class Content_Gate_Excerpt {
 			return wp_trim_excerpt( $text, $post );
 		}
 
-		// A manually written excerpt is the author's own words; core returns it
-		// untouched and so do we. Read it from the post rather than from $text:
-		// $text is whatever the filter chain holds by the time this runs, which is
-		// not necessarily the manual excerpt.
-		if ( '' !== trim( (string) $resolved->post_excerpt ) ) {
-			return wp_trim_excerpt( $text, $resolved );
-		}
-
+		// Core is only ever handed the sanitized clone, in both branches below. Any
+		// path that lets core rebuild from the post reaches post_content, so handing
+		// it the real post anywhere would put gated blocks back in the excerpt.
 		$sanitized               = clone $resolved;
 		$sanitized->post_content = Block_Visibility::strip_blocks_hidden_from_public( $resolved->post_content );
+
+		// A manually written excerpt is the author's own words; core returns it
+		// untouched and so do we. Read it from the post rather than from $text,
+		// which is whatever the filter chain holds by the time this runs and is not
+		// necessarily the manual excerpt. If an earlier filter blanked $text, core
+		// rebuilds — from the sanitized clone, not the original.
+		if ( '' !== trim( (string) $resolved->post_excerpt ) ) {
+			return wp_trim_excerpt( $text, $sanitized );
+		}
 
 		// Pass an empty $text so core rebuilds from the sanitized post.
 		// wp_trim_excerpt() returns $text unchanged when it is non-empty, so

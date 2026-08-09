@@ -150,6 +150,42 @@ class Newspack_Test_Content_Gate_Excerpt extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A blanked $text on a post that has a manual excerpt must not leak.
+	 *
+	 * Core rebuilds from the post whenever $text is empty. If the manual-excerpt
+	 * branch hands core the original post rather than the sanitized clone, that
+	 * rebuild reaches post_content and puts gated blocks back in the excerpt.
+	 */
+	public function test_blanked_text_on_a_post_with_a_manual_excerpt_does_not_leak() {
+		$gate    = '{"newspackAccessControlMode":"custom","newspackAccessControlRules":{"registration":{"active":true}},"newspackAccessControlVisibility":"visible"}';
+		$post_id = $this->factory->post->create(
+			[
+				'post_status'  => 'publish',
+				'post_excerpt' => 'A hand-written excerpt.',
+				'post_content' => '<!-- wp:paragraph --><p>PUBLICMARK</p><!-- /wp:paragraph -->'
+					. '<!-- wp:group ' . $gate . ' --><div class="wp-block-group">'
+					. '<!-- wp:paragraph --><p>SECRETMARK</p><!-- /wp:paragraph -->'
+					. '</div><!-- /wp:group -->',
+			]
+		);
+		$GLOBALS['post'] = get_post( $post_id );
+		setup_postdata( $GLOBALS['post'] );
+		wp_set_current_user( 0 );
+		Block_Visibility::reset_cache_for_tests();
+
+		$blank = function () {
+			return '';
+		};
+		add_filter( 'get_the_excerpt', $blank, 9 );
+		$excerpt = get_the_excerpt( $post_id );
+		remove_filter( 'get_the_excerpt', $blank, 9 );
+
+		$this->assertStringNotContainsString( 'SECRETMARK', $excerpt, 'A rebuild triggered by a blanked $text still uses sanitized content.' );
+
+		unset( $GLOBALS['post'] );
+	}
+
+	/**
 	 * A manually written excerpt is returned untouched.
 	 */
 	public function test_manual_excerpt_is_untouched() {
