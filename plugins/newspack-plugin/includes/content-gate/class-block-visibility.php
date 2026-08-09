@@ -131,6 +131,72 @@ class Block_Visibility {
 	}
 
 	/**
+	 * Remove blocks that are withheld from a logged-out reader.
+	 *
+	 * Evaluated against user 0 whoever is asking, so the result is identical for
+	 * every reader. That is deliberate: Newspack_Blocks_Caching keys cached block
+	 * markup without a user dimension, so reader-varying output would be served
+	 * across readers.
+	 *
+	 * @param string $content Serialized block content.
+	 * @return string Content with withheld blocks removed.
+	 */
+	public static function strip_blocks_hidden_from_public( $content ) {
+		if ( ! has_blocks( $content ) ) {
+			return $content;
+		}
+		return serialize_blocks( self::strip_hidden( parse_blocks( $content ) ) );
+	}
+
+	/**
+	 * Recursive half of strip_blocks_hidden_from_public().
+	 *
+	 * Core's serialize_block() walks innerContent and consumes one innerBlocks
+	 * entry per null marker, so dropping a child means dropping its marker too.
+	 * Filtering innerBlocks alone runs the index past the end and throws from
+	 * inside core.
+	 *
+	 * @param array $blocks Parsed blocks.
+	 * @return array
+	 */
+	private static function strip_hidden( $blocks ) {
+		$kept = [];
+
+		foreach ( $blocks as $block ) {
+			if ( self::is_hidden_for_user( $block, 0 ) ) {
+				continue;
+			}
+
+			if ( ! empty( $block['innerBlocks'] ) ) {
+				$inner_blocks  = [];
+				$inner_content = [];
+				$index         = 0;
+
+				foreach ( (array) $block['innerContent'] as $chunk ) {
+					if ( is_string( $chunk ) ) {
+						$inner_content[] = $chunk;
+						continue;
+					}
+					$child = $block['innerBlocks'][ $index++ ] ?? null;
+					if ( null === $child || self::is_hidden_for_user( $child, 0 ) ) {
+						continue;
+					}
+					$stripped        = self::strip_hidden( [ $child ] );
+					$inner_blocks[]  = $stripped[0];
+					$inner_content[] = null;
+				}
+
+				$block['innerBlocks']  = $inner_blocks;
+				$block['innerContent'] = $inner_content;
+			}
+
+			$kept[] = $block;
+		}
+
+		return $kept;
+	}
+
+	/**
 	 * Register block attributes server-side for target block types.
 	 *
 	 * @param array  $args       Block type arguments.

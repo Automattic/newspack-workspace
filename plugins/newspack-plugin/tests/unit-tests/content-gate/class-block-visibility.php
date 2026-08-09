@@ -694,4 +694,50 @@ class Newspack_Test_Block_Visibility extends WP_UnitTestCase {
 		Block_Visibility::reset_cache_for_tests();
 		$this->assertSame( '<div>x</div>', Block_Visibility::filter_render_block( '<div>x</div>', $block ) );
 	}
+
+	// -----------------------------------------------------------------------
+	// strip_blocks_hidden_from_public() tests
+	// -----------------------------------------------------------------------
+
+	/**
+	 * Gated blocks are removed from content at any nesting depth, and ungated
+	 * siblings survive.
+	 */
+	public function test_strip_removes_gated_blocks_at_any_depth() {
+		$gate    = '{"newspackAccessControlMode":"custom","newspackAccessControlRules":{"registration":{"active":true}},"newspackAccessControlVisibility":"visible"}';
+		$gated   = '<!-- wp:group ' . $gate . ' --><div class="wp-block-group"><!-- wp:paragraph --><p>GATED</p><!-- /wp:paragraph --></div><!-- /wp:group -->';
+		$ungated = '<!-- wp:group --><div class="wp-block-group"><!-- wp:paragraph --><p>ORDINARY</p><!-- /wp:paragraph --></div><!-- /wp:group -->';
+		$plain   = '<!-- wp:paragraph --><p>PLAIN</p><!-- /wp:paragraph -->';
+
+		$top    = Block_Visibility::strip_blocks_hidden_from_public( $plain . $ungated . $gated );
+		$nested = Block_Visibility::strip_blocks_hidden_from_public(
+			$plain . '<!-- wp:columns --><div class="wp-block-columns"><!-- wp:column --><div class="wp-block-column">'
+			. $gated . '</div><!-- /wp:column --></div><!-- /wp:columns -->'
+		);
+
+		$this->assertStringNotContainsString( 'GATED', $top, 'A top-level gated block is removed.' );
+		$this->assertStringContainsString( 'PLAIN', $top, 'Ungated content survives.' );
+		$this->assertStringContainsString( 'ORDINARY', $top, 'An ungated group survives.' );
+		$this->assertStringNotContainsString( 'GATED', $nested, 'A gated block nested in columns is removed.' );
+		$this->assertStringContainsString( 'PLAIN', $nested, 'Ungated content survives the nested case.' );
+	}
+
+	/**
+	 * Removing a nested block keeps innerContent's null markers in step with
+	 * innerBlocks. serialize_block() consumes one innerBlocks entry per null, so a
+	 * mismatch throws from inside core rather than returning wrong output.
+	 */
+	public function test_strip_keeps_inner_content_markers_in_step() {
+		$gate  = '{"newspackAccessControlMode":"custom","newspackAccessControlRules":{"registration":{"active":true}},"newspackAccessControlVisibility":"visible"}';
+		$mixed = '<!-- wp:columns --><div class="wp-block-columns">'
+			. '<!-- wp:column --><div class="wp-block-column"><!-- wp:paragraph --><p>KEEP</p><!-- /wp:paragraph --></div><!-- /wp:column -->'
+			. '<!-- wp:column --><div class="wp-block-column"><!-- wp:group ' . $gate . ' --><div class="wp-block-group"><!-- wp:paragraph --><p>GATED</p><!-- /wp:paragraph --></div><!-- /wp:group --></div><!-- /wp:column -->'
+			. '</div><!-- /wp:columns -->';
+
+		$out = Block_Visibility::strip_blocks_hidden_from_public( $mixed );
+
+		$this->assertStringNotContainsString( 'GATED', $out );
+		$this->assertStringContainsString( 'KEEP', $out );
+		$this->assertNotEmpty( parse_blocks( $out ), 'Output is re-parseable.' );
+	}
 }
