@@ -133,15 +133,25 @@ class Block_Visibility {
 	/**
 	 * Remove blocks that are withheld from a logged-out reader.
 	 *
-	 * Evaluated against user 0 whoever is asking, so the result is identical for
-	 * every reader. That is deliberate: Newspack_Blocks_Caching keys cached block
-	 * markup without a user dimension, so reader-varying output would be served
-	 * across readers.
+	 * Evaluated against the anonymous reader (user 0) rather than the current
+	 * one. That is deliberate: Newspack_Blocks_Caching keys cached block markup
+	 * without a user dimension, so reader-varying output would be served across
+	 * readers. This does not guarantee an identical result for every anonymous
+	 * visitor, though: the "institution" access rule supports anonymous
+	 * evaluation and depends on request context (IP/cookie), so it can still
+	 * vary between two anonymous requests.
 	 *
 	 * @param string $content Serialized block content.
 	 * @return string Content with withheld blocks removed.
 	 */
 	public static function strip_blocks_hidden_from_public( $content ) {
+		// A withheld block always carries newspackAccessControlGateIds or
+		// newspackAccessControlRules, so content without that string has nothing
+		// to strip. Skips parse_blocks()/serialize_blocks() on every
+		// auto-generated excerpt on sites that have never used the gate.
+		if ( false === strpos( $content, 'newspackAccessControl' ) ) {
+			return $content;
+		}
 		if ( ! has_blocks( $content ) ) {
 			return $content;
 		}
