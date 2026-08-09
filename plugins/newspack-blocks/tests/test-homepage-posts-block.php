@@ -330,4 +330,52 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		\Newspack\Tag_Labels::$stub_labels = null;
 		self::assertFalse( Newspack_Blocks_API::newspack_blocks_get_tag_labels( [ 'id' => $post_id ] ) );
 	}
+
+	/**
+	 * The filter_excerpt() method routes its content through Block_Visibility sanitization
+	 * before excerpt_remove_blocks(), verifying the integration point that strips gated
+	 * content from excerpts built by the homepage-posts block.
+	 */
+	public function test_filter_excerpt_sanitizes_via_block_visibility() {
+		// Skip if the real Block_Visibility is present; the stub-based test is for verification
+		// when newspack-plugin is not loaded.
+		if ( ! property_exists( '\Newspack\Block_Visibility', 'sanitization_was_called' ) ) {
+			$this->markTestSkipped( 'Real \Newspack\Block_Visibility present; stub-based wiring test skipped.' );
+		}
+
+		// Create a post with a gated group block (would be withheld from anonymous users).
+		$gate    = '{"newspackAccessControlMode":"custom","newspackAccessControlRules":{"registration":{"active":true}},"newspackAccessControlVisibility":"visible"}';
+		$content = '<!-- wp:paragraph --><p>PUBLICMARK</p><!-- /wp:paragraph -->'
+			. '<!-- wp:group ' . $gate . ' --><div class="wp-block-group">'
+			. '<!-- wp:paragraph --><p>SECRETMARK</p><!-- /wp:paragraph -->'
+			. '</div><!-- /wp:group -->';
+		$post_id = self::factory()->post->create(
+			[
+				'post_status'  => 'publish',
+				'post_content' => $content,
+				'post_excerpt' => '',
+			]
+		);
+
+		// Reset the flag and call filter_excerpt.
+		\Newspack\Block_Visibility::reset_sanitization_for_tests();
+		$GLOBALS['post'] = get_post( $post_id );
+		setup_postdata( $GLOBALS['post'] );
+
+		Newspack_Blocks::filter_excerpt( [ 'excerptLength' => 999, 'showExcerpt' => true ] );
+		$excerpt = get_the_excerpt( $post_id );
+		Newspack_Blocks::remove_excerpt_filter();
+
+		// Verify: Block_Visibility sanitization was called (the integration point).
+		self::assertTrue(
+			\Newspack\Block_Visibility::$sanitization_was_called,
+			'Block_Visibility::strip_blocks_hidden_from_public() must be called by filter_excerpt().'
+		);
+
+		// Verify: gated content was stripped; public content remains.
+		self::assertStringNotContainsString( 'SECRETMARK', $excerpt, 'Gated block content must not appear in excerpt.' );
+		self::assertStringContainsString( 'PUBLICMARK', $excerpt, 'Public block content must remain in excerpt.' );
+
+		unset( $GLOBALS['post'] );
+	}
 }

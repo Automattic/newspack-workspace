@@ -27,11 +27,27 @@ function newspack_blocks_manually_load_plugin() {
 }
 tests_add_filter( 'muplugins_loaded', 'newspack_blocks_manually_load_plugin' );
 
+/**
+ * Load test stubs for dependencies not available in the isolated test environment.
+ */
+require_once __DIR__ . '/class-newspack-tag-labels-stub.php';
+require_once __DIR__ . '/class-newspack-block-visibility-stub.php';
+
 // Print errors to stdout.
 ini_set( 'error_log', 'php://stdout' ); // phpcs:ignore WordPress.PHP.IniSet.Risky
 
-// Load the composer autoloader.
-require_once __DIR__ . '/../vendor/autoload.php';
+// Load the composer autoloader. Use the monorepo root autoloader if available,
+// otherwise fall back to the plugin's own vendor directory.
+$autoloader_paths = [
+	dirname( dirname( dirname( __DIR__ ) ) ) . '/vendor/autoload.php', // monorepo root
+	__DIR__ . '/../vendor/autoload.php', // plugin vendor
+];
+foreach ( $autoloader_paths as $autoloader_path ) {
+	if ( file_exists( $autoloader_path ) ) {
+		require_once $autoloader_path;
+		break;
+	}
+}
 
 // Start up the WP testing environment.
 require $newspack_blocks_tests_dir . '/includes/bootstrap.php';
