@@ -42,11 +42,17 @@ $autoloader_paths = [
 	__DIR__ . '/../vendor/autoload.php', // plugin vendor
 	dirname( dirname( dirname( __DIR__ ) ) ) . '/vendor/autoload.php', // monorepo root
 ];
+$autoloader_loaded = false;
 foreach ( $autoloader_paths as $autoloader_path ) {
 	if ( file_exists( $autoloader_path ) ) {
 		require_once $autoloader_path;
+		$autoloader_loaded = true;
 		break;
 	}
+}
+if ( ! $autoloader_loaded ) {
+	fwrite( STDERR, "Composer autoloader not found. Run `composer install` in plugins/newspack-blocks or at the monorepo root.\n" );
+	exit( 1 );
 }
 
 // Start up the WP testing environment.
