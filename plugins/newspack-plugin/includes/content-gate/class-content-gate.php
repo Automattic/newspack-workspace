@@ -107,6 +107,7 @@ class Content_Gate {
 
 		include __DIR__ . '/class-content-gate-api.php';
 		include __DIR__ . '/class-content-gate-advanced-settings.php';
+		include __DIR__ . '/class-content-gate-excerpt.php';
 		include __DIR__ . '/class-access-rules.php';
 		include __DIR__ . '/class-content-rules.php';
 		include __DIR__ . '/class-content-restriction-control.php';
