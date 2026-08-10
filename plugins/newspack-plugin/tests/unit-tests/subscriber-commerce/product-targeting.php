@@ -270,14 +270,19 @@ class Test_Product_Targeting extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Excluding a grouped product excludes the products sold under it.
+	 * Excluding a grouped product does NOT free the standalone products sold
+	 * under it.
 	 *
-	 * A grouped product's children are top-level products reporting a parent of
-	 * 0, so the parent-ID test that catches variations never sees them. Without
-	 * the expansion the bundle a publisher excluded would keep selling every
-	 * product inside it.
+	 * A grouped product's children are ordinary top-level products, also sold on
+	 * their own, so reaching through the container to exclude them would lift the
+	 * rule off those products everywhere — widening access on the strength of one
+	 * bundle exclusion. An exclusion therefore means exactly the IDs listed (and
+	 * their variations), and excluding a grouped container is a no-op on its
+	 * children. Whether it should behave otherwise is a product decision left to
+	 * the branch owner (PR #742 review); this test pins today's behaviour so the
+	 * decision can't be reversed by accident.
 	 */
-	public function test_exclusion_applies_to_children_of_an_excluded_grouped_product() {
+	public function test_excluding_a_grouped_product_does_not_free_its_children() {
 		$grouped = $this->create_product(
 			0,
 			'grouped',
@@ -291,34 +296,10 @@ class Test_Product_Targeting extends \WP_UnitTestCase {
 			]
 		);
 
+		// The grouped container itself, named in the list, is excluded.
 		$this->assertFalse( Product_Targeting::rule_covers_product( $rule, $grouped ) );
-		$this->assertFalse( Product_Targeting::rule_covers_product( $rule, $this->product ) );
-		// A product outside the bundle is untouched by the exclusion.
-		$this->assertTrue( Product_Targeting::rule_covers_product( $rule, $this->variable_product ) );
-	}
-
-	/**
-	 * The grouped expansion applies to exclusions only. Naming a grouped product
-	 * under `products` targeting still covers the container alone — an exclusion
-	 * that reaches too little sells something the publisher withheld, while
-	 * targeting that reaches too far restricts something they never named.
-	 */
-	public function test_products_targeting_does_not_expand_grouped_children() {
-		$grouped = $this->create_product(
-			0,
-			'grouped',
-			[ $this->product->get_id() ]
-		);
-
-		$rule = $this->make_rule(
-			[
-				'targeting'   => 'products',
-				'product_ids' => [ $grouped->get_id() ],
-			]
-		);
-
-		$this->assertTrue( Product_Targeting::rule_covers_product( $rule, $grouped ) );
-		$this->assertFalse( Product_Targeting::rule_covers_product( $rule, $this->product ) );
+		// Its child, a standalone product, stays covered by the "all" rule.
+		$this->assertTrue( Product_Targeting::rule_covers_product( $rule, $this->product ) );
 	}
 
 	/**

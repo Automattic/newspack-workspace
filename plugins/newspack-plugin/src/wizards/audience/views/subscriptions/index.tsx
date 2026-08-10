@@ -11,12 +11,12 @@
  */
 import { __ } from '@wordpress/i18n';
 import { forwardRef } from '@wordpress/element';
-import { Notice } from '@wordpress/components';
 
 /**
  * Internal dependencies.
  */
-import { Wizard, withWizard } from '../../../../../packages/components/src';
+import { Notice, Wizard, withWizard } from '../../../../../packages/components/src';
+import WizardsTab from '../../../wizards-tab';
 import { getTab } from './tabs';
 import type { SubscriptionsTab } from './types';
 
@@ -49,17 +49,26 @@ function AudienceSubscriptions( _props: Record< string, unknown >, ref: React.Fo
 	// Dropping one unregistered tab is a graceful degrade; ending up with none is
 	// not. Wizard redirects to `sections[ 0 ].path` unconditionally, so an empty
 	// list throws and takes the whole admin screen down with no error boundary
-	// above it. Say so instead — the two registries are maintained independently,
-	// which is exactly how a list ends up empty.
-	if ( ! sections.length ) {
-		return (
-			<Notice status="warning" isDismissible={ false }>
-				{ __( 'No Subscriptions screens are available on this site.', 'newspack-plugin' ) }
-			</Notice>
-		);
-	}
+	// above it. The two registries are maintained independently, which is exactly
+	// how a list ends up empty — so fall back to a single section carrying a
+	// notice. Routed through Wizard rather than returned on its own, it keeps the
+	// header, breadcrumbs and admin chrome, and the forwarded ref stays attached.
+	const displayedSections = sections.length
+		? sections
+		: [
+				{
+					label: __( 'Subscriptions', 'newspack-plugin' ),
+					path: '/',
+					breadcrumbs: [ { label: __( 'Audience Management', 'newspack-plugin' ) }, { label: __( 'Subscriptions', 'newspack-plugin' ) } ],
+					render: () => (
+						<WizardsTab title={ __( 'Subscriptions', 'newspack-plugin' ) }>
+							<Notice isWarning>{ __( 'No Subscriptions screens are available on this site.', 'newspack-plugin' ) }</Notice>
+						</WizardsTab>
+					),
+				},
+		  ];
 
-	return <Wizard headerText={ HEADER_TEXT } sections={ sections } requiredPlugins={ [ 'woocommerce' ] } ref={ ref } />;
+	return <Wizard headerText={ HEADER_TEXT } sections={ displayedSections } requiredPlugins={ [ 'woocommerce' ] } ref={ ref } />;
 }
 
 export default withWizard( forwardRef( AudienceSubscriptions ) );
