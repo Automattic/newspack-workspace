@@ -10,16 +10,20 @@
  *
  * Coverage:
  *   - Eligibility: the narrow set of subscriptions we open the flow for, and each
- *     condition that keeps it closed.
- *   - Follow-through: once a payment method is attached, the next payment date is
- *     calculated and set, so auto-renewal resumes.
+ *     WCS refusal we deliberately keep in place (manual-renewal store setting, zero
+ *     total, no capable gateway, gateway that cannot cancel).
+ *   - Follow-through: for an active subscription a next payment date is calculated
+ *     and set; every other status, an unschedulable date, a gateway that refuses
+ *     date changes, and a failing write are all left alone.
  *
  * @package Newspack\Tests
  */
 
 use Newspack\WooCommerce_Subscriptions;
 
+require_once __DIR__ . '/../mocks/wc-mocks.php';
 require_once __DIR__ . '/../mocks/wcs-payment-gateways-mocks.php';
+require_once __DIR__ . '/../mocks/wcs-add-payment-mocks.php';
 
 /**
  * Tests for opening the add-payment-method flow to subscriptions with no next payment.
@@ -37,14 +41,22 @@ class Newspack_Test_WC_Subscriptions_Add_Payment extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Drop any filter a test added.
+	 */
+	public function tear_down() {
+		remove_all_filters( 'newspack_add_payment_method_store_requires_manual_renewal' );
+		parent::tear_down();
+	}
+
+	/**
 	 * Build a subscription double.
 	 *
 	 * @param array $data Overrides for the subscription data.
 	 *
-	 * @return WC_Subscription
+	 * @return NPPD2170_Test_Subscription
 	 */
 	private function make_subscription( $data = [] ) {
-		return new WC_Subscription(
+		return new NPPD2170_Test_Subscription(
 			array_merge(
 				[
 					'id'               => 1,
@@ -73,10 +85,10 @@ class Newspack_Test_WC_Subscriptions_Add_Payment extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Every status we deliberately cover.
+	 * Every status we deliberately cover. pending-cancel is not among them.
 	 */
 	public function test_grants_eligibility_for_each_covered_status() {
-		foreach ( [ 'pending', 'on-hold', 'active', 'pending-cancel' ] as $status ) {
+		foreach ( [ 'pending', 'on-hold', 'active' ] as $status ) {
 			$subscription = $this->make_subscription( [ 'status' => $status ] );
 
 			$this->assertTrue(
@@ -84,6 +96,53 @@ class Newspack_Test_WC_Subscriptions_Add_Payment extends WP_UnitTestCase {
 				sprintf( 'Expected the flow to be open for a "%s" subscription.', $status )
 			);
 		}
+	}
+
+	/**
+	 * A pending-cancel subscription always has next payment cleared, so it would
+	 * always match the override; it is excluded because the action does nothing for
+	 * a subscription winding down (reactivating restores WCS's own flow).
+	 */
+	public function test_leaves_pending_cancel_alone() {
+		$subscription = $this->make_subscription( [ 'status' => 'pending-cancel' ] );
+
+		$this->assertFalse(
+			WooCommerce_Subscriptions::allow_add_payment_method_without_next_payment( false, $subscription )
+		);
+	}
+
+	/**
+	 * A store that has switched automatic payments off — WCS manual renewals with
+	 * the auto-renew toggle disabled, surfaced here through the store-setting
+	 * filter — keeps the flow closed for a subscription that otherwise qualifies.
+	 */
+	public function test_respects_the_manual_renewal_store_setting() {
+		add_filter( 'newspack_add_payment_method_store_requires_manual_renewal', '__return_true' );
+		$subscription = $this->make_subscription();
+
+		$this->assertFalse(
+			WooCommerce_Subscriptions::allow_add_payment_method_without_next_payment( false, $subscription ),
+			'Expected the flow to stay closed when the store requires manual renewals.'
+		);
+
+		remove_all_filters( 'newspack_add_payment_method_store_requires_manual_renewal' );
+
+		$this->assertTrue(
+			WooCommerce_Subscriptions::allow_add_payment_method_without_next_payment( false, $subscription ),
+			'Expected the flow to open when automatic payments are available.'
+		);
+	}
+
+	/**
+	 * A gateway that cannot cancel keeps the flow closed, matching the WCS bail. A
+	 * card-less subscription reads as manual and so passes this check.
+	 */
+	public function test_leaves_subscriptions_alone_when_the_gateway_cannot_cancel() {
+		$subscription = $this->make_subscription( [ 'payment_method_supports' => [ 'subscription_amount_changes' ] ] );
+
+		$this->assertFalse(
+			WooCommerce_Subscriptions::allow_add_payment_method_without_next_payment( false, $subscription )
+		);
 	}
 
 	/**
@@ -148,22 +207,80 @@ class Newspack_Test_WC_Subscriptions_Add_Payment extends WP_UnitTestCase {
 
 	/**
 	 * Attaching a card to an active subscription with no next payment date
-	 * schedules one, which is what resumes auto-renewal and, for a subscription
-	 * with no orders, unlocks WCS's early renewal as a self-serve way to pay.
+	 * schedules the exact date calculate_date() returns, and records it in an
+	 * order note — which is what unlocks WCS's early renewal as a self-serve way
+	 * to pay.
 	 */
 	public function test_sets_a_next_payment_date_once_a_card_is_attached() {
-		$subscription = $this->make_subscription( [ 'status' => 'active' ] );
-
-		WooCommerce_Subscriptions::schedule_next_payment_after_payment_method_added( $subscription, 'stripe', '' );
-
-		$next_payment = $subscription->get_date( 'next_payment' );
-
-		$this->assertNotEmpty( $next_payment, 'Expected a next payment date to be scheduled.' );
-		$this->assertGreaterThan(
-			time(),
-			strtotime( $next_payment ),
-			'Expected the scheduled next payment to be in the future.'
+		$scheduled    = gmdate( 'Y-m-d H:i:s', strtotime( '+1 year' ) );
+		$subscription = $this->make_subscription(
+			[
+				'status'         => 'active',
+				'calculate_date' => $scheduled,
+			]
 		);
+
+		WooCommerce_Subscriptions::schedule_next_payment_after_payment_method_added( $subscription, 'stripe' );
+
+		$this->assertSame(
+			$scheduled,
+			$subscription->get_date( 'next_payment' ),
+			'Expected the calculated date to be written verbatim.'
+		);
+	}
+
+	/**
+	 * When calculate_date() returns 0 — the next period would fall past the end
+	 * date — a subscription winding down to a fixed end has nothing further to
+	 * bill, so no date is written.
+	 */
+	public function test_does_not_schedule_when_the_calculated_date_is_zero() {
+		$subscription = $this->make_subscription(
+			[
+				'status'         => 'active',
+				'calculate_date' => '0',
+			]
+		);
+
+		WooCommerce_Subscriptions::schedule_next_payment_after_payment_method_added( $subscription, 'stripe' );
+
+		$this->assertEmpty( $subscription->get_date( 'next_payment' ) );
+	}
+
+	/**
+	 * A gateway that refuses date changes gets no Woo-side schedule, so its dates
+	 * and Woo's never diverge.
+	 */
+	public function test_does_not_schedule_when_the_gateway_refuses_date_changes() {
+		$subscription = $this->make_subscription(
+			[
+				'status'              => 'active',
+				'can_date_be_updated' => false,
+				'calculate_date'      => gmdate( 'Y-m-d H:i:s', strtotime( '+1 year' ) ),
+			]
+		);
+
+		WooCommerce_Subscriptions::schedule_next_payment_after_payment_method_added( $subscription, 'stripe' );
+
+		$this->assertEmpty( $subscription->get_date( 'next_payment' ) );
+	}
+
+	/**
+	 * A failing date write is caught, not fatal: the reader keeps the card they
+	 * just added, and no date is written.
+	 */
+	public function test_swallows_a_failing_date_write() {
+		$subscription = $this->make_subscription(
+			[
+				'status'              => 'active',
+				'update_dates_throws' => true,
+				'calculate_date'      => gmdate( 'Y-m-d H:i:s', strtotime( '+1 year' ) ),
+			]
+		);
+
+		WooCommerce_Subscriptions::schedule_next_payment_after_payment_method_added( $subscription, 'stripe' );
+
+		$this->assertEmpty( $subscription->get_date( 'next_payment' ) );
 	}
 
 	/**
@@ -174,9 +291,14 @@ class Newspack_Test_WC_Subscriptions_Add_Payment extends WP_UnitTestCase {
 	 */
 	public function test_does_not_schedule_for_statuses_where_payment_sets_the_date() {
 		foreach ( [ 'pending', 'on-hold', 'pending-cancel' ] as $status ) {
-			$subscription = $this->make_subscription( [ 'status' => $status ] );
+			$subscription = $this->make_subscription(
+				[
+					'status'         => $status,
+					'calculate_date' => gmdate( 'Y-m-d H:i:s', strtotime( '+1 year' ) ),
+				]
+			);
 
-			WooCommerce_Subscriptions::schedule_next_payment_after_payment_method_added( $subscription, 'stripe', '' );
+			WooCommerce_Subscriptions::schedule_next_payment_after_payment_method_added( $subscription, 'stripe' );
 
 			$this->assertEmpty(
 				$subscription->get_date( 'next_payment' ),
@@ -201,7 +323,7 @@ class Newspack_Test_WC_Subscriptions_Add_Payment extends WP_UnitTestCase {
 			]
 		);
 
-		WooCommerce_Subscriptions::schedule_next_payment_after_payment_method_added( $subscription, 'stripe', '' );
+		WooCommerce_Subscriptions::schedule_next_payment_after_payment_method_added( $subscription, 'stripe' );
 
 		$this->assertSame( $existing, $subscription->get_date( 'next_payment' ) );
 	}
@@ -212,7 +334,7 @@ class Newspack_Test_WC_Subscriptions_Add_Payment extends WP_UnitTestCase {
 	public function test_does_not_schedule_when_no_payment_method_was_attached() {
 		$subscription = $this->make_subscription( [ 'status' => 'active' ] );
 
-		WooCommerce_Subscriptions::schedule_next_payment_after_payment_method_added( $subscription, '', '' );
+		WooCommerce_Subscriptions::schedule_next_payment_after_payment_method_added( $subscription, '' );
 
 		$this->assertEmpty( $subscription->get_date( 'next_payment' ) );
 	}

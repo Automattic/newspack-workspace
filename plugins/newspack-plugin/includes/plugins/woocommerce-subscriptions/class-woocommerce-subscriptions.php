@@ -49,7 +49,7 @@ class WooCommerce_Subscriptions {
 		// allow_add_payment_method_without_next_payment() for the whole story.
 		// Priority 20: WCS registers its own answer at 10 and we only override a no.
 		add_filter( 'woocommerce_can_subscription_be_updated_to_new-payment-method', [ __CLASS__, 'allow_add_payment_method_without_next_payment' ], 20, 2 );
-		add_action( 'woocommerce_subscription_payment_method_updated', [ __CLASS__, 'schedule_next_payment_after_payment_method_added' ], 10, 3 );
+		add_action( 'woocommerce_subscription_payment_method_updated', [ __CLASS__, 'schedule_next_payment_after_payment_method_added' ], 10, 2 );
 	}
 
 	/**
@@ -346,9 +346,14 @@ class WooCommerce_Subscriptions {
 	 * than "Change payment" whenever the subscription has no gateway yet, which
 	 * is the wording this case wants.
 	 *
-	 * Deliberately narrow: it only opens the case WCS closes, and only when a
-	 * card could actually be charged afterwards. Anything WCS already allows
-	 * passes straight through.
+	 * Deliberately narrow. WCS refuses the action for several distinct reasons;
+	 * this reproduces every one of them except the one it targets — the
+	 * missing-next-payment / not-active refusal. So the flow opens only for the
+	 * case this fixes and stays closed wherever WCS closed it for a different
+	 * reason: automatic payments switched off store-wide, no recurring charge, no
+	 * gateway that can take a customer card, or a gateway that cannot cancel.
+	 * Overriding just the one refusal, rather than returning a blanket `true`, is
+	 * what keeps a publisher's "no automatic renewals" choice intact.
 	 *
 	 * Paired with {@see schedule_next_payment_after_payment_method_added()},
 	 * which schedules the payment the missing date would otherwise leave unset.
@@ -367,31 +372,75 @@ class WooCommerce_Subscriptions {
 			return $can_be_updated;
 		}
 
-		// Statuses where putting a card on file still leads somewhere: awaiting a
-		// first payment, suspended, running, or winding down after the reader
-		// turned auto-renewal off. Terminal statuses are left to WCS.
-		if ( ! $subscription->has_status( [ 'pending', 'on-hold', 'active', 'pending-cancel' ] ) ) {
-			return $can_be_updated;
-		}
+		// Reproduce every WCS refusal except the missing-next-payment / not-active
+		// one this filter exists to override. See
+		// WC_Subscriptions_Change_Payment_Gateway::can_subscription_be_updated_to_new_payment_method().
 
-		// A scheduled payment means WCS's own rule already applies.
-		if ( $subscription->get_time( 'next_payment' ) > 0 ) {
+		// The store has turned automatic payments off entirely — a publisher
+		// configuration choice, not a per-subscription state.
+		if ( self::store_requires_manual_renewal() ) {
 			return $can_be_updated;
 		}
 
 		// Nothing recurring to charge, so nothing to add a card for. The 'edit'
-		// context reads the unfiltered total, matching WCS's own check.
+		// context reads the unfiltered total, as WCS's own check does.
 		if ( (float) $subscription->get_total( 'edit' ) <= 0 ) {
 			return $can_be_updated;
 		}
 
-		// Offering the action with no gateway able to take a card from the reader
-		// would lead them to a dead end.
+		// No gateway can take a card from the reader, so the flow would dead-end.
 		if ( ! self::one_gateway_supports_customer_payment_method_change() ) {
 			return $can_be_updated;
 		}
 
+		// The subscription's own gateway cannot cancel, which WCS requires before
+		// letting a reader swap payment method. A card-less subscription reads as
+		// manual here, so this passes for the hand-made case it targets.
+		if ( ! $subscription->payment_method_supports( 'subscription_cancellation' ) ) {
+			return $can_be_updated;
+		}
+
+		// The refusal we override, limited to statuses where putting a card on file
+		// leads somewhere: awaiting a first payment, suspended, or running.
+		// pending-cancel is excluded — its next payment is already cleared by
+		// design, so it would always match, and the action would do nothing for a
+		// subscription winding down (reactivating restores WCS's own flow).
+		if ( ! $subscription->has_status( [ 'pending', 'on-hold', 'active' ] ) ) {
+			return $can_be_updated;
+		}
+
+		if ( $subscription->get_time( 'next_payment' ) > 0 ) {
+			return $can_be_updated;
+		}
+
 		return true;
+	}
+
+	/**
+	 * Whether the store has switched automatic payments off — WCS's manual
+	 * renewals required with the reader-facing auto-renew toggle disabled. Under
+	 * that configuration WCS deliberately hides the payment-method change action,
+	 * and this filter must not re-open it.
+	 *
+	 * Wrapped in a method so the decision has a single seam: the
+	 * `newspack_add_payment_method_store_requires_manual_renewal` filter lets a
+	 * publisher override it, and lets the eligibility filter be unit tested
+	 * without loading WooCommerce Subscriptions. A missing toggle class fails
+	 * closed to "off", matching WCS's own guard.
+	 *
+	 * @return bool
+	 */
+	private static function store_requires_manual_renewal() {
+		$required       = function_exists( 'wcs_is_manual_renewal_required' ) && \wcs_is_manual_renewal_required();
+		$toggle_enabled = class_exists( 'WCS_My_Account_Auto_Renew_Toggle' ) && \WCS_My_Account_Auto_Renew_Toggle::is_enabled();
+
+		/**
+		 * Filters whether the store is configured for manual renewals only, which
+		 * keeps the add-payment-method flow closed.
+		 *
+		 * @param bool $manual_only Whether automatic payments are switched off store-wide.
+		 */
+		return (bool) apply_filters( 'newspack_add_payment_method_store_requires_manual_renewal', $required && ! $toggle_enabled );
 	}
 
 	/**
@@ -422,43 +471,39 @@ class WooCommerce_Subscriptions {
 	 * had none.
 	 *
 	 * The other half of {@see allow_add_payment_method_without_next_payment()},
-	 * and deliberately narrower than it. Eligibility opens the form for four
-	 * statuses; only `active` gets a date written here.
+	 * and deliberately narrower than it: eligibility opens the form for three
+	 * statuses, but only `active` gets a date written here.
 	 *
-	 * An active subscription with no next payment date is already giving the
-	 * reader access with nothing scheduled to bill, so calculating the date is
-	 * what turns "card added" into "renewals resume" — and it is also what makes
-	 * WCS's early renewal available, since `wcs_can_user_renew_early()` refuses
-	 * on `subscription_no_next_payment`. That matters for a hand-made
-	 * subscription with no orders at all, where early renewal is the reader's
-	 * only self-serve route to paying.
+	 * An `active` subscription is, by WCS's own model, currently inside a paid
+	 * period — the reader has access. For the subscriptions this targets, a human
+	 * granted that period on purpose (support setting a stuck subscription active
+	 * so the reader keeps access). Scheduling the first *future* charge one
+	 * billing period out is consistent with both facts, and it is what unlocks
+	 * WCS's early renewal — `wcs_can_user_renew_early()` refuses on
+	 * `subscription_no_next_payment`, so a reader who wants to pay sooner has no
+	 * self-serve route until a date exists. With a date set, "Renew now" appears
+	 * and takes payment immediately, resetting the cycle from that payment.
 	 *
-	 * The other statuses are left to WooCommerce, which already handles them
-	 * correctly: paying the pending or failed order is what activates the
-	 * subscription and sets its date. Writing a date for them would be wrong
-	 * twice over — it hands the reader a billing period they never paid for, and
-	 * it withdraws the "Add payment method" action (this pair steps back once a
-	 * date exists, while WCS's own rule still refuses a non-active subscription),
-	 * leaving them with a card on file and no way back to the form.
+	 * `pending` and `on-hold` are left to WooCommerce: they carry an unpaid order,
+	 * and paying it is what activates the subscription and sets its date. Writing
+	 * a date for them would also withdraw the "Add payment method" action (this
+	 * pair steps back once a date exists, while WCS still refuses a non-active
+	 * subscription), stranding the reader with a card on file and no way back.
 	 *
-	 * `calculate_date( 'next_payment' )` derives the date from the last payment
-	 * or the start date plus one billing period, keeps it far enough in the
-	 * future to survive a daylight-saving shift, and returns `0` when the next
-	 * period would fall past the subscription's end date. A `0` is respected:
-	 * a subscription winding down to a fixed end has nothing further to bill.
-	 * A `pending-cancel` subscription therefore stays untouched even though it
-	 * is eligible for the form; resuming its auto-renewal means clearing the
-	 * cancelled and end dates, which is a separate change.
+	 * `calculate_date( 'next_payment' )` derives the date from the last payment or
+	 * the start date plus one billing period, keeps it far enough out to survive a
+	 * daylight-saving shift, and returns `0` when the next period would fall past
+	 * the subscription's end date; a `0` is respected. `can_date_be_updated()`
+	 * additionally gates on the gateway supporting date changes, so a gateway that
+	 * owns the billing agreement and refuses them (PayPal Standard) never gets a
+	 * Woo-side schedule it would not honour.
 	 *
 	 * @param \WC_Subscription $subscription       The subscription that was updated.
 	 * @param string           $new_payment_method The gateway ID now attached.
-	 * @param string           $old_payment_method The gateway ID previously attached.
 	 *
 	 * @return void
 	 */
-	public static function schedule_next_payment_after_payment_method_added( $subscription, $new_payment_method, $old_payment_method = '' ) {
-		unset( $old_payment_method );
-
+	public static function schedule_next_payment_after_payment_method_added( $subscription, $new_payment_method ) {
 		if ( ! ( $subscription instanceof \WC_Subscription ) ) {
 			return;
 		}
@@ -474,14 +519,20 @@ class WooCommerce_Subscriptions {
 			return;
 		}
 
-		// Active only. See the note above on why the other eligible statuses are
-		// left to WooCommerce's own payment-completes-then-schedules flow.
+		// Active only. See the note above on why pending / on-hold are left to
+		// WooCommerce's own payment-completes-then-schedules flow.
 		if ( ! $subscription->has_status( 'active' ) ) {
 			return;
 		}
 
+		// Respect the same gate WCS applies to every date write: the gateway must
+		// support date changes, or its schedule and Woo's would silently diverge.
+		if ( ! $subscription->can_date_be_updated( 'next_payment' ) ) {
+			return;
+		}
+
 		$next_payment = $subscription->calculate_date( 'next_payment' );
-		if ( empty( $next_payment ) || '0' === (string) $next_payment ) {
+		if ( empty( $next_payment ) ) {
 			return;
 		}
 
@@ -494,9 +545,9 @@ class WooCommerce_Subscriptions {
 			$subscription->save();
 			$subscription->add_order_note(
 				sprintf(
-					/* translators: %s: the newly scheduled next payment date. */
+					/* translators: %s: the newly scheduled next payment date, localised. */
 					__( 'Next payment scheduled for %s after the subscriber added a payment method.', 'newspack-plugin' ),
-					$next_payment
+					$subscription->get_date_to_display( 'next_payment' )
 				)
 			);
 		} catch ( \Exception $e ) {

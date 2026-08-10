@@ -327,12 +327,16 @@ final class Checkout_Data {
 			}
 			$order_items = $items_source->get_items();
 			$order_item  = reset( $order_items ); // Use only the first item in the order.
-			if ( $order_item ) {
-				$product_id   = $order_item->get_product_id();
-				$variation_id = $order_item->get_variation_id();
-				$amount       = $order_item->get_subtotal();
+			if ( ! $order_item ) {
+				// No line item means no purchase to summarise, and the product and
+				// name lookups below would fatal on the resulting null. Return empty,
+				// the same "nothing to checkout" signal as an empty source above.
+				return $data;
 			}
-			$referrer = $items_source->get_meta( '_newspack_referer' );
+			$product_id   = $order_item->get_product_id();
+			$variation_id = $order_item->get_variation_id();
+			$amount       = $order_item->get_subtotal();
+			$referrer     = $items_source->get_meta( '_newspack_referer' );
 		}
 
 		// If we have no referrer, set it to the current path.
