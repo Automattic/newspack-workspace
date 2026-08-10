@@ -43,6 +43,13 @@ class WooCommerce_Subscriptions {
 		add_action( 'woocommerce_store_api_checkout_order_processed', [ __CLASS__, 'maybe_reactivate_pending_cancel_switch' ], 40 );
 		add_action( 'woocommerce_order_status_failed', [ __CLASS__, 'maybe_revert_reactivation_on_failed_switch' ] );
 		add_action( 'woocommerce_order_status_cancelled', [ __CLASS__, 'maybe_revert_reactivation_on_failed_switch' ] );
+
+		// Adding a card to a subscription that has no next payment date: eligibility
+		// plus the follow-through that resumes billing. See
+		// allow_add_payment_method_without_next_payment() for the whole story.
+		// Priority 20: WCS registers its own answer at 10 and we only override a no.
+		add_filter( 'woocommerce_can_subscription_be_updated_to_new-payment-method', [ __CLASS__, 'allow_add_payment_method_without_next_payment' ], 20, 2 );
+		add_action( 'woocommerce_subscription_payment_method_updated', [ __CLASS__, 'schedule_next_payment_after_payment_method_added' ], 10, 3 );
 	}
 
 	/**
@@ -317,6 +324,172 @@ class WooCommerce_Subscriptions {
 		// reactivated on purpose in the meantime.
 		$order->delete_meta_data( self::REACTIVATED_FOR_SWITCH_META );
 		$order->save();
+	}
+
+	/**
+	 * Let a reader add a card to a subscription that has no next payment date.
+	 *
+	 * WCS withholds the "change payment method" action from any subscription
+	 * whose next payment date is unset, in
+	 * {@see \WC_Subscriptions_Change_Payment_Gateway::can_subscription_be_updated_to_new_payment_method()}.
+	 * That rule assumes a next payment date always exists once a subscription is
+	 * running, which holds for subscriptions bought at checkout but not for ones
+	 * a publisher creates by hand in wp-admin: those start with no payment method
+	 * and nothing scheduled, so the reader is offered no way to put a card on
+	 * file and the subscription can never be paid (NPPD-2170).
+	 *
+	 * The rule is enforced in exactly one place, and every part of the flow reads
+	 * it — the action button, the form, and the request validator all call
+	 * `can_be_updated_to( 'new-payment-method' )`. The POST handler applies no
+	 * status or date test of its own, so granting eligibility is sufficient to
+	 * open the flow end to end. WCS then labels the action "Add payment" rather
+	 * than "Change payment" whenever the subscription has no gateway yet, which
+	 * is the wording this case wants.
+	 *
+	 * Deliberately narrow: it only opens the case WCS closes, and only when a
+	 * card could actually be charged afterwards. Anything WCS already allows
+	 * passes straight through.
+	 *
+	 * Paired with {@see schedule_next_payment_after_payment_method_added()},
+	 * which schedules the payment the missing date would otherwise leave unset.
+	 *
+	 * @param bool             $can_be_updated Whether WCS allows the change.
+	 * @param \WC_Subscription $subscription   The subscription being checked.
+	 *
+	 * @return bool Whether the payment method can be changed.
+	 */
+	public static function allow_add_payment_method_without_next_payment( $can_be_updated, $subscription ) {
+		if ( $can_be_updated ) {
+			return $can_be_updated;
+		}
+
+		if ( ! ( $subscription instanceof \WC_Subscription ) ) {
+			return $can_be_updated;
+		}
+
+		// Statuses where putting a card on file still leads somewhere: awaiting a
+		// first payment, suspended, running, or winding down after the reader
+		// turned auto-renewal off. Terminal statuses are left to WCS.
+		if ( ! $subscription->has_status( [ 'pending', 'on-hold', 'active', 'pending-cancel' ] ) ) {
+			return $can_be_updated;
+		}
+
+		// A scheduled payment means WCS's own rule already applies.
+		if ( $subscription->get_time( 'next_payment' ) > 0 ) {
+			return $can_be_updated;
+		}
+
+		// Nothing recurring to charge, so nothing to add a card for. The 'edit'
+		// context reads the unfiltered total, matching WCS's own check.
+		if ( (float) $subscription->get_total( 'edit' ) <= 0 ) {
+			return $can_be_updated;
+		}
+
+		// Offering the action with no gateway able to take a card from the reader
+		// would lead them to a dead end.
+		if ( ! self::one_gateway_supports_customer_payment_method_change() ) {
+			return $can_be_updated;
+		}
+
+		return true;
+	}
+
+	/**
+	 * Whether any gateway lets a reader change their own payment method.
+	 *
+	 * Routed through the WCS handler class rather than
+	 * `WC_Subscriptions_Payment_Gateways` directly, because WooPayments
+	 * substitutes its own handler and WCS resolves the capability through
+	 * whichever is active.
+	 *
+	 * @return bool
+	 */
+	private static function one_gateway_supports_customer_payment_method_change() {
+		if ( ! class_exists( 'WC_Subscriptions_Core_Plugin' ) ) {
+			return false;
+		}
+
+		$handler = \WC_Subscriptions_Core_Plugin::instance()->get_gateways_handler_class();
+		if ( ! is_callable( [ $handler, 'one_gateway_supports' ] ) ) {
+			return false;
+		}
+
+		return (bool) $handler::one_gateway_supports( 'subscription_payment_method_change_customer' );
+	}
+
+	/**
+	 * Schedule the next payment once a card is attached to a subscription that
+	 * had none.
+	 *
+	 * The other half of {@see allow_add_payment_method_without_next_payment()}.
+	 * Eligibility alone would leave the reader with a card on file and still no
+	 * billing: the subscription reached this state precisely because nothing was
+	 * ever scheduled, and WCS only recalculates the date when a payment
+	 * completes. Calculating it here is what turns "card added" into "renewals
+	 * resume".
+	 *
+	 * `calculate_date( 'next_payment' )` derives the date from the last payment
+	 * or the start date plus one billing period, keeps it far enough in the
+	 * future to survive a daylight-saving shift, and returns `0` when the next
+	 * period would fall past the subscription's end date. A `0` is respected:
+	 * a subscription winding down to a fixed end has nothing further to bill.
+	 *
+	 * @param \WC_Subscription $subscription       The subscription that was updated.
+	 * @param string           $new_payment_method The gateway ID now attached.
+	 * @param string           $old_payment_method The gateway ID previously attached.
+	 *
+	 * @return void
+	 */
+	public static function schedule_next_payment_after_payment_method_added( $subscription, $new_payment_method, $old_payment_method = '' ) {
+		unset( $old_payment_method );
+
+		if ( ! ( $subscription instanceof \WC_Subscription ) ) {
+			return;
+		}
+
+		// No gateway attached means there is nothing to bill against.
+		if ( empty( $new_payment_method ) ) {
+			return;
+		}
+
+		// Only the gap this pair exists to close. An already-scheduled payment is
+		// the reader's or WCS's, and is never rewritten.
+		if ( $subscription->get_time( 'next_payment' ) > 0 ) {
+			return;
+		}
+
+		if ( ! $subscription->has_status( [ 'pending', 'on-hold', 'active', 'pending-cancel' ] ) ) {
+			return;
+		}
+
+		$next_payment = $subscription->calculate_date( 'next_payment' );
+		if ( empty( $next_payment ) || '0' === (string) $next_payment ) {
+			return;
+		}
+
+		// update_dates() validates the new date against the subscription's other
+		// dates and throws when they disagree. A subscription we could not
+		// schedule is left as it was: the reader still has their card on file,
+		// and the publisher can set the date by hand.
+		try {
+			$subscription->update_dates( [ 'next_payment' => $next_payment ] );
+			$subscription->save();
+			$subscription->add_order_note(
+				sprintf(
+					/* translators: %s: the newly scheduled next payment date. */
+					__( 'Next payment scheduled for %s after the subscriber added a payment method.', 'newspack-plugin' ),
+					$next_payment
+				)
+			);
+		} catch ( \Exception $e ) {
+			Logger::error(
+				sprintf(
+					'Could not schedule the next payment for subscription %1$d after a payment method was added: %2$s',
+					$subscription->get_id(),
+					$e->getMessage()
+				)
+			);
+		}
 	}
 
 	/**
