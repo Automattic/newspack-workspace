@@ -10,6 +10,7 @@
  * timezone shifts the day itself once the offset is far enough from UTC.
  */
 
+import { render, screen } from '@testing-library/react';
 import { setSettings } from '@wordpress/date';
 
 import { getFields } from './fields';
@@ -45,10 +46,10 @@ const configureSite = ( offset, dateFormat = 'F j, Y' ) =>
 
 const fieldById = id => getFields().find( field => field.id === id );
 
-/** Render a field and return its text, unwrapping the tooltip element. */
+/** Render a field and return its text, unwrapping `<Tooltip><span>…</span></Tooltip>`. */
 const renderText = ( id, item ) => {
 	const output = fieldById( id ).render( { item } );
-	return typeof output === 'string' ? output : output.props.children;
+	return typeof output === 'string' ? output : output.props.children.props.children;
 };
 
 const adWithMeta = meta => ( { id: 1, meta } );
@@ -92,12 +93,24 @@ describe( 'Ads list date columns', () => {
 		expect( renderText( 'expiry_date', adWithMeta( { expiry_date: '' } ) ) ).toBe( '' );
 	} );
 
-	it( 'explains the window semantics on hover', () => {
+	it( 'gives each column its own hint about what the date means', () => {
 		configureSite( -4 );
 
-		const output = fieldById( 'start_date' ).render( { item: adWithMeta( { start_date: '2026-08-04' } ) } );
-		expect( output.props.title ).toMatch( /whole days/i );
-		expect( output.props.title ).toMatch( /included/i );
+		const start = fieldById( 'start_date' ).render( { item: adWithMeta( { start_date: '2026-08-04' } ) } );
+		const expiry = fieldById( 'expiry_date' ).render( { item: adWithMeta( { expiry_date: '2026-08-04' } ) } );
+
+		expect( start.props.text ).toBe( 'Runs from this day, in the site timezone.' );
+		expect( expiry.props.text ).toBe( 'Runs through the end of this day, in the site timezone.' );
+	} );
+
+	it( 'mounts the tooltip-wrapped cell without error', () => {
+		configureSite( -4 );
+
+		// The props assertions above never mount `Tooltip`; this catches the
+		// runtime shape it requires (a single element child).
+		render( fieldById( 'start_date' ).render( { item: adWithMeta( { start_date: '2026-08-04' } ) } ) );
+
+		expect( screen.getByText( 'August 4, 2026' ) ).toBeInTheDocument();
 	} );
 } );
 

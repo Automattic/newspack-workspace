@@ -5,7 +5,7 @@
  * `newspack_newsletters_ad_status` so the column matches the filter.
  */
 
-import { Icon } from '@wordpress/components';
+import { Icon, Tooltip } from '@wordpress/components';
 import { __, sprintf } from '@wordpress/i18n';
 import { drafts, notAllowed, published, scheduled, trash } from '@wordpress/icons';
 import { gmdateI18n } from '@wordpress/date';
@@ -33,11 +33,10 @@ const STATUS_KIND_ICONS = {
 // a noon anchor showing up as "8:00 am" on an EDT site, say.
 const adDateFormat = () => __( 'F j, Y', 'newspack-newsletters' );
 
-const adDateHint = () =>
-	__(
-		'Ad scheduling uses whole days in the site timezone, matched against the newsletter’s own date. Both the start and expiration days are included.',
-		'newspack-newsletters'
-	);
+// One hint per column: each says the thing relevant to its own date, so the
+// inclusivity falls out of the wording rather than needing its own sentence.
+const startDateHint = () => __( 'Runs from this day, in the site timezone.', 'newspack-newsletters' );
+const expiryDateHint = () => __( 'Runs through the end of this day, in the site timezone.', 'newspack-newsletters' );
 
 const formatTimestampAsDate = timestamp => {
 	if ( ! timestamp ) {
@@ -111,16 +110,20 @@ const renderTerms =
 			.join( ', ' );
 	};
 
-const renderAdDate = value => {
+const renderAdDate = ( value, hint ) => {
 	const formatted = formatDate( value );
 	if ( ! formatted ) {
 		return '';
 	}
-	return <span title={ adDateHint() }>{ formatted }</span>;
+	return (
+		<Tooltip text={ hint }>
+			<span>{ formatted }</span>
+		</Tooltip>
+	);
 };
 
-const renderStartDate = ( { item } ) => renderAdDate( item?.meta?.start_date );
-const renderExpiryDate = ( { item } ) => renderAdDate( item?.meta?.expiry_date );
+const renderStartDate = ( { item } ) => renderAdDate( item?.meta?.start_date, startDateHint() );
+const renderExpiryDate = ( { item } ) => renderAdDate( item?.meta?.expiry_date, expiryDateHint() );
 
 const renderImpressions = ( { item } ) => String( item?.meta?.tracking_impressions ?? 0 );
 const renderClicks = ( { item } ) => String( item?.meta?.tracking_clicks ?? 0 );
