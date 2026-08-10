@@ -108,15 +108,36 @@ class Teams_Migration {
 	 * subscriptions in place rather than creating duplicates. Reuse keys on the
 	 * source team, so an owner who owns several teams migrates to one group
 	 * subscription per team rather than a single merged group. When --product-id is
-	 * supplied, every re-used subscription has its line items replaced with the
+	 * supplied, every re-used $0 subscription has its line items replaced with the
 	 * migration product.
+	 *
+	 * A team whose linked subscription is one the publisher actually bills is
+	 * migrated in place: it gains the group settings and keeps its own product,
+	 * price, taxes and billing schedule. Forcing a subscription to $0 is only
+	 * correct where the access being carried over was free in Memberships. Because
+	 * such a subscription keeps its own schedule, the team's Teams end date is not
+	 * carried onto it, so the group can outlive the membership it came from.
+	 *
+	 * A subscription already cancelled but paid through the end of its term
+	 * (pending-cancel) is migrated in place for the same reason and keeps its
+	 * scheduled end date, whatever its total. Its members hold access for the rest
+	 * of the paid term and lose it when the subscription self-cancels, which is
+	 * what the reader asked for; re-aligning it onto the migration product would
+	 * overwrite that end date and extend their access indefinitely.
+	 *
+	 * Two cases are skipped rather than migrated, and reported as errors in the
+	 * summary: a paid team whose own product no published gate accepts, since
+	 * granting access would mean rewriting what the publisher charges; and a team
+	 * whose paid subscription is on hold for payment recovery and which has no
+	 * migrated group to update, since creating one would hand the owner permanent
+	 * free access and remove their reason to fix their payment method.
 	 *
 	 * Dry-run by default; pass --live to write.
 	 *
 	 * ## OPTIONS
 	 *
 	 * [--product-id=<id>]
-	 * : Product ID to assign to newly-created subscriptions. When supplied, also overwrites the product on any existing subscription that is re-used. Required unless --skip-unlinked is passed.
+	 * : Product to assign to newly-created subscriptions. Accepts a product ID or a variation ID — pass the variation when a publisher sells seat tiers as variations of one variable subscription product. Must be published and accepted by a published gate's "Active subscription" rule. Also re-aligns any re-used $0 subscription onto this product; a re-used subscription the team pays for keeps its own product, price, taxes and billing schedule. Required unless --skip-unlinked is passed.
 	 *
 	 * [--live]
 	 * : Apply the changes. Without this flag the command runs as a dry-run and writes nothing.
@@ -157,12 +178,28 @@ class Teams_Migration {
 		$migration_product = $product_id ? \wc_get_product( $product_id ) : null;
 		$billing_period    = 'month';
 		$billing_interval  = 1;
+
+		// Derived independently of --product-id: the paid-team guard below needs it
+		// in --skip-unlinked runs, which take no --product-id and process only
+		// linked teams — exactly the teams that can be paid ones. Deriving it inside
+		// the migration-product block would leave that guard dead in the one mode
+		// where every team it protects is in scope.
+		$access_product_ids = self::get_gate_access_product_ids();
 		if ( $product_id && ! $migration_product ) {
 			WP_CLI::error( sprintf( 'Product ID %d not found. Aborting.', $product_id ) );
 		}
 
 		if ( $migration_product ) {
-			WP_CLI::line( sprintf( 'Using product: "%s" (ID: %d)', $migration_product->get_name(), $migration_product->get_id() ) );
+			// Name which shape was passed: a variation and its parent read alike in
+			// the summary, and which one the operator meant is the crux of NPPD-1876.
+			WP_CLI::line(
+				sprintf(
+					'Using %s: "%s" (ID: %d)',
+					$migration_product->is_type( 'variation' ) ? sprintf( 'variation of product %d', $migration_product->get_parent_id() ) : 'product',
+					$migration_product->get_name(),
+					$migration_product->get_id()
+				)
+			);
 			// For a variable-subscription parent these meta live on the variation, not
 			// the parent, and come back empty; default them the same way
 			// create_group_subscription()/create_individual_subscription() do so an
@@ -171,6 +208,40 @@ class Teams_Migration {
 			$interval_meta    = \get_post_meta( $product_id, '_subscription_period_interval', true );
 			$billing_period   = '' !== $period_meta ? $period_meta : 'month';
 			$billing_interval = '' !== $interval_meta ? (int) $interval_meta : 1;
+
+			// An unpublished product fails the same way the migration used to fail on
+			// a variation: WC_Subscription::can_be_updated_to( 'active' ) rejects a
+			// line item whose product is unavailable, and unavailable includes any
+			// status other than publish. Checked here because a dry run cannot
+			// surface it — every write is behind ! $dry_run — so without this the
+			// first the operator hears of it is a fatal on team one of a live run.
+			if ( ! self::product_is_published( $migration_product ) ) {
+				WP_CLI::error(
+					sprintf(
+						'Product %d is not published, so subscriptions created against it cannot be activated. Publish it (or its parent product, for a variation) and re-run.',
+						$product_id
+					)
+				);
+			}
+
+			// A group subscription grants access only where a published gate lists
+			// its product: enforcement runs through WC_Subscription::has_product().
+			// Migrating against a product no gate accepts would report every team as
+			// migrated while granting access to nobody, and on the reuse path the
+			// subscription's original line items are replaced in the same pass, so
+			// there is nothing left to fall back on. Only checkable once the gates
+			// name some products; with none configured they are presumably still to
+			// be built around this product.
+			if ( ! empty( $access_product_ids ) && ! self::product_grants_gate_access( $migration_product, $access_product_ids ) ) {
+				WP_CLI::error(
+					sprintf(
+						'Product %d is not among the products that grant access (%s), so migrating teams onto it would grant no access. Pass --product-id for a product the gates accept, or add %d to a gate\'s "Active subscription" rule first.',
+						$product_id,
+						implode( ', ', $access_product_ids ),
+						$product_id
+					)
+				);
+			}
 		}
 
 		if ( $dry_run ) {
@@ -253,20 +324,37 @@ class Teams_Migration {
 				continue;
 			}
 
-			$subscription  = null;
-			$created_new   = false;
-			$errors        = [];
-			$members_added = 0;
+			$subscription   = null;
+			$created_new    = false;
+			$errors         = [];
+			$members_added  = 0;
+			$recovering_sub = null;
 
-			// Attempt to reuse the team's linked subscription if it is active.
+			// Attempt to reuse the team's linked subscription if it still grants
+			// access. That is active *or* pending-cancel: a team riding out a period
+			// it has already paid for keeps its access until the subscription
+			// self-cancels, and both Access_Rules and Group_Subscription gate member
+			// access on WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES. Reusing
+			// it in place carries that expiry across the migration, so the owner and
+			// the group's members lose access exactly when the subscription ends;
+			// creating a $0 group for such a team instead would hand them permanent
+			// access after they had cancelled.
 			if ( $raw_sub_id ) {
 				$existing_sub = \wcs_get_subscription( $raw_sub_id );
-				if ( $existing_sub && 'active' === $existing_sub->get_status() ) {
+				if ( $existing_sub && $existing_sub->has_status( WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES ) ) {
 					$subscription = $existing_sub;
 					if ( 'yes' === $existing_sub->get_meta( '_newspack_group_subscription_enabled' ) ) {
 						WP_CLI::line( sprintf( 'Team %d: subscription %d is already a group subscription — re-updating.', $team_id, $raw_sub_id ) );
 					}
 				} else {
+					// A paid subscription in payment recovery is not reusable, since reuse
+					// requires active. Remember it so the create branch can refuse to mint
+					// a free replacement; that decision has to wait until after the reuse
+					// lookup below, because a team already migrated on an earlier run has
+					// a group to re-update and the harm cannot arise for it.
+					if ( $existing_sub && 'on-hold' === $existing_sub->get_status() && self::subscription_is_paid( $existing_sub ) ) {
+						$recovering_sub = $existing_sub;
+					}
 					$status_label = $existing_sub ? $existing_sub->get_status() : 'not found';
 					WP_CLI::warning( sprintf( 'Team %d: linked subscription %d is not active (status: %s) — searching for the group subscription this team was previously migrated to.', $team_id, $raw_sub_id, $status_label ) );
 				}
@@ -288,7 +376,7 @@ class Teams_Migration {
 				if ( $reuse['disabled_marked_group_ids'] ) {
 					$disabled_list = implode( ', ', $reuse['disabled_marked_group_ids'] );
 					$errors[]      = sprintf( 'group subscription(s) %s migrated from this team have group subscriptions disabled — re-enable one or clear its %s meta, then re-run', $disabled_list, self::MIGRATED_TEAM_ID_META_KEY );
-					$summary[]     = self::summary_row( $team_id, 'ERROR', 0, 0, $seat_count, false, $errors );
+					$summary[]     = self::summary_row( $team_id, 'ERROR', 0, 0, $group_limit, false, $errors );
 					WP_CLI::warning( sprintf( 'Team %d ("%s"): group subscription(s) %s migrated from this team have group subscriptions disabled — skipping so the migration does not re-enable them or create a duplicate. Re-enable one, or clear the %s meta to let a fresh group be created, then re-run.', $team_id, $team->post_title, $disabled_list, self::MIGRATED_TEAM_ID_META_KEY ) );
 					// This path has just loaded every subscription of the owner's, which is what
 					// the per-team cache clear exists to bound.
@@ -325,6 +413,32 @@ class Teams_Migration {
 				}
 			}
 
+			// Nothing was reusable and the team's own subscription is a paid one in
+			// payment recovery, so creating here would mint a new, active, $0 group
+			// subscription alongside it: the owner would get permanent free access
+			// and no reason to fix their card, turning a recoverable paying customer
+			// into a permanently free one. That is the harm LIVE_SUBSCRIPTION_STATUSES
+			// records as deliberately out of scope for migrate-manual-members
+			// (NPPD-2052 owns the dunning cohort). On_Hold_Duration expires an
+			// unrecovered subscription on its own, and a re-run picks the team up
+			// once it is active again or gone. Checked here rather than at the reuse
+			// lookup so a team that already has a group to re-update is unaffected.
+			if ( ! $subscription && $recovering_sub ) {
+				$errors[]  = sprintf( 'linked subscription %d is a paid subscription in payment recovery ("on-hold") and no migrated group exists for this team — skipped so the migration does not mint a free parallel subscription', $recovering_sub->get_id() );
+				$summary[] = self::summary_row( $team_id, 'ERROR', 0, 0, $group_limit, false, $errors );
+				WP_CLI::warning(
+					sprintf(
+						'Team %d ("%s"): linked subscription %d is a paid subscription (%s) on hold for payment recovery, and this team has no migrated group to update — skipping so the owner is not granted a free subscription mid-recovery. Re-run once it is active again, or once it has expired.',
+						$team_id,
+						$team->post_title,
+						$recovering_sub->get_id(),
+						self::format_subscription_total( $recovering_sub )
+					)
+				);
+				\WP_CLI\Utils\wp_clear_object_cache();
+				continue;
+			}
+
 			// Create a new subscription when none resolved above. This needs a
 			// migration product; with --skip-unlinked and no --product-id a team
 			// whose linked subscription is inactive/missing (so it is not skipped)
@@ -334,7 +448,7 @@ class Teams_Migration {
 			if ( ! $subscription && ! $migration_product ) {
 				$errors[] = 'no reusable subscription and no --product-id supplied to create one';
 				WP_CLI::warning( sprintf( 'Team %d: linked subscription is inactive/missing and no --product-id was supplied to create a replacement — skipping. Re-run with --product-id to migrate these teams.', $team_id ) );
-				$summary[] = self::summary_row( $team_id, 'ERROR', 0, 0, $seat_count, false, $errors );
+				$summary[] = self::summary_row( $team_id, 'ERROR', 0, 0, $group_limit, false, $errors );
 				continue;
 			}
 
@@ -344,7 +458,7 @@ class Teams_Migration {
 				if ( ! $dry_run ) {
 					$new_sub = self::create_migration_subscription( $owner_id, $migration_product, $billing_period, $billing_interval, $start_date, $end_date, $errors, $team_id );
 					if ( ! $new_sub ) {
-						$summary[] = self::summary_row( $team_id, 'ERROR', 0, 0, $seat_count, true, $errors );
+						$summary[] = self::summary_row( $team_id, 'ERROR', 0, 0, $group_limit, true, $errors );
 						continue;
 					}
 					$subscription = $new_sub;
@@ -357,6 +471,46 @@ class Teams_Migration {
 			} else {
 				$subscription_id = $subscription->get_id();
 				$sub_owner_id    = (int) $subscription->get_user_id();
+			}
+
+			// A migration converts free Memberships access into a $0 subscription. A
+			// team that pays for its seats is a different case: the publisher still
+			// sells that subscription, so it keeps its product, price, taxes and
+			// billing schedule and gains only the group settings.
+			$reused_is_paid = ! $created_new && self::subscription_is_paid( $subscription );
+
+			// A pending-cancel subscription keeps its terms too, whatever its total.
+			// Its dates are the point: the scheduled end is what makes the owner and
+			// the group's members lose access when the subscription self-cancels, and
+			// re-aligning it would overwrite those dates with migration-derived ones
+			// and extend access past the cancellation the reader asked for.
+			$reused_is_ending  = ! $created_new && $subscription->has_status( 'pending-cancel' );
+			$reuse_keeps_terms = $reused_is_paid || $reused_is_ending;
+
+			// Access for a paid team therefore rests on its own product, since we no
+			// longer swap in --product-id. If no published gate accepts that product
+			// the migration cannot grant access without rewriting what the publisher
+			// charges — so leave the team untouched and let the operator decide,
+			// rather than silently converting a paying subscription to $0.
+			if ( $reuse_keeps_terms && ! empty( $access_product_ids ) && ! self::subscription_covers_access_products( $subscription, $access_product_ids ) ) {
+				$own_product_ids = self::subscription_product_ids( $subscription );
+				$own_list        = ! empty( $own_product_ids ) ? implode( ', ', $own_product_ids ) : 'none';
+				$errors[]        = sprintf( 'subscription %d is paid and holds product(s) %s, which no published gate accepts (accepted: %s) — migrating it would either grant no access or rewrite what the publisher charges', $subscription->get_id(), $own_list, implode( ', ', $access_product_ids ) );
+				$summary[]       = self::summary_row( $team_id, 'ERROR', 0, 0, $group_limit, false, $errors );
+				WP_CLI::warning(
+					sprintf(
+						'Team %d ("%s"): linked subscription %d is a paid subscription (%s) holding product(s) %s, which no published gate accepts (accepted: %s) — skipping so the migration does not zero out what the publisher bills. Add %s to a gate\'s "Active subscription" rule, then re-run.',
+						$team_id,
+						$team->post_title,
+						$subscription->get_id(),
+						self::format_subscription_total( $subscription ),
+						$own_list,
+						implode( ', ', $access_product_ids ),
+						$own_list
+					)
+				);
+				\WP_CLI\Utils\wp_clear_object_cache();
+				continue;
 			}
 
 			// Enable the group and set its name up front. The seat limit is deferred
@@ -375,10 +529,14 @@ class Teams_Migration {
 				$subscription->save();
 			}
 
-			// When re-using an existing subscription with --product-id, overwrite its
-			// line items with the migration product so re-running aligns every
-			// subscription with the product passed via --product-id.
-			if ( ! $created_new && $migration_product && ! $dry_run ) {
+			// When re-using a $0 subscription with --product-id, overwrite its line
+			// items with the migration product so re-running aligns every migrated
+			// subscription with the product passed via --product-id. Paid
+			// subscriptions are exempt: rewriting their line items would replace what
+			// the publisher sells with a $0 product and overwrite the billing
+			// schedule, and for a pending-cancel subscription would push its expiry
+			// out past the cancellation the reader asked for (see $reuse_keeps_terms).
+			if ( ! $created_new && ! $reuse_keeps_terms && $migration_product && ! $dry_run ) {
 				self::replace_subscription_product( $subscription, $migration_product, $billing_period, $billing_interval, $start_date, $end_date, $errors, $team_id );
 			}
 
@@ -810,11 +968,21 @@ class Teams_Migration {
 			$access_products_source = 'derived from published gates';
 		}
 
+		$product = \wc_get_product( $product_id );
+		if ( ! $product ) {
+			WP_CLI::error( sprintf( 'Product %d could not be found.', $product_id ) );
+		}
+
 		// A $0 subscription for a product no gate accepts restores no access: the
 		// run would report "created" while the reader stays locked out. Only
 		// checkable when the accepted products are known — with none configured
 		// yet, the gates are presumably still to be built around this product.
-		if ( ! empty( $access_product_ids ) && ! in_array( $product_id, $access_product_ids, true ) ) {
+		// Matched through product_grants_gate_access() rather than a flat
+		// comparison because enforcement runs through has_product(), which accepts
+		// a line item's product ID or its variation ID: a gate naming a variable
+		// subscription's parent does accept a seat-tier variation, and refusing one
+		// here would block a --product-id that works.
+		if ( ! empty( $access_product_ids ) && ! self::product_grants_gate_access( $product, $access_product_ids ) ) {
 			WP_CLI::error(
 				sprintf(
 					'Product %d is not among the products that grant access (%s), so a subscription to it grants no access. Pass --product-id for a product the gates accept, or add %d to a gate\'s "Active subscription" rule first.',
@@ -823,11 +991,6 @@ class Teams_Migration {
 					$product_id
 				)
 			);
-		}
-
-		$product = \wc_get_product( $product_id );
-		if ( ! $product ) {
-			WP_CLI::error( sprintf( 'Product %d could not be found.', $product_id ) );
 		}
 
 		// Readers granted a $0 subscription to a limited product cannot purchase
@@ -1737,16 +1900,164 @@ class Teams_Migration {
 	}
 
 	/**
+	 * Product and variation IDs a subscription's line items hold.
+	 *
+	 * Named in the skip messages so the operator can act without opening the
+	 * subscription: these are the IDs that would have to appear in a gate's
+	 * "Active subscription" rule for the team's own subscription to grant access.
+	 *
+	 * @param \WC_Subscription $subscription Subscription to read.
+	 *
+	 * @return int[]
+	 */
+	private static function subscription_product_ids( $subscription ) {
+		$ids = [];
+		foreach ( $subscription->get_items() as $item ) {
+			if ( ! method_exists( $item, 'get_product_id' ) ) {
+				continue;
+			}
+			$ids[] = (int) $item->get_product_id();
+			if ( method_exists( $item, 'get_variation_id' ) && $item->get_variation_id() ) {
+				$ids[] = (int) $item->get_variation_id();
+			}
+		}
+		return array_values( array_unique( array_filter( $ids ) ) );
+	}
+
+	/**
+	 * Whether the publisher bills this subscription.
+	 *
+	 * Decides whether a reused subscription keeps its commercial terms through
+	 * the migration or is re-aligned onto --product-id as a $0 group subscription.
+	 * Erring toward "paid" is the safe direction: the cost of a false positive is
+	 * a subscription that keeps the product it already had, while a false negative
+	 * deletes the product line the publisher sells and rewrites the schedule.
+	 *
+	 * `WC_Subscription::get_total()` is the recurring total, so a free trial, a
+	 * sign-up fee, a synced first payment and a pending-cancel all still report
+	 * the per-period amount. It is discounted, though: a 100% recurring coupon
+	 * stores a total of 0 on a subscription the publisher does intend to bill
+	 * again once the coupon's payment count runs out. The pre-discount subtotal is
+	 * immune to that, and is 0 on every subscription this migration creates
+	 * (link_migration_product() and create_group_subscription() both set it), so
+	 * checking both keeps old $0 groups re-alignable without reading a fully
+	 * discounted subscription as free.
+	 *
+	 * @param \WC_Subscription $subscription Subscription to test.
+	 *
+	 * @return bool
+	 */
+	private static function subscription_is_paid( $subscription ) {
+		$total = method_exists( $subscription, 'get_total' ) ? (float) $subscription->get_total() : 0.0;
+		if ( $total > 0 ) {
+			return true;
+		}
+		$subtotal = method_exists( $subscription, 'get_subtotal' ) ? (float) $subscription->get_subtotal() : 0.0;
+		return $subtotal > 0;
+	}
+
+	/**
+	 * A subscription's recurring total as plain text for CLI output.
+	 *
+	 * Formatted here rather than with wc_price(), which returns markup and renders
+	 * the USD symbol as the HTML entity `&#36;` — both land literally in a
+	 * terminal, in the one message whose job is to make the amount at risk legible.
+	 *
+	 * @param \WC_Subscription $subscription Subscription to format.
+	 *
+	 * @return string
+	 */
+	private static function format_subscription_total( $subscription ) {
+		$decimals = function_exists( 'wc_get_price_decimals' ) ? \wc_get_price_decimals() : 2;
+		return trim( sprintf( '%s %s', \number_format( (float) $subscription->get_total(), $decimals ), $subscription->get_currency() ) );
+	}
+
+	/**
+	 * Whether a product is published, resolving a variation to its parent.
+	 *
+	 * WC_Subscription::contains_unavailable_product() checks the parent's status
+	 * for a variation, so the parent's status is what decides whether a migration
+	 * subscription can be activated.
+	 *
+	 * @param \WC_Product $product Product or variation.
+	 *
+	 * @return bool
+	 */
+	private static function product_is_published( $product ) {
+		$subject = $product;
+		if ( $product->is_type( 'variation' ) ) {
+			$parent = \wc_get_product( $product->get_parent_id() );
+			if ( ! $parent ) {
+				return false;
+			}
+			$subject = $parent;
+		}
+		return 'publish' === $subject->get_status();
+	}
+
+	/**
+	 * Whether the site's published gates would accept a subscription to a product.
+	 *
+	 * Enforcement runs through WC_Subscription::has_product(), which matches a
+	 * line item's product ID *or* its variation ID. So a gate naming a variable
+	 * subscription's parent accepts any of its variations, while a gate naming a
+	 * sibling variation accepts none of the others. Comparing the product's own
+	 * ID alone would refuse a variation the gates do in fact accept.
+	 *
+	 * @param \WC_Product $product            Product or variation.
+	 * @param int[]       $access_product_ids Product IDs the published gates accept.
+	 *
+	 * @return bool
+	 */
+	private static function product_grants_gate_access( $product, $access_product_ids ) {
+		$candidate_ids = [ (int) $product->get_id() ];
+		if ( $product->is_type( 'variation' ) ) {
+			$candidate_ids[] = (int) $product->get_parent_id();
+		}
+		foreach ( $candidate_ids as $candidate_id ) {
+			if ( $candidate_id && in_array( $candidate_id, $access_product_ids, true ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Point a $0 migration line item at the product the operator chose.
+	 *
+	 * `set_product()` is the only setter that records a variation correctly,
+	 * splitting it into parent product ID + variation ID; assigning the
+	 * variation's own ID to `product_id` is rejected outright. Publishers selling
+	 * seat tiers hold them as variations of one variable subscription product, so
+	 * `--product-id` is routinely given a variation ID (see NPPD-1876).
+	 *
+	 * `create_group_subscription()` and `create_individual_subscription()` link
+	 * their items the same way inline rather than through this helper: they were
+	 * already correct, and each builds a differently-shaped item.
+	 *
+	 * @param \WC_Order_Item_Product $line_item The line item to populate.
+	 * @param \WC_Product            $product   The product or variation to link.
+	 *
+	 * @return void
+	 */
+	private static function link_migration_product( $line_item, $product ) {
+		$line_item->set_product( $product );
+		$line_item->set_quantity( 1 );
+		$line_item->set_subtotal( 0 );
+		$line_item->set_total( 0 );
+	}
+
+	/**
 	 * Create a new $0 migration subscription for a team owner and set its dates.
 	 *
-	 * @param int              $owner_id         The owner user ID.
-	 * @param \WC_Product|null $migration_product The migration product.
-	 * @param string           $billing_period   The billing period.
-	 * @param int              $billing_interval The billing interval.
-	 * @param string           $start_date       The subscription start date.
-	 * @param string           $end_date         The subscription end date, or ''.
-	 * @param array            $errors           Errors array, passed by reference.
-	 * @param int              $team_id          The team post ID (for error context).
+	 * @param int         $owner_id         The owner user ID.
+	 * @param \WC_Product $migration_product The migration product.
+	 * @param string      $billing_period   The billing period.
+	 * @param int         $billing_interval The billing interval.
+	 * @param string      $start_date       The subscription start date.
+	 * @param string      $end_date         The subscription end date, or ''.
+	 * @param array       $errors           Errors array, passed by reference.
+	 * @param int         $team_id          The team post ID (for error context).
 	 *
 	 * @return \WC_Subscription|null The subscription, or null on failure.
 	 */
@@ -1770,15 +2081,7 @@ class Teams_Migration {
 		}
 
 		$line_item = new \WC_Order_Item_Product();
-		$line_item->set_props(
-			[
-				'product_id' => $migration_product->get_id(),
-				'name'       => $migration_product->get_name(),
-				'quantity'   => 1,
-				'subtotal'   => 0,
-				'total'      => 0,
-			]
-		);
+		self::link_migration_product( $line_item, $migration_product );
 		$line_item->set_taxes( [] );
 		$new_sub->add_item( $line_item );
 
@@ -1832,15 +2135,7 @@ class Teams_Migration {
 			$subscription->remove_item( $item_id );
 		}
 		$line_item = new \WC_Order_Item_Product();
-		$line_item->set_props(
-			[
-				'product_id' => $migration_product->get_id(),
-				'name'       => $migration_product->get_name(),
-				'quantity'   => 1,
-				'subtotal'   => 0,
-				'total'      => 0,
-			]
-		);
+		self::link_migration_product( $line_item, $migration_product );
 
 		$subscription->set_billing_period( $billing_period );
 		$subscription->set_billing_interval( $billing_interval );
@@ -2394,10 +2689,14 @@ class Teams_Migration {
 			if ( 'manual migration' !== $subscription->get_created_via() ) {
 				continue;
 			}
-			foreach ( $subscription->get_items() as $item ) {
-				if ( method_exists( $item, 'get_product_id' ) && (int) $item->get_product_id() === $product_id ) {
-					return true;
-				}
+			// has_product() matches a line item's product ID *or* its variation ID.
+			// Comparing get_product_id() alone would never recognise this command's
+			// own output for a variation --product-id, since create_individual_subscription()
+			// links through set_product() and so stores the parent in product_id —
+			// and an unrecognised prior run means every re-run grants another $0
+			// subscription rather than skipping the member.
+			if ( method_exists( $subscription, 'has_product' ) && $subscription->has_product( $product_id ) ) {
+				return true;
 			}
 		}
 		return false;
