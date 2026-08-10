@@ -286,6 +286,96 @@ class Content_Gate {
 	}
 
 	/**
+	 * Whether the gate never applies to a post, by post ID alone.
+	 *
+	 * ID comparisons rather than the is_cart()/is_checkout() helpers, so the
+	 * same list can be consulted outside a front-end query. restrict_post()
+	 * keeps those helpers too: they are true in more situations than the page
+	 * ID alone, and the only drift that produces is the front end being
+	 * stricter than a REST read, which is the safe direction.
+	 *
+	 * @param int $post_id Post ID.
+	 * @return bool Whether the post is excluded from gating.
+	 */
+	private static function is_excluded_from_gating( $post_id ) {
+		$excluded = [
+			(int) get_option( 'wp_page_for_privacy_policy' ),
+			(int) get_theme_mod( 'accessibility_statement_page_id' ),
+		];
+		if ( function_exists( 'wc_terms_and_conditions_page_id' ) ) {
+			$excluded[] = (int) wc_terms_and_conditions_page_id();
+		}
+		if ( function_exists( 'wc_get_page_id' ) ) {
+			// wc_get_page_id() returns -1 when the page is not configured.
+			$excluded[] = (int) wc_get_page_id( 'myaccount' );
+			$excluded[] = (int) wc_get_page_id( 'cart' );
+			$excluded[] = (int) wc_get_page_id( 'checkout' );
+		}
+
+		return in_array(
+			(int) $post_id,
+			array_filter(
+				$excluded,
+				static function ( $id ) {
+					return $id > 0;
+				}
+			),
+			true
+		);
+	}
+
+	/**
+	 * Resolve the gated substitute for a post, independent of query context.
+	 *
+	 * Holds the entitlement half of the restriction decision: the feature flag,
+	 * the Memberships deferral, the page exclusions, and the restriction
+	 * filters. The query-context guards stay in restrict_post(), which is what
+	 * keeps the gate off archives and secondary loops on the front end.
+	 *
+	 * Step order is load-bearing. is_post_restricted() populates the gate
+	 * layout map as a side effect, and the teaser build reads that map, so the
+	 * restriction check must run before the teaser is built.
+	 *
+	 * @param \WP_Post $post Post to evaluate.
+	 * @return array|null Array with 'teaser' and 'gate' keys, or null when the
+	 *                    post is not restricted for the current user.
+	 */
+	public static function get_restriction_for_post( $post ) {
+		if ( ! $post instanceof \WP_Post ) {
+			return null;
+		}
+		if ( ! self::is_newspack_feature_enabled() ) {
+			return null;
+		}
+		// Don't apply our restriction strategy if Woo Memberships is active.
+		if ( Memberships::is_active() ) {
+			return null;
+		}
+		if ( self::is_excluded_from_gating( $post->ID ) ) {
+			return null;
+		}
+		if ( ! self::is_post_restricted( $post->ID ) ) {
+			return null;
+		}
+		if (
+			/**
+			 * Filters whether to restrict the post.
+			 *
+			 * @param bool $restrict Whether to restrict the post.
+			 * @param int $post_id Post ID.
+			 */
+			! apply_filters( 'newspack_content_gate_restrict_post', true, $post->ID )
+		) {
+			return null;
+		}
+
+		return [
+			'teaser' => self::get_restricted_post_excerpt( $post ),
+			'gate'   => self::get_inline_gate_html(),
+		];
+	}
+
+	/**
 	 * Restrict the post.
 	 *
 	 * @param \WP_Post  $post Post object.
@@ -337,29 +427,16 @@ class Content_Gate {
 			return;
 		}
 
-		// If no other restrictions apply.
-		if ( ! self::is_post_restricted( $post->ID ) ) {
-			return;
-		}
-		if (
-			/**
-			 * Filters whether to restrict the post.
-			 *
-			 * @param bool $restrict Whether to restrict the post.
-			 * @param int $post_id Post ID.
-			 */
-			! apply_filters( 'newspack_content_gate_restrict_post', true, $post->ID )
-		) {
-			// Content is accessible (e.g. via metering); leave commenting governed
-			// by the site's Discussion Settings rather than gating it.
+		$restriction = self::get_restriction_for_post( $post );
+		if ( null === $restriction ) {
 			return;
 		}
 
 		self::$is_gated          = true;
 		self::$is_content_locked = true;
 
-		$content   = self::get_restricted_post_excerpt( $post );
-		$gate_html = self::get_inline_gate_html();
+		$content   = $restriction['teaser'];
+		$gate_html = $restriction['gate'];
 
 		// Note that this does not feed the 'the_content' chain: core generates the
 		// post's page data before firing 'the_post', so the chain is handed the
@@ -1468,7 +1545,11 @@ class Content_Gate {
 	 */
 	public static function get_restricted_post_excerpt( $post ) {
 		self::$is_gated = true;
-		return self::get_restricted_post_excerpt_for_gate( $post, self::get_gate_layout_id() );
+		// Pass the ID explicitly: get_gate_layout_id() only falls back to the
+		// queried object under is_singular(), which is false outside a
+		// front-end singular view, and it would otherwise resolve to false and
+		// render an empty gate.
+		return self::get_restricted_post_excerpt_for_gate( $post, self::get_gate_layout_id( $post->ID ) );
 	}
 
 	/**
