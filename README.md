@@ -17,7 +17,7 @@ The Newspack monorepo. All product [plugins](plugins), [themes](themes), and sha
 
 Built packages are available in two places:
 
-- **[Newspack Download Center](https://newspack.com/downloads)** — Easy links to the latest stable releases of all Newspack plugins and themes
+- **[Newspack Download Center](https://help.newspack.com/download-center/)** — Easy links to the latest stable releases
 - **[GitHub Releases](https://github.com/Automattic/newspack-workspace/releases)** — All releases, including pre-releases and historical versions
 
 Download the `.zip` file for the plugin or theme you want, then install it on your WordPress site via the WordPress admin interface (Plugins → Add New → Upload Plugin, or Appearance → Themes → Add New → Upload Theme).
