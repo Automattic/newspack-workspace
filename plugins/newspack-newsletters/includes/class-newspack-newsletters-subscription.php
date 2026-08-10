@@ -496,24 +496,31 @@ class Newspack_Newsletters_Subscription {
 			 * We loop through the lists returned by the ESP.
 			 * Only remote lists that still exist in the ESP will be returned.
 			 */
-			$return_lists = array_map(
-				function ( $list ) {
-					if ( ! isset( $list['id'], $list['name'] ) || empty( $list['id'] ) || empty( $list['name'] ) ) {
-						return;
-					}
+			// Drop lists that lack a name or ID, then reindex: a sparse array is
+			// serialized as a JSON object, and the admin screens map over the
+			// REST response as an array.
+			$return_lists = array_values(
+				array_filter(
+					array_map(
+						function ( $list ) {
+							if ( ! isset( $list['id'], $list['name'] ) || empty( $list['id'] ) || empty( $list['name'] ) ) {
+								return;
+							}
 
-					// This is messy, when the ESP returns lists, it's name, when we get it from our UIs, it's title... we need both.
-					$list['title'] = $list['name'];
+							// This is messy, when the ESP returns lists, it's name, when we get it from our UIs, it's title... we need both.
+							$list['title'] = $list['name'];
 
-					$stored_list = Subscription_Lists::get_or_create_remote_list( $list );
+							$stored_list = Subscription_Lists::get_or_create_remote_list( $list );
 
-					if ( is_wp_error( $stored_list ) ) {
-						return;
-					}
+							if ( is_wp_error( $stored_list ) ) {
+								return;
+							}
 
-					return $stored_list->to_array();
-				},
-				$lists
+							return $stored_list->to_array();
+						},
+						$lists
+					)
+				)
 			);
 
 			/**
