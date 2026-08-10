@@ -449,6 +449,16 @@ class Content_Gate {
 			// remainder of the request.
 			remove_filter( 'newspack_content_gate_metering_short_circuit', $short_circuit );
 		}
+
+		// Entitlement was evaluated, so this response depends on the reader
+		// whatever the outcome — including when nothing was substituted, which
+		// is the full-content response a shared cache must not hand to the next
+		// anonymous caller. Core resolves this filter once per response in
+		// WP_REST_Server::serve_request(), after dispatch, so adding it while
+		// items are prepared is in time and covers collections, where per-item
+		// response headers are discarded.
+		add_filter( 'rest_send_nocache_headers', '__return_true' );
+
 		if ( null === $restriction ) {
 			return $response;
 		}

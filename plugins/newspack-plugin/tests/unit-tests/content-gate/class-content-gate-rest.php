@@ -458,4 +458,41 @@ class Test_Content_Gate_Rest extends \WP_UnitTestCase {
 			'The teaser must still be served in place of the withheld body.'
 		);
 	}
+
+	/**
+	 * Gated and entitled reads both opt out of shared caches.
+	 *
+	 * The entitled case matters most: that response is not modified, but it is
+	 * reader-specific, and caching it would serve a full body to an anonymous
+	 * caller.
+	 *
+	 * @dataProvider cache_posture_provider
+	 * @param bool $entitled Whether the reader passes the gate.
+	 */
+	public function test_gated_routes_opt_out_of_shared_caches( $entitled ) {
+		if ( $entitled ) {
+			wp_set_current_user( self::factory()->user->create( [ 'role' => 'subscriber' ] ) );
+		} else {
+			wp_set_current_user( 0 );
+		}
+
+		$this->rest_get( '/wp/v2/posts', [ 'include' => [ $this->gated_post_id ] ] );
+
+		$this->assertTrue(
+			apply_filters( 'rest_send_nocache_headers', false ),
+			'A response whose body depends on reader entitlement must not be shared-cached.'
+		);
+	}
+
+	/**
+	 * Entitled and anonymous cases for the cache posture test.
+	 *
+	 * @return array[]
+	 */
+	public function cache_posture_provider() {
+		return [
+			'anonymous reader' => [ false ],
+			'entitled reader'  => [ true ],
+		];
+	}
 }
