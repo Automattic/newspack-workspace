@@ -80,6 +80,14 @@ describe( 'Ads list date columns', () => {
 		expect( rendered ).not.toMatch( /\d:\d{2}\s*[ap]m/i );
 	} );
 
+	it( "keeps the site's configured date pattern when it carries no time", () => {
+		// de_DE's default `date_format`. Locale ordering is the publisher's
+		// setting, so only a pattern containing a time should be overridden.
+		configureSite( -4, 'j. F Y' );
+
+		expect( renderText( 'start_date', adWithMeta( { start_date: '2026-08-04' } ) ) ).toBe( '4. August 2026' );
+	} );
+
 	it( 'reduces a legacy stored datetime to its date', () => {
 		configureSite( -4 );
 
@@ -117,22 +125,56 @@ describe( 'Ads list date columns', () => {
 describe( 'Ads list status column dates', () => {
 	afterEach( () => configureSite( 0 ) );
 
-	// `starts_at` / `expires_at` are anchored at noon UTC by the REST layer.
-	const NOON_UTC_AUG_4 = Date.UTC( 2026, 7, 4, 12 ) / 1000;
+	const statusLabel = ( status, postStatus = 'publish' ) =>
+		fieldById( 'status' ).render( {
+			item: { id: 1, meta: {}, status: postStatus, newspack_newsletters_ad_status: status },
+		} ).props.children[ 1 ].props.children;
+
+	it( 'drops the clock time when the site date format carries one', () => {
+		configureSite( -4, 'F j, Y, g:i a' );
+
+		// Noon-UTC anchor derived from `start_date` meta of 2026-08-04.
+		const label = statusLabel( { kind: 'scheduled', starts_at: Date.UTC( 2026, 7, 4, 12 ) / 1000 } );
+
+		expect( label ).toBe( 'Starts August 4, 2026' );
+		expect( label ).not.toMatch( /\d:\d{2}\s*[ap]m/i );
+	} );
+
+	// For a `future` post the REST layer sends `post_date_gmt` — a real publish
+	// instant, not a calendar-day anchor. Formatting that in UTC dates a
+	// late-evening scheduled ad a day forward.
+	it( 'dates a future-scheduled ad by its site-local publish day', () => {
+		configureSite( -4 );
+
+		// 2026-08-10 21:00 America/New_York === 2026-08-11 01:00 UTC.
+		const label = statusLabel( { kind: 'scheduled', starts_at: Date.UTC( 2026, 7, 11, 1 ) / 1000 }, 'future' );
+
+		expect( label ).toBe( 'Starts August 10, 2026' );
+	} );
+
+	// The other half of the pair: a published ad with a future start date sends
+	// a noon-UTC anchor, which site time would move to the next day at UTC+12
+	// and beyond — disagreeing with the Start column in the same row.
+	it.each( [
+		[ 'New York', -4 ],
+		[ 'Auckland', 12 ],
+		[ 'Kiritimati', 14 ],
+	] )( 'dates an anchored start by the stored day in %s', ( _label, offset ) => {
+		configureSite( offset );
+
+		const label = statusLabel( { kind: 'scheduled', starts_at: Date.UTC( 2026, 7, 4, 12 ) / 1000 } );
+
+		expect( label ).toBe( 'Starts August 4, 2026' );
+	} );
 
 	it.each( [
 		[ 'New York', -4 ],
 		[ 'Kiritimati', 14 ],
-	] )( 'dates the scheduled label by the stored day in %s', ( _label, offset ) => {
-		configureSite( offset, 'F j, Y, g:i a' );
+	] )( 'dates an expired ad by its stored expiry day in %s', ( _label, offset ) => {
+		configureSite( offset );
 
-		const item = {
-			id: 1,
-			meta: {},
-			newspack_newsletters_ad_status: { kind: 'scheduled', starts_at: NOON_UTC_AUG_4 },
-		};
-		const label = fieldById( 'status' ).render( { item } ).props.children[ 1 ].props.children;
+		const label = statusLabel( { kind: 'expired', expires_at: Date.UTC( 2026, 7, 4, 12 ) / 1000 } );
 
-		expect( label ).toBe( 'Starts August 4, 2026' );
+		expect( label ).toBe( 'Expired August 4, 2026' );
 	} );
 } );
