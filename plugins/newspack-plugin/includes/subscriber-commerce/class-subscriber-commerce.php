@@ -60,9 +60,15 @@ class Subscriber_Commerce {
 		 * Filters whether subscriber-commerce rules (subscriber-only products,
 		 * subscriber discounts) are enforced.
 		 *
+		 * The filter can only turn enforcement *off*. Features read this as their
+		 * licence to call WooCommerce APIs, so letting a filter answer yes on a
+		 * site where WooCommerce is not loaded would turn a stand-down into a
+		 * fatal — the escape hatch this exists for is the Memberships overlap,
+		 * which the clamp leaves reachable.
+		 *
 		 * @param bool $active Whether enforcement is active.
 		 */
-		return apply_filters( 'newspack_subscriber_commerce_enforcement_active', $active );
+		return $active && (bool) apply_filters( 'newspack_subscriber_commerce_enforcement_active', $active );
 	}
 
 	/**
@@ -92,8 +98,16 @@ class Subscriber_Commerce {
 			}
 		}
 
+		// A rule with no ID is one nothing can address for edit or delete, so a
+		// missing or unusable one is minted here rather than left for each caller
+		// to notice. `active` is deliberately NOT defaulted the same way: absent
+		// still reads as paused, and callers that mean "live on create" say so.
+		// Flipping that would make a partial payload silently start enforcing,
+		// which is the worse direction for a rule that gates a purchase or a price.
+		$id = sanitize_key( $rule['id'] ?? '' );
+
 		return [
-			'id'                       => sanitize_key( $rule['id'] ?? '' ),
+			'id'                       => $id ? $id : self::generate_rule_id(),
 			'subscription_product_ids' => $sanitize_ids( $rule['subscription_product_ids'] ?? [] ),
 			'targeting'                => $targeting,
 			'product_ids'              => $sanitize_ids( $rule['product_ids'] ?? [] ),

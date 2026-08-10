@@ -113,11 +113,13 @@ class Test_Product_Targeting extends \WP_UnitTestCase {
 	/**
 	 * Create a product post plus its mock, registered so wc_get_product() finds it.
 	 *
-	 * @param int $parent_id Parent product ID, for a variation.
+	 * @param int    $parent_id Parent product ID, for a variation.
+	 * @param string $type      WooCommerce product type.
+	 * @param int[]  $children  Child product IDs, for a grouped product.
 	 *
 	 * @return \WC_Product
 	 */
-	private function create_product( $parent_id = 0 ) {
+	private function create_product( $parent_id = 0, $type = 'simple', $children = [] ) {
 		$post_id = $this->factory->post->create(
 			[
 				'post_type'   => $parent_id ? 'product_variation' : 'product',
@@ -128,6 +130,8 @@ class Test_Product_Targeting extends \WP_UnitTestCase {
 			[
 				'id'        => $post_id,
 				'parent_id' => $parent_id,
+				'type'      => $type,
+				'children'  => $children,
 			]
 		);
 
@@ -263,6 +267,58 @@ class Test_Product_Targeting extends \WP_UnitTestCase {
 		);
 
 		$this->assertFalse( Product_Targeting::rule_covers_product( $rule, $this->variation ) );
+	}
+
+	/**
+	 * Excluding a grouped product excludes the products sold under it.
+	 *
+	 * A grouped product's children are top-level products reporting a parent of
+	 * 0, so the parent-ID test that catches variations never sees them. Without
+	 * the expansion the bundle a publisher excluded would keep selling every
+	 * product inside it.
+	 */
+	public function test_exclusion_applies_to_children_of_an_excluded_grouped_product() {
+		$grouped = $this->create_product(
+			0,
+			'grouped',
+			[ $this->product->get_id() ]
+		);
+
+		$rule = $this->make_rule(
+			[
+				'targeting'            => 'all',
+				'excluded_product_ids' => [ $grouped->get_id() ],
+			]
+		);
+
+		$this->assertFalse( Product_Targeting::rule_covers_product( $rule, $grouped ) );
+		$this->assertFalse( Product_Targeting::rule_covers_product( $rule, $this->product ) );
+		// A product outside the bundle is untouched by the exclusion.
+		$this->assertTrue( Product_Targeting::rule_covers_product( $rule, $this->variable_product ) );
+	}
+
+	/**
+	 * The grouped expansion applies to exclusions only. Naming a grouped product
+	 * under `products` targeting still covers the container alone — an exclusion
+	 * that reaches too little sells something the publisher withheld, while
+	 * targeting that reaches too far restricts something they never named.
+	 */
+	public function test_products_targeting_does_not_expand_grouped_children() {
+		$grouped = $this->create_product(
+			0,
+			'grouped',
+			[ $this->product->get_id() ]
+		);
+
+		$rule = $this->make_rule(
+			[
+				'targeting'   => 'products',
+				'product_ids' => [ $grouped->get_id() ],
+			]
+		);
+
+		$this->assertTrue( Product_Targeting::rule_covers_product( $rule, $grouped ) );
+		$this->assertFalse( Product_Targeting::rule_covers_product( $rule, $this->product ) );
 	}
 
 	/**

@@ -101,7 +101,20 @@ export default function SearchTokenField( { endpoint, label, help, value, onChan
 
 	// Labels carry the ID so two products sharing a name stay distinguishable —
 	// FormTokenField matches on the label string.
-	const toLabel = useCallback( ( item: Item ) => decodeEntities( `${ item.id }: ${ item.name || __( '(no name)', 'newspack-plugin' ) }` ), [] );
+	//
+	// Trimmed here, at the one place labels are made, so the rendered token and
+	// the lookup key below can never disagree. FormTokenField trims only the
+	// token it is adding: `addNewTokens` splices the trimmed newcomer into an
+	// untouched copy of `value`, and `deleteToken` filters `value` directly, so
+	// every other token comes back exactly as it was rendered. A product whose
+	// name ends in a non-breaking space — what pasting out of a word processor
+	// produces, and which survives the save that strips a plain trailing space —
+	// would otherwise render untrimmed, miss a key trimmed by JS, and be dropped
+	// from the rule on the next edit with nothing shown to the publisher.
+	const toLabel = useCallback(
+		( item: Item ) => decodeEntities( `${ item.id }: ${ item.name || __( '(no name)', 'newspack-plugin' ) }` ).trim(),
+		[]
+	);
 
 	const suggestionLabels = useMemo( () => suggestions.map( toLabel ), [ suggestions, toLabel ] );
 
@@ -113,13 +126,9 @@ export default function SearchTokenField( { endpoint, label, help, value, onChan
 	// Labels resolve back to the item they came from. Free text is dropped rather
 	// than parsed: "2024 Calendar" would otherwise become product ID 2024 and
 	// silently point the rule at whatever that is.
-	//
-	// Keyed on the trimmed label because FormTokenField trims a token as it adds
-	// it — a product whose name ends in a space (or a pasted non-breaking one)
-	// would otherwise be unselectable, the click doing nothing at all.
 	const labelToId = useMemo( () => {
 		const byLabel = new Map< string, number >();
-		known.forEach( item => byLabel.set( toLabel( item ).trim(), item.id ) );
+		known.forEach( item => byLabel.set( toLabel( item ), item.id ) );
 		return byLabel;
 	}, [ known, toLabel ] );
 

@@ -244,14 +244,38 @@ class Audience_Subscriptions extends Wizard {
 		// rule binds as soon as they go live — so let publishers pick them.
 		$posts = $this->search_products( $request, [ 'publish', 'private', 'draft' ] );
 
+		// Variations are appended outside the query, so `per_page` has to be applied
+		// again to the flattened list — otherwise the cap bounds only the parents
+		// and a page of variable products returns an unbounded number of rows, at
+		// one product read each, on every keystroke in the picker.
+		$limit = (int) $request->get_param( 'per_page' );
+
+		// Hydrating saved tokens asks for named IDs and needs every one of them
+		// back: expanding variations there could spend the budget on rows nobody
+		// asked for and leave a saved product rendering as a bare number.
+		$expand_variations = empty( $request->get_param( 'include' ) );
+
 		$data = [];
 		foreach ( $posts as $post ) {
+			if ( count( $data ) >= $limit ) {
+				break;
+			}
 			$product = wc_get_product( $post->ID );
 			if ( ! $product instanceof \WC_Product ) {
 				continue;
 			}
 			$data[] = self::get_product_data( $product );
+
+			// Only variable products carry variations. A grouped product's children
+			// are top-level products that already stand on their own in the results,
+			// so expanding those would list them twice.
+			if ( ! $expand_variations || ! $product->is_type( 'variable' ) ) {
+				continue;
+			}
 			foreach ( $product->get_children() as $variation_id ) {
+				if ( count( $data ) >= $limit ) {
+					break;
+				}
 				$variation = wc_get_product( $variation_id );
 				if ( $variation instanceof \WC_Product ) {
 					$data[] = self::get_product_data( $variation );
@@ -355,7 +379,9 @@ class Audience_Subscriptions extends Wizard {
 		}
 
 		if ( ! empty( $include ) ) {
-			$ids = array_filter( array_map( 'absint', explode( ',', $include ) ) );
+			// Capped to match the `per_page` ceiling: the CSV is caller-supplied and
+			// otherwise sets the width of the post__in clause on its own.
+			$ids = array_slice( array_filter( array_map( 'absint', explode( ',', $include ) ) ), 0, 100 );
 			if ( empty( $ids ) ) {
 				return [];
 			}

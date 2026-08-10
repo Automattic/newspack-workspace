@@ -54,6 +54,28 @@ class Product_Targeting {
 	private static array $expanded_categories = [];
 
 	/**
+	 * Product IDs expanded with the children of any grouped product among them,
+	 * keyed by the hash of the requested IDs.
+	 *
+	 * @var array<string, int[]>
+	 */
+	private static array $expanded_grouped = [];
+
+	/**
+	 * Namespace a per-request cache key to the current site.
+	 *
+	 * Product, term and user IDs are per-site: under switch_to_blog() term 5 on
+	 * two sites would otherwise share an entry and return each other's answers.
+	 *
+	 * @param string $key The key.
+	 *
+	 * @return string
+	 */
+	private static function cache_key( string $key ): string {
+		return get_current_blog_id() . ':' . $key;
+	}
+
+	/**
 	 * Get the rules from a rule set that cover a product, memoized per request.
 	 *
 	 * Inactive rules are never returned.
@@ -69,7 +91,7 @@ class Product_Targeting {
 			return [];
 		}
 
-		$cache_key = md5( wp_json_encode( $rules ) ) . ':' . $product->get_id();
+		$cache_key = self::cache_key( md5( wp_json_encode( $rules ) ) . ':' . $product->get_id() );
 		if ( ! isset( self::$matching_rules[ $cache_key ] ) ) {
 			self::$matching_rules[ $cache_key ] = array_values(
 				array_filter(
@@ -123,6 +145,12 @@ class Product_Targeting {
 	/**
 	 * Whether a product is excluded from a rule.
 	 *
+	 * The exclusion list is expanded through grouped products first: a grouped
+	 * product's children are top-level products reporting a parent of 0, so the
+	 * parent-ID test below — which is what catches a variation of an excluded
+	 * variable product — never sees them. Without the expansion, excluding a
+	 * bundle would leave everything sold under it still covered by the rule.
+	 *
 	 * @param array $rule       The rule.
 	 * @param int   $product_id The product (or variation) ID.
 	 * @param int   $parent_id  The parent product ID, 0 for a non-variation.
@@ -130,8 +158,40 @@ class Product_Targeting {
 	 * @return bool
 	 */
 	private static function is_excluded( array $rule, int $product_id, int $parent_id ): bool {
-		$excluded = array_map( 'intval', $rule['excluded_product_ids'] ?? [] );
+		$excluded = self::expand_grouped_ids( array_map( 'intval', $rule['excluded_product_ids'] ?? [] ) );
 		return ! empty( array_intersect( array_filter( [ $product_id, $parent_id ] ), $excluded ) );
+	}
+
+	/**
+	 * Expand a list of product IDs with the children of any grouped product in it,
+	 * memoized per request.
+	 *
+	 * Deliberately applied to exclusions only, not to `products` targeting: an
+	 * exclusion that covers too little sells something the publisher meant to
+	 * withhold, whereas targeting that covers too much restricts or discounts
+	 * something they never named. Where the two directions disagree, this errs
+	 * toward the rule doing less.
+	 *
+	 * @param int[] $product_ids The product IDs.
+	 *
+	 * @return int[] The IDs, plus the children of any grouped product among them.
+	 */
+	public static function expand_grouped_ids( array $product_ids ): array {
+		if ( empty( $product_ids ) || ! function_exists( 'wc_get_product' ) ) {
+			return $product_ids;
+		}
+		$cache_key = self::cache_key( md5( wp_json_encode( $product_ids ) ) );
+		if ( ! isset( self::$expanded_grouped[ $cache_key ] ) ) {
+			$expanded = $product_ids;
+			foreach ( $product_ids as $product_id ) {
+				$product = wc_get_product( $product_id );
+				if ( $product instanceof \WC_Product && $product->is_type( 'grouped' ) ) {
+					$expanded = array_merge( $expanded, array_map( 'intval', $product->get_children() ) );
+				}
+			}
+			self::$expanded_grouped[ $cache_key ] = array_values( array_unique( $expanded ) );
+		}
+		return self::$expanded_grouped[ $cache_key ];
 	}
 
 	/**
@@ -148,7 +208,7 @@ class Product_Targeting {
 		if ( empty( $category_ids ) ) {
 			return [];
 		}
-		$cache_key = md5( wp_json_encode( $category_ids ) );
+		$cache_key = self::cache_key( md5( wp_json_encode( $category_ids ) ) );
 		if ( ! isset( self::$expanded_categories[ $cache_key ] ) ) {
 			$expanded = $category_ids;
 			foreach ( $category_ids as $category_id ) {
@@ -169,5 +229,6 @@ class Product_Targeting {
 	public static function flush_cache(): void {
 		self::$matching_rules      = [];
 		self::$expanded_categories = [];
+		self::$expanded_grouped    = [];
 	}
 }
