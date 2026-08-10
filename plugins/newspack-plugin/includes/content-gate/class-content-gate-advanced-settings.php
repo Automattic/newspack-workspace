@@ -125,33 +125,20 @@ class Content_Gate_Advanced_Settings {
 	 * sites that have never opened Access Control and have no UI to turn it off
 	 * (the wizard only registers behind the NEWSPACK_CONTENT_GATES constant).
 	 *
-	 * Not memoized: the gate lookup itself is cached by Content_Gate::get_gates(),
-	 * so a second memo here would only add a value that can go stale against the
-	 * cache it was derived from.
+	 * The gates half of this (and the `newspack_content_gate_has_restriction_source`
+	 * filter) lives in {@see Content_Gate::has_first_party_restriction_source()},
+	 * shared with the REST path (`Content_Gate::filter_rest_response()`), which
+	 * needs the identical "could a first-party gate restrict this" answer but
+	 * combines it with Memberships differently — see that REST method's own
+	 * docblock for why Memberships isn't a restriction source there.
 	 *
 	 * @return bool
 	 */
 	private static function has_restriction_source(): bool {
-		// Same arguments as Content_Restriction_Control::get_post_gates(), so
-		// the two share one cached query. Gates only count while gating is active —
-		// otherwise a site with inert gates pays the feed overfetch to evaluate
-		// restriction checks that are all guaranteed no-ops. Memberships is independent
-		// of Audience Management and keeps enforcing either way.
-		$has_restriction_source = Memberships::is_active()
-			|| ( Content_Gate::is_gating_active()
-				&& ! empty( Content_Gate::get_gates( Content_Gate::GATE_CPT, 'publish', false ) ) );
-
-		/**
-		 * Filters whether anything on this site can restrict a post.
-		 *
-		 * The feed hooks short-circuit entirely when this is false, so code that
-		 * answers `newspack_is_post_restricted` on its own — a publisher plugin
-		 * restricting posts without publishing a gate or activating Memberships —
-		 * must return true here, or its restricted posts ship in full in the feed.
-		 *
-		 * @param bool $has_restriction_source Whether a first-party restriction source was detected.
-		 */
-		return (bool) apply_filters( 'newspack_content_gate_has_restriction_source', $has_restriction_source );
+		// Memberships is independent of Audience Management and keeps
+		// enforcing either way, so it isn't gated behind
+		// Content_Gate::is_gating_active() the way the first-party half is.
+		return Memberships::is_active() || Content_Gate::has_first_party_restriction_source();
 	}
 
 	/**

@@ -614,6 +614,97 @@ class Test_Content_Gate_Rest extends \WP_UnitTestCase {
 	// elsewhere in the suite that assume it is false by default.
 
 	/**
+	 * A publisher plugin that restricts a post by answering
+	 * `newspack_is_post_restricted` directly -- with no published Newspack
+	 * gate and no Memberships -- ships that post unrestricted over REST
+	 * unless it also opts back in via `newspack_content_gate_has_restriction_source`,
+	 * exactly mirroring the feed path's own documented, escapable guard (see
+	 * Test_Feed_Restriction::test_restriction_source_filter_opts_a_gateless_site_back_in()
+	 * and Content_Gate::has_first_party_restriction_source()'s docblock).
+	 *
+	 * Regression test for a real bug in an earlier version of this guard: it
+	 * inlined the has_first_party_restriction_source() logic without the
+	 * `apply_filters( 'newspack_content_gate_has_restriction_source', … )`
+	 * call, so a site that legitimately opted back in via that filter was
+	 * silently ignored and stayed ungated over REST regardless -- an
+	 * entitlement verdict the front end (and the feed) would have honored.
+	 */
+	public function test_third_party_restriction_source_opt_in_is_honored_over_rest() {
+		// The layout post a real gate would have resolved to, forced below so
+		// rendering doesn't depend on Content_Restriction_Control's own
+		// post-to-gate map, which our forced `newspack_is_post_restricted`
+		// callback bypasses (nothing populates it for this post/user).
+		// Otherwise get_gate_layout_id() falls through to false, and
+		// get_post( false ) resolves to whatever the global $post happens to
+		// be rather than "no gate layout" -- see get_inline_gate_html()'s own
+		// docblock. Same technique as test_edit_context_is_untouched().
+		$gate_layout_id = Content_Gate::get_registration_settings( $this->gate_id )['gate_layout_id'];
+
+		// No published gate: draft the one this class's set_up() creates, so
+		// Content_Gate::has_first_party_restriction_source() answers false on
+		// its own, and $this->gated_post_id -- specific_posts-targeted by that
+		// same gate -- is no longer matched by any real gate either. Its
+		// layout post still exists regardless. Using $this->gated_post_id
+		// rather than $this->open_post_id here: its three-paragraph body with
+		// visible_paragraphs defaulting to 2 actually gets truncated, unlike
+		// open_post_id's single short paragraph, which the teaser would
+		// reproduce verbatim and so couldn't distinguish gated from ungated.
+		wp_update_post(
+			[
+				'ID'          => $this->gate_id,
+				'post_status' => 'draft',
+			]
+		);
+
+		// Stands in for publisher custom code answering the public
+		// `newspack_is_post_restricted` contract directly.
+		$restrict_everything = function () {
+			return true;
+		};
+		$force_layout         = function () use ( $gate_layout_id ) {
+			return $gate_layout_id;
+		};
+		add_filter( 'newspack_is_post_restricted', $restrict_everything, 99 );
+		add_filter( 'newspack_content_gate_layout_id', $force_layout );
+		wp_set_current_user( 0 );
+
+		try {
+			$unopted_in_data = $this->rest_get( '/wp/v2/posts/' . $this->gated_post_id );
+
+			// Sanity, matching the feed path's own documented trade-off: without
+			// the opt-in filter, a site with no published gate is not treated
+			// as having a restriction source, so this ships unrestricted.
+			$this->assertStringContainsString(
+				self::BODY_SENTINEL,
+				$unopted_in_data['content']['rendered'],
+				'Sanity: without the opt-in filter, a gateless site is not treated as having a restriction source.'
+			);
+
+			add_filter( 'newspack_content_gate_has_restriction_source', '__return_true' );
+			$opted_in_data = $this->rest_get( '/wp/v2/posts/' . $this->gated_post_id );
+			remove_filter( 'newspack_content_gate_has_restriction_source', '__return_true' );
+		} finally {
+			remove_filter( 'newspack_is_post_restricted', $restrict_everything, 99 );
+			remove_filter( 'newspack_content_gate_layout_id', $force_layout );
+		}
+
+		$this->assertStringNotContainsString(
+			self::BODY_SENTINEL,
+			$opted_in_data['content']['rendered'],
+			'The newspack_content_gate_has_restriction_source opt-in must be honored over REST, the same as it is for the feed.'
+		);
+		$this->assertSame(
+			'closed',
+			$opted_in_data['comment_status'],
+			'A third-party restriction verdict must still close comments over REST once opted in.'
+		);
+		$this->assertTrue(
+			apply_filters( 'rest_send_nocache_headers', false ),
+			'A third-party restriction verdict must still force no-cache headers over REST once opted in.'
+		);
+	}
+
+	/**
 	 * The same post yields the same gated string on both paths.
 	 *
 	 * Both substitute after the standard the_content chain — the front end at

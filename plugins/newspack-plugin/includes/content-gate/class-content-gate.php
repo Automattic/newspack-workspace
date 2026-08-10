@@ -287,6 +287,51 @@ class Content_Gate {
 	}
 
 	/**
+	 * Whether Newspack's own Content Restriction Control gates could restrict
+	 * a post on this site — independent of WooCommerce Memberships, which is
+	 * a separate restriction source callers combine in for themselves (see
+	 * {@see Content_Gate_Advanced_Settings::has_restriction_source()} for the
+	 * feed path, and {@see self::filter_rest_response()} for REST).
+	 *
+	 * Shared by both callers so they agree on what "a first-party gate could
+	 * restrict something" means, and both resolve the
+	 * `newspack_content_gate_has_restriction_source` filter through this one
+	 * call rather than duplicating the apply_filters() — see that filter's
+	 * docblock for why the seam exists: a publisher plugin that answers
+	 * `newspack_is_post_restricted` on its own, without publishing a gate or
+	 * activating Memberships, needs a way to opt back in here or its
+	 * restricted posts ship unrestricted wherever this predicate gates work.
+	 *
+	 * Not memoized: the gate lookup itself is cached by self::get_gates(), so
+	 * a second memo here would only add a value that can go stale against the
+	 * cache it was derived from.
+	 *
+	 * @return bool
+	 */
+	public static function has_first_party_restriction_source(): bool {
+		// Gates only count while gating is active — otherwise a site with inert
+		// gates pays this check's cost (a get_gates() query, on cache miss) to
+		// evaluate a restriction that is guaranteed to be a no-op everywhere
+		// this predicate gates work.
+		$has_first_party_restriction_source = self::is_gating_active()
+			&& ! empty( self::get_gates( self::GATE_CPT, 'publish', false ) );
+
+		/**
+		 * Filters whether Newspack's own gate mechanism could restrict a post
+		 * on this site.
+		 *
+		 * Every caller of this predicate short-circuits entirely when it's
+		 * false, so code that answers `newspack_is_post_restricted` on its
+		 * own — a publisher plugin restricting posts without publishing a
+		 * gate — must return true here, or its restricted posts ship
+		 * unrestricted through whichever path consulted this.
+		 *
+		 * @param bool $has_first_party_restriction_source Whether a first-party restriction source was detected.
+		 */
+		return (bool) apply_filters( 'newspack_content_gate_has_restriction_source', $has_first_party_restriction_source );
+	}
+
+	/**
 	 * Whether the gate never applies to a post, by post ID alone.
 	 *
 	 * ID comparisons rather than the is_cart()/is_checkout() helpers, so the
@@ -425,21 +470,32 @@ class Content_Gate {
 		if ( 'edit' === $request['context'] ) {
 			return $response;
 		}
-		// Nothing on this site can produce a REST restriction unless a Content
-		// Gate is published and active. Deliberately not
-		// Content_Gate_Advanced_Settings::has_restriction_source(): that
-		// predicate also treats an active WooCommerce Memberships install as a
-		// restriction source, which is correct for the feed path (it asks
-		// `newspack_is_post_restricted` directly, and Memberships answers that
-		// filter on its own) but wrong here — get_restriction_for_post() below
-		// defers to Memberships unconditionally ("Don't apply our restriction
-		// strategy if Woo Memberships is active") and always returns null while
-		// it is active, so a Memberships-only site can never be restricted by
-		// this filter regardless of gates. Reusing has_restriction_source()
-		// verbatim would keep forcing the no-cache opt-in below on every
-		// REST-exposed post type on such a site for nothing — the exact waste
-		// this guard exists to avoid.
-		if ( Memberships::is_active() || ! self::is_gating_active() || empty( self::get_gates( self::GATE_CPT, 'publish', false ) ) ) {
+		// Nothing this filter can restrict exists on this site unless a
+		// first-party Content Gate is published and active.
+		// has_first_party_restriction_source() is shared with the feed path's
+		// equivalent guard (Content_Gate_Advanced_Settings::has_restriction_source()),
+		// including the `newspack_content_gate_has_restriction_source` filter
+		// seam, but Memberships is combined in differently here: that method
+		// ORs in Memberships::is_active(), which is correct for the feed path
+		// (it asks `newspack_is_post_restricted` directly, and Memberships
+		// answers that filter on its own) but wrong for this REST path —
+		// get_restriction_for_post() below defers to Memberships
+		// unconditionally ("Don't apply our restriction strategy if Woo
+		// Memberships is active") and always returns null while it is
+		// active, so a Memberships-only site can never be restricted by this
+		// filter regardless of gates. Reusing has_restriction_source()
+		// (Memberships included) here would keep forcing the no-cache
+		// opt-in below on every REST-exposed post type on such a site for
+		// nothing — the exact waste this guard exists to avoid.
+		//
+		// $is_newsletter is hard-coded false inside has_first_party_restriction_source(),
+		// so a site with only premium-newsletter gates published (no plain
+		// GATE_CPT gate) is treated as having no restriction source here —
+		// currently unreachable, since Premium_Newsletters gates
+		// `newspack_nl_list` (Newspack_Newsletters\Subscription_Lists::CPT),
+		// which registers with `show_in_rest => false` and so never fires
+		// this hook at all. Would need revisiting if that ever changes.
+		if ( Memberships::is_active() || ! self::has_first_party_restriction_source() ) {
 			return $response;
 		}
 		// Core already withheld the content for a password-protected post whose
@@ -451,17 +507,26 @@ class Content_Gate {
 		//
 		// post_password_required() alone can no longer be trusted to mean that,
 		// though: when the correct password IS supplied,
-		// WP_REST_Posts_Controller::get_item() temporarily clears
-		// $post->post_password so post_password_required() reports false while
-		// content.rendered is built, then restores it before firing this hook
-		// (see can_access_password_content() / check_password_required(),
-		// class-wp-rest-posts-controller.php:2051). By the time we run,
-		// post_password_required( $post ) is true again even though the
-		// response already carries the full body — so the check has to be what
-		// core actually withheld, not merely whether a password exists. Holding
-		// the password does not grant the gate's entitlement, so a
-		// correctly-supplied password still falls through to the restriction
-		// check below.
+		// WP_REST_Posts_Controller::prepare_item_for_response() temporarily adds
+		// a `post_password_required` filter (check_password_required(), gated by
+		// can_access_password_content() matching the request's ?password= — see
+		// class-wp-rest-posts-controller.php:1989-1996) so post_password_required()
+		// reports false while content.rendered is built from the real body, then
+		// removes that filter (:2051-2053) before firing this hook. $post->post_password
+		// itself is never touched. By the time we run, post_password_required( $post )
+		// is true again (the override filter is gone) even though the response
+		// already carries the full body — so the check has to be what core
+		// actually withheld, not merely whether a password exists. Holding the
+		// password does not grant the gate's entitlement, so a correctly-supplied
+		// password still falls through to the restriction check below.
+		//
+		// Known gap, not fixed here: if the body is password-protected AND
+		// genuinely empty (content.rendered === '' with no password supplied,
+		// or supplied-but-wrong), this whole block returns early and none of
+		// the substitutions below run — including comment_status, which stays
+		// whatever core reported rather than being forced to 'closed'. No
+		// content is disclosed either way (there was none to disclose), just a
+		// comment-status mismatch against the front end for this one combination.
 		if ( \post_password_required( $post ) ) {
 			$data = $response->get_data();
 			if ( empty( $data['content']['rendered'] ) ) {

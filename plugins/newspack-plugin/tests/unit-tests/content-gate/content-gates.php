@@ -1245,22 +1245,40 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Confirms wc_get_page_id()'s -1 (unconfigured) return value can never
-	 * match a real post ID -- is_excluded_from_gating() filters out
-	 * non-positive IDs before comparing -- and that a WooCommerce page which
-	 * IS configured is excluded exactly like the Privacy Policy page.
+	 * Every exclusion source in is_excluded_from_gating() defaults to a
+	 * non-positive value when unconfigured: get_option( 'wp_page_for_privacy_policy' )
+	 * and get_theme_mod( 'accessibility_statement_page_id' ) both cast to 0,
+	 * and wc_get_page_id() returns -1. Confirms a post ID of 0 -- a
+	 * degenerate value a caller with no real post in context could pass --
+	 * cannot spuriously match those unconfigured defaults (the
+	 * `array_filter( …, $id > 0 )` guard this pins), and that a WooCommerce
+	 * page which IS configured is excluded exactly like the Privacy Policy
+	 * page.
 	 */
-	public function test_wc_page_exclusion_ignores_unconfigured_minus_one() {
+	public function test_non_positive_ids_do_not_spuriously_match_unconfigured_pages() {
 		require_once dirname( __DIR__, 2 ) . '/mocks/wc-mocks.php';
 		wp_set_current_user( 0 );
 
-		// Unconfigured: wc_get_page_id( 'myaccount'|'cart'|'checkout' ) all
-		// resolve to -1 (no 'woocommerce_*_page_id' option is set). A post
-		// matching the gate must still be restricted, proving -1 cannot
-		// spuriously match a real post ID.
+		// is_excluded_from_gating() is private; reach it directly via
+		// reflection so this can assert on its actual output rather than
+		// inferring it from a real post's ID, which -- being always
+		// positive -- could never demonstrate this guard either way (see
+		// the coordinator's review: comparing a positive post ID against an
+		// all-negative/zero excluded array can't fail whether or not the
+		// array_filter() is even there).
+		$method = new \ReflectionMethod( Content_Gate::class, 'is_excluded_from_gating' );
+		$method->setAccessible( true );
+
+		$this->assertFalse(
+			$method->invoke( null, 0 ),
+			'A post ID of 0 must not spuriously match unconfigured (non-positive) exclusion sources.'
+		);
+
+		// A real post matching the gate is still restricted while every
+		// exclusion source is unconfigured.
 		$this->assertIsArray(
 			Content_Gate::get_restriction_for_post( get_post( $this->post_ids[0] ) ),
-			'-1 (an unconfigured WooCommerce page) must not exclude a real post from gating.'
+			'An unconfigured WooCommerce page must not exclude a real post from gating.'
 		);
 
 		// Configured: a real myaccount page ID is excluded, same as the
