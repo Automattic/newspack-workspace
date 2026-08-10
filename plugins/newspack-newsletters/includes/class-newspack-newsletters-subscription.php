@@ -495,10 +495,11 @@ class Newspack_Newsletters_Subscription {
 			/**
 			 * We loop through the lists returned by the ESP.
 			 * Only remote lists that still exist in the ESP will be returned.
+			 *
+			 * Lists missing a name or an ID are dropped, and the array is then
+			 * reindexed: a sparse array is serialized as a JSON object, and the
+			 * admin screens map over the REST response as an array.
 			 */
-			// Drop lists that lack a name or ID, then reindex: a sparse array is
-			// serialized as a JSON object, and the admin screens map over the
-			// REST response as an array.
 			$return_lists = array_values(
 				array_filter(
 					array_map(
@@ -507,7 +508,7 @@ class Newspack_Newsletters_Subscription {
 								return;
 							}
 
-							// This is messy, when the ESP returns lists, it's name, when we get it from our UIs, it's title... we need both.
+							// The ESP calls this field 'name'; our own UIs call it 'title'. We need both.
 							$list['title'] = $list['name'];
 
 							$stored_list = Subscription_Lists::get_or_create_remote_list( $list );

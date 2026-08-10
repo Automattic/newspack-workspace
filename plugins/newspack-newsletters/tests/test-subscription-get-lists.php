@@ -34,10 +34,17 @@ class Subscription_Get_Lists_Test extends WP_UnitTestCase {
 
 	/**
 	 * Point the plugin at the provider slug and start from a cold list cache.
+	 *
+	 * The option is written directly rather than through set_service_provider(),
+	 * which also memoizes a provider instance in a static property. Static state
+	 * survives the per-test transaction, so touching it here would displace the
+	 * value stub_provider_lists() records as the original. The option itself
+	 * needs no restoring: WP_UnitTestCase_Base opens a transaction in set_up()
+	 * and rolls it back in tear_down().
 	 */
 	public function set_up() {
 		parent::set_up();
-		Newspack_Newsletters::set_service_provider( self::PROVIDER );
+		update_option( 'newspack_newsletters_service_provider', self::PROVIDER );
 		$this->clear_lists_cache();
 	}
 
