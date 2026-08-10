@@ -152,6 +152,12 @@ class Newspack_Popups_Settings {
 		// Page settings validate the submitted ID directly, so any published page qualifies
 		// without the setting having to enumerate every page it would accept.
 		if ( isset( $config['control'] ) && 'page' === $config['control'] ) {
+			// Saving a section resubmits every field it holds, so an unchanged submission is a
+			// no-op. Without this, a saved page that has since been unpublished would either
+			// block the whole section or get cleared by a save aimed at another field.
+			if ( (string) $value === (string) get_option( $config['key'], '' ) ) {
+				return true;
+			}
 			// An empty value clears the setting; anything else must be a published page ID.
 			// Reject rather than coerce, so a malformed payload can't save a different page.
 			if ( empty( $value ) ) {
@@ -272,9 +278,8 @@ class Newspack_Popups_Settings {
 	 * @return array Array of settings objects.
 	 */
 	public static function get_settings( $assoc = false, $get_segments = false ) {
-		// A saved page that has since been unpublished or deleted reports as unset, so the
-		// reported value and the picker's selection agree and re-saving the section doesn't
-		// fail validation on a field that looks empty.
+		// The picker shows nothing when the saved page is no longer published, but the stored
+		// value is still reported as-is so saving the section round-trips it untouched.
 		$donor_landing_page = self::get_donor_landing_page_selection();
 
 		$settings_list = [
@@ -292,7 +297,7 @@ class Newspack_Popups_Settings {
 				'key'         => 'newspack_popups_donor_landing_page',
 				'type'        => 'string',
 				'control'     => 'page',
-				'value'       => $donor_landing_page ? (string) $donor_landing_page['value'] : '',
+				'value'       => self::donor_landing_page(),
 				'default'     => '',
 				'description' => __( 'Donor landing page', 'newspack-popups' ),
 				'help'        => __(

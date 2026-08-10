@@ -8,7 +8,7 @@
 /**
  * Settings test case.
  */
-class SettingsTest extends WP_UnitTestCase {
+class DonorLandingPageSettingTest extends WP_UnitTestCase {
 	const SECTION = 'donor_settings';
 	const KEY     = 'newspack_popups_donor_landing_page';
 
@@ -165,10 +165,48 @@ class SettingsTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A saved page that is no longer published reports as unset, so re-saving the
-	 * section does not fail validation on a field the UI shows as empty.
+	 * A saved page that is no longer published shows nothing in the picker, while the
+	 * stored value is reported as-is.
 	 */
-	public function test_unpublished_saved_page_reports_as_unset() {
+	public function test_unpublished_saved_page_shows_nothing_in_the_picker() {
+		$page_id = $this->unpublish_saved_page();
+
+		$setting = $this->get_donor_landing_setting();
+
+		$this->assertNull( $setting['selected'], 'The picker should show nothing for a page that is no longer published.' );
+		$this->assertSame( (string) $page_id, $setting['value'], 'The stored value should still be reported.' );
+	}
+
+	/**
+	 * Saving a section resubmits every field it holds, so re-saving an unchanged value
+	 * neither fails validation nor clears the setting — even once the saved page is no
+	 * longer published. Without this, saving an unrelated donor setting would wipe it.
+	 */
+	public function test_resaving_an_unchanged_stale_value_is_a_no_op() {
+		$page_id = $this->unpublish_saved_page();
+
+		$setting = $this->get_donor_landing_setting();
+
+		$this->assertNotWPError( $this->update( $setting['value'] ) );
+		$this->assertSame( (string) $page_id, get_option( self::KEY ), 'An unchanged submission should leave the stored value alone.' );
+	}
+
+	/**
+	 * Clearing the setting still works while the saved page is unpublished.
+	 */
+	public function test_stale_value_can_still_be_cleared() {
+		$this->unpublish_saved_page();
+
+		$this->assertNotWPError( $this->update( '' ) );
+		$this->assertSame( '', get_option( self::KEY ) );
+	}
+
+	/**
+	 * Save a published page as the donor landing page, then unpublish it.
+	 *
+	 * @return int The page ID.
+	 */
+	private function unpublish_saved_page() {
 		$page_id = $this->create_page();
 		$this->update( (string) $page_id );
 
@@ -179,11 +217,7 @@ class SettingsTest extends WP_UnitTestCase {
 			]
 		);
 
-		$setting = $this->get_donor_landing_setting();
-
-		$this->assertSame( '', $setting['value'] );
-		$this->assertNull( $setting['selected'] );
-		$this->assertNotWPError( $this->update( $setting['value'] ) );
+		return $page_id;
 	}
 
 	/**
