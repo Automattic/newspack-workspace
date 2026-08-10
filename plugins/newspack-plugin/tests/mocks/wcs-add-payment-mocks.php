@@ -8,8 +8,7 @@
 // WCS_* classes): those persist for the whole PHPUnit process and would change
 // function_exists()/class_exists() results for every other test in the suite —
 // an order-dependent failure. The store-level manual-renewal check is exercised
-// through the `newspack_add_payment_method_store_requires_manual_renewal` filter
-// instead.
+// through the WC_Subscriptions_Add_Payment_Store_Double subclass below instead.
 
 // Subscription double that makes the follow-through's branches reachable. The
 // shared WC_Subscription mock cannot return `0` from calculate_date(), throws on
@@ -17,8 +16,8 @@
 // so the guard, the unschedulable-date branch and the catch path would all be
 // dead without these overrides. Each reads a staged value from $data, defaulting
 // to the success path.
-if ( class_exists( 'WC_Subscription' ) && ! class_exists( 'NPPD2170_Test_Subscription' ) ) {
-	class NPPD2170_Test_Subscription extends WC_Subscription {
+if ( class_exists( 'WC_Subscription' ) && ! class_exists( 'WC_Subscription_Add_Payment_Double' ) ) {
+	class WC_Subscription_Add_Payment_Double extends WC_Subscription {
 		public function can_date_be_updated( $date_type ) {
 			unset( $date_type );
 			return $this->data['can_date_be_updated'] ?? true;
@@ -30,6 +29,8 @@ if ( class_exists( 'WC_Subscription' ) && ! class_exists( 'NPPD2170_Test_Subscri
 
 		public function calculate_date( $date_type = 'next_payment' ) {
 			unset( $date_type );
+			// Follow-through tests all stage a value; the parent fallback is a
+			// safety net for any that forget to.
 			if ( array_key_exists( 'calculate_date', $this->data ) ) {
 				return $this->data['calculate_date'];
 			}
@@ -41,6 +42,19 @@ if ( class_exists( 'WC_Subscription' ) && ! class_exists( 'NPPD2170_Test_Subscri
 				throw new \InvalidArgumentException( 'staged update_dates failure' );
 			}
 			parent::update_dates( $dates );
+		}
+	}
+}
+
+// Subclass of the production integration whose protected store_requires_manual_renewal()
+// is stageable, so the eligibility filter's manual-renewal branch can be tested
+// through late static binding without loading WooCommerce Subscriptions.
+if ( class_exists( 'Newspack\WooCommerce_Subscriptions' ) && ! class_exists( 'WC_Subscriptions_Add_Payment_Store_Double' ) ) {
+	class WC_Subscriptions_Add_Payment_Store_Double extends \Newspack\WooCommerce_Subscriptions {
+		public static $store_requires_manual_renewal = false;
+
+		protected static function store_requires_manual_renewal() {
+			return static::$store_requires_manual_renewal;
 		}
 	}
 }

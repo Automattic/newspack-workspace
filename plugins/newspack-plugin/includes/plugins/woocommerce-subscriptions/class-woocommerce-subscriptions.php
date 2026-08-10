@@ -347,13 +347,14 @@ class WooCommerce_Subscriptions {
 	 * is the wording this case wants.
 	 *
 	 * Deliberately narrow. WCS refuses the action for several distinct reasons;
-	 * this reproduces every one of them except the one it targets — the
-	 * missing-next-payment / not-active refusal. So the flow opens only for the
-	 * case this fixes and stays closed wherever WCS closed it for a different
-	 * reason: automatic payments switched off store-wide, no recurring charge, no
-	 * gateway that can take a customer card, or a gateway that cannot cancel.
-	 * Overriding just the one refusal, rather than returning a blanket `true`, is
-	 * what keeps a publisher's "no automatic renewals" choice intact.
+	 * this reproduces the ones current WCS applies in
+	 * `can_subscription_be_updated_to_new_payment_method()` — automatic payments
+	 * switched off store-wide, no recurring charge, no gateway that can take a
+	 * customer card, a gateway that cannot cancel — and overrides only the
+	 * missing-next-payment / not-active refusal it targets. If a future WCS adds a
+	 * refusal, mirror it below. Overriding just the one refusal, rather than
+	 * returning a blanket `true`, is what keeps a publisher's "no automatic
+	 * renewals" choice intact.
 	 *
 	 * Paired with {@see schedule_next_payment_after_payment_method_added()},
 	 * which schedules the payment the missing date would otherwise leave unset.
@@ -377,8 +378,9 @@ class WooCommerce_Subscriptions {
 		// WC_Subscriptions_Change_Payment_Gateway::can_subscription_be_updated_to_new_payment_method().
 
 		// The store has turned automatic payments off entirely — a publisher
-		// configuration choice, not a per-subscription state.
-		if ( self::store_requires_manual_renewal() ) {
+		// configuration choice, not a per-subscription state. static:: so a test
+		// subclass can override the WCS-dependent read.
+		if ( static::store_requires_manual_renewal() ) {
 			return $can_be_updated;
 		}
 
@@ -420,27 +422,21 @@ class WooCommerce_Subscriptions {
 	 * Whether the store has switched automatic payments off — WCS's manual
 	 * renewals required with the reader-facing auto-renew toggle disabled. Under
 	 * that configuration WCS deliberately hides the payment-method change action,
-	 * and this filter must not re-open it.
+	 * and the eligibility filter must not re-open it.
 	 *
-	 * Wrapped in a method so the decision has a single seam: the
-	 * `newspack_add_payment_method_store_requires_manual_renewal` filter lets a
-	 * publisher override it, and lets the eligibility filter be unit tested
-	 * without loading WooCommerce Subscriptions. A missing toggle class fails
-	 * closed to "off", matching WCS's own guard.
+	 * `protected` rather than `private` and called through `static::` so a test
+	 * can override this WCS-dependent read with a subclass, without the eligibility
+	 * filter having to load WooCommerce Subscriptions or define its globals. A
+	 * missing toggle class leaves the manual-renewal setting to decide, matching
+	 * WCS's own guard.
 	 *
 	 * @return bool
 	 */
-	private static function store_requires_manual_renewal() {
+	protected static function store_requires_manual_renewal() {
 		$required       = function_exists( 'wcs_is_manual_renewal_required' ) && \wcs_is_manual_renewal_required();
 		$toggle_enabled = class_exists( 'WCS_My_Account_Auto_Renew_Toggle' ) && \WCS_My_Account_Auto_Renew_Toggle::is_enabled();
 
-		/**
-		 * Filters whether the store is configured for manual renewals only, which
-		 * keeps the add-payment-method flow closed.
-		 *
-		 * @param bool $manual_only Whether automatic payments are switched off store-wide.
-		 */
-		return (bool) apply_filters( 'newspack_add_payment_method_store_requires_manual_renewal', $required && ! $toggle_enabled );
+		return $required && ! $toggle_enabled;
 	}
 
 	/**

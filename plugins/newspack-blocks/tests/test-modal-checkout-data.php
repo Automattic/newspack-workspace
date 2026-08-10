@@ -364,6 +364,17 @@ class Newspack_Blocks_Modal_Checkout_Data_Test extends WP_UnitTestCase_Blocks {
 	}
 
 	/**
+	 * A subscription or order with no line items has no purchase to summarise.
+	 * It must return empty rather than fatalling on the null product the missing
+	 * line item would leave behind (NPPD-2170).
+	 */
+	public function test_source_with_no_line_items_returns_empty() {
+		$subscription = new WC_Subscription( [], false, 901 );
+
+		$this->assertSame( [], Checkout_Data::get_checkout_data( $subscription ) );
+	}
+
+	/**
 	 * The data-checkout attribute must escape values so a product name containing
 	 * an apostrophe can't break out of the single-quoted attribute.
 	 */

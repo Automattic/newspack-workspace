@@ -41,10 +41,10 @@ class Newspack_Test_WC_Subscriptions_Add_Payment extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Drop any filter a test added.
+	 * Reset the staged store setting.
 	 */
 	public function tear_down() {
-		remove_all_filters( 'newspack_add_payment_method_store_requires_manual_renewal' );
+		WC_Subscriptions_Add_Payment_Store_Double::$store_requires_manual_renewal = false;
 		parent::tear_down();
 	}
 
@@ -53,10 +53,10 @@ class Newspack_Test_WC_Subscriptions_Add_Payment extends WP_UnitTestCase {
 	 *
 	 * @param array $data Overrides for the subscription data.
 	 *
-	 * @return NPPD2170_Test_Subscription
+	 * @return WC_Subscription_Add_Payment_Double
 	 */
 	private function make_subscription( $data = [] ) {
-		return new NPPD2170_Test_Subscription(
+		return new WC_Subscription_Add_Payment_Double(
 			array_merge(
 				[
 					'id'               => 1,
@@ -113,22 +113,22 @@ class Newspack_Test_WC_Subscriptions_Add_Payment extends WP_UnitTestCase {
 
 	/**
 	 * A store that has switched automatic payments off — WCS manual renewals with
-	 * the auto-renew toggle disabled, surfaced here through the store-setting
-	 * filter — keeps the flow closed for a subscription that otherwise qualifies.
+	 * the auto-renew toggle disabled — keeps the flow closed for a subscription
+	 * that otherwise qualifies. Exercised through a subclass that overrides the
+	 * store-setting read, via late static binding.
 	 */
 	public function test_respects_the_manual_renewal_store_setting() {
-		add_filter( 'newspack_add_payment_method_store_requires_manual_renewal', '__return_true' );
 		$subscription = $this->make_subscription();
 
+		WC_Subscriptions_Add_Payment_Store_Double::$store_requires_manual_renewal = true;
 		$this->assertFalse(
-			WooCommerce_Subscriptions::allow_add_payment_method_without_next_payment( false, $subscription ),
+			WC_Subscriptions_Add_Payment_Store_Double::allow_add_payment_method_without_next_payment( false, $subscription ),
 			'Expected the flow to stay closed when the store requires manual renewals.'
 		);
 
-		remove_all_filters( 'newspack_add_payment_method_store_requires_manual_renewal' );
-
+		WC_Subscriptions_Add_Payment_Store_Double::$store_requires_manual_renewal = false;
 		$this->assertTrue(
-			WooCommerce_Subscriptions::allow_add_payment_method_without_next_payment( false, $subscription ),
+			WC_Subscriptions_Add_Payment_Store_Double::allow_add_payment_method_without_next_payment( false, $subscription ),
 			'Expected the flow to open when automatic payments are available.'
 		);
 	}
@@ -244,7 +244,10 @@ class Newspack_Test_WC_Subscriptions_Add_Payment extends WP_UnitTestCase {
 
 		WooCommerce_Subscriptions::schedule_next_payment_after_payment_method_added( $subscription, 'stripe' );
 
-		$this->assertEmpty( $subscription->get_date( 'next_payment' ) );
+		// Strict identity, not assertEmpty: the mock returns int 0 when the date was
+		// never written, but string '0' if the guard were removed and '0' written —
+		// and assertEmpty() would pass on both, so it could not catch the regression.
+		$this->assertSame( 0, $subscription->get_date( 'next_payment' ) );
 	}
 
 	/**
