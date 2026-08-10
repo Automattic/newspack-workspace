@@ -125,6 +125,63 @@ class Subscription_Get_Lists_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A whitespace-only name must be dropped like an empty one. It is not
+	 * caught by `empty()`, so it would otherwise reach
+	 * Subscription_Lists::get_or_create_remote_list(), which throws rather
+	 * than returning a WP_Error — and the outer catch turns that into a
+	 * WP_Error for the whole payload, emptying the screen instead of dropping
+	 * one row.
+	 */
+	public function test_whitespace_named_list_is_dropped_without_failing_the_payload() {
+		$this->stub_provider_lists(
+			[
+				[
+					'id'   => '9001',
+					'name' => 'Weekly digest',
+				],
+				[
+					'id'   => '9002',
+					'name' => '   ',
+				],
+				[
+					'id'   => '9003',
+					'name' => 'Breaking news',
+				],
+			]
+		);
+
+		$result = Newspack_Newsletters_Subscription::get_lists();
+
+		$this->assertNotWPError( $result, 'One badly-named list must not fail the whole payload.' );
+
+		$ids = wp_list_pluck( $result, 'id' );
+		$this->assertContains( '9001', $ids );
+		$this->assertContains( '9003', $ids );
+		$this->assertNotContains( '9002', $ids, 'The whitespace-named list must not be returned.' );
+	}
+
+	/**
+	 * "0" is a legitimate list name that `empty()` rejects.
+	 * Subscription_Lists::get_or_create_remote_list() goes out of its way to
+	 * accept it, so this guard must not disagree.
+	 */
+	public function test_list_named_zero_is_kept() {
+		$this->stub_provider_lists(
+			[
+				[
+					'id'   => '9004',
+					'name' => '0',
+				],
+			]
+		);
+
+		$result = Newspack_Newsletters_Subscription::get_lists();
+
+		$this->assertNotWPError( $result );
+		$this->assertContains( '9004', wp_list_pluck( $result, 'id' ), 'A list named "0" must survive the guard.' );
+	}
+
+	/**
 	 * Install a provider double whose get_lists() returns a fixed payload.
 	 *
 	 * @param array[] $lists Lists the stubbed ESP should return.

@@ -504,7 +504,11 @@ class Newspack_Newsletters_Subscription {
 				array_filter(
 					array_map(
 						function ( $list ) {
-							if ( ! isset( $list['id'], $list['name'] ) || empty( $list['id'] ) || empty( $list['name'] ) ) {
+							// Mirror the validation in Subscription_Lists::get_or_create_remote_list():
+							// it throws on a blank title rather than returning a WP_Error, and the
+							// outer catch would turn that into a WP_Error for the whole payload. It
+							// also accepts a title of "0", which `empty()` would reject.
+							if ( ! isset( $list['id'], $list['name'] ) || empty( $list['id'] ) || ! is_string( $list['name'] ) || '' === trim( $list['name'] ) ) {
 								return;
 							}
 
