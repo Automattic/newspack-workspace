@@ -32,7 +32,7 @@ class Legacy_Payment extends Contact_Metadata {
 	 * @return string
 	 */
 	public static function get_section_name() {
-		return ''; // Legacy fields are not separated into sections.
+		return __( 'Legacy', 'newspack-plugin' );
 	}
 
 	/**
