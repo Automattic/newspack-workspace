@@ -130,10 +130,10 @@ class Teams_Migration {
 	 * : Only process teams that have no linked subscription. Use to safely re-run the command for previously skipped teams.
 	 *
 	 * [--migrate-invitations]
-	 * : Also carry each team's pending (unaccepted) WooCommerce Teams invitations over as group-subscription invites, which SENDS an invitation email to every pending invitee. Off by default because it emails readers; the pending invitees are always listed at the end of the run regardless of this flag. In dry-run mode nothing is sent, but the flag still shapes the rehearsal: per-invitee outcomes and recipient accounting preview what a live run would send, and any dry run with pending invitees warns when the invitation email is not sendable. The run asks for confirmation before the first email goes out, and aborts up front if the invitation email is not sendable on this site while there is something to send. Re-running is safe while the invites it wrote are still live (30 days by default) — an invitee whose invite has lapsed is invited again, and those are reported separately. To recover an invitee reported as FAILED: fix the cause and re-run — or cancel the reader's pending invitation from the group subscription's panel on the WooCommerce subscription screen and re-invite from there. That manual cancel is also the escape hatch for a stored invite the automatic rollback could not remove.
+	 * : Also carry each team's pending (unaccepted) WooCommerce Teams invitations over as group-subscription invites, which SENDS an invitation email to every pending invitee. Off by default because it emails readers; the pending invitees are always listed at the end of the run regardless of this flag. In dry-run mode nothing is sent, but the flag still shapes the rehearsal: per-invitee outcomes preview a live run's already-invited skips, lapsed re-sends (labelled as the second email they would be), and existing-member/non-reader rejections, and any dry run with pending invitees warns when the invitation email is not sendable. The preview stops short of live-only checks: the seat limit, inactive-group guards, and --limit apply on the live run only, and a team with no existing subscription to reuse gets no per-invitee preview. The run asks for confirmation before the first email goes out, and aborts up front if the invitation email is not sendable on this site while there is something to send. Re-running is safe while the invites it wrote are still live (30 days by default) — an invitee whose invite has lapsed is invited again, and those are reported separately. To recover an invitee reported as FAILED: fix the cause and re-run — or cancel the reader's pending invitation from the group subscription's panel on the WooCommerce subscription screen and re-invite from there. That manual cancel is also the escape hatch for a stored invite the automatic rollback could not remove.
 	 *
 	 * [--limit=<n>]
-	 * : With --migrate-invitations --live, cap how many invitation emails this run sends. Invitees beyond the cap stay listed with a re-run note, and the already-invited gate makes the next run resume where this one stopped — use it to drain a large site in operator-sized batches instead of one long burst. No effect on dry runs or without --migrate-invitations.
+	 * : With --migrate-invitations --live, cap how many send attempts (delivered or failed) this run makes — failures count because each one still hits the mail relay and costs a write/rollback cycle. Must be a positive integer; any other value aborts the run rather than silently dropping the cap. Invitees beyond the cap stay listed with a re-run note, and the already-invited gate makes the next run resume where this one stopped — use it to drain a large site in operator-sized batches instead of one long burst. Not applied to dry-run previews; no effect without --migrate-invitations.
 	 *
 	 * [--yes]
 	 * : Skip the confirmation prompt shown before invitation emails are sent. Auto-handled by WP_CLI::confirm.
@@ -158,7 +158,14 @@ class Teams_Migration {
 		$skip_unlinked       = (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'skip-unlinked', false );
 		$only_unlinked       = (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'only-unlinked', false );
 		$migrate_invitations = (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'migrate-invitations', false );
-		$send_limit          = max( 0, (int) \WP_CLI\Utils\get_flag_value( $assoc_args, 'limit', 0 ) ); // 0 = no cap.
+		// A present-but-invalid --limit must abort, never silently become "no cap":
+		// the scripted shape --limit=$BATCH --yes --live with an unset variable
+		// would otherwise run the full burst with the confirm prompt (the only
+		// disclosure of the true count) suppressed by --yes.
+		$send_limit = self::validate_send_limit( \WP_CLI\Utils\get_flag_value( $assoc_args, 'limit', null ) );
+		if ( \is_wp_error( $send_limit ) ) {
+			WP_CLI::error( $send_limit->get_error_message() );
+		}
 
 		// Sending is gated behind the opt-in flag and never happens in a dry-run — but
 		// the pending-invitation list is always reported (below) so the data is never
@@ -529,20 +536,22 @@ class Teams_Migration {
 			// which would take every summary table below down with it.
 			$team_emails                       = $pending_invitations[ $team_id ] ?? [];
 			$invitation_teams_seen[ $team_id ] = true;
-			// Hand each team the remainder of --limit's budget; $invites_sent
-			// accumulates across teams, so the cap holds run-wide.
-			$sends_remaining = ( $send_invitations && $send_limit > 0 ) ? max( 0, $send_limit - $invites_sent ) : null;
+			// Hand each team the remainder of --limit's budget. Sent AND failed
+			// counts accumulate across teams — both are relay attempts — so the
+			// cap holds run-wide.
+			$attempts_remaining = ( $send_invitations && $send_limit > 0 ) ? max( 0, $send_limit - $invites_sent - $invites_failed ) : null;
 			try {
-				$invitation_result = self::migrate_team_invitations( $subscription, $team_id, $send_invitations, $team_emails, $sends_remaining );
+				$invitation_result = self::migrate_team_invitations( $subscription, $team_id, $send_invitations, $team_emails, $attempts_remaining );
 			} catch ( \Throwable $e ) {
 				$errors[]          = sprintf( 'invitations: %s', $e->getMessage() );
 				$invitation_result = [
-					'emails'  => $team_emails,
-					'sent'    => [],
-					'resent'  => [],
-					'skipped' => [],
-					'failed'  => [],
-					'errored' => true,
+					'emails'       => $team_emails,
+					'sent'         => [],
+					'resent'       => [],
+					'skipped'      => [],
+					'failed'       => [],
+					'would_resend' => [],
+					'errored'      => true,
 				];
 			}
 			$invites_sent    += count( $invitation_result['sent'] );
@@ -553,29 +562,11 @@ class Teams_Migration {
 				$invite_skip_reasons[ $skip_reason ] = ( $invite_skip_reasons[ $skip_reason ] ?? 0 ) + 1;
 			}
 			foreach ( $invitation_result['emails'] as $invitee_email ) {
-				if ( in_array( $invitee_email, $invitation_result['resent'], true ) ) {
-					$outcome = 'invite sent (earlier invite had lapsed)';
-				} elseif ( in_array( $invitee_email, $invitation_result['sent'], true ) ) {
-					$outcome = 'invite sent';
-				} elseif ( isset( $invitation_result['skipped'][ $invitee_email ] ) ) {
-					$outcome = 'skipped — ' . $invitation_result['skipped'][ $invitee_email ];
-				} elseif ( isset( $invitation_result['failed'][ $invitee_email ] ) ) {
-					$outcome = 'FAILED — ' . $invitation_result['failed'][ $invitee_email ];
-				} elseif ( ! empty( $invitation_result['errored'] ) ) {
-					// A team-level error must not fall through to the dry-run label on a
-					// live run: the audit table an operator keeps as the record of the
-					// run would describe a rehearsal where an error happened.
-					$outcome = 'not attempted (team error — see errors above)';
-				} elseif ( ! $migrate_invitations ) {
-					$outcome = 'not sent (pass --migrate-invitations to send)';
-				} else {
-					$outcome = 'would send (dry run)';
-				}
 				$invitation_rows[] = [
 					'team_id' => $team_id,
 					'sub'     => $subscription_id,
 					'invitee' => $invitee_email,
-					'outcome' => $outcome,
+					'outcome' => self::invitation_outcome_label( $invitation_result, $invitee_email, $migrate_invitations ),
 				];
 			}
 			if ( ! empty( $invitation_result['failed'] ) ) {
@@ -695,7 +686,7 @@ class Teams_Migration {
 			// contradict the table it sits under.
 			$would_send = $dry_run && $migrate_invitations;
 			$sent_count = $would_send
-				? count( array_filter( $invitation_rows, fn( $row ) => 'would send (dry run)' === $row['outcome'] ) )
+				? count( array_filter( $invitation_rows, fn( $row ) => in_array( $row['outcome'], [ 'would send (dry run)', 'would send again — earlier invite lapsed (dry run)' ], true ) ) )
 				: $invites_sent;
 			WP_CLI::success(
 				sprintf(
@@ -1775,8 +1766,12 @@ class Teams_Migration {
 	 * live run reports the already-invited readers as skipped rather than everyone as
 	 * still waiting — the rehearsal previews what a live run would actually send. The
 	 * rehearsal also applies generate_invite()'s cheap, side-effect-free rejections
-	 * (existing member, non-reader account) with the live run's wording, so per-invitee
-	 * outcomes match a live run for every reason except the seat limit.
+	 * (existing member, non-reader account) with the live run's wording, and labels a
+	 * lapsed invitee's re-send as the second email it would be. The preview's limits,
+	 * deliberately: the seat limit and generate_invite()'s subscription-state guards
+	 * (an inactive group) are checked live only, --limit's budget is not rehearsed,
+	 * and a team with no subscription to reuse returns above before any per-invitee
+	 * preview.
 	 *
 	 * Addresses are compared case-insensitively but invited in their original casing:
 	 * the acceptance handler compares the invite address strictly against the reader's
@@ -1787,27 +1782,32 @@ class Teams_Migration {
 	 * @param int                   $team_id      The team post ID.
 	 * @param bool                  $send         Whether to actually create and send invites.
 	 * @param string[]|null         $emails       Pre-read pending invitee emails; read from the team when null.
-	 * @param int|null              $max_sends    Cap on how many invites this call may email (null = no cap).
-	 *                                            Invitees beyond the cap are skipped with a re-run note; the
-	 *                                            already-invited gate makes the follow-up run resume where
-	 *                                            this one stopped. Carries the remainder of --limit's budget.
+	 * @param int|null              $max_attempts Cap on how many send attempts (delivered + failed) this call
+	 *                                            may make (null = no cap). Failures count because each one is
+	 *                                            a relay attempt plus a write/rollback cycle — the load the
+	 *                                            cap exists to bound. Invitees beyond the cap are skipped with
+	 *                                            a re-run note; the already-invited gate makes the follow-up
+	 *                                            run resume where this one stopped. Carries the remainder of
+	 *                                            --limit's budget.
 	 *
 	 * @return array {
-	 *     @type string[]              $emails  Pending invitee emails for the team.
-	 *     @type string[]              $sent    Emails an invite was created and emailed for.
-	 *     @type string[]              $resent  Subset of $sent that was invited again because an earlier invite had lapsed.
-	 *     @type array<string, string> $skipped Email => skip reason for invitees that were not sent.
-	 *     @type array<string, string> $failed  Email => failure reason for invitees whose invite could not be delivered.
+	 *     @type string[]              $emails       Pending invitee emails for the team.
+	 *     @type string[]              $sent         Emails an invite was created and emailed for.
+	 *     @type string[]              $resent       Subset of $sent that was invited again because an earlier invite had lapsed.
+	 *     @type array<string, string> $skipped      Email => skip reason for invitees that were not sent.
+	 *     @type array<string, string> $failed       Email => failure reason for invitees whose invite could not be delivered.
+	 *     @type string[]              $would_resend Rehearsal only: invitees whose lapsed invite a live run would re-send (a second email to that reader).
 	 * }
 	 */
-	public static function migrate_team_invitations( $subscription, $team_id, $send, $emails = null, $max_sends = null ) {
+	public static function migrate_team_invitations( $subscription, $team_id, $send, $emails = null, $max_attempts = null ) {
 		$emails = null === $emails ? self::get_pending_team_invitation_emails( $team_id ) : $emails;
 		$result = [
-			'emails'  => $emails,
-			'sent'    => [],
-			'resent'  => [],
-			'skipped' => [],
-			'failed'  => [],
+			'emails'       => $emails,
+			'sent'         => [],
+			'resent'       => [],
+			'skipped'      => [],
+			'failed'       => [],
+			'would_resend' => [],
 		];
 
 		if ( ! $subscription ) {
@@ -1854,12 +1854,22 @@ class Teams_Migration {
 					$result['skipped'][ $email ] = __( 'User is already a member of this group subscription.', 'newspack-plugin' );
 					continue;
 				}
+				if ( isset( $lapsed_invites[ $key ] ) ) {
+					// A lapsed invitee would be emailed a SECOND time by a live run —
+					// the one preview gap that under-warns if labelled as a plain
+					// send, since the double-email warning only fires on real sends.
+					$result['would_resend'][] = $email;
+				}
 				continue;
 			}
-			if ( null !== $max_sends && count( $result['sent'] ) >= $max_sends ) {
+			if ( null !== $max_attempts && count( $result['sent'] ) + count( $result['failed'] ) >= $max_attempts ) {
 				// The --limit budget for this run is spent: keep the invitee listed
 				// with an actionable reason instead of a send. The already-invited
-				// gate makes the follow-up run resume exactly here.
+				// gate makes the follow-up run resume exactly here. Failed attempts
+				// consume the budget too — each failure is a relay attempt plus a
+				// write/rollback cycle (two subscription saves), which is exactly
+				// the load the cap exists to bound; counting only successes would
+				// let a struggling relay turn --limit=100 into unbounded attempts.
 				$result['skipped'][ $email ] = __( 'Not sent this run (--limit reached); re-run to send.', 'newspack-plugin' );
 				continue;
 			}
@@ -2790,6 +2800,83 @@ class Teams_Migration {
 			}
 		}
 		return array_values( array_unique( $bare_flags ) );
+	}
+
+	/**
+	 * Label one invitee's outcome for the re-invite table.
+	 *
+	 * Pure, so every branch is pinned by tests: the audit table's wording is the
+	 * operator's record of the run, and mislabels here — a live run's rows wearing
+	 * a dry-run label — have repeatedly been review blockers. Branch order is
+	 * load-bearing in two places: `errored` must outrank the dry-run fallbacks so
+	 * a team-level error on a live run never reads as a rehearsal, and the
+	 * would-resend rehearsal label must rank BELOW `! $migrate_invitations` so a
+	 * flagless run's lapsed invitee reads "not sent (pass --migrate-invitations to
+	 * send)" — consistent with the table's own header — rather than claiming a
+	 * rehearsal happened. Exposed for testing.
+	 *
+	 * @param array  $invitation_result   A migrate_team_invitations() result (see its return shape).
+	 * @param string $invitee_email       The invitee to label.
+	 * @param bool   $migrate_invitations Whether --migrate-invitations was passed.
+	 *
+	 * @return string The outcome-column label.
+	 */
+	public static function invitation_outcome_label( $invitation_result, $invitee_email, $migrate_invitations ) {
+		if ( in_array( $invitee_email, $invitation_result['resent'], true ) ) {
+			return 'invite sent (earlier invite had lapsed)';
+		}
+		if ( in_array( $invitee_email, $invitation_result['sent'], true ) ) {
+			return 'invite sent';
+		}
+		if ( isset( $invitation_result['skipped'][ $invitee_email ] ) ) {
+			return 'skipped — ' . $invitation_result['skipped'][ $invitee_email ];
+		}
+		if ( isset( $invitation_result['failed'][ $invitee_email ] ) ) {
+			return 'FAILED — ' . $invitation_result['failed'][ $invitee_email ];
+		}
+		if ( ! empty( $invitation_result['errored'] ) ) {
+			return 'not attempted (team error — see errors above)';
+		}
+		if ( ! $migrate_invitations ) {
+			return 'not sent (pass --migrate-invitations to send)';
+		}
+		if ( in_array( $invitee_email, $invitation_result['would_resend'] ?? [], true ) ) {
+			// The rehearsal twin of 'invite sent (earlier invite had lapsed)':
+			// this reader would be emailed a second time by a live run.
+			return 'would send again — earlier invite lapsed (dry run)';
+		}
+		return 'would send (dry run)';
+	}
+
+	/**
+	 * Validate the --limit flag's raw value into a send-attempt cap.
+	 *
+	 * Strict on the same principle as parse_user_ids(): a present-but-malformed
+	 * value fails the run rather than silently degrading. `max( 0, (int) $raw )`
+	 * would collapse `--limit=` (an unset shell variable), `--limit=abc`,
+	 * `--limit=0`, and `--limit=-5` into the no-cap sentinel — turning the one
+	 * flag an operator passes to keep an email burst small into an unlimited
+	 * burst, with the disclosing confirm prompt suppressed by --yes in exactly
+	 * the scripted runs where the mistake happens. A bare `--limit` (boolean
+	 * true from WP-CLI) is malformed too. Exposed for testing.
+	 *
+	 * @param mixed $raw The flag value from get_flag_value(), or null when the flag was not passed.
+	 *
+	 * @return int|\WP_Error 0 when the flag was not passed (no cap), the positive
+	 *                       integer cap otherwise, or a WP_Error for any present
+	 *                       value that is not a positive integer.
+	 */
+	public static function validate_send_limit( $raw ) {
+		if ( null === $raw ) {
+			return 0;
+		}
+		if ( ! is_numeric( $raw ) || (int) $raw != $raw || (int) $raw < 1 ) { // phpcs:ignore Universal.Operators.StrictComparisons.LooseNotEqual -- Deliberate: rejects non-integer numerics ("5.5") while accepting integer strings ("5").
+			return new \WP_Error(
+				'newspack_migrate_teams_invalid_limit',
+				sprintf( '--limit expects a positive integer, got "%s". Refusing to run without the cap you asked for: fix the value (or drop the flag to send with no cap).', is_bool( $raw ) ? '(bare --limit)' : ( is_scalar( $raw ) ? (string) $raw : gettype( $raw ) ) )
+			);
+		}
+		return (int) $raw;
 	}
 
 	/**
