@@ -147,11 +147,12 @@ class Newspack_Test_WC_Subscriptions_Add_Payment extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Attaching a card to a subscription with no next payment date schedules one,
-	 * which is what resumes auto-renewal.
+	 * Attaching a card to an active subscription with no next payment date
+	 * schedules one, which is what resumes auto-renewal and, for a subscription
+	 * with no orders, unlocks WCS's early renewal as a self-serve way to pay.
 	 */
 	public function test_sets_a_next_payment_date_once_a_card_is_attached() {
-		$subscription = $this->make_subscription();
+		$subscription = $this->make_subscription( [ 'status' => 'active' ] );
 
 		WooCommerce_Subscriptions::schedule_next_payment_after_payment_method_added( $subscription, 'stripe', '' );
 
@@ -166,14 +167,34 @@ class Newspack_Test_WC_Subscriptions_Add_Payment extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Statuses where WooCommerce sets the date itself when the outstanding order
+	 * is paid. Writing one here would grant a billing period nobody paid for, and
+	 * would withdraw the "Add payment method" action while the reader still has
+	 * no way to pay.
+	 */
+	public function test_does_not_schedule_for_statuses_where_payment_sets_the_date() {
+		foreach ( [ 'pending', 'on-hold', 'pending-cancel' ] as $status ) {
+			$subscription = $this->make_subscription( [ 'status' => $status ] );
+
+			WooCommerce_Subscriptions::schedule_next_payment_after_payment_method_added( $subscription, 'stripe', '' );
+
+			$this->assertEmpty(
+				$subscription->get_date( 'next_payment' ),
+				sprintf( 'Expected no next payment date to be written for a "%s" subscription.', $status )
+			);
+		}
+	}
+
+	/**
 	 * An already-scheduled next payment is never rewritten.
 	 */
 	public function test_does_not_reschedule_an_existing_next_payment() {
 		$existing     = gmdate( 'Y-m-d H:i:s', strtotime( '+30 days' ) );
 		$subscription = $this->make_subscription(
 			[
-				'times' => [ 'next_payment' => strtotime( '+30 days' ) ],
-				'dates' => [
+				'status' => 'active',
+				'times'  => [ 'next_payment' => strtotime( '+30 days' ) ],
+				'dates'  => [
 					'start'        => gmdate( 'Y-m-d H:i:s', strtotime( '-2 days' ) ),
 					'next_payment' => $existing,
 				],
@@ -189,7 +210,7 @@ class Newspack_Test_WC_Subscriptions_Add_Payment extends WP_UnitTestCase {
 	 * No gateway attached means nothing to schedule against.
 	 */
 	public function test_does_not_schedule_when_no_payment_method_was_attached() {
-		$subscription = $this->make_subscription();
+		$subscription = $this->make_subscription( [ 'status' => 'active' ] );
 
 		WooCommerce_Subscriptions::schedule_next_payment_after_payment_method_added( $subscription, '', '' );
 

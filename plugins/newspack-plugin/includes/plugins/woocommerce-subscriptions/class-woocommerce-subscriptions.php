@@ -421,18 +421,34 @@ class WooCommerce_Subscriptions {
 	 * Schedule the next payment once a card is attached to a subscription that
 	 * had none.
 	 *
-	 * The other half of {@see allow_add_payment_method_without_next_payment()}.
-	 * Eligibility alone would leave the reader with a card on file and still no
-	 * billing: the subscription reached this state precisely because nothing was
-	 * ever scheduled, and WCS only recalculates the date when a payment
-	 * completes. Calculating it here is what turns "card added" into "renewals
-	 * resume".
+	 * The other half of {@see allow_add_payment_method_without_next_payment()},
+	 * and deliberately narrower than it. Eligibility opens the form for four
+	 * statuses; only `active` gets a date written here.
+	 *
+	 * An active subscription with no next payment date is already giving the
+	 * reader access with nothing scheduled to bill, so calculating the date is
+	 * what turns "card added" into "renewals resume" — and it is also what makes
+	 * WCS's early renewal available, since `wcs_can_user_renew_early()` refuses
+	 * on `subscription_no_next_payment`. That matters for a hand-made
+	 * subscription with no orders at all, where early renewal is the reader's
+	 * only self-serve route to paying.
+	 *
+	 * The other statuses are left to WooCommerce, which already handles them
+	 * correctly: paying the pending or failed order is what activates the
+	 * subscription and sets its date. Writing a date for them would be wrong
+	 * twice over — it hands the reader a billing period they never paid for, and
+	 * it withdraws the "Add payment method" action (this pair steps back once a
+	 * date exists, while WCS's own rule still refuses a non-active subscription),
+	 * leaving them with a card on file and no way back to the form.
 	 *
 	 * `calculate_date( 'next_payment' )` derives the date from the last payment
 	 * or the start date plus one billing period, keeps it far enough in the
 	 * future to survive a daylight-saving shift, and returns `0` when the next
 	 * period would fall past the subscription's end date. A `0` is respected:
 	 * a subscription winding down to a fixed end has nothing further to bill.
+	 * A `pending-cancel` subscription therefore stays untouched even though it
+	 * is eligible for the form; resuming its auto-renewal means clearing the
+	 * cancelled and end dates, which is a separate change.
 	 *
 	 * @param \WC_Subscription $subscription       The subscription that was updated.
 	 * @param string           $new_payment_method The gateway ID now attached.
@@ -458,7 +474,9 @@ class WooCommerce_Subscriptions {
 			return;
 		}
 
-		if ( ! $subscription->has_status( [ 'pending', 'on-hold', 'active', 'pending-cancel' ] ) ) {
+		// Active only. See the note above on why the other eligible statuses are
+		// left to WooCommerce's own payment-completes-then-schedules flow.
+		if ( ! $subscription->has_status( 'active' ) ) {
 			return;
 		}
 
