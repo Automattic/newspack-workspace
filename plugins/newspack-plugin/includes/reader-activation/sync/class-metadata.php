@@ -388,9 +388,16 @@ class Metadata {
 	 * Get the list of possible fields to be synced, grouped by section.
 	 *
 	 * Returns an array of groups, each with a 'section' label and 'fields' array.
-	 * Only includes classes with a section name — the legacy classes declare
-	 * none, so their fields land in "Additional" alongside filter-added ones
-	 * that belong to no class.
+	 * Every class with a section name gets its own group — including the
+	 * legacy classes, which both declare "Legacy" — and filter-added fields
+	 * that belong to no class land in "Additional".
+	 *
+	 * A group renders last when every one of its fields carries 'legacy'
+	 * status in the field registry (Legacy_Basic and Legacy_Payment always
+	 * do), so the Legacy group(s) sink below "Additional" while every other
+	 * group keeps its class-map order. The check reads registry status rather
+	 * than comparing against the translated section label, so it keeps
+	 * working regardless of that label's copy or locale.
 	 *
 	 * A class's labels are read out of the filtered map by the class's own raw
 	 * keys, so `newspack_ras_metadata_keys` removals and renames are respected
@@ -400,13 +407,16 @@ class Metadata {
 	 *
 	 * @return array<int, array{section: string, fields: list<string>}> List of
 	 *   groups, each with a non-empty section label and an ordered list of field
-	 *   names. May be filtered by `newspack_ras_grouped_metadata_fields`.
+	 *   names, all-legacy groups sorted last. May be filtered by
+	 *   `newspack_ras_grouped_metadata_fields`.
 	 */
 	public static function get_grouped_default_fields(): array {
 		$classes          = self::get_metadata_classes();
 		$label_map        = self::get_all_fields( true );
 		$available_fields = array_values( array_unique( array_values( $label_map ) ) );
-		$groups           = [];
+		$status_by_class  = self::get_status_by_class_and_raw_key();
+		$primary_groups   = [];
+		$legacy_groups    = [];
 		$grouped_fields   = [];
 
 		foreach ( $classes as $class ) {
@@ -416,10 +426,14 @@ class Metadata {
 					continue;
 				}
 
-				$fields = [];
+				$fields     = [];
+				$all_legacy = true;
 				foreach ( array_keys( $class::get_fields() ) as $raw_key ) {
 					if ( isset( $label_map[ $raw_key ] ) ) {
 						$fields[] = $label_map[ $raw_key ];
+						if ( 'legacy' !== ( $status_by_class[ $class ][ $raw_key ] ?? null ) ) {
+							$all_legacy = false;
+						}
 					}
 				}
 				$fields = array_values( array_unique( $fields ) );
@@ -428,21 +442,28 @@ class Metadata {
 					continue;
 				}
 
-				$groups[]       = [
+				$group = [
 					'section' => $section,
 					'fields'  => $fields,
 				];
+				if ( $all_legacy ) {
+					$legacy_groups[] = $group;
+				} else {
+					$primary_groups[] = $group;
+				}
 				$grouped_fields = array_merge( $grouped_fields, $fields );
 			}
 		}
 
 		$ungrouped_fields = array_values( array_diff( $available_fields, array_unique( $grouped_fields ) ) );
 		if ( ! empty( $ungrouped_fields ) ) {
-			$groups[] = [
+			$primary_groups[] = [
 				'section' => __( 'Additional', 'newspack-plugin' ),
 				'fields'  => $ungrouped_fields,
 			];
 		}
+
+		$groups = array_merge( $primary_groups, $legacy_groups );
 
 		/**
 		 * Filters the list of possible metadata fields to be synced, grouped by section.
@@ -451,6 +472,28 @@ class Metadata {
 		 * @param string[] $available_fields Flat list of filtered available metadata field names.
 		 */
 		return \apply_filters( 'newspack_ras_grouped_metadata_fields', $groups, $available_fields );
+	}
+
+	/**
+	 * Map of metadata class => raw key => field status, sourced from the field
+	 * registry.
+	 *
+	 * Backs the all-legacy group check in get_grouped_default_fields(): reading
+	 * the registry's `status` keeps that check aligned with the same signal
+	 * that drives the per-row sunset rule and (pre-removal) the per-row Legacy
+	 * badge in the settings UI, rather than re-deriving legacy-ness from a
+	 * class's own translated section label.
+	 *
+	 * @return array<string, array<string, string|null>>
+	 */
+	private static function get_status_by_class_and_raw_key() {
+		$map = [];
+		foreach ( Field_Registry::get_definitions() as $definition ) {
+			if ( null !== $definition['class'] ) {
+				$map[ $definition['class'] ][ $definition['raw_key'] ] = $definition['status'] ?? null;
+			}
+		}
+		return $map;
 	}
 
 	/**
