@@ -108,15 +108,22 @@ class Teams_Migration {
 	 * subscriptions in place rather than creating duplicates. Reuse keys on the
 	 * source team, so an owner who owns several teams migrates to one group
 	 * subscription per team rather than a single merged group. When --product-id is
-	 * supplied, every re-used subscription has its line items replaced with the
+	 * supplied, every re-used $0 subscription has its line items replaced with the
 	 * migration product.
+	 *
+	 * A team whose linked subscription is one the publisher actually bills is
+	 * migrated in place: it gains the group settings and keeps its own product,
+	 * price, taxes and billing schedule. Forcing a subscription to $0 is only
+	 * correct where the access being carried over was free in Memberships. Such a
+	 * team is skipped when no published gate accepts its product, since granting
+	 * access would otherwise mean rewriting what the publisher charges.
 	 *
 	 * Dry-run by default; pass --live to write.
 	 *
 	 * ## OPTIONS
 	 *
 	 * [--product-id=<id>]
-	 * : Product to assign to newly-created subscriptions. Accepts a product ID or a variation ID — pass the variation when a publisher sells seat tiers as variations of one variable subscription product. Must be published and accepted by a published gate's "Active subscription" rule. When supplied, also overwrites the product on any existing subscription that is re-used. Required unless --skip-unlinked is passed.
+	 * : Product to assign to newly-created subscriptions. Accepts a product ID or a variation ID — pass the variation when a publisher sells seat tiers as variations of one variable subscription product. Must be published and accepted by a published gate's "Active subscription" rule. Also re-aligns any re-used $0 subscription onto this product; a re-used subscription the team pays for keeps its own product, price, taxes and billing schedule. Required unless --skip-unlinked is passed.
 	 *
 	 * [--live]
 	 * : Apply the changes. Without this flag the command runs as a dry-run and writes nothing.
@@ -154,9 +161,10 @@ class Teams_Migration {
 			WP_CLI::error( 'WooCommerce Subscriptions is not active. Aborting.' );
 		}
 
-		$migration_product = $product_id ? \wc_get_product( $product_id ) : null;
-		$billing_period    = 'month';
-		$billing_interval  = 1;
+		$migration_product  = $product_id ? \wc_get_product( $product_id ) : null;
+		$billing_period     = 'month';
+		$billing_interval   = 1;
+		$access_product_ids = [];
 		if ( $product_id && ! $migration_product ) {
 			WP_CLI::error( sprintf( 'Product ID %d not found. Aborting.', $product_id ) );
 		}
@@ -403,6 +411,35 @@ class Teams_Migration {
 				$sub_owner_id    = (int) $subscription->get_user_id();
 			}
 
+			// A migration converts free Memberships access into a $0 subscription. A
+			// team that pays for its seats is a different case: the publisher still
+			// sells that subscription, so it keeps its product, price, taxes and
+			// billing schedule and gains only the group settings. Keyed on the
+			// recurring total rather than provenance so it holds for groups created
+			// by older migrator runs too — those are $0 and stay re-alignable.
+			$reused_is_paid = ! $created_new && (float) $subscription->get_total() > 0;
+
+			// Access for a paid team therefore rests on its own product, since we no
+			// longer swap in --product-id. If no published gate accepts that product
+			// the migration cannot grant access without rewriting what the publisher
+			// charges — so leave the team untouched and let the operator decide,
+			// rather than silently converting a paying subscription to $0.
+			if ( $reused_is_paid && ! empty( $access_product_ids ) && ! self::subscription_covers_access_products( $subscription, $access_product_ids ) ) {
+				$errors[]  = sprintf( 'subscription %d is a paid subscription whose product no published gate accepts (%s) — migrating it would either grant no access or rewrite what the publisher charges', $subscription->get_id(), implode( ', ', $access_product_ids ) );
+				$summary[] = self::summary_row( $team_id, 'ERROR', 0, 0, $group_limit, false, $errors );
+				WP_CLI::warning(
+					sprintf(
+						'Team %d ("%s"): linked subscription %d is a paid subscription (%s) whose product no published gate accepts — skipping so the migration does not zero out what the publisher bills. Add its product to a gate\'s "Active subscription" rule, then re-run.',
+						$team_id,
+						$team->post_title,
+						$subscription->get_id(),
+						\wc_price( $subscription->get_total() )
+					)
+				);
+				\WP_CLI\Utils\wp_clear_object_cache();
+				continue;
+			}
+
 			// Enable the group and set its name up front. The seat limit is deferred
 			// until after members are added (below) so update_members()' limit gate
 			// can't reject existing team members mid-migration — a new subscription
@@ -419,10 +456,13 @@ class Teams_Migration {
 				$subscription->save();
 			}
 
-			// When re-using an existing subscription with --product-id, overwrite its
-			// line items with the migration product so re-running aligns every
-			// subscription with the product passed via --product-id.
-			if ( ! $created_new && $migration_product && ! $dry_run ) {
+			// When re-using a $0 subscription with --product-id, overwrite its line
+			// items with the migration product so re-running aligns every migrated
+			// subscription with the product passed via --product-id. Paid
+			// subscriptions are exempt: rewriting their line items would replace what
+			// the publisher sells with a $0 product and overwrite the billing
+			// schedule (see $reused_is_paid above).
+			if ( ! $created_new && ! $reused_is_paid && $migration_product && ! $dry_run ) {
 				self::replace_subscription_product( $subscription, $migration_product, $billing_period, $billing_interval, $start_date, $end_date, $errors, $team_id );
 			}
 

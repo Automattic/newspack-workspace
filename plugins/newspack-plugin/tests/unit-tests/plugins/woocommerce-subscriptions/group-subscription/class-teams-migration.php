@@ -1123,6 +1123,47 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Gate coverage for a paid team's own subscription follows has_product().
+	 *
+	 * A team the publisher bills keeps its own product rather than being rewritten
+	 * onto --product-id, so whether its access survives the migration is decided
+	 * by whether a gate accepts the product it already holds. A subscription
+	 * linked to a seat-tier variation is covered by a gate naming either that
+	 * variation or its parent.
+	 */
+	public function test_subscription_covers_access_products_matches_parent_or_variation() {
+		$owner        = $this->create_reader();
+		$products     = $this->create_variable_subscription_product();
+		$subscription = wcs_create_subscription(
+			[
+				'customer_id'    => $owner,
+				'status'         => 'active',
+				'billing_period' => 'month',
+			]
+		);
+		$item = new WC_Order_Item_Product();
+		$item->set_product( $products['variation'] );
+		$subscription->add_item( $item );
+
+		$this->assertTrue(
+			$this->invoke_private( 'subscription_covers_access_products', [ $subscription, [ 109742 ] ] ),
+			'A gate naming the parent product covers a subscription linked to one of its variations.'
+		);
+		$this->assertTrue(
+			$this->invoke_private( 'subscription_covers_access_products', [ $subscription, [ 109751 ] ] ),
+			'A gate naming the variation covers it.'
+		);
+		$this->assertFalse(
+			$this->invoke_private( 'subscription_covers_access_products', [ $subscription, [ 109999 ] ] ),
+			'A gate naming an unrelated product covers nothing — this is what makes a paid team skip rather than migrate.'
+		);
+		$this->assertTrue(
+			$this->invoke_private( 'subscription_covers_access_products', [ $subscription, [] ] ),
+			'With no gate products configured there is nothing to check against.'
+		);
+	}
+
+	/**
 	 * A plain (non-variation) product still links as before.
 	 */
 	public function test_create_migration_subscription_links_a_simple_product() {
