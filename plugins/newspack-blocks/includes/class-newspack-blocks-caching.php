@@ -253,9 +253,9 @@ class Newspack_Blocks_Caching {
 		}
 
 		if ( 'newspack-blocks/homepage-articles' === $block_data['blockName'] ) {
-			Newspack_Blocks::enqueue_view_assets( 'homepage-articles' );
+			Newspack_Blocks::enqueue_view_assets( 'homepage-articles', 'defer' );
 		} elseif ( 'newspack-blocks/carousel' === $block_data['blockName'] ) {
-			Newspack_Blocks::enqueue_view_assets( 'carousel' );
+			Newspack_Blocks::enqueue_view_assets( 'carousel', 'defer' );
 		}
 
 		return $cached_data['cached_content'];

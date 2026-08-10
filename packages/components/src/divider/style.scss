@@ -34,7 +34,7 @@
 	// Variant
 
 	&--variant-default {
-		background-color: wp-colors.$gray-300;
+		background-color: var( --wpds-color-stroke-surface-neutral, #{wp-colors.$gray-300} );
 	}
 
 	&--variant-primary {

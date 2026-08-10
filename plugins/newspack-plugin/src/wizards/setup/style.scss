@@ -16,6 +16,12 @@
 	}
 }
 
+.newspack-setup-completed__card {
+	display: flex;
+	flex-direction: column;
+	justify-content: space-between;
+}
+
 // Welcome Screen
 
 .newspack-wizard__welcome {

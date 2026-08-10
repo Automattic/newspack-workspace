@@ -42,27 +42,17 @@ if ( ! $checkout->is_registration_enabled() && $checkout->is_registration_requir
 			?>
 			<div class="order-review-wrapper hidden">
 				<?php do_action( 'woocommerce_checkout_before_order_review_heading' ); ?>
-				<button id="order_review_heading" aria-expanded="false" aria-controls="order_review_content" class="newspack-ui__button newspack-ui__button--ghost" type="button">
-					<?php esc_html_e( 'Transaction details', 'newspack-blocks' ); ?>
-					<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-						<path d="M15.9899 10.8888L12.0018 14.3071L8.01368 10.8888L8.98986 9.74988L12.0018 12.3315L15.0137 9.74988L15.9899 10.8888Z"/>
-					</svg>
-				</button>
-				<div class="transaction-details-content">
-					<div class="transaction-details-content-inner" id="order_review_content">
-						<?php do_action( 'woocommerce_checkout_before_order_review' ); ?>
-						<div id="order_review" class="woocommerce-checkout-review-order newspack-ui__box">
-							<?php
-							if ( wp_is_block_theme() && function_exists( 'woocommerce_order_review' ) ) {
-								woocommerce_order_review();
-							} else {
-								do_action( 'woocommerce_checkout_order_review' );
-							}
-							?>
-						</div>
-						<?php do_action( 'woocommerce_checkout_after_order_review' ); ?>
-					</div>
+				<?php do_action( 'woocommerce_checkout_before_order_review' ); ?>
+				<div id="order_review" class="woocommerce-checkout-review-order newspack-ui__box">
+					<?php
+					if ( wp_is_block_theme() && function_exists( 'woocommerce_order_review' ) ) {
+						woocommerce_order_review();
+					} else {
+						do_action( 'woocommerce_checkout_order_review' );
+					}
+					?>
 				</div>
+				<?php do_action( 'woocommerce_checkout_after_order_review' ); ?>
 			</div>
 			<?php do_action( 'woocommerce_checkout_after_customer_details' ); ?>
 			<button class="newspack-ui__button newspack-ui__button--secondary newspack-ui__button--wide" id="checkout_edit_billing" type="button"><?php echo esc_html( Modal_Checkout::get_modal_checkout_labels( 'checkout_edit_billing' ) ); ?></button>

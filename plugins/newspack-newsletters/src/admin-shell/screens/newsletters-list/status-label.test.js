@@ -20,4 +20,18 @@ describe( 'status-label', () => {
 		expect( statusKindLabel( 'unknown' ) ).toBe( 'Draft' );
 		expect( statusKindLabel( '' ) ).toBe( 'Draft' );
 	} );
+
+	it( 'labels the "sent" kind as "Published" for the manual provider', () => {
+		// The label map is memoised on first read, so seed the provider global
+		// and re-require the module in an isolated registry to get a fresh cache.
+		jest.isolateModules( () => {
+			window.newspackNewslettersAdmin = { serviceProvider: 'manual' };
+			// eslint-disable-next-line global-require
+			const { STATUS_KIND_LABELS: manualLabels } = require( './status-label' );
+			expect( manualLabels().sent ).toBe( 'Published' );
+			// Other kinds are unaffected by the provider.
+			expect( manualLabels().scheduled ).toBe( 'Scheduled' );
+			delete window.newspackNewslettersAdmin;
+		} );
+	} );
 } );
