@@ -55,14 +55,32 @@ final class Pixel {
 		if ( ! empty( self::$pixel_added[ $post->ID ] ) ) {
 			return;
 		}
-		if ( ! Admin::is_tracking_pixel_enabled() ) {
+		$markup = self::get_pixel_markup( $post->ID );
+		if ( '' === $markup ) {
 			return;
 		}
-		printf(
-			'<mj-raw><img src="%s" width="1" height="1" alt="" style="display: block; width: 1px; height: 1px; border: none; margin: 0; padding: 0;" /></mj-raw>',
-			esc_url( self::get_pixel_url( $post->ID ) )
-		);
+		// $markup is built by get_pixel_markup() with esc_url() on the only dynamic part.
+		echo '<mj-raw>' . $markup . '</mj-raw>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 		self::$pixel_added[ $post->ID ] = true;
+	}
+
+	/**
+	 * The open-tracking pixel `<img>` markup, or '' when the pixel is disabled.
+	 *
+	 * Shared by the MJML body hook (which wraps it in `<mj-raw>`) and the WC renderer
+	 * (which injects it directly), so both engines emit an identical pixel.
+	 *
+	 * @param int $post_id Newsletter post ID.
+	 * @return string Pixel markup, or '' when tracking is disabled.
+	 */
+	public static function get_pixel_markup( $post_id ) {
+		if ( ! Admin::is_tracking_pixel_enabled() ) {
+			return '';
+		}
+		return sprintf(
+			'<img src="%s" width="1" height="1" alt="" style="display: block; width: 1px; height: 1px; border: none; margin: 0; padding: 0;" />',
+			esc_url( self::get_pixel_url( $post_id ) )
+		);
 	}
 
 	/**

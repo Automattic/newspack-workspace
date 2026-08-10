@@ -11,6 +11,20 @@ if ( ! class_exists( 'Newspack_Newsletters_Contacts' ) ) {
 		public static $add_and_remove_lists_calls = [];
 
 		/**
+		 * Calls to delete(). Each entry: [ 'email', 'context' ].
+		 *
+		 * @var array[]
+		 */
+		public static $delete_calls = [];
+
+		/**
+		 * Calls to upsert(). Each entry: [ 'contact', 'master_list_id', 'context', 'existing_contact' ].
+		 *
+		 * @var array[]
+		 */
+		public static $upsert_calls = [];
+
+		/**
 		 * Fixture returned by get_fields(). Set in tests that exercise code paths
 		 * calling Newspack_Newsletters_Contacts::get_fields(). An array returns as-is;
 		 * a WP_Error is returned to simulate provider failure.
@@ -37,6 +51,8 @@ if ( ! class_exists( 'Newspack_Newsletters_Contacts' ) ) {
 
 		public static function reset_calls() {
 			self::$add_and_remove_lists_calls = [];
+			self::$delete_calls               = [];
+			self::$upsert_calls               = [];
 			self::$fields_fixture             = [];
 			self::$next_return                = null;
 			self::$next_throw                 = null;
@@ -55,6 +71,45 @@ if ( ! class_exists( 'Newspack_Newsletters_Contacts' ) ) {
 				throw $exception;
 			}
 			return null === self::$next_return ? true : self::$next_return;
+		}
+
+		public static function delete( $email, $context = '' ) {
+			self::$delete_calls[] = [
+				'email'   => $email,
+				'context' => $context,
+			];
+			if ( null !== self::$next_throw ) {
+				$exception        = self::$next_throw;
+				self::$next_throw = null;
+				throw $exception;
+			}
+			return null === self::$next_return ? true : self::$next_return;
+		}
+
+		public static function upsert( $contact, $master_list_id, $context = '', $existing_contact = null ) {
+			self::$upsert_calls[] = [
+				'contact'          => $contact,
+				'master_list_id'   => $master_list_id,
+				'context'          => $context,
+				'existing_contact' => $existing_contact,
+			];
+			if ( null !== self::$next_throw ) {
+				$exception        = self::$next_throw;
+				self::$next_throw = null;
+				throw $exception;
+			}
+			return null === self::$next_return ? true : self::$next_return;
+		}
+
+		public static function update_lists( $email, $lists, $context = '' ) {
+			self::$add_and_remove_lists_calls[] = [
+				'email'           => $email,
+				'lists_to_add'    => [],
+				'lists_to_remove' => [],
+				'lists'           => $lists,
+				'context'         => $context,
+			];
+			return true;
 		}
 
 		public static function get_fields( $list_id = null ) {
@@ -109,12 +164,28 @@ if ( ! class_exists( 'Newspack_Newsletters_Subscription' ) ) {
 		 */
 		public static $contact_lists = [];
 
+		/**
+		 * Configurable per-email contact data returned by get_contact_data().
+		 * Keys are email addresses; values are the provider payload (or WP_Error).
+		 *
+		 * @var array
+		 */
+		public static $contact_data = [];
+
 		public static function reset_calls() {
 			self::$contact_lists = [];
+			self::$contact_data  = [];
 		}
 
 		public static function get_contact_lists( $email ) {
 			return self::$contact_lists[ $email ] ?? [];
+		}
+
+		public static function get_contact_data( $email, $return_details = false ) {
+			if ( ! isset( self::$contact_data[ $email ] ) ) {
+				return new \WP_Error( 'newspack_newsletters_contact_not_found', 'Contact not found' );
+			}
+			return self::$contact_data[ $email ];
 		}
 
 		public static function get_lists() {
@@ -133,6 +204,15 @@ if ( ! class_exists( 'Newspack_Newsletters_Service_Provider' ) ) {
 	class Newspack_Newsletters_Service_Provider {
 		public $service = 'mailchimp';
 
+		/**
+		 * Emails passed to clear_contact_data(), in call order. Static because
+		 * Newspack_Newsletters::get_service_provider() returns a fresh instance
+		 * per call; reset directly in tests that assert on it.
+		 *
+		 * @var string[]
+		 */
+		public static $cleared_emails = [];
+
 		public static function get_lists() {
 			return [
 				[
@@ -141,6 +221,10 @@ if ( ! class_exists( 'Newspack_Newsletters_Service_Provider' ) ) {
 					'id'     => '123',
 				],
 			];
+		}
+
+		public function clear_contact_data( $email ) {
+			self::$cleared_emails[] = $email;
 		}
 	}
 }

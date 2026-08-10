@@ -12,6 +12,7 @@ import { TextControl } from '@wordpress/components';
  */
 import { FormTokenField } from '../../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
+import OneTimePurchaseRuleControl from '../../../../../content-gate/components/one-time-purchase-rule-control';
 
 type RuleOption = { value: string | number; label: string };
 
@@ -77,6 +78,9 @@ export default function AccessRuleControl( { slug, value, onChange }: GateRuleCo
 
 	if ( ! rule || rule.is_boolean ) {
 		return null;
+	}
+	if ( 'one_time_purchase' === slug ) {
+		return <OneTimePurchaseRuleControl value={ value } onChange={ onChange } options={ options } TokenField={ FormTokenField } />;
 	}
 	if ( options && options.length > 0 ) {
 		return (

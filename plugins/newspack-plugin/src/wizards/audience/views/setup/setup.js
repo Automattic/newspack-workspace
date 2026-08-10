@@ -45,10 +45,17 @@ export default withWizardScreen(
 		inFlight,
 		platform,
 		onChangePlatform,
+		verificationRequiredByGates = [],
 	} ) => {
 		const [ allReady, setAllReady ] = useState( false );
 		const [ missingPlugins, setMissingPlugins ] = useState( [] );
 		const [ esp, setEsp ] = useState( '' );
+
+		// Verification gets force-enabled (toggle disabled, value pinned ON) when any
+		// published content gate uses Registered Access + Require Verification. The
+		// list is supplied by the GET /audience-management response so we don't have
+		// to re-fetch on every render.
+		const isVerificationForcedOn = verificationRequiredByGates.length > 0;
 
 		useEffect( () => {
 			window.scrollTo( 0, 0 );
@@ -162,6 +169,34 @@ export default withWizardScreen(
 				{ config.enabled && (
 					<Card noBorder>
 						<Divider alignment="full-width" variant="tertiary" />
+						<ActionCard
+							title={ __( 'Verify new reader accounts', 'newspack-plugin' ) }
+							description={ __(
+								'Ask readers to verify their accounts with an OTP code when registering a new account with an email address.',
+								'newspack-plugin'
+							) }
+							isMedium
+							toggleChecked={ isVerificationForcedOn || Boolean( config.verify_new_reader_accounts ) }
+							toggleOnChange={ value => updateConfig( 'verify_new_reader_accounts', value ) }
+							disabled={ isVerificationForcedOn || inFlight }
+						>
+							{ isVerificationForcedOn && (
+								<Notice
+									isWarning
+									noticeText={
+										<>
+											{ __( 'Verification is required by at least one published content gate: ', 'newspack-plugin' ) }
+											{ verificationRequiredByGates.map( ( gate, index ) => (
+												<span key={ gate.id }>
+													<ExternalLink href={ gate.edit_url }>{ gate.title }</ExternalLink>
+													{ index < verificationRequiredByGates.length - 1 ? ', ' : '' }
+												</span>
+											) ) }
+										</>
+									}
+								/>
+							) }
+						</ActionCard>
 						{ hasNewsletters && (
 							<ActionCard
 								title={ __( 'Present newsletter signup after checkout and registration', 'newspack-plugin' ) }
@@ -336,6 +371,7 @@ export default withWizardScreen(
 										newsletter_lists: config.newsletter_lists,
 										newsletter_list_initial_size: config.newsletter_list_initial_size,
 										oauth_redirect_to_ras: config.oauth_redirect_to_ras,
+										verify_new_reader_accounts: config.verify_new_reader_accounts,
 										sync_esp: config.sync_esp,
 										sync_esp_delete: config.sync_esp_delete,
 										metadata_fields: config.metadata_fields,

@@ -19,19 +19,19 @@ function ShellNotices() {
 
 export default function App( { label, Screen } ) {
 	const isBundled = !! window.newspackNewslettersAdmin?.bundledMode;
-	const titleClass = isBundled ? 'screen-reader-text' : 'newspack-newsletters-admin__title';
-
-	const headerContent = (
-		<>
-			<h1 className={ titleClass }>{ label }</h1>
-			<PageHeader />
-		</>
-	);
 
 	return (
 		<HeaderActionsProvider>
 			<div className="newspack-newsletters-admin">
-				{ isBundled ? headerContent : <div className="newspack-newsletters-admin__header">{ headerContent }</div> }
+				{ isBundled ? (
+					// Bundled: newspack-plugin's admin-header <Page> renders the canonical <h1>.
+					<PageHeader />
+				) : (
+					<div className="newspack-newsletters-admin__header">
+						<h1 className="newspack-newsletters-admin__title">{ label }</h1>
+						<PageHeader />
+					</div>
+				) }
 				<main className="newspack-newsletters-admin__main">
 					<Screen label={ label } />
 				</main>

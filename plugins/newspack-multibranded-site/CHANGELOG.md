@@ -1,3 +1,42 @@
+## newspack-multibranded-site [2.4.1](https://github.com/Automattic/newspack-workspace/compare/newspack-multibranded-site@2.4.0...newspack-multibranded-site@2.4.1) (2026-08-05)
+
+
+### Bug Fixes
+
+* **multibrand:** treat brand front page as a page, not an archive ([#658](https://github.com/Automattic/newspack-workspace/issues/658)) ([63f5193](https://github.com/Automattic/newspack-workspace/commit/63f51934ec945dfa3363906fd6a775736fcf0889))
+
+# newspack-multibranded-site [2.4.0](https://github.com/Automattic/newspack-workspace/compare/newspack-multibranded-site@2.3.1...newspack-multibranded-site@2.4.0) (2026-08-03)
+
+
+### Features
+
+* explicit breadcrumb API for Newspack admin headers ([#472](https://github.com/Automattic/newspack-workspace/issues/472)) ([7c43233](https://github.com/Automattic/newspack-workspace/commit/7c4323301f5323822937e93274c4fda4279a787f))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.6.0
+* **newspack-scripts:** upgraded to 5.10.0
+
+## newspack-multibranded-site [2.3.1](https://github.com/Automattic/newspack-workspace/compare/newspack-multibranded-site@2.3.0...newspack-multibranded-site@2.3.1) (2026-07-20)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.5.0
+
+# newspack-multibranded-site [2.3.0](https://github.com/Automattic/newspack-workspace/compare/newspack-multibranded-site@2.2.0...newspack-multibranded-site@2.3.0) (2026-06-29)
+
+
+### Features
+
+* **access-control:** enable Brand taxonomy for content rules ([#93](https://github.com/Automattic/newspack-workspace/issues/93)) ([280620e](https://github.com/Automattic/newspack-workspace/commit/280620e8d99ede231f90c9890b895611fc10b2a8))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.4.0
+
 # [2.2.0](https://github.com/Automattic/newspack-multibranded-site/compare/v2.1.0...v2.2.0) (2025-11-24)
 
 

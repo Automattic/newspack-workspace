@@ -16,6 +16,7 @@ import { forwardRef } from '@wordpress/element';
  */
 import { Wizard, withWizard } from '../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
+import { redirectWithoutAudienceManagement, requireAudienceManagement } from './audience-management-required';
 import ContentGates from './content-gates';
 import Edit from './edit';
 import CountdownBanner from './edit/countdown-banner';
@@ -23,6 +24,21 @@ import ContentGifting from './edit/content-gifting';
 import Institutions from './institutions';
 import InstitutionEdit from './institutions/edit';
 import { AUDIENCE_CONTENT_GATES_WIZARD_SLUG, BASE_HEADER_TEXT } from './consts';
+
+const ROOT = [ { label: __( 'Audience Management', 'newspack-plugin' ) } ];
+const ACCESS_CONTROL = [ ...ROOT, { label: __( 'Access Control', 'newspack-plugin' ), url: '#/content-gates' } ];
+const ACCESS_CONTROL_INSTITUTIONS = [ ...ACCESS_CONTROL, { label: __( 'Institutions', 'newspack-plugin' ), url: '#/institutions' } ];
+
+// Wrapped at module scope so each section keeps a stable component type across
+// renders. Only the landing route renders the prerequisite state; the rest redirect
+// to it, so the explanation lives in exactly one place.
+const GATES_ROUTE = '/content-gates';
+const GuardedContentGates = requireAudienceManagement( ContentGates );
+const GuardedEdit = redirectWithoutAudienceManagement( Edit, GATES_ROUTE );
+const GuardedCountdownBanner = redirectWithoutAudienceManagement( CountdownBanner, GATES_ROUTE );
+const GuardedContentGifting = redirectWithoutAudienceManagement( ContentGifting, GATES_ROUTE );
+const GuardedInstitutions = redirectWithoutAudienceManagement( Institutions, GATES_ROUTE );
+const GuardedInstitutionEdit = redirectWithoutAudienceManagement( InstitutionEdit, GATES_ROUTE );
 
 const AudienceContentGates = ( props, ref ) => {
 	const { updateWizardSettings } = useDispatch( WIZARD_STORE_NAMESPACE );
@@ -37,29 +53,31 @@ const AudienceContentGates = ( props, ref ) => {
 	return (
 		<Wizard
 			apiSlug={ AUDIENCE_CONTENT_GATES_WIZARD_SLUG }
-			title={ __( 'Access control', 'newspack-plugin' ) }
+			title={ __( 'Access Control', 'newspack-plugin' ) }
 			headerText={ BASE_HEADER_TEXT }
 			ref={ ref }
 			sharedProps={ { updateGatesData } }
-			fixedHeader
 			sections={ [
 				{
 					path: '/content-gates',
-					render: ContentGates,
+					render: GuardedContentGates,
+					breadcrumbs: ACCESS_CONTROL,
 				},
 				{
 					path: '/edit/:id/:type?',
-					render: Edit,
+					render: GuardedEdit,
 					isHidden: true,
 					exact: true,
+					breadcrumbs: ACCESS_CONTROL,
 				},
 				{
 					path: '/settings/countdown-banner',
-					render: CountdownBanner,
+					render: GuardedCountdownBanner,
 					isHidden: true,
 					exact: true,
 					backNav: '#/content-gates',
-					title: __( 'Metered countdown', 'newspack-plugin' ),
+					title: __( 'Metered Countdown', 'newspack-plugin' ),
+					breadcrumbs: [ ...ACCESS_CONTROL, { label: __( 'Metered Countdown', 'newspack-plugin' ) } ],
 					description: __(
 						'Show a countdown banner letting readers know how many free views they have left before content is restricted.',
 						'newspack-plugin'
@@ -67,11 +85,12 @@ const AudienceContentGates = ( props, ref ) => {
 				},
 				{
 					path: '/settings/content-gifting',
-					render: ContentGifting,
+					render: GuardedContentGifting,
 					isHidden: true,
 					exact: true,
 					backNav: '#/content-gates',
-					title: __( 'Content gifting', 'newspack-plugin' ),
+					title: __( 'Content Gifting', 'newspack-plugin' ),
+					breadcrumbs: [ ...ACCESS_CONTROL, { label: __( 'Content Gifting', 'newspack-plugin' ) } ],
 					description: __(
 						'Let members gift articles to non-subscribers. Recipients can read the full content without needing to subscribe.',
 						'newspack-plugin'
@@ -79,27 +98,31 @@ const AudienceContentGates = ( props, ref ) => {
 				},
 				{
 					path: '/institutions',
-					render: Institutions,
+					render: GuardedInstitutions,
 					exact: true,
 					isHidden: true,
 					backNav: '#/content-gates',
 					fullWidth: true,
+					label: __( 'Institutions', 'newspack-plugin' ),
+					breadcrumbs: [ ...ACCESS_CONTROL, { label: __( 'Institutions', 'newspack-plugin' ) } ],
 				},
 				{
 					path: '/institutions/new',
-					render: InstitutionEdit,
+					render: GuardedInstitutionEdit,
 					isHidden: true,
 					exact: true,
 					backNav: '#/institutions',
-					title: __( 'Add new institution', 'newspack-plugin' ),
+					title: __( 'Add Institution', 'newspack-plugin' ),
+					breadcrumbs: ACCESS_CONTROL_INSTITUTIONS,
 				},
 				{
 					path: '/institutions/:id',
-					render: InstitutionEdit,
+					render: GuardedInstitutionEdit,
 					isHidden: true,
 					exact: true,
 					backNav: '#/institutions',
-					title: __( 'Edit institution', 'newspack-plugin' ),
+					title: __( 'Edit Institution', 'newspack-plugin' ),
+					breadcrumbs: ACCESS_CONTROL_INSTITUTIONS,
 				},
 			] }
 		/>
