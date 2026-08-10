@@ -7,12 +7,13 @@
  */
 import apiFetch from '@wordpress/api-fetch';
 import { Component, Fragment } from '@wordpress/element';
+import { __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 import { __ } from '@wordpress/i18n';
 
 /**
  * Internal dependencies.
  */
-import { Button, Card, Modal, Waiting } from '../';
+import { Button, Modal, Waiting } from '../';
 
 /**
  * External dependencies.
@@ -168,14 +169,14 @@ class Handoff extends Component {
 				{ showModal && (
 					<Modal title={ modalTitle } onRequestClose={ () => this.setState( { showModal: false } ) }>
 						<p>{ modalBody }</p>
-						<Card buttonsCard noBorder className="justify-end">
+						<HStack justify="flex-end" spacing={ 4 } wrap className="newspack-modal__footer">
 							<Button variant="secondary" onClick={ () => this.setState( { showModal: false } ) }>
 								{ dismissModalButton }
 							</Button>
 							<Button variant="primary" onClick={ goTo }>
 								{ primaryModalButton }
 							</Button>
-						</Card>
+						</HStack>
 					</Modal>
 				) }
 			</Fragment>

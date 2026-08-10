@@ -7,7 +7,7 @@
  */
 import { ENTER } from '@wordpress/keycodes';
 import { __, sprintf } from '@wordpress/i18n';
-import { ExternalLink } from '@wordpress/components';
+import { ExternalLink, __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 import { useEffect, useState, useRef, Fragment } from '@wordpress/element';
 
 /**
@@ -16,7 +16,7 @@ import { useEffect, useState, useRef, Fragment } from '@wordpress/element';
 import WizardsActionCard from '../../../../wizards-action-card';
 import { useWizardApiFetch } from '../../../../hooks/use-wizard-api-fetch';
 import { WIZARD_ERROR_MESSAGES, WizardError } from '../../../../errors';
-import { Button, Card, Grid, Modal, TextControl } from '../../../../../../packages/components/src';
+import { Button, Grid, Modal, TextControl } from '../../../../../../packages/components/src';
 
 function Mailchimp() {
 	const [ isModalOpen, setIsModalOpen ] = useState( false );
@@ -160,14 +160,14 @@ function Mailchimp() {
 							</p>
 						</Grid>
 					</div>
-					<Card buttonsCard noBorder className="justify-end">
+					<HStack justify="flex-end" spacing={ 4 } wrap className="newspack-modal__footer">
 						<Button variant="secondary" onClick={ closeModal }>
 							{ __( 'Cancel', 'newspack-plugin' ) }
 						</Button>
 						<Button variant="primary" disabled={ ! apiKey } onClick={ submitAPIKey }>
 							{ getModalButtonText() }
 						</Button>
-					</Card>
+					</HStack>
 				</Modal>
 			) }
 		</Fragment>

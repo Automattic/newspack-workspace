@@ -168,7 +168,9 @@ const Placements = () => {
 		<Fragment>
 			{ ! inFlight && ! providers.length && <Notice isWarning noticeText={ __( 'There is no provider available.', 'newspack-plugin' ) } /> }
 			<Grid columns={ 12 } noMargin gutter={ 0 }>
-				<h1 style={ { gridColumn: 'span 4' } }>{ __( 'Placements', 'newspack-plugin' ) }</h1>
+				<h2 className="newspack-wizard__heading" style={ { gridColumn: 'span 4' } }>
+					{ __( 'Placements', 'newspack-plugin' ) }
+				</h2>
 				<VStack
 					spacing={ 4 }
 					style={ { gridColumn: 'span 8' } }

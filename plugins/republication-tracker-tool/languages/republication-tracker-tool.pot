@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-05-19T21:30:11+00:00\n"
+"POT-Creation-Date: 2026-07-10T20:23:25+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: republication-tracker-tool\n"
@@ -17,7 +17,7 @@ msgstr ""
 #. Plugin Name of the plugin
 #: republication-tracker-tool.php
 #: includes/class-article-settings.php:144
-#: includes/class-widget.php:29
+#: includes/class-widget.php:22
 msgid "Republication Tracker Tool"
 msgstr ""
 
@@ -72,6 +72,32 @@ msgstr ""
 #: includes/class-content.php:145
 #: templates/republish-template.php:50
 msgid "By "
+msgstr ""
+
+#: includes/class-republish-pattern.php:44
+msgid "Republication"
+msgstr ""
+
+#: includes/class-republish-pattern.php:47
+#: includes/class-widget.php:139
+msgid "Republish our articles for free, online or in print, under a Creative Commons license."
+msgstr ""
+
+#: includes/class-republish-pattern.php:52
+#: includes/class-widget.php:74
+#: includes/class-widget.php:81
+#: src/blocks/republish-button/class-republish-button-block.php:117
+#: dist/republish-button.js:1
+#: src/blocks/republish-button/edit.js:82
+msgid "Republish This Story"
+msgstr ""
+
+#: includes/class-republish-pattern.php:75
+msgid "Republish Section"
+msgstr ""
+
+#: includes/class-republish-pattern.php:76
+msgid "A paragraph, republish button, and Creative Commons license badge grouped together."
 msgstr ""
 
 #: includes/class-settings.php:43
@@ -143,7 +169,7 @@ msgid "Your Google Analytics 4 API secret. <a href=\"https://developers.google.c
 msgstr ""
 
 #: includes/class-settings.php:230
-msgid "If checked, an attribution statement will be appended to the copied content."
+msgid "If checked, an attribution statement will be appended to the copied content (classic theme only)."
 msgstr ""
 
 #: includes/class-settings.php:249
@@ -178,32 +204,23 @@ msgstr ""
 msgid "If checked, users will be able to copy both HTML and plain text versions of the republishable content."
 msgstr ""
 
-#: includes/class-widget.php:81
-#: includes/class-widget.php:88
-msgid "Republish This Story"
-msgstr ""
-
-#: includes/class-widget.php:97
+#: includes/class-widget.php:90
 msgid "Creative Commons License"
 msgstr ""
 
-#: includes/class-widget.php:142
+#: includes/class-widget.php:137
 msgid "This widget will only display on single articles."
 msgstr ""
 
-#: includes/class-widget.php:144
-msgid "Republish our articles for free, online or in print, under a Creative Commons license."
-msgstr ""
-
-#: includes/class-widget.php:148
+#: includes/class-widget.php:143
 msgid "Title:"
 msgstr ""
 
-#: includes/class-widget.php:157
+#: includes/class-widget.php:152
 msgid "Modal"
 msgstr ""
 
-#: includes/class-widget.php:161
+#: includes/class-widget.php:156
 msgid "Page"
 msgstr ""
 
@@ -318,25 +335,25 @@ msgid "Copy to Clipboard"
 msgstr ""
 
 #. translators: %1$s is the site title, %2$s is the license description.
-#: republication-tracker-tool.php:344
+#: republication-tracker-tool.php:353
 #, php-format
 msgid "This article first appeared on %1$s and is republished here under a %2$s."
 msgstr ""
 
 #. translators: %1$s is a URL, %2$s is the site home URL, %3$s is the site title. %4$s is the license URL, %5$s is the license description.
-#: republication-tracker-tool.php:352
+#: republication-tracker-tool.php:361
 #, php-format
 msgid "This <a target=\"_blank\" href=\"%1$s\">article</a> first appeared on <a target=\"_blank\" href=\"%2$s\">%3$s</a> and is republished here under a <a target=\"_blank\" href=\"%4$s\">%5$s</a>."
 msgstr ""
 
 #. translators: %s is the site title.
-#: republication-tracker-tool.php:365
+#: republication-tracker-tool.php:374
 #, php-format
 msgid "This article first appeared on %s."
 msgstr ""
 
 #. translators: %1$s is a URL, %2$s is the site home URL, %3$s is the site title.
-#: republication-tracker-tool.php:373
+#: republication-tracker-tool.php:382
 #, php-format
 msgid "This <a target=\"_blank\" href=\"%1$s\">article</a> first appeared on <a target=\"_blank\" href=\"%2$s\">%3$s</a>."
 msgstr ""
@@ -377,4 +394,59 @@ msgstr ""
 #: dist/index.js:4
 #: src/index.js:82
 msgid "Total number of views:"
+msgstr ""
+
+#: dist/republish-button.js:1
+#: src/blocks/republish-button/edit.js:51
+msgid "Display Settings"
+msgstr ""
+
+#: dist/republish-button.js:1
+#: src/blocks/republish-button/edit.js:58
+msgid "Show license badge"
+msgstr ""
+
+#: dist/republish-button.js:1
+#: src/blocks/republish-button/edit.js:66
+msgid "Display the site’s configured Creative Commons license badge below the button."
+msgstr ""
+
+#: dist/republish-button.js:1
+#: src/blocks/republish-button/edit.js:87
+msgid "Button text"
+msgstr ""
+
+#: dist/republish-button.js:1
+#: src/blocks/republish-button/edit.js:105
+msgid "No Creative Commons license is configured."
+msgstr ""
+
+#: dist/blocks/republish-button/block.json
+#: src/blocks/republish-button/block.json
+msgctxt "block title"
+msgid "Republish Button"
+msgstr ""
+
+#: dist/blocks/republish-button/block.json
+#: src/blocks/republish-button/block.json
+msgctxt "block description"
+msgid "A button that allows readers to republish your content under a Creative Commons license."
+msgstr ""
+
+#: dist/blocks/republish-button/block.json
+#: src/blocks/republish-button/block.json
+msgctxt "block keyword"
+msgid "republish"
+msgstr ""
+
+#: dist/blocks/republish-button/block.json
+#: src/blocks/republish-button/block.json
+msgctxt "block keyword"
+msgid "creative commons"
+msgstr ""
+
+#: dist/blocks/republish-button/block.json
+#: src/blocks/republish-button/block.json
+msgctxt "block keyword"
+msgid "syndication"
 msgstr ""

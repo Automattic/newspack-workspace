@@ -31,7 +31,9 @@ class Incoming_Field {
 	protected $name = '';
 
 	/**
-	 * Value type: 'string' or 'boolean'.
+	 * Value type. Base values are 'string' or 'boolean'; integrations may also
+	 * declare a richer input kind that the segmentation UI uses to constrain the
+	 * available operators: 'number', 'date', 'datetime', 'select', 'multiselect'.
 	 *
 	 * @var string
 	 */
@@ -142,7 +144,7 @@ class Incoming_Field {
 	/**
 	 * Set the value type.
 	 *
-	 * @param string $value_type 'string' or 'boolean'.
+	 * @param string $value_type One of 'string', 'boolean', 'number', 'date', 'datetime', 'select', 'multiselect'.
 	 * @return self
 	 */
 	public function set_value_type( $value_type ) {
@@ -162,8 +164,7 @@ class Incoming_Field {
 	/**
 	 * Set the matching function.
 	 *
-	 * @param string $matching_function One of 'default', 'list__in', 'list__not_in'.
-	 *                                  Note: 'range' is supported in evaluation but has no UI yet.
+	 * @param string $matching_function One of 'default', 'list__in', 'list__not_in', 'range'.
 	 * @return self
 	 */
 	public function set_matching_function( $matching_function ) {

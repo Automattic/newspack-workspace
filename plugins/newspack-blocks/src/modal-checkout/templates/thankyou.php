@@ -47,9 +47,25 @@ if ( ! $is_valid ) {
 
 $is_success             = ! $order->has_status( 'failed' );
 $after_success_behavior = isset( $_GET['after_success_behavior'] ) ? \sanitize_text_field( \wp_unslash( $_GET['after_success_behavior'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-$after_success_url      = isset( $_GET['after_success_url'] ) ? esc_url( \sanitize_url( \wp_unslash( $_GET['after_success_url'] ) ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+$after_success_token    = isset( $_GET['after_success_token'] ) ? \sanitize_text_field( \wp_unslash( $_GET['after_success_token'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+// Not escaped here: the value is escaped where it is output, and escaping it into the
+// variable would leave it holding something other than the destination that was verified.
+$after_success_url      = isset( $_GET['after_success_url'] ) ? \Newspack_Blocks\Modal_Checkout::sanitize_after_success_url( \sanitize_url( \wp_unslash( $_GET['after_success_url'] ) ), $after_success_token ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 $after_success_label    = isset( $_GET['after_success_button_label'] ) ? \sanitize_text_field( \wp_unslash( $_GET['after_success_button_label'] ) ) : \Newspack_Blocks\Modal_Checkout::get_modal_checkout_labels( 'after_success' ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 $checkout_data          = Checkout_Data::get_checkout_data( $order );
+
+// A behavior the reader can't act on falls back to closing the modal, so they get a
+// finished checkout rather than a button that goes nowhere.
+$after_success_params   = \Newspack_Blocks\Modal_Checkout::filter_after_success_params(
+	[
+		'after_success_behavior'     => $after_success_behavior,
+		'after_success_url'          => $after_success_url,
+		'after_success_button_label' => $after_success_label,
+	]
+);
+$after_success_behavior = $after_success_params['after_success_behavior'] ?? '';
+$after_success_url      = $after_success_params['after_success_url'] ?? '';
+$after_success_label    = $after_success_params['after_success_button_label'] ?? \Newspack_Blocks\Modal_Checkout::get_modal_checkout_labels( 'after_success' );
 ?>
 <div class="woocommerce-order">
 <?php if ( $is_success ) : ?>
@@ -60,7 +76,7 @@ $checkout_data          = Checkout_Data::get_checkout_data( $order );
 				<path d="M16.7 7.1l-6.3 8.5-3.3-2.5-.9 1.2 4.5 3.4L17.9 8z"></path>
 			</svg>
 		</span>
-		<p id="modal-checkout-product-details" data-checkout='<?php echo wp_json_encode( $checkout_data ); ?>'>
+		<p id="modal-checkout-product-details" <?php Checkout_Data::print_data_checkout_attr( $checkout_data ); ?>>
 			<strong>
 				<?php
 					echo esc_html( Modal_Checkout::get_post_checkout_success_text() );

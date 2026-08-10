@@ -269,22 +269,22 @@ integrate_all() {
 # completes once the required CI check passes.
 INCOMING_BRANCH="${INCOMING_BRANCH:-sync/legacy-incoming}"
 
-# Ping the a8c ops channel when the silent-blend gate holds a sync merge. Reuses
-# the release notifier's Slack creds (SLACK_AUTH_TOKEN + SLACK_CHANNEL_ID, a8c
-# workspace). No-ops cleanly when unset (local/dry-run/forks); a Slack hiccup is
-# caught so it can never fail the sync.
-notify_blends() {
-  local branch=$1 blends=$2
+# Ping the a8c ops channel when a gate holds a sync merge. Reuses the release
+# notifier's Slack creds (SLACK_AUTH_TOKEN + SLACK_CHANNEL_ID, a8c workspace).
+# No-ops cleanly when unset (local/dry-run/forks); a Slack hiccup is caught so
+# it can never fail the sync. Args: branch, mrkdwn headline, findings block.
+notify_hold() {
+  local branch=$1 headline=$2 findings=$3
   if [ -z "${SLACK_AUTH_TOKEN:-}" ] || [ -z "${SLACK_CHANNEL_ID:-}" ]; then
-    echo "    (Slack creds unset; skipping blend ping)"
+    echo "    (Slack creds unset; skipping hold ping)"
     return 0
   fi
   local pr_url text payload
   pr_url=$(gh pr view "$branch" --json url --jq '.url' 2>/dev/null \
            || echo "${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY:-}/pulls")
-  text=":warning: *Legacy sync held for review.* The merge into \`main\` blended monorepo and legacy edits into a result matching neither side (possible dropped fix / orphaned code). Auto-merge is paused until someone confirms or fixes:
+  text=":warning: *Legacy sync held for review.* ${headline} Auto-merge is paused until someone confirms or fixes:
 \`\`\`
-${blends}
+${findings}
 \`\`\`
 <${pr_url}|Open the integration PR>"
   payload=$(printf '%s' "$text" | jq -Rs '{channel: env.SLACK_CHANNEL_ID, blocks: [{type: "section", text: {type: "mrkdwn", text: .}}]}') || return 0
@@ -292,7 +292,7 @@ ${blends}
     -H 'Content-type: application/json' \
     -H "Authorization: Bearer $SLACK_AUTH_TOKEN" \
     -X POST https://slack.com/api/chat.postMessage > /dev/null 2>&1 \
-    && echo "    pinged Slack for blend review" \
+    && echo "    pinged Slack for hold review" \
     || echo "    WARNING: Slack ping failed (non-fatal)"
 }
 
@@ -326,9 +326,27 @@ land_on_main() {
   audit=$("$SCRIPT_DIR/detect-sync-collisions.sh" HEAD origin/main 2>&1) || true
   echo "$audit"
   blends=$(printf '%s\n' "$audit" | grep '^  REVIEW ' || true)
+  # JS-regression gate. An incoming legacy commit can re-add a .js file next to
+  # its renamed .ts twin (webpack silently picks one) or drop new JS into a
+  # fully migrated unit. The twin case can pass CI, so it must hold the merge
+  # for a human to port the edit into the TS file on the sync branch.
+  local js_audit js_regressions
+  js_audit=$("$SCRIPT_DIR/detect-sync-js-regressions.sh" HEAD origin/main 2>&1) || true
+  echo "$js_audit"
+  js_regressions=$(printf '%s\n' "$js_audit" | grep '^  REVIEW ' || true)
   if [ -n "$blends" ]; then
     echo "==> Silent-blend gate: holding auto-merge on $INCOMING_BRANCH for review"
-    notify_blends "$INCOMING_BRANCH" "$blends" || true
+    notify_hold "$INCOMING_BRANCH" \
+      "The merge into \`main\` blended monorepo and legacy edits into a result matching neither side (possible dropped fix / orphaned code)." \
+      "$blends" || true
+  fi
+  if [ -n "$js_regressions" ]; then
+    echo "==> JS-regression gate: holding auto-merge on $INCOMING_BRANCH for review"
+    notify_hold "$INCOMING_BRANCH" \
+      "The merge into \`main\` (re)introduces JavaScript where the monorepo is TypeScript (a .js twin of a renamed .ts file, or new JS in a fully migrated unit). Convert the file on the sync branch, porting the legacy edit into the TS twin where one exists." \
+      "$js_regressions" || true
+  fi
+  if [ -n "$blends" ] || [ -n "$js_regressions" ]; then
     return 0
   fi
   # Wait for the PR's required checks, then admin-merge with a merge commit.
