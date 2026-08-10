@@ -8,6 +8,7 @@
 namespace Newspack\Tests\Content_Gate;
 
 use Newspack\Content_Gate;
+use Newspack\Metering;
 use Newspack\Reader_Activation;
 
 /**
@@ -351,6 +352,124 @@ class Test_Content_Gate_Rest extends \WP_UnitTestCase {
 			'closed',
 			$data['comment_status'],
 			'restrict_post() closes comments on the front end; REST must agree.'
+		);
+	}
+
+	/**
+	 * A REST collection read does not spend the reader's metered allowance.
+	 *
+	 * Metering only comes into play once a post is otherwise restricted:
+	 * Metering::restrict_post() flips a `true` restriction to `false` when
+	 * the reader still has metered views left. `registration.metering` alone
+	 * cannot exercise that: with `require_verification` false,
+	 * is_gated_by_registration() returns false for a logged-in reader, so
+	 * Metering::get_effective_settings() reads `custom_access.metering`
+	 * instead ({@see class-metering.php:267-274}) — the two settings groups
+	 * are read by different branches, not merged. And an empty
+	 * `access_rules` evaluates as "no constraint" (Access_Rules::evaluate_rules()
+	 * returns true for it), so custom_access.active alone doesn't restrict
+	 * anyone either. This fixture needs both: metering mirrored into
+	 * `custom_access.metering` (the branch that actually applies here), and
+	 * a real access rule that denies this reader so the post is genuinely
+	 * restricted in the first place.
+	 *
+	 * `email_domain` is that rule: is_email_domain_whitelisted() denies
+	 * outright whenever the reader isn't verified
+	 * ({@see class-access-rules.php:771}), which every subscriber created
+	 * below is not — no WooCommerce fixture required.
+	 *
+	 * The `newspack_content_gate_post_id` filter stands in for the
+	 * is_singular() main-query context Content_Gate::get_gate_post_id()
+	 * normally relies on to identify which gate is in play. A REST request
+	 * has no such context, so without this the settings lookup silently
+	 * resolves to nothing and metering never engages — the same technique
+	 * Test_Metering::test_metering_allowed_when_verification_not_required()
+	 * (tests/unit-tests/content-gate/metering.php) uses to reach the same
+	 * update_user_meta() write this test is asserting against.
+	 */
+	public function test_rest_reads_do_not_consume_metered_allowance() {
+		$user_id = self::factory()->user->create( [ 'role' => 'subscriber' ] );
+		Content_Gate::update_gate_settings(
+			$this->gate_id,
+			[
+				'title'         => 'REST Gate',
+				'status'        => 'publish',
+				'priority'      => 0,
+				'content_rules' => [
+					[
+						'slug'  => 'specific_posts',
+						'value' => [ $this->gated_post_id ],
+					],
+				],
+				'registration'  => [
+					'active'               => true,
+					'metering'             => [
+						'enabled' => true,
+						'count'   => 3,
+						'period'  => 'month',
+					],
+					'require_verification' => false,
+				],
+				'custom_access' => [
+					'active'       => true,
+					'metering'     => [
+						'enabled' => true,
+						'count'   => 3,
+						'period'  => 'month',
+					],
+					// Denies an unverified reader outright regardless of the
+					// domain value; see is_email_domain_whitelisted(). What
+					// matters here is that this genuinely restricts the
+					// subscriber below, not the domain string itself.
+					'access_rules' => [
+						[
+							[
+								'slug'  => 'email_domain',
+								'value' => 'example.com',
+							],
+						],
+					],
+				],
+			]
+		);
+		wp_set_current_user( $user_id );
+
+		$force_gate_id = function () {
+			return $this->gate_id;
+		};
+		add_filter( 'newspack_content_gate_post_id', $force_gate_id );
+
+		$meta_key = Metering::METERING_META_KEY . '_' . $this->gate_id;
+		$before   = get_user_meta( $user_id, $meta_key, true );
+
+		try {
+			$data = $this->rest_get( '/wp/v2/posts', [ 'include' => [ $this->gated_post_id ] ] );
+		} finally {
+			remove_filter( 'newspack_content_gate_post_id', $force_gate_id );
+		}
+
+		$after = get_user_meta( $user_id, $meta_key, true );
+
+		$this->assertSame(
+			$before,
+			$after,
+			'A REST read must not record metered consumption.'
+		);
+
+		// The flip side of the short-circuit: a reader metering would have let
+		// through instead receives the teaser. An API read must not silently
+		// spend allowance, so this reader sees what an un-metered restricted
+		// reader would see. A future change that quietly restores metering on
+		// the REST path should fail this, not pass silently.
+		$this->assertStringNotContainsString(
+			self::BODY_SENTINEL,
+			$data[0]['content']['rendered'],
+			'A reader metering would have admitted must still receive the teaser over REST, not the full body.'
+		);
+		$this->assertStringContainsString(
+			'Free paragraph one.',
+			$data[0]['content']['rendered'],
+			'The teaser must still be served in place of the withheld body.'
 		);
 	}
 }

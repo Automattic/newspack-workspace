@@ -404,7 +404,7 @@ class Content_Gate {
 	 *
 	 * Each item decides independently. No state is shared between items and
 	 * has_rendered()/mark_gate_as_rendered() are deliberately not consulted
-	 * here: they mean "one gate per page render", and honouring them in a
+	 * here: they mean "one gate per page render", and honoring them in a
 	 * collection would gate the first item and serve the rest intact.
 	 *
 	 * @param \WP_REST_Response $response Response object.
@@ -434,7 +434,21 @@ class Content_Gate {
 			return $response;
 		}
 
-		$restriction = self::get_restriction_for_post( $post );
+		// The restriction filter is not a pure predicate: metering records
+		// consumption as a side effect of granting access. A collection read
+		// would spend one view per item for articles the reader never opened,
+		// so metering is short-circuited for the whole REST path.
+		$short_circuit = static function () {
+			return true;
+		};
+		add_filter( 'newspack_content_gate_metering_short_circuit', $short_circuit );
+		try {
+			$restriction = self::get_restriction_for_post( $post );
+		} finally {
+			// Required: without it a throw leaves metering disabled for the
+			// remainder of the request.
+			remove_filter( 'newspack_content_gate_metering_short_circuit', $short_circuit );
+		}
 		if ( null === $restriction ) {
 			return $response;
 		}
