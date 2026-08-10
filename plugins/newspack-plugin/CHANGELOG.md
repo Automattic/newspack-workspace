@@ -1,3 +1,10 @@
+## newspack [6.47.6](https://github.com/Automattic/newspack-workspace/compare/newspack@6.47.5...newspack@6.47.6) (2026-08-10)
+
+
+### Bug Fixes
+
+* **plugin-manager:** use centralized download URLs for plugin updates ([#823](https://github.com/Automattic/newspack-workspace/issues/823)) ([cf1eb01](https://github.com/Automattic/newspack-workspace/commit/cf1eb014bc7607a3568ab12e57639366ec521f59))
+
 ## newspack [6.47.5](https://github.com/Automattic/newspack-workspace/compare/newspack@6.47.4...newspack@6.47.5) (2026-08-10)
 
 
