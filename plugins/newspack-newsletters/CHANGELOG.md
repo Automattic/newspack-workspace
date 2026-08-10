@@ -1,3 +1,17 @@
+## newspack-newsletters [3.38.3](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.38.2...newspack-newsletters@3.38.3) (2026-08-10)
+
+
+### Bug Fixes
+
+* **newsletters:** tolerate foreign send-list ids after ESP switch ([#627](https://github.com/Automattic/newspack-workspace/issues/627)) ([037e5e0](https://github.com/Automattic/newspack-workspace/commit/037e5e040a8d9e344660afa0b831a17262a73488))
+
+## newspack-newsletters [3.38.2](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.38.1...newspack-newsletters@3.38.2) (2026-08-05)
+
+
+### Bug Fixes
+
+* accept Gutenberg theme.json data class in filter callbacks ([#807](https://github.com/Automattic/newspack-workspace/issues/807)) ([94e18e2](https://github.com/Automattic/newspack-workspace/commit/94e18e24cabac25b9f6a491cf6a1ba2e321b9550))
+
 ## newspack-newsletters [3.38.1](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.38.0...newspack-newsletters@3.38.1) (2026-08-04)
 
 
