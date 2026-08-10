@@ -8,6 +8,8 @@
 namespace Newspack\Tests\Content_Gate;
 
 use Newspack\Content_Gate;
+use Newspack\Content_Gate\IP_Access_Rule;
+use Newspack\Institution;
 use Newspack\Metering;
 use Newspack\Reader_Activation;
 
@@ -17,6 +19,8 @@ use Newspack\Reader_Activation;
  * @group content-gate
  */
 class Test_Content_Gate_Rest extends \WP_UnitTestCase {
+
+	use \Newspack\Tests\Content_Gate\Traits\Trait_Restriction_Cache_Test;
 
 	/**
 	 * A sentinel that appears only in the gated post's body.
@@ -536,28 +540,220 @@ class Test_Content_Gate_Rest extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Gated and entitled reads both opt out of shared caches.
+	 * Drives WP_REST_Server::serve_request() directly and returns the headers
+	 * it actually queued to send, plus the decoded response body.
 	 *
-	 * The entitled case matters most: that response is not modified, but it is
-	 * reader-specific, and caching it would serve a full body to an anonymous
-	 * caller.
+	 * Note that `rest_do_request()` -- what `rest_get()` above uses -- is only
+	 * rest_get_server()->dispatch( $request ); it never reaches
+	 * WP_REST_Server::serve_request(), which is where core resolves the
+	 * `rest_send_nocache_headers` filter and turns a true result into a real
+	 * Cache-Control header (see wp_get_nocache_headers() and its call site
+	 * near class-wp-rest-server.php:481). A test that only asserts the
+	 * filter's return value proves the opt-in was registered, not that a
+	 * header was ever emitted. This helper closes that gap by exercising
+	 * serve_request() itself.
+	 *
+	 * This depends on `Spy_REST_Server`, the WP core test-lib server
+	 * subclass (wordpress-tests-lib/includes/spy-rest-server.php) that
+	 * overrides send_header() to record into $sent_headers instead of
+	 * calling PHP's real header() -- avoiding "headers already sent" and
+	 * letting the headers be inspected directly. It also wraps serve_request()
+	 * in ob_start()/ob_get_clean() to capture the echoed JSON body into
+	 * $sent_body, decoded below for callers that need to assert on the
+	 * response content, not just its headers. Core's own test bootstrap
+	 * (wordpress-tests-lib/includes/bootstrap.php) filters
+	 * `wp_rest_server_class` to hand back Spy_REST_Server for every
+	 * rest_get_server() call in the process, including the one this class's
+	 * own set_up() re-triggers via rest_api_init -- so no extra
+	 * initialization is required here. The assertInstanceOf() guard below
+	 * exists so that if a future core or tests-lib change ever drops that
+	 * filter, this fails loudly instead of silently asserting against an
+	 * empty $sent_headers array.
+	 *
+	 * @param string $route  REST route.
+	 * @param array  $params Query parameters.
+	 * @return array {
+	 *     @type array $headers Headers Spy_REST_Server recorded ($header => $value).
+	 *     @type mixed $data    The response body, JSON-decoded.
+	 * }
+	 */
+	protected function serve_request_and_capture_headers( $route, $params = [] ) {
+		$server = rest_get_server();
+		$this->assertInstanceOf(
+			\Spy_REST_Server::class,
+			$server,
+			'This assertion drives serve_request() to capture real headers; it depends on the WP core test bootstrap handing back Spy_REST_Server.'
+		);
+
+		$previous_method = $_SERVER['REQUEST_METHOD'] ?? null; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+		$previous_get    = $_GET; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
+		$_SERVER['REQUEST_METHOD'] = 'GET';
+		$_GET                      = $params;
+
+		try {
+			$server->serve_request( $route );
+		} finally {
+			if ( null === $previous_method ) {
+				unset( $_SERVER['REQUEST_METHOD'] );
+			} else {
+				$_SERVER['REQUEST_METHOD'] = $previous_method;
+			}
+			$_GET = $previous_get;
+		}
+
+		return [
+			'headers' => $server->sent_headers,
+			'data'    => json_decode( $server->sent_body, true ),
+		];
+	}
+
+	/**
+	 * Gated and entitled reads both opt out of shared caches -- proven by the
+	 * Cache-Control header serve_request() actually sends, not merely by the
+	 * `rest_send_nocache_headers` filter's return value. The filter having
+	 * fired is necessary but not sufficient: only serve_request() consumes
+	 * it to produce the header a real cache would see, so asserting the
+	 * filter alone can pass while no header is ever emitted.
+	 *
+	 * The entitled case matters most: that response is not modified, but it
+	 * is reader-specific, and caching it would serve a full body to the next
+	 * caller. It is deliberately built as an ANONYMOUS entitled reader --
+	 * admitted through a custom_access institutional rule, never
+	 * wp_set_current_user()-logged-in -- rather than a logged-in subscriber.
+	 * WP_REST_Server::serve_request() resolves `rest_send_nocache_headers`
+	 * with a default of `is_user_logged_in()` (class-wp-rest-server.php:479),
+	 * so a logged-in "entitled" reader gets a no-store Cache-Control header
+	 * from core's own baseline regardless of whether this plugin's own
+	 * add_filter( 'rest_send_nocache_headers', '__return_true' ) in
+	 * Content_Gate::filter_rest_response() ever runs -- that data set would
+	 * stay green even if that add_filter() call were deleted outright.
+	 * Confirmed empirically: moving that add_filter() call to after the
+	 * `null === $restriction` check it currently precedes did not fail a
+	 * logged-in-subscriber version of this case. An anonymous entitled reader
+	 * has no such baseline to hide behind, so this is the version that
+	 * actually exercises Content_Gate::filter_rest_response()'s own
+	 * contribution to the response headers.
 	 *
 	 * @dataProvider cache_posture_provider
 	 * @param bool $entitled Whether the reader passes the gate.
 	 */
 	public function test_gated_routes_opt_out_of_shared_caches( $entitled ) {
+		wp_set_current_user( 0 );
+
+		// phpcs:disable WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.NonceVerification.Recommended, WordPressVIPMinimum.Variables.ServerVariables.UserControlledHeaders, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__REMOTE_ADDR__, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		$original_remote_addr = $_SERVER['REMOTE_ADDR'] ?? null;
+		$original_cookie      = $_COOKIE[ IP_Access_Rule::COOKIE_NAME ] ?? null;
+		// phpcs:enable
+
 		if ( $entitled ) {
-			wp_set_current_user( self::factory()->user->create( [ 'role' => 'subscriber' ] ) );
-		} else {
-			wp_set_current_user( 0 );
+			$institution_id = Institution::create( 'Test University', '', [ 'ip_range' => '10.0.0.0/8' ] );
+			// save_post_np_institution already invalidates this on create; cleared
+			// again defensively, matching the pattern this plugin's own
+			// content-gates.php suite uses around Institution::create().
+			delete_transient( Institution::TRANSIENT_KEY );
+
+			Content_Gate::update_gate_settings(
+				$this->gate_id,
+				[
+					'title'         => 'REST Gate',
+					'status'        => 'publish',
+					'priority'      => 0,
+					'content_rules' => [
+						[
+							'slug'  => 'specific_posts',
+							'value' => [ $this->gated_post_id ],
+						],
+					],
+					'registration'  => [
+						'active'               => true,
+						'metering'             => [
+							'enabled' => false,
+							'count'   => 0,
+							'period'  => 'month',
+						],
+						'require_verification' => false,
+						'gate_id'              => 0,
+					],
+					// Admits an anonymous visitor via the institution rule's
+					// supports_anonymous bypass (Access_Rules::evaluate_anonymous_rules(),
+					// consulted by Content_Restriction_Control::is_post_restricted()
+					// before registration mode would otherwise restrict them) --
+					// entitlement with no WP login involved at any point.
+					'custom_access' => [
+						'active'       => true,
+						'metering'     => [
+							'enabled' => false,
+							'count'   => 0,
+							'period'  => 'month',
+						],
+						'gate_id'      => 0,
+						'access_rules' => [
+							[
+								[
+									'slug'  => 'institution',
+									'value' => [ $institution_id ],
+								],
+							],
+						],
+					],
+				]
+			);
+			$this->reset_restriction_cache();
+
+			// The IP-access bypass cookie is what lets Institution::user_matches_institution()
+			// evaluate the visitor's IP for an anonymous request server-side at all --
+			// see its own docblock. Without it this scenario would be restricted, not entitled.
+			// phpcs:disable WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPressVIPMinimum.Variables.ServerVariables.UserControlledHeaders, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__REMOTE_ADDR__, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+			$_SERVER['REMOTE_ADDR']                 = '10.1.2.3';
+			$_COOKIE[ IP_Access_Rule::COOKIE_NAME ] = '1';
+			// phpcs:enable
 		}
 
-		$this->rest_get( '/wp/v2/posts', [ 'include' => [ $this->gated_post_id ] ] );
+		try {
+			$result = $this->serve_request_and_capture_headers(
+				'/wp/v2/posts',
+				[ 'include' => [ $this->gated_post_id ] ]
+			);
+		} finally {
+			if ( $entitled ) {
+				// phpcs:disable WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPressVIPMinimum.Variables.ServerVariables.UserControlledHeaders, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__REMOTE_ADDR__, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+				if ( null === $original_remote_addr ) {
+					unset( $_SERVER['REMOTE_ADDR'] );
+				} else {
+					$_SERVER['REMOTE_ADDR'] = $original_remote_addr;
+				}
+				if ( null === $original_cookie ) {
+					unset( $_COOKIE[ IP_Access_Rule::COOKIE_NAME ] );
+				} else {
+					$_COOKIE[ IP_Access_Rule::COOKIE_NAME ] = $original_cookie;
+				}
+				// phpcs:enable
+				delete_transient( Institution::TRANSIENT_KEY );
+				$this->reset_restriction_cache();
+			}
+		}
 
-		$this->assertTrue(
-			apply_filters( 'rest_send_nocache_headers', false ),
+		$this->assertArrayHasKey(
+			'Cache-Control',
+			$result['headers'],
 			'A response whose body depends on reader entitlement must not be shared-cached.'
 		);
+		$this->assertStringContainsString(
+			'no-store',
+			$result['headers']['Cache-Control'],
+			'A response whose body depends on reader entitlement must not be shared-cached.'
+		);
+
+		if ( $entitled ) {
+			// Prove the reader really was admitted -- nothing substituted -- so the
+			// no-store assertion above is guarding a response that actually needs it.
+			$this->assertStringContainsString(
+				self::BODY_SENTINEL,
+				$result['data'][0]['content']['rendered'],
+				'An anonymous reader admitted via the institutional rule must receive the full body, unmodified.'
+			);
+		}
 	}
 
 	/**
@@ -574,13 +770,17 @@ class Test_Content_Gate_Rest extends \WP_UnitTestCase {
 
 	/**
 	 * A site with no published gate must not force no-cache headers on an
-	 * ordinary REST read.
+	 * ordinary REST read -- proven by the absence of a forced no-store
+	 * Cache-Control header from serve_request(), not merely by the
+	 * `rest_send_nocache_headers` filter's return value (see
+	 * serve_request_and_capture_headers()'s docblock for why the filter
+	 * alone is not sufficient evidence).
 	 *
-	 * Before this guard existed, filter_rest_response() reached the
-	 * `rest_send_nocache_headers` opt-in unconditionally for every
-	 * REST-exposed post type as soon as the feature flag was on, regardless
-	 * of whether anything on the site could actually restrict a post -- an
-	 * attachment read (`/wp/v2/media`) was enough to flip it.
+	 * Before the guard filter_rest_response() checks existed, that method
+	 * reached the `rest_send_nocache_headers` opt-in unconditionally for
+	 * every REST-exposed post type as soon as the feature flag was on,
+	 * regardless of whether anything on the site could actually restrict a
+	 * post -- an attachment read (`/wp/v2/media`) was enough to flip it.
 	 */
 	public function test_rest_reads_do_not_force_nocache_headers_without_a_restriction_source() {
 		wp_update_post(
@@ -591,12 +791,22 @@ class Test_Content_Gate_Rest extends \WP_UnitTestCase {
 		);
 		wp_set_current_user( 0 );
 
-		$this->rest_get( '/wp/v2/posts/' . $this->open_post_id );
+		$result  = $this->serve_request_and_capture_headers( '/wp/v2/posts/' . $this->open_post_id );
+		$headers = $result['headers'];
 
-		$this->assertFalse(
-			apply_filters( 'rest_send_nocache_headers', false ),
-			'A site with no published gate must not force no-cache headers on REST reads.'
-		);
+		if ( isset( $headers['Cache-Control'] ) ) {
+			$this->assertStringNotContainsString(
+				'no-store',
+				$headers['Cache-Control'],
+				'A site with no published gate must not force no-cache headers on REST reads.'
+			);
+		} else {
+			$this->assertArrayNotHasKey(
+				'Cache-Control',
+				$headers,
+				'A site with no published gate must not force no-cache headers on REST reads.'
+			);
+		}
 	}
 
 	// NOTE: filter_rest_response() also bails when Memberships::is_active(),
