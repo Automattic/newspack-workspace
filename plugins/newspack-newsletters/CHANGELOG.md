@@ -1,3 +1,10 @@
+## newspack-newsletters [3.38.3](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.38.2...newspack-newsletters@3.38.3) (2026-08-10)
+
+
+### Bug Fixes
+
+* **newsletters:** tolerate foreign send-list ids after ESP switch ([#627](https://github.com/Automattic/newspack-workspace/issues/627)) ([037e5e0](https://github.com/Automattic/newspack-workspace/commit/037e5e040a8d9e344660afa0b831a17262a73488))
+
 ## newspack-newsletters [3.38.2](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.38.1...newspack-newsletters@3.38.2) (2026-08-05)
 
 
