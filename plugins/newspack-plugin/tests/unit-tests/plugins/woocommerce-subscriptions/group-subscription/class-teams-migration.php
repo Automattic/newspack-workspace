@@ -662,10 +662,119 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 		$this->assertSame( 2, $dropped, 'Each pending invitation with a non-email title is counted exactly once.' );
 
 		// Chunking only bounds the per-query load; it must not change the result.
+		// chunk_size 1 puts team B — which HAS invitations and a drop — in a
+		// trailing chunk, so an implementation that kept only the first chunk's
+		// results (or reset the by-reference drop tally between round trips)
+		// fails this assertion instead of hiding behind an empty trailing chunk.
 		$chunked_dropped = 0;
-		$chunked         = Teams_Migration::get_pending_team_invitation_emails_for_teams( [ $team_a, $team_b, $team_c ], $chunked_dropped, 2 );
-		$this->assertSame( $bulk, $chunked, 'A chunked read must return exactly what the one-shot read returns.' );
-		$this->assertSame( $dropped, $chunked_dropped, 'The drop tally must be chunk-independent.' );
+		$chunked         = Teams_Migration::get_pending_team_invitation_emails_for_teams( [ $team_a, $team_b, $team_c ], $chunked_dropped, 1 );
+		$this->assertSame( $bulk, $chunked, 'A chunked read must return exactly what the one-shot read returns, including trailing chunks.' );
+		$this->assertSame( $dropped, $chunked_dropped, 'The drop tally must accumulate across chunks.' );
+	}
+
+	/**
+	 * A present-but-invalid --limit must abort, never silently become "no cap":
+	 * the scripted shape --limit=$BATCH --yes --live with an unset variable would
+	 * otherwise run the full burst with the disclosing prompt suppressed.
+	 */
+	public function test_validate_send_limit_rejects_everything_but_positive_integers() {
+		$this->assertSame( 0, Teams_Migration::validate_send_limit( null ), 'Flag absent means no cap.' );
+		$this->assertSame( 7, Teams_Migration::validate_send_limit( '7' ), 'A positive integer string is the cap.' );
+		$this->assertSame( 100, Teams_Migration::validate_send_limit( 100 ), 'A positive integer is the cap.' );
+
+		foreach ( [ '', 'abc', '0', 0, '-5', -5, '5.5', true ] as $bad ) {
+			$result = Teams_Migration::validate_send_limit( $bad );
+			$this->assertWPError( $result, sprintf( 'Value %s must be rejected, not collapsed into "no cap".', wp_json_encode( $bad ) ) );
+		}
+	}
+
+	/**
+	 * The re-invite table's outcome labels, pinned per state. The two orderings
+	 * that matter most: a team-level error on a live run must never read as a
+	 * rehearsal, and a flagless run's lapsed invitee must read "not sent" —
+	 * matching the table's own header — never "would send again … (dry run)".
+	 */
+	public function test_invitation_outcome_label_covers_every_state() {
+		$result = [
+			'emails'       => [],
+			'sent'         => [ 'sent@test.com', 'resent@test.com' ],
+			'resent'       => [ 'resent@test.com' ],
+			'skipped'      => [ 'skipped@test.com' => 'Already invited.' ],
+			'failed'       => [ 'failed@test.com' => 'Relay said no.' ],
+			'would_resend' => [ 'lapsed@test.com' ],
+		];
+
+		$this->assertSame( 'invite sent', Teams_Migration::invitation_outcome_label( $result, 'sent@test.com', true ) );
+		$this->assertSame( 'invite sent (earlier invite had lapsed)', Teams_Migration::invitation_outcome_label( $result, 'resent@test.com', true ) );
+		$this->assertSame( 'skipped — Already invited.', Teams_Migration::invitation_outcome_label( $result, 'skipped@test.com', true ) );
+		$this->assertSame( 'FAILED — Relay said no.', Teams_Migration::invitation_outcome_label( $result, 'failed@test.com', true ) );
+		$this->assertSame( 'would send again — earlier invite lapsed (dry run)', Teams_Migration::invitation_outcome_label( $result, 'lapsed@test.com', true ), 'A flagged rehearsal labels the lapsed invitee as the second email it would be.' );
+		$this->assertSame( 'would send (dry run)', Teams_Migration::invitation_outcome_label( $result, 'fresh@test.com', true ) );
+
+		// Without the flag, nothing about a rehearsal may appear — including for
+		// a lapsed invitee, whose would_resend entry must rank below the flag check.
+		$this->assertSame( 'not sent (pass --migrate-invitations to send)', Teams_Migration::invitation_outcome_label( $result, 'lapsed@test.com', false ), 'A flagless run must not claim a rehearsal happened.' );
+		$this->assertSame( 'not sent (pass --migrate-invitations to send)', Teams_Migration::invitation_outcome_label( $result, 'fresh@test.com', false ) );
+
+		// A team-level error outranks both dry-run fallbacks, on any run mode.
+		$errored = array_merge( $result, [ 'errored' => true, 'sent' => [], 'resent' => [], 'skipped' => [], 'failed' => [] ] );
+		$this->assertSame( 'not attempted (team error — see errors above)', Teams_Migration::invitation_outcome_label( $errored, 'anyone@test.com', true ) );
+		$this->assertSame( 'not attempted (team error — see errors above)', Teams_Migration::invitation_outcome_label( $errored, 'lapsed@test.com', true ), 'An errored team\'s lapsed invitee reads as not attempted, not as a rehearsal.' );
+	}
+
+	/**
+	 * Failed attempts consume --limit's budget: each failure is a relay attempt
+	 * plus a write/rollback cycle, which is the load the cap exists to bound. A
+	 * budget counting only successes would let a struggling relay turn a bounded
+	 * run into unbounded attempts.
+	 */
+	public function test_migrate_team_invitations_failed_attempts_consume_the_limit() {
+		$owner        = $this->create_reader();
+		$subscription = $this->create_group_subscription( $owner );
+		$team_id      = $this->create_team( $owner, [], $subscription->get_id() );
+		$this->create_team_invitation( $team_id, 'budget-a@test.com' );
+		$this->create_team_invitation( $team_id, 'budget-b@test.com' );
+		$this->create_team_invitation( $team_id, 'budget-c@test.com' );
+
+		add_filter( 'pre_wp_mail', '__return_false' );
+		$run = Teams_Migration::migrate_team_invitations( $subscription, $team_id, true, null, 2 );
+		remove_filter( 'pre_wp_mail', '__return_false' );
+
+		$this->assertSame( [], $run['sent'], 'Nothing is delivered while the relay fails.' );
+		$this->assertCount( 2, $run['failed'], 'Exactly two attempts are made under a budget of two.' );
+		$this->assertCount( 1, $run['skipped'], 'The third invitee is skipped by the spent budget, not attempted.' );
+		$this->assertStringContainsString( '--limit', (string) array_values( $run['skipped'] )[0], 'The skip reason names the flag.' );
+		$this->assertEmpty( Group_Subscription_Invite::get_invites( $subscription ), 'Both failed attempts are rolled back.' );
+	}
+
+	/**
+	 * A lapsed invitee's rehearsal outcome must say a live run would email them a
+	 * SECOND time — labelled as a plain send, the double-email warning would never
+	 * fire on the rehearsal, the one preview gap that under-warns.
+	 */
+	public function test_migrate_team_invitations_dry_rehearsal_labels_lapsed_resends() {
+		$owner        = $this->create_reader();
+		$subscription = $this->create_group_subscription( $owner );
+		$team_id      = $this->create_team( $owner, [], $subscription->get_id() );
+		$invitee      = 'lapsed-rehearsal@test.com';
+		$this->create_team_invitation( $team_id, $invitee );
+
+		Teams_Migration::migrate_team_invitations( $subscription, $team_id, true );
+
+		// Age the stored invite past its expiry.
+		$invites = Group_Subscription_Invite::get_invites( $subscription );
+		foreach ( array_keys( $invites ) as $key ) {
+			$invites[ $key ]['expiration'] = time() - HOUR_IN_SECONDS;
+		}
+		$subscription->update_meta_data( Group_Subscription_Invite::META, $invites );
+		$subscription->save();
+
+		$rehearsal = Teams_Migration::migrate_team_invitations( $subscription, $team_id, false );
+
+		$this->assertSame( [ $invitee ], $rehearsal['would_resend'], 'The rehearsal must flag the lapsed invitee as a would-be second email.' );
+		$this->assertSame( [], $rehearsal['sent'], 'A rehearsal sends nothing.' );
+		$this->assertSame( [], $rehearsal['skipped'], 'A lapsed invitee is not skipped — a live run would email them.' );
+		$this->assertCount( 1, $this->get_sent_emails(), 'Only the original live send dispatched mail.' );
 	}
 
 	/**
