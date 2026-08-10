@@ -308,7 +308,7 @@ class WC_Order_Item_Product implements ArrayAccess {
 	public function set_product_id( $product_id ) {
 		global $products_database;
 		$product = $products_database[ (int) $product_id ] ?? null;
-		if ( $product_id > 0 && $product && $product->is_type( [ 'variation', 'subscription_variation' ] ) ) {
+		if ( $product_id > 0 && $product && $product->is_type( 'variation' ) ) {
 			throw new WC_Data_Exception( 'order_item_product_invalid_product_id', 'Invalid product ID' );
 		}
 		$this->data['product_id'] = (int) $product_id;
@@ -383,13 +383,13 @@ class WC_Order_Item_Product implements ArrayAccess {
 	 * @param WC_Product $product Product or variation.
 	 */
 	public function set_product( $product ) {
-		if ( $product->is_type( [ 'variation', 'subscription_variation' ] ) ) {
+		if ( $product->is_type( 'variation' ) ) {
 			$this->set_product_id( $product->get_parent_id() );
 			$this->set_variation_id( $product->get_id() );
 		} else {
 			$this->set_product_id( $product->get_id() );
 		}
-		$this->data['name'] = $product->get_name();
+		$this->set_name( $product->get_name() );
 	}
 	public function set_quantity( $quantity ) {
 		$this->data['quantity'] = $quantity;
@@ -426,8 +426,22 @@ class WC_Product {
 	public function get_type() {
 		return $this->data['type'] ?? 'simple';
 	}
+	/**
+	 * WC_Product_Subscription_Variation overrides is_type() so a
+	 * `subscription_variation` answers true to `is_type( 'variation' )`. Production
+	 * code relies on that alias — WC_Order_Item_Product::set_product() branches on
+	 * `is_type( 'variation' )` alone — so the mock has to model it, or a test would
+	 * take a different branch than the real code does.
+	 *
+	 * @param string|string[] $types Type or types to test.
+	 *
+	 * @return bool
+	 */
 	public function is_type( $types ) {
 		$types = (array) $types;
+		if ( 'subscription_variation' === $this->get_type() && in_array( 'variation', $types, true ) ) {
+			return true;
+		}
 		return in_array( $this->get_type(), $types, true );
 	}
 	public function get_parent_id() {
@@ -677,7 +691,20 @@ class WC_Subscription {
 	public function set_total( $total ) {
 		$this->data['total'] = $total;
 	}
+	/**
+	 * Real WC_Abstract_Order keys its items by order-item ID, which is what makes
+	 * `remove_item( $item->get_id() )` work. Preserve that when the fixture gave
+	 * the item an ID; fall back to appending for the many fixtures that don't, so
+	 * their positional keys keep working.
+	 *
+	 * @param WC_Order_Item_Product $item Line item.
+	 */
 	public function add_item( $item ) {
+		$item_id = method_exists( $item, 'get_id' ) ? (int) $item->get_id() : 0;
+		if ( $item_id ) {
+			$this->data['items'][ $item_id ] = $item;
+			return;
+		}
 		$this->data['items'][] = $item;
 	}
 	/**

@@ -116,7 +116,7 @@ class Teams_Migration {
 	 * ## OPTIONS
 	 *
 	 * [--product-id=<id>]
-	 * : Product ID to assign to newly-created subscriptions. When supplied, also overwrites the product on any existing subscription that is re-used. Required unless --skip-unlinked is passed.
+	 * : Product to assign to newly-created subscriptions. Accepts a product ID or a variation ID — pass the variation when a publisher sells seat tiers as variations of one variable subscription product. Must be published and accepted by a published gate's "Active subscription" rule. When supplied, also overwrites the product on any existing subscription that is re-used. Required unless --skip-unlinked is passed.
 	 *
 	 * [--live]
 	 * : Apply the changes. Without this flag the command runs as a dry-run and writes nothing.
@@ -162,7 +162,16 @@ class Teams_Migration {
 		}
 
 		if ( $migration_product ) {
-			WP_CLI::line( sprintf( 'Using product: "%s" (ID: %d)', $migration_product->get_name(), $migration_product->get_id() ) );
+			// Name which shape was passed: a variation and its parent read alike in
+			// the summary, and which one the operator meant is the crux of NPPD-1876.
+			WP_CLI::line(
+				sprintf(
+					'Using %s: "%s" (ID: %d)',
+					$migration_product->is_type( 'variation' ) ? sprintf( 'variation of product %d', $migration_product->get_parent_id() ) : 'product',
+					$migration_product->get_name(),
+					$migration_product->get_id()
+				)
+			);
 			// For a variable-subscription parent these meta live on the variation, not
 			// the parent, and come back empty; default them the same way
 			// create_group_subscription()/create_individual_subscription() do so an
@@ -171,6 +180,41 @@ class Teams_Migration {
 			$interval_meta    = \get_post_meta( $product_id, '_subscription_period_interval', true );
 			$billing_period   = '' !== $period_meta ? $period_meta : 'month';
 			$billing_interval = '' !== $interval_meta ? (int) $interval_meta : 1;
+
+			// An unpublished product fails the same way the migration used to fail on
+			// a variation: WC_Subscription::can_be_updated_to( 'active' ) rejects a
+			// line item whose product is unavailable, and unavailable includes any
+			// status other than publish. Checked here because a dry run cannot
+			// surface it — every write is behind ! $dry_run — so without this the
+			// first the operator hears of it is a fatal on team one of a live run.
+			if ( ! self::product_is_published( $migration_product ) ) {
+				WP_CLI::error(
+					sprintf(
+						'Product %d is not published, so subscriptions created against it cannot be activated. Publish it (or its parent product, for a variation) and re-run.',
+						$product_id
+					)
+				);
+			}
+
+			// A group subscription grants access only where a published gate lists
+			// its product: enforcement runs through WC_Subscription::has_product().
+			// Migrating against a product no gate accepts would report every team as
+			// migrated while granting access to nobody, and on the reuse path the
+			// subscription's original line items are replaced in the same pass, so
+			// there is nothing left to fall back on. Only checkable once the gates
+			// name some products; with none configured they are presumably still to
+			// be built around this product.
+			$access_product_ids = self::get_gate_access_product_ids();
+			if ( ! empty( $access_product_ids ) && ! self::product_grants_gate_access( $migration_product, $access_product_ids ) ) {
+				WP_CLI::error(
+					sprintf(
+						'Product %d is not among the products that grant access (%s), so migrating teams onto it would grant no access. Pass --product-id for a product the gates accept, or add %d to a gate\'s "Active subscription" rule first.',
+						$product_id,
+						implode( ', ', $access_product_ids ),
+						$product_id
+					)
+				);
+			}
 		}
 
 		if ( $dry_run ) {
@@ -1737,19 +1781,67 @@ class Teams_Migration {
 	}
 
 	/**
+	 * Whether a product is published, resolving a variation to its parent.
+	 *
+	 * WC_Subscription::contains_unavailable_product() checks the parent's status
+	 * for a variation, so the parent's status is what decides whether a migration
+	 * subscription can be activated.
+	 *
+	 * @param \WC_Product $product Product or variation.
+	 *
+	 * @return bool
+	 */
+	private static function product_is_published( $product ) {
+		$subject = $product;
+		if ( $product->is_type( 'variation' ) ) {
+			$parent = \wc_get_product( $product->get_parent_id() );
+			if ( ! $parent ) {
+				return false;
+			}
+			$subject = $parent;
+		}
+		return 'publish' === $subject->get_status();
+	}
+
+	/**
+	 * Whether the site's published gates would accept a subscription to a product.
+	 *
+	 * Enforcement runs through WC_Subscription::has_product(), which matches a
+	 * line item's product ID *or* its variation ID. So a gate naming a variable
+	 * subscription's parent accepts any of its variations, while a gate naming a
+	 * sibling variation accepts none of the others. Comparing the product's own
+	 * ID alone would refuse a variation the gates do in fact accept.
+	 *
+	 * @param \WC_Product $product            Product or variation.
+	 * @param int[]       $access_product_ids Product IDs the published gates accept.
+	 *
+	 * @return bool
+	 */
+	private static function product_grants_gate_access( $product, $access_product_ids ) {
+		$candidate_ids = [ (int) $product->get_id() ];
+		if ( $product->is_type( 'variation' ) ) {
+			$candidate_ids[] = (int) $product->get_parent_id();
+		}
+		foreach ( $candidate_ids as $candidate_id ) {
+			if ( $candidate_id && in_array( $candidate_id, $access_product_ids, true ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
 	 * Point a $0 migration line item at the product the operator chose.
 	 *
-	 * Assigning `product_id` directly cannot express a variation, and publishers
-	 * selling seat tiers hold them as variations of one variable subscription
-	 * product — so `--product-id` is routinely given a variation ID.
-	 * WC_Order_Item_Product::set_product_id() rejects any ID that is not a
-	 * `product` post by throwing, and set_props() swallows that into a return
-	 * value nobody reads, so the item is saved linked to nothing. From there the
-	 * subscription cannot be activated (WC Subscriptions refuses to activate a
-	 * subscription whose product is unavailable) and, on the reuse path where
-	 * nothing activates it, it silently grants access to nobody, since access is
-	 * matched by product ID. set_product() is the only setter that records a
-	 * variation correctly, splitting it into parent product ID + variation ID.
+	 * `set_product()` is the only setter that records a variation correctly,
+	 * splitting it into parent product ID + variation ID; assigning the
+	 * variation's own ID to `product_id` is rejected outright. Publishers selling
+	 * seat tiers hold them as variations of one variable subscription product, so
+	 * `--product-id` is routinely given a variation ID (see NPPD-1876).
+	 *
+	 * `create_group_subscription()` and `create_individual_subscription()` link
+	 * their items the same way inline rather than through this helper: they were
+	 * already correct, and each builds a differently-shaped item.
 	 *
 	 * @param \WC_Order_Item_Product $line_item The line item to populate.
 	 * @param \WC_Product            $product   The product or variation to link.
@@ -1766,14 +1858,14 @@ class Teams_Migration {
 	/**
 	 * Create a new $0 migration subscription for a team owner and set its dates.
 	 *
-	 * @param int              $owner_id         The owner user ID.
-	 * @param \WC_Product|null $migration_product The migration product.
-	 * @param string           $billing_period   The billing period.
-	 * @param int              $billing_interval The billing interval.
-	 * @param string           $start_date       The subscription start date.
-	 * @param string           $end_date         The subscription end date, or ''.
-	 * @param array            $errors           Errors array, passed by reference.
-	 * @param int              $team_id          The team post ID (for error context).
+	 * @param int         $owner_id         The owner user ID.
+	 * @param \WC_Product $migration_product The migration product.
+	 * @param string      $billing_period   The billing period.
+	 * @param int         $billing_interval The billing interval.
+	 * @param string      $start_date       The subscription start date.
+	 * @param string      $end_date         The subscription end date, or ''.
+	 * @param array       $errors           Errors array, passed by reference.
+	 * @param int         $team_id          The team post ID (for error context).
 	 *
 	 * @return \WC_Subscription|null The subscription, or null on failure.
 	 */

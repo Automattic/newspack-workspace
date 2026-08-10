@@ -51,8 +51,13 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 	 */
 	public function set_up() {
 		parent::set_up();
-		global $subscriptions_database;
+		global $subscriptions_database, $products_database;
 		$subscriptions_database = [];
+		// Products registered by one test are visible to every later one, and the
+		// mock's set_product_id() guard now reads this store to decide whether an ID
+		// is a variation — so a leaked registration could change another test's
+		// outcome. Every sibling test class resets it here for the same reason.
+		$products_database = [];
 		Group_Subscription::reset_cache();
 	}
 
@@ -945,6 +950,9 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 		$this->assertSame( 109742, $item->get_product_id(), 'A variation must be recorded against its parent product ID.' );
 		$this->assertSame( 109751, $item->get_variation_id(), 'The variation ID must be recorded on the line item.' );
 		$this->assertNotFalse( $item->get_product(), 'The line item must resolve to a product; an unresolvable item blocks activation.' );
+		// The name is no longer set explicitly — set_product() carries it over — so
+		// hold that behavior in place rather than leaving it implicit.
+		$this->assertSame( 'Corporate Self Checkout - Unlimited', $item->get_name(), 'The line item should take its name from the linked product.' );
 		$this->assertSame( [], $errors, 'Linking a variation should not record an error.' );
 	}
 
@@ -967,6 +975,22 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 			]
 		);
 
+		// Seed the team's original line item. This method leads with a removal loop,
+		// so without a pre-existing item the count assertion below would prove only
+		// that one item was added, not that the old one was cleared — and clearing
+		// it is the half that decides whether the group grants access.
+		$old_product = wc_create_mock_product(
+			[
+				'id'   => 500,
+				'name' => 'Legacy Teams product',
+				'type' => 'subscription',
+			]
+		);
+		$old_item = new WC_Order_Item_Product( [ 'id' => 4242 ] );
+		$old_item->set_product( $old_product );
+		$subscription->add_item( $old_item );
+		$this->assertCount( 1, $subscription->get_items(), 'Fixture check: the subscription starts with the legacy item.' );
+
 		$this->invoke_private(
 			'replace_subscription_product',
 			[ $subscription, $products['variation'], 'month', 1, '2026-01-01 00:00:00', '', &$errors, 94782 ]
@@ -979,6 +1003,85 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 		$this->assertSame( 109742, $item->get_product_id(), 'A variation must be recorded against its parent product ID.' );
 		$this->assertSame( 109751, $item->get_variation_id(), 'The variation ID must be recorded on the line item.' );
 		$this->assertNotFalse( $item->get_product(), 'The line item must resolve to a product, or the group grants no access.' );
+		$this->assertNotSame( 500, $item->get_product_id(), 'The legacy line item should have been removed, not kept alongside.' );
+	}
+
+	/**
+	 * A migration product's availability is decided by the parent's status.
+	 *
+	 * An unpublished product fails activation the same way an unlinked line item
+	 * does, so the pre-flight has to resolve a variation to its parent before
+	 * judging it.
+	 */
+	public function test_product_is_published_resolves_a_variation_to_its_parent() {
+		$products = $this->create_variable_subscription_product();
+
+		$this->assertTrue(
+			$this->invoke_private( 'product_is_published', [ $products['variation'] ] ),
+			'A variation under a published parent counts as published.'
+		);
+		$this->assertTrue(
+			$this->invoke_private( 'product_is_published', [ $products['parent'] ] ),
+			'A published parent counts as published.'
+		);
+
+		$draft_parent = wc_create_mock_product(
+			[
+				'id'     => 700,
+				'name'   => 'Draft parent',
+				'type'   => 'variable-subscription',
+				'status' => 'draft',
+			]
+		);
+		$draft_child  = wc_create_mock_product(
+			[
+				'id'        => 701,
+				'name'      => 'Variation of a draft parent',
+				'type'      => 'subscription_variation',
+				'parent_id' => 700,
+			]
+		);
+
+		$this->assertFalse(
+			$this->invoke_private( 'product_is_published', [ $draft_child ] ),
+			'A variation whose parent is unpublished must not pass pre-flight — it cannot be activated.'
+		);
+		$this->assertFalse(
+			$this->invoke_private( 'product_is_published', [ $draft_parent ] ),
+			'An unpublished product must not pass pre-flight.'
+		);
+	}
+
+	/**
+	 * Gate matching follows has_product(), which accepts a product or its parent.
+	 *
+	 * A flat comparison against the product's own ID would refuse a seat-tier
+	 * variation on a site whose gate names the parent variable product — a
+	 * configuration that works perfectly at runtime.
+	 */
+	public function test_product_grants_gate_access_accepts_a_parent_rule() {
+		$products = $this->create_variable_subscription_product();
+
+		$this->assertTrue(
+			$this->invoke_private( 'product_grants_gate_access', [ $products['variation'], [ 109742 ] ] ),
+			'A gate naming the parent product accepts any of its variations.'
+		);
+		$this->assertTrue(
+			$this->invoke_private( 'product_grants_gate_access', [ $products['variation'], [ 109751 ] ] ),
+			'A gate naming the variation itself accepts it.'
+		);
+		$this->assertTrue(
+			$this->invoke_private( 'product_grants_gate_access', [ $products['parent'], [ 109742 ] ] ),
+			'A gate naming a plain product accepts it.'
+		);
+		$this->assertFalse(
+			$this->invoke_private( 'product_grants_gate_access', [ $products['variation'], [ 109999 ] ] ),
+			'A gate naming only a sibling variation accepts nothing.'
+		);
+		$this->assertFalse(
+			$this->invoke_private( 'product_grants_gate_access', [ $products['parent'], [ 109751 ] ] ),
+			'A gate naming a variation does not accept the bare parent product.'
+		);
 	}
 
 	/**
@@ -1000,10 +1103,15 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 			[ $owner, $product, 'month', 1, '2026-01-01 00:00:00', '', &$errors, 94783 ]
 		);
 
+		$this->assertNotNull( $subscription, 'The subscription should be created.' );
+		$this->assertSame( [], $errors, 'Linking a plain product should not record an error.' );
+
 		$items = $subscription->get_items();
-		$item  = array_shift( $items );
+		$this->assertCount( 1, $items, 'The subscription should carry one line item.' );
+		$item = array_shift( $items );
 
 		$this->assertSame( 500, $item->get_product_id(), 'A non-variation product links by product ID.' );
 		$this->assertSame( 0, $item->get_variation_id(), 'A non-variation product has no variation ID.' );
+		$this->assertNotFalse( $item->get_product(), 'The line item must resolve to a product.' );
 	}
 }
