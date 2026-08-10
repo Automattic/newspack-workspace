@@ -161,6 +161,12 @@ class Premium_Newsletters {
 			return $lists;
 		}
 
+		// If there are no premium newsletter gates, no list can be restricted, so
+		// skip the per-list check entirely. get_gates() is statically cached.
+		if ( empty( self::get_gates() ) ) {
+			return $lists;
+		}
+
 		// Goes inert with the rest of gating (NPPD-1846). With Audience Management off
 		// Access Control restricts nothing at all, and that includes premium lists:
 		// restricted lists reappear in signup forms and anyone can join them. That is
