@@ -875,4 +875,135 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 		);
 		$this->assertFalse( $reuse['used_owner_fallback'], 'No eligible fallback exists here.' );
 	}
+
+	/**
+	 * Register a variable subscription parent and one variation, as a publisher
+	 * selling seat tiers would have (NPPD-1876).
+	 *
+	 * @return array{parent: WC_Product, variation: WC_Product}
+	 */
+	private function create_variable_subscription_product() {
+		$parent = wc_create_mock_product(
+			[
+				'id'   => 109742,
+				'name' => 'Corporate Self Checkout',
+				'type' => 'variable-subscription',
+			]
+		);
+		$variation = wc_create_mock_product(
+			[
+				'id'        => 109751,
+				'name'      => 'Corporate Self Checkout - Unlimited',
+				'type'      => 'subscription_variation',
+				'parent_id' => 109742,
+			]
+		);
+		return [
+			'parent'    => $parent,
+			'variation' => $variation,
+		];
+	}
+
+	/**
+	 * Call one of the migration's private static creators.
+	 *
+	 * @param string $method Method name.
+	 * @param array  $args   Positional arguments.
+	 *
+	 * @return mixed
+	 */
+	private function invoke_private( $method, $args ) {
+		$reflection = new ReflectionMethod( Teams_Migration::class, $method );
+		$reflection->setAccessible( true );
+		return $reflection->invokeArgs( null, $args );
+	}
+
+	/**
+	 * A team migrated against a variation must end up linked to that variation.
+	 *
+	 * Publishers selling seat tiers hold them as variations of one variable
+	 * subscription product, so `--product-id` is routinely given a variation ID.
+	 * Assigning that ID straight to the line item's `product_id` is rejected by
+	 * WooCommerce and silently dropped, leaving an item linked to nothing — which
+	 * then makes WC Subscriptions refuse to activate the subscription (NPPD-1876).
+	 */
+	public function test_create_migration_subscription_links_a_variation() {
+		$owner    = $this->create_reader();
+		$products = $this->create_variable_subscription_product();
+		$errors   = [];
+
+		$subscription = $this->invoke_private(
+			'create_migration_subscription',
+			[ $owner, $products['variation'], 'month', 1, '2026-01-01 00:00:00', '', &$errors, 94782 ]
+		);
+
+		$this->assertNotNull( $subscription, 'The subscription should be created.' );
+		$items = $subscription->get_items();
+		$this->assertCount( 1, $items, 'The subscription should carry one line item.' );
+		$item = array_shift( $items );
+
+		$this->assertSame( 109742, $item->get_product_id(), 'A variation must be recorded against its parent product ID.' );
+		$this->assertSame( 109751, $item->get_variation_id(), 'The variation ID must be recorded on the line item.' );
+		$this->assertNotFalse( $item->get_product(), 'The line item must resolve to a product; an unresolvable item blocks activation.' );
+		$this->assertSame( [], $errors, 'Linking a variation should not record an error.' );
+	}
+
+	/**
+	 * The same linkage is required when re-using a team's existing subscription.
+	 *
+	 * This path never calls update_status(), so a dropped product ID raises no
+	 * exception — the subscription stays active and reports as migrated while
+	 * granting access to nobody, because access is matched by product ID.
+	 */
+	public function test_replace_subscription_product_links_a_variation() {
+		$owner        = $this->create_reader();
+		$products     = $this->create_variable_subscription_product();
+		$errors       = [];
+		$subscription = wcs_create_subscription(
+			[
+				'customer_id'    => $owner,
+				'status'         => 'active',
+				'billing_period' => 'month',
+			]
+		);
+
+		$this->invoke_private(
+			'replace_subscription_product',
+			[ $subscription, $products['variation'], 'month', 1, '2026-01-01 00:00:00', '', &$errors, 94782 ]
+		);
+
+		$items = $subscription->get_items();
+		$this->assertCount( 1, $items, 'The reused subscription should carry exactly the migration line item.' );
+		$item = array_shift( $items );
+
+		$this->assertSame( 109742, $item->get_product_id(), 'A variation must be recorded against its parent product ID.' );
+		$this->assertSame( 109751, $item->get_variation_id(), 'The variation ID must be recorded on the line item.' );
+		$this->assertNotFalse( $item->get_product(), 'The line item must resolve to a product, or the group grants no access.' );
+	}
+
+	/**
+	 * A plain (non-variation) product still links as before.
+	 */
+	public function test_create_migration_subscription_links_a_simple_product() {
+		$owner   = $this->create_reader();
+		$product = wc_create_mock_product(
+			[
+				'id'   => 500,
+				'name' => 'Group Subscription',
+				'type' => 'subscription',
+			]
+		);
+		$errors = [];
+
+		$subscription = $this->invoke_private(
+			'create_migration_subscription',
+			[ $owner, $product, 'month', 1, '2026-01-01 00:00:00', '', &$errors, 94783 ]
+		);
+
+		$items = $subscription->get_items();
+		$item  = array_shift( $items );
+
+		$this->assertSame( 500, $item->get_product_id(), 'A non-variation product links by product ID.' );
+		$this->assertSame( 0, $item->get_variation_id(), 'A non-variation product has no variation ID.' );
+	}
 }

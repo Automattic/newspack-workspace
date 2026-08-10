@@ -1737,6 +1737,33 @@ class Teams_Migration {
 	}
 
 	/**
+	 * Point a $0 migration line item at the product the operator chose.
+	 *
+	 * Assigning `product_id` directly cannot express a variation, and publishers
+	 * selling seat tiers hold them as variations of one variable subscription
+	 * product — so `--product-id` is routinely given a variation ID.
+	 * WC_Order_Item_Product::set_product_id() rejects any ID that is not a
+	 * `product` post by throwing, and set_props() swallows that into a return
+	 * value nobody reads, so the item is saved linked to nothing. From there the
+	 * subscription cannot be activated (WC Subscriptions refuses to activate a
+	 * subscription whose product is unavailable) and, on the reuse path where
+	 * nothing activates it, it silently grants access to nobody, since access is
+	 * matched by product ID. set_product() is the only setter that records a
+	 * variation correctly, splitting it into parent product ID + variation ID.
+	 *
+	 * @param \WC_Order_Item_Product $line_item The line item to populate.
+	 * @param \WC_Product            $product   The product or variation to link.
+	 *
+	 * @return void
+	 */
+	private static function link_migration_product( $line_item, $product ) {
+		$line_item->set_product( $product );
+		$line_item->set_quantity( 1 );
+		$line_item->set_subtotal( 0 );
+		$line_item->set_total( 0 );
+	}
+
+	/**
 	 * Create a new $0 migration subscription for a team owner and set its dates.
 	 *
 	 * @param int              $owner_id         The owner user ID.
@@ -1770,15 +1797,7 @@ class Teams_Migration {
 		}
 
 		$line_item = new \WC_Order_Item_Product();
-		$line_item->set_props(
-			[
-				'product_id' => $migration_product->get_id(),
-				'name'       => $migration_product->get_name(),
-				'quantity'   => 1,
-				'subtotal'   => 0,
-				'total'      => 0,
-			]
-		);
+		self::link_migration_product( $line_item, $migration_product );
 		$line_item->set_taxes( [] );
 		$new_sub->add_item( $line_item );
 
@@ -1832,15 +1851,7 @@ class Teams_Migration {
 			$subscription->remove_item( $item_id );
 		}
 		$line_item = new \WC_Order_Item_Product();
-		$line_item->set_props(
-			[
-				'product_id' => $migration_product->get_id(),
-				'name'       => $migration_product->get_name(),
-				'quantity'   => 1,
-				'subtotal'   => 0,
-				'total'      => 0,
-			]
-		);
+		self::link_migration_product( $line_item, $migration_product );
 
 		$subscription->set_billing_period( $billing_period );
 		$subscription->set_billing_interval( $billing_interval );
