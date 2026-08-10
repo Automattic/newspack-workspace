@@ -532,4 +532,82 @@ class Test_Content_Gate_Rest extends \WP_UnitTestCase {
 			'entitled reader'  => [ true ],
 		];
 	}
+
+	/**
+	 * The same post yields the same gated string on both paths.
+	 *
+	 * Both substitute after the standard the_content chain — the front end at
+	 * RESTRICTION_PRIORITY (999) and PHP_INT_MAX, REST after core has already
+	 * rendered — so the two strings are expected to match exactly.
+	 */
+	public function test_rest_and_front_end_produce_the_same_gated_string() {
+		wp_set_current_user( 0 );
+
+		$data = $this->rest_get( '/wp/v2/posts/' . $this->gated_post_id );
+
+		$this->go_to( get_permalink( $this->gated_post_id ) );
+		the_post();
+		$front_end = apply_filters( 'the_content', get_post( $this->gated_post_id )->post_content );
+
+		// The registration block's form id comes from wp_unique_id(), a
+		// process-wide counter (see get_form_id() in
+		// src/blocks/reader-registration/index.php). Its own docblock says the
+		// id "doesn't need to be predictable nor consistent across page
+		// renders" — real traffic renders exactly one of these two paths per
+		// request, never both. This test renders the same post twice in one
+		// process to compare them, which is the one situation where that
+		// counter is guaranteed to disagree between the two calls regardless
+		// of whether the gate substitution itself is correct. Normalizing it
+		// out is required for the comparison to mean anything; with it
+		// normalized, the two strings match byte-for-byte, which is the
+		// parity claim holding, not being weakened.
+		$normalize_form_id = static function ( $content ) {
+			return preg_replace( '/newspack-register-\d+/', 'newspack-register-N', $content );
+		};
+
+		$this->assertSame(
+			$normalize_form_id( trim( $front_end ) ),
+			$normalize_form_id( trim( $data['content']['rendered'] ) ),
+			'A gated post should read identically on both paths.'
+		);
+	}
+
+	/**
+	 * An overlay-style gate withholds the body and emits no inline gate.
+	 */
+	public function test_overlay_style_gate_returns_the_teaser_only() {
+		// The 'style' meta that controls inline-vs-overlay rendering lives on
+		// the gate LAYOUT post, not on the gate post itself: Content_Gate::
+		// create_gate() auto-creates a separate layout post per mode and
+		// stores its ID under registration.gate_layout_id (see set_up(),
+		// which passes 'gate_id' => 0 and lets create_gate() generate one).
+		// get_inline_gate_content_for_post() reads style from that layout
+		// post; $this->gate_id is a different post entirely.
+		$gate_layout_id = Content_Gate::get_registration_settings( $this->gate_id )['gate_layout_id'];
+		update_post_meta( $gate_layout_id, 'style', 'overlay' );
+		wp_set_current_user( 0 );
+
+		$data = $this->rest_get( '/wp/v2/posts/' . $this->gated_post_id );
+
+		$this->assertStringNotContainsString(
+			self::BODY_SENTINEL,
+			$data['content']['rendered'],
+			'An overlay gate still withholds the body over REST.'
+		);
+		// Every class this codebase actually renders for a gate — inline or
+		// overlay — is prefixed 'newspack-content-gate' (see
+		// trait-content-gate-layout.php); the bare substring 'newspack-gate'
+		// never occurs anywhere in the plugin's markup, so it can never
+		// distinguish an overlay gate from an inline one. 'newspack-content-gate__inline-gate'
+		// is what get_inline_gate_content_for_post() actually emits when style
+		// resolves to 'inline' (the value the wrong-post bug this replaces
+		// would have silently left in place); its absence is genuine evidence
+		// that get_inline_gate_html() returned the empty string this claim
+		// requires for a non-inline style.
+		$this->assertStringNotContainsString(
+			'newspack-content-gate__inline-gate',
+			$data['content']['rendered'],
+			'The overlay is a front-end affordance and has no place in the payload.'
+		);
+	}
 }
