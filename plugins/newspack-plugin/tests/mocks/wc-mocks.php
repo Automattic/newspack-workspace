@@ -569,8 +569,15 @@ class WC_Order {
 	public function get_date_completed() {
 		return new WC_DateTime( $this->data['date_completed'] );
 	}
+	/**
+	 * Real WC_Abstract_Order returns '0' for an order with no total set; without
+	 * a default a fixture that omits it raises an undefined-key warning instead.
+	 */
 	public function get_total() {
-		return $this->data['total'];
+		return $this->data['total'] ?? 0;
+	}
+	public function get_subtotal() {
+		return $this->data['subtotal'] ?? 0;
 	}
 	public function get_status() {
 		return $this->data['status'];
@@ -697,8 +704,20 @@ class WC_Subscription {
 	public function get_date_paid() {
 		return new WC_DateTime( $this->data['date_paid'] );
 	}
+	/**
+	 * Real WC_Abstract_Order returns '0' when no total is set; without a default
+	 * a fixture that omits it raises an undefined-key warning instead. Production
+	 * code now reads this for every reused subscription.
+	 */
 	public function get_total() {
-		return $this->data['total'];
+		return $this->data['total'] ?? 0;
+	}
+	/**
+	 * Pre-discount total. Distinguishes a fully-discounted subscription, which
+	 * still carries a subtotal, from a $0 migration subscription, which does not.
+	 */
+	public function get_subtotal() {
+		return $this->data['subtotal'] ?? 0;
 	}
 	public function get_status() {
 		return $this->data['status'];

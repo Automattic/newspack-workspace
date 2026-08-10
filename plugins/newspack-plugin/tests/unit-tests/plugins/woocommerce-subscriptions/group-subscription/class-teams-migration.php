@@ -1123,6 +1123,71 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Whether a reused subscription counts as one the publisher bills.
+	 *
+	 * This predicate decides whether a team's subscription keeps its commercial
+	 * terms or is rewritten to $0 on the migration product, so a false negative
+	 * deletes the product line the publisher sells. It errs toward "paid".
+	 */
+	public function test_subscription_is_paid_errs_toward_paid() {
+		$paid = wcs_create_subscription(
+			[
+				'customer_id'    => $this->create_reader(),
+				'status'         => 'active',
+				'billing_period' => 'month',
+				'total'          => 599,
+			]
+		);
+		$this->assertTrue(
+			$this->invoke_private( 'subscription_is_paid', [ $paid ] ),
+			'A subscription with a recurring total is one the publisher bills.'
+		);
+
+		// A fully-discounted subscription stores a total of 0 but is still sold —
+		// the pre-discount subtotal is what distinguishes it from a $0 migration
+		// subscription, which has neither.
+		$fully_discounted = wcs_create_subscription(
+			[
+				'customer_id'    => $this->create_reader(),
+				'status'         => 'active',
+				'billing_period' => 'month',
+				'total'          => 0,
+				'subtotal'       => 599,
+			]
+		);
+		$this->assertTrue(
+			$this->invoke_private( 'subscription_is_paid', [ $fully_discounted ] ),
+			'A 100% recurring coupon must not read as free, or migration deletes the product being sold.'
+		);
+
+		$migration_created = wcs_create_subscription(
+			[
+				'customer_id'    => $this->create_reader(),
+				'status'         => 'active',
+				'billing_period' => 'month',
+				'total'          => 0,
+				'subtotal'       => 0,
+			]
+		);
+		$this->assertFalse(
+			$this->invoke_private( 'subscription_is_paid', [ $migration_created ] ),
+			'A $0 subscription with no pre-discount value is a migration subscription and stays re-alignable.'
+		);
+
+		$no_total_set = wcs_create_subscription(
+			[
+				'customer_id'    => $this->create_reader(),
+				'status'         => 'active',
+				'billing_period' => 'month',
+			]
+		);
+		$this->assertFalse(
+			$this->invoke_private( 'subscription_is_paid', [ $no_total_set ] ),
+			'A subscription with no total recorded is not treated as paid.'
+		);
+	}
+
+	/**
 	 * Gate coverage for a paid team's own subscription follows has_product().
 	 *
 	 * A team the publisher bills keeps its own product rather than being rewritten
