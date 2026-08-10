@@ -30,6 +30,21 @@ class Subscription_Lists {
 	const CPT = 'newspack_nl_list';
 
 	/**
+	 * Post meta keys that carry a Subscription List's provider settings. A write to
+	 * any of these invalidates the list caches (see maybe_flush_cache_for_meta()).
+	 *
+	 * @var string[]
+	 */
+	private const LIST_META_KEYS = [
+		Subscription_List::META_KEY,
+		Subscription_List::TYPE_META,
+		Subscription_List::PROVIDER_META,
+		Subscription_List::REMOTE_ID_META,
+		Subscription_List::REMOTE_NAME_META,
+		Subscription_List::SUBSCRIBER_COUNT_META,
+	];
+
+	/**
 	 * Per-request memo of every Subscription List. Reset by flush_cache() whenever a
 	 * list is created, updated, trashed, untrashed, deleted, or its provider
 	 * settings (post meta) change. Disabled under PHPUnit — see get_all().
@@ -485,21 +500,13 @@ class Subscription_Lists {
 	 * meta-key check short-circuits before the post-type lookup for the many
 	 * unrelated meta writes elsewhere on the site.
 	 *
-	 * @param int    $meta_id  Meta ID (unused).
-	 * @param int    $post_id  Post the meta belongs to.
-	 * @param string $meta_key Meta key written.
+	 * @param int|string[] $meta_id  Meta ID. Int for added/updated meta, array of IDs for deleted meta. Unused.
+	 * @param int          $post_id  Post the meta belongs to.
+	 * @param string       $meta_key Meta key written.
 	 * @return void
 	 */
 	public static function maybe_flush_cache_for_meta( $meta_id, $post_id, $meta_key ) {
-		$list_meta_keys = [
-			Subscription_List::META_KEY,
-			Subscription_List::TYPE_META,
-			Subscription_List::PROVIDER_META,
-			Subscription_List::REMOTE_ID_META,
-			Subscription_List::REMOTE_NAME_META,
-			Subscription_List::SUBSCRIBER_COUNT_META,
-		];
-		if ( in_array( $meta_key, $list_meta_keys, true ) && self::CPT === get_post_type( $post_id ) ) {
+		if ( in_array( $meta_key, self::LIST_META_KEYS, true ) && self::CPT === get_post_type( $post_id ) ) {
 			self::flush_cache();
 		}
 	}
