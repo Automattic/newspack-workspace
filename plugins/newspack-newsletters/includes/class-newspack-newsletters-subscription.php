@@ -29,9 +29,9 @@ class Newspack_Newsletters_Subscription {
 	const LISTS_CACHE_PREFIX = 'newspack_newsletters_lists_';
 
 	/**
-	 * Memoized lists config.
+	 * Memoized lists config. Null is the cache-miss sentinel (see get_lists_config()).
 	 *
-	 * @var array
+	 * @var array|null
 	 */
 	private static $lists_config;
 

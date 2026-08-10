@@ -30,8 +30,9 @@ class Subscription_Lists_Test extends WP_UnitTestCase {
 	 * exercising the cache-hit path.
 	 */
 	public function test_new_active_list_appears_in_lists_config() {
+		// set_service_provider() now clears the provider-scoped config memo itself,
+		// so no manual reset_lists_config_cache() is needed here.
 		Newspack_Newsletters::set_service_provider( 'mailchimp' );
-		Newspack_Newsletters_Subscription::reset_lists_config_cache();
 		$before = count( Newspack_Newsletters_Subscription::get_lists_config() );
 
 		// Create and configure a new active Mailchimp list. The meta write does
@@ -54,6 +55,72 @@ class Subscription_Lists_Test extends WP_UnitTestCase {
 		$this->assertSame( $before + 1, $after, 'New active list should appear once the config cache is flushed.' );
 
 		wp_delete_post( $new_id, true );
+		Subscription_Lists::flush_cache();
+	}
+
+	/**
+	 * The cache-invalidation hooks stay registered. Pins the wiring so a future
+	 * edit that drops a registration is caught, even though the memo read itself is
+	 * disabled under PHPUnit.
+	 */
+	public function test_cache_invalidation_hooks_are_registered() {
+		$this->assertNotFalse(
+			has_action( 'save_post_' . Subscription_Lists::CPT, [ Subscription_Lists::class, 'flush_cache' ] ),
+			'save_post on a list flushes the cache'
+		);
+		foreach ( [ 'deleted_post', 'trashed_post', 'untrashed_post' ] as $hook ) {
+			$this->assertNotFalse(
+				has_action( $hook, [ Subscription_Lists::class, 'maybe_flush_cache_for_post' ] ),
+				"$hook flushes the list cache"
+			);
+		}
+		foreach ( [ 'added_post_meta', 'updated_post_meta', 'deleted_post_meta' ] as $hook ) {
+			$this->assertNotFalse(
+				has_action( $hook, [ Subscription_Lists::class, 'maybe_flush_cache_for_meta' ] ),
+				"$hook flushes the list cache"
+			);
+		}
+	}
+
+	/**
+	 * The flush guards discriminate correctly: a list post, or a list meta key on a
+	 * list post, flushes the memo; a non-list post or an unrelated meta key leaves
+	 * it intact. The memo read is disabled under PHPUnit, so this seeds the static
+	 * directly and asserts on whether flush_cache() cleared it.
+	 */
+	public function test_cache_invalidation_discriminates() {
+		$list_id     = self::$posts['only_mailchimp']; // newspack_nl_list.
+		$non_list_id = self::factory()->post->create(); // Regular post.
+
+		$memo = new \ReflectionProperty( Subscription_Lists::class, 'all_lists' );
+		$memo->setAccessible( true );
+		$seed = function () use ( $memo ) {
+			$memo->setValue( null, [ 'sentinel' ] );
+		};
+
+		// maybe_flush_cache_for_post: a list post flushes, a non-list post does not.
+		$seed();
+		Subscription_Lists::maybe_flush_cache_for_post( $non_list_id );
+		$this->assertSame( [ 'sentinel' ], $memo->getValue(), 'A non-list post must not flush the memo.' );
+
+		$seed();
+		Subscription_Lists::maybe_flush_cache_for_post( $list_id );
+		$this->assertNull( $memo->getValue(), 'A list post must flush the memo.' );
+
+		// maybe_flush_cache_for_meta: only a list meta key on a list post flushes.
+		$seed();
+		Subscription_Lists::maybe_flush_cache_for_meta( 1, $list_id, 'unrelated_key' );
+		$this->assertSame( [ 'sentinel' ], $memo->getValue(), 'An unrelated meta key must not flush the memo.' );
+
+		$seed();
+		Subscription_Lists::maybe_flush_cache_for_meta( 1, $non_list_id, Subscription_List::META_KEY );
+		$this->assertSame( [ 'sentinel' ], $memo->getValue(), 'A list meta key on a non-list post must not flush the memo.' );
+
+		$seed();
+		Subscription_Lists::maybe_flush_cache_for_meta( 1, $list_id, Subscription_List::META_KEY );
+		$this->assertNull( $memo->getValue(), 'A list meta key on a list post must flush the memo.' );
+
+		// Leave the memo cleared for the next test.
 		Subscription_Lists::flush_cache();
 	}
 
