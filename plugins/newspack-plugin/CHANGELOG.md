@@ -1,3 +1,10 @@
+## newspack [6.47.5](https://github.com/Automattic/newspack-workspace/compare/newspack@6.47.4...newspack@6.47.5) (2026-08-10)
+
+
+### Bug Fixes
+
+* **perfmatters:** exclude Complianz CSS from RUCSS (NPPM-3052) ([#739](https://github.com/Automattic/newspack-workspace/issues/739)) ([b9a5464](https://github.com/Automattic/newspack-workspace/commit/b9a54643b5fa61895ff22a973c1e190eaa04d94b))
+
 ## newspack [6.47.4](https://github.com/Automattic/newspack-workspace/compare/newspack@6.47.3...newspack@6.47.4) (2026-08-07)
 
 
