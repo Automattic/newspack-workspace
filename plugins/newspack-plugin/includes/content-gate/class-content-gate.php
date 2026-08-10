@@ -171,6 +171,7 @@ class Content_Gate {
 		add_filter( 'newspack_reader_activity_article_view', [ __CLASS__, 'suppress_article_view_activity' ], 100 );
 
 		add_action( 'the_post', [ __CLASS__, 'restrict_post' ], 10, 2 );
+		add_action( 'rest_api_init', [ __CLASS__, 'register_rest_filters' ] );
 		add_filter( 'the_content', [ __CLASS__, 'replace_restricted_content' ], self::RESTRICTION_PRIORITY );
 		add_filter( 'the_content', [ __CLASS__, 'handle_restricted_content' ], PHP_INT_MAX );
 		add_filter( 'comments_open', [ __CLASS__, 'filter_comments_open' ], 10, 2 );
@@ -371,8 +372,67 @@ class Content_Gate {
 
 		return [
 			'teaser' => self::get_restricted_post_excerpt( $post ),
-			'gate'   => self::get_inline_gate_html(),
+			// Pass the ID explicitly for the same reason self::get_restricted_post_excerpt()
+			// does: get_gate_layout_id()'s is_singular() fallback resolves to nothing outside
+			// a singular main-query view, and outside that view get_post( false ) falls back to
+			// the global $post rather than "no post" — which, from a REST callback, is the very
+			// restricted post being served, defeating the gate.
+			'gate'   => self::get_inline_gate_html( $post->ID ),
 		];
+	}
+
+	/**
+	 * Register the REST response filter for every post type exposed in REST.
+	 *
+	 * The `rest_prepare_{$post_type}` hook fires from WP_REST_Posts_Controller.
+	 * A post type declaring its own rest_controller_class never fires it; none
+	 * do in this workspace, and the boundary is documented rather than
+	 * assumed away.
+	 */
+	public static function register_rest_filters() {
+		foreach ( get_post_types( [ 'show_in_rest' => true ], 'names' ) as $post_type ) {
+			add_filter( "rest_prepare_{$post_type}", [ __CLASS__, 'filter_rest_response' ], 10, 3 );
+		}
+	}
+
+	/**
+	 * Substitute a restricted post's body in a REST response.
+	 *
+	 * {@see self::restrict_post()} cannot serve this path: it is hooked on
+	 * 'the_post' and returns early outside a singular main-query view, so
+	 * nothing populates the substitution the content filters read.
+	 *
+	 * @param \WP_REST_Response $response Response object.
+	 * @param \WP_Post          $post     Post being prepared.
+	 * @param \WP_REST_Request  $request  Request object.
+	 * @return \WP_REST_Response The response, with a restricted body substituted.
+	 */
+	public static function filter_rest_response( $response, $post, $request ) {
+		if ( ! self::is_newspack_feature_enabled() ) {
+			return $response;
+		}
+		if ( ! $response instanceof \WP_REST_Response || ! $post instanceof \WP_Post ) {
+			return $response;
+		}
+		// The block editor. Already gated behind an edit capability, and an
+		// editor whose reader account lacks entitlement must still be able to
+		// edit the post.
+		if ( 'edit' === $request['context'] ) {
+			return $response;
+		}
+
+		$restriction = self::get_restriction_for_post( $post );
+		if ( null === $restriction ) {
+			return $response;
+		}
+
+		$data = $response->get_data();
+		if ( isset( $data['content']['rendered'] ) ) {
+			$data['content']['rendered'] = $restriction['teaser'] . $restriction['gate'];
+		}
+		$response->set_data( $data );
+
+		return $response;
 	}
 
 	/**
