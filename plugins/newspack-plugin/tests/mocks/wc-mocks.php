@@ -646,7 +646,28 @@ class WC_Subscription {
 		}
 		return true;
 	}
+	/**
+	 * Real WC_Subscription::has_product() walks the line items and matches either
+	 * the product ID or the variation ID — which is what lets a rule naming a
+	 * variable subscription's parent accept any of its variations. Check the items
+	 * first so code depending on that matching behaves as it does in production,
+	 * then fall back to the fixture-supplied `products` list, which many tests use
+	 * to declare coverage without building line items.
+	 *
+	 * @param int $product_id Product or variation ID.
+	 *
+	 * @return bool
+	 */
 	public function has_product( $product_id ) {
+		$product_id = (int) $product_id;
+		foreach ( $this->get_items() as $item ) {
+			if ( ! method_exists( $item, 'get_product_id' ) ) {
+				continue;
+			}
+			if ( (int) $item->get_product_id() === $product_id || (int) $item->get_variation_id() === $product_id ) {
+				return true;
+			}
+		}
 		return in_array( $product_id, $this->products, true );
 	}
 	public function get_meta( $field_name ) {

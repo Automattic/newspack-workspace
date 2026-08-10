@@ -854,11 +854,21 @@ class Teams_Migration {
 			$access_products_source = 'derived from published gates';
 		}
 
+		$product = \wc_get_product( $product_id );
+		if ( ! $product ) {
+			WP_CLI::error( sprintf( 'Product %d could not be found.', $product_id ) );
+		}
+
 		// A $0 subscription for a product no gate accepts restores no access: the
 		// run would report "created" while the reader stays locked out. Only
 		// checkable when the accepted products are known — with none configured
 		// yet, the gates are presumably still to be built around this product.
-		if ( ! empty( $access_product_ids ) && ! in_array( $product_id, $access_product_ids, true ) ) {
+		// Matched through product_grants_gate_access() rather than a flat
+		// comparison because enforcement runs through has_product(), which accepts
+		// a line item's product ID or its variation ID: a gate naming a variable
+		// subscription's parent does accept a seat-tier variation, and refusing one
+		// here would block a --product-id that works.
+		if ( ! empty( $access_product_ids ) && ! self::product_grants_gate_access( $product, $access_product_ids ) ) {
 			WP_CLI::error(
 				sprintf(
 					'Product %d is not among the products that grant access (%s), so a subscription to it grants no access. Pass --product-id for a product the gates accept, or add %d to a gate\'s "Active subscription" rule first.',
@@ -867,11 +877,6 @@ class Teams_Migration {
 					$product_id
 				)
 			);
-		}
-
-		$product = \wc_get_product( $product_id );
-		if ( ! $product ) {
-			WP_CLI::error( sprintf( 'Product %d could not be found.', $product_id ) );
 		}
 
 		// Readers granted a $0 subscription to a limited product cannot purchase
@@ -2497,10 +2502,14 @@ class Teams_Migration {
 			if ( 'manual migration' !== $subscription->get_created_via() ) {
 				continue;
 			}
-			foreach ( $subscription->get_items() as $item ) {
-				if ( method_exists( $item, 'get_product_id' ) && (int) $item->get_product_id() === $product_id ) {
-					return true;
-				}
+			// has_product() matches a line item's product ID *or* its variation ID.
+			// Comparing get_product_id() alone would never recognise this command's
+			// own output for a variation --product-id, since create_individual_subscription()
+			// links through set_product() and so stores the parent in product_id —
+			// and an unrecognised prior run means every re-run grants another $0
+			// subscription rather than skipping the member.
+			if ( method_exists( $subscription, 'has_product' ) && $subscription->has_product( $product_id ) ) {
+				return true;
 			}
 		}
 		return false;

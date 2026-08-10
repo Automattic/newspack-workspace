@@ -1085,6 +1085,44 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The re-run guard must recognise a subscription linked to a variation.
+	 *
+	 * The migrate-manual-members command skips members who already hold a
+	 * migration subscription. Since a variation is stored as parent product ID plus
+	 * variation ID, matching on the product ID alone never recognised the
+	 * command's own output — so each re-run granted every member another $0
+	 * subscription instead of skipping them.
+	 */
+	public function test_member_has_migration_subscription_recognises_a_variation() {
+		$user         = $this->create_reader();
+		$products     = $this->create_variable_subscription_product();
+		$subscription = wcs_create_subscription(
+			[
+				'customer_id'    => $user,
+				'status'         => 'active',
+				'billing_period' => 'month',
+				'created_via'    => 'manual migration',
+			]
+		);
+		$item = new WC_Order_Item_Product();
+		$item->set_product( $products['variation'] );
+		$subscription->add_item( $item );
+
+		$this->assertTrue(
+			$this->invoke_private( 'member_has_migration_subscription', [ $user, 109751 ] ),
+			'A member holding a subscription linked to this variation must be recognised, or a re-run duplicates it.'
+		);
+		$this->assertTrue(
+			$this->invoke_private( 'member_has_migration_subscription', [ $user, 109742 ] ),
+			'The parent product ID must match too, since the line item records it.'
+		);
+		$this->assertFalse(
+			$this->invoke_private( 'member_has_migration_subscription', [ $user, 109999 ] ),
+			'An unrelated product must not match.'
+		);
+	}
+
+	/**
 	 * A plain (non-variation) product still links as before.
 	 */
 	public function test_create_migration_subscription_links_a_simple_product() {
