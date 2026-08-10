@@ -358,34 +358,20 @@ class Test_Content_Gate_Rest extends \WP_UnitTestCase {
 	/**
 	 * A REST collection read does not spend the reader's metered allowance.
 	 *
-	 * Metering only comes into play once a post is otherwise restricted:
-	 * Metering::restrict_post() flips a `true` restriction to `false` when
-	 * the reader still has metered views left. `registration.metering` alone
-	 * cannot exercise that: with `require_verification` false,
-	 * is_gated_by_registration() returns false for a logged-in reader, so
-	 * Metering::get_effective_settings() reads `custom_access.metering`
-	 * instead ({@see class-metering.php:267-274}) — the two settings groups
-	 * are read by different branches, not merged. And an empty
-	 * `access_rules` evaluates as "no constraint" (Access_Rules::evaluate_rules()
-	 * returns true for it), so custom_access.active alone doesn't restrict
-	 * anyone either. This fixture needs both: metering mirrored into
-	 * `custom_access.metering` (the branch that actually applies here), and
-	 * a real access rule that denies this reader so the post is genuinely
-	 * restricted in the first place.
-	 *
-	 * `email_domain` is that rule: is_email_domain_whitelisted() denies
-	 * outright whenever the reader isn't verified
-	 * ({@see class-access-rules.php:771}), which every subscriber created
-	 * below is not — no WooCommerce fixture required.
-	 *
-	 * The `newspack_content_gate_post_id` filter stands in for the
-	 * is_singular() main-query context Content_Gate::get_gate_post_id()
-	 * normally relies on to identify which gate is in play. A REST request
-	 * has no such context, so without this the settings lookup silently
-	 * resolves to nothing and metering never engages — the same technique
-	 * Test_Metering::test_metering_allowed_when_verification_not_required()
-	 * (tests/unit-tests/content-gate/metering.php) uses to reach the same
-	 * update_user_meta() write this test is asserting against.
+	 * This reproduction is synthetic, not a currently-reachable leak: the
+	 * `newspack_content_gate_post_id` filter below stands in for a gate-ID
+	 * resolution that real REST traffic never provides —
+	 * Content_Restriction_Control::get_gate_post_id() only trusts a post ID
+	 * under is_singular(), which a REST request never satisfies, so
+	 * Metering::is_logged_in_metering_allowed() bails before its
+	 * update_user_meta() write on every gate type today (confirmed for both
+	 * Content_Restriction_Control and Memberships gates; the latter also
+	 * bails earlier still, at get_restriction_for_post()'s
+	 * Memberships::is_active() check, before the metering filter is even
+	 * reached). This test therefore pins the short-circuit's behavior for
+	 * the day that resolution gap closes, rather than demonstrating a leak
+	 * exploitable today. The wrap in filter_rest_response() stays in as
+	 * planned defense in depth.
 	 */
 	public function test_rest_reads_do_not_consume_metered_allowance() {
 		$user_id = self::factory()->user->create( [ 'role' => 'subscriber' ] );
