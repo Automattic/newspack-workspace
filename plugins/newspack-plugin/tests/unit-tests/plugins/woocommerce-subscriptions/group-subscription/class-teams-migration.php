@@ -1188,6 +1188,59 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A pending-cancel subscription still grants access, so it is reusable.
+	 *
+	 * A team riding out a term it already paid for keeps access until the
+	 * subscription self-cancels. Both Access_Rules and Group_Subscription gate
+	 * member access on WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES, so
+	 * reusing such a subscription in place carries that expiry across the
+	 * migration; creating a $0 group for the team instead would grant its members
+	 * access forever, after the owner had cancelled.
+	 */
+	public function test_pending_cancel_counts_as_access_granting_for_reuse() {
+		$this->assertContains(
+			'pending-cancel',
+			\Newspack\WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES,
+			'Reuse keys on this constant; if pending-cancel leaves it, a cancelled-but-paid team would be given a permanent free group instead.'
+		);
+
+		$pending_cancel = wcs_create_subscription(
+			[
+				'customer_id'    => $this->create_reader(),
+				'status'         => 'pending-cancel',
+				'billing_period' => 'month',
+				'total'          => 599,
+			]
+		);
+		$this->assertTrue(
+			$pending_cancel->has_status( \Newspack\WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES ),
+			'A pending-cancel subscription is reusable, so the migration updates it in place rather than minting a $0 replacement.'
+		);
+		$this->assertTrue(
+			$this->invoke_private( 'subscription_is_paid', [ $pending_cancel ] ),
+			'It is also paid, so its product and price are left alone.'
+		);
+
+		// Even with no total recorded, a pending-cancel subscription must keep its
+		// terms: its scheduled end date is what ends group access on time.
+		$free_pending_cancel = wcs_create_subscription(
+			[
+				'customer_id'    => $this->create_reader(),
+				'status'         => 'pending-cancel',
+				'billing_period' => 'month',
+			]
+		);
+		$this->assertFalse(
+			$this->invoke_private( 'subscription_is_paid', [ $free_pending_cancel ] ),
+			'A $0 pending-cancel subscription is not paid — it is exempted from re-alignment by its status, not its total.'
+		);
+		$this->assertTrue(
+			$free_pending_cancel->has_status( 'pending-cancel' ),
+			'Status is the signal that preserves its end date.'
+		);
+	}
+
+	/**
 	 * Gate coverage for a paid team's own subscription follows has_product().
 	 *
 	 * A team the publisher bills keeps its own product rather than being rewritten

@@ -118,6 +118,13 @@ class Teams_Migration {
 	 * such a subscription keeps its own schedule, the team's Teams end date is not
 	 * carried onto it, so the group can outlive the membership it came from.
 	 *
+	 * A subscription already cancelled but paid through the end of its term
+	 * (pending-cancel) is migrated in place for the same reason and keeps its
+	 * scheduled end date, whatever its total. Its members hold access for the rest
+	 * of the paid term and lose it when the subscription self-cancels, which is
+	 * what the reader asked for; re-aligning it onto the migration product would
+	 * overwrite that end date and extend their access indefinitely.
+	 *
 	 * Two cases are skipped rather than migrated, and reported as errors in the
 	 * summary: a paid team whose own product no published gate accepts, since
 	 * granting access would mean rewriting what the publisher charges; and a team
@@ -323,10 +330,18 @@ class Teams_Migration {
 			$members_added  = 0;
 			$recovering_sub = null;
 
-			// Attempt to reuse the team's linked subscription if it is active.
+			// Attempt to reuse the team's linked subscription if it still grants
+			// access. That is active *or* pending-cancel: a team riding out a period
+			// it has already paid for keeps its access until the subscription
+			// self-cancels, and both Access_Rules and Group_Subscription gate member
+			// access on WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES. Reusing
+			// it in place carries that expiry across the migration, so the owner and
+			// the group's members lose access exactly when the subscription ends;
+			// creating a $0 group for such a team instead would hand them permanent
+			// access after they had cancelled.
 			if ( $raw_sub_id ) {
 				$existing_sub = \wcs_get_subscription( $raw_sub_id );
-				if ( $existing_sub && 'active' === $existing_sub->get_status() ) {
+				if ( $existing_sub && $existing_sub->has_status( WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES ) ) {
 					$subscription = $existing_sub;
 					if ( 'yes' === $existing_sub->get_meta( '_newspack_group_subscription_enabled' ) ) {
 						WP_CLI::line( sprintf( 'Team %d: subscription %d is already a group subscription — re-updating.', $team_id, $raw_sub_id ) );
@@ -464,12 +479,20 @@ class Teams_Migration {
 			// billing schedule and gains only the group settings.
 			$reused_is_paid = ! $created_new && self::subscription_is_paid( $subscription );
 
+			// A pending-cancel subscription keeps its terms too, whatever its total.
+			// Its dates are the point: the scheduled end is what makes the owner and
+			// the group's members lose access when the subscription self-cancels, and
+			// re-aligning it would overwrite those dates with migration-derived ones
+			// and extend access past the cancellation the reader asked for.
+			$reused_is_ending  = ! $created_new && $subscription->has_status( 'pending-cancel' );
+			$reuse_keeps_terms = $reused_is_paid || $reused_is_ending;
+
 			// Access for a paid team therefore rests on its own product, since we no
 			// longer swap in --product-id. If no published gate accepts that product
 			// the migration cannot grant access without rewriting what the publisher
 			// charges — so leave the team untouched and let the operator decide,
 			// rather than silently converting a paying subscription to $0.
-			if ( $reused_is_paid && ! empty( $access_product_ids ) && ! self::subscription_covers_access_products( $subscription, $access_product_ids ) ) {
+			if ( $reuse_keeps_terms && ! empty( $access_product_ids ) && ! self::subscription_covers_access_products( $subscription, $access_product_ids ) ) {
 				$own_product_ids = self::subscription_product_ids( $subscription );
 				$own_list        = ! empty( $own_product_ids ) ? implode( ', ', $own_product_ids ) : 'none';
 				$errors[]        = sprintf( 'subscription %d is paid and holds product(s) %s, which no published gate accepts (accepted: %s) — migrating it would either grant no access or rewrite what the publisher charges', $subscription->get_id(), $own_list, implode( ', ', $access_product_ids ) );
@@ -511,8 +534,9 @@ class Teams_Migration {
 			// subscription with the product passed via --product-id. Paid
 			// subscriptions are exempt: rewriting their line items would replace what
 			// the publisher sells with a $0 product and overwrite the billing
-			// schedule (see $reused_is_paid above).
-			if ( ! $created_new && ! $reused_is_paid && $migration_product && ! $dry_run ) {
+			// schedule, and for a pending-cancel subscription would push its expiry
+			// out past the cancellation the reader asked for (see $reuse_keeps_terms).
+			if ( ! $created_new && ! $reuse_keeps_terms && $migration_product && ! $dry_run ) {
 				self::replace_subscription_product( $subscription, $migration_product, $billing_period, $billing_interval, $start_date, $end_date, $errors, $team_id );
 			}
 
