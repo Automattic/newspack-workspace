@@ -114,7 +114,14 @@ export const buildFieldRows = ( definitions, enabledIds ) => {
 };
 
 /**
- * Group visible rows by section, preserving row order.
+ * Group visible rows by section, preserving row order within each section.
+ *
+ * Sections made up entirely of sunset (legacy-status) rows sort after every
+ * other section, including "Additional" — keyed on each row's own `status`
+ * via `isSunset`, not the section's (translated) label, so this keeps working
+ * regardless of what a legacy section is named or how it's translated.
+ * Relative order is otherwise unchanged: within each partition, sections keep
+ * the order they first appear in `rows`.
  *
  * @param {Object[]} rows Rows from buildFieldRows.
  * @return {{section: string, rows: Object[]}[]} Ordered section groups.
@@ -129,7 +136,8 @@ export const visibleSections = rows => {
 		}
 		sections[ index.get( row.section ) ].rows.push( row );
 	} );
-	return sections;
+	const isLegacySection = section => section.rows.every( row => isSunset( row.activeDefinition ) );
+	return [ ...sections.filter( section => ! isLegacySection( section ) ), ...sections.filter( isLegacySection ) ];
 };
 
 /**
@@ -147,9 +155,10 @@ export const toggleRow = ( enabledIds, row, checked ) => {
 };
 
 /**
- * Badges for a row, read straight off the active definition's status: legacy
- * fields are on the way out, new and updated ones arrived with the current
- * schema. Everything else is unbadged.
+ * Badges for a row, read straight off the active definition's status: new and
+ * updated fields arrived with the current schema. Legacy fields carry no
+ * badge — they are surfaced by sorting into their own Legacy section instead,
+ * last (see visibleSections). Everything else is unbadged.
  *
  * @param {Object} row Row from buildFieldRows.
  * @return {{text: string, level: string}[]} Badge descriptors.
@@ -158,9 +167,6 @@ export const badgesForRow = row => {
 	const status = row.activeDefinition.status;
 	if ( 'new' === status || 'updated' === status ) {
 		return [ { text: __( 'New', 'newspack-plugin' ), level: 'success' } ];
-	}
-	if ( 'legacy' === status ) {
-		return [ { text: __( 'Legacy', 'newspack-plugin' ), level: 'default' } ];
 	}
 	return [];
 };

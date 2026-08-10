@@ -418,10 +418,12 @@ class Field_Registry {
 	 * version choice to offer: get_conflict_groups() is empty by construction,
 	 * so an ESP name appearing under both versions is always a collapsed
 	 * equivalent pair, and the UI reads that off the pair itself. `status` is
-	 * the whole of a field's fate: it drives the badges — 'legacy' and
-	 * 'new'/'updated' badge, anything else (or nothing) is an unbadged
-	 * 'existing' — and the sunset rule, under which a legacy field lists only
-	 * while enabled and every other field lists everywhere.
+	 * the whole of a field's fate: it drives the New badge ('new'/'updated' —
+	 * everything else, including 'legacy', is unbadged), the sunset rule
+	 * (a legacy field lists only while enabled, every other field lists
+	 * everywhere), and, client-side, whether an entire `section` sorts last —
+	 * a section renders after every other one once every field in it carries
+	 * legacy status.
 	 *
 	 * @return array[] List of definition arrays (see the settings REST contract).
 	 */
