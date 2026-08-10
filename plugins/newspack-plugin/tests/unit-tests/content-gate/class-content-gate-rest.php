@@ -47,24 +47,61 @@ class Test_Content_Gate_Rest extends \WP_UnitTestCase {
 	protected $gate_id;
 
 	/**
-	 * Define the feature flag for this class only and re-init the REST server
-	 * so routes register with the flag on.
+	 * Define the feature flag for this class only.
 	 */
 	public static function setUpBeforeClass(): void {
 		parent::setUpBeforeClass();
 		if ( ! defined( 'NEWSPACK_CONTENT_GATES' ) ) {
 			define( 'NEWSPACK_CONTENT_GATES', true );
 		}
-		$GLOBALS['wp_rest_server'] = null;
-		do_action( 'rest_api_init', rest_get_server() );
 	}
 
 	/**
 	 * Create one gated post, one open post, and a published gate bound to the
 	 * gated post through a specific_posts rule.
+	 *
+	 * Re-inits the REST server on every test rather than once in
+	 * setUpBeforeClass(): WP_UnitTestCase::tear_down() unconditionally calls
+	 * _restore_hooks(), which resets $wp_filter to a single, process-wide
+	 * snapshot taken by whichever test happens to run first across the whole
+	 * suite (self::$hooks_saved is a static, gating _backup_hooks() to once
+	 * per process, not once per class). When this class isn't among the very
+	 * first tests PHPUnit runs — true for any full-suite run, and the reason
+	 * `--group content-gate` alone stayed green while the full suite did not
+	 * — that snapshot predates this class's own rest_api_init firing, so the
+	 * very first test's tear_down() wipes register_rest_filters()'s
+	 * rest_prepare_post hook and it never comes back. Re-firing rest_api_init
+	 * per test mirrors what a real REST request does on every request, and
+	 * survives the hook restore regardless of run order.
 	 */
 	public function set_up() {
 		parent::set_up();
+
+		$GLOBALS['wp_rest_server'] = null;
+		do_action( 'rest_api_init', rest_get_server() );
+
+		// Content_Gate::$gate_rendered is a "gate shown once per page render"
+		// flag, set by restrict_post() and read by has_rendered() to stop a
+		// second gate appearing on the same front-end request. It has no
+		// public reset — production never needs one, since a fresh HTTP
+		// request gets a fresh PHP process. This test process doesn't: every
+		// PHPUnit test method is its own logical "page render", but the flag
+		// is a class static that outlives all of them. A test elsewhere in
+		// the suite that gates a post on the front end (via go_to() +
+		// the_post()) leaves it permanently true, and every subsequent
+		// front-end render — including this class's parity test — sees
+		// has_rendered() === true and restrict_post() bails before gating
+		// anything. Confirmed by running the full suite with --order-by=random:
+		// the parity test failed with the FRONT END serving the full,
+		// ungated body while REST (which never consults this flag) gated
+		// correctly — the opposite direction from the REST-side bug Part 2
+		// fixes. Resetting the private static via reflection here is test-only
+		// and mirrors what happens for free between real HTTP requests.
+		( function () {
+			$property = new \ReflectionProperty( \Newspack\Content_Gate::class, 'gate_rendered' );
+			$property->setAccessible( true );
+			$property->setValue( null, false );
+		} )();
 
 		Reader_Activation::update_setting( 'enabled', true );
 
