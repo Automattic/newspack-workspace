@@ -5,7 +5,7 @@
 /**
  * WordPress dependencies
  */
-import { ExternalLink } from '@wordpress/components';
+import { ExternalLink, __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 import { Fragment, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
@@ -13,7 +13,7 @@ import apiFetch from '@wordpress/api-fetch';
 /**
  * Internal dependencies
  */
-import { PluginToggle, ActionCard, Modal, Card, Button, withWizardScreen } from '../../../../../packages/components/src';
+import { PluginToggle, ActionCard, Modal, Button, withWizardScreen } from '../../../../../packages/components/src';
 import GAMOnboarding from '../../components/onboarding';
 
 /**
@@ -67,7 +67,7 @@ const Providers = ( { services, fetchAdvertisingData, toggleService } ) => {
 
 	return (
 		<Fragment>
-			<h1>{ __( 'Providers', 'newspack-plugin' ) }</h1>
+			<h2 className="newspack-wizard__heading">{ __( 'Providers', 'newspack-plugin' ) }</h2>
 			<ActionCard
 				title={ __( 'Google Ad Manager', 'newspack-plugin' ) }
 				description={ __( 'Manage Google Ad Manager ad units and placements directly from the Newspack dashboard.', 'newspack-plugin' ) }
@@ -103,14 +103,14 @@ const Providers = ( { services, fetchAdvertisingData, toggleService } ) => {
 							setIsOnboarding( false );
 						} }
 					/>
-					<Card buttonsCard noBorder className="justify-end">
+					<HStack justify="flex-end" spacing={ 4 } wrap className="newspack-modal__footer">
 						<Button isSecondary disabled={ inFlight } onClick={ () => setIsOnboarding( false ) }>
 							{ __( 'Cancel', 'newspack-plugin' ) }
 						</Button>
 						<Button isPrimary disabled={ inFlight || ! networkCode } onClick={ () => updateGAMNetworkCode() }>
 							{ __( 'Save', 'newspack-plugin' ) }
 						</Button>
-					</Card>
+					</HStack>
 				</Modal>
 			) }
 		</Fragment>

@@ -302,7 +302,11 @@ class GoogleSiteKit {
 		// Content access groups: anonymized identifiers for the user's active group
 		// subscriptions and matching institutions. See get_user_group_labels() for
 		// why we send IDs to GA4 rather than the human-readable names.
-		if ( Content_Gate::is_newspack_feature_enabled() ) {
+		// Gating rather than the flag alone: with Audience Management off nothing is
+		// access-controlled, so the dimension would report memberships that grant
+		// nothing — and computing it costs a group-subscription lookup plus an IP-based
+		// institution match on every pageview, including for anonymous readers.
+		if ( Content_Gate::is_gating_active() ) {
 			$group_labels    = self::get_user_group_labels( $current_user );
 			$params['group'] = empty( $group_labels ) ? 'none' : implode( ', ', $group_labels );
 		}

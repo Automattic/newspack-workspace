@@ -136,7 +136,7 @@ class Emails {
 			$handle,
 			Newspack::plugin_url() . '/dist/other-scripts/emails.js',
 			[],
-			NEWSPACK_PLUGIN_VERSION,
+			Newspack::asset_version( 'other-scripts/emails' ),
 			true
 		);
 		\wp_localize_script(
@@ -157,7 +157,7 @@ class Emails {
 			$handle,
 			Newspack::plugin_url() . '/dist/other-scripts/emails.css',
 			[],
-			NEWSPACK_PLUGIN_VERSION
+			Newspack::asset_version( 'other-scripts/emails' )
 		);
 		\wp_style_add_data( $handle, 'rtl', 'replace' );
 		\wp_enqueue_style( $handle );
@@ -372,7 +372,7 @@ class Emails {
 		$templates = get_posts(
 			[
 				'post_type'      => self::POST_TYPE,
-				'posts_per_page' => -1,
+				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- One-time migration over a handful of email templates.
 				'post_status'    => 'publish',
 			]
 		);
@@ -456,6 +456,19 @@ class Emails {
 					'newspack_emails_post_trashed',
 					esc_html__( 'Cannot test-send a trashed email. Restore the email first.', 'newspack-plugin' ),
 					[ 'status' => 409 ]
+				);
+			}
+
+			// When the outbound-mail guard is active it suppresses generated
+			// placeholder addresses while reporting the send as successful —
+			// which would make a test-send certify a broken configuration as
+			// healthy. Where the guard is off (e.g. dev containers), the mail
+			// genuinely dispatches, so the test-send stays useful there.
+			if ( Guest_Contributor_Role::is_mail_guard_active() && Guest_Contributor_Role::is_dummy_email_address( $to ) ) {
+				return new \WP_Error(
+					'newspack_emails_test_placeholder_recipient',
+					esc_html__( 'This is a generated placeholder address, and mail sent to it is suppressed. Please use a real inbox for test sends.', 'newspack-plugin' ),
+					[ 'status' => 400 ]
 				);
 			}
 
@@ -1320,7 +1333,7 @@ class Emails {
 			$templates = get_posts(
 				[
 					'post_type'      => self::POST_TYPE,
-					'posts_per_page' => -1,
+					'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Email-template CPT; config-scale.
 					'post_status'    => 'publish',
 				]
 			);

@@ -27,6 +27,7 @@ import {
 	SelectControl,
 	FormTokenField,
 	Button,
+	Notice,
 	Spinner,
 	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 	__experimentalToggleGroupControl as ToggleGroupControl,
@@ -41,6 +42,7 @@ import apiFetch from '@wordpress/api-fetch';
  */
 import './edit.scss';
 import RedirectAfterSuccess from '../../components/redirect-after-success';
+import CouponControl from './coupon-control';
 
 function getVariationName( variation ) {
 	const attributes = [];
@@ -137,6 +139,10 @@ function ProductControl( props ) {
 			fetchSaved();
 		} else {
 			setSelected( false );
+			// Clear the parent's copy too, otherwise product-derived state (e.g.
+			// whether this is a donation) keeps describing the product that was
+			// just removed.
+			props.onProduct( {} );
 		}
 	}, [ props.value ] );
 	function onChange( tokens ) {
@@ -158,7 +164,7 @@ function ProductControl( props ) {
 		return <Spinner />;
 	}
 	return (
-		<div className="newspack-checkout-button__product-field" style={ { marginBottom: '16px' } }>
+		<div className="newspack-checkout-button__product-field">
 			{ selected && ! isChanging ? (
 				<>
 					<BaseControl label={ __( 'Product', 'newspack-blocks' ) } id="selected-product-control">
@@ -201,11 +207,16 @@ function ProductControl( props ) {
 
 function CheckoutButtonEdit( props ) {
 	const { attributes, setAttributes, className } = props;
-	const { placeholder, style, text, product, price, variation, width } = attributes;
+	const { placeholder, style, text, product, price, variation, width, coupon } = attributes;
 
 	const [ productData, setProductData ] = useState( {} );
 	const [ variations, setVariations ] = useState( [] );
 	const [ nyp, setNYP ] = useState( false );
+
+	// Resolved server-side, since a donation is not always identifiable from the
+	// product meta. Variations inherit it from their parent, which is the product
+	// fetched here, so the selected variation needs no separate check.
+	const isDonation = !! productData?.newspack_is_donation;
 
 	function handleProduct( data ) {
 		setProductData( data );
@@ -337,6 +348,28 @@ function CheckoutButtonEdit( props ) {
 							</>
 						) }
 					</ProductControl>
+					{ newspack_blocks_data?.coupons_enabled && (
+						<>
+							{ /*
+							 * Coupons are not supported on donation products. The control is
+							 * disabled rather than hidden so a code stored before the product
+							 * was swapped stays visible — and removable, since the block emits
+							 * it regardless of donation status.
+							 */ }
+							{ isDonation && (
+								<Notice status={ coupon ? 'warning' : 'info' } isDismissible={ false }>
+									{ coupon
+										? sprintf(
+												// translators: %s: the coupon code stored on the block.
+												__( 'Donation products do not support coupons. "%s" will not be applied.', 'newspack-blocks' ),
+												coupon
+										  )
+										: __( 'Donation products do not support coupons.', 'newspack-blocks' ) }
+								</Notice>
+							) }
+							<CouponControl value={ coupon } onChange={ value => setAttributes( { coupon: value } ) } disabled={ isDonation } />
+						</>
+					) }
 					<WidthControl selectedWidth={ width } setAttributes={ setAttributes } />
 				</PanelBody>
 				<PanelBody title={ __( 'After purchase', 'newspack-blocks' ) }>

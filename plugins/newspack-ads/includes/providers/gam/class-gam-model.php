@@ -418,7 +418,7 @@ final class GAM_Model {
 		$query           = new \WP_Query(
 			[
 				'post_type'      => self::$custom_post_type,
-				'posts_per_page' => -1,
+				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Legacy ad-unit CPT; config-scale.
 				'post_status'    => [ 'publish' ],
 			]
 		);

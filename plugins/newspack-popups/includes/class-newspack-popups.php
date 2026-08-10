@@ -89,10 +89,18 @@ final class Newspack_Popups {
 		add_action( 'init', [ __CLASS__, 'disable_prompts_for_protected_pages' ] );
 		add_action( 'init', [ __CLASS__, 'maybe_create_temp_reader_session' ] );
 		add_action( 'enqueue_block_assets', [ __CLASS__, 'enqueue_block_assets' ] );
+		add_action( 'enqueue_block_editor_assets', [ __CLASS__, 'enqueue_block_editor_assets' ] );
+		add_action( 'add_meta_boxes_' . self::NEWSPACK_POPUPS_CPT, [ __CLASS__, 'remove_custom_fields_meta_box' ], 99 );
 		add_filter( 'display_post_states', [ __CLASS__, 'display_post_states' ], 10, 2 );
 		add_action( 'save_post_' . self::NEWSPACK_POPUPS_CPT, [ __CLASS__, 'popup_default_fields' ], 10, 3 );
+		add_action( 'save_post_' . self::NEWSPACK_POPUPS_CPT, [ 'Newspack_Popups_Model', 'flush_above_header_cache' ] );
 		add_action( 'transition_post_status', [ __CLASS__, 'prevent_default_category_on_publish' ], 10, 3 );
 		add_action( 'transition_post_status', [ __CLASS__, 'store_activation_dates' ], 10, 3 );
+		add_action( 'transition_post_status', [ __CLASS__, 'flush_above_header_cache_on_transition' ], 10, 3 );
+		add_action( 'before_delete_post', [ __CLASS__, 'flush_above_header_cache_on_delete' ], 10, 2 );
+		add_action( 'added_post_meta', [ __CLASS__, 'flush_above_header_cache_on_meta' ], 10, 3 );
+		add_action( 'updated_post_meta', [ __CLASS__, 'flush_above_header_cache_on_meta' ], 10, 3 );
+		add_action( 'deleted_post_meta', [ __CLASS__, 'flush_above_header_cache_on_meta' ], 10, 3 );
 		add_action( 'pre_delete_term', [ __CLASS__, 'prevent_default_category_on_term_delete' ], 10, 2 );
 		add_filter( 'show_admin_bar', [ __CLASS__, 'show_admin_bar' ], 10, 2 ); // phpcs:ignore WordPressVIPMinimum.UserExperience.AdminBarRemoval.RemovalDetected
 		add_filter( 'newspack_blocks_should_deduplicate', [ __CLASS__, 'newspack_blocks_should_deduplicate' ], 10, 2 );
@@ -175,6 +183,15 @@ final class Newspack_Popups {
 			'menu_icon'    => 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgdmlld0JveD0iMCAwIDI0IDI0IiByb2xlPSJpbWciIGFyaWEtaGlkZGVuPSJ0cnVlIiBmb2N1c2FibGU9ImZhbHNlIj48cGF0aCBmaWxsLXJ1bGU9ImV2ZW5vZGQiIGQ9Ik02Ljg2MyAxMy42NDRMNSAxMy4yNWgtLjVhLjUuNSAwIDAxLS41LS41di0zYS41LjUgMCAwMS41LS41SDVMMTggNi41aDJWMTZoLTJsLTMuODU0LS44MTUuMDI2LjAwOGEzLjc1IDMuNzUgMCAwMS03LjMxLTEuNTQ5em0xLjQ3Ny4zMTNhMi4yNTEgMi4yNTEgMCAwMDQuMzU2LjkyMWwtNC4zNTYtLjkyMXptLTIuODQtMy4yOEwxOC4xNTcgOGguMzQzdjYuNWgtLjM0M0w1LjUgMTEuODIzdi0xLjE0NnoiIGNsaXAtcnVsZT0iZXZlbm9kZCIgZmlsbD0id2hpdGUiPjwvcGF0aD48L3N2Zz4K',
 		];
 		\register_post_type( self::NEWSPACK_POPUPS_CPT, $cpt_args );
+	}
+
+	/**
+	 * Remove the core Custom Fields metabox from the Prompt editor.
+	 *
+	 * @param WP_Post $post The current post object.
+	 */
+	public static function remove_custom_fields_meta_box( $post ) {
+		remove_meta_box( 'postcustom', self::NEWSPACK_POPUPS_CPT, 'normal' );
 	}
 
 	/**
@@ -688,20 +705,27 @@ final class Newspack_Popups {
 	}
 
 	/**
-	 * Load up common JS/CSS for the editor.
+	 * Load block assets in the editor.
 	 */
 	public static function enqueue_block_assets() {
 		if ( ! is_admin() ) {
 			return;
 		}
-		$screen = get_current_screen();
 
 		// Block assets for Custom Placement and Prompt blocks.
+		$dist_dir           = dirname( NEWSPACK_POPUPS_PLUGIN_FILE ) . '/dist';
+		$blocks_asset_path  = trailingslashit( $dist_dir ) . 'blocks.asset.php';
+		$blocks_script_path = trailingslashit( $dist_dir ) . 'blocks.js';
+		if ( ! self::build_assets_exist( [ $blocks_asset_path, $blocks_script_path ] ) ) {
+			return;
+		}
+
+		$blocks_asset = require $blocks_asset_path;
 		\wp_enqueue_script(
 			'newspack-popups-blocks',
 			plugins_url( '../dist/blocks.js', __FILE__ ),
-			[],
-			filemtime( dirname( NEWSPACK_POPUPS_PLUGIN_FILE ) . '/dist/blocks.js' ),
+			$blocks_asset['dependencies'] ?? [],
+			$blocks_asset['version'] ?? filemtime( $blocks_script_path ),
 			true
 		);
 
@@ -716,14 +740,60 @@ final class Newspack_Popups {
 			]
 		);
 
-		\wp_register_style(
-			'newspack-popups-blocks',
-			plugins_url( '../dist/blocks.css', __FILE__ ),
-			[],
-			filemtime( dirname( NEWSPACK_POPUPS_PLUGIN_FILE ) . '/dist/blocks.css' )
+		$blocks_style_path = trailingslashit( $dist_dir ) . 'blocks.css';
+		if ( self::build_assets_exist( [ $blocks_style_path ] ) ) {
+			\wp_register_style(
+				'newspack-popups-blocks',
+				plugins_url( '../dist/blocks.css', __FILE__ ),
+				[],
+				$blocks_asset['version'] ?? filemtime( $blocks_style_path )
+			);
+			wp_style_add_data( 'newspack-popups-blocks', 'rtl', 'replace' );
+			wp_enqueue_style( 'newspack-popups-blocks' );
+		}
+	}
+
+	/**
+	 * Check that generated build assets exist.
+	 *
+	 * @param string[] $asset_paths Build asset paths.
+	 *
+	 * @return bool Whether all assets exist.
+	 */
+	private static function build_assets_exist( $asset_paths ) {
+		$missing_asset_paths = array_filter(
+			$asset_paths,
+			function ( $asset_path ) {
+				return ! file_exists( $asset_path );
+			}
 		);
-		wp_style_add_data( 'newspack-popups-blocks', 'rtl', 'replace' );
-		wp_enqueue_style( 'newspack-popups-blocks' );
+
+		if ( empty( $missing_asset_paths ) ) {
+			return true;
+		}
+
+		$plugin_dir     = trailingslashit( dirname( NEWSPACK_POPUPS_PLUGIN_FILE ) );
+		$relative_paths = array_map(
+			function ( $asset_path ) use ( $plugin_dir ) {
+				return str_replace( $plugin_dir, '', $asset_path );
+			},
+			$missing_asset_paths
+		);
+
+		error_log( sprintf( 'Newspack Popups build assets missing: %s', implode( ', ', $relative_paths ) ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+
+		return false;
+	}
+
+	/**
+	 * Load prompt editor UI assets.
+	 */
+	public static function enqueue_block_editor_assets() {
+		if ( ! is_admin() ) {
+			return;
+		}
+
+		$screen = get_current_screen();
 
 		// Don't enqueue Prompt editor files if we don't have a valid post type or ID (e.g. on the Widget Blocks screen).
 		if ( empty( $screen->post_type ) || empty( get_the_ID() ) ) {
@@ -736,11 +806,18 @@ final class Newspack_Popups {
 			$supported_post_types = Newspack_Popups_Model::get_default_popup_post_types();
 			if ( in_array( $screen->post_type, $supported_post_types, true ) ) {
 				// But it's a supported post type.
+				$document_settings_asset_path  = dirname( NEWSPACK_POPUPS_PLUGIN_FILE ) . '/dist/documentSettings.asset.php';
+				$document_settings_script_path = dirname( NEWSPACK_POPUPS_PLUGIN_FILE ) . '/dist/documentSettings.js';
+				if ( ! self::build_assets_exist( [ $document_settings_asset_path, $document_settings_script_path ] ) ) {
+					return;
+				}
+
+				$document_settings_asset = require $document_settings_asset_path;
 				\wp_enqueue_script(
 					'newspack-popups',
 					plugins_url( '../dist/documentSettings.js', __FILE__ ),
-					[],
-					filemtime( dirname( NEWSPACK_POPUPS_PLUGIN_FILE ) . '/dist/documentSettings.js' ),
+					$document_settings_asset['dependencies'] ?? [],
+					$document_settings_asset['version'] ?? filemtime( $document_settings_script_path ),
 					true
 				);
 			}
@@ -748,11 +825,18 @@ final class Newspack_Popups {
 			return;
 		}
 
+		$editor_asset_path  = dirname( NEWSPACK_POPUPS_PLUGIN_FILE ) . '/dist/editor.asset.php';
+		$editor_script_path = dirname( NEWSPACK_POPUPS_PLUGIN_FILE ) . '/dist/editor.js';
+		if ( ! self::build_assets_exist( [ $editor_asset_path, $editor_script_path ] ) ) {
+			return;
+		}
+
+		$editor_asset = require $editor_asset_path;
 		\wp_enqueue_script(
 			'newspack-popups',
 			plugins_url( '../dist/editor.js', __FILE__ ),
-			[ 'wp-components' ],
-			filemtime( dirname( NEWSPACK_POPUPS_PLUGIN_FILE ) . '/dist/editor.js' ),
+			$editor_asset['dependencies'] ?? [],
+			$editor_asset['version'] ?? filemtime( $editor_script_path ),
 			true
 		);
 
@@ -785,12 +869,15 @@ final class Newspack_Popups {
 				'segmentation_enabled'         => self::$segmentation_enabled,
 			]
 		);
-		\wp_enqueue_style(
-			'newspack-popups-editor',
-			plugins_url( '../dist/editor.css', __FILE__ ),
-			null,
-			filemtime( dirname( NEWSPACK_POPUPS_PLUGIN_FILE ) . '/dist/editor.css' )
-		);
+		$editor_style_path = dirname( NEWSPACK_POPUPS_PLUGIN_FILE ) . '/dist/editor.css';
+		if ( self::build_assets_exist( [ $editor_style_path ] ) ) {
+			\wp_enqueue_style(
+				'newspack-popups-editor',
+				plugins_url( '../dist/editor.css', __FILE__ ),
+				[],
+				$editor_asset['version'] ?? filemtime( $editor_style_path )
+			);
+		}
 	}
 
 	/**
@@ -857,11 +944,17 @@ final class Newspack_Popups {
 	 * @return string|null Popup slug, if found in the URL
 	 */
 	public static function preset_popup_id() {
+		// Param first, so a normal request does not pay for a capability check.
 		// Not using filter_input since it's not playing well with phpunit.
-		if ( isset( $_GET[ self::NEWSPACK_POPUP_PRESET_QUERY_PARAM ] ) && $_GET[ self::NEWSPACK_POPUP_PRESET_QUERY_PARAM ] ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
-			return sanitize_text_field( $_GET[ self::NEWSPACK_POPUP_PRESET_QUERY_PARAM ] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( ! isset( $_GET[ self::NEWSPACK_POPUP_PRESET_QUERY_PARAM ] ) || ! $_GET[ self::NEWSPACK_POPUP_PRESET_QUERY_PARAM ] ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+			return null;
 		}
-		return null;
+		// Ignored for everyone else: preview mode suppresses prompts and swaps the
+		// reader data store.
+		if ( ! self::is_user_admin() ) {
+			return null;
+		}
+		return sanitize_text_field( $_GET[ self::NEWSPACK_POPUP_PRESET_QUERY_PARAM ] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 	}
 
 	/**
@@ -963,11 +1056,17 @@ final class Newspack_Popups {
 	 * Is the user an admin or editor user?
 	 * If so, prompts will be shown to these users while logged in, but analytics
 	 * will not be fired for them.
+	 *
+	 * This also gates the prompt and preset preview paths, which render
+	 * request-supplied content, so widening it widens who can reach those.
 	 */
 	public static function is_user_admin() {
 		/**
 		 * Filter to allow other plugins to decide which capability should be checked
 		 * to determine whether a user's activity should be tracked via Google Analytics.
+		 *
+		 * Also gates the prompt and preset previews, so widening this widens who can
+		 * render request-supplied content through them.
 		 *
 		 * @param string $capability Capability to check. Default: edit_others_pages.
 		 * @return string Filtered capability string.
@@ -1120,6 +1219,51 @@ final class Newspack_Popups {
 	}
 
 	/**
+	 * Flush the above-header prompt detection cache when a prompt's status changes.
+	 *
+	 * @param string  $new_status New status.
+	 * @param string  $old_status Old status.
+	 * @param WP_Post $post       Post.
+	 */
+	public static function flush_above_header_cache_on_transition( $new_status, $old_status, $post ) {
+		if ( self::NEWSPACK_POPUPS_CPT === $post->post_type ) {
+			Newspack_Popups_Model::flush_above_header_cache();
+		}
+	}
+
+	/**
+	 * Flush the above-header prompt detection cache when a prompt is permanently deleted.
+	 *
+	 * @param int          $post_id Post ID.
+	 * @param WP_Post|null $post    Post object.
+	 */
+	public static function flush_above_header_cache_on_delete( $post_id, $post = null ) {
+		$post_type = $post instanceof WP_Post ? $post->post_type : get_post_type( $post_id );
+		if ( self::NEWSPACK_POPUPS_CPT === $post_type ) {
+			Newspack_Popups_Model::flush_above_header_cache();
+		}
+	}
+
+	/**
+	 * Flush the above-header prompt detection cache when a prompt's placement meta
+	 * changes outside of a post save (e.g. a CLI/importer/programmatic meta update).
+	 *
+	 * Shared handler for added_post_meta / updated_post_meta / deleted_post_meta, whose
+	 * second and third arguments are the object ID and meta key in every case. WordPress
+	 * offers no post-type-scoped variant of these hooks, so the post type is checked here;
+	 * the meta key is compared first to keep that check off the path of unrelated writes.
+	 *
+	 * @param int|int[] $meta_id   Meta ID (or IDs, for deleted_post_meta). Unused.
+	 * @param int       $object_id Post ID the meta belongs to.
+	 * @param string    $meta_key  Meta key being changed.
+	 */
+	public static function flush_above_header_cache_on_meta( $meta_id, $object_id, $meta_key ) {
+		if ( 'placement' === $meta_key && self::NEWSPACK_POPUPS_CPT === get_post_type( $object_id ) ) {
+			Newspack_Popups_Model::flush_above_header_cache();
+		}
+	}
+
+	/**
 	 * When a category is deleted, any posts that have only that category assigned
 	 * are automatically assigned the site's default category (usually "Uncategorized").
 	 * We want to prevent this behavior for prompts, as prompts with the default
@@ -1148,7 +1292,7 @@ final class Newspack_Popups {
 				'fields'           => 'ids',
 				'post_status'      => 'any',
 				'post_type'        => self::NEWSPACK_POPUPS_CPT,
-				'posts_per_page'   => -1,
+				'posts_per_page'   => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Prompt CPT; config-scale.
 			]
 		);
 

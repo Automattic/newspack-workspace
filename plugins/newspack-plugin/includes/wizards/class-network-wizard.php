@@ -62,16 +62,16 @@ class Network_Wizard extends Wizard {
 		// Admin screens based on Newspack Network plugin's admin pages and post types.
 		$this->admin_screens = [
 			// admin pages.
-			'newspack-network'                       => __( 'Network / Settings', 'newspack-plugin' ),
-			'newspack-network-event-log'             => __( 'Network / Event Log', 'newspack-plugin' ),
-			'newspack-network-membership-plans'      => __( 'Network / Membership Plans', 'newspack-plugin' ),
-			'newspack-network-distribution-settings' => __( 'Network / Content Distribution', 'newspack-plugin' ),
-			'newspack-network-distributor-settings'  => __( 'Network / Distributor Settings', 'newspack-plugin' ),
-			'newspack-network-node'                  => __( 'Network / Node Settings', 'newspack-plugin' ),
+			'newspack-network'                       => [ [ 'label' => __( 'Network', 'newspack-plugin' ) ], [ 'label' => __( 'Settings', 'newspack-plugin' ) ] ],
+			'newspack-network-event-log'             => [ [ 'label' => __( 'Network', 'newspack-plugin' ) ], [ 'label' => __( 'Event Log', 'newspack-plugin' ) ] ],
+			'newspack-network-membership-plans'      => [ [ 'label' => __( 'Network', 'newspack-plugin' ) ], [ 'label' => __( 'Membership Plans', 'newspack-plugin' ) ] ],
+			'newspack-network-distribution-settings' => [ [ 'label' => __( 'Network', 'newspack-plugin' ) ], [ 'label' => __( 'Content Distribution', 'newspack-plugin' ) ] ],
+			'newspack-network-distributor-settings'  => [ [ 'label' => __( 'Network', 'newspack-plugin' ) ], [ 'label' => __( 'Distributor Settings', 'newspack-plugin' ) ] ],
+			'newspack-network-node'                  => [ [ 'label' => __( 'Network', 'newspack-plugin' ) ], [ 'label' => __( 'Node Settings', 'newspack-plugin' ) ] ],
 			// post types.
-			'newspack_hub_nodes'                     => __( 'Network / Nodes', 'newspack-plugin' ),
-			'np_hub_orders'                          => __( 'Network / Orders', 'newspack-plugin' ),
-			'np_hub_subscriptions'                   => __( 'Network / Subscriptions', 'newspack-plugin' ),
+			'newspack_hub_nodes'                     => [ [ 'label' => __( 'Network', 'newspack-plugin' ) ], [ 'label' => __( 'Nodes', 'newspack-plugin' ) ] ],
+			'np_hub_orders'                          => [ [ 'label' => __( 'Network', 'newspack-plugin' ) ], [ 'label' => __( 'Orders', 'newspack-plugin' ) ] ],
+			'np_hub_subscriptions'                   => [ [ 'label' => __( 'Network', 'newspack-plugin' ) ], [ 'label' => __( 'Subscriptions', 'newspack-plugin' ) ] ],
 		];
 
 		// Hooks: admin_menu/add_page, admin_enqueue_scripts/enqueue_scripts_and_styles, admin_body_class/add_body_class .
@@ -87,8 +87,8 @@ class Network_Wizard extends Wizard {
 			// Display header.
 			$this->admin_header_init(
 				[
-					'title' => $this->get_name(),
-					'tabs'  => $this->get_tabs(),
+					'breadcrumbs' => $this->admin_screens[ $this->get_screen_slug() ] ?? [],
+					'tabs'        => $this->get_tabs(),
 				]
 			);
 		}
@@ -100,7 +100,8 @@ class Network_Wizard extends Wizard {
 	 * @return string The wizard name.
 	 */
 	public function get_name() {
-		return esc_html( $this->admin_screens[ $this->get_screen_slug() ] );
+		$breadcrumbs = $this->admin_screens[ $this->get_screen_slug() ] ?? [];
+		return esc_html( implode( ' / ', wp_list_pluck( $breadcrumbs, 'label' ) ) );
 	}
 
 	/**
