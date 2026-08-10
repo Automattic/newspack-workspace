@@ -431,7 +431,9 @@ class Audience_Subscriptions extends Wizard {
 
 		$include = $request->get_param( 'include' );
 		if ( ! empty( $include ) ) {
-			$ids = array_filter( array_map( 'absint', explode( ',', $include ) ) );
+			// Capped as in search_products(): the CSV is caller-supplied and would
+			// otherwise set the width of the term query on its own.
+			$ids = array_slice( array_filter( array_map( 'absint', explode( ',', $include ) ) ), 0, 100 );
 			if ( empty( $ids ) ) {
 				return rest_ensure_response( [] );
 			}
