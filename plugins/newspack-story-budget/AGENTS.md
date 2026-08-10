@@ -75,6 +75,6 @@ The store lives in its own webpack entry (`src/store/index.js` → `story-budget
 
 ## Dead config
 
-`.travis.yml` (PHP 5.6 to 7.4, `branches: only: trunk`) and `.hooks/pre-push` (blocks pushes to `trunk`; `composer.json` has an empty `extra: {}` so cghooks installs nothing, and the repo sets `core.hooksPath=.husky/_`) are both inert. The `lint-staged` block in `package.json` is also dead, because husky runs the root `.lintstagedrc.json`. The `start` script runs `npm ci`, which fails in this pnpm workspace; use `n watch`.
+`.travis.yml` (PHP 5.6 to 7.4, `branches: only: trunk`) is inert. The `lint-staged` block in `package.json` is also dead, because husky runs the root `.lintstagedrc.json`. The `start` script runs `npm ci`, which fails in this pnpm workspace; use `n watch`.
 
 `bin/install-wp-tests.sh` and `release.config.js` look like standalone-era cruft but are **live**: `n test-php` invokes the former by relative path, and the latter delegates to the monorepo's `config/release.js`.
