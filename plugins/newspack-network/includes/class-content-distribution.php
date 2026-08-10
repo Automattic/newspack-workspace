@@ -9,6 +9,7 @@ namespace Newspack_Network;
 
 use Newspack\Data_Events;
 use Newspack_Network\Content_Distribution\Admin;
+use Newspack_Network\Content_Distribution\Admin_Bar;
 use Newspack_Network\Content_Distribution\API;
 use Newspack_Network\Content_Distribution\Canonical_Url;
 use Newspack_Network\Content_Distribution\Cap_Authors;
@@ -55,6 +56,7 @@ class Content_Distribution {
 		add_action( 'newspack_network_incoming_post_inserted', [ __CLASS__, 'handle_incoming_post_inserted' ], 10, 3 );
 
 		Admin::init();
+		Admin_Bar::init();
 		CLI::init();
 		API::init();
 		Editor::init();

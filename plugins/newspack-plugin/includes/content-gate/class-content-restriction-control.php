@@ -59,6 +59,7 @@ class Content_Restriction_Control {
 	 */
 	public static function init() {
 		add_action( 'init', [ __CLASS__, 'register_meta' ] );
+		add_action( 'init', [ __CLASS__, 'register_meta_guards' ] );
 		add_filter( 'newspack_is_post_restricted', [ __CLASS__, 'is_post_restricted' ], 10, 2 );
 	}
 
@@ -333,6 +334,21 @@ class Content_Restriction_Control {
 			return $is_post_restricted;
 		}
 
+		// Gating stands down rather than half-working ({@see Content_Gate::is_gating_active()}).
+		//
+		// Passes the incoming value through rather than returning false, so this decides
+		// only whether *our* gates restrict and never overrides a verdict another
+		// callback already reached. At this position the two are equivalent — the
+		// Memberships early return above has already fired, and the only other callbacks
+		// either lower the value (`Newsletters_Access::filter_post_restricted`, a bypass)
+		// or run later and win regardless (`Gate_Preview::filter_is_post_restricted` at
+		// PHP_INT_MAX, which still forces a preview restricted so a publisher can see the
+		// gate they are editing). Pass-through is the safer default to keep as new
+		// callbacks are added.
+		if ( ! Content_Gate::is_gating_active() ) {
+			return $is_post_restricted;
+		}
+
 		// Return early if this post is exempt from access control restrictions.
 		if ( $post_id && get_post_meta( $post_id, self::IS_EXEMPT_META_KEY, true ) ) {
 			return false;
@@ -345,13 +361,17 @@ class Content_Restriction_Control {
 
 		$user_id = $user_id ?? get_current_user_id();
 
-		// Don't restrict this post for users who can edit it.
-		if ( ! empty( $post_id ) && user_can( $user_id, 'edit_post', $post_id ) ) {
+		// If no gates apply to this post, nothing can restrict it. Checked before
+		// the capability check below: user_can() fans out to other plugins'
+		// user_has_cap filters and can be expensive, and an empty gate set returns
+		// false regardless of the user's caps, so the outcome is identical either way.
+		$post_gates = self::get_post_gates( $post_id );
+		if ( empty( $post_gates ) ) {
 			return false;
 		}
 
-		$post_gates = self::get_post_gates( $post_id );
-		if ( empty( $post_gates ) ) {
+		// Don't restrict this post for users who can edit it.
+		if ( ! empty( $post_id ) && user_can( $user_id, 'edit_post', $post_id ) ) {
 			return false;
 		}
 
@@ -393,7 +413,8 @@ class Content_Restriction_Control {
 			// If custom_access mode is active and we didn't already evaluate it above for an anonymous bypass.
 			if ( ! $is_restricted && null === $anonymous_bypass_passed && ! empty( $gate['custom_access']['active'] ) ) {
 				$access_rules = $gate['custom_access']['access_rules'] ?? [];
-				if ( ! empty( $access_rules ) && ! Access_Rules::evaluate_rules( $access_rules, $user_id ) ) {
+				$rule_context = [ 'payment_recovery_grace' => $gate['custom_access']['payment_recovery_grace'] ?? true ];
+				if ( ! empty( $access_rules ) && ! Access_Rules::evaluate_rules( $access_rules, $user_id, $rule_context ) ) {
 					$is_restricted  = true;
 					$gate_layout_id = $gate['custom_access']['gate_layout_id'] ?? $gate['id'];
 				}
@@ -467,9 +488,27 @@ class Content_Restriction_Control {
 	}
 
 	/**
+	 * Whether the current user may toggle the content-gate exemption meta.
+	 *
+	 * Single source of truth for the exemption's write capability, shared by
+	 * the meta's register_meta() auth_callback and the REST strip guard so the
+	 * two cannot drift — the strip is defined as the inverse of what the field
+	 * authorizes rather than a re-derivation of the same literal. If the
+	 * capability ever becomes filterable, both stay in lockstep.
+	 *
+	 * @return bool
+	 */
+	public static function current_user_can_edit_exemption() {
+		return current_user_can( 'edit_others_posts' );
+	}
+
+	/**
 	 * Register post meta for the exemption flag.
 	 */
 	public static function register_meta() {
+		if ( ! Content_Gate::is_newspack_feature_enabled() ) {
+			return;
+		}
 		$post_types = array_column( (array) self::get_available_post_types(), 'value' );
 		foreach ( $post_types as $post_type ) {
 			\register_meta(
@@ -481,12 +520,50 @@ class Content_Restriction_Control {
 					'type'           => 'boolean',
 					'default'        => false,
 					'single'         => true,
-					'auth_callback'  => function() {
-						return current_user_can( 'edit_others_posts' );
-					},
+					'auth_callback'  => [ __CLASS__, 'current_user_can_edit_exemption' ],
 				]
 			);
 		}
+	}
+
+	/**
+	 * Register the REST guard that strips the exemption meta from unauthorized
+	 * saves. Registered unconditionally — independent of whether the meta itself
+	 * is registered — so its lifetime never depends on when the content-gate
+	 * feature flag resolves. It is a harmless no-op when the key is absent from
+	 * the request.
+	 */
+	public static function register_meta_guards() {
+		$post_types = array_column( (array) self::get_available_post_types(), 'value' );
+		foreach ( $post_types as $post_type ) {
+			\add_filter( "rest_pre_insert_{$post_type}", [ __CLASS__, 'strip_unauthorized_exempt_meta' ], 10, 2 );
+		}
+	}
+
+	/**
+	 * Remove the exemption meta from an incoming REST save when the current
+	 * user cannot toggle it, so a stray ride-along (Members / Custom Fields /
+	 * third-party) is silently ignored instead of 403-ing the whole save.
+	 *
+	 * Note: `WP_REST_Request` returns array params by value, so the key must be
+	 * removed on a local copy and reassigned — `unset( $request['meta'][ $k ] )`
+	 * is a no-op ("indirect modification of overloaded element").
+	 *
+	 * @param stdClass        $prepared_post Prepared post object (returned unchanged).
+	 * @param WP_REST_Request $request       Incoming request.
+	 * @return stdClass
+	 */
+	public static function strip_unauthorized_exempt_meta( $prepared_post, $request ) {
+		$meta = $request['meta'];
+		if (
+			is_array( $meta ) &&
+			array_key_exists( self::IS_EXEMPT_META_KEY, $meta ) &&
+			! self::current_user_can_edit_exemption()
+		) {
+			unset( $meta[ self::IS_EXEMPT_META_KEY ] );
+			$request['meta'] = $meta;
+		}
+		return $prepared_post;
 	}
 }
 Content_Restriction_Control::init();

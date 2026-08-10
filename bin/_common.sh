@@ -1,6 +1,11 @@
 #!/bin/bash
 
-NABSPATH="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Derived unless the caller already set it to a real workspace root: `n` resolves
+# symlinks with `pwd -P` and that form has to survive being sourced here. An
+# inherited value is checked rather than trusted — bin/worktree.sh removes trees
+# under $NABSPATH, so a root arriving from the environment would delete elsewhere.
+[[ -n "${NABSPATH:-}" && -f "$NABSPATH/n" ]] ||
+    NABSPATH="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 validate_name() {
     if [[ ! "$1" =~ ^[a-zA-Z0-9._/-]+$ ]] || [[ "$1" == *..* ]] || [[ "$1" == /* ]]; then
@@ -29,6 +34,18 @@ validate_port() {
         echo "Error: invalid port '$1' (must be a number between 1 and 65535)"
         exit 1
     fi
+}
+
+# Is this loopback alias up on lo0? (macOS only — Linux routes all 127.x.x.x by
+# default.) The address is compared whole, as a field of its own: loopback
+# addresses are prefixes of each other (127.0.0.2 sits inside 127.0.0.24) and the
+# low ones are recycled while higher envs stay up, so a substring test reports a
+# free address as already aliased — and the env then dies binding a port on an
+# address the host does not have. Returns 0 (shell true) when the address is up;
+# `found` is unset, and so awk-numeric 0, when it is not. An unreadable lo0 is
+# therefore reported absent, which makes the caller create the alias.
+lo0_alias_exists() {
+    ifconfig lo0 2>/dev/null | awk -v ip="$1" '$1 == "inet" && $2 == ip { found = 1 } END { exit !found }'
 }
 
 # Logging helpers — mirror the colored output used by bin/site-setup.sh.

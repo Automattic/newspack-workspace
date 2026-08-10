@@ -69,9 +69,12 @@ function enqueue_scripts() {
 		\Newspack\Newspack::plugin_url() . '/dist/reader-registration-block.js',
 		[ 'wp-polyfill', 'newspack-reader-activation' ],
 		\Newspack\Newspack::asset_version( 'reader-registration-block' ),
-		true
+		[
+			'strategy'  => 'defer',
+			'in_footer' => true,
+		]
 	);
-	\wp_script_add_data( $handle, 'async', true );
+	\wp_script_add_data( $handle, 'defer', true );
 	\wp_script_add_data( $handle, 'amp-plus', true );
 	\wp_localize_script(
 		$handle,
@@ -537,6 +540,13 @@ function process_form() {
 		if ( $existing_user && Reader_Activation::is_user_reader( $existing_user ) ) {
 			// Return the action type - frontend will check OTP hash validity and request fresh OTP if needed.
 			$response['action'] = Reader_Activation::is_reader_without_password( $existing_user ) ? 'otp' : 'pwd';
+		} elseif ( $existing_user ) {
+			// The email belongs to an existing non-reader account (e.g. an admin or editor).
+			// register_reader() has already sent the non-reader login reminder; surface the same
+			// generic "Account not found." error the auth modal returns instead of a silent success
+			// response. The message text deliberately does not name the account, though (as with the
+			// auth modal) the error response is distinguishable from the new-account success flow.
+			return send_form_response( new \WP_Error( 'unauthorized', __( 'Account not found.', 'newspack-plugin' ) ) );
 		}
 	}
 

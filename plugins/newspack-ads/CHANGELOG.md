@@ -1,3 +1,23 @@
+## newspack-ads [3.13.1](https://github.com/Automattic/newspack-workspace/compare/newspack-ads@3.13.0...newspack-ads@3.13.1) (2026-08-03)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.6.0
+* **newspack-scripts:** upgraded to 5.10.0
+
+# newspack-ads [3.13.0](https://github.com/Automattic/newspack-workspace/compare/newspack-ads@3.12.0...newspack-ads@3.13.0) (2026-07-20)
+
+
+### Features
+
+* **block-theme:** add ad slots and spacing control (NPPD-1558, [#300](https://github.com/Automattic/newspack-workspace/issues/300)) ([7823f2f](https://github.com/Automattic/newspack-workspace/commit/7823f2fefd7cc1eaf854b08d8b4422289fa75f62))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.5.0
+
 # newspack-ads [3.12.0](https://github.com/Automattic/newspack-workspace/compare/newspack-ads@3.11.2...newspack-ads@3.12.0) (2026-06-29)
 
 
