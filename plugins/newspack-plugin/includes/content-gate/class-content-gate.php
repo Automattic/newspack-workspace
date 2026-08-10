@@ -402,6 +402,11 @@ class Content_Gate {
 	 * 'the_post' and returns early outside a singular main-query view, so
 	 * nothing populates the substitution the content filters read.
 	 *
+	 * Each item decides independently. No state is shared between items and
+	 * has_rendered()/mark_gate_as_rendered() are deliberately not consulted
+	 * here: they mean "one gate per page render", and honouring them in a
+	 * collection would gate the first item and serve the rest intact.
+	 *
 	 * @param \WP_REST_Response $response Response object.
 	 * @param \WP_Post          $post     Post being prepared.
 	 * @param \WP_REST_Request  $request  Request object.
@@ -434,9 +439,20 @@ class Content_Gate {
 			return $response;
 		}
 
+		// Replace only keys the response already carries. context=embed omits
+		// content entirely, and writing it would fabricate a key core never
+		// emits — changing the response shape for consumers that branch on key
+		// presence. 'embed' is neither 'view' nor 'edit', so the context check
+		// above does not cover it.
 		$data = $response->get_data();
 		if ( isset( $data['content']['rendered'] ) ) {
 			$data['content']['rendered'] = $restriction['teaser'] . $restriction['gate'];
+		}
+		if ( isset( $data['excerpt']['rendered'] ) ) {
+			$data['excerpt']['rendered'] = $restriction['teaser'];
+		}
+		if ( isset( $data['comment_status'] ) ) {
+			$data['comment_status'] = 'closed';
 		}
 		$response->set_data( $data );
 

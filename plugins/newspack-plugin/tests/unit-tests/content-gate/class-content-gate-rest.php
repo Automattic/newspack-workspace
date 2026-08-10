@@ -72,6 +72,11 @@ class Test_Content_Gate_Rest extends \WP_UnitTestCase {
 				'post_status'  => 'publish',
 				'post_title'   => 'Gated article',
 				'post_content' => '<!-- wp:paragraph --><p>Free paragraph one.</p><!-- /wp:paragraph --><!-- wp:paragraph --><p>Free paragraph two.</p><!-- /wp:paragraph --><!-- wp:paragraph --><p>' . self::BODY_SENTINEL . '</p><!-- /wp:paragraph -->',
+				// Force WordPress to auto-generate the excerpt from post_content
+				// instead of the factory's placeholder text, so the excerpt test
+				// actually exercises the withheld-body case (NPPM-3090's defect
+				// class): a generated excerpt that carries the gated paragraph.
+				'post_excerpt' => '',
 			]
 		);
 		$this->open_post_id = self::factory()->post->create(
@@ -245,6 +250,107 @@ class Test_Content_Gate_Rest extends \WP_UnitTestCase {
 			self::BODY_SENTINEL,
 			$data['content']['rendered'],
 			'The block editor must receive the real body even when another newspack_is_post_restricted callback forces a restriction.'
+		);
+	}
+
+	/**
+	 * Every gated item in a collection is gated, not just the first.
+	 *
+	 * The front-end path marks a gate as rendered once per page. Carrying that
+	 * flag into a collection response would gate the first item and serve the
+	 * rest intact.
+	 */
+	public function test_every_gated_item_in_a_collection_is_gated() {
+		$second_gated_id = self::factory()->post->create(
+			[
+				'post_status'  => 'publish',
+				'post_title'   => 'Second gated article',
+				// Same three-paragraph shape as the primary fixture in set_up():
+				// with visible_paragraphs defaulting to 2, a single-paragraph body
+				// can't distinguish a teaser from the full body.
+				'post_content' => '<!-- wp:paragraph --><p>Free paragraph one.</p><!-- /wp:paragraph --><!-- wp:paragraph --><p>Free paragraph two.</p><!-- /wp:paragraph --><!-- wp:paragraph --><p>' . self::BODY_SENTINEL . '</p><!-- /wp:paragraph -->',
+			]
+		);
+		Content_Gate::update_gate_settings(
+			$this->gate_id,
+			[
+				'title'         => 'REST Gate',
+				'status'        => 'publish',
+				'priority'      => 0,
+				'content_rules' => [
+					[
+						'slug'  => 'specific_posts',
+						'value' => [ $this->gated_post_id, $second_gated_id ],
+					],
+				],
+				'registration'  => [
+					'active'               => true,
+					'metering'             => [
+						'enabled' => false,
+						'count'   => 0,
+						'period'  => 'month',
+					],
+					'require_verification' => false,
+					'gate_id'              => 0,
+				],
+			]
+		);
+		wp_set_current_user( 0 );
+
+		$data = $this->rest_get( '/wp/v2/posts', [ 'include' => [ $this->gated_post_id, $second_gated_id ] ] );
+
+		$this->assertCount( 2, $data, 'Both gated posts are in the collection.' );
+		foreach ( $data as $item ) {
+			$this->assertStringNotContainsString(
+				self::BODY_SENTINEL,
+				$item['content']['rendered'],
+				'Every gated item in a collection must withhold its body.'
+			);
+		}
+	}
+
+	/**
+	 * An embed-context response keeps the shape core gives it.
+	 */
+	public function test_embed_context_does_not_gain_a_content_key() {
+		wp_set_current_user( 0 );
+
+		$data = $this->rest_get( '/wp/v2/posts/' . $this->gated_post_id, [ 'context' => 'embed' ] );
+
+		$this->assertArrayNotHasKey(
+			'content',
+			$data,
+			'Embed responses omit content; the filter must not fabricate the key.'
+		);
+	}
+
+	/**
+	 * The excerpt is replaced along with the body.
+	 */
+	public function test_excerpt_is_replaced_for_a_gated_post() {
+		wp_set_current_user( 0 );
+
+		$data = $this->rest_get( '/wp/v2/posts/' . $this->gated_post_id );
+
+		$this->assertStringNotContainsString(
+			self::BODY_SENTINEL,
+			$data['excerpt']['rendered'],
+			'A generated excerpt must not carry the withheld body.'
+		);
+	}
+
+	/**
+	 * A gated post reports comments closed, matching the front end.
+	 */
+	public function test_comment_status_matches_the_front_end() {
+		wp_set_current_user( 0 );
+
+		$data = $this->rest_get( '/wp/v2/posts/' . $this->gated_post_id );
+
+		$this->assertSame(
+			'closed',
+			$data['comment_status'],
+			'restrict_post() closes comments on the front end; REST must agree.'
 		);
 	}
 }
