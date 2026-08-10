@@ -1211,6 +1211,71 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A page configured as excluded from gating (the site's Privacy Policy
+	 * page here) is never gated, even when it matches a published gate's
+	 * content rules.
+	 */
+	public function test_excluded_page_is_never_gated() {
+		$excluded_post_id = $this->post_ids[0];
+		wp_set_current_user( 0 );
+
+		// Precondition: this post matches the published 'post_types' => ['post']
+		// gate from set_up() and would ordinarily be restricted.
+		$this->assertNotFalse(
+			Content_Gate::is_post_restricted( $excluded_post_id ),
+			'Precondition: the post must be restricted before the exclusion is configured.'
+		);
+
+		update_option( 'wp_page_for_privacy_policy', $excluded_post_id );
+
+		$this->assertNull(
+			Content_Gate::get_restriction_for_post( get_post( $excluded_post_id ) ),
+			'The Privacy Policy page must never be gated, regardless of content rules.'
+		);
+
+		// Control: an ordinary post matching the same gate, not configured as
+		// any excluded page, is still gated.
+		$control_post_id  = $this->factory->post->create();
+		$this->post_ids[] = $control_post_id;
+
+		$this->assertIsArray(
+			Content_Gate::get_restriction_for_post( get_post( $control_post_id ) ),
+			'An ordinary post matching the gate must still be restricted.'
+		);
+	}
+
+	/**
+	 * Confirms wc_get_page_id()'s -1 (unconfigured) return value can never
+	 * match a real post ID -- is_excluded_from_gating() filters out
+	 * non-positive IDs before comparing -- and that a WooCommerce page which
+	 * IS configured is excluded exactly like the Privacy Policy page.
+	 */
+	public function test_wc_page_exclusion_ignores_unconfigured_minus_one() {
+		require_once dirname( __DIR__, 2 ) . '/mocks/wc-mocks.php';
+		wp_set_current_user( 0 );
+
+		// Unconfigured: wc_get_page_id( 'myaccount'|'cart'|'checkout' ) all
+		// resolve to -1 (no 'woocommerce_*_page_id' option is set). A post
+		// matching the gate must still be restricted, proving -1 cannot
+		// spuriously match a real post ID.
+		$this->assertIsArray(
+			Content_Gate::get_restriction_for_post( get_post( $this->post_ids[0] ) ),
+			'-1 (an unconfigured WooCommerce page) must not exclude a real post from gating.'
+		);
+
+		// Configured: a real myaccount page ID is excluded, same as the
+		// Privacy Policy page.
+		$myaccount_post_id = $this->factory->post->create();
+		$this->post_ids[]  = $myaccount_post_id;
+		update_option( 'woocommerce_myaccount_page_id', $myaccount_post_id );
+
+		$this->assertNull(
+			Content_Gate::get_restriction_for_post( get_post( $myaccount_post_id ) ),
+			'A configured WooCommerce myaccount page must never be gated.'
+		);
+	}
+
+	/**
 	 * Test that already grouped access_rules remain unchanged.
 	 */
 	public function test_custom_access_preserves_grouped_rules() {

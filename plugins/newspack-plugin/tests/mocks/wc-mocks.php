@@ -890,6 +890,20 @@ function wc_create_order( $data ) {
 function wc_get_checkout_url() {
 	return 'https://example.com/checkout';
 }
+if ( ! function_exists( 'wc_get_page_id' ) ) {
+	/**
+	 * Mirrors real WooCommerce: -1 when the page is not configured, otherwise
+	 * the configured post ID. Content_Gate::is_excluded_from_gating() relies
+	 * on -1 never matching a real post ID (post IDs are always positive).
+	 *
+	 * @param string $page WooCommerce page slug (e.g. 'myaccount', 'cart').
+	 * @return int
+	 */
+	function wc_get_page_id( $page ) {
+		$page_id = get_option( 'woocommerce_' . $page . '_page_id' );
+		return $page_id ? absint( $page_id ) : -1;
+	}
+}
 function wcs_is_subscription( $order ) {
 	global $subscriptions_database;
 	// Mirror real WooCommerce Subscriptions: only an actual WC_Subscription object
