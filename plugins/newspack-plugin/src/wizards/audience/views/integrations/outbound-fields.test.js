@@ -157,10 +157,10 @@ describe( 'toggleRow', () => {
 describe( 'badgesForRow', () => {
 	const badgeText = row => badgesForRow( row ).map( b => b.text );
 
-	it( 'badges new and updated fields New and legacy fields Legacy', () => {
+	it( 'badges new and updated fields New; legacy fields carry no badge', () => {
 		const rows = buildFieldRows( DEFS, [ 'v1:registration_method', 'v2:Registration_Strategy' ] );
 		expect( badgeText( rows.find( r => r.name === 'Registration Strategy' ) ) ).toEqual( [ 'New' ] );
-		expect( badgeText( rows.find( r => r.name === 'Registration Method' ) ) ).toEqual( [ 'Legacy' ] );
+		expect( badgeText( rows.find( r => r.name === 'Registration Method' ) ) ).toEqual( [] );
 		expect( badgeText( { activeDefinition: { status: 'updated' } } ) ).toEqual( [ 'New' ] );
 	} );
 
@@ -189,6 +189,18 @@ describe( 'visibleSections', () => {
 		const sections = visibleSections( buildFieldRows( [ ...DEFS, def( 'v1:extra', 'Extra', { section: '' } ) ], [] ) );
 		expect( sections.map( s => s.section ) ).toContain( 'Additional' );
 		expect( sections.find( s => s.section === 'Test' ).rows.length ).toBeGreaterThan( 0 );
+	} );
+
+	it( 'sorts an all-legacy-status section last, after Additional, regardless of its label', () => {
+		const defs = [
+			// Named "Vintage", not "Legacy" — the ordering must key on each row's
+			// own status, not on the section's translated label.
+			def( 'v1:vintage_field', 'Vintage Field', { section: 'Vintage', status: 'legacy' } ),
+			def( 'v2:new_field', 'New Field', { section: 'Current', status: 'new' } ),
+			def( 'neutral:extra_field', 'Extra Field', { section: '' } ),
+		];
+		const sections = visibleSections( buildFieldRows( defs, [ 'v1:vintage_field' ] ) );
+		expect( sections.map( s => s.section ) ).toEqual( [ 'Current', 'Additional', 'Vintage' ] );
 	} );
 } );
 

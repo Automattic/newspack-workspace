@@ -289,8 +289,9 @@ class Test_Field_Registry extends \WP_UnitTestCase {
 		// Superseded side of a rename carries the reverse link.
 		$this->assertContains( 'v2:Registration_Strategy', $by_id['v1:registration_method']['superseded_by'] );
 
-		// `status` is the badge vocabulary: legacy badges Legacy, new/updated
-		// badge New, and a field with no declared status is a safe 'existing'.
+		// `status` is what the badges and sunset rule key on: new/updated badge
+		// New (legacy is unbadged — it sorts into its own Legacy-last section
+		// instead), and a field with no declared status is a safe 'existing'.
 		$this->assertSame( 'legacy', $by_id['v1:account']['status'] );
 		foreach ( $rows as $r ) {
 			$this->assertContains( $r['status'], [ 'new', 'updated', 'legacy', 'existing' ] );
