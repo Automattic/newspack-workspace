@@ -167,8 +167,9 @@ class Premium_Newsletters {
 		// than widening to both — the meta query is EXISTS vs NOT EXISTS — while the
 		// per-list check below runs through Content_Restriction_Control, which
 		// honours any gate whose content rules match the list. Testing only the
-		// newsletter half would skip lists an ordinary gate restricts. Both calls are
-		// statically cached, so the fast path stays cheap.
+		// newsletter half would skip lists an ordinary gate restricts. In non-test
+		// requests both gate lookups are cached (Content_Gate::get_gates cache is
+		// disabled under PHPUnit), so the fast path stays cheap.
 		if ( empty( self::get_gates() ) && empty( Content_Gate::get_gates( Content_Gate::GATE_CPT, 'publish' ) ) ) {
 			return $lists;
 		}
