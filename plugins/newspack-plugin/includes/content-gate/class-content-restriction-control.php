@@ -346,13 +346,17 @@ class Content_Restriction_Control {
 
 		$user_id = $user_id ?? get_current_user_id();
 
-		// Don't restrict this post for users who can edit it.
-		if ( ! empty( $post_id ) && user_can( $user_id, 'edit_post', $post_id ) ) {
+		// If no gates apply to this post, nothing can restrict it. Checked before
+		// the capability check below: user_can() fans out to other plugins'
+		// user_has_cap filters and can be expensive, and an empty gate set returns
+		// false regardless of the user's caps, so the outcome is identical either way.
+		$post_gates = self::get_post_gates( $post_id );
+		if ( empty( $post_gates ) ) {
 			return false;
 		}
 
-		$post_gates = self::get_post_gates( $post_id );
-		if ( empty( $post_gates ) ) {
+		// Don't restrict this post for users who can edit it.
+		if ( ! empty( $post_id ) && user_can( $user_id, 'edit_post', $post_id ) ) {
 			return false;
 		}
 

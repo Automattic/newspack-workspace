@@ -160,6 +160,11 @@ class Premium_Newsletters {
 		if ( is_admin() ) {
 			return $lists;
 		}
+		// If there are no premium newsletter gates, no list can be restricted, so
+		// skip the per-list check entirely. get_gates() is statically cached.
+		if ( empty( self::get_gates() ) ) {
+			return $lists;
+		}
 		$lists = array_values(
 			array_filter(
 				$lists,
