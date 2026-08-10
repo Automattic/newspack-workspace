@@ -5,6 +5,8 @@
  * @package Newspack_Blocks
  */
 
+require_once __DIR__ . '/class-newspack-tag-labels-stub.php';
+
 /**
  * Homepage Posts Block test case.
  */

@@ -8,14 +8,14 @@ This file covers what is specific to `newspack-plugin`. Shared conventions (Dock
 npm run lint             # JS + SCSS only (see gotchas)
 npm run lint:js          # JavaScript/TypeScript linting
 npm run lint:scss        # SCSS linting
-npm run lint:php         # PHP linting (PHPCS)
 npm run fix:js           # Auto-fix JS issues
-npm run fix:php          # Auto-fix PHP issues (PHPCBF)
 ```
+
+PHP is linted from the workspace root, not from this directory. See the root guide.
 
 ## Common Gotchas
 
-- `npm run lint` runs JS + SCSS only. PHP linting requires a separate `npm run lint:php`.
+- `npm run lint` runs JS + SCSS only. Lint PHP from the workspace root (see the root guide).
 - After adding a new PHP file, run `composer dump-autoload` to update the classmap (Composer uses `classmap`, not PSR-4).
 - Individual JS test files cannot run independently. Always run `npm test` for the full suite.
 - Never import `react-router-dom` directly in source code. Use the proxy: `import Router from '../../packages/components/src/proxied-imports/router'`. Tests may import `react-router-dom` directly.
@@ -130,11 +130,6 @@ All under the `newspack` namespace, defined in `includes/cli/`. Run `wp newspack
 
 ### PHP Testing
 
-```bash
-npm run lint:php         # PHP linting (PHPCS)
-npm run fix:php          # Auto-fix PHP issues (PHPCBF)
-```
-
 - Tests live in `tests/unit-tests/`, extend `WP_UnitTestCase`.
 - Bootstrap: `tests/class-newspack-unit-tests-bootstrap.php`. Mocks in `tests/mocks/`.
 - Available `@group` annotations: `byline-block`, `corrections`, `Access_Rules`, `WooCommerce_Subscriptions_Integration`.
@@ -226,7 +221,7 @@ Blocks in `src/blocks/` with `block.json` metadata. Central registration in `src
 - Design tokens in `packages/colors/colors.module.scss` (primary, secondary, tertiary, quaternary, neutral + semantic colors, each with 000-1000 scale).
 - See `packages/colors/DEVELOPMENT.md` for the color usage decision tree: backend admin uses WordPress colors (with `primary-600` accent override), block icons must use `primary-400`, frontend Newspack UI uses `newspack-colors`, theme elements use the theme palette.
 - BEM-ish naming with `newspack-` prefix (e.g., `.newspack-wizard__header`, `.newspack-card`).
-- Tachyons CSS utility library available for utility classes.
+- No utility-class library. For layout, use `__experimentalHStack`/`__experimentalVStack` from `@wordpress/components`; spacing via the `spacing` prop (4px units).
 - Shared mixins in `src/shared/scss/_mixins.scss`.
 
 ### JS Testing

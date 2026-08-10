@@ -1,1 +1,36 @@
-pnpm exec lint-staged --config .lintstagedrc.json
+# The lint's contract is "check what the author staged". A merge breaks that
+# assumption: completing one stages the entire base integration — every file the
+# merge brings in, hundreds on a typical `main` merge — so lint-staged would
+# judge the merge commit against the base branch's pre-existing lint debt and
+# block it over files nobody touched. Skip the lint while a merge is in
+# progress; CI lints the pushed head regardless.
+#
+# Two states, because they stage the same thing by different routes: a regular
+# merge left mid-resolution (MERGE_HEAD), and `git merge --squash`, which never
+# sets MERGE_HEAD and is identifiable only by SQUASH_MSG. Both files are removed
+# by git on commit and on `git reset --hard`, so neither can go stale and leave
+# the lint silently disabled.
+#
+# Nothing else is exempt. A rebase, cherry-pick or revert replays one commit's
+# worth of changes that the committer is deliberately introducing here, so the
+# contract still holds and the lint stays on.
+if git rev-parse -q --verify MERGE_HEAD >/dev/null ||
+	[ -f "$(git rev-parse --git-dir)/SQUASH_MSG" ]; then
+	echo "husky: merge in progress, skipping lint-staged (CI lints the pushed head)."
+else
+	# `|| exit $?` blocks the commit on lint failure independent of `set -e` (husky
+	# runs this as `sh -e`, but don't depend on that — keep the gate self-contained).
+	pnpm exec lint-staged --config .lintstagedrc.json || exit $?
+fi
+
+# Optional personal pre-commit hook. Drop your own commands in
+# `.husky/pre-commit.local` (gitignored, per-checkout — `.husky/pre-commit` is
+# tracked, so each git worktree needs its own `.local`) and they run after the
+# lint above — git honours a single core.hooksPath, so this is how personal
+# hooks coexist with husky instead of being overwritten. Run as a POSIX-sh
+# snippet (its shebang is ignored); exit non-zero to block. Absent file = no-op.
+# Avoid mutating staged files here — the lint already ran, so changes made now
+# aren't re-checked (CI still re-lints the PR regardless).
+if [ -f .husky/pre-commit.local ]; then
+	sh .husky/pre-commit.local
+fi

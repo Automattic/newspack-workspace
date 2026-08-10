@@ -46,6 +46,7 @@ class WidgetTest extends WP_UnitTestCase {
 	 */
 	public function tear_down() {
 		wp_delete_post( $this->test_post->ID, true );
+		Republication_Tracker_Tool::$modal_rendered = false;
 		parent::tear_down();
 	}
 
@@ -156,11 +157,11 @@ class WidgetTest extends WP_UnitTestCase {
 		$this->widget->widget( $args, $instance );
 		$this->widget->widget( $args, $instance );
 		$output = ob_get_clean();
-		$this->assertStringContainsString( 'republication-tracker-tool-modal', $output );
+		$this->assertStringContainsString( 'id="republication-tracker-tool-modal"', $output );
 		$this->assertStringContainsString( 'republication-tracker-tool-button', $output );
 
-		// Check only one modal is present.
-		$this->assertEquals( substr_count( $output, 'republication-tracker-tool-modal' ), 1, 'Single modal found in output.' );
-		$this->assertEquals( substr_count( $output, 'republication-tracker-tool-button' ), 3, 'Multiple buttons found in output.' );
+		// Check only one modal wrapper is present.
+		$this->assertEquals( 1, substr_count( $output, 'id="republication-tracker-tool-modal"' ), 'Single modal found in output.' );
+		$this->assertEquals( 3, substr_count( $output, 'republication-tracker-tool-button' ), 'Multiple buttons found in output.' );
 	}
 }
