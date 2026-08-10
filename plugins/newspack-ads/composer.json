@@ -12,9 +12,6 @@
 		"phpunit/phpunit": "^7.0 || ^9.5"
 	},
 	"license": "GPL-2.0-or-later",
-	"scripts": {
-		"pre-push": "./.hooks/pre-push"
-	},
 	"extra": {},
 	"require": {
 		"googleads/googleads-php-lib": "^71.0"

@@ -38,7 +38,6 @@ There is no surviving Edit Flow legacy here despite the plugin's origins; the fo
 
 - **After adding, renaming or moving any PHP class under `includes/`:** run `n composer dump-autoload` from this directory. Autoloading is a Composer classmap with no PSR-4 fallback. `n watch` only runs webpack.
 - **After adding a webpack entry:** register it manually in `webpack.config.js` (no auto-discovery) *and* add a matching enqueue in `includes/class-admin.php`. Build output goes to `dist/`, not the wp-scripts default `build/`.
-- **`composer update` inside this plugin exits 127.** `composer.lock` is out of sync with `composer.json`, `brainmaestro/composer-git-hooks` is orphaned in the lock but absent from `require-dev`, and `post-update-cmd` unconditionally runs `vendor/bin/cghooks`, which the update itself prunes. Use `composer install` (warns but succeeds), or fix `require-dev` first.
 
 ## The @wordpress/data store
 
