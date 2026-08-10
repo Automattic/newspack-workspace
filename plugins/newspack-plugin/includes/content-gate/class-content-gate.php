@@ -420,6 +420,14 @@ class Content_Gate {
 		if ( 'edit' === $request['context'] ) {
 			return $response;
 		}
+		// Core already withheld everything for a password-protected post
+		// (content.rendered === '', see WP_REST_Posts_Controller). That is
+		// the more restrictive authority here, so defer to it rather than
+		// overwrite the empty string with a teaser the caller hasn't earned
+		// either the password or the gate for.
+		if ( \post_password_required( $post ) ) {
+			return $response;
+		}
 
 		$restriction = self::get_restriction_for_post( $post );
 		if ( null === $restriction ) {
