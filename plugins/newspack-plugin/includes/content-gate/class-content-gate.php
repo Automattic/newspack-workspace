@@ -1545,10 +1545,14 @@ class Content_Gate {
 	 */
 	public static function get_restricted_post_excerpt( $post ) {
 		self::$is_gated = true;
-		// Pass the ID explicitly: get_gate_layout_id() only falls back to the
-		// queried object under is_singular(), which is false outside a
-		// front-end singular view, and it would otherwise resolve to false and
-		// render an empty gate.
+		// Pass the ID explicitly rather than relying on get_gate_layout_id()'s
+		// own is_singular() fallback to the queried object. Callers:
+		// restrict_post() and wc_memberships_excerpt() both guard on
+		// $post->ID === get_queried_object_id(), so for them this resolves to
+		// the same ID either way. Metering::enqueue_scripts() carries no such
+		// guard and keys its restriction check on $post->ID too, so passing
+		// it here keeps the layout lookup consistent with that decision
+		// instead of risking a mismatched fallback and an empty gate.
 		return self::get_restricted_post_excerpt_for_gate( $post, self::get_gate_layout_id( $post->ID ) );
 	}
 
