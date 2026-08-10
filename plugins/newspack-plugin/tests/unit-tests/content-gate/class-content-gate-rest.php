@@ -210,6 +210,45 @@ class Test_Content_Gate_Rest extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Supplying the correct password to a password-protected AND gated post
+	 * must still withhold the gated body and serve the teaser, not the full
+	 * content.
+	 *
+	 * Core's WP_REST_Posts_Controller::get_item() temporarily clears
+	 * $post->post_password (via can_access_password_content() /
+	 * check_password_required()) to render the real body into
+	 * content.rendered when the caller supplies the correct ?password=, then
+	 * restores post_password before firing rest_prepare_{$post_type}. By the
+	 * time filter_rest_response() runs, post_password_required( $post ) is
+	 * true again even though content.rendered already carries the full body
+	 * -- so a guard keyed on post_password_required() alone would bail here
+	 * and let the full body through unchanged. Holding the password does not
+	 * grant the gate's entitlement, so this reader must still see the teaser.
+	 */
+	public function test_anonymous_read_with_the_correct_password_still_withholds_the_gated_body() {
+		wp_update_post(
+			[
+				'ID'            => $this->gated_post_id,
+				'post_password' => 'secret',
+			]
+		);
+		wp_set_current_user( 0 );
+
+		$data = $this->rest_get( '/wp/v2/posts/' . $this->gated_post_id, [ 'password' => 'secret' ] );
+
+		$this->assertStringNotContainsString(
+			self::BODY_SENTINEL,
+			$data['content']['rendered'],
+			'A reader holding only the post password, not the gate entitlement, must not see the gated body.'
+		);
+		$this->assertStringContainsString(
+			'Free paragraph one.',
+			$data['content']['rendered'],
+			'The teaser must be served in place of the withheld body once the password is supplied.'
+		);
+	}
+
+	/**
 	 * An anonymous read of an ungated post is untouched.
 	 */
 	public function test_anonymous_read_of_an_open_post_is_untouched() {
@@ -532,6 +571,47 @@ class Test_Content_Gate_Rest extends \WP_UnitTestCase {
 			'entitled reader'  => [ true ],
 		];
 	}
+
+	/**
+	 * A site with no published gate must not force no-cache headers on an
+	 * ordinary REST read.
+	 *
+	 * Before this guard existed, filter_rest_response() reached the
+	 * `rest_send_nocache_headers` opt-in unconditionally for every
+	 * REST-exposed post type as soon as the feature flag was on, regardless
+	 * of whether anything on the site could actually restrict a post -- an
+	 * attachment read (`/wp/v2/media`) was enough to flip it.
+	 */
+	public function test_rest_reads_do_not_force_nocache_headers_without_a_restriction_source() {
+		wp_update_post(
+			[
+				'ID'          => $this->gate_id,
+				'post_status' => 'draft',
+			]
+		);
+		wp_set_current_user( 0 );
+
+		$this->rest_get( '/wp/v2/posts/' . $this->open_post_id );
+
+		$this->assertFalse(
+			apply_filters( 'rest_send_nocache_headers', false ),
+			'A site with no published gate must not force no-cache headers on REST reads.'
+		);
+	}
+
+	// NOTE: filter_rest_response() also bails when Memberships::is_active(),
+	// matching get_restriction_for_post()'s own unconditional Memberships
+	// deferral ("Don't apply our restriction strategy if Woo Memberships is
+	// active") a few lines below -- so a Memberships site can never be
+	// restricted by this filter regardless of gates, and must not force
+	// no-cache headers either. Deliberately not covered by an automated test
+	// here: Memberships::is_active() is `class_exists( 'WC_Memberships' ) &&
+	// function_exists( 'wc_memberships' )` with no filter to stub, so making
+	// it true for one test means permanently declaring those globally in
+	// this PHPUnit process -- there is no way to undeclare a class -- which
+	// would silently flip Memberships::is_active() to true for every test
+	// that runs afterward in the same run, including unrelated ones
+	// elsewhere in the suite that assume it is false by default.
 
 	/**
 	 * The same post yields the same gated string on both paths.

@@ -425,13 +425,48 @@ class Content_Gate {
 		if ( 'edit' === $request['context'] ) {
 			return $response;
 		}
-		// Core already withheld everything for a password-protected post
-		// (content.rendered === '', see WP_REST_Posts_Controller). That is
-		// the more restrictive authority here, so defer to it rather than
-		// overwrite the empty string with a teaser the caller hasn't earned
-		// either the password or the gate for.
-		if ( \post_password_required( $post ) ) {
+		// Nothing on this site can produce a REST restriction unless a Content
+		// Gate is published and active. Deliberately not
+		// Content_Gate_Advanced_Settings::has_restriction_source(): that
+		// predicate also treats an active WooCommerce Memberships install as a
+		// restriction source, which is correct for the feed path (it asks
+		// `newspack_is_post_restricted` directly, and Memberships answers that
+		// filter on its own) but wrong here — get_restriction_for_post() below
+		// defers to Memberships unconditionally ("Don't apply our restriction
+		// strategy if Woo Memberships is active") and always returns null while
+		// it is active, so a Memberships-only site can never be restricted by
+		// this filter regardless of gates. Reusing has_restriction_source()
+		// verbatim would keep forcing the no-cache opt-in below on every
+		// REST-exposed post type on such a site for nothing — the exact waste
+		// this guard exists to avoid.
+		if ( Memberships::is_active() || ! self::is_gating_active() || empty( self::get_gates( self::GATE_CPT, 'publish', false ) ) ) {
 			return $response;
+		}
+		// Core already withheld the content for a password-protected post whose
+		// caller has not supplied the correct password (content.rendered === '',
+		// see WP_REST_Posts_Controller::prepare_item_for_response()). That is the
+		// more restrictive authority here, so defer to it rather than overwrite
+		// the empty string with a teaser the caller hasn't earned either the
+		// password or the gate for.
+		//
+		// post_password_required() alone can no longer be trusted to mean that,
+		// though: when the correct password IS supplied,
+		// WP_REST_Posts_Controller::get_item() temporarily clears
+		// $post->post_password so post_password_required() reports false while
+		// content.rendered is built, then restores it before firing this hook
+		// (see can_access_password_content() / check_password_required(),
+		// class-wp-rest-posts-controller.php:2051). By the time we run,
+		// post_password_required( $post ) is true again even though the
+		// response already carries the full body — so the check has to be what
+		// core actually withheld, not merely whether a password exists. Holding
+		// the password does not grant the gate's entitlement, so a
+		// correctly-supplied password still falls through to the restriction
+		// check below.
+		if ( \post_password_required( $post ) ) {
+			$data = $response->get_data();
+			if ( empty( $data['content']['rendered'] ) ) {
+				return $response;
+			}
 		}
 
 		// The restriction filter is not a pure predicate: metering records
