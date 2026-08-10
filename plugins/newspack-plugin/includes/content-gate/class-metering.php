@@ -306,7 +306,10 @@ class Metering {
 			Newspack::plugin_url() . '/dist/content-gate-metering.js',
 			[],
 			filemtime( dirname( NEWSPACK_PLUGIN_FILE ) . '/dist/content-gate-metering.js' ),
-			true
+			[
+				'in_footer' => true,
+				'strategy'  => 'defer',
+			]
 		);
 
 		$settings = self::get_effective_settings( $gate_post_id, false );

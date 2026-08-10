@@ -334,6 +334,21 @@ class Content_Restriction_Control {
 			return $is_post_restricted;
 		}
 
+		// Gating stands down rather than half-working ({@see Content_Gate::is_gating_active()}).
+		//
+		// Passes the incoming value through rather than returning false, so this decides
+		// only whether *our* gates restrict and never overrides a verdict another
+		// callback already reached. At this position the two are equivalent — the
+		// Memberships early return above has already fired, and the only other callbacks
+		// either lower the value (`Newsletters_Access::filter_post_restricted`, a bypass)
+		// or run later and win regardless (`Gate_Preview::filter_is_post_restricted` at
+		// PHP_INT_MAX, which still forces a preview restricted so a publisher can see the
+		// gate they are editing). Pass-through is the safer default to keep as new
+		// callbacks are added.
+		if ( ! Content_Gate::is_gating_active() ) {
+			return $is_post_restricted;
+		}
+
 		// Return early if this post is exempt from access control restrictions.
 		if ( $post_id && get_post_meta( $post_id, self::IS_EXEMPT_META_KEY, true ) ) {
 			return false;
@@ -346,13 +361,17 @@ class Content_Restriction_Control {
 
 		$user_id = $user_id ?? get_current_user_id();
 
-		// Don't restrict this post for users who can edit it.
-		if ( ! empty( $post_id ) && user_can( $user_id, 'edit_post', $post_id ) ) {
+		// If no gates apply to this post, nothing can restrict it. Checked before
+		// the capability check below: user_can() fans out to other plugins'
+		// user_has_cap filters and can be expensive, and an empty gate set returns
+		// false regardless of the user's caps, so the outcome is identical either way.
+		$post_gates = self::get_post_gates( $post_id );
+		if ( empty( $post_gates ) ) {
 			return false;
 		}
 
-		$post_gates = self::get_post_gates( $post_id );
-		if ( empty( $post_gates ) ) {
+		// Don't restrict this post for users who can edit it.
+		if ( ! empty( $post_id ) && user_can( $user_id, 'edit_post', $post_id ) ) {
 			return false;
 		}
 
@@ -394,7 +413,8 @@ class Content_Restriction_Control {
 			// If custom_access mode is active and we didn't already evaluate it above for an anonymous bypass.
 			if ( ! $is_restricted && null === $anonymous_bypass_passed && ! empty( $gate['custom_access']['active'] ) ) {
 				$access_rules = $gate['custom_access']['access_rules'] ?? [];
-				if ( ! empty( $access_rules ) && ! Access_Rules::evaluate_rules( $access_rules, $user_id ) ) {
+				$rule_context = [ 'payment_recovery_grace' => $gate['custom_access']['payment_recovery_grace'] ?? true ];
+				if ( ! empty( $access_rules ) && ! Access_Rules::evaluate_rules( $access_rules, $user_id, $rule_context ) ) {
 					$is_restricted  = true;
 					$gate_layout_id = $gate['custom_access']['gate_layout_id'] ?? $gate['id'];
 				}
