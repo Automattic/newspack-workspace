@@ -60,7 +60,11 @@ module.exports = function releaseConfig( { name, phpFile, npmPublish = false } )
 					callback: 'npm run release:archive',
 				},
 			],
-			...gitCommitStep( [ phpFile, 'CHANGELOG.md' ] ),
+			// languages/** carries the translation files release.yml regenerates
+			// just before multi-semantic-release runs (see the "Regenerate
+			// translation files" step), so the committed template always matches
+			// the strings the release shipped.
+			...gitCommitStep( [ phpFile, 'CHANGELOG.md', 'languages/**' ] ),
 		],
 	};
 };
