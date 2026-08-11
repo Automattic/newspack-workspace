@@ -110,9 +110,11 @@ describe( 'the schedule prices table', () => {
 
 	it( 'invites a first price when the schedule is empty', () => {
 		renderPrices( { steps: [] } );
-		expect( screen.getByRole( 'heading', { level: 4, name: 'No prices yet' } ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Add one to get started.' ) ).toBeInTheDocument();
-		// The header action gives way to the single centered button below the message.
+		expect( screen.getByRole( 'heading', { level: 3, name: 'No prices yet' } ) ).toBeInTheDocument();
+		expect( screen.getByText( /Add the first one to build the schedule/ ) ).toBeInTheDocument();
+		// The card title and header action give way to the empty state and its
+		// single centered button.
+		expect( screen.queryByRole( 'heading', { name: 'Price Schedule' } ) ).not.toBeInTheDocument();
 		expect( screen.getAllByRole( 'button', { name: 'Add Price' } ) ).toHaveLength( 1 );
 		expect( screen.queryByRole( 'table' ) ).not.toBeInTheDocument();
 	} );

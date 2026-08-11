@@ -209,7 +209,7 @@ export default function SchedulePrices( { steps, onChange, publicize, calcTypes,
 	return (
 		<>
 			<TableCard
-				title={ __( 'Price Schedule', 'newspack-plugin' ) }
+				title={ rows.length > 0 && __( 'Price Schedule', 'newspack-plugin' ) }
 				titleId={ titleId }
 				actions={
 					rows.length > 0 && (
@@ -222,15 +222,18 @@ export default function SchedulePrices( { steps, onChange, publicize, calcTypes,
 				{ rows.length === 0 ? (
 					<div className="newspack-pricing-rules__schedule-empty">
 						<Grid columns={ 4 } noMargin>
-							<VStack start={ 2 } end={ 4 } spacing={ 8 }>
+							<VStack start={ 2 } end={ 4 } spacing={ 6 }>
 								<SectionHeader
 									icon={ currencyDollar }
 									title={ __( 'No prices yet', 'newspack-plugin' ) }
-									description={ __( 'Add one to get started.', 'newspack-plugin' ) }
+									description={ __(
+										'Each price applies from its billing cycle until the next takes over. Add the first one to build the schedule.',
+										'newspack-plugin'
+									) }
 									pageHeader
 									size="small"
 									noMargin
-									heading={ 4 }
+									heading={ 3 }
 								/>
 								<HStack justify="center">
 									<Button ref={ addRef } variant="secondary" onClick={ add } __next40pxDefaultSize>
