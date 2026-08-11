@@ -58,16 +58,18 @@
 
 		// Blanket font-family and line-height overrides — moved from
 		// `../style.scss` (Task 5). Forces georgia/arial regardless of theme;
-		// only applies when flag is off (MJML path). Block editor chrome is UI
-		// that never reaches the email, so it is excluded here rather than
-		// overridden afterwards, which leaves core's own typography intact.
-		// `:where()` keeps that exclusion at zero specificity, so these rules
-		// stay at their original weight and the `h1`–`h6` rule below still wins
-		// on source order.
+		// only applies when flag is off (MJML path). Editor chrome never reaches
+		// the email, so it is excluded here rather than overridden afterwards,
+		// leaving core's own typography intact. `:where()` holds the exclusion
+		// at zero specificity, so these rules keep their original weight.
 		*:where(:not(
 			.components-placeholder, .components-placeholder *,
 			.block-editor-warning, .block-editor-warning *,
-			.components-notice, .components-notice *
+			.components-notice, .components-notice *,
+			.newsletters-block__conditional-content__label,
+			.newsletters-block__conditional-content__label *,
+			.newsletters-block-visibility-label,
+			.newsletters-block-visibility-label *
 		)) {
 			line-height: 1.5;
 
@@ -76,14 +78,19 @@
 			}
 		}
 
-		// Chrome roots carry no font-family of their own, so they would inherit
-		// georgia from the block wrapper. Reset the root only: everything inside
-		// then follows core, which is why no line-height is set here — core's
-		// `line-height: initial` on placeholder text would be lost if it were.
+		// Core leaves the placeholder root's font-family unset, and sets no
+		// line-height on any chrome root, so both would otherwise be inherited
+		// from the block wrapper. Core's own declarations inside still win,
+		// an explicit value beating an inherited one. The Newspack labels above
+		// set their own typography and need no reset.
+		.components-placeholder {
+			font-family: wp-vars.$default-font;
+		}
+
 		.components-placeholder,
 		.block-editor-warning,
 		.components-notice {
-			font-family: wp-vars.$default-font;
+			line-height: wp-vars.$default-line-height;
 		}
 
 		h1,
