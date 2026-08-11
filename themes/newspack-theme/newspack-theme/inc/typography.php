@@ -169,10 +169,11 @@ function newspack_get_font_stacks_as_select_choices() {
 /**
  * Prepare a font-family definition with a primary font and fallbacks.
  *
- * Font names are stripped of CSS string and function delimiters — these values
- * flow into inline styles and theme.json preset values, where the theme origin
- * is never passed through core's insecure-property filtering. Generic family
- * keywords stay unquoted so a stack always ends in a real generic.
+ * Values flow into inline styles and theme.json preset values, and core never
+ * passes the theme origin through its insecure-property filtering, so names
+ * are emitted as quoted CSS strings with string delimiters escaped and markup
+ * and control characters removed. Generic family keywords stay unquoted so a
+ * stack always ends in a real generic.
  */
 function newspack_font_stack( $primary_font, $fallback_id ) {
 	$stacks   = newspack_get_font_stacks();
@@ -180,9 +181,9 @@ function newspack_font_stack( $primary_font, $fallback_id ) {
 	$generics = array( 'serif', 'sans-serif', 'monospace', 'cursive', 'fantasy', 'system-ui' );
 	array_unshift( $fonts, $primary_font );
 	foreach ( $fonts as &$font ) {
-		$font = str_replace( array( '"', "'", ';', '{', '}', '(', ')', '\\' ), '', $font );
+		$font = str_replace( array( "\n", "\r", "\t", '<', '>' ), '', stripslashes( $font ) );
 		if ( ! in_array( strtolower( $font ), $generics, true ) ) {
-			$font = '"' . $font . '"';
+			$font = '"' . str_replace( array( '\\', '"' ), array( '\\\\', '\\"' ), $font ) . '"';
 		}
 	}
 	return implode( ',', $fonts );
@@ -222,9 +223,17 @@ function newspack_font_family_stacks() {
 			'heading' => '"Fira Sans Condensed","Helvetica",sans-serif',
 		),
 	);
-	if ( isset( $variations[ get_stylesheet() ] ) ) {
-		$defaults = array_merge( $defaults, $variations[ get_stylesheet() ] );
+	$slug = isset( $variations[ get_stylesheet() ] ) ? get_stylesheet() : get_template();
+	if ( isset( $variations[ $slug ] ) ) {
+		$defaults = array_merge( $defaults, $variations[ $slug ] );
 	}
+
+	/**
+	 * Filter the default Header and Body font stacks.
+	 *
+	 * @param array $defaults Stacks keyed heading/body.
+	 */
+	$defaults = apply_filters( 'newspack_font_family_default_stacks', $defaults );
 
 	$mods   = array(
 		'heading' => array( 'font_header', 'font_header_stack' ),
@@ -249,8 +258,8 @@ function newspack_font_family_stacks() {
  * the Gutenberg plugin active the resolver passes WP_Theme_JSON_Data_Gutenberg,
  * a sibling class rather than a subclass, so the parameter stays untyped.
  *
- * @param WP_Theme_JSON_Data $theme_json Theme JSON data.
- * @return WP_Theme_JSON_Data
+ * @param WP_Theme_JSON_Data|WP_Theme_JSON_Data_Gutenberg $theme_json Theme JSON data.
+ * @return WP_Theme_JSON_Data|WP_Theme_JSON_Data_Gutenberg
  */
 function newspack_font_family_presets( $theme_json ) {
 	$data     = $theme_json->get_data();

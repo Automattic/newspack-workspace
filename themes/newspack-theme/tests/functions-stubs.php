@@ -91,3 +91,9 @@ function newspack_typography_css_wrap() {
  */
 function newspack_sanitize_svgs() {
 }
+/**
+ * Gutenberg's sibling of WP_Theme_JSON_Data; only defined when the plugin is
+ * active, so static analysis needs this stand-in.
+ */
+class WP_Theme_JSON_Data_Gutenberg extends WP_Theme_JSON_Data {
+}
