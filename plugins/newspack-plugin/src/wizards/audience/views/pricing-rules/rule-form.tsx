@@ -751,7 +751,14 @@ export default function RuleForm( { isNew, initialPath = null, rule, vocab, onDo
 									label={ __( 'Calculation', 'newspack-plugin' ) }
 									help={ calcTypeHelp( calcType, vocab.calc_types.find( c => c.value === calcType )?.label ?? '' ) }
 									value={ calcType }
-									options={ vocab.calc_types.map( c => ( { label: c.label, value: c.value } ) ) }
+									// A saved rule can name a calculation the vocabulary no longer
+									// offers; listing it keeps the control showing what the rule is.
+									options={ [
+										...vocab.calc_types.map( c => ( { label: c.label, value: c.value } ) ),
+										...( calcType && ! vocab.calc_types.some( c => c.value === calcType )
+											? [ { label: calcType, value: calcType } ]
+											: [] ),
+									] }
 									onChange={ setCalcType }
 									__next40pxDefaultSize
 								/>
