@@ -37,14 +37,15 @@ export default function CatalogImpact( { stats }: CatalogImpactProps ) {
 
 	const open = useCallback( () => {
 		setIsOpen( true );
-		// The sample does not move under the modal, so one fetch serves every open.
-		if ( detail || hasError ) {
+		// A landed sample does not move under the modal, so it is kept; a failure is retried.
+		if ( detail ) {
 			return;
 		}
+		setHasError( false );
 		apiFetch< CatalogImpactResponse >( { path: `${ API_PATH }?limit=${ IMPACT_SAMPLE_LIMIT }` } )
 			.then( setDetail )
 			.catch( () => setHasError( true ) );
-	}, [ detail, hasError ] );
+	}, [ detail ] );
 
 	return (
 		<div className="newspack-pricing-rules__impact">

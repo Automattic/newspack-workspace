@@ -144,6 +144,27 @@ describe( 'CatalogImpact', () => {
 		expect( screen.getByText( /Could not load the affected products/ ) ).toBeInTheDocument();
 	} );
 
+	it( 'tries again on reopen after a failed fetch', async () => {
+		apiFetch.mockRejectedValueOnce( new Error( 'nope' ) ).mockResolvedValueOnce( detail() );
+		render( <CatalogImpact stats={ stats() } /> );
+
+		await act( async () => {
+			openModal();
+		} );
+
+		expect( screen.getByText( /Could not load the affected products/ ) ).toBeInTheDocument();
+
+		fireEvent.click( screen.getByRole( 'button', { name: 'Close' } ) );
+		await waitForElementToBeRemoved( () => screen.queryByRole( 'dialog' ) );
+		await act( async () => {
+			openModal();
+		} );
+
+		expect( apiFetch ).toHaveBeenCalledTimes( 2 );
+		expect( screen.queryByText( /Could not load the affected products/ ) ).not.toBeInTheDocument();
+		expect( screen.getByTestId( 'impact-table' ) ).toBeInTheDocument();
+	} );
+
 	it( 'withholds the table button and explains itself when nothing is affected', () => {
 		render( <CatalogImpact stats={ stats( { total_matching: 0 } ) } /> );
 
