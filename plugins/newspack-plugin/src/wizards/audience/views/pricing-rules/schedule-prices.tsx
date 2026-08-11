@@ -89,10 +89,8 @@ export default function SchedulePrices( { steps, onChange, publicize, calcTypes,
 		[ ordered, currency, calcTypes ]
 	);
 
-	// Removing a row unmounts the control that triggered it, and rows are keyed by
-	// position, so an edit that moves a price leaves the drawer returning focus to
-	// a row that now holds a different one. A claim re-parks focus after the list
-	// changes; the drawer yields to focus already parked outside it.
+	// Removal unmounts its trigger and a moved price leaves the drawer restoring
+	// focus to the wrong row; a claim re-parks it, which the drawer yields to.
 	useEffect( () => {
 		const claimed = claimFocus.current;
 		claimFocus.current = null;
