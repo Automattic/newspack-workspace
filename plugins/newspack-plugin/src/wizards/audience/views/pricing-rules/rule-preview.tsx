@@ -28,9 +28,12 @@ const DEBOUNCE_MS = 500;
 
 interface RulePreviewProps {
 	body: Record< string, unknown >;
+	// Off while the form's section header carries the legend; on so the table can
+	// explain markers composed in by other active rules.
+	showCycleNote: boolean;
 }
 
-export default function RulePreview( { body }: RulePreviewProps ) {
+export default function RulePreview( { body, showCycleNote }: RulePreviewProps ) {
 	const [ data, setData ] = useState< RulePreviewResponse | null >( null );
 	const [ hasResolved, setHasResolved ] = useState( false );
 	const [ isLoading, setIsLoading ] = useState( false );
@@ -99,7 +102,7 @@ export default function RulePreview( { body }: RulePreviewProps ) {
 				baseline={ preview.sample }
 				segmentGroups={ preview.segment_groups ?? [] }
 				currency={ preview.currency }
-				showCycleNote={ false }
+				showCycleNote={ showCycleNote }
 			/>
 			{ preview.preview_limited && preview.sample_count >= RULE_PREVIEW_SAMPLE_LIMIT && (
 				<p className="newspack-pricing-rules__muted">

@@ -77,6 +77,24 @@ describe( 'RulePreview', () => {
 		expect( screen.getByText( 'Products affected' ) ).toBeInTheDocument();
 	} );
 
+	// A flat rule's preview can still carry cycles composed in by other active
+	// stepped rules; with no legend in the section header, the table shows its own.
+	it( 'lets the table explain cycles composed in by other rules', async () => {
+		const stepped = product( {
+			segments: [
+				{ from_cycle: 1, amount: 1, changed: false },
+				{ from_cycle: 2, amount: 4, changed: false },
+			],
+		} );
+		apiFetch.mockResolvedValue( response( { sample: [ stepped ] } ) );
+		const { rerender } = render( <RulePreview body={ {} } showCycleNote /> );
+		await settle();
+		expect( screen.getByText( /billing cycle it starts from/ ) ).toBeInTheDocument();
+
+		rerender( <RulePreview body={ {} } showCycleNote={ false } /> );
+		expect( screen.queryByText( /billing cycle it starts from/ ) ).not.toBeInTheDocument();
+	} );
+
 	it( 'spins rather than showing an empty card while the first request is in flight', async () => {
 		apiFetch.mockReturnValue( pending() );
 		const { container } = render( <RulePreview body={ {} } /> );

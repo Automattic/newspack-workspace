@@ -268,6 +268,16 @@ describe( 'the schedule prices table', () => {
 		expect( screen.getByRole( 'button', { name: 'Add Price' } ) ).toHaveFocus();
 	} );
 
+	// The empty-state button that opened the drawer unmounts as the table appears.
+	it( 'parks focus on Add Price after the first price is added', async () => {
+		render( <Schedule initial={ [] } /> );
+		await clickButton( 'Add Price' );
+		await type( 'Value ($)', '5' );
+		await clickButton( 'Save' );
+		await waitForPanelToClose();
+		expect( screen.getByRole( 'button', { name: 'Add Price' } ) ).toHaveFocus();
+	} );
+
 	// Rows are keyed by position, so without a claim the drawer would return focus
 	// to the row that now holds a different price.
 	it( 'follows the edited price to its new row when the edit reorders the schedule', async () => {

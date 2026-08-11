@@ -409,12 +409,12 @@ class ComponentsDemo extends Component {
 										</thead>
 										<tbody>
 											<tr>
-												<td style={ { padding: '8px 24px' } }>{ __( '1 → 3', 'newspack-plugin' ) }</td>
-												<td style={ { padding: '8px 24px' } }>{ __( '$3.00', 'newspack-plugin' ) }</td>
+												<td style={ { padding: '8px 24px' } }>1 → 3</td>
+												<td style={ { padding: '8px 24px' } }>$3.00</td>
 											</tr>
 											<tr>
-												<td style={ { padding: '8px 24px' } }>{ __( '4 onward', 'newspack-plugin' ) }</td>
-												<td style={ { padding: '8px 24px' } }>{ __( '$6.00', 'newspack-plugin' ) }</td>
+												<td style={ { padding: '8px 24px' } }>4 onward</td>
+												<td style={ { padding: '8px 24px' } }>$6.00</td>
 											</tr>
 										</tbody>
 									</table>

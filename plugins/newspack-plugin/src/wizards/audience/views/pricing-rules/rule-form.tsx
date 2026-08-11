@@ -203,6 +203,9 @@ export default function RuleForm( { isNew, initialPath = null, rule, vocab, onDo
 	// A stepped schedule, or a flat rule capped to N cycles, has a cycle dimension —
 	// the only case where the cycle anchor is consequential.
 	const hasCycleDimension = isSchedule || ( ! isSchedule && Number( cyclesLimit ) > 0 );
+	// Markers only render when a projection spans cycles, which a one-price
+	// schedule never does; the composed preview covers other rules' cycles itself.
+	const hasCycleMarkers = isSchedule ? steps.length > 1 : Number( cyclesLimit ) > 0;
 	const hasPrice = isSchedule ? steps.length > 0 : String( value ).trim() !== '';
 	const [ scopeType, setScopeType ] = useState( rule?.scope_type ?? seedScope ?? vocab.scopes[ 0 ]?.id ?? 'all_products' );
 	const [ scopeIds, setScopeIds ] = useState< number[] >( rule?.scope_ids ?? [] );
@@ -840,9 +843,9 @@ export default function RuleForm( { isNew, initialPath = null, rule, vocab, onDo
 								) }
 								noMargin
 							/>
-							{ hasCycleDimension && <p className="newspack-pricing-rules__muted">{ cycleMarkerNote() }</p> }
+							{ hasCycleMarkers && <p className="newspack-pricing-rules__muted">{ cycleMarkerNote() }</p> }
 						</VStack>
-						<RulePreview body={ previewBody } />
+						<RulePreview body={ previewBody } showCycleNote={ ! hasCycleMarkers } />
 					</div>
 				</>
 			) }

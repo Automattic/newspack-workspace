@@ -164,6 +164,10 @@ export default function SchedulePrices( { steps, onChange, publicize, calcTypes,
 		const landed = sorted.indexOf( price );
 		if ( isReplace && landed !== index ) {
 			claimFocus.current = landed;
+		} else if ( ! isReplace && 0 === ordered.length ) {
+			// The empty-state button that opened the drawer unmounts as the table
+			// appears, so the drawer has nothing to return focus to.
+			claimFocus.current = 'add';
 		}
 		onChange( sorted );
 		setIsOpen( false );

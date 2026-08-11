@@ -1,6 +1,6 @@
 /**
- * Stands in for the impact table when there is nothing to price. Three causes
- * reach it and each says what would fill it.
+ * Stands in for the impact table when there is nothing to price. Each cause
+ * says what would fill it.
  */
 
 /**
