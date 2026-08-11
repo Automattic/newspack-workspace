@@ -319,7 +319,6 @@ export default function PricingRulesList() {
 
 	return (
 		<div className="newspack-pricing-rules">
-			{ stats?.supported && <CatalogImpact stats={ stats } /> }
 			{ hasError && (
 				<WizardBanner>
 					<Notice
@@ -344,6 +343,7 @@ export default function PricingRulesList() {
 				getItemId={ ( item: PricingRuleRow ) => String( item.id ) }
 				search
 			/>
+			{ stats?.supported && <CatalogImpact stats={ stats } /> }
 		</div>
 	);
 }

@@ -59,7 +59,7 @@ const detail = ( over = {} ) => ( {
 	...over,
 } );
 
-const openModal = () => fireEvent.click( screen.getByRole( 'button', { name: 'View affected products' } ) );
+const openModal = () => fireEvent.click( screen.getByRole( 'button', { name: 'View Affected Products' } ) );
 
 describe( 'CatalogImpact', () => {
 	beforeEach( () => {
@@ -168,7 +168,7 @@ describe( 'CatalogImpact', () => {
 	it( 'withholds the table button and explains itself when nothing is affected', () => {
 		render( <CatalogImpact stats={ stats( { total_matching: 0 } ) } /> );
 
-		expect( screen.queryByRole( 'button', { name: 'View affected products' } ) ).not.toBeInTheDocument();
+		expect( screen.queryByRole( 'button', { name: 'View Affected Products' } ) ).not.toBeInTheDocument();
 		expect( screen.getByText( 'No active pricing rules are affecting products yet.' ) ).toBeInTheDocument();
 	} );
 } );
