@@ -6,9 +6,10 @@
  * WordPress dependencies
  */
 import { __, _n, sprintf } from '@wordpress/i18n';
-import { useState, useEffect, useCallback, useMemo } from '@wordpress/element';
+import { useState, useEffect, useCallback, useMemo, useRef } from '@wordpress/element';
 import { useDispatch } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
+import { addQueryArgs } from '@wordpress/url';
 import { filterSortAndPaginate } from '@wordpress/dataviews';
 import type { Action, Field, View, RenderModalProps } from '@wordpress/dataviews';
 import {
@@ -45,6 +46,11 @@ const DEFAULT_VIEW: View = {
 	titleField: 'title',
 };
 
+// The page waits on the catalogue read so the screen arrives as one unit. The
+// engine's catalogue walk is not bounded by the limit, so the gate is released
+// on its own rather than letting a hung route hold the whole screen.
+const STATS_GATE_TIMEOUT_MS = 8000;
+
 const ACTIVE_STATE_LEVEL = { active: 'success', scheduled: 'info', ended: 'default' } as const;
 
 const ACTIVE_STATE_LABEL: Record< PricingRuleRow[ 'active_state' ], string > = {
@@ -73,6 +79,8 @@ export default function PricingRulesList() {
 	const [ hasResolved, setHasResolved ] = useState( false );
 	const [ stats, setStats ] = useState< CatalogImpactResponse | null >( null );
 	const [ statsResolved, setStatsResolved ] = useState( false );
+	// Remounts the card so its cached product sample cannot outlive a trash.
+	const [ statsVersion, setStatsVersion ] = useState( 0 );
 	const [ view, setView ] = useState< View >( DEFAULT_VIEW );
 	const [ segmentMap, setSegmentMap ] = useState< Record< number, string > >( {} );
 	const [ currency, setCurrency ] = useState< PricingRulesCurrency >( { code: '', symbol: '', decimals: 2 } );
@@ -115,37 +123,61 @@ export default function PricingRulesList() {
 	}, [ fetchData ] );
 
 	// One row is enough: total_matching and count_limited do not vary with the
-	// limit, and pricing the whole sample costs several times as much.
-	useEffect( () => {
-		let cancelled = false;
-		apiFetch< CatalogImpactResponse >( { path: `${ IMPACT_PREVIEW_API_PATH }?limit=1` } )
+	// limit, and pricing the whole sample costs several times as much. The card
+	// also renders stats.audience from this payload; the engine does not send it
+	// on this route yet, and whoever adds it needs it limit-invariant too, or it
+	// belongs on the full-sample read the modal makes instead.
+	const statsRequest = useRef( 0 );
+	const gateTimer = useRef< ReturnType< typeof setTimeout > | undefined >( undefined );
+
+	const fetchStats = useCallback( () => {
+		const generation = ++statsRequest.current;
+		gateTimer.current = setTimeout( () => {
+			if ( generation === statsRequest.current ) {
+				setStatsResolved( true );
+			}
+		}, STATS_GATE_TIMEOUT_MS );
+		apiFetch< CatalogImpactResponse >( { path: addQueryArgs( IMPACT_PREVIEW_API_PATH, { limit: 1 } ) } )
 			.then( res => {
-				if ( ! cancelled ) {
+				if ( generation === statsRequest.current ) {
 					setStats( res );
+					setStatsVersion( v => v + 1 );
 				}
 			} )
 			.catch( () => {
 				// The list is the screen. A missing headline is not worth a notice.
 			} )
 			.finally( () => {
-				if ( ! cancelled ) {
+				clearTimeout( gateTimer.current );
+				if ( generation === statsRequest.current ) {
 					setStatsResolved( true );
 				}
 			} );
-		return () => {
-			cancelled = true;
-		};
 	}, [] );
+
+	useEffect( () => {
+		fetchStats();
+		return () => {
+			// Invalidates any in-flight response so it cannot write after unmount.
+			statsRequest.current++;
+			clearTimeout( gateTimer.current );
+		};
+	}, [ fetchStats ] );
 
 	const trashRule = useCallback(
 		( id: number ) => {
 			apiFetch( { path: `${ API_PATH }/${ id }`, method: 'DELETE' } )
-				.then( () => fetchData() )
+				.then( () => {
+					fetchData();
+					// The trashed rule leaves the engine's active union, so the
+					// headline count and the cached sample are both refetched.
+					fetchStats();
+				} )
 				.catch( () =>
 					addNotice( { message: __( 'Failed to trash the rule.', 'newspack-plugin' ), type: 'error', id: 'pricing-rules-trash-error' } )
 				);
 		},
-		[ addNotice, fetchData ]
+		[ addNotice, fetchData, fetchStats ]
 	);
 
 	const statusElements = useMemo( () => {
@@ -307,8 +339,9 @@ export default function PricingRulesList() {
 
 	if ( ! isReady ) {
 		return (
-			<HStack className="newspack-pricing-rules__loading" justify="center">
+			<HStack className="newspack-pricing-rules__loading" justify="center" role="status">
 				<Spinner />
+				<span className="screen-reader-text">{ __( 'Loading pricing rules…', 'newspack-plugin' ) }</span>
 			</HStack>
 		);
 	}
@@ -343,7 +376,7 @@ export default function PricingRulesList() {
 				getItemId={ ( item: PricingRuleRow ) => String( item.id ) }
 				search
 			/>
-			{ stats?.supported && <CatalogImpact stats={ stats } /> }
+			{ stats?.supported && <CatalogImpact key={ statsVersion } stats={ stats } /> }
 		</div>
 	);
 }

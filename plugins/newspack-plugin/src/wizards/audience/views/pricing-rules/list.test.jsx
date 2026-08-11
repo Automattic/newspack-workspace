@@ -24,14 +24,21 @@ jest.mock( '@wordpress/api-fetch', () => jest.fn() );
 
 jest.mock( '../../../../../packages/components/src/wizard/store', () => ( { WIZARD_STORE_NAMESPACE: 'test/pricing-rules-list' } ) );
 
-// The button lets a test drive the view into a filtered-to-nothing state, which
-// is what separates "no rules" from "no matches".
+// The first button lets a test drive the view into a filtered-to-nothing state,
+// which is what separates "no rules" from "no matches". The second exposes the
+// trash action's confirm step, the one mutation that happens without a route change.
 jest.mock( '../../../../../packages/components/src', () => {
 	const history = { push: jest.fn() };
 	return {
-		DataViews: ( { view, onChangeView } ) => (
-			<button onClick={ () => onChangeView( { ...view, search: 'no-such-rule' } ) }>filter to nothing</button>
-		),
+		DataViews: ( { view, onChangeView, actions, data } ) => {
+			const trash = ( actions || [] ).find( action => action.id === 'trash' );
+			return (
+				<>
+					<button onClick={ () => onChangeView( { ...view, search: 'no-such-rule' } ) }>filter to nothing</button>
+					{ trash && data.length > 0 && <trash.RenderModal items={ [ data[ 0 ] ] } closeModal={ () => {} } /> }
+				</>
+			);
+		},
 		Badge: () => null,
 		WizardBanner: ( { children } ) => <>{ children }</>,
 		Router: { useHistory: () => history },
@@ -326,5 +333,76 @@ describe( 'the Pricing Rules list', () => {
 		expect( screen.getByRole( 'button', { name: 'filter to nothing' } ) ).toBeInTheDocument();
 		// The list is the screen; a missing headline does not warrant a notice.
 		expect( notices ).toEqual( [] );
+	} );
+
+	// The engine answers an unsupported catalogue with the rest of the payload
+	// absent, so the card must not read total_matching off it.
+	it( 'renders the table but no card when the catalogue is unsupported', async () => {
+		serve( { rules: [ rule( 1 ) ], stats: { supported: false } } );
+		await act( async () => {
+			render( <PricingRulesList /> );
+		} );
+
+		expect( screen.queryByTestId( 'catalog-impact' ) ).not.toBeInTheDocument();
+		expect( screen.getByRole( 'button', { name: 'filter to nothing' } ) ).toBeInTheDocument();
+	} );
+
+	// The catalogue walk behind this read is not bounded by the limit, so a route
+	// that hangs rather than fails must not hold the rules behind a spinner.
+	it( 'releases the page once the catalogue read outstays its welcome', async () => {
+		jest.useFakeTimers();
+		apiFetch.mockImplementation( ( { path } ) => {
+			if ( isCatalogPath( path ) ) {
+				return new Promise( () => {} );
+			}
+			return Promise.resolve( response( [ rule( 1 ) ] ) );
+		} );
+		await act( async () => {
+			render( <PricingRulesList /> );
+		} );
+
+		expect( document.querySelector( '.components-spinner' ) ).toBeInTheDocument();
+
+		await act( async () => {
+			jest.advanceTimersByTime( 8000 );
+		} );
+
+		expect( document.querySelector( '.components-spinner' ) ).not.toBeInTheDocument();
+		expect( screen.getByRole( 'button', { name: 'filter to nothing' } ) ).toBeInTheDocument();
+		expect( screen.queryByTestId( 'catalog-impact' ) ).not.toBeInTheDocument();
+		jest.useRealTimers();
+	} );
+
+	// Trashing is the one mutation with no route change behind it, so nothing else
+	// would refresh the catalogue figures or the sample cached behind the card.
+	it( 'refetches the catalogue after a rule is trashed', async () => {
+		serve( { rules: [ rule( 1 ), rule( 2 ) ] } );
+		await act( async () => {
+			render( <PricingRulesList /> );
+		} );
+
+		const catalogCalls = () => apiFetch.mock.calls.filter( ( [ { path } ] ) => isCatalogPath( path ) ).length;
+		expect( catalogCalls() ).toBe( 1 );
+
+		await act( async () => {
+			fireEvent.click( screen.getByRole( 'button', { name: 'Move to Trash' } ) );
+		} );
+
+		expect( apiFetch ).toHaveBeenCalledWith( { path: '/wc-dynamic-pricing/v1/rules/1', method: 'DELETE' } );
+		expect( catalogCalls() ).toBe( 2 );
+	} );
+
+	it( 'announces the page loader for assistive technology', async () => {
+		apiFetch.mockImplementation( ( { path } ) => {
+			if ( isCatalogPath( path ) ) {
+				return new Promise( () => {} );
+			}
+			return Promise.resolve( response( [ rule( 1 ) ] ) );
+		} );
+		await act( async () => {
+			render( <PricingRulesList /> );
+		} );
+
+		expect( screen.getByRole( 'status' ) ).toHaveTextContent( 'Loading pricing rules' );
 	} );
 } );
