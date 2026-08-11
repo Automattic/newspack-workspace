@@ -42,7 +42,7 @@ const isAvailable = button => !! button && ! button.matches( ':disabled, [aria-d
 // name. Composing both from one translated string keeps that true in every locale.
 const nameWithTitle = ( label, title ) =>
 	sprintf(
-		/* translators: 1: the control's visible label. 2: title of the content being moved. */
+		/* translators: keep %1$s first: it repeats the button's visible label, which speech input matches on. 1: the control's visible label. 2: title of the content being moved. */
 		__( '%1$s: %2$s', 'newspack-blocks' ),
 		label,
 		title
@@ -186,6 +186,24 @@ const ReorderModal = ( { title, ids, fetchItems, onSave, onClose } ) => {
 		};
 	}, [] );
 
+	// Rows are the only drop targets, and the frame's own padding is not one, so a
+	// release a few pixels wide of the list would report a cancelled drag and undo
+	// the reorder. Accepting the drop across the whole dialog leaves "cancelled"
+	// meaning only Escape or a release outside it.
+	useEffect( () => {
+		const frame = overlayRef.current?.querySelector( '.components-modal__frame' );
+		if ( ! frame ) {
+			return;
+		}
+		const accept = event => event.preventDefault();
+		frame.addEventListener( 'dragover', accept );
+		frame.addEventListener( 'drop', accept );
+		return () => {
+			frame.removeEventListener( 'dragover', accept );
+			frame.removeEventListener( 'drop', accept );
+		};
+	}, [] );
+
 	const handleDragOver = ( event, index ) => {
 		event.preventDefault();
 		if ( null === dragIndex ) {
@@ -213,14 +231,7 @@ const ReorderModal = ( { title, ids, fetchItems, onSave, onClose } ) => {
 				size="medium"
 				className="newspack-blocks-reorder-modal"
 			>
-				<div
-					className="newspack-blocks-reorder-modal__body"
-					aria-busy={ ! items }
-					// Rows are the only drop targets, so without this every gap between
-					// them reports a cancelled drag and would undo the reorder.
-					onDragOver={ event => event.preventDefault() }
-					onDrop={ event => event.preventDefault() }
-				>
+				<div className="newspack-blocks-reorder-modal__body" aria-busy={ ! items }>
 					{ ! items && (
 						<div className="newspack-blocks-reorder-modal__loading">
 							<Spinner />

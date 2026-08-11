@@ -1,7 +1,7 @@
 /**
  * WordPress dependencies
  */
-import { __, sprintf } from '@wordpress/i18n';
+import { __ } from '@wordpress/i18n';
 import { useCallback, useRef, useState } from '@wordpress/element';
 import {
 	Button,
@@ -61,17 +61,12 @@ const SpecificPostsControl = ( { postIds = [], onChange, fetchSuggestions, fetch
 					__next40pxDefaultSize
 					disabled={ ! canReorder }
 					accessibleWhenDisabled
-					// A button with visible children shows no tooltip unless asked.
+					// A button with visible children shows no tooltip unless asked, and
+					// only shows one at all when it also carries a label. Matching the
+					// label to the visible text leaves the accessible name unchanged.
+					label={ reorderLabel }
 					showTooltip={ ! canReorder }
-					label={
-						canReorder
-							? undefined
-							: sprintf(
-									/* translators: %s: the button's visible label. */
-									__( '%s: pick at least two items', 'newspack-blocks' ),
-									reorderLabel
-							  )
-					}
+					description={ canReorder ? undefined : __( 'Pick at least two items to reorder them.', 'newspack-blocks' ) }
 					onClick={ () => setIsReordering( true ) }
 				>
 					{ reorderLabel }

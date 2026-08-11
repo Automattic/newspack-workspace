@@ -26,23 +26,25 @@ describe( 'SpecificPostsControl', () => {
 
 	it( 'keeps the reorder button focusable while too little content is selected', async () => {
 		render( <SpecificPostsControl postIds={ [ 11 ] } onChange={ noop } fetchSuggestions={ noop } fetchSavedInfo={ noItems } /> );
-		const reorder = await screen.findByRole( 'button', { name: /Reorder Content/ } );
+		const reorder = await screen.findByRole( 'button', { name: 'Reorder Content' } );
 		expect( reorder ).toHaveAttribute( 'aria-disabled', 'true' );
 		reorder.focus();
 		expect( document.activeElement ).toBe( reorder );
 	} );
 
-	it( 'says why the reorder button is unavailable', async () => {
+	it( 'describes why the reorder button is unavailable without renaming it', async () => {
 		render( <SpecificPostsControl postIds={ [ 11 ] } onChange={ noop } fetchSuggestions={ noop } fetchSavedInfo={ noItems } /> );
-		expect( await screen.findByRole( 'button', { name: 'Reorder Content: pick at least two items' } ) ).toBeInTheDocument();
+		const reorder = await screen.findByRole( 'button', { name: 'Reorder Content' } );
+		const description = document.getElementById( reorder.getAttribute( 'aria-describedby' ) );
+		expect( description ).toHaveTextContent( 'Pick at least two items to reorder them.' );
 	} );
 
 	// A button with visible children shows no tooltip by default, so the reason
 	// would otherwise reach assistive technology only.
 	it( 'shows the reason to sighted users too', async () => {
 		render( <SpecificPostsControl postIds={ [ 11 ] } onChange={ noop } fetchSuggestions={ noop } fetchSavedInfo={ noItems } /> );
-		( await screen.findByRole( 'button', { name: 'Reorder Content: pick at least two items' } ) ).focus();
-		expect( await screen.findByRole( 'tooltip' ) ).toHaveTextContent( 'pick at least two items' );
+		( await screen.findByRole( 'button', { name: 'Reorder Content' } ) ).focus();
+		expect( await screen.findByRole( 'tooltip' ) ).toHaveTextContent( 'Pick at least two items to reorder them.' );
 	} );
 
 	it( 'shows no tooltip once the button is usable', async () => {

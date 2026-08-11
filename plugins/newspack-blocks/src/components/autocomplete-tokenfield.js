@@ -55,8 +55,17 @@ class AutocompleteTokenField extends Component {
 
 					this.setState( { validValues, loading: false } );
 				} )
-				// Without this the field spins forever when the request fails.
-				.catch( () => this.setState( { loading: false } ) );
+				.catch( () => {
+					// Without labels the field would render no tokens, and the next
+					// selection would then write back a list missing every saved ID.
+					const { validValues } = this.state;
+
+					tokens.forEach( token => {
+						validValues[ token ] = String( token );
+					} );
+
+					this.setState( { validValues, loading: false } );
+				} );
 		}
 	}
 

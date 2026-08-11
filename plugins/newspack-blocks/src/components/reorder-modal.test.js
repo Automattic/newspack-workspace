@@ -346,20 +346,33 @@ describe( 'ReorderModal drag and drop', () => {
 		expect( dt.getData( 'text/plain' ) ).toBe( '33' );
 	} );
 
-	// Rows are the only drop targets, so the body has to accept the drop as well
-	// or releasing in the gap between two rows reads as a cancelled drag.
-	it( 'accepts a drop anywhere in the modal body', async () => {
+	// Rows are the only drop targets, so the dialog has to accept the drop as well:
+	// otherwise the gaps between rows, and the frame's own padding, read as a
+	// cancelled drag and undo the reorder.
+	it.each( [
+		[ 'frame', '.components-modal__frame' ],
+		[ 'body', '.newspack-blocks-reorder-modal__body' ],
+	] )( 'accepts a drop released on the %s', async ( _name, selector ) => {
 		renderModal();
 		await screen.findByText( 'Alpha' );
-		const body = document.querySelector( '.newspack-blocks-reorder-modal__body' );
+		const target = document.querySelector( selector );
 
-		const over = createEvent.dragOver( body, { dataTransfer: dataTransfer() } );
-		fireEvent( body, over );
+		const over = createEvent.dragOver( target, { dataTransfer: dataTransfer() } );
+		fireEvent( target, over );
 		expect( over.defaultPrevented ).toBe( true );
 
-		const drop = createEvent.drop( body, { dataTransfer: dataTransfer() } );
-		fireEvent( body, drop );
+		const drop = createEvent.drop( target, { dataTransfer: dataTransfer() } );
+		fireEvent( target, drop );
 		expect( drop.defaultPrevented ).toBe( true );
+	} );
+
+	it( 'leaves a drop released on the overlay cancelling the drag', async () => {
+		renderModal();
+		await screen.findByText( 'Alpha' );
+
+		const over = createEvent.dragOver( overlay(), { dataTransfer: dataTransfer() } );
+		fireEvent( overlay(), over );
+		expect( over.defaultPrevented ).toBe( false );
 	} );
 } );
 
