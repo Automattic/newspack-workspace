@@ -26,9 +26,10 @@ import { DataViews, Badge, Router, WizardBanner } from '../../../../../packages/
 import { formatCount } from '../../../../../packages/components/src/breadcrumbs/format-count';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import CatalogImpact from './catalog-impact';
+import PricingRulesOnboarding from './onboarding';
 import { intentLabel } from './recipes';
 import { pricingModelSentence } from './model-sentence';
-import { RULES_API_PATH as API_PATH } from './constants';
+import { RULES_API_PATH as API_PATH, IMPACT_PREVIEW_API_PATH } from './constants';
 
 const { useHistory } = Router;
 
@@ -67,15 +68,25 @@ export default function PricingRulesList() {
 	const [ data, setData ] = useState< PricingRuleRow[] >( [] );
 	const [ isLoading, setIsLoading ] = useState( true );
 	const [ hasError, setHasError ] = useState( false );
+	// Distinct from isLoading: only the first settle blanks the screen, so a
+	// refetch after trashing a rule leaves the table up.
+	const [ hasResolved, setHasResolved ] = useState( false );
+	const [ stats, setStats ] = useState< CatalogImpactResponse | null >( null );
+	const [ statsResolved, setStatsResolved ] = useState( false );
 	const [ view, setView ] = useState< View >( DEFAULT_VIEW );
 	const [ segmentMap, setSegmentMap ] = useState< Record< number, string > >( {} );
 	const [ currency, setCurrency ] = useState< PricingRulesCurrency >( { code: '', symbol: '', decimals: 2 } );
 
+	const isReady = hasResolved && statsResolved;
+	// Raw payload, not the filtered view: a search that matches nothing keeps the
+	// DataViews treatment rather than claiming the site has no rules.
+	const isEmpty = isReady && ! hasError && data.length === 0;
+
 	useEffect( () => {
 		setHeaderData( {
-			actions: [ { type: 'primary', label: __( 'Add Rule', 'newspack-plugin' ), href: '#/new' } ],
+			actions: ! isReady || isEmpty ? [] : [ { type: 'primary', label: __( 'Add Rule', 'newspack-plugin' ), href: '#/new' } ],
 		} );
-	}, [ setHeaderData ] );
+	}, [ setHeaderData, isReady, isEmpty ] );
 
 	const fetchData = useCallback( () => {
 		setIsLoading( true );
@@ -93,12 +104,38 @@ export default function PricingRulesList() {
 				setSegmentMap( map );
 			} )
 			.catch( () => setHasError( true ) )
-			.finally( () => setIsLoading( false ) );
+			.finally( () => {
+				setIsLoading( false );
+				setHasResolved( true );
+			} );
 	}, [] );
 
 	useEffect( () => {
 		fetchData();
 	}, [ fetchData ] );
+
+	// One row is enough: total_matching and count_limited do not vary with the
+	// limit, and pricing the whole sample costs several times as much.
+	useEffect( () => {
+		let cancelled = false;
+		apiFetch< CatalogImpactResponse >( { path: `${ IMPACT_PREVIEW_API_PATH }?limit=1` } )
+			.then( res => {
+				if ( ! cancelled ) {
+					setStats( res );
+				}
+			} )
+			.catch( () => {
+				// The list is the screen. A missing headline is not worth a notice.
+			} )
+			.finally( () => {
+				if ( ! cancelled ) {
+					setStatsResolved( true );
+				}
+			} );
+		return () => {
+			cancelled = true;
+		};
+	}, [] );
 
 	const trashRule = useCallback(
 		( id: number ) => {
@@ -257,7 +294,7 @@ export default function PricingRulesList() {
 			sectionName: [
 				{
 					label: __( 'Pricing Rules', 'newspack-plugin' ),
-					count: isLoading || hasError ? undefined : totalItems,
+					count: isLoading || hasError || isEmpty ? undefined : totalItems,
 					countLabel: sprintf(
 						/* translators: %s: number of pricing rules matching the current view. */
 						_n( '%s rule', '%s rules', totalItems, 'newspack-plugin' ),
@@ -266,17 +303,24 @@ export default function PricingRulesList() {
 				},
 			],
 		} );
-	}, [ setHeaderData, totalItems, isLoading, hasError ] );
+	}, [ setHeaderData, totalItems, isLoading, hasError, isEmpty ] );
+
+	if ( ! isReady ) {
+		return (
+			<HStack className="newspack-pricing-rules__loading" justify="center">
+				<Spinner />
+			</HStack>
+		);
+	}
+
+	if ( isEmpty ) {
+		return <PricingRulesOnboarding />;
+	}
 
 	return (
 		<div className="newspack-pricing-rules">
-			<CatalogImpact />
-			{ isLoading && (
-				<div style={ { display: 'flex', justifyContent: 'center', padding: '48px' } }>
-					<Spinner />
-				</div>
-			) }
-			{ ! isLoading && hasError && (
+			{ stats?.supported && <CatalogImpact stats={ stats } /> }
+			{ hasError && (
 				<WizardBanner>
 					<Notice
 						className="newspack-wizard__load-error"
@@ -288,20 +332,18 @@ export default function PricingRulesList() {
 					</Notice>
 				</WizardBanner>
 			) }
-			{ ! isLoading && ! hasError && (
-				<DataViews
-					data={ processedData }
-					fields={ fields }
-					view={ view }
-					onChangeView={ setView }
-					actions={ actions }
-					paginationInfo={ paginationInfo }
-					defaultLayouts={ { table: {} } }
-					isLoading={ isLoading }
-					getItemId={ ( item: PricingRuleRow ) => String( item.id ) }
-					search
-				/>
-			) }
+			<DataViews
+				data={ processedData }
+				fields={ fields }
+				view={ view }
+				onChangeView={ setView }
+				actions={ actions }
+				paginationInfo={ paginationInfo }
+				defaultLayouts={ { table: {} } }
+				isLoading={ isLoading }
+				getItemId={ ( item: PricingRuleRow ) => String( item.id ) }
+				search
+			/>
 		</div>
 	);
 }

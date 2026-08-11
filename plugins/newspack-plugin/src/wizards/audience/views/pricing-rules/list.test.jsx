@@ -6,7 +6,7 @@
 /**
  * External dependencies
  */
-import { render, act, screen } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 
 /**
  * WordPress dependencies
@@ -23,19 +23,22 @@ jest.mock( '@wordpress/api-fetch', () => jest.fn() );
 
 jest.mock( '../../../../../packages/components/src/wizard/store', () => ( { WIZARD_STORE_NAMESPACE: 'test/pricing-rules-list' } ) );
 
-// Only the header count is under test, so DataViews renders nothing; the count
-// itself comes from filterSortAndPaginate, which stays real.
+// The button lets a test drive the view into a filtered-to-nothing state, which
+// is what separates "no rules" from "no matches".
 jest.mock( '../../../../../packages/components/src', () => {
 	const history = { push: jest.fn() };
 	return {
-		DataViews: () => null,
+		DataViews: ( { view, onChangeView } ) => (
+			<button onClick={ () => onChangeView( { ...view, search: 'no-such-rule' } ) }>filter to nothing</button>
+		),
 		Badge: () => null,
 		WizardBanner: ( { children } ) => <>{ children }</>,
 		Router: { useHistory: () => history },
 	};
 } );
 
-jest.mock( './catalog-impact', () => () => null );
+jest.mock( './catalog-impact', () => () => <div data-testid="catalog-impact" /> );
+jest.mock( './onboarding', () => () => <div data-testid="onboarding" /> );
 
 let headerCalls = [];
 let notices = [];
@@ -60,6 +63,12 @@ register(
 const publishedSection = () => {
 	const named = headerCalls.filter( data => data.sectionName );
 	return named[ named.length - 1 ].sectionName[ 0 ];
+};
+
+/** The actions of the last header payload that set them. */
+const publishedActions = () => {
+	const withActions = headerCalls.filter( data => data.actions );
+	return withActions[ withActions.length - 1 ].actions;
 };
 
 const rule = id => ( {
@@ -101,7 +110,31 @@ const response = rules => ( {
 	conditions: [],
 } );
 
-describe( 'the Pricing Rules list header count', () => {
+const catalogStats = ( over = {} ) => ( {
+	supported: true,
+	total_matching: 33,
+	count_limited: false,
+	preview_limited: true,
+	sample_count: 1,
+	currency: { code: 'USD', symbol: '$', decimals: 2 },
+	sample: [],
+	segment_groups: [],
+	...over,
+} );
+
+const isCatalogPath = path => path.startsWith( '/wc-dynamic-pricing/v1/impact-preview' );
+
+/** Route each request by path, so the catalogue call never receives the rules payload. */
+const serve = ( { rules = [], stats = catalogStats(), rulesFail = false, statsFail = false } = {} ) => {
+	apiFetch.mockImplementation( ( { path } ) => {
+		if ( isCatalogPath( path ) ) {
+			return statsFail ? Promise.reject( new Error( 'nope' ) ) : Promise.resolve( stats );
+		}
+		return rulesFail ? Promise.reject( new Error( 'nope' ) ) : Promise.resolve( response( rules ) );
+	} );
+};
+
+describe( 'the Pricing Rules list', () => {
 	beforeEach( () => {
 		headerCalls = [];
 		notices = [];
@@ -109,7 +142,7 @@ describe( 'the Pricing Rules list header count', () => {
 	} );
 
 	it( 'publishes the count once the rules land', async () => {
-		apiFetch.mockResolvedValue( response( [ rule( 1 ), rule( 2 ), rule( 3 ) ] ) );
+		serve( { rules: [ rule( 1 ), rule( 2 ), rule( 3 ) ] } );
 		await act( async () => {
 			render( <PricingRulesList /> );
 		} );
@@ -120,7 +153,7 @@ describe( 'the Pricing Rules list header count', () => {
 	} );
 
 	it( 'announces a single rule in the singular', async () => {
-		apiFetch.mockResolvedValue( response( [ rule( 1 ) ] ) );
+		serve( { rules: [ rule( 1 ) ] } );
 		await act( async () => {
 			render( <PricingRulesList /> );
 		} );
@@ -130,12 +163,19 @@ describe( 'the Pricing Rules list header count', () => {
 
 	it( 'publishes no count while the read is in flight', async () => {
 		let land;
-		apiFetch.mockReturnValue(
-			new Promise( resolve => {
+		apiFetch.mockImplementation( ( { path } ) => {
+			if ( isCatalogPath( path ) ) {
+				return Promise.resolve( catalogStats() );
+			}
+			return new Promise( resolve => {
 				land = resolve;
-			} )
-		);
-		render( <PricingRulesList /> );
+			} );
+		} );
+		// Wrapped, so the catalogue promise settles inside act. Left unwrapped it
+		// resolves in a microtask after render and React warns about the update.
+		await act( async () => {
+			render( <PricingRulesList /> );
+		} );
 
 		expect( publishedSection().label ).toBe( 'Pricing Rules' );
 		expect( publishedSection().count ).toBeUndefined();
@@ -148,7 +188,7 @@ describe( 'the Pricing Rules list header count', () => {
 	} );
 
 	it( 'publishes no count when the read fails', async () => {
-		apiFetch.mockRejectedValue( new Error( 'nope' ) );
+		serve( { rulesFail: true } );
 		await act( async () => {
 			render( <PricingRulesList /> );
 		} );
@@ -157,5 +197,104 @@ describe( 'the Pricing Rules list header count', () => {
 		expect( publishedSection().count ).toBeUndefined();
 		expect( document.querySelector( '.components-notice.is-error' ) ).toHaveTextContent( 'Could not load pricing rules.' );
 		expect( screen.getByRole( 'button', { name: 'Retry' } ) ).toBeInTheDocument();
+	} );
+
+	it( 'holds a page spinner until both reads settle', async () => {
+		let landStats;
+		apiFetch.mockImplementation( ( { path } ) => {
+			if ( isCatalogPath( path ) ) {
+				return new Promise( resolve => {
+					landStats = resolve;
+				} );
+			}
+			return Promise.resolve( response( [ rule( 1 ) ] ) );
+		} );
+		await act( async () => {
+			render( <PricingRulesList /> );
+		} );
+
+		expect( document.querySelector( '.components-spinner' ) ).toBeInTheDocument();
+		expect( screen.queryByTestId( 'catalog-impact' ) ).not.toBeInTheDocument();
+
+		await act( async () => {
+			landStats( catalogStats() );
+		} );
+
+		expect( document.querySelector( '.components-spinner' ) ).not.toBeInTheDocument();
+		expect( screen.getByTestId( 'catalog-impact' ) ).toBeInTheDocument();
+	} );
+
+	it( 'sets no header action while the screen is still loading', async () => {
+		let landStats;
+		apiFetch.mockImplementation( ( { path } ) => {
+			if ( isCatalogPath( path ) ) {
+				return new Promise( resolve => {
+					landStats = resolve;
+				} );
+			}
+			return Promise.resolve( response( [ rule( 1 ) ] ) );
+		} );
+		await act( async () => {
+			render( <PricingRulesList /> );
+		} );
+
+		expect( publishedActions() ).toEqual( [] );
+
+		await act( async () => {
+			landStats( catalogStats() );
+		} );
+
+		expect( publishedActions() ).toHaveLength( 1 );
+		expect( publishedActions()[ 0 ].label ).toBe( 'Add Rule' );
+	} );
+
+	it( 'shows the empty state and withholds the header action when there are no rules', async () => {
+		serve( { rules: [] } );
+		await act( async () => {
+			render( <PricingRulesList /> );
+		} );
+
+		expect( screen.getByTestId( 'onboarding' ) ).toBeInTheDocument();
+		expect( screen.queryByTestId( 'catalog-impact' ) ).not.toBeInTheDocument();
+		expect( publishedActions() ).toEqual( [] );
+		expect( publishedSection().count ).toBeUndefined();
+	} );
+
+	// The empty state belongs to a list with nothing in it, not to a search that
+	// matched nothing, which keeps the DataViews treatment.
+	it( 'keeps the table when a filter leaves no matches', async () => {
+		serve( { rules: [ rule( 1 ), rule( 2 ) ] } );
+		await act( async () => {
+			render( <PricingRulesList /> );
+		} );
+
+		await act( async () => {
+			fireEvent.click( screen.getByRole( 'button', { name: 'filter to nothing' } ) );
+		} );
+
+		expect( screen.queryByTestId( 'onboarding' ) ).not.toBeInTheDocument();
+		expect( publishedSection().count ).toBe( 0 );
+	} );
+
+	it( 'keeps the table rather than the empty state when the read fails', async () => {
+		serve( { rulesFail: true } );
+		await act( async () => {
+			render( <PricingRulesList /> );
+		} );
+
+		expect( screen.queryByTestId( 'onboarding' ) ).not.toBeInTheDocument();
+		expect( screen.getByRole( 'button', { name: 'filter to nothing' } ) ).toBeInTheDocument();
+	} );
+
+	it( 'renders the screen without a headline when the catalogue read fails', async () => {
+		serve( { rules: [ rule( 1 ) ], statsFail: true } );
+		await act( async () => {
+			render( <PricingRulesList /> );
+		} );
+
+		expect( screen.queryByTestId( 'catalog-impact' ) ).not.toBeInTheDocument();
+		expect( screen.getByRole( 'button', { name: 'filter to nothing' } ) ).toBeInTheDocument();
+		// The list is the screen; a missing headline does not warrant a notice.
+		expect( notices ).toEqual( [] );
 	} );
 } );
