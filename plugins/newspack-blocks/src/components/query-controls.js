@@ -22,6 +22,7 @@ import { decodeEntities } from '@wordpress/html-entities';
  * Internal dependencies.
  */
 import AutocompleteTokenField from './autocomplete-tokenfield';
+import SpecificPostsControl from './specific-posts-control';
 
 const getCategoryTitle = category => decodeEntities( category.name ) || __( '(no title)', 'newspack-blocks' );
 
@@ -307,13 +308,11 @@ class QueryControls extends Component {
 					</ToggleGroupControl>
 				) }
 				{ specificMode ? (
-					<AutocompleteTokenField
-						tokens={ specificPosts || [] }
+					<SpecificPostsControl
+						postIds={ specificPosts || [] }
 						onChange={ onSpecificPostsChange }
 						fetchSuggestions={ this.fetchPostSuggestions }
 						fetchSavedInfo={ this.fetchSavedPosts }
-						label={ __( 'Content', 'newspack-blocks' ) }
-						help={ __( 'Begin typing any word in a title. Click on an autocomplete result to select it.', 'newspack-blocks' ) }
 					/>
 				) : (
 					<>
