@@ -58,8 +58,17 @@
 
 		// Blanket font-family and line-height overrides — moved from
 		// `../style.scss` (Task 5). Forces georgia/arial regardless of theme;
-		// only applies when flag is off (MJML path).
-		* {
+		// only applies when flag is off (MJML path). Block editor chrome is UI
+		// that never reaches the email, so it is excluded here rather than
+		// overridden afterwards, which leaves core's own typography intact.
+		// `:where()` keeps that exclusion at zero specificity, so these rules
+		// stay at their original weight and the `h1`–`h6` rule below still wins
+		// on source order.
+		*:where(:not(
+			.components-placeholder, .components-placeholder *,
+			.block-editor-warning, .block-editor-warning *,
+			.components-notice, .components-notice *
+		)) {
 			line-height: 1.5;
 
 			&:not(code) {
@@ -67,13 +76,14 @@
 			}
 		}
 
-		// Block editor chrome — placeholders and variation pickers — is UI that
-		// never reaches the email, so exempt it from the blanket override above
-		// and leave it on the admin typography.
+		// Chrome roots carry no font-family of their own, so they would inherit
+		// georgia from the block wrapper. Reset the root only: everything inside
+		// then follows core, which is why no line-height is set here — core's
+		// `line-height: initial` on placeholder text would be lost if it were.
 		.components-placeholder,
-		.components-placeholder * {
+		.block-editor-warning,
+		.components-notice {
 			font-family: wp-vars.$default-font;
-			line-height: wp-vars.$default-line-height;
 		}
 
 		h1,
