@@ -102,7 +102,7 @@
 		.dataviews-view-table tr {
 			th:first-child,
 			td:first-child {
-				padding-left: wp-vars.$grid-unit-10;
+				padding-left: wp-vars.$grid-unit-30;
 
 				.dataviews-view-table-header-button {
 					margin-left: 0;
@@ -111,7 +111,7 @@
 
 			th:last-child,
 			td:last-child {
-				padding-right: wp-vars.$grid-unit-10;
+				padding-right: wp-vars.$grid-unit-30;
 			}
 		}
 
@@ -124,6 +124,23 @@
 	&__schedule-table {
 		.dataviews-view-table colgroup col:not(.dataviews-view-table__col-actions) {
 			width: auto;
+		}
+
+		.dataviews-view-table tr .dataviews-item-actions .components-button {
+			opacity: 1;
+
+			&:last-of-type {
+				color: wp-colors.$alert-red;
+			}
+		}
+
+		.dataviews-view-table__actions-column .dataviews-view-table-header {
+			position: absolute;
+			overflow: hidden;
+			clip-path: inset(50%);
+			width: 1px;
+			height: 1px;
+			white-space: nowrap;
 		}
 
 		.dataviews-title-field button.components-button.is-link {
@@ -142,10 +159,8 @@
 		}
 	}
 
-	&__preview-section {
-		> p {
-			margin-top: wp-vars.$grid-unit-15;
-		}
+	&__see-more {
+		min-height: wp-vars.$grid-unit-30;
 	}
 
 	&__preview-loading {

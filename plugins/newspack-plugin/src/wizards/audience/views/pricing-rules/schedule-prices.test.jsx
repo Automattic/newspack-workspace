@@ -6,12 +6,14 @@ import { render, screen, fireEvent, act, within, waitForElementToBeRemoved } fro
 /**
  * WordPress dependencies
  */
+import { dispatch, select } from '@wordpress/data';
 import { useState } from '@wordpress/element';
 
 /**
  * Internal dependencies
  */
 import SchedulePrices from './schedule-prices';
+import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 
 const CALC_TYPES = [
 	{ value: 'fixed_price', label: 'Set price to' },
@@ -52,20 +54,24 @@ const bodyRow = index => screen.getAllByRole( 'row' )[ index + 1 ];
 
 const cell = ( row, index ) => within( bodyRow( row ) ).getAllByRole( 'cell' )[ index ];
 
-// The title cell's only control; the row also carries Edit and the kebab.
+// The title cell's only control; the row also carries the inline Edit and Remove.
 const cycleButton = index => within( cell( index, 0 ) ).getByRole( 'button' );
 const clickCycle = index => act( () => void fireEvent.click( cycleButton( index ) ) );
 
-// DataViews hands the kebab every eligible action, primary ones included, so Edit
-// is reachable both as a row button and from the menu.
-const openKebab = index => act( () => void fireEvent.click( screen.getAllByRole( 'button', { name: 'Actions' } )[ index ] ) );
+// Every action is primary, so both render as row buttons and there is no kebab.
+const clickRowAction = ( index, name ) => act( () => void fireEvent.click( within( bodyRow( index ) ).getByRole( 'button', { name } ) ) );
 
-const chooseFromKebab = async ( index, name ) => {
-	await openKebab( index );
-	const item = await screen.findByRole( 'menuitem', { name } );
+// The confirm button shares its name with the row actions, so scope to the dialog.
+const confirmRemoval = async () => {
+	const dialog = await screen.findByRole( 'dialog', { name: 'Remove Price' } );
 	await act( async () => {
-		fireEvent.click( item );
+		fireEvent.click( within( dialog ).getByRole( 'button', { name: 'Remove' } ) );
 	} );
+};
+
+const removePrice = async index => {
+	await clickRowAction( index, 'Remove' );
+	await confirmRemoval();
 };
 
 // The spoken form, not the visible one: identifying a row is what these assert,
@@ -188,7 +194,7 @@ describe( 'the schedule prices table', () => {
 
 	it( 'frees a cycle for reuse once its price is removed', async () => {
 		render( <Schedule /> );
-		await chooseFromKebab( 1, 'Remove' );
+		await removePrice( 1 );
 		await clickButton( 'Add Price' );
 		await type( 'From cycle #', '2' );
 		await type( 'Value ($)', '5' );
@@ -211,22 +217,48 @@ describe( 'the schedule prices table', () => {
 		expect( screen.getAllByRole( 'button', { name: 'Edit' } ) ).toHaveLength( 3 );
 	} );
 
-	it( 'edits a price from the kebab', async () => {
+	it( 'edits a price from its row button', async () => {
 		renderPrices();
-		await chooseFromKebab( 1, 'Edit' );
+		await clickRowAction( 1, 'Edit' );
 		expect( screen.getByLabelText( 'From cycle #' ) ).toHaveValue( 2 );
 	} );
 
-	it( 'removes a price from the kebab', async () => {
+	it( 'removes a price once its dialog is confirmed', async () => {
 		const { onChange } = renderPrices();
-		await chooseFromKebab( 1, 'Remove' );
+		await removePrice( 1 );
 		expect( onChange ).toHaveBeenCalledWith( [ expect.objectContaining( { at: '1' } ), expect.objectContaining( { at: '7' } ) ] );
 	} );
 
-	// The kebab that triggered it is gone, so focus would otherwise fall to the body.
+	it( 'confirms the removal in a snackbar', async () => {
+		// The store outlives each test, so a stale notice would satisfy the assertion.
+		dispatch( WIZARD_STORE_NAMESPACE ).resetNotices();
+		renderPrices();
+		await removePrice( 1 );
+		const notice = select( WIZARD_STORE_NAMESPACE )
+			.getNotices()
+			.find( n => 'pricing-rule-price-removed' === n.id );
+		expect( notice ).toMatchObject( { type: 'success', message: 'Price removed.' } );
+	} );
+
+	it( 'keeps the price when the removal is cancelled', async () => {
+		const { onChange } = renderPrices();
+		await clickRowAction( 1, 'Remove' );
+		const dialog = await screen.findByRole( 'dialog', { name: 'Remove Price' } );
+		// The dialog's close icon shares the accessible name of the text Cancel button.
+		const cancel = within( dialog )
+			.getAllByRole( 'button', { name: 'Cancel' } )
+			.find( button => 'Cancel' === button.textContent.trim() );
+		await act( async () => {
+			fireEvent.click( cancel );
+		} );
+		expect( onChange ).not.toHaveBeenCalled();
+	} );
+
+	// The Remove button that triggered it unmounts with its row, so focus would
+	// otherwise fall to the body.
 	it( 'keeps focus in the form after a price is removed', async () => {
 		render( <Schedule /> );
-		await chooseFromKebab( 1, 'Remove' );
+		await removePrice( 1 );
 		expect( screen.getByRole( 'button', { name: 'Add Price' } ) ).toHaveFocus();
 	} );
 

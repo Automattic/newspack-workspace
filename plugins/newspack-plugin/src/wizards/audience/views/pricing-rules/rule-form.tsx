@@ -828,16 +828,18 @@ export default function RuleForm( { isNew, initialPath = null, rule, vocab, onDo
 
 			<Divider alignment="full-width" variant="tertiary" />
 
-			<div className="newspack-pricing-rules__preview-section">
-				<SectionHeader
-					title={ __( 'Impact Preview', 'newspack-plugin' ) }
-					description={ __(
-						'What a reader would actually pay, with your other active rules taken into account. Where several rules match, the lowest price wins.',
-						'newspack-plugin'
-					) }
-					noMargin
-				/>
-				{ hasCycleDimension && <p className="newspack-pricing-rules__muted">{ cycleMarkerNote() }</p> }
+			<div>
+				<VStack spacing={ 0 }>
+					<SectionHeader
+						title={ __( 'Impact Preview', 'newspack-plugin' ) }
+						description={ __(
+							'What a reader would actually pay, with your other active rules taken into account. Where several rules match, the lowest price wins.',
+							'newspack-plugin'
+						) }
+						noMargin
+					/>
+					{ hasCycleDimension && <p className="newspack-pricing-rules__muted">{ cycleMarkerNote() }</p> }
+				</VStack>
 				<RulePreview body={ previewBody } hasPrice={ isSchedule ? steps.length > 0 : String( value ).trim() !== '' } />
 			</div>
 			{ goalDialog }

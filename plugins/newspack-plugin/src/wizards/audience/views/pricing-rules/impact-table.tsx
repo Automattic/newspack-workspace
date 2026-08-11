@@ -26,7 +26,6 @@ import { useState, useMemo, useId } from '@wordpress/element';
 import {
 	Button,
 	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
-	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
 // Not the Newspack wrapper: with-wizard-screen/style.scss gives `.newspack-dataviews`
 // a -48px page bleed that hangs this embedded table past the form column.
@@ -36,7 +35,7 @@ import type { Field, View } from '@wordpress/dataviews';
 /**
  * Internal dependencies
  */
-import { Divider } from '../../../../../packages/components/src';
+import { TableCard } from '../../../../../packages/components/src';
 import { cycleMarkerNote, formatPrice, formatSegment } from './impact-format';
 
 /** Rows shown before the publisher asks for the rest. */
@@ -193,7 +192,23 @@ export default function ImpactTable( { baseline, segmentGroups, currency, showCy
 
 	return (
 		<>
-			<VStack spacing={ 0 }>
+			<TableCard
+				after={
+					collapsible ? (
+						<HStack justify="flex-start">
+							<Button
+								className="newspack-pricing-rules__see-more"
+								variant="link"
+								aria-expanded={ expanded }
+								aria-controls={ tableId }
+								onClick={ () => setExpanded( ! expanded ) }
+							>
+								{ expanded ? __( 'See Less', 'newspack-plugin' ) : __( 'See More', 'newspack-plugin' ) }
+							</Button>
+						</HStack>
+					) : undefined
+				}
+			>
 				<div
 					id={ tableId }
 					className="newspack-pricing-rules__impact-table"
@@ -213,24 +228,7 @@ export default function ImpactTable( { baseline, segmentGroups, currency, showCy
 						<DataViews.Layout />
 					</DataViews>
 				</div>
-				{ collapsible && (
-					<>
-						{ /* Divider margins are raw px, not a step scale. */ }
-						<Divider variant="tertiary" marginTop={ 0 } marginBottom={ 8 } />
-						<HStack justify="flex-start">
-							<Button
-								variant="secondary"
-								aria-expanded={ expanded }
-								aria-controls={ tableId }
-								onClick={ () => setExpanded( ! expanded ) }
-								__next40pxDefaultSize
-							>
-								{ expanded ? __( 'See Less', 'newspack-plugin' ) : __( 'See More', 'newspack-plugin' ) }
-							</Button>
-						</HStack>
-					</>
-				) }
-			</VStack>
+			</TableCard>
 			{ showCycleNote && hasCycles && <p className="newspack-pricing-rules__muted">{ cycleMarkerNote() }</p> }
 			{ hasSegments && (
 				<p className="newspack-pricing-rules__muted">

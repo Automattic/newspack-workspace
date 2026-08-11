@@ -8,12 +8,9 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { useState, useMemo, useEffect, useCallback, useRef } from '@wordpress/element';
-import {
-	Button,
-	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
-	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
-} from '@wordpress/components';
+import { useState, useMemo, useEffect, useCallback, useId, useRef } from '@wordpress/element';
+import { Button } from '@wordpress/components';
+import { useDispatch } from '@wordpress/data';
 // Not the Newspack wrapper: with-wizard-screen/style.scss gives `.newspack-dataviews`
 // a -48px page bleed that hangs this embedded table past the form column.
 import { DataViews, filterSortAndPaginate } from '@wordpress/dataviews';
@@ -22,7 +19,8 @@ import type { Action, Field, View } from '@wordpress/dataviews';
 /**
  * Internal dependencies
  */
-import { Divider } from '../../../../../packages/components/src';
+import { ConfirmDialog, TableCard } from '../../../../../packages/components/src';
+import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import { byCycle, cycleRange, priceSummary } from './schedule-format';
 import SchedulePriceDrawer from './schedule-price-drawer';
 
@@ -45,6 +43,8 @@ interface SchedulePricesProps {
 	currency: PricingRulesCurrency;
 }
 
+const REMOVED_NOTICE_ID = 'pricing-rule-price-removed';
+
 /** A row back to the bare price, so the table's own columns never reach the parent. */
 const toPrice = ( row: SchedulePriceRow ): SchedulePriceInput => ( {
 	at: row.at,
@@ -58,8 +58,11 @@ export default function SchedulePrices( { steps, onChange, publicize, calcTypes,
 	// it opened with; `isOpen` is what actually shuts it.
 	const [ editing, setEditing ] = useState< Editing | null >( null );
 	const [ isOpen, setIsOpen ] = useState( false );
+	const [ removing, setRemoving ] = useState< number | null >( null );
 	const addRef = useRef< HTMLButtonElement >( null );
 	const claimFocus = useRef( false );
+	const titleId = useId();
+	const { addNotice, removeNotice } = useDispatch( WIZARD_STORE_NAMESPACE );
 
 	// A rule saved before this redesign can hold its prices in any order, and every
 	// cell reads the price after it, so nothing below may index the prop directly.
@@ -168,16 +171,28 @@ export default function SchedulePrices( { steps, onChange, publicize, calcTypes,
 			{
 				id: 'remove',
 				label: __( 'Remove', 'newspack-plugin' ),
+				// Every action being primary is what suppresses the kebab menu, and the
+				// stylesheet colors the LAST row action red, so Remove stays last here.
+				isPrimary: true,
 				isDestructive: true,
-				// Nothing is destroyed until the rule saves, so this asks for no confirmation.
-				callback: ( items: SchedulePriceRow[] ) => {
-					claimFocus.current = true;
-					onChange( ordered.filter( ( _, i ) => i !== Number( items[ 0 ].id ) ) );
-				},
+				callback: ( items: SchedulePriceRow[] ) => setRemoving( Number( items[ 0 ].id ) ),
 			},
 		],
-		[ ordered, onChange, open ]
+		[ open ]
 	);
+
+	const confirmRemove = () => {
+		if ( null === removing ) {
+			return;
+		}
+		claimFocus.current = true;
+		onChange( ordered.filter( ( _, i ) => i !== removing ) );
+		// Notices append without deduping, so a second removal would stack a toast
+		// sharing the first one's React key.
+		removeNotice( REMOVED_NOTICE_ID );
+		addNotice( { id: REMOVED_NOTICE_ID, type: 'success', message: __( 'Price removed.', 'newspack-plugin' ) } );
+		setRemoving( null );
+	};
 
 	// The page holds every price and the reader-facing column comes and goes with the
 	// disclosure toggle, so both follow the live values rather than living in view
@@ -188,9 +203,16 @@ export default function SchedulePrices( { steps, onChange, publicize, calcTypes,
 
 	return (
 		<>
-			{ /* One child of the section's stack, so the button sits with its table. */ }
-			<VStack spacing={ 0 }>
-				<div className="newspack-pricing-rules__schedule-table" role="region" aria-label={ __( 'Price schedule', 'newspack-plugin' ) }>
+			<TableCard
+				title={ __( 'Price Schedule', 'newspack-plugin' ) }
+				titleId={ titleId }
+				actions={
+					<Button ref={ addRef } variant="secondary" size="compact" onClick={ add }>
+						{ __( 'Add Price', 'newspack-plugin' ) }
+					</Button>
+				}
+			>
+				<div className="newspack-pricing-rules__schedule-table" role="region" aria-labelledby={ titleId }>
 					<DataViews
 						data={ data }
 						fields={ fields }
@@ -207,14 +229,17 @@ export default function SchedulePrices( { steps, onChange, publicize, calcTypes,
 						<DataViews.Layout />
 					</DataViews>
 				</div>
-				{ /* Divider margins are raw px, not a step scale. */ }
-				{ rows.length > 0 && <Divider variant="tertiary" marginTop={ 0 } marginBottom={ 8 } /> }
-				<HStack justify="flex-start">
-					<Button ref={ addRef } variant="secondary" onClick={ add } __next40pxDefaultSize>
-						{ __( 'Add Price', 'newspack-plugin' ) }
-					</Button>
-				</HStack>
-			</VStack>
+			</TableCard>
+			<ConfirmDialog
+				isOpen={ null !== removing }
+				isDestructive
+				title={ __( 'Remove Price', 'newspack-plugin' ) }
+				confirmButtonText={ __( 'Remove', 'newspack-plugin' ) }
+				onConfirm={ confirmRemove }
+				onCancel={ () => setRemoving( null ) }
+			>
+				{ __( 'Remove this price from the schedule? The change applies when you save the rule.', 'newspack-plugin' ) }
+			</ConfirmDialog>
 			{ editing && (
 				<SchedulePriceDrawer
 					isOpen={ isOpen }
