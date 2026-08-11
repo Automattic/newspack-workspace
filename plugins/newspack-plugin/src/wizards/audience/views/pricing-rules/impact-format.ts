@@ -7,7 +7,17 @@
 /**
  * WordPress dependencies
  */
-import { __, sprintf } from '@wordpress/i18n';
+import { __, _n, sprintf } from '@wordpress/i18n';
+
+/**
+ * Internal dependencies
+ */
+import { formatCount } from '../../../../../packages/components/src/breadcrumbs/format-count';
+
+// Re-exported rather than reimplemented: the header count beside these figures
+// uses the same helper, and only that one normalises the locales WordPress ships
+// that Intl rejects.
+export { formatCount };
 
 export function formatPrice( amount: number, currency: PricingRulesCurrency ): string {
 	return currency.symbol + amount.toFixed( currency.decimals );
@@ -35,14 +45,13 @@ export function cycleMarkerNote(): string {
 }
 
 /**
- * Group a count's digits. The externalized @wordpress/i18n has no numberFormat, and
- * WordPress ships locales Intl rejects (pt_PT_ao90), hence the fall back.
+ * The caption a truncated table carries. Shared so the modal and the editor
+ * preview cannot drift into two msgids the translators have to service twice.
  */
-export function formatCount( value: number ): string {
-	const n = Number( value );
-	try {
-		return new Intl.NumberFormat( document.documentElement.lang || undefined ).format( n );
-	} catch {
-		return n.toLocaleString();
-	}
+export function sampleNote( sampleCount: number ): string {
+	return sprintf(
+		/* translators: %s: how many products the table lists. */
+		_n( 'Showing a sample of %s product.', 'Showing a sample of %s products.', sampleCount, 'newspack-plugin' ),
+		formatCount( sampleCount )
+	);
 }

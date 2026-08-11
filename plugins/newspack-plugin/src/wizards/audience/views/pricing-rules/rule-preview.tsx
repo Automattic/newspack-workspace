@@ -7,7 +7,7 @@
 /**
  * WordPress dependencies
  */
-import { _n, sprintf } from '@wordpress/i18n';
+import { __ } from '@wordpress/i18n';
 import { useState, useEffect, useRef } from '@wordpress/element';
 import apiFetch from '@wordpress/api-fetch';
 import {
@@ -21,7 +21,7 @@ import {
 import ImpactEmpty, { type ImpactEmptyReason } from './impact-empty';
 import ImpactStats from './impact-stats';
 import ImpactTable from './impact-table';
-import { formatCount } from './impact-format';
+import { sampleNote } from './impact-format';
 import { RULE_PREVIEW_API_PATH as PREVIEW_PATH, IMPACT_SAMPLE_LIMIT } from './constants';
 
 const DEBOUNCE_MS = 500;
@@ -76,8 +76,9 @@ export default function RulePreview( { body, showCycleNote }: RulePreviewProps )
 
 	if ( ! data && ! hasResolved ) {
 		return (
-			<VStack className="newspack-pricing-rules__preview-loading" alignment="center" justify="center">
+			<VStack className="newspack-pricing-rules__preview-loading" alignment="center" justify="center" role="status">
 				<Spinner />
+				<span className="screen-reader-text">{ __( 'Loading the impact preview…', 'newspack-plugin' ) }</span>
 			</VStack>
 		);
 	}
@@ -105,13 +106,7 @@ export default function RulePreview( { body, showCycleNote }: RulePreviewProps )
 				showCycleNote={ showCycleNote }
 			/>
 			{ preview.preview_limited && preview.sample_count >= IMPACT_SAMPLE_LIMIT && (
-				<p className="newspack-pricing-rules__muted">
-					{ sprintf(
-						/* translators: %s: how many products the table lists. */
-						_n( 'Showing a sample of %s product.', 'Showing a sample of %s products.', preview.sample_count, 'newspack-plugin' ),
-						formatCount( preview.sample_count )
-					) }
-				</p>
+				<p className="newspack-pricing-rules__muted">{ sampleNote( preview.sample_count ) }</p>
 			) }
 		</div>
 	);
