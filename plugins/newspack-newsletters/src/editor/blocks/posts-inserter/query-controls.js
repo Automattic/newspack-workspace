@@ -16,20 +16,24 @@ import { Fragment, useState, useEffect } from '@wordpress/element';
 import apiFetch from '@wordpress/api-fetch';
 import { decodeEntities } from '@wordpress/html-entities';
 
-const fetchPostSuggestions = postType => search =>
-	apiFetch( {
-		path: addQueryArgs( '/wp/v2/search', {
-			search,
-			per_page: 20,
-			_fields: 'id,title',
-			subtype: postType,
-		} ),
-	} ).then( posts =>
-		posts.map( post => ( {
-			id: post.id,
-			title: decodeEntities( post.title ) || __( '(no title)', 'newspack-newsletters' ),
-		} ) )
-	);
+/**
+ * Internal dependencies
+ */
+import { formatPostLabel, getPostSearchPath, getPostStatusPath, mergePostStatuses } from './post-search';
+
+const fetchPostSuggestions = ( restBase, search ) =>
+	apiFetch( { path: getPostSearchPath( restBase, search ) } )
+		// Core rejects the whole request when the user can't edit this post type. Fall back
+		// to published posts rather than leaving the search empty.
+		.catch( () => apiFetch( { path: getPostSearchPath( restBase, search, false ) } ) )
+		.then( posts =>
+			posts.map( post => ( {
+				id: post.id,
+				title: decodeEntities( post.title?.rendered ) || __( '(no title)', 'newspack-newsletters' ),
+				status: post.status,
+			} ) )
+		)
+		.catch( () => [] );
 
 const SEPARATOR = '--';
 const encodePosts = posts => posts.map( post => [ post.id, post.title ].join( SEPARATOR ) );
@@ -45,9 +49,12 @@ const decodePost = encodedPost => {
 const QueryControlsSettings = ( { attributes, setAttributes } ) => {
 	const [ categoriesList, setCategoriesList ] = useState( [] );
 	const [ postTypesList, setPostTypesList ] = useState( [ { value: 'post', label: 'Posts' } ] );
+	const [ postTypeRestBases, setPostTypeRestBases ] = useState( { post: 'posts' } );
+	const [ postStatuses, setPostStatuses ] = useState( {} );
 	const [ showAdvancedFilters, setShowAdvancedFilters ] = useState( false );
 
 	const { categoryExclusions, tags, tagExclusions } = attributes;
+	const restBase = postTypeRestBases[ attributes.postType ];
 
 	useEffect( () => {
 		apiFetch( {
@@ -55,7 +62,15 @@ const QueryControlsSettings = ( { attributes, setAttributes } ) => {
 				per_page: -1,
 			} ),
 		} ).then( setCategoriesList );
-		fetchPostTypes().then( setPostTypesList );
+		fetchPostTypes().then( postTypes => {
+			setPostTypesList(
+				postTypes.map( postType => ( {
+					value: postType.slug,
+					label: decodeEntities( postType.name ) || __( '(no title)', 'newspack-newsletters' ),
+				} ) )
+			);
+			setPostTypeRestBases( postTypes.reduce( ( all, postType ) => ( { ...all, [ postType.slug ]: postType.rest_base } ), {} ) );
+		} );
 	}, [] );
 
 	const categorySuggestions = categoriesList.reduce(
@@ -105,15 +120,29 @@ const QueryControlsSettings = ( { attributes, setAttributes } ) => {
 	const [ isFetchingPosts, setIsFetchingPosts ] = useState( false );
 	const [ foundPosts, setFoundPosts ] = useState( [] );
 	const handleSpecificPostsInput = search => {
-		if ( isFetchingPosts || search.length === 0 ) {
+		if ( isFetchingPosts || search.length === 0 || ! restBase ) {
 			return;
 		}
 		setIsFetchingPosts( true );
-		fetchPostSuggestions( attributes.postType )( search ).then( posts => {
+		fetchPostSuggestions( restBase, search ).then( posts => {
 			setIsFetchingPosts( false );
 			setFoundPosts( posts );
+			setPostStatuses( known => mergePostStatuses( known, [], posts ) );
 		} );
 	};
+
+	// Look up the status of posts already saved on the block, so a draft that has since
+	// been published stops being labelled as one.
+	const unknownPostIds = attributes.specificPosts.map( post => post.id ).filter( id => undefined === postStatuses[ id ] );
+
+	useEffect( () => {
+		if ( ! restBase || 0 === unknownPostIds.length ) {
+			return;
+		}
+		apiFetch( { path: getPostStatusPath( restBase, unknownPostIds ) } )
+			.then( posts => setPostStatuses( known => mergePostStatuses( known, unknownPostIds, posts ) ) )
+			.catch( () => setPostStatuses( known => mergePostStatuses( known, unknownPostIds, [] ) ) );
+	}, [ restBase, unknownPostIds.join() ] );
 
 	const handleSpecificPostsSelection = postTitles => {
 		setAttributes( {
@@ -145,12 +174,7 @@ const QueryControlsSettings = ( { attributes, setAttributes } ) => {
 		return apiFetch( {
 			path: addQueryArgs( '/wp/v2/types', { context: 'edit' } ),
 		} ).then( postTypes => {
-			return Object.values( postTypes )
-				.filter( postType => postType.viewable === true && postType.visibility?.show_ui === true )
-				.map( postType => ( {
-					value: postType.slug,
-					label: decodeEntities( postType.name ) || __( '(no title)', 'newspack-newsletters' ),
-				} ) );
+			return Object.values( postTypes ).filter( postType => postType.viewable === true && postType.visibility?.show_ui === true );
 		} );
 	};
 
@@ -235,7 +259,7 @@ const QueryControlsSettings = ( { attributes, setAttributes } ) => {
 					suggestions={ encodePosts( foundPosts ) }
 					displayTransform={ string => {
 						const [ id, title ] = decodePost( string );
-						return title || id || '';
+						return formatPostLabel( title || id || '', postStatuses[ id ] );
 					} }
 					onInputChange={ debounce( handleSpecificPostsInput, 400 ) }
 				/>

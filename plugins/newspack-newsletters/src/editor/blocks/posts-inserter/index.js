@@ -41,6 +41,7 @@ import blockDefinition from './block.json';
 import { getTemplateBlocks, convertBlockSerializationFormat } from './utils';
 import QueryControlsSettings from './query-controls';
 import { POSTS_INSERTER_BLOCK_NAME, POSTS_INSERTER_STORE_NAME } from './consts';
+import { SEARCHABLE_STATUSES } from './post-search';
 import PostsPreview from './posts-preview';
 
 const PostsInserterBlock = ( {
@@ -367,8 +368,10 @@ const PostsInserterBlockWithSelect = compose( [
 		};
 
 		if ( ! isDisplayingSpecificPosts || isHandlingSpecificPosts ) {
+			// Specific posts are hand-picked, so honour whichever status they were picked at.
+			// The automatic query stays published-only.
 			const postListQuery = isDisplayingSpecificPosts
-				? { include: specificPosts.map( post => post.id ) }
+				? { include: specificPosts.map( post => post.id ), status: SEARCHABLE_STATUSES }
 				: pickBy( query, value => ! isUndefined( value ) );
 
 			posts = getEntityRecords( 'postType', postType, postListQuery ) || [];
