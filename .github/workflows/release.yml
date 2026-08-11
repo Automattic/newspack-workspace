@@ -221,15 +221,20 @@ jobs:
       # themes/newspack-theme/newspack-theme/languages/. The final check is a
       # gate rather than a print, so a future edit that breaks the pathspecs
       # fails here instead of passing quietly.
+      # continue-on-error: this runs after multi-semantic-release has published,
+      # so a failure here would red-flag a shipped release and skip post-release
+      # (which resets alpha and syncs main). A dirty tree breaks nothing anyway:
+      # the version sync below rebases with autostash.
       - name: Discard uncommitted translation output
         if: steps.plan.outputs.release_needed == 'true'
+        continue-on-error: true
         run: |
           set -euo pipefail
           git checkout -- 'plugins/*/languages/*' 'themes/*/languages/*' 2> /dev/null || true
           git clean -fdq -- 'plugins/*/languages/*' 'themes/*/languages/*'
           leftover=$(git status --porcelain -- 'plugins/*/languages/*' 'themes/*/languages/*')
           if [ -n "$leftover" ]; then
-            echo "Translation files still uncommitted after cleanup:"
+            echo "::warning title=i18n::Translation files still uncommitted after cleanup"
             printf '%s\n' "$leftover"
             exit 1
           fi
