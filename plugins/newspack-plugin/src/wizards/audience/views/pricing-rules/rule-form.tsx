@@ -842,7 +842,7 @@ export default function RuleForm( { isNew, initialPath = null, rule, vocab, onDo
 							/>
 							{ hasCycleDimension && <p className="newspack-pricing-rules__muted">{ cycleMarkerNote() }</p> }
 						</VStack>
-						<RulePreview body={ previewBody } hasPrice={ hasPrice } />
+						<RulePreview body={ previewBody } />
 					</div>
 				</>
 			) }

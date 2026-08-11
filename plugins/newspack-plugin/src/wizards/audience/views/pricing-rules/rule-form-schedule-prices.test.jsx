@@ -157,6 +157,9 @@ describe( 'the schedule section of the rule form', () => {
 	it( 'refuses to save a schedule with no prices', async () => {
 		await renderScheduleForm( { ...SCHEDULED_RULE, steps: [] } );
 
+		// Nothing to preview yet, so the whole section stays out of the way.
+		expect( screen.queryByRole( 'heading', { name: 'Impact Preview' } ) ).not.toBeInTheDocument();
+
 		await act( async () => {
 			headerSave()();
 		} );

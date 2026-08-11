@@ -51,6 +51,7 @@ const titleId = useId();
   below the table: stats rows, notes, footer actions. Slot children stretch to
   the card's full content width; wrap a lone control in an `HStack` to keep its
   natural width.
+- `className` — forwarded to `Card.Root`, the card's outermost element.
 - `children` — the table itself, rendered edge-to-edge via `Card.FullBleed`.
   The card supplies no cell padding: pad the table's first and last columns to
   the card's own padding (24px — `$grid-unit-30`, matching upstream's

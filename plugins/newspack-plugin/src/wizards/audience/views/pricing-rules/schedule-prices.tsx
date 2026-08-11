@@ -64,7 +64,8 @@ export default function SchedulePrices( { steps, onChange, publicize, calcTypes,
 	const [ isOpen, setIsOpen ] = useState( false );
 	const [ removing, setRemoving ] = useState< number | null >( null );
 	const addRef = useRef< HTMLButtonElement >( null );
-	const claimFocus = useRef( false );
+	const tableRef = useRef< HTMLDivElement >( null );
+	const claimFocus = useRef< 'add' | number | null >( null );
 	const titleId = useId();
 	const { addNotice, removeNotice } = useDispatch( WIZARD_STORE_NAMESPACE );
 
@@ -88,15 +89,19 @@ export default function SchedulePrices( { steps, onChange, publicize, calcTypes,
 		[ ordered, currency, calcTypes ]
 	);
 
-	// Removing a row unmounts the control that triggered it, which would drop focus
-	// to the body. Disarmed on any length change so a stale claim cannot steal it.
+	// Removing a row unmounts the control that triggered it, and rows are keyed by
+	// position, so an edit that moves a price leaves the drawer returning focus to
+	// a row that now holds a different one. A claim re-parks focus after the list
+	// changes; the drawer yields to focus already parked outside it.
 	useEffect( () => {
 		const claimed = claimFocus.current;
-		claimFocus.current = false;
-		if ( claimed ) {
+		claimFocus.current = null;
+		if ( 'add' === claimed ) {
 			addRef.current?.focus();
+		} else if ( typeof claimed === 'number' ) {
+			tableRef.current?.querySelectorAll< HTMLButtonElement >( '.dataviews-title-field button' )[ claimed ]?.focus();
 		}
-	}, [ rows.length ] );
+	}, [ ordered ] );
 
 	const fields: Field< SchedulePriceRow >[] = useMemo( () => {
 		const list: Field< SchedulePriceRow >[] = [
@@ -155,7 +160,12 @@ export default function SchedulePrices( { steps, onChange, publicize, calcTypes,
 		// An index past the end would leave `map` silently dropping the edit.
 		const isReplace = null !== index && index < ordered.length;
 		const list = isReplace ? ordered.map( ( step, i ) => ( i === index ? price : step ) ) : [ ...ordered, price ];
-		onChange( list.sort( byCycle ) );
+		const sorted = list.sort( byCycle );
+		const landed = sorted.indexOf( price );
+		if ( isReplace && landed !== index ) {
+			claimFocus.current = landed;
+		}
+		onChange( sorted );
 		setIsOpen( false );
 	};
 
@@ -186,7 +196,7 @@ export default function SchedulePrices( { steps, onChange, publicize, calcTypes,
 		if ( null === removing ) {
 			return;
 		}
-		claimFocus.current = true;
+		claimFocus.current = 'add';
 		onChange( ordered.filter( ( _, i ) => i !== removing ) );
 		// Notices append without deduping, so a second removal would stack a toast
 		// sharing the first one's React key.
@@ -239,7 +249,7 @@ export default function SchedulePrices( { steps, onChange, publicize, calcTypes,
 						</Grid>
 					</div>
 				) : (
-					<div className="newspack-pricing-rules__schedule-table" role="region" aria-labelledby={ titleId }>
+					<div ref={ tableRef } className="newspack-pricing-rules__schedule-table" role="region" aria-labelledby={ titleId }>
 						<DataViews
 							data={ data }
 							fields={ fields }

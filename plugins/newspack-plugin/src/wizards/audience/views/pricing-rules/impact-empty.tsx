@@ -8,7 +8,7 @@
  */
 import { __ } from '@wordpress/i18n';
 import { __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
-import { box, currencyDollar, info } from '@wordpress/icons';
+import { box, info } from '@wordpress/icons';
 import { Card } from '@wordpress/ui';
 
 /**
@@ -16,14 +16,9 @@ import { Card } from '@wordpress/ui';
  */
 import { Grid, SectionHeader } from '../../../../../packages/components/src';
 
-export type ImpactEmptyReason = 'no-price' | 'no-products' | 'unsupported';
+export type ImpactEmptyReason = 'no-products' | 'unsupported';
 
 const getReasons = () => ( {
-	'no-price': {
-		icon: currencyDollar,
-		title: __( 'No price set yet', 'newspack-plugin' ),
-		body: __( 'Enter a price above and the resulting prices will appear here.', 'newspack-plugin' ),
-	},
 	'no-products': {
 		icon: box,
 		title: __( 'No products match this rule', 'newspack-plugin' ),

@@ -268,6 +268,18 @@ describe( 'the schedule prices table', () => {
 		expect( screen.getByRole( 'button', { name: 'Add Price' } ) ).toHaveFocus();
 	} );
 
+	// Rows are keyed by position, so without a claim the drawer would return focus
+	// to the row that now holds a different price.
+	it( 'follows the edited price to its new row when the edit reorders the schedule', async () => {
+		render( <Schedule /> );
+		await clickRowAction( 0, 'Edit' );
+		await type( 'From cycle #', '9' );
+		await clickButton( 'Save' );
+		await waitForPanelToClose();
+		expect( cycleCells() ).toEqual( [ '2 to 6', '7 to 8', '9 onward' ] );
+		expect( cycleButton( 2 ) ).toHaveFocus();
+	} );
+
 	it( 'names a calculation it has no wording for rather than pricing it', () => {
 		renderPrices( {
 			steps: [ { at: '1', calc_type: 'discount_percent', value: '20', label: '' } ],
