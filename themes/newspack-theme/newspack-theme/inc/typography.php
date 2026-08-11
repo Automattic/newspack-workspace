@@ -257,8 +257,9 @@ function newspack_font_family_stacks() {
  *
  * The values reference the theme's own CSS variables so saved content tracks
  * Customizer font changes with no re-save; the resolved stack rides along as
- * the var() fallback for contexts that load no theme stylesheet (feeds, lite
- * pages). Existing theme-origin presets are appended to, not replaced. With
+ * the var() fallback for feeds and other contexts that print global styles
+ * without the theme stylesheet. Existing theme-origin presets are appended
+ * to, not replaced. With
  * the Gutenberg plugin active the resolver passes WP_Theme_JSON_Data_Gutenberg,
  * a sibling class rather than a subclass, so the parameter stays untyped.
  *
