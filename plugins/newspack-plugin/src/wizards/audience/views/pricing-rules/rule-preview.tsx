@@ -1,7 +1,7 @@
 /**
  * Per-rule impact preview for the editor. Debounce-POSTs the in-progress rule
- * body to the plugin's preview route; stands down to an empty card when nothing
- * matches, and to nothing at all until the first request settles.
+ * body to the plugin's preview route; spins until the first request settles and
+ * stands down to an empty card when nothing matches or no preview can be had.
  */
 
 /**
