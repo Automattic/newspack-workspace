@@ -8,7 +8,6 @@
  * Text Domain:     newspack-popups
  * Domain Path:     /languages
  * Version:         3.15.1
- * Requires at least: 7.0
  *
  * @package         Newspack_Popups
  */
