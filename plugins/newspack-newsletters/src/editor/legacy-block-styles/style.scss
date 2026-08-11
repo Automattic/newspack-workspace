@@ -60,9 +60,9 @@
 		// Blanket font-family and line-height overrides — moved from
 		// `../style.scss` (Task 5). Forces georgia/arial regardless of theme;
 		// only applies when flag is off (MJML path). Editor chrome never reaches
-		// the email, so it is excluded here rather than overridden afterwards,
-		// leaving core's own typography intact. `:where()` holds the exclusion
-		// at zero specificity, so these rules keep their original weight.
+		// the email, so it is excluded here, leaving core's own typography
+		// intact. `:where()` holds the exclusion at zero specificity, so these
+		// rules keep their original weight.
 		//
 		// This is the registry of canvas chrome, not just the selectors that
 		// currently lose to the blanket — some already out-specify it, and
