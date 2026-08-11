@@ -358,8 +358,16 @@ class Content_Gate {
 		self::$is_gated          = true;
 		self::$is_content_locked = true;
 
-		$content   = self::get_restricted_post_excerpt( $post );
 		$gate_html = self::get_inline_gate_html();
+
+		// Mark before rendering: the renders below run the post content and the
+		// gate layout through the block pipeline, and any block that runs a
+		// secondary loop ends it with wp_reset_postdata(), which re-fires
+		// `the_post` for the main post. The has_rendered() guard above must
+		// already be set by then, or this method re-enters itself unboundedly.
+		self::mark_gate_as_rendered();
+
+		$content = self::get_restricted_post_excerpt( $post );
 
 		// Note that this does not feed the 'the_content' chain: core generates the
 		// post's page data before firing 'the_post', so the chain is handed the
@@ -375,8 +383,6 @@ class Content_Gate {
 			'teaser' => $content,
 			'gate'   => $gate_html,
 		];
-
-		self::mark_gate_as_rendered();
 	}
 
 	/**
@@ -877,14 +883,21 @@ class Content_Gate {
 	}
 
 	/**
-	 * Public method for marking the gate as rendered.
+	 * Public method for marking the gate render as claimed.
+	 *
+	 * Every render path sets this BEFORE producing output, so the flag acts as
+	 * a once-per-request re-entrancy lock, not a signal that gate markup
+	 * already exists.
 	 */
 	public static function mark_gate_as_rendered() {
 		self::$gate_rendered = true;
 	}
 
 	/**
-	 * Whether the gate has rendered.
+	 * Whether a gate render has been claimed for this request.
+	 *
+	 * True from the moment a render path commits to rendering (see
+	 * mark_gate_as_rendered()), which may be before any markup is output.
 	 */
 	public static function has_rendered() {
 		return self::$gate_rendered;
