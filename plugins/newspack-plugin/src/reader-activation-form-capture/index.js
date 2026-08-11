@@ -66,15 +66,23 @@ window.newspackRAS.push( readerActivation => {
 		}
 		warming = true;
 		whenGrecaptchaReady( () => {
-			window.grecaptcha
-				.execute( rasConfig.captcha_site_key, { action: 'integration_registration' } )
-				.then( token => {
-					warmToken = { token, timestamp: Date.now() };
-					warming = false;
-				} )
-				.catch( () => {
-					warming = false;
-				} );
+			// try/catch, not only .finally(): a synchronous throw from
+			// execute() never produces a promise to attach to, and would
+			// otherwise leave the flag set for the rest of the pageview — no
+			// retry, and every later submit sent without a token.
+			try {
+				window.grecaptcha
+					.execute( rasConfig.captcha_site_key, { action: 'integration_registration' } )
+					.then( token => {
+						warmToken = { token, timestamp: Date.now() };
+					} )
+					.catch( () => {} )
+					.finally( () => {
+						warming = false;
+					} );
+			} catch ( err ) {
+				warming = false;
+			}
 		} );
 	};
 

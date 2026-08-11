@@ -296,7 +296,7 @@ abstract class Integration {
 	 * @return string The registration key.
 	 */
 	public function get_registration_key(): string {
-		return hash_hmac( 'sha256', $this->id . '|' . $this->get_registration_key_seed(), \wp_salt( 'auth' ) );
+		return $this->get_default_registration_key();
 	}
 
 	/**
@@ -378,20 +378,46 @@ abstract class Integration {
 	 * @return bool Whether the registration request is valid.
 	 */
 	public function validate_registration_request( string $key, $request ): bool {
-		if ( hash_equals( $this->get_registration_key(), $key ) ) {
+		$current = $this->get_registration_key();
+		if ( hash_equals( $current, $key ) ) {
 			return true;
+		}
+		// Only integrations still on the framework's own key scheme get the
+		// transition allowance. A subclass with a custom scheme (a time-bounded
+		// token, an asymmetric pair) that inherits or calls this validator would
+		// otherwise accept the framework's static HMAC alongside its own, which
+		// is a permanent bypass of whatever bound it was enforcing.
+		if ( ! hash_equals( $this->get_default_registration_key(), $current ) ) {
+			return false;
 		}
 		return hash_equals( $this->get_legacy_registration_key(), $key );
 	}
 
 	/**
-	 * The pre-seed registration key, still accepted for one release.
+	 * The framework's own registration key derivation, as get_registration_key()
+	 * computes it before any subclass override.
+	 *
+	 * @return string The default-scheme registration key.
+	 */
+	private function get_default_registration_key(): string {
+		return hash_hmac( 'sha256', $this->id . '|' . $this->get_registration_key_seed(), \wp_salt( 'auth' ) );
+	}
+
+	/**
+	 * The pre-seed registration key, still accepted during the transition.
 	 *
 	 * Adding the seed to the HMAC input changes every integration's key once on
 	 * upgrade. Pages already in a CDN or page cache carry the old key until
 	 * their TTL expires, and the capture client treats an invalid key as
 	 * permanent for the pageview — so without this the submission is lost
-	 * rather than retried. Remove once caches have cycled.
+	 * rather than retried. This matters in production today: the ESP
+	 * integration and newspack-manager's Fundraise Up handler both emit the
+	 * legacy key on released sites.
+	 *
+	 * @todo Remove this method and its branch in validate_registration_request()
+	 *       once the seeded key has been in production for a release cycle
+	 *       (target: the first stable release after 2026-09-01). Until then
+	 *       rotation narrows a key rather than fully revoking it.
 	 *
 	 * @return string The legacy registration key.
 	 */

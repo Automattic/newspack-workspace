@@ -41,9 +41,9 @@ Syncs contacts and metadata fields with the active Newspack Newsletters service 
 Registers readers from publisher-designated frontend forms built with any form tool (opt-in via the `newspack-form-capture` CSS class or configured selectors). Registered but disabled by default. It is the first capture-only built-in — neither a sync destination nor a pull source — which makes it the working reference for two patterns:
 
 - **Capability declarations over failing gates.** `supports_push()`/`supports_pull()` return `false` (no dead outbound/inbound controls, no bearing on `has_one_syncable_integration()`), while `can_sync()` succeeds — capture-only is a declared capability, not an error state.
-- **One switch for the frontend registration surface.** `supports_frontend_registration()` returns the integration's *enabled* state, so the page-emitted key, the endpoint acceptance, and the capture script share a single off switch.
+- **One switch for the frontend registration surface.** `supports_frontend_registration()` returns the integration's *enabled* state **and** its `get_unsupported_reason()` being null, so the page-emitted key, the endpoint acceptance, and the capture script share a single off switch — one that also closes when the site's configuration changes after enabling.
 
-It also implements `get_unsupported_reason()` (reCAPTCHA v2 is incompatible with capture on page-navigating forms) and sizes its own registration rate-limit bucket via the `newspack_frontend_registration_rate_limit` filter.
+It reports itself unsupported on reCAPTCHA v2, which cannot be pre-acquired for a page-navigating form submit, and sizes its own registration rate-limit bucket via the `newspack_frontend_registration_rate_limit` filter.
 
 ---
 

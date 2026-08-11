@@ -148,7 +148,7 @@ abstract class Contact_Metadata {
 	}
 
 	/**
-	 * Whether the user's display name was generated from their email address.
+	 * Whether the user's display name is a placeholder generated from their email.
 	 *
 	 * Accounts are named after the email when the reader supplies no name, so
 	 * display_name is `jane-doe` for jane.doe@example.com. That is a
@@ -156,22 +156,26 @@ abstract class Contact_Metadata {
 	 * ESP's first-name field, overwriting whatever is there — including a name
 	 * that arrived by list import.
 	 *
-	 * Compares against both constructions rather than calling
-	 * Reader_Activation::reader_has_generic_display_name(), which answers a
-	 * different question (should we prompt this reader to pick a name?) and
-	 * returns false site-wide when NEWSPACK_ALLOW_GENERIC_READER_DISPLAY_NAMES
-	 * is defined — which would put the placeholder back on the wire.
+	 * Applies the reader's own saved-name meta as a short-circuit, but not the
+	 * NEWSPACK_ALLOW_GENERIC_READER_DISPLAY_NAMES constant that
+	 * Reader_Activation::reader_has_generic_display_name() also honors: the
+	 * constant answers whether to stop prompting readers for a real name, and
+	 * a site setting it would otherwise put the placeholder back on the wire.
 	 *
 	 * @return bool
 	 */
-	private function has_email_derived_display_name() {
+	private function has_email_derived_display_name(): bool {
 		$display_name = (string) $this->user->display_name;
 		$email        = (string) $this->user->user_email;
 		if ( '' === $display_name || '' === $email ) {
 			return true;
 		}
-		return Reader_Activation::generate_user_nicename( $email ) === $display_name // Current construction: URL-sanitized local part.
-			|| Reader_Activation::strip_email_domain( $email ) === $display_name;    // Legacy construction: bare local part.
+		// A reader who deliberately saved a display name we would call generic
+		// has chosen it; it is their name, and it syncs.
+		if ( \get_user_meta( $this->user->ID, Reader_Activation::READER_SAVED_GENERIC_DISPLAY_NAME, true ) ) {
+			return false;
+		}
+		return Reader_Activation::is_display_name_derived_from_email( $display_name, $email );
 	}
 
 	/**

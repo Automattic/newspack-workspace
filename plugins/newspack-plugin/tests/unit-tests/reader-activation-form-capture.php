@@ -11,6 +11,8 @@ use Newspack\Reader_Activation\Integrations;
 use Newspack\Reader_Activation\Integrations\Form_Capture;
 use Newspack\Reader_Registration;
 
+require_once __DIR__ . '/integrations/class-inherited-validator-integration.php';
+
 /**
  * Test the Form Capture integration.
  *
@@ -118,6 +120,15 @@ class Test_Form_Capture extends WP_UnitTestCase {
 			[ '.newspack-form-capture', '#a, .b', 'footer form.signup' ],
 			$integration->get_selectors(),
 			'A line is dropped whole when any of its selectors matches every form.'
+		);
+
+		// A trailing comma is a plausible copy-paste from a CSS rule and must
+		// not silently discard the publisher's selector.
+		$integration->update_settings_field_value( 'selectors', "#signup,\n#a, #b," );
+		$this->assertSame(
+			[ '.newspack-form-capture', '#signup,', '#a, #b,' ],
+			$integration->get_selectors(),
+			'An empty part from a trailing comma is skipped, not treated as over-broad.'
 		);
 		$integration->update_settings_field_value( 'selectors', '' );
 	}
@@ -359,8 +370,14 @@ class Test_Form_Capture extends WP_UnitTestCase {
 		$this->assertSame( 'jane-doe', $user->display_name, 'register_reader() names the account after the email when none is given.' );
 		$this->assertSame( '', get_user_meta( $user_id, 'first_name', true ) );
 
+		// The key must be absent, not empty: connectors branch on isset(), so an
+		// empty string overwrites the name the contact already has at the provider.
 		$contact = \Newspack\Reader_Activation\Sync\Metadata::get_contact_with_metadata( $user_id );
-		$this->assertSame( '', $contact['name'], 'A generated display name must never reach the ESP as the contact name.' );
+		$this->assertArrayNotHasKey( 'name', $contact, 'A nameless reader must sync no name at all, not an empty one.' );
+
+		// Same guarantee on the path that runs when WooCommerce is inactive.
+		$contact = Contact_Sync::get_contact_data( $user_id );
+		$this->assertArrayNotHasKey( 'name', $contact, 'The non-WooCommerce path must not send a name either.' );
 
 		// A display name the reader actually has still syncs.
 		wp_update_user(
@@ -371,6 +388,22 @@ class Test_Form_Capture extends WP_UnitTestCase {
 		);
 		$contact = \Newspack\Reader_Activation\Sync\Metadata::get_contact_with_metadata( $user_id );
 		$this->assertSame( 'Jane Doe', $contact['name'], 'A real display name is still worth syncing.' );
+	}
+
+	/**
+	 * A reader who deliberately saved a display name that looks generated has
+	 * chosen it — My Account records that in meta, and it is their name.
+	 */
+	public function test_deliberately_saved_generic_display_name_still_syncs() {
+		$user_id = Reader_Activation::register_reader( 'chosen.name@test.com' );
+		$this->assertIsInt( $user_id );
+
+		$contact = \Newspack\Reader_Activation\Sync\Metadata::get_contact_with_metadata( $user_id );
+		$this->assertArrayNotHasKey( 'name', $contact, 'Generated until the reader says otherwise.' );
+
+		update_user_meta( $user_id, Reader_Activation::READER_SAVED_GENERIC_DISPLAY_NAME, 1 );
+		$contact = \Newspack\Reader_Activation\Sync\Metadata::get_contact_with_metadata( $user_id );
+		$this->assertSame( 'chosen-name', $contact['name'], 'A name the reader saved deliberately must sync.' );
 	}
 
 	/**
@@ -388,6 +421,21 @@ class Test_Form_Capture extends WP_UnitTestCase {
 		$this->assertTrue( $integration->validate_registration_request( $integration->get_registration_key(), $request ) );
 		$this->assertTrue( $integration->validate_registration_request( $legacy_key, $request ), 'A key from a cached page must still validate.' );
 		$this->assertFalse( $integration->validate_registration_request( 'not-a-key', $request ) );
+	}
+
+	/**
+	 * The transition allowance belongs to the framework's own key scheme. An
+	 * integration with a custom scheme that inherits this validator must not
+	 * find the framework's static HMAC accepted alongside its own — that would
+	 * permanently bypass whatever bound the custom scheme enforces.
+	 */
+	public function test_legacy_key_is_refused_for_custom_key_schemes() {
+		$integration = new Inherited_Validator_Integration();
+		$legacy_key  = hash_hmac( 'sha256', 'custom-key-integration', wp_salt( 'auth' ) );
+		$request     = new WP_REST_Request( 'POST', '/newspack/v1/reader-activation/register' );
+
+		$this->assertTrue( $integration->validate_registration_request( 'custom-scheme-key', $request ), 'The custom key still validates.' );
+		$this->assertFalse( $integration->validate_registration_request( $legacy_key, $request ), 'The framework legacy key must not bypass a custom scheme.' );
 	}
 
 	/**

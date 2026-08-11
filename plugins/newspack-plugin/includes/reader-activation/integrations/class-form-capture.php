@@ -256,6 +256,12 @@ class Form_Capture extends Integration {
 					return false;
 				}
 				foreach ( explode( ',', $selector ) as $part ) {
+					// Skip empty parts: a trailing comma is a plausible
+					// copy-paste from a CSS rule, and dropping the line over it
+					// would silently un-opt-in a valid selector.
+					if ( '' === trim( $part ) ) {
+						continue;
+					}
 					if ( self::is_over_broad_selector( $part ) ) {
 						return false;
 					}
@@ -274,11 +280,15 @@ class Form_Capture extends Integration {
 	 * so `body form` and `div > form` are as broad as `form`. One class, id or
 	 * attribute anywhere in the selector makes it specific enough to keep.
 	 *
+	 * Attribute selectors are kept: `[method]` is as broad as `form`, but
+	 * `[data-newsletter-form]` is a precise opt-in and structurally identical,
+	 * so the distinction is semantic rather than something the guard can read.
+	 *
 	 * @param string $selector A single CSS selector (no commas).
 	 *
 	 * @return bool Whether the selector is too broad to opt a form in.
 	 */
-	private static function is_over_broad_selector( $selector ) {
+	private static function is_over_broad_selector( string $selector ): bool {
 		$compounds = preg_split( '/[\s>+~]+/', trim( $selector ), -1, PREG_SPLIT_NO_EMPTY );
 		if ( empty( $compounds ) ) {
 			return true;

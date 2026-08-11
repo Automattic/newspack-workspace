@@ -170,6 +170,36 @@ describe( 'form-capture client', () => {
 		expect( ras.register.mock.calls[ 0 ][ 3 ].captchaToken ).toBe( 'one-token' );
 	} );
 
+	it( 'recovers from a synchronous throw in execute()', async () => {
+		// The in-flight flag must not survive a throw that never produces a
+		// promise: it would block every later warm-up, and each submit would
+		// go out without a token — the failure the flag exists to prevent.
+		let shouldThrow = true;
+		window.grecaptcha = {
+			ready: callback => callback(),
+			execute: jest.fn( () => {
+				if ( shouldThrow ) {
+					throw new Error( 'grecaptcha exploded.' );
+				}
+				return Promise.resolve( 'recovered-token' );
+			} ),
+		};
+		const ras = loadCaptureClient( FORM, V3_CONFIG );
+		const form = document.querySelector( 'form' );
+
+		focusin( form );
+		await flush();
+		expect( window.grecaptcha.execute ).toHaveBeenCalledTimes( 1 );
+
+		shouldThrow = false;
+		focusin( form );
+		await flush();
+		expect( window.grecaptcha.execute ).toHaveBeenCalledTimes( 2 );
+
+		submit( form );
+		expect( ras.register.mock.calls[ 0 ][ 3 ].captchaToken ).toBe( 'recovered-token' );
+	} );
+
 	it( 'does not warm captcha on v2 sites', () => {
 		window.grecaptcha = { ready: callback => callback(), execute: jest.fn() };
 		loadCaptureClient( FORM, { captcha_version: 'v2_invisible', captcha_site_key: 'site-key' } );
