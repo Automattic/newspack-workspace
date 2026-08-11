@@ -34,11 +34,11 @@ if ( ! function_exists( 'newspack_font_stack' ) ) {
 	 */
 	function newspack_font_stack( $primary, $fallback_id ) {
 		$stacks   = newspack_get_font_stacks();
-		$fonts    = isset( $stacks[ $fallback_id ] ) ? $stacks[ $fallback_id ]['fonts'] : [];
+		$fonts    = isset( $stacks[ $fallback_id ] ) ? $stacks[ $fallback_id ]['fonts'] : $stacks['serif']['fonts'];
 		$generics = [ 'serif', 'sans-serif', 'monospace', 'cursive', 'fantasy', 'system-ui' ];
 		array_unshift( $fonts, $primary );
 		foreach ( $fonts as &$font ) {
-			$font = str_replace( [ "\n", "\r", "\t", '<', '>' ], '', stripslashes( $font ) );
+			$font = preg_replace( '/[\x00-\x1F\x7F<>]/', '', stripslashes( $font ) );
 			if ( ! in_array( strtolower( $font ), $generics, true ) ) {
 				$font = '"' . str_replace( [ '\\', '"' ], [ '\\\\', '\\"' ], $font ) . '"';
 			}

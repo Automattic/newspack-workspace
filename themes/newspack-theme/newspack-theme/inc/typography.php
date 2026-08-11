@@ -25,14 +25,14 @@ function newspack_custom_typography_css() {
 	if ( get_theme_mod( 'font_header', '' ) ) {
 		$css_blocks .= '
 			:root {
-				--newspack-theme-font-heading: ' . wp_kses( $font_header, null ) . ';
+				--newspack-theme-font-heading: ' . $font_header . ';
 			}
 		';
 
 		$editor_css_blocks .= '
 			html:root,
 			:root .editor-styles-wrapper {
-				--newspack-theme-font-heading: ' . wp_kses( $font_header, null ) . ';
+				--newspack-theme-font-heading: ' . $font_header . ';
 			}
 		';
 	}
@@ -40,14 +40,14 @@ function newspack_custom_typography_css() {
 	if ( get_theme_mod( 'font_body', '' ) ) {
 		$css_blocks .= '
 			:root {
-				--newspack-theme-font-body: ' . wp_kses( $font_body, null ) . ';
+				--newspack-theme-font-body: ' . $font_body . ';
 			}
 		';
 
 		$editor_css_blocks .= '
 			html:root,
 			:root .editor-styles-wrapper {
-				--newspack-theme-font-body: ' . wp_kses( $font_body, null ) . ';
+				--newspack-theme-font-body: ' . $font_body . ';
 			}
 		';
 	}
@@ -174,14 +174,19 @@ function newspack_get_font_stacks_as_select_choices() {
  * are emitted as quoted CSS strings with string delimiters escaped and markup
  * and control characters removed. Generic family keywords stay unquoted so a
  * stack always ends in a real generic.
+ *
+ * @param string $primary_font Primary font name.
+ * @param string $fallback_id  Key of newspack_get_font_stacks(); unknown ids
+ *                             take the serif stack.
+ * @return string Comma-joined, pre-escaped CSS font-family list.
  */
 function newspack_font_stack( $primary_font, $fallback_id ) {
 	$stacks   = newspack_get_font_stacks();
-	$fonts    = isset( $stacks[ $fallback_id ] ) ? $stacks[ $fallback_id ]['fonts'] : array();
+	$fonts    = isset( $stacks[ $fallback_id ] ) ? $stacks[ $fallback_id ]['fonts'] : $stacks['serif']['fonts'];
 	$generics = array( 'serif', 'sans-serif', 'monospace', 'cursive', 'fantasy', 'system-ui' );
 	array_unshift( $fonts, $primary_font );
 	foreach ( $fonts as &$font ) {
-		$font = str_replace( array( "\n", "\r", "\t", '<', '>' ), '', stripslashes( $font ) );
+		$font = preg_replace( '/[\x00-\x1F\x7F<>]/', '', stripslashes( $font ) );
 		if ( ! in_array( strtolower( $font ), $generics, true ) ) {
 			$font = '"' . str_replace( array( '\\', '"' ), array( '\\\\', '\\"' ), $font ) . '"';
 		}
@@ -223,9 +228,8 @@ function newspack_font_family_stacks() {
 			'heading' => '"Fira Sans Condensed","Helvetica",sans-serif',
 		),
 	);
-	$slug = isset( $variations[ get_stylesheet() ] ) ? get_stylesheet() : get_template();
-	if ( isset( $variations[ $slug ] ) ) {
-		$defaults = array_merge( $defaults, $variations[ $slug ] );
+	if ( isset( $variations[ get_stylesheet() ] ) ) {
+		$defaults = array_merge( $defaults, $variations[ get_stylesheet() ] );
 	}
 
 	/**
@@ -233,7 +237,7 @@ function newspack_font_family_stacks() {
 	 *
 	 * @param array $defaults Stacks keyed heading/body.
 	 */
-	$defaults = apply_filters( 'newspack_font_family_default_stacks', $defaults );
+	$defaults = array_merge( $defaults, (array) apply_filters( 'newspack_font_family_default_stacks', $defaults ) );
 
 	$mods   = array(
 		'heading' => array( 'font_header', 'font_header_stack' ),
