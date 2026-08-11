@@ -1,4 +1,4 @@
-import { formatPostLabel, getPostSearchPath, getPostStatusPath, mergePostStatuses } from './post-search';
+import { formatPostLabel, getPostSearchPath } from './post-search';
 
 describe( 'getPostSearchPath', () => {
 	it( 'searches the given post type collection endpoint', () => {
@@ -27,59 +27,6 @@ describe( 'getPostSearchPath', () => {
 
 		expect( path ).not.toContain( 'status[' );
 		expect( path ).toContain( 'search=election' );
-	} );
-} );
-
-describe( 'getPostStatusPath', () => {
-	it( 'looks up only the id and status of the given posts', () => {
-		const path = decodeURIComponent( getPostStatusPath( 'posts', [ 12, 34 ] ) );
-
-		expect( path ).toContain( '/wp/v2/posts?' );
-		expect( path ).toContain( 'include[0]=12' );
-		expect( path ).toContain( 'include[1]=34' );
-		expect( path ).toContain( '_fields=id,status' );
-	} );
-
-	it( 'covers the same statuses the search offers', () => {
-		const path = decodeURIComponent( getPostStatusPath( 'posts', [ 12 ] ) );
-
-		expect( path ).toContain( 'status[0]=publish' );
-		expect( path ).toContain( 'status[3]=pending' );
-		expect( path ).not.toContain( 'private' );
-	} );
-} );
-
-describe( 'mergePostStatuses', () => {
-	it( 'records the status of every post in the response', () => {
-		const merged = mergePostStatuses(
-			{},
-			[ 12, 34 ],
-			[
-				{ id: 12, status: 'draft' },
-				{ id: 34, status: 'publish' },
-			]
-		);
-
-		expect( merged ).toEqual( { 12: 'draft', 34: 'publish' } );
-	} );
-
-	it( 'keeps statuses it already knew about', () => {
-		const merged = mergePostStatuses( { 9: 'future' }, [ 12 ], [ { id: 12, status: 'draft' } ] );
-
-		expect( merged[ 9 ] ).toBe( 'future' );
-	} );
-
-	it( 'marks requested posts missing from the response as looked up, so they are not requested forever', () => {
-		const merged = mergePostStatuses( {}, [ 12, 99 ], [ { id: 12, status: 'draft' } ] );
-
-		expect( merged ).toHaveProperty( '99' );
-		expect( formatPostLabel( 'Deleted post', merged[ 99 ] ) ).toBe( 'Deleted post' );
-	} );
-
-	it( 'lets a fresh response correct a status it already knew', () => {
-		const merged = mergePostStatuses( { 12: 'draft' }, [ 12 ], [ { id: 12, status: 'publish' } ] );
-
-		expect( merged[ 12 ] ).toBe( 'publish' );
 	} );
 } );
 
