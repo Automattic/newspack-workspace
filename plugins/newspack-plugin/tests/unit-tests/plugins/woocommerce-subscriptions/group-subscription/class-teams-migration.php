@@ -653,8 +653,11 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 		$this->create_team_invitation( $team_b, 'bulk-b-one@test.com' );
 		$this->create_team_invitation( $team_b, 'also not an email' ); // Dropped and counted.
 
+		// Order matters for the chunked call below: the data-bearing team B goes
+		// LAST so it lands in the true final chunk — an off-by-one that drops the
+		// last chunk then fails instead of hiding behind the empty team C.
 		$dropped = 0;
-		$bulk    = Teams_Migration::get_pending_team_invitation_emails_for_teams( [ $team_a, $team_b, $team_c ], $dropped );
+		$bulk    = Teams_Migration::get_pending_team_invitation_emails_for_teams( [ $team_a, $team_c, $team_b ], $dropped );
 
 		$this->assertSame( Teams_Migration::get_pending_team_invitation_emails( $team_a ), $bulk[ $team_a ], 'Bulk and per-team readers must agree on team A.' );
 		$this->assertSame( Teams_Migration::get_pending_team_invitation_emails( $team_b ), $bulk[ $team_b ], 'Bulk and per-team readers must agree on team B.' );
@@ -662,12 +665,13 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 		$this->assertSame( 2, $dropped, 'Each pending invitation with a non-email title is counted exactly once.' );
 
 		// Chunking only bounds the per-query load; it must not change the result.
-		// chunk_size 1 puts team B — which HAS invitations and a drop — in a
-		// trailing chunk, so an implementation that kept only the first chunk's
-		// results (or reset the by-reference drop tally between round trips)
-		// fails this assertion instead of hiding behind an empty trailing chunk.
+		// chunk_size 1 with team B last puts the invitations AND the drop in the
+		// true final chunk, so an implementation that kept only earlier chunks,
+		// dropped the last chunk to an off-by-one, or reset the by-reference drop
+		// tally between round trips fails these assertions instead of hiding
+		// behind an empty trailing team.
 		$chunked_dropped = 0;
-		$chunked         = Teams_Migration::get_pending_team_invitation_emails_for_teams( [ $team_a, $team_b, $team_c ], $chunked_dropped, 1 );
+		$chunked         = Teams_Migration::get_pending_team_invitation_emails_for_teams( [ $team_a, $team_c, $team_b ], $chunked_dropped, 1 );
 		$this->assertSame( $bulk, $chunked, 'A chunked read must return exactly what the one-shot read returns, including trailing chunks.' );
 		$this->assertSame( $dropped, $chunked_dropped, 'The drop tally must accumulate across chunks.' );
 	}
@@ -717,7 +721,16 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 		$this->assertSame( 'not sent (pass --migrate-invitations to send)', Teams_Migration::invitation_outcome_label( $result, 'fresh@test.com', false ) );
 
 		// A team-level error outranks both dry-run fallbacks, on any run mode.
-		$errored = array_merge( $result, [ 'errored' => true, 'sent' => [], 'resent' => [], 'skipped' => [], 'failed' => [] ] );
+		$errored = array_merge(
+			$result,
+			[
+				'errored' => true,
+				'sent'    => [],
+				'resent'  => [],
+				'skipped' => [],
+				'failed'  => [],
+			]
+		);
 		$this->assertSame( 'not attempted (team error — see errors above)', Teams_Migration::invitation_outcome_label( $errored, 'anyone@test.com', true ) );
 		$this->assertSame( 'not attempted (team error — see errors above)', Teams_Migration::invitation_outcome_label( $errored, 'lapsed@test.com', true ), 'An errored team\'s lapsed invitee reads as not attempted, not as a rehearsal.' );
 	}

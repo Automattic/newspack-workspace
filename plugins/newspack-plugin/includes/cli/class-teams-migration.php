@@ -47,6 +47,18 @@ class Teams_Migration {
 	const TEAM_ROLE_META_KEY_TEMPLATE = '_wc_memberships_for_teams_team_%d_role';
 
 	/**
+	 * Re-invite table labels for rehearsal outcomes. Constants because each is
+	 * read at multiple sites — invitation_outcome_label() produces them and the
+	 * summary's would-be-sent / would-resend counters filter on them — and a
+	 * reworded literal at one site would silently zero the counters under a
+	 * table that still shows every row.
+	 *
+	 * @var string
+	 */
+	private const OUTCOME_WOULD_SEND   = 'would send (dry run)';
+	private const OUTCOME_WOULD_RESEND = 'would send again — earlier invite lapsed (dry run)';
+
+	/**
 	 * Subscription statuses that count as "live" for the
 	 * --only-without-live-subscription member filter. Dead statuses deliberately
 	 * do not count — an active membership over a lapsed subscription is the
@@ -132,8 +144,8 @@ class Teams_Migration {
 	 * [--migrate-invitations]
 	 * : Also carry each team's pending (unaccepted) WooCommerce Teams invitations over as group-subscription invites, which SENDS an invitation email to every pending invitee. Off by default because it emails readers; the pending invitees are always listed at the end of the run regardless of this flag. In dry-run mode nothing is sent, but the flag still shapes the rehearsal: per-invitee outcomes preview a live run's already-invited skips, lapsed re-sends (labelled as the second email they would be), and existing-member/non-reader rejections, and any dry run with pending invitees warns when the invitation email is not sendable. The preview stops short of live-only checks: the seat limit, inactive-group guards, and --limit apply on the live run only, and a team with no existing subscription to reuse gets no per-invitee preview. The run asks for confirmation before the first email goes out, and aborts up front if the invitation email is not sendable on this site while there is something to send. Re-running is safe while the invites it wrote are still live (30 days by default) — an invitee whose invite has lapsed is invited again, and those are reported separately. To recover an invitee reported as FAILED: fix the cause and re-run — or cancel the reader's pending invitation from the group subscription's panel on the WooCommerce subscription screen and re-invite from there. That manual cancel is also the escape hatch for a stored invite the automatic rollback could not remove.
 	 *
-	 * [--limit=<n>]
-	 * : With --migrate-invitations --live, cap how many send attempts (delivered or failed) this run makes — failures count because each one still hits the mail relay and costs a write/rollback cycle. Must be a positive integer; any other value aborts the run rather than silently dropping the cap. Invitees beyond the cap stay listed with a re-run note, and the already-invited gate makes the next run resume where this one stopped — use it to drain a large site in operator-sized batches instead of one long burst. Not applied to dry-run previews; no effect without --migrate-invitations.
+	 * [--limit[=<n>]]
+	 * : With --migrate-invitations --live, cap how many send attempts (delivered or failed) this run makes — failures count because each one still hits the mail relay and costs a write/rollback cycle. Must be a positive integer; any other value — including a bare --limit with no value, as an unset shell variable leaves behind — aborts the run rather than silently dropping the cap. (The value is declared optional in the synopsis for exactly that reason: it lets the bare flag reach this command's validator instead of being stripped by WP-CLI with only a stderr warning.) Invitees beyond the cap stay listed with a re-run note, and the already-invited gate makes the next run resume where this one stopped — use it to drain a large site in operator-sized batches instead of one long burst. Not applied to dry-run previews; the cap has no effect without --migrate-invitations, though an invalid value still aborts any run, so a rehearsal of the exact live command line fails early.
 	 *
 	 * [--yes]
 	 * : Skip the confirmation prompt shown before invitation emails are sent. Auto-handled by WP_CLI::confirm.
@@ -686,7 +698,7 @@ class Teams_Migration {
 			// contradict the table it sits under.
 			$would_send = $dry_run && $migrate_invitations;
 			$sent_count = $would_send
-				? count( array_filter( $invitation_rows, fn( $row ) => in_array( $row['outcome'], [ 'would send (dry run)', 'would send again — earlier invite lapsed (dry run)' ], true ) ) )
+				? count( array_filter( $invitation_rows, fn( $row ) => in_array( $row['outcome'], [ self::OUTCOME_WOULD_SEND, self::OUTCOME_WOULD_RESEND ], true ) ) )
 				: $invites_sent;
 			WP_CLI::success(
 				sprintf(
@@ -700,6 +712,16 @@ class Teams_Migration {
 			);
 			if ( $invites_resent ) {
 				WP_CLI::warning( sprintf( '%d of the invitations sent went to readers whose earlier invitation had lapsed (invites expire after %s) — they were emailed a second time.', $invites_resent, Group_Subscription_Invite::get_expiration_label() ) );
+			}
+			// The rehearsal twin of the warning above: surface the double-email count
+			// BEFORE the emails exist, while the information can still change the
+			// decision — otherwise a 500-row rehearsal folds it invisibly into the
+			// "would be sent" total and the live run discloses it only after sending.
+			if ( $would_send ) {
+				$would_resend_count = count( array_filter( $invitation_rows, fn( $row ) => self::OUTCOME_WOULD_RESEND === $row['outcome'] ) );
+				if ( $would_resend_count ) {
+					WP_CLI::warning( sprintf( '%d of those would be emailed a second time — their earlier invitation lapsed (invites expire after %s).', $would_resend_count, Group_Subscription_Invite::get_expiration_label() ) );
+				}
 			}
 			// Break the skipped total down: "already invited, nothing to do" and "the
 			// group had no seats left, so these people were dropped" are the same number
@@ -2843,9 +2865,9 @@ class Teams_Migration {
 		if ( in_array( $invitee_email, $invitation_result['would_resend'] ?? [], true ) ) {
 			// The rehearsal twin of 'invite sent (earlier invite had lapsed)':
 			// this reader would be emailed a second time by a live run.
-			return 'would send again — earlier invite lapsed (dry run)';
+			return self::OUTCOME_WOULD_RESEND;
 		}
-		return 'would send (dry run)';
+		return self::OUTCOME_WOULD_SEND;
 	}
 
 	/**
