@@ -176,6 +176,30 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 	}
 
 	// =========================================================================
+	// filter_subscription_lists() — no-gates guard
+	// =========================================================================
+
+	/**
+	 * With no premium newsletter gates, the filter returns every list untouched
+	 * without evaluating per-list restriction.
+	 */
+	public function test_filter_subscription_lists_returns_all_when_no_gates() {
+		$list_id          = self::factory()->post->create(
+			[
+				'post_type'   => \Newspack\Newsletters\Subscription_Lists::CPT,
+				'post_status' => 'publish',
+			]
+		);
+		$this->post_ids[] = $list_id;
+		$list             = new \Newspack\Newsletters\Subscription_List( $list_id );
+
+		$result = Premium_Newsletters::filter_subscription_lists( [ $list ] );
+
+		$this->assertCount( 1, $result );
+		$this->assertSame( $list_id, $result[0]->get_id() );
+	}
+
+	// =========================================================================
 	// Group B — maybe_enqueue_access_check() — adding behaviour
 	// =========================================================================
 
