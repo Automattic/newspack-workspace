@@ -826,7 +826,6 @@ export default function RuleForm( { isNew, initialPath = null, rule, vocab, onDo
 				) }
 			</VStack>
 
-			{ /* Without a price there is nothing to preview, so the whole section waits for one. */ }
 			{ hasPrice && (
 				<>
 					<Divider alignment="full-width" variant="tertiary" />

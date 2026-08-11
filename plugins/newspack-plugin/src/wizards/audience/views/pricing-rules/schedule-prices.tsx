@@ -1,7 +1,6 @@
 /**
- * The Price Schedule list: one row per price, none of them editable in place.
- * Editing moves to a drawer so the cells hold short strings, which is what lets
- * four columns of controls become three columns of text.
+ * The Price Schedule list. Editing happens in a drawer so the cells hold short
+ * strings that never truncate.
  */
 
 /**
@@ -90,8 +89,7 @@ export default function SchedulePrices( { steps, onChange, publicize, calcTypes,
 	);
 
 	// Removing a row unmounts the control that triggered it, which would drop focus
-	// to the body and lose the publisher's place in the form. Disarmed on any change
-	// of length, so a stale claim cannot steal focus from a later add.
+	// to the body. Disarmed on any length change so a stale claim cannot steal it.
 	useEffect( () => {
 		const claimed = claimFocus.current;
 		claimFocus.current = false;
@@ -108,9 +106,7 @@ export default function SchedulePrices( { steps, onChange, publicize, calcTypes,
 				enableHiding: false,
 				enableSorting: false,
 				getValue: ( { item }: { item: SchedulePriceRow } ) => item.cycles.label,
-				// A real control, not a styled cell: it is what makes the first column read
-				// as a way in, alongside the row's Edit button. `aria-label` rather than
-				// `label`, which would hang a tooltip off every row.
+				// `aria-label` rather than `label`, which would hang a tooltip off every row.
 				render: ( { item }: { item: SchedulePriceRow } ) => (
 					<Button variant="link" aria-label={ item.cycles.label } onClick={ () => open( toPrice( item ), Number( item.id ) ) }>
 						{ item.cycles.display }
@@ -199,9 +195,8 @@ export default function SchedulePrices( { steps, onChange, publicize, calcTypes,
 		setRemoving( null );
 	};
 
-	// The page holds every price and the reader-facing column comes and goes with the
-	// disclosure toggle, so both follow the live values rather than living in view
-	// state, where an effect would land them a paint late.
+	// perPage and the reader-facing column follow the live values; in view state,
+	// an effect would land them a paint late.
 	const tableView = useMemo( () => ( { ...view, perPage, fields: fieldIds } ), [ view, perPage, fieldIds ] );
 
 	const { data, paginationInfo } = useMemo( () => filterSortAndPaginate( rows, tableView, fields ), [ rows, tableView, fields ] );

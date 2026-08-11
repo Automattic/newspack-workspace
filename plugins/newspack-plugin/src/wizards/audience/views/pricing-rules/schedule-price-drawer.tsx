@@ -1,7 +1,6 @@
 /**
  * Add and edit one price in a schedule. The fields stack at full width so the
- * engine's long calculation labels read in full, which they cannot do inside a
- * table cell.
+ * engine's long calculation labels read in full.
  */
 
 /**
@@ -56,10 +55,9 @@ export default function SchedulePriceDrawer( {
 	const atRef = useRef< HTMLInputElement >( null );
 	const valueRef = useRef< HTMLInputElement >( null );
 
-	// The panel outlives a close so it can play its exit, so the draft is seeded on
-	// the way in rather than at mount, and only on that transition: a parent re-render
-	// that hands down a fresh price object must not wipe the edits. During render, as
-	// Drawer.Root does — an effect would paint the entrance on the last price first.
+	// Seeded on the open transition, not at mount (the panel outlives a close to
+	// play its exit) and never on a parent re-render, which must not wipe edits.
+	// During render: an effect would paint the entrance on the last price first.
 	const [ wasOpen, setWasOpen ] = useState( isOpen );
 	if ( wasOpen !== isOpen ) {
 		setWasOpen( isOpen );

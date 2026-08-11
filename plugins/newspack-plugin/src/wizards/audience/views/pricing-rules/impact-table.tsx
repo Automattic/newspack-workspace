@@ -1,21 +1,11 @@
 /**
- * The impact table shared by the editor preview and the catalog panel: one row
- * per product, one resulting-price column per reader segment. The first price
- * column is the "Everyone else" baseline (no segment / not-logged-in); each
- * segment the preview computed adds a column, so prices compare side by side.
- * Flat rules show a bare price; stepped rules chain cycles with ` → `.
+ * The impact table shared by the editor preview and the catalog panel.
  *
  * Every column prices a NEW subscriber — the calculator projects with no
  * customer at acquisition intent — so a first-time-only/locked rule shows in
  * every segment column even though existing subscribers are excluded at
- * checkout. A note below the table spells this out whenever segment columns are
- * present, so a segment named for existing subscribers isn't misread as
- * modeling their lifecycle (NPPD-1853).
- *
- * Long samples collapse to the first ROW_LIMIT rows behind a See More toggle,
- * matching Insights' InsightsDataView: rows are sorted in full and then sliced,
- * so a collapsed table always shows the current top N rather than whichever
- * rows happened to come first.
+ * checkout. The note below the table spells this out whenever segment columns
+ * are present (NPPD-1853).
  */
 
 /**
@@ -48,7 +38,6 @@ interface PriceColumn {
 	byId: Record< number, CatalogImpactRow >;
 }
 
-/** Index a sample's rows by product id for per-column lookup. */
 function indexById( rows: CatalogImpactRow[] ): Record< number, CatalogImpactRow > {
 	const map: Record< number, CatalogImpactRow > = {};
 	for ( const row of rows ) {
@@ -57,7 +46,6 @@ function indexById( rows: CatalogImpactRow[] ): Record< number, CatalogImpactRow
 	return map;
 }
 
-/** One product's resulting price in one column: bare, stepped, or — when absent. */
 function ResultingCell( { row, currency }: { row?: CatalogImpactRow; currency: PricingRulesCurrency } ) {
 	if ( ! row ) {
 		return <span className="newspack-pricing-rules__muted">—</span>;
@@ -153,8 +141,7 @@ export default function ImpactTable( { baseline, segmentGroups, currency, showCy
 
 	const fieldIds = useMemo( () => [ 'regular', ...columns.map( col => col.key ) ], [ columns ] );
 
-	// One page of everything the server sent: DataViews' own pagination is off, and
-	// the See More slice below is what actually shortens the table.
+	// DataViews' own pagination is off; the See More slice is what shortens the table.
 	const perPage = Math.max( baseline.length, 1 );
 
 	const [ view, setView ] = useState< View >( () => ( {
@@ -167,18 +154,15 @@ export default function ImpactTable( { baseline, segmentGroups, currency, showCy
 		fields: fieldIds,
 	} ) );
 
-	// A segment column can appear or vanish while the publisher is editing, and the
-	// page holds the whole sample. Both follow the data rather than living in view
-	// state, where an effect would land them a paint late — long enough for a wider
-	// sample to paint once as a short, un-collapsible table.
+	// perPage and the segment columns follow the data; in view state, an effect
+	// would land them a paint late.
 	const tableView = useMemo( () => ( { ...view, perPage, fields: fieldIds } ), [ view, perPage, fieldIds ] );
 
 	const { data: sorted, paginationInfo } = useMemo( () => filterSortAndPaginate( baseline, tableView, fields ), [ baseline, tableView, fields ] );
 
-	// A different set of products is a fresh answer to "show me the rest", so the
-	// collapse returns. Keyed on the ids alone: a refetch that reprices the same
-	// products is the publisher watching their own edit, and keeps the expansion.
-	// During render, so the wider sample never paints expanded before collapsing.
+	// A different product set re-collapses the table; keyed on ids alone so a
+	// refetch repricing the same products keeps the expansion. During render, so
+	// a wider sample never paints expanded first.
 	const sampleKey = useMemo( () => baseline.map( row => row.product_id ).join( ',' ), [ baseline ] );
 	const [ lastSample, setLastSample ] = useState( sampleKey );
 	if ( lastSample !== sampleKey ) {

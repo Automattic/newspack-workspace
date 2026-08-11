@@ -1,10 +1,7 @@
 /**
- * Per-rule impact preview for the editor: the headline stats, then the composed
- * price-by-cycle table (with unsaved-edit highlighting). Debounce-POSTs the
- * in-progress rule body to the plugin's preview route; mirrors the native
- * plugin's impact metabox. Stands down to an empty card when there is no price
- * yet, nothing matches, or no preview can be had, and to nothing at all until
- * the first request settles.
+ * Per-rule impact preview for the editor. Debounce-POSTs the in-progress rule
+ * body to the plugin's preview route; stands down to an empty card when nothing
+ * matches, and to nothing at all until the first request settles.
  */
 
 /**
