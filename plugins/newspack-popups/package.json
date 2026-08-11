@@ -37,6 +37,7 @@
 	"dependencies": {
 		"classnames": "^2.5.1",
 		"js-cookie": "^3.0.8",
+		"newspack-colors": "workspace:*",
 		"newspack-components": "workspace:*"
 	},
 	"devDependencies": {
