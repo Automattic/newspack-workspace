@@ -29,9 +29,9 @@ class Newspack_Newsletters_Subscription {
 	const LISTS_CACHE_PREFIX = 'newspack_newsletters_lists_';
 
 	/**
-	 * Memoized lists config.
+	 * Memoized lists config. Null is the cache-miss sentinel (see get_lists_config()).
 	 *
-	 * @var array
+	 * @var array|null
 	 */
 	private static $lists_config;
 
@@ -495,25 +495,37 @@ class Newspack_Newsletters_Subscription {
 			/**
 			 * We loop through the lists returned by the ESP.
 			 * Only remote lists that still exist in the ESP will be returned.
+			 *
+			 * Lists missing a name or an ID are dropped, and the array is then
+			 * reindexed: a sparse array is serialized as a JSON object, and the
+			 * admin screens map over the REST response as an array.
 			 */
-			$return_lists = array_map(
-				function ( $list ) {
-					if ( ! isset( $list['id'], $list['name'] ) || empty( $list['id'] ) || empty( $list['name'] ) ) {
-						return;
-					}
+			$return_lists = array_values(
+				array_filter(
+					array_map(
+						function ( $list ) {
+							// Mirror the validation in Subscription_Lists::get_or_create_remote_list():
+							// it throws on a blank title rather than returning a WP_Error, and the
+							// outer catch would turn that into a WP_Error for the whole payload. It
+							// also accepts a title of "0", which `empty()` would reject.
+							if ( ! isset( $list['id'], $list['name'] ) || empty( $list['id'] ) || ! is_string( $list['name'] ) || '' === trim( $list['name'] ) ) {
+								return;
+							}
 
-					// This is messy, when the ESP returns lists, it's name, when we get it from our UIs, it's title... we need both.
-					$list['title'] = $list['name'];
+							// The ESP calls this field 'name'; our own UIs call it 'title'. We need both.
+							$list['title'] = $list['name'];
 
-					$stored_list = Subscription_Lists::get_or_create_remote_list( $list );
+							$stored_list = Subscription_Lists::get_or_create_remote_list( $list );
 
-					if ( is_wp_error( $stored_list ) ) {
-						return;
-					}
+							if ( is_wp_error( $stored_list ) ) {
+								return;
+							}
 
-					return $stored_list->to_array();
-				},
-				$lists
+							return $stored_list->to_array();
+						},
+						$lists
+					)
+				)
 			);
 
 			/**
@@ -569,10 +581,19 @@ class Newspack_Newsletters_Subscription {
 	/**
 	 * Get the lists configuration for the active provider.
 	 *
+	 * Note: on sites with premium newsletter gates, the result is filtered per the
+	 * current user (via the newspack_newsletters_subscription_lists filter →
+	 * Premium_Newsletters::filter_subscription_lists()). The per-request memo
+	 * therefore bakes in the current user's view; a caller that changes the current
+	 * user mid-request must call reset_lists_config_cache() before re-reading.
+	 *
 	 * @return array[]|WP_Error Associative array with list configuration keyed by list ID or error.
 	 */
 	public static function get_lists_config() {
-		if ( self::$lists_config ) {
+		// Skip the memo under PHPUnit, mirroring Subscription_Lists::get_all():
+		// static memos persist across the DB rollback between tests.
+		$use_cache = ! ( defined( 'IS_TEST_ENV' ) && IS_TEST_ENV );
+		if ( $use_cache && null !== self::$lists_config ) {
 			return self::$lists_config;
 		}
 		$provider = Newspack_Newsletters::get_service_provider();
@@ -590,8 +611,20 @@ class Newspack_Newsletters_Subscription {
 			$active_lists[ $list->get_public_id() ] = $list->to_array();
 		}
 
-		self::$lists_config = $active_lists;
-		return self::$lists_config;
+		if ( $use_cache ) {
+			self::$lists_config = $active_lists;
+		}
+		return $active_lists;
+	}
+
+	/**
+	 * Reset the memoized lists config so the next get_lists_config() call rebuilds
+	 * it. Called when a subscription list changes within the same request.
+	 *
+	 * @return void
+	 */
+	public static function reset_lists_config_cache() {
+		self::$lists_config = null;
 	}
 
 	/**

@@ -459,6 +459,19 @@ class Emails {
 				);
 			}
 
+			// When the outbound-mail guard is active it suppresses generated
+			// placeholder addresses while reporting the send as successful —
+			// which would make a test-send certify a broken configuration as
+			// healthy. Where the guard is off (e.g. dev containers), the mail
+			// genuinely dispatches, so the test-send stays useful there.
+			if ( Guest_Contributor_Role::is_mail_guard_active() && Guest_Contributor_Role::is_dummy_email_address( $to ) ) {
+				return new \WP_Error(
+					'newspack_emails_test_placeholder_recipient',
+					esc_html__( 'This is a generated placeholder address, and mail sent to it is suppressed. Please use a real inbox for test sends.', 'newspack-plugin' ),
+					[ 'status' => 400 ]
+				);
+			}
+
 			$sent = self::dispatch_email( $resolved['config'], $resolved['name'], $to, [] );
 			if ( ! $sent ) {
 				return new \WP_Error(

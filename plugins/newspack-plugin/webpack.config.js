@@ -76,6 +76,7 @@ const entry = {
 	'collections-admin': resolveSource( 'src', 'collections', 'admin', 'index' ),
 	'collections-frontend': resolveSource( 'src', 'collections', 'frontend', 'index' ),
 	'group-subscription-admin': resolveSource( 'src', 'group-subscription', 'admin' ),
+	'csv-export': resolveSource( 'src', 'csv-export', 'index' ),
 };
 
 // Get files for other scripts.

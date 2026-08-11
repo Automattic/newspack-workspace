@@ -23,6 +23,8 @@ use Newspack\Institution;
  */
 class Test_Content_Gates extends \WP_UnitTestCase {
 
+	use \Newspack\Tests\Content_Gate\Traits\Trait_Restriction_Cache_Test;
+
 	/**
 	 * Post ID
 	 *
@@ -66,6 +68,10 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 	 */
 	public function set_up() {
 		parent::set_up();
+		// Post IDs are reused across test cases (each case is rolled back), so a
+		// gate lookup cached for the same ID by an earlier case would otherwise be
+		// served here — reporting "no gates" for a post that has one.
+		$this->reset_restriction_cache();
 		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPressVIPMinimum.Variables.ServerVariables.UserControlledHeaders, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__REMOTE_ADDR__
 		$this->original_remote_addr = isset( $_SERVER['REMOTE_ADDR'] ) ? $_SERVER['REMOTE_ADDR'] : null;
 		$this->gate_ids[] = Content_Gate::create_gate( [ 'title' => 'Draft Gate' ] );
@@ -1049,19 +1055,6 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 		$reflection = new \ReflectionProperty( Content_Gate::class, $property );
 		$reflection->setAccessible( true );
 		return $reflection->getValue();
-	}
-
-	/**
-	 * Reset the static per-post restriction cache on Content_Restriction_Control.
-	 * This cache is populated by is_post_restricted() and must be cleared between
-	 * tests to prevent cross-test contamination.
-	 */
-	private function reset_restriction_cache() {
-		foreach ( [ 'post_gate_id_map', 'post_gate_layout_id_map', 'post_gates_map', 'term_descendants_map' ] as $prop ) {
-			$reflection = new \ReflectionProperty( Content_Restriction_Control::class, $prop );
-			$reflection->setAccessible( true );
-			$reflection->setValue( null, [] );
-		}
 	}
 
 	/**

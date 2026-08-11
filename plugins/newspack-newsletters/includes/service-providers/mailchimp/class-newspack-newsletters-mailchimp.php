@@ -598,7 +598,7 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 			}
 
 			// Prefetch send list info if we have a selected list and/or sublist.
-			$send_lists = $this->get_send_lists(
+			$send_lists = $this->get_send_lists_with_fallback(
 				[
 					'ids'  => $send_list_id ? [ $send_list_id ] : null, // If we have a selected list, make sure to fetch it.
 					'type' => 'list',
@@ -611,7 +611,7 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 			$newsletter_data['lists'] = $send_lists;
 
 			$send_sublists = $send_list_id || $send_sublist_id ? // Prefetch send lists only if we have something selected already.
-				$this->get_send_lists(
+				$this->get_send_lists_with_fallback(
 					[
 						'ids'       => [ $send_sublist_id ], // If we have a selected sublist, make sure to fetch it. Otherwise, we'll populate sublists later.
 						'parent_id' => $send_list_id,

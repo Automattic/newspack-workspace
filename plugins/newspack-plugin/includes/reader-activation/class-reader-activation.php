@@ -883,11 +883,16 @@ final class Reader_Activation {
 	 * @return bool True if reader activation is enabled.
 	 */
 	public static function is_enabled() {
-		if ( defined( 'IS_TEST_ENV' ) && IS_TEST_ENV ) {
-			return true;
-		}
-
-		$is_enabled = (bool) \get_option( self::OPTIONS_PREFIX . 'enabled', false );
+		// The test environment defaults to enabled, because the great majority of the
+		// suite assumes reader activation is on and predates this option being
+		// meaningful in tests. The default is applied *before* the filter rather than
+		// instead of it, so a test that needs the disabled path can reach it — without
+		// this, `add_filter( 'newspack_reader_activation_enabled', '__return_false' )`
+		// was silently inert and any behaviour behind "reader activation off" was
+		// untestable.
+		$is_enabled = defined( 'IS_TEST_ENV' ) && IS_TEST_ENV
+			? true
+			: (bool) \get_option( self::OPTIONS_PREFIX . 'enabled', false );
 
 		/**
 		 * Filters whether reader activation is enabled.
