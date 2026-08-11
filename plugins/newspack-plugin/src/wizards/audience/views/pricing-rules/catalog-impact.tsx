@@ -38,11 +38,11 @@ export default function CatalogImpact( { stats }: CatalogImpactProps ) {
 
 	const open = useCallback( () => {
 		setIsOpen( true );
+		setHasError( false );
 		// A landed sample does not move under the modal, so it is kept; a failure is retried.
 		if ( detail ) {
 			return;
 		}
-		setHasError( false );
 		apiFetch< CatalogImpactResponse >( { path: `${ API_PATH }?limit=${ IMPACT_SAMPLE_LIMIT }` } )
 			.then( setDetail )
 			.catch( () => setHasError( true ) );
@@ -64,7 +64,7 @@ export default function CatalogImpact( { stats }: CatalogImpactProps ) {
 				{ isOpen && (
 					<Modal title={ __( 'Affected Products', 'newspack-plugin' ) } size="large" onRequestClose={ () => setIsOpen( false ) }>
 						{ hasError && (
-							<p className="newspack-pricing-rules__muted">
+							<p className="newspack-pricing-rules__muted" role="alert">
 								{ __( 'Could not load the affected products. Please try again.', 'newspack-plugin' ) }
 							</p>
 						) }

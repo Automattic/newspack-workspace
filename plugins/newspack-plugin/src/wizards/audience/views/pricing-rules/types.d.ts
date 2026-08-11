@@ -143,8 +143,4 @@ interface RuleAudienceData {
 	application: 'current' | 'locked' | string;
 }
 
-interface RuleAudienceResponse {
-	audience?: RuleAudienceData;
-}
-
 type RulePreviewResponse = CatalogImpactResponse;

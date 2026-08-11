@@ -1,6 +1,7 @@
 /**
- * The Pricing Rules list publishes its row count to the wizard header. A read that
- * never landed has no count to publish: "(0)" would assert the list is empty.
+ * The Pricing Rules list screen: the count and action it publishes to the wizard
+ * header, the page loader and empty state it gates on both reads landing, what it
+ * asks the catalogue for, and the order it renders the table and the card in.
  */
 
 /**
@@ -224,6 +225,17 @@ describe( 'the Pricing Rules list', () => {
 		expect( screen.getByTestId( 'catalog-impact' ) ).toBeInTheDocument();
 	} );
 
+	// The headline count is the same at any limit, and pricing the modal's 50
+	// products costs several times as much, so the page-level read asks for one row.
+	it( 'asks the catalogue for a single row', async () => {
+		serve( { rules: [ rule( 1 ) ] } );
+		await act( async () => {
+			render( <PricingRulesList /> );
+		} );
+
+		expect( apiFetch ).toHaveBeenCalledWith( { path: '/wc-dynamic-pricing/v1/impact-preview?limit=1' } );
+	} );
+
 	// Nothing else pins the catalogue numbers below the table.
 	it( 'renders the catalogue card after the rules table', async () => {
 		serve( { rules: [ rule( 1 ) ] } );
@@ -236,6 +248,9 @@ describe( 'the Pricing Rules list', () => {
 		const table = screen.getByRole( 'button', { name: 'filter to nothing' } );
 		const card = screen.getByTestId( 'catalog-impact' );
 
+		// Without this, a stand-in that moved out of the container would index at
+		// -1 and every card position would pass.
+		expect( order ).toContain( table );
 		expect( order.indexOf( card ) ).toBeGreaterThan( order.indexOf( table ) );
 	} );
 
