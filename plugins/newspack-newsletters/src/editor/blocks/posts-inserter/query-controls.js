@@ -143,7 +143,10 @@ const QueryControlsSettings = ( { attributes, setAttributes } ) => {
 
 	// Statuses for the saved tokens and for the current suggestions alike. A post still being
 	// looked up simply has none yet, and shows as an unlabelled title.
-	const postStatuses = [ ...foundPosts, ...( savedPosts || [] ) ].reduce( ( all, post ) => ( { ...all, [ post.id ]: post.status } ), {} );
+	const postStatuses = [ ...foundPosts, ...( savedPosts || [] ) ].reduce( ( all, post ) => {
+		all[ post.id ] = post.status;
+		return all;
+	}, {} );
 
 	const handleSpecificPostsSelection = postTitles => {
 		setAttributes( {
