@@ -1,4 +1,5 @@
 @use "~@wordpress/base-styles/colors" as wp-colors;
+@use "~@wordpress/base-styles/variables" as wp-vars;
 
 .editor-styles-wrapper {
 	.newspack-newsletters-ad-block {
@@ -36,6 +37,7 @@
 			background: white;
 			border: 1px dashed rgba(wp-colors.$gray-900, 0.4);
 			color: wp-colors.$gray-900;
+			font-family: wp-vars.$default-font;
 			font-size: 10px;
 			line-height: 1.6;
 			padding: 4px 8px;

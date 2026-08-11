@@ -9,7 +9,8 @@
 //
 // The selector nesting mirrors the original location under
 // `.editor-styles-wrapper .block-editor-block-list__layout` in `style.scss`, so
-// when both stylesheets load (flag off) the result is identical to before.
+// when both stylesheets load (flag off) the result is identical to before,
+// except for editor chrome (see the exclusion list below).
 
 @use "~@wordpress/base-styles/variables" as wp-vars;
 
@@ -62,6 +63,10 @@
 		// the email, so it is excluded here rather than overridden afterwards,
 		// leaving core's own typography intact. `:where()` holds the exclusion
 		// at zero specificity, so these rules keep their original weight.
+		//
+		// This is the registry of canvas chrome, not just the selectors that
+		// currently lose to the blanket — some already out-specify it, and
+		// listing them keeps that from being load-bearing.
 		*:where(:not(
 			.components-placeholder, .components-placeholder *,
 			.block-editor-warning, .block-editor-warning *,
@@ -69,7 +74,9 @@
 			.newsletters-block__conditional-content__label,
 			.newsletters-block__conditional-content__label *,
 			.newsletters-block-visibility-label,
-			.newsletters-block-visibility-label *
+			.newsletters-block-visibility-label *,
+			.newspack-newsletters-ad-block-ad-label,
+			.newspack-newsletters-ad-block-ad-label *
 		)) {
 			line-height: 1.5;
 
