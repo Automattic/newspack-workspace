@@ -21,6 +21,12 @@ final class Google_OAuth_GA4_Client {
 	const BASE_URL = 'https://analyticsadmin.googleapis.com/v1beta';
 
 	/**
+	 * Base URL for the GA4 Data API, which serves reports (the Admin API
+	 * above serves configuration).
+	 */
+	const DATA_BASE_URL = 'https://analyticsdata.googleapis.com/v1beta';
+
+	/**
 	 * OAuth scope required to create GA4 custom dimensions via the Admin API.
 	 */
 	const EDIT_SCOPE = 'https://www.googleapis.com/auth/analytics.edit';
@@ -132,6 +138,22 @@ final class Google_OAuth_GA4_Client {
 	}
 
 	/**
+	 * Run a GA4 Data API report.
+	 *
+	 * Reads need only the base `analytics` scope, which every stored token
+	 * carries — unlike the Admin API writes above.
+	 *
+	 * @param string $property_id GA4 property ID.
+	 * @param array  $request     runReport request body.
+	 * @return array Decoded response.
+	 * @throws \RuntimeException On HTTP or API error.
+	 */
+	public function run_report( $property_id, array $request ) {
+		// The `:runReport` suffix stays outside the encoded segment.
+		return $this->request( 'POST', self::DATA_BASE_URL . '/properties/' . rawurlencode( $property_id ) . ':runReport', $request );
+	}
+
+	/**
 	 * Issue an authenticated request to the Analytics Admin API.
 	 *
 	 * @param string     $method HTTP method.
@@ -163,7 +185,7 @@ final class Google_OAuth_GA4_Client {
 			$message = is_array( $decoded ) && isset( $decoded['error']['message'] )
 				? $decoded['error']['message']
 				: 'HTTP ' . $code;
-			throw new \RuntimeException( esc_html( "Analytics Admin API error ($code): $message" ) );
+			throw new \RuntimeException( esc_html( "Analytics API error ($code): $message" ) );
 		}
 		return is_array( $decoded ) ? $decoded : [];
 	}

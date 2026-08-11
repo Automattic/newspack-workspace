@@ -492,7 +492,7 @@ class Audience_Campaigns extends Wizard {
 				},
 				$newspack_popups_configuration_manager->get_prompts( true, true )
 			);
-			$response['segments']  = $newspack_popups_configuration_manager->get_segments( true );
+			$response['segments']  = self::with_reach( $newspack_popups_configuration_manager->get_segments( true ) );
 			$response['settings']  = $newspack_popups_configuration_manager->get_settings();
 			$response['campaigns'] = $newspack_popups_configuration_manager->get_campaigns();
 		}
@@ -704,8 +704,27 @@ class Audience_Campaigns extends Wizard {
 	 */
 	public function api_get_segments() {
 		$newspack_popups_configuration_manager = Configuration_Managers::configuration_manager_class_for_plugin_slug( 'newspack-popups' );
-		$response                              = $newspack_popups_configuration_manager->get_segments();
-		return $response;
+		return self::with_reach( $newspack_popups_configuration_manager->get_segments() );
+	}
+
+	/**
+	 * Attach cached GA4 reach to a segments payload.
+	 *
+	 * Every endpoint below returns the *whole* segments list, not just the one
+	 * that changed, and the wizard writes those responses straight into the
+	 * list's state. So they all have to decorate: if only the reads did, the
+	 * reach line would disappear from every row the first time a publisher
+	 * toggled, deleted, or reordered a segment, and stay gone until a reload.
+	 * Errors pass through untouched.
+	 *
+	 * @param mixed $segments Segments payload, or a WP_Error.
+	 * @return mixed
+	 */
+	private static function with_reach( $segments ) {
+		if ( is_wp_error( $segments ) ) {
+			return $segments;
+		}
+		return GA4_Segment_Reach::decorate_segments( $segments );
 	}
 
 	/**
@@ -723,7 +742,7 @@ class Audience_Campaigns extends Wizard {
 				'configuration' => $request['configuration'],
 			]
 		);
-		return $response;
+		return self::with_reach( $response );
 	}
 
 	/**
@@ -742,7 +761,7 @@ class Audience_Campaigns extends Wizard {
 				'configuration' => $request['configuration'],
 			]
 		);
-		return $response;
+		return self::with_reach( $response );
 	}
 
 	/**
@@ -754,7 +773,7 @@ class Audience_Campaigns extends Wizard {
 	public function api_delete_segment( $request ) {
 		$newspack_popups_configuration_manager = Configuration_Managers::configuration_manager_class_for_plugin_slug( 'newspack-popups' );
 		$response                              = $newspack_popups_configuration_manager->delete_segment( $request['id'] );
-		return $response;
+		return self::with_reach( $response );
 	}
 
 	/**
@@ -766,7 +785,7 @@ class Audience_Campaigns extends Wizard {
 	public function api_sort_segments( $request ) {
 		$newspack_popups_configuration_manager = Configuration_Managers::configuration_manager_class_for_plugin_slug( 'newspack-popups' );
 		$response                              = $newspack_popups_configuration_manager->sort_segments( $request['segmentIds'] );
-		return $response;
+		return self::with_reach( $response );
 	}
 
 	/**
