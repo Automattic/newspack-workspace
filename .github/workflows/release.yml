@@ -206,10 +206,13 @@ jobs:
       # stops post-release.sh's release -> alpha / default-branch sync from
       # colliding on version headers. The prerelease zip is built from the
       # working tree regardless, so nothing downstream needs this commit.
-      # Released units have their translation files committed by this point;
-      # what is left is regenerated output for the units that did not release,
-      # which goes nowhere. Drop it so the steps below start from a clean tree,
-      # since `git pull --rebase` refuses to run on a dirty one.
+      # Whatever is still uncommitted here has already served its purpose: the
+      # zips were built from the working tree above. On the release branch that
+      # is the units that did not release, since gitCommitStep committed the
+      # ones that did; on prerelease channels it is everything, because
+      # gitCommitStep returns no step there at all. Either way it goes nowhere
+      # from this point, so drop it and let the steps below start from a clean
+      # tree, since `git pull --rebase` refuses to run on a dirty one.
       #
       # The pathspecs need the trailing /* : a glob pathspec has to match the
       # full file path, so 'plugins/*/languages' alone matches nothing at all

@@ -62,8 +62,10 @@ module.exports = function releaseConfig( { name, phpFile, npmPublish = false } )
 			],
 			// languages/** carries the translation files release.yml regenerates
 			// just before multi-semantic-release runs (see the "Regenerate
-			// translation files" step), so the committed template always matches
-			// the strings the release shipped.
+			// translation files" step). gitCommitStep only returns a step on the
+			// stable release branch, so this commits on release alone; prerelease
+			// channels ship the same regenerated files in the zip, from the
+			// working tree, without committing them.
 			...gitCommitStep( [ phpFile, 'CHANGELOG.md', 'languages/**' ] ),
 		],
 	};
