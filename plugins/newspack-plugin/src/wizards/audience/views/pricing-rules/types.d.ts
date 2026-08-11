@@ -129,6 +129,9 @@ interface CatalogImpactResponse {
 	currency: PricingRulesCurrency;
 	sample: CatalogImpactRow[];
 	segment_groups?: SegmentImpactGroup[];
+	// Contributed by the engine's subscriptions layer. Absent on the catalogue
+	// route until that side ships, which is why the stats treat it as optional.
+	audience?: RuleAudienceData;
 }
 
 interface RuleAudienceData {
@@ -144,6 +147,4 @@ interface RuleAudienceResponse {
 	audience?: RuleAudienceData;
 }
 
-interface RulePreviewResponse extends CatalogImpactResponse {
-	audience?: RuleAudienceData;
-}
+type RulePreviewResponse = CatalogImpactResponse;

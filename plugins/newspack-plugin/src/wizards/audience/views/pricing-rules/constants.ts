@@ -9,8 +9,8 @@ export const RULE_PREVIEW_API_PATH = '/wc-dynamic-pricing/v1/rules/preview';
 export const IMPACT_PREVIEW_API_PATH = '/wc-dynamic-pricing/v1/impact-preview';
 
 /**
- * The engine sets its "limited" flag even when it merely skipped a product it could
- * not price, so calling a preview a sample takes reaching one of these caps.
+ * The engine's route maximum, requested by both impact views. It sets its "limited"
+ * flag even when it merely skipped a product it could not price, so calling a
+ * preview a sample takes reaching this cap.
  */
-export const RULE_PREVIEW_SAMPLE_LIMIT = 50;
-export const CATALOG_IMPACT_SAMPLE_LIMIT = 10;
+export const IMPACT_SAMPLE_LIMIT = 50;

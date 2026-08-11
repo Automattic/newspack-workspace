@@ -22,7 +22,7 @@ import ImpactEmpty, { type ImpactEmptyReason } from './impact-empty';
 import ImpactStats from './impact-stats';
 import ImpactTable from './impact-table';
 import { formatCount } from './impact-format';
-import { RULE_PREVIEW_API_PATH as PREVIEW_PATH, RULE_PREVIEW_SAMPLE_LIMIT } from './constants';
+import { RULE_PREVIEW_API_PATH as PREVIEW_PATH, IMPACT_SAMPLE_LIMIT } from './constants';
 
 const DEBOUNCE_MS = 500;
 
@@ -104,7 +104,7 @@ export default function RulePreview( { body, showCycleNote }: RulePreviewProps )
 				currency={ preview.currency }
 				showCycleNote={ showCycleNote }
 			/>
-			{ preview.preview_limited && preview.sample_count >= RULE_PREVIEW_SAMPLE_LIMIT && (
+			{ preview.preview_limited && preview.sample_count >= IMPACT_SAMPLE_LIMIT && (
 				<p className="newspack-pricing-rules__muted">
 					{ sprintf(
 						/* translators: %s: how many products the table lists. */

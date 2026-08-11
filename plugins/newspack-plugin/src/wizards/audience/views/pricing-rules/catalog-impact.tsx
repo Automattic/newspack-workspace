@@ -16,7 +16,7 @@ import { Spinner } from '@wordpress/components';
  * Internal dependencies
  */
 import ImpactTable from './impact-table';
-import { IMPACT_PREVIEW_API_PATH as API_PATH, CATALOG_IMPACT_SAMPLE_LIMIT } from './constants';
+import { IMPACT_PREVIEW_API_PATH as API_PATH, IMPACT_SAMPLE_LIMIT } from './constants';
 
 export default function CatalogImpact() {
 	const [ data, setData ] = useState< CatalogImpactResponse | null >( null );
@@ -88,7 +88,7 @@ export default function CatalogImpact() {
 					count
 				) }
 			</h3>
-			{ data.preview_limited && data.sample_count >= CATALOG_IMPACT_SAMPLE_LIMIT && (
+			{ data.preview_limited && data.sample_count >= IMPACT_SAMPLE_LIMIT && (
 				<p className="newspack-pricing-rules__muted">
 					{ sprintf(
 						/* translators: %d: number of sampled products shown. */
