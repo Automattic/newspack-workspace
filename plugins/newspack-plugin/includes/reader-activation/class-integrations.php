@@ -347,6 +347,11 @@ class Integrations {
 
 		$enabled[] = $integration_id;
 
+		// Put the registration key seed in place before any page can emit the
+		// key, so the write stays off the render path. Integrations enabled
+		// before this existed fall back to seeding on first read.
+		self::$integrations[ $integration_id ]->ensure_registration_key_seed();
+
 		return update_option( self::OPTION_NAME, $enabled );
 	}
 

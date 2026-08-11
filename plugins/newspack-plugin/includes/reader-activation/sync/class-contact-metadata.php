@@ -7,6 +7,8 @@
 
 namespace Newspack\Reader_Activation\Sync;
 
+use Newspack\Reader_Activation;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -118,9 +120,11 @@ abstract class Contact_Metadata {
 	/**
 	 * Get the full name for the contact, preferring the WC_Customer billing name.
 	 *
-	 * Falls back to the WP user's first/last name, then display name, so readers
-	 * without a WooCommerce billing record (e.g. created by frontend registration
-	 * integrations) don't sync an empty name that clears the ESP contact's name.
+	 * Falls back to the WP user's first/last name, then a display name the
+	 * reader actually has, so readers without a WooCommerce billing record
+	 * (e.g. created by frontend registration integrations) don't sync an empty
+	 * name that clears the ESP contact's name. A reader who registered with no
+	 * name at all has neither, and returns '' rather than a stand-in.
 	 *
 	 * @return string
 	 */
@@ -136,9 +140,38 @@ abstract class Contact_Metadata {
 			if ( $name ) {
 				return $name;
 			}
-			return (string) $this->user->display_name;
+			if ( ! $this->has_email_derived_display_name() ) {
+				return (string) $this->user->display_name;
+			}
 		}
 		return '';
+	}
+
+	/**
+	 * Whether the user's display name was generated from their email address.
+	 *
+	 * Accounts are named after the email when the reader supplies no name, so
+	 * display_name is `jane-doe` for jane.doe@example.com. That is a
+	 * placeholder, not a name: syncing it would write the local part into the
+	 * ESP's first-name field, overwriting whatever is there — including a name
+	 * that arrived by list import.
+	 *
+	 * Compares against both constructions rather than calling
+	 * Reader_Activation::reader_has_generic_display_name(), which answers a
+	 * different question (should we prompt this reader to pick a name?) and
+	 * returns false site-wide when NEWSPACK_ALLOW_GENERIC_READER_DISPLAY_NAMES
+	 * is defined — which would put the placeholder back on the wire.
+	 *
+	 * @return bool
+	 */
+	private function has_email_derived_display_name() {
+		$display_name = (string) $this->user->display_name;
+		$email        = (string) $this->user->user_email;
+		if ( '' === $display_name || '' === $email ) {
+			return true;
+		}
+		return Reader_Activation::generate_user_nicename( $email ) === $display_name // Current construction: URL-sanitized local part.
+			|| Reader_Activation::strip_email_domain( $email ) === $display_name;    // Legacy construction: bare local part.
 	}
 
 	/**

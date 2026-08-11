@@ -110,7 +110,52 @@ class Test_Form_Capture extends WP_UnitTestCase {
 			$integration->get_selectors(),
 			'Bare element/universal selectors must be rejected; qualified ones kept.'
 		);
+
+		// An over-broad selector is over-broad wherever it sits: inside a
+		// comma-separated list, or behind ancestors that name only elements.
+		$integration->update_settings_field_value( 'selectors', "form, #signup\nbody , .thing\nbody form\ndiv > form\n#a, .b\nfooter form.signup" );
+		$this->assertSame(
+			[ '.newspack-form-capture', '#a, .b', 'footer form.signup' ],
+			$integration->get_selectors(),
+			'A line is dropped whole when any of its selectors matches every form.'
+		);
 		$integration->update_settings_field_value( 'selectors', '' );
+	}
+
+	/**
+	 * The unsupported check must be consulted at runtime, not only when
+	 * enabling: a site that switches to reCAPTCHA v2 afterwards would
+	 * otherwise keep emitting a key capture can never use.
+	 */
+	public function test_switching_to_recaptcha_v2_after_enabling_stops_capture() {
+		Integrations::enable( Form_Capture::ID );
+		$integration = Integrations::get_integration( Form_Capture::ID );
+		$this->assertTrue( $integration->supports_frontend_registration(), 'Enabled with no captcha configured.' );
+
+		update_option( 'newspack_recaptcha_use_captcha', true );
+		update_option( 'newspack_recaptcha_version', 'v2_invisible' );
+		update_option(
+			'newspack_recaptcha_credentials',
+			[
+				'v2_invisible' => [
+					'site_key'    => 'test-key',
+					'site_secret' => 'test-secret',
+				],
+			]
+		);
+
+		$this->assertTrue( Integrations::is_enabled( Form_Capture::ID ), 'The integration stays enabled — only its support changes.' );
+		$this->assertFalse( $integration->supports_frontend_registration(), 'A v2 switch must withdraw frontend registration.' );
+		$this->assertArrayNotHasKey(
+			Form_Capture::ID,
+			Reader_Registration::get_frontend_registration_integrations(),
+			'No key may be emitted for a configuration capture cannot use.'
+		);
+
+		$integration->enqueue_scripts();
+		$this->assertFalse( wp_script_is( Form_Capture::SCRIPT_HANDLE, 'enqueued' ), 'The capture script must not load either.' );
+
+		Integrations::disable( Form_Capture::ID );
 	}
 
 	/**
@@ -300,6 +345,52 @@ class Test_Form_Capture extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A capture with no name field registers a reader whose display name is
+	 * generated from the email. That is a placeholder, not a name: syncing it
+	 * would write the email's local part into the ESP's name field, overwriting
+	 * a name that may have arrived from a list import.
+	 */
+	public function test_scheduled_sync_payload_omits_generated_display_name() {
+		$user_id = Reader_Activation::register_reader( 'jane.doe@test.com' );
+		$this->assertIsInt( $user_id );
+		$user = get_userdata( $user_id );
+
+		// Precondition: this is the population the guard is for.
+		$this->assertSame( 'jane-doe', $user->display_name, 'register_reader() names the account after the email when none is given.' );
+		$this->assertSame( '', get_user_meta( $user_id, 'first_name', true ) );
+
+		$contact = \Newspack\Reader_Activation\Sync\Metadata::get_contact_with_metadata( $user_id );
+		$this->assertSame( '', $contact['name'], 'A generated display name must never reach the ESP as the contact name.' );
+
+		// A display name the reader actually has still syncs.
+		wp_update_user(
+			[
+				'ID'           => $user_id,
+				'display_name' => 'Jane Doe',
+			]
+		);
+		$contact = \Newspack\Reader_Activation\Sync\Metadata::get_contact_with_metadata( $user_id );
+		$this->assertSame( 'Jane Doe', $contact['name'], 'A real display name is still worth syncing.' );
+	}
+
+	/**
+	 * Adding the seed to the HMAC input changes every integration's key once on
+	 * upgrade. Pages already in a CDN or page cache carry the old key, and the
+	 * capture client treats an invalid key as permanent — so the legacy key must
+	 * keep validating until those caches cycle.
+	 */
+	public function test_legacy_registration_key_is_accepted() {
+		$integration = Integrations::get_integration( Form_Capture::ID );
+		$legacy_key  = hash_hmac( 'sha256', Form_Capture::ID, wp_salt( 'auth' ) );
+		$request     = new WP_REST_Request( 'POST', '/newspack/v1/reader-activation/register' );
+
+		$this->assertNotSame( $legacy_key, $integration->get_registration_key(), 'The seeded key is a new value.' );
+		$this->assertTrue( $integration->validate_registration_request( $integration->get_registration_key(), $request ) );
+		$this->assertTrue( $integration->validate_registration_request( $legacy_key, $request ), 'A key from a cached page must still validate.' );
+		$this->assertFalse( $integration->validate_registration_request( 'not-a-key', $request ) );
+	}
+
+	/**
 	 * End-to-end: the registration endpoint accepts this integration's key and
 	 * produces a reader stamped with this integration's registration method.
 	 *
@@ -368,7 +459,10 @@ class Test_Form_Capture extends WP_UnitTestCase {
 	 */
 	public function test_rate_limit_bucket_and_sizing() {
 		$bucket = Reader_Registration::get_rate_limit_bucket_for( Form_Capture::ID );
-		$this->assertSame( 'registration_form_capture', $bucket );
+		$this->assertSame( 'registration_form-capture', $bucket );
+		// Separators are preserved, so ids differing only by one can't silently
+		// share a counter.
+		$this->assertNotSame( $bucket, Reader_Registration::get_rate_limit_bucket_for( 'form_capture' ) );
 
 		// The integration sizes its own bucket via the existing filter.
 		$this->assertSame(

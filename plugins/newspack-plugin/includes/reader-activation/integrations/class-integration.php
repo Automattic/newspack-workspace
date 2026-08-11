@@ -300,7 +300,30 @@ abstract class Integration {
 	}
 
 	/**
+	 * Create the registration key seed if it doesn't exist yet.
+	 *
+	 * Called when an integration is enabled, so the seed is in place before any
+	 * page can emit the key — which keeps the write off the render path and out
+	 * of concurrent first requests.
+	 *
+	 * @return void
+	 */
+	final public function ensure_registration_key_seed(): void {
+		// Autoloaded on purpose, unlike this class's other options: the key is
+		// read on nearly every frontend render, so a non-autoloaded seed would
+		// add a query to each one.
+		\add_option( self::REGISTRATION_SEED_OPTION_PREFIX . $this->id, \wp_generate_password( 32, false ), '', true );
+	}
+
+	/**
 	 * Get the stored registration key seed, generating it on first use.
+	 *
+	 * Normally seeded by ensure_registration_key_seed() at enable time; this
+	 * lazy path covers integrations enabled before the seed existed. The
+	 * pre-check isn't atomic with the write, so two uncached first requests can
+	 * both generate: the loser's page carries a key that stops validating once
+	 * its cache expires. Narrow, self-healing, and avoided entirely for
+	 * integrations enabled through Integrations::enable().
 	 *
 	 * @return string The seed.
 	 */
@@ -308,12 +331,8 @@ abstract class Integration {
 		$option_name = self::REGISTRATION_SEED_OPTION_PREFIX . $this->id;
 		$seed        = \get_option( $option_name );
 		if ( ! is_string( $seed ) || '' === $seed ) {
-			$seed = \wp_generate_password( 32, false );
-			// add_option() is a no-op when the option already exists, so a
-			// concurrent first request cannot overwrite an already-emitted seed.
-			if ( ! \add_option( $option_name, $seed ) ) {
-				$seed = (string) \get_option( $option_name );
-			}
+			$this->ensure_registration_key_seed();
+			$seed = (string) \get_option( $option_name );
 		}
 		return $seed;
 	}
@@ -326,10 +345,15 @@ abstract class Integration {
 	 * rejected. That is the point: this is the incident-response lever for a
 	 * key being abused by scripted clients.
 	 *
+	 * PHP-only for now: there is no CLI command or admin surface, so operators
+	 * reach it through `wp eval`. Anything that wires it to a request — an admin
+	 * button, a REST route — must gate it on a capability check and a nonce
+	 * first; this method performs neither.
+	 *
 	 * @return string The new registration key.
 	 */
 	final public function rotate_registration_key(): string {
-		\update_option( self::REGISTRATION_SEED_OPTION_PREFIX . $this->id, \wp_generate_password( 32, false ) );
+		\update_option( self::REGISTRATION_SEED_OPTION_PREFIX . $this->id, \wp_generate_password( 32, false ), true );
 		return $this->get_registration_key();
 	}
 
@@ -354,7 +378,25 @@ abstract class Integration {
 	 * @return bool Whether the registration request is valid.
 	 */
 	public function validate_registration_request( string $key, $request ): bool {
-		return hash_equals( $this->get_registration_key(), $key );
+		if ( hash_equals( $this->get_registration_key(), $key ) ) {
+			return true;
+		}
+		return hash_equals( $this->get_legacy_registration_key(), $key );
+	}
+
+	/**
+	 * The pre-seed registration key, still accepted for one release.
+	 *
+	 * Adding the seed to the HMAC input changes every integration's key once on
+	 * upgrade. Pages already in a CDN or page cache carry the old key until
+	 * their TTL expires, and the capture client treats an invalid key as
+	 * permanent for the pageview — so without this the submission is lost
+	 * rather than retried. Remove once caches have cycled.
+	 *
+	 * @return string The legacy registration key.
+	 */
+	private function get_legacy_registration_key(): string {
+		return hash_hmac( 'sha256', $this->id, \wp_salt( 'auth' ) );
 	}
 
 	/**

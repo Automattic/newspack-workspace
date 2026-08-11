@@ -291,12 +291,16 @@ final class Reader_Registration {
 	 * via the `newspack_frontend_registration_rate_limit` filter must compare
 	 * against this same derivation.
 	 *
+	 * sanitize_key() preserves both dashes and underscores, so integrations whose
+	 * IDs differ only by separator get distinct buckets rather than silently
+	 * sharing a counter.
+	 *
 	 * @param string $integration_id Integration identifier.
 	 *
 	 * @return string Bucket name.
 	 */
 	public static function get_rate_limit_bucket_for( string $integration_id ): string {
-		return 'registration_' . str_replace( '-', '_', \sanitize_key( $integration_id ) );
+		return 'registration_' . \sanitize_key( $integration_id );
 	}
 
 	/**
@@ -339,11 +343,23 @@ final class Reader_Registration {
 		/**
 		 * Filters the maximum number of frontend registration attempts per IP per hour.
 		 *
-		 * Applies independently to each bucket: 10/hr for /register, 10/hr for /check-email.
+		 * Applies independently to each bucket, all defaulting to 10/hr:
+		 *   - 'registration'      — /register traffic from filter-only integrations.
+		 *   - 'check_email'       — the /check-email preflight.
+		 *   - 'registration_<id>' — one per Integration-backed registration source,
+		 *                           derived by get_rate_limit_bucket_for(). Scope a
+		 *                           callback by comparing against that helper rather
+		 *                           than rebuilding the string.
+		 *
+		 * Built-in integrations size their own bucket from this filter at priority 5,
+		 * so a callback at the default priority sees the integration's limit, not 10 —
+		 * a callback that transforms the incoming value (`return $limit * 2;`) rather
+		 * than replacing it compounds off that. Form Capture, for instance, has
+		 * already raised its bucket to 100 by the time a default-priority callback runs.
 		 *
 		 * @param int    $limit  Maximum attempts. Default 10.
 		 * @param string $ip     The client IP address.
-		 * @param string $bucket Bucket name ('registration' or 'check_email').
+		 * @param string $bucket Bucket name (see above).
 		 */
 		$limit = \apply_filters( 'newspack_frontend_registration_rate_limit', 10, $ip, $bucket );
 

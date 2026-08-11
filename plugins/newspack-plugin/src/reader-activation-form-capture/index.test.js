@@ -63,19 +63,32 @@ describe( 'form-capture client', () => {
 		expect( ras.register ).toHaveBeenCalledTimes( 1 );
 	} );
 
-	it( 'keeps the dedupe after failures that cannot succeed on retry (429/403)', async () => {
-		const ras = loadCaptureClient( FORM );
-		ras.register.mockImplementation( () => Promise.reject( Object.assign( new Error( 'Too many.' ), { code: 'rate_limit_exceeded' } ) ) );
-		const form = document.querySelector( 'form' );
-		submit( form );
-		await flush();
-		submit( form );
-		expect( ras.register ).toHaveBeenCalledTimes( 1 );
-	} );
+	it.each( [ 'rate_limit_exceeded', 'invalid_integration_key', 'reader_activation_disabled', 'recaptcha_failed' ] )(
+		'keeps the dedupe after %s, which cannot succeed on retry',
+		async code => {
+			const ras = loadCaptureClient( FORM );
+			ras.register.mockImplementation( () => Promise.reject( Object.assign( new Error( 'Rejected.' ), { code } ) ) );
+			const form = document.querySelector( 'form' );
+			submit( form );
+			await flush();
+			submit( form );
+			expect( ras.register ).toHaveBeenCalledTimes( 1 );
+		}
+	);
 
 	it( 'releases the dedupe after a network failure (no error code)', async () => {
 		const ras = loadCaptureClient( FORM );
 		ras.register.mockImplementationOnce( () => Promise.reject( new Error( 'Network down.' ) ) );
+		const form = document.querySelector( 'form' );
+		submit( form );
+		await flush();
+		submit( form );
+		expect( ras.register ).toHaveBeenCalledTimes( 2 );
+	} );
+
+	it( 'releases the dedupe after a server-side registration failure (5xx)', async () => {
+		const ras = loadCaptureClient( FORM );
+		ras.register.mockImplementationOnce( () => Promise.reject( Object.assign( new Error( 'Server error.' ), { code: 'registration_failed' } ) ) );
 		const form = document.querySelector( 'form' );
 		submit( form );
 		await flush();
@@ -131,6 +144,30 @@ describe( 'form-capture client', () => {
 
 		submit( form );
 		expect( ras.register.mock.calls[ 0 ][ 3 ].captchaToken ).toBe( 'late-token' );
+	} );
+
+	it( 'queues one warm-up however many fields the reader tabs through', async () => {
+		// warmToken stays null until an acquisition resolves, so the TTL check
+		// can't cover the gap: without an in-flight flag every focusin before
+		// api.js lands would queue another callback, and the drain would fire
+		// one execute() per field touched.
+		const ras = loadCaptureClient( FORM, V3_CONFIG );
+		const form = document.querySelector( 'form' );
+		focusin( form );
+		focusin( form );
+		focusin( form );
+		expect( window.___grecaptcha_cfg.fns ).toHaveLength( 1 );
+
+		window.grecaptcha = {
+			ready: callback => callback(),
+			execute: jest.fn( () => Promise.resolve( 'one-token' ) ),
+		};
+		window.___grecaptcha_cfg.fns.forEach( fn => fn() );
+		await flush();
+		expect( window.grecaptcha.execute ).toHaveBeenCalledTimes( 1 );
+
+		submit( form );
+		expect( ras.register.mock.calls[ 0 ][ 3 ].captchaToken ).toBe( 'one-token' );
 	} );
 
 	it( 'does not warm captcha on v2 sites', () => {

@@ -221,24 +221,29 @@ class Form_Capture extends Integration {
 	}
 
 	/**
-	 * Frontend registration is available only while the integration is enabled.
-	 * This gates the registration endpoint, the page-emitted key, and the
-	 * capture script together.
+	 * Frontend registration is available while the integration is enabled and
+	 * the site's configuration supports capture. This gates the registration
+	 * endpoint, the page-emitted key, and the capture script together.
+	 *
+	 * The unsupported check runs here, not only at enable time: a site that
+	 * switches to reCAPTCHA v2 after enabling would otherwise keep emitting a
+	 * key that capture can never use, and go on capturing nothing silently.
 	 *
 	 * @return bool
 	 */
 	public function supports_frontend_registration(): bool {
-		return Integrations::is_enabled( self::ID );
+		return Integrations::is_enabled( self::ID ) && ! $this->get_unsupported_reason();
 	}
 
 	/**
 	 * Get the configured form selectors, always including the marker class.
 	 *
-	 * Bare element/universal selectors (`form`, `body`, `*`, …) are rejected:
-	 * any of them opts in every form on the page — comment forms, search,
-	 * checkout — which is never what a per-form opt-in means. A form-tool
-	 * container still needs a qualifier (`form.signup`, `#newsletter form`).
-	 * Applied at read time so previously stored values are covered too.
+	 * Selectors that name only element types (`form`, `body form`, `div > form`)
+	 * or the universal selector opt in every form on the page — comment forms,
+	 * search, checkout — which is never what a per-form opt-in means. A line
+	 * carrying one is dropped whole, including inside a comma-separated list,
+	 * since `form, #signup` matches everything `form` does. Applied at read
+	 * time so previously stored values are covered too.
 	 *
 	 * @return string[] CSS selectors.
 	 */
@@ -247,17 +252,50 @@ class Form_Capture extends Integration {
 		$selectors = array_filter(
 			array_map( 'trim', preg_split( '/[\r\n]+/', $value ) ),
 			function ( $selector ) {
-				return '' !== $selector && '*' !== $selector && ! preg_match( '/^[a-z][a-z0-9-]*$/i', $selector );
+				if ( '' === $selector ) {
+					return false;
+				}
+				foreach ( explode( ',', $selector ) as $part ) {
+					if ( self::is_over_broad_selector( $part ) ) {
+						return false;
+					}
+				}
+				return true;
 			}
 		);
 		return array_values( array_unique( array_merge( [ '.' . self::MARKER_CLASS ], $selectors ) ) );
 	}
 
 	/**
+	 * Whether a single selector names nothing more specific than element types.
+	 *
+	 * Splits on combinators and checks every compound: a selector built only
+	 * from tag names and `*` matches every form on the page whatever its depth,
+	 * so `body form` and `div > form` are as broad as `form`. One class, id or
+	 * attribute anywhere in the selector makes it specific enough to keep.
+	 *
+	 * @param string $selector A single CSS selector (no commas).
+	 *
+	 * @return bool Whether the selector is too broad to opt a form in.
+	 */
+	private static function is_over_broad_selector( $selector ) {
+		$compounds = preg_split( '/[\s>+~]+/', trim( $selector ), -1, PREG_SPLIT_NO_EMPTY );
+		if ( empty( $compounds ) ) {
+			return true;
+		}
+		foreach ( $compounds as $compound ) {
+			if ( '*' !== $compound && ! preg_match( '/^[a-z][a-z0-9-]*$/i', $compound ) ) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/**
 	 * Enqueue the frontend capture script when the integration is active.
 	 */
 	public function enqueue_scripts() {
-		if ( ! Reader_Activation::is_enabled() || ! Integrations::is_enabled( self::ID ) ) {
+		if ( ! Reader_Activation::is_enabled() || ! $this->supports_frontend_registration() ) {
 			return;
 		}
 		\wp_enqueue_script(

@@ -18,6 +18,7 @@ window.newspackRAS.push( readerActivation => {
 	const captured = new Set();
 	const attached = new WeakSet();
 	let warmToken = null;
+	let warming = false;
 
 	const rasConfig = window.newspack_ras_config || {};
 	const isV3 = 'v3' === rasConfig.captcha_version && rasConfig.captcha_site_key;
@@ -57,13 +58,23 @@ window.newspackRAS.push( readerActivation => {
 		if ( warmToken && Date.now() - warmToken.timestamp < CAPTCHA_TOKEN_TTL ) {
 			return;
 		}
+		// The TTL check can't cover an acquisition still in flight — warmToken
+		// stays null until one resolves — so tabbing through a form's fields
+		// would queue a callback per focusin, each firing its own execute().
+		if ( warming ) {
+			return;
+		}
+		warming = true;
 		whenGrecaptchaReady( () => {
 			window.grecaptcha
 				.execute( rasConfig.captcha_site_key, { action: 'integration_registration' } )
 				.then( token => {
 					warmToken = { token, timestamp: Date.now() };
+					warming = false;
 				} )
-				.catch( () => {} );
+				.catch( () => {
+					warming = false;
+				} );
 		} );
 	};
 
