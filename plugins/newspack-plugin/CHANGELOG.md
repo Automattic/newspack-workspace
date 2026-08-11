@@ -1,3 +1,10 @@
+## newspack [6.47.7](https://github.com/Automattic/newspack-workspace/compare/newspack@6.47.6...newspack@6.47.7) (2026-08-10)
+
+
+### Bug Fixes
+
+* **newsletters:** cut per-render subscription-list and gate overhead ([#769](https://github.com/Automattic/newspack-workspace/issues/769)) ([fe939fd](https://github.com/Automattic/newspack-workspace/commit/fe939fd2fe603785555fa087dae35eb64a5956c2))
+
 ## newspack [6.47.6](https://github.com/Automattic/newspack-workspace/compare/newspack@6.47.5...newspack@6.47.6) (2026-08-10)
 
 
