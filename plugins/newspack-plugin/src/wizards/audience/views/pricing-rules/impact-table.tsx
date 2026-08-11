@@ -16,6 +16,7 @@ import { useState, useMemo, useId } from '@wordpress/element';
 import {
 	Button,
 	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
+	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
 // Not the Newspack wrapper: with-wizard-screen/style.scss gives `.newspack-dataviews`
 // a -48px page bleed that hangs this embedded table past the form column.
@@ -222,15 +223,7 @@ export default function ImpactTable( {
 	);
 
 	return (
-		<>
-			{ framed ? (
-				<TableCard after={ seeMore ?? undefined }>{ table }</TableCard>
-			) : (
-				<>
-					{ table }
-					{ seeMore }
-				</>
-			) }
+		<VStack spacing={ 6 }>
 			{ showCycleNote && hasCycles && <p className="newspack-pricing-rules__muted">{ cycleMarkerNote() }</p> }
 			{ hasSegments && (
 				<p className="newspack-pricing-rules__muted">
@@ -240,6 +233,14 @@ export default function ImpactTable( {
 					) }
 				</p>
 			) }
-		</>
+			{ framed ? (
+				<TableCard after={ seeMore ?? undefined }>{ table }</TableCard>
+			) : (
+				<>
+					{ table }
+					{ seeMore }
+				</>
+			) }
+		</VStack>
 	);
 }
