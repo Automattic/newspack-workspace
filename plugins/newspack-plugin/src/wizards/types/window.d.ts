@@ -62,7 +62,13 @@ declare global {
 			can_use_name_your_price: boolean;
 		};
 		newspackAudienceSubscriptions: {
+			tabs: Array<{
+				slug: string;
+				label: string;
+				path: string;
+			}>;
 			memberships_url: string;
+			memberships_active: boolean;
 			primary_product: string;
 			eligible_products: Array<{
 				id: string;
