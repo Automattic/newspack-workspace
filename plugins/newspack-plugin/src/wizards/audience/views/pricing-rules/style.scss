@@ -42,7 +42,7 @@
 	}
 
 	&__impact {
-		margin-top: wp-vars.$grid-unit-60;
+		margin: wp-vars.$grid-unit-60 wp-vars.$grid-unit-60 0;
 
 		p {
 			margin-top: wp-vars.$grid-unit-15;
@@ -87,6 +87,24 @@
 	&__stat-note {
 		color: wp-colors.$gray-700;
 		font-size: wp-vars.$helptext-font-size;
+	}
+
+	&__impact-table {
+		.dataviews-view-table tr {
+			th:first-child,
+			td:first-child {
+				padding-left: wp-vars.$grid-unit-10;
+
+				.dataviews-view-table-header-button {
+					margin-left: 0;
+				}
+			}
+
+			th:last-child,
+			td:last-child {
+				padding-right: wp-vars.$grid-unit-10;
+			}
+		}
 	}
 
 	&__impact-table--framed,
