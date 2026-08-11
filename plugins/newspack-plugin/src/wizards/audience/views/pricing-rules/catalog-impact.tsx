@@ -1,8 +1,6 @@
 /**
- * Catalog-wide impact below the Pricing Rules list: the headline numbers, and
- * the product-by-product table behind them. Opening the table is a deliberate
- * click because pricing the whole sample costs several times what the headline
- * count alone does.
+ * Catalog-wide impact below the Pricing Rules list. The product table sits behind
+ * a click because pricing the whole sample costs several times the headline count.
  */
 
 /**
@@ -38,16 +36,15 @@ export default function CatalogImpact( { stats }: CatalogImpactProps ) {
 	const [ detail, setDetail ] = useState< CatalogImpactResponse | null >( null );
 	const [ hasError, setHasError ] = useState( false );
 
-	// Only the newest request may write state. Closing and reopening before a
-	// request lands would otherwise issue a second full catalogue re-price, and
-	// let a late failure clear a sample that had already arrived.
+	// Reopening mid-flight would otherwise re-price the whole catalogue a second
+	// time, and let a late failure clear a sample that had already arrived.
 	const request = useRef( 0 );
 	const inFlight = useRef( false );
 
 	const open = useCallback( () => {
 		setIsOpen( true );
 		setHasError( false );
-		// A landed sample does not move under the modal, so it is kept; a failure is retried.
+		// A landed sample is kept; a failure is retried.
 		if ( detail || inFlight.current ) {
 			return;
 		}
@@ -71,8 +68,7 @@ export default function CatalogImpact( { stats }: CatalogImpactProps ) {
 			} );
 	}, [ detail ] );
 
-	// The engine ships separately and answers `supported: false` with the rest of
-	// the payload absent, so the sample is checked before the table walks it.
+	// `supported: false` arrives with the rest of the payload absent.
 	let emptyReason: ImpactEmptyReason | null = null;
 	if ( detail ) {
 		if ( ! detail.supported ) {
@@ -85,7 +81,6 @@ export default function CatalogImpact( { stats }: CatalogImpactProps ) {
 	return (
 		<Card.Root className="newspack-pricing-rules__impact">
 			<Card.Content>
-				{ /* The stat leads visually; the heading keeps the section reachable by heading navigation. */ }
 				<h3 className="screen-reader-text">{ __( 'Catalog impact', 'newspack-plugin' ) }</h3>
 				<ImpactStats totalMatching={ stats.total_matching } countLimited={ stats.count_limited } audience={ stats.audience } />
 				{ stats.total_matching === 0 ? (

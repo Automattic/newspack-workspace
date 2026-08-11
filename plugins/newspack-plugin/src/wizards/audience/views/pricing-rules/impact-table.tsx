@@ -73,9 +73,7 @@ interface ImpactTableProps {
 	// The editor carries this note in its section header instead, where it can
 	// appear before the preview has loaded.
 	showCycleNote?: boolean;
-	// Off inside a modal, which is already a frame.
 	framed?: boolean;
-	// Off where the surface can hold the whole sample.
 	collapsible?: boolean;
 }
 

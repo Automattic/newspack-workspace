@@ -46,9 +46,8 @@ const DEFAULT_VIEW: View = {
 	titleField: 'title',
 };
 
-// The page waits on the catalogue read so the screen arrives as one unit. The
-// engine's catalogue walk is not bounded by the limit, so the gate is released
-// on its own rather than letting a hung route hold the whole screen.
+// The catalogue walk is not bounded by the limit, so a hung route would otherwise
+// hold the whole screen behind the spinner indefinitely.
 const STATS_GATE_TIMEOUT_MS = 8000;
 
 const ACTIVE_STATE_LEVEL = { active: 'success', scheduled: 'info', ended: 'default' } as const;
@@ -123,10 +122,9 @@ export default function PricingRulesList() {
 	}, [ fetchData ] );
 
 	// One row is enough: total_matching and count_limited do not vary with the
-	// limit, and pricing the whole sample costs several times as much. The card
-	// also renders stats.audience from this payload; the engine does not send it
-	// on this route yet, and whoever adds it needs it limit-invariant too, or it
-	// belongs on the full-sample read the modal makes instead.
+	// limit, and pricing the whole sample costs several times as much. `audience`
+	// renders from this payload too, so it must stay limit-invariant when the
+	// engine starts sending it.
 	const statsRequest = useRef( 0 );
 	const gateTimer = useRef< ReturnType< typeof setTimeout > | undefined >( undefined );
 
@@ -169,8 +167,7 @@ export default function PricingRulesList() {
 			apiFetch( { path: `${ API_PATH }/${ id }`, method: 'DELETE' } )
 				.then( () => {
 					fetchData();
-					// The trashed rule leaves the engine's active union, so the
-					// headline count and the cached sample are both refetched.
+					// The trashed rule leaves the engine's active union.
 					fetchStats();
 				} )
 				.catch( () =>

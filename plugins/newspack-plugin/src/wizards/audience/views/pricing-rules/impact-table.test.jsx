@@ -13,8 +13,8 @@ import { render, screen, fireEvent, waitForElementToBeRemoved } from '@testing-l
  */
 import ImpactTable from './impact-table';
 
-// The real TableCard is @wordpress/ui internals; a stand-in makes framing observable
-// while still rendering the `after` slot the See More button lives in.
+// A stand-in makes framing observable and still renders the `after` slot the
+// See More button lives in.
 jest.mock( '../../../../../packages/components/src', () => ( {
 	TableCard: ( { children, after } ) => (
 		<div data-testid="table-card">

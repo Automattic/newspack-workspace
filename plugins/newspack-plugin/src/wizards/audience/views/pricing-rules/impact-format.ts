@@ -14,9 +14,9 @@ import { __, _n, sprintf } from '@wordpress/i18n';
  */
 import { formatCount } from '../../../../../packages/components/src/breadcrumbs/format-count';
 
-// Re-exported rather than reimplemented: the header count beside these figures
-// uses the same helper, and only that one normalises the locales WordPress ships
-// that Intl rejects.
+// Re-exported, not reimplemented: only this helper normalises the locales
+// WordPress ships that Intl rejects, and the header count beside these figures
+// already uses it.
 export { formatCount };
 
 export function formatPrice( amount: number, currency: PricingRulesCurrency ): string {
@@ -45,8 +45,7 @@ export function cycleMarkerNote(): string {
 }
 
 /**
- * The caption a truncated table carries. Shared so the modal and the editor
- * preview cannot drift into two msgids the translators have to service twice.
+ * Shared so the modal and the editor preview cannot drift into two msgids.
  */
 export function sampleNote( sampleCount: number ): string {
 	return sprintf(

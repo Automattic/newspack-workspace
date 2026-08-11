@@ -20,8 +20,7 @@ import CatalogImpact from './catalog-impact';
 
 jest.mock( '@wordpress/api-fetch', () => jest.fn() );
 
-// The table itself is covered by impact-table.test.jsx; here it only needs to be
-// identifiable, and its props assertable.
+// Covered by impact-table.test.jsx; here it only needs its props assertable.
 jest.mock( './impact-table', () => ( { baseline, framed, collapsible } ) => (
 	<div data-testid="impact-table" data-framed={ String( framed ) } data-collapsible={ String( collapsible ) }>
 		{ baseline.length } rows
@@ -125,8 +124,8 @@ describe( 'CatalogImpact', () => {
 			openModal();
 		} );
 		fireEvent.click( screen.getByRole( 'button', { name: 'Close' } ) );
-		// The modal's exit animation defers onRequestClose, and until the dialog
-		// goes the trigger stays out of the accessibility tree.
+		// The exit animation defers onRequestClose; until the dialog goes, the
+		// trigger stays out of the accessibility tree.
 		await waitForElementToBeRemoved( () => screen.queryByRole( 'dialog' ) );
 		await act( async () => {
 			openModal();
@@ -167,8 +166,6 @@ describe( 'CatalogImpact', () => {
 		expect( screen.getByTestId( 'impact-table' ) ).toBeInTheDocument();
 	} );
 
-	// The sample is the most expensive request this screen makes, so a reopen
-	// while it is still in flight must not start a second one.
 	it( 'issues no second request when reopened before the sample lands', async () => {
 		let land;
 		apiFetch.mockReturnValue(
@@ -195,8 +192,6 @@ describe( 'CatalogImpact', () => {
 		expect( screen.queryByText( /Could not load the affected products/ ) ).not.toBeInTheDocument();
 	} );
 
-	// The engine ships separately and answers an unsupported catalogue with the
-	// rest of the payload absent, which the table would otherwise walk.
 	it( 'stands down instead of rendering a table the engine did not supply', async () => {
 		apiFetch.mockResolvedValue( { supported: false } );
 		render( <CatalogImpact stats={ stats() } /> );

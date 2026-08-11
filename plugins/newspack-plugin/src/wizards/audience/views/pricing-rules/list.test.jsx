@@ -24,9 +24,8 @@ jest.mock( '@wordpress/api-fetch', () => jest.fn() );
 
 jest.mock( '../../../../../packages/components/src/wizard/store', () => ( { WIZARD_STORE_NAMESPACE: 'test/pricing-rules-list' } ) );
 
-// The first button lets a test drive the view into a filtered-to-nothing state,
-// which is what separates "no rules" from "no matches". The second exposes the
-// trash action's confirm step, the one mutation that happens without a route change.
+// Exposes a filter-to-nothing trigger and the trash action's confirm step, neither
+// of which the real DataViews makes reachable from a test.
 jest.mock( '../../../../../packages/components/src', () => {
 	const history = { push: jest.fn() };
 	return {
@@ -73,7 +72,6 @@ const publishedSection = () => {
 	return named[ named.length - 1 ].sectionName[ 0 ];
 };
 
-/** The actions of the last header payload that set them. */
 const publishedActions = () => {
 	const withActions = headerCalls.filter( data => data.actions );
 	return withActions[ withActions.length - 1 ].actions;
@@ -179,8 +177,8 @@ describe( 'the Pricing Rules list', () => {
 				land = resolve;
 			} );
 		} );
-		// Wrapped, so the catalogue promise settles inside act. Left unwrapped it
-		// resolves in a microtask after render and React warns about the update.
+		// Left unwrapped, the catalogue promise resolves in a microtask after render
+		// and React warns about the update.
 		await act( async () => {
 			render( <PricingRulesList /> );
 		} );
@@ -232,8 +230,6 @@ describe( 'the Pricing Rules list', () => {
 		expect( screen.getByTestId( 'catalog-impact' ) ).toBeInTheDocument();
 	} );
 
-	// The headline count is the same at any limit, and pricing the modal's 50
-	// products costs several times as much, so the page-level read asks for one row.
 	it( 'asks the catalogue for a single row', async () => {
 		serve( { rules: [ rule( 1 ) ] } );
 		await act( async () => {
@@ -243,7 +239,6 @@ describe( 'the Pricing Rules list', () => {
 		expect( apiFetch ).toHaveBeenCalledWith( { path: '/wc-dynamic-pricing/v1/impact-preview?limit=1' } );
 	} );
 
-	// Nothing else pins the catalogue numbers below the table.
 	it( 'renders the catalogue card after the rules table', async () => {
 		serve( { rules: [ rule( 1 ) ] } );
 		let container;
@@ -255,8 +250,8 @@ describe( 'the Pricing Rules list', () => {
 		const table = screen.getByRole( 'button', { name: 'filter to nothing' } );
 		const card = screen.getByTestId( 'catalog-impact' );
 
-		// Without this, a stand-in that moved out of the container would index at
-		// -1 and every card position would pass.
+		// Without this, a stand-in outside the container indexes at -1 and every
+		// card position passes.
 		expect( order ).toContain( table );
 		expect( order.indexOf( card ) ).toBeGreaterThan( order.indexOf( table ) );
 	} );
@@ -297,8 +292,6 @@ describe( 'the Pricing Rules list', () => {
 		expect( publishedSection().count ).toBeUndefined();
 	} );
 
-	// The empty state belongs to a list with nothing in it, not to a search that
-	// matched nothing, which keeps the DataViews treatment.
 	it( 'keeps the table when a filter leaves no matches', async () => {
 		serve( { rules: [ rule( 1 ), rule( 2 ) ] } );
 		await act( async () => {
@@ -331,12 +324,9 @@ describe( 'the Pricing Rules list', () => {
 
 		expect( screen.queryByTestId( 'catalog-impact' ) ).not.toBeInTheDocument();
 		expect( screen.getByRole( 'button', { name: 'filter to nothing' } ) ).toBeInTheDocument();
-		// The list is the screen; a missing headline does not warrant a notice.
 		expect( notices ).toEqual( [] );
 	} );
 
-	// The engine answers an unsupported catalogue with the rest of the payload
-	// absent, so the card must not read total_matching off it.
 	it( 'renders the table but no card when the catalogue is unsupported', async () => {
 		serve( { rules: [ rule( 1 ) ], stats: { supported: false } } );
 		await act( async () => {
@@ -347,8 +337,6 @@ describe( 'the Pricing Rules list', () => {
 		expect( screen.getByRole( 'button', { name: 'filter to nothing' } ) ).toBeInTheDocument();
 	} );
 
-	// The catalogue walk behind this read is not bounded by the limit, so a route
-	// that hangs rather than fails must not hold the rules behind a spinner.
 	it( 'releases the page once the catalogue read outstays its welcome', async () => {
 		jest.useFakeTimers();
 		apiFetch.mockImplementation( ( { path } ) => {
@@ -373,8 +361,6 @@ describe( 'the Pricing Rules list', () => {
 		jest.useRealTimers();
 	} );
 
-	// Trashing is the one mutation with no route change behind it, so nothing else
-	// would refresh the catalogue figures or the sample cached behind the card.
 	it( 'refetches the catalogue after a rule is trashed', async () => {
 		serve( { rules: [ rule( 1 ), rule( 2 ) ] } );
 		await act( async () => {
