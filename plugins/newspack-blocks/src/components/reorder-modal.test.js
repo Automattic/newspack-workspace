@@ -77,26 +77,26 @@ describe( 'ReorderModal', () => {
 
 	it( 'moves an item up with the chevron', async () => {
 		renderModal();
-		fireEvent.click( await screen.findByLabelText( 'Move "Gamma" up' ) );
+		fireEvent.click( await screen.findByLabelText( 'Move Up: Gamma' ) );
 		expect( titles() ).toEqual( [ 'Alpha', 'Gamma', 'Beta' ] );
 	} );
 
 	it( 'moves an item down with the chevron', async () => {
 		renderModal();
-		fireEvent.click( await screen.findByLabelText( 'Move "Alpha" down' ) );
+		fireEvent.click( await screen.findByLabelText( 'Move Down: Alpha' ) );
 		expect( titles() ).toEqual( [ 'Beta', 'Alpha', 'Gamma' ] );
 	} );
 
 	it( 'disables the chevrons at the ends of the list', async () => {
 		renderModal();
-		expect( await screen.findByLabelText( 'Move "Alpha" up' ) ).toHaveAttribute( 'aria-disabled', 'true' );
-		expect( screen.getByLabelText( 'Move "Gamma" down' ) ).toHaveAttribute( 'aria-disabled', 'true' );
-		expect( screen.getByLabelText( 'Move "Alpha" down' ) ).not.toHaveAttribute( 'aria-disabled' );
+		expect( await screen.findByLabelText( 'Move Up: Alpha' ) ).toHaveAttribute( 'aria-disabled', 'true' );
+		expect( screen.getByLabelText( 'Move Down: Gamma' ) ).toHaveAttribute( 'aria-disabled', 'true' );
+		expect( screen.getByLabelText( 'Move Down: Alpha' ) ).not.toHaveAttribute( 'aria-disabled' );
 	} );
 
 	it( 'keeps a disabled chevron focusable but inert', async () => {
 		renderModal();
-		const chevron = await screen.findByLabelText( 'Move "Alpha" up' );
+		const chevron = await screen.findByLabelText( 'Move Up: Alpha' );
 		chevron.focus();
 		expect( document.activeElement ).toBe( chevron );
 		fireEvent.click( chevron );
@@ -114,7 +114,7 @@ describe( 'ReorderModal', () => {
 
 	it( 'keeps the item title in the accessible name and out of the tooltip', async () => {
 		renderModal();
-		const chevron = await screen.findByLabelText( 'Move "Gamma" up' );
+		const chevron = await screen.findByLabelText( 'Move Up: Gamma' );
 		expect( screen.queryAllByLabelText( 'Move Up' ) ).toHaveLength( 0 );
 
 		chevron.focus();
@@ -123,29 +123,36 @@ describe( 'ReorderModal', () => {
 		expect( tooltip ).not.toHaveTextContent( 'Gamma' );
 	} );
 
+	it( 'starts the accessible name with the visible label', async () => {
+		renderModal();
+		const chevron = await screen.findByLabelText( 'Move Up: Gamma' );
+		expect( chevron.getAttribute( 'aria-label' ) ).toContain( 'Move Up' );
+		expect( screen.getByLabelText( 'Move Down: Alpha' ).getAttribute( 'aria-label' ) ).toContain( 'Move Down' );
+	} );
+
 	it( 'keeps focus on the pressed chevron while it stays enabled', async () => {
 		renderModal();
-		fireEvent.click( await screen.findByLabelText( 'Move "Gamma" up' ) );
-		expect( document.activeElement ).toBe( screen.getByLabelText( 'Move "Gamma" up' ) );
+		fireEvent.click( await screen.findByLabelText( 'Move Up: Gamma' ) );
+		expect( document.activeElement ).toBe( screen.getByLabelText( 'Move Up: Gamma' ) );
 	} );
 
 	it( 'moves focus to the other chevron when the pressed one disables', async () => {
 		renderModal();
-		fireEvent.click( await screen.findByLabelText( 'Move "Beta" up' ) );
-		expect( screen.getByLabelText( 'Move "Beta" up' ) ).toHaveAttribute( 'aria-disabled', 'true' );
-		expect( document.activeElement ).toBe( screen.getByLabelText( 'Move "Beta" down' ) );
+		fireEvent.click( await screen.findByLabelText( 'Move Up: Beta' ) );
+		expect( screen.getByLabelText( 'Move Up: Beta' ) ).toHaveAttribute( 'aria-disabled', 'true' );
+		expect( document.activeElement ).toBe( screen.getByLabelText( 'Move Down: Beta' ) );
 	} );
 
 	it( 'saves the reordered IDs', async () => {
 		const { onSave } = renderModal();
-		fireEvent.click( await screen.findByLabelText( 'Move "Gamma" up' ) );
+		fireEvent.click( await screen.findByLabelText( 'Move Up: Gamma' ) );
 		fireEvent.click( screen.getByRole( 'button', { name: 'Save' } ) );
 		expect( onSave ).toHaveBeenCalledWith( [ 11, 33, 22 ] );
 	} );
 
 	it( 'discards the new order once the discard is confirmed', async () => {
 		const { onSave, onClose } = renderModal();
-		fireEvent.click( await screen.findByLabelText( 'Move "Gamma" up' ) );
+		fireEvent.click( await screen.findByLabelText( 'Move Up: Gamma' ) );
 		fireEvent.click( screen.getByRole( 'button', { name: 'Cancel' } ) );
 		fireEvent.click( screen.getByRole( 'button', { name: 'Discard' } ) );
 		expect( onSave ).not.toHaveBeenCalled();
@@ -155,15 +162,15 @@ describe( 'ReorderModal', () => {
 	it( 'disables saving until the order changes', async () => {
 		renderModal();
 		expect( await screen.findByRole( 'button', { name: 'Save' } ) ).toHaveAttribute( 'aria-disabled', 'true' );
-		fireEvent.click( screen.getByLabelText( 'Move "Gamma" up' ) );
+		fireEvent.click( screen.getByLabelText( 'Move Up: Gamma' ) );
 		expect( screen.getByRole( 'button', { name: 'Save' } ) ).not.toHaveAttribute( 'aria-disabled' );
 	} );
 
 	it( 'disables saving again when the order is moved back', async () => {
 		renderModal();
-		fireEvent.click( await screen.findByLabelText( 'Move "Gamma" up' ) );
+		fireEvent.click( await screen.findByLabelText( 'Move Up: Gamma' ) );
 		expect( screen.getByRole( 'button', { name: 'Save' } ) ).not.toHaveAttribute( 'aria-disabled' );
-		fireEvent.click( screen.getByLabelText( 'Move "Gamma" down' ) );
+		fireEvent.click( screen.getByLabelText( 'Move Down: Gamma' ) );
 		expect( titles() ).toEqual( [ 'Alpha', 'Beta', 'Gamma' ] );
 		expect( screen.getByRole( 'button', { name: 'Save' } ) ).toHaveAttribute( 'aria-disabled', 'true' );
 	} );
@@ -177,7 +184,7 @@ describe( 'ReorderModal', () => {
 
 	it( 'asks before discarding and holds the modal open until answered', async () => {
 		const { onSave, onClose } = renderModal();
-		fireEvent.click( await screen.findByLabelText( 'Move "Gamma" up' ) );
+		fireEvent.click( await screen.findByLabelText( 'Move Up: Gamma' ) );
 		fireEvent.click( screen.getByRole( 'button', { name: 'Cancel' } ) );
 		expect( screen.getByText( 'Discard the new order?' ) ).toBeInTheDocument();
 		expect( onClose ).not.toHaveBeenCalled();
@@ -188,7 +195,7 @@ describe( 'ReorderModal', () => {
 	// request behind an exit animation, so the confirmation is up synchronously.
 	it( 'asks before discarding when Escape dismisses the modal', async () => {
 		const { onClose } = renderModal();
-		fireEvent.click( await screen.findByLabelText( 'Move "Gamma" up' ) );
+		fireEvent.click( await screen.findByLabelText( 'Move Up: Gamma' ) );
 		fireEvent.keyDown( document.activeElement, { key: 'Escape' } );
 		expect( screen.getByText( 'Discard the new order?' ) ).toBeInTheDocument();
 		expect( onClose ).not.toHaveBeenCalled();
@@ -204,7 +211,7 @@ describe( 'ReorderModal', () => {
 
 	it( 'asks before discarding when the header close button dismisses the modal', async () => {
 		const { onClose } = renderModal();
-		fireEvent.click( await screen.findByLabelText( 'Move "Gamma" up' ) );
+		fireEvent.click( await screen.findByLabelText( 'Move Up: Gamma' ) );
 		fireEvent.click( screen.getByRole( 'button', { name: 'Close' } ) );
 		expect( screen.getByText( 'Discard the new order?' ) ).toBeInTheDocument();
 		expect( onClose ).not.toHaveBeenCalled();
@@ -219,7 +226,7 @@ describe( 'ReorderModal', () => {
 
 	it( 'asks before discarding when an overlay press dismisses a reordered list', async () => {
 		const { onClose } = renderModal();
-		fireEvent.click( await screen.findByLabelText( 'Move "Gamma" up' ) );
+		fireEvent.click( await screen.findByLabelText( 'Move Up: Gamma' ) );
 		press( overlay(), overlay() );
 		expect( screen.getByText( 'Discard the new order?' ) ).toBeInTheDocument();
 		expect( onClose ).not.toHaveBeenCalled();
@@ -242,12 +249,114 @@ describe( 'ReorderModal', () => {
 
 	it( 'keeps the reordered list when the discard is dismissed', async () => {
 		const { onSave, onClose } = renderModal();
-		fireEvent.click( await screen.findByLabelText( 'Move "Gamma" up' ) );
+		fireEvent.click( await screen.findByLabelText( 'Move Up: Gamma' ) );
 		fireEvent.click( screen.getByRole( 'button', { name: 'Cancel' } ) );
 		fireEvent.click( screen.getByRole( 'button', { name: 'Keep editing' } ) );
 		expect( screen.queryByText( 'Discard the new order?' ) ).not.toBeInTheDocument();
 		expect( titles() ).toEqual( [ 'Alpha', 'Gamma', 'Beta' ] );
 		expect( onClose ).not.toHaveBeenCalled();
+		expect( onSave ).not.toHaveBeenCalled();
+	} );
+
+	it( 'exposes the rows as a list', async () => {
+		renderModal();
+		await screen.findByText( 'Alpha' );
+		expect( screen.getByRole( 'list' ) ).toBeInTheDocument();
+		expect( screen.getAllByRole( 'listitem' ) ).toHaveLength( 3 );
+	} );
+
+	it( 'carries the full title on a row whose text is clipped', async () => {
+		renderModal();
+		await screen.findByText( 'Alpha' );
+		expect( document.querySelector( '.newspack-blocks-reorder-modal__title' ) ).toHaveAttribute( 'title', 'Alpha' );
+	} );
+} );
+
+// jsdom ships no `DataTransfer`, so the drag payload is stubbed.
+const dataTransfer = () => ( {
+	data: {},
+	dropEffect: 'none',
+	effectAllowed: 'none',
+	setData( type, value ) {
+		this.data[ type ] = value;
+	},
+	getData( type ) {
+		return this.data[ type ];
+	},
+} );
+
+const rows = () => Array.from( document.querySelectorAll( '.newspack-blocks-reorder-modal__item' ) );
+
+describe( 'ReorderModal drag and drop', () => {
+	it( 'reorders as a row is dragged over another', async () => {
+		renderModal();
+		await screen.findByText( 'Alpha' );
+		const dt = dataTransfer();
+		fireEvent.dragStart( rows()[ 2 ], { dataTransfer: dt } );
+		expect( dt.getData( 'text/plain' ) ).toBe( '33' );
+		fireEvent.dragOver( rows()[ 0 ], { dataTransfer: dt } );
+		expect( titles() ).toEqual( [ 'Gamma', 'Alpha', 'Beta' ] );
+	} );
+
+	it( 'keeps the new order when the drag is dropped', async () => {
+		renderModal();
+		await screen.findByText( 'Alpha' );
+		const dt = dataTransfer();
+		fireEvent.dragStart( rows()[ 2 ], { dataTransfer: dt } );
+		fireEvent.dragOver( rows()[ 0 ], { dataTransfer: dt } );
+		dt.dropEffect = 'move';
+		fireEvent.dragEnd( rows()[ 0 ], { dataTransfer: dt } );
+		expect( titles() ).toEqual( [ 'Gamma', 'Alpha', 'Beta' ] );
+	} );
+
+	it( 'puts the order back when the drag is cancelled', async () => {
+		renderModal();
+		await screen.findByText( 'Alpha' );
+		const dt = dataTransfer();
+		fireEvent.dragStart( rows()[ 2 ], { dataTransfer: dt } );
+		fireEvent.dragOver( rows()[ 0 ], { dataTransfer: dt } );
+		expect( titles() ).toEqual( [ 'Gamma', 'Alpha', 'Beta' ] );
+		dt.dropEffect = 'none';
+		fireEvent.dragEnd( rows()[ 0 ], { dataTransfer: dt } );
+		expect( titles() ).toEqual( [ 'Alpha', 'Beta', 'Gamma' ] );
+	} );
+
+	it( 'does not start a drag from a chevron', async () => {
+		renderModal();
+		const chevron = await screen.findByLabelText( 'Move Up: Gamma' );
+		const dt = dataTransfer();
+		fireEvent.dragStart( chevron, { dataTransfer: dt } );
+		expect( dt.getData( 'text/plain' ) ).toBeUndefined();
+		fireEvent.dragOver( rows()[ 0 ], { dataTransfer: dt } );
+		expect( titles() ).toEqual( [ 'Alpha', 'Beta', 'Gamma' ] );
+	} );
+} );
+
+describe( 'ReorderModal when the titles cannot be loaded', () => {
+	let errorSpy;
+
+	beforeEach( () => {
+		errorSpy = jest.spyOn( console, 'error' ).mockImplementation( () => {} );
+	} );
+
+	afterEach( () => {
+		errorSpy.mockRestore();
+	} );
+
+	it( 'says so and refuses to save', async () => {
+		const { onSave } = renderModal( { fetchItems: () => Promise.reject( new Error( 'unreachable' ) ) } );
+		// The same wording also lands in the live region core announces it through.
+		expect(
+			await screen.findByText( 'The content could not be loaded, so the order cannot be saved.', {
+				selector: '.components-notice__content',
+			} )
+		).toBeInTheDocument();
+		expect( titles() ).toEqual( [ '(no title)', '(no title)', '(no title)' ] );
+
+		fireEvent.click( screen.getAllByLabelText( 'Move Up: (no title)' )[ 1 ] );
+		const save = screen.getByRole( 'button', { name: 'Save' } );
+		expect( save ).toHaveAttribute( 'aria-disabled', 'true' );
+		fireEvent.click( save );
 		expect( onSave ).not.toHaveBeenCalled();
 	} );
 } );

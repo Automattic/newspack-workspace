@@ -54,7 +54,7 @@ class QueryControls extends Component {
 		return apiFetch( {
 			url: addQueryArgs( restUrl, {
 				// These params use the block query parameters (see Newspack_Blocks::build_articles_query).
-				postsToShow: 100,
+				postsToShow: Math.max( postIDs.length, 1 ),
 				include: postIDs.join( ',' ),
 				_fields: 'id,title',
 				postType,

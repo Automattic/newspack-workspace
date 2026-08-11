@@ -12,6 +12,7 @@ import { useEffect, useRef, useState } from '@wordpress/element';
 import {
 	Button,
 	Modal,
+	Notice,
 	Spinner,
 	__experimentalConfirmDialog as ConfirmDialog, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
@@ -40,20 +41,26 @@ const isAvailable = button => !! button && ! button.matches( ':disabled, [aria-d
 const ReorderModal = ( { title, ids, fetchItems, onSave, onClose } ) => {
 	const [ items, setItems ] = useState( null );
 	const [ dragIndex, setDragIndex ] = useState( null );
+	const [ hasFetchError, setHasFetchError ] = useState( false );
 	const [ isConfirmingDiscard, setIsConfirmingDiscard ] = useState( false );
 	const listRef = useRef( null );
 	const overlayRef = useRef( null );
 	const pendingFocus = useRef( null );
 	const closeRef = useRef( null );
+	const preDragItems = useRef( null );
 
-	// `ids` is the order the modal opened with: it remounts on every open.
-	const isDirty = !! items && items.some( ( item, index ) => item.id !== ids[ index ] );
+	// The order the modal opened with. Snapshotted so a change to `ids` from
+	// elsewhere in the editor cannot desynchronise it from `items`.
+	const openedWith = useRef( ids );
+
+	const isDirty = !! items && items.some( ( item, index ) => item.id !== openedWith.current[ index ] );
 
 	useEffect( () => {
 		let cancelled = false;
-		const withLabels = labels => ids.map( id => ( { id, label: labels[ id ] || __( '(no title)', 'newspack-blocks' ) } ) );
+		const openIds = openedWith.current;
+		const withLabels = labels => openIds.map( id => ( { id, label: labels[ id ] || __( '(no title)', 'newspack-blocks' ) } ) );
 
-		fetchItems( ids )
+		fetchItems( openIds )
 			.then( results => {
 				if ( cancelled ) {
 					return;
@@ -68,6 +75,7 @@ const ReorderModal = ( { title, ids, fetchItems, onSave, onClose } ) => {
 				// eslint-disable-next-line no-console
 				console.error( 'Newspack Blocks: could not prepare the content to reorder.', error );
 				if ( ! cancelled ) {
+					setHasFetchError( true );
 					setItems( withLabels( {} ) );
 				}
 			} );
@@ -199,7 +207,14 @@ const ReorderModal = ( { title, ids, fetchItems, onSave, onClose } ) => {
 						</div>
 					) : (
 						<>
-							<ul className="newspack-blocks-reorder-modal__list" ref={ listRef }>
+							{ hasFetchError && (
+								<Notice status="error" isDismissible={ false } className="newspack-blocks-reorder-modal__notice">
+									{ __( 'The content could not be loaded, so the order cannot be saved.', 'newspack-blocks' ) }
+								</Notice>
+							) }
+							{ /* `list-style: none` drops list semantics in Safari, so the role is restated. */ }
+							{ /* eslint-disable-next-line jsx-a11y/no-redundant-roles */ }
+							<ul className="newspack-blocks-reorder-modal__list" role="list" ref={ listRef }>
 								{ items.map( ( item, index ) => (
 									<Card.Root
 										key={ item.id }
@@ -209,14 +224,28 @@ const ReorderModal = ( { title, ids, fetchItems, onSave, onClose } ) => {
 											'is-dragging': dragIndex === index,
 										} ) }
 										draggable
-										// Firefox and Safari will not start a drag until the payload is set.
 										onDragStart={ event => {
+											// The chevrons live inside the drag source, so a click that
+											// drifts would otherwise drag the row instead of stepping it.
+											if ( event.target.closest?.( 'button' ) ) {
+												event.preventDefault();
+												return;
+											}
+											preDragItems.current = items;
+											// Firefox and Safari will not start a drag until the payload is set.
 											event.dataTransfer.setData( 'text/plain', String( item.id ) );
 											event.dataTransfer.effectAllowed = 'move';
 											setDragIndex( index );
 										} }
 										onDragOver={ event => handleDragOver( event, index ) }
-										onDragEnd={ () => setDragIndex( null ) }
+										onDragEnd={ event => {
+											// A cancelled drag reports no drop effect: put the order back.
+											if ( 'none' === event.dataTransfer.dropEffect && preDragItems.current ) {
+												setItems( preDragItems.current );
+											}
+											preDragItems.current = null;
+											setDragIndex( null );
+										} }
 										onDrop={ event => event.preventDefault() }
 									>
 										<span className="newspack-blocks-reorder-modal__grip" aria-hidden="true">
@@ -230,9 +259,11 @@ const ReorderModal = ( { title, ids, fetchItems, onSave, onClose } ) => {
 												disabled={ 0 === index }
 												accessibleWhenDisabled
 												label={ __( 'Move Up', 'newspack-blocks' ) }
+												// The visible label has to stay a substring of the
+												// accessible name so speech input can reach it.
 												aria-label={ sprintf(
 													/* translators: %s: title of the content being moved. */
-													__( 'Move "%s" up', 'newspack-blocks' ),
+													__( 'Move Up: %s', 'newspack-blocks' ),
 													item.label
 												) }
 												onClick={ () => moveTo( index, index - 1, 'up' ) }
@@ -246,13 +277,15 @@ const ReorderModal = ( { title, ids, fetchItems, onSave, onClose } ) => {
 												label={ __( 'Move Down', 'newspack-blocks' ) }
 												aria-label={ sprintf(
 													/* translators: %s: title of the content being moved. */
-													__( 'Move "%s" down', 'newspack-blocks' ),
+													__( 'Move Down: %s', 'newspack-blocks' ),
 													item.label
 												) }
 												onClick={ () => moveTo( index, index + 1, 'down' ) }
 											/>
 										</span>
-										<Card.Content className="newspack-blocks-reorder-modal__title">{ item.label }</Card.Content>
+										<Card.Content className="newspack-blocks-reorder-modal__title" title={ item.label }>
+											{ item.label }
+										</Card.Content>
 									</Card.Root>
 								) ) }
 							</ul>
@@ -262,7 +295,7 @@ const ReorderModal = ( { title, ids, fetchItems, onSave, onClose } ) => {
 								</Button>
 								<Button
 									variant="primary"
-									disabled={ ! isDirty }
+									disabled={ ! isDirty || hasFetchError }
 									accessibleWhenDisabled
 									onClick={ () => onSave( items.map( item => item.id ) ) }
 								>
