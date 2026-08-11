@@ -21,6 +21,10 @@ describe( 'valueLabel', () => {
 		expect( valueLabel( 'fixed_price', '$' ) ).toBe( 'Value ($)' );
 		expect( valueLabel( 'discount_fixed', '€' ) ).toBe( 'Value (€)' );
 	} );
+
+	it( 'claims no unit for a calculation it has no wording for', () => {
+		expect( valueLabel( 'discount_percent', '$' ) ).toBe( 'Value' );
+	} );
 } );
 
 describe( 'valueHelp', () => {

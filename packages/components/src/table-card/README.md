@@ -67,8 +67,9 @@ node, so the shape follows from which props are passed:
 - No `title`, no `actions`, no `before`, no `after` — the table is flush to
   all four card edges.
 - `title` or `actions` present — a header sits above; the table is inset from
-  the top by the header's bottom padding (upstream's `.header + .content` rule
-  zeroes the content's own top padding).
+  the top by the card's header→content gap token (upstream's
+  `.header + .content` rule zeroes the content's own top padding and reconciles
+  the header's bottom padding to that gap with a compensating margin).
 - `before` / `after` present — the slot sits in the padding and the table no
   longer touches that edge.
 
@@ -92,8 +93,8 @@ bumping past it, re-check:
   styles from restyling it.
 - That the card padding is still 24px — callers pad their outer table columns
   with `$grid-unit-30` to match it, and the two values drift independently.
-- Every consumer, visually: the Price Schedule card (the one surface with a
-  header — title, heading render, and the actions row), the impact table
+- Every consumer, visually: the Price Schedule card (the one product surface
+  with a header — title, heading render, and the actions row), the impact table
   (headerless; rendered by both the rule editor and the list page's catalog
   panel), and the components-demo section, which is the cheapest place to
   eyeball a bump.

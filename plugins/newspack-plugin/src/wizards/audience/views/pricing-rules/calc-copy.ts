@@ -28,8 +28,12 @@ export function valueLabel( calcType: string, currencySymbol: string ): string {
 	if ( 'percent_of_base' === calcType ) {
 		return __( 'Value (%)', 'newspack-plugin' );
 	}
-	/* translators: %s: the store's currency symbol, for example $. */
-	return sprintf( __( 'Value (%s)', 'newspack-plugin' ), currencySymbol );
+	if ( 'fixed_price' === calcType || 'discount_fixed' === calcType ) {
+		/* translators: %s: the store's currency symbol, for example $. */
+		return sprintf( __( 'Value (%s)', 'newspack-plugin' ), currencySymbol );
+	}
+	// A type this build has no wording for: the unit is unknown, so claim none.
+	return __( 'Value', 'newspack-plugin' );
 }
 
 /**
