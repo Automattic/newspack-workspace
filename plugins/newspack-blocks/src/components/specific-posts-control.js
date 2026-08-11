@@ -23,7 +23,7 @@ const SpecificPostsControl = ( { postIds = [], onChange, fetchSuggestions, fetch
 	const reorderLabel = __( 'Reorder Content', 'newspack-blocks' );
 
 	// The token field and the modal ask for the same titles, so the request is
-	// shared rather than made twice. A rejection clears the cache to allow a retry.
+	// shared rather than made twice, and a failure leaves the slot open to retry.
 	const fetchSavedInfoOnce = useCallback(
 		ids => {
 			const key = [ ...ids ].sort().join( ',' );

@@ -89,7 +89,8 @@ const ReorderModal = ( { title, ids, fetchItems, onSave, onClose } ) => {
 				console.error( 'Newspack Blocks: could not prepare the content to reorder.', error );
 				if ( ! cancelled ) {
 					setHasFetchError( true );
-					setItems( withLabels( {} ) );
+					// Only to leave the loading state: the error view lists nothing.
+					setItems( [] );
 				}
 			} );
 
