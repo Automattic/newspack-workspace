@@ -18,6 +18,14 @@
 
 	color: wp-colors.$gray-900;
 
+	// Full-width dividers span 100vw, which overspills the admin content area
+	// (admin menu offset + scrollbar) and triggers horizontal scrolling; clip
+	// (not hidden) so no scroll container is created. Scoped off __content,
+	// which can be a constrained centered column.
+	&:not(.newspack-wizard__content) {
+		overflow-x: clip;
+	}
+
 	// Headings
 	h1,
 	h2,

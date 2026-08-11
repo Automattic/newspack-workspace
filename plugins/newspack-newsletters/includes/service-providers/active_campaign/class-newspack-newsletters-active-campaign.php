@@ -1307,7 +1307,7 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 					$send_sublist_id               = $legacy_sublist_id;
 				}
 			}
-			$send_lists = $this->get_send_lists( // Get first 10 top-level send lists for autocomplete.
+			$send_lists = $this->get_send_lists_with_fallback( // Get first 10 top-level send lists for autocomplete.
 				[
 					'ids'  => $send_list_id ? [ $send_list_id ] : null, // If we have a selected list, make sure to fetch it.
 					'type' => 'list',
@@ -1319,7 +1319,7 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 			}
 			$newsletter_data['lists'] = $send_lists;
 			$send_sublists = $send_list_id || $send_sublist_id ?
-				$this->get_send_lists(
+				$this->get_send_lists_with_fallback(
 					[
 						'ids'       => [ $send_sublist_id ], // If we have a selected sublist, make sure to fetch it. Otherwise, we'll populate sublists later.
 						'parent_id' => $send_list_id,

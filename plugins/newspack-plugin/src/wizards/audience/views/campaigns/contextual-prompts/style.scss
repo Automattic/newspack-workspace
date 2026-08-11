@@ -1,0 +1,15 @@
+/**
+ * Contextual Prompts screen.
+ */
+
+@use "~@wordpress/base-styles/variables" as wp-vars;
+
+// Interstitial shown while the feature disables.
+.newspack-contextual-prompts__disabling {
+	padding: wp-vars.$grid-unit-80 0;
+
+	p {
+		font-weight: 600;
+		margin: 0;
+	}
+}
