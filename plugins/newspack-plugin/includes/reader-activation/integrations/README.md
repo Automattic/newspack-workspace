@@ -36,6 +36,15 @@ The registry class is `Newspack\Reader_Activation\Integrations` (parent namespac
 
 Syncs contacts and metadata fields with the active Newspack Newsletters service provider. Auto-registers and is enabled by default on new installs (and on legacy upgrades unless the legacy `newspack_reader_activation_sync_esp` option was explicitly disabled). Pulls custom merge fields back into Newspack for segmentation and access rules.
 
+### `form-capture`
+
+Registers readers from publisher-designated frontend forms built with any form tool (opt-in via the `newspack-form-capture` CSS class or configured selectors). Registered but disabled by default. It is the first capture-only built-in — neither a sync destination nor a pull source — which makes it the working reference for two patterns:
+
+- **Capability declarations over failing gates.** `supports_push()`/`supports_pull()` return `false` (no dead outbound/inbound controls, no bearing on `has_one_syncable_integration()`), while `can_sync()` succeeds — capture-only is a declared capability, not an error state.
+- **One switch for the frontend registration surface.** `supports_frontend_registration()` returns the integration's *enabled* state, so the page-emitted key, the endpoint acceptance, and the capture script share a single off switch.
+
+It also implements `get_unsupported_reason()` (reCAPTCHA v2 is incompatible with capture on page-navigating forms) and sizes its own registration rate-limit bucket via the `newspack_frontend_registration_rate_limit` filter.
+
 ---
 
 ## Registering an Integration
@@ -129,9 +138,9 @@ class My_Integration extends Integration {
 | `pull_contact_data( $user_id )` | Fetch contact data from the external system. Return `array` of `field_key => value` or `WP_Error`. Defaults to `[]`. |
 | `get_available_incoming_fields()` | Return an array of `Incoming_Field` objects representing the schema available to pull. Required for any integration that supports pulling. |
 | `configure_incoming_field( $field )` | Enrich an `Incoming_Field` with display metadata and promotion flags (access rule / segment criteria). Called by the framework on every constructed field. |
-| `register_handlers()` | Register data event handlers (see [Data Event Handlers](#data-event-handlers)). Called once after all integrations have been registered. |
-| `supports_frontend_registration()` | Return `true` to expose this integration's registration key to the page and accept it on the frontend registration endpoint. |
-| `get_registration_key()` / `validate_registration_request()` | Override to implement custom registration key schemes. Default is timing-safe HMAC-SHA256 of the integration ID with the site's auth salt. |
+| `register_handlers()` | Register data event handlers (see [Data Event Handlers](#data-event-handlers)) and any WordPress hooks the integration needs. Called once per *accepted* instance after all integrations have been registered — hook here, not in the constructor, so a rejected duplicate registration never leaves live callbacks behind. |
+| `supports_frontend_registration()` | Return `true` to expose this integration's registration key to the page and accept it on the frontend registration endpoint. Built-ins gate this on the enabled state so key, endpoint and script share one switch. |
+| `get_registration_key()` / `validate_registration_request()` | Override to implement custom registration key schemes. Default is timing-safe HMAC-SHA256 of the integration ID and a stored per-integration seed with the site's auth salt; `rotate_registration_key()` regenerates the seed, revoking the key without touching `AUTH_SALT`. |
 | `handle_logged_in_user_registration( $user, $request )` | Called when a logged-in user attempts to register again via the frontend. Use to update user data, link the account, record a new event, etc. Default is a no-op. |
 | `get_my_account_menu_item()` | Return `[ 'slug' => ..., 'label' => ..., 'position' => ... ]` to add a tab to the WooCommerce My Account page. Default returns `null` (no tab). |
 | `render_my_account_page( $value )` | Echo markup for the integration's My Account page. Called inside the WooCommerce account template. |
@@ -498,8 +507,12 @@ Endpoints are only registered for integrations that are currently enabled.
 
 To allow an integration to drive frontend reader registration (e.g. a third-party signup form posting to Newspack):
 
-1. Override `supports_frontend_registration()` to return `true`. The framework will output the integration's registration key on the page and accept it on the registration endpoint.
-2. Optionally override `get_registration_key()` and `validate_registration_request()` to implement a custom key scheme (asymmetric keys, time-bounded tokens, etc.). The default is HMAC-SHA256 of the integration ID with the site's auth salt, compared in constant time.
+1. Override `supports_frontend_registration()` to return `true`. The framework will output the integration's registration key on the page and accept it on the registration endpoint. Prefer returning the integration's *enabled* state (as the built-in `form-capture` does) so the key, the endpoint and any frontend script share a single off switch.
+2. Optionally override `get_registration_key()` and `validate_registration_request()` to implement a custom key scheme (asymmetric keys, time-bounded tokens, etc.). The default is HMAC-SHA256 of the integration ID and a stored per-integration seed with the site's auth salt, compared in constant time; `rotate_registration_key()` regenerates the seed to revoke a key that is being abused.
 3. Optionally override `handle_logged_in_user_registration( $user, $request )` to react when an already-logged-in reader submits a registration request — record a new donation, link an account, fire an analytics event, etc.
 
+Each integration's registration traffic is rate-limited per IP in its own bucket (see `Reader_Registration::get_rate_limit_bucket_for()`); integrations expecting more than the default 10/hour should size their bucket via the `newspack_frontend_registration_rate_limit` filter, as `form-capture` does.
+
 The built-in JS client (`newspackReaderActivation.register()`) always sends the value returned by `get_registration_key()`. Custom key schemes that diverge from this default need their own client-side code to compute and submit the key.
+
+The built-in `form-capture` integration ([class-form-capture.php](class-form-capture.php) and `src/reader-activation-form-capture/`) is the reference implementation of this section end to end: enabled-gated key emission, a capture script driving `register()`, magic-link suppression for repeat captures, and existing-reader sync scheduling.

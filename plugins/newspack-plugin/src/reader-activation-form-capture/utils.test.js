@@ -50,6 +50,10 @@ describe( 'getEmailValue', () => {
 		</form>`;
 		expect( getEmailValue( document.querySelector( 'form' ) ) ).toBe( 'reader@example.com' );
 	} );
+	it( 'lower-cases the harvested email so client dedupe agrees with the server', () => {
+		document.body.innerHTML = `<form><input type="email" value="Reader@Example.com"></form>`;
+		expect( getEmailValue( document.querySelector( 'form' ) ) ).toBe( 'reader@example.com' );
+	} );
 } );
 
 describe( 'getNameValues', () => {
@@ -74,5 +78,19 @@ describe( 'getNameValues', () => {
 	it( 'returns empty object when nothing matches', () => {
 		document.body.innerHTML = `<form><input type="text" name="username" value="ada"></form>`;
 		expect( getNameValues( document.querySelector( 'form' ) ) ).toEqual( {} );
+	} );
+	it( 'does not treat a non-person name field as the reader name', () => {
+		document.body.innerHTML = `<form>
+			<input type="text" name="organization_name" value="Acme Corp">
+			<input type="text" name="display-name" value="acme_handle">
+		</form>`;
+		expect( getNameValues( document.querySelector( 'form' ) ) ).toEqual( {} );
+	} );
+	it( 'still harvests a real full-name field alongside a non-person name field', () => {
+		document.body.innerHTML = `<form>
+			<input type="text" name="company_name" value="Acme Corp">
+			<input type="text" name="name" value="Ada Lovelace">
+		</form>`;
+		expect( getNameValues( document.querySelector( 'form' ) ) ).toEqual( { first_name: 'Ada Lovelace', last_name: '' } );
 	} );
 } );

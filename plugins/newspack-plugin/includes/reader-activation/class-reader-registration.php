@@ -201,17 +201,38 @@ final class Reader_Registration {
 	}
 
 	/**
+	 * Get the rate-limit bucket name for an Integration-backed frontend registration.
+	 *
+	 * Each integration's registration traffic is counted in its own per-IP bucket,
+	 * so a high-traffic capture integration can neither starve nor be starved by
+	 * another integration's registrations. Integrations that size their own limit
+	 * via the `newspack_frontend_registration_rate_limit` filter must compare
+	 * against this same derivation.
+	 *
+	 * @param string $integration_id Integration identifier.
+	 *
+	 * @return string Bucket name.
+	 */
+	public static function get_rate_limit_bucket_for( string $integration_id ): string {
+		return 'registration_' . str_replace( '-', '_', \sanitize_key( $integration_id ) );
+	}
+
+	/**
 	 * Check and increment a per-IP rate-limit bucket for frontend registration traffic.
 	 *
-	 * Each bucket has its own per-IP counter at 10/hour. The /register endpoint and
-	 * the /check-email preflight use separate buckets so that:
+	 * Each bucket has its own per-IP counter at 10/hour by default. The /register
+	 * endpoint and the /check-email preflight use separate buckets so that:
 	 *   - A legitimate user submission (one preflight + one register) still buys 10
 	 *     full registrations per hour — neither endpoint can double-charge the other.
 	 *   - An attacker probing /check-email for email enumeration is rate-limited at
 	 *     10 requests/hour regardless of registration traffic, and vice versa.
+	 * Integration-backed registrations use a per-integration bucket (see
+	 * get_rate_limit_bucket_for()) so each integration's traffic is independently
+	 * bounded and can be sized via the filter below.
 	 *
-	 * @param string $bucket Bucket key. 'registration' for /register (default, preserves
-	 *                       the existing cache key), 'check_email' for the preflight.
+	 * @param string $bucket Bucket key. 'registration' for filter-only /register
+	 *                       traffic (preserves the existing cache key), 'check_email'
+	 *                       for the preflight, or a per-integration bucket.
 	 *
 	 * @return bool|\WP_Error True if under limit, WP_Error if exceeded.
 	 */
@@ -224,7 +245,13 @@ final class Reader_Registration {
 
 		// Bucket → cache-key prefix. Keep 'newspack_reg_ip_' for registration so any
 		// in-flight counters from prior releases continue to apply.
-		$prefix    = 'check_email' === $bucket ? 'newspack_check_email_ip_' : 'newspack_reg_ip_';
+		if ( 'registration' === $bucket ) {
+			$prefix = 'newspack_reg_ip_';
+		} elseif ( 'check_email' === $bucket ) {
+			$prefix = 'newspack_check_email_ip_';
+		} else {
+			$prefix = 'newspack_' . $bucket . '_ip_';
+		}
 		$cache_key = $prefix . md5( $ip );
 
 		/**
@@ -250,16 +277,23 @@ final class Reader_Registration {
 
 		if ( $attempts > $limit ) {
 			Logger::log( sprintf( 'Frontend registration rate limit exceeded for IP %1$s (bucket: %2$s)', $ip, $bucket ) );
-			Logger::newspack_log(
-				'newspack_frontend_registration_rate_limited',
-				'Frontend registration rate limit exceeded.',
-				[
-					'ip'       => $ip,
-					'bucket'   => $bucket,
-					'attempts' => $attempts,
-				],
-				'error'
-			);
+			// Remote-log once per crossing, not once per rejected request — an IP
+			// hammering the endpoint must not amplify into remote log traffic. A
+			// visitor-triggered condition, so 'debug' (logstash only), not 'error'.
+			// The hashed IP matches the bucket key and lets a burst be correlated
+			// without putting the raw client IP into the off-site log stream.
+			if ( $attempts === $limit + 1 ) {
+				Logger::newspack_log(
+					'newspack_frontend_registration_rate_limited',
+					'Frontend registration rate limit exceeded.',
+					[
+						'ip_hash'  => md5( $ip ),
+						'bucket'   => $bucket,
+						'attempts' => $attempts,
+					],
+					'debug'
+				);
+			}
 			return new \WP_Error(
 				'rate_limit_exceeded',
 				__( 'Too many registration attempts. Please try again later.', 'newspack-plugin' ),
@@ -388,7 +422,13 @@ final class Reader_Registration {
 
 		// Step 6: Per-IP rate limit. Checked before reCAPTCHA to avoid
 		// triggering external verification calls for rate-limited IPs.
-		$rate_check = self::check_registration_rate_limit();
+		// Integration-backed registrations count in a per-integration bucket
+		// (sized via the newspack_frontend_registration_rate_limit filter);
+		// filter-only registrations keep the shared 'registration' bucket.
+		$bucket     = $integration_instance && $integration_instance->supports_frontend_registration()
+			? self::get_rate_limit_bucket_for( $integration_id )
+			: 'registration';
+		$rate_check = self::check_registration_rate_limit( $bucket );
 		if ( \is_wp_error( $rate_check ) ) {
 			return $rate_check;
 		}
@@ -403,15 +443,9 @@ final class Reader_Registration {
 			$captcha_result                = Recaptcha::verify_captcha();
 			unset( $_POST['g-recaptcha-response'] );
 			if ( \is_wp_error( $captcha_result ) ) {
-				Logger::newspack_log(
-					'newspack_frontend_registration_captcha_failed',
-					'Frontend registration rejected by reCAPTCHA.',
-					[
-						'integration_id' => $integration_id,
-						'error'          => $captcha_result->get_error_message(),
-					],
-					'error'
-				);
+				// No log here: Recaptcha::verify_captcha() already remote-logs both
+				// its transport-error and rejection paths, and this path is driven
+				// by unauthenticated callers — a second entry would double volume.
 				return new \WP_Error(
 					'recaptcha_failed',
 					$captcha_result->get_error_message(),
@@ -423,11 +457,13 @@ final class Reader_Registration {
 		// Step 8: Validate email.
 		$email = $request->get_param( 'npe' );
 		if ( empty( $email ) ) {
+			// Visitor-triggered client condition (bots, malformed submissions) —
+			// routine once capture is live, so 'debug' (logstash only), not 'error'.
 			Logger::newspack_log(
 				'newspack_frontend_registration_invalid_email',
 				'Frontend registration rejected: missing or invalid email.',
 				[ 'integration_id' => $integration_id ],
-				'error'
+				'debug'
 			);
 			return new \WP_Error(
 				'invalid_email',

@@ -31,6 +31,9 @@ class Test_Form_Capture extends WP_UnitTestCase {
 	 */
 	public function tear_down() {
 		delete_option( Reader_Activation::OPTIONS_PREFIX . 'enabled' );
+		delete_option( 'newspack_recaptcha_use_captcha' );
+		delete_option( 'newspack_recaptcha_version' );
+		delete_option( 'newspack_recaptcha_credentials' );
 		wp_set_current_user( 0 );
 		remove_all_filters( 'newspack_magic_link_rate_interval' );
 		remove_all_filters( 'newspack_reader_activation_send_magic_link_on_reregistration' );
@@ -86,7 +89,9 @@ class Test_Form_Capture extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Selector and list settings parse into clean arrays.
+	 * Selector and list settings parse into clean arrays, and bare
+	 * element/universal selectors — which would opt in every form on the
+	 * site — are rejected.
 	 */
 	public function test_settings_parsing() {
 		$integration = Integrations::get_integration( Form_Capture::ID );
@@ -94,6 +99,46 @@ class Test_Form_Capture extends WP_UnitTestCase {
 		$this->assertSame( [ '.newspack-form-capture' ], $integration->get_selectors(), 'Marker class is always present.' );
 		$integration->update_settings_field_value( 'selectors', "#signup-form\n .sidebar form \n#signup-form" );
 		$this->assertSame( [ '.newspack-form-capture', '#signup-form', '.sidebar form' ], $integration->get_selectors() );
+
+		$integration->update_settings_field_value( 'selectors', "form\n*\nbody\nDIV\n#signup-form\nform.signup" );
+		$this->assertSame(
+			[ '.newspack-form-capture', '#signup-form', 'form.signup' ],
+			$integration->get_selectors(),
+			'Bare element/universal selectors must be rejected; qualified ones kept.'
+		);
+		$integration->update_settings_field_value( 'selectors', '' );
+	}
+
+	/**
+	 * The reCAPTCHA v2 flow renders an interactive widget capture cannot warm,
+	 * so the integration must report itself unsupported (the REST layer then
+	 * refuses to enable it) instead of silently capturing nothing.
+	 */
+	public function test_unsupported_on_recaptcha_v2() {
+		$integration = Integrations::get_integration( Form_Capture::ID );
+
+		$this->assertNull( $integration->get_unsupported_reason(), 'Supported when no captcha is configured.' );
+
+		update_option( 'newspack_recaptcha_use_captcha', true );
+		update_option( 'newspack_recaptcha_version', 'v2_invisible' );
+		update_option(
+			'newspack_recaptcha_credentials',
+			[
+				'v2_invisible' => [
+					'site_key'    => 'test-key',
+					'site_secret' => 'test-secret',
+				],
+				'v3'           => [
+					'site_key'    => 'test-key',
+					'site_secret' => 'test-secret',
+				],
+			]
+		);
+		$this->assertNotNull( $integration->get_unsupported_reason(), 'Unsupported while reCAPTCHA v2 is active.' );
+		$this->assertNotEmpty( $integration->get_setup_url(), 'Unsupported state must point at the reCAPTCHA settings.' );
+
+		update_option( 'newspack_recaptcha_version', 'v3' );
+		$this->assertNull( $integration->get_unsupported_reason(), 'Supported on reCAPTCHA v3.' );
 	}
 
 	/**
@@ -125,12 +170,11 @@ class Test_Form_Capture extends WP_UnitTestCase {
 		$this->assertFalse( $errors->has_errors(), 'Capture-only integration has no sync prerequisites to fail.' );
 
 		add_filter( 'newspack_reader_activation_is_syncing_allowed', '__return_true' );
-		// Exercised through the real predicate either way: a pre-capability
-		// framework counts the always-passing can_sync() (true); with
-		// per-direction capabilities a push-less integration never satisfies
-		// this push-path predicate (false).
-		$expected = ! method_exists( $integration, 'is_push_enabled' );
-		$this->assertSame( $expected, Contact_Sync::has_one_syncable_integration() );
+		// A push-less integration can never satisfy has_one_syncable_integration():
+		// its predicate is is_push_enabled() — capability AND toggle — and
+		// supports_push() declares the capability off, always-passing can_sync()
+		// notwithstanding.
+		$this->assertFalse( Contact_Sync::has_one_syncable_integration() );
 
 		Integrations::disable( Form_Capture::ID );
 	}
@@ -146,51 +190,109 @@ class Test_Form_Capture extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The magic link is suppressed for this integration's registrations only.
+	 * The magic link is suppressed for this integration's registrations only,
+	 * and only while the integration is enabled — the off switch must mean off
+	 * even if something else stamps the method string (a replayed job, a CLI
+	 * backfill).
 	 */
 	public function test_magic_link_suppressed_for_form_capture_method() {
-		$user = self::factory()->user->create_and_get( [ 'role' => 'subscriber' ] );
+		$user   = self::factory()->user->create_and_get( [ 'role' => 'subscriber' ] );
+		$method = [ 'registration_method' => Form_Capture::get_registration_method() ];
+
+		$this->assertTrue(
+			apply_filters( 'newspack_reader_activation_send_magic_link_on_reregistration', true, $user, $method ),
+			'Suppression must not apply while the integration is disabled.'
+		);
+
+		Integrations::enable( Form_Capture::ID );
 		$this->assertFalse(
-			apply_filters( 'newspack_reader_activation_send_magic_link_on_reregistration', true, $user, [ 'registration_method' => Form_Capture::get_registration_method() ] )
+			apply_filters( 'newspack_reader_activation_send_magic_link_on_reregistration', true, $user, $method )
 		);
 		$this->assertTrue(
 			apply_filters( 'newspack_reader_activation_send_magic_link_on_reregistration', true, $user, [ 'registration_method' => 'auth-form' ] )
 		);
+		Integrations::disable( Form_Capture::ID );
 	}
 
 	/**
 	 * Existing readers get an explicit contact sync — the reader_registered
-	 * data event covers new users only.
+	 * data event covers new users only. The decision is gated on the enabled
+	 * state alongside the method check.
 	 */
 	public function test_should_sync_existing_reader_decision() {
 		$integration = Integrations::get_integration( Form_Capture::ID );
 		$user        = self::factory()->user->create_and_get( [ 'role' => 'subscriber' ] );
 		$method      = [ 'registration_method' => Form_Capture::get_registration_method() ];
 
+		$this->assertFalse( $integration->should_sync_existing_reader( $user, $method ), 'No sync decision while the integration is disabled.' );
+
+		Integrations::enable( Form_Capture::ID );
 		$this->assertTrue( $integration->should_sync_existing_reader( $user, $method ) );
 		$this->assertFalse( $integration->should_sync_existing_reader( false, $method ), 'New users are covered by the reader_registered data event.' );
 		$this->assertFalse( $integration->should_sync_existing_reader( $user, [ 'registration_method' => 'auth-form' ] ), 'Other methods are not ours to sync.' );
+		Integrations::disable( Form_Capture::ID );
 	}
 
 	/**
-	 * An existing-reader capture registration schedules the contact sync
-	 * asynchronously (via Contact_Sync::schedule_sync()'s wp_schedule_single_event())
-	 * rather than syncing synchronously on the request thread.
+	 * An existing-reader capture registration schedules the contact sync via
+	 * Action Scheduler in the integration's group — off the request thread,
+	 * retryable, inspectable — and repeat captures reuse the pending action
+	 * rather than stacking a second one.
 	 */
 	public function test_existing_reader_sync_is_scheduled_not_synchronous() {
+		if ( ! function_exists( 'as_schedule_single_action' ) ) {
+			$this->markTestSkipped( 'Action Scheduler is not available.' );
+		}
+
+		Integrations::enable( Form_Capture::ID );
 		$integration = Integrations::get_integration( Form_Capture::ID );
 		$user        = self::factory()->user->create_and_get( [ 'role' => 'subscriber' ] );
 		$method      = [ 'registration_method' => Form_Capture::get_registration_method() ];
 		$context     = 'Form Capture registration (existing reader)';
+		$hook        = 'newspack_scheduled_esp_sync';
+		$args        = [ $user->ID, $context ];
+		$group       = $integration->get_action_group();
 
 		$integration->handle_registered_reader( $user->user_email, true, false, $user, $method );
-
 		$this->assertNotFalse(
-			wp_next_scheduled( 'newspack_scheduled_esp_sync', [ $user->ID, $context ] ),
-			'An async ESP sync must be scheduled for an existing reader capture with no lists.'
+			as_next_scheduled_action( $hook, $args, $group ),
+			'An async ESP sync must be scheduled for an existing reader capture.'
 		);
 
-		wp_clear_scheduled_hook( 'newspack_scheduled_esp_sync', [ $user->ID, $context ] );
+		// A repeat capture before the sync runs must not stack a second action.
+		$integration->handle_registered_reader( $user->user_email, true, false, $user, $method );
+		$pending = as_get_scheduled_actions(
+			[
+				'hook'     => $hook,
+				'args'     => $args,
+				'group'    => $group,
+				'status'   => \ActionScheduler_Store::STATUS_PENDING,
+				'per_page' => 10,
+			],
+			'ids'
+		);
+		$this->assertCount( 1, $pending, 'Repeat captures must reuse the pending sync action.' );
+
+		as_unschedule_all_actions( $hook, $args, $group );
+		Integrations::disable( Form_Capture::ID );
+	}
+
+	/**
+	 * The scheduled-sync payload must carry the reader's name for readers
+	 * without a WooCommerce billing record — an empty name pushed to the ESP
+	 * clears the contact's stored name (the repeat-capture FNAME regression).
+	 */
+	public function test_scheduled_sync_payload_preserves_user_name() {
+		$user = self::factory()->user->create_and_get(
+			[
+				'role'       => 'subscriber',
+				'first_name' => 'Grace',
+				'last_name'  => 'Hopper',
+			]
+		);
+
+		$contact = \Newspack\Reader_Activation\Sync\Metadata::get_contact_with_metadata( $user->ID );
+		$this->assertSame( 'Grace Hopper', $contact['name'], 'The sync payload must fall back to the WP user name, not push an empty name.' );
 	}
 
 	/**
@@ -237,14 +339,12 @@ class Test_Form_Capture extends WP_UnitTestCase {
 	 * The capture script is enqueued only when the integration is enabled.
 	 */
 	public function test_capture_script_enqueued_only_when_enabled() {
-		// Constructed locally: registry-held instances can predate this test's
-		// hook backup (suites that reset the Integrations registry re-create
-		// them mid-run, and tear_down's hook restoration strips their
-		// constructor-time add_action calls), so has_action() on the registry
-		// instance reads false in a full-suite run despite correct production
-		// wiring. A fresh instance registers its hooks inside this test's
-		// backup scope and pins the contract order-independently.
+		// A locally constructed instance, with register_handlers() run inside
+		// this test's hook-backup scope, pins the wiring order-independently
+		// (registry instances may have registered their hooks before this
+		// test's backup was taken).
 		$integration = new Form_Capture();
+		$integration->register_handlers();
 
 		$this->assertSame( 20, has_action( 'wp_enqueue_scripts', [ $integration, 'enqueue_scripts' ] ), 'Enqueue must be hooked at priority 20.' );
 
@@ -255,5 +355,40 @@ class Test_Form_Capture extends WP_UnitTestCase {
 		$integration->enqueue_scripts();
 		$this->assertTrue( wp_script_is( Form_Capture::SCRIPT_HANDLE, 'enqueued' ) );
 		Integrations::disable( Form_Capture::ID );
+	}
+
+	/**
+	 * Capture counts in its own per-IP rate-limit bucket, sized for form
+	 * traffic — it must neither starve nor be starved by the shared
+	 * registration bucket.
+	 */
+	public function test_rate_limit_bucket_and_sizing() {
+		$bucket = Reader_Registration::get_rate_limit_bucket_for( Form_Capture::ID );
+		$this->assertSame( 'registration_form_capture', $bucket );
+
+		// The integration sizes its own bucket via the existing filter.
+		$this->assertSame(
+			Form_Capture::RATE_LIMIT_DEFAULT,
+			apply_filters( 'newspack_frontend_registration_rate_limit', 10, '203.0.113.9', $bucket )
+		);
+		// Every other bucket is left alone.
+		$this->assertSame( 10, apply_filters( 'newspack_frontend_registration_rate_limit', 10, '203.0.113.9', 'registration' ) );
+	}
+
+	/**
+	 * The registration key derives from a stored per-integration seed, so it
+	 * is stable across requests but revocable on its own — without rotating
+	 * AUTH_SALT and logging out every user.
+	 */
+	public function test_registration_key_is_stable_and_rotatable() {
+		$integration = Integrations::get_integration( Form_Capture::ID );
+
+		$key = $integration->get_registration_key();
+		$this->assertNotEmpty( $key );
+		$this->assertSame( $key, $integration->get_registration_key(), 'The key must be deterministic (pages are cached).' );
+
+		$new_key = $integration->rotate_registration_key();
+		$this->assertNotSame( $key, $new_key, 'Rotation must invalidate the previous key.' );
+		$this->assertSame( $new_key, $integration->get_registration_key(), 'The rotated key must be stable again.' );
 	}
 }

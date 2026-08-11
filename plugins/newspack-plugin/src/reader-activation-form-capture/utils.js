@@ -49,7 +49,11 @@ export function getEmailValue( form ) {
 	for ( const input of candidates ) {
 		const value = input?.value?.trim() || '';
 		if ( EMAIL_PATTERN.test( value ) ) {
-			return value;
+			// Lower-case at harvest so the client-side dedupe and current-reader
+			// checks agree with the server, which matches emails
+			// case-insensitively — Reader@example.com and reader@example.com
+			// from the same visitor are one capture, not two.
+			return value.toLowerCase();
 		}
 	}
 	return '';
@@ -63,12 +67,24 @@ export function getEmailValue( form ) {
  */
 export function getNameValues( form ) {
 	const inputs = Array.from( form.querySelectorAll( 'input[type="text"], input:not([type])' ) );
-	const valueMatching = pattern => inputs.find( input => pattern.test( attrs( input ) ) )?.value?.trim() || '';
+	const valueMatching = ( pattern, reject = null ) =>
+		inputs
+			.find( input => {
+				const haystack = attrs( input );
+				return pattern.test( haystack ) && ! ( reject && reject.test( haystack ) );
+			} )
+			?.value?.trim() || '';
 	const firstName = valueMatching( /first[-_ ]?name|fname|given-name/i );
 	const lastName = valueMatching( /last[-_ ]?name|lname|family-name|surname/i );
 	if ( firstName || lastName ) {
 		return { first_name: firstName, last_name: lastName };
 	}
-	const fullName = valueMatching( /(^|[-_ [])name([-_ \]]|$)/i );
+	// A bare "name" field is only trusted when it isn't qualified as some
+	// other kind of name — organization_name, display-name, file name — which
+	// would set the reader's first name to a company or a handle.
+	const fullName = valueMatching(
+		/(^|[-_ [])name([-_ \]]|$)/i,
+		/(org|organi[sz]ation|business|company|user|display|file|nick|site|domain|host)[-_ ]?name/i
+	);
 	return fullName ? { first_name: fullName, last_name: '' } : {};
 }

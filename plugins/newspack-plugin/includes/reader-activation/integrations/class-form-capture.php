@@ -27,7 +27,7 @@ use Newspack\Reader_Activation;
 use Newspack\Reader_Registration;
 use Newspack\Reader_Activation\Integration;
 use Newspack\Reader_Activation\Integrations;
-use Newspack\Reader_Activation\Contact_Sync;
+use Newspack\Recaptcha;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -51,6 +51,14 @@ class Form_Capture extends Integration {
 	const SCRIPT_HANDLE = 'newspack-form-capture';
 
 	/**
+	 * Default per-IP hourly limit for this integration's rate-limit bucket.
+	 * Sized for form traffic rather than explicit signup forms: capture fires
+	 * on every opted-in submission across the site, and on hosts where
+	 * REMOTE_ADDR is a proxy IP the bucket is effectively site-wide.
+	 */
+	const RATE_LIMIT_DEFAULT = 100;
+
+	/**
 	 * Constructor.
 	 */
 	public function __construct() {
@@ -59,10 +67,19 @@ class Form_Capture extends Integration {
 			__( 'Inbound Form Capture', 'newspack-plugin' ),
 			__( 'Register readers from email signup forms built with any form tool.', 'newspack-plugin' )
 		);
+	}
 
+	/**
+	 * Register hooks. Called once per accepted instance by the registry, so a
+	 * rejected duplicate registration never leaves live callbacks behind (which
+	 * hooking from the constructor would).
+	 */
+	public function register_handlers() {
 		\add_filter( 'newspack_reader_activation_send_magic_link_on_reregistration', [ $this, 'filter_send_magic_link' ], 10, 3 );
 		\add_action( 'newspack_registered_reader', [ $this, 'handle_registered_reader' ], 10, 5 );
 		\add_action( 'wp_enqueue_scripts', [ $this, 'enqueue_scripts' ], 20 );
+		// Priority 5 so a publisher's own filter at default priority wins.
+		\add_filter( 'newspack_frontend_registration_rate_limit', [ $this, 'filter_rate_limit' ], 5, 3 );
 	}
 
 	/**
@@ -88,10 +105,61 @@ class Form_Capture extends Integration {
 				'key'         => 'selectors',
 				'type'        => 'textarea',
 				'label'       => __( 'Form selectors', 'newspack-plugin' ),
-				'description' => __( 'CSS selectors (one per line) of forms to capture, in addition to any form with the newspack-form-capture class. Only opt in forms whose submissions should always create a reader account: capture runs even if the form tool itself later rejects the submission.', 'newspack-plugin' ),
+				'description' => __( 'CSS selectors (one per line) of forms to capture, in addition to any form with the newspack-form-capture class. Bare tag selectors (e.g. "form") are ignored — they would opt in every form on the site. Only opt in forms whose submissions should always create a reader account: capture runs even if the form tool itself later rejects the submission, so submissions its spam checks would discard still create readers and count toward your ESP contacts. Captures are rate-limited per visitor IP (100/hour by default).', 'newspack-plugin' ),
 				'default'     => '',
 			],
 		];
+	}
+
+	/**
+	 * Why capture cannot operate with the site's current reCAPTCHA configuration.
+	 *
+	 * The v2 flow renders an interactive widget and awaits a callback the page
+	 * never delivers on a navigating form submit, so capture would silently
+	 * produce nothing. Only v3, whose token can be pre-acquired, is compatible.
+	 *
+	 * @return string|null Reason string when reCAPTCHA v2 is active, null otherwise.
+	 */
+	public function get_unsupported_reason() {
+		if ( Recaptcha::can_use_captcha() && ! Recaptcha::can_use_captcha( 'v3' ) ) {
+			return __( 'Requires reCAPTCHA v3', 'newspack-plugin' );
+		}
+		return null;
+	}
+
+	/**
+	 * The remedy for the v2 conflict: switch the reCAPTCHA version.
+	 *
+	 * @return string The action label.
+	 */
+	public function get_unsupported_action_label() {
+		return __( 'Change reCAPTCHA version', 'newspack-plugin' );
+	}
+
+	/**
+	 * Get the URL where reCAPTCHA is configured.
+	 *
+	 * @return string The Newspack settings page URL.
+	 */
+	public function get_setup_url() {
+		return \admin_url( 'admin.php?page=newspack-settings' );
+	}
+
+	/**
+	 * Size this integration's rate-limit bucket for form traffic. Hooked at
+	 * priority 5 so a publisher's own filter at default priority wins.
+	 *
+	 * @param int    $limit  Maximum attempts per IP per hour.
+	 * @param string $ip     The client IP address.
+	 * @param string $bucket Bucket name.
+	 *
+	 * @return int The limit.
+	 */
+	public function filter_rate_limit( $limit, $ip, $bucket ) {
+		if ( Reader_Registration::get_rate_limit_bucket_for( self::ID ) === $bucket ) {
+			return self::RATE_LIMIT_DEFAULT;
+		}
+		return $limit;
 	}
 
 	/**
@@ -166,11 +234,22 @@ class Form_Capture extends Integration {
 	/**
 	 * Get the configured form selectors, always including the marker class.
 	 *
+	 * Bare element/universal selectors (`form`, `body`, `*`, …) are rejected:
+	 * any of them opts in every form on the page — comment forms, search,
+	 * checkout — which is never what a per-form opt-in means. A form-tool
+	 * container still needs a qualifier (`form.signup`, `#newsletter form`).
+	 * Applied at read time so previously stored values are covered too.
+	 *
 	 * @return string[] CSS selectors.
 	 */
 	public function get_selectors() {
 		$value     = (string) $this->get_settings_field_value( 'selectors' );
-		$selectors = array_filter( array_map( 'trim', preg_split( '/[\r\n]+/', $value ) ) );
+		$selectors = array_filter(
+			array_map( 'trim', preg_split( '/[\r\n]+/', $value ) ),
+			function ( $selector ) {
+				return '' !== $selector && '*' !== $selector && ! preg_match( '/^[a-z][a-z0-9-]*$/i', $selector );
+			}
+		);
 		return array_values( array_unique( array_merge( [ '.' . self::MARKER_CLASS ], $selectors ) ) );
 	}
 
@@ -204,14 +283,17 @@ class Form_Capture extends Integration {
 
 	/**
 	 * Whether registration metadata originates from this integration's
-	 * frontend registration flow.
+	 * frontend registration flow. Checks the enabled state so the behaviors
+	 * scoped by this predicate (magic-link suppression, existing-reader sync)
+	 * stay off when the integration is off, even if something else stamps the
+	 * method string (a replayed job, a CLI backfill).
 	 *
 	 * @param array $metadata Registration metadata.
 	 *
 	 * @return bool Whether the registration is a form capture.
 	 */
 	private function is_capture_registration( $metadata ) {
-		return ( $metadata['registration_method'] ?? '' ) === self::get_registration_method();
+		return Integrations::is_enabled( self::ID ) && ( $metadata['registration_method'] ?? '' ) === self::get_registration_method();
 	}
 
 	/**
@@ -255,8 +337,11 @@ class Form_Capture extends Integration {
 
 	/**
 	 * After a capture registration, sync existing readers to the ESP so the
-	 * "upgrade a known reader" path reaches the contact record. Schedules a
-	 * contact sync so the ESP I/O stays off the request thread.
+	 * "upgrade a known reader" path reaches the contact record. The sync is
+	 * scheduled through Action Scheduler in this integration's group — off the
+	 * request thread, retryable, and inspectable in the Activity Logs UI. A
+	 * pending action for the same reader is reused, so repeat captures before
+	 * the sync runs collapse into one push.
 	 *
 	 * @param string         $email         Email address.
 	 * @param bool           $authenticate  Whether the registration authenticates the session.
@@ -268,6 +353,13 @@ class Form_Capture extends Integration {
 		if ( ! $this->should_sync_existing_reader( $existing_user, $metadata ) ) {
 			return;
 		}
-		Contact_Sync::schedule_sync( $existing_user->ID, 'Form Capture registration (existing reader)', 0 );
+		if ( ! function_exists( 'as_schedule_single_action' ) ) {
+			return;
+		}
+		$hook = 'newspack_scheduled_esp_sync';
+		$args = [ $existing_user->ID, 'Form Capture registration (existing reader)' ];
+		if ( false === \as_next_scheduled_action( $hook, $args, $this->get_action_group() ) ) {
+			\as_schedule_single_action( time() + MINUTE_IN_SECONDS, $hook, $args, $this->get_action_group() );
+		}
 	}
 }

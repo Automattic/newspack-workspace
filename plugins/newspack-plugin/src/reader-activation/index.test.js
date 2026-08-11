@@ -612,4 +612,36 @@ describe( 'register() transport options', () => {
 		const body = JSON.parse( global.fetch.mock.calls[ 0 ][ 1 ].body );
 		expect( body[ 'g-recaptcha-response' ] ).toBe( 'warm-token' );
 	} );
+	it( 'treats an existing-reader 409 as a successful capture client-side', async () => {
+		global.fetch = jest.fn( () =>
+			Promise.resolve( {
+				ok: false,
+				status: 409,
+				json: () => Promise.resolve( { code: 'reader_already_exists', message: 'Exists.' } ),
+			} )
+		);
+		// The promise still rejects — callers distinguish created from existing…
+		await expect( register( 'known@example.com', 'form-capture' ) ).rejects.toMatchObject( { code: 'reader_already_exists' } );
+		// …but the captured identity reaches the client store (read by targeting)…
+		expect( getReader().email ).toBe( 'known@example.com' );
+		// …and the activity stream records a registration with 'existing' status,
+		// not a failure — on sites with returning readers this is the routine outcome.
+		const registered = getActivities( 'reader_registered' ).filter( a => a.data.email === 'known@example.com' );
+		expect( registered ).toHaveLength( 1 );
+		expect( registered[ 0 ].data.status ).toBe( 'existing' );
+		expect( getActivities( 'reader_registration_failed' ).filter( a => a.data.email === 'known@example.com' ) ).toHaveLength( 0 );
+	} );
+	it( 'still records a failure activity for non-conflict errors', async () => {
+		global.fetch = jest.fn( () =>
+			Promise.resolve( {
+				ok: false,
+				status: 429,
+				json: () => Promise.resolve( { code: 'rate_limit_exceeded', message: 'Too many.' } ),
+			} )
+		);
+		await expect( register( 'limited@example.com', 'form-capture' ) ).rejects.toMatchObject( { code: 'rate_limit_exceeded' } );
+		expect( getReader().email ).not.toBe( 'limited@example.com' );
+		const failed = getActivities( 'reader_registration_failed' ).filter( a => a.data.email === 'limited@example.com' );
+		expect( failed ).toHaveLength( 1 );
+	} );
 } );

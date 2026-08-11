@@ -23,21 +23,41 @@ window.newspackRAS.push( readerActivation => {
 	const isV3 = 'v3' === rasConfig.captcha_version && rasConfig.captcha_site_key;
 
 	/**
+	 * Run a callback once the reCAPTCHA API is available. grecaptcha is a
+	 * deferred third-party script that can lose the race against a reader
+	 * focusing an above-the-fold form (especially on slow connections), so
+	 * when it hasn't landed yet, queue through Google's documented pre-load
+	 * hook — api.js drains window.___grecaptcha_cfg.fns on load — instead of
+	 * bailing with no retry.
+	 *
+	 * @param {Function} callback Called when the reCAPTCHA API is ready.
+	 */
+	const whenGrecaptchaReady = callback => {
+		if ( window.grecaptcha ) {
+			window.grecaptcha.ready( callback );
+			return;
+		}
+		window.___grecaptcha_cfg = window.___grecaptcha_cfg || {};
+		window.___grecaptcha_cfg.fns = window.___grecaptcha_cfg.fns || [];
+		window.___grecaptcha_cfg.fns.push( callback );
+	};
+
+	/**
 	 * Pre-acquire a reCAPTCHA v3 token while the reader interacts with a
 	 * matched form, so a token is ready at submit time — the submit-time
 	 * request must survive page navigation and cannot await acquisition.
-	 * v2 flows render an interactive widget and cannot be warmed; for them
-	 * register() falls back to submit-time acquisition (best-effort on
-	 * non-AJAX forms).
+	 * v2 flows render an interactive widget and cannot be warmed; the
+	 * integration reports itself unsupported on v2 sites (see
+	 * Form_Capture::get_unsupported_reason()).
 	 */
 	const warmCaptcha = () => {
-		if ( ! isV3 || ! window.grecaptcha ) {
+		if ( ! isV3 ) {
 			return;
 		}
 		if ( warmToken && Date.now() - warmToken.timestamp < CAPTCHA_TOKEN_TTL ) {
 			return;
 		}
-		window.grecaptcha.ready( () => {
+		whenGrecaptchaReady( () => {
 			window.grecaptcha
 				.execute( rasConfig.captcha_site_key, { action: 'integration_registration' } )
 				.then( token => {
@@ -67,10 +87,18 @@ window.newspackRAS.push( readerActivation => {
 			warmToken = null;
 		}
 		readerActivation.register( email, 'form-capture', getNameValues( form ), options ).catch( error => {
-			// Allow retry after transient failures; an existing-reader
-			// conflict is permanent for this pageview.
-			if ( 'reader_already_exists' !== error?.code ) {
+			// Only failures that can succeed on a retry within this pageview
+			// release the dedupe: a network error (the response never parsed,
+			// so no code) or a server-side registration failure. Everything
+			// else — existing reader, rate limit, invalid/rotated key, RAS
+			// disabled — is permanent here, and retrying a 429 would work
+			// against the rate limiter it just hit.
+			if ( ! error?.code || 'registration_failed' === error.code ) {
 				captured.delete( email );
+				// Re-arm the warm token alongside the email: the consumed one
+				// was single-use and nothing necessarily re-fires focusin
+				// before a resubmit.
+				warmCaptcha();
 			}
 		} );
 	};
@@ -82,7 +110,10 @@ window.newspackRAS.push( readerActivation => {
 			}
 			attached.add( form );
 			form.addEventListener( 'focusin', warmCaptcha );
-			form.addEventListener( 'submit', handleSubmit, true );
+			// No capture flag: submit always fires at the form itself, where
+			// capture and bubble listeners run together in registration order,
+			// so a capturing listener here cannot front-run a vendor handler.
+			form.addEventListener( 'submit', handleSubmit );
 		} );
 	};
 

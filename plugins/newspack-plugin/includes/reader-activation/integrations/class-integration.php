@@ -278,16 +278,59 @@ abstract class Integration {
 	}
 
 	/**
+	 * Option prefix for the per-integration registration key seed.
+	 */
+	const REGISTRATION_SEED_OPTION_PREFIX = 'newspack_integration_registration_seed_';
+
+	/**
 	 * Generate the registration key for this integration.
 	 *
-	 * The default implementation uses HMAC-SHA256 with the site's auth salt.
-	 * Subclasses can override this to implement custom key schemes
-	 * (e.g., asymmetric key pairs, time-bounded tokens).
+	 * The default implementation uses HMAC-SHA256 of the integration ID and a
+	 * stored per-integration random seed with the site's auth salt. The seed
+	 * makes the key revocable on its own: if a scripted client starts hammering
+	 * the key, rotate_registration_key() invalidates it without rotating
+	 * AUTH_SALT (which would log out every user on the site). Subclasses can
+	 * override this to implement custom key schemes (e.g., asymmetric key
+	 * pairs, time-bounded tokens).
 	 *
 	 * @return string The registration key.
 	 */
 	public function get_registration_key(): string {
-		return hash_hmac( 'sha256', $this->id, \wp_salt( 'auth' ) );
+		return hash_hmac( 'sha256', $this->id . '|' . $this->get_registration_key_seed(), \wp_salt( 'auth' ) );
+	}
+
+	/**
+	 * Get the stored registration key seed, generating it on first use.
+	 *
+	 * @return string The seed.
+	 */
+	private function get_registration_key_seed(): string {
+		$option_name = self::REGISTRATION_SEED_OPTION_PREFIX . $this->id;
+		$seed        = \get_option( $option_name );
+		if ( ! is_string( $seed ) || '' === $seed ) {
+			$seed = \wp_generate_password( 32, false );
+			// add_option() is a no-op when the option already exists, so a
+			// concurrent first request cannot overwrite an already-emitted seed.
+			if ( ! \add_option( $option_name, $seed ) ) {
+				$seed = (string) \get_option( $option_name );
+			}
+		}
+		return $seed;
+	}
+
+	/**
+	 * Rotate the registration key by regenerating its stored seed.
+	 *
+	 * Invalidates the key on every page emitted so far — cached pages keep
+	 * submitting the old key until their cache expires, and those requests are
+	 * rejected. That is the point: this is the incident-response lever for a
+	 * key being abused by scripted clients.
+	 *
+	 * @return string The new registration key.
+	 */
+	final public function rotate_registration_key(): string {
+		\update_option( self::REGISTRATION_SEED_OPTION_PREFIX . $this->id, \wp_generate_password( 32, false ) );
+		return $this->get_registration_key();
 	}
 
 	/**

@@ -116,13 +116,27 @@ abstract class Contact_Metadata {
 	}
 
 	/**
-	 * Get the full name for the contact from the WC_Customer billing name.
+	 * Get the full name for the contact, preferring the WC_Customer billing name.
+	 *
+	 * Falls back to the WP user's first/last name, then display name, so readers
+	 * without a WooCommerce billing record (e.g. created by frontend registration
+	 * integrations) don't sync an empty name that clears the ESP contact's name.
 	 *
 	 * @return string
 	 */
 	public function get_full_name() {
 		if ( $this->customer ) {
-			return trim( $this->customer->get_billing_first_name() . ' ' . $this->customer->get_billing_last_name() );
+			$name = trim( $this->customer->get_billing_first_name() . ' ' . $this->customer->get_billing_last_name() );
+			if ( $name ) {
+				return $name;
+			}
+		}
+		if ( $this->user ) {
+			$name = trim( $this->user->first_name . ' ' . $this->user->last_name );
+			if ( $name ) {
+				return $name;
+			}
+			return (string) $this->user->display_name;
 		}
 		return '';
 	}
