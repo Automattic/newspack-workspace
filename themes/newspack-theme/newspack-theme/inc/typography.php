@@ -170,3 +170,37 @@ function newspack_font_stack( $primary_font, $fallback_id ) {
 	}
 	return implode( ',', $fonts );
 }
+
+/**
+ * Register the Customizer fonts as editor font family presets.
+ *
+ * The values reference the theme's own CSS variables rather than resolved
+ * stacks, so saved content tracks Customizer font changes with no re-save.
+ *
+ * @param WP_Theme_JSON_Data|WP_Theme_JSON_Data_Gutenberg $theme_json Theme JSON data.
+ * @return WP_Theme_JSON_Data
+ */
+function newspack_font_family_presets( $theme_json ) {
+	return $theme_json->update_with(
+		array(
+			'version'  => 3,
+			'settings' => array(
+				'typography' => array(
+					'fontFamilies' => array(
+						array(
+							'slug'       => 'header',
+							'name'       => _x( 'Header', 'font family name', 'newspack-theme' ),
+							'fontFamily' => 'var(--newspack-theme-font-heading)',
+						),
+						array(
+							'slug'       => 'body',
+							'name'       => _x( 'Body', 'font family name', 'newspack-theme' ),
+							'fontFamily' => 'var(--newspack-theme-font-body)',
+						),
+					),
+				),
+			),
+		)
+	);
+}
+add_filter( 'wp_theme_json_data_theme', 'newspack_font_family_presets' );
