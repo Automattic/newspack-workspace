@@ -1,7 +1,7 @@
 /**
  * WordPress dependencies
  */
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 import { useCallback, useRef, useState } from '@wordpress/element';
 import {
 	Button,
@@ -20,6 +20,7 @@ const SpecificPostsControl = ( { postIds = [], onChange, fetchSuggestions, fetch
 	const [ isReordering, setIsReordering ] = useState( false );
 	const savedInfo = useRef( { key: null, promise: null } );
 	const canReorder = 1 < postIds.length;
+	const reorderLabel = __( 'Reorder Content', 'newspack-blocks' );
 
 	// The token field and the modal ask for the same titles, so the request is
 	// shared rather than made twice. A rejection clears the cache to allow a retry.
@@ -30,7 +31,10 @@ const SpecificPostsControl = ( { postIds = [], onChange, fetchSuggestions, fetch
 				savedInfo.current = {
 					key,
 					promise: fetchSavedInfo( ids ).catch( error => {
-						savedInfo.current = { key: null, promise: null };
+						// A late rejection must not evict an entry a newer request owns.
+						if ( savedInfo.current.key === key ) {
+							savedInfo.current = { key: null, promise: null };
+						}
 						throw error;
 					} ),
 				};
@@ -57,15 +61,25 @@ const SpecificPostsControl = ( { postIds = [], onChange, fetchSuggestions, fetch
 					__next40pxDefaultSize
 					disabled={ ! canReorder }
 					accessibleWhenDisabled
-					label={ canReorder ? undefined : __( 'Reorder Content: pick at least two items', 'newspack-blocks' ) }
+					// A button with visible children shows no tooltip unless asked.
+					showTooltip={ ! canReorder }
+					label={
+						canReorder
+							? undefined
+							: sprintf(
+									/* translators: %s: the button's visible label. */
+									__( '%s: pick at least two items', 'newspack-blocks' ),
+									reorderLabel
+							  )
+					}
 					onClick={ () => setIsReordering( true ) }
 				>
-					{ __( 'Reorder Content', 'newspack-blocks' ) }
+					{ reorderLabel }
 				</Button>
 			</VStack>
 			{ isReordering && (
 				<ReorderModal
-					title={ __( 'Reorder Content', 'newspack-blocks' ) }
+					title={ reorderLabel }
 					ids={ postIds }
 					fetchItems={ fetchSavedInfoOnce }
 					onSave={ ids => {

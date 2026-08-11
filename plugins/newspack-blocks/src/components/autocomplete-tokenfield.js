@@ -45,15 +45,18 @@ class AutocompleteTokenField extends Component {
 		if ( this.isFetchingInfoOnLoad() ) {
 			const { tokens, fetchSavedInfo } = this.props;
 
-			fetchSavedInfo( tokens ).then( results => {
-				const { validValues } = this.state;
+			fetchSavedInfo( tokens )
+				.then( results => {
+					const { validValues } = this.state;
 
-				results.forEach( suggestion => {
-					validValues[ suggestion.value ] = suggestion.label;
-				} );
+					results.forEach( suggestion => {
+						validValues[ suggestion.value ] = suggestion.label;
+					} );
 
-				this.setState( { validValues, loading: false } );
-			} );
+					this.setState( { validValues, loading: false } );
+				} )
+				// Without this the field spins forever when the request fails.
+				.catch( () => this.setState( { loading: false } ) );
 		}
 	}
 

@@ -1,7 +1,7 @@
 /**
  * External dependencies
  */
-import { fireEvent, render, screen } from '@testing-library/react';
+import { createEvent, fireEvent, render, screen } from '@testing-library/react';
 
 /**
  * Internal dependencies
@@ -321,14 +321,45 @@ describe( 'ReorderModal drag and drop', () => {
 		expect( titles() ).toEqual( [ 'Alpha', 'Beta', 'Gamma' ] );
 	} );
 
-	it( 'does not start a drag from a chevron', async () => {
+	// `dragstart` fires at the draggable row even when the gesture began on a
+	// chevron inside it, so the guard keys off where the pointer went down.
+	it( 'does not start a drag that began on a chevron', async () => {
 		renderModal();
 		const chevron = await screen.findByLabelText( 'Move Up: Gamma' );
+		fireEvent( chevron, new MouseEvent( 'pointerdown', { bubbles: true } ) );
+
 		const dt = dataTransfer();
-		fireEvent.dragStart( chevron, { dataTransfer: dt } );
+		fireEvent.dragStart( rows()[ 2 ], { dataTransfer: dt } );
 		expect( dt.getData( 'text/plain' ) ).toBeUndefined();
+
 		fireEvent.dragOver( rows()[ 0 ], { dataTransfer: dt } );
 		expect( titles() ).toEqual( [ 'Alpha', 'Beta', 'Gamma' ] );
+	} );
+
+	it( 'starts a drag that began on the row itself', async () => {
+		renderModal();
+		await screen.findByText( 'Alpha' );
+		fireEvent( rows()[ 2 ], new MouseEvent( 'pointerdown', { bubbles: true } ) );
+
+		const dt = dataTransfer();
+		fireEvent.dragStart( rows()[ 2 ], { dataTransfer: dt } );
+		expect( dt.getData( 'text/plain' ) ).toBe( '33' );
+	} );
+
+	// Rows are the only drop targets, so the body has to accept the drop as well
+	// or releasing in the gap between two rows reads as a cancelled drag.
+	it( 'accepts a drop anywhere in the modal body', async () => {
+		renderModal();
+		await screen.findByText( 'Alpha' );
+		const body = document.querySelector( '.newspack-blocks-reorder-modal__body' );
+
+		const over = createEvent.dragOver( body, { dataTransfer: dataTransfer() } );
+		fireEvent( body, over );
+		expect( over.defaultPrevented ).toBe( true );
+
+		const drop = createEvent.drop( body, { dataTransfer: dataTransfer() } );
+		fireEvent( body, drop );
+		expect( drop.defaultPrevented ).toBe( true );
 	} );
 } );
 
@@ -343,20 +374,20 @@ describe( 'ReorderModal when the titles cannot be loaded', () => {
 		errorSpy.mockRestore();
 	} );
 
-	it( 'says so and refuses to save', async () => {
-		const { onSave } = renderModal( { fetchItems: () => Promise.reject( new Error( 'unreachable' ) ) } );
+	it( 'says so instead of offering rows nobody can tell apart', async () => {
+		const { onClose } = renderModal( { fetchItems: () => Promise.reject( new Error( 'unreachable' ) ) } );
 		// The same wording also lands in the live region core announces it through.
 		expect(
 			await screen.findByText( 'The content could not be loaded, so the order cannot be saved.', {
 				selector: '.components-notice__content',
 			} )
 		).toBeInTheDocument();
-		expect( titles() ).toEqual( [ '(no title)', '(no title)', '(no title)' ] );
 
-		fireEvent.click( screen.getAllByLabelText( 'Move Up: (no title)' )[ 1 ] );
-		const save = screen.getByRole( 'button', { name: 'Save' } );
-		expect( save ).toHaveAttribute( 'aria-disabled', 'true' );
-		fireEvent.click( save );
-		expect( onSave ).not.toHaveBeenCalled();
+		expect( titles() ).toEqual( [] );
+		expect( screen.queryByRole( 'list' ) ).not.toBeInTheDocument();
+		expect( screen.queryByRole( 'button', { name: 'Save' } ) ).not.toBeInTheDocument();
+
+		fireEvent.click( screen.getByRole( 'button', { name: 'Cancel' } ) );
+		expect( onClose ).toHaveBeenCalled();
 	} );
 } );

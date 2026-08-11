@@ -51,10 +51,15 @@ class QueryControls extends Component {
 	fetchSavedPosts = postIDs => {
 		const { postType } = this.props;
 		const restUrl = window.newspack_blocks_data.posts_rest_url;
+		// An empty `include` is dropped server-side, which would answer with the
+		// most recent post rather than nothing.
+		if ( ! postIDs.length ) {
+			return Promise.resolve( [] );
+		}
 		return apiFetch( {
 			url: addQueryArgs( restUrl, {
 				// These params use the block query parameters (see Newspack_Blocks::build_articles_query).
-				postsToShow: Math.max( postIDs.length, 1 ),
+				postsToShow: postIDs.length,
 				include: postIDs.join( ',' ),
 				_fields: 'id,title',
 				postType,

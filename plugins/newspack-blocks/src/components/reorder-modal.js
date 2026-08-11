@@ -38,7 +38,19 @@ export const moveItem = ( items, from, to ) => {
 // than the native attribute.
 const isAvailable = button => !! button && ! button.matches( ':disabled, [aria-disabled="true"]' );
 
+// Speech input matches on the visible label, so it has to open the accessible
+// name. Composing both from one translated string keeps that true in every locale.
+const nameWithTitle = ( label, title ) =>
+	sprintf(
+		/* translators: 1: the control's visible label. 2: title of the content being moved. */
+		__( '%1$s: %2$s', 'newspack-blocks' ),
+		label,
+		title
+	);
+
 const ReorderModal = ( { title, ids, fetchItems, onSave, onClose } ) => {
+	const moveUpLabel = __( 'Move Up', 'newspack-blocks' );
+	const moveDownLabel = __( 'Move Down', 'newspack-blocks' );
 	const [ items, setItems ] = useState( null );
 	const [ dragIndex, setDragIndex ] = useState( null );
 	const [ hasFetchError, setHasFetchError ] = useState( false );
@@ -48,6 +60,7 @@ const ReorderModal = ( { title, ids, fetchItems, onSave, onClose } ) => {
 	const pendingFocus = useRef( null );
 	const closeRef = useRef( null );
 	const preDragItems = useRef( null );
+	const dragBlocked = useRef( false );
 
 	// The order the modal opened with. Snapshotted so a change to `ids` from
 	// elsewhere in the editor cannot desynchronise it from `items`.
@@ -200,18 +213,33 @@ const ReorderModal = ( { title, ids, fetchItems, onSave, onClose } ) => {
 				size="medium"
 				className="newspack-blocks-reorder-modal"
 			>
-				<div className="newspack-blocks-reorder-modal__body">
-					{ ! items ? (
+				<div
+					className="newspack-blocks-reorder-modal__body"
+					aria-busy={ ! items }
+					// Rows are the only drop targets, so without this every gap between
+					// them reports a cancelled drag and would undo the reorder.
+					onDragOver={ event => event.preventDefault() }
+					onDrop={ event => event.preventDefault() }
+				>
+					{ ! items && (
 						<div className="newspack-blocks-reorder-modal__loading">
 							<Spinner />
 						</div>
-					) : (
+					) }
+					{ items && hasFetchError && (
 						<>
-							{ hasFetchError && (
-								<Notice status="error" isDismissible={ false } className="newspack-blocks-reorder-modal__notice">
-									{ __( 'The content could not be loaded, so the order cannot be saved.', 'newspack-blocks' ) }
-								</Notice>
-							) }
+							<Notice status="error" isDismissible={ false } className="newspack-blocks-reorder-modal__notice">
+								{ __( 'The content could not be loaded, so the order cannot be saved.', 'newspack-blocks' ) }
+							</Notice>
+							<div className="newspack-blocks-reorder-modal__footer">
+								<Button variant="tertiary" onClick={ requestClose }>
+									{ __( 'Cancel', 'newspack-blocks' ) }
+								</Button>
+							</div>
+						</>
+					) }
+					{ items && ! hasFetchError && (
+						<>
 							{ /* `list-style: none` drops list semantics in Safari, so the role is restated. */ }
 							{ /* eslint-disable-next-line jsx-a11y/no-redundant-roles */ }
 							<ul className="newspack-blocks-reorder-modal__list" role="list" ref={ listRef }>
@@ -224,10 +252,13 @@ const ReorderModal = ( { title, ids, fetchItems, onSave, onClose } ) => {
 											'is-dragging': dragIndex === index,
 										} ) }
 										draggable
+										// `dragstart` always fires at the draggable row, never at the
+										// chevron inside it, so the grab point is recorded separately.
+										onPointerDown={ event => {
+											dragBlocked.current = !! event.target.closest?.( 'button' );
+										} }
 										onDragStart={ event => {
-											// The chevrons live inside the drag source, so a click that
-											// drifts would otherwise drag the row instead of stepping it.
-											if ( event.target.closest?.( 'button' ) ) {
+											if ( dragBlocked.current ) {
 												event.preventDefault();
 												return;
 											}
@@ -258,14 +289,8 @@ const ReorderModal = ( { title, ids, fetchItems, onSave, onClose } ) => {
 												data-direction="up"
 												disabled={ 0 === index }
 												accessibleWhenDisabled
-												label={ __( 'Move Up', 'newspack-blocks' ) }
-												// The visible label has to stay a substring of the
-												// accessible name so speech input can reach it.
-												aria-label={ sprintf(
-													/* translators: %s: title of the content being moved. */
-													__( 'Move Up: %s', 'newspack-blocks' ),
-													item.label
-												) }
+												label={ moveUpLabel }
+												aria-label={ nameWithTitle( moveUpLabel, item.label ) }
 												onClick={ () => moveTo( index, index - 1, 'up' ) }
 											/>
 											<Button
@@ -274,12 +299,8 @@ const ReorderModal = ( { title, ids, fetchItems, onSave, onClose } ) => {
 												data-direction="down"
 												disabled={ index === items.length - 1 }
 												accessibleWhenDisabled
-												label={ __( 'Move Down', 'newspack-blocks' ) }
-												aria-label={ sprintf(
-													/* translators: %s: title of the content being moved. */
-													__( 'Move Down: %s', 'newspack-blocks' ),
-													item.label
-												) }
+												label={ moveDownLabel }
+												aria-label={ nameWithTitle( moveDownLabel, item.label ) }
 												onClick={ () => moveTo( index, index + 1, 'down' ) }
 											/>
 										</span>

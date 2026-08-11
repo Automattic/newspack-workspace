@@ -37,6 +37,27 @@ describe( 'SpecificPostsControl', () => {
 		expect( await screen.findByRole( 'button', { name: 'Reorder Content: pick at least two items' } ) ).toBeInTheDocument();
 	} );
 
+	// A button with visible children shows no tooltip by default, so the reason
+	// would otherwise reach assistive technology only.
+	it( 'shows the reason to sighted users too', async () => {
+		render( <SpecificPostsControl postIds={ [ 11 ] } onChange={ noop } fetchSuggestions={ noop } fetchSavedInfo={ noItems } /> );
+		( await screen.findByRole( 'button', { name: 'Reorder Content: pick at least two items' } ) ).focus();
+		expect( await screen.findByRole( 'tooltip' ) ).toHaveTextContent( 'pick at least two items' );
+	} );
+
+	it( 'shows no tooltip once the button is usable', async () => {
+		render(
+			<SpecificPostsControl
+				postIds={ [ 11, 22 ] }
+				onChange={ noop }
+				fetchSuggestions={ noop }
+				fetchSavedInfo={ () => Promise.resolve( ITEMS ) }
+			/>
+		);
+		( await screen.findByRole( 'button', { name: 'Reorder Content' } ) ).focus();
+		expect( screen.queryByRole( 'tooltip' ) ).not.toBeInTheDocument();
+	} );
+
 	it( 'enables the reorder button once two items are selected', async () => {
 		render(
 			<SpecificPostsControl
