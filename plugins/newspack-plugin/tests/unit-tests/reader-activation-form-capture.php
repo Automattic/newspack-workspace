@@ -51,7 +51,11 @@ class Test_Form_Capture extends WP_UnitTestCase {
 		// result (mirrors the pattern in tests/unit-tests/magic-link.php).
 		add_filter( 'newspack_magic_link_rate_interval', '__return_zero' );
 
-		$email = 'magic-link-filter@example.com';
+		// Not @example.com: that is the Guest Contributor placeholder domain,
+		// and the outbound-mail guard (#572) suppresses wp_mail() to it, which
+		// would fail the delivery assertion below. Mirrors magic-link.php's
+		// use of @test.com for mail-asserting tests.
+		$email = 'magic-link-filter@test.com';
 		Reader_Activation::register_reader( $email, '', false, [ 'registration_method' => 'test-first' ] );
 
 		// Default: second registration sends the magic link email.
