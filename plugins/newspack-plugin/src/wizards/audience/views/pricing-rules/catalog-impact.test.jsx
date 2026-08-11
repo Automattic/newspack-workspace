@@ -28,6 +28,8 @@ jest.mock( './impact-table', () => ( { baseline, framed, collapsible } ) => (
 	</div>
 ) );
 
+jest.mock( './impact-empty', () => ( { reason } ) => <div data-testid="impact-empty" data-reason={ reason } /> );
+
 const CURRENCY = { code: 'USD', symbol: '$', decimals: 2 };
 
 const stats = ( over = {} ) => ( {
@@ -163,6 +165,79 @@ describe( 'CatalogImpact', () => {
 		expect( apiFetch ).toHaveBeenCalledTimes( 2 );
 		expect( screen.queryByText( /Could not load the affected products/ ) ).not.toBeInTheDocument();
 		expect( screen.getByTestId( 'impact-table' ) ).toBeInTheDocument();
+	} );
+
+	// The sample is the most expensive request this screen makes, so a reopen
+	// while it is still in flight must not start a second one.
+	it( 'issues no second request when reopened before the sample lands', async () => {
+		let land;
+		apiFetch.mockReturnValue(
+			new Promise( resolve => {
+				land = resolve;
+			} )
+		);
+		render( <CatalogImpact stats={ stats() } /> );
+		openModal();
+
+		fireEvent.click( screen.getByRole( 'button', { name: 'Close' } ) );
+		await waitForElementToBeRemoved( () => screen.queryByRole( 'dialog' ) );
+		await act( async () => {
+			openModal();
+		} );
+
+		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
+
+		await act( async () => {
+			land( detail() );
+		} );
+
+		expect( screen.getByTestId( 'impact-table' ) ).toBeInTheDocument();
+		expect( screen.queryByText( /Could not load the affected products/ ) ).not.toBeInTheDocument();
+	} );
+
+	// The engine ships separately and answers an unsupported catalogue with the
+	// rest of the payload absent, which the table would otherwise walk.
+	it( 'stands down instead of rendering a table the engine did not supply', async () => {
+		apiFetch.mockResolvedValue( { supported: false } );
+		render( <CatalogImpact stats={ stats() } /> );
+
+		await act( async () => {
+			openModal();
+		} );
+
+		expect( screen.queryByTestId( 'impact-table' ) ).not.toBeInTheDocument();
+		expect( screen.getByTestId( 'impact-empty' ) ).toHaveAttribute( 'data-reason', 'unsupported' );
+	} );
+
+	it( 'stands down when the sample comes back empty', async () => {
+		apiFetch.mockResolvedValue( detail( { sample: [] } ) );
+		render( <CatalogImpact stats={ stats() } /> );
+
+		await act( async () => {
+			openModal();
+		} );
+
+		expect( screen.queryByTestId( 'impact-table' ) ).not.toBeInTheDocument();
+		expect( screen.getByTestId( 'impact-empty' ) ).toHaveAttribute( 'data-reason', 'no-products' );
+	} );
+
+	it( 'names the card and announces the modal load for assistive technology', async () => {
+		let land;
+		apiFetch.mockReturnValue(
+			new Promise( resolve => {
+				land = resolve;
+			} )
+		);
+		render( <CatalogImpact stats={ stats() } /> );
+
+		expect( screen.getByRole( 'heading', { name: 'Catalog impact', level: 3 } ) ).toBeInTheDocument();
+
+		openModal();
+		expect( screen.getByRole( 'status' ) ).toHaveTextContent( 'Loading the affected products' );
+
+		await act( async () => {
+			land( detail() );
+		} );
 	} );
 
 	it( 'withholds the table button and explains itself when nothing is affected', () => {

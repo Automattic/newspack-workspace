@@ -8,9 +8,10 @@
 /**
  * WordPress dependencies
  */
-import { __, _n, sprintf } from '@wordpress/i18n';
-import { useState, useCallback } from '@wordpress/element';
+import { __ } from '@wordpress/i18n';
+import { useState, useCallback, useRef } from '@wordpress/element';
 import apiFetch from '@wordpress/api-fetch';
+import { addQueryArgs } from '@wordpress/url';
 import {
 	Button,
 	Modal,
@@ -22,9 +23,10 @@ import { Card } from '@wordpress/ui';
 /**
  * Internal dependencies
  */
+import ImpactEmpty, { type ImpactEmptyReason } from './impact-empty';
 import ImpactStats from './impact-stats';
 import ImpactTable from './impact-table';
-import { formatCount } from './impact-format';
+import { sampleNote } from './impact-format';
 import { IMPACT_PREVIEW_API_PATH as API_PATH, IMPACT_SAMPLE_LIMIT } from './constants';
 
 interface CatalogImpactProps {
@@ -36,21 +38,55 @@ export default function CatalogImpact( { stats }: CatalogImpactProps ) {
 	const [ detail, setDetail ] = useState< CatalogImpactResponse | null >( null );
 	const [ hasError, setHasError ] = useState( false );
 
+	// Only the newest request may write state. Closing and reopening before a
+	// request lands would otherwise issue a second full catalogue re-price, and
+	// let a late failure clear a sample that had already arrived.
+	const request = useRef( 0 );
+	const inFlight = useRef( false );
+
 	const open = useCallback( () => {
 		setIsOpen( true );
 		setHasError( false );
 		// A landed sample does not move under the modal, so it is kept; a failure is retried.
-		if ( detail ) {
+		if ( detail || inFlight.current ) {
 			return;
 		}
-		apiFetch< CatalogImpactResponse >( { path: `${ API_PATH }?limit=${ IMPACT_SAMPLE_LIMIT }` } )
-			.then( setDetail )
-			.catch( () => setHasError( true ) );
+		const generation = ++request.current;
+		inFlight.current = true;
+		apiFetch< CatalogImpactResponse >( { path: addQueryArgs( API_PATH, { limit: IMPACT_SAMPLE_LIMIT } ) } )
+			.then( res => {
+				if ( generation === request.current ) {
+					setDetail( res );
+				}
+			} )
+			.catch( () => {
+				if ( generation === request.current ) {
+					setHasError( true );
+				}
+			} )
+			.finally( () => {
+				if ( generation === request.current ) {
+					inFlight.current = false;
+				}
+			} );
 	}, [ detail ] );
+
+	// The engine ships separately and answers `supported: false` with the rest of
+	// the payload absent, so the sample is checked before the table walks it.
+	let emptyReason: ImpactEmptyReason | null = null;
+	if ( detail ) {
+		if ( ! detail.supported ) {
+			emptyReason = 'unsupported';
+		} else if ( ! detail.sample?.length ) {
+			emptyReason = 'no-products';
+		}
+	}
 
 	return (
 		<Card.Root className="newspack-pricing-rules__impact">
 			<Card.Content>
+				{ /* The stat leads visually; the heading keeps the section reachable by heading navigation. */ }
+				<h3 className="screen-reader-text">{ __( 'Catalog impact', 'newspack-plugin' ) }</h3>
 				<ImpactStats totalMatching={ stats.total_matching } countLimited={ stats.count_limited } audience={ stats.audience } />
 				{ stats.total_matching === 0 ? (
 					<p className="newspack-pricing-rules__muted">
@@ -69,25 +105,16 @@ export default function CatalogImpact( { stats }: CatalogImpactProps ) {
 							</p>
 						) }
 						{ ! hasError && ! detail && (
-							<VStack className="newspack-pricing-rules__modal-loading" alignment="center" justify="center">
+							<VStack className="newspack-pricing-rules__modal-loading" alignment="center" justify="center" role="status">
 								<Spinner />
+								<span className="screen-reader-text">{ __( 'Loading the affected products…', 'newspack-plugin' ) }</span>
 							</VStack>
 						) }
-						{ ! hasError && detail && (
+						{ ! hasError && emptyReason && <ImpactEmpty reason={ emptyReason } /> }
+						{ ! hasError && detail && ! emptyReason && (
 							<>
 								{ detail.preview_limited && detail.sample_count >= IMPACT_SAMPLE_LIMIT && (
-									<p className="newspack-pricing-rules__muted">
-										{ sprintf(
-											/* translators: %s: how many products the table lists. */
-											_n(
-												'Showing a sample of %s product.',
-												'Showing a sample of %s products.',
-												detail.sample_count,
-												'newspack-plugin'
-											),
-											formatCount( detail.sample_count )
-										) }
-									</p>
+									<p className="newspack-pricing-rules__muted">{ sampleNote( detail.sample_count ) }</p>
 								) }
 								<ImpactTable
 									baseline={ detail.sample }
