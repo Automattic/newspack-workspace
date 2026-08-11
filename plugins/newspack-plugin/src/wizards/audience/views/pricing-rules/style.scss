@@ -42,17 +42,10 @@
 	}
 
 	&__impact {
-		margin-bottom: wp-vars.$grid-unit-60;
-		padding: 0 wp-vars.$grid-unit-60;
+		margin-top: wp-vars.$grid-unit-60;
 
-		> p {
+		p {
 			margin-top: wp-vars.$grid-unit-15;
-		}
-
-		&--loading {
-			display: flex;
-			justify-content: center;
-			padding: wp-vars.$grid-unit-30;
 		}
 	}
 
@@ -71,11 +64,6 @@
 
 	&__schedule-empty {
 		padding: wp-vars.$grid-unit-40 wp-vars.$grid-unit-30;
-	}
-
-	&__impact-title {
-		margin: 0 0 wp-vars.$grid-unit-05;
-		font-size: 16px;
 	}
 
 	&__stats {
@@ -101,7 +89,7 @@
 		font-size: wp-vars.$helptext-font-size;
 	}
 
-	&__impact-table,
+	&__impact-table--framed,
 	&__schedule-table {
 		.dataviews-view-table tr {
 			th:first-child,
@@ -118,11 +106,25 @@
 				padding-right: wp-vars.$grid-unit-30;
 			}
 		}
+	}
 
+	&__impact-table,
+	&__schedule-table {
 		.dataviews-no-results {
 			padding-bottom: wp-vars.$grid-unit-30;
 			padding-top: wp-vars.$grid-unit-30;
 		}
+	}
+
+	&__loading {
+		align-items: center;
+		display: flex;
+		justify-content: center;
+		min-height: 200px;
+	}
+
+	&__modal-loading {
+		min-height: 200px;
 	}
 
 	&__schedule-table {

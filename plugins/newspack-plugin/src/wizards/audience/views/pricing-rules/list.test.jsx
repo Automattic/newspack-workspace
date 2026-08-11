@@ -224,6 +224,21 @@ describe( 'the Pricing Rules list', () => {
 		expect( screen.getByTestId( 'catalog-impact' ) ).toBeInTheDocument();
 	} );
 
+	// Nothing else pins the catalogue numbers below the table.
+	it( 'renders the catalogue card after the rules table', async () => {
+		serve( { rules: [ rule( 1 ) ] } );
+		let container;
+		await act( async () => {
+			( { container } = render( <PricingRulesList /> ) );
+		} );
+
+		const order = Array.from( container.querySelectorAll( '*' ) );
+		const table = screen.getByRole( 'button', { name: 'filter to nothing' } );
+		const card = screen.getByTestId( 'catalog-impact' );
+
+		expect( order.indexOf( card ) ).toBeGreaterThan( order.indexOf( table ) );
+	} );
+
 	it( 'sets no header action while the screen is still loading', async () => {
 		let landStats;
 		apiFetch.mockImplementation( ( { path } ) => {
