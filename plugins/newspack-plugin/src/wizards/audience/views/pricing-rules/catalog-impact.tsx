@@ -1,103 +1,100 @@
 /**
- * Catalog-wide impact preview — a portfolio overview rendered above the Pricing
- * Rules list. Fetches the standalone plugin's catalog impact endpoint and shows
- * how many products the active rules affect, with a small composed-price sample.
+ * Catalog-wide impact above the Pricing Rules list: the headline numbers, and
+ * the product-by-product table behind them. Opening the table is a deliberate
+ * click because pricing the whole sample costs several times what the headline
+ * count alone does.
  */
 
 /**
  * WordPress dependencies
  */
-import { __, sprintf, _n } from '@wordpress/i18n';
-import { useState, useEffect } from '@wordpress/element';
+import { __, _n, sprintf } from '@wordpress/i18n';
+import { useState, useCallback } from '@wordpress/element';
 import apiFetch from '@wordpress/api-fetch';
-import { Spinner } from '@wordpress/components';
+import {
+	Button,
+	Modal,
+	Spinner,
+	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
+} from '@wordpress/components';
 
 /**
  * Internal dependencies
  */
+import ImpactStats from './impact-stats';
 import ImpactTable from './impact-table';
+import { formatCount } from './impact-format';
 import { IMPACT_PREVIEW_API_PATH as API_PATH, IMPACT_SAMPLE_LIMIT } from './constants';
 
-export default function CatalogImpact() {
-	const [ data, setData ] = useState< CatalogImpactResponse | null >( null );
-	const [ isLoading, setIsLoading ] = useState( true );
+interface CatalogImpactProps {
+	stats: CatalogImpactResponse;
+}
+
+export default function CatalogImpact( { stats }: CatalogImpactProps ) {
+	const [ isOpen, setIsOpen ] = useState( false );
+	const [ detail, setDetail ] = useState< CatalogImpactResponse | null >( null );
 	const [ hasError, setHasError ] = useState( false );
 
-	useEffect( () => {
-		let cancelled = false;
-		apiFetch< CatalogImpactResponse >( { path: API_PATH } )
-			.then( res => {
-				if ( ! cancelled ) {
-					setData( res );
-				}
-			} )
-			.catch( () => {
-				if ( ! cancelled ) {
-					setHasError( true );
-				}
-			} )
-			.finally( () => {
-				if ( ! cancelled ) {
-					setIsLoading( false );
-				}
-			} );
-		return () => {
-			cancelled = true;
-		};
-	}, [] );
-
-	if ( isLoading ) {
-		return (
-			<div className="newspack-pricing-rules__impact newspack-pricing-rules__impact--loading">
-				<Spinner />
-			</div>
-		);
-	}
-
-	// Never block the list on a preview failure or an unsupported result.
-	if ( hasError || ! data || ! data.supported ) {
-		return null;
-	}
-
-	if ( data.total_matching === 0 ) {
-		return (
-			<div className="newspack-pricing-rules__impact">
-				<p className="newspack-pricing-rules__muted">{ __( 'No active pricing rules are affecting products yet.', 'newspack-plugin' ) }</p>
-			</div>
-		);
-	}
-
-	const count = data.count_limited
-		? sprintf(
-				/* translators: %d: a number of products (a lower bound). */
-				__( '%d+ products', 'newspack-plugin' ),
-				data.total_matching
-		  )
-		: sprintf(
-				/* translators: %d: a number of products. */
-				_n( '%d product', '%d products', data.total_matching, 'newspack-plugin' ),
-				data.total_matching
-		  );
+	const open = useCallback( () => {
+		setIsOpen( true );
+		// The sample does not move under the modal, so one fetch serves every open.
+		if ( detail || hasError ) {
+			return;
+		}
+		apiFetch< CatalogImpactResponse >( { path: `${ API_PATH }?limit=${ IMPACT_SAMPLE_LIMIT }` } )
+			.then( setDetail )
+			.catch( () => setHasError( true ) );
+	}, [ detail, hasError ] );
 
 	return (
 		<div className="newspack-pricing-rules__impact">
-			<h3 className="newspack-pricing-rules__impact-title">
-				{ sprintf(
-					/* translators: %s: a product count like "142 products". */
-					__( '%s affected by your active pricing rules', 'newspack-plugin' ),
-					count
-				) }
-			</h3>
-			{ data.preview_limited && data.sample_count >= IMPACT_SAMPLE_LIMIT && (
-				<p className="newspack-pricing-rules__muted">
-					{ sprintf(
-						/* translators: %d: number of sampled products shown. */
-						__( 'Showing a sample of %d.', 'newspack-plugin' ),
-						data.sample_count
-					) }
-				</p>
+			<ImpactStats totalMatching={ stats.total_matching } countLimited={ stats.count_limited } audience={ stats.audience } />
+			{ stats.total_matching === 0 ? (
+				<p className="newspack-pricing-rules__muted">{ __( 'No active pricing rules are affecting products yet.', 'newspack-plugin' ) }</p>
+			) : (
+				<Button variant="secondary" onClick={ open }>
+					{ __( 'View affected products', 'newspack-plugin' ) }
+				</Button>
 			) }
-			<ImpactTable baseline={ data.sample } segmentGroups={ data.segment_groups ?? [] } currency={ data.currency } />
+			{ isOpen && (
+				<Modal title={ __( 'Affected products', 'newspack-plugin' ) } size="large" onRequestClose={ () => setIsOpen( false ) }>
+					{ hasError && (
+						<p className="newspack-pricing-rules__muted">
+							{ __( 'Could not load the affected products. Please try again.', 'newspack-plugin' ) }
+						</p>
+					) }
+					{ ! hasError && ! detail && (
+						<VStack className="newspack-pricing-rules__modal-loading" alignment="center" justify="center">
+							<Spinner />
+						</VStack>
+					) }
+					{ ! hasError && detail && (
+						<>
+							{ detail.preview_limited && detail.sample_count >= IMPACT_SAMPLE_LIMIT && (
+								<p className="newspack-pricing-rules__muted">
+									{ sprintf(
+										/* translators: %s: how many products the table lists. */
+										_n(
+											'Showing a sample of %s product.',
+											'Showing a sample of %s products.',
+											detail.sample_count,
+											'newspack-plugin'
+										),
+										formatCount( detail.sample_count )
+									) }
+								</p>
+							) }
+							<ImpactTable
+								baseline={ detail.sample }
+								segmentGroups={ detail.segment_groups ?? [] }
+								currency={ detail.currency }
+								framed={ false }
+								collapsible={ false }
+							/>
+						</>
+					) }
+				</Modal>
+			) }
 		</div>
 	);
 }
