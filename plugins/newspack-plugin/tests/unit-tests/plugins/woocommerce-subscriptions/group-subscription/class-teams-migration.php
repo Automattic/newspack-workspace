@@ -51,8 +51,13 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 	 */
 	public function set_up() {
 		parent::set_up();
-		global $subscriptions_database;
+		global $subscriptions_database, $products_database;
 		$subscriptions_database = [];
+		// Products registered by one test are visible to every later one, and the
+		// mock's set_product_id() guard now reads this store to decide whether an ID
+		// is a variation — so a leaked registration could change another test's
+		// outcome. Every sibling test class resets it here for the same reason.
+		$products_database = [];
 		Group_Subscription::reset_cache();
 	}
 
@@ -874,5 +879,436 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 			'A fresh team should find no reusable group among another team\'s marked group, a cancelled group, and a non-group subscription.'
 		);
 		$this->assertFalse( $reuse['used_owner_fallback'], 'No eligible fallback exists here.' );
+	}
+
+	/**
+	 * Register a variable subscription parent and one variation, as a publisher
+	 * selling seat tiers would have (NPPD-1876).
+	 *
+	 * @return array{parent: WC_Product, variation: WC_Product}
+	 */
+	private function create_variable_subscription_product() {
+		$parent = wc_create_mock_product(
+			[
+				'id'   => 109742,
+				'name' => 'Corporate Self Checkout',
+				'type' => 'variable-subscription',
+			]
+		);
+		$variation = wc_create_mock_product(
+			[
+				'id'        => 109751,
+				'name'      => 'Corporate Self Checkout - Unlimited',
+				'type'      => 'subscription_variation',
+				'parent_id' => 109742,
+			]
+		);
+		return [
+			'parent'    => $parent,
+			'variation' => $variation,
+		];
+	}
+
+	/**
+	 * Call one of the migration's private static creators.
+	 *
+	 * @param string $method Method name.
+	 * @param array  $args   Positional arguments.
+	 *
+	 * @return mixed
+	 */
+	private function invoke_private( $method, $args ) {
+		$reflection = new ReflectionMethod( Teams_Migration::class, $method );
+		$reflection->setAccessible( true );
+		return $reflection->invokeArgs( null, $args );
+	}
+
+	/**
+	 * A team migrated against a variation must end up linked to that variation.
+	 *
+	 * Publishers selling seat tiers hold them as variations of one variable
+	 * subscription product, so `--product-id` is routinely given a variation ID.
+	 * Assigning that ID straight to the line item's `product_id` is rejected by
+	 * WooCommerce and silently dropped, leaving an item linked to nothing — which
+	 * then makes WC Subscriptions refuse to activate the subscription (NPPD-1876).
+	 */
+	public function test_create_migration_subscription_links_a_variation() {
+		$owner    = $this->create_reader();
+		$products = $this->create_variable_subscription_product();
+		$errors   = [];
+
+		$subscription = $this->invoke_private(
+			'create_migration_subscription',
+			[ $owner, $products['variation'], 'month', 1, '2026-01-01 00:00:00', '', &$errors, 94782 ]
+		);
+
+		$this->assertNotNull( $subscription, 'The subscription should be created.' );
+		$items = $subscription->get_items();
+		$this->assertCount( 1, $items, 'The subscription should carry one line item.' );
+		$item = array_shift( $items );
+
+		$this->assertSame( 109742, $item->get_product_id(), 'A variation must be recorded against its parent product ID.' );
+		$this->assertSame( 109751, $item->get_variation_id(), 'The variation ID must be recorded on the line item.' );
+		$this->assertNotFalse( $item->get_product(), 'The line item must resolve to a product; an unresolvable item blocks activation.' );
+		// The name is no longer set explicitly — set_product() carries it over — so
+		// hold that behavior in place rather than leaving it implicit.
+		$this->assertSame( 'Corporate Self Checkout - Unlimited', $item->get_name(), 'The line item should take its name from the linked product.' );
+		$this->assertSame( [], $errors, 'Linking a variation should not record an error.' );
+	}
+
+	/**
+	 * The same linkage is required when re-using a team's existing subscription.
+	 *
+	 * This path never calls update_status(), so a dropped product ID raises no
+	 * exception — the subscription stays active and reports as migrated while
+	 * granting access to nobody, because access is matched by product ID.
+	 */
+	public function test_replace_subscription_product_links_a_variation() {
+		$owner        = $this->create_reader();
+		$products     = $this->create_variable_subscription_product();
+		$errors       = [];
+		$subscription = wcs_create_subscription(
+			[
+				'customer_id'    => $owner,
+				'status'         => 'active',
+				'billing_period' => 'month',
+			]
+		);
+
+		// Seed the team's original line item. This method leads with a removal loop,
+		// so without a pre-existing item the count assertion below would prove only
+		// that one item was added, not that the old one was cleared — and clearing
+		// it is the half that decides whether the group grants access.
+		$old_product = wc_create_mock_product(
+			[
+				'id'   => 500,
+				'name' => 'Legacy Teams product',
+				'type' => 'subscription',
+			]
+		);
+		$old_item = new WC_Order_Item_Product( [ 'id' => 4242 ] );
+		$old_item->set_product( $old_product );
+		$subscription->add_item( $old_item );
+		$this->assertCount( 1, $subscription->get_items(), 'Fixture check: the subscription starts with the legacy item.' );
+
+		$this->invoke_private(
+			'replace_subscription_product',
+			[ $subscription, $products['variation'], 'month', 1, '2026-01-01 00:00:00', '', &$errors, 94782 ]
+		);
+
+		$items = $subscription->get_items();
+		$this->assertCount( 1, $items, 'The reused subscription should carry exactly the migration line item.' );
+		$item = array_shift( $items );
+
+		$this->assertSame( 109742, $item->get_product_id(), 'A variation must be recorded against its parent product ID.' );
+		$this->assertSame( 109751, $item->get_variation_id(), 'The variation ID must be recorded on the line item.' );
+		$this->assertNotFalse( $item->get_product(), 'The line item must resolve to a product, or the group grants no access.' );
+		$this->assertNotSame( 500, $item->get_product_id(), 'The legacy line item should have been removed, not kept alongside.' );
+	}
+
+	/**
+	 * A migration product's availability is decided by the parent's status.
+	 *
+	 * An unpublished product fails activation the same way an unlinked line item
+	 * does, so the pre-flight has to resolve a variation to its parent before
+	 * judging it.
+	 */
+	public function test_product_is_published_resolves_a_variation_to_its_parent() {
+		$products = $this->create_variable_subscription_product();
+
+		$this->assertTrue(
+			$this->invoke_private( 'product_is_published', [ $products['variation'] ] ),
+			'A variation under a published parent counts as published.'
+		);
+		$this->assertTrue(
+			$this->invoke_private( 'product_is_published', [ $products['parent'] ] ),
+			'A published parent counts as published.'
+		);
+
+		$draft_parent = wc_create_mock_product(
+			[
+				'id'     => 700,
+				'name'   => 'Draft parent',
+				'type'   => 'variable-subscription',
+				'status' => 'draft',
+			]
+		);
+		$draft_child  = wc_create_mock_product(
+			[
+				'id'        => 701,
+				'name'      => 'Variation of a draft parent',
+				'type'      => 'subscription_variation',
+				'parent_id' => 700,
+			]
+		);
+
+		$this->assertFalse(
+			$this->invoke_private( 'product_is_published', [ $draft_child ] ),
+			'A variation whose parent is unpublished must not pass pre-flight — it cannot be activated.'
+		);
+		$this->assertFalse(
+			$this->invoke_private( 'product_is_published', [ $draft_parent ] ),
+			'An unpublished product must not pass pre-flight.'
+		);
+	}
+
+	/**
+	 * Gate matching follows has_product(), which accepts a product or its parent.
+	 *
+	 * A flat comparison against the product's own ID would refuse a seat-tier
+	 * variation on a site whose gate names the parent variable product — a
+	 * configuration that works perfectly at runtime.
+	 */
+	public function test_product_grants_gate_access_accepts_a_parent_rule() {
+		$products = $this->create_variable_subscription_product();
+
+		$this->assertTrue(
+			$this->invoke_private( 'product_grants_gate_access', [ $products['variation'], [ 109742 ] ] ),
+			'A gate naming the parent product accepts any of its variations.'
+		);
+		$this->assertTrue(
+			$this->invoke_private( 'product_grants_gate_access', [ $products['variation'], [ 109751 ] ] ),
+			'A gate naming the variation itself accepts it.'
+		);
+		$this->assertTrue(
+			$this->invoke_private( 'product_grants_gate_access', [ $products['parent'], [ 109742 ] ] ),
+			'A gate naming a plain product accepts it.'
+		);
+		$this->assertFalse(
+			$this->invoke_private( 'product_grants_gate_access', [ $products['variation'], [ 109999 ] ] ),
+			'A gate naming only a sibling variation accepts nothing.'
+		);
+		$this->assertFalse(
+			$this->invoke_private( 'product_grants_gate_access', [ $products['parent'], [ 109751 ] ] ),
+			'A gate naming a variation does not accept the bare parent product.'
+		);
+	}
+
+	/**
+	 * The re-run guard must recognise a subscription linked to a variation.
+	 *
+	 * The migrate-manual-members command skips members who already hold a
+	 * migration subscription. Since a variation is stored as parent product ID plus
+	 * variation ID, matching on the product ID alone never recognised the
+	 * command's own output — so each re-run granted every member another $0
+	 * subscription instead of skipping them.
+	 */
+	public function test_member_has_migration_subscription_recognises_a_variation() {
+		$user         = $this->create_reader();
+		$products     = $this->create_variable_subscription_product();
+		$subscription = wcs_create_subscription(
+			[
+				'customer_id'    => $user,
+				'status'         => 'active',
+				'billing_period' => 'month',
+				'created_via'    => 'manual migration',
+			]
+		);
+		$item = new WC_Order_Item_Product();
+		$item->set_product( $products['variation'] );
+		$subscription->add_item( $item );
+
+		$this->assertTrue(
+			$this->invoke_private( 'member_has_migration_subscription', [ $user, 109751 ] ),
+			'A member holding a subscription linked to this variation must be recognised, or a re-run duplicates it.'
+		);
+		$this->assertTrue(
+			$this->invoke_private( 'member_has_migration_subscription', [ $user, 109742 ] ),
+			'The parent product ID must match too, since the line item records it.'
+		);
+		$this->assertFalse(
+			$this->invoke_private( 'member_has_migration_subscription', [ $user, 109999 ] ),
+			'An unrelated product must not match.'
+		);
+	}
+
+	/**
+	 * Whether a reused subscription counts as one the publisher bills.
+	 *
+	 * This predicate decides whether a team's subscription keeps its commercial
+	 * terms or is rewritten to $0 on the migration product, so a false negative
+	 * deletes the product line the publisher sells. It errs toward "paid".
+	 */
+	public function test_subscription_is_paid_errs_toward_paid() {
+		$paid = wcs_create_subscription(
+			[
+				'customer_id'    => $this->create_reader(),
+				'status'         => 'active',
+				'billing_period' => 'month',
+				'total'          => 599,
+			]
+		);
+		$this->assertTrue(
+			$this->invoke_private( 'subscription_is_paid', [ $paid ] ),
+			'A subscription with a recurring total is one the publisher bills.'
+		);
+
+		// A fully-discounted subscription stores a total of 0 but is still sold —
+		// the pre-discount subtotal is what distinguishes it from a $0 migration
+		// subscription, which has neither.
+		$fully_discounted = wcs_create_subscription(
+			[
+				'customer_id'    => $this->create_reader(),
+				'status'         => 'active',
+				'billing_period' => 'month',
+				'total'          => 0,
+				'subtotal'       => 599,
+			]
+		);
+		$this->assertTrue(
+			$this->invoke_private( 'subscription_is_paid', [ $fully_discounted ] ),
+			'A 100% recurring coupon must not read as free, or migration deletes the product being sold.'
+		);
+
+		$migration_created = wcs_create_subscription(
+			[
+				'customer_id'    => $this->create_reader(),
+				'status'         => 'active',
+				'billing_period' => 'month',
+				'total'          => 0,
+				'subtotal'       => 0,
+			]
+		);
+		$this->assertFalse(
+			$this->invoke_private( 'subscription_is_paid', [ $migration_created ] ),
+			'A $0 subscription with no pre-discount value is a migration subscription and stays re-alignable.'
+		);
+
+		$no_total_set = wcs_create_subscription(
+			[
+				'customer_id'    => $this->create_reader(),
+				'status'         => 'active',
+				'billing_period' => 'month',
+			]
+		);
+		$this->assertFalse(
+			$this->invoke_private( 'subscription_is_paid', [ $no_total_set ] ),
+			'A subscription with no total recorded is not treated as paid.'
+		);
+	}
+
+	/**
+	 * A pending-cancel subscription still grants access, so it is reusable.
+	 *
+	 * A team riding out a term it already paid for keeps access until the
+	 * subscription self-cancels. Both Access_Rules and Group_Subscription gate
+	 * member access on WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES, so
+	 * reusing such a subscription in place carries that expiry across the
+	 * migration; creating a $0 group for the team instead would grant its members
+	 * access forever, after the owner had cancelled.
+	 */
+	public function test_pending_cancel_counts_as_access_granting_for_reuse() {
+		$this->assertContains(
+			'pending-cancel',
+			\Newspack\WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES,
+			'Reuse keys on this constant; if pending-cancel leaves it, a cancelled-but-paid team would be given a permanent free group instead.'
+		);
+
+		$pending_cancel = wcs_create_subscription(
+			[
+				'customer_id'    => $this->create_reader(),
+				'status'         => 'pending-cancel',
+				'billing_period' => 'month',
+				'total'          => 599,
+			]
+		);
+		$this->assertTrue(
+			$pending_cancel->has_status( \Newspack\WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES ),
+			'A pending-cancel subscription is reusable, so the migration updates it in place rather than minting a $0 replacement.'
+		);
+		$this->assertTrue(
+			$this->invoke_private( 'subscription_is_paid', [ $pending_cancel ] ),
+			'It is also paid, so its product and price are left alone.'
+		);
+
+		// Even with no total recorded, a pending-cancel subscription must keep its
+		// terms: its scheduled end date is what ends group access on time.
+		$free_pending_cancel = wcs_create_subscription(
+			[
+				'customer_id'    => $this->create_reader(),
+				'status'         => 'pending-cancel',
+				'billing_period' => 'month',
+			]
+		);
+		$this->assertFalse(
+			$this->invoke_private( 'subscription_is_paid', [ $free_pending_cancel ] ),
+			'A $0 pending-cancel subscription is not paid — it is exempted from re-alignment by its status, not its total.'
+		);
+		$this->assertTrue(
+			$free_pending_cancel->has_status( 'pending-cancel' ),
+			'Status is the signal that preserves its end date.'
+		);
+	}
+
+	/**
+	 * Gate coverage for a paid team's own subscription follows has_product().
+	 *
+	 * A team the publisher bills keeps its own product rather than being rewritten
+	 * onto --product-id, so whether its access survives the migration is decided
+	 * by whether a gate accepts the product it already holds. A subscription
+	 * linked to a seat-tier variation is covered by a gate naming either that
+	 * variation or its parent.
+	 */
+	public function test_subscription_covers_access_products_matches_parent_or_variation() {
+		$owner        = $this->create_reader();
+		$products     = $this->create_variable_subscription_product();
+		$subscription = wcs_create_subscription(
+			[
+				'customer_id'    => $owner,
+				'status'         => 'active',
+				'billing_period' => 'month',
+			]
+		);
+		$item = new WC_Order_Item_Product();
+		$item->set_product( $products['variation'] );
+		$subscription->add_item( $item );
+
+		$this->assertTrue(
+			$this->invoke_private( 'subscription_covers_access_products', [ $subscription, [ 109742 ] ] ),
+			'A gate naming the parent product covers a subscription linked to one of its variations.'
+		);
+		$this->assertTrue(
+			$this->invoke_private( 'subscription_covers_access_products', [ $subscription, [ 109751 ] ] ),
+			'A gate naming the variation covers it.'
+		);
+		$this->assertFalse(
+			$this->invoke_private( 'subscription_covers_access_products', [ $subscription, [ 109999 ] ] ),
+			'A gate naming an unrelated product covers nothing — this is what makes a paid team skip rather than migrate.'
+		);
+		$this->assertTrue(
+			$this->invoke_private( 'subscription_covers_access_products', [ $subscription, [] ] ),
+			'With no gate products configured there is nothing to check against.'
+		);
+	}
+
+	/**
+	 * A plain (non-variation) product still links as before.
+	 */
+	public function test_create_migration_subscription_links_a_simple_product() {
+		$owner   = $this->create_reader();
+		$product = wc_create_mock_product(
+			[
+				'id'   => 500,
+				'name' => 'Group Subscription',
+				'type' => 'subscription',
+			]
+		);
+		$errors = [];
+
+		$subscription = $this->invoke_private(
+			'create_migration_subscription',
+			[ $owner, $product, 'month', 1, '2026-01-01 00:00:00', '', &$errors, 94783 ]
+		);
+
+		$this->assertNotNull( $subscription, 'The subscription should be created.' );
+		$this->assertSame( [], $errors, 'Linking a plain product should not record an error.' );
+
+		$items = $subscription->get_items();
+		$this->assertCount( 1, $items, 'The subscription should carry one line item.' );
+		$item = array_shift( $items );
+
+		$this->assertSame( 500, $item->get_product_id(), 'A non-variation product links by product ID.' );
+		$this->assertSame( 0, $item->get_variation_id(), 'A non-variation product has no variation ID.' );
+		$this->assertNotFalse( $item->get_product(), 'The line item must resolve to a product.' );
 	}
 }

@@ -31,6 +31,7 @@ export { default as Modal } from './modal';
 export { default as NewspackIcon } from './newspack-icon';
 export { default as Notice } from './notice';
 export { default as Page } from './page';
+export { default as PageControl } from './page-control';
 export { default as PluginInstaller } from './plugin-installer';
 export { default as PluginSettings } from './plugin-settings';
 export { default as PluginToggle } from './plugin-toggle';
