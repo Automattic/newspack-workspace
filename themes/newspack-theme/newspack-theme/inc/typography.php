@@ -168,44 +168,75 @@ function newspack_get_font_stacks_as_select_choices() {
 
 /**
  * Prepare a font-family definition with a primary font and fallbacks.
+ *
+ * Font names are stripped of CSS string and function delimiters — these values
+ * flow into inline styles and theme.json preset values, where the theme origin
+ * is never passed through core's insecure-property filtering. Generic family
+ * keywords stay unquoted so a stack always ends in a real generic.
  */
 function newspack_font_stack( $primary_font, $fallback_id ) {
-	$stacks = newspack_get_font_stacks();
-	$fonts  = isset( $stacks[ $fallback_id ] ) ? $stacks[ $fallback_id ]['fonts'] : array();
+	$stacks   = newspack_get_font_stacks();
+	$fonts    = isset( $stacks[ $fallback_id ] ) ? $stacks[ $fallback_id ]['fonts'] : array();
+	$generics = array( 'serif', 'sans-serif', 'monospace', 'cursive', 'fantasy', 'system-ui' );
 	array_unshift( $fonts, $primary_font );
 	foreach ( $fonts as &$font ) {
-		$font = '"' . $font . '"';
+		$font = str_replace( array( '"', "'", ';', '{', '}', '(', ')', '\\' ), '', $font );
+		if ( ! in_array( strtolower( $font ), $generics, true ) ) {
+			$font = '"' . $font . '"';
+		}
 	}
 	return implode( ',', $fonts );
 }
 
 /**
- * The theme's default font stacks, mirroring sass/variables-site/_fonts.scss.
+ * The current Header and Body font stacks: the Customizer font when set,
+ * otherwise the active theme's default, mirroring
+ * sass/variables-site/_fonts.scss and each style variation's overrides.
  *
  * @return array Stacks keyed heading/body.
  */
-function newspack_font_family_default_stacks() {
-	return array(
-		'heading' => '-apple-system,blinkmacsystemfont,"Segoe UI","Roboto","Oxygen","Ubuntu","Cantarell","Fira Sans","Droid Sans","Helvetica Neue",sans-serif',
+function newspack_font_family_stacks() {
+	$system   = '-apple-system,blinkmacsystemfont,"Segoe UI","Roboto","Oxygen","Ubuntu","Cantarell","Fira Sans","Droid Sans","Helvetica Neue",sans-serif';
+	$defaults = array(
+		'heading' => $system,
 		'body'    => 'georgia,garamond,"Times New Roman",serif',
 	);
-}
 
-/**
- * Resolve the stack a Customizer font currently produces, falling back to the
- * theme's default stack when no font is set.
- *
- * @param string $font_mod  Font theme mod name.
- * @param string $stack_mod Fallback-stack theme mod name.
- * @param string $default   Default stack when no font is set.
- * @return string
- */
-function newspack_font_family_resolved_stack( $font_mod, $stack_mod, $default ) {
-	$font = get_theme_mod( $font_mod, '' );
-	if ( ! $font ) {
-		return $default;
+	$variations = array(
+		'newspack-joseph'    => array(
+			'heading' => '"Old Standard TT",georgia,serif',
+			'body'    => '"EB Garamond",georgia,serif',
+		),
+		'newspack-katharine' => array(
+			'heading' => '"Barlow","Helvetica",sans-serif',
+			'body'    => '"Barlow","Helvetica",sans-serif',
+		),
+		'newspack-nelson'    => array(
+			'heading' => '"Montserrat","Helvetica",sans-serif',
+			'body'    => $system,
+		),
+		'newspack-sacha'     => array(
+			'heading' => '"IBM Plex Serif",georgia,serif',
+		),
+		'newspack-scott'     => array(
+			'heading' => '"Fira Sans Condensed","Helvetica",sans-serif',
+		),
+	);
+	if ( isset( $variations[ get_stylesheet() ] ) ) {
+		$defaults = array_merge( $defaults, $variations[ get_stylesheet() ] );
 	}
-	return newspack_font_stack( $font, get_theme_mod( $stack_mod, 'serif' ) );
+
+	$mods   = array(
+		'heading' => array( 'font_header', 'font_header_stack' ),
+		'body'    => array( 'font_body', 'font_body_stack' ),
+	);
+	$stacks = array();
+	foreach ( $mods as $key => $mod_names ) {
+		$font           = get_theme_mod( $mod_names[0], '' );
+		$stacks[ $key ] = $font ? newspack_font_stack( $font, get_theme_mod( $mod_names[1], 'serif' ) ) : $defaults[ $key ];
+	}
+
+	return $stacks;
 }
 
 /**
@@ -228,16 +259,16 @@ function newspack_font_family_presets( $theme_json ) {
 		$families = $families['theme'];
 	}
 
-	$defaults   = newspack_font_family_default_stacks();
+	$stacks     = newspack_font_family_stacks();
 	$families[] = array(
 		'slug'       => 'newspack-header',
 		'name'       => _x( 'Header', 'font family name', 'newspack-theme' ),
-		'fontFamily' => 'var(--newspack-theme-font-heading,' . newspack_font_family_resolved_stack( 'font_header', 'font_header_stack', $defaults['heading'] ) . ')',
+		'fontFamily' => 'var(--newspack-theme-font-heading,' . $stacks['heading'] . ')',
 	);
 	$families[] = array(
 		'slug'       => 'newspack-body',
 		'name'       => _x( 'Body', 'font family name', 'newspack-theme' ),
-		'fontFamily' => 'var(--newspack-theme-font-body,' . newspack_font_family_resolved_stack( 'font_body', 'font_body_stack', $defaults['body'] ) . ')',
+		'fontFamily' => 'var(--newspack-theme-font-body,' . $stacks['body'] . ')',
 	);
 
 	return $theme_json->update_with(
@@ -252,17 +283,3 @@ function newspack_font_family_presets( $theme_json ) {
 	);
 }
 add_filter( 'wp_theme_json_data_theme', 'newspack_font_family_presets', 10, 1 );
-
-/**
- * Define the theme font variables in the editor's admin document, where the
- * Font control renders its option previews; the canvas carries its own copy.
- */
-function newspack_font_family_presets_editor_css() {
-	$defaults = newspack_font_family_default_stacks();
-	$css      = ':root{--newspack-theme-font-heading:' . wp_kses( newspack_font_family_resolved_stack( 'font_header', 'font_header_stack', $defaults['heading'] ), null ) . ';--newspack-theme-font-body:' . wp_kses( newspack_font_family_resolved_stack( 'font_body', 'font_body_stack', $defaults['body'] ), null ) . '}';
-
-	wp_register_style( 'newspack-font-family-presets', false, array(), wp_get_theme()->get( 'Version' ) );
-	wp_enqueue_style( 'newspack-font-family-presets' );
-	wp_add_inline_style( 'newspack-font-family-presets', $css );
-}
-add_action( 'enqueue_block_editor_assets', 'newspack_font_family_presets_editor_css' );
