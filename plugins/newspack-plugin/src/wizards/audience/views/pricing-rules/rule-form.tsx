@@ -17,7 +17,6 @@ import {
 	SelectControl,
 	ToggleControl,
 	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
-	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalToggleGroupControl as ToggleGroupControl, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalToggleGroupControlOption as ToggleGroupControlOption, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
@@ -204,6 +203,7 @@ export default function RuleForm( { isNew, initialPath = null, rule, vocab, onDo
 	// A stepped schedule, or a flat rule capped to N cycles, has a cycle dimension —
 	// the only case where the cycle anchor is consequential.
 	const hasCycleDimension = isSchedule || ( ! isSchedule && Number( cyclesLimit ) > 0 );
+	const hasPrice = isSchedule ? steps.length > 0 : String( value ).trim() !== '';
 	const [ scopeType, setScopeType ] = useState( rule?.scope_type ?? seedScope ?? vocab.scopes[ 0 ]?.id ?? 'all_products' );
 	const [ scopeIds, setScopeIds ] = useState< number[] >( rule?.scope_ids ?? [] );
 	const [ priority, setPriority ] = useState( String( rule?.priority ?? 100 ) );
@@ -826,22 +826,27 @@ export default function RuleForm( { isNew, initialPath = null, rule, vocab, onDo
 				) }
 			</VStack>
 
-			<Divider alignment="full-width" variant="tertiary" />
+			{ /* Without a price there is nothing to preview, so the whole section waits for one. */ }
+			{ hasPrice && (
+				<>
+					<Divider alignment="full-width" variant="tertiary" />
 
-			<div>
-				<VStack spacing={ 0 }>
-					<SectionHeader
-						title={ __( 'Impact Preview', 'newspack-plugin' ) }
-						description={ __(
-							'What a reader would actually pay, with your other active rules taken into account. Where several rules match, the lowest price wins.',
-							'newspack-plugin'
-						) }
-						noMargin
-					/>
-					{ hasCycleDimension && <p className="newspack-pricing-rules__muted">{ cycleMarkerNote() }</p> }
-				</VStack>
-				<RulePreview body={ previewBody } hasPrice={ isSchedule ? steps.length > 0 : String( value ).trim() !== '' } />
-			</div>
+					<div>
+						<VStack spacing={ 0 }>
+							<SectionHeader
+								title={ __( 'Impact Preview', 'newspack-plugin' ) }
+								description={ __(
+									'What a reader would actually pay, with your other active rules taken into account. Where several rules match, the lowest price wins.',
+									'newspack-plugin'
+								) }
+								noMargin
+							/>
+							{ hasCycleDimension && <p className="newspack-pricing-rules__muted">{ cycleMarkerNote() }</p> }
+						</VStack>
+						<RulePreview body={ previewBody } hasPrice={ hasPrice } />
+					</div>
+				</>
+			) }
 			{ goalDialog }
 		</div>
 	);

@@ -69,6 +69,10 @@
 		}
 	}
 
+	&__schedule-empty {
+		padding: wp-vars.$grid-unit-40 wp-vars.$grid-unit-30;
+	}
+
 	&__impact-title {
 		margin: 0 0 wp-vars.$grid-unit-05;
 		font-size: 16px;

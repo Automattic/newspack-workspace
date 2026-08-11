@@ -9,17 +9,22 @@
  */
 import { __ } from '@wordpress/i18n';
 import { useState, useMemo, useEffect, useCallback, useId, useRef } from '@wordpress/element';
-import { Button } from '@wordpress/components';
+import {
+	Button,
+	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
+	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
+} from '@wordpress/components';
 import { useDispatch } from '@wordpress/data';
 // Not the Newspack wrapper: with-wizard-screen/style.scss gives `.newspack-dataviews`
 // a -48px page bleed that hangs this embedded table past the form column.
 import { DataViews, filterSortAndPaginate } from '@wordpress/dataviews';
 import type { Action, Field, View } from '@wordpress/dataviews';
+import { currencyDollar } from '@wordpress/icons';
 
 /**
  * Internal dependencies
  */
-import { ConfirmDialog, TableCard } from '../../../../../packages/components/src';
+import { ConfirmDialog, Grid, SectionHeader, TableCard } from '../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import { byCycle, cycleRange, priceSummary } from './schedule-format';
 import SchedulePriceDrawer from './schedule-price-drawer';
@@ -207,28 +212,50 @@ export default function SchedulePrices( { steps, onChange, publicize, calcTypes,
 				title={ __( 'Price Schedule', 'newspack-plugin' ) }
 				titleId={ titleId }
 				actions={
-					<Button ref={ addRef } variant="secondary" size="compact" onClick={ add }>
-						{ __( 'Add Price', 'newspack-plugin' ) }
-					</Button>
+					rows.length > 0 && (
+						<Button ref={ addRef } variant="secondary" size="compact" onClick={ add }>
+							{ __( 'Add Price', 'newspack-plugin' ) }
+						</Button>
+					)
 				}
 			>
-				<div className="newspack-pricing-rules__schedule-table" role="region" aria-labelledby={ titleId }>
-					<DataViews
-						data={ data }
-						fields={ fields }
-						view={ tableView }
-						onChangeView={ setView }
-						actions={ actions }
-						paginationInfo={ paginationInfo }
-						defaultLayouts={ { table: {} } }
-						getItemId={ ( item: SchedulePriceRow ) => item.id }
-						empty={
-							<p className="newspack-pricing-rules__muted">{ __( 'No prices yet. Add one to get started.', 'newspack-plugin' ) }</p>
-						}
-					>
-						<DataViews.Layout />
-					</DataViews>
-				</div>
+				{ rows.length === 0 ? (
+					<div className="newspack-pricing-rules__schedule-empty">
+						<Grid columns={ 4 } noMargin>
+							<VStack start={ 2 } end={ 4 } spacing={ 8 }>
+								<SectionHeader
+									icon={ currencyDollar }
+									title={ __( 'No prices yet', 'newspack-plugin' ) }
+									description={ __( 'Add one to get started.', 'newspack-plugin' ) }
+									pageHeader
+									size="small"
+									noMargin
+									heading={ 4 }
+								/>
+								<HStack justify="center">
+									<Button ref={ addRef } variant="secondary" onClick={ add } __next40pxDefaultSize>
+										{ __( 'Add Price', 'newspack-plugin' ) }
+									</Button>
+								</HStack>
+							</VStack>
+						</Grid>
+					</div>
+				) : (
+					<div className="newspack-pricing-rules__schedule-table" role="region" aria-labelledby={ titleId }>
+						<DataViews
+							data={ data }
+							fields={ fields }
+							view={ tableView }
+							onChangeView={ setView }
+							actions={ actions }
+							paginationInfo={ paginationInfo }
+							defaultLayouts={ { table: {} } }
+							getItemId={ ( item: SchedulePriceRow ) => item.id }
+						>
+							<DataViews.Layout />
+						</DataViews>
+					</div>
+				) }
 			</TableCard>
 			<ConfirmDialog
 				isOpen={ null !== removing }
