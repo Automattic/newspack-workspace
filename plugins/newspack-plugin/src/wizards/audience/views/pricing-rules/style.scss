@@ -100,7 +100,11 @@
 		align-items: flex-start;
 		display: flex;
 		flex-direction: column;
-		gap: wp-vars.$grid-unit;
+	}
+
+	&__tile-action {
+		font-size: wp-vars.$helptext-font-size;
+		line-height: inherit;
 	}
 
 	&__tile-value {

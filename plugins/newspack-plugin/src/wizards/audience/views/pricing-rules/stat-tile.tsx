@@ -41,7 +41,7 @@ export default function StatTile( { label, value, description, secondary, action
 					<span className="newspack-pricing-rules__tile-description">{ description }</span>
 					{ actionLabel && onAction && (
 						// A modal trigger, so a button styled as a link rather than an anchor.
-						<Button variant="link" onClick={ onAction }>
+						<Button variant="link" className="newspack-pricing-rules__tile-action" onClick={ onAction }>
 							{ actionLabel }
 						</Button>
 					) }
