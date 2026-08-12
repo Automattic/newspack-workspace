@@ -137,40 +137,27 @@ class Test_Content_Gate_Rest extends \WP_UnitTestCase {
 
 	/**
 	 * Reset Content_Gate::$gate_rendered — a "gate render claimed" flag, set
-	 * inside Content_Gate::get_restriction_for_post() (see its docblock: the
-	 * lock has to be claimed before either the gate or the teaser renders, on
-	 * every path that renders them, front end and REST alike, to prevent the
-	 * unbounded restrict_post() re-entry #821 fixed) and read by
-	 * has_rendered(), restrict_post()'s own re-entry guard. It has no public
-	 * reset — production never needs one, since a fresh HTTP request gets a
-	 * fresh PHP process. This test process doesn't: every PHPUnit test method
-	 * is its own logical "page render", but the flag is a class static that
+	 * by restrict_post() (never by get_restriction_for_post() or the REST
+	 * path — see get_restriction_for_post()'s own docblock for why marking
+	 * is restrict_post()'s job alone) and read by has_rendered(),
+	 * restrict_post()'s own front-end re-entry guard. It has no public reset
+	 * — production never needs one, since a fresh HTTP request gets a fresh
+	 * PHP process. This test process doesn't: every PHPUnit test method is
+	 * its own logical "page render", but the flag is a class static that
 	 * outlives all of them.
 	 *
-	 * Two call sites need this, for two different reasons:
+	 * Called once per test method, from set_up(): a test elsewhere in the
+	 * suite that gates a post on the front end (via go_to() + the_post())
+	 * leaves the flag permanently true, and every subsequent front-end
+	 * render — including this class's parity test — would see
+	 * has_rendered() === true and restrict_post() bail before gating
+	 * anything. Confirmed by running the full suite with --order-by=random.
 	 *
-	 * - set_up(), once per test method: a test elsewhere in the suite that
-	 *   gates a post on the front end (via go_to() + the_post()) leaves the
-	 *   flag permanently true, and every subsequent front-end render —
-	 *   including this class's parity test — would see has_rendered() ===
-	 *   true and restrict_post() bail before gating anything. Confirmed by
-	 *   running the full suite with --order-by=random.
-	 *
-	 * - test_rest_and_front_end_produce_the_same_gated_string(), mid-test:
-	 *   that test renders the same post via REST and then via the front end,
-	 *   in that order, in one process, specifically to compare the two
-	 *   outputs. Real traffic never does this — a REST request and a
-	 *   front-end request are always separate HTTP requests, so the flag one
-	 *   sets is never visible to the other — but this test's own two-step
-	 *   construction now triggers exactly the leak set_up() already guards
-	 *   against, from the REST step this time: the REST call claims the
-	 *   render lock as a side effect of building its own response, and the
-	 *   front-end call immediately afterward sees has_rendered() === true and
-	 *   bails, serving the unrestricted body while REST (moments earlier)
-	 *   served the correctly gated one — the same failure mode set_up()'s
-	 *   comment already describes, just reached from the other direction now
-	 *   that REST also claims the lock instead of merely being unaffected by
-	 *   it.
+	 * Not needed between REST and front-end steps within a single test (see
+	 * test_rest_and_front_end_produce_the_same_gated_string(), which no
+	 * longer calls this mid-test): REST resolves through
+	 * get_restriction_for_post(), which never claims this lock, so a REST
+	 * call has no effect on it for a front-end render to collide with.
 	 *
 	 * Resetting the private static via reflection is test-only and mirrors
 	 * what happens for free between real HTTP requests.
@@ -940,6 +927,89 @@ class Test_Content_Gate_Rest extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * SECURITY REGRESSION: an in-process REST dispatch during a front-end page
+	 * render must not disarm gating for the post that render is showing.
+	 *
+	 * `rest_prepare_{$post_type}` fires whenever WP_REST_Posts_Controller
+	 * prepares an item, no matter how the request was dispatched — including
+	 * an in-process rest_do_request() / rest_get_server()->dispatch() call
+	 * made from inside an ordinary page render. Real dispatchers exist and
+	 * run during page rendering: co-authors-plus (php/blocks/class-blocks.php,
+	 * two call sites), newspack-network's hub Woo store
+	 * (includes/hub/stores/class-woo-store.php), and newspack-community's
+	 * moderation list table (includes/admin/class-foundation-moderation-list-table.php)
+	 * all dispatch the REST API in-process while a page is still rendering.
+	 *
+	 * Sequence under test, mirroring that real-world order: a REST read of
+	 * one gated post happens first (standing in for the in-process
+	 * dispatch), then the front-end render of a DIFFERENT gated post happens
+	 * second, in the same process, with NO reset of
+	 * Content_Gate::$gate_rendered in between — production gets no reset
+	 * either, a fresh HTTP request gets a fresh PHP process, and the two
+	 * "requests" here are actually one process by construction. If the REST
+	 * read claims that flag as a side effect, the front-end render's own
+	 * restrict_post() sees has_rendered() already true and bails, serving
+	 * the second post's full body on the public front end. Deliberately two
+	 * DIFFERENT posts, not the same one twice: that is what proves the flag
+	 * is a global side effect of the REST read rather than something scoped
+	 * to the post REST actually touched.
+	 */
+	public function test_in_process_rest_dispatch_during_page_render_does_not_disarm_front_end_gating() {
+		$front_end_post_id = self::factory()->post->create(
+			[
+				'post_status'  => 'publish',
+				'post_title'   => 'Front-end render target',
+				// Same three-paragraph shape as the primary fixture in set_up():
+				// with visible_paragraphs defaulting to 2, a single-paragraph body
+				// can't distinguish a teaser from the full body.
+				'post_content' => '<!-- wp:paragraph --><p>Free paragraph one.</p><!-- /wp:paragraph --><!-- wp:paragraph --><p>Free paragraph two.</p><!-- /wp:paragraph --><!-- wp:paragraph --><p>' . self::BODY_SENTINEL . '</p><!-- /wp:paragraph -->',
+			]
+		);
+		Content_Gate::update_gate_settings(
+			$this->gate_id,
+			[
+				'title'         => 'REST Gate',
+				'status'        => 'publish',
+				'priority'      => 0,
+				'content_rules' => [
+					[
+						'slug'  => 'specific_posts',
+						'value' => [ $this->gated_post_id, $front_end_post_id ],
+					],
+				],
+				'registration'  => [
+					'active'               => true,
+					'metering'             => [
+						'enabled' => false,
+						'count'   => 0,
+						'period'  => 'month',
+					],
+					'require_verification' => false,
+					'gate_id'              => 0,
+				],
+			]
+		);
+		wp_set_current_user( 0 );
+
+		// Step 1: an in-process REST dispatch of a DIFFERENT gated post,
+		// standing in for a block or integration dispatching the REST API
+		// from inside a page render that is showing $front_end_post_id.
+		$this->rest_get( '/wp/v2/posts/' . $this->gated_post_id );
+
+		// Step 2: the front-end render of $front_end_post_id, in the same
+		// process, immediately afterward. No reset in between.
+		$this->go_to( get_permalink( $front_end_post_id ) );
+		the_post();
+		$front_end = apply_filters( 'the_content', get_post( $front_end_post_id )->post_content );
+
+		$this->assertStringNotContainsString(
+			self::BODY_SENTINEL,
+			$front_end,
+			'An in-process REST dispatch during a page render must not disarm gating for the post that render is showing.'
+		);
+	}
+
+	/**
 	 * The same post yields the same gated string on both paths.
 	 *
 	 * Both substitute after the standard the_content chain — the front end at
@@ -951,13 +1021,11 @@ class Test_Content_Gate_Rest extends \WP_UnitTestCase {
 
 		$data = $this->rest_get( '/wp/v2/posts/' . $this->gated_post_id );
 
-		// The REST call above claims Content_Gate::$gate_rendered as a side
-		// effect (see reset_gate_rendered_flag()'s docblock for why); without
-		// resetting it here, the front-end render below sees has_rendered()
-		// === true and restrict_post() bails, serving the full body instead
-		// of gating it.
-		self::reset_gate_rendered_flag();
-
+		// No reset of Content_Gate::$gate_rendered needed between these two
+		// steps: filter_rest_response() resolves through get_restriction_for_post(),
+		// which deliberately never calls mark_gate_as_rendered() (see its own
+		// docblock) — that lock is restrict_post()'s alone to claim, so the
+		// REST call above has no effect on it.
 		$this->go_to( get_permalink( $this->gated_post_id ) );
 		the_post();
 		$front_end = apply_filters( 'the_content', get_post( $this->gated_post_id )->post_content );

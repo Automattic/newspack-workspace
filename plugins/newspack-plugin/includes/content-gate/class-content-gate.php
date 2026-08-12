@@ -371,85 +371,111 @@ class Content_Gate {
 	}
 
 	/**
-	 * Resolve the gated substitute for a post, independent of query context.
+	 * Whether $post is restricted for the current reader, independent of
+	 * query context. Decision only — no rendering, and critically no
+	 * mark_gate_as_rendered() side effect. See get_restriction_for_post()'s
+	 * docblock for why that side effect must not live here.
 	 *
 	 * Holds the entitlement half of the restriction decision: the feature flag,
 	 * the Memberships deferral, the page exclusions, and the restriction
 	 * filters. The query-context guards stay in restrict_post(), which is what
 	 * keeps the gate off archives and secondary loops on the front end.
 	 *
-	 * Step order is load-bearing, twice over. is_post_restricted() populates
-	 * the gate layout map as a side effect, and the teaser build reads that
-	 * map, so the restriction check must run before the teaser is built. And
-	 * the render-claim lock (mark_gate_as_rendered()) must be set before
-	 * EITHER render runs, gate first then lock then teaser — not merely
-	 * before this method returns — because both renders run the post content
-	 * and the gate layout through the block pipeline, and any block that runs
-	 * a secondary loop ends it with wp_reset_postdata(), which re-fires
-	 * `the_post` for the main post. On the front end that re-enters
-	 * restrict_post() itself; has_rendered() must already be true by then, or
-	 * restrict_post() (and, through it, this method) re-enters unboundedly.
-	 * This method is the one place both renders happen — restrict_post() and
-	 * filter_rest_response() both consume the array this returns rather than
-	 * rendering anything themselves — so it is also the one place that lock
-	 * can be claimed for every caller. See has_rendered()'s own docblock for
-	 * why the lock is request-wide rather than scoped to the front end: nothing
-	 * currently claims it outside a singular main-query view (restrict_post()'s
-	 * own query-context guards run before this method is ever reached), so
-	 * marking it here changes nothing for the REST path today; it is a lock on
-	 * "has a gate rendered", not "is this the front end."
-	 *
 	 * @param \WP_Post $post Post to evaluate.
-	 * @return array|null Array with 'teaser' and 'gate' keys, or null when the
-	 *                    post is not restricted for the current user.
+	 * @return bool
 	 */
-	public static function get_restriction_for_post( $post ) {
+	private static function should_restrict_post( $post ) {
 		if ( ! $post instanceof \WP_Post ) {
-			return null;
+			return false;
 		}
 		if ( ! self::is_newspack_feature_enabled() ) {
-			return null;
+			return false;
 		}
 		// Don't apply our restriction strategy if Woo Memberships is active.
 		if ( Memberships::is_active() ) {
-			return null;
+			return false;
 		}
 		if ( self::is_excluded_from_gating( $post->ID ) ) {
-			return null;
+			return false;
 		}
 		if ( ! self::is_post_restricted( $post->ID ) ) {
-			return null;
+			return false;
 		}
-		if (
-			/**
-			 * Filters whether to restrict the post.
-			 *
-			 * @param bool $restrict Whether to restrict the post.
-			 * @param int $post_id Post ID.
-			 */
-			! apply_filters( 'newspack_content_gate_restrict_post', true, $post->ID )
-		) {
-			return null;
+		/**
+		 * Filters whether to restrict the post.
+		 *
+		 * @param bool $restrict Whether to restrict the post.
+		 * @param int $post_id Post ID.
+		 */
+		if ( ! apply_filters( 'newspack_content_gate_restrict_post', true, $post->ID ) ) {
+			return false;
 		}
+		return true;
+	}
 
+	/**
+	 * Render the gate and teaser for a post already decided to be restricted
+	 * — i.e. only ever call this after should_restrict_post( $post ) is true.
+	 *
+	 * Renders only. Does not call mark_gate_as_rendered(): that decision
+	 * belongs to the caller (see get_restriction_for_post()'s docblock), not
+	 * to the render step itself.
+	 *
+	 * @param \WP_Post $post Post to build the restriction for.
+	 * @return array{teaser: string, gate: string}
+	 */
+	private static function build_restriction( $post ) {
 		// Pass the ID explicitly for the same reason self::get_restricted_post_excerpt()
 		// does below: get_gate_layout_id()'s is_singular() fallback resolves to nothing
 		// outside a singular main-query view, and outside that view get_post( false )
 		// falls back to the global $post rather than "no post" — which, from a REST
 		// callback, is the very restricted post being served, defeating the gate.
-		$gate = self::get_inline_gate_html( $post->ID );
-
-		// Mark before the teaser renders — see this method's own docblock for
-		// why the order is gate, then mark, then teaser, not merely "before
-		// returning".
-		self::mark_gate_as_rendered();
-
+		$gate   = self::get_inline_gate_html( $post->ID );
 		$teaser = self::get_restricted_post_excerpt( $post );
 
 		return [
 			'teaser' => $teaser,
 			'gate'   => $gate,
 		];
+	}
+
+	/**
+	 * Resolve the gated substitute for a post, independent of query context.
+	 *
+	 * A thin should_restrict_post()-then-build_restriction() wrapper, kept as
+	 * the one existing entry point so filter_rest_response() (and NPPM-3119's
+	 * planned call site) are unaffected by the split below. Deliberately does
+	 * NOT call mark_gate_as_rendered(): that flag is restrict_post()'s own
+	 * front-end re-entrancy lock (see its docblock and has_rendered()'s), not
+	 * a general "a gate was built" signal, and REST has no analogous
+	 * re-entrancy hazard to guard against — the query-context guards that
+	 * would need it (is_singular(), the main-query check) live in
+	 * restrict_post(), never reached from a REST callback.
+	 *
+	 * This split exists because the more obvious design — claiming the lock
+	 * inside this shared method, so every caller gets it for free — is
+	 * unsound: `rest_prepare_{$post_type}` fires for an in-process REST
+	 * dispatch exactly as it does for an external request, and in-process
+	 * dispatchers exist that run *during* an ordinary front-end page render
+	 * (co-authors-plus's block renderer, newspack-network's hub Woo store,
+	 * newspack-community's moderation list table). A REST read of any gated
+	 * post part-way through such a render would claim the lock as a side
+	 * effect; the render's own restrict_post() call, still to come via
+	 * `the_post`, would then see has_rendered() already true and bail —
+	 * serving that page's post ungated on the public front end. See
+	 * tests/unit-tests/content-gate/class-content-gate-rest.php's
+	 * test_in_process_rest_dispatch_during_page_render_does_not_disarm_front_end_gating(),
+	 * which fails against that shared-lock design and passes against this one.
+	 *
+	 * @param \WP_Post $post Post to evaluate.
+	 * @return array|null Array with 'teaser' and 'gate' keys, or null when the
+	 *                    post is not restricted for the current user.
+	 */
+	public static function get_restriction_for_post( $post ) {
+		if ( ! self::should_restrict_post( $post ) ) {
+			return null;
+		}
+		return self::build_restriction( $post );
 	}
 
 	/**
@@ -661,30 +687,37 @@ class Content_Gate {
 			return;
 		}
 
-		$restriction = self::get_restriction_for_post( $post );
-		if ( null === $restriction ) {
+		// Deliberately should_restrict_post() + build_restriction(), not
+		// get_restriction_for_post(): that thin wrapper does not claim the
+		// render lock (see its own docblock for why), and this method needs
+		// to claim it BETWEEN the decision and the renders, not skip
+		// claiming it at all. Calling get_restriction_for_post() here would
+		// silently reopen #821's unbounded re-entry for this method's own
+		// two renders.
+		if ( ! self::should_restrict_post( $post ) ) {
 			return;
 		}
 
 		self::$is_gated          = true;
 		self::$is_content_locked = true;
 
-		// Both renders, and the mark_gate_as_rendered() re-entrancy lock that
-		// must be claimed before either of them runs (block pipelines run
-		// secondary loops that end with wp_reset_postdata(), re-firing
-		// `the_post` and re-entering restrict_post() unboundedly otherwise),
-		// happen inside get_restriction_for_post() now — see its own docblock.
-		// This is the one thing that changed merging in #821's fix: on `main`
-		// that lock lived here, gate-then-mark-then-teaser inline; this branch
-		// already needed the identical gate-then-teaser render available to
-		// filter_rest_response() as a value, not a side effect, so the lock
-		// moved into the one method both callers already share instead of
-		// this method claiming it a second time (which would have raced
-		// restrict_post() itself: get_restriction_for_post() above is called
-		// BEFORE this point, so a lock claimed only here would leave the gap
-		// #821 closed reopened for this method's own two renders).
-		$content   = $restriction['teaser'];
-		$gate_html = $restriction['gate'];
+		// Mark before rendering: the renders below run the post content and
+		// the gate layout through the block pipeline, and any block that runs
+		// a secondary loop ends it with wp_reset_postdata(), which re-fires
+		// `the_post` for the main post. The has_rendered() guard above must
+		// already be set by then, or this method re-enters itself unboundedly
+		// (#821). Marked here, before build_restriction() runs either render,
+		// rather than inside build_restriction() itself: REST
+		// (filter_rest_response(), via the thin get_restriction_for_post()
+		// wrapper) calls build_restriction() too, indirectly, and must NOT
+		// claim this lock — see get_restriction_for_post()'s docblock for the
+		// in-process-REST-dispatch-during-a-page-render scenario that rules
+		// out claiming it anywhere build_restriction() itself could reach.
+		self::mark_gate_as_rendered();
+
+		$restriction = self::build_restriction( $post );
+		$content     = $restriction['teaser'];
+		$gate_html   = $restriction['gate'];
 
 		// Note that this does not feed the 'the_content' chain: core generates the
 		// post's page data before firing 'the_post', so the chain is handed the
