@@ -1,5 +1,5 @@
 /**
- * The impact preview's headline numbers.
+ * The impact preview's headline numbers, as a grid of tiles.
  */
 
 /**
@@ -22,6 +22,8 @@ const audience = ( over = {} ) => ( {
 	...over,
 } );
 
+const labels = () => [ 'Products affected', 'Subscribers in scope', 'Eligible at renewal', 'Protected' ];
+
 describe( 'ImpactStats', () => {
 	afterEach( () => {
 		document.documentElement.lang = '';
@@ -40,52 +42,63 @@ describe( 'ImpactStats', () => {
 		expect( screen.getByText( '12.480' ) ).toBeInTheDocument();
 	} );
 
-	it( 'marks a capped count as a lower bound', () => {
+	it( 'marks a capped product count as a lower bound', () => {
 		render( <ImpactStats totalMatching={ 500 } countLimited /> );
 		expect( screen.getByText( '500+' ) ).toBeInTheDocument();
 	} );
 
-	it( 'counts products on their own when there is no audience data', () => {
+	it( 'renders one tile when there is no audience data', () => {
 		render( <ImpactStats totalMatching={ 36 } countLimited={ false } /> );
-		expect( screen.getByText( '36' ) ).toBeInTheDocument();
+
 		expect( screen.getByText( 'Products affected' ) ).toBeInTheDocument();
 		expect( screen.queryByText( 'Subscribers in scope' ) ).not.toBeInTheDocument();
-	} );
-
-	it( 'shows who is repriced at renewal', () => {
-		render( <ImpactStats totalMatching={ 36 } countLimited={ false } audience={ audience() } /> );
-		expect( screen.getByText( 'Subscribers in scope' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Eligible at renewal' ) ).toBeInTheDocument();
-		expect( screen.getByText( '8' ) ).toBeInTheDocument();
-		expect( screen.getByText( '4 protected' ) ).toBeInTheDocument();
-	} );
-
-	it( 'says nobody is repriced under a locked rule', () => {
-		render( <ImpactStats totalMatching={ 36 } countLimited={ false } audience={ audience( { application: 'locked' } ) } /> );
 		expect( screen.queryByText( 'Eligible at renewal' ) ).not.toBeInTheDocument();
-		expect( screen.getByText( /new sign-ups only/ ) ).toBeInTheDocument();
+		expect( screen.queryByText( 'Protected' ) ).not.toBeInTheDocument();
 	} );
 
-	it( 'leaves the product count exact when only the audience is capped', () => {
-		render( <ImpactStats totalMatching={ 500 } countLimited={ false } audience={ audience( { count_limited: true } ) } /> );
-		expect( screen.getByText( '500' ) ).toBeInTheDocument();
-		expect( screen.getByText( '12+' ) ).toBeInTheDocument();
-	} );
+	it( 'renders four tiles when the audience arrives', () => {
+		render( <ImpactStats totalMatching={ 36 } countLimited={ false } audience={ audience() } /> );
 
-	it( 'bounds the renewal split when the audience is capped', () => {
-		render( <ImpactStats totalMatching={ 500 } countLimited={ false } audience={ audience( { count_limited: true } ) } /> );
-		expect( screen.getByText( '8+' ) ).toBeInTheDocument();
-		expect( screen.getByText( '4+ protected' ) ).toBeInTheDocument();
-	} );
-
-	it( 'marks both counts as lower bounds when both are capped', () => {
-		render( <ImpactStats totalMatching={ 500 } countLimited audience={ audience( { count_limited: true } ) } /> );
-		expect( screen.getByText( '500+' ) ).toBeInTheDocument();
-		expect( screen.getByText( '12+' ) ).toBeInTheDocument();
+		labels().forEach( label => expect( screen.getByText( label ) ).toBeInTheDocument() );
+		expect( screen.getByText( '8' ) ).toBeInTheDocument();
+		expect( screen.getByText( '4' ) ).toBeInTheDocument();
 	} );
 
 	it( 'ignores an unsupported audience', () => {
 		render( <ImpactStats totalMatching={ 36 } countLimited={ false } audience={ audience( { supported: false } ) } /> );
 		expect( screen.queryByText( 'Subscribers in scope' ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'leaves the product count exact when only the audience is capped', () => {
+		render( <ImpactStats totalMatching={ 500 } countLimited={ false } audience={ audience( { count_limited: true } ) } /> );
+		expect( screen.getByText( '500' ) ).toBeInTheDocument();
+	} );
+
+	// The engine truncates oldest-first and the oldest are the ones a cohort gate
+	// protects, so a capped split under-reports who is repriced.
+	it( 'bounds all three subscriber counts when the audience is capped', () => {
+		render( <ImpactStats totalMatching={ 500 } countLimited audience={ audience( { count_limited: true } ) } /> );
+
+		expect( screen.getByText( '500+' ) ).toBeInTheDocument();
+		expect( screen.getByText( '12+' ) ).toBeInTheDocument();
+		expect( screen.getByText( '8+' ) ).toBeInTheDocument();
+		expect( screen.getByText( '4+' ) ).toBeInTheDocument();
+	} );
+
+	it( 'stands the renewal tiles down for a locked rule', () => {
+		render( <ImpactStats totalMatching={ 36 } countLimited={ false } audience={ audience( { application: 'locked' } ) } /> );
+
+		labels().forEach( label => expect( screen.getByText( label ) ).toBeInTheDocument() );
+		expect( screen.getAllByRole( 'img', { name: 'Not applicable' } ) ).toHaveLength( 2 );
+		expect( screen.getAllByText( 'Applies to new sign-ups only' ) ).toHaveLength( 2 );
+		expect( screen.queryByText( '8' ) ).not.toBeInTheDocument();
+	} );
+
+	// The engine never claims 'locked' for a set whose rules disagree.
+	it( 'keeps the numbers for a mixed rule set', () => {
+		render( <ImpactStats totalMatching={ 36 } countLimited={ false } audience={ audience( { application: 'mixed' } ) } /> );
+
+		expect( screen.getByText( '8' ) ).toBeInTheDocument();
+		expect( screen.queryByRole( 'img', { name: 'Not applicable' } ) ).not.toBeInTheDocument();
 	} );
 } );
