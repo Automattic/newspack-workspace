@@ -378,9 +378,26 @@ class Content_Gate {
 	 * filters. The query-context guards stay in restrict_post(), which is what
 	 * keeps the gate off archives and secondary loops on the front end.
 	 *
-	 * Step order is load-bearing. is_post_restricted() populates the gate
-	 * layout map as a side effect, and the teaser build reads that map, so the
-	 * restriction check must run before the teaser is built.
+	 * Step order is load-bearing, twice over. is_post_restricted() populates
+	 * the gate layout map as a side effect, and the teaser build reads that
+	 * map, so the restriction check must run before the teaser is built. And
+	 * the render-claim lock (mark_gate_as_rendered()) must be set before
+	 * EITHER render runs, gate first then lock then teaser — not merely
+	 * before this method returns — because both renders run the post content
+	 * and the gate layout through the block pipeline, and any block that runs
+	 * a secondary loop ends it with wp_reset_postdata(), which re-fires
+	 * `the_post` for the main post. On the front end that re-enters
+	 * restrict_post() itself; has_rendered() must already be true by then, or
+	 * restrict_post() (and, through it, this method) re-enters unboundedly.
+	 * This method is the one place both renders happen — restrict_post() and
+	 * filter_rest_response() both consume the array this returns rather than
+	 * rendering anything themselves — so it is also the one place that lock
+	 * can be claimed for every caller. See has_rendered()'s own docblock for
+	 * why the lock is request-wide rather than scoped to the front end: nothing
+	 * currently claims it outside a singular main-query view (restrict_post()'s
+	 * own query-context guards run before this method is ever reached), so
+	 * marking it here changes nothing for the REST path today; it is a lock on
+	 * "has a gate rendered", not "is this the front end."
 	 *
 	 * @param \WP_Post $post Post to evaluate.
 	 * @return array|null Array with 'teaser' and 'gate' keys, or null when the
@@ -415,14 +432,23 @@ class Content_Gate {
 			return null;
 		}
 
+		// Pass the ID explicitly for the same reason self::get_restricted_post_excerpt()
+		// does below: get_gate_layout_id()'s is_singular() fallback resolves to nothing
+		// outside a singular main-query view, and outside that view get_post( false )
+		// falls back to the global $post rather than "no post" — which, from a REST
+		// callback, is the very restricted post being served, defeating the gate.
+		$gate = self::get_inline_gate_html( $post->ID );
+
+		// Mark before the teaser renders — see this method's own docblock for
+		// why the order is gate, then mark, then teaser, not merely "before
+		// returning".
+		self::mark_gate_as_rendered();
+
+		$teaser = self::get_restricted_post_excerpt( $post );
+
 		return [
-			'teaser' => self::get_restricted_post_excerpt( $post ),
-			// Pass the ID explicitly for the same reason self::get_restricted_post_excerpt()
-			// does: get_gate_layout_id()'s is_singular() fallback resolves to nothing outside
-			// a singular main-query view, and outside that view get_post( false ) falls back to
-			// the global $post rather than "no post" — which, from a REST callback, is the very
-			// restricted post being served, defeating the gate.
-			'gate'   => self::get_inline_gate_html( $post->ID ),
+			'teaser' => $teaser,
+			'gate'   => $gate,
 		];
 	}
 
@@ -643,6 +669,20 @@ class Content_Gate {
 		self::$is_gated          = true;
 		self::$is_content_locked = true;
 
+		// Both renders, and the mark_gate_as_rendered() re-entrancy lock that
+		// must be claimed before either of them runs (block pipelines run
+		// secondary loops that end with wp_reset_postdata(), re-firing
+		// `the_post` and re-entering restrict_post() unboundedly otherwise),
+		// happen inside get_restriction_for_post() now — see its own docblock.
+		// This is the one thing that changed merging in #821's fix: on `main`
+		// that lock lived here, gate-then-mark-then-teaser inline; this branch
+		// already needed the identical gate-then-teaser render available to
+		// filter_rest_response() as a value, not a side effect, so the lock
+		// moved into the one method both callers already share instead of
+		// this method claiming it a second time (which would have raced
+		// restrict_post() itself: get_restriction_for_post() above is called
+		// BEFORE this point, so a lock claimed only here would leave the gap
+		// #821 closed reopened for this method's own two renders).
 		$content   = $restriction['teaser'];
 		$gate_html = $restriction['gate'];
 
@@ -660,8 +700,6 @@ class Content_Gate {
 			'teaser' => $content,
 			'gate'   => $gate_html,
 		];
-
-		self::mark_gate_as_rendered();
 	}
 
 	/**
@@ -1162,14 +1200,21 @@ class Content_Gate {
 	}
 
 	/**
-	 * Public method for marking the gate as rendered.
+	 * Public method for marking the gate render as claimed.
+	 *
+	 * Every render path sets this BEFORE producing output, so the flag acts as
+	 * a once-per-request re-entrancy lock, not a signal that gate markup
+	 * already exists.
 	 */
 	public static function mark_gate_as_rendered() {
 		self::$gate_rendered = true;
 	}
 
 	/**
-	 * Whether the gate has rendered.
+	 * Whether a gate render has been claimed for this request.
+	 *
+	 * True from the moment a render path commits to rendering (see
+	 * mark_gate_as_rendered()), which may be before any markup is output.
 	 */
 	public static function has_rendered() {
 		return self::$gate_rendered;

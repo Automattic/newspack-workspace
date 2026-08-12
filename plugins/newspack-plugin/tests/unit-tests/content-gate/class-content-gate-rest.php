@@ -84,28 +84,7 @@ class Test_Content_Gate_Rest extends \WP_UnitTestCase {
 		$GLOBALS['wp_rest_server'] = null;
 		do_action( 'rest_api_init', rest_get_server() );
 
-		// Content_Gate::$gate_rendered is a "gate shown once per page render"
-		// flag, set by restrict_post() and read by has_rendered() to stop a
-		// second gate appearing on the same front-end request. It has no
-		// public reset — production never needs one, since a fresh HTTP
-		// request gets a fresh PHP process. This test process doesn't: every
-		// PHPUnit test method is its own logical "page render", but the flag
-		// is a class static that outlives all of them. A test elsewhere in
-		// the suite that gates a post on the front end (via go_to() +
-		// the_post()) leaves it permanently true, and every subsequent
-		// front-end render — including this class's parity test — sees
-		// has_rendered() === true and restrict_post() bails before gating
-		// anything. Confirmed by running the full suite with --order-by=random:
-		// the parity test failed with the FRONT END serving the full,
-		// ungated body while REST (which never consults this flag) gated
-		// correctly — the opposite direction from the REST-side bug Part 2
-		// fixes. Resetting the private static via reflection here is test-only
-		// and mirrors what happens for free between real HTTP requests.
-		( function () {
-			$property = new \ReflectionProperty( \Newspack\Content_Gate::class, 'gate_rendered' );
-			$property->setAccessible( true );
-			$property->setValue( null, false );
-		} )();
+		self::reset_gate_rendered_flag();
 
 		Reader_Activation::update_setting( 'enabled', true );
 
@@ -154,6 +133,52 @@ class Test_Content_Gate_Rest extends \WP_UnitTestCase {
 				],
 			]
 		);
+	}
+
+	/**
+	 * Reset Content_Gate::$gate_rendered — a "gate render claimed" flag, set
+	 * inside Content_Gate::get_restriction_for_post() (see its docblock: the
+	 * lock has to be claimed before either the gate or the teaser renders, on
+	 * every path that renders them, front end and REST alike, to prevent the
+	 * unbounded restrict_post() re-entry #821 fixed) and read by
+	 * has_rendered(), restrict_post()'s own re-entry guard. It has no public
+	 * reset — production never needs one, since a fresh HTTP request gets a
+	 * fresh PHP process. This test process doesn't: every PHPUnit test method
+	 * is its own logical "page render", but the flag is a class static that
+	 * outlives all of them.
+	 *
+	 * Two call sites need this, for two different reasons:
+	 *
+	 * - set_up(), once per test method: a test elsewhere in the suite that
+	 *   gates a post on the front end (via go_to() + the_post()) leaves the
+	 *   flag permanently true, and every subsequent front-end render —
+	 *   including this class's parity test — would see has_rendered() ===
+	 *   true and restrict_post() bail before gating anything. Confirmed by
+	 *   running the full suite with --order-by=random.
+	 *
+	 * - test_rest_and_front_end_produce_the_same_gated_string(), mid-test:
+	 *   that test renders the same post via REST and then via the front end,
+	 *   in that order, in one process, specifically to compare the two
+	 *   outputs. Real traffic never does this — a REST request and a
+	 *   front-end request are always separate HTTP requests, so the flag one
+	 *   sets is never visible to the other — but this test's own two-step
+	 *   construction now triggers exactly the leak set_up() already guards
+	 *   against, from the REST step this time: the REST call claims the
+	 *   render lock as a side effect of building its own response, and the
+	 *   front-end call immediately afterward sees has_rendered() === true and
+	 *   bails, serving the unrestricted body while REST (moments earlier)
+	 *   served the correctly gated one — the same failure mode set_up()'s
+	 *   comment already describes, just reached from the other direction now
+	 *   that REST also claims the lock instead of merely being unaffected by
+	 *   it.
+	 *
+	 * Resetting the private static via reflection is test-only and mirrors
+	 * what happens for free between real HTTP requests.
+	 */
+	private static function reset_gate_rendered_flag() {
+		$property = new \ReflectionProperty( \Newspack\Content_Gate::class, 'gate_rendered' );
+		$property->setAccessible( true );
+		$property->setValue( null, false );
 	}
 
 	/**
@@ -925,6 +950,13 @@ class Test_Content_Gate_Rest extends \WP_UnitTestCase {
 		wp_set_current_user( 0 );
 
 		$data = $this->rest_get( '/wp/v2/posts/' . $this->gated_post_id );
+
+		// The REST call above claims Content_Gate::$gate_rendered as a side
+		// effect (see reset_gate_rendered_flag()'s docblock for why); without
+		// resetting it here, the front-end render below sees has_rendered()
+		// === true and restrict_post() bails, serving the full body instead
+		// of gating it.
+		self::reset_gate_rendered_flag();
 
 		$this->go_to( get_permalink( $this->gated_post_id ) );
 		the_post();

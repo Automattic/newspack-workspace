@@ -1,15 +1,15 @@
 # Copyright (C) 2026 Automattic
-# This file is distributed under the GPL3.
+# This file is distributed under the GPLv2 or later.
 msgid ""
 msgstr ""
-"Project-Id-Version: Newspack Network 2.20.1\n"
+"Project-Id-Version: Newspack Network 2.21.2\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/newspack-network\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-05-19T02:58:44+00:00\n"
+"POT-Creation-Date: 2026-08-11T17:40:04+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: newspack-network\n"
@@ -55,7 +55,7 @@ msgstr ""
 msgid "This site acts as the Network Hub"
 msgstr ""
 
-#: includes/class-initializer.php:81
+#: includes/class-initializer.php:82
 msgid "Network Reader"
 msgstr ""
 
@@ -111,14 +111,43 @@ msgid_plural "Scheduled %d users to be synced across the network."
 msgstr[0] ""
 msgstr[1] ""
 
+#: includes/content-distribution/class-admin-bar.php:235
+#: includes/content-distribution/class-admin-bar.php:337
+#: includes/content-distribution/class-admin-bar.php:351
 #: includes/content-distribution/class-admin.php:93
 #: includes/content-distribution/class-admin.php:120
 #: dist/incoming-post.js:1
 #: dist/outgoing-post.js:1
 #: dist/outgoing-post.js:22
 #: src/content-distribution/content-distribution-panel/index.js:19
-#: src/content-distribution/outgoing-post/index.js:325
+#: src/content-distribution/outgoing-post/index.js:254
 msgid "Distribute"
+msgstr ""
+
+#: includes/content-distribution/class-admin-bar.php:304
+msgid "Already distributed"
+msgstr ""
+
+#: includes/content-distribution/class-admin-bar.php:323
+#: dist/outgoing-post.js:19
+#: src/content-distribution/outgoing-post/index.js:190
+msgid "Select all"
+msgstr ""
+
+#: includes/content-distribution/class-admin-bar.php:338
+msgid "Back"
+msgstr ""
+
+#: includes/content-distribution/class-admin-bar.php:345
+msgid "Distribute to network sites"
+msgstr ""
+
+#: includes/content-distribution/class-admin-bar.php:346
+msgid "Close"
+msgstr ""
+
+#: includes/content-distribution/class-admin-bar.php:348
+msgid "Distribute to"
 msgstr ""
 
 #: includes/content-distribution/class-admin.php:130
@@ -174,11 +203,21 @@ msgstr ""
 msgid "Note: Editors will still be able to modify the status upon distribution of a post."
 msgstr ""
 
-#: includes/content-distribution/class-api.php:156
+#: includes/content-distribution/class-api.php:158
+msgid "A post received from the network cannot be distributed."
+msgstr ""
+
+#: includes/content-distribution/class-api.php:162
 msgid "Data Events class not found."
 msgstr ""
 
-#: includes/content-distribution/class-api.php:166
+#: includes/content-distribution/class-api.php:172
+#: includes/content-distribution/class-distributor-migrator.php:141
+#: includes/content-distribution/class-distributor-migrator.php:385
+msgid "Post not found."
+msgstr ""
+
+#: includes/content-distribution/class-api.php:175
 msgid "Post is currently an auto-draft. Save before distributing it."
 msgstr ""
 
@@ -228,11 +267,6 @@ msgstr ""
 msgid "Editing distributed posts is temporarily disabled due to a recent migration. Editing should be restored in a few minutes."
 msgstr ""
 
-#: includes/content-distribution/class-distributor-migrator.php:141
-#: includes/content-distribution/class-distributor-migrator.php:384
-msgid "Post not found."
-msgstr ""
-
 #: includes/content-distribution/class-distributor-migrator.php:146
 msgid "Original post ID not found."
 msgstr ""
@@ -247,48 +281,48 @@ msgstr ""
 msgid "Site URL \"%s\" is not networked."
 msgstr ""
 
-#: includes/content-distribution/class-distributor-migrator.php:248
+#: includes/content-distribution/class-distributor-migrator.php:249
 msgid "No connections found."
 msgstr ""
 
-#: includes/content-distribution/class-distributor-migrator.php:252
+#: includes/content-distribution/class-distributor-migrator.php:253
 msgid "This post contains internal connections, which are not supported."
 msgstr ""
 
-#: includes/content-distribution/class-distributor-migrator.php:257
+#: includes/content-distribution/class-distributor-migrator.php:258
 msgid "Subscriptions not found."
 msgstr ""
 
-#: includes/content-distribution/class-distributor-migrator.php:293
-#: includes/content-distribution/class-distributor-migrator.php:416
+#: includes/content-distribution/class-distributor-migrator.php:294
+#: includes/content-distribution/class-distributor-migrator.php:417
 msgid "Data Events not found."
 msgstr ""
 
-#: includes/content-distribution/class-distributor-migrator.php:297
+#: includes/content-distribution/class-distributor-migrator.php:298
 msgid "Invalid post IDs."
 msgstr ""
 
 #. translators: post ID.
-#: includes/content-distribution/class-distributor-migrator.php:310
+#: includes/content-distribution/class-distributor-migrator.php:311
 #, php-format
 msgid "No subscriptions found for post %d."
 msgstr ""
 
-#: includes/content-distribution/class-distributor-migrator.php:378
+#: includes/content-distribution/class-distributor-migrator.php:379
 msgid "Subscription not found."
 msgstr ""
 
-#: includes/content-distribution/class-distributor-migrator.php:389
+#: includes/content-distribution/class-distributor-migrator.php:390
 msgid "Target URL not found."
 msgstr ""
 
 #. translators: target URL.
-#: includes/content-distribution/class-distributor-migrator.php:398
+#: includes/content-distribution/class-distributor-migrator.php:399
 #, php-format
 msgid "Target URL \"%s\" is not networked."
 msgstr ""
 
-#: includes/content-distribution/class-distributor-migrator.php:420
+#: includes/content-distribution/class-distributor-migrator.php:421
 msgid "Invalid subscription IDs."
 msgstr ""
 
@@ -345,15 +379,15 @@ msgstr ""
 msgid "Invalid post."
 msgstr ""
 
-#: includes/content-distribution/class-incoming-post.php:562
+#: includes/content-distribution/class-incoming-post.php:564
 msgid "Mismatched post ID."
 msgstr ""
 
-#: includes/content-distribution/class-incoming-post.php:662
+#: includes/content-distribution/class-incoming-post.php:664
 msgid "Linked post content is newer than the post payload."
 msgstr ""
 
-#: includes/content-distribution/class-incoming-post.php:763
+#: includes/content-distribution/class-incoming-post.php:799
 msgid "Error inserting post."
 msgstr ""
 
@@ -377,16 +411,16 @@ msgstr ""
 msgid "No site URLs provided."
 msgstr ""
 
-#: includes/content-distribution/class-outgoing-post.php:174
-#: includes/content-distribution/class-outgoing-post.php:206
+#: includes/content-distribution/class-outgoing-post.php:193
+#: includes/content-distribution/class-outgoing-post.php:238
 msgid "Failed to update post distribution."
 msgstr ""
 
-#: includes/content-distribution/class-outgoing-post.php:195
+#: includes/content-distribution/class-outgoing-post.php:224
 msgid "Site URL not found in post distribution."
 msgstr ""
 
-#: includes/content-distribution/class-outgoing-post.php:332
+#: includes/content-distribution/class-outgoing-post.php:368
 msgid "Key not found in payload."
 msgstr ""
 
@@ -1216,99 +1250,166 @@ msgstr ""
 msgid "If set, this product will be linked to products with the same Network ID on other sites in the network. Users with an active subscription to any linked product will be granted access across all sites."
 msgstr ""
 
+#. translators: %s is the number of network sites selected.
+#: dist/admin-bar.js:3
+#: src/content-distribution/admin-bar/index.js:134
+#, js-format
+msgid "Distribute this post to %s network site?"
+msgid_plural "Distribute this post to %s network sites?"
+msgstr[0] ""
+msgstr[1] ""
+
+#: dist/admin-bar.js:3
+#: src/content-distribution/admin-bar/index.js:136
+msgid "This can’t be undone from here."
+msgstr ""
+
+#: dist/admin-bar.js:3
+#: src/content-distribution/admin-bar/index.js:281
+msgid "The site did not return a valid response."
+msgstr ""
+
+#. translators: %s is the number of network sites distributed to.
+#: dist/admin-bar.js:5
+#: src/content-distribution/admin-bar/index.js:30
+#, js-format
+msgid "Distributed to %s network site as a draft."
+msgid_plural "Distributed to %s network sites as drafts."
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %s is the number of network sites distributed to.
+#: dist/admin-bar.js:7
+#: src/content-distribution/admin-bar/index.js:34
+#, js-format
+msgid "Distributed to %s network site as pending review."
+msgid_plural "Distributed to %s network sites as pending review."
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %s is the number of network sites distributed to.
+#: dist/admin-bar.js:9
+#: src/content-distribution/admin-bar/index.js:43
+#, js-format
+msgid "Distributed to %s network site and published."
+msgid_plural "Distributed to %s network sites and published."
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %s is the number of network sites distributed to.
+#: dist/admin-bar.js:11
+#: src/content-distribution/admin-bar/index.js:52
+#, js-format
+msgid "Distributed to %s network site."
+msgid_plural "Distributed to %s network sites."
+msgstr[0] ""
+msgstr[1] ""
+
+#: dist/admin-bar.js:11
+#: src/content-distribution/admin-bar/index.js:302
+msgid "The request timed out. Please try again."
+msgstr ""
+
+#. translators: %s is the error message.
+#: dist/admin-bar.js:12
+#: src/content-distribution/admin-bar/index.js:304
+#, js-format
+msgid "Could not distribute: %s"
+msgstr ""
+
 #. translators: %s: original site URL.
 #: dist/incoming-post.js:4
-#: src/content-distribution/incoming-post/index.js:67
+#: src/content-distribution/incoming-post/index.js:62
 #, js-format
 msgid "Originally distributed from %s."
 msgstr ""
 
 #. translators: %s: original site URL.
 #: dist/incoming-post.js:7
-#: src/content-distribution/incoming-post/index.js:75
+#: src/content-distribution/incoming-post/index.js:67
 #, js-format
 msgid "Distributed from %s."
 msgstr ""
 
 #. translators: %1$s: post type
 #: dist/incoming-post.js:10
-#: src/content-distribution/incoming-post/index.js:160
+#: src/content-distribution/incoming-post/index.js:145
 #, js-format
 msgid "This %1$s has been unlinked from its origin. Edits to the origin %1$s will not update this version."
 msgstr ""
 
 #. translators: %1$s: post type
 #: dist/incoming-post.js:13
-#: src/content-distribution/incoming-post/index.js:168
+#: src/content-distribution/incoming-post/index.js:153
 #, js-format
 msgid "This %1$s is linked to its origin. Edits to the origin %1$s will update this version."
 msgstr ""
 
 #. translators: %s: post type
 #: dist/incoming-post.js:16
-#: src/content-distribution/incoming-post/index.js:184
+#: src/content-distribution/incoming-post/index.js:162
 #, js-format
 msgid "Edit origin %s"
 msgstr ""
 
 #: dist/incoming-post.js:16
-#: src/content-distribution/incoming-post/index.js:198
+#: src/content-distribution/incoming-post/index.js:176
 msgid "Relinking…"
 msgstr ""
 
 #: dist/incoming-post.js:16
-#: src/content-distribution/incoming-post/index.js:199
+#: src/content-distribution/incoming-post/index.js:177
 msgid "Unlinking…"
 msgstr ""
 
 #. translators: %s: post type
 #: dist/incoming-post.js:19
-#: src/content-distribution/incoming-post/index.js:211
+#: src/content-distribution/incoming-post/index.js:186
 #, js-format
 msgid "Relink to origin %s"
 msgstr ""
 
 #. translators: %s: post type
 #: dist/incoming-post.js:22
-#: src/content-distribution/incoming-post/index.js:203
+#: src/content-distribution/incoming-post/index.js:181
 #, js-format
 msgid "Unlink from origin %s"
 msgstr ""
 
 #. translators: %s: post type
 #: dist/incoming-post.js:25
-#: src/content-distribution/incoming-post/index.js:139
+#: src/content-distribution/incoming-post/index.js:124
 #, js-format
 msgid "%s has been unlinked"
 msgstr ""
 
 #: dist/incoming-post.js:25
-#: src/content-distribution/incoming-post/index.js:230
+#: src/content-distribution/incoming-post/index.js:200
 msgid "Relink"
 msgstr ""
 
 #: dist/incoming-post.js:25
-#: src/content-distribution/incoming-post/index.js:231
+#: src/content-distribution/incoming-post/index.js:200
 msgid "Unlink"
 msgstr ""
 
 #. translators: %s: post type
 #: dist/incoming-post.js:28
-#: src/content-distribution/incoming-post/index.js:238
+#: src/content-distribution/incoming-post/index.js:206
 #, js-format
 msgid "Are you sure you want to relink this %s to its origin? Any changes you've made will be lost."
 msgstr ""
 
 #. translators: %s: post type
 #: dist/incoming-post.js:31
-#: src/content-distribution/incoming-post/index.js:246
+#: src/content-distribution/incoming-post/index.js:211
 #, js-format
 msgid "Are you sure you want to unlink this %s from its origin?"
 msgstr ""
 
 #. translators: %s: post type; %d: number of network sites
 #: dist/outgoing-post.js:7
-#: src/content-distribution/outgoing-post/index.js:77
+#: src/content-distribution/outgoing-post/index.js:64
 #, js-format
 msgid "This %s is distributed to one network site."
 msgid_plural "This %s is distributed to %d network sites."
@@ -1317,7 +1418,7 @@ msgstr[1] ""
 
 #. translators: %s: post type; %d: number of network sites
 #: dist/outgoing-post.js:10
-#: src/content-distribution/outgoing-post/index.js:131
+#: src/content-distribution/outgoing-post/index.js:115
 #, js-format
 msgid "%s distributed to one network site."
 msgid_plural "%s distributed to %d network sites."
@@ -1325,13 +1426,13 @@ msgstr[0] ""
 msgstr[1] ""
 
 #: dist/outgoing-post.js:10
-#: src/content-distribution/outgoing-post/index.js:161
+#: src/content-distribution/outgoing-post/index.js:140
 msgid "Save the post at least once before distributing it."
 msgstr ""
 
 #. translators: %s: post type; %d: number of network sites
 #: dist/outgoing-post.js:13
-#: src/content-distribution/outgoing-post/index.js:193
+#: src/content-distribution/outgoing-post/index.js:163
 #, js-format
 msgid "This %s has been distributed to one network site."
 msgid_plural "This %s has been distributed to %d network sites."
@@ -1340,31 +1441,26 @@ msgstr[1] ""
 
 #. translators: %s: post type
 #: dist/outgoing-post.js:16
-#: src/content-distribution/outgoing-post/index.js:174
+#: src/content-distribution/outgoing-post/index.js:150
 #, js-format
 msgid "This %s has not been distributed to your network site yet."
 msgstr ""
 
 #. translators: %s: post type
 #: dist/outgoing-post.js:19
-#: src/content-distribution/outgoing-post/index.js:182
+#: src/content-distribution/outgoing-post/index.js:155
 #, js-format
 msgid "This %s has not been distributed to any network sites yet."
 msgstr ""
 
 #: dist/outgoing-post.js:19
-#: src/content-distribution/outgoing-post/index.js:207
+#: src/content-distribution/outgoing-post/index.js:177
 msgid "Search available network sites"
-msgstr ""
-
-#: dist/outgoing-post.js:19
-#: src/content-distribution/outgoing-post/index.js:225
-msgid "Select all"
 msgstr ""
 
 #. translators: %d: number of network sites
 #: dist/outgoing-post.js:22
-#: src/content-distribution/outgoing-post/index.js:273
+#: src/content-distribution/outgoing-post/index.js:220
 msgid "One network site selected."
 msgid_plural "%d network sites selected."
 msgstr[0] ""
@@ -1372,33 +1468,33 @@ msgstr[1] ""
 
 #: dist/outgoing-post.js:22
 #: dist/story-budget.js:4
-#: src/content-distribution/outgoing-post/index.js:294
-#: src/story-budget/components/pull-story.js:146
+#: src/content-distribution/outgoing-post/index.js:232
+#: src/story-budget/components/pull-story.js:135
 msgid "Status on publish"
 msgstr ""
 
 #: dist/outgoing-post.js:22
-#: src/content-distribution/outgoing-post/index.js:299
+#: src/content-distribution/outgoing-post/index.js:233
 msgid "Which status to set the post when it's published."
 msgstr ""
 
 #: dist/outgoing-post.js:22
-#: src/content-distribution/outgoing-post/index.js:322
+#: src/content-distribution/outgoing-post/index.js:251
 msgid "Distributing…"
 msgstr ""
 
 #: dist/outgoing-post.js:22
-#: src/content-distribution/outgoing-post/index.js:324
+#: src/content-distribution/outgoing-post/index.js:253
 msgid "Save & Distribute"
 msgstr ""
 
 #: dist/story-budget.js:1
-#: src/story-budget/components/local-budgets-control.js:34
+#: src/story-budget/components/local-budgets-control.js:29
 msgid "Budget"
 msgstr ""
 
 #: dist/story-budget.js:1
-#: src/story-budget/components/local-budgets-control.js:39
+#: src/story-budget/components/local-budgets-control.js:34
 msgid "Select a budget"
 msgstr ""
 
@@ -1420,28 +1516,28 @@ msgid "Pull “%s”"
 msgstr ""
 
 #: dist/story-budget.js:4
-#: src/story-budget/components/pull-story.js:124
+#: src/story-budget/components/pull-story.js:123
 msgid "The following stories will be pulled:"
 msgstr ""
 
 #: dist/story-budget.js:4
-#: src/story-budget/components/pull-story.js:163
+#: src/story-budget/components/pull-story.js:147
 msgid "Pull story"
 msgstr ""
 
 #. translators: %d is the number of stories.
 #: dist/story-budget.js:7
-#: src/story-budget/components/pull-story.js:166
+#: src/story-budget/components/pull-story.js:150
 #, js-format
 msgid "Pull %d stories"
 msgstr ""
 
 #: dist/story-budget.js:7
-#: src/story-budget/components/pull-story.js:175
+#: src/story-budget/components/pull-story.js:155
 msgid "Cancel"
 msgstr ""
 
 #: dist/story-budget.js:7
-#: src/story-budget/index.js:30
+#: src/story-budget/index.js:23
 msgid "Pull Story"
 msgstr ""

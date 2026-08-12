@@ -156,6 +156,11 @@ final class Newspack {
 		include_once NEWSPACK_ABSPATH . 'includes/content-gate/class-content-gate.php';
 		include_once NEWSPACK_ABSPATH . 'includes/content-gate/class-inert-gating-notice.php';
 
+		// Shared infrastructure for rules that tie store products to subscriptions.
+		include_once NEWSPACK_ABSPATH . 'includes/subscriber-commerce/class-subscriber-commerce.php';
+		include_once NEWSPACK_ABSPATH . 'includes/subscriber-commerce/class-product-targeting.php';
+		include_once NEWSPACK_ABSPATH . 'includes/subscriber-commerce/class-subscriber-eligibility.php';
+
 		include_once NEWSPACK_ABSPATH . 'includes/starter_content/class-starter-content-provider.php';
 		include_once NEWSPACK_ABSPATH . 'includes/starter_content/class-starter-content-generated.php';
 		include_once NEWSPACK_ABSPATH . 'includes/starter_content/class-starter-content-wordpress.php';

@@ -182,6 +182,39 @@ function wc_mocks_reset_notices() {
 	$wc_mock_notices = [];
 }
 
+/**
+ * Stand-in for WooCommerce's WC_Data_Exception, thrown by data setters that
+ * reject their input.
+ */
+class WC_Data_Exception extends Exception {
+	/**
+	 * Machine-readable error code.
+	 *
+	 * @var string
+	 */
+	private $error_code;
+
+	/**
+	 * Constructor.
+	 *
+	 * @param string $code    Machine-readable error code.
+	 * @param string $message Human-readable message.
+	 */
+	public function __construct( $code, $message ) {
+		$this->error_code = $code;
+		parent::__construct( $message );
+	}
+
+	/**
+	 * Machine-readable error code.
+	 *
+	 * @return string
+	 */
+	public function getErrorCode() { // phpcs:ignore WordPress.NamingConventions.ValidFunctionName.MethodNameInvalid
+		return $this->error_code;
+	}
+}
+
 class WC_Order_Item_Product implements ArrayAccess {
 	private $data = [];
 	private $meta = [];
@@ -257,11 +290,65 @@ class WC_Order_Item_Product implements ArrayAccess {
 	public function get_variation_id() {
 		return $this->data['variation_id'] ?? 0;
 	}
+	/**
+	 * Real WC_Order_Item_Product::set_product_id() rejects any ID that is not a
+	 * `product` post — a variation is `product_variation` — by throwing
+	 * WC_Data_Exception *before* assigning the prop, so the ID is silently
+	 * dropped rather than stored. Modelling that here is what lets a test catch
+	 * a variation ID being passed where a parent product ID belongs (NPPD-1876);
+	 * a mock that accepted anything made the bug invisible to the suite.
+	 *
+	 * IDs with no registered mock product are left alone, so fixtures that use
+	 * arbitrary product IDs keep working.
+	 *
+	 * @param int $product_id Product ID.
+	 *
+	 * @throws WC_Data_Exception If the ID belongs to a variation.
+	 */
 	public function set_product_id( $product_id ) {
+		global $products_database;
+		$product = $products_database[ (int) $product_id ] ?? null;
+		if ( $product_id > 0 && $product && $product->is_type( 'variation' ) ) {
+			throw new WC_Data_Exception( 'order_item_product_invalid_product_id', 'Invalid product ID' );
+		}
 		$this->data['product_id'] = (int) $product_id;
 	}
 	public function set_variation_id( $variation_id ) {
 		$this->data['variation_id'] = (int) $variation_id;
+	}
+	public function set_name( $name ) {
+		$this->data['name'] = $name;
+	}
+	public function set_taxes( $taxes ) {
+		$this->data['taxes'] = $taxes;
+	}
+	/**
+	 * Mirror of WC_Data::set_props(): call each matching setter, collect any
+	 * WC_Data_Exception into a returned WP_Error rather than letting it bubble.
+	 * That swallowing is exactly how an invalid product ID reaches the database
+	 * as 0 without the caller noticing.
+	 *
+	 * @param array $props Property => value pairs.
+	 *
+	 * @return true|WP_Error
+	 */
+	public function set_props( $props ) {
+		$errors = false;
+		foreach ( $props as $prop => $value ) {
+			$setter = "set_$prop";
+			if ( ! is_callable( [ $this, $setter ] ) ) {
+				continue;
+			}
+			try {
+				$this->{$setter}( $value );
+			} catch ( WC_Data_Exception $e ) {
+				if ( ! $errors ) {
+					$errors = new WP_Error();
+				}
+				$errors->add( $e->getErrorCode(), $e->getMessage(), [ 'property_name' => $prop ] );
+			}
+		}
+		return $errors ? $errors : true;
 	}
 	public function save() {
 		return true;
@@ -278,14 +365,31 @@ class WC_Order_Item_Product implements ArrayAccess {
 	public function get_total() {
 		return $this->data['total'] ?? 0;
 	}
+	/**
+	 * Like the real getter, resolve the variation first and fall back to the
+	 * parent product, so an item linked to a variation returns the variation.
+	 */
 	public function get_product() {
 		global $products_database;
-		$product_id = $this->data['product_id'] ?? 0;
+		$product_id = $this->get_variation_id() ? $this->get_variation_id() : $this->get_product_id();
 		return $products_database[ $product_id ] ?? false;
 	}
+	/**
+	 * Real WC_Order_Item_Product::set_product() splits a variation into parent
+	 * product ID + variation ID; anything else sets the product ID alone. This
+	 * is the only setter that handles a variation correctly, which is why the
+	 * migration CLI uses it rather than assigning `product_id` directly.
+	 *
+	 * @param WC_Product $product Product or variation.
+	 */
 	public function set_product( $product ) {
-		$this->data['product_id'] = $product->get_id();
-		$this->data['name']       = $product->get_name();
+		if ( $product->is_type( 'variation' ) ) {
+			$this->set_product_id( $product->get_parent_id() );
+			$this->set_variation_id( $product->get_id() );
+		} else {
+			$this->set_product_id( $product->get_id() );
+		}
+		$this->set_name( $product->get_name() );
 	}
 	public function set_quantity( $quantity ) {
 		$this->data['quantity'] = $quantity;
@@ -322,8 +426,22 @@ class WC_Product {
 	public function get_type() {
 		return $this->data['type'] ?? 'simple';
 	}
+	/**
+	 * WC_Product_Subscription_Variation overrides is_type() so a
+	 * `subscription_variation` answers true to `is_type( 'variation' )`. Production
+	 * code relies on that alias — WC_Order_Item_Product::set_product() branches on
+	 * `is_type( 'variation' )` alone — so the mock has to model it, or a test would
+	 * take a different branch than the real code does.
+	 *
+	 * @param string|string[] $types Type or types to test.
+	 *
+	 * @return bool
+	 */
 	public function is_type( $types ) {
 		$types = (array) $types;
+		if ( 'subscription_variation' === $this->get_type() && in_array( 'variation', $types, true ) ) {
+			return true;
+		}
 		return in_array( $this->get_type(), $types, true );
 	}
 	public function get_parent_id() {
@@ -451,8 +569,15 @@ class WC_Order {
 	public function get_date_completed() {
 		return new WC_DateTime( $this->data['date_completed'] );
 	}
+	/**
+	 * Real WC_Abstract_Order returns '0' for an order with no total set; without
+	 * a default a fixture that omits it raises an undefined-key warning instead.
+	 */
 	public function get_total() {
-		return $this->data['total'];
+		return $this->data['total'] ?? 0;
+	}
+	public function get_subtotal() {
+		return $this->data['subtotal'] ?? 0;
 	}
 	public function get_status() {
 		return $this->data['status'];
@@ -528,7 +653,28 @@ class WC_Subscription {
 		}
 		return true;
 	}
+	/**
+	 * Real WC_Subscription::has_product() walks the line items and matches either
+	 * the product ID or the variation ID — which is what lets a rule naming a
+	 * variable subscription's parent accept any of its variations. Check the items
+	 * first so code depending on that matching behaves as it does in production,
+	 * then fall back to the fixture-supplied `products` list, which many tests use
+	 * to declare coverage without building line items.
+	 *
+	 * @param int $product_id Product or variation ID.
+	 *
+	 * @return bool
+	 */
 	public function has_product( $product_id ) {
+		$product_id = (int) $product_id;
+		foreach ( $this->get_items() as $item ) {
+			if ( ! method_exists( $item, 'get_product_id' ) ) {
+				continue;
+			}
+			if ( (int) $item->get_product_id() === $product_id || (int) $item->get_variation_id() === $product_id ) {
+				return true;
+			}
+		}
 		return in_array( $product_id, $this->products, true );
 	}
 	public function get_meta( $field_name ) {
@@ -558,8 +704,20 @@ class WC_Subscription {
 	public function get_date_paid() {
 		return new WC_DateTime( $this->data['date_paid'] );
 	}
+	/**
+	 * Real WC_Abstract_Order returns '0' when no total is set; without a default
+	 * a fixture that omits it raises an undefined-key warning instead. Production
+	 * code now reads this for every reused subscription.
+	 */
 	public function get_total() {
-		return $this->data['total'];
+		return $this->data['total'] ?? 0;
+	}
+	/**
+	 * Pre-discount total. Distinguishes a fully-discounted subscription, which
+	 * still carries a subtotal, from a $0 migration subscription, which does not.
+	 */
+	public function get_subtotal() {
+		return $this->data['subtotal'] ?? 0;
 	}
 	public function get_status() {
 		return $this->data['status'];
@@ -573,7 +731,20 @@ class WC_Subscription {
 	public function set_total( $total ) {
 		$this->data['total'] = $total;
 	}
+	/**
+	 * Real WC_Abstract_Order keys its items by order-item ID, which is what makes
+	 * `remove_item( $item->get_id() )` work. Preserve that when the fixture gave
+	 * the item an ID; fall back to appending for the many fixtures that don't, so
+	 * their positional keys keep working.
+	 *
+	 * @param WC_Order_Item_Product $item Line item.
+	 */
 	public function add_item( $item ) {
+		$item_id = method_exists( $item, 'get_id' ) ? (int) $item->get_id() : 0;
+		if ( $item_id ) {
+			$this->data['items'][ $item_id ] = $item;
+			return;
+		}
 		$this->data['items'][] = $item;
 	}
 	/**
@@ -670,6 +841,43 @@ class WC_Subscription {
 	}
 	public function get_items() {
 		return $this->data['items'] ?? [];
+	}
+	/**
+	 * Keyed by item ID like WC_Abstract_Order::remove_item().
+	 *
+	 * @param int $item_id Order item ID.
+	 */
+	public function remove_item( $item_id ) {
+		unset( $this->data['items'][ $item_id ] );
+	}
+	/**
+	 * Sum the line items into the order total, like WC_Abstract_Order does.
+	 */
+	public function calculate_totals() {
+		$total = 0;
+		foreach ( $this->get_items() as $item ) {
+			$total += (float) $item->get_total();
+		}
+		$this->data['total'] = $total;
+		return $total;
+	}
+	/**
+	 * Address setter. The mock stores address fields flat, matching how the
+	 * address getters in __call() read them.
+	 *
+	 * @param array  $address Address fields.
+	 * @param string $type    'billing' or 'shipping'.
+	 */
+	public function set_address( $address, $type = 'billing' ) {
+		foreach ( $address as $field => $value ) {
+			$this->data[ $type . '_' . $field ] = $value;
+		}
+	}
+	public function set_billing_period( $period ) {
+		$this->data['billing_period'] = $period;
+	}
+	public function set_billing_interval( $interval ) {
+		$this->data['billing_interval'] = $interval;
 	}
 	public function get_item( $item_id, $load_from_db = true ) {
 		// Faithful to WC_Abstract_Order::get_item(): the default delegates to
