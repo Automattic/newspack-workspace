@@ -10,9 +10,8 @@
 
 import { buildQueryParams as baseBuildQueryParams, toQueryString } from '../../utils/build-query';
 
-// `auto-draft` is excluded, as core's own lists do: WordPress inserts the
-// row when `post-new.php` loads, and any save promotes it to `draft`, so an
-// `auto-draft` here is always an abandoned "Add new" with nothing in it.
+// `auto-draft` is excluded: any save promotes the row to `draft`, so one still
+// at `auto-draft` is always an abandoned "Add new" with nothing in it.
 const DEFAULT_STATUSES = 'publish,private,future,draft,pending';
 
 // `status` is handled separately by the shared util's status-filter branch, not here.
