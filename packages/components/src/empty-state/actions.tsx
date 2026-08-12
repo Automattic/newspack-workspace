@@ -18,10 +18,13 @@ const Actions = ( { orientation = 'row', spacing = 2, className, children }: Emp
 	// Read for the invariant alone: actions outside a Root would lose the spine.
 	useEmptyStateContext();
 
-	const Stack = orientation === 'column' ? VStack : HStack;
+	const isColumn = orientation === 'column';
+	const Stack = isColumn ? VStack : HStack;
 
+	// A row wraps rather than overflowing: the empty state sits in half the grid above
+	// 1054px, which is the narrow case for two actions side by side.
 	return (
-		<Stack alignment="center" spacing={ spacing } className={ classnames( 'newspack-empty-state__actions', className ) }>
+		<Stack alignment="center" spacing={ spacing } wrap={ ! isColumn } className={ classnames( 'newspack-empty-state__actions', className ) }>
 			{ children }
 		</Stack>
 	);

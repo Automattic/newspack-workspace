@@ -60,8 +60,8 @@ import { EmptyState } from 'newspack-components';
 Every slot except `Root` is optional, and anything else you pass to `Root`
 becomes a sibling of the header at the same 8-unit gap. A screen that offers
 choices rather than one action can drop a stack of cards in instead of
-`EmptyState.Actions`. Pass elements: `Root`'s stack drops bare strings, so wrap
-loose text in a `<p>`.
+`EmptyState.Actions`. Pass elements: `Root`'s stack keeps a lone string but drops
+one sitting beside an element, so wrap loose text in a `<p>`.
 
 ## Consumers own their wrappers
 
@@ -134,9 +134,10 @@ needs this to be its `h1` passes `heading={ 1 }`.
 | `orientation` | `'row'` \| `'column'` | `'row'` | `column` stacks the actions, for a button above a link or an explanatory note. |
 | `spacing` | `number` | `2` | Gap between actions, on the `@wordpress/components` spacing scale. |
 
-A centred stack, carrying `newspack-empty-state__actions`. With one action,
-prefer a single primary button: an empty state asking for two decisions at once
-is usually a sign the screen needs an onboarding view instead.
+A centred stack, carrying `newspack-empty-state__actions`. A row wraps rather
+than overflowing, since the empty state only gets half the grid on a wide screen.
+With one action, prefer a single primary button: an empty state asking for two
+decisions at once is usually a sign the screen needs an onboarding view instead.
 
 ## Outside the Root
 
