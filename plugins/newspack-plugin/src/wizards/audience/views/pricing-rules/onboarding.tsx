@@ -1,8 +1,4 @@
 /**
- * Empty state for the Pricing Rules list.
- */
-
-/**
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';

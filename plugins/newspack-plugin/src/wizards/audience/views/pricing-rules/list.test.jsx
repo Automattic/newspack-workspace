@@ -1,7 +1,6 @@
 /**
- * The Pricing Rules list screen: the count and action it publishes to the wizard
- * header, the page loader and empty state it gates on both reads landing, what it
- * asks the catalogue for, and the order it renders the table and the card in.
+ * The Pricing Rules list screen: what it publishes to the wizard header, how it
+ * gates on both reads, and the order it renders the table and the card in.
  */
 
 /**
