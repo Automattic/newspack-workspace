@@ -91,3 +91,28 @@ describe( 'EmptyState.Header', () => {
 		}
 	} );
 } );
+
+describe( 'EmptyState.Actions', () => {
+	it( 'renders its children in a centred row', () => {
+		const { container } = render(
+			<EmptyState.Root>
+				<EmptyState.Actions>
+					<button type="button">Add Newsletter</button>
+				</EmptyState.Actions>
+			</EmptyState.Root>
+		);
+		expect( container.querySelector( '.newspack-empty-state__actions' ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'button', { name: 'Add Newsletter' } ) ).toBeInTheDocument();
+	} );
+
+	it( 'throws outside Root', () => {
+		const consoleError = jest.spyOn( console, 'error' ).mockImplementation( () => {} );
+		try {
+			expect( () => render( <EmptyState.Actions>x</EmptyState.Actions> ) ).toThrow(
+				'EmptyState subcomponents must be rendered inside EmptyState.Root.'
+			);
+		} finally {
+			consoleError.mockRestore();
+		}
+	} );
+} );

@@ -5,6 +5,7 @@
 /**
  * Internal dependencies.
  */
+import Actions from './actions';
 import Header from './header';
 import Root from './root';
 
@@ -12,6 +13,7 @@ import Root from './root';
 export const EmptyState = {
 	Root,
 	Header,
+	Actions,
 };
 
 Object.entries( EmptyState ).forEach( ( [ name, part ] ) => {
