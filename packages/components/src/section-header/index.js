@@ -13,7 +13,9 @@ import { Icon, chevronLeft, moreVertical } from '@wordpress/icons';
 /**
  * Internal dependencies
  */
-import { Badge, Button, Grid } from '..';
+import Badge from '../badge';
+import Button from '../button';
+import Grid from '../grid';
 import './style.scss';
 
 /**
