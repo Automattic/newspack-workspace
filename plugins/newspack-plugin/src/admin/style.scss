@@ -1,6 +1,14 @@
 @use "~@wordpress/base-styles/colors" as wp-colors;
 @use "~@wordpress/base-styles/variables" as wp-vars;
 
+$wizard-column-width: calc(calc(var(--newspack-wizard-section-space) * 2) + var(--newspack-wizard-section-width));
+
+%wizard-column {
+	margin: 0 auto;
+	max-width: $wizard-column-width;
+	padding: 0 var(--newspack-wizard-section-space);
+}
+
 :root {
 	/* Sections */
 	--newspack-wizard-section-width: 1006px;
@@ -216,7 +224,7 @@ h1 {
 .newspack-wizard__sections {
 	margin: 0 auto;
 	padding: calc(var(--newspack-wizard-section-space) * 2) var(--newspack-wizard-section-space) 0;
-	max-width: calc(calc(var(--newspack-wizard-section-space) * 2) + var(--newspack-wizard-section-width));
+	max-width: $wizard-column-width;
 	> .newspack-wizard__heading {
 		margin-bottom: 8px;
 	}
@@ -261,16 +269,12 @@ h1 {
 	}
 }
 
-.newspack-wizard__constrained {
-	margin: 0 auto;
-	max-width: calc(calc(var(--newspack-wizard-section-space) * 2) + var(--newspack-wizard-section-width));
-	padding: 0 var(--newspack-wizard-section-space);
+.newspack-wizard__column {
+	@extend %wizard-column;
 }
 
 .newspack-dashboard__section {
-	margin: 0 auto;
-	max-width: calc(calc(var(--newspack-wizard-section-space) * 2) + var(--newspack-wizard-section-width));
-	padding: 0 var(--newspack-wizard-section-space);
+	@extend %wizard-column;
 
 	> h3 {
 		font-size: 1.25rem;

@@ -16,7 +16,7 @@ import EmptyState from '../../../../../../packages/components/src/empty-state';
 
 const InstitutionsOnboarding = () => {
 	return (
-		<div className="newspack-wizard__constrained">
+		<div className="newspack-wizard__column">
 			<EmptyState.Root>
 				<EmptyState.Header
 					icon={ institution }
