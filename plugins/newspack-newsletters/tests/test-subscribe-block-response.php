@@ -71,8 +71,14 @@ class Subscribe_Block_Response_Test extends WP_UnitTestCase {
 			send_form_response( $data );
 		} catch ( WPDieException $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch
 			// Expected: wp_send_json() always terminates.
+		} finally {
+			// In finally, not after the try/catch: anything besides WPDieException thrown
+			// by send_form_response() (e.g. a TypeError from a future signature change)
+			// must still close this buffer, or it leaks into whatever the test runner
+			// captures next and turns one failure into a run's worth of noise.
+			$output = ob_get_clean();
 		}
-		return json_decode( ob_get_clean(), true );
+		return json_decode( $output, true );
 	}
 
 	/**
@@ -267,6 +273,71 @@ class Subscribe_Block_Response_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Every other test in this file pins RESPONSE_KEYS/METADATA_KEYS against
+	 * shrinking — each asserts that specific, named keys are absent or present.
+	 * None of them would notice a key being *added* to either allowlist: a
+	 * fixture that only checks for named provider fields stays green even
+	 * after a new field joins the allowlist it was written to guard against.
+	 * This test instead asserts the response's full key set equals the
+	 * allowlist, so widening RESPONSE_KEYS or METADATA_KEYS has to be a
+	 * deliberate act that updates this test, not a drive-by addition that
+	 * slips through unnoticed.
+	 */
+	public function test_response_key_set_is_closed() {
+		$response = $this->capture_response(
+			[
+				'message'                        => 'x',
+				'newspack_newsletters_subscribe' => '1',
+				'metadata'                       => [ 'current_page_url' => 'https://example.com/' ],
+				'registered'                     => 1,
+				'verified'                       => false,
+				'verification_nonce'             => 'abc',
+				'email'                          => 'reader@example.com',
+				'name'                           => 'Ada',
+				'phone'                          => '555',
+				// Named but currently unlisted, so this stands in for whatever key a
+				// future addition would introduce; the response must not carry it.
+				'existing_contact_data'          => [ 'merge_fields' => [] ],
+			]
+		);
+
+		$expected = [
+			'email',
+			'message',
+			'metadata',
+			'newspack_newsletters_subscribe',
+			'newspack_newsletters_subscribed',
+			'registered',
+			'verification_nonce',
+			'verified',
+		];
+		$actual   = array_keys( $response );
+		sort( $actual );
+		$this->assertSame( $expected, $actual, 'The response carries exactly the allowlisted keys.' );
+
+		$metadata_expected = [
+			'current_page_url',
+			'gate_post_id',
+			'newsletters_subscription_method',
+			'newspack_popup_id',
+			'registered',
+			'registration_method',
+			'status',
+		];
+		// 'email_address'/'ip_signup' are provider fields the shrink-direction tests
+		// already cover; 'phone' stands in for a plausible future METADATA_KEYS
+		// addition. array_intersect_key only ever removes keys, so the widening
+		// mutation this test guards against is invisible unless the bait key is
+		// actually present in the input for it to preserve.
+		$response = $this->capture_response(
+			[ 'metadata' => array_fill_keys( array_merge( $metadata_expected, [ 'email_address', 'ip_signup', 'phone' ] ), 'x' ) ]
+		);
+		$actual   = array_keys( $response['metadata'] );
+		sort( $actual );
+		$this->assertSame( $metadata_expected, $actual, 'metadata carries exactly the allowlisted keys.' );
+	}
+
+	/**
 	 * The non-JSON path redirects instead of emitting JSON, and is unchanged by
 	 * this work. Asserting it here means a future edit to the filter that
 	 * accidentally reaches the redirect branch fails a test.
@@ -301,9 +372,12 @@ class Subscribe_Block_Response_Test extends WP_UnitTestCase {
 		} catch ( Subscribe_Block_Redirect_Interrupt $e ) {
 			$location = $e->location;
 		} finally {
+			// In finally: $this->fail() above throws past the catch block, and without
+			// this here that throw would skip ob_get_clean() and leak the buffer into
+			// whatever the test runner captures next.
 			remove_filter( 'wp_redirect', $intercept );
+			$output = ob_get_clean();
 		}
-		$output = ob_get_clean();
 
 		$this->assertSame( '', trim( $output ), 'The redirect branch must not emit a response body.' );
 		$this->assertStringContainsString( 'newspack_newsletters_subscribed=1', $location, 'The redirect must report a successful subscription.' );
