@@ -78,10 +78,10 @@ export default function CatalogImpact( { stats }: CatalogImpactProps ) {
 		}
 	}
 	const note = detail ? sampleNote( detail ) : null;
-	// A count the engine never sent is neither "some" nor "none", so it offers the
-	// table and claims nothing.
+	// A count the engine never sent is neither "some" nor "none". The table loads
+	// its own sample, so only a confirmed zero withdraws it.
 	const affected = finiteCount( stats.total_matching );
-	const hasAffectedProducts = null !== affected && affected > 0;
+	const hasAffectedProducts = 0 !== affected;
 
 	return (
 		<section className="newspack-pricing-rules__impact" aria-labelledby={ headingId }>

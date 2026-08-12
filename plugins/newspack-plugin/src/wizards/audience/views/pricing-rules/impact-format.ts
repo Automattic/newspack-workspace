@@ -65,12 +65,16 @@ export function cycleMarkerNote(): string {
  * product it could not price.
  */
 export function sampleNote( payload: CatalogImpactResponse ): string | null {
-	if ( ! payload.preview_limited || payload.sample_count < ( payload.sample_limit ?? IMPACT_SAMPLE_LIMIT ) ) {
+	// Both sides go through finiteCount: as strings, `'9' < '50'` compares
+	// lexicographically and would announce a cap the engine never applied.
+	const shown = finiteCount( payload.sample_count );
+	const cap = finiteCount( payload.sample_limit ?? IMPACT_SAMPLE_LIMIT );
+	if ( ! payload.preview_limited || null === shown || null === cap || shown < cap ) {
 		return null;
 	}
 	return sprintf(
 		/* translators: %s: how many products the table lists. */
-		_n( 'Showing a sample of %s product.', 'Showing a sample of %s products.', payload.sample_count, 'newspack-plugin' ),
-		formatCount( payload.sample_count )
+		_n( 'Showing a sample of %s product.', 'Showing a sample of %s products.', shown, 'newspack-plugin' ),
+		formatCount( shown )
 	);
 }

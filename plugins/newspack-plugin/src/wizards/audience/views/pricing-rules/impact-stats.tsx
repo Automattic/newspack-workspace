@@ -16,7 +16,7 @@ import StatTile, { type StatTileProps } from './stat-tile';
 import { formatCount, finiteCount } from './impact-format';
 
 interface ImpactStatsProps {
-	totalMatching: number;
+	totalMatching: EngineCount;
 	countLimited: boolean;
 	// What the product count means differs by screen, so its caller supplies the line.
 	productsDescription: string;
@@ -89,7 +89,7 @@ export default function ImpactStats( { totalMatching, countLimited, productsDesc
 			},
 			{
 				id: 'protected',
-				label: __( 'Protected', 'newspack-plugin' ),
+				label: _x( 'Protected', 'subscribers who keep their original price', 'newspack-plugin' ),
 				...( isLocked ? { value: null } : bounded( scope.protected, scope.count_limited ) ),
 				description: __( 'Keep the price they signed up at', 'newspack-plugin' ),
 				secondary: isLocked ? lockedNote : undefined,

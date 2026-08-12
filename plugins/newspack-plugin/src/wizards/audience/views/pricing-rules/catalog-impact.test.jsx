@@ -27,7 +27,9 @@ jest.mock( './impact-table', () => ( { baseline, framed, collapsible } ) => (
 	</div>
 ) );
 
-jest.mock( './impact-empty', () => ( { reason } ) => <div data-testid="impact-empty" data-reason={ reason } /> );
+jest.mock( './impact-empty', () => ( { reason, headingLevel } ) => (
+	<div data-testid="impact-empty" data-reason={ reason } data-heading-level={ String( headingLevel ) } />
+) );
 
 const CURRENCY = { code: 'USD', symbol: '$', decimals: 2 };
 
@@ -292,5 +294,27 @@ describe( 'CatalogImpact', () => {
 
 		expect( screen.queryByRole( 'button', { name: 'View Affected Products' } ) ).not.toBeInTheDocument();
 		expect( screen.getByText( 'No active pricing rules are affecting products yet.' ) ).toBeInTheDocument();
+	} );
+
+	// Only a confirmed zero withdraws the table: the modal fetches its own sample,
+	// so a count that never arrived claims nothing either way.
+	it( 'keeps the table on offer and claims nothing when the count is missing', () => {
+		render( <CatalogImpact stats={ stats( { total_matching: undefined } ) } /> );
+
+		expect( screen.getByRole( 'button', { name: 'View Affected Products' } ) ).toBeInTheDocument();
+		expect( screen.queryByText( 'No active pricing rules are affecting products yet.' ) ).not.toBeInTheDocument();
+		expect( screen.getByText( '—' ) ).toBeInTheDocument();
+	} );
+
+	// Modal renders its title as an h1, so the empty state below it is an h2.
+	it( 'drops the empty state a level inside the modal', async () => {
+		apiFetch.mockResolvedValue( detail( { sample: [] } ) );
+		render( <CatalogImpact stats={ stats() } /> );
+
+		await act( async () => {
+			openModal();
+		} );
+
+		expect( screen.getByTestId( 'impact-empty' ) ).toHaveAttribute( 'data-heading-level', '2' );
 	} );
 } );
