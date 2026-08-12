@@ -171,7 +171,7 @@ export function getFields( { authors = [], categories = [], tags = [], sendLists
 				{ value: 'publish,private', label: statusLabels.sent },
 				{ value: 'future', label: statusLabels.scheduled },
 				// Match `get_status_for_post`'s draft fallthrough.
-				{ value: 'draft,pending,auto-draft', label: statusLabels.draft },
+				{ value: 'draft,pending', label: statusLabels.draft },
 				{ value: 'trash', label: statusLabels.trash },
 			],
 			filterBy: { operators: [ 'isAny' ], isPrimary: true },

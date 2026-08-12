@@ -14,8 +14,9 @@ import { buildQueryParams as baseBuildQueryParams, toQueryString } from '../../u
 // these as `kind=scheduled` regardless of `start_date` meta. Without
 // `future` in the default set, WP-scheduled rows would silently
 // disappear from the list (the classic CPT list showed them).
-// `auto-draft` keeps an abandoned "Add new" visible.
-const DEFAULT_STATUSES = 'publish,private,future,draft,pending,auto-draft';
+// `auto-draft` is excluded, as core's own lists do — see the newsletters
+// list note; an `auto-draft` row is always an empty abandoned "Add new".
+const DEFAULT_STATUSES = 'publish,private,future,draft,pending';
 
 // Each value is the WP REST taxonomy filter param — i.e. the
 // taxonomy's `rest_base`, which defaults to the taxonomy slug when

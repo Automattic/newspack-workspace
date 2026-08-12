@@ -46,9 +46,13 @@ describe( 'buildQueryParams', () => {
 		expect( status.split( ',' ) ).not.toContain( 'trash' );
 	} );
 
-	it( 'includes auto-draft so a post-new + back row stays visible', () => {
-		const { status } = buildQueryParams( {} );
-		expect( status.split( ',' ) ).toContain( 'auto-draft' );
+	it( 'excludes auto-draft so an abandoned "Add new" never reaches the list', () => {
+		expect( buildQueryParams( {} ).status.split( ',' ) ).not.toContain( 'auto-draft' );
+		// The Draft filter is the other way in — it must not widen the set back.
+		const filtered = buildQueryParams( {
+			filters: [ { field: 'status', operator: 'isAny', value: [ 'draft,pending' ] } ],
+		} );
+		expect( filtered.status.split( ',' ) ).not.toContain( 'auto-draft' );
 	} );
 
 	it( 'replaces the default status set when the user filters by status', () => {

@@ -387,8 +387,6 @@ final class Ads {
 		global $wpdb;
 
 		$taxonomy_name = is_object( $taxonomy ) ? $taxonomy->name : $taxonomy;
-		// Include auto-draft to match the Ads list's draft bucket.
-		$statuses = [ 'publish', 'private', 'future', 'draft', 'pending', 'auto-draft' ];
 
 		foreach ( $terms as $tt_id ) {
 			$tt_id = (int) $tt_id;
@@ -398,15 +396,17 @@ final class Ads {
 					INNER JOIN {$wpdb->posts} p ON p.ID = tr.object_id
 					WHERE tr.term_taxonomy_id = %d
 					AND p.post_type = %s
-					AND p.post_status IN ( %s, %s, %s, %s, %s, %s )",
+					AND p.post_status IN ( %s, %s, %s, %s, %s )",
 					$tt_id,
 					self::CPT,
-					$statuses[0],
-					$statuses[1],
-					$statuses[2],
-					$statuses[3],
-					$statuses[4],
-					$statuses[5]
+					// `auto-draft` is absent to match the Ads list's draft
+					// bucket, which hides an abandoned "Add new" the way
+					// core's own lists do.
+					'publish',
+					'private',
+					'future',
+					'draft',
+					'pending'
 				)
 			);
 
@@ -420,10 +420,10 @@ final class Ads {
 	 * One-time recount of existing advertiser terms so counts predating
 	 * the custom count callback refresh without waiting for the next edit.
 	 * Bump the sentinel whenever the counted statuses change so already
-	 * recounted sites pick up the new semantics (v3: added auto-draft).
+	 * recounted sites pick up the new semantics (v4: dropped auto-draft).
 	 */
 	public static function maybe_recount_advertiser_terms() {
-		$option = 'newspack_nl_advertiser_count_recounted_v3';
+		$option = 'newspack_nl_advertiser_count_recounted_v4';
 		if ( get_option( $option ) ) {
 			return;
 		}

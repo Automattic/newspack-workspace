@@ -409,9 +409,10 @@ class Ads_List_REST_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * `kind=draft` covers `draft`, `pending`, and `auto-draft` — the
-	 * trio we resolve to the `draft` kind in the column. The filter
-	 * and the column have to agree on which rows belong in the bucket.
+	 * `kind=draft` covers `draft` and `pending` — the pair we resolve to
+	 * the `draft` kind in the column. The filter and the column have to
+	 * agree on which rows belong in the bucket. `auto-draft` is out: an
+	 * abandoned "Add new" is empty by construction (DSGNEWS-213).
 	 */
 	public function test_filter_rest_query_translates_draft_kind_to_full_draft_set() {
 		$args = Ads_List_REST::filter_rest_query(
@@ -422,7 +423,40 @@ class Ads_List_REST_Test extends WP_UnitTestCase {
 		$post_status = (array) $args['post_status'];
 		$this->assertContains( 'draft', $post_status );
 		$this->assertContains( 'pending', $post_status );
-		$this->assertContains( 'auto-draft', $post_status );
+		$this->assertNotContains( 'auto-draft', $post_status );
+	}
+
+	/**
+	 * An abandoned "Add new" must not reach the Draft bucket — neither
+	 * through `post_status` nor the bucket's `posts_where` (DSGNEWS-213).
+	 */
+	public function test_draft_kind_excludes_auto_draft_ads() {
+		$draft     = $this->make_ad( [ 'post_status' => 'draft' ] );
+		$abandoned = $this->make_ad(
+			[
+				'post_status' => 'auto-draft',
+				'post_title'  => 'Auto Draft',
+			]
+		);
+
+		$args = Ads_List_REST::filter_rest_query(
+			[],
+			$this->rest_request( [ Ads_List_REST::STATUS_QUERY_PARAM => 'draft' ] )
+		);
+
+		$query = new WP_Query(
+			array_merge(
+				$args,
+				[
+					'post_type'      => Ads::CPT,
+					'fields'         => 'ids',
+					'posts_per_page' => -1,
+				]
+			)
+		);
+
+		$this->assertContains( $draft, $query->posts, 'saved draft still surfaces' );
+		$this->assertNotContains( $abandoned, $query->posts, 'abandoned "Add new" never reaches the list' );
 	}
 
 	/**

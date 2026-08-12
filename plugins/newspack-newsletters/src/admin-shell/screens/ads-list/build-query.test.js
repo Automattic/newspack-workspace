@@ -47,9 +47,8 @@ describe( 'ads buildQueryParams', () => {
 		expect( status.split( ',' ) ).toContain( 'future' );
 	} );
 
-	it( 'includes auto-draft so a post-new + back row stays visible', () => {
-		const { status } = buildQueryParams( {} );
-		expect( status.split( ',' ) ).toContain( 'auto-draft' );
+	it( 'excludes auto-draft so an abandoned "Add new" never reaches the list', () => {
+		expect( buildQueryParams( {} ).status.split( ',' ) ).not.toContain( 'auto-draft' );
 	} );
 
 	it( 'maps a single kind filter to the kind-specific REST query param', () => {

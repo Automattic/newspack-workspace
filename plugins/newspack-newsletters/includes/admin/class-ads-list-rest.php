@@ -198,9 +198,12 @@ class Ads_List_REST {
 					$post_status_set[] = 'trash';
 					$bucket_clauses[]  = "{$wpdb->posts}.post_status = 'trash'";
 					break;
+				// `auto-draft` is deliberately absent: an abandoned "Add new" is
+				// empty by construction (any save promotes it to `draft`), and
+				// core's own lists hide it too.
 				case 'draft':
-					$post_status_set    = array_merge( $post_status_set, [ 'draft', 'pending', 'auto-draft' ] );
-					$bucket_clauses[]   = "{$wpdb->posts}.post_status IN ( 'draft', 'pending', 'auto-draft' )";
+					$post_status_set    = array_merge( $post_status_set, [ 'draft', 'pending' ] );
+					$bucket_clauses[]   = "{$wpdb->posts}.post_status IN ( 'draft', 'pending' )";
 					break;
 				case 'expired':
 					$post_status_set    = array_merge( $post_status_set, [ 'publish', 'private' ] );

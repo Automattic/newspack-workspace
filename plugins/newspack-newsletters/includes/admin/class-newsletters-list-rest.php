@@ -123,7 +123,7 @@ class Newsletters_List_REST {
 		}
 
 		$wants_sent      = ! empty( array_intersect( $values, [ 'publish', 'private' ] ) );
-		$wants_draft     = ! empty( array_intersect( $values, [ 'draft', 'pending', 'auto-draft' ] ) );
+		$wants_draft     = ! empty( array_intersect( $values, [ 'draft', 'pending' ] ) );
 		$wants_scheduled = in_array( 'future', $values, true );
 		$wants_trash     = in_array( 'trash', $values, true );
 
@@ -132,8 +132,11 @@ class Newsletters_List_REST {
 		if ( $wants_sent || $wants_draft || $wants_scheduled ) {
 			$widened = array_merge( $widened, [ 'publish', 'private' ] );
 		}
+		// `auto-draft` is deliberately absent: an abandoned "Add new" is empty
+		// by construction (any save promotes it to `draft`), and core's own
+		// lists hide it too.
 		if ( $wants_draft || $wants_scheduled ) {
-			$widened = array_merge( $widened, [ 'draft', 'pending', 'auto-draft' ] );
+			$widened = array_merge( $widened, [ 'draft', 'pending' ] );
 		}
 		if ( $wants_scheduled ) {
 			$widened[] = 'future';
@@ -168,11 +171,10 @@ class Newsletters_List_REST {
 		}
 		if ( $wants_draft ) {
 			$bucket_clauses[] = $wpdb->prepare(
-				"( NOT EXISTS ( SELECT 1 FROM {$wpdb->postmeta} WHERE post_id = {$wpdb->posts}.ID AND meta_key = %s AND meta_value <> '' ) AND ( {$wpdb->posts}.post_status IN (%s, %s, %s) OR ( {$wpdb->posts}.post_status IN (%s, %s) AND EXISTS ( SELECT 1 FROM {$wpdb->postmeta} WHERE post_id = {$wpdb->posts}.ID AND meta_key = %s AND meta_value <> '' ) ) ) )",
+				"( NOT EXISTS ( SELECT 1 FROM {$wpdb->postmeta} WHERE post_id = {$wpdb->posts}.ID AND meta_key = %s AND meta_value <> '' ) AND ( {$wpdb->posts}.post_status IN (%s, %s) OR ( {$wpdb->posts}.post_status IN (%s, %s) AND EXISTS ( SELECT 1 FROM {$wpdb->postmeta} WHERE post_id = {$wpdb->posts}.ID AND meta_key = %s AND meta_value <> '' ) ) ) )",
 				'sending_scheduled',
 				'draft',
 				'pending',
-				'auto-draft',
 				'publish',
 				'private',
 				'scheduling_error'
