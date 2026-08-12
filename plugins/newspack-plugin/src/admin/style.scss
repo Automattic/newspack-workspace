@@ -261,6 +261,12 @@ h1 {
 	}
 }
 
+.newspack-wizard__constrained {
+	margin: 0 auto;
+	max-width: calc(calc(var(--newspack-wizard-section-space) * 2) + var(--newspack-wizard-section-width));
+	padding: 0 var(--newspack-wizard-section-space);
+}
+
 .newspack-dashboard__section {
 	margin: 0 auto;
 	max-width: calc(calc(var(--newspack-wizard-section-space) * 2) + var(--newspack-wizard-section-width));
