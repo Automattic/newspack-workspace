@@ -1,4 +1,8 @@
 /**
+ * One impact figure as a scorecard: its label, the number, and what it counts.
+ */
+
+/**
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
