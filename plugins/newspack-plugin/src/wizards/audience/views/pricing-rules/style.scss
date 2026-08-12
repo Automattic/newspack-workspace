@@ -42,11 +42,10 @@
 	}
 
 	&__impact {
+		display: flex;
+		flex-direction: column;
+		gap: wp-vars.$grid-unit-30;
 		margin: wp-vars.$grid-unit-60 wp-vars.$grid-unit-60 0;
-
-		p {
-			margin-top: wp-vars.$grid-unit-15;
-		}
 	}
 
 	&__empty {

@@ -259,6 +259,26 @@ describe( 'CatalogImpact', () => {
 		expect( screen.queryByText( /Showing a sample of/ ) ).not.toBeInTheDocument();
 	} );
 
+	// Tiles are cards, so the block that holds them must not be one too.
+	it( 'places the trigger below the grid rather than inside a card', () => {
+		const { container } = render( <CatalogImpact stats={ stats() } /> );
+
+		const section = container.querySelector( '.newspack-pricing-rules__impact' );
+		const button = screen.getByRole( 'button', { name: 'View Affected Products' } );
+		const grid = container.querySelector( '.newspack-pricing-rules__stats' );
+
+		expect( section.tagName ).toBe( 'SECTION' );
+		expect( grid.contains( button ) ).toBe( false );
+		// eslint-disable-next-line no-bitwise
+		expect( grid.compareDocumentPosition( button ) & Node.DOCUMENT_POSITION_FOLLOWING ).toBeTruthy();
+	} );
+
+	it( 'names the section with the heading it already carries', () => {
+		render( <CatalogImpact stats={ stats() } /> );
+
+		expect( screen.getByRole( 'region', { name: 'Catalog impact' } ) ).toBeInTheDocument();
+	} );
+
 	it( 'withholds the table button and explains itself when nothing is affected', () => {
 		render( <CatalogImpact stats={ stats( { total_matching: 0 } ) } /> );
 

@@ -16,7 +16,6 @@ import {
 	Spinner,
 	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
-import { Card } from '@wordpress/ui';
 
 /**
  * Internal dependencies
@@ -80,48 +79,46 @@ export default function CatalogImpact( { stats }: CatalogImpactProps ) {
 	const note = detail ? sampleNote( detail ) : null;
 
 	return (
-		<Card.Root className="newspack-pricing-rules__impact">
-			<Card.Content>
-				<h3 className="screen-reader-text">{ __( 'Catalog impact', 'newspack-plugin' ) }</h3>
-				<ImpactStats totalMatching={ stats.total_matching } countLimited={ stats.count_limited } audience={ stats.audience } />
-				{ stats.total_matching === 0 ? (
-					<p className="newspack-pricing-rules__muted">
-						{ __( 'No active pricing rules are affecting products yet.', 'newspack-plugin' ) }
-					</p>
-				) : (
-					<Button variant="secondary" onClick={ open }>
-						{ __( 'View Affected Products', 'newspack-plugin' ) }
-					</Button>
-				) }
-				{ isOpen && (
-					<Modal title={ __( 'Affected Products', 'newspack-plugin' ) } size="large" onRequestClose={ () => setIsOpen( false ) }>
-						{ hasError && (
-							<p className="newspack-pricing-rules__muted" role="alert">
-								{ __( 'Could not load the affected products. Please try again.', 'newspack-plugin' ) }
-							</p>
-						) }
-						{ ! hasError && ! detail && (
-							<VStack className="newspack-pricing-rules__modal-loading" alignment="center" justify="center" role="status">
-								<Spinner />
-								<span className="screen-reader-text">{ __( 'Loading the affected products…', 'newspack-plugin' ) }</span>
-							</VStack>
-						) }
-						{ ! hasError && emptyReason && <ImpactEmpty reason={ emptyReason } /> }
-						{ ! hasError && detail && ! emptyReason && (
-							<>
-								{ note && <p className="newspack-pricing-rules__muted">{ note }</p> }
-								<ImpactTable
-									baseline={ detail.sample }
-									segmentGroups={ detail.segment_groups ?? [] }
-									currency={ detail.currency }
-									framed={ false }
-									collapsible={ false }
-								/>
-							</>
-						) }
-					</Modal>
-				) }
-			</Card.Content>
-		</Card.Root>
+		<section className="newspack-pricing-rules__impact" aria-labelledby="newspack-pricing-rules-impact-heading">
+			<h3 id="newspack-pricing-rules-impact-heading" className="screen-reader-text">
+				{ __( 'Catalog impact', 'newspack-plugin' ) }
+			</h3>
+			<ImpactStats totalMatching={ stats.total_matching } countLimited={ stats.count_limited } audience={ stats.audience } />
+			{ stats.total_matching === 0 ? (
+				<p className="newspack-pricing-rules__muted">{ __( 'No active pricing rules are affecting products yet.', 'newspack-plugin' ) }</p>
+			) : (
+				<Button variant="secondary" onClick={ open }>
+					{ __( 'View Affected Products', 'newspack-plugin' ) }
+				</Button>
+			) }
+			{ isOpen && (
+				<Modal title={ __( 'Affected Products', 'newspack-plugin' ) } size="large" onRequestClose={ () => setIsOpen( false ) }>
+					{ hasError && (
+						<p className="newspack-pricing-rules__muted" role="alert">
+							{ __( 'Could not load the affected products. Please try again.', 'newspack-plugin' ) }
+						</p>
+					) }
+					{ ! hasError && ! detail && (
+						<VStack className="newspack-pricing-rules__modal-loading" alignment="center" justify="center" role="status">
+							<Spinner />
+							<span className="screen-reader-text">{ __( 'Loading the affected products…', 'newspack-plugin' ) }</span>
+						</VStack>
+					) }
+					{ ! hasError && emptyReason && <ImpactEmpty reason={ emptyReason } /> }
+					{ ! hasError && detail && ! emptyReason && (
+						<>
+							{ note && <p className="newspack-pricing-rules__muted">{ note }</p> }
+							<ImpactTable
+								baseline={ detail.sample }
+								segmentGroups={ detail.segment_groups ?? [] }
+								currency={ detail.currency }
+								framed={ false }
+								collapsible={ false }
+							/>
+						</>
+					) }
+				</Modal>
+			) }
+		</section>
 	);
 }
