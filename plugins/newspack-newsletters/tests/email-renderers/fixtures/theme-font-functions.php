@@ -43,6 +43,7 @@ if ( ! function_exists( 'newspack_font_stack' ) ) {
 				$font = '"' . str_replace( [ '\\', '"' ], [ '\\\\', '\\"' ], $font ) . '"';
 			}
 		}
+		unset( $font );
 		return implode( ',', $fonts );
 	}
 }

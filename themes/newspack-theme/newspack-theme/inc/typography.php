@@ -175,6 +175,11 @@ function newspack_get_font_stacks_as_select_choices() {
  * and control characters removed. Generic family keywords stay unquoted so a
  * stack always ends in a real generic.
  *
+ * Mirrored by newspack-newsletters' test fixture at
+ * tests/email-renderers/fixtures/theme-font-functions.php, which stands in for
+ * this function when the theme is not loaded; changes to the escaping here need
+ * to be carried over there.
+ *
  * @param string $primary_font Primary font name.
  * @param string $fallback_id  Key of newspack_get_font_stacks(); unknown ids
  *                             take the serif stack.
@@ -191,6 +196,7 @@ function newspack_font_stack( $primary_font, $fallback_id ) {
 			$font = '"' . str_replace( array( '\\', '"' ), array( '\\\\', '\\"' ), $font ) . '"';
 		}
 	}
+	unset( $font );
 	return implode( ',', $fonts );
 }
 
@@ -258,10 +264,10 @@ function newspack_font_family_stacks() {
  * The values reference the theme's own CSS variables so saved content tracks
  * Customizer font changes with no re-save; the resolved stack rides along as
  * the var() fallback for feeds and other contexts that print global styles
- * without the theme stylesheet. Existing theme-origin presets are appended
- * to, not replaced. With
- * the Gutenberg plugin active the resolver passes WP_Theme_JSON_Data_Gutenberg,
- * a sibling class rather than a subclass, so the parameter stays untyped.
+ * without the theme stylesheet. Existing theme-origin presets are appended to,
+ * not replaced. With the Gutenberg plugin active the resolver passes
+ * WP_Theme_JSON_Data_Gutenberg, a sibling class rather than a subclass, so the
+ * parameter stays untyped.
  *
  * @param WP_Theme_JSON_Data|WP_Theme_JSON_Data_Gutenberg $theme_json Theme JSON data.
  * @return WP_Theme_JSON_Data|WP_Theme_JSON_Data_Gutenberg
@@ -269,6 +275,9 @@ function newspack_font_family_stacks() {
 function newspack_font_family_presets( $theme_json ) {
 	$data     = $theme_json->get_data();
 	$families = $data['settings']['typography']['fontFamilies'] ?? array();
+	// WP_Theme_JSON keys presets by origin internally, so a non-empty list comes
+	// back nested under 'theme'; appending to the nested array would double-nest
+	// it on the way back in and drop the existing presets.
 	if ( isset( $families['theme'] ) ) {
 		$families = $families['theme'];
 	}
