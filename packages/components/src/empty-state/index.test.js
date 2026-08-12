@@ -10,7 +10,11 @@ import EmptyState from '.';
 
 describe( 'EmptyState.Root', () => {
 	it( 'renders the four-column grid spine', () => {
-		const { container } = render( <EmptyState.Root>body</EmptyState.Root> );
+		const { container } = render(
+			<EmptyState.Root>
+				<p>body</p>
+			</EmptyState.Root>
+		);
 		const grid = container.querySelector( '.newspack-empty-state' );
 		expect( grid ).toHaveClass( 'newspack-grid' );
 		expect( grid ).toHaveClass( 'newspack-grid__columns-4' );
@@ -19,7 +23,11 @@ describe( 'EmptyState.Root', () => {
 
 	// grid/style.scss matches on these as plain attributes, so they are a contract.
 	it( 'gives the inner stack the start and end attributes the Grid stylesheet matches on', () => {
-		const { container } = render( <EmptyState.Root>body</EmptyState.Root> );
+		const { container } = render(
+			<EmptyState.Root>
+				<p>body</p>
+			</EmptyState.Root>
+		);
 		const stack = container.querySelector( '.newspack-empty-state' ).firstElementChild;
 		expect( stack ).toHaveAttribute( 'start', '2' );
 		expect( stack ).toHaveAttribute( 'end', '4' );
@@ -28,12 +36,22 @@ describe( 'EmptyState.Root', () => {
 	// Consumers key `:has()` selectors off this class to restyle the page around an
 	// empty state, so losing it changes their layout without failing anything.
 	it( 'merges className onto the grid', () => {
-		const { container } = render( <EmptyState.Root className="consumer-empty-state">body</EmptyState.Root> );
+		const { container } = render(
+			<EmptyState.Root className="consumer-empty-state">
+				<p>body</p>
+			</EmptyState.Root>
+		);
 		expect( container.querySelector( '.newspack-empty-state' ) ).toHaveClass( 'consumer-empty-state' );
 	} );
 
+	// Elements, not a bare string: the stack keeps a lone string but drops one sitting
+	// beside an element, which is why the README tells consumers to wrap loose text.
 	it( 'renders its children', () => {
-		render( <EmptyState.Root>body</EmptyState.Root> );
+		render(
+			<EmptyState.Root>
+				<p>body</p>
+			</EmptyState.Root>
+		);
 		expect( screen.getByText( 'body' ) ).toBeInTheDocument();
 	} );
 } );
@@ -130,6 +148,9 @@ describe( 'EmptyState.Actions', () => {
 		const actions = container.querySelector( '.newspack-empty-state__actions' );
 		expect( actions ).toBeInTheDocument();
 		expect( actions ).toHaveStyle( { flexDirection: 'column' } );
+		// Pinned because VStack's own default is `stretch`: without alignment="center"
+		// the buttons would go full-bleed while flexDirection stayed correct.
+		expect( actions ).toHaveStyle( { alignItems: 'center' } );
 	} );
 
 	it( 'throws outside Root', () => {
