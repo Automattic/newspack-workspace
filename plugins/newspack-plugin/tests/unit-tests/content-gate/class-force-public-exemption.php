@@ -11,6 +11,7 @@
 
 use Newspack\Content_Gate;
 use Newspack\Content_Restriction_Control;
+use Newspack\Tests\Content_Gate\Traits\Trait_Restriction_Cache_Test;
 
 /**
  * Tests that Memberships' force-public flag stands in for a missing exemption.
@@ -19,11 +20,12 @@ use Newspack\Content_Restriction_Control;
  */
 class Force_Public_Exemption_Test extends WP_UnitTestCase {
 
+	use Trait_Restriction_Cache_Test;
+
 	/**
-	 * Reset per-request state and any filter a case added.
+	 * Unregister the exemption meta between cases.
 	 */
 	public function tear_down() {
-		remove_all_filters( 'newspack_content_gate_respect_memberships_force_public' );
 		foreach ( array_column( (array) Content_Restriction_Control::get_available_post_types(), 'value' ) as $subtype ) {
 			unregister_meta_key( 'post', Content_Restriction_Control::IS_EXEMPT_META_KEY, $subtype );
 		}
@@ -40,25 +42,12 @@ class Force_Public_Exemption_Test extends WP_UnitTestCase {
 			define( 'NEWSPACK_CONTENT_GATES', true );
 		}
 		Content_Restriction_Control::register_meta();
-		$this->reset_restriction_caches();
-	}
-
-	/**
-	 * Clear the per-request gate memoisation between cases.
-	 */
-	private function reset_restriction_caches() {
-		foreach ( [ 'post_gates_map', 'post_gate_id_map', 'post_gate_layout_id_map' ] as $property ) {
-			$reflected = new ReflectionProperty( Content_Restriction_Control::class, $property );
-			$reflected->setAccessible( true );
-			$reflected->setValue( null, [] );
-		}
+		$this->reset_restriction_cache();
 		Content_Gate::flush_gates_cache();
 	}
 
 	/**
 	 * Create a published gate that puts every post behind registration.
-	 *
-	 * @return int The gate post ID.
 	 */
 	private function create_registration_gate() {
 		$gate_id = Content_Gate::create_gate(
@@ -72,12 +61,11 @@ class Force_Public_Exemption_Test extends WP_UnitTestCase {
 					],
 				],
 				'registration'  => [ 'active' => true ],
-			],
-			Content_Gate::GATE_CPT
+			]
 		);
 		$this->assertNotWPError( $gate_id, 'Gate fixture could not be created.' );
-		$this->reset_restriction_caches();
-		return $gate_id;
+		$this->reset_restriction_cache();
+		Content_Gate::flush_gates_cache();
 	}
 
 	/**
@@ -202,7 +190,8 @@ class Force_Public_Exemption_Test extends WP_UnitTestCase {
 			metadata_exists( 'post', $post_id, Content_Restriction_Control::IS_EXEMPT_META_KEY ),
 			'Turning the toggle off must write a row rather than leaving the meta absent.'
 		);
-		$this->reset_restriction_caches();
+		$this->reset_restriction_cache();
+		Content_Gate::flush_gates_cache();
 		$this->assertTrue(
 			Content_Restriction_Control::is_post_restricted( false, $post_id, 0 ),
 			'Once turned off, the exemption must stay off despite the Memberships flag.'
@@ -227,6 +216,68 @@ class Force_Public_Exemption_Test extends WP_UnitTestCase {
 		$this->assertTrue(
 			Content_Restriction_Control::is_post_restricted( false, $post_id, 0 ),
 			'A suppressed fallback must leave the gate enforcing.'
+		);
+	}
+
+	/**
+	 * The fallback must stay a fallback. The editor loads every meta value it reads
+	 * from REST and posts the whole set back whenever any one of them is edited, so
+	 * a synthesised exemption would otherwise be written to the database as a real
+	 * row -- silently decoupling the post from Memberships and from the opt-out
+	 * filter, on nothing more than someone opening the post and saving it.
+	 */
+	public function test_an_editor_save_does_not_persist_a_synthesised_exemption() {
+		$this->enable_gates_and_register();
+		$post_id = self::factory()->post->create( [ 'post_status' => 'publish' ] );
+		update_post_meta( $post_id, Content_Restriction_Control::WC_FORCE_PUBLIC_META_KEY, 'yes' );
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'editor' ] ) );
+		rest_get_server();
+
+		$read = new WP_REST_Request( 'GET', '/wp/v2/posts/' . $post_id );
+		$read->set_param( 'context', 'edit' );
+		$meta = rest_do_request( $read )->get_data()['meta'];
+		$this->assertTrue( $meta[ Content_Restriction_Control::IS_EXEMPT_META_KEY ], 'Guard: the editor must be reading the synthesised value.' );
+
+		$save = new WP_REST_Request( 'POST', '/wp/v2/posts/' . $post_id );
+		$save->set_body_params( [ 'meta' => $meta ] );
+		$this->assertSame( 200, rest_do_request( $save )->get_status() );
+
+		$this->assertFalse(
+			metadata_exists( 'post', $post_id, Content_Restriction_Control::IS_EXEMPT_META_KEY ),
+			'A synthesised exemption must not be written to the database by an ordinary save.'
+		);
+
+		delete_post_meta( $post_id, Content_Restriction_Control::WC_FORCE_PUBLIC_META_KEY );
+		$this->assertFalse(
+			(bool) get_post_meta( $post_id, Content_Restriction_Control::IS_EXEMPT_META_KEY, true ),
+			'Once Memberships no longer forces the post public, the exemption must go with it.'
+		);
+	}
+
+	/**
+	 * The fallback covers the post types the exemption itself covers, and no others.
+	 * Memberships writes its flag to products and attachments too, and a gate can
+	 * reach those through a specific-posts rule -- but nothing there offers a way to
+	 * see or undo an exemption.
+	 */
+	public function test_the_fallback_is_scoped_to_supported_post_types() {
+		$this->enable_gates_and_register();
+		$attachment_id = self::factory()->post->create(
+			[
+				'post_type'   => 'attachment',
+				'post_status' => 'inherit',
+			] 
+		);
+		update_post_meta( $attachment_id, Content_Restriction_Control::WC_FORCE_PUBLIC_META_KEY, 'yes' );
+
+		$this->assertNotContains(
+			'attachment',
+			array_column( (array) Content_Restriction_Control::get_available_post_types(), 'value' ),
+			'Guard: this case only means something while attachments are out of scope.'
+		);
+		$this->assertFalse(
+			(bool) get_post_meta( $attachment_id, Content_Restriction_Control::IS_EXEMPT_META_KEY, true ),
+			'A post type the exemption is not registered for must not pick one up from the fallback.'
 		);
 	}
 

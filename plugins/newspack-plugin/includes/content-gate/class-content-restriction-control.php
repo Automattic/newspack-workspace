@@ -69,7 +69,7 @@ class Content_Restriction_Control {
 		add_action( 'init', [ __CLASS__, 'register_meta_guards' ] );
 		add_filter( 'newspack_is_post_restricted', [ __CLASS__, 'is_post_restricted' ], 10, 2 );
 		// Priority 20 so the fallback wins over the meta key's registered default.
-		add_filter( 'default_post_metadata', [ __CLASS__, 'default_exempt_from_force_public' ], 20, 4 );
+		add_filter( 'default_post_metadata', [ __CLASS__, 'filter_default_exemption_meta' ], 20, 4 );
 	}
 
 	/**
@@ -516,39 +516,89 @@ class Content_Restriction_Control {
 	 * when no exemption of our own is recorded for it.
 	 *
 	 * Keeps posts a publisher exempted under Memberships readable once a migrated
-	 * site's gates start enforcing. A recorded exemption always wins, including a falsy
-	 * one, so turning the toggle off is respected.
+	 * site's gates start enforcing. An exemption recorded here wins for as long as it
+	 * is recorded, including a falsy one -- which is why this answers the default
+	 * rather than the read: the default is only consulted when no row exists.
 	 *
-	 * @param mixed  $value     Default value to return.
-	 * @param int    $object_id Post ID.
-	 * @param string $meta_key  Meta key being read.
-	 * @param bool   $single    Whether a single value was requested.
+	 * Answers keyed reads only, so a whole-object meta read will not carry the key.
+	 *
+	 * @param mixed  $value    Default value to return.
+	 * @param int    $post_id  Post ID.
+	 * @param string $meta_key Meta key being read.
+	 * @param bool   $single   Whether a single value was requested.
 	 *
 	 * @return mixed
 	 */
-	public static function default_exempt_from_force_public( $value, $object_id, $meta_key, $single ) {
+	public static function filter_default_exemption_meta( $value, $post_id, $meta_key, $single ) {
 		if ( self::IS_EXEMPT_META_KEY !== $meta_key || ! Content_Gate::is_newspack_feature_enabled() ) {
+			return $value;
+		}
+
+		// Matches core's own default-metadata guard.
+		if ( wp_installing() ) {
+			return $value;
+		}
+
+		// Memberships stores 'yes' or 'no', and 'no' is a truthy string.
+		if ( 'yes' !== get_post_meta( $post_id, self::WC_FORCE_PUBLIC_META_KEY, true ) ) {
+			return $value;
+		}
+
+		// Stay within the post types the exemption is registered and editable for.
+		if ( ! in_array( get_post_type( $post_id ), array_column( (array) self::get_available_post_types(), 'value' ), true ) ) {
 			return $value;
 		}
 
 		/**
 		 * Filters whether a Memberships force-public flag stands in for a missing
-		 * exemption. Turn off on sites that have finished migrating.
+		 * exemption. Turn off on sites that have finished migrating, having first
+		 * recorded the exemptions the flag was standing in for.
 		 *
-		 * @param bool $respect   Whether to honor the Memberships flag. Default true.
-		 * @param int  $object_id Post ID.
+		 * @param bool $respect Whether to honor the Memberships flag. Default true.
+		 * @param int  $post_id Post ID.
 		 */
-		if ( ! apply_filters( 'newspack_content_gate_respect_memberships_force_public', true, $object_id ) ) {
+		if ( ! apply_filters( 'newspack_content_gate_respect_memberships_force_public', true, $post_id ) ) {
 			return $value;
 		}
 
-		// Memberships stores 'yes' or 'no', and 'no' is a truthy string.
-		if ( 'yes' !== get_post_meta( $object_id, self::WC_FORCE_PUBLIC_META_KEY, true ) ) {
-			return $value;
-		}
-
-		// Non-single reads expect an array of values.
 		return $single ? true : [ true ];
+	}
+
+	/**
+	 * Drop an exemption the editor is only echoing back at us.
+	 *
+	 * The block editor reads every meta value from REST and returns the whole set
+	 * whenever any one of them is edited, so without this a value this class
+	 * synthesized would be saved as a real row by nothing more than opening a post
+	 * and saving it. That row would then outlive the Memberships flag it came from
+	 * and ignore the opt-out filter, quietly making the exemption permanent.
+	 *
+	 * An explicit falsy value is left alone: that one is a decision, and recording
+	 * it is what makes turning the toggle off stick.
+	 *
+	 * @param stdClass        $prepared_post Prepared post object (returned unchanged).
+	 * @param WP_REST_Request $request       Incoming request.
+	 * @return stdClass
+	 */
+	public static function strip_inherited_exempt_meta( $prepared_post, $request ) {
+		$meta = $request['meta'];
+		if ( ! is_array( $meta ) || empty( $meta[ self::IS_EXEMPT_META_KEY ] ) ) {
+			return $prepared_post;
+		}
+
+		$post_id = isset( $prepared_post->ID ) ? (int) $prepared_post->ID : 0;
+		if ( ! $post_id || metadata_exists( 'post', $post_id, self::IS_EXEMPT_META_KEY ) ) {
+			return $prepared_post;
+		}
+
+		// Ask the fallback itself, so the two can't drift apart.
+		if ( true !== self::filter_default_exemption_meta( false, $post_id, self::IS_EXEMPT_META_KEY, true ) ) {
+			return $prepared_post;
+		}
+
+		unset( $meta[ self::IS_EXEMPT_META_KEY ] );
+		$request['meta'] = $meta;
+		return $prepared_post;
 	}
 
 	/**
@@ -586,6 +636,7 @@ class Content_Restriction_Control {
 		$post_types = array_column( (array) self::get_available_post_types(), 'value' );
 		foreach ( $post_types as $post_type ) {
 			\add_filter( "rest_pre_insert_{$post_type}", [ __CLASS__, 'strip_unauthorized_exempt_meta' ], 10, 2 );
+			\add_filter( "rest_pre_insert_{$post_type}", [ __CLASS__, 'strip_inherited_exempt_meta' ], 10, 2 );
 		}
 	}
 
