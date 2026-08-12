@@ -627,6 +627,16 @@ class Guest_Contributor_Role {
 			$errors->remove( 'user_login' );
 		}
 
+		// Since WordPress 7.0.3, edit_user() validates the submitted email at
+		// assignment, so an empty field adds invalid_email before this action
+		// fires. Clear it only when the submission is empty — a malformed,
+		// non-empty address must keep failing validation.
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- Nonce verification happens in wp-admin/user-new.php before this hook.
+		$submitted_email = isset( $_POST['email'] ) ? trim( sanitize_text_field( wp_unslash( $_POST['email'] ) ) ) : '';
+		if ( '' === $submitted_email && ! empty( $errors->errors['invalid_email'] ) ) {
+			$errors->remove( 'invalid_email' );
+		}
+
 		// We still don't want users with duplicate emails.
 		if ( ! empty( $errors->errors['email_exists'] ) ) {
 			return $errors;
