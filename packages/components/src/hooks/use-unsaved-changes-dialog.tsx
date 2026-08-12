@@ -1,7 +1,7 @@
 /**
  * WordPress dependencies.
  */
-import { useEffect, useRef } from '@wordpress/element';
+import { useCallback, useEffect, useRef } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 
 /**
@@ -50,7 +50,7 @@ function useUnsavedChangesDialog( { when }: UseUnsavedChangesDialogOptions ) {
 	const { confirmDialog, requestConfirm, cancelConfirm } = useConfirmDialog( {
 		when,
 		message: __( 'You have unsaved changes that will be lost. Discard changes?', 'newspack-plugin' ),
-		confirmButtonText: __( 'Discard changes', 'newspack-plugin' ),
+		confirmButtonText: __( 'Discard Changes', 'newspack-plugin' ),
 		// Hidden, but still the dialog's accessible name.
 		title: __( 'Unsaved changes', 'newspack-plugin' ),
 		hideTitle: true,
@@ -137,7 +137,16 @@ function useUnsavedChangesDialog( { when }: UseUnsavedChangesDialogOptions ) {
 		return () => window.removeEventListener( 'beforeunload', handler );
 	}, [ when ] );
 
-	return { confirmDialog, requestConfirm, cancelConfirm };
+	// Escape hatch for an action that navigates on its own — a handoff that
+	// POSTs and then assigns `window.location` — once the dialog has already
+	// been confirmed. Left armed, the beforeunload guard would draw a second,
+	// native prompt on top of it. Call it immediately before navigating, so a
+	// failed action leaves the guard in place.
+	const allowNextUnload = useCallback( () => {
+		isNavigatingRef.current = true;
+	}, [] );
+
+	return { confirmDialog, requestConfirm, cancelConfirm, allowNextUnload };
 }
 
 export default useUnsavedChangesDialog;
