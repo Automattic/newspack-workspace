@@ -150,6 +150,7 @@ class Subscribe_Block_Response_Test extends WP_UnitTestCase {
 
 		$this->assertArrayHasKey( 'current_page_url', $response['metadata'] );
 		$this->assertArrayHasKey( 'newspack_popup_id', $response['metadata'] );
+		$this->assertArrayHasKey( 'newsletters_subscription_method', $response['metadata'] );
 		$this->assertArrayNotHasKey( 'email_address', $response['metadata'], 'metadata must not carry provider fields.' );
 		$this->assertArrayNotHasKey( 'merge_fields', $response['metadata'], 'metadata must not carry provider fields.' );
 	}
@@ -169,5 +170,123 @@ class Subscribe_Block_Response_Test extends WP_UnitTestCase {
 
 		$this->assertSame( 'Sorry, an error has occurred.', $response['message'] );
 		$this->assertArrayNotHasKey( 'data', $response, 'The raw WP_Error must not be returned.' );
+	}
+
+	/**
+	 * Reader Activation absent or disabled: the registration keys are simply
+	 * not in the payload. newspack-newsletters releases independently of
+	 * newspack-plugin, so this is an ordinary production configuration, and the
+	 * response must stay well-formed without them.
+	 */
+	public function test_response_is_well_formed_without_registration_keys() {
+		$response = $this->capture_response(
+			[
+				'newspack_newsletters_subscribe' => '1',
+				'metadata'                       => [ 'current_page_url' => 'https://example.com/post' ],
+			]
+		);
+
+		$this->assertSame( 1, $response['newspack_newsletters_subscribed'] );
+		$this->assertArrayHasKey( 'newspack_newsletters_subscribe', $response, 'Resubmission depends on this key.' );
+		foreach ( [ 'registered', 'verified', 'verification_nonce', 'email' ] as $key ) {
+			$this->assertArrayNotHasKey( $key, $response, 'Registration keys must be absent, not empty.' );
+		}
+	}
+
+	/**
+	 * A provider that returns a sparse record must not break the filter. Only
+	 * Mailchimp returns a rich contact object; others return very little.
+	 */
+	public function test_sparse_provider_record_is_handled() {
+		$response = $this->capture_response( [ 'id' => '42' ] );
+
+		$this->assertSame( 1, $response['newspack_newsletters_subscribed'] );
+		$this->assertArrayNotHasKey( 'id', $response );
+	}
+
+	/**
+	 * Mailchimp's double opt-in path sets metadata.status; it must survive.
+	 */
+	public function test_double_optin_status_survives() {
+		$response = $this->capture_response(
+			[ 'metadata' => [ 'status' => 'pending' ] ]
+		);
+
+		$this->assertSame( 'pending', $response['metadata']['status'] );
+	}
+
+	/**
+	 * A submission from a popup carries a distinct registration_method, which
+	 * the front end reports as reader activity.
+	 */
+	public function test_popup_registration_method_survives() {
+		$response = $this->capture_response(
+			[
+				'metadata' => [
+					'registration_method' => 'newsletters-subscription-popup',
+					'newspack_popup_id'   => 7,
+				],
+			]
+		);
+
+		$this->assertSame( 'newsletters-subscription-popup', $response['metadata']['registration_method'] );
+		$this->assertSame( 7, $response['metadata']['newspack_popup_id'] );
+	}
+
+	/**
+	 * `metadata.registered` is what `view.js` gates the `reader_registered`
+	 * Reader Activation dispatch on. It is distinct from the top-level
+	 * `registered` flag asserted in test_every_consumed_key_survives — the
+	 * nested copy is what a newly-registered reader's subscription actually
+	 * depends on for that activity to fire.
+	 */
+	public function test_metadata_registered_survives() {
+		$response = $this->capture_response(
+			[
+				'metadata' => [
+					'registered'          => '1',
+					'registration_method' => 'newsletters-subscription',
+				],
+			]
+		);
+
+		$this->assertSame( '1', $response['metadata']['registered'] );
+	}
+
+	/**
+	 * `gate_post_id` is never set by this block — it originates in
+	 * newspack-plugin's content gate — but `view.js` reads it defensively when
+	 * present, so a gated subscription must still carry it through.
+	 */
+	public function test_gate_post_id_survives() {
+		$response = $this->capture_response(
+			[ 'metadata' => [ 'gate_post_id' => 123 ] ]
+		);
+
+		$this->assertSame( 123, $response['metadata']['gate_post_id'] );
+	}
+
+	/**
+	 * The non-JSON path redirects instead of emitting JSON, and is unchanged by
+	 * this work. Asserting it here means a future edit to the filter that
+	 * accidentally reaches the redirect branch fails a test.
+	 */
+	public function test_non_json_request_does_not_emit_json() {
+		unset( $_SERVER['HTTP_ACCEPT'] );
+		$_SERVER['REQUEST_METHOD'] = 'GET';
+
+		ob_start();
+		try {
+			send_form_response( [ 'merge_fields' => [ 'FNAME' => 'Ada' ] ] );
+		} catch ( WPDieException | \PHPUnit\Framework\Error\Warning $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch
+			// wp_safe_redirect() reaches header() here, not wp_die(): this test suite's
+			// bootstrap already emits output before any test runs, so PHP's own
+			// "headers already sent" warning fires first, and PHPUnit converts it to a
+			// catchable Warning. Either termination path leaves the assertion below as
+			// the real check: no response body was sent.
+		}
+		$output = ob_get_clean();
+
+		$this->assertSame( '', trim( $output ), 'The redirect branch must not emit a response body.' );
 	}
 }
