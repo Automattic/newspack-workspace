@@ -458,15 +458,22 @@ function send_form_response( $data ) {
 		if ( $is_error ) {
 			// Only the reader-facing message. The WP_Error's own data can carry the
 			// provider's raw response, and view.js reads nothing but `message` and
-			// the HTTP status on this branch.
+			// the HTTP status on this branch. That also drops get_error_code() from
+			// what a caller can see; view.js doesn't read that either, so this is
+			// deliberate, not an oversight.
 			$message = $data->get_error_message();
 			\wp_send_json( compact( 'message' ), 400 );
 			exit;
 		} else {
 			$data['newspack_newsletters_subscribed'] = 1;
 			$data                                    = array_intersect_key( $data, array_flip( RESPONSE_KEYS ) );
-			if ( isset( $data['metadata'] ) && is_array( $data['metadata'] ) ) {
-				$data['metadata'] = array_intersect_key( $data['metadata'], array_flip( METADATA_KEYS ) );
+			if ( isset( $data['metadata'] ) ) {
+				// `metadata` is itself an allowlisted key, so a non-array value under it
+				// would otherwise skip this nested filter and reach the caller as-is.
+				// Normalizing to an empty array keeps the shape stable for view.js, which
+				// reads `metadata` on every response, rather than passing through
+				// whatever shape happened to arrive.
+				$data['metadata'] = is_array( $data['metadata'] ) ? array_intersect_key( $data['metadata'], array_flip( METADATA_KEYS ) ) : [];
 			}
 			\wp_send_json( $data, 200 );
 			exit;
