@@ -238,9 +238,26 @@ class Force_Public_Exemption_Test extends WP_UnitTestCase {
 		$meta = rest_do_request( $read )->get_data()['meta'];
 		$this->assertTrue( $meta[ Content_Restriction_Control::IS_EXEMPT_META_KEY ], 'Guard: the editor must be reading the synthesised value.' );
 
+		// The editor returns the whole set because some other value in it was edited.
+		register_post_meta(
+			'post',
+			'newspack_probe_meta',
+			[
+				'show_in_rest' => true,
+				'single'       => true,
+				'type'         => 'string',
+			] 
+		);
+		$meta['newspack_probe_meta'] = 'edited';
+
 		$save = new WP_REST_Request( 'POST', '/wp/v2/posts/' . $post_id );
 		$save->set_body_params( [ 'meta' => $meta ] );
-		$this->assertSame( 200, rest_do_request( $save )->get_status() );
+		$saved = rest_do_request( $save );
+		$this->assertSame( 200, $saved->get_status() );
+		$this->assertTrue(
+			$saved->get_data()['meta'][ Content_Restriction_Control::IS_EXEMPT_META_KEY ],
+			'The post is still exempt, so the response must still say so.'
+		);
 
 		$this->assertFalse(
 			metadata_exists( 'post', $post_id, Content_Restriction_Control::IS_EXEMPT_META_KEY ),
@@ -255,10 +272,10 @@ class Force_Public_Exemption_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The fallback covers the post types the exemption itself covers, and no others.
-	 * Memberships writes its flag to products and attachments too, and a gate can
-	 * reach those through a specific-posts rule -- but nothing there offers a way to
-	 * see or undo an exemption.
+	 * The fallback covers the post types the exemption itself is registered for, and
+	 * no others. Memberships writes its flag to attachments too, and a gate can reach
+	 * one through a specific-posts rule -- but there is no toggle there to see or undo
+	 * an exemption, and neither save guard is registered for it.
 	 */
 	public function test_the_fallback_is_scoped_to_supported_post_types() {
 		$this->enable_gates_and_register();
@@ -266,7 +283,7 @@ class Force_Public_Exemption_Test extends WP_UnitTestCase {
 			[
 				'post_type'   => 'attachment',
 				'post_status' => 'inherit',
-			] 
+			]
 		);
 		update_post_meta( $attachment_id, Content_Restriction_Control::WC_FORCE_PUBLIC_META_KEY, 'yes' );
 
@@ -278,6 +295,32 @@ class Force_Public_Exemption_Test extends WP_UnitTestCase {
 		$this->assertFalse(
 			(bool) get_post_meta( $attachment_id, Content_Restriction_Control::IS_EXEMPT_META_KEY, true ),
 			'A post type the exemption is not registered for must not pick one up from the fallback.'
+		);
+	}
+
+	/**
+	 * Only keyed reads get the fallback. Whole-object meta reads must not carry it,
+	 * which is what stops an inferred exemption travelling to other posts and other
+	 * sites -- newspack-network distributes post meta with exactly such a read.
+	 */
+	public function test_a_whole_object_meta_read_does_not_carry_the_fallback() {
+		$this->enable_gates_and_register();
+		$post_id = self::factory()->post->create();
+		update_post_meta( $post_id, Content_Restriction_Control::WC_FORCE_PUBLIC_META_KEY, 'yes' );
+
+		$this->assertTrue(
+			(bool) get_post_meta( $post_id, Content_Restriction_Control::IS_EXEMPT_META_KEY, true ),
+			'Guard: the keyed read must be answering with the fallback.'
+		);
+		$this->assertArrayNotHasKey(
+			Content_Restriction_Control::IS_EXEMPT_META_KEY,
+			get_post_meta( $post_id ),
+			'A whole-object read must not carry an exemption that was never recorded.'
+		);
+		$this->assertArrayNotHasKey(
+			Content_Restriction_Control::IS_EXEMPT_META_KEY,
+			get_post_custom( $post_id ),
+			'get_post_custom() must not carry it either.'
 		);
 	}
 

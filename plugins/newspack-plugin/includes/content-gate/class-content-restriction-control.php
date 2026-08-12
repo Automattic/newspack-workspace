@@ -544,15 +544,16 @@ class Content_Restriction_Control {
 			return $value;
 		}
 
-		// Stay within the post types the exemption is registered and editable for.
-		if ( ! in_array( get_post_type( $post_id ), array_column( (array) self::get_available_post_types(), 'value' ), true ) ) {
+		// Only where the exemption is registered, so an inferred one always has a
+		// toggle to see it and the save guards behind it.
+		if ( ! registered_meta_key_exists( 'post', self::IS_EXEMPT_META_KEY, get_post_type( $post_id ) ) ) {
 			return $value;
 		}
 
 		/**
 		 * Filters whether a Memberships force-public flag stands in for a missing
-		 * exemption. Turn off on sites that have finished migrating, having first
-		 * recorded the exemptions the flag was standing in for.
+		 * exemption. Turning it off re-gates every post whose exemption was only
+		 * inferred, so record those exemptions first.
 		 *
 		 * @param bool $respect Whether to honor the Memberships flag. Default true.
 		 * @param int  $post_id Post ID.
@@ -574,11 +575,12 @@ class Content_Restriction_Control {
 	 * and ignore the opt-out filter, quietly making the exemption permanent.
 	 *
 	 * An explicit falsy value is left alone: that one is a decision, and recording
-	 * it is what makes turning the toggle off stick.
+	 * it is what makes turning the toggle off stick. A post being created has no
+	 * ID yet and nothing to inherit from, so it is skipped.
 	 *
-	 * @param stdClass        $prepared_post Prepared post object (returned unchanged).
-	 * @param WP_REST_Request $request       Incoming request.
-	 * @return stdClass
+	 * @param stdClass|WP_Error $prepared_post Prepared post object (returned unchanged).
+	 * @param WP_REST_Request   $request       Incoming request.
+	 * @return stdClass|WP_Error
 	 */
 	public static function strip_inherited_exempt_meta( $prepared_post, $request ) {
 		$meta = $request['meta'];
@@ -626,11 +628,12 @@ class Content_Restriction_Control {
 	}
 
 	/**
-	 * Register the REST guard that strips the exemption meta from unauthorized
-	 * saves. Registered unconditionally — independent of whether the meta itself
-	 * is registered — so its lifetime never depends on when the content-gate
-	 * feature flag resolves. It is a harmless no-op when the key is absent from
-	 * the request.
+	 * Register the REST guards that keep the exemption meta out of saves that
+	 * should not carry it: one for a user who cannot toggle it, one for a value
+	 * this class inferred rather than a person choosing it. Registered
+	 * unconditionally — independent of whether the meta itself is registered —
+	 * so their lifetime never depends on when the content-gate feature flag
+	 * resolves. Both are harmless no-ops when the key is absent from the request.
 	 */
 	public static function register_meta_guards() {
 		$post_types = array_column( (array) self::get_available_post_types(), 'value' );
