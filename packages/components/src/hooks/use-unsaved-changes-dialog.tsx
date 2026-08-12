@@ -39,17 +39,20 @@ function isSameOriginNavigation( link: HTMLAnchorElement ): boolean {
  * messaging, intercepts same-origin link clicks so the dialog fires instead
  * of a silent navigation, and adds a `beforeunload` listener as the last-resort
  * guard for refresh / tab-close (browser-native, cannot be styled). The
- * returned `confirmDialog` element must be rendered in JSX.
+ * returned `confirmDialog` element must be rendered in JSX, and `requestConfirm`
+ * and `cancelConfirm` behave as `useConfirmDialog` documents them.
  *
  * Single-consumer constraint: the click handler is attached at the document
  * level in capture phase. Two simultaneously-active instances will both fire
  * a dialog. A development-only warning surfaces this.
  */
 function useUnsavedChangesDialog( { when }: UseUnsavedChangesDialogOptions ) {
-	const { confirmDialog, requestConfirm } = useConfirmDialog( {
+	const { confirmDialog, requestConfirm, cancelConfirm } = useConfirmDialog( {
 		when,
 		message: __( 'You have unsaved changes that will be lost. Discard changes?', 'newspack-plugin' ),
 		confirmButtonText: __( 'Discard Changes', 'newspack-plugin' ),
+		// Hidden, but still the dialog's accessible name.
+		title: __( 'Unsaved changes', 'newspack-plugin' ),
 		hideTitle: true,
 	} );
 
@@ -143,7 +146,7 @@ function useUnsavedChangesDialog( { when }: UseUnsavedChangesDialogOptions ) {
 		isNavigatingRef.current = true;
 	}, [] );
 
-	return { confirmDialog, requestConfirm, allowNextUnload };
+	return { confirmDialog, requestConfirm, cancelConfirm, allowNextUnload };
 }
 
 export default useUnsavedChangesDialog;
