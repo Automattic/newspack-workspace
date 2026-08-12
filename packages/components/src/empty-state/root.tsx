@@ -16,9 +16,11 @@ import Grid from '../grid';
 import { EmptyStateContext } from './context';
 import type { EmptyStateRootProps } from './types';
 
-// `start` and `end` are attributes the Grid's own stylesheet matches on, not React
-// props. VStack forwards them to the DOM but does not type them.
-const gridColumn = { start: 2, end: 4 } as React.ComponentProps< 'div' >;
+// `start` and `end` are DOM attributes the Grid stylesheet matches on, not React
+// props: they put the stack in columns 2 and 3 above 1054px, which is what centres
+// the empty state. Dropping them collapses it into the first column, mistyping either
+// spans all four, and both fail silently.
+const gridColumn: { start: number; end: number } = { start: 2, end: 4 };
 
 const Root = ( { size = 'default', className, children }: EmptyStateRootProps ) => {
 	const context = useMemo( () => ( { size } ), [ size ] );
@@ -26,7 +28,7 @@ const Root = ( { size = 'default', className, children }: EmptyStateRootProps ) 
 	return (
 		<EmptyStateContext.Provider value={ context }>
 			<Grid className={ classnames( 'newspack-empty-state', className ) } columns={ 4 } noMargin>
-				<VStack { ...gridColumn } spacing={ 8 }>
+				<VStack { ...( gridColumn as React.ComponentProps< 'div' > ) } spacing={ 8 }>
 					{ children }
 				</VStack>
 			</Grid>

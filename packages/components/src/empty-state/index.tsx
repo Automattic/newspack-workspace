@@ -7,7 +7,7 @@
  */
 import Root from './root';
 
-// A namespace object, matching Drawer. See the README.
+// A namespace object, matching Drawer. See ./README.md.
 export const EmptyState = {
 	Root,
 };
