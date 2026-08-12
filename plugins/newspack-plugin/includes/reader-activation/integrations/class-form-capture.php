@@ -249,27 +249,38 @@ class Form_Capture extends Integration {
 	 */
 	public function get_selectors() {
 		$value     = (string) $this->get_settings_field_value( 'selectors' );
-		$selectors = array_filter(
-			array_map( 'trim', preg_split( '/[\r\n]+/', $value ) ),
-			function ( $selector ) {
-				if ( '' === $selector ) {
-					return false;
-				}
-				foreach ( explode( ',', $selector ) as $part ) {
-					// Skip empty parts: a trailing comma is a plausible
-					// copy-paste from a CSS rule, and dropping the line over it
-					// would silently un-opt-in a valid selector.
-					if ( '' === trim( $part ) ) {
-						continue;
-					}
-					if ( self::is_over_broad_selector( $part ) ) {
-						return false;
-					}
-				}
-				return true;
-			}
-		);
+		$lines     = array_map( 'trim', preg_split( '/[\r\n]+/', $value ) );
+		$selectors = array_filter( array_map( [ __CLASS__, 'normalize_selector' ], $lines ) );
 		return array_values( array_unique( array_merge( [ '.' . self::MARKER_CLASS ], $selectors ) ) );
+	}
+
+	/**
+	 * Reduce one configured line to the selector the client should run, or ''
+	 * to drop it.
+	 *
+	 * Rebuilds the line from its non-empty parts rather than passing it through:
+	 * a trailing comma is a plausible copy-paste from a CSS rule, and an empty
+	 * slot makes the whole list invalid CSS — `querySelectorAll( '#signup,' )`
+	 * throws, so the client discards it and one stray comma takes every
+	 * selector on the line with it.
+	 *
+	 * @param string $line A configured line, possibly a comma-separated list.
+	 *
+	 * @return string The normalized selector, or '' when the line is rejected.
+	 */
+	private static function normalize_selector( string $line ): string {
+		$parts = [];
+		foreach ( explode( ',', $line ) as $part ) {
+			$part = trim( $part );
+			if ( '' === $part ) {
+				continue;
+			}
+			if ( self::is_over_broad_selector( $part ) ) {
+				return '';
+			}
+			$parts[] = $part;
+		}
+		return implode( ', ', $parts );
 	}
 
 	/**

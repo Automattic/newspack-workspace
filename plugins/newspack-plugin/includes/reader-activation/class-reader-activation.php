@@ -2894,8 +2894,10 @@ final class Reader_Activation {
 	 *
 	 * @return bool True if the display name matches either generated construction.
 	 */
-	public static function is_display_name_derived_from_email( $display_name, $email ): bool {
-		if ( empty( $display_name ) || empty( $email ) ) {
+	public static function is_display_name_derived_from_email( string $display_name, string $email ): bool {
+		// '' rather than empty(): a reader at 0@example.com whose display name
+		// is "0" is derived, and empty() would call it not-derived.
+		if ( '' === $display_name || '' === $email ) {
 			return false;
 		}
 		return self::generate_user_nicename( $email ) === $display_name // Current construction (URL-sanitized version of the email address minus domain).

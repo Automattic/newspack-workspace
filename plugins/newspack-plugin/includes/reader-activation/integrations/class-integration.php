@@ -325,12 +325,18 @@ abstract class Integration {
 	 * its cache expires. Narrow, self-healing, and avoided entirely for
 	 * integrations enabled through Integrations::enable().
 	 *
-	 * @return string The seed.
+	 * @param bool $create Whether to create the seed when none is stored.
+	 *                     Pass false on read-only paths; returns '' instead.
+	 *
+	 * @return string The seed, or '' when none is stored and $create is false.
 	 */
-	private function get_registration_key_seed(): string {
+	private function get_registration_key_seed( bool $create = true ): string {
 		$option_name = self::REGISTRATION_SEED_OPTION_PREFIX . $this->id;
 		$seed        = \get_option( $option_name );
 		if ( ! is_string( $seed ) || '' === $seed ) {
+			if ( ! $create ) {
+				return '';
+			}
 			$this->ensure_registration_key_seed();
 			$seed = (string) \get_option( $option_name );
 		}
@@ -387,7 +393,13 @@ abstract class Integration {
 		// token, an asymmetric pair) that inherits or calls this validator would
 		// otherwise accept the framework's static HMAC alongside its own, which
 		// is a permanent bypass of whatever bound it was enforcing.
-		if ( ! hash_equals( $this->get_default_registration_key(), $current ) ) {
+		//
+		// Read-only: this runs on an unauthenticated path, and a custom-scheme
+		// integration should not have a seed written for a key it never emits.
+		// A default-scheme one always has one by now — get_registration_key()
+		// above created it if needed — so a missing seed is itself the answer.
+		$default = $this->get_default_registration_key( false );
+		if ( '' === $default || ! hash_equals( $default, $current ) ) {
 			return false;
 		}
 		return hash_equals( $this->get_legacy_registration_key(), $key );
@@ -397,10 +409,18 @@ abstract class Integration {
 	 * The framework's own registration key derivation, as get_registration_key()
 	 * computes it before any subclass override.
 	 *
-	 * @return string The default-scheme registration key.
+	 * @param bool $create_seed Whether to create the seed when none is stored.
+	 *                          Pass false on read-only paths; returns '' instead.
+	 *
+	 * @return string The default-scheme registration key, or '' when no seed
+	 *                exists and $create_seed is false.
 	 */
-	private function get_default_registration_key(): string {
-		return hash_hmac( 'sha256', $this->id . '|' . $this->get_registration_key_seed(), \wp_salt( 'auth' ) );
+	private function get_default_registration_key( bool $create_seed = true ): string {
+		$seed = $this->get_registration_key_seed( $create_seed );
+		if ( '' === $seed ) {
+			return '';
+		}
+		return hash_hmac( 'sha256', $this->id . '|' . $seed, \wp_salt( 'auth' ) );
 	}
 
 	/**
@@ -411,8 +431,11 @@ abstract class Integration {
 	 * their TTL expires, and the capture client treats an invalid key as
 	 * permanent for the pageview — so without this the submission is lost
 	 * rather than retried. This matters in production today: the ESP
-	 * integration and newspack-manager's Fundraise Up handler both emit the
-	 * legacy key on released sites.
+	 * integration emits the legacy key on released sites and validates through
+	 * this method. (newspack-manager's Fundraise Up handler emits it too, but
+	 * replaces validate_registration_request() wholesale — it authenticates on
+	 * verified supporter identifiers rather than the key — so it never reaches
+	 * this branch and the allowance does nothing for it.)
 	 *
 	 * @todo Remove this method and its branch in validate_registration_request()
 	 *       once the seeded key has been in production for a release cycle

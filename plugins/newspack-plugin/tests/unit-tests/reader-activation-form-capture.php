@@ -122,13 +122,14 @@ class Test_Form_Capture extends WP_UnitTestCase {
 			'A line is dropped whole when any of its selectors matches every form.'
 		);
 
-		// A trailing comma is a plausible copy-paste from a CSS rule and must
-		// not silently discard the publisher's selector.
-		$integration->update_settings_field_value( 'selectors', "#signup,\n#a, #b," );
+		// A trailing comma is a plausible copy-paste from a CSS rule. The empty
+		// slot has to be removed, not merely tolerated: it makes the whole line
+		// invalid CSS, and querySelectorAll() would throw on it client-side.
+		$integration->update_settings_field_value( 'selectors', "#signup,\n#a, #b,\n ,#c" );
 		$this->assertSame(
-			[ '.newspack-form-capture', '#signup,', '#a, #b,' ],
+			[ '.newspack-form-capture', '#signup', '#a, #b', '#c' ],
 			$integration->get_selectors(),
-			'An empty part from a trailing comma is skipped, not treated as over-broad.'
+			'Lines are rebuilt from their non-empty parts, so what ships is valid CSS.'
 		);
 		$integration->update_settings_field_value( 'selectors', '' );
 	}

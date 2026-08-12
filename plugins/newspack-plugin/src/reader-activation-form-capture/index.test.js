@@ -170,6 +170,36 @@ describe( 'form-capture client', () => {
 		expect( ras.register.mock.calls[ 0 ][ 3 ].captchaToken ).toBe( 'one-token' );
 	} );
 
+	it( 'recovers from a synchronous throw in ready()', async () => {
+		// Same failure class as the execute() throw below, one frame further
+		// out: the flag is set before the readiness call, so a throw there must
+		// release it too or warm-up never runs again this pageview.
+		let shouldThrow = true;
+		window.grecaptcha = {
+			ready: callback => {
+				if ( shouldThrow ) {
+					throw new Error( 'grecaptcha.ready exploded.' );
+				}
+				callback();
+			},
+			execute: jest.fn( () => Promise.resolve( 'later-token' ) ),
+		};
+		const ras = loadCaptureClient( FORM, V3_CONFIG );
+		const form = document.querySelector( 'form' );
+
+		focusin( form );
+		await flush();
+		expect( window.grecaptcha.execute ).not.toHaveBeenCalled();
+
+		shouldThrow = false;
+		focusin( form );
+		await flush();
+		expect( window.grecaptcha.execute ).toHaveBeenCalledTimes( 1 );
+
+		submit( form );
+		expect( ras.register.mock.calls[ 0 ][ 3 ].captchaToken ).toBe( 'later-token' );
+	} );
+
 	it( 'recovers from a synchronous throw in execute()', async () => {
 		// The in-flight flag must not survive a throw that never produces a
 		// promise: it would block every later warm-up, and each submit would

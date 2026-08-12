@@ -17,6 +17,14 @@ describe( 'getMatchedForms', () => {
 		const forms = getMatchedForms( [ '.newspack-form-capture', '.newspack-form-capture', ':::garbage', '#formless' ] );
 		expect( forms.map( f => f.id ) ).toEqual( [ 'direct' ] );
 	} );
+	it( 'cannot use a selector list with a trailing comma', () => {
+		// Invalid CSS, so querySelectorAll() throws and the whole list is lost —
+		// which is why Form_Capture::get_selectors() rebuilds each configured
+		// line from its non-empty parts before it reaches the client.
+		document.body.innerHTML = `<form id="a"></form><form id="b"></form>`;
+		expect( getMatchedForms( [ '#a, #b' ] ).map( f => f.id ) ).toEqual( [ 'a', 'b' ] );
+		expect( getMatchedForms( [ '#a, #b,' ] ) ).toEqual( [] );
+	} );
 } );
 
 describe( 'getEmailValue', () => {
