@@ -48,6 +48,29 @@ describe( 'ConfirmDialog navigation blocking', () => {
 		expect( history.location.pathname ).toBe( '/' );
 	} );
 
+	// v5 keeps a single prompt slot, so an unprompted re-sync would be caught by
+	// whichever dialog on the screen did install a blocker.
+	it( 'cancels an unprompted dialog without tripping another blocker', () => {
+		const historyRef = { current: null };
+		render(
+			<MemoryRouter>
+				<HistoryGrabber historyRef={ historyRef } />
+				<ConfirmDialog when confirmButtonText="Leave" cancelButtonText="Stay">
+					Wizard guard
+				</ConfirmDialog>
+				<ConfirmDialog isOpen confirmButtonText="Discard changes" cancelButtonText="Keep editing">
+					Unsaved changes
+				</ConfirmDialog>
+			</MemoryRouter>
+		);
+		const replaceSpy = jest.spyOn( historyRef.current, 'replace' );
+
+		cancelNavigation();
+		expect( dialog() ).not.toBeInTheDocument();
+		expect( screen.queryByText( 'Wizard guard' ) ).not.toBeInTheDocument();
+		expect( replaceSpy ).not.toHaveBeenCalled();
+	} );
+
 	it( 'replays a blocked push on confirm: re-sync replace first, then push, and re-arms the blocker', () => {
 		const history = renderWithHistory();
 		const replaceSpy = jest.spyOn( history, 'replace' );
@@ -199,7 +222,6 @@ describe( 'ConfirmDialog controlled by isOpen', () => {
 		expect( dialog() ).toBeInTheDocument();
 	} );
 
-	// The blocker raises the dialog without touching isOpen.
 	it( 'leaves a blocked navigation prompt up', () => {
 		const historyRef = { current: null };
 		render(
@@ -240,7 +262,6 @@ describe( 'ConfirmDialog controlled by isOpen', () => {
 	} );
 } );
 
-// How both the drawer and `useUnsavedChangesDialog` name their prompt.
 describe( 'ConfirmDialog named by a hidden title', () => {
 	it( 'takes its accessible name from the title while hiding the header', () => {
 		render(

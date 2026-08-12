@@ -79,10 +79,13 @@ function ConfirmDialog(
 
 	const handleOnCancel = useCallback( () => {
 		setShowDialog( false );
+		const hadPendingNavigation = !! pendingNavigation.current;
 		pendingNavigation.current = null;
 		// A POP may have moved the URL to the target before it was blocked; put
 		// it back so the address bar matches the page the user chose to stay on.
-		if ( history ) {
+		// Only when this instance blocked it: v5 keeps one prompt slot, so an
+		// unprompted replace is caught by whichever dialog did install a blocker.
+		if ( hadPendingNavigation && history ) {
 			bypassBlock.current = true;
 			try {
 				history.replace( history.location );
