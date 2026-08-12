@@ -1,7 +1,7 @@
 /**
  * WordPress dependencies.
  */
-import { __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 
 /**
  * External dependencies.
@@ -14,14 +14,16 @@ import classnames from 'classnames';
 import { useEmptyStateContext } from './context';
 import type { EmptyStateActionsProps } from './types';
 
-const Actions = ( { className, children }: EmptyStateActionsProps ) => {
+const Actions = ( { orientation = 'row', spacing = 2, className, children }: EmptyStateActionsProps ) => {
 	// Read for the invariant alone: actions outside a Root would lose the spine.
 	useEmptyStateContext();
 
+	const Stack = orientation === 'column' ? VStack : HStack;
+
 	return (
-		<HStack alignment="center" className={ classnames( 'newspack-empty-state__actions', className ) }>
+		<Stack alignment="center" spacing={ spacing } className={ classnames( 'newspack-empty-state__actions', className ) }>
 			{ children }
-		</HStack>
+		</Stack>
 	);
 };
 

@@ -1,4 +1,9 @@
 /**
+ * External dependencies.
+ */
+import classnames from 'classnames';
+
+/**
  * Internal dependencies.
  */
 import SectionHeader from '../section-header';
@@ -13,7 +18,7 @@ const Header = ( { icon, title, description, heading, className }: EmptyStateHea
 
 	return (
 		<SectionHeader
-			className={ className }
+			className={ classnames( 'newspack-empty-state__header', className ) }
 			icon={ icon }
 			title={ title }
 			description={ description }

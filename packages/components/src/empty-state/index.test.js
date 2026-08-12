@@ -25,12 +25,11 @@ describe( 'EmptyState.Root', () => {
 		expect( stack ).toHaveAttribute( 'end', '4' );
 	} );
 
-	// admin-shell/style.scss:80-91 hides the shell header and constrains the main
-	// region via :has( .newspack-newsletters-admin__empty-state ). Losing the class
-	// restores both, silently.
+	// Consumers key `:has()` selectors off this class to restyle the page around an
+	// empty state, so losing it changes their layout without failing anything.
 	it( 'merges className onto the grid', () => {
-		const { container } = render( <EmptyState.Root className="newspack-newsletters-admin__empty-state">body</EmptyState.Root> );
-		expect( container.querySelector( '.newspack-empty-state' ) ).toHaveClass( 'newspack-newsletters-admin__empty-state' );
+		const { container } = render( <EmptyState.Root className="consumer-empty-state">body</EmptyState.Root> );
+		expect( container.querySelector( '.newspack-empty-state' ) ).toHaveClass( 'consumer-empty-state' );
 	} );
 
 	it( 'renders its children', () => {
@@ -80,6 +79,17 @@ describe( 'EmptyState.Header', () => {
 		expect( screen.getByRole( 'heading', { level: 1, name: 'No products match this rule' } ) ).toBeInTheDocument();
 	} );
 
+	it( 'carries its own class hook alongside any className', () => {
+		const { container } = render(
+			<EmptyState.Root>
+				<EmptyState.Header title="Get started with newsletters" className="consumer-header" />
+			</EmptyState.Root>
+		);
+		const header = container.querySelector( '.newspack-empty-state__header' );
+		expect( header ).toBeInTheDocument();
+		expect( header ).toHaveClass( 'consumer-header' );
+	} );
+
 	it( 'throws outside Root', () => {
 		const consoleError = jest.spyOn( console, 'error' ).mockImplementation( () => {} );
 		try {
@@ -104,6 +114,22 @@ describe( 'EmptyState.Actions', () => {
 		expect( container.querySelector( '.newspack-empty-state__actions' ) ).toBeInTheDocument();
 		expect( container.querySelector( '.newspack-empty-state__actions' ) ).toHaveStyle( { justifyContent: 'center' } );
 		expect( screen.getByRole( 'button', { name: 'Add Newsletter' } ) ).toBeInTheDocument();
+	} );
+
+	// A stacked group still has to carry the hook class: with no stylesheet in the
+	// component, that class is the only thing a consumer can select on.
+	it( 'stacks into a column while keeping the hook class', () => {
+		const { container } = render(
+			<EmptyState.Root>
+				<EmptyState.Actions orientation="column">
+					<button type="button">Set up Audience Management</button>
+					<a href="https://example.com">Learn more</a>
+				</EmptyState.Actions>
+			</EmptyState.Root>
+		);
+		const actions = container.querySelector( '.newspack-empty-state__actions' );
+		expect( actions ).toBeInTheDocument();
+		expect( actions ).toHaveStyle( { flexDirection: 'column' } );
 	} );
 
 	it( 'throws outside Root', () => {
