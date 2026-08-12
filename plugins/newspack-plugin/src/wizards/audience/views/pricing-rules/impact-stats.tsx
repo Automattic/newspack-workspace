@@ -13,7 +13,7 @@ import { __, _x, sprintf } from '@wordpress/i18n';
  */
 import { Grid } from '../../../../../packages/components/src';
 import StatTile, { type StatTileProps } from './stat-tile';
-import { formatCount, finiteCount } from './impact-format';
+import { formatCount, finiteNumber } from './impact-format';
 
 interface ImpactStatsProps {
 	totalMatching: EngineCount;
@@ -27,7 +27,7 @@ interface ImpactStatsProps {
 type Figure = Pick< StatTileProps, 'value' | 'valueLabel' >;
 
 const bounded = ( value: EngineCount, limited: boolean ): Figure => {
-	const count = finiteCount( value );
+	const count = finiteNumber( value );
 	if ( null === count ) {
 		// Distinct from the locked rule's silence: there the figure does not apply,
 		// here it never arrived.

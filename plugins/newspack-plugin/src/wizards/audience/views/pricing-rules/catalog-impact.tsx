@@ -23,7 +23,7 @@ import {
 import ImpactEmpty, { type ImpactEmptyReason } from './impact-empty';
 import ImpactStats from './impact-stats';
 import ImpactTable from './impact-table';
-import { sampleNote, finiteCount } from './impact-format';
+import { sampleNote, finiteNumber } from './impact-format';
 import { IMPACT_PREVIEW_API_PATH as API_PATH, IMPACT_SAMPLE_LIMIT } from './constants';
 
 interface CatalogImpactProps {
@@ -80,7 +80,7 @@ export default function CatalogImpact( { stats }: CatalogImpactProps ) {
 	const note = detail ? sampleNote( detail ) : null;
 	// A count the engine never sent is neither "some" nor "none". The table loads
 	// its own sample, so only a confirmed zero withdraws it.
-	const affected = finiteCount( stats.total_matching );
+	const affected = finiteNumber( stats.total_matching );
 	const hasAffectedProducts = 0 !== affected;
 
 	return (

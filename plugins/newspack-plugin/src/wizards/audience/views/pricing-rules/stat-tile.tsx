@@ -9,6 +9,11 @@ import { _x } from '@wordpress/i18n';
 import { Button } from '@wordpress/components';
 import { Card } from '@wordpress/ui';
 
+/**
+ * Internal dependencies
+ */
+import { EM_DASH } from './impact-format';
+
 export interface StatTileProps {
 	label: string;
 	// Pre-formatted by the caller. Null renders the null glyph.
@@ -21,8 +26,6 @@ export interface StatTileProps {
 	actionLabel?: string;
 	onAction?: () => void;
 }
-
-const EM_DASH = '—';
 
 export default function StatTile( { label, value, valueLabel, description, secondary, actionLabel, onAction }: StatTileProps ) {
 	const shown = null === value ? EM_DASH : value;

@@ -21,7 +21,7 @@ import {
 import ImpactEmpty, { type ImpactEmptyReason } from './impact-empty';
 import ImpactStats from './impact-stats';
 import ImpactTable from './impact-table';
-import { sampleNote } from './impact-format';
+import { sampleNote, finiteNumber } from './impact-format';
 import { RULE_PREVIEW_API_PATH as PREVIEW_PATH } from './constants';
 
 const DEBOUNCE_MS = 500;
@@ -86,7 +86,7 @@ export default function RulePreview( { body, showCycleNote }: RulePreviewProps )
 	let reason: ImpactEmptyReason | null = null;
 	if ( ! data?.supported ) {
 		reason = 'unsupported';
-	} else if ( data.total_matching === 0 || ! data.sample?.length ) {
+	} else if ( 0 === finiteNumber( data.total_matching ) || ! data.sample?.length ) {
 		reason = 'no-products';
 	}
 

@@ -19,13 +19,15 @@ import { IMPACT_SAMPLE_LIMIT } from './constants';
 // WordPress ships that Intl rejects.
 export { formatCount };
 
+export const EM_DASH = '—';
+
 /**
- * The engine is a separate plugin, so its counts arrive over REST as whatever
+ * The engine is a separate plugin, so its numbers arrive over REST as whatever
  * `json_encode` made of them: an int, a numeric string from `$wpdb`, or null.
  * Anything outside that set is refused rather than coerced, because `Number()`
  * turns `false` and `[]` into a confident zero.
  */
-export function finiteCount( value: unknown ): number | null {
+export function finiteNumber( value: unknown ): number | null {
 	if ( 'number' !== typeof value && ( 'string' !== typeof value || '' === value.trim() ) ) {
 		return null;
 	}
@@ -33,8 +35,13 @@ export function finiteCount( value: unknown ): number | null {
 	return Number.isFinite( count ) ? count : null;
 }
 
-export function formatPrice( amount: number, currency: PricingRulesCurrency ): string {
-	return currency.symbol + amount.toFixed( currency.decimals );
+/**
+ * Prices cross the same boundary as the counts, and `toFixed` throws rather than
+ * degrading, so an unexpected shape costs one cell instead of the whole page.
+ */
+export function formatPrice( amount: EngineCount, currency: PricingRulesCurrency ): string {
+	const value = finiteNumber( amount );
+	return null === value ? EM_DASH : currency.symbol + value.toFixed( currency.decimals );
 }
 
 /**
@@ -65,10 +72,10 @@ export function cycleMarkerNote(): string {
  * product it could not price.
  */
 export function sampleNote( payload: CatalogImpactResponse ): string | null {
-	// Both sides go through finiteCount: as strings, `'9' < '50'` compares
+	// Both sides go through finiteNumber: as strings, `'9' < '50'` compares
 	// lexicographically and would announce a cap the engine never applied.
-	const shown = finiteCount( payload.sample_count );
-	const cap = finiteCount( payload.sample_limit ?? IMPACT_SAMPLE_LIMIT );
+	const shown = finiteNumber( payload.sample_count );
+	const cap = finiteNumber( payload.sample_limit ?? IMPACT_SAMPLE_LIMIT );
 	if ( ! payload.preview_limited || null === shown || null === cap || shown < cap ) {
 		return null;
 	}
