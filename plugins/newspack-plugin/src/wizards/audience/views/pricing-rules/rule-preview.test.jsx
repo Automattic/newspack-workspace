@@ -117,6 +117,20 @@ describe( 'RulePreview', () => {
 		expect( stats.compareDocumentPosition( table ) & Node.DOCUMENT_POSITION_FOLLOWING ).toBeTruthy();
 	} );
 
+	// Only an audience-bearing payload reaches the editor's four-tile layout.
+	it( 'shows the subscriber tiles when the preview carries an audience', async () => {
+		apiFetch.mockResolvedValue(
+			response( {
+				audience: { supported: true, total: 12, caught: 8, protected: 4, count_limited: false, application: 'current' },
+			} )
+		);
+		render( <RulePreview body={ {} } /> );
+		await settle();
+		[ 'Products affected', 'Subscribers in scope', 'Eligible at renewal', 'Protected' ].forEach( label =>
+			expect( screen.getByText( label ) ).toBeInTheDocument()
+		);
+	} );
+
 	it( 'renders the stats and table for a partial preview', async () => {
 		apiFetch.mockResolvedValue( response( { preview_limited: true, sample_count: 1, total_matching: 3 } ) );
 		render( <RulePreview body={ {} } /> );
@@ -125,7 +139,7 @@ describe( 'RulePreview', () => {
 		expect( screen.getByRole( 'region', { name: 'Resulting prices by product and reader segment' } ) ).toBeInTheDocument();
 	} );
 
-	// The stat strip reports the total, so without this the table reads as the whole set.
+	// The tiles report the total, so without this the table reads as the whole set.
 	it( 'says the table is a sample when the preview was capped', async () => {
 		apiFetch.mockResolvedValue( response( { preview_limited: true, sample_count: 50, total_matching: 120 } ) );
 		render( <RulePreview body={ {} } /> );
