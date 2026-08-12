@@ -5,7 +5,7 @@
 /**
  * External dependencies
  */
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 
 /**
  * Internal dependencies
@@ -23,6 +23,9 @@ const audience = ( over = {} ) => ( {
 } );
 
 const labels = () => [ 'Products affected', 'Subscribers in scope', 'Eligible at renewal', 'Protected' ];
+
+// Keyed to the label, so a value stays bound to its own tile however the grid is ordered.
+const tileFor = label => screen.getByText( label ).closest( '.newspack-pricing-rules__tile' );
 
 describe( 'ImpactStats', () => {
 	afterEach( () => {
@@ -60,8 +63,10 @@ describe( 'ImpactStats', () => {
 		render( <ImpactStats totalMatching={ 36 } countLimited={ false } audience={ audience() } /> );
 
 		labels().forEach( label => expect( screen.getByText( label ) ).toBeInTheDocument() );
-		expect( screen.getByText( '8' ) ).toBeInTheDocument();
-		expect( screen.getByText( '4' ) ).toBeInTheDocument();
+		expect( within( tileFor( 'Products affected' ) ).getByText( '36' ) ).toBeInTheDocument();
+		expect( within( tileFor( 'Subscribers in scope' ) ).getByText( '12' ) ).toBeInTheDocument();
+		expect( within( tileFor( 'Eligible at renewal' ) ).getByText( '8' ) ).toBeInTheDocument();
+		expect( within( tileFor( 'Protected' ) ).getByText( '4' ) ).toBeInTheDocument();
 	} );
 
 	it( 'ignores an unsupported audience', () => {
@@ -79,10 +84,10 @@ describe( 'ImpactStats', () => {
 	it( 'bounds all three subscriber counts when the audience is capped', () => {
 		render( <ImpactStats totalMatching={ 500 } countLimited audience={ audience( { count_limited: true } ) } /> );
 
-		expect( screen.getByText( '500+' ) ).toBeInTheDocument();
-		expect( screen.getByText( '12+' ) ).toBeInTheDocument();
-		expect( screen.getByText( '8+' ) ).toBeInTheDocument();
-		expect( screen.getByText( '4+' ) ).toBeInTheDocument();
+		expect( within( tileFor( 'Products affected' ) ).getByText( '500+' ) ).toBeInTheDocument();
+		expect( within( tileFor( 'Subscribers in scope' ) ).getByText( '12+' ) ).toBeInTheDocument();
+		expect( within( tileFor( 'Eligible at renewal' ) ).getByText( '8+' ) ).toBeInTheDocument();
+		expect( within( tileFor( 'Protected' ) ).getByText( '4+' ) ).toBeInTheDocument();
 	} );
 
 	it( 'stands the renewal tiles down for a locked rule', () => {
