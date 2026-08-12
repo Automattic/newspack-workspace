@@ -12,6 +12,7 @@ import { EmptyState } from 'newspack-components';
 import { getAdminUrl, getCptSlug } from '../../admin-globals';
 import HeaderCount from '../../components/header-count';
 import ItemsPerPage from '../../components/items-per-page';
+import { EMPTY_STATE_CLASS } from '../../constants';
 import { useHeaderActions } from '../../header-actions-context';
 import usePersistedView from '../../hooks/use-persisted-view';
 import useStrictEmpty from '../../hooks/use-strict-empty';
@@ -80,7 +81,7 @@ export default function NewslettersListScreen() {
 
 	if ( isStrictEmpty ) {
 		return (
-			<EmptyState.Root className="newspack-newsletters-admin__empty-state">
+			<EmptyState.Root className={ EMPTY_STATE_CLASS }>
 				<EmptyState.Header
 					icon={ envelope }
 					title={ __( 'Get started with newsletters', 'newspack-newsletters' ) }

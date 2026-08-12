@@ -16,6 +16,7 @@ import { store } from '@wordpress/icons';
 import { EmptyState } from 'newspack-components';
 import HeaderCount from '../../components/header-count';
 import ItemsPerPage from '../../components/items-per-page';
+import { EMPTY_STATE_CLASS } from '../../constants';
 import { useHeaderActions } from '../../header-actions-context';
 import usePersistedView from '../../hooks/use-persisted-view';
 import useStrictEmpty from '../../hooks/use-strict-empty';
@@ -101,7 +102,7 @@ export default function AdvertisersListScreen() {
 		<>
 			<HeaderCount count={ paginationInfo.totalItems } />
 			{ isStrictEmpty ? (
-				<EmptyState.Root className="newspack-newsletters-admin__empty-state">
+				<EmptyState.Root className={ EMPTY_STATE_CLASS }>
 					<EmptyState.Header
 						icon={ store }
 						title={ __( 'Get started with advertisers', 'newspack-newsletters' ) }
