@@ -127,12 +127,27 @@ each_worktree_in_env() {
     done < <(grep -E '^[[:space:]]*-[[:space:]]+\./worktrees(-repos)?/[^[:space:]:]+:/newspack-(repos|plugins|themes)/[^[:space:]:]+' "$file" 2>/dev/null)
 }
 
+# True for an explicit help request in the name position. validate_env_name
+# rejects a leading dash, so this can never shadow a legitimate environment name.
+is_help_arg() {
+    [[ "$1" == "-h" || "$1" == "--help" ]]
+}
+
+# Print a subcommand's usage and exit. Status 0 when the user asked for help,
+# 1 when the name was simply missing — one usage string serves both, and the
+# caller passes whatever it read positionally so this can tell them apart.
+env_usage() {
+    local name="$1"; shift
+    printf '%s\n' "$@"
+    is_help_arg "$name" && exit 0
+    exit 1
+}
+
 case $1 in
     create)
         env_name="$2"
-        if [[ -z "$env_name" ]]; then
-            echo "Usage: n env create <name> --worktree <repo>:<branch> [--worktree ...] [--domain <domain>] [--up]"
-            exit 1
+        if [[ -z "$env_name" ]] || is_help_arg "$env_name"; then
+            env_usage "$env_name" "Usage: n env create <name> --worktree <repo>:<branch> [--worktree ...] [--domain <domain>] [--up]"
         fi
         validate_env_name "$env_name"
         # Reject names that would collide after dash/underscore normalization.
@@ -362,10 +377,8 @@ YAML
         ;;
     up)
         env_name="$2"
-        if [[ -z "$env_name" ]]; then
-            echo "Usage: n env up <name> [--build]"
-            echo "       n env up --all [--build]"
-            exit 1
+        if [[ -z "$env_name" ]] || is_help_arg "$env_name"; then
+            env_usage "$env_name" "Usage: n env up <name> [--build]" "       n env up --all [--build]"
         fi
         # --all: start all existing environments.
         if [[ "$env_name" == "--all" ]]; then
@@ -586,9 +599,8 @@ MIGRATE
         ;;
     down)
         env_name="$2"
-        if [[ -z "$env_name" ]]; then
-            echo "Usage: n env down <name>"
-            exit 1
+        if [[ -z "$env_name" ]] || is_help_arg "$env_name"; then
+            env_usage "$env_name" "Usage: n env down <name>"
         fi
         validate_env_name "$env_name"
         container_name=$(echo "newspack_env_${env_name}" | tr '-' '_')
@@ -597,9 +609,8 @@ MIGRATE
         ;;
     destroy)
         env_name="$2"
-        if [[ -z "$env_name" ]]; then
-            echo "Usage: n env destroy <name>"
-            exit 1
+        if [[ -z "$env_name" ]] || is_help_arg "$env_name"; then
+            env_usage "$env_name" "Usage: n env destroy <name>"
         fi
         validate_env_name "$env_name"
         compose_file="$NABSPATH/docker-compose.env-${env_name}.yml"

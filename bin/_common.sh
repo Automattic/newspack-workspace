@@ -14,10 +14,14 @@ validate_name() {
     fi
 }
 
-# Stricter validation for env names — no slashes (Docker rejects them in container/service names)
+# Stricter validation for env names — no slashes (Docker rejects them in
+# container/service names), and an alphanumeric first character. The leading
+# character rule is what stops an option being read as a name: bin/env.sh takes
+# the name positionally, so without it `n env create --help` validates cleanly
+# and creates an environment called "--help" instead of printing usage.
 validate_env_name() {
-    if [[ ! "$1" =~ ^[a-zA-Z0-9._-]+$ ]]; then
-        echo "Error: invalid environment name '$1' (only alphanumeric, dots, hyphens, underscores allowed)"
+    if [[ ! "$1" =~ ^[a-zA-Z0-9][a-zA-Z0-9._-]*$ ]]; then
+        echo "Error: invalid environment name '$1' (must start with a letter or digit; only alphanumeric, dots, hyphens, underscores allowed)"
         exit 1
     fi
 }
