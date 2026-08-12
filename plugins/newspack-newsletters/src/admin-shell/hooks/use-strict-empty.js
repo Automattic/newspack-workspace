@@ -9,20 +9,25 @@
  * @param {boolean} options.hasLoadedOnce  Whether a first fetch has resolved.
  * @param {boolean} options.isLoading      Whether a fetch is in flight.
  * @param {Object}  options.paginationInfo DataView pagination, for `totalItems`.
- * @param {?number} options.trashCount     Trashed items. Null on collections with no
- *                                         trash, such as the advertisers taxonomy, which
+ * @param {?number} options.trashCount     Trashed items. Omit the key on collections with
+ *                                         no trash, such as the advertisers taxonomy, which
  *                                         never passes `trashCountPath` to
- *                                         `useCollectionData`. Absent means "no trash
- *                                         concept", not "trash is non-empty".
+ *                                         `useCollectionData`; the default below then makes
+ *                                         the term inert. An explicit `null` is different:
+ *                                         it means the count is *unknown*, either in flight
+ *                                         or after a failed sub-fetch, and deliberately
+ *                                         blocks a strict-empty result. Collapsing that to
+ *                                         zero flashes the empty state over a freshly
+ *                                         trashed last item (`use-collection-data.js:210`).
  * @param {Object}  options.view           The DataView view, for `search` and `filters`.
  * @return {boolean} Whether the collection is strictly empty.
  */
-export default function useStrictEmpty( { hasLoadedOnce, isLoading, paginationInfo, trashCount, view } ) {
+export default function useStrictEmpty( { hasLoadedOnce, isLoading, paginationInfo, trashCount = 0, view } ) {
 	return (
 		hasLoadedOnce &&
 		! isLoading &&
 		paginationInfo.totalItems === 0 &&
-		( trashCount ?? 0 ) === 0 &&
+		trashCount === 0 &&
 		! view.search &&
 		( ! view.filters || view.filters.length === 0 )
 	);
