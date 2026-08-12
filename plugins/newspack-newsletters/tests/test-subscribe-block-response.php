@@ -270,23 +270,42 @@ class Subscribe_Block_Response_Test extends WP_UnitTestCase {
 	 * The non-JSON path redirects instead of emitting JSON, and is unchanged by
 	 * this work. Asserting it here means a future edit to the filter that
 	 * accidentally reaches the redirect branch fails a test.
+	 *
+	 * Intercepts via the `wp_redirect` filter rather than catching whatever
+	 * `wp_safe_redirect()` happens to throw: the filter fires before
+	 * `wp_redirect()` calls `header()`, so this needs no PHP warning to occur
+	 * and no dependency on how this harness converts one. A generic catch on
+	 * the redirect branch would also swallow an unrelated warning introduced
+	 * there later — e.g. an undefined-array-key read while building
+	 * `$args_to_remove` — and this test is the only one that exercises that
+	 * branch, so such a regression would otherwise sit behind a green run
+	 * indefinitely. Catching only Subscribe_Block_Redirect_Interrupt closes
+	 * that gap: nothing else thrown in the branch is this exception type, so
+	 * it propagates and fails the test instead of being absorbed here.
 	 */
 	public function test_non_json_request_does_not_emit_json() {
 		unset( $_SERVER['HTTP_ACCEPT'] );
 		$_SERVER['REQUEST_METHOD'] = 'GET';
 
+		$intercept = function ( $location ) {
+			$interrupt           = new Subscribe_Block_Redirect_Interrupt( 'Intercepted for testing; not a real error.' );
+			$interrupt->location = $location;
+			throw $interrupt;
+		};
+		add_filter( 'wp_redirect', $intercept );
+
 		ob_start();
 		try {
 			send_form_response( [ 'merge_fields' => [ 'FNAME' => 'Ada' ] ] );
-		} catch ( WPDieException | \PHPUnit\Framework\Error\Warning $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch
-			// wp_safe_redirect() reaches header() here, not wp_die(): this test suite's
-			// bootstrap already emits output before any test runs, so PHP's own
-			// "headers already sent" warning fires first, and PHPUnit converts it to a
-			// catchable Warning. Either termination path leaves the assertion below as
-			// the real check: no response body was sent.
+			$this->fail( 'Expected the wp_redirect filter to interrupt send_form_response().' );
+		} catch ( Subscribe_Block_Redirect_Interrupt $e ) {
+			$location = $e->location;
+		} finally {
+			remove_filter( 'wp_redirect', $intercept );
 		}
 		$output = ob_get_clean();
 
 		$this->assertSame( '', trim( $output ), 'The redirect branch must not emit a response body.' );
+		$this->assertStringContainsString( 'newspack_newsletters_subscribed=1', $location, 'The redirect must report a successful subscription.' );
 	}
 }
