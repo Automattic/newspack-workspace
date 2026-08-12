@@ -40,7 +40,7 @@ const Root = forwardRef< HTMLDivElement, DrawerRootProps >( function Root(
 		onRequestClose,
 		isDirty = false,
 		confirmCloseMessage = __( 'You have unsaved changes that will be lost. Discard changes?', 'newspack-plugin' ),
-		confirmButtonText = __( 'Discard changes', 'newspack-plugin' ),
+		confirmButtonText = __( 'Discard Changes', 'newspack-plugin' ),
 		requestConfirm,
 		contentLabel,
 		describedBy,

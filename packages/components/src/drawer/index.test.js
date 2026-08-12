@@ -422,7 +422,7 @@ describe( 'Drawer closing', () => {
 		fireEvent.click( closeButton() );
 		expect( onRequestClose ).not.toHaveBeenCalled();
 
-		fireEvent.click( dialogButton( 'Discard changes' ) );
+		fireEvent.click( dialogButton( 'Discard Changes' ) );
 		expect( onRequestClose ).toHaveBeenCalled();
 	} );
 
@@ -431,7 +431,7 @@ describe( 'Drawer closing', () => {
 		renderDrawer( { rootProps: { isDirty: true, onRequestClose } } );
 		fireEvent.keyDown( screen.getByText( 'Body' ), { key: 'Escape' } );
 		expect( onRequestClose ).not.toHaveBeenCalled();
-		fireEvent.click( dialogButton( 'Discard changes' ) );
+		fireEvent.click( dialogButton( 'Discard Changes' ) );
 		expect( onRequestClose ).toHaveBeenCalled();
 	} );
 
@@ -440,7 +440,7 @@ describe( 'Drawer closing', () => {
 		const Delegating = () => {
 			const { confirmDialog, requestConfirm } = useConfirmDialog( {
 				message: 'Discard?',
-				confirmButtonText: 'Discard changes',
+				confirmButtonText: 'Discard Changes',
 			} );
 			return (
 				<>
@@ -452,11 +452,11 @@ describe( 'Drawer closing', () => {
 		render( <Delegating /> );
 
 		fireEvent.click( closeButton() );
-		expect( screen.getByText( 'Discard changes', { selector: 'button' } ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Discard Changes', { selector: 'button' } ) ).toBeInTheDocument();
 		expect( onRequestClose ).not.toHaveBeenCalled();
 		expect( panel() ).toBeInTheDocument();
 
-		fireEvent.click( screen.getByText( 'Discard changes', { selector: 'button' } ) );
+		fireEvent.click( screen.getByText( 'Discard Changes', { selector: 'button' } ) );
 		expect( onRequestClose ).toHaveBeenCalledTimes( 1 );
 	} );
 
@@ -504,7 +504,7 @@ describe( 'Drawer closing', () => {
 		const Delegating = ( { open } ) => {
 			const { confirmDialog, requestConfirm } = useConfirmDialog( {
 				message: 'Discard?',
-				confirmButtonText: 'Discard changes',
+				confirmButtonText: 'Discard Changes',
 			} );
 			return (
 				<>
@@ -516,10 +516,10 @@ describe( 'Drawer closing', () => {
 		const { rerender } = render( <Delegating open /> );
 
 		fireEvent.click( closeButton() );
-		expect( screen.getByText( 'Discard changes', { selector: 'button' } ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Discard Changes', { selector: 'button' } ) ).toBeInTheDocument();
 
 		rerender( <Delegating open={ false } /> );
-		expect( screen.getByText( 'Discard changes', { selector: 'button' } ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Discard Changes', { selector: 'button' } ) ).toBeInTheDocument();
 		expect( error ).not.toHaveBeenCalled();
 		error.mockRestore();
 	} );
@@ -552,7 +552,7 @@ describe( 'Drawer closing', () => {
 		rerender( withSibling( rootProps, true ) );
 		expect( onRequestClose ).not.toHaveBeenCalled();
 		expect( panel() ).toBeInTheDocument();
-		expect( screen.queryByText( 'Discard changes', { selector: 'button' } ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( 'Discard Changes', { selector: 'button' } ) ).not.toBeInTheDocument();
 	} );
 
 	it( 'stays open when the confirmation is cancelled', () => {
@@ -572,7 +572,7 @@ describe( 'Drawer closing', () => {
 
 		fireEvent.click( closeButton() );
 		expect( requestConfirm ).toHaveBeenCalledTimes( 1 );
-		expect( screen.queryByText( 'Discard changes', { selector: 'button' } ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( 'Discard Changes', { selector: 'button' } ) ).not.toBeInTheDocument();
 
 		expect( onRequestClose ).not.toHaveBeenCalled();
 		requestConfirm.mock.calls[ 0 ][ 0 ]();
@@ -631,7 +631,7 @@ describe( 'Drawer closing', () => {
 		pointerUp( overlay() );
 
 		expect( onRequestClose ).not.toHaveBeenCalled();
-		expect( dialogButton( 'Discard changes' ) ).toBeInTheDocument();
+		expect( dialogButton( 'Discard Changes' ) ).toBeInTheDocument();
 	} );
 
 	it( 'does not close when the press ends inside the panel', () => {
@@ -724,7 +724,7 @@ describe( 'Drawer closing', () => {
 			closing( { isDirty: true, onRequestClose } );
 
 			fireEvent.keyDown( screen.getByText( 'Body' ), { key: 'Escape' } );
-			expect( screen.queryByText( 'Discard changes', { selector: 'button' } ) ).not.toBeInTheDocument();
+			expect( screen.queryByText( 'Discard Changes', { selector: 'button' } ) ).not.toBeInTheDocument();
 			expect( onRequestClose ).not.toHaveBeenCalled();
 		} );
 	} );
@@ -856,13 +856,13 @@ describe( 'Drawer closed from the parent while its confirmation is open', () => 
 	const confirmingThenClosed = () => {
 		const { rerender } = render( drawerTree( { rootProps: dirty } ) );
 		fireEvent.click( closeButton() );
-		expect( dialogButton( 'Discard changes' ) ).toBeInTheDocument();
+		expect( dialogButton( 'Discard Changes' ) ).toBeInTheDocument();
 
 		rerender( drawerTree( { rootProps: { ...dirty, isOpen: false } } ) );
 		return rerender;
 	};
 
-	const confirmation = () => screen.queryByText( 'Discard changes', { selector: 'button' } );
+	const confirmation = () => screen.queryByText( 'Discard Changes', { selector: 'button' } );
 
 	it( 'dismisses the confirmation', () => {
 		confirmingThenClosed();
@@ -906,7 +906,7 @@ describe( 'Drawer confirmation inside a router', () => {
 		renderRouted( { isDirty: true, onRequestClose } );
 
 		fireEvent.click( closeButton() );
-		fireEvent.click( dialogButton( 'Discard changes' ) );
+		fireEvent.click( dialogButton( 'Discard Changes' ) );
 		expect( onRequestClose ).toHaveBeenCalled();
 	} );
 
@@ -919,7 +919,7 @@ describe( 'Drawer confirmation inside a router', () => {
 		expect( onRequestClose ).not.toHaveBeenCalled();
 
 		fireEvent.click( closeButton() );
-		fireEvent.click( dialogButton( 'Discard changes' ) );
+		fireEvent.click( dialogButton( 'Discard Changes' ) );
 		expect( onRequestClose ).toHaveBeenCalled();
 	} );
 } );

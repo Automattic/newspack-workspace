@@ -79,7 +79,7 @@ lives here.
 |------|------|---------|-------------|
 | `children` | `React.ReactNode` | — | The slots. See the constraint under [`Drawer.Content`](#drawercontent). |
 | `className` | `string` | — | Additional CSS class on the panel. |
-| `confirmButtonText` | `string` | `'Discard changes'` | Confirm label on the built-in unsaved-changes dialog. |
+| `confirmButtonText` | `string` | `'Discard Changes'` | Confirm label on the built-in unsaved-changes dialog. |
 | `confirmCloseMessage` | `React.ReactNode` | `'You have unsaved changes that will be lost. Discard changes?'` | Body of the built-in unsaved-changes dialog. |
 | `contentLabel` | `string` | — | Accessible name when the design has no visible title. Ignored when a `Drawer.Title` is rendered. |
 | `describedBy` | `string` | — | Id of an element describing the panel, for the frame's `aria-describedby`. |
@@ -290,7 +290,7 @@ so nothing can close the panel behind that handler.
 false, and the slide-out plays.
 
 **`isDirty` true.** The handler opens the confirm dialog above the drawer, which
-has not moved. "Discard changes" calls `onRequestClose`, and only then does the
+has not moved. "Discard Changes" calls `onRequestClose`, and only then does the
 slide-out play. Cancel does nothing and the panel is still where it was. A
 refused close never animates.
 
