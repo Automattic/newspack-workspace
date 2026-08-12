@@ -2,6 +2,8 @@
  * Shell-wide values shared between the screens and `style.scss`.
  */
 
+import { isBundledMode } from './admin-globals';
+
 /**
  * Class every screen puts on its `EmptyState.Root`.
  *
@@ -24,5 +26,5 @@ export const EMPTY_STATE_CLASS = 'newspack-newsletters-admin__empty-state';
  * @return {number} 1 when standalone, 2 when bundled.
  */
 export function getEmptyStateHeading() {
-	return window.newspackNewslettersAdmin?.bundledMode ? 2 : 1;
+	return isBundledMode() ? 2 : 1;
 }
