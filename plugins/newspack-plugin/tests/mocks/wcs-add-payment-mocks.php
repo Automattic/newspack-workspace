@@ -18,6 +18,15 @@
 // to the success path.
 if ( class_exists( 'WC_Subscription' ) && ! class_exists( 'WC_Subscription_Add_Payment_Double' ) ) {
 	class WC_Subscription_Add_Payment_Double extends WC_Subscription {
+		public function has_payment_gateway() {
+			return $this->data['has_payment_gateway'] ?? true;
+		}
+
+		public function is_manual() {
+			// A card-less subscription reads as manual, matching WCS.
+			return $this->data['is_manual'] ?? ! $this->has_payment_gateway();
+		}
+
 		public function can_date_be_updated( $date_type ) {
 			unset( $date_type );
 			return $this->data['can_date_be_updated'] ?? true;

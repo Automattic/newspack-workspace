@@ -364,6 +364,26 @@ class Newspack_Blocks_Modal_Checkout_Data_Test extends WP_UnitTestCase_Blocks {
 	}
 
 	/**
+	 * A subscription that has a parent order keeps that order's identity, even when
+	 * its product type is one the subscription_ids branch skips. A recurring
+	 * donation resolves to `donation`, so widening the parentless fallback would
+	 * silently move those readers from /view-order/ to /view-subscription/.
+	 */
+	public function test_donation_subscription_with_a_parent_keeps_order_identity() {
+		$GLOBALS['newspack_blocks_test_products'] = [
+			2172 => new WC_Product( 2172, 'simple', [], '15', 'Monthly Donation' ),
+		];
+
+		$parent       = new WC_Order( [ new WC_Order_Item_Product( 2172, '15' ) ], 902 );
+		$subscription = new WC_Subscription( [ new WC_Order_Item_Product( 2172, '15' ) ], $parent, 903 );
+
+		$data = Checkout_Data::get_checkout_data( $subscription );
+
+		$this->assertSame( 902, $data['order_id'] );
+		$this->assertArrayNotHasKey( 'subscription_ids', $data );
+	}
+
+	/**
 	 * A subscription or order with no line items has no purchase to summarise.
 	 * It must return empty rather than fatalling on the null product the missing
 	 * line item would leave behind (NPPD-2170).

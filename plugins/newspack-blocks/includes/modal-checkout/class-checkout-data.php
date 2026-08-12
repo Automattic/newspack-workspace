@@ -414,7 +414,11 @@ final class Checkout_Data {
 		// A subscription with no parent order has no order to identify itself by, so
 		// name the subscription directly. Without this the modal has nothing to
 		// return the reader to once checkout finishes (NPPD-2170).
-		if ( $subscription && empty( $data['subscription_ids'] ) ) {
+		// Only when there is no parent order to identify the purchase by. With a
+		// parent present the block above owns the key, and widening this would set
+		// subscription_ids for product types it skips — a recurring donation resolves
+		// to `donation`, so it would silently change where those readers land.
+		if ( $subscription && ! $order && empty( $data['subscription_ids'] ) ) {
 			$data['subscription_ids'] = [ $subscription->get_id() ];
 		}
 

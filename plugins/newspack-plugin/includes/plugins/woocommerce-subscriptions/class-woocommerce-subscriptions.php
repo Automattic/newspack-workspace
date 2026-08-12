@@ -49,7 +49,11 @@ class WooCommerce_Subscriptions {
 		// allow_add_payment_method_without_next_payment() for the whole story.
 		// Priority 20: WCS registers its own answer at 10 and we only override a no.
 		add_filter( 'woocommerce_can_subscription_be_updated_to_new-payment-method', [ __CLASS__, 'allow_add_payment_method_without_next_payment' ], 20, 2 );
-		add_action( 'woocommerce_subscription_payment_method_updated', [ __CLASS__, 'schedule_next_payment_after_payment_method_added' ], 10, 2 );
+		// Not `woocommerce_subscription_payment_method_updated`: that fires before the
+		// card is validated or charged, so a declined card would still leave a
+		// schedule behind. This filter runs after process_payment() and carries its
+		// result, so the schedule can follow the payment instead of preceding it.
+		add_filter( 'woocommerce_subscriptions_process_payment_for_change_method_via_pay_shortcode', [ __CLASS__, 'schedule_next_payment_after_payment_method_added' ], 10, 2 );
 	}
 
 	/**
@@ -384,8 +388,9 @@ class WooCommerce_Subscriptions {
 			return $can_be_updated;
 		}
 
-		// Nothing recurring to charge, so nothing to add a card for. The 'edit'
-		// context reads the unfiltered total, as WCS's own check does.
+		// Nothing recurring to charge, so nothing to add a card for. WCS reads the
+		// filtered ('view') total here; 'edit' is deliberate, so a site filtering
+		// order totals cannot open the flow on a subscription with nothing to bill.
 		if ( (float) $subscription->get_total( 'edit' ) <= 0 ) {
 			return $can_be_updated;
 		}
@@ -494,42 +499,58 @@ class WooCommerce_Subscriptions {
 	 * owns the billing agreement and refuses them (PayPal Standard) never gets a
 	 * Woo-side schedule it would not honour.
 	 *
-	 * @param \WC_Subscription $subscription       The subscription that was updated.
-	 * @param string           $new_payment_method The gateway ID now attached.
+	 * Runs on `woocommerce_subscriptions_process_payment_for_change_method_via_pay_shortcode`,
+	 * which WCS applies after `process_payment()` and before it bails on a
+	 * non-success result. Scheduling from the earlier
+	 * `woocommerce_subscription_payment_method_updated` action would write a date
+	 * for a card that was later declined, leaving an automatic renewal queued
+	 * against a card the gateway never accepted.
 	 *
-	 * @return void
+	 * @param array            $result       The payment result, with a `result` key.
+	 * @param \WC_Subscription $subscription The subscription whose method changed.
+	 *
+	 * @return array The unmodified payment result.
 	 */
-	public static function schedule_next_payment_after_payment_method_added( $subscription, $new_payment_method ) {
+	public static function schedule_next_payment_after_payment_method_added( $result, $subscription ) {
 		if ( ! ( $subscription instanceof \WC_Subscription ) ) {
-			return;
+			return $result;
 		}
 
-		// No gateway attached means there is nothing to bill against.
-		if ( empty( $new_payment_method ) ) {
-			return;
+		// Only once the card has actually been accepted. WCS returns here after
+		// process_payment() and bails on anything but success, so a declined card
+		// must leave no schedule behind.
+		if ( ! is_array( $result ) || ! isset( $result['result'] ) || 'success' !== $result['result'] ) {
+			return $result;
+		}
+
+		// Ask the subscription whether a chargeable gateway is attached rather than
+		// trusting a method string: this runs for admin and bulk updates too, and
+		// has_payment_gateway() is the same predicate the My Account label uses.
+		if ( ! $subscription->has_payment_gateway() || $subscription->is_manual() ) {
+			return $result;
 		}
 
 		// Only the gap this pair exists to close. An already-scheduled payment is
 		// the reader's or WCS's, and is never rewritten.
 		if ( $subscription->get_time( 'next_payment' ) > 0 ) {
-			return;
+			return $result;
 		}
 
 		// Active only. See the note above on why pending / on-hold are left to
 		// WooCommerce's own payment-completes-then-schedules flow.
 		if ( ! $subscription->has_status( 'active' ) ) {
-			return;
+			return $result;
 		}
 
 		// Respect the same gate WCS applies to every date write: the gateway must
 		// support date changes, or its schedule and Woo's would silently diverge.
 		if ( ! $subscription->can_date_be_updated( 'next_payment' ) ) {
-			return;
+			return $result;
 		}
 
 		$next_payment = $subscription->calculate_date( 'next_payment' );
 		if ( empty( $next_payment ) ) {
-			return;
+			return $result;
 		}
 
 		// update_dates() validates the new date against the subscription's other
@@ -547,14 +568,20 @@ class WooCommerce_Subscriptions {
 				)
 			);
 		} catch ( \Exception $e ) {
-			Logger::error(
+			// An order note rather than Logger::error(): Logger::log() returns early
+			// unless NEWSPACK_LOG_LEVEL is defined and non-zero, which it is not on a
+			// stock site, so the one failure this method plans for would otherwise
+			// leave no trace anywhere the publisher looks.
+			$subscription->add_order_note(
 				sprintf(
-					'Could not schedule the next payment for subscription %1$d after a payment method was added: %2$s',
-					$subscription->get_id(),
+					/* translators: %s: the reason the date could not be set. */
+					__( 'A payment method was added, but the next payment date could not be scheduled: %s. The next payment date may need setting by hand.', 'newspack-plugin' ),
 					$e->getMessage()
 				)
 			);
 		}
+
+		return $result;
 	}
 
 	/**

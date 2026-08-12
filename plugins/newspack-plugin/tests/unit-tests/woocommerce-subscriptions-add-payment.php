@@ -33,6 +33,16 @@ require_once __DIR__ . '/../mocks/wcs-add-payment-mocks.php';
 class Newspack_Test_WC_Subscriptions_Add_Payment extends WP_UnitTestCase {
 
 	/**
+	 * The payment result WCS passes once the card has been accepted.
+	 */
+	const SUCCESS = [ 'result' => 'success' ];
+
+	/**
+	 * The payment result WCS passes when the card was declined.
+	 */
+	const FAILURE = [ 'result' => 'failure' ];
+
+	/**
 	 * Reset staged gateway support between tests.
 	 */
 	public function set_up() {
@@ -220,7 +230,7 @@ class Newspack_Test_WC_Subscriptions_Add_Payment extends WP_UnitTestCase {
 			]
 		);
 
-		WooCommerce_Subscriptions::schedule_next_payment_after_payment_method_added( $subscription, 'stripe' );
+		WooCommerce_Subscriptions::schedule_next_payment_after_payment_method_added( self::SUCCESS, $subscription );
 
 		$this->assertSame(
 			$scheduled,
@@ -242,7 +252,7 @@ class Newspack_Test_WC_Subscriptions_Add_Payment extends WP_UnitTestCase {
 			]
 		);
 
-		WooCommerce_Subscriptions::schedule_next_payment_after_payment_method_added( $subscription, 'stripe' );
+		WooCommerce_Subscriptions::schedule_next_payment_after_payment_method_added( self::SUCCESS, $subscription );
 
 		// Strict identity, not assertEmpty: the mock returns int 0 when the date was
 		// never written, but string '0' if the guard were removed and '0' written —
@@ -263,7 +273,7 @@ class Newspack_Test_WC_Subscriptions_Add_Payment extends WP_UnitTestCase {
 			]
 		);
 
-		WooCommerce_Subscriptions::schedule_next_payment_after_payment_method_added( $subscription, 'stripe' );
+		WooCommerce_Subscriptions::schedule_next_payment_after_payment_method_added( self::SUCCESS, $subscription );
 
 		$this->assertEmpty( $subscription->get_date( 'next_payment' ) );
 	}
@@ -281,7 +291,7 @@ class Newspack_Test_WC_Subscriptions_Add_Payment extends WP_UnitTestCase {
 			]
 		);
 
-		WooCommerce_Subscriptions::schedule_next_payment_after_payment_method_added( $subscription, 'stripe' );
+		WooCommerce_Subscriptions::schedule_next_payment_after_payment_method_added( self::SUCCESS, $subscription );
 
 		$this->assertEmpty( $subscription->get_date( 'next_payment' ) );
 	}
@@ -301,13 +311,48 @@ class Newspack_Test_WC_Subscriptions_Add_Payment extends WP_UnitTestCase {
 				]
 			);
 
-			WooCommerce_Subscriptions::schedule_next_payment_after_payment_method_added( $subscription, 'stripe' );
+			WooCommerce_Subscriptions::schedule_next_payment_after_payment_method_added( self::SUCCESS, $subscription );
 
 			$this->assertEmpty(
 				$subscription->get_date( 'next_payment' ),
 				sprintf( 'Expected no next payment date to be written for a "%s" subscription.', $status )
 			);
 		}
+	}
+
+	/**
+	 * A declined card writes nothing. WCS applies this filter after
+	 * process_payment() and bails on a non-success result, so scheduling here must
+	 * be conditional on that result — otherwise a reader whose card was refused
+	 * keeps access until a renewal runs against a card that was never accepted.
+	 */
+	public function test_does_not_schedule_when_the_payment_failed() {
+		$subscription = $this->make_subscription(
+			[
+				'status'         => 'active',
+				'calculate_date' => gmdate( 'Y-m-d H:i:s', strtotime( '+1 year' ) ),
+			]
+		);
+
+		WooCommerce_Subscriptions::schedule_next_payment_after_payment_method_added( self::FAILURE, $subscription );
+
+		$this->assertSame( 0, $subscription->get_date( 'next_payment' ) );
+	}
+
+	/**
+	 * The filter must hand back whatever WCS gave it, success or not.
+	 */
+	public function test_returns_the_payment_result_unchanged() {
+		$subscription = $this->make_subscription( [ 'status' => 'active' ] );
+
+		$this->assertSame(
+			self::SUCCESS,
+			WooCommerce_Subscriptions::schedule_next_payment_after_payment_method_added( self::SUCCESS, $subscription )
+		);
+		$this->assertSame(
+			self::FAILURE,
+			WooCommerce_Subscriptions::schedule_next_payment_after_payment_method_added( self::FAILURE, $subscription )
+		);
 	}
 
 	/**
@@ -326,18 +371,25 @@ class Newspack_Test_WC_Subscriptions_Add_Payment extends WP_UnitTestCase {
 			]
 		);
 
-		WooCommerce_Subscriptions::schedule_next_payment_after_payment_method_added( $subscription, 'stripe' );
+		WooCommerce_Subscriptions::schedule_next_payment_after_payment_method_added( self::SUCCESS, $subscription );
 
 		$this->assertSame( $existing, $subscription->get_date( 'next_payment' ) );
 	}
 
 	/**
-	 * No gateway attached means nothing to schedule against.
+	 * No chargeable gateway on the subscription means nothing to schedule against.
+	 * Asked of the subscription rather than inferred from a method string, since
+	 * this also runs for admin and bulk updates.
 	 */
-	public function test_does_not_schedule_when_no_payment_method_was_attached() {
-		$subscription = $this->make_subscription( [ 'status' => 'active' ] );
+	public function test_does_not_schedule_when_no_gateway_is_attached() {
+		$subscription = $this->make_subscription(
+			[
+				'status'              => 'active',
+				'has_payment_gateway' => false,
+			]
+		);
 
-		WooCommerce_Subscriptions::schedule_next_payment_after_payment_method_added( $subscription, '' );
+		WooCommerce_Subscriptions::schedule_next_payment_after_payment_method_added( self::SUCCESS, $subscription );
 
 		$this->assertEmpty( $subscription->get_date( 'next_payment' ) );
 	}
