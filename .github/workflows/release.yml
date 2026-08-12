@@ -108,20 +108,14 @@ jobs:
             # silently skip a real one. Require multi-semantic-release's own
             # zero-count line to corroborate before trusting the skip.
             zero_status=0
-            # Verified against the pinned multi-semantic-release: a no-release run
-            # logs `Released 0 of 18 packages, semantically!`, and a run with work to
-            # do logs `Released 1 of 18 packages`, so the count corroborates rather
-            # than reading 0 unconditionally. Spacing and the plural are matched
-            # loosely so a cosmetic upstream reformat does not redden a no-op push;
-            # the count itself is still required to be zero.
+            # msr logs `Released 0 of 18 packages` when nothing is due and `Released 1
+            # of 18 packages` when something is, so the count is real corroboration.
+            # Matched loosely so a cosmetic reformat cannot redden a no-op push.
             grep -qiE 'released +0 +of +[0-9]+ +packages?' msr-dryrun.log || zero_status=$?
             if [ "$zero_status" -ne 0 ]; then
               echo "Neither a release version nor a zero-release marker found; the dry-run output may have changed."
-              # Whole log, not a tail: this branch fires exactly when the output no
-              # longer has the shape the greps expect, which is when the full text is
-              # needed to work out the new one. A tail of a multi-package run shows
-              # only the last package's chatter, and the log is discarded on exit.
-              # `|| true` so the explicit exit 1 below is what ends the step.
+              # Whole log: this fires when the shape is unknown, and a tail of a
+              # multi-package run shows only the last package. `|| true` so exit 1 wins.
               cat msr-dryrun.log || true
               exit 1
             fi
