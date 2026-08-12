@@ -54,7 +54,7 @@ const [ pendingAction, setPendingAction ] = useState( null );
 <ConfirmDialog
 	when={ hasUnsavedChanges }
 	isOpen={ !! pendingAction }
-	confirmButtonText="Discard changes"
+	confirmButtonText="Discard Changes"
 	isDestructive
 	hideTitle
 	onConfirm={ () => {
@@ -116,7 +116,7 @@ const { confirmDialog, requestConfirm } = useConfirmDialog( {
 const { confirmDialog, requestConfirm } = useConfirmDialog( {
 	when: isDirty,
 	message: 'You have unsaved changes that will be lost. Discard changes?',
-	confirmButtonText: 'Discard changes',
+	confirmButtonText: 'Discard Changes',
 	isDestructive: true,
 	hideTitle: true,
 } );
