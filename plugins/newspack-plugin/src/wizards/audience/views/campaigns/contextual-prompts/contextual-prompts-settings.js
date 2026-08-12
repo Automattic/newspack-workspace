@@ -29,6 +29,7 @@ import { megaphone } from '@wordpress/icons';
  * Internal dependencies
  */
 import { Button, Divider, Grid, Modal, SectionHeader } from '../../../../../../packages/components/src';
+import EmptyState from '../../../../../../packages/components/src/empty-state';
 import WizardsTab from '../../../../wizards-tab';
 
 const DISCLOSURE = __(
@@ -64,35 +65,31 @@ const ContextualPromptsSettings = ( { status, values, error, inFlight, onSetValu
 	if ( ! enabled ) {
 		return (
 			<WizardsTab>
-				<Grid columns={ 4 } noMargin>
-					<VStack data-start="2" data-end="4" spacing={ 8 }>
-						{ errorNotice }
-						<SectionHeader
-							icon={ megaphone }
-							title={ __( 'Get started with Contextual Prompts', 'newspack-plugin' ) }
-							description={ __(
-								'Let editors generate story-specific donation prompts with AI. Approved copy appears in the story as a Contextual Prompt, pairing a tailored message with your donation call to action.',
-								'newspack-plugin'
-							) }
-							pageHeader
-							noMargin
-						/>
-						<HStack alignment="center">
-							{ canManage ? (
-								<Button variant="primary" onClick={ () => setModalOpen( true ) }>
+				<EmptyState.Root>
+					{ errorNotice }
+					<EmptyState.Header
+						icon={ megaphone }
+						title={ __( 'Get started with Contextual Prompts', 'newspack-plugin' ) }
+						description={ __(
+							'Let editors generate story-specific donation prompts with AI. Approved copy appears in the story as a Contextual Prompt, pairing a tailored message with your donation call to action.',
+							'newspack-plugin'
+						) }
+					/>
+					<EmptyState.Actions>
+						{ canManage ? (
+							<Button variant="primary" onClick={ () => setModalOpen( true ) }>
+								{ __( 'Enable Contextual Prompts', 'newspack-plugin' ) }
+							</Button>
+						) : (
+							<VStack alignment="center" spacing={ 2 }>
+								<Button variant="primary" disabled>
 									{ __( 'Enable Contextual Prompts', 'newspack-plugin' ) }
 								</Button>
-							) : (
-								<VStack alignment="center" spacing={ 2 }>
-									<Button variant="primary" disabled>
-										{ __( 'Enable Contextual Prompts', 'newspack-plugin' ) }
-									</Button>
-									<p style={ { margin: 0 } }>{ __( 'An administrator must enable this feature.', 'newspack-plugin' ) }</p>
-								</VStack>
-							) }
-						</HStack>
-					</VStack>
-				</Grid>
+								<p style={ { margin: 0 } }>{ __( 'An administrator must enable this feature.', 'newspack-plugin' ) }</p>
+							</VStack>
+						) }
+					</EmptyState.Actions>
+				</EmptyState.Root>
 				{ modalOpen && (
 					<Modal
 						title={ __( 'Enable Contextual Prompts?', 'newspack-plugin' ) }

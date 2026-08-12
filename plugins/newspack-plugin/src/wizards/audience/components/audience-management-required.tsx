@@ -19,7 +19,8 @@ import { people } from '@wordpress/icons';
 /**
  * Internal dependencies
  */
-import { Button, Grid, SectionHeader } from '../../../../packages/components/src';
+import { Button } from '../../../../packages/components/src';
+import EmptyState from '../../../../packages/components/src/empty-state';
 import Router from '../../../../packages/components/src/proxied-imports/router';
 
 const { Redirect } = Router;
@@ -61,27 +62,23 @@ const AudienceManagementRequired = ( {
 	learnMoreUrl?: string;
 } ) => {
 	return (
-		<Grid columns={ 4 } noMargin>
-			<VStack data-start="2" data-end="4" spacing={ 8 }>
-				<SectionHeader
-					icon={ people }
-					title={ __( 'Set up Audience Management first', 'newspack-plugin' ) }
-					description={ description }
-					pageHeader
-					noMargin
-				/>
-				<VStack alignment="center" spacing={ 4 }>
-					{ /* Rendered only with a real destination: a primary CTA pointing at href=""
-					     reloads this same screen, which is worse than offering no button. */ }
-					{ setupUrl && (
-						<Button variant="primary" href={ setupUrl }>
-							{ __( 'Set up Audience Management', 'newspack-plugin' ) }
-						</Button>
-					) }
-					<ExternalLink href={ learnMoreUrl }>{ __( 'Learn more', 'newspack-plugin' ) }</ExternalLink>
-				</VStack>
+		<EmptyState.Root>
+			<EmptyState.Header
+				icon={ people }
+				title={ __( 'Set up Audience Management first', 'newspack-plugin' ) }
+				description={ description }
+			/>
+			<VStack alignment="center" spacing={ 4 }>
+				{ /* Rendered only with a real destination: a primary CTA pointing at href=""
+				     reloads this same screen, which is worse than offering no button. */ }
+				{ setupUrl && (
+					<Button variant="primary" href={ setupUrl }>
+						{ __( 'Set up Audience Management', 'newspack-plugin' ) }
+					</Button>
+				) }
+				<ExternalLink href={ learnMoreUrl }>{ __( 'Learn more', 'newspack-plugin' ) }</ExternalLink>
 			</VStack>
-		</Grid>
+		</EmptyState.Root>
 	);
 };
 
