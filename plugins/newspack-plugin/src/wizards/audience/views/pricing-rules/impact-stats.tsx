@@ -51,13 +51,15 @@ export default function ImpactStats( { totalMatching, countLimited, audience }: 
 				<Stat value={ bounded( totalMatching, countLimited ) } label={ __( 'Products affected', 'newspack-plugin' ) } />
 				{ scope && <Stat value={ bounded( scope.total, scope.count_limited ) } label={ __( 'Subscribers in scope', 'newspack-plugin' ) } /> }
 				{ scope && ! isLocked && (
+					// The engine truncates oldest-first and the oldest are the ones a cohort
+					// gate protects, so a capped split under-reports who is repriced.
 					<Stat
-						value={ formatCount( scope.caught ) }
+						value={ bounded( scope.caught, scope.count_limited ) }
 						label={ __( 'Eligible at renewal', 'newspack-plugin' ) }
 						note={ sprintf(
 							/* translators: %s: how many subscribers in scope keep their current price. */
 							_n( '%s protected', '%s protected', scope.protected, 'newspack-plugin' ),
-							formatCount( scope.protected )
+							bounded( scope.protected, scope.count_limited )
 						) }
 					/>
 				) }

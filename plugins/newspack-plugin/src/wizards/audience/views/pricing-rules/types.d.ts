@@ -126,10 +126,12 @@ interface CatalogImpactResponse {
 	count_limited: boolean;
 	preview_limited: boolean;
 	sample_count: number;
+	// The cap the engine applied; omitted rather than guessed when it had none.
+	sample_limit?: number;
 	currency: PricingRulesCurrency;
 	sample: CatalogImpactRow[];
 	segment_groups?: SegmentImpactGroup[];
-	// Absent on the catalogue route until the engine's subscriptions layer sends it.
+	// Absent unless the engine's subscriptions layer is present.
 	audience?: RuleAudienceData;
 }
 

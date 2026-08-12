@@ -13,10 +13,10 @@ import { __, _n, sprintf } from '@wordpress/i18n';
  * Internal dependencies
  */
 import { formatCount } from '../../../../../packages/components/src/breadcrumbs/format-count';
+import { IMPACT_SAMPLE_LIMIT } from './constants';
 
 // Re-exported, not reimplemented: only this helper normalises the locales
-// WordPress ships that Intl rejects, and the header count beside these figures
-// already uses it.
+// WordPress ships that Intl rejects.
 export { formatCount };
 
 export function formatPrice( amount: number, currency: PricingRulesCurrency ): string {
@@ -45,12 +45,18 @@ export function cycleMarkerNote(): string {
 }
 
 /**
- * Shared so the modal and the editor preview cannot drift into two msgids.
+ * The caption for a table the engine capped, or null when it did not. The cap comes
+ * from the payload because the engine's two entry points default differently, and
+ * `preview_limited` alone cannot tell a capped sample from one that skipped a
+ * product it could not price.
  */
-export function sampleNote( sampleCount: number ): string {
+export function sampleNote( payload: CatalogImpactResponse ): string | null {
+	if ( ! payload.preview_limited || payload.sample_count < ( payload.sample_limit ?? IMPACT_SAMPLE_LIMIT ) ) {
+		return null;
+	}
 	return sprintf(
 		/* translators: %s: how many products the table lists. */
-		_n( 'Showing a sample of %s product.', 'Showing a sample of %s products.', sampleCount, 'newspack-plugin' ),
-		formatCount( sampleCount )
+		_n( 'Showing a sample of %s product.', 'Showing a sample of %s products.', payload.sample_count, 'newspack-plugin' ),
+		formatCount( payload.sample_count )
 	);
 }

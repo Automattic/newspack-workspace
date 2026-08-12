@@ -22,7 +22,7 @@ import ImpactEmpty, { type ImpactEmptyReason } from './impact-empty';
 import ImpactStats from './impact-stats';
 import ImpactTable from './impact-table';
 import { sampleNote } from './impact-format';
-import { RULE_PREVIEW_API_PATH as PREVIEW_PATH, IMPACT_SAMPLE_LIMIT } from './constants';
+import { RULE_PREVIEW_API_PATH as PREVIEW_PATH } from './constants';
 
 const DEBOUNCE_MS = 500;
 
@@ -95,6 +95,7 @@ export default function RulePreview( { body, showCycleNote }: RulePreviewProps )
 	}
 
 	const preview = data as RulePreviewResponse;
+	const note = sampleNote( preview );
 
 	return (
 		<div className={ `newspack-pricing-rules__preview${ isLoading ? ' is-loading' : '' }` }>
@@ -105,9 +106,7 @@ export default function RulePreview( { body, showCycleNote }: RulePreviewProps )
 				currency={ preview.currency }
 				showCycleNote={ showCycleNote }
 			/>
-			{ preview.preview_limited && preview.sample_count >= IMPACT_SAMPLE_LIMIT && (
-				<p className="newspack-pricing-rules__muted">{ sampleNote( preview.sample_count ) }</p>
-			) }
+			{ note && <p className="newspack-pricing-rules__muted">{ note }</p> }
 		</div>
 	);
 }

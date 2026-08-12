@@ -44,7 +44,7 @@ export default function CatalogImpact( { stats }: CatalogImpactProps ) {
 	const open = useCallback( () => {
 		setIsOpen( true );
 		setHasError( false );
-		// A landed sample is kept; a failure is retried.
+		// A failure is retried; only a landed sample short-circuits.
 		if ( detail || inFlight.current ) {
 			return;
 		}
@@ -77,6 +77,7 @@ export default function CatalogImpact( { stats }: CatalogImpactProps ) {
 			emptyReason = 'no-products';
 		}
 	}
+	const note = detail ? sampleNote( detail ) : null;
 
 	return (
 		<Card.Root className="newspack-pricing-rules__impact">
@@ -108,9 +109,7 @@ export default function CatalogImpact( { stats }: CatalogImpactProps ) {
 						{ ! hasError && emptyReason && <ImpactEmpty reason={ emptyReason } /> }
 						{ ! hasError && detail && ! emptyReason && (
 							<>
-								{ detail.preview_limited && detail.sample_count >= IMPACT_SAMPLE_LIMIT && (
-									<p className="newspack-pricing-rules__muted">{ sampleNote( detail.sample_count ) }</p>
-								) }
+								{ note && <p className="newspack-pricing-rules__muted">{ note }</p> }
 								<ImpactTable
 									baseline={ detail.sample }
 									segmentGroups={ detail.segment_groups ?? [] }

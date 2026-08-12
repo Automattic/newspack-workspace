@@ -140,6 +140,14 @@ describe( 'RulePreview', () => {
 		expect( screen.queryByText( /Showing a sample of/ ) ).not.toBeInTheDocument();
 	} );
 
+	// The per-rule route takes no limit at all, so only the payload knows the cap.
+	it( 'measures the sample against the cap the engine reports', async () => {
+		apiFetch.mockResolvedValue( response( { preview_limited: true, sample_count: 10, sample_limit: 10, total_matching: 120 } ) );
+		render( <RulePreview body={ {} } /> );
+		await settle();
+		expect( screen.getByText( 'Showing a sample of 10 products.' ) ).toBeInTheDocument();
+	} );
+
 	// The engine flags a preview as limited when it merely skipped an unpriceable product.
 	it( 'says nothing about sampling when the table never reached the cap', async () => {
 		apiFetch.mockResolvedValue( response( { preview_limited: true, sample_count: 33, total_matching: 36 } ) );

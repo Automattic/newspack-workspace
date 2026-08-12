@@ -121,10 +121,8 @@ export default function PricingRulesList() {
 		fetchData();
 	}, [ fetchData ] );
 
-	// One row is enough: total_matching and count_limited do not vary with the
-	// limit, and pricing the whole sample costs several times as much. `audience`
-	// renders from this payload too, so it must stay limit-invariant when the
-	// engine starts sending it.
+	// One row is enough: total_matching, count_limited and audience are all computed
+	// before the limit applies, and pricing the whole sample costs several times as much.
 	const statsRequest = useRef( 0 );
 	const gateTimer = useRef< ReturnType< typeof setTimeout > | undefined >( undefined );
 
