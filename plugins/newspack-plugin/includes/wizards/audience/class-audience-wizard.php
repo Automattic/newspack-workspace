@@ -590,6 +590,7 @@ class Audience_Wizard extends Wizard {
 	 */
 	public function api_update_reader_activation_settings( $request ) {
 		$args = $request->get_params();
+
 		foreach ( $args as $key => $value ) {
 			Reader_Activation::update_setting( $key, $value );
 		}

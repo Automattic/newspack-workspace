@@ -177,7 +177,7 @@ export default function InstitutionEdit( { match }: { match: { params: { id?: st
 	const { confirmDialog: navBlockDialog } = useConfirmDialog( {
 		when: isDirty && ! isSaving,
 		message: __( 'You have unsaved changes that will be lost. Discard changes?', 'newspack-plugin' ),
-		confirmButtonText: __( 'Discard changes', 'newspack-plugin' ),
+		confirmButtonText: __( 'Discard Changes', 'newspack-plugin' ),
 		hideTitle: true,
 	} );
 
