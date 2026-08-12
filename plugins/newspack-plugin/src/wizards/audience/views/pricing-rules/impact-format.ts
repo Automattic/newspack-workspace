@@ -19,6 +19,20 @@ import { IMPACT_SAMPLE_LIMIT } from './constants';
 // WordPress ships that Intl rejects.
 export { formatCount };
 
+/**
+ * The engine is a separate plugin, so its counts arrive over REST as whatever
+ * `json_encode` made of them: an int, a numeric string from `$wpdb`, or null.
+ * Anything outside that set is refused rather than coerced, because `Number()`
+ * turns `false` and `[]` into a confident zero.
+ */
+export function finiteCount( value: unknown ): number | null {
+	if ( 'number' !== typeof value && ( 'string' !== typeof value || '' === value.trim() ) ) {
+		return null;
+	}
+	const count = Number( value );
+	return Number.isFinite( count ) ? count : null;
+}
+
 export function formatPrice( amount: number, currency: PricingRulesCurrency ): string {
 	return currency.symbol + amount.toFixed( currency.decimals );
 }

@@ -23,7 +23,7 @@ import {
 import ImpactEmpty, { type ImpactEmptyReason } from './impact-empty';
 import ImpactStats from './impact-stats';
 import ImpactTable from './impact-table';
-import { sampleNote } from './impact-format';
+import { sampleNote, finiteCount } from './impact-format';
 import { IMPACT_PREVIEW_API_PATH as API_PATH, IMPACT_SAMPLE_LIMIT } from './constants';
 
 interface CatalogImpactProps {
@@ -78,7 +78,10 @@ export default function CatalogImpact( { stats }: CatalogImpactProps ) {
 		}
 	}
 	const note = detail ? sampleNote( detail ) : null;
-	const hasAffectedProducts = stats.total_matching > 0;
+	// A count the engine never sent is neither "some" nor "none", so it offers the
+	// table and claims nothing.
+	const affected = finiteCount( stats.total_matching );
+	const hasAffectedProducts = null !== affected && affected > 0;
 
 	return (
 		<section className="newspack-pricing-rules__impact" aria-labelledby={ headingId }>
@@ -93,7 +96,7 @@ export default function CatalogImpact( { stats }: CatalogImpactProps ) {
 				audience={ stats.audience }
 				onViewProducts={ hasAffectedProducts ? open : undefined }
 			/>
-			{ ! hasAffectedProducts && (
+			{ 0 === affected && (
 				<p className="newspack-pricing-rules__muted">{ __( 'No active pricing rules are affecting products yet.', 'newspack-plugin' ) }</p>
 			) }
 			{ isOpen && (
@@ -109,7 +112,7 @@ export default function CatalogImpact( { stats }: CatalogImpactProps ) {
 							<span className="screen-reader-text">{ __( 'Loading the affected products…', 'newspack-plugin' ) }</span>
 						</VStack>
 					) }
-					{ ! hasError && emptyReason && <ImpactEmpty reason={ emptyReason } /> }
+					{ ! hasError && emptyReason && <ImpactEmpty reason={ emptyReason } headingLevel={ 2 } /> }
 					{ ! hasError && detail && ! emptyReason && (
 						<>
 							{ note && <p className="newspack-pricing-rules__muted">{ note }</p> }

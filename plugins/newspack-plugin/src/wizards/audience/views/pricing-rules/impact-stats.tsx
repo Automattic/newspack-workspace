@@ -13,7 +13,7 @@ import { __, _x, sprintf } from '@wordpress/i18n';
  */
 import { Grid } from '../../../../../packages/components/src';
 import StatTile, { type StatTileProps } from './stat-tile';
-import { formatCount } from './impact-format';
+import { formatCount, finiteCount } from './impact-format';
 
 interface ImpactStatsProps {
 	totalMatching: number;
@@ -26,22 +26,12 @@ interface ImpactStatsProps {
 
 type Figure = Pick< StatTileProps, 'value' | 'valueLabel' >;
 
-// The counts cross a REST boundary owned by the pricing engine, which can send a
-// count as a numeric string, so coerce before testing rather than after.
-const finiteCount = ( value: unknown ): number | null => {
-	if ( null === value || undefined === value || '' === value ) {
-		return null;
-	}
-	const count = Number( value );
-	return Number.isFinite( count ) ? count : null;
-};
-
-const bounded = ( value: number, limited: boolean ): Figure => {
+const bounded = ( value: EngineCount, limited: boolean ): Figure => {
 	const count = finiteCount( value );
 	if ( null === count ) {
 		// Distinct from the locked rule's silence: there the figure does not apply,
 		// here it never arrived.
-		return { value: null, valueLabel: _x( 'Unavailable', 'a statistic missing from the payload', 'newspack-plugin' ) };
+		return { value: null, valueLabel: _x( 'Unavailable', 'a statistic the server did not return', 'newspack-plugin' ) };
 	}
 	const formatted = formatCount( count );
 	if ( ! limited ) {

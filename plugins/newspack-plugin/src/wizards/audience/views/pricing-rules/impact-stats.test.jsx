@@ -163,6 +163,24 @@ describe( 'ImpactStats', () => {
 		expect( screen.queryByText( 'Not applicable' ) ).not.toBeInTheDocument();
 	} );
 
+	// Zero is a real answer, so it must survive the missing-count guard.
+	it( 'renders a zero count as a number, not as the em-dash', () => {
+		render( stats( { totalMatching: 0, countLimited: false, audience: audience( { caught: 0 } ) } ) );
+
+		expect( within( tileFor( 'Products affected' ) ).getByText( '0' ) ).toBeInTheDocument();
+		expect( within( tileFor( 'Eligible at renewal' ) ).getByText( '0' ) ).toBeInTheDocument();
+		expect( screen.queryByText( '—' ) ).not.toBeInTheDocument();
+	} );
+
+	// Number() would turn these into a confident zero, which is worse than no figure.
+	it( 'refuses a count that is not a number or a numeric string', () => {
+		render( stats( { totalMatching: 36, countLimited: false, audience: audience( { caught: false, protected: [] } ) } ) );
+
+		expect( within( tileFor( 'Eligible at renewal' ) ).getByText( '—' ) ).toBeInTheDocument();
+		expect( within( tileFor( 'Protected' ) ).getByText( '—' ) ).toBeInTheDocument();
+		expect( screen.queryByText( '0' ) ).not.toBeInTheDocument();
+	} );
+
 	// The engine is a separate plugin and PHP counts arrive as strings unless cast.
 	it( 'formats a count the engine sent as a string', () => {
 		render( stats( { totalMatching: '500', countLimited: false, audience: audience( { total: '12', caught: '8', protected: '4' } ) } ) );

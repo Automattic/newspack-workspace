@@ -20,21 +20,19 @@ export interface StatTileProps {
 	secondary?: string;
 	actionLabel?: string;
 	onAction?: () => void;
-	// Both screens that render the tiles put them under a section heading.
-	headingLevel?: 2 | 3 | 4 | 5 | 6;
 }
 
 const EM_DASH = '—';
 
-export default function StatTile( { label, value, valueLabel, description, secondary, actionLabel, onAction, headingLevel = 3 }: StatTileProps ) {
-	const Heading = `h${ headingLevel }` as keyof JSX.IntrinsicElements;
+export default function StatTile( { label, value, valueLabel, description, secondary, actionLabel, onAction }: StatTileProps ) {
 	const shown = null === value ? EM_DASH : value;
 	const spoken = valueLabel ?? ( null === value ? _x( 'Not applicable', 'a statistic with no number to show', 'newspack-plugin' ) : undefined );
 
 	return (
 		<Card.Root className="newspack-pricing-rules__tile">
 			<Card.Content className="newspack-pricing-rules__tile-content">
-				<Heading className="newspack-pricing-rules__tile-label">{ label }</Heading>
+				{ /* Both screens place the grid under a section heading, so the tiles are its children. */ }
+				<h3 className="newspack-pricing-rules__tile-label">{ label }</h3>
 				<div className="newspack-pricing-rules__tile-body">
 					<span className="newspack-pricing-rules__tile-value">
 						{ spoken ? (

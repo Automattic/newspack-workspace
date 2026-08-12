@@ -143,7 +143,7 @@ describe( 'RulePreview', () => {
 	} );
 
 	// The editor sits under the Impact Preview h2, so the tiles are h3.
-	it( 'nests the tile labels under the section heading', async () => {
+	it( 'renders the tile labels as h3', async () => {
 		apiFetch.mockResolvedValue( response() );
 		render( <RulePreview body={ {} } /> );
 		await settle();

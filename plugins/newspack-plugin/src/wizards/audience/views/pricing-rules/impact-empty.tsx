@@ -31,14 +31,20 @@ const getReasons = () => ( {
 	},
 } );
 
-export default function ImpactEmpty( { reason }: { reason: ImpactEmptyReason } ) {
+interface ImpactEmptyProps {
+	reason: ImpactEmptyReason;
+	// The editor sits under a section h2; the modal sits under its own title h1.
+	headingLevel?: 2 | 3;
+}
+
+export default function ImpactEmpty( { reason, headingLevel = 3 }: ImpactEmptyProps ) {
 	const { icon, title, body } = getReasons()[ reason ];
 	return (
 		<Card.Root className="newspack-pricing-rules__empty">
 			<Card.Content>
 				<Grid columns={ 4 } noMargin>
 					<VStack start={ 2 } end={ 4 } spacing={ 8 }>
-						<SectionHeader icon={ icon } title={ title } description={ body } pageHeader size="small" noMargin heading={ 3 } />
+						<SectionHeader icon={ icon } title={ title } description={ body } pageHeader size="small" noMargin heading={ headingLevel } />
 					</VStack>
 				</Grid>
 			</Card.Content>

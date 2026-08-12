@@ -21,13 +21,11 @@ describe( 'StatTile', () => {
 		expect( screen.getByText( 'Rules currently price these products' ) ).toBeInTheDocument();
 	} );
 
-	// Both screens put the tiles under a section heading, so h3 is the default.
-	it( 'renders the label at the level its screen asks for', () => {
-		const { rerender } = render( <StatTile label="Products affected" value="33" description="Rules currently price these products" /> );
-		expect( screen.getByRole( 'heading', { name: 'Products affected', level: 3 } ) ).toBeInTheDocument();
+	// Both screens put the grid under a section heading, so the label is its child.
+	it( 'renders the label as a heading', () => {
+		render( <StatTile label="Products affected" value="33" description="Rules currently price these products" /> );
 
-		rerender( <StatTile label="Products affected" value="33" description="Rules currently price these products" headingLevel={ 4 } /> );
-		expect( screen.getByRole( 'heading', { name: 'Products affected', level: 4 } ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'heading', { name: 'Products affected', level: 3 } ) ).toBeInTheDocument();
 	} );
 
 	it( 'hides the em-dash and speaks its meaning instead', () => {
