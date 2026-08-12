@@ -121,6 +121,7 @@
 	&__tile-description {
 		color: wp-colors.$gray-700;
 		font-size: wp-vars.$helptext-font-size;
+		text-wrap: balance;
 	}
 
 	&__impact-table {
