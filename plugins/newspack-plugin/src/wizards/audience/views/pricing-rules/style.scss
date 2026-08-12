@@ -213,12 +213,13 @@
 	}
 
 	&__preview {
+		display: flex;
+		flex-direction: column;
+		gap: wp-vars.$grid-unit-30;
+		margin-top: wp-vars.$grid-unit-30;
+
 		&.is-loading {
 			opacity: 0.6;
-		}
-
-		> p {
-			margin-top: wp-vars.$grid-unit-15;
 		}
 
 		col[class*="__col-seg-"] {
