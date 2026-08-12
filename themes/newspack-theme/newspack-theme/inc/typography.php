@@ -7,6 +7,12 @@
 
 /**
  * Generate the CSS for custom typography.
+ *
+ * The editor override targets the root element as well as the wrapper: in the
+ * iframed canvas the font-family presets compute on the iframe's root element,
+ * which a wrapper-scoped rule cannot reach. html:root outweighs the compiled
+ * editor defaults, which land later in the canvas and would win a plain-:root
+ * tie on document order.
  */
 function newspack_custom_typography_css() {
 
@@ -19,13 +25,14 @@ function newspack_custom_typography_css() {
 	if ( get_theme_mod( 'font_header', '' ) ) {
 		$css_blocks .= '
 			:root {
-				--newspack-theme-font-heading: ' . wp_kses( $font_header, null ) . ';
+				--newspack-theme-font-heading: ' . $font_header . ';
 			}
 		';
 
 		$editor_css_blocks .= '
+			html:root,
 			:root .editor-styles-wrapper {
-				--newspack-theme-font-heading: ' . wp_kses( $font_header, null ) . ';
+				--newspack-theme-font-heading: ' . $font_header . ';
 			}
 		';
 	}
@@ -33,13 +40,14 @@ function newspack_custom_typography_css() {
 	if ( get_theme_mod( 'font_body', '' ) ) {
 		$css_blocks .= '
 			:root {
-				--newspack-theme-font-body: ' . wp_kses( $font_body, null ) . ';
+				--newspack-theme-font-body: ' . $font_body . ';
 			}
 		';
 
 		$editor_css_blocks .= '
+			html:root,
 			:root .editor-styles-wrapper {
-				--newspack-theme-font-body: ' . wp_kses( $font_body, null ) . ';
+				--newspack-theme-font-body: ' . $font_body . ';
 			}
 		';
 	}
@@ -160,13 +168,141 @@ function newspack_get_font_stacks_as_select_choices() {
 
 /**
  * Prepare a font-family definition with a primary font and fallbacks.
+ *
+ * Values flow into inline styles and theme.json preset values, and core never
+ * passes the theme origin through its insecure-property filtering, so names
+ * are emitted as quoted CSS strings with string delimiters escaped and markup
+ * and control characters removed. Generic family keywords stay unquoted so a
+ * stack always ends in a real generic.
+ *
+ * Mirrored by newspack-newsletters' test fixture at
+ * tests/email-renderers/fixtures/theme-font-functions.php, which stands in for
+ * this function when the theme is not loaded; changes to the escaping here need
+ * to be carried over there.
+ *
+ * @param string $primary_font Primary font name.
+ * @param string $fallback_id  Key of newspack_get_font_stacks(); unknown ids
+ *                             take the serif stack.
+ * @return string Comma-joined, pre-escaped CSS font-family list.
  */
 function newspack_font_stack( $primary_font, $fallback_id ) {
-	$stacks = newspack_get_font_stacks();
-	$fonts  = isset( $stacks[ $fallback_id ] ) ? $stacks[ $fallback_id ]['fonts'] : array();
+	$stacks   = newspack_get_font_stacks();
+	$fonts    = isset( $stacks[ $fallback_id ] ) ? $stacks[ $fallback_id ]['fonts'] : $stacks['serif']['fonts'];
+	$generics = array( 'serif', 'sans-serif', 'monospace', 'cursive', 'fantasy', 'system-ui' );
 	array_unshift( $fonts, $primary_font );
 	foreach ( $fonts as &$font ) {
-		$font = '"' . $font . '"';
+		$font = preg_replace( '/[\x00-\x1F\x7F<>]/', '', stripslashes( $font ) );
+		if ( ! in_array( strtolower( $font ), $generics, true ) ) {
+			$font = '"' . str_replace( array( '\\', '"' ), array( '\\\\', '\\"' ), $font ) . '"';
+		}
 	}
+	unset( $font );
 	return implode( ',', $fonts );
 }
+
+/**
+ * The current Header and Body font stacks: the Customizer font when set,
+ * otherwise the active theme's default, mirroring
+ * sass/variables-site/_fonts.scss and each style variation's overrides.
+ *
+ * @return array Stacks keyed heading/body.
+ */
+function newspack_font_family_stacks() {
+	$system   = '-apple-system,blinkmacsystemfont,"Segoe UI","Roboto","Oxygen","Ubuntu","Cantarell","Fira Sans","Droid Sans","Helvetica Neue",sans-serif';
+	$defaults = array(
+		'heading' => $system,
+		'body'    => 'georgia,garamond,"Times New Roman",serif',
+	);
+
+	$variations = array(
+		'newspack-joseph'    => array(
+			'heading' => '"Old Standard TT",georgia,serif',
+			'body'    => '"EB Garamond",georgia,serif',
+		),
+		'newspack-katharine' => array(
+			'heading' => '"Barlow","Helvetica",sans-serif',
+			'body'    => '"Barlow","Helvetica",sans-serif',
+		),
+		'newspack-nelson'    => array(
+			'heading' => '"Montserrat","Helvetica",sans-serif',
+			'body'    => $system,
+		),
+		'newspack-sacha'     => array(
+			'heading' => '"IBM Plex Serif",georgia,serif',
+		),
+		'newspack-scott'     => array(
+			'heading' => '"Fira Sans Condensed","Helvetica",sans-serif',
+		),
+	);
+	if ( isset( $variations[ get_stylesheet() ] ) ) {
+		$defaults = array_merge( $defaults, $variations[ get_stylesheet() ] );
+	}
+
+	/**
+	 * Filter the default Header and Body font stacks.
+	 *
+	 * @param array $defaults Stacks keyed heading/body.
+	 */
+	$defaults = array_merge( $defaults, (array) apply_filters( 'newspack_font_family_default_stacks', $defaults ) );
+
+	$mods   = array(
+		'heading' => array( 'font_header', 'font_header_stack' ),
+		'body'    => array( 'font_body', 'font_body_stack' ),
+	);
+	$stacks = array();
+	foreach ( $mods as $key => $mod_names ) {
+		$font           = get_theme_mod( $mod_names[0], '' );
+		$stacks[ $key ] = $font ? newspack_font_stack( $font, get_theme_mod( $mod_names[1], 'serif' ) ) : $defaults[ $key ];
+	}
+
+	return $stacks;
+}
+
+/**
+ * Register the Customizer fonts as editor font family presets.
+ *
+ * The values reference the theme's own CSS variables so saved content tracks
+ * Customizer font changes with no re-save; the resolved stack rides along as
+ * the var() fallback for feeds and other contexts that print global styles
+ * without the theme stylesheet. Existing theme-origin presets are appended to,
+ * not replaced. With the Gutenberg plugin active the resolver passes
+ * WP_Theme_JSON_Data_Gutenberg, a sibling class rather than a subclass, so the
+ * parameter stays untyped.
+ *
+ * @param WP_Theme_JSON_Data|WP_Theme_JSON_Data_Gutenberg $theme_json Theme JSON data.
+ * @return WP_Theme_JSON_Data|WP_Theme_JSON_Data_Gutenberg
+ */
+function newspack_font_family_presets( $theme_json ) {
+	$data     = $theme_json->get_data();
+	$families = $data['settings']['typography']['fontFamilies'] ?? array();
+	// WP_Theme_JSON keys presets by origin internally, so a non-empty list comes
+	// back nested under 'theme'; appending to the nested array would double-nest
+	// it on the way back in and drop the existing presets.
+	if ( isset( $families['theme'] ) ) {
+		$families = $families['theme'];
+	}
+
+	$stacks     = newspack_font_family_stacks();
+	$families[] = array(
+		'slug'       => 'newspack-header',
+		'name'       => _x( 'Header', 'font family name', 'newspack-theme' ),
+		'fontFamily' => 'var(--newspack-theme-font-heading,' . $stacks['heading'] . ')',
+	);
+	$families[] = array(
+		'slug'       => 'newspack-body',
+		'name'       => _x( 'Body', 'font family name', 'newspack-theme' ),
+		'fontFamily' => 'var(--newspack-theme-font-body,' . $stacks['body'] . ')',
+	);
+
+	return $theme_json->update_with(
+		array(
+			'version'  => 3,
+			'settings' => array(
+				'typography' => array(
+					'fontFamilies' => $families,
+				),
+			),
+		)
+	);
+}
+add_filter( 'wp_theme_json_data_theme', 'newspack_font_family_presets', 10, 1 );
