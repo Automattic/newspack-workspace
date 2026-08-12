@@ -18,7 +18,11 @@ const FORM_ACTION = 'newspack_newsletters_subscribe';
  * so anything not named here would ship the provider's stored fields to the
  * caller. The consumer of record is `src/blocks/subscribe/view.js`: adding a key
  * here without a matching read there has no effect, and removing one breaks the
- * front end silently.
+ * front end silently. Exception: `verified` and `verification_nonce` are read
+ * there too, but produced elsewhere — newspack-plugin's
+ * `\Newspack\Reader_Activation::get_verification_payload()` — and merged into
+ * the result wholesale below, so a key added on that side needs a matching
+ * read in view.js and an entry here before it can reach the front end.
  */
 const RESPONSE_KEYS = [
 	'message',
