@@ -153,4 +153,21 @@ class Subscribe_Block_Response_Test extends WP_UnitTestCase {
 		$this->assertArrayNotHasKey( 'email_address', $response['metadata'], 'metadata must not carry provider fields.' );
 		$this->assertArrayNotHasKey( 'merge_fields', $response['metadata'], 'metadata must not carry provider fields.' );
 	}
+
+	/**
+	 * The error branch returns a reader-facing message and nothing else. The
+	 * WP_Error's own data can carry the provider's raw response.
+	 */
+	public function test_error_branch_returns_message_only() {
+		$error = new WP_Error(
+			'newspack_newsletters_subscribe_error',
+			'Sorry, an error has occurred.',
+			[ 'raw_provider_response' => [ 'email_address' => 'reader@example.com' ] ]
+		);
+
+		$response = $this->capture_response( $error );
+
+		$this->assertSame( 'Sorry, an error has occurred.', $response['message'] );
+		$this->assertArrayNotHasKey( 'data', $response, 'The raw WP_Error must not be returned.' );
+	}
 }

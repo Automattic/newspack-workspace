@@ -452,8 +452,11 @@ function send_form_response( $data ) {
 	$is_error = \is_wp_error( $data );
 	if ( \wp_is_json_request() ) {
 		if ( $is_error ) {
+			// Only the reader-facing message. The WP_Error's own data can carry the
+			// provider's raw response, and view.js reads nothing but `message` and
+			// the HTTP status on this branch.
 			$message = $data->get_error_message();
-			\wp_send_json( compact( 'message', 'data' ), 400 );
+			\wp_send_json( compact( 'message' ), 400 );
 			exit;
 		} else {
 			$data['newspack_newsletters_subscribed'] = 1;
