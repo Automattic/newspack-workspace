@@ -12,10 +12,10 @@ import { EmptyState } from 'newspack-components';
 import { getAdminUrl, getCptSlug } from '../../admin-globals';
 import HeaderCount from '../../components/header-count';
 import ItemsPerPage from '../../components/items-per-page';
-import { EMPTY_STATE_CLASS } from '../../constants';
+import { EMPTY_STATE_CLASS, getEmptyStateHeading } from '../../constants';
 import { useHeaderActions } from '../../header-actions-context';
 import usePersistedView from '../../hooks/use-persisted-view';
-import useStrictEmpty from '../../hooks/use-strict-empty';
+import isStrictlyEmpty from '../../utils/is-strictly-empty';
 import useNewslettersData from './use-newsletters-data';
 import useFilterElements from './use-filter-elements';
 import { getFields } from './fields';
@@ -53,7 +53,7 @@ export default function NewslettersListScreen() {
 	const fields = useMemo( () => getFields( filterElements ), [ filterElements ] );
 	const actions = useMemo( () => getActions( { refresh, openQuickEdit: setQuickEditItem } ), [ refresh ] );
 
-	const isStrictEmpty = useStrictEmpty( { hasLoadedOnce, isLoading, paginationInfo, trashCount, view } );
+	const isStrictEmpty = isStrictlyEmpty( { hasLoadedOnce, isLoading, paginationInfo, trashCount, view } );
 
 	useHeaderActions(
 		useMemo(
@@ -84,6 +84,7 @@ export default function NewslettersListScreen() {
 			<EmptyState.Root className={ EMPTY_STATE_CLASS }>
 				<EmptyState.Header
 					icon={ envelope }
+					heading={ getEmptyStateHeading() }
 					title={ __( 'Get started with newsletters', 'newspack-newsletters' ) }
 					description={ __(
 						'Compose, schedule, and send newsletters to your subscribers via your connected ESP.',

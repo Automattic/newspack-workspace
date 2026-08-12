@@ -16,10 +16,10 @@ import { store } from '@wordpress/icons';
 import { EmptyState } from 'newspack-components';
 import HeaderCount from '../../components/header-count';
 import ItemsPerPage from '../../components/items-per-page';
-import { EMPTY_STATE_CLASS } from '../../constants';
+import { EMPTY_STATE_CLASS, getEmptyStateHeading } from '../../constants';
 import { useHeaderActions } from '../../header-actions-context';
 import usePersistedView from '../../hooks/use-persisted-view';
-import useStrictEmpty from '../../hooks/use-strict-empty';
+import isStrictlyEmpty from '../../utils/is-strictly-empty';
 import AdvertiserModal from './modal';
 import useAdvertisersData from './use-advertisers-data';
 import useAllAdvertisers from './use-all-advertisers';
@@ -75,7 +75,7 @@ export default function AdvertisersListScreen() {
 	// `trashCount` is omitted, not forgotten: advertisers are terms and have no trash, so
 	// `useAdvertisersData` never resolves a count. Passing the `null` it would hand back,
 	// for symmetry with the other two screens, would block this empty state for good.
-	const isStrictEmpty = useStrictEmpty( { hasLoadedOnce, isLoading, paginationInfo, view } );
+	const isStrictEmpty = isStrictlyEmpty( { hasLoadedOnce, isLoading, paginationInfo, view } );
 
 	useHeaderActions(
 		useMemo(
@@ -108,6 +108,7 @@ export default function AdvertisersListScreen() {
 				<EmptyState.Root className={ EMPTY_STATE_CLASS }>
 					<EmptyState.Header
 						icon={ store }
+						heading={ getEmptyStateHeading() }
 						title={ __( 'Get started with advertisers', 'newspack-newsletters' ) }
 						description={ __(
 							'Group ads by the advertiser they belong to so you can track and report on each one separately.',

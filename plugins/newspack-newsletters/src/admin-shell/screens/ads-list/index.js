@@ -12,10 +12,10 @@ import { EmptyState } from 'newspack-components';
 import { getAdminUrl } from '../../admin-globals';
 import HeaderCount from '../../components/header-count';
 import ItemsPerPage from '../../components/items-per-page';
-import { EMPTY_STATE_CLASS } from '../../constants';
+import { EMPTY_STATE_CLASS, getEmptyStateHeading } from '../../constants';
 import { useHeaderActions } from '../../header-actions-context';
 import usePersistedView from '../../hooks/use-persisted-view';
-import useStrictEmpty from '../../hooks/use-strict-empty';
+import isStrictlyEmpty from '../../utils/is-strictly-empty';
 import { fetchAllTerms } from '../../utils/terms';
 import useAdsData from './use-ads-data';
 import { getFields } from './fields';
@@ -81,7 +81,7 @@ export default function AdsListScreen() {
 	const fields = useMemo( () => getFields( filterTerms ), [ filterTerms ] );
 	const actions = useMemo( () => getActions( { refresh, openQuickEdit: setQuickEditItem } ), [ refresh ] );
 
-	const isStrictEmpty = useStrictEmpty( { hasLoadedOnce, isLoading, paginationInfo, trashCount, view } );
+	const isStrictEmpty = isStrictlyEmpty( { hasLoadedOnce, isLoading, paginationInfo, trashCount, view } );
 
 	useHeaderActions(
 		useMemo(
@@ -112,6 +112,7 @@ export default function AdsListScreen() {
 			<EmptyState.Root className={ EMPTY_STATE_CLASS }>
 				<EmptyState.Header
 					icon={ emailAd }
+					heading={ getEmptyStateHeading() }
 					title={ __( 'Get started with newsletter ads', 'newspack-newsletters' ) }
 					description={ __(
 						'Monetise newsletters with sponsored or house ads. Schedule by date, target by placement or category.',

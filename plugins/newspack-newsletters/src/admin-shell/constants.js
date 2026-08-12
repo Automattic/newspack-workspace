@@ -1,5 +1,5 @@
 /**
- * Shell-wide constants shared between the screens and `style.scss`.
+ * Shell-wide values shared between the screens and `style.scss`.
  */
 
 /**
@@ -12,3 +12,17 @@
  * @type {string}
  */
 export const EMPTY_STATE_CLASS = 'newspack-newsletters-admin__empty-state';
+
+/**
+ * Heading level for a screen's empty state.
+ *
+ * Standalone puts the page `<h1>` in `.newspack-newsletters-admin__header`, which
+ * `style.scss` hides whenever an empty state is on screen, so the empty state has to
+ * carry it. Bundled mode takes its `<h1>` from newspack-plugin's `Page`, outside that
+ * hidden subtree, so the empty state stays an `<h2>`.
+ *
+ * @return {number} 1 when standalone, 2 when bundled.
+ */
+export function getEmptyStateHeading() {
+	return window.newspackNewslettersAdmin?.bundledMode ? 2 : 1;
+}
