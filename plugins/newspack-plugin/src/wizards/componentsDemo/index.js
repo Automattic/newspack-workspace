@@ -95,11 +95,6 @@ class ComponentsDemo extends Component {
 		this.dragWrapperRef = createRef();
 	}
 
-	/**
-	 * Demo footer actions, ordered per count as the README documents.
-	 *
-	 * @param {number} count How many actions to render.
-	 */
 	drawerActions( count ) {
 		const close = () => this.setState( { drawerShown: false } );
 		const save = (

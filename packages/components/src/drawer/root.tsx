@@ -302,7 +302,6 @@ const Root = forwardRef< HTMLDivElement, DrawerRootProps >( function Root(
 	return (
 		<DrawerContext.Provider value={ contextValue }>
 			<Modal
-				// Losing this experimental prop restores core's own header.
 				__experimentalHideHeader
 				ref={ frameRefs }
 				className={ classnames( 'newspack-drawer', sizeClassMap[ size ] || sizeClassMap.medium, isExiting && 'is-exiting', className ) }

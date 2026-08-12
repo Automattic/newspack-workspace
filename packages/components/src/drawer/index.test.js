@@ -499,7 +499,6 @@ describe( 'Drawer closing', () => {
 		warn.mockRestore();
 	} );
 
-	// The Root must not set the consumer's dialog state from its own render.
 	it( 'leaves a real delegated confirmation to its owner', () => {
 		const error = jest.spyOn( console, 'error' ).mockImplementation( () => {} );
 		const Delegating = ( { open } ) => {
@@ -840,7 +839,6 @@ describe( 'Drawer focus return', () => {
 	} );
 } );
 
-// The README's own recipe: `isDirty` while a save is in flight, closed on success.
 describe( 'Drawer closed from the parent while its confirmation is open', () => {
 	let opener;
 
@@ -934,7 +932,6 @@ const animationEnd = ( node, animationName ) => {
 };
 
 describe( 'Drawer exit animation', () => {
-	// In afterEach, so a failed assertion cannot leak the fake clock.
 	afterEach( () => {
 		jest.useRealTimers();
 	} );

@@ -15,7 +15,6 @@ export type DrawerRootProps = {
 	confirmButtonText?: string;
 	requestConfirm?: ( callback: () => void ) => void;
 	contentLabel?: string;
-	/** Id of the element describing the panel, for the frame's `aria-describedby`. */
 	describedBy?: string;
 	className?: string;
 	/** Merged into the frame's own style. A `ref` reaches the overlay around it. */
@@ -42,7 +41,7 @@ export type DrawerCloseIconProps = {
 export type DrawerContentProps = {
 	/** 4px scale, as VStack's `spacing`. `0` for a flush section. */
 	padding?: number;
-	/** Gap between the section's children. 4px scale, as VStack's `spacing`. */
+	/** 4px scale, as VStack's `spacing`. */
 	gap?: number;
 	className?: string;
 	children?: React.ReactNode;

@@ -111,7 +111,6 @@ describe( 'Drawer.Content', () => {
 		expect( screen.getByText( '42' ) ).toBeInTheDocument();
 	} );
 
-	// `Edited by { name }` arrives as separate children but reads as one sentence.
 	it( 'keeps a run of text and interpolations on one row', () => {
 		const { container } = render( <Content>Edited by { 'Ada' } just now</Content> );
 		const rows = sectionOf( container ).children;

@@ -7,7 +7,6 @@ import { useEffect, useState } from '@wordpress/element';
 // Covers an animationend that never arrives.
 const EXIT_FALLBACK_MS = 400;
 
-/** Holds a panel mounted while its exit animation plays. */
 function useExitAnimation( isOpen: boolean, node: HTMLElement | null ) {
 	const [ isExiting, setIsExiting ] = useState( false );
 	const [ wasOpen, setWasOpen ] = useState( isOpen );
