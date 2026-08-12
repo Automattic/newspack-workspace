@@ -9,7 +9,7 @@
  * @param {boolean} options.hasLoadedOnce  Whether a first fetch has resolved.
  * @param {boolean} options.isLoading      Whether a fetch is in flight.
  * @param {Object}  options.paginationInfo DataView pagination, for `totalItems`.
- * @param {?number} options.trashCount     Trashed items. Omit the key on collections with
+ * @param {?number} [options.trashCount=0] Trashed items. Omit the key on collections with
  *                                         no trash, such as the advertisers taxonomy, which
  *                                         never passes `trashCountPath` to
  *                                         `useCollectionData`; the default below then makes
