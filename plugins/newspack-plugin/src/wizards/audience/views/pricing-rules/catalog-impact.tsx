@@ -8,6 +8,7 @@
  */
 import { __ } from '@wordpress/i18n';
 import { useState, useCallback, useRef } from '@wordpress/element';
+import { useInstanceId } from '@wordpress/compose';
 import apiFetch from '@wordpress/api-fetch';
 import { addQueryArgs } from '@wordpress/url';
 import {
@@ -30,6 +31,7 @@ interface CatalogImpactProps {
 }
 
 export default function CatalogImpact( { stats }: CatalogImpactProps ) {
+	const headingId = useInstanceId( CatalogImpact, 'newspack-pricing-rules-impact-heading' );
 	const [ isOpen, setIsOpen ] = useState( false );
 	const [ detail, setDetail ] = useState< CatalogImpactResponse | null >( null );
 	const [ hasError, setHasError ] = useState( false );
@@ -76,19 +78,21 @@ export default function CatalogImpact( { stats }: CatalogImpactProps ) {
 		}
 	}
 	const note = detail ? sampleNote( detail ) : null;
+	const hasAffectedProducts = stats.total_matching > 0;
 
 	return (
-		<section className="newspack-pricing-rules__impact" aria-labelledby="newspack-pricing-rules-impact-heading">
-			<h3 id="newspack-pricing-rules-impact-heading" className="screen-reader-text">
+		<section className="newspack-pricing-rules__impact" aria-labelledby={ headingId }>
+			<h3 id={ headingId } className="screen-reader-text">
 				{ __( 'Catalog impact', 'newspack-plugin' ) }
 			</h3>
 			<ImpactStats
 				totalMatching={ stats.total_matching }
 				countLimited={ stats.count_limited }
+				productsDescription={ __( 'Rules currently price these products', 'newspack-plugin' ) }
 				audience={ stats.audience }
-				onViewProducts={ stats.total_matching === 0 ? undefined : open }
+				onViewProducts={ hasAffectedProducts ? open : undefined }
 			/>
-			{ stats.total_matching === 0 && (
+			{ ! hasAffectedProducts && (
 				<p className="newspack-pricing-rules__muted">{ __( 'No active pricing rules are affecting products yet.', 'newspack-plugin' ) }</p>
 			) }
 			{ isOpen && (

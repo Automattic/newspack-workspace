@@ -5,7 +5,7 @@
 /**
  * WordPress dependencies
  */
-import { __ } from '@wordpress/i18n';
+import { _x } from '@wordpress/i18n';
 import { Button } from '@wordpress/components';
 import { Card } from '@wordpress/ui';
 
@@ -13,28 +13,39 @@ export interface StatTileProps {
 	label: string;
 	// Pre-formatted by the caller. Null renders the null glyph.
 	value: string | null;
+	// Spoken in place of the visible value, for figures whose meaning rests on
+	// punctuation a screen reader may not announce.
+	valueLabel?: string;
 	description: string;
 	secondary?: string;
 	actionLabel?: string;
 	onAction?: () => void;
+	// The tiles sit at different depths on the two screens that render them.
+	headingLevel?: 2 | 3 | 4 | 5 | 6;
 }
 
 const EM_DASH = '—';
 
-export default function StatTile( { label, value, description, secondary, actionLabel, onAction }: StatTileProps ) {
+export default function StatTile( { label, value, valueLabel, description, secondary, actionLabel, onAction, headingLevel = 4 }: StatTileProps ) {
+	const Heading = `h${ headingLevel }` as keyof JSX.IntrinsicElements;
+	const shown = null === value ? EM_DASH : value;
+	const spoken = null === value ? valueLabel ?? _x( 'Not applicable', 'a statistic with no number to show', 'newspack-plugin' ) : valueLabel;
+
 	return (
 		<Card.Root className="newspack-pricing-rules__tile">
 			<Card.Content className="newspack-pricing-rules__tile-content">
-				<span className="newspack-pricing-rules__tile-label">{ label }</span>
+				<Heading className="newspack-pricing-rules__tile-label">{ label }</Heading>
 				<div className="newspack-pricing-rules__tile-body">
-					{ null === value ? (
-						// ARIA prohibits naming a generic element; without a role the label is dropped.
-						<span className="newspack-pricing-rules__tile-value" role="img" aria-label={ __( 'Not applicable', 'newspack-plugin' ) }>
-							{ EM_DASH }
-						</span>
-					) : (
-						<span className="newspack-pricing-rules__tile-value">{ value }</span>
-					) }
+					<span className="newspack-pricing-rules__tile-value">
+						{ spoken ? (
+							<>
+								<span aria-hidden="true">{ shown }</span>
+								<span className="screen-reader-text">{ spoken }</span>
+							</>
+						) : (
+							shown
+						) }
+					</span>
 					{ secondary && <span className="newspack-pricing-rules__tile-secondary">{ secondary }</span> }
 				</div>
 				<div className="newspack-pricing-rules__tile-footer">

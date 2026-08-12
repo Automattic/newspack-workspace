@@ -216,7 +216,7 @@ describe( 'CatalogImpact', () => {
 		expect( screen.getByTestId( 'impact-empty' ) ).toHaveAttribute( 'data-reason', 'no-products' );
 	} );
 
-	it( 'names the card and announces the modal load for assistive technology', async () => {
+	it( 'names the region and announces the modal load for assistive technology', async () => {
 		let land;
 		apiFetch.mockReturnValue(
 			new Promise( resolve => {

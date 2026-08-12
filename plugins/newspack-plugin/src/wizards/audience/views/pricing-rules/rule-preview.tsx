@@ -99,7 +99,13 @@ export default function RulePreview( { body, showCycleNote }: RulePreviewProps )
 
 	return (
 		<div className={ `newspack-pricing-rules__preview${ isLoading ? ' is-loading' : '' }` }>
-			<ImpactStats totalMatching={ preview.total_matching } countLimited={ preview.count_limited } audience={ preview.audience } />
+			<ImpactStats
+				totalMatching={ preview.total_matching }
+				countLimited={ preview.count_limited }
+				productsDescription={ __( 'This rule would price these products', 'newspack-plugin' ) }
+				audience={ preview.audience }
+				headingLevel={ 3 }
+			/>
 			<ImpactTable
 				baseline={ preview.sample }
 				segmentGroups={ preview.segment_groups ?? [] }

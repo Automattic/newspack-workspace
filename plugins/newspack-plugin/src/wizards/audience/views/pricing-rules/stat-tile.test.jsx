@@ -21,11 +21,31 @@ describe( 'StatTile', () => {
 		expect( screen.getByText( 'Rules currently price these products' ) ).toBeInTheDocument();
 	} );
 
-	// ARIA will not name a bare generic element, so without a role the label is dropped.
+	// The tiles sit under a different heading on each of the two screens.
+	it( 'renders the label at the level its screen asks for', () => {
+		const { rerender } = render( <StatTile label="Products affected" value="33" description="Rules currently price these products" /> );
+		expect( screen.getByRole( 'heading', { name: 'Products affected', level: 4 } ) ).toBeInTheDocument();
+
+		rerender( <StatTile label="Products affected" value="33" description="Rules currently price these products" headingLevel={ 3 } /> );
+		expect( screen.getByRole( 'heading', { name: 'Products affected', level: 3 } ) ).toBeInTheDocument();
+	} );
+
 	it( 'announces the em-dash when there is no number', () => {
 		render( <StatTile label="Protected" value={ null } description="Keep the price they signed up at" /> );
 
-		expect( screen.getByRole( 'img', { name: 'Not applicable' } ) ).toHaveTextContent( '—' );
+		expect( screen.getByText( '—' ) ).toHaveAttribute( 'aria-hidden', 'true' );
+		expect( screen.getByText( 'Not applicable' ) ).toHaveClass( 'screen-reader-text' );
+	} );
+
+	// Punctuation verbosity decides whether the "+" is spoken, so the figure carries
+	// its own name rather than resting on the glyph.
+	it( 'announces a bounded figure in words', () => {
+		render(
+			<StatTile label="Subscribers in scope" value="500+" valueLabel="At least 500" description="Renewing subscriptions on those products" />
+		);
+
+		expect( screen.getByText( '500+' ) ).toHaveAttribute( 'aria-hidden', 'true' );
+		expect( screen.getByText( 'At least 500' ) ).toHaveClass( 'screen-reader-text' );
 	} );
 
 	it( 'renders the reason line when one is given', () => {
@@ -38,9 +58,7 @@ describe( 'StatTile', () => {
 
 	// The description explains the label, not the number, so it survives an empty tile.
 	it( 'keeps the description on an em-dash tile', () => {
-		render(
-			<StatTile label="Protected" value={ null } description="Keep the price they signed up at" secondary="Applies to new sign-ups only" />
-		);
+		render( <StatTile label="Protected" value={ null } description="Keep the price they signed up at" /> );
 
 		expect( screen.getByText( 'Keep the price they signed up at' ) ).toBeInTheDocument();
 	} );

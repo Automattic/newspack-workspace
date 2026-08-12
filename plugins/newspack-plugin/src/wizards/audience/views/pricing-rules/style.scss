@@ -74,7 +74,7 @@
 
 	&__tile {
 		container-type: inline-size;
-		min-height: calc(21 * #{wp-vars.$grid-unit});
+		min-height: wp-vars.$grid-unit * 21;
 	}
 
 	&__tile-content {
@@ -86,6 +86,7 @@
 	&__tile-label {
 		@include wp-mixins.heading-large();
 		color: wp-colors.$gray-900;
+		margin: 0;
 	}
 
 	&__tile-body {
@@ -109,7 +110,6 @@
 
 	&__tile-value {
 		color: var(--wp-admin-theme-color);
-		font-feature-settings: "tnum" 1;
 		font-size: 44px;
 		font-size: min(44px, 14cqi);
 		font-variant-numeric: tabular-nums;
