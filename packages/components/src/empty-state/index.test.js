@@ -102,6 +102,7 @@ describe( 'EmptyState.Actions', () => {
 			</EmptyState.Root>
 		);
 		expect( container.querySelector( '.newspack-empty-state__actions' ) ).toBeInTheDocument();
+		expect( container.querySelector( '.newspack-empty-state__actions' ) ).toHaveStyle( { justifyContent: 'center' } );
 		expect( screen.getByRole( 'button', { name: 'Add Newsletter' } ) ).toBeInTheDocument();
 	} );
 
