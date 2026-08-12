@@ -26,7 +26,7 @@ Take the barrel where the bundle already pulls the package in wholesale, as the
 newsletters admin shell does. Import by path where a bundle should stay narrow:
 the barrel reaches `Page`, whose stylesheet carries a `:root` block of
 design-system token overrides, and that block then rides into every bundle that
-touches the barrel. Both newspack-plugin consumers import by path for that
+touches the barrel. Every newspack-plugin consumer imports by path for that
 reason. One by-path import does not settle it on its own: another barrel import
 anywhere in the same bundle brings the tokens back.
 
