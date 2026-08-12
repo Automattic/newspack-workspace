@@ -55,12 +55,21 @@ class Content_Restriction_Control {
 	const IS_EXEMPT_META_KEY = 'newspack_content_restriction_is_exempt';
 
 	/**
+	 * Post meta key WooCommerce Memberships uses to force a post public.
+	 *
+	 * @var string
+	 */
+	const WC_FORCE_PUBLIC_META_KEY = '_wc_memberships_force_public';
+
+	/**
 	 * Initialize hooks and filters.
 	 */
 	public static function init() {
 		add_action( 'init', [ __CLASS__, 'register_meta' ] );
 		add_action( 'init', [ __CLASS__, 'register_meta_guards' ] );
 		add_filter( 'newspack_is_post_restricted', [ __CLASS__, 'is_post_restricted' ], 10, 2 );
+		// Priority 20 so the fallback wins over the meta key's registered default.
+		add_filter( 'default_post_metadata', [ __CLASS__, 'default_exempt_from_force_public' ], 20, 4 );
 	}
 
 	/**
@@ -500,6 +509,46 @@ class Content_Restriction_Control {
 	 */
 	public static function current_user_can_edit_exemption() {
 		return current_user_can( 'edit_others_posts' );
+	}
+
+	/**
+	 * Treat a post WooCommerce Memberships forced public as exempt from access control,
+	 * when no exemption of our own is recorded for it.
+	 *
+	 * Keeps posts a publisher exempted under Memberships readable once a migrated
+	 * site's gates start enforcing. A recorded exemption always wins, including a falsy
+	 * one, so turning the toggle off is respected.
+	 *
+	 * @param mixed  $value     Default value to return.
+	 * @param int    $object_id Post ID.
+	 * @param string $meta_key  Meta key being read.
+	 * @param bool   $single    Whether a single value was requested.
+	 *
+	 * @return mixed
+	 */
+	public static function default_exempt_from_force_public( $value, $object_id, $meta_key, $single ) {
+		if ( self::IS_EXEMPT_META_KEY !== $meta_key || ! Content_Gate::is_newspack_feature_enabled() ) {
+			return $value;
+		}
+
+		/**
+		 * Filters whether a Memberships force-public flag stands in for a missing
+		 * exemption. Turn off on sites that have finished migrating.
+		 *
+		 * @param bool $respect   Whether to honor the Memberships flag. Default true.
+		 * @param int  $object_id Post ID.
+		 */
+		if ( ! apply_filters( 'newspack_content_gate_respect_memberships_force_public', true, $object_id ) ) {
+			return $value;
+		}
+
+		// Memberships stores 'yes' or 'no', and 'no' is a truthy string.
+		if ( 'yes' !== get_post_meta( $object_id, self::WC_FORCE_PUBLIC_META_KEY, true ) ) {
+			return $value;
+		}
+
+		// Non-single reads expect an array of values.
+		return $single ? true : [ true ];
 	}
 
 	/**
