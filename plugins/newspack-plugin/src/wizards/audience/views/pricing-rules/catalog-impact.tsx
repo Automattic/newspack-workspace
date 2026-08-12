@@ -11,7 +11,6 @@ import { useState, useCallback, useRef } from '@wordpress/element';
 import apiFetch from '@wordpress/api-fetch';
 import { addQueryArgs } from '@wordpress/url';
 import {
-	Button,
 	Modal,
 	Spinner,
 	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
@@ -83,13 +82,14 @@ export default function CatalogImpact( { stats }: CatalogImpactProps ) {
 			<h3 id="newspack-pricing-rules-impact-heading" className="screen-reader-text">
 				{ __( 'Catalog impact', 'newspack-plugin' ) }
 			</h3>
-			<ImpactStats totalMatching={ stats.total_matching } countLimited={ stats.count_limited } audience={ stats.audience } />
-			{ stats.total_matching === 0 ? (
+			<ImpactStats
+				totalMatching={ stats.total_matching }
+				countLimited={ stats.count_limited }
+				audience={ stats.audience }
+				onViewProducts={ stats.total_matching === 0 ? undefined : open }
+			/>
+			{ stats.total_matching === 0 && (
 				<p className="newspack-pricing-rules__muted">{ __( 'No active pricing rules are affecting products yet.', 'newspack-plugin' ) }</p>
-			) : (
-				<Button variant="secondary" onClick={ open }>
-					{ __( 'View Affected Products', 'newspack-plugin' ) }
-				</Button>
 			) }
 			{ isOpen && (
 				<Modal title={ __( 'Affected Products', 'newspack-plugin' ) } size="large" onRequestClose={ () => setIsOpen( false ) }>

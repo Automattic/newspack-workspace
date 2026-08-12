@@ -5,7 +5,7 @@
 /**
  * External dependencies
  */
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 
 /**
  * Internal dependencies
@@ -49,5 +49,39 @@ describe( 'StatTile', () => {
 		render( <StatTile label="Products affected" value="33" description="Rules currently price these products" /> );
 
 		expect( screen.queryByText( 'Applies to new sign-ups only' ) ).not.toBeInTheDocument();
+	} );
+
+	// It opens a modal rather than navigating, so a link-styled button, never an anchor.
+	it( 'runs the action from a button when both label and callback are given', () => {
+		const onAction = jest.fn();
+		render(
+			<StatTile
+				label="Products affected"
+				value="33"
+				description="Rules currently price these products"
+				actionLabel="View Affected Products"
+				onAction={ onAction }
+			/>
+		);
+
+		const button = screen.getByRole( 'button', { name: 'View Affected Products' } );
+		expect( button.tagName ).toBe( 'BUTTON' );
+
+		fireEvent.click( button );
+		expect( onAction ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it( 'renders no action when only the label is given', () => {
+		render(
+			<StatTile label="Products affected" value="33" description="Rules currently price these products" actionLabel="View Affected Products" />
+		);
+
+		expect( screen.queryByRole( 'button', { name: 'View Affected Products' } ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'renders no action when neither prop is given', () => {
+		render( <StatTile label="Products affected" value="33" description="Rules currently price these products" /> );
+
+		expect( screen.queryByRole( 'button' ) ).not.toBeInTheDocument();
 	} );
 } );

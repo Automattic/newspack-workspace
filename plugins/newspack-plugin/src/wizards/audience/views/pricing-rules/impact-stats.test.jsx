@@ -69,6 +69,22 @@ describe( 'ImpactStats', () => {
 		expect( within( tileFor( 'Protected' ) ).getByText( '4' ) ).toBeInTheDocument();
 	} );
 
+	it( 'hangs the products action off its own tile and no other', () => {
+		render( <ImpactStats totalMatching={ 36 } countLimited={ false } audience={ audience() } onViewProducts={ jest.fn() } /> );
+
+		const trigger = screen.getByRole( 'button', { name: 'View Affected Products' } );
+		expect( tileFor( 'Products affected' ).contains( trigger ) ).toBe( true );
+		[ 'Subscribers in scope', 'Eligible at renewal', 'Protected' ].forEach( label =>
+			expect( within( tileFor( label ) ).queryByRole( 'button' ) ).not.toBeInTheDocument()
+		);
+	} );
+
+	it( 'shows no products action when the list gives it nothing to open', () => {
+		render( <ImpactStats totalMatching={ 36 } countLimited={ false } audience={ audience() } /> );
+
+		expect( screen.queryByRole( 'button' ) ).not.toBeInTheDocument();
+	} );
+
 	it( 'ignores an unsupported audience', () => {
 		render( <ImpactStats totalMatching={ 36 } countLimited={ false } audience={ audience( { supported: false } ) } /> );
 		expect( screen.queryByText( 'Subscribers in scope' ) ).not.toBeInTheDocument();

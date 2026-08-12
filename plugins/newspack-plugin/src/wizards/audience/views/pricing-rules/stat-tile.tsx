@@ -6,6 +6,7 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
+import { Button } from '@wordpress/components';
 import { Card } from '@wordpress/ui';
 
 export interface StatTileProps {
@@ -14,11 +15,13 @@ export interface StatTileProps {
 	value: string | null;
 	description: string;
 	secondary?: string;
+	actionLabel?: string;
+	onAction?: () => void;
 }
 
 const EM_DASH = '—';
 
-export default function StatTile( { label, value, description, secondary }: StatTileProps ) {
+export default function StatTile( { label, value, description, secondary, actionLabel, onAction }: StatTileProps ) {
 	return (
 		<Card.Root className="newspack-pricing-rules__tile">
 			<Card.Content className="newspack-pricing-rules__tile-content">
@@ -34,7 +37,15 @@ export default function StatTile( { label, value, description, secondary }: Stat
 					) }
 					{ secondary && <span className="newspack-pricing-rules__tile-secondary">{ secondary }</span> }
 				</div>
-				<span className="newspack-pricing-rules__tile-description">{ description }</span>
+				<div className="newspack-pricing-rules__tile-footer">
+					<span className="newspack-pricing-rules__tile-description">{ description }</span>
+					{ actionLabel && onAction && (
+						// A modal trigger, so a button styled as a link rather than an anchor.
+						<Button variant="link" onClick={ onAction }>
+							{ actionLabel }
+						</Button>
+					) }
+				</div>
 			</Card.Content>
 		</Card.Root>
 	);

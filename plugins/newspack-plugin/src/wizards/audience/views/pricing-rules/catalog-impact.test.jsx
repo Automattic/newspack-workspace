@@ -259,18 +259,26 @@ describe( 'CatalogImpact', () => {
 		expect( screen.queryByText( /Showing a sample of/ ) ).not.toBeInTheDocument();
 	} );
 
-	// Tiles are cards, so the block that holds them must not be one too.
-	it( 'places the trigger below the grid rather than inside a card', () => {
+	// It opens a modal rather than navigating, so it has to stay a button.
+	it( 'places the trigger inside the affected-products tile', () => {
 		const { container } = render( <CatalogImpact stats={ stats() } /> );
 
 		const section = container.querySelector( '.newspack-pricing-rules__impact' );
 		const button = screen.getByRole( 'button', { name: 'View Affected Products' } );
-		const grid = container.querySelector( '.newspack-pricing-rules__stats' );
+		const tile = screen.getByText( 'Products affected' ).closest( '.newspack-pricing-rules__tile' );
 
 		expect( section.tagName ).toBe( 'SECTION' );
-		expect( grid.contains( button ) ).toBe( false );
-		// eslint-disable-next-line no-bitwise
-		expect( grid.compareDocumentPosition( button ) & Node.DOCUMENT_POSITION_FOLLOWING ).toBeTruthy();
+		expect( button.tagName ).toBe( 'BUTTON' );
+		expect( tile.contains( button ) ).toBe( true );
+	} );
+
+	it( 'hangs the trigger off the description rather than the number', () => {
+		render( <CatalogImpact stats={ stats() } /> );
+
+		const footer = screen.getByText( 'Rules currently price these products' ).parentElement;
+
+		expect( footer ).toHaveClass( 'newspack-pricing-rules__tile-footer' );
+		expect( footer.contains( screen.getByRole( 'button', { name: 'View Affected Products' } ) ) ).toBe( true );
 	} );
 
 	it( 'names the section with the heading it already carries', () => {

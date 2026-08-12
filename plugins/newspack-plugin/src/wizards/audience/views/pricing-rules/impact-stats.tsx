@@ -19,6 +19,7 @@ interface ImpactStatsProps {
 	totalMatching: number;
 	countLimited: boolean;
 	audience?: RuleAudienceData;
+	onViewProducts?: () => void;
 }
 
 const bounded = ( value: number, limited: boolean ): string => {
@@ -32,7 +33,7 @@ const bounded = ( value: number, limited: boolean ): string => {
 		: formatted;
 };
 
-export default function ImpactStats( { totalMatching, countLimited, audience }: ImpactStatsProps ) {
+export default function ImpactStats( { totalMatching, countLimited, audience, onViewProducts }: ImpactStatsProps ) {
 	const scope = audience?.supported ? audience : null;
 	const isLocked = 'locked' === scope?.application;
 	const lockedNote = __( 'Applies to new sign-ups only', 'newspack-plugin' );
@@ -42,6 +43,8 @@ export default function ImpactStats( { totalMatching, countLimited, audience }: 
 			label: __( 'Products affected', 'newspack-plugin' ),
 			value: bounded( totalMatching, countLimited ),
 			description: __( 'Rules currently price these products', 'newspack-plugin' ),
+			actionLabel: __( 'View Affected Products', 'newspack-plugin' ),
+			onAction: onViewProducts,
 		},
 	];
 
