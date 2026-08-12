@@ -7,6 +7,7 @@
  * WordPress dependencies
  */
 import { __, sprintf } from '@wordpress/i18n';
+import { __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 
 /**
  * Internal dependencies
@@ -69,11 +70,15 @@ export default function ImpactStats( { totalMatching, countLimited, audience }: 
 		);
 	}
 
+	// `noMargin` puts `margin: 0 !important` on the grid, so the section constraint
+	// can only be centred from a wrapper.
 	return (
-		<Grid className="newspack-pricing-rules__stats" columns={ tiles.length } gutter={ 16 } noMargin>
-			{ tiles.map( tile => (
-				<StatTile key={ tile.label } { ...tile } />
-			) ) }
-		</Grid>
+		<HStack justify="center">
+			<Grid className="newspack-pricing-rules__stats" columns={ tiles.length } gutter={ 16 } noMargin>
+				{ tiles.map( tile => (
+					<StatTile key={ tile.label } { ...tile } />
+				) ) }
+			</Grid>
+		</HStack>
 	);
 }

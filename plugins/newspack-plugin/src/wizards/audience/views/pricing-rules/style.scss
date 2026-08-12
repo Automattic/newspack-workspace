@@ -70,6 +70,11 @@
 		width: 100%;
 	}
 
+	&__impact &__stats {
+		max-width: calc(calc(var(--newspack-wizard-section-space) * 2) + var(--newspack-wizard-section-width));
+		padding: 0 var(--newspack-wizard-section-space);
+	}
+
 	&__tile {
 		container-type: inline-size;
 		min-height: calc(21 * #{wp-vars.$grid-unit});
