@@ -19,7 +19,8 @@ import type { EmptyStateRootProps } from './types';
 // `start` and `end` are DOM attributes the Grid stylesheet matches on, not React
 // props: they put the stack in columns 2 and 3 above 1054px, which is what centres
 // the empty state. Dropping them collapses it into the first column, mistyping both
-// values spans all four, and both failures are silent.
+// values spans all four, and both failures are silent. The cast below satisfies
+// VStack's prop type without checking these two, so index.test.js is the only guard.
 const gridColumn: { start: number; end: number } = { start: 2, end: 4 };
 
 const Root = ( { size = 'default', className, children }: EmptyStateRootProps ) => {
