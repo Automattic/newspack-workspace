@@ -12,6 +12,44 @@ defined( 'ABSPATH' ) || exit;
 const FORM_ACTION = 'newspack_newsletters_subscribe';
 
 /**
+ * Keys permitted in the block's JSON response.
+ *
+ * The subscribe handler assembles its response from the ESP's contact record,
+ * so anything not named here would ship the provider's stored fields to the
+ * caller. The consumer of record is `src/blocks/subscribe/view.js`: adding a key
+ * here without a matching read there has no effect, and removing one breaks the
+ * front end silently.
+ */
+const RESPONSE_KEYS = [
+	'message',
+	'newspack_newsletters_subscribed',
+	FORM_ACTION,
+	'metadata',
+	'registered',
+	'verified',
+	'verification_nonce',
+	'email',
+];
+
+/**
+ * Keys permitted inside the response's `metadata` member.
+ *
+ * Bounded for the same reason as RESPONSE_KEYS: allowlisting `metadata` as a
+ * whole would leave the response closed at the top level and open one level
+ * down. `gate_post_id` is never set by this block — it originates in
+ * newspack-plugin's content gate — but view.js reads it defensively.
+ */
+const METADATA_KEYS = [
+	'current_page_url',
+	'newspack_popup_id',
+	'newsletters_subscription_method',
+	'status',
+	'registration_method',
+	'registered',
+	'gate_post_id',
+];
+
+/**
  * Register block from metadata.
  */
 function register_block() {
@@ -419,6 +457,10 @@ function send_form_response( $data ) {
 			exit;
 		} else {
 			$data['newspack_newsletters_subscribed'] = 1;
+			$data                                    = array_intersect_key( $data, array_flip( RESPONSE_KEYS ) );
+			if ( isset( $data['metadata'] ) && is_array( $data['metadata'] ) ) {
+				$data['metadata'] = array_intersect_key( $data['metadata'], array_flip( METADATA_KEYS ) );
+			}
 			\wp_send_json( $data, 200 );
 			exit;
 		}
