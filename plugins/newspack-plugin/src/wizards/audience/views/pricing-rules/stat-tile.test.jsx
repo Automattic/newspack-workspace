@@ -21,20 +21,28 @@ describe( 'StatTile', () => {
 		expect( screen.getByText( 'Rules currently price these products' ) ).toBeInTheDocument();
 	} );
 
-	// The tiles sit under a different heading on each of the two screens.
+	// Both screens put the tiles under a section heading, so h3 is the default.
 	it( 'renders the label at the level its screen asks for', () => {
 		const { rerender } = render( <StatTile label="Products affected" value="33" description="Rules currently price these products" /> );
-		expect( screen.getByRole( 'heading', { name: 'Products affected', level: 4 } ) ).toBeInTheDocument();
-
-		rerender( <StatTile label="Products affected" value="33" description="Rules currently price these products" headingLevel={ 3 } /> );
 		expect( screen.getByRole( 'heading', { name: 'Products affected', level: 3 } ) ).toBeInTheDocument();
+
+		rerender( <StatTile label="Products affected" value="33" description="Rules currently price these products" headingLevel={ 4 } /> );
+		expect( screen.getByRole( 'heading', { name: 'Products affected', level: 4 } ) ).toBeInTheDocument();
 	} );
 
-	it( 'announces the em-dash when there is no number', () => {
+	it( 'hides the em-dash and speaks its meaning instead', () => {
 		render( <StatTile label="Protected" value={ null } description="Keep the price they signed up at" /> );
 
 		expect( screen.getByText( '—' ) ).toHaveAttribute( 'aria-hidden', 'true' );
 		expect( screen.getByText( 'Not applicable' ) ).toHaveClass( 'screen-reader-text' );
+	} );
+
+	// A caller that knows why the number is absent says so in its own words.
+	it( 'prefers the caller’s label over the default on an em-dash tile', () => {
+		render( <StatTile label="Protected" value={ null } valueLabel="Unavailable" description="Keep the price they signed up at" /> );
+
+		expect( screen.getByText( 'Unavailable' ) ).toHaveClass( 'screen-reader-text' );
+		expect( screen.queryByText( 'Not applicable' ) ).not.toBeInTheDocument();
 	} );
 
 	// Punctuation verbosity decides whether the "+" is spoken, so the figure carries

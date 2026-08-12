@@ -53,14 +53,14 @@ describe( 'ImpactStats', () => {
 		expect( screen.getByText( 'At least 500' ) ).toHaveClass( 'screen-reader-text' );
 	} );
 
-	it( 'renders one full-width tile when there is no audience data', () => {
+	// Grid ships no `columns-1` rule; one tile goes full width off the base `1fr`.
+	it( 'renders one tile and passes the count through as the column count', () => {
 		const { container } = render( stats( { totalMatching: 36, countLimited: false } ) );
 
 		expect( screen.getByText( 'Products affected' ) ).toBeInTheDocument();
 		expect( screen.queryByText( 'Subscribers in scope' ) ).not.toBeInTheDocument();
 		expect( screen.queryByText( 'Eligible at renewal' ) ).not.toBeInTheDocument();
 		expect( screen.queryByText( 'Protected' ) ).not.toBeInTheDocument();
-		// The single tile spans the grid, so the column count has to follow the tiles.
 		expect( container.querySelectorAll( '.newspack-pricing-rules__tile' ) ).toHaveLength( 1 );
 		expect( container.querySelector( '.newspack-pricing-rules__stats' ) ).toHaveClass( 'newspack-grid__columns-1' );
 	} );
@@ -153,5 +153,23 @@ describe( 'ImpactStats', () => {
 		expect( within( tileFor( 'Eligible at renewal' ) ).getByText( '—' ) ).toBeInTheDocument();
 		expect( screen.queryByText( 'NaN' ) ).not.toBeInTheDocument();
 		expect( within( tileFor( 'Subscribers in scope' ) ).getByText( '12' ) ).toBeInTheDocument();
+	} );
+
+	// A count that never arrived is not the same claim as one that does not apply.
+	it( 'announces a missing count differently from a locked one', () => {
+		render( stats( { totalMatching: 36, countLimited: false, audience: audience( { caught: null } ) } ) );
+
+		expect( within( tileFor( 'Eligible at renewal' ) ).getByText( 'Unavailable' ) ).toBeInTheDocument();
+		expect( screen.queryByText( 'Not applicable' ) ).not.toBeInTheDocument();
+	} );
+
+	// The engine is a separate plugin and PHP counts arrive as strings unless cast.
+	it( 'formats a count the engine sent as a string', () => {
+		render( stats( { totalMatching: '500', countLimited: false, audience: audience( { total: '12', caught: '8', protected: '4' } ) } ) );
+
+		expect( within( tileFor( 'Products affected' ) ).getByText( '500' ) ).toBeInTheDocument();
+		expect( within( tileFor( 'Subscribers in scope' ) ).getByText( '12' ) ).toBeInTheDocument();
+		expect( within( tileFor( 'Eligible at renewal' ) ).getByText( '8' ) ).toBeInTheDocument();
+		expect( screen.queryByText( '—' ) ).not.toBeInTheDocument();
 	} );
 } );

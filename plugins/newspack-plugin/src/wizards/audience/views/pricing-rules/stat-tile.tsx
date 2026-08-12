@@ -20,16 +20,16 @@ export interface StatTileProps {
 	secondary?: string;
 	actionLabel?: string;
 	onAction?: () => void;
-	// The tiles sit at different depths on the two screens that render them.
+	// Both screens that render the tiles put them under a section heading.
 	headingLevel?: 2 | 3 | 4 | 5 | 6;
 }
 
 const EM_DASH = '—';
 
-export default function StatTile( { label, value, valueLabel, description, secondary, actionLabel, onAction, headingLevel = 4 }: StatTileProps ) {
+export default function StatTile( { label, value, valueLabel, description, secondary, actionLabel, onAction, headingLevel = 3 }: StatTileProps ) {
 	const Heading = `h${ headingLevel }` as keyof JSX.IntrinsicElements;
 	const shown = null === value ? EM_DASH : value;
-	const spoken = null === value ? valueLabel ?? _x( 'Not applicable', 'a statistic with no number to show', 'newspack-plugin' ) : valueLabel;
+	const spoken = valueLabel ?? ( null === value ? _x( 'Not applicable', 'a statistic with no number to show', 'newspack-plugin' ) : undefined );
 
 	return (
 		<Card.Root className="newspack-pricing-rules__tile">

@@ -216,7 +216,7 @@ describe( 'CatalogImpact', () => {
 		expect( screen.getByTestId( 'impact-empty' ) ).toHaveAttribute( 'data-reason', 'no-products' );
 	} );
 
-	it( 'names the region and announces the modal load for assistive technology', async () => {
+	it( 'names the heading and announces the modal load for assistive technology', async () => {
 		let land;
 		apiFetch.mockReturnValue(
 			new Promise( resolve => {
@@ -225,7 +225,7 @@ describe( 'CatalogImpact', () => {
 		);
 		render( <CatalogImpact stats={ stats() } /> );
 
-		expect( screen.getByRole( 'heading', { name: 'Catalog impact', level: 3 } ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'heading', { name: 'Catalog impact', level: 2 } ) ).toBeInTheDocument();
 
 		openModal();
 		expect( screen.getByRole( 'status' ) ).toHaveTextContent( 'Loading the affected products' );

@@ -82,9 +82,10 @@ export default function CatalogImpact( { stats }: CatalogImpactProps ) {
 
 	return (
 		<section className="newspack-pricing-rules__impact" aria-labelledby={ headingId }>
-			<h3 id={ headingId } className="screen-reader-text">
+			{ /* The route renders no section title, so this is the page's first heading below the breadcrumb h1. */ }
+			<h2 id={ headingId } className="screen-reader-text">
 				{ __( 'Catalog impact', 'newspack-plugin' ) }
-			</h3>
+			</h2>
 			<ImpactStats
 				totalMatching={ stats.total_matching }
 				countLimited={ stats.count_limited }

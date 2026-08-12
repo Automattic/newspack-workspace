@@ -131,6 +131,26 @@ describe( 'RulePreview', () => {
 		);
 	} );
 
+	// The count here is what the rule being edited would match, not what is priced
+	// today, so the editor cannot borrow the list screen's line.
+	it( 'describes the product count as this rule’s own', async () => {
+		apiFetch.mockResolvedValue( response() );
+		render( <RulePreview body={ {} } /> );
+		await settle();
+
+		expect( screen.getByText( 'This rule would price these products' ) ).toBeInTheDocument();
+		expect( screen.queryByText( 'Rules currently price these products' ) ).not.toBeInTheDocument();
+	} );
+
+	// The editor sits under the Impact Preview h2, so the tiles are h3.
+	it( 'nests the tile labels under the section heading', async () => {
+		apiFetch.mockResolvedValue( response() );
+		render( <RulePreview body={ {} } /> );
+		await settle();
+
+		expect( screen.getByRole( 'heading', { name: 'Products affected', level: 3 } ) ).toBeInTheDocument();
+	} );
+
 	it( 'renders the stats and table for a partial preview', async () => {
 		apiFetch.mockResolvedValue( response( { preview_limited: true, sample_count: 1, total_matching: 3 } ) );
 		render( <RulePreview body={ {} } /> );

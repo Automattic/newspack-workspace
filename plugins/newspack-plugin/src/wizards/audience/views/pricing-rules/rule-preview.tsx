@@ -104,7 +104,6 @@ export default function RulePreview( { body, showCycleNote }: RulePreviewProps )
 				countLimited={ preview.count_limited }
 				productsDescription={ __( 'This rule would price these products', 'newspack-plugin' ) }
 				audience={ preview.audience }
-				headingLevel={ 3 }
 			/>
 			<ImpactTable
 				baseline={ preview.sample }
