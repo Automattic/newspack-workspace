@@ -52,12 +52,13 @@ describe( 'EmptyState.Header', () => {
 	} );
 
 	it( 'renders an h2 at the default size', () => {
-		render(
+		const { container } = render(
 			<EmptyState.Root>
 				<EmptyState.Header title="Get started with newsletters" />
 			</EmptyState.Root>
 		);
 		expect( screen.getByRole( 'heading', { level: 2, name: 'Get started with newsletters' } ) ).toBeInTheDocument();
+		expect( container.querySelector( '.newspack-section-header--small' ) ).not.toBeInTheDocument();
 	} );
 
 	it( 'drops to an h3 and the small section header when the root is small', () => {
@@ -81,9 +82,12 @@ describe( 'EmptyState.Header', () => {
 
 	it( 'throws outside Root', () => {
 		const consoleError = jest.spyOn( console, 'error' ).mockImplementation( () => {} );
-		expect( () => render( <EmptyState.Header title="Orphan" /> ) ).toThrow(
-			'EmptyState subcomponents must be rendered inside EmptyState.Root.'
-		);
-		consoleError.mockRestore();
+		try {
+			expect( () => render( <EmptyState.Header title="Orphan" /> ) ).toThrow(
+				'EmptyState subcomponents must be rendered inside EmptyState.Root.'
+			);
+		} finally {
+			consoleError.mockRestore();
+		}
 	} );
 } );
