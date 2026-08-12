@@ -65,8 +65,10 @@ const ContextualPromptsSettings = ( { status, values, error, inFlight, onSetValu
 	if ( ! enabled ) {
 		return (
 			<WizardsTab>
+				{ /* Sibling of the empty state, not a child: the error is about the settings
+				     request, so it takes the tab's full width rather than the centred column. */ }
+				{ errorNotice }
 				<EmptyState.Root>
-					{ errorNotice }
 					<EmptyState.Header
 						icon={ megaphone }
 						title={ __( 'Get started with Contextual Prompts', 'newspack-plugin' ) }
@@ -75,19 +77,11 @@ const ContextualPromptsSettings = ( { status, values, error, inFlight, onSetValu
 							'newspack-plugin'
 						) }
 					/>
-					<EmptyState.Actions>
-						{ canManage ? (
-							<Button variant="primary" onClick={ () => setModalOpen( true ) }>
-								{ __( 'Enable Contextual Prompts', 'newspack-plugin' ) }
-							</Button>
-						) : (
-							<VStack alignment="center" spacing={ 2 }>
-								<Button variant="primary" disabled>
-									{ __( 'Enable Contextual Prompts', 'newspack-plugin' ) }
-								</Button>
-								<p style={ { margin: 0 } }>{ __( 'An administrator must enable this feature.', 'newspack-plugin' ) }</p>
-							</VStack>
-						) }
+					<EmptyState.Actions orientation="column">
+						<Button variant="primary" disabled={ ! canManage } onClick={ () => setModalOpen( true ) }>
+							{ __( 'Enable Contextual Prompts', 'newspack-plugin' ) }
+						</Button>
+						{ ! canManage && <p style={ { margin: 0 } }>{ __( 'An administrator must enable this feature.', 'newspack-plugin' ) }</p> }
 					</EmptyState.Actions>
 				</EmptyState.Root>
 				{ modalOpen && (

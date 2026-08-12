@@ -13,7 +13,7 @@
  * WordPress dependencies.
  */
 import { __ } from '@wordpress/i18n';
-import { ExternalLink, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { ExternalLink } from '@wordpress/components';
 import { people } from '@wordpress/icons';
 
 /**
@@ -68,7 +68,7 @@ const AudienceManagementRequired = ( {
 				title={ __( 'Set up Audience Management first', 'newspack-plugin' ) }
 				description={ description }
 			/>
-			<VStack alignment="center" spacing={ 4 }>
+			<EmptyState.Actions orientation="column" spacing={ 4 }>
 				{ /* Rendered only with a real destination: a primary CTA pointing at href=""
 				     reloads this same screen, which is worse than offering no button. */ }
 				{ setupUrl && (
@@ -77,7 +77,7 @@ const AudienceManagementRequired = ( {
 					</Button>
 				) }
 				<ExternalLink href={ learnMoreUrl }>{ __( 'Learn more', 'newspack-plugin' ) }</ExternalLink>
-			</VStack>
+			</EmptyState.Actions>
 		</EmptyState.Root>
 	);
 };
