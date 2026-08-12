@@ -652,8 +652,12 @@ class Newspack_Test_Guest_Contributor_Role extends WP_UnitTestCase {
 		$_POST['user_login'] = 'Malformed Email GC';
 		$_POST['email']      = 'not-an-address';
 
+		// WordPress 7.0.3+ adds both errors for a malformed submission too:
+		// the assignment fails, so user_email stays unset and the later
+		// empty-check also fires. Seed both to mirror the production state.
 		$errors = new WP_Error();
 		$errors->add( 'invalid_email', 'The email address is not correct.', [ 'form-field' => 'email' ] );
+		$errors->add( 'empty_email', 'Please enter an email address.', [ 'form-field' => 'email' ] );
 
 		$user             = new stdClass();
 		$user->role       = Guest_Contributor_Role::CONTRIBUTOR_NO_EDIT_ROLE_NAME;
@@ -705,5 +709,109 @@ class Newspack_Test_Guest_Contributor_Role extends WP_UnitTestCase {
 		$this->assertEmpty( $errors->get_error_messages( 'invalid_email' ), 'The invalid_email error must be cleared when blanking an existing Guest Contributor email.' );
 		$this->assertSame( 'existing-contributor', $user->user_login, 'The update path must not regenerate the login.' );
 		$this->assertSame( 'existing-contributor@' . Guest_Contributor_Role::get_dummy_email_domain(), $user->user_email );
+	}
+
+	/**
+	 * A submission that only sanitization would empty — stray markup like
+	 * <b></b>, or an address pasted with angle brackets — is not an empty
+	 * submission. Emptiness is judged on the raw value, so these keep
+	 * failing validation instead of silently becoming a placeholder.
+	 */
+	public function test_user_profile_update_errors_keeps_invalid_email_for_markup_only_email() {
+		$_POST['user_login'] = 'Markup Email GC';
+		$_POST['email']      = '<b></b>';
+
+		$errors = new WP_Error();
+		$errors->add( 'invalid_email', 'The email address is not correct.', [ 'form-field' => 'email' ] );
+		$errors->add( 'empty_email', 'Please enter an email address.', [ 'form-field' => 'email' ] );
+
+		$user             = new stdClass();
+		$user->role       = Guest_Contributor_Role::CONTRIBUTOR_NO_EDIT_ROLE_NAME;
+		$user->user_login = 'Markup Email GC';
+
+		Guest_Contributor_Role::user_profile_update_errors( $errors, false, $user );
+
+		$this->assertNotEmpty( $errors->get_error_messages( 'invalid_email' ), 'A submission that only sanitization empties must still fail validation.' );
+	}
+
+	/**
+	 * A non-string email payload (e.g. email[]=… from a mis-built form) is
+	 * rejected by WordPress 7.0.3+ with invalid_email; it must not be
+	 * treated as an empty submission.
+	 */
+	public function test_user_profile_update_errors_keeps_invalid_email_for_array_email() {
+		$_POST['user_login'] = 'Array Email GC';
+		$_POST['email']      = [ 'jane@paper.com' ];
+
+		$errors = new WP_Error();
+		$errors->add( 'invalid_email', 'The email address is not correct.', [ 'form-field' => 'email' ] );
+
+		$user             = new stdClass();
+		$user->role       = Guest_Contributor_Role::CONTRIBUTOR_NO_EDIT_ROLE_NAME;
+		$user->user_login = 'Array Email GC';
+
+		Guest_Contributor_Role::user_profile_update_errors( $errors, false, $user );
+
+		$this->assertNotEmpty( $errors->get_error_messages( 'invalid_email' ), 'A non-string email payload must still fail validation.' );
+	}
+
+	/**
+	 * A Guest Contributor submitted with a valid email keeps it: no errors
+	 * are added and the address is not replaced by a placeholder.
+	 */
+	public function test_user_profile_update_errors_leaves_valid_email_untouched() {
+		$_POST['user_login'] = 'Valid Email GC';
+		$_POST['email']      = 'jane@paper.com';
+
+		$errors = new WP_Error();
+
+		$user             = new stdClass();
+		$user->role       = Guest_Contributor_Role::CONTRIBUTOR_NO_EDIT_ROLE_NAME;
+		$user->user_login = 'Valid Email GC';
+		$user->user_email = 'jane@paper.com';
+
+		Guest_Contributor_Role::user_profile_update_errors( $errors, false, $user );
+
+		$this->assertEmpty( $errors->get_error_codes(), 'No errors may be introduced for a valid submission.' );
+		$this->assertSame( 'jane@paper.com', $user->user_email, 'A valid email must not be replaced by a placeholder.' );
+	}
+
+	/**
+	 * End-to-end through core: edit_user() on the running WordPress version
+	 * creates a Guest Contributor with an empty email and assigns the
+	 * placeholder, while a control role still fails. Guards against core
+	 * changing this validation surface again (the NPPM-3124 class of change).
+	 */
+	public function test_edit_user_creates_guest_contributor_with_empty_email() {
+		Guest_Contributor_Role::setup_custom_role_and_capability();
+		$admin_id = $this->factory()->user->create( [ 'role' => 'administrator' ] );
+		wp_set_current_user( $admin_id );
+		require_once ABSPATH . 'wp-admin/includes/user.php';
+
+		$_POST = array_merge(
+			$_POST,
+			[
+				'action'     => 'createuser',
+				'user_login' => 'Integration GC',
+				'email'      => '',
+				'first_name' => '',
+				'last_name'  => '',
+				'url'        => '',
+				'pass1'      => 'S0me-Str0ng-Pass!',
+				'pass2'      => 'S0me-Str0ng-Pass!',
+				'role'       => Guest_Contributor_Role::CONTRIBUTOR_NO_EDIT_ROLE_NAME,
+			]
+		);
+
+		$result = edit_user();
+		$this->assertIsInt( $result, 'edit_user() must create a Guest Contributor with an empty email on the running core version.' );
+		$user = get_user_by( 'id', $result );
+		$this->assertSame( 'integration-gc@' . Guest_Contributor_Role::get_dummy_email_domain(), $user->user_email );
+
+		// Control: a non-Guest-Contributor role with an empty email must still fail.
+		$_POST['user_login'] = 'Integration Control';
+		$_POST['role']       = 'subscriber';
+		$control             = edit_user();
+		$this->assertWPError( $control, 'A subscriber with an empty email must still fail core validation.' );
 	}
 }

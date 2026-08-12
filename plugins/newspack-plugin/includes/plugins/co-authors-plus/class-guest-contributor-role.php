@@ -629,11 +629,13 @@ class Guest_Contributor_Role {
 
 		// Since WordPress 7.0.3, edit_user() validates the submitted email at
 		// assignment, so an empty field adds invalid_email before this action
-		// fires. Clear it only when the submission is empty — a malformed,
-		// non-empty address must keep failing validation.
-		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- Nonce verification happens in wp-admin/user-new.php before this hook.
-		$submitted_email = isset( $_POST['email'] ) ? trim( sanitize_text_field( wp_unslash( $_POST['email'] ) ) ) : '';
-		if ( '' === $submitted_email && ! empty( $errors->errors['invalid_email'] ) ) {
+		// fires. Clear it only when the submission is genuinely empty, judged
+		// on the raw value: input that only sanitization would empty (stray
+		// markup, an address pasted with angle brackets, a non-string
+		// payload) keeps failing validation like any other malformed entry.
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Every edit_user() caller verifies a nonce first (user-new.php, user-edit.php, profile.php, wp_ajax_add_user()); the value is only compared with the empty string, never stored or output.
+		$is_empty_email = isset( $_POST['email'] ) && is_string( $_POST['email'] ) && '' === trim( wp_unslash( $_POST['email'] ) );
+		if ( $is_empty_email && ! empty( $errors->errors['invalid_email'] ) ) {
 			$errors->remove( 'invalid_email' );
 		}
 
