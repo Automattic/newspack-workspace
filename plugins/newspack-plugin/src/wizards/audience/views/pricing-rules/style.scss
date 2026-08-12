@@ -42,6 +42,7 @@
 	}
 
 	&__impact {
+		align-items: start;
 		display: flex;
 		flex-direction: column;
 		gap: wp-vars.$grid-unit-30;
