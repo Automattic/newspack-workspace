@@ -30,7 +30,7 @@ import classnames from 'classnames';
  * @property {string}             [backNav='']       - URL to navigate back to.
  * @property {Object[]}           [badges]           - Badges to display beside the title, each `{ label, level }`.
  * @property {boolean}            [centered=false]   - Indicates if the header is centered.
- * @property {?string}            [className=null]   - Additional CSS class name, applied to the title container.
+ * @property {?string}            [className=null]   - Additional CSS class name, applied to the outer container.
  * @property {string|Function|*}  [description]      - Description of the section.
  * @property {number}             [heading=2]        - HTML heading level, e.g., 1 for h1, 2 for h2, etc.
  * @property {string|Function|*}  [icon]             - Icon to display in the header.
