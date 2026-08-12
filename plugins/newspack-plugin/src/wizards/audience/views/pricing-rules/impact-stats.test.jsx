@@ -107,8 +107,6 @@ describe( 'ImpactStats', () => {
 		expect( within( tileFor( 'Protected' ) ).getByText( '4+' ) ).toBeInTheDocument();
 	} );
 
-	// The engine truncates oldest-first and the oldest are the ones a cohort gate
-	// protects, so a capped split under-reports who is repriced.
 	it( 'bounds all three subscriber counts when the audience is capped', () => {
 		render( stats( { totalMatching: 500, countLimited: true, audience: audience( { count_limited: true } ) } ) );
 
@@ -127,8 +125,6 @@ describe( 'ImpactStats', () => {
 		expect( screen.queryByText( '8' ) ).not.toBeInTheDocument();
 	} );
 
-	// A locked rule still reports how many subscriptions it reaches, and that count
-	// carries its own cap flag.
 	it( 'keeps the scope count bounded under a locked rule the engine capped', () => {
 		render( stats( { totalMatching: 36, countLimited: false, audience: audience( { application: 'locked', count_limited: true } ) } ) );
 
@@ -145,8 +141,6 @@ describe( 'ImpactStats', () => {
 		expect( screen.queryByText( 'Not applicable' ) ).not.toBeInTheDocument();
 	} );
 
-	// The counts cross a REST boundary owned by the pricing engine, so a missing one
-	// falls back to the empty tile rather than formatting to "NaN".
 	it( 'falls back to the em-dash when a count is missing', () => {
 		render( stats( { totalMatching: 36, countLimited: false, audience: audience( { caught: undefined } ) } ) );
 
@@ -155,7 +149,6 @@ describe( 'ImpactStats', () => {
 		expect( within( tileFor( 'Subscribers in scope' ) ).getByText( '12' ) ).toBeInTheDocument();
 	} );
 
-	// A count that never arrived is not the same claim as one that does not apply.
 	it( 'announces a missing count differently from a locked one', () => {
 		render( stats( { totalMatching: 36, countLimited: false, audience: audience( { caught: null } ) } ) );
 
@@ -172,7 +165,6 @@ describe( 'ImpactStats', () => {
 		expect( screen.queryByText( '—' ) ).not.toBeInTheDocument();
 	} );
 
-	// Number() would turn these into a confident zero, which is worse than no figure.
 	it( 'refuses a count that is not a number or a numeric string', () => {
 		render( stats( { totalMatching: 36, countLimited: false, audience: audience( { caught: false, protected: [] } ) } ) );
 
@@ -181,7 +173,6 @@ describe( 'ImpactStats', () => {
 		expect( screen.queryByText( '0' ) ).not.toBeInTheDocument();
 	} );
 
-	// The engine is a separate plugin and PHP counts arrive as strings unless cast.
 	it( 'formats a count the engine sent as a string', () => {
 		render( stats( { totalMatching: '500', countLimited: false, audience: audience( { total: '12', caught: '8', protected: '4' } ) } ) );
 

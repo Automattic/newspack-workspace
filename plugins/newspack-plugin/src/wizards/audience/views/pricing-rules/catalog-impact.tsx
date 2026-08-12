@@ -78,14 +78,13 @@ export default function CatalogImpact( { stats }: CatalogImpactProps ) {
 		}
 	}
 	const note = detail ? sampleNote( detail ) : null;
-	// A count the engine never sent is neither "some" nor "none". The table loads
-	// its own sample, so only a confirmed zero withdraws it.
+	// The table loads its own sample, so only a confirmed zero withdraws it.
 	const affected = finiteNumber( stats.total_matching );
 	const hasAffectedProducts = 0 !== affected;
 
 	return (
 		<section className="newspack-pricing-rules__impact" aria-labelledby={ headingId }>
-			{ /* The route renders no section title, so this is the page's first heading below the breadcrumb h1. */ }
+			{ /* The route renders no section title, so this is the first heading below the breadcrumb h1. */ }
 			<h2 id={ headingId } className="screen-reader-text">
 				{ __( 'Catalog impact', 'newspack-plugin' ) }
 			</h2>

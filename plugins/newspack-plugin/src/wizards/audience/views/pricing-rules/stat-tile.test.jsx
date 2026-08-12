@@ -1,5 +1,5 @@
 /**
- * One scorecard tile: what it renders, and what it announces when there is no number.
+ * One scorecard tile, and what it announces when there is no number.
  */
 
 /**
@@ -21,7 +21,6 @@ describe( 'StatTile', () => {
 		expect( screen.getByText( 'Rules currently price these products' ) ).toBeInTheDocument();
 	} );
 
-	// Both screens put the grid under a section heading, so the label is its child.
 	it( 'renders the label as a heading', () => {
 		render( <StatTile label="Products affected" value="33" description="Rules currently price these products" /> );
 
@@ -35,7 +34,6 @@ describe( 'StatTile', () => {
 		expect( screen.getByText( 'Not applicable' ) ).toHaveClass( 'screen-reader-text' );
 	} );
 
-	// A caller that knows why the number is absent says so in its own words.
 	it( 'prefers the caller’s label over the default on an em-dash tile', () => {
 		render( <StatTile label="Protected" value={ null } valueLabel="Unavailable" description="Keep the price they signed up at" /> );
 
@@ -43,8 +41,6 @@ describe( 'StatTile', () => {
 		expect( screen.queryByText( 'Not applicable' ) ).not.toBeInTheDocument();
 	} );
 
-	// Punctuation verbosity decides whether the "+" is spoken, so the figure carries
-	// its own name rather than resting on the glyph.
 	it( 'announces a bounded figure in words', () => {
 		render(
 			<StatTile label="Subscribers in scope" value="500+" valueLabel="At least 500" description="Renewing subscriptions on those products" />
@@ -62,7 +58,6 @@ describe( 'StatTile', () => {
 		expect( screen.getByText( 'Applies to new sign-ups only' ) ).toBeInTheDocument();
 	} );
 
-	// The description explains the label, not the number, so it survives an empty tile.
 	it( 'keeps the description on an em-dash tile', () => {
 		render( <StatTile label="Protected" value={ null } description="Keep the price they signed up at" /> );
 
@@ -75,7 +70,6 @@ describe( 'StatTile', () => {
 		expect( screen.queryByText( 'Applies to new sign-ups only' ) ).not.toBeInTheDocument();
 	} );
 
-	// It opens a modal rather than navigating, so a link-styled button, never an anchor.
 	it( 'runs the action from a button when both label and callback are given', () => {
 		const onAction = jest.fn();
 		render(

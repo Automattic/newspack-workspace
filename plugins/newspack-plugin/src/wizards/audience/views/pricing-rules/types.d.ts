@@ -135,10 +135,7 @@ interface CatalogImpactResponse {
 	audience?: RuleAudienceData;
 }
 
-/**
- * A count as the engine sends it: `json_encode` of an int, of a `$wpdb` string,
- * or of null. Normalise with `finiteNumber` before doing arithmetic on one.
- */
+/** Normalise with `finiteNumber` before doing arithmetic on one. */
 type EngineCount = number | string | null;
 
 interface RuleAudienceData {

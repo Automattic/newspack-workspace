@@ -18,8 +18,7 @@ export interface StatTileProps {
 	label: string;
 	// Pre-formatted by the caller. Null renders the null glyph.
 	value: string | null;
-	// Spoken in place of the visible value, for figures whose meaning rests on
-	// punctuation a screen reader may not announce.
+	// Spoken instead of the visible value, whose meaning may rest on punctuation.
 	valueLabel?: string;
 	description: string;
 	secondary?: string;
@@ -34,7 +33,7 @@ export default function StatTile( { label, value, valueLabel, description, secon
 	return (
 		<Card.Root className="newspack-pricing-rules__tile">
 			<Card.Content className="newspack-pricing-rules__tile-content">
-				{ /* Both screens place the grid under a section heading, so the tiles are its children. */ }
+				{ /* Both screens place the grid under a section heading. */ }
 				<h3 className="newspack-pricing-rules__tile-label">{ label }</h3>
 				<div className="newspack-pricing-rules__tile-body">
 					<span className="newspack-pricing-rules__tile-value">
@@ -52,7 +51,7 @@ export default function StatTile( { label, value, valueLabel, description, secon
 				<div className="newspack-pricing-rules__tile-footer">
 					<span className="newspack-pricing-rules__tile-description">{ description }</span>
 					{ actionLabel && onAction && (
-						// A modal trigger, so a button styled as a link rather than an anchor.
+						// Opens a modal, so a button styled as a link rather than an anchor.
 						<Button variant="link" className="newspack-pricing-rules__tile-action" onClick={ onAction }>
 							{ actionLabel }
 						</Button>

@@ -1,7 +1,6 @@
 /**
  * Shared price and count formatting for the impact previews (catalog-wide panel
- * and the per-rule editor preview). The contract's prices are plain numbers;
- * currency shaping is the client's job.
+ * and the per-rule editor preview). Currency shaping is the client's job.
  */
 
 /**
@@ -22,10 +21,9 @@ export { formatCount };
 export const EM_DASH = '—';
 
 /**
- * The engine is a separate plugin, so its numbers arrive over REST as whatever
- * `json_encode` made of them: an int, a numeric string from `$wpdb`, or null.
- * Anything outside that set is refused rather than coerced, because `Number()`
- * turns `false` and `[]` into a confident zero.
+ * The engine is a separate plugin, so its numbers arrive as `json_encode` made
+ * them: an int, a `$wpdb` string, or null. Anything else is refused rather than
+ * coerced, because `Number()` turns `false` and `[]` into a confident zero.
  */
 export function finiteNumber( value: unknown ): number | null {
 	if ( 'number' !== typeof value && ( 'string' !== typeof value || '' === value.trim() ) ) {
@@ -35,10 +33,8 @@ export function finiteNumber( value: unknown ): number | null {
 	return Number.isFinite( count ) ? count : null;
 }
 
-/**
- * Prices cross the same boundary as the counts, and `toFixed` throws rather than
- * degrading, so an unexpected shape costs one cell instead of the whole page.
- */
+// `toFixed` throws rather than degrading, and the wizard has no error boundary,
+// so an unexpected shape costs one cell instead of the whole page.
 export function formatPrice( amount: EngineCount, currency: PricingRulesCurrency ): string {
 	const value = finiteNumber( amount );
 	return null === value ? EM_DASH : currency.symbol + value.toFixed( currency.decimals );
@@ -72,8 +68,8 @@ export function cycleMarkerNote(): string {
  * product it could not price.
  */
 export function sampleNote( payload: CatalogImpactResponse ): string | null {
-	// Both sides go through finiteNumber: as strings, `'9' < '50'` compares
-	// lexicographically and would announce a cap the engine never applied.
+	// As strings, `'9' < '50'` compares lexicographically and would announce a cap
+	// the engine never applied.
 	const shown = finiteNumber( payload.sample_count );
 	const cap = finiteNumber( payload.sample_limit ?? IMPACT_SAMPLE_LIMIT );
 	if ( ! payload.preview_limited || null === shown || null === cap || shown < cap ) {

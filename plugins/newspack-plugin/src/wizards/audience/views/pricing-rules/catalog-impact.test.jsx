@@ -261,7 +261,6 @@ describe( 'CatalogImpact', () => {
 		expect( screen.queryByText( /Showing a sample of/ ) ).not.toBeInTheDocument();
 	} );
 
-	// It opens a modal rather than navigating, so it has to stay a button.
 	it( 'places the trigger inside the affected-products tile', () => {
 		const { container } = render( <CatalogImpact stats={ stats() } /> );
 
@@ -296,8 +295,6 @@ describe( 'CatalogImpact', () => {
 		expect( screen.getByText( 'No active pricing rules are affecting products yet.' ) ).toBeInTheDocument();
 	} );
 
-	// Only a confirmed zero withdraws the table: the modal fetches its own sample,
-	// so a count that never arrived claims nothing either way.
 	it( 'keeps the table on offer and claims nothing when the count is missing', () => {
 		render( <CatalogImpact stats={ stats( { total_matching: undefined } ) } /> );
 
@@ -306,7 +303,6 @@ describe( 'CatalogImpact', () => {
 		expect( screen.getByText( '—' ) ).toBeInTheDocument();
 	} );
 
-	// Modal renders its title as an h1, so the empty state below it is an h2.
 	it( 'drops the empty state a level inside the modal', async () => {
 		apiFetch.mockResolvedValue( detail( { sample: [] } ) );
 		render( <CatalogImpact stats={ stats() } /> );

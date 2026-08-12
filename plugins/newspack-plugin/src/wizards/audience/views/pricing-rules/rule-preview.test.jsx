@@ -117,7 +117,6 @@ describe( 'RulePreview', () => {
 		expect( stats.compareDocumentPosition( table ) & Node.DOCUMENT_POSITION_FOLLOWING ).toBeTruthy();
 	} );
 
-	// Only an audience-bearing payload reaches the editor's four-tile layout.
 	it( 'shows the subscriber tiles when the preview carries an audience', async () => {
 		apiFetch.mockResolvedValue(
 			response( {

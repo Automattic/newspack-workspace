@@ -1,5 +1,5 @@
 /**
- * Normalising and captioning the counts the pricing engine sends.
+ * Normalising, pricing and captioning the numbers the engine sends.
  */
 
 /**
@@ -14,7 +14,6 @@ describe( 'finiteNumber', () => {
 		expect( finiteNumber( -4 ) ).toBe( -4 );
 	} );
 
-	// PHP counts arrive as strings unless the engine casts them.
 	it( 'reads a numeric string, whitespace and all', () => {
 		expect( finiteNumber( '12' ) ).toBe( 12 );
 		expect( finiteNumber( '0' ) ).toBe( 0 );
@@ -38,8 +37,7 @@ describe( 'formatPrice', () => {
 		expect( formatPrice( 0, currency ) ).toBe( '$0.00' );
 	} );
 
-	// toFixed throws on a string, and the wizard has no error boundary, so an
-	// unexpected shape has to cost one cell rather than the whole page.
+	// The wizard has no error boundary, so a throw here would cost the whole page.
 	it( 'falls back to the em-dash rather than throwing', () => {
 		[ null, undefined, '', 'abc', {} ].forEach( amount => expect( formatPrice( amount, currency ) ).toBe( '—' ) );
 	} );
@@ -65,7 +63,6 @@ describe( 'sampleNote', () => {
 		expect( sampleNote( payload( { preview_limited: false } ) ) ).toBeNull();
 	} );
 
-	// As strings, '9' < '50' compares lexicographically and inverts the test.
 	it( 'compares counts numerically when the engine sends them as strings', () => {
 		expect( sampleNote( payload( { sample_count: '9', sample_limit: '50' } ) ) ).toBeNull();
 		expect( sampleNote( payload( { sample_count: '50', sample_limit: '50' } ) ) ).toBe( 'Showing a sample of 50 products.' );

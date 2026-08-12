@@ -43,8 +43,6 @@ const bounded = ( value: EngineCount, limited: boolean ): Figure => {
 			__( '%s+', 'newspack-plugin' ),
 			formatted
 		),
-		// Whether the "+" is spoken depends on punctuation verbosity, and it is the
-		// only thing separating a floor from an exact count.
 		valueLabel: sprintf(
 			/* translators: %s: a formatted count acting as a lower bound, e.g. "500". */
 			__( 'At least %s', 'newspack-plugin' ),
