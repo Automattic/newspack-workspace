@@ -23,34 +23,41 @@ class Subscribe_Block_Response_Test extends WP_UnitTestCase {
 	private $original_accept;
 
 	/**
-	 * Make wp_is_json_request() true for the duration of each test.
+	 * Saved $_SERVER['REQUEST_METHOD'], restored in tear_down.
 	 *
-	 * Also forces wp_doing_ajax() to true and routes wp_die()'s Ajax handler
-	 * through the test case's own handler. wp_send_json() only ever reaches
-	 * wp_die() when wp_doing_ajax() is true (otherwise it calls a bare die());
-	 * and once there, wp_die() dispatches on wp_doing_ajax() before anything
-	 * else, so the generic 'wp_die_handler' filter that WP_UnitTestCase wires
-	 * up to throw WPDieException is never consulted. Wiring the same handler
-	 * onto 'wp_die_ajax_handler' is what makes that exception catchable here.
+	 * Set by test_non_json_request_does_not_emit_json() to force the redirect
+	 * branch. WP_UnitTestCase does not reset $_SERVER between tests, so without
+	 * saving and restoring it here the same way as HTTP_ACCEPT, that value would
+	 * leak into every test that runs afterward in the same process and make the
+	 * suite's pass/fail depend on run order.
+	 *
+	 * @var string|null
+	 */
+	private $original_request_method;
+
+	/**
+	 * Make wp_is_json_request() true for the duration of each test.
 	 */
 	public function set_up() {
 		parent::set_up();
-		$this->original_accept  = $_SERVER['HTTP_ACCEPT'] ?? null; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- saved verbatim, restored verbatim in tear_down, never used as output or in a query.
-		$_SERVER['HTTP_ACCEPT'] = 'application/json';
-		add_filter( 'wp_doing_ajax', '__return_true' );
-		add_filter( 'wp_die_ajax_handler', array( $this, 'get_wp_die_handler' ) );
+		$this->original_accept         = $_SERVER['HTTP_ACCEPT'] ?? null; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- saved verbatim, restored verbatim in tear_down, never used as output or in a query.
+		$this->original_request_method = $_SERVER['REQUEST_METHOD'] ?? null; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- saved verbatim, restored verbatim in tear_down, never used as output or in a query.
+		$_SERVER['HTTP_ACCEPT']        = 'application/json';
 	}
 
 	/**
-	 * Restore the request headers and the wp_doing_ajax/wp_die_ajax_handler filters.
+	 * Restore the request headers.
 	 */
 	public function tear_down() {
-		remove_filter( 'wp_die_ajax_handler', array( $this, 'get_wp_die_handler' ) );
-		remove_filter( 'wp_doing_ajax', '__return_true' );
 		if ( null === $this->original_accept ) {
 			unset( $_SERVER['HTTP_ACCEPT'] );
 		} else {
 			$_SERVER['HTTP_ACCEPT'] = $this->original_accept;
+		}
+		if ( null === $this->original_request_method ) {
+			unset( $_SERVER['REQUEST_METHOD'] );
+		} else {
+			$_SERVER['REQUEST_METHOD'] = $this->original_request_method;
 		}
 		parent::tear_down();
 	}
@@ -62,10 +69,22 @@ class Subscribe_Block_Response_Test extends WP_UnitTestCase {
 	 * WordPress test library turns into a WPDieException. Capturing the buffer
 	 * and swallowing that exception is the only way to observe the response.
 	 *
+	 * Forces wp_doing_ajax() to true and routes wp_die()'s Ajax handler through the
+	 * test case's own handler, scoped to this one call rather than the whole test
+	 * (test_non_json_request_does_not_emit_json() takes the redirect branch instead
+	 * and never calls this helper, so it runs without either). wp_send_json() only
+	 * ever reaches wp_die() when wp_doing_ajax() is true (otherwise it calls a bare
+	 * die()); and once there, wp_die() dispatches on wp_doing_ajax() before anything
+	 * else, so the generic 'wp_die_handler' filter that WP_UnitTestCase wires up to
+	 * throw WPDieException is never consulted. Wiring the same handler onto
+	 * 'wp_die_ajax_handler' is what makes that exception catchable here.
+	 *
 	 * @param mixed $data Payload handed to send_form_response().
 	 * @return array Decoded response body.
 	 */
 	private function capture_response( $data ) {
+		add_filter( 'wp_doing_ajax', '__return_true' );
+		add_filter( 'wp_die_ajax_handler', array( $this, 'get_wp_die_handler' ) );
 		ob_start();
 		try {
 			send_form_response( $data );
@@ -77,8 +96,19 @@ class Subscribe_Block_Response_Test extends WP_UnitTestCase {
 			// must still close this buffer, or it leaks into whatever the test runner
 			// captures next and turns one failure into a run's worth of noise.
 			$output = ob_get_clean();
+			remove_filter( 'wp_die_ajax_handler', array( $this, 'get_wp_die_handler' ) );
+			remove_filter( 'wp_doing_ajax', '__return_true' );
 		}
-		return json_decode( $output, true );
+
+		// This helper is the single funnel every test in this file calls
+		// send_form_response() through, so a regression that stops it from
+		// emitting a body at all would otherwise surface here as `null` fed into
+		// every caller's array access — a TypeError cascade across the whole
+		// file instead of one legible failure naming the real problem.
+		$this->assertNotSame( '', $output, 'send_form_response() must emit a response body on this branch.' );
+		$decoded = json_decode( $output, true );
+		$this->assertSame( JSON_ERROR_NONE, json_last_error(), 'send_form_response() must emit valid JSON.' );
+		return $decoded;
 	}
 
 	/**
@@ -270,6 +300,23 @@ class Subscribe_Block_Response_Test extends WP_UnitTestCase {
 		);
 
 		$this->assertSame( 123, $response['metadata']['gate_post_id'] );
+	}
+
+	/**
+	 * `metadata` is itself an allowlisted key, so a non-array value under it
+	 * survives the top-level filter and reaches the nested METADATA_KEYS filter,
+	 * which only runs under is_array(). This is the only test in the file that
+	 * takes that guard's false branch; every other fixture passes an array (or
+	 * omits the key). Confirms a scalar is normalized rather than passed through
+	 * as-is, matching the file's premise that the point of allowlisting is not
+	 * to trust the shape of what came back.
+	 */
+	public function test_non_array_metadata_does_not_pass_through() {
+		$response = $this->capture_response(
+			[ 'metadata' => 'not-an-array' ]
+		);
+
+		$this->assertSame( [], $response['metadata'], 'A non-array metadata value must be normalized, not passed through.' );
 	}
 
 	/**
