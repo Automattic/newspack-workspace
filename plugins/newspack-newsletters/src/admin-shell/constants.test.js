@@ -8,9 +8,8 @@ describe( 'getEmptyStateHeading', () => {
 		delete window.newspackNewslettersAdmin;
 	} );
 
-	// `wp_localize_script()` string-casts, so the wire values are `''` and `'1'`, never
-	// booleans. Asserting on `true` / `false` would keep this green while a tightening
-	// to `=== true` demoted every bundled empty state.
+	// `wp_localize_script()` string-casts, so the wire values are `''` and `'1'`. Pinning
+	// booleans would keep this green while a tightening to `=== true` broke production.
 	it( 'is 1 when standalone, because the shell header holding the h1 is hidden', () => {
 		window.newspackNewslettersAdmin = { bundledMode: '' };
 		expect( getEmptyStateHeading() ).toBe( 1 );
@@ -27,18 +26,16 @@ describe( 'getEmptyStateHeading', () => {
 } );
 
 describe( 'every screen empty state carries the shell contract', () => {
-	// Read the screen sources rather than rendering them: both values fail silently.
-	// Without EMPTY_STATE_CLASS the `:has()` rules in style.scss stop matching, so the
-	// shell header reappears and the region goes full-width; without the heading level
-	// a standalone install has no h1. Neither throws, and no rendered test would notice.
+	// Read the sources rather than render them: both values fail silently. Losing the
+	// class un-hides the shell header and drops the width cap; losing the heading level
+	// leaves a standalone install with no h1. Neither throws.
 	const fs = require( 'fs' );
 	const path = require( 'path' );
 
 	const screensDir = path.join( __dirname, 'screens' );
 
-	// Every .js in the directory, not just index.js: these screens already split
-	// fields, actions and panels into siblings, so an extracted empty state would
-	// otherwise slip past the scan entirely.
+	// Every .js in the directory, not just index.js: these screens already split fields
+	// and actions into siblings, so an extracted empty state would slip past.
 	const readScreen = name => {
 		const dir = path.join( screensDir, name );
 		return fs
@@ -54,14 +51,12 @@ describe( 'every screen empty state carries the shell contract', () => {
 		.map( entry => [ entry.name, readScreen( entry.name ) ] )
 		.filter( ( [ , source ] ) => source.includes( 'EmptyState.Root' ) );
 
-	// Anchored to a literal list so a new empty state has to come through here rather
-	// than shrinking the denominator unnoticed.
+	// Anchored to a literal list so a new empty state cannot shrink the denominator.
 	it( 'covers every screen that renders an empty state', () => {
 		expect( sources.map( ( [ name ] ) => name ).sort() ).toEqual( [ 'ads-list', 'advertisers-list', 'newsletters-list' ] );
 	} );
 
-	// Matched without pinning prop order or line breaks, so adding a second prop to
-	// Root is not a false failure.
+	// Prop order and line breaks are not pinned: a second prop on Root is not a failure.
 	it.each( sources )( '%s passes EMPTY_STATE_CLASS to EmptyState.Root', ( _name, source ) => {
 		expect( source ).toMatch( /<EmptyState\.Root[^>]*\bclassName=\{ EMPTY_STATE_CLASS \}/ );
 	} );

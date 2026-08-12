@@ -72,9 +72,8 @@ export default function AdvertisersListScreen() {
 	const fields = useMemo( () => getFields( { onEdit: openEdit } ), [ openEdit ] );
 	const actions = useMemo( () => getActions( { onEdit: openEdit, onMutated } ), [ openEdit, onMutated ] );
 
-	// `trashCount` is omitted, not forgotten: advertisers are terms and have no trash, so
-	// `useAdvertisersData` never resolves a count. Passing the `null` it would hand back,
-	// for symmetry with the other two screens, would block this empty state for good.
+	// `trashCount` is omitted, not forgotten: advertisers are terms and have no trash.
+	// Passing the `null` `useAdvertisersData` hands back would block this empty state.
 	const isStrictEmpty = isStrictlyEmpty( { hasLoadedOnce, isLoading, paginationInfo, view } );
 
 	useHeaderActions(

@@ -33,8 +33,8 @@ describe( 'EmptyState.Root', () => {
 		expect( stack ).toHaveAttribute( 'end', '4' );
 	} );
 
-	// Consumers key `:has()` selectors off this class to restyle the page around an
-	// empty state, so losing it changes their layout without failing anything.
+	// Consumers key `:has()` selectors off this class, so losing it changes their
+	// layout without failing anything.
 	it( 'merges className onto the grid', () => {
 		const { container } = render(
 			<EmptyState.Root className="consumer-empty-state">
@@ -45,7 +45,7 @@ describe( 'EmptyState.Root', () => {
 	} );
 
 	// Elements, not a bare string: the stack keeps a lone string but drops one sitting
-	// beside an element, which is why the README tells consumers to wrap loose text.
+	// beside an element.
 	it( 'renders its children', () => {
 		render(
 			<EmptyState.Root>
@@ -134,8 +134,6 @@ describe( 'EmptyState.Actions', () => {
 		expect( screen.getByRole( 'button', { name: 'Add Newsletter' } ) ).toBeInTheDocument();
 	} );
 
-	// A stacked group still has to carry the hook class: with no stylesheet in the
-	// component, that class is the only thing a consumer can select on.
 	it( 'stacks into a column while keeping the hook class', () => {
 		const { container } = render(
 			<EmptyState.Root>
@@ -148,8 +146,8 @@ describe( 'EmptyState.Actions', () => {
 		const actions = container.querySelector( '.newspack-empty-state__actions' );
 		expect( actions ).toBeInTheDocument();
 		expect( actions ).toHaveStyle( { flexDirection: 'column' } );
-		// Pinned because VStack's own default is `stretch`: without alignment="center"
-		// the buttons would go full-bleed while flexDirection stayed correct.
+		// VStack's own default is `stretch`, so without alignment="center" the buttons
+		// would go full-bleed while flexDirection stayed correct.
 		expect( actions ).toHaveStyle( { alignItems: 'center' } );
 	} );
 

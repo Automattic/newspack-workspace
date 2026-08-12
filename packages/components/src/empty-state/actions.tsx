@@ -21,8 +21,7 @@ const Actions = ( { orientation = 'row', spacing = 2, className, children }: Emp
 	const isColumn = orientation === 'column';
 	const Stack = isColumn ? VStack : HStack;
 
-	// A row wraps rather than overflowing: the empty state sits in half the grid above
-	// 1054px, which is the narrow case for two actions side by side.
+	// Rows wrap: the empty state only gets half the grid above 1054px.
 	return (
 		<Stack alignment="center" spacing={ spacing } wrap={ ! isColumn } className={ classnames( 'newspack-empty-state__actions', className ) }>
 			{ children }

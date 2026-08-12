@@ -32,8 +32,8 @@ describe( 'isStrictlyEmpty', () => {
 		expect( isStrictlyEmpty( { ...baseArgs, trashCount: 2 } ) ).toBe( false );
 	} );
 
-	// Taxonomy screens (advertisers) never fetch a trash count, so they omit the
-	// key. Treating that as "trash is non-empty" would hide their empty state forever.
+	// Treating an absent count as "trash is non-empty" would hide the advertisers
+	// empty state forever.
 	it( 'is true when the collection has no trash concept at all', () => {
 		const noTrash = { ...baseArgs };
 		delete noTrash.trashCount;
@@ -41,15 +41,12 @@ describe( 'isStrictlyEmpty', () => {
 		expect( isStrictlyEmpty( { ...baseArgs, trashCount: undefined } ) ).toBe( true );
 	} );
 
-	// On screens that DO fetch a count, null means "unknown", not "no trash":
-	// useCollectionData resets it on every refetch, and a failed sub-fetch leaves it
-	// null for good. Collapsing that to 0 makes a freshly trashed last item flash
-	// the empty state.
+	// null means "unknown", not "no trash": useCollectionData resets it on every
+	// refetch, and a failed sub-fetch leaves it null for good.
 	it( 'is false when the trash count is unknown', () => {
 		expect( isStrictlyEmpty( { ...baseArgs, trashCount: null } ) ).toBe( false );
 	} );
 
-	// A search or filter matching nothing keeps the DataViews "no results" treatment.
 	it( 'is false for a search', () => {
 		expect( isStrictlyEmpty( { ...baseArgs, view: { search: 'x', filters: [] } } ) ).toBe( false );
 	} );

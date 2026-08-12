@@ -36,8 +36,7 @@ describe( 'admin-shell App chrome', () => {
 		expect( screen.getByRole( 'heading', { level: 1, name: 'Newsletters' } ) ).toBeInTheDocument();
 	} );
 
-	// `wp_localize_script()` string-casts, so the wire values are `'1'` and `''`, never
-	// booleans. See the matching cases in constants.test.js.
+	// `wp_localize_script()` string-casts: the wire values are `'1'` and `''`.
 	it( 'renders no h1 in bundled mode (newspack-plugin admin-header owns the breadcrumb)', () => {
 		window.newspackNewslettersAdmin = { bundledMode: '1' };
 		const { container } = render( <App label="Newsletters" Screen={ NoopScreen } /> );

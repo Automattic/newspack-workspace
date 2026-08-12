@@ -65,8 +65,8 @@ const ContextualPromptsSettings = ( { status, values, error, inFlight, onSetValu
 	if ( ! enabled ) {
 		return (
 			<WizardsTab>
-				{ /* Sibling of the empty state, not a child: the error is about the settings
-				     request, so it takes the tab's full width rather than the centred column. */ }
+				{ /* Sibling, not a child: the error is about the settings request, so it takes
+				     the tab's full width rather than the empty state's centred column. */ }
 				{ errorNotice }
 				<EmptyState.Root>
 					<EmptyState.Header
