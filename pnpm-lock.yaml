@@ -80,7 +80,7 @@ importers:
         version: 6.21.0
       '@wordpress/icons':
         specifier: ^11.0.0
-        version: 11.8.0(react@18.3.1)
+        version: 11.8.0(@types/react@18.3.31)(react@18.3.1)
       '@wordpress/keycodes':
         specifier: ^4.48.0
         version: 4.48.0
@@ -176,7 +176,7 @@ importers:
         version: 6.21.0
       '@wordpress/icons':
         specifier: ^11.0.0
-        version: 11.8.0(react@18.3.1)
+        version: 11.8.0(@types/react@18.3.31)(react@18.3.1)
       '@wordpress/keycodes':
         specifier: ^4.48.0
         version: 4.48.0
@@ -239,7 +239,7 @@ importers:
   packages/icons:
     dependencies:
       '@wordpress/primitives':
-        specifier: ^3.0.0
+        specifier: ^3.0.0 || ^4.0.0
         version: 3.56.0
       react:
         specifier: 18.3.1
@@ -573,6 +573,9 @@ importers:
       js-cookie:
         specifier: ^3.0.8
         version: 3.0.8
+      newspack-colors:
+        specifier: workspace:*
+        version: link:../../packages/colors
       newspack-components:
         specifier: workspace:*
         version: link:../../packages/components
@@ -3933,12 +3936,6 @@ packages:
   '@wordpress/primitives@3.56.0':
     resolution: {integrity: sha512-NXBq1ODjl6inMWx/l7KCbATcjdoeIOqYeL9i9alqdAfWeKx1EH9PIvKWylIkqZk7erXxCxldiRkuyjTtwjNBxw==}
     engines: {node: '>=12'}
-
-  '@wordpress/primitives@4.48.0':
-    resolution: {integrity: sha512-dfF7IZotIqb6LUiGs7oPwKbSF8RPoC0JDSIrtxvgwFA/yvbc/pDIp/Zs0O8GvxZNxu4JIVnKskOhoLq7lAeziQ==}
-    engines: {node: '>=18.12.0', npm: '>=8.19.2'}
-    peerDependencies:
-      react: 18.3.1
 
   '@wordpress/primitives@4.49.0':
     resolution: {integrity: sha512-mmyDQ6HLFdUhLCcdsJpPzzVjQ2H4wwS3MakMfeiKx39UUAdszoP50vjOohbcUL/7RGkNPvZ66AbpK45XMhlloA==, tarball: https://registry.npmjs.org/@wordpress/primitives/-/primitives-4.49.0.tgz}
@@ -16256,10 +16253,10 @@ snapshots:
       '@wordpress/hooks': 4.48.0
       '@wordpress/html-entities': 4.48.0
       '@wordpress/i18n': 6.21.0
-      '@wordpress/icons': 11.8.0(react@18.3.1)
+      '@wordpress/icons': 11.8.0(@types/react@18.3.31)(react@18.3.1)
       '@wordpress/is-shallow-equal': 5.48.0
       '@wordpress/keycodes': 4.48.0
-      '@wordpress/primitives': 4.48.0(react@18.3.1)
+      '@wordpress/primitives': 4.49.0(@types/react@18.3.31)(react@18.3.1)
       '@wordpress/private-apis': 1.49.0
       '@wordpress/rich-text': 7.48.0(@types/react@18.3.31)(react@18.3.1)
       '@wordpress/warning': 3.48.0
@@ -16551,9 +16548,9 @@ snapshots:
       '@wordpress/date': 5.48.0
       '@wordpress/element': 6.46.0
       '@wordpress/i18n': 6.21.0
-      '@wordpress/icons': 11.8.0(react@18.3.1)
+      '@wordpress/icons': 11.8.0(@types/react@18.3.31)(react@18.3.1)
       '@wordpress/keycodes': 4.48.0
-      '@wordpress/primitives': 4.48.0(react@18.3.1)
+      '@wordpress/primitives': 4.49.0(@types/react@18.3.31)(react@18.3.1)
       '@wordpress/private-apis': 1.49.0
       '@wordpress/url': 4.48.0
       '@wordpress/warning': 3.48.0
@@ -17010,12 +17007,14 @@ snapshots:
       memize: 2.1.1
       tannin: 1.2.0
 
-  '@wordpress/icons@11.8.0(react@18.3.1)':
+  '@wordpress/icons@11.8.0(@types/react@18.3.31)(react@18.3.1)':
     dependencies:
       '@wordpress/element': 6.46.0
-      '@wordpress/primitives': 4.48.0(react@18.3.1)
+      '@wordpress/primitives': 4.49.0(@types/react@18.3.31)(react@18.3.1)
       change-case: 4.1.2
       react: 18.3.1
+    transitivePeerDependencies:
+      - '@types/react'
 
   '@wordpress/icons@13.3.0(@types/react@18.3.31)(react@18.3.1)':
     dependencies:
@@ -17336,12 +17335,6 @@ snapshots:
       '@babel/runtime': 7.29.7
       '@wordpress/element': 5.35.0
       clsx: 2.1.1
-
-  '@wordpress/primitives@4.48.0(react@18.3.1)':
-    dependencies:
-      '@wordpress/element': 8.1.0
-      clsx: 2.1.1
-      react: 18.3.1
 
   '@wordpress/primitives@4.49.0(@types/react@18.3.31)(react@18.3.1)':
     dependencies:

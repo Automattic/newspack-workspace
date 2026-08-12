@@ -24,7 +24,9 @@
 namespace Newspack\CLI;
 
 use Newspack\Content_Gate;
+use Newspack\Emails;
 use Newspack\Group_Subscription;
+use Newspack\Group_Subscription_Invite;
 use Newspack\Reader_Activation;
 use Newspack\WooCommerce_Connection;
 use WP_CLI;
@@ -43,6 +45,18 @@ class Teams_Migration {
 	 * @var string
 	 */
 	const TEAM_ROLE_META_KEY_TEMPLATE = '_wc_memberships_for_teams_team_%d_role';
+
+	/**
+	 * Re-invite table labels for rehearsal outcomes. Constants because each is
+	 * read at multiple sites — invitation_outcome_label() produces them and the
+	 * summary's would-be-sent / would-resend counters filter on them — and a
+	 * reworded literal at one site would silently zero the counters under a
+	 * table that still shows every row.
+	 *
+	 * @var string
+	 */
+	private const OUTCOME_WOULD_SEND   = 'would send (dry run)';
+	private const OUTCOME_WOULD_RESEND = 'would send again — earlier invite lapsed (dry run)';
 
 	/**
 	 * Subscription statuses that count as "live" for the
@@ -108,15 +122,36 @@ class Teams_Migration {
 	 * subscriptions in place rather than creating duplicates. Reuse keys on the
 	 * source team, so an owner who owns several teams migrates to one group
 	 * subscription per team rather than a single merged group. When --product-id is
-	 * supplied, every re-used subscription has its line items replaced with the
+	 * supplied, every re-used $0 subscription has its line items replaced with the
 	 * migration product.
+	 *
+	 * A team whose linked subscription is one the publisher actually bills is
+	 * migrated in place: it gains the group settings and keeps its own product,
+	 * price, taxes and billing schedule. Forcing a subscription to $0 is only
+	 * correct where the access being carried over was free in Memberships. Because
+	 * such a subscription keeps its own schedule, the team's Teams end date is not
+	 * carried onto it, so the group can outlive the membership it came from.
+	 *
+	 * A subscription already cancelled but paid through the end of its term
+	 * (pending-cancel) is migrated in place for the same reason and keeps its
+	 * scheduled end date, whatever its total. Its members hold access for the rest
+	 * of the paid term and lose it when the subscription self-cancels, which is
+	 * what the reader asked for; re-aligning it onto the migration product would
+	 * overwrite that end date and extend their access indefinitely.
+	 *
+	 * Two cases are skipped rather than migrated, and reported as errors in the
+	 * summary: a paid team whose own product no published gate accepts, since
+	 * granting access would mean rewriting what the publisher charges; and a team
+	 * whose paid subscription is on hold for payment recovery and which has no
+	 * migrated group to update, since creating one would hand the owner permanent
+	 * free access and remove their reason to fix their payment method.
 	 *
 	 * Dry-run by default; pass --live to write.
 	 *
 	 * ## OPTIONS
 	 *
 	 * [--product-id=<id>]
-	 * : Product ID to assign to newly-created subscriptions. When supplied, also overwrites the product on any existing subscription that is re-used. Required unless --skip-unlinked is passed.
+	 * : Product to assign to newly-created subscriptions. Accepts a product ID or a variation ID — pass the variation when a publisher sells seat tiers as variations of one variable subscription product. Must be published and accepted by a published gate's "Active subscription" rule. Also re-aligns any re-used $0 subscription onto this product; a re-used subscription the team pays for keeps its own product, price, taxes and billing schedule. Required unless --skip-unlinked is passed.
 	 *
 	 * [--live]
 	 * : Apply the changes. Without this flag the command runs as a dry-run and writes nothing.
@@ -127,12 +162,23 @@ class Teams_Migration {
 	 * [--only-unlinked]
 	 * : Only process teams that have no linked subscription. Use to safely re-run the command for previously skipped teams.
 	 *
+	 * [--migrate-invitations]
+	 * : Also carry each team's pending (unaccepted) WooCommerce Teams invitations over as group-subscription invites, which SENDS an invitation email to every pending invitee. Off by default because it emails readers; the pending invitees are always listed at the end of the run regardless of this flag. In dry-run mode nothing is sent, but the flag still shapes the rehearsal: per-invitee outcomes preview a live run's already-invited skips, lapsed re-sends (labelled as the second email they would be), and existing-member/non-reader rejections, and any dry run with pending invitees warns when the invitation email is not sendable. The preview stops short of live-only checks: the seat limit, inactive-group guards, and --limit apply on the live run only, and a team with no existing subscription to reuse gets no per-invitee preview. The run asks for confirmation before the first email goes out, and aborts up front if the invitation email is not sendable on this site while there is something to send. Re-running is safe while the invites it wrote are still live (30 days by default) — an invitee whose invite has lapsed is invited again, and those are reported separately. To recover an invitee reported as FAILED: fix the cause and re-run — or cancel the reader's pending invitation from the group subscription's panel on the WooCommerce subscription screen and re-invite from there. That manual cancel is also the escape hatch for a stored invite the automatic rollback could not remove.
+	 *
+	 * [--limit[=<n>]]
+	 * : With --migrate-invitations --live, cap how many send attempts (delivered or failed) this run makes — failures count because each one still hits the mail relay and costs a write/rollback cycle. Must be a positive integer; any other value — including a bare --limit with no value, as an unset shell variable leaves behind — aborts the run rather than silently dropping the cap. (The value is declared optional in the synopsis for exactly that reason: it lets the bare flag reach this command's validator instead of being stripped by WP-CLI with only a stderr warning.) Invitees beyond the cap stay listed with a re-run note, and the already-invited gate makes the next run resume where this one stopped — use it to drain a large site in operator-sized batches instead of one long burst. Not applied to dry-run previews; the cap has no effect without --migrate-invitations, though an invalid value still aborts any run, so a rehearsal of the exact live command line fails early.
+	 *
+	 * [--yes]
+	 * : Skip the confirmation prompt shown before invitation emails are sent. Auto-handled by WP_CLI::confirm.
+	 *
 	 * ## EXAMPLES
 	 *
 	 *     wp newspack migrate-teams --product-id=519858
 	 *     wp newspack migrate-teams --product-id=519858 --live
 	 *     wp newspack migrate-teams --skip-unlinked --live
 	 *     wp newspack migrate-teams --product-id=519858 --only-unlinked --live
+	 *     wp newspack migrate-teams --product-id=519858 --migrate-invitations --live
+	 *     wp newspack migrate-teams --product-id=519858 --migrate-invitations --limit=100 --live
 	 *
 	 * @param array $args       Positional args (unused).
 	 * @param array $assoc_args Named args.
@@ -140,10 +186,24 @@ class Teams_Migration {
 	 * @return void
 	 */
 	public function migrate_teams( $args, $assoc_args ) {
-		$product_id    = (int) \WP_CLI\Utils\get_flag_value( $assoc_args, 'product-id', 0 );
-		$dry_run       = ! (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'live', false );
-		$skip_unlinked = (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'skip-unlinked', false );
-		$only_unlinked = (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'only-unlinked', false );
+		$product_id          = (int) \WP_CLI\Utils\get_flag_value( $assoc_args, 'product-id', 0 );
+		$dry_run             = ! (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'live', false );
+		$skip_unlinked       = (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'skip-unlinked', false );
+		$only_unlinked       = (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'only-unlinked', false );
+		$migrate_invitations = (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'migrate-invitations', false );
+		// A present-but-invalid --limit must abort, never silently become "no cap":
+		// the scripted shape --limit=$BATCH --yes --live with an unset variable
+		// would otherwise run the full burst with the confirm prompt (the only
+		// disclosure of the true count) suppressed by --yes.
+		$send_limit = self::validate_send_limit( \WP_CLI\Utils\get_flag_value( $assoc_args, 'limit', null ) );
+		if ( \is_wp_error( $send_limit ) ) {
+			WP_CLI::error( $send_limit->get_error_message() );
+		}
+
+		// Sending is gated behind the opt-in flag and never happens in a dry-run — but
+		// the pending-invitation list is always reported (below) so the data is never
+		// silently dropped at migration.
+		$send_invitations = $migrate_invitations && ! $dry_run;
 
 		// Pre-flight checks.
 		if ( ! $product_id && ! $skip_unlinked ) {
@@ -157,12 +217,28 @@ class Teams_Migration {
 		$migration_product = $product_id ? \wc_get_product( $product_id ) : null;
 		$billing_period    = 'month';
 		$billing_interval  = 1;
+
+		// Derived independently of --product-id: the paid-team guard below needs it
+		// in --skip-unlinked runs, which take no --product-id and process only
+		// linked teams — exactly the teams that can be paid ones. Deriving it inside
+		// the migration-product block would leave that guard dead in the one mode
+		// where every team it protects is in scope.
+		$access_product_ids = self::get_gate_access_product_ids();
 		if ( $product_id && ! $migration_product ) {
 			WP_CLI::error( sprintf( 'Product ID %d not found. Aborting.', $product_id ) );
 		}
 
 		if ( $migration_product ) {
-			WP_CLI::line( sprintf( 'Using product: "%s" (ID: %d)', $migration_product->get_name(), $migration_product->get_id() ) );
+			// Name which shape was passed: a variation and its parent read alike in
+			// the summary, and which one the operator meant is the crux of NPPD-1876.
+			WP_CLI::line(
+				sprintf(
+					'Using %s: "%s" (ID: %d)',
+					$migration_product->is_type( 'variation' ) ? sprintf( 'variation of product %d', $migration_product->get_parent_id() ) : 'product',
+					$migration_product->get_name(),
+					$migration_product->get_id()
+				)
+			);
 			// For a variable-subscription parent these meta live on the variation, not
 			// the parent, and come back empty; default them the same way
 			// create_group_subscription()/create_individual_subscription() do so an
@@ -171,6 +247,40 @@ class Teams_Migration {
 			$interval_meta    = \get_post_meta( $product_id, '_subscription_period_interval', true );
 			$billing_period   = '' !== $period_meta ? $period_meta : 'month';
 			$billing_interval = '' !== $interval_meta ? (int) $interval_meta : 1;
+
+			// An unpublished product fails the same way the migration used to fail on
+			// a variation: WC_Subscription::can_be_updated_to( 'active' ) rejects a
+			// line item whose product is unavailable, and unavailable includes any
+			// status other than publish. Checked here because a dry run cannot
+			// surface it — every write is behind ! $dry_run — so without this the
+			// first the operator hears of it is a fatal on team one of a live run.
+			if ( ! self::product_is_published( $migration_product ) ) {
+				WP_CLI::error(
+					sprintf(
+						'Product %d is not published, so subscriptions created against it cannot be activated. Publish it (or its parent product, for a variation) and re-run.',
+						$product_id
+					)
+				);
+			}
+
+			// A group subscription grants access only where a published gate lists
+			// its product: enforcement runs through WC_Subscription::has_product().
+			// Migrating against a product no gate accepts would report every team as
+			// migrated while granting access to nobody, and on the reuse path the
+			// subscription's original line items are replaced in the same pass, so
+			// there is nothing left to fall back on. Only checkable once the gates
+			// name some products; with none configured they are presumably still to
+			// be built around this product.
+			if ( ! empty( $access_product_ids ) && ! self::product_grants_gate_access( $migration_product, $access_product_ids ) ) {
+				WP_CLI::error(
+					sprintf(
+						'Product %d is not among the products that grant access (%s), so migrating teams onto it would grant no access. Pass --product-id for a product the gates accept, or add %d to a gate\'s "Active subscription" rule first.',
+						$product_id,
+						implode( ', ', $access_product_ids ),
+						$product_id
+					)
+				);
+			}
 		}
 
 		if ( $dry_run ) {
@@ -201,9 +311,74 @@ class Teams_Migration {
 		WP_CLI::line( sprintf( 'Found %d active team membership(s). Starting migration…', $total ) );
 		WP_CLI::line( '' );
 
-		$summary  = [];
-		$skipped  = [];
-		$progress = \WP_CLI\Utils\make_progress_bar( 'Migrating teams', $total );
+		// Read every team's pending invitations up front, before the loop's skip
+		// branches: a team the flags skip still has its invitees reported (below), and
+		// the confirmation prompt needs a truthful recipient count before the first
+		// email goes out. One bulk query rather than one per team, so a
+		// several-hundred-team site doesn't sit silent here before the progress bar.
+		WP_CLI::line( 'Reading pending team invitations… (nothing has been written yet; interrupting here is safe)' );
+		$invitation_drop_count = 0;
+		$pending_invitations   = self::get_pending_team_invitation_emails_for_teams( $teams, $invitation_drop_count );
+		if ( $invitation_drop_count ) {
+			WP_CLI::warning( sprintf( '%d pending team invitation(s) hold a stored address that is not a valid email. They cannot be listed or re-invited by this command; find them by looking for wc_team_invitation posts whose title is not an email address.', $invitation_drop_count ) );
+		}
+
+		// Upper bound: an invitee who is already invited, already a member, or over
+		// the group's seat limit is rejected without an email. Computed on every run:
+		// the dry-run sendability warning below fires whenever pending invitees
+		// exist, not only when --migrate-invitations is being rehearsed, so the
+		// tool's own suggested workflow (rehearse plain, then send live) passes
+		// through the check.
+		$recipient_count = 0;
+		foreach ( $pending_invitations as $team_id => $team_emails ) {
+			if ( ! self::team_is_skipped_by_flags( $team_id, $skip_unlinked, $only_unlinked ) ) {
+				$recipient_count += count( $team_emails );
+			}
+		}
+
+		// Gate on the send-precondition before anything is written, the same way
+		// card_expiry_warning_backfill() does: generate_invite() stores the invite
+		// whether or not the email goes out, so without this an unsendable site
+		// would report hundreds of invitations sent with nobody contacted. Gated on
+		// the recipient count so a site whose invitation email is broken can still
+		// migrate its teams when there is nothing to send anyway. Only the live
+		// branch may use the repairing check: can_send_email()'s miss path
+		// publishes the email post and rewrites newsletter palette keys, so the
+		// dry-run branch asks via the read-only probe — a rehearsal that wrote
+		// would break its own no-writes banner, and would silence this very
+		// warning by repairing the condition it reports.
+		$sendability_message = 'The group subscription invitation email is not currently sendable. The email post may be in draft status, Newspack Newsletters may be inactive, or the Access Control feature (NEWSPACK_CONTENT_GATES) may be off — which leaves the invitation email unregistered.';
+		if ( $recipient_count ) {
+			if ( $send_invitations && ! Emails::can_send_email( Group_Subscription_Invite::EMAIL_TYPE ) ) {
+				WP_CLI::error( $sendability_message . ' Fix that and re-run, or drop --migrate-invitations to migrate without sending.' );
+			} elseif ( $dry_run && ! Emails::can_send_email( Group_Subscription_Invite::EMAIL_TYPE, false ) ) {
+				WP_CLI::warning( $sendability_message . ' Review and publish the invitation email before running with --migrate-invitations --live.' );
+			}
+		}
+
+		if ( $send_invitations && $recipient_count ) {
+			// Name the shared relay in the prompt: the burst rides the same mail path
+			// as reader sign-in links and purchase receipts, and that is the one fact
+			// an operator needs to pick a quiet hour — the recipient count alone
+			// doesn't show it.
+			if ( $send_limit > 0 && $recipient_count > $send_limit ) {
+				$prompt = sprintf( 'This will send up to %1$d of %2$d pending group subscription invitation email(s) (--limit=%1$d) through the site\'s mail relay — the same relay that carries reader sign-in links and purchase receipts. Re-run to send the rest. Continue?', $send_limit, $recipient_count );
+			} else {
+				$prompt = sprintf( 'This will send up to %d group subscription invitation email(s) in one uninterrupted burst through the site\'s mail relay — the same relay that carries reader sign-in links and purchase receipts, so consider a quiet hour for a large batch. Continue?', $recipient_count );
+			}
+			WP_CLI::confirm( $prompt, $assoc_args );
+		}
+
+		$summary               = [];
+		$skipped               = [];
+		$invitation_rows       = []; // Re-invite list rows: team → invitee email → outcome.
+		$invites_sent          = 0;
+		$invites_resent        = 0;
+		$invites_skipped       = 0;
+		$invites_failed        = 0;
+		$invite_skip_reasons   = []; // Reason => count, so "already invited" and "group full" stay distinguishable.
+		$invitation_teams_seen = []; // Teams whose invitees already have rows, so the skipped-team pass doesn't double-report.
+		$progress              = \WP_CLI\Utils\make_progress_bar( 'Migrating teams', $total );
 
 		foreach ( $teams as $team_id ) {
 			$team = \get_post( $team_id );
@@ -253,20 +428,37 @@ class Teams_Migration {
 				continue;
 			}
 
-			$subscription  = null;
-			$created_new   = false;
-			$errors        = [];
-			$members_added = 0;
+			$subscription   = null;
+			$created_new    = false;
+			$errors         = [];
+			$members_added  = 0;
+			$recovering_sub = null;
 
-			// Attempt to reuse the team's linked subscription if it is active.
+			// Attempt to reuse the team's linked subscription if it still grants
+			// access. That is active *or* pending-cancel: a team riding out a period
+			// it has already paid for keeps its access until the subscription
+			// self-cancels, and both Access_Rules and Group_Subscription gate member
+			// access on WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES. Reusing
+			// it in place carries that expiry across the migration, so the owner and
+			// the group's members lose access exactly when the subscription ends;
+			// creating a $0 group for such a team instead would hand them permanent
+			// access after they had cancelled.
 			if ( $raw_sub_id ) {
 				$existing_sub = \wcs_get_subscription( $raw_sub_id );
-				if ( $existing_sub && 'active' === $existing_sub->get_status() ) {
+				if ( $existing_sub && $existing_sub->has_status( WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES ) ) {
 					$subscription = $existing_sub;
 					if ( 'yes' === $existing_sub->get_meta( '_newspack_group_subscription_enabled' ) ) {
 						WP_CLI::line( sprintf( 'Team %d: subscription %d is already a group subscription — re-updating.', $team_id, $raw_sub_id ) );
 					}
 				} else {
+					// A paid subscription in payment recovery is not reusable, since reuse
+					// requires active. Remember it so the create branch can refuse to mint
+					// a free replacement; that decision has to wait until after the reuse
+					// lookup below, because a team already migrated on an earlier run has
+					// a group to re-update and the harm cannot arise for it.
+					if ( $existing_sub && 'on-hold' === $existing_sub->get_status() && self::subscription_is_paid( $existing_sub ) ) {
+						$recovering_sub = $existing_sub;
+					}
 					$status_label = $existing_sub ? $existing_sub->get_status() : 'not found';
 					WP_CLI::warning( sprintf( 'Team %d: linked subscription %d is not active (status: %s) — searching for the group subscription this team was previously migrated to.', $team_id, $raw_sub_id, $status_label ) );
 				}
@@ -288,7 +480,7 @@ class Teams_Migration {
 				if ( $reuse['disabled_marked_group_ids'] ) {
 					$disabled_list = implode( ', ', $reuse['disabled_marked_group_ids'] );
 					$errors[]      = sprintf( 'group subscription(s) %s migrated from this team have group subscriptions disabled — re-enable one or clear its %s meta, then re-run', $disabled_list, self::MIGRATED_TEAM_ID_META_KEY );
-					$summary[]     = self::summary_row( $team_id, 'ERROR', 0, 0, $seat_count, false, $errors );
+					$summary[]     = self::summary_row( $team_id, 'ERROR', 0, 0, $group_limit, false, $errors );
 					WP_CLI::warning( sprintf( 'Team %d ("%s"): group subscription(s) %s migrated from this team have group subscriptions disabled — skipping so the migration does not re-enable them or create a duplicate. Re-enable one, or clear the %s meta to let a fresh group be created, then re-run.', $team_id, $team->post_title, $disabled_list, self::MIGRATED_TEAM_ID_META_KEY ) );
 					// This path has just loaded every subscription of the owner's, which is what
 					// the per-team cache clear exists to bound.
@@ -325,6 +517,32 @@ class Teams_Migration {
 				}
 			}
 
+			// Nothing was reusable and the team's own subscription is a paid one in
+			// payment recovery, so creating here would mint a new, active, $0 group
+			// subscription alongside it: the owner would get permanent free access
+			// and no reason to fix their card, turning a recoverable paying customer
+			// into a permanently free one. That is the harm LIVE_SUBSCRIPTION_STATUSES
+			// records as deliberately out of scope for migrate-manual-members
+			// (NPPD-2052 owns the dunning cohort). On_Hold_Duration expires an
+			// unrecovered subscription on its own, and a re-run picks the team up
+			// once it is active again or gone. Checked here rather than at the reuse
+			// lookup so a team that already has a group to re-update is unaffected.
+			if ( ! $subscription && $recovering_sub ) {
+				$errors[]  = sprintf( 'linked subscription %d is a paid subscription in payment recovery ("on-hold") and no migrated group exists for this team — skipped so the migration does not mint a free parallel subscription', $recovering_sub->get_id() );
+				$summary[] = self::summary_row( $team_id, 'ERROR', 0, 0, $group_limit, false, $errors );
+				WP_CLI::warning(
+					sprintf(
+						'Team %d ("%s"): linked subscription %d is a paid subscription (%s) on hold for payment recovery, and this team has no migrated group to update — skipping so the owner is not granted a free subscription mid-recovery. Re-run once it is active again, or once it has expired.',
+						$team_id,
+						$team->post_title,
+						$recovering_sub->get_id(),
+						self::format_subscription_total( $recovering_sub )
+					)
+				);
+				\WP_CLI\Utils\wp_clear_object_cache();
+				continue;
+			}
+
 			// Create a new subscription when none resolved above. This needs a
 			// migration product; with --skip-unlinked and no --product-id a team
 			// whose linked subscription is inactive/missing (so it is not skipped)
@@ -334,7 +552,7 @@ class Teams_Migration {
 			if ( ! $subscription && ! $migration_product ) {
 				$errors[] = 'no reusable subscription and no --product-id supplied to create one';
 				WP_CLI::warning( sprintf( 'Team %d: linked subscription is inactive/missing and no --product-id was supplied to create a replacement — skipping. Re-run with --product-id to migrate these teams.', $team_id ) );
-				$summary[] = self::summary_row( $team_id, 'ERROR', 0, 0, $seat_count, false, $errors );
+				$summary[] = self::summary_row( $team_id, 'ERROR', 0, 0, $group_limit, false, $errors );
 				continue;
 			}
 
@@ -344,7 +562,7 @@ class Teams_Migration {
 				if ( ! $dry_run ) {
 					$new_sub = self::create_migration_subscription( $owner_id, $migration_product, $billing_period, $billing_interval, $start_date, $end_date, $errors, $team_id );
 					if ( ! $new_sub ) {
-						$summary[] = self::summary_row( $team_id, 'ERROR', 0, 0, $seat_count, true, $errors );
+						$summary[] = self::summary_row( $team_id, 'ERROR', 0, 0, $group_limit, true, $errors );
 						continue;
 					}
 					$subscription = $new_sub;
@@ -357,6 +575,46 @@ class Teams_Migration {
 			} else {
 				$subscription_id = $subscription->get_id();
 				$sub_owner_id    = (int) $subscription->get_user_id();
+			}
+
+			// A migration converts free Memberships access into a $0 subscription. A
+			// team that pays for its seats is a different case: the publisher still
+			// sells that subscription, so it keeps its product, price, taxes and
+			// billing schedule and gains only the group settings.
+			$reused_is_paid = ! $created_new && self::subscription_is_paid( $subscription );
+
+			// A pending-cancel subscription keeps its terms too, whatever its total.
+			// Its dates are the point: the scheduled end is what makes the owner and
+			// the group's members lose access when the subscription self-cancels, and
+			// re-aligning it would overwrite those dates with migration-derived ones
+			// and extend access past the cancellation the reader asked for.
+			$reused_is_ending  = ! $created_new && $subscription->has_status( 'pending-cancel' );
+			$reuse_keeps_terms = $reused_is_paid || $reused_is_ending;
+
+			// Access for a paid team therefore rests on its own product, since we no
+			// longer swap in --product-id. If no published gate accepts that product
+			// the migration cannot grant access without rewriting what the publisher
+			// charges — so leave the team untouched and let the operator decide,
+			// rather than silently converting a paying subscription to $0.
+			if ( $reuse_keeps_terms && ! empty( $access_product_ids ) && ! self::subscription_covers_access_products( $subscription, $access_product_ids ) ) {
+				$own_product_ids = self::subscription_product_ids( $subscription );
+				$own_list        = ! empty( $own_product_ids ) ? implode( ', ', $own_product_ids ) : 'none';
+				$errors[]        = sprintf( 'subscription %d is paid and holds product(s) %s, which no published gate accepts (accepted: %s) — migrating it would either grant no access or rewrite what the publisher charges', $subscription->get_id(), $own_list, implode( ', ', $access_product_ids ) );
+				$summary[]       = self::summary_row( $team_id, 'ERROR', 0, 0, $group_limit, false, $errors );
+				WP_CLI::warning(
+					sprintf(
+						'Team %d ("%s"): linked subscription %d is a paid subscription (%s) holding product(s) %s, which no published gate accepts (accepted: %s) — skipping so the migration does not zero out what the publisher bills. Add %s to a gate\'s "Active subscription" rule, then re-run.',
+						$team_id,
+						$team->post_title,
+						$subscription->get_id(),
+						self::format_subscription_total( $subscription ),
+						$own_list,
+						implode( ', ', $access_product_ids ),
+						$own_list
+					)
+				);
+				\WP_CLI\Utils\wp_clear_object_cache();
+				continue;
 			}
 
 			// Enable the group and set its name up front. The seat limit is deferred
@@ -375,10 +633,14 @@ class Teams_Migration {
 				$subscription->save();
 			}
 
-			// When re-using an existing subscription with --product-id, overwrite its
-			// line items with the migration product so re-running aligns every
-			// subscription with the product passed via --product-id.
-			if ( ! $created_new && $migration_product && ! $dry_run ) {
+			// When re-using a $0 subscription with --product-id, overwrite its line
+			// items with the migration product so re-running aligns every migrated
+			// subscription with the product passed via --product-id. Paid
+			// subscriptions are exempt: rewriting their line items would replace what
+			// the publisher sells with a $0 product and overwrite the billing
+			// schedule, and for a pending-cancel subscription would push its expiry
+			// out past the cancellation the reader asked for (see $reuse_keeps_terms).
+			if ( ! $created_new && ! $reuse_keeps_terms && $migration_product && ! $dry_run ) {
 				self::replace_subscription_product( $subscription, $migration_product, $billing_period, $billing_interval, $start_date, $end_date, $errors, $team_id );
 			}
 
@@ -435,6 +697,50 @@ class Teams_Migration {
 			} else {
 				$manager_result    = self::promote_managers_from_team_roles( $subscription, $team_id, $member_ids, false );
 				$managers_promoted = count( $manager_result['promoted'] );
+			}
+
+			// Carry over pending (unaccepted) team invitations. The re-invite list is
+			// always collected so it survives into the summary; invites are only sent
+			// when opted in via --migrate-invitations on a --live run. A throw escaping
+			// the invite path is recorded as a team error rather than aborting the run,
+			// which would take every summary table below down with it.
+			$team_emails                       = $pending_invitations[ $team_id ] ?? [];
+			$invitation_teams_seen[ $team_id ] = true;
+			// Hand each team the remainder of --limit's budget. Sent AND failed
+			// counts accumulate across teams — both are relay attempts — so the
+			// cap holds run-wide.
+			$attempts_remaining = ( $send_invitations && $send_limit > 0 ) ? max( 0, $send_limit - $invites_sent - $invites_failed ) : null;
+			try {
+				$invitation_result = self::migrate_team_invitations( $subscription, $team_id, $send_invitations, $team_emails, $attempts_remaining );
+			} catch ( \Throwable $e ) {
+				$errors[]          = sprintf( 'invitations: %s', $e->getMessage() );
+				$invitation_result = [
+					'emails'       => $team_emails,
+					'sent'         => [],
+					'resent'       => [],
+					'skipped'      => [],
+					'failed'       => [],
+					'would_resend' => [],
+					'errored'      => true,
+				];
+			}
+			$invites_sent    += count( $invitation_result['sent'] );
+			$invites_resent  += count( $invitation_result['resent'] );
+			$invites_skipped += count( $invitation_result['skipped'] );
+			$invites_failed  += count( $invitation_result['failed'] );
+			foreach ( $invitation_result['skipped'] as $skip_reason ) {
+				$invite_skip_reasons[ $skip_reason ] = ( $invite_skip_reasons[ $skip_reason ] ?? 0 ) + 1;
+			}
+			foreach ( $invitation_result['emails'] as $invitee_email ) {
+				$invitation_rows[] = [
+					'team_id' => $team_id,
+					'sub'     => $subscription_id,
+					'invitee' => $invitee_email,
+					'outcome' => self::invitation_outcome_label( $invitation_result, $invitee_email, $migrate_invitations ),
+				];
+			}
+			if ( ! empty( $invitation_result['failed'] ) ) {
+				WP_CLI::warning( sprintf( 'Team %d: %d invitation(s) could not be delivered — see the re-invite list below; re-run to retry them.', $team_id, count( $invitation_result['failed'] ) ) );
 			}
 
 			$verb = $created_new ? 'new' : 'existing';
@@ -503,9 +809,88 @@ class Teams_Migration {
 			\WP_CLI\Utils\format_items( 'table', $skipped, [ 'team_id', 'owner', 'seat_limit', 'created', 'expires' ] );
 		}
 
+		// Invitees of teams the run never reached — skipped by --skip-unlinked or
+		// --only-unlinked, or errored out for having no subscription to migrate into.
+		// They are listed too, so "the pending invitees are always listed" holds for
+		// every team rather than only the processed ones.
+		// The flag check, not the SKIPPED TEAMS table, is what tells the two cases apart:
+		// only --skip-unlinked records a row there, so --only-unlinked's teams would
+		// otherwise be reported as failures rather than as the deliberate filter they are.
+		foreach ( $pending_invitations as $team_id => $team_emails ) {
+			if ( isset( $invitation_teams_seen[ $team_id ] ) ) {
+				continue;
+			}
+			$outcome = self::team_is_skipped_by_flags( $team_id, $skip_unlinked, $only_unlinked )
+				? 'not processed (team skipped)'
+				: 'not processed (team not migrated)';
+			foreach ( $team_emails as $invitee_email ) {
+				$invitation_rows[] = [
+					'team_id' => $team_id,
+					'sub'     => '—',
+					'invitee' => $invitee_email,
+					'outcome' => $outcome,
+				];
+			}
+		}
+
+		// Pending-invitation re-invite list. Emitted whenever any team carried pending
+		// invitations, whether or not --migrate-invitations was passed, so the invitees
+		// are never lost silently — an operator can act on this list even if they chose
+		// not to send during the migration.
+		if ( ! empty( $invitation_rows ) ) {
+			WP_CLI::line( '' );
+			WP_CLI::line( sprintf( '=== PENDING TEAM INVITATIONS (re-invite list) — %d total ===', count( $invitation_rows ) ) );
+			if ( ! $send_invitations ) {
+				WP_CLI::line( $migrate_invitations ? 'Dry run: no invites were sent. Re-run with --live to send.' : 'These invitees were NOT re-invited. Re-run with --migrate-invitations --live to send group-subscription invites.' );
+			}
+			WP_CLI::line( '' );
+			\WP_CLI\Utils\format_items( 'table', $invitation_rows, [ 'team_id', 'sub', 'invitee', 'outcome' ] );
+		}
+
 		$new_count = count( array_filter( $summary, fn( $r ) => $r['created_new'] ) );
 		WP_CLI::line( '' );
 		WP_CLI::success( sprintf( 'Done. %d team(s) processed: %d used existing subscriptions, %d had new subscriptions created, %d skipped, %d had error(s).', count( $summary ), count( $summary ) - $new_count, $new_count, count( $skipped ), count( $errored_rows ) ) );
+		if ( ! empty( $invitation_rows ) ) {
+			// On a dry run with the flag, nothing is attempted, so the send total is the
+			// number of rows the table shows as "would send" rather than 0 — which would
+			// contradict the table it sits under.
+			$would_send = $dry_run && $migrate_invitations;
+			$sent_count = $would_send
+				? count( array_filter( $invitation_rows, fn( $row ) => in_array( $row['outcome'], [ self::OUTCOME_WOULD_SEND, self::OUTCOME_WOULD_RESEND ], true ) ) )
+				: $invites_sent;
+			WP_CLI::success(
+				sprintf(
+					'Pending invitations: %d %s, %d skipped, %d failed, %d listed only.',
+					$sent_count,
+					$would_send ? 'would be sent' : 'sent',
+					$invites_skipped,
+					$invites_failed,
+					count( $invitation_rows ) - $sent_count - $invites_skipped - $invites_failed
+				)
+			);
+			if ( $invites_resent ) {
+				WP_CLI::warning( sprintf( '%d of the invitations sent went to readers whose earlier invitation had lapsed (invites expire after %s) — they were emailed a second time.', $invites_resent, Group_Subscription_Invite::get_expiration_label() ) );
+			}
+			// The rehearsal twin of the warning above: surface the double-email count
+			// BEFORE the emails exist, while the information can still change the
+			// decision — otherwise a 500-row rehearsal folds it invisibly into the
+			// "would be sent" total and the live run discloses it only after sending.
+			if ( $would_send ) {
+				$would_resend_count = count( array_filter( $invitation_rows, fn( $row ) => self::OUTCOME_WOULD_RESEND === $row['outcome'] ) );
+				if ( $would_resend_count ) {
+					WP_CLI::warning( sprintf( '%d of those would be emailed a second time — their earlier invitation lapsed (invites expire after %s).', $would_resend_count, Group_Subscription_Invite::get_expiration_label() ) );
+				}
+			}
+			// Break the skipped total down: "already invited, nothing to do" and "the
+			// group had no seats left, so these people were dropped" are the same number
+			// otherwise, and only one of them needs the operator's attention.
+			if ( ! empty( $invite_skip_reasons ) ) {
+				arsort( $invite_skip_reasons );
+				foreach ( $invite_skip_reasons as $skip_reason => $skip_count ) {
+					WP_CLI::line( sprintf( '  skipped — %s: %d', $skip_reason, $skip_count ) );
+				}
+			}
+		}
 	}
 
 	/**
@@ -810,11 +1195,21 @@ class Teams_Migration {
 			$access_products_source = 'derived from published gates';
 		}
 
+		$product = \wc_get_product( $product_id );
+		if ( ! $product ) {
+			WP_CLI::error( sprintf( 'Product %d could not be found.', $product_id ) );
+		}
+
 		// A $0 subscription for a product no gate accepts restores no access: the
 		// run would report "created" while the reader stays locked out. Only
 		// checkable when the accepted products are known — with none configured
 		// yet, the gates are presumably still to be built around this product.
-		if ( ! empty( $access_product_ids ) && ! in_array( $product_id, $access_product_ids, true ) ) {
+		// Matched through product_grants_gate_access() rather than a flat
+		// comparison because enforcement runs through has_product(), which accepts
+		// a line item's product ID or its variation ID: a gate naming a variable
+		// subscription's parent does accept a seat-tier variation, and refusing one
+		// here would block a --product-id that works.
+		if ( ! empty( $access_product_ids ) && ! self::product_grants_gate_access( $product, $access_product_ids ) ) {
 			WP_CLI::error(
 				sprintf(
 					'Product %d is not among the products that grant access (%s), so a subscription to it grants no access. Pass --product-id for a product the gates accept, or add %d to a gate\'s "Active subscription" rule first.',
@@ -823,11 +1218,6 @@ class Teams_Migration {
 					$product_id
 				)
 			);
-		}
-
-		$product = \wc_get_product( $product_id );
-		if ( ! $product ) {
-			WP_CLI::error( sprintf( 'Product %d could not be found.', $product_id ) );
 		}
 
 		// Readers granted a $0 subscription to a limited product cannot purchase
@@ -1493,6 +1883,398 @@ class Teams_Migration {
 	}
 
 	/**
+	 * Whether --skip-unlinked / --only-unlinked will move past this team.
+	 *
+	 * Mirrors the two flag gates at the top of the migration loop, for the pre-pass that
+	 * counts the readers a run is about to email. It deliberately does not model the
+	 * "no reusable subscription and no --product-id" error path, which needs the
+	 * subscription lookup the loop performs — so the count is an upper bound, as the
+	 * prompt says.
+	 *
+	 * @param int  $team_id       The team post ID.
+	 * @param bool $skip_unlinked Whether --skip-unlinked was passed.
+	 * @param bool $only_unlinked Whether --only-unlinked was passed.
+	 *
+	 * @return bool
+	 */
+	private static function team_is_skipped_by_flags( $team_id, $skip_unlinked, $only_unlinked ) {
+		$raw_sub_id = (int) \get_post_meta( $team_id, '_subscription_id', true );
+		return ( $skip_unlinked && ! $raw_sub_id ) || ( $only_unlinked && $raw_sub_id );
+	}
+
+	/**
+	 * Carry a team's pending invitations over to its group subscription.
+	 *
+	 * Always returns the list of pending invitee emails so the migration can surface a
+	 * re-invite list even when nothing is sent. When $send is true and a subscription is
+	 * resolved, each invitee is invited via Group_Subscription_Invite::generate_invite(),
+	 * which stores the invite and emails the invitee. Invitees generate_invite() rejects
+	 * (already a member, non-reader account, group at its member limit) are recorded as
+	 * skipped with the reason rather than fataling. Exposed for testing.
+	 *
+	 * Only an invitee whose invitation email actually went out is counted as sent.
+	 * generate_invite() writes the invite row before it dispatches the email and reports
+	 * the delivery result in `email_sent`; when that is false the invite here is rolled
+	 * back with cancel_invite(), because a stored invite would otherwise make the
+	 * already-invited gate below answer "Already invited." forever and leave a reader who
+	 * was never contacted unreachable by a corrective re-run.
+	 *
+	 * A per-invitee try/catch keeps one throwing address (a mail plugin throwing off
+	 * `phpmailer_init`, a save failing inside WooCommerce) from aborting the run and
+	 * destroying the report for the hundreds of invitees behind it. A throw out of the
+	 * send path lands after the invite row is written — Emails::send_email() propagates
+	 * throws by design — so the catch rolls the stored invite back exactly like a false
+	 * `email_sent`; without that, the row would answer "Already invited." to the
+	 * corrective re-run for its 30-day life while the reader was never contacted. The
+	 * rollback saves the subscription and can itself throw, so it carries its own
+	 * guard, and a rollback that fails is surfaced in the failure reason so the
+	 * operator knows to cancel the pending invitation manually before re-running.
+	 *
+	 * One audit-fidelity caveat on that rollback: generate_invite() deletes every prior
+	 * invite for the address — including a lapsed one — before writing the new row, so
+	 * a rollback after a failed send consumes the lapsed invite's history with it. The
+	 * eventual successful retry is then reported as a plain `invite sent` rather than a
+	 * lapsed re-invite, and the double-email warning undercounts by that invitee. A
+	 * lapsed invite is already unusable, so nothing functional is lost.
+	 *
+	 * An email that already holds a live (non-expired) invite on the subscription is
+	 * skipped without re-inviting: generate_invite() replaces and re-sends unconditionally,
+	 * so this gate is what keeps a re-run (the endorsed recovery path) — and two teams
+	 * merged into one subscription sharing a pending invitee — from re-emailing a reader
+	 * who was already invited. The gate reads live invites only, so it holds for as long
+	 * as an invite lives (30 days by default, filterable via
+	 * `newspack_group_subscription_invite_expiration_time`): past that window a re-run
+	 * legitimately re-invites the lapsed invitee, and those addresses are reported
+	 * separately in `resent` so the operator can see who is being emailed a second time.
+	 *
+	 * The gate is read even when not sending, so a dry rehearsal run after a completed
+	 * live run reports the already-invited readers as skipped rather than everyone as
+	 * still waiting — the rehearsal previews what a live run would actually send. The
+	 * rehearsal also applies generate_invite()'s cheap, side-effect-free rejections
+	 * (existing member, non-reader account) with the live run's wording, and labels a
+	 * lapsed invitee's re-send as the second email it would be. The preview's limits,
+	 * deliberately: the seat limit and generate_invite()'s subscription-state guards
+	 * (an inactive group) are checked live only, --limit's budget is not rehearsed,
+	 * and a team with no subscription to reuse returns above before any per-invitee
+	 * preview.
+	 *
+	 * Addresses are compared case-insensitively but invited in their original casing:
+	 * the acceptance handler compares the invite address strictly against the reader's
+	 * stored `user_email`, which WordPress keeps in whatever case the reader registered
+	 * with, so a lowercased invite would be unacceptable for a mixed-case account.
+	 *
+	 * @param \WC_Subscription|null $subscription The resolved group subscription, or null (e.g. a dry-run new subscription).
+	 * @param int                   $team_id      The team post ID.
+	 * @param bool                  $send         Whether to actually create and send invites.
+	 * @param string[]|null         $emails       Pre-read pending invitee emails; read from the team when null.
+	 * @param int|null              $max_attempts Cap on how many send attempts (delivered + failed) this call
+	 *                                            may make (null = no cap). Failures count because each one is
+	 *                                            a relay attempt plus a write/rollback cycle — the load the
+	 *                                            cap exists to bound. Invitees beyond the cap are skipped with
+	 *                                            a re-run note; the already-invited gate makes the follow-up
+	 *                                            run resume where this one stopped. Carries the remainder of
+	 *                                            --limit's budget.
+	 *
+	 * @return array {
+	 *     @type string[]              $emails       Pending invitee emails for the team.
+	 *     @type string[]              $sent         Emails an invite was created and emailed for.
+	 *     @type string[]              $resent       Subset of $sent that was invited again because an earlier invite had lapsed.
+	 *     @type array<string, string> $skipped      Email => skip reason for invitees that were not sent.
+	 *     @type array<string, string> $failed       Email => failure reason for invitees whose invite could not be delivered.
+	 *     @type string[]              $would_resend Rehearsal only: invitees whose lapsed invite a live run would re-send (a second email to that reader).
+	 * }
+	 */
+	public static function migrate_team_invitations( $subscription, $team_id, $send, $emails = null, $max_attempts = null ) {
+		$emails = null === $emails ? self::get_pending_team_invitation_emails( $team_id ) : $emails;
+		$result = [
+			'emails'       => $emails,
+			'sent'         => [],
+			'resent'       => [],
+			'skipped'      => [],
+			'failed'       => [],
+			'would_resend' => [],
+		];
+
+		if ( ! $subscription ) {
+			return $result;
+		}
+
+		// Emails that already hold a live invite on the subscription (from a prior run, or
+		// an earlier team merged into the same subscription this run), and those whose
+		// invite has lapsed and so will be sent again. Keyed lowercase so case variants of
+		// the same mailbox collapse. Read even when not sending, so a dry rehearsal after
+		// a live run reports who a live run would actually email.
+		$already_invited = [];
+		$lapsed_invites  = [];
+		foreach ( Group_Subscription_Invite::get_invites( $subscription ) as $invite ) {
+			if ( empty( $invite['email'] ) ) {
+				continue;
+			}
+			if ( Group_Subscription_Invite::is_invite_expired( $invite ) ) {
+				$lapsed_invites[ strtolower( $invite['email'] ) ] = true;
+			} else {
+				$already_invited[ strtolower( $invite['email'] ) ] = true;
+			}
+		}
+
+		foreach ( $emails as $email ) {
+			$key = strtolower( $email );
+			if ( isset( $already_invited[ $key ] ) ) {
+				$result['skipped'][ $email ] = __( 'Already invited.', 'newspack-plugin' );
+				continue;
+			}
+			if ( ! $send ) {
+				// Rehearse the cheap, side-effect-free rejections generate_invite()
+				// would apply on a live run — same checks, same wording — so a
+				// rehearsal's per-invitee outcome matches the live run for every
+				// reason except the seat limit, which depends on the order invites
+				// land within a run. Invitees none of these catch fall through to
+				// the outcome chain's "would send (dry run)" / "not sent" labels.
+				$existing_user = \get_user_by( 'email', $email );
+				if ( $existing_user && ! Reader_Activation::is_user_reader( $existing_user ) ) {
+					$result['skipped'][ $email ] = __( 'Not a valid reader account.', 'newspack-plugin' );
+					continue;
+				}
+				if ( $existing_user && in_array( (int) $existing_user->ID, array_map( 'absint', Group_Subscription::get_members( $subscription ) ), true ) ) {
+					$result['skipped'][ $email ] = __( 'User is already a member of this group subscription.', 'newspack-plugin' );
+					continue;
+				}
+				if ( isset( $lapsed_invites[ $key ] ) ) {
+					// A lapsed invitee would be emailed a SECOND time by a live run —
+					// the one preview gap that under-warns if labelled as a plain
+					// send, since the double-email warning only fires on real sends.
+					$result['would_resend'][] = $email;
+				}
+				continue;
+			}
+			if ( null !== $max_attempts && count( $result['sent'] ) + count( $result['failed'] ) >= $max_attempts ) {
+				// The --limit budget for this run is spent: keep the invitee listed
+				// with an actionable reason instead of a send. The already-invited
+				// gate makes the follow-up run resume exactly here. Failed attempts
+				// consume the budget too — each failure is a relay attempt plus a
+				// write/rollback cycle (two subscription saves), which is exactly
+				// the load the cap exists to bound; counting only successes would
+				// let a struggling relay turn --limit=100 into unbounded attempts.
+				$result['skipped'][ $email ] = __( 'Not sent this run (--limit reached); re-run to send.', 'newspack-plugin' );
+				continue;
+			}
+			try {
+				$invite = Group_Subscription_Invite::generate_invite( $subscription, $email );
+				if ( \is_wp_error( $invite ) ) {
+					$result['skipped'][ $email ] = $invite->get_error_message();
+					continue;
+				}
+				if ( empty( $invite['email_sent'] ) ) {
+					// Roll the invite back so it can't answer "Already invited." on the
+					// re-run that is meant to reach this reader. Guarded and checked
+					// like the throw-path rollback below: cancel_invites() reports
+					// failure as a WP_Error return, not only a throw, so the success
+					// wording is gated on `true ===` — and a throwing rollback here
+					// would otherwise land in the outer catch and drop the
+					// send-failure fact that explains the row.
+					try {
+						$rolled_back = true === Group_Subscription_Invite::cancel_invite( $subscription, $email );
+					} catch ( \Throwable $rollback_error ) {
+						$rolled_back = false;
+					}
+					$result['failed'][ $email ] = $rolled_back
+						? __( 'Invitation email was not sent — the invite was rolled back so a re-run can retry.', 'newspack-plugin' )
+						: __( 'Invitation email was not sent, and the stored invite could not be rolled back afterwards. If the subscription\'s group panel shows a pending invitation for this reader, cancel it before re-running, or the re-run will answer "Already invited."', 'newspack-plugin' );
+					continue;
+				}
+			} catch ( \Throwable $e ) {
+				// The send path propagates throws after the invite row is written, so
+				// roll the row back like a false `email_sent` — guarded on its own,
+				// because cancel_invite() saves the subscription and can throw too.
+				$rolled_back = false;
+				try {
+					$rolled_back = true === Group_Subscription_Invite::cancel_invite( $subscription, $email );
+				} catch ( \Throwable $rollback_error ) {
+					$rolled_back = false;
+				}
+				// "Any stored invite" / "if the panel shows": generate_invite() can
+				// throw at its own save, before the row persists, and cancel_invites()
+				// returns true whether or not it matched anything — so neither branch
+				// can claim a row certainly existed.
+				$result['failed'][ $email ] = $rolled_back
+					? sprintf(
+						/* translators: %s: the error thrown by the send path. */
+						__( '%s — any stored invite was rolled back so a re-run can retry.', 'newspack-plugin' ),
+						$e->getMessage()
+					)
+					: sprintf(
+						/* translators: %s: the error thrown by the send path. */
+						__( '%s — the invite could not be rolled back. If the subscription\'s group panel shows a pending invitation for this reader, cancel it before re-running, or the re-run will answer "Already invited."', 'newspack-plugin' ),
+						$e->getMessage()
+					);
+				continue;
+			}
+			$result['sent'][]        = $email;
+			$already_invited[ $key ] = true;
+			if ( isset( $lapsed_invites[ $key ] ) ) {
+				$result['resent'][] = $email;
+			}
+		}
+
+		return $result;
+	}
+
+	/**
+	 * Read the emails of a team's pending (unaccepted) WooCommerce Teams invitations.
+	 *
+	 * Invitations are stored as `wc_team_invitation` posts parented to the team, with the
+	 * invitee email in the post title and a `wcmti-pending` status while unaccepted. Read
+	 * directly (rather than through the Teams API) so the migration does not depend on the
+	 * Teams plugin being active. Malformed addresses are dropped and case variants of one
+	 * mailbox dedupe to a single entry (first one wins) — matching the case-insensitive
+	 * already-invited gate in migrate_team_invitations(). The address itself is returned in
+	 * its original casing: it is what gets stored on the invite and emailed, and the
+	 * acceptance handler compares it strictly against the reader's stored `user_email`, so
+	 * lowercasing it would strand every invitee whose account email carries uppercase
+	 * characters. Exposed for testing.
+	 *
+	 * The `post_status` query filter only narrows the result when the status is
+	 * registered: WooCommerce Teams registers `wcmti-pending` on `init`, so during a
+	 * migration (Teams still active) the database returns pending invitations directly.
+	 * This must not depend on Teams being active, though — once Teams is deactivated the
+	 * status is unregistered and WP_Query silently drops the status clause, returning
+	 * every status. So the pending filter is re-applied in PHP on each post's actual
+	 * status as the guarantee that holds either way.
+	 *
+	 * @param int $team_id The team post ID.
+	 *
+	 * @return string[] Sanitised pending invitee emails in their original casing, deduped case-insensitively.
+	 */
+	public static function get_pending_team_invitation_emails( $team_id ) {
+		$invitations = \get_posts(
+			[
+				'post_type'              => 'wc_team_invitation',
+				'post_status'            => 'wcmti-pending',
+				'post_parent'            => absint( $team_id ),
+				'posts_per_page'         => -1,
+				'orderby'                => 'ID',
+				'order'                  => 'ASC',
+				'no_found_rows'          => true,
+				'update_post_meta_cache' => false,
+				'update_post_term_cache' => false,
+			]
+		);
+
+		return self::extract_pending_invitation_emails( $invitations );
+	}
+
+	/**
+	 * Read the pending invitation emails of many teams in a single query.
+	 *
+	 * Bulk twin of get_pending_team_invitation_emails(), used by the migrate-teams
+	 * pre-pass: chunked `post_parent__in` round trips bucketed by team in PHP, where
+	 * the per-team helper would front-load one query per team into the silent stretch
+	 * before the progress bar appears. Both share extract_pending_invitation_emails(),
+	 * so their filtering guarantees cannot drift; the per-team helper remains the
+	 * entry point for reading one team.
+	 *
+	 * @param int[] $team_ids   Team post IDs.
+	 * @param int   $dropped    Out-param: incremented once per pending invitation dropped
+	 *                          because its stored address is not a valid email, so the
+	 *                          caller can warn instead of losing those invitees silently.
+	 * @param int   $chunk_size Teams per query. The status clause only narrows the query
+	 *                          while WooCommerce Teams (which registers `wcmti-pending`)
+	 *                          is active; on the post-migration configuration this command
+	 *                          supports, WP_Query drops the unregistered status entirely
+	 *                          and each round trip returns the chunk's full invitation
+	 *                          history — accepted and cancelled included, the bulk of the
+	 *                          table. Chunking bounds that peak while keeping the query
+	 *                          count low; the PHP re-filter does the narrowing either way.
+	 *
+	 * @return array<int, string[]> Team ID => pending invitee emails, in their original
+	 *                              casing and deduped case-insensitively per team. Teams
+	 *                              with no pending invitations are omitted.
+	 */
+	public static function get_pending_team_invitation_emails_for_teams( $team_ids, &$dropped = 0, $chunk_size = 100 ) {
+		$team_ids = array_values( array_filter( array_map( 'absint', (array) $team_ids ) ) );
+		if ( empty( $team_ids ) ) {
+			return [];
+		}
+
+		$result = [];
+		foreach ( array_chunk( $team_ids, max( 1, (int) $chunk_size ) ) as $chunk ) {
+			$invitations = \get_posts(
+				[
+					'post_type'              => 'wc_team_invitation',
+					'post_status'            => 'wcmti-pending',
+					'post_parent__in'        => $chunk,
+					'posts_per_page'         => -1,
+					'orderby'                => 'ID',
+					'order'                  => 'ASC',
+					'no_found_rows'          => true,
+					// Without this, get_posts() stores every fetched post in the
+					// long-lived posts object cache (cache_results defaults true),
+					// so the peak would grow monotonically across chunks and the
+					// chunking would bound nothing.
+					'cache_results'          => false,
+					'update_post_meta_cache' => false,
+					'update_post_term_cache' => false,
+				]
+			);
+
+			// Bucket and reduce inside the chunk loop, so each chunk's post objects
+			// are released before the next chunk loads.
+			$by_team = [];
+			foreach ( $invitations as $invitation ) {
+				$by_team[ (int) $invitation->post_parent ][] = $invitation;
+			}
+			foreach ( $by_team as $team_id => $team_invitations ) {
+				$emails = self::extract_pending_invitation_emails( $team_invitations, $dropped );
+				if ( ! empty( $emails ) ) {
+					$result[ $team_id ] = $emails;
+				}
+			}
+		}
+
+		return $result;
+	}
+
+	/**
+	 * Filter one team's invitation posts down to pending, valid, deduped invitee emails.
+	 *
+	 * The shared reduction behind the single-team and bulk readers: re-applies the
+	 * pending-status filter in PHP (the query-level clause silently vanishes when the
+	 * Teams plugin — which registers the status — is inactive), drops titles that are
+	 * not valid emails, and dedupes case variants of one mailbox (first one wins,
+	 * keeping its original casing).
+	 *
+	 * @param \WP_Post[] $invitations One team's `wc_team_invitation` posts, in ID order.
+	 * @param int        $dropped     Out-param: incremented once per pending invitation
+	 *                                whose title is_email() rejects. Those invitees can
+	 *                                appear in no table or count, so the caller should
+	 *                                surface the tally rather than lose them silently.
+	 *
+	 * @return string[] Pending invitee emails in their original casing, deduped case-insensitively.
+	 */
+	private static function extract_pending_invitation_emails( $invitations, &$dropped = 0 ) {
+		$emails = [];
+		$seen   = [];
+		foreach ( $invitations as $invitation ) {
+			if ( 'wcmti-pending' !== $invitation->post_status ) {
+				continue;
+			}
+			$email = \is_email( $invitation->post_title );
+			if ( ! $email ) {
+				++$dropped;
+				continue;
+			}
+			$key = strtolower( $email );
+			if ( isset( $seen[ $key ] ) ) {
+				continue;
+			}
+			$seen[ $key ] = true;
+			$emails[]     = $email;
+		}
+
+		return $emails;
+	}
+
+	/**
 	 * Count the managers migrate-teams would promote in a dry-run.
 	 *
 	 * During a dry-run no members are added, so membership can't be read from the
@@ -1737,16 +2519,164 @@ class Teams_Migration {
 	}
 
 	/**
+	 * Product and variation IDs a subscription's line items hold.
+	 *
+	 * Named in the skip messages so the operator can act without opening the
+	 * subscription: these are the IDs that would have to appear in a gate's
+	 * "Active subscription" rule for the team's own subscription to grant access.
+	 *
+	 * @param \WC_Subscription $subscription Subscription to read.
+	 *
+	 * @return int[]
+	 */
+	private static function subscription_product_ids( $subscription ) {
+		$ids = [];
+		foreach ( $subscription->get_items() as $item ) {
+			if ( ! method_exists( $item, 'get_product_id' ) ) {
+				continue;
+			}
+			$ids[] = (int) $item->get_product_id();
+			if ( method_exists( $item, 'get_variation_id' ) && $item->get_variation_id() ) {
+				$ids[] = (int) $item->get_variation_id();
+			}
+		}
+		return array_values( array_unique( array_filter( $ids ) ) );
+	}
+
+	/**
+	 * Whether the publisher bills this subscription.
+	 *
+	 * Decides whether a reused subscription keeps its commercial terms through
+	 * the migration or is re-aligned onto --product-id as a $0 group subscription.
+	 * Erring toward "paid" is the safe direction: the cost of a false positive is
+	 * a subscription that keeps the product it already had, while a false negative
+	 * deletes the product line the publisher sells and rewrites the schedule.
+	 *
+	 * `WC_Subscription::get_total()` is the recurring total, so a free trial, a
+	 * sign-up fee, a synced first payment and a pending-cancel all still report
+	 * the per-period amount. It is discounted, though: a 100% recurring coupon
+	 * stores a total of 0 on a subscription the publisher does intend to bill
+	 * again once the coupon's payment count runs out. The pre-discount subtotal is
+	 * immune to that, and is 0 on every subscription this migration creates
+	 * (link_migration_product() and create_group_subscription() both set it), so
+	 * checking both keeps old $0 groups re-alignable without reading a fully
+	 * discounted subscription as free.
+	 *
+	 * @param \WC_Subscription $subscription Subscription to test.
+	 *
+	 * @return bool
+	 */
+	private static function subscription_is_paid( $subscription ) {
+		$total = method_exists( $subscription, 'get_total' ) ? (float) $subscription->get_total() : 0.0;
+		if ( $total > 0 ) {
+			return true;
+		}
+		$subtotal = method_exists( $subscription, 'get_subtotal' ) ? (float) $subscription->get_subtotal() : 0.0;
+		return $subtotal > 0;
+	}
+
+	/**
+	 * A subscription's recurring total as plain text for CLI output.
+	 *
+	 * Formatted here rather than with wc_price(), which returns markup and renders
+	 * the USD symbol as the HTML entity `&#36;` — both land literally in a
+	 * terminal, in the one message whose job is to make the amount at risk legible.
+	 *
+	 * @param \WC_Subscription $subscription Subscription to format.
+	 *
+	 * @return string
+	 */
+	private static function format_subscription_total( $subscription ) {
+		$decimals = function_exists( 'wc_get_price_decimals' ) ? \wc_get_price_decimals() : 2;
+		return trim( sprintf( '%s %s', \number_format( (float) $subscription->get_total(), $decimals ), $subscription->get_currency() ) );
+	}
+
+	/**
+	 * Whether a product is published, resolving a variation to its parent.
+	 *
+	 * WC_Subscription::contains_unavailable_product() checks the parent's status
+	 * for a variation, so the parent's status is what decides whether a migration
+	 * subscription can be activated.
+	 *
+	 * @param \WC_Product $product Product or variation.
+	 *
+	 * @return bool
+	 */
+	private static function product_is_published( $product ) {
+		$subject = $product;
+		if ( $product->is_type( 'variation' ) ) {
+			$parent = \wc_get_product( $product->get_parent_id() );
+			if ( ! $parent ) {
+				return false;
+			}
+			$subject = $parent;
+		}
+		return 'publish' === $subject->get_status();
+	}
+
+	/**
+	 * Whether the site's published gates would accept a subscription to a product.
+	 *
+	 * Enforcement runs through WC_Subscription::has_product(), which matches a
+	 * line item's product ID *or* its variation ID. So a gate naming a variable
+	 * subscription's parent accepts any of its variations, while a gate naming a
+	 * sibling variation accepts none of the others. Comparing the product's own
+	 * ID alone would refuse a variation the gates do in fact accept.
+	 *
+	 * @param \WC_Product $product            Product or variation.
+	 * @param int[]       $access_product_ids Product IDs the published gates accept.
+	 *
+	 * @return bool
+	 */
+	private static function product_grants_gate_access( $product, $access_product_ids ) {
+		$candidate_ids = [ (int) $product->get_id() ];
+		if ( $product->is_type( 'variation' ) ) {
+			$candidate_ids[] = (int) $product->get_parent_id();
+		}
+		foreach ( $candidate_ids as $candidate_id ) {
+			if ( $candidate_id && in_array( $candidate_id, $access_product_ids, true ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Point a $0 migration line item at the product the operator chose.
+	 *
+	 * `set_product()` is the only setter that records a variation correctly,
+	 * splitting it into parent product ID + variation ID; assigning the
+	 * variation's own ID to `product_id` is rejected outright. Publishers selling
+	 * seat tiers hold them as variations of one variable subscription product, so
+	 * `--product-id` is routinely given a variation ID (see NPPD-1876).
+	 *
+	 * `create_group_subscription()` and `create_individual_subscription()` link
+	 * their items the same way inline rather than through this helper: they were
+	 * already correct, and each builds a differently-shaped item.
+	 *
+	 * @param \WC_Order_Item_Product $line_item The line item to populate.
+	 * @param \WC_Product            $product   The product or variation to link.
+	 *
+	 * @return void
+	 */
+	private static function link_migration_product( $line_item, $product ) {
+		$line_item->set_product( $product );
+		$line_item->set_quantity( 1 );
+		$line_item->set_subtotal( 0 );
+		$line_item->set_total( 0 );
+	}
+
+	/**
 	 * Create a new $0 migration subscription for a team owner and set its dates.
 	 *
-	 * @param int              $owner_id         The owner user ID.
-	 * @param \WC_Product|null $migration_product The migration product.
-	 * @param string           $billing_period   The billing period.
-	 * @param int              $billing_interval The billing interval.
-	 * @param string           $start_date       The subscription start date.
-	 * @param string           $end_date         The subscription end date, or ''.
-	 * @param array            $errors           Errors array, passed by reference.
-	 * @param int              $team_id          The team post ID (for error context).
+	 * @param int         $owner_id         The owner user ID.
+	 * @param \WC_Product $migration_product The migration product.
+	 * @param string      $billing_period   The billing period.
+	 * @param int         $billing_interval The billing interval.
+	 * @param string      $start_date       The subscription start date.
+	 * @param string      $end_date         The subscription end date, or ''.
+	 * @param array       $errors           Errors array, passed by reference.
+	 * @param int         $team_id          The team post ID (for error context).
 	 *
 	 * @return \WC_Subscription|null The subscription, or null on failure.
 	 */
@@ -1770,15 +2700,7 @@ class Teams_Migration {
 		}
 
 		$line_item = new \WC_Order_Item_Product();
-		$line_item->set_props(
-			[
-				'product_id' => $migration_product->get_id(),
-				'name'       => $migration_product->get_name(),
-				'quantity'   => 1,
-				'subtotal'   => 0,
-				'total'      => 0,
-			]
-		);
+		self::link_migration_product( $line_item, $migration_product );
 		$line_item->set_taxes( [] );
 		$new_sub->add_item( $line_item );
 
@@ -1832,15 +2754,7 @@ class Teams_Migration {
 			$subscription->remove_item( $item_id );
 		}
 		$line_item = new \WC_Order_Item_Product();
-		$line_item->set_props(
-			[
-				'product_id' => $migration_product->get_id(),
-				'name'       => $migration_product->get_name(),
-				'quantity'   => 1,
-				'subtotal'   => 0,
-				'total'      => 0,
-			]
-		);
+		self::link_migration_product( $line_item, $migration_product );
 
 		$subscription->set_billing_period( $billing_period );
 		$subscription->set_billing_interval( $billing_interval );
@@ -2206,6 +3120,83 @@ class Teams_Migration {
 	}
 
 	/**
+	 * Label one invitee's outcome for the re-invite table.
+	 *
+	 * Pure, so every branch is pinned by tests: the audit table's wording is the
+	 * operator's record of the run, and mislabels here — a live run's rows wearing
+	 * a dry-run label — have repeatedly been review blockers. Branch order is
+	 * load-bearing in two places: `errored` must outrank the dry-run fallbacks so
+	 * a team-level error on a live run never reads as a rehearsal, and the
+	 * would-resend rehearsal label must rank BELOW `! $migrate_invitations` so a
+	 * flagless run's lapsed invitee reads "not sent (pass --migrate-invitations to
+	 * send)" — consistent with the table's own header — rather than claiming a
+	 * rehearsal happened. Exposed for testing.
+	 *
+	 * @param array  $invitation_result   A migrate_team_invitations() result (see its return shape).
+	 * @param string $invitee_email       The invitee to label.
+	 * @param bool   $migrate_invitations Whether --migrate-invitations was passed.
+	 *
+	 * @return string The outcome-column label.
+	 */
+	public static function invitation_outcome_label( $invitation_result, $invitee_email, $migrate_invitations ) {
+		if ( in_array( $invitee_email, $invitation_result['resent'], true ) ) {
+			return 'invite sent (earlier invite had lapsed)';
+		}
+		if ( in_array( $invitee_email, $invitation_result['sent'], true ) ) {
+			return 'invite sent';
+		}
+		if ( isset( $invitation_result['skipped'][ $invitee_email ] ) ) {
+			return 'skipped — ' . $invitation_result['skipped'][ $invitee_email ];
+		}
+		if ( isset( $invitation_result['failed'][ $invitee_email ] ) ) {
+			return 'FAILED — ' . $invitation_result['failed'][ $invitee_email ];
+		}
+		if ( ! empty( $invitation_result['errored'] ) ) {
+			return 'not attempted (team error — see errors above)';
+		}
+		if ( ! $migrate_invitations ) {
+			return 'not sent (pass --migrate-invitations to send)';
+		}
+		if ( in_array( $invitee_email, $invitation_result['would_resend'] ?? [], true ) ) {
+			// The rehearsal twin of 'invite sent (earlier invite had lapsed)':
+			// this reader would be emailed a second time by a live run.
+			return self::OUTCOME_WOULD_RESEND;
+		}
+		return self::OUTCOME_WOULD_SEND;
+	}
+
+	/**
+	 * Validate the --limit flag's raw value into a send-attempt cap.
+	 *
+	 * Strict on the same principle as parse_user_ids(): a present-but-malformed
+	 * value fails the run rather than silently degrading. `max( 0, (int) $raw )`
+	 * would collapse `--limit=` (an unset shell variable), `--limit=abc`,
+	 * `--limit=0`, and `--limit=-5` into the no-cap sentinel — turning the one
+	 * flag an operator passes to keep an email burst small into an unlimited
+	 * burst, with the disclosing confirm prompt suppressed by --yes in exactly
+	 * the scripted runs where the mistake happens. A bare `--limit` (boolean
+	 * true from WP-CLI) is malformed too. Exposed for testing.
+	 *
+	 * @param mixed $raw The flag value from get_flag_value(), or null when the flag was not passed.
+	 *
+	 * @return int|\WP_Error 0 when the flag was not passed (no cap), the positive
+	 *                       integer cap otherwise, or a WP_Error for any present
+	 *                       value that is not a positive integer.
+	 */
+	public static function validate_send_limit( $raw ) {
+		if ( null === $raw ) {
+			return 0;
+		}
+		if ( ! is_numeric( $raw ) || (int) $raw != $raw || (int) $raw < 1 ) { // phpcs:ignore Universal.Operators.StrictComparisons.LooseNotEqual -- Deliberate: rejects non-integer numerics ("5.5") while accepting integer strings ("5").
+			return new \WP_Error(
+				'newspack_migrate_teams_invalid_limit',
+				sprintf( '--limit expects a positive integer, got "%s". Refusing to run without the cap you asked for: fix the value (or drop the flag to send with no cap).', is_bool( $raw ) ? '(bare --limit)' : ( is_scalar( $raw ) ? (string) $raw : gettype( $raw ) ) )
+			);
+		}
+		return (int) $raw;
+	}
+
+	/**
 	 * Parse the --user-ids CSV and/or --user-ids-file input into a unique list of
 	 * user IDs.
 	 *
@@ -2394,10 +3385,14 @@ class Teams_Migration {
 			if ( 'manual migration' !== $subscription->get_created_via() ) {
 				continue;
 			}
-			foreach ( $subscription->get_items() as $item ) {
-				if ( method_exists( $item, 'get_product_id' ) && (int) $item->get_product_id() === $product_id ) {
-					return true;
-				}
+			// has_product() matches a line item's product ID *or* its variation ID.
+			// Comparing get_product_id() alone would never recognise this command's
+			// own output for a variation --product-id, since create_individual_subscription()
+			// links through set_product() and so stores the parent in product_id —
+			// and an unrecognised prior run means every re-run grants another $0
+			// subscription rather than skipping the member.
+			if ( method_exists( $subscription, 'has_product' ) && $subscription->has_product( $product_id ) ) {
+				return true;
 			}
 		}
 		return false;
