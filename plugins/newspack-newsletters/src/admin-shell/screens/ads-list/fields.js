@@ -49,8 +49,7 @@ const getTitle = item => item?.title?.raw ?? item?.title?.rendered ?? '';
 
 const renderTitle = ( { item } ) => {
 	const raw = getTitle( item );
-	// Auto-drafts carry WordPress's "Auto Draft" placeholder; show a friendly title instead.
-	const title = ! raw || 'auto-draft' === item?.status ? __( '(no title)', 'newspack-newsletters' ) : raw;
+	const title = raw || __( '(no title)', 'newspack-newsletters' );
 	return (
 		<a className="newspack-newsletters-list__title" href={ editUrl( item ) } onClickCapture={ event => event.stopPropagation() }>
 			<strong>{ title }</strong>

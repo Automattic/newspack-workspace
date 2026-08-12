@@ -409,10 +409,8 @@ class Ads_List_REST_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * `kind=draft` covers `draft` and `pending` — the pair we resolve to
-	 * the `draft` kind in the column. The filter and the column have to
-	 * agree on which rows belong in the bucket. `auto-draft` is out: an
-	 * abandoned "Add new" is empty by construction (DSGNEWS-213).
+	 * The `draft` filter and the `draft` column must agree on which rows
+	 * belong in the bucket.
 	 */
 	public function test_filter_rest_query_translates_draft_kind_to_full_draft_set() {
 		$args = Ads_List_REST::filter_rest_query(
@@ -427,8 +425,8 @@ class Ads_List_REST_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * An abandoned "Add new" must not reach the Draft bucket — neither
-	 * through `post_status` nor the bucket's `posts_where` (DSGNEWS-213).
+	 * An abandoned "Add new" must not reach the Draft bucket, through
+	 * either `post_status` or the bucket's `posts_where`.
 	 */
 	public function test_draft_kind_excludes_auto_draft_ads() {
 		$draft     = $this->make_ad( [ 'post_status' => 'draft' ] );
@@ -457,6 +455,28 @@ class Ads_List_REST_Test extends WP_UnitTestCase {
 
 		$this->assertContains( $draft, $query->posts, 'saved draft still surfaces' );
 		$this->assertNotContains( $abandoned, $query->posts, 'abandoned "Add new" never reaches the list' );
+	}
+
+	/**
+	 * The advertiser count covers whatever the list buckets show. If the two
+	 * drift apart the count describes a different set of rows than the list.
+	 */
+	public function test_counted_statuses_match_the_list_buckets() {
+		$listed = [];
+		foreach ( array_diff( Ads_List_REST::VALID_KINDS, [ 'trash' ] ) as $kind ) {
+			$args   = Ads_List_REST::filter_rest_query(
+				[],
+				$this->rest_request( [ Ads_List_REST::STATUS_QUERY_PARAM => $kind ] )
+			);
+			$listed = array_merge( $listed, (array) $args['post_status'] );
+		}
+
+		$listed = array_values( array_unique( $listed ) );
+		sort( $listed );
+		$counted = Ads::COUNTED_STATUSES;
+		sort( $counted );
+
+		$this->assertSame( $counted, $listed );
 	}
 
 	/**

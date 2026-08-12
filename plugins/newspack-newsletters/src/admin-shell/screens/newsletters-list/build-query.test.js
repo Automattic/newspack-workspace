@@ -48,7 +48,6 @@ describe( 'buildQueryParams', () => {
 
 	it( 'excludes auto-draft so an abandoned "Add new" never reaches the list', () => {
 		expect( buildQueryParams( {} ).status.split( ',' ) ).not.toContain( 'auto-draft' );
-		// The Draft filter is the other way in — it must not widen the set back.
 		const filtered = buildQueryParams( {
 			filters: [ { field: 'status', operator: 'isAny', value: [ 'draft,pending' ] } ],
 		} );

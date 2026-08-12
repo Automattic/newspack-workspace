@@ -118,6 +118,14 @@ class Newsletters_List_REST {
 	 */
 	public static function align_status_filter_with_scheduled_meta( $args, $request ) {
 		$values = self::parse_status_values( $request->get_param( 'status' ) );
+		// A legacy `auto-draft` selection resolves to the Draft bucket, as the
+		// list's own deep links do. Left as-is it would match no bucket, and the
+		// query would run unfiltered against `post_status = auto-draft`.
+		if ( in_array( 'auto-draft', $values, true ) ) {
+			$values   = array_diff( $values, [ 'auto-draft' ] );
+			$values[] = 'draft';
+			$values   = array_values( array_unique( $values ) );
+		}
 		if ( empty( $values ) ) {
 			return $args;
 		}
@@ -132,9 +140,6 @@ class Newsletters_List_REST {
 		if ( $wants_sent || $wants_draft || $wants_scheduled ) {
 			$widened = array_merge( $widened, [ 'publish', 'private' ] );
 		}
-		// `auto-draft` is deliberately absent: an abandoned "Add new" is empty
-		// by construction (any save promotes it to `draft`), and core's own
-		// lists hide it too.
 		if ( $wants_draft || $wants_scheduled ) {
 			$widened = array_merge( $widened, [ 'draft', 'pending' ] );
 		}

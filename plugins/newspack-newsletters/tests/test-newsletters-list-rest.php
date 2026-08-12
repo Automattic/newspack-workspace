@@ -612,7 +612,6 @@ class Newsletters_List_REST_Test extends WP_UnitTestCase {
 				'post_date'   => '2026-04-20 10:00:00',
 			]
 		);
-		// Should NOT match: an abandoned "Add new" (DSGNEWS-213).
 		$abandoned = $this->make_newsletter(
 			[
 				'post_status' => 'auto-draft',
@@ -639,8 +638,7 @@ class Newsletters_List_REST_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The default status set the React list sends carries no `auto-draft`,
-	 * and the widening must not add one back (DSGNEWS-213).
+	 * The widening must not add `auto-draft` back to the default set.
 	 */
 	public function test_default_status_set_excludes_auto_draft() {
 		$plain_draft = $this->make_newsletter( [ 'post_status' => 'draft' ] );
@@ -652,19 +650,42 @@ class Newsletters_List_REST_Test extends WP_UnitTestCase {
 		);
 
 		$defaults = [ 'publish', 'private', 'future', 'draft', 'pending' ];
-		$args     = Newsletters_List_REST::align_status_filter_with_scheduled_meta(
-			[],
+		// Seed `post_status` the way the posts controller does, so the widening
+		// either leaves it or overwrites it, and the query runs on the result.
+		$args = Newsletters_List_REST::align_status_filter_with_scheduled_meta(
+			[ 'post_status' => $defaults ],
 			$this->rest_request( [ 'status' => $defaults ] )
 		);
 
-		// The widening only writes `post_status` when it actually changes the
-		// set; either way it must never reintroduce `auto-draft`.
-		$this->assertNotContains( 'auto-draft', (array) ( $args['post_status'] ?? [] ) );
+		$this->assertNotContains( 'auto-draft', (array) $args['post_status'] );
 
-		// The posts controller applies the request's `status` as `post_status`,
-		// so drive the query with the same set the React list sends.
-		$query = $this->run_newsletter_query( array_merge( $args, [ 'post_status' => $defaults ] ) );
+		$query = $this->run_newsletter_query( $args );
 		$this->assertContains( $plain_draft, $query->posts, 'saved draft still surfaces' );
+		$this->assertNotContains( $abandoned, $query->posts, 'abandoned "Add new" never reaches the list' );
+	}
+
+	/**
+	 * A legacy `auto-draft` deep link resolves to the Draft bucket rather
+	 * than querying the status directly.
+	 */
+	public function test_auto_draft_status_request_resolves_to_draft_bucket() {
+		$plain_draft = $this->make_newsletter( [ 'post_status' => 'draft' ] );
+		$abandoned   = $this->make_newsletter(
+			[
+				'post_status' => 'auto-draft',
+				'post_title'  => 'Auto Draft',
+			]
+		);
+
+		$args = Newsletters_List_REST::align_status_filter_with_scheduled_meta(
+			[ 'post_status' => [ 'auto-draft' ] ],
+			$this->rest_request( [ 'status' => [ 'auto-draft' ] ] )
+		);
+
+		$this->assertNotContains( 'auto-draft', (array) $args['post_status'] );
+
+		$query = $this->run_newsletter_query( $args );
+		$this->assertContains( $plain_draft, $query->posts, 'the Draft bucket answers instead' );
 		$this->assertNotContains( $abandoned, $query->posts, 'abandoned "Add new" never reaches the list' );
 	}
 

@@ -43,8 +43,7 @@ const getTitle = item => item?.title?.raw ?? item?.title?.rendered ?? '';
 
 const renderTitle = ( { item } ) => {
 	const raw = getTitle( item );
-	// New newsletters carry WordPress's "Auto Draft" placeholder title; show a friendly label instead.
-	const title = ! raw || 'auto-draft' === item?.status ? __( '(no subject)', 'newspack-newsletters' ) : raw;
+	const title = raw || __( '(no subject)', 'newspack-newsletters' );
 	return (
 		<a className="newspack-newsletters-list__title" href={ editUrl( item ) } onClickCapture={ event => event.stopPropagation() }>
 			<strong>{ title }</strong>

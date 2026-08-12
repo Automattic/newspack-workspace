@@ -26,6 +26,16 @@ final class Ads {
 	const ADVERTISER_TAX = 'newspack_nl_advertiser';
 
 	/**
+	 * Statuses an advertiser's term count covers. Must stay equal to the union
+	 * of the non-trash `post_status` sets in `Ads_List_REST::filter_rest_query`,
+	 * or the count disagrees with the list it describes. Bump the recount
+	 * sentinel in `maybe_recount_advertiser_terms` whenever this changes.
+	 *
+	 * @var string[]
+	 */
+	const COUNTED_STATUSES = [ 'publish', 'private', 'future', 'draft', 'pending' ];
+
+	/**
 	 * Ads already inserted in the newsletter.
 	 *
 	 * @var array[] Ad ids mapped by newsletter id.
@@ -399,14 +409,11 @@ final class Ads {
 					AND p.post_status IN ( %s, %s, %s, %s, %s )",
 					$tt_id,
 					self::CPT,
-					// `auto-draft` is absent to match the Ads list's draft
-					// bucket, which hides an abandoned "Add new" the way
-					// core's own lists do.
-					'publish',
-					'private',
-					'future',
-					'draft',
-					'pending'
+					self::COUNTED_STATUSES[0],
+					self::COUNTED_STATUSES[1],
+					self::COUNTED_STATUSES[2],
+					self::COUNTED_STATUSES[3],
+					self::COUNTED_STATUSES[4]
 				)
 			);
 
@@ -419,14 +426,22 @@ final class Ads {
 	/**
 	 * One-time recount of existing advertiser terms so counts predating
 	 * the custom count callback refresh without waiting for the next edit.
-	 * Bump the sentinel whenever the counted statuses change so already
-	 * recounted sites pick up the new semantics (v4: dropped auto-draft).
 	 */
 	public static function maybe_recount_advertiser_terms() {
 		$option = 'newspack_nl_advertiser_count_recounted_v4';
 		if ( get_option( $option ) ) {
 			return;
 		}
+		// `admin_init` also fires on admin-ajax.php, including for logged-out
+		// requests, so gate on the taxonomy's own management capability.
+		if ( ! current_user_can( 'manage_categories' ) ) {
+			return;
+		}
+		// Claim before the work. The recount is one `COUNT(*)` plus one `UPDATE`
+		// per term, so a concurrent burst would otherwise run it once each, and a
+		// pass that times out would re-arm it on every later request.
+		update_option( $option, 1 );
+		delete_option( 'newspack_nl_advertiser_count_recounted_v3' );
 
 		$term_ids = get_terms(
 			[
@@ -435,13 +450,10 @@ final class Ads {
 				'fields'     => 'tt_ids',
 			]
 		);
-		if ( is_wp_error( $term_ids ) ) {
+		if ( is_wp_error( $term_ids ) || empty( $term_ids ) ) {
 			return;
 		}
-		if ( ! empty( $term_ids ) ) {
-			wp_update_term_count_now( $term_ids, self::ADVERTISER_TAX );
-		}
-		update_option( $option, 1 );
+		wp_update_term_count_now( $term_ids, self::ADVERTISER_TAX );
 	}
 
 	/**
