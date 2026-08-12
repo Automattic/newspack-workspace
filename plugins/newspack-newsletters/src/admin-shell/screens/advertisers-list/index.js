@@ -7,17 +7,18 @@
  * `useAllAdvertisers`).
  */
 
-import { __experimentalHStack as HStack, Spinner } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { Button, __experimentalHStack as HStack, Spinner } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 import { DataViews } from '@wordpress/dataviews/wp';
 import { useCallback, useMemo, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { store } from '@wordpress/icons';
 
-import EmptyState from '../../components/empty-state';
+import { EmptyState } from 'newspack-components';
 import HeaderCount from '../../components/header-count';
 import ItemsPerPage from '../../components/items-per-page';
 import { useHeaderActions } from '../../header-actions-context';
 import usePersistedView from '../../hooks/use-persisted-view';
+import useStrictEmpty from '../../hooks/use-strict-empty';
 import AdvertiserModal from './modal';
 import useAdvertisersData from './use-advertisers-data';
 import useAllAdvertisers from './use-all-advertisers';
@@ -70,8 +71,7 @@ export default function AdvertisersListScreen() {
 	const fields = useMemo( () => getFields( { onEdit: openEdit } ), [ openEdit ] );
 	const actions = useMemo( () => getActions( { onEdit: openEdit, onMutated } ), [ openEdit, onMutated ] );
 
-	const isStrictEmpty =
-		hasLoadedOnce && ! isLoading && paginationInfo.totalItems === 0 && ! view.search && ( ! view.filters || view.filters.length === 0 );
+	const isStrictEmpty = useStrictEmpty( { hasLoadedOnce, isLoading, paginationInfo, view } );
 
 	useHeaderActions(
 		useMemo(
@@ -101,16 +101,21 @@ export default function AdvertisersListScreen() {
 		<>
 			<HeaderCount count={ paginationInfo.totalItems } />
 			{ isStrictEmpty ? (
-				<EmptyState
-					icon={ store }
-					title={ __( 'Get started with advertisers', 'newspack-newsletters' ) }
-					description={ __(
-						'Group ads by the advertiser they belong to so you can track and report on each one separately.',
-						'newspack-newsletters'
-					) }
-					ctaTitle={ __( 'Add Advertiser', 'newspack-newsletters' ) }
-					ctaOnClick={ openAdd }
-				/>
+				<EmptyState.Root className="newspack-newsletters-admin__empty-state">
+					<EmptyState.Header
+						icon={ store }
+						title={ __( 'Get started with advertisers', 'newspack-newsletters' ) }
+						description={ __(
+							'Group ads by the advertiser they belong to so you can track and report on each one separately.',
+							'newspack-newsletters'
+						) }
+					/>
+					<EmptyState.Actions>
+						<Button variant="primary" onClick={ openAdd }>
+							{ __( 'Add Advertiser', 'newspack-newsletters' ) }
+						</Button>
+					</EmptyState.Actions>
+				</EmptyState.Root>
 			) : (
 				<DataViews
 					className="newspack-newsletters-list newspack-newsletters-advertisers-list"
