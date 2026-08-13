@@ -695,6 +695,10 @@ MIGRATE
         echo "Destroyed environment '$env_name'"
         ;;
     list)
+        if is_help_arg "$2"; then
+            echo "Usage: n env list [--porcelain]"
+            exit 0
+        fi
         porcelain=false
         if [[ "$2" == "--porcelain" ]]; then
             porcelain=true
@@ -744,6 +748,7 @@ MIGRATE
             case $1 in
                 --all) cleanup_all=true; shift ;;
                 --yes) cleanup_yes=true; shift ;;
+                -h|--help) echo "Usage: n env cleanup [--all] [--yes]"; exit 0 ;;
                 *) echo "Usage: n env cleanup [--all] [--yes]"; exit 1 ;;
             esac
         done

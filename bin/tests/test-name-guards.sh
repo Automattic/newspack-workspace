@@ -18,10 +18,10 @@
 # to reach git with "--help" as the branch. Git refuses that refname, so nothing
 # was created, but the user got a git error rather than usage.
 #
-# Scope: the four env subcommands that read a name positionally — create, up,
-# down and destroy — are all covered. list only compares $2 against --porcelain,
-# cleanup never reads it, and e2e-setup delegates to bin/setup-local-e2e.sh,
-# which carries its own --help arm and calls validate_env_name itself.
+# Scope: every env subcommand that reads $2 is covered — create, up, down and
+# destroy take a name, list and cleanup take only options. e2e-setup is the one
+# exception: it delegates to bin/setup-local-e2e.sh, which carries its own
+# --help arm and calls validate_env_name itself.
 #
 # Run: bash bin/tests/test-name-guards.sh
 
@@ -75,7 +75,10 @@ assert_name "-h" rejected "a short option is rejected"
 assert_name "-demo" rejected "a leading dash is rejected"
 assert_name ".demo" accepted "a leading dot is accepted; rejecting it would strand an existing env"
 assert_name "_demo" accepted "a leading underscore is accepted, for the same reason"
-assert_name "-demo" rejected "only a leading dash is rejected, and it is the whole point of the rule"
+assert_name "-" rejected "a bare dash is rejected"
+assert_name "de mo" rejected "an embedded space is rejected"
+assert_name $'demo\tx' rejected "an embedded tab is rejected"
+assert_name $'demo\nx' rejected "an embedded newline is rejected, which the hosts marker relies on"
 assert_name "demo/1" rejected "a slash is rejected, since Docker rejects it in container names"
 assert_name "" rejected "an empty name is rejected"
 
@@ -101,22 +104,41 @@ assert_path_name "-h" rejected "a short option is rejected"
 assert_path_name "--force" rejected "any long option is rejected, not just --help"
 assert_path_name "a..b" rejected "a parent-directory traversal is still rejected"
 assert_path_name "/abs" rejected "a leading slash is still rejected"
+assert_path_name "de mo" rejected "an embedded space is rejected"
+assert_path_name $'demo\nx' rejected "an embedded newline is rejected"
 assert_path_name "" rejected "an empty name is rejected"
 
-# _common.sh honours an inherited NABSPATH only when it names a real workspace
-# root, so the stub `n` is what makes this a sandbox: anything a subcommand
-# writes lands here rather than in the checkout.
-touch "$WORK/n"
+# The sandbox root. _common.sh honours an inherited NABSPATH only when it names
+# a real workspace root, so the stub `n` is what makes this one: anything a
+# subcommand writes lands here rather than in the checkout.
+SANDBOX="$WORK/root"
+mkdir -p "$SANDBOX"
+touch "$SANDBOX/n"
+
+# NABSPATH does not bound everything `create` can reach. If a guard regresses it
+# runs for real, and its /etc/hosts step calls `sudo newspack-manage-host`, which
+# is deliberately passwordless and needs no TTY — so a broken tree would write to
+# the host's real hosts file from inside this test, which is how the debris this
+# spec exists to prevent got created in the first place. Stubbing those out of
+# PATH and closing stdin keeps the failure contained.
+STUB="$WORK/stub"
+mkdir -p "$STUB"
+for cmd in sudo docker newspack-manage-host; do
+	printf '#!/bin/sh\necho "%s: blocked by the test sandbox" >&2\nexit 127\n' "$cmd" > "$STUB/$cmd"
+	chmod +x "$STUB/$cmd"
+done
 
 assert_usage() {
 	local want_status="$1" desc="$2"; shift 2
-	local out status=0
-	out=$(NABSPATH="$WORK" bash "$SCRIPT_DIR/../env.sh" "$@" 2>&1) || status=$?
+	local sub="$1" out status=0
+	out=$(PATH="$STUB:$PATH" NABSPATH="$SANDBOX" bash "$SCRIPT_DIR/../env.sh" "$@" </dev/null 2>&1) || status=$?
 	if [[ "$status" != "$want_status" ]]; then
 		echo "  FAIL: $desc — want exit $want_status, got $status"
 		failures=$((failures + 1))
-	elif [[ "$out" != *"Usage:"* ]]; then
-		echo "  FAIL: $desc — printed no usage text"
+	elif [[ "$out" != *"Usage: n env $sub"* ]]; then
+		# Matching the arm's own usage line, not a bare "Usage:", so a truncated
+		# string or another arm's text cannot satisfy the assertion.
+		echo "  FAIL: $desc — usage text did not name 'n env $sub'"
 		failures=$((failures + 1))
 	else
 		echo "  ok: $desc"
@@ -125,9 +147,9 @@ assert_usage() {
 
 echo
 echo "n env <subcommand> --help:"
-for sub in create up down destroy; do
-	assert_usage 0 "$sub --help prints usage and succeeds" "$sub" --help
-	assert_usage 0 "$sub -h prints usage and succeeds" "$sub" -h
+for sub in create up down destroy list cleanup; do
+	assert_usage 0 "$sub --help prints its own usage and succeeds" "$sub" --help
+	assert_usage 0 "$sub -h prints its own usage and succeeds" "$sub" -h
 done
 
 echo
@@ -140,7 +162,7 @@ done
 
 echo
 echo "no environment is created by any of the above:"
-leaked=$(find "$WORK" -mindepth 1 ! -name n)
+leaked=$(find "$SANDBOX" -mindepth 1 ! -name n)
 if [[ -n "$leaked" ]]; then
 	echo "  FAIL: the sandbox gained files — $(echo "$leaked" | tr '\n' ' ')"
 	failures=$((failures + 1))
