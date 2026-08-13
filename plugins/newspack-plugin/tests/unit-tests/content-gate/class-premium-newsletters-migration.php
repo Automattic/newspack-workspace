@@ -678,4 +678,51 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 
 		$migration->migrate_premium_newsletters( [], [ 'plan' => '-5' ] );
 	}
+
+	/**
+	 * A --plan run is a testing path over one plan's lists, but the option it would
+	 * write is site-wide. It must report the derivation and write nothing, even under
+	 * --live: the site's other lists may sit on the other side of the modal split,
+	 * and flipping the option from that partial view auto-subscribes readers to
+	 * newsletters they declined at checkout.
+	 */
+	public function test_report_auto_signup_plan_scoped_live_writes_nothing() {
+		update_option( 'newspack_premium_newsletters_auto_signup', 0 );
+		$this->set_signup_modal_lists( [] ); // Neither list is in the modal, so auto-signup derives to on.
+
+		$this->invoke_private_static( 'report_auto_signup', [ [ $this->list_a, $this->list_b ], false, true ] );
+
+		$this->assertFalse( (bool) get_option( 'newspack_premium_newsletters_auto_signup' ) );
+	}
+
+	/**
+	 * An operator who passed --live has every reason to expect a write, so the reason
+	 * nothing happened must name --plan rather than read as an ordinary dry run.
+	 */
+	public function test_report_auto_signup_plan_scoped_says_why_it_wrote_nothing() {
+		update_option( 'newspack_premium_newsletters_auto_signup', 0 );
+		$this->set_signup_modal_lists( [] );
+
+		$this->invoke_private_static( 'report_auto_signup', [ [ $this->list_a ], false, true ] );
+
+		$matching_lines = array_filter(
+			\WP_CLI::$output,
+			fn( $line ) => str_contains( $line, 'a --plan run never writes it' )
+		);
+		$this->assertNotEmpty( $matching_lines, 'Expected the --plan run to explain why it wrote nothing.' );
+	}
+
+	/**
+	 * A full run still writes: the --plan guard must not have disabled the setting's
+	 * migration altogether.
+	 */
+	public function test_report_auto_signup_full_live_run_still_writes() {
+		update_option( 'newspack_premium_newsletters_auto_signup', 0 );
+		$this->set_signup_modal_lists( [] );
+
+		$this->invoke_private_static( 'report_auto_signup', [ [ $this->list_a ], false, false ] );
+
+		$this->assertTrue( (bool) get_option( 'newspack_premium_newsletters_auto_signup' ) );
+	}
+
 }

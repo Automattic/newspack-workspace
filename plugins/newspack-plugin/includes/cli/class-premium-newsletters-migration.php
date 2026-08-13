@@ -47,7 +47,9 @@ class Premium_Newsletters_Migration {
 	 *
 	 * Registration mode is always activated; paid access mode only when every plan in
 	 * the group requires a purchase (see group_requires_purchase()). The site-wide
-	 * auto-signup setting is derived from the post-checkout signup modal.
+	 * auto-signup setting is derived from the post-checkout signup modal. Settling
+	 * that setting takes a full run: it is one option for the whole site, so a
+	 * --plan run reports what it would be but never writes it.
 	 *
 	 * Dry-run by default; pass --live to write.
 	 *
@@ -67,7 +69,7 @@ class Premium_Newsletters_Migration {
 	 * : Apply the changes. Without this flag the command runs as a dry-run and writes nothing.
 	 *
 	 * [--plan=<id>]
-	 * : Only process the plan with this post ID. Useful for testing.
+	 * : Only process the plan with this post ID. Useful for testing; never writes the site-wide auto-signup setting.
 	 *
 	 * ## EXAMPLES
 	 *
@@ -154,8 +156,6 @@ class Premium_Newsletters_Migration {
 			$gate_key     = trim( strtolower( $gate_title ) );
 			$has_purchase = self::group_requires_purchase( $group );
 			$access_type  = $has_purchase ? 'purchase' : 'signup';
-
-			$migrated_lists = array_merge( $migrated_lists, $list_ids );
 
 			// Cast to int for parity with the REST write path, which stores subscription
 			// access-rule values as ints; raw `_product_ids` meta can hold strings.
@@ -264,6 +264,10 @@ class Premium_Newsletters_Migration {
 				continue;
 			}
 
+			// Only lists behind a gate this run actually wrote feed the site-wide
+			// auto-signup derivation; a group whose write failed migrated nothing.
+			$migrated_lists = array_merge( $migrated_lists, $list_ids );
+
 			$verification_issues = [];
 			if ( ! $dry_run && $gate_id ) {
 				$verification_issues = self::verify_migrated_gate( $gate_id, $has_purchase );
@@ -314,7 +318,7 @@ class Premium_Newsletters_Migration {
 		);
 
 		WP_CLI::line( '' );
-		self::report_auto_signup( array_values( array_unique( $migrated_lists ) ), $dry_run );
+		self::report_auto_signup( array_values( array_unique( $migrated_lists ) ), $dry_run, (bool) $plan_id );
 
 		WP_CLI::line( '' );
 		$processed = count(
@@ -795,12 +799,20 @@ class Premium_Newsletters_Migration {
 	 * zero-touch migration — but the transition is always printed, so a change to a
 	 * setting a publisher may have chosen is visible rather than silent.
 	 *
-	 * @param int[] $list_ids All newsletter list IDs this run migrated.
-	 * @param bool  $dry_run  Whether this is a dry run.
+	 * A --plan run is the exception: the option is site-wide, but the derivation only
+	 * sees the lists that one plan restricts. If the site's other lists sit on the
+	 * other side of the modal split, writing it would flip a global setting from a
+	 * partial view — turning auto-signup on for readers who declined those lists at
+	 * checkout, or off for readers who expected them. So a --plan run reports the
+	 * derivation and says why it is not written; settling the setting takes a full run.
+	 *
+	 * @param int[] $list_ids    All newsletter list IDs this run migrated.
+	 * @param bool  $dry_run     Whether this is a dry run.
+	 * @param bool  $plan_scoped Whether the run was narrowed to a single plan with --plan.
 	 *
 	 * @return void
 	 */
-	private static function report_auto_signup( array $list_ids, bool $dry_run ) {
+	private static function report_auto_signup( array $list_ids, bool $dry_run, bool $plan_scoped = false ) {
 		$derived = self::derive_auto_signup( $list_ids );
 		$current = (bool) \get_option( 'newspack_premium_newsletters_auto_signup', 1 );
 
@@ -832,6 +844,18 @@ class Premium_Newsletters_Migration {
 
 		if ( $derived['value'] === $current ) {
 			WP_CLI::line( sprintf( 'Auto-signup is already %s; leaving it unchanged.', $current_label ) );
+			return;
+		}
+		// Reported before the dry-run branch so a --plan --live operator, who has every
+		// reason to expect a write, is told which of the two reasons applies.
+		if ( $plan_scoped ) {
+			WP_CLI::line(
+				sprintf(
+					'Auto-signup derives to %s from this plan\'s lists (currently %s), but a --plan run never writes it: the setting is site-wide, and one plan\'s lists cannot stand for the rest of the site\'s. Re-run without --plan to settle it.',
+					$derived_label,
+					$current_label
+				)
+			);
 			return;
 		}
 		if ( $dry_run ) {
