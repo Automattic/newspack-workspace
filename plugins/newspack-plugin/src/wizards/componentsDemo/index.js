@@ -1004,6 +1004,7 @@ class ComponentsDemo extends Component {
 							<h3>{ __( 'States', 'newspack-plugin' ) }</h3>
 							<Grid columns={ 2 } gutter={ 16 }>
 								<CardFeature
+									titleLevel={ 3 }
 									title={ __( 'Metered countdown', 'newspack-plugin' ) }
 									description={ __(
 										'Show a countdown banner letting readers know how many free views they have left.',
@@ -1014,6 +1015,7 @@ class ComponentsDemo extends Component {
 									onConfigure={ () => {} }
 								/>
 								<CardFeature
+									titleLevel={ 3 }
 									title={ __( 'Metered countdown', 'newspack-plugin' ) }
 									description={ __(
 										'Show a countdown banner letting readers know how many free views they have left.',
@@ -1028,6 +1030,7 @@ class ComponentsDemo extends Component {
 							<h3>{ __( 'Interactive toggle', 'newspack-plugin' ) }</h3>
 							<Grid columns={ 2 } gutter={ 16 }>
 								<CardFeature
+									titleLevel={ 3 }
 									title={ __( 'Metered countdown', 'newspack-plugin' ) }
 									description={ __(
 										'Show a countdown banner letting readers know how many free views they have left.',
@@ -1044,6 +1047,7 @@ class ComponentsDemo extends Component {
 							<h3>{ __( 'With a custom icon', 'newspack-plugin' ) }</h3>
 							<Grid columns={ 2 } gutter={ 16 }>
 								<CardFeature
+									titleLevel={ 3 }
 									title={ __( 'Content gifting', 'newspack-plugin' ) }
 									description={ __( 'Let subscribers share gated articles with non-subscribers.', 'newspack-plugin' ) }
 									icon={ { node: <Icon icon={ settings } />, fill: '#757575', backgroundColor: '#f0f0f0' } }
@@ -1052,6 +1056,7 @@ class ComponentsDemo extends Component {
 									onConfigure={ () => {} }
 								/>
 								<CardFeature
+									titleLevel={ 3 }
 									title={ __( 'Content gifting', 'newspack-plugin' ) }
 									description={ __( 'Let subscribers share gated articles with non-subscribers.', 'newspack-plugin' ) }
 									icon={ { node: <Icon icon={ settings } />, fill: '#003da5', backgroundColor: '#dfe7f4', radius: 'full' } }
@@ -1064,6 +1069,7 @@ class ComponentsDemo extends Component {
 							<h3>{ __( 'With custom button labels', 'newspack-plugin' ) }</h3>
 							<Grid columns={ 2 } gutter={ 16 }>
 								<CardFeature
+									titleLevel={ 3 }
 									title={ __( 'Apple News', 'newspack-plugin' ) }
 									description={ __( 'Automatically publish articles to Apple News.', 'newspack-plugin' ) }
 									enabled={ this.state.cardFeatureCustomEnabled }
@@ -1082,6 +1088,7 @@ class ComponentsDemo extends Component {
 							<h3>{ __( 'With a custom badge', 'newspack-plugin' ) }</h3>
 							<Grid columns={ 2 } gutter={ 16 }>
 								<CardFeature
+									titleLevel={ 3 }
 									title={ __( 'Stripe', 'newspack-plugin' ) }
 									description={ __( 'Accept payments via Stripe.', 'newspack-plugin' ) }
 									enabled={ true }
@@ -1095,6 +1102,7 @@ class ComponentsDemo extends Component {
 							<h3>{ __( 'With multiple dropdown controls', 'newspack-plugin' ) }</h3>
 							<Grid columns={ 2 } gutter={ 16 }>
 								<CardFeature
+									titleLevel={ 3 }
 									title={ __( 'Newsletters', 'newspack-plugin' ) }
 									description={ __( 'Send newsletters directly from the WordPress editor.', 'newspack-plugin' ) }
 									enabled={ true }

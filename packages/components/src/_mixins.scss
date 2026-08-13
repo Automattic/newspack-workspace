@@ -10,9 +10,9 @@
  *
  * The accent deliberately stops at `--wp-admin-theme-color`, which `src/style.scss`
  * pins to the Newspack primary for anything loading the package barrel. Ending the
- * chain in the palette instead would mean
- * importing `colors.module.scss` here, and its `:export` block is emitted into every
- * stylesheet that uses any mixin in this file.
+ * chain in the palette instead would mean importing `colors.module.scss` here, and
+ * its `:export` block is emitted into every stylesheet that uses any mixin in this
+ * file.
  */
 
 @use "~@wordpress/base-styles/colors" as wp-colors;

@@ -45,7 +45,12 @@ type MoreControl = {
 
 type CardFeatureProps = {
 	title: string;
-	/** Heading level for the title. Pick the level that fits the surrounding document outline. */
+	/**
+	 * Heading level for the title. Pick the level that fits the surrounding
+	 * document outline: 3 under a `SectionHeader`, 2 when the cards sit directly
+	 * under a page's h1. Levels 2-6 are the practical range, since wp-admin's own
+	 * `.wrap h1` rule outranks the card's title class.
+	 */
 	titleLevel?: HeadingLevel;
 	description?: string;
 	/** Icon shown beside the title: a descriptor (coloured badge) or a ready element rendered as-is. */
@@ -55,8 +60,11 @@ type CardFeatureProps = {
 	/**
 	 * When set, the card enters the "unmet requirements" state: an error badge
 	 * displays this string and the title drops to the muted text colour. By
-	 * default the primary button is disabled — set `requirementsActionable`
+	 * default the primary button is blocked — set `requirementsActionable`
 	 * if the primary button is the remediation for the unmet requirement.
+	 *
+	 * This string is also the primary button's accessible description, so write
+	 * it to read sensibly after the button's own label.
 	 */
 	requirements?: string;
 	/**
@@ -116,6 +124,8 @@ const CardFeature = ( {
 }: CardFeatureProps ) => {
 	const instanceId = useInstanceId( CardFeature, 'newspack-card-feature' );
 	const badgeId = `${ instanceId }__badge`;
+	// The button's description and the badge's id must appear and disappear together.
+	const describedById = requirements ? badgeId : undefined;
 	const isMuted = !! requirements;
 	const classes = classnames( 'newspack-card-feature', className, {
 		'newspack-card-feature--muted': isMuted,
@@ -185,7 +195,7 @@ const CardFeature = ( {
 						<Button
 							variant={ isConfigureState ? 'tertiary' : 'secondary' }
 							accessibleWhenDisabled
-							aria-describedby={ requirements ? badgeId : undefined }
+							aria-describedby={ describedById }
 							disabled={ ( isMuted && ! requirementsActionable ) || busy }
 							isBusy={ busy }
 							onClick={ handleButtonClick }
@@ -202,7 +212,7 @@ const CardFeature = ( {
 							/>
 						) }
 					</Stack>
-					{ badge && <Badge id={ requirements ? badgeId : undefined } text={ badge.text } level={ badge.level } /> }
+					{ badge && <Badge id={ describedById } text={ badge.text } level={ badge.level } /> }
 				</Stack>
 			</Card.Content>
 		</Card.Root>
