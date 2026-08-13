@@ -2,7 +2,7 @@
  * WordPress dependencies.
  */
 import { Fragment, useEffect, useState } from '@wordpress/element';
-import { __, sprintf } from '@wordpress/i18n';
+import { __, _n, sprintf } from '@wordpress/i18n';
 
 /**
  * Internal dependencies.
@@ -62,7 +62,17 @@ const makeBound = ( type, rawValue, seed = false ) => {
 		// control falls back to the chosen bound type while the bound is absent.
 		return date ? { type: 'absolute', date } : undefined;
 	}
-	const days = Math.abs( parseInt( rawValue, 10 ) || 0 );
+	// A cleared magnitude mirrors a cleared date: no bound at all, not a
+	// zero-day bound — { days: 0 } would quietly move the window's edge to
+	// today and snap the emptied input back to '0' mid-retype. An explicit
+	// '0' is falsy-but-present, so the check is on emptiness, not truthiness.
+	const raw = '' === rawValue && seed ? '0' : rawValue;
+	if ( '' === raw ) {
+		return undefined;
+	}
+	// Number() rather than parseInt(): a number input accepts scientific
+	// notation, and parseInt( '1e2' ) reads it as 1 instead of 100.
+	const days = Math.abs( Math.trunc( Number( raw ) ) || 0 );
 	return { type: 'relative', days: 'future' === type ? days : -days };
 };
 
@@ -141,7 +151,7 @@ const PRESET_DAYS = [ 7, 30, 365 ];
 const PRESETS = [
 	{ label: __( 'Any', 'newspack-plugin' ), value: '' },
 	/* translators: %d: number of days in a trailing date window. */
-	...PRESET_DAYS.map( days => ( { label: sprintf( __( 'Last %d days', 'newspack-plugin' ), days ), value: String( days ) } ) ),
+	...PRESET_DAYS.map( days => ( { label: sprintf( _n( 'Last %d day', 'Last %d days', days, 'newspack-plugin' ), days ), value: String( days ) } ) ),
 	{ label: __( 'Custom', 'newspack-plugin' ), value: 'custom' },
 ];
 
