@@ -43,13 +43,19 @@ ok "wrapper declares a pinned PATH" "$([ -n "$PIN" ] && echo yes || echo no)" "y
 # ordinary-looking change, and if that directory is user-writable the pin stops
 # meaning anything while every other check here still passes. Asserting the
 # property rather than the string is what makes widening visible.
+#
+# Symlinks are followed deliberately. Under usrmerge, /bin and /sbin are
+# symlinks into /usr and carry mode 777 like every symlink, so reading the link
+# rather than its target reports them world-writable and fails on Linux while
+# passing on macOS, where both are real directories. What governs lookup is the
+# target, and a link sitting in root-owned / cannot be replaced by a user.
 dir_root_only() {
     local d="$1" owner mode g o
     [ -d "$d" ] || return 0   # absent dir contributes nothing to lookup
-    if stat -f '%Su' "$d" >/dev/null 2>&1; then
-        owner=$(stat -f '%Su' "$d"); mode=$(stat -f '%Lp' "$d")   # BSD
+    if stat --version >/dev/null 2>&1; then
+        owner=$(stat -L -c '%U' "$d"); mode=$(stat -L -c '%a' "$d")   # GNU
     else
-        owner=$(stat -c '%U' "$d"); mode=$(stat -c '%a' "$d")     # GNU
+        owner=$(stat -L -f '%Su' "$d"); mode=$(stat -L -f '%Lp' "$d") # BSD
     fi
     [ "$owner" = "root" ] || return 1
     mode=$(printf '%03d' "$mode" 2>/dev/null || printf '%s' "$mode")
@@ -90,10 +96,18 @@ derive_commands() {
 
 # Control for the derivation itself. If it silently stopped matching, it would
 # return nothing and every check below would pass while testing nothing.
+#
+# The probe command is created here rather than borrowed from the system: the
+# derivation drops tokens that resolve nowhere, so naming a real command would
+# make this control depend on that command being installed. An earlier version
+# used openssl and reported "not detected" on a bare Ubuntu image, which is the
+# same silent-pass failure this control exists to prevent.
+mkdir -p "$FIX/ctl"
+printf '#!/bin/sh\nexit 0\n' > "$FIX/ctl/derivectlprobe"; chmod +x "$FIX/ctl/derivectlprobe"
 probe_src="$FIX/derive-probe"; cp "$WRAP" "$probe_src"
-printf '\nopenssl version\n' >> "$probe_src"
+printf '\nderivectlprobe --version\n' >> "$probe_src"
 ok "derivation detects a command added to the wrapper" \
-   "$(derive_commands "$probe_src" | grep -cx openssl)" "1"
+   "$(PATH="$FIX/ctl:$PATH" derive_commands "$probe_src" | grep -cx derivectlprobe)" "1"
 
 CMDS="$(derive_commands "$WRAP")"
 ok "derivation finds the wrapper's helpers" \
