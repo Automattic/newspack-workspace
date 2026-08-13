@@ -64,6 +64,12 @@ class Membership_Gates_Migration {
 	 * left alone when nothing could be extracted for it, so an empty extraction never
 	 * blanks a working layout.
 	 *
+	 * Every decision that needs an operator is settled before the first write: the
+	 * groups are scanned, the problems are reported, and the one confirmation prompt
+	 * is asked with nothing yet written. The write loop then runs to completion
+	 * unattended, so a run that is interrupted at a prompt is a run that changed
+	 * nothing.
+	 *
 	 * ## OPTIONS
 	 *
 	 * [--live]
@@ -73,7 +79,7 @@ class Membership_Gates_Migration {
 	 * : Only process the plan with this post ID. Useful for testing.
 	 *
 	 * [--yes]
-	 * : Answer yes to the confirmation prompt shown when a gate would be created alongside gates the same plans were migrated to individually.
+	 * : Answer yes to the pre-flight confirmation prompt shown when gates would be created alongside gates the same plans were migrated to individually. Required for non-interactive runs (cron, `ssh host "wp ..."`): with no terminal to answer the prompt, the command errors out rather than exiting silently mid-migration.
 	 *
 	 * ## EXAMPLES
 	 *
@@ -145,88 +151,94 @@ class Membership_Gates_Migration {
 			$existing_gates[ trim( strtolower( $gate['title'] ) ) ] = $gate['id'];
 		}
 
-		$summary        = [];
-		$skipped        = [];
-		$titles_written = [];
+		$summary = [];
+		$skipped = [];
 
 		// Phase 1: group plans by content-rule fingerprint.
 		$plan_groups = self::group_plans_by_fingerprint( $plan_ids, $skipped );
 
-		// Phase 2: create/update one gate per group.
 		$group_count = count( $plan_groups );
 		if ( $group_count < ( $total - count( $skipped ) ) ) {
 			WP_CLI::line( sprintf( 'Grouped into %d gate(s) after deduplication.', $group_count ) );
 			WP_CLI::line( '' );
 		}
+
+		// Phase 2: pre-flight. Everything that can stop the run, or needs an answer
+		// from the operator, is settled here — before the first write. Two same-named
+		// plan groups are a hard error, and the one confirmation prompt is asked once
+		// for the whole run. The write loop below therefore runs to completion without
+		// reading STDIN, so it cannot be truncated part-way through by a prompt that
+		// nobody is there to answer.
+		$collisions = self::find_colliding_gate_titles( $plan_groups );
+		if ( ! empty( $collisions ) ) {
+			WP_CLI::error(
+				sprintf(
+					'Two or more plan groups resolve to the same gate title: %s. A gate is identified by its title, so the second group would replace the first group\'s content rules and layouts outright and leave that group\'s content behind no gate at all. Rename one of the plans and re-run. Nothing has been written.',
+					implode( ', ', array_map( fn( $title ) => sprintf( '"%s"', $title ), $collisions ) )
+				)
+			);
+		}
+
+		// Product resolution reads the group and its product posts and writes nothing,
+		// so it runs here — putting every warning it raises in front of the prompt.
+		$products_by_group = [];
+		foreach ( $plan_groups as $fingerprint => $group ) {
+			$products                          = self::resolve_product_ids( $group );
+			$products_by_group[ $fingerprint ] = $products['product_ids'];
+			self::report_dropped_product_ids( self::gate_title( $group ), $products['dropped'] );
+		}
+
+		// Regrouping can merge plans a previous run migrated separately. Gate identity
+		// is the title, so the merged title matches no existing gate and this run would
+		// write a new one while the originals stay published and keep restricting. Name
+		// them, and let the operator stop before anything is created.
+		$superseding = self::find_superseding_groups( $plan_groups, $existing_gates );
+		foreach ( $superseding as $superseding_title => $superseded ) {
+			WP_CLI::warning(
+				sprintf(
+					'"%s" merges plans that were migrated separately before. Creating it leaves these gates in place, still restricting the same content: %s. Retire them after this run.',
+					$superseding_title,
+					implode(
+						', ',
+						array_map(
+							fn( $title, $id ) => sprintf( '"%s" (gate %d)', $title, $id ),
+							array_keys( $superseded ),
+							$superseded
+						)
+					)
+				)
+			);
+		}
+		if ( ! empty( $superseding ) && ! $dry_run ) {
+			self::confirm_or_error(
+				sprintf(
+					'Create %d gate(s) that supersede the gates named above? Answering no stops the run before anything is written.',
+					count( $superseding )
+				),
+				$assoc_args
+			);
+		}
+
+		// Phase 3: create/update one gate per group. Every group's title is unique (the
+		// collision check above errors out otherwise), so a title names one gate.
 		$progress = \WP_CLI\Utils\make_progress_bar( 'Migrating gates', $group_count );
 
-		foreach ( $plan_groups as $group ) {
+		foreach ( $plan_groups as $fingerprint => $group ) {
 			$progress->tick();
 
 			$layout_errors = [];
 			$ac_rules      = $group[0]['ac_rules'];
-			$gate_title    = implode( ' | ', array_column( $group, 'name' ) );
+			$gate_title    = self::gate_title( $group );
 			$gate_key      = trim( strtolower( $gate_title ) );
-			$has_purchase = self::group_requires_purchase( $group );
-			$access_type  = $has_purchase ? 'purchase' : 'signup';
+			$has_purchase  = self::group_requires_purchase( $group );
+			$access_type   = $has_purchase ? 'purchase' : 'signup';
 
-			$products           = self::resolve_product_ids( $group );
-			$merged_product_ids = $products['product_ids'];
-			self::report_dropped_product_ids( $gate_title, $products['dropped'] );
+			$merged_product_ids = $products_by_group[ $fingerprint ];
 
-			// Gate identity is the title, but groups are keyed by rule fingerprint —
-			// so two same-named plans with different rules land in different groups
-			// and would silently overwrite each other's rules and layouts.
-			if ( isset( $titles_written[ $gate_key ] ) ) {
-				WP_CLI::warning(
-					sprintf(
-						'Two plan groups resolve to the gate title "%s" (same plan name(s), different content rules). The later group overwrites the earlier one — rename one of the plans and re-run.',
-						$gate_title
-					)
-				);
-			}
-			$titles_written[ $gate_key ] = true;
-
+			// A null gate ID means the gate does not exist yet; the summary prints it as
+			// '(pending)' on a dry run, and the write path below fills it in on --live.
 			$action  = array_key_exists( $gate_key, $existing_gates ) ? 'updated' : 'created';
 			$gate_id = $existing_gates[ $gate_key ] ?? null;
-
-			// Regrouping can merge plans a previous run migrated separately. Gate identity
-			// is the title, so the merged title matches no existing gate and this run would
-			// write a new one while the originals stay published and keep restricting. Name
-			// them, and let the operator stop before the duplicate is created.
-			if ( 'created' === $action ) {
-				$superseded = self::find_superseded_gates( $group, $gate_key, $existing_gates );
-				if ( ! empty( $superseded ) ) {
-					WP_CLI::warning(
-						sprintf(
-							'"%s" merges plans that were migrated separately before. Creating it leaves these gates in place, still restricting the same content: %s. Retire them after this run.',
-							$gate_title,
-							implode(
-								', ',
-								array_map(
-									fn( $title, $id ) => sprintf( '"%s" (gate %d)', $title, $id ),
-									array_keys( $superseded ),
-									$superseded
-								)
-							)
-						)
-					);
-					if ( ! $dry_run ) {
-						WP_CLI::confirm(
-							sprintf( 'Create "%s" anyway? Answering no stops the whole run; gates already written stay written, and re-running is safe.', $gate_title ),
-							$assoc_args
-						);
-					}
-				}
-			}
-
-			// Keep $existing_gates consistent for both live and dry-run passes so a
-			// later group with the same title is reported as 'updated'. A null value
-			// means "claimed by this run but not created yet" (dry-run, or an earlier
-			// group in the same pass), which the summary prints as '(pending)'.
-			if ( ! array_key_exists( $gate_key, $existing_gates ) ) {
-				$existing_gates[ $gate_key ] = null;
-			}
 
 			// Resolve layout content — try each plan in the group for a plan-specific gate.
 			$memberships_gate = null;
@@ -261,7 +273,6 @@ class Membership_Gates_Migration {
 					}
 					$gate_id = $result;
 				}
-				$existing_gates[ $gate_key ] = $gate_id;
 
 				// Set content rules. WooCommerce Memberships restricts the *union* of a
 				// plan's restriction rules, while the gate evaluator defaults an unset
@@ -418,6 +429,130 @@ class Membership_Gates_Migration {
 	 */
 	private static function is_valid_plan_arg( $plan_arg ): bool {
 		return ctype_digit( (string) $plan_arg ) && (int) $plan_arg > 0;
+	}
+
+	/**
+	 * Whether a confirmation prompt could not be answered on this invocation.
+	 *
+	 * WP_CLI::confirm() reads STDIN with fgets(), which returns false at EOF; that
+	 * trims to '' rather than 'y', so the command exits — with status 0 and no
+	 * message. A run driven from a script or over SSH therefore stops at the prompt
+	 * having already written everything before it, and reports success. Erroring out
+	 * instead is the honest outcome, and --yes is the way to run unattended.
+	 *
+	 * @param array $assoc_args     The command's named args.
+	 * @param bool  $stdin_is_a_tty Whether STDIN is an interactive terminal.
+	 *
+	 * @return bool True when the prompt must not be asked.
+	 */
+	private static function prompt_is_unanswerable( array $assoc_args, bool $stdin_is_a_tty ): bool {
+		if ( \WP_CLI\Utils\get_flag_value( $assoc_args, 'yes', false ) ) {
+			return false;
+		}
+		return ! $stdin_is_a_tty;
+	}
+
+	/**
+	 * Whether STDIN is an interactive terminal.
+	 *
+	 * STDIN is only defined under the CLI SAPI, so the constant is checked before it
+	 * is read.
+	 *
+	 * @return bool
+	 */
+	private static function stdin_is_a_tty(): bool {
+		return defined( 'STDIN' ) && stream_isatty( STDIN );
+	}
+
+	/**
+	 * Ask the operator to confirm, or hard-error when nothing can answer.
+	 *
+	 * @param string $question   The yes/no question.
+	 * @param array  $assoc_args The command's named args, passed through to WP-CLI so
+	 *                           --yes answers the prompt.
+	 *
+	 * @return void
+	 */
+	private static function confirm_or_error( string $question, array $assoc_args ) {
+		if ( self::prompt_is_unanswerable( $assoc_args, self::stdin_is_a_tty() ) ) {
+			WP_CLI::error(
+				sprintf(
+					'This run needs an answer to: "%s" — but STDIN is not a terminal, so the prompt would be answered for you and the command would stop without writing a summary. Re-run with --yes to answer yes up front, or run it from an interactive terminal.',
+					$question
+				)
+			);
+		}
+		WP_CLI::confirm( $question, $assoc_args );
+	}
+
+	/**
+	 * The gate title a plan group resolves to.
+	 *
+	 * @param array[] $group Plan descriptors, each carrying a 'name' key.
+	 *
+	 * @return string The group's plan names joined with " | ".
+	 */
+	private static function gate_title( array $group ): string {
+		return implode( ' | ', array_column( $group, 'name' ) );
+	}
+
+	/**
+	 * Gate titles that more than one plan group resolves to.
+	 *
+	 * Gate identity is the title, but groups are keyed by content-rule fingerprint —
+	 * so two same-named plans with different rules land in different groups and
+	 * resolve to one title. The second group takes the update branch, and
+	 * update_gate_content_rules() replaces rather than merges, so the first group's
+	 * content ends up behind no gate at all while both rows report as processed. The
+	 * collision is computable from the grouping alone, so the caller stops the run
+	 * before anything is written.
+	 *
+	 * @param array<string,array> $plan_groups Map of fingerprint => plan descriptors.
+	 *
+	 * @return string[] The colliding titles, in the casing they were first seen with.
+	 */
+	private static function find_colliding_gate_titles( array $plan_groups ): array {
+		$seen       = [];
+		$collisions = [];
+		foreach ( $plan_groups as $group ) {
+			$title = self::gate_title( $group );
+			$key   = trim( strtolower( $title ) );
+			if ( isset( $seen[ $key ] ) ) {
+				$collisions[ $key ] = $seen[ $key ];
+				continue;
+			}
+			$seen[ $key ] = $title;
+		}
+		return array_values( $collisions );
+	}
+
+	/**
+	 * The gates each about-to-be-created group would supersede.
+	 *
+	 * Only groups whose title matches no existing gate are considered: a group that
+	 * updates an existing gate supersedes nothing.
+	 *
+	 * @param array<string,array> $plan_groups    Map of fingerprint => plan descriptors.
+	 * @param array               $existing_gates Map of lower-cased gate title => gate ID.
+	 *
+	 * @return array<string,array<string,int>> Map of group gate title => superseded
+	 *                                         gate title => gate ID; empty when no
+	 *                                         group supersedes anything.
+	 */
+	private static function find_superseding_groups( array $plan_groups, array $existing_gates ): array {
+		$superseding = [];
+		foreach ( $plan_groups as $group ) {
+			$gate_title = self::gate_title( $group );
+			$gate_key   = trim( strtolower( $gate_title ) );
+			if ( array_key_exists( $gate_key, $existing_gates ) ) {
+				continue;
+			}
+			$superseded = self::find_superseded_gates( $group, $gate_key, $existing_gates );
+			if ( ! empty( $superseded ) ) {
+				$superseding[ $gate_title ] = $superseded;
+			}
+		}
+		return $superseding;
 	}
 
 	/**

@@ -580,15 +580,16 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 	/**
 	 * Create a premium newsletter gate restricting the given lists.
 	 *
-	 * @param int[] $list_ids     Newsletter list post IDs.
-	 * @param bool  $has_purchase Whether to activate paid access with a product rule.
+	 * @param int[]  $list_ids     Newsletter list post IDs.
+	 * @param bool   $has_purchase Whether to activate paid access with a product rule.
+	 * @param string $title        The gate title.
 	 *
 	 * @return int The gate post ID.
 	 */
-	private function create_premium_gate( array $list_ids, bool $has_purchase = false ): int {
+	private function create_premium_gate( array $list_ids, bool $has_purchase = false, string $title = 'Premium fixture' ): int {
 		return \Newspack\Content_Gate::create_gate(
 			[
-				'title'               => 'Premium fixture',
+				'title'               => $title,
 				'status'              => 'publish',
 				'content_rules'       => [
 					[
@@ -1037,6 +1038,98 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * The pre-flight prompt fires once for every group that would supersede an
+	 * existing gate, so it has to find them all before the first write.
+	 */
+	public function test_find_superseding_groups_names_what_each_merged_group_supersedes() {
+		$plan_groups = [
+			'[1]' => [ $this->make_named_plan( 'Plan A' ), $this->make_named_plan( 'Plan B' ) ],
+		];
+
+		$superseding = $this->invoke_private_static(
+			'find_superseding_groups',
+			[
+				$plan_groups,
+				[
+					'plan a' => 11,
+					'plan b' => 22,
+				],
+			]
+		);
+
+		$this->assertSame(
+			[
+				'Plan A | Plan B' => [
+					'plan a' => 11,
+					'plan b' => 22,
+				],
+			],
+			$superseding
+		);
+	}
+
+	/**
+	 * A group whose own title already exists updates that gate rather than creating a
+	 * second one, so it supersedes nothing and must not raise a prompt.
+	 */
+	public function test_find_superseding_groups_skips_a_group_that_updates_its_own_gate() {
+		$plan_groups = [
+			'[1]' => [ $this->make_named_plan( 'Plan A' ) ],
+		];
+
+		$this->assertSame(
+			[],
+			$this->invoke_private_static( 'find_superseding_groups', [ $plan_groups, [ 'plan a' => 11 ] ] )
+		);
+	}
+
+	/**
+	 * Two same-named plans restricting different lists land in different groups and
+	 * resolve to one gate title. The second group would take the update branch, and
+	 * update_gate_content_rules() replaces rather than merges — so the first group's
+	 * lists would end up behind no gate at all while both rows reported as processed.
+	 * The collision is computable before any write, so it is found here.
+	 */
+	public function test_find_colliding_gate_titles_fires_for_two_groups_sharing_a_title() {
+		$plan_groups = [
+			'[1]' => [ $this->make_payload_plan( 'purchase', [], [ $this->list_a ], 'Premium' ) ],
+			'[2]' => [ $this->make_payload_plan( 'purchase', [], [ $this->list_b ], 'premium' ) ],
+		];
+
+		$this->assertSame(
+			[ 'Premium' ],
+			$this->invoke_private_static( 'find_colliding_gate_titles', [ $plan_groups ] )
+		);
+	}
+
+	/**
+	 * One group cannot collide with itself.
+	 */
+	public function test_find_colliding_gate_titles_is_empty_for_a_single_group() {
+		$plan_groups = [
+			'[1]' => [ $this->make_payload_plan( 'purchase', [], [ $this->list_a ], 'Premium' ) ],
+		];
+
+		$this->assertSame( [], $this->invoke_private_static( 'find_colliding_gate_titles', [ $plan_groups ] ) );
+	}
+
+	/**
+	 * Distinct titles name distinct gates, which is the ordinary multi-gate run — it
+	 * must not be stopped.
+	 */
+	public function test_find_colliding_gate_titles_is_empty_for_distinct_titles() {
+		$plan_groups = [
+			'[1]' => [ $this->make_payload_plan( 'purchase', [], [ $this->list_a ], 'Premium' ) ],
+			'[2]' => [ $this->make_payload_plan( 'purchase', [], [ $this->list_b ], 'Insider' ) ],
+		];
+
+		$this->assertSame( [], $this->invoke_private_static( 'find_colliding_gate_titles', [ $plan_groups ] ) );
+	}
+
+
+
+
+	/**
 	 * WP-CLI strips a bare `--plan` before the command runs, so the command sees no
 	 * plan at all. The raw argv is the only place the mistake is still visible.
 	 */
@@ -1110,5 +1203,29 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 		$this->expectExceptionMessage( 'WooCommerce Memberships is not active' );
 
 		$migration->migrate_premium_newsletters( [], [ 'plan' => '12' ] );
+	}
+
+	/**
+	 * WP_CLI::confirm() reads STDIN, and at EOF it exits with status 0 and no message
+	 * — so an `ssh host "wp newspack migrate-…"` run would stop at the prompt having
+	 * already written every gate before it, and report success. With no terminal and
+	 * no --yes, the prompt must never be asked.
+	 */
+	public function test_prompt_is_unanswerable_without_a_terminal_or_yes() {
+		$this->assertTrue( $this->invoke_private_static( 'prompt_is_unanswerable', [ [], false ] ) );
+	}
+
+	/**
+	 * --yes is the documented way to run unattended, so it answers the prompt.
+	 */
+	public function test_prompt_is_answerable_with_yes() {
+		$this->assertFalse( $this->invoke_private_static( 'prompt_is_unanswerable', [ [ 'yes' => true ], false ] ) );
+	}
+
+	/**
+	 * An operator at a terminal can answer, so the prompt is asked as usual.
+	 */
+	public function test_prompt_is_answerable_at_a_terminal() {
+		$this->assertFalse( $this->invoke_private_static( 'prompt_is_unanswerable', [ [], true ] ) );
 	}
 }
