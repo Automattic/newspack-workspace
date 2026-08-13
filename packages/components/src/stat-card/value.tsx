@@ -19,8 +19,8 @@ import type { StatCardValueProps, StatCardValueVariant } from './types';
 const variants: StatCardValueVariant[] = [ 'figure', 'text' ];
 
 const Value = ( { value, valueLabel, variant = 'figure', className }: StatCardValueProps ) => {
-	// The hero scale is a container query on the root, so a value rendered outside
-	// one would size against whatever container it happened to land in.
+	// The hero scale is a container query on the root, so a value rendered loose
+	// would size against whichever container it landed in.
 	useStatCardContext();
 
 	useEffect( () => {
@@ -40,7 +40,7 @@ const Value = ( { value, valueLabel, variant = 'figure', className }: StatCardVa
 		<span className={ classnames( 'newspack-stat-card__value', 'text' === variant && 'newspack-stat-card__value--text', className ) }>
 			{ spoken ? (
 				<>
-					{ /* Hidden rather than labelled: ARIA prohibits naming a generic element, and `role="img"` makes screen readers announce a graphic. */ }
+					{ /* Hidden, not labelled: ARIA forbids naming a generic element, and `role="img"` announces a graphic. */ }
 					<span aria-hidden="true">{ shown }</span>
 					<span className="screen-reader-text">{ spoken }</span>
 				</>

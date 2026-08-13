@@ -25,8 +25,8 @@ const headings = {
 const Label = ( { suffix, heading, className, children }: StatCardLabelProps ) => {
 	const context = useStatCardContext();
 	const level = ( heading ?? context.heading ) as StatCardHeadingLevel;
-	// Most of this package's consumers are untyped JS, where an out-of-range
-	// level would otherwise render an <h7>, which carries no heading role.
+	// Consumers are largely untyped JS, where an out-of-range level would
+	// otherwise render an <h7>, which carries no heading role at all.
 	const Heading = headings[ level ] || headings[ 3 ];
 
 	useEffect( () => {

@@ -15,8 +15,7 @@ import { useStatCardContext } from './context';
 import type { StatCardFooterProps } from './types';
 
 // A run of text shares one wrapper, so `Applies to { count } products` is one
-// sentence rather than three stacked paragraphs. Elements pass through, which
-// is how an action lands under the description.
+// sentence rather than three stacked paragraphs.
 const asParts = ( children: React.ReactNode ) => {
 	const parts: React.ReactNode[] = [];
 	let text: React.ReactNode[] = [];

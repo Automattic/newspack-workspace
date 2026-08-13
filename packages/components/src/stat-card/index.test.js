@@ -18,8 +18,8 @@ const renderOrphan = node => {
 };
 
 describe( 'StatCard.Root', () => {
-	// style.scss puts container-type on this class, and the hero scale is a
-	// container query against it, so losing the class silently resizes the figure.
+	// The hero scale is a container query against this class, so losing it
+	// silently resizes the figure.
 	it( 'carries the class the container query is scoped to', () => {
 		const { container } = render(
 			<StatCard.Root>
@@ -91,7 +91,6 @@ describe( 'StatCard.Label', () => {
 		expect( screen.getByRole( 'heading', { level: 2, name: 'Subscribers reached' } ) ).toBeInTheDocument();
 	} );
 
-	// Untyped consumers can pass anything; an <h7> would carry no heading role.
 	it( 'falls back to h3 for a level outside 2-6', () => {
 		const consoleWarn = jest.spyOn( console, 'warn' ).mockImplementation( () => {} );
 		render(
@@ -104,8 +103,7 @@ describe( 'StatCard.Label', () => {
 		consoleWarn.mockRestore();
 	} );
 
-	// Inside the heading, the control's text would join the heading's accessible
-	// name and the document outline.
+	// Inside the heading, the control's text would join its accessible name.
 	it( 'renders the suffix beside the heading rather than inside it', () => {
 		render(
 			<StatCard.Root>
@@ -202,8 +200,6 @@ describe( 'StatCard.Value', () => {
 		expect( screen.getByText( 'Not applicable' ) ).toHaveClass( 'screen-reader-text' );
 	} );
 
-	// role="img" makes NVDA and VoiceOver announce "graphic" for a typographic
-	// placeholder, which is why the glyph is hidden and named in text instead.
 	it( 'does not expose the glyph as an image', () => {
 		render(
 			<StatCard.Root>
@@ -394,8 +390,7 @@ describe( 'StatCard.Footer', () => {
 		expect( container.querySelector( '.newspack-stat-card__description' ) ).not.toBeInTheDocument();
 	} );
 
-	// The documented escape hatch for a description carrying inline markup,
-	// which would otherwise be split into a block per child.
+	// The documented escape hatch: inline markup would otherwise split into a block per child.
 	it( 'passes a self-wrapped description through as one paragraph', () => {
 		const { container } = render(
 			<StatCard.Root>
