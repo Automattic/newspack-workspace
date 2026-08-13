@@ -74,17 +74,23 @@ class Institution {
 		\register_post_type(
 			self::POST_TYPE,
 			[
-				'label'        => __( 'Institutions', 'newspack-plugin' ),
-				'public'       => false,
-				'show_ui'      => false,
-				'show_in_menu' => false,
-				'show_in_rest' => true,
-				'supports'     => [ 'title', 'excerpt', 'thumbnail', 'custom-fields' ],
+				'label'                 => __( 'Institutions', 'newspack-plugin' ),
+				'public'                => false,
+				'show_ui'               => false,
+				'show_in_menu'          => false,
+				'show_in_rest'          => true,
+				'supports'              => [ 'title', 'excerpt', 'thumbnail', 'custom-fields' ],
 				/**
 				 * Institutions effectively grant access, so restrict all CRUD operations
 				 * (including via REST) to the `manage_options` user capability.
 				 */
-				'capabilities' => $capabilities,
+				'capabilities'          => $capabilities,
+				/**
+				 * The capability map above governs writes. Reads of a published
+				 * post bypass it in core, so the read gate lives in this
+				 * controller.
+				 */
+				'rest_controller_class' => Institution_REST_Controller::class,
 			]
 		);
 	}
