@@ -788,20 +788,20 @@ class Newspack_Test_Guest_Contributor_Role extends WP_UnitTestCase {
 		wp_set_current_user( $admin_id );
 		require_once ABSPATH . 'wp-admin/includes/user.php';
 
-		$_POST = array_merge(
-			$_POST,
-			[
-				'action'     => 'createuser',
-				'user_login' => 'Integration GC',
-				'email'      => '',
-				'first_name' => '',
-				'last_name'  => '',
-				'url'        => '',
-				'pass1'      => 'S0me-Str0ng-Pass!',
-				'pass2'      => 'S0me-Str0ng-Pass!',
-				'role'       => Guest_Contributor_Role::CONTRIBUTOR_NO_EDIT_ROLE_NAME,
-			]
-		);
+		// The test framework clears $_POST in set_up(), so assign directly —
+		// reading the superglobal (e.g. via array_merge) trips the
+		// nonce-verification sniff, and there is nothing to merge with.
+		$_POST = [
+			'action'     => 'createuser',
+			'user_login' => 'Integration GC',
+			'email'      => '',
+			'first_name' => '',
+			'last_name'  => '',
+			'url'        => '',
+			'pass1'      => 'S0me-Str0ng-Pass!',
+			'pass2'      => 'S0me-Str0ng-Pass!',
+			'role'       => Guest_Contributor_Role::CONTRIBUTOR_NO_EDIT_ROLE_NAME,
+		];
 
 		$result = edit_user();
 		$this->assertIsInt( $result, 'edit_user() must create a Guest Contributor with an empty email on the running core version.' );
