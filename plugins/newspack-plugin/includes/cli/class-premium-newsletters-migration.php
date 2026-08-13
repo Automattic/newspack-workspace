@@ -228,6 +228,8 @@ class Premium_Newsletters_Migration {
 
 		// Every group's title is unique (the collision check above errors out
 		// otherwise), so the write loop can treat a title as naming one gate.
+		$titles_written = array_fill_keys( array_map( fn( $payload ) => trim( strtolower( $payload['title'] ) ), $payloads ), true );
+
 		$progress = \WP_CLI\Utils\make_progress_bar( 'Migrating premium newsletter gates', $group_count );
 
 		foreach ( $payloads as $payload ) {
@@ -336,6 +338,9 @@ class Premium_Newsletters_Migration {
 			),
 			[ 'Plan Name', 'Action', 'Gate ID', 'Lists', 'Access Type' ]
 		);
+
+		WP_CLI::line( '' );
+		self::report_stale_gates( $titles_written, $dry_run, (bool) $plan_id );
 
 		WP_CLI::line( '' );
 		self::report_auto_signup( array_values( array_unique( $migrated_lists ) ), $dry_run, (bool) $plan_id );
@@ -847,6 +852,78 @@ class Premium_Newsletters_Migration {
 			}
 		}
 		return $superseded;
+	}
+
+	/**
+	 * Published premium newsletter gates whose titles this run did not write.
+	 *
+	 * @param array[]            $gates        Gate descriptors from Content_Gate::get_gates(),
+	 *                                         each carrying 'id' and 'title'.
+	 * @param array<string,bool> $written_keys Lower-cased gate titles this run wrote, as keys.
+	 *
+	 * @return array[] The untouched gates, each [ 'id' => int, 'title' => string ].
+	 */
+	private static function find_stale_newsletter_gates( array $gates, array $written_keys ): array {
+		$stale = [];
+		foreach ( $gates as $gate ) {
+			$key = trim( strtolower( $gate['title'] ?? '' ) );
+			if ( isset( $written_keys[ $key ] ) ) {
+				continue;
+			}
+			$stale[] = [
+				'id'    => (int) $gate['id'],
+				'title' => (string) ( $gate['title'] ?? '' ),
+			];
+		}
+		return $stale;
+	}
+
+	/**
+	 * Name every published premium newsletter gate this run left untouched.
+	 *
+	 * A gate this run did not write is a gate no current plan accounts for: the plans
+	 * behind it were renamed, regrouped, unpublished or deleted since the gate was
+	 * created. It keeps restricting its lists regardless, and is_post_restricted()
+	 * stops at the first gate that restricts — so a stale, stricter gate beats the
+	 * gate this run wrote. On a newsletter gate that is not a paywall:
+	 * Premium_Newsletters::check_access() unsubscribes the reader from the list at the
+	 * ESP, so a reader silently loses a newsletter they pay for. Only the operator can
+	 * tell which of these are wanted, so they are named rather than touched.
+	 *
+	 * The gate list is re-read rather than taken from the pre-loop snapshot. Either
+	 * source gives the same answer — every gate this run created carries a title in
+	 * $written_keys and is filtered out — so a warm get_gates() cache cannot change
+	 * the outcome.
+	 *
+	 * @param array<string,bool> $written_keys Lower-cased gate titles this run wrote, as keys.
+	 * @param bool               $dry_run      Whether this is a dry run.
+	 * @param bool               $plan_scoped  Whether the run was narrowed with --plan.
+	 *
+	 * @return void
+	 */
+	private static function report_stale_gates( array $written_keys, bool $dry_run, bool $plan_scoped = false ) {
+		$stale = self::find_stale_newsletter_gates(
+			\Newspack\Content_Gate::get_gates( \Newspack\Content_Gate::GATE_CPT, 'publish', true ),
+			$written_keys
+		);
+		if ( empty( $stale ) ) {
+			return;
+		}
+		WP_CLI::warning(
+			sprintf(
+				'%d published premium newsletter gate(s) %s by this run, and still restrict their lists: %s. The first gate that restricts wins, so one of these can override a gate this run wrote — and a restricted premium newsletter unsubscribes the reader at the ESP. Check each one and retire the ones no plan accounts for.%s',
+				count( $stale ),
+				$dry_run ? 'would not be written' : 'were not written',
+				implode(
+					', ',
+					array_map(
+						fn( $gate ) => sprintf( '"%s" (gate %d)', $gate['title'], $gate['id'] ),
+						$stale
+					)
+				),
+				$plan_scoped ? ' A --plan run writes one gate, so every other gate on the site is listed here.' : ''
+			)
+		);
 	}
 
 	/**

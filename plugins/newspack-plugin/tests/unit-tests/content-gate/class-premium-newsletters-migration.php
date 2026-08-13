@@ -1126,8 +1126,67 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 		$this->assertSame( [], $this->invoke_private_static( 'find_colliding_gate_titles', [ $plan_groups ] ) );
 	}
 
+	/**
+	 * A published premium newsletter gate no group wrote is a gate no current plan
+	 * accounts for. It keeps restricting its lists, and the first restricting gate
+	 * wins — so it has to be named. Gates in the content bucket are somebody else's
+	 * business and must not be dragged in.
+	 */
+	public function test_report_stale_gates_names_an_untouched_newsletter_gate() {
+		$stale_id = $this->create_premium_gate( [ $this->list_a ], false, 'Stale gate' );
+		\Newspack\Content_Gate::create_gate(
+			[
+				'title'  => 'Plain content gate',
+				'status' => 'publish',
+			]
+		);
 
+		$this->invoke_private_static( 'report_stale_gates', [ [], false, false ] );
 
+		$warnings = implode( "\n", \WP_CLI::$warnings );
+		$this->assertStringContainsString( sprintf( '"Stale gate" (gate %d)', $stale_id ), $warnings );
+		$this->assertStringNotContainsString( 'Plain content gate', $warnings );
+	}
+
+	/**
+	 * A gate this run wrote is accounted for, so reporting it would be noise that
+	 * buries the gates that matter.
+	 */
+	public function test_report_stale_gates_ignores_a_gate_this_run_wrote() {
+		$this->create_premium_gate( [ $this->list_a ], false, 'Written gate' );
+
+		$this->invoke_private_static( 'report_stale_gates', [ [ 'written gate' => true ], false, false ] );
+
+		$this->assertSame( [], \WP_CLI::$warnings );
+	}
+
+	/**
+	 * The diff is by title, and titles are matched case-insensitively everywhere else
+	 * in this command; a casing difference must not turn a written gate into a stale
+	 * one.
+	 */
+	public function test_find_stale_newsletter_gates_matches_titles_case_insensitively() {
+		$gates = [
+			[
+				'id'    => 11,
+				'title' => 'Written Gate',
+			],
+			[
+				'id'    => 22,
+				'title' => 'Untouched Gate',
+			],
+		];
+
+		$this->assertSame(
+			[
+				[
+					'id'    => 22,
+					'title' => 'Untouched Gate',
+				],
+			],
+			$this->invoke_private_static( 'find_stale_newsletter_gates', [ $gates, [ 'written gate' => true ] ] )
+		);
+	}
 
 	/**
 	 * WP-CLI strips a bare `--plan` before the command runs, so the command sees no
