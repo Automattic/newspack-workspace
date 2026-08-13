@@ -112,6 +112,10 @@ class Premium_Newsletters_Migration {
 			WP_CLI::error( 'Newspack Newsletters is not active, so there are no newsletter lists to migrate. Aborting.' );
 		}
 
+		if ( ! \Newspack\Content_Gate::is_newspack_feature_enabled() ) {
+			WP_CLI::warning( 'The content gates feature (NEWSPACK_CONTENT_GATES) is not enabled on this site: premium newsletter gates will be created but will remain dormant until it is enabled.' );
+		}
+
 		if ( $dry_run ) {
 			WP_CLI::line( '' );
 			WP_CLI::line( '*** DRY RUN MODE — no data will be modified. Pass --live to write. ***' );
