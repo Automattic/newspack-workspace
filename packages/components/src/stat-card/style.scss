@@ -2,10 +2,9 @@
 @use "~@wordpress/base-styles/variables" as wp-vars;
 @use "~@wordpress/base-styles/mixins" as wp-mixins;
 @use "../../../colors/colors.module" as colors;
+@use "../variables" as np-vars;
 
 $stat-card-min-height: wp-vars.$grid-unit * 21;
-$stat-card-value-size: 44px;
-$stat-card-value-size-min: 20px;
 
 .newspack-stat-card {
 	--wp-admin-theme-color: #{colors.$primary-600};
@@ -44,11 +43,11 @@ $stat-card-value-size-min: 20px;
 
 	&__value {
 		color: var(--wp-admin-theme-color);
-		font-size: $stat-card-value-size;
-		font-size: clamp(#{$stat-card-value-size-min}, 14cqi, #{$stat-card-value-size});
+		font-size: np-vars.$font-size-3x-large;
+		font-size: clamp(#{wp-vars.$font-size-x-large}, 14cqi, #{np-vars.$font-size-3x-large});
 		font-variant-numeric: tabular-nums;
 		font-weight: wp-vars.$font-weight-medium;
-		line-height: 1;
+		line-height: np-vars.$font-line-height-3x-large;
 
 		&--text {
 			font-size: wp-vars.$font-size-x-large;

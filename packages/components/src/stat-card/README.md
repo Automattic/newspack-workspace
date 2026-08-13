@@ -72,10 +72,17 @@ to a zero that genuinely is one. `undefined` takes the same path, so
 
 ## Scale and the container query
 
-The hero figure is `clamp( 20px, 14cqi, 44px )`, against a
+The hero figure is `clamp( 20px, 14cqi, 48px )`, against a
 `container-type: inline-size` on `Root`. A four-figure number in a narrow column
 shrinks to fit rather than overflowing or forcing a smaller fixed size on every
 card in the row, and the floor stops it shrinking under its own label.
+
+The ceiling and its ratio are `$font-size-3x-large` and
+`$font-line-height-3x-large` in the package's `src/_variables.scss`, which
+carries the steps this package needs above the `@wordpress/base-styles` scale.
+The line height is unitless on purpose: the font size is fluid, so a fixed
+value from the base-styles pairs would drift out of proportion as the figure
+shrinks.
 
 That query is why the parts throw outside a `Root`: a `StatCard.Value` rendered
 loose would size against whichever container it happened to land in, which fails
