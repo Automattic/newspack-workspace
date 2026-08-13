@@ -60,6 +60,13 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * The argument vector PHPUnit was invoked with, restored after each test.
+	 *
+	 * @var array|null
+	 */
+	private $original_argv;
+
+	/**
 	 * Register the list post type, create two lists, and reset the WP_CLI mock's
 	 * recorded output so assertions in one test cannot see another's messages.
 	 */
@@ -69,13 +76,21 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 		$this->list_a = self::factory()->post->create( [ 'post_type' => Subscription_Lists::CPT ] );
 		$this->list_b = self::factory()->post->create( [ 'post_type' => Subscription_Lists::CPT ] );
 		$this->product = self::factory()->post->create( [ 'post_type' => 'product' ] );
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Raw argv, kept verbatim so tear_down() can restore it.
+		$this->original_argv = $_SERVER['argv'] ?? null;
 		\WP_CLI::reset();
 	}
 
 	/**
-	 * Unregister the list post type so it does not leak into other test classes.
+	 * Unregister the list post type so it does not leak into other test classes, and
+	 * put back the argument vector the bare-flag tests overwrite.
 	 */
 	public function tear_down() {
+		if ( null === $this->original_argv ) {
+			unset( $_SERVER['argv'] );
+		} else {
+			$_SERVER['argv'] = $this->original_argv;
+		}
 		unregister_post_type( Subscription_Lists::CPT );
 		parent::tear_down();
 	}
@@ -1019,5 +1034,81 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 		$superseded = $this->invoke_private_static( 'find_superseded_gates', [ $group, 'plan a | plan b', [ 'other' => 11 ] ] );
 
 		$this->assertSame( [], $superseded );
+	}
+
+	/**
+	 * WP-CLI strips a bare `--plan` before the command runs, so the command sees no
+	 * plan at all. The raw argv is the only place the mistake is still visible.
+	 */
+	public function test_get_valueless_value_flags_reports_a_bare_plan() {
+		$this->assertSame(
+			[ '--plan' ],
+			Premium_Newsletters_Migration::get_valueless_value_flags( [ 'wp', 'newspack', 'migrate-premium-newsletters', '--plan', '--live' ] )
+		);
+	}
+
+	/**
+	 * A --plan that carries its value is the ordinary invocation and must pass.
+	 */
+	public function test_get_valueless_value_flags_ignores_a_plan_with_a_value() {
+		$this->assertSame(
+			[],
+			Premium_Newsletters_Migration::get_valueless_value_flags( [ 'wp', 'newspack', 'migrate-premium-newsletters', '--plan=12', '--live' ] )
+		);
+	}
+
+	/**
+	 * The guard has to be wired into the command, not merely available: a bare --plan
+	 * with --live would otherwise migrate every plan on the site and write the
+	 * site-wide auto-signup setting.
+	 */
+	public function test_migrate_premium_newsletters_aborts_on_a_bare_plan_flag() {
+		$_SERVER['argv'] = [ 'wp', 'newspack', 'migrate-premium-newsletters', '--plan', '--live' ];
+		$migration       = new Premium_Newsletters_Migration();
+
+		$this->expectException( \WP_CLI_Mock_Exception::class );
+		$this->expectExceptionMessage( 'require a value but arrived without one' );
+
+		$migration->migrate_premium_newsletters( [], [ 'live' => true ] );
+	}
+
+	/**
+	 * PHP's is_numeric() accepts '12.9', which casts to plan 12 — a run narrowed to a plan
+	 * the operator never named.
+	 */
+	public function test_migrate_premium_newsletters_aborts_on_a_fractional_plan() {
+		$migration = new Premium_Newsletters_Migration();
+
+		$this->expectException( \WP_CLI_Mock_Exception::class );
+		$this->expectExceptionMessage( 'Invalid --plan value' );
+
+		$migration->migrate_premium_newsletters( [], [ 'plan' => '12.9' ] );
+	}
+
+	/**
+	 * PHP's is_numeric() accepts '1e2', which casts to plan 100.
+	 */
+	public function test_migrate_premium_newsletters_aborts_on_an_exponent_plan() {
+		$migration = new Premium_Newsletters_Migration();
+
+		$this->expectException( \WP_CLI_Mock_Exception::class );
+		$this->expectExceptionMessage( 'Invalid --plan value' );
+
+		$migration->migrate_premium_newsletters( [], [ 'plan' => '1e2' ] );
+	}
+
+	/**
+	 * A digits-only --plan passes both guards and the run proceeds — reaching, in this
+	 * harness, the WooCommerce Memberships pre-flight. Without this the two guards
+	 * above could pass by rejecting everything.
+	 */
+	public function test_migrate_premium_newsletters_accepts_a_digits_only_plan() {
+		$_SERVER['argv'] = [ 'wp', 'newspack', 'migrate-premium-newsletters', '--plan=12' ];
+		$migration       = new Premium_Newsletters_Migration();
+
+		$this->expectException( \WP_CLI_Mock_Exception::class );
+		$this->expectExceptionMessage( 'WooCommerce Memberships is not active' );
+
+		$migration->migrate_premium_newsletters( [], [ 'plan' => '12' ] );
 	}
 }

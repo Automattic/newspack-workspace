@@ -88,12 +88,20 @@ class Premium_Newsletters_Migration {
 	public function migrate_premium_newsletters( $args, $assoc_args ) {
 		$dry_run = ! (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'live', false );
 
+		// A bare --plan never reaches the validation below: WP-CLI warns and strips it,
+		// so the command sees no plan at all and would run against every plan on the
+		// site. The raw command line is the only place the mistake is still visible.
+		$bare_flags = self::get_valueless_value_flags();
+		if ( ! empty( $bare_flags ) ) {
+			WP_CLI::error( sprintf( 'The following flag(s) require a value but arrived without one: %s. WP-CLI strips a bare flag before the command runs, so the run would widen to every plan on the site — fix the invocation and re-run.', implode( ', ', $bare_flags ) ) );
+		}
+
 		// A mistyped --plan must never silently widen the run to every plan, so an
 		// unusable value is a hard error rather than a fallback to "no filter".
 		$plan_arg = \WP_CLI\Utils\get_flag_value( $assoc_args, 'plan', null );
 		$plan_id  = 0;
 		if ( null !== $plan_arg ) {
-			if ( ! is_numeric( $plan_arg ) || (int) $plan_arg <= 0 ) {
+			if ( ! self::is_valid_plan_arg( $plan_arg ) ) {
 				WP_CLI::error( sprintf( 'Invalid --plan value "%s". Pass a positive membership plan post ID.', $plan_arg ) );
 			}
 			$plan_id = (int) $plan_arg;
@@ -352,6 +360,52 @@ class Premium_Newsletters_Migration {
 				)
 			);
 		}
+	}
+
+	/**
+	 * Value-requiring migrate-premium-newsletters flags found bare (no `=value`) on
+	 * the raw command line.
+	 *
+	 * WP-CLI validates flags against the command synopsis before invoking the command:
+	 * a bare `--plan` draws only a warning, then the flag is stripped and the command
+	 * receives the flag's default — so the in-method guard against an unusable --plan
+	 * value can never fire on a real invocation, and a run the operator scoped to one
+	 * plan would silently widen to every plan on the site (and, under --live, write the
+	 * site-wide auto-signup setting). Reading the raw argv is the only place the
+	 * mistake is still visible.
+	 *
+	 * @param string[]|null $argv Raw argument vector; defaults to $_SERVER['argv'].
+	 *
+	 * @return string[] The value-requiring flags present without a value.
+	 */
+	public static function get_valueless_value_flags( $argv = null ): array {
+		if ( null === $argv ) {
+			$argv = isset( $_SERVER['argv'] ) ? (array) $_SERVER['argv'] : []; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+		}
+		$value_flags = [ '--plan' ];
+		$bare_flags  = [];
+		foreach ( $argv as $token ) {
+			if ( in_array( $token, $value_flags, true ) ) {
+				$bare_flags[] = $token;
+			}
+		}
+		return array_values( array_unique( $bare_flags ) );
+	}
+
+	/**
+	 * Whether a --plan value names a plan post ID.
+	 *
+	 * Uses ctype_digit() rather than is_numeric(): is_numeric() accepts '12.9' and '1e2',
+	 * which cast to 12 and 100 — a run narrowed to a plan the operator never named.
+	 * The value is cast to string first because ctype_digit() reads an integer
+	 * argument between -128 and 255 as a character code, not as digits.
+	 *
+	 * @param mixed $plan_arg The raw --plan value.
+	 *
+	 * @return bool
+	 */
+	private static function is_valid_plan_arg( $plan_arg ): bool {
+		return ctype_digit( (string) $plan_arg ) && (int) $plan_arg > 0;
 	}
 
 	/**

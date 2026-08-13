@@ -47,7 +47,36 @@ class Test_Membership_Gates_Migration extends \WP_UnitTestCase {
 	 */
 	public static function set_up_before_class() {
 		parent::set_up_before_class();
+		require_once dirname( __DIR__, 2 ) . '/mocks/wp-cli-mocks.php';
 		require_once dirname( __DIR__, 2 ) . '/mocks/newsletters-namespaced-mocks.php';
+	}
+
+	/**
+	 * The argument vector PHPUnit was invoked with, restored after each test.
+	 *
+	 * @var array|null
+	 */
+	private $original_argv;
+
+	/**
+	 * Remember the argument vector the bare-flag tests overwrite.
+	 */
+	public function set_up() {
+		parent::set_up();
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Raw argv, kept verbatim so tear_down() can restore it.
+		$this->original_argv = $_SERVER['argv'] ?? null;
+	}
+
+	/**
+	 * Put the argument vector back so it cannot leak into another test class.
+	 */
+	public function tear_down() {
+		if ( null === $this->original_argv ) {
+			unset( $_SERVER['argv'] );
+		} else {
+			$_SERVER['argv'] = $this->original_argv;
+		}
+		parent::tear_down();
 	}
 
 	/**
@@ -973,5 +1002,80 @@ HTML;
 		$superseded = $this->invoke_private_static( 'find_superseded_gates', [ $group, 'plan a | plan b', [ 'other' => 11 ] ] );
 
 		$this->assertSame( [], $superseded );
+	}
+
+	/**
+	 * WP-CLI strips a bare `--plan` before the command runs, so the command sees no
+	 * plan at all. The raw argv is the only place the mistake is still visible.
+	 */
+	public function test_get_valueless_value_flags_reports_a_bare_plan() {
+		$this->assertSame(
+			[ '--plan' ],
+			Membership_Gates_Migration::get_valueless_value_flags( [ 'wp', 'newspack', 'migrate-membership-gates', '--plan', '--live' ] )
+		);
+	}
+
+	/**
+	 * A --plan that carries its value is the ordinary invocation and must pass.
+	 */
+	public function test_get_valueless_value_flags_ignores_a_plan_with_a_value() {
+		$this->assertSame(
+			[],
+			Membership_Gates_Migration::get_valueless_value_flags( [ 'wp', 'newspack', 'migrate-membership-gates', '--plan=12', '--live' ] )
+		);
+	}
+
+	/**
+	 * The guard has to be wired into the command, not merely available: a bare --plan
+	 * with --live would otherwise rewrite every gate on the site.
+	 */
+	public function test_migrate_membership_gates_aborts_on_a_bare_plan_flag() {
+		$_SERVER['argv'] = [ 'wp', 'newspack', 'migrate-membership-gates', '--plan', '--live' ];
+		$migration       = new Membership_Gates_Migration();
+
+		$this->expectException( \WP_CLI_Mock_Exception::class );
+		$this->expectExceptionMessage( 'require a value but arrived without one' );
+
+		$migration->migrate_membership_gates( [], [ 'live' => true ] );
+	}
+
+	/**
+	 * PHP's is_numeric() accepts '12.9', which casts to plan 12 — a run narrowed to a plan
+	 * the operator never named.
+	 */
+	public function test_migrate_membership_gates_aborts_on_a_fractional_plan() {
+		$migration = new Membership_Gates_Migration();
+
+		$this->expectException( \WP_CLI_Mock_Exception::class );
+		$this->expectExceptionMessage( 'Invalid --plan value' );
+
+		$migration->migrate_membership_gates( [], [ 'plan' => '12.9' ] );
+	}
+
+	/**
+	 * PHP's is_numeric() accepts '1e2', which casts to plan 100.
+	 */
+	public function test_migrate_membership_gates_aborts_on_an_exponent_plan() {
+		$migration = new Membership_Gates_Migration();
+
+		$this->expectException( \WP_CLI_Mock_Exception::class );
+		$this->expectExceptionMessage( 'Invalid --plan value' );
+
+		$migration->migrate_membership_gates( [], [ 'plan' => '1e2' ] );
+	}
+
+	/**
+	 * A digits-only --plan passes both guards and the run proceeds — reaching, in this
+	 * harness, the WooCommerce Memberships pre-flight. Without this the two guards
+	 * above could pass by rejecting everything.
+	 */
+	public function test_migrate_membership_gates_accepts_a_digits_only_plan() {
+		$_SERVER['argv'] = [ 'wp', 'newspack', 'migrate-membership-gates', '--plan=12' ];
+		$migration       = new Membership_Gates_Migration();
+
+		$this->expectException( \WP_CLI_Mock_Exception::class );
+		$this->expectExceptionMessage( 'WooCommerce Memberships is not active' );
+
+		$migration->migrate_membership_gates( [], [ 'plan' => '12' ] );
 	}
 }
