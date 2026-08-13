@@ -636,7 +636,7 @@ final class Newspack_Newsletters_Constant_Contact extends \Newspack_Newsletters_
 			}
 
 			// Prefetch send list info if we have a selected list and/or sublist.
-			$send_lists = $this->get_send_lists(
+			$send_lists = $this->get_send_lists_with_fallback(
 				[
 					'ids'  => $send_list_id ? [ $send_list_id ] : null, // If we have a selected list, make sure to fetch it.
 					'type' => 'list',
