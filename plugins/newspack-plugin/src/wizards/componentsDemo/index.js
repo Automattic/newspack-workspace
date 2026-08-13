@@ -408,7 +408,12 @@ class ComponentsDemo extends Component {
 								<StatCard.Root>
 									<StatCard.Label
 										suffix={
-											<Button icon={ info } size="small" label={ __( 'Averaged across the timeframe.', 'newspack-plugin' ) } />
+											<Button
+												icon={ info }
+												size="small"
+												className="newspack-stat-card__label-action"
+												label={ __( 'Averaged across the timeframe.', 'newspack-plugin' ) }
+											/>
 										}
 									>
 										{ __( 'Average order value', 'newspack-plugin' ) }

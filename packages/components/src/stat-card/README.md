@@ -156,6 +156,18 @@ container query. Forwards a ref to the card element, and passes any other props
 `suffix` sits next to the heading rather than inside it, so a control there stays
 out of the document outline and off the heading's accessible name.
 
+An icon button in that slot keeps the label row's height by taking the
+`newspack-stat-card__label-action` class, which trims the 2px a 24px control
+otherwise adds to a 20px line:
+
+```jsx
+<StatCard.Label
+	suffix={ <Button icon={ info } size="small" className="newspack-stat-card__label-action" label={ … } /> }
+>
+	{ __( 'Average order value', 'newspack-plugin' ) }
+</StatCard.Label>
+```
+
 A level outside 2–6 falls back to `3` and warns outside production, rather than
 rendering an element that is not a heading at all.
 

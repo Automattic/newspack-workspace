@@ -5,6 +5,7 @@
 @use "../variables" as np-vars;
 
 $stat-card-min-height: wp-vars.$grid-unit * 21;
+$stat-card-label-action-inset: -2px;
 
 .newspack-stat-card {
 	--wp-admin-theme-color: #{colors.$primary-600};
@@ -23,6 +24,11 @@ $stat-card-min-height: wp-vars.$grid-unit * 21;
 
 	&__content {
 		flex: 1;
+	}
+
+	&__label-action,
+	&__label-action.components-button {
+		margin: $stat-card-label-action-inset 0;
 	}
 
 	&__label-text {
