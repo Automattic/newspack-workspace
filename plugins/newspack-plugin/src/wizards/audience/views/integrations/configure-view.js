@@ -122,7 +122,12 @@ export const reconcileOperators = ( currentMap, options ) => {
 		if ( valid.some( o => o.value === map[ key ] ) ) {
 			return;
 		}
-		const fallback = valid[ 0 ]?.value;
+		// Prefer exact matching when it is on offer: the first option can be an
+		// operator with side effects (date_range makes the pull rewrite stored
+		// reader values), and a repair folded into an unrelated save must never
+		// opt the publisher into one — mirroring how the stored-schema overlay
+		// pins a legacy entry to exact matching.
+		const fallback = valid.some( o => 'default' === o.value ) ? 'default' : valid[ 0 ]?.value;
 		if ( undefined !== fallback && fallback !== map[ key ] ) {
 			next[ key ] = fallback;
 			changed = true;

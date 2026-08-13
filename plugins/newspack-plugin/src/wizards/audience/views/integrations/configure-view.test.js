@@ -436,6 +436,16 @@ describe( 'incoming-field operators', () => {
 		expect( reconcileOperators( map, options ) ).toBe( map );
 	} );
 
+	it( 'repairs an out-of-set operator on a date field to Text, not Date range', () => {
+		// 'range' was choosable for these fields before value types existed.
+		// Falling back to the first offered option would silently opt the field
+		// into date-range matching — and pull-time value rewriting — on an
+		// unrelated save; exact matching is the repair that changes nothing.
+		const map = { last_gift_date: 'range' };
+		const options = [ { value: 'last_gift_date', value_type: 'date' } ];
+		expect( reconcileOperators( map, options ) ).toEqual( { last_gift_date: 'default' } );
+	} );
+
 	it( 'toggles a field in/out of the operator map using the field default', () => {
 		const option = { value: 'AMOUNT', has_options: false, matching_function: 'default' };
 		expect( toggleField( {}, option, true ) ).toEqual( { AMOUNT: 'default' } );
