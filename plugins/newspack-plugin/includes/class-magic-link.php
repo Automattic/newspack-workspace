@@ -438,6 +438,14 @@ final class Magic_Link {
 
 		$target = \wp_parse_url( $candidate );
 
+		// wp_parse_url() returns false on a malformed URL. wp_validate_redirect()
+		// should already have rejected anything that would reach this point
+		// malformed, but this is a security helper, so its fail-closed guarantee
+		// must hold even if that upstream assumption ever changes.
+		if ( false === $target ) {
+			return \home_url();
+		}
+
 		// A host-less result is a same-site path; wp_validate_redirect has already
 		// rejected the protocol-relative and backslash shapes that only look
 		// path-like.
