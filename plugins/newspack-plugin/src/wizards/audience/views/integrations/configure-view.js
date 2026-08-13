@@ -9,7 +9,7 @@ import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
 /**
  * Internal dependencies
  */
-import { Accordion, AccordionPanel, Divider, Grid, SectionHeader, useUnsavedChangesDialog } from '../../../../../packages/components/src';
+import { CollapsibleGroup, Divider, Grid, SectionHeader, useUnsavedChangesDialog } from '../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import WizardsTab from '../../../wizards-tab';
 import { SettingsField } from './settings-field';
@@ -547,12 +547,12 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 										/>
 									) ) }
 								{ outboundEnabled && outboundField && (
-									<Accordion hideSingleTitle>
+									<CollapsibleGroup hideSingleTitle>
 										{ ( outboundField.grouped_options || [] ).map( ( group, index ) => {
 											const currentValue = getFieldValue( outboundField );
 											const selected = Array.isArray( currentValue ) ? currentValue : [];
 											return (
-												<AccordionPanel
+												<CollapsibleGroup.Item
 													key={ `${ index }-${ group.section }` }
 													title={ group.section }
 													defaultOpen={ index === 0 }
@@ -570,10 +570,10 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 															/>
 														) ) }
 													</Grid>
-												</AccordionPanel>
+												</CollapsibleGroup.Item>
 											);
 										} ) }
-									</Accordion>
+									</CollapsibleGroup>
 								) }
 							</Grid>
 						</Grid>

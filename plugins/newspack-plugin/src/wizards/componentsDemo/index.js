@@ -27,8 +27,6 @@ import { Icon, plus, postList, settings } from '@wordpress/icons';
  * Internal dependencies.
  */
 import {
-	Accordion,
-	AccordionPanel,
 	ActionCard,
 	AutocompleteWithSuggestions,
 	AutocompleteWithLatestPosts,
@@ -38,6 +36,7 @@ import {
 	CardFeature,
 	CardForm,
 	CardSettingsGroup,
+	CollapsibleGroup,
 	ColorPicker,
 	Footer,
 	Grid,
@@ -389,36 +388,36 @@ class ComponentsDemo extends Component {
 							</Drawer.Root>
 						</Card>
 						<Card>
-							<h2>{ __( 'Accordion', 'newspack-plugin' ) }</h2>
+							<h2>{ __( 'CollapsibleGroup', 'newspack-plugin' ) }</h2>
 							<p>
 								{ __(
-									'A stack of independently collapsible panels, separated by dividers and sitting flush with the surrounding column.',
+									'A stack of independently collapsible items, separated by dividers and sitting flush with the surrounding column. A collapsed item stays reachable by the browser find-in-page, which expands it to reveal the match.',
 									'newspack-plugin'
 								) }
 							</p>
-							<Accordion>
-								<AccordionPanel title={ __( 'Contact fields', 'newspack-plugin' ) } defaultOpen>
-									<p>{ __( 'A panel set to defaultOpen starts expanded.', 'newspack-plugin' ) }</p>
-								</AccordionPanel>
-								<AccordionPanel title={ __( 'Tags and segments', 'newspack-plugin' ) }>
-									<p>{ __( 'Panels are independent: opening one does not close the others.', 'newspack-plugin' ) }</p>
-								</AccordionPanel>
-								<AccordionPanel title={ __( 'Sync options', 'newspack-plugin' ) }>
-									<p>{ __( 'A divider separates each panel from the next, but never trails the last one.', 'newspack-plugin' ) }</p>
-								</AccordionPanel>
-							</Accordion>
-							<h3>{ __( 'Single panel', 'newspack-plugin' ) }</h3>
+							<CollapsibleGroup>
+								<CollapsibleGroup.Item title={ __( 'Contact fields', 'newspack-plugin' ) } defaultOpen>
+									<p>{ __( 'An item set to defaultOpen starts expanded.', 'newspack-plugin' ) }</p>
+								</CollapsibleGroup.Item>
+								<CollapsibleGroup.Item title={ __( 'Tags and segments', 'newspack-plugin' ) }>
+									<p>{ __( 'Items are independent: opening one does not close the others.', 'newspack-plugin' ) }</p>
+								</CollapsibleGroup.Item>
+								<CollapsibleGroup.Item title={ __( 'Sync options', 'newspack-plugin' ) }>
+									<p>{ __( 'A divider separates each item from the next, but never trails the last one.', 'newspack-plugin' ) }</p>
+								</CollapsibleGroup.Item>
+							</CollapsibleGroup>
+							<h3>{ __( 'Single item', 'newspack-plugin' ) }</h3>
 							<p>
 								{ __(
-									'With nothing to collapse against, hideSingleTitle renders a lone panel open and drops its title.',
+									'With nothing to collapse against, hideSingleTitle renders a lone item open and drops its title.',
 									'newspack-plugin'
 								) }
 							</p>
-							<Accordion hideSingleTitle>
-								<AccordionPanel title={ __( 'Contact fields', 'newspack-plugin' ) }>
+							<CollapsibleGroup hideSingleTitle>
+								<CollapsibleGroup.Item title={ __( 'Contact fields', 'newspack-plugin' ) }>
 									<p>{ __( 'This content is always visible.', 'newspack-plugin' ) }</p>
-								</AccordionPanel>
-							</Accordion>
+								</CollapsibleGroup.Item>
+							</CollapsibleGroup>
 						</Card>
 						<Card>
 							<h2>{ __( 'Notice', 'newspack-plugin' ) }</h2>

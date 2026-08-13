@@ -46,9 +46,8 @@ jest.mock( '@wordpress/components', () => ( {
 	),
 } ) );
 jest.mock( '../../../../../packages/components/src', () => ( {
-	Accordion: ( { children } ) => children,
-	AccordionPanel: ( { children } ) => children,
 	Button: ( { children } ) => children,
+	CollapsibleGroup: Object.assign( ( { children } ) => children, { Item: ( { children } ) => children } ),
 	// Section dividers pass alignment="full-width"; the divider under a section
 	// toggle does not, so the stub tags them apart for the tests that assert on
 	// whether a toggle divider has anything to divide.
