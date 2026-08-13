@@ -31,10 +31,10 @@ class Institution_REST_Controller extends \WP_REST_Posts_Controller {
 	/**
 	 * Capability required to write to institutions, matching the post type's
 	 * capability map in class-institution.php (every write capability there
-	 * resolves to this one). Not consulted directly by this class today — the
-	 * write gate below defers to the parent's own resolution of that map. A
-	 * later task also uses this constant to limit which callers see the
-	 * stored access rules in read responses.
+	 * resolves to this one). Not consulted directly by the write gate below —
+	 * that defers to the parent's own resolution of the map. Also the
+	 * capability that gates the stored access-rule fields in read responses;
+	 * see prepare_item_for_response() below.
 	 *
 	 * @var string
 	 */
@@ -137,5 +137,34 @@ class Institution_REST_Controller extends \WP_REST_Posts_Controller {
 		}
 
 		return parent::check_update_permission( $post );
+	}
+
+	/**
+	 * Withhold the stored fields from callers who may not see them.
+	 *
+	 * Every registered field is removed rather than an enumerated list. An
+	 * enumerated list is a denylist: a field registered later would be returned
+	 * by default, and nothing would fail. The consumers that read this route
+	 * without the rules capability use the id and title only, so removing the
+	 * whole object costs them nothing.
+	 *
+	 * @param \WP_Post         $item    Post object.
+	 * @param \WP_REST_Request $request Request object.
+	 * @return \WP_REST_Response
+	 */
+	public function prepare_item_for_response( $item, $request ) {
+		$response = parent::prepare_item_for_response( $item, $request );
+
+		if ( \current_user_can( self::RULES_CAPABILITY ) ) {
+			return $response;
+		}
+
+		$data = $response->get_data();
+		if ( isset( $data['meta'] ) ) {
+			$data['meta'] = [];
+			$response->set_data( $data );
+		}
+
+		return $response;
 	}
 }

@@ -63,6 +63,15 @@ class Newspack_Test_Institution_REST_Controller extends WP_UnitTestCase {
 	 * The rest_api_init action runs per test rather than once for the class:
 	 * WP's test framework restores a once-per-process $wp_filter snapshot
 	 * between tests, so anything registered in setUpBeforeClass silently decays.
+	 *
+	 * WP_UnitTestCase_Base::tear_down() also calls unregister_all_meta_keys()
+	 * after every test, which clears the global meta-key registry for every
+	 * post type, not only this one. Institution::register_meta() only runs
+	 * once, on the process-wide 'init' action fired at bootstrap, so without
+	 * the explicit call below the first test in the file would see the
+	 * registered meta fields and every test after it would not: the fields
+	 * registered via register_post_meta() would already have been wiped by
+	 * the previous test's tear-down.
 	 */
 	public function set_up() {
 		parent::set_up();
@@ -82,6 +91,7 @@ class Newspack_Test_Institution_REST_Controller extends WP_UnitTestCase {
 		update_post_meta( $this->institution_id, Institution::META_PREFIX . 'email_domain', 'test-university.example' );
 		update_post_meta( $this->institution_id, Institution::META_PREFIX . 'ip_range', '10.0.0.0/8' );
 
+		Institution::register_meta();
 		do_action( 'rest_api_init' );
 	}
 
@@ -218,6 +228,51 @@ class Newspack_Test_Institution_REST_Controller extends WP_UnitTestCase {
 		$response = rest_do_request( $request );
 
 		$this->assertSame( 200, $response->get_status() );
+	}
+
+	/**
+	 * A caller without the rules capability sees no stored rules.
+	 */
+	public function test_rules_are_withheld_without_the_rules_capability() {
+		$response = $this->read_collection( $this->editor_id, 'edit' );
+		$data     = $response->get_data();
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( [], $data[0]['meta'], 'No stored field may reach a caller without the rules capability.' );
+	}
+
+	/**
+	 * A caller with the rules capability sees them.
+	 */
+	public function test_rules_are_returned_with_the_rules_capability() {
+		$response = $this->read_collection( $this->admin_id, 'edit' );
+		$data     = $response->get_data();
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( '10.0.0.0/8', $data[0]['meta'][ Institution::META_PREFIX . 'ip_range' ] );
+		$this->assertSame( 'test-university.example', $data[0]['meta'][ Institution::META_PREFIX . 'email_domain' ] );
+	}
+
+	/**
+	 * Field selection cannot sidestep the strip.
+	 *
+	 * Core's rest_filter_response_fields() is hooked to rest_post_dispatch,
+	 * which WP_REST_Server applies in serve_request() and
+	 * serve_batch_request_v1() but NOT in dispatch(). rest_do_request() calls
+	 * dispatch(), so simply setting _fields on a dispatched request never runs
+	 * the filter at all and the test would pass without exercising anything.
+	 * Applying the filter here is what serve_request() would have done.
+	 */
+	public function test_field_selection_cannot_recover_the_rules() {
+		wp_set_current_user( $this->editor_id );
+		$request = new WP_REST_Request( 'GET', $this->route );
+		$request->set_param( 'context', 'edit' );
+		$request->set_param( '_fields', 'meta' );
+
+		$response = rest_filter_response_fields( rest_do_request( $request ), rest_get_server(), $request );
+		$data     = $response->get_data();
+
+		$this->assertSame( [], $data[0]['meta'] );
 	}
 
 	// =========================================================================
