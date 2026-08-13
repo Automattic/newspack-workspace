@@ -969,6 +969,21 @@ abstract class Integration {
 				) {
 					$field->set_matching_function( $raw_data['matching_function'] );
 				}
+				// Same for the source date format: the ESP integration maps it in its
+				// configure_incoming_field(), but nothing else does — without this, a
+				// non-ESP integration declaring a real format in its raw schema would
+				// present '' to the pull and the access-rule evaluator, so values
+				// would be stored un-normalized and the pull log would misreport the
+				// source format as undeclared. Fills the gap only: a format set by
+				// configure_incoming_field() is fresher than the stored snapshot.
+				if (
+					'' === $field->get_date_format()
+					&& isset( $raw_data['date_format'] )
+					&& is_scalar( $raw_data['date_format'] )
+					&& '' !== (string) $raw_data['date_format']
+				) {
+					$field->set_date_format( (string) $raw_data['date_format'] );
+				}
 				$fields[] = $field;
 			}
 		}

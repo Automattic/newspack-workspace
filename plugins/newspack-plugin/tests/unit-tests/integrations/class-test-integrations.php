@@ -2263,6 +2263,23 @@ class Test_Integrations extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A format that parses no year (`m/d`) parses cleanly into the Unix epoch:
+	 * '03/04' becomes a confident, well-formed '1970-03-04' that nothing
+	 * downstream can tell from a real date. Such a format cannot anchor a value
+	 * on a timeline, so it is treated as undeclared — only an already
+	 * ISO-shaped value qualifies.
+	 */
+	public function test_normalize_date_value_treats_year_less_format_as_undeclared() {
+		$this->assertSame( '03/04', Contact_Pull::normalize_date_value( '03/04', 'm/d' ) );
+
+		// The ISO rescue still applies under a year-less format.
+		$this->assertSame( '2026-03-04', Contact_Pull::normalize_date_value( '2026-03-04', 'm/d' ) );
+
+		// An escaped year character is a literal, not a specifier.
+		$this->assertSame( '03/04 Y', Contact_Pull::normalize_date_value( '03/04 Y', 'm/d \\Y' ) );
+	}
+
+	/**
 	 * Fields the declared format doesn't specify must not be filled from "now":
 	 * a datetime field under a date-only source format would otherwise store a
 	 * different ATOM string on every pull — churning Reader_Data writes and
@@ -2322,13 +2339,45 @@ class Test_Integrations extends \WP_UnitTestCase {
 		$fields = $integration->get_enabled_incoming_fields();
 
 		$this->assertCount( 1, $fields );
-		// Asserted on raw data because that is what the overlay writes and what
-		// ESP::configure_incoming_field() reads to call set_date_format(); the base
-		// Incoming_Field constructor does not hydrate typed properties from it.
+		// The raw data is what the overlay writes and what
+		// ESP::configure_incoming_field() reads to call set_date_format().
 		$raw = $fields[0]->get_raw_data();
 		$this->assertSame( 'd/m/Y', $raw['date_format'] );
+		// The read path also re-applies it onto the typed property, so an
+		// integration whose configure_incoming_field() doesn't map the format
+		// still exposes it to the pull and the access-rule evaluator.
+		$this->assertSame( 'd/m/Y', $fields[0]->get_date_format() );
 		// The publisher's stored operator is untouched by the overlay.
 		$this->assertSame( 'date_range', $fields[0]->get_matching_function() );
+	}
+
+	/**
+	 * A stored source format must reach the typed property even when the
+	 * integration's configure_incoming_field() doesn't map it — only the ESP
+	 * integration does. Without the re-apply, a non-ESP integration declaring a
+	 * real format per the README would present '' to the pull and the
+	 * access-rule evaluator: values stored un-normalized, the matcher failing
+	 * closed, and the pull log naming the wrong source format.
+	 */
+	public function test_get_enabled_incoming_fields_applies_stored_date_format_to_the_field() {
+		$integration = new Sample_Integration( 'stored-date-format', 'Stored Date Format' );
+		\update_option(
+			'newspack_integration_incoming_fields_stored-date-format',
+			[
+				'last_gift' => [
+					'key'               => 'last_gift',
+					'name'              => 'Last Gift',
+					'value_type'        => 'date',
+					'matching_function' => 'date_range',
+					'date_format'       => 'd/m/Y',
+				],
+			]
+		);
+
+		$fields = $integration->get_enabled_incoming_fields();
+
+		$this->assertCount( 1, $fields );
+		$this->assertSame( 'd/m/Y', $fields[0]->get_date_format() );
 	}
 
 	/**

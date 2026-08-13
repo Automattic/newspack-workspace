@@ -288,7 +288,11 @@ class Contact_Pull {
 	 *
 	 * @param mixed  $value      Raw value from the integration.
 	 * @param string $format     Source format as a PHP date format string. Empty means
-	 *                           the provider already sends ISO 8601 / Y-m-d.
+	 *                           the provider already sends ISO 8601 / Y-m-d. A format
+	 *                           that parses no year (`m/d`) is treated as undeclared:
+	 *                           it would parse cleanly into the Unix epoch year, and a
+	 *                           confident `1970-03-04` is exactly the wrong answer the
+	 *                           paths below exist to avoid.
 	 * @param string $value_type Either 'date' or 'datetime'.
 	 * @return mixed ISO string, or the value unchanged.
 	 */
@@ -300,7 +304,7 @@ class Contact_Pull {
 		$trimmed = trim( $value );
 		$date    = false;
 
-		if ( '' !== $format ) {
+		if ( '' !== $format && self::format_specifies_year( $format ) ) {
 			// The `!` resets fields the format doesn't specify to zero instead of
 			// "now", so a datetime under a date-only source format stores the same
 			// value on every pull rather than embedding the pull moment.
@@ -335,6 +339,24 @@ class Contact_Pull {
 		}
 
 		return $date->format( 'datetime' === $value_type ? \DateTimeInterface::ATOM : 'Y-m-d' );
+	}
+
+	/**
+	 * Whether a PHP date format string parses a year.
+	 *
+	 * `createFromFormat()` accepts a year-less format (`m/d`) without complaint —
+	 * the `!` prefix resets the unspecified year to the Unix epoch, so `03/04`
+	 * becomes a confident, well-formed `1970-03-04` that nothing downstream can
+	 * tell from a real date. The in-tree provider mappers never emit such a
+	 * format (Mailchimp's year-less `birthday` is deliberately not a date type),
+	 * but any third-party `set_date_format()` caller can. Backslash-escaped
+	 * literals (`\Y`) don't count as specifiers.
+	 *
+	 * @param string $format PHP date format string.
+	 * @return bool
+	 */
+	private static function format_specifies_year( $format ) {
+		return 1 === preg_match( '/(?<!\\\\)[YyoXx]/', $format );
 	}
 
 	/**
