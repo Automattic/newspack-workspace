@@ -72,6 +72,10 @@ class Membership_Gates_Migration {
 	 * [--plan=<id>]
 	 * : Only process the plan with this post ID. Useful for testing.
 	 *
+	 * [--yes]
+	 * : Answer yes to the confirmation prompt shown when a gate would be created
+	 * : alongside gates the same plans were migrated to individually.
+	 *
 	 * ## EXAMPLES
 	 *
 	 *     wp newspack migrate-membership-gates
@@ -189,6 +193,33 @@ class Membership_Gates_Migration {
 
 			$action  = array_key_exists( $gate_key, $existing_gates ) ? 'updated' : 'created';
 			$gate_id = $existing_gates[ $gate_key ] ?? null;
+
+			// Regrouping can merge plans a previous run migrated separately. Gate identity
+			// is the title, so the merged title matches no existing gate and this run would
+			// write a new one while the originals stay published and keep restricting. Name
+			// them, and let the operator stop before the duplicate is created.
+			if ( 'created' === $action ) {
+				$superseded = self::find_superseded_gates( $group, $gate_key, $existing_gates );
+				if ( ! empty( $superseded ) ) {
+					WP_CLI::warning(
+						sprintf(
+							'"%s" merges plans that were migrated separately before. Creating it leaves these gates in place, still restricting the same content: %s. Retire them after this run.',
+							$gate_title,
+							implode(
+								', ',
+								array_map(
+									fn( $title, $id ) => sprintf( '"%s" (gate %d)', $title, $id ),
+									array_keys( $superseded ),
+									$superseded
+								)
+							)
+						)
+					);
+					if ( ! $dry_run ) {
+						WP_CLI::confirm( sprintf( 'Create "%s" anyway?', $gate_title ), $assoc_args );
+					}
+				}
+			}
 
 			// Keep $existing_gates consistent for both live and dry-run passes so a
 			// later group with the same title is reported as 'updated'. A null value
@@ -631,6 +662,38 @@ class Membership_Gates_Migration {
 	 */
 	private static function group_requires_purchase( array $group ): bool {
 		return ! array_filter( $group, fn( $g ) => 'purchase' !== $g['access_method'] );
+	}
+
+	/**
+	 * Existing gates this group's plans were migrated to individually.
+	 *
+	 * Gate identity is the gate title, and a group's title is its plan names joined.
+	 * When regrouping merges plans a previous run migrated separately, the merged
+	 * title matches no existing gate — so the run creates a new gate while the
+	 * originals stay published and keep restricting the same content. Naming them
+	 * lets the operator retire them.
+	 *
+	 * Entries whose value is null are skipped: those titles were claimed by this run
+	 * rather than found on the site, so there is no prior gate to supersede.
+	 *
+	 * @param array[] $group          Plan descriptors, each carrying a 'name' key.
+	 * @param string  $gate_key       The group's own lower-cased gate title.
+	 * @param array   $existing_gates Map of lower-cased gate title => gate ID.
+	 *
+	 * @return array<string,int> Map of gate title => gate ID, excluding the group's own title.
+	 */
+	private static function find_superseded_gates( array $group, string $gate_key, array $existing_gates ): array {
+		$superseded = [];
+		foreach ( $group as $plan ) {
+			$plan_key = trim( strtolower( $plan['name'] ) );
+			if ( $plan_key === $gate_key ) {
+				continue;
+			}
+			if ( isset( $existing_gates[ $plan_key ] ) ) {
+				$superseded[ $plan_key ] = $existing_gates[ $plan_key ];
+			}
+		}
+		return $superseded;
 	}
 
 	/**
