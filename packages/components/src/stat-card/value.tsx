@@ -3,6 +3,7 @@
  */
 import { useEffect } from '@wordpress/element';
 import { _x } from '@wordpress/i18n';
+import { Stack } from '@wordpress/ui';
 
 /**
  * External dependencies.
@@ -18,7 +19,7 @@ import type { StatCardValueProps, StatCardValueVariant } from './types';
 
 const variants: StatCardValueVariant[] = [ 'figure', 'text' ];
 
-const Value = ( { value, valueLabel, variant = 'figure', className }: StatCardValueProps ) => {
+const Value = ( { value, valueLabel, variant = 'figure', suffix, className }: StatCardValueProps ) => {
 	// The hero scale is a container query on the root, so a value rendered loose
 	// would size against whichever container it landed in.
 	useStatCardContext();
@@ -36,7 +37,7 @@ const Value = ( { value, valueLabel, variant = 'figure', className }: StatCardVa
 	// `||` not `??`: an empty label is a missing one, and the glyph must never be left unnamed.
 	const spoken = valueLabel || ( isNull ? _x( 'Not applicable', 'a statistic with no number to show', 'newspack-plugin' ) : undefined );
 
-	return (
+	const figure = (
 		<span className={ classnames( 'newspack-stat-card__value', 'text' === variant && 'newspack-stat-card__value--text', className ) }>
 			{ spoken ? (
 				<>
@@ -48,6 +49,17 @@ const Value = ( { value, valueLabel, variant = 'figure', className }: StatCardVa
 				shown
 			) }
 		</span>
+	);
+
+	if ( ! suffix ) {
+		return figure;
+	}
+
+	return (
+		<Stack direction="row" align="baseline" gap="sm" className="newspack-stat-card__figure">
+			{ figure }
+			{ suffix }
+		</Stack>
 	);
 };
 

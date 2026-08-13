@@ -6,6 +6,7 @@
  * Internal dependencies.
  */
 import Body from './body';
+import Delta from './delta';
 import Footer from './footer';
 import Label from './label';
 import Root from './root';
@@ -15,6 +16,9 @@ import Value from './value';
 export { STAT_CARD_NULL_GLYPH } from './constants';
 export type {
 	StatCardBodyProps,
+	StatCardDeltaDirection,
+	StatCardDeltaProps,
+	StatCardDeltaTone,
 	StatCardFooterProps,
 	StatCardHeadingLevel,
 	StatCardLabelProps,
@@ -31,6 +35,7 @@ export const StatCard = {
 	Label,
 	Body,
 	Value,
+	Delta,
 	Secondary,
 	Footer,
 };

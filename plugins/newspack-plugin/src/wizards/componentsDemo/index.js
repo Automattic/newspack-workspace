@@ -393,7 +393,14 @@ class ComponentsDemo extends Component {
 								<StatCard.Root>
 									<StatCard.Label>{ __( 'Subscribers reached', 'newspack-plugin' ) }</StatCard.Label>
 									<StatCard.Body>
-										<StatCard.Value value="1,284" />
+										<StatCard.Value
+											value="1,284"
+											suffix={
+												<StatCard.Delta direction="up" tone="positive">
+													{ __( '2%', 'newspack-plugin' ) }
+												</StatCard.Delta>
+											}
+										/>
 										<StatCard.Secondary>{ __( 'Up from 1,190 last month', 'newspack-plugin' ) }</StatCard.Secondary>
 									</StatCard.Body>
 									<StatCard.Footer>{ __( 'Readers who received at least one campaign.', 'newspack-plugin' ) }</StatCard.Footer>
@@ -407,7 +414,15 @@ class ComponentsDemo extends Component {
 										{ __( 'Average order value', 'newspack-plugin' ) }
 									</StatCard.Label>
 									<StatCard.Body>
-										<StatCard.Value value="$1.2M" valueLabel={ __( '1.2 million dollars', 'newspack-plugin' ) } />
+										<StatCard.Value
+											value="$1.2M"
+											valueLabel={ __( '1.2 million dollars', 'newspack-plugin' ) }
+											suffix={
+												<StatCard.Delta direction="down" tone="negative">
+													{ __( '4%', 'newspack-plugin' ) }
+												</StatCard.Delta>
+											}
+										/>
 									</StatCard.Body>
 									<StatCard.Footer>
 										{ __( 'Products this rule applies to.', 'newspack-plugin' ) }

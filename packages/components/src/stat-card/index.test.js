@@ -296,6 +296,88 @@ describe( 'StatCard.Value', () => {
 	} );
 } );
 
+describe( 'StatCard.Delta', () => {
+	it( 'renders the change with the arrow named in text', () => {
+		const { container } = render(
+			<StatCard.Root>
+				<StatCard.Delta direction="up">2%</StatCard.Delta>
+			</StatCard.Root>
+		);
+		expect( container.querySelector( '[aria-hidden="true"]' ) ).toHaveTextContent( '↑' );
+		expect( screen.getByText( 'Up' ) ).toHaveClass( 'screen-reader-text' );
+		expect( screen.getByText( '2%' ) ).toBeInTheDocument();
+	} );
+
+	it( 'points the arrow down without changing the colour', () => {
+		const { container } = render(
+			<StatCard.Root>
+				<StatCard.Delta direction="down">2%</StatCard.Delta>
+			</StatCard.Root>
+		);
+		expect( container.querySelector( '[aria-hidden="true"]' ) ).toHaveTextContent( '↓' );
+		expect( screen.getByText( 'Down' ) ).toHaveClass( 'screen-reader-text' );
+		const delta = container.querySelector( '.newspack-stat-card__delta' );
+		expect( delta ).not.toHaveClass( 'newspack-stat-card__delta--negative' );
+		expect( delta ).not.toHaveClass( 'newspack-stat-card__delta--positive' );
+	} );
+
+	// A rise is not always good news, so the caller sets the tone separately.
+	it( 'takes its tone from the caller, not from the direction', () => {
+		const { container } = render(
+			<StatCard.Root>
+				<StatCard.Delta direction="up" tone="negative">
+					2%
+				</StatCard.Delta>
+			</StatCard.Root>
+		);
+		expect( container.querySelector( '.newspack-stat-card__delta' ) ).toHaveClass( 'newspack-stat-card__delta--negative' );
+	} );
+
+	it( 'lets directionLabel replace the spoken direction', () => {
+		render(
+			<StatCard.Root>
+				<StatCard.Delta direction="up" directionLabel="Increased by">
+					2%
+				</StatCard.Delta>
+			</StatCard.Root>
+		);
+		expect( screen.getByText( 'Increased by' ) ).toHaveClass( 'screen-reader-text' );
+		expect( screen.queryByText( 'Up' ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'sits in a row beside the figure when passed as a Value suffix', () => {
+		const { container } = render(
+			<StatCard.Root>
+				<StatCard.Value
+					value="1,284"
+					suffix={
+						<StatCard.Delta direction="up" tone="positive">
+							2%
+						</StatCard.Delta>
+					}
+				/>
+			</StatCard.Root>
+		);
+		const figure = container.querySelector( '.newspack-stat-card__figure' );
+		expect( figure ).toHaveStyle( { flexDirection: 'row' } );
+		expect( figure.querySelector( '.newspack-stat-card__value' ) ).toBeInTheDocument();
+		expect( figure.querySelector( '.newspack-stat-card__delta' ) ).toBeInTheDocument();
+	} );
+
+	it( 'adds no row when the value has no suffix', () => {
+		const { container } = render(
+			<StatCard.Root>
+				<StatCard.Value value="1,284" />
+			</StatCard.Root>
+		);
+		expect( container.querySelector( '.newspack-stat-card__figure' ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'throws outside Root', () => {
+		renderOrphan( <StatCard.Delta direction="up">2%</StatCard.Delta> );
+	} );
+} );
+
 describe( 'StatCard.Secondary', () => {
 	it( 'renders its children', () => {
 		const { container } = render(

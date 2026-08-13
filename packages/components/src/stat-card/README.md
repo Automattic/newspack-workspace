@@ -174,9 +174,39 @@ A column that takes the free space. Put `StatCard.Value` in it, plus a
 | Prop | Type | Default | Description |
 |------|------|---------|-------------|
 | `className` | `string` | — | Merged onto the value. |
+| `suffix` | `React.ReactNode` | — | Rendered in a row beside the figure, e.g. a `StatCard.Delta`. |
 | `value` | `string` \| `number` \| `null` \| `undefined` | — | **Required.** Pre-formatted. `null` and `undefined` render the null glyph. |
 | `valueLabel` | `string` | "Not applicable" when null | Spoken instead of the visible value. |
 | `variant` | `'figure'` \| `'text'` | `'figure'` | `text` drops the hero scale for a phrase. |
+
+With a `suffix`, the figure and the suffix share a baseline-aligned row. Without
+one, the figure renders on its own with no extra wrapper.
+
+## `StatCard.Delta`
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `children` | `React.ReactNode` | — | The change, pre-formatted. |
+| `className` | `string` | — | Merged onto the delta. |
+| `direction` | `'up'` \| `'down'` | — | **Required.** Which arrow to show. |
+| `directionLabel` | `string` | "Up" or "Down" | Spoken in place of the direction. |
+| `tone` | `'positive'` \| `'negative'` \| `'neutral'` | `'neutral'` | Which colour to use. |
+
+```jsx
+<StatCard.Value
+	value="1,284"
+	suffix={ <StatCard.Delta direction="up" tone="positive">2%</StatCard.Delta> }
+/>
+```
+
+**`direction` and `tone` are deliberately separate.** A rise is not always good
+news: a refund rate climbing 2% wants an up arrow and a negative tone. The
+component owns the arrow, the size and the colour; the caller, which is the only
+one that knows what the figure means, decides which of them applies.
+
+The arrow is `aria-hidden` and its meaning supplied as text, so the delta reads
+as "Up 2%" rather than as a glyph. That also means the direction survives for
+anyone who cannot use the colour, which the colour alone would not.
 
 ## `StatCard.Secondary`
 

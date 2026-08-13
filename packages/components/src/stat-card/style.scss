@@ -49,6 +49,19 @@ $stat-card-min-height: wp-vars.$grid-unit * 21;
 		}
 	}
 
+	&__delta {
+		@include wp-mixins.heading-medium();
+		color: wp-colors.$gray-700;
+
+		&--positive {
+			color: colors.$success-600;
+		}
+
+		&--negative {
+			color: colors.$error-600;
+		}
+	}
+
 	&__action,
 	&__action.components-button {
 		font-size: wp-vars.$helptext-font-size;

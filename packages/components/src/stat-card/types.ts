@@ -34,7 +34,24 @@ export type StatCardValueProps = {
 	valueLabel?: string;
 	/** `text` drops the hero scale, for a phrase standing in for a number. */
 	variant?: StatCardValueVariant;
+	/** Rendered in a row beside the figure, e.g. a `StatCard.Delta`. */
+	suffix?: React.ReactNode;
 	className?: string;
+};
+
+export type StatCardDeltaDirection = 'up' | 'down';
+
+export type StatCardDeltaTone = 'positive' | 'negative' | 'neutral';
+
+export type StatCardDeltaProps = {
+	/** Which arrow to show. Says nothing about whether the change is good. */
+	direction: StatCardDeltaDirection;
+	/** Which colour to use. The caller decides, because a rise is not always good news. */
+	tone?: StatCardDeltaTone;
+	/** Spoken in place of "Up" or "Down". */
+	directionLabel?: string;
+	className?: string;
+	children?: React.ReactNode;
 };
 
 export type StatCardSecondaryProps = {
