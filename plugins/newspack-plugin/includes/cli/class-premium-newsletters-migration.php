@@ -158,26 +158,12 @@ class Premium_Newsletters_Migration {
 		foreach ( $plan_groups as $group ) {
 			$progress->tick();
 
-			$list_ids     = $group[0]['list_ids'];
-			$gate_title   = implode( ' | ', array_column( $group, 'name' ) );
+			$payload      = self::build_gate_payload( $group );
+			$list_ids     = $payload['list_ids'];
+			$gate_title   = $payload['title'];
 			$gate_key     = trim( strtolower( $gate_title ) );
-			$has_purchase = self::group_requires_purchase( $group );
-			$access_type  = $has_purchase ? 'purchase' : 'signup';
-
-			// Cast to int for parity with the REST write path, which stores subscription
-			// access-rule values as ints; raw `_product_ids` meta can hold strings.
-			$merged_product_ids = array_values(
-				array_unique(
-					array_map( 'absint', array_merge( ...array_column( $group, 'product_ids' ) ) )
-				)
-			);
-			// Drop product variations — gates should reference parent products only.
-			$merged_product_ids = array_values(
-				array_filter(
-					$merged_product_ids,
-					fn( $id ) => 'product_variation' !== \get_post_type( $id )
-				)
-			);
+			$has_purchase = $payload['has_purchase'];
+			$access_type  = $payload['access_type'];
 
 			// Gate identity is the title, but groups are keyed by list fingerprint — so
 			// two same-named plans restricting different lists land in different groups
@@ -235,37 +221,17 @@ class Premium_Newsletters_Migration {
 				$existing_gates[ $gate_key ] = null;
 			}
 
-			$content_rules = [
-				[
-					'slug'  => 'newsletters',
-					'value' => array_map( 'strval', $list_ids ),
-				],
-			];
-			$access_rules = $has_purchase && ! empty( $merged_product_ids )
-				? [
-					[
-						[
-							'slug'  => 'subscription',
-							'value' => $merged_product_ids,
-						],
-					],
-				]
-				: [];
-
 			$write_error = '';
 			if ( ! $dry_run ) {
 				if ( null === $gate_id ) {
 					$result = \Newspack\Content_Gate::create_gate(
 						[
-							'title'               => $gate_title,
+							'title'               => $payload['title'],
 							'status'              => 'publish',
-							'content_rules'       => $content_rules,
-							'content_rules_match' => 'any',
-							'registration'        => [ 'active' => true ],
-							'custom_access'       => [
-								'active'       => $has_purchase,
-								'access_rules' => $access_rules,
-							],
+							'content_rules'       => $payload['content_rules'],
+							'content_rules_match' => $payload['content_rules_match'],
+							'registration'        => $payload['registration'],
+							'custom_access'       => $payload['custom_access'],
 						],
 						\Newspack\Content_Gate::GATE_CPT,
 						true
@@ -276,16 +242,10 @@ class Premium_Newsletters_Migration {
 						$gate_id = $result;
 					}
 				} else {
-					\Newspack\Content_Rules::update_gate_content_rules( $gate_id, $content_rules );
-					\Newspack\Content_Rules::update_gate_content_rules_match( $gate_id, 'any' );
-					\Newspack\Content_Gate::update_registration_settings( $gate_id, [ 'active' => true ] );
-					\Newspack\Content_Gate::update_custom_access_settings(
-						$gate_id,
-						[
-							'active'       => $has_purchase,
-							'access_rules' => $access_rules,
-						]
-					);
+					\Newspack\Content_Rules::update_gate_content_rules( $gate_id, $payload['content_rules'] );
+					\Newspack\Content_Rules::update_gate_content_rules_match( $gate_id, $payload['content_rules_match'] );
+					\Newspack\Content_Gate::update_registration_settings( $gate_id, $payload['registration'] );
+					\Newspack\Content_Gate::update_custom_access_settings( $gate_id, $payload['custom_access'] );
 				}
 				if ( '' === $write_error ) {
 					$existing_gates[ $gate_key ] = $gate_id;
@@ -315,7 +275,7 @@ class Premium_Newsletters_Migration {
 					WP_CLI::warning( sprintf( '"%s" (gate %d) will not restrict as intended: %s', $gate_title, $gate_id, $issue ) );
 				}
 			} elseif ( $dry_run ) {
-				$verification_issues = self::compute_pre_write_issues( $list_ids, $has_purchase, $merged_product_ids );
+				$verification_issues = self::compute_pre_write_issues( $list_ids, $has_purchase, $payload['product_ids'] );
 				foreach ( $verification_issues as $issue ) {
 					WP_CLI::warning( sprintf( '"%s" will not migrate correctly: %s', $gate_title, $issue ) );
 				}
@@ -390,6 +350,90 @@ class Premium_Newsletters_Migration {
 				)
 			);
 		}
+	}
+
+	/**
+	 * Build everything a plan group's gate needs, from the group alone.
+	 *
+	 * Reads only the group descriptors group_plans_by_lists() produced and the product
+	 * posts they name, so it runs without WooCommerce Memberships. That is the point of
+	 * the extraction: the three decisions below used to sit inline in a loop that cannot
+	 * run without it, and so could not be unit-tested.
+	 *
+	 * - `content_rules_match` is 'any' because the gate carries exactly one content
+	 *   rule, on which 'any' and 'all' agree. 'any' is the safer of the two to fix
+	 *   here: should a second rule ever join it, 'any' restricts a post on either
+	 *   list, while 'all' would restrict only posts on both and quietly open the rest.
+	 * - Registration mode is always active because every plan this command migrates
+	 *   grants membership to an account — a purchase plan to the purchasing account, a
+	 *   signup plan to the registering one. Manual-only plans, the one shape that can
+	 *   hold a reader who never registered, never reach here: group_plans_by_lists()
+	 *   skips them. So requiring registration never restricts a reader the plan admitted.
+	 * - The paid access mode carries a subscription rule only when the group requires a
+	 *   purchase AND at least one product ID survives. An active mode with no rules asks
+	 *   for no purchase at all, so the empty shape is left empty deliberately for
+	 *   verify_migrated_gate() and compute_pre_write_issues() to flag, rather than
+	 *   papered over with a rule that would grant more than the plan did.
+	 *
+	 * @param array[] $group Plan descriptors from group_plans_by_lists(), each carrying
+	 *                       'pid', 'name', 'access_method', 'list_ids' and 'product_ids'.
+	 *
+	 * @return array The gate payload: 'title', 'list_ids', 'has_purchase', 'access_type',
+	 *               'content_rules', 'content_rules_match', 'registration' and
+	 *               'custom_access' are what the create and update paths write;
+	 *               'product_ids' is what the pre-write check reports on.
+	 */
+	private static function build_gate_payload( array $group ): array {
+		$list_ids     = $group[0]['list_ids'] ?? [];
+		$has_purchase = self::group_requires_purchase( $group );
+
+		// Cast to int for parity with the REST write path, which stores subscription
+		// access-rule values as ints; raw `_product_ids` meta can hold strings.
+		$product_ids = array_values(
+			array_unique(
+				array_map( 'absint', array_merge( ...array_values( array_column( $group, 'product_ids' ) ) ) )
+			)
+		);
+		// Drop product variations — gates should reference parent products only.
+		$product_ids = array_values(
+			array_filter(
+				$product_ids,
+				fn( $id ) => 'product_variation' !== \get_post_type( $id )
+			)
+		);
+
+		$content_rules = [
+			[
+				'slug'  => 'newsletters',
+				'value' => array_map( 'strval', $list_ids ),
+			],
+		];
+
+		$access_rules = $has_purchase && ! empty( $product_ids )
+			? [
+				[
+					[
+						'slug'  => 'subscription',
+						'value' => $product_ids,
+					],
+				],
+			]
+			: [];
+
+		return [
+			'title'               => implode( ' | ', array_column( $group, 'name' ) ),
+			'list_ids'            => $list_ids,
+			'has_purchase'        => $has_purchase,
+			'access_type'         => $has_purchase ? 'purchase' : 'signup',
+			'content_rules'       => $content_rules,
+			'content_rules_match' => 'any',
+			'registration'        => [ 'active' => true ],
+			'custom_access'       => [
+				'active'       => $has_purchase,
+				'access_rules' => $access_rules,
+			],
+			'product_ids'         => $product_ids,
+		];
 	}
 
 	/**
@@ -747,9 +791,9 @@ class Premium_Newsletters_Migration {
 				// No rule at all is the benign shape of this failure. A rule carrying an
 				// EMPTY value would be worse: Access_Rules::has_active_subscription() with an
 				// empty product list falls through to "any active subscription", so it grants
-				// access instead of denying it. The write path above emits either [] or a rule
-				// with a non-empty value, so that shape cannot occur today — do not relax the
-				// `! empty( $merged_product_ids )` guard without handling it here.
+				// access instead of denying it. build_gate_payload() emits either [] or a rule
+				// with a non-empty value, so that shape cannot occur today — do not relax its
+				// `! empty( $product_ids )` guard without handling it here.
 				$issues[] = 'its paid access mode is active but has no access rules, so it asks for no purchase — any registered reader would keep the list';
 			}
 		}

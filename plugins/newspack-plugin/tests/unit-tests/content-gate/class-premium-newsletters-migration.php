@@ -39,6 +39,13 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 	private $list_b;
 
 	/**
+	 * A published WooCommerce product post ID.
+	 *
+	 * @var int
+	 */
+	private $product;
+
+	/**
 	 * Load the mocks once for the class. Deferred to set_up_before_class() rather
 	 * than a file-scope require because PHPUnit loads every test file before the run
 	 * starts: a file-scope require would define Subscription_List and
@@ -61,6 +68,7 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 		register_post_type( Subscription_Lists::CPT, [ 'public' => false ] );
 		$this->list_a = self::factory()->post->create( [ 'post_type' => Subscription_Lists::CPT ] );
 		$this->list_b = self::factory()->post->create( [ 'post_type' => Subscription_Lists::CPT ] );
+		$this->product = self::factory()->post->create( [ 'post_type' => 'product' ] );
 		\WP_CLI::reset();
 	}
 
@@ -236,6 +244,107 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 		$this->assertTrue( $this->invoke_private_static( 'group_requires_purchase', [ $all_purchase ] ) );
 		$this->assertFalse( $this->invoke_private_static( 'group_requires_purchase', [ $mixed ] ) );
 		$this->assertFalse( $this->invoke_private_static( 'group_requires_purchase', [ $all_signup ] ) );
+	}
+
+	/**
+	 * Build a plan-group descriptor of the shape group_plans_by_lists() produces.
+	 *
+	 * @param string $access_method The WCM plan access method.
+	 * @param int[]  $product_ids   The plan's product IDs.
+	 * @param int[]  $list_ids      The lists the plan restricts.
+	 * @param string $name          The plan name.
+	 *
+	 * @return array
+	 */
+	private function make_payload_plan( string $access_method, array $product_ids = [], array $list_ids = [], string $name = 'Plan' ): array {
+		return [
+			'pid'           => 0,
+			'name'          => $name,
+			'access_method' => $access_method,
+			'list_ids'      => $list_ids,
+			'product_ids'   => $product_ids,
+		];
+	}
+
+	/**
+	 * A premium newsletter gate carries one content rule, so 'any' and 'all' agree on
+	 * it today — but the match mode is written, not defaulted, and 'all' would restrict
+	 * only posts on every listed list if a second rule ever joined. Pin 'any'.
+	 */
+	public function test_build_gate_payload_matches_content_rules_on_any() {
+		$payload = $this->invoke_private_static(
+			'build_gate_payload',
+			[ [ $this->make_payload_plan( 'signup', [], [ $this->list_a ] ) ] ]
+		);
+
+		$this->assertSame( 'any', $payload['content_rules_match'] );
+		$this->assertSame(
+			[
+				[
+					'slug'  => 'newsletters',
+					'value' => [ (string) $this->list_a ],
+				],
+			],
+			$payload['content_rules']
+		);
+	}
+
+	/**
+	 * Registration mode is activated for every migrated group, purchase or signup:
+	 * every plan that reaches here grants membership to an account, so requiring one
+	 * never shuts out a reader the plan admitted.
+	 */
+	public function test_build_gate_payload_always_activates_registration() {
+		$signup   = $this->invoke_private_static( 'build_gate_payload', [ [ $this->make_payload_plan( 'signup' ) ] ] );
+		$purchase = $this->invoke_private_static( 'build_gate_payload', [ [ $this->make_payload_plan( 'purchase', [ $this->product ] ) ] ] );
+
+		$this->assertSame( [ 'active' => true ], $signup['registration'] );
+		$this->assertSame( [ 'active' => true ], $purchase['registration'] );
+	}
+
+	/**
+	 * A group holding both a purchase plan and a signup plan migrates
+	 * registration-only. The gate's two modes AND for a logged-in reader, so writing
+	 * the purchase plan's products here would demand a subscription from the signup
+	 * plan's members, who WooCommerce Memberships admitted for free.
+	 */
+	public function test_build_gate_payload_keeps_a_mixed_group_registration_only() {
+		$group = [
+			$this->make_payload_plan( 'purchase', [ $this->product ], [ $this->list_a ], 'Paid' ),
+			$this->make_payload_plan( 'signup', [], [ $this->list_a ], 'Free' ),
+		];
+
+		$payload = $this->invoke_private_static( 'build_gate_payload', [ $group ] );
+
+		$this->assertFalse( $payload['has_purchase'] );
+		$this->assertSame( 'signup', $payload['access_type'] );
+		$this->assertFalse( $payload['custom_access']['active'] );
+		$this->assertSame( [], $payload['custom_access']['access_rules'] );
+		$this->assertSame( 'Paid | Free', $payload['title'] );
+	}
+
+	/**
+	 * A purchase group writes its products as a single subscription rule, in the
+	 * grouped shape Access_Rules::normalize_rules() expects.
+	 */
+	public function test_build_gate_payload_writes_a_subscription_rule_for_a_purchase_group() {
+		$payload = $this->invoke_private_static(
+			'build_gate_payload',
+			[ [ $this->make_payload_plan( 'purchase', [ $this->product ], [ $this->list_a ] ) ] ]
+		);
+
+		$this->assertTrue( $payload['custom_access']['active'] );
+		$this->assertSame(
+			[
+				[
+					[
+						'slug'  => 'subscription',
+						'value' => [ $this->product ],
+					],
+				],
+			],
+			$payload['custom_access']['access_rules']
+		);
 	}
 
 	/**
