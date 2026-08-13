@@ -11,6 +11,29 @@
 
 set -euo pipefail
 
+# Pin a fixed, root-owned PATH before invoking any external command.
+#
+# This script is granted passwordless root by a sudoers drop-in, and macOS
+# sudoers sets no secure_path, so sudo hands it the CALLER's PATH untouched.
+# Without this line, a helper binary planted earlier in that PATH runs as root,
+# and any process running as the user — including the non-interactive callers
+# this wrapper exists to serve — inherits that.
+#
+# Every directory here must be writable only by root, which is the property
+# doing the work. On Apple Silicon /opt/homebrew/bin is group-writable and owned
+# by the login user, so adding it would restore the same hole under a different
+# name; the same applies to any brew prefix. /usr/local/bin is left out on the
+# same principle even where it happens to be root-owned, because nothing needed
+# here lives there and its permissions vary by machine.
+#
+# The pin must also cover every external command below, or the script dies under
+# `set -e` with a confusing "command not found". Today that is ifconfig (/sbin),
+# grep (/usr/bin) and sed (/usr/bin). Adding a call to anything outside these
+# directories means reconsidering this line, not widening it reflexively.
+#
+# bin/tests/test-newspack-manage-host-path.sh proves the pin holds.
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin
+
 usage() {
     echo "Usage:"
     echo "  $0 alias-add <127.0.0.X>"
