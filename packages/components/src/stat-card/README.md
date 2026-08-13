@@ -23,15 +23,21 @@ import StatCard from '../../packages/components/src/stat-card';
 The card's chrome is not self-contained. `Card.Root` from `@wordpress/ui` takes
 its background, border, radius and padding from `--wpds-*` custom properties
 with no fallbacks, and this package defines those in one place only:
-`page/style.scss`, which imports the design-token sheet. The package's own
-`style.scss` separately remaps `--wp-admin-theme-color` to the Newspack primary,
-which is the hero figure's colour. Both ride in with the barrel.
+`page/style.scss`, which imports the design-token sheet. That sheet rides in
+with the barrel.
 
-So a by-path import keeps the bundle narrow at the cost of the card's
-appearance, unless that bundle already renders `Page` or pulls the token sheet
-in some other way. Without it the card is an unpadded, borderless, transparent
-box and the figure takes the publisher's wp-admin colour scheme. Take the narrow
-import where the screen already has the tokens; take the barrel otherwise.
+So a by-path import keeps the bundle narrow at the cost of the card's chrome,
+unless that bundle already renders `Page` or pulls the token sheet in some other
+way. Without it the card is an unpadded, borderless, transparent box. The figure
+is unaffected either way: the card declares the Newspack accent on itself rather
+than relying on the package's global remap. Take the narrow import where the
+screen already has the tokens; take the barrel otherwise.
+
+The exported prop types travel with neither route. The barrel is a `.js` file so
+it cannot re-export types, and the package ships no declarations (it compiles
+with Babel and sets no `types` field), so `StatCardRootProps` and its siblings
+are reachable only through a path import into `src/stat-card` from inside this
+monorepo.
 
 ## Usage
 
@@ -82,6 +88,13 @@ inline size**. A grid track or a `flex: 1` item is fine. Dropped somewhere its
 width would come from its contents, such as an `inline-block` or a table cell,
 it collapses to nothing. Equal widths across a row are what keep one type scale
 across that row.
+
+It also makes the card a containing block for `position: absolute` and
+`position: fixed` descendants, and `Card.Root` clips its overflow. Anything
+positioned that renders inline inside the card, such as a popover on a control
+in `suffix`, is therefore trapped by the card unless it portals out. The
+tooltips and popovers in `@wordpress/components` portal by default, so this
+mostly matters if a consumer registers its own `Popover.Slot` inside a card.
 
 For a hero that is a phrase rather than a number ("0 of 17", "No conversions"),
 pass `variant="text"`. It keeps the slot and drops the display scale, which
@@ -155,7 +168,7 @@ A column that takes the free space. Put `StatCard.Value` in it, plus a
 | Prop | Type | Default | Description |
 |------|------|---------|-------------|
 | `className` | `string` | — | Merged onto the value. |
-| `value` | `string` \| `number` \| `null` | — | **Required.** Pre-formatted. `null` renders the null glyph. |
+| `value` | `string` \| `number` \| `null` \| `undefined` | — | **Required.** Pre-formatted. `null` and `undefined` render the null glyph. |
 | `valueLabel` | `string` | "Not applicable" when null | Spoken instead of the visible value. |
 | `variant` | `'figure'` \| `'text'` | `'figure'` | `text` drops the hero scale for a phrase. |
 
@@ -177,6 +190,18 @@ Pinned to the bottom. A run of text children shares one `<p>` carrying the
 description styling, so `<StatCard.Footer>Applies to { count } products</StatCard.Footer>`
 is one sentence rather than three stacked lines; elements pass through
 untouched, which is how an action lands under the text.
+
+An element ends the run, so a description with inline markup in the middle of it
+would be split across several blocks. Wrap that description yourself and it
+passes through as one:
+
+```jsx
+<StatCard.Footer>
+	<p className="newspack-stat-card__description">
+		Applies to <strong>12</strong> products.
+	</p>
+</StatCard.Footer>
+```
 
 An action keeps the description's type scale by taking the
 `newspack-stat-card__action` class:

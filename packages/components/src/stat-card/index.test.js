@@ -264,6 +264,18 @@ describe( 'StatCard.Value', () => {
 		expect( screen.getByText( 'Not applicable' ) ).toHaveClass( 'screen-reader-text' );
 	} );
 
+	it( 'warns on an unknown variant and keeps the hero scale', () => {
+		const consoleWarn = jest.spyOn( console, 'warn' ).mockImplementation( () => {} );
+		const { container } = render(
+			<StatCard.Root>
+				<StatCard.Value value="1,284" variant="headline" />
+			</StatCard.Root>
+		);
+		expect( container.querySelector( '.newspack-stat-card__value' ) ).not.toHaveClass( 'newspack-stat-card__value--text' );
+		expect( consoleWarn ).toHaveBeenCalled();
+		consoleWarn.mockRestore();
+	} );
+
 	it( 'keeps the hero scale by default', () => {
 		const { container } = render(
 			<StatCard.Root>
@@ -371,6 +383,32 @@ describe( 'StatCard.Footer', () => {
 			</StatCard.Root>
 		);
 		expect( container.querySelector( '.newspack-stat-card__description' ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'renders nothing for a whitespace-only description', () => {
+		const { container } = render(
+			<StatCard.Root>
+				<StatCard.Footer>{ '   ' }</StatCard.Footer>
+			</StatCard.Root>
+		);
+		expect( container.querySelector( '.newspack-stat-card__description' ) ).not.toBeInTheDocument();
+	} );
+
+	// The documented escape hatch for a description carrying inline markup,
+	// which would otherwise be split into a block per child.
+	it( 'passes a self-wrapped description through as one paragraph', () => {
+		const { container } = render(
+			<StatCard.Root>
+				<StatCard.Footer>
+					<p className="newspack-stat-card__description">
+						Applies to <strong>12</strong> products.
+					</p>
+				</StatCard.Footer>
+			</StatCard.Root>
+		);
+		const descriptions = container.querySelectorAll( '.newspack-stat-card__description' );
+		expect( descriptions ).toHaveLength( 1 );
+		expect( descriptions[ 0 ] ).toHaveTextContent( 'Applies to 12 products.' );
 	} );
 
 	it( 'throws outside Root', () => {

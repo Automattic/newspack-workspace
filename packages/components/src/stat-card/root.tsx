@@ -17,7 +17,7 @@ import { StatCardContext } from './context';
 import type { StatCardRootProps } from './types';
 import './style.scss';
 
-const Root = forwardRef< HTMLDivElement, StatCardRootProps >( ( { heading = 3, className, children, ...props }, ref ) => {
+const Root = forwardRef< HTMLDivElement, StatCardRootProps >( function Root( { heading = 3, className, children, ...props }, ref ) {
 	const context = useMemo( () => ( { heading } ), [ heading ] );
 
 	return (

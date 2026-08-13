@@ -21,7 +21,7 @@ import {
 } from '@wordpress/components';
 import { Component, Fragment, render, createInterpolateElement, createRef } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
-import { Icon, plus, postList, settings } from '@wordpress/icons';
+import { Icon, info, plus, postList, settings } from '@wordpress/icons';
 
 /**
  * Internal dependencies.
@@ -41,7 +41,6 @@ import {
 	Grid,
 	Handoff,
 	ImageUpload,
-	InfoButton,
 	Modal,
 	Notice,
 	Page,
@@ -400,7 +399,16 @@ class ComponentsDemo extends Component {
 									<StatCard.Footer>{ __( 'Readers who received at least one campaign.', 'newspack-plugin' ) }</StatCard.Footer>
 								</StatCard.Root>
 								<StatCard.Root>
-									<StatCard.Label suffix={ <InfoButton text={ __( 'Averaged across the timeframe.', 'newspack-plugin' ) } /> }>
+									<StatCard.Label
+										suffix={
+											<Button
+												icon={ info }
+												size="small"
+												variant="tertiary"
+												label={ __( 'Averaged across the timeframe.', 'newspack-plugin' ) }
+											/>
+										}
+									>
 										{ __( 'Average order value', 'newspack-plugin' ) }
 									</StatCard.Label>
 									<StatCard.Body>

@@ -2,8 +2,8 @@ export type StatCardHeadingLevel = 2 | 3 | 4 | 5 | 6;
 
 export type StatCardValueVariant = 'figure' | 'text';
 
-/** Pre-formatted by the caller. Null renders the null glyph. */
-export type StatCardValue = string | number | null;
+/** Pre-formatted by the caller. Null and undefined both render the null glyph. */
+export type StatCardValue = string | number | null | undefined;
 
 export type StatCardRootProps = Omit< React.ComponentPropsWithoutRef< 'div' >, 'children' > & {
 	/** Heading level for `StatCard.Label`, read through context. */

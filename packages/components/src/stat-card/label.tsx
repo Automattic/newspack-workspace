@@ -35,7 +35,9 @@ const Label = ( { suffix, heading, className, children }: StatCardLabelProps ) =
 		}
 		// eslint-disable-next-line no-console
 		console.warn(
-			`StatCard.Label: unknown heading level "${ level }", falling back to 3. Use one of ${ Object.keys( headings ).join( ', ' ) }.`
+			`StatCard: unknown heading level "${ level }", falling back to 3. Set \`heading\` on StatCard.Root or StatCard.Label to one of ${ Object.keys(
+				headings
+			).join( ', ' ) }.`
 		);
 	}, [ level ] );
 
