@@ -246,6 +246,15 @@ describe( 'Date range criteria input', () => {
 		expect( screen.getByTestId( 'date-range-start-value' ) ).toHaveValue( 30 );
 	} );
 
+	it( 'reads scientific notation as its numeric value', () => {
+		selectCustom();
+		fireEvent.change( screen.getByLabelText( 'From' ), { target: { value: 'past' } } );
+		// A number input accepts '1e2'; parseInt() would read it as 1 and store
+		// a window a hundred times narrower than the publisher typed.
+		fireEvent.change( screen.getByTestId( 'date-range-start-value' ), { target: { value: '1e2' } } );
+		expect( screen.getByTestId( 'date-range-start-value' ) ).toHaveValue( 100 );
+	} );
+
 	it( 'clears a bound back to Any', () => {
 		selectCustom();
 		fireEvent.change( screen.getByLabelText( 'From' ), { target: { value: 'past' } } );
@@ -447,6 +456,105 @@ describe( 'Date range criteria input for an existing segment with a loaded absol
 				} ),
 			} )
 		);
+	} );
+} );
+
+describe( 'Date range criteria input clearing a relative bound', () => {
+	// Clearing the day magnitude mirrors clearing a date: the bound is dropped
+	// rather than saved as { days: 0 } — a zero-day bound would quietly move
+	// the window's edge to today — while the row stays open for retyping.
+	const makeExistingSegment = () => ( {
+		...SEGMENTS[ 0 ],
+		criteria: [
+			{
+				criteria_id: 'LAST_GIFT_DATE',
+				value: { end: { type: 'relative', days: 7 } },
+			},
+			{ criteria_id: 'newsletter', value: 'subscribers' },
+		],
+	} );
+	let existingSegment;
+
+	const wizardApiFetch = jest.fn( ( { method } = {} ) => Promise.resolve( 'POST' === method ? existingSegment : [ existingSegment ] ) );
+
+	const mockProps = {
+		segmentId: SEGMENTS[ 0 ].id,
+		setSegments: jest.fn(),
+		wizardApiFetch,
+	};
+
+	beforeEach( () => {
+		window.newspackAudienceCampaigns = { criteria };
+		existingSegment = makeExistingSegment();
+		wizardApiFetch.mockClear();
+		render(
+			<MemoryRouter>
+				<SingleSegment { ...mockProps } />
+			</MemoryRouter>
+		);
+	} );
+
+	it( 'keeps a cleared magnitude open for retyping but saves the range without the bound', async () => {
+		await waitFor( () => expect( screen.getByLabelText( 'To' ) ).toHaveValue( 'future' ) );
+
+		fireEvent.change( screen.getByTestId( 'date-range-end-value' ), { target: { value: '' } } );
+		// The row stays put so the publisher can retype…
+		expect( screen.getByLabelText( 'To' ) ).toHaveValue( 'future' );
+		expect( screen.getByTestId( 'date-range-end-value' ) ).toHaveValue( null );
+
+		fireEvent.click( screen.getByText( 'Save' ) );
+		// …but the emitted bound is gone rather than saved as a zero-day bound.
+		expect( wizardApiFetch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				method: 'POST',
+				data: expect.objectContaining( {
+					criteria: [ { criteria_id: 'newsletter', value: 'subscribers' } ],
+				} ),
+			} )
+		);
+	} );
+} );
+
+describe( 'Date range value rendered after the operator moved back to Text', () => {
+	// Switching a field off Date range in Connections (or a newspack-popups too
+	// old to run date_range) re-registers the criterion with the default
+	// operator while segments still hold { start, end } values. The text input
+	// must not render the object — it would show "[object Object]", and one
+	// keystroke would save that literal over the range.
+	const textOperatorCriteria = criteria.map( c => ( 'LAST_GIFT_DATE' === c.id ? { ...c, matching_function: 'default' } : c ) );
+	const makeExistingSegment = () => ( {
+		...SEGMENTS[ 0 ],
+		criteria: [
+			{
+				criteria_id: 'LAST_GIFT_DATE',
+				value: { start: { type: 'relative', days: -30 }, end: { type: 'relative', days: 0 } },
+			},
+		],
+	} );
+	let existingSegment;
+
+	const wizardApiFetch = jest.fn( ( { method } = {} ) => Promise.resolve( 'POST' === method ? existingSegment : [ existingSegment ] ) );
+
+	const mockProps = {
+		segmentId: SEGMENTS[ 0 ].id,
+		setSegments: jest.fn(),
+		wizardApiFetch,
+	};
+
+	beforeEach( () => {
+		window.newspackAudienceCampaigns = { criteria: textOperatorCriteria };
+		existingSegment = makeExistingSegment();
+		wizardApiFetch.mockClear();
+		render(
+			<MemoryRouter>
+				<SingleSegment { ...mockProps } />
+			</MemoryRouter>
+		);
+	} );
+
+	it( 'renders an empty text input instead of the object', async () => {
+		await waitFor( () => expect( screen.getByPlaceholderText( 'Untitled Segment' ) ).toHaveValue( 'Subscribers' ) );
+		expect( screen.getByTestId( 'newspack-criteria-LAST_GIFT_DATE' ) ).toHaveValue( '' );
 	} );
 } );
 

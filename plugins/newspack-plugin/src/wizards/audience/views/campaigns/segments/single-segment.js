@@ -191,7 +191,12 @@ const SingleSegment = ( { segmentId, setSegments, wizardApiFetch } ) => {
 					isWide
 					placeholder={ criteria.placeholder }
 					help={ criteria.help }
-					value={ value }
+					// A criterion that changed operators may still hold an object value
+					// (a saved { start, end } range after the field moved off Date range).
+					// Rendered raw it becomes "[object Object]", and one keystroke would
+					// save that literal over the range — show an empty input instead and
+					// leave the stored value alone until it is deliberately replaced.
+					value={ value && 'object' === typeof value && ! Array.isArray( value ) ? '' : value }
 					onChange={ update }
 				/>
 			);
