@@ -8,15 +8,15 @@ import classnames from 'classnames';
  */
 import { __ } from '@wordpress/i18n';
 import { isValidElement } from '@wordpress/element';
-import { DropdownMenu, __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { DropdownMenu } from '@wordpress/components';
 import { moreVertical } from '@wordpress/icons';
+import { Card, Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies
  */
 import Badge from '../badge';
 import Button from '../button';
-import Card from '../card';
 import './style.scss';
 
 type BadgeLevel = 'default' | 'info' | 'success' | 'warning' | 'error';
@@ -156,46 +156,41 @@ const CardFeature = ( {
 	}
 
 	return (
-		<Card
-			className={ classes }
-			__experimentalCoreCard
-			__experimentalCoreProps={ {
-				headerStyle: { padding: 32 },
-				header: (
-					<>
-						<HStack alignment="top" spacing={ 4 }>
-							<div className="newspack-card-feature__content">
-								<h2 className="newspack-card-feature__title">{ title }</h2>
-								{ description && <p className="newspack-card-feature__description">{ description }</p> }
-							</div>
-							{ renderedIcon }
-						</HStack>
-						<HStack alignment="edge">
-							<HStack expanded={ false } spacing="8px">
-								<Button
-									variant={ isConfigureState ? 'tertiary' : 'secondary' }
-									disabled={ ( isMuted && ! requirementsActionable ) || busy }
-									isBusy={ busy }
-									onClick={ handleButtonClick }
-									size="compact"
-								>
-									{ buttonLabel }
-								</Button>
-								{ showMoreControls && (
-									<DropdownMenu
-										icon={ moreVertical }
-										label={ __( 'More', 'newspack-plugin' ) }
-										controls={ moreControls }
-										toggleProps={ { size: 'compact' } }
-									/>
-								) }
-							</HStack>
-							{ badge && <Badge text={ badge.text } level={ badge.level } /> }
-						</HStack>
-					</>
-				),
-			} }
-		/>
+		<Card.Root className={ classes }>
+			<Card.Header>
+				<Stack direction="row" align="start" gap="lg">
+					<Stack className="newspack-card-feature__content" direction="column" gap="sm">
+						<h2 className="newspack-card-feature__title">{ title }</h2>
+						{ description && <p className="newspack-card-feature__description">{ description }</p> }
+					</Stack>
+					{ renderedIcon }
+				</Stack>
+			</Card.Header>
+			<Card.Content className="newspack-card-feature__actions">
+				<Stack direction="row" align="center" justify="space-between" gap="sm">
+					<Stack direction="row" align="center" gap="sm">
+						<Button
+							variant={ isConfigureState ? 'tertiary' : 'secondary' }
+							disabled={ ( isMuted && ! requirementsActionable ) || busy }
+							isBusy={ busy }
+							onClick={ handleButtonClick }
+							size="compact"
+						>
+							{ buttonLabel }
+						</Button>
+						{ showMoreControls && (
+							<DropdownMenu
+								icon={ moreVertical }
+								label={ __( 'More', 'newspack-plugin' ) }
+								controls={ moreControls }
+								toggleProps={ { size: 'compact' } }
+							/>
+						) }
+					</Stack>
+					{ badge && <Badge text={ badge.text } level={ badge.level } /> }
+				</Stack>
+			</Card.Content>
+		</Card.Root>
 	);
 };
 

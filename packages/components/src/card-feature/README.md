@@ -15,7 +15,7 @@ A card component for presenting a named feature or setting with a predictable, s
 | **Disabled** | `!enabled`, no requirements | "Enable" | Hidden | None |
 | **Enabled** | `enabled`, no requirements | "Configure" | Shown if `moreControls` provided | Success badge ("Enabled") |
 
-The card content (title + description) is visually muted (gray text, lighter border) when `requirements` is set.
+The card content (title + description) is visually muted (gray text) when `requirements` is set.
 
 ## Basic usage
 
