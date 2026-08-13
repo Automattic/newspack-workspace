@@ -28,8 +28,10 @@
 namespace Newspack\Tests\Content_Gate;
 
 use Newspack\CLI\Membership_Gates_Migration;
+use Newspack\Newsletters\Subscription_Lists;
 
 require_once dirname( __DIR__, 3 ) . '/includes/cli/class-membership-gates-migration.php';
+require_once dirname( __DIR__, 2 ) . '/mocks/newsletters-namespaced-mocks.php';
 
 /**
  * Characterization tests for the migrate-membership-gates helpers.
@@ -818,5 +820,38 @@ HTML;
 			]
 		);
 		return get_post( $post_id );
+	}
+
+	/**
+	 * Newsletter-list rules belong to the premium newsletter gate bucket, which
+	 * migrate-premium-newsletters writes. Mapped here they would be inert — the
+	 * evaluator judges a list post against the newsletter bucket — while still
+	 * entering the fingerprint, splitting two plans that restrict identical content
+	 * into two gates.
+	 */
+	public function test_map_rules_to_ac_format_skips_newsletter_list_rules() {
+		$rules = [
+			$this->make_rule( 'post', [] ),
+			$this->make_rule( Subscription_Lists::CPT, [ 21, 22 ] ),
+		];
+
+		$mapped_rules = $this->invoke_private_static( 'map_rules_to_ac_format', [ $rules ] );
+
+		$this->assertCount( 1, $mapped_rules );
+		$this->assertSame( 'post', $mapped_rules[0]['slug'] );
+	}
+
+	/**
+	 * A plan restricting only newsletter lists maps to no content rules at all, which
+	 * is correct — but it is not the same as a plan that restricts nothing, and the
+	 * operator needs to know where it went.
+	 */
+	public function test_plan_has_newsletter_rules_distinguishes_the_skip_reason() {
+		$this->assertTrue(
+			$this->invoke_private_static( 'plan_has_newsletter_rules', [ [ $this->make_rule( Subscription_Lists::CPT, [ 21 ] ) ] ] )
+		);
+		$this->assertFalse(
+			$this->invoke_private_static( 'plan_has_newsletter_rules', [ [ $this->make_rule( 'post', [] ) ] ] )
+		);
 	}
 }

@@ -590,7 +590,9 @@ class Membership_Gates_Migration {
 			if ( empty( $ac_rules ) ) {
 				$skipped[] = [
 					'plan_name'     => $plan_name,
-					'action'        => 'skipped (no restrictions)',
+					'action'        => self::plan_has_newsletter_rules( $wc_rules )
+						? 'skipped (newsletter lists only — run migrate-premium-newsletters)'
+						: 'skipped (no restrictions)',
 					'gate_id'       => '—',
 					'content_rules' => '0',
 					'access_type'   => $access_method,
@@ -804,6 +806,15 @@ class Membership_Gates_Migration {
 			if ( empty( $slug ) ) {
 				continue;
 			}
+			// Newsletter-list rules migrate through `migrate-premium-newsletters`
+			// (NPPD-2079), which writes them to the premium newsletter gate bucket.
+			// Mapped here they would be inert — Content_Restriction_Control judges a
+			// list post against the newsletter bucket, never this one — while still
+			// entering the rule fingerprint, splitting two plans that restrict
+			// identical content into two gates.
+			if ( self::get_newsletter_list_cpt() === $slug ) {
+				continue;
+			}
 			$existing_key = array_search( $slug, array_column( $ac_rules, 'slug' ), true );
 			if ( false !== $existing_key ) {
 				// Merge object IDs into the existing rule for this slug.
@@ -1000,5 +1011,44 @@ class Membership_Gates_Migration {
 		// Fallback only if JSON encoding fails; the fingerprint is an internal
 		// grouping key, never unserialized.
 		return $fingerprint ? $fingerprint : serialize( $normalised ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize
+	}
+
+	/**
+	 * The newsletter list post type.
+	 *
+	 * Read from Newspack Newsletters when it is loaded, with a literal fallback so
+	 * this command keeps skipping newsletter rules on sites where that plugin is
+	 * inactive but its rules are still recorded on the plans.
+	 *
+	 * @return string The list post type.
+	 */
+	private static function get_newsletter_list_cpt(): string {
+		if ( class_exists( 'Newspack\Newsletters\Subscription_Lists' ) ) {
+			$cpt = \Newspack\Newsletters\Subscription_Lists::CPT;
+			if ( $cpt ) {
+				return $cpt;
+			}
+		}
+		return 'newspack_nl_list';
+	}
+
+	/**
+	 * Whether any of a plan's rules restricts a newsletter list.
+	 *
+	 * Used to tell a plan that restricts nothing apart from a plan whose whole
+	 * restriction migrates through migrate-premium-newsletters instead.
+	 *
+	 * @param \WC_Memberships_Membership_Plan_Rule[] $wc_rules Array of WC Memberships rules.
+	 *
+	 * @return bool
+	 */
+	private static function plan_has_newsletter_rules( array $wc_rules ): bool {
+		$list_cpt = self::get_newsletter_list_cpt();
+		foreach ( $wc_rules as $rule ) {
+			if ( $list_cpt === $rule->get_content_type_name() ) {
+				return true;
+			}
+		}
+		return false;
 	}
 }
