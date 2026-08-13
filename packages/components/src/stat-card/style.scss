@@ -18,6 +18,8 @@ $stat-card-value-size-min: 20px;
 	--wp-admin-theme-color-lighter-10--rgb: #{colors.$primary-000--rgb};
 
 	container-type: inline-size;
+	display: flex;
+	flex-direction: column;
 	min-height: $stat-card-min-height;
 
 	&__content {
@@ -68,6 +70,7 @@ $stat-card-value-size-min: 20px;
 		gap: wp-vars.$grid-unit-05;
 	}
 
+	&__action,
 	&__action.components-button {
 		font-size: wp-vars.$helptext-font-size;
 		line-height: wp-vars.$font-line-height-x-small;
