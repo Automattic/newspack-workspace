@@ -402,7 +402,10 @@ class Newspack_Test_Magic_Link extends WP_UnitTestCase {
 	public function data_off_origin_bases() {
 		return [
 			'off-origin host'     => [ 'https://attacker.example/harvest' ],
-			'scheme mismatch'     => [ 'https://example.org/x' ], // Test site is http; https is a different origin.
+			// This row tests scheme pinning ONLY while the test site is http (WP_TESTS_DOMAIN default):
+			// https://example.org is then a different origin. If the suite is ever configured for https,
+			// update this row (e.g. to an http:// input) or it silently stops testing the scheme check.
+			'scheme mismatch'     => [ 'https://example.org/x' ],
 			'protocol-relative'   => [ '//attacker.example/harvest' ],
 			'backslash authority' => [ 'https:\\\\attacker.example' ],
 			'schemeful host-less' => [ 'mailto:reader@example.com' ],

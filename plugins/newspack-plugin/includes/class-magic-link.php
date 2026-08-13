@@ -408,18 +408,17 @@ final class Magic_Link {
 	/**
 	 * Restrict a magic-link base URL to the site's own origin.
 	 *
-	 * The base becomes the reader's link and carries their single-use auth
-	 * token and secret, so an off-origin base would hand those credentials to
-	 * another host. Core's wp_validate_redirect does the parse-hardening — it
+	 * The base becomes the reader's authentication link, so it must resolve to
+	 * the site itself. Core's wp_validate_redirect does the parse-hardening — it
 	 * rejects mailto:/javascript: and other schemeful-but-host-less URLs,
 	 * protocol-relative //host bases, and backslash authorities a browser would
 	 * read as a host. On top of that, this re-checks the FULL origin (scheme,
 	 * host, port) against home_url(), which is stricter than wp_validate_redirect
-	 * in two ways that matter for a credential-bearing link: it does not inherit
-	 * the platform-wide allowed_redirect_hosts list (which other flows populate
-	 * for browser navigation, e.g. donation checkout — a weaker question than
-	 * "may this host receive a reader's auth token?"), and it pins the scheme, so
-	 * an http:// base cannot downgrade the token onto plaintext on an https site.
+	 * in two ways that matter here: it does not inherit the platform-wide
+	 * allowed_redirect_hosts list (which other flows populate for browser
+	 * navigation, e.g. donation checkout — a broader allowance than an
+	 * authentication link should take), and it pins the scheme, so an http://
+	 * base cannot downgrade an https link.
 	 *
 	 * @param string $url Candidate base URL.
 	 * @return string A same-origin base, or home_url() when $url is off-origin or empty.
