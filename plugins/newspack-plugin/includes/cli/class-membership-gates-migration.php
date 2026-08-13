@@ -73,8 +73,7 @@ class Membership_Gates_Migration {
 	 * : Only process the plan with this post ID. Useful for testing.
 	 *
 	 * [--yes]
-	 * : Answer yes to the confirmation prompt shown when a gate would be created
-	 * : alongside gates the same plans were migrated to individually.
+	 * : Answer yes to the confirmation prompt shown when a gate would be created alongside gates the same plans were migrated to individually.
 	 *
 	 * ## EXAMPLES
 	 *
@@ -216,7 +215,10 @@ class Membership_Gates_Migration {
 						)
 					);
 					if ( ! $dry_run ) {
-						WP_CLI::confirm( sprintf( 'Create "%s" anyway?', $gate_title ), $assoc_args );
+						WP_CLI::confirm(
+							sprintf( 'Create "%s" anyway? Answering no stops the whole run; gates already written stay written, and re-running is safe.', $gate_title ),
+							$assoc_args
+						);
 					}
 				}
 			}
