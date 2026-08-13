@@ -120,4 +120,115 @@ class Premium_Newsletters_Migration {
 	private static function group_requires_purchase( array $group ): bool {
 		return ! array_filter( $group, fn( $g ) => 'purchase' !== $g['access_method'] );
 	}
+
+	/**
+	 * Resolve a newsletter list's public (ESP) list ID.
+	 *
+	 * The post type is checked first so a stale or mistyped ID returns null instead
+	 * of reaching Subscription_List, whose constructor throws for anything that is
+	 * not a list.
+	 *
+	 * @param int $list_id The list post ID.
+	 *
+	 * @return string|null The public list ID, or null when it cannot be resolved.
+	 */
+	private static function get_public_id( int $list_id ): ?string {
+		if ( \get_post_type( $list_id ) !== self::get_list_cpt() ) {
+			return null;
+		}
+		if ( ! class_exists( 'Newspack\Newsletters\Subscription_List' ) ) {
+			return null;
+		}
+		try {
+			$list = new \Newspack\Newsletters\Subscription_List( $list_id );
+		} catch ( \Throwable $e ) {
+			return null;
+		}
+		$public_id = $list->get_public_id();
+		return $public_id ? (string) $public_id : null;
+	}
+
+	/**
+	 * The public list IDs shown in the post-checkout newsletter signup modal.
+	 *
+	 * Mirrors the lookup the pre-Access-Control WooCommerce Memberships integration
+	 * used to decide which lists to leave to reader opt-in. With custom lists off the
+	 * modal offers every list rather than a chosen set, so the saved selection is not
+	 * a carve-out and the set is empty.
+	 *
+	 * @return string[] Public list IDs.
+	 */
+	private static function get_modal_public_ids(): array {
+		if ( ! method_exists( 'Newspack\Reader_Activation', 'get_settings' ) ) {
+			return [];
+		}
+		$settings = \Newspack\Reader_Activation::get_settings();
+		if ( empty( $settings['use_custom_lists'] ) || empty( $settings['newsletter_lists'] ) ) {
+			return [];
+		}
+		$public_ids = [];
+		foreach ( $settings['newsletter_lists'] as $list ) {
+			if ( isset( $list['id'] ) ) {
+				$public_ids[] = (string) $list['id'];
+			}
+		}
+		return array_values( array_unique( $public_ids ) );
+	}
+
+	/**
+	 * Derive the site-wide auto-signup setting from the restricted lists.
+	 *
+	 * Before Access Control, activating a membership auto-subscribed the member to
+	 * every list the plan restricted, except lists shown in the post-checkout signup
+	 * modal, which were left to reader opt-in. `newspack_premium_newsletters_auto_signup`
+	 * is a single site-wide option, so that per-list distinction only survives when
+	 * every restricted list falls on the same side. A split returns a null value:
+	 * one flag cannot express it, and either guess has a victim — on subscribes
+	 * readers who opted out, off drops readers who expected the list.
+	 *
+	 * A list whose public ID cannot be resolved is reported separately and counted as
+	 * non-modal, matching the pre-Access-Control default.
+	 *
+	 * @param int[] $list_ids The restricted newsletter list post IDs.
+	 *
+	 * @return array{value: bool|null, modal: int[], non_modal: int[], unresolved: int[]}
+	 */
+	private static function derive_auto_signup( array $list_ids ): array {
+		$modal_public_ids = self::get_modal_public_ids();
+		$modal            = [];
+		$non_modal        = [];
+		$unresolved       = [];
+
+		foreach ( $list_ids as $list_id ) {
+			$list_id   = (int) $list_id;
+			$public_id = self::get_public_id( $list_id );
+			if ( null === $public_id ) {
+				$unresolved[] = $list_id;
+				$non_modal[]  = $list_id;
+				continue;
+			}
+			if ( in_array( $public_id, $modal_public_ids, true ) ) {
+				$modal[] = $list_id;
+			} else {
+				$non_modal[] = $list_id;
+			}
+		}
+
+		if ( empty( $modal ) && empty( $non_modal ) ) {
+			$value = null;
+		} elseif ( empty( $modal ) ) {
+			$value = true;
+		} elseif ( empty( $non_modal ) ) {
+			$value = false;
+		} else {
+			$value = null;
+		}
+
+		return [
+			'value'      => $value,
+			'modal'      => $modal,
+			'non_modal'  => $non_modal,
+			'unresolved' => $unresolved,
+		];
+	}
 }

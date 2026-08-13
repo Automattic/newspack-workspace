@@ -26,6 +26,38 @@ require_once dirname( __DIR__, 3 ) . '/includes/cli/class-premium-newsletters-mi
 class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 
 	/**
+	 * A newsletter list post ID.
+	 *
+	 * @var int
+	 */
+	private $list_a;
+
+	/**
+	 * A second newsletter list post ID.
+	 *
+	 * @var int
+	 */
+	private $list_b;
+
+	/**
+	 * Register the list post type and create two lists.
+	 */
+	public function set_up() {
+		parent::set_up();
+		register_post_type( Subscription_Lists::CPT, [ 'public' => false ] );
+		$this->list_a = self::factory()->post->create( [ 'post_type' => Subscription_Lists::CPT ] );
+		$this->list_b = self::factory()->post->create( [ 'post_type' => Subscription_Lists::CPT ] );
+	}
+
+	/**
+	 * Unregister the list post type so it does not leak into other test classes.
+	 */
+	public function tear_down() {
+		unregister_post_type( Subscription_Lists::CPT );
+		parent::tear_down();
+	}
+
+	/**
 	 * Invoke a private static method on the CLI class via reflection.
 	 *
 	 * @param string $method_name The method name.
@@ -189,5 +221,110 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 		$this->assertTrue( $this->invoke_private_static( 'group_requires_purchase', [ $all_purchase ] ) );
 		$this->assertFalse( $this->invoke_private_static( 'group_requires_purchase', [ $mixed ] ) );
 		$this->assertFalse( $this->invoke_private_static( 'group_requires_purchase', [ $all_signup ] ) );
+	}
+
+	/**
+	 * Resolve a list's public (ESP) ID the same way the derivation does, rather than
+	 * hardcoding the mock's ID format.
+	 *
+	 * @param int $list_id The list post ID.
+	 *
+	 * @return string The public list ID.
+	 */
+	private function public_id_for( int $list_id ): string {
+		return ( new \Newspack\Newsletters\Subscription_List( $list_id ) )->get_public_id();
+	}
+
+	/**
+	 * Put the given lists in the post-checkout signup modal.
+	 *
+	 * @param int[] $list_ids List post IDs.
+	 */
+	private function set_signup_modal_lists( array $list_ids ) {
+		update_option( 'newspack_reader_activation_use_custom_lists', 1 );
+		update_option(
+			'newspack_reader_activation_newsletter_lists',
+			array_map( fn( $list_id ) => [ 'id' => $this->public_id_for( $list_id ) ], $list_ids )
+		);
+	}
+
+	/**
+	 * A list outside the signup modal was auto-subscribed on membership activation
+	 * before Access Control, so auto-signup carries that behavior forward.
+	 */
+	public function test_derive_auto_signup_is_on_when_no_list_is_in_the_signup_modal() {
+		$this->set_signup_modal_lists( [] );
+
+		$derived = $this->invoke_private_static( 'derive_auto_signup', [ [ $this->list_a, $this->list_b ] ] );
+
+		$this->assertTrue( $derived['value'] );
+		$this->assertSame( [ $this->list_a, $this->list_b ], $derived['non_modal'] );
+		$this->assertSame( [], $derived['modal'] );
+	}
+
+	/**
+	 * A list in the signup modal was left to reader opt-in, so auto-signup stays off.
+	 */
+	public function test_derive_auto_signup_is_off_when_every_list_is_in_the_signup_modal() {
+		$this->set_signup_modal_lists( [ $this->list_a, $this->list_b ] );
+
+		$derived = $this->invoke_private_static( 'derive_auto_signup', [ [ $this->list_a, $this->list_b ] ] );
+
+		$this->assertFalse( $derived['value'] );
+		$this->assertSame( [ $this->list_a, $this->list_b ], $derived['modal'] );
+	}
+
+	/**
+	 * Auto-signup is one site-wide setting but the pre-Access-Control behavior was
+	 * per-list, so a site splitting its lists across the modal cannot be expressed.
+	 * The derivation returns no value rather than picking a side: guessing on
+	 * subscribes readers who opted out, guessing off drops readers who expected the
+	 * list.
+	 */
+	public function test_derive_auto_signup_is_undecided_when_lists_disagree() {
+		$this->set_signup_modal_lists( [ $this->list_a ] );
+
+		$derived = $this->invoke_private_static( 'derive_auto_signup', [ [ $this->list_a, $this->list_b ] ] );
+
+		$this->assertNull( $derived['value'] );
+		$this->assertSame( [ $this->list_a ], $derived['modal'] );
+		$this->assertSame( [ $this->list_b ], $derived['non_modal'] );
+	}
+
+	/**
+	 * With custom lists off, the modal shows every list rather than a chosen set, so
+	 * the saved list selection is not the carve-out and must be ignored.
+	 */
+	public function test_derive_auto_signup_ignores_the_saved_lists_when_custom_lists_are_off() {
+		update_option( 'newspack_reader_activation_use_custom_lists', 0 );
+		update_option( 'newspack_reader_activation_newsletter_lists', [ [ 'id' => $this->public_id_for( $this->list_a ) ] ] );
+
+		$derived = $this->invoke_private_static( 'derive_auto_signup', [ [ $this->list_a ] ] );
+
+		$this->assertTrue( $derived['value'] );
+	}
+
+	/**
+	 * A list ID that is not a newsletter list resolves to no ESP list, so it cannot
+	 * be matched against the modal set. It is reported separately and counted as a
+	 * non-modal list, which is what the pre-Access-Control default was.
+	 */
+	public function test_derive_auto_signup_reports_lists_it_cannot_resolve() {
+		$this->set_signup_modal_lists( [] );
+		$not_a_list = self::factory()->post->create();
+
+		$derived = $this->invoke_private_static( 'derive_auto_signup', [ [ $this->list_a, $not_a_list ] ] );
+
+		$this->assertSame( [ $not_a_list ], $derived['unresolved'] );
+		$this->assertSame( [ $this->list_a, $not_a_list ], $derived['non_modal'] );
+	}
+
+	/**
+	 * With no lists there is nothing to derive from, so nothing is decided.
+	 */
+	public function test_derive_auto_signup_is_undecided_with_no_lists() {
+		$derived = $this->invoke_private_static( 'derive_auto_signup', [ [] ] );
+
+		$this->assertNull( $derived['value'] );
 	}
 }
