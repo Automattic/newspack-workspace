@@ -35,10 +35,7 @@ $stat-card-min-height: wp-vars.$grid-unit * 21;
 	}
 
 	&__body {
-		display: flex;
 		flex: 1;
-		flex-direction: column;
-		gap: wp-vars.$grid-unit-05;
 	}
 
 	&__value {
