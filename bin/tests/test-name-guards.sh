@@ -18,6 +18,11 @@
 # to reach git with "--help" as the branch. Git refuses that refname, so nothing
 # was created, but the user got a git error rather than usage.
 #
+# Scope: the four env subcommands that read a name positionally — create, up,
+# down and destroy — are all covered. list only compares $2 against --porcelain,
+# cleanup never reads it, and e2e-setup delegates to bin/setup-local-e2e.sh,
+# which carries its own --help arm and calls validate_env_name itself.
+#
 # Run: bash bin/tests/test-name-guards.sh
 
 set -euo pipefail
@@ -31,10 +36,26 @@ trap 'rm -rf "$WORK"' EXIT
 
 failures=0
 
+# Classify a validator call. Both validators exit rather than return, so the
+# call runs in a subshell. A rejection is exit 1 carrying the error message:
+# counting any non-zero as a rejection would let a syntax error or a set -u
+# abort satisfy every rejection assertion below, and the suite would stay green
+# against a _common.sh that no longer parses.
+classify() {
+	local out status=0
+	out=$( "$@" 2>&1 ) || status=$?
+	if [[ "$status" -eq 0 ]]; then
+		echo accepted
+	elif [[ "$status" -eq 1 && "$out" == *"Error: invalid"* ]]; then
+		echo rejected
+	else
+		echo "broken(exit $status)"
+	fi
+}
+
 assert_name() {
 	local name="$1" want="$2" desc="$3" got
-	# validate_env_name exits rather than returning, so it runs in a subshell.
-	if ( validate_env_name "$name" ) >/dev/null 2>&1; then got=accepted; else got=rejected; fi
+	got=$(classify validate_env_name "$name")
 	if [[ "$got" == "$want" ]]; then
 		echo "  ok: $desc"
 	else
@@ -52,15 +73,15 @@ assert_name "1demo" accepted "a leading digit is accepted"
 assert_name "--help" rejected "the option that named the bug is rejected"
 assert_name "-h" rejected "a short option is rejected"
 assert_name "-demo" rejected "a leading dash is rejected"
-assert_name ".demo" rejected "a leading dot is rejected, which would misname the data dir"
-assert_name "_demo" rejected "a leading underscore is rejected"
+assert_name ".demo" accepted "a leading dot is accepted; rejecting it would strand an existing env"
+assert_name "_demo" accepted "a leading underscore is accepted, for the same reason"
+assert_name "-demo" rejected "only a leading dash is rejected, and it is the whole point of the rule"
 assert_name "demo/1" rejected "a slash is rejected, since Docker rejects it in container names"
 assert_name "" rejected "an empty name is rejected"
 
 assert_path_name() {
 	local name="$1" want="$2" desc="$3" got
-	# validate_name exits rather than returning, so it runs in a subshell.
-	if ( validate_name "$name" "branch" ) >/dev/null 2>&1; then got=accepted; else got=rejected; fi
+	got=$(classify validate_name "$name" "branch")
 	if [[ "$got" == "$want" ]]; then
 		echo "  ok: $desc"
 	else

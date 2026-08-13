@@ -127,8 +127,9 @@ each_worktree_in_env() {
     done < <(grep -E '^[[:space:]]*-[[:space:]]+\./worktrees(-repos)?/[^[:space:]:]+:/newspack-(repos|plugins|themes)/[^[:space:]:]+' "$file" 2>/dev/null)
 }
 
-# True for an explicit help request in the name position. validate_env_name
-# rejects a leading dash, so this can never shadow a legitimate environment name.
+# True for an explicit help request in the name position. It matches -h and
+# --help and nothing else, so `up --all` — the one other dash-leading token read
+# from that position — still reaches its own branch below.
 is_help_arg() {
     [[ "$1" == "-h" || "$1" == "--help" ]]
 }
