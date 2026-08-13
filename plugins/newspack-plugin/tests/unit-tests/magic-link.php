@@ -402,10 +402,13 @@ class Newspack_Test_Magic_Link extends WP_UnitTestCase {
 	public function data_off_origin_bases() {
 		return [
 			'off-origin host'     => [ 'https://attacker.example/harvest' ],
-			// This row tests scheme pinning ONLY while the test site is http (WP_TESTS_DOMAIN default):
-			// https://example.org is then a different origin. If the suite is ever configured for https,
-			// update this row (e.g. to an http:// input) or it silently stops testing the scheme check.
-			'scheme mismatch'     => [ 'https://example.org/x' ],
+			// Derived from home_url() by flipping only its scheme, so this row
+			// tests scheme pinning regardless of which scheme the test site runs
+			// under (WP_TESTS_DOMAIN defaults to http, but should that ever
+			// change, the row keeps exercising a scheme mismatch on the same host
+			// instead of silently degrading to a host mismatch or a same-origin
+			// input).
+			'scheme mismatch'     => [ self::scheme_mismatch_base() ],
 			'protocol-relative'   => [ '//attacker.example/harvest' ],
 			'backslash authority' => [ 'https:\\\\attacker.example' ],
 			'schemeful host-less' => [ 'mailto:reader@example.com' ],
@@ -413,6 +416,21 @@ class Newspack_Test_Magic_Link extends WP_UnitTestCase {
 			'suffix host'         => [ 'https://example.org.attacker.example/' ],
 			'bare authority'      => [ '://attacker.example' ], // Core normalises to a relative path.
 		];
+	}
+
+	/**
+	 * Build an off-origin base that mismatches home_url() by scheme only.
+	 *
+	 * PHPUnit calls data providers before set_up(), but home_url() is safe to
+	 * call here: the WP test bootstrap loads WP (and its options) once, before
+	 * PHPUnit collects any tests, so the site URL is already resolvable.
+	 *
+	 * @return string Same host and port as home_url(), opposite scheme.
+	 */
+	private static function scheme_mismatch_base() {
+		$home            = wp_parse_url( home_url() );
+		$mismatched_home = 'https' === $home['scheme'] ? 'http' : 'https';
+		return $mismatched_home . '://' . $home['host'] . ( isset( $home['port'] ) ? ':' . $home['port'] : '' ) . '/x';
 	}
 
 	/**
@@ -489,20 +507,30 @@ class Newspack_Test_Magic_Link extends WP_UnitTestCase {
 		$name_callback = function () {
 			return 'reader-activation-magic-link';
 		};
+		// The filter add/reset and its teardown are wrapped in try/finally so the
+		// two filters and the email-config cache are cleaned up even if an
+		// assertion below fails — this suite has had order-dependent failures
+		// from leaked filter/cache state between tests.
 		add_filter( 'newspack_email_configs', $config_callback );
 		add_filter( 'newspack_magic_link_email_config', $name_callback );
 		Emails::reset_email_configs_cache();
 		reset_phpmailer_instance();
 
-		$sent = Magic_Link::send_email( get_user_by( 'id', self::$user_id ), 'https://attacker.example/harvest' );
+		try {
+			$sent = Magic_Link::send_email( get_user_by( 'id', self::$user_id ), 'https://attacker.example/harvest' );
 
-		$body = tests_retrieve_phpmailer_instance()->get_sent()->body;
+			// Assert dispatch succeeded before reading the sent body: if send_email()
+			// ever regressed to return false/WP_Error, get_sent() would return null
+			// and ->body would fatal here instead of failing this assertion cleanly.
+			$this->assertTrue( $sent, 'The email must dispatch through MockPHPMailer.' );
 
-		remove_filter( 'newspack_magic_link_email_config', $name_callback );
-		remove_filter( 'newspack_email_configs', $config_callback );
-		Emails::reset_email_configs_cache();
+			$body = tests_retrieve_phpmailer_instance()->get_sent()->body;
+		} finally {
+			remove_filter( 'newspack_magic_link_email_config', $name_callback );
+			remove_filter( 'newspack_email_configs', $config_callback );
+			Emails::reset_email_configs_cache();
+		}
 
-		$this->assertTrue( $sent, 'The email must dispatch through MockPHPMailer.' );
 		$this->assertStringNotContainsString( 'attacker.example', $body, 'The base must not be the attacker host.' );
 
 		// wp_mail() sends this template as quoted-printable, so the raw body
