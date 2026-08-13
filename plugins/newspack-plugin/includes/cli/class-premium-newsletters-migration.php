@@ -383,8 +383,8 @@ class Premium_Newsletters_Migration {
 	 * @return array The gate payload: 'title', 'list_ids', 'has_purchase', 'access_type',
 	 *               'content_rules', 'content_rules_match', 'registration' and
 	 *               'custom_access' are what the create and update paths write;
-	 *               'product_ids' and 'dropped_product_ids' are what the pre-write check
-	 *               and the warnings report on.
+	 *               'product_ids', 'variation_ids' and 'dropped_product_ids' are what
+	 *               the pre-write check and the warnings report on.
 	 */
 	private static function build_gate_payload( array $group ): array {
 		$list_ids     = $group[0]['list_ids'] ?? [];
@@ -424,6 +424,7 @@ class Premium_Newsletters_Migration {
 				'access_rules' => $access_rules,
 			],
 			'product_ids'         => $product_ids,
+			'variation_ids'       => $products['variations'],
 			'dropped_product_ids' => $products['dropped'],
 		];
 	}
@@ -448,13 +449,23 @@ class Premium_Newsletters_Migration {
 	 * own — a rule nothing can satisfy — but they leave the gate stricter than the plan
 	 * was, so the caller warns rather than staying silent.
 	 *
+	 * Variation IDs are kept, unlike in the sibling content gate command.
+	 * WC_Subscription::has_product() matches a line item on either its product_id or
+	 * its variation_id, so the variation ID admits exactly the readers who bought that
+	 * variation — which is what the plan granted. Substituting the parent would also
+	 * admit holders of its sibling variations, and dropping the ID restricts readers
+	 * the plan admitted, who Premium_Newsletters::check_access() then unsubscribes at
+	 * cutover. The cost is that the gate editor's product picker is built from
+	 * Access_Rules::get_subscription_products_options(), which lists parent products
+	 * only, so a variation ID is not shown there and is lost if that field is re-saved.
+	 *
 	 * @param array[] $group Plan descriptors, each carrying a 'product_ids' key.
 	 *
 	 * @return array 'product_ids' are the surviving IDs, in the order they appeared;
+	 *               'variations' is the subset of them that are product variations;
 	 *               'dropped' holds 'invalid' (did not normalize to a positive integer —
-	 *               a non-numeric meta value therefore appears as 0), 'unresolvable' (no
-	 *               product post with that ID) and 'variations' (product variations,
-	 *               which gates reference by parent product only).
+	 *               a non-numeric meta value therefore appears as 0) and 'unresolvable'
+	 *               (no product post with that ID).
 	 */
 	private static function resolve_product_ids( array $group ): array {
 		$raw = array_merge( ...array_values( array_column( $group, 'product_ids' ) ) );
@@ -474,26 +485,27 @@ class Premium_Newsletters_Migration {
 				$variations[] = $product_id;
 			} elseif ( 'product' !== $post_type ) {
 				$unresolvable[] = $product_id;
-			} else {
-				$product_ids[] = $product_id;
+				continue;
 			}
+			$product_ids[] = $product_id;
 		}
 
 		return [
 			'product_ids' => $product_ids,
+			'variations'  => $variations,
 			'dropped'     => [
 				'invalid'      => $invalid,
 				'unresolvable' => $unresolvable,
-				'variations'   => $variations,
 			],
 		];
 	}
 
 	/**
-	 * Warn about the product IDs the gate payload dropped.
+	 * Warn about the product IDs the gate payload dropped, and about the variation IDs
+	 * it kept.
 	 *
-	 * Plain warnings rather than WARN rows: a dropped ID does not stop the gate being
-	 * written, and a group that loses every product is caught separately by
+	 * Plain warnings rather than WARN rows: none of these stop the gate being written,
+	 * and a group that loses every product is caught separately by
 	 * compute_pre_write_issues() and verify_migrated_gate().
 	 *
 	 * @param array $payload A build_gate_payload() result.
@@ -516,6 +528,15 @@ class Premium_Newsletters_Migration {
 					'"%s": dropped product ID(s) %s, which resolve to no product (deleted?). A rule naming them could never be satisfied, so the gate would be stricter than the plan was. Check the plan\'s products.',
 					$payload['title'],
 					implode( ', ', $payload['dropped_product_ids']['unresolvable'] )
+				)
+			);
+		}
+		if ( ! empty( $payload['variation_ids'] ) ) {
+			WP_CLI::warning(
+				sprintf(
+					'"%s": its paid access rule keeps product variation ID(s) %s, which is what the plan granted. The gate editor\'s product picker lists parent products only, so they are not shown there — and re-saving that field in the editor drops them. Leave it alone unless you mean to change what the gate grants.',
+					$payload['title'],
+					implode( ', ', $payload['variation_ids'] )
 				)
 			);
 		}

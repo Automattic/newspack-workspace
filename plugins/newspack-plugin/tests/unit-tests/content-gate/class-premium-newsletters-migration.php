@@ -385,6 +385,54 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A plan granting membership on purchase of a variation must migrate to a rule
+	 * naming that variation. WC_Subscription::has_product() matches a line item on
+	 * either product_id or variation_id, so the variation ID admits exactly the
+	 * readers the plan admitted.
+	 *
+	 * This fails under both alternatives: dropping the variation leaves access_rules
+	 * empty, and substituting the parent product would also admit holders of its
+	 * sibling variations, whom the plan never granted.
+	 */
+	public function test_build_gate_payload_keeps_a_variation_id_rather_than_its_parent() {
+		$parent    = self::factory()->post->create( [ 'post_type' => 'product' ] );
+		$variation = self::factory()->post->create(
+			[
+				'post_type'   => 'product_variation',
+				'post_parent' => $parent,
+			]
+		);
+
+		$payload = $this->invoke_private_static(
+			'build_gate_payload',
+			[ [ $this->make_payload_plan( 'purchase', [ $variation ], [ $this->list_a ] ) ] ]
+		);
+
+		$this->assertSame( [ $variation ], $payload['product_ids'] );
+		$this->assertSame( [ $variation ], $payload['custom_access']['access_rules'][0][0]['value'] );
+		$this->assertSame( [ $variation ], $payload['variation_ids'] );
+		$this->assertNotContains( $parent, $payload['product_ids'] );
+	}
+
+	/**
+	 * A variation alongside other products is kept too. This is the case nothing used
+	 * to warn about: the rule stayed non-empty, so compute_pre_write_issues() saw no
+	 * problem while the variation's holders lost the list at cutover.
+	 */
+	public function test_build_gate_payload_keeps_a_variation_id_alongside_other_products() {
+		$variation = self::factory()->post->create( [ 'post_type' => 'product_variation' ] );
+
+		$payload = $this->invoke_private_static(
+			'build_gate_payload',
+			[ [ $this->make_payload_plan( 'purchase', [ $this->product, $variation ], [ $this->list_a ] ) ] ]
+		);
+
+		$this->assertSame( [ $this->product, $variation ], $payload['product_ids'] );
+		$this->assertSame( [ $this->product, $variation ], $payload['custom_access']['access_rules'][0][0]['value'] );
+		$this->assertSame( [ $variation ], $payload['variation_ids'] );
+	}
+
+	/**
 	 * When dropping leaves a purchase group with nothing, the payload must fall back to
 	 * the empty-access_rules shape rather than writing a rule with an empty value: an
 	 * empty product list makes Access_Rules::has_active_subscription() grant any active
