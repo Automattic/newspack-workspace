@@ -395,9 +395,10 @@ class Premium_Newsletters_Migration {
 	/**
 	 * The newsletter list post type.
 	 *
-	 * Read from Newspack Newsletters when it is loaded so the two stay in step, with
-	 * a literal fallback so this command's sibling can call it without depending on
-	 * that plugin.
+	 * Read from Newspack Newsletters when it is loaded so the two stay in step. The
+	 * literal fallback is unreachable in practice — the command's preflight hard-errors
+	 * when Subscription_Lists is missing — but it keeps the helper correct on its own
+	 * terms for any caller that reaches it outside that flow.
 	 *
 	 * @return string The list post type.
 	 */
@@ -513,9 +514,10 @@ class Premium_Newsletters_Migration {
 	/**
 	 * Resolve a newsletter list's public (ESP) list ID.
 	 *
-	 * The post type is checked first so a stale or mistyped ID returns null instead
-	 * of reaching Subscription_List, whose constructor throws for anything that is
-	 * not a list.
+	 * The post type is checked first because Subscription_List's constructor does not
+	 * check it: it throws only when the post does not exist, so a live post of any
+	 * other type would construct and hand back a bogus public ID. The guard is what
+	 * makes a stale or mistyped ID return null instead.
 	 *
 	 * @param int $list_id The list post ID.
 	 *
@@ -681,9 +683,13 @@ class Premium_Newsletters_Migration {
 	 * deactivated, so without this an unenforceable gate would look migrated for as
 	 * long as it takes someone to notice at cutover.
 	 *
-	 * Layout checks are deliberately absent: this command never authors layouts, a
-	 * premium gate controls list visibility rather than rendering an article gate,
-	 * and create_gate() seeds both layout posts.
+	 * Layout checks are deliberately absent, but not because layouts do not matter:
+	 * is_post_restricted() ends on `if ( $is_restricted && $gate_layout_id )`, and
+	 * get_registration_settings() defaults gate_layout_id to 0, so a gate with no
+	 * layout restricts nothing — premium newsletter gates included. The check is safe
+	 * to omit because Content_Gate::create_gate() seeds both layout posts, and every
+	 * path that creates one of these gates — this command and the Premium Newsletters
+	 * wizard — goes through it.
 	 *
 	 * @param int  $gate_id      The gate post ID.
 	 * @param bool $has_purchase Whether every plan behind this gate requires a purchase.
@@ -738,6 +744,12 @@ class Premium_Newsletters_Migration {
 			if ( empty( $custom_access['active'] ) ) {
 				$issues[] = 'it migrates a plan that requires a purchase, but its paid access mode is not active — any registered reader would keep the list';
 			} elseif ( empty( $custom_access['access_rules'] ) ) {
+				// No rule at all is the benign shape of this failure. A rule carrying an
+				// EMPTY value would be worse: Access_Rules::has_active_subscription() with an
+				// empty product list falls through to "any active subscription", so it grants
+				// access instead of denying it. The write path above emits either [] or a rule
+				// with a non-empty value, so that shape cannot occur today — do not relax the
+				// `! empty( $merged_product_ids )` guard without handling it here.
 				$issues[] = 'its paid access mode is active but has no access rules, so it asks for no purchase — any registered reader would keep the list';
 			}
 		}
