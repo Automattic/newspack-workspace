@@ -5,6 +5,7 @@
  * @package Newspack\Tests
  */
 
+use Newspack\Emails;
 use Newspack\Magic_Link;
 use Newspack\Reader_Activation;
 
@@ -455,5 +456,52 @@ class Newspack_Test_Magic_Link extends WP_UnitTestCase {
 	public function test_generate_url_empty_base_is_home() {
 		$url = Magic_Link::generate_url( get_user_by( 'id', self::$user_id ), '' );
 		$this->assertStringStartsWith( home_url(), $url );
+	}
+
+	/**
+	 * The magic-link email built by send_email() also keeps its base on-origin.
+	 *
+	 * Mirrors the generate_url() coverage above for the second builder:
+	 * send_email() embeds the URL in an email rather than returning it, so
+	 * this captures the sent body via MockPHPMailer (as
+	 * tests/unit-tests/emails.php does for its own sends). The mock config
+	 * mirrors the real 'reader-activation-magic-link' config registered by
+	 * Reader_Activation_Emails::add_email_configs() — a `template` pointing
+	 * at the real template file, not an inline `html_payload` string,
+	 * because Emails::get_email_config_by_type() resolves the rendered body
+	 * from a post created from that template, not from a config-level
+	 * payload field.
+	 */
+	public function test_send_email_restricts_off_origin_base() {
+		$config_callback = function ( $configs ) {
+			$configs['reader-activation-magic-link'] = [
+				'name'        => 'reader-activation-magic-link',
+				'category'    => 'reader-activation',
+				'label'       => 'Magic link',
+				'description' => 'Magic link email.',
+				'template'    => dirname( NEWSPACK_PLUGIN_FILE ) . '/includes/templates/reader-activation-emails/magic-link.php',
+			];
+			return $configs;
+		};
+		$name_callback = function () {
+			return 'reader-activation-magic-link';
+		};
+		add_filter( 'newspack_email_configs', $config_callback );
+		add_filter( 'newspack_magic_link_email_config', $name_callback );
+		Emails::reset_email_configs_cache();
+		reset_phpmailer_instance();
+
+		$sent = Magic_Link::send_email( get_user_by( 'id', self::$user_id ), 'https://attacker.example/harvest' );
+
+		$body = tests_retrieve_phpmailer_instance()->get_sent()->body;
+
+		remove_filter( 'newspack_magic_link_email_config', $name_callback );
+		remove_filter( 'newspack_email_configs', $config_callback );
+		Emails::reset_email_configs_cache();
+
+		$this->assertTrue( $sent, 'The email must dispatch through MockPHPMailer.' );
+		$this->assertStringNotContainsString( 'attacker.example', $body, 'The base must not be the attacker host.' );
+		$this->assertStringContainsString( home_url(), $body, 'The base must be the site origin.' );
+		$this->assertStringContainsString( 'token=', $body, 'The token must still be present.' );
 	}
 }
