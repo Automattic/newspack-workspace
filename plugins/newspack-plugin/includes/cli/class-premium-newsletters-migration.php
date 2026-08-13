@@ -231,4 +231,155 @@ class Premium_Newsletters_Migration {
 			'unresolved' => $unresolved,
 		];
 	}
+
+	/**
+	 * Which of the given IDs are not newsletter list posts.
+	 *
+	 * The evaluator matches a 'newsletters' rule by comparing the list post's own ID
+	 * against the rule values, so an ID belonging to a deleted post or to something
+	 * that is not a list matches nothing and leaves that list open.
+	 *
+	 * @param int[] $list_ids Newsletter list post IDs.
+	 *
+	 * @return int[] The IDs that do not resolve to a newsletter list.
+	 */
+	private static function list_ids_that_do_not_resolve( array $list_ids ): array {
+		$list_cpt = self::get_list_cpt();
+		$missing  = [];
+		foreach ( $list_ids as $list_id ) {
+			if ( \get_post_type( (int) $list_id ) !== $list_cpt ) {
+				$missing[] = (int) $list_id;
+			}
+		}
+		return $missing;
+	}
+
+	/**
+	 * Describe how many of a gate's restricted lists fail to resolve.
+	 *
+	 * Shared by the live and dry-run passes so both report the same wording.
+	 *
+	 * @param int[] $list_ids     The gate's restricted list IDs.
+	 * @param int[] $unresolvable The subset that does not resolve.
+	 *
+	 * @return string|null The problem, or null when every list resolves.
+	 */
+	private static function describe_unresolvable_lists( array $list_ids, array $unresolvable ): ?string {
+		if ( empty( $unresolvable ) ) {
+			return null;
+		}
+		if ( count( $unresolvable ) === count( $list_ids ) ) {
+			return sprintf(
+				'none of its restricted lists (%s) exist as newsletter lists',
+				implode( ', ', $unresolvable )
+			);
+		}
+		return sprintf(
+			'%d of its %d restricted lists (%s) do not exist as newsletter lists, so those lists stay unrestricted',
+			count( $unresolvable ),
+			count( $list_ids ),
+			implode( ', ', $unresolvable )
+		);
+	}
+
+	/**
+	 * Re-read a freshly written gate and report why it would fail to restrict.
+	 *
+	 * Mirrors the conditions Content_Restriction_Control::get_post_gates() and
+	 * is_post_restricted() apply to a newsletter list post, so a gate that passes
+	 * here is one the evaluator can act on for the readers the source plan
+	 * restricted. Migrated gates stay dormant until WooCommerce Memberships is
+	 * deactivated, so without this an unenforceable gate would look migrated for as
+	 * long as it takes someone to notice at cutover.
+	 *
+	 * Layout checks are deliberately absent: this command never authors layouts, a
+	 * premium gate controls list visibility rather than rendering an article gate,
+	 * and create_gate() seeds both layout posts.
+	 *
+	 * @param int  $gate_id      The gate post ID.
+	 * @param bool $has_purchase Whether every plan behind this gate requires a purchase.
+	 *
+	 * @return string[] Human-readable problems; empty when the gate is enforceable.
+	 */
+	private static function verify_migrated_gate( int $gate_id, bool $has_purchase = false ): array {
+		$issues = [];
+
+		if ( 'publish' !== \get_post_status( $gate_id ) ) {
+			$issues[] = 'the gate is not published';
+		}
+
+		if ( ! \get_post_meta( $gate_id, 'is_newsletter', true ) ) {
+			$issues[] = 'it is missing the is_newsletter flag, so the evaluator judges list posts against the content gate bucket and this gate never applies';
+		}
+
+		$content_rules = \Newspack\Content_Rules::get_gate_content_rules( $gate_id );
+		$list_ids      = [];
+		foreach ( $content_rules as $content_rule ) {
+			if ( 'newsletters' === ( $content_rule['slug'] ?? '' ) ) {
+				$list_ids = array_merge( $list_ids, array_map( 'intval', (array) ( $content_rule['value'] ?? [] ) ) );
+			}
+		}
+		$list_ids = array_values( array_unique( $list_ids ) );
+
+		if ( empty( $list_ids ) ) {
+			// get_gate_content_rules() drops rules with an empty value, so a gate can be
+			// written with rules and still evaluate as having none — say which it is.
+			$written_rules = \get_post_meta( $gate_id, 'content_rules', true );
+			$issues[]      = empty( $written_rules )
+				? 'it has no content rules'
+				: 'none of its content rules select a newsletter list';
+		} else {
+			$unresolvable = self::describe_unresolvable_lists( $list_ids, self::list_ids_that_do_not_resolve( $list_ids ) );
+			if ( null !== $unresolvable ) {
+				$issues[] = $unresolvable;
+			}
+		}
+
+		$registration  = \Newspack\Content_Gate::get_registration_settings( $gate_id );
+		$custom_access = \Newspack\Content_Gate::get_custom_access_settings( $gate_id );
+		if ( empty( $registration['active'] ) && empty( $custom_access['active'] ) ) {
+			$issues[] = 'neither the registration nor the paid access mode is active';
+		}
+
+		// A plan that required a purchase must migrate to a gate that gates on the
+		// purchase. Registration mode alone stops nobody who has an account, so a paid
+		// plan whose paid access mode is missing or unconstrained turns into a premium
+		// list any reader can join by registering a free account.
+		if ( $has_purchase ) {
+			if ( empty( $custom_access['active'] ) ) {
+				$issues[] = 'it migrates a plan that requires a purchase, but its paid access mode is not active — any registered reader would keep the list';
+			} elseif ( empty( $custom_access['access_rules'] ) ) {
+				$issues[] = 'its paid access mode is active but has no access rules, so it asks for no purchase — any registered reader would keep the list';
+			}
+		}
+
+		return $issues;
+	}
+
+	/**
+	 * Predict migration issues from group data alone, without writing anything.
+	 *
+	 * The computable subset of verify_migrated_gate(). Called in dry-run mode so the
+	 * planning pass surfaces the same warnings --live would.
+	 *
+	 * @param int[] $list_ids     The group's restricted list IDs.
+	 * @param bool  $has_purchase Whether every plan in the group requires a purchase.
+	 * @param int[] $product_ids  Merged parent product IDs for the paid access mode.
+	 *
+	 * @return string[] Human-readable problems; empty when no issues are predicted.
+	 */
+	private static function compute_pre_write_issues( array $list_ids, bool $has_purchase, array $product_ids ): array {
+		$issues = [];
+
+		$unresolvable = self::describe_unresolvable_lists( $list_ids, self::list_ids_that_do_not_resolve( $list_ids ) );
+		if ( null !== $unresolvable ) {
+			$issues[] = $unresolvable;
+		}
+
+		if ( $has_purchase && empty( $product_ids ) ) {
+			$issues[] = 'its paid access mode will have no access rules (no product IDs remain after stripping product variations), so it will ask for no purchase — any registered reader would keep the list';
+		}
+
+		return $issues;
+	}
 }

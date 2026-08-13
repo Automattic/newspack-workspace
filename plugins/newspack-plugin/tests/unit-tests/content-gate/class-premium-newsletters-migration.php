@@ -327,4 +327,167 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 
 		$this->assertNull( $derived['value'] );
 	}
+
+	/**
+	 * Create a premium newsletter gate restricting the given lists.
+	 *
+	 * @param int[] $list_ids     Newsletter list post IDs.
+	 * @param bool  $has_purchase Whether to activate paid access with a product rule.
+	 *
+	 * @return int The gate post ID.
+	 */
+	private function create_premium_gate( array $list_ids, bool $has_purchase = false ): int {
+		return \Newspack\Content_Gate::create_gate(
+			[
+				'title'               => 'Premium fixture',
+				'status'              => 'publish',
+				'content_rules'       => [
+					[
+						'slug'  => 'newsletters',
+						'value' => array_map( 'strval', $list_ids ),
+					],
+				],
+				'content_rules_match' => 'any',
+				'registration'        => [ 'active' => true ],
+				'custom_access'       => [
+					'active'       => $has_purchase,
+					'access_rules' => $has_purchase
+						? [
+							[
+								[
+									'slug'  => 'subscription',
+									'value' => [ 123 ],
+								],
+							],
+						]
+						: [],
+				],
+			],
+			\Newspack\Content_Gate::GATE_CPT,
+			true
+		);
+	}
+
+	/**
+	 * A correctly migrated gate reports nothing.
+	 */
+	public function test_verify_migrated_gate_passes_an_enforceable_gate() {
+		$gate_id = $this->create_premium_gate( [ $this->list_a ] );
+
+		$this->assertSame( [], $this->invoke_private_static( 'verify_migrated_gate', [ $gate_id ] ) );
+	}
+
+	/**
+	 * Without the is_newsletter flag the gate lands in the content gate bucket, which
+	 * the evaluator never consults for a list post, so it restricts nothing while
+	 * looking migrated.
+	 */
+	public function test_verify_migrated_gate_flags_a_gate_missing_the_newsletter_flag() {
+		$gate_id = $this->create_premium_gate( [ $this->list_a ] );
+		delete_post_meta( $gate_id, 'is_newsletter' );
+
+		$issues = $this->invoke_private_static( 'verify_migrated_gate', [ $gate_id ] );
+
+		$this->assertCount( 1, $issues );
+		$this->assertStringContainsString( 'is_newsletter', $issues[0] );
+	}
+
+	/**
+	 * A rule pointing at posts that are not newsletter lists selects nothing, so the
+	 * lists the plan restricted stay open after cutover.
+	 */
+	public function test_verify_migrated_gate_flags_list_ids_that_are_not_lists() {
+		$not_a_list = self::factory()->post->create();
+		$gate_id    = $this->create_premium_gate( [ $not_a_list ] );
+
+		$issues = $this->invoke_private_static( 'verify_migrated_gate', [ $gate_id ] );
+
+		$this->assertCount( 1, $issues );
+		$this->assertStringContainsString( 'none of its restricted lists', $issues[0] );
+	}
+
+	/**
+	 * A partly resolvable rule set is a partial leak, not a clean gate: the lists
+	 * behind the dead IDs stay open while the rest are restricted.
+	 */
+	public function test_verify_migrated_gate_flags_a_partially_resolvable_rule() {
+		$not_a_list = self::factory()->post->create();
+		$gate_id    = $this->create_premium_gate( [ $this->list_a, $not_a_list ] );
+
+		$issues = $this->invoke_private_static( 'verify_migrated_gate', [ $gate_id ] );
+
+		$this->assertCount( 1, $issues );
+		$this->assertStringContainsString( 'stay unrestricted', $issues[0] );
+	}
+
+	/**
+	 * A gate with neither mode active is skipped outright by the evaluator.
+	 */
+	public function test_verify_migrated_gate_flags_a_gate_with_no_active_mode() {
+		$gate_id = $this->create_premium_gate( [ $this->list_a ] );
+		\Newspack\Content_Gate::update_registration_settings( $gate_id, [ 'active' => false ] );
+
+		$issues = $this->invoke_private_static( 'verify_migrated_gate', [ $gate_id ] );
+
+		$this->assertCount( 1, $issues );
+		$this->assertStringContainsString( 'neither the registration nor the paid access mode', $issues[0] );
+	}
+
+	/**
+	 * Registration mode alone stops nobody who has an account, so a paid plan whose
+	 * paid access mode never activated hands the premium list to any registered
+	 * reader.
+	 */
+	public function test_verify_migrated_gate_flags_a_purchase_gate_with_no_paid_access_mode() {
+		$gate_id = $this->create_premium_gate( [ $this->list_a ], false );
+
+		$issues = $this->invoke_private_static( 'verify_migrated_gate', [ $gate_id, true ] );
+
+		$this->assertCount( 1, $issues );
+		$this->assertStringContainsString( 'paid access mode is not active', $issues[0] );
+		$this->assertSame( [], $this->invoke_private_static( 'verify_migrated_gate', [ $gate_id, false ] ) );
+	}
+
+	/**
+	 * An active paid access mode with no access rules asks for no purchase.
+	 */
+	public function test_verify_migrated_gate_flags_a_purchase_gate_whose_paid_access_has_no_rules() {
+		$gate_id = $this->create_premium_gate( [ $this->list_a ], true );
+		\Newspack\Content_Gate::update_custom_access_settings( $gate_id, [ 'access_rules' => [] ] );
+
+		$issues = $this->invoke_private_static( 'verify_migrated_gate', [ $gate_id, true ] );
+
+		$this->assertCount( 1, $issues );
+		$this->assertStringContainsString( 'no access rules', $issues[0] );
+	}
+
+	/**
+	 * The dry-run pass predicts the purchase-mode gap from group data, so the
+	 * planning run is not more optimistic than the write.
+	 */
+	public function test_compute_pre_write_issues_flags_a_purchase_group_with_no_products() {
+		$issues = $this->invoke_private_static( 'compute_pre_write_issues', [ [ $this->list_a ], true, [] ] );
+
+		$this->assertCount( 1, $issues );
+		$this->assertStringContainsString( 'no access rules', $issues[0] );
+	}
+
+	/**
+	 * The dry-run pass also predicts unresolvable list IDs.
+	 */
+	public function test_compute_pre_write_issues_flags_list_ids_that_are_not_lists() {
+		$not_a_list = self::factory()->post->create();
+
+		$issues = $this->invoke_private_static( 'compute_pre_write_issues', [ [ $not_a_list ], false, [] ] );
+
+		$this->assertCount( 1, $issues );
+		$this->assertStringContainsString( 'none of its restricted lists', $issues[0] );
+	}
+
+	/**
+	 * A group with resolvable lists and products predicts nothing.
+	 */
+	public function test_compute_pre_write_issues_passes_a_sound_group() {
+		$this->assertSame( [], $this->invoke_private_static( 'compute_pre_write_issues', [ [ $this->list_a ], true, [ 123 ] ] ) );
+	}
 }
