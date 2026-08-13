@@ -64,6 +64,12 @@ final class Newspack_Newsletters_Mailpoet extends \Newspack_Newsletters_Service_
 		$this->service    = 'mailpoet';
 		$this->controller = new Newspack_Newsletters_Mailpoet_Controller( $this );
 
+		// The base class hooks updated_post_meta for its own `is_public` handling
+		// only, so the campaign sync and cleanup are wired here as the other
+		// providers do.
+		add_action( 'updated_post_meta', [ $this, 'save' ], 10, 4 );
+		add_action( 'wp_trash_post', [ $this, 'trash' ], 10, 1 );
+
 		parent::__construct( $this );
 	}
 
@@ -643,12 +649,49 @@ final class Newspack_Newsletters_Mailpoet extends \Newspack_Newsletters_Service_
 	/**
 	 * Retrieve a campaign.
 	 *
+	 * Creates the MailPoet newsletter on first call, mirroring the other
+	 * providers: the editor asks for campaign data as soon as a newsletter is
+	 * opened, and that is when the campaign should come into existence.
+	 *
 	 * @param integer $post_id Numeric ID of the Newsletter post.
 	 *
-	 * @return WP_Error
+	 * @return array|WP_Error
 	 */
 	public function retrieve( $post_id ) {
-		return $this->campaigns_not_supported();
+		if ( ! Newspack_Newsletters_Mailpoet_Campaigns::is_available() ) {
+			return new WP_Error(
+				'newspack_newsletters_mailpoet_unavailable',
+				__( 'MailPoet is not available.', 'newspack-newsletters' )
+			);
+		}
+
+		$newsletter_id = (int) get_post_meta( $post_id, Newspack_Newsletters_Mailpoet_Campaigns::CAMPAIGN_ID_META, true );
+		$newsletter    = Newspack_Newsletters_Mailpoet_Campaigns::find( $newsletter_id );
+
+		if ( ! $newsletter ) {
+			// Either never synced, or the newsletter was deleted in MailPoet. Drop
+			// the stale ID so the sync creates a fresh one rather than failing.
+			delete_post_meta( $post_id, Newspack_Newsletters_Mailpoet_Campaigns::CAMPAIGN_ID_META );
+			$synced = $this->sync( get_post( $post_id ) );
+			if ( is_wp_error( $synced ) ) {
+				return $synced;
+			}
+			$newsletter_id = (int) get_post_meta( $post_id, Newspack_Newsletters_Mailpoet_Campaigns::CAMPAIGN_ID_META, true );
+			$newsletter    = Newspack_Newsletters_Mailpoet_Campaigns::find( $newsletter_id );
+		}
+
+		if ( ! $newsletter ) {
+			return new WP_Error(
+				'newspack_newsletters_mailpoet_campaign_not_found',
+				__( 'Could not find or create the MailPoet newsletter.', 'newspack-newsletters' )
+			);
+		}
+
+		return [
+			'campaign'    => Newspack_Newsletters_Mailpoet_Campaigns::to_array( $newsletter ),
+			'campaign_id' => $newsletter_id,
+			'link'        => Newspack_Newsletters_Mailpoet_Campaigns::get_edit_url( $newsletter_id ),
+		];
 	}
 
 	/**
@@ -664,21 +707,59 @@ final class Newspack_Newsletters_Mailpoet extends \Newspack_Newsletters_Service_
 	}
 
 	/**
-	 * Synchronize a post with its ESP campaign.
+	 * Synchronize a post with its MailPoet newsletter.
+	 *
+	 * Creates the MailPoet newsletter on first sync and updates it thereafter,
+	 * so a newsletter composed in the Newspack editor shows up in MailPoet as a
+	 * draft ready to send.
 	 *
 	 * @param WP_Post $post Post to synchronize.
 	 *
-	 * @return WP_Error
+	 * @return int|WP_Error MailPoet newsletter ID on success.
 	 */
 	public function sync( $post ) {
-		return $this->campaigns_not_supported();
+		$transient_name = $this->get_transient_name( $post->ID );
+		delete_transient( $transient_name );
+
+		if ( ! Newspack_Newsletters_Mailpoet_Campaigns::is_available() ) {
+			return new WP_Error(
+				'newspack_newsletters_mailpoet_unavailable',
+				__( 'MailPoet is not available.', 'newspack-newsletters' )
+			);
+		}
+
+		if ( empty( $post->post_title ) ) {
+			$error = new WP_Error(
+				'newspack_newsletters_mailpoet_no_subject',
+				__( 'The newsletter subject cannot be empty.', 'newspack-newsletters' )
+			);
+			set_transient( $transient_name, $error->get_error_message(), 45 );
+			return $error;
+		}
+
+		$result = Newspack_Newsletters_Mailpoet_Campaigns::upsert(
+			$post,
+			[
+				'subject'       => $post->post_title,
+				'campaign_name' => $this->get_campaign_name( $post ),
+				'sender_name'   => get_post_meta( $post->ID, 'senderName', true ),
+				'sender_email'  => get_post_meta( $post->ID, 'senderEmail', true ),
+				'html'          => get_post_meta( $post->ID, Newspack_Newsletters::EMAIL_HTML_META, true ),
+			]
+		);
+
+		if ( is_wp_error( $result ) ) {
+			set_transient( $transient_name, 'MailPoet sync error: ' . $result->get_error_message(), 45 );
+		}
+
+		return $result;
 	}
 
 	/**
-	 * Update the ESP campaign after the email HTML post meta is saved.
+	 * Update the MailPoet newsletter after the email HTML post meta is saved.
 	 *
-	 * Required by Newspack_Newsletters_WP_Hookable_Interface. A no-op while
-	 * MailPoet owns composing: there is no campaign of ours to keep in step.
+	 * Guards mirror the other providers: skip autosaves, only react to the email
+	 * HTML meta, never sync a layout post, and never sync a trashed one.
 	 *
 	 * @param int   $meta_id  Numeric ID of the meta field being updated.
 	 * @param int   $post_id  The post ID for the meta field being updated.
@@ -687,7 +768,23 @@ final class Newspack_Newsletters_Mailpoet extends \Newspack_Newsletters_Service_
 	 * @return void
 	 */
 	public function save( $meta_id, $post_id, $meta_key ) {
-		// Nothing to sync; MailPoet composes and stores its own newsletters.
+		if ( defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE ) {
+			return;
+		}
+		if ( Newspack_Newsletters::EMAIL_HTML_META !== $meta_key ) {
+			return;
+		}
+		if ( $this->is_layout_post( $post_id ) ) {
+			return;
+		}
+		if ( ! Newspack_Newsletters_Editor::is_editing_email( $post_id ) ) {
+			return;
+		}
+		$post = get_post( $post_id );
+		if ( ! $post || 'trash' === $post->post_status ) {
+			return;
+		}
+		$this->sync( $post );
 	}
 
 	/**
@@ -706,17 +803,14 @@ final class Newspack_Newsletters_Mailpoet extends \Newspack_Newsletters_Service_
 	}
 
 	/**
-	 * Clean up the ESP campaign after a Newsletter post is deleted.
-	 *
-	 * Required by Newspack_Newsletters_WP_Hookable_Interface. A no-op: MailPoet
-	 * owns the lifecycle of its own newsletters.
+	 * Clean up the MailPoet newsletter after a Newsletter post is deleted.
 	 *
 	 * @param string $post_id Numeric ID of the campaign.
 	 *
 	 * @return void
 	 */
 	public function trash( $post_id ) {
-		// Nothing to clean up on MailPoet's side.
+		Newspack_Newsletters_Mailpoet_Campaigns::delete_for_post( $post_id );
 	}
 
 	// Reporting.
