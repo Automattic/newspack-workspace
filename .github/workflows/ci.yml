@@ -524,27 +524,46 @@ jobs:
             bash "$spec"
           done
       - name: shellcheck
-        # Errors only. The tree carries ~126 warning-level findings across 39
+        # Pinned rather than using whatever the runner image ships: that version
+        # changes when the image is rebuilt, and a release adding a new check
+        # would redden main on an unrelated PR. Bumping is then a deliberate
+        # commit that carries any resulting fixes with it.
+        env:
+          SHELLCHECK_VERSION: v0.11.0
+        # Errors only. The tree carries 119 warning-level findings across 39
         # files, so a warning gate would fail on its first run; raising the floor
-        # is a separate cleanup. Errors are the class worth blocking on now, and
-        # the actively-maintained bin/ core already passes at warning level.
-        # -x follows sourced files, which the `# shellcheck source=` directives
-        # already in bin/ exist to support.
+        # is a separate cleanup. -x follows sourced files, honouring the
+        # `# shellcheck source=` directives already in the tree.
         run: |
-          files=$(
-            { git ls-files '*.sh'
-              git ls-files bin/ n | while read -r f; do
-                [ -f "$f" ] && head -1 "$f" | grep -Eq '^#!.*(ba)?sh' && echo "$f"
-              done
-            } | sort -u
-          )
-          # An empty list would make this step pass without checking anything.
-          if [ -z "$files" ]; then
+          curl -fsSL "https://github.com/koalaman/shellcheck/releases/download/${SHELLCHECK_VERSION}/shellcheck-${SHELLCHECK_VERSION}.linux.x86_64.tar.xz" | tar -xJ
+          SHELLCHECK="$PWD/shellcheck-${SHELLCHECK_VERSION}/shellcheck"
+          "$SHELLCHECK" --version | sed -n '2p'
+
+          # Every tracked *.sh, plus tracked extensionless files whose shebang
+          # names a shell: `n`, bin/newspack-manage-host and the per-package
+          # .hooks/pre-push scripts all carry no extension. The interpreter is
+          # matched by name rather than by a trailing "sh", so a shebang like
+          # `#!/usr/bin/env fish` is not swept in. NUL-delimited throughout so a
+          # path containing whitespace cannot split into two arguments.
+          {
+            git ls-files -z '*.sh'
+            git ls-files -z | while IFS= read -r -d '' f; do
+              case "${f##*/}" in *.*) continue ;; esac
+              [ -f "$f" ] || continue
+              head -1 "$f" 2>/dev/null \
+                | grep -Eq '^#!(/[^ ]+)*/(env +)?(sh|bash|dash|ksh|zsh)( |$)' \
+                && printf '%s\0' "$f"
+            done
+          } | sort -zu > shell-files.txt
+
+          count=$(tr -dc '\0' < shell-files.txt | wc -c | tr -d ' ')
+          # A list that matched nothing would otherwise pass silently.
+          if [ "$count" -eq 0 ]; then
             echo "No shell files matched."
             exit 1
           fi
-          echo "Checking $(echo "$files" | wc -l | tr -d ' ') files."
-          echo "$files" | xargs shellcheck -x -S error -f gcc
+          echo "Checking $count files."
+          xargs -0 "$SHELLCHECK" -x -S error -f gcc < shell-files.txt
 
   # ----------------------------------------------------------------------------
   ci-ok:
