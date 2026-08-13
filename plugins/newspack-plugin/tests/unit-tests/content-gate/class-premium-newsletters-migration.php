@@ -725,4 +725,79 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 		$this->assertTrue( (bool) get_option( 'newspack_premium_newsletters_auto_signup' ) );
 	}
 
+	/**
+	 * Build a plan-group descriptor carrying just the name find_superseded_gates()
+	 * inspects.
+	 *
+	 * @param string $name The plan name.
+	 *
+	 * @return array
+	 */
+	private function make_named_plan( string $name ): array {
+		return [
+			'pid'           => 0,
+			'name'          => $name,
+			'access_method' => 'purchase',
+			'list_ids'      => [],
+			'product_ids'   => [],
+		];
+	}
+
+	/**
+	 * When regrouping merges plans a previous run migrated separately — the likely
+	 * shape after a --plan run — the gates those plans were written to are named so
+	 * the operator can retire them before a stale, stricter gate wins the evaluation.
+	 */
+	public function test_find_superseded_gates_names_gates_the_merged_plans_already_have() {
+		$group          = [ $this->make_named_plan( 'Plan A' ), $this->make_named_plan( 'Plan B' ) ];
+		$existing_gates = [
+			'plan a' => 11,
+			'plan b' => 22,
+		];
+
+		$superseded = $this->invoke_private_static( 'find_superseded_gates', [ $group, 'plan a | plan b', $existing_gates ] );
+
+		$this->assertSame(
+			[
+				'plan a' => 11,
+				'plan b' => 22,
+			],
+			$superseded
+		);
+	}
+
+	/**
+	 * A single-plan group's title IS its plan name, so the gate it is about to update
+	 * must never be reported as superseded by itself.
+	 */
+	public function test_find_superseded_gates_excludes_the_groups_own_title() {
+		$group = [ $this->make_named_plan( 'Plan A' ) ];
+
+		$superseded = $this->invoke_private_static( 'find_superseded_gates', [ $group, 'plan a', [ 'plan a' => 11 ] ] );
+
+		$this->assertSame( [], $superseded );
+	}
+
+	/**
+	 * A null entry marks a title claimed by this run rather than a gate found on the
+	 * site, so there is no prior gate to retire.
+	 */
+	public function test_find_superseded_gates_ignores_titles_claimed_by_this_run() {
+		$group = [ $this->make_named_plan( 'Plan A' ), $this->make_named_plan( 'Plan B' ) ];
+
+		$superseded = $this->invoke_private_static( 'find_superseded_gates', [ $group, 'plan a | plan b', [ 'plan a' => null ] ] );
+
+		$this->assertSame( [], $superseded );
+	}
+
+	/**
+	 * A genuinely new group supersedes nothing.
+	 */
+	public function test_find_superseded_gates_returns_empty_when_no_plan_has_a_gate() {
+		$group = [ $this->make_named_plan( 'Plan A' ), $this->make_named_plan( 'Plan B' ) ];
+
+		$superseded = $this->invoke_private_static( 'find_superseded_gates', [ $group, 'plan a | plan b', [ 'other' => 11 ] ] );
+
+		$this->assertSame( [], $superseded );
+	}
 }
