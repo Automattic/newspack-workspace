@@ -68,6 +68,16 @@ abstract class Integration {
 	const METADATA_PREFIX_OPTION_PREFIX = 'newspack_integration_metadata_prefix_';
 
 	/**
+	 * WP_Error code pull_contact_data() should return when the provider has no
+	 * contact for the reader. Not a failure: no re-run can make an absent
+	 * contact appear, so batch drivers count these readers as skipped rather
+	 * than errored.
+	 *
+	 * @var string
+	 */
+	const CONTACT_NOT_FOUND_ERROR_CODE = 'ras_contact_not_found';
+
+	/**
 	 * The unique identifier for this integration.
 	 *
 	 * @var string
@@ -94,6 +104,21 @@ abstract class Integration {
 	 * @var array
 	 */
 	protected $settings_fields = [];
+
+	/**
+	 * Memoized return value of get_settings_fields().
+	 *
+	 * The declarations are stable for the life of the instance — the subclass
+	 * half is already frozen in $settings_fields, and the base-class groups are
+	 * built from per-instance capability flags — but rebuilding them costs a
+	 * __() call per label and description. The direction toggles resolve through
+	 * this array on every is_push_enabled()/is_pull_enabled() call, which run
+	 * once per contact in sync loops, so the array is built once and reused.
+	 * Reset by init(), the only place $settings_fields can change.
+	 *
+	 * @var array|null
+	 */
+	private $settings_fields_cache = null;
 
 	/**
 	 * Constructor.
@@ -253,16 +278,89 @@ abstract class Integration {
 	}
 
 	/**
+	 * Option prefix for the per-integration registration key seed.
+	 */
+	const REGISTRATION_SEED_OPTION_PREFIX = 'newspack_integration_registration_seed_';
+
+	/**
 	 * Generate the registration key for this integration.
 	 *
-	 * The default implementation uses HMAC-SHA256 with the site's auth salt.
-	 * Subclasses can override this to implement custom key schemes
-	 * (e.g., asymmetric key pairs, time-bounded tokens).
+	 * The default implementation uses HMAC-SHA256 of the integration ID and a
+	 * stored per-integration random seed with the site's auth salt. The seed
+	 * makes the key revocable on its own: if a scripted client starts hammering
+	 * the key, rotate_registration_key() invalidates it without rotating
+	 * AUTH_SALT (which would log out every user on the site). Subclasses can
+	 * override this to implement custom key schemes (e.g., asymmetric key
+	 * pairs, time-bounded tokens).
 	 *
 	 * @return string The registration key.
 	 */
 	public function get_registration_key(): string {
-		return hash_hmac( 'sha256', $this->id, \wp_salt( 'auth' ) );
+		return $this->get_default_registration_key();
+	}
+
+	/**
+	 * Create the registration key seed if it doesn't exist yet.
+	 *
+	 * Called when an integration is enabled, so the seed is in place before any
+	 * page can emit the key — which keeps the write off the render path and out
+	 * of concurrent first requests.
+	 *
+	 * @return void
+	 */
+	final public function ensure_registration_key_seed(): void {
+		// Autoloaded on purpose, unlike this class's other options: the key is
+		// read on nearly every frontend render, so a non-autoloaded seed would
+		// add a query to each one.
+		\add_option( self::REGISTRATION_SEED_OPTION_PREFIX . $this->id, \wp_generate_password( 32, false ), '', true );
+	}
+
+	/**
+	 * Get the stored registration key seed, generating it on first use.
+	 *
+	 * Normally seeded by ensure_registration_key_seed() at enable time; this
+	 * lazy path covers integrations enabled before the seed existed. The
+	 * pre-check isn't atomic with the write, so two uncached first requests can
+	 * both generate: the loser's page carries a key that stops validating once
+	 * its cache expires. Narrow, self-healing, and avoided entirely for
+	 * integrations enabled through Integrations::enable().
+	 *
+	 * @param bool $create Whether to create the seed when none is stored.
+	 *                     Pass false on read-only paths; returns '' instead.
+	 *
+	 * @return string The seed, or '' when none is stored and $create is false.
+	 */
+	private function get_registration_key_seed( bool $create = true ): string {
+		$option_name = self::REGISTRATION_SEED_OPTION_PREFIX . $this->id;
+		$seed        = \get_option( $option_name );
+		if ( ! is_string( $seed ) || '' === $seed ) {
+			if ( ! $create ) {
+				return '';
+			}
+			$this->ensure_registration_key_seed();
+			$seed = (string) \get_option( $option_name );
+		}
+		return $seed;
+	}
+
+	/**
+	 * Rotate the registration key by regenerating its stored seed.
+	 *
+	 * Invalidates the key on every page emitted so far — cached pages keep
+	 * submitting the old key until their cache expires, and those requests are
+	 * rejected. That is the point: this is the incident-response lever for a
+	 * key being abused by scripted clients.
+	 *
+	 * PHP-only for now: there is no CLI command or admin surface, so operators
+	 * reach it through `wp eval`. Anything that wires it to a request — an admin
+	 * button, a REST route — must gate it on a capability check and a nonce
+	 * first; this method performs neither.
+	 *
+	 * @return string The new registration key.
+	 */
+	final public function rotate_registration_key(): string {
+		\update_option( self::REGISTRATION_SEED_OPTION_PREFIX . $this->id, \wp_generate_password( 32, false ), true );
+		return $this->get_registration_key();
 	}
 
 	/**
@@ -286,7 +384,68 @@ abstract class Integration {
 	 * @return bool Whether the registration request is valid.
 	 */
 	public function validate_registration_request( string $key, $request ): bool {
-		return hash_equals( $this->get_registration_key(), $key );
+		$current = $this->get_registration_key();
+		if ( hash_equals( $current, $key ) ) {
+			return true;
+		}
+		// Only integrations still on the framework's own key scheme get the
+		// transition allowance. A subclass with a custom scheme (a time-bounded
+		// token, an asymmetric pair) that inherits or calls this validator would
+		// otherwise accept the framework's static HMAC alongside its own, which
+		// is a permanent bypass of whatever bound it was enforcing.
+		//
+		// Read-only: this runs on an unauthenticated path, and a custom-scheme
+		// integration should not have a seed written for a key it never emits.
+		// A default-scheme one always has one by now — get_registration_key()
+		// above created it if needed — so a missing seed is itself the answer.
+		$default = $this->get_default_registration_key( false );
+		if ( '' === $default || ! hash_equals( $default, $current ) ) {
+			return false;
+		}
+		return hash_equals( $this->get_legacy_registration_key(), $key );
+	}
+
+	/**
+	 * The framework's own registration key derivation, as get_registration_key()
+	 * computes it before any subclass override.
+	 *
+	 * @param bool $create_seed Whether to create the seed when none is stored.
+	 *                          Pass false on read-only paths; returns '' instead.
+	 *
+	 * @return string The default-scheme registration key, or '' when no seed
+	 *                exists and $create_seed is false.
+	 */
+	private function get_default_registration_key( bool $create_seed = true ): string {
+		$seed = $this->get_registration_key_seed( $create_seed );
+		if ( '' === $seed ) {
+			return '';
+		}
+		return hash_hmac( 'sha256', $this->id . '|' . $seed, \wp_salt( 'auth' ) );
+	}
+
+	/**
+	 * The pre-seed registration key, still accepted during the transition.
+	 *
+	 * Adding the seed to the HMAC input changes every integration's key once on
+	 * upgrade. Pages already in a CDN or page cache carry the old key until
+	 * their TTL expires, and the capture client treats an invalid key as
+	 * permanent for the pageview — so without this the submission is lost
+	 * rather than retried. This matters in production today: the ESP
+	 * integration emits the legacy key on released sites and validates through
+	 * this method. (newspack-manager's Fundraise Up handler emits it too, but
+	 * replaces validate_registration_request() wholesale — it authenticates on
+	 * verified supporter identifiers rather than the key — so it never reaches
+	 * this branch and the allowance does nothing for it.)
+	 *
+	 * @todo Remove this method and its branch in validate_registration_request()
+	 *       once the seeded key has been in production for a release cycle
+	 *       (target: the first stable release after 2026-09-01). Until then
+	 *       rotation narrows a key rather than fully revoking it.
+	 *
+	 * @return string The legacy registration key.
+	 */
+	private function get_legacy_registration_key(): string {
+		return hash_hmac( 'sha256', $this->id, \wp_salt( 'auth' ) );
 	}
 
 	/**
@@ -295,7 +454,8 @@ abstract class Integration {
 	 * Currently only initializes settings fields, but can be extended by child classes for additional setup.
 	 */
 	public function init() {
-		$this->settings_fields = $this->register_settings_fields();
+		$this->settings_fields       = $this->register_settings_fields();
+		$this->settings_fields_cache = null;
 	}
 
 	/**
@@ -317,6 +477,92 @@ abstract class Integration {
 	 * @return bool|\WP_Error True if contacts can be synced, false otherwise. WP_Error if return_errors is true.
 	 */
 	abstract public function can_sync( $return_errors = false );
+
+	/**
+	 * Whether this integration can push (outbound) contact data to its external
+	 * destination.
+	 *
+	 * Push-capable integrations get the Outbound settings section, the
+	 * account-deletion sync fields and the metadata field prefix, and count
+	 * toward Sync::has_one_syncable_integration(). Inbound-only integrations
+	 * (those whose push_contact_data() is a deliberate no-op) should override
+	 * this to return false so the settings UI shows no dead outbound controls
+	 * and the sync framework skips the push path entirely.
+	 *
+	 * @return bool True if the integration can push contact data.
+	 */
+	public function supports_push(): bool {
+		return true;
+	}
+
+	/**
+	 * Whether this integration can pull (inbound) contact data from its
+	 * external source.
+	 *
+	 * Pull-capable integrations get the Inbound settings section and are
+	 * included in the Contact_Pull dispatch. Integrations that don't implement
+	 * pull_contact_data()/get_available_incoming_fields() should override this
+	 * to return false.
+	 *
+	 * @return bool True if the integration can pull contact data.
+	 */
+	public function supports_pull(): bool {
+		return true;
+	}
+
+	/**
+	 * Whether outbound (push) sync should currently run for this integration.
+	 *
+	 * Combines the push capability with the `outgoing_sync_enabled` toggle,
+	 * which pauses the direction while preserving the configured outgoing
+	 * field selection. Every push dispatch site must consult this — including
+	 * account-deletion propagation, which travels the push pipeline.
+	 *
+	 * An undeclared toggle field (e.g. a subclass overriding
+	 * get_settings_fields() without the base metadata group) reads as null and
+	 * counts as enabled: the toggle can only ever pause sync explicitly,
+	 * mirroring the frontend's missing-toggle-means-enabled rendering. A
+	 * declared field never resolves to null — get_settings_field_value() falls
+	 * back to the field default.
+	 *
+	 * The stored value is coerced with wp_validate_boolean() rather than a cast
+	 * so this agrees with the wizard's toBool(): both read the strings `'false'`
+	 * and `'0'` as off. The sanctioned write path can't produce `'false'` (the
+	 * checkbox sanitizes to a real bool), but a hand-set option or external
+	 * writer otherwise diverges in the worst direction — UI paused, dispatch
+	 * still pushing.
+	 *
+	 * @return bool True if pushes should run.
+	 */
+	final public function is_push_enabled(): bool {
+		if ( ! $this->supports_push() ) {
+			return false;
+		}
+		$enabled = $this->get_settings_field_value( 'outgoing_sync_enabled' );
+		return null === $enabled || \wp_validate_boolean( $enabled );
+	}
+
+	/**
+	 * Whether inbound (pull) sync should currently run for this integration.
+	 *
+	 * Combines the pull capability with the `incoming_sync_enabled` toggle,
+	 * which pauses the direction while preserving the configured incoming
+	 * field selection. Every pull dispatch site must consult this.
+	 *
+	 * As with is_push_enabled(), an undeclared toggle field reads as null and
+	 * counts as enabled — only an explicit stored value can pause the
+	 * direction — and the stored value is coerced with wp_validate_boolean() so
+	 * PHP and the wizard agree on the falsy string forms.
+	 *
+	 * @return bool True if pulls should run.
+	 */
+	final public function is_pull_enabled(): bool {
+		if ( ! $this->supports_pull() ) {
+			return false;
+		}
+		$enabled = $this->get_settings_field_value( 'incoming_sync_enabled' );
+		return null === $enabled || \wp_validate_boolean( $enabled );
+	}
 
 	/**
 	 * Push contact data to the integration destination.
@@ -775,10 +1021,54 @@ abstract class Integration {
 	/**
 	 * Get the enabled outgoing metadata fields for this integration.
 	 *
+	 * In legacy metadata mode an integration with no saved selection of its
+	 * own inherits the ESP integration's effective selection — the set the
+	 * legacy pipeline filters by — so pre-existing legacy sites keep syncing
+	 * exactly what they did before per-integration selection existed, and
+	 * the Outbound UI reflects what is actually pushed. An explicitly saved
+	 * selection (even an empty one) always wins (NPPD-2107).
+	 *
+	 * Two legacy-mode caveats, accepted for this transitional schema: the
+	 * legacy pipeline upstream-filters by the ESP selection, so an explicit
+	 * selection can only narrow that set (a field the ESP integration has
+	 * disabled never syncs even when enabled here); and once a selection is
+	 * saved, only deleting the integration's option restores inheritance.
+	 *
+	 * What gets inherited is overridable — see
+	 * get_inherited_legacy_outgoing_fields().
+	 *
 	 * @return string[] List of enabled field names.
 	 */
 	public function get_enabled_outgoing_fields() {
-		return array_values( \get_option( self::OUTGOING_FIELDS_OPTION_PREFIX . $this->id, [] ) );
+		$stored = \get_option( self::OUTGOING_FIELDS_OPTION_PREFIX . $this->id, null );
+		if ( null !== $stored && is_array( $stored ) ) {
+			return array_values( $stored );
+		}
+
+		if ( 'legacy' === Sync\Metadata::get_version() && 'esp' !== $this->get_id() ) {
+			return array_values( $this->get_inherited_legacy_outgoing_fields() );
+		}
+
+		return [];
+	}
+
+	/**
+	 * The selection this integration inherits in legacy mode when it has never
+	 * saved one of its own.
+	 *
+	 * Defaults to the ESP integration's effective selection — the set the legacy
+	 * metadata pipeline filters by — so an un-migrated site keeps its existing
+	 * payloads. Sync\Metadata::get_fields() is the single definition of that
+	 * set, including its registry-miss fallbacks.
+	 *
+	 * Override to inherit something else, or return an empty array to opt out of
+	 * inheritance entirely (an integration that does so pushes no metadata until
+	 * an Outbound selection is saved).
+	 *
+	 * @return string[] List of inherited field names.
+	 */
+	protected function get_inherited_legacy_outgoing_fields() {
+		return Sync\Metadata::get_fields();
 	}
 
 	/**
@@ -899,9 +1189,11 @@ abstract class Integration {
 	/**
 	 * Get the account-deletion fields declared by this integration.
 	 *
-	 * Auto-appended to every integration's settings. The first field is a top-level
-	 * toggle; the second field is gated by the first via the `condition` predicate
-	 * honored by the frontend renderer.
+	 * Auto-appended to push-capable integrations' settings (see
+	 * get_settings_fields()): deletion propagates through the push pipeline, so
+	 * for a push-less integration these would be dead controls. The first field
+	 * is a top-level toggle; the second field is gated by the first via the
+	 * `condition` predicate honored by the frontend renderer.
 	 *
 	 * @return array Array of settings field declarations.
 	 */
@@ -954,30 +1246,55 @@ abstract class Integration {
 	/**
 	 * Get the metadata fields declared by this integration.
 	 *
+	 * Capability-aware: the outbound group (metadata prefix, outbound sync
+	 * toggle, outgoing fields) is declared only for push-capable integrations —
+	 * the prefix is only ever read on push paths (prepare_contact()) — and the
+	 * inbound group (inbound sync toggle, incoming fields) only for
+	 * pull-capable ones, so an integration lacking a direction gets no dead
+	 * controls for it.
+	 *
 	 * @return array Array of settings field declarations.
 	 */
 	public function get_metadata_fields() {
-		return [
-			[
+		$fields = [];
+		if ( $this->supports_push() ) {
+			$fields[] = [
 				'key'         => 'metadata_prefix',
 				'type'        => 'text',
 				'label'       => __( 'Metadata field prefix', 'newspack-plugin' ),
 				'description' => __( 'A string to prefix metadata fields synced to the integration. Required to ensure that metadata field names are unique. Default: NP_', 'newspack-plugin' ),
 				'default'     => 'NP_',
-			],
-			[
+			];
+			$fields[] = [
+				'key'         => 'outgoing_sync_enabled',
+				'type'        => 'checkbox',
+				'label'       => __( 'Enable outbound sync', 'newspack-plugin' ),
+				'description' => __( 'Sync reader data to this integration. Disabling pauses outbound sync, including account-deletion sync, and preserves the outgoing field selection. Changes and deletions that occur while paused are not sent retroactively on re-enable.', 'newspack-plugin' ),
+				'default'     => true,
+			];
+			$fields[] = [
 				'key'     => 'outgoing_metadata_fields',
 				'type'    => 'metadata',
 				'label'   => __( 'Outgoing metadata fields', 'newspack-plugin' ),
 				'default' => [],
-			],
-			[
+			];
+		}
+		if ( $this->supports_pull() ) {
+			$fields[] = [
+				'key'         => 'incoming_sync_enabled',
+				'type'        => 'checkbox',
+				'label'       => __( 'Enable inbound sync', 'newspack-plugin' ),
+				'description' => __( 'Pull contact data from this integration. Disabling pauses inbound sync and preserves the incoming field selection.', 'newspack-plugin' ),
+				'default'     => true,
+			];
+			$fields[] = [
 				'key'     => 'incoming_metadata_fields',
 				'type'    => 'metadata',
 				'label'   => __( 'Incoming metadata fields', 'newspack-plugin' ),
 				'default' => [],
-			],
-		];
+			];
+		}
+		return $fields;
 	}
 
 	/**
@@ -1004,19 +1321,23 @@ abstract class Integration {
 	 * Prepare contact data for this integration by filtering to enabled
 	 * outgoing fields and adding the metadata prefix.
 	 *
-	 * In legacy mode, metadata classes already return filtered and prefixed
-	 * data, so the contact is returned unchanged.
+	 * In legacy mode the metadata classes return data already filtered and
+	 * prefixed — but filtered by the ESP integration's own field config, so
+	 * only the `esp` integration takes it as-is. Every other integration
+	 * still applies its enabled-outgoing selection via
+	 * prepare_contact_legacy(); otherwise an integration with an empty
+	 * Outbound selection would receive (and push) the full default field set.
 	 *
 	 * @param array $contact Contact data with raw metadata keys.
 	 * @return array Contact data with filtered, prefixed metadata.
 	 */
 	public function prepare_contact( $contact ) {
-		if ( 'legacy' === Sync\Metadata::get_version() ) {
+		if ( empty( $contact['metadata'] ) ) {
 			return $contact;
 		}
 
-		if ( empty( $contact['metadata'] ) ) {
-			return $contact;
+		if ( 'legacy' === Sync\Metadata::get_version() ) {
+			return $this->prepare_contact_legacy( $contact );
 		}
 
 		$enabled_fields = $this->get_enabled_outgoing_fields();
@@ -1047,6 +1368,124 @@ abstract class Integration {
 	}
 
 	/**
+	 * Apply this integration's outgoing-field selection to legacy-pipeline data.
+	 *
+	 * Legacy metadata arrives already prefixed and filtered — by the ESP
+	 * integration's field config. The `esp` integration therefore takes it
+	 * unchanged, but any other integration must still narrow the set to its
+	 * own enabled outgoing fields: an explicitly saved empty Outbound
+	 * selection means no metadata fields, not all of them. An integration
+	 * that never saved a selection inherits the ESP integration's effective
+	 * selection via get_enabled_outgoing_fields(), preserving pre-existing
+	 * legacy behavior (NPPD-2107).
+	 *
+	 * Matching runs against whole keys rather than de-prefixed remainders, so a
+	 * key reshaped by the `newspack_ras_metadata_key` filter still matches (see
+	 * get_legacy_enabled_key_shapes()). Unprefixed sync-control keys
+	 * (Legacy_Metadata::SYNC_CONTROL_KEYS — `status`, `status_if_new`) always
+	 * pass through; any other unprefixed key is dropped, so future unprefixed
+	 * metadata cannot bypass the outbound selection filter.
+	 *
+	 * @param array $contact Contact data with prefixed legacy metadata.
+	 * @return array Contact data with metadata narrowed to enabled fields.
+	 */
+	private function prepare_contact_legacy( array $contact ): array {
+		if ( 'esp' === $this->get_id() ) {
+			return $contact;
+		}
+
+		[ $exact_keys, $utm_prefixes ] = $this->get_legacy_enabled_key_shapes();
+		$prepared                      = [];
+
+		foreach ( $contact['metadata'] as $key => $value ) {
+			if ( in_array( $key, Sync\Legacy_Metadata::SYNC_CONTROL_KEYS, true ) ) {
+				$prepared[ $key ] = $value;
+				continue;
+			}
+			if ( isset( $exact_keys[ $key ] ) ) {
+				$prepared[ $key ] = $value;
+				continue;
+			}
+			foreach ( $utm_prefixes as $utm_prefix ) {
+				// A UTM label only carries its own suffixed sub-keys, never a
+				// bare re-match of itself (that is the exact-key case above).
+				if ( 0 === strpos( $key, $utm_prefix ) && strlen( $key ) > strlen( $utm_prefix ) ) {
+					$prepared[ $key ] = $value;
+					break;
+				}
+			}
+		}
+
+		$contact['metadata'] = $prepared;
+		return $contact;
+	}
+
+	/**
+	 * Build the legacy-mode match shapes for this integration's enabled fields.
+	 *
+	 * Returns two sets of whole keys, both built with the legacy pipeline's own
+	 * prefix (Sync\Metadata::get_prefix() — the one the data actually carries,
+	 * not this integration's own, which may differ):
+	 *
+	 * - exact keys, matched by identity;
+	 * - UTM prefixes, matched by prefix with a non-empty remainder.
+	 *
+	 * Each enabled label contributes both the key Sync\Metadata::get_key()
+	 * produces (so a key reshaped by the `newspack_ras_metadata_key` filter
+	 * still matches) and the plain `prefix . label` shape (so a label absent
+	 * from the current key map still matches as it did before).
+	 *
+	 * Only the raw keys in Legacy_Metadata::UTM_RAW_KEYS get prefix-match
+	 * semantics. `newspack_ras_metadata_keys` lets any plugin register labels,
+	 * and a registered label ending in `': '` that happened to prefix another
+	 * label would otherwise carry that other field past the selection.
+	 *
+	 * @return array{0: array<string, true>, 1: string[]} Exact-key set and UTM prefixes.
+	 */
+	private function get_legacy_enabled_key_shapes(): array {
+		$enabled_fields = $this->get_enabled_outgoing_fields();
+		$prefix         = Sync\Metadata::get_prefix();
+		$keys_map       = Sync\Metadata::get_keys();
+		$exact_keys     = [];
+		$utm_prefixes   = [];
+
+		$utm_labels = [];
+		foreach ( Sync\Legacy_Metadata::UTM_RAW_KEYS as $utm_raw_key ) {
+			if ( isset( $keys_map[ $utm_raw_key ] ) ) {
+				$utm_labels[] = $keys_map[ $utm_raw_key ];
+			}
+		}
+
+		foreach ( $keys_map as $raw_key => $label ) {
+			if ( ! in_array( $label, $enabled_fields, true ) ) {
+				continue;
+			}
+			$filtered_key = Sync\Metadata::get_key( $raw_key );
+			if ( ! is_string( $filtered_key ) || '' === $filtered_key ) {
+				continue;
+			}
+			if ( in_array( $raw_key, Sync\Legacy_Metadata::UTM_RAW_KEYS, true ) ) {
+				$utm_prefixes[] = $filtered_key;
+			} else {
+				$exact_keys[ $filtered_key ] = true;
+			}
+		}
+
+		foreach ( $enabled_fields as $label ) {
+			if ( ! is_string( $label ) || '' === $label ) {
+				continue;
+			}
+			if ( in_array( $label, $utm_labels, true ) ) {
+				$utm_prefixes[] = $prefix . $label;
+			} else {
+				$exact_keys[ $prefix . $label ] = true;
+			}
+		}
+
+		return [ $exact_keys, array_values( array_unique( $utm_prefixes ) ) ];
+	}
+
+	/**
 	 * Update the metadata prefix for this integration.
 	 *
 	 * @param string $prefix The new prefix value.
@@ -1062,14 +1501,26 @@ abstract class Integration {
 	/**
 	 * Get the settings fields declared by this integration.
 	 *
+	 * The account-deletion group follows the push capability: deletion sync
+	 * routes through push_contact_data()/delete_contact(), so a push-less
+	 * integration gets neither field (and its `sync_account_deletion` value
+	 * reads as null/falsy, which the deletion dispatcher treats as disabled).
+	 * The metadata groups are capability-gated in get_metadata_fields().
+	 *
+	 * Memoized per instance — see $settings_fields_cache for why.
+	 *
 	 * @return array Array of settings field declarations.
 	 */
 	public function get_settings_fields() {
-		return array_merge(
-			$this->settings_fields,
-			$this->get_account_deletion_fields(),
-			$this->get_metadata_fields()
-		);
+		if ( null !== $this->settings_fields_cache ) {
+			return $this->settings_fields_cache;
+		}
+		$fields = $this->settings_fields;
+		if ( $this->supports_push() ) {
+			$fields = array_merge( $fields, $this->get_account_deletion_fields() );
+		}
+		$this->settings_fields_cache = array_merge( $fields, $this->get_metadata_fields() );
+		return $this->settings_fields_cache;
 	}
 
 	/**

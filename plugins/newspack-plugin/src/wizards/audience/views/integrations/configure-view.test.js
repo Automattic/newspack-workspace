@@ -17,7 +17,24 @@ jest.mock( '@wordpress/data', () => ( {
 // Stub the components barrel: with @wordpress/data mocked, the real barrel eagerly loads @wordpress/rich-text, whose module-load combineReducers() call throws.
 // Cover everything SettingsField imports so a future select/oauth/textarea fixture renders a stub, not `undefined`.
 jest.mock( '@wordpress/components', () => ( {
-	CheckboxControl: () => null,
+	// Real inputs (not null stubs) so the per-direction section tests can assert
+	// on picker visibility and drive the enable toggles.
+	CheckboxControl: ( { label, checked, onChange } ) => (
+		<input
+			type="checkbox"
+			aria-label={ typeof label === 'string' ? label : undefined }
+			checked={ !! checked }
+			onChange={ e => onChange( e.target.checked ) }
+		/>
+	),
+	ToggleControl: ( { label, checked, onChange } ) => (
+		<input
+			type="checkbox"
+			aria-label={ typeof label === 'string' ? label : undefined }
+			checked={ !! checked }
+			onChange={ e => onChange( e.target.checked ) }
+		/>
+	),
 	ExternalLink: ( { children } ) => children,
 	TextareaControl: ( { label, value, onChange } ) => (
 		<textarea aria-label={ label } value={ value || '' } onChange={ e => onChange( e.target.value ) } />
@@ -32,7 +49,10 @@ jest.mock( '../../../../../packages/components/src', () => ( {
 	Accordion: ( { children } ) => children,
 	AccordionPanel: ( { children } ) => children,
 	Button: ( { children } ) => children,
-	Divider: () => null,
+	// Section dividers pass alignment="full-width"; the divider under a section
+	// toggle does not, so the stub tags them apart for the tests that assert on
+	// whether a toggle divider has anything to divide.
+	Divider: ( { alignment } ) => <hr data-testid={ 'full-width' === alignment ? 'section-divider' : 'toggle-divider' } />,
 	Grid: ( { children } ) => children,
 	SectionHeader: () => null,
 	SelectControl: ( { label, value, onChange } ) => (
@@ -501,5 +521,220 @@ describe( 'incoming-field operator reconciliation on save', () => {
 			getLatestSaveAction()();
 		} );
 		expect( onSave ).toHaveBeenCalledWith( 'esp', { mailchimp_audience_id: 'abc123' } );
+	} );
+} );
+
+describe( 'ConfigureView per-direction sections', () => {
+	beforeEach( () => {
+		mockSetHeaderData.mockClear();
+		useUnsavedChangesDialog.mockClear();
+		useUnsavedChangesDialog.mockReturnValue( { confirmDialog: null, requestConfirm: jest.fn() } );
+	} );
+
+	// A bidirectional integration as the capability-aware backend declares it:
+	// each direction carries its enable toggle alongside its metadata field.
+	const bidirectionalIntegration = () => ( {
+		esp: {
+			...INTEGRATION,
+			settings: [
+				{ key: 'mailchimp_audience_id', type: 'text', label: 'Audience ID', value: '' },
+				{ key: 'outgoing_sync_enabled', type: 'checkbox', label: 'Enable outbound sync', value: true },
+				{
+					key: 'outgoing_metadata_fields',
+					type: 'metadata',
+					label: 'Outgoing metadata fields',
+					value: [ 'Full Name' ],
+					grouped_options: [ { section: 'Basic', fields: [ 'Full Name', 'Signup Date' ] } ],
+				},
+				{ key: 'incoming_sync_enabled', type: 'checkbox', label: 'Enable inbound sync', value: true },
+				{
+					key: 'incoming_metadata_fields',
+					type: 'metadata',
+					label: 'Incoming metadata fields',
+					value: { vip: 'default' },
+					options: [ { value: 'vip', label: 'VIP', matching_function: 'default', has_options: false } ],
+				},
+			],
+		},
+	} );
+
+	// The backend omits a direction's fields when the integration lacks the
+	// capability, so the view must simply not render that section.
+	it( 'renders no direction sections for an integration that declares neither', () => {
+		renderConfigureView();
+		expect( screen.queryByLabelText( 'Enable outbound sync' ) ).toBeNull();
+		expect( screen.queryByLabelText( 'Enable inbound sync' ) ).toBeNull();
+		expect( screen.queryByLabelText( 'Full Name' ) ).toBeNull();
+		expect( screen.queryByLabelText( 'VIP' ) ).toBeNull();
+	} );
+
+	it( 'renders both sections with their toggles and pickers when enabled', () => {
+		renderConfigureView( { integrations: bidirectionalIntegration() } );
+		expect( screen.getByLabelText( 'Enable outbound sync' ).checked ).toBe( true );
+		expect( screen.getByLabelText( 'Enable inbound sync' ).checked ).toBe( true );
+		expect( screen.getByLabelText( 'Full Name' ).checked ).toBe( true );
+		expect( screen.getByLabelText( 'Signup Date' ).checked ).toBe( false );
+		expect( screen.getByLabelText( 'VIP' ).checked ).toBe( true );
+	} );
+
+	it( 'hides only the outbound picker when outbound sync is toggled off and submits just the toggle', async () => {
+		const onSave = jest.fn( () => Promise.resolve() );
+		renderConfigureView( { integrations: bidirectionalIntegration(), onSave } );
+
+		fireEvent.click( screen.getByLabelText( 'Enable outbound sync' ) );
+		expect( screen.queryByLabelText( 'Full Name' ) ).toBeNull();
+		expect( screen.getByLabelText( 'VIP' ) ).toBeInTheDocument();
+
+		await act( async () => {
+			getLatestSaveAction()();
+		} );
+		// The field selection is not part of the payload: pausing must not
+		// rewrite (or clear) the stored outgoing_metadata_fields option.
+		expect( onSave ).toHaveBeenCalledWith( 'esp', { outgoing_sync_enabled: false } );
+	} );
+
+	it( 'restores the inbound selection after toggling the direction off and back on', () => {
+		renderConfigureView( { integrations: bidirectionalIntegration() } );
+
+		const toggle = () => screen.getByLabelText( 'Enable inbound sync' );
+		fireEvent.click( toggle() );
+		expect( screen.queryByLabelText( 'VIP' ) ).toBeNull();
+		expect( screen.getByLabelText( 'Full Name' ) ).toBeInTheDocument();
+		expect( useUnsavedChangesDialog ).toHaveBeenLastCalledWith( { when: true } );
+
+		fireEvent.click( toggle() );
+		expect( screen.getByLabelText( 'VIP' ).checked ).toBe( true );
+		// A net-zero toggle leaves nothing pending.
+		expect( useUnsavedChangesDialog ).toHaveBeenLastCalledWith( { when: false } );
+	} );
+
+	// Payloads predating the toggles (or an integration that opted out of them)
+	// must keep rendering the pickers unconditionally.
+	it( 'renders pickers without toggles for a payload lacking the toggle fields', () => {
+		const integrations = bidirectionalIntegration();
+		integrations.esp.settings = integrations.esp.settings.filter( f => ! f.key.endsWith( '_sync_enabled' ) );
+		renderConfigureView( { integrations } );
+		expect( screen.queryByLabelText( 'Enable outbound sync' ) ).toBeNull();
+		expect( screen.queryByLabelText( 'Enable inbound sync' ) ).toBeNull();
+		expect( screen.getByLabelText( 'Full Name' ) ).toBeInTheDocument();
+		expect( screen.getByLabelText( 'VIP' ) ).toBeInTheDocument();
+	} );
+
+	// The push-pipeline settings (metadata prefix, account-deletion sync) render
+	// inside the Outbound section and follow the outbound pause the same way the
+	// outgoing picker does.
+	it( 'renders push settings in the Outbound section and hides them while paused', () => {
+		const integrations = bidirectionalIntegration();
+		integrations.esp.settings = [
+			{ key: 'sync_account_deletion', type: 'checkbox', label: 'Sync account deletion', value: true },
+			{
+				key: 'account_deletion_handling',
+				type: 'select',
+				label: 'Deletion handling',
+				value: 'flag',
+				options: [
+					{ value: 'flag', label: 'Flag' },
+					{ value: 'delete', label: 'Delete' },
+				],
+				condition: { field: 'sync_account_deletion', equals: true },
+			},
+			{ key: 'metadata_prefix', type: 'text', label: 'Metadata field prefix', value: 'NP_' },
+			...integrations.esp.settings,
+		];
+		renderConfigureView( { integrations } );
+		expect( screen.getByLabelText( 'Sync account deletion' ).checked ).toBe( true );
+		expect( screen.getByLabelText( 'Deletion handling' ) ).toBeInTheDocument();
+
+		// Document order pins the placement: own settings first, then the Inbound
+		// picker, then the push settings inside the Outbound section.
+		const order = screen
+			.getAllByLabelText( /^(Audience ID|VIP|Sync account deletion|Metadata field prefix)$/ )
+			.map( el => el.getAttribute( 'aria-label' ) );
+		expect( order ).toEqual( [ 'Audience ID', 'VIP', 'Sync account deletion', 'Metadata field prefix' ] );
+
+		fireEvent.click( screen.getByLabelText( 'Enable outbound sync' ) );
+		expect( screen.queryByLabelText( 'Sync account deletion' ) ).toBeNull();
+		expect( screen.queryByLabelText( 'Deletion handling' ) ).toBeNull();
+		expect( screen.queryByLabelText( 'Metadata field prefix' ) ).toBeNull();
+		// The integration's own settings stay put.
+		expect( screen.getByLabelText( 'Audience ID' ) ).toBeInTheDocument();
+
+		fireEvent.click( screen.getByLabelText( 'Enable outbound sync' ) );
+		expect( screen.getByLabelText( 'Sync account deletion' ).checked ).toBe( true );
+		expect( screen.getByLabelText( 'Metadata field prefix' ).value ).toBe( 'NP_' );
+	} );
+
+	// With push-group settings but no picker (a partial third-party override),
+	// the Outbound section still renders its toggle and settings.
+	it( 'renders the Outbound section for push settings without a picker', () => {
+		const integrations = bidirectionalIntegration();
+		integrations.esp.settings = [
+			{ key: 'metadata_prefix', type: 'text', label: 'Metadata field prefix', value: 'NP_' },
+			...integrations.esp.settings.filter( f => f.key !== 'outgoing_metadata_fields' ),
+		];
+		renderConfigureView( { integrations } );
+		expect( screen.getByLabelText( 'Metadata field prefix' ) ).toBeInTheDocument();
+
+		fireEvent.click( screen.getByLabelText( 'Enable outbound sync' ) );
+		expect( screen.queryByLabelText( 'Metadata field prefix' ) ).toBeNull();
+	} );
+
+	// A toggle whose paired metadata field is missing (a third-party
+	// get_settings_fields() override) must stay visible and editable rather
+	// than shipping a field the view can neither display nor save.
+	it( 'falls an orphaned direction toggle through to the generic Settings group', async () => {
+		const onSave = jest.fn( () => Promise.resolve() );
+		const integrations = bidirectionalIntegration();
+		integrations.esp.settings = integrations.esp.settings.filter( f => f.key !== 'outgoing_metadata_fields' );
+		renderConfigureView( { integrations, onSave } );
+
+		// No Outbound section without the picker field, but the toggle survives.
+		expect( screen.queryByLabelText( 'Full Name' ) ).toBeNull();
+		const toggle = screen.getByLabelText( 'Enable outbound sync' );
+		expect( toggle.checked ).toBe( true );
+
+		fireEvent.click( toggle );
+		await act( async () => {
+			getLatestSaveAction()();
+		} );
+		expect( onSave ).toHaveBeenCalledWith( 'esp', { outgoing_sync_enabled: false } );
+	} );
+
+	// The divider under a section toggle only separates it from the content
+	// below, so a direction with nothing to show must not render one.
+	it( 'renders a toggle divider per enabled section, and none once both are paused', () => {
+		renderConfigureView( { integrations: bidirectionalIntegration() } );
+		expect( screen.queryAllByTestId( 'toggle-divider' ) ).toHaveLength( 2 );
+
+		fireEvent.click( screen.getByLabelText( 'Enable outbound sync' ) );
+		fireEvent.click( screen.getByLabelText( 'Enable inbound sync' ) );
+		expect( screen.queryAllByTestId( 'toggle-divider' ) ).toHaveLength( 0 );
+	} );
+
+	// An enabled Outbound section that declares a settings field but has no
+	// picker, and hides that field behind an unsatisfied condition, still
+	// renders the section — with nothing under the toggle to divide.
+	it( 'renders no outbound toggle divider when every outbound settings field is hidden', () => {
+		renderConfigureView( {
+			integrations: {
+				esp: {
+					...INTEGRATION,
+					settings: [
+						{ key: 'mailchimp_audience_id', type: 'text', label: 'Audience ID', value: '' },
+						{ key: 'outgoing_sync_enabled', type: 'checkbox', label: 'Enable outbound sync', value: true },
+						{
+							key: 'account_deletion_handling',
+							type: 'text',
+							label: 'How to sync deletion',
+							value: 'flag',
+							condition: { field: 'mailchimp_audience_id', equals: 'never-matches' },
+						},
+					],
+				},
+			},
+		} );
+		expect( screen.getByLabelText( 'Enable outbound sync' ).checked ).toBe( true );
+		expect( screen.queryByLabelText( 'How to sync deletion' ) ).toBeNull();
+		expect( screen.queryAllByTestId( 'toggle-divider' ) ).toHaveLength( 0 );
 	} );
 } );

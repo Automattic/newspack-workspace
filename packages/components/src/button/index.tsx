@@ -6,7 +6,7 @@
  * WordPress dependencies.
  */
 import { Button as BaseComponent } from '@wordpress/components';
-import { useState } from '@wordpress/element';
+import { useEffect, useState } from '@wordpress/element';
 
 /**
  * Internal dependencies
@@ -20,23 +20,48 @@ type OriginalButtonProps = typeof BaseComponent.defaultProps;
 type Props = OriginalButtonProps & {
 	href?: string;
 	loading?: boolean;
-	onClick?: () => void;
+	onClick?: ( event?: React.MouseEvent< HTMLElement > ) => void;
 };
+
+// Control characters are stripped first, as browsers do, so `java\nscript:`
+// cannot slip past.
+const isJavascriptHref = ( href?: string ) =>
+	'string' === typeof href &&
+	href
+		.replace( /[\u0000-\u0020]/g, '' )
+		.toLowerCase()
+		.startsWith( 'javascript:' );
 
 const Button = ( { href, loading = undefined, onClick, ...otherProps }: Props ) => {
 	const history = useHistory();
 	const [ isAwaitingOnClick, setIsAwaitingOnClick ] = useState( false );
 
+	const isUnsafeHref = isJavascriptHref( href );
+	const safeHref = isUnsafeHref ? undefined : href;
+
+	useEffect( () => {
+		if ( 'production' === process.env.NODE_ENV || ! isUnsafeHref ) {
+			return;
+		}
+		// eslint-disable-next-line no-console
+		console.warn( 'Button: a `javascript:` href is not a link and has been dropped.' );
+	}, [ isUnsafeHref ] );
+
 	// If both onClick and href are present, await the onClick action an then redirect.
-	if ( href && onClick ) {
-		( otherProps as Props ).onClick = async () => {
+	if ( safeHref && onClick ) {
+		( otherProps as Props ).onClick = async ( event?: React.MouseEvent< HTMLElement > ) => {
 			setIsAwaitingOnClick( true );
-			await onClick();
+			await onClick( event );
 			setIsAwaitingOnClick( false );
-			history.push( ( href || '' ).replace( '#', '' ) );
+			// Outside a Router the href can only mean a real URL.
+			if ( history ) {
+				history.push( safeHref.replace( '#', '' ) );
+			} else {
+				window.location.href = safeHref;
+			}
 		};
 	} else {
-		( otherProps as Props ).href = href;
+		( otherProps as Props ).href = safeHref;
 		( otherProps as Props ).onClick = onClick;
 	}
 	if ( isAwaitingOnClick ) {

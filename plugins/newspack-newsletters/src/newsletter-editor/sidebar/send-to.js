@@ -17,7 +17,11 @@ import { usePrevious } from '../utils';
 
 // The container for list + sublist autocomplete fields.
 const SendTo = () => {
-	const [ error, setError ] = useState( null );
+	// `{ status, message }` — the status matters: a selection the user just made
+	// that we can't resolve is a real error, while a stored selection that the
+	// connected ESP doesn't know about is advisory and recoverable.
+	const [ notice, setNotice ] = useState( null );
+	const setError = message => setNotice( message ? { status: 'error', message } : null );
 	const { listId, sublistId, postStatus } = useSelect( select => {
 		const { getEditedPostAttribute } = select( 'core/editor' );
 		const meta = getEditedPostAttribute( 'meta' );
@@ -72,34 +76,51 @@ const SendTo = () => {
 		}
 	}, [ listId, sublistId ] );
 
-	// Handle cases where the selected list or sublist is no longer valid.
+	// Handle cases where the stored list or sublist doesn't resolve against the
+	// connected ESP — most often because it was picked under a previously
+	// connected one.
+	//
+	// These stored ids are deliberately NOT cleared here. Every provider's
+	// send-time guard treats an explicitly unset send_sublist_id (null or '')
+	// as an intentional whole-list send, so writing null to mean "we couldn't
+	// resolve this" would disarm the check that stops an unresolvable segment
+	// from reaching the entire audience. Leaving the value in place keeps that
+	// guard armed: the send aborts with a message naming the problem, and the
+	// warning below asks for a new selection first.
 	useEffect( () => {
 		if ( isRetrievingLists || ! hasRetrievedLists || ! lists.length ) {
 			return;
 		}
-		// If the list ID doesn't match any fetched lists reset the list and sublist IDs.
 		if ( listId && ! lists.find( item => item.id.toString() === listId.toString() ) ) {
-			updateMeta( { send_list_id: null, send_sublist_id: null } );
-			setError(
-				sprintf(
-					// Translators: Error shown when we can't find the selected list for a newsletter. %s is the ESP's label for the list entity.
-					__( 'Could not find the selected %s. It may have been deleted in your email service provider.', 'newspack-newsletters' ),
+			setNotice( {
+				status: 'warning',
+				message: sprintf(
+					// Translators: Warning shown when a newsletter's stored list isn't available in the connected ESP. %s is the ESP's label for the list entity.
+					__(
+						'The saved %s isn’t available in the connected email service provider. Choose a new one before sending.',
+						'newspack-newsletters'
+					),
 					listLabel
-				)
-			);
+				),
+			} );
 			return;
 		}
-		// If the sublist ID doesn't match any fetched sublists reset the sublist ID.
 		if ( listId && sublistId && ! sublists?.find( item => item.id.toString() === sublistId.toString() ) ) {
-			updateMeta( { send_sublist_id: null } );
-			setError(
-				sprintf(
-					// Translators: Error shown when we can't find the selected sublist for a newsletter. %s is the ESP's label for the sublist entity or entities.
-					__( 'Could not find the selected %s. It may have been deleted in your email service provider.', 'newspack-newsletters' ),
+			setNotice( {
+				status: 'warning',
+				message: sprintf(
+					// Translators: Warning shown when a newsletter's stored sublist isn't available in the connected ESP. %s is the ESP's label for the sublist entity or entities.
+					__(
+						'The saved %s isn’t available in the connected email service provider. Choose a new one before sending.',
+						'newspack-newsletters'
+					),
 					sublistLabel
-				)
-			);
+				),
+			} );
+			return;
 		}
+		// Both stored ids resolve now, so retire any earlier unresolved warning.
+		setNotice( current => ( 'warning' === current?.status ? null : current ) );
 	}, [ lists, sublists ] );
 
 	const renderSelectedSummary = () => {
@@ -151,9 +172,9 @@ const SendTo = () => {
 		<>
 			<hr />
 			<strong className="newspack-newsletters__label">{ __( 'Send to', 'newspack-newsletters' ) }</strong>
-			{ error && (
-				<Notice status="error" isDismissible={ false }>
-					{ error }
+			{ notice && (
+				<Notice status={ notice.status } isDismissible={ false }>
+					{ notice.message }
 				</Notice>
 			) }
 			{ ( send_list_id || send_sublist_id ) && (

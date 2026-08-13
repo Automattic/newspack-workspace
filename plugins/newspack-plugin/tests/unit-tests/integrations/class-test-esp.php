@@ -7,6 +7,7 @@
 
 namespace Newspack\Tests\Unit\Integrations;
 
+use Newspack\Reader_Activation\Integration;
 use Newspack\Reader_Activation\Integrations\ESP;
 use Newspack\Reader_Activation\Integrations\Incoming_Field;
 
@@ -675,5 +676,108 @@ class Test_ESP extends \WP_UnitTestCase {
 
 		$with_list = $this->make_esp_with_master_list( 'list-123' );
 		$this->assertTrue( $with_list->is_set_up(), 'Connected with a master list is set up.' );
+	}
+
+	/**
+	 * Run pull_contact_data() against a staged provider payload.
+	 *
+	 * @param array  $contact_data The payload get_contact_data() should return.
+	 * @param string $list_id      The ESP's configured master list id.
+	 * @return array|\WP_Error
+	 */
+	private function pull_with_contact_data( $contact_data, $list_id = 'list-123' ) {
+		\Newspack_Newsletters::$is_service_provider_configured = true;
+		$user_id = self::factory()->user->create( [ 'user_email' => 'reader@example.com' ] );
+		\Newspack_Newsletters_Subscription::$contact_data = [ 'reader@example.com' => $contact_data ];
+
+		$result = $this->make_esp_with_master_list( $list_id )->pull_contact_data( $user_id );
+
+		\Newspack_Newsletters_Subscription::reset_calls();
+		return $result;
+	}
+
+	/**
+	 * The enabled incoming fields are resolved from one specific list, so a
+	 * provider reporting per-list fields must be read at that list. A reader in
+	 * several lists would otherwise get whichever the provider reported last —
+	 * storing another list's values under this list's field keys.
+	 */
+	public function test_pull_reads_the_configured_list_from_a_per_list_payload() {
+		$result = $this->pull_with_contact_data(
+			[
+				// Flat map reports the last list, as merge_fields always has.
+				'metadata'         => [ 'CRM_SCORE' => '22' ],
+				'metadata_by_list' => [
+					'list-123' => [ 'CRM_SCORE' => '11' ],
+					'list-999' => [ 'CRM_SCORE' => '22' ],
+				],
+			]
+		);
+
+		$this->assertSame( [ 'CRM_SCORE' => '11' ], $result, 'The configured list wins over the flat map.' );
+	}
+
+	/**
+	 * A reader who belongs to other lists but not the configured one has no
+	 * fields to pull — better than storing a different list's values.
+	 */
+	public function test_pull_returns_nothing_when_the_configured_list_is_absent() {
+		$result = $this->pull_with_contact_data(
+			[
+				'metadata'         => [ 'CRM_SCORE' => '22' ],
+				'metadata_by_list' => [ 'list-999' => [ 'CRM_SCORE' => '22' ] ],
+			]
+		);
+
+		$this->assertSame( [], $result, 'Another list\'s values are not this list\'s values.' );
+	}
+
+	/**
+	 * Providers whose fields are account-wide (ActiveCampaign) report a single
+	 * flat map with no per-list ambiguity, and keep working unchanged.
+	 */
+	public function test_pull_falls_back_to_the_flat_map_without_a_per_list_payload() {
+		$result = $this->pull_with_contact_data( [ 'metadata' => [ 'CRM_SCORE' => '42' ] ] );
+
+		$this->assertSame( [ 'CRM_SCORE' => '42' ], $result );
+	}
+
+	/**
+	 * A contact carrying no fields at all is an empty pull, not a failure.
+	 */
+	public function test_pull_returns_empty_array_without_any_metadata() {
+		$this->assertSame( [], $this->pull_with_contact_data( [ 'lists' => [] ] ) );
+	}
+
+	/**
+	 * Providers name "no such contact" differently (Mailchimp has a dedicated
+	 * error code, ActiveCampaign a generic one). Callers get one canonical code
+	 * so batch drivers can tell "the provider does not know this reader" from a
+	 * failure without provider knowledge.
+	 */
+	public function test_pull_normalizes_provider_not_found_to_the_canonical_code() {
+		\Newspack_Newsletters::$is_service_provider_configured = true;
+		$user_id = self::factory()->user->create( [ 'user_email' => 'ghost@example.com' ] );
+		// No staged contact data: the subscription mock reports the contact as not found.
+
+		$result = $this->make_esp_with_master_list( 'list-123' )->pull_contact_data( $user_id );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( Integration::CONTACT_NOT_FOUND_ERROR_CODE, $result->get_error_code() );
+	}
+
+	/**
+	 * Bulk pulls read each contact once. A provider that memoizes contact
+	 * payloads per email must have the entry released after the read, or a
+	 * full-site pull grows by one payload per reader for the life of the
+	 * process — the batch loops' object-cache flush cannot free it.
+	 */
+	public function test_pull_releases_the_provider_contact_cache_entry() {
+		\Newspack_Newsletters_Service_Provider::$cleared_emails = [];
+
+		$result = $this->pull_with_contact_data( [ 'metadata' => [ 'CRM_SCORE' => '11' ] ] );
+
+		$this->assertSame( [ 'CRM_SCORE' => '11' ], $result, 'Sanity: the pull read the staged payload.' );
+		$this->assertSame( [ 'reader@example.com' ], \Newspack_Newsletters_Service_Provider::$cleared_emails, 'The provider cache entry for the pulled contact was released.' );
 	}
 }

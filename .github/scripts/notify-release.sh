@@ -79,6 +79,7 @@ PAYLOAD=$(
   VERB="$VERB" \
   CC_SUBTEAM="$CC_SUBTEAM" \
   CHANNEL="$CHANNEL" \
+  I18N_FAILED_UNITS="${I18N_FAILED_UNITS:-}" \
   SERVER="${GITHUB_SERVER_URL:-https://github.com}" \
   REPO="${GITHUB_REPOSITORY:-}" \
   node -e '
@@ -95,6 +96,12 @@ PAYLOAD=$(
       return `:ship: ${display(pkg)} ${verb}: <${url}>`;
     });
     let text = lines.join("\n");
+    // Translation regeneration is non-blocking, so a failing unit leaves the
+    // release green and its workflow annotation unread. Say it here instead.
+    const i18nFailed = (process.env.I18N_FAILED_UNITS || "").trim();
+    if (i18nFailed) {
+      text += `\n:warning: Translation files not regenerated for: ${i18nFailed}`;
+    }
     if (process.env.CC_SUBTEAM) {
       text += `\n(cc <!subteam^${process.env.CC_SUBTEAM}>)`;
     }

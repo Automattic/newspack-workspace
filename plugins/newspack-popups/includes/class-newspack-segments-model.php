@@ -496,7 +496,7 @@ final class Newspack_Segments_Model {
 			[
 				'post_type'      => Newspack_Popups::NEWSPACK_POPUPS_CPT,
 				'fields'         => 'ids',
-				'posts_per_page' => -1,
+				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Prompt IDs for a single segment; config-scale.
 				'tax_query'      => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query
 					[
 						'taxonomy' => self::TAX_SLUG,
