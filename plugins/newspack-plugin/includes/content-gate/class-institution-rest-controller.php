@@ -159,6 +159,14 @@ class Institution_REST_Controller extends \WP_REST_Posts_Controller {
 	 * without the rules capability use the id and title only, so removing the
 	 * whole object costs them nothing.
 	 *
+	 * Cast to an object rather than left as an empty PHP array: WP_REST_Server
+	 * json_encode()s the response, and an empty PHP array serializes as a JSON
+	 * array ([]) while WordPress declares this field's schema type as object.
+	 * An administrator's response — which keeps the associative array
+	 * get_value() returns — always serializes as an object, so leaving this
+	 * one as an array would make the field's JSON type vary by caller: valid
+	 * against the schema for one tier, a violation for the other.
+	 *
 	 * @param \WP_Post         $item    Post object.
 	 * @param \WP_REST_Request $request Request object.
 	 * @return \WP_REST_Response
@@ -172,7 +180,7 @@ class Institution_REST_Controller extends \WP_REST_Posts_Controller {
 
 		$data = $response->get_data();
 		if ( isset( $data['meta'] ) ) {
-			$data['meta'] = [];
+			$data['meta'] = (object) [];
 			$response->set_data( $data );
 		}
 

@@ -128,6 +128,22 @@ class Newspack_Test_Institution_REST_Controller extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Assert that a 'meta' value is the empty-object shape the strip produces.
+	 *
+	 * Checks both that the value is an object, not an array — the strip casts
+	 * to stdClass so the field's JSON type stays object regardless of caller —
+	 * and that it carries no properties. Checking type alone would pass even
+	 * if every rule field were still present, which would quietly defeat the
+	 * withholding tests that call this.
+	 *
+	 * @param mixed $meta The 'meta' value from a response body.
+	 */
+	private function assert_meta_withheld( $meta ) {
+		$this->assertInstanceOf( \stdClass::class, $meta, 'The stripped meta field must serialize as a JSON object, not an array.' );
+		$this->assertSame( [], get_object_vars( $meta ), 'No stored field may reach a caller without the rules capability.' );
+	}
+
+	/**
 	 * The route is served by this controller and not the default one.
 	 *
 	 * Without this, a class that fails to load leaves get_rest_controller()
@@ -266,7 +282,7 @@ class Newspack_Test_Institution_REST_Controller extends WP_UnitTestCase {
 		$response = rest_do_request( new WP_REST_Request( 'GET', $this->route . '/' . $this->institution_id ) );
 
 		$this->assertSame( 200, $response->get_status() );
-		$this->assertSame( [], $response->get_data()['meta'] );
+		$this->assert_meta_withheld( $response->get_data()['meta'] );
 	}
 
 	/**
@@ -325,7 +341,7 @@ class Newspack_Test_Institution_REST_Controller extends WP_UnitTestCase {
 		$data     = $response->get_data();
 
 		$this->assertSame( 200, $response->get_status() );
-		$this->assertSame( [], $data[0]['meta'], 'No stored field may reach a caller without the rules capability.' );
+		$this->assert_meta_withheld( $data[0]['meta'] );
 	}
 
 	/**
@@ -359,7 +375,7 @@ class Newspack_Test_Institution_REST_Controller extends WP_UnitTestCase {
 		$response = rest_filter_response_fields( rest_do_request( $request ), rest_get_server(), $request );
 		$data     = $response->get_data();
 
-		$this->assertSame( [], $data[0]['meta'] );
+		$this->assert_meta_withheld( $data[0]['meta'] );
 	}
 
 	// =========================================================================
