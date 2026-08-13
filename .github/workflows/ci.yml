@@ -523,6 +523,28 @@ jobs:
             echo "--- $spec"
             bash "$spec"
           done
+      - name: shellcheck
+        # Errors only. The tree carries ~126 warning-level findings across 39
+        # files, so a warning gate would fail on its first run; raising the floor
+        # is a separate cleanup. Errors are the class worth blocking on now, and
+        # the actively-maintained bin/ core already passes at warning level.
+        # -x follows sourced files, which the `# shellcheck source=` directives
+        # already in bin/ exist to support.
+        run: |
+          files=$(
+            { git ls-files '*.sh'
+              git ls-files bin/ n | while read -r f; do
+                [ -f "$f" ] && head -1 "$f" | grep -Eq '^#!.*(ba)?sh' && echo "$f"
+              done
+            } | sort -u
+          )
+          # An empty list would make this step pass without checking anything.
+          if [ -z "$files" ]; then
+            echo "No shell files matched."
+            exit 1
+          fi
+          echo "Checking $(echo "$files" | wc -l | tr -d ' ') files."
+          echo "$files" | xargs shellcheck -x -S error -f gcc
 
   # ----------------------------------------------------------------------------
   ci-ok:

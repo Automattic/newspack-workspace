@@ -391,11 +391,16 @@ case $1 in
         fi
 
         ;;
+    # ${*:2} rather than ${@:2}: inside the quoted sh -c string, "$@" expands to
+    # separate words, so every argument after the first became a positional
+    # parameter of the inner shell instead of part of the command line. Joining
+    # with ${*} keeps them in the string. Arguments containing spaces are still
+    # unsupported here, as documented for `n wp`.
     sites-list)
-        docker exec $DOCKER_IT $TARGET_CONTAINER sh -c "/var/scripts/sites-list.sh ${@:2}"
+        docker exec $DOCKER_IT $TARGET_CONTAINER sh -c "/var/scripts/sites-list.sh ${*:2}"
         ;;
     sites-drop)
-        docker exec $DOCKER_IT $TARGET_CONTAINER sh -c "/var/scripts/sites-drop.sh ${@:2}"
+        docker exec $DOCKER_IT $TARGET_CONTAINER sh -c "/var/scripts/sites-drop.sh ${*:2}"
         ;;
     build)
         if [[ -n "$2" ]]; then
