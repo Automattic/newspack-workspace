@@ -27,6 +27,8 @@ import { Icon, plus, postList, settings } from '@wordpress/icons';
  * Internal dependencies.
  */
 import {
+	Accordion,
+	AccordionPanel,
 	ActionCard,
 	AutocompleteWithSuggestions,
 	AutocompleteWithLatestPosts,
@@ -385,6 +387,38 @@ class ComponentsDemo extends Component {
 								</Drawer.Content>
 								<Drawer.Footer>{ this.drawerActions( drawerActionCount ) }</Drawer.Footer>
 							</Drawer.Root>
+						</Card>
+						<Card>
+							<h2>{ __( 'Accordion', 'newspack-plugin' ) }</h2>
+							<p>
+								{ __(
+									'A stack of independently collapsible panels, separated by dividers and sitting flush with the surrounding column.',
+									'newspack-plugin'
+								) }
+							</p>
+							<Accordion>
+								<AccordionPanel title={ __( 'Contact fields', 'newspack-plugin' ) } defaultOpen>
+									<p>{ __( 'A panel set to defaultOpen starts expanded.', 'newspack-plugin' ) }</p>
+								</AccordionPanel>
+								<AccordionPanel title={ __( 'Tags and segments', 'newspack-plugin' ) }>
+									<p>{ __( 'Panels are independent: opening one does not close the others.', 'newspack-plugin' ) }</p>
+								</AccordionPanel>
+								<AccordionPanel title={ __( 'Sync options', 'newspack-plugin' ) }>
+									<p>{ __( 'A divider separates each panel from the next, but never trails the last one.', 'newspack-plugin' ) }</p>
+								</AccordionPanel>
+							</Accordion>
+							<h3>{ __( 'Single panel', 'newspack-plugin' ) }</h3>
+							<p>
+								{ __(
+									'With nothing to collapse against, hideSingleTitle renders a lone panel open and drops its title.',
+									'newspack-plugin'
+								) }
+							</p>
+							<Accordion hideSingleTitle>
+								<AccordionPanel title={ __( 'Contact fields', 'newspack-plugin' ) }>
+									<p>{ __( 'This content is always visible.', 'newspack-plugin' ) }</p>
+								</AccordionPanel>
+							</Accordion>
 						</Card>
 						<Card>
 							<h2>{ __( 'Notice', 'newspack-plugin' ) }</h2>
