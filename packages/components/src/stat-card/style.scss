@@ -22,10 +22,7 @@ $stat-card-min-height: wp-vars.$grid-unit * 21;
 	min-height: $stat-card-min-height;
 
 	&__content {
-		display: flex;
 		flex: 1;
-		flex-direction: column;
-		gap: wp-vars.$grid-unit-10;
 	}
 
 	&__label-text {
@@ -71,15 +68,5 @@ $stat-card-min-height: wp-vars.$grid-unit * 21;
 		line-height: wp-vars.$font-line-height-x-small;
 		margin: 0;
 		text-wrap: balance;
-	}
-
-	.screen-reader-text {
-		clip: rect(1px, 1px, 1px, 1px);
-		clip-path: inset(50%);
-		height: 1px;
-		overflow: hidden;
-		position: absolute;
-		white-space: nowrap;
-		width: 1px;
 	}
 }

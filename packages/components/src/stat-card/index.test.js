@@ -30,6 +30,16 @@ describe( 'StatCard.Root', () => {
 		expect( container.querySelector( '.newspack-stat-card__content' ) ).toBeInTheDocument();
 	} );
 
+	// The footer only pins to the bottom while the content region is a column.
+	it( 'lays the content region out as a column', () => {
+		const { container } = render(
+			<StatCard.Root>
+				<p>body</p>
+			</StatCard.Root>
+		);
+		expect( container.querySelector( '.newspack-stat-card__content' ) ).toHaveStyle( { flexDirection: 'column' } );
+	} );
+
 	it( 'merges className onto the card', () => {
 		const { container } = render(
 			<StatCard.Root className="consumer-tile">

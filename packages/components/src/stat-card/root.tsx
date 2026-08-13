@@ -3,7 +3,7 @@
  */
 import { forwardRef, useMemo } from '@wordpress/element';
 // Aliased: this package exports a different `Card` of its own.
-import { Card as UICard } from '@wordpress/ui';
+import { Card as UICard, Stack } from '@wordpress/ui';
 
 /**
  * External dependencies.
@@ -23,7 +23,9 @@ const Root = forwardRef< HTMLDivElement, StatCardRootProps >( function Root( { h
 	return (
 		<StatCardContext.Provider value={ context }>
 			<UICard.Root ref={ ref } className={ classnames( 'newspack-stat-card', className ) } { ...props }>
-				<UICard.Content className="newspack-stat-card__content">{ children }</UICard.Content>
+				<UICard.Content render={ <Stack direction="column" gap="sm" /> } className="newspack-stat-card__content">
+					{ children }
+				</UICard.Content>
 			</UICard.Root>
 		</StatCardContext.Provider>
 	);
