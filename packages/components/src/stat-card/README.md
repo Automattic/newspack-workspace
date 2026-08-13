@@ -20,18 +20,17 @@ import { StatCard } from 'newspack-components';
 import StatCard from '../../packages/components/src/stat-card';
 ```
 
-The card's chrome is not self-contained. `Card.Root` from `@wordpress/ui` takes
-its background, border, radius and padding from `--wpds-*` custom properties
-with no fallbacks, and this package defines those in one place only:
-`page/style.scss`, which imports the design-token sheet. That sheet rides in
-with the barrel.
+Both are safe. `Card.Root` from `@wordpress/ui` takes its background, border,
+radius and padding from `--wpds-*` custom properties, which arrive with the
+design-token sheet that `page/style.scss` imports, and that sheet rides in with
+the barrel. But the CSS `@wordpress/ui` actually ships carries a fallback on
+each of those properties, and the fallbacks are the same light-theme values the
+token sheet sets, so a card outside the sheet renders the same chrome. Only a
+consumer opting into non-default theme settings, a different corner radius say,
+would see the two diverge.
 
-So a by-path import keeps the bundle narrow at the cost of the card's chrome,
-unless that bundle already renders `Page` or pulls the token sheet in some other
-way. Without it the card is an unpadded, borderless, transparent box. The figure
-is unaffected either way: the card declares the Newspack accent on itself rather
-than relying on the package's global remap. Take the narrow import where the
-screen already has the tokens; take the barrel otherwise.
+The figure is unaffected either way: the card declares the Newspack accent on
+itself rather than relying on the package's global remap.
 
 The exported prop types travel with neither route. The barrel is a `.js` file so
 it cannot re-export types, and the package ships no declarations (it compiles
