@@ -7,9 +7,15 @@
 [[ -n "${NABSPATH:-}" && -f "$NABSPATH/n" ]] ||
     NABSPATH="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+# Names that become git branches and path components. Slashes are allowed here
+# and not in validate_env_name, since `fix/some-thing` is the normal branch
+# shape. The first character may not be a dash, so an option is never taken as
+# a name: bin/worktree.sh and the --worktree parsing in bin/env.sh both read
+# these positionally. A leading dot or underscore stays legal because branches
+# like _pr738 are in use, and git rejects the refnames that are truly invalid.
 validate_name() {
-    if [[ ! "$1" =~ ^[a-zA-Z0-9._/-]+$ ]] || [[ "$1" == *..* ]] || [[ "$1" == /* ]]; then
-        echo "Error: invalid $2 '$1' (only alphanumeric, dots, hyphens, underscores, slashes allowed; no '..' or leading '/')"
+    if [[ ! "$1" =~ ^[a-zA-Z0-9._][a-zA-Z0-9._/-]*$ ]] || [[ "$1" == *..* ]] || [[ "$1" == /* ]]; then
+        echo "Error: invalid $2 '$1' (must not start with '-'; only alphanumeric, dots, hyphens, underscores, slashes allowed; no '..' or leading '/')"
         exit 1
     fi
 }

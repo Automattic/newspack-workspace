@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 #
-# test-env-name-guards.sh
+# test-name-guards.sh
 #
-# Self-proving spec for the two guards that stop an option being taken as an
-# environment name.
+# Self-proving spec for the guards that stop an option being taken as a name.
 #
 # `n env create --help` used to create an environment called "--help". The
 # subcommands read the name positionally, validate_env_name allowed a leading
@@ -13,7 +12,13 @@
 # alone lets the other regress. Loosen the validator and `destroy` accepts an
 # option again; drop the help arm and `--help` errors instead of helping.
 #
-# Run: bash bin/tests/test-env-name-guards.sh
+# validate_name is covered alongside it because it has the same exposure by a
+# different route: bin/worktree.sh and the --worktree parsing in bin/env.sh read
+# branch and repo names positionally through it, so `n worktree add --help` used
+# to reach git with "--help" as the branch. Git refuses that refname, so nothing
+# was created, but the user got a git error rather than usage.
+#
+# Run: bash bin/tests/test-name-guards.sh
 
 set -euo pipefail
 
@@ -51,6 +56,31 @@ assert_name ".demo" rejected "a leading dot is rejected, which would misname the
 assert_name "_demo" rejected "a leading underscore is rejected"
 assert_name "demo/1" rejected "a slash is rejected, since Docker rejects it in container names"
 assert_name "" rejected "an empty name is rejected"
+
+assert_path_name() {
+	local name="$1" want="$2" desc="$3" got
+	# validate_name exits rather than returning, so it runs in a subshell.
+	if ( validate_name "$name" "branch" ) >/dev/null 2>&1; then got=accepted; else got=rejected; fi
+	if [[ "$got" == "$want" ]]; then
+		echo "  ok: $desc"
+	else
+		echo "  FAIL: $desc — want $want, got $got"
+		failures=$((failures + 1))
+	fi
+}
+
+echo
+echo "validate_name:"
+assert_path_name "fix/some-thing" accepted "a slashed branch name is accepted, unlike an env name"
+assert_path_name "newspack-plugin" accepted "a repo name with an internal dash is accepted"
+assert_path_name "_pr738" accepted "a leading underscore is accepted, since such branches are in use"
+assert_path_name "demo.1" accepted "a dotted name is accepted"
+assert_path_name "--help" rejected "the option shape that reached git as a branch name is rejected"
+assert_path_name "-h" rejected "a short option is rejected"
+assert_path_name "--force" rejected "any long option is rejected, not just --help"
+assert_path_name "a..b" rejected "a parent-directory traversal is still rejected"
+assert_path_name "/abs" rejected "a leading slash is still rejected"
+assert_path_name "" rejected "an empty name is rejected"
 
 # _common.sh honours an inherited NABSPATH only when it names a real workspace
 # root, so the stub `n` is what makes this a sandbox: anything a subcommand
