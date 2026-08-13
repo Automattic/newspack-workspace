@@ -143,6 +143,10 @@ final class Newspack_Newsletters {
 				'name'  => 'Active Campaign',
 				'class' => 'Newspack_Newsletters_Active_Campaign',
 			],
+			'mailpoet'         => [
+				'name'  => 'MailPoet',
+				'class' => 'Newspack_Newsletters_Mailpoet',
+			],
 		];
 
 		/**
