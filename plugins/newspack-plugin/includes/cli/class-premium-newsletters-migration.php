@@ -36,6 +36,319 @@ class Premium_Newsletters_Migration {
 	const NEWSLETTER_LIST_CPT_FALLBACK = 'newspack_nl_list';
 
 	/**
+	 * Create or update Newspack Access Control premium newsletter gates from
+	 * WooCommerce Membership plans.
+	 *
+	 * For each published plan carrying a newsletter-list content restriction rule,
+	 * writes the equivalent premium newsletter gate: the plan's lists as the gate's
+	 * restricted lists, and the plan's products as its paid access rules. Plans
+	 * restricting the same lists are grouped and represented by a single gate whose
+	 * title is all matching plan names joined with " | ".
+	 *
+	 * Registration mode is always activated; paid access mode only when every plan in
+	 * the group requires a purchase (see group_requires_purchase()). The site-wide
+	 * auto-signup setting is derived from the post-checkout signup modal.
+	 *
+	 * Dry-run by default; pass --live to write.
+	 *
+	 * Re-running overwrites a matching gate's content rules and mode settings, but
+	 * never its layouts: this command does not author them, and a publisher may have
+	 * customized one in Newsletters > Premium.
+	 *
+	 * Both modes surface predictable problems as WARN rows. On --live each written
+	 * gate is re-read and checked against the conditions the frontend evaluator
+	 * applies. Migrated gates stay dormant until WooCommerce Memberships is
+	 * deactivated, so without this an unenforceable gate would look migrated for as
+	 * long as it takes someone to notice at cutover.
+	 *
+	 * ## OPTIONS
+	 *
+	 * [--live]
+	 * : Apply the changes. Without this flag the command runs as a dry-run and writes nothing.
+	 *
+	 * [--plan=<id>]
+	 * : Only process the plan with this post ID. Useful for testing.
+	 *
+	 * ## EXAMPLES
+	 *
+	 *     wp newspack migrate-premium-newsletters
+	 *     wp newspack migrate-premium-newsletters --live
+	 *     wp newspack migrate-premium-newsletters --plan=711923
+	 *
+	 * @param array $args       Positional args (unused).
+	 * @param array $assoc_args Named args.
+	 *
+	 * @return void
+	 */
+	public function migrate_premium_newsletters( $args, $assoc_args ) {
+		$dry_run = ! (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'live', false );
+
+		// A mistyped --plan must never silently widen the run to every plan, so an
+		// unusable value is a hard error rather than a fallback to "no filter".
+		$plan_arg = \WP_CLI\Utils\get_flag_value( $assoc_args, 'plan', null );
+		$plan_id  = 0;
+		if ( null !== $plan_arg ) {
+			if ( ! is_numeric( $plan_arg ) || (int) $plan_arg <= 0 ) {
+				WP_CLI::error( sprintf( 'Invalid --plan value "%s". Pass a positive membership plan post ID.', $plan_arg ) );
+			}
+			$plan_id = (int) $plan_arg;
+		}
+
+		if ( ! class_exists( 'Newspack\Content_Gate' ) ) {
+			WP_CLI::error( 'Newspack\Content_Gate class not found. Is newspack-plugin active? Aborting.' );
+		}
+		if ( ! class_exists( 'Newspack\Content_Rules' ) ) {
+			WP_CLI::error( 'Newspack\Content_Rules class not found. Is newspack-plugin active? Aborting.' );
+		}
+		if ( ! function_exists( 'wc_memberships' ) ) {
+			WP_CLI::error( 'WooCommerce Memberships is not active. Aborting.' );
+		}
+		if ( ! class_exists( 'Newspack\Newsletters\Subscription_Lists' ) ) {
+			WP_CLI::error( 'Newspack Newsletters is not active, so there are no newsletter lists to migrate. Aborting.' );
+		}
+
+		if ( $dry_run ) {
+			WP_CLI::line( '' );
+			WP_CLI::line( '*** DRY RUN MODE — no data will be modified. Pass --live to write. ***' );
+			WP_CLI::line( '' );
+		}
+
+		$plan_ids = self::get_plans( $plan_id );
+		$total    = count( $plan_ids );
+
+		if ( 0 === $total ) {
+			WP_CLI::line( $plan_id ? sprintf( 'No published plan found with ID %d.', $plan_id ) : 'No published membership plans found.' );
+			return;
+		}
+
+		WP_CLI::line( sprintf( 'Found %d membership plan(s). Starting migration…', $total ) );
+		WP_CLI::line( '' );
+
+		// Pre-load existing premium newsletter gates indexed by lower-cased title. Only
+		// published gates are considered: the frontend enforces nothing else, so writing
+		// into a draft or trashed title match would produce a gate that never restricts.
+		$existing_gates = [];
+		foreach ( \Newspack\Content_Gate::get_gates( \Newspack\Content_Gate::GATE_CPT, 'publish', true ) as $gate ) {
+			$existing_gates[ trim( strtolower( $gate['title'] ) ) ] = $gate['id'];
+		}
+
+		$summary        = [];
+		$skipped        = [];
+		$titles_written = [];
+		$migrated_lists = [];
+
+		$plan_groups = self::group_plans_by_lists( $plan_ids, $skipped );
+
+		$group_count = count( $plan_groups );
+		if ( $group_count < ( $total - count( $skipped ) ) ) {
+			WP_CLI::line( sprintf( 'Grouped into %d gate(s) after deduplication.', $group_count ) );
+			WP_CLI::line( '' );
+		}
+		$progress = \WP_CLI\Utils\make_progress_bar( 'Migrating premium newsletter gates', $group_count );
+
+		foreach ( $plan_groups as $group ) {
+			$progress->tick();
+
+			$list_ids     = $group[0]['list_ids'];
+			$gate_title   = implode( ' | ', array_column( $group, 'name' ) );
+			$gate_key     = trim( strtolower( $gate_title ) );
+			$has_purchase = self::group_requires_purchase( $group );
+			$access_type  = $has_purchase ? 'purchase' : 'signup';
+
+			$migrated_lists = array_merge( $migrated_lists, $list_ids );
+
+			// Cast to int for parity with the REST write path, which stores subscription
+			// access-rule values as ints; raw `_product_ids` meta can hold strings.
+			$merged_product_ids = array_values(
+				array_unique(
+					array_map( 'absint', array_merge( ...array_column( $group, 'product_ids' ) ) )
+				)
+			);
+			// Drop product variations — gates should reference parent products only.
+			$merged_product_ids = array_values(
+				array_filter(
+					$merged_product_ids,
+					fn( $id ) => 'product_variation' !== \get_post_type( $id )
+				)
+			);
+
+			// Gate identity is the title, but groups are keyed by list fingerprint — so
+			// two same-named plans restricting different lists land in different groups
+			// and would silently overwrite each other's rules.
+			if ( isset( $titles_written[ $gate_key ] ) ) {
+				WP_CLI::warning(
+					sprintf(
+						'Two plan groups resolve to the gate title "%s" (same plan name(s), different lists). The later group overwrites the earlier one — rename one of the plans and re-run.',
+						$gate_title
+					)
+				);
+			}
+			$titles_written[ $gate_key ] = true;
+
+			$action  = array_key_exists( $gate_key, $existing_gates ) ? 'updated' : 'created';
+			$gate_id = $existing_gates[ $gate_key ] ?? null;
+
+			// Keep $existing_gates consistent across both passes so a later group with the
+			// same title is reported as 'updated'. A null value means "claimed by this run
+			// but not created yet", which the summary prints as '(pending)'.
+			if ( ! array_key_exists( $gate_key, $existing_gates ) ) {
+				$existing_gates[ $gate_key ] = null;
+			}
+
+			$content_rules = [
+				[
+					'slug'  => 'newsletters',
+					'value' => array_map( 'strval', $list_ids ),
+				],
+			];
+			$access_rules = $has_purchase && ! empty( $merged_product_ids )
+				? [
+					[
+						[
+							'slug'  => 'subscription',
+							'value' => $merged_product_ids,
+						],
+					],
+				]
+				: [];
+
+			$write_error = '';
+			if ( ! $dry_run ) {
+				if ( null === $gate_id ) {
+					$result = \Newspack\Content_Gate::create_gate(
+						[
+							'title'               => $gate_title,
+							'status'              => 'publish',
+							'content_rules'       => $content_rules,
+							'content_rules_match' => 'any',
+							'registration'        => [ 'active' => true ],
+							'custom_access'       => [
+								'active'       => $has_purchase,
+								'access_rules' => $access_rules,
+							],
+						],
+						\Newspack\Content_Gate::GATE_CPT,
+						true
+					);
+					if ( \is_wp_error( $result ) ) {
+						$write_error = $result->get_error_message();
+					} else {
+						$gate_id = $result;
+					}
+				} else {
+					\Newspack\Content_Rules::update_gate_content_rules( $gate_id, $content_rules );
+					\Newspack\Content_Rules::update_gate_content_rules_match( $gate_id, 'any' );
+					\Newspack\Content_Gate::update_registration_settings( $gate_id, [ 'active' => true ] );
+					\Newspack\Content_Gate::update_custom_access_settings(
+						$gate_id,
+						[
+							'active'       => $has_purchase,
+							'access_rules' => $access_rules,
+						]
+					);
+				}
+				if ( '' === $write_error ) {
+					$existing_gates[ $gate_key ] = $gate_id;
+				}
+			}
+
+			if ( '' !== $write_error ) {
+				WP_CLI::warning( sprintf( 'Failed to create gate "%s": %s', $gate_title, $write_error ) );
+				$summary[] = [
+					'plan_name'   => $gate_title,
+					'action'      => 'ERROR: ' . $write_error,
+					'gate_id'     => '—',
+					'lists'       => count( $list_ids ),
+					'access_type' => $access_type,
+				];
+				continue;
+			}
+
+			$verification_issues = [];
+			if ( ! $dry_run && $gate_id ) {
+				$verification_issues = self::verify_migrated_gate( $gate_id, $has_purchase );
+				foreach ( $verification_issues as $issue ) {
+					WP_CLI::warning( sprintf( '"%s" (gate %d) will not restrict as intended: %s', $gate_title, $gate_id, $issue ) );
+				}
+			} elseif ( $dry_run ) {
+				$verification_issues = self::compute_pre_write_issues( $list_ids, $has_purchase, $merged_product_ids );
+				foreach ( $verification_issues as $issue ) {
+					WP_CLI::warning( sprintf( '"%s" will not migrate correctly: %s', $gate_title, $issue ) );
+				}
+			}
+
+			if ( ! empty( $verification_issues ) ) {
+				$row_action = 'WARN: ' . implode( '; ', $verification_issues );
+			} else {
+				$row_action = $dry_run ? $action . ' (dry-run)' : $action;
+			}
+
+			$summary[] = [
+				'plan_name'   => $gate_title,
+				'action'      => $row_action,
+				'gate_id'     => $gate_id ?? '(pending)',
+				'lists'       => count( $list_ids ),
+				'access_type' => $access_type,
+			];
+		}
+
+		$progress->finish();
+		WP_CLI::line( '' );
+
+		WP_CLI::line( $dry_run ? '=== DRY RUN SUMMARY ===' : '=== MIGRATION SUMMARY ===' );
+		WP_CLI::line( '' );
+
+		\WP_CLI\Utils\format_items(
+			'table',
+			array_map(
+				fn( $row ) => [
+					'Plan Name'   => $row['plan_name'],
+					'Action'      => $row['action'],
+					'Gate ID'     => $row['gate_id'],
+					'Lists'       => $row['lists'],
+					'Access Type' => $row['access_type'],
+				],
+				array_merge( $summary, $skipped )
+			),
+			[ 'Plan Name', 'Action', 'Gate ID', 'Lists', 'Access Type' ]
+		);
+
+		WP_CLI::line( '' );
+		self::report_auto_signup( array_values( array_unique( $migrated_lists ) ), $dry_run );
+
+		WP_CLI::line( '' );
+		$processed = count(
+			array_filter(
+				$summary,
+				fn( $r ) => ! str_starts_with( $r['action'], 'ERROR' )
+			)
+		);
+		$unenforceable = count(
+			array_filter(
+				$summary,
+				fn( $r ) => str_starts_with( $r['action'], 'WARN' )
+			)
+		);
+		WP_CLI::success(
+			sprintf(
+				'Done. %d gate(s) %s.',
+				$processed,
+				$dry_run ? 'would be created/updated' : 'created/updated'
+			)
+		);
+		// Written but unenforceable is worse than not written at all — it looks
+		// migrated. Call it out after the success line so it is not lost in the table.
+		if ( $unenforceable ) {
+			WP_CLI::warning(
+				sprintf(
+					'%d of those gate(s) will not restrict as intended (see the WARN rows above). Fix them before deactivating WooCommerce Memberships.',
+					$unenforceable
+				)
+			);
+		}
+	}
+
+	/**
 	 * The newsletter list post type.
 	 *
 	 * Read from Newspack Newsletters when it is loaded so the two stay in step, with
@@ -381,5 +694,151 @@ class Premium_Newsletters_Migration {
 		}
 
 		return $issues;
+	}
+
+	/**
+	 * Get all published WooCommerce Membership plans, optionally filtered by ID.
+	 *
+	 * @param int $plan_id Optional plan ID to filter by.
+	 *
+	 * @return int[] Array of plan post IDs.
+	 */
+	private static function get_plans( int $plan_id = 0 ): array {
+		$args = [
+			'post_type'      => 'wc_membership_plan',
+			'post_status'    => 'publish',
+			'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Operator-run CLI command; unbounded by design.
+			'fields'         => 'ids',
+			'no_found_rows'  => true,
+			'orderby'        => 'ID',
+			'order'          => 'ASC',
+		];
+		if ( $plan_id ) {
+			$args['p'] = $plan_id;
+		}
+		return \get_posts( $args );
+	}
+
+	/**
+	 * Group published plans by the set of newsletter lists they restrict.
+	 *
+	 * Manual-only plans (which have no content gates) and plans that restrict no
+	 * newsletter list are collected into $skipped instead of grouped. Plans
+	 * restricting the same lists share a group, and therefore a single gate.
+	 *
+	 * @param int[] $plan_ids Plan post IDs.
+	 * @param array $skipped  Skipped-plan summary rows, appended to by reference.
+	 *
+	 * @return array<string,array> Map of fingerprint => list of plan descriptors, each
+	 *                             [ 'pid', 'name', 'access_method', 'list_ids', 'product_ids' ].
+	 */
+	private static function group_plans_by_lists( array $plan_ids, array &$skipped ): array {
+		$plan_groups = [];
+
+		foreach ( $plan_ids as $pid ) {
+			// The factory validates the post and lets WC Memberships integrations
+			// substitute their own plan subclasses, which direct construction bypasses.
+			$plan = \wc_memberships_get_membership_plan( $pid );
+			if ( ! $plan ) {
+				$skipped[] = [
+					'plan_name'   => sprintf( '(plan %d)', $pid ),
+					'action'      => 'skipped (not a valid membership plan)',
+					'gate_id'     => '—',
+					'lists'       => '—',
+					'access_type' => '—',
+				];
+				continue;
+			}
+			$plan_name     = $plan->get_name();
+			$access_method = $plan->get_access_method();
+
+			if ( 'manual-only' === $access_method ) {
+				$skipped[] = [
+					'plan_name'   => $plan_name,
+					'action'      => 'skipped (manual-only)',
+					'gate_id'     => '—',
+					'lists'       => '—',
+					'access_type' => '—',
+				];
+				continue;
+			}
+
+			$list_ids = self::extract_list_ids( $plan->get_content_restriction_rules() );
+			if ( empty( $list_ids ) ) {
+				$skipped[] = [
+					'plan_name'   => $plan_name,
+					'action'      => 'skipped (restricts no newsletter list)',
+					'gate_id'     => '—',
+					'lists'       => '0',
+					'access_type' => $access_method,
+				];
+				continue;
+			}
+
+			$fingerprint                   = self::compute_list_fingerprint( $list_ids );
+			$plan_groups[ $fingerprint ][] = [
+				'pid'           => $pid,
+				'name'          => $plan_name,
+				'access_method' => $access_method,
+				'list_ids'      => $list_ids,
+				'product_ids'   => 'purchase' === $access_method ? array_values( $plan->get_product_ids() ) : [],
+			];
+		}
+
+		return $plan_groups;
+	}
+
+	/**
+	 * Derive, report, and (in live mode) write the site-wide auto-signup setting.
+	 *
+	 * The option is written rather than left alone because the whole point is a
+	 * zero-touch migration — but the transition is always printed, so a change to a
+	 * setting a publisher may have chosen is visible rather than silent.
+	 *
+	 * @param int[] $list_ids All newsletter list IDs this run migrated.
+	 * @param bool  $dry_run  Whether this is a dry run.
+	 *
+	 * @return void
+	 */
+	private static function report_auto_signup( array $list_ids, bool $dry_run ) {
+		$derived = self::derive_auto_signup( $list_ids );
+		$current = (bool) \get_option( 'newspack_premium_newsletters_auto_signup', 1 );
+
+		if ( ! empty( $derived['unresolved'] ) ) {
+			WP_CLI::warning(
+				sprintf(
+					'Could not resolve an ESP list for list(s) %s, so they are treated as auto-signup lists. Confirm them in Newsletters > Premium.',
+					implode( ', ', $derived['unresolved'] )
+				)
+			);
+		}
+
+		if ( null === $derived['value'] ) {
+			if ( ! empty( $derived['modal'] ) && ! empty( $derived['non_modal'] ) ) {
+				WP_CLI::warning(
+					sprintf(
+						'Auto-signup is one site-wide setting, but these lists disagree: %s appear in the post-checkout signup modal (auto-signup off), while %s do not (auto-signup on). Leaving it %s — set it in Newsletters > Premium.',
+						implode( ', ', $derived['modal'] ),
+						implode( ', ', $derived['non_modal'] ),
+						$current ? 'on' : 'off'
+					)
+				);
+			}
+			return;
+		}
+
+		$derived_label = $derived['value'] ? 'on' : 'off';
+		$current_label = $current ? 'on' : 'off';
+
+		if ( $derived['value'] === $current ) {
+			WP_CLI::line( sprintf( 'Auto-signup is already %s; leaving it unchanged.', $current_label ) );
+			return;
+		}
+		if ( $dry_run ) {
+			WP_CLI::line( sprintf( 'Auto-signup would be set to %s (currently %s).', $derived_label, $current_label ) );
+			return;
+		}
+		\update_option( 'newspack_premium_newsletters_auto_signup', $derived['value'] ? 1 : 0, false );
+		WP_CLI::line( sprintf( 'Auto-signup set to %s (was %s).', $derived_label, $current_label ) );
 	}
 }

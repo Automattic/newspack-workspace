@@ -35,6 +35,7 @@ class Initializer {
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-teams-migration.php';
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-institutions-migration.php';
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-membership-gates-migration.php';
+		include_once NEWSPACK_ABSPATH . 'includes/cli/class-premium-newsletters-migration.php';
 	}
 
 	/**
@@ -129,6 +130,7 @@ class Initializer {
 				);
 			}
 			WP_CLI::add_command( 'newspack migrate-membership-gates', [ 'Newspack\CLI\Membership_Gates_Migration', 'migrate_membership_gates' ] );
+			WP_CLI::add_command( 'newspack migrate-premium-newsletters', [ 'Newspack\CLI\Premium_Newsletters_Migration', 'migrate_premium_newsletters' ] );
 		}
 
 		Optional_Modules::register_commands();
