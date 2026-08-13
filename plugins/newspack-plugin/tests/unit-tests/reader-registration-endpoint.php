@@ -545,15 +545,8 @@ class Newspack_Test_Frontend_Registration_Endpoint extends WP_UnitTestCase {
 
 	/**
 	 * Test RAS disabled returns 403.
-	 *
-	 * Skipped in the test environment because Reader_Activation::is_enabled()
-	 * short-circuits to true when IS_TEST_ENV is defined, bypassing the filter.
 	 */
 	public function test_register_when_ras_disabled() {
-		if ( defined( 'IS_TEST_ENV' ) && IS_TEST_ENV ) {
-			$this->markTestSkipped( 'is_enabled() always returns true when IS_TEST_ENV is defined.' );
-		}
-
 		add_filter( 'newspack_reader_activation_enabled', '__return_false' );
 
 		$response = $this->do_register_request(
