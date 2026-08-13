@@ -6,7 +6,7 @@ import apiFetch from '@wordpress/api-fetch';
 import { BaseControl, Button, DatePicker, PanelRow, RangeControl, ToggleControl } from '@wordpress/components';
 import { compose } from '@wordpress/compose';
 import { withDispatch, withSelect } from '@wordpress/data';
-import { dateI18n } from '@wordpress/date';
+import { dateI18n, getDate } from '@wordpress/date';
 import { PluginDocumentSettingPanel } from '@wordpress/editor';
 import { useEffect, useState } from '@wordpress/element';
 import { addQueryArgs } from '@wordpress/url';
@@ -125,13 +125,18 @@ const FeaturedListingsComponent = ( { createNotice, isSavingPost, meta, postId, 
 					<PanelRow>
 						<BaseControl id="newspack-listings__featured-listing-expiration" label={ __( 'Expiration Date', 'newspack-listings' ) }>
 							<DatePicker
-								currentDate={ newspack_listings_featured_expires ? new Date( newspack_listings_featured_expires ) : null }
+								currentDate={ newspack_listings_featured_expires || null }
 								onMonthPreviewed={ () => {} }
 								onChange={ value => {
-									// Convert value to midnight in the local timezone.
-									const date = new Date( value );
-									const midnight = new Date( date.getFullYear(), date.getMonth(), date.getDate() );
-									updateMetaValue( 'newspack_listings_featured_expires', dateI18n( 'Y-m-d\\TH:i:s', midnight ) );
+									// Pin midnight in the *site* timezone, which is how
+									// Featured::unset_featured_status parses this value when it decides
+									// whether the listing has expired. Taking the calendar date from the
+									// browser instead lands on the wrong day for any editor far enough
+									// from the site timezone, expiring the listing a day early or late.
+									updateMetaValue(
+										'newspack_listings_featured_expires',
+										value ? `${ dateI18n( 'Y-m-d', getDate( value ) ) }T00:00:00` : ''
+									);
 								} }
 							/>
 							{ newspack_listings_featured_expires && (
