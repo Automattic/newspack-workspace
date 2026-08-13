@@ -2,6 +2,7 @@
  * WordPress dependencies.
  */
 import { Children, isValidElement } from '@wordpress/element';
+import { Stack } from '@wordpress/ui';
 
 /**
  * External dependencies.
@@ -47,7 +48,11 @@ const asParts = ( children: React.ReactNode ) => {
 const Footer = ( { className, children }: StatCardFooterProps ) => {
 	useStatCardContext();
 
-	return <div className={ classnames( 'newspack-stat-card__footer', className ) }>{ asParts( children ) }</div>;
+	return (
+		<Stack direction="column" align="flex-start" gap="xs" className={ classnames( 'newspack-stat-card__footer', className ) }>
+			{ asParts( children ) }
+		</Stack>
+	);
 };
 
 export default Footer;

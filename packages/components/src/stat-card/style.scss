@@ -29,13 +29,6 @@ $stat-card-value-size-min: 20px;
 		gap: wp-vars.$grid-unit-10;
 	}
 
-	&__label {
-		align-items: flex-start;
-		display: flex;
-		gap: wp-vars.$grid-unit-10;
-		justify-content: space-between;
-	}
-
 	&__label-text {
 		@include wp-mixins.heading-large();
 		color: wp-colors.$gray-900;
@@ -61,13 +54,6 @@ $stat-card-value-size-min: 20px;
 			font-size: wp-vars.$font-size-x-large;
 			line-height: wp-vars.$font-line-height-x-large;
 		}
-	}
-
-	&__footer {
-		align-items: flex-start;
-		display: flex;
-		flex-direction: column;
-		gap: wp-vars.$grid-unit-05;
 	}
 
 	&__action,

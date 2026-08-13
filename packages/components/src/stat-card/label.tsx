@@ -2,6 +2,7 @@
  * WordPress dependencies.
  */
 import { useEffect } from '@wordpress/element';
+import { Stack } from '@wordpress/ui';
 
 /**
  * External dependencies.
@@ -42,10 +43,10 @@ const Label = ( { suffix, heading, className, children }: StatCardLabelProps ) =
 	}, [ level ] );
 
 	return (
-		<div className={ classnames( 'newspack-stat-card__label', className ) }>
+		<Stack direction="row" align="flex-start" justify="space-between" gap="sm" className={ classnames( 'newspack-stat-card__label', className ) }>
 			<Heading className="newspack-stat-card__label-text">{ children }</Heading>
 			{ suffix }
-		</div>
+		</Stack>
 	);
 };
 
