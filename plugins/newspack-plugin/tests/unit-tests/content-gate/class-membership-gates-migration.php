@@ -142,6 +142,39 @@ class Test_Membership_Gates_Migration extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A garbage `_product_ids` entry normalizes to 0, and a rule value of 0 grants the
+	 * gate to every paying reader — WC_Subscription::has_product() matches a line item
+	 * whose variation_id is 0, which every simple-product line item's is. A negative ID
+	 * is dropped for the same reason: absint() would have turned it into a different,
+	 * real product ID. A deleted product writes a rule nothing can satisfy, which fails
+	 * safe but over-restricts, so it is dropped and reported too. Variations keep this
+	 * command's inherited behavior and stay dropped.
+	 */
+	public function test_resolve_product_ids_drops_ids_a_subscription_rule_must_not_carry() {
+		$product   = self::factory()->post->create( [ 'post_type' => 'product' ] );
+		$variation = self::factory()->post->create( [ 'post_type' => 'product_variation' ] );
+		$deleted   = self::factory()->post->create( [ 'post_type' => 'product' ] );
+		wp_delete_post( $deleted, true );
+
+		$group = [
+			[
+				'pid'           => 0,
+				'name'          => 'Plan',
+				'access_method' => 'purchase',
+				'ac_rules'      => [],
+				'product_ids'   => [ $product, 0, -7, $deleted, $variation ],
+			],
+		];
+
+		$resolved = $this->invoke_private_static( 'resolve_product_ids', [ $group ] );
+
+		$this->assertSame( [ $product ], $resolved['product_ids'] );
+		$this->assertSame( [ 0, -7 ], $resolved['dropped']['invalid'] );
+		$this->assertSame( [ $deleted ], $resolved['dropped']['unresolvable'] );
+		$this->assertSame( [ $variation ], $resolved['dropped']['variations'] );
+	}
+
+	/**
 	 * A group is purchase-gated only when EVERY plan requires a purchase — the two
 	 * gate modes AND for a logged-in reader, so a mixed group would demand the
 	 * subscription from members the signup plan granted for free. A group holding one

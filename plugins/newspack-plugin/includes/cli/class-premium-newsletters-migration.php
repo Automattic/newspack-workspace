@@ -165,6 +165,8 @@ class Premium_Newsletters_Migration {
 			$has_purchase = $payload['has_purchase'];
 			$access_type  = $payload['access_type'];
 
+			self::report_product_id_issues( $payload );
+
 			// Gate identity is the title, but groups are keyed by list fingerprint — so
 			// two same-named plans restricting different lists land in different groups
 			// and would silently overwrite each other's rules.
@@ -381,26 +383,15 @@ class Premium_Newsletters_Migration {
 	 * @return array The gate payload: 'title', 'list_ids', 'has_purchase', 'access_type',
 	 *               'content_rules', 'content_rules_match', 'registration' and
 	 *               'custom_access' are what the create and update paths write;
-	 *               'product_ids' is what the pre-write check reports on.
+	 *               'product_ids' and 'dropped_product_ids' are what the pre-write check
+	 *               and the warnings report on.
 	 */
 	private static function build_gate_payload( array $group ): array {
 		$list_ids     = $group[0]['list_ids'] ?? [];
 		$has_purchase = self::group_requires_purchase( $group );
 
-		// Cast to int for parity with the REST write path, which stores subscription
-		// access-rule values as ints; raw `_product_ids` meta can hold strings.
-		$product_ids = array_values(
-			array_unique(
-				array_map( 'absint', array_merge( ...array_values( array_column( $group, 'product_ids' ) ) ) )
-			)
-		);
-		// Drop product variations — gates should reference parent products only.
-		$product_ids = array_values(
-			array_filter(
-				$product_ids,
-				fn( $id ) => 'product_variation' !== \get_post_type( $id )
-			)
-		);
+		$products    = self::resolve_product_ids( $group );
+		$product_ids = $products['product_ids'];
 
 		$content_rules = [
 			[
@@ -433,7 +424,101 @@ class Premium_Newsletters_Migration {
 				'access_rules' => $access_rules,
 			],
 			'product_ids'         => $product_ids,
+			'dropped_product_ids' => $products['dropped'],
 		];
+	}
+
+	/**
+	 * Sort a group's raw product IDs into the ones a subscription rule can carry and
+	 * the ones that must never reach it.
+	 *
+	 * Cast with intval rather than absint. Both give the ints the REST write path
+	 * stores (raw `_product_ids` meta can hold strings), but absint() also turns a
+	 * negative ID into a positive one, which would silently point the rule at a
+	 * different, real product.
+	 *
+	 * Non-positive IDs are dropped because a rule value of 0 grants the gate to every
+	 * paying reader: WC_Subscription::has_product() matches a line item when
+	 * `$line_item['variation_id'] == $product_id`, and variation_id is 0 on every
+	 * simple-product line item, so a value of [ 0 ] matches any active subscription.
+	 * Nothing downstream catches that — verify_migrated_gate() sees a non-empty
+	 * access_rules and reports the gate as sound.
+	 *
+	 * IDs that resolve to no product post are dropped too. Those fail safe on their
+	 * own — a rule nothing can satisfy — but they leave the gate stricter than the plan
+	 * was, so the caller warns rather than staying silent.
+	 *
+	 * @param array[] $group Plan descriptors, each carrying a 'product_ids' key.
+	 *
+	 * @return array 'product_ids' are the surviving IDs, in the order they appeared;
+	 *               'dropped' holds 'invalid' (did not normalize to a positive integer —
+	 *               a non-numeric meta value therefore appears as 0), 'unresolvable' (no
+	 *               product post with that ID) and 'variations' (product variations,
+	 *               which gates reference by parent product only).
+	 */
+	private static function resolve_product_ids( array $group ): array {
+		$raw = array_merge( ...array_values( array_column( $group, 'product_ids' ) ) );
+
+		$product_ids  = [];
+		$invalid      = [];
+		$unresolvable = [];
+		$variations   = [];
+
+		foreach ( array_values( array_unique( array_map( 'intval', $raw ) ) ) as $product_id ) {
+			if ( $product_id <= 0 ) {
+				$invalid[] = $product_id;
+				continue;
+			}
+			$post_type = \get_post_type( $product_id );
+			if ( 'product_variation' === $post_type ) {
+				$variations[] = $product_id;
+			} elseif ( 'product' !== $post_type ) {
+				$unresolvable[] = $product_id;
+			} else {
+				$product_ids[] = $product_id;
+			}
+		}
+
+		return [
+			'product_ids' => $product_ids,
+			'dropped'     => [
+				'invalid'      => $invalid,
+				'unresolvable' => $unresolvable,
+				'variations'   => $variations,
+			],
+		];
+	}
+
+	/**
+	 * Warn about the product IDs the gate payload dropped.
+	 *
+	 * Plain warnings rather than WARN rows: a dropped ID does not stop the gate being
+	 * written, and a group that loses every product is caught separately by
+	 * compute_pre_write_issues() and verify_migrated_gate().
+	 *
+	 * @param array $payload A build_gate_payload() result.
+	 *
+	 * @return void
+	 */
+	private static function report_product_id_issues( array $payload ) {
+		if ( ! empty( $payload['dropped_product_ids']['invalid'] ) ) {
+			WP_CLI::warning(
+				sprintf(
+					'"%s": dropped product ID(s) %s, which are not positive integers. Writing one would grant the gate to every reader with an active subscription, because a subscription line item matches a rule value of 0. Check the plan\'s products.',
+					$payload['title'],
+					implode( ', ', $payload['dropped_product_ids']['invalid'] )
+				)
+			);
+		}
+		if ( ! empty( $payload['dropped_product_ids']['unresolvable'] ) ) {
+			WP_CLI::warning(
+				sprintf(
+					'"%s": dropped product ID(s) %s, which resolve to no product (deleted?). A rule naming them could never be satisfied, so the gate would be stricter than the plan was. Check the plan\'s products.',
+					$payload['title'],
+					implode( ', ', $payload['dropped_product_ids']['unresolvable'] )
+				)
+			);
+		}
 	}
 
 	/**
@@ -809,7 +894,7 @@ class Premium_Newsletters_Migration {
 	 *
 	 * @param int[] $list_ids     The group's restricted list IDs.
 	 * @param bool  $has_purchase Whether every plan in the group requires a purchase.
-	 * @param int[] $product_ids  Merged parent product IDs for the paid access mode.
+	 * @param int[] $product_ids  The product IDs build_gate_payload() kept for the paid access mode.
 	 *
 	 * @return string[] Human-readable problems; empty when no issues are predicted.
 	 */
@@ -822,7 +907,7 @@ class Premium_Newsletters_Migration {
 		}
 
 		if ( $has_purchase && empty( $product_ids ) ) {
-			$issues[] = 'its paid access mode will have no access rules (no product IDs remain after stripping product variations), so it will ask for no purchase — any registered reader would keep the list';
+			$issues[] = 'its paid access mode will have no access rules (no usable product IDs remain), so it will ask for no purchase — any registered reader would keep the list';
 		}
 
 		return $issues;

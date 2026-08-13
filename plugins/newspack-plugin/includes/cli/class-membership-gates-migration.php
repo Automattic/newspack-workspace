@@ -46,7 +46,7 @@ class Membership_Gates_Migration {
 	 * Dry-run by default; pass --live to write.
 	 *
 	 * Both modes surface predictable migration issues as WARN rows. Purchase-mode
-	 * gaps (no custom_access layout found, no product IDs after stripping variations)
+	 * gaps (no custom_access layout found, no usable product IDs)
 	 * and content-rule slugs the evaluator cannot resolve are computable from the
 	 * group data before any write, so they appear in dry-run and make the planning
 	 * pass predictive rather than optimistic. On --live each written gate is
@@ -162,20 +162,9 @@ class Membership_Gates_Migration {
 			$has_purchase = self::group_requires_purchase( $group );
 			$access_type  = $has_purchase ? 'purchase' : 'signup';
 
-			// Cast to int for parity with the REST write path, which stores subscription
-			// access-rule values as ints; raw `_product_ids` meta can hold strings.
-			$merged_product_ids = array_values(
-				array_unique(
-					array_map( 'absint', array_merge( ...array_column( $group, 'product_ids' ) ) )
-				)
-			);
-			// Drop product variations — gates should reference parent products only.
-			$merged_product_ids = array_values(
-				array_filter(
-					$merged_product_ids,
-					fn( $id ) => 'product_variation' !== \get_post_type( $id )
-				)
-			);
+			$products           = self::resolve_product_ids( $group );
+			$merged_product_ids = $products['product_ids'];
+			self::report_dropped_product_ids( $gate_title, $products['dropped'] );
 
 			// Gate identity is the title, but groups are keyed by rule fingerprint —
 			// so two same-named plans with different rules land in different groups
@@ -486,7 +475,7 @@ class Membership_Gates_Migration {
 	 *
 	 * A computable subset of verify_migrated_gate() that needs no written gate: slugs
 	 * that the evaluator cannot resolve, and purchase-mode gaps (no custom_access
-	 * layout extracted, or no product IDs after stripping variations). Called in
+	 * layout extracted, or no usable product IDs). Called in
 	 * dry-run mode so the planning pass surfaces the same warnings --live would.
 	 *
 	 * @param array[] $ac_rules           AC-format content rules: [ [ 'slug' => string, 'value' => string[] ], ... ].
@@ -535,7 +524,7 @@ class Membership_Gates_Migration {
 				// apply_layout() is called but with an empty $product_ids → access_rules
 				// will be an empty array → mode is active with no purchase constraint.
 				// Mirrors verify_migrated_gate()'s "active but has no access rules" check.
-				$issues[] = 'its paid access mode will have no access rules (no product IDs remain after stripping product variations), so it will ask for no purchase — any registered reader would get in';
+				$issues[] = 'its paid access mode will have no access rules (no usable product IDs remain), so it will ask for no purchase — any registered reader would get in';
 			}
 		}
 
@@ -644,6 +633,102 @@ class Membership_Gates_Migration {
 		}
 
 		return $plan_groups;
+	}
+
+	/**
+	 * Sort a group's raw product IDs into the ones a subscription rule can carry and
+	 * the ones that must never reach it.
+	 *
+	 * Cast with intval rather than absint. Both give the ints the REST write path
+	 * stores (raw `_product_ids` meta can hold strings), but absint() also turns a
+	 * negative ID into a positive one, which would silently point the rule at a
+	 * different, real product.
+	 *
+	 * Non-positive IDs are dropped because a rule value of 0 grants the gate to every
+	 * paying reader: WC_Subscription::has_product() matches a line item when
+	 * `$line_item['variation_id'] == $product_id`, and variation_id is 0 on every
+	 * simple-product line item, so a value of [ 0 ] matches any active subscription.
+	 * Nothing downstream catches that — verify_migrated_gate() sees a non-empty
+	 * access_rules and reports the gate as sound.
+	 *
+	 * IDs that resolve to no product post are dropped too. Those fail safe on their
+	 * own — a rule nothing can satisfy — but they leave the gate stricter than the plan
+	 * was, so the caller warns rather than staying silent.
+	 *
+	 * Product variations keep the behavior this command has always had: they are
+	 * dropped, because gates reference parent products only.
+	 *
+	 * @param array[] $group Plan descriptors, each carrying a 'product_ids' key.
+	 *
+	 * @return array 'product_ids' are the surviving parent product IDs, in the order
+	 *               they appeared; 'dropped' holds 'invalid' (did not normalize to a
+	 *               positive integer — a non-numeric meta value therefore appears as 0),
+	 *               'unresolvable' (no product post with that ID) and 'variations'.
+	 */
+	private static function resolve_product_ids( array $group ): array {
+		$raw = array_merge( ...array_values( array_column( $group, 'product_ids' ) ) );
+
+		$product_ids  = [];
+		$invalid      = [];
+		$unresolvable = [];
+		$variations   = [];
+
+		foreach ( array_values( array_unique( array_map( 'intval', $raw ) ) ) as $product_id ) {
+			if ( $product_id <= 0 ) {
+				$invalid[] = $product_id;
+				continue;
+			}
+			$post_type = \get_post_type( $product_id );
+			if ( 'product_variation' === $post_type ) {
+				$variations[] = $product_id;
+			} elseif ( 'product' !== $post_type ) {
+				$unresolvable[] = $product_id;
+			} else {
+				$product_ids[] = $product_id;
+			}
+		}
+
+		return [
+			'product_ids' => $product_ids,
+			'dropped'     => [
+				'invalid'      => $invalid,
+				'unresolvable' => $unresolvable,
+				'variations'   => $variations,
+			],
+		];
+	}
+
+	/**
+	 * Warn about the product IDs resolve_product_ids() refused to write.
+	 *
+	 * Plain warnings rather than WARN rows: a dropped ID does not stop the gate being
+	 * written, and a group that loses every product is caught separately by
+	 * compute_pre_write_issues() and verify_migrated_gate().
+	 *
+	 * @param string $gate_title The gate title, for the message.
+	 * @param array  $dropped    The 'dropped' element of a resolve_product_ids() result.
+	 *
+	 * @return void
+	 */
+	private static function report_dropped_product_ids( string $gate_title, array $dropped ) {
+		if ( ! empty( $dropped['invalid'] ) ) {
+			WP_CLI::warning(
+				sprintf(
+					'"%s": dropped product ID(s) %s, which are not positive integers. Writing one would grant the gate to every reader with an active subscription, because a subscription line item matches a rule value of 0. Check the plan\'s products.',
+					$gate_title,
+					implode( ', ', $dropped['invalid'] )
+				)
+			);
+		}
+		if ( ! empty( $dropped['unresolvable'] ) ) {
+			WP_CLI::warning(
+				sprintf(
+					'"%s": dropped product ID(s) %s, which resolve to no product (deleted?). A rule naming them could never be satisfied, so the gate would be stricter than the plan was. Check the plan\'s products.',
+					$gate_title,
+					implode( ', ', $dropped['unresolvable'] )
+				)
+			);
+		}
 	}
 
 	/**

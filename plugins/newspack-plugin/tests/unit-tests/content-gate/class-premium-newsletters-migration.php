@@ -348,6 +348,68 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A garbage `_product_ids` entry normalizes to 0, and a rule value of 0 grants the
+	 * gate to every paying reader — WC_Subscription::has_product() matches a line item
+	 * whose variation_id is 0, which every simple-product line item's is. It must never
+	 * reach access_rules. A negative ID is dropped for the same reason: absint() would
+	 * have turned it into a different, real product ID.
+	 */
+	public function test_build_gate_payload_never_writes_a_non_positive_product_id() {
+		$payload = $this->invoke_private_static(
+			'build_gate_payload',
+			[ [ $this->make_payload_plan( 'purchase', [ $this->product, 0, -7 ], [ $this->list_a ] ) ] ]
+		);
+
+		$this->assertSame( [ $this->product ], $payload['product_ids'] );
+		$this->assertSame( [ $this->product ], $payload['custom_access']['access_rules'][0][0]['value'] );
+		$this->assertSame( [ 0, -7 ], $payload['dropped_product_ids']['invalid'] );
+	}
+
+	/**
+	 * A deleted product leaves a rule nothing can satisfy. That fails safe, but it
+	 * restricts readers the plan admitted, so the ID is dropped and reported rather
+	 * than written and forgotten.
+	 */
+	public function test_build_gate_payload_never_writes_a_deleted_product_id() {
+		$deleted = self::factory()->post->create( [ 'post_type' => 'product' ] );
+		wp_delete_post( $deleted, true );
+
+		$payload = $this->invoke_private_static(
+			'build_gate_payload',
+			[ [ $this->make_payload_plan( 'purchase', [ $this->product, $deleted ], [ $this->list_a ] ) ] ]
+		);
+
+		$this->assertSame( [ $this->product ], $payload['product_ids'] );
+		$this->assertSame( [ $this->product ], $payload['custom_access']['access_rules'][0][0]['value'] );
+		$this->assertSame( [ $deleted ], $payload['dropped_product_ids']['unresolvable'] );
+	}
+
+	/**
+	 * When dropping leaves a purchase group with nothing, the payload must fall back to
+	 * the empty-access_rules shape rather than writing a rule with an empty value: an
+	 * empty product list makes Access_Rules::has_active_subscription() grant any active
+	 * subscription. The empty shape is what compute_pre_write_issues() and
+	 * verify_migrated_gate() flag.
+	 */
+	public function test_build_gate_payload_writes_no_access_rules_when_every_product_is_dropped() {
+		$payload = $this->invoke_private_static(
+			'build_gate_payload',
+			[ [ $this->make_payload_plan( 'purchase', [ 0 ], [ $this->list_a ] ) ] ]
+		);
+
+		$this->assertSame( [], $payload['product_ids'] );
+		$this->assertTrue( $payload['custom_access']['active'] );
+		$this->assertSame( [], $payload['custom_access']['access_rules'] );
+
+		$issues = $this->invoke_private_static(
+			'compute_pre_write_issues',
+			[ $payload['list_ids'], $payload['has_purchase'], $payload['product_ids'] ]
+		);
+		$this->assertCount( 1, $issues );
+		$this->assertStringContainsString( 'no access rules', $issues[0] );
+	}
+
+	/**
 	 * Resolve a list's public (ESP) ID the same way the derivation does, rather than
 	 * hardcoding the mock's ID format.
 	 *
