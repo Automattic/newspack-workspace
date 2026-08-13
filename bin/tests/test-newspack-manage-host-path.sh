@@ -6,13 +6,20 @@
 #
 # That wrapper is granted passwordless root by a sudoers drop-in, and macOS
 # sudoers sets no secure_path, so sudo passes the caller's PATH straight
-# through. A helper binary planted earlier in that PATH would therefore run as
+# through. A helper binary placed earlier in that PATH would therefore run as
 # root. The wrapper pins PATH to root-owned system directories to prevent it;
 # this spec proves the pin is not overridable by the caller.
 #
-# No sudo is involved. PATH resolution works the same way whoever runs the
-# script, so the mechanism can be proved without privileges — which also means
-# this is safe to run in CI.
+# Nothing here needs privileges and nothing mutates host state. The probe calls
+# alias-add with 127.0.0.999, which the wrapper's own validation accepts
+# (^127\.0\.0\.[0-9]+$) and ifconfig rejects as a bad value, so the helper call
+# is reached but never applied. That holds under root too, which matters
+# because CI containers commonly run as one.
+#
+# Two properties are read from the wrapper rather than restated here, because a
+# copy in this file would go stale in the direction that matters: widening the
+# pin, or adding a helper it does not cover, would still be checked against
+# yesterday's values and pass.
 #
 # Run: bash bin/tests/test-newspack-manage-host-path.sh
 
@@ -25,40 +32,101 @@ ok(){ if [ "$2" = "$3" ]; then echo "  PASS  $1"; pass=$((pass+1)); else echo " 
 
 [ -x "$WRAP" ] || { echo "  FAIL  wrapper not found or not executable at $WRAP"; exit 1; }
 
-# Plant an `ifconfig` that records having run. alias-add is the path that calls
-# it, and it is reached before any privileged operation, so an unpinned wrapper
-# executes the plant even when the caller is unprivileged.
+# --- the pinned value, read from the wrapper --------------------------------
+PIN="$(grep -m1 '^export PATH=' "$WRAP" | sed 's/^export PATH=//; s/[[:space:]]*$//')"
+ok "wrapper declares a pinned PATH" "$([ -n "$PIN" ] && echo yes || echo no)" "yes"
+
+# --- every pinned directory must be writable only by root -------------------
+#
+# This is the property the pin actually rests on, and the one a later edit is
+# most likely to break: adding a directory to make a new helper resolve is an
+# ordinary-looking change, and if that directory is user-writable the pin stops
+# meaning anything while every other check here still passes. Asserting the
+# property rather than the string is what makes widening visible.
+dir_root_only() {
+    local d="$1" owner mode g o
+    [ -d "$d" ] || return 0   # absent dir contributes nothing to lookup
+    if stat -f '%Su' "$d" >/dev/null 2>&1; then
+        owner=$(stat -f '%Su' "$d"); mode=$(stat -f '%Lp' "$d")   # BSD
+    else
+        owner=$(stat -c '%U' "$d"); mode=$(stat -c '%a' "$d")     # GNU
+    fi
+    [ "$owner" = "root" ] || return 1
+    mode=$(printf '%03d' "$mode" 2>/dev/null || printf '%s' "$mode")
+    g=$(printf '%s' "$mode" | tail -c 2 | head -c 1)
+    o=$(printf '%s' "$mode" | tail -c 1)
+    case "$g" in [2367]) return 1 ;; esac
+    case "$o" in [2367]) return 1 ;; esac
+    return 0
+}
+
+writable=""
+IFS=: read -r -a PIN_DIRS <<< "$PIN"
+for d in "${PIN_DIRS[@]}"; do
+    dir_root_only "$d" || writable="$writable $d"
+done
+ok "every pinned directory is owned by root and not group- or world-writable" "$writable" ""
+
+# --- the commands it invokes, derived from the wrapper ----------------------
+#
+# Deriving beats enumerating: a hardcoded list of command names can only catch
+# names someone already thought of, so the check that exists to catch a future
+# edit is exactly the check that cannot. Tokens are taken from command position,
+# minus shell keywords and the wrapper's own functions, then filtered to those
+# that resolve as commands somewhere on this system — which drops case labels
+# and variable names without needing to know what they are.
+derive_commands() {
+    local f="$1" funcs builtins tok
+    funcs=$(grep -oE '^[a-zA-Z_][a-zA-Z0-9_]*\(\)' "$f" | tr -d '()' | sort -u)
+    builtins='^(if|then|else|elif|fi|for|while|until|do|done|case|esac|function|return|local|echo|exit|set|export|shift|read|printf|test|eval|source|cd|true|false|break|continue|unset|trap)$'
+    sed 's/#.*//' "$f" \
+      | grep -oE '(^|[;&|(]|&&|\|\||!|\b(if|then|else|do|while|until)\b)[[:space:]]*!?[[:space:]]*[a-zA-Z_][a-zA-Z0-9_.-]*' \
+      | grep -oE '[a-zA-Z_][a-zA-Z0-9_.-]*$' \
+      | grep -vE "$builtins" \
+      | { if [ -n "$funcs" ]; then grep -vxF "$funcs"; else cat; fi; } \
+      | sort -u \
+      | while read -r tok; do command -v "$tok" >/dev/null 2>&1 && echo "$tok"; done
+}
+
+# Control for the derivation itself. If it silently stopped matching, it would
+# return nothing and every check below would pass while testing nothing.
+probe_src="$FIX/derive-probe"; cp "$WRAP" "$probe_src"
+printf '\nopenssl version\n' >> "$probe_src"
+ok "derivation detects a command added to the wrapper" \
+   "$(derive_commands "$probe_src" | grep -cx openssl)" "1"
+
+CMDS="$(derive_commands "$WRAP")"
+ok "derivation finds the wrapper's helpers" \
+   "$([ "$(printf '%s\n' "$CMDS" | grep -c .)" -ge 2 ] && echo yes || echo no)" "yes"
+
+uncovered=""
+for c in $CMDS; do
+    PATH="$PIN" command -v "$c" >/dev/null 2>&1 || uncovered="$uncovered $c"
+done
+ok "every command the wrapper invokes resolves under its own pinned PATH" "$uncovered" ""
+
+# --- the hijack probe, with a control that must hijack ----------------------
 mkdir -p "$FIX/evil"
 printf '#!/bin/bash\ntouch "%s/HIJACKED"\nexit 0\n' "$FIX" > "$FIX/evil/ifconfig"
 chmod +x "$FIX/evil/ifconfig"
 
-rm -f "$FIX/HIJACKED"
-PATH="$FIX/evil:$PATH" bash "$WRAP" alias-add 127.0.0.99 >/dev/null 2>&1 || true
+# $1 = wrapper to run. Echoes hijacked|clean.
+hijack_probe() {
+    rm -f "$FIX/HIJACKED"
+    PATH="$FIX/evil:$PATH" "$1" alias-add 127.0.0.999 >/dev/null 2>&1 || true
+    [ -e "$FIX/HIJACKED" ] && echo hijacked || echo clean
+}
 
-# Assert on the marker rather than on exit status: a planted binary that runs
-# and then exits 0 leaves the status clean, so a status check would pass while
-# the hijack succeeded.
-ok "planted ifconfig is not reached" \
-   "$([ -e "$FIX/HIJACKED" ] && echo hijacked || echo clean)" "clean"
+ok "planted ifconfig is not reached" "$(hijack_probe "$WRAP")" "clean"
 
-# The pin must not simply break command resolution. If the wrapper could no
-# longer find its helpers it would also report "clean" above, so confirm the
-# real binaries are still reachable under the pinned PATH.
-missing=""
-for c in ifconfig grep sed; do
-    PATH=/usr/sbin:/usr/bin:/sbin:/bin command -v "$c" >/dev/null 2>&1 || missing="$missing $c"
-done
-ok "pinned PATH still resolves every helper the wrapper uses" "$missing" ""
-
-# Guard against a future edit adding a command the pin does not cover, which
-# would fail at runtime under `set -e` rather than here.
-uncovered=""
-while read -r c; do
-    [ -n "$c" ] || continue
-    PATH=/usr/sbin:/usr/bin:/sbin:/bin command -v "$c" >/dev/null 2>&1 || uncovered="$uncovered $c"
-done <<EOF
-$(grep -oE '\b(ifconfig|grep|sed|awk|perl|python3|curl|networksetup|dscacheutil|killall)\b' "$WRAP" | sort -u)
-EOF
-ok "no external command used by the wrapper falls outside the pin" "$uncovered" ""
+# Without this control, "clean" cannot tell a working pin from a code path that
+# was never reached: any early return added ahead of the ifconfig call would
+# also leave the marker absent, and the probe above would still report a pass.
+# Running the identical probe against a copy with the pin stripped proves the
+# probe can still detect a hijack when one is present.
+unpinned="$FIX/unpinned"
+grep -v '^export PATH=' "$WRAP" > "$unpinned"; chmod +x "$unpinned"
+ok "control: the same probe hijacks once the pin is removed" \
+   "$(hijack_probe "$unpinned")" "hijacked"
 
 echo ""; echo "RESULT: $pass passed, $fail failed"; [ "$fail" -eq 0 ]
