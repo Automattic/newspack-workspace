@@ -12,14 +12,8 @@ defined( 'ABSPATH' ) || exit;
 /**
  * Supplies the read authorization the default posts controller does not.
  *
- * Core's WP_REST_Posts_Controller::check_read_permission() returns true as soon
- * as a post is published, before it consults a capability, and
- * get_items_permissions_check() carries no read check at all. A post type's
- * capability map therefore governs writes but not reads of published posts.
- * Institutions are always published, so the map alone leaves the route open.
- *
- * This controller adds the missing gate, and narrows what a caller who may see
- * institution names is shown of the rules that grant access.
+ * Core gates writes through the capability map but not reads of published
+ * posts, so the read requirement lives here.
  */
 class Institution_REST_Controller extends \WP_REST_Posts_Controller {
 
@@ -35,19 +29,31 @@ class Institution_REST_Controller extends \WP_REST_Posts_Controller {
 	const READ_CAPABILITY = 'edit_others_posts';
 
 	/**
-	 * Capability required to see the stored access rules.
+	 * Capability required to write to institutions, matching the post type's
+	 * capability map in class-institution.php (every write capability there
+	 * resolves to this one). Not consulted directly by this class today — the
+	 * write gate below defers to the parent's own resolution of that map. A
+	 * later task also uses this constant to limit which callers see the
+	 * stored access rules in read responses.
 	 *
 	 * @var string
 	 */
 	const RULES_CAPABILITY = 'manage_options';
 
 	/**
-	 * Permission check for reading the collection.
+	 * True while get_items() is running.
 	 *
-	 * Deliberately does not defer to the parent. The parent's only test refuses
-	 * the edit context to anyone lacking this post type's edit_posts, which is
-	 * mapped to manage_options — and the consuming dropdowns request the edit
-	 * context because they read title.raw.
+	 * Lets check_update_permission() below tell a per-item collection-read call
+	 * from a write-permission call apart, since the parent calls that method
+	 * from both places with only a \WP_Post argument — no request or context to
+	 * branch on otherwise.
+	 *
+	 * @var bool
+	 */
+	private $reading_collection = false;
+
+	/**
+	 * Permission check for reading the collection.
 	 *
 	 * @param \WP_REST_Request $request Full details about the request.
 	 * @return true|\WP_Error
@@ -57,13 +63,39 @@ class Institution_REST_Controller extends \WP_REST_Posts_Controller {
 	}
 
 	/**
+	 * Retrieves a collection of institutions.
+	 *
+	 * Flags check_update_permission() below as answering a read for the
+	 * duration of the parent's query, then restores it — including if the
+	 * parent throws, so a broadened write check never survives past this call.
+	 *
+	 * @param \WP_REST_Request $request Full details about the request.
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public function get_items( $request ) {
+		$this->reading_collection = true;
+		try {
+			return parent::get_items( $request );
+		} finally {
+			$this->reading_collection = false;
+		}
+	}
+
+	/**
 	 * Permission check for reading a single institution.
+	 *
+	 * Refuses outright if the caller lacks READ_CAPABILITY; otherwise defers to
+	 * the parent so its other checks (trashed posts, and edit context on a
+	 * single item — the only consumer of that path is the audience wizard's
+	 * institutions editor, gated to RULES_CAPABILITY at the page level) still
+	 * apply.
 	 *
 	 * @param \WP_REST_Request $request Full details about the request.
 	 * @return true|\WP_Error
 	 */
 	public function get_item_permissions_check( $request ) {
-		return self::check_read_capability();
+		$check = self::check_read_capability();
+		return true === $check ? parent::get_item_permissions_check( $request ) : $check;
 	}
 
 	/**
@@ -78,52 +110,32 @@ class Institution_REST_Controller extends \WP_REST_Posts_Controller {
 
 		return new \WP_Error(
 			'rest_forbidden',
-			__( 'Sorry, you are not allowed to view institutions.', 'newspack-plugin' ),
+			\__( 'Sorry, you are not allowed to view institutions.', 'newspack-plugin' ),
 			[ 'status' => \rest_authorization_required_code() ]
 		);
 	}
 
 	/**
-	 * Per-item check the parent class uses for two unrelated purposes: filtering
-	 * the collection when the request context is edit (a read), and gating
-	 * update_item_permissions_check() below (a write). get_items_permissions_check()
-	 * above only covers the collection as a whole; core's get_items() still runs
-	 * this method against every post in the result set when context=edit, and the
-	 * default implementation requires this post type's edit_post, mapped to
-	 * RULES_CAPABILITY. Left alone, a caller who passes the collection-level gate
-	 * with READ_CAPABILITY would still see an empty list. Broadened here to
-	 * READ_CAPABILITY for that read path; update_item_permissions_check() restores
-	 * the original, stricter requirement for the write path that also calls this
-	 * method, so the broadening never reaches a write.
+	 * Per-item check the parent also uses to gate updates.
+	 *
+	 * Core's get_items() calls this — not check_read_permission() — for every
+	 * post in the result set when the request context is edit, so
+	 * get_items_permissions_check() above isn't enough on its own: a caller who
+	 * passes it with READ_CAPABILITY would still see an empty collection once
+	 * every item got filtered out here. Broadened to READ_CAPABILITY only while
+	 * get_items() (above) is running; every other caller of this method —
+	 * including the real write gate in update_item_permissions_check(), which
+	 * this class does not override — gets the parent's unmodified check, so the
+	 * broadening never reaches a write.
 	 *
 	 * @param \WP_Post $post Post object.
 	 * @return bool
 	 */
 	protected function check_update_permission( $post ) {
-		return \current_user_can( self::READ_CAPABILITY );
-	}
-
-	/**
-	 * Permission check for updating a single institution.
-	 *
-	 * Every write-related meta capability on this post type (edit_post,
-	 * edit_others_posts, publish_posts, ...) maps to RULES_CAPABILITY uniformly,
-	 * so requiring it directly reproduces the parent's write gate without routing
-	 * through check_update_permission(), which this class broadens above for the
-	 * edit-context collection read.
-	 *
-	 * @param \WP_REST_Request $request Full details about the request.
-	 * @return true|\WP_Error
-	 */
-	public function update_item_permissions_check( $request ) {
-		if ( \current_user_can( self::RULES_CAPABILITY ) ) {
-			return true;
+		if ( $this->reading_collection ) {
+			return \current_user_can( self::READ_CAPABILITY );
 		}
 
-		return new \WP_Error(
-			'rest_cannot_edit',
-			__( 'Sorry, you are not allowed to edit this post.', 'newspack-plugin' ),
-			[ 'status' => \rest_authorization_required_code() ]
-		);
+		return parent::check_update_permission( $post );
 	}
 }
