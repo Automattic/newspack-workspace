@@ -178,6 +178,9 @@ A column that takes the free space. Put `StatCard.Value` in it, plus a
 | `children` | `React.ReactNode` | — | A short qualifying line under the value. |
 | `className` | `string` | — | Merged onto the line. |
 
+It takes the figure's colour and a heading scale, so it reads as part of the
+headline rather than a note under it. The quiet line is the footer's description.
+
 ## `StatCard.Footer`
 
 | Prop | Type | Default | Description |

@@ -76,7 +76,13 @@ $stat-card-value-size-min: 20px;
 		line-height: wp-vars.$font-line-height-x-small;
 	}
 
-	&__secondary,
+	&__secondary {
+		@include wp-mixins.heading-medium();
+		color: var(--wp-admin-theme-color);
+		margin: 0;
+		text-wrap: balance;
+	}
+
 	&__description {
 		color: wp-colors.$gray-700;
 		font-size: wp-vars.$helptext-font-size;
