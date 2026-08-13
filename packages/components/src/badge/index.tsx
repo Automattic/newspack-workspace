@@ -13,7 +13,6 @@ export type BadgeLevel = 'default' | 'info' | 'success' | 'warning' | 'error';
 type BadgeProps = {
 	text: string;
 	level?: BadgeLevel;
-	/** Lets a control reference this badge, e.g. via aria-describedby. */
 	id?: string;
 };
 

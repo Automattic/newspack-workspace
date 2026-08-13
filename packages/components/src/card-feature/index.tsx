@@ -45,12 +45,7 @@ type MoreControl = {
 
 type CardFeatureProps = {
 	title: string;
-	/**
-	 * Heading level for the title. Pick the level that fits the surrounding
-	 * document outline: 3 under a `SectionHeader`, 2 when the cards sit directly
-	 * under a page's h1. Levels 2-6 are the practical range, since wp-admin's own
-	 * `.wrap h1` rule outranks the card's title class.
-	 */
+	/** Heading level for the title: 3 under a `SectionHeader`, 2 directly under a page's h1. Practical range is 2-6. */
 	titleLevel?: HeadingLevel;
 	description?: string;
 	/** Icon shown beside the title: a descriptor (coloured badge) or a ready element rendered as-is. */
@@ -62,9 +57,7 @@ type CardFeatureProps = {
 	 * displays this string and the title drops to the muted text colour. By
 	 * default the primary button is blocked — set `requirementsActionable`
 	 * if the primary button is the remediation for the unmet requirement.
-	 *
-	 * This string is also the primary button's accessible description, so write
-	 * it to read sensibly after the button's own label.
+	 * Also the button's accessible description, so it must read after the label.
 	 */
 	requirements?: string;
 	/**
@@ -124,7 +117,6 @@ const CardFeature = ( {
 }: CardFeatureProps ) => {
 	const instanceId = useInstanceId( CardFeature, 'newspack-card-feature' );
 	const badgeId = `${ instanceId }__badge`;
-	// The button's description and the badge's id must appear and disappear together.
 	const describedById = requirements ? badgeId : undefined;
 	const isMuted = !! requirements;
 	const classes = classnames( 'newspack-card-feature', className, {
@@ -163,8 +155,7 @@ const CardFeature = ( {
 		renderedIcon = icon;
 	} else if ( iconDescriptor ) {
 		renderedIcon = (
-			// Decorative: the feature is always named in the adjacent title, and a
-			// vendor mark passed as `node` carries no aria-hidden of its own.
+			// Decorative: a vendor mark passed as `node` carries no aria-hidden of its own.
 			<div
 				aria-hidden="true"
 				className={ iconClasses }

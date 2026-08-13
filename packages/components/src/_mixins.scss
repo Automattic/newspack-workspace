@@ -1,20 +1,3 @@
-/**
- * Shared mixins.
- *
- * Text colours are mixins rather than utility classes: about half the muted-text
- * declarations in this package style elements inside third-party components
- * through descendant selectors, where no class can be added. Each one reads the
- * design-system token first and falls back to the equivalent WordPress value, so
- * a component renders correctly outside `Page`, where the token sheet is not
- * loaded.
- *
- * The accent deliberately stops at `--wp-admin-theme-color`, which `src/style.scss`
- * pins to the Newspack primary for anything loading the package barrel. Ending the
- * chain in the palette instead would mean importing `colors.module.scss` here, and
- * its `:export` block is emitted into every stylesheet that uses any mixin in this
- * file.
- */
-
 @use "~@wordpress/base-styles/colors" as wp-colors;
 
 @mixin text-body {
