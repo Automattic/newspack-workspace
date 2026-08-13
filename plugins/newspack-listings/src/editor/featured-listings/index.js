@@ -128,11 +128,13 @@ const FeaturedListingsComponent = ( { createNotice, isSavingPost, meta, postId, 
 								currentDate={ newspack_listings_featured_expires || null }
 								onMonthPreviewed={ () => {} }
 								onChange={ value => {
-									// Pin midnight in the *site* timezone, which is how
-									// Featured::unset_featured_status parses this value when it decides
-									// whether the listing has expired. Taking the calendar date from the
-									// browser instead lands on the wrong day for any editor far enough
-									// from the site timezone, expiring the listing a day early or late.
+									// Pin midnight in the site timezone, not the browser's. The stored
+									// value is a naive, offset-less datetime, and
+									// Featured::unset_featured_status parses it as site-local when deciding
+									// whether the listing has expired, so attaching an offset here (via
+									// toISOString or similar) would change its meaning rather than clarify
+									// it. Taking the calendar date from the browser lands on the wrong day
+									// for a distant editor, expiring the listing a day early or late.
 									updateMetaValue(
 										'newspack_listings_featured_expires',
 										value ? `${ dateI18n( 'Y-m-d', getDate( value ) ) }T00:00:00` : ''
