@@ -88,6 +88,13 @@ describe( 'date_range matching function', () => {
 		expect( dateRange( { value: '2026-13-45' }, config ) ).toBe( false );
 	} );
 
+	it( 'accepts a real date with a year below 100, matching the server side', () => {
+		// new Date( 26, … ) would map the year into 1926 and reject it, while
+		// PHP's checkdate() accepts year 26 — the two sides must agree.
+		expect( dateRange( { value: '0026-01-15' }, { value: { end: absolute( '2026-01-01' ) } } ) ).toBe( true );
+		expect( dateRange( { value: '0026-02-30' }, { value: { end: absolute( '2026-01-01' ) } } ) ).toBe( false );
+	} );
+
 	it( 'never matches an empty or non-string reader value', () => {
 		const config = { value: { start: absolute( '2026-01-01' ) } };
 		expect( dateRange( { value: '' }, config ) ).toBe( false );

@@ -38,7 +38,11 @@ const ISO_DATE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
  */
 const isCalendarDate = candidate => {
 	const [ year, month, day ] = candidate.split( '-' ).map( Number );
-	const date = new Date( year, month - 1, day );
+	// setFullYear() rather than the constructor: `new Date( year, … )` maps
+	// years 0–99 into 1900–1999, which would reject a real (if mistyped)
+	// year-0026 date that the PHP mirror's checkdate() accepts.
+	const date = new Date( 0, 0, 1 );
+	date.setFullYear( year, month - 1, day );
 	return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day;
 };
 
