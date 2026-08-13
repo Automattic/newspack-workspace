@@ -17,7 +17,6 @@ namespace Newspack\Tests\Content_Gate;
 use Newspack\CLI\Premium_Newsletters_Migration;
 use Newspack\Newsletters\Subscription_Lists;
 
-require_once dirname( __DIR__, 2 ) . '/mocks/newsletters-namespaced-mocks.php';
 require_once dirname( __DIR__, 3 ) . '/includes/cli/class-premium-newsletters-migration.php';
 
 /**
@@ -40,15 +39,17 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 	private $list_b;
 
 	/**
-	 * Load the WP-CLI mocks once for the class. Deferred to set_up_before_class()
-	 * rather than a file-scope require so this file does not load its mocks before
-	 * an earlier-running test class gets a chance to run without them (see
-	 * newsletters-namespaced-mocks.php's require above for the class of bug this
-	 * avoids).
+	 * Load the mocks once for the class. Deferred to set_up_before_class() rather
+	 * than a file-scope require because PHPUnit loads every test file before the run
+	 * starts: a file-scope require would define Subscription_List and
+	 * Subscription_Lists for the whole suite, and three production guards branch on
+	 * class_exists() for those, so unrelated tests would silently take the
+	 * "Newsletters active" path.
 	 */
 	public static function set_up_before_class() {
 		parent::set_up_before_class();
 		require_once dirname( __DIR__, 2 ) . '/mocks/wp-cli-mocks.php';
+		require_once dirname( __DIR__, 2 ) . '/mocks/newsletters-namespaced-mocks.php';
 	}
 
 	/**

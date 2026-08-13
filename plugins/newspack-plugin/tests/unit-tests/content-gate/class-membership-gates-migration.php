@@ -31,12 +31,24 @@ use Newspack\CLI\Membership_Gates_Migration;
 use Newspack\Newsletters\Subscription_Lists;
 
 require_once dirname( __DIR__, 3 ) . '/includes/cli/class-membership-gates-migration.php';
-require_once dirname( __DIR__, 2 ) . '/mocks/newsletters-namespaced-mocks.php';
 
 /**
  * Characterization tests for the migrate-membership-gates helpers.
  */
 class Test_Membership_Gates_Migration extends \WP_UnitTestCase {
+
+	/**
+	 * Load the newsletters mocks once for the class. Deferred to set_up_before_class()
+	 * rather than a file-scope require because PHPUnit loads every test file before the
+	 * run starts: a file-scope require would define Subscription_List and
+	 * Subscription_Lists for the whole suite, and three production guards branch on
+	 * class_exists() for those, so unrelated tests would silently take the
+	 * "Newsletters active" path.
+	 */
+	public static function set_up_before_class() {
+		parent::set_up_before_class();
+		require_once dirname( __DIR__, 2 ) . '/mocks/newsletters-namespaced-mocks.php';
+	}
 
 	/**
 	 * Invoke a private static method on the CLI class via reflection.
