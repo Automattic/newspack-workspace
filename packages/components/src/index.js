@@ -42,6 +42,7 @@ export { default as RadioControl } from './radio-control';
 export { default as SectionHeader } from './section-header';
 export { default as SelectControl } from './select-control';
 export { default as Settings } from './settings';
+export { default as StatCard, NULL_GLYPH } from './stat-card';
 export { default as StepsList } from './steps-list';
 export { default as StepsListItem } from './steps-list-item';
 export { default as StyleCard } from './style-card';

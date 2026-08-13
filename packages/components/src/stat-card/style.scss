@@ -1,0 +1,63 @@
+@use "~@wordpress/base-styles/colors" as wp-colors;
+@use "~@wordpress/base-styles/variables" as wp-vars;
+@use "~@wordpress/base-styles/mixins" as wp-mixins;
+
+.newspack-stat-card {
+	container-type: inline-size;
+	min-height: wp-vars.$grid-unit * 21;
+
+	&__content {
+		display: flex;
+		flex: 1;
+		flex-direction: column;
+	}
+
+	&__label {
+		align-items: flex-start;
+		display: flex;
+		gap: wp-vars.$grid-unit;
+		justify-content: space-between;
+	}
+
+	&__label-text {
+		@include wp-mixins.heading-large();
+		color: wp-colors.$gray-900;
+		margin: 0;
+	}
+
+	&__body {
+		display: flex;
+		flex: 1;
+		flex-direction: column;
+		gap: wp-vars.$grid-unit;
+		padding-top: wp-vars.$grid-unit;
+	}
+
+	&__value {
+		color: var(--wp-admin-theme-color);
+		font-size: 44px;
+		font-size: min(44px, 14cqi);
+		font-variant-numeric: tabular-nums;
+		font-weight: wp-vars.$font-weight-medium;
+		line-height: 1;
+
+		&--text {
+			font-size: wp-vars.$default-font-size;
+			line-height: 1.4;
+		}
+	}
+
+	&__footer {
+		align-items: flex-start;
+		display: flex;
+		flex-direction: column;
+	}
+
+	&__secondary,
+	&__description {
+		color: wp-colors.$gray-700;
+		font-size: wp-vars.$helptext-font-size;
+		margin: 0;
+		text-wrap: balance;
+	}
+}

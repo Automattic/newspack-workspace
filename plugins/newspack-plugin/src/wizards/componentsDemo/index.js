@@ -41,6 +41,7 @@ import {
 	Grid,
 	Handoff,
 	ImageUpload,
+	InfoButton,
 	Modal,
 	Notice,
 	Page,
@@ -49,6 +50,7 @@ import {
 	PluginToggle,
 	ProgressBar,
 	SelectControl,
+	StatCard,
 	TextControl,
 	Divider,
 	Drawer,
@@ -385,6 +387,51 @@ class ComponentsDemo extends Component {
 								</Drawer.Content>
 								<Drawer.Footer>{ this.drawerActions( drawerActionCount ) }</Drawer.Footer>
 							</Drawer.Root>
+						</Card>
+						<Card>
+							<h2>{ __( 'StatCard', 'newspack-plugin' ) }</h2>
+							<Grid columns={ 4 } gutter={ 16 } noMargin>
+								<StatCard.Root>
+									<StatCard.Label>{ __( 'Subscribers reached', 'newspack-plugin' ) }</StatCard.Label>
+									<StatCard.Body>
+										<StatCard.Value value="1,284" />
+										<StatCard.Secondary>{ __( 'Up from 1,190 last month', 'newspack-plugin' ) }</StatCard.Secondary>
+									</StatCard.Body>
+									<StatCard.Footer>{ __( 'Readers who received at least one campaign.', 'newspack-plugin' ) }</StatCard.Footer>
+								</StatCard.Root>
+								<StatCard.Root>
+									<StatCard.Label suffix={ <InfoButton text={ __( 'Averaged across the timeframe.', 'newspack-plugin' ) } /> }>
+										{ __( 'Average order value', 'newspack-plugin' ) }
+									</StatCard.Label>
+									<StatCard.Body>
+										<StatCard.Value value="$1.2M" valueLabel={ __( '1.2 million dollars', 'newspack-plugin' ) } />
+									</StatCard.Body>
+									<StatCard.Footer>
+										{ __( 'Products this rule applies to.', 'newspack-plugin' ) }
+										<Button isLink onClick={ () => console.log( 'StatCard action' ) }>
+											{ __( 'See the products', 'newspack-plugin' ) }
+										</Button>
+									</StatCard.Footer>
+								</StatCard.Root>
+								<StatCard.Root>
+									<StatCard.Label>{ __( 'Refund rate', 'newspack-plugin' ) }</StatCard.Label>
+									<StatCard.Body>
+										<StatCard.Value value={ null } />
+									</StatCard.Body>
+									<StatCard.Footer>
+										{ __( 'The null glyph, named "Not applicable" to screen readers.', 'newspack-plugin' ) }
+									</StatCard.Footer>
+								</StatCard.Root>
+								<StatCard.Root>
+									<StatCard.Label>{ __( 'Paywall conversions', 'newspack-plugin' ) }</StatCard.Label>
+									<StatCard.Body>
+										<StatCard.Value value={ __( '0 of 17', 'newspack-plugin' ) } variant="text" />
+									</StatCard.Body>
+									<StatCard.Footer>
+										{ __( 'A phrase rather than a number, so it drops the hero scale.', 'newspack-plugin' ) }
+									</StatCard.Footer>
+								</StatCard.Root>
+							</Grid>
 						</Card>
 						<Card>
 							<h2>{ __( 'Notice', 'newspack-plugin' ) }</h2>
