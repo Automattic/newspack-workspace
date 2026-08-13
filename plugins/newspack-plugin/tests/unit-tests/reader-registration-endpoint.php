@@ -504,6 +504,42 @@ class Newspack_Test_Frontend_Registration_Endpoint extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A logged-in caller is subject to the Reader Activation gate.
+	 *
+	 * The logged-in branch used to return ahead of that check, so a session got
+	 * a 200 even with Reader Activation switched off. Reader_Registration::init()
+	 * only registers the route when Reader Activation is enabled, so this covers
+	 * the narrower case where the `newspack_reader_activation_enabled` filter
+	 * returns false after the route was already registered.
+	 */
+	public function test_register_while_logged_in_when_ras_disabled() {
+		$admin_id = self::factory()->user->create(
+			[
+				'role'       => 'administrator',
+				'user_email' => 'admin-ras@test.com',
+			]
+		);
+		wp_set_current_user( $admin_id );
+
+		add_filter( 'newspack_reader_activation_enabled', '__return_false' );
+
+		$response = $this->do_register_request(
+			[
+				'npe'             => self::$reader_email,
+				'integration_id'  => self::$integration_id,
+				'integration_key' => self::generate_key( self::$integration_id ),
+			]
+		);
+
+		$this->assertEquals( 403, $response->get_status() );
+		$data = $response->get_data();
+		$this->assertEquals( 'reader_activation_disabled', $data['code'] );
+
+		remove_filter( 'newspack_reader_activation_enabled', '__return_false' );
+		wp_delete_user( $admin_id );
+	}
+
+	/**
 	 * Test registration with profile fields.
 	 */
 	public function test_register_with_profile_fields() {
@@ -613,7 +649,7 @@ class Newspack_Test_Frontend_Registration_Endpoint extends WP_UnitTestCase {
 	 */
 	public function test_rate_limit_precedes_integration_key_check() {
 		// Lower limit to 1 for testing.
-		$set_limit = function() {
+		$set_limit = function () {
 			return 1;
 		};
 		add_filter( 'newspack_frontend_registration_rate_limit', $set_limit );
