@@ -40,13 +40,27 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 	private $list_b;
 
 	/**
-	 * Register the list post type and create two lists.
+	 * Load the WP-CLI mocks once for the class. Deferred to set_up_before_class()
+	 * rather than a file-scope require so this file does not load its mocks before
+	 * an earlier-running test class gets a chance to run without them (see
+	 * newsletters-namespaced-mocks.php's require above for the class of bug this
+	 * avoids).
+	 */
+	public static function set_up_before_class() {
+		parent::set_up_before_class();
+		require_once dirname( __DIR__, 2 ) . '/mocks/wp-cli-mocks.php';
+	}
+
+	/**
+	 * Register the list post type, create two lists, and reset the WP_CLI mock's
+	 * recorded output so assertions in one test cannot see another's messages.
 	 */
 	public function set_up() {
 		parent::set_up();
 		register_post_type( Subscription_Lists::CPT, [ 'public' => false ] );
 		$this->list_a = self::factory()->post->create( [ 'post_type' => Subscription_Lists::CPT ] );
 		$this->list_b = self::factory()->post->create( [ 'post_type' => Subscription_Lists::CPT ] );
+		\WP_CLI::reset();
 	}
 
 	/**
@@ -489,5 +503,179 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 	 */
 	public function test_compute_pre_write_issues_passes_a_sound_group() {
 		$this->assertSame( [], $this->invoke_private_static( 'compute_pre_write_issues', [ [ $this->list_a ], true, [ 123 ] ] ) );
+	}
+
+	/**
+	 * A dry run must never touch the site-wide option, even when the derived value
+	 * disagrees with what is currently stored.
+	 */
+	public function test_report_auto_signup_dry_run_never_writes_option() {
+		update_option( 'newspack_premium_newsletters_auto_signup', 0 );
+		$this->set_signup_modal_lists( [] ); // Neither list is in the modal, so auto-signup derives to on.
+
+		$this->invoke_private_static( 'report_auto_signup', [ [ $this->list_a, $this->list_b ], true ] );
+
+		$this->assertFalse( (bool) get_option( 'newspack_premium_newsletters_auto_signup' ) );
+	}
+
+	/**
+	 * A live run writes the derived value when it differs from what is stored.
+	 */
+	public function test_report_auto_signup_live_writes_derived_value_when_it_differs() {
+		update_option( 'newspack_premium_newsletters_auto_signup', 0 );
+		$this->set_signup_modal_lists( [] ); // Derives to on.
+
+		$this->invoke_private_static( 'report_auto_signup', [ [ $this->list_a, $this->list_b ], false ] );
+
+		$this->assertTrue( (bool) get_option( 'newspack_premium_newsletters_auto_signup' ) );
+	}
+
+	/**
+	 * A live run that already matches the stored value takes the "leave it alone"
+	 * branch rather than the write branch — pinned via the distinct message each
+	 * branch emits, since WordPress's own update_option() no-ops an equal-value
+	 * write regardless of which branch called it.
+	 */
+	public function test_report_auto_signup_live_leaves_matching_option_unchanged() {
+		update_option( 'newspack_premium_newsletters_auto_signup', 1 );
+		$this->set_signup_modal_lists( [] ); // Derives to on, same as current.
+
+		$this->invoke_private_static( 'report_auto_signup', [ [ $this->list_a, $this->list_b ], false ] );
+
+		$this->assertTrue( (bool) get_option( 'newspack_premium_newsletters_auto_signup' ) );
+		$this->assertContains( 'Auto-signup is already on; leaving it unchanged.', \WP_CLI::$output );
+	}
+
+	/**
+	 * A live run against a split list set — some lists in the post-checkout signup
+	 * modal, some not — cannot express the per-list distinction in one site-wide
+	 * flag. It must write nothing and warn, naming the conflicting lists.
+	 */
+	public function test_report_auto_signup_split_lists_warns_and_writes_nothing_live() {
+		update_option( 'newspack_premium_newsletters_auto_signup', 1 );
+		$this->set_signup_modal_lists( [ $this->list_a ] ); // list_a in the modal, list_b is not.
+
+		$this->invoke_private_static( 'report_auto_signup', [ [ $this->list_a, $this->list_b ], false ] );
+
+		$this->assertTrue( (bool) get_option( 'newspack_premium_newsletters_auto_signup' ) );
+		$matching_warnings = array_filter(
+			\WP_CLI::$warnings,
+			fn( $warning ) => str_contains( $warning, 'disagree' )
+		);
+		$this->assertNotEmpty( $matching_warnings, 'Expected a warning about disagreeing lists.' );
+		$warning = reset( $matching_warnings );
+		$this->assertStringContainsString( (string) $this->list_a, $warning );
+		$this->assertStringContainsString( (string) $this->list_b, $warning );
+	}
+
+	/**
+	 * A list whose public (ESP) ID cannot be resolved is called out in its own
+	 * warning, separate from the derived-value reporting.
+	 */
+	public function test_report_auto_signup_warns_for_unresolvable_lists() {
+		$not_a_list = self::factory()->post->create();
+		$this->set_signup_modal_lists( [] );
+
+		$this->invoke_private_static( 'report_auto_signup', [ [ $not_a_list ], true ] );
+
+		$matching_warnings = array_filter(
+			\WP_CLI::$warnings,
+			fn( $warning ) => str_contains( $warning, 'Could not resolve an ESP list' )
+		);
+		$this->assertNotEmpty( $matching_warnings, 'Expected an unresolved-list warning.' );
+		$this->assertStringContainsString( (string) $not_a_list, reset( $matching_warnings ) );
+	}
+
+	/**
+	 * Create a wc_membership_plan post directly, bypassing WooCommerce Memberships
+	 * (which is absent from this harness) — get_plans() is a plain get_posts() query
+	 * keyed on post_type and post_status, so no registration is needed for it to see
+	 * the post.
+	 *
+	 * @param string $status Post status.
+	 *
+	 * @return int The plan post ID.
+	 */
+	private function create_plan_post( string $status = 'publish' ): int {
+		return self::factory()->post->create(
+			[
+				'post_type'   => 'wc_membership_plan',
+				'post_status' => $status,
+			]
+		);
+	}
+
+	/**
+	 * Published wc_membership_plan posts come back as IDs, in ascending ID order.
+	 */
+	public function test_get_plans_returns_published_plan_ids() {
+		$plan_a = $this->create_plan_post();
+		$plan_b = $this->create_plan_post();
+
+		$this->assertSame( [ $plan_a, $plan_b ], $this->invoke_private_static( 'get_plans', [ 0 ] ) );
+	}
+
+	/**
+	 * A draft plan and a published post of a different post type must not appear —
+	 * only published wc_membership_plan posts qualify.
+	 */
+	public function test_get_plans_excludes_drafts_and_other_post_types() {
+		$published_plan = $this->create_plan_post();
+		$this->create_plan_post( 'draft' );
+		self::factory()->post->create(
+			[
+				'post_type'   => 'post',
+				'post_status' => 'publish',
+			] 
+		);
+
+		$this->assertSame( [ $published_plan ], $this->invoke_private_static( 'get_plans', [ 0 ] ) );
+	}
+
+	/**
+	 * With an ID argument, get_plans() returns only that plan.
+	 */
+	public function test_get_plans_with_id_returns_only_that_plan() {
+		$plan_a = $this->create_plan_post();
+		$plan_b = $this->create_plan_post();
+
+		$this->assertSame( [ $plan_b ], $this->invoke_private_static( 'get_plans', [ $plan_b ] ) );
+	}
+
+	/**
+	 * A non-numeric --plan value aborts before any WooCommerce Memberships check is
+	 * reached, so it is reachable without that plugin present in this harness.
+	 */
+	public function test_migrate_premium_newsletters_aborts_on_non_numeric_plan() {
+		$migration = new Premium_Newsletters_Migration();
+
+		$this->expectException( \WP_CLI_Mock_Exception::class );
+		$this->expectExceptionMessage( 'Invalid --plan value' );
+
+		$migration->migrate_premium_newsletters( [], [ 'plan' => 'not-a-number' ] );
+	}
+
+	/**
+	 * A --plan value of zero aborts rather than being treated as "no filter".
+	 */
+	public function test_migrate_premium_newsletters_aborts_on_zero_plan() {
+		$migration = new Premium_Newsletters_Migration();
+
+		$this->expectException( \WP_CLI_Mock_Exception::class );
+		$this->expectExceptionMessage( 'Invalid --plan value' );
+
+		$migration->migrate_premium_newsletters( [], [ 'plan' => '0' ] );
+	}
+
+	/**
+	 * A negative --plan value aborts as well.
+	 */
+	public function test_migrate_premium_newsletters_aborts_on_negative_plan() {
+		$migration = new Premium_Newsletters_Migration();
+
+		$this->expectException( \WP_CLI_Mock_Exception::class );
+		$this->expectExceptionMessage( 'Invalid --plan value' );
+
+		$migration->migrate_premium_newsletters( [], [ 'plan' => '-5' ] );
 	}
 }
