@@ -1,3 +1,10 @@
+## newspack-newsletters [3.38.6](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.38.5...newspack-newsletters@3.38.6) (2026-08-13)
+
+
+### Bug Fixes
+
+* **newsletters:** ad dates shift a day on negative-offset sites ([#789](https://github.com/Automattic/newspack-workspace/issues/789)) ([6cd76f2](https://github.com/Automattic/newspack-workspace/commit/6cd76f2519bf24ce2666ea97d4420ce119753a84))
+
 ## newspack-newsletters [3.38.5](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.38.4...newspack-newsletters@3.38.5) (2026-08-10)
 
 
