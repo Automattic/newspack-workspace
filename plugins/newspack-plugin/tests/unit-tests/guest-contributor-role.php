@@ -641,6 +641,7 @@ class Newspack_Test_Guest_Contributor_Role extends WP_UnitTestCase {
 		Guest_Contributor_Role::user_profile_update_errors( $errors, false, $user );
 
 		$this->assertEmpty( $errors->get_error_messages( 'invalid_email' ), 'The invalid_email error must be cleared for a whitespace-only submission.' );
+		$this->assertEmpty( $errors->get_error_messages( 'empty_email' ), 'The empty_email error must be cleared for a whitespace-only submission.' );
 		$this->assertSame( 'whitespace-email-gc@' . Guest_Contributor_Role::get_dummy_email_domain(), $user->user_email );
 	}
 
