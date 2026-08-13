@@ -19,6 +19,12 @@ describe( 'CardFeature', () => {
 			expect( screen.getByText( 'Let subscribers share gated articles.' ) ).toBeInTheDocument();
 		} );
 
+		it( 'renders the title at the requested heading level', () => {
+			render( <CardFeature title="Content gifting" titleLevel={ 3 } /> );
+			expect( screen.getByRole( 'heading', { level: 3 } ) ).toHaveTextContent( 'Content gifting' );
+			expect( screen.queryByRole( 'heading', { level: 2 } ) ).not.toBeInTheDocument();
+		} );
+
 		it( 'omits the description paragraph when none is passed', () => {
 			const { container } = render( <CardFeature title="Content gifting" /> );
 			expect( container.querySelector( '.newspack-card-feature__description' ) ).toBeNull();
@@ -74,12 +80,36 @@ describe( 'CardFeature', () => {
 			expect( onConfigure ).not.toHaveBeenCalled();
 		} );
 
-		it( 'does not fire when a requirement is not actionable', () => {
+		it( 'does not fire when a requirement is not actionable, but stays reachable', () => {
 			const onEnable = jest.fn();
 			render( <CardFeature title="Content gifting" requirements="Managed by site configuration" onEnable={ onEnable } /> );
-			expect( primaryButton() ).toBeDisabled();
+			expect( primaryButton() ).toHaveAttribute( 'aria-disabled', 'true' );
+			expect( primaryButton() ).not.toHaveAttribute( 'disabled' );
 			fireEvent.click( primaryButton() );
 			expect( onEnable ).not.toHaveBeenCalled();
+		} );
+
+		it( 'points the blocked button at the badge that explains why', () => {
+			render( <CardFeature title="Content gifting" requirements="Managed by site configuration" /> );
+			const describedBy = primaryButton().getAttribute( 'aria-describedby' );
+			expect( describedBy ).toBeTruthy();
+			expect( document.getElementById( describedBy ) ).toHaveTextContent( 'Managed by site configuration' );
+		} );
+
+		it( 'leaves the enabled badge unlinked, since it explains nothing about the button', () => {
+			render( <CardFeature title="Content gifting" enabled /> );
+			expect( primaryButton() ).not.toHaveAttribute( 'aria-describedby' );
+		} );
+
+		it( 'disables the button while an action is in flight, even with an actionable requirement', () => {
+			const onEnable = jest.fn();
+			const { rerender } = render( <CardFeature title="Content gifting" busy onEnable={ onEnable } /> );
+			expect( primaryButton() ).toHaveAttribute( 'aria-disabled', 'true' );
+			fireEvent.click( primaryButton() );
+			expect( onEnable ).not.toHaveBeenCalled();
+
+			rerender( <CardFeature title="Content gifting" busy requirements="Requires metering" requirementsActionable onEnable={ onEnable } /> );
+			expect( primaryButton() ).toHaveAttribute( 'aria-disabled', 'true' );
 		} );
 
 		it( 'accepts custom labels for both states', () => {
@@ -152,6 +182,11 @@ describe( 'CardFeature', () => {
 			expect( iconContainer ).toHaveStyle( { backgroundColor: '#dfe7f4', color: '#003da5' } );
 		} );
 
+		it( 'hides the descriptor container from assistive tech, since the title already names the feature', () => {
+			const { container } = render( <CardFeature title="Content gifting" icon={ { node: <svg /> } } /> );
+			expect( container.querySelector( '.newspack-card-feature__icon' ) ).toHaveAttribute( 'aria-hidden', 'true' );
+		} );
+
 		it( 'falls back to small corners when a background is set without a radius', () => {
 			const { container } = render( <CardFeature title="Content gifting" icon={ { node: <span />, backgroundColor: '#dfe7f4' } } /> );
 			const iconContainer = container.querySelector( '.newspack-card-feature__icon' );
@@ -164,6 +199,11 @@ describe( 'CardFeature', () => {
 			const iconContainer = container.querySelector( '.newspack-card-feature__icon' );
 			expect( iconContainer ).not.toHaveClass( 'newspack-card-feature__icon--radius-small' );
 		} );
+	} );
+
+	it( 'passes className through to the card element', () => {
+		const { container } = render( <CardFeature title="Content gifting" className="newspack-subscribers__card" /> );
+		expect( container.querySelector( '.newspack-card-feature' ) ).toHaveClass( 'newspack-subscribers__card' );
 	} );
 
 	it( 'marks the card as muted only when requirements are set', () => {

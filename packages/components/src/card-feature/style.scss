@@ -33,15 +33,15 @@
 	&__icon {
 		align-items: center;
 		display: flex;
-		flex: 0 0 40px;
-		height: 40px;
+		flex: 0 0 wp-vars.$grid-unit-50;
+		height: wp-vars.$grid-unit-50;
 		justify-content: center;
 
 		svg {
 			display: block;
 			fill: currentcolor;
-			height: 24px;
-			width: 24px;
+			height: wp-vars.$grid-unit-30;
+			width: wp-vars.$grid-unit-30;
 		}
 
 		&--radius-small {

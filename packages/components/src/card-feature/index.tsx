@@ -7,7 +7,8 @@ import classnames from 'classnames';
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { isValidElement } from '@wordpress/element';
+import { createElement, isValidElement } from '@wordpress/element';
+import { useInstanceId } from '@wordpress/compose';
 import { DropdownMenu } from '@wordpress/components';
 import { moreVertical } from '@wordpress/icons';
 import { Card, Stack } from '@wordpress/ui';
@@ -15,11 +16,9 @@ import { Card, Stack } from '@wordpress/ui';
 /**
  * Internal dependencies
  */
-import Badge from '../badge';
+import Badge, { type BadgeLevel } from '../badge';
 import Button from '../button';
 import './style.scss';
-
-type BadgeLevel = 'default' | 'info' | 'success' | 'warning' | 'error';
 
 type CardFeatureIcon = {
 	/** The icon node to render (e.g. a WordPress <Icon> component). */
@@ -36,6 +35,8 @@ type CardFeatureIcon = {
 	radius?: 'small' | 'full';
 };
 
+type HeadingLevel = 1 | 2 | 3 | 4 | 5 | 6;
+
 type MoreControl = {
 	title: string;
 	onClick: () => void;
@@ -44,14 +45,16 @@ type MoreControl = {
 
 type CardFeatureProps = {
 	title: string;
+	/** Heading level for the title. Pick the level that fits the surrounding document outline. */
+	titleLevel?: HeadingLevel;
 	description?: string;
 	/** Icon shown beside the title: a descriptor (coloured badge) or a ready element rendered as-is. */
 	icon?: CardFeatureIcon | React.ReactElement;
 	/** Whether the feature is currently enabled. */
 	enabled?: boolean;
 	/**
-	 * When set, the card enters the "unmet requirements" state: an error
-	 * badge displays this string and the title/description are muted. By
+	 * When set, the card enters the "unmet requirements" state: an error badge
+	 * displays this string and the title drops to the muted text colour. By
 	 * default the primary button is disabled — set `requirementsActionable`
 	 * if the primary button is the remediation for the unmet requirement.
 	 */
@@ -63,11 +66,11 @@ type CardFeatureProps = {
 	 * (e.g. can be disabled), unlike a hard-locked requirement.
 	 */
 	requirementsActionable?: boolean;
-	/** Primary button label when not enabled. Default: "Enable". */
+	/** Label for the primary button in its "Enable" states: not enabled, or enabled with an unmet requirement. Default: "Enable". */
 	enableLabel?: string;
 	/** Show the primary button as busy (spinner) and disabled while an action is in flight. */
 	busy?: boolean;
-	/** Primary button label when enabled. Default: "Configure". */
+	/** Label for the primary button in its "Configure" state: enabled, with no unmet requirement. Default: "Configure". */
 	configureLabel?: string;
 	/**
 	 * Called when the primary button is clicked while it reads "Enable". That is
@@ -79,9 +82,9 @@ type CardFeatureProps = {
 	onConfigure?: () => void;
 	/** Controls rendered inside the "More" dropdown, shown when enabled — including the unmet-requirements state when `requirementsActionable`. */
 	moreControls?: MoreControl[];
-	/** Badge text shown when enabled. Default: "Enabled". */
+	/** Badge text shown when enabled. Ignored while `requirements` is set, which takes the badge. Default: "Enabled". */
 	badgeText?: string;
-	/** Badge level shown when enabled. Default: "success". */
+	/** Badge level shown when enabled. Ignored while `requirements` is set, which forces an error badge. Default: "success". */
 	badgeLevel?: BadgeLevel;
 	className?: string;
 };
@@ -95,6 +98,7 @@ type CardFeatureProps = {
  */
 const CardFeature = ( {
 	title,
+	titleLevel = 2,
 	description,
 	icon,
 	enabled = false,
@@ -110,6 +114,8 @@ const CardFeature = ( {
 	badgeLevel = 'success',
 	className,
 }: CardFeatureProps ) => {
+	const instanceId = useInstanceId( CardFeature, 'newspack-card-feature' );
+	const badgeId = `${ instanceId }__badge`;
 	const isMuted = !! requirements;
 	const classes = classnames( 'newspack-card-feature', className, {
 		'newspack-card-feature--muted': isMuted,
@@ -147,7 +153,10 @@ const CardFeature = ( {
 		renderedIcon = icon;
 	} else if ( iconDescriptor ) {
 		renderedIcon = (
+			// Decorative: the feature is always named in the adjacent title, and a
+			// vendor mark passed as `node` carries no aria-hidden of its own.
 			<div
+				aria-hidden="true"
 				className={ iconClasses }
 				style={ {
 					backgroundColor: iconDescriptor.backgroundColor,
@@ -164,7 +173,7 @@ const CardFeature = ( {
 			<Card.Header>
 				<Stack direction="row" align="start" gap="lg">
 					<Stack className="newspack-card-feature__content" direction="column" gap="sm">
-						<h2 className="newspack-card-feature__title">{ title }</h2>
+						{ createElement( `h${ titleLevel }`, { className: 'newspack-card-feature__title' }, title ) }
 						{ description && <p className="newspack-card-feature__description">{ description }</p> }
 					</Stack>
 					{ renderedIcon }
@@ -175,6 +184,8 @@ const CardFeature = ( {
 					<Stack direction="row" align="center" gap="sm">
 						<Button
 							variant={ isConfigureState ? 'tertiary' : 'secondary' }
+							accessibleWhenDisabled
+							aria-describedby={ requirements ? badgeId : undefined }
 							disabled={ ( isMuted && ! requirementsActionable ) || busy }
 							isBusy={ busy }
 							onClick={ handleButtonClick }
@@ -191,7 +202,7 @@ const CardFeature = ( {
 							/>
 						) }
 					</Stack>
-					{ badge && <Badge text={ badge.text } level={ badge.level } /> }
+					{ badge && <Badge id={ requirements ? badgeId : undefined } text={ badge.text } level={ badge.level } /> }
 				</Stack>
 			</Card.Content>
 		</Card.Root>

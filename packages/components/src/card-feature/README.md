@@ -36,7 +36,19 @@ import { __ } from '@wordpress/i18n';
 
 ## With unmet requirements
 
-When `requirements` is set the button is disabled and an error badge displays the string, and the title drops to the muted text colour.
+When `requirements` is set, an error badge displays the string and the title drops to the muted text colour. By default the requirement is treated as locked: the primary button is disabled and the "More" dropdown is hidden, so `onConfigure` and `moreControls` have nothing to act on.
+
+```tsx
+import { __ } from '@wordpress/i18n';
+
+<CardFeature
+	title={ __( 'Metered countdown', 'newspack-plugin' ) }
+	description={ __( 'Show a countdown banner letting readers know how many free views they have left.', 'newspack-plugin' ) }
+	requirements={ __( 'Managed by site configuration', 'newspack-plugin' ) }
+/>
+```
+
+Set `requirementsActionable` when the button is how the reader clears the requirement. It stays clickable and routes to `onEnable`, and an enabled card keeps its "More" dropdown so the feature can still be turned off.
 
 ```tsx
 import { __ } from '@wordpress/i18n';
@@ -46,8 +58,9 @@ import { __ } from '@wordpress/i18n';
 	description={ __( 'Show a countdown banner letting readers know how many free views they have left.', 'newspack-plugin' ) }
 	enabled={ isEnabled }
 	requirements={ __( 'Requires metering', 'newspack-plugin' ) }
-	onEnable={ () => setEnabled( true ) }
-	onConfigure={ () => history.push( '/settings/countdown' ) }
+	requirementsActionable
+	enableLabel={ __( 'Set up metering', 'newspack-plugin' ) }
+	onEnable={ () => history.push( '/settings/metering' ) }
 	moreControls={ [
 		{ title: __( 'Disable', 'newspack-plugin' ), onClick: () => setEnabled( false ) },
 	] }
@@ -84,7 +97,7 @@ import colors from 'newspack-colors';
 <CardFeature
 	title={ __( 'Mailchimp', 'newspack-plugin' ) }
 	description={ __( 'Sync reader activity with your Mailchimp audience.', 'newspack-plugin' ) }
-	icon={ { node: <MailchimpMark />, backgroundColor: '#241c15', radius: 'full' } }
+	icon={ { node: <MailchimpMark />, backgroundColor: '#ffe01b', radius: 'full' } }
 	enabled={ isEnabled }
 	onEnable={ handleEnable }
 	onConfigure={ handleConfigure }
@@ -95,7 +108,7 @@ import colors from 'newspack-colors';
 <CardFeature
 	title={ __( 'Mailchimp', 'newspack-plugin' ) }
 	description={ __( 'Sync reader activity with your Mailchimp audience.', 'newspack-plugin' ) }
-	icon={ <IntegrationIcon slug="mailchimp" /> }
+	icon={ <IntegrationIcon provider="mailchimp" /> }
 	enabled={ isEnabled }
 	onEnable={ handleEnable }
 	onConfigure={ handleConfigure }
@@ -166,18 +179,20 @@ import { __ } from '@wordpress/i18n';
 | Prop | Type | Default | Description |
 |---|---|---|---|
 | `title` | `string` | — | Card heading (**required**) |
+| `titleLevel` | `1`–`6` | `2` | Heading level for the title. Pick the level that fits the surrounding document outline |
 | `description` | `string` | — | Supporting text below the title |
 | `icon` | `CardFeatureIcon \| ReactElement` | — | Icon displayed on the right. A descriptor gets the 40 × 40 container; a ready element renders as-is. See `CardFeatureIcon` below. |
 | `enabled` | `boolean` | `false` | Whether the feature is currently enabled |
 | `requirements` | `string` | — | When set, enters the unmet-requirements state; value is used as the error badge text |
 | `requirementsActionable` | `boolean` | `false` | When `requirements` is set, keep the primary button clickable so it can remediate the unmet requirement, and keep the "More" dropdown visible on an enabled card (degraded but still operable) |
-| `enableLabel` | `string` | `"Enable"` | Primary button label when not enabled |
-| `configureLabel` | `string` | `"Configure"` | Primary button label when enabled |
+| `enableLabel` | `string` | `"Enable"` | Label for the primary button in its "Enable" states: not enabled, or enabled with an unmet requirement |
+| `configureLabel` | `string` | `"Configure"` | Label for the primary button in its "Configure" state: enabled, with no unmet requirement |
 | `onEnable` | `() => void` | — | Called when the primary button is clicked while it reads "Enable". That covers the not-enabled case and the enabled-with-unmet-requirements case, where the feature is on but the requirement is what the button acts on |
 | `onConfigure` | `() => void` | — | Called when the primary button is clicked while it reads "Configure", which is the enabled state with no unmet requirements |
 | `moreControls` | `MoreControl[]` | — | Items for the "More" dropdown. Shown when `enabled` and either there are no `requirements` or `requirementsActionable` is set |
-| `badgeText` | `string` | `"Enabled"` | Badge text shown when enabled |
-| `badgeLevel` | `BadgeLevel` | `"success"` | Badge level shown when enabled |
+| `badgeText` | `string` | `"Enabled"` | Badge text shown when enabled. Ignored while `requirements` is set, which takes the badge |
+| `badgeLevel` | `BadgeLevel` | `"success"` | Badge level shown when enabled. Ignored while `requirements` is set, which forces an error badge |
+| `busy` | `boolean` | `false` | Shows the primary button as busy and blocks it while an action is in flight |
 | `className` | `string` | — | Additional class name applied to the card element |
 
 ### `CardFeatureIcon`
@@ -188,8 +203,8 @@ type CardFeatureIcon = {
 	fill?: string;               // SVG fill colour (applied via currentColor)
 	backgroundColor?: string;    // Background colour of the 40×40 container
 	radius?: 'small' | 'full';   // 'small' = 2px ($radius-small), 'full' = 50% ($radius-round)
-	                             // Defaults to 'small' whenever backgroundColor is set.
-	                             // Only applied when backgroundColor is set.
+	                             // Defaults to 'small' whenever backgroundColor is set,
+	                             // and has nothing to round without one.
 };
 ```
 
@@ -199,6 +214,6 @@ type CardFeatureIcon = {
 type MoreControl = {
 	title: string;
 	onClick: () => void;
-	icon?: React.ReactNode;
+	icon?: JSX.Element;
 };
 ```
