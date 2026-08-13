@@ -15,7 +15,7 @@ A card component for presenting a named feature or setting with a predictable, s
 | **Disabled** | `!enabled`, no requirements | "Enable" | Hidden | None |
 | **Enabled** | `enabled`, no requirements | "Configure" | Shown if `moreControls` provided | Success badge ("Enabled") |
 
-The card content (title + description) is visually muted (gray text) when `requirements` is set.
+When `requirements` is set the title drops to the muted text colour. The description already uses that colour in every state, so the unmet-requirements state is signalled by the title colour plus the error badge.
 
 ## Basic usage
 
@@ -36,7 +36,7 @@ import { __ } from '@wordpress/i18n';
 
 ## With unmet requirements
 
-When `requirements` is set the button is disabled and an error badge displays the string. The title and description are visually muted.
+When `requirements` is set the button is disabled and an error badge displays the string, and the title drops to the muted text colour.
 
 ```tsx
 import { __ } from '@wordpress/i18n';
@@ -60,26 +60,29 @@ The `icon` prop accepts an object, not a bare node. Pass `node` for the icon ele
 
 The icon container is always **40 × 40 px** with the SVG at **24 × 24 px**. `radius` only applies when `backgroundColor` is set.
 
+`fill` and `backgroundColor` take any CSS colour. Reach for the Newspack palette when the icon should read as ours, and pass a literal when it should carry a third party's colour, such as an integration's own brand.
+
 ```tsx
 import { __ } from '@wordpress/i18n';
 import { Icon, starFilled } from '@wordpress/icons';
+import colors from '../../packages/colors/colors.module.scss';
 
-// Icon with fill only
+// Newspack palette, fill only
 <CardFeature
 	title={ __( 'Content gifting', 'newspack-plugin' ) }
 	description={ __( 'Let subscribers share gated articles with non-subscribers.', 'newspack-plugin' ) }
-	icon={ { node: <Icon icon={ starFilled } />, fill: '#003da5' } }
+	icon={ { node: <Icon icon={ starFilled } />, fill: colors[ 'primary-600' ] } }
 	enabled={ isEnabled }
 	onEnable={ handleEnable }
 	onConfigure={ handleConfigure }
 	moreControls={ [ { title: __( 'Disable', 'newspack-plugin' ), onClick: handleDisable } ] }
 />
 
-// Icon with circular background
+// A third party's own colour, on a circular background
 <CardFeature
-	title={ __( 'Content gifting', 'newspack-plugin' ) }
-	description={ __( 'Let subscribers share gated articles with non-subscribers.', 'newspack-plugin' ) }
-	icon={ { node: <Icon icon={ starFilled } />, fill: '#003da5', backgroundColor: '#dfe7f4', radius: 'full' } }
+	title={ __( 'Mailchimp', 'newspack-plugin' ) }
+	description={ __( 'Sync reader activity with your Mailchimp audience.', 'newspack-plugin' ) }
+	icon={ { node: <Icon icon={ starFilled } />, fill: '#ffe01b', backgroundColor: '#241c15', radius: 'full' } }
 	enabled={ isEnabled }
 	onEnable={ handleEnable }
 	onConfigure={ handleConfigure }
