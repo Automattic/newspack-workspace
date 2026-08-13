@@ -1,3 +1,17 @@
+## newspack-newsletters [3.38.5](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.38.4...newspack-newsletters@3.38.5) (2026-08-10)
+
+
+### Bug Fixes
+
+* **newsletters:** drop unnamed ESP lists from the lists payload ([#836](https://github.com/Automattic/newspack-workspace/issues/836)) ([07000da](https://github.com/Automattic/newspack-workspace/commit/07000da9cc04f76c2e997197aceec8e0be418d53))
+
+## newspack-newsletters [3.38.4](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.38.3...newspack-newsletters@3.38.4) (2026-08-10)
+
+
+### Bug Fixes
+
+* **newsletters:** cut per-render subscription-list and gate overhead ([#769](https://github.com/Automattic/newspack-workspace/issues/769)) ([fe939fd](https://github.com/Automattic/newspack-workspace/commit/fe939fd2fe603785555fa087dae35eb64a5956c2))
+
 ## newspack-newsletters [3.38.3](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.38.2...newspack-newsletters@3.38.3) (2026-08-10)
 
 
