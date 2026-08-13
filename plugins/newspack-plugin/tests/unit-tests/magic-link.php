@@ -501,7 +501,25 @@ class Newspack_Test_Magic_Link extends WP_UnitTestCase {
 
 		$this->assertTrue( $sent, 'The email must dispatch through MockPHPMailer.' );
 		$this->assertStringNotContainsString( 'attacker.example', $body, 'The base must not be the attacker host.' );
-		$this->assertStringContainsString( home_url(), $body, 'The base must be the site origin.' );
-		$this->assertStringContainsString( 'token=', $body, 'The token must still be present.' );
+
+		// wp_mail() sends this template as quoted-printable, so the raw body
+		// has '=' encoded as '=3D' and long lines soft-wrapped with a
+		// trailing '='. Decode before pattern-matching, otherwise the long
+		// token-bearing URL is split across lines and a naive match on the
+		// raw body truncates it.
+		$decoded_body = quoted_printable_decode( $body );
+
+		// Assert on the magic-link URL specifically, not on home_url()
+		// appearing anywhere in the body: the template also renders
+		// home_url() via *SITE_URL* in its logo and footer links,
+		// independent of the redirect base, so a bare "body contains
+		// home_url()" assertion would pass even without the fix. The token
+		// is the anchor — it identifies the one URL in the email that
+		// carries the reader's auth token, i.e. the magic-link base itself.
+		$this->assertMatchesRegularExpression( '#https?://[^\s"\'<>]*token=[^\s"\'<>]*#', $decoded_body, 'The email must contain a magic-link URL carrying the token.' );
+		preg_match( '#https?://[^\s"\'<>]*token=[^\s"\'<>]*#', $decoded_body, $matches );
+		$link_host = wp_parse_url( $matches[0], PHP_URL_HOST );
+		$site_host = wp_parse_url( home_url(), PHP_URL_HOST );
+		$this->assertSame( $site_host, $link_host, 'The magic-link base must be the site host.' );
 	}
 }
