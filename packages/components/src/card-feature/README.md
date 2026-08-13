@@ -56,16 +56,18 @@ import { __ } from '@wordpress/i18n';
 
 ## With a custom icon
 
-The `icon` prop accepts an object, not a bare node. Pass `node` for the icon element, `fill` to control the SVG colour (applied via `currentColor`), `backgroundColor` for a container background, and `radius` for the corner treatment.
+`icon` takes either a descriptor object or a ready React element. A descriptor gets the standard treatment: pass `node` for the icon element, `fill` for the SVG colour, `backgroundColor` for a container background, and `radius` for the corner treatment. A ready element renders exactly as given, with no container, background or radius, which is the escape hatch for an icon that already carries its own chrome.
 
-The icon container is always **40 × 40 px** with the SVG at **24 × 24 px**. `radius` only applies when `backgroundColor` is set.
+A descriptor's container is always **40 × 40 px** with the SVG at **24 × 24 px**. Setting `backgroundColor` without a `radius` gives 2px corners; pass `radius: 'full'` for a circle.
 
-`fill` and `backgroundColor` take any CSS colour. Reach for the Newspack palette when the icon should read as ours, and pass a literal when it should carry a third party's colour, such as an integration's own brand.
+`fill` sets the container's `color`, which the SVG picks up through `fill: currentcolor`. That only recolours single-colour icons that inherit their fill, such as those from `@wordpress/icons`. A vendor's own mark carries `fill` on its paths and keeps its colours, so pair it with `backgroundColor` rather than trying to tint it.
+
+`fill` and `backgroundColor` take any CSS colour. Reach for the Newspack palette when the icon should read as ours, and pass a literal when it should carry a third party's colour.
 
 ```tsx
 import { __ } from '@wordpress/i18n';
 import { Icon, starFilled } from '@wordpress/icons';
-import colors from '../../packages/colors/colors.module.scss';
+import colors from 'newspack-colors';
 
 // Newspack palette, fill only
 <CardFeature
@@ -78,15 +80,25 @@ import colors from '../../packages/colors/colors.module.scss';
 	moreControls={ [ { title: __( 'Disable', 'newspack-plugin' ), onClick: handleDisable } ] }
 />
 
-// A third party's own colour, on a circular background
+// A vendor mark on its own brand background, keeping the mark's colours
 <CardFeature
 	title={ __( 'Mailchimp', 'newspack-plugin' ) }
 	description={ __( 'Sync reader activity with your Mailchimp audience.', 'newspack-plugin' ) }
-	icon={ { node: <Icon icon={ starFilled } />, fill: '#ffe01b', backgroundColor: '#241c15', radius: 'full' } }
+	icon={ { node: <MailchimpMark />, backgroundColor: '#241c15', radius: 'full' } }
 	enabled={ isEnabled }
 	onEnable={ handleEnable }
 	onConfigure={ handleConfigure }
 	moreControls={ [ { title: __( 'Disable', 'newspack-plugin' ), onClick: handleDisable } ] }
+/>
+
+// A ready element, rendered as-is
+<CardFeature
+	title={ __( 'Mailchimp', 'newspack-plugin' ) }
+	description={ __( 'Sync reader activity with your Mailchimp audience.', 'newspack-plugin' ) }
+	icon={ <IntegrationIcon slug="mailchimp" /> }
+	enabled={ isEnabled }
+	onEnable={ handleEnable }
+	onConfigure={ handleConfigure }
 />
 ```
 
@@ -155,14 +167,14 @@ import { __ } from '@wordpress/i18n';
 |---|---|---|---|
 | `title` | `string` | — | Card heading (**required**) |
 | `description` | `string` | — | Supporting text below the title |
-| `icon` | `CardFeatureIcon` | — | Icon displayed on the right. See `CardFeatureIcon` below. |
+| `icon` | `CardFeatureIcon \| ReactElement` | — | Icon displayed on the right. A descriptor gets the 40 × 40 container; a ready element renders as-is. See `CardFeatureIcon` below. |
 | `enabled` | `boolean` | `false` | Whether the feature is currently enabled |
 | `requirements` | `string` | — | When set, enters the unmet-requirements state; value is used as the error badge text |
 | `requirementsActionable` | `boolean` | `false` | When `requirements` is set, keep the primary button clickable so it can remediate the unmet requirement, and keep the "More" dropdown visible on an enabled card (degraded but still operable) |
 | `enableLabel` | `string` | `"Enable"` | Primary button label when not enabled |
 | `configureLabel` | `string` | `"Configure"` | Primary button label when enabled |
-| `onEnable` | `() => void` | — | Called when the primary button is clicked and the feature is not enabled |
-| `onConfigure` | `() => void` | — | Called when the primary button is clicked and the feature is enabled |
+| `onEnable` | `() => void` | — | Called when the primary button is clicked while it reads "Enable". That covers the not-enabled case and the enabled-with-unmet-requirements case, where the feature is on but the requirement is what the button acts on |
+| `onConfigure` | `() => void` | — | Called when the primary button is clicked while it reads "Configure", which is the enabled state with no unmet requirements |
 | `moreControls` | `MoreControl[]` | — | Items for the "More" dropdown. Shown when `enabled` and either there are no `requirements` or `requirementsActionable` is set |
 | `badgeText` | `string` | `"Enabled"` | Badge text shown when enabled |
 | `badgeLevel` | `BadgeLevel` | `"success"` | Badge level shown when enabled |
@@ -176,6 +188,7 @@ type CardFeatureIcon = {
 	fill?: string;               // SVG fill colour (applied via currentColor)
 	backgroundColor?: string;    // Background colour of the 40×40 container
 	radius?: 'small' | 'full';   // 'small' = 2px ($radius-small), 'full' = 50% ($radius-round)
+	                             // Defaults to 'small' whenever backgroundColor is set.
 	                             // Only applied when backgroundColor is set.
 };
 ```

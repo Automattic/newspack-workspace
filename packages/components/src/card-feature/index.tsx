@@ -31,7 +31,7 @@ type CardFeatureIcon = {
 	/**
 	 * Border-radius of the icon container.
 	 * 'small' uses $radius-small (2px), 'full' uses $radius-round (50%).
-	 * Only relevant when backgroundColor is set.
+	 * Only relevant when backgroundColor is set, where it defaults to 'small'.
 	 */
 	radius?: 'small' | 'full';
 };
@@ -69,9 +69,13 @@ type CardFeatureProps = {
 	busy?: boolean;
 	/** Primary button label when enabled. Default: "Configure". */
 	configureLabel?: string;
-	/** Called when the primary button is clicked and the feature is not enabled. */
+	/**
+	 * Called when the primary button is clicked while it reads "Enable". That is
+	 * the not-enabled state, and also the enabled state with unmet requirements,
+	 * where the requirement rather than the feature is what the button acts on.
+	 */
 	onEnable?: () => void;
-	/** Called when the primary button is clicked and the feature is enabled. */
+	/** Called when the primary button is clicked while it reads "Configure": enabled, with no unmet requirements. */
 	onConfigure?: () => void;
 	/** Controls rendered inside the "More" dropdown, shown when enabled — including the unmet-requirements state when `requirementsActionable`. */
 	moreControls?: MoreControl[];
