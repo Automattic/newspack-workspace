@@ -128,19 +128,23 @@ class Institution_REST_Controller extends \WP_REST_Posts_Controller {
 	 * Core's get_items() calls this — not check_read_permission() — for every
 	 * post in the result set when the request context is edit, so
 	 * get_items_permissions_check() above isn't enough on its own: a caller who
-	 * passes it with READ_CAPABILITY would still see an empty collection once
-	 * every item got filtered out here. Broadened to READ_CAPABILITY only while
-	 * get_items() (above) is running; every other caller of this method —
-	 * including the real write gate in update_item_permissions_check(), which
-	 * this class does not override — gets the parent's unmodified check, so the
-	 * broadening never reaches a write.
+	 * passes it would still see an empty collection once every item got
+	 * filtered out here. Broadened to admit either capability, matching
+	 * check_read_capability() above, but only while get_items() (above) is
+	 * running; every other caller of this method — including the real write
+	 * gate in update_item_permissions_check(), which this class does not
+	 * override — gets the parent's unmodified check, so the broadening never
+	 * reaches a write. Admitting RULES_CAPABILITY here cannot loosen the data
+	 * gate either: prepare_item_for_response() below keys the field strip on
+	 * RULES_CAPABILITY independently, so a caller admitted here who lacks it
+	 * still gets an empty meta object.
 	 *
 	 * @param \WP_Post $post Post object.
 	 * @return bool
 	 */
 	protected function check_update_permission( $post ) {
 		if ( $this->reading_collection ) {
-			return \current_user_can( self::READ_CAPABILITY );
+			return \current_user_can( self::READ_CAPABILITY ) || \current_user_can( self::RULES_CAPABILITY );
 		}
 
 		return parent::check_update_permission( $post );

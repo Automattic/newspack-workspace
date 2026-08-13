@@ -275,13 +275,15 @@ class Newspack_Test_Institution_REST_Controller extends WP_UnitTestCase {
 	 * Wizard::$capability, and it already sees every field once past the
 	 * read gate — so it must not be locked out of the institutions list.
 	 *
-	 * Uses view context rather than edit: edit-context collection reads are
-	 * filtered per item by check_update_permission(), which this fix
-	 * deliberately leaves untouched (it is still scoped to READ_CAPABILITY
-	 * only, per its own docblock). View-context reads go through
-	 * check_read_permission() instead, unmodified from core, which admits
-	 * any published post regardless of capability — the actual gate for this
-	 * tier is get_items_permissions_check() above, which this fix widens.
+	 * Uses view context, which goes through check_read_permission() —
+	 * unmodified from core, admitting any published post regardless of
+	 * capability — so this exercises only get_items_permissions_check()
+	 * above. It does not exercise check_update_permission(), which core also
+	 * filters edit-context collections through: see
+	 * test_rules_capability_alone_can_read_collection_with_edit_context()
+	 * below for that path, which this test alone does not cover — a caller
+	 * admitted here could still see an empty list at context=edit and this
+	 * test would not catch it.
 	 */
 	public function test_rules_capability_alone_can_read_collection_and_see_rules() {
 		$response = $this->read_collection( $this->rules_only_id, 'view' );
@@ -290,6 +292,29 @@ class Newspack_Test_Institution_REST_Controller extends WP_UnitTestCase {
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertSame( '10.0.0.0/8', $data[0]['meta'][ Institution::META_PREFIX . 'ip_range' ] );
 		$this->assertSame( 'test-university.example', $data[0]['meta'][ Institution::META_PREFIX . 'email_domain' ] );
+	}
+
+	/**
+	 * The same caller — RULES_CAPABILITY but not READ_CAPABILITY — reading
+	 * with context=edit, the context both real consumers
+	 * (block-visibility.tsx and access-rule-control.tsx) actually request.
+	 *
+	 * This is the case the view-context test above does not cover: an
+	 * edit-context collection read is filtered a second time, per item, by
+	 * check_update_permission(), which is a separate method from
+	 * get_items_permissions_check() and must independently admit
+	 * RULES_CAPABILITY. Before that method was widened, this exact request
+	 * returned 200 with an empty item array — passing the route-level gate
+	 * and then losing every item to the per-item one, which the view-context
+	 * test above cannot detect because it never reaches that second check.
+	 */
+	public function test_rules_capability_alone_can_read_collection_with_edit_context() {
+		$response = $this->read_collection( $this->rules_only_id, 'edit' );
+		$data     = $response->get_data();
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertNotEmpty( $data, 'A caller who owns this route must still see its items at context=edit.' );
+		$this->assertSame( '10.0.0.0/8', $data[0]['meta'][ Institution::META_PREFIX . 'ip_range' ] );
 	}
 
 	/**
