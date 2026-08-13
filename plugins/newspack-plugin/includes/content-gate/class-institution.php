@@ -81,14 +81,19 @@ class Institution {
 				'show_in_rest'          => true,
 				'supports'              => [ 'title', 'excerpt', 'thumbnail', 'custom-fields' ],
 				/**
-				 * Institutions effectively grant access, so restrict all CRUD operations
-				 * (including via REST) to the `manage_options` user capability.
+				 * Institutions effectively grant access, so every write —
+				 * including via REST — is restricted to the `manage_options`
+				 * capability; every key in the map above resolves to it. Reads
+				 * are not covered here: core does not gate reads of a published
+				 * post through this map, so the REST read requirement is
+				 * enforced separately by Institution_REST_Controller (below),
+				 * which admits `edit_others_posts` in addition to
+				 * `manage_options`.
 				 */
 				'capabilities'          => $capabilities,
 				/**
-				 * The capability map above governs writes. Reads of a published
-				 * post bypass it in core, so the read gate lives in this
-				 * controller.
+				 * Supplies the REST read gate the capability map above does not
+				 * provide; see the comment there.
 				 */
 				'rest_controller_class' => Institution_REST_Controller::class,
 			]
