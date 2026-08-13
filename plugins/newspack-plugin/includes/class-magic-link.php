@@ -406,6 +406,54 @@ final class Magic_Link {
 	}
 
 	/**
+	 * Restrict a magic-link base URL to the site's own origin.
+	 *
+	 * The base becomes the reader's link and carries their single-use auth
+	 * token and secret, so an off-origin base would hand those credentials to
+	 * another host. Core's wp_validate_redirect does the parse-hardening — it
+	 * rejects mailto:/javascript: and other schemeful-but-host-less URLs,
+	 * protocol-relative //host bases, and backslash authorities a browser would
+	 * read as a host. On top of that, this re-checks the FULL origin (scheme,
+	 * host, port) against home_url(), which is stricter than wp_validate_redirect
+	 * in two ways that matter for a credential-bearing link: it does not inherit
+	 * the platform-wide allowed_redirect_hosts list (which other flows populate
+	 * for browser navigation, e.g. donation checkout — a weaker question than
+	 * "may this host receive a reader's auth token?"), and it pins the scheme, so
+	 * an http:// base cannot downgrade the token onto plaintext on an https site.
+	 *
+	 * @param string $url Candidate base URL.
+	 * @return string A same-origin base, or home_url() when $url is off-origin or empty.
+	 */
+	private static function restrict_redirect_to_origin( $url ) {
+		if ( empty( $url ) ) {
+			return \home_url();
+		}
+
+		// Core parser-hardening. An empty fallback lets us distinguish rejection
+		// (mailto:, javascript:, //host, backslash authorities, malformed) from a
+		// value we then origin-check ourselves.
+		$candidate = \wp_validate_redirect( $url, '' );
+		if ( empty( $candidate ) ) {
+			return \home_url();
+		}
+
+		$target = \wp_parse_url( $candidate );
+
+		// A host-less result is a same-site path; wp_validate_redirect has already
+		// rejected the protocol-relative and backslash shapes that only look
+		// path-like.
+		if ( empty( $target['host'] ) ) {
+			return $candidate;
+		}
+
+		$home          = \wp_parse_url( \home_url() );
+		$target_origin = \strtolower( $target['scheme'] ?? $home['scheme'] ) . '://' . \strtolower( $target['host'] ) . ( isset( $target['port'] ) ? ':' . $target['port'] : '' );
+		$home_origin   = \strtolower( $home['scheme'] ) . '://' . \strtolower( $home['host'] ) . ( isset( $home['port'] ) ? ':' . $home['port'] : '' );
+
+		return ( $target_origin === $home_origin ) ? $candidate : \home_url();
+	}
+
+	/**
 	 * Check for active magic link tokens.
 	 *
 	 * @param \WP_User $user User to check the active magic link token for.
@@ -463,7 +511,7 @@ final class Magic_Link {
 				'token'  => $token_data['token'],
 				'secret' => self::generate_secret( $user ),
 			],
-			! empty( $url ) ? $url : \home_url()
+			self::restrict_redirect_to_origin( $url )
 		);
 	}
 
@@ -503,7 +551,7 @@ final class Magic_Link {
 				'token'  => $token_data['token'],
 				'secret' => self::generate_secret( $user ),
 			],
-			! empty( $redirect_to ) ? $redirect_to : \home_url()
+			self::restrict_redirect_to_origin( $redirect_to )
 		);
 		$email_type         = 'MAGIC_LINK';
 		$email_placeholders = [

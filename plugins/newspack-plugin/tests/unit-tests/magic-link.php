@@ -351,4 +351,109 @@ class Newspack_Test_Magic_Link extends WP_UnitTestCase {
 		$this->assertEquals( 'https://example.com/redirect', $received_params['redirect_to'], 'Filter received the correct redirect_to.' );
 		$this->assertIsArray( $received_params['token_data'], 'Filter received token data as array.' );
 	}
+
+	/**
+	 * Assert a generated magic link cannot resolve to a foreign host or scheme.
+	 *
+	 * A base that resolves off-origin is the whole risk. The link's host must be
+	 * either empty (a relative URL, resolved against the site) or the site host;
+	 * likewise its scheme, since the helper pins the full origin (scheme, host,
+	 * port), not host alone — a same-host base on the wrong scheme would still
+	 * carry the token off the site's actual origin (e.g. downgrading it to
+	 * plaintext http, or off to a non-http scheme like mailto:).
+	 *
+	 * @param string $link  The generated magic link.
+	 * @param string $input The input that produced it, for the failure message.
+	 */
+	private function assertLinkStaysOnSite( $link, $input ) {
+		$link_host   = wp_parse_url( $link, PHP_URL_HOST );
+		$site_host   = wp_parse_url( home_url(), PHP_URL_HOST );
+		$link_scheme = wp_parse_url( $link, PHP_URL_SCHEME );
+		$site_scheme = wp_parse_url( home_url(), PHP_URL_SCHEME );
+		$this->assertTrue(
+			empty( $link_host ) || $link_host === $site_host,
+			sprintf( 'Base must stay on the site host. Input "%s" produced "%s".', $input, $link )
+		);
+		$this->assertTrue(
+			empty( $link_scheme ) || $link_scheme === $site_scheme,
+			sprintf( 'Base must stay on the site scheme. Input "%s" produced "%s".', $input, $link )
+		);
+		$this->assertStringContainsString( 'token=', $link, 'Token must still be present.' );
+		$this->assertStringContainsString( 'secret=', $link, 'Secret must still be present.' );
+	}
+
+	/**
+	 * A generated magic link keeps its base on the site's own origin.
+	 *
+	 * @dataProvider data_off_origin_bases
+	 * @param string $input An off-origin or unsafe base.
+	 */
+	public function test_generate_url_restricts_off_origin_base( $input ) {
+		$url = Magic_Link::generate_url( get_user_by( 'id', self::$user_id ), $input );
+		$this->assertLinkStaysOnSite( $url, $input );
+	}
+
+	/**
+	 * Off-origin and unsafe bases that must not resolve to a foreign host.
+	 *
+	 * @return array[]
+	 */
+	public function data_off_origin_bases() {
+		return [
+			'off-origin host'     => [ 'https://attacker.example/harvest' ],
+			'scheme mismatch'     => [ 'https://example.org/x' ], // Test site is http; https is a different origin.
+			'protocol-relative'   => [ '//attacker.example/harvest' ],
+			'backslash authority' => [ 'https:\\\\attacker.example' ],
+			'schemeful host-less' => [ 'mailto:reader@example.com' ],
+			'userinfo confusion'  => [ 'https://example.org@attacker.example/x' ],
+			'suffix host'         => [ 'https://example.org.attacker.example/' ],
+			'bare authority'      => [ '://attacker.example' ], // Core normalises to a relative path.
+		];
+	}
+
+	/**
+	 * A same-origin or same-site base is preserved unchanged.
+	 */
+	public function test_generate_url_preserves_same_origin_base() {
+		$user = get_user_by( 'id', self::$user_id );
+
+		$same_origin = Magic_Link::generate_url( $user, 'http://example.org/premium/' );
+		$this->assertStringStartsWith( 'http://example.org/premium/', $same_origin, 'Same-origin base preserved.' );
+
+		// Reset rate-limiting state between calls: generate_token() rejects a
+		// second token for the same user within RATE_INTERVAL (60s), which two
+		// calls in the same test would otherwise always collide with.
+		delete_user_meta( self::$user_id, Magic_Link::TOKENS_META );
+
+		$relative = Magic_Link::generate_url( $user, '/premium/' );
+		$this->assertStringStartsWith( '/premium/', $relative, 'Relative path preserved.' );
+	}
+
+	/**
+	 * The platform allowed_redirect_hosts list is NOT inherited for the base.
+	 *
+	 * A host other flows allowlist for browser navigation must not become a
+	 * magic-link base, because the base carries the reader's auth token.
+	 */
+	public function test_generate_url_does_not_inherit_allowed_redirect_hosts() {
+		$callback = function ( $hosts ) {
+			$hosts[] = 'checkout.fundjournalism.org';
+			return $hosts;
+		};
+		add_filter( 'allowed_redirect_hosts', $callback );
+
+		$url = Magic_Link::generate_url( get_user_by( 'id', self::$user_id ), 'https://checkout.fundjournalism.org/x' );
+
+		remove_filter( 'allowed_redirect_hosts', $callback );
+
+		$this->assertLinkStaysOnSite( $url, 'https://checkout.fundjournalism.org/x' );
+	}
+
+	/**
+	 * An empty base yields home_url(), unchanged from prior behaviour.
+	 */
+	public function test_generate_url_empty_base_is_home() {
+		$url = Magic_Link::generate_url( get_user_by( 'id', self::$user_id ), '' );
+		$this->assertStringStartsWith( home_url(), $url );
+	}
 }
