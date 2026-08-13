@@ -101,10 +101,17 @@ class Institution_REST_Controller extends \WP_REST_Posts_Controller {
 	/**
 	 * The shared read gate.
 	 *
+	 * Accepts either capability: a role holding only RULES_CAPABILITY (an ops
+	 * or billing role scoped to manage_options without content capabilities,
+	 * for example) still owns this route — it is the tier the Audience wizard
+	 * grants access to, and it already sees every field once past this check,
+	 * per prepare_item_for_response() below. Without this, such a role could
+	 * open the wizard but never load the institutions list inside it.
+	 *
 	 * @return true|\WP_Error
 	 */
 	private static function check_read_capability() {
-		if ( \current_user_can( self::READ_CAPABILITY ) ) {
+		if ( \current_user_can( self::READ_CAPABILITY ) || \current_user_can( self::RULES_CAPABILITY ) ) {
 			return true;
 		}
 

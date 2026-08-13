@@ -51,6 +51,14 @@ class Newspack_Test_Institution_REST_Controller extends WP_UnitTestCase {
 	private $admin_id;
 
 	/**
+	 * A user holding RULES_CAPABILITY but not READ_CAPABILITY — an ops or
+	 * billing role scoped to manage_options without content capabilities.
+	 *
+	 * @var int
+	 */
+	private $rules_only_id;
+
+	/**
 	 * The collection route for the institution post type.
 	 *
 	 * @var string
@@ -81,6 +89,16 @@ class Newspack_Test_Institution_REST_Controller extends WP_UnitTestCase {
 		$this->subscriber_id  = $this->factory->user->create( [ 'role' => 'subscriber' ] );
 		$this->author_id      = $this->factory->user->create( [ 'role' => 'author' ] );
 		$this->admin_id       = $this->factory->user->create( [ 'role' => 'administrator' ] );
+
+		// A built-in role never isolates RULES_CAPABILITY from READ_CAPABILITY —
+		// administrator holds both — so this user's capabilities are composed
+		// directly rather than assigned from a built-in role, to exercise a
+		// caller who holds manage_options alone.
+		$this->rules_only_id = $this->factory->user->create( [ 'role' => '' ] );
+		$rules_only_user     = new \WP_User( $this->rules_only_id );
+		$rules_only_user->add_cap( 'read' );
+		$rules_only_user->add_cap( 'manage_options' );
+
 		$this->institution_id = $this->factory->post->create(
 			[
 				'post_type'   => Institution::POST_TYPE,
@@ -228,6 +246,50 @@ class Newspack_Test_Institution_REST_Controller extends WP_UnitTestCase {
 		$response = rest_do_request( $request );
 
 		$this->assertSame( 200, $response->get_status() );
+	}
+
+	/**
+	 * An Editor reading a single institution sees the row but not the rules.
+	 *
+	 * Deliberately omits context=edit: on the single-item route, edit context
+	 * refuses the read tier by design — get_item_permissions_check() defers
+	 * to the parent once its own check passes, and reading_collection is
+	 * false here, so the parent's own edit-context gate (mapped to
+	 * RULES_CAPABILITY) still applies. Without this test, the single-item
+	 * read path is entirely unpinned: get_item_permissions_check() could
+	 * refuse every non-administrator, or the strip in
+	 * prepare_item_for_response() could be dropped for this route, and every
+	 * other test in this file would stay green.
+	 */
+	public function test_editor_item_read_returns_200_without_the_rules() {
+		wp_set_current_user( $this->editor_id );
+		$response = rest_do_request( new WP_REST_Request( 'GET', $this->route . '/' . $this->institution_id ) );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( [], $response->get_data()['meta'] );
+	}
+
+	/**
+	 * A caller holding RULES_CAPABILITY but not READ_CAPABILITY still owns
+	 * this route — the Audience wizard grants it access via
+	 * Wizard::$capability, and it already sees every field once past the
+	 * read gate — so it must not be locked out of the institutions list.
+	 *
+	 * Uses view context rather than edit: edit-context collection reads are
+	 * filtered per item by check_update_permission(), which this fix
+	 * deliberately leaves untouched (it is still scoped to READ_CAPABILITY
+	 * only, per its own docblock). View-context reads go through
+	 * check_read_permission() instead, unmodified from core, which admits
+	 * any published post regardless of capability — the actual gate for this
+	 * tier is get_items_permissions_check() above, which this fix widens.
+	 */
+	public function test_rules_capability_alone_can_read_collection_and_see_rules() {
+		$response = $this->read_collection( $this->rules_only_id, 'view' );
+		$data     = $response->get_data();
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( '10.0.0.0/8', $data[0]['meta'][ Institution::META_PREFIX . 'ip_range' ] );
+		$this->assertSame( 'test-university.example', $data[0]['meta'][ Institution::META_PREFIX . 'email_domain' ] );
 	}
 
 	/**
