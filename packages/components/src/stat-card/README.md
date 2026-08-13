@@ -5,7 +5,8 @@ number counts. Cards sit in a row, so they share a type scale and a null
 treatment rather than each screen inventing its own.
 
 The API is compound: a `StatCard.Root` and one subcomponent per slot. The parts
-hang off one exported object, as `Drawer`'s and `EmptyState`'s do.
+hang off one exported object rather than this package's usual flat exports,
+which keeps a six-part component to one name on the barrel.
 
 ## Importing
 
@@ -19,12 +20,18 @@ import { StatCard } from 'newspack-components';
 import StatCard from '../../packages/components/src/stat-card';
 ```
 
-Import by path where a bundle should stay narrow: the barrel reaches `Page`,
-whose stylesheet carries a `:root` block of design-system token overrides, and
-that block then rides into every bundle that touches the barrel. One by-path
-import does not settle it, since the package declares no `sideEffects` and a
-bundler cannot drop what the barrel re-exports. It is the direction of travel
-rather than a saving already banked.
+The card's chrome is not self-contained. `Card.Root` from `@wordpress/ui` takes
+its background, border, radius and padding from `--wpds-*` custom properties
+with no fallbacks, and this package defines those in one place only:
+`page/style.scss`, which imports the design-token sheet. The package's own
+`style.scss` separately remaps `--wp-admin-theme-color` to the Newspack primary,
+which is the hero figure's colour. Both ride in with the barrel.
+
+So a by-path import keeps the bundle narrow at the cost of the card's
+appearance, unless that bundle already renders `Page` or pulls the token sheet
+in some other way. Without it the card is an unpadded, borderless, transparent
+box and the figure takes the publisher's wp-admin colour scheme. Take the narrow
+import where the screen already has the tokens; take the barrel otherwise.
 
 ## Usage
 
@@ -49,23 +56,32 @@ its numbers on one line.
 
 ## The figure is the caller's to format
 
-`StatCard.Value` takes a string, not a number. Currency symbols, thousands
-separators, percentages, abbreviated millions and locale all belong to the
-screen that knows what the figure means; the component only sizes it.
+`StatCard.Value` takes a string or a number, not an element. Currency symbols,
+thousands separators, percentages, abbreviated millions and locale all belong to
+the screen that knows what the figure means; the component only sizes it.
 
 The one thing it does own is the absence of a figure. Pass `value={ null }` and
 it renders the null glyph, standing in for "there is no number here" as opposed
-to a zero that genuinely is one.
+to a zero that genuinely is one. `undefined` takes the same path, so
+`value={ data?.count }` is safe before the data arrives.
 
 ## Scale and the container query
 
-The hero figure is `min(44px, 14cqi)`, against a `container-type: inline-size`
-on `Root`. A four-figure number in a narrow column shrinks to fit rather than
-overflowing or forcing a smaller fixed size on every card in the row.
+The hero figure is `clamp( 20px, 14cqi, 44px )`, against a
+`container-type: inline-size` on `Root`. A four-figure number in a narrow column
+shrinks to fit rather than overflowing or forcing a smaller fixed size on every
+card in the row, and the floor stops it shrinking under its own label.
 
 That query is why the parts throw outside a `Root`: a `StatCard.Value` rendered
 loose would size against whichever container it happened to land in, which fails
 quietly and looks like a styling bug.
+
+Inline-size containment has a second consequence: the card contributes nothing
+to its own intrinsic width, so **the parent layout has to give `Root` a definite
+inline size**. A grid track or a `flex: 1` item is fine. Dropped somewhere its
+width would come from its contents, such as an `inline-block` or a table cell,
+it collapses to nothing. Equal widths across a row are what keep one type scale
+across that row.
 
 For a hero that is a phrase rather than a number ("0 of 17", "No conversions"),
 pass `variant="text"`. It keeps the slot and drops the display scale, which
@@ -83,7 +99,8 @@ NVDA and VoiceOver announce "graphic" for what is a typographic placeholder.
 Hiding the glyph and supplying real text avoids both.
 
 The null glyph gets "Not applicable" by default. Pass `valueLabel` to say
-something more specific, e.g. why the figure is missing.
+something more specific, e.g. why the figure is missing. An empty `valueLabel`
+falls back to that default rather than leaving the glyph unnamed.
 
 ## Anatomy, not policy
 
@@ -105,7 +122,8 @@ its own props.
 | `heading` | `2`–`6` | `3` | Heading level for `StatCard.Label`, passed through context. |
 
 Renders `Card.Root` / `Card.Content` from `@wordpress/ui`, and owns the
-container query.
+container query. Forwards a ref to the card element, and passes any other props
+(`id`, `style`, `data-*`) through to it, so a wrapper can reach the DOM node.
 
 ## `StatCard.Label`
 
@@ -118,6 +136,9 @@ container query.
 
 `suffix` sits next to the heading rather than inside it, so a control there stays
 out of the document outline and off the heading's accessible name.
+
+A level outside 2–6 falls back to `3` and warns outside production, rather than
+rendering an element that is not a heading at all.
 
 ## `StatCard.Body`
 
@@ -134,7 +155,7 @@ A column that takes the free space. Put `StatCard.Value` in it, plus a
 | Prop | Type | Default | Description |
 |------|------|---------|-------------|
 | `className` | `string` | — | Merged onto the value. |
-| `value` | `React.ReactNode` \| `null` | — | **Required.** Pre-formatted. `null` renders the null glyph. |
+| `value` | `string` \| `number` \| `null` | — | **Required.** Pre-formatted. `null` renders the null glyph. |
 | `valueLabel` | `string` | "Not applicable" when null | Spoken instead of the visible value. |
 | `variant` | `'figure'` \| `'text'` | `'figure'` | `text` drops the hero scale for a phrase. |
 
@@ -152,17 +173,30 @@ A column that takes the free space. Put `StatCard.Value` in it, plus a
 | `children` | `React.ReactNode` | — | The description, plus any action. |
 | `className` | `string` | — | Merged onto the footer. |
 
-Pinned to the bottom. Text children are wrapped in a `<p>` carrying the
-description styling, so the common case is `<StatCard.Footer>{ description }</StatCard.Footer>`;
-elements pass through untouched, which is how an action lands under the text.
+Pinned to the bottom. A run of text children shares one `<p>` carrying the
+description styling, so `<StatCard.Footer>Applies to { count } products</StatCard.Footer>`
+is one sentence rather than three stacked lines; elements pass through
+untouched, which is how an action lands under the text.
 
-## `NULL_GLYPH`
+An action keeps the description's type scale by taking the
+`newspack-stat-card__action` class:
+
+```jsx
+<StatCard.Footer>
+	{ __( 'Products this rule applies to.', 'newspack-plugin' ) }
+	<Button isLink className="newspack-stat-card__action" onClick={ onView }>
+		{ __( 'See the products', 'newspack-plugin' ) }
+	</Button>
+</StatCard.Footer>
+```
+
+## `STAT_CARD_NULL_GLYPH`
 
 The glyph `StatCard.Value` shows for `null`, exported so a table under a row of
 cards can show the same one:
 
 ```jsx
-import { NULL_GLYPH } from 'newspack-components';
+import { STAT_CARD_NULL_GLYPH } from 'newspack-components';
 ```
 
 ## Outside the Root

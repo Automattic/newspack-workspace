@@ -12,7 +12,18 @@ import Root from './root';
 import Secondary from './secondary';
 import Value from './value';
 
-export { NULL_GLYPH } from './constants';
+export { STAT_CARD_NULL_GLYPH } from './constants';
+export type {
+	StatCardBodyProps,
+	StatCardFooterProps,
+	StatCardHeadingLevel,
+	StatCardLabelProps,
+	StatCardRootProps,
+	StatCardSecondaryProps,
+	StatCardValue,
+	StatCardValueProps,
+	StatCardValueVariant,
+} from './types';
 
 // A namespace object, not this package's usual flat exports. See the README.
 export const StatCard = {

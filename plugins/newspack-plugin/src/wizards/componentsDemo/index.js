@@ -408,7 +408,7 @@ class ComponentsDemo extends Component {
 									</StatCard.Body>
 									<StatCard.Footer>
 										{ __( 'Products this rule applies to.', 'newspack-plugin' ) }
-										<Button isLink onClick={ () => console.log( 'StatCard action' ) }>
+										<Button isLink className="newspack-stat-card__action" onClick={ () => console.log( 'StatCard action' ) }>
 											{ __( 'See the products', 'newspack-plugin' ) }
 										</Button>
 									</StatCard.Footer>

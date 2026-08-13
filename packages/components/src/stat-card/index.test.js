@@ -6,7 +6,7 @@ import { render, screen } from '@testing-library/react';
 /**
  * Internal dependencies
  */
-import StatCard, { NULL_GLYPH } from '.';
+import StatCard, { STAT_CARD_NULL_GLYPH } from '.';
 
 const renderOrphan = node => {
 	const consoleError = jest.spyOn( console, 'error' ).mockImplementation( () => {} );
@@ -47,6 +47,20 @@ describe( 'StatCard.Root', () => {
 		);
 		expect( screen.getByText( 'body' ) ).toBeInTheDocument();
 	} );
+
+	// A wrapper in another repo needs the node to anchor a popover or measure the tile.
+	it( 'forwards a ref and passes other props to the card', () => {
+		const ref = { current: null };
+		const { container } = render(
+			<StatCard.Root ref={ ref } id="tile-1" data-testid="tile">
+				<p>body</p>
+			</StatCard.Root>
+		);
+		const card = container.querySelector( '.newspack-stat-card' );
+		expect( ref.current ).toBe( card );
+		expect( card ).toHaveAttribute( 'id', 'tile-1' );
+		expect( card ).toHaveAttribute( 'data-testid', 'tile' );
+	} );
 } );
 
 describe( 'StatCard.Label', () => {
@@ -75,6 +89,19 @@ describe( 'StatCard.Label', () => {
 			</StatCard.Root>
 		);
 		expect( screen.getByRole( 'heading', { level: 2, name: 'Subscribers reached' } ) ).toBeInTheDocument();
+	} );
+
+	// Untyped consumers can pass anything; an <h7> would carry no heading role.
+	it( 'falls back to h3 for a level outside 2-6', () => {
+		const consoleWarn = jest.spyOn( console, 'warn' ).mockImplementation( () => {} );
+		render(
+			<StatCard.Root>
+				<StatCard.Label heading={ 7 }>Subscribers reached</StatCard.Label>
+			</StatCard.Root>
+		);
+		expect( screen.getByRole( 'heading', { level: 3, name: 'Subscribers reached' } ) ).toBeInTheDocument();
+		expect( consoleWarn ).toHaveBeenCalled();
+		consoleWarn.mockRestore();
 	} );
 
 	// Inside the heading, the control's text would join the heading's accessible
@@ -117,6 +144,17 @@ describe( 'StatCard.Body', () => {
 		expect( screen.getByText( 'body' ) ).toBeInTheDocument();
 	} );
 
+	it( 'merges className onto the body', () => {
+		const { container } = render(
+			<StatCard.Root>
+				<StatCard.Body className="consumer-body">
+					<p>body</p>
+				</StatCard.Body>
+			</StatCard.Root>
+		);
+		expect( container.querySelector( '.newspack-stat-card__body' ) ).toHaveClass( 'consumer-body' );
+	} );
+
 	it( 'throws outside Root', () => {
 		renderOrphan( <StatCard.Body>Orphan</StatCard.Body> );
 	} );
@@ -134,13 +172,33 @@ describe( 'StatCard.Value', () => {
 		expect( container.querySelector( '[aria-hidden="true"]' ) ).not.toBeInTheDocument();
 	} );
 
+	it( 'merges className onto the value', () => {
+		const { container } = render(
+			<StatCard.Root>
+				<StatCard.Value value="1,284" className="consumer-value" />
+			</StatCard.Root>
+		);
+		expect( container.querySelector( '.newspack-stat-card__value' ) ).toHaveClass( 'consumer-value' );
+	} );
+
 	it( 'renders the null glyph with an accessible name for a null value', () => {
 		render(
 			<StatCard.Root>
 				<StatCard.Value value={ null } />
 			</StatCard.Root>
 		);
-		expect( screen.getByText( NULL_GLYPH ) ).toHaveAttribute( 'aria-hidden', 'true' );
+		expect( screen.getByText( STAT_CARD_NULL_GLYPH ) ).toHaveAttribute( 'aria-hidden', 'true' );
+		expect( screen.getByText( 'Not applicable' ) ).toHaveClass( 'screen-reader-text' );
+	} );
+
+	// `value={ data?.count }` before the data arrives must not read as a zero.
+	it( 'treats undefined as no figure', () => {
+		render(
+			<StatCard.Root>
+				<StatCard.Value value={ undefined } />
+			</StatCard.Root>
+		);
+		expect( screen.getByText( STAT_CARD_NULL_GLYPH ) ).toHaveAttribute( 'aria-hidden', 'true' );
 		expect( screen.getByText( 'Not applicable' ) ).toHaveClass( 'screen-reader-text' );
 	} );
 
@@ -175,6 +233,17 @@ describe( 'StatCard.Value', () => {
 		expect( screen.queryByText( 'Not applicable' ) ).not.toBeInTheDocument();
 	} );
 
+	// A label mapped from an empty field must not leave the glyph unnamed.
+	it( 'falls back to the default name when valueLabel is empty', () => {
+		render(
+			<StatCard.Root>
+				<StatCard.Value value={ null } valueLabel="" />
+			</StatCard.Root>
+		);
+		expect( screen.getByText( STAT_CARD_NULL_GLYPH ) ).toHaveAttribute( 'aria-hidden', 'true' );
+		expect( screen.getByText( 'Not applicable' ) ).toHaveClass( 'screen-reader-text' );
+	} );
+
 	it( 'drops the hero scale for a text variant', () => {
 		const { container } = render(
 			<StatCard.Root>
@@ -182,6 +251,17 @@ describe( 'StatCard.Value', () => {
 			</StatCard.Root>
 		);
 		expect( container.querySelector( '.newspack-stat-card__value' ) ).toHaveClass( 'newspack-stat-card__value--text' );
+	} );
+
+	it( 'keeps the null treatment in the text variant', () => {
+		const { container } = render(
+			<StatCard.Root>
+				<StatCard.Value value={ null } variant="text" />
+			</StatCard.Root>
+		);
+		expect( container.querySelector( '.newspack-stat-card__value' ) ).toHaveClass( 'newspack-stat-card__value--text' );
+		expect( screen.getByText( STAT_CARD_NULL_GLYPH ) ).toHaveAttribute( 'aria-hidden', 'true' );
+		expect( screen.getByText( 'Not applicable' ) ).toHaveClass( 'screen-reader-text' );
 	} );
 
 	it( 'keeps the hero scale by default', () => {
@@ -209,6 +289,15 @@ describe( 'StatCard.Secondary', () => {
 		expect( screen.getByText( 'Up from 1,190 last month' ) ).toBeInTheDocument();
 	} );
 
+	it( 'merges className onto the line', () => {
+		const { container } = render(
+			<StatCard.Root>
+				<StatCard.Secondary className="consumer-secondary">Up from 1,190 last month</StatCard.Secondary>
+			</StatCard.Root>
+		);
+		expect( container.querySelector( '.newspack-stat-card__secondary' ) ).toHaveClass( 'consumer-secondary' );
+	} );
+
 	it( 'throws outside Root', () => {
 		renderOrphan( <StatCard.Secondary>Orphan</StatCard.Secondary> );
 	} );
@@ -224,6 +313,28 @@ describe( 'StatCard.Footer', () => {
 		const description = container.querySelector( '.newspack-stat-card__description' );
 		expect( description.tagName ).toBe( 'P' );
 		expect( description ).toHaveTextContent( 'Readers who received at least one campaign.' );
+	} );
+
+	it( 'merges className onto the footer', () => {
+		const { container } = render(
+			<StatCard.Root>
+				<StatCard.Footer className="consumer-footer">Readers who received at least one campaign.</StatCard.Footer>
+			</StatCard.Root>
+		);
+		expect( container.querySelector( '.newspack-stat-card__footer' ) ).toHaveClass( 'consumer-footer' );
+	} );
+
+	// An interpolated sentence arrives as several children and has to stay one sentence.
+	it( 'keeps a run of text children in one paragraph', () => {
+		const count = 12;
+		const { container } = render(
+			<StatCard.Root>
+				<StatCard.Footer>Applies to { count } products.</StatCard.Footer>
+			</StatCard.Root>
+		);
+		const descriptions = container.querySelectorAll( '.newspack-stat-card__description' );
+		expect( descriptions ).toHaveLength( 1 );
+		expect( descriptions[ 0 ] ).toHaveTextContent( 'Applies to 12 products.' );
 	} );
 
 	it( 'passes elements through untouched', () => {
@@ -250,6 +361,16 @@ describe( 'StatCard.Footer', () => {
 		expect( container.querySelectorAll( '.newspack-stat-card__description' ) ).toHaveLength( 1 );
 		expect( screen.getByText( 'Products this rule applies to.' ) ).toHaveClass( 'newspack-stat-card__description' );
 		expect( screen.getByRole( 'button', { name: 'See the products' } ) ).toBeInTheDocument();
+	} );
+
+	// An empty or whitespace-only child would otherwise leave a stray paragraph.
+	it( 'renders nothing for an empty description', () => {
+		const { container } = render(
+			<StatCard.Root>
+				<StatCard.Footer>{ '' }</StatCard.Footer>
+			</StatCard.Root>
+		);
+		expect( container.querySelector( '.newspack-stat-card__description' ) ).not.toBeInTheDocument();
 	} );
 
 	it( 'throws outside Root', () => {
