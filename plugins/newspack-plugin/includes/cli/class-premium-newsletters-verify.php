@@ -418,6 +418,13 @@ class Premium_Newsletters_Verify {
 
 		WP_CLI::line( sprintf( '"%s" (gate %d): checking %d reader(s) against %d list(s)…', $gate['title'], $gate['id'], count( $population ), count( $list_ids ) ) );
 
+		// Resolved once per gate rather than once per reader: a list ID's public ID
+		// does not vary by reader, and every reader checks the same $list_ids.
+		$public_ids = [];
+		foreach ( $list_ids as $list_id ) {
+			$public_ids[ $list_id ] = self::public_id_for_list( $list_id );
+		}
+
 		$rows              = [];
 		$in_batch          = 0;
 		$population_count  = count( $population );
@@ -443,7 +450,7 @@ class Premium_Newsletters_Verify {
 				$unresolved    = \is_wp_error( $contact_lists ) || ! is_array( $contact_lists );
 
 				foreach ( $list_ids as $list_id ) {
-					$public_id = self::public_id_for_list( $list_id );
+					$public_id = $public_ids[ $list_id ];
 					if ( $unresolved || null === $public_id ) {
 						$rows[] = self::make_row( $gate, $list_id, $user, 'unresolved' );
 						continue;
