@@ -87,14 +87,19 @@ export const SettingsField = ( { field, value, onChange } ) => {
 		}
 		case 'checkbox':
 			return <CheckboxControl key={ key } label={ label } help={ help } checked={ !! value } onChange={ onChange } />;
-		case 'select':
+		case 'select': {
+			// Core's SelectControl renders nothing without options, leaving the
+			// Newspack wrapper as an empty grid child that still takes a gap.
+			if ( ! ( options || [] ).length ) {
+				return null;
+			}
 			return (
 				<SelectControl
 					key={ key }
 					label={ label }
 					help={ help }
 					value={ value }
-					options={ ( options || [] ).map( opt => ( {
+					options={ options.map( opt => ( {
 						label: opt.label,
 						value: opt.value,
 					} ) ) }
@@ -103,6 +108,7 @@ export const SettingsField = ( { field, value, onChange } ) => {
 					__nextHasNoMarginBottom
 				/>
 			);
+		}
 		case 'textarea':
 			return (
 				<TextareaControl

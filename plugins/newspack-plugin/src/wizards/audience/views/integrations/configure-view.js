@@ -473,7 +473,7 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 							<SectionHeader heading={ 2 } title={ __( 'Inbound', 'newspack-plugin' ) } noMargin />
 							<Grid columns={ 1 } rowGap={ 24 } noMargin>
 								{ renderSectionToggle( inboundToggleField, inboundEnabled && ( inboundField.options || [] ).length > 0 ) }
-								{ inboundEnabled && (
+								{ inboundEnabled && ( inboundField.options || [] ).length > 0 && (
 									<Grid columns={ 1 } rowGap={ 8 } noMargin>
 										{ ( inboundField.options || [] ).map( option => {
 											// Options are always { value, label, matching_function, has_options } objects
