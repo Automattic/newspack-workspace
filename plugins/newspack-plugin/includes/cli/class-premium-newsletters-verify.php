@@ -47,9 +47,14 @@ class Premium_Newsletters_Verify {
 	 * can gate on it.
 	 *
 	 * Each reader costs two ESP calls, not one: a contact lookup before the list
-	 * read, so a failed API call can be told apart from a reader with no contact at
-	 * all. Every shipped provider's list read otherwise swallows that distinction
-	 * into an empty array, which would misreport an outage as a clean run.
+	 * read, because every shipped provider's list read swallows a failed request
+	 * into an empty array and cannot itself tell a reader with no contact apart
+	 * from one the provider simply failed to answer for. The contact lookup
+	 * recovers that distinction for a reader who has no contact at all — but not
+	 * past it: a reader whose contact lookup succeeds and whose list read then
+	 * fails still reads as subscribed to nothing, the same as a genuinely
+	 * unsubscribed reader. That window is narrow, and an outage large enough to
+	 * matter trips the contact lookup for everyone, so it is left as is.
 	 *
 	 * ## OPTIONS
 	 *
@@ -63,7 +68,7 @@ class Premium_Newsletters_Verify {
 	 * : Readers to check between pauses. Default 100. Each reader costs two ESP calls, so a large batch size is a large burst of API traffic.
 	 *
 	 * [--max-batches=<number>]
-	 * : Stop after this many batches. Useful for sampling a large site before committing to a full run.
+	 * : Stop after roughly this many batches, across the whole run. Useful for sampling a large site before committing to a full run. Not an exact cap: a gate's last batch is never counted against it, so a run spanning several gates can check somewhat more readers than batch-size times max-batches implies.
 	 *
 	 * ## EXAMPLES
 	 *
@@ -373,15 +378,23 @@ class Premium_Newsletters_Verify {
 	 * Whether a WP_Error from get_contact_data() means "no such contact" rather
 	 * than a failed lookup.
 	 *
-	 * Mailchimp and Active Campaign each expose a dedicated not-found code
-	 * alongside their failure codes — `newspack_newsletters_mailchimp_contact_not_found`
-	 * and `newspack_newsletters_contact_not_found` respectively — so matching that
-	 * shared suffix tells the two apart. Constant Contact does not: its
-	 * get_contact_data() returns the same generic `newspack_newsletters_error` code
-	 * for both "no such contact" and a failed request, so on that provider every
-	 * error reaching here is necessarily treated as unresolved rather than as an
-	 * empty list. That is the same safe default this command already applies to any
-	 * lookup it cannot trust.
+	 * Mailchimp, Active Campaign and Constant Contact each expose a dedicated
+	 * not-found code alongside their failure codes — `newspack_newsletters_mailchimp_contact_not_found`,
+	 * `newspack_newsletters_contact_not_found` and
+	 * `newspack_newsletters_constant_contact_contact_not_found` respectively — so
+	 * matching the shared `_contact_not_found` suffix tells the two apart on any of
+	 * the three. A provider with no such code would have every error here treated
+	 * as unresolved rather than as an empty list, which is the same safe default
+	 * this command already applies to any lookup it cannot trust.
+	 *
+	 * This duplicates the provider knowledge kept in
+	 * Newspack\Reader_Activation\Integrations\ESP::pull_contact_data()'s
+	 * `$not_found_codes` allowlist (includes/reader-activation/integrations/class-esp.php).
+	 * The two already disagree — that allowlist predates Constant Contact's
+	 * dedicated code and still names only Mailchimp's and Active Campaign's, so a
+	 * Constant Contact miss reaches it as a hard error rather than being
+	 * normalized. Out of scope here; noted so whoever closes that gap, or adds a
+	 * fourth provider, finds both places.
 	 *
 	 * @param \WP_Error $error The error get_contact_data() returned.
 	 *
@@ -441,8 +454,8 @@ class Premium_Newsletters_Verify {
 			// call into an empty array rather than a WP_Error, so it cannot tell
 			// "no contact" from "could not ask". Reading get_contact_data() first
 			// recovers that distinction: its WP_Error code names a genuine miss on
-			// Mailchimp and Active Campaign (is_contact_not_found_error()), so that
-			// case still counts as "no lists" rather than failing the reader.
+			// all three providers (is_contact_not_found_error()), so that case
+			// still counts as "no lists" rather than failing the reader.
 			$contact_data = \Newspack_Newsletters_Subscription::get_contact_data( $user->user_email );
 			if ( \is_wp_error( $contact_data ) && ! self::is_contact_not_found_error( $contact_data ) ) {
 				foreach ( $list_ids as $list_id ) {
