@@ -70,6 +70,7 @@ export default function GoalCards( { selected, onSelect, disabled = false }: Goa
 						),
 						icon: opt.icon,
 						iconBackgroundColor: true,
+						isSelectable: true,
 						isVertical: true,
 						onClick: () => {
 							if ( ! disabled ) {
