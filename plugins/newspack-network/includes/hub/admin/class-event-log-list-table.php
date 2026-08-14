@@ -143,7 +143,7 @@ class Event_Log_List_Table extends \WP_List_Table {
 	 * @return string
 	 */
 	protected function get_data_column( $item ) {
-		$str = wp_json_encode( $item->get_data(), JSON_PRETTY_PRINT );
+		$str = esc_html( wp_json_encode( $item->get_data(), JSON_PRETTY_PRINT ) );
 		if ( 300 > strlen( $str ) ) {
 			return sprintf(
 				'<div class="newspack-network-data-column"><pre><code>%1$s</code></pre></div>',
@@ -171,11 +171,11 @@ class Event_Log_List_Table extends \WP_List_Table {
 			case 'date':
 				return gmdate( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $item->get_timestamp() );
 			case 'summary':
-				return $item->get_summary();
+				return esc_html( $item->get_summary() );
 			case 'node':
-				return $item->get_node_url() ? $item->get_node_url() : '-';
+				return $item->get_node_url() ? esc_html( $item->get_node_url() ) : '-';
 			case 'action_name':
-				return $item->get_action_name();
+				return esc_html( $item->get_action_name() );
 			case 'data':
 				return $this->get_data_column( $item );
 			default:
