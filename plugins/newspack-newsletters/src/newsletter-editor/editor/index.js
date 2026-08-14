@@ -20,7 +20,6 @@ import { registerPlugin } from '@wordpress/plugins';
 import withApiHandler from '../../components/with-api-handler';
 import SendButton from '../../components/send-button';
 import './style.scss';
-import { validateNewsletter } from '../utils';
 import { CAMPAIGN_SENT_NOTICE_ID } from '../../utils/consts';
 
 const Editor = compose( [
@@ -45,14 +44,12 @@ const Editor = compose( [
 		};
 	} ),
 	withDispatch( dispatch => {
-		const { lockPostAutosaving, lockPostSaving, unlockPostAutosaving, unlockPostSaving, editPost } = dispatch( 'core/editor' );
+		const { lockPostAutosaving, unlockPostAutosaving, editPost } = dispatch( 'core/editor' );
 		const { createNotice, removeNotice } = dispatch( 'core/notices' );
 		const { openModal } = dispatch( 'core/interface' );
 		return {
 			lockPostAutosaving,
-			lockPostSaving,
 			unlockPostAutosaving,
-			unlockPostSaving,
 			editPost,
 			createNotice,
 			removeNotice,
@@ -66,18 +63,13 @@ const Editor = compose( [
 	html,
 	isCustomFieldsMetaBoxActive,
 	lockPostAutosaving,
-	lockPostSaving,
-	meta,
 	newsletterSendErrors,
 	openModal,
 	removeNotice,
-	unlockPostSaving,
 	sent,
 	successNote,
 } ) => {
 	const [ publishEl ] = useState( document.createElement( 'div' ) );
-	const newsletterValidationErrors = validateNewsletter( meta );
-	const isReady = newsletterValidationErrors.length === 0;
 
 	useEffect( () => {
 		// Create alternate publish button.
@@ -97,14 +89,13 @@ const Editor = compose( [
 		} );
 	}, [ JSON.stringify( colorPalette ) ] );
 
-	// Lock or unlock post publishing.
-	useEffect( () => {
-		if ( isReady ) {
-			unlockPostSaving( 'newspack-newsletters-post-lock' );
-		} else {
-			lockPostSaving( 'newspack-newsletters-post-lock' );
-		}
-	}, [ isReady ] );
+	// Sending is gated on newsletter validation by the Send button itself (see
+	// components/send-button), which is the control that actually dispatches to
+	// the ESP. Saving deliberately is not gated: an incomplete newsletter is a
+	// perfectly good draft, and holding a post-saving lock open would also disable
+	// "Save draft" on WordPress 7.1+, which added the saving lock to that button's
+	// disabled condition. That left authors unable to save work in progress until
+	// they had filled in sender and list (NEWS-2888).
 
 	useEffect( () => {
 		if ( sent ) {
