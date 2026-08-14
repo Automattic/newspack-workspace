@@ -32,6 +32,39 @@ class Newspack_Newsletters_Mailpoet_Campaigns {
 	const CAMPAIGN_ID_META = 'mailpoet_newsletter_id';
 
 	/**
+	 * Post meta holding the mirrored `mailpoet_email` post ID, for the
+	 * `mailpoet_post` strategy.
+	 */
+	const MIRROR_POST_META = 'mailpoet_email_post_id';
+
+	/**
+	 * Option holding the chosen sync strategy.
+	 */
+	const STRATEGY_OPTION = 'newspack_newsletters_mailpoet_sync_strategy';
+
+	/**
+	 * MailPoet's post type for its block-based email editor.
+	 */
+	const MAILPOET_EMAIL_CPT = 'mailpoet_email';
+
+	/**
+	 * The default strategy.
+	 */
+	const DEFAULT_STRATEGY = 'mailpoet_post';
+
+	/**
+	 * Available strategies, with the labels shown in settings.
+	 *
+	 * @return array
+	 */
+	public static function get_strategies() {
+		return [
+			'mailpoet_post' => __( 'Edit in MailPoet — copies the newsletter into a MailPoet email', 'newspack-newsletters' ),
+			'wp_post'       => __( 'Edit in Newspack — MailPoet sends this newsletter directly', 'newspack-newsletters' ),
+		];
+	}
+
+	/**
 	 * Whether MailPoet's entity layer is reachable.
 	 *
 	 * @return boolean
@@ -44,17 +77,28 @@ class Newspack_Newsletters_Mailpoet_Campaigns {
 	/**
 	 * Get the body strategy in use.
 	 *
-	 * @return string Either 'html' or 'wp_post'.
+	 * Set in Newsletters settings when MailPoet is the provider. `html` is not
+	 * offered there — it leaves MailPoet with no attached post, which sends the
+	 * publisher into MailPoet's legacy page builder — but remains reachable
+	 * through the filter for a site without the WC renderer.
+	 *
+	 * @return string One of 'mailpoet_post', 'wp_post' or 'html'.
 	 */
 	public static function get_strategy() {
+		$strategy = get_option( self::STRATEGY_OPTION, self::DEFAULT_STRATEGY );
+
 		/**
 		 * Filters how the newsletter body reaches MailPoet.
 		 *
-		 * @param string $strategy Either 'html' (push rendered HTML) or 'wp_post'
-		 *                         (attach our post and let MailPoet render it).
+		 * @param string $strategy One of 'mailpoet_post' (mirror into a MailPoet
+		 *                         email post), 'wp_post' (attach our own post) or
+		 *                         'html' (push rendered HTML into a text block).
 		 */
-		$strategy = apply_filters( 'newspack_newsletters_mailpoet_sync_strategy', 'html' );
-		return in_array( $strategy, [ 'html', 'wp_post' ], true ) ? $strategy : 'html';
+		$strategy = apply_filters( 'newspack_newsletters_mailpoet_sync_strategy', $strategy );
+
+		return in_array( $strategy, [ 'mailpoet_post', 'wp_post', 'html' ], true )
+			? $strategy
+			: self::DEFAULT_STRATEGY;
 	}
 
 	/**
@@ -171,27 +215,95 @@ class Newspack_Newsletters_Mailpoet_Campaigns {
 	 * @return true|WP_Error
 	 */
 	private static function apply_body( $newsletter, $post, $args ) {
-		if ( 'wp_post' === self::get_strategy() ) {
-			return self::attach_wp_post( $newsletter, $post );
+		switch ( self::get_strategy() ) {
+			case 'mailpoet_post':
+				$mirror_id = self::sync_mirror_post( $post );
+				if ( is_wp_error( $mirror_id ) ) {
+					return $mirror_id;
+				}
+				return self::attach_post_id( $newsletter, $mirror_id );
+			case 'wp_post':
+				return self::attach_post_id( $newsletter, $post->ID );
+			default:
+				$newsletter->setBody( self::build_html_body( $args['html'] ?? '' ) );
+				return true;
 		}
-		$newsletter->setBody( self::build_html_body( $args['html'] ?? '' ) );
-		return true;
 	}
 
 	/**
-	 * Attach our Newsletter post to the MailPoet newsletter.
+	 * Create or update the `mailpoet_email` post mirroring a Newspack newsletter.
 	 *
-	 * MailPoet's renderer branches on the presence of a WP post and, when there
-	 * is one, renders it with the WooCommerce email editor engine — the same
-	 * engine our WC renderer path uses, so our blocks render through their own
-	 * email renderers.
+	 * MailPoet routes the edit link to whatever post a newsletter has attached, so
+	 * attaching one of its own post type is what makes its editor open on its own
+	 * screen. Our newsletter stays the source of truth and the mirror is rewritten
+	 * on every sync.
+	 *
+	 * The content written here is passed through
+	 * `newspack_newsletters_newsletter_content` first, which is what inserts
+	 * automatically placed ads. MailPoet never calls our renderers, so without
+	 * this the mirror would carry only manually inserted ad blocks.
+	 *
+	 * @param \WP_Post $post The Newspack newsletter post.
+	 *
+	 * @return int|WP_Error The mirror post ID.
+	 */
+	private static function sync_mirror_post( $post ) {
+		if ( ! post_type_exists( self::MAILPOET_EMAIL_CPT ) ) {
+			return new WP_Error(
+				'newspack_newsletters_mailpoet_no_email_cpt',
+				__( "MailPoet's email post type is unavailable. Its new email editor may need enabling.", 'newspack-newsletters' )
+			);
+		}
+
+		// Ads::$inserted_ads is process-global and the renderer will already have
+		// run in this request, marking each ad inserted. Without a reset the filter
+		// below drops every ad silently, exactly as a repeated render would.
+		if ( class_exists( '\Newspack_Newsletters\Ads' ) && method_exists( '\Newspack_Newsletters\Ads', 'reset_inserted_ads' ) ) {
+			\Newspack_Newsletters\Ads::reset_inserted_ads( $post->ID );
+		}
+
+		$content = (string) apply_filters( 'newspack_newsletters_newsletter_content', $post->post_content, $post );
+
+		$mirror_id = (int) get_post_meta( $post->ID, self::MIRROR_POST_META, true );
+		$mirror    = $mirror_id ? get_post( $mirror_id ) : null;
+
+		$postarr = [
+			'post_type'    => self::MAILPOET_EMAIL_CPT,
+			'post_status'  => 'draft',
+			'post_title'   => $post->post_title,
+			'post_content' => $content,
+		];
+
+		if ( $mirror instanceof \WP_Post && self::MAILPOET_EMAIL_CPT === $mirror->post_type ) {
+			$postarr['ID'] = $mirror->ID;
+			$result        = wp_update_post( $postarr, true );
+		} else {
+			// Either never mirrored, or the mirror was deleted in MailPoet.
+			$result = wp_insert_post( $postarr, true );
+		}
+
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+
+		update_post_meta( $post->ID, self::MIRROR_POST_META, (int) $result );
+		return (int) $result;
+	}
+
+	/**
+	 * Point a MailPoet newsletter at a WordPress post.
+	 *
+	 * MailPoet's renderer branches on the presence of a post and, when there is
+	 * one, renders it with the WooCommerce email editor engine — the same engine
+	 * our WC renderer path uses, so our blocks render through their own email
+	 * renderers.
 	 *
 	 * @param \MailPoet\Entities\NewsletterEntity $newsletter The MailPoet newsletter.
-	 * @param \WP_Post                            $post       The Newspack newsletter post.
+	 * @param int                                 $post_id    Post to attach.
 	 *
 	 * @return true|WP_Error
 	 */
-	private static function attach_wp_post( $newsletter, $post ) {
+	private static function attach_post_id( $newsletter, $post_id ) {
 		if ( ! class_exists( '\MailPoet\Entities\WpPostEntity' ) ) {
 			return new WP_Error(
 				'newspack_newsletters_mailpoet_no_wp_post_entity',
@@ -200,7 +312,7 @@ class Newspack_Newsletters_Mailpoet_Campaigns {
 		}
 		try {
 			$entity_manager = \MailPoet\DI\ContainerWrapper::getInstance()->get( \MailPoetVendor\Doctrine\ORM\EntityManager::class );
-			$newsletter->setWpPost( $entity_manager->getReference( \MailPoet\Entities\WpPostEntity::class, $post->ID ) );
+			$newsletter->setWpPost( $entity_manager->getReference( \MailPoet\Entities\WpPostEntity::class, $post_id ) );
 			// The body still has to be valid JSON for MailPoet's own screens,
 			// even though the renderer takes the post path.
 			$newsletter->setBody( [] );
@@ -291,17 +403,34 @@ class Newspack_Newsletters_Mailpoet_Campaigns {
 			return new WP_Error( 'newspack_newsletters_mailpoet_delete_failed', $e->getMessage() );
 		}
 		delete_post_meta( $post_id, self::CAMPAIGN_ID_META );
+
+		// The mirror exists only to back the campaign, so it goes with it.
+		$mirror_id = (int) get_post_meta( $post_id, self::MIRROR_POST_META, true );
+		if ( $mirror_id && self::MAILPOET_EMAIL_CPT === get_post_type( $mirror_id ) ) {
+			wp_delete_post( $mirror_id, true );
+		}
+		delete_post_meta( $post_id, self::MIRROR_POST_META );
+
 		return true;
 	}
 
 	/**
-	 * Get the MailPoet admin URL for editing a newsletter.
+	 * Get the URL for editing a newsletter, matching where MailPoet itself sends
+	 * the publisher.
+	 *
+	 * MailPoet routes to the block editor for the attached post when a newsletter
+	 * has one, and to its legacy page builder otherwise.
 	 *
 	 * @param int $newsletter_id MailPoet newsletter ID.
 	 *
 	 * @return string
 	 */
 	public static function get_edit_url( $newsletter_id ) {
+		$newsletter = self::find( $newsletter_id );
+		$post_id    = $newsletter ? $newsletter->getWpPostId() : null;
+		if ( $post_id ) {
+			return admin_url( 'post.php?post=' . (int) $post_id . '&action=edit' );
+		}
 		return admin_url( 'admin.php?page=mailpoet-newsletter-editor&id=' . (int) $newsletter_id );
 	}
 
