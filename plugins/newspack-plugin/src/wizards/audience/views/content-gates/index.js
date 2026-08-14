@@ -112,7 +112,6 @@ const AudienceContentGates = ( props, ref ) => {
 					isHidden: true,
 					exact: true,
 					backNav: '#/institutions',
-					title: __( 'Add Institution', 'newspack-plugin' ),
 					breadcrumbs: ACCESS_CONTROL_INSTITUTIONS,
 				},
 				{
@@ -121,7 +120,6 @@ const AudienceContentGates = ( props, ref ) => {
 					isHidden: true,
 					exact: true,
 					backNav: '#/institutions',
-					title: __( 'Edit Institution', 'newspack-plugin' ),
 					breadcrumbs: ACCESS_CONTROL_INSTITUTIONS,
 				},
 			] }

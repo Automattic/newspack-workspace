@@ -22,6 +22,8 @@ import './style.scss';
 const ROOT = [ { label: __( 'Audience Management', 'newspack-plugin' ) } ];
 const RULES_TRAIL = [ ...ROOT, { label: __( 'Pricing Rules', 'newspack-plugin' ), url: '#/' } ];
 
+// No `title` on the editors: they publish their own leaf crumb, which the breadcrumb
+// Page renders as the page's single <h1>. A section title would repeat it as an <h2>.
 export const SECTIONS = [
 	// Ancestors only: the list owns its own leaf, so it can annotate it with the
 	// number of rules matching the current search and filters.
@@ -35,7 +37,6 @@ export const SECTIONS = [
 		exact: true,
 		breadcrumbs: RULES_TRAIL,
 		backNav: '#/',
-		title: __( 'Add Rule', 'newspack-plugin' ),
 	},
 	{
 		path: '/edit/:id',
@@ -44,7 +45,6 @@ export const SECTIONS = [
 		exact: true,
 		breadcrumbs: RULES_TRAIL,
 		backNav: '#/',
-		title: __( 'Edit Rule', 'newspack-plugin' ),
 	},
 ];
 

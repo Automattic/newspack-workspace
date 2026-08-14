@@ -69,7 +69,6 @@ const AudienceSubscriptionProducts = ( props: object, ref: React.Ref< HTMLDivEle
 					exact: true,
 					breadcrumbs: PLANS_TRAIL,
 					backNav: '#/',
-					title: __( 'Add Plan', 'newspack-plugin' ),
 				},
 				{
 					path: '/edit/:id',
@@ -78,7 +77,6 @@ const AudienceSubscriptionProducts = ( props: object, ref: React.Ref< HTMLDivEle
 					exact: true,
 					breadcrumbs: PLANS_TRAIL,
 					backNav: '#/',
-					title: __( 'Edit Plan', 'newspack-plugin' ),
 				},
 			] }
 		/>
