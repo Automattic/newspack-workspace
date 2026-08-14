@@ -301,7 +301,7 @@ class Premium_Newsletters_Migration {
 					WP_CLI::warning( sprintf( '"%s" (gate %d) will not restrict as intended: %s', $gate_title, $gate_id, $issue ) );
 				}
 			} elseif ( $dry_run ) {
-				$verification_issues = self::compute_pre_write_issues( $list_ids, $has_purchase, $payload['product_ids'] );
+				$verification_issues = self::compute_pre_write_issues( $list_ids, $has_purchase, $payload['product_ids'], $gate_id );
 				foreach ( $verification_issues as $issue ) {
 					WP_CLI::warning( sprintf( '"%s" will not migrate correctly: %s', $gate_title, $issue ) );
 				}
@@ -1158,6 +1158,50 @@ class Premium_Newsletters_Migration {
 	}
 
 	/**
+	 * Why an active gate mode's layout leaves the gate unable to do its job, or null
+	 * when the mode is inactive or its layout is sound.
+	 *
+	 * A layout ID of 0 is the load-bearing case. Content_Restriction_Control::
+	 * is_post_restricted() ends each gate's turn on `if ( $is_restricted &&
+	 * $gate_layout_id )`, and both Content_Gate settings getters always return a
+	 * gate_layout_id key defaulting to (int) 0 — so the `?? $gate['id']` fallbacks
+	 * beside that assignment never fire, and a mode with no layout makes the gate
+	 * restrict nothing at all while looking migrated. create_gate() can leave it 0
+	 * without telling the caller: create_gate_layout() returns a WP_Error when the
+	 * insert fails, the settings are then written without the key, and create_gate()
+	 * returns the gate ID rather than the error.
+	 *
+	 * A layout ID naming no live published post is the milder case: the ID is truthy,
+	 * so the gate does restrict, but the layout is gone from under it and
+	 * get_inline_gate_content_for_post() falls back to a hard-coded default paragraph
+	 * instead of the publisher's layout. The sibling command treats a layout post it
+	 * cannot write to as disqualifying in the same way
+	 * ({@see Membership_Gates_Migration::apply_layout()}).
+	 *
+	 * @param bool   $active    Whether the mode is active.
+	 * @param int    $layout_id The mode's gate_layout_id.
+	 * @param string $label     The mode's name, as it should read in the message.
+	 *
+	 * @return string|null The problem, or null when there is none.
+	 */
+	private static function describe_layout_problem( bool $active, int $layout_id, string $label ): ?string {
+		if ( ! $active ) {
+			return null;
+		}
+		if ( $layout_id <= 0 ) {
+			return sprintf( 'its %s mode is active but points at no gate layout, so the evaluator passes the gate over and it restricts nothing', $label );
+		}
+		$status = \get_post_status( $layout_id );
+		if ( ! $status ) {
+			return sprintf( 'its %s layout (post %d) no longer exists, so readers get a default gate rather than the one the publisher wrote', $label, $layout_id );
+		}
+		if ( 'publish' !== $status ) {
+			return sprintf( 'its %s layout (post %d) is %s rather than published', $label, $layout_id, $status );
+		}
+		return null;
+	}
+
+	/**
 	 * Re-read a freshly written gate and report why it would fail to restrict.
 	 *
 	 * Mirrors the conditions Content_Restriction_Control::get_post_gates() and
@@ -1167,13 +1211,13 @@ class Premium_Newsletters_Migration {
 	 * deactivated, so without this an unenforceable gate would look migrated for as
 	 * long as it takes someone to notice at cutover.
 	 *
-	 * Layout checks are deliberately absent, but not because layouts do not matter:
-	 * is_post_restricted() ends on `if ( $is_restricted && $gate_layout_id )`, and
-	 * get_registration_settings() defaults gate_layout_id to 0, so a gate with no
-	 * layout restricts nothing — premium newsletter gates included. The check is safe
-	 * to omit because Content_Gate::create_gate() seeds both layout posts, and every
-	 * path that creates one of these gates — this command and the Premium Newsletters
-	 * wizard — goes through it.
+	 * Each active mode's layout is checked too. Content_Gate::create_gate() seeds both
+	 * layout posts, but only when their inserts succeed: it drops a WP_Error from
+	 * create_gate_layout(), writes the mode's settings without a gate_layout_id, and
+	 * still returns the gate ID — so a creation that looks successful can leave a gate
+	 * whose layout ID is 0, and a gate with no layout restricts nothing. An existing
+	 * gate can also have lost its layout post since it was written.
+	 * {@see describe_layout_problem()} for both mechanisms.
 	 *
 	 * @param int  $gate_id      The gate post ID.
 	 * @param bool $has_purchase Whether every plan behind this gate requires a purchase.
@@ -1220,6 +1264,12 @@ class Premium_Newsletters_Migration {
 			$issues[] = 'neither the registration nor the paid access mode is active';
 		}
 
+		$layout_problems = [
+			self::describe_layout_problem( ! empty( $registration['active'] ), (int) ( $registration['gate_layout_id'] ?? 0 ), 'registration' ),
+			self::describe_layout_problem( ! empty( $custom_access['active'] ), (int) ( $custom_access['gate_layout_id'] ?? 0 ), 'paid access' ),
+		];
+		$issues          = array_merge( $issues, array_values( array_filter( $layout_problems ) ) );
+
 		// A plan that required a purchase must migrate to a gate that gates on the
 		// purchase. Registration mode alone stops nobody who has an account, so a paid
 		// plan whose paid access mode is missing or unconstrained turns into a premium
@@ -1247,13 +1297,23 @@ class Premium_Newsletters_Migration {
 	 * The computable subset of verify_migrated_gate(). Called in dry-run mode so the
 	 * planning pass surfaces the same warnings --live would.
 	 *
-	 * @param int[] $list_ids     The group's restricted list IDs.
-	 * @param bool  $has_purchase Whether every plan in the group requires a purchase.
-	 * @param int[] $product_ids  The product IDs build_gate_payload() kept for the paid access mode.
+	 * Layouts are only computable for a group whose gate already exists: its layout
+	 * IDs can be read now, and the update path leaves them alone (both settings
+	 * updaters merge over the stored meta). A group that would CREATE its gate is not
+	 * predictable — create_gate() makes the layout posts as part of the write, and
+	 * whether those inserts succeed is not knowable until it runs — so the dry run
+	 * says nothing about those rather than guessing. The mode flags mirror
+	 * build_gate_payload(): registration is always activated, paid access only for a
+	 * purchase group.
+	 *
+	 * @param int[]    $list_ids     The group's restricted list IDs.
+	 * @param bool     $has_purchase Whether every plan in the group requires a purchase.
+	 * @param int[]    $product_ids  The product IDs build_gate_payload() kept for the paid access mode.
+	 * @param int|null $gate_id      The existing gate this group would update, or null when it would create one.
 	 *
 	 * @return string[] Human-readable problems; empty when no issues are predicted.
 	 */
-	private static function compute_pre_write_issues( array $list_ids, bool $has_purchase, array $product_ids ): array {
+	private static function compute_pre_write_issues( array $list_ids, bool $has_purchase, array $product_ids, ?int $gate_id = null ): array {
 		$issues = [];
 
 		$unresolvable = self::describe_unresolvable_lists( $list_ids, self::list_ids_that_do_not_resolve( $list_ids ) );
@@ -1263,6 +1323,16 @@ class Premium_Newsletters_Migration {
 
 		if ( $has_purchase && empty( $product_ids ) ) {
 			$issues[] = 'its paid access mode will have no access rules (no usable product IDs remain), so it will ask for no purchase — any registered reader would keep the list';
+		}
+
+		if ( $gate_id ) {
+			$registration    = \Newspack\Content_Gate::get_registration_settings( $gate_id );
+			$custom_access   = \Newspack\Content_Gate::get_custom_access_settings( $gate_id );
+			$layout_problems = [
+				self::describe_layout_problem( true, (int) $registration['gate_layout_id'], 'registration' ),
+				self::describe_layout_problem( $has_purchase, (int) $custom_access['gate_layout_id'], 'paid access' ),
+			];
+			$issues          = array_merge( $issues, array_values( array_filter( $layout_problems ) ) );
 		}
 
 		return $issues;
