@@ -198,4 +198,29 @@ class Newspack_Test_Content_Gate_Excerpt extends WP_UnitTestCase {
 		);
 		$this->assertStringContainsString( 'Hand written.', get_the_excerpt( $post_id ) );
 	}
+
+	/**
+	 * A post with no access-control attributes keeps core's contract: a non-empty
+	 * $text from an earlier filter is returned untouched. This filter replaces
+	 * core's on every site, including those with gates switched off, so a post
+	 * that cannot have gated blocks must not notice the replacement.
+	 */
+	public function test_ungated_post_returns_upstream_text_untouched() {
+		$post_id = $this->factory->post->create(
+			[
+				'post_status'  => 'publish',
+				'post_content' => '<!-- wp:paragraph --><p>PUBLICMARK</p><!-- /wp:paragraph -->',
+				'post_excerpt' => '',
+			]
+		);
+
+		$supplied = function () {
+			return 'THIRDPARTYEXCERPT';
+		};
+		add_filter( 'get_the_excerpt', $supplied, 6 );
+		$excerpt = get_the_excerpt( $post_id );
+		remove_filter( 'get_the_excerpt', $supplied, 6 );
+
+		$this->assertSame( 'THIRDPARTYEXCERPT', $excerpt, 'An ungated post must not have an upstream excerpt discarded.' );
+	}
 }

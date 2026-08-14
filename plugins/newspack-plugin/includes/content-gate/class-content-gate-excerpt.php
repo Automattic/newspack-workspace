@@ -43,6 +43,15 @@ class Content_Gate_Excerpt {
 			return wp_trim_excerpt( $text, $post );
 		}
 
+		// Core returns a non-empty $text untouched; the branches below deliberately
+		// do not. Confine that difference to posts that actually use the gate, so on
+		// every other post -- including every post on a site with gates switched off,
+		// where this filter still replaces core's -- an excerpt supplied by a filter
+		// below priority 10 survives exactly as it would without Newspack installed.
+		if ( ! Block_Visibility::has_access_control( (string) $resolved->post_content ) ) {
+			return wp_trim_excerpt( $text, $post );
+		}
+
 		// Core is only ever handed the sanitized clone, in both branches below. Any
 		// path that lets core rebuild from the post reaches post_content, so handing
 		// it the real post anywhere would put gated blocks back in the excerpt.

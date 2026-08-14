@@ -131,6 +131,21 @@ class Block_Visibility {
 	}
 
 	/**
+	 * Whether any block in the content carries access-control attributes.
+	 *
+	 * A withheld block always carries newspackAccessControlGateIds or
+	 * newspackAccessControlRules, so content without that substring has nothing
+	 * to strip. Callers use this to skip parse_blocks()/serialize_blocks()
+	 * entirely, and to tell a post that uses the gate from one that does not.
+	 *
+	 * @param string $content Serialized block content.
+	 * @return bool
+	 */
+	public static function has_access_control( $content ) {
+		return false !== strpos( (string) $content, 'newspackAccessControl' );
+	}
+
+	/**
 	 * Remove blocks that are withheld from a logged-out reader.
 	 *
 	 * Evaluated against the anonymous reader (user 0) rather than the current
@@ -145,11 +160,7 @@ class Block_Visibility {
 	 * @return string Content with withheld blocks removed.
 	 */
 	public static function strip_blocks_hidden_from_public( $content ) {
-		// A withheld block always carries newspackAccessControlGateIds or
-		// newspackAccessControlRules, so content without that string has nothing
-		// to strip. Skips parse_blocks()/serialize_blocks() on every
-		// auto-generated excerpt on sites that have never used the gate.
-		if ( false === strpos( $content, 'newspackAccessControl' ) ) {
+		if ( ! self::has_access_control( $content ) ) {
 			return $content;
 		}
 		if ( ! has_blocks( $content ) ) {
