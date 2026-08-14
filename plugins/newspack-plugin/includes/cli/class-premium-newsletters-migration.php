@@ -347,7 +347,12 @@ class Premium_Newsletters_Migration {
 		self::report_stale_gates( $titles_written, $dry_run, (bool) $plan_id );
 
 		WP_CLI::line( '' );
-		self::report_auto_signup( array_values( array_unique( $migrated_lists ) ), $dry_run, (bool) $plan_id );
+		self::report_auto_signup(
+			array_values( array_unique( $migrated_lists ) ),
+			$dry_run,
+			(bool) $plan_id,
+			self::count_incomplete_groups( $summary )
+		);
 
 		WP_CLI::line( '' );
 		$processed = count(
@@ -461,6 +466,29 @@ class Premium_Newsletters_Migration {
 		return sprintf(
 			'Gates will not enforce on this site: %s. Enforcement asks Content_Gate::is_gating_active(), which needs both — so the gates below will be written but stay dormant, restricting nobody and subscribing nobody, until that is fixed.',
 			implode( ', and ', $missing )
+		);
+	}
+
+	/**
+	 * How many of this run's groups must be kept out of the auto-signup derivation.
+	 *
+	 * A group whose gate failed to write migrated nothing; a group reported as a WARN
+	 * row wrote a gate the evaluator cannot enforce. Either way its lists are not
+	 * behind a working gate, so the site-wide setting must not be derived as if they
+	 * were. Counted from the summary rows rather than tracked through the write loop:
+	 * the rows are what the operator is shown, and $migrated_lists is appended before
+	 * verify_migrated_gate() runs, so it cannot tell the two apart on its own.
+	 *
+	 * @param array[] $summary The run's summary rows, each carrying an 'action'.
+	 *
+	 * @return int The number of rows that failed to write or will not enforce.
+	 */
+	private static function count_incomplete_groups( array $summary ): int {
+		return count(
+			array_filter(
+				$summary,
+				fn( $row ) => str_starts_with( $row['action'], 'ERROR' ) || str_starts_with( $row['action'], 'WARN' )
+			)
 		);
 	}
 
@@ -1339,6 +1367,21 @@ class Premium_Newsletters_Migration {
 	 * zero-touch migration — but the transition is always printed, so a change to a
 	 * setting a publisher may have chosen is visible rather than silent.
 	 *
+	 * A run in which any group failed to write, or was reported as a WARN row, takes
+	 * the same report-only path. The derivation is over the lists this run migrated,
+	 * and a group that wrote nothing — or wrote a gate the evaluator cannot enforce —
+	 * keeps its lists out of that view. Dropping lists can only collapse a
+	 * disagreement into a determinate value, never the reverse, and the option
+	 * defaults to ON: so the shape that does damage is a modal group succeeding while
+	 * a non-modal group fails, which derives false and turns auto-signup off
+	 * site-wide from a partial view. Members then stop being auto-subscribed to lists
+	 * they should get, with nothing to show for it. Re-runs are idempotent, so fixing
+	 * the failure and running again settles the setting.
+	 *
+	 * The boundary is this run's summary rows. A plan skipped before any write is not
+	 * counted here; a manual-only plan's lists are named in their own warning instead
+	 * ({@see report_manual_only_plan()}).
+	 *
 	 * A --plan run is the exception: the option is site-wide, but the derivation only
 	 * sees the lists that one plan restricts. If the site's other lists sit on the
 	 * other side of the modal split, writing it would flip a global setting from a
@@ -1346,13 +1389,15 @@ class Premium_Newsletters_Migration {
 	 * checkout, or off for readers who expected them. So a --plan run reports the
 	 * derivation and says why it is not written; settling the setting takes a full run.
 	 *
-	 * @param int[] $list_ids    All newsletter list IDs this run migrated.
-	 * @param bool  $dry_run     Whether this is a dry run.
-	 * @param bool  $plan_scoped Whether the run was narrowed to a single plan with --plan.
+	 * @param int[] $list_ids          All newsletter list IDs this run migrated.
+	 * @param bool  $dry_run           Whether this is a dry run.
+	 * @param bool  $plan_scoped       Whether the run was narrowed to a single plan with --plan.
+	 * @param int   $incomplete_groups How many groups failed to write or will not enforce
+	 *                                 ({@see count_incomplete_groups()}).
 	 *
 	 * @return void
 	 */
-	private static function report_auto_signup( array $list_ids, bool $dry_run, bool $plan_scoped = false ) {
+	private static function report_auto_signup( array $list_ids, bool $dry_run, bool $plan_scoped = false, int $incomplete_groups = 0 ) {
 		$derived = self::derive_auto_signup( $list_ids );
 		$current = (bool) \get_option( 'newspack_premium_newsletters_auto_signup', 1 );
 
@@ -1375,7 +1420,18 @@ class Premium_Newsletters_Migration {
 						$current ? 'on' : 'off'
 					)
 				);
+				return;
 			}
+			// Nothing to derive from at all. Said out loud rather than passed over in
+			// silence: a run where every group failed reaches here, and the absence of an
+			// auto-signup line reads exactly like a run that had nothing to change.
+			WP_CLI::warning(
+				sprintf(
+					'Auto-signup was not derived: this run migrated no newsletter lists%s. Leaving it %s — check it in Newsletters > Premium.',
+					$incomplete_groups ? sprintf( ', because all %d gate(s) it touched either failed to write or will not enforce', $incomplete_groups ) : '',
+					$current ? 'on' : 'off'
+				)
+			);
 			return;
 		}
 
@@ -1394,6 +1450,19 @@ class Premium_Newsletters_Migration {
 					'Auto-signup derives to %s from this plan\'s lists (currently %s), but a --plan run never writes it: the setting is site-wide, and one plan\'s lists cannot stand for the rest of the site\'s. Re-run without --plan to settle it.',
 					$derived_label,
 					$current_label
+				)
+			);
+			return;
+		}
+		// Before the dry-run branch for the same reason as the --plan case above, and so
+		// a dry run predicts the suppression instead of promising a write.
+		if ( $incomplete_groups ) {
+			WP_CLI::line(
+				sprintf(
+					'Auto-signup derives to %s from the lists this run migrated (currently %s), but %d gate(s) failed to write or will not enforce, so their lists are missing from that view — and a missing list can only turn a genuine disagreement into a decision. Leaving the setting alone: fix those gate(s) and re-run to settle it.',
+					$derived_label,
+					$current_label,
+					$incomplete_groups
 				)
 			);
 			return;
