@@ -117,7 +117,6 @@ describe( 'CollapsibleGroup item state', () => {
 	it( 'leaves a collapsed panel reachable by find-in-page', () => {
 		const { container } = renderItems( 1 );
 		expect( container.querySelector( '.newspack-collapsible-group__panel' ) ).toHaveAttribute( 'hidden', 'until-found' );
-		// Find-in-page can only match mounted text, so a collapsed item keeps its children.
 		expect( screen.getByText( 'content' ) ).toBeInTheDocument();
 	} );
 

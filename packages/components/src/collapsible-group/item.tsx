@@ -26,14 +26,12 @@ const Item = ( { children, className, defaultOpen = false, title }: CollapsibleG
 
 	return (
 		<Collapsible.Root className={ classNames( 'newspack-collapsible-group__item', className ) } defaultOpen={ defaultOpen }>
-			{ /* Heading wraps the trigger, per the W3C accordion pattern. */ }
 			<Heading className="newspack-collapsible-group__heading">
 				<Collapsible.Trigger className="newspack-collapsible-group__trigger">
 					{ title }
 					<Icon icon={ chevronDown } size={ 24 } />
 				</Collapsible.Trigger>
 			</Heading>
-			{ /* `hiddenUntilFound` lets the browser's find-in-page expand a collapsed item. */ }
 			<Collapsible.Panel className="newspack-collapsible-group__panel" hiddenUntilFound>
 				<div className="newspack-collapsible-group__panel-inner">{ children }</div>
 			</Collapsible.Panel>

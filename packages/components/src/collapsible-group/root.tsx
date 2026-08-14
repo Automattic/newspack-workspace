@@ -18,11 +18,9 @@ import type { CollapsibleGroupItemProps, CollapsibleGroupProps } from './types';
 import './style.scss';
 
 const Root = ( { children, className, hideSingleTitle = false, spacing = 6, titleLevel }: CollapsibleGroupProps ) => {
-	// An unspecified level matches the enclosing group rather than resetting to the default.
 	const inheritedTitleLevel = useTitleLevel();
 	const items = Children.toArray( children ).filter( isValidElement ) as React.ReactElement< CollapsibleGroupItemProps >[];
 
-	// With nothing to collapse against, a lone item can render untitled, and so permanently open.
 	const content =
 		hideSingleTitle && items.length === 1 ? (
 			<div className={ classNames( 'newspack-collapsible-group', className ) }>{ cloneElement( items[ 0 ], { title: undefined } ) }</div>
