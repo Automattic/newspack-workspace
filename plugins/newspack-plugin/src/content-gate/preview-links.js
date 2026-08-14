@@ -13,10 +13,11 @@
  * longer reach in and rewrite these links from outside. A document may always
  * rewrite its own. Same fix as NEWS-2889, applied to the gate preview.
  *
- * Scope note: the gate's front-end script only loads on restricted singular
- * posts, so propagation reaches other restricted content and stops there. That
- * is the surface a gate preview is about; an unrestricted page has no gate to
- * preview.
+ * Kept deliberately in step with newspack-popups/src/view/preview-links.js,
+ * which solves the same problem for prompt previews. The two are duplicated
+ * rather than shared: a shared package would tie two independently released
+ * plugins to one version, which is the wrong trade for a fix this small. If you
+ * change one, change the other.
  */
 export function propagateGatePreviewParams() {
 	// Only localized on a gate preview, so its absence means there is nothing to
@@ -34,6 +35,12 @@ export function propagateGatePreviewParams() {
 		return;
 	}
 
+	// One eager pass at domReady. Anchors added later — "Load more", modal
+	// checkout, anything AJAX — keep their own hrefs and leave the preview on the
+	// first click. Neither does this reach the gate's own conversion CTAs, which
+	// are <form target="newspack_modal_checkout_iframe"> rather than links. A
+	// capture-phase click interceptor would close both gaps if it ever proves
+	// worth the extra surface.
 	document.querySelectorAll( 'a[href]' ).forEach( anchor => {
 		// Read the attribute rather than the `href` property: the selector also
 		// matches SVG <a>, whose property is an SVGAnimatedString, and resolving

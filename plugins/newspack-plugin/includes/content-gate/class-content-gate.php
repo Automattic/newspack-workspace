@@ -765,12 +765,18 @@ class Content_Gate {
 	public static function enqueue_scripts() {
 		self::enqueue_content_banner_assets();
 
-		if ( ! self::has_gate() ) {
+		$renders_gate = self::has_gate() && is_singular() && self::is_post_restricted();
+		$is_preview   = Content_Gate\Gate_Preview::is_preview_request();
+
+		// The script also loads on a gate preview where no gate renders — archives,
+		// home, search — so the previewed params survive a click through one of
+		// those pages. Gate them out and the preview ends silently at the first
+		// non-singular view, which is not something the pre-7.1 editor-side handler
+		// did: it re-ran on every navigation inside the preview frame.
+		if ( ! $renders_gate && ! $is_preview ) {
 			return;
 		}
-		if ( ! is_singular() || ! self::is_post_restricted() ) {
-			return;
-		}
+
 		$handle = 'newspack-content-gate';
 		\wp_enqueue_script(
 			$handle,
@@ -780,29 +786,51 @@ class Content_Gate {
 			true
 		);
 		\wp_script_add_data( $handle, 'async', true );
-		$script_data = [
-			'metadata' => self::get_gate_metadata(),
-		];
+		\wp_localize_script( $handle, 'newspack_content_gate', self::get_frontend_script_data( $renders_gate, $is_preview ) );
 
-		// On a gate preview the previewed document carries its own preview params
-		// onto same-origin links, so the preview survives navigation. It needs the
-		// param list to know which of its query params those are. Gate_Preview's
-		// own check already requires the preview capability, so this does not ship
-		// to ordinary readers.
-		if ( Content_Gate\Gate_Preview::is_preview_request() ) {
-			$script_data['preview_query_params'] = array_merge(
-				[ Content_Gate\Gate_Preview::PREVIEW_QUERY_PARAM ],
-				array_values( Content_Gate\Gate_Preview::PREVIEW_QUERY_KEYS )
-			);
+		// Only a rendering gate needs the styles.
+		if ( ! $renders_gate ) {
+			return;
 		}
-
-		\wp_localize_script( $handle, 'newspack_content_gate', $script_data );
 		\wp_enqueue_style(
 			$handle,
 			Newspack::plugin_url() . '/dist/content-gate.css',
 			[],
 			filemtime( dirname( NEWSPACK_PLUGIN_FILE ) . '/dist/content-gate.css' )
 		);
+	}
+
+	/**
+	 * Data localized to the front-end gate script.
+	 *
+	 * Split out from enqueue_scripts() so the preview branch — the one seam that
+	 * decides whether the preview params reach the page — is assertable without
+	 * touching the filesystem for asset versions.
+	 *
+	 * @param bool $renders_gate Whether a gate renders on this request.
+	 * @param bool $is_preview   Whether this is a gate preview request.
+	 * @return array
+	 */
+	public static function get_frontend_script_data( $renders_gate, $is_preview ) {
+		$script_data = [];
+
+		if ( $renders_gate ) {
+			$script_data['metadata'] = self::get_gate_metadata();
+		}
+
+		// On a gate preview the previewed document carries its own preview params
+		// onto same-origin links, so the preview survives navigation. It needs the
+		// param list to know which of its query params those are. Gate_Preview's
+		// own check already requires the preview capability, so this does not ship
+		// to ordinary readers.
+		if ( $is_preview ) {
+			$script_data['preview_query_params'] = array_merge(
+				[ Content_Gate\Gate_Preview::PREVIEW_QUERY_PARAM ],
+				array_values( Content_Gate\Gate_Preview::PREVIEW_QUERY_KEYS )
+			);
+		}
+
+		return $script_data;
 	}
 
 	/**
